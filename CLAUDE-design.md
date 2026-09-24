@@ -167,7 +167,7 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/projects/:projectId` | Boards eines Projekts | Rahmen; Boards als Platten, Zahlen in Plex Mono | #978 |
 | `/projects/:projectId/ideas` | Ideen | Rahmen; Nut-Zonen und Platten wie das Board | #978, #980 |
 | `/projects/:projectId/members` | Mitglieder | Rahmen; Tabelle als Platte, Zahlen in Plex Mono | #978 |
-| `/projects/:projectId/nachtlauf` | Runner | Verbrauchs-Bereich (Zeitraum-Sicht) nach `docs/mockup-nachtlauf-verbrauch.html` und Blöcke der Runs nach `docs/mockup-nachtlauf-lauf.html`, beide in Kupferwarte; der übrige Inhalt **Ausnahme Nachtlauf** (eigener Abschnitt); Rahmen der Vorlage | #978, #987, #988 |
+| `/projects/:projectId/nachtlauf` | Runner | Blöcke der Runs nach `docs/mockup-nachtlauf-lauf.html` in Kupferwarte; der übrige Inhalt **Ausnahme Nachtlauf** (eigener Abschnitt); Rahmen der Vorlage | #978, #988 |
 | `/boards/:boardId` | Board | Board der Vorlage (Entwurf Z. 1679–1864) | #980 |
 | `/boards/:boardId/list` | Liste | Liste der Vorlage, nach Vorhaben gruppiert (Entwurf Z. 1865–2054) | #980 |
 | `/boards/:boardId/vorhaben` | Vorhaben | Rahmen; Vorhaben als Platten mit Fortschritt | #978 |
@@ -187,13 +187,11 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 
 **Die Ausnahme gilt nur für den Inhaltsbereich dieser Seite** — Schiene, Kopf und Kartendialog folgen Kupferwarte. Das Entwurfs-Theme liegt als verschachtelter `ThemeProvider` über dem Inhaltsbereich.
 
-**Der Verbrauchs-Bereich (Zeitraum-Sicht) steht seit #987 außerhalb der Ausnahme.** Er folgt Kupferwarte — Tokens aus [`frontend/src/theme.ts`](frontend/src/theme.ts), Bausteine aus [`frontend/src/components/leitstand/LeitstandBausteine.tsx`](frontend/src/components/leitstand/LeitstandBausteine.tsx) — und seine Vorlage ist [`docs/mockup-nachtlauf-verbrauch.html`](docs/mockup-nachtlauf-verbrauch.html), von Manne am 2026-09-17 abgenommen: Kopfzeile „Verbrauch" mit Zeitraum-Wahl, zwei Platten mit je vier Kacheln, darunter Nächte und Vorhaben. **Er folgt damit auch im Dunkeln dem Erscheinungsbild**, wie der Leitstand; hergestellt in [`frontend/src/components/nachtlauf/KupferwarteBereich.tsx`](frontend/src/components/nachtlauf/KupferwarteBereich.tsx), das Theme und Variablen (`ERSCHEINUNGSBILD_SX`) für seinen Teilbaum zurückstellt. **Die Nachtansicht darunter bleibt in der Ausnahme.**
-
 **Die Blöcke der Runs stehen seit #988 ebenfalls außerhalb der Ausnahme.** Ihre Vorlage ist [`docs/mockup-nachtlauf-lauf.html`](docs/mockup-nachtlauf-lauf.html), von Manne am 2026-09-17 abgenommen: **jeder Run eine aufklappbare Platte** — Kopf mit Aufklapp-Pfeil, LED nach Ergebnis, Vorzeile „Schicht vom ‹Tag› auf den ‹Folgetag›" (#1127), Titel „Run #‹Nr› · ‹Tag›. ‹Monat›, ‹HH:MM›" in 15 px, die Art des Runs als erste Marke (#1128), Metazeile und rechts Zustand und Herkunft (zugeklappt zusätzlich die Kosten); aufgeklappt sechs eingelassene Instrumente (Kosten, Eingabe, Ausgabe, Cache-Quote, Dauer, Pakete) und die Vorgänge als kompakte Zeilen wie „Letzter Run" im Leitstand, deren Befund mit „Kopieren" an der Zeile aufklappt. Tokens aus [`frontend/src/theme.ts`](frontend/src/theme.ts), Bausteine aus [`LeitstandBausteine.tsx`](frontend/src/components/leitstand/LeitstandBausteine.tsx) (Platte, LED, Instrument, Klassenmarke, Taste) und den Bausteinen der Runs unter [`frontend/src/components/nachtlauf/`](frontend/src/components/nachtlauf/); sie stehen im [`KupferwarteBereich`](frontend/src/components/nachtlauf/KupferwarteBereich.tsx) und folgen damit auch im Dunkeln dem Erscheinungsbild.
 
 **Nicht gemessen ist nicht 0.** Wo eine Zahl fehlt, steht in Instrument und Kostenspalte „—"; den Grund („nicht gemessen") trägt ein Text, der nur Vorlesewerkzeugen gilt (`NUR_LESER_SX`). Eine Null behauptete eine Messung, die es nicht gab.
 
-**In der Ausnahme bleibt damit nur noch,** was außerhalb der Blöcke der Runs und außerhalb der Zeitraum-Sicht auf der Seite steht: Brotkrumenpfad, „Protokoll einlesen", die Meldungszeile und die Nachtansicht des Verbrauchs.
+**In der Ausnahme bleibt damit nur noch,** was außerhalb der Blöcke der Runs auf der Seite steht: Brotkrumenpfad, „Protokoll einlesen", die Meldungszeile und die Leerfall-Hinweise.
 
 **Auch im dunklen Erscheinungsbild bleibt der Inhaltsbereich hell.** Hergestellt wird das am Wurzelknoten (`NACHTLAUF_WURZEL_SX` setzt `HELLE_VARIABLEN` und malt den Grund selbst) und in `nachtlaufTheme` (Komponenten-Vorgaben mit aufgelösten Hellwerten, `lib/variablenAufloesen.ts`); nachgewiesen in `nachtlaufDesign.test.ts` und `NightRunPage.test.tsx`.
 

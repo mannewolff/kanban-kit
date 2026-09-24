@@ -29,28 +29,6 @@ const nichts = {
 afterEach(() => vi.restoreAllMocks())
 
 describe('nightRunUsageApi', () => {
-  it('night ruft GET /api/projects/{id}/night-run-usage/night mit Datum und Zone', async () => {
-    const f = spyFetch(
-      JSON.stringify({
-        night: '2026-09-15',
-        runCount: 2,
-        durationMs: 4000,
-        cardCount: 1,
-        usage: { total: nichts, cardShare: nichts, remainder: nichts },
-        aborted: false,
-        cards: [],
-      }),
-    )
-
-    const nacht = await nightRunUsageApi.night(4, '2026-09-15', 'Europe/Berlin')
-
-    const url = lastUrl(f)
-    expect(url.pathname).toBe('/api/projects/4/night-run-usage/night')
-    expect(url.searchParams.get('date')).toBe('2026-09-15')
-    expect(url.searchParams.get('zone')).toBe('Europe/Berlin')
-    expect(nacht.runCount).toBe(2)
-  })
-
   it('period ruft GET /api/projects/{id}/night-run-usage mit Art, Rueckschritt und Zone', async () => {
     const f = spyFetch('{}')
 
@@ -67,7 +45,6 @@ describe('nightRunUsageApi', () => {
     const f = spyFetch('{}')
 
     await nightRunUsageApi.period(4, 'DAY', 0)
-    await nightRunUsageApi.night(4, '2026-09-15')
 
     expect(lastUrl(f).searchParams.get('zone')).toBe(
       Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -78,7 +55,7 @@ describe('nightRunUsageApi', () => {
   it('kodiert die Zone, statt sie roh in die Adresse zu schreiben', async () => {
     const f = spyFetch('{}')
 
-    await nightRunUsageApi.night(4, '2026-09-15', 'Etc/GMT+2')
+    await nightRunUsageApi.period(4, 'DAY', 0, 'Etc/GMT+2')
 
     const [roh] = f.mock.calls[0]
     expect(String(roh)).toContain('zone=Etc%2FGMT%2B2')
@@ -178,8 +155,6 @@ describe('nightRunUsageApi', () => {
     spyFetch('{"detail":"verboten"}', 403)
 
     await expect(nightRunUsageApi.period(4, 'DAY', 0, 'UTC')).rejects.toBeInstanceOf(ApiError)
-    await expect(nightRunUsageApi.night(4, '2026-09-15', 'UTC')).rejects.toMatchObject({
-      status: 403,
-    })
+    await expect(nightRunUsageApi.total(4)).rejects.toMatchObject({ status: 403 })
   })
 })

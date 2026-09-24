@@ -389,77 +389,6 @@ function aufbewahrt(
   }
 }
 
-/** Leere Verbrauchsangaben — „nicht gemessen". */
-const VERBRAUCH_NICHTS = {
-  costUsd: null,
-  inputTokens: null,
-  outputTokens: null,
-  cachedInputTokens: null,
-  cachedInputSharePercent: null,
-}
-
-const VERBRAUCH_LEER = {
-  total: VERBRAUCH_NICHTS,
-  cardShare: VERBRAUCH_NICHTS,
-  remainder: VERBRAUCH_NICHTS,
-}
-
-/** Die Aufteilung nach Gattung, beide Anteile ungemessen (Issue #1013, #1016). */
-const VERBRAUCH_JE_GATTUNG = { night: VERBRAUCH_LEER, interactive: VERBRAUCH_LEER }
-
-/** Kennzahlen eines Zeitraums ohne Messung. */
-const verbrauchKennzahlen = (type: string, firstDay: string, lastDay: string) => ({
-  type,
-  firstDay,
-  lastDay,
-  from: '2026-09-07T10:00:00Z',
-  to: '2026-09-14T10:00:00Z',
-  coverage: 'COMPLETE',
-  noRuns: false,
-  runCount: 2,
-  durationMs: 60_000,
-  cardCount: 1,
-  usage: VERBRAUCH_LEER,
-  usageByKind: VERBRAUCH_JE_GATTUNG,
-  interactiveUsageSince: null,
-})
-
-/**
- * Jede Zeitraum-Anfrage bekommt denselben Zeitraum: Beim Tageszeitraum mit Rückschritt 0 liefert er
- * das Datum der zuletzt abgeschlossenen Nacht, in der Zeitraum-Sicht eine Nacht zum Anwählen.
- */
-const VERBRAUCH_ZEITRAUM = {
-  current: verbrauchKennzahlen('DAY', '2026-09-15', '2026-09-15'),
-  previous: verbrauchKennzahlen('DAY', '2026-09-14', '2026-09-14'),
-  nights: [
-    {
-      night: '2026-09-10',
-      runCount: 1,
-      cardCount: 1,
-      usage: VERBRAUCH_LEER,
-      usageByKind: VERBRAUCH_JE_GATTUNG,
-      aborted: false,
-    },
-  ],
-  epics: [],
-  withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: VERBRAUCH_NICHTS },
-  epicsOverlap: false,
-  stages: [],
-}
-
-/** Eine Nacht aus zwei Läufen — mit dem Datum, nach dem gefragt wurde. */
-const verbrauchNacht = (night: string) => ({
-  night,
-  runCount: 2,
-  durationMs: 60_000,
-  cardCount: 1,
-  usage: VERBRAUCH_LEER,
-  usageByKind: VERBRAUCH_JE_GATTUNG,
-  aborted: false,
-  cards: [],
-  stages: [],
-})
-
 interface Antworten {
   /** Je `GET /night-runs` eine Antwort; die letzte gilt für alle weiteren Aufrufe. */
   listen?: NightRunView[][]
@@ -533,21 +462,6 @@ const antwortOhneDetail = (body: string, status = 502) => ({
   statusText: 'Bad Gateway',
   text: () => Promise.resolve(body),
 })
-
-/**
- * Die Antworten des Verbrauchs-Bereichs (Issue #941). Ausgelagert, weil sie keinen Zustand des
- * Stubs brauchen — anders als Liste und Haeufigkeiten, die ihren Zaehler mitfuehren.
- */
-function verbrauchsAntwort(url: string) {
-  if (url.startsWith('/api/projects/5/night-run-usage/night?')) {
-    const datum = new URL(url, 'http://localhost').searchParams.get('date') ?? ''
-    return Promise.resolve(antwortOk(verbrauchNacht(datum)))
-  }
-  if (url.startsWith('/api/projects/5/night-run-usage?')) {
-    return Promise.resolve(antwortOk(VERBRAUCH_ZEITRAUM))
-  }
-  return undefined
-}
 
 /**
  * Eine gefundene Karte oder 404, wahlweise angehalten bis `verzoegert` aufloest — die Form teilen
@@ -628,9 +542,6 @@ function stubFetch(antworten: Antworten) {
     vi.fn((url: string, init?: RequestInit) => {
       const method = init?.method ?? 'GET'
       anfragen.push({ url, method, body: String(init?.body ?? '') })
-
-      const verbrauch = verbrauchsAntwort(url)
-      if (verbrauch) return verbrauch
 
       if (url === '/api/projects') {
         return Promise.resolve(antwortOk([{ id: 5, name: 'Team', role: 'OWNER', createdAt: '' }]))
@@ -1120,31 +1031,42 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
   })
 })
 
-describe('NightRunPage — Verbrauch (Issue #941)', () => {
-  it('zeigt den Verbrauchs-Bereich auf der bestehenden Seite, im Theme-Teilbaum des Entwurfs', async () => {
+/**
+ * Der Statistikteil über der Laufliste ist mit Issue #1161 ersatzlos entfallen — was er zeigte,
+ * führt der Board-Leitstand ausführlicher. Die Zusage ist eine **Abwesenheitszusage**, deshalb
+ * halten drei Tests sie fest: kein Bereich, keine Anfrage, und die Laufliste unmittelbar hinter
+ * der Meldungszeile.
+ */
+describe('NightRunPage — Statistikteil entfernt (Issue #1161)', () => {
+  it('zeigt keinen Verbrauchs-Bereich mehr', async () => {
     renderPage()
+    await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    const bereich = await screen.findByTestId('verbrauch-bereich')
-    expect(within(bereich).getByRole('heading', { level: 2, name: 'Verbrauch' })).toBeInTheDocument()
-    expect(await within(bereich).findByTestId('verbrauch-nacht')).toHaveTextContent('2 Runs')
-    expect(anfragen.map((a) => a.url)).toContain('/api/projects/5/night-run-usage/night?date=2026-09-15&zone=' + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone))
+    expect(screen.queryByTestId('verbrauch-bereich')).not.toBeInTheDocument()
   })
 
-  it('erreicht vom Zeitraum aus eine einzelne Nacht und stellt die Nachtansicht um (Issue #942, AK 8)', async () => {
+  it('fragt keine Verbrauchszahlen der Seite mehr ab', async () => {
     renderPage()
-    const bereich = await screen.findByTestId('verbrauch-bereich')
-    // Die Überschrift der Nachtansicht; die Zeitraum-Sicht darüber nennt ihren Zeitraum seit #987
-    // in der Kopfzeile und nicht mehr als Überschrift.
-    const nachtUeberschrift = async () =>
-      within(await within(bereich).findByTestId('verbrauch-nacht')).getByRole('heading', { level: 3 })
-    expect(await nachtUeberschrift()).toHaveTextContent('Schicht vom 15.09.2026 auf den 16.09.2026')
+    await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    fireEvent.click(await within(bereich).findByRole('button', { name: /Schicht vom 10\.09\.2026/ }))
+    expect(anfragen.filter((a) => a.url.includes('night-run-usage'))).toEqual([])
+  })
 
-    await waitFor(async () =>
-      expect(await nachtUeberschrift()).toHaveTextContent('Schicht vom 10.09.2026 auf den 11.09.2026'),
-    )
-    expect(anfragen.some((a) => a.url.includes('/night-run-usage/night?date=2026-09-10&'))).toBe(true)
+  it('stellt die Laufliste unmittelbar hinter die Meldungszeile', async () => {
+    renderPage({ karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    // Die Meldungszeile entsteht nur beim Einlesen; ein nicht abgeschlossener Lauf erzeugt sie
+    // und bleibt zugleich als Laufblock stehen.
+    protokollWaehlen(stand({ abschluss: null, einheiten: [einheit({ ausgang: 'erfolg', pruefung: GEPRUEFT })] }))
+
+    const meldung = await screen.findByRole('alert')
+    expect(meldung).toHaveTextContent('Run noch nicht abgeschlossen — nicht gespeichert')
+    // Die Zusage ist eine Stellung im Dokument, und die steht weder in einer Rolle noch in einem
+    // Text — Testing Library hat dafür keine Abfrage. Der Griff zum Geschwisterelement ist hier
+    // die Zusage selbst, nicht ein Umweg um eine vorhandene Abfrage.
+    // eslint-disable-next-line testing-library/no-node-access
+    expect(meldung.nextElementSibling).toBe(screen.getByTestId('kupferwarte-bereich'))
   })
 
   it('legt keine neue Route an: App.tsx fuehrt fuer die Seite nur /projects/:projectId/nachtlauf', () => {
@@ -5144,9 +5066,10 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
     const bereiche = screen.getAllByTestId('kupferwarte-bereich')
-    // Zwei: die Zeitraum-Sicht des Verbrauchs (#987) und die Laufblöcke (#988).
-    expect(bereiche).toHaveLength(2)
-    expect(bereiche[1]).toContainElement(lauf(0))
+    // Einer: die Laufblöcke (#988). Die Zeitraum-Sicht des Verbrauchs brachte bis #1161 einen
+    // zweiten mit; der Statistikteil ist entfallen.
+    expect(bereiche).toHaveLength(1)
+    expect(bereiche[0]).toContainElement(lauf(0))
   })
 })
 
