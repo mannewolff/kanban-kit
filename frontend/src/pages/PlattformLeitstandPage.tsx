@@ -10,6 +10,7 @@ import {
   type LeitstandView,
 } from '../api/plattformLeitstand'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
+import { AktuellerStand } from '../components/leitstand/AktuellerStand'
 import { LaufArtSymbol } from '../components/leitstand/LaufArtSymbol'
 import {
   FilterTaste,
@@ -25,8 +26,14 @@ import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { zyklusDavor, zyklusDesStarts, zyklusSpanne } from '../lib/verbrauchZeitraum'
 import { ANZEIGE, ETIKETT, KLEIN_RADIUS, NUT, RAND, TEXT_MATT, TEXT_SCHWACH } from '../theme'
 
-/** Der Anfangszustand: drei leere Listen, noch von keiner Antwort belegt. */
-const LEERE_SICHT: LeitstandView = { laufende: [], durchgefuehrte: [], durchgefuehrteVoriger: [], stoerungen: [] }
+/** Der Anfangszustand: leere Listen, noch von keiner Antwort belegt. */
+const LEERE_SICHT: LeitstandView = {
+  laufende: [],
+  durchgefuehrte: [],
+  durchgefuehrteVoriger: [],
+  stoerungen: [],
+  gemeldetePakete: [],
+}
 
 /** Der Takt des Auffrischens (Kriterium 19): Was sich aendert, steht spaetestens so bald da. */
 const AUFFRISCH_MS = 30_000
@@ -123,13 +130,15 @@ interface Fehler {
  * Der Plattform-Leitstand: die Startseite eines Plattform-Admins (Issue #1083, fachliche Quellen
  * #1064 und #1086).
  *
- * **Drei Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098; benannt in #1102): *Aktive
- * Laeufe* zeigen mit pulsierendem Melder, dass gerade etwas arbeitet; *Beendete Laeufe* zeigen den
+ * **Vier Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098; benannt in #1102, um *Aktueller
+ * Status* erweitert in #1173): *Aktive
+ * Laeufe* zeigen mit pulsierendem Melder, dass gerade etwas arbeitet; *Aktueller Status* zeigt je
+ * laufendem Lauf, was er bisher gemeldet hat; *Beendete Laeufe* zeigen den
  * Ausgang jedes beendeten Laufs der laufenden Nacht; *Stoerungen* zeigt jede nicht quittierte
  * Stoerung ueber alle Naechte, juengste zuoberst. Wer mehrere Projekte betreibt, beantwortet damit
  * „laeuft gerade etwas, und ist die Nacht gut durch?" an einer Stelle statt Projekt fuer Projekt.
  *
- * **Eine Antwort fuer alle drei Bereiche** (Plan #1088 E5): Die Seite frischt sich auf, und ein
+ * **Eine Antwort fuer alle Bereiche** (Plan #1088 E5): Die Seite frischt sich auf, und ein
  * Lauf kann zwischen zwei Rundreisen den Bereich wechseln — aus drei Abrufen erschiene er doppelt
  * oder gar nicht. Aus derselben Antwort liest die Seite auch, zu welchem durchgefuehrten Lauf es
  * eine Stoerung gibt.
@@ -262,6 +271,14 @@ export default function PlattformLeitstandPage() {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <Platte titel="Aktive Runs">
           <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
+        </Platte>
+        {/* Zwischen den laufenden und den beendeten Runs (AK 1 der Quelle #1153): Was gerade
+            gemeldet wird, gehoert neben das, was gerade arbeitet. */}
+        <Platte titel="Aktueller Status">
+          <AktuellerStand
+            laufende={geladen ? sicht.laufende : null}
+            gemeldetePakete={sicht.gemeldetePakete}
+          />
         </Platte>
         <Platte
           titel="Beendete Runs"

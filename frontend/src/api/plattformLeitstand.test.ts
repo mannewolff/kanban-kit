@@ -73,6 +73,38 @@ describe('plattformLeitstandApi (#1083, drei Listen seit #1098)', () => {
     expect(new URL(String(lastCall(f).url), 'https://x').searchParams.get('zone')).toBe(leserZone())
   })
 
+  /**
+   * Issue #1173: Die vierte Liste — die gemeldeten Pakete der laufenden Läufe (#1170) — geht
+   * ungefiltert an die Seite. Sie steht neben `laufende` und nicht an deren Zeilen (Plan #1167 E1).
+   */
+  it('reicht die gemeldeten Pakete der laufenden Runs durch', async () => {
+    const antwort = {
+      laufende: [],
+      durchgefuehrte: [],
+      durchgefuehrteVoriger: [],
+      stoerungen: [],
+      gemeldetePakete: [
+        {
+          nightRunId: 8,
+          pakete: [
+            { cardNumber: 721, title: 'Erstes Paket', state: 'GREEN', errorClass: null, cardExists: true },
+            {
+              cardNumber: 722,
+              title: 'Zweites Paket',
+              state: 'RED',
+              errorClass: 'CHECKS_RED',
+              cardExists: false,
+            },
+          ],
+        },
+      ],
+    }
+    const f = spyFetch(JSON.stringify(antwort))
+
+    expect(await plattformLeitstandApi.leitstand('Europe/Berlin')).toEqual(antwort)
+    expect(lastCall(f).url).toBe('/api/admin/leitstand?zone=Europe%2FBerlin')
+  })
+
   it('quittieren ruft DELETE /api/admin/disruptions/{laufId}', async () => {
     const f = spyFetch()
 

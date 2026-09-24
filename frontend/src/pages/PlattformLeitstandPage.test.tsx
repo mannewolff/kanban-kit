@@ -3,7 +3,12 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
-import type { DisruptionView, LeitstandView } from '../api/plattformLeitstand'
+import type {
+  DisruptionView,
+  LaufPaketeView,
+  LeitstandView,
+  PaketView,
+} from '../api/plattformLeitstand'
 import { plattformLeitstandApi } from '../api/plattformLeitstand'
 import { cssRegel } from '../test/cssRegel'
 import PlattformLeitstandPage from './PlattformLeitstandPage'
@@ -79,6 +84,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     durchgefuehrte: [],
     durchgefuehrteVoriger: [],
     stoerungen: [],
+    gemeldetePakete: [],
     ...teil,
   })
 
@@ -94,8 +100,12 @@ describe('PlattformLeitstandPage (#1083)', () => {
     vi.stubGlobal('localStorage', fakeStorage())
   })
 
-  /** Kriterium 18: die drei Bereiche untereinander, in dieser Ordnung. */
-  it('stellt die drei Bereiche in der Ordnung Aktive Runs, Beendete Runs, Störungen', async () => {
+  /**
+   * Kriterium 18 und AK 1 der Quelle #1153: die vier Bereiche untereinander, in dieser Ordnung.
+   * „Aktueller Status" (#1173) steht zwischen den laufenden und den beendeten Runs — was gerade
+   * gemeldet wird, gehört neben das, was gerade arbeitet.
+   */
+  it('stellt die vier Bereiche in der Ordnung Aktive Runs, Aktueller Status, Beendete Runs, Störungen', async () => {
     api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
 
     zeigeSeite()
@@ -103,6 +113,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
     await screen.findByTestId('stoerung-5')
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Aktive Runs',
+      'Aktueller Status',
       'Beendete Runs',
       'Störungen',
     ])
@@ -374,6 +385,252 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(await screen.findByTestId('keine-durchgefuehrten')).toHaveTextContent(
         'In dieser Schicht wurde noch kein Run beendet.',
       )
+    })
+  })
+
+  /**
+   * Die Sektion „Aktueller Status" (Issue #1173, fachliche Quelle #1153, AK 1–8 und 10–12).
+   *
+   * Geprüft wird die **Aussage** der Zeile: Nummer, Titel und das Zustandswort — nie die Farbe
+   * allein. Die Wörter kommen aus `lib/nightRunHandoff.ts`, derselben Quelle wie in der
+   * Lauf-Ansicht; der Stand aus `lib/aktuellerStand.ts` (#1172).
+   */
+  describe('Aktueller Status (#1173)', () => {
+    const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
+      nightRunId: 8,
+      projectId: 9,
+      projectName: 'Mein Projekt',
+      mode: 'CHAIN',
+      startedAt: '2026-09-21T01:10:00Z',
+      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+      ...extra,
+    })
+
+    const paket = (extra: Partial<PaketView> = {}): PaketView => ({
+      cardNumber: 721,
+      title: 'Erstes Paket',
+      state: 'GREEN',
+      errorClass: null,
+      cardExists: true,
+      ...extra,
+    })
+
+    /** Die Pakete eines Laufs, wie die Antwort sie neben `laufende` führt. */
+    const pakete = (nightRunId: number, liste: PaketView[]): LaufPaketeView => ({
+      nightRunId,
+      pakete: liste,
+    })
+
+    /** AK 3–5: Nummer, Titel und Zustandswort — je gemeldetem Paket eine Zeile. */
+    it('nennt je Paket Nummer, Titel und Zustandswort', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [pakete(8, [paket({ cardNumber: 721, title: 'Erstes Paket' })])],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stand-paket-8-721')
+      expect(within(zeile).getByText('#721')).toBeInTheDocument()
+      expect(within(zeile).getByText('Erstes Paket')).toBeInTheDocument()
+      expect(within(zeile).getByText('Erfolg')).toBeInTheDocument()
+    })
+
+    /**
+     * AK 5: Alle vier Zustände tragen ihr eigenes Wort neben dem Melder — Farbe ist nie der
+     * einzige Träger der Aussage.
+     */
+    it.each([
+      ['GREEN', null, 'Erfolg', 'led-gruen'],
+      ['YELLOW', 'CHECKS_RED', 'Erfolg, Prüfung rot', 'led-bernst'],
+      ['RED', 'CHECKS_RED', 'gescheitert', 'led-zinnob'],
+      ['GREY', 'AWAITING_DECISION', 'nicht bearbeitet', 'led-grau'],
+    ] as const)('zeigt %s als „%s" mit eigenem Melder', async (state, errorClass, wort, led) => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [pakete(8, [paket({ state, errorClass })])],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stand-paket-8-721')
+      expect(within(zeile).getByText(wort)).toBeInTheDocument()
+      expect(within(zeile).getByTestId(led)).toBeInTheDocument()
+    })
+
+    /**
+     * AK 4: Das Wort kommt aus `nightRunZustandsText` und stimmt deshalb mit dem der Lauf-Ansicht
+     * überein — „Erfolg, Prüfung rot" wäre an einem am Zeitbudget beendeten Paket eine
+     * Falschaussage: Die Prüfung war nicht rot, sie kam gar nicht dran.
+     */
+    it('nennt ein am Zeitbudget beendetes Paket wie die Lauf-Ansicht', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [
+            pakete(8, [paket({ state: 'YELLOW', errorClass: 'TIME_BUDGET_EXCEEDED' })]),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('stand-paket-8-721')
+      expect(within(zeile).getByText('Am Zeitbudget beendet, Ergebnis liegt vor')).toBeInTheDocument()
+    })
+
+    /** AK 6: nach Projekt gruppiert, je Lauf ein Kopf mit Kennung und Stand. */
+    it('gruppiert nach Projekt und gibt jedem Lauf einen Kopf mit seinem Stand', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [
+            laufend({ nightRunId: 8, projectId: 9, projectName: 'Alpha' }),
+            laufend({ nightRunId: 7, projectId: 10, projectName: 'Beta' }),
+            laufend({ nightRunId: 6, projectId: 9, projectName: 'Alpha' }),
+          ],
+          gemeldetePakete: [
+            pakete(8, [paket({ cardNumber: 721 }), paket({ cardNumber: 722, state: 'RED', errorClass: 'CHECKS_RED' })]),
+            pakete(7, [paket({ cardNumber: 800 })]),
+            pakete(6, []),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const gruppen = await screen.findAllByTestId(/^stand-gruppe-\d+$/)
+      expect(gruppen.map((g) => g.getAttribute('data-testid'))).toEqual([
+        'stand-gruppe-9',
+        'stand-gruppe-10',
+      ])
+      expect(within(gruppen[0]).getByText('Alpha')).toBeInTheDocument()
+      expect(
+        within(gruppen[0])
+          .getAllByTestId(/^stand-lauf-\d+$/)
+          .map((l) => l.getAttribute('data-testid')),
+      ).toEqual(['stand-lauf-8', 'stand-lauf-6'])
+      expect(screen.getByTestId('stand-kopf-8')).toHaveTextContent(
+        'Run #8 · 2 gemeldet · 1 Erfolg, 1 gescheitert',
+      )
+      // Ein laufender Run ohne Paket steht mit „0 gemeldet" und ohne Zeile darunter.
+      expect(screen.getByTestId('stand-kopf-6')).toHaveTextContent('Run #6 · 0 gemeldet')
+      expect(within(screen.getByTestId('stand-lauf-6')).queryAllByTestId(/^stand-paket-/)).toHaveLength(0)
+    })
+
+    /** AK 7: keine Kappung — ein langer Lauf zeigt jede seiner Zeilen. */
+    it('zeigt auch vierzig Pakete ohne Kappung', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [
+            pakete(
+              8,
+              Array.from({ length: 40 }, (_, i) => paket({ cardNumber: 700 + i, title: `Paket ${i}` })),
+            ),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      await screen.findByTestId('stand-paket-8-700')
+      expect(screen.getAllByTestId(/^stand-paket-/)).toHaveLength(40)
+      expect(screen.queryByText(/ausgeblendet/)).toBeNull()
+    })
+
+    /**
+     * AK 8: Gezählt wird alles Gemeldete einschließlich der grauen Pakete, und **ohne Nenner** —
+     * wie viele noch kommen, weiß der laufende Run selbst nicht.
+     */
+    it('zählt graue Pakete im Stand mit und nennt keinen Nenner', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [
+            pakete(8, [
+              paket({ cardNumber: 721 }),
+              paket({ cardNumber: 722, state: 'GREY', errorClass: 'DEPENDENCY_UNMET' }),
+            ]),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const kopf = await screen.findByTestId('stand-kopf-8')
+      expect(kopf).toHaveTextContent('Run #8 · 2 gemeldet · 1 Erfolg, 1 nicht bearbeitet')
+      expect(kopf.textContent).not.toMatch(/\bvon\b|\/\s*\d/)
+    })
+
+    /**
+     * Ohne Namen sagte ein Vorlesewerkzeug nur „Liste mit elf Einträgen" und ließe offen, zu
+     * welchem Lauf sie gehört. Der Name ist der Kopf — dieselbe Lösung wie bei den Störgruppen.
+     */
+    it('benennt die Liste eines Laufs mit dessen Kopf', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend()],
+          gemeldetePakete: [pakete(8, [paket()])],
+        }),
+      )
+
+      zeigeSeite()
+
+      const liste = await screen.findByRole('list', { name: 'Run #8 · 1 gemeldet · 1 Erfolg' })
+      expect(within(liste).getByTestId('stand-paket-8-721')).toBeInTheDocument()
+    })
+
+    /** AK 12: ein eigener Satz, nicht derselbe wie in „Aktive Runs" (E9). */
+    it('sagt ohne laufenden Run einen eigenen Satz', async () => {
+      api.leitstand.mockResolvedValue(sicht())
+
+      zeigeSeite()
+
+      expect(await screen.findByTestId('kein-aktueller-stand')).toHaveTextContent(
+        'Gerade arbeitet kein Run — nichts gemeldet.',
+      )
+      expect(screen.getByTestId('keine-laufenden')).toHaveTextContent('Gerade läuft kein Run.')
+    })
+
+    /**
+     * AK 10 und E11: Die Sektion erbt den Takt der Seite — ein neu gemeldetes Paket steht nach
+     * 30 Sekunden da, und es gibt **keinen** zweiten Abruf allein für sie.
+     */
+    it('zeigt nach dem Takt ein neu gemeldetes Paket, ohne eigenen Abruf', async () => {
+      vi.useFakeTimers()
+      try {
+        api.leitstand
+          .mockResolvedValueOnce(
+            sicht({ laufende: [laufend()], gemeldetePakete: [pakete(8, [paket()])] }),
+          )
+          .mockResolvedValueOnce(
+            sicht({
+              laufende: [laufend()],
+              gemeldetePakete: [
+                pakete(8, [paket(), paket({ cardNumber: 722, title: 'Zweites Paket' })]),
+              ],
+            }),
+          )
+
+        zeigeSeite()
+        await act(async () => {
+          await Promise.resolve()
+        })
+        expect(screen.queryByTestId('stand-paket-8-722')).toBeNull()
+
+        await act(async () => {
+          vi.advanceTimersByTime(30_000)
+        })
+
+        expect(screen.getByTestId('stand-paket-8-722')).toHaveTextContent('Zweites Paket')
+        expect(api.leitstand).toHaveBeenCalledTimes(2)
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 
