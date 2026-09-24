@@ -5092,14 +5092,15 @@ describe('NightRunPage — Lauf ohne Arbeit (#1069)', () => {
     // und ein Zaehlen ueber beide sagte nicht, dass die Marke die ihre hat.
     const kopf = laufKopfzeile(lauf(0))
     const marke = within(kopf).getByTestId('lauf-zustand')
-    expect(marke).toHaveTextContent(GRUND)
+    expect(marke).toHaveTextContent(`nichts zu tun — ${GRUND}`)
     expect(within(marke).getByTestId('led-grau')).toBeInTheDocument()
     expect(within(kopf).queryAllByTestId('led-zinnob')).toHaveLength(0)
   })
 
   /**
    * Der Rueckfall des Servers ist seit #1185 derselbe ruhige Lauf, nur mit blasserer Auskunft: Der
-   * Melder ist grau wie beim gemeldeten Grund. Den Wortlaut der Marke nimmt Issue #1190 vor.
+   * Melder ist grau wie beim gemeldeten Grund. Das Wort „nichts zu tun" steht auch hier (#1190) —
+   * es kommt aus dem Ausgang, nicht aus dem Wortlaut des Grunds.
    */
   it('zeigt am Lauf ohne Arbeit mit unbekanntem Grund den grauen Melder', async () => {
     renderPage({
@@ -5117,10 +5118,86 @@ describe('NightRunPage — Lauf ohne Arbeit (#1069)', () => {
 
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     const marke = within(laufKopfzeile(lauf(0))).getByTestId('lauf-zustand')
-    expect(marke).toHaveTextContent(GRUND_UNBEKANNT)
+    expect(marke).toHaveTextContent(`nichts zu tun — ${GRUND_UNBEKANNT}`)
     expect(within(marke).getByTestId('led-grau')).toBeInTheDocument()
   })
 
+  /**
+   * Die Auskunft bleibt **ungekuerzt** (E8): Die Marke steht allein in ihrer Zeile, und einen
+   * zweiten Ort fuer den vollen Text gibt es an der Laufplatte nicht — anders als beim
+   * Abbruchgrund, den die aufgeklappte Platte vollstaendig fuehrt.
+   */
+  it('kuerzt einen langen gemeldeten Grund in der Marke nicht', async () => {
+    const LANG = `Kein Eintrag trug das Label kit:nightrun — ${'und auch sonst lag nichts an. '.repeat(4)}`
+    // Die Voraussetzung des Fixtures: Waere der Grund kurz, prueft der Test unten nichts.
+    expect(LANG.length).toBeGreaterThan(120)
+
+    renderPage({
+      listen: [
+        [aufbewahrt({ id: 1, startedAt: startedAt(0), processedCount: 0, noWorkReason: LANG })],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const marke = within(laufKopfzeile(lauf(0))).getByTestId('lauf-zustand')
+    expect(marke).toHaveTextContent(`nichts zu tun — ${LANG.trim()}`)
+    expect(marke.textContent).not.toContain('…')
+  })
+
+  /**
+   * Kriterium 4 der fachlichen Quelle (#1175): Ein Lauf, der alle Pakete zurueckstellte, traegt am
+   * Datensatz den Rueckfalltext, ist aber „mit Vorbehalt" — keine Marke „nichts zu tun". Deshalb
+   * haengt sie am Befund und nicht mehr an `noWorkReason` (E10).
+   */
+  it('zeigt am Lauf mit sämtlich zurückgestellten Paketen keine Marke „nichts zu tun"', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            processedCount: 0,
+            noWorkReason: GRUND_UNBEKANNT,
+            items: [
+              {
+                id: 1,
+                cardNumber: 42,
+                title: 'Zurückgestellt',
+                state: 'GREY',
+                errorClass: 'DEPENDENCY_UNMET',
+              },
+            ],
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    expect(kopf).not.toHaveTextContent('nichts zu tun')
+    expect(kopf).not.toHaveTextContent(GRUND_UNBEKANNT)
+  })
+
+  /** Kriterium 9: Mehrere Laeufe ohne Arbeit hintereinander stehen einzeln, nichts fasst sie zusammen. */
+  it('stellt zwei Läufe ohne Arbeit als zwei Laufplatten dar', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 1, startedAt: startedAt(0), processedCount: 0, noWorkReason: GRUND }),
+          aufbewahrt({ id: 2, startedAt: startedAt(5), processedCount: 0, noWorkReason: GRUND }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(screen.getByTestId(`lauf-${startedAt(5)}`)).toBeInTheDocument()
+    expect(
+      within(laufKopfzeile(lauf(0))).getByTestId('lauf-zustand'),
+    ).toHaveTextContent(`nichts zu tun — ${GRUND}`)
+    expect(
+      within(laufKopfzeile(lauf(5))).getByTestId('lauf-zustand'),
+    ).toHaveTextContent(`nichts zu tun — ${GRUND}`)
+  })
 
   /**
    * Die beiden Marken schliessen einander aus: Ein Lauf ist entweder noch nicht abgeschlossen
