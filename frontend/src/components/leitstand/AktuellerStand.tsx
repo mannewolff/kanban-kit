@@ -14,7 +14,7 @@ import {
 import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../../lib/nightRunHandoff'
 import { ANZEIGE, RAND, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { LaufArtSymbol } from './LaufArtSymbol'
-import { Led, LeerSatz, ZEILE_HOVER } from './LeitstandBausteine'
+import { Led, LeerSatz, Taste, ZEILE_HOVER } from './LeitstandBausteine'
 
 /**
  * Der Schluessel eines Pakets in der Menge der verschwundenen Karten (Issue #1174, E14).
@@ -33,6 +33,22 @@ interface Zeilenwege {
   /** Karten, die beim Abruf 404 waren — Schluessel aus {@link karteSchluessel} (E14). */
   verschwunden: ReadonlySet<string>
   onKarteOeffnen: (projectId: number, nummer: number) => void
+}
+
+/** Dazu, was der Kopf eines Laufs braucht — die Paketzeilen kennen diesen Weg nicht. */
+interface Laufwege extends Zeilenwege {
+  /**
+   * Meldet den Wunsch, diesen Run von Hand als beendet zu kennzeichnen (Issue #1197).
+   *
+   * <p><b>Nur der Wunsch</b>: Die Rueckfrage und der Aufruf liegen bei der Seite. Ein Dialog
+   * innerhalb dieser Sektion stuende im Teilbaum der Kupferwarte und erbte deren helle Variablen
+   * — dieselbe Grenze, die der Kartendialog schon zieht (Plan #1167, E12).
+   *
+   * <p>Weitergereicht wird der **Lauf** und nicht seine Kennung: Die Rueckfrage nennt Nummer und
+   * Projekt, und die Seite muesste ihn sonst in `laufende` wiederfinden — eine Suche, die nie
+   * leer ausgehen kann und deren Rueckfall damit unpruefbar waere.
+   */
+  onAlsBeendetKennzeichnen: (lauf: DisruptionView) => void
 }
 
 /**
@@ -63,7 +79,7 @@ export function AktuellerStand({
     laufende: DisruptionView[] | null
     /** Die gemeldeten Pakete je laufendem Run, in der Ordnung der Antwort. */
     gemeldetePakete: LaufPaketeView[]
-  } & Zeilenwege
+  } & Laufwege
 >) {
   if (laufende === null) {
     return null
@@ -101,7 +117,7 @@ function Standgruppe({
   {
     gruppe: Projektgruppe<Laufeintrag<PaketView>>
     jeLauf: ReadonlyMap<number, DisruptionView>
-  } & Zeilenwege
+  } & Laufwege
 >) {
   return (
     <Box data-testid={`stand-gruppe-${gruppe.projectId}`}>
@@ -159,9 +175,10 @@ function Standlauf({
   eintrag,
   lauf,
   projectId,
+  onAlsBeendetKennzeichnen,
   ...wege
 }: Readonly<
-  { eintrag: Laufeintrag<PaketView>; lauf: DisruptionView; projectId: number } & Zeilenwege
+  { eintrag: Laufeintrag<PaketView>; lauf: DisruptionView; projectId: number } & Laufwege
 >) {
   const kopfId = useId()
   return (
@@ -183,6 +200,18 @@ function Standlauf({
             {`Run #${eintrag.nightRunId}`}
           </Typography>
           {` · ${NIGHT_RUN_VERDICT_TEXT[lauf.outcome.verdict]} seit ${uhrzeit(lauf.startedAt)} · ${eintrag.stand}`}
+        </Box>
+        {/* Rechtsbuendig ans Ende des Kopfs (Issue #1197) — der Weg hinaus steht in dieser Seite
+            stets am rechten Rand seiner Zeile, wie die Taste „Stoerung loeschen". Der Name nennt
+            die Nummer: Zwei gleichlautende Tasten waeren fuer ein Vorlesewerkzeug nicht zu
+            unterscheiden. */}
+        <Box sx={{ ml: 'auto', flex: 'none' }}>
+          <Taste
+            ariaLabel={`Run #${eintrag.nightRunId} als beendet kennzeichnen`}
+            onClick={() => onAlsBeendetKennzeichnen(lauf)}
+          >
+            Als beendet kennzeichnen
+          </Taste>
         </Box>
       </Box>
       <Box component="ul" aria-labelledby={kopfId} sx={{ listStyle: 'none', m: 0, p: 0 }}>

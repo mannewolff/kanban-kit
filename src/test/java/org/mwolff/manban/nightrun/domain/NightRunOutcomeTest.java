@@ -60,7 +60,7 @@ class NightRunOutcomeTest {
       NightRunMode mode,
       List<NightRunItem> items) {
     return NightRunOutcome.of(
-        complete, noWorkReason, null, mode, items, FIXED, FIXED, FIXED, FRIST);
+        complete, null, noWorkReason, null, mode, items, FIXED, FIXED, FIXED, FRIST);
   }
 
   /** Derselbe Fall mit einem gemeldeten Abbruchgrund (Issue #1143). */
@@ -72,7 +72,16 @@ class NightRunOutcomeTest {
   private static NightRunOutcome abgebrochen(
       boolean complete, List<NightRunItem> items, Instant jetzt) {
     return NightRunOutcome.of(
-        complete, null, ABBRUCH, NightRunMode.IMPLEMENTATION, items, FIXED, FIXED, jetzt, FRIST);
+        complete,
+        null,
+        null,
+        ABBRUCH,
+        NightRunMode.IMPLEMENTATION,
+        items,
+        FIXED,
+        FIXED,
+        jetzt,
+        FRIST);
   }
 
   private static NightRunItem item(
@@ -434,6 +443,7 @@ class NightRunOutcomeTest {
             false,
             null,
             null,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
             FIXED,
@@ -453,6 +463,7 @@ class NightRunOutcomeTest {
             false,
             null,
             null,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
             FIXED,
@@ -468,6 +479,7 @@ class NightRunOutcomeTest {
     var outcome =
         NightRunOutcome.of(
             false,
+            null,
             null,
             null,
             NightRunMode.IMPLEMENTATION,
@@ -495,6 +507,7 @@ class NightRunOutcomeTest {
             false,
             null,
             null,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
             FIXED,
@@ -504,6 +517,7 @@ class NightRunOutcomeTest {
     var darueber =
         NightRunOutcome.of(
             false,
+            null,
             null,
             null,
             NightRunMode.IMPLEMENTATION,
@@ -528,6 +542,7 @@ class NightRunOutcomeTest {
             true,
             null,
             null,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(item(1, NightRunState.GREEN, null)),
             FIXED,
@@ -549,6 +564,7 @@ class NightRunOutcomeTest {
     var outcome =
         NightRunOutcome.of(
             false,
+            null,
             "Ready war leer",
             null,
             NightRunMode.IMPLEMENTATION,
@@ -651,6 +667,7 @@ class NightRunOutcomeTest {
     var outcome =
         NightRunOutcome.of(
             true,
+            null,
             NightRunOutcome.GRUND_UNBEKANNT,
             ABBRUCH,
             NightRunMode.IMPLEMENTATION,
@@ -665,5 +682,63 @@ class NightRunOutcomeTest {
     assertThat(outcome.noWorkReason()).isNull();
     assertThat(outcome.abortReason()).isEqualTo(ABBRUCH);
     assertThat(outcome.isDisruption()).isTrue();
+  }
+
+  // --- Von Hand beendet (Issue #1197) ---------------------------------------------------------
+
+  /**
+   * Der Fall, um den es geht: Ein Lauf, dessen Prozess weg ist, hat sich nie abgemeldet — die
+   * Kennzeichnung ersetzt die ausgebliebene Meldung, und er ist danach beendet und keine Störung.
+   */
+  @Test
+  void einVonHandBeendeterLaufIstGeschlossenUndKeineStoerung() {
+    var outcome = vonHandBeendet(false, FIXED, List.of(item(1, NightRunState.GREEN, null)));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.CLOSED);
+    assertThat(outcome.decisiveItem()).isNull();
+    assertThat(outcome.noWorkReason()).isNull();
+    assertThat(outcome.abortReason()).isNull();
+    assertThat(outcome.isDisruption()).isFalse();
+  }
+
+  /**
+   * Die Kennzeichnung steht <b>vor</b> der Stillefrist: Sonst wäre der gekennzeichnete Lauf nach
+   * ihrem Ablauf wieder eine Störung, und die Kennzeichnung hielte nur Minuten.
+   */
+  @Test
+  void dieKennzeichnungHaeltAuchUeberDieStilleFristHinaus() {
+    var outcome = vonHandBeendet(false, FIXED.plus(FRIST).plusSeconds(1), List.of());
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.CLOSED);
+  }
+
+  /**
+   * Meldet sich der gekennzeichnete Lauf doch noch vollständig, gilt <b>seine</b> Meldung: Die
+   * Kennzeichnung ersetzte nur die ausgebliebene, und die echte Auskunft ist die bessere.
+   */
+  @Test
+  void einVollstaendigGemeldeterLaufBehaeltSeinenAusgangTrotzKennzeichnung() {
+    var gelungen = vonHandBeendet(true, FIXED, List.of(item(1, NightRunState.GREEN, null)));
+    var rot = vonHandBeendet(true, FIXED, List.of(item(1, NightRunState.RED, null)));
+
+    assertThat(gelungen.verdict()).isEqualTo(NightRunOutcome.Verdict.SUCCEEDED);
+    assertThat(rot.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(rot.decisiveItem()).isNotNull();
+  }
+
+  /** Ein Lauf mit gesetztem {@code closedAt}, gemessen an einem eigenen Bezugszeitpunkt. */
+  private static NightRunOutcome vonHandBeendet(
+      boolean complete, Instant jetzt, List<NightRunItem> items) {
+    return NightRunOutcome.of(
+        complete,
+        FIXED,
+        null,
+        null,
+        NightRunMode.IMPLEMENTATION,
+        items,
+        FIXED,
+        FIXED,
+        jetzt,
+        FRIST);
   }
 }

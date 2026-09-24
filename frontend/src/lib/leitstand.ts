@@ -153,7 +153,9 @@ export function melderAusBefund(befund: NightRunOutcomeView): Melder {
   // ist abgeschlossen und kein Mangel. Den Sinn traegt das Wort daneben, nicht die Farbe. Seit
   // #1185 gilt das fuer jeden Grund: Der Zweig „Rueckfalltext bleibt rot" ist mit #1186 entfallen,
   // weil kein Befund mehr neben einem Grund `FAILED` traegt und er unerreichbar geworden waere.
-  if (befund.verdict === 'NO_WORK') {
+  // Derselbe neutrale Grauton fuer den von Hand beendeten Lauf (Issue #1197): Er ist keine
+  // Stoerung, und was mit ihm geschah, traegt das Wort daneben — nicht die Farbe.
+  if (befund.verdict === 'NO_WORK' || befund.verdict === 'CLOSED') {
     return 'grau'
   }
   if (befund.decisiveItem != null) {

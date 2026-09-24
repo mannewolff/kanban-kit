@@ -313,6 +313,86 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     assertThat(disruptions.openCandidates()).isEmpty();
   }
 
+  // --- Kennzeichnung von Hand (Issue #1197) ---------------------------------------------------
+
+  /** Dieselbe Grenze wie beim Ack-Ziel: Was nicht teilnimmt, kennt der Leitstand nicht. */
+  @Test
+  void derEinzelneLaufKommtNurAusTeilnehmendenProjekten_undNieUnbekannt() {
+    long laufId = lauf(T1, "NIGHT", false);
+
+    assertThat(disruptions.candidate(laufId)).isEmpty();
+
+    teilnahme(true);
+    assertThat(disruptions.candidate(laufId)).isPresent();
+    assertThat(disruptions.candidate(999_999L)).isEmpty();
+  }
+
+  /**
+   * Der Vermerk wird geschrieben und kommt am Kandidaten wieder heraus — beide Listen lesen ihn.
+   */
+  @Test
+  void dasKennzeichnenSchreibtDenVermerk_undDerKandidatTraegtIhn() {
+    long laufId = lauf(T1, "NIGHT", false);
+    teilnahme(true);
+
+    disruptions.close(laufId, userId, LETZTE_MELDUNG);
+
+    assertThat(disruptions.candidate(laufId))
+        .get()
+        .extracting(DisruptionRepository.DisruptionCandidate::closedAt)
+        .isEqualTo(LETZTE_MELDUNG);
+    assertThat(
+            jdbc.queryForObject("SELECT closed_by FROM night_run WHERE id = ?", Long.class, laufId))
+        .isEqualTo(userId);
+  }
+
+  /** Idempotent wie die Quittung: Der erste Kennzeichnende bleibt vermerkt. */
+  @Test
+  void daszweiteKennzeichnenLaesstDenErstenVermerkStehen() {
+    long laufId = lauf(T1, "NIGHT", false);
+    teilnahme(true);
+    long zweiter =
+        id(
+            "INSERT INTO app_user (email, password_hash, display_name)"
+                + " VALUES ('zweiter-schluss@example.com', 'x', 'Z') RETURNING id");
+    disruptions.close(laufId, userId, LETZTE_MELDUNG);
+
+    disruptions.close(laufId, zweiter, LETZTE_MELDUNG.plusSeconds(60));
+
+    assertThat(disruptions.candidate(laufId))
+        .get()
+        .extracting(DisruptionRepository.DisruptionCandidate::closedAt)
+        .isEqualTo(LETZTE_MELDUNG);
+    assertThat(
+            jdbc.queryForObject("SELECT closed_by FROM night_run WHERE id = ?", Long.class, laufId))
+        .isEqualTo(userId);
+  }
+
+  /**
+   * Wie bei der Quittung: Wer gekennzeichnet hat, ist nachrangig — der Vermerk selbst überlebt das
+   * Löschen des Kontos, sonst stünde der Lauf wieder unter den laufenden.
+   */
+  @Test
+  void dasLoeschenDesNutzersLaesstDieKennzeichnungStehen() {
+    long laufId = lauf(T1, "NIGHT", false);
+    teilnahme(true);
+    long geht =
+        id(
+            "INSERT INTO app_user (email, password_hash, display_name)"
+                + " VALUES ('kennzeichner@example.com', 'x', 'K') RETURNING id");
+    disruptions.close(laufId, geht, LETZTE_MELDUNG);
+
+    jdbc.update("DELETE FROM app_user WHERE id = ?", geht);
+
+    assertThat(disruptions.candidate(laufId))
+        .get()
+        .extracting(DisruptionRepository.DisruptionCandidate::closedAt)
+        .isEqualTo(LETZTE_MELDUNG);
+    assertThat(
+            jdbc.queryForObject("SELECT closed_by FROM night_run WHERE id = ?", Long.class, laufId))
+        .isNull();
+  }
+
   private long anzahlQuittungen() {
     Long wert =
         jdbc.queryForObject(

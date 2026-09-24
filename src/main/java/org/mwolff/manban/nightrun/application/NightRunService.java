@@ -408,6 +408,11 @@ public class NightRunService {
         run.abortReason(),
         NightRunOutcome.of(
             run.complete(),
+            // Die Sicht eines Projekts kennt die Kennzeichnung von Hand nicht (Issue #1197): Sie
+            // wird auf dem Plattform-Leitstand gesetzt und dort gelesen; der Lauf-Datensatz dieser
+            // Sicht fuehrt die Spalte nicht. Ein gekennzeichneter Lauf steht hier also weiter als
+            // verstummt — dieselbe Auskunft wie vor der Kennzeichnung, keine falsche.
+            null,
             run.noWorkReason(),
             // Seit Issue #1143 wirkt der Abbruchgrund auf den Ausgang: Ein Lauf, der abbrach, ist
             // nie gelungen. Dieselben Argumente wie in DisruptionService.view — eine Rechnung,

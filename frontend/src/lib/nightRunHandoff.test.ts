@@ -230,11 +230,11 @@ describe('nightRunZustandsText — Rueckfall wertgleich (AK 9 aus #842)', () => 
   })
 })
 
-describe('NIGHT_RUN_VERDICT_TEXT — die Woerter der fuenf Ausgaenge (#1096, #1121)', () => {
-  const VERDICTS = ['SUCCEEDED', 'FAILED', 'WAITING', 'RUNNING', 'NO_WORK'] as const satisfies readonly Verdict[]
+describe('NIGHT_RUN_VERDICT_TEXT — die Woerter der sechs Ausgaenge (#1096, #1121, #1197)', () => {
+  const VERDICTS = ['SUCCEEDED', 'FAILED', 'WAITING', 'RUNNING', 'NO_WORK', 'CLOSED'] as const satisfies readonly Verdict[]
 
-  it('traegt zu jedem der fuenf Ausgaenge einen nicht leeren Text', () => {
-    // Ueber die Schluessel der Tabelle selbst: Ein sechster Eintrag faellt hier auf, statt still
+  it('traegt zu jedem der sechs Ausgaenge einen nicht leeren Text', () => {
+    // Ueber die Schluessel der Tabelle selbst: Ein siebter Eintrag faellt hier auf, statt still
     // mitzulaufen. Ein fehlender bricht schon `tsc` am `Record`.
     expect(Object.keys(NIGHT_RUN_VERDICT_TEXT).toSorted()).toEqual([...VERDICTS].toSorted())
     for (const verdict of VERDICTS) {
@@ -245,6 +245,7 @@ describe('NIGHT_RUN_VERDICT_TEXT — die Woerter der fuenf Ausgaenge (#1096, #11
   // Woertlich, weil Kriterium 11 der fachlichen Quelle (#1086) genau diese Woerter verlangt: Der
   // Ausgang muss ohne Farbwahrnehmung zu lesen sein. `NO_WORK` kam mit Issue #1121 dazu — sein
   // Melder ist dasselbe Grau wie das eines uebergangenen Pakets, den Sinn traegt allein das Wort.
+  // `CLOSED` kam mit Issue #1197 dazu: derselbe graue Melder, und wieder traegt das Wort den Sinn.
   it('ordnet die Ausgaenge ihren Woertern woertlich zu', () => {
     expect(NIGHT_RUN_VERDICT_TEXT).toEqual({
       SUCCEEDED: 'gelungen',
@@ -252,6 +253,7 @@ describe('NIGHT_RUN_VERDICT_TEXT — die Woerter der fuenf Ausgaenge (#1096, #11
       WAITING: 'mit Vorbehalt',
       RUNNING: 'läuft',
       NO_WORK: 'nichts zu tun',
+      CLOSED: 'von Hand beendet',
     })
   })
 })

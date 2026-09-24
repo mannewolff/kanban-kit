@@ -97,6 +97,19 @@ public record NightRunOutcome(
     WAITING,
 
     /**
+     * Von Hand als beendet gekennzeichnet — <b>keine Störung</b> (Issue #1197).
+     *
+     * <p>Der Lauf hat sich nie abgemeldet, weil sein Prozess weg ist; ein Plattform-Admin hat die
+     * ausgebliebene Meldung auf der Oberfläche ersetzt. Das ist kein Mangel des Laufs im Sinne von
+     * {@link #isDisruption()}: Quittieren müsste diese Zeile niemand, sie stünde sonst nur ewig
+     * unter den laufenden.
+     *
+     * <p><b>Ausdrücklich nicht {@link #NO_WORK}:</b> Der Lauf hat nicht „nichts zu tun"
+     * vorgefunden, über seine Arbeit ist gar nichts bekannt. Das Wort dort wäre falsch.
+     */
+    CLOSED,
+
+    /**
      * Abgeschlossen, keine Arbeit vorgefunden — <b>kein Mangel des Laufs</b> (Issue #1121).
      *
      * <p>Der Lauf lief an, fand nichts Freigegebenes und meldete das mit seinem Grund. Wer ein
@@ -128,10 +141,16 @@ public record NightRunOutcome(
    * <p>Die Reihenfolge der Prüfungen trägt eine Aussage:
    *
    * <ol>
-   *   <li><b>Verstummt</b> schlägt alles. Ein unfertiger Lauf ohne Lebenszeichen über die Frist
-   *       hinaus ist nicht gelungen — ohne maßgebliches Paket und ohne Grund, denn er hat sein
-   *       Ergebnis nie gemeldet. Genau <em>auf</em> der Frist ist er noch nicht tot, erst darüber:
-   *       Die Frist ist die zugesagte Stille, nicht ihr Überschreiten.
+   *   <li><b>Von Hand beendet</b> schlägt alles (Issue #1197) — aber nur am unfertigen Lauf. Die
+   *       Kennzeichnung <em>ersetzt</em> die ausgebliebene Abmeldung; sie steht deshalb vor
+   *       „verstummt", sonst wäre ein gekennzeichneter Lauf nach der Stillefrist wieder eine
+   *       Störung und die Kennzeichnung hielte nur Minuten. Meldet sich der Lauf danach doch noch
+   *       vollständig, <b>gilt seine Meldung</b>: Sie ist die bessere Auskunft als der Ersatz für
+   *       sie.
+   *   <li><b>Verstummt</b> schlägt alles Folgende. Ein unfertiger Lauf ohne Lebenszeichen über die
+   *       Frist hinaus ist nicht gelungen — ohne maßgebliches Paket und ohne Grund, denn er hat
+   *       sein Ergebnis nie gemeldet. Genau <em>auf</em> der Frist ist er noch nicht tot, erst
+   *       darüber: Die Frist ist die zugesagte Stille, nicht ihr Überschreiten.
    *   <li><b>Läuft noch</b> schlägt das Übrige. Ein Lauf ohne Abschluss hat noch nichts zu melden —
    *       er wird nicht rot, auch nicht mit einem roten Paket (dieselbe Begründung, die {@code
    *       laufMelder} seit #1069 trägt).
@@ -161,6 +180,9 @@ public record NightRunOutcome(
    * keine Spring-Abhängigkeit erlaubt (Plan #1088 E2).
    *
    * @param complete ob der Lauf sich als abgeschlossen gemeldet hat
+   * @param closedAt Zeitpunkt, zu dem ein Plattform-Admin den Lauf von Hand als beendet
+   *     gekennzeichnet hat (Issue #1197); {@code null} heißt „nicht gekennzeichnet" — der
+   *     Normalfall
    * @param noWorkReason Grund eines Laufs ohne Arbeit; {@code null} oder leer, wenn er gearbeitet
    *     hat
    * @param abortReason Grund eines harten Abbruchs; {@code null}, wenn der Lauf nicht abbrach. Ein
@@ -178,6 +200,7 @@ public record NightRunOutcome(
    */
   public static NightRunOutcome of(
       boolean complete,
+      @Nullable Instant closedAt,
       @Nullable String noWorkReason,
       @Nullable String abortReason,
       NightRunMode mode,
@@ -186,6 +209,9 @@ public record NightRunOutcome(
       @Nullable Instant updatedAt,
       Instant jetzt,
       Duration stilleFrist) {
+    if (!complete && closedAt != null) {
+      return new NightRunOutcome(Verdict.CLOSED, null, null, null);
+    }
     if (!complete && verstummt(startedAt, updatedAt, jetzt, stilleFrist)) {
       return new NightRunOutcome(Verdict.FAILED, null, null, null);
     }
@@ -279,7 +305,8 @@ public record NightRunOutcome(
    * Ob der Befund eine Störung im Sinne von AK 4 ist — sie gehört dann auf den Leitstand.
    *
    * <p>{@link Verdict#NO_WORK} gehört ausdrücklich nicht dazu (Issue #1121): Eine ruhige Nacht muss
-   * niemand quittieren.
+   * niemand quittieren. {@link Verdict#CLOSED} ebenso wenig (Issue #1197): Wer die Zeile gerade
+   * selbst weggeräumt hat, soll sie nicht gleich darauf als Störung wiederfinden.
    */
   public boolean isDisruption() {
     return verdict == Verdict.FAILED || verdict == Verdict.WAITING;

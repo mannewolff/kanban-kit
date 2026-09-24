@@ -1,6 +1,12 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogTitle from '@mui/material/DialogTitle'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
@@ -195,6 +201,11 @@ export default function PlattformLeitstandPage() {
   const [verschwunden, setVerschwunden] = useState<ReadonlySet<string>>(() => new Set())
   const [karteFehler, setKarteFehler] = useState<string | null>(null)
 
+  // Die Rückfrage vor dem Kennzeichnen von Hand (#1197) und ihr Fehlerweg. Der Run steht darin und
+  // nicht nur seine Kennung: Die Rückfrage nennt ihn, und der Fehlertext danach ebenso.
+  const [schlussNachfrage, setSchlussNachfrage] = useState<DisruptionView | null>(null)
+  const [schlussFehler, setSchlussFehler] = useState<string | null>(null)
+
   const vorigeUmschalten = useCallback(() => {
     setVorigeOffen((offen) => !offen)
   }, [])
@@ -259,6 +270,33 @@ export default function PlattformLeitstandPage() {
       ...vorher,
       stoerungen: vorher.stoerungen.filter((s) => s.nightRunId !== stoerung.nightRunId),
     }))
+  }
+
+  /**
+   * Kennzeichnet den Run der Rückfrage von Hand als beendet (Issue #1197).
+   *
+   * **Mit Rückfrage**, anders als das Quittieren daneben (AK 8): Das sagt „gesehen" und ist
+   * folgenlos, die Kennzeichnung ändert den Ausgang eines Laufs.
+   *
+   * **Neu geladen statt örtlich umgehängt**: Ein von Hand beendeter Run wechselt den Bereich — aus
+   * „Aktueller Status" nach „Beendete Runs", mitsamt seinem Ausgang. Ihn im Browser
+   * umzusortieren hieße, die Aufteilung ein zweites Mal zu rechnen; sie liegt beim Server
+   * (`DisruptionService.leitstand`).
+   *
+   * **Ein Fehler erscheint als Meldung**, der Run bleibt stehen — dieselbe Trennung wie beim
+   * misslungenen Kartenabruf (E14): Er sagt etwas über den Klick, nichts über den Leitstand. Der
+   * häufigste Fall ist 409: Die Seite hängt dem Stand bis zu 30 Sekunden hinterher, und der Run
+   * kann sich in der Zwischenzeit selbst abgemeldet haben.
+   */
+  const alsBeendetKennzeichnen = async (lauf: DisruptionView) => {
+    setSchlussFehler(null)
+    setSchlussNachfrage(null)
+    try {
+      await plattformLeitstandApi.alsBeendetKennzeichnen(lauf.nightRunId)
+      laden()
+    } catch {
+      setSchlussFehler(`Run #${lauf.nightRunId} konnte nicht als beendet gekennzeichnet werden.`)
+    }
   }
 
   /**
@@ -333,11 +371,15 @@ export default function PlattformLeitstandPage() {
               gemeldetePakete={sicht.gemeldetePakete}
               verschwunden={verschwunden}
               onKarteOeffnen={(projectId, nummer) => void karteOeffnen(projectId, nummer)}
+              onAlsBeendetKennzeichnen={setSchlussNachfrage}
             />
           </Platte>
           {/* Unter der Platte und nicht in ihr (E14): Die Sektion bleibt vollstaendig stehen — der
               misslungene Abruf sagt etwas ueber den Klick, nichts ueber die gemeldeten Pakete. */}
           {karteFehler !== null && <Alert severity="error">{karteFehler}</Alert>}
+          {/* Aus demselben Grund, und an derselben Stelle: Das misslungene Kennzeichnen (#1197)
+              sagt etwas ueber den Klick, nichts ueber den Stand der Laeufe. */}
+          {schlussFehler !== null && <Alert severity="error">{schlussFehler}</Alert>}
           <Platte
             titel="Beendete Runs"
             werkzeug={<AnzahlWahlTasten wahl={anzahlWahl} onWaehlen={setAnzahlWahl} />}
@@ -394,6 +436,26 @@ export default function PlattformLeitstandPage() {
           schreibt die hellen Variablen des Leitstands in seinen Teilbaum — der Dialog erbte sie
           sonst und stuende im dunklen Erscheinungsbild hell da. `canEdit={false}`: Der Leitstand
           zeigt die Karte, er bearbeitet sie nicht. */}
+      {/* Die Rueckfrage vor dem Kennzeichnen (#1197) — **ausserhalb** des Kupferwarte-Teilbaums aus
+          demselben Grund wie der Kartendialog (E12): Der traegt einen eigenen ThemeProvider, und
+          der Dialog stuende darin hell im dunklen Erscheinungsbild. */}
+      {schlussNachfrage !== null && (
+        <Dialog open onClose={() => setSchlussNachfrage(null)}>
+          <DialogTitle>{`Run #${schlussNachfrage.nightRunId} als beendet kennzeichnen?`}</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {`Der Run von ${schlussNachfrage.projectName} steht danach unter „Beendete Runs" mit dem`}
+              {' Vermerk „von Hand beendet". Seinen Prozess berührt das nicht.'}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSchlussNachfrage(null)}>Abbrechen</Button>
+            <Button onClick={() => void alsBeendetKennzeichnen(schlussNachfrage)}>
+              Kennzeichnen
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
       {detail !== null && (
         <CardDetailModal
           card={detail.card}

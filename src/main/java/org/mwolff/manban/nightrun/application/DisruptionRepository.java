@@ -96,6 +96,27 @@ public interface DisruptionRepository {
   void acknowledge(long nightRunId, long userId, Instant at);
 
   /**
+   * Der Lauf, der von Hand als beendet gekennzeichnet werden soll — mit allem, was sein Ausgang
+   * braucht (Issue #1197); leer, wenn es ihn nicht gibt oder sein Projekt nicht teilnimmt.
+   *
+   * <p>Ein voller {@link DisruptionCandidate} und kein schmales Ziel wie {@link AckTarget}: Ob
+   * gekennzeichnet werden <em>darf</em>, entscheidet der Ausgang des Laufs, und den bildet allein
+   * {@link org.mwolff.manban.nightrun.domain.NightRunOutcome}. Ein eigenes, schmaleres Ziel zwänge
+   * den Dienst, den Ausgang aus weniger Angaben ein zweites Mal zu bestimmen.
+   */
+  Optional<DisruptionCandidate> candidate(long nightRunId);
+
+  /**
+   * Kennzeichnet den Lauf als von Hand beendet (Issue #1197).
+   *
+   * <p><b>Nur an einem noch nicht gekennzeichneten Lauf:</b> Ein zweiter Aufruf lässt den ersten
+   * Kennzeichnenden und seinen Zeitpunkt stehen — dieselbe Idempotenz wie bei {@link #acknowledge}.
+   * Dass der Dienst einen bereits gekennzeichneten Lauf gar nicht erst hierher bringt, ist die eine
+   * Zusage; dass das Schreiben sie nicht überschriebe, die andere.
+   */
+  void close(long nightRunId, long userId, Instant at);
+
+  /**
    * Ein Lauf mit allem, was der Maßstab braucht — als Störungs-Kandidat wie als Lauf einer Nacht.
    *
    * @param nightRunId Lauf-Id, zugleich die anklickbare Kennung der Störzeile
@@ -113,6 +134,9 @@ public interface DisruptionRepository {
    * @param abortReason Grund, warum der Lauf hart abgebrochen ist (Issue #1143); {@code null}, wenn
    *     er nicht abbrach. Der Maßstab braucht ihn, weil ein abgebrochener Lauf nie gelingt — auch
    *     nicht mit lauter grünen Paketen
+   * @param closedAt Zeitpunkt, zu dem ein Plattform-Admin den Lauf von Hand als beendet
+   *     gekennzeichnet hat (Issue #1197); {@code null}, wenn niemand das tat. Der Maßstab braucht
+   *     ihn, weil ein gekennzeichneter Lauf sonst für immer unter den laufenden stünde
    */
   record DisruptionCandidate(
       long nightRunId,
@@ -123,7 +147,8 @@ public interface DisruptionRepository {
       @Nullable Instant updatedAt,
       boolean complete,
       @Nullable String noWorkReason,
-      @Nullable String abortReason) {}
+      @Nullable String abortReason,
+      @Nullable Instant closedAt) {}
 
   /** Der Lauf, auf den sich eine Quittung bezieht. */
   record AckTarget(long nightRunId, long projectId) {}

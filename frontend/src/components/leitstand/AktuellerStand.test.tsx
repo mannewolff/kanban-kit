@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import type { DisruptionView, LaufPaketeView, PaketView } from '../../api/plattformLeitstand'
@@ -45,13 +46,18 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
     pakete: liste,
   })
 
-  const zeige = (laufende: DisruptionView[], gemeldetePakete: LaufPaketeView[]) =>
+  const zeige = (
+    laufende: DisruptionView[],
+    gemeldetePakete: LaufPaketeView[],
+    onAlsBeendetKennzeichnen: (lauf: DisruptionView) => void = () => {},
+  ) =>
     render(
       <AktuellerStand
         laufende={laufende}
         gemeldetePakete={gemeldetePakete}
         verschwunden={new Set()}
         onKarteOeffnen={() => {}}
+        onAlsBeendetKennzeichnen={onAlsBeendetKennzeichnen}
       />,
       { wrapper: MemoryRouter },
     )
@@ -112,5 +118,29 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
 
     const led = within(screen.getByTestId('stand-kopf-8')).getByTestId('led-stahl')
     expect(led).toHaveAttribute('data-puls', 'an')
+  })
+
+  /**
+   * Issue #1197: Die Schaltfläche, mit der ein Plattform-Admin einen hängenden Run wegräumt.
+   *
+   * Ihr Name nennt die Run-Nummer: In einer Sektion mit mehreren laufenden Runs wären zwei
+   * gleichlautende Tasten für ein Vorlesewerkzeug nicht zu unterscheiden.
+   */
+  it('gibt jedem laufenden Run eine Taste, die seine Nummer nennt', async () => {
+    const gemeldet: number[] = []
+    zeige(
+      [laufend(), laufend({ nightRunId: 6 })],
+      [pakete(8, [paket()]), pakete(6, [])],
+      (lauf) => gemeldet.push(lauf.nightRunId),
+    )
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Run #6 als beendet kennzeichnen' }),
+    )
+
+    expect(gemeldet).toEqual([6])
+    expect(
+      screen.getByRole('button', { name: 'Run #8 als beendet kennzeichnen' }),
+    ).toBeInTheDocument()
   })
 })

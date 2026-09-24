@@ -43,6 +43,7 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
   private static final String TOKEN_HEADER = "X-Kanban-Token";
   private static final String LEITSTAND = "/api/admin/leitstand";
   private static final String QUITTIEREN = "/api/admin/disruptions";
+  private static final String SCHLIESSEN = "/api/admin/night-runs";
   private static final String ZONE = "Europe/Berlin";
 
   @Autowired private MockMvc mvc;
@@ -335,6 +336,77 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
     mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(nutzer))
         .andExpect(status().isForbidden());
     mvc.perform(delete(QUITTIEREN + "/" + laufId).cookie(nutzer)).andExpect(status().isForbidden());
+  }
+
+  // --- Von Hand als beendet kennzeichnen (Issue #1197) ----------------------------------------
+
+  /**
+   * Der Fall, um den es geht: Ein laufender Lauf wird gekennzeichnet und steht danach unter den
+   * beendeten — mit Ausgang {@code CLOSED}, nicht unter den laufenden und nicht in der
+   * Störungsliste.
+   *
+   * <p>Hier und nicht nur am Dienst: Der Vermerk reist über die Spalte {@code closed_at} durch
+   * beide Abfragen bis in die Antwort. Fiele er unterwegs weg, stünde der Lauf nach dem nächsten
+   * Abruf wieder als laufend da — genau der Mangel, den die Karte behebt.
+   */
+  @Test
+  void einLaufenderLaufLaesstSichVonHandBeenden_undStehtDanachUnterDenBeendeten() throws Exception {
+    Cookie admin = session("de-schluss@example.com", PlatformRole.ADMIN);
+    long haengt = laufend();
+
+    mvc.perform(post(SCHLIESSEN + "/" + haengt + "/close").cookie(admin))
+        .andExpect(status().isNoContent());
+
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(jsonPath("$.laufende.length()").value(0))
+        // Jüngster zuoberst: Der Lauf aus dem Seed startete eben, der hängende zwei Minuten davor.
+        .andExpect(jsonPath("$.durchgefuehrte.length()").value(2))
+        .andExpect(jsonPath("$.durchgefuehrte[1].nightRunId").value(haengt))
+        .andExpect(jsonPath("$.durchgefuehrte[1].outcome.verdict").value("CLOSED"))
+        .andExpect(jsonPath("$.stoerungen.length()").value(1))
+        .andExpect(jsonPath("$.stoerungen[0].nightRunId").value(laufId));
+
+    // Zwei Admins räumen dieselbe Zeile weg — der zweite darf nichts Rotes sehen.
+    mvc.perform(post(SCHLIESSEN + "/" + haengt + "/close").cookie(admin))
+        .andExpect(status().isNoContent());
+  }
+
+  /**
+   * Ein abgeschlossener Lauf trägt seinen gemeldeten Ausgang — an ihm gibt es nichts zu ersetzen.
+   */
+  @Test
+  void einAbgeschlossenerLaufIstBeimKennzeichnen409() throws Exception {
+    Cookie admin = session("de-409@example.com", PlatformRole.ADMIN);
+
+    mvc.perform(post(SCHLIESSEN + "/" + laufId + "/close").cookie(admin))
+        .andExpect(status().isConflict());
+  }
+
+  @Test
+  void einUnbekannterLaufIstBeimKennzeichnen404() throws Exception {
+    Cookie admin = session("de-404-schluss@example.com", PlatformRole.ADMIN);
+
+    mvc.perform(post(SCHLIESSEN + "/999999/close").cookie(admin)).andExpect(status().isNotFound());
+  }
+
+  /** AK 3, für den neuen Endpunkt: Ohne Plattform-Rolle ADMIN kennzeichnet niemand. */
+  @Test
+  void ohnePlattformRolleAdminIstDasKennzeichnen403() throws Exception {
+    Cookie nutzer = session("de-nutzer-schluss@example.com", PlatformRole.USER);
+    long haengt = laufend();
+
+    mvc.perform(post(SCHLIESSEN + "/" + haengt + "/close").cookie(nutzer))
+        .andExpect(status().isForbidden());
+  }
+
+  /** Ein Lauf, der arbeitet: unfertig, mit frischem Lebenszeichen. */
+  private long laufend() {
+    return id(
+        "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms, processed_count,"
+            + " skipped_count, unparsed_count, created_at, updated_at, origin, complete)"
+            + " VALUES (?, now() - interval '2 minute', 'IMPLEMENTATION', 'NIGHT', 1, 0, 0, 0,"
+            + " now(), now(), 'TOKEN', false) RETURNING id",
+        projectId);
   }
 
   /**

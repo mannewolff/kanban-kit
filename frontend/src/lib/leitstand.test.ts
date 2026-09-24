@@ -602,12 +602,12 @@ describe('melderAusBefund — der Melder eines Laufs aus seinem Befund (#1096)',
   })
 
   /**
-   * AK 6 aus #1121 ueber **alle** fuenf Ausgaenge: Ein Lauf ohne Arbeit mit gemeldetem Grund ist
-   * `NO_WORK`, und der ist nirgends rot. Die Tabelle geht ueber die Schluessel der Wortliste und
-   * nicht ueber eine eigene Aufzaehlung — ein sechster Ausgang faellt hier auf, statt still
-   * mitzulaufen.
+   * AK 6 aus #1121 ueber **alle** sechs Ausgaenge: Ein Lauf ohne Arbeit mit gemeldetem Grund ist
+   * `NO_WORK`, und der ist nirgends rot; der von Hand beendete Lauf (#1197) ebenso wenig. Die
+   * Tabelle geht ueber die Schluessel der Wortliste und nicht ueber eine eigene Aufzaehlung — ein
+   * siebter Ausgang faellt hier auf, statt still mitzulaufen.
    */
-  it('ordnet jedem der fuenf Ausgaenge seinen Melder zu, und nur FAILED ist rot', () => {
+  it('ordnet jedem der sechs Ausgaenge seinen Melder zu, und nur FAILED ist rot', () => {
     const je = Object.fromEntries(
       (Object.keys(NIGHT_RUN_VERDICT_TEXT) as Verdict[]).map((verdict) => [
         verdict,
@@ -626,6 +626,7 @@ describe('melderAusBefund — der Melder eines Laufs aus seinem Befund (#1096)',
       WAITING: 'zinnob',
       RUNNING: 'stahl',
       NO_WORK: 'grau',
+      CLOSED: 'grau',
     })
   })
 

@@ -114,6 +114,19 @@ describe('plattformLeitstandApi (#1083, drei Listen seit #1098)', () => {
   })
 
   /**
+   * Issue #1197: `POST` und nicht `DELETE` — geloescht wird nichts, der Lauf bekommt einen
+   * Vermerk. Der eigene Pfadstamm `/night-runs` sagt dasselbe: eine Aussage ueber den Lauf, nicht
+   * ueber die Sichtung einer Stoerung.
+   */
+  it('alsBeendetKennzeichnen ruft POST /api/admin/night-runs/{laufId}/close', async () => {
+    const f = spyFetch()
+
+    await plattformLeitstandApi.alsBeendetKennzeichnen(5)
+
+    expect(lastCall(f)).toEqual({ url: '/api/admin/night-runs/5/close', method: 'POST' })
+  })
+
+  /**
    * Der Pfadstamm ist eine Sicherheitsentscheidung des Servers (Plan #1072 E24): Nur unter
    * `/api/admin` verlangt die Filterkette eine Sitzung und lässt kein Token zu. Ein Umbenennen auf
    * `/api/platform` fiele hier nicht auf, deshalb steht der Pfad ausdrücklich im Test.
@@ -123,10 +136,12 @@ describe('plattformLeitstandApi (#1083, drei Listen seit #1098)', () => {
 
     await plattformLeitstandApi.leitstand('Europe/Berlin')
     await plattformLeitstandApi.quittieren(7)
+    await plattformLeitstandApi.alsBeendetKennzeichnen(7)
 
     expect(f.mock.calls.map(([url]) => url)).toEqual([
       '/api/admin/leitstand?zone=Europe%2FBerlin',
       '/api/admin/disruptions/7',
+      '/api/admin/night-runs/7/close',
     ])
   })
 })

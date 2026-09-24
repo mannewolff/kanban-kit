@@ -1,11 +1,14 @@
 package org.mwolff.manban.nightrun.infrastructure.persistence;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.DisruptionRepository;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.springframework.jdbc.core.RowMapper;
@@ -38,7 +41,8 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
   private static final String KANDIDATEN =
       """
       SELECT r.id AS night_run_id, r.project_id, p.name AS project_name, r.mode,
-             r.started_at, r.updated_at, r.complete, r.no_work_reason, r.abort_reason
+             r.started_at, r.updated_at, r.complete, r.no_work_reason, r.abort_reason,
+             r.closed_at
         FROM night_run r
         JOIN project p ON p.id = r.project_id
         LEFT JOIN night_run_disruption_ack a ON a.night_run_id = r.id
@@ -82,7 +86,8 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
   private static final String LAEUFE_DER_NACHT =
       """
       SELECT r.id AS night_run_id, r.project_id, p.name AS project_name, r.mode,
-             r.started_at, r.updated_at, r.complete, r.no_work_reason, r.abort_reason
+             r.started_at, r.updated_at, r.complete, r.no_work_reason, r.abort_reason,
+             r.closed_at
         FROM night_run r
         JOIN project p ON p.id = r.project_id
        WHERE r.kind = 'NIGHT'
@@ -91,6 +96,38 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
                OR (r.complete = false
                    AND COALESCE(r.updated_at, r.started_at) >= :lebenszeichenAb) )
        ORDER BY r.started_at DESC, r.id DESC
+      """;
+
+  /**
+   * Ein einzelner Lauf in der Form der beiden Listen-Abfragen (Issue #1197).
+   *
+   * <p>Dieselben Spalten und dieselbe Teilnahme-Bedingung wie oben — nur auf eine Kennung
+   * eingegrenzt. <b>Ohne</b> Gattungsfilter: Eine interaktive Sitzung steht gar nicht erst auf dem
+   * Leitstand, und der Ausgang weist sie hier ohnehin ab.
+   */
+  private static final String EIN_LAUF =
+      """
+      SELECT r.id AS night_run_id, r.project_id, p.name AS project_name, r.mode,
+             r.started_at, r.updated_at, r.complete, r.no_work_reason, r.abort_reason,
+             r.closed_at
+        FROM night_run r
+        JOIN project p ON p.id = r.project_id
+       WHERE r.id = :nightRunId
+         AND p.dashboard_participation = true
+      """;
+
+  /**
+   * Die Kennzeichnung von Hand (Issue #1197).
+   *
+   * <p>Die Bedingung {@code closed_at IS NULL} ist die Idempotenz — dieselbe Zusage, die beim
+   * Quittieren {@code ON CONFLICT DO NOTHING} trägt: Der erste Kennzeichnende bleibt vermerkt.
+   */
+  private static final String KENNZEICHNUNG =
+      """
+      UPDATE night_run
+         SET closed_at = :at, closed_by = :userId
+       WHERE id = :nightRunId
+         AND closed_at IS NULL
       """;
 
   /** Lauf und Teilnahme in einer Abfrage — beide Verneinungen enden beim Aufrufer als 404. */
@@ -116,19 +153,30 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
 
   /** Beide Abfragen liefern dieselben Spalten — ein Mapper, damit sie nicht auseinanderlaufen. */
   private static final RowMapper<DisruptionCandidate> KANDIDAT =
-      (rs, zeile) -> {
-        OffsetDateTime updatedAt = rs.getObject("updated_at", OffsetDateTime.class);
-        return new DisruptionCandidate(
-            rs.getLong("night_run_id"),
-            rs.getLong("project_id"),
-            rs.getString("project_name"),
-            NightRunMode.valueOf(rs.getString("mode")),
-            rs.getObject("started_at", OffsetDateTime.class).toInstant(),
-            updatedAt == null ? null : updatedAt.toInstant(),
-            rs.getBoolean("complete"),
-            rs.getString("no_work_reason"),
-            rs.getString("abort_reason"));
-      };
+      (rs, zeile) ->
+          new DisruptionCandidate(
+              rs.getLong("night_run_id"),
+              rs.getLong("project_id"),
+              rs.getString("project_name"),
+              NightRunMode.valueOf(rs.getString("mode")),
+              rs.getObject("started_at", OffsetDateTime.class).toInstant(),
+              zeitpunkt(rs, "updated_at"),
+              rs.getBoolean("complete"),
+              rs.getString("no_work_reason"),
+              rs.getString("abort_reason"),
+              zeitpunkt(rs, "closed_at"));
+
+  /**
+   * Ein Zeitpunkt, der fehlen darf — {@code null} bleibt {@code null}.
+   *
+   * <p>Eigene Methode seit Issue #1197: Der Mapper führt mit {@code closed_at} zwei solche Spalten,
+   * und zweimal derselbe Dreisatz lief beim nächsten Feld auseinander.
+   */
+  @Nullable
+  private static Instant zeitpunkt(ResultSet rs, String spalte) throws SQLException {
+    OffsetDateTime wert = rs.getObject(spalte, OffsetDateTime.class);
+    return wert == null ? null : wert.toInstant();
+  }
 
   private final NamedParameterJdbcTemplate jdbc;
 
@@ -164,6 +212,24 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
             (rs, zeile) -> new AckTarget(rs.getLong("night_run_id"), rs.getLong("project_id")))
         .stream()
         .findFirst();
+  }
+
+  @Override
+  public Optional<DisruptionCandidate> candidate(long nightRunId) {
+    return jdbc
+        .query(EIN_LAUF, new MapSqlParameterSource("nightRunId", nightRunId), KANDIDAT)
+        .stream()
+        .findFirst();
+  }
+
+  @Override
+  public void close(long nightRunId, long userId, Instant at) {
+    jdbc.update(
+        KENNZEICHNUNG,
+        new MapSqlParameterSource()
+            .addValue("nightRunId", nightRunId)
+            .addValue("userId", userId)
+            .addValue("at", OffsetDateTime.ofInstant(at, ZoneOffset.UTC)));
   }
 
   @Override

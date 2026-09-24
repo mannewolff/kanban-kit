@@ -223,6 +223,49 @@ public class DisruptionService {
     repository.acknowledge(nightRunId, userId, clock.instant());
   }
 
+  /**
+   * Kennzeichnet einen hängenden Lauf von Hand als beendet (Issue #1197).
+   *
+   * <p><b>Warum es das gibt:</b> Ein Lauf, dessen Prozess weg ist, meldet sich nie ab und stünde
+   * für immer unter den laufenden. Warum er sich nicht abmeldet, ist ein eigenes Problem — hier
+   * wird nur die ausgebliebene Meldung ersetzt. Den Prozess berührt das nicht, er ist ohnehin weg.
+   *
+   * <p><b>Nur ein laufender Lauf</b> lässt sich kennzeichnen. Ein verstummter ist heute eine
+   * Störung und bleibt es: Für ihn gibt es das Quittieren, und das sagt etwas anderes. Ein
+   * abgeschlossener trägt seinen gemeldeten Ausgang.
+   *
+   * <p><b>Idempotent</b> wie das Quittieren: Ein bereits gekennzeichneter Lauf ist kein Fehler,
+   * sondern das Ziel des Aufrufs — zwei Admins können dieselbe Zeile gleichzeitig wegräumen. Der
+   * erste Kennzeichnende bleibt vermerkt.
+   *
+   * <p>Der Ausgang kommt aus {@link NightRunOutcome} und wird hier nicht nachgerechnet (dieselbe
+   * Zusage wie in {@link #leitstand}): Was der Leitstand als laufend zeigt, ist genau das, was sich
+   * kennzeichnen lässt. Die Pakete werden dafür geholt, obwohl ein unfertiger Lauf sie für seinen
+   * Ausgang nicht braucht — mit einer leeren Liste wäre es derselbe Maßstab nur unter einer
+   * Annahme, die beim nächsten Feinschliff der Rangfolge stillschweigend bräche.
+   *
+   * @throws AdminAccessDeniedException wenn der Aufrufer kein Plattform-Admin ist (403)
+   * @throws DisruptionNotFoundException wenn der Lauf unbekannt ist oder sein Projekt nicht
+   *     teilnimmt (404)
+   * @throws NightRunNotRunningException wenn der Lauf weder läuft noch schon gekennzeichnet ist
+   *     (409)
+   */
+  @Transactional
+  public void close(long userId, long nightRunId) {
+    requirePlatformAdmin(userId);
+    DisruptionRepository.DisruptionCandidate kandidat =
+        repository.candidate(nightRunId).orElseThrow(DisruptionNotFoundException::new);
+    Verdict ausgang =
+        view(kandidat, runs.findItemsByRunIds(List.of(nightRunId))).outcome().verdict();
+    if (ausgang == Verdict.CLOSED) {
+      return;
+    }
+    if (ausgang != Verdict.RUNNING) {
+      throw new NightRunNotRunningException();
+    }
+    repository.close(nightRunId, userId, clock.instant());
+  }
+
   private void requirePlatformAdmin(long userId) {
     if (!platformAdminChecker.isPlatformAdmin(userId)) {
       throw new AdminAccessDeniedException();
@@ -256,6 +299,9 @@ public class DisruptionService {
         k.startedAt(),
         NightRunOutcome.of(
             k.complete(),
+            // Issue #1197: Die Kennzeichnung eines Admins ersetzt die ausgebliebene Abmeldung —
+            // der Lauf steht danach unter den beendeten statt ewig unter den laufenden.
+            k.closedAt(),
             k.noWorkReason(),
             // Dieselben Argumente wie in NightRunService.view (Issue #1143): Ein Lauf, der seinen
             // Abbruch meldete, ist in beiden Auswertungswegen gescheitert — nicht hier gelungen

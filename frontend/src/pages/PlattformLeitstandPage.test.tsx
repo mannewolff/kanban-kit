@@ -19,7 +19,7 @@ vi.mock('../api/plattformLeitstand', async () => {
   const echt = await vi.importActual<typeof import('../api/plattformLeitstand')>(
     '../api/plattformLeitstand',
   )
-  return { ...echt, plattformLeitstandApi: { leitstand: vi.fn(), quittieren: vi.fn() } }
+  return { ...echt, plattformLeitstandApi: { leitstand: vi.fn(), quittieren: vi.fn(), alsBeendetKennzeichnen: vi.fn() } }
 })
 
 // Nur `byNumber` wird ersetzt (Issue #1174): Der Kartenabruf beim Klick auf eine Nummer ist der
@@ -120,6 +120,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     api.quittieren.mockResolvedValue(undefined)
+    api.alsBeendetKennzeichnen.mockResolvedValue(undefined)
     // Der gemerkte Klappzustand (#1152) läuft über einen eigenen Speicher je Test statt über das
     // native `localStorage`: Unter Node 26 ist das nativ vorhandene deaktiviert (siehe
     // `test/setup.ts`), und ein Test, der lokal an dieser Stelle grün ist und in CI rot, prüft
@@ -798,10 +799,15 @@ describe('PlattformLeitstandPage (#1083)', () => {
         expect(nummer).not.toContainElement(verweis)
         expect(verweis).not.toContainElement(nummer)
 
-        // Gegangen wird der ganze Weg von vorn: erst die Kennung im Kopf des Laufs, dann die beiden
-        // Halte der Paketzeile, dann die Tasten der nächsten Platte — genau zwei Halte in der Zeile.
+        // Gegangen wird der ganze Weg von vorn: erst die Kennung im Kopf des Laufs, dann seine
+        // Taste (#1197), dann die beiden Halte der Paketzeile, dann die Tasten der nächsten Platte
+        // — genau zwei Halte in der Zeile.
         await userEvent.tab()
         expect(within(screen.getByTestId('stand-kopf-8')).getByRole('link')).toHaveFocus()
+        await userEvent.tab()
+        expect(
+          screen.getByRole('button', { name: 'Run #8 als beendet kennzeichnen' }),
+        ).toHaveFocus()
         await userEvent.tab()
         expect(nummer).toHaveFocus()
         await userEvent.tab()
@@ -1971,6 +1977,119 @@ describe('PlattformLeitstandPage (#1083)', () => {
       await waitFor(() => expect(screen.queryByTestId('stoerung-9')).not.toBeInTheDocument())
       expect(zeilenIn(screen.getByTestId('stoergruppe-1'))).toEqual(['stoerung-7'])
       expect(within(screen.getByTestId('stoergruppe-kopf-1')).getByText('1 Störung')).toBeInTheDocument()
+    })
+  })
+
+  /**
+   * Issue #1197: Einen hängenden Run von Hand als beendet kennzeichnen.
+   *
+   * Anders als das Quittieren daneben (AK 8) kommt hier eine **Rückfrage**: Das Quittieren sagt
+   * „gesehen" und ist folgenlos, die Kennzeichnung ändert den Ausgang eines Laufs.
+   */
+  describe('Hängenden Run von Hand beenden (#1197)', () => {
+    const haengt = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
+      nightRunId: 8,
+      projectId: 9,
+      projectName: 'Mein Projekt',
+      mode: 'CHAIN',
+      startedAt: '2026-09-21T01:10:00Z',
+      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+      ...extra,
+    })
+
+    const mitLaufendem = () =>
+      sicht({ laufende: [haengt()], gemeldetePakete: [{ nightRunId: 8, pakete: [] }] })
+
+    const tasteKlicken = async () =>
+      userEvent.click(
+        await screen.findByRole('button', { name: 'Run #8 als beendet kennzeichnen' }),
+      )
+
+    /** Abbrechen ruft nichts auf — die Rückfrage ist eine echte Frage, kein Hinweis. */
+    it('ruft beim Abbrechen nichts auf und lässt den Run stehen', async () => {
+      api.leitstand.mockResolvedValue(mitLaufendem())
+
+      zeigeSeite()
+      await tasteKlicken()
+
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).getByText('Run #8 als beendet kennzeichnen?')).toBeInTheDocument()
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Abbrechen' }))
+
+      expect(api.alsBeendetKennzeichnen).not.toHaveBeenCalled()
+      expect(screen.getByTestId('stand-lauf-8')).toBeInTheDocument()
+    })
+
+    /** Escape ist derselbe Weg hinaus wie „Abbrechen" — eine Rückfrage muss man verlassen können. */
+    it('schließt die Rückfrage mit Escape, ohne etwas aufzurufen', async () => {
+      api.leitstand.mockResolvedValue(mitLaufendem())
+
+      zeigeSeite()
+      await tasteKlicken()
+      await screen.findByRole('dialog')
+      await userEvent.keyboard('{Escape}')
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(api.alsBeendetKennzeichnen).not.toHaveBeenCalled()
+    })
+
+    it('ruft beim Bestätigen den Endpunkt genau einmal und lädt den Leitstand neu', async () => {
+      api.leitstand.mockResolvedValue(mitLaufendem())
+      api.alsBeendetKennzeichnen.mockResolvedValue(undefined)
+
+      zeigeSeite()
+      await tasteKlicken()
+      await userEvent.click(
+        within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kennzeichnen' }),
+      )
+
+      await waitFor(() => expect(api.leitstand).toHaveBeenCalledTimes(2))
+      expect(api.alsBeendetKennzeichnen).toHaveBeenCalledTimes(1)
+      expect(api.alsBeendetKennzeichnen).toHaveBeenCalledWith(8)
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    })
+
+    /**
+     * Ein Fehler erscheint als Meldung, der Run bleibt stehen — dieselbe Trennung wie beim
+     * misslungenen Kartenabruf (#1174, E14): Der Fehler sagt etwas über den Klick, nichts über
+     * den Leitstand.
+     */
+    it('zeigt einen Fehler als Meldung und lässt den Run stehen', async () => {
+      api.leitstand.mockResolvedValue(mitLaufendem())
+      api.alsBeendetKennzeichnen.mockRejectedValue(new ApiError(409, 'Conflict'))
+
+      zeigeSeite()
+      await tasteKlicken()
+      await userEvent.click(
+        within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kennzeichnen' }),
+      )
+
+      expect(await screen.findByText('Run #8 konnte nicht als beendet gekennzeichnet werden.')).toBeInTheDocument()
+      expect(screen.getByTestId('stand-lauf-8')).toBeInTheDocument()
+    })
+
+    /** Der gekennzeichnete Run steht danach grau unter „Beendete Runs" mit seinem Wort. */
+    it('zeigt den gekennzeichneten Run unter Beendete Runs mit „von Hand beendet"', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          durchgefuehrte: [
+            haengt({
+              outcome: {
+                abortReason: null,
+                verdict: 'CLOSED',
+                decisiveItem: null,
+                noWorkReason: null,
+              },
+            }),
+          ],
+        }),
+      )
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-8')
+      expect(within(zeile).getByText('von Hand beendet')).toBeInTheDocument()
+      expect(within(zeile).getByTestId('led-grau')).toBeInTheDocument()
     })
   })
 })

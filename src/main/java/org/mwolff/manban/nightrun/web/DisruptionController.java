@@ -8,6 +8,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -55,5 +56,21 @@ class DisruptionController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   void acknowledge(@AuthenticationPrincipal Long userId, @PathVariable long laufId) {
     disruptions.acknowledge(userId, laufId);
+  }
+
+  /**
+   * Kennzeichnet einen hängenden Lauf von Hand als beendet (Issue #1197).
+   *
+   * <p><b>{@code POST} und nicht {@code DELETE}</b> wie das Quittieren daneben: Gelöscht wird
+   * nichts — der Lauf bleibt mitsamt seinen Paketen stehen und bekommt einen Vermerk. Der eigene
+   * Pfadstamm {@code /night-runs} sagt dasselbe: Dies ist eine Aussage über den <em>Lauf</em>,
+   * während die Quittung eine über die Sichtung einer Störung ist.
+   *
+   * <p>404, 409 und 403 liefert {@link DisruptionService}.
+   */
+  @PostMapping("/night-runs/{laufId}/close")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void close(@AuthenticationPrincipal Long userId, @PathVariable long laufId) {
+    disruptions.close(userId, laufId);
   }
 }

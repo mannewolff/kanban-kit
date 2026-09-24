@@ -186,8 +186,12 @@ export interface NightRunUsageView {
  *
  * `NO_WORK` kam mit Issue #1121 dazu: ein Lauf, der anlief und nichts Freigegebenes fand. Er ist
  * abgeschlossen und **kein Mangel** — weder rot noch eine Stoerung.
+ *
+ * `CLOSED` kam mit Issue #1197 dazu: ein haengender Lauf, den ein Plattform-Admin von Hand als
+ * beendet gekennzeichnet hat. Auch er ist **kein Mangel** — die Kennzeichnung ersetzt nur die
+ * ausgebliebene Abmeldung eines Prozesses, der laengst weg ist.
  */
-export type Verdict = 'SUCCEEDED' | 'FAILED' | 'WAITING' | 'RUNNING' | 'NO_WORK'
+export type Verdict = 'SUCCEEDED' | 'FAILED' | 'WAITING' | 'RUNNING' | 'NO_WORK' | 'CLOSED'
 
 /**
  * Der Befund eines Laufs, wie der Server ihn seit Issue #1078 mitschickt.

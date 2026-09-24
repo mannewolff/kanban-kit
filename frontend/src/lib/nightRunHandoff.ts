@@ -84,6 +84,10 @@ export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = {
  * ist — zurueckgestellt oder auf einen Menschen wartend. Nicht zu verwechseln mit
  * `NightRunState.YELLOW`, das auf `FAILED` abbildet.
  *
+ * <p>`CLOSED` heisst „von Hand beendet" (Issue #1197): der haengende Lauf, dessen Prozess weg ist
+ * und den ein Plattform-Admin selbst weggeraeumt hat. Ausdruecklich nicht „nichts zu tun" — der
+ * Lauf hat gar nichts vorgefunden oder gemeldet, ueber seine Arbeit ist nichts bekannt.
+ *
  * <p>`NO_WORK` heisst „nichts zu tun" (Issue #1121): der Lauf, der anlief und nichts Freigegebenes
  * fand. Das Wort traegt hier den ganzen Sinn — seine Farbe ist dasselbe Grau wie das eines
  * uebergangenen Pakets, und Grau allein sagte nicht, dass es nichts zu tun gab.
@@ -94,6 +98,7 @@ export const NIGHT_RUN_VERDICT_TEXT: Record<Verdict, string> = {
   WAITING: 'mit Vorbehalt',
   RUNNING: 'läuft',
   NO_WORK: 'nichts zu tun',
+  CLOSED: 'von Hand beendet',
 }
 
 /**

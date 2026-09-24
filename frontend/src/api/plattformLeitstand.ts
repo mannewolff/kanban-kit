@@ -106,4 +106,14 @@ export const plattformLeitstandApi = {
    */
   quittieren: (laufId: number) =>
     apiFetch<void>(`/api/admin/disruptions/${laufId}`, { method: 'DELETE' }),
+  /**
+   * Kennzeichnet einen haengenden Lauf von Hand als beendet (Issue #1197).
+   *
+   * `POST` und nicht `DELETE` wie das Quittieren daneben: Geloescht wird nichts — der Lauf bleibt
+   * mitsamt seinen Paketen stehen und bekommt einen Vermerk. Idempotent: Ein zweiter Aufruf ist
+   * kein Fehler. Ein Lauf, der laengst beendet ist, antwortet 409 — die Seite haengt dem Stand bis
+   * zu 30 Sekunden hinterher.
+   */
+  alsBeendetKennzeichnen: (laufId: number) =>
+    apiFetch<void>(`/api/admin/night-runs/${laufId}/close`, { method: 'POST' }),
 }
