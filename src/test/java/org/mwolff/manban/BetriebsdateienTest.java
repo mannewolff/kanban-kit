@@ -10,9 +10,15 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Hält die ausgelieferten Betriebsdateien an den beiden Zusicherungen fest, die ein Betreiber ihnen
- * entnimmt: Das Produktions-Overlay schaltet den Entwicklungs-Schalter fest aus, und die
- * Umgebungs-Vorlage liefert keinen funktionierenden Sitzungsschlüssel mit (Issue #889).
+ * Hält die ausgelieferten Betriebsdateien an den Zusicherungen fest, die ein Betreiber ihnen
+ * entnimmt: Das Produktions-Overlay schaltet den Entwicklungs-Schalter fest aus, die
+ * Umgebungs-Vorlage liefert keinen funktionierenden Sitzungsschlüssel mit (Issue #889), und das
+ * automatische Deployment startet den Stack mit dem Sicherungs-Overlay (Issue #1198).
+ *
+ * <p>Das Sicherungs-Overlay {@code docker-compose.backup.yml} ist der einzige Schalter der
+ * Sicherung: Fehlt es in einem Compose-Aufruf des Deploy-Workflows, legt der Deploy {@code
+ * postgres} ohne WAL-Archivierung und {@code manban-api} ohne {@code MANBAN_BACKUP_ENABLED} neu an
+ * — die Sicherung fällt stumm aus (Plan #825, E6).
  *
  * <p>Der Schalter {@code MANBAN_DEV_MODE} steht im Overlay bewusst als fester Wert und <b>nicht</b>
  * als {@code ${…}}-Interpolation: Ein Wert aus der {@code .env} wäre dieselbe Lücke mit einem
@@ -31,6 +37,12 @@ class BetriebsdateienTest {
 
   /** Vorlage, die ein Betreiber nach {@code .env} kopiert. */
   private static final Path UMGEBUNGS_VORLAGE = Path.of(".env.example");
+
+  /** Workflow, der bei jedem Push auf {@code production} den Stack neu startet. */
+  private static final Path DEPLOY_WORKFLOW = Path.of(".github/workflows/deploy.yml");
+
+  /** Einziger Schalter der Sicherung — siehe Klassen-Javadoc. */
+  private static final String SICHERUNGS_OVERLAY = "-f docker-compose.backup.yml";
 
   /** Standardwert des lokalen Stacks — in der Vorlage wäre er ein gesetzter Schlüssel. */
   private static final String UNSICHERER_STANDARDWERT = "dev-only-insecure-secret-change-me";
@@ -60,6 +72,18 @@ class BetriebsdateienTest {
     assertThat(vorlage)
         .as("%s darf den unsicheren Standardwert auch nicht im Fließtext nennen", UMGEBUNGS_VORLAGE)
         .doesNotContain(UNSICHERER_STANDARDWERT);
+  }
+
+  @Test
+  void deployWorkflowGibtJedemComposeAufrufDasSicherungsOverlayMit() throws IOException {
+    List<String> composeAufrufe = wirksameZeilenMit(DEPLOY_WORKFLOW, "docker compose");
+
+    assertThat(composeAufrufe)
+        .as("Compose-Aufrufe in %s — ein leerer Treffer wäre kein Beweis", DEPLOY_WORKFLOW)
+        .isNotEmpty();
+    assertThat(composeAufrufe)
+        .as("jeder Compose-Aufruf in %s trägt das Sicherungs-Overlay", DEPLOY_WORKFLOW)
+        .allSatisfy(zeile -> assertThat(zeile).contains(SICHERUNGS_OVERLAY));
   }
 
   /**
