@@ -55,13 +55,13 @@ class KanbanCompatControllerTest {
   }
 
   @Test
-  void create_withBoundPrincipal_delegates_defaultsIdeaStoredToFalse() {
-    // Given: fehlendes ideaStored (null) -> false an den Service
+  void create_withBoundPrincipal_delegates_defaultsDirectToFalse() {
+    // Given: fehlendes direct (null) -> false an den Service
     Created created = new Created(42L, 7, true);
     var request =
         new KanbanCompatController.CreateItemRequest(
             "Title", "Body", "todo", null, null, null, null, null);
-    when(service.create(PRINCIPAL, "Title", "Body", "todo", false, null, false, null, null, null))
+    when(service.create(PRINCIPAL, "Title", "Body", "todo", null, false, null, null, null))
         .thenReturn(created);
 
     // When
@@ -72,13 +72,13 @@ class KanbanCompatControllerTest {
   }
 
   @Test
-  void create_withIdeaStoredTrue_delegatesFlag() {
-    // Given: ideaStored=true wird an den Service durchgereicht
-    Created created = new Created(43L, 8, true);
+  void create_withDirectTrue_delegatesFlag() {
+    // Given: direct=true entscheidet im Service die Strenge der Spaltenauflösung (Issue #1203)
+    Created created = new Created(45L, 10, true);
     var request =
         new KanbanCompatController.CreateItemRequest(
-            "Idee", "Body", "todo", true, null, null, null, null);
-    when(service.create(PRINCIPAL, "Idee", "Body", "todo", true, null, false, null, null, null))
+            "Title", "Body", "READY", null, null, true, null, null);
+    when(service.create(PRINCIPAL, "Title", "Body", "READY", null, true, null, null, null))
         .thenReturn(created);
 
     // When
@@ -86,6 +86,25 @@ class KanbanCompatControllerTest {
 
     // Then
     assertThat(result).isSameAs(created);
+  }
+
+  @Test
+  void create_acceptsIdeaStored_butDoesNotPassItOn() {
+    // Given (Issue #1203): `ideaStored` bleibt im Vertrag zulaessig — aeltere Kit-Versionen senden
+    // es —, erreicht den Service aber nicht mehr. Der Aufruf ist feldgleich mit dem ohne das Feld.
+    Created created = new Created(43L, 8, true);
+    var withFlag =
+        new KanbanCompatController.CreateItemRequest(
+            "Idee", "Body", "todo", true, null, null, null, null);
+    when(service.create(PRINCIPAL, "Idee", "Body", "todo", null, false, null, null, null))
+        .thenReturn(created);
+
+    // When
+    Created result = controller.create(boundAuthentication(), withFlag, null);
+
+    // Then: kein Fehler, dieselbe Delegation wie ohne das Feld
+    assertThat(result).isSameAs(created);
+    verify(service).create(PRINCIPAL, "Idee", "Body", "todo", null, false, null, null, null);
   }
 
   @Test
@@ -95,7 +114,7 @@ class KanbanCompatControllerTest {
     var request =
         new KanbanCompatController.CreateItemRequest(
             "Title", "Body", null, null, null, null, null, null);
-    when(service.create(PRINCIPAL, "Title", "Body", null, false, null, false, null, null, "k-1"))
+    when(service.create(PRINCIPAL, "Title", "Body", null, null, false, null, null, "k-1"))
         .thenReturn(created);
 
     // When

@@ -32,10 +32,10 @@ import org.springframework.test.web.servlet.MockMvc;
  * End-to-End der vorgegebenen Kartennummer beim Ingest (#565): Ein Import aus einem anderen Tracker
  * behält die Identität seiner Issues, statt neue Nummern zu bekommen.
  *
- * <p>Deckt die vier Ablehnungspfade mit ab, weil bei einer Migration jeder von ihnen
- * stillschweigend die falsche Identität erzeugen würde: fehlendes {@code direct}, fehlender {@code
- * externalKey}, belegte Nummer (auch im Papierkorb) und ein Projekt, das schon vor dem Import
- * gewachsen war.
+ * <p>Deckt die Ablehnungspfade mit ab, weil bei einer Migration jeder von ihnen stillschweigend die
+ * falsche Identität erzeugen würde: fehlender {@code externalKey}, belegte Nummer (auch im
+ * Papierkorb) und ein Projekt, das schon vor dem Import gewachsen war. Die frühere Pflicht {@code
+ * direct=true} ist mit dem Ideen-Pool entfallen (Issue #1203, E8) und hat hier ihre Gegenprobe.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
@@ -160,7 +160,10 @@ class KanbanCompatGivenNumberIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void givenNumberWithoutDirectIsBadRequest() throws Exception {
+  void givenNumberWithoutDirectIsAccepted() throws Exception {
+    // Seit Issue #1203 (E8) entfaellt die Vorbedingung „vorgegebene Nummer verlangt direct=true":
+    // Jeder Ingest legt board-gebunden an, es gibt keinen Weg mehr, der keine Nummer vergeben
+    // koennte. Die Karte behaelt ihre Identitaet aus dem fremden Tracker.
     Fixture f = fixture("gn-nodirect");
 
     mvc.perform(
@@ -169,6 +172,21 @@ class KanbanCompatGivenNumberIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content(
                     "{\"title\":\"X\",\"externalKey\":\"github#1\",\"number\":1,\"direct\":false}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.number").value(1));
+  }
+
+  @Test
+  void givenNumberWithoutDirectStillNeedsAnExternalKey() throws Exception {
+    // Die verbleibende Vorbedingung gilt auf beiden Wegen: ohne Schluessel legte der erste Aufruf
+    // eine schluessellose Karte an, und ab dem zweiten lehnte die Vorbedingung denselben Import ab.
+    Fixture f = fixture("gn-nodirect-nokey");
+
+    mvc.perform(
+            post("/api/kanban/items")
+                .header("X-Kanban-Token", f.token)
+                .contentType("application/json")
+                .content("{\"title\":\"X\",\"number\":1}"))
         .andExpect(status().isBadRequest());
   }
 

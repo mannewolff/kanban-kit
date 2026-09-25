@@ -131,7 +131,7 @@ class KanbanCompatUpdateIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void updateRejectsUnknownForeignAndPoolCards() throws Exception {
+  void updateRejectsUnknownAndForeignCards() throws Exception {
     Fixture f = fixture("update-scope");
 
     // Unbekannte id.
@@ -143,11 +143,12 @@ class KanbanCompatUpdateIT extends AbstractIntegrationTest {
     mvc.perform(updateRequest(f.token, foreignCard, "Neu", "Neu")).andExpect(status().isNotFound());
     assertThat(titleOf(foreignCard)).isEqualTo("Fremd");
 
-    // Board-lose Pool-Idee (Ingest ohne direct=true).
-    long poolId = poolIngest(f.token, "Pool-Idee", "Pool-Rumpf");
-    mvc.perform(updateRequest(f.token, poolId, "Neu", "Neu")).andExpect(status().isNotFound());
-    assertThat(titleOf(poolId)).isEqualTo("Pool-Idee");
-    assertThat(descriptionOf(poolId)).isEqualTo("Pool-Rumpf");
+    // Gegenprobe: eine ohne direct ingestierte Karte liegt seit Issue #1203 auf dem gebundenen
+    // Board und ist damit schreibbar — vorher war sie board-los und antwortete mit 404.
+    long ownCard = ingestWithoutDirect(f.token, "Ohne direct", "Rumpf");
+    mvc.perform(updateRequest(f.token, ownCard, "Neu", "Neuer Rumpf")).andExpect(status().isOk());
+    assertThat(titleOf(ownCard)).isEqualTo("Neu");
+    assertThat(descriptionOf(ownCard)).isEqualTo("Neuer Rumpf");
   }
 
   @Test
@@ -281,7 +282,8 @@ class KanbanCompatUpdateIT extends AbstractIntegrationTest {
     return json.readTree(created).get("id").asLong();
   }
 
-  private long poolIngest(String token, String title, String body) throws Exception {
+  /** Ingest ohne {@code direct} — seit Issue #1203 dieselbe Anlage, nur nachsichtig aufgelöst. */
+  private long ingestWithoutDirect(String token, String title, String body) throws Exception {
     String created =
         mvc.perform(
                 post("/api/kanban/items")

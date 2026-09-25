@@ -242,7 +242,7 @@ class KanbanCompatIdempotencyIT extends AbstractIntegrationTest {
   // --- Fixtures ------------------------------------------------------------
 
   private Created createVia(KanbanPrincipal principal, String key) {
-    return service.create(principal, "Rennen", null, null, false, null, false, null, null, key);
+    return service.create(principal, "Rennen", null, null, null, false, null, null, key);
   }
 
   private KanbanPrincipal principal(String token) {

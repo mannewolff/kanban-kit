@@ -168,14 +168,14 @@ class KanbanCompatIT extends AbstractIntegrationTest {
   // --- Tests ----------------------------------------------------------------
 
   @Test
-  void fullClientFlow_ingestToPool_thenPlan_thenListMoveComment() throws Exception {
+  void fullClientFlow_ingest_thenListMoveComment() throws Exception {
     Cookie session = loginAs("kanban-owner@example.com");
     long projectId = createProject("kanban-owner@example.com", "Dogfood");
     long boardId = createBoard(session, projectId, "Board");
     String token = boundToken(session, projectId, boardId);
 
-    // Ingest über den board-gebundenen Token landet seit Entscheidung B als board-lose Pool-Idee,
-    // NICHT direkt im Board. Zurück kommt die id der Idee (keine board-scoped Nummer).
+    // Ingest über den board-gebundenen Token legt seit Issue #1203 direkt auf dem Board an — in
+    // der genannten Spalte. Zurück kommen id und projektweite Nummer der Karte.
     String created =
         mvc.perform(
                 post("/api/kanban/items")
@@ -186,28 +186,14 @@ class KanbanCompatIT extends AbstractIntegrationTest {
                             + "\"column\":\"BACKLOG\"}"))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").exists())
+            .andExpect(jsonPath("$.number").isNumber())
             .andReturn()
             .getResponse()
             .getContentAsString();
-    long ideaId = json.readTree(created).get("id").asLong();
+    long cardId = json.readTree(created).get("id").asLong();
 
-    // Die Idee liegt im Projekt-Pool und ist (noch) nicht in den kanbancompat-Board-Items sichtbar.
-    mvc.perform(get("/api/projects/" + projectId + "/ideas").cookie(session))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(1))
-        .andExpect(jsonPath("$[0].id").value(ideaId));
-    assertThat(kanbanItems(token).get("BACKLOG")).isEmpty();
-
-    // Einplanen (Cookie-API) macht daraus eine board-gebundene Karte; erst dann sehen die
-    // kanbancompat-Operationen (list/move/comment) das Item.
-    mvc.perform(
-            put("/api/cards/" + ideaId + "/plan")
-                .cookie(session)
-                .contentType("application/json")
-                .content("{\"targetBoardId\":" + boardId + "}"))
-        .andExpect(status().isOk());
-
-    // list -> gruppiert, Item im BACKLOG mit type "card"
+    // Die Karte ist sofort für die kanbancompat-Operationen (list/move/comment) da — sie liegt
+    // nicht mehr an einem zweiten Ablageort, den ein Mensch erst einplanen müsste.
     JsonNode items = kanbanItems(token);
     assertThat(items.has("BACKLOG")).isTrue();
     assertThat(items.has("READY")).isTrue();
@@ -217,24 +203,24 @@ class KanbanCompatIT extends AbstractIntegrationTest {
     JsonNode item = items.get("BACKLOG").get(0);
     assertThat(item.get("title").asText()).isEqualTo("Erste Aufgabe");
     assertThat(item.get("body").asText()).isEqualTo("Beschreibung");
-    assertThat(item.get("id").asLong()).isEqualTo(ideaId);
+    assertThat(item.get("id").asLong()).isEqualTo(cardId);
     assertThat(item.get("column").asText()).isEqualTo("BACKLOG");
     assertThat(item.get("type").asText()).isEqualTo("card");
 
     // move -> IN_PROGRESS
     mvc.perform(
-            put("/api/kanban/items/" + ideaId + "/move")
+            put("/api/kanban/items/" + cardId + "/move")
                 .header("X-Kanban-Token", token)
                 .contentType("application/json")
                 .content("{\"column\":\"IN_PROGRESS\",\"position\":0}"))
         .andExpect(status().isOk());
     JsonNode afterMove = kanbanItems(token);
     assertThat(afterMove.get("BACKLOG")).isEmpty();
-    assertThat(afterMove.get("IN_PROGRESS").get(0).get("id").asLong()).isEqualTo(ideaId);
+    assertThat(afterMove.get("IN_PROGRESS").get(0).get("id").asLong()).isEqualTo(cardId);
 
     // comment
     mvc.perform(
-            post("/api/kanban/items/" + ideaId + "/comments")
+            post("/api/kanban/items/" + cardId + "/comments")
                 .header("X-Kanban-Token", token)
                 .contentType("application/json")
                 .content("{\"body\":\"Ein Kommentar\"}"))
@@ -328,8 +314,9 @@ class KanbanCompatIT extends AbstractIntegrationTest {
    * Abdeckungs-Gate, sobald board-gebundene Token die übrige API nicht mehr erreichen.
    *
    * <p>Reichweite wie beim Kommentar-Lesepfad: eigenes Board 200, Karte eines anderen Boards
-   * desselben Projekts 404 (Board-Guard, nicht Mitgliedschaft), board-lose Pool-Idee 404,
-   * ungebundenes Token 409.
+   * desselben Projekts 404 (Board-Guard, nicht Mitgliedschaft), ungebundenes Token 409. Eine
+   * board-lose Karte gibt es über diesen Weg seit Issue #1203 nicht mehr — jeder Ingest legt
+   * board-gebunden an, und die neue Karte ist damit selbst über ihr Token lesbar.
    */
   @Test
   void activity_isReadableForOwnBoard_andScopedToTheBoundBoard() throws Exception {
@@ -357,20 +344,23 @@ class KanbanCompatIT extends AbstractIntegrationTest {
             get("/api/kanban/items/" + foreignCard + "/activity").header("X-Kanban-Token", token))
         .andExpect(status().isNotFound());
 
-    // Board-lose Pool-Idee: trägt gar kein Board und liegt damit außerhalb jeder Bindung — 404.
+    // Eine über den Ingest angelegte Karte liegt auf dem gebundenen Board und ist damit über
+    // dasselbe Token lesbar (Issue #1203) — vorher war sie board-los und antwortete mit 404.
     String created =
         mvc.perform(
                 post("/api/kanban/items")
                     .header("X-Kanban-Token", token)
                     .contentType("application/json")
-                    .content("{\"title\":\"Pool-Idee\"}"))
+                    .content("{\"title\":\"Per Ingest\"}"))
             .andExpect(status().isCreated())
             .andReturn()
             .getResponse()
             .getContentAsString();
-    long ideaId = json.readTree(created).get("id").asLong();
-    mvc.perform(get("/api/kanban/items/" + ideaId + "/activity").header("X-Kanban-Token", token))
-        .andExpect(status().isNotFound());
+    long ingestedId = json.readTree(created).get("id").asLong();
+    mvc.perform(
+            get("/api/kanban/items/" + ingestedId + "/activity").header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].origin").value("TOKEN"));
 
     // Ungebundenes Token: 409 wie bei allen übrigen Compat-Endpunkten.
     mvc.perform(
@@ -416,14 +406,14 @@ class KanbanCompatIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void ingest_landsInProjectIdeaPool_notOnBoard() throws Exception {
+  void ingest_landsOnTheBoundBoard_neverBoardless() throws Exception {
     Cookie session = loginAs("kanban-idea@example.com");
     long projectId = createProject("kanban-idea@example.com", "Idea-Dogfood");
     long boardId = createBoard(session, projectId, "Idea-Board");
     String token = boundToken(session, projectId, boardId);
 
-    // Entscheidung B: jeder board-token-Ingest landet als board-lose Pool-Idee. Das ideaStored-Feld
-    // ist gegenstandslos (hier bewusst weggelassen — das Ergebnis ist mit/ohne Feld identisch).
+    // Issue #1203: jeder board-token-Ingest legt board-gebunden an. Das ideaStored-Feld ist
+    // gegenstandslos (hier bewusst weggelassen — das Ergebnis ist mit/ohne Feld identisch).
     String created =
         mvc.perform(
                 post("/api/kanban/items")
@@ -431,26 +421,24 @@ class KanbanCompatIT extends AbstractIntegrationTest {
                     .contentType("application/json")
                     .content("{\"title\":\"Als Idee\"}"))
             .andExpect(status().isCreated())
-            // #402: die Ingest-Antwort enthält die sofort vergebene projektweite Nummer.
+            // #402: die Ingest-Antwort enthält die vergebene projektweite Nummer.
             .andExpect(jsonPath("$.number").isNumber())
             .andReturn()
             .getResponse()
             .getContentAsString();
-    long ideaId = json.readTree(created).get("id").asLong();
-    int ideaNumber = json.readTree(created).get("number").asInt();
+    long cardId = json.readTree(created).get("id").asLong();
+    int cardNumber = json.readTree(created).get("number").asInt();
 
-    // Akzeptanzkriterium: erscheint in GET /api/projects/{id}/ideas mit derselben Nummer ...
-    mvc.perform(get("/api/projects/" + projectId + "/ideas").cookie(session))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(1))
-        .andExpect(jsonPath("$[0].id").value(ideaId))
-        .andExpect(jsonPath("$[0].number").value(ideaNumber))
-        .andExpect(jsonPath("$[0].title").value("Als Idee"))
-        .andExpect(jsonPath("$[0].ideaStored").value(true));
-    // ... aber NICHT in GET /api/boards/{id}/cards.
+    // Akzeptanzkriterium: keine angelegte Karte ist board-los — jede traegt Board, Spalte, Nummer.
+    long firstColumn = firstColumnId(session, boardId);
     mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(session))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(0));
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0].id").value(cardId))
+        .andExpect(jsonPath("$[0].number").value(cardNumber))
+        .andExpect(jsonPath("$[0].title").value("Als Idee"))
+        .andExpect(jsonPath("$[0].boardId").value(boardId))
+        .andExpect(jsonPath("$[0].columnId").value(firstColumn));
   }
 
   @Test
@@ -595,9 +583,8 @@ class KanbanCompatIT extends AbstractIntegrationTest {
                 .content("{\"column\":\"DONE\",\"position\":0}"))
         .andExpect(status().isNotFound());
 
-    // Eigene Karte auf board1 über die Cookie-API anlegen (ein Ingest ginge seit Entscheidung B in
-    // den Pool, nicht aufs Board): sonst wären alle Spalten leer und die Non-Leak-Prüfung unten
-    // würde vacuously durchlaufen, ohne wirklich etwas zu beweisen (Sonar S5841).
+    // Eigene Karte auf board1 über die Cookie-API anlegen: sonst wären alle Spalten leer und die
+    // Non-Leak-Prüfung unten würde vacuously durchlaufen, ohne etwas zu beweisen (Sonar S5841).
     long col1 = firstColumnId(session, board1);
     mvc.perform(
             post("/api/boards/" + board1 + "/cards")

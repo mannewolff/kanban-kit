@@ -78,12 +78,12 @@ class KanbanCompatController {
           @Nullable
           @Size(max = MAX_IDEMPOTENCY_KEY)
           String idempotencyKey) {
+    // request.ideaStored() wird bewusst nicht weitergereicht — siehe CreateItemRequest.
     return service.create(
         principal(authentication),
         request.title(),
         request.body(),
         request.column(),
-        Boolean.TRUE.equals(request.ideaStored()),
         request.externalKey(),
         Boolean.TRUE.equals(request.direct()),
         request.number(),
@@ -191,14 +191,19 @@ class KanbanCompatController {
       @NotBlank @Size(max = 300) String title,
       @Size(max = TextLimits.MAX_TEXT) String body,
       String column,
+      // Seit Issue #1203 wirkungslos und bewusst im Vertrag belassen: Jeder Ingest legt
+      // board-gebunden an, es gibt keinen Ideen-Pool mehr, in den dieses Feld routen koennte.
+      // Aelteren Kit-Versionen ist das Anlegen ausdruecklich zugesagt — ein 400 auf ein bekanntes
+      // Feld waere der Bruch dieser Zusage. Der Service bekommt es deshalb nicht mehr zu sehen.
       @Nullable Boolean ideaStored,
       // Idempotenz-Schlüssel (#534); Normalisierung (trim/Kappung) macht der Service.
       @Nullable String externalKey,
-      // Opt-in-Board-Routing (#535): true = direkt aufs Token-Board statt in den Ideen-Pool.
-      // Die Zielspalte kommt seit #569 aus `column` (ohne Angabe: erste Spalte, DONE abgelehnt).
+      // Seit Issue #1203 entscheidet `direct` nur noch, wie streng `column` aufgeloest wird: mit
+      // direct ist ein nicht auflösbarer Schluessel ein 400, ohne direct greift die erste Spalte
+      // (E8a). Ohne `column` gilt auf beiden Wegen die erste Spalte, DONE wird stets abgelehnt.
       @Nullable Boolean direct,
       // Vorgegebene projektweite Nummer (#565), fuer den Import aus einem anderen Tracker.
-      // Verlangt direct=true und einen externalKey; der Service lehnt beides sonst ab.
+      // Verlangt einen externalKey; der Service lehnt sie sonst ab.
       // Obergrenze: nextCardNumber rechnet MAX(number)+1 auf einer integer-Spalte — ohne Deckel
       // legt ein einziger Import mit Integer.MAX_VALUE jede spaetere Anlage im Projekt lahm.
       @Nullable @Positive @Max(CardNumbers.MAX) Integer number,

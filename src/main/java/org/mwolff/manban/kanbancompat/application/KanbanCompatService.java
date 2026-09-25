@@ -42,7 +42,7 @@ public class KanbanCompatService {
   /** Kanban-Key der Backlog-Spalte; auch Fallback bei unbekannter Spalten-Zuordnung. */
   private static final String BACKLOG = "BACKLOG";
 
-  /** Kanban-Key der Done-Spalte; beim direct-Ingest ausgeschlossen (#569). */
+  /** Kanban-Key der Done-Spalte; beim Ingest ausgeschlossen (#569, E8b). */
   private static final String DONE = "DONE";
 
   /** Feste Reihenfolge der Kanban-Spalten-Keys (spiegelt das tbx.mjs-Protokoll). */
@@ -118,23 +118,19 @@ public class KanbanCompatService {
   }
 
   /**
-   * Nimmt einen kanbancompat-Ingest entgegen und legt ihn als board-lose Pool-Idee im Projekt des
-   * gebundenen Boards an; das Token-Board wird als Zielboard notiert ({@code target_board_id}).
+   * Nimmt einen kanbancompat-Ingest entgegen und legt ihn als Karte auf dem Board an, an das der
+   * Zugang gebunden ist (Issue #1203, E8). Zurückgegeben werden {@code id} und die projektweite
+   * {@code number} der Karte (#402), damit CLI/Adapter direkt {@code #N} zeigen können.
    *
-   * <p>Entscheidung B: Jeder board-token-Ingest landet bewusst im Projekt-Ideen-Pool statt direkt
-   * im Board-Backlog, damit der Night-Modus (der aus <em>Ready</em> zieht) nichts autonom
-   * abarbeitet, was nicht bewusst eingeplant wurde. Im Pool-Zweig sind {@code column} und {@code
-   * ideaStored} gegenstandslos — sie bleiben aus Rückwärtskompatibilität im Request, werden dort
-   * aber ignoriert. Mit {@code direct} bestimmt {@code column} seit #569 die Zielspalte; {@code
-   * ideaStored} bleibt auch dann wirkungslos. Zurückgegeben werden {@code id} und die sofort
-   * vergebene projektweite {@code number} der neuen Pool-Idee (#402), damit CLI/Adapter direkt
-   * {@code #N} zeigen können.
+   * <p><strong>Die Leitplanke gegen autonomes Abarbeiten bleibt, nur an anderer Stelle:</strong>
+   * Ein Ingest ohne {@code direct} landet in der ersten Spalte des gebundenen Boards, nicht in
+   * <em>Ready</em>. Der Nachtlauf zieht aus Ready, arbeitet also weiterhin nur ab, was ein Mensch
+   * dorthin gestellt hat. Vorher lag eine solche Karte board-los im Ideen-Pool; mit dem Pool
+   * entfällt dieser Weg (Plan #1199).
    *
-   * <p>Die zurückgegebene {@code id} taugt bewusst <em>nicht</em> als Kommentar-Ziel (#472): Eine
-   * board-lose Pool-Idee liegt auf keinem Board, {@code GET/POST /items/{id}/comments} verlangt
-   * aber genau das und antwortet für sie mit 404. Erst das Einplanen auf ein Board macht die Karte
-   * kommentierbar. Für Aufrufer ist das folgenlos, weil die IDs dort aus {@link #items} stammen —
-   * und die Liste enthält nur eingeplante Karten.
+   * <p>{@code direct} entscheidet nur noch, wie streng ein angegebenes {@code column} aufgelöst
+   * wird — siehe {@link #zielSpalteId}. {@code ideaStored} bleibt im Request zulässig, hat aber
+   * keine Wirkung mehr; die Begründung steht am Anfrage-DTO des Controllers.
    *
    * <p><strong>Idempotenz (Issue #1001, E7/E8):</strong> Mit einem {@code idempotencyKey} tritt die
    * Anlage je Projekt und Schlüssel genau einmal ein; jede Wiederholung bekommt dieselbe Antwort.
@@ -147,7 +143,6 @@ public class KanbanCompatService {
       String title,
       @Nullable String body,
       @Nullable String column,
-      boolean ideaStored,
       @Nullable String externalKey,
       boolean direct,
       @Nullable Integer number,
@@ -158,33 +153,20 @@ public class KanbanCompatService {
     String key = normalizeExternalKey(externalKey);
     String idempotent = key == null ? normalizeIdempotencyKey(idempotencyKey) : null;
     if (idempotent == null) {
-      return createNow(
-          principal, boardId, projectId, title, body, column, key, direct, number, derivedFrom);
+      return createNow(principal, boardId, title, body, column, key, direct, number, derivedFrom);
     }
     return idempotency.execute(
         projectId,
         idempotent,
         "POST /items",
         Created.class,
-        () ->
-            createNow(
-                principal,
-                boardId,
-                projectId,
-                title,
-                body,
-                column,
-                key,
-                direct,
-                number,
-                derivedFrom));
+        () -> createNow(principal, boardId, title, body, column, key, direct, number, derivedFrom));
   }
 
   /** Die eigentliche Anlage, mit oder ohne Idempotenz-Schlüssel davor. */
   private Created createNow(
       KanbanPrincipal principal,
       long boardId,
-      long projectId,
       String title,
       @Nullable String body,
       @Nullable String column,
@@ -192,31 +174,19 @@ public class KanbanCompatService {
       boolean direct,
       @Nullable Integer number,
       @Nullable Integer derivedFrom) {
-    requireImportPreconditions(number, key, direct);
-    CardService.IdeaCreation result;
-    if (direct) {
-      // Opt-in-Board-Routing (#535): für dedizierte Sammel-Boards (z. B. Sonar-Findings) landet
-      // die Karte direkt auf dem Token-Board statt im Pool — seit #569 in der angeforderten
-      // Spalte, ohne Angabe weiterhin in der ersten. Die Pool-Leitplanke aus Entscheidung B
-      // bleibt der Default: was von außen kommt, plant sonst ein Mensch ein.
-      //
-      // Die Spalte wird VOR dem Duplikat-Check in createDirect aufgelöst. Damit meldet ein
-      // ungültiges `column` denselben Fehler, egal ob der Schlüssel schon eine Karte trifft —
-      // sonst hinge die Fehlermeldung davon ab, ob zufällig schon eine existiert.
-      long columnId = directColumnId(boardId, column);
-      result =
-          cardService.createDirect(
-              principal.userId(),
-              boardId,
-              columnId,
-              new CardService.DirectCard(title, body, key, number, derivedFrom));
-    } else {
-      result =
-          cardService.createProjectIdea(
-              principal.userId(), projectId, title, body, boardId, key, derivedFrom);
-    }
-    // Seit #402 vergibt createProjectIdea sofort eine Nummer; requireNonNull macht das fuer
-    // NullAway explizit (CardView.number() ist @Nullable fuer Legacy-Ideen ohne Nummer).
+    requireImportPreconditions(number, key);
+    // Die Spalte wird VOR dem Duplikat-Check in createDirect aufgelöst. Damit meldet ein
+    // ungültiges `column` denselben Fehler, egal ob der Schlüssel schon eine Karte trifft —
+    // sonst hinge die Fehlermeldung davon ab, ob zufällig schon eine existiert.
+    long columnId = zielSpalteId(boardId, column, direct);
+    CardService.IdeaCreation result =
+        cardService.createDirect(
+            principal.userId(),
+            boardId,
+            columnId,
+            new CardService.DirectCard(title, body, key, number, derivedFrom));
+    // Jede board-gebundene Karte trägt eine Nummer; requireNonNull macht das fuer NullAway
+    // explizit (CardView.number() ist bis zum Pool-Rückbau noch @Nullable).
     return new Created(
         result.view().id(), Objects.requireNonNull(result.view().number()), result.created());
   }
@@ -225,10 +195,11 @@ public class KanbanCompatService {
    * Ersetzt die Abhängigkeiten einer Karte des gebundenen Projekts (Issue #566) — der Weg, auf dem
    * ein Migrations-Script die {@code Issue #N}-Verweise eines fremden Trackers überträgt.
    *
-   * <p>Der Guard prüft das <em>Projekt</em> des gebundenen Boards, nicht das Board selbst. Ein
-   * Ingest ohne {@code direct} legt board-lose Pool-Ideen an (Entscheidung B); der board-bezogene
-   * Guard von {@link #move} und {@link #comment} antwortet für sie mit 404, und genau diese Karten
-   * will das Script gleich danach verknüpfen.
+   * <p>Der Guard prüft das <em>Projekt</em> des gebundenen Boards, nicht das Board selbst: Ein
+   * Migrations-Script verknüpft Karten, die es über mehrere Boards eines Projekts verteilt hat, und
+   * der board-bezogene Guard von {@link #move} und {@link #comment} antwortete für die Karten der
+   * übrigen Boards mit 404. Vor Issue #1203 war der Anlass derselbe, nur mit board-losen Pool-Ideen
+   * als Fall.
    *
    * <p>Ersetzen-Semantik: Die übergebene Liste tritt an die Stelle der vorhandenen Verweise. Damit
    * ist ein wiederholter Aufruf mit derselben Liste folgenlos, ohne dass es eine Sonderbehandlung
@@ -243,54 +214,57 @@ public class KanbanCompatService {
   }
 
   /**
-   * Zielspalte für den direct-Ingest (#569).
+   * Zielspalte des Ingests (#569, seit #1203 für jeden Ingest).
    *
    * <p>Fehlt {@code column} (oder ist es JSON-{@code null}), bleibt es bei der ersten Spalte — das
-   * ist das Verhalten seit #535, und bestehende Aufrufer wie der Sonar-Sync senden keines. Ein
-   * leerer oder nur aus Leerzeichen bestehender String ist dagegen ein <em>angegebener</em>,
-   * ungültiger Schlüssel und wird abgelehnt; {@link #columnIdForKey} erledigt das mit.
+   * ist das Verhalten seit #535, und bestehende Aufrufer wie der Sonar-Sync senden keines.
    *
-   * <p><strong>DONE ist ausgeschlossen.</strong> Eine von außen hereingereichte Karte, die sofort
-   * als erledigt gilt, umginge die Messung des Spaltenverlaufs: Sie hätte nie eine andere Spalte
-   * gesehen, und die Durchlaufzeit rechnete auf einem Verlauf ohne Vorgeschichte. Der reale Bedarf
-   * (Ready) ist davon nicht berührt. (Der Zeitstempel selbst wäre seit Issue #1200 da — {@code
-   * doCreate} setzt {@code movedToDoneAt} beim Anlegen in eine Done-Spalte —, an diesem Guard
-   * ändert das nichts.)
+   * <p><strong>{@code direct} entscheidet nur noch die Strenge (E8a).</strong> Mit {@code
+   * direct=true} bleibt ein nicht auflösbarer Schlüssel — unbekannter Key, leerer String, oder ein
+   * Key ohne passende Spalte auf diesem Board — ein Requestfehler, wie seit #569. Ohne {@code
+   * direct} greift stattdessen die erste Spalte: {@code .claude/kit/board.mjs} sendet {@code
+   * column: "BACKLOG"} bedingungslos und lässt für eine Idee nur {@code direct} weg. Ein 400 träfe
+   * damit genau die ältere Kit-Version, der die Zusage gilt, weiter anlegen zu können — auf einem
+   * Board ohne Backlog-Spalte, an dem der Aufrufer nichts ändern kann.
+   *
+   * <p><strong>DONE ist ausgeschlossen</strong>, auf beiden Wegen: Ein Werkzeug von außen legt
+   * nichts an, was bereits erledigt ist — dass eine Karte fertig ist, stellt ein Mensch auf dem
+   * Board fest. Das ist eine fachliche Regel und kein Auflösungsfehler, deshalb führt sie auch ohne
+   * {@code direct} zur Ablehnung statt zum Rückfall auf die erste Spalte (E8b).
    */
-  private long directColumnId(long boardId, @Nullable String column) {
+  private long zielSpalteId(long boardId, @Nullable String column, boolean direct) {
     if (column == null) {
       return boardService.firstColumn(boardId).id();
     }
-    if (DONE.equals(column.trim().toUpperCase(Locale.ROOT))) {
+    if (DONE.equals(normalizeColumnKey(column))) {
       throw new InvalidKanbanColumnException(
-          "Karten koennen nicht direkt in DONE angelegt werden — die Done-Aufbewahrung erfasst nur"
-              + " Karten, die dorthin verschoben wurden.");
+          "Karten koennen nicht in DONE angelegt werden — dass eine Karte fertig ist, stellt ein"
+              + " Mensch auf dem Board fest.");
     }
-    return columnIdForKey(boardId, column);
+    if (direct) {
+      return columnIdForKey(boardId, column);
+    }
+    return findColumnIdForKey(boardId, column)
+        .orElseGet(() -> boardService.firstColumn(boardId).id());
   }
 
   /**
-   * Beide Pflichten, die an einer vorgegebenen Nummer hängen (#565).
-   *
-   * <p>{@code direct} ist Pflicht, weil der Ideen-Pool für ungesichtete Rohanforderungen gedacht
-   * ist — eine migrierte Karte hat ihren Platz bereits.
+   * Die Pflicht, die an einer vorgegebenen Nummer hängt (#565).
    *
    * <p>Der {@code externalKey} ist Pflicht, weil die Import-Vorbedingung („keine Karte ohne
    * Schlüssel") sich sonst selbst aushebelt: Der erste Aufruf ohne Schlüssel legt eine
    * schlüssellose Karte an, und ab dem zweiten lehnt die Vorbedingung denselben Import ab.
    *
-   * <p>Beides sind Requestfehler (400), keine Zustandskonflikte — derselbe Aufruf ist zu keinem
+   * <p>Die frühere zweite Pflicht ({@code direct=true}) ist mit dem Ideen-Pool entfallen (#1203,
+   * E8): Es gibt keinen Anlegeweg mehr, der eine Nummer nicht vergeben könnte.
+   *
+   * <p>Es ist ein Requestfehler (400), kein Zustandskonflikt — derselbe Aufruf ist zu keinem
    * Zeitpunkt und gegen kein Projekt gültig.
    */
   private static void requireImportPreconditions(
-      @Nullable Integer number, @Nullable String normalizedKey, boolean direct) {
+      @Nullable Integer number, @Nullable String normalizedKey) {
     if (number == null) {
       return;
-    }
-    if (!direct) {
-      throw new InvalidNumberedIngestException(
-          "Eine vorgegebene Nummer verlangt direct=true — Pool-Ideen werden nicht nummeriert"
-              + " uebernommen.");
     }
     if (normalizedKey == null) {
       throw new InvalidNumberedIngestException(
@@ -494,20 +468,43 @@ public class KanbanCompatService {
     return map;
   }
 
+  /** Strenge Auflösung: jeder nicht auflösbare Schlüssel ist ein Requestfehler. */
   private long columnIdForKey(long boardId, @Nullable String key) {
-    String wanted = key == null ? "" : key.trim().toUpperCase(Locale.ROOT);
+    String wanted = normalizeColumnKey(key);
     if (!COLUMNS.contains(wanted)) {
       throw new InvalidKanbanColumnException("Unbekannte Kanban-Spalte: " + key);
     }
-    Map<Long, String> keyByColumn = keyByColumn(boardId);
-    return keyByColumn.entrySet().stream()
-        .filter(e -> e.getValue().equals(wanted))
-        .map(Map.Entry::getKey)
-        .findFirst()
+    return columnWithKey(boardId, wanted)
         .orElseThrow(
             () ->
                 new InvalidKanbanColumnException(
                     "Board " + boardId + " hat keine Spalte für " + wanted));
+  }
+
+  /**
+   * Nachsichtige Auflösung für den Ingest ohne {@code direct} (E8a): leer, wenn der Schlüssel
+   * unbekannt ist <em>oder</em> das Board keine Spalte dafür hat. Der Aufrufer entscheidet, was
+   * dann gilt — hier ist es die erste Spalte, siehe {@link #zielSpalteId}.
+   */
+  private Optional<Long> findColumnIdForKey(long boardId, String key) {
+    String wanted = normalizeColumnKey(key);
+    if (!COLUMNS.contains(wanted)) {
+      return Optional.empty();
+    }
+    return columnWithKey(boardId, wanted);
+  }
+
+  /** Die erste Spalte des Boards, die diesen Kanban-Key trägt. */
+  private Optional<Long> columnWithKey(long boardId, String wanted) {
+    return keyByColumn(boardId).entrySet().stream()
+        .filter(e -> e.getValue().equals(wanted))
+        .map(Map.Entry::getKey)
+        .findFirst();
+  }
+
+  /** Normalisiert einen eingehenden Spalten-Schlüssel; {@code null} und leer werden zu "". */
+  private static String normalizeColumnKey(@Nullable String key) {
+    return key == null ? "" : key.trim().toUpperCase(Locale.ROOT);
   }
 
   /** Normalisierter Namensabgleich auf einen Kanban-Key; leer, wenn kein Treffer. */

@@ -3,7 +3,6 @@ package org.mwolff.manban.kanbancompat;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -55,14 +54,7 @@ class KanbanCompatExternalKeyIT extends AbstractIntegrationTest {
     assertThat(secondId).isEqualTo(firstId);
     assertThat(countByKey(projectId, "sonar:AAA")).isEqualTo(1);
 
-    // Auch eine verworfene Karte unterdrückt den Re-Ingest weiterhin: erst aufs Board einplanen
-    // (Pool-Ideen sind board-los und kennen keinen Papierkorb-Weg), dann in den Papierkorb.
-    mvc.perform(
-            put("/api/cards/" + firstId + "/plan")
-                .cookie(owner)
-                .contentType("application/json")
-                .content("{\"targetBoardId\":%d}".formatted(board.get("id").asLong())))
-        .andExpect(status().isOk());
+    // Auch eine verworfene Karte unterdrückt den Re-Ingest weiterhin.
     mvc.perform(delete("/api/cards/" + firstId).cookie(owner)).andExpect(status().isNoContent());
     long thirdId = ingest(token, "Finding A (nach Verwerfen)", "sonar:AAA", false);
     assertThat(thirdId).isEqualTo(firstId);
@@ -98,7 +90,7 @@ class KanbanCompatExternalKeyIT extends AbstractIntegrationTest {
             .getContentAsString();
     long cardId = json.readTree(created).get("id").asLong();
 
-    // … und ist damit sofort in der Items-Liste sichtbar (BACKLOG) — anders als eine Pool-Idee.
+    // … und ist damit sofort in der Items-Liste sichtbar (BACKLOG).
     mvc.perform(
             org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
                     "/api/kanban/items")
@@ -119,19 +111,20 @@ class KanbanCompatExternalKeyIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.id").value(cardId));
     assertThat(countByKey(projectId, "sonar:DIRECT")).isEqualTo(1);
 
-    // Ohne direct bleibt der Pool-Weg: die Karte erscheint NICHT in der Items-Liste.
+    // Seit Issue #1203 landet auch ein Ingest ohne direct auf dem Board: die zweite Karte
+    // erscheint in derselben Spalte, statt board-los im Pool zu verschwinden.
     mvc.perform(
             post("/api/kanban/items")
                 .header("X-Kanban-Token", token)
                 .contentType("application/json")
-                .content("{\"title\":\"Pool-Idee\"}"))
+                .content("{\"title\":\"Ohne direct\"}"))
         .andExpect(status().isCreated());
     mvc.perform(
             org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
                     "/api/kanban/items")
                 .header("X-Kanban-Token", token))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.BACKLOG.length()").value(1));
+        .andExpect(jsonPath("$.BACKLOG.length()").value(2));
   }
 
   @Test
