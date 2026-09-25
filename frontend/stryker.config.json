@@ -9,7 +9,9 @@
     "!src/**/*.test.ts",
     "!src/**/*.test.tsx"
   ],
-  "reporters": ["html", "clear-text", "progress"],
+  "reporters": ["json", "html", "clear-text", "progress"],
+  "htmlReporter": { "fileName": "../.claude/stryker/mutation.html" },
+  "jsonReporter": { "fileName": "../.claude/stryker/mutation.json" },
   "concurrency": 4,
   "thresholds": { "high": 100, "low": 90, "break": null }
 }
