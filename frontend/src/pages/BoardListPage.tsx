@@ -394,13 +394,12 @@ export function BoardListPage() {
   // einzelnen Zugriffe (Filterleiste, Sichtbarkeit, Spalten-Chips) ohne eigenen Null-Guard auskommen.
   const activeFilters = filters ?? new Set<FilterKey>()
   const archiveActive = activeFilters.has(ARCHIVED)
-  // Die Liste zeigt nur aktive Karten. Board-lose bzw. board-gebundene Ideen (ideaStored) leben
-  // jetzt in der projektweiten Ideen-Seite und sind hier ausgeblendet.
+  // Die Liste zeigt nur aktive Karten; archivierte erst mit gesetztem Archiv-Filter.
   const istUeberfaellig = (c: Card) =>
     !c.archived && isOverdue(c.dueDate, (columnById.get(c.columnId)?.name ?? '').toLowerCase().includes('done'))
-  const ueberfaelligZahl = cards.filter((c) => !c.ideaStored && istUeberfaellig(c)).length
+  const ueberfaelligZahl = cards.filter((c) => istUeberfaellig(c)).length
   const inBoardOrder = cards
-    .filter((c) => !c.ideaStored && (c.archived ? archiveActive : activeFilters.has(c.columnId)))
+    .filter((c) => (c.archived ? archiveActive : activeFilters.has(c.columnId)))
     .filter((c) => labelFilter.size === 0 || c.labels.some((l) => labelFilter.has(l)))
     .filter((c) => !nurUeberfaellig || istUeberfaellig(c))
     .filter((c) => zustaendig === null || c.assignees.includes(zustaendig))

@@ -98,7 +98,6 @@ function card(overrides: Partial<CardByNumber> = {}): CardByNumber {
     shortcode: null,
     dueDate: null,
     archived: false,
-    ideaStored: false,
     boardId: 1,
     columnId: 2,
     ...overrides,
@@ -117,17 +116,6 @@ function hit(overrides: Partial<CardSearchHit> = {}): CardSearchHit {
     columnName: 'Backlog',
     ...overrides,
   }
-}
-
-/** Board-lose Pool-Idee: weder Board noch Spalte, aber ein Projekt. */
-function ideaHit(): CardSearchHit {
-  return hit({
-    card: card({ id: 9, title: 'Idee ohne Board', boardId: null, columnId: null }),
-    boardId: null,
-    boardName: null,
-    columnId: null,
-    columnName: null,
-  })
 }
 
 const member = (userId: number, displayName: string): Member => ({
@@ -220,6 +208,20 @@ describe('CardNumberSearch', () => {
     expect(input()).toHaveValue('')
   })
 
+  /**
+   * Der Spaltenname ist das einzige Ortsfeld, das die Suche leer lassen kann — dann bekommt das
+   * Modal keinen Namen für den Status-Chip, statt eines leeren Chips.
+   */
+  it('reicht einen nicht aufgelösten Spaltennamen nicht als leeren Chip weiter', async () => {
+    mockedCards.searchByNumber.mockResolvedValue([hit({ columnName: null })])
+    render(<CardNumberSearch />)
+
+    search('345')
+
+    expect(await screen.findByTestId('detail-title')).toHaveTextContent('Fehlerbild klären')
+    expect(screen.getByTestId('detail-column')).toHaveTextContent('—')
+  })
+
   it('öffnet einen Treffer im eigenen Projekt bearbeitbar', async () => {
     mockedCards.searchByNumber.mockResolvedValue([hit()])
     render(<CardNumberSearch />)
@@ -288,20 +290,6 @@ describe('CardNumberSearch', () => {
     expect(screen.getByTestId('detail-epics')).toBeEmptyDOMElement()
     expect(screen.getByTestId('detail-labels')).toBeEmptyDOMElement()
     // Ohne Optionsvorrat bleiben Epic-Auswahl und Label-Sektion lesend.
-    expect(screen.getByTestId('detail-can-edit-epic')).toHaveTextContent('false')
-    expect(screen.getByTestId('detail-can-edit-labels')).toHaveTextContent('false')
-  })
-
-  it('hält eine board-lose Pool-Idee bearbeitbar, ohne Epics und Labels', async () => {
-    mockedCards.searchByNumber.mockResolvedValue([ideaHit()])
-    render(<CardNumberSearch />)
-
-    search('345')
-
-    expect(await detailReady()).toHaveTextContent('true')
-    expect(screen.getByTestId('detail-members')).toHaveTextContent('Manne')
-    expect(mockedEpics.list).not.toHaveBeenCalled()
-    expect(mockedLabels.list).not.toHaveBeenCalled()
     expect(screen.getByTestId('detail-can-edit-epic')).toHaveTextContent('false')
     expect(screen.getByTestId('detail-can-edit-labels')).toHaveTextContent('false')
   })
@@ -537,19 +525,17 @@ describe('CardNumberSearch', () => {
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument()
   })
 
-  it('benennt board-lose Pool-Ideen in der Auswahl als Ideen des Projekts', async () => {
-    mockedCards.searchByNumber.mockResolvedValue([hit(), ideaHit()])
+  it('benennt jeden Treffer mit Board und Spalte — kein Ort „Ideen" mehr (Issue #1202)', async () => {
+    mockedCards.searchByNumber.mockResolvedValue([hit(), hit({ card: card({ id: 9 }) })])
     render(<CardNumberSearch />)
 
     search('345')
 
     const options = await screen.findAllByRole('menuitem')
-    expect(options[1]).toHaveTextContent('Projekt A / Ideen')
-
-    fireEvent.click(options[1])
-
-    // Ohne Spalte darf das Modal keinen Status-Chip-Namen bekommen.
-    expect(await screen.findByTestId('detail-column')).toHaveTextContent('—')
+    for (const option of options) {
+      expect(option).toHaveTextContent('Projekt A / Entwicklung / Backlog')
+      expect(option).not.toHaveTextContent('Ideen')
+    }
   })
 
   it('lässt die Trefferauswahl ohne Wahl wieder schließen', async () => {

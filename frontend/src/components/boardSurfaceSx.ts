@@ -18,7 +18,7 @@ import {
 /**
  * Flächen der Karte nach dem Leitstand-Entwurf (#980, `docs/entwurf-leitstand.html` Z. 751–778):
  * **Spalten liegen als Nut im Grund, Karten liegen als Platte darauf.** Ein gemeinsamer Baustein für
- * Board und Ideen-Board, damit eine Karte auf beiden Seiten gleich aussieht.
+ * alle Board-Flächen, damit eine Karte überall gleich aussieht.
  *
  * **Keine farbige Status-Kante mehr.** Der Entwurf trägt den Zustand am Spaltenkopf (LED) und an
  * der Karte über ihre Marken, nicht über eine Kante; die Kante aus „Kante"/„Panel" entfällt.

@@ -41,30 +41,23 @@ function parseCardNumber(raw: string): number | null {
 }
 
 /**
- * Ortsangabe eines Treffers, die die Projekte unterscheidbar macht. Eine board-lose Pool-Idee hat
- * weder Board noch Spalte und wird als „Ideen" des Projekts benannt; board-gebundene Karten haben
- * laut Backend stets beides (seit V18 lässt die Datenbank nichts dazwischen zu). Ein archiviertes
- * Board wird als solches gekennzeichnet — die Karte bleibt auffindbar, der Ort soll nicht so
- * aussehen wie ein aktives Board.
+ * Ortsangabe eines Treffers, die die Projekte unterscheidbar macht. Jede Karte liegt auf einem
+ * Board in einer Spalte. Ein archiviertes Board wird als solches gekennzeichnet — die Karte bleibt
+ * auffindbar, der Ort soll nicht so aussehen wie ein aktives Board.
  *
  * Dieselbe Angabe trägt der Pfad im geöffneten Detail-Modal, deshalb eine gemeinsame Form
- * (`CardLocation`) statt zweier Formulierungen derselben Sonderfälle.
+ * (`CardLocation`) statt zweier Formulierungen desselben Sonderfalls.
  */
 function hitLocation(hit: CardSearchHit): CardLocation {
   return {
     projectId: hit.projectId,
     projectName: hit.projectName,
-    // Board-ID und -Name sind im Vertrag der Suche stets gemeinsam gesetzt oder gemeinsam `null`;
-    // die Prüfung auf beide dient allein der Typverengung.
-    board:
-      hit.boardId === null || hit.boardName === null
-        ? null
-        : {
-            id: hit.boardId,
-            name: hit.boardName,
-            archived: hit.boardArchived,
-            columnName: hit.columnName,
-          },
+    board: {
+      id: hit.boardId,
+      name: hit.boardName,
+      archived: hit.boardArchived,
+      columnName: hit.columnName,
+    },
   }
 }
 
@@ -72,8 +65,8 @@ function hitLocation(hit: CardSearchHit): CardLocation {
 interface Opened {
   hit: CardSearchHit
   /**
-   * Eigens gehalten, weil das Suchfeld beim Treffer geleert wird und `card.number` nullable ist
-   * (Legacy-Pool-Ideen) — ohne sie ließe sich der Treffer nach einer Änderung nicht neu holen.
+   * Eigens gehalten, weil das Suchfeld beim Treffer geleert wird — ohne sie ließe sich der Treffer
+   * nach einer Änderung nicht neu holen.
    */
   number: number
 }
@@ -112,8 +105,8 @@ export interface CardNumberSearchProps {
  * sie lesend: Least Privilege, und ein leerer Optionsvorrat wäre gefährlicher als kein Editiermodus.
  * Epics und Board-Labels gibt es nur von einem aktiven Board (das Backend verweigert sie für ein
  * archiviertes, obwohl dessen Karten bearbeitbar bleiben, #462); die Mitglieder hängen dagegen am
- * Projekt und werden deshalb immer geladen — auch für eine board-lose Pool-Idee. Fehlt ein
- * Optionsvorrat, bleiben Epic-Auswahl und Label-Sektion lesend, während der Rest bearbeitbar ist.
+ * Projekt und werden deshalb immer geladen. Fehlt ein Optionsvorrat, bleiben Epic-Auswahl und
+ * Label-Sektion lesend, während der Rest bearbeitbar ist.
  *
  * Ein leeres Ergebnis heißt „nicht gefunden", nicht „existiert nicht": Die Suche läuft nur über die
  * eigenen Projekte, und Karten im Papierkorb bleiben unsichtbar, obwohl ihre Nummer belegt ist.
@@ -158,7 +151,7 @@ export function CardNumberSearch({ aktuellesProjekt = null }: CardNumberSearchPr
   const openedProjectId = selected?.hit.projectId ?? null
   // Board-gebundene Vorräte nur von einem aktiven Board: Für ein archiviertes Board scheitern
   // Epics und Labels im Backend an `BoardService.requireProjectId`, während die Karte selbst
-  // bearbeitbar bleibt (#462). Eine board-lose Pool-Idee hat ohnehin kein Board.
+  // bearbeitbar bleibt (#462).
   const openedBoardId = selected && !selected.hit.boardArchived ? selected.hit.boardId : null
 
   const role = useProjectRole(openedProjectId)

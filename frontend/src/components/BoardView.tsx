@@ -178,7 +178,6 @@ interface Props {
     | 'get'
     | 'move'
     | 'archive'
-    | 'moveToIdeaStorage'
     | 'restore'
     | 'remove'
     | 'bulkArchive'
@@ -426,7 +425,7 @@ export function BoardView({
   // angemeldete Nutzer zugeordnet ist; „Überfällig" Karten mit einer Frist vor heute außerhalb von Done.
   const spaltenName = new Map(columns.map((c) => [c.id, c.name]))
   const istUeberfaellig = (c: Card) => isOverdue(c.dueDate, isDoneColumn(spaltenName.get(c.columnId) ?? ''))
-  const ueberfaelligZahl = filteredCards.filter((c) => !c.archived && !c.ideaStored && istUeberfaellig(c)).length
+  const ueberfaelligZahl = filteredCards.filter((c) => !c.archived && istUeberfaellig(c)).length
   const sichtbareKarten = filteredCards.filter((c) => {
     if (kartenFilter === 'meine') return currentUserId !== null && c.assignees.includes(currentUserId)
     if (kartenFilter === 'ueberfaellig') return istUeberfaellig(c)
@@ -515,7 +514,6 @@ export function BoardView({
       input.title,
       input.description,
       input.parentId,
-      false,
       {
         dependencies: input.dependencies,
         dueDate: input.dueDate,
@@ -554,21 +552,6 @@ export function BoardView({
       onCardsChanged?.()
     } catch (e) {
       notify(apiErrorMessage(e, 'Archivieren fehlgeschlagen.'), 'error')
-    }
-  }
-
-  // In den Ideen-Speicher: Alltags-Aktion (nicht editiermodus-gegatet). Optimistisch aus der
-  // Board-Ansicht nehmen (ideaStored filtert activeCardsInColumn), bei Fehler zurückrollen.
-  const moveToIdeaStorageCard = async (card: Card) => {
-    const previous = cards
-    setCards((current) => current.map((c) => (c.id === card.id ? { ...c, ideaStored: true } : c)))
-    try {
-      await api.moveToIdeaStorage(card.id)
-      onCardsChanged?.()
-      notify('In den Ideen-Pool verschoben — unter Ideen zu finden.', 'success')
-    } catch (e) {
-      setCards(previous)
-      notify(apiErrorMessage(e, 'In den Ideen-Pool verschieben fehlgeschlagen.'), 'error')
     }
   }
 
@@ -984,9 +967,6 @@ export function BoardView({
           </MenuItem>,
           <MenuItem key="archive" onClick={() => { const c = menu.card; closeMenu(); void archiveCard(c) }}>
             Archivieren
-          </MenuItem>,
-          <MenuItem key="idea-storage" onClick={() => { const c = menu.card; closeMenu(); void moveToIdeaStorageCard(c) }}>
-            In den Ideen-Pool
           </MenuItem>,
           ...(canTransfer
             ? [

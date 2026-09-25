@@ -236,7 +236,7 @@ describe('EpicsPage', () => {
     mCards.list.mockResolvedValue([
       {
         id: 30, boardId: 1, columnId: 10, number: 3, title: 'Kind', description: null,
-        positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+        positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
         type: 'CARD', parentId: 9, shortcode: null, assignees: [], dueDate: null, labels: [],
       },
     ])
@@ -359,7 +359,7 @@ describe('EpicsPage', () => {
     mCards.list.mockResolvedValue([
       {
         id: 30, boardId: 1, columnId: 10, number: 7, title: 'Anforderungskarte', description: null,
-        positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+        positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
         type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
       },
     ])
@@ -462,7 +462,7 @@ describe('EpicsPage', () => {
   function karte(number: number, title: string, labels: number[] = []) {
     return {
       id: number * 10, boardId: 1, columnId: 10, number, title, description: null,
-      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null,
+      positionInColumn: 0, archived: false, movedToDoneAt: null,
       dependencies: [], type: 'CARD', parentId: null, shortcode: null, assignees: [],
       dueDate: null, labels,
     }
@@ -1051,7 +1051,7 @@ describe('EpicsPage', () => {
     /** Die Anforderungskarte von `zahlung`, wahlweise dem ausgeblendeten `auth` zugeordnet. */
     const anforderung = (parentId: number | null) => ({
       id: 40, boardId: 1, columnId: 10, number: 4, title: 'Anforderung', description: null,
-      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null,
+      positionInColumn: 0, archived: false, movedToDoneAt: null,
       dependencies: [], type: 'CARD', parentId, shortcode: null, assignees: [], dueDate: null,
       labels: [],
     })
@@ -1125,7 +1125,7 @@ describe('EpicsPage', () => {
     const verknuepfteKarte = (assignees: number[]) => ({
       id: 30, boardId: 1, columnId: 10, number: 3, title: 'Kind aus dem Baum', description: null,
       type: 'CARD', dependencies: [], assignees, labels: [], parentId: null, shortcode: null,
-      dueDate: null, archived: false, ideaStored: false, derivedFrom: null,
+      dueDate: null, archived: false, derivedFrom: null,
     })
 
     /** Öffnet das Vorhaben und löst Enter auf der ersten Baumzeile aus. */
@@ -1170,7 +1170,7 @@ describe('EpicsPage', () => {
       mCards.list.mockResolvedValue([
         {
           id: 30, boardId: 1, columnId: 10, number: 3, title: 'Anforderung', description: null,
-          positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null,
+          positionInColumn: 0, archived: false, movedToDoneAt: null,
           dependencies: [], type: 'CARD', parentId: null, shortcode: null, assignees: [],
           dueDate: null, labels: [5],
         },

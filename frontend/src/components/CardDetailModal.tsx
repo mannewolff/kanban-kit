@@ -644,14 +644,13 @@ const statusChipSx = (colors: { bg: string; text: string }) => ({
  * Sind `columns`, `columnId` und `onMove` gesetzt (interaktiver Kontext), wird der Chip in einer
  * kanonischen Spalte zum Steuerelement für den Statuswechsel. Fehlt auch nur eine der drei
  * Angaben, bleibt es beim rein lesenden Chip — so bleiben alle Aufrufer ohne Board-Kontext
- * (Kartensuche, Ideen-Planung, Dashboard, Nachtlauf, Vorhaben-Seite, Listenansicht) unberührt.
+ * (Kartensuche, Dashboard, Nachtlauf, Vorhaben-Seite, Listenansicht) unberührt.
  */
 function CardStatusChip({
   isEpic,
   columnName,
   colors,
   archived,
-  ideaStored,
   canEdit,
   editing,
   columns,
@@ -662,7 +661,6 @@ function CardStatusChip({
   columnName?: string
   colors: { bg: string; text: string } | null
   archived: boolean
-  ideaStored: boolean
   canEdit: boolean
   editing: boolean
   columns?: BoardColumn[]
@@ -688,7 +686,6 @@ function CardStatusChip({
 
   if (archived) return spaltenChip
   if (isEpic) return <Chip label="Vorhaben" size="small" color="secondary" />
-  if (ideaStored) return <Chip label="Noch nicht eingeplant" size="small" />
   if (!current) return null
   if (canonicalColumnKey(current.name) === undefined || !canEdit) return spaltenChip
 
@@ -907,7 +904,6 @@ function VorgangEroeffnenDialog({
   canEdit,
   isEpic,
   archived,
-  ideaStored,
   parentId,
   cardsApi,
   onChanged,
@@ -918,7 +914,6 @@ function VorgangEroeffnenDialog({
   canEdit: boolean
   isEpic: boolean
   archived: boolean
-  ideaStored: boolean
   parentId: number | null
   cardsApi: Pick<typeof defaultCardsApi, 'openEpic'>
   onChanged?: () => void
@@ -936,7 +931,7 @@ function VorgangEroeffnenDialog({
    * in #640 prueft. Die Oberflaeche zeigt den Weg gar nicht erst an, statt ihn in einen Fehler
    * laufen zu lassen.
    */
-  const kannVorgangEroeffnen = canEdit && !isEpic && !archived && !ideaStored && parentId === null
+  const kannVorgangEroeffnen = canEdit && !isEpic && !archived && parentId === null
 
   const eroeffneVorgang = async () => {
     try {
@@ -1015,26 +1010,20 @@ function KartenDialogAktionen({
   editing,
   canEdit,
   archived,
-  ideaStored,
-  isEpic,
   speichernGesperrt,
   onAbbrechen,
   onSpeichern,
   onWiederherstellen,
-  onIdeenPool,
   onClose,
   vorgang,
 }: Readonly<{
   editing: boolean
   canEdit: boolean
   archived: boolean
-  ideaStored: boolean
-  isEpic: boolean
   speichernGesperrt: boolean
   onAbbrechen: () => void
   onSpeichern: () => void
   onWiederherstellen: () => void
-  onIdeenPool: () => void
   onClose: () => void
   vorgang: ReactNode
 }>) {
@@ -1051,10 +1040,6 @@ function KartenDialogAktionen({
   return (
     <DialogActions>
       {canEdit && archived && <Button onClick={onWiederherstellen}>Wiederherstellen</Button>}
-      {/* In den Ideen-Pool: Alltags-Aktion (an canEdit gebunden, nicht editiermodus-gegatet). */}
-      {canEdit && !archived && !ideaStored && !isEpic && (
-        <Button onClick={onIdeenPool}>In den Ideen-Pool</Button>
-      )}
       {vorgang}
       <Button onClick={onClose}>Schließen</Button>
     </DialogActions>
@@ -1080,8 +1065,8 @@ interface Props {
   /**
    * Spalten des Boards für den interaktiven Statuswechsel. Erst zusammen mit {@link columnId} und
    * {@link onMove} wird der Status-Chip zum Steuerelement; fehlt eine der drei Angaben, bleibt er
-   * rein lesend. Aufrufer ohne Board-Kontext (Kartensuche, Ideen-Planung, Dashboard, Nachtlauf,
-   * Vorhaben-Seite, Listenansicht) bleiben so unverändert.
+   * rein lesend. Aufrufer ohne Board-Kontext (Kartensuche, Dashboard, Nachtlauf, Vorhaben-Seite,
+   * Listenansicht) bleiben so unverändert.
    */
   columns?: BoardColumn[]
   /**
@@ -1097,7 +1082,7 @@ interface Props {
   onMove?: (toColumnId: number) => Promise<void>
   /**
    * Ort der Karte (Projekt / Board / Spalte) für den Modal-Kopf. Optional: Aufrufer ohne diesen
-   * Kontext (Epics-Seite, Ideen-Planung) zeigen wie bisher keinen Pfad — ein leerer Platzhalter
+   * Kontext (Epics-Seite) zeigen wie bisher keinen Pfad — ein leerer Platzhalter
    * wäre schlechter als keine Angabe. `null` ist gleichbedeutend mit „nicht gesetzt", damit
    * Aufrufer mit noch nicht geladenem Board den Wert direkt durchreichen können.
    */
@@ -1137,7 +1122,6 @@ interface Props {
     | 'setLabels'
     | 'getActivity'
     | 'restore'
-    | 'moveToIdeaStorage'
     | 'byNumber'
     | 'assignDerivedFrom'
     | 'epicTree'
@@ -1157,6 +1141,16 @@ type ViewProps = Props & {
   onOpenDependency?: (number: number) => void
   /** Eine Ebene im Verweis-Stack zurück; fehlt auf der Ausgangskarte. */
   onBack?: () => void
+}
+
+/**
+ * Ob der Aufrufer die Karte mitsamt ihrer Board-Bindung hereingereicht hat. `CardDetail` — die Form,
+ * die das Modal verlangt — kennt keine `boardId`; Aufrufer mit Board-Kontext übergeben aber eine
+ * `Card` bzw. `CardByNumber`, die beide eine tragen. Als Prädikat statt als Feldzugriff, damit der
+ * strukturelle Test an einer Stelle steht und der Aufrufer ohne Typumdeutung auskommt.
+ */
+function mitBoardBindung(card: CardDetail): card is CardDetail & { boardId: number } {
+  return 'boardId' in card
 }
 
 function CardDetailModalView({
@@ -1218,20 +1212,6 @@ function CardDetailModalView({
     } catch (error_: unknown) {
       // Bei einem Fehler bleibt der Dialog offen — die Karte bleibt sichtbar, wie sie ist.
       notify(apiErrorMessage(error_, 'Wiederherstellen fehlgeschlagen.'), 'error')
-    }
-  }
-
-  // In den Ideen-Pool: Alltags-Aktion (an canEdit gebunden, nicht editiermodus-gegatet).
-  // Der Knopf dazu steht in `KartenDialogAktionen`.
-  const moveToIdeaStorage = async () => {
-    try {
-      await cardsApi.moveToIdeaStorage(card.id)
-      onChanged?.()
-      notify('In den Ideen-Pool verschoben — unter Ideen zu finden.', 'success')
-      onClose()
-    } catch (error_: unknown) {
-      // Bei einem Fehler bleibt der Dialog offen — die Karte verschwindet nicht.
-      notify(apiErrorMessage(error_, 'In den Ideen-Pool verschieben fehlgeschlagen.'), 'error')
     }
   }
 
@@ -1347,11 +1327,10 @@ function CardDetailModalView({
   // Der Baum eines Vorhabens (Issue #644). Das Laden liegt hier und nicht mehr in
   // `DerivationTree`: Der Dialog kennt die Karte ohnehin, und Lade-, Fehler- und Leerzustand
   // gehoeren zu ihm — die uebrigen Bereiche bleiben in jedem dieser Faelle bedienbar.
-  // Nur board-gebundene Karten tragen eine `boardId`: `CardDetail` — der Typ, den ein ueber einen
-  // `#N`-Verweis nachgeladener Eintrag hat — kennt sie nicht. Ohne Board gibt es keinen Baum
-  // abzurufen; der Dialog bleibt dann ohne diesen Bereich, statt zu raten.
-  const baumBoardId: number | null =
-    'boardId' in card && typeof card.boardId === 'number' ? card.boardId : null
+  // Nur Aufrufer mit Board-Kontext reichen eine `boardId` herein: `CardDetail` — die Form, die das
+  // Modal verlangt — kennt sie nicht. Ohne sie gibt es keinen Baum abzurufen; der Dialog bleibt
+  // dann ohne diesen Bereich, statt zu raten.
+  const baumBoardId: number | null = mitBoardBindung(card) ? card.boardId : null
 
   // Der Fortschritt eines Vorhabens (Issue #686), derselbe Wortlaut wie auf der Kachel der
   // Vorhaben-Seite. Die Zahlen stehen nur in der `epics`-Prop: Der `Card`-Typ traegt kein
@@ -1640,20 +1619,17 @@ function CardDetailModalView({
             columnName={columnName}
             colors={colors}
             archived={card.archived}
-            ideaStored={card.ideaStored}
             canEdit={canEdit}
             editing={editing}
             columns={columns}
             columnId={columnId}
             onMove={onMove}
           />
-          {/* Legacy-Pool-Ideen ohne projektweite Nummer zeigen kein nacktes „#". Nummer in Kupfer und
-              Titel in Archivo wie der Kopf des Blatts (Entwurf `.blatt-nr`, `.blatt-titel`, Z. 1023–1024). */}
-          {card.number != null && (
-            <Typography component="span" sx={{ ...ZAHL, fontSize: 13, fontWeight: 500, color: 'primary.main' }}>
-              #{card.number}
-            </Typography>
-          )}
+          {/* Nummer in Kupfer und Titel in Archivo wie der Kopf des Blatts (Entwurf `.blatt-nr`,
+              `.blatt-titel`, Z. 1023–1024). */}
+          <Typography component="span" sx={{ ...ZAHL, fontSize: 13, fontWeight: 500, color: 'primary.main' }}>
+            #{card.number}
+          </Typography>
           <Typography component="span" sx={{ ...ANZEIGE, fontStretch: '110%', fontSize: 19, fontWeight: 700, lineHeight: 1.25, letterSpacing: '-.01em' }}>
             {card.title}
           </Typography>
@@ -1812,9 +1788,9 @@ function CardDetailModalView({
 
           {!editing && (
             <KartenBlock name="Verlauf">
-              {/* Nur mit Projekt und Kartennummer gibt es etwas abzurufen: `projectId` ist am
-                  Modal optional, und eine Pool-Idee trägt keine Nummer (Issue #968). */}
-              {projectId != null && card.number != null && (
+              {/* Nur mit Projekt gibt es etwas abzurufen: `projectId` ist am Modal optional
+                  (Issue #968). */}
+              {projectId != null && (
                 <KartenAnlaeufe projectId={projectId} cardNumber={card.number} api={nightRunsApi} />
               )}
               <Divider />
@@ -1856,13 +1832,10 @@ function CardDetailModalView({
         editing={editing}
         canEdit={canEdit}
         archived={card.archived}
-        ideaStored={card.ideaStored}
-        isEpic={isEpic}
         speichernGesperrt={!title.trim() || saving || isTooLong(body)}
         onAbbrechen={() => setEditing(false)}
         onSpeichern={() => void save()}
         onWiederherstellen={() => void restore()}
-        onIdeenPool={() => void moveToIdeaStorage()}
         onClose={onClose}
         vorgang={
           <VorgangEroeffnenDialog
@@ -1871,7 +1844,6 @@ function CardDetailModalView({
             canEdit={canEdit}
             isEpic={isEpic}
             archived={card.archived}
-            ideaStored={card.ideaStored}
             parentId={card.parentId}
             cardsApi={cardsApi}
             onChanged={onChanged}
@@ -1902,15 +1874,13 @@ interface LinkedCard {
 
 /**
  * Spaltenname der verknüpften Karte, aufgelöst über ihr eigenes Board — der Spaltenname der
- * Ausgangskarte gilt nicht, weil der Verweis projektweit auf ein anderes Board zeigen kann. Eine
- * board-lose Pool-Idee hat keine Spalte; scheitert der Board-Abruf, bleibt nur der Chip leer,
- * statt die ganze Navigation abzubrechen.
+ * Ausgangskarte gilt nicht, weil der Verweis projektweit auf ein anderes Board zeigen kann.
+ * Scheitert der Board-Abruf, bleibt nur der Chip leer, statt die ganze Navigation abzubrechen.
  */
 async function resolveColumnName(
   linked: CardByNumber,
   boardsApi: Pick<typeof defaultBoardsApi, 'get'>,
 ): Promise<string | undefined> {
-  if (linked.boardId == null) return undefined
   try {
     const board = await boardsApi.get(linked.boardId)
     return board.columns.find((c) => c.id === linked.columnId)?.name

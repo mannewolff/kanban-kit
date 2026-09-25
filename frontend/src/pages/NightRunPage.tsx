@@ -3083,7 +3083,7 @@ export function NightRunPage() {
                 { label: 'Runner' },
               ]}
             />
-            {/* Dateiauswahl wie in der Ideen-Seite: Button als <label> mit verstecktem Input. */}
+            {/* Dateiauswahl wie beim Spezifikations-Import: Button als <label> mit verstecktem Input. */}
             <Button variant="contained" component="label">
               Protokoll einlesen<input
                 hidden

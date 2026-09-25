@@ -55,7 +55,7 @@ const board: Board = {
 
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null, excerpt: null,
-  positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+  positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
   derivedFrom: null,
 }
@@ -133,7 +133,7 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.stringContaining('## Kontext'), null, false, {
+      expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.stringContaining('## Kontext'), null, {
         dependencies: [],
         dueDate: null,
         assigneeIds: [],
@@ -340,50 +340,6 @@ describe('BoardView', () => {
     await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
   })
 
-  it('zeigt Ideen (ideaStored) nicht in der Spaltenansicht', () => {
-    const idea: Card = { ...card, id: 500, number: 5, title: 'Idee', ideaStored: true }
-    render(<BoardView board={board} initialCards={[card, idea]} canEdit api={mkApi()} />)
-
-    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
-    expect(within(screen.getByTestId('column-10')).queryByTestId('card-500')).not.toBeInTheDocument()
-  })
-
-  it('legt eine Karte über das ⋮-Menü in den Ideen-Pool und entfernt sie optimistisch', async () => {
-    const api = mkApi({ moveToIdeaStorage: vi.fn().mockResolvedValue({}) })
-    const onCardsChanged = vi.fn()
-    // Zweite Karte in derselben Spalte: der optimistische map bleibt für sie unverändert (: c-Zweig).
-    const other: Card = { ...card, id: 101, number: 2, title: 'Andere' }
-    render(
-      <BoardView board={board} initialCards={[card, other]} canEdit api={api} onCardsChanged={onCardsChanged} />,
-      { wrapper: SnackbarProvider },
-    )
-
-    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
-
-    await waitFor(() => expect(api.moveToIdeaStorage).toHaveBeenCalledWith(100))
-    expect(onCardsChanged).toHaveBeenCalled()
-    // Erfolgs-Toast benennt den Zielort.
-    expect(await screen.findByText('In den Ideen-Pool verschoben — unter Ideen zu finden.')).toBeInTheDocument()
-    // Optimistisch aus dem Board entfernt (ideaStored filtert die Spaltenansicht).
-    expect(within(screen.getByTestId('column-10')).queryByTestId('card-100')).not.toBeInTheDocument()
-    // Die zweite Karte bleibt unangetastet sichtbar.
-    expect(within(screen.getByTestId('column-10')).getByTestId('card-101')).toBeInTheDocument()
-  })
-
-  it('rollt bei Fehler im Ideen-Pool zurück und zeigt die Karte wieder', async () => {
-    const api = mkApi({ moveToIdeaStorage: vi.fn().mockRejectedValue(new Error('fail')) })
-    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
-      wrapper: SnackbarProvider,
-    })
-
-    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
-
-    await screen.findByText('In den Ideen-Pool verschieben fehlgeschlagen.')
-    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
-  })
-
   it('verschiebt eine Karte über das ⋮-Menü nach Bestätigung in den Papierkorb', async () => {
     const api = mkApi({ bulkDelete: vi.fn().mockResolvedValue(undefined) })
     const onCardsChanged = vi.fn()
@@ -461,7 +417,7 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Volltext aus get', 9, false, {
+      expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Volltext aus get', 9, {
         dependencies: [],
         dueDate: null,
         assigneeIds: [],
@@ -2026,7 +1982,7 @@ describe('BoardView', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
       await waitFor(() =>
-        expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.any(String), null, false, expect.any(Object)),
+        expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.any(String), null, expect.any(Object)),
       )
       expect(within(screen.getByTestId('column-10')).getByTestId('card-200')).toBeInTheDocument()
     })
@@ -2157,16 +2113,23 @@ describe('BoardView', () => {
       expect(moveItems()).toHaveLength(0)
     })
 
-    it('lässt die übrigen Menüeinträge unangetastet', () => {
+    it('lässt die übrigen Menüeinträge unangetastet — die Liste ist vollständig (Issue #1202)', () => {
       render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit canTransfer
         onEditCard={vi.fn()} api={mkApi()} />)
 
       fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
 
-      for (const name of ['Bearbeiten', 'Duplizieren', 'Archivieren', 'In den Ideen-Pool',
-        'Verschieben…']) {
-        expect(screen.getByRole('menuitem', { name })).toBeInTheDocument()
-      }
+      // Vollständige Liste, nicht nur eine Auswahl: Nur so belegt der Test, dass der Pool-Eintrag
+      // fehlt und nicht bloß nicht mitgeprüft wird (AK 3).
+      expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+        'Bearbeiten',
+        'Duplizieren',
+        'Archivieren',
+        'Verschieben…',
+        'Nach links verschieben',
+        'Nach rechts verschieben',
+        'Löschen',
+      ])
     })
 
     it('ist ohne Maus bedienbar: Tab zum ⋮, Enter, Pfeiltasten, Enter', async () => {
@@ -2856,21 +2819,6 @@ describe('BoardView', () => {
       await erwarteFehlerToast('Sortieren ist auf diesem Board gesperrt.')
       // Die Richtung wechselt nicht: der nächste Klick versucht dieselbe erneut.
       expect(screen.getByLabelText(ascLabel('Backlog'))).toBeInTheDocument()
-    })
-
-    it('moveToIdeaStorageCard: meldet den Serverfehler und zeigt die Karte wieder', async () => {
-      const api = mkApi({
-        moveToIdeaStorage: vi.fn().mockRejectedValue(serverfehler('Der Ideen-Pool ist gesperrt.')),
-      })
-      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
-        wrapper: SnackbarProvider,
-      })
-
-      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-      fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
-
-      await erwarteFehlerToast('Der Ideen-Pool ist gesperrt.')
-      expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
     })
 
     it('duplicateCard: meldet den Serverfehler des Ladens und öffnet keinen Dialog', async () => {

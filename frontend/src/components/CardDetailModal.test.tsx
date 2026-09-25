@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
 import type { Board, BoardColumn } from '../api/boards'
 import { ApiError } from '../api/client'
-import type { Card, CardByNumber } from '../api/cards'
+import type { Card, CardByNumber, CardDetail } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
 import type { CardLocation } from '../lib/cardLocation'
 import { CardDetailModal, commentFieldProps, parseDependencyInput, parseHerkunftInput } from './CardDetailModal'
@@ -22,14 +22,14 @@ vi.mock('../auth/AuthContext', () => ({
 
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
-  excerpt: null, positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [3, 4],
+  excerpt: null, positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [3, 4],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [], derivedFrom: null,
 }
 
 /** Karte, auf die der Abhängigkeits-Verweis „#3“ zeigt — bewusst auf einem anderen Board. */
 const linkedCard: CardByNumber = {
   id: 300, boardId: 2, columnId: 20, number: 3, title: 'Vorbedingung', description: 'Text der Vorbedingung',
-  archived: false, ideaStored: false, dependencies: [], type: 'CARD', parentId: null, shortcode: null,
+  archived: false, dependencies: [], type: 'CARD', parentId: null, shortcode: null,
   assignees: [], dueDate: null, labels: [], derivedFrom: null,
 }
 
@@ -216,44 +216,11 @@ describe('CardDetailModal', () => {
     expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument()
   })
 
-  it('legt eine aktive Karte über den Detail-Button in den Ideen-Pool', async () => {
+  it('bietet keine Aktion mehr an, die Karten aus dem Board nimmt (Issue #1202)', () => {
     const apis = makeApis()
-    const onChanged = vi.fn()
-    const onClose = vi.fn()
-    render(<CardDetailModal card={card} canEdit onChanged={onChanged} onClose={onClose} {...apis} />, {
-      wrapper: SnackbarProvider,
-    })
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'In den Ideen-Pool' }))
-
-    await waitFor(() => expect(apis.cardsApi.moveToIdeaStorage).toHaveBeenCalledWith(100))
-    expect(onChanged).toHaveBeenCalled()
-    expect(onClose).toHaveBeenCalled()
-    // Erfolgs-Toast benennt den Zielort.
-    expect(await screen.findByText('In den Ideen-Pool verschoben — unter Ideen zu finden.')).toBeInTheDocument()
-  })
-
-  it('zeigt bei Fehler einen Toast und lässt die Karte im Detail sichtbar', async () => {
-    const apis = makeApis()
-    apis.cardsApi.moveToIdeaStorage = vi.fn().mockRejectedValue(new Error('fail'))
-    const onClose = vi.fn()
-    render(<CardDetailModal card={card} canEdit onClose={onClose} {...apis} />, {
-      wrapper: SnackbarProvider,
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'In den Ideen-Pool' }))
-
-    expect(await screen.findByText('In den Ideen-Pool verschieben fehlgeschlagen.')).toBeInTheDocument()
-    // Bei einem Fehler bleibt der Dialog offen — die Karte verschwindet nicht.
-    expect(onClose).not.toHaveBeenCalled()
-  })
-
-  it('zeigt „In den Ideen-Pool“ nicht für eine bereits gespeicherte Idee', () => {
-    const apis = makeApis()
-    const idea: Card = { ...card, ideaStored: true }
-    render(<CardDetailModal card={idea} canEdit onClose={vi.fn()} {...apis} />)
-
-    expect(screen.queryByRole('button', { name: 'In den Ideen-Pool' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ideen/ })).not.toBeInTheDocument()
   })
 
   it('speichert Titel, Beschreibung, Abhängigkeiten und Epic in einem Update', async () => {
@@ -774,6 +741,27 @@ describe('CardDetailModal', () => {
     expect(await screen.findByText('2 von 5 fertig')).toBeInTheDocument()
   })
 
+  /**
+   * Der Fortschritt haengt an der Prop, nicht am Board: Ein Aufrufer ohne Board-Kontext reicht die
+   * Karte als reines `CardDetail` herein — ohne `boardId` und damit ohne Herkunftsbaum. Die Zahlen
+   * liegen trotzdem vor.
+   */
+  it('zeigt den Fortschritt auch für ein Vorhaben ohne Board-Bindung', async () => {
+    const apis = makeApis()
+    const ohneBoard: CardDetail = {
+      id: epicCard.id, number: epicCard.number, title: epicCard.title, description: null,
+      type: epicCard.type, dependencies: [], assignees: [], labels: [], parentId: null,
+      shortcode: epicCard.shortcode, dueDate: null, archived: false, derivedFrom: null,
+    }
+    render(
+      <CardDetailModal
+        card={ohneBoard} canEdit epics={[epicEintrag(200, 3, 4)]} onClose={vi.fn()} {...apis} />,
+    )
+
+    expect(await screen.findByText('3 von 4 fertig')).toBeInTheDocument()
+    expect(screen.queryByRole('tree')).toBeNull()
+  })
+
   /** Die echte Null ist eine Aussage („noch nichts fertig"), kein fehlender Wert. */
   it('zeigt „0 von 0 fertig" für ein Vorhaben, das mit Nullen in der Prop liegt', async () => {
     const apis = makeApis()
@@ -792,22 +780,6 @@ describe('CardDetailModal', () => {
 
     await screen.findByText('Kommentare')
     expect(fortschrittText()).toBeNull()
-  })
-
-  /**
-   * Der Fortschritt haengt an der Prop, nicht am Board: Ein ueber einen `#N`-Verweis nachgeladenes
-   * Vorhaben traegt keine `boardId` und damit keinen Herkunftsbaum — die Zahlen liegen trotzdem vor.
-   */
-  it('zeigt den Fortschritt auch für ein Vorhaben ohne boardId', async () => {
-    const apis = makeApis()
-    const ohneBoard: CardByNumber = { ...epicCard, boardId: null, columnId: null }
-    render(
-      <CardDetailModal
-        card={ohneBoard} canEdit epics={[epicEintrag(200, 3, 4)]} onClose={vi.fn()} {...apis} />,
-    )
-
-    expect(await screen.findByText('3 von 4 fertig')).toBeInTheDocument()
-    expect(screen.queryByRole('tree')).toBeNull()
   })
 
   it('zeigt bei einer gewöhnlichen Karte keinen Fortschritt', async () => {
@@ -1756,18 +1728,6 @@ describe('CardDetailModal', () => {
     expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
   })
 
-  it('zeigt eine board-lose Pool-Idee ohne Status-Chip und ohne Board-Abruf', async () => {
-    const apis = makeApis()
-    apis.cardsApi.byNumber = vi.fn().mockResolvedValue({ ...linkedCard, boardId: null, columnId: null })
-    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Karte #3 öffnen' }))
-
-    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
-    expect(apis.boardsApi.get).not.toHaveBeenCalled()
-    expect(screen.queryByText('Done')).not.toBeInTheDocument()
-  })
-
   it('zeigt die verknüpfte Karte auch, wenn ihr Board nicht geladen werden kann', async () => {
     const apis = makeApis()
     apis.boardsApi.get = vi.fn().mockRejectedValue(new Error('403'))
@@ -1799,22 +1759,26 @@ describe('CardDetailModal', () => {
     expect(screen.getAllByText('In Progress').length).toBeGreaterThan(0)
   })
 
-  it('zeigt für eine board-lose Pool-Idee den verkürzten Pfad zu den Ideen', () => {
+  it('nennt im Pfad stets Board und Spalte — kein Segment „Ideen“ mehr (Issue #1202)', () => {
     const apis = makeApis()
     render(
       <MemoryRouter>
         <CardDetailModal
-          card={{ ...card, ideaStored: true }}
+          card={card}
           canEdit
-          location={{ projectId: 9, projectName: 'IT-Bildungshaus', board: null }}
+          location={{
+            projectId: 9,
+            projectName: 'IT-Bildungshaus',
+            board: { id: 2, name: 'Entwicklung', columnName: 'In Progress' },
+          }}
           onClose={vi.fn()}
           {...apis}
         />
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('link', { name: 'Ideen' })).toHaveAttribute('href', '/projects/9/ideas')
-    expect(screen.queryByRole('link', { name: 'Entwicklung' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Entwicklung' })).toHaveAttribute('href', '/boards/2')
+    expect(screen.queryByRole('link', { name: 'Ideen' })).not.toBeInTheDocument()
   })
 
   it('zeigt ohne Ortsangabe keinen Pfad', () => {
@@ -2120,20 +2084,6 @@ describe('CardDetailModal', () => {
 
       expect(await screen.findByText('Die Karte ist gesperrt.')).toBeInTheDocument()
       await waitFor(() => expect(screen.getByLabelText('Aufgabe 2')).not.toBeChecked())
-    })
-
-    it('meldet den Servertext beim Verschieben in den Ideen-Pool', async () => {
-      const apis = makeApis()
-      apis.cardsApi.moveToIdeaStorage = vi.fn().mockRejectedValue(
-        serverfehler('Die Karte hängt an einem Vorhaben.'),
-      )
-      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />, {
-        wrapper: SnackbarProvider,
-      })
-
-      fireEvent.click(screen.getByRole('button', { name: 'In den Ideen-Pool' }))
-
-      expect(await screen.findByText('Die Karte hängt an einem Vorhaben.')).toBeInTheDocument()
     })
 
     it('meldet den Servertext beim Hochladen im Anhänge-Bereich', async () => {
@@ -2450,11 +2400,16 @@ describe('CardDetailModal — interaktiver Status-Chip', () => {
     expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
   })
 
-  it('zeigt an einer Pool-Idee den Chip „Noch nicht eingeplant"', async () => {
-    renderInteraktiv({ card: { ...card, ideaStored: true } })
+  /**
+   * Der Sonderchip für eine nicht eingeplante Karte ist mit dem Pool entfallen (Issue #1202): Jede
+   * Karte liegt in einer Spalte, und die zeigt der Chip. Geprüft wird über den Zustands-Wechsler —
+   * ihn gäbe es im Sonderfall nicht.
+   */
+  it('zeigt an jeder aktiven Karte den Spalten-Chip als Zustands-Wechsler (Issue #1202)', async () => {
+    renderInteraktiv({})
 
-    expect(await screen.findByText('Noch nicht eingeplant')).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+    expect(await screen.findByRole('combobox', { name: 'Zustand' })).toBeInTheDocument()
+    expect(screen.getByText('Backlog')).toBeInTheDocument()
   })
 
   it('zeigt keinen Chip, wenn die Spalte der Karte nicht zum Board gehört', async () => {
@@ -2644,16 +2599,6 @@ describe('CardDetailModal — interaktiver Status-Chip', () => {
     it('ruft ohne projectId nichts ab', async () => {
       const apis = makeApis()
       render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
-
-      expect(await screen.findByText('Aufgabe')).toBeInTheDocument()
-      expect(apis.nightRunsApi.anlaeufeDerKarte).not.toHaveBeenCalled()
-    })
-
-    it('ruft für eine Pool-Idee ohne Nummer nichts ab', async () => {
-      const apis = makeApis()
-      render(
-        <CardDetailModal card={{ ...card, number: null }} canEdit projectId={9} onClose={vi.fn()} {...apis} />,
-      )
 
       expect(await screen.findByText('Aufgabe')).toBeInTheDocument()
       expect(apis.nightRunsApi.anlaeufeDerKarte).not.toHaveBeenCalled()

@@ -716,7 +716,6 @@ describe('PlattformLeitstandPage (#1083)', () => {
         shortcode: null,
         dueDate: null,
         archived: false,
-        ideaStored: false,
         derivedFrom: null,
         boardId: 1,
         columnId: 5,

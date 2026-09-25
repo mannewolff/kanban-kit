@@ -14,7 +14,6 @@ function card(number: number, parentId: number | null = null): Card {
     excerpt: null,
     positionInColumn: 0,
     archived: false,
-    ideaStored: false,
     movedToDoneAt: null,
     dependencies: [],
     type: 'CARD',
@@ -80,7 +79,7 @@ describe('epicOfCard', () => {
   })
 
   it('liefert undefined für eine Karte mit parentId, die in keinem memberNumbers steht', () => {
-    // Der Fall der archivierten Karte: Der Server filtert `archived` und `ideaStored` aus der
+    // Der Fall der archivierten Karte: Der Server filtert `archived` aus der
     // Zugehörigkeit (`EpicMembership.zaehlt()`), die Anzeige folgt ihm. Der alte
     // `parentId`-Lookup hätte hier noch ein Vorhaben gezeigt — der Unterschied ist gewollt
     // (Entscheidung Manne, 2026-09-01).

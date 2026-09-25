@@ -25,7 +25,6 @@ export interface Card {
   excerpt: string | null
   positionInColumn: number
   archived: boolean
-  ideaStored: boolean
   movedToDoneAt: string | null
   dependencies: number[]
   type: CardType
@@ -39,15 +38,13 @@ export interface Card {
 }
 
 /**
- * Strukturelle Karten-Form, die das CardDetailModal tatsächlich liest — erfüllt sowohl die
- * board-gebundene `Card` als auch die board-nullable Pool-`Idea`. So kann das Modal beide öffnen,
- * ohne die FE-`Card` global board-nullable zu machen. `number` ist board-nullable (Legacy-Ideen
- * ohne projektweite Nummer). Board-spezifische Felder (`boardId`/`columnId`/`positionInColumn`/
- * `movedToDoneAt`) nutzt das Modal nicht und stehen deshalb bewusst nicht hier.
+ * Strukturelle Karten-Form, die das CardDetailModal tatsächlich liest — die Teilmenge der `Card`,
+ * die ohne Board-Kontext auskommt. Board-spezifische Felder (`boardId`/`columnId`/
+ * `positionInColumn`/`movedToDoneAt`) nutzt das Modal nicht und stehen deshalb bewusst nicht hier.
  */
 export interface CardDetail {
   id: number
-  number: number | null
+  number: number
   title: string
   description: string | null
   type: CardType
@@ -58,19 +55,18 @@ export interface CardDetail {
   shortcode: string | null
   dueDate: string | null
   archived: boolean
-  ideaStored: boolean
   derivedFrom: number | null
 }
 
 /**
- * Ergebnis des projektweiten Nummer-Lookups: die Karte zu einer projektweit vergebenen `number` —
- * board-gebunden oder als board-lose Pool-Idee. Deshalb sind `boardId`/`columnId` nullable. Mehr
- * als die `CardDetail`-Felder plus Board-Bindung braucht das Detail-Modal für einen `#N`-Verweis
- * nicht; die Bindung dient dort nur dazu, den Spaltennamen des fremden Boards aufzulösen.
+ * Ergebnis des projektweiten Nummer-Lookups: die Karte zu einer projektweit vergebenen `number`,
+ * samt ihrer Board-Bindung. Mehr als die `CardDetail`-Felder plus Board-Bindung braucht das
+ * Detail-Modal für einen `#N`-Verweis nicht; die Bindung dient dort nur dazu, den Spaltennamen des
+ * fremden Boards aufzulösen.
  */
 export interface CardByNumber extends CardDetail {
-  boardId: number | null
-  columnId: number | null
+  boardId: number
+  columnId: number
 }
 
 /**
@@ -82,18 +78,19 @@ export interface CardByNumber extends CardDetail {
  * Kartennummern sind projektweit eindeutig, nicht global — dieselbe Nummer kann also in mehreren
  * Projekten liegen. Deshalb eine Liste und kein einzelner Treffer.
  *
- * Eine board-lose Pool-Idee hat weder Board noch Spalte; board-gebundene Karten haben stets beides.
- * `boardArchived` unterscheidet ein archiviertes von einem aktiven Board — die Karte bleibt
- * auffindbar, also soll ihr Ort auch dann benannt werden.
+ * Jede Karte liegt auf einem Board in einer Spalte. `boardArchived` unterscheidet ein archiviertes
+ * von einem aktiven Board — die Karte bleibt auffindbar, also soll ihr Ort auch dann benannt
+ * werden.
  */
 export interface CardSearchHit {
   card: CardByNumber
   projectId: number
   projectName: string
-  boardId: number | null
-  boardName: string | null
+  boardId: number
+  boardName: string
   boardArchived: boolean
-  columnId: number | null
+  columnId: number
+  /** Leer, wenn der Spaltenname nicht aufgelöst werden konnte — dann entfällt das Ortssegment. */
   columnName: string | null
 }
 
@@ -179,7 +176,6 @@ export const cardsApi = {
     title: string,
     description?: string,
     parentId?: number | null,
-    ideaStored?: boolean,
     // Inhaltlicher Zusatz-Feldsatz beim atomaren Anlegen (Backend #325); leer/weggelassen = wie bisher.
     extra?: {
       dependencies?: number[]
@@ -190,7 +186,7 @@ export const cardsApi = {
   ) =>
     apiFetch<Card>(`/api/boards/${boardId}/cards`, {
       method: 'POST',
-      body: JSON.stringify({ columnId, title, description, parentId, ideaStored, ...extra }),
+      body: JSON.stringify({ columnId, title, description, parentId, ...extra }),
     }),
   /**
    * Legt mehrere Karten in einem Zug am Ende einer Spalte dieses Boards an (Backend #1200) — Ziel
@@ -225,8 +221,6 @@ export const cardsApi = {
       body: JSON.stringify({ labels }),
     }),
   archive: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/archive`, { method: 'POST' }),
-  moveToIdeaStorage: (cardId: number) =>
-    apiFetch<Card>(`/api/cards/${cardId}/idea-storage`, { method: 'POST' }),
   bulkArchive: (cardIds: number[]) =>
     apiFetch<Card[]>(`/api/cards/bulk-archive`, { method: 'POST', body: JSON.stringify({ cardIds }) }),
   bulkTransfer: (cardIds: number[], targetBoardId: number, targetColumnId: number) =>

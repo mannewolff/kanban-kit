@@ -416,7 +416,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     const openCard = {
       id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
       type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     }
     mockedBoards.get.mockResolvedValue({
@@ -457,7 +457,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     // Karte ohne parentId, die allein über die Herkunft zum Vorhaben gehört (memberNumbers).
     const memberCard = {
       id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
       type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
       derivedFrom: null,
     }
@@ -520,7 +520,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     const openCard = {
       id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
       type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     }
     mockedBoards.get.mockResolvedValue({
@@ -574,7 +574,7 @@ describe('BoardPage weitere Orchestrierung', () => {
     memberships = [{ projectId: 9, role: 'OWNER' }]
     const openCard = {
       id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-      positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+      positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
       type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     }
     mockedBoards.get.mockResolvedValue({
@@ -621,7 +621,7 @@ describe('BoardPage Berechtigungen aus Rolle und Plattform-Admin', () => {
 
   const trashedCard = {
     id: 200, boardId: 1, columnId: 10, number: 2, title: 'Weg', description: null,
-    positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+    positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
     type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
   }
   const openCard = { ...trashedCard, id: 100, number: 1, title: 'Aufgabe' }
@@ -731,7 +731,7 @@ describe('BoardPage Statuswechsel aus dem Detail-Modal', () => {
   ]
   const offeneKarte = {
     id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null,
-    positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+    positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
     type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
   }
   // Zwei Karten liegen bereits in „In Progress" — die verschobene Karte gehört also an Position 2.
@@ -898,7 +898,7 @@ describe('BoardPage ausgeblendete Vorhaben', () => {
   })
   const mkKarte = (id: number, nummer: number, parentId: number | null) => ({
     id, boardId: 1, columnId: 10, number: nummer, title: `Karte ${nummer}`, description: null,
-    positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+    positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
     type: 'CARD' as const, parentId, shortcode: null, assignees: [], dueDate: null, labels: [],
   })
 
