@@ -32,7 +32,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * wäre die Menge der Schalternamen leer — und ein Test über eine leere Menge ist immer grün.
  */
 @SpringBootTest
-class AutomationSchalterDocumentationTest extends AbstractIntegrationTest {
+class AutomationSchalterDocumentationIT extends AbstractIntegrationTest {
 
   private static final Path ANLEITUNG = Path.of("docs", "betrieb.md");
   private static final Pattern VARIABLE = Pattern.compile("MANBAN_[A-Z0-9_]+");
