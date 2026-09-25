@@ -88,7 +88,6 @@ class CardServiceListByBoardTest {
         null,
         0,
         false,
-        false,
         null,
         1L,
         FIXED,
@@ -98,7 +97,6 @@ class CardServiceListByBoardTest {
         null,
         null,
         PROJECT,
-        null,
         null,
         derivedFrom,
         null);

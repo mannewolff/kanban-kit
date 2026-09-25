@@ -27,6 +27,10 @@ class CardEntity {
   @Column(name = "project_id", nullable = false)
   private Long projectId;
 
+  // Board, Spalte und Nummer trägt jede Karte (Issue #1204). Die Felder bleiben trotzdem
+  // @Nullable, weil die Spalten es bis Migration V44 (#1205) noch sind: Die Abbildung beschreibt
+  // das Schema, nicht die Invariante. Der Adapter löst sie beim Übergang in den Domänen-Record mit
+  // einer benannten Meldung auf, statt in eine nackte NPE zu laufen.
   @Column(name = "board_id")
   private @Nullable Long boardId;
 
@@ -35,9 +39,6 @@ class CardEntity {
 
   @Column(name = "number")
   private @Nullable Integer number;
-
-  @Column(name = "target_board_id")
-  private @Nullable Long targetBoardId;
 
   // Idempotenz-Schlüssel eines Automatik-Ingests (Issue #534); projekt-eindeutig via partiellem
   // Unique-Index (V24).
@@ -63,9 +64,6 @@ class CardEntity {
 
   @Column(name = "archived", nullable = false)
   private boolean archived;
-
-  @Column(name = "idea_stored", nullable = false)
-  private boolean ideaStored;
 
   @Column(name = "moved_to_done_at")
   private @Nullable Instant movedToDoneAt;
@@ -108,7 +106,6 @@ class CardEntity {
     this.boardId = c.boardId();
     this.columnId = c.columnId();
     this.number = c.number();
-    this.targetBoardId = c.targetBoardId();
     this.externalKey = c.externalKey();
     this.derivedFromCardId = c.derivedFromCardId();
     this.requirementCardId = c.requirementCardId();
@@ -116,7 +113,6 @@ class CardEntity {
     this.description = c.description();
     this.positionInColumn = c.positionInColumn();
     this.archived = c.archived();
-    this.ideaStored = c.ideaStored();
     this.movedToDoneAt = c.movedToDoneAt();
     this.createdBy = c.createdBy();
     this.createdAt = c.createdAt();
@@ -147,10 +143,6 @@ class CardEntity {
     return number;
   }
 
-  @Nullable Long getTargetBoardId() {
-    return targetBoardId;
-  }
-
   @Nullable String getExternalKey() {
     return externalKey;
   }
@@ -177,10 +169,6 @@ class CardEntity {
 
   boolean isArchived() {
     return archived;
-  }
-
-  boolean isIdeaStored() {
-    return ideaStored;
   }
 
   @Nullable Instant getMovedToDoneAt() {

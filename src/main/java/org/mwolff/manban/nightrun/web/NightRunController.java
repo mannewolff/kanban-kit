@@ -51,8 +51,7 @@ class NightRunController {
   static final int MAX_RUNS_PER_REQUEST = 100;
 
   /**
-   * Obergrenze der Arbeitspakete je Lauf, bemessen wie {@code
-   * ProjectIdeaController#MAX_IDEAS_PER_BATCH}.
+   * Obergrenze der Arbeitspakete je Lauf, bemessen wie {@code CardController#MAX_CARDS_PER_BATCH}.
    */
   static final int MAX_ITEMS_PER_RUN = 200;
 
@@ -160,8 +159,9 @@ class NightRunController {
 
   /**
    * Eine leere Liste ist eine Fehleingabe und keine leere Erfolgsantwort ({@code @NotEmpty} → 400)
-   * — dasselbe Verhalten wie bei {@code ideas/batch}. Der Browser sendet bei einem Protokoll aus
-   * lauter Probeläufen gar nicht erst.
+   * — dasselbe Verhalten wie beim Stapel-Anlegen an einer Board-Spalte ({@code
+   * boards/{boardId}/cards/batch}). Der Browser sendet bei einem Protokoll aus lauter Probeläufen
+   * gar nicht erst.
    */
   record SubmitNightRunsRequest(
       @NotEmpty @Size(max = MAX_RUNS_PER_REQUEST) List<@Valid @NotNull NightRunRequest> runs) {}

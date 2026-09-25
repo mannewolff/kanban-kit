@@ -4,7 +4,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -254,31 +253,6 @@ class AttachmentIT extends AbstractIntegrationTest {
     long after = upload("nach-archiv.bin", "application/octet-stream", data);
     mvc.perform(delete("/api/attachments/" + after).cookie(login))
         .andExpect(status().isNoContent());
-  }
-
-  /**
-   * Board-lose Pool-Ideen (#405) haben kein Board, über das sich eine Projekt-ID auflösen ließe —
-   * ihre Anhänge müssen trotzdem funktionieren (#462).
-   */
-  @Test
-  void attachmentsWorkForBoardlessPoolIdea() throws Exception {
-    setup("att-pool-idea@example.com");
-    byte[] data = {9, 8, 7};
-    mvc.perform(put("/api/cards/" + cardId + "/to-pool").cookie(login)).andExpect(status().isOk());
-
-    long id = upload("idee.bin", "application/octet-stream", data);
-
-    mvc.perform(get("/api/cards/" + cardId + "/attachments").cookie(login))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(1));
-    var response =
-        mvc.perform(get("/api/attachments/" + id).cookie(login))
-            .andExpect(status().isOk())
-            .andReturn()
-            .getResponse();
-    Assertions.assertThat(response.getContentAsByteArray()).isEqualTo(data);
-
-    mvc.perform(delete("/api/attachments/" + id).cookie(login)).andExpect(status().isNoContent());
   }
 
   // --- Konsistenz Metadaten ↔ Objektspeicher (Issue #503) --------------------------------------

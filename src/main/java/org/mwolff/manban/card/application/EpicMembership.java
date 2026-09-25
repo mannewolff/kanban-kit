@@ -21,9 +21,9 @@ import org.mwolff.manban.card.domain.CardType;
  * Dieselbe Trennung wie bei {@link DerivationTree} und {@link DerivedFrom}.
  *
  * <p><b>Die Filter wirken auf die Zugehörigkeit, nicht auf die Kantenverfolgung.</b> Eine Karte,
- * die selbst nicht zählt — archiviert, im Ideen-Speicher oder selbst ein Vorhaben —, unterbricht
- * die Kette nicht: Ihre Nachfahren bleiben zugehörig. Andernfalls machte ein archiviertes
- * Zwischendokument seine Arbeitspakete unsichtbar, obwohl an ihnen noch gearbeitet wird.
+ * die selbst nicht zählt — archiviert oder selbst ein Vorhaben —, unterbricht die Kette nicht: Ihre
+ * Nachfahren bleiben zugehörig. Andernfalls machte ein archiviertes Zwischendokument seine
+ * Arbeitspakete unsichtbar, obwohl an ihnen noch gearbeitet wird.
  *
  * <p><b>Der Abstieg führt eine Menge besuchter IDs</b>, obwohl der Schreibpfad Zyklen ablehnt.
  * {@link DerivationTree} darf darauf verzichten, weil es ausschliesslich von herkunftslosen Wurzeln
@@ -102,6 +102,6 @@ final class EpicMembership {
    * siehe die Grundregel im Klassen-Javadoc.
    */
   private static boolean zaehlt(Card c) {
-    return c.type() != CardType.EPIC && !c.archived() && !c.ideaStored();
+    return c.type() != CardType.EPIC && !c.archived();
   }
 }

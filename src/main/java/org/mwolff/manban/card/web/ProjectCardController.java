@@ -8,9 +8,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Projektweiter Karten-Lookup: löst eine projektweite Nummer zu ihrer Karte auf (board-gebundene
- * Karte oder board-lose Pool-Idee). Session-Auth erforderlich; Rechte prüft der {@link CardService}
- * (Mitglied, sonst 404). Basis für klickbare {@code #N}-Verweise (#403).
+ * Projektweiter Karten-Lookup: löst eine projektweite Nummer zu ihrer Karte auf. Session-Auth
+ * erforderlich; Rechte prüft der {@link CardService} (Mitglied, sonst 404). Basis für klickbare
+ * {@code #N}-Verweise (#403).
  */
 @RestController
 class ProjectCardController {

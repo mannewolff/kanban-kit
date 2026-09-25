@@ -37,7 +37,6 @@ class TrashRetentionServiceTest {
         null,
         0,
         false,
-        false,
         null,
         1L,
         NOW,
@@ -47,7 +46,6 @@ class TrashRetentionServiceTest {
         null,
         null,
         1L,
-        null,
         null,
         null,
         null);

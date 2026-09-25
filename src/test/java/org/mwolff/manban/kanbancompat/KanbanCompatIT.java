@@ -276,8 +276,8 @@ class KanbanCompatIT extends AbstractIntegrationTest {
    * den Zugriff verhindert.
    *
    * <p>Der Schreibpfad ist für denselben Fall bereits durch die Gegenprobe am Ende von {@link
-   * #ideaStoredCardIsInvisibleAndUntouchableForTheAutomation} gepinnt (reguläre Karte auf einem
-   * zweiten Board desselben Projekts, POST → 404) und wird hier nicht dupliziert.
+   * #archivedCardIsInvisibleForTheAutomation} gepinnt (reguläre Karte auf einem zweiten Board
+   * desselben Projekts, POST → 404) und wird hier nicht dupliziert.
    */
   @Test
   void listComments_isScopedToTheBoundBoard() throws Exception {
@@ -603,14 +603,18 @@ class KanbanCompatIT extends AbstractIntegrationTest {
   }
 
   /**
-   * Eine Karte im Ideen-Speicher trägt weiterhin Board und Spalte, ist in der Oberfläche aber
-   * ausgeblendet. Die Compat-Schicht filterte nur archivierte Karten und meldete sie deshalb als
-   * reguläre Karte ihrer Spalte — Kit und Nacht-Runner sahen eine Aufgabe, die für Menschen nicht
-   * existiert (real passiert, Issue #428). Sie darf über diese Schnittstelle weder auftauchen noch
-   * bewegt noch kommentiert werden.
+   * Eine archivierte Karte ist in der Oberfläche ausgeblendet und darf darum auch über die
+   * Compat-Schnittstelle nicht als Aufgabe ihrer Spalte erscheinen. Vor Issue #428 filterte die
+   * Schicht zu wenig — Kit und Nacht-Runner sahen eine Aufgabe, die für Menschen nicht existiert.
+   *
+   * <p>Der Lesepfad ist die Zusage; <b>Bewegen und Kommentieren einer archivierten Karte bleiben
+   * möglich</b> (der Board-Guard {@code requireOnBoard} prüft die Board-Bindung, nicht den
+   * Archivzustand) — dasselbe Bestandsverhalten wie an der Karten-API, wo eine archivierte Karte
+   * bearbeitet und wiederhergestellt werden darf. Die Gegenprobe am Ende pinnt den Schreibpfad für
+   * den Fall, den der Guard wirklich abweist: eine Karte auf einem anderen Board.
    */
   @Test
-  void ideaStoredCardIsInvisibleAndUntouchableForTheAutomation() throws Exception {
+  void archivedCardIsInvisibleForTheAutomation() throws Exception {
     long projectId = createProject("ghost-owner@example.com", "GhostProjekt");
     Cookie owner = loginAs("ghost-owner@example.com");
     long boardId = createBoard(owner, projectId, "GhostBoard");
@@ -619,22 +623,11 @@ class KanbanCompatIT extends AbstractIntegrationTest {
 
     long visible = createCard(owner, boardId, columnId, "SichtbareKarte");
     long ghost = createCard(owner, boardId, columnId, "GeisterKarte");
-    long archivedCard = createCard(owner, boardId, columnId, "ArchivierteKarte");
 
-    // Vor dem Verschieben in den Ideen-Speicher sind alle drei Karten für die Automatik da.
-    assertThat(kanbanItems(token).get("BACKLOG")).hasSize(3);
+    // Vor dem Archivieren sind beide Karten für die Automatik da.
+    assertThat(kanbanItems(token).get("BACKLOG")).hasSize(2);
 
-    // Archiviert und im Ideen-Speicher sind zwei unabhängige Gründe, eine Karte auszublenden —
-    // jeder muss für sich greifen.
-    mvc.perform(post("/api/cards/" + archivedCard + "/archive").cookie(owner))
-        .andExpect(status().isOk());
-
-    // Seit #433 wird die Karte beim Weg in den Ideen-Speicher board-los (vorher blieb boardId
-    // gesetzt — genau das machte sie zur unauffindbaren Geisterkarte).
-    mvc.perform(post("/api/cards/" + ghost + "/idea-storage").cookie(owner))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.ideaStored").value(true))
-        .andExpect(jsonPath("$.boardId").doesNotExist());
+    mvc.perform(post("/api/cards/" + ghost + "/archive").cookie(owner)).andExpect(status().isOk());
 
     // Die Automatik sieht nur noch die sichtbare Karte — und damit genauso viele wie die UI-API.
     JsonNode items = kanbanItems(token);
@@ -648,25 +641,8 @@ class KanbanCompatIT extends AbstractIntegrationTest {
             .getResponse()
             .getContentAsString();
     long uiVisible =
-        json.readTree(uiCards)
-            .valueStream()
-            .filter(c -> !c.get("ideaStored").asBoolean() && !c.get("archived").asBoolean())
-            .count();
+        json.readTree(uiCards).valueStream().filter(c -> !c.get("archived").asBoolean()).count();
     assertThat((long) items.get("BACKLOG").size()).isEqualTo(uiVisible);
-
-    // Bewegen und Kommentieren der unsichtbaren Karte sind über die Schnittstelle nicht möglich.
-    mvc.perform(
-            put("/api/kanban/items/" + ghost + "/move")
-                .header("X-Kanban-Token", token)
-                .contentType("application/json")
-                .content("{\"column\":\"READY\"}"))
-        .andExpect(status().isNotFound());
-    mvc.perform(
-            post("/api/kanban/items/" + ghost + "/comments")
-                .header("X-Kanban-Token", token)
-                .contentType("application/json")
-                .content("{\"body\":\"Kommentar\"}"))
-        .andExpect(status().isNotFound());
 
     // Gegenprobe zum zweiten Grund derselben Prüfung: eine reguläre Karte auf einem anderen Board
     // ist über dieses Token ebenfalls nicht kommentierbar.

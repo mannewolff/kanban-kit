@@ -202,8 +202,7 @@ public class CardCycleTimeService {
     if (dwell <= OUTLIER_THRESHOLD_SECONDS) {
       return null;
     }
-    return new OutlierCard(
-        card.requireId(), card.requireNumber(), card.title(), t.columnName(), dwell);
+    return new OutlierCard(card.requireId(), card.number(), card.title(), t.columnName(), dwell);
   }
 
   /**

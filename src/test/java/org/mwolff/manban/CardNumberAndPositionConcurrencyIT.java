@@ -407,7 +407,7 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
   }
 
   private List<Integer> numbers(long projectId) {
-    return cards.findByProjectId(projectId).stream().map(Card::requireNumber).sorted().toList();
+    return cards.findByProjectId(projectId).stream().map(Card::number).sorted().toList();
   }
 
   /**
@@ -420,7 +420,7 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
     return new JdbcTemplate(dataSource)
         .queryForList(
             "SELECT position_in_column FROM card WHERE column_id = ? AND archived = false"
-                + " AND idea_stored = false AND deleted_at IS NULL AND type <> 'EPIC'"
+                + " AND deleted_at IS NULL AND type <> 'EPIC'"
                 + " ORDER BY position_in_column",
             Integer.class,
             columnId);

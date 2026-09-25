@@ -55,45 +55,42 @@ class CardDerivedFromPersistenceIT extends AbstractIntegrationTest {
 
   @Test
   void herkunft_ueberlebtSpeichernUndLaden() {
-    Card vorfahr = cards.save(karte("Vorfahr", 1, null, false, false));
+    Card vorfahr = cards.save(karte("Vorfahr", 1, null, false));
 
-    Card kind = cards.save(karte("Kind", 2, vorfahr.requireId(), false, false));
+    Card kind = cards.save(karte("Kind", 2, vorfahr.requireId(), false));
 
     assertThat(cards.findById(kind.requireId()).orElseThrow().derivedFromCardId())
         .isEqualTo(vorfahr.requireId());
   }
 
   @Test
-  void findByDerivedFrom_liefertAlleKinder_auchArchivierteUndPoolIdeen() {
-    Card vorfahr = cards.save(karte("Vorfahr", 1, null, false, false));
+  void findByDerivedFrom_liefertAlleKinder_auchArchivierte() {
+    Card vorfahr = cards.save(karte("Vorfahr", 1, null, false));
     long v = vorfahr.requireId();
 
-    Card normal = cards.save(karte("Normal", 2, v, false, false));
-    Card archiviert = cards.save(karte("Archiviert", 3, v, true, false));
-    Card poolIdee = cards.save(karte("Pool", 4, v, false, true));
-    cards.save(karte("Ohne Herkunft", 5, null, false, false));
+    Card normal = cards.save(karte("Normal", 2, v, false));
+    Card archiviert = cards.save(karte("Archiviert", 3, v, true));
+    cards.save(karte("Ohne Herkunft", 5, null, false));
 
     List<Card> kinder = cards.findByDerivedFrom(v);
 
     assertThat(kinder)
         .extracting(Card::requireId)
-        .containsExactlyInAnyOrder(
-            normal.requireId(), archiviert.requireId(), poolIdee.requireId());
+        .containsExactlyInAnyOrder(normal.requireId(), archiviert.requireId());
   }
 
   @Test
   void findByDerivedFrom_liefertLeer_ohneKinder() {
-    Card einsam = cards.save(karte("Einsam", 1, null, false, false));
+    Card einsam = cards.save(karte("Einsam", 1, null, false));
 
     assertThat(cards.findByDerivedFrom(einsam.requireId())).isEmpty();
   }
 
-  private Card karte(
-      String titel, int nummer, Long herkunft, boolean archiviert, boolean ideenSpeicher) {
+  private Card karte(String titel, int nummer, Long herkunft, boolean archiviert) {
     return new Card(
         null,
-        ideenSpeicher ? null : boardId,
-        ideenSpeicher ? null : columnId,
+        boardId,
+        columnId,
         nummer,
         titel,
         null,
@@ -101,7 +98,6 @@ class CardDerivedFromPersistenceIT extends AbstractIntegrationTest {
         // eine feste 0 kollidierte auf uq_card_active_position.
         nummer,
         archiviert,
-        ideenSpeicher,
         null,
         null,
         NOW,
@@ -111,7 +107,6 @@ class CardDerivedFromPersistenceIT extends AbstractIntegrationTest {
         null,
         null,
         projectId,
-        null,
         null,
         herkunft,
         null);

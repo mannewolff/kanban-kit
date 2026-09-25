@@ -82,7 +82,6 @@ class KanbanCompatServiceTest {
         null,
         0,
         false,
-        false,
         null,
         List.of(),
         CardType.CARD,
@@ -91,7 +90,6 @@ class KanbanCompatServiceTest {
         List.of(),
         null,
         List.of(),
-        null,
         null);
   }
 
@@ -295,7 +293,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     // When
     KanbanCompatService.Created created =
@@ -316,7 +314,7 @@ class KanbanCompatServiceTest {
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.createDirect(
             1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", "READY", null, false, null, null, null);
 
@@ -337,7 +335,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(200L, "Eingang", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 200L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", BACKLOG_KEY, null, false, null, null, null);
 
@@ -355,7 +353,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", column, null, false, null, null, null);
 
@@ -371,7 +369,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), false));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), false));
 
     // When
     KanbanCompatService.Created created =
@@ -391,7 +389,7 @@ class KanbanCompatServiceTest {
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(anyLong(), anyLong(), anyLong(), any()))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     // When: überlanger Schlüssel und blanker Schlüssel
     service.create(bound(), "Titel", "Body", null, "x".repeat(150), false, null, null, null);
@@ -449,7 +447,7 @@ class KanbanCompatServiceTest {
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.createDirect(
             1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", "READY", null, true, null, null, null);
 
@@ -466,7 +464,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", null, null, true, null, null, null);
 
@@ -559,7 +557,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "github#278", 278, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", null, "github#278", true, 278, null, null);
 
@@ -576,7 +574,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "github#278", 278, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     KanbanCompatService.Created created =
         service.create(bound(), "Titel", "Body", null, "github#278", false, 278, null, null);
@@ -616,7 +614,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     KanbanCompatService.Created created =
         service.create(bound(), "Titel", "Body", null, null, false, null, null, null);
@@ -631,7 +629,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(42L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
 
     // When
     KanbanCompatService.Created created =
@@ -888,7 +886,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(55L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(55L), true));
 
     // When
     KanbanCompatService.Created first =
@@ -911,7 +909,7 @@ class KanbanCompatServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
     when(cardService.createDirect(
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null)))
-        .thenReturn(new CardService.IdeaCreation(angelegt(55L), true));
+        .thenReturn(new CardService.CardCreation(angelegt(55L), true));
 
     // When
     service.create(bound(), "Titel", "Body", null, "sonar:abc", false, null, null, "k-1");

@@ -1,6 +1,5 @@
 package org.mwolff.manban.card;
 
-import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -80,35 +79,12 @@ class CardByNumberIT extends AbstractIntegrationTest {
     long cardId = cardNode.get("id").asLong();
     int cardNumber = cardNode.get("number").asInt();
 
-    // Board-lose Pool-Idee anlegen (bekommt sofort eine projektweite Nummer, #402).
-    var ideaNode =
-        json.readTree(
-            mvc.perform(
-                    post("/api/projects/" + projectId + "/ideas")
-                        .cookie(owner)
-                        .contentType("application/json")
-                        .content("{\"title\":\"Idee\"}"))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString());
-    long ideaId = ideaNode.get("id").asLong();
-    int ideaNumber = ideaNode.get("number").asInt();
-
     // Mitglied löst die Board-Karte per Nummer auf.
     mvc.perform(get("/api/projects/" + projectId + "/cards/by-number/" + cardNumber).cookie(owner))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(cardId))
         .andExpect(jsonPath("$.number").value(cardNumber))
         .andExpect(jsonPath("$.boardId").value(boardId));
-
-    // Mitglied löst auch die board-lose Pool-Idee per Nummer auf.
-    mvc.perform(get("/api/projects/" + projectId + "/cards/by-number/" + ideaNumber).cookie(owner))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.id").value(ideaId))
-        .andExpect(jsonPath("$.number").value(ideaNumber))
-        .andExpect(jsonPath("$.boardId").value(nullValue()))
-        .andExpect(jsonPath("$.ideaStored").value(true));
 
     // Nichtmitglied → 404 (kein Existenz-Leak).
     mvc.perform(
@@ -117,7 +93,7 @@ class CardByNumberIT extends AbstractIntegrationTest {
 
     // Unbekannte Nummer → 404.
     mvc.perform(
-            get("/api/projects/" + projectId + "/cards/by-number/" + (ideaNumber + 999))
+            get("/api/projects/" + projectId + "/cards/by-number/" + (cardNumber + 999))
                 .cookie(owner))
         .andExpect(status().isNotFound());
   }

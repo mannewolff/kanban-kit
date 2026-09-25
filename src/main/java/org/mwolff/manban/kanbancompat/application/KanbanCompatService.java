@@ -179,7 +179,7 @@ public class KanbanCompatService {
     // ungültiges `column` denselben Fehler, egal ob der Schlüssel schon eine Karte trifft —
     // sonst hinge die Fehlermeldung davon ab, ob zufällig schon eine existiert.
     long columnId = zielSpalteId(boardId, column, direct);
-    CardService.IdeaCreation result =
+    CardService.CardCreation result =
         cardService.createDirect(
             principal.userId(),
             boardId,
@@ -198,8 +198,7 @@ public class KanbanCompatService {
    * <p>Der Guard prüft das <em>Projekt</em> des gebundenen Boards, nicht das Board selbst: Ein
    * Migrations-Script verknüpft Karten, die es über mehrere Boards eines Projekts verteilt hat, und
    * der board-bezogene Guard von {@link #move} und {@link #comment} antwortete für die Karten der
-   * übrigen Boards mit 404. Vor Issue #1203 war der Anlass derselbe, nur mit board-losen Pool-Ideen
-   * als Fall.
+   * übrigen Boards mit 404.
    *
    * <p>Ersetzen-Semantik: Die übergebene Liste tritt an die Stelle der vorhandenen Verweise. Damit
    * ist ein wiederholter Aufruf mit derselben Liste folgenlos, ohne dass es eine Sonderbehandlung
@@ -313,8 +312,8 @@ public class KanbanCompatService {
    * Vorhaben ihr Kürzel, weil dieser Aufrufer diese Felder gar nicht kennt.
    *
    * <p>Reichweite wie bei {@link #move} und {@link #comment}: nur Karten und Vorhaben des
-   * gebundenen Boards. Board-lose Pool-Ideen und Karten im Ideen-Speicher sind über {@code
-   * requireOnBoard} ausgeschlossen und antworten mit 404.
+   * gebundenen Boards. Karten anderer Boards sind über {@code requireOnBoard} ausgeschlossen und
+   * antworten mit 404.
    */
   @Transactional
   public Item update(KanbanPrincipal principal, long cardId, String title, @Nullable String body) {
@@ -328,8 +327,8 @@ public class KanbanCompatService {
    * claude-workflow-kit sein Routing-Label {@code kit:nightrun} setzt.
    *
    * <p>Reichweite wie bei {@link #move} und {@link #comment}: Der Board-Guard der card-Fassade
-   * schließt Karten anderer Boards, board-lose Pool-Ideen und den Ideen-Speicher mit 404 aus. Das
-   * gilt auch innerhalb desselben Projekts, wo die Projektberechtigung allein nicht schützt.
+   * schließt Karten anderer Boards mit 404 aus. Das gilt auch innerhalb desselben Projekts, wo die
+   * Projektberechtigung allein nicht schützt.
    *
    * <p>Alle übrigen Labels der Karte bleiben unverändert; ein bereits gesetztes Label erneut zu
    * setzen ist Erfolg (Einzelheiten in {@code LabelService.addToCard}).

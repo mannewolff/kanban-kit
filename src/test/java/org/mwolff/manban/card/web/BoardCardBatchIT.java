@@ -107,8 +107,7 @@ class BoardCardBatchIT extends AbstractIntegrationTest {
         assertThat(karte.get("positionInColumn").asInt())
             .isGreaterThan(created.get(i - 1).get("positionInColumn").asInt());
       }
-      // Board-Karte, keine Pool-Idee, nicht erledigt.
-      assertThat(karte.get("ideaStored").asBoolean()).isFalse();
+      // Nicht erledigt: die Zielspalte ist keine Done-Spalte.
       assertThat(karte.get("movedToDoneAt").isNull()).isTrue();
     }
 

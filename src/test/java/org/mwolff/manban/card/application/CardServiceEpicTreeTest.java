@@ -95,7 +95,6 @@ class CardServiceEpicTreeTest {
         null,
         0,
         archived,
-        false,
         null,
         1L,
         FIXED,
@@ -105,7 +104,6 @@ class CardServiceEpicTreeTest {
         null,
         null,
         PROJECT,
-        null,
         null,
         derivedFrom,
         null);
@@ -257,7 +255,6 @@ class CardServiceEpicTreeTest {
             null,
             0,
             false,
-            false,
             null,
             1L,
             FIXED,
@@ -267,7 +264,6 @@ class CardServiceEpicTreeTest {
             null,
             null,
             PROJECT,
-            null,
             null,
             null,
             null);

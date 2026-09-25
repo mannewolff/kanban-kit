@@ -102,37 +102,13 @@ class TextLimitsIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void ideaEndpointsAcceptTheLimitAndRejectOneMore() throws Exception {
-    // POST /api/projects/{projectId}/ideas — vor #572 komplett unbegrenzt.
-    long ideaId =
-        json.readTree(
-                mvc.perform(
-                        post("/api/projects/" + projectId + "/ideas")
-                            .cookie(session)
-                            .contentType("application/json")
-                            .content(
-                                json.writeValueAsString(
-                                    Map.of("title", "Idee", "description", AT_LIMIT))))
-                    .andExpect(status().isCreated())
-                    .andReturn()
-                    .getResponse()
-                    .getContentAsString())
-            .get("id")
-            .asLong();
-    assertThat(descriptionOf(ideaId)).hasSize(TextLimits.MAX_TEXT);
-
+  void cardBatchEndpointAcceptsTheLimitAndRejectsOneMore() throws Exception {
+    // POST /api/boards/{boardId}/cards/batch (Issue #1200) — ein zu langes Element kippt den
+    // ganzen Stapel, es entsteht keine einzige Karte.
     long before = cardCount();
-    mvc.perform(
-            post("/api/projects/" + projectId + "/ideas")
-                .cookie(session)
-                .contentType("application/json")
-                .content(
-                    json.writeValueAsString(Map.of("title", "Idee", "description", OVER_LIMIT))))
-        .andExpect(status().isBadRequest());
-    assertThat(cardCount()).isEqualTo(before);
-
-    // POST /api/projects/{projectId}/ideas/batch — ein zu langes Element kippt den ganzen Stapel.
     batchRequest("Stapel", AT_LIMIT).andExpect(status().isCreated());
+    assertThat(cardCount()).isEqualTo(before + 1);
+
     before = cardCount();
     batchRequest("Stapel zu lang", OVER_LIMIT).andExpect(status().isBadRequest());
     assertThat(cardCount()).isEqualTo(before);
@@ -267,12 +243,16 @@ class TextLimitsIT extends AbstractIntegrationTest {
 
   private ResultActions batchRequest(String title, String description) throws Exception {
     return mvc.perform(
-        post("/api/projects/" + projectId + "/ideas/batch")
+        post("/api/boards/" + boardId + "/cards/batch")
             .cookie(session)
             .contentType("application/json")
             .content(
                 json.writeValueAsString(
-                    Map.of("ideas", List.of(Map.of("title", title, "description", description))))));
+                    Map.of(
+                        "columnId",
+                        columnId,
+                        "cards",
+                        List.of(Map.of("title", title, "description", description))))));
   }
 
   private ResultActions commentRequest(long cardId, String body) throws Exception {

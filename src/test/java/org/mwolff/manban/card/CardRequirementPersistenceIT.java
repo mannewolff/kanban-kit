@@ -119,7 +119,6 @@ class CardRequirementPersistenceIT extends AbstractIntegrationTest {
         // eine feste 0 kollidierte auf uq_card_active_position.
         nummer,
         false,
-        false,
         null,
         null,
         NOW,
@@ -129,7 +128,6 @@ class CardRequirementPersistenceIT extends AbstractIntegrationTest {
         null,
         null,
         projectId,
-        null,
         null,
         null,
         anforderung);

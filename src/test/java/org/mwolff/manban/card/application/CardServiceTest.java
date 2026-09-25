@@ -46,7 +46,7 @@ import org.springframework.context.ApplicationEventPublisher;
 /** Verhaltenstests der Karten- und Epic-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Karten + Epics, Erfolgs- und Fehlerpfade je
 // Use-Case). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
-// PMD.NcssCount/PMD.ExcessiveImports: aus demselben Grund und derselben Größe. Die Suite deckt
+// PMD.ExcessiveImports: aus demselben Grund und derselben Größe. Die Suite deckt
 // die vollständige Fassade eines Moduls ab; ihre Länge und die Zahl der Typen, die sie dafür
 // aufruft, sind die Folge der Abdeckungspflicht. Ein Zerschneiden nach Zeilenzahl würde die
 // Use-Cases über Dateien verstreuen, ohne etwas zu entkoppeln.
@@ -54,7 +54,6 @@ import org.springframework.context.ApplicationEventPublisher;
   "PMD.TooManyMethods",
   "PMD.CyclomaticComplexity",
   "PMD.CouplingBetweenObjects",
-  "PMD.NcssCount",
   "PMD.ExcessiveImports"
 })
 class CardServiceTest {
@@ -90,8 +89,8 @@ class CardServiceTest {
       Long parentId,
       String shortcode) {
     return new Card(
-        id, BOARD, columnId, number, "Titel", null, 0, archived, false, done, 1L, FIXED, FIXED,
-        type, parentId, shortcode, null, PROJECT, null, null, null, null);
+        id, BOARD, columnId, number, "Titel", null, 0, archived, done, 1L, FIXED, FIXED, type,
+        parentId, shortcode, null, PROJECT, null, null, null);
   }
 
   private static ColumnView column(long id, String name, int position) {
@@ -145,7 +144,6 @@ class CardServiceTest {
         c.description(),
         c.positionInColumn(),
         c.archived(),
-        c.ideaStored(),
         c.movedToDoneAt(),
         c.createdBy(),
         c.createdAt(),
@@ -155,7 +153,6 @@ class CardServiceTest {
         c.shortcode(),
         c.dueDate(),
         c.projectId(),
-        c.targetBoardId(),
         c.externalKey(),
         null,
         null);
@@ -190,7 +187,7 @@ class CardServiceTest {
     // Die zurückgegebene View der Voll-Signatur (11 Args) wird bewusst geprüft, damit der
     // @Transactional-Einstieg (der an den privaten Kern doCreate delegiert) nicht null zurückgibt.
     CardService.CardView result =
-        service.create(1L, BOARD, 20L, "Titel", null, null, null, false, due, null, null, null);
+        service.create(1L, BOARD, 20L, "Titel", null, null, null, due, null, null, null);
 
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().dueDate()).isEqualTo(due);
@@ -206,7 +203,7 @@ class CardServiceTest {
     when(permissions.isRealProjectMember(8L, 1L)).thenReturn(true);
 
     service.create(
-        1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(7L, 8L, 7L), null, null);
+        1L, BOARD, 20L, "Titel", null, null, null, null, List.of(7L, 8L, 7L), null, null);
 
     verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
     // Genau ein Aktivitätseintrag (CREATED) — kein zusätzlicher ASSIGNED beim atomaren Anlegen.
@@ -243,7 +240,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(1);
     when(cards.allocateActivePosition(20L)).thenReturn(0);
 
-    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, List.of(), null, null);
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, null, List.of(), null, null);
 
     verify(assignees, never()).replaceAssignees(anyLong(), anyList());
   }
@@ -258,18 +255,7 @@ class CardServiceTest {
     assertThatThrownBy(
             () ->
                 service.create(
-                    1L,
-                    BOARD,
-                    20L,
-                    "Titel",
-                    null,
-                    null,
-                    null,
-                    false,
-                    null,
-                    List.of(9L),
-                    null,
-                    null))
+                    1L, BOARD, 20L, "Titel", null, null, null, null, List.of(9L), null, null))
         .isInstanceOf(InvalidAssigneeException.class);
     verify(assignees, never()).replaceAssignees(anyLong(), anyList());
   }
@@ -286,7 +272,7 @@ class CardServiceTest {
                 new Label(8L, BOARD, "Ux", "#0f0", false)));
 
     service.create(
-        1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(7L, 8L, 7L), null);
+        1L, BOARD, 20L, "Titel", null, null, null, null, null, List.of(7L, 8L, 7L), null);
 
     verify(cardLabels).replaceLabels(1L, List.of(7L, 8L));
   }
@@ -297,7 +283,7 @@ class CardServiceTest {
     when(cards.allocateCardNumber(PROJECT)).thenReturn(1);
     when(cards.allocateActivePosition(20L)).thenReturn(0);
 
-    service.create(1L, BOARD, 20L, "Titel", null, null, null, false, null, null, List.of(), null);
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, null, null, List.of(), null);
 
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
@@ -313,18 +299,7 @@ class CardServiceTest {
     assertThatThrownBy(
             () ->
                 service.create(
-                    1L,
-                    BOARD,
-                    20L,
-                    "Titel",
-                    null,
-                    null,
-                    null,
-                    false,
-                    null,
-                    null,
-                    List.of(8L),
-                    null))
+                    1L, BOARD, 20L, "Titel", null, null, null, null, null, List.of(8L), null))
         .isInstanceOf(InvalidLabelException.class);
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
@@ -593,18 +568,9 @@ class CardServiceTest {
         .containsExactly(1, 2);
   }
 
-  /**
-   * Karte mit Herkunft und optionalem Ideen-Speicher-Kennzeichen — für die Zugehörigkeit über die
-   * Kette (Issue #633).
-   */
+  /** Karte mit Herkunft — für die Zugehörigkeit über die Kette (Issue #633). */
   private static Card kette(
-      long id,
-      long columnId,
-      int number,
-      CardType type,
-      Long parentId,
-      Long derivedFrom,
-      boolean ideaStored) {
+      long id, long columnId, int number, CardType type, Long parentId, Long derivedFrom) {
     return new Card(
         id,
         BOARD,
@@ -614,7 +580,6 @@ class CardServiceTest {
         null,
         0,
         false,
-        ideaStored,
         null,
         1L,
         FIXED,
@@ -624,7 +589,6 @@ class CardServiceTest {
         null,
         null,
         PROJECT,
-        null,
         null,
         derivedFrom,
         null);
@@ -638,11 +602,11 @@ class CardServiceTest {
     when(cards.findByBoardId(BOARD))
         .thenReturn(
             List.of(
-                kette(5L, 20L, 1, CardType.EPIC, null, null, false),
-                kette(6L, 20L, 2, CardType.CARD, 5L, null, false),
-                kette(7L, 21L, 3, CardType.CARD, null, 6L, false),
-                kette(8L, 20L, 4, CardType.CARD, null, 7L, false),
-                kette(9L, 20L, 5, CardType.CARD, null, null, false)));
+                kette(5L, 20L, 1, CardType.EPIC, null, null),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null),
+                kette(7L, 21L, 3, CardType.CARD, null, 6L),
+                kette(8L, 20L, 4, CardType.CARD, null, 7L),
+                kette(9L, 20L, 5, CardType.CARD, null, null)));
 
     // When
     List<CardService.EpicView> result = service.listEpics(1L, BOARD);
@@ -663,9 +627,9 @@ class CardServiceTest {
     when(cards.findByBoardId(BOARD))
         .thenReturn(
             List.of(
-                kette(5L, 20L, 1, CardType.EPIC, null, null, false),
-                kette(6L, 20L, 2, CardType.CARD, 5L, null, false),
-                kette(7L, 20L, 3, CardType.CARD, null, 6L, false)));
+                kette(5L, 20L, 1, CardType.EPIC, null, null),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null),
+                kette(7L, 20L, 3, CardType.CARD, null, 6L)));
 
     // When
     CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
@@ -675,26 +639,6 @@ class CardServiceTest {
     assertThat(view.memberNumbers()).containsExactly(2, 3);
     assertThat(view.memberNumbers()).containsAll(view.rootNumbers());
     assertThat(view.total()).isEqualTo(view.memberNumbers().size());
-  }
-
-  @Test
-  void listEpics_zaehltKarteImIdeenSpeicherNichtMit() {
-    // Given: eine board-gebundene Karte im Ideen-Speicher, direkt zugeordnet (Entscheidung E6).
-    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
-    when(cards.findByBoardId(BOARD))
-        .thenReturn(
-            List.of(
-                kette(5L, 20L, 1, CardType.EPIC, null, null, false),
-                kette(6L, 20L, 2, CardType.CARD, 5L, null, false),
-                kette(7L, 20L, 3, CardType.CARD, 5L, null, true)));
-
-    // When
-    CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
-
-    // Then
-    assertThat(view.total()).isEqualTo(1);
-    assertThat(view.memberNumbers()).containsExactly(2);
-    assertThat(view.memberNumbers()).doesNotContain(3);
   }
 
   @Test
@@ -1008,112 +952,6 @@ class CardServiceTest {
     assertThat(captor.getValue().positionInColumn()).isEqualTo(3);
   }
 
-  // --- Ideen-Speicher (führt seit #433 in den projektweiten Pool) -------
-
-  @Test
-  void moveToIdeaStorage_becomesBoardlessPoolIdea_keepsNumber_notesTargetBoard() {
-    // Given
-    when(cards.findById(1L))
-        .thenReturn(Optional.of(card(1L, 20L, 7, false, null, CardType.CARD, null, null)));
-
-    // When
-    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardService.CardView view = service.moveToIdeaStorage(9L, 1L);
-
-    // Then — Ideen-Pflege nutzt das Verschieberecht (kein Löschen); die Karte wird board-los,
-    // behält ihre Nummer (#433, sonst brächen #N-Rückverweise) und notiert das alte Board als
-    // Zielboard-Hinweis.
-    verify(permissions).require(9L, 1L, Permission.CARD_MOVE);
-    verify(cards).save(captor.capture());
-    Card saved = captor.getValue();
-    assertThat(saved.ideaStored()).isTrue();
-    assertThat(saved.boardId()).isNull();
-    assertThat(saved.columnId()).isNull();
-    assertThat(saved.number()).isEqualTo(7);
-    assertThat(saved.targetBoardId()).isEqualTo(BOARD);
-    assertThat(view.ideaStored()).isTrue();
-    verify(activity)
-        .add(
-            1L,
-            9L,
-            CardActivityType.IDEA_STORED,
-            "In den Ideen-Speicher",
-            FIXED,
-            ActorContext.ActorStamp.unknown());
-    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
-  }
-
-  @Test
-  void moveToIdeaStorage_rejectsEpic() {
-    // Given
-    when(cards.findById(5L))
-        .thenReturn(Optional.of(card(5L, 20L, 5, false, null, CardType.EPIC, null, "E")));
-
-    // When / Then — Epics gehören nicht in den Ideen-Speicher; kein Save.
-    assertThatThrownBy(() -> service.moveToIdeaStorage(9L, 5L))
-        .isInstanceOf(InvalidDependencyException.class);
-    verify(cards, never()).save(any(Card.class));
-  }
-
-  @Test
-  void moveToIdeaStorage_throwsCardNotFound_whenUnknown() {
-    // Given
-    when(cards.findById(1L)).thenReturn(Optional.empty());
-
-    // When / Then
-    assertThatThrownBy(() -> service.moveToIdeaStorage(9L, 1L))
-        .isInstanceOf(CardNotFoundException.class);
-  }
-
-  @Test
-  void moveToIdeaStorage_throwsBoardNotFound_whenBoardUnknown() {
-    // Given
-    when(cards.findById(1L))
-        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-    when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
-
-    // When / Then
-    assertThatThrownBy(() -> service.moveToIdeaStorage(9L, 1L))
-        .isInstanceOf(BoardNotFoundException.class);
-  }
-
-  @Test
-  void create_asIdea_marksIdeaStoredAndSkipsTransition() {
-    // Given
-    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
-
-    // When: direkt als Idee angelegt
-    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardService.CardView view = service.create(1L, BOARD, 20L, "Idee", null, null, null, true);
-
-    // Then — ideaStored gesetzt, keine Spalten-Transition (kein Board-Workflow), CREATED
-    // protokolliert.
-    verify(cards).save(captor.capture());
-    assertThat(captor.getValue().ideaStored()).isTrue();
-    assertThat(view.ideaStored()).isTrue();
-    verify(transitions, never()).open(anyLong(), anyLong(), any(), any());
-    verify(activity)
-        .add(
-            1L,
-            1L,
-            CardActivityType.CREATED,
-            "Karte angelegt",
-            FIXED,
-            ActorContext.ActorStamp.unknown());
-  }
-
-  @Test
-  void create_normalCard_hasIdeaStoredFalseInView() {
-    // Given
-    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
-
-    // When
-    CardService.CardView view = service.create(1L, BOARD, 20L, "Titel", null, null, null);
-
-    // Then — ohne Idee-Flag ist die Karte eine normale Board-Karte.
-    assertThat(view.ideaStored()).isFalse();
-  }
-
   @Test
   void delete_softDeletesCard() {
     // Given
@@ -1241,7 +1079,6 @@ class CardServiceTest {
             null,
             0,
             false,
-            false,
             null,
             1L,
             FIXED,
@@ -1251,7 +1088,6 @@ class CardServiceTest {
             "E",
             null,
             PROJECT,
-            null,
             null,
             null,
             null);
@@ -1740,45 +1576,6 @@ class CardServiceTest {
   }
 
   @Test
-  void listBoardItems_liefertNull_wennDerVorfahrKeineNummerHat() {
-    // Alt-Ideen von vor #402 haben number == null. Ein Verweis auf eine solche Karte liefert
-    // keine Nummer — die Sicht haelt das aus, statt zu scheitern.
-    Card ohneNummer =
-        new Card(
-            91L,
-            BOARD,
-            20L,
-            null,
-            "Alt",
-            null,
-            0,
-            false,
-            true,
-            null,
-            1L,
-            FIXED,
-            FIXED,
-            CardType.CARD,
-            null,
-            null,
-            null,
-            PROJECT,
-            null,
-            null,
-            null,
-            null);
-    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
-    when(cards.findByBoardId(BOARD))
-        .thenReturn(
-            List.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null).withDerivedFrom(91L)));
-    when(cards.findByIds(any())).thenReturn(List.of(ohneNummer));
-
-    List<CardService.BoardItemView> items = service.listBoardItems(5L, BOARD);
-
-    assertThat(items).singleElement().extracting(CardService.BoardItemView::derivedFrom).isNull();
-  }
-
-  @Test
   void transfer_projektwechsel_loeschtDieHerkunftDerKarte() {
     stubTransferScenario(9L);
     when(cards.findById(100L))
@@ -2021,19 +1818,6 @@ class CardServiceTest {
     verify(cards, never()).save(any());
   }
 
-  @Test
-  void openEpicFromCard_quelleImIdeenSpeicher_wirdAbgelehnt() {
-    Card quelle = kette(1L, 20L, 7, CardType.CARD, null, null, true);
-    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
-    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
-
-    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
-        .isExactlyInstanceOf(InvalidDependencyException.class)
-        .hasMessageContaining("ruhende Karte");
-
-    verify(cards, never()).save(any());
-  }
-
   /**
    * Der Papierkorb ist im Domain-Record nicht abgebildet: {@code findById} liefert geloeschte
    * Karten, die Nummernsuche filtert sie. Findet die Suche nichts, liegt die Karte im Papierkorb.
@@ -2124,8 +1908,8 @@ class CardServiceTest {
     when(cards.findByBoardId(BOARD))
         .thenReturn(
             List.of(
-                kette(5L, 20L, 1, CardType.EPIC, null, null, false).withRequirement(6L),
-                kette(6L, 20L, 2, CardType.CARD, 5L, null, false)));
+                kette(5L, 20L, 1, CardType.EPIC, null, null).withRequirement(6L),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null)));
 
     CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
 
@@ -2143,8 +1927,8 @@ class CardServiceTest {
     when(cards.findByBoardId(BOARD))
         .thenReturn(
             List.of(
-                kette(5L, 20L, 1, CardType.EPIC, null, null, false),
-                kette(6L, 20L, 2, CardType.CARD, 5L, null, false)));
+                kette(5L, 20L, 1, CardType.EPIC, null, null),
+                kette(6L, 20L, 2, CardType.CARD, 5L, null)));
 
     CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
 
@@ -2160,8 +1944,7 @@ class CardServiceTest {
   void listEpics_anforderungNichtMehrAufDemBoard_liefertNull() {
     when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
     when(cards.findByBoardId(BOARD))
-        .thenReturn(
-            List.of(kette(5L, 20L, 1, CardType.EPIC, null, null, false).withRequirement(99L)));
+        .thenReturn(List.of(kette(5L, 20L, 1, CardType.EPIC, null, null).withRequirement(99L)));
 
     CardService.EpicView view = service.listEpics(1L, BOARD).getFirst();
 
@@ -3199,20 +2982,6 @@ class CardServiceTest {
   }
 
   @Test
-  void moveToIdeaStorage_publishesMovedAndIdeasChangedEvent() {
-    // Seit #433 publiziert die Methode zwei Events (das Board muss die Karte verschwinden lassen,
-    // der Pool sie zeigen) — anders als bei einem Einzel-Event genügt hier je ein gezielter
-    // verify() statt der onlyPublishedEvent()-Kurzform.
-    when(cards.findById(1L))
-        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-
-    service.moveToIdeaStorage(9L, 1L);
-
-    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.MOVED, 1L));
-    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
-  }
-
-  @Test
   void delete_publishesDeletedEvent() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
@@ -3288,273 +3057,6 @@ class CardServiceTest {
     verify(events, never()).publishEvent(any());
   }
 
-  // --- Projektweiter Ideen-Pool (#372) -----------------------------------
-
-  private static Card poolIdea(long id) {
-    return new Card(
-        id,
-        null,
-        null,
-        null,
-        "Idee",
-        null,
-        0,
-        false,
-        true,
-        null,
-        1L,
-        FIXED,
-        FIXED,
-        CardType.CARD,
-        null,
-        null,
-        null,
-        PROJECT,
-        null,
-        null,
-        null,
-        null);
-  }
-
-  @Test
-  void createProjectIdea_savesBoardlessIdea_withProjectAndTargetBoard() {
-    // Neue Pool-Ideen bekommen sofort eine projektweite Nummer (#402), bleiben aber board-los.
-    when(cards.allocateCardNumber(PROJECT)).thenReturn(3);
-    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardService.CardView view = service.createProjectIdea(1L, PROJECT, "Idee", "d", 7L);
-
-    verify(permissions).require(1L, PROJECT, Permission.TICKET_CREATE);
-    verify(cards).allocateCardNumber(PROJECT);
-    verify(cards).save(captor.capture());
-    assertThat(captor.getValue().boardId()).isNull();
-    assertThat(captor.getValue().columnId()).isNull();
-    assertThat(captor.getValue().number()).isEqualTo(3);
-    assertThat(captor.getValue().ideaStored()).isTrue();
-    assertThat(captor.getValue().projectId()).isEqualTo(PROJECT);
-    assertThat(captor.getValue().targetBoardId()).isEqualTo(7L);
-    verify(activity)
-        .add(
-            1L,
-            1L,
-            CardActivityType.CREATED,
-            "Idee angelegt",
-            FIXED,
-            ActorContext.ActorStamp.unknown());
-    assertThat(view.boardId()).isNull();
-    assertThat(view.number()).isEqualTo(3);
-    // view() muss das notierte Zielboard durchreichen — das Frontend wählt es beim Einplanen vor.
-    assertThat(view.targetBoardId()).isEqualTo(7L);
-  }
-
-  @Test
-  void planOntoBoard_movesIdeaIntoBacklog_assignsNumberPosition_andPublishes() {
-    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
-    when(cards.allocateCardNumber(PROJECT)).thenReturn(5);
-    when(cards.allocateActivePosition(20L)).thenReturn(3);
-
-    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardService.CardView result = service.planOntoBoard(9L, 1L, BOARD);
-
-    verify(permissions).require(9L, PROJECT, Permission.TICKET_CREATE);
-    verify(cards).save(captor.capture());
-    assertThat(captor.getValue().boardId()).isEqualTo(BOARD);
-    assertThat(captor.getValue().columnId()).isEqualTo(20L);
-    assertThat(captor.getValue().number()).isEqualTo(5);
-    assertThat(captor.getValue().positionInColumn()).isEqualTo(3);
-    assertThat(captor.getValue().ideaStored()).isFalse();
-    verify(transitions).open(1L, 20L, "Backlog", FIXED);
-    verify(activity)
-        .add(
-            1L,
-            9L,
-            CardActivityType.PROMOTED,
-            "Auf Board eingeplant",
-            FIXED,
-            ActorContext.ActorStamp.unknown());
-    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.CREATED, 1L));
-    assertThat(result.boardId()).isEqualTo(BOARD);
-    assertThat(result.ideaStored()).isFalse();
-  }
-
-  @Test
-  void planOntoBoard_keepsExistingNumber_forAlreadyNumberedIdea() {
-    // Seit #402 tragen Pool-Ideen bereits bei der Anlage eine projektweite Nummer; beim Einplanen
-    // wird sie behalten (keine Neuvergabe).
-    Card numbered =
-        new Card(
-            1L,
-            null,
-            null,
-            42,
-            "Idee",
-            null,
-            0,
-            false,
-            true,
-            null,
-            1L,
-            FIXED,
-            FIXED,
-            CardType.CARD,
-            null,
-            null,
-            null,
-            PROJECT,
-            null,
-            null,
-            null,
-            null);
-    when(cards.findById(1L)).thenReturn(Optional.of(numbered));
-    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
-    when(cards.allocateActivePosition(20L)).thenReturn(0);
-
-    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    service.planOntoBoard(9L, 1L, BOARD);
-
-    verify(cards).save(captor.capture());
-    assertThat(captor.getValue().number()).isEqualTo(42);
-    verify(cards, never()).allocateCardNumber(anyLong());
-  }
-
-  @Test
-  void planOntoBoard_rejectsBoardOfOtherProject() {
-    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    when(boardService.requireProjectId(BOARD)).thenReturn(99L);
-
-    assertThatThrownBy(() -> service.planOntoBoard(9L, 1L, BOARD))
-        .isInstanceOf(BoardNotFoundException.class);
-    verify(cards, never()).save(any(Card.class));
-  }
-
-  @Test
-  void moveBackToPool_makesCardBoardless_notesOldBoard_andPublishes() {
-    when(cards.findById(1L))
-        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-
-    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardService.CardView result = service.moveBackToPool(9L, 1L);
-
-    verify(permissions).require(9L, PROJECT, Permission.CARD_MOVE);
-    verify(cards).save(captor.capture());
-    assertThat(captor.getValue().boardId()).isNull();
-    assertThat(captor.getValue().ideaStored()).isTrue();
-    assertThat(captor.getValue().targetBoardId()).isEqualTo(BOARD);
-    verify(activity)
-        .add(
-            1L,
-            9L,
-            CardActivityType.IDEA_STORED,
-            "Zurück in den Ideen-Pool",
-            FIXED,
-            ActorContext.ActorStamp.unknown());
-    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.MOVED, 1L));
-    assertThat(result.boardId()).isNull();
-  }
-
-  @Test
-  void createProjectIdea_publishesIdeasChanged() {
-    service.createProjectIdea(1L, PROJECT, "Idee", "d", 7L);
-
-    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
-  }
-
-  @Test
-  void createProjectIdeas_createsEveryIdea_withOwnNumberAndSharedTargetBoard() {
-    when(cards.allocateCardNumber(PROJECT)).thenReturn(3, 4);
-    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-
-    List<CardService.CardView> views =
-        service.createProjectIdeas(
-            1L,
-            PROJECT,
-            List.of(new CardService.NewIdea("Erste", "a"), new CardService.NewIdea("Zweite", null)),
-            7L);
-
-    verify(cards, times(2)).save(captor.capture());
-    assertThat(captor.getAllValues()).extracting(Card::title).containsExactly("Erste", "Zweite");
-    assertThat(captor.getAllValues()).extracting(Card::description).containsExactly("a", null);
-    assertThat(captor.getAllValues()).extracting(Card::number).containsExactly(3, 4);
-    assertThat(captor.getAllValues())
-        .allMatch(c -> c.ideaStored() && c.boardId() == null && c.targetBoardId() == 7L);
-    // Beide Speicherungen liefern im Mock dieselbe Id (1L) — je Idee entsteht ein CREATED-Eintrag.
-    verify(activity, times(2))
-        .add(
-            1L,
-            1L,
-            CardActivityType.CREATED,
-            "Idee angelegt",
-            FIXED,
-            ActorContext.ActorStamp.unknown());
-    assertThat(views).hasSize(2).extracting(CardService.CardView::number).containsExactly(3, 4);
-  }
-
-  @Test
-  void createProjectIdeas_checksTicketCreateOnce_andPublishesOneIdeasChangedEvent() {
-    // Ein Ereignis fuer den ganzen Stapel genuegt: der Ideen-Pool laedt danach ohnehin komplett
-    // neu.
-    service.createProjectIdeas(
-        1L,
-        PROJECT,
-        List.of(
-            new CardService.NewIdea("Erste", null),
-            new CardService.NewIdea("Zweite", null),
-            new CardService.NewIdea("Dritte", null)),
-        null);
-
-    verify(permissions, times(1)).require(1L, PROJECT, Permission.TICKET_CREATE);
-    verify(events, times(1)).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
-  }
-
-  @Test
-  void createProjectIdeas_withoutTicketCreate_createsNothing() {
-    doThrow(new ProjectAccessDeniedException())
-        .when(permissions)
-        .require(1L, PROJECT, Permission.TICKET_CREATE);
-
-    assertThatThrownBy(
-            () ->
-                service.createProjectIdeas(
-                    1L, PROJECT, List.of(new CardService.NewIdea("Erste", null)), null))
-        .isInstanceOf(ProjectAccessDeniedException.class);
-
-    verify(cards, never()).save(any(Card.class));
-    verify(events, never()).publishEvent(any(ProjectIdeasChangedEvent.class));
-  }
-
-  @Test
-  void planOntoBoard_publishesIdeasChanged() {
-    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
-    when(cards.allocateCardNumber(PROJECT)).thenReturn(5);
-    when(cards.allocateActivePosition(20L)).thenReturn(3);
-
-    service.planOntoBoard(9L, 1L, BOARD);
-
-    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
-  }
-
-  @Test
-  void moveBackToPool_publishesIdeasChanged() {
-    when(cards.findById(1L))
-        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
-
-    service.moveBackToPool(9L, 1L);
-
-    verify(events).publishEvent(new ProjectIdeasChangedEvent(PROJECT));
-  }
-
-  @Test
-  void listProjectIdeas_returnsOnlyCards_forMember() {
-    when(cards.findIdeasByProjectId(PROJECT))
-        .thenReturn(List.of(poolIdea(1L), card(2L, 20L, 2, false, null, CardType.EPIC, null, "E")));
-
-    List<CardService.CardView> result = service.listProjectIdeas(1L, PROJECT);
-
-    verify(permissions).requireMembership(1L, PROJECT);
-    assertThat(result).singleElement().extracting(CardService.CardView::id).isEqualTo(1L);
-  }
-
   // --- getByNumber (#408) -----------------------------------------------
 
   @Test
@@ -3567,18 +3069,6 @@ class CardServiceTest {
     assertThat(view.id()).isEqualTo(1L);
     assertThat(view.number()).isEqualTo(42);
     assertThat(view.boardId()).isEqualTo(BOARD);
-  }
-
-  @Test
-  void getByNumber_returnsPoolIdeaView_forMember() {
-    // Auch eine board-lose Pool-Idee ist per projektweiter Nummer auflösbar.
-    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(poolIdea(1L)));
-
-    CardService.CardView view = service.getByNumber(5L, PROJECT, 7);
-
-    assertThat(view.id()).isEqualTo(1L);
-    assertThat(view.boardId()).isNull();
-    assertThat(view.ideaStored()).isTrue();
   }
 
   @Test
@@ -3627,7 +3117,6 @@ class CardServiceTest {
         null,
         0,
         false,
-        false,
         null,
         1L,
         FIXED,
@@ -3637,7 +3126,6 @@ class CardServiceTest {
         null,
         null,
         projectId,
-        null,
         null,
         null,
         null);
@@ -3717,26 +3205,6 @@ class CardServiceTest {
   }
 
   @Test
-  void searchByNumber_returnsHitWithoutBoardAndColumn_forPoolIdea() {
-    when(projects.listAccessible(5L)).thenReturn(List.of(accessible(PROJECT, "Projekt A")));
-    when(cards.findByNumberInProjects(7, List.of(PROJECT))).thenReturn(List.of(poolIdea(1L)));
-
-    List<CardService.CardSearchHit> hits = service.searchByNumber(5L, 7);
-
-    assertThat(hits).singleElement().isNotNull();
-    CardService.CardSearchHit hit = hits.get(0);
-    assertThat(hit.projectName()).isEqualTo("Projekt A");
-    assertThat(hit.boardId()).isNull();
-    assertThat(hit.boardName()).isNull();
-    assertThat(hit.boardArchived()).isFalse();
-    assertThat(hit.columnId()).isNull();
-    assertThat(hit.columnName()).isNull();
-    // Eine board-lose Pool-Idee loest weder Board noch Spalte auf.
-    verify(boardService, never()).requireBoardSummary(anyLong());
-    verify(boardService, never()).requireColumn(anyLong(), anyLong());
-  }
-
-  @Test
   void searchByNumber_reportsArchivedBoard_withName() {
     // Die Karte bleibt auffindbar, obwohl das Board ueber die normale Board-API 404 liefert.
     when(projects.listAccessible(5L)).thenReturn(List.of(accessible(PROJECT, "Projekt A")));
@@ -3753,77 +3221,11 @@ class CardServiceTest {
     assertThat(hit.columnName()).isEqualTo("Done");
   }
 
-  // --- Board-lose Pool-Ideen editierbar (#405) --------------------------
-
-  @Test
-  void update_onBoardlessPoolIdea_editsViaProjectRight_andSkipsBoardEvent() {
-    // Board-lose Idee: Recht projekt-basiert (card.projectId()), kein Board-Live-Update.
-    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-
-    CardService.CardView view = service.update(9L, 1L, "Neu", null, null, null, null, null);
-
-    verify(permissions).require(9L, PROJECT, Permission.TICKET_UPDATE);
-    verify(activity)
-        .add(
-            1L,
-            9L,
-            CardActivityType.UPDATED,
-            "Karte bearbeitet",
-            FIXED,
-            ActorContext.ActorStamp.unknown());
-    verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
-    assertThat(view.title()).isEqualTo("Neu");
-    assertThat(view.boardId()).isNull();
-  }
-
-  @Test
-  void update_onBoardlessPoolIdea_setsDueDate() {
-    // Fälligkeit an einer board-losen Idee editierbar.
-    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    Instant due = Instant.parse("2026-03-01T00:00:00Z");
-
-    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    service.update(9L, 1L, "Neu", null, null, null, null, due);
-
-    verify(cards).save(captor.capture());
-    assertThat(captor.getValue().dueDate()).isEqualTo(due);
-  }
-
-  @Test
-  void setAssignees_onBoardlessPoolIdea_worksViaProjectRight_andSkipsBoardEvent() {
-    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    when(permissions.isRealProjectMember(7L, PROJECT)).thenReturn(true);
-
-    service.setAssignees(3L, 1L, List.of(7L));
-
-    verify(permissions).require(3L, PROJECT, Permission.TICKET_UPDATE);
-    verify(assignees).replaceAssignees(1L, List.of(7L));
-    verify(activity)
-        .add(
-            1L,
-            3L,
-            CardActivityType.ASSIGNED,
-            "Zuständige geändert",
-            FIXED,
-            ActorContext.ActorStamp.unknown());
-    verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
-  }
-
-  @Test
-  void listActivity_onBoardlessPoolIdea_checksMembershipViaProject() {
-    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-    when(activity.findByCardId(1L)).thenReturn(List.of());
-
-    service.listActivity(5L, 1L);
-
-    verify(permissions).requireMembership(5L, PROJECT);
-  }
-
   // --- Modul-Fassade fuer fremde Module (#458) --------------------------
 
   /** Board-gebundene Karte mit frei waehlbarer Position, Sichtbarkeit und Typ. */
   private static Card boardCard(
-      long id, long columnId, int number, int position, boolean archived, boolean ideaStored) {
+      long id, long columnId, int number, int position, boolean archived) {
     return new Card(
         id,
         BOARD,
@@ -3833,7 +3235,6 @@ class CardServiceTest {
         "Body",
         position,
         archived,
-        ideaStored,
         null,
         1L,
         FIXED,
@@ -3845,35 +3246,7 @@ class CardServiceTest {
         PROJECT,
         null,
         null,
-        null,
         null);
-  }
-
-  /** Legacy-Pool-Idee aus der Zeit vor #402: board-los und ohne projektweite Nummer. */
-  private static Card pooledIdeaWithoutNumber(long id) {
-    return new Card(
-        id,
-        null, // boardId
-        null, // columnId
-        null, // number
-        "Titel",
-        "Body",
-        0, // positionInColumn
-        false,
-        true,
-        null, // movedToDoneAt
-        1L, // createdBy
-        FIXED,
-        FIXED,
-        CardType.CARD,
-        null, // parentId
-        null, // shortcode
-        null, // dueDate
-        PROJECT,
-        null, // targetBoardId
-        null,
-        null,
-        null); // externalKey
   }
 
   @Test
@@ -3895,16 +3268,7 @@ class CardServiceTest {
 
   @Test
   void listBoardItems_skipsArchivedCards() {
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(boardCard(1L, 20L, 1, 0, true, false)));
-
-    assertThat(service.listBoardItems(5L, BOARD)).isEmpty();
-  }
-
-  @Test
-  void listBoardItems_skipsIdeaStoredCards() {
-    // #434: im Ideen-Speicher liegende Karten tragen weiter Board und Spalte, sind fuer Menschen
-    // aber ausgeblendet — die Automatik darf sie folglich auch nicht sehen.
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(boardCard(2L, 20L, 1, 0, false, true)));
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(boardCard(1L, 20L, 1, 0, true)));
 
     assertThat(service.listBoardItems(5L, BOARD)).isEmpty();
   }
@@ -3914,9 +3278,9 @@ class CardServiceTest {
     when(cards.findByBoardId(BOARD))
         .thenReturn(
             List.of(
-                boardCard(1L, 20L, 1, 2, false, false),
-                boardCard(2L, 20L, 2, 0, false, false),
-                boardCard(3L, 20L, 3, 1, false, false)));
+                boardCard(1L, 20L, 1, 2, false),
+                boardCard(2L, 20L, 2, 0, false),
+                boardCard(3L, 20L, 3, 1, false)));
 
     assertThat(service.listBoardItems(5L, BOARD))
         .extracting(CardService.BoardItemView::id)
@@ -3925,7 +3289,7 @@ class CardServiceTest {
 
   @Test
   void listBoardItems_projectsCardFieldsIntoView() {
-    when(cards.findByBoardId(BOARD)).thenReturn(List.of(boardCard(1L, 20L, 7, 3, false, false)));
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(boardCard(1L, 20L, 7, 3, false)));
 
     assertThat(service.listBoardItems(5L, BOARD))
         .singleElement()
@@ -3953,44 +3317,13 @@ class CardServiceTest {
         .isEqualTo(true);
   }
 
-  // --- createProjectIdea mit externalKey (#534) ------------------------
-
-  @Test
-  void createProjectIdea_withExternalKey_persistsKeyOnNewCard() {
-    when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
-
-    CardService.IdeaCreation result =
-        service.createProjectIdea(1L, PROJECT, "Finding", null, BOARD, "sonar:abc", null);
-
-    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    verify(cards).save(captor.capture());
-    assertThat(captor.getValue().externalKey()).isEqualTo("sonar:abc");
-    assertThat(result.created()).isTrue();
-  }
-
-  @Test
-  void createProjectIdea_withExistingExternalKey_returnsExistingWithoutCreating() {
-    // Duplikat: bestehende Karte zurück, nichts anlegen, kein Aktivitätseintrag, kein SSE-Event.
-    when(cards.findByProjectIdAndExternalKey(PROJECT, "sonar:abc"))
-        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
-
-    CardService.IdeaCreation result =
-        service.createProjectIdea(1L, PROJECT, "Finding", null, BOARD, "sonar:abc", null);
-
-    assertThat(result.created()).isFalse();
-    assertThat(result.view().id()).isEqualTo(7L);
-    verify(cards, never()).save(any(Card.class));
-    verify(activity, never()).add(anyLong(), anyLong(), any(), any(), any(), any());
-    verify(events, never()).publishEvent(any(ProjectIdeasChangedEvent.class));
-  }
-
   @Test
   void createDirect_createsBoardCardWithExternalKey() {
     // #535: direct-Ingest läuft über den normalen Anlege-Pfad und persistiert den Schlüssel.
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
-    CardService.IdeaCreation result =
+    CardService.CardCreation result =
         service.createDirect(
             1L, BOARD, 20L, new CardService.DirectCard("Finding", null, "sonar:abc", null, null));
 
@@ -4004,9 +3337,9 @@ class CardServiceTest {
   @Test
   void createDirect_withExistingExternalKey_returnsExistingWithoutCreating() {
     when(cards.findByProjectIdAndExternalKey(PROJECT, "sonar:abc"))
-        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false)));
 
-    CardService.IdeaCreation result =
+    CardService.CardCreation result =
         service.createDirect(
             1L, BOARD, 20L, new CardService.DirectCard("Finding", null, "sonar:abc", null, null));
 
@@ -4019,7 +3352,7 @@ class CardServiceTest {
   void replaceDependenciesFromIngest_storesUnknownNumbers() {
     // #566: Der Import darf auf Karten verweisen, die noch nicht angekommen sind — sonst waere die
     // Importreihenfolge bindend. Die DB traegt das (kein Fremdschluessel).
-    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false)));
 
     service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99, 1234));
 
@@ -4029,7 +3362,7 @@ class CardServiceTest {
   @Test
   void replaceDependenciesFromIngest_rejectsSelfReference() {
     // Die Selbstverweis-Pruefung bleibt geteilt: sie haengt nicht am Wissen ueber andere Karten.
-    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false)));
 
     assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(3)))
         .isInstanceOf(InvalidDependencyException.class);
@@ -4038,7 +3371,7 @@ class CardServiceTest {
 
   @Test
   void replaceDependenciesFromIngest_deduplicates() {
-    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false)));
 
     service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99, 99, 100));
 
@@ -4047,7 +3380,7 @@ class CardServiceTest {
 
   @Test
   void replaceDependenciesFromIngest_clearsOnEmptyList() {
-    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false)));
 
     service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of());
 
@@ -4056,7 +3389,7 @@ class CardServiceTest {
 
   @Test
   void replaceDependenciesFromIngest_clearsOnNull() {
-    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false)));
 
     service.replaceDependenciesFromIngest(1L, 7L, PROJECT, null);
 
@@ -4064,40 +3397,9 @@ class CardServiceTest {
   }
 
   @Test
-  void replaceDependenciesFromIngest_rejectsCardWithoutNumber_alsoForEmptyList() {
-    // Die Nummern-Pruefung steht vor jeder Listenbehandlung (Code-Review Codex, Fund 1): Eine
-    // Karte ohne Nummer ist kein gueltiges Ziel, auch nicht zum Loeschen. Ein stilles 204
-    // verspraeche eine Operation, die es fuer sie nicht gibt.
-    when(cards.findById(7L)).thenReturn(Optional.of(pooledIdeaWithoutNumber(7L)));
-
-    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of()))
-        .isInstanceOf(CardWithoutNumberException.class);
-    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
-  }
-
-  @Test
-  void replaceDependenciesFromIngest_rejectsCardWithoutNumber_alsoForNull() {
-    when(cards.findById(7L)).thenReturn(Optional.of(pooledIdeaWithoutNumber(7L)));
-
-    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, null))
-        .isInstanceOf(CardWithoutNumberException.class);
-    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
-  }
-
-  @Test
-  void replaceDependenciesFromIngest_rejectsCardWithoutNumber() {
-    // Legacy-Pool-Idee ohne Nummer: definierte Antwort statt Exception aus requireNumber().
-    when(cards.findById(7L)).thenReturn(Optional.of(pooledIdeaWithoutNumber(7L)));
-
-    assertThatThrownBy(() -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT, List.of(99)))
-        .isInstanceOf(CardWithoutNumberException.class);
-    verify(dependencies, never()).replaceDependencies(anyLong(), anyList());
-  }
-
-  @Test
   void replaceDependenciesFromIngest_rejectsCardOfOtherProject() {
     // Der Token bindet an ein Projekt; eine Karte aus einem fremden bleibt unerreichbar.
-    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+    when(cards.findById(7L)).thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false)));
 
     assertThatThrownBy(
             () -> service.replaceDependenciesFromIngest(1L, 7L, PROJECT + 1, List.of(99)))
@@ -4119,7 +3421,7 @@ class CardServiceTest {
     // bleibt erhalten.
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
-    CardService.IdeaCreation result =
+    CardService.CardCreation result =
         service.createDirect(
             1L, BOARD, 20L, new CardService.DirectCard("Migriert", null, "github#278", 278, null));
 
@@ -4189,7 +3491,7 @@ class CardServiceTest {
   void createDirect_existingKeyWithDifferentNumber_throwsConflict() {
     // Der Idempotenz-Treffer darf keine andere Identität zurückgeben als angefordert.
     when(cards.findByProjectIdAndExternalKey(PROJECT, "github#278"))
-        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false)));
 
     assertThatThrownBy(
             () ->
@@ -4205,9 +3507,9 @@ class CardServiceTest {
   @Test
   void createDirect_existingKeyWithSameNumber_returnsExistingWithoutCreating() {
     when(cards.findByProjectIdAndExternalKey(PROJECT, "github#3"))
-        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false, false)));
+        .thenReturn(Optional.of(boardCard(7L, 20L, 3, 0, false)));
 
-    CardService.IdeaCreation result =
+    CardService.CardCreation result =
         service.createDirect(
             1L, BOARD, 20L, new CardService.DirectCard("Migriert", null, "github#3", 3, null));
 
@@ -4221,7 +3523,7 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
     when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
 
-    CardService.IdeaCreation result =
+    CardService.CardCreation result =
         service.createDirect(
             1L, BOARD, 20L, new CardService.DirectCard("Karte", null, null, null, null));
 
@@ -4245,26 +3547,8 @@ class CardServiceTest {
   }
 
   @Test
-  void createProjectIdea_withoutExternalKey_skipsLookup() {
-    when(cards.allocateCardNumber(PROJECT)).thenReturn(9);
-
-    service.createProjectIdea(1L, PROJECT, "Idee", null, BOARD, null, null);
-
-    verify(cards, never()).findByProjectIdAndExternalKey(anyLong(), any());
-  }
-
-  @Test
   void requireProjectId_returnsProjectOfCard() {
-    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false, false)));
-
-    assertThat(service.requireProjectId(1L)).isEqualTo(PROJECT);
-  }
-
-  @Test
-  void requireProjectId_worksForBoardlessPoolIdea() {
-    // #405: eine board-lose Pool-Idee traegt keine Board-ID, aber immer eine Projekt-ID — genau
-    // deshalb loest die Fassade ueber die Karte auf und nicht ueber deren Board.
-    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false)));
 
     assertThat(service.requireProjectId(1L)).isEqualTo(PROJECT);
   }
@@ -4281,7 +3565,7 @@ class CardServiceTest {
 
   @Test
   void getCard_returnsViewOfCard() {
-    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false)));
 
     assertThat(service.getCard(5L, 1L)).extracting(CardService.CardView::number).isEqualTo(7);
   }
@@ -4290,7 +3574,7 @@ class CardServiceTest {
   void getCard_liefertDieVolleBeschreibungOhneAuszug() {
     // Issue #771: Der Auszug gehoert der Board-Liste; der Einzelabruf bleibt die Quelle des
     // Volltexts. Waere hier beides gesetzt, gaebe es zwei Wahrheiten fuer denselben Text.
-    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false)));
 
     CardService.CardView sicht = service.getCard(5L, 1L);
 
@@ -4300,7 +3584,7 @@ class CardServiceTest {
 
   @Test
   void getCard_requiresMembershipInCardsProject() {
-    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false)));
 
     service.getCard(5L, 1L);
 
@@ -4310,7 +3594,7 @@ class CardServiceTest {
   @Test
   void getCard_liefertDieHerkunftAlsNummerDesVorfahren() {
     when(cards.findById(1L))
-        .thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false).withDerivedFrom(91L)));
+        .thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false).withDerivedFrom(91L)));
     when(cards.findById(91L))
         .thenReturn(Optional.of(card(91L, 20L, 42, false, null, CardType.CARD, null, null)));
 
@@ -4321,7 +3605,7 @@ class CardServiceTest {
   void getCard_liefertNull_wennDerVorfahrNichtMehrExistiert() {
     // Regulaer raeumt ON DELETE SET NULL das auf; die Sicht haelt den Zustand trotzdem aus.
     when(cards.findById(1L))
-        .thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false).withDerivedFrom(91L)));
+        .thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false).withDerivedFrom(91L)));
     when(cards.findById(91L)).thenReturn(Optional.empty());
 
     assertThat(service.getCard(5L, 1L).derivedFrom()).isNull();
@@ -4329,7 +3613,7 @@ class CardServiceTest {
 
   @Test
   void getCard_liefertNull_ohneHerkunft() {
-    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false)));
 
     assertThat(service.getCard(5L, 1L).derivedFrom()).isNull();
   }
@@ -4358,7 +3642,7 @@ class CardServiceTest {
   @Test
   void getCard_propagatesNotFound_whenCallerIsNoMember() {
     // Nichtmitglied wie unbekannte Karte → 404, kein Existenz-Leak.
-    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false, false)));
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false)));
     doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
 
     assertThatThrownBy(() -> service.getCard(5L, 1L)).isInstanceOf(ProjectNotFoundException.class);
@@ -4366,7 +3650,7 @@ class CardServiceTest {
 
   @Test
   void requireOnBoard_passes_whenCardIsOnBoard() {
-    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false, false)));
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false)));
 
     assertThatCode(() -> service.requireOnBoard(1L, BOARD)).doesNotThrowAnyException();
   }
@@ -4391,7 +3675,6 @@ class CardServiceTest {
             null,
             0,
             false,
-            false,
             null,
             1L,
             FIXED,
@@ -4403,27 +3686,8 @@ class CardServiceTest {
             PROJECT,
             null,
             null,
-            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
-
-    assertThatThrownBy(() -> service.requireOnBoard(1L, BOARD))
-        .isInstanceOf(CardNotFoundException.class);
-  }
-
-  @Test
-  void requireOnBoard_throwsCardNotFound_whenCardIsBoardless() {
-    // Board-lose Pool-Idee: boardId == null darf nicht als Treffer durchgehen (NPE-frei).
-    when(cards.findById(1L)).thenReturn(Optional.of(poolIdea(1L)));
-
-    assertThatThrownBy(() -> service.requireOnBoard(1L, BOARD))
-        .isInstanceOf(CardNotFoundException.class);
-  }
-
-  @Test
-  void requireOnBoard_throwsCardNotFound_whenCardIsIdeaStored() {
-    // #434: auf dem richtigen Board, aber im Ideen-Speicher — fuer die Automatik nicht vorhanden.
-    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false, true)));
 
     assertThatThrownBy(() -> service.requireOnBoard(1L, BOARD))
         .isInstanceOf(CardNotFoundException.class);
@@ -4444,7 +3708,6 @@ class CardServiceTest {
             null,
             0,
             false,
-            false,
             null,
             1L,
             FIXED,
@@ -4454,7 +3717,6 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
-            null,
             null,
             null,
             null);

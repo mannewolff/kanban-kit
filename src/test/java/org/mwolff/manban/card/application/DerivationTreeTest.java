@@ -42,11 +42,11 @@ class DerivationTreeTest {
 
   /** Karte dieses Boards. {@code derivedFrom} ist die ID des Vorfahren, nicht dessen Nummer. */
   private static Card card(long id, int number, @Nullable Long derivedFrom) {
-    return card(id, number, derivedFrom, false, null);
+    return card(id, number, derivedFrom, null);
   }
 
   private static Card card(
-      long id, int number, @Nullable Long derivedFrom, boolean ideaStored, @Nullable Instant done) {
+      long id, int number, @Nullable Long derivedFrom, @Nullable Instant done) {
     return new Card(
         id,
         BOARD,
@@ -56,7 +56,6 @@ class DerivationTreeTest {
         null,
         0,
         false,
-        ideaStored,
         done,
         1L,
         FIXED,
@@ -66,7 +65,6 @@ class DerivationTreeTest {
         null,
         null,
         PROJECT,
-        null,
         null,
         derivedFrom,
         null);
@@ -83,7 +81,6 @@ class DerivationTreeTest {
         null,
         0,
         false,
-        false,
         null,
         1L,
         FIXED,
@@ -93,7 +90,6 @@ class DerivationTreeTest {
         null,
         null,
         PROJECT,
-        null,
         null,
         null,
         null);
@@ -158,7 +154,6 @@ class DerivationTreeTest {
             null,
             0,
             false,
-            false,
             null,
             1L,
             FIXED,
@@ -168,7 +163,6 @@ class DerivationTreeTest {
             null,
             null,
             PROJECT,
-            null,
             null,
             null,
             null));
@@ -224,15 +218,6 @@ class DerivationTreeTest {
   }
 
   @Test
-  void ideen_speicher_karten_bleiben_aussen_vor() {
-    // ideaStored heisst "noch nicht eingeplant" — die Karte gehoert nicht auf das Board.
-    List<DerivationNodeView> baum =
-        tree(List.of(card(1L, 1, null), card(2L, 2, 1L, true, null), card(3L, 3, 1L)));
-
-    assertThat(baum).extracting(DerivationNodeView::number).containsExactly(1, 3);
-  }
-
-  @Test
   void fremde_herkunft_macht_die_karte_zur_wurzel_auch_ohne_kinder() {
     // Board-fremde Herkunft: Der Vorfahr liegt nicht in der Menge, die Karte ist also Wurzel und
     // wird als externalOrigin ausgewiesen. Seit #642 waere sie das auch ohne jede Herkunft — hier
@@ -282,7 +267,7 @@ class DerivationTreeTest {
   void done_folgt_dem_zeitstempel_und_blockiert_nicht_mehr() {
     when(dependencies.findByCardIds(any())).thenReturn(Map.of(3L, List.of(2)));
     List<DerivationNodeView> baum =
-        tree(List.of(card(1L, 1, null), card(2L, 2, 1L, false, FIXED), card(3L, 3, 1L)));
+        tree(List.of(card(1L, 1, null), card(2L, 2, 1L, FIXED), card(3L, 3, 1L)));
 
     assertThat(baum).filteredOn(n -> n.number() == 2).allMatch(DerivationNodeView::done);
     // Gegenprobe: sonst waere eine Fassung gruen, die jede Zeile als erledigt meldet.

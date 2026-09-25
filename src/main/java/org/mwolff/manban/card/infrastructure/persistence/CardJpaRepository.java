@@ -52,14 +52,6 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   List<CardEntity> findByNumberAndProjectIdInAndDeletedAtIsNullOrderByProjectId(
       Integer number, List<Long> projectIds);
 
-  /**
-   * Ideen-Karten eines Projekts (board-los + Legacy), <b>älteste zuerst</b> (#419): Der Pool wird
-   * von oben nach unten abgearbeitet, und das Backlog daneben ist aufsteigend sortiert — bei
-   * absteigendem Pool kehrte sich die Reihenfolge beim Einplanen um.
-   */
-  List<CardEntity> findByProjectIdAndIdeaStoredTrueAndDeletedAtIsNullOrderByCreatedAtAsc(
-      Long projectId);
-
   /** Karten im Papierkorb des Boards. */
   List<CardEntity> findByBoardIdAndDeletedAtIsNotNullOrderByNumber(Long boardId);
 
@@ -73,7 +65,7 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
 
   @Query(
       "select coalesce(max(c.positionInColumn), -1) from CardEntity c "
-          + "where c.columnId = ?1 and c.archived = false and c.ideaStored = false "
+          + "where c.columnId = ?1 and c.archived = false "
           + "and c.deletedAt is null and c.type <> 'EPIC'")
   int maxActivePositionInColumn(Long columnId);
 }

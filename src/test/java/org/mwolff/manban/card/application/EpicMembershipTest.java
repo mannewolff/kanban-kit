@@ -28,7 +28,7 @@ class EpicMembershipTest {
   private static final long PROJECT = 1L;
 
   private static Card vorhaben(long id, int number) {
-    return karte(id, number, CardType.EPIC, null, null, false, false);
+    return karte(id, number, CardType.EPIC, null, null, false);
   }
 
   /**
@@ -36,7 +36,7 @@ class EpicMembershipTest {
    */
   private static Card karte(
       long id, int number, @Nullable Long parentId, @Nullable Long derivedFrom) {
-    return karte(id, number, CardType.CARD, parentId, derivedFrom, false, false);
+    return karte(id, number, CardType.CARD, parentId, derivedFrom, false);
   }
 
   private static Card karte(
@@ -45,8 +45,7 @@ class EpicMembershipTest {
       CardType type,
       @Nullable Long parentId,
       @Nullable Long derivedFrom,
-      boolean archived,
-      boolean ideaStored) {
+      boolean archived) {
     return new Card(
         id,
         BOARD,
@@ -56,7 +55,6 @@ class EpicMembershipTest {
         null,
         0,
         archived,
-        ideaStored,
         null,
         null,
         FIXED,
@@ -67,14 +65,13 @@ class EpicMembershipTest {
         null,
         PROJECT,
         null,
-        null,
         derivedFrom,
         null);
   }
 
   private static Set<Integer> nummern(Map<Long, Set<Card>> ergebnis, long epicId) {
     return ergebnis.get(epicId).stream()
-        .map(Card::requireNumber)
+        .map(Card::number)
         .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
   }
 
@@ -123,7 +120,7 @@ class EpicMembershipTest {
   void archivierterZwischenknotenZaehltNichtAberSeineNachfahrenSchon() {
     Card epic = vorhaben(1L, 1);
     Card wurzel = karte(2L, 2, 1L, null);
-    Card archiviert = karte(3L, 3, CardType.CARD, null, 2L, true, false);
+    Card archiviert = karte(3L, 3, CardType.CARD, null, 2L, true);
     Card kindDesArchivierten = karte(4L, 4, null, 3L);
 
     Map<Long, Set<Card>> ergebnis =
@@ -136,27 +133,13 @@ class EpicMembershipTest {
   @Test
   void archivierteWurzelZaehltNichtAberIhreNachfahrenSchon() {
     Card epic = vorhaben(1L, 1);
-    Card archivierteWurzel = karte(2L, 2, CardType.CARD, 1L, null, true, false);
+    Card archivierteWurzel = karte(2L, 2, CardType.CARD, 1L, null, true);
     Card kind = karte(3L, 3, null, 2L);
 
     Map<Long, Set<Card>> ergebnis = EpicMembership.compute(List.of(epic, archivierteWurzel, kind));
 
     assertThat(nummern(ergebnis, 1L)).containsExactly(3);
     assertThat(nummern(ergebnis, 1L)).doesNotContain(2);
-  }
-
-  @Test
-  void ideaStoredZaehltNichtAberSeineNachfahrenZaehlenWeiter() {
-    Card epic = vorhaben(1L, 1);
-    Card wurzel = karte(2L, 2, 1L, null);
-    Card idee = karte(3L, 3, CardType.CARD, null, 2L, false, true);
-    Card kindDerIdee = karte(4L, 4, null, 3L);
-
-    Map<Long, Set<Card>> ergebnis =
-        EpicMembership.compute(List.of(epic, wurzel, idee, kindDerIdee));
-
-    assertThat(nummern(ergebnis, 1L)).containsExactly(2, 4);
-    assertThat(nummern(ergebnis, 1L)).doesNotContain(3);
   }
 
   /**
@@ -215,7 +198,7 @@ class EpicMembershipTest {
   void vorhabenInDerKetteZaehltNichtMitSeineNachfahrenSchon() {
     Card epic = vorhaben(1L, 1);
     Card wurzel = karte(2L, 2, 1L, null);
-    Card fremdesVorhaben = karte(3L, 3, CardType.EPIC, null, 2L, false, false);
+    Card fremdesVorhaben = karte(3L, 3, CardType.EPIC, null, 2L, false);
     Card kindDesVorhabens = karte(4L, 4, null, 3L);
 
     Map<Long, Set<Card>> ergebnis =

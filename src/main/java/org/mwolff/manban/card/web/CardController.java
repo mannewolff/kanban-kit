@@ -48,8 +48,8 @@ class CardController {
 
   /**
    * Obergrenze für ein Stapel-Anlegen an einer Board-Spalte. Dieselbe Zahl wie an den bestehenden
-   * Bulk-Endpunkten dieser Klasse und am Pool-Stapel ({@code ProjectIdeaController}), damit im
-   * Projekt genau eine Mengen-Obergrenze gilt statt mehrerer divergierender.
+   * Bulk-Endpunkten dieser Klasse, damit im Projekt genau eine Mengen-Obergrenze gilt statt
+   * mehrerer divergierender.
    */
   static final int MAX_CARDS_PER_BATCH = 200;
 
@@ -92,7 +92,6 @@ class CardController {
         request.description(),
         request.dependencies(),
         request.parentId(),
-        Boolean.TRUE.equals(request.ideaStored()),
         request.dueDate(),
         request.assigneeIds(),
         request.labelIds(),
@@ -288,31 +287,6 @@ class CardController {
     return cards.restore(userId, cardId);
   }
 
-  /**
-   * Legt eine Karte in den Ideen-Speicher: sie wird board-los und landet im projektweiten
-   * Ideen-Pool (#433). Der frühere Rückweg {@code POST /api/cards/{id}/promote} entfällt damit —
-   * zurück aufs Board geht seither über {@link #plan(Long, long, PlanRequest)}.
-   */
-  @PostMapping("/api/cards/{cardId}/idea-storage")
-  CardView moveToIdeaStorage(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    return cards.moveToIdeaStorage(userId, cardId);
-  }
-
-  /** Plant eine board-lose Pool-Idee ins Backlog eines Boards desselben Projekts ein. */
-  @PutMapping("/api/cards/{cardId}/plan")
-  CardView plan(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody PlanRequest request) {
-    return cards.planOntoBoard(userId, cardId, request.targetBoardId());
-  }
-
-  /** Holt eine board-gebundene Karte zurück in den projektweiten Ideen-Pool (board-los). */
-  @PutMapping("/api/cards/{cardId}/to-pool")
-  CardView toPool(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    return cards.moveBackToPool(userId, cardId);
-  }
-
   /** Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). */
   @DeleteMapping("/api/cards/{cardId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -400,15 +374,14 @@ class CardController {
       @Nullable CardType type,
       @Nullable Long parentId,
       @Nullable @Size(max = 16) String shortcode,
-      @Nullable Boolean ideaStored,
       @Nullable Instant dueDate,
       @Nullable List<Long> assigneeIds,
       @Nullable List<Long> labelIds,
       @Nullable @Positive @Max(CardNumbers.MAX) Integer derivedFrom) {}
 
   /**
-   * Ein Element des Stapels (Issue #1200). Titel- und Beschreibungsgrenze wie an allen anderen
-   * Anlegewegen ({@link CreateCardRequest}, {@code ProjectIdeaController}).
+   * Ein Element des Stapels (Issue #1200). Titel- und Beschreibungsgrenze wie am anderen Anlegeweg
+   * ({@link CreateCardRequest}).
    */
   record BatchCardItem(
       @NotBlank @Size(max = 300) String title,
@@ -448,8 +421,6 @@ class CardController {
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
 
   record SortByNumberRequest(@NotNull SortDirection direction) {}
-
-  record PlanRequest(@NotNull Long targetBoardId) {}
 
   record BulkArchiveRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
 
