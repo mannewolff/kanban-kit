@@ -7,6 +7,25 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.10.0] – 2026-09-25
+
+- chore: v2.9.2
+- Deploy-Workflow startet das Sicherungs-Overlay mit ([#1198](https://github.com/mannewolff/kanban-kit/issues/1198))
+- chore: v2.9.1
+- Haengenden Run von Hand als beendet kennzeichnen ([#1197](https://github.com/mannewolff/kanban-kit/issues/1197))
+- Aktive Runs geht in Aktueller Status auf ([#1193](https://github.com/mannewolff/kanban-kit/issues/1193))
+- Abschnitte beendeter Runs nennen den Start, Leersaetze behaupten nichts Falsches ([#1191](https://github.com/mannewolff/kanban-kit/issues/1191))
+- Marke am Lauf ohne Arbeit nennt "nichts zu tun" und liest den Befund ([#1190](https://github.com/mannewolff/kanban-kit/issues/1190))
+- Frontend-Tests halten Last stand: Zeitlimit und Wartezeit angehoben ([#1196](https://github.com/mannewolff/kanban-kit/issues/1196))
+- Lauf ohne Arbeit nennt seinen Grund in Beendete Runs statt in der Stoerung ([#1189](https://github.com/mannewolff/kanban-kit/issues/1189))
+- Frontend liest den Lauf ohne Arbeit allein am Befund ([#1186](https://github.com/mannewolff/kanban-kit/issues/1186))
+- Ein Lauf ohne Arbeit ist keine Stoerung, das massgebliche Paket geht vor ([#1185](https://github.com/mannewolff/kanban-kit/issues/1185))
+- chore: v2.9.0
+- chore: v2.8.1
+- Design-Guide und Benutzerdoku ziehen den entfallenen Statistikteil nach ([#1188](https://github.com/mannewolff/kanban-kit/issues/1188))
+- Verwaisten Verbrauchs-Client und Textrechnungen ohne Aufrufer abbauen ([#1187](https://github.com/mannewolff/kanban-kit/issues/1187))
+- Laeufe-Seite: der Statistikteil verschwindet, die Seite beginnt mit den Laeufen ([#1184](https://github.com/mannewolff/kanban-kit/issues/1184))
+
 ## [2.9.0] – 2026-09-24
 
 - chore: v2.8.1
