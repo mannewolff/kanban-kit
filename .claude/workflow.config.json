@@ -3,11 +3,18 @@
   "issueTracker": "toolbox",
   "buildChecks": [
     {
+      "cmd": "mvn -Dskip.frontend=true -DskipITs -Djacoco.skip=true verify",
+      "areas": [
+        "backend"
+      ]
+    },
+    {
       "cmd": "mvn verify",
       "areas": [
         "backend",
         "doku"
-      ]
+      ],
+      "stufe": "push"
     },
     {
       "cmd": "npm --prefix frontend run build",
