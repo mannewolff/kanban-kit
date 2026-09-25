@@ -9,7 +9,9 @@
  *
  * Die Aenderungspruefung steht fuer beide Seiten: Anker, Dateilisten, Pruefbereich,
  * Test-zu-Quelle-Zuordnung, der Lauf (Stryker bzw. PIT), die Auswertung seines Berichts und die
- * gemeinsame Ausgabeform. Der Vollauf folgt in einem eigenen Paket (Issue #1215).
+ * gemeinsame Ausgabeform. Der Vollauf faehrt beide Seiten in ihrem vollen Umfang, prueft die
+ * Schwelle je Seite und hinterlaesst die Gedaechtnisdatei, aus der die Aenderungspruefung Dauer,
+ * Datum und die Mutantenliste des letzten Vollaufs liest (Issue #1215).
  *
  * Zwei Festlegungen, die sich aus dem Bestand ergeben:
  *
@@ -27,13 +29,20 @@
  * lokalem Zustand abhaengen. Die Semantik ist bewusst dieselbe.
  */
 
-import { existsSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 export const KOMMANDOS = ['aenderung', 'vollauf'];
 export const SEITEN = ['frontend', 'backend'];
+
+/**
+ * Die Schwellen des Vollaufs (Kriterium 8) — an EINER Stelle, nicht verstreut: Zwei Fundstellen
+ * derselben Zahl gingen beim ersten Anheben auseinander. Backend 100, weil das Profil `pit` seine
+ * Marke schon auf 100 fuehrt; Frontend 80 als der heute haltbare Stand (84,70 % am 2026-09-24).
+ */
+export const SCHWELLEN = { frontend: 80, backend: 100 };
 
 const HAUPTZWEIG_VORGABE = 'main';
 
@@ -456,10 +465,24 @@ export function pitArgumente(dateien) {
 }
 
 /**
- * Der Aufruf des Werkzeugs. Verengt wird AUSSCHLIESSLICH `mutate` (`-m`) — der Testumfang bleibt
- * der bestehende: Strykers Deckungsanalyse waehlt je Mutant ohnehin die deckenden Tests, eine
- * zweite Verengung riskierte falsch Ueberlebende. `--incremental` faellt aus demselben Grund weg
- * wie die Historie im Backend: Bei wechselndem Umfang mischte eine inkrementelle Datei Staende.
+ * Der Vollauf des Backends faehrt das Profil `pit` mit seinem Default-Umfang UND seiner
+ * Default-Marke: Anders als die Aenderungspruefung schaltet er `pit.marke` nicht ab — dort musste
+ * die Werkzeugschwelle weichen, weil ein Altlast-Vermerk nicht anhalten, aber mitzaehlen soll; hier
+ * gibt es keine Vermerke, und die Schwelle dieses Treibers (100) sagt dasselbe wie die des Profils.
+ */
+export function pitVollaufArgumente() {
+  return ['-B', '-Ppit', '-Dskip.frontend=true', 'test'];
+}
+
+/**
+ * Der Aufruf des Werkzeugs, fuer beide Unterkommandos: Verengt wird AUSSCHLIESSLICH `mutate`
+ * (`-m`) — der Testumfang bleibt der bestehende, denn Strykers Deckungsanalyse waehlt je Mutant
+ * ohnehin die deckenden Tests, und eine zweite Verengung riskierte falsch Ueberlebende. Ohne
+ * Dateiliste — also im Vollauf — bleibt der volle `mutate`-Bereich stehen.
+ *
+ * Kein gespeicherter Zwischenstand von Lauf zu Lauf, aus demselben Grund wie die fehlende Historie
+ * im Backend: Bei wechselndem Umfang mischte eine solche Datei Staende, und der Vollauf ist der
+ * Nachweis (Kriterium 11) — er darf auf keinem uebernommenen Urteil ruhen.
  */
 export function strykerArgumente(dateien) {
   const relativ = dateien.map((pfad) => (pfad.startsWith(FRONTEND_PRAEFIX) ? pfad.slice(FRONTEND_PRAEFIX.length) : pfad));
@@ -582,6 +605,44 @@ export function auswerten({ mutanten, quellen, istBeruehrt, zeileGeaendert, date
   return { zaehlung, ueberlebende, haltende };
 }
 
+/**
+ * Die Auswertung des Vollaufs. Sie kennt weder Beruehrung noch Altlast-Vermerk: Im Vollauf gilt die
+ * ganze Seite, und angehalten wird allein an der Schwelle (Kriterium 8) — ein Vermerk gibt die
+ * AENDERUNGSpruefung frei, nicht die Gesamtquote. Gezaehlt wird wie dort, damit beide Ausgaben
+ * dieselbe Zahl gleich meinen.
+ */
+export function vollaufAuswerten(mutanten) {
+  const zaehlung = { geprueft: 0, getoetet: 0, ueberlebt: 0, ausgenommen: 0, ausserhalb: 0 };
+  const ueberlebende = [];
+  for (const mutant of mutanten) {
+    if (mutant.zustand === 'Ignored') {
+      zaehlung.ausgenommen += 1;
+      continue;
+    }
+    if (ZUSTAND_GETOETET.has(mutant.zustand)) {
+      zaehlung.geprueft += 1;
+      zaehlung.getoetet += 1;
+      continue;
+    }
+    if (!ZUSTAND_UEBERLEBT.has(mutant.zustand)) continue;
+    zaehlung.geprueft += 1;
+    zaehlung.ueberlebt += 1;
+    ueberlebende.push({ ...mutant, altlast: null, vermerkGrund: null });
+  }
+  return { zaehlung, ueberlebende };
+}
+
+/**
+ * Die Quote in Prozent, auf zwei Stellen gerundet — dieselbe Rechnung, die Stryker seinen
+ * Mutation-Score nennt. Ohne einen einzigen gepruefsten Mutanten gilt sie als erfuellt: Eine Seite
+ * ohne Mutanten hat nichts unterschritten, und eine 0 dort liesse jeden Vollauf anhalten, bevor es
+ * etwas zu messen gibt.
+ */
+export function quoteAus(zaehlung) {
+  if (zaehlung.geprueft === 0) return 100;
+  return Math.round((zaehlung.getoetet / zaehlung.geprueft) * 10000) / 100;
+}
+
 // --- Anker und Dateilisten --------------------------------------------------
 
 /**
@@ -691,6 +752,22 @@ export function dauerText(ms) {
   return `${minuten} min ${sekunden} s`;
 }
 
+/** Prozentangaben in derselben Schreibweise wie die Dauer: Komma statt Punkt. */
+export function prozentText(wert) {
+  return String(wert).replace('.', ',');
+}
+
+/**
+ * Die Zeile zur Schwelle (Kriterium 8). Sie nennt den gemessenen Wert UND die Schwelle in beiden
+ * Richtungen: Ein gruener Lauf, der nur "erfuellt" sagte, liesse offen, wie knapp es war.
+ */
+export function schwellenZeile(quote, schwelle) {
+  const gemessen = `Quote: ${prozentText(quote.toFixed(2))} %`;
+  return quote >= schwelle
+    ? `${gemessen} — Schwelle ${prozentText(schwelle)} % erfüllt.`
+    : `${gemessen} — unter der Schwelle ${prozentText(schwelle)} %. Der Vollauf hält an.`;
+}
+
 function vollaufZeile(seite, inhalt) {
   if (!inhalt) {
     return `Letzter Vollauf ${seite}: es gibt noch keinen Vollauf — allein für diese Anzeige wird keiner gestartet.`;
@@ -721,6 +798,8 @@ export function meldungBauen({
   dauerMs,
   vollauf,
   stufe,
+  quote = null,
+  schwelle = null,
   schluss,
 }) {
   const zeilen = [];
@@ -780,6 +859,11 @@ export function meldungBauen({
     }
   }
 
+  if (quote !== null && schwelle !== null) {
+    zeilen.push('');
+    zeilen.push(schwellenZeile(quote, schwelle));
+  }
+
   zeilen.push('');
   zeilen.push(`Dauer: ${dauerText(dauerMs)}. ${vollaufZeile(seite, vollauf)}`);
   zeilen.push(stufe ? `Stufe: ${stufe}` : 'Stufe: noch nicht eingetragen');
@@ -826,11 +910,11 @@ const BERICHT_TEILE = ['.claude', 'stryker', 'mutation.json'];
  * Ein Stryker-Lauf ueber die beruehrten Dateien. Der alte Bericht faellt VOR dem Lauf weg: Sonst
  * laese ein abgebrochener Lauf den Stand des vorigen und meldete ihn als seinen eigenen.
  */
-function strykerLaufen({ wurzel, starte, dateien }) {
+function strykerLaufen({ wurzel, starte, args }) {
   const berichtsPfad = join(wurzel, ...BERICHT_TEILE);
   rmSync(berichtsPfad, { force: true });
   const binaer = join(wurzel, 'frontend', 'node_modules', '.bin', 'stryker');
-  const ergebnis = starte(binaer, strykerArgumente(dateien), {
+  const ergebnis = starte(binaer, args, {
     cwd: join(wurzel, 'frontend'),
     encoding: 'utf-8',
   });
@@ -844,10 +928,10 @@ const PIT_BERICHT_TEILE = ['target', 'pit-reports', 'mutations.xml'];
  * Ein PIT-Lauf ueber die beruehrten Klassen. Wie im Frontend faellt der alte Bericht VOR dem Lauf
  * weg, sonst laese ein abgebrochener Lauf den Stand des vorigen und meldete ihn als seinen eigenen.
  */
-function pitLaufen({ wurzel, starte, dateien }) {
+function pitLaufen({ wurzel, starte, args }) {
   const berichtsPfad = join(wurzel, ...PIT_BERICHT_TEILE);
   rmSync(berichtsPfad, { force: true });
-  const ergebnis = starte('mvn', pitArgumente(dateien), { cwd: wurzel, encoding: 'utf-8' });
+  const ergebnis = starte('mvn', args, { cwd: wurzel, encoding: 'utf-8' });
   return { ergebnis, xml: existsSync(berichtsPfad) ? readFileSync(berichtsPfad, 'utf-8') : null };
 }
 
@@ -862,6 +946,40 @@ function quellenLesen(mutanten, lies) {
     if (!quellen.has(mutant.datei)) quellen.set(mutant.datei, lies(mutant.datei));
   }
   return quellen;
+}
+
+/**
+ * Die Gedaechtnisdatei des Vollaufs (Kriterium 9). Sie liegt unter `.claude/` und ist damit durch
+ * den bestehenden `.claude/*`-Eintrag ignoriert: Eine versionierte Datei verschmutzte den
+ * Arbeitsbaum genau im Veroeffentlichungslauf und liefe gegen den harten Stopp auf dirty.
+ */
+function vollaufPfad(wurzel, seite) {
+  return join(wurzel, '.claude', `mutationsvollauf-${seite}.json`);
+}
+
+/**
+ * Der Stand, gegen den der Vollauf gemessen hat. Faellt `rev-parse` aus — kein Repository, kein
+ * Commit —, steht `null` in der Datei: lieber kein Stand als ein erfundener, denn an ihm haengt
+ * spaeter die Frage, ob ein Ueberlebender derselbe ist.
+ */
+function standLesen(git) {
+  const res = git('rev-parse', 'HEAD');
+  const roh = res.status === 0 ? res.stdout.trim() : '';
+  return roh.length > 0 ? roh : null;
+}
+
+/**
+ * Schreibt die Gedaechtnisdatei und gibt im Fehlerfall den Satz zurueck, der in die Meldung gehoert.
+ * Ein gescheitertes Schreiben faerbt den Lauf rot: Die Datei IST der Auftrag dieses Unterkommandos,
+ * und ein gruener Lauf ohne sie liesse die naechste Aenderungspruefung ohne Vergleich zurueck.
+ */
+function gedaechtnisSchreiben(wurzel, seite, inhalt) {
+  try {
+    writeFileSync(vollaufPfad(wurzel, seite), `${JSON.stringify(inhalt, null, 2)}\n`);
+    return null;
+  } catch (err) {
+    return `Die Gedächtnisdatei ${vollaufPfad(wurzel, seite)} ließ sich nicht schreiben: ${err.message}`;
+  }
 }
 
 function letzteZeilen(roh, anzahl) {
@@ -880,6 +998,67 @@ function fehlenderBericht(teile, ergebnis) {
   return `Der Mutationslauf hat keinen Bericht unter ${teile.join('/')} hinterlassen `
     + `(Rückgabewert ${ergebnis?.status ?? 'unbekannt'}). Geprüft wurde deshalb nichts.\n`
     + `${tail.join('\n')}\n`;
+}
+
+/**
+ * Der Vollauf einer Seite: der volle Umfang des Werkzeugs, die Schwelle je Seite und die
+ * Gedaechtnisdatei. Der Rueckgabewert des Werkzeugs selbst wird wie in der Aenderungspruefung nicht
+ * uebernommen — geurteilt wird ueber den Bericht: Im Backend haelt das Profil an seiner eigenen
+ * Marke schon an, und ein durchgereichter Exitcode sagte dann zweimal dasselbe, aber ohne Zahl.
+ */
+function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, beginn, vollauf, stufe, schwelle }) {
+  let mutanten;
+  if (seite === 'frontend') {
+    const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, args: strykerArgumente([]) });
+    if (!bericht) {
+      ausgabe(fehlenderBericht(BERICHT_TEILE, ergebnis));
+      return 1;
+    }
+    mutanten = strykerMutanten(bericht);
+  } else {
+    const { ergebnis, xml } = pitLaufen({ wurzel, starte, args: pitVollaufArgumente() });
+    if (xml === null) {
+      ausgabe(fehlenderBericht(PIT_BERICHT_TEILE, ergebnis));
+      return 1;
+    }
+    mutanten = pitMutanten(xml);
+  }
+
+  const { zaehlung, ueberlebende } = vollaufAuswerten(mutanten);
+  const quote = quoteAus(zaehlung);
+  const dauerMs = jetzt() - beginn;
+  // Auch ein an der Schwelle gescheiterter Lauf hinterlaesst die Datei: Sein Ergebnis ist der
+  // Stand, gegen den die naechste Aenderungspruefung vergleicht — ihn wegzuwerfen, weil er rot ist,
+  // nahm der vierten Bedingung des Altlast-Vermerks genau dann die Grundlage, wenn sie gebraucht wird.
+  const fehler = gedaechtnisSchreiben(wurzel, seite, {
+    stand: standLesen(git),
+    datum: new Date(jetzt()).toISOString(),
+    dauerMs,
+    umfang: bereich.zeilen,
+    quote,
+    mutanten: ueberlebende.map((m) => ({
+      datei: m.datei,
+      zeile: m.zeile,
+      mutator: m.mutator,
+      tests: m.deckendeTests ?? [],
+    })),
+  });
+
+  ausgabe(meldungBauen({
+    kommando: 'vollauf',
+    seite,
+    bereich,
+    ankerSatz: 'Umfang: die ganze Seite.',
+    ueberlebende,
+    zaehlung,
+    dauerMs,
+    vollauf,
+    stufe,
+    quote,
+    schwelle,
+    schluss: fehler ?? undefined,
+  }));
+  return quote >= schwelle && !fehler ? 0 : 1;
 }
 
 /**
@@ -925,21 +1104,16 @@ export function laufen(argv, umgebung = {}) {
   }
 
   const config = jsonLesen(join(wurzel, '.claude', 'workflow.config.json')) ?? {};
-  const vollauf = jsonLesen(join(wurzel, '.claude', `mutationsvollauf-${seite}.json`));
+  const vollauf = jsonLesen(vollaufPfad(wurzel, seite));
   const stufe = stufeAus(config, `mutationspruefung.mjs ${kommando} ${seite}`);
+  // Ueber `umgebung.schwellen` ueberschreibbar wie `git` und `starte`: Ein Nachweis an einer
+  // kuenstlich angehobenen Schwelle braucht sonst einen zweiten halbstuendigen Vollauf.
+  const schwelle = (umgebung.schwellen ?? SCHWELLEN)[seite];
 
   if (kommando === 'vollauf') {
-    ausgabe(meldungBauen({
-      kommando,
-      seite,
-      bereich,
-      ankerSatz: 'Umfang: die ganze Seite.',
-      dauerMs: jetzt() - beginn,
-      vollauf,
-      stufe,
-      schluss: 'Der Vollauf ist noch nicht umgesetzt (Issue #1215) — er folgt in einem eigenen Arbeitspaket.',
-    }));
-    return 1;
+    return vollaufLaufen({
+      wurzel, seite, bereich, starte, git, ausgabe, jetzt, beginn, vollauf, stufe, schwelle,
+    });
   }
 
   const { anker, vollerUmfang, satz } = ankerBestimmen(git, config.mainBranch ?? HAUPTZWEIG_VORGABE);
@@ -975,14 +1149,14 @@ export function laufen(argv, umgebung = {}) {
   let mutanten;
   let quellen;
   if (seite === 'frontend') {
-    const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, dateien: dateienDesLaufs });
+    const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, args: strykerArgumente(dateienDesLaufs) });
     if (!bericht) {
       ausgabe(fehlenderBericht(BERICHT_TEILE, ergebnis));
       return 1;
     }
     ({ mutanten, quellen } = strykerMutanten(bericht, { mitQuellen: true }));
   } else {
-    const { ergebnis, xml } = pitLaufen({ wurzel, starte, dateien: dateienDesLaufs });
+    const { ergebnis, xml } = pitLaufen({ wurzel, starte, args: pitArgumente(dateienDesLaufs) });
     if (xml === null) {
       ausgabe(fehlenderBericht(PIT_BERICHT_TEILE, ergebnis));
       return 1;

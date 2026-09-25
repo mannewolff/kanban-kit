@@ -38,6 +38,10 @@ import {
   pitQuellPfad,
   pitMutanten,
   pitArgumente,
+  pitVollaufArgumente,
+  SCHWELLEN,
+  quoteAus,
+  vollaufAuswerten,
 } from './mutationspruefung.mjs';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
@@ -345,7 +349,13 @@ test('dauerText: Sekunden und Minuten', () => {
 
 // --- Lauf -------------------------------------------------------------------
 
-function mitProjekt(fn, { stryker = STRYKER, pom = POM_MIT_PROPERTY, config = { mainBranch: 'main', buildChecks: [] }, vollauf = null } = {}) {
+function mitProjekt(fn, {
+  stryker = STRYKER,
+  pom = POM_MIT_PROPERTY,
+  config = { mainBranch: 'main', buildChecks: [] },
+  vollauf = null,
+  vollaufRoh = null,
+} = {}) {
   const wurzel = mkdtempSync(join(tmpdir(), 'mutpruef-'));
   try {
     mkdirSync(join(wurzel, '.claude'), { recursive: true });
@@ -358,13 +368,16 @@ function mitProjekt(fn, { stryker = STRYKER, pom = POM_MIT_PROPERTY, config = { 
         writeFileSync(join(wurzel, '.claude', `mutationsvollauf-${seite}.json`), JSON.stringify(inhalt));
       }
     }
+    for (const [seite, text] of Object.entries(vollaufRoh ?? {})) {
+      writeFileSync(join(wurzel, '.claude', `mutationsvollauf-${seite}.json`), text);
+    }
     return fn(wurzel);
   } finally {
     rmSync(wurzel, { recursive: true, force: true });
   }
 }
 
-function sammelLauf(argv, wurzel, gitAntworten = {}, starte = undefined) {
+function sammelLauf(argv, wurzel, gitAntworten = {}, starte = undefined, extra = {}) {
   const zeilen = [];
   const aufrufe = [];
   const code = laufen(argv, {
@@ -373,6 +386,7 @@ function sammelLauf(argv, wurzel, gitAntworten = {}, starte = undefined) {
       'merge-base HEAD origin/main': OK('1a2b3c4\n'),
       'diff --name-status -z 1a2b3c4': OK(''),
       'status --porcelain -z --untracked-files=all': OK(''),
+      'rev-parse HEAD': OK('9f8e7d6c5b4a\n'),
       ...gitAntworten,
     }),
     starte: (befehl, args, optionen) => {
@@ -380,8 +394,14 @@ function sammelLauf(argv, wurzel, gitAntworten = {}, starte = undefined) {
       return starte ? starte(befehl, args, optionen) : { status: 0, stdout: '', stderr: '' };
     },
     ausgabe: (text) => zeilen.push(text),
+    ...extra,
   });
   return { code, text: zeilen.join(''), aufrufe };
+}
+
+/** Die Gedaechtnisdatei des Vollaufs, gelesen im tmp-Projekt (vor dem Aufraeumen). */
+function gedaechtnis(wurzel, seite) {
+  return JSON.parse(readFileSync(join(wurzel, '.claude', `mutationsvollauf-${seite}.json`), 'utf-8'));
 }
 
 /** Ein `starte`-Doppel, das den json-Bericht an seinen vereinbarten Ort schreibt. */
@@ -413,12 +433,6 @@ test('laufen: unbekannte Seite endet ungleich 0 und nennt die erlaubten Werte', 
   assert.notEqual(code, 0);
   assert.match(text, /frontend/);
   assert.match(text, /backend/);
-});
-
-test('laufen: vollauf ist in diesem Paket noch nicht umgesetzt', () => {
-  const { code, text } = mitProjekt((wurzel) => sammelLauf(['vollauf', 'frontend'], wurzel));
-  assert.notEqual(code, 0);
-  assert.match(text, /noch nicht umgesetzt/);
 });
 
 test('laufen: leere Beruehrungsmenge endet gruen, nennt Bereich und Satz', () => {
@@ -1088,4 +1102,229 @@ test('laufen: unaufloesbarer Anker fuehrt zum vollen Umfang und sagt das', () =>
   assert.match(text, /volle Umfang/);
   assert.match(text, /Umfang: die ganze Seite/);
   assert.deepEqual(aufrufe[0].args, ['run', '--reporters', 'json,html,clear-text']);
+});
+
+// --- Vollauf: Schwelle und Gedaechtnisdatei (Issue #1215) --------------------
+
+test('SCHWELLEN: je Seite genau eine Zahl, Frontend 80, Backend 100', () => {
+  assert.deepEqual(SCHWELLEN, { frontend: 80, backend: 100 });
+});
+
+test('quoteAus: getoetet je geprueft in Prozent, auf zwei Stellen gerundet', () => {
+  assert.equal(quoteAus({ geprueft: 6, getoetet: 5 }), 83.33);
+  assert.equal(quoteAus({ geprueft: 4, getoetet: 4 }), 100);
+});
+
+test('quoteAus: ohne einen einzigen gepruefsten Mutanten gilt die Quote als erfuellt', () => {
+  assert.equal(quoteAus({ geprueft: 0, getoetet: 0 }), 100);
+});
+
+test('vollaufAuswerten: im Vollauf gilt jede Datei, Ausnahmen zaehlen nicht mit', () => {
+  const { zaehlung, ueberlebende } = vollaufAuswerten([
+    { datei: 'frontend/src/lib/a.ts', zeile: 2, mutator: 'ConditionalExpression', zustand: 'Survived', deckendeTests: ['frontend/src/lib/a.test.ts'] },
+    { datei: 'frontend/src/lib/b.ts', zeile: 9, mutator: 'EqualityOperator', zustand: 'Killed', deckendeTests: [] },
+    { datei: 'frontend/src/lib/b.ts', zeile: 10, mutator: 'BooleanLiteral', zustand: 'Timeout', deckendeTests: [] },
+    { datei: 'frontend/src/lib/b.ts', zeile: 11, mutator: 'StringLiteral', zustand: 'Ignored', deckendeTests: [] },
+    { datei: 'frontend/src/lib/b.ts', zeile: 12, mutator: 'ArrowFunction', zustand: 'CompileError', deckendeTests: [] },
+    { datei: 'frontend/src/lib/c.ts', zeile: 4, mutator: 'ObjectLiteral', zustand: 'NoCoverage', deckendeTests: [] },
+  ]);
+  assert.deepEqual(zaehlung, { geprueft: 4, getoetet: 2, ueberlebt: 2, ausgenommen: 1, ausserhalb: 0 });
+  assert.deepEqual(ueberlebende.map((m) => m.zeile), [2, 4]);
+});
+
+test('pitVollaufArgumente: Default-Umfang und Default-Marke des Profils, kein inkrementeller Zustand', () => {
+  const args = pitVollaufArgumente();
+  assert.deepEqual(args, ['-B', '-Ppit', '-Dskip.frontend=true', 'test']);
+  assert.equal(args.some((a) => a.startsWith('-Dpit.targetClasses')), false);
+  assert.equal(args.some((a) => a.startsWith('-Dpit.marke')), false);
+});
+
+/** 6 Mutanten, 5 getoetet -> 83,33 %: ueber der Frontend-Schwelle. */
+const BERICHT_UEBER_SCHWELLE = bericht({
+  'src/lib/a.ts': {
+    source: QUELLE_A,
+    mutants: [
+      mutant(2, 'ConditionalExpression', 'Survived'),
+      ...['a', 'b', 'c', 'd', 'e'].map((k, n) => mutant(2, 'EqualityOperator', 'Killed', { id: `k${k}`, ersetzung: `x${n}` })),
+    ],
+  },
+});
+
+/** 5 Mutanten, 4 getoetet -> genau 80,00 %: der Grenzfall. */
+const BERICHT_AUF_SCHWELLE = bericht({
+  'src/lib/a.ts': {
+    source: QUELLE_A,
+    mutants: [
+      mutant(2, 'ConditionalExpression', 'Survived'),
+      ...['a', 'b', 'c', 'd'].map((k, n) => mutant(2, 'EqualityOperator', 'Killed', { id: `k${k}`, ersetzung: `x${n}` })),
+    ],
+  },
+});
+
+test('laufen: vollauf frontend ruft Stryker ohne Verengung im Arbeitsverzeichnis frontend', () => {
+  const { aufrufe } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_UEBER_SCHWELLE)),
+  );
+  assert.equal(aufrufe.length, 1);
+  assert.deepEqual(aufrufe[0].args, ['run', '--reporters', 'json,html,clear-text']);
+  assert.match(aufrufe[0].optionen.cwd, /frontend$/);
+});
+
+test('laufen: vollauf frontend ueber der Schwelle endet gruen und nennt Quote und Schwelle', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_UEBER_SCHWELLE)),
+  );
+  assert.equal(code, 0);
+  assert.match(text, /Quote: 83,33 %/);
+  assert.match(text, /Schwelle 80 %/);
+});
+
+test('laufen: vollauf frontend genau auf der Schwelle endet gruen', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_AUF_SCHWELLE)),
+  );
+  assert.equal(code, 0);
+  assert.match(text, /Quote: 80,00 %/);
+});
+
+test('laufen: vollauf frontend unter der Schwelle endet ungleich 0 und nennt gemessenen Wert und Schwelle', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_A)),
+  );
+  assert.notEqual(code, 0);
+  assert.match(text, /Quote: 50,00 %/);
+  assert.match(text, /unter der Schwelle 80 %/);
+});
+
+test('laufen: eine kuenstlich auf 99 gesetzte Frontend-Schwelle laesst denselben Lauf anhalten', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_UEBER_SCHWELLE), {
+      schwellen: { frontend: 99, backend: 100 },
+    }),
+  );
+  assert.notEqual(code, 0);
+  assert.match(text, /Quote: 83,33 %/);
+  assert.match(text, /unter der Schwelle 99 %/);
+});
+
+test('laufen: vollauf frontend legt die Gedaechtnisdatei mit allen fuenf Feldern und der Mutantenliste an', () => {
+  const inhalt = mitProjekt((wurzel) => {
+    sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_UEBER_SCHWELLE));
+    return gedaechtnis(wurzel, 'frontend');
+  });
+  assert.equal(inhalt.stand, '9f8e7d6c5b4a');
+  assert.match(inhalt.datum, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(typeof inhalt.dauerMs, 'number');
+  assert.deepEqual(inhalt.umfang, STRYKER.mutate);
+  assert.equal(inhalt.quote, 83.33);
+  assert.deepEqual(inhalt.mutanten, [{
+    datei: 'frontend/src/lib/a.ts',
+    zeile: 2,
+    mutator: 'ConditionalExpression',
+    tests: ['frontend/src/lib/andersHeissend.test.ts'],
+  }]);
+});
+
+test('laufen: auch ein an der Schwelle gescheiterter Vollauf hinterlaesst die Gedaechtnisdatei', () => {
+  const inhalt = mitProjekt((wurzel) => {
+    const { code } = sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_A));
+    assert.notEqual(code, 0);
+    return gedaechtnis(wurzel, 'frontend');
+  });
+  assert.equal(inhalt.quote, 50);
+  assert.equal(inhalt.mutanten.length, 1);
+});
+
+test('laufen: ohne aufloesbaren Stand steht der Stand als unbekannt in der Gedaechtnisdatei', () => {
+  const inhalt = mitProjekt((wurzel) => {
+    sammelLauf(['vollauf', 'frontend'], wurzel, {
+      'rev-parse HEAD': { status: 128, stdout: '', stderr: 'not a repository' },
+    }, strykerDoppel(wurzel, BERICHT_UEBER_SCHWELLE));
+    return gedaechtnis(wurzel, 'frontend');
+  });
+  assert.equal(inhalt.stand, null);
+});
+
+test('laufen: vollauf frontend ohne Bericht endet ungleich 0, sagt warum und schreibt keine Gedaechtnisdatei', () => {
+  const { code, text } = mitProjekt((wurzel) => {
+    const ergebnis = sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, null, 1));
+    assert.throws(() => gedaechtnis(wurzel, 'frontend'));
+    return ergebnis;
+  });
+  assert.notEqual(code, 0);
+  assert.match(text, /keinen Bericht/);
+});
+
+test('laufen: vollauf backend faehrt das Profil mit seinem Default-Umfang und seiner Default-Marke', () => {
+  const { aufrufe } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML)),
+  );
+  assert.equal(aufrufe[0].befehl, 'mvn');
+  assert.deepEqual(aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', 'test']);
+});
+
+test('laufen: vollauf backend unter 100 Prozent endet ungleich 0 und legt die Gedaechtnisdatei an', () => {
+  const { code, text, inhalt } = mitProjekt((wurzel) => {
+    const ergebnis = sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML));
+    return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'backend') };
+  });
+  assert.notEqual(code, 0);
+  assert.match(text, /unter der Schwelle 100 %/);
+  assert.equal(inhalt.quote, 50);
+  assert.equal(inhalt.mutanten.length, 2);
+  assert.deepEqual(inhalt.umfang, [
+    'eingeschlossen: org.mwolff.manban.*.application.*',
+    'eingeschlossen: org.mwolff.manban.*.domain.*',
+    'ausgenommen:    org.mwolff.manban.*.infrastructure.*',
+    'ausgenommen:    org.mwolff.manban.ManbanApplication',
+  ]);
+});
+
+test('laufen: vollauf backend mit lauter getoeteten Mutanten endet gruen bei 100 Prozent', () => {
+  const xml = '<mutations>'
+    + '<mutation detected="true" status="KILLED"><sourceFile>CardService.java</sourceFile>'
+    + '<mutatedClass>org.mwolff.manban.card.application.CardService</mutatedClass>'
+    + '<lineNumber>7</lineNumber><mutator>org.pitest.mutationtest.engine.gregor.mutators.MathMutator</mutator>'
+    + '<description>Replaced addition</description>'
+    + '<killingTest>org.mwolff.manban.card.application.CardServiceTest.x(org.mwolff.manban.card.application.CardServiceTest)</killingTest>'
+    + '</mutation></mutations>';
+  const { code, text, inhalt } = mitProjekt((wurzel) => {
+    const ergebnis = sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, xml));
+    return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'backend') };
+  });
+  assert.equal(code, 0);
+  assert.match(text, /Quote: 100,00 %/);
+  assert.deepEqual(inhalt.mutanten, []);
+});
+
+test('laufen: vollauf backend ohne Bericht endet ungleich 0 und sagt warum', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, null, 1)),
+  );
+  assert.notEqual(code, 0);
+  assert.match(text, /keinen Bericht/);
+});
+
+test('laufen: ohne Gedaechtnisdatei steht im Vollauf der Satz, dass es noch keinen Vollauf gibt', () => {
+  const { text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_UEBER_SCHWELLE)),
+  );
+  assert.match(text, /noch keinen Vollauf/);
+});
+
+test('laufen: eine beschaedigte Gedaechtnisdatei gilt wie eine fehlende, ohne Absturz', () => {
+  const { code, text } = mitProjekt(
+    (wurzel) => sammelLauf(['aenderung', 'frontend'], wurzel),
+    { vollaufRoh: { frontend: '{ das ist kein JSON' } },
+  );
+  assert.equal(code, 0);
+  assert.match(text, /noch keinen Vollauf/);
+});
+
+test('laufen: die Aenderungspruefung nennt die eigene Dauer neben Dauer und Datum des Vollaufs', () => {
+  const vollauf = {
+    frontend: { stand: 'abc', datum: '2026-09-24T11:36:00.000Z', dauerMs: 1789000, quote: 84.7, umfang: [], mutanten: [] },
+  };
+  const { text } = mitProjekt((wurzel) => sammelLauf(['aenderung', 'frontend'], wurzel), { vollauf });
+  assert.match(text, /Dauer: \d+,\d s\. Letzter Vollauf frontend: 29 min 49 s am 2026-09-24, Quote 84,7 %\./);
 });
