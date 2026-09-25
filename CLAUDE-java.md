@@ -172,7 +172,7 @@ node scripts/mutationspruefung.mjs aenderung backend   # je Paket, Stufe paket
 node scripts/mutationspruefung.mjs vollauf backend     # an der Merge-Stufe, Schwelle 100 %
 ```
 
-Beide stehen als `buildChecks` in `.claude/workflow.config.json`, sobald dort eingetragen. Die Stufe
+Beide stehen als `buildChecks` in `.claude/workflow.config.json`. Die Stufe
 `paket` kommt aus der Messung in Issue #1211 (rund 30 s für ein typisches Backend-Paket).
 
 **Die Änderungsprüfung** verengt PIT über zwei Properties des Profils `pit` in der `pom.xml`:

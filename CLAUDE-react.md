@@ -252,7 +252,7 @@ node scripts/mutationspruefung.mjs aenderung frontend   # je Paket, Stufe paket
 node scripts/mutationspruefung.mjs vollauf frontend     # an der Merge-Stufe, Schwelle 80 %
 ```
 
-Beide stehen als `buildChecks` in `.claude/workflow.config.json`, sobald dort eingetragen. Die Stufe
+Beide stehen als `buildChecks` in `.claude/workflow.config.json`. Die Stufe
 `paket` kommt aus der Messung in Issue #1211 (rund 30 s für ein typisches Frontend-Paket). Die
 Änderungsprüfung mutiert nur die geänderten Dateien aus dem `mutate`-Bereich; ein Überlebender in einer
 berührten Datei hält an, Überlebende anderswo erscheinen nur als Zahl. Der Vollauf prüft den ganzen

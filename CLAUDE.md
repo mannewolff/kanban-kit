@@ -118,7 +118,7 @@ node --test cli/tbx.test.mjs            # tbx-Kommandozeilenwerkzeug
 # Skripte
 node --test scripts/*.test.mjs          # Projektskripte, darunter scripts/mutationspruefung.test.mjs
 
-# Mutationsprüfung (sobald in .claude/workflow.config.json eingetragen)
+# Mutationsprüfung (Bereiche frontend bzw. backend; Vollauf nur an der Merge-Stufe)
 node scripts/mutationspruefung.mjs aenderung frontend   # Stufe paket: Stryker über die geänderten Dateien
 node scripts/mutationspruefung.mjs aenderung backend    # Stufe paket: PIT über die geänderten Klassen
 node scripts/mutationspruefung.mjs vollauf frontend     # Stufe merge: Stryker über den ganzen Bereich, Schwelle 80 %
@@ -134,12 +134,12 @@ Checkstyle, PMD, SpotBugs — ohne Integrationstests, Abdeckung und Frontend-/Do
 Integrationstests, 100-%-Abdeckung und Doku-Seite) trägt `stufe: "push"` und läuft erst bei `push main`
 und `merge production` — die Abdeckungsgrenze ist ohne Integrationstests nicht zu halten, deshalb
 wandert sie mit. Beim Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine Datei
-ohne Bereich (etwa `Dockerfile`, `.github/`) fährt alle der Paketstufe. **Vor `push main` und
-`merge production` laufen immer alle sieben.** Die Config ändert nur Manne.
+ohne Bereich (etwa `Dockerfile`, `.github/`) fährt alle der Paketstufe. **Vor `push main` laufen alle
+Prüfungen der Paket- und Push-Stufe (neun), vor `merge production` zusätzlich die beiden Vollläufe (elf).** Die Config ändert nur Manne.
 
 **Mutationsprüfung (Issue #1104).** Die Änderungsprüfung (`aenderung`) mutiert je Paket nur, was das
-Paket berührt — gemessen je Seite rund 30 s (Issue #1211), deshalb Stufe `paket`, sobald in
-`.claude/workflow.config.json` eingetragen. Ein Überlebender in einer berührten Datei hält an; wie eine
+Paket berührt — gemessen je Seite rund 30 s (Issue #1211), deshalb Stufe `paket`.
+Das frühere Feld `mutationCommand` ist entfallen; PIT und Stryker laufen nur noch über den Treiber. Ein Überlebender in einer berührten Datei hält an; wie eine
 bewusst hingenommene Altlast markiert wird, steht in CLAUDE-java.md §5.5 und CLAUDE-react.md. Der
 Vollauf (`vollauf`) prüft den ganzen Bereich gegen die Schwelle (Frontend 80 %, Backend 100 %) und schreibt
 die Gedächtnisdatei `.claude/mutationsvollauf-<seite>.json`, aus der die Änderungsprüfung Dauer und
