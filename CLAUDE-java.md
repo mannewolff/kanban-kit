@@ -115,10 +115,11 @@ Vor dem Markieren einer Aufgabe als „fertig" ist nachzuweisen:
 | PIT Mutation Score                | **100 %**   |
 | PIT Test Strength                 | **100 %**   |
 
-JaCoCo (`check`) läuft im Default-`mvn verify`. **PIT läuft bewusst im Maven-Profil `-Ppit`**
-(`mvn -Ppit test`), damit der Standard-Build schnell bleibt — das Profil gehört zu den
-Pflichtchecks vor Abschluss (local-check und CI). Eine separate Test-Strength-Schwelle bietet
-pitest-maven nicht; sie wird über `mutationThreshold=100` miterzwungen und im Report geprüft.
+JaCoCo (`check`) läuft im vollen `mvn verify` (Stufe `push`). **PIT liegt im Maven-Profil `-Ppit`**
+(`mvn -Ppit test`), damit der Standard-Build schnell bleibt. Aufgerufen wird es nicht mehr direkt,
+sondern über den Treiber `scripts/mutationspruefung.mjs` (§5.5): je Paket die Änderungsprüfung,
+an der Merge-Stufe der Vollauf. Eine separate Test-Strength-Schwelle bietet pitest-maven nicht; sie
+wird über `mutationThreshold` (Property `pit.marke`, Default 100) miterzwungen und im Report geprüft.
 
 ### 5.2 Ausschlussregeln (eng gefasst)
 
@@ -163,6 +164,44 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
    existiert unter `common/ExcludeFromJacocoGeneratedReport.java` (Retention CLASS; PIT honoriert
    sie über das `FANN`-Feature in der pit-Profil-Konfiguration) und ist methodengenau
    einzusetzen, nie pauschal.
+
+### 5.5 Mutationsprüfung der Backend-Seite (Issue #1104)
+
+```bash
+node scripts/mutationspruefung.mjs aenderung backend   # je Paket, Stufe paket
+node scripts/mutationspruefung.mjs vollauf backend     # an der Merge-Stufe, Schwelle 100 %
+```
+
+Beide stehen als `buildChecks` in `.claude/workflow.config.json`, sobald dort eingetragen. Die Stufe
+`paket` kommt aus der Messung in Issue #1211 (rund 30 s für ein typisches Backend-Paket).
+
+**Die Änderungsprüfung** verengt PIT über zwei Properties des Profils `pit` in der `pom.xml`:
+
+- `pit.targetClasses` — der Prüfbereich. Default ist der volle Bereich
+  (`org.mwolff.manban.*.application.*`, `*.domain.*`, `config.*`, `ratelimit.web.*`); der Treiber
+  setzt `-Dpit.targetClasses=<berührte Klassen>`.
+- `pit.marke` — die Werkzeugschwelle (`mutationThreshold`), Default `100`. Die Änderungsprüfung
+  setzt `-Dpit.marke=0`: Der Halt kommt aus dem Rückgabewert des Treibers, nicht aus PIT, weil ein
+  Altlast-Vermerk nicht anhalten, aber mitzählen soll. Der Vollauf lässt die Marke stehen.
+
+Ein überlebender Mutant in einer berührten Klasse hält an; Überlebende anderswo erscheinen nur als
+Zahl. `--incremental` wird nirgends benutzt — der Vollauf darf nicht auf gespeicherten Urteilen ruhen.
+
+**Ausnahmen, zwei Formen:**
+
+- `@ExcludeFromJacocoGeneratedReport` **je Einheit** (Methode) — die gröbere Form, sie wirkt schon bei
+  der Erzeugung: Solche Mutanten entstehen gar nicht erst. Es gelten die Regeln aus §5.4.
+- Der **Altlast-Vermerk** an der Zeile des Mutanten:
+  `// Mutations-Altlast: <Grund> (#<Issue>, <JJJJ-MM-TT>)`. Die Begründung ist Pflicht. Er gibt die
+  Änderungsprüfung frei, **zählt aber weiter mit**, und er trägt nur, wenn alle vier Bedingungen
+  zugleich erfüllt sind:
+  1. Der Vermerk steht an der Stelle des Überlebenden.
+  2. Die Zeile des Mutanten ist gegenüber dem Anker unverändert.
+  3. Keine Testdatei, die die Stelle deckt, hat sich geändert.
+  4. Der Mutant hat auch im letzten Vollauf überlebt (Gedächtnisdatei `.claude/mutationsvollauf-backend.json`)
+     — sonst ist er keine Altlast, sondern neu.
+
+  Welche Bedingung verletzt ist, nennt die Meldung am haltenden Mutanten.
 
 ---
 
