@@ -234,6 +234,54 @@ public class CardService {
         derivedFrom);
   }
 
+  /**
+   * Legt mehrere Karten in einem Zug am Ende einer Board-Spalte an (Issue #1200) — der
+   * board-gebundene Weg des Spezifikations-Imports. Recht: {@link Permission#TICKET_CREATE}, einmal
+   * für den ganzen Stapel geprüft; importieren ist fachlich dasselbe wie Karten anlegen, nur in
+   * Menge.
+   *
+   * <p><b>Alles-oder-nichts.</b> Die Methode läuft in einer Transaktion: schlägt eine Karte fehl,
+   * entsteht keine. Ein halb importierter Spec wäre schwerer aufzuräumen (welche Abschnitte
+   * fehlen?) als ein wiederholter Import. Feld- und Mengengrenzen prüft bereits die Bean-Validation
+   * am Endpoint, sodass ein ungültiges Element gar nicht bis hierher gelangt.
+   *
+   * <p><b>Ein Ereignis je Karte</b> statt eines gebündelten: Der Stapel läuft bewusst über den
+   * gemeinsamen Anlegepfad {@code doCreate}, damit Nummern-, Positions- und Transitionsvergabe
+   * unverändert greifen — das Ereignis je Karte ist dessen Nebenwirkung, und der Board-Strom
+   * liefert ohnehin erst nach Commit aus.
+   *
+   * <p>Die Karten landen in Eingabereihenfolge am Ende der Zielspalte: {@code doCreate} holt je
+   * Karte eine frische aktive Position aus {@link CardRepository#allocateActivePosition(long)}.
+   */
+  @Transactional
+  public List<CardView> createCardsBatch(
+      long userId, long boardId, long columnId, List<NewCard> neueKarten) {
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    // Die Spalte einmal vorab gegen das Board prüfen: ein falsches Ziel soll scheitern, bevor die
+    // erste Karte eine Nummer verbraucht hat. doCreate prüft sie je Karte erneut (unverändert).
+    boardService.requireColumn(columnId, boardId);
+    return neueKarten.stream()
+        .map(
+            card ->
+                doCreate(
+                    userId,
+                    boardId,
+                    columnId,
+                    card.title(),
+                    card.description(),
+                    null,
+                    null,
+                    false,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null))
+        .toList();
+  }
+
   // Kern-Logik des Anlegens ohne eigene @Transactional: wird von den öffentlichen create-
   // Überladungen (je @Transactional) aufgerufen, ohne Self-Invocation über den Proxy (java:S6809).
   private CardView doCreate(
@@ -263,6 +311,7 @@ public class CardService {
     int number = givenNumber != null ? givenNumber : cards.allocateCardNumber(projectId);
     int position = cards.allocateActivePosition(columnId);
     Instant now = clock.instant();
+    Instant movedToDoneAt = doneStempel(ideaStored, column, now);
     Card saved =
         cards.save(
             new Card(
@@ -275,7 +324,7 @@ public class CardService {
                 position,
                 false,
                 ideaStored,
-                null,
+                movedToDoneAt,
                 userId,
                 now,
                 now,
@@ -1581,6 +1630,13 @@ public class CardService {
    */
   public record NewIdea(String title, @Nullable String description) {}
 
+  /**
+   * Eine anzulegende Board-Karte im Stapel (Issue #1200): Titel und optionale Beschreibung. Board
+   * und Spalte stehen bewusst nicht hier, sondern gelten für den ganzen Stapel — er füllt genau
+   * eine Spalte.
+   */
+  public record NewCard(String title, @Nullable String description) {}
+
   /** Ergebnis eines idempotenten Ingests (#534): die Karte plus ob sie neu angelegt wurde. */
   public record IdeaCreation(CardView view, boolean created) {}
 
@@ -1985,6 +2041,26 @@ public class CardService {
       }
     }
     dependencies.replaceDependencies(card.requireId(), distinct);
+  }
+
+  /**
+   * Done-Zeitpunkt einer frisch angelegten Karte (Issue #1200, E4): Wird sie direkt in einer
+   * Done-Spalte angelegt, zählt sie ab sofort als erledigt. Ohne diesen Zeitstempel fiele sie
+   * dauerhaft aus der Done-Aufbewahrung, die ausschließlich über ihn greift ({@code
+   * findArchivableDoneCards} verlangt {@code movedToDoneAt is not null}).
+   *
+   * <p>Eine Idee im Pool bekommt ihn nicht: Sie nimmt am Board-Workflow nicht teil und eröffnet
+   * darum auch keine Spalten-Transition.
+   *
+   * <p>Eigene Methode statt eines Ausdrucks in {@code doCreate}: Dort trieben die beiden
+   * Verzweigungen die NPath-Komplexität des ohnehin verzweigungsreichen Anlegepfads über die
+   * PMD-Schwelle.
+   */
+  private static @Nullable Instant doneStempel(boolean ideaStored, ColumnView column, Instant now) {
+    if (ideaStored) {
+      return null;
+    }
+    return isDoneColumn(column.name()) ? now : null;
   }
 
   private static boolean isDoneColumn(@Nullable String name) {

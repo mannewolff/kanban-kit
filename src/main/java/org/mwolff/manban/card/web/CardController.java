@@ -46,6 +46,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class CardController {
 
+  /**
+   * Obergrenze für ein Stapel-Anlegen an einer Board-Spalte. Dieselbe Zahl wie an den bestehenden
+   * Bulk-Endpunkten dieser Klasse und am Pool-Stapel ({@code ProjectIdeaController}), damit im
+   * Projekt genau eine Mengen-Obergrenze gilt statt mehrerer divergierender.
+   */
+  static final int MAX_CARDS_PER_BATCH = 200;
+
   private final CardService cards;
 
   CardController(CardService cards) {
@@ -90,6 +97,28 @@ class CardController {
         request.assigneeIds(),
         request.labelIds(),
         request.derivedFrom());
+  }
+
+  /**
+   * Legt mehrere Karten in einem Zug am Ende einer Spalte dieses Boards an (Issue #1200) — der
+   * board-gebundene Weg des Spezifikations-Imports. Antwort: die angelegten Karten in
+   * Eingabereihenfolge, jeweils mit {@code id} und vergebener {@code number}.
+   *
+   * <p>Alles-oder-nichts: Verletzt ein Element die Feldgrenzen, lehnt die Bean-Validation die ganze
+   * Anfrage mit 400 ab, bevor der Service läuft — es entsteht keine einzige Karte. Begründung der
+   * Entscheidung im Javadoc von {@link CardService#createCardsBatch}.
+   */
+  @PostMapping("/api/boards/{boardId}/cards/batch")
+  @ResponseStatus(HttpStatus.CREATED)
+  List<CardView> createBatch(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long boardId,
+      @Valid @RequestBody CreateCardsBatchRequest request) {
+    List<CardService.NewCard> neueKarten =
+        request.cards().stream()
+            .map(c -> new CardService.NewCard(c.title(), c.description()))
+            .toList();
+    return cards.createCardsBatch(userId, boardId, request.columnId(), neueKarten);
   }
 
   @GetMapping("/api/boards/{boardId}/cards")
@@ -376,6 +405,23 @@ class CardController {
       @Nullable List<Long> assigneeIds,
       @Nullable List<Long> labelIds,
       @Nullable @Positive @Max(CardNumbers.MAX) Integer derivedFrom) {}
+
+  /**
+   * Ein Element des Stapels (Issue #1200). Titel- und Beschreibungsgrenze wie an allen anderen
+   * Anlegewegen ({@link CreateCardRequest}, {@code ProjectIdeaController}).
+   */
+  record BatchCardItem(
+      @NotBlank @Size(max = 300) String title,
+      @Nullable @Size(max = TextLimits.MAX_TEXT) String description) {}
+
+  /**
+   * Eine leere Liste ist eine Fehleingabe und keine leere Erfolgsantwort ({@code @NotEmpty} → 400)
+   * — dasselbe Verhalten wie bei den bestehenden Bulk-Endpunkten. Die {@code columnId} gilt für
+   * alle Elemente: Der Stapel füllt genau eine Spalte.
+   */
+  record CreateCardsBatchRequest(
+      @NotNull Long columnId,
+      @NotEmpty @Size(max = MAX_CARDS_PER_BATCH) List<@Valid @NotNull BatchCardItem> cards) {}
 
   record UpdateCardRequest(
       @NotBlank @Size(max = 300) String title,

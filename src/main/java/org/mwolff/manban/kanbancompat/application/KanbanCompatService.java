@@ -250,12 +250,12 @@ public class KanbanCompatService {
    * leerer oder nur aus Leerzeichen bestehender String ist dagegen ein <em>angegebener</em>,
    * ungültiger Schlüssel und wird abgelehnt; {@link #columnIdForKey} erledigt das mit.
    *
-   * <p><strong>DONE ist ausgeschlossen.</strong> {@code doCreate} setzt {@code movedToDoneAt} nicht
-   * — diesen Zeitstempel vergibt allein {@code CardService.move} beim Eintritt in eine Done-Spalte,
-   * und die Done-Retention archiviert ausschließlich darüber ({@code findArchivableDoneCards}
-   * verlangt {@code movedToDoneAt is not null}). Eine direkt in DONE angelegte Karte fiele
-   * dauerhaft aus der Aufbewahrung, ohne dass der Grund sichtbar wäre; außerdem umginge sie die
-   * Messung des Spaltenverlaufs. Der reale Bedarf (Ready) ist davon nicht berührt.
+   * <p><strong>DONE ist ausgeschlossen.</strong> Eine von außen hereingereichte Karte, die sofort
+   * als erledigt gilt, umginge die Messung des Spaltenverlaufs: Sie hätte nie eine andere Spalte
+   * gesehen, und die Durchlaufzeit rechnete auf einem Verlauf ohne Vorgeschichte. Der reale Bedarf
+   * (Ready) ist davon nicht berührt. (Der Zeitstempel selbst wäre seit Issue #1200 da — {@code
+   * doCreate} setzt {@code movedToDoneAt} beim Anlegen in eine Done-Spalte —, an diesem Guard
+   * ändert das nichts.)
    */
   private long directColumnId(long boardId, @Nullable String column) {
     if (column == null) {
