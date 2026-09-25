@@ -34,8 +34,7 @@
   den Einträgen „Nach links verschieben" und „Nach rechts verschieben" (jeweils genau eine Spalte
   weit) — auch per Tastatur bedienbar. In der ersten bzw. letzten Spalte fehlt der jeweils sinnlose
   Eintrag.
-- **⋮-Menü:** „Duplizieren", „Archivieren", „In den Ideen-Pool" (legt die Karte in den
-  [Ideen-Pool](#ideen-pool)) — mit Board-Recht — „Verschieben…" (Spalte, Board oder Projekt) sowie „Nach
+- **⋮-Menü:** „Duplizieren", „Archivieren" — mit Board-Recht — „Verschieben…" (Spalte, Board oder Projekt) sowie „Nach
   links/rechts verschieben". Der Eintrag **„Bearbeiten"** (öffnet das Detail im Bearbeiten-Modus)
   erscheint nur bei aktivem [Editiermodus](#editiermodus); der Button „Bearbeiten" im Karten-Detail
   steht dagegen immer zur Verfügung, sofern du Bearbeitungsrecht hast. Bei **archivierten** Karten
@@ -155,43 +154,36 @@ Papierkorb wird über den Button **„Papierkorb"** in der Board-Kopfzeile geöf
   gilt **global** für alle Boards (nur der Spaltenfilter oben bleibt pro Board).
 - **Zeilen umsortieren:** über den Drag-Handle links (innerhalb derselben Spalte).
 
-## Ideen-Pool
+## Spezifikation einlesen {#spezifikations-import}
 
-Der **Ideen-Pool** ist ein **projektweiter** Ablageort für Karten, die noch nicht auf einem Board
-sichtbar sein sollen — ein leichtgewichtiges Grooming, kein Löschen. Er ist nicht an ein einzelnes
-Board gebunden, sondern gilt für das ganze Projekt.
+Eine Markdown-Spezifikation lässt sich in einem Zug in Karten auflösen: Jeder Abschnitt der
+gewählten Überschriftenebene wird zu einer Karte — die Überschrift zum Titel, der Text darunter zur
+Beschreibung.
 
-Erreichbar über den Sidebar-Eintrag **„Ideen"** (sichtbar, sobald ein Projekt-Kontext offen ist). Die
-Seite zeigt die **Planen-Ansicht**:
+- **Ort:** Button **„Spezifikation einlesen"** in der **Werkzeugleiste der Board-Ansicht**. Er
+  öffnet die Dateiauswahl (`.md`/`.markdown`).
+- **Recht:** Der Button erscheint nur, wenn du auf diesem Board **Karten anlegen** darfst
+  (`TICKET_CREATE`).
+- **Zielspalte:** Im Dialog wählbar über das Feld **„Spalte"**; vorbelegt ist die **erste Spalte**
+  des Boards. Es wird stets in genau eine Spalte eingelesen.
+- **Trennende Ebene:** Das Feld **„Ebene"** bestimmt, welche Überschrift die Karten trennt — **H1**
+  oder **H2**. Voreingestellt ist **H2**, weil H1 in exportierten Spezifikationen meist den
+  Dokumenttitel trägt. Findet sich keine Überschrift der gewählten Ebene, sagt das der Dialog und
+  bietet die andere Ebene an.
+- **Vorschau:** Vor dem Anlegen zeigt der Dialog **alle gefundenen Abschnitte** mit Titel und einer
+  einzeiligen Textvorschau. Jeder Abschnitt lässt sich **einzeln abwählen** (etwa Vorspann oder
+  Inhaltsverzeichnis); der Knopf nennt die Zahl der Karten, die tatsächlich entstehen. Ein
+  Ebenenwechsel setzt die Abwahl zurück.
+- **Kürzungen:** Zu lange Titel und Beschreibungen werden auf die Feldgrenzen gekürzt; die Vorschau
+  **weist das am betroffenen Abschnitt aus**, bevor etwas angelegt wird.
+- **Obergrenze:** Höchstens **200 Karten je Import**. Darüber warnt der Dialog und das Anlegen
+  bleibt gesperrt, bis genug Abschnitte abgewählt sind.
+- **Die Datei bleibt bei dir:** Sie wird **nur im Browser gelesen** — weder hochgeladen noch
+  verändert oder gelöscht. An den Server gehen ausschließlich die in der Vorschau gezeigten Karten.
 
-- **Oben:** alle Boards des Projekts untereinander, je Board seine **erste Spalte** und ein Button
-  **„Board öffnen"** (springt in die Listen-Ansicht dieses Boards).
-- **Darunter:** der projektweite **Ideen-Pool** mit allen noch nicht eingeplanten Ideen.
-- **Suchfeld** oben auf der Seite (Label „Suche"): filtert **nur den Pool** nach Titel — die
-  Board-Zonen bleiben unverändert.
-
-Einen Umschalter zwischen „Liste" und „Planen" gibt es nicht mehr — es bleibt bei der Planen-Ansicht.
-Ideen erscheinen **nicht** in der Board-Spaltenansicht und **nicht** in der Listen-Ansicht des Boards.
-
-- **Idee anlegen:** Button **„Idee anlegen"** auf der Ideen-Seite legt direkt eine Idee im Pool an
-  (Titel + Markdown-Beschreibung, wie eine normale Karte).
-- **Einplanen (Idee → Board):** eine Idee per **Drag** aus dem Pool in die erste Spalte des
-  gewünschten Boards ziehen. Der Button **„Einplanen"** ist die Abkürzung dafür und plant stets auf
-  das **erste Board** des Projekts. So oder so wird die Idee zur normalen Karte in der **ersten
-  Spalte** und erscheint wieder auf dem Board.
-- **Zurückholen (Board → Pool):** eine Karte per **Drag** aus der ersten Spalte in den Pool ziehen,
-  über den Button **„In den Pool"** oder im **⋮-Menü** der Karte über „In den Ideen-Pool". Die Karte
-  verschwindet vom Board.
-- **Zwischen Boards verschieben:** eine Karte per **Drag** direkt von der ersten Spalte eines Boards
-  in die eines anderen ziehen — sie landet in dessen erster Spalte.
-- **Reihenfolge innerhalb einer Board-Zone:** Karten per **Drag** auf eine andere Zeile derselben
-  Zone umsortieren.
-- **Projektweite Nummer bleibt erhalten:** Eine Karte behält beim Weg in den Pool ihre **projektweite
-  Nummer**; sie wird auch im Pool angezeigt und geht beim Einplanen nicht verloren.
-
-Alle Richtungen zählen als normaler Arbeitsfluss und brauchen nur das Recht zum **Verschieben** von
-Karten (kein Löschrecht). Auch der Ingest über die API (kanbancompat) kann eine Karte direkt als Idee
-anlegen.
+**Ideen sammeln:** Einen projektweiten Ideen-Ablageort gibt es nicht mehr. Wer Ideen sammeln will,
+legt sich dafür eine **eigene Spalte auf dem Board** an (etwa „Ideen") und schiebt Karten von dort
+weiter, sobald sie eingeplant sind.
 
 ## Leitstand eines Boards {#leitstand}
 
@@ -452,14 +444,14 @@ Die Tatsachengrundlage dazu steht in
   nichts zurück, was von Hand aufzuräumen wäre.
 - **Grenze:** Die Zugehörigkeit endet an der Board-Grenze. Die zugeordnete Karte muss auf
   **demselben Board** liegen wie das Vorhaben, und eine Kette, die auf ein anderes Board führt,
-  endet dort. Karten im Ideen-Speicher und archivierte Karten zählen nicht mit; sie
+  endet dort. Archivierte Karten zählen nicht mit; sie
   unterbrechen die Kette aber auch nicht — ihre Nachfahren bleiben zugehörig.
 - **Vorgang eröffnen:** An einer fachlichen Anforderung oder einem Plandokument entsteht das
   Vorhaben in einem Schritt: im Detail der Karte auf **„Vorgang eröffnen"**, Name (vorbelegt mit
   dem Kartentitel) und optional ein Kürzel eingeben. Das Vorhaben wird angelegt, die Karte wird
   seine Anforderung und ist ihm zugeordnet — ohne zweiten Handgriff. Der Knopf erscheint nur,
-  wo das möglich ist: nicht an einem Vorhaben, nicht an einer archivierten Karte, nicht im
-  Ideen-Speicher und nicht an einer Karte, die schon einem Vorhaben zugeordnet ist.
+  wo das möglich ist: nicht an einem Vorhaben, nicht an einer archivierten Karte und nicht an
+  einer Karte, die schon einem Vorhaben zugeordnet ist.
 - **Vorhaben-Übersicht:** Kacheln mit **Fortschrittsbalken** („X/Y Arbeitspakete fertig"). Die
   Kachel nennt die **Anforderung**, aus der der Vorgang eröffnet wurde; der Verweis ist
   **anklickbar** und öffnet die Karte. Trägt das Vorhaben keine Anforderung — etwa weil es von
@@ -496,8 +488,8 @@ Sidebar-Eintrag **„Administration"** ein- und ausgeschaltet:
   Projekt ein **Ankreuzfeld**, mit dem OWNER und ADMIN mit echter Mitgliedschaft die Teilnahme
   ihres Projekts am [Plattform-Leitstand](#plattform-leitstand) schalten — der Plattform-Admin
   schaltet es für ein fremdes Projekt nicht.
-- **Der Alltag bleibt unberührt:** Karten anlegen, verschieben, archivieren und in den Ideen-Pool
-  legen funktioniert **unabhängig** vom Editiermodus.
+- **Der Alltag bleibt unberührt:** Karten anlegen, verschieben und archivieren funktioniert
+  **unabhängig** vom Editiermodus.
 
 ## Plattform-Leitstand
 
