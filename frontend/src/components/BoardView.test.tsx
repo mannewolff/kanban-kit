@@ -62,7 +62,7 @@ const card: Card = {
 
 function mkApi(over: Record<string, unknown> = {}) {
   return {
-    create: vi.fn(), move: vi.fn(), archive: vi.fn(), moveToIdeaStorage: vi.fn(),
+    create: vi.fn(), createBatch: vi.fn(), move: vi.fn(), archive: vi.fn(), moveToIdeaStorage: vi.fn(),
     restore: vi.fn(), remove: vi.fn(), get: vi.fn().mockResolvedValue(card),
     bulkArchive: vi.fn(), bulkTransfer: vi.fn(), bulkDelete: vi.fn(),
     bulkLabels: vi.fn().mockResolvedValue([]), ...over,
@@ -146,6 +146,132 @@ describe('BoardView', () => {
   it('blendet den Anlege-Button für Nicht-Editoren aus', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
     expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
+  })
+
+  describe('Spezifikations-Import in der Werkzeugleiste (#1201)', () => {
+    /** Markdown-Datei, wie der Nutzer sie auswählt — zwei H2-Abschnitte werden zwei Karten. */
+    const specDatei = () =>
+      new File(['## Anmeldung\nText A\n\n## Registrierung\nText B'], 'spec.md', {
+        type: 'text/markdown',
+      })
+
+    /** Wählt eine Datei im versteckten Datei-Input des Knopfs aus; `null` = Auswahl abgebrochen. */
+    function dateiSetzen(file: File | null) {
+      const input = screen.getByLabelText('Markdown-Datei auswählen')
+      Object.defineProperty(input, 'files', { value: file === null ? null : [file], configurable: true })
+      fireEvent.change(input)
+    }
+
+    /** Wählt die Spezifikationsdatei aus und wartet auf den Anlegen-Knopf der Vorschau. */
+    async function dateiWaehlen(file: File = specDatei()) {
+      dateiSetzen(file)
+      return screen.findByRole('button', { name: /Karten? anlegen/ })
+    }
+
+    it('zeigt den Knopf nur mit Bearbeitungsrecht', () => {
+      const { unmount } = render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      expect(screen.getByRole('button', { name: 'Spezifikation einlesen' })).toBeInTheDocument()
+      unmount()
+
+      render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
+      expect(screen.queryByRole('button', { name: 'Spezifikation einlesen' })).not.toBeInTheDocument()
+    })
+
+    it('legt die Karten in der vorbelegten ersten Spalte an und zeigt sie sofort', async () => {
+      const angelegt: Card[] = [
+        { ...card, id: 300, number: 3, title: 'Anmeldung' },
+        { ...card, id: 301, number: 4, title: 'Registrierung' },
+      ]
+      const api = mkApi({ createBatch: vi.fn().mockResolvedValue(angelegt) })
+      const onCardsChanged = vi.fn()
+      render(
+        <BoardView board={board} initialCards={[card]} canEdit api={api} onCardsChanged={onCardsChanged} />,
+        { wrapper: SnackbarProvider },
+      )
+
+      const anlegen = await dateiWaehlen()
+      expect(screen.getByLabelText('Zielspalte')).toHaveValue('10')
+      fireEvent.click(anlegen)
+
+      await waitFor(() =>
+        expect(api.createBatch).toHaveBeenCalledWith(1, 10, [
+          { title: 'Anmeldung', description: 'Text A' },
+          { title: 'Registrierung', description: 'Text B' },
+        ]),
+      )
+      expect(await screen.findByText('2 Karten angelegt.')).toBeInTheDocument()
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-300')).toBeInTheDocument()
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-301')).toBeInTheDocument()
+      expect(onCardsChanged).toHaveBeenCalled()
+    })
+
+    it('meldet eine einzelne Karte im Singular', async () => {
+      const api = mkApi({ createBatch: vi.fn().mockResolvedValue([{ ...card, id: 302, number: 5 }]) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      const anlegen = await dateiWaehlen(
+        new File(['## Nur eine'], 'spec.md', { type: 'text/markdown' }),
+      )
+      fireEvent.click(anlegen)
+
+      expect(await screen.findByText('1 Karte angelegt.')).toBeInTheDocument()
+    })
+
+    it('legt in die gewählte Zielspalte an', async () => {
+      const api = mkApi({ createBatch: vi.fn().mockResolvedValue([]) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      const anlegen = await dateiWaehlen()
+      fireEvent.change(screen.getByLabelText('Zielspalte'), { target: { value: '20' } })
+      fireEvent.click(anlegen)
+
+      await waitFor(() => expect(api.createBatch).toHaveBeenCalledWith(1, 20, expect.any(Array)))
+    })
+
+    it('meldet eine unlesbare Datei, ohne die Vorschau zu öffnen', async () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+      class FailingReader {
+        onload: (() => void) | null = null
+        onerror: (() => void) | null = null
+        result: string | null = null
+        readAsText(): void {
+          this.onerror?.()
+        }
+      }
+      vi.stubGlobal('FileReader', FailingReader)
+
+      dateiSetzen(specDatei())
+
+      expect(await screen.findByText('Die Datei konnte nicht gelesen werden.')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Karten? anlegen/ })).not.toBeInTheDocument()
+      vi.unstubAllGlobals()
+    })
+
+    it('tut nichts, wenn die Auswahl abgebrochen wird', () => {
+      const api = mkApi({ createBatch: vi.fn() })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+      dateiSetzen(null)
+
+      expect(screen.queryByRole('button', { name: /Karten? anlegen/ })).not.toBeInTheDocument()
+      expect(api.createBatch).not.toHaveBeenCalled()
+    })
+
+    it('setzt den Datei-Input zurück, damit dieselbe Datei erneut gewählt werden kann', async () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      await dateiWaehlen()
+
+      expect((screen.getByLabelText('Markdown-Datei auswählen') as HTMLInputElement).value).toBe('')
+    })
   })
 
   it('legt über Typ=Epic ein Epic an statt einer Karte', async () => {

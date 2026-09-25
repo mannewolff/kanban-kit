@@ -48,15 +48,6 @@ export const VorhabenSymbol = strichSymbol(
   </>,
 )
 
-export const IdeenSymbol = strichSymbol(
-  'IdeenSymbol',
-  <path
-    d="M6 13h4M8 2a4.2 4.2 0 0 0-2.4 7.7c.3.3.4.6.4 1v.3h4v-.3c0-.4.1-.7.4-1A4.2 4.2 0 0 0 8 2Z"
-    {...strich}
-    strokeLinejoin="round"
-  />,
-)
-
 export const NachtlaeufeSymbol = strichSymbol(
   'NachtlaeufeSymbol',
   <path d="M13 9.6A5.6 5.6 0 0 1 6.4 3 5.6 5.6 0 1 0 13 9.6Z" {...strich} strokeLinejoin="round" />,

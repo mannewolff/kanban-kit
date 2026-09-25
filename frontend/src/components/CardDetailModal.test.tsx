@@ -1128,7 +1128,7 @@ describe('CardDetailModal', () => {
 
   it('zeigt die nackte Nummer, wenn auch die Vorhaben-Liste das Vorhaben nicht kennt', async () => {
     const apis = makeApis()
-    // Wie `IdeaPlanningBoard`: `epics=[]` ohne `canEditEpic` (Plan #717, A6). Ohne Eintrag in
+    // `epics=[]` ohne `canEditEpic` (Plan #717, A6). Ohne Eintrag in
     // `epics` gibt es keinen Titel zu zeigen — die Nummer belegt trotzdem, dass eine Zuordnung
     // besteht.
     render(<CardDetailModal card={{ ...card, parentId: 9 }} canEdit epics={[]} onClose={vi.fn()} {...apis} />)

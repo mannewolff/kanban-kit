@@ -192,6 +192,21 @@ export const cardsApi = {
       method: 'POST',
       body: JSON.stringify({ columnId, title, description, parentId, ideaStored, ...extra }),
     }),
+  /**
+   * Legt mehrere Karten in einem Zug am Ende einer Spalte dieses Boards an (Backend #1200) — Ziel
+   * des Spezifikations-Imports (#1201). Alles-oder-nichts: Verletzt ein Element die Feldgrenzen des
+   * Servers (Titel > 300, Beschreibung zu lang, mehr als 200 Elemente), entsteht keine einzige
+   * Karte. Antwort: die angelegten Karten in Eingabereihenfolge, jeweils mit `id` und `number`.
+   */
+  createBatch: (
+    boardId: number,
+    columnId: number,
+    cards: ReadonlyArray<{ title: string; description: string | null }>,
+  ) =>
+    apiFetch<Card[]>(`/api/boards/${boardId}/cards/batch`, {
+      method: 'POST',
+      body: JSON.stringify({ columnId, cards }),
+    }),
   move: (cardId: number, columnId: number, position: number) =>
     apiFetch<Card>(`/api/cards/${cardId}/move`, { method: 'POST', body: JSON.stringify({ columnId, position }) }),
   transfer: (cardId: number, targetBoardId: number, targetColumnId: number) =>

@@ -139,6 +139,38 @@ describe('cardsApi', () => {
     expect(JSON.parse(String(c.body))).toEqual({ columnId: 10, title: 'Idee', parentId: null, ideaStored: true })
   })
 
+  it('createBatch ruft POST /api/boards/{id}/cards/batch mit Spalte und Karten', async () => {
+    const f = spyFetch(JSON.stringify([card]))
+    const result = await cardsApi.createBatch(3, 10, [
+      { title: 'Anmeldung', description: 'Text' },
+      { title: 'Registrierung', description: null },
+    ])
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/boards/3/cards/batch')
+    expect(c.method).toBe('POST')
+    expect(JSON.parse(String(c.body))).toEqual({
+      columnId: 10,
+      cards: [
+        { title: 'Anmeldung', description: 'Text' },
+        { title: 'Registrierung', description: null },
+      ],
+    })
+    expect(result).toEqual([card])
+  })
+
+  it('createBatch reicht die Server-Meldung als ApiError durch', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      text: () => Promise.resolve(JSON.stringify({ detail: 'Höchstens 200 Karten auf einmal.' })),
+    } as Response)
+
+    await expect(cardsApi.createBatch(3, 10, [{ title: 'X', description: null }])).rejects.toMatchObject(
+      { status: 400, detail: 'Höchstens 200 Karten auf einmal.' },
+    )
+  })
+
   it('moveToIdeaStorage ruft POST /api/cards/{id}/idea-storage', async () => {
     const f = spyFetch()
     await cardsApi.moveToIdeaStorage(1)

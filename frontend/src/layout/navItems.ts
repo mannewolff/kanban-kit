@@ -5,7 +5,6 @@ import FolderIcon from '@mui/icons-material/Folder'
 import { canManageBoards, canManageMembers } from '../lib/roles'
 import {
   BoardSymbol,
-  IdeenSymbol,
   LeitstandSymbol,
   ListeSymbol,
   MitgliederSymbol,
@@ -56,9 +55,9 @@ export interface NavParams {
   /** Ob man im aktuellen Projekt Boards anlegen/löschen darf (dann bleibt „Boards" erreichbar). */
   canManageBoards?: boolean
   /**
-   * Aktueller Projekt-Kontext auch ohne offenes Board (z. B. auf der Boards-/Ideen-Seite). Steuert
-   * die Sichtbarkeit des projektweiten „Ideen"-Links. Bei offenem Board hat {@code board.projectId}
-   * Vorrang; {@code null} = kein Projekt-Kontext (dann kein „Ideen"-Link).
+   * Aktueller Projekt-Kontext auch ohne offenes Board (z. B. auf der Boards-Seite). Steuert die
+   * Sichtbarkeit der projektweiten Einträge. Bei offenem Board hat {@code board.projectId} Vorrang;
+   * {@code null} = kein Projekt-Kontext (dann entfällt der Projekt-Block).
    */
   projectId?: number | null
   /**
@@ -74,11 +73,41 @@ export interface NavParams {
 }
 
 /**
+ * Einträge des Projekt-Blocks: bei offenem Board seine vier Ansichten, dazu projektweit „Runner",
+ * sofern das Recht besteht. Leer, wenn beides fehlt — dann entfällt der Block.
+ */
+function projektEintraege(
+  board: BoardContext | null,
+  currentProjectId: number,
+  canViewNightRun: boolean,
+): NavLink[] {
+  const projekt: NavLink[] = []
+  if (board) {
+    projekt.push(
+      { kind: 'link', label: 'Leitstand', path: `/boards/${board.id}/leitstand`, icon: LeitstandSymbol },
+      { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: BoardSymbol },
+      { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ListeSymbol },
+      { kind: 'link', label: 'Vorhaben', path: `/boards/${board.id}/vorhaben`, icon: VorhabenSymbol },
+    )
+  }
+  // „Läufe" liegt hinter einem eigenen Recht (Owner bzw. Plattform-Admin); die Shell entscheidet.
+  if (canViewNightRun) {
+    projekt.push({
+      kind: 'link',
+      label: 'Runner',
+      path: `/projects/${currentProjectId}/nachtlauf`,
+      icon: NachtlaeufeSymbol,
+    })
+  }
+  return projekt
+}
+
+/**
  * Baut die Blöcke der Navigationsschiene in der Gliederung des Leitstand-Entwurfs (#978,
  * `docs/entwurf-leitstand.html` HTML Z. 1114–1156):
  *
  * - **Projekt** — sobald ein Projekt-Kontext besteht: bei offenem Board Leitstand, Board, Liste und
- *   Vorhaben, dazu projektweit Ideen und (mit Recht) Nachtläufe.
+ *   Vorhaben, dazu projektweit (mit Recht) Nachtläufe.
  * - **Übersicht** — „Projekte" nur, wenn es etwas zu wählen gibt (≥ 2 Projekte) oder man
  *   System-Admin ist; „Boards" bei offenem Board nur, wenn es ≥ 2 Boards gibt oder man sie verwalten
  *   darf. Der Entwurf kennt diesen Block nicht; er hält die Wege zurück zur Auswahl.
@@ -104,27 +133,13 @@ export function buildNavItems(params: NavParams): NavGroup[] {
   const currentProjectId = board?.projectId ?? projectId
 
   if (currentProjectId !== null) {
-    const projekt: NavLink[] = []
-    if (board) {
-      projekt.push(
-        { kind: 'link', label: 'Leitstand', path: `/boards/${board.id}/leitstand`, icon: LeitstandSymbol },
-        { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: BoardSymbol },
-        { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ListeSymbol },
-        { kind: 'link', label: 'Vorhaben', path: `/boards/${board.id}/vorhaben`, icon: VorhabenSymbol },
-      )
+    const projekt = projektEintraege(board, currentProjectId, canViewNightRun)
+    // Ohne offenes Board und ohne Nachtlauf-Recht bleibt der Block leer — seit dem Rückbau des
+    // Ideen-Links (#1201) ist das ein erreichbarer Zustand, und ein Block ohne Eintrag zeigte dem
+    // Nutzer nur einen Titel ohne Ziel.
+    if (projekt.length > 0) {
+      bloecke.push({ kind: 'group', id: 'projekt', label: projectName ? `Projekt ${projectName}` : 'Projekt', children: projekt })
     }
-    // „Ideen" ist projektweit und auch ohne offenes Board sichtbar — dort liegt der Ideen-Pool.
-    projekt.push({ kind: 'link', label: 'Ideen', path: `/projects/${currentProjectId}/ideas`, icon: IdeenSymbol })
-    // „Läufe" liegt hinter einem eigenen Recht (Owner bzw. Plattform-Admin); die Shell entscheidet.
-    if (canViewNightRun) {
-      projekt.push({
-        kind: 'link',
-        label: 'Runner',
-        path: `/projects/${currentProjectId}/nachtlauf`,
-        icon: NachtlaeufeSymbol,
-      })
-    }
-    bloecke.push({ kind: 'group', id: 'projekt', label: projectName ? `Projekt ${projectName}` : 'Projekt', children: projekt })
   }
 
   const uebersicht: NavLink[] = []
