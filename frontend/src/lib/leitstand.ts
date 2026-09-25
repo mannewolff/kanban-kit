@@ -82,34 +82,30 @@ export function juengsterLauf(laeufe: readonly NightRunView[]): NightRunView | n
  * und das Anzeigemodell der Nachtlauf-Seite (#988) ebenso; eine zweite Rechenstelle für dieselbe
  * Frage liefe beim nächsten Zustand auseinander.
  *
+ * <p><b>Kein Zweig für den Lauf ohne Arbeit</b> (Issue #1186): Trägt der Lauf einen Befund, sagt
+ * `NO_WORK` es schon. Der einzige Lauf ohne Befund ist der im Browser geparste, und der kann nach
+ * Plan #1181 E10 keinen Grund tragen — ein Zweig hier wäre von keinem Aufrufer erreichbar. Wer die
+ * Auskunft „nichts zu tun" braucht, nimmt {@link auskunftOhneArbeit}.
+ *
  * <p><b>Kein Zweig für den Abbruchgrund</b> (Issue #1144): Trägt der Lauf einen Befund, entscheidet
  * {@link melderAusBefund} und der Abbruch ist dort behandelt; ohne Befund ist es der eben im
  * Browser geparste Lauf der Nachtlauf-Seite, und der kann nach Plan #1139 E7 nie einen
  * Abbruchgrund tragen. Ein Zweig hier wäre von keinem Aufrufer erreichbar.
  */
-export function laufMelder(
-  lauf: {
-    complete: boolean
-    items: readonly { state: NightRunState; errorClass?: NightRunErrorClass | null }[]
-    outcome?: NightRunOutcomeView | null
-  },
-  ohneArbeit?: string | null,
-): Melder {
+export function laufMelder(lauf: {
+  complete: boolean
+  items: readonly { state: NightRunState; errorClass?: NightRunErrorClass | null }[]
+  outcome?: NightRunOutcomeView | null
+}): Melder {
   // Traegt der Lauf den Befund des Servers, gilt er. Nur der eben im Browser geparste Lauf der
   // Nachtlauf-Seite hat keinen (#988, Plan #1072 E28) — er ist noch nicht eingeliefert.
   if (lauf.outcome != null) {
     return melderAusBefund(lauf.outcome)
   }
-  // Die Reihenfolge traegt eine Aussage: „laeuft noch" schlaegt „ohne Arbeit". Ein laufender Lauf
-  // hat noch nichts zu melden und wird nicht rot (Vorspann der fachlichen Kriterien, #1060).
+  // Ein laufender Lauf hat noch nichts zu melden und wird nicht rot (Vorspann der fachlichen
+  // Kriterien, #1060).
   if (!lauf.complete) {
     return 'stahl'
-  }
-  // Grau und nicht zinnober (Issue #1121): Ein Grund kommt hier nur aus dem Ergebnisstand des Kits
-  // und nie aus dem Rueckfall des Servers — dieser Lauf hat also nichts zu tun gefunden, und das
-  // ist kein Mangel.
-  if (ohneArbeit != null && ohneArbeit !== '') {
-    return 'grau'
   }
   // Dieselbe Rangfolge wie NightRunOutcome im Server (#1078): rot vor gelb vor
   // grau-mit-Fehlerklasse. Grau ohne Fehlerklasse ist ein uebergangenes Paket und kein Mangel.
@@ -154,19 +150,38 @@ export function melderAusBefund(befund: NightRunOutcomeView): Melder {
     return 'zinnob'
   }
   // Der Lauf, der nichts zu tun fand (Issue #1121): dasselbe Grau wie ein uebergangenes Paket — er
-  // ist abgeschlossen und kein Mangel. Den Sinn traegt das Wort daneben, nicht die Farbe.
-  if (befund.verdict === 'NO_WORK') {
+  // ist abgeschlossen und kein Mangel. Den Sinn traegt das Wort daneben, nicht die Farbe. Seit
+  // #1185 gilt das fuer jeden Grund: Der Zweig „Rueckfalltext bleibt rot" ist mit #1186 entfallen,
+  // weil kein Befund mehr neben einem Grund `FAILED` traegt und er unerreichbar geworden waere.
+  // Derselbe neutrale Grauton fuer den von Hand beendeten Lauf (Issue #1197): Er ist keine
+  // Stoerung, und was mit ihm geschah, traegt das Wort daneben — nicht die Farbe.
+  if (befund.verdict === 'NO_WORK' || befund.verdict === 'CLOSED') {
     return 'grau'
-  }
-  // Bleibt der Rueckfall des Servers („Grund unbekannt"): Dahinter kann ein echtes Problem stecken,
-  // und er bleibt rot. Nur dort traegt ein Befund neben dem Grund noch `FAILED`.
-  if (befund.noWorkReason != null && befund.noWorkReason !== '') {
-    return 'zinnob'
   }
   if (befund.decisiveItem != null) {
     return MELDER_JE_ZUSTAND[befund.decisiveItem.state]
   }
   return befund.verdict === 'SUCCEEDED' ? 'gruen' : 'zinnob'
+}
+
+/**
+ * Die Auskunft eines Laufs, der nichts zu tun fand — sein Grund; `null` bei jedem anderen Ausgang
+ * (Issue #1186, Plan #1181 E10).
+ *
+ * <p><b>Sie liest allein den Ausgang.</b> `NO_WORK` heisst „nichts zu tun gefunden", gleich ob der
+ * Runner seinen Grund meldete oder der Server auf seinen Rueckfalltext zurueckfiel (#1185). Wer
+ * stattdessen `noWorkReason` am Datensatz liest, nennt den Grund auch am Lauf, der alle Pakete
+ * zurueckstellte — der traegt den Rueckfalltext, ist aber „mit Vorbehalt" und hat nicht nichts
+ * gefunden (E11).
+ *
+ * <p><b>Kein Zweig ohne Befund.</b> Der einzige Lauf ohne Befund ist der eben im Browser geparste
+ * der Nachtlauf-Seite, und der traegt nie einen Grund — ein Rueckfall hier waere unerreichbar.
+ *
+ * <p>Die Form ist absichtlich schmal: Die Sicht eines Laufs und die Zeile des Plattform-Leitstands
+ * reichen verschiedene Typen herein und fragen dasselbe.
+ */
+export function auskunftOhneArbeit(lauf: { outcome?: NightRunOutcomeView | null }): string | null {
+  return lauf.outcome?.verdict === 'NO_WORK' ? lauf.outcome.noWorkReason : null
 }
 
 /**
@@ -207,16 +222,20 @@ export function laufband(lauf: NightRunView): Laufband {
   const gesamt = lauf.items.length
   const letzter = lauf.items.at(-1)
   const beginn = new Date(lauf.startedAt)
+  // Die Auskunft kommt aus dem Befund und nicht aus `lauf.noWorkReason` (Issue #1186): Ein Lauf, der
+  // alle Pakete zurueckstellte, traegt den Rueckfalltext am Datensatz, ist aber „mit Vorbehalt" —
+  // sein Titel bleibt der regulaere (Plan #1181 E11).
+  const ohneArbeit = auskunftOhneArbeit(lauf)
   let titel: string
   if (lauf.abortReason != null) {
     // Der Abbruchgrund steht vor allem anderen (Issue #1144, Plan #1139 E6): Er verdraengt den
     // Rueckfalltext „Nichts abgearbeitet — Grund unbekannt" ebenso wie die Zahl der Vorgaenge —
     // die sagt an einem abgebrochenen Lauf nicht, woran er starb.
     titel = lauf.abortReason
-  } else if (lauf.complete && lauf.noWorkReason != null) {
+  } else if (ohneArbeit != null) {
     // Der Grund steht statt „abgeschlossen — 0 Vorgaenge": Die Zahl sagt dasselbe noch einmal,
     // der Grund sagt, warum.
-    titel = lauf.noWorkReason
+    titel = ohneArbeit
   } else if (lauf.complete) {
     titel = `${modus} abgeschlossen — ${vorgaenge(gesamt)}`
   } else if (gesamt === 0) {
@@ -231,7 +250,7 @@ export function laufband(lauf: NightRunView): Laufband {
   const laeuft = laeuftNoch(lauf)
   return {
     titel,
-    melder: laufMelder(lauf, lauf.noWorkReason),
+    melder: laufMelder(lauf),
     laeuft,
     vorgang: letzter ? { nummer: letzter.cardNumber, titel: letzter.title } : null,
     zeitpunkt: laeuft ? `seit ${uhrzeit(lauf.startedAt)}` : `Beginn ${TAG_ZEIT.format(beginn)}`,
@@ -305,9 +324,11 @@ export function uhrzeit(iso: string): string {
 export function laufNotiz(lauf: NightRunView): string {
   const pakete = lauf.items.length === 1 ? '1 Paket' : `${lauf.items.length} Pakete`
   const stand = `${tagZeit(lauf.startedAt)} · ${laufDauer(lauf.durationMs)} · ${pakete}`
-  // Der Abbruchgrund haengt an derselben Stelle wie der Grund eines Laufs ohne Arbeit und hat
-  // Vorrang vor ihm (Issue #1144, Plan #1139 E6) — beide zugleich gibt es nicht.
-  const grund = lauf.abortReason ?? lauf.noWorkReason
+  // Der Abbruchgrund haengt an derselben Stelle wie die Auskunft eines Laufs ohne Arbeit und hat
+  // Vorrang vor ihr (Issue #1144, Plan #1139 E6) — beide zugleich gibt es nicht. Die Auskunft kommt
+  // aus dem Befund (Issue #1186): Der Lauf mit zurueckgestellten Paketen traegt den Rueckfalltext,
+  // hat aber nicht nichts gefunden — in seiner Notiz steht kein Grund (Plan #1181 E11).
+  const grund = lauf.abortReason ?? auskunftOhneArbeit(lauf)
   return grund == null ? stand : `${stand} · ${grund}`
 }
 

@@ -37,6 +37,7 @@ import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
@@ -1097,11 +1098,18 @@ class NightRunServiceTest {
         List.of());
   }
 
+  /**
+   * Issue #1185 hat das Setzen nicht angetastet: Der Text am Lauf bleibt woertlich der Rueckfall,
+   * und er ist woertlich der aus der Domaene — nur seine <em>Lesart</em> hat sich geaendert (siehe
+   * {@link #list_liestEinenLaufOhneArbeitOhneGemeldetenGrundAlsNichtsZuTun}).
+   */
   @Test
   void ingest_setztDenRueckfalltext_wennEinNachtlaufOhneArbeitKeinenGrundMeldet() {
     service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null));
 
-    assertThat(gemeldeterLauf().noWorkReason()).isEqualTo(RUECKFALL);
+    assertThat(gemeldeterLauf().noWorkReason())
+        .isEqualTo(RUECKFALL)
+        .isEqualTo(NightRunOutcome.GRUND_UNBEKANNT);
   }
 
   @Test
@@ -1164,6 +1172,25 @@ class NightRunServiceTest {
     assertThat(service.list(USER, PROJECT))
         .extracting(NightRunService.NightRunView::noWorkReason)
         .containsExactly(RUECKFALL);
+  }
+
+  /**
+   * Issue #1185, Kriterium 8: Derselbe gespeicherte Lauf — eingeliefert ohne gemeldeten Grund, also
+   * mit dem Rueckfalltext — liest sich an der Sicht als „nichts zu tun" und ist keine Stoerung.
+   *
+   * <p>Die Regel wird <b>gelesen, nicht geschrieben</b>: Zwischen Einlieferung und Abruf liegt
+   * keine zweite Meldung und keine Migration. Was sich geaendert hat, ist allein {@link
+   * NightRunOutcome#of} — und damit traegt der ganze Bestand die neue Lesart.
+   */
+  @Test
+  void list_liestEinenLaufOhneArbeitOhneGemeldetenGrundAlsNichtsZuTun() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null));
+
+    NightRunOutcome befund = service.list(USER, PROJECT).getFirst().outcome();
+    assertThat(befund.verdict()).isEqualTo(NightRunOutcome.Verdict.NO_WORK);
+    assertThat(befund.noWorkReason()).isEqualTo(RUECKFALL);
+    assertThat(befund.decisiveItem()).isNull();
+    assertThat(befund.isDisruption()).isFalse();
   }
 
   // --- Harter Abbruch: der Grund am Lauf (Issue #1142, Plan #1139) -------------------------

@@ -34,9 +34,8 @@ import org.jspecify.annotations.Nullable;
  *
  * @param verdict der Ausgang des Laufs
  * @param decisiveItem das Paket, das den Ausgang bestimmt; {@code null}, wenn keines ihn bestimmt —
- *     bei {@link Verdict#SUCCEEDED}, {@link Verdict#RUNNING}, {@link Verdict#NO_WORK} und beim Lauf
- *     ohne Arbeit mit unbekanntem Grund. Beim <em>abgebrochenen</em> Lauf steht es, sobald die
- *     Pakete eines hergeben (Issue #1143)
+ *     bei {@link Verdict#SUCCEEDED}, {@link Verdict#RUNNING} und {@link Verdict#NO_WORK}. Beim
+ *     <em>abgebrochenen</em> Lauf steht es, sobald die Pakete eines hergeben (Issue #1143)
  * @param noWorkReason Grund, warum der Lauf nichts abgearbeitet hat (Issue #1068); durchgereicht,
  *     nicht formuliert, und {@code null}, wenn der Lauf gearbeitet hat
  * @param abortReason Grund, warum der Lauf hart abgebrochen ist (Issue #1143); durchgereicht wie
@@ -59,11 +58,16 @@ public record NightRunOutcome(
    * Laufplatte, Laufband und „Letzter Lauf" lesen denselben Wert, drei Einsetzstellen liefen
    * auseinander.
    *
-   * <p><b>In der Domäne und nicht mehr im Dienst</b> seit Issue #1121: Seither hängt am Text eine
-   * Aussage über den <em>Ausgang</em> — nur ein Lauf mit <b>gemeldetem</b> Grund ist {@link
-   * Verdict#NO_WORK}, der Rückfall bleibt {@link Verdict#FAILED}. Setzen tut ihn weiterhin allein
-   * der Dienst; gelesen wird er hier, weil hier der Ausgang entsteht. Eine eigene Spalte „Grund
-   * gemeldet ja/nein" wäre eine Migration für dieselbe Aussage, die schon im Text steckt.
+   * <p><b>Ein reiner Anzeigetext</b> seit Issue #1185 (es löst #1121 ab): Am Wortlaut hängt keine
+   * Aussage über den Ausgang mehr — jeder Grund ist {@link Verdict#NO_WORK}, gemeldet oder nicht.
+   * Der Vergleich, der ihn bis dahin von einem gemeldeten Grund unterschied, ist mit #1185
+   * entfallen; gesetzt wird er weiterhin allein im Dienst.
+   *
+   * <p><b>Er bleibt trotzdem hier</b> und wandert nicht zurück in den Dienst: Er ist öffentlich und
+   * wird von zwei Testklassen gelesen ({@code NightRunOutcomeTest}, {@code DisruptionServiceTest}),
+   * und er ist der Wortlaut eines <em>Ausgangs</em> dieser Domäne. Ihn in den Dienst zu schieben,
+   * hieße, den Text der Schicht zu geben, die ihn einsetzt, statt der, die ihn bedeutet — und ein
+   * Test der Domäne müsste ihn dann von dort holen.
    */
   public static final String GRUND_UNBEKANNT = "Nichts abgearbeitet — Grund unbekannt";
 
@@ -80,9 +84,12 @@ public record NightRunOutcome(
     SUCCEEDED,
 
     /**
-     * Nicht gelungen: hartes Scheitern, ein verstummter Lauf, ein Lauf, der seinen <b>Abbruch</b>
-     * selbst gemeldet hat (Issue #1143), oder ein Lauf ohne Arbeit, dessen Grund niemand gemeldet
-     * hat ({@link NightRunOutcome#GRUND_UNBEKANNT}).
+     * Nicht gelungen: hartes Scheitern, ein verstummter Lauf oder ein Lauf, der seinen
+     * <b>Abbruch</b> selbst gemeldet hat (Issue #1143).
+     *
+     * <p><b>Ein Lauf ohne Arbeit gehört seit Issue #1185 nicht mehr dazu</b> — auch nicht der ohne
+     * gemeldeten Grund ({@link NightRunOutcome#GRUND_UNBEKANNT}). Wer nichts vorfand, hat nichts
+     * falsch gemacht; was hinter dem Rückfall an echtem Problem steckte, sagen jetzt die Pakete.
      */
     FAILED,
 
@@ -90,10 +97,27 @@ public record NightRunOutcome(
     WAITING,
 
     /**
+     * Von Hand als beendet gekennzeichnet — <b>keine Störung</b> (Issue #1197).
+     *
+     * <p>Der Lauf hat sich nie abgemeldet, weil sein Prozess weg ist; ein Plattform-Admin hat die
+     * ausgebliebene Meldung auf der Oberfläche ersetzt. Das ist kein Mangel des Laufs im Sinne von
+     * {@link #isDisruption()}: Quittieren müsste diese Zeile niemand, sie stünde sonst nur ewig
+     * unter den laufenden.
+     *
+     * <p><b>Ausdrücklich nicht {@link #NO_WORK}:</b> Der Lauf hat nicht „nichts zu tun"
+     * vorgefunden, über seine Arbeit ist gar nichts bekannt. Das Wort dort wäre falsch.
+     */
+    CLOSED,
+
+    /**
      * Abgeschlossen, keine Arbeit vorgefunden — <b>kein Mangel des Laufs</b> (Issue #1121).
      *
      * <p>Der Lauf lief an, fand nichts Freigegebenes und meldete das mit seinem Grund. Wer ein
      * Projekt nachts bewusst ruhen lässt, soll dafür keine Störung quittieren müssen.
+     *
+     * <p><b>Seit Issue #1185 gehört der Lauf ohne gemeldeten Grund dazu</b> ({@link
+     * NightRunOutcome#GRUND_UNBEKANNT}): Ein alter Runner, der Upload-Weg oder ein Lauf, der den
+     * Grund nicht mitschickte, ist derselbe ruhige Lauf — nur mit blasserer Auskunft.
      */
     NO_WORK,
 
@@ -117,10 +141,16 @@ public record NightRunOutcome(
    * <p>Die Reihenfolge der Prüfungen trägt eine Aussage:
    *
    * <ol>
-   *   <li><b>Verstummt</b> schlägt alles. Ein unfertiger Lauf ohne Lebenszeichen über die Frist
-   *       hinaus ist nicht gelungen — ohne maßgebliches Paket und ohne Grund, denn er hat sein
-   *       Ergebnis nie gemeldet. Genau <em>auf</em> der Frist ist er noch nicht tot, erst darüber:
-   *       Die Frist ist die zugesagte Stille, nicht ihr Überschreiten.
+   *   <li><b>Von Hand beendet</b> schlägt alles (Issue #1197) — aber nur am unfertigen Lauf. Die
+   *       Kennzeichnung <em>ersetzt</em> die ausgebliebene Abmeldung; sie steht deshalb vor
+   *       „verstummt", sonst wäre ein gekennzeichneter Lauf nach der Stillefrist wieder eine
+   *       Störung und die Kennzeichnung hielte nur Minuten. Meldet sich der Lauf danach doch noch
+   *       vollständig, <b>gilt seine Meldung</b>: Sie ist die bessere Auskunft als der Ersatz für
+   *       sie.
+   *   <li><b>Verstummt</b> schlägt alles Folgende. Ein unfertiger Lauf ohne Lebenszeichen über die
+   *       Frist hinaus ist nicht gelungen — ohne maßgebliches Paket und ohne Grund, denn er hat
+   *       sein Ergebnis nie gemeldet. Genau <em>auf</em> der Frist ist er noch nicht tot, erst
+   *       darüber: Die Frist ist die zugesagte Stille, nicht ihr Überschreiten.
    *   <li><b>Läuft noch</b> schlägt das Übrige. Ein Lauf ohne Abschluss hat noch nichts zu melden —
    *       er wird nicht rot, auch nicht mit einem roten Paket (dieselbe Begründung, die {@code
    *       laufMelder} seit #1069 trägt).
@@ -131,16 +161,16 @@ public record NightRunOutcome(
    *       maßgebliche Paket bleibt</b> und wird weiter aus den Paketen bestimmt: „Karte #1112:
    *       harter Abbruch" ist die genauere Auskunft als der Abbruchgrund allein, und sie ist seit
    *       #1123 eigens geschärft.
-   *   <li><b>Ohne Arbeit</b> schlägt die Pakete. Der Grund ist der Text selbst; ein Paket daneben
-   *       wäre eine zweite Begründung für denselben Lauf. Ein <b>gemeldeter</b> Grund ist {@link
-   *       Verdict#NO_WORK} — ein ruhiger Lauf und keine Störung; allein der Rückfall {@link
-   *       #GRUND_UNBEKANNT} bleibt {@link Verdict#FAILED}, denn hinter ihm kann ein echtes Problem
-   *       stecken (ein Lauf, der alle Pakete zurückstellte, meldet keinen Grund). Die Stelle in der
-   *       Rangfolge ändert das nicht: Ein Lauf mit gemeldetem Grund hat keine Pakete, und für den
-   *       Rückfall bleibt alles wie zuvor (Issue #1121).
    *   <li><b>Rot vor Gelb vor Grau-mit-Fehlerklasse</b>, innerhalb einer Farbe das erste in
    *       Laufreihenfolge — <b>bei einer Kette das zuletzt gerissene</b> (Issue #1123, siehe {@link
    *       #auswahlreihenfolge}).
+   *   <li><b>Ohne Arbeit</b> steht zuletzt (Issue #1185, Plan #1181 E2/E6) — und stand bis dahin
+   *       eine Stufe höher. Zwei Läufe zeigten, dass das die falsche Reihenfolge war: Wer alle
+   *       Pakete zurückstellte, meldet keinen Grund und wurde über den Rückfall rot statt „mit
+   *       Vorbehalt"; wer einen Grund meldete und ein rotes Paket trug, fiel als ruhiger Lauf aus
+   *       der Störungsliste. Das maßgebliche Paket ist die genauere Auskunft, wo es eines gibt;
+   *       erst wo keines ist, gilt der Grund. Er macht den Lauf zu {@link Verdict#NO_WORK} — gleich
+   *       ob der Runner ihn meldete oder der Server auf {@link #GRUND_UNBEKANNT} zurückfiel.
    * </ol>
    *
    * <p>Grau <em>ohne</em> Fehlerklasse ist ein übergangenes Paket — der Lauf hat es nicht
@@ -150,6 +180,9 @@ public record NightRunOutcome(
    * keine Spring-Abhängigkeit erlaubt (Plan #1088 E2).
    *
    * @param complete ob der Lauf sich als abgeschlossen gemeldet hat
+   * @param closedAt Zeitpunkt, zu dem ein Plattform-Admin den Lauf von Hand als beendet
+   *     gekennzeichnet hat (Issue #1197); {@code null} heißt „nicht gekennzeichnet" — der
+   *     Normalfall
    * @param noWorkReason Grund eines Laufs ohne Arbeit; {@code null} oder leer, wenn er gearbeitet
    *     hat
    * @param abortReason Grund eines harten Abbruchs; {@code null}, wenn der Lauf nicht abbrach. Ein
@@ -167,6 +200,7 @@ public record NightRunOutcome(
    */
   public static NightRunOutcome of(
       boolean complete,
+      @Nullable Instant closedAt,
       @Nullable String noWorkReason,
       @Nullable String abortReason,
       NightRunMode mode,
@@ -175,26 +209,48 @@ public record NightRunOutcome(
       @Nullable Instant updatedAt,
       Instant jetzt,
       Duration stilleFrist) {
+    if (!complete && closedAt != null) {
+      return new NightRunOutcome(Verdict.CLOSED, null, null, null);
+    }
     if (!complete && verstummt(startedAt, updatedAt, jetzt, stilleFrist)) {
       return new NightRunOutcome(Verdict.FAILED, null, null, null);
     }
     if (!complete) {
       return new NightRunOutcome(Verdict.RUNNING, null, null, null);
     }
+    // Einmal bestimmt, zweimal gebraucht (Issue #1185): Der Abbruch-Zweig braucht dasselbe Paket
+    // wie die Rangfolge darunter, und zweimal ausgewaehlt liefen die beiden auseinander.
+    Optional<NightRunItem> massgeblich = massgeblich(mode, items);
     if (abortReason != null) {
       return new NightRunOutcome(
           Verdict.FAILED,
-          massgeblich(mode, items).map(NightRunOutcome::decisiveItem).orElse(null),
+          massgeblich.map(NightRunOutcome::decisiveItem).orElse(null),
           null,
           abortReason);
     }
-    if (noWorkReason != null && !noWorkReason.isBlank()) {
-      Verdict ohneArbeit = GRUND_UNBEKANNT.equals(noWorkReason) ? Verdict.FAILED : Verdict.NO_WORK;
-      return new NightRunOutcome(ohneArbeit, null, noWorkReason, null);
-    }
-    return massgeblich(mode, items)
+    return massgeblich
         .map(NightRunOutcome::ausPaket)
-        .orElseGet(() -> new NightRunOutcome(Verdict.SUCCEEDED, null, null, null));
+        .orElseGet(() -> ohneMassgeblichesPaket(noWorkReason));
+  }
+
+  /**
+   * Der Befund eines Laufs, dessen Pakete keines hergeben, das den Ausgang bestimmt: entweder ein
+   * Lauf ohne Arbeit oder ein gelungener (Issue #1185).
+   *
+   * <p>Ein gesetzter Grund ist {@link Verdict#NO_WORK} — gleich <em>welcher</em>: Seit #1185 hängt
+   * am Wortlaut keine Aussage über den Ausgang mehr. Was #1121 am Rückfall festmachte, dahinter
+   * könne ein echtes Problem stecken, entscheiden jetzt die Pakete: Ein zurückgestelltes Paket ist
+   * maßgeblich und kommt hier nie an.
+   *
+   * <p>Ein leerer Grund gilt wie ein fehlender. Der Dienst lässt ihn ohnehin nicht entstehen (er
+   * fällt auf {@link #GRUND_UNBEKANNT} zurück); ein Bestand, der ihn trägt, wäre sonst ein Lauf
+   * ohne Arbeit ohne Auskunft.
+   */
+  private static NightRunOutcome ohneMassgeblichesPaket(@Nullable String noWorkReason) {
+    if (noWorkReason == null || noWorkReason.isBlank()) {
+      return new NightRunOutcome(Verdict.SUCCEEDED, null, null, null);
+    }
+    return new NightRunOutcome(Verdict.NO_WORK, null, noWorkReason, null);
   }
 
   /**
@@ -249,7 +305,8 @@ public record NightRunOutcome(
    * Ob der Befund eine Störung im Sinne von AK 4 ist — sie gehört dann auf den Leitstand.
    *
    * <p>{@link Verdict#NO_WORK} gehört ausdrücklich nicht dazu (Issue #1121): Eine ruhige Nacht muss
-   * niemand quittieren.
+   * niemand quittieren. {@link Verdict#CLOSED} ebenso wenig (Issue #1197): Wer die Zeile gerade
+   * selbst weggeräumt hat, soll sie nicht gleich darauf als Störung wiederfinden.
    */
   public boolean isDisruption() {
     return verdict == Verdict.FAILED || verdict == Verdict.WAITING;

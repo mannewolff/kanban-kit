@@ -70,6 +70,7 @@ import { epicColor } from '../lib/epicMeta'
 import { formatDuration } from '../lib/formatDuration'
 import type { Melder } from '../lib/leitstand'
 import {
+  auskunftOhneArbeit,
   ersteZeile,
   kostenText,
   kurzHash,
@@ -88,6 +89,7 @@ import {
   kurzGrund,
   nightRunZustandsText,
   NIGHT_RUN_ERROR_CLASS_TEXT,
+  NIGHT_RUN_VERDICT_TEXT,
   type NightRunHandoffItem,
 } from '../lib/nightRunHandoff'
 import {
@@ -535,7 +537,12 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   eingeliefertAm: view.createdAt,
   zuletztGemeldetAm: view.updatedAt ?? undefined,
   vollstaendig: view.complete,
-  ohneArbeit: view.noWorkReason ?? undefined,
+  // Die Auskunft kommt aus dem **Befund** und nicht aus `noWorkReason` am Datensatz (Issue #1190,
+  // E10): Ein Lauf, der alle Pakete zurueckstellte, traegt den Rueckfalltext, ist aber „mit
+  // Vorbehalt" — er bekaeme sonst die Marke „nichts zu tun". Uebersetzt wird hier, an der einen
+  // Stelle zwischen Server-Sicht und Anzeigetyp; die Marke kennt nur den Anzeigetyp, und der im
+  // Browser geparste Lauf setzt `ohneArbeit` ohnehin nie.
+  ohneArbeit: auskunftOhneArbeit(view) ?? undefined,
   abbruchGrund: view.abortReason ?? undefined,
   befund: view.outcome,
   laufId: view.id,
@@ -2191,10 +2198,14 @@ function Kopfmarken({
           abgeschlossen, abgebrochen oder ohne Arbeit beendet. Mehrere zugleich waeren ein
           Widerspruch im Kopf derselben Platte (Issue #1069). */}
       {/* Der Melder kommt vom Lauf und steht nicht fest auf zinnober (Issue #1121): Ein Lauf, der
-          nichts zu tun fand, ist grau — rot bleibt allein der Rueckfall „Grund unbekannt". */}
+          nichts zu tun fand, ist grau — auch mit dem Rueckfalltext „Grund unbekannt" (#1185). */}
+      {/* Das Wort vor der Auskunft kommt aus der Woertertabelle des Befunds (Issue #1190, E8): Der
+          Grund allein sagte nicht, dass es nichts zu tun gab. Die Auskunft bleibt **ungekuerzt** —
+          die Marke steht allein in ihrer Zeile, und einen zweiten Ort fuer den vollen Text gibt es
+          an der Laufplatte nicht (anders als beim Abbruchgrund daruber). */}
       {lauf.vollstaendig && lauf.abbruchGrund === undefined && lauf.ohneArbeit !== undefined && (
         <LaufMarke testId="lauf-zustand" led={<Led melder={melder} />}>
-          {lauf.ohneArbeit}
+          {`${NIGHT_RUN_VERDICT_TEXT.NO_WORK} — ${lauf.ohneArbeit}`}
         </LaufMarke>
       )}
       {!offen && kosten !== null && <LaufMarke testId="lauf-kosten">{kosten}</LaufMarke>}
@@ -2616,10 +2627,10 @@ function LaufPanel({
   // Einmal gerechnet und zweimal gezeigt: Die Platte trägt ihn, und die Marke „ohne Arbeit" nimmt
   // ihn von hier (Issue #1121). Zwei Aufrufe nebeneinander wären zwei Stellen, an denen dieselbe
   // Frage beantwortet wird — und die Marke stand vorher fest auf zinnober.
-  const melder = laufMelder(
-    { complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund },
-    lauf.ohneArbeit,
-  )
+  //
+  // Den Grund bekommt er seit Issue #1186 nicht mehr: Er steht im Befund als `NO_WORK`, und der
+  // eben im Browser geparste Lauf trägt ohnehin keinen.
+  const melder = laufMelder({ complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund })
 
   return (
     <NachtlaufLaufPlatte

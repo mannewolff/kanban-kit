@@ -5,11 +5,16 @@ import { useId } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import type { DisruptionView, LaufPaketeView, PaketView } from '../../api/plattformLeitstand'
 import { laufgruppen, type Laufeintrag } from '../../lib/aktuellerStand'
-import { melderAusBefund, MELDER_JE_ZUSTAND, type Projektgruppe } from '../../lib/leitstand'
-import { nightRunZustandsText } from '../../lib/nightRunHandoff'
+import {
+  melderAusBefund,
+  MELDER_JE_ZUSTAND,
+  uhrzeit,
+  type Projektgruppe,
+} from '../../lib/leitstand'
+import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../../lib/nightRunHandoff'
 import { ANZEIGE, RAND, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { LaufArtSymbol } from './LaufArtSymbol'
-import { Led, LeerSatz, ZEILE_HOVER } from './LeitstandBausteine'
+import { Led, LeerSatz, Taste, ZEILE_HOVER } from './LeitstandBausteine'
 
 /**
  * Der Schluessel eines Pakets in der Menge der verschwundenen Karten (Issue #1174, E14).
@@ -28,6 +33,22 @@ interface Zeilenwege {
   /** Karten, die beim Abruf 404 waren — Schluessel aus {@link karteSchluessel} (E14). */
   verschwunden: ReadonlySet<string>
   onKarteOeffnen: (projectId: number, nummer: number) => void
+}
+
+/** Dazu, was der Kopf eines Laufs braucht — die Paketzeilen kennen diesen Weg nicht. */
+interface Laufwege extends Zeilenwege {
+  /**
+   * Meldet den Wunsch, diesen Run von Hand als beendet zu kennzeichnen (Issue #1197).
+   *
+   * <p><b>Nur der Wunsch</b>: Die Rueckfrage und der Aufruf liegen bei der Seite. Ein Dialog
+   * innerhalb dieser Sektion stuende im Teilbaum der Kupferwarte und erbte deren helle Variablen
+   * — dieselbe Grenze, die der Kartendialog schon zieht (Plan #1167, E12).
+   *
+   * <p>Weitergereicht wird der **Lauf** und nicht seine Kennung: Die Rueckfrage nennt Nummer und
+   * Projekt, und die Seite muesste ihn sonst in `laufende` wiederfinden — eine Suche, die nie
+   * leer ausgehen kann und deren Rueckfall damit unpruefbar waere.
+   */
+  onAlsBeendetKennzeichnen: (lauf: DisruptionView) => void
 }
 
 /**
@@ -58,14 +79,14 @@ export function AktuellerStand({
     laufende: DisruptionView[] | null
     /** Die gemeldeten Pakete je laufendem Run, in der Ordnung der Antwort. */
     gemeldetePakete: LaufPaketeView[]
-  } & Zeilenwege
+  } & Laufwege
 >) {
   if (laufende === null) {
     return null
   }
   if (laufende.length === 0) {
-    // Ein eigener Satz und nicht der von „Aktive Runs" (E9): Zweimal derselbe Satz auf einer Seite
-    // ist fuer Vorlesewerkzeuge wie fuer Tests nicht auseinanderzuhalten.
+    // Der Satz nennt beides — dass nichts arbeitet und dass darum nichts gemeldet ist (E9). Seit
+    // die zweite Platte ueber dieselbe Liste entfallen ist (#1193), sagt ihn keine andere Sektion.
     return (
       <LeerSatz testId="kein-aktueller-stand">Gerade arbeitet kein Run — nichts gemeldet.</LeerSatz>
     )
@@ -96,7 +117,7 @@ function Standgruppe({
   {
     gruppe: Projektgruppe<Laufeintrag<PaketView>>
     jeLauf: ReadonlyMap<number, DisruptionView>
-  } & Zeilenwege
+  } & Laufwege
 >) {
   return (
     <Box data-testid={`stand-gruppe-${gruppe.projectId}`}>
@@ -129,23 +150,35 @@ function Standgruppe({
 }
 
 /**
- * Ein Lauf im Projektblock: sein Kopf „Run #N · <Stand>" und darunter seine Paketzeilen.
+ * Ein Lauf im Projektblock: sein Kopf „Run #N · läuft seit HH:MM · <Stand>" und darunter seine
+ * Paketzeilen.
+ *
+ * <p><b>Drei Angaben stehen seit Issue #1193 hier</b>, weil die zweite Platte ueber dieselbe Liste
+ * `laufende` entfallen ist — sie brachte keinen Lauf, den diese Sektion nicht schon haette: der
+ * **Verweis** auf die Lauf-Ansicht, das **Zustandswort** und die **Startzeit**.
+ *
+ * <p>Das Wort ist dabei keine Zierde: Nach Kriterium 3 der Quelle #1064 darf der Zustand weder
+ * allein an einer Farbe noch allein an der Bewegung haengen. Wer `prefers-reduced-motion` gesetzt
+ * hat — das Theme haelt den Puls dann an — und Farben nicht unterscheidet, laese sonst nirgends,
+ * dass dieser Run arbeitet. Es steht in der Komponente und nicht in `standText` (Plan #1167, E4):
+ * Der zaehlt gemeldete Pakete, das Wort des Laufs ist eine andere Sache.
  *
  * <p>Die Liste traegt ueber `aria-labelledby` den Kopf als Namen — ohne ihn sagte ein
  * Vorlesewerkzeug nur „Liste mit elf Eintraegen" und liesse offen, zu welchem Lauf sie gehoert.
- * Benannt wird mit der Kennung samt Stand und **nicht** mit dem ganzen Kopf: Die Art des Laufs
- * steht als eigenes Symbol daneben und traegt ihren Namen selbst.
+ * Benannt wird mit Kennung, Zustand, Zeit und Stand und **nicht** mit dem ganzen Kopf: Die Art des
+ * Laufs steht als eigenes Symbol daneben und traegt ihren Namen selbst.
  *
- * <p>Der Melder pulsiert wie in der laufenden Zeile und kommt aus demselben Befund — Farbe und
- * Bewegung koennen so nicht auseinanderlaufen.
+ * <p>Der Melder pulsiert aus demselben Befund, aus dem das Wort kommt — Farbe, Bewegung und Text
+ * koennen so nicht auseinanderlaufen.
  */
 function Standlauf({
   eintrag,
   lauf,
   projectId,
+  onAlsBeendetKennzeichnen,
   ...wege
 }: Readonly<
-  { eintrag: Laufeintrag<PaketView>; lauf: DisruptionView; projectId: number } & Zeilenwege
+  { eintrag: Laufeintrag<PaketView>; lauf: DisruptionView; projectId: number } & Laufwege
 >) {
   const kopfId = useId()
   return (
@@ -158,7 +191,27 @@ function Standlauf({
         <Led melder={melderAusBefund(lauf.outcome)} pulsiert={lauf.outcome.verdict === 'RUNNING'} />
         <LaufArtSymbol art={lauf.mode} />
         <Box component="span" id={kopfId} sx={{ fontSize: 12, color: 'text.secondary' }}>
-          {`Run #${eintrag.nightRunId} · ${eintrag.stand}`}
+          <Typography
+            component={RouterLink}
+            to={`/projects/${projectId}/nachtlauf?lauf=${eintrag.nightRunId}`}
+            aria-label={`Run #${eintrag.nightRunId} von ${lauf.projectName}`}
+            sx={{ fontSize: 12, fontFamily: 'monospace' }}
+          >
+            {`Run #${eintrag.nightRunId}`}
+          </Typography>
+          {` · ${NIGHT_RUN_VERDICT_TEXT[lauf.outcome.verdict]} seit ${uhrzeit(lauf.startedAt)} · ${eintrag.stand}`}
+        </Box>
+        {/* Rechtsbuendig ans Ende des Kopfs (Issue #1197) — der Weg hinaus steht in dieser Seite
+            stets am rechten Rand seiner Zeile, wie die Taste „Stoerung loeschen". Der Name nennt
+            die Nummer: Zwei gleichlautende Tasten waeren fuer ein Vorlesewerkzeug nicht zu
+            unterscheiden. */}
+        <Box sx={{ ml: 'auto', flex: 'none' }}>
+          <Taste
+            ariaLabel={`Run #${eintrag.nightRunId} als beendet kennzeichnen`}
+            onClick={() => onAlsBeendetKennzeichnen(lauf)}
+          >
+            Als beendet kennzeichnen
+          </Taste>
         </Box>
       </Box>
       <Box component="ul" aria-labelledby={kopfId} sx={{ listStyle: 'none', m: 0, p: 0 }}>

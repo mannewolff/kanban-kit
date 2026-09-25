@@ -112,6 +112,12 @@ Die Update-Routine oben läuft auf Wunsch automatisch: Ein **Push auf `productio
 [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml), der auf einem **self-hosted
 Runner** auf dem VPS genau `git reset --hard origin/production` + das Compose-Kommando ausführt.
 
+Der Workflow startet den Stack **mit dem Sicherungs-Overlay** `docker-compose.backup.yml` — dieses
+`-f` ist der einzige Schalter der Sicherung, ohne ihn würde jeder Deploy sie stumm abschalten. Die
+Sicherung muss auf dem Server daher eingerichtet sein (siehe [`backup.md`](backup.md)). Der erste
+Deploy nach dieser Änderung startet die Datenbank einmal neu, falls die WAL-Archivierung gerade
+aus ist — der Overlay-`command` ändert die Container-Definition von `postgres`.
+
 Einmalige Einrichtung (Server + GitHub, nicht Teil des Repos):
 
 1. **Runner installieren** auf dem VPS und als Dienst einrichten (`config.sh` gegen dieses Repo,

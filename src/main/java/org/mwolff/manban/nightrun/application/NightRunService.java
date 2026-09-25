@@ -298,9 +298,10 @@ public class NightRunService {
    * <p>Ein gemeldeter, aber leerer Grund gilt wie ein fehlender. AK 2 verlangt einen Text, nicht
    * ein gesetztes Feld — ein leerer Grund erschiene in der Anzeige als Luecke.
    *
-   * <p>Der Rueckfalltext steht seit Issue #1121 in {@link NightRunOutcome}: Dort haengt am Text die
-   * Aussage ueber den Ausgang — ein gemeldeter Grund ist „nichts zu tun", der Rueckfall bleibt
-   * „nicht gelungen". Gesetzt wird er weiterhin nur hier.
+   * <p>Der Rueckfalltext steht seit Issue #1121 in {@link NightRunOutcome} und ist dort seit Issue
+   * #1185 ein reiner <b>Anzeigetext</b>: Jeder Grund — gemeldet oder zurueckgefallen — ergibt den
+   * Ausgang „nichts zu tun". Gesetzt wird der Text weiterhin nur hier, und das Verhalten dieser
+   * Methode hat #1185 nicht angetastet: Ein Lauf ohne Arbeit steht nie ohne Text da.
    *
    * <p><b>Ein gesetzter Abbruchgrund verdraengt den Rueckfalltext</b> (Issue #1142, Plan #1139 E6):
    * Ein Lauf, der abgebrochen ist, hat nichts abgearbeitet — aber der Grund dafuer ist bekannt und
@@ -407,6 +408,11 @@ public class NightRunService {
         run.abortReason(),
         NightRunOutcome.of(
             run.complete(),
+            // Die Sicht eines Projekts kennt die Kennzeichnung von Hand nicht (Issue #1197): Sie
+            // wird auf dem Plattform-Leitstand gesetzt und dort gelesen; der Lauf-Datensatz dieser
+            // Sicht fuehrt die Spalte nicht. Ein gekennzeichneter Lauf steht hier also weiter als
+            // verstummt — dieselbe Auskunft wie vor der Kennzeichnung, keine falsche.
+            null,
             run.noWorkReason(),
             // Seit Issue #1143 wirkt der Abbruchgrund auf den Ausgang: Ein Lauf, der abbrach, ist
             // nie gelungen. Dieselben Argumente wie in DisruptionService.view — eine Rechnung,

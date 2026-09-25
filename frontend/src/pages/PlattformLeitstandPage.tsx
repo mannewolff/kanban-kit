@@ -1,6 +1,12 @@
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogTitle from '@mui/material/DialogTitle'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
@@ -23,7 +29,13 @@ import {
   Projektname,
   Taste,
 } from '../components/leitstand/LeitstandBausteine'
-import { melderAusBefund, nachProjekt, tagZeit, uhrzeit, type Projektgruppe } from '../lib/leitstand'
+import {
+  auskunftOhneArbeit,
+  melderAusBefund,
+  nachProjekt,
+  tagZeit,
+  type Projektgruppe,
+} from '../lib/leitstand'
 import { kurzGrund, NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../lib/nightRunHandoff'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { zyklusDavor, zyklusDesStarts, zyklusSpanne } from '../lib/verbrauchZeitraum'
@@ -139,23 +151,29 @@ interface Auswahl {
  * Der Plattform-Leitstand: die Startseite eines Plattform-Admins (Issue #1083, fachliche Quellen
  * #1064 und #1086).
  *
- * **Vier Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098; benannt in #1102, um *Aktueller
- * Status* erweitert in #1173): *Aktive
- * Laeufe* zeigen mit pulsierendem Melder, dass gerade etwas arbeitet; *Aktueller Status* zeigt je
- * laufendem Lauf, was er bisher gemeldet hat; *Beendete Laeufe* zeigen den
- * Ausgang jedes beendeten Laufs der laufenden Nacht; *Stoerungen* zeigt jede nicht quittierte
- * Stoerung ueber alle Naechte, juengste zuoberst. Wer mehrere Projekte betreibt, beantwortet damit
- * „laeuft gerade etwas, und ist die Nacht gut durch?" an einer Stelle statt Projekt fuer Projekt.
+ * **Drei Bereiche in dieser Ordnung** (Kriterium 18, Issue #1098; benannt in #1102, um *Aktueller
+ * Status* erweitert in #1173, auf drei verkuerzt in #1193): *Aktueller Status* zeigt mit
+ * pulsierendem Melder, dass gerade etwas arbeitet, und je laufendem Lauf, was er bisher gemeldet
+ * hat; *Beendete Laeufe* zeigen den Ausgang jedes beendeten Laufs der laufenden Nacht;
+ * *Stoerungen* zeigt jede nicht quittierte Stoerung ueber alle Naechte, juengste zuoberst. Wer
+ * mehrere Projekte betreibt, beantwortet damit „laeuft gerade etwas, und ist die Nacht gut durch?"
+ * an einer Stelle statt Projekt fuer Projekt.
+ *
+ * **Keine zweite Platte ueber die laufenden Laeufe mehr** (#1193): Sie speiste sich aus derselben
+ * Liste `laufende` wie *Aktueller Status*, der auch den Lauf ohne gemeldetes Paket fuehrt — mit
+ * „0 gemeldet". Zwei Sektionen ueber dieselbe Liste sind zwei Orte fuer dieselbe Aussage; der
+ * Leser sucht dann nach einem Unterschied, den es nicht gibt. Verweis, Zustandswort und Startzeit,
+ * die nur dort standen, traegt jetzt der Kopf in `AktuellerStand`.
  *
  * **Eine Antwort fuer alle Bereiche** (Plan #1088 E5): Die Seite frischt sich auf, und ein
  * Lauf kann zwischen zwei Rundreisen den Bereich wechseln — aus drei Abrufen erschiene er doppelt
  * oder gar nicht. Aus derselben Antwort liest die Seite auch, zu welchem durchgefuehrten Lauf es
  * eine Stoerung gibt.
  *
- * **Nach Projekt gruppiert** ist allein der Bereich *Stoerungen* (Issue #1087): Eine flache Liste
- * liess den Leser abwechselnd Namen statt Befunde lesen. Die beiden Lauf-Bereiche gruppieren
- * **nicht** — ein Projekt darf in einer Nacht mehrmals anlaufen, und jeder Anlauf soll als eigene
- * Zeile sichtbar bleiben (Kriterium 9).
+ * **Nach Projekt gruppiert** sind die Bereiche *Stoerungen* (Issue #1087) und *Aktueller Status*
+ * (#1173): Eine flache Liste liess den Leser abwechselnd Namen statt Befunde lesen. *Beendete
+ * Laeufe* gruppiert **nicht** — ein Projekt darf in einer Nacht mehrmals anlaufen, und jeder
+ * Anlauf soll als eigene Zeile sichtbar bleiben (Kriterium 9).
  *
  * **Gestaltung:** `docs/entwurf-leitstand.html` ist verbindlich (`CLAUDE-design.md`), fuehrt fuer
  * diese Ansicht aber kein eigenes Mockup. Sie entsteht deshalb aus den vorhandenen Bausteinen —
@@ -182,6 +200,11 @@ export default function PlattformLeitstandPage() {
   const [detail, setDetail] = useState<Auswahl | null>(null)
   const [verschwunden, setVerschwunden] = useState<ReadonlySet<string>>(() => new Set())
   const [karteFehler, setKarteFehler] = useState<string | null>(null)
+
+  // Die Rückfrage vor dem Kennzeichnen von Hand (#1197) und ihr Fehlerweg. Der Run steht darin und
+  // nicht nur seine Kennung: Die Rückfrage nennt ihn, und der Fehlertext danach ebenso.
+  const [schlussNachfrage, setSchlussNachfrage] = useState<DisruptionView | null>(null)
+  const [schlussFehler, setSchlussFehler] = useState<string | null>(null)
 
   const vorigeUmschalten = useCallback(() => {
     setVorigeOffen((offen) => !offen)
@@ -250,6 +273,33 @@ export default function PlattformLeitstandPage() {
   }
 
   /**
+   * Kennzeichnet den Run der Rückfrage von Hand als beendet (Issue #1197).
+   *
+   * **Mit Rückfrage**, anders als das Quittieren daneben (AK 8): Das sagt „gesehen" und ist
+   * folgenlos, die Kennzeichnung ändert den Ausgang eines Laufs.
+   *
+   * **Neu geladen statt örtlich umgehängt**: Ein von Hand beendeter Run wechselt den Bereich — aus
+   * „Aktueller Status" nach „Beendete Runs", mitsamt seinem Ausgang. Ihn im Browser
+   * umzusortieren hieße, die Aufteilung ein zweites Mal zu rechnen; sie liegt beim Server
+   * (`DisruptionService.leitstand`).
+   *
+   * **Ein Fehler erscheint als Meldung**, der Run bleibt stehen — dieselbe Trennung wie beim
+   * misslungenen Kartenabruf (E14): Er sagt etwas über den Klick, nichts über den Leitstand. Der
+   * häufigste Fall ist 409: Die Seite hängt dem Stand bis zu 30 Sekunden hinterher, und der Run
+   * kann sich in der Zwischenzeit selbst abgemeldet haben.
+   */
+  const alsBeendetKennzeichnen = async (lauf: DisruptionView) => {
+    setSchlussFehler(null)
+    setSchlussNachfrage(null)
+    try {
+      await plattformLeitstandApi.alsBeendetKennzeichnen(lauf.nightRunId)
+      laden()
+    } catch {
+      setSchlussFehler(`Run #${lauf.nightRunId} konnte nicht als beendet gekennzeichnet werden.`)
+    }
+  }
+
+  /**
    * Holt die Karte zu einer Paketnummer und öffnet den Dialog (AK 9).
    *
    * **Erst beim Klick** (Plan #1167, E3): Ein Vorabladen aller gemeldeten Karten — wie es
@@ -313,37 +363,45 @@ export default function PlattformLeitstandPage() {
     <>
       <KupferwarteBereich>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <Platte titel="Aktive Runs">
-            <LaufendeListe zeilen={geladen ? sicht.laufende : null} />
-          </Platte>
-          {/* Zwischen den laufenden und den beendeten Runs (AK 1 der Quelle #1153): Was gerade
-              gemeldet wird, gehoert neben das, was gerade arbeitet. */}
+          {/* Die oberste Platte (AK 1 der Quelle #1153, Issue #1193): Was gerade arbeitet und was
+              es gemeldet hat, steht an **einer** Stelle. */}
           <Platte titel="Aktueller Status">
             <AktuellerStand
               laufende={geladen ? sicht.laufende : null}
               gemeldetePakete={sicht.gemeldetePakete}
               verschwunden={verschwunden}
               onKarteOeffnen={(projectId, nummer) => void karteOeffnen(projectId, nummer)}
+              onAlsBeendetKennzeichnen={setSchlussNachfrage}
             />
           </Platte>
           {/* Unter der Platte und nicht in ihr (E14): Die Sektion bleibt vollstaendig stehen — der
               misslungene Abruf sagt etwas ueber den Klick, nichts ueber die gemeldeten Pakete. */}
           {karteFehler !== null && <Alert severity="error">{karteFehler}</Alert>}
+          {/* Aus demselben Grund, und an derselben Stelle: Das misslungene Kennzeichnen (#1197)
+              sagt etwas ueber den Klick, nichts ueber den Stand der Laeufe. */}
+          {schlussFehler !== null && <Alert severity="error">{schlussFehler}</Alert>}
           <Platte
             titel="Beendete Runs"
             werkzeug={<AnzahlWahlTasten wahl={anzahlWahl} onWaehlen={setAnzahlWahl} />}
           >
-            <ZyklusAbschnitt titel="Diese Schicht" spanne={zyklusSpanne(dieserZyklus)} testId="zyklus-dieser">
+            {/* Die Titel nennen den Start, nicht das Ende (#1191): Der Server ordnet beide Listen
+                ueber `startedAt` zu, und die Schichtgrenze liegt auf 12:00 — ein Run ueber die
+                Mittagsgrenze endet in der einen und zaehlt zur anderen Schicht. */}
+            <ZyklusAbschnitt
+              titel="Begonnen in dieser Schicht"
+              spanne={zyklusSpanne(dieserZyklus)}
+              testId="zyklus-dieser"
+            >
               <DurchgefuehrteListe
                 zeilen={geladen ? sichtbarDieser : null}
                 verdeckt={verdecktDieser}
                 testId="zyklus-dieser"
                 mitStoerung={mitStoerung}
-                leer={{ testId: 'keine-durchgefuehrten', text: 'In dieser Schicht wurde noch kein Run beendet.' }}
+                leer={{ testId: 'keine-durchgefuehrten', text: 'Kein Run dieser Schicht ist beendet.' }}
               />
             </ZyklusAbschnitt>
             <ZyklusAbschnitt
-              titel="Vorige Schicht"
+              titel="Begonnen in der vorigen Schicht"
               spanne={zyklusSpanne(zyklusDavor(dieserZyklus))}
               testId="zyklus-voriger"
               anzahl={geladen ? sicht.durchgefuehrteVoriger.length : null}
@@ -355,7 +413,10 @@ export default function PlattformLeitstandPage() {
                 verdeckt={verdecktVoriger}
                 testId="zyklus-voriger"
                 mitStoerung={mitStoerung}
-                leer={{ testId: 'keine-durchgefuehrten-voriger', text: 'In der vorigen Schicht wurde kein Run beendet.' }}
+                leer={{
+                  testId: 'keine-durchgefuehrten-voriger',
+                  text: 'Kein Run der vorigen Schicht ist beendet.',
+                }}
               />
             </ZyklusAbschnitt>
             {geladen && verdecktDieser + verdecktVoriger > 0 && (
@@ -375,6 +436,26 @@ export default function PlattformLeitstandPage() {
           schreibt die hellen Variablen des Leitstands in seinen Teilbaum — der Dialog erbte sie
           sonst und stuende im dunklen Erscheinungsbild hell da. `canEdit={false}`: Der Leitstand
           zeigt die Karte, er bearbeitet sie nicht. */}
+      {/* Die Rueckfrage vor dem Kennzeichnen (#1197) — **ausserhalb** des Kupferwarte-Teilbaums aus
+          demselben Grund wie der Kartendialog (E12): Der traegt einen eigenen ThemeProvider, und
+          der Dialog stuende darin hell im dunklen Erscheinungsbild. */}
+      {schlussNachfrage !== null && (
+        <Dialog open onClose={() => setSchlussNachfrage(null)}>
+          <DialogTitle>{`Run #${schlussNachfrage.nightRunId} als beendet kennzeichnen?`}</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {`Der Run von ${schlussNachfrage.projectName} steht danach unter „Beendete Runs" mit dem`}
+              {' Vermerk „von Hand beendet". Seinen Prozess berührt das nicht.'}
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setSchlussNachfrage(null)}>Abbrechen</Button>
+            <Button onClick={() => void alsBeendetKennzeichnen(schlussNachfrage)}>
+              Kennzeichnen
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
       {detail !== null && (
         <CardDetailModal
           card={detail.card}
@@ -431,7 +512,7 @@ function VerdecktSatz({ testId, children }: Readonly<{ testId: string; children:
   )
 }
 
-/** Eine Zeile der beiden Lauf-Bereiche; Trennlinie wie in der Laufplatte des Board-Leitstands. */
+/** Eine Zeile des Bereichs „Beendete Runs"; Trennlinie wie in der Laufplatte des Board-Leitstands. */
 const LAUF_ZEILE_SX = {
   display: 'flex',
   alignItems: 'center',
@@ -460,48 +541,6 @@ function LaufVerweis({ zeile }: Readonly<{ zeile: DisruptionView }>) {
     >
       Run #{zeile.nightRunId}
     </Typography>
-  )
-}
-
-/** Der Bereich „Aktive Laeufe" (Kriterien 1–4). */
-function LaufendeListe({ zeilen }: Readonly<{ zeilen: DisruptionView[] | null }>) {
-  if (zeilen === null) {
-    return null
-  }
-  if (zeilen.length === 0) {
-    return <LeerSatz testId="keine-laufenden">Gerade läuft kein Run.</LeerSatz>
-  }
-  return (
-    <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-      {zeilen.map((zeile) => (
-        <LaufendeZeile key={zeile.nightRunId} zeile={zeile} />
-      ))}
-    </Box>
-  )
-}
-
-/**
- * Eine laufende Zeile: pulsierender Stahl-Melder, Projekt, „laeuft seit HH:MM", Kennung.
- *
- * **Melder, Wort und Puls kommen aus demselben Befund** — sie koennen nicht auseinanderlaufen. Das
- * Wort steht dabei nicht nur zur Zierde: Nach Kriterium 3 darf der Zustand weder allein an einer
- * Farbe noch allein an der Bewegung haengen. Wer Bewegung abgeschaltet hat, liest ihn trotzdem —
- * den Puls haelt die globale `prefers-reduced-motion`-Regel des Themes von selbst an.
- *
- * Die Uhrzeit kommt aus {@link uhrzeit}, also im Format des Laufbands („seit 02:41", Entwurf
- * Z. 1164–1165).
- */
-function LaufendeZeile({ zeile }: Readonly<{ zeile: DisruptionView }>) {
-  return (
-    <Box component="li" data-testid={`laufend-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
-      <Led melder={melderAusBefund(zeile.outcome)} pulsiert={zeile.outcome.verdict === 'RUNNING'} />
-      <LaufArtSymbol art={zeile.mode} />
-      <Projektname name={zeile.projectName} />
-      <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
-        {`${NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]} seit ${uhrzeit(zeile.startedAt)}`}
-      </Typography>
-      <LaufVerweis zeile={zeile} />
-    </Box>
   )
 }
 
@@ -689,6 +728,16 @@ function DurchgefuehrteListe({
  * der Kopfmarke der Nachtlauf-Auswertung. „Nicht gelungen" allein liesse offen, ob ein Paket rot
  * war oder der Lauf als ganzer riss; den vollen Text zeigt die Auswertung des Laufs.
  *
+ * **An derselben Stelle die Auskunft des Laufs ohne Arbeit** (Issue #1189, Plan #1181 E9). Seit der
+ * neuen Leseregel (#1185) ist er keine Stoerung mehr — damit faellt die Stoerzeile weg, die seinen
+ * Grund bisher als einzige nannte, und „nichts zu tun" allein sagte nicht, warum. Gelesen wird der
+ * Ausgang ueber {@link auskunftOhneArbeit} und nicht `noWorkReason` am Datensatz: Den Rueckfalltext
+ * traegt auch der Lauf, der alle Pakete zurueckstellte, und der hat nicht nichts gefunden (E11).
+ *
+ * **Beide schliessen einander aus:** Ein abgebrochener Lauf ist `FAILED`, ein Lauf ohne Arbeit
+ * `NO_WORK` — die Reihenfolge im Ausdruck entscheidet nie wirklich, sie haelt nur den Vorrang des
+ * Abbruchs fest, den auch {@link stoerungsGrund} kennt.
+ *
  * **Der zweite Verweis** fuehrt zur Stoerzeile weiter unten auf derselben Seite (Kriterium 12); er
  * erscheint nur, solange die Stoerung offen ist.
  */
@@ -696,6 +745,7 @@ function DurchgefuehrteZeile({
   zeile,
   hatStoerung,
 }: Readonly<{ zeile: DisruptionView; hatStoerung: boolean }>) {
+  const nachsatz = zeile.outcome.abortReason || auskunftOhneArbeit(zeile)
   return (
     <Box component="li" data-testid={`durchgefuehrt-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
       <Led melder={melderAusBefund(zeile.outcome)} />
@@ -707,7 +757,7 @@ function DurchgefuehrteZeile({
       <LaufVerweis zeile={zeile} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
         {NIGHT_RUN_VERDICT_TEXT[zeile.outcome.verdict]}
-        {zeile.outcome.abortReason ? ` — ${kurzGrund(zeile.outcome.abortReason)}` : ''}
+        {nachsatz ? ` — ${kurzGrund(nachsatz)}` : ''}
       </Typography>
       {hatStoerung && (
         <Typography
@@ -829,16 +879,16 @@ function Projektblock({
  * Stoerung nichts.
  */
 export function stoerungsGrund(outcome: DisruptionView['outcome']): string {
-  // Der selbst gemeldete Abbruch steht vor allem anderen (Issue #1146, AK 4): Er sagt, warum der
-  // Lauf abbrach, und das schlaegt sowohl den Rueckfall „ohne Arbeit" als auch das massgebliche
-  // Paket — nach einem harten Stopp ist dessen Zustand nur noch der letzte Stand vor dem Riss.
+  // Der selbst gemeldete Abbruch steht vor dem massgeblichen Paket (Issue #1146, AK 4): Er sagt,
+  // warum der Lauf abbrach — nach einem harten Stopp ist der Zustand des Pakets nur noch der letzte
+  // Stand vor dem Riss.
+  // Kein Zweig ueber `noWorkReason` (Issue #1189, Plan #1181 E4): Ein Lauf ohne Arbeit ist seit der
+  // neuen Leseregel (#1185) keine Stoerung mehr, ein Zweig hier waere unerreichbar. Seine Auskunft
+  // steht jetzt in der durchgefuehrten Zeile.
   // Gekuerzt wird mit {@link kurzGrund} und nicht im Server (Plan #1139 E8): Die Textbildung liegt
   // im Browser, und die Nachtlauf-Auswertung kuerzt denselben Text mit derselben Funktion.
   if (outcome.abortReason !== null && outcome.abortReason !== '') {
     return kurzGrund(outcome.abortReason)
-  }
-  if (outcome.noWorkReason !== null && outcome.noWorkReason !== '') {
-    return outcome.noWorkReason
   }
   const paket = outcome.decisiveItem
   if (paket === null) {

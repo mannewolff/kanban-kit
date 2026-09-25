@@ -88,7 +88,8 @@ class DisruptionServiceTest {
   }
 
   private static DisruptionCandidate kandidat(long laufId, Instant startedAt, NightRunMode mode) {
-    return new DisruptionCandidate(laufId, 9L, "Projekt", mode, startedAt, null, true, null, null);
+    return new DisruptionCandidate(
+        laufId, 9L, "Projekt", mode, startedAt, null, true, null, null, null);
   }
 
   /** Ein Lauf, der sich noch nicht als abgeschlossen gemeldet hat. */
@@ -109,6 +110,7 @@ class DisruptionServiceTest {
         updatedAt,
         false,
         null,
+        null,
         null);
   }
 
@@ -123,7 +125,8 @@ class DisruptionServiceTest {
         null,
         true,
         null,
-        "Dirty-Guard: uncommittete Reste in src/main/java/Foo.java");
+        "Dirty-Guard: uncommittete Reste in src/main/java/Foo.java",
+        null);
   }
 
   private static NightRunItem paket(
@@ -494,6 +497,7 @@ class DisruptionServiceTest {
             Instant.parse("2026-09-22T10:55:00Z"),
             false,
             null,
+            null,
             null));
 
     LeitstandView leitstand = umEinsNachMittag().leitstand(ADMIN, BERLIN);
@@ -580,12 +584,51 @@ class DisruptionServiceTest {
   }
 
   /**
-   * Ein Lauf ohne Arbeit hat kein Paket — der Grund ist der Text, und er reicht. Seit Issue #1121
-   * ist das nur noch beim <b>Rückfall</b> des Servers eine Störung: Er kann einen alten Runner, den
-   * Upload-Weg oder einen Lauf meinen, der alle Pakete zurückstellte.
+   * Issue #1185, Kriterium 6: Auch der <b>Rückfall</b> des Servers ist keine Störung. Bis #1121
+   * stand ein Lauf ohne Arbeit ohne gemeldeten Grund in der Liste — ein alter Runner und der
+   * Upload-Weg quittierten damit jeden Morgen eine Meldung, hinter der nichts stand.
+   *
+   * <p>Der Fall <em>kippt</em>: Er hieß {@code
+   * einLaufOhneArbeitMitUnbekanntemGrundIstEineStoerungAuchOhnePaket} und erwartete die Störzeile.
+   * Die Störungsabfrage liefert den Lauf weiterhin (sie kennt den Ausgang nicht); den Unterschied
+   * macht allein {@code isDisruption()} des Befunds.
    */
   @Test
-  void einLaufOhneArbeitMitUnbekanntemGrundIstEineStoerungAuchOhnePaket() {
+  void einLaufOhneArbeitMitUnbekanntemGrundIstKeineStoerung() {
+    DisruptionCandidate rueckfall =
+        new DisruptionCandidate(
+            5L,
+            9L,
+            "Projekt",
+            NightRunMode.IMPLEMENTATION,
+            JETZT,
+            null,
+            true,
+            NightRunOutcome.GRUND_UNBEKANNT,
+            null,
+            null);
+    nachtLaeufe(rueckfall);
+    when(disruptions.openCandidates()).thenReturn(List.of(rueckfall));
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.stoerungen()).isEmpty();
+    assertThat(leitstand.durchgefuehrte())
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.outcome().verdict()).isEqualTo(NightRunOutcome.Verdict.NO_WORK);
+              assertThat(v.outcome().noWorkReason()).isEqualTo(NightRunOutcome.GRUND_UNBEKANNT);
+            });
+  }
+
+  /**
+   * Issue #1185, Kriterium 3: Ein Lauf, der alle seine Pakete zurückstellte, meldet keinen Grund —
+   * der Server trägt den Rückfalltext ein. Er bleibt, was er ohne den Text schon war: eine Störung
+   * „mit Vorbehalt", und zwar mit dem zurückgestellten Paket als maßgeblichem.
+   */
+  @Test
+  void einZurueckgestelltesPaketBleibtEineStoerungAuchMitRueckfalltext() {
     when(disruptions.openCandidates())
         .thenReturn(
             List.of(
@@ -598,12 +641,18 @@ class DisruptionServiceTest {
                     null,
                     true,
                     NightRunOutcome.GRUND_UNBEKANNT,
+                    null,
                     null)));
+    pakete(paket(5L, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen())
         .singleElement()
-        .extracting(v -> v.outcome().noWorkReason())
-        .isEqualTo(NightRunOutcome.GRUND_UNBEKANNT);
+        .satisfies(
+            v -> {
+              assertThat(v.outcome().verdict()).isEqualTo(NightRunOutcome.Verdict.WAITING);
+              assertThat(v.outcome().decisiveItem().cardNumber()).isEqualTo(721);
+              assertThat(v.outcome().noWorkReason()).isNull();
+            });
   }
 
   /**
@@ -623,6 +672,7 @@ class DisruptionServiceTest {
             null,
             true,
             "Ready ist leer — nichts zu tun.",
+            null,
             null);
     nachtLaeufe(ruhig);
     when(disruptions.openCandidates()).thenReturn(List.of(ruhig));
@@ -711,6 +761,7 @@ class DisruptionServiceTest {
                     JETZT,
                     null,
                     true,
+                    null,
                     null,
                     null)));
     pakete(paket(5L, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
@@ -940,6 +991,111 @@ class DisruptionServiceTest {
     assertThatThrownBy(() -> service.acknowledge(ADMIN, 5L))
         .isInstanceOf(DisruptionNotFoundException.class);
     verify(disruptions, never()).acknowledge(5L, ADMIN, JETZT);
+  }
+
+  // --- Von Hand als beendet kennzeichnen (Issue #1197) ----------------------------------------
+
+  @Test
+  void dasKennzeichnenVerlangtDenPlattformAdmin_undSchreibtOhneIhnNichts() {
+    assertThatThrownBy(() -> service.close(NIEMAND, 5L))
+        .isInstanceOf(AdminAccessDeniedException.class);
+    verifyNoInteractions(disruptions);
+  }
+
+  @Test
+  void dasKennzeichnenSchreibtDenVermerkMitNutzerUndUhr() {
+    kandidatIstLaufend(5L);
+
+    service.close(ADMIN, 5L);
+
+    verify(disruptions).close(5L, ADMIN, JETZT);
+  }
+
+  /** Zwei Admins räumen dieselbe Zeile weg — der zweite darf nichts Rotes sehen. */
+  @Test
+  void einBereitsGekennzeichneterLaufIstKeinFehler_undWirdNichtZweimalGeschrieben() {
+    when(disruptions.candidate(5L))
+        .thenReturn(Optional.of(unfertigGekennzeichnet(5L, JETZT.minus(Duration.ofMinutes(10)))));
+    pakete();
+
+    assertThatCode(() -> service.close(ADMIN, 5L)).doesNotThrowAnyException();
+    verify(disruptions, never()).close(anyLong(), anyLong(), any());
+  }
+
+  @Test
+  void einUnbekannterOderNichtTeilnehmenderLaufIst404_undSchreibtNichts() {
+    when(disruptions.candidate(5L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.close(ADMIN, 5L))
+        .isInstanceOf(DisruptionNotFoundException.class);
+    verify(disruptions, never()).close(anyLong(), anyLong(), any());
+  }
+
+  /**
+   * Ein abgeschlossener Lauf trägt seinen gemeldeten Ausgang — an ihm gibt es nichts zu ersetzen.
+   */
+  @Test
+  void einAbgeschlossenerLaufIst409_undSchreibtNichts() {
+    when(disruptions.candidate(5L)).thenReturn(Optional.of(kandidat(5L, JETZT)));
+    pakete();
+
+    assertThatThrownBy(() -> service.close(ADMIN, 5L))
+        .isInstanceOf(NightRunNotRunningException.class);
+    verify(disruptions, never()).close(anyLong(), anyLong(), any());
+  }
+
+  /**
+   * Ein verstummter Lauf ist heute eine Störung und bleibt es: Für ihn gibt es das Quittieren, und
+   * das sagt etwas anderes als „beendet".
+   */
+  @Test
+  void einVerstummterLaufIst409_undSchreibtNichts() {
+    when(disruptions.candidate(5L))
+        .thenReturn(Optional.of(unfertig(5L, JETZT.minus(Duration.ofHours(5)), null)));
+    pakete();
+
+    assertThatThrownBy(() -> service.close(ADMIN, 5L))
+        .isInstanceOf(NightRunNotRunningException.class);
+    verify(disruptions, never()).close(anyLong(), anyLong(), any());
+  }
+
+  /** Der gekennzeichnete Lauf steht danach unter den beendeten — und nicht in der Störungsliste. */
+  @Test
+  void einGekennzeichneterLaufStehtUnterDenBeendetenUndIstKeineStoerung() {
+    DisruptionCandidate gekennzeichnet =
+        unfertigGekennzeichnet(5L, JETZT.minus(Duration.ofMinutes(10)));
+    nachtLaeufe(gekennzeichnet);
+    when(disruptions.openCandidates()).thenReturn(List.of(gekennzeichnet));
+
+    LeitstandView sicht = service.leitstand(ADMIN, UTC);
+
+    assertThat(sicht.laufende()).isEmpty();
+    assertThat(ids(sicht.durchgefuehrte())).containsExactly(5L);
+    assertThat(sicht.durchgefuehrte().getFirst().outcome().verdict())
+        .isEqualTo(NightRunOutcome.Verdict.CLOSED);
+    assertThat(sicht.stoerungen()).isEmpty();
+  }
+
+  /** Ein laufender Lauf, wie ihn die Abfrage für das Kennzeichnen liefert. */
+  private void kandidatIstLaufend(long laufId) {
+    when(disruptions.candidate(laufId))
+        .thenReturn(Optional.of(unfertig(laufId, JETZT.minus(Duration.ofMinutes(10)), JETZT)));
+    pakete();
+  }
+
+  /** Ein unfertiger Lauf mit gesetztem Vermerk — verstummt, aber von Hand beendet. */
+  private static DisruptionCandidate unfertigGekennzeichnet(long laufId, Instant closedAt) {
+    return new DisruptionCandidate(
+        laufId,
+        9L,
+        "Projekt",
+        NightRunMode.IMPLEMENTATION,
+        JETZT.minus(Duration.ofHours(5)),
+        null,
+        false,
+        null,
+        null,
+        closedAt);
   }
 
   private DisruptionService mitUhr(Instant jetzt) {

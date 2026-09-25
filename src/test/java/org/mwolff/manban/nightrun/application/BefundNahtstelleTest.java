@@ -119,7 +119,8 @@ class BefundNahtstelleTest {
                     LETZTE_MELDUNG,
                     complete,
                     null,
-                    abortReason)));
+                    abortReason,
+                    null)));
     PlatformAdminChecker admins = mock(PlatformAdminChecker.class);
     when(admins.isPlatformAdmin(ADMIN)).thenReturn(true);
     DisruptionService service =
