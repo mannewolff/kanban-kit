@@ -39,6 +39,12 @@
       "areas": [
         "cli"
       ]
+    },
+    {
+      "cmd": "node --test scripts/*.test.mjs",
+      "areas": [
+        "scripts"
+      ]
     }
   ],
   "mutationCommand": "mvn -Ppit -Dskip.frontend=true test",
@@ -77,6 +83,9 @@
     ],
     "cli": [
       "cli/**"
+    ],
+    "scripts": [
+      "scripts/**"
     ],
     "workflow": [
       ".claude/**",

@@ -113,6 +113,9 @@ cd frontend && npm test                 # Vitest
 
 # CLI
 node --test cli/tbx.test.mjs            # tbx-Kommandozeilenwerkzeug
+
+# Skripte
+node --test scripts/*.test.mjs          # Projektskripte (z. B. Mutationspruefung)
 ```
 
 **Je Paket nach Bereichen eingegrenzt.** Die Checks stehen in `.claude/workflow.config.json` (`buildChecks`)
@@ -120,12 +123,12 @@ mit Bereichen aus `checkAreas`: `backend` (`src/**`, `pom.xml`, `config/**`) →
 `mvn -Dskip.frontend=true -DskipITs -Djacoco.skip=true verify` (Kompilieren, Unit-Tests, Spotless,
 Checkstyle, PMD, SpotBugs — ohne Integrationstests, Abdeckung und Frontend-/Doku-Build);
 `frontend` (`frontend/**`, `CLAUDE-design.md`) → die drei npm-Checks; `cli` (`cli/**`) →
-`node --test cli/tbx.test.mjs`. Das volle `mvn verify` (Bereiche `backend` und `doku`, inklusive
+`node --test cli/tbx.test.mjs`; `scripts` (`scripts/**`) → `node --test scripts/*.test.mjs`. Das volle `mvn verify` (Bereiche `backend` und `doku`, inklusive
 Integrationstests, 100-%-Abdeckung und Doku-Seite) trägt `stufe: "push"` und läuft erst bei `push main`
 und `merge production` — die Abdeckungsgrenze ist ohne Integrationstests nicht zu halten, deshalb
 wandert sie mit. Beim Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine Datei
-ohne Bereich (etwa `Dockerfile`, `.github/`, `scripts/`) fährt alle der Paketstufe. **Vor `push main` und
-`merge production` laufen immer alle sechs.** Die Config ändert nur Manne.
+ohne Bereich (etwa `Dockerfile`, `.github/`) fährt alle der Paketstufe. **Vor `push main` und
+`merge production` laufen immer alle sieben.** Die Config ändert nur Manne.
 
 **Nicht Pflichtcheck, eigens aufgerufen:** die Mutationstests. Backend
 `mvn -Ppit -Dskip.frontend=true test` (CLAUDE-java.md §5.3), Frontend `npm --prefix frontend run test:mutation` (Stryker über `src/lib`
