@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * mutationspruefung.mjs — Treiber der Mutationspruefung fuer beide Seiten (Issue #1212,
- * Plan #1210, fachliche Quelle #1104).
+ * mutationspruefung.mjs — Treiber der Mutationspruefung fuer beide Seiten (Issues #1212, #1213,
+ * #1214, Plan #1210, fachliche Quelle #1104).
  *
  * Nutzung:
  *   node scripts/mutationspruefung.mjs aenderung frontend|backend
  *   node scripts/mutationspruefung.mjs vollauf   frontend|backend
  *
- * Dieses Paket legt die GEMEINSAMEN Teile an: Anker, Dateilisten, Pruefbereich beider Seiten,
- * Test-zu-Quelle-Zuordnung und die Ausgabeform. Die seitenspezifische Auswertung und der Vollauf
- * folgen in eigenen Paketen; hier laeuft noch kein Mutationswerkzeug.
+ * Die Aenderungspruefung steht fuer beide Seiten: Anker, Dateilisten, Pruefbereich,
+ * Test-zu-Quelle-Zuordnung, der Lauf (Stryker bzw. PIT), die Auswertung seines Berichts und die
+ * gemeinsame Ausgabeform. Der Vollauf folgt in einem eigenen Paket (Issue #1215).
  *
  * Zwei Festlegungen, die sich aus dem Bestand ergeben:
  *
@@ -223,13 +223,17 @@ const JAVA_TESTKLASSE = /([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.[A-Z][\w$]*(?
 /**
  * Eine Testangabe aus einem Vollauf-Bericht als Pfad. Stryker nennt Testdateien bereits mit Pfad;
  * PIT nennt in `killingTest` eine Testklasse samt Methode (`org.x.FooTest.bar(org.x.FooTest)`).
+ *
+ * Die Klassenform wird ZUERST geprueft: Unter JUnit 5 traegt `killingTest` einen Descriptor, der
+ * selbst Schraegstriche enthaelt (`org.x.FooTest.[engine:junit-jupiter]/[class:org.x.FooTest]/…`).
+ * Ein Test auf den Schraegstrich zuerst haette ihn faelschlich fuer einen Pfad gehalten. Geprueft
+ * wird nur der Teil vor der ersten eckigen Klammer, damit der Descriptor nicht mitspricht.
  */
 export function testAngabeZuPfad(angabe) {
   if (typeof angabe !== 'string' || angabe.length === 0) return null;
-  if (angabe.includes('/')) return angabe;
-  const klasse = JAVA_TESTKLASSE.exec(angabe)?.[1];
-  if (!klasse) return null;
-  return `src/test/java/${klasse.replaceAll('.', '/')}.java`;
+  const klasse = JAVA_TESTKLASSE.exec(angabe.split('[')[0])?.[1];
+  if (klasse) return `src/test/java/${klasse.replaceAll('.', '/')}.java`;
+  return angabe.includes('/') ? angabe : null;
 }
 
 /**
@@ -340,6 +344,115 @@ export function strykerMutanten(bericht, { mitQuellen = false } = {}) {
     }
   }
   return mitQuellen ? { mutanten, quellen } : mutanten;
+}
+
+// --- PIT-Bericht ------------------------------------------------------------
+
+/**
+ * Die Zustaende von PIT in dasselbe Vokabular wie die von Stryker. Ein unbekannter Zustand bleibt
+ * woertlich stehen und faellt damit in KEINE der beiden Mengen — `NON_VIABLE`, `RUN_ERROR` und
+ * `MEMORY_ERROR` sagen nichts ueber die Tests aus, genau wie `CompileError` im Frontend.
+ *
+ * Einen Gegenpart zu `Ignored` gibt es nicht: Die Backend-Ausnahme (FANN ueber
+ * `@ExcludeFromJacocoGeneratedReport`) wirkt schon bei der Erzeugung, solche Mutanten stehen gar
+ * nicht erst im Bericht.
+ */
+const PIT_ZUSTAENDE = new Map([
+  ['KILLED', 'Killed'],
+  ['TIMED_OUT', 'Timeout'],
+  ['SURVIVED', 'Survived'],
+  ['NO_COVERAGE', 'NoCoverage'],
+]);
+
+export function pitZustand(status) {
+  return PIT_ZUSTAENDE.get(status) ?? status;
+}
+
+const ENTITAETEN = new Map([['amp', '&'], ['lt', '<'], ['gt', '>'], ['quot', '"'], ['apos', "'"]]);
+
+function xmlText(roh) {
+  return String(roh ?? '').replaceAll(/&(#\d+|#x[\da-fA-F]+|\w+);/g, (ganz, name) => {
+    if (name.startsWith('#x') || name.startsWith('#X')) return String.fromCodePoint(Number.parseInt(name.slice(2), 16));
+    if (name.startsWith('#')) return String.fromCodePoint(Number(name.slice(1)));
+    return ENTITAETEN.get(name) ?? ganz;
+  });
+}
+
+/**
+ * Die Quelldatei eines Mutanten. `sourceFile` traegt nur den Dateinamen, `mutatedClass` das Paket —
+ * zusammen ergeben sie den Pfad. Der Umweg ueber `sourceFile` statt ueber den Klassennamen allein
+ * ist der genauere: Eine innere Klasse (`Card$Zustand`) und eine im selben Datei-Kopf deklarierte
+ * Nebenklasse landen so bei ihrer wirklichen Datei statt bei einer erfundenen.
+ */
+export function pitQuellPfad(mutatedClass, sourceFile) {
+  if (!mutatedClass || !sourceFile) return null;
+  const punkt = mutatedClass.lastIndexOf('.');
+  const paket = punkt < 0 ? '' : `${mutatedClass.slice(0, punkt).replaceAll('.', '/')}/`;
+  return `src/main/java/${paket}${sourceFile}`;
+}
+
+function xmlFeld(block, name) {
+  const treffer = new RegExp(`<${name}>([\\s\\S]*?)</${name}>`).exec(block);
+  return treffer ? xmlText(treffer[1]) : '';
+}
+
+/**
+ * `target/pit-reports/mutations.xml` in dieselbe Mutantenform wie der Stryker-Bericht. Gelesen wird
+ * je Mutant Datei, Zeile, Mutator, Ersetzung (`description`) und Zustand.
+ *
+ * Als deckender Test steht nur der ERSTE toetende (`killingTest`) zur Verfuegung: Das Profil setzt
+ * `fullMutationMatrix` nicht, und `succeedingTests` gibt es in diesem Bericht gar nicht. Bei einem
+ * Ueberlebenden ist das Element leer oder fehlt — dort traegt die Namenskonvention die dritte
+ * Bedingung des Altlast-Vermerks allein.
+ */
+export function pitMutanten(xml) {
+  const mutanten = [];
+  for (const treffer of String(xml ?? '').matchAll(/<mutation\b([^>]*)>([\s\S]*?)<\/mutation>/g)) {
+    const [, kopf, block] = treffer;
+    const datei = pitQuellPfad(xmlFeld(block, 'mutatedClass'), xmlFeld(block, 'sourceFile'));
+    if (!datei) continue;
+    const toetend = testAngabeZuPfad(xmlFeld(block, 'killingTest'));
+    mutanten.push({
+      datei,
+      zeile: Number(xmlFeld(block, 'lineNumber')) || 0,
+      mutator: xmlFeld(block, 'mutator').split('.').pop(),
+      ersetzung: xmlFeld(block, 'description'),
+      zustand: pitZustand(/status=['"]([^'"]*)['"]/.exec(kopf)?.[1] ?? ''),
+      deckendeTests: toetend ? [toetend] : [],
+    });
+  }
+  return mutanten;
+}
+
+/**
+ * Der Aufruf des Werkzeugs. Verengt wird der Pruefbereich ueber `-Dpit.targetClasses`, damit die
+ * Einschraenkung schon IM Lauf wirkt und nicht erst bei der Auswertung. Je beruehrter Datei zwei
+ * Muster: die Klasse selbst und `$*` fuer ihre inneren und anonymen Typen — PIT vergleicht gegen
+ * den Klassennamen, und `Foo` traefe `Foo$1` nicht.
+ *
+ * `-Dpit.marke=0` schaltet die Werkzeugschwelle ab: Der Halt kommt aus dem Rueckgabewert dieses
+ * Treibers, weil ein Altlast-Vermerk nicht anhalten, aber mitzaehlen soll. Keine Historie — das
+ * Bestandspaket `pitest-entry-1.25.7` bringt keine `HistoryFactory` mit, ein Lauf mit
+ * `withHistory` braeche ab.
+ *
+ * `-B` (Batch-Modus), weil dieser Lauf programmatisch startet: Seine Ausgabe wird nie
+ * durchgereicht, sondern zusammengefasst — ANSI-Steuerzeichen darin waeren nur Rauschen —, und
+ * Maven darf nichts erfragen, worauf niemand antwortet.
+ */
+export function pitArgumente(dateien) {
+  const klassen = [];
+  for (const pfad of dateien) {
+    const klasse = javaPfadZuKlasse(pfad);
+    if (klasse) klassen.push(klasse, `${klasse}$*`);
+  }
+  return [
+    '-B',
+    '-Ppit',
+    '-Dskip.frontend=true',
+    '-Dpit.marke=0',
+    ...(klassen.length > 0 ? [`-Dpit.targetClasses=${klassen.join(',')}`] : []),
+    'test',
+  ];
 }
 
 /**
@@ -653,9 +766,15 @@ export function meldungBauen({
   }
 
   if (zaehlung) {
+    // Die Form der Ausnahme steht an der Zahl, weil die beiden Seiten verschieden ausnehmen:
+    // Stryker markiert je Stelle und meldet den Mutanten als `Ignored`; im Backend nimmt FANN
+    // ihn schon bei der Erzeugung heraus, er erscheint gar nicht erst im Bericht.
+    const ausnahme = seite === 'backend'
+      ? '@ExcludeFromJacocoGeneratedReport je Einheit — solche Mutanten entstehen gar nicht erst'
+      : 'Stryker-Ausnahme je Stelle';
     zeilen.push('');
     zeilen.push(`Mutanten: ${zaehlung.geprueft} geprüft, ${zaehlung.getoetet} getötet, `
-      + `${zaehlung.ueberlebt} überlebt, ${zaehlung.ausgenommen} ausgenommen (Stryker-Ausnahme je Stelle).`);
+      + `${zaehlung.ueberlebt} überlebt, ${zaehlung.ausgenommen} ausgenommen (${ausnahme}).`);
     if (zaehlung.ausserhalb > 0) {
       zeilen.push(`Dazu ${zaehlung.ausserhalb} Überlebende außerhalb der berührten Dateien — sie halten nicht an (Kriterium 4).`);
     }
@@ -696,8 +815,6 @@ function bereichLesen(seite, wurzel) {
   return backendBereich(pitBereichLesen(readFileSync(pomPfad, 'utf-8')));
 }
 
-const NOCH_NICHT = 'Die Auswertung der Backend-Seite ist noch nicht umgesetzt (Issue #1214) — dieser Lauf hat nichts geprüft und endet deshalb ungleich 0.';
-
 /** Der Bericht liegt unter `.claude/` — dort ist er durch `.claude/*` ignoriert und verschmutzt
  * den Arbeitsbaum nicht. Ein Berichtsrest unter `frontend/reports/` brachte sonst den harten Stopp
  * des Nacht-Runners auf `git status --porcelain` zum Greifen, und `checks.mjs` zaehlte ihn ueber
@@ -720,6 +837,51 @@ function strykerLaufen({ wurzel, starte, dateien }) {
   return { ergebnis, bericht: jsonLesen(berichtsPfad) };
 }
 
+/** PIT schreibt seinen XML-Bericht unversioniert nach `target/` — es gibt ihn also fertig. */
+const PIT_BERICHT_TEILE = ['target', 'pit-reports', 'mutations.xml'];
+
+/**
+ * Ein PIT-Lauf ueber die beruehrten Klassen. Wie im Frontend faellt der alte Bericht VOR dem Lauf
+ * weg, sonst laese ein abgebrochener Lauf den Stand des vorigen und meldete ihn als seinen eigenen.
+ */
+function pitLaufen({ wurzel, starte, dateien }) {
+  const berichtsPfad = join(wurzel, ...PIT_BERICHT_TEILE);
+  rmSync(berichtsPfad, { force: true });
+  const ergebnis = starte('mvn', pitArgumente(dateien), { cwd: wurzel, encoding: 'utf-8' });
+  return { ergebnis, xml: existsSync(berichtsPfad) ? readFileSync(berichtsPfad, 'utf-8') : null };
+}
+
+/**
+ * Anders als Stryker traegt der PIT-Bericht keinen Quelltext. Er kommt darum von der Platte — je
+ * Datei genau einmal, und eine unlesbare Datei gilt als leer: Dort greift dann kein
+ * Altlast-Vermerk, was die richtige Irrtumsrichtung ist.
+ */
+function quellenLesen(mutanten, lies) {
+  const quellen = new Map();
+  for (const mutant of mutanten) {
+    if (!quellen.has(mutant.datei)) quellen.set(mutant.datei, lies(mutant.datei));
+  }
+  return quellen;
+}
+
+function letzteZeilen(roh, anzahl) {
+  const text = String(roh ?? '').trim();
+  return text.length === 0 ? [] : text.split('\n').slice(-anzahl);
+}
+
+/**
+ * Die einzige Stelle, an der die Ausgabe des Werkzeugs doch durchgereicht wird — und dann aus
+ * BEIDEN Kanälen: Maven meldet den Grund eines Fehlschlags auf stdout, auf stderr steht oft nur
+ * Rauschen der JVM. Nur stderr zu zeigen liesse jeden gescheiterten Lauf grundlos aussehen. Dass
+ * ein `[ERROR]` aus dem Tail `checks.mjs` rot faerbt, ist hier richtig: Der Lauf IST rot.
+ */
+function fehlenderBericht(teile, ergebnis) {
+  const tail = [...letzteZeilen(ergebnis?.stdout, 15), ...letzteZeilen(ergebnis?.stderr, 5)];
+  return `Der Mutationslauf hat keinen Bericht unter ${teile.join('/')} hinterlassen `
+    + `(Rückgabewert ${ergebnis?.status ?? 'unbekannt'}). Geprüft wurde deshalb nichts.\n`
+    + `${tail.join('\n')}\n`;
+}
+
 /**
  * Ein Lauf, vollstaendig ueber `umgebung` steuerbar: `cwd` (Projektwurzel), `git` (Aufruf mit
  * Rueckgabe wie spawnSync), `starte` (Mutationswerkzeug), `ausgabe` (Schreiben) und `jetzt` (Uhr).
@@ -730,6 +892,13 @@ export function laufen(argv, umgebung = {}) {
   const ausgabe = umgebung.ausgabe ?? ((text) => process.stdout.write(text));
   const jetzt = umgebung.jetzt ?? (() => Date.now());
   const existiert = umgebung.existiert ?? ((pfad) => existsSync(join(wurzel, pfad)));
+  const liesDatei = umgebung.liesDatei ?? ((pfad) => {
+    try {
+      return readFileSync(join(wurzel, pfad), 'utf-8');
+    } catch {
+      return '';
+    }
+  });
   const git = umgebung.git ?? ((...args) => spawnSync('git', args, { cwd: wurzel, encoding: 'utf-8' }));
   const starte = umgebung.starte
     ?? ((befehl, args, optionen) => spawnSync(befehl, args, { encoding: 'utf-8', ...optionen }));
@@ -796,30 +965,32 @@ export function laufen(argv, umgebung = {}) {
     ausgabe(meldungBauen({ ...grundmeldung, dauerMs: jetzt() - beginn }));
     return 0;
   }
-  if (seite === 'backend') {
-    ausgabe(meldungBauen({ ...grundmeldung, dauerMs: jetzt() - beginn, schluss: NOCH_NICHT }));
-    return 1;
-  }
-
   // Bei ganzer Seite gilt jede Datei des Pruefbereichs als beruehrt: Der Umfang ist genau dann
   // die ganze Seite, wenn der Anker fehlt oder ein geaenderter Test keiner Quelle zuzuordnen war —
   // in beiden Faellen ist unbekannt, was verschont bleiben duerfte.
   const beruehrt = new Set(gemessen.dateien);
   const geaendert = new Set(stand.alle);
-  const { ergebnis, bericht } = strykerLaufen({
-    wurzel,
-    starte,
-    dateien: gemessen.ganzeSeite ? [] : gemessen.dateien,
-  });
+  const dateienDesLaufs = gemessen.ganzeSeite ? [] : gemessen.dateien;
 
-  if (!bericht) {
-    ausgabe(`Der Stryker-Lauf hat keinen Bericht unter ${BERICHT_TEILE.join('/')} hinterlassen `
-      + `(Rückgabewert ${ergebnis?.status ?? 'unbekannt'}). Geprüft wurde deshalb nichts.\n`
-      + `${(ergebnis?.stderr ?? '').trim().split('\n').slice(-5).join('\n')}\n`);
-    return 1;
+  let mutanten;
+  let quellen;
+  if (seite === 'frontend') {
+    const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, dateien: dateienDesLaufs });
+    if (!bericht) {
+      ausgabe(fehlenderBericht(BERICHT_TEILE, ergebnis));
+      return 1;
+    }
+    ({ mutanten, quellen } = strykerMutanten(bericht, { mitQuellen: true }));
+  } else {
+    const { ergebnis, xml } = pitLaufen({ wurzel, starte, dateien: dateienDesLaufs });
+    if (xml === null) {
+      ausgabe(fehlenderBericht(PIT_BERICHT_TEILE, ergebnis));
+      return 1;
+    }
+    mutanten = pitMutanten(xml);
+    quellen = quellenLesen(mutanten, liesDatei);
   }
 
-  const { mutanten, quellen } = strykerMutanten(bericht, { mitQuellen: true });
   const ausgewertet = auswerten({
     mutanten,
     quellen,

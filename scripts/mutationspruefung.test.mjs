@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   SEITEN,
@@ -33,7 +34,14 @@ import {
   hunkZeilen,
   vollaufSchluessel,
   auswerten,
+  pitZustand,
+  pitQuellPfad,
+  pitMutanten,
+  pitArgumente,
 } from './mutationspruefung.mjs';
+
+const HIER = dirname(fileURLToPath(import.meta.url));
+const BEISPIEL_XML = readFileSync(join(HIER, 'testdaten', 'mutations-beispiel.xml'), 'utf-8');
 
 const STRYKER = {
   mutate: ['src/lib/**/*.ts', 'src/api/**/*.ts', '!src/**/*.test.ts', '!src/**/*.test.tsx'],
@@ -461,15 +469,6 @@ test('laufen: ein gruener Lauf traegt keine Fehlermerkmale', () => {
   assert.ok(!text.includes('BUILD FAILURE'));
 });
 
-test('laufen: das Backend wartet weiter auf seine Auswertung (Issue #1214)', () => {
-  const { code, text } = mitProjekt((wurzel) =>
-    sammelLauf(['aenderung', 'backend'], wurzel, {
-      'diff --name-status -z 1a2b3c4': OK('M\0src/main/java/org/mwolff/manban/card/domain/Card.java\0'),
-    }),
-  );
-  assert.notEqual(code, 0);
-  assert.match(text, /noch nicht umgesetzt/);
-});
 
 // --- Stryker-Bericht --------------------------------------------------------
 
@@ -840,6 +839,243 @@ test('laufen: ein alter Bericht wird vor dem Lauf verworfen und nicht als neuer 
   assert.notEqual(code, 0);
   assert.match(text, /Bericht/);
   assert.ok(!text.includes('ConditionalExpression'));
+});
+
+// --- PIT-Bericht ------------------------------------------------------------
+
+const CARD_SERVICE = 'src/main/java/org/mwolff/manban/card/application/CardService.java';
+const CARD = 'src/main/java/org/mwolff/manban/card/domain/Card.java';
+
+test('pitZustand: PIT-Zustaende gehen in dasselbe Vokabular wie die Stryker-Zustaende', () => {
+  assert.equal(pitZustand('KILLED'), 'Killed');
+  assert.equal(pitZustand('TIMED_OUT'), 'Timeout');
+  assert.equal(pitZustand('SURVIVED'), 'Survived');
+  assert.equal(pitZustand('NO_COVERAGE'), 'NoCoverage');
+  assert.equal(ZUSTAND_GETOETET.has(pitZustand('KILLED')), true);
+  assert.equal(ZUSTAND_UEBERLEBT.has(pitZustand('NO_COVERAGE')), true);
+});
+
+test('pitZustand: ein unbekannter Zustand faellt in keine der beiden Mengen', () => {
+  for (const roh of ['NON_VIABLE', 'RUN_ERROR', 'MEMORY_ERROR']) {
+    assert.equal(ZUSTAND_GETOETET.has(pitZustand(roh)), false);
+    assert.equal(ZUSTAND_UEBERLEBT.has(pitZustand(roh)), false);
+  }
+});
+
+test('pitQuellPfad: Paket der Klasse plus sourceFile, auch bei einer inneren Klasse', () => {
+  assert.equal(pitQuellPfad('org.mwolff.manban.card.application.CardService', 'CardService.java'), CARD_SERVICE);
+  assert.equal(pitQuellPfad('org.mwolff.manban.card.domain.Card$Zustand', 'Card.java'), CARD);
+  assert.equal(pitQuellPfad('', 'Card.java'), null);
+  assert.equal(pitQuellPfad('org.mwolff.manban.card.domain.Card', ''), null);
+});
+
+test('pitMutanten: getoeteter Mutant traegt Datei, Zeile, Mutator, Ersetzung und den toetenden Test', () => {
+  const mutanten = pitMutanten(BEISPIEL_XML);
+  assert.deepEqual(mutanten[0], {
+    datei: CARD_SERVICE,
+    zeile: 42,
+    mutator: 'NegateConditionalsMutator',
+    ersetzung: 'negated conditional',
+    zustand: 'Killed',
+    deckendeTests: ['src/test/java/org/mwolff/manban/card/application/CardServiceTest.java'],
+  });
+});
+
+test('pitMutanten: ein Ueberlebender mit leerem killingTest bleibt ohne deckenden Test', () => {
+  const ueberlebend = pitMutanten(BEISPIEL_XML).find((m) => m.zustand === 'Survived');
+  assert.deepEqual(ueberlebend, {
+    datei: CARD_SERVICE,
+    zeile: 43,
+    mutator: 'ConditionalsBoundaryMutator',
+    ersetzung: 'changed conditional boundary',
+    zustand: 'Survived',
+    deckendeTests: [],
+  });
+});
+
+test('pitMutanten: ein Mutant ganz ohne killingTest-Element wird gelesen und der inneren Klasse ihre Datei zugeordnet', () => {
+  const ohneDeckung = pitMutanten(BEISPIEL_XML).find((m) => m.zustand === 'NoCoverage');
+  assert.equal(ohneDeckung.datei, CARD);
+  assert.equal(ohneDeckung.zeile, 17);
+  assert.deepEqual(ohneDeckung.deckendeTests, []);
+});
+
+test('pitMutanten: XML-Entitaeten der Beschreibung werden aufgeloest', () => {
+  const nichtTragfaehig = pitMutanten(BEISPIEL_XML).find((m) => m.zustand === 'NON_VIABLE');
+  assert.equal(nichtTragfaehig.ersetzung, 'replaced return value with "" for org/mwolff/manban/card/domain/Card::titel');
+});
+
+test('pitMutanten: der Zeitablauf zaehlt als getoetet und liest seinen toetenden Test', () => {
+  const zeitablauf = pitMutanten(BEISPIEL_XML).find((m) => m.zustand === 'Timeout');
+  assert.deepEqual(zeitablauf.deckendeTests, ['src/test/java/org/mwolff/manban/card/domain/CardTest.java']);
+});
+
+test('pitMutanten: leerer oder fehlender Bericht ergibt keine Mutanten statt eines Fehlers', () => {
+  assert.deepEqual(pitMutanten('<mutations/>'), []);
+  assert.deepEqual(pitMutanten(null), []);
+});
+
+test('pitMutanten: die Auswertung des Beispielberichts trennt getoetet, ueberlebt und ausserhalb', () => {
+  const mutanten = pitMutanten(BEISPIEL_XML);
+  const ergebnis = auswerten({
+    mutanten,
+    quellen: new Map(),
+    istBeruehrt: (datei) => datei === CARD_SERVICE,
+    zeileGeaendert: () => true,
+    dateiGeaendert: () => false,
+    vollauf: null,
+  });
+  assert.deepEqual(ergebnis.zaehlung, { geprueft: 4, getoetet: 2, ueberlebt: 1, ausgenommen: 0, ausserhalb: 1 });
+  assert.equal(ergebnis.haltende.length, 1);
+  assert.equal(ergebnis.haltende[0].zeile, 43);
+});
+
+test('pitArgumente: beruehrte Dateien werden zu voll qualifizierten Klassennamen samt inneren Typen', () => {
+  const args = pitArgumente([CARD_SERVICE, CARD, 'src/test/java/org/mwolff/manban/card/domain/CardTest.java']);
+  assert.deepEqual(args, [
+    '-B',
+    '-Ppit',
+    '-Dskip.frontend=true',
+    '-Dpit.marke=0',
+    '-Dpit.targetClasses=org.mwolff.manban.card.application.CardService,org.mwolff.manban.card.application.CardService$*,'
+      + 'org.mwolff.manban.card.domain.Card,org.mwolff.manban.card.domain.Card$*',
+    'test',
+  ]);
+});
+
+test('pitArgumente: ohne Dateiliste bleibt der Default-Umfang des Profils stehen, die Marke faellt trotzdem', () => {
+  const args = pitArgumente([]);
+  assert.deepEqual(args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
+  assert.equal(args.some((a) => a.startsWith('-Dpit.targetClasses')), false);
+  assert.equal(args.some((a) => a.includes('withHistory') || a.includes('historie')), false);
+});
+
+// --- Lauf mit PIT -----------------------------------------------------------
+
+/** Ein `starte`-Doppel, das den PIT-Bericht an seinen vereinbarten Ort schreibt. */
+function pitDoppel(wurzel, xml, status = 0) {
+  return () => {
+    mkdirSync(join(wurzel, 'target', 'pit-reports'), { recursive: true });
+    if (xml) writeFileSync(join(wurzel, 'target', 'pit-reports', 'mutations.xml'), xml);
+    return { status, stdout: '', stderr: '' };
+  };
+}
+
+function javaAblegen(wurzel, pfad, inhalt) {
+  mkdirSync(join(wurzel, dirname(pfad)), { recursive: true });
+  writeFileSync(join(wurzel, pfad), inhalt);
+}
+
+const GEAENDERT_SERVICE = { 'diff --name-status -z 1a2b3c4': OK(`M\0${CARD_SERVICE}\0`) };
+
+test('laufen: der Backend-Aufruf verengt targetClasses auf die beruehrten Klassen und schaltet die Marke ab', () => {
+  const { aufrufe } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      ...GEAENDERT_SERVICE,
+      [`diff -U0 1a2b3c4 -- ${CARD_SERVICE}`]: OK('@@ -43 +43 @@\n'),
+    }, pitDoppel(wurzel, BEISPIEL_XML)),
+  );
+  assert.equal(aufrufe.length, 1);
+  assert.equal(aufrufe[0].befehl, 'mvn');
+  assert.deepEqual(aufrufe[0].args, [
+    '-B',
+    '-Ppit',
+    '-Dskip.frontend=true',
+    '-Dpit.marke=0',
+    '-Dpit.targetClasses=org.mwolff.manban.card.application.CardService,org.mwolff.manban.card.application.CardService$*',
+    'test',
+  ]);
+});
+
+test('laufen: ein Ueberlebender in einer beruehrten Backend-Datei endet ungleich 0 und nennt Datei, Zeile und Mutator', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      ...GEAENDERT_SERVICE,
+      [`diff -U0 1a2b3c4 -- ${CARD_SERVICE}`]: OK('@@ -43 +43 @@\n'),
+    }, pitDoppel(wurzel, BEISPIEL_XML)),
+  );
+  assert.notEqual(code, 0);
+  assert.match(text, /CardService\.java:43 — ConditionalsBoundaryMutator/);
+  assert.ok(!text.includes('noch nicht umgesetzt'));
+});
+
+test('laufen: ein Ueberlebender in einer nicht beruehrten Backend-Datei endet gruen und ist kein Grund', () => {
+  const fremd = 'src/main/java/org/mwolff/manban/board/domain/Column.java';
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      'diff --name-status -z 1a2b3c4': OK(`M\0${fremd}\0`),
+      [`diff -U0 1a2b3c4 -- ${fremd}`]: OK('@@ -1 +1 @@\n'),
+    }, pitDoppel(wurzel, BEISPIEL_XML)),
+  );
+  assert.equal(code, 0);
+  assert.ok(!text.includes('CardService.java:43'));
+  assert.match(text, /2 Überlebende außerhalb/);
+});
+
+test('laufen: ein Altlast-Vermerk in einer Backend-Quelle laesst gruen enden und zaehlt trotzdem mit', () => {
+  const quelle = [
+    'package org.mwolff.manban.card.application;', //                              1
+    'class CardService {', //                                                      2
+    '  int zaehle(int n) {', //                                                    3
+    '    // Mutations-Altlast: äquivalenter Grenzfall (#1213, 2026-09-25)', //     4
+    '    return n > 0 ? 1 : 2;', //                                                5
+  ].join('\n');
+  const vollauf = {
+    backend: {
+      datum: '2026-09-24T11:36:00.000Z',
+      dauerMs: 1000,
+      mutanten: [{ datei: CARD_SERVICE, zeile: 5, mutator: 'ConditionalsBoundaryMutator' }],
+    },
+  };
+  const { code, text } = mitProjekt((wurzel) => {
+    javaAblegen(wurzel, CARD_SERVICE, quelle);
+    return sammelLauf(['aenderung', 'backend'], wurzel, {
+      ...GEAENDERT_SERVICE,
+      [`diff -U0 1a2b3c4 -- ${CARD_SERVICE}`]: OK('@@ -1 +1 @@\n'),
+    }, pitDoppel(wurzel, BEISPIEL_XML.replaceAll('<lineNumber>43</lineNumber>', '<lineNumber>5</lineNumber>')));
+  }, { vollauf });
+  assert.equal(code, 0);
+  assert.match(text, /Altlast-Vermerk/);
+  assert.match(text, /1 überlebt/);
+});
+
+test('laufen: ein abgebrochener PIT-Lauf ohne Bericht endet ungleich 0 und sagt warum', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, GEAENDERT_SERVICE, () => ({ status: 1, stdout: '', stderr: 'boom' })),
+  );
+  assert.notEqual(code, 0);
+  assert.match(text, /mutations\.xml/);
+});
+
+test('laufen: ein alter PIT-Bericht wird vor dem Lauf verworfen und nicht als neuer gelesen', () => {
+  const { code, text } = mitProjekt((wurzel) => {
+    mkdirSync(join(wurzel, 'target', 'pit-reports'), { recursive: true });
+    writeFileSync(join(wurzel, 'target', 'pit-reports', 'mutations.xml'), BEISPIEL_XML);
+    return sammelLauf(['aenderung', 'backend'], wurzel, GEAENDERT_SERVICE, () => ({ status: 1, stdout: '', stderr: 'boom' }));
+  });
+  assert.notEqual(code, 0);
+  assert.ok(!text.includes('ConditionalsBoundaryMutator'));
+});
+
+test('laufen: die Zaehlung des Backends nennt die Ausnahme je Einheit statt der Stryker-Form je Stelle', () => {
+  const { text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      ...GEAENDERT_SERVICE,
+      [`diff -U0 1a2b3c4 -- ${CARD_SERVICE}`]: OK('@@ -43 +43 @@\n'),
+    }, pitDoppel(wurzel, BEISPIEL_XML)),
+  );
+  assert.match(text, /ausgenommen \(.*je Einheit/);
+  assert.ok(!text.includes('Stryker-Ausnahme'));
+});
+
+test('laufen: unaufloesbarer Anker fuehrt im Backend zum Default-Umfang des Profils', () => {
+  const { aufrufe, text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      'merge-base HEAD origin/main': { status: 128, stdout: '', stderr: 'no upstream' },
+    }, pitDoppel(wurzel, BEISPIEL_XML)),
+  );
+  assert.match(text, /Umfang: die ganze Seite/);
+  assert.deepEqual(aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
 });
 
 test('laufen: unaufloesbarer Anker fuehrt zum vollen Umfang und sagt das', () => {

@@ -805,6 +805,35 @@
                      hier ohnehin die maßgebliche Metrik; die JaCoCo-Line/Branch-Gates laufen
                      im Default-`verify`. -->
                 <jacoco.skip>true</jacoco.skip>
+
+                <!-- Die Schwelle als Property, damit die Änderungsprüfung
+                     (scripts/mutationspruefung.mjs) sie mit -Dpit.marke=0 abschalten kann: Dort
+                     kommt der Halt aus dem Rückgabewert des Treibers, weil ein Altlast-Vermerk
+                     nicht anhalten, aber mitzählen soll. Der Default ist die bisherige 100 —
+                     ein Aufruf ohne die Property verhält sich unverändert. Begründung der 100
+                     am <mutationThreshold> unten. -->
+                <pit.marke>100</pit.marke>
+
+                <!-- Der Prüfbereich als Property, damit die Änderungsprüfung ihn je Lauf auf die
+                     berührten Klassen verengen kann (-Dpit.targetClasses=…). Der Default sind die
+                     bisherigen vier Muster; ein Aufruf ohne die Property prüft unverändert alles.
+                     Kommagetrennt, weil Maven eine Zeichenkette für einen Listenparameter an den
+                     Kommata trennt.
+
+                     Scope: gemutiert werden nur die unit-getesteten Klassen —
+                     Application-Schicht (Services + Werte/Properties), Domäne und die
+                     logiktragenden Composition-Root-Klassen aus config (#465).
+                     Analog zu den JaCoCo-<excludes> (web/infrastructure/main).
+
+                     ratelimit.web traegt keine Controller, sondern die
+                     spoofsichere Herkunftsaufloesung der Zaehlbremse
+                     (ClientOriginResolver, Issue #898, Plan #892 E2): reine,
+                     vollstaendig unit-getestete Logik. An ihr haengt, ob die
+                     Bremse ueberhaupt wirkt — sie unter den pauschalen
+                     web-Ausschluss fallen zu lassen, fuehrte genau diese Klasse
+                     am Mutationsgate vorbei (gleiche Begruendung wie bei den
+                     Verhaltensklassen in config, #465). -->
+                <pit.targetClasses>org.mwolff.manban.*.application.*,org.mwolff.manban.*.domain.*,org.mwolff.manban.config.*,org.mwolff.manban.ratelimit.web.*</pit.targetClasses>
             </properties>
             <build>
                 <plugins>
@@ -868,24 +897,11 @@
                                 <feature>+FANN(annotation[Generated] annotation[DoNotMutate] annotation[CoverageIgnore] annotation[ExcludeFromJacocoGeneratedReport])</feature>
                             </features>
 
-                            <!-- Scope: gemutiert werden nur die unit-getesteten Klassen —
-                                 Application-Schicht (Services + Werte/Properties), Domäne und die
-                                 logiktragenden Composition-Root-Klassen aus config (#465).
-                                 Analog zu den JaCoCo-<excludes> (web/infrastructure/main). -->
-                            <targetClasses>
-                                <param>org.mwolff.manban.*.application.*</param>
-                                <param>org.mwolff.manban.*.domain.*</param>
-                                <param>org.mwolff.manban.config.*</param>
-                                <!-- ratelimit.web traegt keine Controller, sondern die
-                                     spoofsichere Herkunftsaufloesung der Zaehlbremse
-                                     (ClientOriginResolver, Issue #898, Plan #892 E2): reine,
-                                     vollstaendig unit-getestete Logik. An ihr haengt, ob die
-                                     Bremse ueberhaupt wirkt — sie unter den pauschalen
-                                     web-Ausschluss fallen zu lassen, fuehrte genau diese Klasse
-                                     am Mutationsgate vorbei (gleiche Begruendung wie bei den
-                                     Verhaltensklassen in config, #465). -->
-                                <param>org.mwolff.manban.ratelimit.web.*</param>
-                            </targetClasses>
+                            <!-- Scope: siehe die Property pit.targetClasses oben; sie trägt die
+                                 vier Default-Muster samt ihrer Begründung. Das Element steht hier
+                                 als reine Property-Expression, damit die Änderungsprüfung den
+                                 Bereich je Lauf verengen kann. -->
+                            <targetClasses>${pit.targetClasses}</targetClasses>
                             <excludedClasses>
                                 <!-- Controller/DTOs (nur via IT abgedeckt). Modulweise
                                      aufgezaehlt statt als org.mwolff.manban.*.web.*, damit das
@@ -934,7 +950,7 @@
                                  JaCoCo-Ausnahme — aus der Mutation genommen.
                                  Eine eigene Test-Strength-Schwelle bietet pitest-maven nicht als
                                  Parameter; sie liegt bei erreichten 100 % gleichauf. -->
-                            <mutationThreshold>100</mutationThreshold>
+                            <mutationThreshold>${pit.marke}</mutationThreshold>
                         </configuration>
                     </plugin>
                 </plugins>
