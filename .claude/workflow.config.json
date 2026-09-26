@@ -69,6 +69,7 @@
       "stufe": "merge"
     }
   ],
+  "mutationCommand": "",
   "mainBranch": "main",
   "productionBranch": "production",
   "reviewScope": "diff",
