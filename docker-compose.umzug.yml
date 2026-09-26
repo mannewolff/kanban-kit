@@ -1,0 +1,134 @@
+# Umzugs-Overlay: die vorhandenen Anhaenge einmalig aus dem alten Speicher in den neuen
+# (Issue #1230, Plan #1222, E13/E18). Vollstaendige Anleitung: docs/betrieb.md, Abschnitt
+# "Umstellung des Objektspeichers" — hier steht nur, was die Datei tut.
+#
+# Zuschalten (Reihenfolge zaehlt: dieses Overlay kommt ZULETZT, es ueberschreibt die Adresse,
+# die das Produktions-Overlay setzt):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#                  -f docker-compose.backup.yml -f docker-compose.altspeicher.yml \
+#                  -f docker-compose.umzug.yml up -d
+#
+# Zwei Dinge auf einmal, und beide nur voruebergehend:
+#   1. Anwendung und Anhang-Spiegel bleiben bei der ALTEN Adresse. Nur so laesst sich die Vorkopie
+#      im laufenden Betrieb fahren — sonst waere das Wartungsfenster die ganze Kopierzeit. Und
+#      spiegelte die Sicherung in dieser Zeit den neuen, noch leeren Speicher, blieben die
+#      Anhaenge, die waehrenddessen entstehen, ungesichert.
+#   2. Der Einmal-Dienst manban-umzug kopiert und prueft. Er laeuft einmal und beendet sich; sein
+#      Ergebnis steht im Exitcode. `rclone copy` (nicht `sync`) loescht auf der Zielseite nie:
+#      Anhaenge sind unveraenderlich, es kommen nur welche hinzu oder fallen weg — ein zwischen
+#      Vorkopie und Umstieg geloeschter bleibt im neuen Speicher als verwaistes Objekt liegen, und
+#      verwaiste sind erlaubt. Ein `sync` wuerde dagegen gerade das Neue wegraeumen.
+#
+# Kein neues Abbild: Beide Dienste bauen aus backup/, das sein `rclone` schon mitbringt (Issue
+# #1228). Eine neue fremde Bezugsquelle fuer einen einmaligen Vorgang muesste in
+# scripts/bausteine.json geführt und laufend auf Beziehbarkeit geprueft werden.
+#
+# Wann es entfaellt: mit Version 2.13.0 — zusammen mit docker-compose.altspeicher.yml und dem
+# Volume minio_data.
+services:
+  # Die Anwendung liest weiter den alten Speicher. Der environment-Block des Basis-Compose wird
+  # nur an diesen drei Schluesseln ueberschrieben; alles andere bleibt, wie es dort steht.
+  manban-api:
+    environment:
+      MANBAN_STORAGE_ENDPOINT: ${UMZUG_ALT_ENDPOINT:-http://minio:9000}
+      MANBAN_STORAGE_ACCESS_KEY: ${UMZUG_ALT_ACCESS_KEY}
+      MANBAN_STORAGE_SECRET_KEY: ${UMZUG_ALT_SECRET_KEY}
+
+  # Derselbe Griff fuer den Anhang-Spiegel der Sicherung.
+  #
+  # `build:` steht hier, obwohl docker-compose.backup.yml denselben Dienst schon baut: Ohne diese
+  # Angabe waere `docker compose -f docker-compose.yml -f docker-compose.umzug.yml config` ein
+  # Fehler — ein Dienst ohne Abbild und ohne Baukontext. So laesst sich dieses Overlay auch ohne
+  # das Sicherungs-Overlay pruefen. Der Kontext ist derselbe, das Abbild also dasselbe.
+  manban-backup:
+    build:
+      context: ./backup
+    environment:
+      RCLONE_CONFIG_SPEICHER_ENDPOINT: ${UMZUG_ALT_ENDPOINT:-http://minio:9000}
+      RCLONE_CONFIG_SPEICHER_ACCESS_KEY_ID: ${UMZUG_ALT_ACCESS_KEY}
+      RCLONE_CONFIG_SPEICHER_SECRET_ACCESS_KEY: ${UMZUG_ALT_SECRET_KEY}
+
+  # Der Einmal-Dienst. Beide Seiten als rclone-S3-Remotes ueber Umgebungsvariablen, kein Geheimnis
+  # in dieser Datei — nur Variablenverweise, und bewusst OHNE `:-`-Vorgabe: Eine Vorgabe liesse den
+  # Umzug mit den im oeffentlichen Repository stehenden Standardwerten laufen, ohne dass etwas
+  # anschlaegt (dieselbe Luecke wie in Issue #1227). Fehlt ein Wert, scheitert rclone mit einem
+  # Zugriffsfehler, und der Exitcode sagt es.
+  manban-umzug:
+    build:
+      context: ./backup
+    # Ein Umzug, der nach einem Reboot von selbst noch einmal anlaeuft, waere keiner.
+    restart: "no"
+    environment:
+      # rclone soll gar keine Konfigurationsdatei lesen: Beide Remotes stehen unten in der
+      # Umgebung. Das Abbild zeigt RCLONE_CONFIG auf die eingehaengte Datei des Betreibers, die
+      # sein Ziel ausser Haus beschreibt — die hat mit dem Umzug nichts zu tun.
+      RCLONE_CONFIG: ""
+      RCLONE_CONFIG_ALT_TYPE: s3
+      RCLONE_CONFIG_ALT_PROVIDER: Minio
+      RCLONE_CONFIG_ALT_ENDPOINT: ${UMZUG_ALT_ENDPOINT:-http://minio:9000}
+      RCLONE_CONFIG_ALT_ACCESS_KEY_ID: ${UMZUG_ALT_ACCESS_KEY}
+      RCLONE_CONFIG_ALT_SECRET_ACCESS_KEY: ${UMZUG_ALT_SECRET_KEY}
+      RCLONE_CONFIG_NEU_TYPE: s3
+      # `Other` ist rclones Sammelbegriff fuer einen S3-Dienst, der weder AWS noch einer der
+      # namentlich bekannten ist — SeaweedFS gehoert dazu (wie in docker-compose.backup.yml).
+      RCLONE_CONFIG_NEU_PROVIDER: Other
+      RCLONE_CONFIG_NEU_ENDPOINT: http://objektspeicher:8333
+      RCLONE_CONFIG_NEU_ACCESS_KEY_ID: ${OBJEKTSPEICHER_ROOT_USER}
+      RCLONE_CONFIG_NEU_SECRET_ACCESS_KEY: ${OBJEKTSPEICHER_ROOT_PASSWORD}
+    # Ein `entrypoint`-Override verwirft das CMD des Abbilds — der Dienst-Modus von backup.sh
+    # kommt hier also nicht mit, und ein leeres `command:` ist nicht noetig.
+    #
+    # `sh -ec` bricht beim ersten Fehlschlag ab; damit steht das Ergebnis im Exitcode.
+    #
+    # Das Skript kommt ohne eine einzige Shell-Variable aus, und darum ohne ein `$` — jedes `$`
+    # muesste im YAML als `$$` stehen, weil Compose selbst interpoliert, und ein vergessenes
+    # Zeichen verbrauchte still das Wartungsfenster. Statt einer Warteschleife mit Zaehler zaehlt
+    # rclone seine Versuche selbst (`--retries`), und statt einer Zahl in einer Variablen prueft
+    # `grep -q .`, dass ueberhaupt etwas da ist. Der Bucketname steht deshalb mehrfach als
+    # Compose-Ausdruck — dasselbe Muster wie im Einstiegspunkt des Speicherdienstes.
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        echo 'Umzug der Anhaenge: alt -> neu, Bucket ${MANBAN_STORAGE_BUCKET:-manban}'
+
+        # Warten, bis der alte Speicher antwortet: Bei `up -d` startet dieser Dienst neben ihm, und
+        # `depends_on` kann ihn nicht nennen — er steht in docker-compose.altspeicher.yml, und ein
+        # depends_on auf einen Dienst aus einem anderen Overlay liesse schon `docker compose config`
+        # scheitern, wenn jenes nicht mitgegeben ist.
+        rclone lsd alt: --retries 30 --retries-sleep 2s > /dev/null
+
+        echo 'Quelle vor dem Kopieren:'
+        rclone size "alt:${MANBAN_STORAGE_BUCKET:-manban}"
+
+        # Dass ueberhaupt etwas da ist, wird vor dem Kopieren geprueft: Eine leere Quelle liefe
+        # sonst mit Exitcode 0 durch, und die Pruefung darunter meldete "keine Unterschiede" — ein
+        # Umzug, der nichts umgezogen hat, saehe aus wie ein gelungener. Das ist die
+        # gefaehrlichste Verwechslung dieses Vorgangs.
+        rclone lsf --files-only --recursive "alt:${MANBAN_STORAGE_BUCKET:-manban}" | grep -q . || {
+          echo 'FEHLSCHLAG: die Quelle ist leer.' >&2
+          echo 'Falscher Bucketname, oder der Zugang liest einen anderen Speicher?' >&2
+          exit 78
+        }
+
+        rclone copy --stats 30s --stats-one-line \
+          "alt:${MANBAN_STORAGE_BUCKET:-manban}" "neu:${MANBAN_STORAGE_BUCKET:-manban}"
+
+        # `--one-way` prueft, dass alles aus der Quelle im Ziel liegt, und stoert sich nicht an
+        # Zusaetzlichem im Ziel: Ein Anhang, der zwischen Vorkopie und Umstieg geloescht wurde,
+        # liegt dort noch als verwaistes Objekt. Verwaiste sind erlaubt, fehlende nicht — ohne
+        # dieses Flag braeche gerade der gelungene Umzug ab.
+        #
+        # `--download` vergleicht byteweise statt ueber Pruefsummen: Die beiden Dienste bilden ETags
+        # nicht gleich (Mehrteil-Uploads), und ein `check`, der den Vergleich stillschweigend
+        # ueberspringt, weil es keine gemeinsame Pruefsumme gibt, waere kein Nachweis. Er kostet die
+        # Bandbreite eines zweiten Durchlaufs — die Vorkopie misst, wie lange das dauert.
+        rclone check --one-way --download \
+          "alt:${MANBAN_STORAGE_BUCKET:-manban}" "neu:${MANBAN_STORAGE_BUCKET:-manban}"
+
+        echo 'Ziel nach dem Kopieren:'
+        rclone size "neu:${MANBAN_STORAGE_BUCKET:-manban}"
+        echo 'Umzug vollstaendig: jedes Objekt der Quelle liegt byteweise gleich im Ziel.'
+    depends_on:
+      objektspeicher:
+        condition: service_healthy

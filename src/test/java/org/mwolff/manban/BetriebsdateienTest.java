@@ -48,6 +48,9 @@ class BetriebsdateienTest {
   /** Rückweg-Overlay mit dem alten Speicherdienst (Plan #1222, E13). */
   private static final Path ALTSPEICHER_OVERLAY = Path.of("docker-compose.altspeicher.yml");
 
+  /** Umzugs-Overlay des einmaligen Speicherwechsels (Issue #1230). */
+  private static final Path UMZUG_OVERLAY = Path.of("docker-compose.umzug.yml");
+
   /** Die Anwendungskonfiguration, die die Speicher-Variablen ausliest. */
   private static final Path ANWENDUNGS_KONFIGURATION =
       Path.of("src/main/resources/application.yml");
@@ -117,6 +120,9 @@ class BetriebsdateienTest {
     assertThat(wirksameZeilenMit(PROD_OVERLAY, NICHT_BEZIEHBARES_ABBILD))
         .as("%s darf %s nicht mehr fahren", PROD_OVERLAY, NICHT_BEZIEHBARES_ABBILD)
         .isEmpty();
+    assertThat(wirksameZeilenMit(UMZUG_OVERLAY, NICHT_BEZIEHBARES_ABBILD))
+        .as("%s liest den alten Speicher, fährt ihn aber nicht selbst", UMZUG_OVERLAY)
+        .isEmpty();
 
     assertThat(wirksameZeilenMit(ALTSPEICHER_OVERLAY, NICHT_BEZIEHBARES_ABBILD))
         .as("%s ist der Rückweg und behält das alte Abbild", ALTSPEICHER_OVERLAY)
@@ -135,7 +141,12 @@ class BetriebsdateienTest {
   @Test
   void keineAusgelieferteBetriebsdateiNenntDieAbgeloestenSpeicherVariablen() throws IOException {
     for (Path datei :
-        List.of(BASIS_STACK, PROD_OVERLAY, UMGEBUNGS_VORLAGE, ANWENDUNGS_KONFIGURATION)) {
+        List.of(
+            BASIS_STACK,
+            PROD_OVERLAY,
+            UMZUG_OVERLAY,
+            UMGEBUNGS_VORLAGE,
+            ANWENDUNGS_KONFIGURATION)) {
       assertThat(wirksameZeilenMit(datei, ALTES_VARIABLEN_PRAEFIX))
           .as("abgelöste Speicher-Variablen in %s", datei)
           .isEmpty();

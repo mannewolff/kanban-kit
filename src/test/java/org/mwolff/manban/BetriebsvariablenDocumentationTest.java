@@ -29,12 +29,19 @@ import org.junit.jupiter.api.Test;
  * aus <b>Tabellenzeilen</b>: Der Fließtext nennt einzelne Variablen ebenfalls, und ein dort
  * erwähnter Name ist keine Zusicherung, dass er durchgereicht werden muss.
  *
+ * <p><b>Ausgenommen sind die Abschnitte in {@link #KEINE_ZUSICHERUNG}</b> (Issue #1230): Der
+ * Umzugsabschnitt führt eine Zuordnung <i>abgelöster</i> Namen auf ihre Nachfolger. Die alte Spalte
+ * ist kein Versprechen, dass ein Wert ankommt — sie sagt das Gegenteil, nämlich dass er es nicht
+ * mehr tut. Ausgenommen wird der Abschnitt und nicht das Format: Wer die Zuordnung später als Liste
+ * statt als Tabelle schreibt, umgeht damit nichts, und jede Variable außerhalb dieser Abschnitte
+ * zählt weiterhin.
+ *
  * <p><b>Gezählt werden mehrere Blöcke, nicht mehrere Dateien am Stück</b> (Issue #831): Die
  * Sicherung läuft in einem eigenen Dienst und wird über ein Overlay zugeschaltet — ihre Variablen
  * erreichen {@code manban-backup} in {@code docker-compose.backup.yml}, nicht die Anwendung. Der
  * Schnitt auf einzelne Dienste bleibt trotzdem erhalten: Eine dokumentierte Variable muss in
  * mindestens einem der unten aufgeführten Blöcke stehen, und eine bei {@code postgres} oder {@code
- * minio} vergessene zählt weiterhin nicht.
+ * objektspeicher} vergessene zählt weiterhin nicht.
  */
 class BetriebsvariablenDocumentationTest {
 
@@ -51,6 +58,13 @@ class BetriebsvariablenDocumentationTest {
           new Herkunft(Path.of("docker-compose.backup.yml"), "manban-backup:"));
 
   private static final Pattern VARIABLE = Pattern.compile("MANBAN_[A-Z0-9_]+");
+
+  /**
+   * Abschnitte, deren Tabellenzeilen keine Zusicherung sind — siehe Klassen-Javadoc. Die
+   * Überschriften stehen wörtlich, damit eine Umbenennung des Abschnitts die Ausnahme verliert und
+   * nicht still weiterläuft.
+   */
+  private static final Set<String> KEINE_ZUSICHERUNG = Set.of("## Umstellung des Objektspeichers");
 
   /** Compose-Datei und der Dienst darin, dessen {@code environment} zählt. */
   private record Herkunft(Path datei, String dienst) {}
@@ -78,12 +92,16 @@ class BetriebsvariablenDocumentationTest {
 
   /**
    * Die Variablennamen aus den Tabellenzeilen — alles, was nach {@code strip()} mit {@code |}
-   * beginnt.
+   * beginnt, außer in den Abschnitten aus {@link #KEINE_ZUSICHERUNG}.
    */
   private static Set<String> ausTabellenzeilen(List<String> zeilen) {
     Set<String> namen = new LinkedHashSet<>();
+    boolean zusichernderAbschnitt = true;
     for (String zeile : zeilen) {
-      if (!zeile.strip().startsWith("|")) {
+      if (zeile.startsWith("## ")) {
+        zusichernderAbschnitt = !KEINE_ZUSICHERUNG.contains(zeile.strip());
+      }
+      if (!zusichernderAbschnitt || !zeile.strip().startsWith("|")) {
         continue;
       }
       Matcher treffer = VARIABLE.matcher(zeile);
