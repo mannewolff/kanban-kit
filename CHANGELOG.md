@@ -7,6 +7,47 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+## [2.11.0] – 2026-09-26
+
+- chore: v2.10.2
+- Sechs ueberlebende Mutanten des Pool-Rueckbaus getoetet ([#1220](https://github.com/mannewolff/kanban-kit/issues/1220))
+- Mutationspruefung als Pflichtcheck eingetragen, mutationCommand entfaellt
+- Mutationspruefung: Guides nachziehen und Config-Ausschnitt uebergeben ([#1216](https://github.com/mannewolff/kanban-kit/issues/1216))
+- Pruefbereich scripts: node --test scripts/*.test.mjs laeuft als Pflichtcheck
+- Mutationspruefung: Vollauf beider Seiten mit Schwelle und Gedaechtnisdatei ([#1215](https://github.com/mannewolff/kanban-kit/issues/1215))
+- Mutationspruefung Backend: Properties im pit-Profil und Auswertung ([#1214](https://github.com/mannewolff/kanban-kit/issues/1214))
+- Mutationspruefung Frontend: Auswertung, Ausnahme und Altlast-Vermerk ([#1213](https://github.com/mannewolff/kanban-kit/issues/1213))
+- Mutationsprüfung: Treiber mit Anker, Prüfbereich und Ausgabeform ([#1212](https://github.com/mannewolff/kanban-kit/issues/1212))
+- AutomationSchalterDocumentationTest wird zum IT ([#1209](https://github.com/mannewolff/kanban-kit/issues/1209))
+- chore: v2.10.1
+- Pflichtchecks gestuft: je Paket schneller Maven-Lauf, volles mvn verify erst beim Push
+- Doku-Navigation zeigt auf den Spezifikations-Import ([#1206](https://github.com/mannewolff/kanban-kit/issues/1206))
+- Dokumentation: Ideen-Pool raus, Spezifikations-Import rein ([#1206](https://github.com/mannewolff/kanban-kit/issues/1206))
+- Migration V44 schliesst den board-losen Kartenzustand aus ([#1205](https://github.com/mannewolff/kanban-kit/issues/1205))
+- Ideen-Pool im Backend zurueckbauen, Karte hat immer Board, Spalte und Nummer ([#1204](https://github.com/mannewolff/kanban-kit/issues/1204))
+- Kanban-Ingest legt immer board-gebunden an ([#1203](https://github.com/mannewolff/kanban-kit/issues/1203))
+- Pool-Spuren aus der Oberflaeche entfernen ([#1202](https://github.com/mannewolff/kanban-kit/issues/1202))
+- Spezifikations-Import zieht auf das Board, Ideen-Seite entfaellt ([#1201](https://github.com/mannewolff/kanban-kit/issues/1201))
+- gate geändert
+- Board-gebundener Stapel-Endpunkt fuer die Kartenanlage ([#1200](https://github.com/mannewolff/kanban-kit/issues/1200))
+- chore: v2.10.0
+- chore: v2.9.2
+- Deploy-Workflow startet das Sicherungs-Overlay mit ([#1198](https://github.com/mannewolff/kanban-kit/issues/1198))
+- chore: v2.9.1
+- Haengenden Run von Hand als beendet kennzeichnen ([#1197](https://github.com/mannewolff/kanban-kit/issues/1197))
+- Aktive Runs geht in Aktueller Status auf ([#1193](https://github.com/mannewolff/kanban-kit/issues/1193))
+- Abschnitte beendeter Runs nennen den Start, Leersaetze behaupten nichts Falsches ([#1191](https://github.com/mannewolff/kanban-kit/issues/1191))
+- Marke am Lauf ohne Arbeit nennt "nichts zu tun" und liest den Befund ([#1190](https://github.com/mannewolff/kanban-kit/issues/1190))
+- Frontend-Tests halten Last stand: Zeitlimit und Wartezeit angehoben ([#1196](https://github.com/mannewolff/kanban-kit/issues/1196))
+- Lauf ohne Arbeit nennt seinen Grund in Beendete Runs statt in der Stoerung ([#1189](https://github.com/mannewolff/kanban-kit/issues/1189))
+- Frontend liest den Lauf ohne Arbeit allein am Befund ([#1186](https://github.com/mannewolff/kanban-kit/issues/1186))
+- Ein Lauf ohne Arbeit ist keine Stoerung, das massgebliche Paket geht vor ([#1185](https://github.com/mannewolff/kanban-kit/issues/1185))
+- chore: v2.9.0
+- chore: v2.8.1
+- Design-Guide und Benutzerdoku ziehen den entfallenen Statistikteil nach ([#1188](https://github.com/mannewolff/kanban-kit/issues/1188))
+- Verwaisten Verbrauchs-Client und Textrechnungen ohne Aufrufer abbauen ([#1187](https://github.com/mannewolff/kanban-kit/issues/1187))
+- Laeufe-Seite: der Statistikteil verschwindet, die Seite beginnt mit den Laeufen ([#1184](https://github.com/mannewolff/kanban-kit/issues/1184))
+
 ## [2.10.0] – 2026-09-25
 
 - chore: v2.9.2
