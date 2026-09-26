@@ -16,7 +16,7 @@
 #   * das Verfallen: dass die juengste Basissicherung nie faellt, und dass ein Anhang, der noch an
 #     einer Karte haengt, im Spiegel bleibt, egal wie alt er ist (Gegenprobe zu E5)
 #
-# Was `age`, `rclone`, `mc` und `psql` tun, beweist erst backup/test/restore-roundtrip.sh
+# Was `age`, `rclone` und `psql` tun, beweist erst backup/test/restore-roundtrip.sh
 # (Issue #832). Hier geht es um die Entscheidungen davor.
 #
 # Kein Teil von `mvn verify` (E14): Die Sicherung lebt ausserhalb der Anwendung, und ihre Proben
@@ -209,13 +209,11 @@ frist "sieben" FEHLER
 
 # --- Die Abbruchpfade der Rueckholung --------------------------------------
 #
-# Sie greifen alle, BEVOR irgendetwas eingespielt wird, und brauchen darum weder tar noch mc noch
+# Sie greifen alle, BEVOR irgendetwas eingespielt wird, und brauchen darum weder tar noch
 # rclone. Genau das macht sie hier pruefbar — und sie tragen die beiden Zusagen, auf die es
 # ankommt: AK2 (ohne privaten Schluessel kein Weg ausser Haus) und AK3 (ein Zeitpunkt hinter dem
 # Spiegel wird abgewiesen, und es wird nichts eingespielt).
 
-MINIO_ROOT_USER=probe
-MINIO_ROOT_PASSWORD=probe
 MANBAN_BACKUP_TARGET="$raum/ziel"
 SICHERUNG="$raum/sicherungen"
 BASIS_DIR="$SICHERUNG/basis"
@@ -231,6 +229,21 @@ rueckhol() {
   rueckhol_hauptlauf "$@" > /dev/null 2>&1 || ist=$?
   melde "restore.sh $*" "$ist" "$erwartet"
 }
+
+# Die Pflichtfelder des Objektspeichers (Issue #1228). Seit dem Wechsel von `mc` auf `rclone` ist
+# der Speicher ein rclone-Remote namens `speicher`; seine Zugangsdaten kommen aus der Umgebung,
+# nicht mehr aus einem `mc alias`. Geprueft wird hier beides: dass die Rueckholung ohne sie gar
+# nicht erst anfaengt, und dass sie die alten Namen nicht mehr verlangt — eine Pruefung, die noch
+# nach MINIO_ROOT_* fragt, liesse einen richtig eingerichteten Container scheitern.
+ohne_zugang=$(rueckhol_hauptlauf 2026-09-23T07:00:00Z 2>&1 || true)
+melde "Rueckholung verlangt die Zugangsdaten des speicher-Remotes" \
+  "$(printf '%s\n' "$ohne_zugang" \
+    | grep -c 'RCLONE_CONFIG_SPEICHER_ACCESS_KEY_ID RCLONE_CONFIG_SPEICHER_SECRET_ACCESS_KEY')" 1
+melde "Rueckholung verlangt die MINIO_ROOT_*-Namen nicht mehr" \
+  "$(printf '%s\n' "$ohne_zugang" | grep -c 'MINIO_ROOT')" 0
+
+RCLONE_CONFIG_SPEICHER_ACCESS_KEY_ID=probe
+RCLONE_CONFIG_SPEICHER_SECRET_ACCESS_KEY=probe
 
 # Ohne den verwahrten privaten Schluessel gibt es keinen Weg aus der Kopie ausser Haus (AK2, AK8).
 rueckhol 2 2026-09-23T08:00:00Z --quelle aussenhaus

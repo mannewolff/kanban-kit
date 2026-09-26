@@ -33,11 +33,17 @@
 #   * E5 — ein Rueckholzeitpunkt hinter dem letzten Anhang-Spiegel wird abgewiesen, und es wird
 #     dabei nichts eingespielt.
 #
+# Dazu der Nachweis aus E15 (Issue #1228): Ein Anhang-Spiegel, der noch mit `mc mirror` entstanden
+# ist, wird mit dem neuen Werkzeug `rclone` in den neuen Objektspeicher zurueckgeholt und kommt von
+# dort byteweise unveraendert wieder heraus — eine Sicherung von vor der Umstellung braucht also
+# keinen Uebersetzungsschritt. Die Fixtur liegt in backup/test/spiegel-vor-umstellung/; warum sie
+# eingecheckt ist und nicht zur Laufzeit entsteht, steht in ihrer LIESMICH.md.
+#
 # Und eine dritte auf Zuruf: `--sabotage` verfaelscht den Anhang in der Kopie ausser Haus, nachdem
 # sie entstanden ist. Die Probe muss dann scheitern — sonst prueft der byteweise Vergleich nichts.
 #
-# Kein Teil von `mvn verify` (E14): AbstractIntegrationTest teilt Postgres und MinIO als statische
-# Singletons ueber die ganze IT-Suite; eine Probe, die genau diese Container verwirft, risse jede
+# Kein Teil von `mvn verify` (E14): AbstractIntegrationTest teilt Postgres und Objektspeicher als
+# statische Singletons ueber die ganze IT-Suite; eine Probe, die genau diese Container verwirft, risse jede
 # danach laufende Klasse mit. Sie laeuft von Hand und vor jedem Release, das die Sicherung beruehrt.
 set -euo pipefail
 
@@ -49,13 +55,13 @@ PORT=${MANBAN_PROBE_PORT:-18080}
 BASIS_URL="http://127.0.0.1:$PORT"
 
 # Caddy bleibt aus: Es belegte 80 und 443 und brauchte TLS-Namen, die eine Probe nicht hat.
-DIENSTE=(postgres minio manban-api manban-backup)
+DIENSTE=(postgres objektspeicher manban-api manban-backup)
 
 # Compose bildet die Volumenamen aus Projektname und Schluessel; nach Schritt 4 gibt es sie
 # zeitweise nicht mehr, und ein Nachschlagen ginge dann ins Leere. Darum hier aufgeschrieben und
 # direkt nach dem Hochfahren gegen die Wirklichkeit geprueft.
 VOL_PG="${PROJEKT}_postgres_data"
-VOL_MINIO="${PROJEKT}_minio_data"
+VOL_SPEICHER="${PROJEKT}_objektspeicher_data"
 VOL_WAL="${PROJEKT}_wal_archiv"
 VOL_SICHERUNG="${PROJEKT}_backup_data"
 VOL_AUSSENHAUS="${PROJEKT}_aussenhaus"
@@ -155,14 +161,14 @@ compose() {
 
 aufraeumen() {
   log ''
-  log "== 7/7 Abraeumen: Stack und Wegwerf-Volumes"
+  log "== 8/8 Abraeumen: Stack und Wegwerf-Volumes"
   if [ -n "$ENVDATEI" ]; then
     compose down --volumes --remove-orphans > /dev/null 2>&1 || true
   fi
   # Zusaetzlich namentlich: Ein Volume, das Schritt 5 ueber `run -v` neu anlegen liess, traegt
   # keine Compose-Label und faellt sonst durch `down --volumes` hindurch.
   docker volume rm -f \
-    "$VOL_PG" "$VOL_MINIO" "$VOL_WAL" "$VOL_SICHERUNG" "$VOL_AUSSENHAUS" > /dev/null 2>&1 || true
+    "$VOL_PG" "$VOL_SPEICHER" "$VOL_WAL" "$VOL_SICHERUNG" "$VOL_AUSSENHAUS" > /dev/null 2>&1 || true
   if [ -n "$RAUM" ]; then
     rm -rf "$RAUM"
   fi
@@ -208,8 +214,8 @@ cat > "$ENVDATEI" << ENV
 POSTGRES_DB=$PG_DB
 POSTGRES_USER=$PG_USER
 POSTGRES_PASSWORD=$(zufall 12)
-MINIO_ROOT_USER=manbanprobe
-MINIO_ROOT_PASSWORD=$(zufall 12)
+OBJEKTSPEICHER_ROOT_USER=manbanprobe
+OBJEKTSPEICHER_ROOT_PASSWORD=$(zufall 12)
 MANBAN_BASE_URL=$BASIS_URL
 MANBAN_DEV_MODE=true
 MANBAN_SESSION_SECRET=$(zufall 24)
@@ -343,15 +349,15 @@ rueckholung() {
 }
 
 # ---------------------------------------------------------------------------
-# 1/7 — Stack hochfahren und Instanz befuellen
+# 1/8 — Stack hochfahren und Instanz befuellen
 # ---------------------------------------------------------------------------
 
-schritt '1/7 Stack hochfahren und Instanz befuellen'
+schritt '1/8 Stack hochfahren und Instanz befuellen'
 
 # Reste eines abgebrochenen frueheren Laufs zuerst weg, sonst erbt diese Probe deren Daten.
 compose down --volumes --remove-orphans > /dev/null 2>&1 || true
 docker volume rm -f \
-  "$VOL_PG" "$VOL_MINIO" "$VOL_WAL" "$VOL_SICHERUNG" "$VOL_AUSSENHAUS" > /dev/null 2>&1 || true
+  "$VOL_PG" "$VOL_SPEICHER" "$VOL_WAL" "$VOL_SICHERUNG" "$VOL_AUSSENHAUS" > /dev/null 2>&1 || true
 
 log 'Sicherungs-Abbild bauen …'
 compose build manban-backup
@@ -371,7 +377,7 @@ printf 'MANBAN_BACKUP_AGE_RECIPIENT=%s\n' "$EMPFAENGER" >> "$ENVDATEI"
 log 'Stack hochfahren (das erste Mal dauert es, die Anwendung wird gebaut) …'
 compose up -d --build --wait --wait-timeout 900 "${DIENSTE[@]}"
 
-for volume in "$VOL_PG" "$VOL_MINIO" "$VOL_WAL" "$VOL_SICHERUNG" "$VOL_AUSSENHAUS"; do
+for volume in "$VOL_PG" "$VOL_SPEICHER" "$VOL_WAL" "$VOL_SICHERUNG" "$VOL_AUSSENHAUS"; do
   if ! docker volume inspect "$volume" > /dev/null 2>&1; then
     log "FEHLER Volume '$volume' gibt es nicht — der Projektname '$PROJEKT' passt nicht zu den"
     log '       erwarteten Namen. Ohne sie kann Schritt 4 nichts verwerfen.'
@@ -406,10 +412,10 @@ ANHANG_ID=$(curl --silent --show-error --fail-with-body \
 log "Projekt $PROJEKT_ID, Board $BOARD_ID, Karte $KARTE_ID, Anhang $ANHANG_ID."
 
 # ---------------------------------------------------------------------------
-# 2/7 — Zeitpunkt merken, Sicherung erzwingen, Kopie ausser Haus abwarten
+# 2/8 — Zeitpunkt merken, Sicherung erzwingen, Kopie ausser Haus abwarten
 # ---------------------------------------------------------------------------
 
-schritt '2/7 Sicherung erzwingen und Zeitpunkt merken'
+schritt '2/8 Sicherung erzwingen und Zeitpunkt merken'
 
 # Die Basissicherung zuerst, dann der Zeitpunkt: Die Rueckholung waehlt die juengste Basis VOR dem
 # Ziel (restore.sh, basis_waehlen). Eine Basis, die nach dem Zielzeitpunkt begonnen hat, kaeme fuer
@@ -444,10 +450,10 @@ pruefe 'kein privater Schluessel in der Umgebung des Sicherungs-Containers' \
 gruppe_auswerten
 
 # ---------------------------------------------------------------------------
-# 3/7 — Weitere Karte; sie muss nach der Rueckholung fehlen
+# 3/8 — Weitere Karte; sie muss nach der Rueckholung fehlen
 # ---------------------------------------------------------------------------
 
-schritt '3/7 Weitere Karte anlegen und das WAL ausser Haus bringen'
+schritt '3/8 Weitere Karte anlegen und das WAL ausser Haus bringen'
 
 sleep 2
 api POST "/api/boards/$BOARD_ID/cards" \
@@ -490,28 +496,28 @@ if [ "$SABOTAGE" = ja ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 4/7 — Die leere Maschine
+# 4/8 — Die leere Maschine
 # ---------------------------------------------------------------------------
 
-schritt '4/7 Datenbank, Objektspeicher, WAL-Archiv und oertliche Sicherung verwerfen'
+schritt '4/8 Datenbank, Objektspeicher, WAL-Archiv und oertliche Sicherung verwerfen'
 
 # Verworfen wird mehr, als AK4 mindestens verlangt: auch das WAL-Archiv und die oertliche
 # Sicherung. Blieben sie stehen, koennte die Rueckholung sich daraus bedienen, und die
 # verschluesselte Kopie ausser Haus — der einzige Weg auf eine wirklich leere Maschine — waere
 # ungeprueft. Uebrig bleibt allein das Ziel ausser Haus.
 compose down --remove-orphans
-docker volume rm -f "$VOL_PG" "$VOL_MINIO" "$VOL_WAL" "$VOL_SICHERUNG" > /dev/null
+docker volume rm -f "$VOL_PG" "$VOL_SPEICHER" "$VOL_WAL" "$VOL_SICHERUNG" > /dev/null
 log 'Datenbank-, Objektspeicher-, WAL- und Sicherungs-Volume sind weg.'
 
 # ---------------------------------------------------------------------------
-# 5/7 — Rueckholung aus der verschluesselten Kopie
+# 5/8 — Rueckholung aus der verschluesselten Kopie
 # ---------------------------------------------------------------------------
 
-schritt '5/7 Rueckholung aus der verschluesselten Kopie ausser Haus'
+schritt '5/8 Rueckholung aus der verschluesselten Kopie ausser Haus'
 
 # Der Objektspeicher muss stehen, bevor zurueckgeholt wird: restore.sh schreibt die Anhaenge
 # hinein. Die Datenbank bleibt aus — ihr Datenverzeichnis entsteht gerade erst.
-compose up -d --wait --wait-timeout 300 minio
+compose up -d --wait --wait-timeout 300 objektspeicher
 
 # Gegenprobe E5, vor der echten Rueckholung und mit leerem Datenverzeichnis: Ein Zeitpunkt hinter
 # dem letzten Anhang-Spiegel wird abgewiesen, und es wird nichts eingespielt.
@@ -545,10 +551,10 @@ compose up -d manban-api
 "$WURZEL/scripts/warte-auf-bereitschaft.sh" "$BASIS_URL/" 300
 
 # ---------------------------------------------------------------------------
-# 6/7 — Was danach da sein muss, und was nicht
+# 6/8 — Was danach da sein muss, und was nicht
 # ---------------------------------------------------------------------------
 
-schritt '6/7 Stand nach der Rueckholung pruefen'
+schritt '6/8 Stand nach der Rueckholung pruefen'
 
 rm -f "$KEKSE"
 api POST /api/auth/login "{\"email\":\"$EMAIL\",\"password\":\"$KENNWORT\"}" > /dev/null
@@ -577,6 +583,50 @@ pruefe 'Anhang ist byteweise derselbe' "$gleich" ja
 
 fehlende=$(api GET /api/admin/storage/reconciliation | json_wert missingObjects.length)
 pruefe 'Abgleich meldet keine fehlenden Objekte' "$fehlende" 0
+gruppe_auswerten
+
+# ---------------------------------------------------------------------------
+# 7/8 — Ein Spiegel von vor der Umstellung (E15, Issue #1228)
+# ---------------------------------------------------------------------------
+
+schritt '7/8 Spiegel von vor der Umstellung zurueckholen'
+
+# Der Weg ist genau der, den restore.sh geht: `anhaenge_zurueck` schreibt den Inhalt von
+# $SPIEGEL_DIR mit `rclone` in den Objektspeicher. Nur der Spiegel selbst kommt hier nicht aus der
+# Kopie ausser Haus, sondern aus der eingecheckten Fixtur — sie ist noch mit `mc mirror` entstanden.
+#
+# Verglichen wird danach byteweise, und zwar ueber den Rueckweg aus dem Speicher heraus: Ein
+# Vergleich der Fixtur gegen sich selbst bewiese nichts. Verglichen werden ausschliesslich die
+# Pfade der Fixtur — im Bucket liegt daneben der echte Anhang der Probe, und der gehoert dort hin.
+alt_spiegel_stand=0
+compose run --rm --no-deps -T \
+  --volume "$PROBE_HEIM/spiegel-vor-umstellung/spiegel:/alt-spiegel:ro" \
+  --entrypoint bash manban-backup -c '
+    # restore.sh laedt backup.sh nach; beide fuehren ihren Hauptlauf nur aus, wenn sie selbst
+    # gestartet wurden — gesourct stellen sie blosse Funktionen bereit.
+    . /usr/local/bin/restore.sh
+    vorgaben_setzen
+    RUECKHOL_QUELLE=lokal
+    rm -rf "$SPIEGEL_DIR" /tmp/zurueck
+    mkdir -p "$SPIEGEL_DIR" /tmp/zurueck
+    cp -a /alt-spiegel/. "$SPIEGEL_DIR/"
+    anhaenge_zurueck > /dev/null
+    rclone copy "$SPEICHER_REMOTE:$MANBAN_STORAGE_BUCKET" /tmp/zurueck
+    anzahl=0
+    while IFS= read -r rel; do
+      cmp "/alt-spiegel/$rel" "/tmp/zurueck/$rel" || exit 1
+      anzahl=$((anzahl + 1))
+    done < <(cd /alt-spiegel && find . -type f -printf "%P\n" | sort)
+    # Eine leere Fixtur wuerde die Schleife ohne einen einzigen Vergleich verlassen und den
+    # Nachweis stillschweigend zu einem gelungenen erklaeren.
+    [ "$anzahl" -ge 3 ] || exit 1
+  ' > "$RAUM/alt-spiegel.log" 2>&1 || alt_spiegel_stand=$?
+if [ "$alt_spiegel_stand" -ne 0 ]; then
+  log "Ausgabe des Laufs:"
+  sed 's/^/    /' "$RAUM/alt-spiegel.log"
+fi
+pruefe 'Spiegel von vor der Umstellung kommt byteweise unveraendert zurueck' \
+  "$alt_spiegel_stand" 0
 gruppe_auswerten
 
 log ''

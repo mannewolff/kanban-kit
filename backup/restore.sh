@@ -243,7 +243,7 @@ pgdata_einspielen() {
 # meldet sie als verwaist, nicht als fehlend, und AK4 verlangt genau das: keine fehlenden.
 anhaenge_zurueck() {
   local roh="$ARBEIT/spiegel" datei rel
-  mkdir -p "$SPIEGEL_DIR" "$MC_CONFIG_DIR"
+  mkdir -p "$SPIEGEL_DIR"
   if [ "$RUECKHOL_QUELLE" != lokal ]; then
     rm -rf "$roh"
     mkdir -p "$roh"
@@ -256,11 +256,20 @@ anhaenge_zurueck() {
     done < <(find "$roh" -type f -name '*.age' | sort)
     rm -rf "$roh"
   fi
-  mc alias set "$MC_ALIAS" "$MANBAN_MINIO_ENDPOINT" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" \
+  # `rclone copy` statt `mc mirror`: Auch hier wird nur geschrieben, nie geloescht (E5). Der
+  # Speicher ist ein rclone-Remote, siehe SPEICHER_REMOTE in backup.sh (Issue #1228).
+  #
+  # Den Bucket legt diese Stelle NICHT mehr an — anders als das fruehere `mc mb
+  # --ignore-existing`. Seit dem Wechsel des Objektspeichers (Issue #1226, E16) entsteht er beim
+  # Start des Speicherdienstes: `PutBucket` verlangt dort das Recht Admin, und die Zugangsdaten
+  # der Sicherung tragen bewusst nur Read, Write und List. Ein Anlegeversuch von hier aus
+  # scheiterte also immer mit 403 — auch dann, wenn der Bucket laengst steht. `--s3-no-check-bucket`
+  # haelt rclone davon ab, ihn vorsorglich selbst anzulegen. Fehlt der Bucket wirklich, scheitert
+  # das Kopieren mit der Meldung des Speichers, und das ist die richtige Stelle dafuer: Ein
+  # Objektspeicher ohne Anhang-Bucket ist nicht bereit, und die Rueckholung darf ihn nicht
+  # heimlich herstellen.
+  rclone copy --s3-no-check-bucket "$SPIEGEL_DIR" "$SPEICHER_REMOTE:$MANBAN_STORAGE_BUCKET" \
     > /dev/null || return 1
-  mc mb --ignore-existing "$MC_ALIAS/$MANBAN_MINIO_BUCKET" > /dev/null || return 1
-  mc mirror --quiet --overwrite "$SPIEGEL_DIR" "$MC_ALIAS/$MANBAN_MINIO_BUCKET" > /dev/null \
-    || return 1
   log "Anhaenge zurueckgeschrieben ($(find "$SPIEGEL_DIR" -type f | wc -l | tr -d ' ') Objekte)."
 }
 
@@ -276,7 +285,7 @@ rueckholung() {
   fi
   zeitpunkt=$(zeitpunkt_postgres "$eingabe")
 
-  local -a pflicht=(MINIO_ROOT_USER MINIO_ROOT_PASSWORD)
+  local -a pflicht=(RCLONE_CONFIG_SPEICHER_ACCESS_KEY_ID RCLONE_CONFIG_SPEICHER_SECRET_ACCESS_KEY)
   [ "$RUECKHOL_QUELLE" = lokal ] || pflicht+=(MANBAN_BACKUP_TARGET)
   pflichtfelder_pruefen "${pflicht[@]}" || return 1
 

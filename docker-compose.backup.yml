@@ -66,16 +66,25 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-manban}
       POSTGRES_USER: ${POSTGRES_USER:-manban}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-manban}
-      # Der Speicher heisst jetzt `objektspeicher` und lauscht auf 8333 (Plan #1222, E1).
-      # Die Variablennamen dieses Dienstes bleiben vorerst, wie sie sind: Seine Umgebung aendert
-      # sich mit dem Wechsel des Spiegel-Werkzeugs von `mc` auf `rclone` (E4) ein zweites Mal —
-      # hier nachgezogen wird nur, was den Stack gueltig haelt. Die Werte kommen aber schon jetzt
-      # aus den neuen Wurzel-Zugangsdaten, damit Sicherung und Anwendung denselben Speicher
-      # ansprechen.
-      MANBAN_MINIO_ENDPOINT: http://objektspeicher:8333
-      MANBAN_MINIO_BUCKET: ${MANBAN_STORAGE_BUCKET:-manban}
-      MINIO_ROOT_USER: ${OBJEKTSPEICHER_ROOT_USER:-manban}
-      MINIO_ROOT_PASSWORD: ${OBJEKTSPEICHER_ROOT_PASSWORD:-manban-objektspeicher}
+      # Welchen Bucket der Anhang-Spiegel liest — derselbe Wert wie bei manban-api, sonst spiegelte
+      # die Sicherung an den Anhaengen vorbei.
+      MANBAN_STORAGE_BUCKET: ${MANBAN_STORAGE_BUCKET:-manban}
+      # Der Objektspeicher als rclone-Remote `speicher` (Issue #1228, E4). Seit dem Wegfall von
+      # `mc` spiegelt `rclone copy` die Anhaenge, und rclone liest ein Remote genauso aus der
+      # Umgebung wie aus einer Datei. Hierher gehoert es und nicht in die eingehaengte
+      # backup/rclone.conf: Die gehoert dem Betreiber und beschreibt sein Ziel ausser Haus — der
+      # Stack darf sie nicht mitschreiben.
+      #
+      # Der Endpunkt steht genau einmal, naemlich hier: Eine zweite Variable mit derselben Adresse
+      # koennte davon abweichen, und dann spiegelte die Sicherung woandershin, als die Anwendung
+      # schreibt.
+      RCLONE_CONFIG_SPEICHER_TYPE: s3
+      # `Other` ist rclones Sammelbegriff fuer einen S3-Dienst, der weder AWS noch einer der
+      # namentlich bekannten ist — SeaweedFS gehoert dazu.
+      RCLONE_CONFIG_SPEICHER_PROVIDER: Other
+      RCLONE_CONFIG_SPEICHER_ENDPOINT: http://objektspeicher:8333
+      RCLONE_CONFIG_SPEICHER_ACCESS_KEY_ID: ${OBJEKTSPEICHER_ROOT_USER:-manban}
+      RCLONE_CONFIG_SPEICHER_SECRET_ACCESS_KEY: ${OBJEKTSPEICHER_ROOT_PASSWORD:-manban-objektspeicher}
       # Ohne Ziel und ohne Empfaenger sichert der Container nichts und sagt das beim Start. Kein
       # `:?` an dieser Stelle: Das liesse schon `docker compose config` scheitern, und die Meldung
       # des Dienstes benennt beide fehlenden Werte auf einmal statt nur den ersten.

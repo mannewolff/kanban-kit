@@ -1,0 +1,4 @@
+# Die Fixtur wird byteweise verglichen (Issue #1228, E15). Git darf an ihr nichts normalisieren —
+# eine umgeschriebene Zeilenendung machte den Nachweis auf einem anderen Rechner ungueltig.
+spiegel/** -text
+spiegel-stand -text
