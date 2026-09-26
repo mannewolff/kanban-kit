@@ -7,12 +7,13 @@ import org.springframework.stereotype.Service;
 /**
  * Plant das Löschen eines Blobs im Objektspeicher über die Outbox ein (Issue #503).
  *
- * <p><strong>Warum nicht direkt löschen:</strong> Eine Spring-Transaktion kann MinIO nicht
- * zurückrollen. Der Löschauftrag wird deshalb in derselben Transaktion wie die Metadaten-Änderung
- * vorgemerkt und nach dem Commit vom Outbox-Worker ausgeführt — Rollback nimmt den Auftrag mit,
- * Commit garantiert die (notfalls wiederholte) Ausführung. Der schlimmste verbleibende Fall ist ein
- * <em>verwaister Blob</em> (unsichtbar, über die {@link StorageReconciliationService
- * Reconciliation} auffindbar) statt eines <em>kaputten Verweises</em> (sichtbar, störend).
+ * <p><strong>Warum nicht direkt löschen:</strong> Eine Spring-Transaktion kann den Objektspeicher
+ * nicht zurückrollen. Der Löschauftrag wird deshalb in derselben Transaktion wie die
+ * Metadaten-Änderung vorgemerkt und nach dem Commit vom Outbox-Worker ausgeführt — Rollback nimmt
+ * den Auftrag mit, Commit garantiert die (notfalls wiederholte) Ausführung. Der schlimmste
+ * verbleibende Fall ist ein <em>verwaister Blob</em> (unsichtbar, über die {@link
+ * StorageReconciliationService Reconciliation} auffindbar) statt eines <em>kaputten Verweises</em>
+ * (sichtbar, störend).
  *
  * <p>Der Idempotenzschlüssel ist der Object-Key selbst (UUID-basiert, dauerhaft eindeutig): Planen
  * Einzel-Löschung und Purge-Kaskade denselben Blob ein, entsteht genau ein Auftrag.

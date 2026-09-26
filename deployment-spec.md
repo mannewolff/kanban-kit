@@ -137,7 +137,7 @@ Zwei Mechanismen sorgen dafür, dass der Produktivbetrieb einen Serverneustart �
 
 ### Neustart nach einem Reboot
 
-[`docker-compose.prod.yml`](docker-compose.prod.yml) setzt `restart: unless-stopped` an `postgres`, `minio` und `manban-api`. Nach einem Neustart des Servers kommt der Stack damit ohne Eingriff wieder hoch.
+[`docker-compose.prod.yml`](docker-compose.prod.yml) setzt `restart: unless-stopped` an `postgres`, `objektspeicher` und `manban-api`. Nach einem Neustart des Servers kommt der Stack damit ohne Eingriff wieder hoch.
 
 - **Nur im Prod-Overlay, nicht im Basis-Compose:** Die Lücke besteht in Produktion. Auf einem Entwicklerrechner soll der lokale Stack nicht bei jedem Start von Docker Desktop mit hochkommen.
 - **`unless-stopped` statt `always`:** Ein bewusstes `docker compose stop` hält damit auch über einen Reboot hinweg.

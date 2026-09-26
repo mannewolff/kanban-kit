@@ -11,7 +11,7 @@ Ergänzend zu [CLAUDE.md](CLAUDE.md), [CLAUDE-security.md](CLAUDE-security.md) u
 - **Sprache:** Java 25 (LTS), keine Preview-Features ohne explizite Freigabe. Die Version wird durch `maven-enforcer-plugin` erzwungen (`requireJavaVersion=[25,26)`), der Build bricht auf jeder anderen JDK-Hauptversion ab. Wenn lokal eine andere JDK aktiv ist, entweder `JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home` setzen oder `maven-toolchains-plugin` über `~/.m2/toolchains.xml` konfigurieren (Beispiel im Repo: `infra/toolchains.xml.example`).
 - **Framework:** Spring Boot 3.5.
 - **Build:** Maven 3.9+. Compiler läuft mit `-Xlint:all -Werror`; jede Warnung bricht den Build. Enforcer prüft zusätzlich `dependencyConvergence` und `banDuplicatePomDependencyVersions`.
-- **Datenbank:** PostgreSQL 16 (Testcontainers in Integrationstests). Objektspeicher für Anhänge: MinIO (S3-kompatibel).
+- **Datenbank:** PostgreSQL 16 (Testcontainers in Integrationstests). Objektspeicher für Anhänge: SeaweedFS (S3-kompatibel).
 - **Schema-Migration:** Flyway (`src/main/resources/db/migration/`, `V<n>__<beschreibung>.sql`).
 - **Paradigma:** Strenges Test-Driven Development (TDD) nach Kent Beck — **Red → Green → Refactor**.
 - **Qualitätsziel:** 100 % Zeilenabdeckung, 100 % Branch-Abdeckung, 100 % Mutationsabdeckung. Keine Ausnahmen ohne dokumentierte Begründung im Code.
@@ -58,7 +58,7 @@ Vor dem Markieren einer Aufgabe als „fertig" ist nachzuweisen:
 
 - **Unit-Tests (≥ 80 % der Tests):** JUnit 5 + AssertJ + Mockito. Schnell, isoliert, deterministisch.
 - **Slice-Tests:** `@WebMvcTest`, `@DataJpaTest`, `@JsonTest` etc. — eingesetzt zielgerichtet, nicht inflationär.
-- **Integrationstests:** `@SpringBootTest` mit Testcontainers für echte Infrastruktur (PostgreSQL, ggf. MinIO). **Niemals** H2 als Postgres-Ersatz.
+- **Integrationstests:** `@SpringBootTest` mit Testcontainers für echte Infrastruktur (PostgreSQL, ggf. Objektspeicher). **Niemals** H2 als Postgres-Ersatz.
 - **Architekturtests:** ArchUnit prüft Schichtentrennung, Paketregeln, Naming (siehe `ArchitectureTest`). Verstoß = Build-Fehler.
   **Achtung, gelernte Falle:** Die `archunit-junit5`-Engine (`@AnalyzeClasses`/`@ArchTest`) wird von Surefire in diesem Projekt **nicht ausgeführt** — die Regeln liefen als „0 Tests" durch, ein bewusst eingebauter Verstoß blieb unentdeckt (falsches Grün). ArchUnit-Regeln deshalb immer als reguläre JUnit-`@Test`-Methoden gegen einen `ClassFileImporter` (mit `DoNotIncludeTests`) schreiben.
 
@@ -236,7 +236,7 @@ Zahl. `--incremental` wird nirgends benutzt — der Vollauf darf nicht auf gespe
 ### 6.4 Datenbank
 
 - Schemamigrationen ausschließlich über **Flyway**. Niemals `hibernate.ddl-auto=update/create` außerhalb von Tests. In Produktion: `validate`.
-- Integrationstests verwenden **dieselbe DB-Engine** wie Produktion (PostgreSQL via Testcontainers). Alle `*IT` erben von `AbstractIntegrationTest`: **eine** geteilte Postgres-/MinIO-Singleton-Instanz für die ganze Suite (`@ServiceConnection`, Start im statischen Initialisierer — bewusst ohne `@Container`, die JUnit-Extension würde pro Klasse stoppen). Datenisolation: vor jeder Testmethode werden alle Fachtabellen geleert (Seed-Tabellen `permission`/`role_permission` bleiben).
+- Integrationstests verwenden **dieselbe DB-Engine** wie Produktion (PostgreSQL via Testcontainers). Alle `*IT` erben von `AbstractIntegrationTest`: **eine** geteilte Postgres-/Objektspeicher-Singleton-Instanz für die ganze Suite (`@ServiceConnection`, Start im statischen Initialisierer — bewusst ohne `@Container`, die JUnit-Extension würde pro Klasse stoppen). Datenisolation: vor jeder Testmethode werden alle Fachtabellen geleert (Seed-Tabellen `permission`/`role_permission` bleiben).
 - Repository-Tests prüfen tatsächliche SQL-Ausführung, nicht nur Spring-Data-Methodennamen.
 - **Prepared Statements / Parameter-Bindung** ist Pflicht. Niemals Benutzereingaben in JPQL/SQL konkatenieren. Siehe [CLAUDE-security.md](CLAUDE-security.md).
 

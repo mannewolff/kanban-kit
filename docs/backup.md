@@ -176,6 +176,13 @@ davor wird eingespielt, und das WAL trägt von dort bis zum gewählten Zeitpunkt
 > **bricht die Rückholung ab und spielt nichts ein** — eine Datenbank, deren Karten auf Anhänge
 > zeigen, die es im Objektspeicher nicht gibt, ist kein wiederhergestellter Stand.
 
+> **Sicherungen von vor der Umstellung des Objektspeichers** (Plan #1222) werden **ohne
+> Umschlüsselung und ohne Übersetzungsschritt** zurückgeholt — genau so, wie hier beschrieben. Der
+> Spiegel ist derselbe Dateibaum wie zuvor: Er entsteht auf Dateiebene, nicht im Format eines
+> bestimmten Speicherdienstes, und der Schlüssel der Verschlüsselung hat sich nicht geändert. Eine
+> Formatmigration alter Sicherungen ist also nicht nötig. Zur Umstellung selbst:
+> [Umstellung des Objektspeichers](betrieb.md#umstellung-des-objektspeichers).
+
 ### Der schnelle Weg
 
 Die Datenbank muss dabei stehen, und ihr Datenverzeichnis muss leer sein — es wird nichts

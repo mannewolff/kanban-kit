@@ -13,7 +13,7 @@ kanban-kit wird deshalb **hinter dieses Traefik** gehängt statt seinen eigenen 
 - `manban-api` hängt am externen Docker-Netz **`web`** und wird über Traefik-Labels
   veröffentlicht (TLS über den certresolver **`mytlschallenge`**).
 - Der lokale **Caddy**-Container startet in Produktion **nicht** (Compose-Profil `local-tls`).
-- **Postgres** und **MinIO** bleiben rein intern (keine Host-Ports, nur das interne Netz).
+- **Postgres** und der **Objektspeicher** bleiben rein intern (keine Host-Ports, nur das interne Netz).
 
 Aktiviert wird das über das Overlay `docker-compose.prod.yml` zusätzlich zur Basis
 `docker-compose.yml`:
@@ -58,7 +58,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
      also nicht mehr daran, dass das Produktions-Overlay verwendet wird.
      `-hex` liefert nur `0-9a-f`, also kein `$`-Escaping nötig.
    - `MANBAN_COOKIE_SECURE=true`
-   - `POSTGRES_PASSWORD`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` — starke Werte.
+   - `POSTGRES_PASSWORD`, `OBJEKTSPEICHER_ROOT_USER`, `OBJEKTSPEICHER_ROOT_PASSWORD` — starke Werte.
    - Mail (Strato): `MANBAN_MAIL_ENABLED=true`, `MANBAN_SMTP_*`, `MANBAN_MAIL_FROM=info@mwolff.org`,
      echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst verifizieren
      (Links landen nur im Log).
@@ -82,7 +82,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
    docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
    docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f manban-api
    ```
-   Erwartet: `manban-api`, `postgres`, `minio` laufen (**kein** `caddy`); Flyway-Migrationen
+   Erwartet: `manban-api`, `postgres`, `objektspeicher` laufen (**kein** `caddy`); Flyway-Migrationen
    grün; „Started ManbanApplication".
 
 6. **Ersten Admin einrichten.** Registrieren → Verifikations-Mail (Strato) bestätigen →
@@ -138,9 +138,9 @@ Hintergrund und die verworfene Alternative (Checkout-Variante) stehen in
   (kein Selbstsigniert-Warnhinweis).
 - Registrierung löst eine **echte** Verifikations-Mail über Strato aus.
 - Das Session-Cookie ist `Secure` + `HttpOnly`.
-- Postgres und MinIO sind von außen **nicht** erreichbar (kein offener Host-Port —
+- Postgres und der Objektspeicher sind von außen **nicht** erreichbar (kein offener Host-Port —
   in `docker compose … config` erscheinen für sie keine `ports:`-Mappings).
-- Smoke-Test: Projekt/Board/Karte anlegen, Datei-Anhang hochladen (MinIO), Kommentar.
+- Smoke-Test: Projekt/Board/Karte anlegen, Datei-Anhang hochladen (Objektspeicher), Kommentar.
 
 Server-Interna (Pfade, Traefik-Details des Gesamt-Setups) liegen im privaten Memory-Vault
 (`Wissen/Toolbox-Deployment-Hostinger.md`), nicht in diesem öffentlichen Repo.

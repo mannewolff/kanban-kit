@@ -15,7 +15,7 @@ Im **Leitstand** steht, was die KI daraus gemacht hat:
 - **Verbrauch** — Token und Kosten je Nacht, Woche, Monat, Vorhaben und Stufe der Kette, getrennt
   nach Läufen und interaktiven Sitzungen.
 
-Technik: Spring Boot (Java 21) + Postgres + MinIO im Backend, React + Vite im Frontend,
+Technik: Spring Boot (Java 21) + Postgres + SeaweedFS als Objektspeicher im Backend, React + Vite im Frontend,
 alles hinter einem Caddy-Reverse-Proxy mit automatischem TLS. Der ganze Stack läuft über
 Docker Compose.
 

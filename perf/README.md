@@ -30,7 +30,7 @@ dieses Projekts mit echten Karten; 30 Minuten mit 3.000 Befehlen pro Minute dara
 den eigenen Prozess anzuhalten und echte Daten mit Testkarten zu vermengen (Plan #995, E13).
 
 Gemessen wird gegen eine **eigens hochgezogene, baugleiche Instanz**: dieselbe Ausstattung wie die
-gehostete (CPU, RAM, Datenträger), derselbe Aufbau aus `docker-compose.yml` (Postgres 16, MinIO,
+gehostete (CPU, RAM, Datenträger), derselbe Aufbau aus `docker-compose.yml` (Postgres 16, Objektspeicher,
 Caddy, App), dieselbe Version. Die Beschaffung dieser zweiten, zeitweiligen Instanz liegt beim
 Menschen. Die Zusage gilt danach für die gehostete Instanz.
 

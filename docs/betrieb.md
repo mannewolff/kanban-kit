@@ -2,7 +2,9 @@
 
 kanban-kit läuft als ein Stack aus vier Containern (über Docker Compose):
 **Caddy** (TLS + Reverse-Proxy), **manban-api** (Spring-Boot-Backend, das auch das
-gebaute Frontend ausliefert), **Postgres** und **MinIO** (Objektspeicher für Anhänge).
+gebaute Frontend ausliefert), **Postgres** und **objektspeicher** (SeaweedFS, S3-kompatibler
+Objektspeicher für Anhänge — siehe
+[Herkunft und Aktualisierung des Objektspeichers](#herkunft-und-aktualisierung-des-objektspeichers)).
 
 ## Voraussetzungen
 
@@ -175,14 +177,63 @@ geladen und ist per `.gitignore` ausgeschlossen).
 > ```
 >
 > Der Abgleich **berichtet nur** und löscht nichts automatisch (ein laufender Upload hat kurzzeitig
-> ein Objekt ohne Metadaten). Verwaiste Objekte bei Bedarf gezielt über die MinIO-Konsole oder
-> `mc rm` entfernen.
+> ein Objekt ohne Metadaten). Verwaiste Objekte bei Bedarf gezielt entfernen:
+>
+> ```
+> docker compose exec manban-backup rclone delete speicher:<bucket>/<key>
+> ```
 
 > **Sicherung ist ausgeliefert aus:** Die fünf `MANBAN_BACKUP_*`-Werte oben wirken erst, wenn das
 > Sicherungs-Overlay zugeschaltet ist (`-f docker-compose.backup.yml`). Das ist der einzige
 > Schalter; `MANBAN_BACKUP_ENABLED` setzt das Overlay selbst und wird nie von Hand gesetzt. Das
 > Zuschalten startet die Datenbank **einmalig** neu (WAL-Archivierung). Vollständige Anleitung:
 > [Sicherung & Wiederherstellung](backup.md).
+
+## Herkunft und Aktualisierung des Objektspeichers
+
+Den Objektspeicher der Anhänge liefert **SeaweedFS** — ein fremdes Projekt, das mitläuft, und
+darum eines, dessen Herkunft und Pflege hier stehen muss.
+
+| | |
+|---|---|
+| Projekt | SeaweedFS (`seaweedfs/seaweedfs` auf GitHub) |
+| Lizenz | Apache-2.0 |
+| Bezugsstelle | Docker-Abbild `chrislusf/seaweedfs`, derzeit Fassung `4.47` |
+| Wer die Fassung pflegt | dieses Projekt — die Fassung ist im Repository festgeschrieben, nicht `latest` |
+| Sicherheitsmeldungen | <https://github.com/seaweedfs/seaweedfs/security/advisories> und die Release-Notes unter <https://github.com/seaweedfs/seaweedfs/releases> |
+
+**Wo die Fassung steht.** An zwei Stellen, und beide gehören zusammen: die Fundstelle, die sie
+fährt (`docker-compose.yml`, Dienst `objektspeicher`, und `AbstractIntegrationTest` für die
+Integrationstests), und die Bausteinliste
+[`scripts/bausteine.json`](../scripts/bausteine.json), die dem Selbsthoster sagt, woher sein Stack
+kommt. Wer eine Fassung anhebt, hebt sie an **beiden** Stellen an; der Pflichtcheck des Bereichs
+`scripts` hält die Liste in beide Richtungen gegen den Bestand.
+
+**Wie ein Selbsthoster eine neue Fassung bekommt.**
+
+1. Release-Notes des Projekts lesen (Link oben) — besonders auf Änderungen an der
+   S3-Identitätsdatei und am Datenverzeichnis achten.
+2. Die Fassung in `docker-compose.yml` und in `scripts/bausteine.json` anheben.
+3. Sicherung ziehen (siehe [Sicherung & Wiederherstellung](backup.md)); das Volume
+   `objektspeicher_data` trägt die Anhänge.
+4. `docker compose up -d --build` — der Dienst kommt mit dem neuen Abbild auf demselben Volume
+   wieder hoch. Ein Formatwechsel ist damit **nicht** verbunden; ändert sich das Datenformat
+   zwischen zwei Fassungen, steht das in den Release-Notes und ist dann ein eigener Vorgang.
+5. Anhang hoch- und herunterladen, dann den Admin-Abgleich
+   (`GET /api/admin/storage/reconciliation`) auf leere Listen prüfen.
+
+**Ob der Bezug überhaupt noch offen ist**, prüft
+[`scripts/bezugspruefung.mjs`](../scripts/bezugspruefung.mjs) anonym auf HTTP-Ebene über alle
+Einträge der Bausteinliste:
+
+```
+node scripts/bezugspruefung.mjs
+```
+
+Das Skript ist bewusst kein lokaler Pflichtcheck — es hängt am Netz. Es läuft als eigener CI-Job
+und wöchentlich, damit eine weggefallene Bezugsstelle als benannter Fehler auffällt und nicht
+erst beim nächsten Neuaufsetzen. Genau so fiel auf, dass das alte MinIO-Abbild anonym nicht mehr
+beziehbar ist.
 
 ## Umstellung des Objektspeichers
 
