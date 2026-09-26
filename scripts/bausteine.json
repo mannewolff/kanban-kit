@@ -1,0 +1,112 @@
+{
+  "_hinweis": [
+    "Bausteinliste aller fremden Bezugsquellen (Issue #1229, Plan #1222, E8/E9).",
+    "Einzige Quelle: scripts/bezugspruefung.mjs prueft daraus jeden Eintrag mit pruefung \"bezug\"",
+    "anonym auf HTTP-Ebene, und scripts/bezugspruefung.test.mjs haelt die Liste in beide",
+    "Richtungen gegen den Bestand (docker-compose*.yml, Dockerfile, backup/Dockerfile,",
+    "src/test/**/*.java). Ein neues Abbild ohne Eintrag hier laesst den Pflichtcheck des Bereichs",
+    "scripts scheitern — und umgekehrt ein Eintrag, den niemand mehr faehrt.",
+    "Wer eine Fassung anhebt, hebt sie an ihrer Fundstelle UND hier: Die Liste sagt dem",
+    "Selbsthoster, woher sein Stack kommt."
+  ],
+  "bausteine": [
+    {
+      "name": "Datenbank",
+      "zweck": "PostgreSQL des Stacks (docker-compose.yml) und der Integrationstests",
+      "art": "abbild",
+      "bezugsstelle": "postgres:16",
+      "fassung": "16",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "Objektspeicher",
+      "zweck": "S3-kompatibler Speicher der Anhaenge (docker-compose.yml, AbstractIntegrationTest)",
+      "art": "abbild",
+      "bezugsstelle": "chrislusf/seaweedfs:4.47",
+      "fassung": "4.47",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "Reverse-Proxy",
+      "zweck": "Caddy mit automatischem TLS vor der Anwendung (docker-compose.yml)",
+      "art": "abbild",
+      "bezugsstelle": "caddy:2",
+      "fassung": "2",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "Sicherung: Werkzeugstufe",
+      "zweck": "Baustufe, die age und rclone fuer den Sicherungs-Container holt (backup/Dockerfile)",
+      "art": "abbild",
+      "bezugsstelle": "debian:bookworm-slim",
+      "fassung": "bookworm-slim",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "Sicherung: Basis",
+      "zweck": "Basis des Sicherungs-Containers, passend zur Hauptversion der Datenbank (backup/Dockerfile)",
+      "art": "abbild",
+      "bezugsstelle": "postgres:16-bookworm",
+      "fassung": "16-bookworm",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "Sicherung: age",
+      "zweck": "Verschluesselung der Sicherung; schreibt das Format, aus dem zurueckgeholt wird",
+      "art": "archiv",
+      "bezugsstelle": "https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz",
+      "fassung": "1.2.1",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "Sicherung: rclone",
+      "zweck": "Spiegel der Anhaenge und Weg ausser Haus (backup/Dockerfile, docker-compose.backup.yml)",
+      "art": "archiv",
+      "bezugsstelle": "https://downloads.rclone.org/v1.68.2/rclone-v1.68.2-linux-amd64.zip",
+      "fassung": "1.68.2",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "Bau: Frontend",
+      "zweck": "Node-Stufe des Anwendungs-Abbilds; eine Installation nach Anleitung baut es selbst (Dockerfile)",
+      "art": "abbild",
+      "bezugsstelle": "node:22-alpine",
+      "fassung": "22-alpine",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "Bau: Backend",
+      "zweck": "Maven-Stufe des Anwendungs-Abbilds (Dockerfile)",
+      "art": "abbild",
+      "bezugsstelle": "maven:3.9-eclipse-temurin-25",
+      "fassung": "3.9-eclipse-temurin-25",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "Laufzeit",
+      "zweck": "JRE-Stufe, in der die Anwendung laeuft (Dockerfile)",
+      "art": "abbild",
+      "bezugsstelle": "eclipse-temurin:25-jre",
+      "fassung": "25-jre",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "IT-Suite: Mailserver",
+      "zweck": "Mailpit als SMTP-Gegenstelle von SmtpMailIT; faellt es weg, steht mvn verify",
+      "art": "abbild",
+      "bezugsstelle": "axllent/mailpit:v1.27",
+      "fassung": "v1.27",
+      "pruefung": "bezug"
+    },
+    {
+      "name": "Rueckweg: Altspeicher",
+      "zweck": "bisheriger MinIO-Speicher im Rueckweg-Overlay docker-compose.altspeicher.yml",
+      "art": "abbild",
+      "bezugsstelle": "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
+      "fassung": "RELEASE.2025-09-07T16-13-09Z",
+      "pruefung": "keine",
+      "grund": "anonym nicht mehr beziehbar (geprueft am 2026-09-26: leere Aktionsliste im Token, Manifest antwortet 401); das Overlay laeuft nur aus dem lokalen Vorrat des Servers",
+      "ablaufversion": "2.13.0"
+    }
+  ]
+}
