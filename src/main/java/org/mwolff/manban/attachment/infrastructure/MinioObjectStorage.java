@@ -18,8 +18,13 @@ import org.mwolff.manban.attachment.application.ObjectStorageProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * {@link ObjectStorage} auf Basis von MinIO. Der Ziel-Bucket wird faul beim ersten Zugriff angelegt
- * (nicht beim Start), sodass Kontexte ohne Anhang-Nutzung keinen Objektspeicher benötigen.
+ * {@link ObjectStorage} über das S3-Protokoll. Der Ziel-Bucket wird faul beim ersten Zugriff
+ * angelegt (nicht beim Start), sodass Kontexte ohne Anhang-Nutzung keinen Objektspeicher benötigen.
+ *
+ * <p>Der Klassenname stammt aus der verwendeten Client-Bibliothek: {@code io.minio} ist hier nur
+ * der <em>S3-Client</em>. Der Server dahinter ist seit Plan #1222 (Issue #1226) SeaweedFS mit
+ * eingeschaltetem S3-Dienst — im Betrieb läuft kein MinIO mehr. Jeder Aufruf unten ist ein
+ * gewöhnlicher S3-Aufruf und trägt nichts MinIO-Eigenes.
  */
 // PMD.AvoidCatchingGenericException: Der MinIO-Client deklariert bei jedem Aufruf ein breites
 // Bündel geprüfter Ausnahmen (IO, Krypto, Server, XML-Parsing). Sie werden hier bewusst gebündelt
