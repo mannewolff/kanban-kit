@@ -66,10 +66,16 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-manban}
       POSTGRES_USER: ${POSTGRES_USER:-manban}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-manban}
-      MANBAN_MINIO_ENDPOINT: http://minio:9000
-      MANBAN_MINIO_BUCKET: ${MANBAN_MINIO_BUCKET:-manban}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-manban}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-manban-minio}
+      # Der Speicher heisst jetzt `objektspeicher` und lauscht auf 8333 (Plan #1222, E1).
+      # Die Variablennamen dieses Dienstes bleiben vorerst, wie sie sind: Seine Umgebung aendert
+      # sich mit dem Wechsel des Spiegel-Werkzeugs von `mc` auf `rclone` (E4) ein zweites Mal —
+      # hier nachgezogen wird nur, was den Stack gueltig haelt. Die Werte kommen aber schon jetzt
+      # aus den neuen Wurzel-Zugangsdaten, damit Sicherung und Anwendung denselben Speicher
+      # ansprechen.
+      MANBAN_MINIO_ENDPOINT: http://objektspeicher:8333
+      MANBAN_MINIO_BUCKET: ${MANBAN_STORAGE_BUCKET:-manban}
+      MINIO_ROOT_USER: ${OBJEKTSPEICHER_ROOT_USER:-manban}
+      MINIO_ROOT_PASSWORD: ${OBJEKTSPEICHER_ROOT_PASSWORD:-manban-objektspeicher}
       # Ohne Ziel und ohne Empfaenger sichert der Container nichts und sagt das beim Start. Kein
       # `:?` an dieser Stelle: Das liesse schon `docker compose config` scheitern, und die Meldung
       # des Dienstes benennt beide fehlenden Werte auf einmal statt nur den ersten.
@@ -88,7 +94,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
+      objektspeicher:
         condition: service_healthy
     # Anders als die Dienste des Basis-Stacks kommt dieser hier nach einem Neustart von selbst
     # wieder hoch. Wer das Overlay zuschaltet, will gesichert haben; eine Sicherung, die nach einem

@@ -8,7 +8,7 @@
 #     unter https://kanban.mwolff.org veroeffentlicht (TLS via certresolver "mytlschallenge").
 #   - Caddy (lokaler self-signed-Proxy) laeuft NICHT: er ist dem Profil "local-tls"
 #     zugeordnet und wird ohne aktives Profil nicht gestartet.
-#   - Postgres/MinIO bleiben unveraendert rein intern (keine Host-Ports).
+#   - Postgres/Objektspeicher bleiben unveraendert rein intern (keine Host-Ports).
 #   - Alle drei Dienste starten nach einem Reboot des Servers von selbst wieder
 #     (restart: unless-stopped, siehe unten).
 services:
@@ -24,7 +24,7 @@ services:
   postgres:
     restart: unless-stopped
 
-  minio:
+  objektspeicher:
     restart: unless-stopped
 
   manban-api:
@@ -41,7 +41,7 @@ services:
       MANBAN_SESSION_SECRET: ${MANBAN_SESSION_SECRET:?MANBAN_SESSION_SECRET muss in .env gesetzt sein}
       MANBAN_BASE_URL: ${MANBAN_BASE_URL:?MANBAN_BASE_URL muss in .env gesetzt sein (z. B. https://kanban.mwolff.org)}
       # Uebrige Prod-Envs (MANBAN_COOKIE_SECURE, MANBAN_BOOTSTRAP_ADMIN_TOKEN, MANBAN_MAIL_*,
-      # DB-/MinIO-Zugang) werden vom Basis-Compose aus der .env gelesen.
+      # DB- und Objektspeicher-Zugang) werden vom Basis-Compose aus der .env gelesen.
     networks:
       - default
       - web

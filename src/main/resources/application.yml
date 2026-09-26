@@ -90,10 +90,10 @@ manban:
   project:
     invitation-ttl: P7D
   storage:
-    endpoint: ${MANBAN_MINIO_ENDPOINT:http://localhost:9000}
-    access-key: ${MANBAN_MINIO_ACCESS_KEY:manban}
-    secret-key: ${MANBAN_MINIO_SECRET_KEY:manban-minio}
-    bucket: ${MANBAN_MINIO_BUCKET:manban}
+    endpoint: ${MANBAN_STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${MANBAN_STORAGE_ACCESS_KEY:manban}
+    secret-key: ${MANBAN_STORAGE_SECRET_KEY:manban-minio}
+    bucket: ${MANBAN_STORAGE_BUCKET:manban}
     max-per-card: 20
   # Transaktionale Outbox (Issue #501): Seiteneffekte werden in der Fachtransaktion vorgemerkt und
   # danach von einem Worker zugestellt. Abgeschaltet bleiben Einträge liegen, sie gehen nicht

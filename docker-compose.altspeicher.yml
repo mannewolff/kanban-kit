@@ -1,0 +1,38 @@
+# Rueckweg-Overlay: der bisherige MinIO-Speicher (Plan #1222, E13).
+#
+# Wofuer es da ist — zwei Faelle, beide voruebergehend:
+#   1. Der Umzug der Anhaenge. Der alte Speicher laeuft neben dem neuen, damit die Anhaenge aus
+#      ihm heraus in den neuen kopiert werden koennen.
+#   2. Der Rueckweg, falls die Pruefung nach dem Umzug scheitert. Das Volume `minio_data` bleibt
+#      dafuer unangetastet — der vorige Stand ist vollstaendig darin.
+#
+# Zuschalten:
+#   docker compose -f docker-compose.yml -f docker-compose.altspeicher.yml up -d
+#
+# ACHTUNG: Das Abbild unten ist anonym NICHT MEHR BEZIEHBAR (geprueft am 2026-09-26: das anonyme
+# Pull-Token von quay.io fuer `minio/minio` traegt eine leere Aktionsliste, der Manifest-Abruf
+# antwortet mit 401). Dieses Overlay laeuft deshalb ausschliesslich auf einem Server, auf dem das
+# Abbild noch im lokalen Vorrat liegt — `docker image ls | grep minio` sagt, ob das der Fall ist.
+# Auf einer frischen Maschine kommt es nicht hoch, und das ist der Grund fuer die ganze
+# Umstellung. Fehlt der lokale Vorrat, fuehrt der Ersatzweg aus E14 ueber den juengsten Spiegel
+# beziehungsweise die Sicherung (docs/backup.md), nicht ueber dieses Overlay.
+#
+# Wann es entfaellt: mit Version 2.13.0. Eine Version lang (2.12.0) bleiben dieses Overlay und das
+# Volume `minio_data` unberuehrt stehen; danach wird beides zusammen entfernt.
+services:
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-manban}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-manban-minio}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  minio_data:

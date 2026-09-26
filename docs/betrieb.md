@@ -6,6 +6,13 @@ gebaute Frontend ausliefert), **Postgres** und **MinIO** (Objektspeicher für An
 
 ## Voraussetzungen
 
+- **Docker Compose ab 2.23.** Der Stack legt die S3-Identität des Objektspeichers als
+  `configs`-Eintrag mit `content:` an und lässt Compose die Zugangsdaten aus der `.env` darin
+  einsetzen — eine eingehängte Datei würde Compose nicht einsetzen, und die Zugangsdaten stünden
+  dann im Repository. `content:` gibt es erst ab dieser Fassung. Prüfen mit
+  `docker compose version`; ältere Fassungen starten den Speicher ohne gültige Identität, und
+  jeder Anhang-Zugriff endet in 403.
+
 - Docker-Laufzeit. Auf macOS z. B. **Colima**:
   ```
   colima status || colima start
@@ -125,7 +132,8 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_DB_POOL_MIN_IDLE` | Verbindungen, die auch ohne Last offen bleiben | `5` |
 | `MANBAN_DB_CONNECTION_TIMEOUT_MS` | Höchste Wartezeit auf eine freie Verbindung in Millisekunden | `5000` |
 | `MANBAN_SERVER_THREADS_MAX` | Höchstzahl gleichzeitig bearbeiteter HTTP-Aufrufe | `600` |
-| `POSTGRES_*`, `MINIO_*` | DB- und Objektspeicher-Zugangsdaten | siehe `docker-compose.yml` |
+| `MANBAN_STORAGE_BUCKET` | Name des Buckets, in dem die Anhänge liegen. Derselbe Wert speist die S3-Identität des Speichers und den Anlegeschritt beim Start — eine Änderung wirkt auf alle drei Stellen zugleich, holt aber keine Anhänge aus dem alten Bucket nach | `manban` |
+| `POSTGRES_*`, `OBJEKTSPEICHER_ROOT_*` | DB- und Objektspeicher-Zugangsdaten. Bewusst ohne `MANBAN_`-Präfix: Sie gehören den Bausteinen, nicht der Anwendung. Aus den `OBJEKTSPEICHER_ROOT_*` speist der Stack zugleich die S3-Identität des Speichers und den Zugang von `manban-api` | siehe `docker-compose.yml` |
 
 > **Verbindungspool und Server-Threads:** Die vier Stellschrauben `MANBAN_DB_POOL_MAX`,
 > `MANBAN_DB_POOL_MIN_IDLE`, `MANBAN_DB_CONNECTION_TIMEOUT_MS` und `MANBAN_SERVER_THREADS_MAX`
