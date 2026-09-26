@@ -1,5 +1,9 @@
 package org.mwolff.manban;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -12,15 +16,22 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
-import org.testcontainers.containers.MinIOContainer;
+import org.testcontainers.containers.Container.ExecResult;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.MountableFile;
 
 /**
- * Gemeinsame Basis aller {@code *IT}: eine geteilte Postgres- und MinIO-Instanz für die gesamte
+ * Gemeinsame Basis aller {@code *IT}: eine geteilte Postgres- und SeaweedFS-Instanz für die gesamte
  * Suite (Testcontainers-Singleton-Pattern, CLAUDE-java.md §6.4) statt Container pro Testklasse —
  * spart pro Klasse Container-Start und ermöglicht Spring-Context-Caching über einheitliche
  * Konfiguration.
+ *
+ * <p><strong>Objektspeicher:</strong> SeaweedFS statt MinIO (Plan #1222, E1) — das MinIO-Abbild ist
+ * anonym nicht mehr beziehbar, womit weder eine Neuinstallation nach {@code docs/betrieb.md} noch
+ * {@code mvn verify} den Speicher hochfahren konnte. Der Client {@code io.minio} bleibt (E3): Er
+ * ist ein S3-Client und an keine Bezugsquelle eines Abbilds gebunden.
  *
  * <p>Die Container werden bewusst im statischen Initialisierer gestartet (nicht über
  * {@code @Testcontainers}/{@code @Container}): die JUnit-Extension würde sie nach jeder Testklasse
@@ -78,27 +89,96 @@ public abstract class AbstractIntegrationTest {
   static final PostgreSQLContainer<?> POSTGRES =
       new PostgreSQLContainer<>("postgres:16").withCommand("postgres", "-c", "max_connections=200");
 
-  // Das Image kommt von quay.io, nicht von Docker Hub: `minio/minio` existiert dort nicht mehr
-  // (404 beim Pull), was die gesamte IT-Suite lahmlegte. Der Tag steht fest — ein beweglicher
-  // `latest` war genau das, was hier ohne Vorwarnung verschwunden ist.
-  // `asCompatibleSubstituteFor` ist nötig, weil MinIOContainer den Namen im Konstruktor gegen
-  // `minio/minio` prüft (assertCompatibleWith) und eine fremde Registry sonst ablehnt.
-  static final MinIOContainer MINIO =
-      new MinIOContainer(
-          DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z")
-              .asCompatibleSubstituteFor("minio/minio"));
+  /** S3-Identitäten des Speicher-Containers; zugleich Quelle der Zugangsdaten unten. */
+  private static final String IDENTITAETSDATEI = "objektspeicher-identitaeten.json";
+
+  /** Vorgabewert aus {@code ObjectStorageProperties} — die IT-Suite überschreibt ihn nicht. */
+  private static final String BUCKET = "manban";
+
+  /** S3-Port von {@code weed server -s3}. */
+  private static final int S3_PORT = 8333;
+
+  private static final JsonNode ZUGANGSDATEN = ladeZugangsdaten();
+
+  // SeaweedFS statt MinIO (Plan #1222, E1): Das Abbild `quay.io/minio/minio` ist anonym nicht mehr
+  // beziehbar (anonymes Pull-Token mit leerer Aktionsliste, Manifest-Abruf mit 401) — damit stand
+  // die gesamte IT-Suite. `chrislusf/seaweedfs` liefert sein Manifest anonym aus, ist Apache-2.0
+  // und läuft als ein Prozess. Der Tag steht fest, aus demselben Grund wie zuvor: Ein beweglicher
+  // `latest` ist genau das, was hier ohne Vorwarnung verschwunden ist.
+  // Bewusst `GenericContainer` und nicht das abgelegte MinIO-Modul von Testcontainers (E5):
+  // Dessen Container prüft den Abbildnamen im Konstruktor (assertCompatibleWith) und setzt
+  // MinIO-eigene Umgebungsvariablen, die dieser Speicher nicht liest.
+  // Die Wartestrategie liest das Protokoll des Containers statt den S3-Port anzufragen: Der
+  // Speicher legt seine Portweiterleitung auf IPv4 **und** IPv6, antwortet aber nur über IPv4 —
+  // `getHost()` liefert `localhost`, die Test-JVM löst das nach `::1` auf, und der HTTP-Client von
+  // `Wait.forHttp` bekommt dort eine angenommene und sofort geschlossene Verbindung
+  // (`Unexpected end of file from server`), ohne auf IPv4 auszuweichen. Die Meldung erscheint,
+  // sobald der S3-Dienst lauscht; er startet laut eigenem Protokoll erst nach dem Filer, darum
+  // genügt danach ein einzelner Anlauf für den Bucket.
+  static final GenericContainer<?> OBJEKTSPEICHER =
+      new GenericContainer<>("chrislusf/seaweedfs:4.47")
+          .withExposedPorts(S3_PORT)
+          .withCopyFileToContainer(
+              MountableFile.forClasspathResource(IDENTITAETSDATEI), "/etc/seaweedfs/s3.json")
+          .withCommand("server", "-s3", "-s3.config=/etc/seaweedfs/s3.json", "-dir=/data")
+          .waitingFor(Wait.forLogMessage(".*Start Seaweed S3 API Server.*", 1));
 
   static {
     POSTGRES.start();
-    MINIO.start();
+    OBJEKTSPEICHER.start();
+    erzeugeBucket();
+  }
+
+  /**
+   * Legt den Anhang-Bucket beim Hochfahren an — nicht die Anwendung (Plan #1222, E16). Deren
+   * Identität trägt nur {@code Read}, {@code Write} und {@code List} auf diesen Bucket; {@code
+   * PutBucket} verlangt in SeaweedFS das Recht {@code Admin}, und Wurzelrechte für einen einmaligen
+   * Anlegeschritt wären eine Verletzung von Priorität 1.
+   */
+  private static void erzeugeBucket() {
+    try {
+      ExecResult ergebnis =
+          OBJEKTSPEICHER.execInContainer(
+              "sh",
+              "-c",
+              "echo 's3.bucket.create -name " + BUCKET + "' | weed shell -master=localhost:9333");
+      if (ergebnis.getExitCode() != 0 || !ergebnis.getStdout().contains("created bucket")) {
+        throw new IllegalStateException(
+            "Bucket %s nicht angelegt (Exitcode %d): %s%s"
+                .formatted(
+                    BUCKET, ergebnis.getExitCode(), ergebnis.getStdout(), ergebnis.getStderr()));
+      }
+    } catch (IOException e) {
+      throw new IllegalStateException("Bucket " + BUCKET + " nicht angelegt", e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Bucket " + BUCKET + " nicht angelegt", e);
+    }
+  }
+
+  /** Zugangsdaten der Anwendungs-Identität — eine Quelle: die Identitätsdatei des Containers. */
+  private static JsonNode ladeZugangsdaten() {
+    try (InputStream datei =
+        AbstractIntegrationTest.class.getResourceAsStream("/" + IDENTITAETSDATEI)) {
+      if (datei == null) {
+        throw new IllegalStateException(IDENTITAETSDATEI + " liegt nicht im Test-Klassenpfad");
+      }
+      return new ObjectMapper().readTree(datei).get("identities").get(0).get("credentials").get(0);
+    } catch (IOException e) {
+      throw new IllegalStateException(IDENTITAETSDATEI + " nicht lesbar", e);
+    }
   }
 
   /** Einheitliche Storage-Konfiguration für alle Kontexte (verbessert das Context-Caching). */
   @DynamicPropertySource
   static void objectStorageProperties(DynamicPropertyRegistry registry) {
-    registry.add("manban.storage.endpoint", MINIO::getS3URL);
-    registry.add("manban.storage.access-key", MINIO::getUserName);
-    registry.add("manban.storage.secret-key", MINIO::getPassword);
+    registry.add(
+        "manban.storage.endpoint",
+        () ->
+            "http://%s:%d"
+                .formatted(OBJEKTSPEICHER.getHost(), OBJEKTSPEICHER.getMappedPort(S3_PORT)));
+    registry.add("manban.storage.access-key", () -> ZUGANGSDATEN.get("accessKey").asText());
+    registry.add("manban.storage.secret-key", () -> ZUGANGSDATEN.get("secretKey").asText());
   }
 
   /**

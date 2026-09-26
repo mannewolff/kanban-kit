@@ -1,0 +1,18 @@
+{
+  "identities": [
+    {
+      "name": "manban-anwendung",
+      "credentials": [
+        {
+          "accessKey": "manban-it",
+          "secretKey": "manban-it-geheim"
+        }
+      ],
+      "actions": [
+        "Read:manban",
+        "Write:manban",
+        "List:manban"
+      ]
+    }
+  ]
+}

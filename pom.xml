@@ -166,11 +166,6 @@
             <artifactId>postgresql</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>minio</artifactId>
-            <scope>test</scope>
-        </dependency>
 
         <!-- SpotBugs-Annotationen (@SuppressFBWarnings) für gezielte, begründete Ausnahmen. -->
         <dependency>

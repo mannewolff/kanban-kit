@@ -30,7 +30,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** End-to-End-Test für Anhänge gegen echtes Postgres + MinIO (Testcontainers). */
+/** End-to-End-Test für Anhänge gegen echtes Postgres + SeaweedFS (Testcontainers). */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class AttachmentIT extends AbstractIntegrationTest {
@@ -355,6 +355,27 @@ class AttachmentIT extends AbstractIntegrationTest {
         .isInstanceOf(RuntimeException.class);
     Assertions.assertThatThrownBy(() -> objectStorage.get(trashedKey))
         .isInstanceOf(RuntimeException.class);
+  }
+
+  /**
+   * Fährt den Abgleich-Pfad über die Port-Methode {@link ObjectStorage#listKeys()} gegen den echten
+   * Speicher-Container (Plan #1222, Paket A). {@code ListObjectsV2} ist die Stelle, an der eine
+   * fremde S3-Implementierung typischerweise vom Client {@code io.minio} abweicht; der Abgleich
+   * selbst war bisher nur unit-getestet. Die Schlüssel tragen das Präfix {@code cards/<id>/} — der
+   * Fall belegt damit zugleich das rekursive Auflisten über Präfixe hinweg.
+   */
+  @Test
+  void listKeysSeesUploadedObjectAndLosesItAfterDeletion() throws Exception {
+    setup("att-listkeys@example.com");
+    long id = upload("liste.bin", "application/octet-stream", new byte[] {1, 2, 3});
+    String key = objectKeyOf(id);
+
+    // "contains" statt Gleichheit: Der Bucket ist über die ganze Suite geteilt.
+    Assertions.assertThat(objectStorage.listKeys()).contains(key);
+
+    objectStorage.delete(key);
+
+    Assertions.assertThat(objectStorage.listKeys()).doesNotContain(key);
   }
 
   @Test
