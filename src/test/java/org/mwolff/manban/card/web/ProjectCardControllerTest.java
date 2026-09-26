@@ -29,7 +29,6 @@ class ProjectCardControllerTest {
         null,
         0,
         false,
-        false,
         null,
         List.of(),
         CardType.CARD,
@@ -38,7 +37,6 @@ class ProjectCardControllerTest {
         List.of(),
         null,
         List.of(),
-        null,
         null);
   }
 

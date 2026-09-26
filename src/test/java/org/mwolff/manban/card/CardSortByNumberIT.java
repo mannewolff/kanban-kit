@@ -183,15 +183,12 @@ class CardSortByNumberIT extends AbstractIntegrationTest {
         .andExpect(status().isOk());
     long trashed = createCard(backlog, "Papierkorb"); // #4, pos 3
     mvc.perform(delete("/api/cards/" + trashed).cookie(login)).andExpect(status().isNoContent());
-    long idea =
-        createCard("{\"columnId\":%d,\"title\":\"Idee\",\"ideaStored\":true}".formatted(backlog));
     long epic = createCard("{\"title\":\"Epic\",\"type\":\"EPIC\"}");
     long other = createCard(ready, "Andere Spalte"); // Ready, pos 0
     move(b, backlog, 0); // Backlog ungeordnet: B, A
 
     int archivedBefore = position(archived);
     int trashedBefore = position(trashed);
-    int ideaBefore = position(idea);
     int epicBefore = position(epic);
     int otherBefore = position(other);
 
@@ -201,7 +198,6 @@ class CardSortByNumberIT extends AbstractIntegrationTest {
     Assertions.assertThat(position(b)).isEqualTo(1);
     Assertions.assertThat(position(archived)).isEqualTo(archivedBefore);
     Assertions.assertThat(position(trashed)).isEqualTo(trashedBefore);
-    Assertions.assertThat(position(idea)).isEqualTo(ideaBefore);
     Assertions.assertThat(position(epic)).isEqualTo(epicBefore);
     Assertions.assertThat(position(other)).isEqualTo(otherBefore);
   }

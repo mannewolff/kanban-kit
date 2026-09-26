@@ -103,44 +103,6 @@ describe('NewCardModal', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('zeigt im Ideen-Modus nur den schlanken Feldsatz und legt ohne Zusatzfelder an', async () => {
-    const onSubmit = vi.fn().mockResolvedValue(undefined)
-    const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
-    render(
-      <NewCardModal open ideaOnly columnName="" epics={epics} onClose={vi.fn()} onSubmit={onSubmit} />,
-    )
-
-    expect(screen.getByLabelText('Titel')).toBeInTheDocument()
-    expect(screen.getByLabelText('Beschreibung')).toBeInTheDocument()
-    expect(screen.getByLabelText('Vorhaben')).toBeInTheDocument()
-    // Optionsvorrat wie in der gemeinsamen Feldbasis: „(kein Vorhaben)" plus Kürzel + Titel (#781).
-    expect(screen.getByRole('option', { name: '(kein Vorhaben)' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'AUT – Auth' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Zuständige')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Labels')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Fällig am')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Abhängig von')).not.toBeInTheDocument()
-
-    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Idee' } })
-    fireEvent.change(screen.getByLabelText('Beschreibung'), { target: { value: 'Ideentext' } })
-    // Epic-Auswahl im schlanken Zweig auslösen (deckt onChange + beide Ternary-Seiten ab).
-    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
-    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'CARD',
-        title: 'Idee',
-        description: 'Ideentext',
-        dependencies: [],
-        dueDate: null,
-        assigneeIds: [],
-        labelIds: [],
-      }),
-    )
-    await Promise.resolve()
-  })
-
   it('legt ein Epic mit Kürzel an, ohne die neuen Kartenfelder', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(
@@ -242,7 +204,7 @@ describe('NewCardModal', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     const tooLong = 'a'.repeat(MAX_TEXT_LENGTH + 10_000)
     render(
-      <NewCardModal open ideaOnly columnName="Backlog" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />,
+      <NewCardModal open epicOnly columnName="Backlog" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />,
     )
 
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Titel' } })
@@ -382,7 +344,7 @@ describe('NewCardModal', () => {
       .fn()
       .mockRejectedValue(new ApiError(400, 'Ungültig', { title: 'Titel ist zu lang.' }, 'Ungültige Eingabe.'))
     render(
-      <NewCardModal open ideaOnly columnName="" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />,
+      <NewCardModal open epicOnly columnName="" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />,
     )
 
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Idee' } })
@@ -434,7 +396,7 @@ describe('NewCardModal', () => {
   it('legt an der Grenze noch an und meldet nichts', () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(
-      <NewCardModal open ideaOnly columnName="Backlog" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />,
+      <NewCardModal open epicOnly columnName="Backlog" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />,
     )
 
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Titel' } })

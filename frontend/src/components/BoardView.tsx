@@ -28,6 +28,7 @@ import { isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
 import { selectableEpics } from '../lib/epicTiles'
 import { hiddenCardNumbers } from '../lib/hiddenCards'
+import { readTextFile } from '../lib/readTextFile'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import {
   MELDER,
@@ -46,6 +47,7 @@ import { type Dichte } from './boardSurfaceSx'
 import { BulkActionBar, type LabelOption, type LabelZustand } from './BulkActionBar'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
 import { useSnackbar } from './SnackbarProvider'
+import { SpecImportDialog, type SpecCard } from './SpecImportDialog'
 import { TransferCardDialog } from './TransferCardDialog'
 
 const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
@@ -172,10 +174,10 @@ interface Props {
   api?: Pick<
     CardsApi,
     | 'create'
+    | 'createBatch'
     | 'get'
     | 'move'
     | 'archive'
-    | 'moveToIdeaStorage'
     | 'restore'
     | 'remove'
     | 'bulkArchive'
@@ -232,6 +234,11 @@ export function BoardView({
   // Läuft gerade ein bulk-labels-Aufruf? Sperrt den zweiten Klick, solange die Antwort aussteht.
   const [labelBusy, setLabelBusy] = useState(false)
   const [kartenFilter, setKartenFilter] = useState<KartenFilter>('alle')
+  // Im Browser gelesene Spezifikationsdatei (Name nur zur Anzeige). `null` = keine Vorschau offen;
+  // hochgeladen wird die Datei nie, sie existiert hier nur als Text (Issue #493, #1201).
+  const [spec, setSpec] = useState<{ fileName: string; markdown: string } | null>(null)
+  // Zielspalte des Imports, beim Öffnen der Vorschau mit der ersten Spalte des Boards vorbelegt.
+  const [specColumnId, setSpecColumnId] = useState<number | null>(null)
   const [dichte, setDichte] = useState<Dichte>('normal')
   const notify = useSnackbar()
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
@@ -418,7 +425,7 @@ export function BoardView({
   // angemeldete Nutzer zugeordnet ist; „Überfällig" Karten mit einer Frist vor heute außerhalb von Done.
   const spaltenName = new Map(columns.map((c) => [c.id, c.name]))
   const istUeberfaellig = (c: Card) => isOverdue(c.dueDate, isDoneColumn(spaltenName.get(c.columnId) ?? ''))
-  const ueberfaelligZahl = filteredCards.filter((c) => !c.archived && !c.ideaStored && istUeberfaellig(c)).length
+  const ueberfaelligZahl = filteredCards.filter((c) => !c.archived && istUeberfaellig(c)).length
   const sichtbareKarten = filteredCards.filter((c) => {
     if (kartenFilter === 'meine') return currentUserId !== null && c.assignees.includes(currentUserId)
     if (kartenFilter === 'ueberfaellig') return istUeberfaellig(c)
@@ -507,7 +514,6 @@ export function BoardView({
       input.title,
       input.description,
       input.parentId,
-      false,
       {
         dependencies: input.dependencies,
         dueDate: input.dueDate,
@@ -518,27 +524,34 @@ export function BoardView({
     setCards((current) => [...current, created])
   }
 
+  // Die Spezifikationsdatei wird ausschließlich im Browser gelesen — kein Upload, kein
+  // Objektspeicher, und die Quelldatei bleibt unangetastet (Issue #493).
+  const readSpecFile = async (file: File) => {
+    try {
+      const markdown = await readTextFile(file)
+      setSpecColumnId(columns[0].id)
+      setSpec({ fileName: file.name, markdown })
+    } catch {
+      notify('Die Datei konnte nicht gelesen werden.', 'error')
+    }
+  }
+
+  // Bewusst ohne try/catch: Der Fehler gehört in den Dialog, der offen bleibt und seine Meldung
+  // zeigt (dieselbe Regel wie bei `createItem`). Die neuen Karten hängen sofort in der Ansicht,
+  // damit der Erfolg auch ohne Live-Ereignis sichtbar ist.
+  const handleSpecImport = async (neueKarten: SpecCard[], columnId: number) => {
+    const created = await api.createBatch(board.id, columnId, neueKarten)
+    setCards((current) => [...current, ...created])
+    onCardsChanged?.()
+    notify(`${created.length} ${created.length === 1 ? 'Karte' : 'Karten'} angelegt.`, 'success')
+  }
+
   const archiveCard = async (card: Card) => {
     try {
       await api.archive(card.id)
       onCardsChanged?.()
     } catch (e) {
       notify(apiErrorMessage(e, 'Archivieren fehlgeschlagen.'), 'error')
-    }
-  }
-
-  // In den Ideen-Speicher: Alltags-Aktion (nicht editiermodus-gegatet). Optimistisch aus der
-  // Board-Ansicht nehmen (ideaStored filtert activeCardsInColumn), bei Fehler zurückrollen.
-  const moveToIdeaStorageCard = async (card: Card) => {
-    const previous = cards
-    setCards((current) => current.map((c) => (c.id === card.id ? { ...c, ideaStored: true } : c)))
-    try {
-      await api.moveToIdeaStorage(card.id)
-      onCardsChanged?.()
-      notify('In den Ideen-Pool verschoben — unter Ideen zu finden.', 'success')
-    } catch (e) {
-      setCards(previous)
-      notify(apiErrorMessage(e, 'In den Ideen-Pool verschieben fehlgeschlagen.'), 'error')
     }
   }
 
@@ -767,6 +780,25 @@ export function BoardView({
               </Button>
             )}
             {canEdit && (
+              /* Dateiauswahl wie beim Anhang-Upload (CardDetailModal): Button als <label> mit
+                 verstecktem Input — hier zusätzlich auf Markdown eingeschränkt. */
+              <Button size="small" variant="outlined" component="label">
+                Spezifikation einlesen<input
+                  hidden
+                  type="file"
+                  accept=".md,.markdown,text/markdown"
+                  aria-label="Markdown-Datei auswählen"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann — sonst bleibt
+                    // `change` beim zweiten Mal aus, weil sich der Wert nicht ändert.
+                    e.target.value = ''
+                    if (file) void readSpecFile(file)
+                  }}
+                />
+              </Button>
+            )}
+            {canEdit && (
               <Button
                 variant="contained"
                 size="small"
@@ -936,9 +968,6 @@ export function BoardView({
           <MenuItem key="archive" onClick={() => { const c = menu.card; closeMenu(); void archiveCard(c) }}>
             Archivieren
           </MenuItem>,
-          <MenuItem key="idea-storage" onClick={() => { const c = menu.card; closeMenu(); void moveToIdeaStorageCard(c) }}>
-            In den Ideen-Pool
-          </MenuItem>,
           ...(canTransfer
             ? [
                 <MenuItem
@@ -997,6 +1026,21 @@ export function BoardView({
         onClose={() => { setModalColumn(null); setDuplicateValues(null) }}
         onSubmit={(input) => createItem(modalColumn!.id, input)}
       />
+
+      {/* Erst mit gelesener Datei gemountet: `specColumnId` ist dann gesetzt, und die Vorschau
+          startet mit der Vorbelegung des Öffnens statt mit einer Spalte von vorletztem Mal. */}
+      {spec !== null && specColumnId !== null && (
+        <SpecImportDialog
+          open
+          fileName={spec.fileName}
+          markdown={spec.markdown}
+          columns={columns}
+          columnId={specColumnId}
+          onColumnChange={setSpecColumnId}
+          onClose={() => setSpec(null)}
+          onImport={handleSpecImport}
+        />
+      )}
 
       {transferCard && (
         <TransferCardDialog

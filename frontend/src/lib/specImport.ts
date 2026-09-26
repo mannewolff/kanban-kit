@@ -1,4 +1,4 @@
-// Auflösung einer Markdown-Spezifikation in Ideen-Rohdaten (Issue #493).
+// Auflösung einer Markdown-Spezifikation in Karten-Rohdaten (Issue #493, #1201).
 //
 // Die Datei verlässt den Browser nicht: gelesen und aufgelöst wird hier, an den Server gehen nur
 // die fertigen Karten (Batch-Endpoint aus #492). Deshalb liegt diese Logik im Frontend — das
@@ -14,20 +14,20 @@
 
 import { MAX_TEXT_LENGTH } from './textLimits'
 
-/** Titelgrenze des Backends (`BatchIdeaItem.title`, `@Size(max = 300)`). */
+/** Titelgrenze des Backends (`BatchCardItem.title`, `@Size(max = 300)`). */
 export const MAX_TITLE_LENGTH = 300
 /**
  * Beschreibungsgrenze des Batch-Endpoints. Seit Issue #572 dieselbe wie an allen anderen
  * Textwegen — der Wert steht im Frontend nur in `textLimits.ts`.
  */
 export const MAX_DESCRIPTION_LENGTH = MAX_TEXT_LENGTH
-/** Elementgrenze eines Stapel-Aufrufs (`ProjectIdeaController.MAX_IDEAS_PER_BATCH`). */
-export const MAX_IDEAS_PER_IMPORT = 200
+/** Elementgrenze eines Stapel-Aufrufs (`CardController.MAX_CARDS_PER_BATCH`). */
+export const MAX_CARDS_PER_IMPORT = 200
 
 /** Trennende Überschriftenebene: H1 oder H2, vom Nutzer beim Import gewählt. */
 export type HeadingLevel = 1 | 2
 
-/** Eine aus der Spezifikation aufgelöste Idee, bereits auf die Feldgrenzen des Servers gekürzt. */
+/** Eine aus der Spezifikation aufgelöste Karte, bereits auf die Feldgrenzen des Servers gekürzt. */
 export interface SpecSection {
   title: string
   description: string

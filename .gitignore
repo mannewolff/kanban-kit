@@ -54,3 +54,11 @@ kanban-kit-metriken.md
 .codex/
 
 frontend/.stryker-tmp/
+
+# Stryker-Berichte (Issue #1213). Sie liegen jetzt unter `.claude/stryker/` und sind dort durch
+# `.claude/*` ignoriert; `frontend/reports/` bleibt als Fangnetz fuer einen Lauf mit alter Config.
+# Ein versionierter Bericht wird bei jedem Lauf ueberschrieben, bringt den harten Stopp des
+# Nacht-Runners auf `git status --porcelain` zum Greifen, und `checks.mjs` zaehlte ihn ueber
+# `--untracked-files=all` als Aenderung im Bereich `frontend` — jeder Aenderungslauf beruehrte dann
+# den Bereich, der ihn ausgeloest hat.
+frontend/reports/

@@ -50,7 +50,7 @@ final class DerivationTree {
     Map<Integer, Card> byNumber = new HashMap<>();
     for (Card c : boardCards) {
       byId.put(c.requireId(), c);
-      byNumber.put(c.requireNumber(), c);
+      byNumber.put(c.number(), c);
     }
 
     // Kanten über den Vorfahren selbst statt über dessen ID: Fehlt er auf diesem Board (oder fehlt
@@ -134,7 +134,7 @@ final class DerivationTree {
   }
 
   private static Card kleinsteNummer(List<Card> ring) {
-    return ring.stream().min(Comparator.comparingInt(Card::requireNumber)).orElseThrow();
+    return ring.stream().min(Comparator.comparingInt(Card::number)).orElseThrow();
   }
 
   private static @Nullable Card elternteilImBoard(Card c, Kontext ctx) {
@@ -177,7 +177,7 @@ final class DerivationTree {
       }
     }
     return new DerivationNodeView(
-        c.requireNumber(),
+        c.number(),
         c.title(),
         c.type(),
         herkunftsnummer(c, ctx),
@@ -215,19 +215,20 @@ final class DerivationTree {
     // Kein Kurzschluss fuer leere oder einelementige Gruppen: Der allgemeine Weg liefert dort
     // dasselbe, und eine Abkuerzung waere ein zweiter Pfad, den niemand nachrechnet.
     Set<Integer> gruppenNummern = new HashSet<>();
-    gruppe.forEach(c -> gruppenNummern.add(c.requireNumber()));
+    gruppe.forEach(c -> gruppenNummern.add(c.number()));
 
     List<Kandidat> offen = new ArrayList<>();
     for (Card c : gruppe) {
       Set<Integer> blockierer = new HashSet<>();
+      int eigeneNummer = c.number();
       for (Integer nummer : ctx.depsByCardId.getOrDefault(c.requireId(), List.of())) {
-        if (gruppenNummern.contains(nummer) && nummer != c.requireNumber()) {
+        if (gruppenNummern.contains(nummer) && nummer != eigeneNummer) {
           blockierer.add(nummer);
         }
       }
       offen.add(new Kandidat(c, blockierer));
     }
-    offen.sort(Comparator.comparingInt(k -> k.karte().requireNumber()));
+    offen.sort(Comparator.comparingInt(k -> k.karte().number()));
 
     List<Card> ergebnis = new ArrayList<>();
     Set<Integer> ausgegeben = new HashSet<>();
@@ -240,7 +241,7 @@ final class DerivationTree {
         }
       }
       Kandidat naechste = offen.remove(index);
-      ausgegeben.add(naechste.karte().requireNumber());
+      ausgegeben.add(naechste.karte().number());
       ergebnis.add(naechste.karte());
     }
     return ergebnis;

@@ -29,7 +29,8 @@ Schalter — steht in `CLAUDE-design.md` im Wurzelverzeichnis.
   alter Stände.
 - [Produktions-Deployment (Hostinger)](deployment-hostinger.md) — öffentlicher Betrieb hinter Traefik unter `kanban.mwolff.org`.
 - [Nutzung](nutzung.md) — Registrieren, Projekte, Boards, Karten (Zuständige, Fälligkeit, Labels),
-  Papierkorb, Listen-Ansicht, Ideen-Pool, [Läufe](nutzung.md#nachtlauf) (Laufarten, vier Zustände
+  Papierkorb, Listen-Ansicht, [Spezifikation einlesen](nutzung.md#spezifikations-import),
+  [Läufe](nutzung.md#nachtlauf) (Laufarten, vier Zustände
   je Arbeitspaket, Übernahmetext, Aufbewahrung),
   [Verbrauch im Leitstand](nutzung.md#verbrauch-leitstand) (Gattungen, „ohne Karte", Lebenszeit-Summe,
   Erfassungslücken),

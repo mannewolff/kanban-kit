@@ -27,10 +27,11 @@ import org.springframework.test.web.servlet.ResultActions;
  * End-to-End der Abhängigkeiten über den Ingest (#566): Ein Migrations-Script überträgt die
  * strukturierten {@code Issue #N}-Verweise eines fremden Trackers.
  *
- * <p>Zwei Eigenschaften sind der Kern und werden hier belegt: Der Endpunkt erreicht auch board-lose
- * Pool-Ideen (der board-bezogene Guard von {@code move}/{@code comments} täte das nicht), und
- * Verweise auf noch nicht importierte Nummern werden gespeichert statt abgelehnt — sonst müsste ein
- * Import seine Karten nach Abhängigkeitsgraph sortieren.
+ * <p>Zwei Eigenschaften sind der Kern und werden hier belegt: Der Endpunkt arbeitet projektweit und
+ * erreicht damit auch Karten der übrigen Boards des Projekts (der board-bezogene Guard von {@code
+ * move}/{@code comments} täte das nicht), und Verweise auf noch nicht importierte Nummern werden
+ * gespeichert statt abgelehnt — sonst müsste ein Import seine Karten nach Abhängigkeitsgraph
+ * sortieren.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
@@ -60,16 +61,31 @@ class KanbanCompatDependenciesIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void poolIdeaIsReachable() throws Exception {
-    // Ohne direct entsteht eine board-lose Pool-Idee (Entscheidung B). Der board-bezogene Guard
-    // von move/comments antwortet fuer sie mit 404 (#472) — dieser Endpunkt muss sie erreichen,
-    // sonst scheitert der Hauptanwendungsfall des Issues.
-    Fixture f = fixture("dep-pool");
-    long poolIdea = ingestPooled(f.token, "Rohe Idee");
+  void cardOfAnotherBoardOfTheProjectIsReachable() throws Exception {
+    // Der Guard dieses Endpunkts ist projekt- und nicht boardbezogen: Ein Migrations-Script
+    // verknuepft Karten, die es ueber mehrere Boards eines Projekts verteilt hat. Der
+    // board-bezogene Guard von move/comments antwortet fuer sie mit 404 (#472) — dieser Endpunkt
+    // muss sie erreichen, sonst scheitert der Hauptanwendungsfall des Issues. Vor Issue #1203 stand
+    // hier derselbe Nachweis mit einer board-losen Pool-Idee.
+    Fixture f = fixture("dep-otherboard");
+    long otherBoard = createBoard(f.owner, f.projectId, "Zweites Board").get("id").asLong();
+    long cardOnOtherBoard = createCard(f.owner, otherBoard, "Auf Board 2");
 
-    setDependencies(f.token, poolIdea, "[77]").andExpect(status().isNoContent());
+    setDependencies(f.token, cardOnOtherBoard, "[77]").andExpect(status().isNoContent());
 
-    assertThat(dependenciesOf(f.owner, poolIdea)).containsExactly(77);
+    assertThat(dependenciesOf(f.owner, cardOnOtherBoard)).containsExactly(77);
+  }
+
+  @Test
+  void ingestWithoutDirectIsReachable() throws Exception {
+    // Seit Issue #1203 legt ein Ingest ohne direct auf dem gebundenen Board an; der Endpunkt
+    // erreicht die Karte weiterhin.
+    Fixture f = fixture("dep-nodirect");
+    long card = ingestWithoutDirect(f.token, "Ohne direct");
+
+    setDependencies(f.token, card, "[77]").andExpect(status().isNoContent());
+
+    assertThat(dependenciesOf(f.owner, card)).containsExactly(77);
   }
 
   @Test
@@ -229,7 +245,34 @@ class KanbanCompatDependenciesIT extends AbstractIntegrationTest {
     return json.readTree(body).get("id").asLong();
   }
 
-  private long ingestPooled(String token, String title) throws Exception {
+  /** Legt eine Karte über den UI-Pfad in der ersten Spalte des genannten Boards an. */
+  private long createCard(Cookie session, long boardId, String title) throws Exception {
+    long columnId =
+        json.readTree(
+                mvc.perform(get("/api/boards/" + boardId).cookie(session))
+                    .andExpect(status().isOk())
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString())
+            .get("columns")
+            .get(0)
+            .get("id")
+            .asLong();
+    return json.readTree(
+            mvc.perform(
+                    post("/api/boards/" + boardId + "/cards")
+                        .cookie(session)
+                        .contentType("application/json")
+                        .content("{\"columnId\":%d,\"title\":\"%s\"}".formatted(columnId, title)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+        .get("id")
+        .asLong();
+  }
+
+  private long ingestWithoutDirect(String token, String title) throws Exception {
     String body =
         mvc.perform(
                 post("/api/kanban/items")

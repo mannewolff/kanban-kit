@@ -55,14 +55,14 @@ const board: Board = {
 
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null, excerpt: null,
-  positionInColumn: 0, archived: false, ideaStored: false, movedToDoneAt: null, dependencies: [],
+  positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
   derivedFrom: null,
 }
 
 function mkApi(over: Record<string, unknown> = {}) {
   return {
-    create: vi.fn(), move: vi.fn(), archive: vi.fn(), moveToIdeaStorage: vi.fn(),
+    create: vi.fn(), createBatch: vi.fn(), move: vi.fn(), archive: vi.fn(), moveToIdeaStorage: vi.fn(),
     restore: vi.fn(), remove: vi.fn(), get: vi.fn().mockResolvedValue(card),
     bulkArchive: vi.fn(), bulkTransfer: vi.fn(), bulkDelete: vi.fn(),
     bulkLabels: vi.fn().mockResolvedValue([]), ...over,
@@ -133,7 +133,7 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.stringContaining('## Kontext'), null, false, {
+      expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.stringContaining('## Kontext'), null, {
         dependencies: [],
         dueDate: null,
         assigneeIds: [],
@@ -146,6 +146,132 @@ describe('BoardView', () => {
   it('blendet den Anlege-Button für Nicht-Editoren aus', () => {
     render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
     expect(screen.queryByRole('button', { name: 'Neu anlegen' })).not.toBeInTheDocument()
+  })
+
+  describe('Spezifikations-Import in der Werkzeugleiste (#1201)', () => {
+    /** Markdown-Datei, wie der Nutzer sie auswählt — zwei H2-Abschnitte werden zwei Karten. */
+    const specDatei = () =>
+      new File(['## Anmeldung\nText A\n\n## Registrierung\nText B'], 'spec.md', {
+        type: 'text/markdown',
+      })
+
+    /** Wählt eine Datei im versteckten Datei-Input des Knopfs aus; `null` = Auswahl abgebrochen. */
+    function dateiSetzen(file: File | null) {
+      const input = screen.getByLabelText('Markdown-Datei auswählen')
+      Object.defineProperty(input, 'files', { value: file === null ? null : [file], configurable: true })
+      fireEvent.change(input)
+    }
+
+    /** Wählt die Spezifikationsdatei aus und wartet auf den Anlegen-Knopf der Vorschau. */
+    async function dateiWaehlen(file: File = specDatei()) {
+      dateiSetzen(file)
+      return screen.findByRole('button', { name: /Karten? anlegen/ })
+    }
+
+    it('zeigt den Knopf nur mit Bearbeitungsrecht', () => {
+      const { unmount } = render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+      expect(screen.getByRole('button', { name: 'Spezifikation einlesen' })).toBeInTheDocument()
+      unmount()
+
+      render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} />)
+      expect(screen.queryByRole('button', { name: 'Spezifikation einlesen' })).not.toBeInTheDocument()
+    })
+
+    it('legt die Karten in der vorbelegten ersten Spalte an und zeigt sie sofort', async () => {
+      const angelegt: Card[] = [
+        { ...card, id: 300, number: 3, title: 'Anmeldung' },
+        { ...card, id: 301, number: 4, title: 'Registrierung' },
+      ]
+      const api = mkApi({ createBatch: vi.fn().mockResolvedValue(angelegt) })
+      const onCardsChanged = vi.fn()
+      render(
+        <BoardView board={board} initialCards={[card]} canEdit api={api} onCardsChanged={onCardsChanged} />,
+        { wrapper: SnackbarProvider },
+      )
+
+      const anlegen = await dateiWaehlen()
+      expect(screen.getByLabelText('Zielspalte')).toHaveValue('10')
+      fireEvent.click(anlegen)
+
+      await waitFor(() =>
+        expect(api.createBatch).toHaveBeenCalledWith(1, 10, [
+          { title: 'Anmeldung', description: 'Text A' },
+          { title: 'Registrierung', description: 'Text B' },
+        ]),
+      )
+      expect(await screen.findByText('2 Karten angelegt.')).toBeInTheDocument()
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-300')).toBeInTheDocument()
+      expect(within(screen.getByTestId('column-10')).getByTestId('card-301')).toBeInTheDocument()
+      expect(onCardsChanged).toHaveBeenCalled()
+    })
+
+    it('meldet eine einzelne Karte im Singular', async () => {
+      const api = mkApi({ createBatch: vi.fn().mockResolvedValue([{ ...card, id: 302, number: 5 }]) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      const anlegen = await dateiWaehlen(
+        new File(['## Nur eine'], 'spec.md', { type: 'text/markdown' }),
+      )
+      fireEvent.click(anlegen)
+
+      expect(await screen.findByText('1 Karte angelegt.')).toBeInTheDocument()
+    })
+
+    it('legt in die gewählte Zielspalte an', async () => {
+      const api = mkApi({ createBatch: vi.fn().mockResolvedValue([]) })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      const anlegen = await dateiWaehlen()
+      fireEvent.change(screen.getByLabelText('Zielspalte'), { target: { value: '20' } })
+      fireEvent.click(anlegen)
+
+      await waitFor(() => expect(api.createBatch).toHaveBeenCalledWith(1, 20, expect.any(Array)))
+    })
+
+    it('meldet eine unlesbare Datei, ohne die Vorschau zu öffnen', async () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+      class FailingReader {
+        onload: (() => void) | null = null
+        onerror: (() => void) | null = null
+        result: string | null = null
+        readAsText(): void {
+          this.onerror?.()
+        }
+      }
+      vi.stubGlobal('FileReader', FailingReader)
+
+      dateiSetzen(specDatei())
+
+      expect(await screen.findByText('Die Datei konnte nicht gelesen werden.')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Karten? anlegen/ })).not.toBeInTheDocument()
+      vi.unstubAllGlobals()
+    })
+
+    it('tut nichts, wenn die Auswahl abgebrochen wird', () => {
+      const api = mkApi({ createBatch: vi.fn() })
+      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+      dateiSetzen(null)
+
+      expect(screen.queryByRole('button', { name: /Karten? anlegen/ })).not.toBeInTheDocument()
+      expect(api.createBatch).not.toHaveBeenCalled()
+    })
+
+    it('setzt den Datei-Input zurück, damit dieselbe Datei erneut gewählt werden kann', async () => {
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />, {
+        wrapper: SnackbarProvider,
+      })
+
+      await dateiWaehlen()
+
+      expect((screen.getByLabelText('Markdown-Datei auswählen') as HTMLInputElement).value).toBe('')
+    })
   })
 
   it('legt über Typ=Epic ein Epic an statt einer Karte', async () => {
@@ -212,50 +338,6 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Nach rechts verschieben' }))
     await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
-  })
-
-  it('zeigt Ideen (ideaStored) nicht in der Spaltenansicht', () => {
-    const idea: Card = { ...card, id: 500, number: 5, title: 'Idee', ideaStored: true }
-    render(<BoardView board={board} initialCards={[card, idea]} canEdit api={mkApi()} />)
-
-    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
-    expect(within(screen.getByTestId('column-10')).queryByTestId('card-500')).not.toBeInTheDocument()
-  })
-
-  it('legt eine Karte über das ⋮-Menü in den Ideen-Pool und entfernt sie optimistisch', async () => {
-    const api = mkApi({ moveToIdeaStorage: vi.fn().mockResolvedValue({}) })
-    const onCardsChanged = vi.fn()
-    // Zweite Karte in derselben Spalte: der optimistische map bleibt für sie unverändert (: c-Zweig).
-    const other: Card = { ...card, id: 101, number: 2, title: 'Andere' }
-    render(
-      <BoardView board={board} initialCards={[card, other]} canEdit api={api} onCardsChanged={onCardsChanged} />,
-      { wrapper: SnackbarProvider },
-    )
-
-    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
-
-    await waitFor(() => expect(api.moveToIdeaStorage).toHaveBeenCalledWith(100))
-    expect(onCardsChanged).toHaveBeenCalled()
-    // Erfolgs-Toast benennt den Zielort.
-    expect(await screen.findByText('In den Ideen-Pool verschoben — unter Ideen zu finden.')).toBeInTheDocument()
-    // Optimistisch aus dem Board entfernt (ideaStored filtert die Spaltenansicht).
-    expect(within(screen.getByTestId('column-10')).queryByTestId('card-100')).not.toBeInTheDocument()
-    // Die zweite Karte bleibt unangetastet sichtbar.
-    expect(within(screen.getByTestId('column-10')).getByTestId('card-101')).toBeInTheDocument()
-  })
-
-  it('rollt bei Fehler im Ideen-Pool zurück und zeigt die Karte wieder', async () => {
-    const api = mkApi({ moveToIdeaStorage: vi.fn().mockRejectedValue(new Error('fail')) })
-    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
-      wrapper: SnackbarProvider,
-    })
-
-    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
-
-    await screen.findByText('In den Ideen-Pool verschieben fehlgeschlagen.')
-    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
   })
 
   it('verschiebt eine Karte über das ⋮-Menü nach Bestätigung in den Papierkorb', async () => {
@@ -335,7 +417,7 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Volltext aus get', 9, false, {
+      expect(api.create).toHaveBeenCalledWith(1, 10, 'Original', 'Volltext aus get', 9, {
         dependencies: [],
         dueDate: null,
         assigneeIds: [],
@@ -1900,7 +1982,7 @@ describe('BoardView', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
       await waitFor(() =>
-        expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.any(String), null, false, expect.any(Object)),
+        expect(api.create).toHaveBeenCalledWith(1, 10, 'Neu', expect.any(String), null, expect.any(Object)),
       )
       expect(within(screen.getByTestId('column-10')).getByTestId('card-200')).toBeInTheDocument()
     })
@@ -2031,16 +2113,23 @@ describe('BoardView', () => {
       expect(moveItems()).toHaveLength(0)
     })
 
-    it('lässt die übrigen Menüeinträge unangetastet', () => {
+    it('lässt die übrigen Menüeinträge unangetastet — die Liste ist vollständig (Issue #1202)', () => {
       render(<BoardView board={wideBoard} initialCards={[middleCard]} canEdit canTransfer
         onEditCard={vi.fn()} api={mkApi()} />)
 
       fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
 
-      for (const name of ['Bearbeiten', 'Duplizieren', 'Archivieren', 'In den Ideen-Pool',
-        'Verschieben…']) {
-        expect(screen.getByRole('menuitem', { name })).toBeInTheDocument()
-      }
+      // Vollständige Liste, nicht nur eine Auswahl: Nur so belegt der Test, dass der Pool-Eintrag
+      // fehlt und nicht bloß nicht mitgeprüft wird (AK 3).
+      expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+        'Bearbeiten',
+        'Duplizieren',
+        'Archivieren',
+        'Verschieben…',
+        'Nach links verschieben',
+        'Nach rechts verschieben',
+        'Löschen',
+      ])
     })
 
     it('ist ohne Maus bedienbar: Tab zum ⋮, Enter, Pfeiltasten, Enter', async () => {
@@ -2730,21 +2819,6 @@ describe('BoardView', () => {
       await erwarteFehlerToast('Sortieren ist auf diesem Board gesperrt.')
       // Die Richtung wechselt nicht: der nächste Klick versucht dieselbe erneut.
       expect(screen.getByLabelText(ascLabel('Backlog'))).toBeInTheDocument()
-    })
-
-    it('moveToIdeaStorageCard: meldet den Serverfehler und zeigt die Karte wieder', async () => {
-      const api = mkApi({
-        moveToIdeaStorage: vi.fn().mockRejectedValue(serverfehler('Der Ideen-Pool ist gesperrt.')),
-      })
-      render(<BoardView board={board} initialCards={[card]} canEdit api={api} />, {
-        wrapper: SnackbarProvider,
-      })
-
-      fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
-      fireEvent.click(screen.getByRole('menuitem', { name: 'In den Ideen-Pool' }))
-
-      await erwarteFehlerToast('Der Ideen-Pool ist gesperrt.')
-      expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
     })
 
     it('duplicateCard: meldet den Serverfehler des Ladens und öffnet keinen Dialog', async () => {

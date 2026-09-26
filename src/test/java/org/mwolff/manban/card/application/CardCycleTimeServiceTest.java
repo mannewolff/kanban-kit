@@ -67,7 +67,6 @@ class CardCycleTimeServiceTest {
         null,
         0,
         false,
-        false,
         done,
         1L,
         createdAt,
@@ -77,7 +76,6 @@ class CardCycleTimeServiceTest {
         null,
         null,
         1L,
-        null,
         null,
         null,
         null);
@@ -173,7 +171,6 @@ class CardCycleTimeServiceTest {
             null,
             0,
             false,
-            false,
             NOW,
             1L,
             NOW.minusSeconds(500_000),
@@ -183,7 +180,6 @@ class CardCycleTimeServiceTest {
             "EP",
             null,
             1L,
-            null,
             null,
             null,
             null);

@@ -4,6 +4,7 @@ import { Box, CircularProgress } from '@mui/material'
 import { AppShell } from './components/AppShell'
 import { LegacyDashboardRedirect } from './routes/LegacyDashboardRedirect'
 import { LegacyEpicsRedirect } from './routes/LegacyEpicsRedirect'
+import { LegacyIdeasRedirect } from './routes/LegacyIdeasRedirect'
 import { ProtectedRoute } from './routes/ProtectedRoute'
 import { StartRedirect } from './routes/StartRedirect'
 
@@ -27,7 +28,6 @@ const BootstrapAdminPage = lazy(() =>
   import('./pages/BootstrapAdminPage').then((m) => ({ default: m.BootstrapAdminPage })),
 )
 const EpicsPage = lazy(() => import('./pages/EpicsPage').then((m) => ({ default: m.EpicsPage })))
-const IdeasPage = lazy(() => import('./pages/IdeasPage').then((m) => ({ default: m.IdeasPage })))
 const ForgotPasswordPage = lazy(() =>
   import('./pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })),
 )
@@ -78,7 +78,8 @@ export function App() {
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/plattform-leitstand" element={<PlattformLeitstandPage />} />
             <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
-            <Route path="/projects/:projectId/ideas" element={<IdeasPage />} />
+            {/* Alter Pfad der entfallenen Ideen-Seite: leitet auf das Projekt weiter (#1201). */}
+            <Route path="/projects/:projectId/ideas" element={<LegacyIdeasRedirect />} />
             <Route path="/projects/:projectId/members" element={<ProjectMembersPage />} />
             <Route path="/projects/:projectId/nachtlauf" element={<NightRunPage />} />
             <Route path="/boards/:boardId" element={<BoardPage />} />

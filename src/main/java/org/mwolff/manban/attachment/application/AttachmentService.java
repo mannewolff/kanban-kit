@@ -26,13 +26,11 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Anhänge an Karten eines <b>archivierten Boards</b> bleiben nutzbar. Das Archivieren
  *       entzieht das Board-Aggregat (→ 404), nicht dessen Karten: die bleiben editierbar und tragen
  *       weiterhin Kommentare. Anhänge folgen dieser Linie.
- *   <li>Anhänge an <b>board-lose Pool-Ideen</b> (#405) funktionieren; sie haben kein Board, über
- *       das sich eine Projekt-ID auflösen ließe.
  * </ul>
  *
- * <p>Die frühere Auflösung über das Board (gelöschtes {@code projectIdOfCard}) lieferte in beiden
- * Fällen 404 bzw. 500 und machte Anhänge zum einzigen Ausreißer gegenüber {@code CommentService},
- * der schon immer projekt-basiert prüft.
+ * <p>Die frühere Auflösung über das Board (gelöschtes {@code projectIdOfCard}) lieferte in diesem
+ * Fall 404 bzw. 500 und machte Anhänge zum einzigen Ausreißer gegenüber {@code CommentService}, der
+ * schon immer projekt-basiert prüft.
  */
 @Service
 public class AttachmentService {

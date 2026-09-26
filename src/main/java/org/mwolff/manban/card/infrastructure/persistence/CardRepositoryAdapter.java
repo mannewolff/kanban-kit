@@ -34,16 +34,16 @@ class CardRepositoryAdapter implements CardRepository {
 
   /**
    * Prädikat des aktiven Positions-Namespace — dieselbe Bedingung, unter der die generierte Spalte
-   * {@code active_position} einen Wert trägt (V16). Die einzige Aktiv-Definition dieser Klasse:
-   * Jede Stelle, die Positionen liest oder neu vergibt (Move-Reindex, Transfer-Reindex, Sortieren),
-   * nutzt sie, damit alle nachweislich dieselbe Menge treffen. Karten außerhalb dieser Menge
-   * (archiviert, im Ideen-Speicher, im Papierkorb, Vorhaben) halten keinen Slot und werden vom
-   * Reindex nicht angefasst — ihre {@code position_in_column} bleibt stehen, kollidiert aber nicht,
-   * weil ihre {@code active_position} NULL ist. Beim Zurückholen vergibt {@code
-   * allocateActivePosition} eine frische Position.
+   * {@code active_position} einen Wert trägt (V16, ohne den Ideen-Term seit V44). Die einzige
+   * Aktiv-Definition dieser Klasse: Jede Stelle, die Positionen liest oder neu vergibt
+   * (Move-Reindex, Transfer-Reindex, Sortieren), nutzt sie, damit alle nachweislich dieselbe Menge
+   * treffen. Karten außerhalb dieser Menge (archiviert, im Papierkorb, Vorhaben) halten keinen Slot
+   * und werden vom Reindex nicht angefasst — ihre {@code position_in_column} bleibt stehen,
+   * kollidiert aber nicht, weil ihre {@code active_position} NULL ist. Beim Zurückholen vergibt
+   * {@code allocateActivePosition} eine frische Position.
    */
   private static final String ACTIVE_NAMESPACE =
-      "AND archived = false AND idea_stored = false AND deleted_at IS NULL AND type <> 'EPIC' ";
+      "AND archived = false AND deleted_at IS NULL AND type <> 'EPIC' ";
 
   private final CardJpaRepository jpa;
   private final JdbcTemplate jdbc;
@@ -134,15 +134,6 @@ class CardRepositoryAdapter implements CardRepository {
   @Override
   public List<Card> findByRequirementCard(long cardId) {
     return jpa.findByRequirementCardId(cardId).stream()
-        .map(CardRepositoryAdapter::toDomain)
-        .toList();
-  }
-
-  @Override
-  public List<Card> findIdeasByProjectId(long projectId) {
-    return jpa
-        .findByProjectIdAndIdeaStoredTrueAndDeletedAtIsNullOrderByCreatedAtAsc(projectId)
-        .stream()
         .map(CardRepositoryAdapter::toDomain)
         .toList();
   }
@@ -454,14 +445,13 @@ class CardRepositoryAdapter implements CardRepository {
   private static Card toDomain(CardEntity e) {
     return new Card(
         e.getId(),
-        e.getBoardId(),
-        e.getColumnId(),
-        e.getNumber(),
+        pflichtfeld(e, e.getBoardId(), "board_id"),
+        pflichtfeld(e, e.getColumnId(), "column_id"),
+        pflichtfeld(e, e.getNumber(), "number"),
         e.getTitle(),
         e.getDescription(),
         e.getPositionInColumn(),
         e.isArchived(),
-        e.isIdeaStored(),
         e.getMovedToDoneAt(),
         e.getCreatedBy(),
         e.getCreatedAt(),
@@ -471,9 +461,22 @@ class CardRepositoryAdapter implements CardRepository {
         e.getShortcode(),
         e.getDueDate(),
         e.getProjectId(),
-        e.getTargetBoardId(),
         e.getExternalKey(),
         e.getDerivedFromCardId(),
         e.getRequirementCardId());
+  }
+
+  /**
+   * Löst ein Feld auf, das die Karte immer trägt (Issue #1204), dessen Spalte aber erst Migration
+   * V44 (#1205) als {@code NOT NULL} festschreibt. Bis dahin könnte eine Zeile aus der Zeit des
+   * Ideen-Pools noch NULL enthalten — dann scheitert der Zugriff mit dem Spaltennamen und der
+   * Karten-ID statt mit einer nackten NPE aus dem Unboxing.
+   */
+  private static <T> T pflichtfeld(CardEntity e, @Nullable T wert, String spalte) {
+    if (wert == null) {
+      throw new IllegalStateException(
+          "Karte " + e.getId() + " hat kein " + spalte + " — board-loser Altbestand (Issue #1204)");
+    }
+    return wert;
   }
 }

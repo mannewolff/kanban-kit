@@ -52,7 +52,6 @@ class DerivedFromResolutionTest {
             null,
             nummer,
             false,
-            false,
             null,
             null,
             NOW,
@@ -62,7 +61,6 @@ class DerivedFromResolutionTest {
             null,
             null,
             PROJEKT,
-            null,
             null,
             herkunft,
             null);

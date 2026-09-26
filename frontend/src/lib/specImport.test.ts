@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAX_DESCRIPTION_LENGTH,
-  MAX_IDEAS_PER_IMPORT,
+  MAX_CARDS_PER_IMPORT,
   MAX_TITLE_LENGTH,
   splitSpecIntoSections,
 } from './specImport'
@@ -211,6 +211,6 @@ describe('splitSpecIntoSections', () => {
   })
 
   it('hält die Obergrenze als Konstante bereit (Grenze des Batch-Endpoints)', () => {
-    expect(MAX_IDEAS_PER_IMPORT).toBe(200)
+    expect(MAX_CARDS_PER_IMPORT).toBe(200)
   })
 })

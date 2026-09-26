@@ -79,7 +79,6 @@ class CardServiceEpicsByCardNumberTest {
         null,
         0,
         false,
-        false,
         null,
         1L,
         FIXED,
@@ -89,7 +88,6 @@ class CardServiceEpicsByCardNumberTest {
         shortcode,
         null,
         PROJECT,
-        null,
         null,
         derivedFrom,
         null);
@@ -207,39 +205,5 @@ class CardServiceEpicsByCardNumberTest {
     assertThat(service.epicsByCardNumber(PROJECT, Set.of())).isEmpty();
 
     verifyNoInteractions(cards);
-  }
-
-  /** Eine board-lose Pool-Idee hat kein Board, auf dem EpicMembership rechnen koennte. */
-  @Test
-  void eineBoardlosePoolIdeeStoertDieRechnungNicht() {
-    Card idee =
-        new Card(
-            30L,
-            null,
-            null,
-            null,
-            "Idee",
-            null,
-            0,
-            false,
-            true,
-            null,
-            1L,
-            FIXED,
-            FIXED,
-            CardType.CARD,
-            1L,
-            null,
-            null,
-            PROJECT,
-            null,
-            null,
-            null,
-            null);
-    when(cards.findByProjectId(PROJECT))
-        .thenReturn(
-            List.of(vorhaben(1L, BOARD_A, 900, "PLANEN"), zugeordnet(10L, BOARD_A, 964, 1L), idee));
-
-    assertThat(zuordnung(964)).containsExactly(Map.entry(964, Set.of(PLANEN)));
   }
 }

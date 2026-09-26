@@ -391,9 +391,10 @@ describe('AppShell', () => {
       'Board',
       'Liste',
       'Vorhaben',
-      'Ideen',
       'Runner',
     ])
+    // AK 1 (#1201): Die Ideen-Seite ist entfallen, die Schiene nennt sie auch bei offenem Board nicht.
+    expect(screen.queryByRole('link', { name: 'Ideen' })).not.toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Verwaltung' })).toHaveTextContent('Rollen & Rechte')
   })
 
@@ -509,13 +510,11 @@ describe('AppShell', () => {
     await waitFor(() => expect(screen.queryByText('B')).not.toBeInTheDocument())
   })
 
-  it('zeigt den projektweiten „Ideen"-Link auf einer Projekt-Route (ohne offenes Board)', async () => {
+  it('nennt auf einer Projekt-Route keinen „Ideen"-Eintrag mehr (#1201, AK 1)', async () => {
     renderShell('/projects/5')
 
-    const ideen = await screen.findByText('Ideen')
-    fireEvent.click(ideen)
-
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects/5/ideas'))
+    await screen.findByRole('group', { name: /^Projekt/ })
+    expect(screen.queryByText('Ideen')).not.toBeInTheDocument()
   })
 
   describe('Läufe-Eintrag', () => {
@@ -789,9 +788,9 @@ describe('AppShell', () => {
       '/',
       '/boards/1',
       '/boards/3',
-      '/projects/5/ideas',
+      '/projects/5',
       '/projects/5/nachtlauf',
-      '/projects/6/ideas',
+      '/projects/6',
       '/projects',
       '/plattform-leitstand',
       '/admin',
@@ -855,7 +854,6 @@ describe('AppShell', () => {
         ['Board', '/boards/1'],
         ['Liste', '/boards/1/list'],
         ['Vorhaben', '/boards/1/vorhaben'],
-        ['Ideen', '/projects/5/ideas'],
         ['Runner', '/projects/5/nachtlauf'],
       ])
       // Aktiv ist die Seite, auf der man steht — kein Board-Eintrag.
@@ -868,7 +866,7 @@ describe('AppShell', () => {
 
     it('nimmt beim direkten Aufruf einer Projektseite das zuletzt besuchte Board dieses Projekts', async () => {
       verlaufSetzen([{ id: 3, name: 'Drei', projectId: 5, projectName: 'P1' }])
-      renderMitZielen('/projects/5/ideas')
+      renderMitZielen('/projects/5')
 
       expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/3')
     })
@@ -878,39 +876,39 @@ describe('AppShell', () => {
       await screen.findByRole('link', { name: 'Leitstand' })
       await gehZu('/')
 
-      await gehZu('/projects/5/ideas')
+      await gehZu('/projects/5')
 
       // Ohne `projectId` im Verlaufseintrag fiele die Schiene auf das erste Board (1) zurück.
       expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/3')
     })
 
     it('nimmt ohne Verlauf das erste Board des Projekts', async () => {
-      renderMitZielen('/projects/5/ideas')
+      renderMitZielen('/projects/5')
 
       expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/1')
     })
 
     it('ignoriert einen alten Verlaufseintrag ohne projectId und nimmt das erste Board', async () => {
       verlaufSetzen([{ id: 3, name: 'Drei', projectName: 'P1' }])
-      renderMitZielen('/projects/5/ideas')
+      renderMitZielen('/projects/5')
 
       expect(await screen.findByRole('link', { name: 'Board' })).toHaveAttribute('href', '/boards/1')
     })
 
-    it('zeigt bei einem Projekt ohne Board keine Board-Einträge', async () => {
+    it('lässt den Projekt-Block bei einem Projekt ohne Board und ohne Nachtlauf-Recht ganz weg', async () => {
       mockedBoards.list.mockResolvedValue([])
-      renderMitZielen('/projects/6/ideas')
+      renderMitZielen('/projects/6')
 
-      await screen.findByRole('group', { name: 'Projekt P2' })
       await waitFor(() => expect(mockedBoards.list).toHaveBeenCalledWith(6))
-      expect(projektBlock('P2')).toEqual([['Ideen', '/projects/6/ideas']])
+      // Ohne Board bleibt nichts Projektweites übrig, seit der Ideen-Eintrag entfallen ist (#1201).
+      expect(screen.queryByRole('group', { name: 'Projekt P2' })).not.toBeInTheDocument()
     })
 
     it('zeigt auf der Projektseite eines anderen Projekts nie ein Board des vorigen', async () => {
       renderMitZielen('/boards/1')
       await screen.findByRole('link', { name: 'Leitstand' })
 
-      await gehZu('/projects/6/ideas')
+      await gehZu('/projects/6')
 
       // Schon vor der Antwort der Boardliste ist der fremde Kontext weg.
       expect(
@@ -927,20 +925,16 @@ describe('AppShell', () => {
         ['Board', '/boards/2'],
         ['Liste', '/boards/2/list'],
         ['Vorhaben', '/boards/2/vorhaben'],
-        ['Ideen', '/projects/6/ideas'],
       ])
     })
 
     it('lässt die Schiene ohne Board, wenn die Boardliste des Projekts fehlschlägt', async () => {
       mockedBoards.list.mockRejectedValue(new Error('500'))
-      renderMitZielen('/projects/5/ideas')
+      renderMitZielen('/projects/5')
 
       await screen.findByRole('group', { name: 'Projekt P1' })
       await waitFor(() => expect(mockedBoards.list).toHaveBeenCalledWith(5))
-      expect(projektBlock('P1')).toEqual([
-        ['Ideen', '/projects/5/ideas'],
-        ['Runner', '/projects/5/nachtlauf'],
-      ])
+      expect(projektBlock('P1')).toEqual([['Runner', '/projects/5/nachtlauf']])
     })
 
     describe('Seiten ohne Projekt behalten den Kontext (#1129)', () => {
@@ -949,7 +943,6 @@ describe('AppShell', () => {
         ['Board', '/boards/1'],
         ['Liste', '/boards/1/list'],
         ['Vorhaben', '/boards/1/vorhaben'],
-        ['Ideen', '/projects/5/ideas'],
         ['Runner', '/projects/5/nachtlauf'],
       ]
 
@@ -1006,7 +999,7 @@ describe('AppShell', () => {
           liste = resolve
         }),
       )
-      renderMitZielen('/projects/5/ideas')
+      renderMitZielen('/projects/5')
       await screen.findByRole('group', { name: 'Projekt P1' })
 
       await gehZu('/')

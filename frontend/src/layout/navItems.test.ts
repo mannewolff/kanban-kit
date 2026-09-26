@@ -31,19 +31,24 @@ describe('buildNavItems Gliederung nach dem Leitstand-Entwurf (#978)', () => {
     expect(bloecke({ board })[0]).toBe('Projekt')
   })
 
-  it('ordnet den Projekt-Block wie der Entwurf: Leitstand, Board, Liste, Vorhaben, Ideen, Runs', () => {
+  it('ordnet den Projekt-Block wie der Entwurf: Leitstand, Board, Liste, Vorhaben, Runs', () => {
     expect(eintraege({ board, canViewNightRun: true }, 'Projekt')).toEqual([
       'Leitstand',
       'Board',
       'Liste',
       'Vorhaben',
-      'Ideen',
       'Runner',
     ])
   })
 
   it('führt ohne offenes Board im Projekt-Block nur die projektweiten Einträge', () => {
-    expect(eintraege({ board: null, projectId: 7, canViewNightRun: true }, 'Projekt')).toEqual(['Ideen', 'Runner'])
+    expect(eintraege({ board: null, projectId: 7, canViewNightRun: true }, 'Projekt')).toEqual(['Runner'])
+  })
+
+  // Seit dem Rückbau des Ideen-Links (#1201) kann der Projekt-Block leer bleiben: kein Board, kein
+  // Nachtlauf-Recht. Dann darf er gar nicht erscheinen, statt einen Titel ohne Eintrag zu zeigen.
+  it('lässt den Projekt-Block weg, wenn er ohne Board und ohne Nachtlauf-Recht leer bliebe', () => {
+    expect(bloecke({ board: null, projectId: 7 })).toEqual(['Übersicht', 'Verwaltung'])
   })
 
   it('lässt den Projekt-Block ohne Projekt-Kontext weg', () => {
@@ -97,21 +102,11 @@ describe('buildNavItems Übersicht', () => {
   })
 })
 
-describe('buildNavItems Ideen-Link', () => {
-  it('zeigt „Ideen" bei offenem Board (Projekt-Kontext aus dem Board)', () => {
-    expect(link({ board }, 'Ideen')?.path).toBe(`/projects/${board.projectId}/ideas`)
-  })
-
-  it('zeigt „Ideen" auf einer Projekt-Route ohne offenes Board', () => {
-    expect(link({ board: null, projectId: 7 }, 'Ideen')?.path).toBe('/projects/7/ideas')
-  })
-
-  it('blendet „Ideen" ohne Projekt-Kontext aus (kein Board, keine projectId)', () => {
-    expect(link({ board: null }, 'Ideen')).toBeUndefined()
-  })
-
+describe('buildNavItems Projekt-Kontext', () => {
   it('bevorzugt den Board-Projektkontext vor einer abweichenden projectId', () => {
-    expect(link({ board, projectId: 99 }, 'Ideen')?.path).toBe(`/projects/${board.projectId}/ideas`)
+    expect(link({ board, projectId: 99, canViewNightRun: true }, 'Runner')?.path).toBe(
+      `/projects/${board.projectId}/nachtlauf`,
+    )
   })
 })
 

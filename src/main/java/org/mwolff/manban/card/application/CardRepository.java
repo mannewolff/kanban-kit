@@ -15,9 +15,8 @@ public interface CardRepository {
   Optional<Card> findById(long id);
 
   /**
-   * Nicht-gelöschte Karte eines Projekts nach ihrer projektweiten Nummer (board-gebundene Karte
-   * oder board-lose Pool-Idee). Nummern sind projektweit eindeutig; leer, wenn keine solche Karte
-   * existiert.
+   * Nicht-gelöschte Karte eines Projekts nach ihrer projektweiten Nummer. Nummern sind projektweit
+   * eindeutig; leer, wenn keine solche Karte existiert.
    */
   Optional<Card> findByProjectIdAndNumber(long projectId, int number);
 
@@ -66,16 +65,16 @@ public interface CardRepository {
    */
   List<Long> findAllIdsByBoardId(long boardId);
 
-  /** Alle nicht-gelöschten Karten eines Projekts (board-übergreifend, inkl. board-loser Ideen). */
+  /** Alle nicht-gelöschten Karten eines Projekts (board-übergreifend). */
   List<Card> findByProjectId(long projectId);
 
   /**
    * Karten, deren Herkunft auf {@code cardId} zeigt — die direkten Kinder im Herkunftsbaum.
    *
-   * <p>Liefert <strong>alle</strong> Treffer, unabhängig von {@code archived}, {@code ideaStored}
-   * und Papierkorb; die Reihenfolge ist unspezifiziert. Eine gefilterte Abfrage wäre für das
-   * Aufräumen beim Projektwechsel ein stiller Fehler: Auch archivierte Kinder behielten sonst einen
-   * Verweis über die Projektgrenze.
+   * <p>Liefert <strong>alle</strong> Treffer, unabhängig von {@code archived} und Papierkorb; die
+   * Reihenfolge ist unspezifiziert. Eine gefilterte Abfrage wäre für das Aufräumen beim
+   * Projektwechsel ein stiller Fehler: Auch archivierte Kinder behielten sonst einen Verweis über
+   * die Projektgrenze.
    */
   List<Card> findByDerivedFrom(long cardId);
 
@@ -101,12 +100,6 @@ public interface CardRepository {
    * existiert noch, und seine Nummer ist stabil — die Sicht soll sie weiterhin liefern.
    */
   List<Card> findByIds(Collection<Long> ids);
-
-  /**
-   * Ideen-Karten eines Projekts (idea_stored), älteste zuerst — board-lose Pool-Ideen und
-   * board-gebundene Legacy-Ideen. Papierkorb-Karten sind ausgenommen.
-   */
-  List<Card> findIdeasByProjectId(long projectId);
 
   /** Nicht-archivierte Karten, die vor {@code threshold} nach Done verschoben wurden. */
   List<Card> findArchivableDoneCards(Instant threshold);
@@ -243,10 +236,10 @@ public interface CardRepository {
    * nach vorn, {@link SortDirection#DESC} die größte.
    *
    * <p>Betroffen ist ausschließlich der <strong>aktive Positions-Namespace</strong> der Spalte
-   * ({@code archived = false}, {@code idea_stored = false}, {@code deleted_at IS NULL}, {@code type
-   * <> 'EPIC'}) — genau die Menge, für die {@code active_position} gesetzt ist. Archivierte,
-   * gelöschte und Ideen-Speicher-Karten sowie Vorhaben behalten ihre Position: Sie halten keinen
-   * aktiven Anspruch, und eine Neuvergabe würde ihre Rückkehr-Position ohne Grund verwerfen.
+   * ({@code archived = false}, {@code deleted_at IS NULL}, {@code type <> 'EPIC'}) — genau die
+   * Menge, für die {@code active_position} gesetzt ist. Archivierte und gelöschte Karten sowie
+   * Vorhaben behalten ihre Position: Sie halten keinen aktiven Anspruch, und eine Neuvergabe würde
+   * ihre Rückkehr-Position ohne Grund verwerfen.
    *
    * <p>Die Spaltenzeile wird gesperrt (siehe {@link #lockColumnPositions(List)}) — die neue Ordnung
    * entsteht aus dem gelesenen Bestand, eine parallel angehängte Karte bliebe sonst außerhalb der

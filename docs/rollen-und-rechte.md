@@ -26,11 +26,11 @@ Recht). Der Schlüssel in der zweiten Spalte ist der technische Name des Rechts 
 | Vorhaben anlegen | `EPIC_CREATE` | – | ✓ | ✓ | ✓ |
 | Vorhaben bearbeiten | `EPIC_UPDATE` | – | ✓ | ✓ | ✓ |
 | Vorhaben archivieren / in den Papierkorb legen | `EPIC_DELETE` | – | ✓ | ✓ | ✓ |
-| Karten lesen (inkl. Dashboard, Papierkorb, Ideen-Pool) | `TICKET_READ` | ✓ | ✓ | ✓ | ✓ |
-| Karte anlegen, Idee aus dem Pool einplanen | `TICKET_CREATE` | – | ✓ | ✓ | ✓ |
+| Karten lesen (inkl. Dashboard, Papierkorb) | `TICKET_READ` | ✓ | ✓ | ✓ | ✓ |
+| Karte anlegen, Spezifikation einlesen | `TICKET_CREATE` | – | ✓ | ✓ | ✓ |
 | Karte bearbeiten (Titel, Text, Zuständige, Fälligkeit, Labels) | `TICKET_UPDATE` | – | ✓ | ✓ | ✓ |
 | Karte archivieren, in den Papierkorb legen, wiederherstellen | `TICKET_DELETE` | – | ✓ | ✓ | ✓ |
-| Karte verschieben — Spalte, **anderes Board desselben Projekts**, Ideen-Pool; Spalte nach Kartennummer sortieren | `CARD_MOVE` | – | ✓ | ✓ | ✓ |
+| Karte verschieben — Spalte, **anderes Board desselben Projekts**; Spalte nach Kartennummer sortieren | `CARD_MOVE` | – | ✓ | ✓ | ✓ |
 | **Karte in ein anderes Projekt verschieben** | *(Projekt-Rolle `OWNER`)* | – | – | – | ✓ |
 | **Auswertung der Läufe lesen und Protokoll hineingeben** | *(Projekt-Rolle `OWNER`; zusätzlich Plattform-Admin eines teilnehmenden Projekts)* | – | – | – | ✓ |
 | **Teilnahme am Plattform-Leitstand schalten** | *(Projekt-Rolle `OWNER` oder `ADMIN` — nicht der Plattform-Admin)* | – | – | ✓ | ✓ |

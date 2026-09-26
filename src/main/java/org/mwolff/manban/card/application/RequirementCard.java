@@ -41,7 +41,7 @@ final class RequirementCard {
     // ist auch ein Löschen an ihr kein sinnvoller Aufruf, sondern ein Irrtum des Aufrufers.
     if (epic.type() != CardType.EPIC) {
       throw new InvalidRequirementCardException(
-          "Eine Anforderung laesst sich nur an einem Vorhaben setzen: " + epic.requireNumber());
+          "Eine Anforderung laesst sich nur an einem Vorhaben setzen: " + epic.number());
     }
     if (requirementNumber == null) {
       return null;

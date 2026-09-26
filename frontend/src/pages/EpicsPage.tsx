@@ -65,8 +65,7 @@ function Art({ anzahl, eins, viele }: Readonly<{ anzahl: number; eins: string; v
 
 /**
  * Der Text der Löschen-Rückfrage. „aktive" ist bewusst gewählt: `rootNumbers` lässt archivierte
- * und im Ideen-Speicher liegende Karten aus (`EpicMembership`), während der Server beim Löschen
- * auch deren Zuordnung löst. Die Zahl kann also kleiner sein als die Zahl der tatsächlich
+ * Karten aus (`EpicMembership`), während der Server beim Löschen auch deren Zuordnung löst. Die Zahl kann also kleiner sein als die Zahl der tatsächlich
  * gelösten Zuordnungen — der Satz behauptet deshalb nur etwas über die aktiven Karten.
  *
  * Der Hinweis auf die Unumkehrbarkeit steht da, weil ein gelöschtes Vorhaben in keinem

@@ -15,7 +15,6 @@ function karte(number: number, title: string, labels: number[] = []): Card {
     excerpt: null,
     positionInColumn: 0,
     archived: false,
-    ideaStored: false,
     movedToDoneAt: null,
     dependencies: [],
     type: 'CARD',
@@ -63,8 +62,7 @@ describe('countKinds', () => {
   })
 
   /**
-   * Eine eingeplante Idee ist faktisch ein Arbeitspaket (Entscheidung Manne, 2026-08-31); Ideen
-   * im Pool erscheinen ohnehin nicht, sie tragen `ideaStored`.
+   * Eine Idee auf dem Board ist faktisch ein Arbeitspaket (Entscheidung Manne, 2026-08-31).
    */
   it('zählt eine [Idee] als Arbeitspaket', () => {
     const cards = [karte(1, '[Idee] Labels an allen Karten')]

@@ -60,7 +60,6 @@ class RequirementCardResolutionTest {
             null,
             nummer,
             false,
-            false,
             null,
             null,
             NOW,
@@ -70,7 +69,6 @@ class RequirementCardResolutionTest {
             null,
             null,
             PROJEKT,
-            null,
             null,
             null,
             null);

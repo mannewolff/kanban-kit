@@ -20,17 +20,17 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * End-to-End der Herkunft am Ingest: beide Anlegewege tragen sie, eine unbekannte Nummer wird auf
- * beiden abgelehnt, und der Idempotenz-Treffer lässt sie unverändert.
+ * End-to-End der Herkunft am Ingest: mit und ohne {@code direct} trägt die Karte sie, eine
+ * unbekannte Nummer wird auf beiden Wegen abgelehnt, und der Idempotenz-Treffer lässt sie
+ * unverändert.
  *
  * <p>Der Assert läuft über die Datenbank, nicht über die kanbancompat-Antwort: {@code Created}
  * trägt nur {@code id}, {@code number} und {@code created}, und {@code Item} bekommt die Herkunft
- * erst in Issue #605. Board-lose Pool-Ideen sind über {@code /api/kanban/items} ohnehin nicht
- * lesbar (#434).
+ * erst in Issue #605.
  *
- * <p>Beide Wege werden einzeln geprüft, auch bei Ablehnung und Idempotenz: Der Duplikat-Check ist
- * in {@code doCreateProjectIdea} und {@code createDirect} getrennt implementiert — ein Test auf
- * einem Weg belegt den anderen nicht.
+ * <p>Beide Aufrufformen bleiben einzeln geprüft, auch bei Ablehnung und Idempotenz. Seit Issue
+ * #1203 laufen sie durch denselben Anlegepfad — die Fälle sichern, dass der Unterschied wirklich
+ * nur die Strenge der Spaltenauflösung ist und nicht die Herkunft berührt.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
@@ -45,8 +45,8 @@ class KanbanCompatDerivedFromIT extends AbstractIntegrationTest {
   @Autowired private JdbcTemplate jdbc;
 
   @Test
-  void poolWeg_traegtDieHerkunft() throws Exception {
-    Fixture f = fixture("df-pool");
+  void ohneDirect_traegtDieHerkunft() throws Exception {
+    Fixture f = fixture("df-nodirect");
 
     int vorfahrNummer = numberOf(ingest(f.token, "Vorfahr", null, null, false));
     long kindId = ingest(f.token, "Kind", vorfahrNummer, null, false);
@@ -68,7 +68,7 @@ class KanbanCompatDerivedFromIT extends AbstractIntegrationTest {
   void unbekannteNummer_wirdAbgelehnt_aufBeidenWegen() throws Exception {
     Fixture f = fixture("df-unknown");
 
-    ingestExpecting(f.token, "Pool", 999_999, null, false, status().isBadRequest());
+    ingestExpecting(f.token, "Ohne direct", 999_999, null, false, status().isBadRequest());
     ingestExpecting(f.token, "Direct", 999_999, null, true, status().isBadRequest());
 
     assertThat(countCards(f.projectId)).isZero();
@@ -80,10 +80,11 @@ class KanbanCompatDerivedFromIT extends AbstractIntegrationTest {
     int vorfahrNummer = numberOf(ingest(f.token, "Vorfahr", null, null, false));
     int andererNummer = numberOf(ingest(f.token, "Anderer", null, null, false));
 
-    long poolId = ingest(f.token, "Pool", vorfahrNummer, "k:pool", false);
-    long poolWieder = ingestExisting(f.token, "Pool erneut", andererNummer, "k:pool", false);
-    assertThat(poolWieder).isEqualTo(poolId);
-    assertThat(derivedFromNumber(poolId)).isEqualTo(vorfahrNummer);
+    long ohneDirectId = ingest(f.token, "Ohne direct", vorfahrNummer, "k:nodirect", false);
+    long ohneDirectWieder =
+        ingestExisting(f.token, "Ohne direct erneut", andererNummer, "k:nodirect", false);
+    assertThat(ohneDirectWieder).isEqualTo(ohneDirectId);
+    assertThat(derivedFromNumber(ohneDirectId)).isEqualTo(vorfahrNummer);
 
     long directId = ingest(f.token, "Direct", vorfahrNummer, "k:direct", true);
     long directWieder = ingestExisting(f.token, "Direct erneut", andererNummer, "k:direct", true);
@@ -141,23 +142,25 @@ class KanbanCompatDerivedFromIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void poolIdee_traegtDieHerkunftVorUndNachDemEinplanen() throws Exception {
-    Fixture f = fixture("df-plan");
+  void herkunftUeberlebtDenSpaltenwechsel() throws Exception {
+    // Der Zustandswechsel, den eine ingestierte Karte nach ihrer Anlage noch erlebt: Sie wandert
+    // durch die Spalten. Vor Issue #1203 stand hier derselbe Nachweis fuer den Weg aus dem
+    // Ideen-Pool auf das Board — den es nicht mehr gibt, weil keine Karte mehr board-los entsteht.
+    Fixture f = fixture("df-move");
     int vorfahrNummer = numberOf(ingest(f.token, "Vorfahr", null, null, true));
-    long ideeId = ingest(f.token, "Idee", vorfahrNummer, null, false);
+    long kindId = ingest(f.token, "Kind", vorfahrNummer, null, false);
 
-    assertThat(derivedFromNumber(ideeId)).isEqualTo(vorfahrNummer);
+    assertThat(derivedFromNumber(kindId)).isEqualTo(vorfahrNummer);
 
-    // Einplanen: die Idee wandert auf das Board. Die Herkunft bleibt.
-    jdbc.update(
-        "UPDATE card SET idea_stored = false, board_id = (SELECT id FROM board WHERE project_id = ?"
-            + " LIMIT 1), column_id = (SELECT bc.id FROM board_column bc JOIN board b"
-            + " ON b.id = bc.board_id WHERE b.project_id = ? LIMIT 1) WHERE id = ?",
-        f.projectId(),
-        f.projectId(),
-        ideeId);
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+                    "/api/kanban/items/" + kindId + "/move")
+                .header("X-Kanban-Token", f.token)
+                .contentType("application/json")
+                .content("{\"column\":\"IN_PROGRESS\",\"position\":0}"))
+        .andExpect(status().isOk());
 
-    assertThat(derivedFromNumber(ideeId)).isEqualTo(vorfahrNummer);
+    assertThat(derivedFromNumber(kindId)).isEqualTo(vorfahrNummer);
   }
 
   // --- Hilfen ---------------------------------------------------------------

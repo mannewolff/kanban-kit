@@ -10,9 +10,9 @@ import { epicShortcode } from './epicMeta'
  * in seinem `memberNumbers` steht — dort führt der Server beide Zugehörigkeitswege zusammen, den
  * ausdrücklich zugeordneten und den über die Herkunft geerbten.
  *
- * `card.parentId` liest die Funktion bewusst **nicht**. Eine archivierte oder in den Ideenpool
- * gelegte Karte behält ihre `parentId`, zählt aber serverseitig nicht mehr zur Zugehörigkeit
- * (`EpicMembership.zaehlt()`); die Anzeige folgt dem Server statt einer zweiten Wahrheit.
+ * `card.parentId` liest die Funktion bewusst **nicht**. Eine archivierte Karte behält ihre
+ * `parentId`, zählt aber serverseitig nicht mehr zur Zugehörigkeit (`EpicMembership.zaehlt()`);
+ * die Anzeige folgt dem Server statt einer zweiten Wahrheit.
  *
  * **Herkunft vor ausdrücklicher Zuordnung:** Steht die Nummer in `memberNumbers`, aber nicht in
  * `rootNumbers`, wurde das Vorhaben über die Herkunftskette erreicht und hat Vorrang. Bleiben

@@ -46,8 +46,7 @@ function memberCards(epic: Epic, cards: Card[]): Card[] {
  *
  * Ein Präfix zählt nur **am Anfang** des Titels und in exakt dieser Schreibweise (Konvention des
  * Arbeitsablaufs). Alles andere ist ein Arbeitspaket — ausdrücklich auch `[Idee]` (Entscheidung
- * Manne, 2026-08-31): Eine eingeplante Idee ist faktisch ein Arbeitspaket, und Ideen im Pool
- * erscheinen ohnehin nicht, sie tragen `ideaStored`.
+ * Manne, 2026-08-31): Eine Idee auf dem Board ist faktisch ein Arbeitspaket.
  */
 export function countKinds(epic: Epic, cards: Card[]): KindCounts {
   const counts: KindCounts = { requirements: 0, plans: 0, workItems: 0 }

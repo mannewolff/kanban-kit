@@ -58,7 +58,6 @@ const karte = (title: string): Card => ({
   excerpt: null,
   positionInColumn: 0,
   archived: false,
-  ideaStored: false,
   movedToDoneAt: null,
   dependencies: [],
   type: 'CARD',

@@ -71,7 +71,7 @@ const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mLabels = labelsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
 const base = {
-  boardId: 1, positionInColumn: 0, ideaStored: false, movedToDoneAt: null as string | null,
+  boardId: 1, positionInColumn: 0, movedToDoneAt: null as string | null,
   dependencies: [] as number[], type: 'CARD' as const, parentId: null as number | null, shortcode: null as string | null, assignees: [] as number[], dueDate: null as string | null, labels: [] as number[],
   derivedFrom: null as number | null,
   // Die Listen-Antwort liefert die Beschreibung nur noch als Auszug (Issue #771); `description`
@@ -80,7 +80,6 @@ const base = {
 }
 const active: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '# Titel\nText **fett**', excerpt: '# Titel\nText **fett**', archived: false }
 const archived: Card = { ...base, id: 101, columnId: 20, number: 2, title: 'AlteKarte', description: 'x', archived: true }
-const idea: Card = { ...base, id: 102, columnId: 10, number: 3, title: 'MeineIdee', description: 'Idee-Text', archived: false, ideaStored: true }
 // `memberNumbers: [1]` fasst die Zugehörigkeit der Karte #1: Die Zuordnung rechnet über die
 // Vorhaben-Liste, nicht über `parentId` (Issue #689) — das Muster „parentId gesetzt,
 // memberNumbers leer" gibt es real nicht.
@@ -312,13 +311,10 @@ describe('BoardListPage', () => {
     expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
   })
 
-  it('blendet ideaStored-Karten komplett aus der Liste aus (Ideen sind jetzt projektweit)', async () => {
-    renderPage([active, idea])
+  it('zeigt jede aktive Karte der Spalte — es gibt keine Ideen-Zone mehr (Issue #1202)', async () => {
+    renderPage([active])
     await screen.findByText('Aufgabe')
 
-    // Die Idee (ideaStored) taucht in der Board-Listenansicht nicht mehr auf — sie lebt seit dem
-    // projektweiten Ideen-Pool auf der Projekt-Ideen-Seite. Es gibt keine Ideen-Zone mehr.
-    expect(screen.queryByText('MeineIdee')).not.toBeInTheDocument()
     expect(screen.queryByTestId('idea-zone')).not.toBeInTheDocument()
   })
 

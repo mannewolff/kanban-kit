@@ -15,7 +15,6 @@ function card(number: number, over: Partial<Card> = {}): Card {
     excerpt: null,
     positionInColumn: 0,
     archived: false,
-    ideaStored: false,
     movedToDoneAt: null,
     dependencies: [],
     type: 'CARD',

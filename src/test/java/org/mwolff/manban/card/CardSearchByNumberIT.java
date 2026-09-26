@@ -1,7 +1,6 @@
 package org.mwolff.manban.card;
 
 import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -108,35 +107,11 @@ class CardSearchByNumberIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void findsPoolIdeaWithoutBoard_andCardOnArchivedBoard_butNotTrashedCard() throws Exception {
+  void findsCardOnArchivedBoard_butNotTrashedCard() throws Exception {
     Cookie owner = session("search2-owner@example.com", PlatformRole.USER);
     Cookie admin = session("search-admin@example.com", PlatformRole.ADMIN);
 
     long projectId = createProject(admin, "Projekt C", "search2-owner@example.com");
-
-    // Board-lose Pool-Idee: Treffer ohne Board und ohne Spalte.
-    JsonNode idea =
-        json.readTree(
-            mvc.perform(
-                    post("/api/projects/" + projectId + "/ideas")
-                        .cookie(owner)
-                        .contentType("application/json")
-                        .content("{\"title\":\"Idee\"}"))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString());
-
-    mvc.perform(get("/api/cards/search").param("number", idea.get("number").asText()).cookie(owner))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$", hasSize(1)))
-        .andExpect(jsonPath("$[0].card.id").value(idea.get("id").asLong()))
-        .andExpect(jsonPath("$[0].projectName").value("Projekt C"))
-        .andExpect(jsonPath("$[0].boardId").value(nullValue()))
-        .andExpect(jsonPath("$[0].boardName").value(nullValue()))
-        .andExpect(jsonPath("$[0].boardArchived").value(false))
-        .andExpect(jsonPath("$[0].columnId").value(nullValue()))
-        .andExpect(jsonPath("$[0].columnName").value(nullValue()));
 
     // Karte auf einem Board, das anschließend archiviert wird: bleibt auffindbar, Board benannt.
     JsonNode board = createBoard(owner, projectId, "Altes Board");

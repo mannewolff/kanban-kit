@@ -165,7 +165,6 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/projects` | Projekte | Rahmen; Projekte als Platten | #978, #1082 |
 | `/plattform-leitstand` | Plattform-Leitstand | Kupferwarte aus den Bausteinen des Leitstands (`LeitstandBausteine.tsx`, `KupferwarteBereich`, `Platte`, `Led`, `Taste`); vier Bereiche in dieser Ordnung: Aktive Runs, Aktueller Status, Beendete Runs, Störungen; der Entwurf führt für diese Ansicht kein eigenes Mockup | #1083, #1102, #1173 |
 | `/projects/:projectId` | Boards eines Projekts | Rahmen; Boards als Platten, Zahlen in Plex Mono | #978 |
-| `/projects/:projectId/ideas` | Ideen | Rahmen; Nut-Zonen und Platten wie das Board | #978, #980 |
 | `/projects/:projectId/members` | Mitglieder | Rahmen; Tabelle als Platte, Zahlen in Plex Mono | #978 |
 | `/projects/:projectId/nachtlauf` | Runner | Blöcke der Runs nach `docs/mockup-nachtlauf-lauf.html` in Kupferwarte; der übrige Inhalt **Ausnahme Nachtlauf** (eigener Abschnitt); Rahmen der Vorlage | #978, #988 |
 | `/boards/:boardId` | Board | Board der Vorlage (Entwurf Z. 1679–1864) | #980 |

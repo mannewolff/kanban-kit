@@ -11,17 +11,18 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useEffect, useMemo, useState } from 'react'
+import type { BoardColumn } from '../api/boards'
 import { apiErrorMessage } from '../api/client'
 import {
-  MAX_IDEAS_PER_IMPORT,
+  MAX_CARDS_PER_IMPORT,
   splitSpecIntoSections,
   type HeadingLevel,
   type SpecSection,
 } from '../lib/specImport'
 import { dialogTitleSx } from './dialogChromeSx'
 
-/** Eine anzulegende Idee, wie sie der Batch-Endpoint erwartet (#492). */
-export interface SpecIdea {
+/** Eine anzulegende Karte, wie sie der Stapel-Endpunkt erwartet (#1200). */
+export interface SpecCard {
   title: string
   description: string | null
 }
@@ -32,9 +33,18 @@ interface Props {
   fileName: string
   /** Inhalt der Datei, im Browser gelesen. */
   markdown: string
+  /** Spalten des Boards, in das eingelesen wird — in ihrer Reihenfolge auf dem Board. */
+  columns: readonly BoardColumn[]
+  /** Gewählte Zielspalte; der Aufrufer belegt sie mit der ersten Spalte des Boards vor. */
+  columnId: number
+  onColumnChange: (columnId: number) => void
   onClose: () => void
-  /** Legt die ausgewählten Ideen an; wirft bei Fehlschlag (der Dialog bleibt dann offen). */
-  onImport: (ideas: SpecIdea[]) => Promise<void>
+  /**
+   * Legt die ausgewählten Karten in der gewählten Spalte an; wirft bei Fehlschlag (der Dialog bleibt
+   * dann offen). Die Spalte reist mit, damit der Aufrufer sie nicht aus einem zweiten Zustand lesen
+   * muss — angelegt wird genau dort, wo der Dialog sie beim Druck auf den Knopf zeigte.
+   */
+  onImport: (cards: SpecCard[], columnId: number) => Promise<void>
 }
 
 /** Zeichen der einzeiligen Beschreibungs-Vorschau je Abschnitt. */
@@ -50,8 +60,8 @@ function previewText(description: string): string {
 }
 
 /**
- * Vorschau und Bestätigung des Spezifikations-Imports (Issue #493): zeigt, welche Ideen aus der
- * gewählten Markdown-Datei entstünden, bevor irgendetwas angelegt wird.
+ * Vorschau und Bestätigung des Spezifikations-Imports (Issue #493, #1201): zeigt, welche Karten aus
+ * der gewählten Markdown-Datei entstünden, bevor irgendetwas angelegt wird.
  *
  * Die Vorschau ist Sicherheitsmerkmal, nicht Komfort — eine falsch geratene Trennebene erzeugte
  * sonst Dutzende unbrauchbarer Karten, die einzeln wegzuräumen wären. Deshalb: Ebene umschaltbar,
@@ -61,7 +71,16 @@ function previewText(description: string): string {
  * Die Datei selbst bleibt im Browser: {@link Props.markdown} ist bereits gelesener Text, an den
  * Server gehen ausschließlich die fertigen Karten.
  */
-export function SpecImportDialog({ open, fileName, markdown, onClose, onImport }: Readonly<Props>) {
+export function SpecImportDialog({
+  open,
+  fileName,
+  markdown,
+  columns,
+  columnId,
+  onColumnChange,
+  onClose,
+  onImport,
+}: Readonly<Props>) {
   const [level, setLevel] = useState<HeadingLevel>(DEFAULT_LEVEL)
   const [deselected, setDeselected] = useState<ReadonlySet<number>>(new Set())
   const [busy, setBusy] = useState(false)
@@ -79,7 +98,7 @@ export function SpecImportDialog({ open, fileName, markdown, onClose, onImport }
 
   const sections = useMemo(() => splitSpecIntoSections(markdown, level), [markdown, level])
   const selected = sections.filter((_, index) => !deselected.has(index))
-  const tooMany = selected.length > MAX_IDEAS_PER_IMPORT
+  const tooMany = selected.length > MAX_CARDS_PER_IMPORT
 
   // Die Abwahl hängt an der Position im Dokument; nach einem Ebenenwechsel zeigen dieselben
   // Positionen auf andere Abschnitte, deshalb wird sie mit zurückgesetzt.
@@ -111,10 +130,11 @@ export function SpecImportDialog({ open, fileName, markdown, onClose, onImport }
           // sondern gar keine — dasselbe, was das Anlegen von Hand liefert.
           description: section.description === '' ? null : section.description,
         })),
+        columnId,
       )
       onClose()
     } catch (e) {
-      setError(apiErrorMessage(e, 'Die Ideen konnten nicht angelegt werden. Bitte erneut versuchen.'))
+      setError(apiErrorMessage(e, 'Die Karten konnten nicht angelegt werden. Bitte erneut versuchen.'))
     } finally {
       setBusy(false)
     }
@@ -150,11 +170,30 @@ export function SpecImportDialog({ open, fileName, markdown, onClose, onImport }
               <option value="1">H1 trennt die Karten</option>
               <option value="2">H2 trennt die Karten</option>
             </TextField>
+            {/* Zielspalte nach dem Muster aus `TransferCardDialog`: nativer Select, Beschriftung am
+                Feld. Ohne Leer-Option — es wird stets in genau eine Spalte eingelesen. */}
+            <TextField
+              select
+              size="small"
+              label="Spalte"
+              value={String(columnId)}
+              onChange={(e) => onColumnChange(Number(e.target.value))}
+              slotProps={{
+                htmlInput: { 'aria-label': 'Zielspalte' },
+                select: { native: true },
+              }}
+            >
+              {columns.map((column) => (
+                <option key={column.id} value={column.id}>
+                  {column.name}
+                </option>
+              ))}
+            </TextField>
           </Stack>
 
           <Typography variant="caption" color="text.secondary">
             Die Datei wird nur im Browser gelesen — sie wird weder hochgeladen noch verändert oder
-            gelöscht. An den Server gehen ausschließlich die unten gezeigten Ideen.
+            gelöscht. An den Server gehen ausschließlich die unten gezeigten Karten.
           </Typography>
 
           {error !== null && <Alert severity="error">{error}</Alert>}
@@ -165,7 +204,7 @@ export function SpecImportDialog({ open, fileName, markdown, onClose, onImport }
             <>
               {tooMany && (
                 <Alert severity="warning">
-                  {`${selected.length} Abschnitte ausgewählt — es lassen sich höchstens ${MAX_IDEAS_PER_IMPORT} auf einmal anlegen. Bitte einzelne Abschnitte abwählen.`}
+                  {`${selected.length} Abschnitte ausgewählt — es lassen sich höchstens ${MAX_CARDS_PER_IMPORT} auf einmal anlegen. Bitte einzelne Abschnitte abwählen.`}
                 </Alert>
               )}
               <Typography variant="body2">
@@ -193,7 +232,7 @@ export function SpecImportDialog({ open, fileName, markdown, onClose, onImport }
             onClick={() => void handleImport()}
             disabled={selected.length === 0 || tooMany || busy}
           >
-            {`${selected.length} ${selected.length === 1 ? 'Idee' : 'Ideen'} anlegen`}
+            {`${selected.length} ${selected.length === 1 ? 'Karte' : 'Karten'} anlegen`}
           </Button>
         )}
       </DialogActions>

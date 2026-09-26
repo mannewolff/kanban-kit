@@ -151,7 +151,7 @@ public class LabelService {
   @Transactional
   public void addToCard(long userId, long cardId, String name) {
     Card card = requireLabelableCard(userId, cardId);
-    long boardId = card.requireBoardId();
+    long boardId = card.boardId();
     if (cardLabels.addLabel(cardId, requireLabelId(boardId, name))) {
       events.publishEvent(new CardBoardActivityEvent(boardId, ActivityType.UPDATED, cardId));
     }
@@ -164,7 +164,7 @@ public class LabelService {
   @Transactional
   public void removeFromCard(long userId, long cardId, String name) {
     Card card = requireLabelableCard(userId, cardId);
-    long boardId = card.requireBoardId();
+    long boardId = card.boardId();
     if (cardLabels.removeLabel(cardId, requireLabelId(boardId, name))) {
       events.publishEvent(new CardBoardActivityEvent(boardId, ActivityType.UPDATED, cardId));
     }

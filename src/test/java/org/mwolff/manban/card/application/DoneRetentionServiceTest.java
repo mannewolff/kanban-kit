@@ -34,7 +34,6 @@ class DoneRetentionServiceTest {
         null,
         0,
         false,
-        false,
         NOW.minus(Duration.ofDays(40)),
         1L,
         NOW,
@@ -44,7 +43,6 @@ class DoneRetentionServiceTest {
         null,
         null,
         1L,
-        null,
         null,
         null,
         null);

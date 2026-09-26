@@ -16,7 +16,7 @@ import { epicShortcode } from '../lib/epicMeta'
 import { dueInputToIso } from '../lib/dueDate'
 import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
-import { CardFields, EpicSelectField } from './CardFields'
+import { CardFields } from './CardFields'
 import { AssigneeSection, LabelSection, parseDependencyInput } from './CardDetailModal'
 import { dialogTitleSx } from './dialogChromeSx'
 
@@ -31,13 +31,13 @@ export interface NewItemInput {
   description: string
   parentId: number | null
   shortcode: string | null
-  /** Kartennummern, von denen die neue Karte abhängt (leer bei Idee/Epic). */
+  /** Kartennummern, von denen die neue Karte abhängt (leer beim Vorhaben). */
   dependencies: number[]
-  /** Fälligkeit als ISO-String (null bei Idee/Epic oder leerer Eingabe). */
+  /** Fälligkeit als ISO-String (null beim Vorhaben oder bei leerer Eingabe). */
   dueDate: string | null
-  /** Zuständige (User-IDs); leer bei Idee/Epic. */
+  /** Zuständige (User-IDs); leer beim Vorhaben. */
   assigneeIds: number[]
-  /** Labels (IDs); leer bei Idee/Epic. */
+  /** Labels (IDs); leer beim Vorhaben. */
   labelIds: number[]
 }
 
@@ -56,8 +56,6 @@ interface Props {
   onSubmit: (input: NewItemInput) => Promise<void> | void
   /** Nur Epic anlegen: Typ vorbelegt EPIC, ohne Typ-/Zuordnungs-Auswahl (für die Epics-Ansicht). */
   epicOnly?: boolean
-  /** Nur Idee anlegen: Typ fest CARD, ohne Typ-Auswahl (für die Ideen-Speicher-Zone). */
-  ideaOnly?: boolean
   /** Vorbefüllung für „Duplizieren"; ohne Angabe startet der Dialog leer. */
   initialValues?: NewCardInitialValues
   /** Projektmitglieder für die Zuständigen-Auswahl (nur voller Karten-Anlege-Modus). */
@@ -78,7 +76,6 @@ export function NewCardModal({
   onClose,
   onSubmit,
   epicOnly = false,
-  ideaOnly = false,
   initialValues,
   members = [],
   boardLabels = [],
@@ -125,19 +122,11 @@ export function NewCardModal({
   // Die Laengensperre haengt am selben Praedikat wie die Feldmeldung: Was rot markiert ist,
   // laesst sich nicht abschicken (Issue #572).
   const canSubmit = title.trim().length > 0 && !saving && !isTooLong(body)
-  // Voller Karten-Anlege-Modus: nur echte Karten (kein Epic) außerhalb des schlanken Ideen-Dialogs
-  // bekommen Abhängigkeiten, Fälligkeit, Zuständige und Labels.
-  const fullCard = type === 'CARD' && !ideaOnly
+  // Voller Karten-Anlege-Modus: nur echte Karten (kein Epic) bekommen Abhängigkeiten,
+  // Fälligkeit, Zuständige und Labels.
+  const fullCard = type === 'CARD'
 
-  // Kein verschachteltes Ternary im JSX (Sonar S3358): der Titel richtet sich nach dem Modus.
-  let dialogTitle
-  if (type === 'EPIC') {
-    dialogTitle = 'Neues Vorhaben'
-  } else if (ideaOnly) {
-    dialogTitle = 'Neue Idee'
-  } else {
-    dialogTitle = `Neue Karte in „${columnName}“`
-  }
+  const dialogTitle = type === 'EPIC' ? 'Neues Vorhaben' : `Neue Karte in „${columnName}“`
 
   /**
    * Verteilt einen Fehlschlag des Anlegens auf die Anzeigeorte des Dialogs: Feldmeldungen zu
@@ -228,7 +217,7 @@ export function NewCardModal({
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           {formError !== null && <Alert severity="error">{formError}</Alert>}
 
-          {!epicOnly && !ideaOnly && (
+          {!epicOnly && (
             <TextField
               select
               label="Typ"
@@ -287,25 +276,21 @@ export function NewCardModal({
             </>
           ) : (
             <>
-              {/* Ideen-Speicher (ideaOnly) und Epic bleiben bewusst schlank: nur die bisherigen
-                  Felder, keine Zuständigen/Labels/Fälligkeit/Abhängigkeiten. */}
-              {type === 'EPIC' ? (
-                <TextField
-                  label="Kürzel (optional)"
-                  value={shortcode}
-                  onChange={(e) => {
-                    setShortcode(e.target.value)
-                    if (shortcodeError) setShortcodeError(null)
-                  }}
-                  placeholder={epicShortcode(title)}
-                  error={shortcodeError != null}
-                  helperText={shortcodeError ?? 'Leer lassen, um es aus dem Titel abzuleiten.'}
-                  slotProps={{ htmlInput: { maxLength: 16, 'aria-label': 'Kürzel' } }}
-                  fullWidth
-                />
-              ) : (
-                <EpicSelectField parentId={parentId} epics={epics} onParentIdChange={setParentId} />
-              )}
+              {/* Das Vorhaben bleibt bewusst schlank: nur die bisherigen Felder, keine
+                  Zuständigen/Labels/Fälligkeit/Abhängigkeiten. */}
+              <TextField
+                label="Kürzel (optional)"
+                value={shortcode}
+                onChange={(e) => {
+                  setShortcode(e.target.value)
+                  if (shortcodeError) setShortcodeError(null)
+                }}
+                placeholder={epicShortcode(title)}
+                error={shortcodeError != null}
+                helperText={shortcodeError ?? 'Leer lassen, um es aus dem Titel abzuleiten.'}
+                slotProps={{ htmlInput: { maxLength: 16, 'aria-label': 'Kürzel' } }}
+                fullWidth
+              />
 
               <TextField
                 label="Titel"

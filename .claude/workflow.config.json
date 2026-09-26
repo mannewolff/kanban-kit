@@ -3,11 +3,18 @@
   "issueTracker": "toolbox",
   "buildChecks": [
     {
+      "cmd": "mvn -Dskip.frontend=true -DskipITs -Djacoco.skip=true verify",
+      "areas": [
+        "backend"
+      ]
+    },
+    {
       "cmd": "mvn verify",
       "areas": [
         "backend",
         "doku"
-      ]
+      ],
+      "stufe": "push"
     },
     {
       "cmd": "npm --prefix frontend run build",
@@ -32,9 +39,36 @@
       "areas": [
         "cli"
       ]
+    },
+    {
+      "cmd": "node --test scripts/*.test.mjs",
+      "areas": [
+        "scripts"
+      ]
+    },
+    {
+      "cmd": "node scripts/mutationspruefung.mjs aenderung frontend",
+      "areas": [
+        "frontend"
+      ],
+      "stufe": "paket"
+    },
+    {
+      "cmd": "node scripts/mutationspruefung.mjs aenderung backend",
+      "areas": [
+        "backend"
+      ],
+      "stufe": "paket"
+    },
+    {
+      "cmd": "node scripts/mutationspruefung.mjs vollauf frontend",
+      "stufe": "merge"
+    },
+    {
+      "cmd": "node scripts/mutationspruefung.mjs vollauf backend",
+      "stufe": "merge"
     }
   ],
-  "mutationCommand": "mvn -Ppit -Dskip.frontend=true test",
   "mainBranch": "main",
   "productionBranch": "production",
   "reviewScope": "diff",
@@ -70,6 +104,9 @@
     ],
     "cli": [
       "cli/**"
+    ],
+    "scripts": [
+      "scripts/**"
     ],
     "workflow": [
       ".claude/**",

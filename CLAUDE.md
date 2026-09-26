@@ -104,7 +104,8 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 ```bash
 # Backend
-mvn verify                              # Tests + Coverage + Mutation (siehe CLAUDE-java.md §5)
+mvn -Dskip.frontend=true -DskipITs -Djacoco.skip=true verify   # je Paket: Kompilieren, Unit-Tests, statische Analyse
+mvn verify                              # beim Push: dazu Integrationstests, 100-%-Abdeckung, Doku-Seite
 
 # Frontend
 cd frontend && npm run build            # tsc + vite build
@@ -113,20 +114,40 @@ cd frontend && npm test                 # Vitest
 
 # CLI
 node --test cli/tbx.test.mjs            # tbx-Kommandozeilenwerkzeug
+
+# Skripte
+node --test scripts/*.test.mjs          # Projektskripte, darunter scripts/mutationspruefung.test.mjs
+
+# Mutationsprüfung (Bereiche frontend bzw. backend; Vollauf nur an der Merge-Stufe)
+node scripts/mutationspruefung.mjs aenderung frontend   # Stufe paket: Stryker über die geänderten Dateien
+node scripts/mutationspruefung.mjs aenderung backend    # Stufe paket: PIT über die geänderten Klassen
+node scripts/mutationspruefung.mjs vollauf frontend     # Stufe merge: Stryker über den ganzen Bereich, Schwelle 80 %
+node scripts/mutationspruefung.mjs vollauf backend      # Stufe merge: PIT über den ganzen Bereich, Schwelle 100 %
 ```
 
 **Je Paket nach Bereichen eingegrenzt.** Die Checks stehen in `.claude/workflow.config.json` (`buildChecks`)
-mit Bereichen aus `checkAreas`: `backend` (`src/**`, `pom.xml`, `config/**`) → `mvn verify`;
-`doku` (`docs/**`, `docs-site/**`) → `mvn verify` (baut die Doku-Seite mit); `frontend` (`frontend/**`,
-`CLAUDE-design.md`) → die drei npm-Checks; `cli` (`cli/**`) → `node --test cli/tbx.test.mjs`. Beim
-Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine Datei ohne Bereich
-(etwa `Dockerfile`, `.github/`, `scripts/`) fährt alle. **Vor `push main` und `merge production` laufen
-immer alle fünf.** Die Config ändert nur Manne.
+mit Bereichen aus `checkAreas`: `backend` (`src/**`, `pom.xml`, `config/**`) →
+`mvn -Dskip.frontend=true -DskipITs -Djacoco.skip=true verify` (Kompilieren, Unit-Tests, Spotless,
+Checkstyle, PMD, SpotBugs — ohne Integrationstests, Abdeckung und Frontend-/Doku-Build);
+`frontend` (`frontend/**`, `CLAUDE-design.md`) → die drei npm-Checks; `cli` (`cli/**`) →
+`node --test cli/tbx.test.mjs`; `scripts` (`scripts/**`) → `node --test scripts/*.test.mjs`. Das volle `mvn verify` (Bereiche `backend` und `doku`, inklusive
+Integrationstests, 100-%-Abdeckung und Doku-Seite) trägt `stufe: "push"` und läuft erst bei `push main`
+und `merge production` — die Abdeckungsgrenze ist ohne Integrationstests nicht zu halten, deshalb
+wandert sie mit. Beim Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine Datei
+ohne Bereich (etwa `Dockerfile`, `.github/`) fährt alle der Paketstufe. **Vor `push main` laufen alle
+Prüfungen der Paket- und Push-Stufe (neun), vor `merge production` zusätzlich die beiden Vollläufe (elf).** Die Config ändert nur Manne.
 
-**Nicht Pflichtcheck, eigens aufgerufen:** die Mutationstests. Backend
-`mvn -Ppit -Dskip.frontend=true test` (CLAUDE-java.md §5.3), Frontend `npm --prefix frontend run test:mutation` (Stryker über `src/lib`
-und `src/api`, CLAUDE-react.md). Beide bleiben absichtlich außerhalb des Standardlaufs, damit er
-schnell bleibt.
+**Mutationsprüfung (Issue #1104).** Die Änderungsprüfung (`aenderung`) mutiert je Paket nur, was das
+Paket berührt — gemessen je Seite rund 30 s (Issue #1211), deshalb Stufe `paket`.
+Das frühere Feld `mutationCommand` ist entfallen; PIT und Stryker laufen nur noch über den Treiber. Ein Überlebender in einer berührten Datei hält an; wie eine
+bewusst hingenommene Altlast markiert wird, steht in CLAUDE-java.md §5.5 und CLAUDE-react.md. Der
+Vollauf (`vollauf`) prüft den ganzen Bereich gegen die Schwelle (Frontend 80 %, Backend 100 %) und schreibt
+die Gedächtnisdatei `.claude/mutationsvollauf-<seite>.json`, aus der die Änderungsprüfung Dauer und
+Altlast-Stellen liest. Er hängt an der Stufe `merge`: **Mit beiden Vollläufen dauert `merge production`
+deutlich über zehn Minuten** — der Prüflauf läuft im Hintergrund, und die Sitzung wartet sein Ende ab,
+statt mit „ich melde mich“ zu enden. Per Hand bleibt nur der Vollauf außerhalb des Standardlaufs, etwa
+um die Gedächtnisdatei neu anzulegen; die Werkzeug-Aufrufe `mvn -Ppit -Dskip.frontend=true test` und
+`npm --prefix frontend run test:mutation` fährt der Treiber selbst.
 
 Verfahren, Reporting-Format und detaillierte Schritte → [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md).
 

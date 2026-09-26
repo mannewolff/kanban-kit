@@ -325,9 +325,9 @@ export function AppShell() {
   const boardMatch = useMatch('/boards/:boardId/*')
   const boardId = boardMatch?.params.boardId ? Number(boardMatch.params.boardId) : null
 
-  // Projekt-Kontext auch ohne offenes Board (Boards-/Ideen-/Mitglieder-Seite), damit der
-  // projektweite „Ideen"-Link auch dort sichtbar/aktiv ist. Das Splat matcht /projects/:id ebenso
-  // wie /projects/:id/ideas. Auf Board-Routen ist dieser Match null — dort liefert board.projectId.
+  // Projekt-Kontext auch ohne offenes Board (Boards-/Mitglieder-/Nachtlauf-Seite), damit die
+  // projektweiten Einträge auch dort sichtbar/aktiv sind. Das Splat matcht /projects/:id ebenso wie
+  // /projects/:id/nachtlauf. Auf Board-Routen ist dieser Match null — dort liefert board.projectId.
   const projectMatch = useMatch('/projects/:projectId/*')
   const routeProjectId = projectMatch?.params.projectId ? Number(projectMatch.params.projectId) : null
   // Die Projektauswahl ist die eine Seite ohne Projekt, die den Kontext verwirft (#1129).
