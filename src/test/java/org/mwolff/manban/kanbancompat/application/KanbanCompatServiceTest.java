@@ -362,6 +362,27 @@ class KanbanCompatServiceTest {
             1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null));
   }
 
+  /**
+   * Derselbe Fall an einem Board mit vollständigen Kanban-Spalten (Issue #1220): Auch dann trifft
+   * ein protokollfremder Schlüssel keine Spalte, und der Rückfall auf die erste Spalte greift. Das
+   * hält fest, was {@code findColumnIdForKey} ohne eigene {@code COLUMNS}-Prüfung leistet.
+   */
+  @Test
+  void create_withoutDirect_fallsBackToFirstColumn_whenBoardHasAllKanbanColumns() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(5L);
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
+    when(cardService.createDirect(
+            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+
+    service.create(bound(), "Titel", "Body", "FOO", null, false, null, null, null);
+
+    verify(cardService)
+        .createDirect(
+            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null));
+  }
+
   @Test
   void create_normalizesExternalKey_andReportsCreatedFlag() {
     // Given: Schlüssel mit Rand-Whitespace; der Service traf ein Duplikat (created=false).

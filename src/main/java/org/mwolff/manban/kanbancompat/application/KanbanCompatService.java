@@ -484,13 +484,16 @@ public class KanbanCompatService {
    * Nachsichtige Auflösung für den Ingest ohne {@code direct} (E8a): leer, wenn der Schlüssel
    * unbekannt ist <em>oder</em> das Board keine Spalte dafür hat. Der Aufrufer entscheidet, was
    * dann gilt — hier ist es die erste Spalte, siehe {@link #zielSpalteId}.
+   *
+   * <p>Ohne eigene Prüfung gegen {@link #COLUMNS} (Issue #1220): Die Schlüssel in {@link
+   * #keyByColumn} stammen ausschließlich aus {@link #canonicalKey} und liegen damit immer in {@code
+   * COLUMNS} — ein unbekannter Schlüssel findet dort ohnehin keine Spalte. Eine vorgeschaltete
+   * Prüfung wäre reine Verdopplung ohne Wirkung und hielt einen Mutanten am Leben, den kein Test
+   * töten kann. Die strenge Auflösung {@link #columnIdForKey} braucht sie weiterhin, weil sie den
+   * unbekannten Schlüssel von der fehlenden Spalte unterscheidet.
    */
   private Optional<Long> findColumnIdForKey(long boardId, String key) {
-    String wanted = normalizeColumnKey(key);
-    if (!COLUMNS.contains(wanted)) {
-      return Optional.empty();
-    }
-    return columnWithKey(boardId, wanted);
+    return columnWithKey(boardId, normalizeColumnKey(key));
   }
 
   /** Die erste Spalte des Boards, die diesen Kanban-Key trägt. */
