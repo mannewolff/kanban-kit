@@ -45,7 +45,8 @@ class AppUserRepositoryIT extends AbstractIntegrationTest {
 
   @Test
   void seedsRolePermissionMatrix() {
-    assertThat(permissionCount("OWNER")).isEqualTo(24);
+    // V4-Seed plus die drei Sonderregeln aus V45 (nur OWNER), wie in RoleMatrixIT
+    assertThat(permissionCount("OWNER")).isEqualTo(27);
     assertThat(permissionCount("ADMIN")).isEqualTo(22);
     assertThat(permissionCount("MEMBER")).isEqualTo(16);
     assertThat(permissionCount("VIEWER")).isEqualTo(5);
