@@ -18,6 +18,23 @@ erzeugt von `scripts/gen-changelog.mjs`.
   Rückweg: Abschnitt „Umstellung des Objektspeichers" in
   [docs/betrieb.md](docs/betrieb.md#umstellung-des-objektspeichers).
 
+## [2.12.0] – 2026-09-27
+
+- chore: v2.11.2
+- AppUserRepositoryIT erwartet die Rechte-Matrix nach V45 ([#1241](https://github.com/mannewolff/kanban-kit/issues/1241))
+- Sonderregeln der Rechte-Matrix werden echte Schluessel ([#1165](https://github.com/mannewolff/kanban-kit/issues/1165))
+- Hostinger-Anleitung prueft die .env mit config -q ([#1236](https://github.com/mannewolff/kanban-kit/issues/1236))
+- Altspeicher liest seine Zugangsdaten aus UMZUG_ALT_* ([#1233](https://github.com/mannewolff/kanban-kit/issues/1233))
+- chore: v2.11.1
+- Dokumentation nachgezogen: Objektspeicher statt MinIO, Herkunft und Aktualisierung ([#1231](https://github.com/mannewolff/kanban-kit/issues/1231))
+- Umzug der Anhaenge: Einmal-Dienst, zwei Releases, Rueckweg ([#1230](https://github.com/mannewolff/kanban-kit/issues/1230))
+- Bezugspruefung: Bausteinliste und anonymer Nachweis ([#1229](https://github.com/mannewolff/kanban-kit/issues/1229))
+- Spiegel ueber rclone statt mc, Alt-Spiegel als Fixtur belegt ([#1228](https://github.com/mannewolff/kanban-kit/issues/1228))
+- Startpruefung gegen Standardzugangsdaten des Objektspeichers ([#1227](https://github.com/mannewolff/kanban-kit/issues/1227))
+- Objektspeicher im Betrieb getauscht, Variablen umbenannt ([#1226](https://github.com/mannewolff/kanban-kit/issues/1226))
+- IT-Suite auf SeaweedFS umgestellt, Vertraeglichkeit belegt ([#1225](https://github.com/mannewolff/kanban-kit/issues/1225))
+- workflow config geschärft
+
 ## [2.11.0] – 2026-09-26
 
 - chore: v2.10.2
