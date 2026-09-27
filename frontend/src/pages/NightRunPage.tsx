@@ -77,7 +77,6 @@ import {
   laeuftNoch,
   laufDauer,
   laufMelder,
-  paketDauer,
   paketZaehlung,
   tagZeit,
   MELDER_JE_FEHLERKLASSE,
@@ -2430,7 +2429,7 @@ function Vorgangszeile({
           ? null
           : { titel: vorhabenKarte.title, farbe: epicColor(vorhabenKarte.id) }
       }
-      dauer={paketDauer(item.durationMs ?? null)}
+      dauer={item.durationMs ?? null}
       kosten={kostenText(vorgangskosten(item, standItem))}
       commit={kurzHash(item.commitHash ?? null)}
       offen={offen}

@@ -5021,11 +5021,13 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
     const panel = within(lauf(0))
-    expect(panel.getByTestId('dauer-917')).toHaveTextContent('25:00')
+    expect(panel.getByTestId('dauer-917')).toHaveTextContent('25:00 min')
+    // Die Dauer ist an Einheit und Beschriftung als Dauer erkennbar und nicht als Uhrzeit (#1245).
+    expect(panel.getByTestId('dauer-917')).toHaveAttribute('aria-label', 'Dauer 25 min 0 s')
     expect(panel.getByTestId('kosten-917')).toHaveTextContent('2,30 $')
     expect(panel.getByTestId('commit-917')).toHaveTextContent('9489421')
     // Der Abbruch hat keine Kostenmeldung und keinen Commit.
-    expect(panel.getByTestId('dauer-922')).toHaveTextContent('42:15')
+    expect(panel.getByTestId('dauer-922')).toHaveTextContent('42:15 min')
     expect(panel.getByTestId('kosten-922')).toHaveTextContent('—')
     expect(panel.queryByTestId('commit-922')).not.toBeInTheDocument()
   })

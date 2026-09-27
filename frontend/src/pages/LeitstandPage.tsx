@@ -20,6 +20,7 @@ import {
   KlassenMarke,
   Led,
   melderFarbe,
+  PaketDauer,
   Platte,
   ZEILE_HOVER,
 } from '../components/leitstand/LeitstandBausteine'
@@ -44,7 +45,6 @@ import {
   MELDER_JE_FEHLERKLASSE,
   MELDER_JE_ZUSTAND,
   modusName,
-  paketDauer,
 } from '../lib/leitstand'
 import { useLeitstandDaten, type Laden } from '../lib/useLeitstandDaten'
 import {
@@ -415,9 +415,7 @@ function Vorgang({ item, epic, onOeffnen }: Readonly<{ item: NightRunItemView; e
         </Box>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 'none' }}>
-        <Box component="span" sx={{ ...ZAHL, fontSize: 12, color: 'text.secondary' }}>
-          {paketDauer(item.durationMs)}
-        </Box>
+        <PaketDauer ms={item.durationMs} testId={`dauer-${item.cardNumber}`} />
         {hash && (
           <Box
             component="span"
