@@ -312,9 +312,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml \
 
 Das Kommando darf **nichts ausgeben**. Jede Zeile ist ein Fund: `required variable … is missing a
 value` nennt einen Pflichtwert, der fehlt — darunter `UMZUG_ALT_*` und `OBJEKTSPEICHER_ROOT_*` —,
-`… is not set` einen Wert, der still auf seinen Standard fällt. Ein Zählen nur der zweiten Sorte
-(`grep -c "is not set"`) reicht nicht: Es ergibt auch bei einer leeren `.env` `0`, weil die
-Pflichtwerte mit `:?` stehen und als eigener Fehler abbrechen.
+`… is not set` einen Wert, der still auf seinen Standard fällt. Nur die zweite Sorte zu zählen
+reicht nicht: Das ergibt auch bei einer leeren `.env` `0`, weil die Pflichtwerte mit `:?` stehen
+und als eigener Fehler abbrechen.
 
 ### Release 1 — Speicher und Werkzeug auf den Server, Anwendung bleibt alt
 

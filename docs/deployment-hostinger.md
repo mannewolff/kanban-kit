@@ -70,11 +70,86 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
    > schlägt fehl. Symptom beim Start: `WARN The "…" variable is not set. Defaulting to a blank string.`
    > Beispiel: Passwort `ab$cd` → `ab$$cd`. Für **selbst erzeugte** Tokens `$`-freie Erzeugung
    > bevorzugen (`openssl rand -hex 32`), dann entfällt das Escaping.
-   > **Kontrolle** (muss `0` liefern):
+   > **Kontrolle** — das Kommando darf nichts ausgeben:
    > ```bash
-   > docker compose -f docker-compose.yml -f docker-compose.prod.yml config 2>&1 >/dev/null \
-   >   | grep -c "is not set"
+   > docker compose -f docker-compose.yml -f docker-compose.prod.yml config -q
    > ```
+   > Jede Zeile ist ein Fund: `… is not set` meldet einen Wert, den Compose als Variable liest
+   > (etwa ein nicht verdoppeltes `# Produktions-Deployment (Hostinger, hinter Traefik)
+
+Diese Anleitung beschreibt den öffentlichen Betrieb von kanban-kit unter
+**`https://kanban.mwolff.org`** auf dem Hostinger-Server. Für den **lokalen** Betrieb
+(eigener Caddy, self-signed TLS) siehe [Betrieb & Installation](betrieb.md) — dort stehen
+auch die gemeinsamen Konzepte (Umgebungsvariablen, erster Admin, E-Mail-Verifikation).
+
+## Überblick
+
+Auf dem Server läuft bereits **Traefik** (Reverse-Proxy + Let's Encrypt) auf Port 80/443.
+kanban-kit wird deshalb **hinter dieses Traefik** gehängt statt seinen eigenen Caddy zu nutzen:
+
+- `manban-api` hängt am externen Docker-Netz **`web`** und wird über Traefik-Labels
+  veröffentlicht (TLS über den certresolver **`mytlschallenge`**).
+- Der lokale **Caddy**-Container startet in Produktion **nicht** (Compose-Profil `local-tls`).
+- **Postgres** und der **Objektspeicher** bleiben rein intern (keine Host-Ports, nur das interne Netz).
+
+Aktiviert wird das über das Overlay `docker-compose.prod.yml` zusätzlich zur Basis
+`docker-compose.yml`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+## Erstinbetriebnahme (auf dem Server)
+
+1. **Traefik/Netz prüfen.** Auf dem Server (`srv1014330.hstgr.cloud`) sicherstellen, dass
+   Traefik läuft und das externe Netz `web` existiert:
+   ```bash
+   docker ps                     # Traefik auf 80/443?
+   docker network ls | grep web  # sonst: docker network create web
+   ```
+   Der certresolver heißt `mytlschallenge`, die Entrypoints `web,websecure` — diese Werte
+   stehen bereits im Overlay. Nur bei Abweichung die Labels in `docker-compose.prod.yml`
+   anpassen.
+
+2. **DNS prüfen.** Der A-Record ist bei Strato vorbereitet:
+   ```bash
+   dig kanban.mwolff.org +short  # -> 72.60.131.171
+   ```
+
+3. **Code holen.** Repo (Branch `production`) nach `/root/opt/kanban-kit` klonen (bzw. `git pull`):
+   ```bash
+   git clone -b production https://github.com/mannewolff/kanban-kit.git /root/opt/kanban-kit
+   cd /root/opt/kanban-kit
+   ```
+
+4. **`.env` anlegen** (aus `.env.example`) und die echten Prod-Werte setzen:
+   ```bash
+   cp .env.example .env
+   ```
+   Mindestens:
+   - `MANBAN_BASE_URL=https://kanban.mwolff.org`
+   - `MANBAN_SESSION_SECRET=$(openssl rand -hex 32)` — **ohne diesen Wert bricht der
+     Start absichtlich ab** (fail-fast), und zwar an zwei Stellen: Der Compose-Aufruf scheitert am
+     `:?` in `docker-compose.prod.yml`, und seit Issue #890 verweigert **auch die Anwendung selbst**
+     den Start, wenn sie mit dem mitgelieferten Standardschlüssel signieren würde. Der Abbruch hängt
+     also nicht mehr daran, dass das Produktions-Overlay verwendet wird.
+     `-hex` liefert nur `0-9a-f`, also kein `$`-Escaping nötig.
+   - `MANBAN_COOKIE_SECURE=true`
+   - `POSTGRES_PASSWORD`, `OBJEKTSPEICHER_ROOT_USER`, `OBJEKTSPEICHER_ROOT_PASSWORD` — starke Werte.
+   - Mail (Strato): `MANBAN_MAIL_ENABLED=true`, `MANBAN_SMTP_*`, `MANBAN_MAIL_FROM=info@mwolff.org`,
+     echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst verifizieren
+     (Links landen nur im Log).
+   - `MANBAN_BOOTSTRAP_ADMIN_TOKEN=<Zufallswert>` — für den ersten Admin.
+
+   > **⚠️ Sonderzeichen in Secrets (`$`).** Docker Compose interpoliert `$` in `.env`-Werten.
+   > Enthält ein Wert ein `$` (typisch: ein vorgegebenes SMTP-Passwort), muss **jedes `$` als `$$`**
+   > geschrieben werden — sonst wird der Wert stillschweigend verstümmelt und z. B. die SMTP-Auth
+   > schlägt fehl. Symptom beim Start: `WARN The "…" variable is not set. Defaulting to a blank string.`
+   > Beispiel: Passwort `ab$cd` → `ab$$cd`. Für **selbst erzeugte** Tokens `$`-freie Erzeugung
+   > bevorzugen (`openssl rand -hex 32`), dann entfällt das Escaping.
+), `required variable … is missing a value` einen Pflichtwert,
+   > der in der `.env` fehlt. Nur die erste Sorte zu zählen genügt nicht — fehlt ein Pflichtwert,
+   > bricht `config` ab, und die Zählung ergibt `0`, auch bei einer leeren `.env`.
 
 5. **Starten:**
    ```bash

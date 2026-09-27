@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -66,6 +67,15 @@ class BetriebsdateienTest {
 
   /** Standardwert des lokalen Stacks — in der Vorlage wäre er ein gesetzter Schlüssel. */
   private static final String UNSICHERER_STANDARDWERT = "dev-only-insecure-secret-change-me";
+
+  /** Verzeichnis der ausgelieferten Anleitungen. */
+  private static final Path ANLEITUNGEN = Path.of("docs");
+
+  /** Anleitung für die Produktions-Installation auf dem VPS. */
+  private static final Path HOSTINGER_ANLEITUNG = Path.of("docs", "deployment-hostinger.md");
+
+  /** Die Kontrolle, die fehlende Pflichtwerte nicht bemerkt (Issue #1236). */
+  private static final String WIRKUNGSLOSE_KONTROLLE = "grep -c \"is not set\"";
 
   @Test
   void produktionsOverlaySchaltetDenEntwicklungsSchalterFestAus() throws IOException {
@@ -151,6 +161,33 @@ class BetriebsdateienTest {
           .as("abgelöste Speicher-Variablen in %s", datei)
           .isEmpty();
     }
+  }
+
+  /**
+   * Keine Anleitung empfiehlt die {@code .env}-Kontrolle, die nur Warnungen zählt (Issue #1236).
+   * Pflichtwerte stehen mit {@code :?} in den Compose-Dateien; fehlt einer, bricht {@code config}
+   * mit „is missing a value" ab, und das Zählen von „is not set" ergibt {@code 0} — auch bei einer
+   * leeren {@code .env}.
+   */
+  @Test
+  void keineAnleitungEmpfiehltDieKontrolleDieNurWarnungenZaehlt() throws IOException {
+    try (Stream<Path> dateien = Files.walk(ANLEITUNGEN)) {
+      for (Path datei : dateien.filter(p -> p.toString().endsWith(".md")).toList()) {
+        assertThat(Files.readString(datei, StandardCharsets.UTF_8))
+            .as("wirkungslose .env-Kontrolle in %s", datei)
+            .doesNotContain(WIRKUNGSLOSE_KONTROLLE);
+      }
+    }
+  }
+
+  /** Die Hostinger-Anleitung prüft die {@code .env} mit {@code config -q} (Issue #1236). */
+  @Test
+  void dieHostingerAnleitungPrueftDieUmgebungMitConfigQ() throws IOException {
+    assertThat(Files.readString(HOSTINGER_ANLEITUNG, StandardCharsets.UTF_8))
+        .as("Kontrolle der .env in %s", HOSTINGER_ANLEITUNG)
+        .contains("config -q")
+        .contains("darf nichts ausgeben")
+        .contains("is missing a value");
   }
 
   /**
