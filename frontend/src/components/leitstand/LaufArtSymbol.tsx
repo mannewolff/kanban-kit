@@ -93,7 +93,7 @@ export function laufArtName(art: LaufArt): string {
  */
 export function LaufArtSymbol({ art }: Readonly<{ art: LaufArt }>) {
   const wort = laufArtName(art)
-  const Symbol = SYMBOL[art]
+  const Zeichen = SYMBOL[art]
   return (
     <Tooltip title={wort}>
       <Box
@@ -112,7 +112,7 @@ export function LaufArtSymbol({ art }: Readonly<{ art: LaufArt }>) {
           color: TEXT_MATT,
         }}
       >
-        <Symbol sx={{ width: BREITE, height: BREITE, fontSize: BREITE }} />
+        <Zeichen sx={{ width: BREITE, height: BREITE, fontSize: BREITE }} />
       </Box>
     </Tooltip>
   )
