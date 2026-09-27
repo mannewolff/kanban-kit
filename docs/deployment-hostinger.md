@@ -59,6 +59,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
      `-hex` liefert nur `0-9a-f`, also kein `$`-Escaping nötig.
    - `MANBAN_COOKIE_SECURE=true`
    - `POSTGRES_PASSWORD`, `OBJEKTSPEICHER_ROOT_USER`, `OBJEKTSPEICHER_ROOT_PASSWORD` — starke Werte.
+     **Auch der Benutzer:** `OBJEKTSPEICHER_ROOT_USER` darf nicht `manban` sein und nicht der
+     Platzhalter `change-me-benutzer` aus der Vorlage bleiben — beide lehnt die Anwendung beim Start
+     als öffentlich bekannten Standard ab, und sie kommt dann nicht hoch (Issue #1243).
    - Mail (Strato): `MANBAN_MAIL_ENABLED=true`, `MANBAN_SMTP_*`, `MANBAN_MAIL_FROM=info@mwolff.org`,
      echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst verifizieren
      (Links landen nur im Log).
@@ -136,6 +139,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
      `-hex` liefert nur `0-9a-f`, also kein `$`-Escaping nötig.
    - `MANBAN_COOKIE_SECURE=true`
    - `POSTGRES_PASSWORD`, `OBJEKTSPEICHER_ROOT_USER`, `OBJEKTSPEICHER_ROOT_PASSWORD` — starke Werte.
+     **Auch der Benutzer:** `OBJEKTSPEICHER_ROOT_USER` darf nicht `manban` sein und nicht der
+     Platzhalter `change-me-benutzer` aus der Vorlage bleiben — beide lehnt die Anwendung beim Start
+     als öffentlich bekannten Standard ab, und sie kommt dann nicht hoch (Issue #1243).
    - Mail (Strato): `MANBAN_MAIL_ENABLED=true`, `MANBAN_SMTP_*`, `MANBAN_MAIL_FROM=info@mwolff.org`,
      echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst verifizieren
      (Links landen nur im Log).

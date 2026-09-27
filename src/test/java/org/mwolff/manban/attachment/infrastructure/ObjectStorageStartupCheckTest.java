@@ -42,6 +42,13 @@ class ObjectStorageStartupCheckTest {
 
   private static final String STANDARD_ZUGANGSSCHLUESSEL = "manban";
 
+  /**
+   * Platzhalter aus {@code .env.example} (Issue #1243). Er steht dort, weil die Vorlage bewusst
+   * nicht lauffähig sein soll — genau darum muss ihn auch die Startprüfung ablehnen, sonst startete
+   * eine unveränderte Kopie der Vorlage mit einem öffentlich bekannten Benutzernamen.
+   */
+  private static final String STANDARD_ZUGANGSSCHLUESSEL_ENV_VORLAGE = "change-me-benutzer";
+
   /** Standardwert aus {@code application.yml} und dem Kompaktkonstruktor der Properties. */
   private static final String STANDARD_GEHEIMNIS_ANWENDUNG = "manban-minio";
 
@@ -121,6 +128,11 @@ class ObjectStorageStartupCheckTest {
         Arguments.of(
             "Zugangsschlüssel auf Standardwert",
             props(EIGENER_ENDPUNKT, STANDARD_ZUGANGSSCHLUESSEL, EIGENES_GEHEIMNIS),
+            "MANBAN_STORAGE_ACCESS_KEY",
+            "manban.storage.access-key"),
+        Arguments.of(
+            "Zugangsschlüssel auf Platzhalter der .env-Vorlage",
+            props(EIGENER_ENDPUNKT, STANDARD_ZUGANGSSCHLUESSEL_ENV_VORLAGE, EIGENES_GEHEIMNIS),
             "MANBAN_STORAGE_ACCESS_KEY",
             "manban.storage.access-key"),
         Arguments.of(
