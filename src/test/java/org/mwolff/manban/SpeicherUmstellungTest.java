@@ -217,6 +217,30 @@ class SpeicherUmstellungTest {
         .contains(ALTER_DIENSTNAME + ":");
   }
 
+  /**
+   * Der alte Speicher startet mit genau den Zugangsdaten, mit denen der Umzug aus ihm liest (Issue
+   * #1233). Las er stattdessen {@code MINIO_ROOT_*} mit Standardwert, fiel er nach der in der
+   * Anleitung beschriebenen Umbenennung still auf {@code manban}/{@code manban-minio} zurück — die
+   * Vorkopie las dann mit den bisherigen Werten gegen einen Container, der sie nicht mehr kennt.
+   * Ohne Standardwert scheitert ein fehlender Wert schon an der {@code config}-Probe.
+   */
+  @Test
+  void derAlteSpeicherStartetMitDenZugangsdatenDesUmzugs() throws IOException {
+    List<String> zeilen = wirksameZeilen(ALTSPEICHER_OVERLAY);
+
+    assertThat(zeilen)
+        .as("Kennung des alten Speichers in %s", ALTSPEICHER_OVERLAY)
+        .anySatisfy(
+            zeile -> assertThat(zeile).startsWith("MINIO_ROOT_USER: ${UMZUG_ALT_ACCESS_KEY:?"));
+    assertThat(zeilen)
+        .as("Geheimnis des alten Speichers in %s", ALTSPEICHER_OVERLAY)
+        .anySatisfy(
+            zeile -> assertThat(zeile).startsWith("MINIO_ROOT_PASSWORD: ${UMZUG_ALT_SECRET_KEY:?"));
+    assertThat(String.join("\n", zeilen))
+        .as("%s liest keine MINIO_ROOT_*-Variable mehr", ALTSPEICHER_OVERLAY)
+        .doesNotContain("${MINIO_ROOT");
+  }
+
   @Test
   void dieAnleitungFuehrtDenAbschnittZurUmstellung() throws IOException {
     assertThat(Files.readString(BETRIEB, StandardCharsets.UTF_8))

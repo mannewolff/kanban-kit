@@ -294,15 +294,27 @@ verschwinden — sie beschreiben den **alten** Speicher, aus dem gelesen wird:
 Getrennte Werte, nicht dieselben wie für den neuen Speicher: Wer beim Wechsel starke, neue
 Zugangsdaten setzt — und das ist der empfohlene Weg —, braucht die alten weiterhin zum Lesen.
 
+**`UMZUG_ALT_ACCESS_KEY` und `UMZUG_ALT_SECRET_KEY` starten zugleich den alten Speicher.**
+`docker-compose.altspeicher.yml` setzt mit ihnen dessen Zugangsdaten (Issue #1233) — `MINIO_ROOT_*`
+liest nach der Umbenennung niemand mehr. Die beiden Werte müssen darum **genau** die bisherigen
+`MINIO_ROOT_USER` und `MINIO_ROOT_PASSWORD` sein. Ein falscher Wert startet den alten Speicher mit
+Zugangsdaten, zu denen seine Daten nicht passen: Die Vorkopie und der Rückweg lesen dann nichts, bis
+der Wert korrigiert und der Dienst neu gestartet ist. Die Anhänge im Volume `minio_data` bleiben
+dabei unberührt.
+
 Vor Release 1 prüfen, dass nichts leer durchgeht:
 
 ```
 docker compose -f docker-compose.yml -f docker-compose.prod.yml \
                -f docker-compose.backup.yml -f docker-compose.altspeicher.yml \
-               -f docker-compose.umzug.yml config 2>&1 >/dev/null | grep -c "is not set"
+               -f docker-compose.umzug.yml config -q
 ```
 
-Das Ergebnis muss `0` sein.
+Das Kommando darf **nichts ausgeben**. Jede Zeile ist ein Fund: `required variable … is missing a
+value` nennt einen Pflichtwert, der fehlt — darunter `UMZUG_ALT_*` und `OBJEKTSPEICHER_ROOT_*` —,
+`… is not set` einen Wert, der still auf seinen Standard fällt. Ein Zählen nur der zweiten Sorte
+(`grep -c "is not set"`) reicht nicht: Es ergibt auch bei einer leeren `.env` `0`, weil die
+Pflichtwerte mit `:?` stehen und als eigener Fehler abbrechen.
 
 ### Release 1 — Speicher und Werkzeug auf den Server, Anwendung bleibt alt
 

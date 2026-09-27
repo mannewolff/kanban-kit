@@ -23,9 +23,13 @@ services:
   minio:
     image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
+    # Dieselben Werte, mit denen der Umzug aus diesem Dienst liest (Issue #1233): die bisherigen
+    # MINIO_ROOT_*-Werte, jetzt unter UMZUG_ALT_* in der .env. Kein Standardwert — fehlt einer,
+    # scheitert schon die config-Probe, statt dass der Dienst still mit manban/manban-minio startet
+    # und die Vorkopie nicht mehr lesen kann (docs/betrieb.md, "Umstellung des Objektspeichers").
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-manban}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-manban-minio}
+      MINIO_ROOT_USER: ${UMZUG_ALT_ACCESS_KEY:?UMZUG_ALT_ACCESS_KEY muss in .env gesetzt sein (bisheriger Wert von MINIO_ROOT_USER, siehe docs/betrieb.md)}
+      MINIO_ROOT_PASSWORD: ${UMZUG_ALT_SECRET_KEY:?UMZUG_ALT_SECRET_KEY muss in .env gesetzt sein (bisheriger Wert von MINIO_ROOT_PASSWORD, siehe docs/betrieb.md)}
     volumes:
       - minio_data:/data
     healthcheck:
