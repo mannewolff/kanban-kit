@@ -4993,6 +4993,29 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     expect(panel.getByTestId('instrument-pakete-wert')).toHaveTextContent('1 grün 1 gelb 1 rot')
   })
 
+  // Issue #1244: Die gemeldete Dauer steht zwischen zwei Meldungen still. Wie lange ein Lauf
+  // tatsächlich schon läuft, steht darum als Zusatzzeile der Kachel — und nur, solange er läuft.
+  it('zeigt am laufenden Lauf unter der Dauer, wie lange er schon läuft', async () => {
+    const jetzt = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-01T23:14:00.000Z'))
+    try {
+      renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), complete: false })]] })
+      await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+      expect(within(lauf(0)).getByTestId('instrument-dauer-zusatz')).toHaveTextContent(
+        'läuft seit 1:14 h',
+      )
+    } finally {
+      jetzt.mockRestore()
+    }
+  })
+
+  it('lässt die mitlaufende Zeit am beendeten Lauf weg', async () => {
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(within(lauf(0)).queryByTestId('instrument-dauer-zusatz')).not.toBeInTheDocument()
+  })
+
   it('führt je Vorgangszeile Dauer, Kosten und Commit — und „—" ohne Messung', async () => {
     renderPage(mitAllem())
     await screen.findByTestId(`lauf-${startedAt(0)}`)
