@@ -13,6 +13,8 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -79,9 +81,19 @@ class PermissionCheckerNightRunAccessTest {
     verify(projects, never()).findById(PROJECT);
   }
 
-  @Test
-  void einMitgliedUnterhalbVonOwnerBekommt403() {
-    mitgliedschaft(USER, ProjectRole.ADMIN);
+  /**
+   * Keine Rolle unterhalb von OWNER liest die Auswertung — auch der Projekt-ADMIN nicht. Seit Issue
+   * #1165 trägt die Matrix {@code NIGHT_RUN_READ}/{@code NIGHT_RUN_SUBMIT} als echte Schlüssel; sie
+   * beschreiben genau diese Regel und ersetzen die Prüfung nicht. Deshalb steht hier jede der drei
+   * Rollen einzeln: Ein Schlüssel, der versehentlich an VIEWER, MEMBER oder ADMIN gerät, dürfte an
+   * dieser Prüfung nichts ändern.
+   */
+  @ParameterizedTest
+  @EnumSource(
+      value = ProjectRole.class,
+      names = {"VIEWER", "MEMBER", "ADMIN"})
+  void einMitgliedUnterhalbVonOwnerBekommt403(ProjectRole rolle) {
+    mitgliedschaft(USER, rolle);
 
     assertThatThrownBy(() -> checker.requireNightRunAccess(USER, PROJECT))
         .isInstanceOf(ProjectAccessDeniedException.class);

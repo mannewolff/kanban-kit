@@ -61,12 +61,12 @@ class RoleMatrixIT extends AbstractIntegrationTest {
             .andExpect(jsonPath("$.roles[0]").value("VIEWER"))
             .andExpect(jsonPath("$.roles[3]").value("OWNER"))
             // Rechte inkl. abgeleiteter Ressource/Operation
-            .andExpect(jsonPath("$.permissions.length()").value(24))
-            // Grants je Rolle passend zum V4-Seed
+            .andExpect(jsonPath("$.permissions.length()").value(27))
+            // Grants je Rolle passend zum V4-Seed plus den drei Sonderregeln aus V45 (nur OWNER)
             .andExpect(jsonPath("$.grants.VIEWER.length()").value(5))
             .andExpect(jsonPath("$.grants.MEMBER.length()").value(16))
             .andExpect(jsonPath("$.grants.ADMIN.length()").value(22))
-            .andExpect(jsonPath("$.grants.OWNER.length()").value(24))
+            .andExpect(jsonPath("$.grants.OWNER.length()").value(27))
             .andReturn()
             .getResponse()
             .getContentAsString();
@@ -84,6 +84,38 @@ class RoleMatrixIT extends AbstractIntegrationTest {
     assertThat(JsonPath.<List<Object>>read(body, "$.grants.MEMBER"))
         .doesNotContain("COMMENT_DELETE");
     assertThat(JsonPath.<List<Object>>read(body, "$.grants.ADMIN")).contains("COMMENT_DELETE");
+  }
+
+  /**
+   * Die vormaligen Sonderregeln der Matrix sind echte Rechte (Issue #1165) — und zwar
+   * ausschließlich beim OWNER. Die Regel selbst ändert sich dabei nicht: Bis hierher verlangte
+   * jeder dieser drei Wege die Projekt-Rolle OWNER, und genau das steht jetzt als Schlüssel in der
+   * Matrix. Ein Häkchen bei VIEWER, MEMBER oder ADMIN wäre eine stillschweigende Rechteausweitung.
+   */
+  @Test
+  void matrixFuehrtDieSonderregelnAlsEchteRechteUndZwarNurBeimOwner() throws Exception {
+    Cookie session = loginAs("matrix-sonderregeln@example.com");
+
+    String body =
+        mvc.perform(get("/api/roles/matrix").cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    for (String key : List.of("NIGHT_RUN_READ", "NIGHT_RUN_SUBMIT", "CARD_MOVE_PROJECT")) {
+      assertThat(JsonPath.<List<Object>>read(body, "$.permissions[?(@.key=='" + key + "')].key"))
+          .as("Recht %s fehlt in der Matrix", key)
+          .containsExactly(key);
+      assertThat(JsonPath.<List<Object>>read(body, "$.grants.OWNER"))
+          .as("OWNER ohne %s", key)
+          .contains(key);
+      for (String rolle : List.of("VIEWER", "MEMBER", "ADMIN")) {
+        assertThat(JsonPath.<List<Object>>read(body, "$.grants." + rolle))
+            .as("%s hätte %s nicht bekommen dürfen", rolle, key)
+            .doesNotContain(key);
+      }
+    }
   }
 
   @Test
