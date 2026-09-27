@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Anhang-Use-Cases. Der Blob wandert in den Objektspeicher (MinIO), nur Metadaten in die DB.
+ * Anhang-Use-Cases. Der Blob wandert in den Objektspeicher (SeaweedFS), nur Metadaten in die DB.
  * Content-Type wird aus den Magic-Bytes bestimmt (nicht dem Client vertraut). Upload erfordert
  * ATTACHMENT_CREATE, Löschen ATTACHMENT_DELETE, Lesen nur Mitgliedschaft.
  *

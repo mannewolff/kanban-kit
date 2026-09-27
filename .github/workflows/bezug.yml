@@ -1,0 +1,29 @@
+# Woechentliche Bezugspruefung (Issue #1229, Plan #1222, E11).
+#
+# Derselbe Schritt wie der Job `bezug` in ci.yml, nur mit eigenem Takt: Eine Bezugsstelle faellt
+# nicht beim Aendern von Code weg, sondern irgendwann von selbst. Ohne diesen Zeitplan fiele der
+# Wegfall erst beim naechsten Push auf — bei `quay.io/minio/minio` waren es Monate, und gemerkt hat
+# es die stehende IT-Suite.
+#
+# Bewusst KEINE Code-Jobs hier: Ein `schedule` an ci.yml zoege Backend-, Mutations- und
+# Frontend-Job jede Woche mit, ohne dass sich Code geaendert hat.
+name: Bezugsquellen
+
+on:
+  schedule:
+    # Montags 05:17 UTC — nicht zur runden Stunde, zu der GitHub die Zeitplaene aller staut.
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+jobs:
+  bezug:
+    name: Bezugsquellen (anonym beziehbar)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Bezugspruefung
+        run: node scripts/bezugspruefung.mjs

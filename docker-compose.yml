@@ -13,21 +13,54 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
-    # quay.io statt Docker Hub: `minio/minio` existiert dort nicht mehr. Fester Tag statt
-    # `latest`, damit ein Deployment nicht erneut an einer bewegten Referenz scheitert.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-manban}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-manban-minio}
+  objektspeicher:
+    # SeaweedFS statt MinIO (Plan #1222, E1): Das MinIO-Abbild auf quay.io ist anonym nicht
+    # mehr beziehbar — eine Neuinstallation nach docs/betrieb.md kam ohne Konto und Anmeldung an
+    # einer Registry nicht mehr hoch. `chrislusf/seaweedfs` liefert sein Manifest anonym aus, ist
+    # Apache-2.0 und laeuft als ein Prozess. Der Tag steht fest, aus demselben Grund wie zuvor:
+    # Ein beweglicher `latest` ist genau das, was hier ohne Vorwarnung verschwunden ist.
+    # Der bisherige Dienst lebt als Rueckweg in docker-compose.altspeicher.yml weiter (E13).
+    image: chrislusf/seaweedfs:4.47
+    # Eigener Einstiegspunkt statt `command:`, weil neben dem Speicher selbst der Anhang-Bucket
+    # angelegt werden muss (E16): Die Identitaet der Anwendung traegt nur Read, Write und List,
+    # `PutBucket` verlangt in SeaweedFS das Recht Admin — Wurzelrechte fuer einen einmaligen
+    # Anlegeschritt waeren eine Verletzung von Prioritaet 1. `weed shell` spricht mit dem Master
+    # und geht an der S3-Rechtepruefung vorbei.
+    # Der Anlegeschritt laeuft im Hintergrund und der Speicher per `exec` im Vordergrund: So
+    # bleibt `weed` PID 1 und bekommt das SIGTERM eines `docker compose down` selbst.
+    # Die Schleife prueft das Ergebnis statt den Rueckgabewert und deckt damit beide Faelle ab —
+    # erster Start (Bucket fehlt) und Neustart auf vorhandenem Volume (Bucket ist da). Die
+    # Ausgabe des Anlegeschritts bleibt im Protokoll: Kommt der Bucket nicht zustande, steht der
+    # Grund dort, und der Healthcheck unten schlaegt an, statt dass die Anwendung an einem
+    # fehlenden Bucket scheitert.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        (
+          until echo 's3.bucket.list' | weed shell -master=localhost:9333 2>/dev/null \
+              | grep -qw '${MANBAN_STORAGE_BUCKET:-manban}'; do
+            echo 's3.bucket.create -name ${MANBAN_STORAGE_BUCKET:-manban}' \
+              | weed shell -master=localhost:9333 2>&1
+            sleep 2
+          done
+          touch /tmp/bucket-bereit
+        ) &
+        exec weed server -s3 -s3.config=/etc/seaweedfs/s3.json -dir=/data
+    configs:
+      - source: objektspeicher_identitaeten
+        target: /etc/seaweedfs/s3.json
     volumes:
-      - minio_data:/data
+      - objektspeicher_data:/data
+    # Zwei Bedingungen, nicht eine: Dass der S3-Dienst antwortet, heisst noch nicht, dass der
+    # Anhang-Bucket steht. Ohne die zweite koennte manban-api starten, bevor es ihn gibt.
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:8333/status > /dev/null && test -f /tmp/bucket-bereit
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
   manban-api:
     build: .
@@ -67,9 +100,15 @@ services:
       MANBAN_SMTP_PASSWORD: ${MANBAN_SMTP_PASSWORD:-}
       MANBAN_SMTP_AUTH: ${MANBAN_SMTP_AUTH:-true}
       MANBAN_SMTP_STARTTLS: ${MANBAN_SMTP_STARTTLS:-true}
-      MANBAN_MINIO_ENDPOINT: http://minio:9000
-      MANBAN_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-manban}
-      MANBAN_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-manban-minio}
+      MANBAN_STORAGE_ENDPOINT: http://objektspeicher:8333
+      MANBAN_STORAGE_ACCESS_KEY: ${OBJEKTSPEICHER_ROOT_USER:-manban}
+      MANBAN_STORAGE_SECRET_KEY: ${OBJEKTSPEICHER_ROOT_PASSWORD:-manban-objektspeicher}
+      # Auch der Bucketname steht hier, obwohl sein Standardwert genuegte: Er ist in
+      # docs/betrieb.md dokumentiert, und eine dokumentierte Variable ohne Eintrag im
+      # environment-Block erreicht den Container nicht — wer sie in der .env setzt, erzielte
+      # keine Wirkung. Derselbe Wert speist die Identitaetsdatei und den Anlegeschritt des
+      # Speicherdienstes, damit alle drei Stellen denselben Bucket meinen.
+      MANBAN_STORAGE_BUCKET: ${MANBAN_STORAGE_BUCKET:-manban}
       # Aufraeum- und Zustell-Automatiken. Sie haengen hier, weil eine Variable, die im
       # environment-Block fehlt, den Container gar nicht erreicht — wer sie nach docs/betrieb.md
       # in der .env abschaltet, erzielte sonst keine Wirkung, ohne dass etwas anschlaegt.
@@ -84,7 +123,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
+      objektspeicher:
         condition: service_healthy
 
   caddy:
@@ -104,6 +143,33 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  objektspeicher_data:
   caddy_data:
   caddy_config:
+
+# Die S3-Identitaeten des Speichers als `configs`-Eintrag mit `content:` (Plan #1222, E17):
+# Compose interpoliert den Inhalt, eine eingehaengte Repo-Datei dagegen nicht — die Zugangsdaten
+# waeren dann eingecheckt. Das setzt Docker Compose >= 2.23 voraus (siehe docs/betrieb.md).
+# Die Identitaet traegt ausschliesslich Read, Write und List auf den Anhang-Bucket (E16); der
+# Bucket selbst entsteht im Anlegeschritt des Dienstes, nicht durch die Anwendung.
+configs:
+  objektspeicher_identitaeten:
+    content: |
+      {
+        "identities": [
+          {
+            "name": "manban-anwendung",
+            "credentials": [
+              {
+                "accessKey": "${OBJEKTSPEICHER_ROOT_USER:-manban}",
+                "secretKey": "${OBJEKTSPEICHER_ROOT_PASSWORD:-manban-objektspeicher}"
+              }
+            ],
+            "actions": [
+              "Read:${MANBAN_STORAGE_BUCKET:-manban}",
+              "Write:${MANBAN_STORAGE_BUCKET:-manban}",
+              "List:${MANBAN_STORAGE_BUCKET:-manban}"
+            ]
+          }
+        ]
+      }

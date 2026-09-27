@@ -8,7 +8,7 @@
 #     unter https://kanban.mwolff.org veroeffentlicht (TLS via certresolver "mytlschallenge").
 #   - Caddy (lokaler self-signed-Proxy) laeuft NICHT: er ist dem Profil "local-tls"
 #     zugeordnet und wird ohne aktives Profil nicht gestartet.
-#   - Postgres/MinIO bleiben unveraendert rein intern (keine Host-Ports).
+#   - Postgres/Objektspeicher bleiben unveraendert rein intern (keine Host-Ports).
 #   - Alle drei Dienste starten nach einem Reboot des Servers von selbst wieder
 #     (restart: unless-stopped, siehe unten).
 services:
@@ -24,7 +24,7 @@ services:
   postgres:
     restart: unless-stopped
 
-  minio:
+  objektspeicher:
     restart: unless-stopped
 
   manban-api:
@@ -40,8 +40,17 @@ services:
       # Prod-kritische Werte MUESSEN aus der Server-.env kommen (kein unsicherer Default).
       MANBAN_SESSION_SECRET: ${MANBAN_SESSION_SECRET:?MANBAN_SESSION_SECRET muss in .env gesetzt sein}
       MANBAN_BASE_URL: ${MANBAN_BASE_URL:?MANBAN_BASE_URL muss in .env gesetzt sein (z. B. https://kanban.mwolff.org)}
+      # Auch die Zugangsdaten des Objektspeichers MUESSEN aus der Server-.env kommen (Issue #1227):
+      # Das Basis-Compose reicht sie mit `:-`-Vorgabe durch, im Container ist die Variable also nie
+      # leer — ein Betreiber, der seine .env nicht anfasst, betriebe seine Anhaenge mit den
+      # oeffentlich bekannten Standardzugangsdaten aus diesem Repository, ohne etwas zu merken.
+      # Mit `:?` scheitert schon `docker compose config`, also bevor die Anwendung startet. Die
+      # Startpruefung ObjectStorageStartupCheck faengt denselben Fall in der Anwendung ab; hier
+      # steht die frueheste Stelle, an der er auffallen kann.
+      MANBAN_STORAGE_ACCESS_KEY: ${OBJEKTSPEICHER_ROOT_USER:?OBJEKTSPEICHER_ROOT_USER muss in .env gesetzt sein}
+      MANBAN_STORAGE_SECRET_KEY: ${OBJEKTSPEICHER_ROOT_PASSWORD:?OBJEKTSPEICHER_ROOT_PASSWORD muss in .env gesetzt sein (starker, eigener Wert)}
       # Uebrige Prod-Envs (MANBAN_COOKIE_SECURE, MANBAN_BOOTSTRAP_ADMIN_TOKEN, MANBAN_MAIL_*,
-      # DB-/MinIO-Zugang) werden vom Basis-Compose aus der .env gelesen.
+      # DB- und Objektspeicher-Zugang) werden vom Basis-Compose aus der .env gelesen.
     networks:
       - default
       - web

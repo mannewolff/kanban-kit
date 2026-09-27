@@ -3,9 +3,9 @@ package org.mwolff.manban.attachment.application;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Objektspeicher-Konfiguration (S3-kompatibel, MinIO).
+ * Objektspeicher-Konfiguration (S3-kompatibel, SeaweedFS).
  *
- * @param endpoint MinIO-/S3-Endpoint
+ * @param endpoint S3-Endpoint des Objektspeichers
  * @param accessKey Zugangsschlüssel
  * @param secretKey geheimer Schlüssel
  * @param bucket Ziel-Bucket für Anhänge

@@ -2,9 +2,18 @@
 
 kanban-kit läuft als ein Stack aus vier Containern (über Docker Compose):
 **Caddy** (TLS + Reverse-Proxy), **manban-api** (Spring-Boot-Backend, das auch das
-gebaute Frontend ausliefert), **Postgres** und **MinIO** (Objektspeicher für Anhänge).
+gebaute Frontend ausliefert), **Postgres** und **objektspeicher** (SeaweedFS, S3-kompatibler
+Objektspeicher für Anhänge — siehe
+[Herkunft und Aktualisierung des Objektspeichers](#herkunft-und-aktualisierung-des-objektspeichers)).
 
 ## Voraussetzungen
+
+- **Docker Compose ab 2.23.** Der Stack legt die S3-Identität des Objektspeichers als
+  `configs`-Eintrag mit `content:` an und lässt Compose die Zugangsdaten aus der `.env` darin
+  einsetzen — eine eingehängte Datei würde Compose nicht einsetzen, und die Zugangsdaten stünden
+  dann im Repository. `content:` gibt es erst ab dieser Fassung. Prüfen mit
+  `docker compose version`; ältere Fassungen starten den Speicher ohne gültige Identität, und
+  jeder Anhang-Zugriff endet in 403.
 
 - Docker-Laufzeit. Auf macOS z. B. **Colima**:
   ```
@@ -125,7 +134,8 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_DB_POOL_MIN_IDLE` | Verbindungen, die auch ohne Last offen bleiben | `5` |
 | `MANBAN_DB_CONNECTION_TIMEOUT_MS` | Höchste Wartezeit auf eine freie Verbindung in Millisekunden | `5000` |
 | `MANBAN_SERVER_THREADS_MAX` | Höchstzahl gleichzeitig bearbeiteter HTTP-Aufrufe | `600` |
-| `POSTGRES_*`, `MINIO_*` | DB- und Objektspeicher-Zugangsdaten | siehe `docker-compose.yml` |
+| `MANBAN_STORAGE_BUCKET` | Name des Buckets, in dem die Anhänge liegen. Derselbe Wert speist die S3-Identität des Speichers und den Anlegeschritt beim Start — eine Änderung wirkt auf alle drei Stellen zugleich, holt aber keine Anhänge aus dem alten Bucket nach | `manban` |
+| `POSTGRES_*`, `OBJEKTSPEICHER_ROOT_*` | DB- und Objektspeicher-Zugangsdaten. Bewusst ohne `MANBAN_`-Präfix: Sie gehören den Bausteinen, nicht der Anwendung. Aus den `OBJEKTSPEICHER_ROOT_*` speist der Stack zugleich die S3-Identität des Speichers und den Zugang von `manban-api` | siehe `docker-compose.yml` |
 
 > **Verbindungspool und Server-Threads:** Die vier Stellschrauben `MANBAN_DB_POOL_MAX`,
 > `MANBAN_DB_POOL_MIN_IDLE`, `MANBAN_DB_CONNECTION_TIMEOUT_MS` und `MANBAN_SERVER_THREADS_MAX`
@@ -167,14 +177,271 @@ geladen und ist per `.gitignore` ausgeschlossen).
 > ```
 >
 > Der Abgleich **berichtet nur** und löscht nichts automatisch (ein laufender Upload hat kurzzeitig
-> ein Objekt ohne Metadaten). Verwaiste Objekte bei Bedarf gezielt über die MinIO-Konsole oder
-> `mc rm` entfernen.
+> ein Objekt ohne Metadaten). Verwaiste Objekte bei Bedarf gezielt entfernen:
+>
+> ```
+> docker compose exec manban-backup rclone delete speicher:<bucket>/<key>
+> ```
 
 > **Sicherung ist ausgeliefert aus:** Die fünf `MANBAN_BACKUP_*`-Werte oben wirken erst, wenn das
 > Sicherungs-Overlay zugeschaltet ist (`-f docker-compose.backup.yml`). Das ist der einzige
 > Schalter; `MANBAN_BACKUP_ENABLED` setzt das Overlay selbst und wird nie von Hand gesetzt. Das
 > Zuschalten startet die Datenbank **einmalig** neu (WAL-Archivierung). Vollständige Anleitung:
 > [Sicherung & Wiederherstellung](backup.md).
+
+## Herkunft und Aktualisierung des Objektspeichers
+
+Den Objektspeicher der Anhänge liefert **SeaweedFS** — ein fremdes Projekt, das mitläuft, und
+darum eines, dessen Herkunft und Pflege hier stehen muss.
+
+| | |
+|---|---|
+| Projekt | SeaweedFS (`seaweedfs/seaweedfs` auf GitHub) |
+| Lizenz | Apache-2.0 |
+| Bezugsstelle | Docker-Abbild `chrislusf/seaweedfs`, derzeit Fassung `4.47` |
+| Wer die Fassung pflegt | dieses Projekt — die Fassung ist im Repository festgeschrieben, nicht `latest` |
+| Sicherheitsmeldungen | <https://github.com/seaweedfs/seaweedfs/security/advisories> und die Release-Notes unter <https://github.com/seaweedfs/seaweedfs/releases> |
+
+**Wo die Fassung steht.** An zwei Stellen, und beide gehören zusammen: die Fundstelle, die sie
+fährt (`docker-compose.yml`, Dienst `objektspeicher`, und `AbstractIntegrationTest` für die
+Integrationstests), und die Bausteinliste
+[`scripts/bausteine.json`](../scripts/bausteine.json), die dem Selbsthoster sagt, woher sein Stack
+kommt. Wer eine Fassung anhebt, hebt sie an **beiden** Stellen an; der Pflichtcheck des Bereichs
+`scripts` hält die Liste in beide Richtungen gegen den Bestand.
+
+**Wie ein Selbsthoster eine neue Fassung bekommt.**
+
+1. Release-Notes des Projekts lesen (Link oben) — besonders auf Änderungen an der
+   S3-Identitätsdatei und am Datenverzeichnis achten.
+2. Die Fassung in `docker-compose.yml` und in `scripts/bausteine.json` anheben.
+3. Sicherung ziehen (siehe [Sicherung & Wiederherstellung](backup.md)); das Volume
+   `objektspeicher_data` trägt die Anhänge.
+4. `docker compose up -d --build` — der Dienst kommt mit dem neuen Abbild auf demselben Volume
+   wieder hoch. Ein Formatwechsel ist damit **nicht** verbunden; ändert sich das Datenformat
+   zwischen zwei Fassungen, steht das in den Release-Notes und ist dann ein eigener Vorgang.
+5. Anhang hoch- und herunterladen, dann den Admin-Abgleich
+   (`GET /api/admin/storage/reconciliation`) auf leere Listen prüfen.
+
+**Ob der Bezug überhaupt noch offen ist**, prüft
+[`scripts/bezugspruefung.mjs`](../scripts/bezugspruefung.mjs) anonym auf HTTP-Ebene über alle
+Einträge der Bausteinliste:
+
+```
+node scripts/bezugspruefung.mjs
+```
+
+Das Skript ist bewusst kein lokaler Pflichtcheck — es hängt am Netz. Es läuft als eigener CI-Job
+und wöchentlich, damit eine weggefallene Bezugsstelle als benannter Fehler auffällt und nicht
+erst beim nächsten Neuaufsetzen. Genau so fiel auf, dass das alte MinIO-Abbild anonym nicht mehr
+beziehbar ist.
+
+## Umstellung des Objektspeichers
+
+Der Speicher der Anhänge wechselt von MinIO auf SeaweedFS (Plan #1222). Für die laufende Instanz
+ändert sich an den Anhängen nichts: Nach dem Update sind es dieselben, mit derselben Vorschau —
+den Dateityp für die Vorschau liest die Anwendung ohnehin aus ihrer Datenbank, nicht aus dem
+Speicher. Dazwischen liegt genau **ein** Umzug, und der läuft in **zwei Releases**.
+
+**Warum zwei Releases und nicht ein Handgriff im Fenster:** `.github/workflows/deploy.yml` fährt
+bei jedem Push auf `production` selbsttätig `git reset --hard origin/production` und
+`docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.backup.yml
+up -d --build`. Drei `-f`, und die beiden Umzugs-Overlays sind nicht dabei: **Jeder** Deploy schaltet
+die Anwendung damit auf den neuen Speicher. Der Umstieg **ist** der Deploy — nicht etwas, das man im
+Fenster von Hand auslöst, und auch nichts, das man ihm nehmen kann, ohne den Prozess für einen
+einmaligen Vorgang umzubauen.
+
+Daraus folgen die beiden Releases:
+
+- **Release 1** ist der Merge, der diesen Stand auf den Server bringt. Direkt danach schaltet ein
+  Aufruf von Hand Anwendung und Spiegel mit den beiden Zusatz-Overlays auf die **alte** Adresse
+  zurück — und dort läuft die Vorkopie im laufenden Betrieb.
+- **Release 2** ist der **nächste** Deploy. Sein Inhalt ist beliebig (es genügt der nächste Merge auf
+  `production`): Weil er ohne die Zusatz-Overlays fährt, schaltet er `manban-api` und
+  `manban-backup` um. Genau dieser Deploy ist der Umstieg, und das Fenster liegt um ihn herum.
+
+Werkzeug ist `docker-compose.umzug.yml`: ein Einmal-Dienst `manban-umzug`, der mit dem `rclone` des
+Sicherungs-Abbilds kopiert und danach byteweise prüft. Er hält zugleich Anwendung und Anhang-Spiegel
+bei der **alten** Adresse — nur so lässt sich die Hauptmenge im laufenden Betrieb kopieren, statt
+das Wartungsfenster so lang zu machen wie die Kopie.
+
+### Vorher: die `.env` umstellen
+
+Die Variablennamen des Speichers haben sich geändert. **Ein alter Name in der `.env` wirkt nicht
+mehr**: Compose reicht ihn durch, die Anwendung liest ihn nicht — sie fiele still auf ihren
+Standardwert zurück, statt zu scheitern. Umbenennen, Werte behalten:
+
+| bisher | ab dieser Version | was damit gemeint ist |
+|---|---|---|
+| `MANBAN_MINIO_ENDPOINT` | `MANBAN_STORAGE_ENDPOINT` | Adresse des Speichers, die die Anwendung anspricht |
+| `MANBAN_MINIO_ACCESS_KEY` | `MANBAN_STORAGE_ACCESS_KEY` | Zugangskennung der Anwendung am Speicher |
+| `MANBAN_MINIO_SECRET_KEY` | `MANBAN_STORAGE_SECRET_KEY` | Geheimnis der Anwendung am Speicher |
+| `MANBAN_MINIO_BUCKET` | `MANBAN_STORAGE_BUCKET` | Bucket, in dem die Anhänge liegen |
+| `MINIO_ROOT_USER` | `OBJEKTSPEICHER_ROOT_USER` | Kennung des Speicherdienstes selbst |
+| `MINIO_ROOT_PASSWORD` | `OBJEKTSPEICHER_ROOT_PASSWORD` | Geheimnis des Speicherdienstes selbst |
+
+`OBJEKTSPEICHER_ROOT_USER` und `OBJEKTSPEICHER_ROOT_PASSWORD` **müssen** gesetzt sein, sonst
+scheitert schon der Compose-Aufruf des Deploys (`:?` in `docker-compose.prod.yml`, Issue #1227).
+
+Dazu kommen drei Werte, die **nur für den Umzug** gelten und danach wieder aus der `.env`
+verschwinden — sie beschreiben den **alten** Speicher, aus dem gelesen wird:
+
+| Variable | Bedeutung | Vorgabe |
+|---|---|---|
+| `UMZUG_ALT_ENDPOINT` | Adresse des alten Speichers im Netz des Stacks | `http://minio:9000` |
+| `UMZUG_ALT_ACCESS_KEY` | die Kennung, mit der der alte Speicher heute läuft (bisher `MINIO_ROOT_USER`) | keine |
+| `UMZUG_ALT_SECRET_KEY` | das zugehörige Geheimnis (bisher `MINIO_ROOT_PASSWORD`) | keine |
+
+Getrennte Werte, nicht dieselben wie für den neuen Speicher: Wer beim Wechsel starke, neue
+Zugangsdaten setzt — und das ist der empfohlene Weg —, braucht die alten weiterhin zum Lesen.
+
+**`UMZUG_ALT_ACCESS_KEY` und `UMZUG_ALT_SECRET_KEY` starten zugleich den alten Speicher.**
+`docker-compose.altspeicher.yml` setzt mit ihnen dessen Zugangsdaten (Issue #1233) — `MINIO_ROOT_*`
+liest nach der Umbenennung niemand mehr. Die beiden Werte müssen darum **genau** die bisherigen
+`MINIO_ROOT_USER` und `MINIO_ROOT_PASSWORD` sein. Ein falscher Wert startet den alten Speicher mit
+Zugangsdaten, zu denen seine Daten nicht passen: Die Vorkopie und der Rückweg lesen dann nichts, bis
+der Wert korrigiert und der Dienst neu gestartet ist. Die Anhänge im Volume `minio_data` bleiben
+dabei unberührt.
+
+Vor Release 1 prüfen, dass nichts leer durchgeht:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+               -f docker-compose.backup.yml -f docker-compose.altspeicher.yml \
+               -f docker-compose.umzug.yml config -q
+```
+
+Das Kommando darf **nichts ausgeben**. Jede Zeile ist ein Fund: `required variable … is missing a
+value` nennt einen Pflichtwert, der fehlt — darunter `UMZUG_ALT_*` und `OBJEKTSPEICHER_ROOT_*` —,
+`… is not set` einen Wert, der still auf seinen Standard fällt. Nur die zweite Sorte zu zählen
+reicht nicht: Das ergibt auch bei einer leeren `.env` `0`, weil die Pflichtwerte mit `:?` stehen
+und als eigener Fehler abbrechen.
+
+### Release 1 — Speicher und Werkzeug auf den Server, Anwendung bleibt alt
+
+1. **Ankündigen.** Release 1 hat eine **kurze** Lücke: Zwischen dem Ende des Deploy-Jobs und dem
+   Nachfahren in Schritt 3 spricht die Anwendung den neuen, noch leeren Speicher an — Anhänge sind
+   in dieser Zeit nicht abrufbar, alles andere läuft. Bei wem der Nachzug bereitliegt, sind das
+   unter zwei Minuten. Wer das nicht will, kündigt für Release 1 dasselbe Fenster an wie für
+   Release 2.
+2. **Merge auf `production`.** Der Deploy zieht den Stand, baut und startet. Danach laufen der neue
+   Speicherdienst `objektspeicher` (leer) und der alte `minio` (mit allen Anhängen) nebeneinander —
+   den alten lässt der Deploy unberührt, weil er ihn ohne `-f docker-compose.altspeicher.yml` gar
+   nicht kennt und verwaiste Container nicht anfasst.
+3. **Direkt danach von Hand nachfahren**, mit beiden Overlays und in genau dieser Reihenfolge:
+
+   ```
+   cd /root/opt/kanban-kit
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+                  -f docker-compose.backup.yml -f docker-compose.altspeicher.yml \
+                  -f docker-compose.umzug.yml up -d
+   ```
+
+   Damit lesen Anwendung und Anhang-Spiegel wieder den alten Speicher, und die **Vorkopie** läuft
+   an: `manban-umzug` startet mit, kopiert und prüft. Reihenfolge zählt — `docker-compose.umzug.yml`
+   steht zuletzt, weil es die Adresse überschreibt, die das Produktions-Overlay setzt.
+4. **Ergebnis der Vorkopie ansehen** — und die **Dauer messen**, sie ist der Maßstab für das
+   Fenster:
+
+   ```
+   docker compose ... logs manban-umzug
+   docker compose ... ps -a manban-umzug
+   ```
+
+   Die Spalte `STATUS` zeigt den Exitcode: `Exited (0)` heißt, dass jedes Objekt der Quelle
+   byteweise gleich im Ziel liegt. Alles andere hält den Umzug an — der Grund steht im Protokoll.
+   Der Dienst meldet dabei auch dann einen Fehlschlag, wenn die **Quelle leer** ist: Ein Umzug, der
+   nichts umgezogen hat, soll nicht wie ein gelungener aussehen. Die Vorkopie ist beliebig oft
+   wiederholbar, nichts geht dabei verloren.
+5. Der Stand aus Schritt 3 bleibt so, bis Release 2 kommt. Neue Anhänge landen weiter im alten
+   Speicher und werden weiter gespiegelt; die Restkopie holt sie im Fenster nach.
+
+### Release 2 — der Umstieg, Fenster ≤ 30 Minuten
+
+Das Fenster ist die Summe aus Deploy, Restkopie und Prüfung. Die Vorkopie aus Release 1 hat die
+Kopierzeit für den Gesamtbestand gemessen; die Restkopie betrifft nur, was seither hinzukam, die
+Prüfung dagegen wieder den ganzen Bestand. Passt diese Summe nicht in **30 Minuten**, wird zuerst
+die Vorkopie unmittelbar vor dem Fenster noch einmal gefahren (sie ist beliebig oft wiederholbar)
+und das Fenster danach angesetzt.
+
+1. **Ankündigen und freigeben.** Fenster von höchstens 30 Minuten, in dem Anhänge kurzzeitig nicht
+   abrufbar sind.
+2. **Merge auf `production`** — der nächste, inhaltlich beliebig. Der Deploy fährt mit seinen drei
+   `-f` und damit ohne die beiden Zusatz-Overlays: **Dieser Deploy ist der Umstieg.** `manban-api`
+   und `manban-backup` sprechen ab jetzt den neuen Speicher an, ohne dass jemand etwas umstellt.
+3. **Restkopie und Prüfung**, unmittelbar nachdem der Schritt „Auf Bereitschaft der Anwendung
+   warten" des Deploy-Jobs grün ist:
+
+   ```
+   cd /root/opt/kanban-kit
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+                  -f docker-compose.backup.yml -f docker-compose.altspeicher.yml \
+                  -f docker-compose.umzug.yml run --rm manban-umzug
+   ```
+
+   `run --rm` legt den Exitcode direkt in die Shell. Dieser Aufruf schaltet Anwendung und Spiegel
+   **nicht** zurück: `run` startet nur den einen Dienst, die anderen bleiben, wie der Deploy sie
+   hinterlassen hat.
+4. **Abgleich fahren** (siehe unten). Erst er beendet das Fenster.
+5. Die Umzugs-Zeilen `UMZUG_ALT_*` aus der `.env` entfernen.
+
+### Vollständigkeitsnachweis
+
+Als Plattform-Admin:
+
+```
+GET /api/admin/storage/reconciliation   → { "orphanedObjects": [...], "missingObjects": [...] }
+```
+
+**`missingObjects` muss leer sein.** Jeder Eintrag darin ist ein Anhang, den die Datenbank kennt und
+der im Speicher fehlt — dann gilt der Rückweg. **`orphanedObjects` darf gefüllt sein und bleibt
+erlaubt:** Ein Anhang, der zwischen Vorkopie und Umstieg gelöscht wurde, liegt im neuen Speicher
+noch als Objekt, weil der Umzug mit `rclone copy` arbeitet und auf der Zielseite nie löscht. Das ist
+Absicht — ein `sync` hätte stattdessen das Neue weggeräumt.
+
+### Rückweg
+
+Meldet der Abgleich fehlende Objekte oder geht im Fenster etwas anderes schief, führt der Rückweg
+zurück auf den alten Speicher. Er hat **zwei Stufen**, und beide sind nötig — die erste wirkt
+sofort, die zweite hält:
+
+1. **Sofort: die beiden Zusatz-Overlays wieder zuschalten.** Derselbe Aufruf wie in Release 1,
+   Schritt 3:
+
+   ```
+   cd /root/opt/kanban-kit
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+                  -f docker-compose.backup.yml -f docker-compose.altspeicher.yml \
+                  -f docker-compose.umzug.yml up -d
+   ```
+
+   Anwendung und Spiegel lesen damit wieder den alten Speicher. Dessen Volume `minio_data` ist
+   unangetastet — der vorige Stand der Anhänge liegt vollständig darin, es wurde nur daraus
+   gelesen. Das Fenster ist damit beendet; die Anhänge sind wieder da.
+
+2. **Dauerhaft: Revert auf `production`.** Stufe 1 hält **nicht** über den nächsten Deploy: Der
+   fährt wieder mit seinen drei `-f` und schaltete erneut um — aus demselben Grund, aus dem der
+   Umstieg überhaupt der Deploy ist. Darum wird die Umstellung auf `production` revertet und
+   gepusht; der nächste Deploy stellt den vorigen Stand dann von selbst her. Bis dahin **keinen**
+   weiteren Deploy auslösen.
+
+`docker-compose.altspeicher.yml`, `docker-compose.umzug.yml` und das Volume `minio_data` bleiben
+dafür **eine Version lang unangetastet** (bis 2.13.0). Erst danach werden sie zusammen entfernt —
+und damit ist der Rückweg zu. Vorher gehört der Abgleich oben grün gesehen.
+
+### Ersatzweg, wenn das alte Abbild fehlt
+
+`docker-compose.altspeicher.yml` fährt ein Abbild, das **anonym nicht mehr beziehbar** ist. Es läuft
+nur auf einem Server, auf dem es noch im lokalen Vorrat liegt:
+
+```
+docker image ls | grep minio
+```
+
+Kommt dort keine Zeile, sind Umzugsquelle und Rückweg über den alten Dienst beide zu — dann kommen
+die Anhänge aus dem **jüngsten Spiegel beziehungsweise der Sicherung** in den neuen Speicher, über
+denselben Pfad, den `restore.sh` fährt (siehe [Sicherung & Wiederherstellung](backup.md)). Eine
+Umschlüsselung oder ein Übersetzungsschritt ist dabei nicht nötig: Der Spiegel ist derselbe
+Dateibaum. Der Nachweis ist danach derselbe — `missingObjects` leer.
 
 ## Sicherung & Wiederherstellung
 

@@ -38,7 +38,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 | Backend-Framework | Spring Boot 3.5, Spring Data JPA, Spring Web |
 | Build (Backend) | Maven (inkl. `frontend-maven-plugin` für den Vite-Build) |
 | Datenbank | PostgreSQL 16 |
-| Objektspeicher | MinIO (S3-kompatibel) für Datei-Anhänge |
+| Objektspeicher | SeaweedFS (S3-kompatibel) für Datei-Anhänge |
 | Schema-Migrationen | Flyway (`db/migration/V<n>__…sql`) |
 | Test (Backend) | JUnit 5, AssertJ, Mockito, Testcontainers, ArchUnit, PIT |
 | Frontend-Sprache | TypeScript (`strict: true`) |
@@ -62,9 +62,9 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 /
 ├── Codex*.md                          # Guide-Familie (Workflow-Guide unter .Codex/)
 ├── pom.xml                             # Maven-Konfiguration (inkl. frontend-maven-plugin)
-├── Dockerfile, docker-compose.yml      # Multi-Stage-Image + lokale Composition (Postgres, MinIO, Caddy)
+├── Dockerfile, docker-compose.yml      # Multi-Stage-Image + lokale Composition (Postgres, Objektspeicher, Caddy)
 ├── Caddyfile                           # Reverse-Proxy + automatisches TLS
-├── .env.example                        # DB-, MinIO- und App-Konfig-Vorlage
+├── .env.example                        # DB-, Objektspeicher- und App-Konfig-Vorlage
 ├── issues/                             # Lokaler Issue-Tracker (0001.md …) für den 9-Schritte-Workflow
 ├── src/main/java/org/mwolff/manban/    # Backend (je Modul: domain/application/web/infrastructure)
 │   ├── ManbanApplication.java
@@ -73,7 +73,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 │   ├── board/                          # Boards + konfigurierbare Spalten
 │   ├── card/                           # Karten, Vorhaben, Abhängigkeiten, Done-Retention-Job
 │   ├── comment/                        # Kommentare an Karten
-│   ├── attachment/                     # Datei-Anhänge (MinIO-Speicher, Bild-/PDF-Vorschau)
+│   ├── attachment/                     # Datei-Anhänge (Objektspeicher, Bild-/PDF-Vorschau)
 │   ├── accesstoken/                    # Projektgebundene API-/Ingest-Tokens
 │   ├── kanbancompat/                   # Kanban-kompatibler Ingest (Token→Board-Binding)
 │   ├── config/                         # SpaWebConfig (SPA-Forwarding)
@@ -139,7 +139,7 @@ Keine kurzfristige Bequemlichkeit rechtfertigt unsicheren, untypisierten oder sc
 
 ---
 
-**TL;DR:** Java 21 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + MinIO. React 18 + TypeScript strict + MUI. Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und lokale Issues sind verbindlich (siehe Workflow).
+**TL;DR:** Java 21 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + SeaweedFS. React 18 + TypeScript strict + MUI. Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und lokale Issues sind verbindlich (siehe Workflow).
 
 ## Gedächtnis (Obsidian-Vault)
 

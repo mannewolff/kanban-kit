@@ -31,7 +31,12 @@ SPIEGEL_DIR="$SICHERUNG/spiegel"
 VERSANDT_DIR="$SICHERUNG/versandt"
 UMGEBUNG="$SICHERUNG/.umgebung"
 CRON_DATEI=/etc/cron.d/manban-backup
-MC_ALIAS=manban
+# Der Name des rclone-Remotes, das auf den Objektspeicher zeigt (Issue #1228). Seine Einstellungen
+# stehen NICHT in der eingehaengten rclone.conf — die gehoert dem Betreiber und beschreibt sein
+# Ziel ausser Haus —, sondern kommen als RCLONE_CONFIG_SPEICHER_*-Variablen aus Compose. rclone
+# liest beide Quellen; ein Remote aus der Umgebung ueberschreibt nichts, was der Betreiber gesetzt
+# hat, und der Stack muss seine Konfigurationsdatei nicht anfassen.
+SPEICHER_REMOTE=speicher
 
 # Bis wohin der Anhang-Spiegel reicht — ein Stempel wie 20260923T075500Z, geschrieben nach jedem
 # gelungenen Spiegel-Lauf und mit derselben Datei ausser Haus abgelegt.
@@ -75,10 +80,14 @@ kurzfassung() {
 # und bekommt 0600 — sie liegt auf dem Sicherungs-Volume, das nur dieser Container sieht.
 UMGEBUNGSFELDER=(
   POSTGRES_HOST POSTGRES_PORT POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
-  MANBAN_MINIO_ENDPOINT MANBAN_MINIO_BUCKET MINIO_ROOT_USER MINIO_ROOT_PASSWORD
+  MANBAN_STORAGE_BUCKET
   MANBAN_BACKUP_TARGET MANBAN_BACKUP_AGE_RECIPIENT MANBAN_BACKUP_RETENTION_DAYS
   MANBAN_BACKUP_MIRROR_INTERVAL MANBAN_BACKUP_BASE_CRON
-  RCLONE_CONFIG MC_CONFIG_DIR
+  RCLONE_CONFIG
+  # Die Beschreibung des speicher-Remotes. Sie gehoert hierher, weil cron mit fast leerer Umgebung
+  # startet: Ohne diese Felder faende der naechtliche Lauf den Objektspeicher nicht mehr.
+  RCLONE_CONFIG_SPEICHER_TYPE RCLONE_CONFIG_SPEICHER_PROVIDER RCLONE_CONFIG_SPEICHER_ENDPOINT
+  RCLONE_CONFIG_SPEICHER_ACCESS_KEY_ID RCLONE_CONFIG_SPEICHER_SECRET_ACCESS_KEY
 )
 
 umgebung_sichern() {
@@ -102,12 +111,9 @@ vorgaben_setzen() {
   : "${POSTGRES_PORT:=5432}"
   : "${POSTGRES_DB:=manban}"
   : "${POSTGRES_USER:=manban}"
-  : "${MANBAN_MINIO_ENDPOINT:=http://minio:9000}"
-  : "${MANBAN_MINIO_BUCKET:=manban}"
+  : "${MANBAN_STORAGE_BUCKET:=manban}"
   : "${MANBAN_BACKUP_MIRROR_INTERVAL:=PT5M}"
   : "${MANBAN_BACKUP_BASE_CRON:=0 0 3 * * *}"
-  : "${MC_CONFIG_DIR:=$SICHERUNG/.mc}"
-  export MC_CONFIG_DIR
 }
 
 # Fehlt eines der uebergebenen Felder, laeuft der Aufruf nicht — und soll das laut sagen, statt in
@@ -362,17 +368,15 @@ spiegel_lauf() {
   # Beginn schon da war. Was waehrend des Laufs hochgeladen wurde, kann fehlen — ein Stand aus dem
   # Nachhinein verspraeche der Rueckholung also mehr, als der Spiegel haelt.
   stempel=$(date -u +%Y%m%dT%H%M%SZ)
-  mkdir -p "$SPIEGEL_DIR" "$VERSANDT_DIR/spiegel" "$MC_CONFIG_DIR"
+  mkdir -p "$SPIEGEL_DIR" "$VERSANDT_DIR/spiegel"
 
-  # Bewusst ohne --remove (E5): Anhaenge sind unveraenderlich, aber nicht unloeschbar. Mit --remove
-  # fehlte nach einer Rueckholung auf einen Zeitpunkt vor der Loeschung genau dieses Objekt. Was im
-  # Spiegel zuviel liegt, raeumt retention.sh — und nur, wenn es niemand mehr referenziert.
-  if ! {
-    mc alias set "$MC_ALIAS" "$MANBAN_MINIO_ENDPOINT" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" \
-      > /dev/null 2> "$fehler" \
-      && mc mirror --quiet --overwrite "$MC_ALIAS/$MANBAN_MINIO_BUCKET" "$SPIEGEL_DIR" \
-        > /dev/null 2>> "$fehler"
-  }; then
+  # `rclone copy` statt `mc mirror` (Issue #1228) — dieselbe Semantik: Es kopiert, was fehlt oder
+  # neuer ist, und loescht nie. Bewusst ohne eine --remove-Entsprechung (E5): Anhaenge sind
+  # unveraenderlich, aber nicht unloeschbar. Wuerde hier geloescht, fehlte nach einer Rueckholung
+  # auf einen Zeitpunkt vor der Loeschung genau dieses Objekt. Was im Spiegel zuviel liegt, raeumt
+  # retention.sh — und nur, wenn es niemand mehr referenziert.
+  if ! rclone copy "$SPEICHER_REMOTE:$MANBAN_STORAGE_BUCKET" "$SPIEGEL_DIR" \
+    > /dev/null 2> "$fehler"; then
     log "FEHLER Anhang-Spiegel gescheitert."
     protokoll spiegel "$beginn" fehlschlag "$(kurzfassung "$fehler")"
     return 1
@@ -445,13 +449,14 @@ archiv_uebereignen() {
 
 dienst() {
   local takt
-  pflichtfelder_pruefen POSTGRES_PASSWORD MINIO_ROOT_USER MINIO_ROOT_PASSWORD \
+  pflichtfelder_pruefen POSTGRES_PASSWORD \
+    RCLONE_CONFIG_SPEICHER_ACCESS_KEY_ID RCLONE_CONFIG_SPEICHER_SECRET_ACCESS_KEY \
     MANBAN_BACKUP_TARGET MANBAN_BACKUP_AGE_RECIPIENT
   if ! takt=$(takt_sekunden "$MANBAN_BACKUP_MIRROR_INTERVAL"); then
     log "FEHLER MANBAN_BACKUP_MIRROR_INTERVAL='$MANBAN_BACKUP_MIRROR_INTERVAL' ist keine Dauer wie PT5M."
     return 1
   fi
-  mkdir -p "$BASIS_DIR" "$SPIEGEL_DIR" "$VERSANDT_DIR" "$MC_CONFIG_DIR"
+  mkdir -p "$BASIS_DIR" "$SPIEGEL_DIR" "$VERSANDT_DIR"
   archiv_uebereignen
   umgebung_sichern
   cron_einrichten

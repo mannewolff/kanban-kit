@@ -12,9 +12,13 @@
 # docker-compose.yml passen — `pg_basebackup` einer anderen Hauptversion kann den Datenbestand
 # nicht lesen. Beides zusammen zu heben, ist damit eine einzige, sichtbare Entscheidung.
 #
-# `mc` kommt aus genau dem MinIO-Abbild, das der Stack ohnehin faehrt (docker-compose.yml). Damit
-# koennen Spiegel-Client und Objektspeicher nicht auseinanderlaufen, und es entsteht keine zweite
-# Versionsangabe, die jemand vergessen koennte.
+# Der Anhang-Spiegel lief bis Issue #1228 ueber `mc`, kopiert aus dem MinIO-Abbild des Stacks.
+# Beides ist entfallen: Das Abbild auf quay.io ist anonym nicht mehr beziehbar — dieser Bau lief
+# damit gar nicht mehr durch —, und mit dem Wechsel des Objektspeichers (Issue #1226) gibt es auch
+# kein MinIO mehr, zu dem der Client passen muesste. An seine Stelle tritt `rclone`, das ohnehin
+# schon hier liegt und den Weg ausser Haus faehrt: `mc mirror` ohne --remove und `rclone copy`
+# haben dieselbe Semantik, der Spiegel loescht weiterhin nie (E5 aus Plan #825). Damit faellt eine
+# Bezugsquelle und ein Werkzeug weg.
 
 ARG AGE_VERSION=1.2.1
 ARG RCLONE_VERSION=1.68.2
@@ -38,11 +42,6 @@ RUN curl -fsSL -o rclone.zip \
     && unzip -q rclone.zip \
     && install -m 0755 "rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}/rclone" /usr/local/bin/rclone
 
-# `command -v` statt eines fest verdrahteten Pfades: Verschiebt MinIO sein Werkzeug, scheitert der
-# Bau mit einer klaren Meldung, statt ein Abbild ohne `mc` auszuliefern.
-FROM quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z AS minio-werkzeug
-RUN cp "$(command -v mc)" /mc
-
 FROM postgres:16-bookworm
 
 # `cron` faehrt den Takt der Basissicherung aus MANBAN_BACKUP_BASE_CRON; `util-linux` bringt
@@ -54,7 +53,6 @@ RUN apt-get update \
 COPY --from=werkzeuge /usr/local/bin/age /usr/local/bin/age
 COPY --from=werkzeuge /usr/local/bin/age-keygen /usr/local/bin/age-keygen
 COPY --from=werkzeuge /usr/local/bin/rclone /usr/local/bin/rclone
-COPY --from=minio-werkzeug /mc /usr/local/bin/mc
 # Alle drei Skripte in dasselbe Verzeichnis: restore.sh und retention.sh laden backup.sh von dort
 # nach (gemeinsame Begriffe — Pfade, Protokollzeile, Ziel ausser Haus).
 #
@@ -68,8 +66,10 @@ RUN chmod 0755 /usr/local/bin/backup.sh /usr/local/bin/restore.sh /usr/local/bin
 # Das Verzeichnis `backup/` selbst haengt read-only unter /etc/manban-backup (siehe
 # docker-compose.backup.yml). Dort sucht rclone seine Konfiguration: So gibt es keinen
 # Einzeldatei-Mount, der bei fehlender Datei stillschweigend zu einem Verzeichnis wird.
-ENV RCLONE_CONFIG=/etc/manban-backup/rclone.conf \
-    MC_CONFIG_DIR=/sicherungen/.mc
+# Das Remote `speicher` — der Objektspeicher — steht bewusst NICHT in dieser Datei, sondern kommt
+# als RCLONE_CONFIG_SPEICHER_*-Umgebung aus docker-compose.backup.yml: Die eingehaengte Datei
+# gehoert dem Betreiber und beschreibt sein Ziel ausser Haus.
+ENV RCLONE_CONFIG=/etc/manban-backup/rclone.conf
 
 ENTRYPOINT ["/usr/local/bin/backup.sh"]
 CMD ["dienst"]

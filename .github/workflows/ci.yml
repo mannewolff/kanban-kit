@@ -53,3 +53,20 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npm run test:coverage
+
+  # Bezugspruefung (Issue #1229, Plan #1222, E11): eigener Job NEBEN den Code-Jobs, nicht in ihnen.
+  # Ein weggefallener Bezug — wie `quay.io/minio/minio`, das anonym nicht mehr beziehbar ist — soll
+  # an eigener Stelle rot werden und keinen Code-Job faerben. Der woechentliche Lauf haengt an
+  # .github/workflows/bezug.yml und nicht hier: Ein `schedule` an dieser Datei zoege Backend-,
+  # Mutations- und Frontend-Job jede Woche mit, ohne dass sich Code geaendert hat.
+  bezug:
+    name: Bezugsquellen (anonym beziehbar)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Bezugspruefung
+        run: node scripts/bezugspruefung.mjs

@@ -2078,6 +2078,25 @@ class CardServiceTest {
     verify(permissions, never()).require(anyLong(), anyLong(), any(Permission.class));
   }
 
+  /**
+   * Der Projektwechsel verlangt OWNER in <b>beiden</b> Projekten. Seit Issue #1165 trägt die Matrix
+   * dafür den Schlüssel {@code CARD_MOVE_PROJECT}; er beschreibt die Regel, ersetzt sie aber nicht.
+   * Reicht die Rolle nur im Quellprojekt, bleibt die Karte, wo sie ist — die Projektgrenze ist die
+   * Vertraulichkeitsgrenze.
+   */
+  @Test
+  void transfer_acrossProjects_scheitertWennOwnerNurImQuellprojektGilt() {
+    // Given: Zielprojekt (2) verweigert; das Quellprojekt (0) lässt durch.
+    stubTransferScenario(null);
+    doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(1L, 2L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.transfer(1L, 100L, 20L, 60L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cards, never()).transfer(anyLong(), anyLong(), anyLong(), anyInt());
+    verify(dependencies, never()).deleteByCardId(anyLong());
+  }
+
   @Test
   void transfer_sameProject_requiresCardMoveInsteadOfOwner() {
     // Given: Ziel-Board liegt im SELBEN Projekt (1) wie die Quelle.

@@ -5,7 +5,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.Identifiable;
 
 /**
- * Metadaten eines Karten-Anhangs. Der eigentliche Blob liegt im Objektspeicher (MinIO),
+ * Metadaten eines Karten-Anhangs. Der eigentliche Blob liegt im Objektspeicher (SeaweedFS),
  * referenziert über {@code objectKey}; in der DB stehen nur Metadaten.
  *
  * @param id technische ID; {@code null} vor der Persistierung
