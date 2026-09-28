@@ -1,9 +1,14 @@
 # Sicherungs-Overlay (Issue #829, Plan #825).
 #
-# Zuschalten:
-#   docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d --build
-# In Produktion zusaetzlich mit dem Prod-Overlay:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.backup.yml up -d --build
+# Zuschalten (Normalfall, zieht die veroeffentlichten Abbilder — kein Bau, Issue #1265):
+#   docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d
+# Wer vor Ort bauen will, legt beide Bau-Overlays dazu; das des Sicherungsdienstes steht hinter
+# diesem hier, weil sein `image: !reset null` die Zeile unten zurueckzunehmen hat:
+#   docker compose -f docker-compose.yml -f docker-compose.bau.yml \
+#     -f docker-compose.backup.yml -f docker-compose.backup-bau.yml up -d --build
+# In Produktion zusaetzlich mit dem Prod-Overlay — das ist der Deploy-Weg des Projektservers:
+#   docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose.prod.yml \
+#     -f docker-compose.backup.yml -f docker-compose.backup-bau.yml up -d --build
 #
 # Genau ein Schalter (E6): Zugeschaltet wird allein ueber dieses `-f`. Das Overlay setzt
 # MANBAN_BACKUP_ENABLED an manban-api selbst; die Variable steht nicht in .env.example und wird von
@@ -56,8 +61,10 @@ services:
       MANBAN_BACKUP_TARGET_LABEL: ${MANBAN_BACKUP_TARGET:-nicht benannt}
 
   manban-backup:
-    build:
-      context: ./backup
+    # Wie manban-api im Basis-Stack: das veroeffentlichte Abbild statt `build:` (Issue #1265).
+    # Auch ein Betrieb mit Sicherung soll ohne Bauen auskommen; das `build:` dieses Dienstes liegt
+    # in docker-compose.bau.yml. Volle Fassung aus derselben Ueberlegung wie dort.
+    image: ghcr.io/mannewolff/kanban-kit-backup:2.14.0
     # Der Dienst startet cron neben seiner eigenen Schleife — ein Init raeumt deren Kinder ab.
     init: true
     environment:

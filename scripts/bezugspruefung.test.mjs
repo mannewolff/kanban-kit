@@ -415,6 +415,16 @@ test('abbilderAusCompose liest jede image-Zeile', () => {
   assert.deepEqual([...abbilder].sort(), ['caddy:2', 'postgres:16']);
 });
 
+test('abbilderAusCompose laesst ein zurueckgenommenes image aus (!reset, Issue #1265)', () => {
+  // Die Bau-Overlays nehmen die image-Zeile des Basis-Stacks mit `image: !reset null` zurueck.
+  // Ohne diese Ausnahme stuende `!reset` als Phantom-Abbild im Bestand, und der Abgleich verlangte
+  // dafuer einen Eintrag in der Bausteinliste — eine Bezugsquelle, die es gar nicht gibt.
+  const abbilder = abbilderAusCompose(
+    ['services:', '  a:', '    image: !reset null', '    build: .'].join('\n'),
+  );
+  assert.deepEqual([...abbilder], []);
+});
+
 test('abbilderAusDockerfile liest FROM und laesst eigene Baustufen aus', () => {
   const abbilder = abbilderAusDockerfile(
     ['FROM debian:bookworm-slim AS werkzeuge', 'FROM werkzeuge AS zwei', 'FROM postgres:16-bookworm'].join(

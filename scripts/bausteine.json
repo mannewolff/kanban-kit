@@ -11,6 +11,14 @@
   ],
   "bausteine": [
     {
+      "name": "Anwendung",
+      "zweck": "das veroeffentlichte Anwendungs-Abbild des Basis-Stacks (docker-compose.yml)",
+      "art": "abbild",
+      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit:2.14.0",
+      "fassung": "2.14.0",
+      "pruefung": "eigen"
+    },
+    {
       "name": "Datenbank",
       "zweck": "PostgreSQL des Stacks (docker-compose.yml) und der Integrationstests",
       "art": "abbild",
@@ -33,6 +41,14 @@
       "bezugsstelle": "caddy:2.11.4",
       "fassung": "2.11.4",
       "pruefung": "bezug"
+    },
+    {
+      "name": "Sicherung",
+      "zweck": "das veroeffentlichte Abbild des Sicherungsdienstes (docker-compose.backup.yml)",
+      "art": "abbild",
+      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit-backup:2.14.0",
+      "fassung": "2.14.0",
+      "pruefung": "eigen"
     },
     {
       "name": "Sicherung: Werkzeugstufe",

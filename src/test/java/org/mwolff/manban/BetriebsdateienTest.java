@@ -14,8 +14,21 @@ import org.junit.jupiter.api.Test;
  * Hält die ausgelieferten Betriebsdateien an den Zusicherungen fest, die ein Betreiber ihnen
  * entnimmt: Das Produktions-Overlay schaltet den Entwicklungs-Schalter fest aus, die
  * Umgebungs-Vorlage liefert keinen funktionierenden Sitzungsschlüssel mit (Issue #889), das
- * automatische Deployment startet den Stack mit dem Sicherungs-Overlay (Issue #1198), und der
- * ausgelieferte Stack fährt kein Abbild, das anonym nicht mehr beziehbar ist (Issue #1226).
+ * automatische Deployment startet den Stack mit dem Sicherungs-Overlay (Issue #1198), der
+ * ausgelieferte Stack fährt kein Abbild, das anonym nicht mehr beziehbar ist (Issue #1226), und er
+ * baut nichts mehr selbst, sondern zieht veröffentlichte Abbilder (Issue #1265).
+ *
+ * <p>Die Bau-Overlays {@code docker-compose.bau.yml} (Anwendung) und {@code
+ * docker-compose.backup-bau.yml} (Sicherungsdienst) sind seit Issue #1265 die einzigen Schalter des
+ * Baus — genau wie das Sicherungs-Overlay der einzige Schalter der Sicherung. Fehlt eines ihrer
+ * {@code -f} in einem Compose-Aufruf des Deploy-Workflows, baut {@code --build} nichts mehr: Der
+ * Server zöge das veröffentlichte Abbild und bliebe stumm auf einem alten Stand, obwohl der Deploy
+ * grün ist.
+ *
+ * <p>Zwei Dateien und nicht eine: Compose führt jede übergebene Datei zusammen, ohne zu fragen, ob
+ * eine andere denselben Dienst auch beschreibt. Stünde {@code manban-backup} im Bau-Overlay des
+ * Basis-Stacks, baute und startete jeder Entwickler-Aufruf ohne Sicherungs-Overlay einen
+ * Sicherungs-Container ohne Umgebung, ohne Volumes und ohne {@code depends_on}.
  *
  * <p>Das Sicherungs-Overlay {@code docker-compose.backup.yml} ist der einzige Schalter der
  * Sicherung: Fehlt es in einem Compose-Aufruf des Deploy-Workflows, legt der Deploy {@code
@@ -49,6 +62,15 @@ class BetriebsdateienTest {
   /** Rückweg-Overlay mit dem alten Speicherdienst (Plan #1222, E13). */
   private static final Path ALTSPEICHER_OVERLAY = Path.of("docker-compose.altspeicher.yml");
 
+  /** Sicherungs-Overlay als Datei — auch sein Dienst zieht sein Abbild (Issue #1265). */
+  private static final Path SICHERUNGS_OVERLAY_DATEI = Path.of("docker-compose.backup.yml");
+
+  /** Bau-Overlay des Basis-Stacks — seit Issue #1265 der einzige Ort des {@code build:}. */
+  private static final Path BAU_OVERLAY = Path.of("docker-compose.bau.yml");
+
+  /** Bau-Overlay des Sicherungs-Overlays; eigene Datei aus dem Grund im Klassen-Javadoc. */
+  private static final Path SICHERUNGS_BAU_OVERLAY = Path.of("docker-compose.backup-bau.yml");
+
   /** Umzugs-Overlay des einmaligen Speicherwechsels (Issue #1230). */
   private static final Path UMZUG_OVERLAY = Path.of("docker-compose.umzug.yml");
 
@@ -64,6 +86,16 @@ class BetriebsdateienTest {
 
   /** Einziger Schalter der Sicherung — siehe Klassen-Javadoc. */
   private static final String SICHERUNGS_OVERLAY = "-f docker-compose.backup.yml";
+
+  /** Die beiden Schalter des Baus — siehe Klassen-Javadoc. */
+  private static final List<String> BAU_SCHALTER =
+      List.of("-f docker-compose.bau.yml", "-f docker-compose.backup-bau.yml");
+
+  /** Der Compose-Schlüssel, der einen Dienst vor Ort bauen lässt. */
+  private static final String BAU_SCHLUESSEL = "build:";
+
+  /** Namensraum der Abbilder, die dieses Projekt selbst veröffentlicht. */
+  private static final String EIGENE_ABBILDER = "ghcr.io/mannewolff/";
 
   /** Standardwert des lokalen Stacks — in der Vorlage wäre er ein gesetzter Schlüssel. */
   private static final String UNSICHERER_STANDARDWERT = "dev-only-insecure-secret-change-me";
@@ -165,6 +197,88 @@ class BetriebsdateienTest {
     assertThat(composeAufrufe)
         .as("jeder Compose-Aufruf in %s trägt das Sicherungs-Overlay", DEPLOY_WORKFLOW)
         .allSatisfy(zeile -> assertThat(zeile).contains(SICHERUNGS_OVERLAY));
+  }
+
+  /**
+   * Der Deploy des Projektservers baut weiter vor Ort — dafür braucht jeder seiner Compose-Aufrufe
+   * seit Issue #1265 beide Bau-Overlays. Derselbe Fehlerfall wie bei der Sicherung: Ohne das {@code
+   * -f} baut {@code --build} nichts, der Deploy bleibt grün, und der Server läuft weiter auf dem
+   * Abbild, das er vorher hatte.
+   */
+  @Test
+  void deployWorkflowGibtJedemComposeAufrufBeideBauOverlaysMit() throws IOException {
+    List<String> composeAufrufe = wirksameZeilenMit(DEPLOY_WORKFLOW, "docker compose");
+
+    assertThat(composeAufrufe)
+        .as("Compose-Aufrufe in %s — ein leerer Treffer wäre kein Beweis", DEPLOY_WORKFLOW)
+        .isNotEmpty();
+    assertThat(composeAufrufe)
+        .as("jeder Compose-Aufruf in %s trägt beide Bau-Overlays", DEPLOY_WORKFLOW)
+        .allSatisfy(zeile -> assertThat(zeile).contains(BAU_SCHALTER));
+  }
+
+  /**
+   * Das Bau-Overlay des Sicherungsdienstes steht <b>hinter</b> dem Sicherungs-Overlay: Sein {@code
+   * image: !reset null} nimmt die dortige {@code image:}-Zeile zurück, und Compose wertet die
+   * Dateien in der Reihenfolge der Aufrufe aus. Stünde es davor, bliebe das veröffentlichte Abbild
+   * stehen und trüge am Ende den lokal gebauten Stand.
+   */
+  @Test
+  void dasBauOverlayDerSicherungStehtHinterDemSicherungsOverlay() throws IOException {
+    List<String> composeAufrufe = wirksameZeilenMit(DEPLOY_WORKFLOW, "docker compose");
+
+    assertThat(composeAufrufe)
+        .as("Compose-Aufrufe in %s — ein leerer Treffer wäre kein Beweis", DEPLOY_WORKFLOW)
+        .isNotEmpty()
+        .allSatisfy(
+            zeile ->
+                assertThat(zeile.indexOf("-f " + SICHERUNGS_BAU_OVERLAY))
+                    .as("Reihenfolge in: %s", zeile)
+                    .isGreaterThan(zeile.indexOf(SICHERUNGS_OVERLAY)));
+  }
+
+  /**
+   * Der ausgelieferte Stack zieht veröffentlichte Abbilder, der Bau liegt allein im Bau-Overlay
+   * (Issue #1265, fachliche Quelle #675). Bliebe ein {@code build:} im Basis-Stack oder im
+   * Sicherungs-Overlay stehen, bräuchte ein Selbsthoster wieder Node-, Maven- und JDK-Bauzeit,
+   * bevor er etwas sieht — und der Schnellstart mit einem einzigen Aufruf wäre dahin.
+   *
+   * <p>Die Fassung steht voll in der {@code image:}-Zeile und nicht als beweglicher Tag: Ein {@code
+   * latest} ist genau das, was dieses Vorhaben abschafft.
+   */
+  @Test
+  void derStackZiehtVeroeffentlichteAbbilderUndBautNurImBauOverlay() throws IOException {
+    for (Path datei : List.of(BASIS_STACK, SICHERUNGS_OVERLAY_DATEI)) {
+      assertThat(wirksameZeilenMit(datei, BAU_SCHLUESSEL))
+          .as("%s baut nicht mehr selbst — der Bau liegt in %s", datei, BAU_OVERLAY)
+          .isEmpty();
+      assertThat(wirksameZeilenMit(datei, EIGENE_ABBILDER))
+          .as("%s zieht genau ein veröffentlichtes Abbild, mit voller Fassung", datei)
+          .singleElement()
+          .asString()
+          .matches("image: \\Qghcr.io/mannewolff/\\E[\\w.-]+:\\d+\\.\\d+\\.\\d+");
+    }
+
+    assertThat(wirksameZeilenMit(BAU_OVERLAY, BAU_SCHLUESSEL))
+        .as("%s baut die Anwendung", BAU_OVERLAY)
+        .containsExactly("build: .");
+    assertThat(wirksameZeilenMit(BAU_OVERLAY, "manban-backup"))
+        .as(
+            "%s beschreibt den Sicherungsdienst nicht — sonst entstünde er ohne sein Overlay",
+            BAU_OVERLAY)
+        .isEmpty();
+    assertThat(wirksameZeilenMit(SICHERUNGS_BAU_OVERLAY, "context: ./backup"))
+        .as("%s baut den Sicherungsdienst aus seinem Verzeichnis", SICHERUNGS_BAU_OVERLAY)
+        .isNotEmpty();
+
+    for (Path overlay : List.of(BAU_OVERLAY, SICHERUNGS_BAU_OVERLAY)) {
+      assertThat(wirksameZeilenMit(overlay, "image:"))
+          .as("%s nimmt das veröffentlichte Abbild zurück, statt es stehen zu lassen", overlay)
+          .containsExactly("image: !reset null");
+      assertThat(Files.readAllLines(overlay, StandardCharsets.UTF_8).getFirst())
+          .as("%s beginnt mit einem Kopfkommentar", overlay)
+          .startsWith("#");
+    }
   }
 
   /**

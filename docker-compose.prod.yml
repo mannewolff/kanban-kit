@@ -1,7 +1,9 @@
 # Produktions-Overlay: manban hinter dem vorhandenen Traefik des Hostinger-Servers.
 #
 # Aufruf auf dem Server:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose.prod.yml up -d --build
+# Das Bau-Overlay muss dabeistehen: Der Basis-Stack zieht seit Issue #1265 das veroeffentlichte
+# Abbild, und `--build` allein baut ohne ein `build:` nichts mehr.
 #
 # Unterschiede zum lokalen Basis-Stack (docker-compose.yml):
 #   - manban-api haengt am externen Traefik-Netz "web" und wird ueber Traefik-Labels

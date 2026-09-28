@@ -317,9 +317,18 @@ export async function laufen(bausteine, {
 
 // --- Abgleich gegen den Bestand (E9) -------------------------------------
 
+/**
+ * Jede image-Zeile — ausser der, die eine fruehere zuruecknimmt. Die Bau-Overlays schreiben
+ * `image: !reset null`, damit ein oertlich gebautes Abbild nicht den Tag der veroeffentlichten
+ * Fassung traegt (Issue #1265). Das ist ein Compose-Merge-Befehl und keine Bezugsquelle: Ohne die
+ * Ausnahme stuende `!reset` als Phantom-Abbild im Bestand, und der Abgleich verlangte einen
+ * Bausteineintrag fuer etwas, das niemand beziehen kann.
+ */
 export function abbilderAusCompose(text) {
   const abbilder = new Set();
-  for (const treffer of text.matchAll(/^\s*image:\s*(\S+)/gm)) abbilder.add(treffer[1]);
+  for (const treffer of text.matchAll(/^\s*image:\s*(\S+)/gm)) {
+    if (!treffer[1].startsWith('!')) abbilder.add(treffer[1]);
+  }
   return abbilder;
 }
 

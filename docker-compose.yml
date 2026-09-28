@@ -63,7 +63,15 @@ services:
       retries: 20
 
   manban-api:
-    build: .
+    # Das veroeffentlichte Abbild statt `build: .` (Issue #1265, fachliche Quelle #675): Eine
+    # Installation nach docs/betrieb.md soll von der leeren Maschine zur laufenden Instanz kommen,
+    # ohne dass etwas uebersetzt wird — Node-, Maven- und JDK-Bauzeit stuenden sonst vor dem ersten
+    # Blick auf die Anwendung. Wer selbst bauen will (Entwickler, und der Deploy des Projekts),
+    # legt docker-compose.bau.yml darueber; dort steht das `build:`.
+    # Volle Fassung statt eines beweglichen Tags: Ein `latest` ist genau das, was dieses Vorhaben
+    # abschafft. Das Abbild dieser Nummer steht erst mit ihrem Release in der Registry — die
+    # Pruefart `eigen` in scripts/bausteine.json haelt den CI-Job deshalb gruen (Issue #1264).
+    image: ghcr.io/mannewolff/kanban-kit:2.14.0
     environment:
       MANBAN_BASE_URL: ${MANBAN_BASE_URL:-https://localhost}
       # Dies ist der lokale Entwicklungs-Stack: Der Schalter erlaubt den Start mit den
