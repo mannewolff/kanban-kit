@@ -18,6 +18,12 @@ erzeugt von `scripts/gen-changelog.mjs`.
   Rückweg: Abschnitt „Umstellung des Objektspeichers" in
   [docs/betrieb.md](docs/betrieb.md#umstellung-des-objektspeichers).
 
+## [2.14.0] – 2026-09-28
+
+- chore: v2.13.1
+- Plattform-Leitstand zeigt die Dauer jedes gemeldeten Pakets ([#1247](https://github.com/mannewolff/kanban-kit/issues/1247))
+- Plattform-Leitstand zeigt die Laufzeit eines laufenden Runs ([#1246](https://github.com/mannewolff/kanban-kit/issues/1246))
+
 ## [2.13.0] – 2026-09-28
 
 - chore: v2.12.1
