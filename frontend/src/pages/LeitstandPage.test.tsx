@@ -415,11 +415,25 @@ describe('LeitstandPage — Letzter Run', () => {
     const letzter = await platte()
     const zeilen = within(letzter).getAllByRole('listitem')
     expect(zeilen).toHaveLength(4)
-    expect(zeilen[0]).toHaveTextContent('#917Paket 917Nachtlauf-Auswertung18:429489421')
+    expect(zeilen[0]).toHaveTextContent('#917Paket 917Nachtlauf-Auswertung18:42 min9489421')
     expect(zeilen[1]).toHaveTextContent('CHECKS_RED2 Tests rot in BoardViewTest')
     expect(zeilen[2]).toHaveTextContent('AWAITING_DECISION')
     expect(zeilen[3]).toHaveTextContent('#930Paket 930—')
     expect(letzter).toHaveTextContent('4 Pakete')
+  })
+
+  it('macht die Dauer je Zeile an Einheit und Beschriftung als Dauer erkennbar (#1245)', async () => {
+    renderPage()
+    const letzter = await platte()
+
+    const dauer = within(letzter).getByTestId('dauer-917')
+    expect(dauer).toHaveTextContent('18:42 min')
+    expect(dauer).toHaveAttribute('aria-label', 'Dauer 18 min 42 s')
+    expect(dauer).toHaveAttribute('title', 'Dauer 18 min 42 s')
+
+    const ohne = within(letzter).getByTestId('dauer-930')
+    expect(ohne).toHaveTextContent('—')
+    expect(ohne).toHaveAttribute('aria-label', 'Dauer nicht gemessen')
   })
 
   it('filtert auf Abbrüche und zurück', async () => {

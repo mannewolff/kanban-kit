@@ -15,7 +15,7 @@ import {
   TEXT_SCHWACH,
   ZAHL,
 } from '../../theme'
-import { KlassenMarke, Led, ZEILE_HOVER } from '../leitstand/LeitstandBausteine'
+import { KlassenMarke, Led, PaketDauer, ZEILE_HOVER } from '../leitstand/LeitstandBausteine'
 
 /** Die Fehlerklasse eines Abbruchs als Marke: ihr Schlüsselwort und ihre Farbe. */
 export interface Zeilenklasse {
@@ -70,6 +70,7 @@ export function NachtlaufVorgangszeile({
   haeufigkeit,
   /** Das Vorhaben des Vorgangs; steht nur, wo kein Abbruch die Zeile beansprucht. */
   vorhaben,
+  /** Die gemessene Dauer des Vorgangs in Millisekunden; `null` heisst „nicht gemessen". */
   dauer,
   /** Die Kosten des Vorgangs; `null` heißt „nicht gemessen" und erscheint als „—". */
   kosten,
@@ -89,7 +90,7 @@ export function NachtlaufVorgangszeile({
   auszug: string | null
   haeufigkeit: string | null
   vorhaben: Zeilenvorhaben | null
-  dauer: string
+  dauer: number | null
   kosten: string | null
   commit: string | null
   offen: boolean
@@ -207,13 +208,7 @@ export function NachtlaufVorgangszeile({
         </Box>
       </ButtonBase>
 
-      <Box
-        component="span"
-        data-testid={`dauer-${nummer}`}
-        sx={{ ...ZAHL, fontSize: 12, color: 'text.secondary', display: { xs: 'none', md: 'block' } }}
-      >
-        {dauer}
-      </Box>
+      <PaketDauer ms={dauer} testId={`dauer-${nummer}`} sx={{ display: { xs: 'none', md: 'block' } }} />
       <Box
         component="span"
         data-testid={`kosten-${nummer}`}

@@ -18,6 +18,14 @@ erzeugt von `scripts/gen-changelog.mjs`.
   Rückweg: Abschnitt „Umstellung des Objektspeichers" in
   [docs/betrieb.md](docs/betrieb.md#umstellung-des-objektspeichers).
 
+## [2.13.0] – 2026-09-28
+
+- chore: v2.12.1
+- Die Dauer eines Pakets ist als Dauer erkennbar ([#1245](https://github.com/mannewolff/kanban-kit/issues/1245))
+- Laufender Run zeigt die verstrichene Zeit ([#1244](https://github.com/mannewolff/kanban-kit/issues/1244))
+- Lehren aus dem Speicher-Umzug in Vorlage und Anleitung ([#1243](https://github.com/mannewolff/kanban-kit/issues/1243))
+- Zwei Sonar-Zuverlaessigkeitsbefunde behoben ([#1242](https://github.com/mannewolff/kanban-kit/issues/1242))
+
 ## [2.12.0] – 2026-09-27
 
 - chore: v2.11.2

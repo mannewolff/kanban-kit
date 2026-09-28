@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box'
 import { cacheQuote, dollar, laufDauerGeteilt, tokenMenge } from '../../lib/leitstand'
+import { useJetzt } from '../../lib/useJetzt'
 import { RAND } from '../../theme'
 import { Instrument, type InstrumentWert } from '../leitstand/LeitstandBausteine'
 
@@ -33,6 +34,9 @@ const anteilText = (usd: number | undefined): string =>
 /** `undefined` aus dem Anzeigemodell heißt „nicht gemessen"; die Rechnung kennt dafür `null`. */
 const alsNull = (wert: number | undefined): number | null => wert ?? null
 
+/** Der Takt der mitlaufenden Zeit (#1244): zehn Sekunden — fein genug für eine Minutenanzeige. */
+const TAKT_MS = 10_000
+
 /** Eine Token-Menge als Instrumentenwert; `null`, wo nichts gemessen wurde. */
 const mengeAlsWert = (anzahl: number | undefined): InstrumentWert[] | null => {
   const menge = tokenMenge(alsNull(anzahl))
@@ -62,6 +66,7 @@ export function NachtlaufLaufInstrumente({
   dauerMs,
   pakete,
   aufteilung,
+  laeuftSeit,
   testId = 'lauf-instrumente',
 }: Readonly<{
   /** `undefined` am eben geparsten Lauf — dort gibt es noch keinen aufbewahrten Stand. */
@@ -70,9 +75,20 @@ export function NachtlaufLaufInstrumente({
   pakete: Paketzahlen
   /** Nur an einem eingelieferten Kettenlauf; sonst steht unter den Kosten nichts (Issue #1106). */
   aufteilung?: Kostenaufteilung
+  /**
+   * Die Startzeit (ISO) eines Laufs, der **noch läuft** (Issue #1244). Nur dann steht unter der
+   * gemeldeten Dauer, wie lange er tatsächlich schon läuft; an einem beendeten Lauf ist die
+   * gemeldete Dauer die ganze Wahrheit.
+   */
+  laeuftSeit?: string
   testId?: string
 }>) {
   const dauer = laufDauerGeteilt(dauerMs)
+  // Die gemeldete Dauer reicht nur bis zur letzten Meldung und steht zwischen zwei Meldungen still
+  // (#1244). Was daneben steht, ist reine Rechnung im Browser — kein zweiter Abruf.
+  const jetzt = useJetzt(laeuftSeit === undefined ? null : TAKT_MS)
+  const seit =
+    laeuftSeit === undefined ? undefined : laufDauerGeteilt(jetzt - new Date(laeuftSeit).getTime())
   const quote = cacheQuote(alsNull(verbrauch?.zwischenspeicher), alsNull(verbrauch?.eingabe))
 
   return (
@@ -116,7 +132,14 @@ export function NachtlaufLaufInstrumente({
         leerText="nicht berechenbar"
         teile={quote === null ? null : [{ wert: String(quote), einheit: '%' }]}
       />
-      <Instrument titel="Dauer" testId="instrument-dauer" teile={[dauer]} />
+      <Instrument
+        titel="Dauer"
+        testId="instrument-dauer"
+        teile={[dauer]}
+        // Text, keine Live-Region: Ein Vorlesewerkzeug soll die Zeile nicht alle zehn Sekunden
+        // erneut ansagen.
+        zusatz={seit === undefined ? undefined : `läuft seit ${seit.wert} ${seit.einheit}`}
+      />
       <Instrument
         titel="Pakete"
         testId="instrument-pakete"

@@ -4993,16 +4993,41 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     expect(panel.getByTestId('instrument-pakete-wert')).toHaveTextContent('1 grün 1 gelb 1 rot')
   })
 
+  // Issue #1244: Die gemeldete Dauer steht zwischen zwei Meldungen still. Wie lange ein Lauf
+  // tatsächlich schon läuft, steht darum als Zusatzzeile der Kachel — und nur, solange er läuft.
+  it('zeigt am laufenden Lauf unter der Dauer, wie lange er schon läuft', async () => {
+    const jetzt = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-01T23:14:00.000Z'))
+    try {
+      renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), complete: false })]] })
+      await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+      expect(within(lauf(0)).getByTestId('instrument-dauer-zusatz')).toHaveTextContent(
+        'läuft seit 1:14 h',
+      )
+    } finally {
+      jetzt.mockRestore()
+    }
+  })
+
+  it('lässt die mitlaufende Zeit am beendeten Lauf weg', async () => {
+    renderPage(mitAllem())
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(within(lauf(0)).queryByTestId('instrument-dauer-zusatz')).not.toBeInTheDocument()
+  })
+
   it('führt je Vorgangszeile Dauer, Kosten und Commit — und „—" ohne Messung', async () => {
     renderPage(mitAllem())
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
     const panel = within(lauf(0))
-    expect(panel.getByTestId('dauer-917')).toHaveTextContent('25:00')
+    expect(panel.getByTestId('dauer-917')).toHaveTextContent('25:00 min')
+    // Die Dauer ist an Einheit und Beschriftung als Dauer erkennbar und nicht als Uhrzeit (#1245).
+    expect(panel.getByTestId('dauer-917')).toHaveAttribute('aria-label', 'Dauer 25 min 0 s')
     expect(panel.getByTestId('kosten-917')).toHaveTextContent('2,30 $')
     expect(panel.getByTestId('commit-917')).toHaveTextContent('9489421')
     // Der Abbruch hat keine Kostenmeldung und keinen Commit.
-    expect(panel.getByTestId('dauer-922')).toHaveTextContent('42:15')
+    expect(panel.getByTestId('dauer-922')).toHaveTextContent('42:15 min')
     expect(panel.getByTestId('kosten-922')).toHaveTextContent('—')
     expect(panel.queryByTestId('commit-922')).not.toBeInTheDocument()
   })

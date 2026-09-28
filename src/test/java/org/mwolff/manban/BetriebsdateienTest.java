@@ -68,6 +68,20 @@ class BetriebsdateienTest {
   /** Standardwert des lokalen Stacks — in der Vorlage wäre er ein gesetzter Schlüssel. */
   private static final String UNSICHERER_STANDARDWERT = "dev-only-insecure-secret-change-me";
 
+  /**
+   * Der Benutzername, den {@code ObjectStorageStartupCheck} als öffentlich bekannten Standard
+   * ablehnt (Issue #1227). Stand er in der Vorlage, bekam ein Betreiber, der sie kopiert oder der
+   * seine bisherigen {@code MINIO_ROOT_*}-Werte behält, einen Start, der abbricht — so ist es in
+   * Produktion passiert (Issue #1243).
+   */
+  private static final String ABGELEHNTER_SPEICHER_BENUTZER = "manban";
+
+  /** Platzhalter, mit dem die Vorlage den Speicher-Benutzer führt (Issue #1243). */
+  private static final String VORLAGE_SPEICHER_BENUTZER = "change-me-benutzer";
+
+  /** Platzhalter, mit dem die Vorlage das Speicher-Geheimnis führt. */
+  private static final String VORLAGE_SPEICHER_GEHEIMNIS = "change-me-objektspeicher";
+
   /** Verzeichnis der ausgelieferten Anleitungen. */
   private static final Path ANLEITUNGEN = Path.of("docs");
 
@@ -93,6 +107,43 @@ class BetriebsdateienTest {
     assertThat(schluesselZeilen)
         .as("Sitzungsschlüssel in %s — Zeile ohne Wert", UMGEBUNGS_VORLAGE)
         .containsExactly("MANBAN_SESSION_SECRET=");
+  }
+
+  /**
+   * Beide Speicher-Zugangsdaten der Vorlage tragen einen Platzhalter, den {@code
+   * ObjectStorageStartupCheck} ablehnt (Issue #1243): Die Vorlage ist damit bewusst nicht lauffähig
+   * — wer sie unverändert kopiert, bekommt einen Abbruch mit Grund, keinen laufenden Stack mit
+   * öffentlich bekannten Zugangsdaten. Der bisherige Wert {@code manban} sah dagegen wie ein
+   * gültiger Vorgabewert aus und brach den Start erst beim Deploy ab.
+   */
+  @Test
+  void umgebungsVorlageFuehrtDenSpeicherZugangNurAlsAbgelehntenPlatzhalter() throws IOException {
+    assertThat(wirksameZeilenMit(UMGEBUNGS_VORLAGE, "OBJEKTSPEICHER_ROOT_USER="))
+        .as(
+            "Speicher-Benutzer in %s — abgelehnter Platzhalter, kein gültig aussehender Wert",
+            UMGEBUNGS_VORLAGE)
+        .containsExactly("OBJEKTSPEICHER_ROOT_USER=" + VORLAGE_SPEICHER_BENUTZER);
+    assertThat(VORLAGE_SPEICHER_BENUTZER)
+        .as("der Platzhalter ist nicht der abgelehnte Standard selbst")
+        .isNotEqualTo(ABGELEHNTER_SPEICHER_BENUTZER);
+    assertThat(wirksameZeilenMit(UMGEBUNGS_VORLAGE, "OBJEKTSPEICHER_ROOT_PASSWORD="))
+        .as("Speicher-Geheimnis in %s — ebenfalls ein abgelehnter Platzhalter", UMGEBUNGS_VORLAGE)
+        .containsExactly("OBJEKTSPEICHER_ROOT_PASSWORD=" + VORLAGE_SPEICHER_GEHEIMNIS);
+  }
+
+  /**
+   * Keine Speicher-Variable der Vorlage trägt den abgelehnten Wert — auch keine weitere, die später
+   * hinzukommt. Die {@code POSTGRES_*}-Werte bleiben außen vor: Dort ist {@code manban} Datenbank-
+   * und Rollenname, kein Zugangsmittel des Objektspeichers. Kommentare bleiben frei: Dort steht
+   * gerade der Hinweis, dass {@code manban} abgelehnt wird (Issue #1243).
+   */
+  @Test
+  void keineSpeicherVariableDerVorlageTraegtDenAbgelehntenWert() throws IOException {
+    assertThat(wirksameZeilenMit(UMGEBUNGS_VORLAGE, "OBJEKTSPEICHER_"))
+        .as("Speicher-Variablen in %s — ein leerer Treffer wäre kein Beweis", UMGEBUNGS_VORLAGE)
+        .isNotEmpty()
+        .as("abgelehnter Wert %s als Speicher-Zugangsdatum", ABGELEHNTER_SPEICHER_BENUTZER)
+        .noneMatch(zeile -> zeile.endsWith("=" + ABGELEHNTER_SPEICHER_BENUTZER));
   }
 
   @Test

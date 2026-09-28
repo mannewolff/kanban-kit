@@ -1,10 +1,11 @@
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
-import { keyframes } from '@mui/material/styles'
+import { keyframes, type Theme } from '@mui/material/styles'
+import type { SystemStyleObject } from '@mui/system'
 import { useId, type ReactNode } from 'react'
 import type { DeltaArt, Kachel as KachelDaten, Melder } from '../../lib/leitstand'
-import { funkenPunkte } from '../../lib/leitstand'
+import { funkenPunkte, paketDauer, paketDauerBeschriftung } from '../../lib/leitstand'
 import {
   ANZEIGE,
   BLINKER_HELL,
@@ -575,5 +576,40 @@ export function Taste({
     >
       {children}
     </ButtonBase>
+  )
+}
+
+/**
+ * Die Dauer eines Arbeitspakets in einer Zeile (#1245): der Wert und seine kleine, gedämpfte
+ * Einheit dahinter — dasselbe Muster wie die Einheit eines Instruments ({@link KachelWert},
+ * {@link Instrument}).
+ *
+ * <p><b>Ein Baustein für beide Verwender</b> — die Vorgangszeile der Läufe-Seite und „Letzter Run"
+ * des Projekt-Leitstands: Dieselbe Angabe sähe sonst an zwei Stellen verschieden aus. Die
+ * ausgeschriebene Beschriftung steht als `aria-label` und `title`, weil „12:56" vorgelesen wie
+ * eine Uhrzeit klingt.
+ */
+export function PaketDauer({
+  ms,
+  testId,
+  sx,
+}: Readonly<{ ms: number | null; testId: string; sx?: SystemStyleObject<Theme> }>) {
+  const { wert, einheit } = paketDauer(ms)
+  const beschriftung = paketDauerBeschriftung(ms)
+  return (
+    <Box
+      component="span"
+      data-testid={testId}
+      aria-label={beschriftung}
+      title={beschriftung}
+      sx={[{ ...ZAHL, fontSize: 12, color: ms === null ? TEXT_SCHWACH : 'text.secondary' }, sx ?? {}]}
+    >
+      {wert}
+      {einheit !== '' && (
+        <Box component="span" sx={{ fontSize: 10.5, fontWeight: 400, color: TEXT_SCHWACH }}>
+          {` ${einheit}`}
+        </Box>
+      )}
+    </Box>
   )
 }

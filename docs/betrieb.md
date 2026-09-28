@@ -268,7 +268,8 @@ das Wartungsfenster so lang zu machen wie die Kopie.
 
 Die Variablennamen des Speichers haben sich geändert. **Ein alter Name in der `.env` wirkt nicht
 mehr**: Compose reicht ihn durch, die Anwendung liest ihn nicht — sie fiele still auf ihren
-Standardwert zurück, statt zu scheitern. Umbenennen, Werte behalten:
+Standardwert zurück, statt zu scheitern. Umbenennen — die Werte der Anwendung behalten, die des
+Speicherdienstes selbst **nicht**:
 
 | bisher | ab dieser Version | was damit gemeint ist |
 |---|---|---|
@@ -276,11 +277,29 @@ Standardwert zurück, statt zu scheitern. Umbenennen, Werte behalten:
 | `MANBAN_MINIO_ACCESS_KEY` | `MANBAN_STORAGE_ACCESS_KEY` | Zugangskennung der Anwendung am Speicher |
 | `MANBAN_MINIO_SECRET_KEY` | `MANBAN_STORAGE_SECRET_KEY` | Geheimnis der Anwendung am Speicher |
 | `MANBAN_MINIO_BUCKET` | `MANBAN_STORAGE_BUCKET` | Bucket, in dem die Anhänge liegen |
-| `MINIO_ROOT_USER` | `OBJEKTSPEICHER_ROOT_USER` | Kennung des Speicherdienstes selbst |
-| `MINIO_ROOT_PASSWORD` | `OBJEKTSPEICHER_ROOT_PASSWORD` | Geheimnis des Speicherdienstes selbst |
+| `MINIO_ROOT_USER` | `OBJEKTSPEICHER_ROOT_USER` | Kennung des Speicherdienstes selbst — **eigene, neue Werte**; `manban` wird abgelehnt |
+| `MINIO_ROOT_PASSWORD` | `OBJEKTSPEICHER_ROOT_PASSWORD` | Geheimnis des Speicherdienstes selbst — **eigene, neue Werte** |
 
 `OBJEKTSPEICHER_ROOT_USER` und `OBJEKTSPEICHER_ROOT_PASSWORD` **müssen** gesetzt sein, sonst
 scheitert schon der Compose-Aufruf des Deploys (`:?` in `docker-compose.prod.yml`, Issue #1227).
+
+**Bei diesen beiden Zeilen die bisherigen Werte nicht übernehmen.** `ObjectStorageStartupCheck`
+lehnt öffentlich bekannte Standardwerte ab (Issue #1227) — darunter den Benutzernamen `manban`, den
+der bisherige Stack als Vorgabe für `MINIO_ROOT_USER` fuhr. Wer ihn mitnimmt, bekommt beim Start
+„Start abgebrochen: … Zugangsschlüssel (MANBAN_STORAGE_ACCESS_KEY)“, und die Anwendung kommt nicht
+hoch. Genau das ist bei v2.12.0 in Produktion passiert (Issue #1243). Also beide Werte neu setzen,
+etwa Benutzer `kanban-speicher` und Geheimnis aus `openssl rand -hex 32`.
+
+**Nach jeder Änderung von `OBJEKTSPEICHER_ROOT_*` wird der Speicherdienst neu angelegt:**
+
+```
+docker compose ... up -d --force-recreate --no-deps objektspeicher
+```
+
+`objektspeicher` liest seine Identitäten aus der Compose-`config` `objektspeicher_identitaeten`.
+Eine geänderte `config` erkennt `docker compose up -d` **nicht** als Änderung: Der Container behält
+die alten Zugangsdaten, die Anwendung schickt die neuen, und jeder Upload scheitert mit
+`InvalidAccessKeyId` — obwohl die Seite läuft. `--no-deps` hält die übrigen Dienste dabei in Ruhe.
 
 Dazu kommen drei Werte, die **nur für den Umzug** gelten und danach wieder aus der `.env`
 verschwinden — sie beschreiben den **alten** Speicher, aus dem gelesen wird:
@@ -315,6 +334,73 @@ value` nennt einen Pflichtwert, der fehlt — darunter `UMZUG_ALT_*` und `OBJEKT
 `… is not set` einen Wert, der still auf seinen Standard fällt. Nur die zweite Sorte zu zählen
 reicht nicht: Das ergibt auch bei einer leeren `.env` `0`, weil die Pflichtwerte mit `:?` stehen
 und als eigener Fehler abbrechen.
+
+Die Probe prüft nur, ob Werte **gesetzt** sind — nicht, ob sie **erlaubt** sind (Issue #1243). Auf
+dem Server war sie grün, während `OBJEKTSPEICHER_ROOT_USER=manban` den Start sicher scheitern ließ.
+Darum eine zweite Zeile, die die Werte gegen die abgelehnten Standards hält:
+
+```
+grep -E '^OBJEKTSPEICHER_ROOT_USER=manban$' .env
+```
+
+Auch dieses Kommando darf **nichts ausgeben**. Ein Treffer heißt: Die Anwendung kommt nach dem
+Deploy nicht hoch. Dasselbe gilt für den Platzhalter `change-me-benutzer` aus `.env.example`.
+
+Und: **nie `--remove-orphans`**, solange der alte MinIO der Rückweg ist. Für einen Aufruf ohne
+`-f docker-compose.altspeicher.yml` ist `kanban-kit-minio-1` ein verwaister Container — das Flag
+räumte ihn samt Rückweg weg.
+
+### Welcher Weg gilt: zwei Releases oder direkt
+
+Vor Release 1 eine Frage klären:
+
+```
+grep -E '^MINIO_ROOT_USER=' .env
+```
+
+- **Steht dort ein eigener Benutzername**, gilt der Zwei-Release-Weg unten. Er hat die kürzere
+  Lücke, weil die Anwendung bis zum Umstieg weiter den alten Speicher liest.
+- **Steht dort `MINIO_ROOT_USER=manban`** (der bisherige Standard), **geht der Zwei-Release-Weg
+  nicht.** Release 1
+  schaltet die Anwendung mit `docker-compose.umzug.yml` auf den alten Speicher zurück, und zwar mit
+  `UMZUG_ALT_ACCESS_KEY` als Zugangsschlüssel — ist das `manban`, bricht derselbe Startcheck ab. Dann
+  gilt der **direkte Weg**.
+
+#### Der direkte Weg — Anwendung sofort auf den neuen Speicher
+
+So ist der Umzug auf kanban.mwolff.org gelaufen (v2.12.0, 2026-09-27). Die Lücke ist die Kopierzeit;
+bei kleinem Bestand sind das Minuten.
+
+1. **Ankündigen.** Anhänge sind zwischen Schritt 2 und 4 nicht abrufbar, alles andere läuft.
+2. **`.env` setzen:** `OBJEKTSPEICHER_ROOT_USER`/`_PASSWORD` auf eigene, neue Werte (nicht `manban`),
+   `UMZUG_ALT_*` auf die bisherigen `MINIO_ROOT_*`. Dann die beiden Proben oben fahren.
+3. **Stack mit drei `-f` neu starten** — die Anwendung geht damit sofort auf den neuen Speicher —,
+   und `objektspeicher` dabei neu anlegen, damit er die neuen Zugangsdaten übernimmt:
+
+   ```
+   cd /root/opt/kanban-kit
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+                  -f docker-compose.backup.yml up -d --build
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+                  -f docker-compose.backup.yml up -d --force-recreate --no-deps objektspeicher
+   ```
+
+4. **Kopie fahren**, mit den beiden Zusatz-Overlays, aber **nur** dem Einmal-Dienst — `--no-deps`
+   lässt Anwendung und Spiegel dort, wo Schritt 3 sie hingestellt hat:
+
+   ```
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+                  -f docker-compose.backup.yml -f docker-compose.altspeicher.yml \
+                  -f docker-compose.umzug.yml \
+                  up --no-deps --exit-code-from manban-umzug manban-umzug
+   ```
+
+   Exitcode `0` heißt: Jedes Objekt der Quelle liegt byteweise gleich im Ziel.
+5. **Abgleich** über `GET /api/admin/storage/reconciliation` (siehe unten), **Sichtprüfung** eines
+   Anhangs im Browser, **Sicherungskachel** auf `OK` prüfen.
+6. Die Umzugs-Zeilen `UMZUG_ALT_*` bleiben in der `.env`, solange der Rückweg gilt (bis 2.13.0).
+
+Wer den direkten Weg gegangen ist, überspringt die beiden folgenden Abschnitte.
 
 ### Release 1 — Speicher und Werkzeug auf den Server, Anwendung bleibt alt
 

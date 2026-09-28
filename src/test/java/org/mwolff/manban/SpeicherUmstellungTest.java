@@ -67,6 +67,13 @@ class SpeicherUmstellungTest {
           "MINIO_ROOT_USER", "OBJEKTSPEICHER_ROOT_USER",
           "MINIO_ROOT_PASSWORD", "OBJEKTSPEICHER_ROOT_PASSWORD");
 
+  /**
+   * Der Benutzername, den {@code ObjectStorageStartupCheck} ablehnt (Issue #1227). Er ist zugleich
+   * der bisherige Standard von {@code MINIO_ROOT_USER} — daran hängt in Issue #1243 beides: die
+   * Vorabprüfung und der direkte Weg.
+   */
+  private static final String ABGELEHNTER_BENUTZER = "manban";
+
   /** Standardwerte aus dem Repository — keiner davon darf im Umzugs-Overlay stehen. */
   private static final List<String> OEFFENTLICH_BEKANNTE_WERTE =
       List.of("manban-minio", "manban-objektspeicher", "change-me");
@@ -311,6 +318,83 @@ class SpeicherUmstellungTest {
     assertThat(abschnitt)
         .as("Vollständigkeitsnachweis über den Abgleich, verwaiste Objekte bleiben erlaubt")
         .contains("reconciliation");
+  }
+
+  /**
+   * Nach jeder Änderung von {@code OBJEKTSPEICHER_ROOT_*} wird der Speicherdienst neu angelegt
+   * (Issue #1243): Seine Identitäten stehen in einer Compose-{@code config}, und eine geänderte
+   * {@code config} erkennt {@code docker compose up -d} nicht als Änderung. Der Container behielt
+   * die alten Zugangsdaten, die Anwendung schickte die neuen — Uploads scheiterten mit {@code
+   * InvalidAccessKeyId}, obwohl die Seite lief. Ohne {@code --no-deps} nähme der Aufruf zugleich
+   * die Anwendung mit.
+   */
+  @Test
+  void dieAnleitungLegtDenSpeicherNachGeaendertenZugangsdatenNeuAn() throws IOException {
+    String abschnitt = String.join("\n", abschnittZeilen());
+
+    assertThat(abschnitt)
+        .as("Neuanlegen des Speicherdienstes im Abschnitt „%s\"", ABSCHNITT)
+        .contains("--force-recreate")
+        .contains("--no-deps objektspeicher");
+  }
+
+  /**
+   * Der Zwei-Release-Weg setzt voraus, dass der alte Speicher mit einem eigenen Benutzernamen läuft
+   * (Issue #1243): {@code UMZUG_ALT_ACCESS_KEY} ist der bisherige {@code MINIO_ROOT_USER}, und ist
+   * das {@code manban}, bricht dieselbe Startprüfung ab, die Release 1 gerade überstehen müsste.
+   * Dann gilt der direkte Weg — die Anwendung geht sofort mit eigenen Zugangsdaten auf den neuen
+   * Speicher, die Kopie läuft danach als Einmal-Dienst. Ohne diese Vorabprüfung liest ein Betreiber
+   * eine Anleitung, die auf seiner Instanz nicht durchläuft.
+   */
+  @Test
+  void dieAnleitungPrueftVorabWelcherWegGiltUndFuehrtDenDirektenWeg() throws IOException {
+    String abschnitt = String.join("\n", abschnittZeilen());
+
+    assertThat(abschnitt)
+        .as("Vorabprüfung auf den abgelehnten bisherigen Benutzernamen")
+        .contains("MINIO_ROOT_USER=" + ABGELEHNTER_BENUTZER);
+    assertThat(abschnitt).as("der direkte Weg als zweite Möglichkeit").contains("direkte Weg");
+    assertThat(abschnitt)
+        .as("die Kopie des direkten Wegs läuft als Einmal-Dienst mit Exitcode")
+        .contains("--exit-code-from " + UMZUGSDIENST);
+  }
+
+  /**
+   * Die {@code config -q}-Probe aus Issue #1236 prüft nur, ob Werte <em>gesetzt</em> sind, nicht ob
+   * sie <em>erlaubt</em> sind: Sie war auf dem Server grün, obwohl {@code
+   * OBJEKTSPEICHER_ROOT_USER=manban} den Start sicher scheitern ließ (Issue #1243). Dazu kommt der
+   * Hinweis auf {@code --remove-orphans}: Solange der alte Speicher der Rückweg ist, räumte das
+   * Flag ihn samt Rückweg weg — er ist für den Deploy ein verwaister Container.
+   */
+  @Test
+  void dieProbeVorRelease1PrueftAuchAufAbgelehnteStandardwerte() throws IOException {
+    String abschnitt = String.join("\n", abschnittZeilen());
+
+    assertThat(abschnitt)
+        .as("zweite Zeile der Probe: Werte gegen die abgelehnten Standards")
+        .contains("grep -E '^OBJEKTSPEICHER_ROOT_USER=" + ABGELEHNTER_BENUTZER + "$' .env");
+    assertThat(abschnitt)
+        .as("Warnung vor dem Flag, das den Rückweg wegräumt")
+        .contains("--remove-orphans");
+  }
+
+  /**
+   * Die Umbenennungstabelle sagt bei den Wurzel-Zugangsdaten des Speichers <b>nicht</b> mehr „Werte
+   * behalten" (Issue #1243): Wer die behielt und bisher den Standard fuhr, trug {@code manban} ein
+   * und bekam einen Start, der abbricht.
+   */
+  @Test
+  void dieAnleitungVerlangtFuerDenSpeicherZugangNeueWerte() throws IOException {
+    List<String> abschnitt = abschnittZeilen();
+
+    assertThat(abschnitt)
+        .as("Zeile der Umbenennungstabelle zu OBJEKTSPEICHER_ROOT_USER")
+        .anySatisfy(
+            zeile -> {
+              assertThat(zeile).contains("OBJEKTSPEICHER_ROOT_USER");
+              assertThat(zeile).contains("eigene, neue Werte");
+              assertThat(zeile).contains(ABGELEHNTER_BENUTZER + "` wird abgelehnt");
+            });
   }
 
   /** Die Zeilen des Umzugs-Abschnitts — von seiner Überschrift bis zur nächsten auf Ebene zwei. */

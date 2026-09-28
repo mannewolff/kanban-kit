@@ -26,10 +26,12 @@ import {
   laufMelder,
   laufNotiz,
   melderAusBefund,
+  MELDER_JE_FEHLERKLASSE,
   MELDER_JE_ZUSTAND,
   modusName,
   nachProjekt,
   paketDauer,
+  paketDauerBeschriftung,
   paketZaehlung,
   tagZeit,
   tokenMenge,
@@ -126,6 +128,10 @@ describe('leitstand Laufband (#979)', () => {
     expect(juengsterLauf([alt, neu])?.id).toBe(2)
     expect(juengsterLauf([neu, alt])?.id).toBe(2)
     expect(juengsterLauf([])).toBeNull()
+    // Bei gleichem Startzeitpunkt gewinnt der erste der Antwort — eine Reihenfolge ist noetig,
+    // und die der Antwort ist die einzige, die es gibt.
+    const gleich = lauf({ id: 3, startedAt: '2026-09-14T21:00:00Z' })
+    expect(juengsterLauf([neu, gleich])?.id).toBe(2)
   })
 
   it('benennt die Betriebsarten und die Zahl der Vorgänge', () => {
@@ -156,10 +162,21 @@ describe('leitstand Laufband (#979)', () => {
 })
 
 describe('leitstand Letzter Run', () => {
-  it('formatiert Paketdauern wie der Entwurf', () => {
-    expect(paketDauer(null)).toBe('—')
-    expect(paketDauer(391_000)).toBe('06:31')
-    expect(paketDauer(3_735_000)).toBe('1:02:15')
+  it('formatiert Paketdauern wie der Entwurf, Wert und Einheit getrennt', () => {
+    expect(paketDauer(null)).toEqual({ wert: '—', einheit: '' })
+    expect(paketDauer(391_000)).toEqual({ wert: '06:31', einheit: 'min' })
+    expect(paketDauer(776_000)).toEqual({ wert: '12:56', einheit: 'min' })
+    expect(paketDauer(3_730_000)).toEqual({ wert: '1:02:10', einheit: 'h' })
+    expect(paketDauer(3_735_000)).toEqual({ wert: '1:02:15', einheit: 'h' })
+    // Volle Minute: Die Sekunden bleiben zweistellig, sonst stuende „25:0" in der Spalte.
+    expect(paketDauer(1_500_000)).toEqual({ wert: '25:00', einheit: 'min' })
+  })
+
+  it('schreibt die Paketdauer fuer Maus und Vorlesewerkzeug aus', () => {
+    expect(paketDauerBeschriftung(776_000)).toBe('Dauer 12 min 56 s')
+    expect(paketDauerBeschriftung(3_730_000)).toBe('Dauer 1 h 2 min 10 s')
+    expect(paketDauerBeschriftung(45_000)).toBe('Dauer 0 min 45 s')
+    expect(paketDauerBeschriftung(null)).toBe('Dauer nicht gemessen')
   })
 
   it('formatiert Laufdauern und die Notiz im Plattenkopf', () => {
@@ -216,7 +233,7 @@ describe('leitstand Kennzahl-Kacheln', () => {
     expect(durchlaufKachel(86_400, 1).basis).toBe('1 Karte')
     expect(implementierungKachel(53_280, 61)).toMatchObject({ wert: '14,8', einheit: 'Stunden', basis: '61 Karten' })
     expect(implementierungKachel(3600, 0).wert).toBeNull()
-    expect(implementierungKachel(null, 3).wert).toBeNull()
+    expect(implementierungKachel(null, 3)).toMatchObject({ wert: null, einheit: 'Stunden' })
     expect(implementierungKachel(3600, 1).basis).toBe('1 Karte')
   })
 
@@ -248,6 +265,11 @@ describe('leitstand Kennzahl-Kacheln', () => {
       { x: 122, y: 17 },
     ])
     expect(funkenPunkte([7])).toEqual([{ x: 2, y: 17 }])
+    // Der Rahmen haengt an der Spanne, nicht am Betrag: Zwei Werte ueber null fuellen ihn ganz.
+    expect(funkenPunkte([10, 20])).toEqual([
+      { x: 2, y: 30 },
+      { x: 122, y: 4 },
+    ])
   })
 })
 
@@ -263,6 +285,19 @@ describe('leitstand Platten', () => {
     expect(balkenHoehen([0, 0])).toEqual([0, 0])
   })
 
+  it('faerbt jede Fehlerklasse nach ihrer Art — Abbruch zinnober, Wartendes bernstein, Ausfall grau', () => {
+    expect(MELDER_JE_FEHLERKLASSE).toEqual({
+      CHECKS_RED: 'zinnob',
+      CHECKS_NOT_STARTED: 'zinnob',
+      UNEXPECTED_STATE: 'zinnob',
+      HARD_ABORT: 'zinnob',
+      TIME_BUDGET_EXCEEDED: 'zinnob',
+      AWAITING_DECISION: 'bernst',
+      DEPENDENCY_UNMET: 'bernst',
+      REVIEWER_FAILED: 'grau',
+    })
+  })
+
   it('sortiert Abbruchgründe nach Häufigkeit und färbt sie nach Art', () => {
     expect(abbruchgruende({ REVIEWER_FAILED: 2, CHECKS_RED: 11, AWAITING_DECISION: 7, HARD_ABORT: 0, DEPENDENCY_UNMET: 7 })).toEqual([
       { klasse: 'CHECKS_RED', zahl: 11, breite: 100, melder: 'zinnob' },
@@ -276,6 +311,12 @@ describe('leitstand Platten', () => {
   it('nennt Token-Mengen in der Einheit des Entwurfs', () => {
     expect(tokenMenge(4_820_000)).toEqual({ wert: '4,82', einheit: 'Mio' })
     expect(tokenMenge(186_400)).toEqual({ wert: '186', einheit: 'Tsd' })
+    // Die Grenzen selbst gehoeren zur groesseren Einheit.
+    expect(tokenMenge(1_000_000)).toEqual({ wert: '1,00', einheit: 'Mio' })
+    expect(tokenMenge(1000)).toEqual({ wert: '1', einheit: 'Tsd' })
+    expect(tokenMenge(999)).toEqual({ wert: '999', einheit: 'Token' })
+    // Token werden in ganzen Stuecken genannt; eine gebrochene Zahl rundet der Formatierer.
+    expect(tokenMenge(420.6)).toEqual({ wert: '421', einheit: 'Token' })
     expect(tokenMenge(420)).toEqual({ wert: '420', einheit: 'Token' })
     expect(tokenMenge(null)).toBeNull()
     expect(tokenText(3_660_000)).toBe('3,66 Mio')
@@ -475,6 +516,9 @@ describe('leitstand Der Browser liest den Massstab (#1081)', () => {
   // Grau ohne Fehlerklasse ist ein uebergangenes Paket — der Lauf hat es nicht angefasst.
   it('laufMelder laesst grau ohne Fehlerklasse gruen', () => {
     expect(laufMelder({ complete: true, items: [paket(1, 'GREEN'), paket(2, 'GREY')] })).toBe('gruen')
+    // Zurueckgestellt ist allein das graue Paket: Eine Fehlerklasse an einem gruenen — im Betrieb
+    // gibt es sie nicht — macht den Lauf nicht grau.
+    expect(laufMelder({ complete: true, items: [paket(1, 'GREEN', { errorClass: 'DEPENDENCY_UNMET' })] })).toBe('gruen')
   })
 
   // Dieselbe Rangfolge wie im Server (#1078): rot vor gelb vor grau-mit-Fehlerklasse.

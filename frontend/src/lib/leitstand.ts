@@ -15,10 +15,19 @@ import type { NightRunErrorClass, NightRunState } from './nightRunLog'
 /** Die Melder des Entwurfs als Namen — die Werte liegen im Theme. */
 export type Melder = 'gruen' | 'bernst' | 'zinnob' | 'stahl' | 'grau'
 
+// Die fuenf Formatierer entstehen beim Laden des Moduls. Stryker kann einen Mutanten dort nicht
+// mehr aktivieren — das Modul ist schon ausgewertet, wenn der Lauf beginnt —, weshalb jede
+// Aenderung an ihren Zeichenketten ohne Wirkung ueberlebt. Die Ausnahme steht je Stelle, damit die
+// Zaehlung sie als ausgenommen fuehrt und nicht als offenen Ueberlebenden (#1245).
+// Stryker disable next-line StringLiteral: statischer Mutant — der Formatierer steht beim Laden des Moduls fest
 const ZAHL_1 = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+// Stryker disable next-line StringLiteral: statischer Mutant — der Formatierer steht beim Laden des Moduls fest
 const ZAHL_2 = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Stryker disable next-line StringLiteral: statischer Mutant — der Formatierer steht beim Laden des Moduls fest
 const GANZ = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 })
+// Stryker disable next-line StringLiteral: statischer Mutant — der Formatierer steht beim Laden des Moduls fest
 const TAG_ZEIT = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+// Stryker disable next-line StringLiteral: statischer Mutant — der Formatierer steht beim Laden des Moduls fest
 const ZEIT = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' })
 
 /** Der Zustand eines Arbeitspakets als Melder (Entwurf: LED grün, gelb, rot, grau). */
@@ -269,16 +278,42 @@ export function kostenText(usd: number | null): string | null {
   return usd === null ? null : `${dollar(usd)} $`
 }
 
-/** Dauer eines Arbeitspakets wie im Entwurf: `mm:ss`, ab einer Stunde `h:mm:ss`; ohne Messung `—`. */
-export function paketDauer(ms: number | null): string {
-  if (ms === null) {
-    return '—'
-  }
+/** Die Teile einer Paketdauer: `mm`/`h`, `mm`, `ss` — Grundlage beider Schreibweisen. */
+function paketDauerTeile(ms: number): { h: number; m: number; s: number } {
   const sekunden = Math.round(ms / 1000)
-  const h = Math.floor(sekunden / 3600)
-  const m = Math.floor((sekunden % 3600) / 60)
-  const s = String(sekunden % 60).padStart(2, '0')
-  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${String(m).padStart(2, '0')}:${s}`
+  return { h: Math.floor(sekunden / 3600), m: Math.floor((sekunden % 3600) / 60), s: sekunden % 60 }
+}
+
+/**
+ * Dauer eines Arbeitspakets wie im Entwurf: `mm:ss`, ab einer Stunde `h:mm:ss`; ohne Messung `—`.
+ *
+ * <p>Wert und Einheit stehen getrennt wie bei {@link laufDauerGeteilt} (#1245): Nackt neben der
+ * Startzeit im Kopf las sich „12:56" wie eine Uhrzeit. Die Einheit steht klein hinter dem Wert und
+ * macht die Angabe als Dauer erkennbar, ohne die Spalten zu verschieben. Ohne Messung bleibt die
+ * Einheit leer — „—" zählt nichts, was eine Einheit hätte.
+ */
+export function paketDauer(ms: number | null): { wert: string; einheit: string } {
+  if (ms === null) {
+    return { wert: '—', einheit: '' }
+  }
+  const { h, m, s } = paketDauerTeile(ms)
+  const ss = String(s).padStart(2, '0')
+  return h > 0
+    ? { wert: `${h}:${String(m).padStart(2, '0')}:${ss}`, einheit: 'h' }
+    : { wert: `${String(m).padStart(2, '0')}:${ss}`, einheit: 'min' }
+}
+
+/**
+ * Dieselbe Dauer ausgeschrieben als Beschriftung für Maus und Vorlesewerkzeug (#1245): „Dauer
+ * 12 min 56 s", ab einer Stunde „Dauer 1 h 2 min 10 s", ohne Messung „Dauer nicht gemessen".
+ * Ausgeschrieben statt `mm:ss`, weil ein Vorlesewerkzeug „12:56" als Uhrzeit spricht.
+ */
+export function paketDauerBeschriftung(ms: number | null): string {
+  if (ms === null) {
+    return 'Dauer nicht gemessen'
+  }
+  const { h, m, s } = paketDauerTeile(ms)
+  return h > 0 ? `Dauer ${h} h ${m} min ${s} s` : `Dauer ${m} min ${s} s`
 }
 
 /** Dauer eines Laufs als „4 h 12 min" bzw. „12 min". */
@@ -412,7 +447,11 @@ function wochenDelta(letzte: number, vorige: number): Delta {
   if (letzte === vorige) {
     return { text: '± 0', art: 'neutral' }
   }
+  // Gleichstand kehrt oben schon zurueck; `>` und `>=` sind hier darum gleichwertig, und ein Test
+  // dagegen koennte nur einen Fall pinnen, den diese Zeile nie sieht (#1245).
+  // Stryker disable next-line EqualityOperator: gleichwertiger Mutant — Gleichstand ist oben abgefangen
   const art: DeltaArt = letzte > vorige ? 'gut' : 'schlecht'
+  // Stryker disable next-line EqualityOperator: gleichwertiger Mutant — Gleichstand ist oben abgefangen
   const pfeil = letzte > vorige ? '▲' : '▼'
   if (vorige === 0) {
     return { text: `${pfeil} ${letzte} zur Vorwoche`, art }

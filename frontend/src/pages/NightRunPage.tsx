@@ -77,7 +77,6 @@ import {
   laeuftNoch,
   laufDauer,
   laufMelder,
-  paketDauer,
   paketZaehlung,
   tagZeit,
   MELDER_JE_FEHLERKLASSE,
@@ -2430,7 +2429,7 @@ function Vorgangszeile({
           ? null
           : { titel: vorhabenKarte.title, farbe: epicColor(vorhabenKarte.id) }
       }
-      dauer={paketDauer(item.durationMs ?? null)}
+      dauer={item.durationMs ?? null}
       kosten={kostenText(vorgangskosten(item, standItem))}
       commit={kurzHash(item.commitHash ?? null)}
       offen={offen}
@@ -2661,6 +2660,13 @@ function LaufPanel({
         dauerMs={lauf.durationMs}
         pakete={paketZaehlung(lauf.items)}
         aufteilung={kostenaufteilung(lauf)}
+        // Dieselbe Bedingung wie `pulsiert`: Nur ein laufender Lauf zeigt, wie lange er schon
+        // läuft (#1244).
+        laeuftSeit={
+          laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })
+            ? lauf.startedAt
+            : undefined
+        }
       />
 
       {/* Statt eines Bandes (#873): Der Erzeugungs- und der Prüf-Lauf sortieren die große Mehrheit

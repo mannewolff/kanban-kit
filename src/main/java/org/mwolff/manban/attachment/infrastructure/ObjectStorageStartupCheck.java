@@ -57,6 +57,14 @@ final class ObjectStorageStartupCheck {
   /** Standardwert aus {@code application.yml}, dem Record und der {@code :-}-Vorgabe in Compose. */
   private static final String INSECURE_DEFAULT_ACCESS_KEY = "manban";
 
+  /**
+   * Platzhalter von {@code OBJEKTSPEICHER_ROOT_USER} in {@code .env.example} (Issue #1243) — wie
+   * {@link #INSECURE_DEFAULT_SECRET_KEY_ENV_VORLAGE} für das Geheimnis. Die Vorlage trägt seit dem
+   * Ausfall von v2.12.0 keinen gültig aussehenden Benutzernamen mehr, sondern genau diesen
+   * Platzhalter; dass er hier steht, hält die Vorlage bewusst nicht lauffähig.
+   */
+  private static final String INSECURE_DEFAULT_ACCESS_KEY_ENV_VORLAGE = "change-me-benutzer";
+
   /** Standardwert aus {@code application.yml} und dem Kompaktkonstruktor der Properties. */
   private static final String INSECURE_DEFAULT_SECRET_KEY = "manban-minio";
 
@@ -119,7 +127,10 @@ final class ObjectStorageStartupCheck {
     if (istUnsicher(properties.endpoint(), INSECURE_DEFAULT_ENDPOINT)) {
       befunde.add(BEFUND_ENDPUNKT);
     }
-    if (istUnsicher(properties.accessKey(), INSECURE_DEFAULT_ACCESS_KEY)) {
+    if (istUnsicher(
+        properties.accessKey(),
+        INSECURE_DEFAULT_ACCESS_KEY,
+        INSECURE_DEFAULT_ACCESS_KEY_ENV_VORLAGE)) {
       befunde.add(BEFUND_ZUGANGSSCHLUESSEL);
     }
     if (istUnsicher(

@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.LastUsedStampThrottle;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -37,6 +38,11 @@ public class InMemoryLastUsedStampThrottle implements LastUsedStampThrottle {
   private final Map<Long, Instant> stamps = new ConcurrentHashMap<>();
   private final int maxTrackedTokens;
 
+  /**
+   * Der Konstruktor, den Spring nimmt — ausdrücklich ausgezeichnet (Issue #1242, {@code
+   * java:S6829}): Bei zwei Konstruktoren wählte Spring sonst nach Regel statt nach Absicht.
+   */
+  @Autowired
   public InMemoryLastUsedStampThrottle() {
     this(DEFAULT_MAX_TRACKED_TOKENS);
   }
