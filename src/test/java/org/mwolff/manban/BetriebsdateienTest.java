@@ -15,8 +15,10 @@ import org.junit.jupiter.api.Test;
  * entnimmt: Das Produktions-Overlay schaltet den Entwicklungs-Schalter fest aus, die
  * Umgebungs-Vorlage liefert keinen funktionierenden Sitzungsschlüssel mit (Issue #889), das
  * automatische Deployment startet den Stack mit dem Sicherungs-Overlay (Issue #1198), der
- * ausgelieferte Stack fährt kein Abbild, das anonym nicht mehr beziehbar ist (Issue #1226), und er
- * baut nichts mehr selbst, sondern zieht veröffentlichte Abbilder (Issue #1265).
+ * ausgelieferte Stack fährt kein Abbild, das anonym nicht mehr beziehbar ist (Issue #1226), er baut
+ * nichts mehr selbst, sondern zieht veröffentlichte Abbilder (Issue #1265), und das
+ * Betriebs-Overlay erzwingt die fünf Werte, die ein Produktivbetrieb selbst setzen muss (Issue
+ * #1266).
  *
  * <p>Die Bau-Overlays {@code docker-compose.bau.yml} (Anwendung) und {@code
  * docker-compose.backup-bau.yml} (Sicherungsdienst) sind seit Issue #1265 die einzigen Schalter des
@@ -49,6 +51,9 @@ class BetriebsdateienTest {
 
   /** Produktions-Overlay über dem lokalen Basis-Stack {@code docker-compose.yml}. */
   private static final Path PROD_OVERLAY = Path.of("docker-compose.prod.yml");
+
+  /** Betriebs-Overlay für einen Produktivbetrieb auf fremder Hardware (Issue #1266). */
+  private static final Path BETRIEBS_OVERLAY = Path.of("docker-compose.betrieb.yml");
 
   /** Vorlage, die ein Betreiber nach {@code .env} kopiert. */
   private static final Path UMGEBUNGS_VORLAGE = Path.of(".env.example");
@@ -114,6 +119,30 @@ class BetriebsdateienTest {
   /** Platzhalter, mit dem die Vorlage das Speicher-Geheimnis führt. */
   private static final String VORLAGE_SPEICHER_GEHEIMNIS = "change-me-objektspeicher";
 
+  /**
+   * Das Datenbankkennwort, das {@code DatabasePasswordStartupCheck} als öffentlich bekannten
+   * Vorgabewert ablehnt (Issue #1266) — er steht in {@code application.yml} und als {@code
+   * :-manban}-Vorgabe in {@code docker-compose.yml}.
+   */
+  private static final String ABGELEHNTES_DB_KENNWORT = "manban";
+
+  /** Platzhalter, mit dem die Vorlage das Datenbankkennwort führt (Issue #1266). */
+  private static final String VORLAGE_DB_KENNWORT = "change-me";
+
+  /**
+   * Die fünf Werte, die ein Produktivbetrieb selbst setzen muss (Issue #1266, fachliche Quelle
+   * #675). Das Betriebs-Overlay erzwingt jeden davon mit {@code :?}, damit schon {@code docker
+   * compose config} abbricht und den fehlenden Namen nennt — die früheste Stelle, an der ein
+   * fehlender Wert auffallen kann.
+   */
+  private static final List<String> PFLICHTWERTE =
+      List.of(
+          "MANBAN_SESSION_SECRET",
+          "MANBAN_BASE_URL",
+          "OBJEKTSPEICHER_ROOT_USER",
+          "OBJEKTSPEICHER_ROOT_PASSWORD",
+          "POSTGRES_PASSWORD");
+
   /** Verzeichnis der ausgelieferten Anleitungen. */
   private static final Path ANLEITUNGEN = Path.of("docs");
 
@@ -130,6 +159,80 @@ class BetriebsdateienTest {
     assertThat(schalterZeilen)
         .as("Entwicklungs-Schalter in %s — fester Wert, keine ${…}-Interpolation", PROD_OVERLAY)
         .containsExactly("MANBAN_DEV_MODE: \"false\"");
+  }
+
+  /**
+   * Dieselbe Zusicherung wie beim Produktions-Overlay und aus demselben Grund: Das Betriebs-Overlay
+   * erbt den {@code environment:}-Block des Basis-Stacks (dort {@code MANBAN_DEV_MODE=true}) und
+   * überschreibt nur die Schlüssel, die es selbst nennt. Ein Wert aus der {@code .env} wäre
+   * dieselbe Lücke mit einem Zwischenschritt — wer {@code MANBAN_DEV_MODE=true} für den lokalen
+   * Betrieb in seine {@code .env} schreibt, nähme ihn in den Produktivbetrieb mit.
+   */
+  @Test
+  void betriebsOverlaySchaltetDenEntwicklungsSchalterFestAus() throws IOException {
+    List<String> schalterZeilen = wirksameZeilenMit(BETRIEBS_OVERLAY, "MANBAN_DEV_MODE");
+
+    assertThat(schalterZeilen)
+        .as("Entwicklungs-Schalter in %s — fester Wert, keine ${…}-Interpolation", BETRIEBS_OVERLAY)
+        .containsExactly("MANBAN_DEV_MODE: \"false\"");
+  }
+
+  /**
+   * Jeder der fünf Pflichtwerte steht im Betriebs-Overlay mit {@code :?} und nirgends mit einer
+   * {@code :-}-Vorgabe: Fehlt einer, bricht schon {@code docker compose config} ab und nennt genau
+   * diesen Namen. Eine einzige zurückgebliebene {@code :-}-Stelle machte die Zusage wertlos — der
+   * Wert erreichte den Container dann doch, nur mit dem öffentlich bekannten Vorgabewert.
+   *
+   * <p>{@code POSTGRES_PASSWORD} wird gegen den Basis-Stack gezählt: Das Overlay muss es an
+   * mindestens so vielen Stellen erzwingen, wie der Basis-Stack es mit {@code :-}-Vorgabe
+   * durchreicht (Dienst {@code postgres} und {@code MANBAN_DB_PASSWORD} an {@code manban-api}).
+   * Käme im Basis-Stack eine dritte Stelle hinzu, schlägt dieser Fall an, bis das Overlay sie
+   * ebenfalls deckt — ohne die Verknüpfung bliebe genau diese Stelle mit dem Vorgabewert zurück.
+   */
+  @Test
+  void betriebsOverlayErzwingtAlleFuenfPflichtwerte() throws IOException {
+    for (String pflichtwert : PFLICHTWERTE) {
+      assertThat(wirksameZeilenMit(BETRIEBS_OVERLAY, "${" + pflichtwert + ":?"))
+          .as("Pflichtwert %s in %s — mit :? erzwungen", pflichtwert, BETRIEBS_OVERLAY)
+          .isNotEmpty();
+      assertThat(wirksameZeilenMit(BETRIEBS_OVERLAY, "${" + pflichtwert + ":-"))
+          .as("Pflichtwert %s in %s — keine :-Vorgabe daneben", pflichtwert, BETRIEBS_OVERLAY)
+          .isEmpty();
+    }
+
+    int stellenImBasisStack = wirksameZeilenMit(BASIS_STACK, "${POSTGRES_PASSWORD:-").size();
+    assertThat(stellenImBasisStack)
+        .as(
+            "%s reicht POSTGRES_PASSWORD mit Vorgabe durch — ein leerer Treffer wäre kein Beweis",
+            BASIS_STACK)
+        .isPositive();
+    assertThat(wirksameZeilenMit(BETRIEBS_OVERLAY, "${POSTGRES_PASSWORD:?"))
+        .as(
+            "%s erzwingt POSTGRES_PASSWORD an allen %d Stellen des Basis-Stacks",
+            BETRIEBS_OVERLAY, stellenImBasisStack)
+        .hasSizeGreaterThanOrEqualTo(stellenImBasisStack);
+  }
+
+  /**
+   * Das Datenbankkennwort der Vorlage trägt einen Platzhalter, den {@code
+   * DatabasePasswordStartupCheck} ablehnt (Issue #1266) — wie die Speicher-Zugangsdaten seit Issue
+   * #1243. Die Vorlage ist damit bewusst nicht lauffähig: Wer sie unverändert kopiert, bekommt
+   * einen Abbruch mit Grund, keine Instanz, deren Daten unter einem öffentlich bekannten Kennwort
+   * liegen.
+   *
+   * <p>{@code :?} allein reichte hier nicht: Der Basis-Stack reicht {@code POSTGRES_PASSWORD} mit
+   * {@code :-manban} durch, ein gesetzter Platzhalter käme also durch die Interpolation hindurch.
+   */
+  @Test
+  void umgebungsVorlageFuehrtDasDatenbankkennwortNurAlsAbgelehntenPlatzhalter() throws IOException {
+    assertThat(wirksameZeilenMit(UMGEBUNGS_VORLAGE, "POSTGRES_PASSWORD="))
+        .as(
+            "Datenbankkennwort in %s — abgelehnter Platzhalter, kein gültig aussehender Wert",
+            UMGEBUNGS_VORLAGE)
+        .containsExactly("POSTGRES_PASSWORD=" + VORLAGE_DB_KENNWORT);
+    assertThat(VORLAGE_DB_KENNWORT)
+        .as("der Platzhalter ist nicht der abgelehnte Vorgabewert selbst")
+        .isNotEqualTo(ABGELEHNTES_DB_KENNWORT);
   }
 
   @Test
