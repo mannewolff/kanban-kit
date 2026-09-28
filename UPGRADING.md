@@ -24,7 +24,7 @@ Versionen überspringt, arbeitet die betroffenen Abschnitte von unten nach oben 
 ### Vom Bau auf das veröffentlichte Abbild
 
 Der Basis-Stack zieht seit dieser Version ein fertiges Abbild von `ghcr.io`, statt bei jedem Start
-zu übersetzen. Wer bisher `docker compose up -d --build` fuhr, fährt jetzt:
+zu übersetzen. Wer bisher bei jedem Start bauen ließ, fährt jetzt:
 
 ```
 docker compose pull

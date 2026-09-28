@@ -101,16 +101,26 @@ brauchbar für eine Probe, keine Kopie außer Haus.
 ### 5. Overlay zuschalten
 
 ```
-docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d
 ```
 
-In Produktion zusätzlich mit dem Prod-Overlay:
+**Der Sicherungsdienst kommt als fertiges Abbild** (`ghcr.io/mannewolff/kanban-kit-backup`) — es
+wird nichts übersetzt. Wer ihn aus dem Quelltext bauen will (Entwicklung, eigene Änderungen), legt
+beide Bau-Overlays dazu; das des Sicherungsdienstes steht **hinter** seinem Overlay, weil sein
+`image: !reset null` die dortige `image:`-Zeile zurückzunehmen hat:
 
 ```
-docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.backup.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.bau.yml \
+  -f docker-compose.backup.yml -f docker-compose.backup-bau.yml up -d --build
 ```
 
-Das `-f` ist der **einzige Schalter**. `MANBAN_BACKUP_ENABLED` setzt das Overlay selbst; von Hand
+In Produktion zusätzlich mit dem Betriebs-Overlay:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.betrieb.yml -f docker-compose.backup.yml up -d
+```
+
+Das `-f` des Sicherungs-Overlays ist der **einzige Schalter** der Sicherung. `MANBAN_BACKUP_ENABLED` setzt das Overlay selbst; von Hand
 wird es nie gesetzt — ein zweiter Schalter in der `.env` könnte vom Zustand der Container
 abweichen, und die Anwendung meldete „veraltet", während gar kein Sicherungs-Container läuft.
 
@@ -214,7 +224,7 @@ Gebraucht werden: Docker, dieses Repository, die `.env`, der Zugang zum rclone-Z
 git clone https://github.com/mannewolff/kanban-kit.git && cd kanban-kit
 cp .env.example .env                                 # Zugangsdaten und MANBAN_BACKUP_* eintragen
 cp backup/rclone.conf.example backup/rclone.conf     # Ziel eintragen
-docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d
 docker compose -f docker-compose.yml -f docker-compose.backup.yml stop postgres manban-api
 docker compose -f docker-compose.yml -f docker-compose.backup.yml run --rm \
   -v kanban-kit_postgres_data:/wiederherstellung/pgdata \

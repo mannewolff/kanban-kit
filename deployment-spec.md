@@ -2,7 +2,7 @@
 
 ## Ziel
 
-Bei jedem Push auf den `production`-Branch soll der VPS den aktuellen Stand ziehen und die Container neu bauen. Der bisher manuelle Ablauf (SSH auf den Server, `git pull`, `docker compose up -d --build`) wird automatisiert, ohne dass ein Schlüssel bei GitHub hinterlegt oder ein eingehender Port geöffnet werden muss.
+Bei jedem Push auf den `production`-Branch soll der VPS den aktuellen Stand ziehen und die Container neu bauen. Der bisher manuelle Ablauf (SSH auf den Server, `git pull`, `docker compose -f docker-compose.yml -f docker-compose.bau.yml up -d --build`) wird automatisiert, ohne dass ein Schlüssel bei GitHub hinterlegt oder ein eingehender Port geöffnet werden muss.
 
 ## Grundprinzip: Pull statt Push
 
@@ -81,7 +81,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build and restart
-        run: docker compose up -d --build
+        run: docker compose -f docker-compose.yml -f docker-compose.bau.yml up -d --build
 ```
 
 `actions/checkout` legt den Code in das Arbeitsverzeichnis des Runners (`~/actions-runner/_work/REPO/REPO`).
@@ -106,7 +106,7 @@ jobs:
           cd /root/opt/kanban-kit
           git fetch origin production
           git reset --hard origin/production
-          docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+          docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose.prod.yml up -d --build
 ```
 
 Entspricht dem manuellen Ablauf aus [docs/deployment-hostinger.md](docs/deployment-hostinger.md), mit zwei bewussten Schärfungen:
@@ -146,7 +146,7 @@ Zwei Mechanismen sorgen dafür, dass der Produktivbetrieb einen Serverneustart �
 
 ### Bereitschaftsprüfung nach dem Deploy
 
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) ruft nach `up -d --build` das Skript [`scripts/warte-auf-bereitschaft.sh`](scripts/warte-auf-bereitschaft.sh) auf:
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) ruft nach dem Compose-Aufruf (`-f docker-compose.bau.yml … up -d --build`) das Skript [`scripts/warte-auf-bereitschaft.sh`](scripts/warte-auf-bereitschaft.sh) auf:
 
 ```
 scripts/warte-auf-bereitschaft.sh https://kanban.mwolff.org/login 180

@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -142,6 +143,15 @@ class BetriebsdateienTest {
           "OBJEKTSPEICHER_ROOT_USER",
           "OBJEKTSPEICHER_ROOT_PASSWORD",
           "POSTGRES_PASSWORD");
+
+  /** Die Startseite des Repositories — erste Anleitung, die ein Selbsthoster liest. */
+  private static final Path README = Path.of("README.md");
+
+  /** Der einzige Ort des Upgrade-Wissens (Issue #1268). */
+  private static final Path UPGRADE_ANLEITUNG = Path.of("UPGRADING.md");
+
+  /** Spezifikation des automatischen Deployments des Projektservers. */
+  private static final Path DEPLOYMENT_SPEZIFIKATION = Path.of("deployment-spec.md");
 
   /** Verzeichnis der ausgelieferten Anleitungen. */
   private static final Path ANLEITUNGEN = Path.of("docs");
@@ -456,6 +466,105 @@ class BetriebsdateienTest {
         .contains("config -q")
         .contains("darf nichts ausgeben")
         .contains("is missing a value");
+  }
+
+  /**
+   * Die Formen, in denen ein Compose-Aufruf bauen lässt — beide Reihenfolgen des Flags, damit ein
+   * künftiges {@code up --build -d} nicht durch die Prüfung fällt.
+   */
+  private static final List<String> BAU_AUFRUF_FORMEN = List.of("up -d --build", "up --build -d");
+
+  /** Woran ein Aufruf zu erkennen ist — ohne das ist {@code --build} nur ein erwähntes Wort. */
+  private static final String COMPOSE_AUFRUF = "docker compose";
+
+  /**
+   * Kein Bau-Aufruf in einer ausgelieferten Anleitung oder Betriebsdatei ohne das Bau-Overlay
+   * (Issue #1269, fachliche Quelle #675). Seit Issue #1265 liegt das {@code build:} allein in
+   * {@code docker-compose.bau.yml}: Ein {@code up -d --build} ohne dessen {@code -f} baut nichts
+   * mehr, sondern zieht das veröffentlichte Abbild — der Aufrufer bekommt einen grünen Start auf
+   * einem fremden Stand, obwohl er seinen Arbeitsstand fahren wollte.
+   *
+   * <p>Ohne diesen Fall wandert die Regel beim nächsten Anfassen wieder auseinander, genau wie die
+   * Sicherungs-Regel, für die {@link #deployWorkflowGibtJedemComposeAufrufDasSicherungsOverlayMit}
+   * da ist: Die Stellen liegen über ein Dutzend Dateien verteilt, und jede einzelne sieht für sich
+   * richtig aus.
+   *
+   * <p>Als Aufruf zählt eine Stelle, die {@code docker compose} <b>und</b> das Flag trägt. Die
+   * bloße <b>Erwähnung</b> von {@code --build} im Fließtext bleibt damit erlaubt — etwa der
+   * Kopfkommentar von {@code docker-compose.prod.yml}, der gerade erklärt, dass das Flag ohne
+   * Overlay nichts tut. Geprüft werden Aufrufe, nicht Wörter.
+   */
+  @Test
+  void keinAusgelieferterBauAufrufKommtOhneDasBauOverlay() throws IOException {
+    List<String> bauAufrufe = new ArrayList<>();
+
+    for (Path datei : ausgelieferteAnleitungenUndBetriebsdateien()) {
+      for (String aufruf : zusammengezogeneZeilen(datei)) {
+        if (!aufruf.contains(COMPOSE_AUFRUF)
+            || BAU_AUFRUF_FORMEN.stream().noneMatch(aufruf::contains)) {
+          continue;
+        }
+        bauAufrufe.add(aufruf);
+        assertThat(aufruf)
+            .as("Bau-Aufruf in %s ohne %s", datei, BAU_SCHALTER.getFirst())
+            .contains(BAU_SCHALTER.getFirst());
+      }
+    }
+
+    assertThat(bauAufrufe)
+        .as("Bau-Aufrufe in den ausgelieferten Dateien — ein leerer Treffer wäre kein Beweis")
+        .isNotEmpty();
+  }
+
+  /**
+   * Die ausgelieferten Anleitungen und Betriebsdateien: die Anleitungen aus {@code docs/}, die
+   * Dateien der Wurzel, die ein Betreiber liest, alle Compose-Dateien und der Deploy-Workflow.
+   *
+   * <p>Die Befund-Dateien {@code 2026-09-09-*.md} der Wurzel bleiben außen vor — sie halten
+   * historische Befunde fest und werden nicht nachgezogen. Deshalb sind die Wurzel-Dateien
+   * aufgezählt und nicht gesammelt. {@code docs-site/content/} bleibt ebenfalls außen vor: Das
+   * Verzeichnis wird aus {@code docs/} erzeugt und ist nicht eingecheckt.
+   */
+  private static List<Path> ausgelieferteAnleitungenUndBetriebsdateien() throws IOException {
+    List<Path> dateien =
+        new ArrayList<>(
+            List.of(
+                README,
+                UPGRADE_ANLEITUNG,
+                DEPLOYMENT_SPEZIFIKATION,
+                UMGEBUNGS_VORLAGE,
+                DEPLOY_WORKFLOW));
+    try (Stream<Path> anleitungen = Files.walk(ANLEITUNGEN)) {
+      dateien.addAll(anleitungen.filter(pfad -> pfad.toString().endsWith(".md")).toList());
+    }
+    try (Stream<Path> wurzel = Files.list(Path.of("."))) {
+      dateien.addAll(
+          wurzel
+              .filter(pfad -> pfad.getFileName().toString().startsWith("docker-compose"))
+              .toList());
+    }
+    return dateien;
+  }
+
+  /**
+   * Die Zeilen der Datei, wobei eine mit {@code \} fortgesetzte Zeile mit ihrer Folgezeile
+   * zusammengezogen wird: Ein mehrzeiliger Compose-Aufruf ist <b>ein</b> Aufruf, und seine {@code
+   * -f} stehen über die Zeilen verteilt. Ohne das Zusammenziehen sähe jede Fortsetzungszeile wie
+   * ein eigener Aufruf ohne Overlay aus.
+   */
+  private static List<String> zusammengezogeneZeilen(Path datei) throws IOException {
+    List<String> zeilen = new ArrayList<>();
+    StringBuilder offen = new StringBuilder();
+    for (String zeile : Files.readAllLines(datei, StandardCharsets.UTF_8)) {
+      String getrimmt = zeile.trim();
+      if (getrimmt.endsWith("\\")) {
+        offen.append(getrimmt, 0, getrimmt.length() - 1).append(' ');
+        continue;
+      }
+      zeilen.add(offen.append(getrimmt).toString());
+      offen.setLength(0);
+    }
+    return zeilen;
   }
 
   /**
