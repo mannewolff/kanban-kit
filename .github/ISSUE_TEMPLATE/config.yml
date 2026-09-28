@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sicherheitslücke melden
+    url: https://github.com/mannewolff/kanban-kit/blob/main/SECURITY.md
+    about: >-
+      Sicherheitslücken gehören nicht in ein öffentliches Issue. SECURITY.md
+      beschreibt den vertraulichen Meldeweg.
+  - name: Allgemeine Fragen, Doku-Fehler, Betriebsprobleme
+    url: mailto:info@mwolff.org
+    about: Alles, was keine Fehlermeldung und kein Vorschlag ist, geht per E-Mail.
