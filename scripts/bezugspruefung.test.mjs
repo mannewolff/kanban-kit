@@ -13,7 +13,9 @@ import {
   ZUSTAND_OK,
   ZUSTAND_FEHLSCHLAG,
   ZUSTAND_UEBERSPRUNGEN,
+  GRUND_EIGEN,
   bausteineLesen,
+  argumenteZerlegen,
   abbildTeile,
   manifestUrl,
   wwwAuthenticateLesen,
@@ -89,6 +91,15 @@ const UEBERSPRUNGEN = {
   pruefung: 'keine',
   grund: 'anonym nicht mehr beziehbar',
   ablaufversion: '2.13.0',
+};
+
+const EIGEN = {
+  name: 'manban',
+  zweck: 'das Abbild dieses Projekts',
+  art: 'abbild',
+  bezugsstelle: 'ghcr.io/manfredwolff/manban:2.14.0',
+  fassung: '2.14.0',
+  pruefung: 'eigen',
 };
 
 // --- Zerlegung der Bezugsstelle -------------------------------------------
@@ -363,7 +374,7 @@ test('die Fristen stehen als Vorgabe im Skript', () => {
   assert.equal(FRIST_QUELLE_MS, 20_000);
   assert.ok(FRIST_GESAMT_MS > FRIST_QUELLE_MS);
   assert.deepEqual(ARTEN, ['abbild', 'archiv']);
-  assert.deepEqual(PRUEFARTEN, ['bezug', 'keine']);
+  assert.deepEqual(PRUEFARTEN, ['bezug', 'keine', 'eigen']);
 });
 
 // --- Liste: Schema -------------------------------------------------------
@@ -471,4 +482,123 @@ test('quellePruefen haengt die Ursache eines fetch-Fehlers an die Meldung', asyn
   const befund = await quellePruefen(ABBILD, { holen: holenMit(fehler) });
   assert.equal(befund.zustand, ZUSTAND_FEHLSCHLAG);
   assert.equal(befund.grund, 'fetch failed: getaddrinfo ENOTFOUND registry-1.docker.io');
+});
+
+// --- Pruefart eigen ------------------------------------------------------
+
+test('bausteineLesen nimmt einen eigen-Eintrag ohne Grund und ohne Ablaufversion an', () => {
+  const verzeichnis = mkdtempSync(join(tmpdir(), 'bausteine-eigen-'));
+  const pfad = join(verzeichnis, 'bausteine.json');
+  writeFileSync(pfad, JSON.stringify({ bausteine: [EIGEN] }));
+  const bausteine = bausteineLesen(pfad);
+  assert.equal(bausteine.length, 1);
+  assert.equal(bausteine[0].pruefung, 'eigen');
+  rmSync(verzeichnis, { recursive: true, force: true });
+});
+
+test('quellePruefen ueberspringt einen eigen-Eintrag ohne Verlangen und ruft nichts ab', async () => {
+  const holen = holenMit();
+  const befund = await quellePruefen(EIGEN, { holen });
+  assert.equal(befund.zustand, ZUSTAND_UEBERSPRUNGEN);
+  assert.equal(befund.grund, GRUND_EIGEN);
+  assert.equal(befund.ablaufversion, null);
+  assert.equal(holen.aufrufe.length, 0);
+});
+
+test('GRUND_EIGEN sagt, dass das Abbild aus diesem Projekt stammt und erst veroeffentlicht werden muss', () => {
+  assert.match(GRUND_EIGEN, /diesem Projekt/);
+  assert.match(GRUND_EIGEN, /Veroeffentlichung/);
+});
+
+test('befundZeile nennt beim eigen-Eintrag die Begruendung ohne Ablaufversion', () => {
+  const zeile = befundZeile({
+    name: EIGEN.name,
+    bezugsstelle: EIGEN.bezugsstelle,
+    zustand: ZUSTAND_UEBERSPRUNGEN,
+    grund: GRUND_EIGEN,
+    ablaufversion: null,
+    fristMs: FRIST_QUELLE_MS,
+  });
+  assert.match(zeile, /uebersprungen/);
+  assert.match(zeile, /diesem Projekt/);
+  assert.ok(!/entfaellt mit/.test(zeile), 'ohne Ablaufversion steht kein Ablauf in der Zeile');
+});
+
+test('quellePruefen ruft einen eigen-Eintrag mit Verlangen normal ab', async () => {
+  const holen = holenMit(antwort(200));
+  const befund = await quellePruefen(EIGEN, { holen, eigenePruefen: true });
+  assert.equal(befund.zustand, ZUSTAND_OK);
+  assert.equal(holen.aufrufe.length, 1);
+  assert.equal(holen.aufrufe[0].url, 'https://ghcr.io/v2/manfredwolff/manban/manifests/2.14.0');
+});
+
+test('quellePruefen laesst einen eigen-Eintrag auch per pruefenErzwingen abrufen', async () => {
+  const holen = holenMit(antwort(200));
+  const befund = await quellePruefen(EIGEN, { holen, pruefenErzwingen: true });
+  assert.equal(befund.zustand, ZUSTAND_OK);
+  assert.equal(holen.aufrufe.length, 1);
+});
+
+test('laufen ueberspringt eigen-Eintraege ohne Verlangen und endet mit 0', async () => {
+  const zeilen = [];
+  const holen = holenMit(antwort(200));
+  const ergebnis = await laufen([EIGEN, ABBILD], { holen, schreiben: (z) => zeilen.push(z) });
+  assert.equal(ergebnis.exitcode, 0);
+  assert.equal(ergebnis.befunde[0].zustand, ZUSTAND_UEBERSPRUNGEN);
+  assert.equal(holen.aufrufe.length, 1, 'nur das fremde Abbild wird abgerufen');
+  assert.ok(zeilen.some((z) => z.includes('manban') && /uebersprungen/.test(z)));
+});
+
+test('laufen reicht das Verlangen durch und ruft den eigen-Eintrag ab', async () => {
+  const holen = holenMit(antwort(200), antwort(200));
+  const ergebnis = await laufen([EIGEN, ABBILD], {
+    holen,
+    schreiben: () => {},
+    eigenePruefen: true,
+  });
+  assert.equal(ergebnis.exitcode, 0);
+  assert.equal(ergebnis.befunde[0].zustand, ZUSTAND_OK);
+  assert.equal(holen.aufrufe.length, 2);
+});
+
+test('laufen setzt den Exitcode, wenn der erzwungene Abruf des eigen-Eintrags scheitert', async () => {
+  const zeilen = [];
+  const ergebnis = await laufen([EIGEN], {
+    holen: holenMit(antwort(404)),
+    schreiben: (z) => zeilen.push(z),
+    eigenePruefen: true,
+  });
+  assert.equal(ergebnis.exitcode, 1);
+  assert.equal(ergebnis.befunde[0].zustand, ZUSTAND_FEHLSCHLAG);
+  assert.ok(zeilen.some((z) => /FEHLSCHLAG/.test(z) && z.includes('manban')));
+});
+
+// --- Argument-Zerlegung des Einsprungs ----------------------------------
+
+test('argumenteZerlegen erkennt --eigen ohne Pfad', () => {
+  assert.deepEqual(argumenteZerlegen(['--eigen']), { pfad: null, eigenePruefen: true });
+});
+
+test('argumenteZerlegen erkennt einen Pfad ohne Flag', () => {
+  assert.deepEqual(argumenteZerlegen(['scripts/bausteine.json']), {
+    pfad: 'scripts/bausteine.json',
+    eigenePruefen: false,
+  });
+});
+
+test('argumenteZerlegen erkennt beides in beiden Reihenfolgen', () => {
+  const erwartet = { pfad: 'scripts/bausteine.json', eigenePruefen: true };
+  assert.deepEqual(argumenteZerlegen(['--eigen', 'scripts/bausteine.json']), erwartet);
+  assert.deepEqual(argumenteZerlegen(['scripts/bausteine.json', '--eigen']), erwartet);
+});
+
+test('argumenteZerlegen erkennt keines von beidem', () => {
+  assert.deepEqual(argumenteZerlegen([]), { pfad: null, eigenePruefen: false });
+});
+
+test('argumenteZerlegen nimmt nur das erste Argument ohne Bindestrich als Pfad', () => {
+  assert.deepEqual(argumenteZerlegen(['eins.json', 'zwei.json']), {
+    pfad: 'eins.json',
+    eigenePruefen: false,
+  });
 });
