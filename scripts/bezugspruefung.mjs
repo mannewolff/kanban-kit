@@ -337,11 +337,14 @@ export function abbilderAusCompose(text) {
  * gehoerte sonst als Phantom-Baustein in die Liste.
  */
 export function abbilderAusDockerfile(text) {
+  // `(?:--\S+\s+)*` ueberliest die Schalter eines FROM (`--platform=$BUILDPLATFORM`). Ohne sie
+  // waere der Schalter selbst das "Abbild" und die Stufe daneben unbekannt — der Abgleich meldete
+  // dann einen fehlenden Baustein und eine Bezugsstelle, die es nicht gibt.
   const stufen = new Set(
-    [...text.matchAll(/^FROM\s+\S+\s+AS\s+(\S+)/gim)].map((t) => t[1].toLowerCase()),
+    [...text.matchAll(/^FROM\s+(?:--\S+\s+)*\S+\s+AS\s+(\S+)/gim)].map((t) => t[1].toLowerCase()),
   );
   const abbilder = new Set();
-  for (const treffer of text.matchAll(/^FROM\s+(\S+)/gim)) {
+  for (const treffer of text.matchAll(/^FROM\s+(?:--\S+\s+)*(\S+)/gim)) {
     const wert = treffer[1];
     if (!stufen.has(wert.toLowerCase())) abbilder.add(wert);
   }

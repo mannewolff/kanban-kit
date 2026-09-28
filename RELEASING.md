@@ -33,14 +33,37 @@ Bei jedem `merge production`: Minor-Teil erhöhen (Y+1, Z→0), Changelog schrei
 Release taggen. Schrittfolge:
 
 ```
-node scripts/bump-version.mjs minor # VERSION/pom/package auf die neue Version setzen
+node scripts/bump-version.mjs minor # VERSION/pom/package + eigene Image-Tags auf die neue Version
 node scripts/gen-changelog.mjs      # Changelog-Block der NEUEN Version oben in CHANGELOG.md
-# Release-Commit (VERSION, pom.xml, package(-lock).json, CHANGELOG.md)
+# Release-Commit (VERSION, pom.xml, package(-lock).json, CHANGELOG.md,
+#                 docker-compose.yml, docker-compose.backup.yml, scripts/bausteine.json)
 node scripts/bump-version.mjs tag   # annotated Tag vX.Y.Z auf den Release-Commit setzen
 git push origin main --follow-tags  # main + Tag pushen (annotated Tag wird mitgenommen)
+# der Tag-Push startet release-images.yml (siehe unten) — kein manueller Schritt
 # PR main -> production erstellen (Mannes Merge ist der Stop-Punkt)
 # nach dem Merge: GitHub Release zum Tag vX.Y.Z anlegen (Changelog-Block als Beschreibung)
 ```
+
+**`bump-version.mjs minor` zieht seit Issue #1267 die eigenen Image-Tags selbst nach** — die
+ghcr-Zeile in `docker-compose.yml` und `docker-compose.backup.yml` sowie die beiden ghcr-Einträge
+in [`scripts/bausteine.json`](scripts/bausteine.json). Kein Handgriff mehr, und darum gehören diese
+drei Dateien in den Release-Commit. `patch` lässt sie bewusst unberührt: Ein `push main`
+veröffentlicht kein Abbild, eine Betriebsdatei mit `2.14.3` zeigte auf etwas, das es nie gab.
+
+### Der Tag-Push veröffentlicht die Abbilder
+
+Der Push des Tags löst [.github/workflows/release-images.yml](.github/workflows/release-images.yml)
+aus. Der Lauf baut das Anwendungs- und das Sicherungs-Abbild für `linux/amd64` und `linux/arm64`,
+legt sie als `ghcr.io/mannewolff/kanban-kit:X.Y.Z` bzw. `…-backup:X.Y.Z` und jeweils zusätzlich als
+`latest` ab und weist danach mit `node scripts/bezugspruefung.mjs --eigen` nach, dass beide anonym
+— also ohne Registry-Anmeldung — beziehbar sind. Ein roter Nachweisschritt heißt nicht, dass der
+Bau fehlschlug, sondern dass ein Abbild nicht abrufbar ist.
+
+**Einmalig, beim ersten Release mit Abbildern:** Die Sichtbarkeit **beider** ghcr-Pakete in den
+Package-Einstellungen auf „Public" stellen (GitHub → Profil → Packages → `kanban-kit` bzw.
+`kanban-kit-backup` → Package settings → Change visibility). Ein neu erzeugtes ghcr-Paket ist
+zunächst **privat**; der Workflow kann das nicht selbst ändern. Ohne diesen Handgriff scheitert der
+Nachweisschritt — und die Zusage „ohne Registry-Anmeldung abrufbar" wäre still verletzt.
 
 Reihenfolge beachten: **erst** der Version-Bump, **dann** `gen-changelog.mjs`, **dann** der
 Release-Commit, **erst danach** `bump-version.mjs tag` — das Skript liest die Zielversion aus

@@ -434,6 +434,17 @@ test('abbilderAusDockerfile liest FROM und laesst eigene Baustufen aus', () => {
   assert.deepEqual([...abbilder].sort(), ['debian:bookworm-slim', 'postgres:16-bookworm']);
 });
 
+test('abbilderAusDockerfile ueberliest die Schalter eines FROM', () => {
+  const abbilder = abbilderAusDockerfile(
+    [
+      'FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend',
+      'FROM --platform=$BUILDPLATFORM frontend AS zwei',
+      'FROM eclipse-temurin:25-jre AS runtime',
+    ].join('\n'),
+  );
+  assert.deepEqual([...abbilder].sort(), ['eclipse-temurin:25-jre', 'node:22-alpine']);
+});
+
 test('abbilderAusJava liest alle drei Testcontainers-Muster', () => {
   const abbilder = abbilderAusJava(
     [
