@@ -148,7 +148,8 @@ public class DisruptionService {
                                     i.errorClass(),
                                     vorhanden
                                         .getOrDefault(i.projectId(), Set.of())
-                                        .contains(i.cardNumber())))
+                                        .contains(i.cardNumber()),
+                                    i.durationMs()))
                         .toList()))
         .toList();
   }
@@ -379,7 +380,8 @@ public class DisruptionService {
    * Kosten, Dauer, Stufen, Verbrauch und vor allem den Protokollauszug je Paket mit. AK 7 der
    * Quelle #1153 verbietet jede Obergrenze für diese Sektion — der Auszug über alle laufenden Läufe
    * wäre damit die größte Last der Antwort. Was nicht hinausgeht, kann auch nicht versehentlich
-   * erscheinen.
+   * erscheinen. Die Dauer (Issue #1247) ist eine einzelne Zahl und belastet die Antwort nicht; sie
+   * macht das Zeitverhalten der laufenden Läufe im Plattform-Leitstand sichtbar.
    *
    * @param cardNumber projektweite Kartennummer des Pakets
    * @param title Titel zum Zeitpunkt des Laufs — ein Schnappschuss, kein Verweis
@@ -387,11 +389,14 @@ public class DisruptionService {
    * @param errorClass Grund für einen nicht-grünen Ausgang; {@code null} bei grün
    * @param cardExists ob es im Projekt noch eine Karte zu dieser Nummer gibt — der Leitstand
    *     verlinkt nur dann dorthin
+   * @param durationMs Dauer des Pakets in Millisekunden; {@code null}, wenn der Lauf keine gemessen
+   *     hat
    */
   public record PaketView(
       int cardNumber,
       String title,
       NightRunState state,
       @Nullable NightRunErrorClass errorClass,
-      boolean cardExists) {}
+      boolean cardExists,
+      @Nullable Long durationMs) {}
 }

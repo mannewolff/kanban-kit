@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -369,6 +370,34 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
     // Zwei Admins räumen dieselbe Zeile weg — der zweite darf nichts Rotes sehen.
     mvc.perform(post(SCHLIESSEN + "/" + haengt + "/close").cookie(admin))
         .andExpect(status().isNoContent());
+  }
+
+  /**
+   * Issue #1247: Die Dauer eines gemeldeten Pakets reist aus {@code night_run_item.duration_ms} bis
+   * in die Antwort — ein Paket ohne Messung kommt mit {@code null} an, nicht mit einer Null.
+   */
+  @Test
+  void einGemeldetesPaketTraegtSeineDauerInDieAntwort() throws Exception {
+    Cookie admin = session("de-dauer@example.com", PlatformRole.ADMIN);
+    long arbeitet = laufend();
+    jdbc.update(
+        "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, kind, card_number,"
+            + " title, state, duration_ms) VALUES (?, ?, now(), 'IMPLEMENTATION', 'NIGHT', 730,"
+            + " 'Gemessen', 'GREEN', 776000), (?, ?, now(), 'IMPLEMENTATION', 'NIGHT', 731,"
+            + " 'Ungemessen', 'GREEN', NULL)",
+        arbeitet,
+        projectId,
+        arbeitet,
+        projectId);
+
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.gemeldetePakete.length()").value(1))
+        .andExpect(jsonPath("$.gemeldetePakete[0].nightRunId").value(arbeitet))
+        .andExpect(jsonPath("$.gemeldetePakete[0].pakete[0].cardNumber").value(730))
+        .andExpect(jsonPath("$.gemeldetePakete[0].pakete[0].durationMs").value(776000))
+        .andExpect(jsonPath("$.gemeldetePakete[0].pakete[1].cardNumber").value(731))
+        .andExpect(jsonPath("$.gemeldetePakete[0].pakete[1].durationMs").value(nullValue()));
   }
 
   /**

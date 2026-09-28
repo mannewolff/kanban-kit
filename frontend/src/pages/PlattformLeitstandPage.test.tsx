@@ -463,6 +463,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       state: 'GREEN',
       errorClass: null,
       cardExists: true,
+      durationMs: null,
       ...extra,
     })
 
@@ -565,11 +566,11 @@ describe('PlattformLeitstandPage (#1083)', () => {
           .map((l) => l.getAttribute('data-testid')),
       ).toEqual(['stand-lauf-8', 'stand-lauf-6'])
       expect(screen.getByTestId('stand-kopf-8')).toHaveTextContent(
-        'Run #8 · läuft seit 03:10 · 2 gemeldet · 1 Erfolg, 1 gescheitert',
+        /^Run #8 · gestartet 03:10 · läuft seit \d{2,}:\d{2}:\d{2} · 2 gemeldet · 1 Erfolg, 1 gescheitert/,
       )
       // Ein laufender Run ohne Paket steht mit „0 gemeldet" und ohne Zeile darunter.
       expect(screen.getByTestId('stand-kopf-6')).toHaveTextContent(
-        'Run #6 · läuft seit 03:10 · 0 gemeldet',
+        /^Run #6 · gestartet 03:10 · läuft seit \d{2,}:\d{2}:\d{2} · 0 gemeldet/,
       )
       expect(within(screen.getByTestId('stand-lauf-6')).queryAllByTestId(/^stand-paket-/)).toHaveLength(0)
     })
@@ -616,7 +617,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
 
       const kopf = await screen.findByTestId('stand-kopf-8')
       expect(kopf).toHaveTextContent(
-        'Run #8 · läuft seit 03:10 · 2 gemeldet · 1 Erfolg, 1 nicht bearbeitet',
+        /^Run #8 · gestartet 03:10 · läuft seit \d{2,}:\d{2}:\d{2} · 2 gemeldet · 1 Erfolg, 1 nicht bearbeitet/,
       )
       expect(kopf.textContent).not.toMatch(/\bvon\b|\/\s*\d/)
     })
@@ -636,7 +637,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       zeigeSeite()
 
       const liste = await screen.findByRole('list', {
-        name: /Run #8.*läuft seit 03:10 · 1 gemeldet · 1 Erfolg/,
+        name: /Run #8.*gestartet 03:10 · läuft · 1 gemeldet · 1 Erfolg/,
       })
       expect(within(liste).getByTestId('stand-paket-8-721')).toBeInTheDocument()
     })
@@ -1761,7 +1762,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       await zeitVergehtLassen(30_000)
 
       expect(api.leitstand).toHaveBeenCalledTimes(2)
-      expect(screen.getByTestId('stand-kopf-8')).toHaveTextContent('läuft seit 03:10')
+      expect(screen.getByTestId('stand-kopf-8')).toHaveTextContent('gestartet 03:10')
       expect(screen.queryByText('Laden fehlgeschlagen.')).not.toBeInTheDocument()
     })
 

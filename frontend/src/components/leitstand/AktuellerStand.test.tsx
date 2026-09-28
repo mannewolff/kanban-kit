@@ -1,7 +1,7 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DisruptionView, LaufPaketeView, PaketView } from '../../api/plattformLeitstand'
 import { AktuellerStand } from './AktuellerStand'
 
@@ -22,6 +22,17 @@ import { AktuellerStand } from './AktuellerStand'
  * Kopf, weil seine Angaben an der Komponente hängen und nicht an der Seite.
  */
 describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
+  // Start 01:10:00Z, jetzt 02:33:22Z — der Lauf ist 01:23:22 alt (#1246). Nur Uhr und Intervall
+  // werden vorgetäuscht; userEvent braucht den echten setTimeout.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(new Date('2026-09-21T02:33:22Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
     nightRunId: 8,
     projectId: 9,
@@ -38,6 +49,7 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
     state: 'GREEN',
     errorClass: null,
     cardExists: true,
+    durationMs: null,
     ...extra,
   })
 
@@ -77,7 +89,7 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
     zeige([laufend()], [pakete(8, [paket()])])
 
     expect(screen.getByTestId('stand-kopf-8')).toHaveTextContent(
-      'Run #8 · läuft seit 03:10 · 1 gemeldet · 1 Erfolg',
+      'Run #8 · gestartet 03:10 · läuft seit 01:23:22 · 1 gemeldet · 1 Erfolg',
     )
   })
 
@@ -94,7 +106,7 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
       'href',
       '/projects/9/nachtlauf?lauf=6',
     )
-    expect(kopf).toHaveTextContent('Run #6 · läuft seit 03:10 · 0 gemeldet')
+    expect(kopf).toHaveTextContent('Run #6 · gestartet 03:10 · läuft seit 01:23:22 · 0 gemeldet')
     expect(within(screen.getByTestId('stand-lauf-6')).queryAllByTestId(/^stand-paket-/)).toHaveLength(
       0,
     )
@@ -108,7 +120,7 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
     zeige([laufend()], [pakete(8, [paket()])])
 
     expect(screen.getByRole('list')).toHaveAccessibleName(
-      /Run #8.*läuft seit 03:10 · 1 gemeldet · 1 Erfolg/,
+      /^Run #8 von Mein Projekt · gestartet 03:10 · läuft · 1 gemeldet · 1 Erfolg$/,
     )
   })
 
@@ -142,5 +154,77 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
     expect(
       screen.getByRole('button', { name: 'Run #8 als beendet kennzeichnen' }),
     ).toBeInTheDocument()
+    })
+
+  /**
+   * Issue #1246: Die Laufzeit steht sekundengenau im Kopf und zählt ohne Server-Abruf hoch — damit
+   * das Zeitverhalten aller laufenden Runs auf einen Blick zu sehen ist.
+   */
+  it('zählt die Laufzeit eines laufenden Runs jede Sekunde weiter', () => {
+    zeige([laufend()], [pakete(8, [paket()])])
+
+    expect(screen.getByTestId('stand-laufzeit-8')).toHaveTextContent('01:23:22')
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    expect(screen.getByTestId('stand-laufzeit-8')).toHaveTextContent('01:23:23')
+    expect(screen.getByTestId('stand-kopf-8')).toHaveTextContent(
+      'Run #8 · gestartet 03:10 · läuft seit 01:23:23 · 1 gemeldet · 1 Erfolg',
+    )
+  })
+
+  /**
+   * Eine hochzählende Uhr an einem Lauf, der nicht mehr arbeitet, behauptete Arbeit — ein solcher
+   * Eintrag nennt Startzeit und Zustandswort, aber keine Laufzeit, und legt keinen Takt an.
+   */
+  it('zeigt an einem nicht laufenden Run keine Laufzeit und legt keinen Takt an', () => {
+    zeige(
+      [
+        laufend({
+          outcome: { abortReason: null, verdict: 'CLOSED', decisiveItem: null, noWorkReason: null },
+        }),
+      ],
+      [pakete(8, [paket()])],
+    )
+
+    expect(screen.getByTestId('stand-kopf-8')).toHaveTextContent(
+      'Run #8 · gestartet 03:10 · von Hand beendet · 1 gemeldet · 1 Erfolg',
+    )
+    expect(screen.queryByTestId('stand-laufzeit-8')).not.toBeInTheDocument()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  /** Der Takt endet mit der Anzeige — ein verlassener Leitstand tickt nicht weiter. */
+  it('räumt den Takt beim Verlassen ab', () => {
+    const { unmount } = zeige([laufend()], [pakete(8, [paket()])])
+    expect(vi.getTimerCount()).toBe(1)
+
+    unmount()
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  /**
+   * Issue #1247: Jede Paketzeile unter einem laufenden Run nennt die Dauer des Pakets — im Format
+   * der übrigen Paketdauern, ohne Messung als Strich.
+   */
+  it('zeigt die Dauer jedes gemeldeten Pakets', () => {
+    zeige(
+      [laufend()],
+      [
+        pakete(8, [
+          paket({ cardNumber: 721, durationMs: 776_000 }),
+          paket({ cardNumber: 722, durationMs: 3_730_000 }),
+          paket({ cardNumber: 723, durationMs: null }),
+        ]),
+      ],
+    )
+
+    expect(screen.getByTestId('stand-dauer-8-721')).toHaveTextContent('12:56 min')
+    expect(screen.getByTestId('stand-dauer-8-721')).toHaveAccessibleName('Dauer 12 min 56 s')
+    expect(screen.getByTestId('stand-dauer-8-722')).toHaveTextContent('1:02:10 h')
+    expect(screen.getByTestId('stand-dauer-8-723')).toHaveTextContent('—')
   })
 })

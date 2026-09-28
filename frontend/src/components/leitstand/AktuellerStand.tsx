@@ -8,13 +8,15 @@ import { laufgruppen, type Laufeintrag } from '../../lib/aktuellerStand'
 import {
   melderAusBefund,
   MELDER_JE_ZUSTAND,
+  laufzeitUhr,
   uhrzeit,
   type Projektgruppe,
 } from '../../lib/leitstand'
 import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../../lib/nightRunHandoff'
+import { useJetzt } from '../../lib/useJetzt'
 import { ANZEIGE, RAND, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { LaufArtSymbol } from './LaufArtSymbol'
-import { Led, LeerSatz, Taste, ZEILE_HOVER } from './LeitstandBausteine'
+import { Led, LeerSatz, PaketDauer, Taste, ZEILE_HOVER } from './LeitstandBausteine'
 
 /**
  * Der Schluessel eines Pakets in der Menge der verschwundenen Karten (Issue #1174, E14).
@@ -150,8 +152,15 @@ function Standgruppe({
 }
 
 /**
- * Ein Lauf im Projektblock: sein Kopf „Run #N · läuft seit HH:MM · <Stand>" und darunter seine
- * Paketzeilen.
+ * Ein Lauf im Projektblock: sein Kopf „Run #N · gestartet HH:MM · läuft seit HH:MM:SS · <Stand>" und
+ * darunter seine Paketzeilen.
+ *
+ * <p><b>Die Laufzeit tickt sekundengenau</b> (Issue #1246): Der Plattform-Leitstand ist der Blick
+ * auf das Zeitverhalten aller laufenden Runs, und die Startzeit allein zwang zum Rechnen. Sie steht
+ * nur an einem Lauf mit dem Befund RUNNING — eine hochzaehlende Uhr an einem Lauf, der nicht mehr
+ * arbeitet, behauptete Arbeit —, und der Takt kommt aus {@link useJetzt}, ohne Server-Abruf. Den
+ * Namen der Paketliste bilden Kopf und Stand <b>ohne</b> die Laufzeit: Sonst aenderte sich der
+ * zugaengliche Name jede Sekunde.
  *
  * <p><b>Drei Angaben stehen seit Issue #1193 hier</b>, weil die zweite Platte ueber dieselbe Liste
  * `laufende` entfallen ist — sie brachte keinen Lauf, den diese Sektion nicht schon haette: der
@@ -181,6 +190,9 @@ function Standlauf({
   { eintrag: Laufeintrag<PaketView>; lauf: DisruptionView; projectId: number } & Laufwege
 >) {
   const kopfId = useId()
+  const standId = useId()
+  const laeuft = lauf.outcome.verdict === 'RUNNING'
+  const jetzt = useJetzt(laeuft ? 1000 : null)
   return (
     <Box data-testid={`stand-lauf-${eintrag.nightRunId}`}>
       <Box
@@ -188,18 +200,33 @@ function Standlauf({
         data-testid={`stand-kopf-${eintrag.nightRunId}`}
         sx={{ display: 'flex', alignItems: 'center', gap: '8px', m: 0, px: '16px', py: '8px' }}
       >
-        <Led melder={melderAusBefund(lauf.outcome)} pulsiert={lauf.outcome.verdict === 'RUNNING'} />
+        <Led melder={melderAusBefund(lauf.outcome)} pulsiert={laeuft} />
         <LaufArtSymbol art={lauf.mode} />
-        <Box component="span" id={kopfId} sx={{ fontSize: 12, color: 'text.secondary' }}>
-          <Typography
-            component={RouterLink}
-            to={`/projects/${projectId}/nachtlauf?lauf=${eintrag.nightRunId}`}
-            aria-label={`Run #${eintrag.nightRunId} von ${lauf.projectName}`}
-            sx={{ fontSize: 12, fontFamily: 'monospace' }}
-          >
-            {`Run #${eintrag.nightRunId}`}
-          </Typography>
-          {` · ${NIGHT_RUN_VERDICT_TEXT[lauf.outcome.verdict]} seit ${uhrzeit(lauf.startedAt)} · ${eintrag.stand}`}
+        <Box component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>
+          <Box component="span" id={kopfId}>
+            <Typography
+              component={RouterLink}
+              to={`/projects/${projectId}/nachtlauf?lauf=${eintrag.nightRunId}`}
+              aria-label={`Run #${eintrag.nightRunId} von ${lauf.projectName}`}
+              sx={{ fontSize: 12, fontFamily: 'monospace' }}
+            >
+              {`Run #${eintrag.nightRunId}`}
+            </Typography>
+            {` · gestartet ${uhrzeit(lauf.startedAt)} · ${NIGHT_RUN_VERDICT_TEXT[lauf.outcome.verdict]}`}
+          </Box>
+          {laeuft && (
+            <>
+              {' seit '}
+              <Box
+                component="span"
+                data-testid={`stand-laufzeit-${eintrag.nightRunId}`}
+                sx={{ fontVariantNumeric: 'tabular-nums' }}
+              >
+                {laufzeitUhr(jetzt - Date.parse(lauf.startedAt))}
+              </Box>
+            </>
+          )}
+          <Box component="span" id={standId}>{` · ${eintrag.stand}`}</Box>
         </Box>
         {/* Rechtsbuendig ans Ende des Kopfs (Issue #1197) — der Weg hinaus steht in dieser Seite
             stets am rechten Rand seiner Zeile, wie die Taste „Stoerung loeschen". Der Name nennt
@@ -214,7 +241,7 @@ function Standlauf({
           </Taste>
         </Box>
       </Box>
-      <Box component="ul" aria-labelledby={kopfId} sx={{ listStyle: 'none', m: 0, p: 0 }}>
+      <Box component="ul" aria-labelledby={`${kopfId} ${standId}`} sx={{ listStyle: 'none', m: 0, p: 0 }}>
         {eintrag.pakete.map((p) => (
           <Paketzeile
             key={p.cardNumber}
@@ -247,6 +274,10 @@ function Standlauf({
  * „Karte #N nicht gefunden" — der Zustand gilt **vor** dem Klick und nicht erst nach einem
  * erfolglosen. Er kommt aus zwei Quellen: `cardExists` der Antwort (Issue #1170) und der Menge der
  * Karten, die ein Abruf mit 404 beantwortet hat (E14). Nachgerechnet wird im Browser nichts.
+ *
+ * <p><b>Die Dauer des Pakets</b> (Issue #1247) steht zwischen Titel und Zustandswort, im Baustein
+ * {@link PaketDauer} wie in der Lauf-Ansicht — mit dem Kopf zusammen zeigt die Sektion so das
+ * Zeitverhalten aller laufenden Runs. Ein Paket ohne Messung steht mit Strich da.
  *
  * <p>Der Zusatz steht <b>ausserhalb</b> beider Bedienelemente: In einem von ihnen waere er Teil
  * dessen Namens, und ein Vorlesewerkzeug nennte den Weg in die Lauf-Ansicht „… nicht gefunden".
@@ -320,6 +351,11 @@ function Paketzeile({
         >
           {paket.title}
         </Box>
+        <PaketDauer
+          ms={paket.durationMs}
+          testId={`stand-dauer-${lauf}-${paket.cardNumber}`}
+          sx={{ flex: 'none' }}
+        />
         <Box component="span" sx={{ fontSize: 12, color: 'text.secondary', flex: 'none' }}>
           {nightRunZustandsText(paket.state, paket.errorClass ?? undefined)}
         </Box>
