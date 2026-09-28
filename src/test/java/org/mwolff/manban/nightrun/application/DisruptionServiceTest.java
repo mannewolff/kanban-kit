@@ -146,6 +146,17 @@ class DisruptionServiceTest {
       int cardNumber,
       NightRunState state,
       @Nullable NightRunErrorClass errorClass) {
+    return paket(laufId, projectId, cardNumber, state, errorClass, 1L);
+  }
+
+  /** Dasselbe Paket mit einer bestimmten Dauer — für die Dauer im Leitstand (Issue #1247). */
+  private static NightRunItem paket(
+      long laufId,
+      long projectId,
+      int cardNumber,
+      NightRunState state,
+      @Nullable NightRunErrorClass errorClass,
+      @Nullable Long durationMs) {
     return new NightRunItem(
         laufId * 100 + cardNumber,
         laufId,
@@ -157,7 +168,7 @@ class DisruptionServiceTest {
         "Paket",
         state,
         errorClass,
-        1L,
+        durationMs,
         null,
         null,
         null,
@@ -894,6 +905,24 @@ class DisruptionServiceTest {
         .containsExactly(tuple(1170, true), tuple(4711, false));
   }
 
+  /**
+   * Issue #1247: Jedes gemeldete Paket trägt seine Dauer, damit der Plattform-Leitstand das
+   * Zeitverhalten der laufenden Läufe zeigt — ein Paket ohne Messung bleibt ohne Dauer, statt eine
+   * Null zu behaupten.
+   */
+  @Test
+  void jedesPaketTraegtSeineDauer() {
+    nachtLaeufe(unfertig(7L, JETZT.minus(Duration.ofMinutes(10)), JETZT));
+    pakete(
+        paket(7L, 9L, 1170, NightRunState.GREEN, null, 776_000L),
+        paket(7L, 9L, 1171, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET, null));
+    vorhandeneKarten(1170, 1171);
+
+    assertThat(service.leitstand(ADMIN, UTC).gemeldetePakete().getFirst().pakete())
+        .extracting(PaketView::cardNumber, PaketView::durationMs)
+        .containsExactly(tuple(1170, 776_000L), tuple(1171, null));
+  }
+
   /** Ein laufender Lauf ohne gemeldete Pakete erscheint mit leerer Liste, nicht gar nicht. */
   @Test
   void einLaufenderLaufOhnePaketeErscheintMitLeererPaketliste() {
@@ -944,13 +973,14 @@ class DisruptionServiceTest {
   /**
    * E2 aus Plan #1167: Die Paketsicht ist schmal. Insbesondere trägt sie <b>keinen Auszug</b> —
    * über alle laufenden Läufe wäre er die größte Last der Antwort, und AK 7 der Quelle #1153
-   * verbietet jede Obergrenze, die ihn beschneiden könnte.
+   * verbietet jede Obergrenze, die ihn beschneiden könnte. Die Dauer (Issue #1247) ist eine
+   * einzelne Zahl und belastet die Antwort nicht.
    */
   @Test
-  void diePaketsichtTraegtGenauFuenfAngaben() {
+  void diePaketsichtTraegtGenauSechsAngaben() {
     assertThat(PaketView.class.getRecordComponents())
         .extracting(RecordComponent::getName)
-        .containsExactly("cardNumber", "title", "state", "errorClass", "cardExists");
+        .containsExactly("cardNumber", "title", "state", "errorClass", "cardExists", "durationMs");
   }
 
   // --- Quittieren (AK 8, 10) -----------------------------------------------------------------

@@ -88,6 +88,8 @@ export interface PaketView {
   errorClass: NightRunErrorClass | null
   /** Ob es im Projekt noch eine Karte zu dieser Nummer gibt — nur dann fuehrt ein Weg dorthin. */
   cardExists: boolean
+  /** Dauer des Pakets in Millisekunden; `null`, wenn der Lauf keine gemessen hat (Issue #1247). */
+  durationMs: number | null
 }
 
 export const plattformLeitstandApi = {

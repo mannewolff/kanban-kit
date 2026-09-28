@@ -49,6 +49,7 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
     state: 'GREEN',
     errorClass: null,
     cardExists: true,
+    durationMs: null,
     ...extra,
   })
 
@@ -203,5 +204,27 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
     unmount()
 
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  /**
+   * Issue #1247: Jede Paketzeile unter einem laufenden Run nennt die Dauer des Pakets — im Format
+   * der übrigen Paketdauern, ohne Messung als Strich.
+   */
+  it('zeigt die Dauer jedes gemeldeten Pakets', () => {
+    zeige(
+      [laufend()],
+      [
+        pakete(8, [
+          paket({ cardNumber: 721, durationMs: 776_000 }),
+          paket({ cardNumber: 722, durationMs: 3_730_000 }),
+          paket({ cardNumber: 723, durationMs: null }),
+        ]),
+      ],
+    )
+
+    expect(screen.getByTestId('stand-dauer-8-721')).toHaveTextContent('12:56 min')
+    expect(screen.getByTestId('stand-dauer-8-721')).toHaveAccessibleName('Dauer 12 min 56 s')
+    expect(screen.getByTestId('stand-dauer-8-722')).toHaveTextContent('1:02:10 h')
+    expect(screen.getByTestId('stand-dauer-8-723')).toHaveTextContent('—')
   })
 })

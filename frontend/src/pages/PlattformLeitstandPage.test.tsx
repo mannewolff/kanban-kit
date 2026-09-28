@@ -463,6 +463,7 @@ describe('PlattformLeitstandPage (#1083)', () => {
       state: 'GREEN',
       errorClass: null,
       cardExists: true,
+      durationMs: null,
       ...extra,
     })
 

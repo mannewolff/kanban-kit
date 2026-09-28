@@ -16,7 +16,7 @@ import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../../lib/nightRun
 import { useJetzt } from '../../lib/useJetzt'
 import { ANZEIGE, RAND, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { LaufArtSymbol } from './LaufArtSymbol'
-import { Led, LeerSatz, Taste, ZEILE_HOVER } from './LeitstandBausteine'
+import { Led, LeerSatz, PaketDauer, Taste, ZEILE_HOVER } from './LeitstandBausteine'
 
 /**
  * Der Schluessel eines Pakets in der Menge der verschwundenen Karten (Issue #1174, E14).
@@ -275,6 +275,10 @@ function Standlauf({
  * erfolglosen. Er kommt aus zwei Quellen: `cardExists` der Antwort (Issue #1170) und der Menge der
  * Karten, die ein Abruf mit 404 beantwortet hat (E14). Nachgerechnet wird im Browser nichts.
  *
+ * <p><b>Die Dauer des Pakets</b> (Issue #1247) steht zwischen Titel und Zustandswort, im Baustein
+ * {@link PaketDauer} wie in der Lauf-Ansicht — mit dem Kopf zusammen zeigt die Sektion so das
+ * Zeitverhalten aller laufenden Runs. Ein Paket ohne Messung steht mit Strich da.
+ *
  * <p>Der Zusatz steht <b>ausserhalb</b> beider Bedienelemente: In einem von ihnen waere er Teil
  * dessen Namens, und ein Vorlesewerkzeug nennte den Weg in die Lauf-Ansicht „… nicht gefunden".
  */
@@ -347,6 +351,11 @@ function Paketzeile({
         >
           {paket.title}
         </Box>
+        <PaketDauer
+          ms={paket.durationMs}
+          testId={`stand-dauer-${lauf}-${paket.cardNumber}`}
+          sx={{ flex: 'none' }}
+        />
         <Box component="span" sx={{ fontSize: 12, color: 'text.secondary', flex: 'none' }}>
           {nightRunZustandsText(paket.state, paket.errorClass ?? undefined)}
         </Box>

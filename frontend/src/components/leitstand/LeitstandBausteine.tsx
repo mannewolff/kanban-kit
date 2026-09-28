@@ -584,8 +584,9 @@ export function Taste({
  * Einheit dahinter — dasselbe Muster wie die Einheit eines Instruments ({@link KachelWert},
  * {@link Instrument}).
  *
- * <p><b>Ein Baustein für beide Verwender</b> — die Vorgangszeile der Läufe-Seite und „Letzter Run"
- * des Projekt-Leitstands: Dieselbe Angabe sähe sonst an zwei Stellen verschieden aus. Die
+ * <p><b>Ein Baustein für alle Verwender</b> — die Vorgangszeile der Läufe-Seite, „Letzter Run" des
+ * Projekt-Leitstands und die Paketzeile in „Aktueller Status" des Plattform-Leitstands (#1247):
+ * Dieselbe Angabe sähe sonst an mehreren Stellen verschieden aus. Die
  * ausgeschriebene Beschriftung steht als `aria-label` und `title`, weil „12:56" vorgelesen wie
  * eine Uhrzeit klingt.
  */
