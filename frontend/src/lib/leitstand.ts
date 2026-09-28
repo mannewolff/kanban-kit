@@ -355,6 +355,20 @@ export function uhrzeit(iso: string): string {
   return ZEIT.format(new Date(iso))
 }
 
+/**
+ * Die Laufzeit eines laufenden Runs als `HH:MM:SS` („läuft seit 01:23:22", #1246) — sekundengenau,
+ * weil der Plattform-Leitstand sie jede Sekunde auffrischt.
+ *
+ * <p>Angefangene Sekunden werden abgeschnitten, nicht gerundet: Sonst spränge die Anzeige bei einem
+ * Takt, der nicht genau auf der Sekundengrenze liegt, um eine Sekunde vor. Über 24 Stunden zählt
+ * die Stunde weiter, und ein Uhrversatz zwischen Server und Browser bleibt bei `00:00:00`.
+ */
+export function laufzeitUhr(ms: number): string {
+  const sekunden = Math.max(0, Math.floor(ms / 1000))
+  const zwei = (n: number) => String(n).padStart(2, '0')
+  return `${zwei(Math.floor(sekunden / 3600))}:${zwei(Math.floor((sekunden % 3600) / 60))}:${zwei(sekunden % 60)}`
+}
+
 /** Die Notiz im Kopf der Platte „Letzter Run": Beginn, Dauer, Zahl der Pakete. */
 export function laufNotiz(lauf: NightRunView): string {
   const pakete = lauf.items.length === 1 ? '1 Paket' : `${lauf.items.length} Pakete`

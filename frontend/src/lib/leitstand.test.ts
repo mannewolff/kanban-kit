@@ -24,6 +24,7 @@ import {
   laufDauer,
   laufDauerGeteilt,
   laufMelder,
+  laufzeitUhr,
   laufNotiz,
   melderAusBefund,
   MELDER_JE_FEHLERKLASSE,
@@ -788,5 +789,36 @@ describe('nachProjekt', () => {
     expect(gruppen).toHaveLength(2)
     expect(gruppen.map((g) => g.projectId)).toEqual([1, 2])
     expect(gruppen.every((g) => g.projectName === 'Doppel')).toBe(true)
+  })
+})
+
+/**
+ * Die Laufzeit eines laufenden Runs im Plattform-Leitstand (#1246): `HH:MM:SS` mit führenden
+ * Nullen, wie Manne sie verlangt hat („läuft seit 01:23:22") — über 24 Stunden läuft die Stunde
+ * weiter, ein Uhrversatz zwischen Server und Browser wird nicht negativ.
+ */
+describe('laufzeitUhr (#1246)', () => {
+  it('schreibt null Millisekunden als 00:00:00', () => {
+    expect(laufzeitUhr(0)).toBe('00:00:00')
+  })
+
+  it('schreibt Sekunden mit führenden Nullen', () => {
+    expect(laufzeitUhr(59_000)).toBe('00:00:59')
+  })
+
+  it('schreibt Stunden, Minuten und Sekunden', () => {
+    expect(laufzeitUhr((1 * 3600 + 23 * 60 + 22) * 1000)).toBe('01:23:22')
+  })
+
+  it('schneidet angefangene Sekunden ab, statt aufzurunden', () => {
+    expect(laufzeitUhr(59_999)).toBe('00:00:59')
+  })
+
+  it('zählt über 24 Stunden weiter', () => {
+    expect(laufzeitUhr((26 * 3600 + 3 * 60 + 10) * 1000)).toBe('26:03:10')
+  })
+
+  it('zeigt einen Uhrversatz in die Zukunft als 00:00:00', () => {
+    expect(laufzeitUhr(-5_000)).toBe('00:00:00')
   })
 })
