@@ -25,7 +25,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 class NachtlaufOhneArbeitMigrationIT {
 
-  private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  private static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>("postgres:16.15");
 
   /** Ein Lauf von vor {@code V35}, der <b>nichts</b> abgearbeitet hat — der Fall aus AK 4. */
   private static final Instant BESTAND_OHNE_ARBEIT = Instant.parse("2026-09-01T22:00:00Z");

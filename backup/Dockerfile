@@ -23,7 +23,7 @@
 ARG AGE_VERSION=1.2.1
 ARG RCLONE_VERSION=1.68.2
 
-FROM debian:bookworm-slim AS werkzeuge
+FROM debian:bookworm-20260918-slim AS werkzeuge
 ARG AGE_VERSION
 ARG RCLONE_VERSION
 # TARGETARCH setzt BuildKit selbst (amd64 auf dem Server, arm64 auf einem Apple-Rechner). Fest
@@ -42,7 +42,7 @@ RUN curl -fsSL -o rclone.zip \
     && unzip -q rclone.zip \
     && install -m 0755 "rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}/rclone" /usr/local/bin/rclone
 
-FROM postgres:16-bookworm
+FROM postgres:16.15-bookworm
 
 # `cron` faehrt den Takt der Basissicherung aus MANBAN_BACKUP_BASE_CRON; `util-linux` bringt
 # `flock` mit, das zwei gleichzeitige Laeufe derselben Art verhindert.

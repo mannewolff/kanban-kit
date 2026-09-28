@@ -14,8 +14,8 @@
       "name": "Datenbank",
       "zweck": "PostgreSQL des Stacks (docker-compose.yml) und der Integrationstests",
       "art": "abbild",
-      "bezugsstelle": "postgres:16",
-      "fassung": "16",
+      "bezugsstelle": "postgres:16.15",
+      "fassung": "16.15",
       "pruefung": "bezug"
     },
     {
@@ -30,24 +30,24 @@
       "name": "Reverse-Proxy",
       "zweck": "Caddy mit automatischem TLS vor der Anwendung (docker-compose.yml)",
       "art": "abbild",
-      "bezugsstelle": "caddy:2",
-      "fassung": "2",
+      "bezugsstelle": "caddy:2.11.4",
+      "fassung": "2.11.4",
       "pruefung": "bezug"
     },
     {
       "name": "Sicherung: Werkzeugstufe",
       "zweck": "Baustufe, die age und rclone fuer den Sicherungs-Container holt (backup/Dockerfile)",
       "art": "abbild",
-      "bezugsstelle": "debian:bookworm-slim",
-      "fassung": "bookworm-slim",
+      "bezugsstelle": "debian:bookworm-20260918-slim",
+      "fassung": "bookworm-20260918-slim",
       "pruefung": "bezug"
     },
     {
       "name": "Sicherung: Basis",
       "zweck": "Basis des Sicherungs-Containers, passend zur Hauptversion der Datenbank (backup/Dockerfile)",
       "art": "abbild",
-      "bezugsstelle": "postgres:16-bookworm",
-      "fassung": "16-bookworm",
+      "bezugsstelle": "postgres:16.15-bookworm",
+      "fassung": "16.15-bookworm",
       "pruefung": "bezug"
     },
     {
@@ -70,24 +70,24 @@
       "name": "Bau: Frontend",
       "zweck": "Node-Stufe des Anwendungs-Abbilds; eine Installation nach Anleitung baut es selbst (Dockerfile)",
       "art": "abbild",
-      "bezugsstelle": "node:22-alpine",
-      "fassung": "22-alpine",
+      "bezugsstelle": "node:22.23.3-alpine",
+      "fassung": "22.23.3-alpine",
       "pruefung": "bezug"
     },
     {
       "name": "Bau: Backend",
       "zweck": "Maven-Stufe des Anwendungs-Abbilds (Dockerfile)",
       "art": "abbild",
-      "bezugsstelle": "maven:3.9-eclipse-temurin-25",
-      "fassung": "3.9-eclipse-temurin-25",
+      "bezugsstelle": "maven:3.9.16-eclipse-temurin-25",
+      "fassung": "3.9.16-eclipse-temurin-25",
       "pruefung": "bezug"
     },
     {
       "name": "Laufzeit",
       "zweck": "JRE-Stufe, in der die Anwendung laeuft (Dockerfile)",
       "art": "abbild",
-      "bezugsstelle": "eclipse-temurin:25-jre",
-      "fassung": "25-jre",
+      "bezugsstelle": "eclipse-temurin:25.0.4.1_1-jre",
+      "fassung": "25.0.4.1_1-jre",
       "pruefung": "bezug"
     },
     {

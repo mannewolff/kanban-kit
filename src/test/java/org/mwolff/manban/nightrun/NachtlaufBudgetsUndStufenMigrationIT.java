@@ -27,7 +27,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 class NachtlaufBudgetsUndStufenMigrationIT {
 
-  private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  private static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>("postgres:16.15");
 
   /** Der Lauf, den es schon vor {@code V37} gab — er belegt das Ausbleiben des Backfills. */
   private static final Instant BESTAND = Instant.parse("2026-09-01T22:00:00Z");

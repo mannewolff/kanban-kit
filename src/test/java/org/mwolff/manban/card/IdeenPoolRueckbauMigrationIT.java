@@ -39,7 +39,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 class IdeenPoolRueckbauMigrationIT {
 
-  private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  private static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>("postgres:16.15");
 
   /** Der Kern der Abbruchmeldung aus E5 — kurz genug, um Formulierungen offen zu lassen. */
   private static final String RIEGEL_MELDUNG = "board-los oder als Idee gekennzeichnet";

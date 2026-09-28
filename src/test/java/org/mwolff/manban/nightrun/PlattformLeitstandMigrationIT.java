@@ -23,7 +23,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 class PlattformLeitstandMigrationIT {
 
-  private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  private static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>("postgres:16.15");
 
   private static JdbcTemplate jdbc;
   private static long projectId;

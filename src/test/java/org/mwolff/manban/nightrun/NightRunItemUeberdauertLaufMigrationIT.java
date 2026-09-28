@@ -22,7 +22,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 class NightRunItemUeberdauertLaufMigrationIT {
 
-  private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  private static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>("postgres:16.15");
 
   private static final Instant START_A = Instant.parse("2026-09-01T22:00:00Z");
   private static final Instant START_B = Instant.parse("2026-09-02T22:00:00Z");

@@ -87,7 +87,8 @@ public abstract class AbstractIntegrationTest {
   // das aenderte das Verhalten der vier Nebenlaeufigkeits-ITs, die parallele Verbindungen brauchen.
   @ServiceConnection
   static final PostgreSQLContainer<?> POSTGRES =
-      new PostgreSQLContainer<>("postgres:16").withCommand("postgres", "-c", "max_connections=200");
+      new PostgreSQLContainer<>("postgres:16.15")
+          .withCommand("postgres", "-c", "max_connections=200");
 
   /** S3-Identitäten des Speicher-Containers; zugleich Quelle der Zugangsdaten unten. */
   private static final String IDENTITAETSDATEI = "objektspeicher-identitaeten.json";
