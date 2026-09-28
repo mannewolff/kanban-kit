@@ -87,13 +87,9 @@ Der vollständige Server-Ablauf (Traefik, DNS, Mail, erster Admin) steht in
 
 ## Upgrade-Hinweise
 
-**Eigener Sitzungsschlüssel ist Startbedingung.** Eine Instanz, die bisher ohne eigenen
-`MANBAN_SESSION_SECRET` lief, startet nach dem Update erst wieder, wenn ein eigener Schlüssel
-gesetzt ist (siehe [Produktiv betreiben](#produktiv-betreiben)). Alle bestehenden Sitzungen sind
-danach ungültig — die Nutzer melden sich einmal neu an.
-
-Das ist gewollt: Mit dem mitgelieferten Wert kann jeder, der das öffentliche Repository kennt,
-gültige Sitzungen für jedes Konto erzeugen — auch für einen Plattform-Administrator.
+Was ein Versionssprung von Hand verlangt — je Version ein Abschnitt, und die Regel, dass eine
+Version ohne eigenen Abschnitt keine Handarbeit verlangt —, steht an genau einer Stelle:
+[UPGRADING.md](../UPGRADING.md).
 
 ## Aufruf
 

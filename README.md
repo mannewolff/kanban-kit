@@ -88,6 +88,8 @@ Die ausführliche Benutzer- und Betriebsdokumentation liegt unter [`docs/`](docs
 
 - [Betrieb & Installation](docs/betrieb.md) — Start, Umgebungsvariablen, E-Mail, erster Admin,
   Meldeweg der interaktiven Sitzungen
+- [Upgrade](UPGRADING.md) — was ein Versionssprung von Hand verlangt; eine Version ohne eigenen
+  Abschnitt verlangt keine Handarbeit
 - [Nutzung](docs/nutzung.md) — Projekte, Boards, Karten, Listen-Ansicht, Ideen-Pool, Vorhaben,
   [Läufe](docs/nutzung.md#nachtlauf), [Verbrauch](docs/nutzung.md#verbrauch-leitstand),
   [Plattform-Leitstand](docs/nutzung.md#plattform-leitstand), Mitglieder

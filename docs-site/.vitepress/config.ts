@@ -20,6 +20,7 @@ export default defineConfig({
     nav: [
       { text: "Überblick", link: "/" },
       { text: "Betrieb", link: "/betrieb" },
+      { text: "Upgrade", link: "/upgrading" },
       { text: "Sicherung", link: "/backup" },
       { text: "Nutzung", link: "/nutzung" },
       { text: "Rollen & Rechte", link: "/rollen-und-rechte" },
@@ -39,6 +40,7 @@ export default defineConfig({
           { text: "E-Mail-Bestätigung", link: "/betrieb#e-mail-bestatigung-ohne-mailserver" },
           { text: "Ersten Admin einrichten", link: "/betrieb#den-ersten-admin-einrichten" },
           { text: "Testsuite lokal starten", link: "/betrieb#testsuite-lokal-starten" },
+          { text: "Upgrade", link: "/upgrading" },
         ],
       },
       {

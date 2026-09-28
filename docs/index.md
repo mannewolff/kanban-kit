@@ -24,6 +24,8 @@ Schalter — steht in `CLAUDE-design.md` im Wurzelverzeichnis.
 - [Betrieb & Installation](betrieb.md) — Start via Docker, Umgebungsvariablen, erster Admin, E-Mail/Verifikation,
   [Meldeweg der interaktiven Sitzungen](betrieb.md#meldeweg-der-interaktiven-sitzungen) (Token,
   Hook, Erfassungsbeginn, Aufbewahrungsgrenzen, Worktree-Einschränkung).
+- [Upgrade](upgrading.md) — was ein Versionssprung von Hand verlangt, je Version ein Abschnitt;
+  eine Version ohne eigenen Abschnitt verlangt keine Handarbeit.
 - [Sicherung & Wiederherstellung](backup.md) — Einrichtung der Sicherung, Verwahrung des privaten
   Schlüssels (ohne ihn ist aus den Sicherungen nichts zu holen), die beiden Rückholwege, Verfallen
   alter Stände.

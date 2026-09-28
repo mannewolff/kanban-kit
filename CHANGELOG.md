@@ -9,14 +9,7 @@ erzeugt von `scripts/gen-changelog.mjs`.
 
 ## Hinweise zum Upgrade
 
-- **Umstellung des Objektspeichers von MinIO auf SeaweedFS** (Plan #1222). Das Upgrade verlangt
-  ein **Wartungsfenster** (Fenster ≤ 30 Minuten, in zwei Releases) und eine **Änderung der
-  `.env`**: Die vier `MANBAN_MINIO_*`-Werte heißen jetzt `MANBAN_STORAGE_*`, `MINIO_ROOT_USER`
-  und `MINIO_ROOT_PASSWORD` heißen `OBJEKTSPEICHER_ROOT_USER` und
-  `OBJEKTSPEICHER_ROOT_PASSWORD`. An den Anhängen selbst ändert sich nichts, und Sicherungen von
-  vor der Umstellung werden ohne Umschlüsselung zurückgeholt. Vollständige Anleitung samt
-  Rückweg: Abschnitt „Umstellung des Objektspeichers" in
-  [docs/betrieb.md](docs/betrieb.md#umstellung-des-objektspeichers).
+Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
 ## [2.14.0] – 2026-09-28
 
