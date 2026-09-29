@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -24,6 +25,7 @@ class ReadmeDokumentationTest {
   private static final String SCHNELLSTART = "Schnellstart";
   private static final String WARUM = "Warum kanban-kit";
   private static final String ERWARTUNG = "Was du erwarten darfst";
+  private static final String PRODUKTIVBETRIEB = "Produktivbetrieb";
   private static final String SCHLUSS = "Mitwirken, Kontakt und Lizenz";
 
   private static final String WHITEPAPER =
@@ -92,6 +94,35 @@ class ReadmeDokumentationTest {
         .as("Lizenzangabe im Abschnitt %s", SCHLUSS)
         .contains("MIT-Lizenz")
         .contains("Copyright (c) 2026 Manfred Wolff");
+  }
+
+  /**
+   * Der Schnellstart nennt seine Instanz eine Testinstanz und zeigt auf den Produktivbetrieb; der
+   * Anker muss zu einer vorhandenen Überschrift gehören (Issue #1286, fachliche Quelle #677).
+   */
+  @Test
+  void derSchnellstartIstAlsTestinstanzGekennzeichnetUndVerweistAufDenProduktivbetrieb()
+      throws IOException {
+    assertThat(abschnitt(SCHNELLSTART))
+        .as("Kennzeichnung im Abschnitt %s", SCHNELLSTART)
+        .contains("Testinstanz")
+        .contains("(#" + PRODUKTIVBETRIEB.toLowerCase(Locale.ROOT) + ")");
+    assertThat(ueberschriften()).as("Verweisziel in %s", README).contains(PRODUKTIVBETRIEB);
+  }
+
+  /** Der kürzeste Weg bleibt kurz: höchstens fünf Befehlszeilen im Schnellstart (Issue #1286). */
+  @Test
+  void dieCodebloeckeImSchnellstartHabenHoechstensFuenfZeilen() throws IOException {
+    long zeilen = 0;
+    boolean imBlock = false;
+    for (String zeile : abschnitt(SCHNELLSTART).split("\n", -1)) {
+      if (zeile.strip().startsWith("```")) {
+        imBlock = !imBlock;
+      } else if (imBlock && !zeile.isBlank()) {
+        zeilen++;
+      }
+    }
+    assertThat(zeilen).as("Nichtleere Codezeilen im Abschnitt %s", SCHNELLSTART).isBetween(1L, 5L);
   }
 
   /** Die Titel der {@code ##}-Überschriften, in der Reihenfolge des README. */
