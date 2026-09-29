@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +19,7 @@ import {
   testAngabeZuPfad,
   zuordnungAusVollauf,
   beruehrung,
+  festeZuordnungLesen,
   diffPfade,
   untracktePfade,
   ankerBestimmen,
@@ -287,6 +288,52 @@ test('beruehrung: ein Test der anderen Seite loest die ganze Seite nicht aus', (
   });
   assert.equal(ergebnis.ganzeSeite, false);
   assert.deepEqual(ergebnis.dateien, []);
+});
+
+test('beruehrung: feste Zuordnung zieht eine Quelle im Bereich mit (Issue #1287)', () => {
+  const ergebnis = beruehrung({
+    geaendert: ['frontend/src/lib/andersHeissend.test.ts'],
+    bereich: frontendBereich(STRYKER),
+    zuordnung: new Map(),
+    festeZuordnung: { 'frontend/src/lib/andersHeissend.test.ts': ['frontend/src/lib/a.ts'] },
+    existiert: () => false,
+  });
+  assert.deepEqual(ergebnis, { dateien: ['frontend/src/lib/a.ts'], ganzeSeite: false, ohneZuordnung: [] });
+});
+
+test('beruehrung: feste Zuordnung nur ausserhalb des Bereichs macht den Test zugeordnet, ohne Datei', () => {
+  const ergebnis = beruehrung({
+    geaendert: ['frontend/src/lib/strykerUmfang.test.ts'],
+    bereich: frontendBereich(STRYKER),
+    zuordnung: new Map(),
+    festeZuordnung: { 'frontend/src/lib/strykerUmfang.test.ts': ['frontend/mutationTestUmfang.ts'] },
+    existiert: () => false,
+  });
+  assert.deepEqual(ergebnis, { dateien: [], ganzeSeite: false, ohneZuordnung: [] });
+});
+
+test('mutationszuordnung.json: gueltiges JSON, jeder Test und jede Quelle existiert im Repo', () => {
+  const repo = join(HIER, '..');
+  const zuordnung = festeZuordnungLesen(repo);
+  assert.ok(Object.keys(zuordnung).length > 0, 'die ausgelieferte Zuordnung ist leer');
+  for (const [testPfad, quellen] of Object.entries(zuordnung)) {
+    assert.ok(existsSync(join(repo, testPfad)), `Test fehlt: ${testPfad}`);
+    assert.ok(Array.isArray(quellen) && quellen.length > 0, `keine Quelle fuer ${testPfad}`);
+    for (const quelle of quellen) assert.ok(existsSync(join(repo, quelle)), `Quelle fehlt: ${quelle}`);
+  }
+});
+
+test('mutationszuordnung.json: strykerUmfang.test.ts allein loest weder Datei noch ganze Seite aus', () => {
+  const repo = join(HIER, '..');
+  const stryker = JSON.parse(readFileSync(join(repo, 'frontend', 'stryker.config.json'), 'utf-8'));
+  const ergebnis = beruehrung({
+    geaendert: ['frontend/src/lib/strykerUmfang.test.ts'],
+    bereich: frontendBereich(stryker),
+    zuordnung: new Map(),
+    festeZuordnung: festeZuordnungLesen(repo),
+    existiert: (pfad) => existsSync(join(repo, pfad)),
+  });
+  assert.deepEqual(ergebnis, { dateien: [], ganzeSeite: false, ohneZuordnung: [] });
 });
 
 // --- Anker und Dateilisten --------------------------------------------------
@@ -1102,6 +1149,33 @@ test('laufen: unaufloesbarer Anker fuehrt zum vollen Umfang und sagt das', () =>
   assert.match(text, /volle Umfang/);
   assert.match(text, /Umfang: die ganze Seite/);
   assert.deepEqual(aufrufe[0].args, ['run', '--reporters', 'json,html,clear-text']);
+});
+
+test('laufen: ein Test ohne Zuordnung haelt sofort an, ohne Werkzeuglauf (Issue #1287)', () => {
+  const { code, text, aufrufe } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, {
+      'diff --name-status -z 1a2b3c4': OK('M\0frontend/src/lib/ohnePartner.test.ts\0'),
+    }, strykerDoppel(wurzel, BERICHT_A)),
+  );
+  assert.equal(code, 1);
+  assert.equal(aufrufe.length, 0);
+  assert.ok(text.includes('frontend/src/lib/ohnePartner.test.ts'));
+  assert.ok(text.includes('scripts/mutationszuordnung.json'));
+  assert.ok(!text.includes('Umfang: die ganze Seite'));
+});
+
+test('laufen: die feste Zuordnung aus scripts/mutationszuordnung.json wird gelesen', () => {
+  const { code, text, aufrufe } = mitProjekt((wurzel) => {
+    mkdirSync(join(wurzel, 'scripts'), { recursive: true });
+    writeFileSync(join(wurzel, 'scripts', 'mutationszuordnung.json'),
+      JSON.stringify({ 'frontend/src/lib/ohnePartner.test.ts': ['frontend/mutationTestUmfang.ts'] }));
+    return sammelLauf(['aenderung', 'frontend'], wurzel, {
+      'diff --name-status -z 1a2b3c4': OK('M\0frontend/src/lib/ohnePartner.test.ts\0'),
+    }, strykerDoppel(wurzel, BERICHT_A));
+  });
+  assert.equal(code, 0);
+  assert.equal(aufrufe.length, 0);
+  assert.ok(text.includes('keine berührte Datei im Prüfbereich'));
 });
 
 // --- Vollauf: Schwelle und Gedaechtnisdatei (Issue #1215) --------------------

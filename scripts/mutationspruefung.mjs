@@ -273,15 +273,19 @@ export function zuordnungAusVollauf(inhalt) {
  * Tests: Wer einen Test schwaecht, faellt damit schon in der Aenderungspruefung auf (Kriterium 1).
  * Bleibt ein geaenderter Test der eigenen Seite ohne Zuordnung, gilt die GANZE Seite als
  * beruehrt — lieber zu viel pruefen als eine Luecke uebersehen.
+ *
+ * Der dritte Weg neben Konvention und Berichtsumkehrung ist die feste Zuordnung aus
+ * `scripts/mutationszuordnung.json` (Issue #1287): fuer Tests, deren Name keine Quelle trifft.
+ * Zeigt sie nur auf Quellen ausserhalb des Bereichs, ist der Test zugeordnet und steuert nichts bei.
  */
-export function beruehrung({ geaendert, bereich, zuordnung, existiert }) {
+export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {}, existiert }) {
   const dateien = new Set();
   const ohneZuordnung = [];
   for (const pfad of geaendert) {
     if (bereich.trifft(pfad)) dateien.add(pfad);
     if (!istTestdatei(pfad) || !bereich.istSeitenTest(pfad)) continue;
 
-    const quellen = new Set(zuordnung.get(pfad) ?? []);
+    const quellen = new Set([...(zuordnung.get(pfad) ?? []), ...(festeZuordnung[pfad] ?? [])]);
     const konvention = konventionsQuelle(pfad);
     if (konvention && existiert(konvention)) quellen.add(konvention);
     if (quellen.size === 0) {
@@ -888,6 +892,23 @@ function jsonLesen(pfad) {
   }
 }
 
+export const ZUORDNUNG_PFAD = 'scripts/mutationszuordnung.json';
+
+function ohneZuordnungMeldung(tests) {
+  const zeilen = ['Mutationsprüfung — Änderungsprüfung angehalten, kein Werkzeuglauf.', ''];
+  for (const pfad of tests) zeilen.push(`  geänderter Test ohne zuordenbare Quelle: ${pfad}`);
+  zeilen.push('');
+  zeilen.push(`Eintrag in ${ZUORDNUNG_PFAD} ergänzen oder den Test nach der Quelle benennen.`);
+  zeilen.push('Ohne Zuordnung müsste die ganze Seite laufen, und das dauert länger als eine Paketrunde.');
+  zeilen.push('-> rot');
+  return `${zeilen.join('\n')}\n`;
+}
+
+/** Die feste Test-zu-Quelle-Zuordnung (Issue #1287); fehlt die Datei, ist sie leer. */
+export function festeZuordnungLesen(wurzel) {
+  return jsonLesen(join(wurzel, ZUORDNUNG_PFAD)) ?? {};
+}
+
 function bereichLesen(seite, wurzel) {
   if (seite === 'frontend') {
     const config = jsonLesen(join(wurzel, 'frontend', 'stryker.config.json'));
@@ -1121,7 +1142,16 @@ export function laufen(argv, umgebung = {}) {
   const stand = vollerUmfang ? { alle: [], ungetrackt: new Set() } : geaenderteDateien(git, anker);
   const gemessen = vollerUmfang
     ? { dateien: [], ganzeSeite: true, ohneZuordnung: [] }
-    : beruehrung({ geaendert: stand.alle, bereich, zuordnung, existiert });
+    : beruehrung({
+      geaendert: stand.alle, bereich, zuordnung, festeZuordnung: festeZuordnungLesen(wurzel), existiert,
+    });
+
+  // Ein Test ohne Zuordnung faehrt die Seite nicht mehr ganz (Issue #1287): Der Lauf dauert
+  // weit laenger als eine Paketrunde (80 min am 2026-09-28, #1275), die Abhilfe ist eine Zeile.
+  if (gemessen.ohneZuordnung.length > 0) {
+    ausgabe(ohneZuordnungMeldung(gemessen.ohneZuordnung));
+    return 1;
+  }
 
   const grundmeldung = {
     kommando,

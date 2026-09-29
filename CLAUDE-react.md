@@ -257,6 +257,10 @@ Beide stehen als `buildChecks` in `.claude/workflow.config.json`. Die Stufe
 Änderungsprüfung mutiert nur die geänderten Dateien aus dem `mutate`-Bereich; ein Überlebender in einer
 berührten Datei hält an, Überlebende anderswo erscheinen nur als Zahl. Der Vollauf prüft den ganzen
 Bereich ohne `--incremental` und schreibt die Gedächtnisdatei `.claude/mutationsvollauf-frontend.json`.
+Einen geänderten Test ordnet die Änderungsprüfung über den Namen (`a.test.ts` → `a.ts`), den letzten
+Vollauf oder die feste Zuordnung in [`scripts/mutationszuordnung.json`](scripts/mutationszuordnung.json)
+seiner Quelle zu. Ein Test, dessen Name keine Quelle trifft, braucht dort einen Eintrag — sonst hält die
+Änderungsprüfung sofort an, statt die ganze Seite zu mutieren (Issue #1287).
 Die Stryker-Berichte (JSON und HTML) liegen unter **`.claude/stryker/`** — dort sind sie ignoriert und
 verschmutzen den Arbeitsbaum nicht; der Treiber liest den JSON-Bericht von dort. Konfiguration: [`frontend/stryker.config.json`](frontend/stryker.config.json).
 
