@@ -216,10 +216,15 @@ test('ausschnittVon: jede Datei landet in ihrem Ausschnitt, Ausnahmen und Tests 
   const bereich = frontendBereich(repoPlan());
   assert.equal(ausschnittVon(bereich, 'frontend/src/lib/statusColors.ts')?.name, 'hilfsfunktionen');
   assert.equal(ausschnittVon(bereich, 'frontend/src/api/cards.ts')?.name, 'server-anbindung');
+  // bausteine-leitstand ist seit Issue #1281 aufgenommen, bausteine-nachtlauf noch nicht.
   const leitstand = ausschnittVon(bereich, 'frontend/src/components/leitstand/Kachel.tsx');
   assert.equal(leitstand?.name, 'bausteine-leitstand');
-  assert.equal(leitstand?.aufgenommen, false);
-  assert.equal(bereich.trifft('frontend/src/components/leitstand/Kachel.tsx'), false);
+  assert.equal(leitstand?.aufgenommen, true);
+  assert.equal(bereich.trifft('frontend/src/components/leitstand/Kachel.tsx'), true);
+  const nachtlauf = ausschnittVon(bereich, 'frontend/src/components/nachtlauf/Probe.tsx');
+  assert.equal(nachtlauf?.name, 'bausteine-nachtlauf');
+  assert.equal(nachtlauf?.aufgenommen, false);
+  assert.equal(bereich.trifft('frontend/src/components/nachtlauf/Probe.tsx'), false);
   assert.equal(ausschnittVon(bereich, 'frontend/src/lib/__fixtures__/probe.ts'), null);
   assert.equal(bereich.trifft('frontend/src/lib/__fixtures__/probe.ts'), false);
   assert.equal(ausschnittVon(bereich, 'frontend/src/lib/statusColors.test.ts'), null);
@@ -231,7 +236,7 @@ test('frontendBereich: die Ausschnitte tragen ihren Namen und ob sie aufgenommen
   assert.equal(bereich.ausschnitte.length, repoPlan().ausschnitte.length);
   assert.deepEqual(
     bereich.ausschnitte.filter((a) => a.aufgenommen).map((a) => a.name),
-    ['hilfsfunktionen', 'server-anbindung'],
+    ['hilfsfunktionen', 'server-anbindung', 'bausteine-leitstand'],
   );
 });
 

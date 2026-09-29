@@ -56,6 +56,7 @@ export function LeitstandVerbrauch({
 }: Readonly<{ projectId: number; api?: Pick<NightRunUsageApi, 'period' | 'total'> }>) {
   const [art, setArt] = useState<VerbrauchZeitraumArt>('DAY')
   const [zustand, setZustand] = useState<Zustand>({ art: 'laden' })
+  // Stryker disable next-line ObjectLiteral,StringLiteral: gleichwertig — der Effekt setzt vor jeder Anzeige der Lebenszeit selbst 'laden'
   const [gesamt, setGesamt] = useState<GesamtZustand>({ art: 'laden' })
 
   useEffect(() => {
@@ -84,6 +85,7 @@ export function LeitstandVerbrauch({
         if (aktiv) setGesamt({ art: 'da', gesamt: wert })
       },
       () => {
+        // Stryker disable next-line ObjectLiteral,StringLiteral: gleichwertig — die Lebenszeit unterscheidet nur 'laden' von allem anderen
         if (aktiv) setGesamt({ art: 'fehler' })
       },
     )
@@ -157,8 +159,12 @@ function VerbrauchKacheln({
   const ausgabe = tokenMenge(summe.outputTokens)
   const karten = zeitraum.current.cardCount
   const gelesen = summe.cachedInputTokens
-  const frisch = summe.inputTokens !== null && gelesen !== null ? summe.inputTokens - gelesen : null
-  const anteilGelesen = summe.inputTokens && gelesen !== null ? Math.round((gelesen / summe.inputTokens) * 100) : null
+  // Eine Bedingung für die ganze Aufteilung (Issue #1281): Vorher prüften `frisch`, der Anteil und
+  // die Anzeige je für sich, und die doppelten Prüfungen waren von außen nicht zu unterscheiden.
+  const aufteilung =
+    summe.inputTokens && gelesen !== null
+      ? { gelesen, frisch: summe.inputTokens - gelesen, anteil: Math.round((gelesen / summe.inputTokens) * 100) }
+      : null
   const ausgabeVerlauf = zeitraum.nights
     .map((nacht) => nacht.usage.total.outputTokens)
     .filter((wert): wert is number => wert !== null)
@@ -175,20 +181,24 @@ function VerbrauchKacheln({
       >
         <Box component="article" aria-label="Eingabe-Token" sx={{ ...KACHEL_SX, gridColumn: { sm: 'span 2' } }}>
           <Box sx={ETIKETT}>Eingabe-Token</Box>
-          <KachelWert wert={eingabe?.wert ?? null} einheit={eingabe?.einheit ?? ''} />
-          {frisch !== null && gelesen !== null && anteilGelesen !== null && (
+          <KachelWert
+            wert={eingabe?.wert ?? null}
+            // Stryker disable next-line StringLiteral: gleichwertig — ohne Menge zeigt KachelWert den Leertext, nie die Einheit
+            einheit={eingabe?.einheit ?? ''}
+          />
+          {aufteilung && (
             <>
               <Box
                 role="img"
-                aria-label={`Aufteilung der Eingabe: ${anteilGelesen} Prozent aus dem Cache gelesen, ${100 - anteilGelesen} Prozent frisch`}
+                aria-label={`Aufteilung der Eingabe: ${aufteilung.anteil} Prozent aus dem Cache gelesen, ${100 - aufteilung.anteil} Prozent frisch`}
                 sx={{ display: 'flex', height: 13, borderRadius: '7px', overflow: 'hidden', bgcolor: NUT, boxShadow: SCHATTEN_NUTE }}
               >
-                <Box component="span" sx={{ display: 'block', width: `${anteilGelesen}%`, background: `linear-gradient(180deg, color-mix(in srgb, ${MELDER.gruen} 88%, white), ${MELDER.gruen})` }} />
-                <Box component="span" sx={{ display: 'block', width: `${100 - anteilGelesen}%`, background: `linear-gradient(180deg, ${KUPFER_HELL}, ${KUPFER})` }} />
+                <Box component="span" sx={{ display: 'block', width: `${aufteilung.anteil}%`, background: `linear-gradient(180deg, color-mix(in srgb, ${MELDER.gruen} 88%, white), ${MELDER.gruen})` }} />
+                <Box component="span" sx={{ display: 'block', width: `${100 - aufteilung.anteil}%`, background: `linear-gradient(180deg, ${KUPFER_HELL}, ${KUPFER})` }} />
               </Box>
               <Box sx={{ display: 'flex', gap: '13px', flexWrap: 'wrap', fontSize: 10.5, color: 'text.secondary' }}>
-                <Legende farbe={MELDER.gruen} text="Cache gelesen" wert={tokenText(gelesen)} />
-                <Legende farbe={KUPFER} text="frisch" wert={tokenText(frisch)} />
+                <Legende farbe={MELDER.gruen} text="Cache gelesen" wert={tokenText(aufteilung.gelesen)} />
+                <Legende farbe={KUPFER} text="frisch" wert={tokenText(aufteilung.frisch)} />
               </Box>
             </>
           )}
@@ -197,7 +207,11 @@ function VerbrauchKacheln({
 
         <Box component="article" aria-label="Ausgabe-Token" sx={KACHEL_SX}>
           <Box sx={ETIKETT}>Ausgabe-Token</Box>
-          <KachelWert wert={ausgabe?.wert ?? null} einheit={ausgabe?.einheit ?? ''} />
+          <KachelWert
+            wert={ausgabe?.wert ?? null}
+            // Stryker disable next-line StringLiteral: gleichwertig — ohne Menge zeigt KachelWert den Leertext, nie die Einheit
+            einheit={ausgabe?.einheit ?? ''}
+          />
           {ausgabeVerlauf.length > 1 && <Funke werte={ausgabeVerlauf} melder="stahl" />}
           <Anteile nacht={mengeText(night.total.outputTokens)} sitzungen={mengeText(interactive.total.outputTokens)} stand={stand} />
           <KachelFuss
@@ -280,6 +294,7 @@ function Lebenszeit({ zustand }: Readonly<{ zustand: GesamtZustand }>) {
         <Anteile
           nacht={kostenText(gesamt.usageByKind.night.total.costUsd)}
           sitzungen={kostenText(gesamt.usageByKind.interactive.total.costUsd)}
+          // Stryker disable next-line StringLiteral: gleichwertig — Anteile unterscheidet nur 'nicht-erfasst' und 'teilweise-erfasst'
           stand={gesamt.interactiveUsageSince === null ? 'nicht-erfasst' : 'erfasst'}
         />
       )}
