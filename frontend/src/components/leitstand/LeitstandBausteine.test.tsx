@@ -21,7 +21,7 @@ import {
   Platte,
   Projektname,
   Taste,
-  ZEILE_HOVER,
+  ZEILE_HOVER_SX,
 } from './LeitstandBausteine'
 
 // Verhaltenstests der Leitstand-Bausteine (Issue #1281): Die Bausteine waren über die Seiten-Tests
@@ -303,8 +303,8 @@ describe('kleine Bausteine', () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
-  it('ZEILE_HOVER mischt die helle Platte mit dem Kupferschimmer', () => {
-    expect(ZEILE_HOVER).toBe(`color-mix(in srgb, ${PLATTE_HOCH} 75%, ${KUPFER_SCHIMMER})`)
+  it('ZEILE_HOVER_SX mischt die helle Platte mit dem Kupferschimmer', () => {
+    expect(ZEILE_HOVER_SX).toBe(`color-mix(in srgb, ${PLATTE_HOCH} 75%, ${KUPFER_SCHIMMER})`)
   })
 })
 

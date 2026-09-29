@@ -49,6 +49,31 @@ export const STIL_SCHLUESSEL = new Set([
   'display',
   'alignItems',
   'justifyContent',
+  'border',
+  'borderTop',
+  'borderBottom',
+  'borderLeft',
+  'borderRight',
+  'borderColor',
+  'background',
+  'overflow',
+  'transition',
+  'transform',
+  'fontFamily',
+  'fontStretch',
+  'fontVariantNumeric',
+  'textTransform',
+  'textAlign',
+  'lineHeight',
+  'whiteSpace',
+  'flexDirection',
+  'flexWrap',
+  'gridTemplateColumns',
+  'gridColumn',
+  'perspective',
+  'cursor',
+  'animation',
+  'animationDelay',
 ])
 
 /** Die JSX-Attribute, deren Wert reiner Stil ist. */
@@ -56,6 +81,9 @@ const STIL_ATTRIBUTE = new Set(['sx', 'style'])
 
 /** Bezeichner einer Stilkonstante: `kopfSx`, `KACHEL_SX`. */
 const STIL_BEZEICHNER = /(?:Sx|_SX)$/
+
+/** Die Tags der Stiltexte aus Emotion und MUI: ``keyframes`…` `` und ``css`…` ``. */
+const STIL_TAGS = new Set(['keyframes', 'css'])
 
 /** Hüllen, die den Wert eines Ausdrucks nicht ändern: `{…} as const`, `{…} satisfies T`, `(…)`. */
 const HUELLEN = new Set(['TSAsExpression', 'TSSatisfiesExpression', 'TSTypeAssertion', 'ParenthesizedExpression'])
@@ -77,23 +105,68 @@ const schluesselName = (eigenschaft) => {
   return eigenschaft.key.type === 'StringLiteral' ? eigenschaft.key.value : undefined
 }
 
-const nurStilSchluessel = (objekt) =>
-  objekt.properties.every((eigenschaft) => STIL_SCHLUESSEL.has(schluesselName(eigenschaft)))
+/**
+ * Ob ein Schlüssel samt Wert Stil ist: ein Schlüssel der Liste, eine CSS-Variable (`--…`) oder ein
+ * Selektor bzw. eine Media-Query (`&…`, `@…`), deren Wert wieder ein reines Stilobjekt ist.
+ */
+const istStilEigenschaft = (eigenschaft) => {
+  const name = schluesselName(eigenschaft)
+  if (name === undefined) return false
+  if (STIL_SCHLUESSEL.has(name) || name.startsWith('--')) return true
+  return (
+    (name.startsWith('&') || name.startsWith('@')) &&
+    eigenschaft.value.type === 'ObjectExpression' &&
+    nurStilSchluessel(eigenschaft.value)
+  )
+}
 
-/** Der Bezeichner, dem das Objekt zugewiesen ist — durch wertneutrale Hüllen hindurch. */
-const zugewiesenerBezeichner = (path) => {
+const nurStilSchluessel = (objekt) => objekt.properties.every(istStilEigenschaft)
+
+/** Der äußerste Pfad um `path`, der nur aus wertneutralen Hüllen besteht. */
+const ohneHuellen = (path) => {
   let aktuell = path
   while (HUELLEN.has(aktuell.parent.type)) aktuell = aktuell.parentPath
+  return aktuell
+}
+
+/** Der Bezeichner, dem der Wert zugewiesen ist — durch wertneutrale Hüllen hindurch. */
+const zugewiesenerBezeichner = (path) => {
+  const aktuell = ohneHuellen(path)
   const { parent } = aktuell
   return parent.type === 'VariableDeclarator' && parent.init === aktuell.node && parent.id.type === 'Identifier'
     ? parent.id.name
     : undefined
 }
 
+const traegtStilNamen = (path) => STIL_BEZEICHNER.test(zugewiesenerBezeichner(path) ?? '')
+
+/**
+ * Die Funktion, deren Rückgabewert der Wert ist: als Ausdruckskörper einer Pfeilfunktion oder als
+ * Argument eines `return`, jeweils durch wertneutrale Hüllen hindurch.
+ */
+const zurueckgebendeFunktion = (path) => {
+  const aktuell = ohneHuellen(path)
+  const { parent } = aktuell
+  if (parent.type === 'ArrowFunctionExpression' && parent.body === aktuell.node) return aktuell.parentPath
+  return parent.type === 'ReturnStatement' ? aktuell.parentPath.getFunctionParent() : null
+}
+
+/** Ein Stilobjekt, das eine Funktion mit Stilnamen zurückgibt: `lampeSx = (a) => ({ … })`. */
+const istStilRueckgabe = (path) => {
+  const funktion = zurueckgebendeFunktion(path)
+  return funktion !== null && traegtStilNamen(funktion)
+}
+
 const istStilKonstante = (path) =>
   path.node.type === 'ObjectExpression' &&
-  STIL_BEZEICHNER.test(zugewiesenerBezeichner(path) ?? '') &&
+  (traegtStilNamen(path) || istStilRueckgabe(path)) &&
   nurStilSchluessel(path.node)
+
+const istStilTemplate = (knoten) =>
+  knoten.type === 'TaggedTemplateExpression' && knoten.tag.type === 'Identifier' && STIL_TAGS.has(knoten.tag.name)
+
+const istStilText = (path) =>
+  (path.node.type === 'StringLiteral' || path.node.type === 'TemplateLiteral') && traegtStilNamen(path)
 
 export class DarstellungIgnorer {
   /** Ein Grund, wenn der Teilbaum unter `path` reiner Stil ist; sonst `undefined`. */
@@ -101,6 +174,8 @@ export class DarstellungIgnorer {
     if (istStilAttribut(path.node)) return 'Darstellung: Stilwert im sx- oder style-Attribut'
     if (istStyledArgument(path)) return 'Darstellung: Argument eines styled(...)-Aufrufs'
     if (istStilKonstante(path)) return 'Darstellung: Stilkonstante mit reinen Stilschlüsseln'
+    if (istStilTemplate(path.node)) return 'Darstellung: Stiltext in keyframes`…` oder css`…`'
+    if (istStilText(path)) return 'Darstellung: Stiltext in einer Stilkonstante'
     return undefined
   }
 }

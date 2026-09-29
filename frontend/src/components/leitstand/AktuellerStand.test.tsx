@@ -3,7 +3,32 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DisruptionView, LaufPaketeView, PaketView } from '../../api/plattformLeitstand'
-import { AktuellerStand } from './AktuellerStand'
+import { AktuellerStand, karteSchluessel } from './AktuellerStand'
+
+const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
+  nightRunId: 8,
+  projectId: 9,
+  projectName: 'Mein Projekt',
+  mode: 'CHAIN',
+  startedAt: '2026-09-21T01:10:00Z',
+  outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+  ...extra,
+})
+
+const paket = (extra: Partial<PaketView> = {}): PaketView => ({
+  cardNumber: 721,
+  title: 'Erstes Paket',
+  state: 'GREEN',
+  errorClass: null,
+  cardExists: true,
+  durationMs: null,
+  ...extra,
+})
+
+const pakete = (nightRunId: number, liste: PaketView[]): LaufPaketeView => ({
+  nightRunId,
+  pakete: liste,
+})
 
 /**
  * Der Kopf eines laufenden Runs in „Aktueller Status" (Issue #1193).
@@ -31,31 +56,6 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
 
   afterEach(() => {
     vi.useRealTimers()
-  })
-
-  const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
-    nightRunId: 8,
-    projectId: 9,
-    projectName: 'Mein Projekt',
-    mode: 'CHAIN',
-    startedAt: '2026-09-21T01:10:00Z',
-    outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
-    ...extra,
-  })
-
-  const paket = (extra: Partial<PaketView> = {}): PaketView => ({
-    cardNumber: 721,
-    title: 'Erstes Paket',
-    state: 'GREEN',
-    errorClass: null,
-    cardExists: true,
-    durationMs: null,
-    ...extra,
-  })
-
-  const pakete = (nightRunId: number, liste: PaketView[]): LaufPaketeView => ({
-    nightRunId,
-    pakete: liste,
   })
 
   const zeige = (
@@ -226,5 +226,106 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
     expect(screen.getByTestId('stand-dauer-8-721')).toHaveAccessibleName('Dauer 12 min 56 s')
     expect(screen.getByTestId('stand-dauer-8-722')).toHaveTextContent('1:02:10 h')
     expect(screen.getByTestId('stand-dauer-8-723')).toHaveTextContent('—')
+  })
+})
+
+/**
+ * Leerzustand, Projektblock und Paketzeile (Issue #1289): Die Angaben einer Zeile — Kartenverweis,
+ * Lauf-Verweis, fehlende Karte, Zustandswort — hängen an der Komponente. Sie waren bisher nur über
+ * Seiten-Tests gedeckt, die die Mutationsprüfung des Ausschnitts nicht erreicht.
+ */
+describe('AktuellerStand — Leerzustand, Projektblock und Paketzeile', () => {
+  const zeige = (
+    laufende: DisruptionView[] | null,
+    gemeldetePakete: LaufPaketeView[],
+    verschwunden: ReadonlySet<string> = new Set(),
+    onKarteOeffnen: (projectId: number, nummer: number) => void = () => {},
+  ) =>
+    render(
+      <AktuellerStand
+        laufende={laufende}
+        gemeldetePakete={gemeldetePakete}
+        verschwunden={verschwunden}
+        onKarteOeffnen={onKarteOeffnen}
+        onAlsBeendetKennzeichnen={() => {}}
+      />,
+      { wrapper: MemoryRouter },
+    )
+
+  it('zeigt nichts, solange die erste Antwort fehlt', () => {
+    const { container } = zeige(null, [])
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('sagt ohne laufenden Run, dass nichts arbeitet und nichts gemeldet ist', () => {
+    zeige([], [])
+    expect(screen.getByTestId('kein-aktueller-stand')).toHaveTextContent(
+      'Gerade arbeitet kein Run — nichts gemeldet.',
+    )
+  })
+
+  it('fasst die Läufe eines Projekts unter einem Projektkopf zusammen', () => {
+    zeige([laufend()], [pakete(8, [paket()])])
+    const gruppe = screen.getByTestId('stand-gruppe-9')
+    expect(within(gruppe).getByTestId('stand-gruppe-kopf-9')).toHaveTextContent('Mein Projekt')
+    expect(within(gruppe).getByTestId('stand-paket-8-721')).toBeInTheDocument()
+  })
+
+  it('öffnet die Karte über ihren Nummernverweis', async () => {
+    const geoeffnet: Array<[number, number]> = []
+    zeige([laufend()], [pakete(8, [paket()])], new Set(), (projekt, nummer) =>
+      geoeffnet.push([projekt, nummer]),
+    )
+
+    const verweis = screen.getByRole('button', { name: 'Karte #721 öffnen: Erstes Paket' })
+    expect(verweis).toHaveTextContent('#721')
+    await userEvent.click(verweis)
+
+    expect(geoeffnet).toEqual([[9, 721]])
+    expect(screen.queryByText('Karte #721 nicht gefunden')).not.toBeInTheDocument()
+  })
+
+  it('führt vom Titel des Pakets in die Auswertung seines Laufs', () => {
+    zeige([laufend()], [pakete(8, [paket()])])
+    expect(screen.getByRole('link', { name: 'Erstes Paket — Run #8 anzeigen' })).toHaveAttribute(
+      'href',
+      '/projects/9/nachtlauf?lauf=8',
+    )
+  })
+
+  it('zeigt eine gelöschte Karte als bloße Nummer mit Hinweis', () => {
+    zeige([laufend()], [pakete(8, [paket({ cardExists: false })])])
+
+    const zeile = screen.getByTestId('stand-paket-8-721')
+    expect(within(zeile).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(zeile).getByText('#721')).toBeInTheDocument()
+    expect(zeile).toHaveTextContent('Karte #721 nicht gefunden')
+  })
+
+  it('behandelt eine beim Abruf verschwundene Karte desselben Projekts als fehlend', () => {
+    zeige([laufend()], [pakete(8, [paket()])], new Set([karteSchluessel(9, 721)]))
+
+    const zeile = screen.getByTestId('stand-paket-8-721')
+    expect(within(zeile).queryByRole('button')).not.toBeInTheDocument()
+    expect(zeile).toHaveTextContent('Karte #721 nicht gefunden')
+  })
+
+  it('lässt dieselbe Nummer aus einem anderen Projekt unberührt', () => {
+    zeige([laufend()], [pakete(8, [paket()])], new Set([karteSchluessel(10, 721)]))
+
+    expect(screen.getByRole('button', { name: 'Karte #721 öffnen: Erstes Paket' })).toBeInTheDocument()
+    expect(screen.queryByText('Karte #721 nicht gefunden')).not.toBeInTheDocument()
+  })
+
+  it('verbindet Projekt und Nummer zum Schlüssel einer verschwundenen Karte', () => {
+    expect(karteSchluessel(9, 721)).toBe('9#721')
+  })
+
+  it('nennt das Zustandswort nach der Fehlerklasse des Pakets', () => {
+    zeige(
+      [laufend()],
+      [pakete(8, [paket({ state: 'RED', errorClass: 'TIME_BUDGET_EXCEEDED' })])],
+    )
+    expect(screen.getByTestId('stand-paket-8-721')).toHaveTextContent('Am Zeitbudget beendet, ohne Ergebnis')
   })
 })

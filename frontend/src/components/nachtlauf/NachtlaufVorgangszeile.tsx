@@ -15,7 +15,7 @@ import {
   TEXT_SCHWACH,
   ZAHL,
 } from '../../theme'
-import { KlassenMarke, Led, PaketDauer, ZEILE_HOVER } from '../leitstand/LeitstandBausteine'
+import { KlassenMarke, Led, PaketDauer, ZEILE_HOVER_SX } from '../leitstand/LeitstandBausteine'
 
 /** Die Fehlerklasse eines Abbruchs als Marke: ihr Schlüsselwort und ihre Farbe. */
 export interface Zeilenklasse {
@@ -115,7 +115,7 @@ export function NachtlaufVorgangszeile({
         '&:not(:last-child)': {
           borderBottom: `1px solid color-mix(in srgb, ${RAND} 55%, transparent)`,
         },
-        '&:hover': { background: ZEILE_HOVER },
+        '&:hover': { background: ZEILE_HOVER_SX },
       }}
     >
       <Led melder={melder} />
