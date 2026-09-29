@@ -3,6 +3,7 @@
   "frontend/src/lib/strykerUmfang.test.ts": ["frontend/mutationTestUmfang.ts"],
   "src/test/java/org/mwolff/manban/AbstractIntegrationTest.java": ["docker-compose.yml"],
   "src/test/java/org/mwolff/manban/BetriebsdateienTest.java": ["README.md", "UPGRADING.md", "deployment-spec.md"],
+  "src/test/java/org/mwolff/manban/ReadmeDokumentationTest.java": ["README.md"],
   "src/test/java/org/mwolff/manban/UpgradeDokumentationTest.java": ["UPGRADING.md", "CHANGELOG.md"],
   "src/test/java/org/mwolff/manban/card/CardActivityHistorischeTypenIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardActivityRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/card/CardColumnTransitionBackfillIT.java": ["src/main/resources/db/migration/V9__card_column_transition.sql"],

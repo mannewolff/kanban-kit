@@ -55,6 +55,27 @@ echte Domain `MANBAN_DOMAIN` setzen — dann besorgt Caddy automatisch ein Let's
 
 Das Datenbank-Schema wird beim Start **automatisch per Flyway** migriert — kein manuelles SQL nötig.
 
+## Warum kanban-kit
+
+kanban-kit ist das Board für einen bestimmten Prozess: KI-gestützte Softwareentwicklung, in der
+ein Mensch an drei Stellen entscheidet. Aus einer Anforderung wird ein Fachkonzept, das ein Mensch
+freigibt; daraus ein Plan, den ein Mensch freigibt; daraus Arbeitspakete, die erst mit dem GO
+eines Menschen in die Umsetzung gehen. Was die KI danach — auch unbeaufsichtigt über Nacht — aus
+einem Arbeitspaket gemacht hat, steht im Leitstand. Den Prozess beschreibt das Whitepaper
+[„Ein Prozess zur KI-gestützten Softwareentwicklung“ (v1.2)](https://mwolff.org/whitepapers/whitepaper-ki-entwicklungsprozess-v1.2.pdf);
+die Dokumentation liegt unter [https://docs.mwolff.org](https://docs.mwolff.org).
+
+## Was du erwarten darfst
+
+kanban-kit ist zuerst das Werkzeug für meinen eigenen Entwicklungs-Workflow und meine Workshops —
+daher kommt es, und danach richtet es sich. Pull Requests sind willkommen; wie sie gelingen, steht
+in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Offen gesagt heißt das auch: Es gibt keine allgemeine Support-Zusage, keine Roadmap und
+keine allgemeine Reaktionszeit für Issues oder Pull Requests. Ausgenommen sind
+Sicherheitsmeldungen — für sie gelten die Zusagen aus [SECURITY.md](SECURITY.md): eine Eingangsbestätigung binnen fünf
+Werktagen; eine Frist für die Korrektur sagt auch SECURITY.md nicht zu.
+
 ## Produktivbetrieb
 
 Der zweite Weg. Er unterscheidet sich vom Schnellstart in genau zwei Punkten: eine vollständige
@@ -161,7 +182,19 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-## Lizenz
+## Mitwirken, Kontakt und Lizenz
+
+Drei Wege, je nach Anliegen:
+
+- **Fehler und Wünsche** als GitHub-Issue, mit den Vorlagen aus
+  [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/).
+- **Sicherheitslücken** vertraulich nach [SECURITY.md](SECURITY.md) — **nicht** als öffentliches
+  Issue.
+- **Alles andere** — Fragen, Doku-Fehler, Betriebsprobleme — per Mail an
+  [info@mwolff.org](mailto:info@mwolff.org).
+
+Wer beitragen will, liest zuerst [CONTRIBUTING.md](CONTRIBUTING.md); für alle Beteiligten gilt der
+[Verhaltenskodex](CODE_OF_CONDUCT.md).
 
 kanban-kit steht unter der MIT-Lizenz. Der vollständige Lizenztext liegt in
 [LICENSE](LICENSE).
