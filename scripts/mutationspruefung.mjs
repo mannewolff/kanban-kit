@@ -184,6 +184,7 @@ export function frontendBereich(plan) {
   const naechster = kandidatVon(plan);
   const ausschnitte = plan.ausschnitte.map((ausschnitt) => {
     const eigene = ausschnitt.muster.map((m) => globZuRegex(`frontend/${m}`));
+    const tests = (ausschnitt.testMuster ?? []).map((m) => globZuRegex(`frontend/${m}`));
     return {
       name: ausschnitt.name,
       muster: ausschnitt.muster,
@@ -192,6 +193,7 @@ export function frontendBereich(plan) {
       gemeinsameSchwelle: ausschnitt.gemeinsameSchwelle === true,
       kandidat: ausschnitt === naechster,
       trifft: (pfad) => eigene.some((r) => r.test(pfad)) && !ausgeschlossen(pfad),
+      umfasstTest: (pfad) => eigene.some((r) => r.test(pfad)) || tests.some((r) => r.test(pfad)),
     };
   });
   // Der Vollauf misst die aufgenommenen Ausschnitte plus genau den Kandidaten (E6). Sein `-m`
@@ -208,6 +210,14 @@ export function frontendBereich(plan) {
     vollaufMutate: mutateFuer(gemessen, plan),
     trifft: (pfad) => ein.some((r) => r.test(pfad)) && !ausgeschlossen(pfad),
     istSeitenTest: (pfad) => pfad.startsWith('frontend/') && /\.test\.tsx?$/.test(pfad),
+    // Ein Test, der nur zu noch nicht aufgenommenen Ausschnitten gehoert (Muster oder `testMuster`),
+    // liegt ausserhalb des Pruefbereichs (Issue #1279). Ohne Zuordnung haelt er deshalb nicht an —
+    // sonst braeche der Altbestand ueber die Pfadfinderregel herein, bevor sein Ausschnitt
+    // aufgenommen ist. Ein Test ausserhalb jedes Ausschnitts bleibt unbekannt und haelt weiter an.
+    testAusserhalb: (pfad) => {
+      const eigene = ausschnitte.filter((a) => a.umfasstTest(pfad));
+      return eigene.length > 0 && eigene.every((a) => !a.aufgenommen);
+    },
   };
 }
 
@@ -370,6 +380,8 @@ export function zuordnungAusVollauf(inhalt) {
  * Der dritte Weg neben Konvention und Berichtsumkehrung ist die feste Zuordnung aus
  * `scripts/mutationszuordnung.json` (Issue #1287): fuer Tests, deren Name keine Quelle trifft.
  * Zeigt sie nur auf Quellen ausserhalb des Bereichs, ist der Test zugeordnet und steuert nichts bei.
+ * Ein Test eines noch nicht aufgenommenen Ausschnitts ohne Zuordnung steuert ebenfalls nichts bei
+ * (Issue #1279): Pruefbereich sind die aufgenommenen Ausschnitte, alles andere ist aussen vor.
  */
 export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {}, existiert }) {
   const dateien = new Set();
@@ -382,6 +394,7 @@ export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {},
     const konvention = konventionsQuelle(pfad);
     if (konvention && existiert(konvention)) quellen.add(konvention);
     if (quellen.size === 0) {
+      if (bereich.testAusserhalb?.(pfad)) continue;
       ohneZuordnung.push(pfad);
       continue;
     }

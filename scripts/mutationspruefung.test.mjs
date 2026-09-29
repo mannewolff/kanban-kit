@@ -1864,3 +1864,165 @@ test('mutationspruefung.mjs schreibt nie in frontend/mutationsstufen.json (grep-
     assert.ok(!/STRYKER_PFAD|mutationsstufen/.test(ziel), `Schreibzugriff auf den Stufenplan: ${ziel}`);
   }
 });
+
+// --- Aenderungspruefung folgt den aufgenommenen Ausschnitten (Issue #1279) ---
+
+/**
+ * Ein Stufenplan mit einem aufgenommenen Stufen-Ausschnitt (`stufe-c`), einem Kandidaten und einem
+ * spaeteren Ausschnitt mit eigenem `testMuster`. Die Ausnahmen liegen einmal ausserhalb jedes
+ * Ausschnitts (`src/theme.ts`) und einmal mitten in einem aufgenommenen.
+ */
+const PLAN_STUFEN = {
+  ausnahmen: ['src/theme.ts', 'src/c/stil.tsx'],
+  ausschnitte: [
+    { name: 'bestand-a', muster: ['src/lib/**/*.{ts,tsx}'], aufgenommen: '2026-09-28', gemeinsameSchwelle: true, reihenfolge: 1 },
+    { name: 'stufe-c', muster: ['src/c/**/*.tsx'], aufgenommen: '2026-09-29', reihenfolge: 2 },
+    { name: 'kandidat-k', muster: ['src/k/**/*.tsx'], aufgenommen: false, reihenfolge: 3 },
+    {
+      name: 'spaeter-z',
+      muster: ['src/Z.tsx'],
+      testMuster: ['src/ZSammel.test.tsx'],
+      aufgenommen: false,
+      reihenfolge: 4,
+    },
+  ],
+};
+
+const C_DATEI = 'frontend/src/c/C.tsx';
+const K_DATEI = 'frontend/src/k/K.tsx';
+
+function geaendert(...pfade) {
+  return { 'diff --name-status -z 1a2b3c4': OK(pfade.map((p) => `M\0${p}\0`).join('')) };
+}
+
+function aenderungStufen(pfade, berichtInhalt, gitExtra = {}, optionen = {}) {
+  return mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, {
+      ...geaendert(...pfade),
+      ...Object.fromEntries(pfade.map((p) => [`diff -U0 1a2b3c4 -- ${p}`, OK('@@ -2 +2 @@\n')])),
+      ...gitExtra,
+    }, strykerDoppel(wurzel, berichtInhalt)),
+  { plan: PLAN_STUFEN, ...optionen });
+}
+
+const BERICHT_C_UEBERLEBT = berichtJeDatei({ 'src/c/C.tsx': { getoetet: 1, ueberlebt: 1 } });
+
+test('laufen: eine beruehrte Datei in einem aufgenommenen Ausschnitt wird mutiert, ihr Ueberlebender haelt an (#1279)', () => {
+  const { code, text, aufrufe } = aenderungStufen([C_DATEI], BERICHT_C_UEBERLEBT);
+  assert.equal(aufrufe.length, 1);
+  assert.deepEqual(aufrufe[0].args, ['run', '-m', 'src/c/C.tsx', '--reporters', 'json,html,clear-text']);
+  assert.equal(code, 1);
+  assert.match(text, /frontend\/src\/c\/C\.tsx:2 — ConditionalExpression/);
+  assert.match(text, /hält an — kein Altlast-Vermerk/);
+});
+
+test('laufen: eine beruehrte Datei in einem nicht aufgenommenen Ausschnitt wird nicht mutiert, ihr Ueberlebender haelt nicht an (#1279)', () => {
+  // Der Bericht traegt einen Ueberlebenden in K — mutiert Stryker die Datei doch mit, darf er
+  // trotzdem nicht anhalten; verlangt wird aber schon, dass K nicht im -m steht.
+  const berichtInhalt = berichtJeDatei({
+    'src/c/C.tsx': { getoetet: 1 },
+    'src/k/K.tsx': { ueberlebt: 1 },
+  });
+  const { code, text, aufrufe } = aenderungStufen([C_DATEI, K_DATEI], berichtInhalt);
+  assert.equal(aufrufe.length, 1);
+  assert.deepEqual(aufrufe[0].args, ['run', '-m', 'src/c/C.tsx', '--reporters', 'json,html,clear-text']);
+  assert.equal(code, 0);
+  assert.ok(!text.includes('src/k/K.tsx:'));
+  assert.ok(!text.includes(`  ${K_DATEI}\n`));
+  assert.match(text, /1 Überlebende außerhalb/);
+});
+
+test('laufen: eine beruehrte Ausnahme-Datei wird nicht mutiert, auch mitten in einem aufgenommenen Ausschnitt (#1279)', () => {
+  const { code, text, aufrufe } = aenderungStufen(['frontend/src/theme.ts', 'frontend/src/c/stil.tsx'], BERICHT_C_UEBERLEBT);
+  assert.equal(aufrufe.length, 0);
+  assert.equal(code, 0);
+  assert.ok(text.includes('keine berührte Datei im Prüfbereich'));
+});
+
+test('laufen: nur nicht aufgenommene Dateien beruehrt — kein Werkzeugstart, Rueckgabewert 0 (#1279)', () => {
+  // Dabei auch Tests der nicht aufgenommenen Ausschnitte ohne zuordenbare Quelle: ueber das Muster
+  // (K.test.tsx) und ueber das testMuster (ZSammel.test.tsx). Sie gehoeren zu einem Ausschnitt
+  // ausserhalb des Pruefbereichs und halten deshalb nicht als "Test ohne Zuordnung" an.
+  const { code, text, aufrufe } = aenderungStufen(
+    [K_DATEI, 'frontend/src/k/K.test.tsx', 'frontend/src/Z.tsx', 'frontend/src/ZSammel.test.tsx'],
+    BERICHT_C_UEBERLEBT,
+  );
+  assert.equal(aufrufe.length, 0);
+  assert.equal(code, 0);
+  assert.ok(text.includes('keine berührte Datei im Prüfbereich'));
+  assert.ok(!text.includes('ohne zuordenbare Quelle'));
+});
+
+test('beruehrung: ein Test ohne Zuordnung ausserhalb jedes Ausschnitts haelt weiter an (#1279, #1287)', () => {
+  const ergebnis = beruehrung({
+    geaendert: ['frontend/src/sonstwo/lose.test.ts', 'frontend/src/c/Ohne.test.tsx', 'frontend/src/k/K.test.tsx'],
+    bereich: frontendBereich(PLAN_STUFEN),
+    zuordnung: new Map(),
+    existiert: () => false,
+  });
+  // lose.test.ts liegt in keinem Ausschnitt, Ohne.test.tsx in einem aufgenommenen: beide bleiben
+  // unbekannt und halten an. Nur K.test.tsx faellt als Test eines fremden Ausschnitts heraus.
+  assert.deepEqual(ergebnis.ohneZuordnung, ['frontend/src/sonstwo/lose.test.ts', 'frontend/src/c/Ohne.test.tsx']);
+});
+
+test('beruehrung: ein Test eines nicht aufgenommenen Ausschnitts mit Zuordnung in den Pruefbereich zieht seine Quelle mit (#1279)', () => {
+  const ergebnis = beruehrung({
+    geaendert: ['frontend/src/k/K.test.tsx'],
+    bereich: frontendBereich(PLAN_STUFEN),
+    zuordnung: new Map([['frontend/src/k/K.test.tsx', ['frontend/src/c/C.tsx']]]),
+    existiert: () => false,
+  });
+  assert.deepEqual(ergebnis, { dateien: [C_DATEI], ganzeSeite: false, ohneZuordnung: [] });
+});
+
+test('laufen: die Altlast-Markierung greift weiterhin in einem aufgenommenen Stufen-Ausschnitt (#1279)', () => {
+  const berichtInhalt = bericht({
+    'src/c/C.tsx': { source: VERMERKTE_QUELLE, mutants: [mutant(3, 'ConditionalExpression', 'Survived')] },
+  });
+  const vollauf = {
+    frontend: {
+      datum: '2026-09-29T08:00:00.000Z',
+      dauerMs: 1000,
+      quote: 84.7,
+      mutanten: [{ datei: C_DATEI, zeile: 3, mutator: 'ConditionalExpression' }],
+    },
+  };
+  const { code, text } = aenderungStufen([C_DATEI], berichtInhalt, {
+    [`diff -U0 1a2b3c4 -- ${C_DATEI}`]: OK('@@ -1 +1 @@\n'),
+  }, { vollauf });
+  assert.equal(code, 0);
+  assert.match(text, /Altlast-Vermerk \(#1213, 2026-09-25\)/);
+  assert.match(text, /1 überlebt/);
+});
+
+test('laufen: der Rueckgabewert haengt nur an Ueberlebenden in beruehrten Dateien aufgenommener Ausschnitte (#1279)', () => {
+  const beide = [C_DATEI, K_DATEI];
+  const nurK = berichtJeDatei({ 'src/c/C.tsx': { getoetet: 2 }, 'src/k/K.tsx': { ueberlebt: 3 } });
+  const nurC = berichtJeDatei({ 'src/c/C.tsx': { getoetet: 1, ueberlebt: 1 }, 'src/k/K.tsx': { getoetet: 3 } });
+  const ungeaendertC = berichtJeDatei({ 'src/c/C.tsx': { ueberlebt: 1 } });
+  assert.equal(aenderungStufen(beide, nurK).code, 0);
+  assert.equal(aenderungStufen(beide, nurC).code, 1);
+  // C traegt einen Ueberlebenden, ist aber nicht beruehrt: kein Halt.
+  assert.equal(aenderungStufen([K_DATEI, 'frontend/src/lib/a.ts'], ungeaendertC).code, 0);
+});
+
+test('laufen: der Backend-Zweig bleibt unveraendert — beruehrte Klasse mutiert, Test ohne Zuordnung haelt an (#1279)', () => {
+  const beruehrt = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      ...GEAENDERT_SERVICE,
+      [`diff -U0 1a2b3c4 -- ${CARD_SERVICE}`]: OK('@@ -43 +43 @@\n'),
+    }, pitDoppel(wurzel, BEISPIEL_XML)),
+  { plan: PLAN_STUFEN });
+  assert.equal(beruehrt.aufrufe.length, 1);
+  assert.ok(beruehrt.aufrufe[0].args.includes('-Dpit.targetClasses=org.mwolff.manban.card.application.CardService,org.mwolff.manban.card.application.CardService$*'));
+  assert.equal(beruehrt.code, 1);
+  assert.match(beruehrt.text, /CardService\.java:43 — ConditionalsBoundaryMutator/);
+
+  const ohne = 'src/test/java/org/mwolff/manban/card/application/NirgendsTest.java';
+  const test = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, geaendert(ohne), pitDoppel(wurzel, BEISPIEL_XML)),
+  { plan: PLAN_STUFEN });
+  assert.equal(test.code, 1);
+  assert.equal(test.aufrufe.length, 0);
+  assert.ok(test.text.includes(ohne));
+});
