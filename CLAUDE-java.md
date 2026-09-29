@@ -186,6 +186,10 @@ Beide stehen als `buildChecks` in `.claude/workflow.config.json`. Die Stufe
 
 Ein überlebender Mutant in einer berührten Klasse hält an; Überlebende anderswo erscheinen nur als
 Zahl. `--incremental` wird nirgends benutzt — der Vollauf darf nicht auf gespeicherten Urteilen ruhen.
+Findet die Änderungsprüfung für einen geänderten Test keine Quelle (Name, letzter Vollauf oder
+[`scripts/mutationszuordnung.json`](scripts/mutationszuordnung.json)), weicht sie im Backend auf die
+ganze Seite aus — rund 2 Minuten —, statt anzuhalten; der sofortige Halt gilt nur fürs Frontend
+(Issue #1308, `HALT_OHNE_ZUORDNUNG`).
 
 **Ausnahmen, zwei Formen:**
 

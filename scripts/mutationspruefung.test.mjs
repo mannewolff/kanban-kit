@@ -43,6 +43,7 @@ import {
   pitArgumente,
   pitVollaufArgumente,
   SCHWELLEN,
+  HALT_OHNE_ZUORDNUNG,
   quoteAus,
   vollaufAuswerten,
   klammernAufloesen,
@@ -1314,6 +1315,24 @@ test('laufen: ein Test ohne Zuordnung haelt sofort an, ohne Werkzeuglauf (Issue 
   assert.ok(!text.includes('Umfang: die ganze Seite'));
 });
 
+test('laufen: im Backend weicht ein Test ohne Zuordnung auf die ganze Seite aus (Issue #1308)', () => {
+  const test = 'src/test/java/org/mwolff/manban/card/application/CardServiceEpicTreeTest.java';
+  const { text, aufrufe } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      'diff --name-status -z 1a2b3c4': OK(`M\0${test}\0`),
+    }, pitDoppel(wurzel, BEISPIEL_XML)),
+  );
+  assert.equal(aufrufe.length, 1);
+  assert.deepEqual(aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
+  assert.match(text, /Umfang: die ganze Seite/);
+  assert.ok(text.includes(test));
+  assert.ok(!text.includes('kein Werkzeuglauf'));
+});
+
+test('HALT_OHNE_ZUORDNUNG: nur das Frontend haelt sofort an', () => {
+  assert.deepEqual(HALT_OHNE_ZUORDNUNG, { frontend: true, backend: false });
+});
+
 test('laufen: die feste Zuordnung aus scripts/mutationszuordnung.json wird gelesen', () => {
   const { code, text, aufrufe } = mitProjekt((wurzel) => {
     mkdirSync(join(wurzel, 'scripts'), { recursive: true });
@@ -2066,7 +2085,7 @@ test('laufen: der Rueckgabewert haengt nur an Ueberlebenden in beruehrten Dateie
   assert.equal(aenderungStufen([K_DATEI, 'frontend/src/lib/a.ts'], ungeaendertC).code, 0);
 });
 
-test('laufen: der Backend-Zweig bleibt unveraendert — beruehrte Klasse mutiert, Test ohne Zuordnung haelt an (#1279)', () => {
+test('laufen: der Backend-Zweig bleibt unveraendert — beruehrte Klasse mutiert, Test ohne Zuordnung faehrt die ganze Seite (#1279, #1308)', () => {
   const beruehrt = mitProjekt((wurzel) =>
     sammelLauf(['aenderung', 'backend'], wurzel, {
       ...GEAENDERT_SERVICE,
@@ -2082,8 +2101,9 @@ test('laufen: der Backend-Zweig bleibt unveraendert — beruehrte Klasse mutiert
   const test = mitProjekt((wurzel) =>
     sammelLauf(['aenderung', 'backend'], wurzel, geaendert(ohne), pitDoppel(wurzel, BEISPIEL_XML)),
   { plan: PLAN_STUFEN });
-  assert.equal(test.code, 1);
-  assert.equal(test.aufrufe.length, 0);
+  assert.equal(test.aufrufe.length, 1);
+  assert.deepEqual(test.aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
+  assert.match(test.text, /Umfang: die ganze Seite/);
   assert.ok(test.text.includes(ohne));
 });
 

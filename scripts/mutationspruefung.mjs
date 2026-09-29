@@ -47,6 +47,15 @@ export const SEITEN = ['frontend', 'backend'];
 export const SCHWELLEN = { frontend: 80, backend: 100 };
 
 /**
+ * Haelt die Aenderungspruefung bei einem Test ohne Zuordnung sofort an (true) oder weicht sie auf
+ * die ganze Seite aus (false)? Je Seite, weil der Preis des Ausweichens verschieden ist (Issue
+ * #1308): Stryker ueber das ganze Frontend dauert rund 80 min (#1275), PIT ueber das ganze Backend
+ * rund 2 min — und Backend-Tests sind oft nach Aspekten geteilt (`CardServiceEpicTreeTest`), ein
+ * Halt traefe dort fast jedes Paket.
+ */
+export const HALT_OHNE_ZUORDNUNG = { frontend: true, backend: false };
+
+/**
  * Ab dieser Quote schlaegt der Vollauf den Kandidaten zur Aufnahme vor (Plan #1270, AK 4). Zwei
  * Punkte ueber der Schwelle, damit ein frisch aufgenommener Ausschnitt nicht beim ersten
  * schwankenden Lauf wieder darunter faellt. Der Vorschlag ist eine Zeile im Bericht, mehr nicht.
@@ -1531,9 +1540,10 @@ export function laufen(argv, umgebung = {}) {
       geaendert: stand.alle, bereich, zuordnung, festeZuordnung: festeZuordnungLesen(wurzel), existiert,
     });
 
-  // Ein Test ohne Zuordnung faehrt die Seite nicht mehr ganz (Issue #1287): Der Lauf dauert
+  // Ein Test ohne Zuordnung faehrt das Frontend nicht mehr ganz (Issue #1287): Der Lauf dauert
   // weit laenger als eine Paketrunde (80 min am 2026-09-28, #1275), die Abhilfe ist eine Zeile.
-  if (gemessen.ohneZuordnung.length > 0) {
+  // Das Backend weicht auf die ganze Seite aus (Issue #1308, HALT_OHNE_ZUORDNUNG).
+  if (gemessen.ohneZuordnung.length > 0 && HALT_OHNE_ZUORDNUNG[seite]) {
     ausgabe(ohneZuordnungMeldung(gemessen.ohneZuordnung));
     return 1;
   }
