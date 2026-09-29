@@ -248,26 +248,70 @@ cd frontend && npm test         # Vitest
 **Mutationsprüfung (Issue #1104):**
 
 ```bash
-node scripts/mutationspruefung.mjs aenderung frontend   # je Paket, Stufe paket
-node scripts/mutationspruefung.mjs vollauf frontend     # an der Merge-Stufe, Schwelle 80 %
+node scripts/mutationspruefung.mjs aenderung frontend   # je Paket, Stufe paket (Median über 10 min → push)
+node scripts/mutationspruefung.mjs vollauf frontend     # an der Merge-Stufe, Schwelle 80 % je Ausschnitt
 ```
 
 Beide stehen als `buildChecks` in `.claude/workflow.config.json`. Die Stufe
-`paket` kommt aus der Messung in Issue #1211 (rund 30 s für ein typisches Frontend-Paket). Die
-Änderungsprüfung mutiert nur die geänderten Dateien aus dem `mutate`-Bereich; ein Überlebender in einer
-berührten Datei hält an, Überlebende anderswo erscheinen nur als Zahl. Der Vollauf prüft den ganzen
-Bereich ohne `--incremental` und schreibt die Gedächtnisdatei `.claude/mutationsvollauf-frontend.json`.
-Einen geänderten Test ordnet die Änderungsprüfung über den Namen (`a.test.ts` → `a.ts`), den letzten
-Vollauf oder die feste Zuordnung in [`scripts/mutationszuordnung.json`](scripts/mutationszuordnung.json)
-seiner Quelle zu. Ein Test, dessen Name keine Quelle trifft, braucht dort einen Eintrag — sonst hält die
-Änderungsprüfung sofort an, statt die ganze Seite zu mutieren (Issue #1287).
-Die Stryker-Berichte (JSON und HTML) liegen unter **`.claude/stryker/`** — dort sind sie ignoriert und
-verschmutzen den Arbeitsbaum nicht; der Treiber liest den JSON-Bericht von dort. Konfiguration: [`frontend/stryker.config.mjs`](frontend/stryker.config.mjs).
+`paket` kommt aus der Messung in Issue #1211 (rund 30 s für ein typisches Frontend-Paket); wie die
+Änderungsprüfung mit wachsendem Prüfbereich an `push` wandert, steht in [CLAUDE.md](CLAUDE.md) beim
+Absatz „Mutationsprüfung".
+
+**Der Stufenplan ist die einzige Quelle des Prüfbereichs** (Plan #1270, Issues #1275, #1276):
+[`frontend/mutationsstufen.json`](frontend/mutationsstufen.json) führt die `ausnahmen` (reine Stil- und
+Theme-Dateien, der Testbaum) und die `ausschnitte` — benannte Teile des Frontends mit `muster`, optional
+`testMuster`, `aufgenommen` (`false` oder das Aufnahmedatum), `phase`, `reihenfolge` und `begruendung`.
+Mensch und Werkzeug lesen dieselbe Datei: [`frontend/mutationsbereich.mjs`](frontend/mutationsbereich.mjs)
+leitet daraus die `mutate`-Liste für [`frontend/stryker.config.mjs`](frontend/stryker.config.mjs) und den
+Prüfbereich des Treibers ab, [`frontend/mutationTestUmfang.ts`](frontend/mutationTestUmfang.ts) den
+Testumfang. Niemand pflegt eine dieser Listen von Hand. Jede Quelldatei unter `frontend/src` gehört genau
+einem Ausschnitt oder den Ausnahmen; eine neue Datei ohne Platz im Plan lässt
+[`mutationsstufen.test.ts`](frontend/src/lib/mutationsstufen.test.ts) im Pflicht-Gate fallen.
+
+**Aufnahme Ausschnitt für Ausschnitt.** Mutiert werden die aufgenommenen Ausschnitte. Der Vollauf misst
+zusätzlich genau den nächsten **Kandidaten** — den nicht aufgenommenen mit der kleinsten `reihenfolge` —
+und schlägt ihn **ab 82 %** zur Aufnahme vor; das ist eine Zeile im Bericht, zwei Punkte über der
+Schwelle, damit ein frisch aufgenommener Ausschnitt nicht beim ersten schwankenden Lauf wieder darunter
+fällt. **Die Aufnahme trägt der Mensch per Karte ein** (Datum in `aufgenommen`); kein Codepfad nimmt
+selbst auf. Eine **Rücknahme** setzt `aufgenommen` wieder auf `false` und braucht eine Begründung in
+`begruendung` des Ausschnitts. Nach der Aufnahme gilt in diesem Ausschnitt von selbst die Pfadfinderregel
+aus #1104: Wer eine Datei dort berührt, hinterlässt sie ohne neuen Überlebenden.
+
+**Die Schwelle von 80 % gilt je Ausschnitt**, nicht über die Gesamtmenge: Ein aufgenommener Ausschnitt
+darunter hält den Vollauf an und wird genannt, auch wenn alle anderen darüber liegen; der Kandidat hält
+nie an. Die beiden Bestandsausschnitte `hilfsfunktionen` und `server-anbindung` tragen
+`gemeinsameSchwelle` und zählen zunächst gemeinsam, bis jeder von ihnen die 80 % einmal erreicht hat.
+
+**Die Änderungsprüfung** mutiert nur die berührten Dateien der aufgenommenen Ausschnitte; ein
+Überlebender in einer berührten Datei hält an, Überlebende anderswo erscheinen nur als Zahl. Der Vollauf
+prüft den ganzen Bereich ohne `--incremental` und schreibt die Gedächtnisdatei
+`.claude/mutationsvollauf-frontend.json`. Einen geänderten Test ordnet die Änderungsprüfung über den Namen
+(`a.test.ts` → `a.ts`), den letzten Vollauf oder die feste Zuordnung in
+[`scripts/mutationszuordnung.json`](scripts/mutationszuordnung.json) seiner Quelle zu. Ein Test, dessen
+Name keine Quelle trifft, braucht dort einen Eintrag — sonst hält die Änderungsprüfung sofort an, statt
+die ganze Seite zu mutieren (Issue #1287). Die Stryker-Berichte (JSON und HTML) liegen unter
+**`.claude/stryker/`** — dort sind sie ignoriert und verschmutzen den Arbeitsbaum nicht; der Treiber liest
+den JSON-Bericht von dort.
+
+Einen einzelnen Ausschnitt misst man eingegrenzt mit **einer** kommagetrennten Liste:
+`npx stryker run -m 'src/components/leitstand/**/*.tsx,!src/**/*.test.tsx'` aus `frontend/`. Zwei
+`-m`-Schalter überschreiben einander — übrig bliebe nur der Ausschluss, und Stryker mutierte nichts.
+
+**Darstellungsmutanten laufen gar nicht erst** (Issue #1277): Der Ignorer
+[`frontend/stryker/darstellungIgnorer.js`](frontend/stryker/darstellungIgnorer.js) nimmt beim
+Instrumentieren Mutanten in `sx`- und `style`-Attributen, in den Argumenten eines `styled(...)` und in
+Objektliteralen benannter Stilkonstanten (`…Sx`, `…_SX`) heraus, deren Schlüssel sämtlich Stilschlüssel
+sind. Sie erscheinen als `Ignored` und zählen nicht in der Quote. Stilwerte an anderer Stelle — ein
+Objekt, das an eine Hilfsfunktion geht, ein `keyframes`-Text, eine `color-mix`-Konstante — erfasst er
+nicht; dort töten Tests über die erzeugte CSS-Regel (`cssRegel` aus `src/test/cssRegel.ts`) oder eine
+Ausnahme je Stelle.
 
 **Ausnahmen, zwei Formen:**
 
 - `// Stryker disable next-line <mutator>: <Grund>` **je Stelle** — Strykers eigene Ausnahme; der Mutant
-  zählt als ausgenommen, nicht als überlebt.
+  zählt als ausgenommen, nicht als überlebt. Gedacht für gleichwertige Mutanten, deren Wirkung von außen
+  nicht zu beobachten ist. In JSX steht sie als Zeilenkommentar **im Tag vor dem Attribut**; ein
+  `{/* … */}` vor dem Element greift nicht.
 - Der **Altlast-Vermerk** an der Zeile des Mutanten:
   `// Mutations-Altlast: <Grund> (#<Issue>, <JJJJ-MM-TT>)`. Die Begründung ist Pflicht. Er gibt die
   Änderungsprüfung frei, **zählt aber weiter mit**, und er trägt nur, wenn alle vier Bedingungen
@@ -278,15 +322,20 @@ verschmutzen den Arbeitsbaum nicht; der Treiber liest den JSON-Bericht von dort.
   4. Der Mutant hat auch im letzten Vollauf überlebt (`.claude/mutationsvollauf-frontend.json`) —
      sonst ist er keine Altlast, sondern neu.
 
-**Der zugesagte Umfang muss eingelöst sein.** Was in `mutate` steht, muss der Testrunner auch
-erreichen (`vitest.dir`). Lief beides auseinander, sah der erzeugte Bericht trotzdem vollständig
-aus, enthielt aber keine einzige Datei des ausgeschlossenen Verzeichnisses — ein stiller Blindfleck
-(Issue #1073, Befund 1). Die Deckung hält deshalb der Test
+**Der zugesagte Umfang muss eingelöst sein.** Was mutiert wird, muss der Testlauf der Mutationsprüfung
+auch erreichen. Der Testumfang leitet sich je Ausschnitt ab — für die aufgenommenen und den Kandidaten:
+`testMuster`, falls vorhanden; sonst die Musterwurzel bei einem Muster mit Wildcard
+(`src/components/leitstand/**/*.tsx` → alle Tests unter `src/components/leitstand/`); sonst der
+Konventionstest daneben (`X.tsx` → `X.test.tsx`). Liefen Mutations- und Testumfang auseinander, sähe der
+Bericht trotzdem vollständig aus, enthielte aber keine Tötung aus dem fehlenden Teil — ein stiller
+Blindfleck (Issue #1073, Befund 1). Die Deckung hält deshalb der Test
 [`strykerUmfang.test.ts`](frontend/src/lib/strykerUmfang.test.ts) im Pflicht-Gate, nicht dieser
-Absatz. `thresholds.break` steht auf `null`: Ob und wann der Lauf abbricht, regelt die
-Mutationsprüfung auf dem geänderten Code (Issue #1104), nicht eine Gesamtschwelle. Den Halt liefert der
-Rückgabewert von `scripts/mutationspruefung.mjs` — bei der Änderungsprüfung ein Überlebender in einer
-berührten Datei, beim Vollauf eine Quote unter 80 %.
+Absatz. Folge für Tests: Ein Baustein, den nur Seiten-Tests außerhalb seines Ausschnitts rendern, ist in
+der Abdeckung grün, in der Mutationsprüfung aber ungedeckt — er braucht Tests im eigenen Ausschnitt.
+`thresholds.break` steht auf `null`: Ob und wann der Lauf abbricht, regelt die Mutationsprüfung auf dem
+geänderten Code (Issue #1104), nicht eine Gesamtschwelle. Den Halt liefert der Rückgabewert von
+`scripts/mutationspruefung.mjs` — bei der Änderungsprüfung ein Überlebender in einer berührten Datei, beim
+Vollauf ein aufgenommener Ausschnitt unter 80 %.
 
 ---
 
