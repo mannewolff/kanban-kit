@@ -46,6 +46,9 @@ import {
   quoteAus,
   vollaufAuswerten,
   klammernAufloesen,
+  DAUER_PROTOKOLL_LAENGE,
+  STUFENGRENZE_MS,
+  median,
 } from './mutationspruefung.mjs';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
@@ -2025,4 +2028,202 @@ test('laufen: der Backend-Zweig bleibt unveraendert — beruehrte Klasse mutiert
   assert.equal(test.code, 1);
   assert.equal(test.aufrufe.length, 0);
   assert.ok(test.text.includes(ohne));
+});
+
+// --- Stufenschaltung und Dauerprotokoll (Issue #1280) ------------------------
+
+const MINUTE = 60 * 1000;
+
+function protokollAblegen(wurzel, seite, dauern) {
+  const laeufe = dauern.map((dauerMs, i) => ({ datum: `2026-09-2${i}T10:00:00.000Z`, dauerMs }));
+  writeFileSync(join(wurzel, '.claude', `mutationsdauer-${seite}.json`), JSON.stringify({ laeufe }));
+}
+
+function protokoll(wurzel, seite) {
+  const pfad = join(wurzel, '.claude', `mutationsdauer-${seite}.json`);
+  return existsSync(pfad) ? JSON.parse(readFileSync(pfad, 'utf-8')) : null;
+}
+
+/** Eine Uhr, die je Aufruf um `schrittMs` weiterlaeuft — damit hat jeder Lauf eine bekannte Dauer. */
+function uhr(schrittMs) {
+  let t = Date.parse('2026-09-29T08:00:00.000Z');
+  return () => {
+    const jetzt = t;
+    t += schrittMs;
+    return jetzt;
+  };
+}
+
+const MIT_WERKZEUG = {
+  ...GEAENDERT_A,
+  'diff -U0 1a2b3c4 -- frontend/src/lib/a.ts': OK('@@ -2 +2 @@\n'),
+};
+
+test('median: ungerade und gerade Anzahl, leer ergibt null', () => {
+  assert.equal(median([3, 1, 2]), 2);
+  assert.equal(median([4, 1, 3, 2]), 2.5);
+  assert.equal(median([]), null);
+});
+
+test('Stufenschaltung: Median unter 10 min — paket laeuft, push steigt mit Satz und 0 aus', () => {
+  const [paket, push] = mitProjekt((wurzel) => {
+    protokollAblegen(wurzel, 'frontend', [1 * MINUTE, 2 * MINUTE, 11 * MINUTE]);
+    // Erst der Ausstieg: Der Paketlauf ergaenzt das Protokoll und verschoebe den Median.
+    const ausstieg = sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A));
+    return [
+      sammelLauf(['aenderung', 'frontend', '--stufe', 'paket'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A)),
+      ausstieg,
+    ];
+  });
+  assert.equal(paket.aufrufe.length, 1);
+  assert.equal(push.aufrufe.length, 0);
+  assert.equal(push.code, 0);
+  assert.match(push.text, /Median .*2 min 0 s/);
+  assert.match(push.text, /Grenze 10 min/);
+  assert.match(push.text, /geltende Stufe: paket/);
+});
+
+test('Stufenschaltung: Median ueber 10 min — push laeuft, paket steigt mit Satz und 0 aus', () => {
+  const [paket, push] = mitProjekt((wurzel) => {
+    protokollAblegen(wurzel, 'frontend', [11 * MINUTE, 12 * MINUTE, 2 * MINUTE]);
+    return [
+      sammelLauf(['aenderung', 'frontend', '--stufe', 'paket'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A)),
+      sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A)),
+    ];
+  });
+  assert.equal(paket.aufrufe.length, 0);
+  assert.equal(paket.code, 0);
+  assert.match(paket.text, /Median .*11 min 0 s/);
+  assert.match(paket.text, /geltende Stufe: push/);
+  assert.equal(push.aufrufe.length, 1);
+});
+
+test('Stufenschaltung: genau 10 min Median liegt nicht ueber der Grenze — es gilt paket', () => {
+  const push = mitProjekt((wurzel) => {
+    protokollAblegen(wurzel, 'frontend', [STUFENGRENZE_MS]);
+    return sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A));
+  });
+  assert.equal(push.aufrufe.length, 0);
+  assert.match(push.text, /geltende Stufe: paket/);
+});
+
+test('Stufenschaltung: ohne Protokoll gilt paket, push steigt mit Satz aus', () => {
+  const [paket, push] = mitProjekt((wurzel) => [
+    sammelLauf(['aenderung', 'frontend', '--stufe', 'paket'], wurzel),
+    sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel),
+  ]);
+  assert.equal(paket.code, 0);
+  assert.ok(paket.text.includes('keine berührte Datei im Prüfbereich'));
+  assert.equal(push.code, 0);
+  assert.ok(!push.text.includes('keine berührte Datei im Prüfbereich'));
+  assert.match(push.text, /Median/);
+  assert.match(push.text, /Grenze 10 min/);
+  assert.match(push.text, /geltende Stufe: paket/);
+});
+
+test('Stufenschaltung: ein unlesbares Protokoll gilt wie keines', () => {
+  const push = mitProjekt((wurzel) => {
+    writeFileSync(join(wurzel, '.claude', 'mutationsdauer-frontend.json'), '{kaputt');
+    return sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel);
+  });
+  assert.equal(push.code, 0);
+  assert.match(push.text, /geltende Stufe: paket/);
+});
+
+test('Stufenschaltung: unbekannte Stufe oder --stufe am Vollauf endet ungleich 0', () => {
+  const [falsch, fehlt, vollauf] = mitProjekt((wurzel) => [
+    sammelLauf(['aenderung', 'frontend', '--stufe', 'merge'], wurzel),
+    sammelLauf(['aenderung', 'frontend', '--stufe'], wurzel),
+    sammelLauf(['vollauf', 'frontend', '--stufe', 'push'], wurzel),
+  ]);
+  for (const lauf of [falsch, fehlt, vollauf]) {
+    assert.equal(lauf.code, 2);
+    assert.equal(lauf.aufrufe.length, 0);
+    assert.match(lauf.text, /paket/);
+  }
+});
+
+test('Dauerprotokoll: ein Lauf mit Werkzeugstart hinterlaesst genau einen Eintrag mit seiner Dauer', () => {
+  const eintraege = mitProjekt((wurzel) => {
+    sammelLauf(['aenderung', 'frontend'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A), { jetzt: uhr(1000) });
+    return protokoll(wurzel, 'frontend');
+  });
+  assert.equal(eintraege.laeufe.length, 1);
+  assert.ok(eintraege.laeufe[0].dauerMs > 0);
+  assert.match(eintraege.laeufe[0].datum, /^2026-09-29T/);
+});
+
+test('Dauerprotokoll: auch ein Lauf ohne Bericht hat das Werkzeug gestartet und wird protokolliert', () => {
+  const eintraege = mitProjekt((wurzel) => {
+    const { code } = sammelLauf(['aenderung', 'frontend'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, null, 1));
+    assert.equal(code, 1);
+    return protokoll(wurzel, 'frontend');
+  });
+  assert.equal(eintraege.laeufe.length, 1);
+});
+
+test('Dauerprotokoll: Leerlauf und Ausstieg kommen nicht hinein', () => {
+  const [nachLeerlauf, nachAusstieg] = mitProjekt((wurzel) => {
+    sammelLauf(['aenderung', 'frontend', '--stufe', 'paket'], wurzel);
+    const leer = protokoll(wurzel, 'frontend');
+    sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A));
+    return [leer, protokoll(wurzel, 'frontend')];
+  });
+  assert.equal(nachLeerlauf, null);
+  assert.equal(nachAusstieg, null);
+});
+
+test('Dauerprotokoll: haelt hoechstens N Laeufe, der aelteste faellt heraus', () => {
+  const eintraege = mitProjekt((wurzel) => {
+    protokollAblegen(wurzel, 'frontend', Array.from({ length: DAUER_PROTOKOLL_LAENGE }, (_, i) => (i + 1) * 1000));
+    sammelLauf(['aenderung', 'frontend'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A), { jetzt: uhr(1000) });
+    return protokoll(wurzel, 'frontend');
+  });
+  assert.equal(eintraege.laeufe.length, DAUER_PROTOKOLL_LAENGE);
+  assert.equal(eintraege.laeufe[0].dauerMs, 2000);
+  assert.match(eintraege.laeufe.at(-1).datum, /^2026-09-29T/);
+});
+
+test('stufeAus: zwei Eintraege je Seite — jeder Aufruf findet den Eintrag mit seinem --stufe-Argument', () => {
+  const config = {
+    buildChecks: [
+      { cmd: 'node scripts/mutationspruefung.mjs aenderung frontend --stufe paket' },
+      { cmd: 'node scripts/mutationspruefung.mjs aenderung frontend --stufe push', stufe: 'push' },
+    ],
+  };
+  const text = 'mutationspruefung.mjs aenderung frontend';
+  assert.equal(stufeAus(config, text, 'paket'), 'paket');
+  assert.equal(stufeAus(config, text, 'push'), 'push');
+  assert.equal(stufeAus(config, text), 'paket');
+  assert.equal(stufeAus({ buildChecks: [{ cmd: 'node scripts/mutationspruefung.mjs aenderung frontend' }] }, text, 'push'), null);
+});
+
+test('laufen: mit zwei Config-Eintraegen nennt der push-Lauf Stufe push', () => {
+  const config = {
+    mainBranch: 'main',
+    buildChecks: [
+      { cmd: 'node scripts/mutationspruefung.mjs aenderung frontend --stufe paket' },
+      { cmd: 'node scripts/mutationspruefung.mjs aenderung frontend --stufe push', stufe: 'push' },
+    ],
+  };
+  const push = mitProjekt((wurzel) => {
+    protokollAblegen(wurzel, 'frontend', [20 * MINUTE]);
+    return sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel);
+  }, { config });
+  assert.match(push.text, /Stufe: push/);
+});
+
+test('ohne --stufe: selbst ein Median ueber 10 min laesst den Lauf wie bisher durchlaufen', () => {
+  const [ohne, vorher] = mitProjekt((wurzel) => {
+    const referenz = sammelLauf(['aenderung', 'frontend'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A), { jetzt: () => 0 });
+    rmSync(join(wurzel, '.claude', 'mutationsdauer-frontend.json'), { force: true });
+    protokollAblegen(wurzel, 'frontend', [30 * MINUTE]);
+    return [
+      sammelLauf(['aenderung', 'frontend'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A), { jetzt: () => 0 }),
+      referenz,
+    ];
+  });
+  assert.equal(ohne.aufrufe.length, 1);
+  assert.equal(ohne.code, vorher.code);
+  assert.equal(ohne.text, vorher.text);
 });

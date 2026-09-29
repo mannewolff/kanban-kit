@@ -4,7 +4,7 @@
  * #1214, Plan #1210, fachliche Quelle #1104).
  *
  * Nutzung:
- *   node scripts/mutationspruefung.mjs aenderung frontend|backend
+ *   node scripts/mutationspruefung.mjs aenderung frontend|backend [--stufe paket|push]
  *   node scripts/mutationspruefung.mjs vollauf   frontend|backend
  *
  * Die Aenderungspruefung steht fuer beide Seiten: Anker, Dateilisten, Pruefbereich,
@@ -54,6 +54,18 @@ export const SCHWELLEN = { frontend: 80, backend: 100 };
 export const VORSCHLAGSSCHWELLE = 82;
 
 const HAUPTZWEIG_VORGABE = 'main';
+
+/** Die beiden Stufen, auf denen die Aenderungspruefung je Seite in der Config steht (Issue #1280). */
+export const STUFEN = ['paket', 'push'];
+
+/** Liegt der Median der protokollierten Laeufe darueber, gehoert die Aenderungspruefung an `push`. */
+export const STUFENGRENZE_MS = 10 * 60 * 1000;
+
+/**
+ * So viele Laeufe haelt das Dauerprotokoll. Fuenf, weil der Median dann einen einzelnen Ausreisser
+ * nach oben wie nach unten schluckt, ein anhaltender Anstieg aber nach drei Laeufen durchschlaegt.
+ */
+export const DAUER_PROTOKOLL_LAENGE = 5;
 
 // --- Muster ----------------------------------------------------------------
 
@@ -938,15 +950,38 @@ export function ankerBestimmen(git, hauptzweig) {
 
 // --- Stufe und Formate ------------------------------------------------------
 
-/** Die Stufe, auf der die Pruefung dieser Seite laut Config gerade haengt (Kriterium 12). */
-export function stufeAus(config, kommandoText) {
+/**
+ * Die Stufe, auf der die Pruefung dieser Seite laut Config gerade haengt (Kriterium 12). Mit
+ * `stufeArgument` zaehlt nur der Eintrag, dessen `cmd` dasselbe `--stufe`-Argument traegt: Mit zwei
+ * Eintraegen je Seite faende der blosse Teilstring sonst in beiden Laeufen den ersten (Issue #1280).
+ */
+export function stufeAus(config, kommandoText, stufeArgument = null) {
+  const argumentMuster = stufeArgument ? new RegExp(`--stufe\\s+${stufeArgument}(\\s|$)`) : null;
   for (const eintrag of config?.buildChecks ?? []) {
     const cmd = typeof eintrag === 'string' ? eintrag : eintrag?.cmd;
-    if (typeof cmd === 'string' && cmd.includes(kommandoText)) {
+    if (typeof cmd === 'string' && cmd.includes(kommandoText) && (!argumentMuster || argumentMuster.test(cmd))) {
       return (typeof eintrag === 'string' ? null : eintrag.stufe) ?? 'paket';
     }
   }
   return null;
+}
+
+export function median(werte) {
+  if (werte.length === 0) return null;
+  const sortiert = [...werte].sort((a, b) => a - b);
+  const mitte = Math.floor(sortiert.length / 2);
+  return sortiert.length % 2 === 1 ? sortiert[mitte] : (sortiert[mitte - 1] + sortiert[mitte]) / 2;
+}
+
+/**
+ * Die Stufe, auf der die Aenderungspruefung gilt, aus dem Dauerprotokoll. Ohne Protokoll gilt
+ * `paket` — etwa in einer frischen Arbeitskopie, denn `.claude/*` ist nicht versioniert; die
+ * Irrtumsrichtung heisst "mehr pruefen, nie weniger".
+ */
+export function geltendeStufe(protokoll) {
+  const dauern = (protokoll?.laeufe ?? []).map((lauf) => lauf?.dauerMs).filter(Number.isFinite);
+  const mitte = median(dauern);
+  return { mitte, anzahl: dauern.length, stufe: mitte !== null && mitte > STUFENGRENZE_MS ? 'push' : 'paket' };
 }
 
 export function dauerText(ms) {
@@ -1256,6 +1291,35 @@ function vollaufPfad(wurzel, seite) {
   return join(wurzel, '.claude', `mutationsvollauf-${seite}.json`);
 }
 
+/** Das Dauerprotokoll der Aenderungspruefung, unversioniert wie die Gedaechtnisdatei (Issue #1280). */
+function dauerPfad(wurzel, seite) {
+  return join(wurzel, '.claude', `mutationsdauer-${seite}.json`);
+}
+
+/**
+ * Haengt die Dauer eines Laufs mit Werkzeugstart an und kuerzt auf die letzten Laeufe. Ein
+ * gescheitertes Schreiben aendert das Urteil des Laufs nicht — es kostet nur eine Messung —, wird
+ * aber genannt.
+ */
+function dauerProtokollieren({ wurzel, seite, datum, dauerMs, ausgabe }) {
+  const bisher = jsonLesen(dauerPfad(wurzel, seite));
+  const laeufe = Array.isArray(bisher?.laeufe) ? bisher.laeufe : [];
+  const neu = { laeufe: [...laeufe, { datum, dauerMs }].slice(-DAUER_PROTOKOLL_LAENGE) };
+  try {
+    writeFileSync(dauerPfad(wurzel, seite), `${JSON.stringify(neu, null, 2)}\n`);
+  } catch (err) {
+    ausgabe(`Das Dauerprotokoll ${dauerPfad(wurzel, seite)} ließ sich nicht schreiben: ${err.message}\n`);
+  }
+}
+
+function ausstiegsSatz(seite, stufeArgument, { mitte, anzahl, stufe }) {
+  const medianText = mitte === null
+    ? 'Median: keiner, es gibt noch kein Dauerprotokoll'
+    : `Median der letzten ${anzahl} Läufe ${dauerText(mitte)}`;
+  return `Änderungsprüfung ${seite} auf Stufe ${stufeArgument} ausgelassen — ${medianText}, `
+    + `Grenze 10 min, geltende Stufe: ${stufe}.\n`;
+}
+
 /**
  * Der Stand, gegen den der Vollauf gemessen hat. Faellt `rev-parse` aus — kein Repository, kein
  * Commit —, steht `null` in der Datei: lieber kein Stand als ein erfundener, denn an ihm haengt
@@ -1411,7 +1475,7 @@ export function laufen(argv, umgebung = {}) {
     ?? ((befehl, args, optionen) => spawnSync(befehl, args, { encoding: 'utf-8', ...optionen }));
   const beginn = jetzt();
 
-  const [kommando, seite] = argv;
+  const [kommando, seite, ...rest] = argv;
   if (!KOMMANDOS.includes(kommando)) {
     ausgabe(`Unbekanntes Unterkommando '${kommando ?? ''}'. Erlaubt: ${KOMMANDOS.join(', ')}.\n`
       + `Aufruf: node scripts/mutationspruefung.mjs <${KOMMANDOS.join('|')}> <${SEITEN.join('|')}>\n`);
@@ -1421,6 +1485,20 @@ export function laufen(argv, umgebung = {}) {
     ausgabe(`Unbekannte Seite '${seite ?? ''}'. Erlaubt: ${SEITEN.join(', ')}.\n`
       + `Aufruf: node scripts/mutationspruefung.mjs <${KOMMANDOS.join('|')}> <${SEITEN.join('|')}>\n`);
     return 2;
+  }
+  const stufenIndex = rest.indexOf('--stufe');
+  const stufeArgument = stufenIndex === -1 ? null : (rest[stufenIndex + 1] ?? '');
+  if (stufeArgument !== null && (kommando !== 'aenderung' || !STUFEN.includes(stufeArgument))) {
+    ausgabe(`Ungültiges --stufe '${stufeArgument}'. Erlaubt nur an der Änderungsprüfung: `
+      + `--stufe ${STUFEN.join('|')}.\n`);
+    return 2;
+  }
+  if (stufeArgument !== null) {
+    const geltend = geltendeStufe(jsonLesen(dauerPfad(wurzel, seite)));
+    if (geltend.stufe !== stufeArgument) {
+      ausgabe(ausstiegsSatz(seite, stufeArgument, geltend));
+      return 0;
+    }
   }
 
   let bereich;
@@ -1433,7 +1511,7 @@ export function laufen(argv, umgebung = {}) {
 
   const config = jsonLesen(join(wurzel, '.claude', 'workflow.config.json')) ?? {};
   const vollauf = jsonLesen(vollaufPfad(wurzel, seite));
-  const stufe = stufeAus(config, `mutationspruefung.mjs ${kommando} ${seite}`);
+  const stufe = stufeAus(config, `mutationspruefung.mjs ${kommando} ${seite}`, stufeArgument);
   // Ueber `umgebung.schwellen` ueberschreibbar wie `git` und `starte`: Ein Nachweis an einer
   // kuenstlich angehobenen Schwelle braucht sonst einen zweiten halbstuendigen Vollauf.
   const schwelle = (umgebung.schwellen ?? SCHWELLEN)[seite];
@@ -1483,6 +1561,22 @@ export function laufen(argv, umgebung = {}) {
   const geaendert = new Set(stand.alle);
   const dateienDesLaufs = gemessen.ganzeSeite ? [] : gemessen.dateien;
 
+  // Protokolliert wird nur ein Lauf, der das Werkzeug wirklich gestartet hat: Leerlaeufe und
+  // Ausstiege dauern Sekunden, und der Median maesse sonst sie statt der Laeufe (Issue #1280).
+  const code = aenderungMitWerkzeug({
+    wurzel, seite, starte, git, ausgabe, liesDatei, jetzt, beginn, anker, vollerUmfang, stand, gemessen,
+    beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung,
+  });
+  dauerProtokollieren({
+    wurzel, seite, datum: new Date(beginn).toISOString(), dauerMs: jetzt() - beginn, ausgabe,
+  });
+  return code;
+}
+
+function aenderungMitWerkzeug({
+  wurzel, seite, starte, git, ausgabe, liesDatei, jetzt, beginn, anker, vollerUmfang, stand, gemessen,
+  beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung,
+}) {
   let mutanten;
   let quellen;
   if (seite === 'frontend') {
