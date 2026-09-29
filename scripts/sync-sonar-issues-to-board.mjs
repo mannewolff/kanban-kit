@@ -22,7 +22,7 @@
  * lokaler Probelauf mit `--dry-run` (listet Findings, legt nichts an).
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, realpathSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -53,18 +53,24 @@ function readProperties() {
   return props;
 }
 
-/** Ant-Style-Glob (`**`, `*`) zu RegExp — genügt für die einfachen Pfadmuster in sonar.exclusions. */
-function globToRegExp(pattern) {
+/**
+ * Ant-Style-Glob (`**`, `*`) zu RegExp — genügt für die einfachen Pfadmuster in sonar.exclusions.
+ * `**` passt über beliebig viele Ebenen, `**\/` auch auf null Ordner, `*` bleibt in einer Ebene.
+ * Die Platzhalter für `**` werden erst nach dem `*`-Schritt aufgelöst, sonst fräße der ihn mit.
+ */
+export function globToRegExp(pattern) {
   const escaped = pattern
+    .split('**/').join('\u0001')
     .split('**').join('\u0000')
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .split('\u0000').join('.*')
-    .replace(/\*/g, '[^/]*');
+    .replace(/\*/g, '[^/]*')
+    .split('\u0001').join('(?:.*/)?')
+    .split('\u0000').join('.*');
   return new RegExp(`^${escaped}$`);
 }
 
 /** Filtert Issues heraus, deren Datei-Pfad auf sonar.exclusions passt (z. B. db/migration/**). */
-function excludeByExclusions(issues, exclusionsRaw) {
+export function excludeByExclusions(issues, exclusionsRaw) {
   if (!exclusionsRaw) return issues;
   const patterns = exclusionsRaw.split(',').map((p) => globToRegExp(p.trim()));
   return issues.filter((issue) => {
@@ -310,7 +316,12 @@ async function main() {
   console.log(`\nFertig. ${created} neu angelegt, ${existing} bereits vorhanden.`);
 }
 
-main().catch((e) => {
-  console.error(`Fehler: ${e.message}`);
-  process.exit(1);
-});
+// Nur beim direkten Aufruf laufen lassen: Der Test importiert dieses Modul.
+const direktAufgerufen =
+  process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+if (direktAufgerufen) {
+  main().catch((e) => {
+    console.error(`Fehler: ${e.message}`);
+    process.exit(1);
+  });
+}
