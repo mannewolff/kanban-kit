@@ -34,7 +34,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-import { aufgenommene, mutateFuer } from '../frontend/mutationsbereich.mjs';
+import { aufgenommene, kandidat as kandidatVon, mutateFuer } from '../frontend/mutationsbereich.mjs';
 
 export const KOMMANDOS = ['aenderung', 'vollauf'];
 export const SEITEN = ['frontend', 'backend'];
@@ -45,6 +45,13 @@ export const SEITEN = ['frontend', 'backend'];
  * Marke schon auf 100 fuehrt; Frontend 80 als der heute haltbare Stand (84,70 % am 2026-09-24).
  */
 export const SCHWELLEN = { frontend: 80, backend: 100 };
+
+/**
+ * Ab dieser Quote schlaegt der Vollauf den Kandidaten zur Aufnahme vor (Plan #1270, AK 4). Zwei
+ * Punkte ueber der Schwelle, damit ein frisch aufgenommener Ausschnitt nicht beim ersten
+ * schwankenden Lauf wieder darunter faellt. Der Vorschlag ist eine Zeile im Bericht, mehr nicht.
+ */
+export const VORSCHLAGSSCHWELLE = 82;
 
 const HAUPTZWEIG_VORGABE = 'main';
 
@@ -86,6 +93,19 @@ export function globZuRegex(muster) {
     }
   }
   return new RegExp(`^${quelle}$`);
+}
+
+/**
+ * Loest eine Klammer-Alternative `{a,b}` in zwei Muster auf. Noetig fuer `-m`: Stryker trennt die
+ * Liste an jedem Komma (`stryker-cli.js`, `createSplitter(',')`), `*.{ts,tsx}` zerfiele dort in
+ * zwei unsinnige Muster. Ohne Schachtelung, wie `globZuRegex`.
+ */
+export function klammernAufloesen(muster) {
+  const treffer = /\{([^{}]*)\}/.exec(muster);
+  if (!treffer) return [muster];
+  const vorn = muster.slice(0, treffer.index);
+  const hinten = muster.slice(treffer.index + treffer[0].length);
+  return treffer[1].split(',').flatMap((zweig) => klammernAufloesen(`${vorn}${zweig}${hinten}`));
 }
 
 /**
@@ -161,20 +181,31 @@ export function frontendBereich(plan) {
   const woertlich = mutateFuer(aufgenommene(plan).map((a) => a.name), plan);
   const { ein, aus } = frontendRegexe(woertlich);
   const ausgeschlossen = (pfad) => aus.some((r) => r.test(pfad));
+  const naechster = kandidatVon(plan);
   const ausschnitte = plan.ausschnitte.map((ausschnitt) => {
     const eigene = ausschnitt.muster.map((m) => globZuRegex(`frontend/${m}`));
     return {
       name: ausschnitt.name,
+      muster: ausschnitt.muster,
       aufgenommen: typeof ausschnitt.aufgenommen === 'string',
+      aufgenommenAm: typeof ausschnitt.aufgenommen === 'string' ? ausschnitt.aufgenommen : false,
+      gemeinsameSchwelle: ausschnitt.gemeinsameSchwelle === true,
+      kandidat: ausschnitt === naechster,
       trifft: (pfad) => eigene.some((r) => r.test(pfad)) && !ausgeschlossen(pfad),
     };
   });
+  // Der Vollauf misst die aufgenommenen Ausschnitte plus genau den Kandidaten (E6). Sein `-m`
+  // traegt die Ausschluesse und Ausnahmen woertlich mit, weil `--mutate` die Liste der
+  // Konfiguration ersetzt — sonst mutierte er die Testdateien mit.
+  const gemessen = ausschnitte.filter((a) => a.aufgenommen || a.kandidat).map((a) => a.name);
   return {
     seite: 'frontend',
     quelle: `${STRYKER_PFAD} (aufgenommene Ausschnitte)`,
     woertlich,
     zeilen: woertlich,
     ausschnitte,
+    gemessen,
+    vollaufMutate: mutateFuer(gemessen, plan),
     trifft: (pfad) => ein.some((r) => r.test(pfad)) && !ausgeschlossen(pfad),
     istSeitenTest: (pfad) => pfad.startsWith('frontend/') && /\.test\.tsx?$/.test(pfad),
   };
@@ -250,6 +281,7 @@ export function backendBereich(gelesen) {
     // Genau ein Ausschnitt ueber den ganzen Pruefbereich (E11): Die Ausschnittslogik ist damit fuer
     // beide Seiten dieselbe, statt zwei Auswertungspfade zu tragen, die auseinanderlaufen.
     ausschnitte: [{ name: 'backend', aufgenommen: true, trifft }],
+    gemessen: ['backend'],
     trifft,
     istSeitenTest: (pfad) => pfad.startsWith('src/test/java/') && /(Test|IT)\.java$/.test(pfad),
   };
@@ -413,6 +445,7 @@ export function strykerMutanten(bericht, { mitQuellen = false } = {}) {
         mutator: roh?.mutatorName ?? 'unbekannt',
         ersetzung: roh?.replacement ?? '',
         zustand: roh?.status ?? 'unbekannt',
+        grund: roh?.statusReason ?? null,
         deckendeTests: [...deckende].sort(),
       });
     }
@@ -670,31 +703,125 @@ export function auswerten({ mutanten, quellen, istBeruehrt, zeileGeaendert, date
   return { zaehlung, ueberlebende, haltende };
 }
 
+/** Der Grund, den der Darstellungs-Ignorer (#1277) jedem seiner Mutanten mitgibt, beginnt so. */
+const DARSTELLUNG_PRAEFIX = 'Darstellung:';
+
+/**
+ * Die Zaehlung je Ausschnitt. Neben den Mengen der Gesamtzaehlung fuehrt sie zwei Teilmengen: die
+ * vom Darstellungs-Ignorer ausgenommenen Mutanten (ein Teil von `ausgenommen`), damit eine
+ * Verschiebung im Bestand auffaellt, und die ungedeckten (`NoCoverage`, ein Teil von `ueberlebt`),
+ * an denen ein Kandidat ohne Tests im Umfang zu erkennen ist.
+ */
+function ausschnittsZaehlung() {
+  return { geprueft: 0, getoetet: 0, ueberlebt: 0, ausgenommen: 0, darstellung: 0, ohneDeckung: 0 };
+}
+
 /**
  * Die Auswertung des Vollaufs. Sie kennt weder Beruehrung noch Altlast-Vermerk: Im Vollauf gilt die
  * ganze Seite, und angehalten wird allein an der Schwelle (Kriterium 8) — ein Vermerk gibt die
  * AENDERUNGSpruefung frei, nicht die Gesamtquote. Gezaehlt wird wie dort, damit beide Ausgaben
  * dieselbe Zahl gleich meinen.
+ *
+ * Mit `ausschnitte` (Issue #1278) ordnet sie jeden Mutanten seinem Ausschnitt zu und zaehlt je
+ * Ausschnitt. Gesamtzaehlung und Ueberlebendenliste bleiben beim Pruefbereich, also bei den
+ * AUFGENOMMENEN Ausschnitten: Der Kandidat wird nur gemessen, und seine Ueberlebenden fluteten sonst
+ * Bericht und Gedaechtnisdatei. Ein Mutant, der in keinen Ausschnitt faellt, landet in
+ * `ohneAusschnitt` — Stufenplan und Mutationsumfang passen dann nicht zusammen, und das wird
+ * gemeldet statt verschluckt. Bei genau einem Ausschnitt (Backend, E11) ist er der ganze
+ * Pruefbereich: Jeder Mutant, den das Werkzeug erzeugt hat, gehoert zu ihm.
  */
-export function vollaufAuswerten(mutanten) {
+export function vollaufAuswerten(mutanten, ausschnitte = null) {
   const zaehlung = { geprueft: 0, getoetet: 0, ueberlebt: 0, ausgenommen: 0, ausserhalb: 0 };
   const ueberlebende = [];
+  const ohneAusschnitt = [];
+  const je = new Map((ausschnitte ?? []).map((a) => [a, ausschnittsZaehlung()]));
+
   for (const mutant of mutanten) {
+    let ausschnitt = null;
+    if (ausschnitte !== null) {
+      ausschnitt = ausschnitte.length === 1 ? ausschnitte[0] : ausschnitte.find((a) => a.trifft(mutant.datei));
+      if (!ausschnitt) {
+        ohneAusschnitt.push(mutant);
+        continue;
+      }
+    }
+    const eigene = ausschnitt ? je.get(ausschnitt) : ausschnittsZaehlung();
+    const gesamt = ausschnitt === null || ausschnitt.aufgenommen;
     if (mutant.zustand === 'Ignored') {
-      zaehlung.ausgenommen += 1;
+      eigene.ausgenommen += 1;
+      if (String(mutant.grund ?? '').startsWith(DARSTELLUNG_PRAEFIX)) eigene.darstellung += 1;
+      if (gesamt) zaehlung.ausgenommen += 1;
       continue;
     }
     if (ZUSTAND_GETOETET.has(mutant.zustand)) {
-      zaehlung.geprueft += 1;
-      zaehlung.getoetet += 1;
+      eigene.geprueft += 1;
+      eigene.getoetet += 1;
+      if (gesamt) {
+        zaehlung.geprueft += 1;
+        zaehlung.getoetet += 1;
+      }
       continue;
     }
     if (!ZUSTAND_UEBERLEBT.has(mutant.zustand)) continue;
-    zaehlung.geprueft += 1;
-    zaehlung.ueberlebt += 1;
-    ueberlebende.push({ ...mutant, altlast: null, vermerkGrund: null });
+    eigene.geprueft += 1;
+    eigene.ueberlebt += 1;
+    if (mutant.zustand === 'NoCoverage') eigene.ohneDeckung += 1;
+    if (gesamt) {
+      zaehlung.geprueft += 1;
+      zaehlung.ueberlebt += 1;
+      ueberlebende.push({ ...mutant, altlast: null, vermerkGrund: null });
+    }
   }
-  return { zaehlung, ueberlebende };
+
+  const jeAusschnitt = [...je].map(([ausschnitt, eigene]) => ({
+    name: ausschnitt.name,
+    muster: ausschnitt.muster ?? [],
+    aufgenommen: ausschnitt.aufgenommen,
+    aufgenommenAm: ausschnitt.aufgenommenAm ?? ausschnitt.aufgenommen,
+    gemeinsameSchwelle: ausschnitt.gemeinsameSchwelle === true,
+    kandidat: ausschnitt.kandidat === true,
+    zaehlung: eigene,
+    quote: quoteAus(eigene),
+  }));
+  return { zaehlung, ueberlebende, ausschnitte: jeAusschnitt, ohneAusschnitt };
+}
+
+/**
+ * Der Halt je Ausschnitt (AK 3, AK 6) samt der Bestandsregel (E7).
+ *
+ * Jeder aufgenommene Ausschnitt unter der Schwelle haelt an und wird genannt, auch wenn alle
+ * anderen darueber liegen; der Kandidat haelt nie an. Die Bestandsausschnitte
+ * (`gemeinsameSchwelle`) halten zunaechst nicht einzeln an, fuer sie zaehlt ihre gemeinsame Quote.
+ * Das Datum, an dem ein Bestandsausschnitt erstmals die Schwelle erreichte (`erstmals80`), kommt
+ * aus der Gedaechtnisdatei des vorigen Vollaufs und wird hier fortgeschrieben; sobald jeder
+ * Bestandsausschnitt eines traegt, gilt fuer sie die getrennte Schwelle. Der Treiber schreibt dazu
+ * nie in den versionierten Stufenplan — nur in die Gedaechtnisdatei unter `.claude/`.
+ */
+export function haltBestimmen({ ausschnitte, schwelle, erstmalsVorher = {}, heute }) {
+  const bestand = ausschnitte.filter((a) => a.aufgenommen && a.gemeinsameSchwelle);
+  const erstmals80 = {};
+  for (const a of bestand) {
+    const vorher = erstmalsVorher[a.name];
+    erstmals80[a.name] = typeof vorher === 'string' ? vorher : (a.quote >= schwelle ? heute : null);
+  }
+  const getrennt = bestand.length > 0 && bestand.every((a) => erstmals80[a.name] !== null);
+  const gemeinsamZaehlung = bestand.reduce(
+    (summe, a) => ({ geprueft: summe.geprueft + a.zaehlung.geprueft, getoetet: summe.getoetet + a.zaehlung.getoetet }),
+    { geprueft: 0, getoetet: 0 },
+  );
+  const gemeinsam = bestand.length > 0 && !getrennt
+    ? { namen: bestand.map((a) => a.name), quote: quoteAus(gemeinsamZaehlung) }
+    : null;
+
+  const haltende = [];
+  if (gemeinsam && gemeinsam.quote < schwelle) haltende.push(`Bestand gemeinsam (${gemeinsam.namen.join(', ')})`);
+  for (const a of ausschnitte) {
+    if (!a.aufgenommen) continue;
+    if (gemeinsam && a.gemeinsameSchwelle) continue;
+    if (a.quote < schwelle) haltende.push(a.name);
+  }
+  const karten = gemeinsam ? bestand.filter((a) => a.quote < schwelle).map((a) => a.name) : [];
+  return { haltende, gemeinsam, karten, erstmals80 };
 }
 
 /**
@@ -833,6 +960,77 @@ export function schwellenZeile(quote, schwelle) {
     : `${gemessen} — unter der Schwelle ${prozentText(schwelle)} %. Der Vollauf hält an.`;
 }
 
+function ausschnittsQuoteText(a, schwelle) {
+  if (a.zaehlung.geprueft === 0) return 'keine Mutanten — bestanden.';
+  const gemessen = `${prozentText(a.quote.toFixed(2))} %`;
+  return a.quote >= schwelle
+    ? `${gemessen} — Schwelle ${prozentText(schwelle)} % erfüllt`
+    : `${gemessen} — unter der Schwelle ${prozentText(schwelle)} %`;
+}
+
+function zaehlungsText(z) {
+  return `${z.geprueft} geprüft, ${z.getoetet} getötet, ${z.ueberlebt} überlebt, `
+    + `${z.ausgenommen} ausgenommen, davon ${z.darstellung} Darstellung.`;
+}
+
+function kandidatText(a) {
+  const vorschlag = `zur Aufnahme vorgeschlagen. Die Aufnahme trägt der Mensch in ${STRYKER_PFAD} ein.`;
+  if (a.zaehlung.geprueft === 0) return `keine Mutanten — bestanden, ${vorschlag}`;
+  if (a.zaehlung.ohneDeckung === a.zaehlung.geprueft) return '0 % — keine Tests im Umfang.';
+  const gemessen = `${prozentText(a.quote.toFixed(2))} %`;
+  return a.quote >= VORSCHLAGSSCHWELLE
+    ? `${gemessen} — erreicht ${VORSCHLAGSSCHWELLE} %, ${vorschlag}`
+    : `${gemessen} — unter ${VORSCHLAGSSCHWELLE} %, nicht zur Aufnahme vorgeschlagen.`;
+}
+
+/**
+ * Der Bericht je Ausschnitt (AK 5): je aufgenommenem Ausschnitt der gemessene Wert gegen die
+ * Schwelle, die Zaehlung samt der Darstellungsmutanten des Ignorers, dann die Bestandsregel (E7)
+ * und zuletzt der Kandidat gegen die Vorschlagsschwelle. Die Gesamtquote steht danach als Wert,
+ * nicht mehr als Schwellenzeile — gehalten wird je Ausschnitt. Bei genau einem Ausschnitt entfaellt
+ * der ganze Block (E11), die Meldung bleibt dann zeichengleich mit der vor Issue #1278.
+ */
+export function ausschnittsZeilen({ ausschnitte, halt, schwelle, quote, ohneAusschnitt = [] }) {
+  const zeilen = [`Ausschnitte (Schwelle ${prozentText(schwelle)} % je aufgenommenem Ausschnitt):`];
+  const imBestand = new Set(halt.gemeinsam?.namen ?? []);
+  for (const a of ausschnitte.filter((x) => x.aufgenommen)) {
+    const text = ausschnittsQuoteText(a, schwelle);
+    const zusatz = imBestand.has(a.name) ? ' (gemeinsame Schwelle des Bestands).' : '.';
+    zeilen.push(`  ${a.name}: ${text.endsWith('.') ? text : `${text}${zusatz}`}`);
+    zeilen.push(`      ${zaehlungsText(a.zaehlung)}`);
+  }
+  if (halt.gemeinsam) {
+    const { namen, quote: gemeinsam } = halt.gemeinsam;
+    const stand = namen.map((name) => `${name}: ${halt.erstmals80[name] ?? 'noch nicht'}`).join(', ');
+    const urteil = gemeinsam >= schwelle ? 'erfüllt' : 'nicht erfüllt';
+    zeilen.push(`Bestand gemeinsam (${namen.join(', ')}): ${prozentText(gemeinsam.toFixed(2))} % — `
+      + `Schwelle ${prozentText(schwelle)} % ${urteil}. Die getrennte Schwelle gilt, sobald jeder `
+      + `Bestandsausschnitt erstmals ${prozentText(schwelle)} % erreicht hat (${stand}).`);
+    for (const name of halt.karten) {
+      zeilen.push(`  ${name} unter ${prozentText(schwelle)} % — Karte für die fehlenden Tests anlegen.`);
+    }
+  }
+  const naechster = ausschnitte.find((a) => a.kandidat);
+  if (naechster) {
+    zeilen.push(`Kandidat ${naechster.name}: ${kandidatText(naechster)}`);
+    zeilen.push(`      ${zaehlungsText(naechster.zaehlung)}`);
+  } else {
+    zeilen.push('Kandidat: keiner — alle Ausschnitte sind aufgenommen.');
+  }
+  if (ohneAusschnitt.length > 0) {
+    const dateien = [...new Set(ohneAusschnitt.map((m) => m.datei))].sort();
+    zeilen.push(`Mutanten ohne Ausschnitt (${ohneAusschnitt.length}) — Stufenplan und Mutationsumfang passen nicht zusammen:`);
+    for (const datei of dateien) zeilen.push(`  ${datei}`);
+  }
+  zeilen.push('');
+  zeilen.push(`Quote: ${prozentText(quote.toFixed(2))} % gesamt über die aufgenommenen Ausschnitte.`);
+  zeilen.push(halt.haltende.length > 0
+    ? `Der Vollauf hält an: ${halt.haltende.join(', ')} unter der Schwelle ${prozentText(schwelle)} %.`
+    : `Kein Halt: Schwelle ${prozentText(schwelle)} % in jedem aufgenommenen Ausschnitt erfüllt`
+      + `${halt.gemeinsam ? ', im Bestand gemeinsam' : ''}.`);
+  return zeilen;
+}
+
 function vollaufZeile(seite, inhalt) {
   if (!inhalt) {
     return `Letzter Vollauf ${seite}: es gibt noch keinen Vollauf — allein für diese Anzeige wird keiner gestartet.`;
@@ -865,6 +1063,7 @@ export function meldungBauen({
   stufe,
   quote = null,
   schwelle = null,
+  ausschnittsBericht = null,
   schluss,
 }) {
   const zeilen = [];
@@ -924,7 +1123,10 @@ export function meldungBauen({
     }
   }
 
-  if (quote !== null && schwelle !== null) {
+  if (ausschnittsBericht) {
+    zeilen.push('');
+    zeilen.push(...ausschnittsBericht);
+  } else if (quote !== null && schwelle !== null) {
     zeilen.push('');
     zeilen.push(schwellenZeile(quote, schwelle));
   }
@@ -1093,7 +1295,8 @@ function fehlenderBericht(teile, ergebnis) {
 function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, beginn, vollauf, stufe, schwelle }) {
   let mutanten;
   if (seite === 'frontend') {
-    const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, args: strykerArgumente([]) });
+    const mutate = bereich.vollaufMutate.flatMap(klammernAufloesen);
+    const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, args: strykerArgumente(mutate) });
     if (!bericht) {
       ausgabe(fehlenderBericht(BERICHT_TEILE, ergebnis));
       return 1;
@@ -1108,9 +1311,20 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
     mutanten = pitMutanten(xml);
   }
 
-  const { zaehlung, ueberlebende } = vollaufAuswerten(mutanten);
+  const gemessen = bereich.ausschnitte.filter((a) => bereich.gemessen.includes(a.name));
+  const ausgewertet = vollaufAuswerten(mutanten, gemessen);
+  const { zaehlung, ueberlebende } = ausgewertet;
   const quote = quoteAus(zaehlung);
   const dauerMs = jetzt() - beginn;
+  const mehrere = gemessen.length > 1;
+  const erstmalsVorher = Object.fromEntries((Array.isArray(vollauf?.ausschnitte) ? vollauf.ausschnitte : [])
+    .filter((a) => typeof a?.name === 'string')
+    .map((a) => [a.name, a.erstmals80]));
+  const halt = mehrere
+    ? haltBestimmen({
+      ausschnitte: ausgewertet.ausschnitte, schwelle, erstmalsVorher, heute: new Date(jetzt()).toISOString().slice(0, 10),
+    })
+    : { haltende: quote >= schwelle ? [] : [seite] };
   // Auch ein an der Schwelle gescheiterter Lauf hinterlaesst die Datei: Sein Ergebnis ist der
   // Stand, gegen den die naechste Aenderungspruefung vergleicht — ihn wegzuwerfen, weil er rot ist,
   // nahm der vierten Bedingung des Altlast-Vermerks genau dann die Grundlage, wenn sie gebraucht wird.
@@ -1126,6 +1340,8 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
       mutator: m.mutator,
       tests: m.deckendeTests ?? [],
     })),
+    // Nur bei mehreren Ausschnitten (E11): Die Backend-Datei bleibt, wie sie war.
+    ...(mehrere ? { ausschnitte: ausgewertet.ausschnitte.map((a) => gedaechtnisAusschnitt(a, halt)) } : {}),
   });
 
   ausgabe(meldungBauen({
@@ -1140,9 +1356,24 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
     stufe,
     quote,
     schwelle,
+    ausschnittsBericht: mehrere
+      ? ausschnittsZeilen({ ausschnitte: ausgewertet.ausschnitte, halt, schwelle, quote, ohneAusschnitt: ausgewertet.ohneAusschnitt })
+      : null,
     schluss: fehler ?? undefined,
   }));
-  return quote >= schwelle && !fehler ? 0 : 1;
+  return halt.haltende.length === 0 && ausgewertet.ohneAusschnitt.length === 0 && !fehler ? 0 : 1;
+}
+
+/** Ein Ausschnitt in der Gedaechtnisdatei; `erstmals80` traegt nur ein Bestandsausschnitt (E7). */
+function gedaechtnisAusschnitt(a, halt) {
+  return {
+    name: a.name,
+    muster: a.muster,
+    aufgenommen: a.aufgenommenAm,
+    quote: a.quote,
+    zaehlung: a.zaehlung,
+    ...(a.name in halt.erstmals80 ? { erstmals80: halt.erstmals80[a.name] } : {}),
+  };
 }
 
 /**

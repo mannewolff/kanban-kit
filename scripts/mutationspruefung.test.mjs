@@ -45,6 +45,7 @@ import {
   SCHWELLEN,
   quoteAus,
   vollaufAuswerten,
+  klammernAufloesen,
 } from './mutationspruefung.mjs';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
@@ -1324,12 +1325,14 @@ const BERICHT_AUF_SCHWELLE = bericht({
   },
 });
 
-test('laufen: vollauf frontend ruft Stryker ohne Verengung im Arbeitsverzeichnis frontend', () => {
+test('laufen: vollauf frontend ruft Stryker mit dem vollen Pruefbereich als -m im Arbeitsverzeichnis frontend', () => {
   const { aufrufe } = mitProjekt((wurzel) =>
     sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_UEBER_SCHWELLE)),
   );
   assert.equal(aufrufe.length, 1);
-  assert.deepEqual(aufrufe[0].args, ['run', '--reporters', 'json,html,clear-text']);
+  // Ohne Kandidat im Plan ist der Umfang genau der Pruefbereich; `--mutate` ersetzt die Liste der
+  // Konfiguration, darum stehen die Negationen mit darin (E6, Issue #1278).
+  assert.deepEqual(aufrufe[0].args, ['run', '-m', MUTATE.join(','), '--reporters', 'json,html,clear-text']);
   assert.match(aufrufe[0].optionen.cwd, /frontend$/);
 });
 
@@ -1564,4 +1567,300 @@ test('laufen: vollauf backend bleibt mit dem Stufenplan zeichengleich (Gegenprob
   assert.equal(inhalt.datum, '1970-01-01T00:02:04.000Z');
   assert.equal(inhalt.dauerMs, 61500);
   assert.equal(inhalt.quote, 50);
+});
+
+// --- Vollauf je Ausschnitt (Issue #1278) -------------------------------------
+
+/**
+ * Ein Stufenplan mit vier aufgenommenen Ausschnitten und einem Kandidaten. Die beiden ersten
+ * tragen die gemeinsame Schwelle des Bestands (E7), die beiden folgenden nicht.
+ */
+const PLAN_AUSSCHNITTE = {
+  ausnahmen: ['src/theme.ts'],
+  ausschnitte: [
+    { name: 'bestand-a', muster: ['src/lib/**/*.{ts,tsx}'], aufgenommen: '2026-09-28', gemeinsameSchwelle: true, reihenfolge: 1 },
+    { name: 'bestand-b', muster: ['src/api/**/*.ts'], aufgenommen: '2026-09-28', gemeinsameSchwelle: true, reihenfolge: 2 },
+    { name: 'stufe-c', muster: ['src/c/**/*.tsx'], aufgenommen: '2026-09-29', reihenfolge: 3 },
+    { name: 'stufe-d', muster: ['src/d/**/*.tsx'], aufgenommen: '2026-09-29', reihenfolge: 4 },
+    { name: 'kandidat-k', muster: ['src/k/**/*.tsx'], aufgenommen: false, reihenfolge: 5 },
+    { name: 'spaeter-z', muster: ['src/z/**/*.tsx'], aufgenommen: false, reihenfolge: 6 },
+  ],
+};
+
+let laufendeId = 0;
+
+/**
+ * Rohmutanten eines Stryker-Berichts in der verlangten Mischung. `ignoriert` erzeugt Mutanten, die
+ * der Darstellungs-Ignorer ausgenommen hat, `kommentar` solche aus einer Stryker-Ausnahme je Stelle.
+ */
+function mischung({ getoetet = 0, ueberlebt = 0, ohneDeckung = 0, ignoriert = 0, kommentar = 0 }) {
+  const reihe = (anzahl, zustand, extra = {}) => Array.from({ length: anzahl }, () => {
+    laufendeId += 1;
+    return { ...mutant(2, 'ConditionalExpression', zustand, { id: `m${laufendeId}`, ersetzung: `x${laufendeId}` }), ...extra };
+  });
+  return [
+    ...reihe(getoetet, 'Killed'),
+    ...reihe(ueberlebt, 'Survived'),
+    ...reihe(ohneDeckung, 'NoCoverage', { coveredBy: [] }),
+    ...reihe(ignoriert, 'Ignored', { statusReason: 'Darstellung: Stilwert im sx- oder style-Attribut' }),
+    ...reihe(kommentar, 'Ignored', { statusReason: 'Disabled by user comment' }),
+  ];
+}
+
+function berichtJeDatei(dateien) {
+  const files = {};
+  for (const [pfad, zusammensetzung] of Object.entries(dateien)) {
+    files[pfad] = { source: QUELLE_A, mutants: mischung(zusammensetzung) };
+  }
+  return bericht(files);
+}
+
+/** Drei aufgenommene Ausschnitte bei 95 %, einer bei 79,9 %, der Kandidat bei 90 %. */
+const BERICHT_EINER_UNTER = berichtJeDatei({
+  'src/lib/a.ts': { getoetet: 95, ueberlebt: 5 },
+  'src/api/b.ts': { getoetet: 95, ueberlebt: 5 },
+  'src/c/C.tsx': { getoetet: 799, ueberlebt: 201 },
+  'src/d/D.tsx': { getoetet: 95, ueberlebt: 5 },
+  'src/k/K.tsx': { getoetet: 9, ueberlebt: 1 },
+});
+
+function vollaufMit(berichtInhalt, optionen = {}, extra = {}) {
+  return mitProjekt((wurzel) => {
+    const ergebnis = sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, berichtInhalt), {
+      jetzt: () => Date.parse('2026-09-29T10:00:00.000Z'),
+      ...extra,
+    });
+    return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'frontend') };
+  }, { plan: PLAN_AUSSCHNITTE, ...optionen });
+}
+
+test('strykerMutanten: der Grund einer Ausnahme wird mitgelesen', () => {
+  const [ignoriert] = strykerMutanten(berichtJeDatei({ 'src/c/C.tsx': { ignoriert: 1 } }));
+  assert.equal(ignoriert.zustand, 'Ignored');
+  assert.match(ignoriert.grund, /^Darstellung:/);
+});
+
+test('klammernAufloesen: {a,b} wird zu zwei Mustern, alles andere bleibt', () => {
+  assert.deepEqual(klammernAufloesen('src/lib/**/*.{ts,tsx}'), ['src/lib/**/*.ts', 'src/lib/**/*.tsx']);
+  assert.deepEqual(klammernAufloesen('!src/**/*.test.ts'), ['!src/**/*.test.ts']);
+});
+
+test('frontendBereich: der Vollauf mutiert die aufgenommenen Ausschnitte plus den Kandidaten samt Ausschluessen (E6)', () => {
+  const bereich = frontendBereich(PLAN_AUSSCHNITTE);
+  assert.deepEqual(bereich.gemessen, ['bestand-a', 'bestand-b', 'stufe-c', 'stufe-d', 'kandidat-k']);
+  assert.deepEqual(bereich.vollaufMutate, [
+    'src/lib/**/*.{ts,tsx}', 'src/api/**/*.ts', 'src/c/**/*.tsx', 'src/d/**/*.tsx', 'src/k/**/*.tsx',
+    '!src/**/*.test.ts', '!src/**/*.test.tsx', '!src/theme.ts',
+  ]);
+  const kandidat = bereich.ausschnitte.find((a) => a.name === 'kandidat-k');
+  assert.equal(kandidat.kandidat, true);
+  assert.equal(bereich.ausschnitte.filter((a) => a.kandidat).length, 1);
+});
+
+test('laufen: vollauf frontend traegt -m aus mutateFuer mit Negationen, die Klammern aufgeloest (E6)', () => {
+  const { aufrufe } = vollaufMit(BERICHT_EINER_UNTER);
+  assert.equal(aufrufe.length, 1);
+  const [, schalter, liste] = aufrufe[0].args;
+  assert.equal(schalter, '-m');
+  assert.deepEqual(liste.split(','), [
+    'src/lib/**/*.ts', 'src/lib/**/*.tsx', 'src/api/**/*.ts', 'src/c/**/*.tsx', 'src/d/**/*.tsx', 'src/k/**/*.tsx',
+    '!src/**/*.test.ts', '!src/**/*.test.tsx', '!src/theme.ts',
+  ]);
+});
+
+test('vollaufAuswerten: zaehlt je Ausschnitt geprueft, getoetet, ueberlebt, ausgenommen und Darstellung', () => {
+  const bereich = frontendBereich(PLAN_AUSSCHNITTE);
+  const mutanten = strykerMutanten(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 3, ueberlebt: 1, ignoriert: 2, kommentar: 1 },
+    'src/c/C.tsx': { getoetet: 1, ohneDeckung: 1 },
+    'src/k/K.tsx': { getoetet: 1, ueberlebt: 1 },
+  }));
+  const { zaehlung, ausschnitte, ohneAusschnitt, ueberlebende } = vollaufAuswerten(mutanten, bereich.ausschnitte.filter((a) => bereich.gemessen.includes(a.name)));
+  const je = Object.fromEntries(ausschnitte.map((a) => [a.name, a]));
+  assert.deepEqual(je['bestand-a'].zaehlung, { geprueft: 4, getoetet: 3, ueberlebt: 1, ausgenommen: 3, darstellung: 2, ohneDeckung: 0 });
+  assert.equal(je['bestand-a'].quote, 75);
+  assert.deepEqual(je['stufe-c'].zaehlung, { geprueft: 2, getoetet: 1, ueberlebt: 1, ausgenommen: 0, darstellung: 0, ohneDeckung: 1 });
+  assert.equal(je['bestand-b'].zaehlung.geprueft, 0);
+  assert.equal(je['kandidat-k'].quote, 50);
+  assert.deepEqual(ohneAusschnitt, []);
+  // Gesamtwert und Ueberlebendenliste bleiben beim Pruefbereich: den aufgenommenen Ausschnitten.
+  assert.deepEqual(zaehlung, { geprueft: 6, getoetet: 4, ueberlebt: 2, ausgenommen: 3, ausserhalb: 0 });
+  assert.equal(ueberlebende.length, 2);
+});
+
+test('vollaufAuswerten: ein Mutant ohne Ausschnitt wird gemeldet, nicht verschluckt', () => {
+  const bereich = frontendBereich(PLAN_AUSSCHNITTE);
+  const mutanten = strykerMutanten(berichtJeDatei({ 'src/fremd/F.tsx': { getoetet: 1 } }));
+  const { ohneAusschnitt } = vollaufAuswerten(mutanten, bereich.ausschnitte);
+  assert.deepEqual(ohneAusschnitt.map((m) => m.datei), ['frontend/src/fremd/F.tsx']);
+});
+
+test('laufen: ein Mutant ohne Ausschnitt endet ungleich 0 und nennt die Datei', () => {
+  const { code, text } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 5 },
+    'src/fremd/F.tsx': { getoetet: 1 },
+  }));
+  assert.equal(code, 1);
+  assert.match(text, /ohne Ausschnitt.*\n.*frontend\/src\/fremd\/F\.tsx/);
+});
+
+test('laufen: ein aufgenommener Ausschnitt bei 79,9 % neben drei bei 95 % haelt an und wird genannt (AK 3)', () => {
+  const { code, text } = vollaufMit(BERICHT_EINER_UNTER);
+  assert.equal(code, 1);
+  assert.match(text, /stufe-c: 79,90 % — unter der Schwelle 80 %/);
+  assert.match(text, /Der Vollauf hält an: stufe-c unter der Schwelle 80 %\./);
+  assert.match(text, /stufe-d: 95,00 % — Schwelle 80 % erfüllt/);
+});
+
+test('laufen: derselbe Wert beim Kandidaten haelt nicht an (AK 3)', () => {
+  const { code, text } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 95, ueberlebt: 5 },
+    'src/k/K.tsx': { getoetet: 799, ueberlebt: 201 },
+  }));
+  assert.equal(code, 0);
+  assert.match(text, /Kandidat kandidat-k: 79,90 %/);
+  assert.ok(!text.includes('hält an'));
+});
+
+test('laufen: der Kandidat bei 79 % haelt nicht an', () => {
+  const { code } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 9, ueberlebt: 1 },
+    'src/k/K.tsx': { getoetet: 79, ueberlebt: 21 },
+  }));
+  assert.equal(code, 0);
+});
+
+test('laufen: Kandidat bei 81,9 % ohne, bei 82,0 % mit Vorschlagszeile', () => {
+  const darunter = vollaufMit(berichtJeDatei({ 'src/k/K.tsx': { getoetet: 819, ueberlebt: 181 } }));
+  assert.match(darunter.text, /Kandidat kandidat-k: 81,90 % — unter 82 %, nicht zur Aufnahme vorgeschlagen\./);
+  assert.ok(!darunter.text.includes('zur Aufnahme vorgeschlagen. '));
+  const erreicht = vollaufMit(berichtJeDatei({ 'src/k/K.tsx': { getoetet: 82, ueberlebt: 18 } }));
+  assert.match(erreicht.text, /Kandidat kandidat-k: 82,00 % — erreicht 82 %, zur Aufnahme vorgeschlagen\. Die Aufnahme trägt der Mensch in frontend\/mutationsstufen\.json ein\./);
+});
+
+test('laufen: ein Ausschnitt ohne Mutanten steht als bestanden mit dem Vermerk keine Mutanten', () => {
+  const { code, text } = vollaufMit(berichtJeDatei({ 'src/lib/a.ts': { getoetet: 5 } }));
+  assert.equal(code, 0);
+  assert.match(text, /stufe-d: keine Mutanten — bestanden\./);
+});
+
+test('laufen: ein Kandidat ohne Tests im Umfang steht als 0 % — keine Tests im Umfang', () => {
+  const { code, text } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 5 },
+    'src/k/K.tsx': { ohneDeckung: 7 },
+  }));
+  assert.equal(code, 0);
+  assert.match(text, /Kandidat kandidat-k: 0 % — keine Tests im Umfang\./);
+});
+
+test('laufen: je Ausschnitt die Zahl der Darstellungsmutanten, auch fuer die Bestandsausschnitte', () => {
+  const { text } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 5, ignoriert: 3, kommentar: 1 },
+    'src/api/b.ts': { getoetet: 5, ignoriert: 2 },
+    'src/c/C.tsx': { getoetet: 5, ignoriert: 11 },
+    'src/k/K.tsx': { getoetet: 5, ignoriert: 4 },
+  }));
+  assert.match(text, /bestand-a: 100,00 %[^\n]*\n\s+5 geprüft, 5 getötet, 0 überlebt, 4 ausgenommen, davon 3 Darstellung\./);
+  assert.match(text, /bestand-b: 100,00 %[^\n]*\n\s+5 geprüft, 5 getötet, 0 überlebt, 2 ausgenommen, davon 2 Darstellung\./);
+  assert.match(text, /stufe-c: 100,00 %[^\n]*\n\s+5 geprüft, 5 getötet, 0 überlebt, 11 ausgenommen, davon 11 Darstellung\./);
+  assert.match(text, /Kandidat kandidat-k: 100,00 %[^\n]*\n\s+5 geprüft, 5 getötet, 0 überlebt, 4 ausgenommen, davon 4 Darstellung\./);
+});
+
+/** Bestand-a bei 90 %, bestand-b bei 75 %: gemeinsam 82,5 %. */
+const BERICHT_BESTAND_B_UNTER = berichtJeDatei({
+  'src/lib/a.ts': { getoetet: 90, ueberlebt: 10 },
+  'src/api/b.ts': { getoetet: 75, ueberlebt: 25 },
+});
+
+test('Bestandsregel (E7): ohne erstmals80 zaehlt die gemeinsame Quote, der Bericht verlangt eine Karte', () => {
+  const { code, text, inhalt } = vollaufMit(BERICHT_BESTAND_B_UNTER);
+  assert.equal(code, 0);
+  assert.match(text, /Bestand gemeinsam \(bestand-a, bestand-b\): 82,50 % — Schwelle 80 % erfüllt/);
+  assert.match(text, /bestand-b unter 80 % — Karte für die fehlenden Tests anlegen\./);
+  assert.match(text, /Kein Halt: Schwelle 80 % in jedem aufgenommenen Ausschnitt erfüllt, im Bestand gemeinsam\./);
+  const je = Object.fromEntries(inhalt.ausschnitte.map((a) => [a.name, a]));
+  assert.equal(je['bestand-a'].erstmals80, '2026-09-29');
+  assert.equal(je['bestand-b'].erstmals80, null);
+});
+
+test('Bestandsregel (E7): ein erstmals80 gesetzt — weiter die gemeinsame Quote, das Datum bleibt stehen', () => {
+  const vollauf = {
+    frontend: {
+      datum: '2026-09-27T00:00:00.000Z', dauerMs: 1, quote: 84.58, mutanten: [],
+      ausschnitte: [{ name: 'bestand-a', erstmals80: '2026-09-20' }, { name: 'bestand-b', erstmals80: null }],
+    },
+  };
+  const { code, text, inhalt } = vollaufMit(BERICHT_BESTAND_B_UNTER, { vollauf });
+  assert.equal(code, 0);
+  assert.match(text, /Karte für die fehlenden Tests anlegen/);
+  const je = Object.fromEntries(inhalt.ausschnitte.map((a) => [a.name, a]));
+  assert.equal(je['bestand-a'].erstmals80, '2026-09-20');
+  assert.equal(je['bestand-b'].erstmals80, null);
+});
+
+test('Bestandsregel (E7): beide erstmals80 gesetzt — die getrennte Schwelle haelt an', () => {
+  const vollauf = {
+    frontend: {
+      datum: '2026-09-27T00:00:00.000Z', dauerMs: 1, quote: 84.58, mutanten: [],
+      ausschnitte: [{ name: 'bestand-a', erstmals80: '2026-09-20' }, { name: 'bestand-b', erstmals80: '2026-09-21' }],
+    },
+  };
+  const { code, text } = vollaufMit(BERICHT_BESTAND_B_UNTER, { vollauf });
+  assert.equal(code, 1);
+  assert.match(text, /Der Vollauf hält an: bestand-b unter der Schwelle 80 %\./);
+  assert.ok(!text.includes('Karte für die fehlenden Tests anlegen'));
+});
+
+test('Bestandsregel (E7): die gemeinsame Quote unter 80 % haelt an', () => {
+  const { code, text } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 70, ueberlebt: 30 },
+    'src/api/b.ts': { getoetet: 75, ueberlebt: 25 },
+  }));
+  assert.equal(code, 1);
+  assert.match(text, /Der Vollauf hält an: Bestand gemeinsam \(bestand-a, bestand-b\) unter der Schwelle 80 %\./);
+});
+
+test('Gedaechtnisdatei: Feld ausschnitte mit Name, Muster, aufgenommen, Quote und Zaehlung; quote bleibt Gesamtwert', () => {
+  const { inhalt } = vollaufMit(BERICHT_EINER_UNTER);
+  assert.deepEqual(inhalt.ausschnitte.map((a) => a.name), ['bestand-a', 'bestand-b', 'stufe-c', 'stufe-d', 'kandidat-k']);
+  const c = inhalt.ausschnitte.find((a) => a.name === 'stufe-c');
+  assert.deepEqual(c, {
+    name: 'stufe-c',
+    muster: ['src/c/**/*.tsx'],
+    aufgenommen: '2026-09-29',
+    quote: 79.9,
+    zaehlung: { geprueft: 1000, getoetet: 799, ueberlebt: 201, ausgenommen: 0, darstellung: 0, ohneDeckung: 0 },
+  });
+  assert.equal(inhalt.ausschnitte.find((a) => a.name === 'kandidat-k').aufgenommen, false);
+  assert.ok('erstmals80' in inhalt.ausschnitte.find((a) => a.name === 'bestand-a'));
+  // Gesamtwert ueber die aufgenommenen Ausschnitte: (95+95+799+95)/(100+100+1000+100).
+  assert.equal(inhalt.quote, 83.38);
+});
+
+test('Gedaechtnisdatei: eine Datei ohne ausschnitte wird weiter gelesen und wie bisher ausgewertet', () => {
+  const vollauf = { frontend: { datum: '2026-09-27T00:00:00.000Z', dauerMs: 2100000, quote: 84.58, mutanten: [] } };
+  const { code, text } = vollaufMit(BERICHT_BESTAND_B_UNTER, { vollauf });
+  assert.equal(code, 0);
+  assert.match(text, /Letzter Vollauf frontend: 35 min 0 s am 2026-09-27, Quote 84,58 %\./);
+  assert.match(text, /Bestand gemeinsam/);
+});
+
+test('Backend im Ein-Ausschnitt-Fall: keine Ausschnittszeile, keine ausschnitte in der Gedaechtnisdatei (E11)', () => {
+  const { text, inhalt } = mitProjekt((wurzel) => {
+    const ergebnis = sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML));
+    return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'backend') };
+  });
+  assert.ok(!text.includes('Ausschnitt'));
+  assert.ok(!text.includes('Kandidat'));
+  assert.equal('ausschnitte' in inhalt, false);
+});
+
+test('mutationspruefung.mjs schreibt nie in frontend/mutationsstufen.json (grep-fest)', () => {
+  const quelle = readFileSync(join(HIER, 'mutationspruefung.mjs'), 'utf-8');
+  const schreibend = /\b(writeFileSync|appendFileSync|rmSync|renameSync|unlinkSync|copyFileSync|writeFile|appendFile|createWriteStream)\s*\(([^)]*)/g;
+  const aufrufe = [...quelle.matchAll(schreibend)];
+  assert.ok(aufrufe.length > 0);
+  for (const [, , ziel] of aufrufe) {
+    assert.ok(!/STRYKER_PFAD|mutationsstufen/.test(ziel), `Schreibzugriff auf den Stufenplan: ${ziel}`);
+  }
 });
