@@ -34,6 +34,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
+import { aufgenommene, mutateFuer } from '../frontend/mutationsbereich.mjs';
+
 export const KOMMANDOS = ['aenderung', 'vollauf'];
 export const SEITEN = ['frontend', 'backend'];
 
@@ -58,14 +60,20 @@ function maskiere(zeichen) {
  * Minimal-Glob fuer Pfadmuster: '*' innerhalb eines Segments, '**' ueber Segmentgrenzen.
  * Ein '**' samt folgendem Trenner darf ganz verschwinden, damit `src/lib/**\/*.ts` auch
  * `src/lib/a.ts` trifft und nicht erst eine Datei im Unterverzeichnis — dieselbe Auslegung,
- * die Stryker seinen `mutate`-Mustern gibt.
+ * die Stryker seinen `mutate`-Mustern gibt. Dazu Alternativen ohne Schachtelung,
+ * `*.{ts,tsx}`, wie sie der Stufenplan traegt (#1276).
  */
 export function globZuRegex(muster) {
   let quelle = '';
   let i = 0;
   while (i < muster.length) {
     const zeichen = muster[i];
-    if (zeichen !== '*') {
+    if (zeichen === '{' && muster.indexOf('}', i) > i) {
+      const ende = muster.indexOf('}', i);
+      const zweige = muster.slice(i + 1, ende).split(',');
+      quelle += `(?:${zweige.map((zweig) => [...zweig].map(maskiere).join('')).join('|')})`;
+      i = ende + 1;
+    } else if (zeichen !== '*') {
       quelle += maskiere(zeichen);
       i += 1;
     } else if (muster[i + 1] === '*') {
@@ -102,30 +110,79 @@ export function javaPfadZuKlasse(pfad) {
 
 // --- Pruefbereich je Seite --------------------------------------------------
 
-const STRYKER_PFAD = join('frontend', 'stryker.config.json');
+const STRYKER_PFAD = join('frontend', 'mutationsstufen.json');
+
+function istMusterliste(wert) {
+  return Array.isArray(wert) && wert.length > 0 && wert.every((m) => typeof m === 'string' && m.length > 0);
+}
 
 /**
- * Der Frontend-Bereich kommt aus `mutate` in `frontend/stryker.config.json` — dieselbe Quelle,
- * aus der schon der Frontend-Testumfang abgeleitet wird. Nie duplizieren: Ab der ersten
- * Abweichung pruefte der Treiber einen anderen Bereich als das Werkzeug.
+ * Prueft die Form des Stufenplans, bevor ein Bereich daraus entsteht: Ein Ausschnitt ohne Muster
+ * fiele sonst still aus dem Pruefbereich, und der Bericht saehe vollstaendig aus (#1073).
+ * Rueckgabe ist der erste Fehler als Satz oder `null`.
  */
-export function frontendBereich(strykerConfig) {
-  const woertlich = strykerConfig?.mutate ?? [];
+export function stufenplanPruefen(plan) {
+  if (plan === null || typeof plan !== 'object') return 'der Stufenplan ist kein Objekt';
+  if (!Array.isArray(plan.ausnahmen)) return '`ausnahmen` fehlt oder ist keine Liste';
+  if (!Array.isArray(plan.ausschnitte)) return '`ausschnitte` fehlt oder ist keine Liste';
+  for (const ausschnitt of plan.ausschnitte) {
+    if (typeof ausschnitt?.name !== 'string' || ausschnitt.name.length === 0) {
+      return 'ein Ausschnitt traegt keinen `name`';
+    }
+    if (!istMusterliste(ausschnitt.muster)) {
+      return `Ausschnitt ${ausschnitt.name}: \`muster\` fehlt oder ist keine nicht-leere Liste`;
+    }
+  }
+  return null;
+}
+
+/** Ein- und Ausschluss eines `mutate`-Musters als Regex, relativ zur Repo-Wurzel. */
+function frontendRegexe(mutate) {
   const ein = [];
   const aus = [];
-  for (const muster of woertlich) {
+  for (const muster of mutate) {
     const negiert = muster.startsWith('!');
     const roh = negiert ? muster.slice(1) : muster;
     (negiert ? aus : ein).push(globZuRegex(`frontend/${roh}`));
   }
+  return { ein, aus };
+}
+
+/**
+ * Der Frontend-Bereich kommt aus dem Stufenplan `frontend/mutationsstufen.json` — dieselbe Quelle,
+ * aus der `stryker.config.mjs` ihr `mutate` und der Mutationslauf seinen Testumfang ableiten. Nie
+ * duplizieren: Ab der ersten Abweichung pruefte der Treiber einen anderen Bereich als das Werkzeug.
+ *
+ * Neben dem Pruefbereich liefert er ALLE Ausschnitte des Plans mit ihrer Trefferfunktion — auch
+ * die noch nicht aufgenommenen, damit sich jede Datei ihrem Ausschnitt zuordnen laesst. Die
+ * Ausschluesse (Testdateien, Ausnahmen) gelten fuer jeden Ausschnitt.
+ */
+export function frontendBereich(plan) {
+  const woertlich = mutateFuer(aufgenommene(plan).map((a) => a.name), plan);
+  const { ein, aus } = frontendRegexe(woertlich);
+  const ausgeschlossen = (pfad) => aus.some((r) => r.test(pfad));
+  const ausschnitte = plan.ausschnitte.map((ausschnitt) => {
+    const eigene = ausschnitt.muster.map((m) => globZuRegex(`frontend/${m}`));
+    return {
+      name: ausschnitt.name,
+      aufgenommen: typeof ausschnitt.aufgenommen === 'string',
+      trifft: (pfad) => eigene.some((r) => r.test(pfad)) && !ausgeschlossen(pfad),
+    };
+  });
   return {
     seite: 'frontend',
-    quelle: `${STRYKER_PFAD} (mutate)`,
+    quelle: `${STRYKER_PFAD} (aufgenommene Ausschnitte)`,
     woertlich,
     zeilen: woertlich,
-    trifft: (pfad) => ein.some((r) => r.test(pfad)) && !aus.some((r) => r.test(pfad)),
+    ausschnitte,
+    trifft: (pfad) => ein.some((r) => r.test(pfad)) && !ausgeschlossen(pfad),
     istSeitenTest: (pfad) => pfad.startsWith('frontend/') && /\.test\.tsx?$/.test(pfad),
   };
+}
+
+/** Der Ausschnitt, in dem eine Datei liegt, oder `null` — fuer beide Seiten dieselbe Frage. */
+export function ausschnittVon(bereich, pfad) {
+  return bereich.ausschnitte.find((ausschnitt) => ausschnitt.trifft(pfad)) ?? null;
 }
 
 function ohneKommentare(xml) {
@@ -177,6 +234,11 @@ export function backendBereich(gelesen) {
   const quelle = gelesen.quelle === 'property'
     ? 'pom.xml, Profil pit, Property pit.targetClasses + excludedClasses'
     : 'pom.xml, Profil pit, targetClasses + excludedClasses';
+  const trifft = (pfad) => {
+    const klasse = javaPfadZuKlasse(pfad);
+    if (klasse === null) return false;
+    return ein.some((r) => r.test(klasse)) && !aus.some((r) => r.test(klasse));
+  };
   return {
     seite: 'backend',
     quelle,
@@ -185,11 +247,10 @@ export function backendBereich(gelesen) {
       ...gelesen.ziel.map((m) => `eingeschlossen: ${m}`),
       ...gelesen.aus.map((m) => `ausgenommen:    ${m}`),
     ],
-    trifft: (pfad) => {
-      const klasse = javaPfadZuKlasse(pfad);
-      if (klasse === null) return false;
-      return ein.some((r) => r.test(klasse)) && !aus.some((r) => r.test(klasse));
-    },
+    // Genau ein Ausschnitt ueber den ganzen Pruefbereich (E11): Die Ausschnittslogik ist damit fuer
+    // beide Seiten dieselbe, statt zwei Auswertungspfade zu tragen, die auseinanderlaufen.
+    ausschnitte: [{ name: 'backend', aufgenommen: true, trifft }],
+    trifft,
     istSeitenTest: (pfad) => pfad.startsWith('src/test/java/') && /(Test|IT)\.java$/.test(pfad),
   };
 }
@@ -911,9 +972,11 @@ export function festeZuordnungLesen(wurzel) {
 
 function bereichLesen(seite, wurzel) {
   if (seite === 'frontend') {
-    const config = jsonLesen(join(wurzel, 'frontend', 'stryker.config.json'));
-    if (!config) throw new Error(`${STRYKER_PFAD} fehlt oder ist kein gültiges JSON — ohne sie ist der Prüfbereich unbekannt.`);
-    return frontendBereich(config);
+    const plan = jsonLesen(join(wurzel, STRYKER_PFAD));
+    if (!plan) throw new Error(`${STRYKER_PFAD} fehlt oder ist kein gültiges JSON — ohne ihn ist der Prüfbereich unbekannt.`);
+    const fehler = stufenplanPruefen(plan);
+    if (fehler) throw new Error(`${STRYKER_PFAD} ist ungültig: ${fehler} — ohne ihn ist der Prüfbereich unbekannt.`);
+    return frontendBereich(plan);
   }
   const pomPfad = join(wurzel, 'pom.xml');
   if (!existsSync(pomPfad)) throw new Error('pom.xml fehlt — ohne sie ist der Prüfbereich unbekannt.');

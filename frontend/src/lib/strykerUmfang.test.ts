@@ -8,7 +8,7 @@ import {
   type Stufenplan,
 } from '../../mutationTestUmfang'
 
-// Leitplanke zu Issue #1073, Befund 1: `stryker.config.json` hat einen Umfang zugesagt, den es
+// Leitplanke zu Issue #1073, Befund 1: die Stryker-Konfiguration hat einen Umfang zugesagt, den sie
 // nicht eingelöst hat — `mutate` nannte `src/api/**/*.ts`, der Testrunner wurde über
 // `vitest.dir: "src/lib"` aber nur nach `src/lib` geschickt. Der erzeugte Bericht sah trotzdem
 // vollständig aus, enthielt aber keine einzige Datei aus `src/api`. Das ist schlimmer als ein

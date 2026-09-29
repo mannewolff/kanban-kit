@@ -2,7 +2,7 @@ import stufenplanQuelle from './mutationsstufen.json'
 
 /**
  * Der Testumfang des Mutationslaufs, abgeleitet aus dem Stufenplan `mutationsstufen.json`
- * (#1275; zuvor aus `mutate` in `stryker.config.json`, #1073).
+ * (#1275; zuvor aus `mutate` der Stryker-Konfiguration, #1073).
  *
  * Vorher standen Mutationsumfang und Testumfang getrennt in derselben Datei — `mutate` nannte
  * `src/api/**` + `src/lib/**`, der Runner wurde über `vitest.dir` aber nur nach `src/lib`

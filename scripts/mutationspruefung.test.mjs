@@ -12,6 +12,8 @@ import {
   pitGlobZuRegex,
   javaPfadZuKlasse,
   frontendBereich,
+  stufenplanPruefen,
+  ausschnittVon,
   pitBereichLesen,
   backendBereich,
   istTestdatei,
@@ -48,9 +50,21 @@ import {
 const HIER = dirname(fileURLToPath(import.meta.url));
 const BEISPIEL_XML = readFileSync(join(HIER, 'testdaten', 'mutations-beispiel.xml'), 'utf-8');
 
-const STRYKER = {
-  mutate: ['src/lib/**/*.ts', 'src/api/**/*.ts', '!src/**/*.test.ts', '!src/**/*.test.tsx'],
+/** Ein Stufenplan, dessen aufgenommene Ausschnitte genau den frueheren `mutate`-Bereich ergeben. */
+const PLAN = {
+  ausnahmen: [],
+  ausschnitte: [
+    { name: 'hilfsfunktionen', muster: ['src/lib/**/*.ts'], aufgenommen: '2026-09-28', reihenfolge: 1 },
+    { name: 'server-anbindung', muster: ['src/api/**/*.ts'], aufgenommen: '2026-09-28', reihenfolge: 2 },
+  ],
 };
+
+const MUTATE = ['src/lib/**/*.ts', 'src/api/**/*.ts', '!src/**/*.test.ts', '!src/**/*.test.tsx'];
+
+/** Der Stufenplan des Repositories, wie Konfiguration und Treiber ihn lesen. */
+function repoPlan() {
+  return JSON.parse(readFileSync(join(HIER, '..', 'frontend', 'mutationsstufen.json'), 'utf-8'));
+}
 
 const POM_MIT_PROPERTY = `<project>
   <profiles>
@@ -120,6 +134,17 @@ test('globZuRegex: ** erfasst beliebige Tiefe einschliesslich keiner', () => {
   assert.equal(regex.test('src/lib/a.tsx'), false);
 });
 
+test('globZuRegex: {a,b} waehlt eine der Alternativen (Stufenplan, #1276)', () => {
+  const r = globZuRegex('src/lib/**/*.{ts,tsx}');
+  assert.equal(r.test('src/lib/a.ts'), true);
+  assert.equal(r.test('src/lib/x/b.tsx'), true);
+  assert.equal(r.test('src/lib/a.js'), false);
+  assert.equal(r.test('src/lib/a.{ts,tsx}'), false);
+  assert.equal(globZuRegex('src/a.{t.s}').test('src/a.t.s'), true);
+  assert.equal(globZuRegex('src/a.{t.s}').test('src/a.tXs'), false);
+  assert.equal(globZuRegex('src/{a').test('src/{a'), true);
+});
+
 test('globZuRegex: * bleibt im Pfadsegment', () => {
   const regex = globZuRegex('src/*.ts');
   assert.equal(regex.test('src/a.ts'), true);
@@ -144,14 +169,66 @@ test('javaPfadZuKlasse: nur Hauptquellen unter src/main/java', () => {
 
 // --- Pruefbereich je Seite --------------------------------------------------
 
-test('frontendBereich: Musterschnitt aus mutate, Negationen schneiden heraus', () => {
-  const bereich = frontendBereich(STRYKER);
+test('frontendBereich: Musterschnitt aus den aufgenommenen Ausschnitten, Negationen schneiden heraus', () => {
+  const bereich = frontendBereich(PLAN);
   assert.equal(bereich.trifft('frontend/src/lib/statusColors.ts'), true);
   assert.equal(bereich.trifft('frontend/src/api/cards.ts'), true);
   assert.equal(bereich.trifft('frontend/src/lib/statusColors.test.ts'), false);
   assert.equal(bereich.trifft('frontend/src/components/BoardView.tsx'), false);
   assert.equal(bereich.trifft('src/main/java/org/mwolff/manban/card/application/CardService.java'), false);
-  assert.deepEqual(bereich.woertlich, STRYKER.mutate);
+  assert.deepEqual(bereich.woertlich, MUTATE);
+  assert.equal(bereich.quelle, 'frontend/mutationsstufen.json (aufgenommene Ausschnitte)');
+});
+
+test('frontendBereich: der Pruefbereich ist mutateFuer ueber die aufgenommenen Ausschnitte des Repo-Plans', async () => {
+  const { aufgenommene, mutateFuer } = await import('../frontend/mutationsbereich.mjs');
+  const plan = repoPlan();
+  assert.deepEqual(frontendBereich(plan).woertlich, mutateFuer(aufgenommene(plan).map((a) => a.name), plan));
+});
+
+test('stryker.config.mjs: mutate ist dieselbe Ableitung wie im Treiber und schliesst die Tests aus', async () => {
+  const { default: config } = await import('../frontend/stryker.config.mjs');
+  assert.deepEqual(config.mutate, frontendBereich(repoPlan()).woertlich);
+  assert.ok(config.mutate.includes('!src/**/*.test.ts'));
+  assert.ok(config.mutate.includes('!src/**/*.test.tsx'));
+  assert.equal(config.testRunner, 'vitest');
+  assert.deepEqual(config.vitest, { configFile: 'vitest.mutation.config.ts' });
+});
+
+test('stufenplanPruefen: der Repo-Plan ist gueltig', () => {
+  assert.equal(stufenplanPruefen(repoPlan()), null);
+});
+
+test('stufenplanPruefen: fehlende oder falsch geformte Felder werden benannt', () => {
+  assert.match(stufenplanPruefen(null), /kein Objekt/);
+  assert.match(stufenplanPruefen({ ausschnitte: [] }), /ausnahmen/);
+  assert.match(stufenplanPruefen({ ausnahmen: [] }), /ausschnitte/);
+  assert.match(stufenplanPruefen({ ausnahmen: [], ausschnitte: [{ muster: ['a'] }] }), /name/);
+  assert.match(stufenplanPruefen({ ausnahmen: [], ausschnitte: [{ name: 'x', muster: 'a' }] }), /x.*muster/);
+  assert.match(stufenplanPruefen({ ausnahmen: [], ausschnitte: [{ name: 'x', muster: [] }] }), /x.*muster/);
+});
+
+test('ausschnittVon: jede Datei landet in ihrem Ausschnitt, Ausnahmen und Tests in keinem', () => {
+  const bereich = frontendBereich(repoPlan());
+  assert.equal(ausschnittVon(bereich, 'frontend/src/lib/statusColors.ts')?.name, 'hilfsfunktionen');
+  assert.equal(ausschnittVon(bereich, 'frontend/src/api/cards.ts')?.name, 'server-anbindung');
+  const leitstand = ausschnittVon(bereich, 'frontend/src/components/leitstand/Kachel.tsx');
+  assert.equal(leitstand?.name, 'bausteine-leitstand');
+  assert.equal(leitstand?.aufgenommen, false);
+  assert.equal(bereich.trifft('frontend/src/components/leitstand/Kachel.tsx'), false);
+  assert.equal(ausschnittVon(bereich, 'frontend/src/lib/__fixtures__/probe.ts'), null);
+  assert.equal(bereich.trifft('frontend/src/lib/__fixtures__/probe.ts'), false);
+  assert.equal(ausschnittVon(bereich, 'frontend/src/lib/statusColors.test.ts'), null);
+  assert.equal(ausschnittVon(bereich, 'src/main/java/org/mwolff/manban/card/application/CardService.java'), null);
+});
+
+test('frontendBereich: die Ausschnitte tragen ihren Namen und ob sie aufgenommen sind', () => {
+  const bereich = frontendBereich(repoPlan());
+  assert.equal(bereich.ausschnitte.length, repoPlan().ausschnitte.length);
+  assert.deepEqual(
+    bereich.ausschnitte.filter((a) => a.aufgenommen).map((a) => a.name),
+    ['hilfsfunktionen', 'server-anbindung'],
+  );
 });
 
 test('pitBereichLesen: Property gewinnt, wenn sie vorhanden ist', () => {
@@ -165,6 +242,19 @@ test('pitBereichLesen: ohne Property faellt das Lesen auf die targetClasses-Elem
   const gelesen = pitBereichLesen(POM_OHNE_PROPERTY);
   assert.equal(gelesen.quelle, 'elemente');
   assert.deepEqual(gelesen.ziel, ['org.mwolff.manban.*.application.*', 'org.mwolff.manban.*.domain.*']);
+});
+
+test('backendBereich: genau ein Ausschnitt ueber den ganzen Pruefbereich (E11)', () => {
+  const bereich = backendBereich(pitBereichLesen(POM_MIT_PROPERTY));
+  assert.equal(bereich.ausschnitte.length, 1);
+  const [einziger] = bereich.ausschnitte;
+  assert.equal(einziger.name, 'backend');
+  assert.equal(einziger.aufgenommen, true);
+  const drin = 'src/main/java/org/mwolff/manban/card/application/CardService.java';
+  const draussen = 'src/main/java/org/mwolff/manban/card/infrastructure/CardRepository.java';
+  assert.equal(ausschnittVon(bereich, drin), einziger);
+  assert.equal(ausschnittVon(bereich, draussen), null);
+  assert.equal(ausschnittVon(bereich, 'frontend/src/lib/statusColors.ts'), null);
 });
 
 test('backendBereich: Musterschnitt ueber Klassennamen, excludedClasses gewinnt', () => {
@@ -238,7 +328,7 @@ test('zuordnungAusVollauf: ohne Mutantenliste bleibt die Zuordnung leer', () => 
 test('beruehrung: geaenderte Quelldatei im Bereich zaehlt, ausserhalb nicht', () => {
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/a.ts', 'frontend/src/components/B.tsx', 'README.md'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
     existiert: () => true,
   });
@@ -249,7 +339,7 @@ test('beruehrung: geaenderte Quelldatei im Bereich zaehlt, ausserhalb nicht', ()
 test('beruehrung: geaenderter Test zieht seine Quelle ueber die Namenskonvention mit', () => {
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/a.test.ts'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
     existiert: (pfad) => pfad === 'frontend/src/lib/a.ts',
   });
@@ -260,7 +350,7 @@ test('beruehrung: geaenderter Test zieht seine Quelle ueber die Namenskonvention
 test('beruehrung: geaenderter Test zieht seine Quelle ueber die Berichtsumkehrung mit', () => {
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/andersHeissend.test.ts'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map([['frontend/src/lib/andersHeissend.test.ts', new Set(['frontend/src/lib/a.ts'])]]),
     existiert: () => false,
   });
@@ -271,7 +361,7 @@ test('beruehrung: geaenderter Test zieht seine Quelle ueber die Berichtsumkehrun
 test('beruehrung: Test ohne Zuordnung macht die ganze Seite beruehrt', () => {
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/ohnePartner.test.ts'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
     existiert: () => false,
   });
@@ -282,7 +372,7 @@ test('beruehrung: Test ohne Zuordnung macht die ganze Seite beruehrt', () => {
 test('beruehrung: ein Test der anderen Seite loest die ganze Seite nicht aus', () => {
   const ergebnis = beruehrung({
     geaendert: ['src/test/java/org/mwolff/manban/card/OhnePartnerTest.java'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
     existiert: () => false,
   });
@@ -293,7 +383,7 @@ test('beruehrung: ein Test der anderen Seite loest die ganze Seite nicht aus', (
 test('beruehrung: feste Zuordnung zieht eine Quelle im Bereich mit (Issue #1287)', () => {
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/andersHeissend.test.ts'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
     festeZuordnung: { 'frontend/src/lib/andersHeissend.test.ts': ['frontend/src/lib/a.ts'] },
     existiert: () => false,
@@ -304,7 +394,7 @@ test('beruehrung: feste Zuordnung zieht eine Quelle im Bereich mit (Issue #1287)
 test('beruehrung: feste Zuordnung nur ausserhalb des Bereichs macht den Test zugeordnet, ohne Datei', () => {
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/strykerUmfang.test.ts'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
     festeZuordnung: { 'frontend/src/lib/strykerUmfang.test.ts': ['frontend/mutationTestUmfang.ts'] },
     existiert: () => false,
@@ -325,10 +415,9 @@ test('mutationszuordnung.json: gueltiges JSON, jeder Test und jede Quelle existi
 
 test('mutationszuordnung.json: strykerUmfang.test.ts allein loest weder Datei noch ganze Seite aus', () => {
   const repo = join(HIER, '..');
-  const stryker = JSON.parse(readFileSync(join(repo, 'frontend', 'stryker.config.json'), 'utf-8'));
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/strykerUmfang.test.ts'],
-    bereich: frontendBereich(stryker),
+    bereich: frontendBereich(repoPlan()),
     zuordnung: new Map(),
     festeZuordnung: festeZuordnungLesen(repo),
     existiert: (pfad) => existsSync(join(repo, pfad)),
@@ -397,7 +486,7 @@ test('dauerText: Sekunden und Minuten', () => {
 // --- Lauf -------------------------------------------------------------------
 
 function mitProjekt(fn, {
-  stryker = STRYKER,
+  plan = PLAN,
   pom = POM_MIT_PROPERTY,
   config = { mainBranch: 'main', buildChecks: [] },
   vollauf = null,
@@ -408,7 +497,7 @@ function mitProjekt(fn, {
     mkdirSync(join(wurzel, '.claude'), { recursive: true });
     mkdirSync(join(wurzel, 'frontend'), { recursive: true });
     writeFileSync(join(wurzel, '.claude', 'workflow.config.json'), JSON.stringify(config));
-    writeFileSync(join(wurzel, 'frontend', 'stryker.config.json'), JSON.stringify(stryker));
+    if (plan !== null) writeFileSync(join(wurzel, 'frontend', 'mutationsstufen.json'), JSON.stringify(plan));
     writeFileSync(join(wurzel, 'pom.xml'), pom);
     if (vollauf) {
       for (const [seite, inhalt] of Object.entries(vollauf)) {
@@ -486,7 +575,7 @@ test('laufen: leere Beruehrungsmenge endet gruen, nennt Bereich und Satz', () =>
   const { code, text } = mitProjekt((wurzel) => sammelLauf(['aenderung', 'frontend'], wurzel));
   assert.equal(code, 0);
   assert.ok(text.includes('keine berührte Datei im Prüfbereich'));
-  for (const muster of STRYKER.mutate) assert.ok(text.includes(muster), `Muster fehlt woertlich: ${muster}`);
+  for (const muster of MUTATE) assert.ok(text.includes(muster), `Muster fehlt woertlich: ${muster}`);
 });
 
 test('laufen: ohne buildChecks-Eintrag steht die Stufe woertlich als nicht eingetragen', () => {
@@ -1289,7 +1378,7 @@ test('laufen: vollauf frontend legt die Gedaechtnisdatei mit allen fuenf Feldern
   assert.equal(inhalt.stand, '9f8e7d6c5b4a');
   assert.match(inhalt.datum, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(typeof inhalt.dauerMs, 'number');
-  assert.deepEqual(inhalt.umfang, STRYKER.mutate);
+  assert.deepEqual(inhalt.umfang, MUTATE);
   assert.equal(inhalt.quote, 83.33);
   assert.deepEqual(inhalt.mutanten, [{
     datei: 'frontend/src/lib/a.ts',
@@ -1401,4 +1490,78 @@ test('laufen: die Aenderungspruefung nennt die eigene Dauer neben Dauer und Datu
   };
   const { text } = mitProjekt((wurzel) => sammelLauf(['aenderung', 'frontend'], wurzel), { vollauf });
   assert.match(text, /Dauer: \d+,\d s\. Letzter Vollauf frontend: 29 min 49 s am 2026-09-24, Quote 84,7 %\./);
+});
+
+// --- Stufenplan als Quelle des Frontend-Bereichs (Issue #1276) ---------------
+
+test('laufen: ohne Stufenplan endet das Frontend ungleich 0 und nennt die fehlende Datei', () => {
+  const { code, text, aufrufe } = mitProjekt((wurzel) => sammelLauf(['aenderung', 'frontend'], wurzel), { plan: null });
+  assert.equal(code, 1);
+  assert.match(text, /frontend\/mutationsstufen\.json fehlt oder ist kein gültiges JSON/);
+  assert.equal(aufrufe.length, 0);
+});
+
+test('laufen: ein falsch geformter Stufenplan endet ungleich 0 und nennt den Fehler', () => {
+  const { code, text, aufrufe } = mitProjekt(
+    (wurzel) => sammelLauf(['vollauf', 'frontend'], wurzel),
+    { plan: { ausnahmen: [], ausschnitte: [{ name: 'kaputt', muster: 'src/lib' }] } },
+  );
+  assert.equal(code, 1);
+  assert.match(text, /frontend\/mutationsstufen\.json ist ungültig: .*kaputt.*muster/);
+  assert.equal(aufrufe.length, 0);
+});
+
+test('laufen: der Frontend-Bereich nennt den Stufenplan als Quelle', () => {
+  const { text } = mitProjekt((wurzel) => sammelLauf(['aenderung', 'frontend'], wurzel));
+  assert.ok(text.includes('Geprüfter Bereich (frontend/mutationsstufen.json (aufgenommene Ausschnitte)):'));
+});
+
+/**
+ * Gegenprobe zur Unveraendertheit des Backends (Issue #1276): Die Meldung des Backend-Vollaufs ist
+ * zeichengleich mit der vor dem Umbau auf den Stufenplan erzeugten, Rueckgabewert und
+ * Gedaechtnisdatei ebenso. Die Uhr steht still, damit Dauer und Datum feste Werte tragen.
+ */
+const BACKEND_VOLLAUF_MELDUNG = `Mutationsprüfung — Vollauf backend
+
+Geprüfter Bereich (pom.xml, Profil pit, Property pit.targetClasses + excludedClasses):
+  eingeschlossen: org.mwolff.manban.*.application.*
+  eingeschlossen: org.mwolff.manban.*.domain.*
+  ausgenommen:    org.mwolff.manban.*.infrastructure.*
+  ausgenommen:    org.mwolff.manban.ManbanApplication
+
+Umfang: die ganze Seite.
+
+Überlebende Stellen (2):
+  src/main/java/org/mwolff/manban/card/application/CardService.java:43 — ConditionalsBoundaryMutator: changed conditional boundary überlebt
+  src/main/java/org/mwolff/manban/card/domain/Card.java:17 — BooleanTrueReturnValsMutator: replaced boolean return with true for org/mwolff/manban/card/domain/Card$Zustand::istOffen überlebt
+
+Mutanten: 4 geprüft, 2 getötet, 2 überlebt, 0 ausgenommen (@ExcludeFromJacocoGeneratedReport je Einheit — solche Mutanten entstehen gar nicht erst).
+
+Quote: 50,00 % — unter der Schwelle 100 %. Der Vollauf hält an.
+
+Dauer: 1 min 2 s. Letzter Vollauf backend: 29 min 49 s am 2026-09-24, Quote 97,5 %.
+Stufe: noch nicht eingetragen
+Ausnahme: im Backend gilt sie je Einheit (Typ, Methode, Konstruktor), nicht je Stelle.
+`;
+
+test('laufen: vollauf backend bleibt mit dem Stufenplan zeichengleich (Gegenprobe #1276)', () => {
+  const vollauf = {
+    backend: { stand: 'abc', datum: '2026-09-24T11:36:00.000Z', dauerMs: 1789000, quote: 97.5, umfang: [], mutanten: [] },
+  };
+  let uhr = 1000;
+  const { code, text, inhalt } = mitProjekt((wurzel) => {
+    const ergebnis = sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML), {
+      jetzt: () => {
+        const wert = uhr;
+        uhr += 61500;
+        return wert;
+      },
+    });
+    return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'backend') };
+  }, { vollauf });
+  assert.equal(code, 1);
+  assert.equal(text, BACKEND_VOLLAUF_MELDUNG);
+  assert.equal(inhalt.datum, '1970-01-01T00:02:04.000Z');
+  assert.equal(inhalt.dauerMs, 61500);
+  assert.equal(inhalt.quote, 50);
 });
