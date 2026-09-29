@@ -212,32 +212,84 @@ test('stufenplanPruefen: fehlende oder falsch geformte Felder werden benannt', (
   assert.match(stufenplanPruefen({ ausnahmen: [], ausschnitte: [{ name: 'x', muster: [] }] }), /x.*muster/);
 });
 
+/**
+ * Ein kleiner Stufenplan mit festem Stand fuer die festen Erwartungen (Issue #1288): Er folgt dem
+ * Aufbau des Repo-Plans, aendert sich aber nicht, wenn dort ein Ausschnitt aufgenommen wird.
+ */
+const PLAN_PROBE = {
+  ausnahmen: ['src/lib/__fixtures__/**'],
+  ausschnitte: [
+    { name: 'hilfsfunktionen', muster: ['src/lib/**/*.{ts,tsx}'], aufgenommen: '2026-09-28', reihenfolge: 1 },
+    { name: 'server-anbindung', muster: ['src/api/**/*.ts'], aufgenommen: '2026-09-28', reihenfolge: 2 },
+    { name: 'bausteine-leitstand', muster: ['src/components/leitstand/**/*.tsx'], aufgenommen: false, reihenfolge: 3 },
+  ],
+};
+
+/** Ein Probepfad aus dem ersten Muster eines Ausschnitts, etwa `src/lib/**\/*.{ts,tsx}` → `frontend/src/lib/probe.ts`. */
+function probePfad(ausschnitt) {
+  const [muster] = ausschnitt.muster;
+  return `frontend/${muster.replace('**/', '').replace(/\{([^,}]+)[^}]*\}/, '$1').replace('*', 'probe')}`;
+}
+
+/** Was unabhaengig vom Stand des Plans gilt: Probepfade landen in ihrem Ausschnitt, `trifft` folgt der Aufnahme. */
+function standUnabhaengigPruefen(plan) {
+  const bereich = frontendBereich(plan);
+  for (const ausschnitt of plan.ausschnitte) {
+    const pfad = probePfad(ausschnitt);
+    const aufgenommen = typeof ausschnitt.aufgenommen === 'string';
+    const gefunden = ausschnittVon(bereich, pfad);
+    assert.equal(gefunden?.name, ausschnitt.name, pfad);
+    assert.equal(gefunden?.aufgenommen, aufgenommen, pfad);
+    assert.equal(bereich.trifft(pfad), aufgenommen, pfad);
+  }
+  assert.deepEqual(
+    bereich.ausschnitte.filter((a) => a.aufgenommen).map((a) => a.name),
+    plan.ausschnitte.filter((a) => typeof a.aufgenommen === 'string').map((a) => a.name),
+  );
+}
+
 test('ausschnittVon: jede Datei landet in ihrem Ausschnitt, Ausnahmen und Tests in keinem', () => {
-  const bereich = frontendBereich(repoPlan());
+  const bereich = frontendBereich(PLAN_PROBE);
   assert.equal(ausschnittVon(bereich, 'frontend/src/lib/statusColors.ts')?.name, 'hilfsfunktionen');
   assert.equal(ausschnittVon(bereich, 'frontend/src/api/cards.ts')?.name, 'server-anbindung');
-  // bausteine-leitstand ist seit Issue #1281 aufgenommen, bausteine-nachtlauf noch nicht.
+  assert.equal(bereich.trifft('frontend/src/lib/statusColors.ts'), true);
   const leitstand = ausschnittVon(bereich, 'frontend/src/components/leitstand/Kachel.tsx');
   assert.equal(leitstand?.name, 'bausteine-leitstand');
-  assert.equal(leitstand?.aufgenommen, true);
-  assert.equal(bereich.trifft('frontend/src/components/leitstand/Kachel.tsx'), true);
-  const nachtlauf = ausschnittVon(bereich, 'frontend/src/components/nachtlauf/Probe.tsx');
-  assert.equal(nachtlauf?.name, 'bausteine-nachtlauf');
-  assert.equal(nachtlauf?.aufgenommen, false);
-  assert.equal(bereich.trifft('frontend/src/components/nachtlauf/Probe.tsx'), false);
+  assert.equal(leitstand?.aufgenommen, false);
+  assert.equal(bereich.trifft('frontend/src/components/leitstand/Kachel.tsx'), false);
   assert.equal(ausschnittVon(bereich, 'frontend/src/lib/__fixtures__/probe.ts'), null);
   assert.equal(bereich.trifft('frontend/src/lib/__fixtures__/probe.ts'), false);
   assert.equal(ausschnittVon(bereich, 'frontend/src/lib/statusColors.test.ts'), null);
   assert.equal(ausschnittVon(bereich, 'src/main/java/org/mwolff/manban/card/application/CardService.java'), null);
 });
 
+test('ausschnittVon: im Repo-Plan landet jeder Probepfad in seinem Ausschnitt, trifft folgt der Aufnahme', () => {
+  standUnabhaengigPruefen(repoPlan());
+});
+
 test('frontendBereich: die Ausschnitte tragen ihren Namen und ob sie aufgenommen sind', () => {
+  const probe = frontendBereich(PLAN_PROBE);
+  assert.deepEqual(
+    probe.ausschnitte.filter((a) => a.aufgenommen).map((a) => a.name),
+    ['hilfsfunktionen', 'server-anbindung'],
+  );
   const bereich = frontendBereich(repoPlan());
   assert.equal(bereich.ausschnitte.length, repoPlan().ausschnitte.length);
   assert.deepEqual(
     bereich.ausschnitte.filter((a) => a.aufgenommen).map((a) => a.name),
-    ['hilfsfunktionen', 'server-anbindung', 'bausteine-leitstand'],
+    repoPlan().ausschnitte.filter((a) => a.aufgenommen).map((a) => a.name),
   );
+});
+
+test('Repo-Plan-Tests ueberstehen die Aufnahme des Kandidaten (Issue #1288)', () => {
+  const kopie = structuredClone(repoPlan());
+  const kandidat = kopie.ausschnitte
+    .filter((a) => typeof a.aufgenommen !== 'string')
+    .sort((x, y) => x.reihenfolge - y.reihenfolge)[0];
+  assert.ok(kandidat, 'der Repo-Plan hat keinen Kandidaten mehr');
+  kandidat.aufgenommen = '2099-01-01';
+  assert.equal(frontendBereich(kopie).ausschnitte.find((a) => a.name === kandidat.name)?.aufgenommen, true);
+  standUnabhaengigPruefen(kopie);
 });
 
 test('pitBereichLesen: Property gewinnt, wenn sie vorhanden ist', () => {
