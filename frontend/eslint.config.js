@@ -89,4 +89,17 @@ export default tseslint.config(
     files: ['src/**/*.test.{ts,tsx}'],
     extends: [testingLibrary.configs['flat/react']],
   },
+  {
+    // Stryker-Plugins (Issue #1277): reines JavaScript ausserhalb des `tsconfig`-Projekts, darum
+    // ohne Typed Linting. Der Block oben griffe fuer `stryker/**` nicht; ohne diesen hier bliebe
+    // der Ordner ungeprueft. Die untypisierten Sonar-Regeln gelten wie dort.
+    files: ['stryker/**/*.js'],
+    extends: [tseslint.configs.recommended],
+    plugins: { sonarjs },
+    rules: {
+      'sonarjs/cognitive-complexity': ['error', 15],
+      'sonarjs/no-nested-template-literals': 'error',
+      'no-nested-ternary': 'error',
+    },
+  },
 )

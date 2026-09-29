@@ -5,11 +5,16 @@ import { aufgenommene, mutateFuer, stufenplanLesen } from './mutationsbereich.mj
 // `scripts/mutationspruefung.mjs` seinen Prüfbereich und `mutationTestUmfang.ts` den Testumfang
 // holen (#1073, #1275). Der Plan wird synchron gelesen: Stryker 8 akzeptiert als Export nur ein
 // Objekt, keine Funktion.
+//
+// Der Darstellungs-Ignorer (#1277) nimmt Stilmutanten schon beim Instrumentieren heraus; sie
+// erscheinen als `Ignored` und zählen nicht in der Quote. Der Platzhalter `@stryker-mutator/*`
+// lädt den Vitest-Runner mit, sobald eine eigene Plugin-Liste den Default ersetzt.
 const plan = stufenplanLesen()
 
 export default {
   testRunner: 'vitest',
-  plugins: ['@stryker-mutator/vitest-runner'],
+  plugins: ['@stryker-mutator/*', './stryker/darstellungIgnorer.js'],
+  ignorers: ['darstellung'],
   vitest: { configFile: 'vitest.mutation.config.ts' },
   mutate: mutateFuer(
     aufgenommene(plan).map((ausschnitt) => ausschnitt.name),
