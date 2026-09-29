@@ -1,0 +1,272 @@
+{
+  "ausnahmen": [
+    "src/theme.ts",
+    "src/nachtlaufDesign.ts",
+    "src/components/boardSurfaceSx.ts",
+    "src/components/dialogChromeSx.ts",
+    "src/components/labelChipSx.ts",
+    "src/vite-env.d.ts",
+    "src/test/**",
+    "src/lib/__fixtures__/**"
+  ],
+  "ausschnitte": [
+    {
+      "name": "hilfsfunktionen",
+      "muster": ["src/lib/**/*.{ts,tsx}"],
+      "aufgenommen": "2026-09-28",
+      "gemeinsameSchwelle": true,
+      "phase": 0,
+      "reihenfolge": 1,
+      "begruendung": "Die reine Rechen- und Zustandslogik des Frontends, seit Issue #1073 im Bestand des Pruefbereichs."
+    },
+    {
+      "name": "server-anbindung",
+      "muster": ["src/api/**/*.ts"],
+      "aufgenommen": "2026-09-28",
+      "gemeinsameSchwelle": true,
+      "phase": 0,
+      "reihenfolge": 2,
+      "begruendung": "Die Aufrufe gegen die Server-Schnittstelle samt ihrer Abbildung auf Typen, seit Issue #1073 im Bestand des Pruefbereichs."
+    },
+    {
+      "name": "bausteine-leitstand",
+      "muster": ["src/components/leitstand/**/*.tsx"],
+      "aufgenommen": false,
+      "phase": 1,
+      "reihenfolge": 3,
+      "begruendung": "Die Anzeigebausteine des Leitstands — der kleinste Ausschnitt der ersten Stufe und der einzige, der bereits vier Testdateien traegt."
+    },
+    {
+      "name": "bausteine-nachtlauf",
+      "muster": ["src/components/nachtlauf/**/*.tsx"],
+      "aufgenommen": false,
+      "phase": 1,
+      "reihenfolge": 4,
+      "begruendung": "Die Bausteine der Nachtlauf-Ansicht, die den Verlauf eines Laufs darstellen."
+    },
+    {
+      "name": "bausteine-board",
+      "muster": ["src/components/board/**/*.tsx"],
+      "testMuster": ["src/components/BoardView.test.tsx"],
+      "aufgenommen": false,
+      "phase": 1,
+      "reihenfolge": 5,
+      "begruendung": "Die Bausteine der Board-Ansicht (Spalte, Kopf, Karte, Belastungsskala), die BoardView zusammensetzt."
+    },
+    {
+      "name": "bausteine-rahmen",
+      "muster": [
+        "src/components/AppShell.tsx",
+        "src/components/Breadcrumbs.tsx",
+        "src/components/BoardSwitcher.tsx",
+        "src/components/SnackbarProvider.tsx",
+        "src/components/EditModeBanner.tsx"
+      ],
+      "testMuster": [
+        "src/components/AppShell.test.tsx",
+        "src/components/Breadcrumbs.test.tsx",
+        "src/components/BoardSwitcher.test.tsx",
+        "src/components/SnackbarProvider.test.tsx",
+        "src/components/EditModeBanner.test.tsx"
+      ],
+      "aufgenommen": false,
+      "phase": 2,
+      "reihenfolge": 6,
+      "begruendung": "Der Rahmen um jede Seite: Navigation, Pfadzeile, Board-Auswahl, Meldungen und das Band des Bearbeitungsmodus."
+    },
+    {
+      "name": "bausteine-karte",
+      "muster": [
+        "src/components/CardDetailModal.tsx",
+        "src/components/CardFields.tsx",
+        "src/components/NewCardModal.tsx",
+        "src/components/TransferCardDialog.tsx",
+        "src/components/CardNumberSearch.tsx",
+        "src/components/EpicBadge.tsx",
+        "src/components/DerivationTree.tsx"
+      ],
+      "testMuster": [
+        "src/components/CardDetailModal.test.tsx",
+        "src/components/CardFields.test.tsx",
+        "src/components/NewCardModal.test.tsx",
+        "src/components/TransferCardDialog.test.tsx",
+        "src/components/CardNumberSearch.test.tsx",
+        "src/components/EpicBadge.test.tsx",
+        "src/components/DerivationTree.test.tsx"
+      ],
+      "aufgenommen": false,
+      "phase": 2,
+      "reihenfolge": 7,
+      "begruendung": "Alles, was eine Karte anzeigt, anlegt, verschiebt oder ihre Herkunft zeigt."
+    },
+    {
+      "name": "bausteine-tabelle",
+      "muster": [
+        "src/components/DataTable.tsx",
+        "src/components/BulkActionBar.tsx",
+        "src/components/EpicVisibilityList.tsx",
+        "src/components/TrashDialog.tsx"
+      ],
+      "testMuster": [
+        "src/components/DataTable.test.tsx",
+        "src/components/BulkActionBar.test.tsx",
+        "src/components/EpicVisibilityList.test.tsx",
+        "src/components/TrashDialog.test.tsx"
+      ],
+      "aufgenommen": false,
+      "phase": 2,
+      "reihenfolge": 8,
+      "begruendung": "Listen und Tabellen samt Mehrfachauswahl, Sichtbarkeit und Papierkorb."
+    },
+    {
+      "name": "bausteine-formular",
+      "muster": [
+        "src/components/PasswordField.tsx",
+        "src/components/AuthCard.tsx",
+        "src/components/LabelManagerDialog.tsx",
+        "src/components/SpecImportDialog.tsx",
+        "src/components/AttachmentPreview.tsx"
+      ],
+      "testMuster": [
+        "src/components/PasswordField.test.tsx",
+        "src/components/AuthCard.test.tsx",
+        "src/components/LabelManagerDialog.test.tsx",
+        "src/components/SpecImportDialog.test.tsx",
+        "src/components/AttachmentPreview.test.tsx"
+      ],
+      "aufgenommen": false,
+      "phase": 2,
+      "reihenfolge": 9,
+      "begruendung": "Eingabe und Dateiannahme: Passwortfeld, Anmeldekarte, Etiketten, Spezifikationsimport und Anhangvorschau."
+    },
+    {
+      "name": "bausteine-betrieb",
+      "muster": [
+        "src/components/BackupStatusSection.tsx",
+        "src/components/OverloadRejectionsSection.tsx"
+      ],
+      "testMuster": [
+        "src/components/BackupStatusSection.test.tsx",
+        "src/components/OverloadRejectionsSection.test.tsx"
+      ],
+      "aufgenommen": false,
+      "phase": 2,
+      "reihenfolge": 10,
+      "begruendung": "Die beiden Betriebsanzeigen der Verwaltung: Sicherungsstand und abgewiesene Anfragen unter Last."
+    },
+    {
+      "name": "baustein-boardview",
+      "muster": ["src/components/BoardView.tsx"],
+      "testMuster": ["src/components/BoardView.test.tsx"],
+      "aufgenommen": false,
+      "phase": 2,
+      "reihenfolge": 11,
+      "begruendung": "Die Board-Ansicht traegt als einziger Baustein die Zieh- und Ablauflogik des Boards und bekommt deshalb einen eigenen Ausschnitt."
+    },
+    {
+      "name": "seiten-anmeldung",
+      "muster": [
+        "src/pages/LoginPage.tsx",
+        "src/pages/SignupPage.tsx",
+        "src/pages/ForgotPasswordPage.tsx",
+        "src/pages/ResetPasswordPage.tsx",
+        "src/pages/VerifyNoticePage.tsx",
+        "src/pages/AcceptInvitationPage.tsx",
+        "src/pages/BootstrapAdminPage.tsx"
+      ],
+      "testMuster": [
+        "src/pages/LoginPage.test.tsx",
+        "src/pages/SignupPage.test.tsx",
+        "src/pages/ForgotPasswordPage.test.tsx",
+        "src/pages/ResetPasswordPage.test.tsx",
+        "src/pages/VerifyNoticePage.test.tsx",
+        "src/pages/AcceptInvitationPage.test.tsx",
+        "src/pages/BootstrapAdminPage.test.tsx"
+      ],
+      "aufgenommen": false,
+      "phase": 3,
+      "reihenfolge": 12,
+      "begruendung": "Die Seiten rund um Zugang und Kennwort — der einzige Teil der Oberflaeche, der ohne Anmeldung erreichbar ist."
+    },
+    {
+      "name": "seiten-projekt",
+      "muster": [
+        "src/pages/ProjectsPage.tsx",
+        "src/pages/ProjectBoardsPage.tsx",
+        "src/pages/ProjectMembersPage.tsx",
+        "src/pages/BoardListPage.tsx",
+        "src/pages/BoardPage.tsx",
+        "src/pages/EpicsPage.tsx"
+      ],
+      "testMuster": [
+        "src/pages/ProjectsPage.test.tsx",
+        "src/pages/ProjectBoardsPage.test.tsx",
+        "src/pages/ProjectMembersPage.test.tsx",
+        "src/pages/BoardListPage.test.tsx",
+        "src/pages/BoardPage.test.tsx",
+        "src/pages/EpicsPage.test.tsx"
+      ],
+      "aufgenommen": false,
+      "phase": 3,
+      "reihenfolge": 13,
+      "begruendung": "Die taegliche Arbeit am Projekt: Projekte, Boards, Mitglieder, Karten und Vorhaben."
+    },
+    {
+      "name": "seiten-verwaltung",
+      "muster": [
+        "src/pages/AdminPage.tsx",
+        "src/pages/AdministrationPage.tsx",
+        "src/pages/RolesPage.tsx",
+        "src/pages/ProfilePage.tsx"
+      ],
+      "testMuster": [
+        "src/pages/AdminPage.test.tsx",
+        "src/pages/AdministrationPage.test.tsx",
+        "src/pages/RolesPage.test.tsx",
+        "src/pages/ProfilePage.test.tsx"
+      ],
+      "aufgenommen": false,
+      "phase": 3,
+      "reihenfolge": 14,
+      "begruendung": "Die Seiten der Rechte- und Kontoverwaltung, auf denen falsche Logik unmittelbar Rechte verschiebt."
+    },
+    {
+      "name": "seiten-leitstand",
+      "muster": [
+        "src/pages/LeitstandPage.tsx",
+        "src/pages/PlattformLeitstandPage.tsx",
+        "src/pages/NightRunPage.tsx"
+      ],
+      "testMuster": [
+        "src/pages/LeitstandPage.test.tsx",
+        "src/pages/PlattformLeitstandPage.test.tsx",
+        "src/pages/NightRunPage.test.tsx"
+      ],
+      "aufgenommen": false,
+      "phase": 3,
+      "reihenfolge": 15,
+      "begruendung": "Die auswertenden Seiten von Leitstand und Nachtlauf, die aus Rohdaten Kennzahlen machen."
+    },
+    {
+      "name": "einstieg-und-routing",
+      "muster": [
+        "src/App.tsx",
+        "src/main.tsx",
+        "src/appMeta.ts",
+        "src/routes/**/*.tsx",
+        "src/auth/**/*.tsx",
+        "src/layout/navItems.ts",
+        "src/layout/navIcons.tsx"
+      ],
+      "testMuster": [
+        "src/routes/**/*.test.tsx",
+        "src/auth/**/*.test.tsx",
+        "src/layout/navItems.test.ts"
+      ],
+      "aufgenommen": false,
+      "phase": 4,
+      "reihenfolge": 16,
+      "begruendung": "Einstieg, Sitzungskontext, Weiterleitungen und Navigation — die Muster erfassen die Wurzel src bewusst nicht, damit designQuelle.test.ts ausserhalb des Sandkastens bleibt."
+    }
+  ]
+}

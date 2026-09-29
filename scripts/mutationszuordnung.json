@@ -1,3 +1,4 @@
 {
+  "frontend/src/lib/mutationsstufen.test.ts": ["frontend/mutationTestUmfang.ts", "frontend/mutationsstufen.json"],
   "frontend/src/lib/strykerUmfang.test.ts": ["frontend/mutationTestUmfang.ts"]
 }
