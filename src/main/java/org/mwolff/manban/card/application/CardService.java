@@ -289,6 +289,7 @@ public class CardService {
                 projectId,
                 externalKey,
                 herkunft,
+                null,
                 null));
 
     transitions.open(saved.requireId(), columnId, column.name(), now);
@@ -364,6 +365,8 @@ public class CardService {
                 // Herkunft: kein Schreibpfad hier — der kommt in Issue #604.
                 null,
                 // Anforderungskarte: kein Schreibpfad hier — der kommt in Issue #639.
+                null,
+                // Status: ein Vorhaben trägt keinen (Plan #1294, E2).
                 null));
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
     return view(saved);

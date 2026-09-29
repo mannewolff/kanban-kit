@@ -8,6 +8,8 @@ public enum CardActivityType {
   ASSIGNED,
   ARCHIVED,
   RESTORED,
+  // Statuswechsel eines Arbeitspakets ohne Spaltenwechsel (Plan #1294, E14).
+  STATUS_CHANGED,
 
   // Historische Werte aus der Zeit des Ideen-Pools (Issue #1204, E17): Sie werden nur noch
   // GELESEN — kein Schreibpfad setzt sie mehr. Sie bleiben stehen, weil `card_activity.type` als

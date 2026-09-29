@@ -95,6 +95,7 @@ class CardServiceCreateBatchTest {
         c.projectId(),
         c.externalKey(),
         null,
+        null,
         null);
   }
 
@@ -238,6 +239,6 @@ class CardServiceCreateBatchTest {
       long id, long columnId, int number, CardType type, @Nullable Long parentId) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, false, null, 1L, FIXED, FIXED, type,
-        parentId, null, null, PROJECT, null, null, null);
+        parentId, null, null, PROJECT, null, null, null, null);
   }
 }

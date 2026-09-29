@@ -31,6 +31,7 @@ class CardTest {
           1L,
           null,
           null,
+          null,
           null);
 
   @Test
@@ -65,5 +66,28 @@ class CardTest {
     assertThat(CARD.derivedFromCardId()).isNull();
     assertThat(CARD.withDerivedFrom(99L).derivedFromCardId()).isEqualTo(99L);
     assertThat(CARD.withDerivedFrom(99L).withDerivedFrom(null).derivedFromCardId()).isNull();
+  }
+
+  /** Wie die Herkunft muss auch der Status durch jede Konstruktionsstelle wandern. */
+  @Test
+  void status_ueberlebt_jedeKonstruktionsstelleDesRecords() {
+    Card mitStatus = CARD.withStatus(CardStatus.READY);
+
+    assertThat(mitStatus.withContent("neu", "d").status()).isEqualTo(CardStatus.READY);
+    assertThat(mitStatus.asArchived().status()).isEqualTo(CardStatus.READY);
+    assertThat(mitStatus.asArchived().asRestored(0).status()).isEqualTo(CardStatus.READY);
+    assertThat(mitStatus.withMovedToDoneAt(FIXED).status()).isEqualTo(CardStatus.READY);
+    assertThat(mitStatus.withParent(7L).status()).isEqualTo(CardStatus.READY);
+    assertThat(mitStatus.withShortcode("K").status()).isEqualTo(CardStatus.READY);
+    assertThat(mitStatus.withDueDate(FIXED).status()).isEqualTo(CardStatus.READY);
+    assertThat(mitStatus.withRequirement(3L).status()).isEqualTo(CardStatus.READY);
+    assertThat(mitStatus.withDerivedFrom(9L).status()).isEqualTo(CardStatus.READY);
+  }
+
+  @Test
+  void withStatus_setztUndLoescht() {
+    assertThat(CARD.status()).isNull();
+    assertThat(CARD.withStatus(CardStatus.DONE).status()).isEqualTo(CardStatus.DONE);
+    assertThat(CARD.withStatus(CardStatus.DONE).withStatus(null).status()).isNull();
   }
 }

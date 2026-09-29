@@ -90,7 +90,7 @@ class CardServiceTest {
       String shortcode) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, archived, done, 1L, FIXED, FIXED, type,
-        parentId, shortcode, null, PROJECT, null, null, null);
+        parentId, shortcode, null, PROJECT, null, null, null, null);
   }
 
   private static ColumnView column(long id, String name, int position) {
@@ -154,6 +154,7 @@ class CardServiceTest {
         c.dueDate(),
         c.projectId(),
         c.externalKey(),
+        null,
         null,
         null);
   }
@@ -591,6 +592,7 @@ class CardServiceTest {
         PROJECT,
         null,
         derivedFrom,
+        null,
         null);
   }
 
@@ -1088,6 +1090,7 @@ class CardServiceTest {
             "E",
             null,
             PROJECT,
+            null,
             null,
             null,
             null);
@@ -3147,6 +3150,7 @@ class CardServiceTest {
         projectId,
         null,
         null,
+        null,
         null);
   }
 
@@ -3263,6 +3267,7 @@ class CardServiceTest {
         null,
         null,
         PROJECT,
+        null,
         null,
         null,
         null);
@@ -3705,6 +3710,7 @@ class CardServiceTest {
             PROJECT,
             null,
             null,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
@@ -3736,6 +3742,7 @@ class CardServiceTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null,
             null);

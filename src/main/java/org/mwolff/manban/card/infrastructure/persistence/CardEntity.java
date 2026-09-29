@@ -9,6 +9,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardStatus;
 
 /**
  * JPA-Abbildung der Tabelle {@code card}. Die generierte Spalte {@code active_position} wird von
@@ -80,6 +81,11 @@ class CardEntity {
   @Column(name = "type", nullable = false)
   private String type;
 
+  // Eigener Status eines Arbeitspakets (V46, Plan #1294): wie `type` als Konstantenname von
+  // CardStatus gespeichert und im Adapter per valueOf übersetzt, bewusst ohne JPA-Enum-Abbildung.
+  @Column(name = "status")
+  private @Nullable String status;
+
   @Column(name = "parent_id")
   private @Nullable Long parentId;
 
@@ -118,6 +124,8 @@ class CardEntity {
     this.createdAt = c.createdAt();
     this.updatedAt = c.updatedAt();
     this.type = c.type().name();
+    CardStatus cardStatus = c.status();
+    this.status = cardStatus == null ? null : cardStatus.name();
     this.parentId = c.parentId();
     this.shortcode = c.shortcode();
     this.dueDate = c.dueDate();
@@ -189,6 +197,10 @@ class CardEntity {
 
   String getType() {
     return type;
+  }
+
+  @Nullable String getStatus() {
+    return status;
   }
 
   @Nullable Long getParentId() {

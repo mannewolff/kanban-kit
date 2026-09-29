@@ -109,6 +109,7 @@ class CardDerivedFromPersistenceIT extends AbstractIntegrationTest {
         projectId,
         null,
         herkunft,
+        null,
         null);
   }
 

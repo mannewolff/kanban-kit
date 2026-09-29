@@ -66,6 +66,7 @@ class EpicMembershipTest {
         PROJECT,
         null,
         derivedFrom,
+        null,
         null);
   }
 

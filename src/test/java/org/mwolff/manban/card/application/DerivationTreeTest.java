@@ -67,6 +67,7 @@ class DerivationTreeTest {
         PROJECT,
         null,
         derivedFrom,
+        null,
         null);
   }
 
@@ -90,6 +91,7 @@ class DerivationTreeTest {
         null,
         null,
         PROJECT,
+        null,
         null,
         null,
         null);
@@ -163,6 +165,7 @@ class DerivationTreeTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null,
             null));

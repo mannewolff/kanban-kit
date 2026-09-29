@@ -57,6 +57,8 @@ import org.mwolff.manban.common.Identifiable;
  *     ableitbar ist. Welche der zugeordneten Karten die Anforderung ist, ist es nicht — manuelles
  *     Zuordnen bleibt möglich, ein Vorhaben kann also mehrere Wurzeln haben. Wie bei {@code
  *     derivedFromCardId} wird die <strong>ID</strong> gespeichert, nicht die Nummer.
+ * @param status eigener Prozesszustand eines Arbeitspakets (nullable; Plan #1294, E1/E2) — {@code
+ *     null} bei Vorhaben und Dokumentarten, für sie zählt die Spalte (siehe {@link Arbeitspaket})
  */
 public record Card(
     @Nullable Long id,
@@ -78,7 +80,8 @@ public record Card(
     Long projectId,
     @Nullable String externalKey,
     @Nullable Long derivedFromCardId,
-    @Nullable Long requirementCardId)
+    @Nullable Long requirementCardId,
+    @Nullable CardStatus status)
     implements Identifiable {
 
   public Card withContent(String newTitle, @Nullable String newDescription) {
@@ -102,7 +105,8 @@ public record Card(
         projectId,
         externalKey,
         derivedFromCardId,
-        requirementCardId);
+        requirementCardId,
+        status);
   }
 
   public Card asArchived() {
@@ -126,7 +130,8 @@ public record Card(
         projectId,
         externalKey,
         derivedFromCardId,
-        requirementCardId);
+        requirementCardId,
+        status);
   }
 
   /** Wiederherstellen an einer freien Position (append), um Positionskollisionen zu vermeiden. */
@@ -151,7 +156,8 @@ public record Card(
         projectId,
         externalKey,
         derivedFromCardId,
-        requirementCardId);
+        requirementCardId,
+        status);
   }
 
   public Card withMovedToDoneAt(@Nullable Instant when) {
@@ -175,7 +181,34 @@ public record Card(
         projectId,
         externalKey,
         derivedFromCardId,
-        requirementCardId);
+        requirementCardId,
+        status);
+  }
+
+  /** Setzt oder löscht ({@code null}) den eigenen Status eines Arbeitspakets. */
+  public Card withStatus(@Nullable CardStatus newStatus) {
+    return new Card(
+        id,
+        boardId,
+        columnId,
+        number,
+        title,
+        description,
+        positionInColumn,
+        archived,
+        movedToDoneAt,
+        createdBy,
+        createdAt,
+        updatedAt,
+        type,
+        parentId,
+        shortcode,
+        dueDate,
+        projectId,
+        externalKey,
+        derivedFromCardId,
+        requirementCardId,
+        newStatus);
   }
 
   /** Setzt oder löscht ({@code null}) die Vorhaben-Zuordnung. */
@@ -200,7 +233,8 @@ public record Card(
         projectId,
         externalKey,
         derivedFromCardId,
-        requirementCardId);
+        requirementCardId,
+        status);
   }
 
   /** Setzt das Kürzel (nur für Vorhaben sinnvoll). */
@@ -225,7 +259,8 @@ public record Card(
         projectId,
         externalKey,
         derivedFromCardId,
-        requirementCardId);
+        requirementCardId,
+        status);
   }
 
   /** Setzt oder löscht ({@code null}) das Fälligkeitsdatum. */
@@ -250,7 +285,8 @@ public record Card(
         projectId,
         externalKey,
         derivedFromCardId,
-        requirementCardId);
+        requirementCardId,
+        status);
   }
 
   /**
@@ -282,7 +318,8 @@ public record Card(
         projectId,
         externalKey,
         derivedFromCardId,
-        newRequirementCardId);
+        newRequirementCardId,
+        status);
   }
 
   /**
@@ -313,6 +350,7 @@ public record Card(
         projectId,
         externalKey,
         newDerivedFromCardId,
-        requirementCardId);
+        requirementCardId,
+        status);
   }
 }

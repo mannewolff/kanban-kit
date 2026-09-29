@@ -509,7 +509,13 @@ public class KanbanCompatService {
     return key == null ? "" : key.trim().toUpperCase(Locale.ROOT);
   }
 
-  /** Normalisierter Namensabgleich auf einen Kanban-Key; leer, wenn kein Treffer. */
+  /**
+   * Normalisierter Namensabgleich auf einen Kanban-Key; leer, wenn kein Treffer.
+   *
+   * <p>Wortgleich zu {@code Arbeitspaket.statusVonSpalte} im {@code card}-Modul (Plan #1294, E5):
+   * Die Doppelung erzwingt die Modulgrenze, {@code kanbancompat} darf nicht auf {@code card.domain}
+   * zugreifen. Wer die eine Seite ändert, ändert die andere mit.
+   */
   static Optional<String> canonicalKey(@Nullable String columnName) {
     if (columnName == null) {
       return Optional.empty();
