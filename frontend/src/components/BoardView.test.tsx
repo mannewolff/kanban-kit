@@ -845,6 +845,84 @@ describe('BoardView', () => {
     expect(onCardClick).not.toHaveBeenCalled()
   })
 
+  describe('Kartentitel als Knopf (Issue #1305)', () => {
+    /** Der Titelknopf der Karte — sein Name ist der sichtbare Titel, kein `aria-label` (Plan #1292, E5). */
+    const titelKnopf = () => within(screen.getByTestId('card-100')).getByRole('button', { name: 'Aufgabe' })
+
+    /** Tabt vom Dokumentanfang, bis der Fokus auf `ziel` steht; scheitert, wenn der Weg es nie erreicht. */
+    async function tabBis(user: ReturnType<typeof userEvent.setup>, ziel: HTMLElement) {
+      for (let i = 0; i < 50 && !ziel.matches(':focus'); i++) await user.tab()
+      expect(ziel).toHaveFocus()
+    }
+
+    it('erreicht den Titel per Tab vor dem ⋮ und öffnet das Detail mit Enter und Leertaste', async () => {
+      const user = userEvent.setup()
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onCardClick={onCardClick} />)
+
+      await tabBis(user, titelKnopf())
+      await user.keyboard('{Enter}')
+      expect(onCardClick).toHaveBeenCalledTimes(1)
+      await user.keyboard(' ')
+      expect(onCardClick).toHaveBeenCalledTimes(2)
+      expect(onCardClick).toHaveBeenLastCalledWith(expect.objectContaining({ id: 100 }))
+
+      // Die Haupthandlung zuerst: Der nächste Tab-Schritt führt auf das ⋮ derselben Karte (E7).
+      await user.tab()
+      expect(screen.getByLabelText('Menü Aufgabe')).toHaveFocus()
+    })
+
+    it('öffnet ohne Schreibrecht genauso über den Titelknopf', async () => {
+      const user = userEvent.setup()
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} onCardClick={onCardClick} />)
+
+      await tabBis(user, titelKnopf())
+      await user.keyboard('{Enter}')
+
+      expect(onCardClick).toHaveBeenCalledTimes(1)
+    })
+
+    it('öffnet mit Enter auf dem ⋮ das Menü, nicht das Detail', async () => {
+      const user = userEvent.setup()
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onCardClick={onCardClick} />)
+
+      await tabBis(user, screen.getByLabelText('Menü Aufgabe'))
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByRole('menuitem', { name: 'Archivieren' })).toBeInTheDocument()
+      expect(onCardClick).not.toHaveBeenCalled()
+    })
+
+    it('öffnet beim Mausklick auf den Titel das Detail genau einmal', async () => {
+      const user = userEvent.setup()
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onCardClick={onCardClick} />)
+
+      await user.click(titelKnopf())
+
+      expect(onCardClick).toHaveBeenCalledTimes(1)
+    })
+
+    it('ist im Auswahlmodus keine Tab-Station und wählt per Mausklick aus', async () => {
+      const user = userEvent.setup()
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onCardClick={onCardClick} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+
+      expect(titelKnopf()).toHaveAttribute('tabindex', '-1')
+      // Der Tastaturweg ist die Checkbox: Nach ihr kommt der Titel nicht als nächste Station.
+      await tabBis(user, screen.getByLabelText('Karte Aufgabe auswählen'))
+      await user.tab()
+      expect(titelKnopf()).not.toHaveFocus()
+
+      await user.click(titelKnopf())
+      expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+      expect(onCardClick).not.toHaveBeenCalled()
+    })
+  })
+
   it('archiviert die Auswahl nach Bestätigung über die Bulk-API und entfernt sie optimistisch', async () => {
     const api = mkApi({ bulkArchive: vi.fn().mockResolvedValue([]) })
     const onCardsChanged = vi.fn()

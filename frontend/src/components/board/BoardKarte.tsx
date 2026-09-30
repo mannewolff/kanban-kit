@@ -2,6 +2,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert'
 import Avatar from '@mui/material/Avatar'
 import AvatarGroup from '@mui/material/AvatarGroup'
 import Box from '@mui/material/Box'
+import ButtonBase from '@mui/material/ButtonBase'
 import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
@@ -266,7 +267,26 @@ export function BoardKarte({
         '&:active': { cursor: alltag ? 'grabbing' : 'pointer' },
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '7px', minHeight: 20 }}>
+      {/* Der Titel steht im DOM vor dem Kopf: Das Öffnen ist die erste Tab-Station der Karte, vor
+          dem ⋮ (Plan #1292, E7). Sichtbar bleibt der Kopf oben, über `order`. */}
+      <Typography component="h4" sx={{ m: 0, fontSize: 12.5, fontWeight: 500, lineHeight: 1.35 }}>
+        {/* Ein eigener Knopf statt der ganzen Fläche, weil die Karte selbst Knöpfe trägt (E1); sein Name
+            ist der sichtbare Titel, damit die Überschrift ihren Titel behält (E5). Die Klickwelle änderte das
+            Erscheinungsbild, der Fokusring kommt aus dem Theme (E6). */}
+        <ButtonBase
+          disableRipple
+          tabIndex={selectionMode ? -1 : 0}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (selectionMode) onSelect()
+            else onOpen()
+          }}
+          sx={{ display: 'inline', font: 'inherit', color: 'inherit', textAlign: 'left', verticalAlign: 'baseline', cursor: 'inherit' }}
+        >
+          {card.title}
+        </ButtonBase>
+      </Typography>
+      <Box sx={{ order: -1, display: 'flex', alignItems: 'center', gap: '7px', minHeight: 20 }}>
         {selectionMode && (
           <Checkbox
             size="small"
@@ -293,9 +313,6 @@ export function BoardKarte({
           </IconButton>
         )}
       </Box>
-      <Typography component="h4" sx={{ m: 0, fontSize: 12.5, fontWeight: 500, lineHeight: 1.35 }}>
-        {card.title}
-      </Typography>
       {normal && <CardLabels labelIds={card.labels} boardLabels={boardLabels} cardTitle={card.title} />}
       <KartenFuss card={card} epic={epic} statusmal={statusmal} doneAt={doneAt} retentionDays={retentionDays} overdue={overdue} onEpicOpen={onEpicOpen} />
     </Paper>
