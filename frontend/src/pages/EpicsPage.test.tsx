@@ -434,9 +434,81 @@ describe('EpicsPage', () => {
     mitAnforderung(7)
     renderPage()
 
-    fireEvent.click(await screen.findByText('Auth'))
+    // Die Fläche selbst, nicht der Titel: Der Titel ist seit Issue #1306 ein eigener Knopf.
+    fireEvent.click(await screen.findByTestId('vorhaben-kachel-9'))
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
+  describe('Titelknopf der Kachel (Issue #1306)', () => {
+    const auth = {
+      id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1,
+      memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null,
+    }
+    const titelKnopf = async () =>
+      within(await screen.findByTestId('vorhaben-kachel-9')).getByRole('button', { name: 'Auth' })
+
+    it('erreicht den Titel per Tab als Knopf und öffnet mit Enter', async () => {
+      mEpics.list.mockResolvedValue([auth])
+      const user = userEvent.setup()
+      renderPage()
+      const knopf = await titelKnopf()
+
+      umschalter().focus()
+      await user.tab()
+      expect(knopf).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    })
+
+    it('öffnet mit der Leertaste', async () => {
+      mEpics.list.mockResolvedValue([auth])
+      const user = userEvent.setup()
+      renderPage()
+      ;(await titelKnopf()).focus()
+
+      await user.keyboard(' ')
+
+      expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    })
+
+    it('öffnet auch für einen Nur-Leser', async () => {
+      mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'VIEWER', createdAt: '' }])
+      mEpics.list.mockResolvedValue([auth])
+      const user = userEvent.setup()
+      renderPage()
+      await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
+      ;(await titelKnopf()).focus()
+
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    })
+
+    it('steht in der Tab-Reihenfolge vor dem ⋮, und Enter auf dem ⋮ öffnet nur das Menü', async () => {
+      mEpics.list.mockResolvedValue([auth])
+      const user = userEvent.setup()
+      renderPage()
+      ;(await titelKnopf()).focus()
+
+      await user.tab()
+      expect(screen.getByLabelText('Menü Auth')).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByRole('menuitem', { name: 'Ausblenden' })).toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('öffnet per Mausklick genau einmal', async () => {
+      mEpics.list.mockResolvedValue([auth])
+      renderPage()
+
+      fireEvent.click(await titelKnopf())
+
+      expect(await screen.findAllByRole('dialog')).toHaveLength(1)
+      await waitFor(() => expect(mEpicTree.epicTree).toHaveBeenCalledTimes(1))
+    })
   })
 
   it('zeigt eine nicht auflösbare Anforderungsnummer an und öffnet beim Klick nichts', async () => {
@@ -823,11 +895,13 @@ describe('EpicsPage', () => {
 
       // Vom letzten Bedienelement vor dem Raster über den stets sichtbaren Umschalter zum
       // ⋮-Knopf: Dieses Vorhaben trägt keine Anforderung, die Kachel enthält vor dem ⋮-Knopf also
-      // nichts Fokussierbares. Das belegt, dass er in der Tab-Reihenfolge liegt und nicht bloß per
+      // nur den Titelknopf. Das belegt, dass er in der Tab-Reihenfolge liegt und nicht bloß per
       // Maus zu treffen ist.
       screen.getByRole('button', { name: 'Neues Vorhaben' }).focus()
       await user.tab()
       expect(umschalter()).toHaveFocus()
+      // Seit Issue #1306 steht der Titelknopf als erste Tab-Station der Kachel vor dem ⋮.
+      await user.tab()
       await user.tab()
       expect(knopf).toHaveFocus()
 

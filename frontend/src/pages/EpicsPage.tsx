@@ -3,6 +3,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import ButtonBase from '@mui/material/ButtonBase'
 import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
@@ -382,7 +383,21 @@ export function EpicsPage() {
                     overflow: 'hidden',
                   }}
                 >
-                  {epic.title}
+                  {/* Ein eigener Knopf statt der ganzen Fläche, weil die Kachel selbst Knöpfe trägt
+                      (Plan #1292, E1); sein Name ist der sichtbare Titel, damit die Überschrift ihren
+                      Titel behält (E5). Die Klickwelle änderte das Erscheinungsbild, der Fokusring
+                      kommt aus dem Theme (E6). */}
+                  <ButtonBase
+                    disableRipple
+                    onClick={(e) => {
+                      // Sonst öffnete der Flächen-Handler der Kachel dasselbe Vorhaben ein zweites Mal.
+                      e.stopPropagation()
+                      setSelected(epicToCard(epic, id))
+                    }}
+                    sx={{ display: 'inline', font: 'inherit', color: 'inherit', textAlign: 'left', verticalAlign: 'baseline' }}
+                  >
+                    {epic.title}
+                  </ButtonBase>
                 </Typography>
                 {/* Immer neutral, auch bei sortenreinen Vorhaben: `total` zaehlt ALLE
                     Mitglieder, und sobald dieselbe Kachel Anforderungen und Plaene ausweist, waere
