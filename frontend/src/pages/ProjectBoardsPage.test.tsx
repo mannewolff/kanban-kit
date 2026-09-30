@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { cssRegel } from '../test/cssRegel'
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError } from '../api/client'
@@ -466,5 +467,87 @@ describe('ProjectBoardsPage RBAC', () => {
       </MemoryRouter>,
     )
     expect(screen.getByText('Ungültige Projekt-ID.')).toBeInTheDocument()
+  })
+
+  describe('Board-Name als Link (Issue #1307)', () => {
+    function Ziel() {
+      return <div>Ziel {useLocation().pathname}</div>
+    }
+    function renderMitZiel(role: string) {
+      mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role, createdAt: '' }])
+      // Zwei Boards: Bei genau einem routet die Seite von selbst durch.
+      mockedBoards.list.mockResolvedValue([
+        { id: 9, name: 'Board A', projectId: 5, createdAt: '', columns: [] },
+        { id: 10, name: 'Board B', projectId: 5, createdAt: '', columns: [] },
+      ])
+      mockedBoards.listArchived.mockResolvedValue([])
+      return render(
+        <SnackbarProvider>
+          <MemoryRouter initialEntries={['/projects/5']}>
+            <Routes>
+              <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+              <Route path="/boards/:boardId/leitstand" element={<Ziel />} />
+            </Routes>
+          </MemoryRouter>
+        </SnackbarProvider>,
+      )
+    }
+
+    it('erreicht den Board-Namen per Tab als Link und navigiert mit Enter', async () => {
+      const user = userEvent.setup()
+      renderMitZiel('OWNER')
+      const link = await screen.findByRole('link', { name: 'Board A' })
+
+      screen.getByRole('button', { name: 'Anlegen' }).focus()
+      await user.tab()
+      expect(link).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByText('Ziel /boards/9/leitstand')).toBeInTheDocument()
+    })
+
+    it('trägt das Ziel des Leitstand-Boards als href', async () => {
+      renderMitZiel('OWNER')
+
+      expect(await screen.findByRole('link', { name: 'Board A' })).toHaveAttribute('href', '/boards/9/leitstand')
+    })
+
+    it('ist auch für einen Nur-Leser erreichbar und wirksam', async () => {
+      const user = userEvent.setup()
+      renderMitZiel('VIEWER')
+      const link = await screen.findByRole('link', { name: 'Board A' })
+      await waitFor(() => expect(mockedProjects.list).toHaveBeenCalled())
+
+      screen.getByRole('link', { name: 'Projekte' }).focus()
+      await user.tab()
+      expect(link).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByText('Ziel /boards/9/leitstand')).toBeInTheDocument()
+    })
+
+    it('navigiert weiterhin per Klick auf die Fläche neben dem Namen', async () => {
+      renderMitZiel('OWNER')
+      await screen.findByRole('link', { name: 'Board A' })
+
+      // Die Kachelfläche (Spaltenzahl der ersten Kachel), nicht der Name: Der Name ist seit
+      // Issue #1307 ein eigener Link.
+      fireEvent.click(screen.getAllByText('0 Spalten')[0])
+
+      expect(await screen.findByText('Ziel /boards/9/leitstand')).toBeInTheDocument()
+    })
+
+    it('steht vor dem Archivieren, und Enter darauf öffnet nur dessen Dialog', async () => {
+      const user = userEvent.setup()
+      renderMitZiel('OWNER')
+      ;(await screen.findByRole('link', { name: 'Board A' })).focus()
+
+      await user.tab()
+      expect(screen.getByLabelText('Board Board A archivieren')).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByText('Board archivieren?')).toBeInTheDocument()
+      expect(screen.queryByText(/^Ziel /)).not.toBeInTheDocument()
+    })
   })
 })

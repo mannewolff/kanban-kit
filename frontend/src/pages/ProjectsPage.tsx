@@ -10,6 +10,7 @@ import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
+import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
@@ -17,7 +18,7 @@ import Typography from '@mui/material/Typography'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
 import { canManageProject, isPlatformAdmin } from '../lib/roles'
@@ -219,7 +220,18 @@ export function ProjectsPage() {
               }}
             >
               <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
-                {project.name}
+                {/* Tastaturweg zum Projekt (Issue #1307): Der Name ist ein echter Link, die Fläche
+                    behält ihren Klick. stopPropagation, damit der Klick nicht doppelt navigiert. */}
+                <Link
+                  component={RouterLink}
+                  to={`/projects/${project.id}`}
+                  state={{ autoRoute: true }}
+                  underline="none"
+                  color="inherit"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {project.name}
+                </Link>
               </Typography>
               <Chip label={project.role} size="small" color={ROLE_CHIP[project.role] ?? 'default'} />
               {formatDate(project.createdAt) && (

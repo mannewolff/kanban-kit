@@ -141,6 +141,16 @@ Aktuelle Struktur unter `frontend/src/`:
 - Bilder mit aussagekräftigem `alt` oder als dekorativ markieren.
 - Farben dürfen nicht die einzige Informationsträger sein. Kontraste prüfen.
 
+**Kachel mit eigenem Öffnen-Element (Issue #796).** Eine klickbare Kachel wird nicht selbst zum Knopf
+(`role="button"` mit `tabIndex`), denn sie enthält meist weitere Knöpfe (⋮-Menü, Bearbeiten-Modus) —
+verschachtelte Interaktion. Stattdessen trägt der Titel bzw. Name die Handlung als echtes Element:
+`ButtonBase` mit `disableRipple`, wenn die Kachel einen Dialog öffnet (Karte, Vorhaben), und MUI
+`Link component={RouterLink}` mit `underline="none"` und `color="inherit"`, wenn sie auf eine andere
+Seite führt (Projekt, Board). Das Element stoppt die Weitergabe seines Klicks; die Fläche behält ihren
+`onClick` für die Maus. Kein `aria-label` — der Name ist der sichtbare Titel, die Rolle sagt, was
+geschieht. Der Fokusring kommt aus dem Theme, keine eigene Stilregel. In der Tab-Reihenfolge steht das
+Öffnen vor den sekundären Knöpfen der Kachel.
+
 ---
 
 ## ⚡ Performance
