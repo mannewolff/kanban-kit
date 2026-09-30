@@ -58,6 +58,8 @@ const card: Card = {
   positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
   derivedFrom: null,
+  status: null,
+  canSetStatus: false,
 }
 
 function mkApi(over: Record<string, unknown> = {}) {

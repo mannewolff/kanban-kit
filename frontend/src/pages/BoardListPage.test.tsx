@@ -74,6 +74,8 @@ const base = {
   boardId: 1, positionInColumn: 0, movedToDoneAt: null as string | null,
   dependencies: [] as number[], type: 'CARD' as const, parentId: null as number | null, shortcode: null as string | null, assignees: [] as number[], dueDate: null as string | null, labels: [] as number[],
   derivedFrom: null as number | null,
+  status: null,
+  canSetStatus: false,
   // Die Listen-Antwort liefert die Beschreibung nur noch als Auszug (Issue #771); `description`
   // ist dort immer `null`. Die Fixturen tragen den Vorschautext deshalb in `excerpt`.
   excerpt: null as string | null,

@@ -40,6 +40,22 @@ afterEach(() => {
   setUnauthorizedHandler(null)
 })
 
+describe('apiFetch – Anfrage', () => {
+  it('sendet Cookies mit und setzt den JSON-Header', async () => {
+    mockOkResponse('')
+    await apiFetch('/api/test')
+    const init = vi.mocked(globalThis.fetch).mock.calls[0][1]
+    expect(init?.credentials).toBe('include')
+    expect(init?.headers).toEqual({ 'Content-Type': 'application/json' })
+  })
+})
+
+describe('ApiError', () => {
+  it('trägt den Namen ApiError', () => {
+    expect(new ApiError(400, 'x').name).toBe('ApiError')
+  })
+})
+
 describe('apiFetch – ApiError aus RFC-9457 Problem Details', () => {
   it('nutzt detail als message', async () => {
     mockErrorResponse(
@@ -121,6 +137,17 @@ describe('apiFetch – ApiError aus RFC-9457 Problem Details', () => {
     expect((await failingFetch()).message).toBe('42')
   })
 
+  it('fällt auf statusText zurück, wenn der Body nicht lesbar ist', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+      text: () => Promise.reject(new Error('Verbindung abgerissen')),
+    } as Response)
+
+    expect((await failingFetch()).message).toBe('Bad Gateway')
+  })
+
   it('fällt bei leerem Body auf statusText zurück', async () => {
     mockErrorResponse(500, '', 'Internal Server Error')
 
@@ -141,6 +168,21 @@ describe('ApiError.detail – nur aus einem gelesenen Problem-Body', () => {
 
     expect(error.detail).toBe('Spalte ist nicht leer')
     expect(apiErrorMessage(error, 'Fallback')).toBe('Spalte ist nicht leer')
+  })
+
+  it('übergeht ein leeres detail und nimmt den title', async () => {
+    mockErrorResponse(409, JSON.stringify({ title: 'Conflict', detail: '' }))
+
+    expect((await failingFetch()).detail).toBe('Conflict')
+  })
+
+  it('verträgt fieldErrors: null und lässt sie undefiniert', async () => {
+    mockErrorResponse(400, JSON.stringify({ detail: 'Ungültig', fieldErrors: null }))
+
+    const error = await failingFetch()
+
+    expect(error.detail).toBe('Ungültig')
+    expect(error.fieldErrors).toBeUndefined()
   })
 
   it('nutzt ohne detail den title als detail', async () => {

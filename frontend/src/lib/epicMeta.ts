@@ -74,9 +74,9 @@ export function epicTint(id: number): string {
 export function epicShortcode(title: string, explicit?: string | null): string {
   const trimmed = explicit?.trim()
   if (trimmed) return trimmed
-  const initials = title
-    .split(/\s+/)
-    .filter(Boolean)
+  // Stryker disable next-line MethodExpression,Regex: gleichwertig — leere Wörter liefern in `map` `undefined`, und `join` schreibt es als leeren Text
+  const woerter = title.split(/\s+/).filter(Boolean)
+  const initials = woerter
     .map((w) => w[0])
     .join('')
     .slice(0, 3)

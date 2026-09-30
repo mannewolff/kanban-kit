@@ -237,7 +237,7 @@ describe('EpicsPage', () => {
       {
         id: 30, boardId: 1, columnId: 10, number: 3, title: 'Kind', description: null,
         positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
-        type: 'CARD', parentId: 9, shortcode: null, assignees: [], dueDate: null, labels: [],
+        type: 'CARD', parentId: 9, shortcode: null, assignees: [], dueDate: null, labels: [], status: null, canSetStatus: false,
       },
     ])
     mEpicTree.epicTree.mockResolvedValue([
@@ -360,7 +360,7 @@ describe('EpicsPage', () => {
       {
         id: 30, boardId: 1, columnId: 10, number: 7, title: 'Anforderungskarte', description: null,
         positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
-        type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
+        type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [], status: null, canSetStatus: false,
       },
     ])
   }
@@ -1053,7 +1053,7 @@ describe('EpicsPage', () => {
       id: 40, boardId: 1, columnId: 10, number: 4, title: 'Anforderung', description: null,
       positionInColumn: 0, archived: false, movedToDoneAt: null,
       dependencies: [], type: 'CARD', parentId, shortcode: null, assignees: [], dueDate: null,
-      labels: [],
+      labels: [], status: null, canSetStatus: false,
     })
 
     it('lässt den Umschalter „Ausgeblendete zeigen" den Optionsvorrat des Formulars unberührt', async () => {
@@ -1125,7 +1125,7 @@ describe('EpicsPage', () => {
     const verknuepfteKarte = (assignees: number[]) => ({
       id: 30, boardId: 1, columnId: 10, number: 3, title: 'Kind aus dem Baum', description: null,
       type: 'CARD', dependencies: [], assignees, labels: [], parentId: null, shortcode: null,
-      dueDate: null, archived: false, derivedFrom: null,
+      dueDate: null, archived: false, derivedFrom: null, status: null, canSetStatus: false,
     })
 
     /** Öffnet das Vorhaben und löst Enter auf der ersten Baumzeile aus. */
@@ -1172,7 +1172,7 @@ describe('EpicsPage', () => {
           id: 30, boardId: 1, columnId: 10, number: 3, title: 'Anforderung', description: null,
           positionInColumn: 0, archived: false, movedToDoneAt: null,
           dependencies: [], type: 'CARD', parentId: null, shortcode: null, assignees: [],
-          dueDate: null, labels: [5],
+          dueDate: null, labels: [5], status: null, canSetStatus: false,
         },
       ])
       mLabels.list.mockResolvedValue([{ id: 5, name: 'Fehler', color: '#ff0000' }])

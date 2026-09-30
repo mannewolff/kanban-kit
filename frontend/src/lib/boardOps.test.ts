@@ -8,6 +8,8 @@ function card(id: number, columnId: number, position: number, archived = false):
     positionInColumn: position, archived, movedToDoneAt: null, dependencies: [],
     type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
     derivedFrom: null,
+    status: null,
+    canSetStatus: false,
   }
 }
 
@@ -25,6 +27,13 @@ describe('boardOps', () => {
     expect(card1.columnId).toBe(20)
     expect(card1.positionInColumn).toBe(1) // hinter der bestehenden Karte in Spalte 20
     expect(cards[0].columnId).toBe(10) // Original unverändert
+  })
+
+  it('applyMove verschiebt genau die gewählte Karte, auch wenn sie nicht vorn steht', () => {
+    const cards = [card(1, 10, 0), card(2, 20, 0)]
+    const moved = applyMove(cards, 2, 10)
+    expect(moved.find((c) => c.id === 2)).toMatchObject({ columnId: 10, positionInColumn: 1 })
+    expect(moved.find((c) => c.id === 1)).toMatchObject({ columnId: 10, positionInColumn: 0 })
   })
 
   it('applyMove in dieselbe Spalte liefert unveränderte Referenz', () => {

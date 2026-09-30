@@ -56,21 +56,40 @@ function spaltenPosition(card: Card, ctx: SortContext): number {
 }
 
 const SCHLUESSEL: Record<ColumnKey, (card: Card, ctx: SortContext) => Schluessel> = {
+  // `ende` und `text` sind je Spalte für alle Karten gleich; welcher Wert dort steht, ändert keine
+  // Reihenfolge. Das gilt ebenso für die übrigen konstanten Leerwerte unten.
+  // Stryker disable next-line BooleanLiteral,StringLiteral: gleichwertig — konstant für alle Karten dieser Spalte
   number: (card) => ({ ende: false, zahl: card.number, text: '' }),
   // Der Status folgt der fachlichen Kette der Spalten („Backlog, Ready, …"), nicht dem Alphabet.
   // Archivierte Karten haben in dieser Kette keinen Platz.
   status: (card, ctx) =>
     card.archived
-      ? { ende: true, zahl: 0, text: '' }
-      : { ende: false, zahl: spaltenPosition(card, ctx), text: '' },
+      ? {
+          ende: true,
+          zahl: 0,
+          // Stryker disable next-line StringLiteral: gleichwertig — archivierte Karten vergleichen nur untereinander
+          text: '',
+        }
+      : {
+          ende: false,
+          zahl: spaltenPosition(card, ctx),
+          // Stryker disable next-line StringLiteral: gleichwertig — konstant für alle nicht archivierten Karten
+          text: '',
+        },
   epic: (card, ctx) => {
     // Der Leerwert hängt am fehlenden Vorhaben, nicht am Kürzel: `epicShortcode` fällt notfalls
     // auf „VORH" zurück und ist nie leer.
     const epic = epicOfCard(card, ctx.epics)
     return epic === undefined
-      ? { ende: true, zahl: 0, text: '' }
+      ? {
+          ende: true,
+          zahl: 0,
+          // Stryker disable next-line StringLiteral: gleichwertig — Karten ohne Vorhaben vergleichen nur untereinander
+          text: '',
+        }
       : { ende: false, zahl: 0, text: epicShortcode(epic.title, epic.shortcode) }
   },
+  // Stryker disable next-line BooleanLiteral: gleichwertig — konstant für alle Karten dieser Spalte
   title: (card) => ({ ende: false, zahl: 0, text: card.title }),
   excerpt: (card) => {
     // Sortiert wird über den angezeigten, gestrippten Text — über den rohen Markdown zu sortieren

@@ -8,5 +8,8 @@ export function epicToCard(epic: Epic, boardId: number): Card {
     dependencies: [], type: 'EPIC', parentId: null, shortcode: epic.shortcode, assignees: [], dueDate: null, labels: [],
     // Vorhaben tragen keine Herkunft (Issue #607): der Anlege-Endpunkt lehnt sie fuer EPIC ab.
     derivedFrom: null,
+    // Vorhaben tragen keinen eigenen Status; fuer sie zaehlt die Spalte (Plan #1294, E2).
+    status: null,
+    canSetStatus: false,
   }
 }

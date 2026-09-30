@@ -17,6 +17,10 @@ describe('stripMarkdown', () => {
     expect(stripMarkdown('# Titel\nText **fett** und `code`')).toBe('Titel Text fett und code')
   })
 
+  it('entfernt Hashes auch ohne folgendes Leerzeichen und in Folge', () => {
+    expect(stripMarkdown('#Tag ## Titel')).toBe('Tag Titel')
+  })
+
   it('kollabiert Whitespace und trimmt', () => {
     expect(stripMarkdown('  a\n\n  b  ')).toBe('a b')
   })

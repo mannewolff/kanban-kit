@@ -35,11 +35,11 @@ import {
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { attachmentsApi as defaultAttachmentsApi, type Attachment, type AttachmentsApi } from '../api/attachments'
-import { boardsApi as defaultBoardsApi, type BoardColumn } from '../api/boards'
+import { boardsApi as defaultBoardsApi } from '../api/boards'
 import CircularProgress from '@mui/material/CircularProgress'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { DerivationTree } from './DerivationTree'
-import { cardsApi as defaultCardsApi, type CardActivity, type CardByNumber, type CardDetail, type DerivationNode } from '../api/cards'
+import { cardsApi as defaultCardsApi, type CardActivity, type CardByNumber, type CardDetail, type CardStatus, type DerivationNode } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { NightRunsApi } from '../api/nightRuns'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
@@ -51,7 +51,6 @@ import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 import { vorhabenFeld } from '../lib/cardEpic'
 import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
-import { canonicalColumnKey, otherCanonicalColumns } from '../lib/columnMeta'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
@@ -631,7 +630,7 @@ function ActivitySection({
   )
 }
 
-/** Aussehen des farbigen Spalten-Chips — eine Quelle für den lesenden und den interaktiven Fall. */
+/** Aussehen des farbigen Status-Chips — eine Quelle für den lesenden und den interaktiven Fall. */
 const statusChipSx = (colors: { bg: string; text: string }) => ({
   bgcolor: colors.bg,
   color: colors.text,
@@ -639,65 +638,69 @@ const statusChipSx = (colors: { bg: string; text: string }) => ({
 })
 
 /**
- * Status-Chip in der Kopfleiste: „Vorhaben" bei Epics, sonst der Spalten-Chip (falls bekannt).
+ * Die fünf Prozesszustände in ihrer Reihenfolge, mit dem kanonischen Prozessnamen wortgleich zu
+ * `workflow.config.json` → `columns` und `CardStatus.anzeigename()` im Backend (Plan #1294, E24).
+ * Der Name speist zugleich `statusColors` — so trägt der Wechsler die Melderfarbe der gleichnamigen
+ * Spalte.
+ */
+const STATUS_NAMEN: ReadonlyArray<readonly [CardStatus, string]> = [
+  ['BACKLOG', 'Backlog'],
+  ['READY', 'Ready'],
+  ['IN_PROGRESS', 'In progress'],
+  ['IN_REVIEW', 'In review'],
+  ['DONE', 'Done'],
+]
+
+const statusName = (status: CardStatus) => STATUS_NAMEN.find(([s]) => s === status)![1]
+
+/**
+ * Status-Chip in der Kopfleiste. Ein Vorhaben zeigt „Vorhaben", eine Karte ohne eigenen Status
+ * (Dokumentarten) wie bisher ihre Spalte, ein Arbeitspaket seinen Status (Plan #1294, E16, E21).
  *
- * Sind `columns`, `columnId` und `onMove` gesetzt (interaktiver Kontext), wird der Chip in einer
- * kanonischen Spalte zum Steuerelement für den Statuswechsel. Fehlt auch nur eine der drei
- * Angaben, bleibt es beim rein lesenden Chip — so bleiben alle Aufrufer ohne Board-Kontext
- * (Kartensuche, Dashboard, Nachtlauf, Vorhaben-Seite, Listenansicht) unberührt.
+ * Zum Wechsler wird der Chip allein aus der Karte heraus: `canSetStatus` sagt der Server für das
+ * Board **dieser** Karte (E10) — deshalb erscheint er unabhängig davon, von wo aus sie geöffnet
+ * wurde. Lesend bleibt er an einer archivierten Karte und auf einem archivierten Board. Ein Wechsel
+ * setzt nur den Status; die Karte bleibt in ihrer Spalte.
  */
 function CardStatusChip({
   isEpic,
   columnName,
-  colors,
+  status,
+  canSetStatus,
   archived,
-  canEdit,
   editing,
-  columns,
-  columnId,
-  onMove,
+  onSetStatus,
 }: Readonly<{
   isEpic: boolean
   columnName?: string
-  colors: { bg: string; text: string } | null
+  status: CardStatus | null
+  canSetStatus: boolean
   archived: boolean
-  canEdit: boolean
   editing: boolean
-  columns?: BoardColumn[]
-  columnId?: number
-  onMove?: (toColumnId: number) => Promise<void>
+  onSetStatus: (status: CardStatus) => Promise<void>
 }>) {
-  // Läuft ein Wechsel, ist die Auswahl gesperrt; der Bestätigungsdialog gilt nur für „Ready".
+  // Läuft ein Wechsel, ist die Auswahl gesperrt; die Rückfrage gilt nur für „Ready".
   const [pending, setPending] = useState(false)
-  const [confirmTarget, setConfirmTarget] = useState<BoardColumn | null>(null)
+  const [confirmReady, setConfirmReady] = useState(false)
 
-  if (columns === undefined || columnId === undefined || onMove === undefined) {
-    if (isEpic) return <Chip label="Vorhaben" size="small" color="secondary" />
-    if (!colors) return null
-    return <Chip label={columnName} size="small" sx={statusChipSx(colors)} />
+  if (isEpic) return <Chip label="Vorhaben" size="small" color="secondary" />
+  if (status === null) {
+    if (!columnName) return null
+    return <Chip label={columnName} size="small" sx={statusChipSx(statusColors(columnName))} />
   }
 
-  // Im interaktiven Kontext ist die Spalte aus `columns` maßgeblich, nicht die `columnName`-Prop:
-  // Nur sie zieht bei einem Wechsel mit, ohne dass der Aufrufer eine zweite Prop nachführen muss.
-  const current = columns.find((c) => c.id === columnId)
-  const spaltenChip = current ? (
-    <Chip label={current.name} size="small" sx={statusChipSx(statusColors(current.name))} />
-  ) : null
+  const name = statusName(status)
+  if (archived || !canSetStatus) {
+    return <Chip label={name} size="small" sx={statusChipSx(statusColors(name))} />
+  }
 
-  if (archived) return spaltenChip
-  if (isEpic) return <Chip label="Vorhaben" size="small" color="secondary" />
-  if (!current) return null
-  if (canonicalColumnKey(current.name) === undefined || !canEdit) return spaltenChip
-
-  const ziele = otherCanonicalColumns(columns, columnId)
-
-  const verschiebe = async (target: BoardColumn) => {
+  const setze = async (ziel: CardStatus) => {
     setPending(true)
     try {
-      await onMove(target.id)
+      await onSetStatus(ziel)
     } catch {
-      // Die Fehlermeldung ist Sache des Aufrufers; hier zählt nur, dass die Auswahl wieder
-      // bedienbar wird. Sie zeigt weiter `columnId` — also die unveränderte Spalte.
+      // Die Meldung gibt `onSetStatus` selbst aus; hier zählt nur, dass die Auswahl wieder
+      // bedienbar wird. Sie zeigt weiter `status` — also den unveränderten Stand.
     } finally {
       setPending(false)
     }
@@ -708,47 +711,49 @@ function CardStatusChip({
       <Select
         size="small"
         variant="standard"
-        value={columnId}
+        value={status}
         disabled={pending || editing}
-        SelectDisplayProps={{ 'aria-label': 'Zustand' }}
+        disableUnderline
+        SelectDisplayProps={{ 'aria-label': 'Status' }}
+        // Der gewählte Wert erscheint als derselbe Chip wie im lesenden Fall — Melderfarbe und
+        // Radius kommen so aus `statusColors` und dem Theme, nicht aus eigenen Werten.
+        renderValue={(wert) => (
+          <Chip label={statusName(wert)} size="small" sx={statusChipSx(statusColors(statusName(wert)))} />
+        )}
         onChange={(e) => {
-          // Nur die Zielspalten lösen `onChange` aus — der Eintrag der aktuellen Spalte ist
-          // `disabled`. Deshalb ohne Nicht-gefunden-Zweig; das `!` ist dadurch gedeckt.
-          const target = ziele.find((c) => c.id === Number(e.target.value))!
-          if (canonicalColumnKey(target.name) === 'READY') {
-            setConfirmTarget(target)
+          // Nur die übrigen Zustände lösen `onChange` aus — der aktuelle Eintrag ist `disabled`.
+          const ziel = e.target.value as CardStatus
+          if (ziel === 'READY') {
+            setConfirmReady(true)
             return
           }
-          void verschiebe(target)
+          void setze(ziel)
         }}
       >
-        <MenuItem value={columnId} disabled>
-          {current.name}
-        </MenuItem>
-        {ziele.map((c) => (
-          <MenuItem key={c.id} value={c.id}>
-            {c.name}
+        {STATUS_NAMEN.map(([s, anzeige]) => (
+          <MenuItem key={s} value={s} disabled={s === status}>
+            {anzeige}
           </MenuItem>
         ))}
       </Select>
 
       {/*
-        Rückfrage nur vor „Ready": Dort übergibt man die Karte an die Umsetzung — ein Zug, der
-        andernorts eine Freigabe ist. Alle anderen Wechsel laufen ohne Zwischenschritt.
+        Rückfrage nur vor „Ready": Ready ist das menschliche GO — das Gate hängt an der Bedeutung,
+        nicht an der Bewegung (Plan #1294, E20). Alle anderen Wechsel laufen ohne Zwischenschritt.
       */}
-      {confirmTarget !== null && (
-        <Dialog open onClose={() => setConfirmTarget(null)}>
-          <DialogTitle sx={dialogTitleSx}>Nach Ready verschieben?</DialogTitle>
+      {confirmReady && (
+        <Dialog open onClose={() => setConfirmReady(false)}>
+          <DialogTitle sx={dialogTitleSx}>Status auf Ready setzen?</DialogTitle>
           <DialogActions>
-            <Button onClick={() => setConfirmTarget(null)}>Abbrechen</Button>
+            <Button onClick={() => setConfirmReady(false)}>Abbrechen</Button>
             <Button
               variant="contained"
               onClick={() => {
-                setConfirmTarget(null)
-                void verschiebe(confirmTarget)
+                setConfirmReady(false)
+                void setze('READY')
               }}
             >
-              Nach Ready verschieben
+              Status auf Ready setzen
             </Button>
           </DialogActions>
         </Dialog>
@@ -1060,26 +1065,11 @@ interface Props {
   onChanged?: () => void
   /** Direkt im Edit-Modus öffnen (z. B. aus dem Karten-⋮-Menü). */
   initialEditing?: boolean
-  /** Spaltenname für den Status-Chip (bei Karten). */
+  /**
+   * Spaltenname für den Status-Chip einer Karte ohne eigenen Status (Dokumentarten). Ein
+   * Arbeitspaket zeigt stattdessen `card.status` (Plan #1294, E16).
+   */
   columnName?: string
-  /**
-   * Spalten des Boards für den interaktiven Statuswechsel. Erst zusammen mit {@link columnId} und
-   * {@link onMove} wird der Status-Chip zum Steuerelement; fehlt eine der drei Angaben, bleibt er
-   * rein lesend. Aufrufer ohne Board-Kontext (Kartensuche, Dashboard, Nachtlauf, Vorhaben-Seite,
-   * Listenansicht) bleiben so unverändert.
-   */
-  columns?: BoardColumn[]
-  /**
-   * Aktuelle Spalte der Karte. Im interaktiven Kontext ist sie — nicht {@link columnName} — die
-   * Quelle des angezeigten Spaltennamens, damit ein Wechsel ohne zweite nachgeführte Prop wirkt.
-   */
-  columnId?: number
-  /**
-   * Verschiebt die Karte in die gewählte Spalte. Solange das Promise offen ist, bleibt die Auswahl
-   * gesperrt; bei Ablehnung wird sie wieder bedienbar und zeigt weiter {@link columnId} — die
-   * Fehlermeldung gehört dem Aufrufer, der den Fehler kennt.
-   */
-  onMove?: (toColumnId: number) => Promise<void>
   /**
    * Ort der Karte (Projekt / Board / Spalte) für den Modal-Kopf. Optional: Aufrufer ohne diesen
    * Kontext (Epics-Seite) zeigen wie bisher keinen Pfad — ein leerer Platzhalter
@@ -1122,6 +1112,7 @@ interface Props {
     | 'setLabels'
     | 'getActivity'
     | 'restore'
+    | 'setStatus'
     | 'byNumber'
     | 'assignDerivedFrom'
     | 'epicTree'
@@ -1161,9 +1152,6 @@ function CardDetailModalView({
   onChanged,
   initialEditing = false,
   columnName,
-  columns,
-  columnId,
-  onMove,
   location,
   epics = [],
   selectableEpics,
@@ -1202,6 +1190,22 @@ function CardDetailModalView({
       }
       notify(apiErrorMessage(error_, 'Zuständige speichern fehlgeschlagen.'), 'error')
     }
+  }
+
+  // Der angezeigte Status: Die `card`-Prop des Aufrufers zieht nach einem Wechsel nicht zwingend mit
+  // (etwa bei einer über `#N` geöffneten Karte), deshalb hält die Ansicht den zugesagten Stand selbst.
+  const [status, setStatus] = useState<CardStatus | null>(card.status)
+  useEffect(() => setStatus(card.status), [card.status])
+
+  const setzeStatus = async (ziel: CardStatus) => {
+    try {
+      await cardsApi.setStatus(card.id, ziel)
+    } catch (error_: unknown) {
+      notify(apiErrorMessage(error_, 'Status setzen fehlgeschlagen.'), 'error')
+      throw error_
+    }
+    setStatus(ziel)
+    onChanged?.()
   }
 
   const restore = async () => {
@@ -1566,9 +1570,14 @@ function CardDetailModalView({
     epics,
   })
 
-  const colors = columnName ? statusColors(columnName) : null
+  // Erledigt ist ein Arbeitspaket nach seinem Status, alles andere nach der Spalte (Plan #1294,
+  // E7). Lokal formuliert, bis das Folgepaket #1303 den gemeinsamen Done-Maßstab bringt.
   const dueOverdue =
-    !isEpic && isOverdue(card.dueDate, (columnName ?? '').toLowerCase().includes('done'))
+    !isEpic &&
+    isOverdue(
+      card.dueDate,
+      status === 'DONE' || (status === null && (columnName ?? '').toLowerCase().includes('done')),
+    )
 
   // Aktuellen Toggle-Handler über ein Ref halten und als stabile Callback-Identität an TaskMarkdown
   // reichen, damit dessen `memo` greift (kein Remount der Beschreibung bei Kommentar-Nachladen).
@@ -1617,13 +1626,11 @@ function CardDetailModalView({
           <CardStatusChip
             isEpic={isEpic}
             columnName={columnName}
-            colors={colors}
+            status={status}
+            canSetStatus={card.canSetStatus && location?.board.archived !== true}
             archived={card.archived}
-            canEdit={canEdit}
             editing={editing}
-            columns={columns}
-            columnId={columnId}
-            onMove={onMove}
+            onSetStatus={setzeStatus}
           />
           {/* Nummer in Kupfer und Titel in Archivo wie der Kopf des Blatts (Entwurf `.blatt-nr`,
               `.blatt-titel`, Z. 1023–1024). */}
@@ -1900,6 +1907,10 @@ async function resolveColumnName(
  * fremdes Board falsch. Zum Bearbeiten öffnet man die Karte auf ihrem eigenen Board. Aus demselben
  * Grund erbt sie auch den Ortspfad (`location`) der Ausgangskarte nicht — er zeigte sonst auf ein
  * fremdes Board. Lieber kein Pfad als ein falscher; der Status-Chip nennt weiterhin ihre Spalte.
+ *
+ * Ausgenommen ist der Statuswechsler eines Arbeitspakets: Sein Recht (`canSetStatus`) liefert der
+ * Server mit der Karte selbst, für ihr eigenes Board — es hängt nicht am Kontext des Aufrufers
+ * (Plan #1294, E10, E23).
  */
 export function CardDetailModal(props: Readonly<Props>) {
   const { projectId, cardsApi = defaultCardsApi, boardsApi = defaultBoardsApi } = props

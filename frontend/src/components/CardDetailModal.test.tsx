@@ -4,7 +4,7 @@ import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
-import type { Board, BoardColumn } from '../api/boards'
+import type { Board } from '../api/boards'
 import { ApiError } from '../api/client'
 import type { Card, CardByNumber, CardDetail } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
@@ -24,6 +24,7 @@ const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
   excerpt: null, positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [3, 4],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [], derivedFrom: null,
+  status: null, canSetStatus: false,
 }
 
 /** Karte, auf die der Abhängigkeits-Verweis „#3“ zeigt — bewusst auf einem anderen Board. */
@@ -31,6 +32,7 @@ const linkedCard: CardByNumber = {
   id: 300, boardId: 2, columnId: 20, number: 3, title: 'Vorbedingung', description: 'Text der Vorbedingung',
   archived: false, dependencies: [], type: 'CARD', parentId: null, shortcode: null,
   assignees: [], dueDate: null, labels: [], derivedFrom: null,
+  status: null, canSetStatus: false,
 }
 
 const linkedBoard: Board = {
@@ -77,6 +79,7 @@ function makeApis() {
     setLabels: vi.fn().mockResolvedValue({ ...card }),
     getActivity: vi.fn().mockResolvedValue([]),
     restore: vi.fn().mockResolvedValue({ ...card }),
+    setStatus: vi.fn().mockResolvedValue(undefined),
     moveToIdeaStorage: vi.fn().mockResolvedValue({ ...card }),
     byNumber: vi.fn().mockResolvedValue({ ...linkedCard }),
     assignDerivedFrom: vi.fn().mockResolvedValue({ ...card }),
@@ -752,6 +755,7 @@ describe('CardDetailModal', () => {
       id: epicCard.id, number: epicCard.number, title: epicCard.title, description: null,
       type: epicCard.type, dependencies: [], assignees: [], labels: [], parentId: null,
       shortcode: epicCard.shortcode, dueDate: null, archived: false, derivedFrom: null,
+      status: null, canSetStatus: false,
     }
     render(
       <CardDetailModal
@@ -2346,184 +2350,195 @@ describe('CardDetailModal — Herkunft (#608)', () => {
   })
 })
 
-// --- Interaktiver Status-Chip (Issue #751) ----------------------------------
+// --- Statuswechsler (Issue #751, umgestellt mit Issue #1302) -----------------
 
 /**
- * Board-Spalten des interaktiven Kontexts: drei kanonische und eine frei benannte. Die Karte liegt
- * in „Backlog" (ID 10) — dieselbe `columnId`, die die Test-Karte oben trägt.
+ * Ein Arbeitspaket mit eigenem Status und Schreibrecht. Es liegt bewusst in der eigenen Spalte
+ * „Wartet auf Zulieferung": Der Kopf zeigt den Status, nicht den Spaltennamen (Plan #1294, E16).
  */
-const spalten: BoardColumn[] = [
-  { id: 10, name: 'Backlog', position: 0, wipLimit: null },
-  { id: 11, name: 'Ready', position: 1, wipLimit: null },
-  { id: 12, name: 'In Progress', position: 2, wipLimit: null },
-  { id: 13, name: 'Wartet auf Zulieferung', position: 3, wipLimit: null },
-]
+const paket: Card = { ...card, status: 'BACKLOG', canSetStatus: true }
 
-describe('CardDetailModal — interaktiver Status-Chip', () => {
-  /**
-   * Rendert das Modal im interaktiven Kontext (alle drei neuen Props gesetzt). `columnName` trägt
-   * bewusst einen anderen Wert als die Spalte 10 — im interaktiven Kontext gilt der Name aus
-   * `columns`, nicht die Prop.
-   */
-  function renderInteraktiv(props: Partial<ComponentProps<typeof CardDetailModal>> = {}) {
+describe('CardDetailModal — Statuswechsler', () => {
+  function renderPaket(
+    props: Partial<ComponentProps<typeof CardDetailModal>> = {},
+    apis: ReturnType<typeof makeApis> = makeApis(),
+  ) {
     render(
-      <CardDetailModal
-        card={card}
-        canEdit
-        columnName="Alter Name"
-        columns={spalten}
-        columnId={10}
-        onMove={vi.fn().mockResolvedValue(undefined)}
-        onClose={vi.fn()}
-        {...makeApis()}
-        {...props}
-      />,
+      <MemoryRouter>
+        <SnackbarProvider>
+          <CardDetailModal
+            card={paket}
+            canEdit
+            columnName="Wartet auf Zulieferung"
+            onClose={vi.fn()}
+            {...apis}
+            {...props}
+          />
+        </SnackbarProvider>
+      </MemoryRouter>,
     )
+    return apis
   }
 
-  /** Öffnet die Auswahlliste des Status-Selects. */
-  async function oeffneZustand() {
-    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Zustand' }))
+  /** Öffnet die Auswahlliste des Statuswechslers. */
+  async function oeffneStatus() {
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Status' }))
   }
 
-  it('zeigt an einer archivierten Karte den farbigen Chip ohne Steuerelement', async () => {
-    renderInteraktiv({ card: { ...card, archived: true } })
+  it('zeigt an einem Arbeitspaket den Status als Wechsler statt des Spaltennamens', async () => {
+    renderPaket()
 
-    expect(await screen.findByText('Backlog')).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+    const wechsler = await screen.findByRole('combobox', { name: 'Status' })
+    expect(wechsler).toHaveTextContent('Backlog')
+    expect(screen.queryByText('Wartet auf Zulieferung')).toBeNull()
   })
 
-  it('zeigt an einem Vorhaben weiterhin den Chip „Vorhaben"', async () => {
-    renderInteraktiv({ card: { ...card, type: 'EPIC' } })
+  it('bietet alle fünf Zustände an, der aktuelle ist nicht wählbar', async () => {
+    renderPaket()
 
-    expect(await screen.findByText('Vorhaben')).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
-  })
-
-  /**
-   * Der Sonderchip für eine nicht eingeplante Karte ist mit dem Pool entfallen (Issue #1202): Jede
-   * Karte liegt in einer Spalte, und die zeigt der Chip. Geprüft wird über den Zustands-Wechsler —
-   * ihn gäbe es im Sonderfall nicht.
-   */
-  it('zeigt an jeder aktiven Karte den Spalten-Chip als Zustands-Wechsler (Issue #1202)', async () => {
-    renderInteraktiv({})
-
-    expect(await screen.findByRole('combobox', { name: 'Zustand' })).toBeInTheDocument()
-    expect(screen.getByText('Backlog')).toBeInTheDocument()
-  })
-
-  it('zeigt keinen Chip, wenn die Spalte der Karte nicht zum Board gehört', async () => {
-    renderInteraktiv({ columnId: 99 })
-
-    expect(await screen.findByRole('button', { name: 'Bearbeiten' })).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
-    // Weder der Name aus `columns` (unbekannt) noch die alte `columnName`-Prop erscheinen.
-    expect(screen.queryByText('Alter Name')).toBeNull()
-  })
-
-  it('bietet in einer kanonischen Spalte die übrigen kanonischen Spalten an', async () => {
-    renderInteraktiv()
-
-    const select = await screen.findByRole('combobox', { name: 'Zustand' })
-    expect(select).toHaveTextContent('Backlog')
-
-    await oeffneZustand()
+    await oeffneStatus()
     const optionen = await screen.findAllByRole('option')
-    // Erster Eintrag ist die aktuelle Spalte (nicht wählbar); „Wartet auf Zulieferung" ist
-    // nicht kanonisch und fehlt deshalb.
-    expect(optionen.map((o) => o.textContent)).toEqual(['Backlog', 'Ready', 'In Progress'])
+    expect(optionen.map((o) => o.textContent)).toEqual([
+      'Backlog',
+      'Ready',
+      'In progress',
+      'In review',
+      'Done',
+    ])
     expect(optionen[0]).toHaveAttribute('aria-disabled', 'true')
   })
 
-  it('zeigt ohne Schreibrecht den Spaltennamen statt des Steuerelements', async () => {
-    renderInteraktiv({ canEdit: false })
+  it('zeigt ohne canSetStatus den Status lesend', async () => {
+    renderPaket({ card: { ...paket, canSetStatus: false } })
 
     expect(await screen.findByText('Backlog')).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Status' })).toBeNull()
   })
 
-  it('zeigt in einer nicht-kanonischen Spalte den Chip statt des Steuerelements', async () => {
-    renderInteraktiv({ columnId: 13 })
+  it('richtet sich nach canSetStatus, nicht nach canEdit', async () => {
+    renderPaket({ canEdit: false })
 
-    expect(await screen.findByText('Wartet auf Zulieferung')).toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
+    expect(await screen.findByRole('combobox', { name: 'Status' })).toBeInTheDocument()
   })
 
-  it('deaktiviert das Steuerelement im Editiermodus', async () => {
-    renderInteraktiv({ initialEditing: true })
+  it('zeigt an einem Vorhaben weiterhin den Chip „Vorhaben"', async () => {
+    renderPaket({ card: { ...card, type: 'EPIC', status: null, canSetStatus: false } })
 
-    expect(await screen.findByRole('combobox', { name: 'Zustand' })).toHaveAttribute(
+    expect(await screen.findByText('Vorhaben')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Status' })).toBeNull()
+  })
+
+  it('zeigt an einer archivierten Karte den Status lesend', async () => {
+    renderPaket({ card: { ...paket, archived: true } })
+
+    expect(await screen.findByText('Backlog')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Status' })).toBeNull()
+  })
+
+  it('zeigt auf einem archivierten Board den Status lesend', async () => {
+    renderPaket({
+      location: {
+        projectId: 9,
+        projectName: 'P',
+        board: { id: 1, name: 'Altes Board', archived: true, columnName: 'Wartet auf Zulieferung' },
+      },
+    })
+
+    expect(await screen.findByText('Backlog')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Status' })).toBeNull()
+  })
+
+  it('zeigt an einer Karte ohne eigenen Status den lesenden Spaltenchip wie bisher', async () => {
+    renderPaket({ card: { ...card, status: null, canSetStatus: false }, columnName: 'In Progress' })
+
+    expect(await screen.findByText('In Progress')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Status' })).toBeNull()
+  })
+
+  it('deaktiviert den Wechsler im Editiermodus', async () => {
+    renderPaket({ initialEditing: true })
+
+    expect(await screen.findByRole('combobox', { name: 'Status' })).toHaveAttribute(
       'aria-disabled',
       'true',
     )
   })
 
-  it('verschiebt in eine Nicht-Ready-Spalte ohne Rückfrage', async () => {
-    const onMove = vi.fn().mockResolvedValue(undefined)
-    renderInteraktiv({ onMove })
+  it('setzt einen Nicht-Ready-Status ohne Rückfrage und meldet die Änderung', async () => {
+    const onChanged = vi.fn()
+    const apis = makeApis()
+    apis.cardsApi.setStatus = vi.fn().mockResolvedValue(undefined)
+    renderPaket({ onChanged }, apis)
 
-    await oeffneZustand()
-    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+    await oeffneStatus()
+    fireEvent.click(await screen.findByRole('option', { name: 'In progress' }))
 
-    await waitFor(() => expect(onMove).toHaveBeenCalledWith(12))
-    expect(screen.queryByText('Nach Ready verschieben?')).toBeNull()
+    await waitFor(() => expect(apis.cardsApi.setStatus).toHaveBeenCalledWith(100, 'IN_PROGRESS'))
+    expect(screen.queryByText('Status auf Ready setzen?')).toBeNull()
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Status' })).toHaveTextContent('In progress'),
+    )
+    expect(onChanged).toHaveBeenCalled()
   })
 
-  it('fragt vor dem Wechsel nach Ready nach und verschiebt bei Abbruch nicht', async () => {
-    const onMove = vi.fn().mockResolvedValue(undefined)
-    renderInteraktiv({ onMove })
+  it('fragt vor Ready nach und lässt den Status bei Abbruch unverändert', async () => {
+    const apis = makeApis()
+    apis.cardsApi.setStatus = vi.fn().mockResolvedValue(undefined)
+    renderPaket({}, apis)
 
-    await oeffneZustand()
+    await oeffneStatus()
     fireEvent.click(await screen.findByRole('option', { name: 'Ready' }))
 
-    expect(await screen.findByText('Nach Ready verschieben?')).toBeInTheDocument()
+    expect(await screen.findByText('Status auf Ready setzen?')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
 
-    expect(onMove).not.toHaveBeenCalled()
-    await waitFor(() => expect(screen.queryByText('Nach Ready verschieben?')).toBeNull())
-    // Die Auswahl steht wieder auf der bisherigen Spalte.
-    expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveTextContent('Backlog')
+    await waitFor(() => expect(screen.queryByText('Status auf Ready setzen?')).toBeNull())
+    expect(apis.cardsApi.setStatus).not.toHaveBeenCalled()
+    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveTextContent('Backlog')
   })
 
-  it('schließt die Rückfrage per Escape, ohne zu verschieben', async () => {
-    const onMove = vi.fn().mockResolvedValue(undefined)
-    renderInteraktiv({ onMove })
+  it('schließt die Rückfrage per Escape, ohne den Status zu setzen', async () => {
+    const apis = makeApis()
+    apis.cardsApi.setStatus = vi.fn().mockResolvedValue(undefined)
+    renderPaket({}, apis)
 
-    await oeffneZustand()
+    await oeffneStatus()
     fireEvent.click(await screen.findByRole('option', { name: 'Ready' }))
-    expect(await screen.findByText('Nach Ready verschieben?')).toBeInTheDocument()
+    expect(await screen.findByText('Status auf Ready setzen?')).toBeInTheDocument()
 
     await userEvent.keyboard('{Escape}')
 
-    await waitFor(() => expect(screen.queryByText('Nach Ready verschieben?')).toBeNull())
-    expect(onMove).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByText('Status auf Ready setzen?')).toBeNull())
+    expect(apis.cardsApi.setStatus).not.toHaveBeenCalled()
   })
 
-  it('verschiebt nach Ready, sobald bestätigt wurde', async () => {
-    const onMove = vi.fn().mockResolvedValue(undefined)
-    renderInteraktiv({ onMove })
+  it('setzt Ready, sobald bestätigt wurde', async () => {
+    const apis = makeApis()
+    apis.cardsApi.setStatus = vi.fn().mockResolvedValue(undefined)
+    renderPaket({}, apis)
 
-    await oeffneZustand()
+    await oeffneStatus()
     fireEvent.click(await screen.findByRole('option', { name: 'Ready' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Nach Ready verschieben' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Status auf Ready setzen' }))
 
-    await waitFor(() => expect(onMove).toHaveBeenCalledWith(11))
+    await waitFor(() => expect(apis.cardsApi.setStatus).toHaveBeenCalledWith(100, 'READY'))
   })
 
-  it('deaktiviert das Steuerelement, solange der Wechsel läuft', async () => {
+  it('deaktiviert den Wechsler, solange das Setzen läuft', async () => {
     let aufloesen = () => {}
-    const onMove = vi.fn().mockReturnValue(
+    const apis = makeApis()
+    apis.cardsApi.setStatus = vi.fn().mockReturnValue(
       new Promise<void>((resolve) => {
         aufloesen = resolve
       }),
     )
-    renderInteraktiv({ onMove })
+    renderPaket({}, apis)
 
-    await oeffneZustand()
-    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+    await oeffneStatus()
+    fireEvent.click(await screen.findByRole('option', { name: 'Done' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Zustand' })).toHaveAttribute(
+      expect(screen.getByRole('combobox', { name: 'Status' })).toHaveAttribute(
         'aria-disabled',
         'true',
       ),
@@ -2531,48 +2546,97 @@ describe('CardDetailModal — interaktiver Status-Chip', () => {
 
     aufloesen()
     await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Zustand' })).not.toHaveAttribute('aria-disabled'),
+      expect(screen.getByRole('combobox', { name: 'Status' })).not.toHaveAttribute('aria-disabled'),
     )
   })
 
-  it('reaktiviert das Steuerelement bei abgewiesenem Wechsel und lässt die Spalte stehen', async () => {
-    const onMove = vi.fn().mockRejectedValue(new Error('boom'))
-    renderInteraktiv({ onMove })
+  it('meldet einen abgewiesenen Wechsel und lässt den Status stehen', async () => {
+    const onChanged = vi.fn()
+    const apis = makeApis()
+    apis.cardsApi.setStatus = vi.fn().mockRejectedValue(serverfehler('Keine Berechtigung.'))
+    renderPaket({ onChanged }, apis)
 
-    await oeffneZustand()
-    fireEvent.click(await screen.findByRole('option', { name: 'In Progress' }))
+    await oeffneStatus()
+    fireEvent.click(await screen.findByRole('option', { name: 'In progress' }))
 
-    await waitFor(() => expect(onMove).toHaveBeenCalledWith(12))
-    const select = await screen.findByRole('combobox', { name: 'Zustand' })
-    await waitFor(() => expect(select).not.toHaveAttribute('aria-disabled'))
-    // Die Fehlermeldung ist Sache des Aufrufers; der Chip zeigt weiter die bisherige Spalte.
-    expect(select).toHaveTextContent('Backlog')
+    expect(await screen.findByText('Keine Berechtigung.')).toBeInTheDocument()
+    const wechsler = screen.getByRole('combobox', { name: 'Status' })
+    await waitFor(() => expect(wechsler).not.toHaveAttribute('aria-disabled'))
+    expect(wechsler).toHaveTextContent('Backlog')
+    expect(onChanged).not.toHaveBeenCalled()
   })
 
-  it('bleibt beim heutigen Chip, sobald eine der drei Props fehlt', async () => {
-    const gemeinsam = {
-      card,
-      canEdit: true,
-      columnName: 'In Progress',
-      onClose: vi.fn(),
-      ...makeApis(),
-    }
-    const erwarteAltesVerhalten = () => {
-      expect(screen.getByText('In Progress')).toBeInTheDocument()
-      expect(screen.queryByRole('combobox', { name: 'Zustand' })).toBeNull()
-    }
+  it('zeigt an einer über #N geöffneten Karte den Wechsler, wenn canSetStatus es zulässt', async () => {
+    const apis = makeApis()
+    apis.cardsApi.byNumber = vi
+      .fn()
+      .mockResolvedValue({ ...linkedCard, status: 'IN_REVIEW', canSetStatus: true })
+    apis.cardsApi.setStatus = vi.fn().mockResolvedValue(undefined)
+    renderPaket({ projectId: 9 }, apis)
 
-    const { rerender } = render(
-      <CardDetailModal {...gemeinsam} columnId={10} onMove={vi.fn()} />,
+    fireEvent.click(screen.getByRole('button', { name: 'Karte #3 öffnen' }))
+
+    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
+    const wechsler = await screen.findByRole('combobox', { name: 'Status' })
+    expect(wechsler).toHaveTextContent('In review')
+    // Nur der Status wird bedienbar; die übrigen Felder bleiben auf dem fremden Board lesend.
+    expect(screen.queryByRole('button', { name: 'Bearbeiten' })).toBeNull()
+
+    await oeffneStatus()
+    fireEvent.click(await screen.findByRole('option', { name: 'Done' }))
+    await waitFor(() => expect(apis.cardsApi.setStatus).toHaveBeenCalledWith(300, 'DONE'))
+  })
+
+  it('zeigt an einer über #N geöffneten Karte ohne canSetStatus den Status lesend', async () => {
+    const apis = makeApis()
+    apis.cardsApi.byNumber = vi
+      .fn()
+      .mockResolvedValue({ ...linkedCard, status: 'IN_REVIEW', canSetStatus: false })
+    renderPaket({ projectId: 9 }, apis)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Karte #3 öffnen' }))
+
+    expect(await screen.findByText('In review')).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Status' })).toBeNull()
+  })
+
+  it('rechnet die Überfälligkeit nach dem Status, nicht nach der Spalte', async () => {
+    const faellig = '2020-01-01T00:00:00Z'
+    const { unmount } = render(
+      <CardDetailModal
+        card={{ ...paket, dueDate: faellig, status: 'DONE' }}
+        canEdit={false}
+        columnName="Wartet auf Zulieferung"
+        onClose={vi.fn()}
+        {...makeApis()}
+      />,
     )
-    expect(await screen.findByText('In Progress')).toBeInTheDocument()
-    erwarteAltesVerhalten()
+    expect(screen.getByLabelText('Fälligkeitsdatum')).not.toHaveTextContent('überfällig')
+    unmount()
 
-    rerender(<CardDetailModal {...gemeinsam} columns={spalten} onMove={vi.fn()} />)
-    erwarteAltesVerhalten()
+    render(
+      <CardDetailModal
+        card={{ ...paket, dueDate: faellig, status: 'IN_REVIEW' }}
+        canEdit={false}
+        columnName="Done"
+        onClose={vi.fn()}
+        {...makeApis()}
+      />,
+    )
+    expect(screen.getByLabelText('Fälligkeitsdatum')).toHaveTextContent('überfällig')
+  })
 
-    rerender(<CardDetailModal {...gemeinsam} columns={spalten} columnId={10} />)
-    erwarteAltesVerhalten()
+  it('rechnet die Überfälligkeit ohne eigenen Status weiter nach der Spalte', () => {
+    render(
+      <CardDetailModal
+        card={{ ...card, dueDate: '2020-01-01T00:00:00Z' }}
+        canEdit={false}
+        columnName="Done"
+        onClose={vi.fn()}
+        {...makeApis()}
+      />,
+    )
+    expect(screen.getByLabelText('Fälligkeitsdatum')).not.toHaveTextContent('überfällig')
   })
 
   describe('Nachtlauf-Anläufe (Issue #968)', () => {

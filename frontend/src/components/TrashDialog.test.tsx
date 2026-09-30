@@ -11,6 +11,8 @@ const base = {
   shortcode: null as string | null, assignees: [] as number[], dueDate: null as string | null,
   labels: [] as number[],
   derivedFrom: null as number | null,
+  status: null,
+  canSetStatus: false,
   excerpt: null as string | null,
 }
 const card: Card = { ...base, id: 100, number: 5, title: 'Gelöscht', description: null }

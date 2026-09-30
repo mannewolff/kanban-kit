@@ -24,6 +24,8 @@ function card(number: number, over: Partial<Card> = {}): Card {
     dueDate: null,
     labels: [],
     derivedFrom: null,
+    status: null,
+    canSetStatus: false,
     ...over,
   }
 }
@@ -167,6 +169,11 @@ describe('sortCards — Titel', () => {
 
   it('sortiert alphabetisch absteigend', () => {
     expect(nummern(sortCards(cards, { key: 'title', dir: 'desc' }, ctxVon()))).toEqual([1, 2])
+  })
+
+  it('vergleicht Zahlen im Titel nach ihrem Wert, nicht Zeichen für Zeichen', () => {
+    const nummeriert = [card(1, { title: 'Schritt 10' }), card(2, { title: 'Schritt 9' })]
+    expect(nummern(sortCards(nummeriert, { key: 'title', dir: 'asc' }, ctxVon()))).toEqual([2, 1])
   })
 })
 

@@ -25,10 +25,12 @@ const card = {
 
 describe('cardsApi', () => {
   it('list ruft GET /api/boards/{id}/cards und liefert die geparste Antwort', async () => {
-    spyFetch(JSON.stringify([card]))
+    const f = spyFetch(JSON.stringify([card]))
     const result = await cardsApi.list(3)
+    expect(lastCall(f).url).toBe('/api/boards/3/cards')
     expect(result).toEqual([card])
   })
+
 
   it('openEpic ruft POST /api/cards/{id}/open-epic mit Name und Kürzel', async () => {
     const f = spyFetch(JSON.stringify({ ...card, id: 400, number: 9, title: 'Vorhaben', type: 'EPIC' }))
@@ -96,8 +98,9 @@ describe('cardsApi', () => {
 
   it('getActivity ruft GET /api/cards/{id}/activity und liefert die geparste Antwort', async () => {
     const activity = [{ id: 1, actorUserId: 5, type: 'MOVED', detail: 'Von A nach B', createdAt: '2026-01-01' }]
-    spyFetch(JSON.stringify(activity))
+    const f = spyFetch(JSON.stringify(activity))
     const result = await cardsApi.getActivity(1)
+    expect(lastCall(f).url).toBe('/api/cards/1/activity')
     expect(result).toEqual(activity)
   })
 
@@ -172,6 +175,15 @@ describe('cardsApi', () => {
     expect(c.url).toBe('/api/cards/1/move')
     expect(c.method).toBe('POST')
     expect(JSON.parse(String(c.body))).toEqual({ columnId: 10, position: 2 })
+  })
+
+  it('setStatus ruft PUT /api/cards/{id}/status mit dem Status', async () => {
+    const f = spyFetch('')
+    await cardsApi.setStatus(1, 'READY')
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/1/status')
+    expect(c.method).toBe('PUT')
+    expect(JSON.parse(String(c.body))).toEqual({ status: 'READY' })
   })
 
   it('transfer ruft POST /api/cards/{id}/transfer mit Ziel-Board und -Spalte', async () => {

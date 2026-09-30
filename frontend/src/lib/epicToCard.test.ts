@@ -33,6 +33,16 @@ describe('epicToCard', () => {
     expect(epicToCard(vorhaben, 12).assignees).toEqual([])
   })
 
+  it('liefert eine aktive Karte ohne Abhängigkeiten, Labels und eigenen Status', () => {
+    expect(epicToCard(vorhaben, 12)).toMatchObject({
+      archived: false,
+      dependencies: [],
+      labels: [],
+      status: null,
+      canSetStatus: false,
+    })
+  })
+
   it('setzt die Herkunft auf null, weil Vorhaben keine tragen (Issue #607)', () => {
     expect(epicToCard(vorhaben, 12).derivedFrom).toBeNull()
   })

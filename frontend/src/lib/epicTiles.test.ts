@@ -24,6 +24,8 @@ function karte(number: number, title: string, labels: number[] = []): Card {
     dueDate: null,
     labels,
     derivedFrom: null,
+    status: null,
+    canSetStatus: false,
   }
 }
 
@@ -136,6 +138,15 @@ describe('aggregateMarks', () => {
     ])
   })
 
+  it('ordnet die Marken nach Label-ID, unabhängig von der Reihenfolge der Labels', () => {
+    const umgekehrt = [label(90, 'blockiert', true), label(70, 'bereit', true), label(80, 'stockt', true)]
+    const cards = [karte(1, 'A', [70, 80, 90])]
+
+    expect(
+      aggregateMarks(vorhaben({ id: 9, memberNumbers: [1] }), cards, umgekehrt).map((m) => m.name),
+    ).toEqual(['bereit', 'stockt', 'blockiert'])
+  })
+
   it('ignoriert eine Mitgliedsnummer ohne zugehörige Karte', () => {
     const cards = [karte(1, 'A', [70])]
 
@@ -164,6 +175,26 @@ describe('sortEpics', () => {
     const zweiKarten = vorhaben({ id: 2, memberNumbers: [2, 3], total: 2 })
 
     expect(sortEpics([eineKarte, zweiKarten], cards, zweiLabels).map((e) => e.id)).toEqual([2, 1])
+  })
+
+  /** Ein nicht gezähltes Label ist kein Handlungsbedarf, auch nicht an mehreren Karten. */
+  it('zählt Karten mit nur ungezählten Labels nicht mit', () => {
+    const gemischt = [label(70, 'stockt', true), label(71, 'intern', false)]
+    const cards = [karte(1, 'A', [71]), karte(2, 'B', [71]), karte(3, 'C', [70])]
+    const ungezaehlt = vorhaben({ id: 1, memberNumbers: [1, 2], total: 2 })
+    const gezaehlt = vorhaben({ id: 2, memberNumbers: [3], total: 1 })
+
+    expect(sortEpics([ungezaehlt, gezaehlt], cards, gemischt).map((e) => e.id)).toEqual([2, 1])
+  })
+
+  /** Eine gezählte Marke genügt — ein daneben hängendes ungezähltes Label nimmt sie nicht zurück. */
+  it('zählt eine Karte mit gezähltem und ungezähltem Label mit', () => {
+    const gemischt = [label(70, 'stockt', true), label(71, 'intern', false)]
+    const cards = [karte(1, 'A', [70, 71]), karte(2, 'B', [])]
+    const markiert = vorhaben({ id: 1, shortcode: 'ZZZ', memberNumbers: [1], total: 1 })
+    const ohne = vorhaben({ id: 2, shortcode: 'AAA', memberNumbers: [2], total: 1 })
+
+    expect(sortEpics([ohne, markiert], cards, gemischt).map((e) => e.id)).toEqual([1, 2])
   })
 
   it('entscheidet bei Gleichstand über das Anzeige-Kürzel', () => {
@@ -210,6 +241,15 @@ describe('sortEpics', () => {
     const eroeffnet = vorhaben({ id: 2, total: 0, requirementCardNumber: 7 })
 
     expect(sortEpics([leer, eroeffnet], [], labels).map((e) => e.id)).toEqual([2, 1])
+  })
+
+  /** Ein eröffnetes Vorhaben ohne Karten ist unfertig, nicht abgeschlossen — 0 von 0 ist kein Ende. */
+  it('stellt ein eröffnetes Vorhaben ohne Karten zu den unfertigen', () => {
+    const cards = [karte(1, 'A', [])]
+    const eroeffnet = vorhaben({ id: 1, shortcode: 'AAA', total: 0, requirementCardNumber: 7 })
+    const offen = vorhaben({ id: 2, shortcode: 'ZZZ', memberNumbers: [1], done: 0, total: 1 })
+
+    expect(sortEpics([offen, eroeffnet], cards, labels).map((e) => e.id)).toEqual([1, 2])
   })
 
   it('lässt das Eingabe-Array unverändert', () => {

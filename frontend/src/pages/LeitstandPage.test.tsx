@@ -66,6 +66,8 @@ const karte = (title: string): Card => ({
   assignees: [],
   dueDate: null,
   labels: [],
+  status: null,
+  canSetStatus: false,
 })
 
 const kpis = (extra: Partial<BoardDashboardKpis> = {}): BoardDashboardKpis => ({
