@@ -276,7 +276,7 @@ export function BoardPage() {
           }}
           onClose={() => setSelectedCard(null)}
           onChanged={() => {
-            reloadCards()
+            void reloadCards()
             reloadEpics()
           }}
         />
@@ -289,7 +289,7 @@ export function BoardPage() {
         onClose={() => setLabelManagerOpen(false)}
         onChanged={() => {
           reloadLabels()
-          reloadCards()
+          void reloadCards()
         }}
       />
 
