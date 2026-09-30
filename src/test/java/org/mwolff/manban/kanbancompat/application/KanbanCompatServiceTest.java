@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
@@ -17,6 +18,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,7 +41,9 @@ import org.mwolff.manban.comment.application.CommentService.CommentView;
 /** Unit-Tests der Kanban-Compat-Schicht (Spaltennamen-Normalisierung + Verhalten an den Ports). */
 // PMD.TooManyMethods: methodenreiche Testsuite — viele kleine @Test-Methoden je Erfolgs- und
 // Fehlerpfad sind hier gewollt, kein Refactoring-Signal.
-@SuppressWarnings("PMD.TooManyMethods")
+// PMD.CyclomaticComplexity: die Summe über lauter Methoden der Komplexität 1 — sie zählt hier nur
+// die Tests, nicht verschachtelte Logik.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity"})
 class KanbanCompatServiceTest {
 
   private static final long BOARD = 10L;
@@ -68,6 +72,36 @@ class KanbanCompatServiceTest {
 
   private static BoardItemView item(long id, long columnId, int number) {
     return new BoardItemView(id, number, "T", "body", columnId, 0, false, null, null, null);
+  }
+
+  /** Ein Arbeitspaket: Es trägt einen eigenen Status (Plan #1294, E2). */
+  private static BoardItemView paket(long id, long columnId, int number, String status) {
+    return new BoardItemView(id, number, "T", "body", columnId, 0, false, null, null, status);
+  }
+
+  /** Die Karte, wie {@code getCard} sie liefert — mit oder ohne eigenen Status. */
+  private static CardView karte(@Nullable String status) {
+    return new CardView(
+        1L,
+        BOARD,
+        100L,
+        7,
+        "Titel",
+        "Body",
+        null,
+        0,
+        false,
+        null,
+        List.of(),
+        CardType.CARD,
+        null,
+        null,
+        List.of(),
+        null,
+        List.of(),
+        null,
+        status,
+        true);
   }
 
   /** Die angelegte Karte, wie sie seit Issue #1203 zurückkommt: mit Board, Spalte und Nummer. */
@@ -109,6 +143,9 @@ class KanbanCompatServiceTest {
             labelService,
             commentService,
             new IdempotencyGuard(idempotencyStore, Clock.systemUTC()));
+    // Vorgabe: eine Karte ohne eigenen Status ([Plan]-Karte, Vorhaben). Die Tests des
+    // Arbeitspakets überschreiben das; die übrigen move-Tests prüfen das Verschieben.
+    when(cardService.getCard(anyLong(), anyLong())).thenReturn(karte(null));
   }
 
   @ParameterizedTest
@@ -245,6 +282,49 @@ class KanbanCompatServiceTest {
         .extracting(KanbanCompatService.Item::number)
         .containsExactly(1);
     assertThat(grouped.get("READY")).isEmpty();
+  }
+
+  @Test
+  void items_groupsWorkPackageByItsStatus_evenInOwnColumn() {
+    // Given: ein Arbeitspaket liegt in „Anstehend", sein Status ist READY (Plan #1294, E12). Nach
+    // der Spalte gruppiert sähe der Nacht-Runner es nie auf Ready, obwohl die Oberfläche es zeigt.
+    when(boardService.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                new ColumnView(100L, "Backlog", 0, null),
+                new ColumnView(101L, "Anstehend", 1, null),
+                new ColumnView(102L, "Ready", 2, null)));
+    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(paket(1L, 101L, 1, "READY")));
+
+    // When
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    // Then: unter READY, und column trägt den Status
+    assertThat(grouped.get("READY"))
+        .singleElement()
+        .extracting(KanbanCompatService.Item::column)
+        .isEqualTo("READY");
+    assertThat(grouped.get(BACKLOG_KEY)).isEmpty();
+  }
+
+  @Test
+  void items_groupsWorkPackageByItsStatus_evenInAnotherProcessColumn() {
+    // Given: Status IN_REVIEW, Karte liegt in der Prozessspalte Backlog. Der Status gewinnt auch
+    // dort, wo die Spalte selbst einen Kanban-Key trüge.
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.listBoardItems(1L, BOARD))
+        .thenReturn(List.of(paket(1L, 100L, 1, "IN_REVIEW"), item(2L, 100L, 2)));
+
+    // When
+    Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
+
+    // Then: das Paket unter IN_REVIEW, die Karte ohne Status weiter nach ihrer Spalte
+    assertThat(grouped.get("IN_REVIEW"))
+        .extracting(KanbanCompatService.Item::number)
+        .containsExactly(1);
+    assertThat(grouped.get(BACKLOG_KEY))
+        .extracting(KanbanCompatService.Item::number)
+        .containsExactly(2);
   }
 
   @Test
@@ -743,6 +823,52 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void move_setsStatus_forWorkPackage_andLeavesItInItsColumn() {
+    // Given: ein Arbeitspaket; das Board hat gar keine Ready-Spalte, nur „Anstehend". Der Status
+    // hängt an keiner Spalte, also braucht sein Setzen auch keine (Plan #1294, E11).
+    when(boardService.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                new ColumnView(100L, "Backlog", 0, null),
+                new ColumnView(101L, "Anstehend", 1, null)));
+    when(cardService.getCard(1L, 1L)).thenReturn(karte("BACKLOG"));
+
+    // When: kleingeschrieben und mit Position — die Position bleibt ohne Wirkung
+    service.move(bound(), 1L, " ready ", 3);
+
+    // Then
+    verify(cardService).setStatus(1L, 1L, "READY");
+    verify(cardService, never()).move(anyLong(), anyLong(), anyLong(), anyInt());
+  }
+
+  @Test
+  void move_rejectsUnknownKey_forWorkPackage() {
+    // Given: ein Arbeitspaket und ein Schlüssel außerhalb der fünf Zustände
+    when(cardService.getCard(1L, 1L)).thenReturn(karte("BACKLOG"));
+
+    // When / Then: dieselbe Meldung wie beim Verschieben, kein Statusaufruf
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.move(principal, 1L, "ANSTEHEND", 0))
+        .isInstanceOf(InvalidKanbanColumnException.class)
+        .hasMessageContaining("Unbekannte Kanban-Spalte");
+    verify(cardService, never()).setStatus(anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  void move_movesAsBefore_whenCardHasNoStatus() {
+    // Given: [Plan]-Karte oder Vorhaben — kein eigener Status, die Spalte zählt
+    when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
+    when(cardService.getCard(1L, 1L)).thenReturn(karte(null));
+
+    // When
+    service.move(bound(), 1L, "READY", 1);
+
+    // Then
+    verify(cardService).move(1L, 1L, 101L, 1);
+    verify(cardService, never()).setStatus(anyLong(), anyLong(), anyString());
+  }
+
+  @Test
   void update_writesContentAndReturnsItemInBoardForm() {
     // Given: die Karte liegt auf dem Board; die Fassade meldet den neuen Stand zurueck.
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
@@ -814,6 +940,27 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void update_reportsStatusAsColumn_forWorkPackage() {
+    // Given: das Arbeitspaket liegt in „Anstehend" mit Status IN_PROGRESS. Schreib- und
+    // Leseantwort dürfen nicht auseinanderlaufen — auch item(...) meldet den Status.
+    when(boardService.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                new ColumnView(100L, "Backlog", 0, null),
+                new ColumnView(101L, "Anstehend", 1, null)));
+    when(cardService.updateContent(1L, 7L, "Neu", "Rumpf"))
+        .thenReturn(
+            new BoardItemView(7L, 42, "Neu", "Rumpf", 101L, 0, false, null, null, "IN_PROGRESS"));
+    when(labelService.namesByCard(BOARD, List.of(7L))).thenReturn(Map.of());
+
+    // When
+    KanbanCompatService.Item updated = service.update(bound(), 7L, "Neu", "Rumpf");
+
+    // Then
+    assertThat(updated.column()).isEqualTo("IN_PROGRESS");
+  }
+
+  @Test
   void update_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard schlaegt an. Faellt der requireOnBoard-Aufruf weg (Mutant), wuerde
     // eine fremde oder im Ideen-Speicher liegende Karte ueberschrieben.
@@ -835,6 +982,9 @@ class KanbanCompatServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.move(bound(), 1L, "DONE", 0))
         .isInstanceOf(CardNotFoundException.class);
+    // Der Guard läuft vor dem Lesen der Karte: Eine fremde Karte verrät nicht einmal ihren Status.
+    verify(cardService, never()).getCard(anyLong(), anyLong());
+    verify(cardService, never()).setStatus(anyLong(), anyLong(), anyString());
   }
 
   @Test

@@ -71,6 +71,9 @@ public class KanbanCompatService {
   /**
    * Nach Kanban-Spalte gruppierte, nicht-archivierte Items des gebundenen Boards (inkl. Vorhaben).
    *
+   * <p>Ein Arbeitspaket steht unter seinem Status, jede übrige Karte unter dem Kanban-Key ihrer
+   * Spalte (Plan #1294, E12) — siehe {@link #key}.
+   *
    * <p>Karten im Ideen-Speicher bleiben ausgeschlossen (#434): Sie tragen weiterhin Board und
    * Spalte, sind in der Oberfläche aber ausgeblendet. Ohne diesen Filter meldete die Schnittstelle
    * sie als reguläre Karten ihrer Spalte — Kit und Nacht-Runner sahen dann Aufgaben, die für
@@ -93,7 +96,7 @@ public class KanbanCompatService {
         labelService.namesByCard(boardId, visible.stream().map(BoardItemView::id).toList());
 
     for (BoardItemView c : visible) {
-      String key = keyByColumn.getOrDefault(c.columnId(), BACKLOG);
+      String key = key(c, keyByColumn);
       // grouped ist mit allen COLUMNS-Keys vorbelegt und key stammt aus COLUMNS;
       // requireNonNull macht das fuer NullAway explizit (Map.get liefert @Nullable).
       Objects.requireNonNull(grouped.get(key))
@@ -294,11 +297,24 @@ public class KanbanCompatService {
     return trimmed.substring(0, Math.min(trimmed.length(), 100));
   }
 
-  /** Verschiebt ein Item des gebundenen Boards in die Ziel-Spalte an die Ziel-Position. */
+  /**
+   * Setzt bei einem Arbeitspaket den Status, sonst verschiebt es das Item des gebundenen Boards in
+   * die Ziel-Spalte an die Ziel-Position (Plan #1294, E11).
+   *
+   * <p>Ein Arbeitspaket bleibt in seiner Spalte liegen; {@code position} hat dann keine Wirkung,
+   * und das Board braucht keine Spalte für den Schlüssel — der Status hängt an keiner. Vorhaben und
+   * die Dokumentarten tragen keinen Status und werden wie bisher verschoben. Pfad und Antwortform
+   * bleiben für beide Fälle gleich, damit jeder bestehende Aufrufer lauffähig bleibt.
+   */
   @Transactional
   public void move(KanbanPrincipal principal, long cardId, String column, int position) {
     long boardId = requireBound(principal);
     cardService.requireOnBoard(cardId, boardId);
+    if (cardService.getCard(principal.userId(), cardId).status() != null) {
+      // Die Kanban-Keys sind zugleich die Statusnamen der card-Fassade (E24).
+      cardService.setStatus(principal.userId(), cardId, requireKanbanKey(column));
+      return;
+    }
     long columnId = columnIdForKey(boardId, column);
     cardService.move(principal.userId(), cardId, columnId, position);
   }
@@ -441,13 +457,22 @@ public class KanbanCompatService {
         card.number(),
         card.title(),
         card.description(),
-        keyByColumn(boardId).getOrDefault(card.columnId(), BACKLOG),
+        key(card, keyByColumn(boardId)),
         card.positionInColumn(),
         // Protokoll, nicht Vokabular — siehe die Erlaeuterung an der Board-Liste oben.
         card.epic() ? "epic" : "card",
         labelService.namesByCard(boardId, List.of(card.id())).getOrDefault(card.id(), List.of()),
         card.externalKey(),
         card.derivedFrom());
+  }
+
+  /**
+   * Kanban-Key eines Items: bei einem Arbeitspaket sein Status, sonst der Key seiner Spalte bzw.
+   * BACKLOG für eine eigene Spalte. Ein und dieselbe Regel für Lese- und Schreibantwort.
+   */
+  private static String key(BoardItemView card, Map<Long, String> keyByColumn) {
+    String status = card.status();
+    return status != null ? status : keyByColumn.getOrDefault(card.columnId(), BACKLOG);
   }
 
   private long requireBound(@Nullable KanbanPrincipal principal) {
@@ -469,10 +494,7 @@ public class KanbanCompatService {
 
   /** Strenge Auflösung: jeder nicht auflösbare Schlüssel ist ein Requestfehler. */
   private long columnIdForKey(long boardId, @Nullable String key) {
-    String wanted = normalizeColumnKey(key);
-    if (!COLUMNS.contains(wanted)) {
-      throw new InvalidKanbanColumnException("Unbekannte Kanban-Spalte: " + key);
-    }
+    String wanted = requireKanbanKey(key);
     return columnWithKey(boardId, wanted)
         .orElseThrow(
             () ->
@@ -502,6 +524,17 @@ public class KanbanCompatService {
         .filter(e -> e.getValue().equals(wanted))
         .map(Map.Entry::getKey)
         .findFirst();
+  }
+
+  /**
+   * Normalisierter Kanban-Key; ein Schlüssel außerhalb von {@link #COLUMNS} ist ein Requestfehler.
+   */
+  private static String requireKanbanKey(@Nullable String key) {
+    String wanted = normalizeColumnKey(key);
+    if (!COLUMNS.contains(wanted)) {
+      throw new InvalidKanbanColumnException("Unbekannte Kanban-Spalte: " + key);
+    }
+    return wanted;
   }
 
   /** Normalisiert einen eingehenden Spalten-Schlüssel; {@code null} und leer werden zu "". */
@@ -534,7 +567,8 @@ public class KanbanCompatService {
   // --- Response-Formen (spiegeln das tbx.mjs-Protokoll) ---------------------
 
   /**
-   * Board-Item; {@code column} ist der Kanban-Key, {@code type} ist "card" oder "epic" — das
+   * Board-Item; {@code column} ist der Kanban-Key — bei einem Arbeitspaket sein Status, sonst der
+   * Key seiner Spalte (Plan #1294, E12) —, {@code type} ist "card" oder "epic" — das
    * Protokoll-Literal bleibt auch nach der Umbenennung auf „Vorhaben" unverändert. {@code labels}
    * enthält die zugeordneten Label-Namen in Board-Definitionsreihenfolge (leer, wenn keine).
    */

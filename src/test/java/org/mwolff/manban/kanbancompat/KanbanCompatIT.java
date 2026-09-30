@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
@@ -20,12 +23,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
  * End-to-End-Test der Kanban-Compat-API (tbx.mjs/board.mjs-Kontrakt) über ein board-gebundenes PAT.
  */
+// PMD.TooManyMethods: End-to-End-Suite mit Setup-Helfern je Ressource (Projekt, Board, Spalte,
+// Karte, Token) — die Methodenzahl ist für eine IT dieses Umfangs gewollt, kein Refactoring-Signal.
+@SuppressWarnings("PMD.TooManyMethods")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class KanbanCompatIT extends AbstractIntegrationTest {
@@ -654,6 +661,124 @@ class KanbanCompatIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content("{\"body\":\"Kommentar\"}"))
         .andExpect(status().isNotFound());
+  }
+
+  /**
+   * Ein Arbeitspaket in einer eigenen Spalte bekommt über {@code move} seinen Status gesetzt und
+   * bleibt liegen (Plan #1294, E11/E12). Die Antwortformen von {@code GET /api/kanban/items} und
+   * {@code PUT …/move} werden gegen feste Erwartungen verglichen, streng — ein zusätzliches, ein
+   * fehlendes oder ein umbenanntes Feld bricht den Test. Das ist der Nachweis, dass der Vertrag
+   * formgleich bleibt; {@code cli/tbx.test.mjs} läuft gegen selbstgebaute Antworten und kann ihn
+   * nicht führen.
+   */
+  @Test
+  void move_setsStatusOfWorkPackage_andKeepsTheResponseForm() throws Exception {
+    long projectId = createProject("status-owner@example.com", "StatusProjekt");
+    Cookie owner = loginAs("status-owner@example.com");
+    long boardId = createBoard(owner, projectId, "StatusBoard");
+    long anstehend = addColumn(owner, boardId, "Anstehend");
+    String token = boundToken(owner, projectId, boardId);
+    long cardId = createCard(owner, boardId, anstehend, "Paket");
+
+    // Vorher: in eigener Spalte angelegt, also Status Backlog
+    mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(content().json(itemsJson(cardId, "BACKLOG"), JsonCompareMode.STRICT));
+
+    mvc.perform(
+            put("/api/kanban/items/" + cardId + "/move")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"column\":\"READY\",\"position\":0}"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(""));
+
+    // Nachher: unter READY geführt, die Karte liegt weiter in „Anstehend"
+    mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(content().json(itemsJson(cardId, "READY"), JsonCompareMode.STRICT));
+    assertThat(columnOf(owner, cardId)).isEqualTo(anstehend);
+  }
+
+  /** Gegenprobe: Eine {@code [Plan]}-Karte trägt keinen Status und wird wie bisher verschoben. */
+  @Test
+  void move_stillMovesPlanCard_intoTheTargetColumn() throws Exception {
+    long projectId = createProject("plan-owner@example.com", "PlanProjekt");
+    Cookie owner = loginAs("plan-owner@example.com");
+    long boardId = createBoard(owner, projectId, "PlanBoard");
+    addColumn(owner, boardId, "Anstehend");
+    String token = boundToken(owner, projectId, boardId);
+    long cardId = createCard(owner, boardId, firstColumnId(owner, boardId), "[Plan] Entwurf");
+
+    mvc.perform(
+            put("/api/kanban/items/" + cardId + "/move")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"column\":\"READY\",\"position\":0}"))
+        .andExpect(status().isOk());
+
+    assertThat(columnOf(owner, cardId)).isEqualTo(columnIdByName(owner, boardId, "Ready"));
+    JsonNode items = kanbanItems(token);
+    assertThat(items.get("READY"))
+        .singleElement()
+        .satisfies(
+            n -> {
+              assertThat(n.get("id").asLong()).isEqualTo(cardId);
+              assertThat(n.get("column").asText()).isEqualTo("READY");
+            });
+  }
+
+  /** Feste Erwartung der Listenantwort mit genau einem Arbeitspaket unter {@code key}. */
+  private static String itemsJson(long cardId, String key) {
+    String item =
+        ("{\"id\":%d,\"number\":1,\"title\":\"Paket\",\"body\":null,\"column\":\"%s\","
+                + "\"position\":0,\"type\":\"card\",\"labels\":[],\"externalKey\":null,"
+                + "\"derivedFrom\":null}")
+            .formatted(cardId, key);
+    return List.of("BACKLOG", "READY", "IN_PROGRESS", "IN_REVIEW", "DONE").stream()
+        .map(column -> "\"" + column + "\":[" + (column.equals(key) ? item : "") + "]")
+        .collect(Collectors.joining(",", "{", "}"));
+  }
+
+  private long addColumn(Cookie session, long boardId, String name) throws Exception {
+    String body =
+        mvc.perform(
+                post("/api/boards/" + boardId + "/columns")
+                    .cookie(session)
+                    .contentType("application/json")
+                    .content("{\"name\":\"%s\"}".formatted(name)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("id").asLong();
+  }
+
+  private long columnIdByName(Cookie session, long boardId, String name) throws Exception {
+    String body =
+        mvc.perform(get("/api/boards/" + boardId).cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body)
+        .get("columns")
+        .valueStream()
+        .filter(c -> name.equals(c.get("name").asText()))
+        .findFirst()
+        .orElseThrow()
+        .get("id")
+        .asLong();
+  }
+
+  private long columnOf(Cookie session, long cardId) throws Exception {
+    String body =
+        mvc.perform(get("/api/cards/" + cardId).cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("columnId").asLong();
   }
 
   private long createCard(Cookie session, long boardId, long columnId, String title)
