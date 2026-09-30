@@ -67,7 +67,7 @@ class KanbanCompatServiceTest {
   }
 
   private static BoardItemView item(long id, long columnId, int number) {
-    return new BoardItemView(id, number, "T", "body", columnId, 0, false, null, null);
+    return new BoardItemView(id, number, "T", "body", columnId, 0, false, null, null, null);
   }
 
   /** Die angelegte Karte, wie sie seit Issue #1203 zurückkommt: mit Board, Spalte und Nummer. */
@@ -90,7 +90,9 @@ class KanbanCompatServiceTest {
         List.of(),
         null,
         List.of(),
-        null);
+        null,
+        null,
+        false);
   }
 
   @BeforeEach
@@ -152,7 +154,8 @@ class KanbanCompatServiceTest {
     // Given: ein Epic auf dem Board
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.listBoardItems(1L, BOARD))
-        .thenReturn(List.of(new BoardItemView(3L, 3, "E", "body", 100L, 0, true, null, null)));
+        .thenReturn(
+            List.of(new BoardItemView(3L, 3, "E", "body", 100L, 0, true, null, null, null)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -746,7 +749,7 @@ class KanbanCompatServiceTest {
     when(cardService.updateContent(1L, 7L, "Neuer Titel", "Neuer Rumpf"))
         .thenReturn(
             new BoardItemView(
-                7L, 42, "Neuer Titel", "Neuer Rumpf", 102L, 3, false, "github#7", null));
+                7L, 42, "Neuer Titel", "Neuer Rumpf", 102L, 3, false, "github#7", null, null));
     when(labelService.namesByCard(BOARD, List.of(7L))).thenReturn(Map.of(7L, List.of("bug")));
 
     // When
@@ -772,7 +775,7 @@ class KanbanCompatServiceTest {
     // Given: Epic ohne bekannte Spalte (columnId trifft keine Board-Spalte) und ohne Labels.
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(cardService.updateContent(1L, 8L, "Epic", null))
-        .thenReturn(new BoardItemView(8L, 43, "Epic", null, 999L, 0, true, null, null));
+        .thenReturn(new BoardItemView(8L, 43, "Epic", null, 999L, 0, true, null, null, null));
     when(labelService.namesByCard(BOARD, List.of(8L))).thenReturn(Map.of());
 
     // When
@@ -799,7 +802,8 @@ class KanbanCompatServiceTest {
                 new ColumnView(102L, "Ready", 2, null)));
     when(cardService.updateContent(1L, 7L, "Neuer Titel", "Neuer Rumpf"))
         .thenReturn(
-            new BoardItemView(7L, 42, "Neuer Titel", "Neuer Rumpf", 101L, 0, false, null, null));
+            new BoardItemView(
+                7L, 42, "Neuer Titel", "Neuer Rumpf", 101L, 0, false, null, null, null));
     when(labelService.namesByCard(BOARD, List.of(7L))).thenReturn(Map.of());
 
     // When

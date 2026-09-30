@@ -309,7 +309,7 @@ public class CardService {
       zuordnung.ersetzeLabels(saved.requireId(), boardId, labelIds);
     }
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
-    return view(saved);
+    return view(userId, saved);
   }
 
   /**
@@ -370,14 +370,14 @@ public class CardService {
                 // Status: ein Vorhaben trägt keinen (Plan #1294, E2).
                 null));
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
-    return view(saved);
+    return view(userId, saved);
   }
 
   /**
    * Karten eines Boards (ohne Vorhaben) mit ihren Zusatzdaten — vier Sammelzugriffe statt vier
    * Abfragen <em>je Karte</em> (Issue #768).
    *
-   * <p>Bewusst nicht über {@link #view(Card)}: Der baut eine einzelne Karte und lädt
+   * <p>Bewusst nicht über {@link #view(Card, boolean)}: Der baut eine einzelne Karte und lädt
    * Abhängigkeiten, Zuständige, Labels und Herkunft je Aufruf einzeln nach. Auf einer ganzen
    * Board-Liste ergibt das ein N+1 mit vier Abfragen pro Karte; hier sind es vier für die gesamte
    * Liste. Für die Einzelkarten-Pfade bleibt {@code view(...)} unverändert — dort ist die
@@ -392,7 +392,8 @@ public class CardService {
    */
   @Transactional(readOnly = true)
   public List<CardView> listByBoard(long userId, long boardId) {
-    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
     List<Card> karten =
         cards.findByBoardId(boardId).stream().filter(c -> c.type() == CardType.CARD).toList();
     Set<Long> ids = karten.stream().map(Card::requireId).collect(Collectors.toSet());
@@ -402,6 +403,8 @@ public class CardService {
     Map<Long, List<Long>> zustaendige = zuordnung.zustaendigeJeKarte(ids);
     Map<Long, List<Long>> labelIds = zuordnung.labelsJeKarte(ids);
     Map<Long, Integer> nummern = herkunftsnummern(karten);
+    // Alle Karten liegen auf diesem Board: eine CARD_MOVE-Prüfung für die ganze Liste (E10).
+    boolean darfStatusSetzen = darfStatusSetzen(userId, projectId);
     return karten.stream()
         .map(
             c ->
@@ -426,7 +429,9 @@ public class CardService {
                     zustaendige.getOrDefault(c.requireId(), List.of()),
                     c.dueDate(),
                     labelIds.getOrDefault(c.requireId(), List.of()),
-                    c.derivedFromCardId() == null ? null : nummern.get(c.derivedFromCardId())))
+                    c.derivedFromCardId() == null ? null : nummern.get(c.derivedFromCardId()),
+                    statusName(c),
+                    c.status() != null && darfStatusSetzen))
         .toList();
   }
 
@@ -482,7 +487,8 @@ public class CardService {
                     c.externalKey(),
                     c.derivedFromCardId() == null
                         ? null
-                        : herkunftsnummern.get(c.derivedFromCardId())))
+                        : herkunftsnummern.get(c.derivedFromCardId()),
+                    statusName(c)))
         .toList();
   }
 
@@ -583,7 +589,7 @@ public class CardService {
   public CardView getCard(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.requireMembership(userId, card.projectId());
-    return view(card);
+    return view(userId, card);
   }
 
   /**
@@ -773,7 +779,7 @@ public class CardService {
       setDependencies(saved, dependsOn);
     }
     publishChanged(saved.boardId(), ActivityType.UPDATED, cardId);
-    return view(saved);
+    return view(userId, saved);
   }
 
   /**
@@ -822,7 +828,8 @@ public class CardService {
         saved.positionInColumn(),
         saved.type() == CardType.EPIC,
         saved.externalKey(),
-        herkunftsnummer(saved));
+        herkunftsnummer(saved),
+        statusName(saved));
   }
 
   /**
@@ -848,7 +855,7 @@ public class CardService {
         clock.instant(),
         actor.current());
     publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
-    return view(card);
+    return view(userId, card);
   }
 
   /**
@@ -866,7 +873,7 @@ public class CardService {
 
     zuordnung.ersetzeLabels(cardId, card.boardId(), labelIds);
     publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
-    return view(card);
+    return view(userId, card);
   }
 
   /**
@@ -897,7 +904,7 @@ public class CardService {
     long boardId = card.boardId();
     zuordnung.aendereLabel(cardId, boardId, labelId, action);
     publishChanged(boardId, ActivityType.UPDATED, cardId);
-    return view(card);
+    return view(userId, card);
   }
 
   /**
@@ -913,7 +920,7 @@ public class CardService {
         parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
     Card saved = cards.save(card.withParent(effective));
     publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
-    return view(saved);
+    return view(userId, saved);
   }
 
   /**
@@ -935,7 +942,7 @@ public class CardService {
     Long herkunft = DerivedFrom.resolve(cards, card.projectId(), derivedFrom, cardId);
     Card saved = cards.save(card.withDerivedFrom(herkunft));
     publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
-    return view(saved);
+    return view(userId, saved);
   }
 
   /**
@@ -971,7 +978,7 @@ public class CardService {
     Card gespeichert = cards.save(epic.withRequirement(anforderung));
     cards.save(quelle.withParent(epic.requireId()));
 
-    return view(gespeichert);
+    return view(userId, gespeichert);
   }
 
   /**
@@ -1027,7 +1034,7 @@ public class CardService {
     Long anforderung = RequirementCard.resolve(cards, card, requirementCardNumber);
     Card saved = cards.save(card.withRequirement(anforderung));
     publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
-    return view(saved);
+    return view(userId, saved);
   }
 
   @Transactional
@@ -1069,12 +1076,77 @@ public class CardService {
     if (fromColumn != targetColumnId) {
       moved = moved.withStatus(statusIn(moved, target.name()));
     }
+    // CARD_MOVE ist oben geprüft, und die Karte bleibt im Projekt — die Sicht braucht keine zweite
+    // Prüfung.
     CardView result =
         view(
-            cards.save(
-                moved.withMovedToDoneAt(doneStempel(moved, target.name(), clock.instant()))));
+            cards.save(moved.withMovedToDoneAt(doneStempel(moved, target.name(), clock.instant()))),
+            true);
     publishChanged(card.boardId(), ActivityType.MOVED, cardId);
     return result;
+  }
+
+  /**
+   * Setzt den eigenen Status eines Arbeitspakets (Plan #1294, E9) — <b>ohne</b> es zu verschieben:
+   * Spalte und Position bleiben, wie sie sind. Recht wie beim Verschieben: {@link
+   * Permission#CARD_MOVE}, geprüft vor jeder Auswertung der Eingabe.
+   *
+   * <p>Nebenwirkungen eines echten Wechsels, alle mit demselben Zeitstempel:
+   *
+   * <ul>
+   *   <li>der Done-Zeitstempel wird aus dem neuen Status abgeleitet (E7);
+   *   <li>der Aufenthaltsverlauf schließt den offenen Aufenthalt und öffnet einen neuen in der
+   *       tatsächlichen Spalte, benannt mit dem kanonischen Prozessnamen (E25) — sonst hätte ein
+   *       Paket, das in einer eigenen Spalte per Status durch In progress läuft, keine
+   *       Implementierungszeit;
+   *   <li>ein Verlaufseintrag {@code STATUS_CHANGED} „Status auf &lt;Prozessname&gt;" (E14);
+   *   <li>ein {@code UPDATED}-Ereignis für offene Boards.
+   * </ul>
+   *
+   * <p>Der bisherige Status noch einmal gesetzt ist kein Wechsel und hinterlässt keine Spur.
+   *
+   * @param status Konstantenname von {@code CardStatus} (E24) — ein Anzeigename gilt nicht
+   * @throws CardNotFoundException wenn die Karte nicht existiert
+   * @throws InvalidStatusException bei unbekanntem Wert oder einer Karte ohne eigenen Status
+   *     (Vorhaben, Dokumentart)
+   */
+  @Transactional
+  public void setStatus(long userId, long cardId, String status) {
+    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    permissions.require(userId, card.projectId(), Permission.CARD_MOVE);
+    CardStatus neu = statusAus(status);
+    if (!Arbeitspaket.istArbeitspaket(card.type(), card.title())) {
+      throw new InvalidStatusException("Diese Karte trägt keinen eigenen Status");
+    }
+    if (neu == card.status()) {
+      return;
+    }
+    Instant jetzt = clock.instant();
+    Card gesetzt = card.withStatus(neu);
+    // Bei einem Arbeitspaket entscheidet allein der Status über Done — die Spalte geht nicht ein.
+    cards.save(gesetzt.withMovedToDoneAt(doneStempel(gesetzt, null, jetzt)));
+    transitions.closeOpen(cardId, jetzt);
+    transitions.open(cardId, card.columnId(), neu.anzeigename(), jetzt);
+    activity.add(
+        cardId,
+        userId,
+        CardActivityType.STATUS_CHANGED,
+        "Status auf " + neu.anzeigename(),
+        jetzt,
+        actor.current());
+    publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
+  }
+
+  /**
+   * Der Status zu seinem Konstantennamen. Die Meldung wiederholt die Eingabe bewusst nicht — sie
+   * stammt vom Client.
+   */
+  private static CardStatus statusAus(String status) {
+    try {
+      return CardStatus.valueOf(status);
+    } catch (IllegalArgumentException e) {
+      throw new InvalidStatusException("Unbekannter Status", e);
+    }
   }
 
   /**
@@ -1191,7 +1263,7 @@ public class CardService {
       // Dieselbe Begruendung fuer die Anforderung: Sie ist board- und damit projekt-lokal.
       cleaned = cleaned.withRequirement(null);
     }
-    CardView result = view(cards.save(cleaned));
+    CardView result = view(userId, cards.save(cleaned));
     if (!sameProject) {
       // Gegenrichtung: Auch die Kinder verlieren ihren Verweis. Sonst zeigten sie auf die NEUE
       // Nummer der abgewanderten Karte — im eigenen Projekt womoeglich eine fremde. Bewusst ohne
@@ -1265,7 +1337,7 @@ public class CardService {
         "Archiviert",
         clock.instant(),
         actor.current());
-    CardView result = view(cards.save(card.asArchived()));
+    CardView result = view(userId, cards.save(card.asArchived()));
     publishChanged(card.boardId(), ActivityType.ARCHIVED, card.requireId());
     return result;
   }
@@ -1292,7 +1364,7 @@ public class CardService {
         "Wiederhergestellt",
         clock.instant(),
         actor.current());
-    CardView result = view(cards.save(card.asRestored(position)));
+    CardView result = view(userId, cards.save(card.asRestored(position)));
     publishChanged(card.boardId(), ActivityType.RESTORED, card.requireId());
     return result;
   }
@@ -1327,7 +1399,7 @@ public class CardService {
         requireMatchingNumber(existing.get(), givenNumber);
         // Idempotenz-Treffer: derivedFrom wird ignoriert wie Titel und Rumpf auch. Anders als
         // number, das requireMatchingNumber als Identitaetsfeld verifiziert (#565).
-        return new CardCreation(view(existing.get()), false);
+        return new CardCreation(view(userId, existing.get()), false);
       }
     }
     if (givenNumber != null) {
@@ -1424,7 +1496,7 @@ public class CardService {
     permissions.requireMembership(userId, projectId);
     Card card =
         cards.findByProjectIdAndNumber(projectId, number).orElseThrow(CardNotFoundException::new);
-    return view(card);
+    return view(userId, card);
   }
 
   /**
@@ -1464,7 +1536,7 @@ public class CardService {
       return List.of();
     }
     return cards.findByNumberInProjects(number, List.copyOf(projectNames.keySet())).stream()
-        .map(c -> hit(c, Objects.requireNonNull(projectNames.get(c.projectId()))))
+        .map(c -> hit(userId, c, Objects.requireNonNull(projectNames.get(c.projectId()))))
         .toList();
   }
 
@@ -1472,12 +1544,12 @@ public class CardService {
    * Baut den Suchtreffer samt Ortsangabe. Board und Spalte werden über die board-Fassade aufgelöst
    * — der Boardname auch dann, wenn das Board archiviert ist.
    */
-  private CardSearchHit hit(Card c, String projectName) {
+  private CardSearchHit hit(long userId, Card c, String projectName) {
     Long boardId = c.boardId();
     BoardSummary board = boardService.requireBoardSummary(boardId);
     ColumnView column = boardService.requireColumn(c.columnId(), boardId);
     return new CardSearchHit(
-        view(c),
+        view(userId, c),
         c.projectId(),
         projectName,
         boardId,
@@ -1580,7 +1652,7 @@ public class CardService {
     publishChanged(card.boardId(), ActivityType.RESTORED, card.requireId());
     // View aus der bereits geladenen Karte mit neuer Position — der JDBC-Restore hat die DB-Zeile
     // geändert; ein erneutes findById käme aus dem JPA-Cache noch mit dem alten Stand.
-    return view(card.asRestored(position));
+    return view(userId, card.asRestored(position));
   }
 
   /**
@@ -1603,10 +1675,12 @@ public class CardService {
   /** Karten im Papierkorb eines Boards. Erfordert Board-Mitgliedschaft (Leserecht). */
   @Transactional(readOnly = true)
   public List<CardView> listTrash(long userId, long boardId) {
-    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
+    boolean darfStatusSetzen = darfStatusSetzen(userId, projectId);
     return cards.findTrashByBoardId(boardId).stream()
         .filter(c -> c.type() == CardType.CARD)
-        .map(this::view)
+        .map(c -> view(c, darfStatusSetzen))
         .toList();
   }
 
@@ -1805,7 +1879,20 @@ public class CardService {
     return id == null ? null : cards.findById(id).map(Card::number).orElse(null);
   }
 
-  private CardView view(Card c) {
+  /**
+   * Die Sicht einer einzelnen Karte für diesen Betrachter — die {@link
+   * Permission#CARD_MOVE}-Prüfung für {@code canSetStatus} läuft hier einmal (Plan #1294, E10).
+   */
+  private CardView view(long userId, Card c) {
+    return view(c, darfStatusSetzen(userId, c.projectId()));
+  }
+
+  /**
+   * Die Sicht einer Karte. {@code canSetStatus} ist das Ergebnis der einen {@link
+   * Permission#CARD_MOVE}-Prüfung je Anfrage (E10) und greift nur, wo die Karte einen eigenen
+   * Status trägt — ohne ihn gibt es nichts zu setzen.
+   */
+  private CardView view(Card c, boolean canSetStatus) {
     return new CardView(
         c.requireId(),
         c.boardId(),
@@ -1825,7 +1912,28 @@ public class CardService {
         zuordnung.zustaendigeVon(c.requireId()),
         c.dueDate(),
         zuordnung.labelsVon(c.requireId()),
-        herkunftsnummer(c));
+        herkunftsnummer(c),
+        statusName(c),
+        c.status() != null && canSetStatus);
+  }
+
+  /**
+   * Der Status als Text über die Modulgrenze (E24): der Konstantenname, zugleich der gespeicherte
+   * Wert; {@code null} ohne eigenen Status.
+   */
+  private static @Nullable String statusName(Card c) {
+    CardStatus status = c.status();
+    return status == null ? null : status.name();
+  }
+
+  /**
+   * Ob der Betrachter im Projekt einer Karte den Status setzen darf — dasselbe Recht wie für das
+   * Verschieben (E9). Geprüft wird das Projekt der Karte, nicht das der aufrufenden Ansicht: Eine
+   * über {@code #N} gefundene Karte kann auf einem fremden Board mit anderen Rechten liegen (E10).
+   * Die Projekt-ID der Karte stimmt mit der ihres Boards überein (siehe {@link #requireCardOp}).
+   */
+  private boolean darfStatusSetzen(long userId, long projectId) {
+    return permissions.hasPermission(userId, projectId, Permission.CARD_MOVE);
   }
 
   /**
@@ -1840,6 +1948,11 @@ public class CardService {
    *     #listByBoard(long, long)}
    * @param excerpt erste 200 Codepoints der rohen Beschreibung, nur in der Board-Liste gesetzt;
    *     sonst {@code null}
+   * @param status eigener Status als Konstantenname von {@code CardStatus} (Plan #1294, E8/E24);
+   *     {@code null} bei Vorhaben und Dokumentarten — dort zählt die Spalte
+   * @param canSetStatus ob der Betrachter den Status dieser Karte setzen darf: {@link
+   *     Permission#CARD_MOVE} im Projekt <em>dieser</em> Karte (E10) — und nur, wenn sie einen
+   *     eigenen Status trägt
    */
   public record CardView(
       Long id,
@@ -1859,7 +1972,9 @@ public class CardService {
       List<Long> assignees,
       @Nullable Instant dueDate,
       List<Long> labels,
-      @Nullable Integer derivedFrom) {}
+      @Nullable Integer derivedFrom,
+      @Nullable String status,
+      boolean canSetStatus) {}
 
   /**
    * Ein Eintrag des Aktivitätsverlaufs als Fassaden-Sicht: {@code type} und {@code origin} sind die
@@ -1912,6 +2027,10 @@ public class CardService {
    * <p>{@code externalKey} ist der Idempotenz-Schlüssel eines Automatik-Ingests (#534). Er wird
    * seit #573 mitgeliefert, damit ein Importwerkzeug seine eigenen Karten wiedererkennt, ohne dafür
    * schreiben zu müssen; {@code null} für alles, was nicht aus einem Ingest stammt.
+   *
+   * <p>{@code status} ist der eigene Status als Konstantenname von {@code CardStatus} — als Text,
+   * weil {@code card.domain} modulintern bleibt (Plan #1294, E24); {@code null} bei Vorhaben und
+   * Dokumentarten.
    */
   public record BoardItemView(
       long id,
@@ -1922,7 +2041,8 @@ public class CardService {
       int positionInColumn,
       boolean epic,
       @Nullable String externalKey,
-      @Nullable Integer derivedFrom) {}
+      @Nullable Integer derivedFrom,
+      @Nullable String status) {}
 
   /**
    * Eine Zeile des Herkunftsbaums (Issue #609). Die Liste kommt in Präorder — jede Wurzel
