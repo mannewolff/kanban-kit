@@ -845,6 +845,38 @@ describe('BoardListPage', () => {
     expect(await screen.findByLabelText('Fällig Aufgabe')).toBeInTheDocument()
   })
 
+  it('richtet die Überfälligkeit nach dem Status statt nach der Spalte (#1303)', async () => {
+    const gestern = new Date(Date.now() - 86_400_000).toISOString()
+    const fertig: Card = {
+      ...base, id: 100, columnId: 30, number: 1, title: 'Fertig anstehend', description: '', archived: false,
+      status: 'DONE', dueDate: gestern,
+    }
+    const offen: Card = {
+      ...base, id: 101, columnId: 20, number: 2, title: 'Offen in Done', description: '', archived: false,
+      status: 'READY', dueDate: gestern,
+    }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [
+        { id: 20, name: 'Done', position: 0, wipLimit: null },
+        { id: 30, name: 'Anstehend', position: 1, wipLimit: null },
+      ],
+    })
+    mCards.list.mockResolvedValue([fertig, offen])
+    mEpics.list.mockResolvedValue([])
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('Fällig Fertig anstehend')).not.toHaveAttribute('data-ueberfaellig')
+    expect(screen.getByLabelText('Filter Überfällig')).toHaveTextContent('Überfällig1')
+    expect(screen.getByLabelText('Fällig Offen in Done')).toHaveAttribute('data-ueberfaellig', 'ja')
+  })
+
   it('zeigt ein Epic-Badge in der Epic-Spalte, wenn die Karte einem Epic zugeordnet ist', async () => {
     const child: Card = {
       ...base, id: 100, columnId: 10, number: 1, title: 'Aufgabe', description: '', archived: false, parentId: 7,

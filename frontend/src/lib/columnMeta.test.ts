@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { BoardColumn } from '../api/boards'
 import {
   canonicalColumnKey,
+  effektivDone,
   isDoneColumn,
   neighbourColumns,
   otherCanonicalColumns,
+  statusAnzeigename,
+  statusWeichtAb,
 } from './columnMeta'
 
 describe('isDoneColumn', () => {
@@ -16,6 +19,41 @@ describe('isDoneColumn', () => {
     ['', false],
   ])('erkennt %s als done=%s', (name, expected) => {
     expect(isDoneColumn(name)).toBe(expected)
+  })
+})
+
+describe('effektivDone', () => {
+  it.each([
+    ['DONE', 'Anstehend', true],
+    ['READY', 'Done', false],
+    [null, 'Done (Archiv)', true],
+    [null, 'Anstehend', false],
+  ] as const)('Status %s in Spalte „%s“ ist fertig=%s', (status, spaltenname, expected) => {
+    expect(effektivDone({ status }, spaltenname)).toBe(expected)
+  })
+})
+
+describe('statusWeichtAb', () => {
+  it.each([
+    ['DONE', 'Anstehend', true],
+    ['DONE', 'Done', false],
+    ['IN_PROGRESS', 'In Progress', false],
+    ['READY', 'Backlog', true],
+    [null, 'Anstehend', false],
+  ] as const)('Status %s in Spalte „%s“ weicht ab=%s', (status, spaltenname, expected) => {
+    expect(statusWeichtAb(status, spaltenname)).toBe(expected)
+  })
+})
+
+describe('statusAnzeigename', () => {
+  it.each([
+    ['BACKLOG', 'Backlog'],
+    ['READY', 'Ready'],
+    ['IN_PROGRESS', 'In progress'],
+    ['IN_REVIEW', 'In review'],
+    ['DONE', 'Done'],
+  ] as const)('%s heißt „%s“', (status, name) => {
+    expect(statusAnzeigename(status)).toBe(name)
   })
 })
 

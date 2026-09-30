@@ -51,6 +51,7 @@ import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 import { vorhabenFeld } from '../lib/cardEpic'
 import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
+import { effektivDone, STATUS_NAMEN, statusAnzeigename } from '../lib/columnMeta'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
 import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
@@ -638,22 +639,6 @@ const statusChipSx = (colors: { bg: string; text: string }) => ({
 })
 
 /**
- * Die fünf Prozesszustände in ihrer Reihenfolge, mit dem kanonischen Prozessnamen wortgleich zu
- * `workflow.config.json` → `columns` und `CardStatus.anzeigename()` im Backend (Plan #1294, E24).
- * Der Name speist zugleich `statusColors` — so trägt der Wechsler die Melderfarbe der gleichnamigen
- * Spalte.
- */
-const STATUS_NAMEN: ReadonlyArray<readonly [CardStatus, string]> = [
-  ['BACKLOG', 'Backlog'],
-  ['READY', 'Ready'],
-  ['IN_PROGRESS', 'In progress'],
-  ['IN_REVIEW', 'In review'],
-  ['DONE', 'Done'],
-]
-
-const statusName = (status: CardStatus) => STATUS_NAMEN.find(([s]) => s === status)![1]
-
-/**
  * Status-Chip in der Kopfleiste. Ein Vorhaben zeigt „Vorhaben", eine Karte ohne eigenen Status
  * (Dokumentarten) wie bisher ihre Spalte, ein Arbeitspaket seinen Status (Plan #1294, E16, E21).
  *
@@ -689,7 +674,7 @@ function CardStatusChip({
     return <Chip label={columnName} size="small" sx={statusChipSx(statusColors(columnName))} />
   }
 
-  const name = statusName(status)
+  const name = statusAnzeigename(status)
   if (archived || !canSetStatus) {
     return <Chip label={name} size="small" sx={statusChipSx(statusColors(name))} />
   }
@@ -718,7 +703,7 @@ function CardStatusChip({
         // Der gewählte Wert erscheint als derselbe Chip wie im lesenden Fall — Melderfarbe und
         // Radius kommen so aus `statusColors` und dem Theme, nicht aus eigenen Werten.
         renderValue={(wert) => (
-          <Chip label={statusName(wert)} size="small" sx={statusChipSx(statusColors(statusName(wert)))} />
+          <Chip label={statusAnzeigename(wert)} size="small" sx={statusChipSx(statusColors(statusAnzeigename(wert)))} />
         )}
         onChange={(e) => {
           // Nur die übrigen Zustände lösen `onChange` aus — der aktuelle Eintrag ist `disabled`.
@@ -1571,13 +1556,8 @@ function CardDetailModalView({
   })
 
   // Erledigt ist ein Arbeitspaket nach seinem Status, alles andere nach der Spalte (Plan #1294,
-  // E7). Lokal formuliert, bis das Folgepaket #1303 den gemeinsamen Done-Maßstab bringt.
-  const dueOverdue =
-    !isEpic &&
-    isOverdue(
-      card.dueDate,
-      status === 'DONE' || (status === null && (columnName ?? '').toLowerCase().includes('done')),
-    )
+  // E7) — über den gemeinsamen Done-Maßstab, damit es im Frontend nur eine Antwort gibt.
+  const dueOverdue = !isEpic && isOverdue(card.dueDate, effektivDone({ status }, columnName ?? ''))
 
   // Aktuellen Toggle-Handler über ein Ref halten und als stabile Callback-Identität an TaskMarkdown
   // reichen, damit dessen `memo` greift (kein Remount der Beschreibung bei Kommentar-Nachladen).

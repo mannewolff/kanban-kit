@@ -8,6 +8,7 @@ import type { Epic } from '../../api/epics'
 import type { Label } from '../../api/labels'
 import type { Member } from '../../api/members'
 import { epicOfCard } from '../../lib/cardEpic'
+import { effektivDone } from '../../lib/columnMeta'
 import { MELDER, NUT, PANEL_RADIUS, RAND, SCHATTEN_NUTE } from '../../theme'
 import { ablageflaecheSx, type Dichte } from '../boardSurfaceSx'
 import { Belastungsskala } from './Belastungsskala'
@@ -26,8 +27,6 @@ interface Props {
   /** Die Karten, die die Spalte gerade zeigt. */
   angezeigteKarten: Card[]
   epics: Epic[]
-  /** Done-Spalte: Die Karten tragen Archiv-Countdown und Überfälligkeit. */
-  done: boolean
   dichte: Dichte
   selectionMode: boolean
   selectedIds: ReadonlySet<number>
@@ -82,7 +81,6 @@ export function BoardSpalte({
   hiddenCount,
   angezeigteKarten,
   epics,
-  done,
   dichte,
   selectionMode,
   selectedIds,
@@ -191,7 +189,10 @@ export function BoardSpalte({
             key={card.id}
             card={card}
             epic={epicOfCard(card, epics)}
-            done={done}
+            // Erledigt nach dem gemeinsamen Maßstab: ein Arbeitspaket nach seinem Status, alles
+            // andere nach der Spalte (Plan #1294, E7).
+            done={effektivDone(card, column.name)}
+            spaltenname={column.name}
             dichte={dichte}
             selectionMode={selectionMode}
             selected={selectedIds.has(card.id)}
