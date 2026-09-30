@@ -123,6 +123,13 @@ Beide Endpunkte adressieren die Karte über ihre **interne Karten-ID** (das Feld
 Adressierung wie bei `/items/{id}/move` und `/items/{id}/comments`; `board.mjs` löst eine
 übergebene Board-Nummer intern in diese ID auf.
 
+Für Arbeitspakete (Karten außer Vorhaben, deren Titel nicht mit `[Idee]`, `[Fachlich]` oder
+`[Plan]` beginnt) trägt das Feld `column` in `GET /api/kanban/items` den Status der Karte und nicht
+mehr den Spaltennamen — ein Paket in einer eigenen Spalte wie „Anstehend" erscheint so unter
+seinem Status. Entsprechend setzt `PUT /api/kanban/items/{id}/move` bei Arbeitspaketen den Status,
+statt die Karte zu verschieben; sie bleibt in ihrer Spalte liegen. Vorhaben und Dokumentarten
+gruppiert und verschiebt die Schnittstelle wie bisher nach der Spalte.
+
 ```
 # Label hinzufügen
 curl -sk -X POST https://localhost/api/kanban/items/42/labels \
