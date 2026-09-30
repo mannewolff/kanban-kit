@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 
 /** Verhaltenstests der Done-Retention-Archivierung (Mockito am CardRepository-Port). */
@@ -117,5 +118,22 @@ class DoneRetentionServiceTest {
     // Then: kein Zugriff aufs Repository, nichts archiviert
     assertThat(count).isZero();
     verifyNoInteractions(cards);
+  }
+
+  @Test
+  void archiveExpiredDoneCards_archiviertErledigtesArbeitspaketInEigenerSpalte() {
+    // Plan #1294, E7: Der Job greift allein über den Done-Zeitstempel. Ein Arbeitspaket mit
+    // Status DONE in einer eigenen Spalte (20 = „Anstehend") trägt ihn und wird deshalb erfasst.
+    Card paket = doneCard(3).withStatus(CardStatus.DONE);
+    when(cards.findArchivableDoneCards(any())).thenReturn(List.of(paket));
+    when(cards.save(any(Card.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    int count = service.archiveExpiredDoneCards(NOW, 14);
+
+    assertThat(count).isEqualTo(1);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().archived()).isTrue();
+    assertThat(captor.getValue().status()).isEqualTo(CardStatus.DONE);
   }
 }

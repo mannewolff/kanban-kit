@@ -84,6 +84,75 @@ class DoneRetentionIT extends AbstractIntegrationTest {
     Assertions.assertThat(cards.findById(notDone).orElseThrow().archived()).isFalse();
   }
 
+  @Test
+  void raeumtErledigtesArbeitspaketAuf_dasNieInDerDoneSpalteLag() throws Exception {
+    // Plan #1294, E7: Bei einem Arbeitspaket speist der Status DONE den Done-Zeitstempel — auch in
+    // einer eigenen Spalte. Ohne ihn fiele das Paket dauerhaft aus dem Aufräumjob.
+    Cookie alice = login("retention-status@example.com");
+    long boardId = boardAnlegen(alice, "retention-status@example.com");
+    long anstehend = spalteAnlegen(alice, boardId, "Anstehend");
+    long wartet = spalteAnlegen(alice, boardId, "Wartet auf Zulieferung");
+    long paket = createCard(alice, boardId, anstehend, "Paket");
+    // Den Status setzt hier noch die Datenbank: Der Endpunkt dafür folgt in Issue #1300.
+    jdbc.update("UPDATE card SET status = 'DONE' WHERE id = ?", paket);
+
+    mvc.perform(
+            post("/api/cards/" + paket + "/move")
+                .cookie(alice)
+                .contentType("application/json")
+                .content("{\"columnId\":%d,\"position\":0}".formatted(wartet)))
+        .andExpect(status().isOk());
+
+    Instant erledigt = cards.findById(paket).orElseThrow().movedToDoneAt();
+    Assertions.assertThat(erledigt).isNotNull();
+    int archivedCount = retention.archiveExpiredDoneCards(erledigt.plus(Duration.ofDays(40)), 30);
+
+    Assertions.assertThat(archivedCount).isEqualTo(1);
+    Assertions.assertThat(cards.findById(paket).orElseThrow().archived()).isTrue();
+  }
+
+  private long boardAnlegen(Cookie session, String ownerEmail) throws Exception {
+    long projectId =
+        json.readTree(
+                mvc.perform(
+                        post("/api/projects")
+                            .cookie(platformAdminSession())
+                            .contentType("application/json")
+                            .content(
+                                "{\"name\":\"P\",\"ownerEmail\":\"%s\"}".formatted(ownerEmail)))
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString())
+            .get("id")
+            .asLong();
+    return json.readTree(
+            mvc.perform(
+                    post("/api/projects/" + projectId + "/boards")
+                        .cookie(session)
+                        .contentType("application/json")
+                        .content("{\"name\":\"B\"}"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+        .get("id")
+        .asLong();
+  }
+
+  private long spalteAnlegen(Cookie session, long boardId, String name) throws Exception {
+    return json.readTree(
+            mvc.perform(
+                    post("/api/boards/" + boardId + "/columns")
+                        .cookie(session)
+                        .contentType("application/json")
+                        .content("{\"name\":\"%s\"}".formatted(name)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+        .get("id")
+        .asLong();
+  }
+
   private Cookie login(String email) throws Exception {
     if (users.findByEmail(email).isEmpty()) {
       users.save(

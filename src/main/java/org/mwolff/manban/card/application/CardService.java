@@ -8,7 +8,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -20,9 +19,11 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
+import org.mwolff.manban.card.domain.Arbeitspaket;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardActivityType;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectService;
@@ -266,31 +267,31 @@ public class CardService {
     int number = givenNumber != null ? givenNumber : cards.allocateCardNumber(projectId);
     int position = cards.allocateActivePosition(columnId);
     Instant now = clock.instant();
-    Instant movedToDoneAt = doneStempel(column, now);
-    Card saved =
-        cards.save(
-            new Card(
-                null,
-                boardId,
-                columnId,
-                number,
-                title.trim(),
-                normalize(description),
-                position,
-                false,
-                movedToDoneAt,
-                userId,
-                now,
-                now,
-                CardType.CARD,
-                effectiveParent,
-                null,
-                dueDate,
-                projectId,
-                externalKey,
-                herkunft,
-                null,
-                null));
+    Card neu =
+        new Card(
+            null,
+            boardId,
+            columnId,
+            number,
+            title.trim(),
+            normalize(description),
+            position,
+            false,
+            null,
+            userId,
+            now,
+            now,
+            CardType.CARD,
+            effectiveParent,
+            null,
+            dueDate,
+            projectId,
+            externalKey,
+            herkunft,
+            null,
+            null);
+    // Status und Done-Zeitstempel leitet inSpalte aus der Zielspalte ab (Plan #1294, E5/E7).
+    Card saved = cards.save(inSpalte(neu, column.name(), now));
 
     transitions.open(saved.requireId(), columnId, column.name(), now);
     activity.add(
@@ -632,7 +633,7 @@ public class CardService {
               int done =
                   (int)
                       members.stream()
-                          .filter(c -> isDoneColumn(columnNames.get(c.columnId())))
+                          .filter(c -> Arbeitspaket.effektivDone(c, columnNames.get(c.columnId())))
                           .count();
               // Wurzeln aus den Mitgliedern heraus, nicht neu aus `all`: So gelten für sie
               // dieselben Filter, und die Invariante rootNumbers ⊆ memberNumbers hält von selbst.
@@ -760,7 +761,7 @@ public class CardService {
           parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
-    Card saved = cards.save(updated);
+    Card saved = cards.save(folgeArtwechsel(card, updated));
     activity.add(
         cardId,
         userId,
@@ -799,8 +800,11 @@ public class CardService {
     Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     Card saved =
         cards.save(
-            card.withContent(
-                title.trim(), description == null ? card.description() : normalize(description)));
+            folgeArtwechsel(
+                card,
+                card.withContent(
+                    title.trim(),
+                    description == null ? card.description() : normalize(description))));
     activity.add(
         cardId,
         userId,
@@ -1059,17 +1063,16 @@ public class CardService {
           actor.current());
     }
 
-    // moved_to_done_at: beim Eintritt in eine "Done"-Spalte setzen, beim Verlassen löschen.
-    boolean targetIsDone = isDoneColumn(target.name());
-    Instant done = card.movedToDoneAt();
-    if (targetIsDone && done == null) {
-      done = clock.instant();
-    } else if (!targetIsDone) {
-      done = null;
-    }
-
+    // Status nur bei echtem Spaltenwechsel (Plan #1294): Umsortieren ändert ihn nicht. Der
+    // Done-Zeitstempel folgt dem effektiven Maßstab — bei Arbeitspaketen dem Status (E7).
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    CardView result = view(cards.save(moved.withMovedToDoneAt(done)));
+    if (fromColumn != targetColumnId) {
+      moved = moved.withStatus(statusIn(moved, target.name()));
+    }
+    CardView result =
+        view(
+            cards.save(
+                moved.withMovedToDoneAt(doneStempel(moved, target.name(), clock.instant()))));
     publishChanged(card.boardId(), ActivityType.MOVED, cardId);
     return result;
   }
@@ -1137,10 +1140,10 @@ public class CardService {
     }
     // Zielboard == Board der Karte: Das ist kein Umzug, sondern ein Spaltenwechsel, und dessen
     // Regeln stehen vollständig in doMove — Spaltenverlauf nur bei echtem Wechsel, Verlaufseintrag
-    // MOVED, movedToDoneAt beim Eintritt in eine Done-Spalte, Vorhaben-Zuordnung bleibt. Der
-    // Umzugspfad unten ist auf den Board-Wechsel gebaut: Er leert parentId (das Ziel-Board hat
-    // eigene Vorhaben) und movedToDoneAt und schreibt den Spaltenverlauf auch dann fort, wenn die
-    // Spalte dieselbe bleibt. Auf dem eigenen Board wäre jede dieser drei Wirkungen falsch.
+    // MOVED, Status nur bei echtem Wechsel, Vorhaben-Zuordnung bleibt. Der Umzugspfad unten ist
+    // auf den Board-Wechsel gebaut: Er leert parentId (das Ziel-Board hat eigene Vorhaben) und
+    // schreibt Spaltenverlauf und Status auch dann fort, wenn die Spalte dieselbe bleibt. Auf dem
+    // eigenen Board wäre jede dieser Wirkungen falsch.
     if (targetBoardId == card.boardId()) {
       return doMove(userId, cardId, targetColumnId, POSITION_AM_ENDE);
     }
@@ -1176,7 +1179,9 @@ public class CardService {
     transitions.open(cardId, targetColumnId, targetColumn.name(), switchedAt);
 
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    Card cleaned = moved.withParent(null).withMovedToDoneAt(null);
+    // Status wie bei doMove aus der Zielspalte; der Done-Zeitstempel wird daraus neu abgeleitet
+    // statt gelöscht — sonst fiele ein Paket mit Status DONE aus jeder Auswertung (Plan E18).
+    Card cleaned = inSpalte(moved.withParent(null), targetColumn.name(), switchedAt);
     if (!sameProject) {
       // Die Herkunft ist projekt-lokal: Der Vorfahr bleibt zurueck, und ein Verweis ueber die
       // Projektgrenze zeigte auf eine Nummer, die dort einer anderen Karte gehoeren kann.
@@ -1706,20 +1711,60 @@ public class CardService {
   }
 
   /**
-   * Done-Zeitpunkt einer frisch angelegten Karte (Issue #1200, E4): Wird sie direkt in einer
-   * Done-Spalte angelegt, zählt sie ab sofort als erledigt. Ohne diesen Zeitstempel fiele sie
-   * dauerhaft aus der Done-Aufbewahrung, die ausschließlich über ihn greift ({@code
-   * findArchivableDoneCards} verlangt {@code movedToDoneAt is not null}).
-   *
-   * <p>Eigene Methode statt eines Ausdrucks in {@code doCreate}: Dort trieb die Verzweigung die
-   * NPath-Komplexität des ohnehin verzweigungsreichen Anlegepfads über die PMD-Schwelle.
+   * Die Karte, wie sie in einer Spalte dieses Namens ankommt (Plan #1294): Status nach {@link
+   * #statusIn}, Done-Zeitstempel nach {@link #doneStempel}. Gemeinsamer Weg von Anlegen und
+   * Übertragen, damit beide dieselbe Regel sprechen.
    */
-  private static @Nullable Instant doneStempel(ColumnView column, Instant now) {
-    return isDoneColumn(column.name()) ? now : null;
+  private static Card inSpalte(Card card, @Nullable String spaltenname, Instant now) {
+    Card mitStatus = card.withStatus(statusIn(card, spaltenname));
+    return mitStatus.withMovedToDoneAt(doneStempel(mitStatus, spaltenname, now));
   }
 
-  private static boolean isDoneColumn(@Nullable String name) {
-    return name != null && name.toLowerCase(Locale.ROOT).contains("done");
+  /**
+   * Status einer Karte, die in einer Spalte dieses Namens ankommt (Plan #1294, E2/E5): Eine
+   * Prozessspalte gibt ihren Status vor, eine eigene Spalte lässt den bisherigen stehen — und wer
+   * noch keinen hat, bekommt {@code BACKLOG}. Vorhaben und Dokumentarten tragen keinen.
+   */
+  private static @Nullable CardStatus statusIn(Card card, @Nullable String spaltenname) {
+    if (!Arbeitspaket.istArbeitspaket(card.type(), card.title())) {
+      return null;
+    }
+    CardStatus bisher = card.status();
+    return Arbeitspaket.statusVonSpalte(spaltenname)
+        .orElse(bisher != null ? bisher : CardStatus.BACKLOG);
+  }
+
+  /**
+   * Done-Zeitpunkt nach dem effektiven Maßstab (Plan #1294, E7): Gilt die Karte laut {@link
+   * Arbeitspaket#effektivDone} als erledigt, bleibt ein vorhandener Zeitstempel stehen, sonst gilt
+   * {@code now}; gilt sie nicht als erledigt, entfällt er. Ohne diesen Zeitstempel fiele eine
+   * erledigte Karte dauerhaft aus der Done-Aufbewahrung, die ausschließlich über ihn greift ({@code
+   * findArchivableDoneCards} verlangt {@code movedToDoneAt is not null}), und ebenso aus
+   * Abhängigkeiten, Durchlaufzeit und Überfälligkeit.
+   */
+  private static @Nullable Instant doneStempel(
+      Card card, @Nullable String spaltenname, Instant now) {
+    if (!Arbeitspaket.effektivDone(card, spaltenname)) {
+      return null;
+    }
+    Instant bisher = card.movedToDoneAt();
+    return bisher != null ? bisher : now;
+  }
+
+  /**
+   * Folge eines Artwechsels durch Umbenennen (Plan #1294): Wird eine Dokumentkarte zum
+   * Arbeitspaket, bekommt sie den Status ihrer Prozessspalte, sonst {@code BACKLOG}; wird ein
+   * Arbeitspaket zur Dokumentkarte, entfällt ihr Status, und wieder zählt die Spalte. Der
+   * Done-Zeitstempel folgt derselben Ableitung. Ohne Artwechsel bleibt alles, wie es ist — die
+   * Spalte wird dann gar nicht erst nachgeschlagen.
+   */
+  private Card folgeArtwechsel(Card vorher, Card nachher) {
+    boolean warPaket = Arbeitspaket.istArbeitspaket(vorher.type(), vorher.title());
+    if (warPaket == Arbeitspaket.istArbeitspaket(nachher.type(), nachher.title())) {
+      return nachher;
+    }
+    String spalte = boardService.requireColumn(nachher.columnId(), nachher.boardId()).name();
+    return inSpalte(nachher.withStatus(null), spalte, clock.instant());
   }
 
   private static @Nullable String normalize(@Nullable String description) {

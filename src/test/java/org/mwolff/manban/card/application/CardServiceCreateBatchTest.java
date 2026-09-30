@@ -184,7 +184,30 @@ class CardServiceCreateBatchTest {
 
   @Test
   void createCardsBatch_inDoneSpalte_stempeltJedeKarte() {
-    // Given
+    // Given: Dokumentkarten — für sie gilt weiter die Substring-Regel des Spaltennamens (Plan
+    // #1294, E6), „Fertig / Done" zählt also als Done-Spalte.
+    spalteMitNamen("Fertig / Done");
+
+    // When
+    List<CardService.CardView> result =
+        service.createCardsBatch(
+            1L,
+            BOARD,
+            COLUMN,
+            List.of(
+                new CardService.NewCard("[Idee] A", null),
+                new CardService.NewCard("[Idee] B", null)));
+
+    // Then
+    assertThat(result)
+        .extracting(CardService.CardView::movedToDoneAt)
+        .containsExactly(FIXED, FIXED);
+  }
+
+  @Test
+  void createCardsBatch_arbeitspaketeInEigenerDoneAehnlicherSpalte_sindNichtErledigt() {
+    // Given: „Fertig / Done" ist keine Prozessspalte — Arbeitspakete bekommen dort BACKLOG, und
+    // für sie entscheidet der Status, nicht der Spaltenname (Plan #1294, E5/E7).
     spalteMitNamen("Fertig / Done");
 
     // When
@@ -196,9 +219,7 @@ class CardServiceCreateBatchTest {
             List.of(new CardService.NewCard("A", null), new CardService.NewCard("B", null)));
 
     // Then
-    assertThat(result)
-        .extracting(CardService.CardView::movedToDoneAt)
-        .containsExactly(FIXED, FIXED);
+    assertThat(result).extracting(CardService.CardView::movedToDoneAt).containsOnlyNulls();
   }
 
   /**
