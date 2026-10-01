@@ -304,10 +304,11 @@ public class KanbanCompatService {
    * Setzt bei einem Arbeitspaket den Status, sonst verschiebt es das Item des gebundenen Boards in
    * die Ziel-Spalte an die Ziel-Position (Plan #1294, E11).
    *
-   * <p>Ein Arbeitspaket bleibt in seiner Spalte liegen; {@code position} hat dann keine Wirkung,
-   * und das Board braucht keine Spalte für den Schlüssel — der Status hängt an keiner. Vorhaben und
-   * die Dokumentarten tragen keinen Status und werden wie bisher verschoben. Pfad und Antwortform
-   * bleiben für beide Fälle gleich, damit jeder bestehende Aufrufer lauffähig bleibt.
+   * <p>Ein Arbeitspaket wandert über {@link CardService#setStatus} ans Ende der Prozessspalte des
+   * Status, wenn das Board eine hat, sonst bleibt es liegen (Korrektur #787, Issue #1326); {@code
+   * position} hat dabei keine Wirkung, und das Board braucht keine Spalte für den Schlüssel.
+   * Vorhaben und die Dokumentarten tragen keinen Status und werden wie bisher verschoben. Pfad und
+   * Antwortform bleiben für beide Fälle gleich, damit jeder bestehende Aufrufer lauffähig bleibt.
    */
   @Transactional
   public void move(KanbanPrincipal principal, long cardId, String column, int position) {

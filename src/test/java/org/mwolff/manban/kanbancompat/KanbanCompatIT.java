@@ -2,6 +2,7 @@ package org.mwolff.manban.kanbancompat;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -665,11 +666,11 @@ class KanbanCompatIT extends AbstractIntegrationTest {
 
   /**
    * Ein Arbeitspaket in einer eigenen Spalte bekommt über {@code move} seinen Status gesetzt und
-   * bleibt liegen (Plan #1294, E11/E12). Die Antwortformen von {@code GET /api/kanban/items} und
-   * {@code PUT …/move} werden gegen feste Erwartungen verglichen, streng — ein zusätzliches, ein
-   * fehlendes oder ein umbenanntes Feld bricht den Test. Das ist der Nachweis, dass der Vertrag
-   * formgleich bleibt; {@code cli/tbx.test.mjs} läuft gegen selbstgebaute Antworten und kann ihn
-   * nicht führen.
+   * wandert in die Prozessspalte dieses Status (Plan #1294, E11/E12; Korrektur #787, Issue #1326).
+   * Die Antwortformen von {@code GET /api/kanban/items} und {@code PUT …/move} werden gegen feste
+   * Erwartungen verglichen, streng — ein zusätzliches, ein fehlendes oder ein umbenanntes Feld
+   * bricht den Test. Das ist der Nachweis, dass der Vertrag formgleich bleibt; {@code
+   * cli/tbx.test.mjs} läuft gegen selbstgebaute Antworten und kann ihn nicht führen.
    */
   @Test
   void move_setsStatusOfWorkPackage_andKeepsTheResponseForm() throws Exception {
@@ -693,11 +694,44 @@ class KanbanCompatIT extends AbstractIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(content().string(""));
 
-    // Nachher: unter READY geführt, die Karte liegt weiter in „Anstehend"
+    // Nachher: unter READY geführt und in die Spalte „Ready" gewandert
     mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", token))
         .andExpect(status().isOk())
         .andExpect(content().json(itemsJson(cardId, "READY"), JsonCompareMode.STRICT));
+    assertThat(columnOf(owner, cardId)).isEqualTo(columnIdByName(owner, boardId, "Ready"));
+  }
+
+  /**
+   * Ohne Prozessspalte für den Ziel-Status setzt {@code move} nur den Status, die Karte bleibt in
+   * ihrer eigenen Spalte (Korrektur #787, Issue #1326). Die Ready-Spalte wird dafür umbenannt; ein
+   * Umbenennen ändert keinen Status.
+   */
+  @Test
+  void move_withoutColumnForTheStatus_setsOnlyTheStatus() throws Exception {
+    long projectId = createProject("ohne-ready@example.com", "OhneReadyProjekt");
+    Cookie owner = loginAs("ohne-ready@example.com");
+    long boardId = createBoard(owner, projectId, "OhneReadyBoard");
+    long anstehend = addColumn(owner, boardId, "Anstehend");
+    mvc.perform(
+            patch("/api/columns/" + columnIdByName(owner, boardId, "Ready"))
+                .cookie(owner)
+                .contentType("application/json")
+                .content("{\"name\":\"Bereit\"}"))
+        .andExpect(status().isOk());
+    String token = boundToken(owner, projectId, boardId);
+    long cardId = createCard(owner, boardId, anstehend, "Paket");
+
+    mvc.perform(
+            put("/api/kanban/items/" + cardId + "/move")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content("{\"column\":\"READY\",\"position\":0}"))
+        .andExpect(status().isOk());
+
     assertThat(columnOf(owner, cardId)).isEqualTo(anstehend);
+    mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", token))
+        .andExpect(status().isOk())
+        .andExpect(content().json(itemsJson(cardId, "READY"), JsonCompareMode.STRICT));
   }
 
   /** Gegenprobe: Eine {@code [Plan]}-Karte trägt keinen Status und wird wie bisher verschoben. */

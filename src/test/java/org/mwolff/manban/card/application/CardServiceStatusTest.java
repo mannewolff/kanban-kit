@@ -1,8 +1,11 @@
 package org.mwolff.manban.card.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -25,7 +28,9 @@ import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectService;
+import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -48,12 +53,14 @@ class CardServiceStatusTest {
 
   private CardRepository cards;
   private BoardService boardService;
+  private PermissionChecker permissions;
   private CardService service;
 
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
     boardService = mock(BoardService.class);
+    permissions = mock(PermissionChecker.class);
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
@@ -61,7 +68,7 @@ class CardServiceStatusTest {
             cards,
             mock(CardDependencyRepository.class),
             boardService,
-            mock(PermissionChecker.class),
+            permissions,
             mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             new KartenZuordnung(
@@ -467,5 +474,92 @@ class CardServiceStatusTest {
         .singleElement()
         .extracting(CardService.EpicView::done, CardService.EpicView::total)
         .containsExactly(2, 3);
+  }
+
+  // --- setStatus legt in die Prozessspalte (Issue #1326, Korrektur #787) -----
+
+  /** Die Spalten des Boards in Board-Reihenfolge; jede ist über requireColumn auffindbar. */
+  private void spalten(ColumnView... spalten) {
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(spalten));
+    for (ColumnView spalte : spalten) {
+      when(boardService.requireColumn(spalte.id(), BOARD)).thenReturn(spalte);
+    }
+  }
+
+  private void paketIn(long columnId, CardStatus status) {
+    when(cards.findById(5L)).thenReturn(Optional.of(paket(5L, columnId, "Paket", status, null)));
+  }
+
+  @Test
+  void setStatus_legtDasPaketAnsEndeDerProzessspalteDesNeuenStatus() {
+    paketIn(20L, CardStatus.READY);
+    spalten(column(20L, "Ready", 1), column(30L, "In Review", 3));
+
+    service.setStatus(1L, 5L, "IN_REVIEW");
+
+    verify(cards).move(5L, 30L, Integer.MAX_VALUE);
+    assertThat(gespeichert().status()).isEqualTo(CardStatus.IN_REVIEW);
+  }
+
+  @Test
+  void setStatus_holtDasPaketAusEinerEigenenSpalteInDieProzessspalte() {
+    paketIn(20L, CardStatus.BACKLOG);
+    spalten(column(20L, "Anstehend", 0), column(30L, "Ready", 1));
+
+    service.setStatus(1L, 5L, "READY");
+
+    verify(cards).move(5L, 30L, Integer.MAX_VALUE);
+    assertThat(gespeichert().status()).isEqualTo(CardStatus.READY);
+  }
+
+  @Test
+  void setStatus_ohneSpalteFuerDenStatus_setztNurDenStatus() {
+    paketIn(20L, CardStatus.READY);
+    spalten(column(20L, "Ready", 1), column(40L, "Anstehend", 2));
+
+    service.setStatus(1L, 5L, "IN_REVIEW");
+
+    verify(cards, never()).move(anyLong(), anyLong(), anyInt());
+    Card nachher = gespeichert();
+    assertThat(nachher.status()).isEqualTo(CardStatus.IN_REVIEW);
+    assertThat(nachher.columnId()).isEqualTo(20L);
+  }
+
+  @Test
+  void setStatus_inDerPassendenProzessspalte_setztNurDenStatusUndLaesstDiePosition() {
+    // Altbestand: Die Karte liegt schon in „In Review", trägt aber noch READY.
+    paketIn(20L, CardStatus.READY);
+    spalten(column(20L, "In Review", 3));
+
+    service.setStatus(1L, 5L, "IN_REVIEW");
+
+    verify(cards, never()).move(anyLong(), anyLong(), anyInt());
+    assertThat(gespeichert().status()).isEqualTo(CardStatus.IN_REVIEW);
+  }
+
+  @Test
+  void setStatus_beiZweiPassendenSpalten_nimmtDieErsteInBoardReihenfolge() {
+    paketIn(20L, CardStatus.BACKLOG);
+    spalten(column(20L, "Backlog", 0), column(30L, "Ready", 1), column(31L, "ready", 2));
+
+    service.setStatus(1L, 5L, "READY");
+
+    verify(cards).move(5L, 30L, Integer.MAX_VALUE);
+    verify(cards, never()).move(5L, 31L, Integer.MAX_VALUE);
+  }
+
+  @Test
+  void setStatus_ohneRecht_verschiebtNicht() {
+    paketIn(20L, CardStatus.READY);
+    spalten(column(20L, "Ready", 1), column(30L, "In Review", 3));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(1L, PROJECT, Permission.CARD_MOVE);
+
+    assertThatThrownBy(() -> service.setStatus(1L, 5L, "IN_REVIEW"))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+
+    verify(cards, never()).move(anyLong(), anyLong(), anyInt());
+    verify(cards, never()).save(any(Card.class));
   }
 }
