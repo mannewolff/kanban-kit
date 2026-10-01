@@ -953,5 +953,33 @@
                 </plugins>
             </build>
         </profile>
+
+        <!-- Stückliste der Backend-Abhängigkeiten für die Sicherheitsprüfung (Issue #1334, Plan #1295,
+             E5/E6). Trivy löst die Versionen aus dieser pom.xml (Parent, BOM-Importe) nur unvollständig
+             auf; die CycloneDX-Stückliste nennt sie vollständig. Nur `compile` und `runtime`: Was nicht
+             ausgeliefert wird, soll kein Release aufhalten. Bewusst ohne Execution — die Stückliste
+             entsteht nur auf ausdrücklichen Aufruf:
+             mvn -B -Psbom -Dskip.frontend=true cyclonedx:makeBom  →  target/bom.json -->
+        <profile>
+            <id>sbom</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.cyclonedx</groupId>
+                        <artifactId>cyclonedx-maven-plugin</artifactId>
+                        <version>2.9.3</version>
+                        <configuration>
+                            <includeCompileScope>true</includeCompileScope>
+                            <includeRuntimeScope>true</includeRuntimeScope>
+                            <includeTestScope>false</includeTestScope>
+                            <includeProvidedScope>false</includeProvidedScope>
+                            <includeSystemScope>false</includeSystemScope>
+                            <outputFormat>json</outputFormat>
+                            <outputName>bom</outputName>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>
