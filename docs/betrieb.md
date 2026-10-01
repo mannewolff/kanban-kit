@@ -311,6 +311,122 @@ zweiter Weg nach `main` neben `push main`. Was das für die lokale Arbeit heißt
 `push main` den Stand von `origin/main` nachziehen), steht im Workflow-Guide
 `.claude/CLAUDE-workflow.md` unter „Zweiter Weg nach `main`: Aktualisierungs-PRs“.
 
+## Schutz des Branches `production`
+
+Nach `production` kommt ein Stand nur über einen Pull Request mit grünen Prüfungen. Das sichert
+ein **Ruleset** des Repositorys, zusätzlich zur Regel, dass `merge production` bei roter CI
+keinen Release-PR erstellt. Ein Ruleset ist keine Datei im Repository; damit sein Zustand
+nachprüfbar bleibt, steht seine Definition hier, samt den Aufrufen zum Setzen und Nachlesen.
+
+**Die Definition.** Ziel ist `refs/heads/production`. Die Regeln: ein Pull Request ist
+erforderlich (`pull_request`), die sieben Jobs aus [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
+müssen grün sein (`required_status_checks`, ohne die Pflicht, den Branch vorher auf den
+neuesten Stand zu bringen), kein Force-Push (`non_fast_forward`) und kein Löschen
+(`deletion`). Freigaben durch Reviewer verlangt das Ruleset nicht — es gibt nur einen Menschen
+mit Schreibrechten, und der kann seinen eigenen PR nicht freigeben.
+
+```json
+{
+  "name": "production schuetzen",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/production"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "required_status_checks": [
+          { "context": "Backend (mvn verify)" },
+          { "context": "Backend (PIT Mutation -Ppit)" },
+          { "context": "Frontend (npm build)" },
+          { "context": "Bezugsquellen (anonym beziehbar)" },
+          { "context": "Abbild bauen (Anwendungs-Abbild)" },
+          { "context": "Abbild bauen (Sicherungs-Abbild)" },
+          { "context": "Sicherheit" }
+        ]
+      }
+    },
+    { "type": "non_fast_forward" },
+    { "type": "deletion" }
+  ]
+}
+```
+
+Die Namen sind die angezeigten Namen der Jobs (`name:` in `ci.yml`); die beiden Abbild-Jobs
+entstehen aus der Matrix von `abbilder`. **Kommt in `ci.yml` ein neuer Job hinzu, gehört sein
+Name in diese Liste** — und das Ruleset wird mit dem Aufruf unten aktualisiert. Ein umbenannter
+Job, der hier noch unter altem Namen steht, meldet sich nie: Der PR wartet dann auf eine
+Prüfung, die es nicht mehr gibt.
+
+**Warum keine Ausnahme eingetragen ist.** `bypass_actors` bleibt leer, auch für den
+Repo-Inhaber. Ein Bypass für den einzigen Menschen mit Schreibrechten hebt den Schutz
+vollständig auf: Jeder Merge nach `production` liefe dann an den Prüfungen vorbei. Muss im
+Notfall doch einmal an ihnen vorbei gemergt werden, wird das Ruleset bewusst auf
+`"enforcement": "disabled"` gestellt und danach wieder auf `active` — sichtbar und nicht still.
+
+**`main` bleibt ungeschützt.** Auf `main` liegt kein Ruleset, damit `push main` wie bisher
+funktioniert; daneben führt der Merge eines grünen Aktualisierungs-PRs dorthin (zweiter Weg
+nach `main`, siehe oben). Geschützt wird erst der Übergang nach `production`.
+
+**Setzen.** Den JSON-Block oben in eine Datei außerhalb des Repositorys kopieren (etwa
+`$TMPDIR/ruleset-production.json`) und mit Admin-Rechten anlegen:
+
+```bash
+gh api --method POST repos/mannewolff/kanban-kit/rulesets --input - < "$TMPDIR/ruleset-production.json"
+```
+
+Die Antwort enthält die `id` des neuen Rulesets. Eine spätere Änderung (etwa ein neuer Job)
+geht mit derselben Datei an diese `id`:
+
+```bash
+gh api --method PUT repos/mannewolff/kanban-kit/rulesets/<id> --input - < "$TMPDIR/ruleset-production.json"
+```
+
+**Nachlesen.** Die Liste zeigt Name, `id`, `target` und `enforcement` aller Rulesets — es gibt
+genau eines, `production schuetzen`, mit `"enforcement": "active"`:
+
+```bash
+gh api repos/mannewolff/kanban-kit/rulesets
+```
+
+Die Einzelansicht zeigt die Regeln:
+
+```bash
+gh api repos/mannewolff/kanban-kit/rulesets/<id>
+```
+
+Daran ist der Schutz zu erkennen:
+
+- `"bypass_actors": []` — keine Ausnahme; `"current_user_can_bypass": "never"` bestätigt es aus
+  Sicht des Aufrufers.
+- `conditions.ref_name.include` enthält genau `refs/heads/production`, nicht `main`.
+- Unter `rules` steht ein Eintrag mit `"type": "required_status_checks"`, dessen
+  `parameters.required_status_checks` die sieben Namen oben trägt, dazu `pull_request`,
+  `non_fast_forward` und `deletion`.
+
+Kurz geprüft:
+
+```bash
+gh api repos/mannewolff/kanban-kit/rulesets/<id> --jq '{bypass: .bypass_actors, ziel: .conditions.ref_name.include, pruefungen: [.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context]}'
+```
+
 ## Umstellung des Objektspeichers
 
 Der Speicher der Anhänge wechselt von MinIO auf SeaweedFS (Plan #1222). Für die laufende Instanz
