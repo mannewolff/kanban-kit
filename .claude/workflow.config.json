@@ -51,7 +51,7 @@
       "areas": [
         "frontend"
       ],
-      "stufe": "paket"
+      "stufe": "push"
     },
     {
       "cmd": "node scripts/mutationspruefung.mjs aenderung backend",
@@ -62,7 +62,7 @@
     },
     {
       "cmd": "node scripts/mutationspruefung.mjs vollauf frontend",
-      "stufe": "merge"
+      "stufe": "push"
     },
     {
       "cmd": "node scripts/mutationspruefung.mjs vollauf backend",
