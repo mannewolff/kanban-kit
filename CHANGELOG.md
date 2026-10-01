@@ -11,6 +11,53 @@ erzeugt von `scripts/gen-changelog.mjs`.
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.15.0] – 2026-09-30
+
+- chore: v2.14.3
+- bump-version-Tests lesen die aktuelle Fassung statt 2.14.0 fest einzubauen ([#1316](https://github.com/mannewolff/kanban-kit/issues/1316))
+- chore: v2.14.2
+- reloadCards-Aufrufe in BoardPage mit void abschließen ([#1315](https://github.com/mannewolff/kanban-kit/issues/1315))
+- chore: v2.14.1
+- Projekt- und Board-Kachel per Tastatur öffnen ([#1307](https://github.com/mannewolff/kanban-kit/issues/1307))
+- Titel der Vorhaben-Kachel per Tastatur öffnen ([#1306](https://github.com/mannewolff/kanban-kit/issues/1306))
+- Kartentitel auf dem Board per Tastatur öffnen ([#1305](https://github.com/mannewolff/kanban-kit/issues/1305))
+- Doku folgt dem Statuswechsel ([#1304](https://github.com/mannewolff/kanban-kit/issues/1304))
+- Statusmal auf der Kachel und gemeinsamer Done-Maßstab im Frontend ([#1303](https://github.com/mannewolff/kanban-kit/issues/1303))
+- Statuswechsler im Kartendialog und Frontend-Typen ([#1302](https://github.com/mannewolff/kanban-kit/issues/1302))
+- Kanban-Schnittstelle setzt den Status statt zu verschieben ([#1301](https://github.com/mannewolff/kanban-kit/issues/1301))
+- Status setzen: Fassadenmethode, Endpunkt und canSetStatus ([#1300](https://github.com/mannewolff/kanban-kit/issues/1300))
+- Status an den bestehenden Schreibpfaden und effektiver Done-Maßstab ([#1299](https://github.com/mannewolff/kanban-kit/issues/1299))
+- Mutations-Änderungsprüfung hält nur im Frontend an, das Backend weicht auf die ganze Seite aus ([#1308](https://github.com/mannewolff/kanban-kit/issues/1308))
+- Statusfeld an der Karte: Domäne, Persistenz und Migration V46 ([#1298](https://github.com/mannewolff/kanban-kit/issues/1298))
+- Sonar-Abgleich schließt Pfade über mehrere Ordnerebenen richtig aus ([#1291](https://github.com/mannewolff/kanban-kit/issues/1291))
+- Schnellstart als Testinstanz und Fünf-Zeilen-Grenze im README-Test festhalten ([#1286](https://github.com/mannewolff/kanban-kit/issues/1286))
+- README: Warum-Absatz, Erwartungshaltung und Schlussabschnitt mit Meldewegen ([#1285](https://github.com/mannewolff/kanban-kit/issues/1285))
+- CardActivityHistorischeTypenIT hängt nicht mehr an der Uhr der Datenbank ([#1290](https://github.com/mannewolff/kanban-kit/issues/1290))
+- Darstellungs-Ignorer erfasst Stilfunktionen, Stiltexte und weitere Stilschlüssel ([#1289](https://github.com/mannewolff/kanban-kit/issues/1289))
+- Skript-Tests hängen nicht mehr am Stand des Stufenplans ([#1288](https://github.com/mannewolff/kanban-kit/issues/1288))
+- Guides nachziehen: Stufenplan, Schwelle je Ausschnitt, Ignorer ([#1282](https://github.com/mannewolff/kanban-kit/issues/1282))
+- Erste aufgenommene Stufe: bausteine-leitstand ([#1281](https://github.com/mannewolff/kanban-kit/issues/1281))
+- Dauerprotokoll und Stufenschaltung der Änderungsprüfung ([#1280](https://github.com/mannewolff/kanban-kit/issues/1280))
+- Änderungsprüfung folgt den aufgenommenen Ausschnitten ([#1279](https://github.com/mannewolff/kanban-kit/issues/1279))
+- Vollauf je Ausschnitt: Auswertung, Halt, Bestandsregel und Bericht ([#1278](https://github.com/mannewolff/kanban-kit/issues/1278))
+- Darstellungs-Ignorer: Stilmutanten laufen gar nicht erst ([#1277](https://github.com/mannewolff/kanban-kit/issues/1277))
+- stryker.config.mjs und Treiber-Prüfbereich aus dem Stufenplan ([#1276](https://github.com/mannewolff/kanban-kit/issues/1276))
+- Zeiten verändert
+- Zeiten verändert
+- Stufenplan mutationsstufen.json als einzige Quelle des Frontend-Prüfbereichs ([#1275](https://github.com/mannewolff/kanban-kit/issues/1275))
+- Änderungsprüfung hält bei Test ohne Zuordnung sofort an statt die ganze Seite zu mutieren ([#1287](https://github.com/mannewolff/kanban-kit/issues/1287))
+- Testinstanz und Produktivbetrieb als zwei Wege, jede --build-Stelle nachgezogen ([#1269](https://github.com/mannewolff/kanban-kit/issues/1269))
+- UPGRADING.md als einziger Ort des Upgrade-Wissens ([#1268](https://github.com/mannewolff/kanban-kit/issues/1268))
+- Eigene Abbilder bei jedem Tag nach ghcr.io, Versionsnummer zieht mit ([#1267](https://github.com/mannewolff/kanban-kit/issues/1267))
+- Betriebs-Overlay mit fuenf Pflichtwerten und Startpruefung fuer das Datenbankkennwort ([#1266](https://github.com/mannewolff/kanban-kit/issues/1266))
+- Basis-Stack zieht veröffentlichte Abbilder, der Bau zieht ins Overlay ([#1265](https://github.com/mannewolff/kanban-kit/issues/1265))
+- Pruefart eigen in bezugspruefung.mjs: eigene Abbilder nur auf Verlangen ([#1264](https://github.com/mannewolff/kanban-kit/issues/1264))
+- Volle Versions-Tags für alle fremden Abbilder ([#1263](https://github.com/mannewolff/kanban-kit/issues/1263))
+- Issue-Vorlagen als YAML-Formulare mit Sicherheits- und Kontaktweg ([#1254](https://github.com/mannewolff/kanban-kit/issues/1254))
+- CONTRIBUTING.md mit vier Punkten, Prüfungen je Bereich und Fokus-Vorbehalt ([#1253](https://github.com/mannewolff/kanban-kit/issues/1253))
+- CODE_OF_CONDUCT.md als deutsche Fassung des Contributor Covenant 2.1 ([#1252](https://github.com/mannewolff/kanban-kit/issues/1252))
+- SECURITY.md mit vertraulichem Meldeweg und Versionsregel ([#1251](https://github.com/mannewolff/kanban-kit/issues/1251))
+
 ## [2.14.0] – 2026-09-28
 
 - chore: v2.13.1

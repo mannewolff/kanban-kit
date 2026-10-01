@@ -14,8 +14,8 @@
       "name": "Anwendung",
       "zweck": "das veroeffentlichte Anwendungs-Abbild des Basis-Stacks (docker-compose.yml)",
       "art": "abbild",
-      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit:2.14.0",
-      "fassung": "2.14.0",
+      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit:2.15.0",
+      "fassung": "2.15.0",
       "pruefung": "eigen"
     },
     {
@@ -46,8 +46,8 @@
       "name": "Sicherung",
       "zweck": "das veroeffentlichte Abbild des Sicherungsdienstes (docker-compose.backup.yml)",
       "art": "abbild",
-      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit-backup:2.14.0",
-      "fassung": "2.14.0",
+      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit-backup:2.15.0",
+      "fassung": "2.15.0",
       "pruefung": "eigen"
     },
     {
