@@ -124,6 +124,9 @@ function ChipGruppe<T extends string>({
  */
 const LEERE_AUSBLENDUNG: ReadonlySet<number> = new Set<number>()
 
+/** Ruhezustand des Ziehens: keine Karte unterwegs. Konstant aus demselben Grund wie oben. */
+const KEINE_KARTEN: ReadonlySet<number> = new Set<number>()
+
 /**
  * Erfolgsmeldung nach dem Sortieren: benennt die Richtung, in der tatsächlich sortiert wurde.
  * Läuft über den Toast-Stapel, dessen `Alert` als Live-Region vorgelesen wird — ohne die Meldung
@@ -287,31 +290,16 @@ export function BoardView({
 
   // Spalten-Reihenfolge per Drag & Drop (getrennt vom Karten-Drag, das dataTransfer nutzt).
   const [colDrag, setColDrag] = useState<number | null>(null)
-  // Ziehen einer Karte (AK 7, AK 8, Plan #932 E15): welche Karte bewegt wird und über welcher Spalte
-  // sie gerade steht. Beides dient allein der Darstellung; das Verschieben selbst trägt weiterhin
-  // die `dataTransfer`-Nutzlast.
-  const [dragCardId, setDragCardId] = useState<number | null>(null)
+  // Ziehen von Karten (AK 7, AK 8, Plan #932 E15; Auswahl #1324): welche Karten bewegt werden und
+  // über welcher Spalte sie gerade stehen. Beides dient allein der Darstellung; das Verschieben
+  // selbst trägt weiterhin die `dataTransfer`-Nutzlast.
+  const [dragCardIds, setDragCardIds] = useState<ReadonlySet<number>>(KEINE_KARTEN)
   const [ablageSpalteId, setAblageSpalteId] = useState<number | null>(null)
   // Ohne Argument: Unter `@types/react` 18.3 wählt `useRef<T>()` dieselbe Überladung, der Typ
   // bleibt `MutableRefObject<T | undefined>` (S4623). React 19 verlangt das Argument wieder.
   const zugTakt = useRef<ReturnType<typeof setTimeout>>()
   useEffect(() => () => clearTimeout(zugTakt.current), [])
 
-  const zugBeginnen = (e: React.DragEvent, cardId: number) => {
-    e.dataTransfer.setData('text/plain', String(cardId))
-    // Einen Takt später: Der Browser nimmt das Ziehbild erst nach diesem Ereignis auf. Ein sofortiger
-    // Zustandswechsel zeigte dort schon den Platzhalter statt der Karte.
-    clearTimeout(zugTakt.current)
-    zugTakt.current = setTimeout(() => setDragCardId(cardId), 0)
-  }
-
-  const zugBeenden = () => {
-    clearTimeout(zugTakt.current)
-    setDragCardId(null)
-    setAblageSpalteId(null)
-  }
-
-  const herkunftsSpalteId = cards.find((c) => c.id === dragCardId)?.columnId
   const reorderColumn = async (fromId: number, toId: number) => {
     if (fromId === toId) {
       return
@@ -671,6 +659,57 @@ export function BoardView({
         .map((c) => c.id),
     )
 
+  // Was mit einer gezogenen Karte wandert (#1324): im Auswahlmodus die ganze wirksame Auswahl in
+  // Sichtreihenfolge, sonst die Karte allein. Ziehbar ist im Auswahlmodus nur eine ausgewählte Karte.
+  const sammelZug = (cardId: number) => selectionMode && effectiveSelectedIds.has(cardId)
+  const wanderndeIds = (cardId: number) => (sammelZug(cardId) ? selectedIdsInViewOrder() : [cardId])
+
+  const zugBeginnen = (e: React.DragEvent, cardId: number) => {
+    e.dataTransfer.setData('text/plain', String(cardId))
+    const ids = new Set(wanderndeIds(cardId))
+    // Einen Takt später: Der Browser nimmt das Ziehbild erst nach diesem Ereignis auf. Ein sofortiger
+    // Zustandswechsel zeigte dort schon den Platzhalter statt der Karte.
+    clearTimeout(zugTakt.current)
+    zugTakt.current = setTimeout(() => setDragCardIds(ids), 0)
+  }
+
+  const zugBeenden = () => {
+    clearTimeout(zugTakt.current)
+    setDragCardIds(KEINE_KARTEN)
+    setAblageSpalteId(null)
+  }
+
+  // Die Spalte, die alle wandernden Karten schon enthält, ist keine Ablage. Stammen sie aus mehreren
+  // Spalten, gibt es keine solche, und jede Spalte nimmt sie an — die schon dort liegenden bleiben.
+  const herkunftsSpalten = new Set(cards.filter((c) => dragCardIds.has(c.id)).map((c) => c.columnId))
+  const herkunftsSpalteId = herkunftsSpalten.size === 1 ? [...herkunftsSpalten][0] : undefined
+
+  // Sammel-Ablage auf dem eigenen Board: ein Aufruf für alle, alles oder nichts — einzelne
+  // `move`-Aufrufe ließen bei einem Fehler halb verschobene Karten zurück. Karten, die schon in der
+  // Zielspalte liegen, bleiben an ihrem Platz (dieselbe Regel wie `moveCard`).
+  const moveCards = async (ids: number[], toColumnId: number) => {
+    const spalteJeKarte = new Map(cards.map((c) => [c.id, c.columnId]))
+    const wandernd = ids.filter((id) => spalteJeKarte.get(id) !== toColumnId)
+    if (wandernd.length === 0) {
+      return
+    }
+    const previous = cards
+    applyTransferred(wandernd, board.id, toColumnId)
+    exitSelection()
+    try {
+      await api.bulkTransfer(wandernd, board.id, toColumnId)
+      onCardsChanged?.()
+    } catch (e) {
+      setCards(previous)
+      notify(apiErrorMessage(e, 'Verschieben fehlgeschlagen.'), 'error')
+    }
+  }
+
+  const karteAbgelegt = (cardId: number, toColumnId: number) => {
+    if (sammelZug(cardId)) void moveCards(selectedIdsInViewOrder(), toColumnId)
+    else void moveCard(cardId, toColumnId)
+  }
+
   // Ordnungsposition der Quellspalte für die Vorbelegung der Zielspalte im Verschieben-Dialog.
   // Eindeutig nur, wenn alle zu verschiebenden Karten in derselben Spalte liegen — sonst null,
   // dann bleibt das Feld im Dialog leer statt zu raten. `columns` ist bereits nach Position sortiert.
@@ -857,7 +896,7 @@ export function BoardView({
               retentionDays={retentionDays}
               naechsteRichtung={nextSortDirection[column.id] ?? 'ASC'}
               sortiertGerade={sortingColumnId === column.id}
-              dragCardId={dragCardId}
+              dragCardIds={dragCardIds}
               ablageSpalteId={ablageSpalteId}
               herkunftsSpalteId={herkunftsSpalteId}
               colDrag={colDrag}
@@ -865,7 +904,7 @@ export function BoardView({
               onKarteAbgelegt={(cardId) => {
                 zugBeenden()
                 if (cardId) {
-                  void moveCard(cardId, column.id)
+                  karteAbgelegt(cardId, column.id)
                 }
               }}
               onKarteZugBeginn={(e, card) => zugBeginnen(e, card.id)}

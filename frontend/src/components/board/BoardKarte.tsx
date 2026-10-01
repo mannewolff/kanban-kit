@@ -196,7 +196,7 @@ interface Props {
   selectionMode: boolean
   selected: boolean
   canEdit: boolean
-  /** Diese Karte wird gerade gezogen — an ihrer Stelle bleibt die Vertiefung. */
+  /** Diese Karte wird gerade gezogen, allein oder mit der Auswahl — an ihrer Stelle bleibt die Vertiefung. */
   bewegt: boolean
   members: Member[]
   boardLabels: Label[]
@@ -246,13 +246,16 @@ export function BoardKarte({
   // Bearbeitbar und nicht im Auswahlmodus: Dann trägt die Karte ihren Alltag — sie lässt sich
   // ziehen (Cursor `grab`) und zeigt das ⋮-Menü. Im Auswahlmodus sammelt der Klick nur ein.
   const alltag = canEdit && !selectionMode
+  // Im Auswahlmodus zieht eine ausgewählte Karte die ganze Auswahl mit (#1324); eine nicht
+  // ausgewählte bleibt unbeweglich, ihr Klick wählt sie aus.
+  const ziehbar = alltag || (canEdit && selected)
   const normal = dichte === 'normal'
   return (
     <Paper
       component="article"
       data-testid={`card-${card.id}`}
       data-dichte={dichte}
-      draggable={alltag}
+      draggable={ziehbar}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       data-zieh-zustand={bewegt ? 'bewegt' : undefined}
@@ -263,8 +266,8 @@ export function BoardKarte({
         flexDirection: 'column',
         ...karteDichteSx(dichte),
         ...karteSx({ gewaehlt: selected, bewegt }),
-        cursor: alltag ? 'grab' : 'pointer',
-        '&:active': { cursor: alltag ? 'grabbing' : 'pointer' },
+        cursor: ziehbar ? 'grab' : 'pointer',
+        '&:active': { cursor: ziehbar ? 'grabbing' : 'pointer' },
       }}
     >
       {/* Der Titel steht im DOM vor dem Kopf: Das Öffnen ist die erste Tab-Station der Karte, vor

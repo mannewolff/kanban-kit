@@ -1630,6 +1630,160 @@ describe('BoardView', () => {
     })
   })
 
+  describe('Ausgewählte Karten gemeinsam ziehen (#1324)', () => {
+    const backlog: Card[] = [
+      { ...card, id: 101, number: 1, positionInColumn: 0, title: 'Eins', assignees: [7] },
+      { ...card, id: 102, number: 2, positionInColumn: 1, title: 'Zwei', assignees: [7] },
+      { ...card, id: 103, number: 3, positionInColumn: 2, title: 'Drei', assignees: [8] },
+    ]
+    const rechts: Card = { ...card, id: 201, number: 4, columnId: 20, positionInColumn: 0, title: 'Rechts' }
+
+    const auswaehlen = (...ids: number[]) => {
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+      ids.forEach((id) => fireEvent.click(screen.getByTestId(`card-${id}`)))
+    }
+    const ziehenAuf = (cardId: number, columnId: number) => {
+      fireEvent.dragStart(screen.getByTestId(`card-${cardId}`), { dataTransfer: { setData: vi.fn() } })
+      fireEvent.dragOver(screen.getByTestId(`column-${columnId}`), { dataTransfer: {} })
+      dropOnColumn(columnId, cardId)
+    }
+    const kartenIn = (columnId: number) =>
+      within(screen.getByTestId(`column-${columnId}`)).queryAllByTestId(/^card-/).map((el) => el.dataset.testid)
+
+    it('verschiebt drei ausgewählte Karten mit einem Sammelaufruf in Sichtreihenfolge', async () => {
+      const onCardsChanged = vi.fn()
+      const api = mkApi({ bulkTransfer: vi.fn().mockResolvedValue([]) })
+      render(<BoardView board={board} initialCards={backlog} canEdit api={api} onCardsChanged={onCardsChanged} />)
+      // Von unten nach oben anhaken: gezogen wird trotzdem in Sichtreihenfolge.
+      auswaehlen(103, 101, 102)
+
+      ziehenAuf(102, 20)
+
+      await waitFor(() => expect(api.bulkTransfer).toHaveBeenCalledTimes(1))
+      expect(api.bulkTransfer).toHaveBeenCalledWith([101, 102, 103], 1, 20)
+      expect(api.move).not.toHaveBeenCalled()
+      expect(kartenIn(20)).toEqual(['card-101', 'card-102', 'card-103'])
+      expect(kartenIn(10)).toEqual([])
+      expect(screen.getByRole('button', { name: 'Auswählen' })).toBeInTheDocument()
+      expect(screen.queryByText('3 ausgewählt')).not.toBeInTheDocument()
+      await waitFor(() => expect(onCardsChanged).toHaveBeenCalled())
+    })
+
+    it('lässt Karten, die schon in der Zielspalte liegen, an ihrem Platz', async () => {
+      const api = mkApi({ bulkTransfer: vi.fn().mockResolvedValue([]) })
+      render(<BoardView board={board} initialCards={[...backlog, rechts]} canEdit api={api} />)
+      auswaehlen(101, 201, 103)
+
+      ziehenAuf(201, 20)
+
+      await waitFor(() => expect(api.bulkTransfer).toHaveBeenCalledWith([101, 103], 1, 20))
+      expect(kartenIn(20)).toEqual(['card-201', 'card-101', 'card-103'])
+    })
+
+    it('tut nichts, wenn alle gezogenen Karten schon in der Zielspalte liegen', () => {
+      const api = mkApi({ bulkTransfer: vi.fn().mockResolvedValue([]) })
+      render(<BoardView board={board} initialCards={backlog} canEdit api={api} />)
+      auswaehlen(101, 102)
+
+      ziehenAuf(101, 10)
+
+      expect(api.bulkTransfer).not.toHaveBeenCalled()
+      expect(screen.getByText('2 ausgewählt')).toBeInTheDocument()
+    })
+
+    it('rollt bei einem Fehlschlag zurück und meldet ihn', async () => {
+      const api = mkApi({ bulkTransfer: vi.fn().mockRejectedValue(serverfehler('Keine Berechtigung.')) })
+      render(
+        <SnackbarProvider>
+          <BoardView board={board} initialCards={backlog} canEdit api={api} />
+        </SnackbarProvider>,
+      )
+      auswaehlen(101, 102, 103)
+
+      ziehenAuf(101, 20)
+
+      await erwarteFehlerToast('Keine Berechtigung.')
+      expect(kartenIn(10)).toEqual(['card-101', 'card-102', 'card-103'])
+      expect(kartenIn(20)).toEqual([])
+    })
+
+    it('zieht nur die wirksame Auswahl — eine vom Filter verdeckte Karte bleibt', async () => {
+      const api = mkApi({ bulkTransfer: vi.fn().mockResolvedValue([]) })
+      render(<BoardView board={board} initialCards={backlog} canEdit currentUserId={7} api={api} />)
+      auswaehlen(101, 102, 103)
+      fireEvent.click(screen.getByRole('button', { name: 'Meine' }))
+
+      ziehenAuf(101, 20)
+
+      await waitFor(() => expect(api.bulkTransfer).toHaveBeenCalledWith([101, 102], 1, 20))
+    })
+
+    it('zieht im Auswahlmodus auch eine einzelne ausgewählte Karte über den Sammelaufruf', async () => {
+      const api = mkApi({ bulkTransfer: vi.fn().mockResolvedValue([]) })
+      render(<BoardView board={board} initialCards={backlog} canEdit api={api} />)
+      auswaehlen(102)
+
+      ziehenAuf(102, 20)
+
+      await waitFor(() => expect(api.bulkTransfer).toHaveBeenCalledWith([102], 1, 20))
+      expect(api.move).not.toHaveBeenCalled()
+    })
+
+    it('macht im Auswahlmodus nur ausgewählte Karten ziehbar', () => {
+      render(<BoardView board={board} initialCards={backlog} canEdit api={mkApi()} />)
+      auswaehlen(101)
+
+      expect(screen.getByTestId('card-101')).toHaveAttribute('draggable', 'true')
+      expect(screen.getByTestId('card-102')).toHaveAttribute('draggable', 'false')
+    })
+
+    it('verschiebt außerhalb des Auswahlmodus weiter nur die eine Karte per move', async () => {
+      const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+      render(<BoardView board={board} initialCards={backlog} canEdit api={api} />)
+
+      ziehenAuf(102, 20)
+
+      await waitFor(() => expect(api.move).toHaveBeenCalledWith(102, 20, 0))
+      expect(api.bulkTransfer).not.toHaveBeenCalled()
+      expect(kartenIn(20)).toEqual(['card-102'])
+    })
+
+    it('kennzeichnet alle wandernden Karten als bewegt', async () => {
+      render(<BoardView board={board} initialCards={backlog} canEdit api={mkApi()} />)
+      auswaehlen(101, 103)
+
+      fireEvent.dragStart(screen.getByTestId('card-101'), { dataTransfer: { setData: vi.fn() } })
+
+      await waitFor(() => expect(screen.getByTestId('card-103')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+      expect(screen.getByTestId('card-101')).toHaveAttribute('data-zieh-zustand', 'bewegt')
+      expect(screen.getByTestId('card-102')).not.toHaveAttribute('data-zieh-zustand')
+    })
+
+    it('bietet bei einer Herkunftsspalte nur die anderen Spalten als Ablage an', async () => {
+      render(<BoardView board={board} initialCards={backlog} canEdit api={mkApi()} />)
+      auswaehlen(101, 102)
+      fireEvent.dragStart(screen.getByTestId('card-101'), { dataTransfer: { setData: vi.fn() } })
+      await waitFor(() => expect(screen.getByTestId('card-102')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+
+      fireEvent.dragOver(screen.getByTestId('column-10'), { dataTransfer: {} })
+      expect(screen.getByTestId('ablage-10')).not.toHaveAttribute('data-ablage')
+      fireEvent.dragOver(screen.getByTestId('column-20'), { dataTransfer: {} })
+      expect(screen.getByTestId('ablage-20')).toHaveAttribute('data-ablage', 'aktiv')
+    })
+
+    it('bietet bei mehreren Herkunftsspalten jede davon als Ablage an', async () => {
+      render(<BoardView board={board} initialCards={[...backlog, rechts]} canEdit api={mkApi()} />)
+      auswaehlen(101, 201)
+      fireEvent.dragStart(screen.getByTestId('card-101'), { dataTransfer: { setData: vi.fn() } })
+      await waitFor(() => expect(screen.getByTestId('card-201')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+
+      fireEvent.dragOver(screen.getByTestId('column-10'), { dataTransfer: {} })
+      expect(screen.getByTestId('ablage-10')).toHaveAttribute('data-ablage', 'aktiv')
+      fireEvent.dragOver(screen.getByTestId('column-20'), { dataTransfer: {} })
+      expect(screen.getByTestId('ablage-20')).toHaveAttribute('data-ablage', 'aktiv')
+    })
+  })
+
   describe('Werkzeugleiste (#980)', () => {
     const heute = Date.now()
     const eigene: Card = { ...card, id: 100, title: 'Meine Karte', assignees: [7] }
