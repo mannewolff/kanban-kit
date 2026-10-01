@@ -1,0 +1,35 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": ".",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": ".env.example",
+      "Class": "secret",
+      "Secrets": [
+        {
+          "RuleID": "generic-password",
+          "Category": "Generic",
+          "Severity": "HIGH",
+          "Title": "Generic Password",
+          "StartLine": 7,
+          "EndLine": 7
+        }
+      ]
+    },
+    {
+      "Target": "src/main/resources/geheim.properties",
+      "Class": "secret",
+      "Secrets": [
+        {
+          "RuleID": "aws-access-key-id",
+          "Category": "AWS",
+          "Severity": "CRITICAL",
+          "Title": "AWS Access Key ID",
+          "StartLine": 3,
+          "EndLine": 3
+        }
+      ]
+    }
+  ]
+}

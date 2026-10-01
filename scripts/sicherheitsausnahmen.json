@@ -1,0 +1,16 @@
+{
+  "_hinweis": [
+    "Ausnahmeliste der Sicherheitspruefung (Issue #1333, Plan #1295, E3). Gelesen und geprueft von",
+    "scripts/sicherheitspruefung.mjs; scripts/sicherheitspruefung.test.mjs haelt ihre Form.",
+    "Schwachstelle mit Korrektur, die vorerst hingenommen wird — alle vier Felder Pflicht:",
+    "  { \"kennung\": \"CVE-…\", \"ziel\": \"<Pruefziel, etwa postgres:16.15 oder frontend/package-lock.json>\",",
+    "    \"begruendung\": \"…\", \"ablauf\": \"JJJJ-MM-TT\" }",
+    "  Die Ausnahme gilt einschliesslich des Ablauftags; danach sperrt der naechste Lauf wieder.",
+    "Geheimnis, das nachweislich ein Fehlalarm ist (etwa ein Beispielwert in einer Vorlage):",
+    "  { \"kennung\": \"<Trivys RuleID>\", \"ziel\": \"<Pfad der Datei relativ zur Wurzel>\",",
+    "    \"begruendung\": \"…\", \"art\": \"fehlalarm\" } — ohne ablauf, Geheimnisse laufen nicht ab.",
+    "Ein Eintrag mit Formfehler gilt nicht und sperrt selbst; ein Eintrag ohne passenden Befund",
+    "erscheint als Hinweis in der Zusammenfassung."
+  ],
+  "ausnahmen": []
+}
