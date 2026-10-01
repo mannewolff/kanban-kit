@@ -2847,7 +2847,7 @@ export function NightRunPage() {
     )
 
     while (offen.length > 0) {
-      const geladen = await Promise.all(
+      const geladen = await Promise.all( // NOSONAR typescript:S9382 – Runde n+1 hängt von den Ergebnissen der Runde n ab
         // `apiFetch` wirft bei 404; eine nicht auflösbare Nummer ist hier kein Fehler, sondern
         // ein Ergebnis — sie erscheint als „Karte #N nicht gefunden".
         offen.map(async (n) => [n, await cardsApi.byNumber(id, n).catch(() => null)] as const),

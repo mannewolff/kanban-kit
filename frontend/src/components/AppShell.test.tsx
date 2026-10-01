@@ -320,6 +320,42 @@ describe('AppShell', () => {
     expect(await screen.findByText('B')).toBeInTheDocument()
   })
 
+  describe('Boardanzahl ohne Boardliste (Rolle ohne Board-Verwaltung)', () => {
+    const EIN_BOARD = [{ id: 1, name: 'B', projectId: 5, columns: [] }]
+
+    beforeEach(() => {
+      mockedProjects.list.mockResolvedValue([{ id: 5, name: 'P1', role: 'MEMBER', createdAt: '' }])
+    })
+
+    it('blendet den „Boards"-Eintrag aus, wenn das Projekt genau ein Board hat', async () => {
+      mockedBoards.list.mockResolvedValue(EIN_BOARD)
+      renderShell('/boards/1')
+
+      expect(await screen.findByText('B')).toBeInTheDocument()
+      await waitFor(() => expect(mockedBoards.list).toHaveBeenCalledWith(5))
+      await waitFor(() => expect(screen.queryByRole('link', { name: 'Boards' })).not.toBeInTheDocument())
+    })
+
+    it('zeigt den „Boards"-Eintrag, wenn die Boardliste nicht lädt — die Anzahl ist unbekannt', async () => {
+      mockedBoards.list.mockRejectedValue(new Error('500'))
+      renderShell('/boards/1')
+
+      expect(await screen.findByRole('link', { name: 'Boards' })).toHaveAttribute('href', '/projects/5')
+    })
+
+    it('zeigt den „Boards"-Eintrag, wenn die Boardliste beim Fensterfokus-Nachladen nicht lädt', async () => {
+      mockedBoards.list.mockResolvedValue(EIN_BOARD)
+      renderShell('/boards/1')
+      expect(await screen.findByText('B')).toBeInTheDocument()
+      await waitFor(() => expect(screen.queryByRole('link', { name: 'Boards' })).not.toBeInTheDocument())
+      mockedBoards.list.mockRejectedValue(new Error('500'))
+
+      fireEvent(window, new Event('focus'))
+
+      expect(await screen.findByRole('link', { name: 'Boards' })).toHaveAttribute('href', '/projects/5')
+    })
+  })
+
   it('lädt Projekt- und Board-Kontext beim Fensterfokus neu', async () => {
     renderShell('/boards/1')
     expect(await screen.findByText('B')).toBeInTheDocument()

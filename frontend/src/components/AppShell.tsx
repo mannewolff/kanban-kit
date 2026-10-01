@@ -139,6 +139,15 @@ const NAV_EINTRAG_SX = {
   '&[aria-current="page"] .nav-icon': { color: KUPFER },
 } as const
 
+/** Anzahl der Boards eines Projekts; `null`, wenn die Liste nicht lädt. */
+async function zaehleBoards(projectId: number): Promise<number | null> {
+  try {
+    return (await boardsApi.list(projectId)).length
+  } catch {
+    return null
+  }
+}
+
 interface SchieneProps {
   /** Die Blöcke der Navigation, wie {@link buildNavItems} sie liefert. */
   navItems: NavGroup[]
@@ -157,7 +166,14 @@ interface SchieneProps {
  * {@link buildNavItems} und der Fuß mit Administration, Dokumentation und Einklapp-Taste.
  * Eigene Komponente, weil die Schiene für sich steht — die Shell reicht ihr nur Zustand an.
  */
-function Schiene({ navItems, eingeklappt, collapsed, schmal, onZielWaehlen, onToggleCollapsed }: SchieneProps) {
+function Schiene({
+  navItems,
+  eingeklappt,
+  collapsed,
+  schmal,
+  onZielWaehlen,
+  onToggleCollapsed,
+}: Readonly<SchieneProps>) {
   const location = useLocation()
 
   // Aktiv ist der Eintrag mit dem längsten passenden Pfad: Auf `/boards/1/list` passt „Board"
@@ -361,27 +377,22 @@ export function AppShell() {
   useEffect(() => {
     let cancelled = false
     if (boardId != null) {
-      boardsApi
-        .get(boardId)
-        .then((b) => {
+      const ladeBoard = async (id: number) => {
+        try {
+          const b = await boardsApi.get(id)
           if (cancelled) return
           setBoard({ id: b.id, name: b.name, projectId: b.projectId })
           // Anzahl Boards im Projekt für die Sichtbarkeit des „Boards"-Eintrags.
-          boardsApi
-            .list(b.projectId)
-            .then((bs) => {
-              if (!cancelled) setBoardCount(bs.length)
-            })
-            .catch(() => {
-              if (!cancelled) setBoardCount(null)
-            })
-        })
-        .catch(() => {
+          const anzahl = await zaehleBoards(b.projectId)
+          if (!cancelled) setBoardCount(anzahl)
+        } catch {
           if (!cancelled) {
             setBoard(null)
             setBoardCount(null)
           }
-        })
+        }
+      }
+      void ladeBoard(boardId)
       return () => {
         cancelled = true
       }
@@ -426,19 +437,17 @@ export function AppShell() {
     if (boardId == null) {
       return
     }
-    boardsApi
-      .get(boardId)
-      .then((b) => {
+    const ladeBoard = async (id: number) => {
+      try {
+        const b = await boardsApi.get(id)
         setBoard({ id: b.id, name: b.name, projectId: b.projectId })
-        boardsApi
-          .list(b.projectId)
-          .then((bs) => setBoardCount(bs.length))
-          .catch(() => setBoardCount(null))
-      })
-      .catch(() => {
+        setBoardCount(await zaehleBoards(b.projectId))
+      } catch {
         setBoard(null)
         setBoardCount(null)
-      })
+      }
+    }
+    void ladeBoard(boardId)
   }, [boardId])
   useRefetchOnFocus(refetchOnFocus)
 

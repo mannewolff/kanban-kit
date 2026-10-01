@@ -166,13 +166,15 @@ export function buildNavItems(params: NavParams): NavGroup[] {
   if (isAdmin) {
     // Die Startseite eines Plattform-Admins (Issue #1082, AK 2): jederzeit erreichbar, nicht nur
     // beim Anmelden. Wer nicht Plattform-Admin ist, sieht den Eintrag nicht (AK 3).
-    verwaltung.push({
-      kind: 'link',
-      label: 'Plattform-Leitstand',
-      path: '/plattform-leitstand',
-      icon: LeitstandSymbol,
-    })
-    verwaltung.push({ kind: 'link', label: 'Admin', path: '/admin', icon: AdminPanelSettingsIcon })
+    verwaltung.push(
+      {
+        kind: 'link',
+        label: 'Plattform-Leitstand',
+        path: '/plattform-leitstand',
+        icon: LeitstandSymbol,
+      },
+      { kind: 'link', label: 'Admin', path: '/admin', icon: AdminPanelSettingsIcon },
+    )
   }
   bloecke.push({ kind: 'group', id: 'verwaltung', label: 'Verwaltung', children: verwaltung })
 

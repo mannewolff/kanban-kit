@@ -201,7 +201,7 @@ describe('navKontext Projektzahl', () => {
   })
 
   it('meldet die Anzahl als unbekannt, solange die Liste nicht geladen ist', () => {
-    expect(kontext({ projects: null }).projectCount).toBe(null)
+    expect(kontext({ projects: null }).projectCount).toBeNull()
   })
 })
 
@@ -224,7 +224,7 @@ describe('navKontext Bezugsprojekt', () => {
   })
 
   it('bleibt ohne Projekt- und Board-Bezug offen', () => {
-    expect(kontext({ board: null, boardId: null }).pfadProjektId).toBe(null)
+    expect(kontext({ board: null, boardId: null }).pfadProjektId).toBeNull()
   })
 })
 
@@ -312,17 +312,17 @@ describe('navKontext Projektnamen', () => {
   it('nennt auf der Projektseite eines anderen Projekts nur den Namen des Pfad-Projekts', () => {
     const fremd = kontext({ routeProjectId: 9, boardId: null })
     expect(fremd.projectName).toBe('Neun')
-    expect(fremd.currentProjectName).toBe(null)
+    expect(fremd.currentProjectName).toBeNull()
   })
 
   it('lässt beide Namen ohne Projekt-Kontext offen', () => {
-    expect(kontext({ board: null, boardId: null }).projectName).toBe(null)
-    expect(kontext({ board: null, boardId: null }).currentProjectName).toBe(null)
+    expect(kontext({ board: null, boardId: null }).projectName).toBeNull()
+    expect(kontext({ board: null, boardId: null }).currentProjectName).toBeNull()
   })
 
   it('lässt beide Namen offen, solange die Projektliste fehlt', () => {
-    expect(kontext({ projects: null }).projectName).toBe(null)
-    expect(kontext({ projects: null }).currentProjectName).toBe(null)
+    expect(kontext({ projects: null }).projectName).toBeNull()
+    expect(kontext({ projects: null }).currentProjectName).toBeNull()
   })
 })
 
