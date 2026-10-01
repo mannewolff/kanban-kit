@@ -268,6 +268,49 @@ und wöchentlich, damit eine weggefallene Bezugsstelle als benannter Fehler auff
 erst beim nächsten Neuaufsetzen. Genau so fiel auf, dass das alte MinIO-Abbild anonym nicht mehr
 beziehbar ist.
 
+## Automatische Aktualisierung (Renovate)
+
+Abhängigkeiten und Abbilder bleiben von selbst aktuell: **Renovate** legt gebündelte
+Aktualisierungs-PRs gegen `main` an. Übernommen wird keiner von selbst — `automerge` ist aus.
+Die Konfiguration steht versioniert in [`renovate.json`](../renovate.json).
+
+**Einmal einrichten.** Die Renovate-GitHub-App von Mend auf dem Repository installieren
+(<https://github.com/apps/renovate>, Zugriff nur auf dieses Repository). Ein Secret oder Token im
+Repository braucht es dafür nicht: Die App arbeitet mit ihren eigenen, kurzlebigen Rechten, und
+ihre PRs lösen die CI wie jeder andere PR aus. Wer einen Fork selbst betreibt, installiert die App
+auf seinem Fork; ohne App bleibt `renovate.json` wirkungslos.
+
+**Gruppen und Takt.** Je Gruppe entsteht höchstens ein PR pro Woche, montags vor 6 Uhr
+(Europe/Berlin):
+
+| Gruppe | Umfang |
+|---|---|
+| `Basisabbilder` | beide Dockerfiles (`Dockerfile`, `backup/Dockerfile`), die Compose-Dateien, die Bausteinliste `scripts/bausteine.json` und die Testcontainers-Abbilder in `src/test/**/*.java` |
+| `Backend` | Maven-Abhängigkeiten aus `pom.xml` |
+| `Frontend` | npm-Abhängigkeiten unter `frontend/` |
+| `Dokumentationsseite` | npm-Abhängigkeiten unter `docs-site/` |
+
+Fremde Abbilder sind an ihren Digest gebunden; ein Aktualisierungs-PR hebt den Digest auch bei
+unverändertem Tag an und bei einem Versionswechsel Tag und Digest gemeinsam — an jeder Fundstelle
+und in der Bausteinliste in einem PR, sodass der Abgleich der Bausteinliste grün bleibt. Nicht
+erfasst sind die eigenen Abbilder `ghcr.io/mannewolff/kanban-kit*` (die schreibt der Release),
+das Rückweg-Overlay `docker-compose.altspeicher.yml` und die GitHub Actions.
+
+**Einen Aktualisierungs-PR lesen.**
+
+1. **Release-Notes:** Renovate hängt sie je Abhängigkeit an die PR-Beschreibung. Auf Brüche,
+   Formatwechsel und Hinweise zur Migration achten — bei Datenbank und Objektspeicher besonders.
+2. **CI-Ergebnis:** Gemergt wird nur ein PR mit grüner CI — dazu gehört der Job `bezug`,
+   der die Bezugsstellen anonym prüft und die Bausteinliste gegen den Bestand hält.
+3. **Dependency-Dashboard:** Ein Issue mit dem Titel „Dependency Dashboard“ listet, was gerade
+   ansteht, was auf den nächsten Takt wartet und was nicht als PR offen ist. Dort lässt sich ein
+   PR auch vorzeitig anstoßen.
+
+**Der Merge ist das GO.** Wer einen grünen Aktualisierungs-PR mergt, gibt ihn frei — das ist ein
+zweiter Weg nach `main` neben `push main`. Was das für die lokale Arbeit heißt (vor dem nächsten
+`push main` den Stand von `origin/main` nachziehen), steht im Workflow-Guide
+`.claude/CLAUDE-workflow.md` unter „Zweiter Weg nach `main`: Aktualisierungs-PRs“.
+
 ## Umstellung des Objektspeichers
 
 Der Speicher der Anhänge wechselt von MinIO auf SeaweedFS (Plan #1222). Für die laufende Instanz

@@ -416,7 +416,8 @@
                     </execution>
                     <!-- VitePress-Doku (docs-site) mit demselben Node bauen; wird unter static/docs
                          ins Jar gebündelt (#314). Nutzt das oben installierte Node (installDirectory
-                         target), nur workingDirectory abweichend. -->
+                         target), nur workingDirectory abweichend. `ci` statt `install`: Die Sperrdatei
+                         ist eingecheckt (#1331), und `install` schriebe sie bei jedem Lauf um. -->
                     <execution>
                         <id>docs-npm-install</id>
                         <goals>
@@ -425,7 +426,7 @@
                         <phase>generate-resources</phase>
                         <configuration>
                             <workingDirectory>docs-site</workingDirectory>
-                            <arguments>install</arguments>
+                            <arguments>ci</arguments>
                         </configuration>
                     </execution>
                     <execution>

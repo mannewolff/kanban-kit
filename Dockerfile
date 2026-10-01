@@ -9,15 +9,16 @@
 # bewusst NICHT: Sie ist das ausgelieferte Abbild und muss je Zielarchitektur entstehen.
 FROM --platform=$BUILDPLATFORM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS frontend
 WORKDIR /build/frontend
-COPY frontend/package.json ./
-RUN npm install
+# Mit Sperrdatei und `npm ci`: Das Abbild baut genau die Fassungen, die im Repository stehen (#1331).
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
 # VitePress-Doku (docs-site) bauen; copy-docs.mjs liest die Markdown-Quellen aus ../docs und ../UPGRADING.md.
 WORKDIR /build/docs-site
-COPY docs-site/package.json ./
-RUN npm install
+COPY docs-site/package.json docs-site/package-lock.json ./
+RUN npm ci
 COPY docs-site/ ./
 COPY docs /build/docs
 COPY UPGRADING.md /build/UPGRADING.md
