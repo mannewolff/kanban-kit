@@ -94,6 +94,17 @@ jobs:
             ${{ matrix.abbild }}:${{ steps.version.outputs.wert }}
             ${{ matrix.abbild }}:latest
 
+      # Herkunft (Issue #1338, E19, E23): bindet an denselben Digest eine Provenienz-Attestation,
+      # die Workflow, Tag und Commit nennt. Sie ersetzt den Digest, den die eigenen Abbilder in den
+      # Betriebsdateien bewusst nicht tragen. Pruefen: `gh attestation verify oci://<abbild>:<fassung>
+      # --repo mannewolff/kanban-kit` (docs/betrieb.md). Kein Schluesselmaterial im Repo.
+      - name: Herkunft an den Digest binden
+        uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-name: ${{ matrix.abbild }}
+          subject-digest: ${{ steps.bau.outputs.digest }}
+          push-to-registry: true
+
       # Stueckliste des Anwendungs-Abbilds: dieselbe Profil-Stueckliste, die der CI-Job `sicherheit`
       # prueft (nur Scopes compile und runtime, E6).
       - name: JDK 25 einrichten

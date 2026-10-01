@@ -452,6 +452,43 @@ gh attestation verify oci://ghcr.io/mannewolff/kanban-kit:<fassung> --repo manne
 Für das Sicherungs-Abbild entsprechend mit `oci://ghcr.io/mannewolff/kanban-kit-backup:<fassung>`.
 Mit `--format json` gibt der Befehl die Stückliste selbst aus.
 
+## Herkunft eines Release-Abbilds prüfen
+
+Dass ein Release-Abbild vom Projekt stammt, belegt eine Herkunfts-Attestation (Build Provenance):
+Der Lauf von [`.github/workflows/release-images.yml`](../.github/workflows/release-images.yml) zum
+Tag bindet sie an den Digest des Abbilds und legt sie neben dem Abbild in der Registry ab. Signiert
+wird schlüssellos über die GitHub-Identität des Laufs — im Repository liegt kein Schlüsselmaterial,
+und es gibt keines zu verwalten. Geprüft wird mit einem Befehl (GitHub CLI `gh`):
+
+```bash
+gh attestation verify oci://ghcr.io/mannewolff/kanban-kit:<fassung> --repo mannewolff/kanban-kit
+gh attestation verify oci://ghcr.io/mannewolff/kanban-kit-backup:<fassung> --repo mannewolff/kanban-kit
+```
+
+Eine erfolgreiche Prüfung endet mit `✓ Verification succeeded!` und nennt Workflow und Tag, aus dem
+das Abbild stammt, etwa für die Fassung `1.4.0`:
+
+```text
+✓ Verification succeeded!
+
+The following 1 attestation matched the policy criteria
+
+- Attestation #1
+  - Build repo:..... mannewolff/kanban-kit
+  - Build workflow:. .github/workflows/release-images.yml@refs/tags/v1.4.0
+  - Signer repo:.... mannewolff/kanban-kit
+  - Signer workflow: .github/workflows/release-images.yml@refs/tags/v1.4.0
+```
+
+Stammt das Abbild aus einem anderen Repository oder Workflow, oder fehlt die Attestation, endet der
+Befehl mit einem Fehler und einem Exitcode ungleich null.
+
+**Warum die eigenen Abbilder ohne Digest stehen.** In `docker-compose.yml` und
+`docker-compose.backup.yml` stehen `ghcr.io/mannewolff/kanban-kit` und
+`ghcr.io/mannewolff/kanban-kit-backup` bewusst nur mit Tag, die fremden Betriebsabbilder dagegen mit
+Digest. Der Digest der eigenen Abbilder entsteht erst im Release-Lauf auf dem Tag, der Commit dieses
+Tags kann ihn also nicht tragen. Ihre Herkunft sichert stattdessen die Attestation oben.
+
 ## Umstellung des Objektspeichers
 
 Der Speicher der Anhänge wechselt von MinIO auf SeaweedFS (Plan #1222). Für die laufende Instanz
