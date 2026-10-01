@@ -55,6 +55,9 @@ import org.springframework.stereotype.Component;
 @SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.GodClass"})
 class NightRunRepositoryAdapter implements NightRunRepository {
 
+  /** Name des benannten SQL-Parameters für die Dauer (Sonar java:S1192). */
+  private static final String P_DURATION_MS = "durationMs";
+
   /** Name des benannten SQL-Parameters für die Projekt-ID (Sonar java:S1192). */
   private static final String P_PROJECT_ID = "projectId";
 
@@ -370,7 +373,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue(P_STARTED_AT, zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
             .addValue(P_KIND, run.kind().name())
-            .addValue("durationMs", run.durationMs())
+            .addValue(P_DURATION_MS, run.durationMs())
             .addValue("processedCount", run.processedCount())
             .addValue("skippedCount", run.skippedCount())
             .addValue("unparsedCount", run.unparsedCount())
@@ -438,7 +441,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         new MapSqlParameterSource()
             .addValue("nightRunItemId", itemId)
             .addValue("stage", stage.stage().name())
-            .addValue("durationMs", stage.durationMs(), Types.BIGINT);
+            .addValue(P_DURATION_MS, stage.durationMs(), Types.BIGINT);
     verbrauchSchreiben(parameter, stage.usage());
     return parameter;
   }
@@ -456,7 +459,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue("title", item.title())
             .addValue("state", item.state().name())
             .addValue("errorClass", errorClass == null ? null : errorClass.name(), Types.VARCHAR)
-            .addValue("durationMs", item.durationMs(), Types.BIGINT)
+            .addValue(P_DURATION_MS, item.durationMs(), Types.BIGINT)
             .addValue("commitHash", item.commitHash(), Types.VARCHAR)
             .addValue("excerpt", item.excerpt(), Types.VARCHAR);
     verbrauchSchreiben(parameter, item.usage());

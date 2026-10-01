@@ -26,6 +26,9 @@ import org.springframework.stereotype.Component;
 @Component
 class DisruptionRepositoryAdapter implements DisruptionRepository {
 
+  /** Name des benannten SQL-Parameters für die Lauf-ID (Sonar java:S1192). */
+  private static final String P_NIGHT_RUN_ID = "nightRunId";
+
   /**
    * Die Kandidaten, jüngster Lauf zuoberst.
    *
@@ -208,7 +211,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
     return jdbc
         .query(
             ACK_ZIEL,
-            new MapSqlParameterSource("nightRunId", nightRunId),
+            new MapSqlParameterSource(P_NIGHT_RUN_ID, nightRunId),
             (rs, zeile) -> new AckTarget(rs.getLong("night_run_id"), rs.getLong("project_id")))
         .stream()
         .findFirst();
@@ -217,7 +220,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
   @Override
   public Optional<DisruptionCandidate> candidate(long nightRunId) {
     return jdbc
-        .query(EIN_LAUF, new MapSqlParameterSource("nightRunId", nightRunId), KANDIDAT)
+        .query(EIN_LAUF, new MapSqlParameterSource(P_NIGHT_RUN_ID, nightRunId), KANDIDAT)
         .stream()
         .findFirst();
   }
@@ -227,7 +230,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
     jdbc.update(
         KENNZEICHNUNG,
         new MapSqlParameterSource()
-            .addValue("nightRunId", nightRunId)
+            .addValue(P_NIGHT_RUN_ID, nightRunId)
             .addValue("userId", userId)
             .addValue("at", OffsetDateTime.ofInstant(at, ZoneOffset.UTC)));
   }
@@ -237,7 +240,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
     jdbc.update(
         QUITTUNG,
         new MapSqlParameterSource()
-            .addValue("nightRunId", nightRunId)
+            .addValue(P_NIGHT_RUN_ID, nightRunId)
             .addValue("userId", userId)
             .addValue("at", OffsetDateTime.ofInstant(at, ZoneOffset.UTC)));
   }

@@ -444,6 +444,7 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   private static Card toDomain(CardEntity e) {
+    String status = e.getStatus();
     return new Card(
         e.getId(),
         pflichtfeld(e, e.getBoardId(), "board_id"),
@@ -465,7 +466,7 @@ class CardRepositoryAdapter implements CardRepository {
         e.getExternalKey(),
         e.getDerivedFromCardId(),
         e.getRequirementCardId(),
-        e.getStatus() == null ? null : CardStatus.valueOf(e.getStatus()));
+        status == null ? null : CardStatus.valueOf(status));
   }
 
   /**

@@ -79,7 +79,7 @@ public class ThroughputFilter extends OncePerRequestFilter {
         }
       }
       case Rejected(Duration retryAfter) -> {
-        recorder.record(person);
+        recorder.recordRejection(person);
         rejectAsOverloaded(response, retryAfter);
       }
     }

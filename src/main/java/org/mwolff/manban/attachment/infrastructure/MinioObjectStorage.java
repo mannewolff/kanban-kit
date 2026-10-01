@@ -79,7 +79,7 @@ class MinioObjectStorage implements ObjectStorage {
     ensureBucket();
     try {
       List<String> keys = new ArrayList<>();
-      for (Result<Item> result :
+      for (Result<Item> result : // NOSONAR java:S9391 – geprüfte Ausnahmen aus Result.get()
           client.listObjects(ListObjectsArgs.builder().bucket(bucket).recursive(true).build())) {
         keys.add(result.get().objectName());
       }

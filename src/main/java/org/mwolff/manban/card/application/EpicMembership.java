@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 
@@ -73,12 +74,10 @@ final class EpicMembership {
   /** Steigt von den direkt zugeordneten Wurzeln ab und sammelt ein, was zählt. */
   private static Set<Card> sammle(
       long epicId, List<Card> boardCards, Map<Long, List<Card>> kinder) {
-    Deque<Card> offen = new ArrayDeque<>();
-    for (Card c : boardCards) {
-      if (Long.valueOf(epicId).equals(c.parentId())) {
-        offen.add(c);
-      }
-    }
+    Deque<Card> offen =
+        boardCards.stream()
+            .filter(c -> Long.valueOf(epicId).equals(c.parentId()))
+            .collect(Collectors.toCollection(ArrayDeque::new));
 
     // Je Vorhaben eine eigene Menge: Eine Karte darf zu mehreren Vorhaben gehören (Plan #631, E10),
     // eine gemeinsame Besuchtenmenge würde sie dem zweiten Vorhaben stillschweigend vorenthalten.
