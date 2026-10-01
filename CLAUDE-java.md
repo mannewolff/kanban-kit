@@ -117,8 +117,8 @@ Vor dem Markieren einer Aufgabe als „fertig" ist nachzuweisen:
 
 JaCoCo (`check`) läuft im vollen `mvn verify` (Stufe `push`). **PIT liegt im Maven-Profil `-Ppit`**
 (`mvn -Ppit test`), damit der Standard-Build schnell bleibt. Aufgerufen wird es nicht mehr direkt,
-sondern über den Treiber `scripts/mutationspruefung.mjs` (§5.5): je Paket die Änderungsprüfung,
-an der Merge-Stufe der Vollauf. Eine separate Test-Strength-Schwelle bietet pitest-maven nicht; sie
+sondern über den Treiber `scripts/mutationspruefung.mjs` (§5.5): beim Push die Änderungsprüfung über
+den Batch und der Vollauf, beide an der Push-Stufe. Eine separate Test-Strength-Schwelle bietet pitest-maven nicht; sie
 wird über `mutationThreshold` (Property `pit.marke`, Default 100) miterzwungen und im Report geprüft.
 
 ### 5.2 Ausschlussregeln (eng gefasst)
@@ -168,12 +168,11 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
 ### 5.5 Mutationsprüfung der Backend-Seite (Issue #1104)
 
 ```bash
-node scripts/mutationspruefung.mjs aenderung backend   # je Paket, Stufe paket
-node scripts/mutationspruefung.mjs vollauf backend     # an der Merge-Stufe, Schwelle 100 %
+node scripts/mutationspruefung.mjs aenderung backend   # beim Push über den Batch, Stufe push
+node scripts/mutationspruefung.mjs vollauf backend     # an der Push-Stufe, Schwelle 100 %
 ```
 
-Beide stehen als `buildChecks` in `.claude/workflow.config.json`. Die Stufe
-`paket` kommt aus der Messung in Issue #1211 (rund 30 s für ein typisches Backend-Paket).
+Beide stehen als `buildChecks` in `.claude/workflow.config.json`, beide an der Stufe `push`.
 
 **Die Änderungsprüfung** verengt PIT über zwei Properties des Profils `pit` in der `pom.xml`:
 
