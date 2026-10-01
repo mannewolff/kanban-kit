@@ -70,3 +70,34 @@ jobs:
           node-version: '22'
       - name: Bezugspruefung
         run: node scripts/bezugspruefung.mjs
+
+  # Ohne diesen Job lief der Docker-Bau erst nach dem Merge nach `production` — beim Deploy auf dem
+  # Server und in release-images.yml beim Tag-Push. Der Deploy von v2.15.0 scheiterte genau dort
+  # (Issue #1320), obwohl alle Pruefungen gruen waren. Hier bauen beide Abbilder bei jedem Push und
+  # Pull Request, ohne Veroeffentlichung und nur fuer amd64: Fehler im Dockerfile oder im
+  # Bau-Kontext sind plattformunabhaengig. Matrix und Action-Fassungen folgen release-images.yml,
+  # damit derselbe Bauweg geprueft wird (Issue #1321).
+  abbilder:
+    name: Abbild bauen (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Anwendungs-Abbild
+            kontext: .
+            datei: ./Dockerfile
+          - name: Sicherungs-Abbild
+            kontext: ./backup
+            datei: ./backup/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Buildx einrichten
+        uses: docker/setup-buildx-action@v4.4.1
+      - name: Bauen ohne Veroeffentlichung
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ${{ matrix.kontext }}
+          file: ${{ matrix.datei }}
+          platforms: linux/amd64
+          push: false
