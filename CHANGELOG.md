@@ -11,6 +11,12 @@ erzeugt von `scripts/gen-changelog.mjs`.
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.17.0] – 2026-10-01
+
+- Statuswechsel legt Arbeitspaket in die Prozessspalte ([#1326](https://github.com/mannewolff/kanban-kit/issues/1326))
+- Ausgewählte Karten per Drag-and-Drop gemeinsam verschieben ([#1324](https://github.com/mannewolff/kanban-kit/issues/1324))
+- Änderungen und Vollauf umgestellt
+
 ## [2.16.0] – 2026-10-01
 
 - chore: v2.15.1

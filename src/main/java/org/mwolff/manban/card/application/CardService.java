@@ -1087,11 +1087,17 @@ public class CardService {
   }
 
   /**
-   * Setzt den eigenen Status eines Arbeitspakets (Plan #1294, E9) — <b>ohne</b> es zu verschieben:
-   * Spalte und Position bleiben, wie sie sind. Recht wie beim Verschieben: {@link
-   * Permission#CARD_MOVE}, geprüft vor jeder Auswertung der Eingabe.
+   * Setzt den eigenen Status eines Arbeitspakets (Plan #1294, E9) und legt es in die Prozessspalte
+   * dieses Status (Korrektur von #787 am 2026-10-01, Issue #1326). Recht wie beim Verschieben:
+   * {@link Permission#CARD_MOVE}, geprüft vor jeder Auswertung der Eingabe.
    *
-   * <p>Nebenwirkungen eines echten Wechsels, alle mit demselben Zeitstempel:
+   * <p>Hat das Board eine Spalte, deren Name nach {@link Arbeitspaket#statusVonSpalte} den neuen
+   * Status ergibt, und liegt die Karte nicht schon darin, wandert sie über {@code doMove} ans Ende
+   * der ersten solchen Spalte in Board-Reihenfolge; Status, Done-Zeitstempel, Aufenthalt und
+   * Verlauf folgen dort aus der Zielspalte. Sonst — keine passende Spalte, oder die Karte liegt
+   * schon darin — wird nur der Status gesetzt, Spalte und Position bleiben.
+   *
+   * <p>Nebenwirkungen eines reinen Statuswechsels, alle mit demselben Zeitstempel:
    *
    * <ul>
    *   <li>der Done-Zeitstempel wird aus dem neuen Status abgeleitet (E7);
@@ -1119,6 +1125,16 @@ public class CardService {
       throw new InvalidStatusException("Diese Karte trägt keinen eigenen Status");
     }
     if (neu == card.status()) {
+      return;
+    }
+    Optional<ColumnView> prozessspalte =
+        boardService.listColumns(card.boardId()).stream()
+            .filter(
+                spalte ->
+                    Arbeitspaket.statusVonSpalte(spalte.name()).filter(neu::equals).isPresent())
+            .findFirst();
+    if (prozessspalte.isPresent() && prozessspalte.get().id().longValue() != card.columnId()) {
+      doMove(userId, cardId, prozessspalte.get().id().longValue(), POSITION_AM_ENDE);
       return;
     }
     Instant jetzt = clock.instant();

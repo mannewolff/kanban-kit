@@ -2,6 +2,7 @@ package org.mwolff.manban.card;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -113,14 +114,78 @@ class CardStatusIT extends AbstractIntegrationTest {
             .getContentAsString());
   }
 
+  private static long spalte(JsonNode board, String name) {
+    for (JsonNode c : board.get("columns")) {
+      if (name.equals(c.get("name").asText())) {
+        return c.get("id").asLong();
+      }
+    }
+    throw new IllegalStateException("Spalte fehlt: " + name);
+  }
+
+  private void umbenennen(Cookie owner, long columnId, String name) throws Exception {
+    mvc.perform(
+            patch("/api/columns/" + columnId)
+                .cookie(owner)
+                .contentType("application/json")
+                .content("{\"name\":\"%s\"}".formatted(name)))
+        .andExpect(status().isOk());
+  }
+
+  /**
+   * Mit Prozessspalte wandert das Paket beim Statuswechsel ans Ende dieser Spalte (Korrektur #787,
+   * Issue #1326).
+   */
   @Test
-  void setztDenStatus_ohneDieKarteZuVerschieben() throws Exception {
+  void setztDenStatus_undLegtDieKarteInDieProzessspalte() throws Exception {
+    Cookie admin = session("wandert-admin@example.com", PlatformRole.ADMIN);
+    Cookie owner = session("wandert-owner@example.com", PlatformRole.USER);
+    long projectId = project(admin, "wandert-owner@example.com", "Wandert");
+    JsonNode board = board(owner, projectId);
+    long boardId = board.get("id").asLong();
+    long backlog = spalte(board, "Backlog");
+    long inReview = spalte(board, "In Review");
+    card(owner, boardId, inReview, "Schon dort");
+    long cardId = card(owner, boardId, backlog, "Paket").get("id").asLong();
+
+    mvc.perform(
+            put("/api/cards/" + cardId + "/status")
+                .cookie(owner)
+                .contentType("application/json")
+                .content("{\"status\":\"IN_REVIEW\"}"))
+        .andExpect(status().isNoContent());
+
+    JsonNode nachher = getCard(owner, cardId);
+    assertThat(nachher.get("status").asText()).isEqualTo("IN_REVIEW");
+    assertThat(nachher.get("columnId").asLong()).isEqualTo(inReview);
+    assertThat(nachher.get("positionInColumn").asInt()).isEqualTo(1);
+
+    // Auf Done: Spalte „Done", der Done-Zeitstempel ist gesetzt.
+    mvc.perform(
+            put("/api/cards/" + cardId + "/status")
+                .cookie(owner)
+                .contentType("application/json")
+                .content("{\"status\":\"DONE\"}"))
+        .andExpect(status().isNoContent());
+    JsonNode erledigt = getCard(owner, cardId);
+    assertThat(erledigt.get("columnId").asLong()).isEqualTo(spalte(board, "Done"));
+    assertThat(erledigt.get("movedToDoneAt").isNull()).isFalse();
+  }
+
+  /**
+   * Ohne Prozessspalte für den Status wird nur der Status gesetzt, die Karte bleibt liegen. Die
+   * Spalten „In Review" und „Done" werden dafür umbenannt; ein Umbenennen ändert keinen Status.
+   */
+  @Test
+  void setztDenStatus_ohneProzessspalte_ohneDieKarteZuVerschieben() throws Exception {
     Cookie admin = session("status-admin@example.com", PlatformRole.ADMIN);
     Cookie owner = session("status-owner@example.com", PlatformRole.USER);
     long projectId = project(admin, "status-owner@example.com", "Status");
     JsonNode board = board(owner, projectId);
     long boardId = board.get("id").asLong();
-    long backlog = board.get("columns").get(0).get("id").asLong();
+    long backlog = spalte(board, "Backlog");
+    umbenennen(owner, spalte(board, "In Review"), "Prüfung");
+    umbenennen(owner, spalte(board, "Done"), "Fertig");
     card(owner, boardId, backlog, "Vorne");
     JsonNode paket = card(owner, boardId, backlog, "Paket");
     long cardId = paket.get("id").asLong();

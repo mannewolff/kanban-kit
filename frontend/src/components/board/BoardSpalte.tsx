@@ -39,11 +39,14 @@ interface Props {
   naechsteRichtung: SortDirection
   /** Für diese Spalte läuft gerade ein Sortier-Aufruf. */
   sortiertGerade: boolean
-  /** Welche Karte gerade gezogen wird, `null` = keine. */
-  dragCardId: number | null
-  /** Über welcher Spalte die gezogene Karte gerade steht. */
+  /** Welche Karten gerade gezogen werden — eine oder die ganze Auswahl (#1324); leer = keine. */
+  dragCardIds: ReadonlySet<number>
+  /** Über welcher Spalte die gezogenen Karten gerade stehen. */
   ablageSpalteId: number | null
-  /** Aus welcher Spalte die gezogene Karte stammt — die Herkunft ist keine Ablage. */
+  /**
+   * Die Spalte, die alle gezogenen Karten schon enthält — sie ist keine Ablage. Stammen die Karten
+   * aus mehreren Spalten, gibt es sie nicht, und jede Spalte nimmt die Ablage an.
+   */
   herkunftsSpalteId: number | undefined
   /** Welche Spalte gerade gezogen wird (Spalten-Umsortierung), `null` = keine. */
   colDrag: number | null
@@ -91,7 +94,7 @@ export function BoardSpalte({
   retentionDays,
   naechsteRichtung,
   sortiertGerade,
-  dragCardId,
+  dragCardIds,
   ablageSpalteId,
   herkunftsSpalteId,
   colDrag,
@@ -116,7 +119,7 @@ export function BoardSpalte({
   // Vergleichs liefen bei einer Änderung auseinander (Plan #1042, P12).
   const grenzeErreicht = column.wipLimit != null && count >= column.wipLimit
   // Dieselbe Überlegung für die Ablagefläche: Kennung (`data-ablage`) und Fläche lesen einen Wert.
-  const ablageAktiv = dragCardId != null && ablageSpalteId === column.id && herkunftsSpalteId !== column.id
+  const ablageAktiv = dragCardIds.size > 0 && ablageSpalteId === column.id && herkunftsSpalteId !== column.id
   // Vorab als Konstante, damit im `border` kein Template-Literal im Template-Literal steht
   // (#1028, S4624) — verschachtelt war der Ausdruck kaum noch zu lesen.
   const randFarbe = grenzeErreicht ? `color-mix(in srgb, ${MELDER.bernst} 42%, ${RAND})` : RAND
@@ -127,7 +130,7 @@ export function BoardSpalte({
       elevation={0}
       onDragOver={(e) => {
         e.preventDefault()
-        if (dragCardId != null) onKarteUeber()
+        if (dragCardIds.size > 0) onKarteUeber()
       }}
       onDrop={(e) => {
         e.preventDefault()
@@ -197,7 +200,7 @@ export function BoardSpalte({
             selectionMode={selectionMode}
             selected={selectedIds.has(card.id)}
             canEdit={canEdit}
-            bewegt={dragCardId === card.id}
+            bewegt={dragCardIds.has(card.id)}
             members={members}
             boardLabels={boardLabels}
             retentionDays={retentionDays}
