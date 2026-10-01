@@ -1,12 +1,12 @@
 package org.mwolff.manban.nightrun.infrastructure.persistence;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.math.BigDecimal;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -18,10 +18,6 @@ import org.jspecify.annotations.Nullable;
  */
 @Entity
 @Table(name = "night_run_item")
-// Die Feldzahl folgt dem Tabellenschema, wie bei NightRunEntity: night_run_item traegt seit
-// Issue #964 Projekt, Startzeitpunkt und Lauf-Art selbst. Sie aufzuteilen hiesse, eine Zeile
-// auf zwei Objekte zu verteilen, die es in der Datenbank nicht gibt.
-@SuppressWarnings("PMD.TooManyFields")
 class NightRunItemEntity {
 
   @Id
@@ -66,24 +62,8 @@ class NightRunItemEntity {
   @Column(name = "excerpt")
   private @Nullable String excerpt;
 
-  @Column(name = "cost_usd")
-  private @Nullable BigDecimal costUsd;
-
-  @Column(name = "input_tokens")
-  private @Nullable Long inputTokens;
-
-  @Column(name = "output_tokens")
-  private @Nullable Long outputTokens;
-
-  @Column(name = "cached_input_tokens")
-  private @Nullable Long cachedInputTokens;
-
-  /** Modellzeit und Zuege gehoeren zum Verbrauch (Issue #1112, Plan #1110 E1). */
-  @Column(name = "model_duration_ms")
-  private @Nullable Long modelDurationMs;
-
-  @Column(name = "turns")
-  private @Nullable Integer turns;
+  /** Die sechs Verbrauchsspalten (Issue #1317); {@code null}, wenn keine davon gesetzt ist. */
+  @Embedded private @Nullable VerbrauchEmbeddable verbrauch;
 
   protected NightRunItemEntity() {
     // für JPA
@@ -141,27 +121,7 @@ class NightRunItemEntity {
     return excerpt;
   }
 
-  @Nullable BigDecimal getCostUsd() {
-    return costUsd;
-  }
-
-  @Nullable Long getInputTokens() {
-    return inputTokens;
-  }
-
-  @Nullable Long getOutputTokens() {
-    return outputTokens;
-  }
-
-  @Nullable Long getCachedInputTokens() {
-    return cachedInputTokens;
-  }
-
-  @Nullable Long getModelDurationMs() {
-    return modelDurationMs;
-  }
-
-  @Nullable Integer getTurns() {
-    return turns;
+  VerbrauchEmbeddable getVerbrauch() {
+    return verbrauch == null ? new VerbrauchEmbeddable() : verbrauch;
   }
 }

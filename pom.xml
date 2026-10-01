@@ -541,6 +541,7 @@
                         <exclude>org/mwolff/manban/outbox/infrastructure/persistence/OutboxEntryEntity.class</exclude>
                         <exclude>org/mwolff/manban/nightrun/infrastructure/persistence/NightRunEntity.class</exclude>
                         <exclude>org/mwolff/manban/nightrun/infrastructure/persistence/NightRunItemEntity.class</exclude>
+                        <exclude>org/mwolff/manban/nightrun/infrastructure/persistence/VerbrauchEmbeddable.class</exclude>
                         <exclude>org/mwolff/manban/backup/infrastructure/persistence/BackupRunEntity.class</exclude>
 
                         <!-- IT-only: DB-gebundene Repository-Adapter (JPA-Mapping, nur via IT, §5.2). -->

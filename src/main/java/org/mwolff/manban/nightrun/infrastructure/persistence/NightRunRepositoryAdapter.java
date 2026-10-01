@@ -489,13 +489,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getTokenName(),
         e.isComplete(),
         e.getUpdatedAt(),
-        verbrauchLesen(
-            e.getCostUsd(),
-            e.getInputTokens(),
-            e.getOutputTokens(),
-            e.getCachedInputTokens(),
-            e.getModelDurationMs(),
-            e.getTurns()),
+        verbrauchLesen(e.getVerbrauch()),
         e.getNoWorkReason(),
         budgetLesen(e),
         e.getAbortReason());
@@ -517,27 +511,13 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getDurationMs(),
         e.getCommitHash(),
         e.getExcerpt(),
-        verbrauchLesen(
-            e.getCostUsd(),
-            e.getInputTokens(),
-            e.getOutputTokens(),
-            e.getCachedInputTokens(),
-            e.getModelDurationMs(),
-            e.getTurns()),
+        verbrauchLesen(e.getVerbrauch()),
         stages);
   }
 
   private static NightRunItemStage toDomain(NightRunItemStageEntity e) {
     return new NightRunItemStage(
-        NightRunStage.valueOf(e.getStage()),
-        e.getDurationMs(),
-        verbrauchLesen(
-            e.getCostUsd(),
-            e.getInputTokens(),
-            e.getOutputTokens(),
-            e.getCachedInputTokens(),
-            e.getModelDurationMs(),
-            e.getTurns()));
+        NightRunStage.valueOf(e.getStage()), e.getDurationMs(), verbrauchLesen(e.getVerbrauch()));
   }
 
   /**
@@ -545,13 +525,13 @@ class NightRunRepositoryAdapter implements NightRunRepository {
    * ist. Ein Record aus lauter {@code null} waere von „nicht gemessen" nicht zu unterscheiden und
    * zwaenge jede Anzeigestelle zu einer zweiten Fallunterscheidung.
    */
-  private static @Nullable NightRunUsage verbrauchLesen(
-      @Nullable BigDecimal costUsd,
-      @Nullable Long inputTokens,
-      @Nullable Long outputTokens,
-      @Nullable Long cachedInputTokens,
-      @Nullable Long modelDurationMs,
-      @Nullable Integer turns) {
+  private static @Nullable NightRunUsage verbrauchLesen(VerbrauchEmbeddable verbrauch) {
+    BigDecimal costUsd = verbrauch.getCostUsd();
+    Long inputTokens = verbrauch.getInputTokens();
+    Long outputTokens = verbrauch.getOutputTokens();
+    Long cachedInputTokens = verbrauch.getCachedInputTokens();
+    Long modelDurationMs = verbrauch.getModelDurationMs();
+    Integer turns = verbrauch.getTurns();
     if (costUsd == null
         && inputTokens == null
         && outputTokens == null
