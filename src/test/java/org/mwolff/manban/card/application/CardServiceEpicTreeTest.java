@@ -106,6 +106,7 @@ class CardServiceEpicTreeTest {
         PROJECT,
         null,
         derivedFrom,
+        null,
         null);
   }
 
@@ -264,6 +265,7 @@ class CardServiceEpicTreeTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null,
             null);

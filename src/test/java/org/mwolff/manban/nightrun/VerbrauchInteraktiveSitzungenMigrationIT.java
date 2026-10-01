@@ -27,7 +27,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 class VerbrauchInteraktiveSitzungenMigrationIT {
 
-  private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  private static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>("postgres:16.15");
 
   /** Der Lauf, den es schon vor {@code V34} gab — er belegt den Vorgabewert der Gattung. */
   private static final Instant BESTAND = Instant.parse("2026-09-01T22:00:00Z");

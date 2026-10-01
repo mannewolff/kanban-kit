@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
@@ -510,6 +511,98 @@ describe('ProjectsPage', () => {
       await waitFor(() => expect(mocked.setDashboardParticipation).toHaveBeenCalledWith(1, true))
       fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
       expect(screen.getByText('Anderes')).toBeInTheDocument()
+    })
+  })
+
+  describe('Projektname als Link (Issue #1307)', () => {
+    function Ziel() {
+      const { pathname, state } = useLocation()
+      return <div>Ziel {pathname} autoRoute={String((state as { autoRoute?: boolean } | null)?.autoRoute)}</div>
+    }
+    // Zwei Projekte: Bei genau einem routet die Seite von selbst durch.
+    function renderMitZiel() {
+      return render(
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<ProjectsPage />} />
+            <Route path="/projects/:id" element={<Ziel />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+    }
+
+    it('erreicht den Projektnamen per Tab als Link und navigiert mit Enter', async () => {
+      mocked.list.mockResolvedValue([
+        { id: 7, name: 'Sieben', role: 'OWNER', createdAt: '' },
+        { id: 8, name: 'Acht', role: 'OWNER', createdAt: '' },
+      ])
+      const user = userEvent.setup()
+      renderMitZiel()
+      const link = await screen.findByRole('link', { name: 'Sieben' })
+
+      await user.tab()
+      expect(link).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByText('Ziel /projects/7 autoRoute=true')).toBeInTheDocument()
+    })
+
+    it('trägt das Ziel der Projektseite als href', async () => {
+      mocked.list.mockResolvedValue([
+        { id: 7, name: 'Sieben', role: 'OWNER', createdAt: '' },
+        { id: 8, name: 'Acht', role: 'OWNER', createdAt: '' },
+      ])
+      renderMitZiel()
+
+      expect(await screen.findByRole('link', { name: 'Sieben' })).toHaveAttribute('href', '/projects/7')
+    })
+
+    it('ist auch für einen Nur-Leser erreichbar und wirksam', async () => {
+      mocked.list.mockResolvedValue([
+        { id: 7, name: 'Sieben', role: 'VIEWER', createdAt: '' },
+        { id: 8, name: 'Acht', role: 'VIEWER', createdAt: '' },
+      ])
+      const user = userEvent.setup()
+      renderMitZiel()
+      const link = await screen.findByRole('link', { name: 'Sieben' })
+
+      await user.tab()
+      expect(link).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByText('Ziel /projects/7 autoRoute=true')).toBeInTheDocument()
+    })
+
+    it('navigiert weiterhin per Klick auf die Fläche neben dem Namen', async () => {
+      mocked.list.mockResolvedValue([
+        { id: 7, name: 'Sieben', role: 'OWNER', createdAt: '' },
+        { id: 8, name: 'Acht', role: 'OWNER', createdAt: '' },
+      ])
+      renderMitZiel()
+      await screen.findByRole('link', { name: 'Sieben' })
+
+      // Die Kachelfläche (Rollen-Chip der ersten Kachel), nicht der Name: Der Name ist seit
+      // Issue #1307 ein eigener Link.
+      fireEvent.click(screen.getAllByText('OWNER')[0])
+
+      expect(await screen.findByText('Ziel /projects/7 autoRoute=true')).toBeInTheDocument()
+    })
+
+    it('steht vor dem Stift, und Enter auf dem Stift öffnet nur das Umbenennen', async () => {
+      mocked.list.mockResolvedValue([
+        { id: 7, name: 'Sieben', role: 'OWNER', createdAt: '' },
+        { id: 8, name: 'Acht', role: 'OWNER', createdAt: '' },
+      ])
+      const user = userEvent.setup()
+      renderMitZiel()
+      ;(await screen.findByRole('link', { name: 'Sieben' })).focus()
+
+      await user.tab()
+      expect(screen.getByLabelText('Projekt Sieben umbenennen')).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByText('Projekt umbenennen')).toBeInTheDocument()
+      expect(screen.queryByText(/^Ziel /)).not.toBeInTheDocument()
     })
   })
 })

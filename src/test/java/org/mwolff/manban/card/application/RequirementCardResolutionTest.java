@@ -71,6 +71,7 @@ class RequirementCardResolutionTest {
             PROJEKT,
             null,
             null,
+            null,
             null);
     nachId.put(id, c);
     nachNummer.put(nummer, c);

@@ -121,6 +121,9 @@ node --test scripts/*.test.mjs          # Projektskripte, darunter scripts/mutat
 # Mutationsprüfung (Bereiche frontend bzw. backend; Vollauf nur an der Merge-Stufe)
 node scripts/mutationspruefung.mjs aenderung frontend   # Stufe paket: Stryker über die geänderten Dateien
 node scripts/mutationspruefung.mjs aenderung backend    # Stufe paket: PIT über die geänderten Klassen
+# Soll nach Issue #1280: je Seite zwei Einträge statt einem, der Median der Dauer wählt, welcher läuft
+node scripts/mutationspruefung.mjs aenderung <seite> --stufe paket   # Stufe paket: Median bis 10 min
+node scripts/mutationspruefung.mjs aenderung <seite> --stufe push    # Stufe push: Median über 10 min
 node scripts/mutationspruefung.mjs vollauf frontend     # Stufe merge: Stryker über den ganzen Bereich, Schwelle 80 %
 node scripts/mutationspruefung.mjs vollauf backend      # Stufe merge: PIT über den ganzen Bereich, Schwelle 100 %
 ```
@@ -138,7 +141,20 @@ ohne Bereich (etwa `Dockerfile`, `.github/`) fährt alle der Paketstufe. **Vor `
 Prüfungen der Paket- und Push-Stufe (neun), vor `merge production` zusätzlich die beiden Vollläufe (elf).** Die Config ändert nur Manne.
 
 **Mutationsprüfung (Issue #1104).** Die Änderungsprüfung (`aenderung`) mutiert je Paket nur, was das
-Paket berührt — gemessen je Seite rund 30 s (Issue #1211), deshalb Stufe `paket`.
+Paket berührt — gemessen je Seite rund 30 s (Issue #1211), deshalb Stufe `paket`. Der Prüfbereich des
+Frontends kommt aus dem Stufenplan [`frontend/mutationsstufen.json`](frontend/mutationsstufen.json):
+Er wächst Ausschnitt für Ausschnitt, die Schwelle gilt je Ausschnitt (Einzelheiten in CLAUDE-react.md).
+
+**Stufenschaltung (Issue #1280).** Mit dem Prüfbereich wächst die Dauer der Änderungsprüfung. Der Treiber
+schreibt die Dauer jedes Laufs mit Werkzeugstart in `.claude/mutationsdauer-<seite>.json` (die letzten
+fünf). Liegt ihr **Median über 10 min**, gilt die Stufe `push`, sonst `paket`; **ohne Protokoll gilt
+`paket`** — mehr prüfen, nie weniger. Dafür trägt die Config je Seite **zwei** Einträge:
+`node scripts/mutationspruefung.mjs aenderung <seite> --stufe paket` mit `stufe: "paket"` und
+`… --stufe push` mit `stufe: "push"`. Der Eintrag, dessen `--stufe` nicht die geltende ist, endet sofort
+mit einem Satz (Median, Grenze, geltende Stufe) und Rückgabewert 0; so läuft die Prüfung genau einmal, an
+der richtigen Stufe. **Stand 2026-09-29:** Die Config trägt noch je Seite den einen Eintrag ohne
+`--stufe` (Stufe `paket`); die beiden Einträge trägt Manne ein, bis dahin läuft die Änderungsprüfung wie
+bisher an jedem Paket.
 Das frühere Feld `mutationCommand` ist entfallen; PIT und Stryker laufen nur noch über den Treiber. Ein Überlebender in einer berührten Datei hält an; wie eine
 bewusst hingenommene Altlast markiert wird, steht in CLAUDE-java.md §5.5 und CLAUDE-react.md. Der
 Vollauf (`vollauf`) prüft den ganzen Bereich gegen die Schwelle (Frontend 80 %, Backend 100 %) und schreibt

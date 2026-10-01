@@ -23,6 +23,8 @@ function card(number: number, parentId: number | null = null): Card {
     dueDate: null,
     labels: [],
     derivedFrom: null,
+    status: null,
+    canSetStatus: false,
   }
 }
 

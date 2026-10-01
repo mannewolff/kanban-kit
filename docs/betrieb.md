@@ -34,12 +34,13 @@ Objektspeicher für Anhänge — siehe
 Im Repo-Verzeichnis (dort liegt `docker-compose.yml`):
 
 ```
-docker compose up --build -d
+docker compose up -d
 ```
 
-- `--build` baut das Image neu (npm-Build des Frontends + Maven-Jar). **Nach jeder Codeänderung nötig** —
-  ein reines `docker compose up -d` nutzt sonst das alte Image.
-- `-d` startet im Hintergrund; die Build-Ausgabe erscheint dann erst am Ende. Für Live-Ausgabe `-d` weglassen.
+- Es wird **nichts übersetzt**: Der Basis-Stack zieht das veröffentlichte Abbild von `ghcr.io`. Wer
+  seinen eigenen Arbeitsstand fahren will, nimmt das Bau-Overlay —
+  siehe [Aus dem Quelltext bauen](#aus-dem-quelltext-bauen).
+- `-d` startet im Hintergrund; für Live-Ausgabe `-d` weglassen.
 
 Status prüfen:
 ```
@@ -61,39 +62,71 @@ docker compose logs -f manban-api   # warten auf "Started ManbanApplication"
 
 ## Produktiv betreiben
 
-**Vor dem ersten produktiven Start** wird ein eigener `MANBAN_SESSION_SECRET` gesetzt. Ohne
-diesen Wert startet die Anwendung nicht — sie bricht ab, statt mit dem mitgelieferten
-Standardschlüssel zu signieren. Die ausgelieferte `.env.example` lässt den Wert deshalb bewusst
-leer: Niemand soll einen Schlüssel gesetzt haben, ohne ihn gewählt zu haben.
+Der Weg für einen echten Betrieb ist das **Betriebs-Overlay** `docker-compose.betrieb.yml`. Es
+schaltet `MANBAN_DEV_MODE` fest auf `false` — ein Eintrag in der `.env` greift dort nicht — und
+erzwingt die **fünf Werte**, die ein Produktivbetrieb selbst setzen muss.
 
-1. Schlüssel erzeugen:
-   ```
-   openssl rand -hex 32
-   ```
-   `-hex` liefert nur `0-9a-f` — damit ist kein `$`-Escaping in der `.env` nötig.
-2. Den Wert in die `.env` neben der `docker-compose.yml` eintragen:
-   ```
-   MANBAN_SESSION_SECRET=<erzeugter Wert>
-   ```
-3. Mit dem Produktions-Overlay starten:
-   ```
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-   ```
-   Das Overlay setzt `MANBAN_DEV_MODE` fest auf `false` — der Entwicklungs-Schalter aus der `.env`
-   greift dort nicht.
+Nicht zu verwechseln mit `docker-compose.prod.yml`: Das ist der Projektserver hinter dem dort
+vorhandenen Traefik und verlangt ein externes Netz `web`; auf fremder Hardware ist es nicht
+startbar.
 
-Der vollständige Server-Ablauf (Traefik, DNS, Mail, erster Admin) steht in
+**Die fünf Pflichtwerte** in der `.env` neben der `docker-compose.yml`:
+
+| Wert | Bedeutung |
+|---|---|
+| `MANBAN_SESSION_SECRET` | Schlüssel zum Signieren der Sitzungs-Cookies |
+| `MANBAN_BASE_URL` | öffentliche Adresse dieser Instanz für Links in E-Mails, z. B. `https://kanban.example.org` |
+| `OBJEKTSPEICHER_ROOT_USER` | Benutzername des Objektspeichers, frei wählbar und **nicht** `manban` |
+| `OBJEKTSPEICHER_ROOT_PASSWORD` | Geheimnis des Objektspeichers |
+| `POSTGRES_PASSWORD` | Kennwort der Datenbankrolle |
+
+Die drei Geheimnisse erzeugt man je mit `openssl rand -hex 32`; `-hex` liefert nur `0-9a-f`, damit
+ist kein `$`-Escaping in der `.env` nötig. Die ausgelieferte `.env.example` führt sie bewusst als
+abgelehnte Platzhalter: Niemand soll einen Wert gesetzt haben, ohne ihn gewählt zu haben.
+
+Starten:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.betrieb.yml up -d
+```
+
+Fehlt einer der fünf Werte, bricht schon `docker compose config` mit
+`required variable … is missing a value` ab und nennt den Namen — die früheste Stelle, an der ein
+fehlender Wert auffallen kann. Die Startprüfungen der Anwendung fangen dieselben Fälle ein zweites
+Mal ab; sie müssen es, weil `:?` nur leer und ungesetzt fängt, nicht einen gesetzten Vorgabewert.
+
+**Zwei Wege für den Reverse-Proxy.** Im Normalfall läuft der mitgelieferte Caddy mit: Er nimmt die
+Host-Ports 80 und 443 und holt für `MANBAN_DOMAIN` ein Let's-Encrypt-Zertifikat. Wer schon einen
+Proxy betreibt, setzt `MANBAN_PROXY_PROFIL=eigener-proxy` in die `.env` — dann bleibt Caddy unten,
+80 und 443 bleiben frei, und der eigene Proxy spricht `manban-api` auf `127.0.0.1:8080` an. Er muss
+dabei das TLS beenden und `X-Forwarded-Proto`, `-Host` und `-For` setzen.
+
+Der vollständige Server-Ablauf des Projektservers (Traefik, DNS, Mail, erster Admin) steht in
 [docs/deployment-hostinger.md](deployment-hostinger.md) und wird hier nicht wiederholt.
+
+## Aus dem Quelltext bauen
+
+Der Basis-Stack zieht veröffentlichte Abbilder und baut nichts. Wer seinen eigenen Arbeitsstand
+fahren will — Entwicklung, eigene Änderungen —, gibt das **Bau-Overlay** mit; es ist der einzige
+Schalter des Baus:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.bau.yml up -d --build
+```
+
+`docker-compose.bau.yml` nimmt die `image:`-Zeile des Basis-Stacks mit `!reset null` zurück, statt
+sie nur zu ergänzen: Ohne das trüge das hier gebaute Abbild örtlich den Tag der veröffentlichten
+Fassung, und ein späterer Start ohne Overlay führe stillschweigend den Arbeitsstand weiter. `!reset`
+setzt Docker Compose ab 2.24 voraus; das betrifft nur diesen Weg.
+
+Der Sicherungsdienst hat sein eigenes Bau-Overlay `docker-compose.backup-bau.yml` — siehe
+[Sicherung & Wiederherstellung](backup.md).
 
 ## Upgrade-Hinweise
 
-**Eigener Sitzungsschlüssel ist Startbedingung.** Eine Instanz, die bisher ohne eigenen
-`MANBAN_SESSION_SECRET` lief, startet nach dem Update erst wieder, wenn ein eigener Schlüssel
-gesetzt ist (siehe [Produktiv betreiben](#produktiv-betreiben)). Alle bestehenden Sitzungen sind
-danach ungültig — die Nutzer melden sich einmal neu an.
-
-Das ist gewollt: Mit dem mitgelieferten Wert kann jeder, der das öffentliche Repository kennt,
-gültige Sitzungen für jedes Konto erzeugen — auch für einen Plattform-Administrator.
+Was ein Versionssprung von Hand verlangt — je Version ein Abschnitt, und die Regel, dass eine
+Version ohne eigenen Abschnitt keine Handarbeit verlangt —, steht an genau einer Stelle:
+[UPGRADING.md](../UPGRADING.md).
 
 ## Aufruf
 
@@ -216,7 +249,7 @@ kommt. Wer eine Fassung anhebt, hebt sie an **beiden** Stellen an; der Pflichtch
 2. Die Fassung in `docker-compose.yml` und in `scripts/bausteine.json` anheben.
 3. Sicherung ziehen (siehe [Sicherung & Wiederherstellung](backup.md)); das Volume
    `objektspeicher_data` trägt die Anhänge.
-4. `docker compose up -d --build` — der Dienst kommt mit dem neuen Abbild auf demselben Volume
+4. `docker compose up -d` — der Dienst kommt mit dem neuen Abbild auf demselben Volume
    wieder hoch. Ein Formatwechsel ist damit **nicht** verbunden; ändert sich das Datenformat
    zwischen zwei Fassungen, steht das in den Release-Notes und ist dann ein eigener Vorgang.
 5. Anhang hoch- und herunterladen, dann den Admin-Abgleich
@@ -243,9 +276,14 @@ den Dateityp für die Vorschau liest die Anwendung ohnehin aus ihrer Datenbank, 
 Speicher. Dazwischen liegt genau **ein** Umzug, und der läuft in **zwei Releases**.
 
 **Warum zwei Releases und nicht ein Handgriff im Fenster:** `.github/workflows/deploy.yml` fährt
-bei jedem Push auf `production` selbsttätig `git reset --hard origin/production` und
-`docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.backup.yml
-up -d --build`. Drei `-f`, und die beiden Umzugs-Overlays sind nicht dabei: **Jeder** Deploy schaltet
+bei jedem Push auf `production` selbsttätig `git reset --hard origin/production` und danach:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose.prod.yml \
+               -f docker-compose.backup.yml -f docker-compose.backup-bau.yml up -d --build
+```
+
+Fünf `-f`, und die beiden Umzugs-Overlays sind nicht dabei: **Jeder** Deploy schaltet
 die Anwendung damit auf den neuen Speicher. Der Umstieg **ist** der Deploy — nicht etwas, das man im
 Fenster von Hand auslöst, und auch nichts, das man ihm nehmen kann, ohne den Prozess für einen
 einmaligen Vorgang umzubauen.
@@ -379,8 +417,8 @@ bei kleinem Bestand sind das Minuten.
 
    ```
    cd /root/opt/kanban-kit
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-                  -f docker-compose.backup.yml up -d --build
+   docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose.prod.yml \
+                  -f docker-compose.backup.yml -f docker-compose.backup-bau.yml up -d --build
    docker compose -f docker-compose.yml -f docker-compose.prod.yml \
                   -f docker-compose.backup.yml up -d --force-recreate --no-deps objektspeicher
    ```
@@ -645,7 +683,8 @@ Der vorgesehene Pfad: Er läuft über die reguläre Anwendungslogik und hinterl�
 vollständig eingerichteten Admin. Wirkt **nur, solange kein Admin existiert** (selbstheilend,
 kein Aussperren).
 
-1. `MANBAN_BOOTSTRAP_ADMIN_TOKEN=DEIN_TOKEN` in der `.env` setzen und **neu bauen** (`docker compose up --build -d`).
+1. `MANBAN_BOOTSTRAP_ADMIN_TOKEN=DEIN_TOKEN` in der `.env` setzen und die Container **neu anlegen**
+   (`docker compose up -d`) — Compose liest die `.env` nur beim Anlegen, ein `restart` genügt nicht.
 2. Normal **registrieren** und **einloggen** (E-Mail vorher bestätigen, s. o.).
 3. Eingeloggt **`https://localhost/admin/bootstrap`** öffnen, den Token eingeben → „Admin werden".
 
@@ -655,7 +694,8 @@ wenn schon ein Admin existiert → 409. Token danach aus der `.env` entfernen.
 
 ### Weg B — direkt in der Datenbank (Notweg)
 
-Nur nehmen, wenn Weg A nicht in Frage kommt — etwa weil kein Neubau möglich ist. Der Weg
+Nur nehmen, wenn Weg A nicht in Frage kommt — etwa weil die Container nicht neu angelegt
+werden können. Der Weg
 umgeht jede Anwendungslogik, jedes Feld muss von Hand stimmen. Registrieren, dann per SQL
 freischalten und zum Admin machen (spart Token + Verifikations-Link):
 

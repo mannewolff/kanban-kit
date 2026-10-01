@@ -1,0 +1,38 @@
+name: Funktion vorschlagen
+description: Ein Problem beschreiben, das die Software heute nicht löst
+title: "[Vorschlag] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Bevor du schreibst:** kanban-kit hält einen engen Fokus — eine schlanke,
+        self-hostbare Trello-Alternative. Vorschläge, die darüber hinausgehen, werden
+        mit Dank und Begründung abgelehnt, auch wenn sie gut sind. Der Fokus-Vorbehalt
+        steht in [CONTRIBUTING.md](../../CONTRIBUTING.md#zum-fokus).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statt Lösung
+      description: >-
+        Welches Problem soll gelöst werden? Bitte das Problem beschreiben, ausdrücklich
+        nicht die gewünschte Umsetzung.
+    validations:
+      required: true
+  - type: textarea
+    id: nutzen
+    attributes:
+      label: Nutzen
+      description: Wem hilft es, und wobei?
+    validations:
+      required: true
+  - type: dropdown
+    id: bereich
+    attributes:
+      label: Betroffener Bereich
+      options:
+        - Backend
+        - Frontend
+        - CLI
+        - Skripte
+        - Doku
+        - unklar

@@ -3,6 +3,12 @@ import { apiFetch } from './client'
 export type CardType = 'CARD' | 'EPIC'
 
 /**
+ * Prozesszustand eines Arbeitspakets, als Konstantenname des Servers (Plan #1294, E24). Nur
+ * Arbeitspakete tragen ihn; Vorhaben und die Dokumentarten haben `null` — für sie zählt die Spalte.
+ */
+export type CardStatus = 'BACKLOG' | 'READY' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE'
+
+/**
  * Richtung der Label-Massenaktion: Das Label wird allen gewählten Karten hinzugefügt oder allen
  * abgenommen. Die übrigen Labels jeder Karte bleiben stehen (Issue #994).
  */
@@ -35,6 +41,16 @@ export interface Card {
   labels: number[]
   /** Projektweite Nummer der Karte, aus der diese hervorgegangen ist (Issue #601 ff.). */
   derivedFrom: number | null
+  /**
+   * Eigener Status der Karte; `null` heißt „kein Arbeitspaket" (Vorhaben, `[Idee]`, `[Fachlich]`,
+   * `[Plan]`). Woran eine Karte als Arbeitspaket gilt, entscheidet allein der Server (Plan #1294, E16).
+   */
+  status: CardStatus | null
+  /**
+   * Ob der Betrachter den Status setzen darf — `CARD_MOVE` auf dem Board **dieser** Karte, nicht
+   * das Recht der aufrufenden Ansicht (Plan #1294, E10). Ohne eigenen Status immer `false`.
+   */
+  canSetStatus: boolean
 }
 
 /**
@@ -56,6 +72,16 @@ export interface CardDetail {
   dueDate: string | null
   archived: boolean
   derivedFrom: number | null
+  /**
+   * Eigener Status der Karte; `null` heißt „kein Arbeitspaket" (Vorhaben, `[Idee]`, `[Fachlich]`,
+   * `[Plan]`). Woran eine Karte als Arbeitspaket gilt, entscheidet allein der Server (Plan #1294, E16).
+   */
+  status: CardStatus | null
+  /**
+   * Ob der Betrachter den Status setzen darf — `CARD_MOVE` auf dem Board **dieser** Karte, nicht
+   * das Recht der aufrufenden Ansicht (Plan #1294, E10). Ohne eigenen Status immer `false`.
+   */
+  canSetStatus: boolean
 }
 
 /**
@@ -203,6 +229,12 @@ export const cardsApi = {
       method: 'POST',
       body: JSON.stringify({ columnId, cards }),
     }),
+  /**
+   * Setzt den Status eines Arbeitspakets, ohne die Karte zu verschieben (Plan #1294, E9). Der
+   * Server antwortet ohne Rumpf; die neue Sicht holt der Aufrufer über seine Liste.
+   */
+  setStatus: (cardId: number, status: CardStatus) =>
+    apiFetch<void>(`/api/cards/${cardId}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
   move: (cardId: number, columnId: number, position: number) =>
     apiFetch<Card>(`/api/cards/${cardId}/move`, { method: 'POST', body: JSON.stringify({ columnId, position }) }),
   transfer: (cardId: number, targetBoardId: number, targetColumnId: number) =>

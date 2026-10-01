@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
+import java.sql.Timestamp;
+import java.time.Instant;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
@@ -54,8 +56,9 @@ class CardActivityHistorischeTypenIT extends AbstractIntegrationTest {
     long columnId = board.get("columns").get(0).get("id").asLong();
     long cardId = createCard(owner, boardId, columnId, "Karte aus dem Pool");
 
-    seedActivity(cardId, "IDEA_STORED", "In den Ideen-Speicher");
-    seedActivity(cardId, "PROMOTED", "Auf Board eingeplant");
+    Instant created = createdAt(cardId);
+    seedActivity(cardId, "IDEA_STORED", "In den Ideen-Speicher", created.plusSeconds(1));
+    seedActivity(cardId, "PROMOTED", "Auf Board eingeplant", created.plusSeconds(2));
 
     mvc.perform(get("/api/cards/" + cardId + "/activity").cookie(owner))
         .andExpect(status().isOk())
@@ -67,13 +70,28 @@ class CardActivityHistorischeTypenIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[2].detail").value("Auf Board eingeplant"));
   }
 
-  private void seedActivity(long cardId, String type, String detail) {
+  /**
+   * Zeitstempel des {@code CREATED}-Eintrags, den die Anwendung mit der JVM-Uhr geschrieben hat.
+   * Die geseedeten Zeilen liegen relativ dazu, nicht auf der Uhr der Datenbank: Geht der Container
+   * auch nur Millisekunden nach, läge die Datenbankzeit vor {@code CREATED}, und die nach {@code
+   * created_at} sortierte Reihenfolge kippte (Issue #1290).
+   */
+  private Instant createdAt(long cardId) {
+    return jdbc.queryForObject(
+            "SELECT created_at FROM card_activity WHERE card_id = ? AND type = 'CREATED'",
+            Timestamp.class,
+            cardId)
+        .toInstant();
+  }
+
+  private void seedActivity(long cardId, String type, String detail, Instant createdAt) {
     jdbc.update(
         "INSERT INTO card_activity (card_id, actor_user_id, type, detail, created_at) "
-            + "VALUES (?, NULL, ?, ?, now())",
+            + "VALUES (?, NULL, ?, ?, ?)",
         cardId,
         type,
-        detail);
+        detail,
+        Timestamp.from(createdAt));
   }
 
   private long createProject(Cookie admin, String name, String ownerEmail) throws Exception {

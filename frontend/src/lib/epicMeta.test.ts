@@ -6,6 +6,14 @@ describe('epicShortcode', () => {
     expect(epicShortcode('Irgendein Titel', 'AUTH')).toBe('AUTH')
   })
 
+  it('schneidet Leerraum um ein explizites Kürzel ab', () => {
+    expect(epicShortcode('Alpha Beta', '  AB  ')).toBe('AB')
+  })
+
+  it('leitet bei einem Kürzel nur aus Leerraum die Initialen ab', () => {
+    expect(epicShortcode('Alpha Beta', '   ')).toBe('AB')
+  })
+
   it('leitet Initialen aus dem Titel ab (max. 3)', () => {
     expect(epicShortcode('Zehn Tage Workshop IT')).toBe('ZTW')
     expect(epicShortcode('   ', null)).toBe('VORH')
@@ -21,6 +29,16 @@ describe('epicColor', () => {
   // bleibt dieselbe. Welcher Wert dahinter liegt, prüft `theme.test.ts`.
   it('liefert einen Verweis auf den Farbton eines Palettenplatzes', () => {
     expect(epicColor(7)).toMatch(/^var\(--mb-palette-epic-[0-3]-hue\)$/)
+  })
+
+  // Der Platz folgt dem Hash `h * 31 + Zeichen` über die Ziffern der ID; die drei IDs sind so
+  // gewählt, dass jede andere Rechenart dort einen anderen Platz ergäbe.
+  it('rechnet den Palettenplatz aus dem Hash der ID', () => {
+    expect([1, 12, 99].map(epicColor)).toEqual([
+      'var(--mb-palette-epic-1-hue)',
+      'var(--mb-palette-epic-1-hue)',
+      'var(--mb-palette-epic-0-hue)',
+    ])
   })
 
   it('verteilt verschiedene Vorhaben auf verschiedene Plätze', () => {

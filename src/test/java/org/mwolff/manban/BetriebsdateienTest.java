@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -14,8 +15,23 @@ import org.junit.jupiter.api.Test;
  * Hält die ausgelieferten Betriebsdateien an den Zusicherungen fest, die ein Betreiber ihnen
  * entnimmt: Das Produktions-Overlay schaltet den Entwicklungs-Schalter fest aus, die
  * Umgebungs-Vorlage liefert keinen funktionierenden Sitzungsschlüssel mit (Issue #889), das
- * automatische Deployment startet den Stack mit dem Sicherungs-Overlay (Issue #1198), und der
- * ausgelieferte Stack fährt kein Abbild, das anonym nicht mehr beziehbar ist (Issue #1226).
+ * automatische Deployment startet den Stack mit dem Sicherungs-Overlay (Issue #1198), der
+ * ausgelieferte Stack fährt kein Abbild, das anonym nicht mehr beziehbar ist (Issue #1226), er baut
+ * nichts mehr selbst, sondern zieht veröffentlichte Abbilder (Issue #1265), und das
+ * Betriebs-Overlay erzwingt die fünf Werte, die ein Produktivbetrieb selbst setzen muss (Issue
+ * #1266).
+ *
+ * <p>Die Bau-Overlays {@code docker-compose.bau.yml} (Anwendung) und {@code
+ * docker-compose.backup-bau.yml} (Sicherungsdienst) sind seit Issue #1265 die einzigen Schalter des
+ * Baus — genau wie das Sicherungs-Overlay der einzige Schalter der Sicherung. Fehlt eines ihrer
+ * {@code -f} in einem Compose-Aufruf des Deploy-Workflows, baut {@code --build} nichts mehr: Der
+ * Server zöge das veröffentlichte Abbild und bliebe stumm auf einem alten Stand, obwohl der Deploy
+ * grün ist.
+ *
+ * <p>Zwei Dateien und nicht eine: Compose führt jede übergebene Datei zusammen, ohne zu fragen, ob
+ * eine andere denselben Dienst auch beschreibt. Stünde {@code manban-backup} im Bau-Overlay des
+ * Basis-Stacks, baute und startete jeder Entwickler-Aufruf ohne Sicherungs-Overlay einen
+ * Sicherungs-Container ohne Umgebung, ohne Volumes und ohne {@code depends_on}.
  *
  * <p>Das Sicherungs-Overlay {@code docker-compose.backup.yml} ist der einzige Schalter der
  * Sicherung: Fehlt es in einem Compose-Aufruf des Deploy-Workflows, legt der Deploy {@code
@@ -37,6 +53,9 @@ class BetriebsdateienTest {
   /** Produktions-Overlay über dem lokalen Basis-Stack {@code docker-compose.yml}. */
   private static final Path PROD_OVERLAY = Path.of("docker-compose.prod.yml");
 
+  /** Betriebs-Overlay für einen Produktivbetrieb auf fremder Hardware (Issue #1266). */
+  private static final Path BETRIEBS_OVERLAY = Path.of("docker-compose.betrieb.yml");
+
   /** Vorlage, die ein Betreiber nach {@code .env} kopiert. */
   private static final Path UMGEBUNGS_VORLAGE = Path.of(".env.example");
 
@@ -48,6 +67,15 @@ class BetriebsdateienTest {
 
   /** Rückweg-Overlay mit dem alten Speicherdienst (Plan #1222, E13). */
   private static final Path ALTSPEICHER_OVERLAY = Path.of("docker-compose.altspeicher.yml");
+
+  /** Sicherungs-Overlay als Datei — auch sein Dienst zieht sein Abbild (Issue #1265). */
+  private static final Path SICHERUNGS_OVERLAY_DATEI = Path.of("docker-compose.backup.yml");
+
+  /** Bau-Overlay des Basis-Stacks — seit Issue #1265 der einzige Ort des {@code build:}. */
+  private static final Path BAU_OVERLAY = Path.of("docker-compose.bau.yml");
+
+  /** Bau-Overlay des Sicherungs-Overlays; eigene Datei aus dem Grund im Klassen-Javadoc. */
+  private static final Path SICHERUNGS_BAU_OVERLAY = Path.of("docker-compose.backup-bau.yml");
 
   /** Umzugs-Overlay des einmaligen Speicherwechsels (Issue #1230). */
   private static final Path UMZUG_OVERLAY = Path.of("docker-compose.umzug.yml");
@@ -64,6 +92,16 @@ class BetriebsdateienTest {
 
   /** Einziger Schalter der Sicherung — siehe Klassen-Javadoc. */
   private static final String SICHERUNGS_OVERLAY = "-f docker-compose.backup.yml";
+
+  /** Die beiden Schalter des Baus — siehe Klassen-Javadoc. */
+  private static final List<String> BAU_SCHALTER =
+      List.of("-f docker-compose.bau.yml", "-f docker-compose.backup-bau.yml");
+
+  /** Der Compose-Schlüssel, der einen Dienst vor Ort bauen lässt. */
+  private static final String BAU_SCHLUESSEL = "build:";
+
+  /** Namensraum der Abbilder, die dieses Projekt selbst veröffentlicht. */
+  private static final String EIGENE_ABBILDER = "ghcr.io/mannewolff/";
 
   /** Standardwert des lokalen Stacks — in der Vorlage wäre er ein gesetzter Schlüssel. */
   private static final String UNSICHERER_STANDARDWERT = "dev-only-insecure-secret-change-me";
@@ -82,6 +120,39 @@ class BetriebsdateienTest {
   /** Platzhalter, mit dem die Vorlage das Speicher-Geheimnis führt. */
   private static final String VORLAGE_SPEICHER_GEHEIMNIS = "change-me-objektspeicher";
 
+  /**
+   * Das Datenbankkennwort, das {@code DatabasePasswordStartupCheck} als öffentlich bekannten
+   * Vorgabewert ablehnt (Issue #1266) — er steht in {@code application.yml} und als {@code
+   * :-manban}-Vorgabe in {@code docker-compose.yml}.
+   */
+  private static final String ABGELEHNTES_DB_KENNWORT = "manban";
+
+  /** Platzhalter, mit dem die Vorlage das Datenbankkennwort führt (Issue #1266). */
+  private static final String VORLAGE_DB_KENNWORT = "change-me";
+
+  /**
+   * Die fünf Werte, die ein Produktivbetrieb selbst setzen muss (Issue #1266, fachliche Quelle
+   * #675). Das Betriebs-Overlay erzwingt jeden davon mit {@code :?}, damit schon {@code docker
+   * compose config} abbricht und den fehlenden Namen nennt — die früheste Stelle, an der ein
+   * fehlender Wert auffallen kann.
+   */
+  private static final List<String> PFLICHTWERTE =
+      List.of(
+          "MANBAN_SESSION_SECRET",
+          "MANBAN_BASE_URL",
+          "OBJEKTSPEICHER_ROOT_USER",
+          "OBJEKTSPEICHER_ROOT_PASSWORD",
+          "POSTGRES_PASSWORD");
+
+  /** Die Startseite des Repositories — erste Anleitung, die ein Selbsthoster liest. */
+  private static final Path README = Path.of("README.md");
+
+  /** Der einzige Ort des Upgrade-Wissens (Issue #1268). */
+  private static final Path UPGRADE_ANLEITUNG = Path.of("UPGRADING.md");
+
+  /** Spezifikation des automatischen Deployments des Projektservers. */
+  private static final Path DEPLOYMENT_SPEZIFIKATION = Path.of("deployment-spec.md");
+
   /** Verzeichnis der ausgelieferten Anleitungen. */
   private static final Path ANLEITUNGEN = Path.of("docs");
 
@@ -98,6 +169,80 @@ class BetriebsdateienTest {
     assertThat(schalterZeilen)
         .as("Entwicklungs-Schalter in %s — fester Wert, keine ${…}-Interpolation", PROD_OVERLAY)
         .containsExactly("MANBAN_DEV_MODE: \"false\"");
+  }
+
+  /**
+   * Dieselbe Zusicherung wie beim Produktions-Overlay und aus demselben Grund: Das Betriebs-Overlay
+   * erbt den {@code environment:}-Block des Basis-Stacks (dort {@code MANBAN_DEV_MODE=true}) und
+   * überschreibt nur die Schlüssel, die es selbst nennt. Ein Wert aus der {@code .env} wäre
+   * dieselbe Lücke mit einem Zwischenschritt — wer {@code MANBAN_DEV_MODE=true} für den lokalen
+   * Betrieb in seine {@code .env} schreibt, nähme ihn in den Produktivbetrieb mit.
+   */
+  @Test
+  void betriebsOverlaySchaltetDenEntwicklungsSchalterFestAus() throws IOException {
+    List<String> schalterZeilen = wirksameZeilenMit(BETRIEBS_OVERLAY, "MANBAN_DEV_MODE");
+
+    assertThat(schalterZeilen)
+        .as("Entwicklungs-Schalter in %s — fester Wert, keine ${…}-Interpolation", BETRIEBS_OVERLAY)
+        .containsExactly("MANBAN_DEV_MODE: \"false\"");
+  }
+
+  /**
+   * Jeder der fünf Pflichtwerte steht im Betriebs-Overlay mit {@code :?} und nirgends mit einer
+   * {@code :-}-Vorgabe: Fehlt einer, bricht schon {@code docker compose config} ab und nennt genau
+   * diesen Namen. Eine einzige zurückgebliebene {@code :-}-Stelle machte die Zusage wertlos — der
+   * Wert erreichte den Container dann doch, nur mit dem öffentlich bekannten Vorgabewert.
+   *
+   * <p>{@code POSTGRES_PASSWORD} wird gegen den Basis-Stack gezählt: Das Overlay muss es an
+   * mindestens so vielen Stellen erzwingen, wie der Basis-Stack es mit {@code :-}-Vorgabe
+   * durchreicht (Dienst {@code postgres} und {@code MANBAN_DB_PASSWORD} an {@code manban-api}).
+   * Käme im Basis-Stack eine dritte Stelle hinzu, schlägt dieser Fall an, bis das Overlay sie
+   * ebenfalls deckt — ohne die Verknüpfung bliebe genau diese Stelle mit dem Vorgabewert zurück.
+   */
+  @Test
+  void betriebsOverlayErzwingtAlleFuenfPflichtwerte() throws IOException {
+    for (String pflichtwert : PFLICHTWERTE) {
+      assertThat(wirksameZeilenMit(BETRIEBS_OVERLAY, "${" + pflichtwert + ":?"))
+          .as("Pflichtwert %s in %s — mit :? erzwungen", pflichtwert, BETRIEBS_OVERLAY)
+          .isNotEmpty();
+      assertThat(wirksameZeilenMit(BETRIEBS_OVERLAY, "${" + pflichtwert + ":-"))
+          .as("Pflichtwert %s in %s — keine :-Vorgabe daneben", pflichtwert, BETRIEBS_OVERLAY)
+          .isEmpty();
+    }
+
+    int stellenImBasisStack = wirksameZeilenMit(BASIS_STACK, "${POSTGRES_PASSWORD:-").size();
+    assertThat(stellenImBasisStack)
+        .as(
+            "%s reicht POSTGRES_PASSWORD mit Vorgabe durch — ein leerer Treffer wäre kein Beweis",
+            BASIS_STACK)
+        .isPositive();
+    assertThat(wirksameZeilenMit(BETRIEBS_OVERLAY, "${POSTGRES_PASSWORD:?"))
+        .as(
+            "%s erzwingt POSTGRES_PASSWORD an allen %d Stellen des Basis-Stacks",
+            BETRIEBS_OVERLAY, stellenImBasisStack)
+        .hasSizeGreaterThanOrEqualTo(stellenImBasisStack);
+  }
+
+  /**
+   * Das Datenbankkennwort der Vorlage trägt einen Platzhalter, den {@code
+   * DatabasePasswordStartupCheck} ablehnt (Issue #1266) — wie die Speicher-Zugangsdaten seit Issue
+   * #1243. Die Vorlage ist damit bewusst nicht lauffähig: Wer sie unverändert kopiert, bekommt
+   * einen Abbruch mit Grund, keine Instanz, deren Daten unter einem öffentlich bekannten Kennwort
+   * liegen.
+   *
+   * <p>{@code :?} allein reichte hier nicht: Der Basis-Stack reicht {@code POSTGRES_PASSWORD} mit
+   * {@code :-manban} durch, ein gesetzter Platzhalter käme also durch die Interpolation hindurch.
+   */
+  @Test
+  void umgebungsVorlageFuehrtDasDatenbankkennwortNurAlsAbgelehntenPlatzhalter() throws IOException {
+    assertThat(wirksameZeilenMit(UMGEBUNGS_VORLAGE, "POSTGRES_PASSWORD="))
+        .as(
+            "Datenbankkennwort in %s — abgelehnter Platzhalter, kein gültig aussehender Wert",
+            UMGEBUNGS_VORLAGE)
+        .containsExactly("POSTGRES_PASSWORD=" + VORLAGE_DB_KENNWORT);
+    assertThat(VORLAGE_DB_KENNWORT)
+        .as("der Platzhalter ist nicht der abgelehnte Vorgabewert selbst")
+        .isNotEqualTo(ABGELEHNTES_DB_KENNWORT);
   }
 
   @Test
@@ -165,6 +310,88 @@ class BetriebsdateienTest {
     assertThat(composeAufrufe)
         .as("jeder Compose-Aufruf in %s trägt das Sicherungs-Overlay", DEPLOY_WORKFLOW)
         .allSatisfy(zeile -> assertThat(zeile).contains(SICHERUNGS_OVERLAY));
+  }
+
+  /**
+   * Der Deploy des Projektservers baut weiter vor Ort — dafür braucht jeder seiner Compose-Aufrufe
+   * seit Issue #1265 beide Bau-Overlays. Derselbe Fehlerfall wie bei der Sicherung: Ohne das {@code
+   * -f} baut {@code --build} nichts, der Deploy bleibt grün, und der Server läuft weiter auf dem
+   * Abbild, das er vorher hatte.
+   */
+  @Test
+  void deployWorkflowGibtJedemComposeAufrufBeideBauOverlaysMit() throws IOException {
+    List<String> composeAufrufe = wirksameZeilenMit(DEPLOY_WORKFLOW, "docker compose");
+
+    assertThat(composeAufrufe)
+        .as("Compose-Aufrufe in %s — ein leerer Treffer wäre kein Beweis", DEPLOY_WORKFLOW)
+        .isNotEmpty();
+    assertThat(composeAufrufe)
+        .as("jeder Compose-Aufruf in %s trägt beide Bau-Overlays", DEPLOY_WORKFLOW)
+        .allSatisfy(zeile -> assertThat(zeile).contains(BAU_SCHALTER));
+  }
+
+  /**
+   * Das Bau-Overlay des Sicherungsdienstes steht <b>hinter</b> dem Sicherungs-Overlay: Sein {@code
+   * image: !reset null} nimmt die dortige {@code image:}-Zeile zurück, und Compose wertet die
+   * Dateien in der Reihenfolge der Aufrufe aus. Stünde es davor, bliebe das veröffentlichte Abbild
+   * stehen und trüge am Ende den lokal gebauten Stand.
+   */
+  @Test
+  void dasBauOverlayDerSicherungStehtHinterDemSicherungsOverlay() throws IOException {
+    List<String> composeAufrufe = wirksameZeilenMit(DEPLOY_WORKFLOW, "docker compose");
+
+    assertThat(composeAufrufe)
+        .as("Compose-Aufrufe in %s — ein leerer Treffer wäre kein Beweis", DEPLOY_WORKFLOW)
+        .isNotEmpty()
+        .allSatisfy(
+            zeile ->
+                assertThat(zeile.indexOf("-f " + SICHERUNGS_BAU_OVERLAY))
+                    .as("Reihenfolge in: %s", zeile)
+                    .isGreaterThan(zeile.indexOf(SICHERUNGS_OVERLAY)));
+  }
+
+  /**
+   * Der ausgelieferte Stack zieht veröffentlichte Abbilder, der Bau liegt allein im Bau-Overlay
+   * (Issue #1265, fachliche Quelle #675). Bliebe ein {@code build:} im Basis-Stack oder im
+   * Sicherungs-Overlay stehen, bräuchte ein Selbsthoster wieder Node-, Maven- und JDK-Bauzeit,
+   * bevor er etwas sieht — und der Schnellstart mit einem einzigen Aufruf wäre dahin.
+   *
+   * <p>Die Fassung steht voll in der {@code image:}-Zeile und nicht als beweglicher Tag: Ein {@code
+   * latest} ist genau das, was dieses Vorhaben abschafft.
+   */
+  @Test
+  void derStackZiehtVeroeffentlichteAbbilderUndBautNurImBauOverlay() throws IOException {
+    for (Path datei : List.of(BASIS_STACK, SICHERUNGS_OVERLAY_DATEI)) {
+      assertThat(wirksameZeilenMit(datei, BAU_SCHLUESSEL))
+          .as("%s baut nicht mehr selbst — der Bau liegt in %s", datei, BAU_OVERLAY)
+          .isEmpty();
+      assertThat(wirksameZeilenMit(datei, EIGENE_ABBILDER))
+          .as("%s zieht genau ein veröffentlichtes Abbild, mit voller Fassung", datei)
+          .singleElement()
+          .asString()
+          .matches("image: \\Qghcr.io/mannewolff/\\E[\\w.-]+:\\d+\\.\\d+\\.\\d+");
+    }
+
+    assertThat(wirksameZeilenMit(BAU_OVERLAY, BAU_SCHLUESSEL))
+        .as("%s baut die Anwendung", BAU_OVERLAY)
+        .containsExactly("build: .");
+    assertThat(wirksameZeilenMit(BAU_OVERLAY, "manban-backup"))
+        .as(
+            "%s beschreibt den Sicherungsdienst nicht — sonst entstünde er ohne sein Overlay",
+            BAU_OVERLAY)
+        .isEmpty();
+    assertThat(wirksameZeilenMit(SICHERUNGS_BAU_OVERLAY, "context: ./backup"))
+        .as("%s baut den Sicherungsdienst aus seinem Verzeichnis", SICHERUNGS_BAU_OVERLAY)
+        .isNotEmpty();
+
+    for (Path overlay : List.of(BAU_OVERLAY, SICHERUNGS_BAU_OVERLAY)) {
+      assertThat(wirksameZeilenMit(overlay, "image:"))
+          .as("%s nimmt das veröffentlichte Abbild zurück, statt es stehen zu lassen", overlay)
+          .containsExactly("image: !reset null");
+      assertThat(Files.readAllLines(overlay, StandardCharsets.UTF_8).getFirst())
+          .as("%s beginnt mit einem Kopfkommentar", overlay)
+          .startsWith("#");
+    }
   }
 
   /**
@@ -239,6 +466,105 @@ class BetriebsdateienTest {
         .contains("config -q")
         .contains("darf nichts ausgeben")
         .contains("is missing a value");
+  }
+
+  /**
+   * Die Formen, in denen ein Compose-Aufruf bauen lässt — beide Reihenfolgen des Flags, damit ein
+   * künftiges {@code up --build -d} nicht durch die Prüfung fällt.
+   */
+  private static final List<String> BAU_AUFRUF_FORMEN = List.of("up -d --build", "up --build -d");
+
+  /** Woran ein Aufruf zu erkennen ist — ohne das ist {@code --build} nur ein erwähntes Wort. */
+  private static final String COMPOSE_AUFRUF = "docker compose";
+
+  /**
+   * Kein Bau-Aufruf in einer ausgelieferten Anleitung oder Betriebsdatei ohne das Bau-Overlay
+   * (Issue #1269, fachliche Quelle #675). Seit Issue #1265 liegt das {@code build:} allein in
+   * {@code docker-compose.bau.yml}: Ein {@code up -d --build} ohne dessen {@code -f} baut nichts
+   * mehr, sondern zieht das veröffentlichte Abbild — der Aufrufer bekommt einen grünen Start auf
+   * einem fremden Stand, obwohl er seinen Arbeitsstand fahren wollte.
+   *
+   * <p>Ohne diesen Fall wandert die Regel beim nächsten Anfassen wieder auseinander, genau wie die
+   * Sicherungs-Regel, für die {@link #deployWorkflowGibtJedemComposeAufrufDasSicherungsOverlayMit}
+   * da ist: Die Stellen liegen über ein Dutzend Dateien verteilt, und jede einzelne sieht für sich
+   * richtig aus.
+   *
+   * <p>Als Aufruf zählt eine Stelle, die {@code docker compose} <b>und</b> das Flag trägt. Die
+   * bloße <b>Erwähnung</b> von {@code --build} im Fließtext bleibt damit erlaubt — etwa der
+   * Kopfkommentar von {@code docker-compose.prod.yml}, der gerade erklärt, dass das Flag ohne
+   * Overlay nichts tut. Geprüft werden Aufrufe, nicht Wörter.
+   */
+  @Test
+  void keinAusgelieferterBauAufrufKommtOhneDasBauOverlay() throws IOException {
+    List<String> bauAufrufe = new ArrayList<>();
+
+    for (Path datei : ausgelieferteAnleitungenUndBetriebsdateien()) {
+      for (String aufruf : zusammengezogeneZeilen(datei)) {
+        if (!aufruf.contains(COMPOSE_AUFRUF)
+            || BAU_AUFRUF_FORMEN.stream().noneMatch(aufruf::contains)) {
+          continue;
+        }
+        bauAufrufe.add(aufruf);
+        assertThat(aufruf)
+            .as("Bau-Aufruf in %s ohne %s", datei, BAU_SCHALTER.getFirst())
+            .contains(BAU_SCHALTER.getFirst());
+      }
+    }
+
+    assertThat(bauAufrufe)
+        .as("Bau-Aufrufe in den ausgelieferten Dateien — ein leerer Treffer wäre kein Beweis")
+        .isNotEmpty();
+  }
+
+  /**
+   * Die ausgelieferten Anleitungen und Betriebsdateien: die Anleitungen aus {@code docs/}, die
+   * Dateien der Wurzel, die ein Betreiber liest, alle Compose-Dateien und der Deploy-Workflow.
+   *
+   * <p>Die Befund-Dateien {@code 2026-09-09-*.md} der Wurzel bleiben außen vor — sie halten
+   * historische Befunde fest und werden nicht nachgezogen. Deshalb sind die Wurzel-Dateien
+   * aufgezählt und nicht gesammelt. {@code docs-site/content/} bleibt ebenfalls außen vor: Das
+   * Verzeichnis wird aus {@code docs/} erzeugt und ist nicht eingecheckt.
+   */
+  private static List<Path> ausgelieferteAnleitungenUndBetriebsdateien() throws IOException {
+    List<Path> dateien =
+        new ArrayList<>(
+            List.of(
+                README,
+                UPGRADE_ANLEITUNG,
+                DEPLOYMENT_SPEZIFIKATION,
+                UMGEBUNGS_VORLAGE,
+                DEPLOY_WORKFLOW));
+    try (Stream<Path> anleitungen = Files.walk(ANLEITUNGEN)) {
+      dateien.addAll(anleitungen.filter(pfad -> pfad.toString().endsWith(".md")).toList());
+    }
+    try (Stream<Path> wurzel = Files.list(Path.of("."))) {
+      dateien.addAll(
+          wurzel
+              .filter(pfad -> pfad.getFileName().toString().startsWith("docker-compose"))
+              .toList());
+    }
+    return dateien;
+  }
+
+  /**
+   * Die Zeilen der Datei, wobei eine mit {@code \} fortgesetzte Zeile mit ihrer Folgezeile
+   * zusammengezogen wird: Ein mehrzeiliger Compose-Aufruf ist <b>ein</b> Aufruf, und seine {@code
+   * -f} stehen über die Zeilen verteilt. Ohne das Zusammenziehen sähe jede Fortsetzungszeile wie
+   * ein eigener Aufruf ohne Overlay aus.
+   */
+  private static List<String> zusammengezogeneZeilen(Path datei) throws IOException {
+    List<String> zeilen = new ArrayList<>();
+    StringBuilder offen = new StringBuilder();
+    for (String zeile : Files.readAllLines(datei, StandardCharsets.UTF_8)) {
+      String getrimmt = zeile.trim();
+      if (getrimmt.endsWith("\\")) {
+        offen.append(getrimmt, 0, getrimmt.length() - 1).append(' ');
+        continue;
+      }
+      zeilen.add(offen.append(getrimmt).toString());
+      offen.setLength(0);
+    }
+    return zeilen;
   }
 
   /**

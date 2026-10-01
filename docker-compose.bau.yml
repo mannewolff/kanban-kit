@@ -1,0 +1,30 @@
+# Bau-Overlay des Basis-Stacks (Issue #1265, Plan #1262, fachliche Quelle #675).
+#
+# Der Normalfall ist das veroeffentlichte Abbild: docker-compose.yml traegt
+# `image: ghcr.io/mannewolff/kanban-kit:<Fassung>` und baut nichts. Ein Selbsthoster kommt damit
+# von der leeren Maschine zur laufenden Instanz, ohne dass Node, Maven und das JDK erst
+# uebersetzen muessen.
+#
+# Dieses Overlay ist der einzige Schalter des Baus. Es gilt fuer zwei, die ihn brauchen: fuer
+# Entwickler, die ihren Arbeitsstand fahren wollen, und fuer das Deployment des Projekts selbst,
+# das den Server weiterhin aus dem Quelltext bestueckt (.github/workflows/deploy.yml).
+#
+# Aufruf:
+#   docker compose -f docker-compose.yml -f docker-compose.bau.yml up -d --build
+#
+# `image: !reset null` nimmt die ghcr-Zeile des Basis-Stacks zurueck, statt sie nur zu ergaenzen.
+# Ohne das truege das hier gebaute Abbild oertlich den Tag der veroeffentlichten Fassung — ein
+# spaeterer Schnellstart ohne dieses Overlay faehrt dann stillschweigend den Arbeitsstand des
+# Entwicklers statt des Release. `!reset` setzt Docker Compose >= 2.24 voraus; das betrifft nur
+# diesen Bau-Weg, der Schnellstart bleibt bei den >= 2.23 aus docs/betrieb.md.
+#
+# Der Sicherungsdienst wird hier NICHT gebaut, obwohl sein Abbild denselben Weg ging: Ein Dienst,
+# den nur dieses Overlay nennt, entstuende auch ohne das Sicherungs-Overlay — Compose fuehrt die
+# Dateien zusammen und kennt kein "nur, wenn eine andere Datei ihn auch beschreibt". Wer bloss
+# seinen Arbeitsstand fahren will, baute und startete dann einen Sicherungs-Container ohne
+# Umgebung und ohne Volumes. Sein Bau steht darum in docker-compose.backup-bau.yml, das zum
+# Sicherungs-Overlay gehoert.
+services:
+  manban-api:
+    image: !reset null
+    build: .

@@ -1,0 +1,85 @@
+# Betriebs-Overlay: Produktivbetrieb auf eigener Hardware (Issue #1266, Plan #1262, fachlich #675).
+#
+# Der Schnellstart aus README.md ist eine Testinstanz — er laeuft mit MANBAN_DEV_MODE=true und den
+# mitgelieferten Standardwerten. Dieses Overlay ist der zweite Weg: Es knipst den
+# Entwicklungsschalter fest aus und erzwingt die fuenf Werte, die ein Produktivbetrieb selbst setzen
+# muss (MANBAN_SESSION_SECRET, MANBAN_BASE_URL, OBJEKTSPEICHER_ROOT_USER,
+# OBJEKTSPEICHER_ROOT_PASSWORD, POSTGRES_PASSWORD). Fehlt einer, bricht schon `docker compose
+# config` ab und nennt ihn.
+#
+# Nicht zu verwechseln mit docker-compose.prod.yml: Das ist der Projektserver hinter dem dort
+# vorhandenen Traefik und verlangt ein externes Netz `web` — auf fremder Hardware nicht startbar.
+#
+# --- Weg 1: mitgelieferter Caddy (Normalfall) --------------------------------------------------
+#   docker compose -f docker-compose.yml -f docker-compose.betrieb.yml up -d
+# Caddy nimmt die Host-Ports 80 und 443 und holt fuer MANBAN_DOMAIN ein Let's-Encrypt-Zertifikat
+# (ohne eigenen Eintrag bleibt es bei `localhost` und damit bei einem selbst ausgestellten).
+#
+# --- Weg 2: eigener Reverse-Proxy -------------------------------------------------------------
+# Wer schon einen Proxy betreibt, schaltet Caddy ueber eine Zeile in der .env ab:
+#   MANBAN_PROXY_PROFIL=eigener-proxy
+# Dann bleiben 80 und 443 frei, und der eigene Proxy spricht manban-api auf 127.0.0.1:8080 an. Er
+# muss dabei das TLS beenden und X-Forwarded-Proto, -Host und -For setzen.
+#
+# Warum ein Profil mit interpolierter Vorgabe und nicht einfach zwei Dateien: Ohne Eintrag ist der
+# Profilname leer, und das ist genau das Profil, das Compose ohne `--profile` fuehrt — Caddy laeuft
+# also im Normalfall mit. Mit Eintrag traegt er einen Namen, den niemand aktiviert, und bleibt
+# unten. (Wer selbst ein `--profile` uebergibt, schaltet damit das leere Profil ab und laesst Caddy
+# weg; das ist hier der einzige Weg, ihn versehentlich zu verlieren.)
+#
+# Die Bindung `127.0.0.1:8080:8080` steht in beiden Wegen und **oeffnet keinen Port nach aussen**:
+# Sie haengt ausschliesslich am Loopback-Gerät des Servers. Ohne sie waere manban-api fuer einen
+# eigenen Proxy gar nicht erreichbar — das Basis-Compose gibt dem Dienst keinen Host-Port, weil dort
+# Caddy im selben Netz mit ihm spricht.
+#
+# Sicherung zuschalten (docs/backup.md) wie gewohnt mit einem weiteren -f:
+#   docker compose -f docker-compose.yml -f docker-compose.betrieb.yml \
+#     -f docker-compose.backup.yml up -d
+services:
+  # Neustart-Regel an allen Diensten, wie im Prod-Overlay und aus demselben Grund: Ohne Eintrag
+  # startet Docker nach einem Neustart des Servers keinen Container wieder, und die Instanz bleibt
+  # aus, bis jemand von Hand `docker compose up -d` aufruft. `unless-stopped` statt `always`, damit
+  # ein bewusstes `docker compose stop` auch ueber einen Reboot hinweg haelt.
+  postgres:
+    restart: unless-stopped
+    environment:
+      # Erzwungen an beiden Stellen, an denen das Basis-Compose POSTGRES_PASSWORD mit :-manban
+      # durchreicht — hier und als MANBAN_DB_PASSWORD an manban-api. Bliebe eine davon bei der
+      # Vorgabe, liefen Datenbank und Anwendung mit verschiedenen Kennwoertern auseinander.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss in .env gesetzt sein - Kennwort der Datenbankrolle, erzeugen mit openssl rand -hex 32}
+
+  objektspeicher:
+    restart: unless-stopped
+
+  manban-api:
+    restart: unless-stopped
+    # Fuer Weg 2 (eigener Reverse-Proxy) und ausdruecklich an das Loopback gebunden: Ein
+    # `8080:8080` haengte den Dienst an jede Adresse des Servers und damit ungeschuetzt ins Netz.
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      # Fester Wert, bewusst KEINE ${...}-Interpolation: Das Overlay erbt den environment:-Block des
+      # Basis-Compose (dort MANBAN_DEV_MODE=true) und ueberschreibt nur die hier genannten
+      # Schluessel. Ohne eigenen Eintrag reiste "true" in den Produktivbetrieb. Kaeme der Wert aus
+      # der .env, genuegte ein MANBAN_DEV_MODE=true fuer den lokalen Betrieb, um die Ausnahme auch
+      # hier stillschweigend einzuschalten — dieselbe Luecke mit einem Zwischenschritt.
+      MANBAN_DEV_MODE: "false"
+      # Die fuenf Pflichtwerte mit :? — die frueheste Stelle, an der ein fehlender Wert auffallen
+      # kann: Es scheitert schon `docker compose config`, also bevor irgendein Container startet.
+      # Die Startpruefungen der Anwendung (SessionSecretStartupCheck, ObjectStorageStartupCheck,
+      # DatabasePasswordStartupCheck) fangen dieselben Faelle ein zweites Mal ab — sie muessen es,
+      # weil :? nur leer und ungesetzt faengt, nicht einen gesetzten Vorgabewert.
+      MANBAN_SESSION_SECRET: ${MANBAN_SESSION_SECRET:?MANBAN_SESSION_SECRET muss in .env gesetzt sein - Schluessel zum Signieren der Sitzungs-Cookies, erzeugen mit openssl rand -hex 32}
+      MANBAN_BASE_URL: ${MANBAN_BASE_URL:?MANBAN_BASE_URL muss in .env gesetzt sein - oeffentliche Adresse dieser Instanz fuer Links in E-Mails, z. B. https://kanban.example.org}
+      MANBAN_STORAGE_ACCESS_KEY: ${OBJEKTSPEICHER_ROOT_USER:?OBJEKTSPEICHER_ROOT_USER muss in .env gesetzt sein - Benutzername des Objektspeichers fuer die Anhaenge, frei waehlbar und nicht manban}
+      MANBAN_STORAGE_SECRET_KEY: ${OBJEKTSPEICHER_ROOT_PASSWORD:?OBJEKTSPEICHER_ROOT_PASSWORD muss in .env gesetzt sein - Geheimnis des Objektspeichers, erzeugen mit openssl rand -hex 32}
+      MANBAN_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss in .env gesetzt sein - Kennwort der Datenbankrolle, erzeugen mit openssl rand -hex 32}
+
+  caddy:
+    restart: unless-stopped
+    # Leerer Profilname als Vorgabe = das Profil, das Compose ohne `--profile` fuehrt: Caddy laeuft
+    # im Normalfall mit. Wer MANBAN_PROXY_PROFIL in der .env setzt, gibt ihm einen Namen, den
+    # niemand aktiviert — dann bleibt er unten und die Host-Ports 80 und 443 frei. Muster:
+    # der profiles-Eintrag `local-tls` in docker-compose.prod.yml, nur mit umgekehrter Vorgabe.
+    profiles:
+      - "${MANBAN_PROXY_PROFIL:-}"

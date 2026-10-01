@@ -3,6 +3,7 @@ package org.mwolff.manban.card.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -34,6 +35,7 @@ import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -90,7 +92,7 @@ class CardServiceTest {
       String shortcode) {
     return new Card(
         id, BOARD, columnId, number, "Titel", null, 0, archived, done, 1L, FIXED, FIXED, type,
-        parentId, shortcode, null, PROJECT, null, null, null);
+        parentId, shortcode, null, PROJECT, null, null, null, null);
   }
 
   private static ColumnView column(long id, String name, int position) {
@@ -154,6 +156,7 @@ class CardServiceTest {
         c.dueDate(),
         c.projectId(),
         c.externalKey(),
+        null,
         null,
         null);
   }
@@ -591,6 +594,7 @@ class CardServiceTest {
         PROJECT,
         null,
         derivedFrom,
+        null,
         null);
   }
 
@@ -1088,6 +1092,7 @@ class CardServiceTest {
             "E",
             null,
             PROJECT,
+            null,
             null,
             null,
             null);
@@ -3147,6 +3152,7 @@ class CardServiceTest {
         projectId,
         null,
         null,
+        null,
         null);
   }
 
@@ -3263,6 +3269,7 @@ class CardServiceTest {
         null,
         null,
         PROJECT,
+        null,
         null,
         null,
         null);
@@ -3705,6 +3712,7 @@ class CardServiceTest {
             PROJECT,
             null,
             null,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
@@ -3738,9 +3746,297 @@ class CardServiceTest {
             PROJECT,
             null,
             null,
+            null,
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(onLargeBoard));
 
     assertThatCode(() -> service.requireOnBoard(1L, largeBoard)).doesNotThrowAnyException();
+  }
+
+  // --- setStatus (Issue #1300, Plan #1294) ----------------------------
+
+  private static Card paket(long id, String titel, CardType type, @Nullable CardStatus status) {
+    return new Card(
+        id, BOARD, 20L, 7, titel, null, 3, false, null, 1L, FIXED, FIXED, type, null, null, null,
+        PROJECT, null, null, null, status);
+  }
+
+  private Card gespeichert() {
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    verify(cards).save(captor.capture());
+    return captor.getValue();
+  }
+
+  @Test
+  void setStatus_laesstSpalteUndPositionUnveraendert() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.BACKLOG)));
+
+    service.setStatus(1L, 5L, "IN_PROGRESS");
+
+    Card nachher = gespeichert();
+    assertThat(nachher.status()).isEqualTo(CardStatus.IN_PROGRESS);
+    assertThat(nachher.columnId()).isEqualTo(20L);
+    assertThat(nachher.positionInColumn()).isEqualTo(3);
+    verify(cards, never()).move(anyLong(), anyLong(), anyInt());
+  }
+
+  @Test
+  void setStatus_verlangtCardMove_undSchreibtOhneRechtNichts() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.BACKLOG)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(1L, PROJECT, Permission.CARD_MOVE);
+
+    assertThatThrownBy(() -> service.setStatus(1L, 5L, "READY"))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+
+    verify(cards, never()).save(any(Card.class));
+    verify(transitions, never()).closeOpen(anyLong(), any(Instant.class));
+    verify(events, never()).publishEvent(any(Object.class));
+  }
+
+  @Test
+  void setStatus_weistUnbekanntenWertAb() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.BACKLOG)));
+
+    assertThatThrownBy(() -> service.setStatus(1L, 5L, "FERTIG"))
+        .isInstanceOf(InvalidStatusException.class);
+    // Nur der Konstantenname gilt (E24) — ein Anzeigename oder Kleinschreibung ist kein Status.
+    assertThatThrownBy(() -> service.setStatus(1L, 5L, "In review"))
+        .isInstanceOf(InvalidStatusException.class);
+    assertThatThrownBy(() -> service.setStatus(1L, 5L, "done"))
+        .isInstanceOf(InvalidStatusException.class);
+
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void setStatus_weistVorhabenAb() {
+    when(cards.findById(5L)).thenReturn(Optional.of(paket(5L, "Vorhaben", CardType.EPIC, null)));
+
+    assertThatThrownBy(() -> service.setStatus(1L, 5L, "READY"))
+        .isInstanceOf(InvalidStatusException.class);
+
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void setStatus_weistDokumentartAb() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "[Fachlich] Anforderung", CardType.CARD, null)));
+
+    assertThatThrownBy(() -> service.setStatus(1L, 5L, "READY"))
+        .isInstanceOf(InvalidStatusException.class);
+
+    verify(cards, never()).save(any(Card.class));
+    verify(activity, never())
+        .add(anyLong(), anyLong(), any(), any(), any(), any(ActorContext.ActorStamp.class));
+  }
+
+  @Test
+  void setStatus_schreibtStatusChangedMitKanonischemProzessnamen() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.IN_PROGRESS)));
+
+    service.setStatus(1L, 5L, "IN_REVIEW");
+
+    verify(activity)
+        .add(
+            5L,
+            1L,
+            CardActivityType.STATUS_CHANGED,
+            "Status auf In review",
+            FIXED,
+            ActorContext.ActorStamp.unknown());
+  }
+
+  @Test
+  void setStatus_veroeffentlichtUpdated() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.BACKLOG)));
+
+    service.setStatus(1L, 5L, "READY");
+
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 5L));
+  }
+
+  @Test
+  void setStatus_fuehrtDenAufenthaltMitDemProzessnamenInDerEigenenSpalte() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.BACKLOG)));
+
+    service.setStatus(1L, 5L, "IN_PROGRESS");
+
+    InOrder reihenfolge = inOrder(transitions);
+    reihenfolge.verify(transitions).closeOpen(5L, FIXED);
+    reihenfolge.verify(transitions).open(5L, 20L, "In progress", FIXED);
+  }
+
+  @Test
+  void setStatus_setztDoneStempelBeimWechselAufDone() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.IN_REVIEW)));
+
+    service.setStatus(1L, 5L, "DONE");
+
+    assertThat(gespeichert().movedToDoneAt()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void setStatus_raeumtDoneStempelBeimWechselWegVonDone() {
+    Card erledigt =
+        paket(5L, "Paket", CardType.CARD, CardStatus.DONE)
+            .withMovedToDoneAt(Instant.parse("2025-12-01T00:00:00Z"));
+    when(cards.findById(5L)).thenReturn(Optional.of(erledigt));
+
+    service.setStatus(1L, 5L, "IN_REVIEW");
+
+    Card nachher = gespeichert();
+    assertThat(nachher.movedToDoneAt()).isNull();
+    assertThat(nachher.status()).isEqualTo(CardStatus.IN_REVIEW);
+  }
+
+  @Test
+  void setStatus_aufDenBisherigenStatus_hinterlaesstKeineSpur() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.READY)));
+
+    service.setStatus(1L, 5L, "READY");
+
+    verify(permissions).require(1L, PROJECT, Permission.CARD_MOVE);
+    verify(cards, never()).save(any(Card.class));
+    verify(transitions, never()).closeOpen(anyLong(), any(Instant.class));
+    verify(activity, never())
+        .add(anyLong(), anyLong(), any(), any(), any(), any(ActorContext.ActorStamp.class));
+    verify(events, never()).publishEvent(any(Object.class));
+  }
+
+  @Test
+  void setStatus_unbekannteKarte_wirftNotFound() {
+    when(cards.findById(5L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.setStatus(1L, 5L, "READY"))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  // --- status und canSetStatus in der Sicht (Issue #1300, E8/E10) ------
+
+  @Test
+  void getCard_traegtStatusUndCanSetStatusAusDerCardMovePruefung() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.IN_REVIEW)));
+    when(permissions.hasPermission(1L, PROJECT, Permission.CARD_MOVE)).thenReturn(true);
+
+    CardService.CardView sicht = service.getCard(1L, 5L);
+
+    assertThat(sicht.status()).isEqualTo("IN_REVIEW");
+    assertThat(sicht.canSetStatus()).isTrue();
+  }
+
+  @Test
+  void getCard_ohneCardMove_canSetStatusFalsch() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.IN_REVIEW)));
+    when(permissions.hasPermission(1L, PROJECT, Permission.CARD_MOVE)).thenReturn(false);
+
+    assertThat(service.getCard(1L, 5L).canSetStatus()).isFalse();
+  }
+
+  @Test
+  void getCard_ohneEigenenStatus_statusNullUndCanSetStatusFalsch() {
+    // Ohne eigenen Status gibt es nichts zu setzen — auch nicht für jemanden mit CARD_MOVE.
+    when(cards.findById(5L)).thenReturn(Optional.of(paket(5L, "[Plan] Plan", CardType.CARD, null)));
+    when(permissions.hasPermission(1L, PROJECT, Permission.CARD_MOVE)).thenReturn(true);
+
+    CardService.CardView sicht = service.getCard(1L, 5L);
+
+    assertThat(sicht.status()).isNull();
+    assertThat(sicht.canSetStatus()).isFalse();
+  }
+
+  @Test
+  void listByBoard_prueftCardMoveEinmalFuerAlleKarten() {
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                paket(1L, "A", CardType.CARD, CardStatus.READY),
+                paket(2L, "B", CardType.CARD, CardStatus.DONE),
+                paket(3L, "[Idee] C", CardType.CARD, null)));
+    when(permissions.hasPermission(1L, PROJECT, Permission.CARD_MOVE)).thenReturn(true);
+
+    List<CardService.CardView> sichten = service.listByBoard(1L, BOARD);
+
+    // Die Dokumentkarte trägt keinen Status — also auch kein Recht, ihn zu setzen.
+    assertThat(sichten)
+        .extracting(CardService.CardView::status, CardService.CardView::canSetStatus)
+        .containsExactly(tuple("READY", true), tuple("DONE", true), tuple(null, false));
+    verify(permissions, times(1)).hasPermission(1L, PROJECT, Permission.CARD_MOVE);
+  }
+
+  @Test
+  void listByBoard_ohneCardMove_canSetStatusFalsch() {
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(List.of(paket(1L, "A", CardType.CARD, CardStatus.READY)));
+    when(permissions.hasPermission(1L, PROJECT, Permission.CARD_MOVE)).thenReturn(false);
+
+    assertThat(service.listByBoard(1L, BOARD))
+        .extracting(CardService.CardView::status, CardService.CardView::canSetStatus)
+        .containsExactly(tuple("READY", false));
+  }
+
+  @Test
+  void listBoardItems_traegtDenStatusAlsText() {
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                paket(1L, "A", CardType.CARD, CardStatus.IN_PROGRESS),
+                paket(2L, "Vorhaben", CardType.EPIC, null)));
+
+    assertThat(service.listBoardItems(1L, BOARD))
+        .extracting(CardService.BoardItemView::status)
+        .containsExactly("IN_PROGRESS", null);
+  }
+
+  @Test
+  void searchByNumber_traegtCanSetStatusJeProjektDerKarte() {
+    Card fremd =
+        new Card(
+            6L,
+            BOARD_B,
+            30L,
+            7,
+            "Fremd",
+            null,
+            0,
+            false,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            PROJECT_B,
+            null,
+            null,
+            null,
+            CardStatus.READY);
+    when(projects.listAccessible(1L))
+        .thenReturn(List.of(new ProjectService.AccessibleProject(PROJECT_B, "B")));
+    when(cards.findByNumberInProjects(7, List.of(PROJECT_B))).thenReturn(List.of(fremd));
+    when(boardService.requireBoardSummary(BOARD_B))
+        .thenReturn(new BoardService.BoardSummary(BOARD_B, "Fremdes Board", false));
+    when(boardService.requireColumn(30L, BOARD_B)).thenReturn(column(30L, "Ready", 1));
+    when(permissions.hasPermission(1L, PROJECT, Permission.CARD_MOVE)).thenReturn(true);
+    when(permissions.hasPermission(1L, PROJECT_B, Permission.CARD_MOVE)).thenReturn(false);
+
+    CardService.CardSearchHit treffer = service.searchByNumber(1L, 7).get(0);
+
+    assertThat(treffer.card().status()).isEqualTo("READY");
+    assertThat(treffer.card().canSetStatus()).isFalse();
   }
 }

@@ -21,7 +21,7 @@ import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import type { Member } from '../api/members'
 import { activeCardsInColumn, applyMove, spaltenAuswahlUmschalten } from '../lib/boardOps'
-import { neighbourColumns } from '../lib/columnMeta'
+import { effektivDone, neighbourColumns } from '../lib/columnMeta'
 import { useEditMode } from '../lib/EditModeContext'
 import type { Label } from '../api/labels'
 import { isOverdue } from '../lib/dueDate'
@@ -49,8 +49,6 @@ import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './Ne
 import { useSnackbar } from './SnackbarProvider'
 import { SpecImportDialog, type SpecCard } from './SpecImportDialog'
 import { TransferCardDialog } from './TransferCardDialog'
-
-const isDoneColumn = (name: string) => name.toLowerCase().includes('done')
 
 /** Wie weit ein Label in der Auswahl vertreten ist — `alle` nur, wenn jede gewählte Karte es trägt. */
 const labelZustand = (treffer: number, gesamt: number): LabelZustand => {
@@ -424,7 +422,7 @@ export function BoardView({
   // Filter der Werkzeugleiste (#980, Entwurf Z. 1682–1686): „Meine" sind Karten, denen der
   // angemeldete Nutzer zugeordnet ist; „Überfällig" Karten mit einer Frist vor heute außerhalb von Done.
   const spaltenName = new Map(columns.map((c) => [c.id, c.name]))
-  const istUeberfaellig = (c: Card) => isOverdue(c.dueDate, isDoneColumn(spaltenName.get(c.columnId) ?? ''))
+  const istUeberfaellig = (c: Card) => isOverdue(c.dueDate, effektivDone(c, spaltenName.get(c.columnId) ?? ''))
   const ueberfaelligZahl = filteredCards.filter((c) => !c.archived && istUeberfaellig(c)).length
   const sichtbareKarten = filteredCards.filter((c) => {
     if (kartenFilter === 'meine') return currentUserId !== null && c.assignees.includes(currentUserId)
@@ -849,7 +847,6 @@ export function BoardView({
               // Was die Spalte gerade zeigt — Grundlage des Spalten-Kästchens und der Karten.
               angezeigteKarten={activeCardsInColumn(sichtbareKarten, column.id)}
               epics={epics}
-              done={isDoneColumn(column.name)}
               dichte={dichte}
               selectionMode={selectionMode}
               selectedIds={selectedIds}

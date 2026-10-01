@@ -16,7 +16,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 class CardColumnTransitionBackfillIT {
 
-  private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  private static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>("postgres:16.15");
 
   static {
     POSTGRES.start();

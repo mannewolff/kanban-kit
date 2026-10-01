@@ -46,9 +46,12 @@ function parseProblem(body: string): { message?: string; fieldErrors?: FieldErro
   let data: unknown
   try {
     data = JSON.parse(body)
-  } catch {
+  }
+  // Stryker disable next-line BlockStatement: gleichwertig — ohne `return {}` bleibt `data` undefiniert, und die Typprüfung darunter liefert dasselbe `{}`
+  catch {
     return {}
   }
+  // Stryker disable next-line ConditionalExpression: gleichwertig — an einem JSON-Primitiv liest der Zugriff darunter nur `undefined`, `null` fängt der zweite Teil
   if (typeof data !== 'object' || data === null) return {}
   const problem = data as Record<string, unknown>
   return {
@@ -108,6 +111,7 @@ export async function apiFetch<T>(
   })
 
   if (!response.ok) {
+    // Stryker disable next-line ArrowFunction: gleichwertig — ein undefinierter Body scheitert in `parseProblem` am JSON und fällt wie `''` auf `statusText`
     const body = await response.text().catch(() => '')
     const problem = parseProblem(body)
     notifyUnauthorized(response.status)

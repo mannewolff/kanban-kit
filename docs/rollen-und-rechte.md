@@ -37,7 +37,7 @@ hängt, gehört deshalb nicht in die Tabelle, sondern unter [Sonderregeln](#sond
 | Karte anlegen, Spezifikation einlesen | `TICKET_CREATE` | – | ✓ | ✓ | ✓ |
 | Karte bearbeiten (Titel, Text, Zuständige, Fälligkeit, Labels) | `TICKET_UPDATE` | – | ✓ | ✓ | ✓ |
 | Karte archivieren, in den Papierkorb legen, wiederherstellen | `TICKET_DELETE` | – | ✓ | ✓ | ✓ |
-| Karte verschieben — Spalte, **anderes Board desselben Projekts**; Spalte nach Kartennummer sortieren | `CARD_MOVE` | – | ✓ | ✓ | ✓ |
+| Karte verschieben — Spalte, **anderes Board desselben Projekts**; Spalte nach Kartennummer sortieren; Status eines Arbeitspakets setzen (`PUT /api/cards/{cardId}/status`) | `CARD_MOVE` | – | ✓ | ✓ | ✓ |
 | **Karte in ein anderes Projekt verschieben** — OWNER in **beiden** Projekten | `CARD_MOVE_PROJECT` | – | – | – | ✓ |
 | Kommentare lesen | `COMMENT_READ` | ✓ | ✓ | ✓ | ✓ |
 | Kommentar schreiben | `COMMENT_CREATE` | – | ✓ | ✓ | ✓ |

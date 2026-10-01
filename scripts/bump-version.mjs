@@ -4,6 +4,13 @@
  * frontend/package.json (+ package-lock.json). Quelle der Wahrheit ist die Datei VERSION im
  * Repo-Root; die anderen beiden Dateien werden daraus synchronisiert.
  *
+ * Seit Issue #1267 ziehen `minor` und `major` zusaetzlich die Tags der EIGENEN Abbilder in den
+ * Betriebsdateien nach: die ghcr-Zeile in docker-compose.yml und in docker-compose.backup.yml
+ * sowie die beiden ghcr-Eintraege in scripts/bausteine.json. Warum `patch` aussen vor bleibt: Nur
+ * der Tag vX.Y.Z eines `merge production` loest .github/workflows/release-images.yml aus, ein
+ * `push main` veroeffentlicht kein Abbild. Eine Betriebsdatei, die nach einem Patch-Bump auf
+ * 2.14.3 zeigte, zeigte auf etwas, das nie gebaut wurde.
+ *
  * Nutzung:
  *   node scripts/bump-version.mjs patch   (Z+1)              -> push main
  *   node scripts/bump-version.mjs minor   (Y+1, Z=0)         -> merge production
@@ -15,7 +22,7 @@
  * Siehe RELEASING.md fuer den Kontext, wann welcher Teil/Befehl faellig ist.
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -60,6 +67,67 @@ function updatePom(newVersion) {
     fail('Projekt-Version in pom.xml (Artefakt "manban") nicht gefunden');
   }
   writeFileSync(POM_PATH, pom.replace(pattern, `$1${newVersion}$2`));
+}
+
+/** Die beiden eigenen Abbilder, die dieses Projekt selbst nach ghcr.io veroeffentlicht. */
+export const GHCR_ANWENDUNG = 'ghcr.io/mannewolff/kanban-kit';
+export const GHCR_SICHERUNG = 'ghcr.io/mannewolff/kanban-kit-backup';
+
+/**
+ * Ob ein Bump die eigenen Image-Tags in den Betriebsdateien mitzieht. Nur `minor` und `major`:
+ * siehe Kopfkommentar.
+ */
+export function betriebsdateienFaellig(part) {
+  return part === 'minor' || part === 'major';
+}
+
+/**
+ * Ersetzt in `datei` den Tag hinter `abbild` durch `neueVersion`.
+ *
+ * Getroffen wird die Zeile ueber den ABBILDNAMEN, nicht ueber die alte Version: Zwischen zwei
+ * Releases heben mehrere `patch`-Bumps VERSION an, ohne die Betriebsdateien anzufassen — der
+ * naechste `minor` traefe die Zeile also mit einer aelteren Fassung an und liefe mit einem Muster
+ * aus der alten Version ins Leere. Das `:` hinter dem Namen grenzt die Anwendung gegen
+ * `…-backup` ab.
+ */
+function tagInDatei(pfad, abbild, neueVersion) {
+  const text = readFileSync(pfad, 'utf-8');
+  const muster = new RegExp(`(image:\\s*${abbild.replaceAll('.', '\\.')}:)\\S+`);
+  if (!muster.test(text)) {
+    throw new Error(`Zeile 'image: ${abbild}:<Fassung>' in ${pfad} nicht gefunden`);
+  }
+  writeFileSync(pfad, text.replace(muster, `$1${neueVersion}`));
+}
+
+/**
+ * Zieht in `bausteine.json` Bezugsstelle und Fassung des Bausteins zu `abbild` nach. Die Datei
+ * wird als JSON gelesen und mit zwei Leerzeichen Einrueckung zurueckgeschrieben — genau die Form,
+ * in der sie im Repo liegt.
+ */
+function bausteinNachziehen(bausteine, abbild, neueVersion, pfad) {
+  const baustein = bausteine.find((eintrag) => eintrag.bezugsstelle?.startsWith(`${abbild}:`));
+  if (!baustein) {
+    throw new Error(`Baustein zu '${abbild}' in ${pfad} nicht gefunden`);
+  }
+  baustein.bezugsstelle = `${abbild}:${neueVersion}`;
+  baustein.fassung = neueVersion;
+}
+
+/**
+ * Zieht die Tags der eigenen Abbilder in den Betriebsdateien unterhalb von `wurzel` nach. Fehlt
+ * eine der vier Stellen, bricht der Lauf ab statt still weiterzulaufen — dieselbe Haltung wie bei
+ * updatePom: Eine Betriebsdatei, die auf ein nie gebautes Abbild zeigt, ist schlimmer als keine.
+ */
+export function betriebsdateienNachziehen(wurzel, neueVersion) {
+  tagInDatei(join(wurzel, 'docker-compose.yml'), GHCR_ANWENDUNG, neueVersion);
+  tagInDatei(join(wurzel, 'docker-compose.backup.yml'), GHCR_SICHERUNG, neueVersion);
+
+  const bausteinePfad = join(wurzel, 'scripts', 'bausteine.json');
+  const daten = JSON.parse(readFileSync(bausteinePfad, 'utf-8'));
+  const bausteine = daten.bausteine ?? [];
+  bausteinNachziehen(bausteine, GHCR_ANWENDUNG, neueVersion, bausteinePfad);
+  bausteinNachziehen(bausteine, GHCR_SICHERUNG, neueVersion, bausteinePfad);
+  writeFileSync(bausteinePfad, `${JSON.stringify(daten, null, 2)}\n`);
 }
 
 function updateFrontend(newVersion) {
@@ -111,8 +179,22 @@ function main(argv) {
   writeFileSync(VERSION_PATH, `${nextText}\n`);
   updatePom(nextText);
   updateFrontend(nextText);
+  if (betriebsdateienFaellig(cmd)) {
+    try {
+      betriebsdateienNachziehen(REPO_ROOT, nextText);
+    } catch (fehler) {
+      fail(fehler.message);
+    }
+    process.stdout.write(`Eigene Image-Tags in den Betriebsdateien auf ${nextText} gesetzt.\n`);
+  }
 
   process.stdout.write(`Version: ${currentText} -> ${nextText}\n`);
 }
 
-main(process.argv.slice(2));
+// Nur beim direkten Aufruf laufen lassen: Der Test importiert dieses Modul, und ein main() beim
+// Import zerlegte die Repo-Dateien mit den Argumenten des Test-Runners.
+const direktAufgerufen =
+  process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+if (direktAufgerufen) {
+  main(process.argv.slice(2));
+}

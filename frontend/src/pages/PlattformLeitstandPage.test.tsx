@@ -718,6 +718,8 @@ describe('PlattformLeitstandPage (#1083)', () => {
         dueDate: null,
         archived: false,
         derivedFrom: null,
+        status: null,
+        canSetStatus: false,
         boardId: 1,
         columnId: 5,
       })

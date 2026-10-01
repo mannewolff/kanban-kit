@@ -1,0 +1,47 @@
+name: Fehler melden
+description: Etwas funktioniert nicht wie beschrieben
+title: "[Fehler] "
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Welche Version von kanban-kit läuft? Bei einem eigenen Build der Commit.
+      placeholder: "2.14.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: betriebsart
+    attributes:
+      label: Betriebsart
+      description: Wie wird die Anwendung betrieben?
+      options:
+        - Docker Compose
+        - anders (bitte beschreiben)
+    validations:
+      required: true
+  - type: textarea
+    id: erwartet
+    attributes:
+      label: Erwartetes Verhalten
+      description: Was sollte geschehen?
+    validations:
+      required: true
+  - type: textarea
+    id: beobachtet
+    attributes:
+      label: Beobachtetes Verhalten
+      description: Was geschieht stattdessen? Fehlermeldungen und Log-Auszüge gehören hierher.
+    validations:
+      required: true
+  - type: textarea
+    id: schritte
+    attributes:
+      label: Schritte zur Reproduktion
+      description: Der kürzeste Weg, auf dem der Fehler wieder auftritt.
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true

@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardService.DerivationNodeView;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectService;
@@ -67,6 +68,7 @@ class DerivationTreeTest {
         PROJECT,
         null,
         derivedFrom,
+        null,
         null);
   }
 
@@ -90,6 +92,7 @@ class DerivationTreeTest {
         null,
         null,
         PROJECT,
+        null,
         null,
         null,
         null);
@@ -163,6 +166,7 @@ class DerivationTreeTest {
             null,
             null,
             PROJECT,
+            null,
             null,
             null,
             null));
@@ -273,6 +277,18 @@ class DerivationTreeTest {
     // Gegenprobe: sonst waere eine Fassung gruen, die jede Zeile als erledigt meldet.
     assertThat(baum).filteredOn(n -> n.number() != 2).noneMatch(DerivationNodeView::done);
     // Die Abhaengigkeit liegt in Done -> die abhaengige Karte ist nicht blockiert.
+    assertThat(baum).noneMatch(DerivationNodeView::blocked);
+  }
+
+  @Test
+  void erledigtes_arbeitspaket_in_eigener_spalte_blockiert_keine_abhaengigkeit() {
+    // Plan #1294, E7: Paket 2 steht auf DONE, liegt aber in einer eigenen Spalte. Sein
+    // Done-Zeitstempel (gesetzt von den Schreibpfaden) traegt Done und Blockade.
+    when(dependencies.findByCardIds(any())).thenReturn(Map.of(3L, List.of(2)));
+    Card erledigt = card(2L, 2, 1L, FIXED).withStatus(CardStatus.DONE);
+    List<DerivationNodeView> baum = tree(List.of(card(1L, 1, null), erledigt, card(3L, 3, 1L)));
+
+    assertThat(baum).filteredOn(n -> n.number() == 2).allMatch(DerivationNodeView::done);
     assertThat(baum).noneMatch(DerivationNodeView::blocked);
   }
 

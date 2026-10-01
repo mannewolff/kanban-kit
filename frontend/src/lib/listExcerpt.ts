@@ -16,9 +16,11 @@ export function clampExcerptWidth(pct: number): number {
  * entfernt Überschriften-Hashes, Betonungszeichen und Backticks, kollabiert Zeilenumbrüche.
  */
 export function stripMarkdown(raw: string): string {
-  return raw
-    .replace(/\r?\n/g, ' ')
-    .replace(/#+\s*/g, '')
+  // Stryker disable next-line Regex: gleichwertig — ein verbliebenes `\r` fasst `\s+` unten ohnehin zu einem Leerzeichen zusammen
+  return raw.replace(/\r?\n/g, ' ')
+    // Jedes `#` einzeln samt folgendem Leerraum: Die globale Ersetzung räumt `##` so vollständig
+    // ab wie `#+` — und ohne den Quantor gibt es keine gleichwertige Mutante.
+    .replace(/#\s*/g, '')
     .replace(/[*_`]/g, '')
     .replace(/\s+/g, ' ')
     .trim()

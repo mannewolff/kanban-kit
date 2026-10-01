@@ -11,6 +11,7 @@ import org.mwolff.manban.card.application.CardMovedConcurrentlyException;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -463,7 +464,8 @@ class CardRepositoryAdapter implements CardRepository {
         e.getProjectId(),
         e.getExternalKey(),
         e.getDerivedFromCardId(),
-        e.getRequirementCardId());
+        e.getRequirementCardId(),
+        e.getStatus() == null ? null : CardStatus.valueOf(e.getStatus()));
   }
 
   /**

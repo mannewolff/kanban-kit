@@ -1,0 +1,90 @@
+# Veroeffentlichung der eigenen Abbilder (Issue #1267, Plan #1262, fachliche Quelle #675).
+#
+# Warum der Ausloeser der Tag ist und nicht ein Push: Der annotated Tag `vX.Y.Z` wird genau einmal
+# je Release gesetzt (siehe RELEASING.md, `merge production`) — er ist der einzige Punkt, an dem
+# eine Version endgueltig ist. An ci.yml angehaengt liefe der Bau bei jedem Push und jedem Pull
+# Request; an deploy.yml haengt er am self-hosted Runner und am Branch `production`, und die
+# Registry-Umstellung des eigenen Deployments ist ausdruecklich Nicht-Ziel.
+#
+# Der Nachweisschritt am Ende ist der Beleg fuer die Zusage "ohne Registry-Anmeldung abrufbar":
+# scripts/bezugspruefung.mjs --eigen fragt beide Abbilder anonym auf HTTP-Ebene ab. Schlaegt er
+# fehl, steht ein ghcr-Paket typischerweise noch auf "Private" — der einmalige Handgriff dazu steht
+# in RELEASING.md.
+#
+# Alle Actions sind auf eine volle Version gebunden. In einem Workflow, dessen Zweck
+# Versionsbindung ist, waere ein gleitendes `@v7` ein Widerspruch in sich.
+name: Release-Abbilder
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  abbilder:
+    # Ein Job je Abbild: Anwendung aus dem Dockerfile der Repo-Wurzel, Sicherungsdienst aus
+    # backup/Dockerfile. Dieselben Schritte auf zwei Datenzeilen statt zweimal derselbe Block.
+    name: ${{ matrix.name }} (amd64/arm64)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Anwendungs-Abbild
+            abbild: ghcr.io/mannewolff/kanban-kit
+            kontext: .
+            datei: ./Dockerfile
+          - name: Sicherungs-Abbild
+            abbild: ghcr.io/mannewolff/kanban-kit-backup
+            kontext: ./backup
+            datei: ./backup/Dockerfile
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # Der Tag heisst `vX.Y.Z`, der Abbild-Tag `X.Y.Z`. Ausdruecke in GitHub Actions koennen kein
+      # Praefix abschneiden, darum dieser eine Schritt statt einer Zeile in `tags:`.
+      - name: Version aus dem Tag lesen
+        id: version
+        run: echo "wert=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: QEMU einrichten
+        uses: docker/setup-qemu-action@v4.4.0
+      - name: Buildx einrichten
+        uses: docker/setup-buildx-action@v4.4.1
+      - name: An ghcr.io anmelden
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bauen und veroeffentlichen
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ${{ matrix.kontext }}
+          file: ${{ matrix.datei }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ matrix.abbild }}:${{ steps.version.outputs.wert }}
+            ${{ matrix.abbild }}:latest
+
+  nachweis:
+    # Erst nach beiden Abbildern: Die Pruefart `eigen` fragt genau die Bezugsstellen ab, die dieser
+    # Lauf gerade angelegt hat. Ein roter Schritt hier heisst, dass ein Abbild nicht anonym
+    # beziehbar ist — nicht, dass der Bau fehlschlug.
+    name: Anonym beziehbar (bezugspruefung --eigen)
+    needs: [abbilder]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Node 22 einrichten
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+      - name: Eigene Abbilder anonym abrufen
+        run: node scripts/bezugspruefung.mjs --eigen

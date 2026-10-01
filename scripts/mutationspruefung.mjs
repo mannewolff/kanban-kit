@@ -4,7 +4,7 @@
  * #1214, Plan #1210, fachliche Quelle #1104).
  *
  * Nutzung:
- *   node scripts/mutationspruefung.mjs aenderung frontend|backend
+ *   node scripts/mutationspruefung.mjs aenderung frontend|backend [--stufe paket|push]
  *   node scripts/mutationspruefung.mjs vollauf   frontend|backend
  *
  * Die Aenderungspruefung steht fuer beide Seiten: Anker, Dateilisten, Pruefbereich,
@@ -34,6 +34,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
+import { aufgenommene, kandidat as kandidatVon, mutateFuer } from '../frontend/mutationsbereich.mjs';
+
 export const KOMMANDOS = ['aenderung', 'vollauf'];
 export const SEITEN = ['frontend', 'backend'];
 
@@ -44,7 +46,35 @@ export const SEITEN = ['frontend', 'backend'];
  */
 export const SCHWELLEN = { frontend: 80, backend: 100 };
 
+/**
+ * Haelt die Aenderungspruefung bei einem Test ohne Zuordnung sofort an (true) oder weicht sie auf
+ * die ganze Seite aus (false)? Je Seite, weil der Preis des Ausweichens verschieden ist (Issue
+ * #1308): Stryker ueber das ganze Frontend dauert rund 80 min (#1275), PIT ueber das ganze Backend
+ * rund 2 min — und Backend-Tests sind oft nach Aspekten geteilt (`CardServiceEpicTreeTest`), ein
+ * Halt traefe dort fast jedes Paket.
+ */
+export const HALT_OHNE_ZUORDNUNG = { frontend: true, backend: false };
+
+/**
+ * Ab dieser Quote schlaegt der Vollauf den Kandidaten zur Aufnahme vor (Plan #1270, AK 4). Zwei
+ * Punkte ueber der Schwelle, damit ein frisch aufgenommener Ausschnitt nicht beim ersten
+ * schwankenden Lauf wieder darunter faellt. Der Vorschlag ist eine Zeile im Bericht, mehr nicht.
+ */
+export const VORSCHLAGSSCHWELLE = 82;
+
 const HAUPTZWEIG_VORGABE = 'main';
+
+/** Die beiden Stufen, auf denen die Aenderungspruefung je Seite in der Config steht (Issue #1280). */
+export const STUFEN = ['paket', 'push'];
+
+/** Liegt der Median der protokollierten Laeufe darueber, gehoert die Aenderungspruefung an `push`. */
+export const STUFENGRENZE_MS = 10 * 60 * 1000;
+
+/**
+ * So viele Laeufe haelt das Dauerprotokoll. Fuenf, weil der Median dann einen einzelnen Ausreisser
+ * nach oben wie nach unten schluckt, ein anhaltender Anstieg aber nach drei Laeufen durchschlaegt.
+ */
+export const DAUER_PROTOKOLL_LAENGE = 5;
 
 // --- Muster ----------------------------------------------------------------
 
@@ -58,14 +88,20 @@ function maskiere(zeichen) {
  * Minimal-Glob fuer Pfadmuster: '*' innerhalb eines Segments, '**' ueber Segmentgrenzen.
  * Ein '**' samt folgendem Trenner darf ganz verschwinden, damit `src/lib/**\/*.ts` auch
  * `src/lib/a.ts` trifft und nicht erst eine Datei im Unterverzeichnis — dieselbe Auslegung,
- * die Stryker seinen `mutate`-Mustern gibt.
+ * die Stryker seinen `mutate`-Mustern gibt. Dazu Alternativen ohne Schachtelung,
+ * `*.{ts,tsx}`, wie sie der Stufenplan traegt (#1276).
  */
 export function globZuRegex(muster) {
   let quelle = '';
   let i = 0;
   while (i < muster.length) {
     const zeichen = muster[i];
-    if (zeichen !== '*') {
+    if (zeichen === '{' && muster.indexOf('}', i) > i) {
+      const ende = muster.indexOf('}', i);
+      const zweige = muster.slice(i + 1, ende).split(',');
+      quelle += `(?:${zweige.map((zweig) => [...zweig].map(maskiere).join('')).join('|')})`;
+      i = ende + 1;
+    } else if (zeichen !== '*') {
       quelle += maskiere(zeichen);
       i += 1;
     } else if (muster[i + 1] === '*') {
@@ -78,6 +114,19 @@ export function globZuRegex(muster) {
     }
   }
   return new RegExp(`^${quelle}$`);
+}
+
+/**
+ * Loest eine Klammer-Alternative `{a,b}` in zwei Muster auf. Noetig fuer `-m`: Stryker trennt die
+ * Liste an jedem Komma (`stryker-cli.js`, `createSplitter(',')`), `*.{ts,tsx}` zerfiele dort in
+ * zwei unsinnige Muster. Ohne Schachtelung, wie `globZuRegex`.
+ */
+export function klammernAufloesen(muster) {
+  const treffer = /\{([^{}]*)\}/.exec(muster);
+  if (!treffer) return [muster];
+  const vorn = muster.slice(0, treffer.index);
+  const hinten = muster.slice(treffer.index + treffer[0].length);
+  return treffer[1].split(',').flatMap((zweig) => klammernAufloesen(`${vorn}${zweig}${hinten}`));
 }
 
 /**
@@ -102,30 +151,100 @@ export function javaPfadZuKlasse(pfad) {
 
 // --- Pruefbereich je Seite --------------------------------------------------
 
-const STRYKER_PFAD = join('frontend', 'stryker.config.json');
+const STRYKER_PFAD = join('frontend', 'mutationsstufen.json');
+
+function istMusterliste(wert) {
+  return Array.isArray(wert) && wert.length > 0 && wert.every((m) => typeof m === 'string' && m.length > 0);
+}
 
 /**
- * Der Frontend-Bereich kommt aus `mutate` in `frontend/stryker.config.json` — dieselbe Quelle,
- * aus der schon der Frontend-Testumfang abgeleitet wird. Nie duplizieren: Ab der ersten
- * Abweichung pruefte der Treiber einen anderen Bereich als das Werkzeug.
+ * Prueft die Form des Stufenplans, bevor ein Bereich daraus entsteht: Ein Ausschnitt ohne Muster
+ * fiele sonst still aus dem Pruefbereich, und der Bericht saehe vollstaendig aus (#1073).
+ * Rueckgabe ist der erste Fehler als Satz oder `null`.
  */
-export function frontendBereich(strykerConfig) {
-  const woertlich = strykerConfig?.mutate ?? [];
+export function stufenplanPruefen(plan) {
+  if (plan === null || typeof plan !== 'object') return 'der Stufenplan ist kein Objekt';
+  if (!Array.isArray(plan.ausnahmen)) return '`ausnahmen` fehlt oder ist keine Liste';
+  if (!Array.isArray(plan.ausschnitte)) return '`ausschnitte` fehlt oder ist keine Liste';
+  for (const ausschnitt of plan.ausschnitte) {
+    if (typeof ausschnitt?.name !== 'string' || ausschnitt.name.length === 0) {
+      return 'ein Ausschnitt traegt keinen `name`';
+    }
+    if (!istMusterliste(ausschnitt.muster)) {
+      return `Ausschnitt ${ausschnitt.name}: \`muster\` fehlt oder ist keine nicht-leere Liste`;
+    }
+  }
+  return null;
+}
+
+/** Ein- und Ausschluss eines `mutate`-Musters als Regex, relativ zur Repo-Wurzel. */
+function frontendRegexe(mutate) {
   const ein = [];
   const aus = [];
-  for (const muster of woertlich) {
+  for (const muster of mutate) {
     const negiert = muster.startsWith('!');
     const roh = negiert ? muster.slice(1) : muster;
     (negiert ? aus : ein).push(globZuRegex(`frontend/${roh}`));
   }
+  return { ein, aus };
+}
+
+/**
+ * Der Frontend-Bereich kommt aus dem Stufenplan `frontend/mutationsstufen.json` — dieselbe Quelle,
+ * aus der `stryker.config.mjs` ihr `mutate` und der Mutationslauf seinen Testumfang ableiten. Nie
+ * duplizieren: Ab der ersten Abweichung pruefte der Treiber einen anderen Bereich als das Werkzeug.
+ *
+ * Neben dem Pruefbereich liefert er ALLE Ausschnitte des Plans mit ihrer Trefferfunktion — auch
+ * die noch nicht aufgenommenen, damit sich jede Datei ihrem Ausschnitt zuordnen laesst. Die
+ * Ausschluesse (Testdateien, Ausnahmen) gelten fuer jeden Ausschnitt.
+ */
+export function frontendBereich(plan) {
+  const woertlich = mutateFuer(aufgenommene(plan).map((a) => a.name), plan);
+  const { ein, aus } = frontendRegexe(woertlich);
+  const ausgeschlossen = (pfad) => aus.some((r) => r.test(pfad));
+  const naechster = kandidatVon(plan);
+  const ausschnitte = plan.ausschnitte.map((ausschnitt) => {
+    const eigene = ausschnitt.muster.map((m) => globZuRegex(`frontend/${m}`));
+    const tests = (ausschnitt.testMuster ?? []).map((m) => globZuRegex(`frontend/${m}`));
+    return {
+      name: ausschnitt.name,
+      muster: ausschnitt.muster,
+      aufgenommen: typeof ausschnitt.aufgenommen === 'string',
+      aufgenommenAm: typeof ausschnitt.aufgenommen === 'string' ? ausschnitt.aufgenommen : false,
+      gemeinsameSchwelle: ausschnitt.gemeinsameSchwelle === true,
+      kandidat: ausschnitt === naechster,
+      trifft: (pfad) => eigene.some((r) => r.test(pfad)) && !ausgeschlossen(pfad),
+      umfasstTest: (pfad) => eigene.some((r) => r.test(pfad)) || tests.some((r) => r.test(pfad)),
+    };
+  });
+  // Der Vollauf misst die aufgenommenen Ausschnitte plus genau den Kandidaten (E6). Sein `-m`
+  // traegt die Ausschluesse und Ausnahmen woertlich mit, weil `--mutate` die Liste der
+  // Konfiguration ersetzt — sonst mutierte er die Testdateien mit.
+  const gemessen = ausschnitte.filter((a) => a.aufgenommen || a.kandidat).map((a) => a.name);
   return {
     seite: 'frontend',
-    quelle: `${STRYKER_PFAD} (mutate)`,
+    quelle: `${STRYKER_PFAD} (aufgenommene Ausschnitte)`,
     woertlich,
     zeilen: woertlich,
-    trifft: (pfad) => ein.some((r) => r.test(pfad)) && !aus.some((r) => r.test(pfad)),
+    ausschnitte,
+    gemessen,
+    vollaufMutate: mutateFuer(gemessen, plan),
+    trifft: (pfad) => ein.some((r) => r.test(pfad)) && !ausgeschlossen(pfad),
     istSeitenTest: (pfad) => pfad.startsWith('frontend/') && /\.test\.tsx?$/.test(pfad),
+    // Ein Test, der nur zu noch nicht aufgenommenen Ausschnitten gehoert (Muster oder `testMuster`),
+    // liegt ausserhalb des Pruefbereichs (Issue #1279). Ohne Zuordnung haelt er deshalb nicht an —
+    // sonst braeche der Altbestand ueber die Pfadfinderregel herein, bevor sein Ausschnitt
+    // aufgenommen ist. Ein Test ausserhalb jedes Ausschnitts bleibt unbekannt und haelt weiter an.
+    testAusserhalb: (pfad) => {
+      const eigene = ausschnitte.filter((a) => a.umfasstTest(pfad));
+      return eigene.length > 0 && eigene.every((a) => !a.aufgenommen);
+    },
   };
+}
+
+/** Der Ausschnitt, in dem eine Datei liegt, oder `null` — fuer beide Seiten dieselbe Frage. */
+export function ausschnittVon(bereich, pfad) {
+  return bereich.ausschnitte.find((ausschnitt) => ausschnitt.trifft(pfad)) ?? null;
 }
 
 function ohneKommentare(xml) {
@@ -177,6 +296,11 @@ export function backendBereich(gelesen) {
   const quelle = gelesen.quelle === 'property'
     ? 'pom.xml, Profil pit, Property pit.targetClasses + excludedClasses'
     : 'pom.xml, Profil pit, targetClasses + excludedClasses';
+  const trifft = (pfad) => {
+    const klasse = javaPfadZuKlasse(pfad);
+    if (klasse === null) return false;
+    return ein.some((r) => r.test(klasse)) && !aus.some((r) => r.test(klasse));
+  };
   return {
     seite: 'backend',
     quelle,
@@ -185,11 +309,11 @@ export function backendBereich(gelesen) {
       ...gelesen.ziel.map((m) => `eingeschlossen: ${m}`),
       ...gelesen.aus.map((m) => `ausgenommen:    ${m}`),
     ],
-    trifft: (pfad) => {
-      const klasse = javaPfadZuKlasse(pfad);
-      if (klasse === null) return false;
-      return ein.some((r) => r.test(klasse)) && !aus.some((r) => r.test(klasse));
-    },
+    // Genau ein Ausschnitt ueber den ganzen Pruefbereich (E11): Die Ausschnittslogik ist damit fuer
+    // beide Seiten dieselbe, statt zwei Auswertungspfade zu tragen, die auseinanderlaufen.
+    ausschnitte: [{ name: 'backend', aufgenommen: true, trifft }],
+    gemessen: ['backend'],
+    trifft,
     istSeitenTest: (pfad) => pfad.startsWith('src/test/java/') && /(Test|IT)\.java$/.test(pfad),
   };
 }
@@ -273,18 +397,25 @@ export function zuordnungAusVollauf(inhalt) {
  * Tests: Wer einen Test schwaecht, faellt damit schon in der Aenderungspruefung auf (Kriterium 1).
  * Bleibt ein geaenderter Test der eigenen Seite ohne Zuordnung, gilt die GANZE Seite als
  * beruehrt — lieber zu viel pruefen als eine Luecke uebersehen.
+ *
+ * Der dritte Weg neben Konvention und Berichtsumkehrung ist die feste Zuordnung aus
+ * `scripts/mutationszuordnung.json` (Issue #1287): fuer Tests, deren Name keine Quelle trifft.
+ * Zeigt sie nur auf Quellen ausserhalb des Bereichs, ist der Test zugeordnet und steuert nichts bei.
+ * Ein Test eines noch nicht aufgenommenen Ausschnitts ohne Zuordnung steuert ebenfalls nichts bei
+ * (Issue #1279): Pruefbereich sind die aufgenommenen Ausschnitte, alles andere ist aussen vor.
  */
-export function beruehrung({ geaendert, bereich, zuordnung, existiert }) {
+export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {}, existiert }) {
   const dateien = new Set();
   const ohneZuordnung = [];
   for (const pfad of geaendert) {
     if (bereich.trifft(pfad)) dateien.add(pfad);
     if (!istTestdatei(pfad) || !bereich.istSeitenTest(pfad)) continue;
 
-    const quellen = new Set(zuordnung.get(pfad) ?? []);
+    const quellen = new Set([...(zuordnung.get(pfad) ?? []), ...(festeZuordnung[pfad] ?? [])]);
     const konvention = konventionsQuelle(pfad);
     if (konvention && existiert(konvention)) quellen.add(konvention);
     if (quellen.size === 0) {
+      if (bereich.testAusserhalb?.(pfad)) continue;
       ohneZuordnung.push(pfad);
       continue;
     }
@@ -348,6 +479,7 @@ export function strykerMutanten(bericht, { mitQuellen = false } = {}) {
         mutator: roh?.mutatorName ?? 'unbekannt',
         ersetzung: roh?.replacement ?? '',
         zustand: roh?.status ?? 'unbekannt',
+        grund: roh?.statusReason ?? null,
         deckendeTests: [...deckende].sort(),
       });
     }
@@ -605,31 +737,125 @@ export function auswerten({ mutanten, quellen, istBeruehrt, zeileGeaendert, date
   return { zaehlung, ueberlebende, haltende };
 }
 
+/** Der Grund, den der Darstellungs-Ignorer (#1277) jedem seiner Mutanten mitgibt, beginnt so. */
+const DARSTELLUNG_PRAEFIX = 'Darstellung:';
+
+/**
+ * Die Zaehlung je Ausschnitt. Neben den Mengen der Gesamtzaehlung fuehrt sie zwei Teilmengen: die
+ * vom Darstellungs-Ignorer ausgenommenen Mutanten (ein Teil von `ausgenommen`), damit eine
+ * Verschiebung im Bestand auffaellt, und die ungedeckten (`NoCoverage`, ein Teil von `ueberlebt`),
+ * an denen ein Kandidat ohne Tests im Umfang zu erkennen ist.
+ */
+function ausschnittsZaehlung() {
+  return { geprueft: 0, getoetet: 0, ueberlebt: 0, ausgenommen: 0, darstellung: 0, ohneDeckung: 0 };
+}
+
 /**
  * Die Auswertung des Vollaufs. Sie kennt weder Beruehrung noch Altlast-Vermerk: Im Vollauf gilt die
  * ganze Seite, und angehalten wird allein an der Schwelle (Kriterium 8) — ein Vermerk gibt die
  * AENDERUNGSpruefung frei, nicht die Gesamtquote. Gezaehlt wird wie dort, damit beide Ausgaben
  * dieselbe Zahl gleich meinen.
+ *
+ * Mit `ausschnitte` (Issue #1278) ordnet sie jeden Mutanten seinem Ausschnitt zu und zaehlt je
+ * Ausschnitt. Gesamtzaehlung und Ueberlebendenliste bleiben beim Pruefbereich, also bei den
+ * AUFGENOMMENEN Ausschnitten: Der Kandidat wird nur gemessen, und seine Ueberlebenden fluteten sonst
+ * Bericht und Gedaechtnisdatei. Ein Mutant, der in keinen Ausschnitt faellt, landet in
+ * `ohneAusschnitt` — Stufenplan und Mutationsumfang passen dann nicht zusammen, und das wird
+ * gemeldet statt verschluckt. Bei genau einem Ausschnitt (Backend, E11) ist er der ganze
+ * Pruefbereich: Jeder Mutant, den das Werkzeug erzeugt hat, gehoert zu ihm.
  */
-export function vollaufAuswerten(mutanten) {
+export function vollaufAuswerten(mutanten, ausschnitte = null) {
   const zaehlung = { geprueft: 0, getoetet: 0, ueberlebt: 0, ausgenommen: 0, ausserhalb: 0 };
   const ueberlebende = [];
+  const ohneAusschnitt = [];
+  const je = new Map((ausschnitte ?? []).map((a) => [a, ausschnittsZaehlung()]));
+
   for (const mutant of mutanten) {
+    let ausschnitt = null;
+    if (ausschnitte !== null) {
+      ausschnitt = ausschnitte.length === 1 ? ausschnitte[0] : ausschnitte.find((a) => a.trifft(mutant.datei));
+      if (!ausschnitt) {
+        ohneAusschnitt.push(mutant);
+        continue;
+      }
+    }
+    const eigene = ausschnitt ? je.get(ausschnitt) : ausschnittsZaehlung();
+    const gesamt = ausschnitt === null || ausschnitt.aufgenommen;
     if (mutant.zustand === 'Ignored') {
-      zaehlung.ausgenommen += 1;
+      eigene.ausgenommen += 1;
+      if (String(mutant.grund ?? '').startsWith(DARSTELLUNG_PRAEFIX)) eigene.darstellung += 1;
+      if (gesamt) zaehlung.ausgenommen += 1;
       continue;
     }
     if (ZUSTAND_GETOETET.has(mutant.zustand)) {
-      zaehlung.geprueft += 1;
-      zaehlung.getoetet += 1;
+      eigene.geprueft += 1;
+      eigene.getoetet += 1;
+      if (gesamt) {
+        zaehlung.geprueft += 1;
+        zaehlung.getoetet += 1;
+      }
       continue;
     }
     if (!ZUSTAND_UEBERLEBT.has(mutant.zustand)) continue;
-    zaehlung.geprueft += 1;
-    zaehlung.ueberlebt += 1;
-    ueberlebende.push({ ...mutant, altlast: null, vermerkGrund: null });
+    eigene.geprueft += 1;
+    eigene.ueberlebt += 1;
+    if (mutant.zustand === 'NoCoverage') eigene.ohneDeckung += 1;
+    if (gesamt) {
+      zaehlung.geprueft += 1;
+      zaehlung.ueberlebt += 1;
+      ueberlebende.push({ ...mutant, altlast: null, vermerkGrund: null });
+    }
   }
-  return { zaehlung, ueberlebende };
+
+  const jeAusschnitt = [...je].map(([ausschnitt, eigene]) => ({
+    name: ausschnitt.name,
+    muster: ausschnitt.muster ?? [],
+    aufgenommen: ausschnitt.aufgenommen,
+    aufgenommenAm: ausschnitt.aufgenommenAm ?? ausschnitt.aufgenommen,
+    gemeinsameSchwelle: ausschnitt.gemeinsameSchwelle === true,
+    kandidat: ausschnitt.kandidat === true,
+    zaehlung: eigene,
+    quote: quoteAus(eigene),
+  }));
+  return { zaehlung, ueberlebende, ausschnitte: jeAusschnitt, ohneAusschnitt };
+}
+
+/**
+ * Der Halt je Ausschnitt (AK 3, AK 6) samt der Bestandsregel (E7).
+ *
+ * Jeder aufgenommene Ausschnitt unter der Schwelle haelt an und wird genannt, auch wenn alle
+ * anderen darueber liegen; der Kandidat haelt nie an. Die Bestandsausschnitte
+ * (`gemeinsameSchwelle`) halten zunaechst nicht einzeln an, fuer sie zaehlt ihre gemeinsame Quote.
+ * Das Datum, an dem ein Bestandsausschnitt erstmals die Schwelle erreichte (`erstmals80`), kommt
+ * aus der Gedaechtnisdatei des vorigen Vollaufs und wird hier fortgeschrieben; sobald jeder
+ * Bestandsausschnitt eines traegt, gilt fuer sie die getrennte Schwelle. Der Treiber schreibt dazu
+ * nie in den versionierten Stufenplan — nur in die Gedaechtnisdatei unter `.claude/`.
+ */
+export function haltBestimmen({ ausschnitte, schwelle, erstmalsVorher = {}, heute }) {
+  const bestand = ausschnitte.filter((a) => a.aufgenommen && a.gemeinsameSchwelle);
+  const erstmals80 = {};
+  for (const a of bestand) {
+    const vorher = erstmalsVorher[a.name];
+    erstmals80[a.name] = typeof vorher === 'string' ? vorher : (a.quote >= schwelle ? heute : null);
+  }
+  const getrennt = bestand.length > 0 && bestand.every((a) => erstmals80[a.name] !== null);
+  const gemeinsamZaehlung = bestand.reduce(
+    (summe, a) => ({ geprueft: summe.geprueft + a.zaehlung.geprueft, getoetet: summe.getoetet + a.zaehlung.getoetet }),
+    { geprueft: 0, getoetet: 0 },
+  );
+  const gemeinsam = bestand.length > 0 && !getrennt
+    ? { namen: bestand.map((a) => a.name), quote: quoteAus(gemeinsamZaehlung) }
+    : null;
+
+  const haltende = [];
+  if (gemeinsam && gemeinsam.quote < schwelle) haltende.push(`Bestand gemeinsam (${gemeinsam.namen.join(', ')})`);
+  for (const a of ausschnitte) {
+    if (!a.aufgenommen) continue;
+    if (gemeinsam && a.gemeinsameSchwelle) continue;
+    if (a.quote < schwelle) haltende.push(a.name);
+  }
+  const karten = gemeinsam ? bestand.filter((a) => a.quote < schwelle).map((a) => a.name) : [];
+  return { haltende, gemeinsam, karten, erstmals80 };
 }
 
 /**
@@ -733,15 +959,38 @@ export function ankerBestimmen(git, hauptzweig) {
 
 // --- Stufe und Formate ------------------------------------------------------
 
-/** Die Stufe, auf der die Pruefung dieser Seite laut Config gerade haengt (Kriterium 12). */
-export function stufeAus(config, kommandoText) {
+/**
+ * Die Stufe, auf der die Pruefung dieser Seite laut Config gerade haengt (Kriterium 12). Mit
+ * `stufeArgument` zaehlt nur der Eintrag, dessen `cmd` dasselbe `--stufe`-Argument traegt: Mit zwei
+ * Eintraegen je Seite faende der blosse Teilstring sonst in beiden Laeufen den ersten (Issue #1280).
+ */
+export function stufeAus(config, kommandoText, stufeArgument = null) {
+  const argumentMuster = stufeArgument ? new RegExp(`--stufe\\s+${stufeArgument}(\\s|$)`) : null;
   for (const eintrag of config?.buildChecks ?? []) {
     const cmd = typeof eintrag === 'string' ? eintrag : eintrag?.cmd;
-    if (typeof cmd === 'string' && cmd.includes(kommandoText)) {
+    if (typeof cmd === 'string' && cmd.includes(kommandoText) && (!argumentMuster || argumentMuster.test(cmd))) {
       return (typeof eintrag === 'string' ? null : eintrag.stufe) ?? 'paket';
     }
   }
   return null;
+}
+
+export function median(werte) {
+  if (werte.length === 0) return null;
+  const sortiert = [...werte].sort((a, b) => a - b);
+  const mitte = Math.floor(sortiert.length / 2);
+  return sortiert.length % 2 === 1 ? sortiert[mitte] : (sortiert[mitte - 1] + sortiert[mitte]) / 2;
+}
+
+/**
+ * Die Stufe, auf der die Aenderungspruefung gilt, aus dem Dauerprotokoll. Ohne Protokoll gilt
+ * `paket` — etwa in einer frischen Arbeitskopie, denn `.claude/*` ist nicht versioniert; die
+ * Irrtumsrichtung heisst "mehr pruefen, nie weniger".
+ */
+export function geltendeStufe(protokoll) {
+  const dauern = (protokoll?.laeufe ?? []).map((lauf) => lauf?.dauerMs).filter(Number.isFinite);
+  const mitte = median(dauern);
+  return { mitte, anzahl: dauern.length, stufe: mitte !== null && mitte > STUFENGRENZE_MS ? 'push' : 'paket' };
 }
 
 export function dauerText(ms) {
@@ -766,6 +1015,77 @@ export function schwellenZeile(quote, schwelle) {
   return quote >= schwelle
     ? `${gemessen} — Schwelle ${prozentText(schwelle)} % erfüllt.`
     : `${gemessen} — unter der Schwelle ${prozentText(schwelle)} %. Der Vollauf hält an.`;
+}
+
+function ausschnittsQuoteText(a, schwelle) {
+  if (a.zaehlung.geprueft === 0) return 'keine Mutanten — bestanden.';
+  const gemessen = `${prozentText(a.quote.toFixed(2))} %`;
+  return a.quote >= schwelle
+    ? `${gemessen} — Schwelle ${prozentText(schwelle)} % erfüllt`
+    : `${gemessen} — unter der Schwelle ${prozentText(schwelle)} %`;
+}
+
+function zaehlungsText(z) {
+  return `${z.geprueft} geprüft, ${z.getoetet} getötet, ${z.ueberlebt} überlebt, `
+    + `${z.ausgenommen} ausgenommen, davon ${z.darstellung} Darstellung.`;
+}
+
+function kandidatText(a) {
+  const vorschlag = `zur Aufnahme vorgeschlagen. Die Aufnahme trägt der Mensch in ${STRYKER_PFAD} ein.`;
+  if (a.zaehlung.geprueft === 0) return `keine Mutanten — bestanden, ${vorschlag}`;
+  if (a.zaehlung.ohneDeckung === a.zaehlung.geprueft) return '0 % — keine Tests im Umfang.';
+  const gemessen = `${prozentText(a.quote.toFixed(2))} %`;
+  return a.quote >= VORSCHLAGSSCHWELLE
+    ? `${gemessen} — erreicht ${VORSCHLAGSSCHWELLE} %, ${vorschlag}`
+    : `${gemessen} — unter ${VORSCHLAGSSCHWELLE} %, nicht zur Aufnahme vorgeschlagen.`;
+}
+
+/**
+ * Der Bericht je Ausschnitt (AK 5): je aufgenommenem Ausschnitt der gemessene Wert gegen die
+ * Schwelle, die Zaehlung samt der Darstellungsmutanten des Ignorers, dann die Bestandsregel (E7)
+ * und zuletzt der Kandidat gegen die Vorschlagsschwelle. Die Gesamtquote steht danach als Wert,
+ * nicht mehr als Schwellenzeile — gehalten wird je Ausschnitt. Bei genau einem Ausschnitt entfaellt
+ * der ganze Block (E11), die Meldung bleibt dann zeichengleich mit der vor Issue #1278.
+ */
+export function ausschnittsZeilen({ ausschnitte, halt, schwelle, quote, ohneAusschnitt = [] }) {
+  const zeilen = [`Ausschnitte (Schwelle ${prozentText(schwelle)} % je aufgenommenem Ausschnitt):`];
+  const imBestand = new Set(halt.gemeinsam?.namen ?? []);
+  for (const a of ausschnitte.filter((x) => x.aufgenommen)) {
+    const text = ausschnittsQuoteText(a, schwelle);
+    const zusatz = imBestand.has(a.name) ? ' (gemeinsame Schwelle des Bestands).' : '.';
+    zeilen.push(`  ${a.name}: ${text.endsWith('.') ? text : `${text}${zusatz}`}`);
+    zeilen.push(`      ${zaehlungsText(a.zaehlung)}`);
+  }
+  if (halt.gemeinsam) {
+    const { namen, quote: gemeinsam } = halt.gemeinsam;
+    const stand = namen.map((name) => `${name}: ${halt.erstmals80[name] ?? 'noch nicht'}`).join(', ');
+    const urteil = gemeinsam >= schwelle ? 'erfüllt' : 'nicht erfüllt';
+    zeilen.push(`Bestand gemeinsam (${namen.join(', ')}): ${prozentText(gemeinsam.toFixed(2))} % — `
+      + `Schwelle ${prozentText(schwelle)} % ${urteil}. Die getrennte Schwelle gilt, sobald jeder `
+      + `Bestandsausschnitt erstmals ${prozentText(schwelle)} % erreicht hat (${stand}).`);
+    for (const name of halt.karten) {
+      zeilen.push(`  ${name} unter ${prozentText(schwelle)} % — Karte für die fehlenden Tests anlegen.`);
+    }
+  }
+  const naechster = ausschnitte.find((a) => a.kandidat);
+  if (naechster) {
+    zeilen.push(`Kandidat ${naechster.name}: ${kandidatText(naechster)}`);
+    zeilen.push(`      ${zaehlungsText(naechster.zaehlung)}`);
+  } else {
+    zeilen.push('Kandidat: keiner — alle Ausschnitte sind aufgenommen.');
+  }
+  if (ohneAusschnitt.length > 0) {
+    const dateien = [...new Set(ohneAusschnitt.map((m) => m.datei))].sort();
+    zeilen.push(`Mutanten ohne Ausschnitt (${ohneAusschnitt.length}) — Stufenplan und Mutationsumfang passen nicht zusammen:`);
+    for (const datei of dateien) zeilen.push(`  ${datei}`);
+  }
+  zeilen.push('');
+  zeilen.push(`Quote: ${prozentText(quote.toFixed(2))} % gesamt über die aufgenommenen Ausschnitte.`);
+  zeilen.push(halt.haltende.length > 0
+    ? `Der Vollauf hält an: ${halt.haltende.join(', ')} unter der Schwelle ${prozentText(schwelle)} %.`
+    : `Kein Halt: Schwelle ${prozentText(schwelle)} % in jedem aufgenommenen Ausschnitt erfüllt`
+      + `${halt.gemeinsam ? ', im Bestand gemeinsam' : ''}.`);
+  return zeilen;
 }
 
 function vollaufZeile(seite, inhalt) {
@@ -800,6 +1120,7 @@ export function meldungBauen({
   stufe,
   quote = null,
   schwelle = null,
+  ausschnittsBericht = null,
   schluss,
 }) {
   const zeilen = [];
@@ -859,7 +1180,10 @@ export function meldungBauen({
     }
   }
 
-  if (quote !== null && schwelle !== null) {
+  if (ausschnittsBericht) {
+    zeilen.push('');
+    zeilen.push(...ausschnittsBericht);
+  } else if (quote !== null && schwelle !== null) {
     zeilen.push('');
     zeilen.push(schwellenZeile(quote, schwelle));
   }
@@ -888,11 +1212,30 @@ function jsonLesen(pfad) {
   }
 }
 
+export const ZUORDNUNG_PFAD = 'scripts/mutationszuordnung.json';
+
+function ohneZuordnungMeldung(tests) {
+  const zeilen = ['Mutationsprüfung — Änderungsprüfung angehalten, kein Werkzeuglauf.', ''];
+  for (const pfad of tests) zeilen.push(`  geänderter Test ohne zuordenbare Quelle: ${pfad}`);
+  zeilen.push('');
+  zeilen.push(`Eintrag in ${ZUORDNUNG_PFAD} ergänzen oder den Test nach der Quelle benennen.`);
+  zeilen.push('Ohne Zuordnung müsste die ganze Seite laufen, und das dauert länger als eine Paketrunde.');
+  zeilen.push('-> rot');
+  return `${zeilen.join('\n')}\n`;
+}
+
+/** Die feste Test-zu-Quelle-Zuordnung (Issue #1287); fehlt die Datei, ist sie leer. */
+export function festeZuordnungLesen(wurzel) {
+  return jsonLesen(join(wurzel, ZUORDNUNG_PFAD)) ?? {};
+}
+
 function bereichLesen(seite, wurzel) {
   if (seite === 'frontend') {
-    const config = jsonLesen(join(wurzel, 'frontend', 'stryker.config.json'));
-    if (!config) throw new Error(`${STRYKER_PFAD} fehlt oder ist kein gültiges JSON — ohne sie ist der Prüfbereich unbekannt.`);
-    return frontendBereich(config);
+    const plan = jsonLesen(join(wurzel, STRYKER_PFAD));
+    if (!plan) throw new Error(`${STRYKER_PFAD} fehlt oder ist kein gültiges JSON — ohne ihn ist der Prüfbereich unbekannt.`);
+    const fehler = stufenplanPruefen(plan);
+    if (fehler) throw new Error(`${STRYKER_PFAD} ist ungültig: ${fehler} — ohne ihn ist der Prüfbereich unbekannt.`);
+    return frontendBereich(plan);
   }
   const pomPfad = join(wurzel, 'pom.xml');
   if (!existsSync(pomPfad)) throw new Error('pom.xml fehlt — ohne sie ist der Prüfbereich unbekannt.');
@@ -957,6 +1300,35 @@ function vollaufPfad(wurzel, seite) {
   return join(wurzel, '.claude', `mutationsvollauf-${seite}.json`);
 }
 
+/** Das Dauerprotokoll der Aenderungspruefung, unversioniert wie die Gedaechtnisdatei (Issue #1280). */
+function dauerPfad(wurzel, seite) {
+  return join(wurzel, '.claude', `mutationsdauer-${seite}.json`);
+}
+
+/**
+ * Haengt die Dauer eines Laufs mit Werkzeugstart an und kuerzt auf die letzten Laeufe. Ein
+ * gescheitertes Schreiben aendert das Urteil des Laufs nicht — es kostet nur eine Messung —, wird
+ * aber genannt.
+ */
+function dauerProtokollieren({ wurzel, seite, datum, dauerMs, ausgabe }) {
+  const bisher = jsonLesen(dauerPfad(wurzel, seite));
+  const laeufe = Array.isArray(bisher?.laeufe) ? bisher.laeufe : [];
+  const neu = { laeufe: [...laeufe, { datum, dauerMs }].slice(-DAUER_PROTOKOLL_LAENGE) };
+  try {
+    writeFileSync(dauerPfad(wurzel, seite), `${JSON.stringify(neu, null, 2)}\n`);
+  } catch (err) {
+    ausgabe(`Das Dauerprotokoll ${dauerPfad(wurzel, seite)} ließ sich nicht schreiben: ${err.message}\n`);
+  }
+}
+
+function ausstiegsSatz(seite, stufeArgument, { mitte, anzahl, stufe }) {
+  const medianText = mitte === null
+    ? 'Median: keiner, es gibt noch kein Dauerprotokoll'
+    : `Median der letzten ${anzahl} Läufe ${dauerText(mitte)}`;
+  return `Änderungsprüfung ${seite} auf Stufe ${stufeArgument} ausgelassen — ${medianText}, `
+    + `Grenze 10 min, geltende Stufe: ${stufe}.\n`;
+}
+
 /**
  * Der Stand, gegen den der Vollauf gemessen hat. Faellt `rev-parse` aus — kein Repository, kein
  * Commit —, steht `null` in der Datei: lieber kein Stand als ein erfundener, denn an ihm haengt
@@ -1009,7 +1381,8 @@ function fehlenderBericht(teile, ergebnis) {
 function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, beginn, vollauf, stufe, schwelle }) {
   let mutanten;
   if (seite === 'frontend') {
-    const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, args: strykerArgumente([]) });
+    const mutate = bereich.vollaufMutate.flatMap(klammernAufloesen);
+    const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, args: strykerArgumente(mutate) });
     if (!bericht) {
       ausgabe(fehlenderBericht(BERICHT_TEILE, ergebnis));
       return 1;
@@ -1024,9 +1397,20 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
     mutanten = pitMutanten(xml);
   }
 
-  const { zaehlung, ueberlebende } = vollaufAuswerten(mutanten);
+  const gemessen = bereich.ausschnitte.filter((a) => bereich.gemessen.includes(a.name));
+  const ausgewertet = vollaufAuswerten(mutanten, gemessen);
+  const { zaehlung, ueberlebende } = ausgewertet;
   const quote = quoteAus(zaehlung);
   const dauerMs = jetzt() - beginn;
+  const mehrere = gemessen.length > 1;
+  const erstmalsVorher = Object.fromEntries((Array.isArray(vollauf?.ausschnitte) ? vollauf.ausschnitte : [])
+    .filter((a) => typeof a?.name === 'string')
+    .map((a) => [a.name, a.erstmals80]));
+  const halt = mehrere
+    ? haltBestimmen({
+      ausschnitte: ausgewertet.ausschnitte, schwelle, erstmalsVorher, heute: new Date(jetzt()).toISOString().slice(0, 10),
+    })
+    : { haltende: quote >= schwelle ? [] : [seite] };
   // Auch ein an der Schwelle gescheiterter Lauf hinterlaesst die Datei: Sein Ergebnis ist der
   // Stand, gegen den die naechste Aenderungspruefung vergleicht — ihn wegzuwerfen, weil er rot ist,
   // nahm der vierten Bedingung des Altlast-Vermerks genau dann die Grundlage, wenn sie gebraucht wird.
@@ -1042,6 +1426,8 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
       mutator: m.mutator,
       tests: m.deckendeTests ?? [],
     })),
+    // Nur bei mehreren Ausschnitten (E11): Die Backend-Datei bleibt, wie sie war.
+    ...(mehrere ? { ausschnitte: ausgewertet.ausschnitte.map((a) => gedaechtnisAusschnitt(a, halt)) } : {}),
   });
 
   ausgabe(meldungBauen({
@@ -1056,9 +1442,24 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
     stufe,
     quote,
     schwelle,
+    ausschnittsBericht: mehrere
+      ? ausschnittsZeilen({ ausschnitte: ausgewertet.ausschnitte, halt, schwelle, quote, ohneAusschnitt: ausgewertet.ohneAusschnitt })
+      : null,
     schluss: fehler ?? undefined,
   }));
-  return quote >= schwelle && !fehler ? 0 : 1;
+  return halt.haltende.length === 0 && ausgewertet.ohneAusschnitt.length === 0 && !fehler ? 0 : 1;
+}
+
+/** Ein Ausschnitt in der Gedaechtnisdatei; `erstmals80` traegt nur ein Bestandsausschnitt (E7). */
+function gedaechtnisAusschnitt(a, halt) {
+  return {
+    name: a.name,
+    muster: a.muster,
+    aufgenommen: a.aufgenommenAm,
+    quote: a.quote,
+    zaehlung: a.zaehlung,
+    ...(a.name in halt.erstmals80 ? { erstmals80: halt.erstmals80[a.name] } : {}),
+  };
 }
 
 /**
@@ -1083,7 +1484,7 @@ export function laufen(argv, umgebung = {}) {
     ?? ((befehl, args, optionen) => spawnSync(befehl, args, { encoding: 'utf-8', ...optionen }));
   const beginn = jetzt();
 
-  const [kommando, seite] = argv;
+  const [kommando, seite, ...rest] = argv;
   if (!KOMMANDOS.includes(kommando)) {
     ausgabe(`Unbekanntes Unterkommando '${kommando ?? ''}'. Erlaubt: ${KOMMANDOS.join(', ')}.\n`
       + `Aufruf: node scripts/mutationspruefung.mjs <${KOMMANDOS.join('|')}> <${SEITEN.join('|')}>\n`);
@@ -1093,6 +1494,20 @@ export function laufen(argv, umgebung = {}) {
     ausgabe(`Unbekannte Seite '${seite ?? ''}'. Erlaubt: ${SEITEN.join(', ')}.\n`
       + `Aufruf: node scripts/mutationspruefung.mjs <${KOMMANDOS.join('|')}> <${SEITEN.join('|')}>\n`);
     return 2;
+  }
+  const stufenIndex = rest.indexOf('--stufe');
+  const stufeArgument = stufenIndex === -1 ? null : (rest[stufenIndex + 1] ?? '');
+  if (stufeArgument !== null && (kommando !== 'aenderung' || !STUFEN.includes(stufeArgument))) {
+    ausgabe(`Ungültiges --stufe '${stufeArgument}'. Erlaubt nur an der Änderungsprüfung: `
+      + `--stufe ${STUFEN.join('|')}.\n`);
+    return 2;
+  }
+  if (stufeArgument !== null) {
+    const geltend = geltendeStufe(jsonLesen(dauerPfad(wurzel, seite)));
+    if (geltend.stufe !== stufeArgument) {
+      ausgabe(ausstiegsSatz(seite, stufeArgument, geltend));
+      return 0;
+    }
   }
 
   let bereich;
@@ -1105,7 +1520,7 @@ export function laufen(argv, umgebung = {}) {
 
   const config = jsonLesen(join(wurzel, '.claude', 'workflow.config.json')) ?? {};
   const vollauf = jsonLesen(vollaufPfad(wurzel, seite));
-  const stufe = stufeAus(config, `mutationspruefung.mjs ${kommando} ${seite}`);
+  const stufe = stufeAus(config, `mutationspruefung.mjs ${kommando} ${seite}`, stufeArgument);
   // Ueber `umgebung.schwellen` ueberschreibbar wie `git` und `starte`: Ein Nachweis an einer
   // kuenstlich angehobenen Schwelle braucht sonst einen zweiten halbstuendigen Vollauf.
   const schwelle = (umgebung.schwellen ?? SCHWELLEN)[seite];
@@ -1121,7 +1536,17 @@ export function laufen(argv, umgebung = {}) {
   const stand = vollerUmfang ? { alle: [], ungetrackt: new Set() } : geaenderteDateien(git, anker);
   const gemessen = vollerUmfang
     ? { dateien: [], ganzeSeite: true, ohneZuordnung: [] }
-    : beruehrung({ geaendert: stand.alle, bereich, zuordnung, existiert });
+    : beruehrung({
+      geaendert: stand.alle, bereich, zuordnung, festeZuordnung: festeZuordnungLesen(wurzel), existiert,
+    });
+
+  // Ein Test ohne Zuordnung faehrt das Frontend nicht mehr ganz (Issue #1287): Der Lauf dauert
+  // weit laenger als eine Paketrunde (80 min am 2026-09-28, #1275), die Abhilfe ist eine Zeile.
+  // Das Backend weicht auf die ganze Seite aus (Issue #1308, HALT_OHNE_ZUORDNUNG).
+  if (gemessen.ohneZuordnung.length > 0 && HALT_OHNE_ZUORDNUNG[seite]) {
+    ausgabe(ohneZuordnungMeldung(gemessen.ohneZuordnung));
+    return 1;
+  }
 
   const grundmeldung = {
     kommando,
@@ -1146,6 +1571,22 @@ export function laufen(argv, umgebung = {}) {
   const geaendert = new Set(stand.alle);
   const dateienDesLaufs = gemessen.ganzeSeite ? [] : gemessen.dateien;
 
+  // Protokolliert wird nur ein Lauf, der das Werkzeug wirklich gestartet hat: Leerlaeufe und
+  // Ausstiege dauern Sekunden, und der Median maesse sonst sie statt der Laeufe (Issue #1280).
+  const code = aenderungMitWerkzeug({
+    wurzel, seite, starte, git, ausgabe, liesDatei, jetzt, beginn, anker, vollerUmfang, stand, gemessen,
+    beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung,
+  });
+  dauerProtokollieren({
+    wurzel, seite, datum: new Date(beginn).toISOString(), dauerMs: jetzt() - beginn, ausgabe,
+  });
+  return code;
+}
+
+function aenderungMitWerkzeug({
+  wurzel, seite, starte, git, ausgabe, liesDatei, jetzt, beginn, anker, vollerUmfang, stand, gemessen,
+  beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung,
+}) {
   let mutanten;
   let quellen;
   if (seite === 'frontend') {

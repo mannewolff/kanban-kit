@@ -2,6 +2,8 @@ package org.mwolff.manban.card.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -10,7 +12,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,10 +23,17 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardColumnTransition;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectService;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Dashboard-Aggregation (Ports gemockt, feste Uhr). */
+// PMD.CouplingBetweenObjects: Der E25-Test (Issue #1300) verdrahtet CardService mit dieser
+// Aggregation über einen gemeinsamen Aufenthaltsverlauf — nur so ist belegt, dass ein Statuswechsel
+// die Kennzahl speist. Die Kopplung zählt die Ports beider Services, kein Design-Smell.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 class CardCycleTimeServiceTest {
 
   private static final Instant NOW = Instant.parse("2026-07-13T00:00:00Z");
@@ -76,6 +87,7 @@ class CardCycleTimeServiceTest {
         null,
         null,
         1L,
+        null,
         null,
         null,
         null);
@@ -180,6 +192,7 @@ class CardCycleTimeServiceTest {
             "EP",
             null,
             1L,
+            null,
             null,
             null,
             null);
@@ -313,5 +326,161 @@ class CardCycleTimeServiceTest {
     assertThat(out.get(1).dwellSeconds()).isEqualTo(700_000L);
     assertThat(out.get(1).columnName()).isEqualTo("Backlog");
     assertThat(out).noneSatisfy(o -> assertThat(o.dwellSeconds()).isEqualTo(THRESHOLD));
+  }
+
+  // --- Statuswechsel speist den Aufenthaltsverlauf (Issue #1300, Plan #1294 E25) -------------
+
+  /** Uhr, die der Test vorstellt — ein Statuswechsel je Zeitpunkt. */
+  private static final class StellbareUhr extends Clock {
+    private Instant jetzt;
+
+    StellbareUhr(Instant start) {
+      this.jetzt = start;
+    }
+
+    void vor(long sekunden) {
+      jetzt = jetzt.plusSeconds(sekunden);
+    }
+
+    @Override
+    public ZoneOffset getZone() {
+      return ZoneOffset.UTC;
+    }
+
+    @Override
+    public Clock withZone(java.time.ZoneId zone) {
+      return this;
+    }
+
+    @Override
+    public Instant instant() {
+      return jetzt;
+    }
+  }
+
+  /** Aufenthaltsverlauf im Speicher — derselbe Vertrag wie der JDBC-Adapter. */
+  private static final class VerlaufImSpeicher implements CardColumnTransitionRepository {
+    private final List<CardColumnTransition> zeilen = new ArrayList<>();
+
+    @Override
+    public void open(long cardId, long columnId, String columnName, Instant enteredAt) {
+      zeilen.add(
+          new CardColumnTransition(null, cardId, columnId, columnName, enteredAt, null, null));
+    }
+
+    @Override
+    public void closeOpen(long cardId, Instant leftAt) {
+      zeilen.replaceAll(
+          t ->
+              t.cardId() == cardId && t.leftAt() == null
+                  ? new CardColumnTransition(
+                      t.id(),
+                      t.cardId(),
+                      t.columnId(),
+                      t.columnName(),
+                      t.enteredAt(),
+                      leftAt,
+                      Duration.between(t.enteredAt(), leftAt).toSeconds())
+                  : t);
+    }
+
+    @Override
+    public List<CardColumnTransition> findByCardId(long cardId) {
+      return zeilen.stream().filter(t -> t.cardId() == cardId).toList();
+    }
+
+    @Override
+    public List<CardColumnTransition> findByBoardId(long boardId) {
+      return List.copyOf(zeilen);
+    }
+  }
+
+  @Test
+  void paketInEigenerSpalte_perStatusDurchInProgressNachDone_hatImplementierungszeit() {
+    // Gegeben: ein Paket in der eigenen Spalte „Anstehend" mit Status BACKLOG — es wechselt nie die
+    // Spalte. Ohne E25 hätte es keinen einzigen Aufenthalt „In progress" und fiele still aus der
+    // Kennzahl.
+    long anstehend = 25L;
+    Instant start = NOW.minusSeconds(10_000);
+    StellbareUhr uhr = new StellbareUhr(start);
+    VerlaufImSpeicher verlauf = new VerlaufImSpeicher();
+    verlauf.open(1L, anstehend, "Anstehend", start);
+    Card[] karte = {
+      new Card(
+          1L,
+          BOARD,
+          anstehend,
+          1,
+          "Paket",
+          null,
+          0,
+          false,
+          null,
+          1L,
+          start,
+          start,
+          CardType.CARD,
+          null,
+          null,
+          null,
+          PROJECT,
+          null,
+          null,
+          null,
+          CardStatus.BACKLOG)
+    };
+    when(cards.findById(1L)).thenAnswer(inv -> Optional.of(karte[0]));
+    when(cards.save(any(Card.class)))
+        .thenAnswer(
+            inv -> {
+              karte[0] = inv.getArgument(0);
+              return karte[0];
+            });
+    ActorContext actor = mock(ActorContext.class);
+    when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
+    CardService karten =
+        new CardService(
+            cards,
+            mock(CardDependencyRepository.class),
+            boardService,
+            permissions,
+            mock(ProjectService.class),
+            verlauf,
+            new KartenZuordnung(
+                mock(CardAssigneeRepository.class),
+                mock(LabelRepository.class),
+                mock(CardLabelRepository.class),
+                permissions),
+            mock(CardActivityRepository.class),
+            actor,
+            mock(ApplicationEventPublisher.class),
+            uhr);
+
+    // Wenn: BACKLOG → IN_PROGRESS (nach 1000 s) → DONE (nach weiteren 3600 s).
+    uhr.vor(1000);
+    karten.setStatus(5L, 1L, "IN_PROGRESS");
+    uhr.vor(3600);
+    karten.setStatus(5L, 1L, "DONE");
+
+    // Dann: je Zustand ein Aufenthalt mit eigener Verweildauer, alle in der tatsächlichen Spalte.
+    assertThat(verlauf.findByCardId(1L))
+        .extracting(
+            CardColumnTransition::columnName,
+            CardColumnTransition::columnId,
+            CardColumnTransition::durationSeconds)
+        .containsExactly(
+            tuple("Anstehend", anstehend, 1000L),
+            tuple("In progress", anstehend, 3600L),
+            tuple("Done", anstehend, null));
+    assertThat(karte[0].columnId()).isEqualTo(anstehend);
+    assertThat(karte[0].movedToDoneAt()).isNotNull();
+
+    // … und die Dashboard-Kennzahl sieht die Implementierungszeit.
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(karte[0]));
+    CardCycleTimeService kennzahlen =
+        new CardCycleTimeService(cards, verlauf, boardService, permissions, uhr);
+    BoardDashboardKpis kpis = kennzahlen.dashboard(5L, BOARD);
+    assertThat(kpis.avgImplementationSeconds()).isEqualTo(3600L).isPositive();
+    assertThat(kpis.implementationSampleCount()).isEqualTo(1);
   }
 }

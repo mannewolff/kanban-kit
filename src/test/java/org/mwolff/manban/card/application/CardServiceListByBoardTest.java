@@ -99,6 +99,7 @@ class CardServiceListByBoardTest {
         PROJECT,
         null,
         derivedFrom,
+        null,
         null);
   }
 

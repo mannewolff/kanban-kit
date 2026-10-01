@@ -15,7 +15,7 @@ Im **Leitstand** steht, was die KI daraus gemacht hat:
 - **Verbrauch** — Token und Kosten je Nacht, Woche, Monat, Vorhaben und Stufe der Kette, getrennt
   nach Läufen und interaktiven Sitzungen.
 
-Technik: Spring Boot (Java 21) + Postgres + SeaweedFS als Objektspeicher im Backend, React + Vite im Frontend,
+Technik: Spring Boot (Java 25) + Postgres + SeaweedFS als Objektspeicher im Backend, React + Vite im Frontend,
 alles hinter einem Caddy-Reverse-Proxy mit automatischem TLS. Der ganze Stack läuft über
 Docker Compose.
 
@@ -32,11 +32,16 @@ Docker Compose.
 ```
 git clone https://github.com/mannewolff/kanban-kit.git
 cd kanban-kit
-docker compose up --build -d
+docker compose up -d
 ```
 
-- `--build` baut das Image neu (Frontend-Build + Backend-Jar). **Nach jeder Codeänderung nötig** —
-  ein reines `docker compose up -d` nutzt sonst das alte Image.
+> **Dieser Weg stellt eine Testinstanz im Entwicklungsbetrieb her — er ist nicht für den Betrieb
+> gedacht.** Der Stack läuft mit unsicheren Standardwerten und `MANBAN_DEV_MODE=true`; die
+> Sitzungs-Cookies dieser Instanz sind fälschbar, weil der mitgelieferte Sitzungsschlüssel im
+> öffentlichen Repository steht. Die Anwendung startet damit, schreibt aber bei jedem Start eine
+> Warnung ins Log. Für einen echten Betrieb siehe [Produktivbetrieb](#produktivbetrieb).
+
+- Es wird **nichts übersetzt**: Compose zieht das veröffentlichte Abbild von `ghcr.io`.
 - `-d` startet im Hintergrund. Für Live-Logs `-d` weglassen oder:
   ```
   docker compose logs -f manban-api    # warten auf "Started ManbanApplication"
@@ -49,6 +54,71 @@ Sicherheitswarnung. Einmal „Trotzdem fortfahren" bestätigen (lokal so gewollt
 echte Domain `MANBAN_DOMAIN` setzen — dann besorgt Caddy automatisch ein Let's-Encrypt-Zertifikat.
 
 Das Datenbank-Schema wird beim Start **automatisch per Flyway** migriert — kein manuelles SQL nötig.
+
+## Warum kanban-kit
+
+kanban-kit ist das Board für einen bestimmten Prozess: KI-gestützte Softwareentwicklung, in der
+ein Mensch an drei Stellen entscheidet. Aus einer Anforderung wird ein Fachkonzept, das ein Mensch
+freigibt; daraus ein Plan, den ein Mensch freigibt; daraus Arbeitspakete, die erst mit dem GO
+eines Menschen in die Umsetzung gehen. Was die KI danach — auch unbeaufsichtigt über Nacht — aus
+einem Arbeitspaket gemacht hat, steht im Leitstand. Den Prozess beschreibt das Whitepaper
+[„Ein Prozess zur KI-gestützten Softwareentwicklung“ (v1.2)](https://mwolff.org/whitepapers/whitepaper-ki-entwicklungsprozess-v1.2.pdf);
+die Dokumentation liegt unter [https://docs.mwolff.org](https://docs.mwolff.org).
+
+## Was du erwarten darfst
+
+kanban-kit ist zuerst das Werkzeug für meinen eigenen Entwicklungs-Workflow und meine Workshops —
+daher kommt es, und danach richtet es sich. Pull Requests sind willkommen; wie sie gelingen, steht
+in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Offen gesagt heißt das auch: Es gibt keine allgemeine Support-Zusage, keine Roadmap und
+keine allgemeine Reaktionszeit für Issues oder Pull Requests. Ausgenommen sind
+Sicherheitsmeldungen — für sie gelten die Zusagen aus [SECURITY.md](SECURITY.md): eine Eingangsbestätigung binnen fünf
+Werktagen; eine Frist für die Korrektur sagt auch SECURITY.md nicht zu.
+
+## Produktivbetrieb
+
+Der zweite Weg. Er unterscheidet sich vom Schnellstart in genau zwei Punkten: eine vollständige
+`.env` und ein zusätzliches Overlay.
+
+1. **Die fünf Pflichtwerte** in die `.env` neben der `docker-compose.yml` eintragen. Fehlt einer,
+   bricht schon `docker compose config` ab und nennt ihn:
+
+   | Wert | Bedeutung |
+   |---|---|
+   | `MANBAN_SESSION_SECRET` | Schlüssel zum Signieren der Sitzungs-Cookies (`openssl rand -hex 32`) |
+   | `MANBAN_BASE_URL` | öffentliche Adresse dieser Instanz für Links in E-Mails |
+   | `OBJEKTSPEICHER_ROOT_USER` | Benutzername des Objektspeichers, frei wählbar und nicht `manban` |
+   | `OBJEKTSPEICHER_ROOT_PASSWORD` | Geheimnis des Objektspeichers (`openssl rand -hex 32`) |
+   | `POSTGRES_PASSWORD` | Kennwort der Datenbankrolle (`openssl rand -hex 32`) |
+
+2. **Mit dem Betriebs-Overlay starten:**
+
+   ```
+   docker compose -f docker-compose.yml -f docker-compose.betrieb.yml up -d
+   ```
+
+   Das Overlay setzt `MANBAN_DEV_MODE` fest auf `false` — ein Eintrag in der `.env` greift dort
+   nicht.
+
+**Zwei Wege für den Reverse-Proxy:**
+
+- **Mitgelieferter Caddy (Normalfall).** Nichts weiter zu tun: Caddy nimmt die Host-Ports 80 und
+  443 und holt für `MANBAN_DOMAIN` automatisch ein Let's-Encrypt-Zertifikat.
+- **Eigener Reverse-Proxy.** `MANBAN_PROXY_PROFIL=eigener-proxy` in die `.env` — dann bleibt Caddy
+  unten, und `manban-api` hängt auf `127.0.0.1:8080`. Der eigene Proxy muss das TLS beenden und
+  `X-Forwarded-Proto`, `-Host` und `-For` setzen.
+
+Sicherung und Wiederherstellung: [docs/backup.md](docs/backup.md). Was ein Versionssprung von Hand
+verlangt: [UPGRADING.md](UPGRADING.md).
+
+## Aus dem Quelltext bauen
+
+Für Entwicklung und eigene Änderungen — das Bau-Overlay ist der einzige Schalter des Baus:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.bau.yml up -d --build
+```
 
 ## Ersten Admin einrichten
 
@@ -88,6 +158,8 @@ Die ausführliche Benutzer- und Betriebsdokumentation liegt unter [`docs/`](docs
 
 - [Betrieb & Installation](docs/betrieb.md) — Start, Umgebungsvariablen, E-Mail, erster Admin,
   Meldeweg der interaktiven Sitzungen
+- [Upgrade](UPGRADING.md) — was ein Versionssprung von Hand verlangt; eine Version ohne eigenen
+  Abschnitt verlangt keine Handarbeit
 - [Nutzung](docs/nutzung.md) — Projekte, Boards, Karten, Listen-Ansicht, Ideen-Pool, Vorhaben,
   [Läufe](docs/nutzung.md#nachtlauf), [Verbrauch](docs/nutzung.md#verbrauch-leitstand),
   [Plattform-Leitstand](docs/nutzung.md#plattform-leitstand), Mitglieder
@@ -110,7 +182,19 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-## Lizenz
+## Mitwirken, Kontakt und Lizenz
+
+Drei Wege, je nach Anliegen:
+
+- **Fehler und Wünsche** als GitHub-Issue, mit den Vorlagen aus
+  [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/).
+- **Sicherheitslücken** vertraulich nach [SECURITY.md](SECURITY.md) — **nicht** als öffentliches
+  Issue.
+- **Alles andere** — Fragen, Doku-Fehler, Betriebsprobleme — per Mail an
+  [info@mwolff.org](mailto:info@mwolff.org).
+
+Wer beitragen will, liest zuerst [CONTRIBUTING.md](CONTRIBUTING.md); für alle Beteiligten gilt der
+[Verhaltenskodex](CODE_OF_CONDUCT.md).
 
 kanban-kit steht unter der MIT-Lizenz. Der vollständige Lizenztext liegt in
 [LICENSE](LICENSE).

@@ -19,7 +19,7 @@ Aktiviert wird das über das Overlay `docker-compose.prod.yml` zusätzlich zur B
 `docker-compose.yml`:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose.prod.yml up -d --build
 ```
 
 ## Erstinbetriebnahme (auf dem Server)
@@ -99,7 +99,7 @@ Aktiviert wird das über das Overlay `docker-compose.prod.yml` zusätzlich zur B
 `docker-compose.yml`:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose.prod.yml up -d --build
 ```
 
 ## Erstinbetriebnahme (auf dem Server)
@@ -159,7 +159,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 5. **Starten:**
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+   docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose.prod.yml up -d --build
    docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
    docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f manban-api
    ```
@@ -179,7 +179,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```bash
 cd /root/opt/kanban-kit
 git pull
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose.prod.yml up -d --build
 ```
 
 Flyway migriert die Datenbank automatisch beim Boot der `manban-api`. Neue

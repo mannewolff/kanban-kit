@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,8 @@ import {
   pitGlobZuRegex,
   javaPfadZuKlasse,
   frontendBereich,
+  stufenplanPruefen,
+  ausschnittVon,
   pitBereichLesen,
   backendBereich,
   istTestdatei,
@@ -19,6 +21,7 @@ import {
   testAngabeZuPfad,
   zuordnungAusVollauf,
   beruehrung,
+  festeZuordnungLesen,
   diffPfade,
   untracktePfade,
   ankerBestimmen,
@@ -40,16 +43,33 @@ import {
   pitArgumente,
   pitVollaufArgumente,
   SCHWELLEN,
+  HALT_OHNE_ZUORDNUNG,
   quoteAus,
   vollaufAuswerten,
+  klammernAufloesen,
+  DAUER_PROTOKOLL_LAENGE,
+  STUFENGRENZE_MS,
+  median,
 } from './mutationspruefung.mjs';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const BEISPIEL_XML = readFileSync(join(HIER, 'testdaten', 'mutations-beispiel.xml'), 'utf-8');
 
-const STRYKER = {
-  mutate: ['src/lib/**/*.ts', 'src/api/**/*.ts', '!src/**/*.test.ts', '!src/**/*.test.tsx'],
+/** Ein Stufenplan, dessen aufgenommene Ausschnitte genau den frueheren `mutate`-Bereich ergeben. */
+const PLAN = {
+  ausnahmen: [],
+  ausschnitte: [
+    { name: 'hilfsfunktionen', muster: ['src/lib/**/*.ts'], aufgenommen: '2026-09-28', reihenfolge: 1 },
+    { name: 'server-anbindung', muster: ['src/api/**/*.ts'], aufgenommen: '2026-09-28', reihenfolge: 2 },
+  ],
 };
+
+const MUTATE = ['src/lib/**/*.ts', 'src/api/**/*.ts', '!src/**/*.test.ts', '!src/**/*.test.tsx'];
+
+/** Der Stufenplan des Repositories, wie Konfiguration und Treiber ihn lesen. */
+function repoPlan() {
+  return JSON.parse(readFileSync(join(HIER, '..', 'frontend', 'mutationsstufen.json'), 'utf-8'));
+}
 
 const POM_MIT_PROPERTY = `<project>
   <profiles>
@@ -119,6 +139,17 @@ test('globZuRegex: ** erfasst beliebige Tiefe einschliesslich keiner', () => {
   assert.equal(regex.test('src/lib/a.tsx'), false);
 });
 
+test('globZuRegex: {a,b} waehlt eine der Alternativen (Stufenplan, #1276)', () => {
+  const r = globZuRegex('src/lib/**/*.{ts,tsx}');
+  assert.equal(r.test('src/lib/a.ts'), true);
+  assert.equal(r.test('src/lib/x/b.tsx'), true);
+  assert.equal(r.test('src/lib/a.js'), false);
+  assert.equal(r.test('src/lib/a.{ts,tsx}'), false);
+  assert.equal(globZuRegex('src/a.{t.s}').test('src/a.t.s'), true);
+  assert.equal(globZuRegex('src/a.{t.s}').test('src/a.tXs'), false);
+  assert.equal(globZuRegex('src/{a').test('src/{a'), true);
+});
+
 test('globZuRegex: * bleibt im Pfadsegment', () => {
   const regex = globZuRegex('src/*.ts');
   assert.equal(regex.test('src/a.ts'), true);
@@ -143,14 +174,123 @@ test('javaPfadZuKlasse: nur Hauptquellen unter src/main/java', () => {
 
 // --- Pruefbereich je Seite --------------------------------------------------
 
-test('frontendBereich: Musterschnitt aus mutate, Negationen schneiden heraus', () => {
-  const bereich = frontendBereich(STRYKER);
+test('frontendBereich: Musterschnitt aus den aufgenommenen Ausschnitten, Negationen schneiden heraus', () => {
+  const bereich = frontendBereich(PLAN);
   assert.equal(bereich.trifft('frontend/src/lib/statusColors.ts'), true);
   assert.equal(bereich.trifft('frontend/src/api/cards.ts'), true);
   assert.equal(bereich.trifft('frontend/src/lib/statusColors.test.ts'), false);
   assert.equal(bereich.trifft('frontend/src/components/BoardView.tsx'), false);
   assert.equal(bereich.trifft('src/main/java/org/mwolff/manban/card/application/CardService.java'), false);
-  assert.deepEqual(bereich.woertlich, STRYKER.mutate);
+  assert.deepEqual(bereich.woertlich, MUTATE);
+  assert.equal(bereich.quelle, 'frontend/mutationsstufen.json (aufgenommene Ausschnitte)');
+});
+
+test('frontendBereich: der Pruefbereich ist mutateFuer ueber die aufgenommenen Ausschnitte des Repo-Plans', async () => {
+  const { aufgenommene, mutateFuer } = await import('../frontend/mutationsbereich.mjs');
+  const plan = repoPlan();
+  assert.deepEqual(frontendBereich(plan).woertlich, mutateFuer(aufgenommene(plan).map((a) => a.name), plan));
+});
+
+test('stryker.config.mjs: mutate ist dieselbe Ableitung wie im Treiber und schliesst die Tests aus', async () => {
+  const { default: config } = await import('../frontend/stryker.config.mjs');
+  assert.deepEqual(config.mutate, frontendBereich(repoPlan()).woertlich);
+  assert.ok(config.mutate.includes('!src/**/*.test.ts'));
+  assert.ok(config.mutate.includes('!src/**/*.test.tsx'));
+  assert.equal(config.testRunner, 'vitest');
+  assert.deepEqual(config.vitest, { configFile: 'vitest.mutation.config.ts' });
+});
+
+test('stufenplanPruefen: der Repo-Plan ist gueltig', () => {
+  assert.equal(stufenplanPruefen(repoPlan()), null);
+});
+
+test('stufenplanPruefen: fehlende oder falsch geformte Felder werden benannt', () => {
+  assert.match(stufenplanPruefen(null), /kein Objekt/);
+  assert.match(stufenplanPruefen({ ausschnitte: [] }), /ausnahmen/);
+  assert.match(stufenplanPruefen({ ausnahmen: [] }), /ausschnitte/);
+  assert.match(stufenplanPruefen({ ausnahmen: [], ausschnitte: [{ muster: ['a'] }] }), /name/);
+  assert.match(stufenplanPruefen({ ausnahmen: [], ausschnitte: [{ name: 'x', muster: 'a' }] }), /x.*muster/);
+  assert.match(stufenplanPruefen({ ausnahmen: [], ausschnitte: [{ name: 'x', muster: [] }] }), /x.*muster/);
+});
+
+/**
+ * Ein kleiner Stufenplan mit festem Stand fuer die festen Erwartungen (Issue #1288): Er folgt dem
+ * Aufbau des Repo-Plans, aendert sich aber nicht, wenn dort ein Ausschnitt aufgenommen wird.
+ */
+const PLAN_PROBE = {
+  ausnahmen: ['src/lib/__fixtures__/**'],
+  ausschnitte: [
+    { name: 'hilfsfunktionen', muster: ['src/lib/**/*.{ts,tsx}'], aufgenommen: '2026-09-28', reihenfolge: 1 },
+    { name: 'server-anbindung', muster: ['src/api/**/*.ts'], aufgenommen: '2026-09-28', reihenfolge: 2 },
+    { name: 'bausteine-leitstand', muster: ['src/components/leitstand/**/*.tsx'], aufgenommen: false, reihenfolge: 3 },
+  ],
+};
+
+/** Ein Probepfad aus dem ersten Muster eines Ausschnitts, etwa `src/lib/**\/*.{ts,tsx}` → `frontend/src/lib/probe.ts`. */
+function probePfad(ausschnitt) {
+  const [muster] = ausschnitt.muster;
+  return `frontend/${muster.replace('**/', '').replace(/\{([^,}]+)[^}]*\}/, '$1').replace('*', 'probe')}`;
+}
+
+/** Was unabhaengig vom Stand des Plans gilt: Probepfade landen in ihrem Ausschnitt, `trifft` folgt der Aufnahme. */
+function standUnabhaengigPruefen(plan) {
+  const bereich = frontendBereich(plan);
+  for (const ausschnitt of plan.ausschnitte) {
+    const pfad = probePfad(ausschnitt);
+    const aufgenommen = typeof ausschnitt.aufgenommen === 'string';
+    const gefunden = ausschnittVon(bereich, pfad);
+    assert.equal(gefunden?.name, ausschnitt.name, pfad);
+    assert.equal(gefunden?.aufgenommen, aufgenommen, pfad);
+    assert.equal(bereich.trifft(pfad), aufgenommen, pfad);
+  }
+  assert.deepEqual(
+    bereich.ausschnitte.filter((a) => a.aufgenommen).map((a) => a.name),
+    plan.ausschnitte.filter((a) => typeof a.aufgenommen === 'string').map((a) => a.name),
+  );
+}
+
+test('ausschnittVon: jede Datei landet in ihrem Ausschnitt, Ausnahmen und Tests in keinem', () => {
+  const bereich = frontendBereich(PLAN_PROBE);
+  assert.equal(ausschnittVon(bereich, 'frontend/src/lib/statusColors.ts')?.name, 'hilfsfunktionen');
+  assert.equal(ausschnittVon(bereich, 'frontend/src/api/cards.ts')?.name, 'server-anbindung');
+  assert.equal(bereich.trifft('frontend/src/lib/statusColors.ts'), true);
+  const leitstand = ausschnittVon(bereich, 'frontend/src/components/leitstand/Kachel.tsx');
+  assert.equal(leitstand?.name, 'bausteine-leitstand');
+  assert.equal(leitstand?.aufgenommen, false);
+  assert.equal(bereich.trifft('frontend/src/components/leitstand/Kachel.tsx'), false);
+  assert.equal(ausschnittVon(bereich, 'frontend/src/lib/__fixtures__/probe.ts'), null);
+  assert.equal(bereich.trifft('frontend/src/lib/__fixtures__/probe.ts'), false);
+  assert.equal(ausschnittVon(bereich, 'frontend/src/lib/statusColors.test.ts'), null);
+  assert.equal(ausschnittVon(bereich, 'src/main/java/org/mwolff/manban/card/application/CardService.java'), null);
+});
+
+test('ausschnittVon: im Repo-Plan landet jeder Probepfad in seinem Ausschnitt, trifft folgt der Aufnahme', () => {
+  standUnabhaengigPruefen(repoPlan());
+});
+
+test('frontendBereich: die Ausschnitte tragen ihren Namen und ob sie aufgenommen sind', () => {
+  const probe = frontendBereich(PLAN_PROBE);
+  assert.deepEqual(
+    probe.ausschnitte.filter((a) => a.aufgenommen).map((a) => a.name),
+    ['hilfsfunktionen', 'server-anbindung'],
+  );
+  const bereich = frontendBereich(repoPlan());
+  assert.equal(bereich.ausschnitte.length, repoPlan().ausschnitte.length);
+  assert.deepEqual(
+    bereich.ausschnitte.filter((a) => a.aufgenommen).map((a) => a.name),
+    repoPlan().ausschnitte.filter((a) => a.aufgenommen).map((a) => a.name),
+  );
+});
+
+test('Repo-Plan-Tests ueberstehen die Aufnahme des Kandidaten (Issue #1288)', () => {
+  const kopie = structuredClone(repoPlan());
+  const kandidat = kopie.ausschnitte
+    .filter((a) => typeof a.aufgenommen !== 'string')
+    .sort((x, y) => x.reihenfolge - y.reihenfolge)[0];
+  assert.ok(kandidat, 'der Repo-Plan hat keinen Kandidaten mehr');
+  kandidat.aufgenommen = '2099-01-01';
+  assert.equal(frontendBereich(kopie).ausschnitte.find((a) => a.name === kandidat.name)?.aufgenommen, true);
+  standUnabhaengigPruefen(kopie);
 });
 
 test('pitBereichLesen: Property gewinnt, wenn sie vorhanden ist', () => {
@@ -164,6 +304,19 @@ test('pitBereichLesen: ohne Property faellt das Lesen auf die targetClasses-Elem
   const gelesen = pitBereichLesen(POM_OHNE_PROPERTY);
   assert.equal(gelesen.quelle, 'elemente');
   assert.deepEqual(gelesen.ziel, ['org.mwolff.manban.*.application.*', 'org.mwolff.manban.*.domain.*']);
+});
+
+test('backendBereich: genau ein Ausschnitt ueber den ganzen Pruefbereich (E11)', () => {
+  const bereich = backendBereich(pitBereichLesen(POM_MIT_PROPERTY));
+  assert.equal(bereich.ausschnitte.length, 1);
+  const [einziger] = bereich.ausschnitte;
+  assert.equal(einziger.name, 'backend');
+  assert.equal(einziger.aufgenommen, true);
+  const drin = 'src/main/java/org/mwolff/manban/card/application/CardService.java';
+  const draussen = 'src/main/java/org/mwolff/manban/card/infrastructure/CardRepository.java';
+  assert.equal(ausschnittVon(bereich, drin), einziger);
+  assert.equal(ausschnittVon(bereich, draussen), null);
+  assert.equal(ausschnittVon(bereich, 'frontend/src/lib/statusColors.ts'), null);
 });
 
 test('backendBereich: Musterschnitt ueber Klassennamen, excludedClasses gewinnt', () => {
@@ -237,7 +390,7 @@ test('zuordnungAusVollauf: ohne Mutantenliste bleibt die Zuordnung leer', () => 
 test('beruehrung: geaenderte Quelldatei im Bereich zaehlt, ausserhalb nicht', () => {
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/a.ts', 'frontend/src/components/B.tsx', 'README.md'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
     existiert: () => true,
   });
@@ -248,7 +401,7 @@ test('beruehrung: geaenderte Quelldatei im Bereich zaehlt, ausserhalb nicht', ()
 test('beruehrung: geaenderter Test zieht seine Quelle ueber die Namenskonvention mit', () => {
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/a.test.ts'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
     existiert: (pfad) => pfad === 'frontend/src/lib/a.ts',
   });
@@ -259,7 +412,7 @@ test('beruehrung: geaenderter Test zieht seine Quelle ueber die Namenskonvention
 test('beruehrung: geaenderter Test zieht seine Quelle ueber die Berichtsumkehrung mit', () => {
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/andersHeissend.test.ts'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map([['frontend/src/lib/andersHeissend.test.ts', new Set(['frontend/src/lib/a.ts'])]]),
     existiert: () => false,
   });
@@ -270,7 +423,7 @@ test('beruehrung: geaenderter Test zieht seine Quelle ueber die Berichtsumkehrun
 test('beruehrung: Test ohne Zuordnung macht die ganze Seite beruehrt', () => {
   const ergebnis = beruehrung({
     geaendert: ['frontend/src/lib/ohnePartner.test.ts'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
     existiert: () => false,
   });
@@ -281,12 +434,57 @@ test('beruehrung: Test ohne Zuordnung macht die ganze Seite beruehrt', () => {
 test('beruehrung: ein Test der anderen Seite loest die ganze Seite nicht aus', () => {
   const ergebnis = beruehrung({
     geaendert: ['src/test/java/org/mwolff/manban/card/OhnePartnerTest.java'],
-    bereich: frontendBereich(STRYKER),
+    bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
     existiert: () => false,
   });
   assert.equal(ergebnis.ganzeSeite, false);
   assert.deepEqual(ergebnis.dateien, []);
+});
+
+test('beruehrung: feste Zuordnung zieht eine Quelle im Bereich mit (Issue #1287)', () => {
+  const ergebnis = beruehrung({
+    geaendert: ['frontend/src/lib/andersHeissend.test.ts'],
+    bereich: frontendBereich(PLAN),
+    zuordnung: new Map(),
+    festeZuordnung: { 'frontend/src/lib/andersHeissend.test.ts': ['frontend/src/lib/a.ts'] },
+    existiert: () => false,
+  });
+  assert.deepEqual(ergebnis, { dateien: ['frontend/src/lib/a.ts'], ganzeSeite: false, ohneZuordnung: [] });
+});
+
+test('beruehrung: feste Zuordnung nur ausserhalb des Bereichs macht den Test zugeordnet, ohne Datei', () => {
+  const ergebnis = beruehrung({
+    geaendert: ['frontend/src/lib/strykerUmfang.test.ts'],
+    bereich: frontendBereich(PLAN),
+    zuordnung: new Map(),
+    festeZuordnung: { 'frontend/src/lib/strykerUmfang.test.ts': ['frontend/mutationTestUmfang.ts'] },
+    existiert: () => false,
+  });
+  assert.deepEqual(ergebnis, { dateien: [], ganzeSeite: false, ohneZuordnung: [] });
+});
+
+test('mutationszuordnung.json: gueltiges JSON, jeder Test und jede Quelle existiert im Repo', () => {
+  const repo = join(HIER, '..');
+  const zuordnung = festeZuordnungLesen(repo);
+  assert.ok(Object.keys(zuordnung).length > 0, 'die ausgelieferte Zuordnung ist leer');
+  for (const [testPfad, quellen] of Object.entries(zuordnung)) {
+    assert.ok(existsSync(join(repo, testPfad)), `Test fehlt: ${testPfad}`);
+    assert.ok(Array.isArray(quellen) && quellen.length > 0, `keine Quelle fuer ${testPfad}`);
+    for (const quelle of quellen) assert.ok(existsSync(join(repo, quelle)), `Quelle fehlt: ${quelle}`);
+  }
+});
+
+test('mutationszuordnung.json: strykerUmfang.test.ts allein loest weder Datei noch ganze Seite aus', () => {
+  const repo = join(HIER, '..');
+  const ergebnis = beruehrung({
+    geaendert: ['frontend/src/lib/strykerUmfang.test.ts'],
+    bereich: frontendBereich(repoPlan()),
+    zuordnung: new Map(),
+    festeZuordnung: festeZuordnungLesen(repo),
+    existiert: (pfad) => existsSync(join(repo, pfad)),
+  });
+  assert.deepEqual(ergebnis, { dateien: [], ganzeSeite: false, ohneZuordnung: [] });
 });
 
 // --- Anker und Dateilisten --------------------------------------------------
@@ -350,7 +548,7 @@ test('dauerText: Sekunden und Minuten', () => {
 // --- Lauf -------------------------------------------------------------------
 
 function mitProjekt(fn, {
-  stryker = STRYKER,
+  plan = PLAN,
   pom = POM_MIT_PROPERTY,
   config = { mainBranch: 'main', buildChecks: [] },
   vollauf = null,
@@ -361,7 +559,7 @@ function mitProjekt(fn, {
     mkdirSync(join(wurzel, '.claude'), { recursive: true });
     mkdirSync(join(wurzel, 'frontend'), { recursive: true });
     writeFileSync(join(wurzel, '.claude', 'workflow.config.json'), JSON.stringify(config));
-    writeFileSync(join(wurzel, 'frontend', 'stryker.config.json'), JSON.stringify(stryker));
+    if (plan !== null) writeFileSync(join(wurzel, 'frontend', 'mutationsstufen.json'), JSON.stringify(plan));
     writeFileSync(join(wurzel, 'pom.xml'), pom);
     if (vollauf) {
       for (const [seite, inhalt] of Object.entries(vollauf)) {
@@ -439,7 +637,7 @@ test('laufen: leere Beruehrungsmenge endet gruen, nennt Bereich und Satz', () =>
   const { code, text } = mitProjekt((wurzel) => sammelLauf(['aenderung', 'frontend'], wurzel));
   assert.equal(code, 0);
   assert.ok(text.includes('keine berührte Datei im Prüfbereich'));
-  for (const muster of STRYKER.mutate) assert.ok(text.includes(muster), `Muster fehlt woertlich: ${muster}`);
+  for (const muster of MUTATE) assert.ok(text.includes(muster), `Muster fehlt woertlich: ${muster}`);
 });
 
 test('laufen: ohne buildChecks-Eintrag steht die Stufe woertlich als nicht eingetragen', () => {
@@ -1104,6 +1302,51 @@ test('laufen: unaufloesbarer Anker fuehrt zum vollen Umfang und sagt das', () =>
   assert.deepEqual(aufrufe[0].args, ['run', '--reporters', 'json,html,clear-text']);
 });
 
+test('laufen: ein Test ohne Zuordnung haelt sofort an, ohne Werkzeuglauf (Issue #1287)', () => {
+  const { code, text, aufrufe } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, {
+      'diff --name-status -z 1a2b3c4': OK('M\0frontend/src/lib/ohnePartner.test.ts\0'),
+    }, strykerDoppel(wurzel, BERICHT_A)),
+  );
+  assert.equal(code, 1);
+  assert.equal(aufrufe.length, 0);
+  assert.ok(text.includes('frontend/src/lib/ohnePartner.test.ts'));
+  assert.ok(text.includes('scripts/mutationszuordnung.json'));
+  assert.ok(!text.includes('Umfang: die ganze Seite'));
+});
+
+test('laufen: im Backend weicht ein Test ohne Zuordnung auf die ganze Seite aus (Issue #1308)', () => {
+  const test = 'src/test/java/org/mwolff/manban/card/application/CardServiceEpicTreeTest.java';
+  const { text, aufrufe } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      'diff --name-status -z 1a2b3c4': OK(`M\0${test}\0`),
+    }, pitDoppel(wurzel, BEISPIEL_XML)),
+  );
+  assert.equal(aufrufe.length, 1);
+  assert.deepEqual(aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
+  assert.match(text, /Umfang: die ganze Seite/);
+  assert.ok(text.includes(test));
+  assert.ok(!text.includes('kein Werkzeuglauf'));
+});
+
+test('HALT_OHNE_ZUORDNUNG: nur das Frontend haelt sofort an', () => {
+  assert.deepEqual(HALT_OHNE_ZUORDNUNG, { frontend: true, backend: false });
+});
+
+test('laufen: die feste Zuordnung aus scripts/mutationszuordnung.json wird gelesen', () => {
+  const { code, text, aufrufe } = mitProjekt((wurzel) => {
+    mkdirSync(join(wurzel, 'scripts'), { recursive: true });
+    writeFileSync(join(wurzel, 'scripts', 'mutationszuordnung.json'),
+      JSON.stringify({ 'frontend/src/lib/ohnePartner.test.ts': ['frontend/mutationTestUmfang.ts'] }));
+    return sammelLauf(['aenderung', 'frontend'], wurzel, {
+      'diff --name-status -z 1a2b3c4': OK('M\0frontend/src/lib/ohnePartner.test.ts\0'),
+    }, strykerDoppel(wurzel, BERICHT_A));
+  });
+  assert.equal(code, 0);
+  assert.equal(aufrufe.length, 0);
+  assert.ok(text.includes('keine berührte Datei im Prüfbereich'));
+});
+
 // --- Vollauf: Schwelle und Gedaechtnisdatei (Issue #1215) --------------------
 
 test('SCHWELLEN: je Seite genau eine Zahl, Frontend 80, Backend 100', () => {
@@ -1161,12 +1404,14 @@ const BERICHT_AUF_SCHWELLE = bericht({
   },
 });
 
-test('laufen: vollauf frontend ruft Stryker ohne Verengung im Arbeitsverzeichnis frontend', () => {
+test('laufen: vollauf frontend ruft Stryker mit dem vollen Pruefbereich als -m im Arbeitsverzeichnis frontend', () => {
   const { aufrufe } = mitProjekt((wurzel) =>
     sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_UEBER_SCHWELLE)),
   );
   assert.equal(aufrufe.length, 1);
-  assert.deepEqual(aufrufe[0].args, ['run', '--reporters', 'json,html,clear-text']);
+  // Ohne Kandidat im Plan ist der Umfang genau der Pruefbereich; `--mutate` ersetzt die Liste der
+  // Konfiguration, darum stehen die Negationen mit darin (E6, Issue #1278).
+  assert.deepEqual(aufrufe[0].args, ['run', '-m', MUTATE.join(','), '--reporters', 'json,html,clear-text']);
   assert.match(aufrufe[0].optionen.cwd, /frontend$/);
 });
 
@@ -1215,7 +1460,7 @@ test('laufen: vollauf frontend legt die Gedaechtnisdatei mit allen fuenf Feldern
   assert.equal(inhalt.stand, '9f8e7d6c5b4a');
   assert.match(inhalt.datum, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(typeof inhalt.dauerMs, 'number');
-  assert.deepEqual(inhalt.umfang, STRYKER.mutate);
+  assert.deepEqual(inhalt.umfang, MUTATE);
   assert.equal(inhalt.quote, 83.33);
   assert.deepEqual(inhalt.mutanten, [{
     datei: 'frontend/src/lib/a.ts',
@@ -1327,4 +1572,735 @@ test('laufen: die Aenderungspruefung nennt die eigene Dauer neben Dauer und Datu
   };
   const { text } = mitProjekt((wurzel) => sammelLauf(['aenderung', 'frontend'], wurzel), { vollauf });
   assert.match(text, /Dauer: \d+,\d s\. Letzter Vollauf frontend: 29 min 49 s am 2026-09-24, Quote 84,7 %\./);
+});
+
+// --- Stufenplan als Quelle des Frontend-Bereichs (Issue #1276) ---------------
+
+test('laufen: ohne Stufenplan endet das Frontend ungleich 0 und nennt die fehlende Datei', () => {
+  const { code, text, aufrufe } = mitProjekt((wurzel) => sammelLauf(['aenderung', 'frontend'], wurzel), { plan: null });
+  assert.equal(code, 1);
+  assert.match(text, /frontend\/mutationsstufen\.json fehlt oder ist kein gültiges JSON/);
+  assert.equal(aufrufe.length, 0);
+});
+
+test('laufen: ein falsch geformter Stufenplan endet ungleich 0 und nennt den Fehler', () => {
+  const { code, text, aufrufe } = mitProjekt(
+    (wurzel) => sammelLauf(['vollauf', 'frontend'], wurzel),
+    { plan: { ausnahmen: [], ausschnitte: [{ name: 'kaputt', muster: 'src/lib' }] } },
+  );
+  assert.equal(code, 1);
+  assert.match(text, /frontend\/mutationsstufen\.json ist ungültig: .*kaputt.*muster/);
+  assert.equal(aufrufe.length, 0);
+});
+
+test('laufen: der Frontend-Bereich nennt den Stufenplan als Quelle', () => {
+  const { text } = mitProjekt((wurzel) => sammelLauf(['aenderung', 'frontend'], wurzel));
+  assert.ok(text.includes('Geprüfter Bereich (frontend/mutationsstufen.json (aufgenommene Ausschnitte)):'));
+});
+
+/**
+ * Gegenprobe zur Unveraendertheit des Backends (Issue #1276): Die Meldung des Backend-Vollaufs ist
+ * zeichengleich mit der vor dem Umbau auf den Stufenplan erzeugten, Rueckgabewert und
+ * Gedaechtnisdatei ebenso. Die Uhr steht still, damit Dauer und Datum feste Werte tragen.
+ */
+const BACKEND_VOLLAUF_MELDUNG = `Mutationsprüfung — Vollauf backend
+
+Geprüfter Bereich (pom.xml, Profil pit, Property pit.targetClasses + excludedClasses):
+  eingeschlossen: org.mwolff.manban.*.application.*
+  eingeschlossen: org.mwolff.manban.*.domain.*
+  ausgenommen:    org.mwolff.manban.*.infrastructure.*
+  ausgenommen:    org.mwolff.manban.ManbanApplication
+
+Umfang: die ganze Seite.
+
+Überlebende Stellen (2):
+  src/main/java/org/mwolff/manban/card/application/CardService.java:43 — ConditionalsBoundaryMutator: changed conditional boundary überlebt
+  src/main/java/org/mwolff/manban/card/domain/Card.java:17 — BooleanTrueReturnValsMutator: replaced boolean return with true for org/mwolff/manban/card/domain/Card$Zustand::istOffen überlebt
+
+Mutanten: 4 geprüft, 2 getötet, 2 überlebt, 0 ausgenommen (@ExcludeFromJacocoGeneratedReport je Einheit — solche Mutanten entstehen gar nicht erst).
+
+Quote: 50,00 % — unter der Schwelle 100 %. Der Vollauf hält an.
+
+Dauer: 1 min 2 s. Letzter Vollauf backend: 29 min 49 s am 2026-09-24, Quote 97,5 %.
+Stufe: noch nicht eingetragen
+Ausnahme: im Backend gilt sie je Einheit (Typ, Methode, Konstruktor), nicht je Stelle.
+`;
+
+test('laufen: vollauf backend bleibt mit dem Stufenplan zeichengleich (Gegenprobe #1276)', () => {
+  const vollauf = {
+    backend: { stand: 'abc', datum: '2026-09-24T11:36:00.000Z', dauerMs: 1789000, quote: 97.5, umfang: [], mutanten: [] },
+  };
+  let uhr = 1000;
+  const { code, text, inhalt } = mitProjekt((wurzel) => {
+    const ergebnis = sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML), {
+      jetzt: () => {
+        const wert = uhr;
+        uhr += 61500;
+        return wert;
+      },
+    });
+    return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'backend') };
+  }, { vollauf });
+  assert.equal(code, 1);
+  assert.equal(text, BACKEND_VOLLAUF_MELDUNG);
+  assert.equal(inhalt.datum, '1970-01-01T00:02:04.000Z');
+  assert.equal(inhalt.dauerMs, 61500);
+  assert.equal(inhalt.quote, 50);
+});
+
+// --- Vollauf je Ausschnitt (Issue #1278) -------------------------------------
+
+/**
+ * Ein Stufenplan mit vier aufgenommenen Ausschnitten und einem Kandidaten. Die beiden ersten
+ * tragen die gemeinsame Schwelle des Bestands (E7), die beiden folgenden nicht.
+ */
+const PLAN_AUSSCHNITTE = {
+  ausnahmen: ['src/theme.ts'],
+  ausschnitte: [
+    { name: 'bestand-a', muster: ['src/lib/**/*.{ts,tsx}'], aufgenommen: '2026-09-28', gemeinsameSchwelle: true, reihenfolge: 1 },
+    { name: 'bestand-b', muster: ['src/api/**/*.ts'], aufgenommen: '2026-09-28', gemeinsameSchwelle: true, reihenfolge: 2 },
+    { name: 'stufe-c', muster: ['src/c/**/*.tsx'], aufgenommen: '2026-09-29', reihenfolge: 3 },
+    { name: 'stufe-d', muster: ['src/d/**/*.tsx'], aufgenommen: '2026-09-29', reihenfolge: 4 },
+    { name: 'kandidat-k', muster: ['src/k/**/*.tsx'], aufgenommen: false, reihenfolge: 5 },
+    { name: 'spaeter-z', muster: ['src/z/**/*.tsx'], aufgenommen: false, reihenfolge: 6 },
+  ],
+};
+
+let laufendeId = 0;
+
+/**
+ * Rohmutanten eines Stryker-Berichts in der verlangten Mischung. `ignoriert` erzeugt Mutanten, die
+ * der Darstellungs-Ignorer ausgenommen hat, `kommentar` solche aus einer Stryker-Ausnahme je Stelle.
+ */
+function mischung({ getoetet = 0, ueberlebt = 0, ohneDeckung = 0, ignoriert = 0, kommentar = 0 }) {
+  const reihe = (anzahl, zustand, extra = {}) => Array.from({ length: anzahl }, () => {
+    laufendeId += 1;
+    return { ...mutant(2, 'ConditionalExpression', zustand, { id: `m${laufendeId}`, ersetzung: `x${laufendeId}` }), ...extra };
+  });
+  return [
+    ...reihe(getoetet, 'Killed'),
+    ...reihe(ueberlebt, 'Survived'),
+    ...reihe(ohneDeckung, 'NoCoverage', { coveredBy: [] }),
+    ...reihe(ignoriert, 'Ignored', { statusReason: 'Darstellung: Stilwert im sx- oder style-Attribut' }),
+    ...reihe(kommentar, 'Ignored', { statusReason: 'Disabled by user comment' }),
+  ];
+}
+
+function berichtJeDatei(dateien) {
+  const files = {};
+  for (const [pfad, zusammensetzung] of Object.entries(dateien)) {
+    files[pfad] = { source: QUELLE_A, mutants: mischung(zusammensetzung) };
+  }
+  return bericht(files);
+}
+
+/** Drei aufgenommene Ausschnitte bei 95 %, einer bei 79,9 %, der Kandidat bei 90 %. */
+const BERICHT_EINER_UNTER = berichtJeDatei({
+  'src/lib/a.ts': { getoetet: 95, ueberlebt: 5 },
+  'src/api/b.ts': { getoetet: 95, ueberlebt: 5 },
+  'src/c/C.tsx': { getoetet: 799, ueberlebt: 201 },
+  'src/d/D.tsx': { getoetet: 95, ueberlebt: 5 },
+  'src/k/K.tsx': { getoetet: 9, ueberlebt: 1 },
+});
+
+function vollaufMit(berichtInhalt, optionen = {}, extra = {}) {
+  return mitProjekt((wurzel) => {
+    const ergebnis = sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, berichtInhalt), {
+      jetzt: () => Date.parse('2026-09-29T10:00:00.000Z'),
+      ...extra,
+    });
+    return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'frontend') };
+  }, { plan: PLAN_AUSSCHNITTE, ...optionen });
+}
+
+test('strykerMutanten: der Grund einer Ausnahme wird mitgelesen', () => {
+  const [ignoriert] = strykerMutanten(berichtJeDatei({ 'src/c/C.tsx': { ignoriert: 1 } }));
+  assert.equal(ignoriert.zustand, 'Ignored');
+  assert.match(ignoriert.grund, /^Darstellung:/);
+});
+
+test('klammernAufloesen: {a,b} wird zu zwei Mustern, alles andere bleibt', () => {
+  assert.deepEqual(klammernAufloesen('src/lib/**/*.{ts,tsx}'), ['src/lib/**/*.ts', 'src/lib/**/*.tsx']);
+  assert.deepEqual(klammernAufloesen('!src/**/*.test.ts'), ['!src/**/*.test.ts']);
+});
+
+test('frontendBereich: der Vollauf mutiert die aufgenommenen Ausschnitte plus den Kandidaten samt Ausschluessen (E6)', () => {
+  const bereich = frontendBereich(PLAN_AUSSCHNITTE);
+  assert.deepEqual(bereich.gemessen, ['bestand-a', 'bestand-b', 'stufe-c', 'stufe-d', 'kandidat-k']);
+  assert.deepEqual(bereich.vollaufMutate, [
+    'src/lib/**/*.{ts,tsx}', 'src/api/**/*.ts', 'src/c/**/*.tsx', 'src/d/**/*.tsx', 'src/k/**/*.tsx',
+    '!src/**/*.test.ts', '!src/**/*.test.tsx', '!src/theme.ts',
+  ]);
+  const kandidat = bereich.ausschnitte.find((a) => a.name === 'kandidat-k');
+  assert.equal(kandidat.kandidat, true);
+  assert.equal(bereich.ausschnitte.filter((a) => a.kandidat).length, 1);
+});
+
+test('laufen: vollauf frontend traegt -m aus mutateFuer mit Negationen, die Klammern aufgeloest (E6)', () => {
+  const { aufrufe } = vollaufMit(BERICHT_EINER_UNTER);
+  assert.equal(aufrufe.length, 1);
+  const [, schalter, liste] = aufrufe[0].args;
+  assert.equal(schalter, '-m');
+  assert.deepEqual(liste.split(','), [
+    'src/lib/**/*.ts', 'src/lib/**/*.tsx', 'src/api/**/*.ts', 'src/c/**/*.tsx', 'src/d/**/*.tsx', 'src/k/**/*.tsx',
+    '!src/**/*.test.ts', '!src/**/*.test.tsx', '!src/theme.ts',
+  ]);
+});
+
+test('vollaufAuswerten: zaehlt je Ausschnitt geprueft, getoetet, ueberlebt, ausgenommen und Darstellung', () => {
+  const bereich = frontendBereich(PLAN_AUSSCHNITTE);
+  const mutanten = strykerMutanten(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 3, ueberlebt: 1, ignoriert: 2, kommentar: 1 },
+    'src/c/C.tsx': { getoetet: 1, ohneDeckung: 1 },
+    'src/k/K.tsx': { getoetet: 1, ueberlebt: 1 },
+  }));
+  const { zaehlung, ausschnitte, ohneAusschnitt, ueberlebende } = vollaufAuswerten(mutanten, bereich.ausschnitte.filter((a) => bereich.gemessen.includes(a.name)));
+  const je = Object.fromEntries(ausschnitte.map((a) => [a.name, a]));
+  assert.deepEqual(je['bestand-a'].zaehlung, { geprueft: 4, getoetet: 3, ueberlebt: 1, ausgenommen: 3, darstellung: 2, ohneDeckung: 0 });
+  assert.equal(je['bestand-a'].quote, 75);
+  assert.deepEqual(je['stufe-c'].zaehlung, { geprueft: 2, getoetet: 1, ueberlebt: 1, ausgenommen: 0, darstellung: 0, ohneDeckung: 1 });
+  assert.equal(je['bestand-b'].zaehlung.geprueft, 0);
+  assert.equal(je['kandidat-k'].quote, 50);
+  assert.deepEqual(ohneAusschnitt, []);
+  // Gesamtwert und Ueberlebendenliste bleiben beim Pruefbereich: den aufgenommenen Ausschnitten.
+  assert.deepEqual(zaehlung, { geprueft: 6, getoetet: 4, ueberlebt: 2, ausgenommen: 3, ausserhalb: 0 });
+  assert.equal(ueberlebende.length, 2);
+});
+
+test('vollaufAuswerten: ein Mutant ohne Ausschnitt wird gemeldet, nicht verschluckt', () => {
+  const bereich = frontendBereich(PLAN_AUSSCHNITTE);
+  const mutanten = strykerMutanten(berichtJeDatei({ 'src/fremd/F.tsx': { getoetet: 1 } }));
+  const { ohneAusschnitt } = vollaufAuswerten(mutanten, bereich.ausschnitte);
+  assert.deepEqual(ohneAusschnitt.map((m) => m.datei), ['frontend/src/fremd/F.tsx']);
+});
+
+test('laufen: ein Mutant ohne Ausschnitt endet ungleich 0 und nennt die Datei', () => {
+  const { code, text } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 5 },
+    'src/fremd/F.tsx': { getoetet: 1 },
+  }));
+  assert.equal(code, 1);
+  assert.match(text, /ohne Ausschnitt.*\n.*frontend\/src\/fremd\/F\.tsx/);
+});
+
+test('laufen: ein aufgenommener Ausschnitt bei 79,9 % neben drei bei 95 % haelt an und wird genannt (AK 3)', () => {
+  const { code, text } = vollaufMit(BERICHT_EINER_UNTER);
+  assert.equal(code, 1);
+  assert.match(text, /stufe-c: 79,90 % — unter der Schwelle 80 %/);
+  assert.match(text, /Der Vollauf hält an: stufe-c unter der Schwelle 80 %\./);
+  assert.match(text, /stufe-d: 95,00 % — Schwelle 80 % erfüllt/);
+});
+
+test('laufen: derselbe Wert beim Kandidaten haelt nicht an (AK 3)', () => {
+  const { code, text } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 95, ueberlebt: 5 },
+    'src/k/K.tsx': { getoetet: 799, ueberlebt: 201 },
+  }));
+  assert.equal(code, 0);
+  assert.match(text, /Kandidat kandidat-k: 79,90 %/);
+  assert.ok(!text.includes('hält an'));
+});
+
+test('laufen: der Kandidat bei 79 % haelt nicht an', () => {
+  const { code } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 9, ueberlebt: 1 },
+    'src/k/K.tsx': { getoetet: 79, ueberlebt: 21 },
+  }));
+  assert.equal(code, 0);
+});
+
+test('laufen: Kandidat bei 81,9 % ohne, bei 82,0 % mit Vorschlagszeile', () => {
+  const darunter = vollaufMit(berichtJeDatei({ 'src/k/K.tsx': { getoetet: 819, ueberlebt: 181 } }));
+  assert.match(darunter.text, /Kandidat kandidat-k: 81,90 % — unter 82 %, nicht zur Aufnahme vorgeschlagen\./);
+  assert.ok(!darunter.text.includes('zur Aufnahme vorgeschlagen. '));
+  const erreicht = vollaufMit(berichtJeDatei({ 'src/k/K.tsx': { getoetet: 82, ueberlebt: 18 } }));
+  assert.match(erreicht.text, /Kandidat kandidat-k: 82,00 % — erreicht 82 %, zur Aufnahme vorgeschlagen\. Die Aufnahme trägt der Mensch in frontend\/mutationsstufen\.json ein\./);
+});
+
+test('laufen: ein Ausschnitt ohne Mutanten steht als bestanden mit dem Vermerk keine Mutanten', () => {
+  const { code, text } = vollaufMit(berichtJeDatei({ 'src/lib/a.ts': { getoetet: 5 } }));
+  assert.equal(code, 0);
+  assert.match(text, /stufe-d: keine Mutanten — bestanden\./);
+});
+
+test('laufen: ein Kandidat ohne Tests im Umfang steht als 0 % — keine Tests im Umfang', () => {
+  const { code, text } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 5 },
+    'src/k/K.tsx': { ohneDeckung: 7 },
+  }));
+  assert.equal(code, 0);
+  assert.match(text, /Kandidat kandidat-k: 0 % — keine Tests im Umfang\./);
+});
+
+test('laufen: je Ausschnitt die Zahl der Darstellungsmutanten, auch fuer die Bestandsausschnitte', () => {
+  const { text } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 5, ignoriert: 3, kommentar: 1 },
+    'src/api/b.ts': { getoetet: 5, ignoriert: 2 },
+    'src/c/C.tsx': { getoetet: 5, ignoriert: 11 },
+    'src/k/K.tsx': { getoetet: 5, ignoriert: 4 },
+  }));
+  assert.match(text, /bestand-a: 100,00 %[^\n]*\n\s+5 geprüft, 5 getötet, 0 überlebt, 4 ausgenommen, davon 3 Darstellung\./);
+  assert.match(text, /bestand-b: 100,00 %[^\n]*\n\s+5 geprüft, 5 getötet, 0 überlebt, 2 ausgenommen, davon 2 Darstellung\./);
+  assert.match(text, /stufe-c: 100,00 %[^\n]*\n\s+5 geprüft, 5 getötet, 0 überlebt, 11 ausgenommen, davon 11 Darstellung\./);
+  assert.match(text, /Kandidat kandidat-k: 100,00 %[^\n]*\n\s+5 geprüft, 5 getötet, 0 überlebt, 4 ausgenommen, davon 4 Darstellung\./);
+});
+
+/** Bestand-a bei 90 %, bestand-b bei 75 %: gemeinsam 82,5 %. */
+const BERICHT_BESTAND_B_UNTER = berichtJeDatei({
+  'src/lib/a.ts': { getoetet: 90, ueberlebt: 10 },
+  'src/api/b.ts': { getoetet: 75, ueberlebt: 25 },
+});
+
+test('Bestandsregel (E7): ohne erstmals80 zaehlt die gemeinsame Quote, der Bericht verlangt eine Karte', () => {
+  const { code, text, inhalt } = vollaufMit(BERICHT_BESTAND_B_UNTER);
+  assert.equal(code, 0);
+  assert.match(text, /Bestand gemeinsam \(bestand-a, bestand-b\): 82,50 % — Schwelle 80 % erfüllt/);
+  assert.match(text, /bestand-b unter 80 % — Karte für die fehlenden Tests anlegen\./);
+  assert.match(text, /Kein Halt: Schwelle 80 % in jedem aufgenommenen Ausschnitt erfüllt, im Bestand gemeinsam\./);
+  const je = Object.fromEntries(inhalt.ausschnitte.map((a) => [a.name, a]));
+  assert.equal(je['bestand-a'].erstmals80, '2026-09-29');
+  assert.equal(je['bestand-b'].erstmals80, null);
+});
+
+test('Bestandsregel (E7): ein erstmals80 gesetzt — weiter die gemeinsame Quote, das Datum bleibt stehen', () => {
+  const vollauf = {
+    frontend: {
+      datum: '2026-09-27T00:00:00.000Z', dauerMs: 1, quote: 84.58, mutanten: [],
+      ausschnitte: [{ name: 'bestand-a', erstmals80: '2026-09-20' }, { name: 'bestand-b', erstmals80: null }],
+    },
+  };
+  const { code, text, inhalt } = vollaufMit(BERICHT_BESTAND_B_UNTER, { vollauf });
+  assert.equal(code, 0);
+  assert.match(text, /Karte für die fehlenden Tests anlegen/);
+  const je = Object.fromEntries(inhalt.ausschnitte.map((a) => [a.name, a]));
+  assert.equal(je['bestand-a'].erstmals80, '2026-09-20');
+  assert.equal(je['bestand-b'].erstmals80, null);
+});
+
+test('Bestandsregel (E7): beide erstmals80 gesetzt — die getrennte Schwelle haelt an', () => {
+  const vollauf = {
+    frontend: {
+      datum: '2026-09-27T00:00:00.000Z', dauerMs: 1, quote: 84.58, mutanten: [],
+      ausschnitte: [{ name: 'bestand-a', erstmals80: '2026-09-20' }, { name: 'bestand-b', erstmals80: '2026-09-21' }],
+    },
+  };
+  const { code, text } = vollaufMit(BERICHT_BESTAND_B_UNTER, { vollauf });
+  assert.equal(code, 1);
+  assert.match(text, /Der Vollauf hält an: bestand-b unter der Schwelle 80 %\./);
+  assert.ok(!text.includes('Karte für die fehlenden Tests anlegen'));
+});
+
+test('Bestandsregel (E7): die gemeinsame Quote unter 80 % haelt an', () => {
+  const { code, text } = vollaufMit(berichtJeDatei({
+    'src/lib/a.ts': { getoetet: 70, ueberlebt: 30 },
+    'src/api/b.ts': { getoetet: 75, ueberlebt: 25 },
+  }));
+  assert.equal(code, 1);
+  assert.match(text, /Der Vollauf hält an: Bestand gemeinsam \(bestand-a, bestand-b\) unter der Schwelle 80 %\./);
+});
+
+test('Gedaechtnisdatei: Feld ausschnitte mit Name, Muster, aufgenommen, Quote und Zaehlung; quote bleibt Gesamtwert', () => {
+  const { inhalt } = vollaufMit(BERICHT_EINER_UNTER);
+  assert.deepEqual(inhalt.ausschnitte.map((a) => a.name), ['bestand-a', 'bestand-b', 'stufe-c', 'stufe-d', 'kandidat-k']);
+  const c = inhalt.ausschnitte.find((a) => a.name === 'stufe-c');
+  assert.deepEqual(c, {
+    name: 'stufe-c',
+    muster: ['src/c/**/*.tsx'],
+    aufgenommen: '2026-09-29',
+    quote: 79.9,
+    zaehlung: { geprueft: 1000, getoetet: 799, ueberlebt: 201, ausgenommen: 0, darstellung: 0, ohneDeckung: 0 },
+  });
+  assert.equal(inhalt.ausschnitte.find((a) => a.name === 'kandidat-k').aufgenommen, false);
+  assert.ok('erstmals80' in inhalt.ausschnitte.find((a) => a.name === 'bestand-a'));
+  // Gesamtwert ueber die aufgenommenen Ausschnitte: (95+95+799+95)/(100+100+1000+100).
+  assert.equal(inhalt.quote, 83.38);
+});
+
+test('Gedaechtnisdatei: eine Datei ohne ausschnitte wird weiter gelesen und wie bisher ausgewertet', () => {
+  const vollauf = { frontend: { datum: '2026-09-27T00:00:00.000Z', dauerMs: 2100000, quote: 84.58, mutanten: [] } };
+  const { code, text } = vollaufMit(BERICHT_BESTAND_B_UNTER, { vollauf });
+  assert.equal(code, 0);
+  assert.match(text, /Letzter Vollauf frontend: 35 min 0 s am 2026-09-27, Quote 84,58 %\./);
+  assert.match(text, /Bestand gemeinsam/);
+});
+
+test('Backend im Ein-Ausschnitt-Fall: keine Ausschnittszeile, keine ausschnitte in der Gedaechtnisdatei (E11)', () => {
+  const { text, inhalt } = mitProjekt((wurzel) => {
+    const ergebnis = sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML));
+    return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'backend') };
+  });
+  assert.ok(!text.includes('Ausschnitt'));
+  assert.ok(!text.includes('Kandidat'));
+  assert.equal('ausschnitte' in inhalt, false);
+});
+
+test('mutationspruefung.mjs schreibt nie in frontend/mutationsstufen.json (grep-fest)', () => {
+  const quelle = readFileSync(join(HIER, 'mutationspruefung.mjs'), 'utf-8');
+  const schreibend = /\b(writeFileSync|appendFileSync|rmSync|renameSync|unlinkSync|copyFileSync|writeFile|appendFile|createWriteStream)\s*\(([^)]*)/g;
+  const aufrufe = [...quelle.matchAll(schreibend)];
+  assert.ok(aufrufe.length > 0);
+  for (const [, , ziel] of aufrufe) {
+    assert.ok(!/STRYKER_PFAD|mutationsstufen/.test(ziel), `Schreibzugriff auf den Stufenplan: ${ziel}`);
+  }
+});
+
+// --- Aenderungspruefung folgt den aufgenommenen Ausschnitten (Issue #1279) ---
+
+/**
+ * Ein Stufenplan mit einem aufgenommenen Stufen-Ausschnitt (`stufe-c`), einem Kandidaten und einem
+ * spaeteren Ausschnitt mit eigenem `testMuster`. Die Ausnahmen liegen einmal ausserhalb jedes
+ * Ausschnitts (`src/theme.ts`) und einmal mitten in einem aufgenommenen.
+ */
+const PLAN_STUFEN = {
+  ausnahmen: ['src/theme.ts', 'src/c/stil.tsx'],
+  ausschnitte: [
+    { name: 'bestand-a', muster: ['src/lib/**/*.{ts,tsx}'], aufgenommen: '2026-09-28', gemeinsameSchwelle: true, reihenfolge: 1 },
+    { name: 'stufe-c', muster: ['src/c/**/*.tsx'], aufgenommen: '2026-09-29', reihenfolge: 2 },
+    { name: 'kandidat-k', muster: ['src/k/**/*.tsx'], aufgenommen: false, reihenfolge: 3 },
+    {
+      name: 'spaeter-z',
+      muster: ['src/Z.tsx'],
+      testMuster: ['src/ZSammel.test.tsx'],
+      aufgenommen: false,
+      reihenfolge: 4,
+    },
+  ],
+};
+
+const C_DATEI = 'frontend/src/c/C.tsx';
+const K_DATEI = 'frontend/src/k/K.tsx';
+
+function geaendert(...pfade) {
+  return { 'diff --name-status -z 1a2b3c4': OK(pfade.map((p) => `M\0${p}\0`).join('')) };
+}
+
+function aenderungStufen(pfade, berichtInhalt, gitExtra = {}, optionen = {}) {
+  return mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, {
+      ...geaendert(...pfade),
+      ...Object.fromEntries(pfade.map((p) => [`diff -U0 1a2b3c4 -- ${p}`, OK('@@ -2 +2 @@\n')])),
+      ...gitExtra,
+    }, strykerDoppel(wurzel, berichtInhalt)),
+  { plan: PLAN_STUFEN, ...optionen });
+}
+
+const BERICHT_C_UEBERLEBT = berichtJeDatei({ 'src/c/C.tsx': { getoetet: 1, ueberlebt: 1 } });
+
+test('laufen: eine beruehrte Datei in einem aufgenommenen Ausschnitt wird mutiert, ihr Ueberlebender haelt an (#1279)', () => {
+  const { code, text, aufrufe } = aenderungStufen([C_DATEI], BERICHT_C_UEBERLEBT);
+  assert.equal(aufrufe.length, 1);
+  assert.deepEqual(aufrufe[0].args, ['run', '-m', 'src/c/C.tsx', '--reporters', 'json,html,clear-text']);
+  assert.equal(code, 1);
+  assert.match(text, /frontend\/src\/c\/C\.tsx:2 — ConditionalExpression/);
+  assert.match(text, /hält an — kein Altlast-Vermerk/);
+});
+
+test('laufen: eine beruehrte Datei in einem nicht aufgenommenen Ausschnitt wird nicht mutiert, ihr Ueberlebender haelt nicht an (#1279)', () => {
+  // Der Bericht traegt einen Ueberlebenden in K — mutiert Stryker die Datei doch mit, darf er
+  // trotzdem nicht anhalten; verlangt wird aber schon, dass K nicht im -m steht.
+  const berichtInhalt = berichtJeDatei({
+    'src/c/C.tsx': { getoetet: 1 },
+    'src/k/K.tsx': { ueberlebt: 1 },
+  });
+  const { code, text, aufrufe } = aenderungStufen([C_DATEI, K_DATEI], berichtInhalt);
+  assert.equal(aufrufe.length, 1);
+  assert.deepEqual(aufrufe[0].args, ['run', '-m', 'src/c/C.tsx', '--reporters', 'json,html,clear-text']);
+  assert.equal(code, 0);
+  assert.ok(!text.includes('src/k/K.tsx:'));
+  assert.ok(!text.includes(`  ${K_DATEI}\n`));
+  assert.match(text, /1 Überlebende außerhalb/);
+});
+
+test('laufen: eine beruehrte Ausnahme-Datei wird nicht mutiert, auch mitten in einem aufgenommenen Ausschnitt (#1279)', () => {
+  const { code, text, aufrufe } = aenderungStufen(['frontend/src/theme.ts', 'frontend/src/c/stil.tsx'], BERICHT_C_UEBERLEBT);
+  assert.equal(aufrufe.length, 0);
+  assert.equal(code, 0);
+  assert.ok(text.includes('keine berührte Datei im Prüfbereich'));
+});
+
+test('laufen: nur nicht aufgenommene Dateien beruehrt — kein Werkzeugstart, Rueckgabewert 0 (#1279)', () => {
+  // Dabei auch Tests der nicht aufgenommenen Ausschnitte ohne zuordenbare Quelle: ueber das Muster
+  // (K.test.tsx) und ueber das testMuster (ZSammel.test.tsx). Sie gehoeren zu einem Ausschnitt
+  // ausserhalb des Pruefbereichs und halten deshalb nicht als "Test ohne Zuordnung" an.
+  const { code, text, aufrufe } = aenderungStufen(
+    [K_DATEI, 'frontend/src/k/K.test.tsx', 'frontend/src/Z.tsx', 'frontend/src/ZSammel.test.tsx'],
+    BERICHT_C_UEBERLEBT,
+  );
+  assert.equal(aufrufe.length, 0);
+  assert.equal(code, 0);
+  assert.ok(text.includes('keine berührte Datei im Prüfbereich'));
+  assert.ok(!text.includes('ohne zuordenbare Quelle'));
+});
+
+test('beruehrung: ein Test ohne Zuordnung ausserhalb jedes Ausschnitts haelt weiter an (#1279, #1287)', () => {
+  const ergebnis = beruehrung({
+    geaendert: ['frontend/src/sonstwo/lose.test.ts', 'frontend/src/c/Ohne.test.tsx', 'frontend/src/k/K.test.tsx'],
+    bereich: frontendBereich(PLAN_STUFEN),
+    zuordnung: new Map(),
+    existiert: () => false,
+  });
+  // lose.test.ts liegt in keinem Ausschnitt, Ohne.test.tsx in einem aufgenommenen: beide bleiben
+  // unbekannt und halten an. Nur K.test.tsx faellt als Test eines fremden Ausschnitts heraus.
+  assert.deepEqual(ergebnis.ohneZuordnung, ['frontend/src/sonstwo/lose.test.ts', 'frontend/src/c/Ohne.test.tsx']);
+});
+
+test('beruehrung: ein Test eines nicht aufgenommenen Ausschnitts mit Zuordnung in den Pruefbereich zieht seine Quelle mit (#1279)', () => {
+  const ergebnis = beruehrung({
+    geaendert: ['frontend/src/k/K.test.tsx'],
+    bereich: frontendBereich(PLAN_STUFEN),
+    zuordnung: new Map([['frontend/src/k/K.test.tsx', ['frontend/src/c/C.tsx']]]),
+    existiert: () => false,
+  });
+  assert.deepEqual(ergebnis, { dateien: [C_DATEI], ganzeSeite: false, ohneZuordnung: [] });
+});
+
+test('laufen: die Altlast-Markierung greift weiterhin in einem aufgenommenen Stufen-Ausschnitt (#1279)', () => {
+  const berichtInhalt = bericht({
+    'src/c/C.tsx': { source: VERMERKTE_QUELLE, mutants: [mutant(3, 'ConditionalExpression', 'Survived')] },
+  });
+  const vollauf = {
+    frontend: {
+      datum: '2026-09-29T08:00:00.000Z',
+      dauerMs: 1000,
+      quote: 84.7,
+      mutanten: [{ datei: C_DATEI, zeile: 3, mutator: 'ConditionalExpression' }],
+    },
+  };
+  const { code, text } = aenderungStufen([C_DATEI], berichtInhalt, {
+    [`diff -U0 1a2b3c4 -- ${C_DATEI}`]: OK('@@ -1 +1 @@\n'),
+  }, { vollauf });
+  assert.equal(code, 0);
+  assert.match(text, /Altlast-Vermerk \(#1213, 2026-09-25\)/);
+  assert.match(text, /1 überlebt/);
+});
+
+test('laufen: der Rueckgabewert haengt nur an Ueberlebenden in beruehrten Dateien aufgenommener Ausschnitte (#1279)', () => {
+  const beide = [C_DATEI, K_DATEI];
+  const nurK = berichtJeDatei({ 'src/c/C.tsx': { getoetet: 2 }, 'src/k/K.tsx': { ueberlebt: 3 } });
+  const nurC = berichtJeDatei({ 'src/c/C.tsx': { getoetet: 1, ueberlebt: 1 }, 'src/k/K.tsx': { getoetet: 3 } });
+  const ungeaendertC = berichtJeDatei({ 'src/c/C.tsx': { ueberlebt: 1 } });
+  assert.equal(aenderungStufen(beide, nurK).code, 0);
+  assert.equal(aenderungStufen(beide, nurC).code, 1);
+  // C traegt einen Ueberlebenden, ist aber nicht beruehrt: kein Halt.
+  assert.equal(aenderungStufen([K_DATEI, 'frontend/src/lib/a.ts'], ungeaendertC).code, 0);
+});
+
+test('laufen: der Backend-Zweig bleibt unveraendert — beruehrte Klasse mutiert, Test ohne Zuordnung faehrt die ganze Seite (#1279, #1308)', () => {
+  const beruehrt = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      ...GEAENDERT_SERVICE,
+      [`diff -U0 1a2b3c4 -- ${CARD_SERVICE}`]: OK('@@ -43 +43 @@\n'),
+    }, pitDoppel(wurzel, BEISPIEL_XML)),
+  { plan: PLAN_STUFEN });
+  assert.equal(beruehrt.aufrufe.length, 1);
+  assert.ok(beruehrt.aufrufe[0].args.includes('-Dpit.targetClasses=org.mwolff.manban.card.application.CardService,org.mwolff.manban.card.application.CardService$*'));
+  assert.equal(beruehrt.code, 1);
+  assert.match(beruehrt.text, /CardService\.java:43 — ConditionalsBoundaryMutator/);
+
+  const ohne = 'src/test/java/org/mwolff/manban/card/application/NirgendsTest.java';
+  const test = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, geaendert(ohne), pitDoppel(wurzel, BEISPIEL_XML)),
+  { plan: PLAN_STUFEN });
+  assert.equal(test.aufrufe.length, 1);
+  assert.deepEqual(test.aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
+  assert.match(test.text, /Umfang: die ganze Seite/);
+  assert.ok(test.text.includes(ohne));
+});
+
+// --- Stufenschaltung und Dauerprotokoll (Issue #1280) ------------------------
+
+const MINUTE = 60 * 1000;
+
+function protokollAblegen(wurzel, seite, dauern) {
+  const laeufe = dauern.map((dauerMs, i) => ({ datum: `2026-09-2${i}T10:00:00.000Z`, dauerMs }));
+  writeFileSync(join(wurzel, '.claude', `mutationsdauer-${seite}.json`), JSON.stringify({ laeufe }));
+}
+
+function protokoll(wurzel, seite) {
+  const pfad = join(wurzel, '.claude', `mutationsdauer-${seite}.json`);
+  return existsSync(pfad) ? JSON.parse(readFileSync(pfad, 'utf-8')) : null;
+}
+
+/** Eine Uhr, die je Aufruf um `schrittMs` weiterlaeuft — damit hat jeder Lauf eine bekannte Dauer. */
+function uhr(schrittMs) {
+  let t = Date.parse('2026-09-29T08:00:00.000Z');
+  return () => {
+    const jetzt = t;
+    t += schrittMs;
+    return jetzt;
+  };
+}
+
+const MIT_WERKZEUG = {
+  ...GEAENDERT_A,
+  'diff -U0 1a2b3c4 -- frontend/src/lib/a.ts': OK('@@ -2 +2 @@\n'),
+};
+
+test('median: ungerade und gerade Anzahl, leer ergibt null', () => {
+  assert.equal(median([3, 1, 2]), 2);
+  assert.equal(median([4, 1, 3, 2]), 2.5);
+  assert.equal(median([]), null);
+});
+
+test('Stufenschaltung: Median unter 10 min — paket laeuft, push steigt mit Satz und 0 aus', () => {
+  const [paket, push] = mitProjekt((wurzel) => {
+    protokollAblegen(wurzel, 'frontend', [1 * MINUTE, 2 * MINUTE, 11 * MINUTE]);
+    // Erst der Ausstieg: Der Paketlauf ergaenzt das Protokoll und verschoebe den Median.
+    const ausstieg = sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A));
+    return [
+      sammelLauf(['aenderung', 'frontend', '--stufe', 'paket'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A)),
+      ausstieg,
+    ];
+  });
+  assert.equal(paket.aufrufe.length, 1);
+  assert.equal(push.aufrufe.length, 0);
+  assert.equal(push.code, 0);
+  assert.match(push.text, /Median .*2 min 0 s/);
+  assert.match(push.text, /Grenze 10 min/);
+  assert.match(push.text, /geltende Stufe: paket/);
+});
+
+test('Stufenschaltung: Median ueber 10 min — push laeuft, paket steigt mit Satz und 0 aus', () => {
+  const [paket, push] = mitProjekt((wurzel) => {
+    protokollAblegen(wurzel, 'frontend', [11 * MINUTE, 12 * MINUTE, 2 * MINUTE]);
+    return [
+      sammelLauf(['aenderung', 'frontend', '--stufe', 'paket'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A)),
+      sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A)),
+    ];
+  });
+  assert.equal(paket.aufrufe.length, 0);
+  assert.equal(paket.code, 0);
+  assert.match(paket.text, /Median .*11 min 0 s/);
+  assert.match(paket.text, /geltende Stufe: push/);
+  assert.equal(push.aufrufe.length, 1);
+});
+
+test('Stufenschaltung: genau 10 min Median liegt nicht ueber der Grenze — es gilt paket', () => {
+  const push = mitProjekt((wurzel) => {
+    protokollAblegen(wurzel, 'frontend', [STUFENGRENZE_MS]);
+    return sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A));
+  });
+  assert.equal(push.aufrufe.length, 0);
+  assert.match(push.text, /geltende Stufe: paket/);
+});
+
+test('Stufenschaltung: ohne Protokoll gilt paket, push steigt mit Satz aus', () => {
+  const [paket, push] = mitProjekt((wurzel) => [
+    sammelLauf(['aenderung', 'frontend', '--stufe', 'paket'], wurzel),
+    sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel),
+  ]);
+  assert.equal(paket.code, 0);
+  assert.ok(paket.text.includes('keine berührte Datei im Prüfbereich'));
+  assert.equal(push.code, 0);
+  assert.ok(!push.text.includes('keine berührte Datei im Prüfbereich'));
+  assert.match(push.text, /Median/);
+  assert.match(push.text, /Grenze 10 min/);
+  assert.match(push.text, /geltende Stufe: paket/);
+});
+
+test('Stufenschaltung: ein unlesbares Protokoll gilt wie keines', () => {
+  const push = mitProjekt((wurzel) => {
+    writeFileSync(join(wurzel, '.claude', 'mutationsdauer-frontend.json'), '{kaputt');
+    return sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel);
+  });
+  assert.equal(push.code, 0);
+  assert.match(push.text, /geltende Stufe: paket/);
+});
+
+test('Stufenschaltung: unbekannte Stufe oder --stufe am Vollauf endet ungleich 0', () => {
+  const [falsch, fehlt, vollauf] = mitProjekt((wurzel) => [
+    sammelLauf(['aenderung', 'frontend', '--stufe', 'merge'], wurzel),
+    sammelLauf(['aenderung', 'frontend', '--stufe'], wurzel),
+    sammelLauf(['vollauf', 'frontend', '--stufe', 'push'], wurzel),
+  ]);
+  for (const lauf of [falsch, fehlt, vollauf]) {
+    assert.equal(lauf.code, 2);
+    assert.equal(lauf.aufrufe.length, 0);
+    assert.match(lauf.text, /paket/);
+  }
+});
+
+test('Dauerprotokoll: ein Lauf mit Werkzeugstart hinterlaesst genau einen Eintrag mit seiner Dauer', () => {
+  const eintraege = mitProjekt((wurzel) => {
+    sammelLauf(['aenderung', 'frontend'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A), { jetzt: uhr(1000) });
+    return protokoll(wurzel, 'frontend');
+  });
+  assert.equal(eintraege.laeufe.length, 1);
+  assert.ok(eintraege.laeufe[0].dauerMs > 0);
+  assert.match(eintraege.laeufe[0].datum, /^2026-09-29T/);
+});
+
+test('Dauerprotokoll: auch ein Lauf ohne Bericht hat das Werkzeug gestartet und wird protokolliert', () => {
+  const eintraege = mitProjekt((wurzel) => {
+    const { code } = sammelLauf(['aenderung', 'frontend'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, null, 1));
+    assert.equal(code, 1);
+    return protokoll(wurzel, 'frontend');
+  });
+  assert.equal(eintraege.laeufe.length, 1);
+});
+
+test('Dauerprotokoll: Leerlauf und Ausstieg kommen nicht hinein', () => {
+  const [nachLeerlauf, nachAusstieg] = mitProjekt((wurzel) => {
+    sammelLauf(['aenderung', 'frontend', '--stufe', 'paket'], wurzel);
+    const leer = protokoll(wurzel, 'frontend');
+    sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A));
+    return [leer, protokoll(wurzel, 'frontend')];
+  });
+  assert.equal(nachLeerlauf, null);
+  assert.equal(nachAusstieg, null);
+});
+
+test('Dauerprotokoll: haelt hoechstens N Laeufe, der aelteste faellt heraus', () => {
+  const eintraege = mitProjekt((wurzel) => {
+    protokollAblegen(wurzel, 'frontend', Array.from({ length: DAUER_PROTOKOLL_LAENGE }, (_, i) => (i + 1) * 1000));
+    sammelLauf(['aenderung', 'frontend'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A), { jetzt: uhr(1000) });
+    return protokoll(wurzel, 'frontend');
+  });
+  assert.equal(eintraege.laeufe.length, DAUER_PROTOKOLL_LAENGE);
+  assert.equal(eintraege.laeufe[0].dauerMs, 2000);
+  assert.match(eintraege.laeufe.at(-1).datum, /^2026-09-29T/);
+});
+
+test('stufeAus: zwei Eintraege je Seite — jeder Aufruf findet den Eintrag mit seinem --stufe-Argument', () => {
+  const config = {
+    buildChecks: [
+      { cmd: 'node scripts/mutationspruefung.mjs aenderung frontend --stufe paket' },
+      { cmd: 'node scripts/mutationspruefung.mjs aenderung frontend --stufe push', stufe: 'push' },
+    ],
+  };
+  const text = 'mutationspruefung.mjs aenderung frontend';
+  assert.equal(stufeAus(config, text, 'paket'), 'paket');
+  assert.equal(stufeAus(config, text, 'push'), 'push');
+  assert.equal(stufeAus(config, text), 'paket');
+  assert.equal(stufeAus({ buildChecks: [{ cmd: 'node scripts/mutationspruefung.mjs aenderung frontend' }] }, text, 'push'), null);
+});
+
+test('laufen: mit zwei Config-Eintraegen nennt der push-Lauf Stufe push', () => {
+  const config = {
+    mainBranch: 'main',
+    buildChecks: [
+      { cmd: 'node scripts/mutationspruefung.mjs aenderung frontend --stufe paket' },
+      { cmd: 'node scripts/mutationspruefung.mjs aenderung frontend --stufe push', stufe: 'push' },
+    ],
+  };
+  const push = mitProjekt((wurzel) => {
+    protokollAblegen(wurzel, 'frontend', [20 * MINUTE]);
+    return sammelLauf(['aenderung', 'frontend', '--stufe', 'push'], wurzel);
+  }, { config });
+  assert.match(push.text, /Stufe: push/);
+});
+
+test('ohne --stufe: selbst ein Median ueber 10 min laesst den Lauf wie bisher durchlaufen', () => {
+  const [ohne, vorher] = mitProjekt((wurzel) => {
+    const referenz = sammelLauf(['aenderung', 'frontend'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A), { jetzt: () => 0 });
+    rmSync(join(wurzel, '.claude', 'mutationsdauer-frontend.json'), { force: true });
+    protokollAblegen(wurzel, 'frontend', [30 * MINUTE]);
+    return [
+      sammelLauf(['aenderung', 'frontend'], wurzel, MIT_WERKZEUG, strykerDoppel(wurzel, BERICHT_A), { jetzt: () => 0 }),
+      referenz,
+    ];
+  });
+  assert.equal(ohne.aufrufe.length, 1);
+  assert.equal(ohne.code, vorher.code);
+  assert.equal(ohne.text, vorher.text);
 });

@@ -204,7 +204,17 @@ export function ProjectBoardsPage() {
               }}
             >
               <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
-                {board.name}
+                {/* Tastaturweg zum Board (Issue #1307): Der Name ist ein echter Link, die Fläche
+                    behält ihren Klick. stopPropagation, damit der Klick nicht doppelt navigiert. */}
+                <Link
+                  component={RouterLink}
+                  to={`/boards/${board.id}/leitstand`}
+                  underline="none"
+                  color="inherit"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {board.name}
+                </Link>
               </Typography>
               {/* Die Zahlen stehen je Board untereinander: gleich breite Ziffern (AK 10, #960). */}
               <Typography variant="caption" color="text.secondary" sx={TABELLENZIFFERN}>

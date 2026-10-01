@@ -130,7 +130,8 @@ class CardRequirementPersistenceIT extends AbstractIntegrationTest {
         projectId,
         null,
         null,
-        anforderung);
+        anforderung,
+        null);
   }
 
   private long insert(String sql) {

@@ -22,7 +22,7 @@ import {
   melderFarbe,
   PaketDauer,
   Platte,
-  ZEILE_HOVER,
+  ZEILE_HOVER_SX,
 } from '../components/leitstand/LeitstandBausteine'
 import { LeitstandVerbrauch } from '../components/leitstand/LeitstandVerbrauch'
 import { useSnackbar } from '../components/SnackbarProvider'
@@ -396,7 +396,7 @@ function Vorgang({ item, epic, onOeffnen }: Readonly<{ item: NightRunItemView; e
         py: '11px',
         textAlign: 'left',
         transition: 'background .12s ease',
-        '&:hover': { background: ZEILE_HOVER },
+        '&:hover': { background: ZEILE_HOVER_SX },
       }}
     >
       <Led melder={MELDER_JE_ZUSTAND[item.state]} />

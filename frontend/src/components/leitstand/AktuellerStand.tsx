@@ -16,7 +16,7 @@ import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../../lib/nightRun
 import { useJetzt } from '../../lib/useJetzt'
 import { ANZEIGE, RAND, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { LaufArtSymbol } from './LaufArtSymbol'
-import { Led, LeerSatz, PaketDauer, Taste, ZEILE_HOVER } from './LeitstandBausteine'
+import { Led, LeerSatz, PaketDauer, Taste, ZEILE_HOVER_SX } from './LeitstandBausteine'
 
 /**
  * Der Schluessel eines Pakets in der Menge der verschwundenen Karten (Issue #1174, E14).
@@ -304,7 +304,7 @@ function Paketzeile({
         '&:not(:last-child)': {
           borderBottom: `1px solid color-mix(in srgb, ${RAND} 55%, transparent)`,
         },
-        '&:hover': { background: ZEILE_HOVER },
+        '&:hover': { background: ZEILE_HOVER_SX },
       }}
     >
       <Led melder={MELDER_JE_ZUSTAND[paket.state]} />

@@ -24,6 +24,7 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { EpicBadge } from '../components/EpicBadge'
 import { epicOfCard } from '../lib/cardEpic'
+import { effektivDone } from '../lib/columnMeta'
 import { epicToCard } from '../lib/epicToCard'
 import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/listExcerpt'
 import { nextSortState, sortCards, type ColumnKey, type SortState } from '../lib/listSort'
@@ -396,7 +397,7 @@ export function BoardListPage() {
   const archiveActive = activeFilters.has(ARCHIVED)
   // Die Liste zeigt nur aktive Karten; archivierte erst mit gesetztem Archiv-Filter.
   const istUeberfaellig = (c: Card) =>
-    !c.archived && isOverdue(c.dueDate, (columnById.get(c.columnId)?.name ?? '').toLowerCase().includes('done'))
+    !c.archived && isOverdue(c.dueDate, effektivDone(c, columnById.get(c.columnId)?.name ?? ''))
   const ueberfaelligZahl = cards.filter((c) => istUeberfaellig(c)).length
   const inBoardOrder = cards
     .filter((c) => (c.archived ? archiveActive : activeFilters.has(c.columnId)))
@@ -504,7 +505,7 @@ export function BoardListPage() {
         ) : null
       }
       case 'title': {
-        const overdue = isOverdue(card.dueDate, (col?.name ?? '').toLowerCase().includes('done'))
+        const overdue = isOverdue(card.dueDate, effektivDone(card, col?.name ?? ''))
         return (
           // Fälligkeit neben dem Titel statt darunter: eine Zeile weniger je fälliger Karte (AK 12).
           // Reicht der Platz nicht, bricht sie um, statt den Titel zu kürzen.

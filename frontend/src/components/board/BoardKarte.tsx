@@ -2,18 +2,21 @@ import MoreVertIcon from '@mui/icons-material/MoreVert'
 import Avatar from '@mui/material/Avatar'
 import AvatarGroup from '@mui/material/AvatarGroup'
 import Box from '@mui/material/Box'
+import ButtonBase from '@mui/material/ButtonBase'
 import Checkbox from '@mui/material/Checkbox'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
-import type { Card } from '../../api/cards'
+import type { Card, CardStatus } from '../../api/cards'
 import type { Epic } from '../../api/epics'
 import type { Label } from '../../api/labels'
 import type { Member } from '../../api/members'
 import { cleanupCountdownLabel, cleanupDaysRemaining } from '../../lib/cleanupCountdown'
+import { statusAnzeigename, statusWeichtAb } from '../../lib/columnMeta'
 import { formatDueDate, isOverdue } from '../../lib/dueDate'
+import { statusColors } from '../../lib/statusColors'
 import { MELDER, NUTZER_MAL_SX, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { type Dichte, karteDichteSx, karteSx } from '../boardSurfaceSx'
 import { EpicBadge } from '../EpicBadge'
@@ -94,6 +97,38 @@ function CardAssignees({ assigneeIds, members, cardTitle }: Readonly<{ assigneeI
 }
 
 /**
+ * Statusmal eines Arbeitspakets als Schild des Entwurfs (`.schild`, Z. 780–786): Rand und Schrift
+ * im Melderton des Status, die Fläche als seine Tönung aus `statusColors`. Der zugängliche Name
+ * nennt den Status in Worten — das Mal ist keine reine Farbinformation.
+ */
+function Statusmal({ status }: Readonly<{ status: CardStatus }>) {
+  const name = statusAnzeigename(status)
+  const farben = statusColors(name)
+  return (
+    <Box
+      component="span"
+      aria-label={`Status ${name}`}
+      data-status={status}
+      sx={{
+        flexShrink: 0,
+        px: '6px',
+        py: '1px',
+        // Maße wie das Schild des Vorhabens (`EpicBadge`), beide nach dem Entwurf.
+        borderRadius: '5px',
+        border: '1px solid currentColor',
+        bgcolor: farben.bg,
+        color: farben.text,
+        fontSize: 10,
+        fontWeight: 500,
+        lineHeight: 1.5,
+      }}
+    >
+      {name}
+    </Box>
+  )
+}
+
+/**
  * Fuß der Karte: Schild des Vorhabens, Archiv-Countdown auf Done und die Frist. Eigene Komponente,
  * weil die Zeile erst entsteht, wenn es etwas zu zeigen gibt — die Bedingung dafür wog in der
  * Karten-Schleife (Plan #1042, P11) mit ihren drei Zweigen schwer.
@@ -101,6 +136,7 @@ function CardAssignees({ assigneeIds, members, cardTitle }: Readonly<{ assigneeI
 function KartenFuss({
   card,
   epic,
+  statusmal,
   doneAt,
   retentionDays,
   overdue,
@@ -108,6 +144,8 @@ function KartenFuss({
 }: Readonly<{
   card: Card
   epic: Epic | undefined
+  /** Der Status, den das Mal zeigt — `null`, wenn er zur Spalte passt oder fehlt. */
+  statusmal: CardStatus | null
   doneAt: string | null
   retentionDays: number
   overdue: boolean
@@ -116,9 +154,11 @@ function KartenFuss({
   // Verbleibende Tage bis zur Aufräumung, oder `null`, wenn kein Countdown läuft. Als Wert statt
   // als Bedingung: Er trägt die Nullprüfung für `doneAt` gleich mit, und `0` bleibt ein Countdown.
   const restTage = doneAt != null && retentionDays > 0 ? cleanupDaysRemaining(doneAt, retentionDays) : null
-  if (!epic && card.dueDate == null && restTage == null) return null
+  if (statusmal == null && !epic && card.dueDate == null && restTage == null) return null
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+      {/* Das Statusmal steht vorn im Fuß, wie das erste Schild des Entwurfs (Plan #1294, E17). */}
+      {statusmal != null && <Statusmal status={statusmal} />}
       {epic && (
         <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode}
           onOpen={onEpicOpen ? () => onEpicOpen(epic) : undefined} />
@@ -148,8 +188,10 @@ interface Props {
   card: Card
   /** Das Vorhaben, dessen Kürzel die Karte trägt — `undefined`, wenn sie in keinem steht. */
   epic: Epic | undefined
-  /** Liegt die Karte in einer Done-Spalte? Trägt Archiv-Countdown und Überfälligkeit. */
+  /** Ist die Karte erledigt (`effektivDone`)? Trägt Archiv-Countdown und Überfälligkeit. */
   done: boolean
+  /** Name der Spalte, in der die Karte liegt — Maßstab des Statusmals. */
+  spaltenname: string
   dichte: Dichte
   selectionMode: boolean
   selected: boolean
@@ -181,6 +223,7 @@ export function BoardKarte({
   card,
   epic,
   done,
+  spaltenname,
   dichte,
   selectionMode,
   selected,
@@ -198,6 +241,8 @@ export function BoardKarte({
 }: Readonly<Props>) {
   const doneAt = done ? card.movedToDoneAt : null
   const overdue = isOverdue(card.dueDate, done)
+  // Das Mal erscheint nur, wenn der Status nicht zur Spalte passt — sonst wäre es Rauschen (E17).
+  const statusmal = statusWeichtAb(card.status, spaltenname) ? card.status : null
   // Bearbeitbar und nicht im Auswahlmodus: Dann trägt die Karte ihren Alltag — sie lässt sich
   // ziehen (Cursor `grab`) und zeigt das ⋮-Menü. Im Auswahlmodus sammelt der Klick nur ein.
   const alltag = canEdit && !selectionMode
@@ -222,7 +267,26 @@ export function BoardKarte({
         '&:active': { cursor: alltag ? 'grabbing' : 'pointer' },
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '7px', minHeight: 20 }}>
+      {/* Der Titel steht im DOM vor dem Kopf: Das Öffnen ist die erste Tab-Station der Karte, vor
+          dem ⋮ (Plan #1292, E7). Sichtbar bleibt der Kopf oben, über `order`. */}
+      <Typography component="h4" sx={{ m: 0, fontSize: 12.5, fontWeight: 500, lineHeight: 1.35 }}>
+        {/* Ein eigener Knopf statt der ganzen Fläche, weil die Karte selbst Knöpfe trägt (E1); sein Name
+            ist der sichtbare Titel, damit die Überschrift ihren Titel behält (E5). Die Klickwelle änderte das
+            Erscheinungsbild, der Fokusring kommt aus dem Theme (E6). */}
+        <ButtonBase
+          disableRipple
+          tabIndex={selectionMode ? -1 : 0}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (selectionMode) onSelect()
+            else onOpen()
+          }}
+          sx={{ display: 'inline', font: 'inherit', color: 'inherit', textAlign: 'left', verticalAlign: 'baseline', cursor: 'inherit' }}
+        >
+          {card.title}
+        </ButtonBase>
+      </Typography>
+      <Box sx={{ order: -1, display: 'flex', alignItems: 'center', gap: '7px', minHeight: 20 }}>
         {selectionMode && (
           <Checkbox
             size="small"
@@ -249,11 +313,8 @@ export function BoardKarte({
           </IconButton>
         )}
       </Box>
-      <Typography component="h4" sx={{ m: 0, fontSize: 12.5, fontWeight: 500, lineHeight: 1.35 }}>
-        {card.title}
-      </Typography>
       {normal && <CardLabels labelIds={card.labels} boardLabels={boardLabels} cardTitle={card.title} />}
-      <KartenFuss card={card} epic={epic} doneAt={doneAt} retentionDays={retentionDays} overdue={overdue} onEpicOpen={onEpicOpen} />
+      <KartenFuss card={card} epic={epic} statusmal={statusmal} doneAt={doneAt} retentionDays={retentionDays} overdue={overdue} onEpicOpen={onEpicOpen} />
     </Paper>
   )
 }

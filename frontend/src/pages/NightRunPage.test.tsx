@@ -218,6 +218,8 @@ function karte(
     dueDate: null,
     archived: false,
     derivedFrom: null,
+    status: null,
+    canSetStatus: false,
     boardId: 1,
     columnId: 2,
     ...partial,
@@ -246,6 +248,8 @@ function vorhaben(partial: Partial<Card> & { id: number; number: number; title: 
     dueDate: null,
     labels: [],
     derivedFrom: null,
+    status: null,
+    canSetStatus: false,
     ...partial,
   }
 }

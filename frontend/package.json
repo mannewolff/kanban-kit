@@ -1,6 +1,6 @@
 {
   "name": "manban-frontend",
-  "version": "2.14.0",
+  "version": "2.15.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -9,7 +9,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "eslint src",
+    "lint": "eslint src stryker",
     "test:coverage": "vitest run --coverage",
     "test:mutation": "stryker run"
   },
@@ -29,6 +29,8 @@
     "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.9",
+    "@babel/traverse": "^7.29.8",
     "@stryker-mutator/core": "^8.7.1",
     "@stryker-mutator/vitest-runner": "^8.7.1",
     "@testing-library/jest-dom": "^6.6.3",

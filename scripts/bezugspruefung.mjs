@@ -5,6 +5,12 @@
  *
  * Nutzung:
  *   node scripts/bezugspruefung.mjs [pfad/zu/bausteine.json]
+ *   node scripts/bezugspruefung.mjs --eigen [pfad/zu/bausteine.json]
+ *
+ * Warum die eigenen Abbilder nur auf Verlangen abgerufen werden (Pruefart `eigen`): Der Job `bezug`
+ * in .github/workflows/ci.yml laeuft bei JEDEM Push auf `main` und JEDEM Pull Request, das eigene
+ * Abbild entsteht aber erst Minuten nach dem Release-Commit — ohne diese Pruefart waere jeder
+ * Release-Lauf und der PR `main -> production` rot, ohne dass etwas fehlt.
  *
  * Warum HTTP und nicht Docker (E10): `docker pull` beantwortet die Frage falsch, weil ein
  * vorhandener lokaler Vorrat sie beantwortet, statt die Bezugsstelle zu fragen. Genau daran fiel
@@ -28,7 +34,15 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ARTEN = ['abbild', 'archiv'];
-export const PRUEFARTEN = ['bezug', 'keine'];
+export const PRUEFARTEN = ['bezug', 'keine', 'eigen'];
+
+/**
+ * Die feste Begruendung der Pruefart `eigen`. Sie traegt KEINE `ablaufversion`: Anders als bei
+ * `keine` ist das keine Ausnahme auf Zeit, sondern die dauerhaft richtige Behandlung eines Abbilds,
+ * das dieses Projekt selbst erst herstellt.
+ */
+export const GRUND_EIGEN =
+  'Abbild aus diesem Projekt — anonym erst nach seiner Veroeffentlichung abrufbar, Abruf nur mit --eigen';
 
 export const ZUSTAND_OK = 'ok';
 export const ZUSTAND_FEHLSCHLAG = 'fehlschlag';
@@ -211,11 +225,18 @@ async function archivAbrufen(baustein, holen) {
 
 /**
  * Prueft genau eine Quelle. `pruefenErzwingen` ist der Weg der Gegenprobe: Damit laesst sich ein
- * Eintrag mit `pruefung: "keine"` einzeln doch abrufen, ohne die Liste zu aendern.
+ * Eintrag mit `pruefung: "keine"` oder `"eigen"` einzeln doch abrufen, ohne die Liste zu aendern.
+ * `eigenePruefen` ist das Verlangen des Aufrufs `--eigen` und gilt nur fuer die Pruefart `eigen`.
  */
-export async function quellePruefen(baustein, { holen, fristMs = FRIST_QUELLE_MS, pruefenErzwingen = false } = {}) {
+export async function quellePruefen(
+  baustein,
+  { holen, fristMs = FRIST_QUELLE_MS, pruefenErzwingen = false, eigenePruefen = false } = {},
+) {
   if (baustein.pruefung === 'keine' && !pruefenErzwingen) {
     return befund(baustein, ZUSTAND_UEBERSPRUNGEN, baustein.grund, fristMs);
+  }
+  if (baustein.pruefung === 'eigen' && !eigenePruefen && !pruefenErzwingen) {
+    return befund(baustein, ZUSTAND_UEBERSPRUNGEN, GRUND_EIGEN, fristMs);
   }
   try {
     const abrufen = baustein.art === 'archiv' ? archivAbrufen : abbildAbrufen;
@@ -240,8 +261,9 @@ export function befundZeile(befundDaten) {
   if (zustand === ZUSTAND_OK) return `${kopf} (Frist ${sekunden(fristMs)})`;
   if (zustand === ZUSTAND_UEBERSPRUNGEN) {
     // Die Ablaufversion gehoert in die Zeile: Sonst steht die Ausnahme still, bis sie jemand in
-    // der Liste nachliest — und genau das tut niemand.
-    return `${kopf}: ${grund} (entfaellt mit ${ablaufversion})`;
+    // der Liste nachliest — und genau das tut niemand. Die Pruefart `eigen` traegt keine, weil sie
+    // nicht ablaeuft; dort bliebe sonst ein "entfaellt mit null" stehen.
+    return ablaufversion ? `${kopf}: ${grund} (entfaellt mit ${ablaufversion})` : `${kopf}: ${grund}`;
   }
   return `${kopf} (Frist ${sekunden(fristMs)}): ${grund}`;
 }
@@ -258,6 +280,7 @@ export async function laufen(bausteine, {
   fristMs = FRIST_QUELLE_MS,
   gesamtFristMs = FRIST_GESAMT_MS,
   jetzt = () => Date.now(),
+  eigenePruefen = false,
 } = {}) {
   const beginn = jetzt();
   const befunde = [];
@@ -275,7 +298,7 @@ export async function laufen(bausteine, {
             `Gesamtfrist von ${sekunden(gesamtFristMs)} ueberschritten — nicht mehr geprueft`,
             fristMs,
           )
-        : await quellePruefen(baustein, { holen, fristMs });
+        : await quellePruefen(baustein, { holen, fristMs, eigenePruefen });
     befunde.push(naechster);
     schreiben(befundZeile(naechster));
   }
@@ -294,9 +317,18 @@ export async function laufen(bausteine, {
 
 // --- Abgleich gegen den Bestand (E9) -------------------------------------
 
+/**
+ * Jede image-Zeile — ausser der, die eine fruehere zuruecknimmt. Die Bau-Overlays schreiben
+ * `image: !reset null`, damit ein oertlich gebautes Abbild nicht den Tag der veroeffentlichten
+ * Fassung traegt (Issue #1265). Das ist ein Compose-Merge-Befehl und keine Bezugsquelle: Ohne die
+ * Ausnahme stuende `!reset` als Phantom-Abbild im Bestand, und der Abgleich verlangte einen
+ * Bausteineintrag fuer etwas, das niemand beziehen kann.
+ */
 export function abbilderAusCompose(text) {
   const abbilder = new Set();
-  for (const treffer of text.matchAll(/^\s*image:\s*(\S+)/gm)) abbilder.add(treffer[1]);
+  for (const treffer of text.matchAll(/^\s*image:\s*(\S+)/gm)) {
+    if (!treffer[1].startsWith('!')) abbilder.add(treffer[1]);
+  }
   return abbilder;
 }
 
@@ -305,11 +337,14 @@ export function abbilderAusCompose(text) {
  * gehoerte sonst als Phantom-Baustein in die Liste.
  */
 export function abbilderAusDockerfile(text) {
+  // `(?:--\S+\s+)*` ueberliest die Schalter eines FROM (`--platform=$BUILDPLATFORM`). Ohne sie
+  // waere der Schalter selbst das "Abbild" und die Stufe daneben unbekannt — der Abgleich meldete
+  // dann einen fehlenden Baustein und eine Bezugsstelle, die es nicht gibt.
   const stufen = new Set(
-    [...text.matchAll(/^FROM\s+\S+\s+AS\s+(\S+)/gim)].map((t) => t[1].toLowerCase()),
+    [...text.matchAll(/^FROM\s+(?:--\S+\s+)*\S+\s+AS\s+(\S+)/gim)].map((t) => t[1].toLowerCase()),
   );
   const abbilder = new Set();
-  for (const treffer of text.matchAll(/^FROM\s+(\S+)/gim)) {
+  for (const treffer of text.matchAll(/^FROM\s+(?:--\S+\s+)*(\S+)/gim)) {
     const wert = treffer[1];
     if (!stufen.has(wert.toLowerCase())) abbilder.add(wert);
   }
@@ -376,10 +411,23 @@ export function abgleich(bausteine, bestand) {
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Trennt Flags vom optionalen Pfad zur Bausteinliste. Eigene Funktion und exportiert, weil der
+ * Einsprung selbst im `c8 ignore`-Block liegt und die Zerlegung sonst ungeprueft bliebe: Ohne sie
+ * landete ein `--eigen` als Pfad in `readFileSync`.
+ */
+export function argumenteZerlegen(argumente) {
+  return {
+    pfad: argumente.find((wert) => !wert.startsWith('-')) ?? null,
+    eigenePruefen: argumente.includes('--eigen'),
+  };
+}
+
 /* c8 ignore start — der Einsprung laeuft nur als Kommando, nie im Test. */
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const pfad = process.argv[2] ?? join(HIER, 'bausteine.json');
-  const { exitcode } = await laufen(bausteineLesen(pfad), { holen: fetch });
+  const { pfad, eigenePruefen } = argumenteZerlegen(process.argv.slice(2));
+  const listenPfad = pfad ?? join(HIER, 'bausteine.json');
+  const { exitcode } = await laufen(bausteineLesen(listenPfad), { holen: fetch, eigenePruefen });
   process.exitCode = exitcode;
 }
 /* c8 ignore stop */

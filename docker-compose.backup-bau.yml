@@ -1,0 +1,21 @@
+# Bau-Overlay des Sicherungs-Overlays (Issue #1265, Plan #1262).
+#
+# Gehoert zu docker-compose.backup.yml wie docker-compose.bau.yml zum Basis-Stack: Dort steht der
+# Sicherungsdienst mit `image: ghcr.io/mannewolff/kanban-kit-backup:<Fassung>`, damit auch ein
+# Betrieb mit Sicherung ohne Bauen auskommt; hier steht sein `build:`.
+#
+# Eigene Datei und nicht ein Abschnitt in docker-compose.bau.yml: Compose fuehrt alle uebergebenen
+# Dateien zusammen, ohne zu fragen, ob eine andere den Dienst auch beschreibt. Stuende
+# manban-backup in docker-compose.bau.yml, baute und startete jeder Entwickler-Aufruf ohne
+# Sicherungs-Overlay einen Sicherungs-Container ohne Umgebung, ohne Volumes und ohne depends_on.
+#
+# Aufruf — immer NACH dem Sicherungs-Overlay, damit `!reset` dessen image-Zeile trifft:
+#   docker compose -f docker-compose.yml -f docker-compose.bau.yml \
+#     -f docker-compose.backup.yml -f docker-compose.backup-bau.yml up -d --build
+#
+# Zu `image: !reset null` und der noetigen Compose-Fassung siehe docker-compose.bau.yml.
+services:
+  manban-backup:
+    image: !reset null
+    build:
+      context: ./backup

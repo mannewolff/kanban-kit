@@ -58,6 +58,8 @@ const card: Card = {
   positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
   derivedFrom: null,
+  status: null,
+  canSetStatus: false,
 }
 
 function mkApi(over: Record<string, unknown> = {}) {
@@ -465,6 +467,75 @@ describe('BoardView', () => {
     expect(screen.queryByText(/archiviert/)).not.toBeInTheDocument()
   })
 
+  describe('Status auf der Kachel (#1303)', () => {
+    const mitAnstehend: Board = {
+      ...board,
+      columns: [...board.columns, { id: 30, name: 'Anstehend', position: 2, wipLimit: null }],
+    }
+    const gestern = new Date(Date.now() - 86_400_000).toISOString()
+
+    it('zeigt das Statusmal im Kartenfuß, wenn der Status nicht zur Spalte passt', () => {
+      const paket: Card = { ...card, columnId: 30, status: 'DONE' }
+      render(<BoardView board={mitAnstehend} initialCards={[paket]} canEdit api={mkApi()} />)
+
+      const mal = within(screen.getByTestId('card-100')).getByLabelText('Status Done')
+      expect(mal).toHaveTextContent('Done')
+      expect(mal).toHaveAttribute('data-status', 'DONE')
+    })
+
+    it('zeigt kein Statusmal, wenn der Status zur Spalte passt', () => {
+      const paket: Card = { ...card, columnId: 20, status: 'DONE' }
+      render(<BoardView board={mitAnstehend} initialCards={[paket]} canEdit api={mkApi()} />)
+
+      expect(within(screen.getByTestId('card-100')).queryByLabelText(/^Status /)).not.toBeInTheDocument()
+    })
+
+    it('zeigt kein Statusmal an einer Karte ohne eigenen Status', () => {
+      const dokument: Card = { ...card, columnId: 30, status: null }
+      render(<BoardView board={mitAnstehend} initialCards={[dokument]} canEdit api={mkApi()} />)
+
+      expect(within(screen.getByTestId('card-100')).queryByLabelText(/^Status /)).not.toBeInTheDocument()
+    })
+
+    it('stellt das Statusmal vor die übrigen Schilder des Fußes', () => {
+      const paket: Card = { ...card, columnId: 30, status: 'IN_REVIEW', dueDate: gestern }
+      render(<BoardView board={mitAnstehend} initialCards={[paket]} canEdit api={mkApi()} />)
+
+      const schilder = within(screen.getByTestId('card-100')).getAllByLabelText(/^(Status|Fällig) /)
+      expect(schilder.map((e) => e.getAttribute('aria-label'))).toEqual(['Status In review', 'Fällig Aufgabe'])
+    })
+
+    it('zählt ein fertiges Paket in einer eigenen Spalte nicht als überfällig', () => {
+      const fertig: Card = { ...card, columnId: 30, status: 'DONE', dueDate: gestern }
+      render(<BoardView board={mitAnstehend} initialCards={[fertig]} canEdit api={mkApi()} />)
+
+      expect(screen.getByRole('button', { name: 'Überfällig' })).toHaveTextContent(/^Überfällig$/)
+      expect(screen.getByLabelText('Fällig Aufgabe')).not.toHaveAttribute('data-ueberfaellig')
+    })
+
+    it('zählt ein nicht fertiges Paket in der Done-Spalte als überfällig', () => {
+      const offen: Card = { ...card, columnId: 20, status: 'READY', dueDate: gestern }
+      render(<BoardView board={mitAnstehend} initialCards={[offen]} canEdit api={mkApi()} />)
+
+      expect(screen.getByRole('button', { name: /^Überfällig/ })).toHaveTextContent('Überfällig1')
+      expect(screen.getByLabelText('Fällig Aufgabe')).toHaveAttribute('data-ueberfaellig', 'ja')
+    })
+
+    it('zeigt den Archiv-Countdown an einem fertigen Paket außerhalb der Done-Spalte', () => {
+      const fertig: Card = { ...card, columnId: 30, status: 'DONE', movedToDoneAt: new Date().toISOString() }
+      render(<BoardView board={mitAnstehend} initialCards={[fertig]} canEdit retentionDays={5} api={mkApi()} />)
+
+      expect(screen.getByText(/wird in 5 Tagen archiviert/)).toBeInTheDocument()
+    })
+
+    it('zeigt keinen Archiv-Countdown an einem offenen Paket in der Done-Spalte', () => {
+      const offen: Card = { ...card, columnId: 20, status: 'IN_PROGRESS', movedToDoneAt: new Date().toISOString() }
+      render(<BoardView board={mitAnstehend} initialCards={[offen]} canEdit retentionDays={5} api={mkApi()} />)
+
+      expect(screen.queryByText(/archiviert/)).not.toBeInTheDocument()
+    })
+  })
+
   it('filtert das Board nach Epic', () => {
     // Die Zugehörigkeit steht in memberNumbers — seit Task #1103 rechnet auch die Filter-Achse darüber.
     const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null }]
@@ -772,6 +843,84 @@ describe('BoardView', () => {
     fireEvent.click(screen.getByTestId('card-100'))
 
     expect(onCardClick).not.toHaveBeenCalled()
+  })
+
+  describe('Kartentitel als Knopf (Issue #1305)', () => {
+    /** Der Titelknopf der Karte — sein Name ist der sichtbare Titel, kein `aria-label` (Plan #1292, E5). */
+    const titelKnopf = () => within(screen.getByTestId('card-100')).getByRole('button', { name: 'Aufgabe' })
+
+    /** Tabt vom Dokumentanfang, bis der Fokus auf `ziel` steht; scheitert, wenn der Weg es nie erreicht. */
+    async function tabBis(user: ReturnType<typeof userEvent.setup>, ziel: HTMLElement) {
+      for (let i = 0; i < 50 && !ziel.matches(':focus'); i++) await user.tab()
+      expect(ziel).toHaveFocus()
+    }
+
+    it('erreicht den Titel per Tab vor dem ⋮ und öffnet das Detail mit Enter und Leertaste', async () => {
+      const user = userEvent.setup()
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onCardClick={onCardClick} />)
+
+      await tabBis(user, titelKnopf())
+      await user.keyboard('{Enter}')
+      expect(onCardClick).toHaveBeenCalledTimes(1)
+      await user.keyboard(' ')
+      expect(onCardClick).toHaveBeenCalledTimes(2)
+      expect(onCardClick).toHaveBeenLastCalledWith(expect.objectContaining({ id: 100 }))
+
+      // Die Haupthandlung zuerst: Der nächste Tab-Schritt führt auf das ⋮ derselben Karte (E7).
+      await user.tab()
+      expect(screen.getByLabelText('Menü Aufgabe')).toHaveFocus()
+    })
+
+    it('öffnet ohne Schreibrecht genauso über den Titelknopf', async () => {
+      const user = userEvent.setup()
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[card]} canEdit={false} api={mkApi()} onCardClick={onCardClick} />)
+
+      await tabBis(user, titelKnopf())
+      await user.keyboard('{Enter}')
+
+      expect(onCardClick).toHaveBeenCalledTimes(1)
+    })
+
+    it('öffnet mit Enter auf dem ⋮ das Menü, nicht das Detail', async () => {
+      const user = userEvent.setup()
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onCardClick={onCardClick} />)
+
+      await tabBis(user, screen.getByLabelText('Menü Aufgabe'))
+      await user.keyboard('{Enter}')
+
+      expect(await screen.findByRole('menuitem', { name: 'Archivieren' })).toBeInTheDocument()
+      expect(onCardClick).not.toHaveBeenCalled()
+    })
+
+    it('öffnet beim Mausklick auf den Titel das Detail genau einmal', async () => {
+      const user = userEvent.setup()
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onCardClick={onCardClick} />)
+
+      await user.click(titelKnopf())
+
+      expect(onCardClick).toHaveBeenCalledTimes(1)
+    })
+
+    it('ist im Auswahlmodus keine Tab-Station und wählt per Mausklick aus', async () => {
+      const user = userEvent.setup()
+      const onCardClick = vi.fn()
+      render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} onCardClick={onCardClick} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+
+      expect(titelKnopf()).toHaveAttribute('tabindex', '-1')
+      // Der Tastaturweg ist die Checkbox: Nach ihr kommt der Titel nicht als nächste Station.
+      await tabBis(user, screen.getByLabelText('Karte Aufgabe auswählen'))
+      await user.tab()
+      expect(titelKnopf()).not.toHaveFocus()
+
+      await user.click(titelKnopf())
+      expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+      expect(onCardClick).not.toHaveBeenCalled()
+    })
   })
 
   it('archiviert die Auswahl nach Bestätigung über die Bulk-API und entfernt sie optimistisch', async () => {

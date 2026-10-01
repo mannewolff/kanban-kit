@@ -60,7 +60,7 @@ const wechsel = keyframes`
  * Eine Lampe des Blinkers. Ihr Grundton ist die Farbe, in der sie steht, wenn die Bewegung ruht
  * (`prefers-reduced-motion`, zentrale Regel in `theme.ts`): die linke hell, die rechte im Melder.
  */
-const blinkerLampe = (melder: Melder, versetzt: boolean) => ({
+const blinkerLampeSx = (melder: Melder, versetzt: boolean) => ({
   '--blinker-hell': BLINKER_HELL,
   '--blinker-an': melderFarbe(melder),
   width: 9,
@@ -98,8 +98,8 @@ export function Led({ melder, pulsiert = false }: Readonly<{ melder: Melder; pul
         data-puls="an"
         sx={{ display: 'inline-flex', gap: '3px', flex: 'none' }}
       >
-        <Box component="span" data-testid="blinker-lampe" sx={blinkerLampe(melder, false)} />
-        <Box component="span" data-testid="blinker-lampe" sx={blinkerLampe(melder, true)} />
+        <Box component="span" data-testid="blinker-lampe" sx={blinkerLampeSx(melder, false)} />
+        <Box component="span" data-testid="blinker-lampe" sx={blinkerLampeSx(melder, true)} />
       </Box>
     )
   }
@@ -535,7 +535,7 @@ export function Projektname({ name }: Readonly<{ name: string }>) {
 }
 
 /** Hover einer Zeile in einer Platte (Entwurf `.vorgang:hover`, Z. 578). */
-export const ZEILE_HOVER = `color-mix(in srgb, ${PLATTE_HOCH} 75%, ${KUPFER_SCHIMMER})`
+export const ZEILE_HOVER_SX = `color-mix(in srgb, ${PLATTE_HOCH} 75%, ${KUPFER_SCHIMMER})`
 
 /**
  * Eine Taste im Kupferwarte-Stil (#1083).

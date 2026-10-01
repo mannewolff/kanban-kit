@@ -30,7 +30,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 class NightRunAbbruchGrundMigrationIT {
 
-  private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
+  private static final PostgreSQLContainer<?> POSTGRES =
+      new PostgreSQLContainer<>("postgres:16.15");
 
   /** Ein Lauf von vor {@code V42}, der unabgeschlossen blieb — der Fall aus E11. */
   private static final Instant BESTAND_UNVOLLSTAENDIG = Instant.parse("2026-09-01T22:00:00Z");

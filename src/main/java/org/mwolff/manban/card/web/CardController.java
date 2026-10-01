@@ -232,6 +232,21 @@ class CardController {
   }
 
   /**
+   * Setzt den Status eines Arbeitspakets, ohne es zu verschieben (Issue #1300). Ein eigener
+   * Endpunkt statt eines Felds am {@code PATCH}: Der Status hängt an {@code CARD_MOVE}, das Patch
+   * an {@code TICKET_UPDATE} — zwei Rechte in einem Endpunkt öffneten still zu weit (Plan #1294,
+   * E9).
+   */
+  @PutMapping("/api/cards/{cardId}/status")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void setStatus(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long cardId,
+      @Valid @RequestBody SetStatusRequest request) {
+    cards.setStatus(userId, cardId, request.status());
+  }
+
+  /**
    * Ordnet die aktiven Karten einer Spalte nach Kartennummer. Die Richtung kommt bei jedem Aufruf
    * mit — das Backend merkt sich keinen Toggle-Zustand.
    */
@@ -417,6 +432,8 @@ class CardController {
 
   record MoveCardRequest(
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
+
+  record SetStatusRequest(@NotBlank String status) {}
 
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
 

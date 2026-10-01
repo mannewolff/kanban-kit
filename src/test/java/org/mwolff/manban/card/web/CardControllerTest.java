@@ -2,10 +2,12 @@ package org.mwolff.manban.card.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,9 +15,14 @@ import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.CardService.EpicView;
+import org.mwolff.manban.card.application.InvalidStatusException;
 import org.mwolff.manban.card.application.LabelAction;
 import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.project.application.ProjectAccessDeniedException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 /** Unit-Tests des Karten-/Epic-Controllers (Service gemockt). */
 // PMD.TooManyMethods: je Endpunkt eine kleine Delegations-Prüfung — die Methodenzahl folgt der
@@ -47,7 +54,9 @@ class CardControllerTest {
         List.of(),
         null,
         List.of(),
-        null);
+        null,
+        "BACKLOG",
+        true);
   }
 
   @BeforeEach
@@ -473,5 +482,47 @@ class CardControllerTest {
               assertThat(v.tokenName()).isNull();
               assertThat(v.agent()).isNull();
             });
+  }
+
+  // --- PUT /api/cards/{cardId}/status (Issue #1300) -------------------
+  // Die Statuscodes entstehen im GlobalExceptionHandler aus @ResponseStatus; der Endpunkt gegen
+  // die echte Kette steht in CardStatusIT.
+
+  @Test
+  void setStatus_delegiertUndAntwortet204() throws NoSuchMethodException {
+    controller.setStatus(3L, 8L, new CardController.SetStatusRequest("IN_REVIEW"));
+
+    verify(service).setStatus(3L, 8L, "IN_REVIEW");
+    Method endpunkt =
+        CardController.class.getDeclaredMethod(
+            "setStatus", Long.class, long.class, CardController.SetStatusRequest.class);
+    assertThat(endpunkt.getAnnotation(PutMapping.class).value())
+        .containsExactly("/api/cards/{cardId}/status");
+    assertThat(endpunkt.getAnnotation(ResponseStatus.class).value())
+        .isEqualTo(HttpStatus.NO_CONTENT);
+  }
+
+  @Test
+  void setStatus_unbekannterWert_ergibt400() {
+    doThrow(new InvalidStatusException("Unbekannter Status: FERTIG"))
+        .when(service)
+        .setStatus(3L, 8L, "FERTIG");
+
+    assertThatThrownBy(
+            () -> controller.setStatus(3L, 8L, new CardController.SetStatusRequest("FERTIG")))
+        .isInstanceOf(InvalidStatusException.class);
+    assertThat(InvalidStatusException.class.getAnnotation(ResponseStatus.class).value())
+        .isEqualTo(HttpStatus.BAD_REQUEST);
+  }
+
+  @Test
+  void setStatus_ohneCardMove_ergibt403() {
+    doThrow(new ProjectAccessDeniedException()).when(service).setStatus(3L, 8L, "READY");
+
+    assertThatThrownBy(
+            () -> controller.setStatus(3L, 8L, new CardController.SetStatusRequest("READY")))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    assertThat(ProjectAccessDeniedException.class.getAnnotation(ResponseStatus.class).value())
+        .isEqualTo(HttpStatus.FORBIDDEN);
   }
 }
