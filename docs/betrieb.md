@@ -427,6 +427,31 @@ Kurz geprüft:
 gh api repos/mannewolff/kanban-kit/rulesets/<id> --jq '{bypass: .bypass_actors, ziel: .conditions.ref_name.include, pruefungen: [.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context]}'
 ```
 
+## Stückliste eines Release-Abbilds
+
+Zu jedem veröffentlichten Release-Abbild — `ghcr.io/mannewolff/kanban-kit` und
+`ghcr.io/mannewolff/kanban-kit-backup` — gibt es eine Stückliste im Format CycloneDX: welche
+Bestandteile in welcher Fassung darin stecken. Sie entsteht im Lauf von
+[`.github/workflows/release-images.yml`](../.github/workflows/release-images.yml) zum Tag. Die
+Stückliste des Anwendungs-Abbilds nennt die ausgelieferten Backend-Abhängigkeiten (Maven-Scopes
+`compile` und `runtime`), die des Sicherungs-Abbilds die Pakete des gebauten Abbilds.
+
+**Als Release-Asset.** Am GitHub-Release der Fassung hängen `stueckliste-kanban-kit.cdx.json` und
+`stueckliste-kanban-kit-backup.cdx.json` — abrufbar ohne `gh`, direkt von der Release-Seite. Angehängt
+werden sie von `node scripts/gh-release.mjs`; das Skript bricht ab, solange der Lauf zum Tag nicht
+grün abgeschlossen ist.
+
+**Über die Attestation.** Dieselbe Stückliste ist per GitHub Artifact Attestation an den Digest des
+Abbilds gebunden. Damit lässt sich prüfen, dass sie zu genau diesem Abbild gehört und aus dem Lauf
+dieses Repositorys stammt:
+
+```bash
+gh attestation verify oci://ghcr.io/mannewolff/kanban-kit:<fassung> --repo mannewolff/kanban-kit --predicate-type https://cyclonedx.org/bom
+```
+
+Für das Sicherungs-Abbild entsprechend mit `oci://ghcr.io/mannewolff/kanban-kit-backup:<fassung>`.
+Mit `--format json` gibt der Befehl die Stückliste selbst aus.
+
 ## Umstellung des Objektspeichers
 
 Der Speicher der Anhänge wechselt von MinIO auf SeaweedFS (Plan #1222). Für die laufende Instanz

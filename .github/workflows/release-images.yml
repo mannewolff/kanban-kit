@@ -11,6 +11,16 @@
 # fehl, steht ein ghcr-Paket typischerweise noch auf "Private" — der einmalige Handgriff dazu steht
 # in RELEASING.md.
 #
+# Welle 2 (Issue #1337, Plan #1295, E19, E20): Jedes Abbild bekommt eine CycloneDX-Stueckliste, per
+# GitHub Artifact Attestation (`actions/attest-sbom`) an den Digest des Bau-Schritts gebunden und in
+# die Registry geschrieben. Die Anwendung beschreibt die Stueckliste aus dem Maven-Profil `sbom`
+# (E5, E6), das Sicherungs-Abbild — ohne Maven-Projekt — eine Trivy-Stueckliste des gebauten
+# Abbilds. Pruefen: `gh attestation verify oci://<abbild>:<fassung> --repo mannewolff/kanban-kit
+# --predicate-type https://cyclonedx.org/bom` (docs/betrieb.md). Zusaetzlich liegt die Stueckliste
+# als Workflow-Artefakt `stueckliste-<abbild>` bereit; ans Release haengt sie scripts/gh-release.mjs,
+# denn das Release legt Manne erst nach dem Tag an, und Schreibrecht auf den Repository-Inhalt braucht
+# der Workflow so nicht. Die neuen Rechte `id-token` und `attestations` traegt nur der Job `abbilder`.
+#
 # Alle Actions sind auf eine volle Version gebunden. In einem Workflow, dessen Zweck
 # Versionsbindung ist, waere ein gleitendes `@v7` ein Widerspruch in sich.
 name: Release-Abbilder
@@ -30,16 +40,26 @@ jobs:
     # backup/Dockerfile. Dieselben Schritte auf zwei Datenzeilen statt zweimal derselbe Block.
     name: ${{ matrix.name }} (amd64/arm64)
     runs-on: ubuntu-latest
+    # Job-Rechte ersetzen die Top-Level-Rechte vollstaendig, darum stehen beide hier noch einmal.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Anwendungs-Abbild
             abbild: ghcr.io/mannewolff/kanban-kit
+            kurzname: kanban-kit
+            stueckliste: maven
             kontext: .
             datei: ./Dockerfile
           - name: Sicherungs-Abbild
             abbild: ghcr.io/mannewolff/kanban-kit-backup
+            kurzname: kanban-kit-backup
+            stueckliste: trivy
             kontext: ./backup
             datei: ./backup/Dockerfile
     steps:
@@ -63,6 +83,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Bauen und veroeffentlichen
+        id: bau
         uses: docker/build-push-action@v7.4.0
         with:
           context: ${{ matrix.kontext }}
@@ -72,6 +93,49 @@ jobs:
           tags: |
             ${{ matrix.abbild }}:${{ steps.version.outputs.wert }}
             ${{ matrix.abbild }}:latest
+
+      # Stueckliste des Anwendungs-Abbilds: dieselbe Profil-Stueckliste, die der CI-Job `sicherheit`
+      # prueft (nur Scopes compile und runtime, E6).
+      - name: JDK 25 einrichten
+        if: matrix.stueckliste == 'maven'
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Stueckliste aus dem Profil sbom
+        if: matrix.stueckliste == 'maven'
+        run: |
+          mvn -B -Psbom -Dskip.frontend=true cyclonedx:makeBom
+          cp target/bom.json "stueckliste-${{ matrix.kurzname }}.cdx.json"
+
+      # Stueckliste des Sicherungs-Abbilds: Trivy liest das veroeffentlichte Abbild genau ueber den
+      # Digest, den die Attestation bindet. Trivy gepinnt wie im CI-Job `sicherheit`.
+      - name: Trivy bereitstellen
+        if: matrix.stueckliste == 'trivy'
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.75.0
+      - name: Stueckliste des Abbilds ueber Trivy
+        if: matrix.stueckliste == 'trivy'
+        run: >
+          trivy image --format cyclonedx
+          --output "stueckliste-${{ matrix.kurzname }}.cdx.json"
+          "${{ matrix.abbild }}@${{ steps.bau.outputs.digest }}"
+
+      - name: Stueckliste an den Digest binden
+        uses: actions/attest-sbom@v4.1.0
+        with:
+          subject-name: ${{ matrix.abbild }}
+          subject-digest: ${{ steps.bau.outputs.digest }}
+          sbom-path: stueckliste-${{ matrix.kurzname }}.cdx.json
+          push-to-registry: true
+      - name: Stueckliste fuer das Release ablegen
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: stueckliste-${{ matrix.kurzname }}
+          path: stueckliste-${{ matrix.kurzname }}.cdx.json
+          if-no-files-found: error
 
   nachweis:
     # Erst nach beiden Abbildern: Die Pruefart `eigen` fragt genau die Bezugsstellen ab, die dieser
