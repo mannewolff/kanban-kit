@@ -119,7 +119,7 @@ export interface CardNumberSearchProps {
  * mit der Maus bzw. nach dem Schließen erreichbar; `Strg`/`Cmd`-Kürzel scheiden aus, weil der Hook
  * Modifikatoren dem Browser überlässt.
  */
-export function CardNumberSearch({ aktuellesProjekt = null }: CardNumberSearchProps) {
+export function CardNumberSearch({ aktuellesProjekt = null }: Readonly<CardNumberSearchProps>) {
   const notify = useSnackbar()
   const [query, setQuery] = useState('')
   // Auf schmalen Breiten ist das Feld zu einem Icon eingeklappt (wie der Benutzername in der

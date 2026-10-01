@@ -7,4 +7,6 @@ frontend/dist
 issues
 install.mjs
 *.md
+# Die Doku-Seite braucht UPGRADING.md (#1268).
+!UPGRADING.md
 .env

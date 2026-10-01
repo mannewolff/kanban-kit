@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardService.DerivationNodeView;
 import org.mwolff.manban.card.application.CardService.LabelMarkView;
@@ -219,13 +220,11 @@ final class DerivationTree {
 
     List<Kandidat> offen = new ArrayList<>();
     for (Card c : gruppe) {
-      Set<Integer> blockierer = new HashSet<>();
       int eigeneNummer = c.number();
-      for (Integer nummer : ctx.depsByCardId.getOrDefault(c.requireId(), List.of())) {
-        if (gruppenNummern.contains(nummer) && nummer != eigeneNummer) {
-          blockierer.add(nummer);
-        }
-      }
+      Set<Integer> blockierer =
+          ctx.depsByCardId.getOrDefault(c.requireId(), List.of()).stream()
+              .filter(nummer -> gruppenNummern.contains(nummer) && nummer != eigeneNummer)
+              .collect(Collectors.toCollection(HashSet::new));
       offen.add(new Kandidat(c, blockierer));
     }
     offen.sort(Comparator.comparingInt(k -> k.karte().number()));

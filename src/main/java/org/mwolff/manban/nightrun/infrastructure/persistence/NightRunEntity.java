@@ -1,6 +1,7 @@
 package org.mwolff.manban.nightrun.infrastructure.persistence;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -76,24 +77,8 @@ class NightRunEntity {
   @Column(name = "no_work_reason")
   private @Nullable String noWorkReason;
 
-  @Column(name = "cost_usd")
-  private @Nullable BigDecimal costUsd;
-
-  @Column(name = "input_tokens")
-  private @Nullable Long inputTokens;
-
-  @Column(name = "output_tokens")
-  private @Nullable Long outputTokens;
-
-  @Column(name = "cached_input_tokens")
-  private @Nullable Long cachedInputTokens;
-
-  /** Modellzeit und Zuege gehoeren zum Verbrauch (Issue #1112, Plan #1110 E1). */
-  @Column(name = "model_duration_ms")
-  private @Nullable Long modelDurationMs;
-
-  @Column(name = "turns")
-  private @Nullable Integer turns;
+  /** Die sechs Verbrauchsspalten (Issue #1317); {@code null}, wenn keine davon gesetzt ist. */
+  @Embedded private @Nullable VerbrauchEmbeddable verbrauch;
 
   /** Die Vorgaben des Laufs (Issue #1112); {@code NULL} heisst „nicht angegeben". */
   @Column(name = "budget_plan_min")
@@ -190,28 +175,8 @@ class NightRunEntity {
     return noWorkReason;
   }
 
-  @Nullable BigDecimal getCostUsd() {
-    return costUsd;
-  }
-
-  @Nullable Long getInputTokens() {
-    return inputTokens;
-  }
-
-  @Nullable Long getOutputTokens() {
-    return outputTokens;
-  }
-
-  @Nullable Long getCachedInputTokens() {
-    return cachedInputTokens;
-  }
-
-  @Nullable Long getModelDurationMs() {
-    return modelDurationMs;
-  }
-
-  @Nullable Integer getTurns() {
-    return turns;
+  VerbrauchEmbeddable getVerbrauch() {
+    return verbrauch == null ? new VerbrauchEmbeddable() : verbrauch;
   }
 
   @Nullable Integer getBudgetPlanMin() {

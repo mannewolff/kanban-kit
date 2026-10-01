@@ -197,13 +197,13 @@ class ThroughputFilterTest {
     ThroughputFilter filter = filter(1, 10);
     authenticateAs(PatAuthenticationFilter.AUTHORITY);
     call(filter);
-    verify(recorder, never()).record(PERSON);
+    verify(recorder, never()).recordRejection(PERSON);
 
     call(filter);
     call(filter);
     call(filter);
 
-    verify(recorder, times(3)).record(PERSON);
+    verify(recorder, times(3)).recordRejection(PERSON);
   }
 
   @Test

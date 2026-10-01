@@ -154,40 +154,43 @@ public class KanbanCompatService {
     long boardId = requireBound(principal);
     long projectId = boardService.requireProjectId(boardId);
     String key = normalizeExternalKey(externalKey);
+    NeueKarte neu = new NeueKarte(title, body, column, key, direct, number, derivedFrom);
     String idempotent = key == null ? normalizeIdempotencyKey(idempotencyKey) : null;
     if (idempotent == null) {
-      return createNow(principal, boardId, title, body, column, key, direct, number, derivedFrom);
+      return createNow(principal, boardId, neu);
     }
     return idempotency.execute(
         projectId,
         idempotent,
         "POST /items",
         Created.class,
-        () -> createNow(principal, boardId, title, body, column, key, direct, number, derivedFrom));
+        () -> createNow(principal, boardId, neu));
   }
 
-  /** Die eigentliche Anlage, mit oder ohne Idempotenz-Schlüssel davor. */
-  private Created createNow(
-      KanbanPrincipal principal,
-      long boardId,
+  /** Die Werte einer neuen Karte, die gemeinsam vom Request bis zur Anlage reisen. */
+  private record NeueKarte(
       String title,
       @Nullable String body,
       @Nullable String column,
       @Nullable String key,
       boolean direct,
       @Nullable Integer number,
-      @Nullable Integer derivedFrom) {
-    requireImportPreconditions(number, key);
+      @Nullable Integer derivedFrom) {}
+
+  /** Die eigentliche Anlage, mit oder ohne Idempotenz-Schlüssel davor. */
+  private Created createNow(KanbanPrincipal principal, long boardId, NeueKarte neu) {
+    requireImportPreconditions(neu.number(), neu.key());
     // Die Spalte wird VOR dem Duplikat-Check in createDirect aufgelöst. Damit meldet ein
     // ungültiges `column` denselben Fehler, egal ob der Schlüssel schon eine Karte trifft —
     // sonst hinge die Fehlermeldung davon ab, ob zufällig schon eine existiert.
-    long columnId = zielSpalteId(boardId, column, direct);
+    long columnId = zielSpalteId(boardId, neu.column(), neu.direct());
     CardService.CardCreation result =
         cardService.createDirect(
             principal.userId(),
             boardId,
             columnId,
-            new CardService.DirectCard(title, body, key, number, derivedFrom));
+            new CardService.DirectCard(
+                neu.title(), neu.body(), neu.key(), neu.number(), neu.derivedFrom()));
     // Jede board-gebundene Karte trägt eine Nummer; requireNonNull macht das fuer NullAway
     // explizit (CardView.number() ist bis zum Pool-Rückbau noch @Nullable).
     return new Created(

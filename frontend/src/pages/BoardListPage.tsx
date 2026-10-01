@@ -248,6 +248,15 @@ export function BoardListPage() {
       return
     }
     let active = true
+    // Zuständige für den Filter „Zuständig" (#980); ohne sie bleibt der Filter weg.
+    const ladeMitglieder = async (projectId: number) => {
+      try {
+        const ms = await membersApi.list(projectId)
+        if (active) setMembers(ms)
+      } catch {
+        if (active) setMembers([])
+      }
+    }
     void boardsApi.get(id).then((b) => {
       if (!active) return
       setBoard(b)
@@ -259,15 +268,7 @@ export function BoardListPage() {
         initial = null
       }
       setFilters(initial ?? new Set<FilterKey>(b.columns.map((c) => c.id)))
-      // Zuständige für den Filter „Zuständig" (#980); ohne sie bleibt der Filter weg.
-      membersApi.list(b.projectId).then(
-        (ms) => {
-          if (active) setMembers(ms)
-        },
-        () => {
-          if (active) setMembers([])
-        },
-      )
+      void ladeMitglieder(b.projectId)
     })
     void cardsApi.list(id).then((cs) => {
       if (active) setCards(cs)

@@ -258,14 +258,11 @@ cd frontend && npm test         # Vitest
 **Mutationsprüfung (Issue #1104):**
 
 ```bash
-node scripts/mutationspruefung.mjs aenderung frontend   # je Paket, Stufe paket (Median über 10 min → push)
-node scripts/mutationspruefung.mjs vollauf frontend     # an der Merge-Stufe, Schwelle 80 % je Ausschnitt
+node scripts/mutationspruefung.mjs aenderung frontend   # beim Push über den Batch, Stufe push
+node scripts/mutationspruefung.mjs vollauf frontend     # an der Push-Stufe, Schwelle 80 % je Ausschnitt
 ```
 
-Beide stehen als `buildChecks` in `.claude/workflow.config.json`. Die Stufe
-`paket` kommt aus der Messung in Issue #1211 (rund 30 s für ein typisches Frontend-Paket); wie die
-Änderungsprüfung mit wachsendem Prüfbereich an `push` wandert, steht in [CLAUDE.md](CLAUDE.md) beim
-Absatz „Mutationsprüfung".
+Beide stehen als `buildChecks` in `.claude/workflow.config.json`, beide an der Stufe `push`.
 
 **Der Stufenplan ist die einzige Quelle des Prüfbereichs** (Plan #1270, Issues #1275, #1276):
 [`frontend/mutationsstufen.json`](frontend/mutationsstufen.json) führt die `ausnahmen` (reine Stil- und

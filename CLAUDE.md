@@ -118,14 +118,11 @@ node --test cli/tbx.test.mjs            # tbx-Kommandozeilenwerkzeug
 # Skripte
 node --test scripts/*.test.mjs          # Projektskripte, darunter scripts/mutationspruefung.test.mjs
 
-# Mutationsprüfung (Bereiche frontend bzw. backend; Vollauf nur an der Merge-Stufe)
-node scripts/mutationspruefung.mjs aenderung frontend   # Stufe paket: Stryker über die geänderten Dateien
-node scripts/mutationspruefung.mjs aenderung backend    # Stufe paket: PIT über die geänderten Klassen
-# Soll nach Issue #1280: je Seite zwei Einträge statt einem, der Median der Dauer wählt, welcher läuft
-node scripts/mutationspruefung.mjs aenderung <seite> --stufe paket   # Stufe paket: Median bis 10 min
-node scripts/mutationspruefung.mjs aenderung <seite> --stufe push    # Stufe push: Median über 10 min
-node scripts/mutationspruefung.mjs vollauf frontend     # Stufe merge: Stryker über den ganzen Bereich, Schwelle 80 %
-node scripts/mutationspruefung.mjs vollauf backend      # Stufe merge: PIT über den ganzen Bereich, Schwelle 100 %
+# Mutationsprüfung (Bereiche frontend bzw. backend; alle an der Push-Stufe)
+node scripts/mutationspruefung.mjs aenderung frontend   # Stufe push: Stryker über die geänderten Dateien des Batches
+node scripts/mutationspruefung.mjs aenderung backend    # Stufe push: PIT über die geänderten Klassen des Batches
+node scripts/mutationspruefung.mjs vollauf frontend     # Stufe push: Stryker über den ganzen Bereich, Schwelle 80 %
+node scripts/mutationspruefung.mjs vollauf backend      # Stufe push: PIT über den ganzen Bereich, Schwelle 100 %
 ```
 
 **Je Paket nach Bereichen eingegrenzt.** Die Checks stehen in `.claude/workflow.config.json` (`buildChecks`)
@@ -138,28 +135,21 @@ Integrationstests, 100-%-Abdeckung und Doku-Seite) trägt `stufe: "push"` und l�
 und `merge production` — die Abdeckungsgrenze ist ohne Integrationstests nicht zu halten, deshalb
 wandert sie mit. Beim Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine Datei
 ohne Bereich (etwa `Dockerfile`, `.github/`) fährt alle der Paketstufe. **Vor `push main` laufen alle
-Prüfungen der Paket- und Push-Stufe (neun), vor `merge production` zusätzlich die beiden Vollläufe (elf).** Die Config ändert nur Manne.
+Prüfungen der Paket- und Push-Stufe (elf); `merge production` wiederholt keine davon.** Die Config ändert nur Manne.
 
-**Mutationsprüfung (Issue #1104).** Die Änderungsprüfung (`aenderung`) mutiert je Paket nur, was das
-Paket berührt — gemessen je Seite rund 30 s (Issue #1211), deshalb Stufe `paket`. Der Prüfbereich des
+**Mutationsprüfung (Issue #1104).** Die Änderungsprüfung (`aenderung`) läuft an der Push-Stufe und mutiert,
+was die Karten des Batches berühren (Anker `git merge-base HEAD origin/main`). Der Prüfbereich des
 Frontends kommt aus dem Stufenplan [`frontend/mutationsstufen.json`](frontend/mutationsstufen.json):
 Er wächst Ausschnitt für Ausschnitt, die Schwelle gilt je Ausschnitt (Einzelheiten in CLAUDE-react.md).
 
-**Stufenschaltung (Issue #1280).** Mit dem Prüfbereich wächst die Dauer der Änderungsprüfung. Der Treiber
-schreibt die Dauer jedes Laufs mit Werkzeugstart in `.claude/mutationsdauer-<seite>.json` (die letzten
-fünf). Liegt ihr **Median über 10 min**, gilt die Stufe `push`, sonst `paket`; **ohne Protokoll gilt
-`paket`** — mehr prüfen, nie weniger. Dafür trägt die Config je Seite **zwei** Einträge:
-`node scripts/mutationspruefung.mjs aenderung <seite> --stufe paket` mit `stufe: "paket"` und
-`… --stufe push` mit `stufe: "push"`. Der Eintrag, dessen `--stufe` nicht die geltende ist, endet sofort
-mit einem Satz (Median, Grenze, geltende Stufe) und Rückgabewert 0; so läuft die Prüfung genau einmal, an
-der richtigen Stufe. **Stand 2026-09-29:** Die Config trägt noch je Seite den einen Eintrag ohne
-`--stufe` (Stufe `paket`); die beiden Einträge trägt Manne ein, bis dahin läuft die Änderungsprüfung wie
-bisher an jedem Paket.
+**Stufenschaltung (Issue #1280).** Der Treiber kann per `--stufe` und Dauerprotokoll
+(`.claude/mutationsdauer-<seite>.json`) zwischen `paket` und `push` schalten; die Config nutzt das nicht,
+weil die Änderungsprüfung fest an `push` steht.
 Das frühere Feld `mutationCommand` ist entfallen; PIT und Stryker laufen nur noch über den Treiber. Ein Überlebender in einer berührten Datei hält an; wie eine
 bewusst hingenommene Altlast markiert wird, steht in CLAUDE-java.md §5.5 und CLAUDE-react.md. Der
 Vollauf (`vollauf`) prüft den ganzen Bereich gegen die Schwelle (Frontend 80 %, Backend 100 %) und schreibt
 die Gedächtnisdatei `.claude/mutationsvollauf-<seite>.json`, aus der die Änderungsprüfung Dauer und
-Altlast-Stellen liest. Er hängt an der Stufe `merge`: **Mit beiden Vollläufen dauert `merge production`
+Altlast-Stellen liest. Er hängt wie die Änderungsprüfung an der Stufe `push`: **Mit beiden Vollläufen dauert `push main`
 deutlich über zehn Minuten** — der Prüflauf läuft im Hintergrund, und die Sitzung wartet sein Ende ab,
 statt mit „ich melde mich“ zu enden. Per Hand bleibt nur der Vollauf außerhalb des Standardlaufs, etwa
 um die Gedächtnisdatei neu anzulegen; die Werkzeug-Aufrufe `mvn -Ppit -Dskip.frontend=true test` und

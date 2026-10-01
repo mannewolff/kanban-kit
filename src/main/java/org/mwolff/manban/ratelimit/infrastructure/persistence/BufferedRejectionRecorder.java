@@ -41,7 +41,7 @@ public class BufferedRejectionRecorder implements RejectionRecorder {
   }
 
   @Override
-  public void record(long userId) {
+  public void recordRejection(long userId) {
     buffer.merge(
         new HourKey(userId, clock.instant().truncatedTo(ChronoUnit.HOURS)), 1, Integer::sum);
   }
@@ -52,8 +52,8 @@ public class BufferedRejectionRecorder implements RejectionRecorder {
    * aber nie in keinem.
    *
    * <p>{@code synchronized}, weil der geplante Lauf und der beim Herunterfahren sich überschneiden
-   * können. Nur ein Flush entfernt Schlüssel, {@link #record} fügt sie bloß hinzu; mit dem Monitor
-   * ist jeder Schlüssel der Kopie beim Entfernen also noch vorhanden.
+   * können. Nur ein Flush entfernt Schlüssel, {@link #recordRejection} fügt sie bloß hinzu; mit dem
+   * Monitor ist jeder Schlüssel der Kopie beim Entfernen also noch vorhanden.
    */
   @Scheduled(fixedDelayString = "${manban.ratelimit.throughput.rejection-flush-ms:10000}")
   public synchronized void flush() {

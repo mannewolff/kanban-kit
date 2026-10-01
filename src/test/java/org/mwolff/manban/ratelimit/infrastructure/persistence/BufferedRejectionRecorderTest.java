@@ -40,7 +40,7 @@ class BufferedRejectionRecorderTest {
 
   @Test
   void manyRejectionsInOneBufferWindow_becomeOneWrite() {
-    IntStream.range(0, 100).forEach(i -> recorder.record(7L));
+    IntStream.range(0, 100).forEach(i -> recorder.recordRejection(7L));
 
     recorder.flush();
 
@@ -50,10 +50,10 @@ class BufferedRejectionRecorderTest {
 
   @Test
   void rejectionsAreBucketedByPersonAndFullHour() {
-    recorder.record(7L);
-    recorder.record(8L);
+    recorder.recordRejection(7L);
+    recorder.recordRejection(8L);
     clock.advance(Duration.ofHours(1));
-    recorder.record(7L);
+    recorder.recordRejection(7L);
 
     recorder.flush();
 
@@ -66,7 +66,7 @@ class BufferedRejectionRecorderTest {
 
   @Test
   void flush_emptiesTheBuffer() {
-    recorder.record(7L);
+    recorder.recordRejection(7L);
     recorder.flush();
 
     recorder.flush();
@@ -84,8 +84,8 @@ class BufferedRejectionRecorderTest {
   @Test
   void failedWrite_keepsTheCountsForTheNextFlush() {
     // Given: Die Datenbank ist beim ersten Versuch nicht erreichbar.
-    recorder.record(7L);
-    recorder.record(7L);
+    recorder.recordRejection(7L);
+    recorder.recordRejection(7L);
     doThrow(new DataAccessResourceFailureException("Datenbank weg"))
         .doNothing()
         .when(table)
@@ -93,7 +93,7 @@ class BufferedRejectionRecorderTest {
     assertThatThrownBy(recorder::flush).isInstanceOf(DataAccessResourceFailureException.class);
 
     // When: eine weitere Abweisung, dann der nächste Versuch.
-    recorder.record(7L);
+    recorder.recordRejection(7L);
     recorder.flush();
 
     // Then: Nichts ist verloren — beim zweiten Schreiben stehen alle drei da.
@@ -104,7 +104,7 @@ class BufferedRejectionRecorderTest {
 
   @Test
   void shutdown_flushesWhatIsStillBuffered() {
-    recorder.record(7L);
+    recorder.recordRejection(7L);
 
     recorder.flushOnShutdown();
 

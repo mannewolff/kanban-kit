@@ -94,7 +94,7 @@ const ANZAHL_VORGABE: AnzahlWahl = '10'
 const ANZAHL_SCHLUESSEL = 'manban.plattformLeitstand.anzahl'
 
 function istAnzahlWahl(wert: string | null): wert is AnzahlWahl {
-  return ANZAHL_WERTE.some((w) => w === wert)
+  return (ANZAHL_WERTE as readonly (string | null)[]).includes(wert)
 }
 
 /** Ein fehlender, unlesbarer oder unbekannter Wert ergibt die Vorgabe. */

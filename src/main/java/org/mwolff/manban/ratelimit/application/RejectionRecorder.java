@@ -11,5 +11,5 @@ package org.mwolff.manban.ratelimit.application;
 public interface RejectionRecorder {
 
   /** Meldet eine Abweisung der Person. Kehrt sofort zurück; geschrieben wird gepuffert. */
-  void record(long userId);
+  void recordRejection(long userId);
 }
