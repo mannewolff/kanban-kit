@@ -35,6 +35,7 @@ import org.mwolff.manban.card.application.CardService.BoardItemView;
 import org.mwolff.manban.card.application.CardService.CardView;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.comment.application.CommentNotFoundException;
 import org.mwolff.manban.comment.application.CommentService;
 import org.mwolff.manban.comment.application.CommentService.CommentView;
 
@@ -1170,7 +1171,7 @@ class KanbanCompatServiceTest {
   }
 
   @Test
-  void listComments_mapsAuthorBodyAndCreatedAt_inServiceOrder() {
+  void listComments_mapsIdAuthorBodyAndCreatedAt_inServiceOrder() {
     // Given: die Kommentar-Fassade liefert bereits chronologisch sortiert
     Instant first = Instant.parse("2026-01-01T10:00:00Z");
     Instant second = Instant.parse("2026-01-01T11:00:00Z");
@@ -1186,10 +1187,62 @@ class KanbanCompatServiceTest {
     // Then: Reihenfolge und Feldabbildung bleiben erhalten
     assertThat(result)
         .extracting(
+            KanbanCompatService.Comment::id,
             KanbanCompatService.Comment::author,
             KanbanCompatService.Comment::body,
             KanbanCompatService.Comment::createdAt)
-        .containsExactly(tuple("Anna", "Erster", first), tuple("Bert", "Zweiter", second));
+        .containsExactly(tuple(9L, "Anna", "Erster", first), tuple(10L, "Bert", "Zweiter", second));
+  }
+
+  @Test
+  void updateComment_delegatesToCommentService_whenCommentBelongsToCard() {
+    // Given: der Kommentar 9 haengt an der Karte 42
+    Instant at = Instant.parse("2026-01-01T10:00:00Z");
+    when(commentService.list(1L, 42L))
+        .thenReturn(List.of(new CommentView(9L, 42L, 1L, "Anna", "Alt", at, at)));
+
+    // When
+    service.updateComment(bound(), 42L, 9L, "Neu");
+
+    // Then
+    verify(commentService).update(1L, 9L, "Neu");
+  }
+
+  @Test
+  void updateComment_throwsCommentNotFound_whenCommentBelongsToAnotherCard() {
+    // Given: an der Karte 42 haengt nur der Kommentar 10. Ohne die Zugehoerigkeitspruefung
+    // (Mutant) ersetzte ein Aufruf ueber eine Karte des Boards einen Kommentar einer fremden.
+    Instant at = Instant.parse("2026-01-01T10:00:00Z");
+    when(commentService.list(1L, 42L))
+        .thenReturn(List.of(new CommentView(10L, 42L, 1L, "Anna", "Alt", at, at)));
+
+    // When / Then
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.updateComment(principal, 42L, 9L, "Neu"))
+        .isInstanceOf(CommentNotFoundException.class);
+    verify(commentService, never()).update(anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  void updateComment_throwsCardNotFound_whenCardNotOnBoard() {
+    // Given: der Board-Guard der card-Fassade schlaegt an
+    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(42L, BOARD);
+
+    // When / Then
+    KanbanPrincipal principal = bound();
+    assertThatThrownBy(() -> service.updateComment(principal, 42L, 9L, "Neu"))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(commentService, never()).update(anyLong(), anyLong(), anyString());
+  }
+
+  @Test
+  void updateComment_throwsTokenNotBound_whenPrincipalUnbound() {
+    // Given
+    KanbanPrincipal unbound = new KanbanPrincipal(1L, 2L, null, null, "Token");
+
+    // When / Then
+    assertThatThrownBy(() -> service.updateComment(unbound, 42L, 9L, "Neu"))
+        .isInstanceOf(TokenNotBoundException.class);
   }
 
   @Test

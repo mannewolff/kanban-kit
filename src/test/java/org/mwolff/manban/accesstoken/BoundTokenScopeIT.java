@@ -1,6 +1,7 @@
 package org.mwolff.manban.accesstoken;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -79,6 +80,53 @@ class BoundTokenScopeIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content("{\"title\":\"Via Token\",\"direct\":true}"))
         .andExpect(status().isCreated());
+  }
+
+  /**
+   * Das Ersetzen eines Kommentars (Issue #1339) liegt innerhalb der Kit-Schnittstelle: Das
+   * gebundene Token erreicht es über {@code /api/kanban/**}, nicht über die Route der
+   * Weboberfläche, die ihm verschlossen bleibt.
+   */
+  @Test
+  void boundTokenReplacesItsOwnCommentViaKanbanApi() throws Exception {
+    Cookie admin = session("scope-edit-admin@example.com", PlatformRole.ADMIN);
+    Cookie owner = session("scope-edit@example.com", PlatformRole.USER);
+    long projectId = createProject(admin, "Ersetzen-Projekt", "scope-edit@example.com");
+    JsonNode board = createBoard(owner, projectId, "Board A");
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+    long cardId = createCard(owner, boardId, columnId, "Karte A");
+    String token = boundToken(owner, projectId, boardId, "Board-A-Token");
+    String comments = "/api/kanban/items/" + cardId + "/comments";
+    mvc.perform(
+            post(comments)
+                .header(TOKEN_HEADER, token)
+                .contentType("application/json")
+                .content("{\"body\":\"alt\"}"))
+        .andExpect(status().isCreated());
+    long commentId =
+        json.readTree(
+                mvc.perform(get(comments).header(TOKEN_HEADER, token))
+                    .andExpect(status().isOk())
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString())
+            .get(0)
+            .get("id")
+            .asLong();
+
+    mvc.perform(
+            patch(comments + "/" + commentId)
+                .header(TOKEN_HEADER, token)
+                .contentType("application/json")
+                .content("{\"body\":\"neu\"}"))
+        .andExpect(status().isNoContent());
+    mvc.perform(
+            patch("/api/comments/" + commentId)
+                .header(TOKEN_HEADER, token)
+                .contentType("application/json")
+                .content("{\"body\":\"quer\"}"))
+        .andExpect(status().isForbidden());
   }
 
   @Test

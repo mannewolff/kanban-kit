@@ -157,6 +157,18 @@ class KanbanCompatControllerTest {
   }
 
   @Test
+  void updateComment_withBoundPrincipal_delegates() {
+    // Given
+    var request = new KanbanCompatController.CommentRequest("neu");
+
+    // When
+    controller.updateComment(boundAuthentication(), 8L, 9L, request);
+
+    // Then
+    verify(service).updateComment(PRINCIPAL, 8L, 9L, "neu");
+  }
+
+  @Test
   void addLabel_withBoundPrincipal_delegates() {
     // Given
     var request = new KanbanCompatController.LabelRequest("kit:nightrun");
@@ -181,7 +193,7 @@ class KanbanCompatControllerTest {
   void comments_withBoundPrincipal_delegates() {
     // Given
     List<Comment> comments =
-        List.of(new Comment("Anna", "Hallo", Instant.parse("2026-01-01T10:00:00Z")));
+        List.of(new Comment(9L, "Anna", "Hallo", Instant.parse("2026-01-01T10:00:00Z")));
     when(service.listComments(PRINCIPAL, 8L)).thenReturn(comments);
 
     // When
