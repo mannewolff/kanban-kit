@@ -29,6 +29,9 @@ import {
   abbilderAusJava,
   bestandAbbilder,
   abgleich,
+  ohneDigest,
+  fundstellenAbbilder,
+  digestAbweichungen,
 } from './bezugspruefung.mjs';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
@@ -71,6 +74,7 @@ const ABBILD = {
   bezugsstelle: 'postgres:16',
   fassung: '16',
   pruefung: 'bezug',
+  ausgeliefert: true,
 };
 
 const ARCHIV = {
@@ -91,6 +95,7 @@ const UEBERSPRUNGEN = {
   pruefung: 'keine',
   grund: 'anonym nicht mehr beziehbar',
   ablaufversion: '2.13.0',
+  ausgeliefert: false,
 };
 
 const EIGEN = {
@@ -100,6 +105,7 @@ const EIGEN = {
   bezugsstelle: 'ghcr.io/manfredwolff/manban:2.14.0',
   fassung: '2.14.0',
   pruefung: 'eigen',
+  ausgeliefert: true,
 };
 
 // --- Zerlegung der Bezugsstelle -------------------------------------------
@@ -622,4 +628,132 @@ test('argumenteZerlegen nimmt nur das erste Argument ohne Bindestrich als Pfad',
     pfad: 'eins.json',
     eigenePruefen: false,
   });
+});
+
+// --- Digest und Auslieferung (Issue #1330, Plan #1295, E11/E13/E24) -------
+
+const DIGEST_A = `sha256:${'a'.repeat(64)}`;
+const DIGEST_B = `sha256:${'b'.repeat(64)}`;
+
+function bestandAnlegen(dateien) {
+  const verzeichnis = mkdtempSync(join(tmpdir(), 'digest-'));
+  for (const [datei, inhalt] of Object.entries(dateien)) {
+    mkdirSync(dirname(join(verzeichnis, datei)), { recursive: true });
+    writeFileSync(join(verzeichnis, datei), inhalt);
+  }
+  return verzeichnis;
+}
+
+test('ohneDigest nimmt den Digest ab und laesst eine Referenz ohne Digest stehen', () => {
+  assert.equal(ohneDigest(`postgres:16.15@${DIGEST_A}`), 'postgres:16.15');
+  assert.equal(ohneDigest('postgres:16.15'), 'postgres:16.15');
+});
+
+test('abgleich haelt eine Fundstelle mit Digest und den Eintrag ohne Digest fuer gleich', () => {
+  const bestand = new Set([`postgres:16@${DIGEST_A}`]);
+  const { fehlen, ueberzaehlig } = abgleich([{ ...ABBILD, digest: DIGEST_A }], bestand);
+  assert.deepEqual(fehlen, []);
+  assert.deepEqual(ueberzaehlig, []);
+});
+
+test('abgleich schlaegt an, wenn Compose eine Fassung anhebt und die Liste nicht', () => {
+  const verzeichnis = bestandAnlegen({
+    'docker-compose.yml': `services:\n  a:\n    image: postgres:17@${DIGEST_B}\n`,
+  });
+  const { fehlen, ueberzaehlig } = abgleich([{ ...ABBILD, digest: DIGEST_A }], bestandAbbilder(verzeichnis));
+  rmSync(verzeichnis, { recursive: true, force: true });
+  assert.deepEqual(fehlen, ['postgres:17']);
+  assert.deepEqual(ueberzaehlig, ['postgres:16']);
+});
+
+test('fundstellenAbbilder nennt je Referenz die Datei und laesst die Java-Tests aus', () => {
+  const verzeichnis = bestandAnlegen({
+    'docker-compose.yml': `services:\n  a:\n    image: postgres:16@${DIGEST_A}\n`,
+    Dockerfile: `FROM --platform=$BUILDPLATFORM postgres:16@${DIGEST_A} AS bau\nFROM bau\n`,
+    'backup/Dockerfile': 'FROM postgres:16\n',
+    'src/test/java/EinIT.java': 'new GenericContainer<>("postgres:16");\n',
+  });
+  const fundstellen = fundstellenAbbilder(verzeichnis);
+  rmSync(verzeichnis, { recursive: true, force: true });
+  assert.deepEqual(
+    fundstellen.map(({ datei, referenz }) => `${datei} ${referenz}`).sort(),
+    [
+      `Dockerfile postgres:16@${DIGEST_A}`,
+      join('backup', 'Dockerfile') + ' postgres:16',
+      `docker-compose.yml postgres:16@${DIGEST_A}`,
+    ].sort(),
+  );
+});
+
+test('digestAbweichungen ist leer, wenn jede Fundstelle den Digest des Eintrags traegt', () => {
+  const fundstellen = [
+    { datei: 'docker-compose.yml', referenz: `postgres:16@${DIGEST_A}` },
+    { datei: 'Dockerfile', referenz: `postgres:16@${DIGEST_A}` },
+  ];
+  assert.deepEqual(digestAbweichungen([{ ...ABBILD, digest: DIGEST_A }, ARCHIV], fundstellen), []);
+});
+
+test('digestAbweichungen meldet einen abweichenden und einen fehlenden Digest an der Fundstelle', () => {
+  const verzeichnis = bestandAnlegen({
+    'docker-compose.yml': `services:\n  a:\n    image: postgres:16@${DIGEST_B}\n`,
+    'backup/Dockerfile': 'FROM postgres:16\n',
+  });
+  const abweichungen = digestAbweichungen([{ ...ABBILD, digest: DIGEST_A }], fundstellenAbbilder(verzeichnis));
+  rmSync(verzeichnis, { recursive: true, force: true });
+  assert.deepEqual(abweichungen.sort(), [
+    `postgres:16 in ${join('backup', 'Dockerfile')}: Digest fehlt, erwartet ${DIGEST_A}`,
+    `postgres:16 in docker-compose.yml: Digest ${DIGEST_B}, erwartet ${DIGEST_A}`,
+  ]);
+});
+
+test('digestAbweichungen laesst einen Eintrag ohne Digest aussen vor', () => {
+  const fundstellen = [{ datei: 'docker-compose.yml', referenz: 'postgres:16' }];
+  assert.deepEqual(digestAbweichungen([ABBILD], fundstellen), []);
+});
+
+test('jede Fundstelle des Projekts traegt den Digest ihres Eintrags', () => {
+  const bausteine = bausteineLesen(join(HIER, 'bausteine.json'));
+  assert.deepEqual(digestAbweichungen(bausteine, fundstellenAbbilder(WURZEL)), []);
+});
+
+test('jedes fremde Abbild mit Fundstelle in den Betriebsdateien ist an einen Digest gebunden', () => {
+  const bausteine = bausteineLesen(join(HIER, 'bausteine.json'));
+  const gebunden = bausteine.filter((b) => b.digest).map((b) => b.bezugsstelle).sort();
+  assert.deepEqual(gebunden, [
+    'caddy:2.11.4',
+    'chrislusf/seaweedfs:4.47',
+    'debian:bookworm-20260918-slim',
+    'eclipse-temurin:25.0.4.1_1-jre',
+    'maven:3.9.16-eclipse-temurin-25',
+    'node:22.23.3-alpine',
+    'postgres:16.15',
+    'postgres:16.15-bookworm',
+  ]);
+});
+
+test('jeder Abbild-Eintrag der Liste traegt ein boolesches ausgeliefert', () => {
+  const bausteine = bausteineLesen(join(HIER, 'bausteine.json'));
+  for (const baustein of bausteine.filter((b) => b.art === 'abbild')) {
+    assert.equal(typeof baustein.ausgeliefert, 'boolean', `${baustein.name} ohne ausgeliefert`);
+  }
+  const nichtAusgeliefert = bausteine.filter((b) => b.ausgeliefert === false).map((b) => b.name).sort();
+  assert.deepEqual(nichtAusgeliefert, ['IT-Suite: Mailserver', 'Rueckweg: Altspeicher']);
+});
+
+test('bausteineLesen weist einen Abbild-Eintrag ohne boolesches ausgeliefert ab', () => {
+  const verzeichnis = mkdtempSync(join(tmpdir(), 'bausteine-'));
+  const pfad = join(verzeichnis, 'bausteine.json');
+  writeFileSync(pfad, JSON.stringify({ bausteine: [{ ...ABBILD, ausgeliefert: 'ja' }] }));
+  assert.throws(() => bausteineLesen(pfad), /ausgeliefert/);
+  writeFileSync(pfad, JSON.stringify({ bausteine: [ARCHIV] }));
+  assert.equal(bausteineLesen(pfad).length, 1);
+  rmSync(verzeichnis, { recursive: true, force: true });
+});
+
+test('bausteineLesen weist einen Digest in falscher Form ab', () => {
+  const verzeichnis = mkdtempSync(join(tmpdir(), 'bausteine-'));
+  const pfad = join(verzeichnis, 'bausteine.json');
+  writeFileSync(pfad, JSON.stringify({ bausteine: [{ ...ABBILD, digest: 'sha256:abc' }] }));
+  assert.throws(() => bausteineLesen(pfad), /Digest/);
+  rmSync(verzeichnis, { recursive: true, force: true });
 });

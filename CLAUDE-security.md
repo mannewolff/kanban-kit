@@ -131,6 +131,7 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 - Container läuft idealerweise als Non-Root-User. Bei `eclipse-temurin:21-jre`: explizit Non-Root setzen, wenn das Image dies nicht schon tut.
 - `docker-compose.yml`: keine Secrets als Klartext — über `.env` oder Compose-Secrets binden.
 - Healthcheck nutzt `/actuator/health` mit minimalen Informationen.
+- Jeder Bezug auf ein fremdes Abbild in `docker-compose*.yml`, `Dockerfile` und `backup/Dockerfile` ist an Tag **und** Digest gebunden (`name:tag@sha256:…`, Digest der Manifest-Liste, nicht einer Architektur). So fährt ein unverändertes Tag nicht still einen anderen Inhalt. Den Digest hebt der Aktualisierungs-PR an (Renovate, `pinDigests`), und zwar an der Fundstelle und in `scripts/bausteine.json` gemeinsam; `scripts/bezugspruefung.test.mjs` hält beide Stellen gleich. Ausgenommen sind die eigenen Abbilder `ghcr.io/mannewolff/kanban-kit` und `ghcr.io/mannewolff/kanban-kit-backup`: Ihr Digest entsteht erst im Release-Lauf auf dem Tag, der Commit dazu kann ihn also nicht tragen (Plan #1295, E23). Ebenfalls ausgenommen ist das Rückweg-Overlay `docker-compose.altspeicher.yml` (E12).
 
 ---
 

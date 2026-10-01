@@ -59,6 +59,9 @@ export const FRIST_GESAMT_MS = 300_000;
 
 const DOCKER_HUB_REGISTRY = 'registry-1.docker.io';
 
+/** Der Digest einer Manifest-Liste, wie ihn `docker buildx imagetools inspect` nennt. */
+const DIGEST_FORM = /^sha256:[0-9a-f]{64}$/;
+
 /**
  * Die Medientypen, die ein Manifest haben kann. Ohne diesen Accept-Header antwortet eine Registry
  * fuer ein Multi-Arch-Abbild mit 404 statt mit dem Index — die Pruefung meldete dann einen
@@ -94,6 +97,14 @@ export function bausteineLesen(pfad) {
     if (baustein.pruefung === 'keine') {
       if (!baustein.grund) throw new Error(`Baustein ${wer} ohne Grund zur uebersprungenen Pruefung`);
       if (!baustein.ablaufversion) throw new Error(`Baustein ${wer} ohne Ablaufversion`);
+    }
+    // `ausgeliefert` ist der Filter der Sicherheitspruefung (Plan #1295, E13): Ein Abbild ohne die
+    // Angabe fiele dort still heraus oder still hinein.
+    if (baustein.art === 'abbild' && typeof baustein.ausgeliefert !== 'boolean') {
+      throw new Error(`Baustein ${wer} ohne boolesches ausgeliefert`);
+    }
+    if (baustein.digest !== undefined && !DIGEST_FORM.test(baustein.digest)) {
+      throw new Error(`Baustein ${wer} mit Digest in falscher Form`);
     }
   }
   return bausteine;
@@ -371,39 +382,80 @@ function javaDateien(verzeichnis) {
   return gefunden;
 }
 
-/** Sammelt jede Abbild-Referenz des Bestands — die eine Seite des Abgleichs. */
-export function bestandAbbilder(wurzel) {
-  const bestand = new Set();
-  const aufnehmen = (menge) => {
-    for (const abbild of menge) bestand.add(abbild);
+/** Nimmt den Digest einer Referenz ab: `postgres:16.15@sha256:…` wird `postgres:16.15`. */
+export function ohneDigest(referenz) {
+  const trenner = referenz.indexOf('@');
+  return trenner === -1 ? referenz : referenz.slice(0, trenner);
+}
+
+/**
+ * Jede Abbild-Referenz der Betriebsdateien samt Datei — die Stellen, an denen der Digest stehen
+ * muss. Die Testcontainers-Zeichenketten in `src/test/**` gehoeren nicht dazu: Testabbilder werden
+ * nicht ausgeliefert und bleiben ohne Digest.
+ */
+export function fundstellenAbbilder(wurzel) {
+  const fundstellen = [];
+  const aufnehmen = (datei, menge) => {
+    for (const referenz of menge) fundstellen.push({ datei, referenz });
   };
   for (const datei of readdirSync(wurzel)) {
     if (/^docker-compose.*\.ya?ml$/.test(datei)) {
-      aufnehmen(abbilderAusCompose(readFileSync(join(wurzel, datei), 'utf-8')));
+      aufnehmen(datei, abbilderAusCompose(readFileSync(join(wurzel, datei), 'utf-8')));
     }
   }
   for (const datei of ['Dockerfile', join('backup', 'Dockerfile')]) {
     const pfad = join(wurzel, datei);
-    if (existsSync(pfad)) aufnehmen(abbilderAusDockerfile(readFileSync(pfad, 'utf-8')));
+    if (existsSync(pfad)) aufnehmen(datei, abbilderAusDockerfile(readFileSync(pfad, 'utf-8')));
   }
+  return fundstellen;
+}
+
+/** Sammelt jede Abbild-Referenz des Bestands — die eine Seite des Abgleichs. */
+export function bestandAbbilder(wurzel) {
+  const bestand = new Set(fundstellenAbbilder(wurzel).map(({ referenz }) => referenz));
   for (const datei of javaDateien(join(wurzel, 'src', 'test'))) {
-    aufnehmen(abbilderAusJava(readFileSync(datei, 'utf-8')));
+    for (const abbild of abbilderAusJava(readFileSync(datei, 'utf-8'))) bestand.add(abbild);
   }
   return bestand;
+}
+
+/**
+ * Haelt den Digest getrennt vom Abgleich (Plan #1295, E24): Traegt ein Eintrag `digest`, muss jede
+ * Fundstelle seiner Bezugsstelle genau diesen Digest tragen. Sonst fuehre ein unveraendertes Tag
+ * still einen anderen Inhalt, oder Liste und Betriebsdatei nennten verschiedene Abbilder.
+ */
+export function digestAbweichungen(bausteine, fundstellen) {
+  const abweichungen = [];
+  for (const baustein of bausteine.filter((b) => b.art === 'abbild' && b.digest)) {
+    for (const { datei, referenz } of fundstellen) {
+      if (ohneDigest(referenz) !== baustein.bezugsstelle) continue;
+      const gefunden = referenz.slice(baustein.bezugsstelle.length + 1);
+      if (gefunden === baustein.digest) continue;
+      abweichungen.push(
+        gefunden
+          ? `${baustein.bezugsstelle} in ${datei}: Digest ${gefunden}, erwartet ${baustein.digest}`
+          : `${baustein.bezugsstelle} in ${datei}: Digest fehlt, erwartet ${baustein.digest}`,
+      );
+    }
+  }
+  return abweichungen;
 }
 
 /**
  * Haelt Liste und Bestand gegeneinander — in BEIDE Richtungen: `fehlen` sind Abbilder des Bestands
  * ohne Eintrag (die Liste altert sonst still), `ueberzaehlig` sind Eintraege ohne Fundstelle (die
  * Pruefung faehre sonst bald etwas, das niemand mehr benutzt). Archive bleiben aussen vor: Sie
- * stehen als URL in einem RUN-Schritt und nicht als Abbild-Referenz.
+ * stehen als URL in einem RUN-Schritt und nicht als Abbild-Referenz. Verglichen wird ohne Digest:
+ * Die Bezugsstelle bleibt tag-foermig, weil die anonyme Pruefung mit ihr arbeitet; ob der Digest
+ * stimmt, haelt `digestAbweichungen`.
  */
 export function abgleich(bausteine, bestand) {
   const eingetragen = new Set(
     bausteine.filter((b) => b.art === 'abbild').map((b) => b.bezugsstelle),
   );
-  const fehlen = [...bestand].filter((abbild) => !eingetragen.has(abbild)).sort();
-  const ueberzaehlig = [...eingetragen].filter((abbild) => !bestand.has(abbild)).sort();
+  const ohne = new Set([...bestand].map(ohneDigest));
+  const fehlen = [...ohne].filter((abbild) => !eingetragen.has(abbild)).sort();
+  const ueberzaehlig = [...eingetragen].filter((abbild) => !ohne.has(abbild)).sort();
   return { fehlen, ueberzaehlig };
 }
 

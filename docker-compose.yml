@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16.15
+    image: postgres:16.15@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-manban}
       POSTGRES_USER: ${POSTGRES_USER:-manban}
@@ -20,7 +20,7 @@ services:
     # Apache-2.0 und laeuft als ein Prozess. Der Tag steht fest, aus demselben Grund wie zuvor:
     # Ein beweglicher `latest` ist genau das, was hier ohne Vorwarnung verschwunden ist.
     # Der bisherige Dienst lebt als Rueckweg in docker-compose.altspeicher.yml weiter (E13).
-    image: chrislusf/seaweedfs:4.47
+    image: chrislusf/seaweedfs:4.47@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882
     # Eigener Einstiegspunkt statt `command:`, weil neben dem Speicher selbst der Anhang-Bucket
     # angelegt werden muss (E16): Die Identitaet der Anwendung traegt nur Read, Write und List,
     # `PutBucket` verlangt in SeaweedFS das Recht Admin — Wurzelrechte fuer einen einmaligen
@@ -135,7 +135,7 @@ services:
         condition: service_healthy
 
   caddy:
-    image: caddy:2.11.4
+    image: caddy:2.11.4@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
     ports:
       - "80:80"
       - "443:443"

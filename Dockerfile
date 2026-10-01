@@ -7,7 +7,7 @@
 # .github/workflows/release-images.yml vollstaendig unter QEMU-Emulation — Minuten statt Sekunden,
 # fuer ein Ergebnis, das ohnehin dasselbe ist. Die Laufzeit-Stufe `runtime` traegt den Schalter
 # bewusst NICHT: Sie ist das ausgelieferte Abbild und muss je Zielarchitektur entstehen.
-FROM --platform=$BUILDPLATFORM node:22.23.3-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:22.23.3-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS frontend
 WORKDIR /build/frontend
 COPY frontend/package.json ./
 RUN npm install
@@ -24,7 +24,7 @@ COPY UPGRADING.md /build/UPGRADING.md
 RUN npm run build
 
 # 2) Backend-Jar bauen (Frontend-Plugin übersprungen, dist wird hineinkopiert)
-FROM --platform=$BUILDPLATFORM maven:3.9.16-eclipse-temurin-25 AS backend
+FROM --platform=$BUILDPLATFORM maven:3.9.16-eclipse-temurin-25@sha256:93b8a14ea2f412782e4e842651273b4d903e35cc496284f178fbbe2d67d00976 AS backend
 WORKDIR /build
 COPY pom.xml ./
 COPY src ./src
@@ -33,7 +33,7 @@ COPY --from=frontend /build/docs-site/.vitepress/dist ./src/main/resources/stati
 RUN mvn -q -B -DskipTests -Dskip.frontend=true package
 
 # 3) Schlanke Runtime
-FROM eclipse-temurin:25.0.4.1_1-jre AS runtime
+FROM eclipse-temurin:25.0.4.1_1-jre@sha256:8da0490fa9a3c26867012019565948eef0ee69438f5c75ac28146967bae984b5 AS runtime
 WORKDIR /app
 RUN groupadd --system manban && useradd --system --gid manban manban
 COPY --from=backend /build/target/manban.jar app.jar
