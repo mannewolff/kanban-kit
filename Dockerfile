@@ -14,12 +14,13 @@ RUN npm install
 COPY frontend/ ./
 RUN npm run build
 
-# VitePress-Doku (docs-site) bauen; copy-docs.mjs liest die Markdown-Quellen aus ../docs.
+# VitePress-Doku (docs-site) bauen; copy-docs.mjs liest die Markdown-Quellen aus ../docs und ../UPGRADING.md.
 WORKDIR /build/docs-site
 COPY docs-site/package.json ./
 RUN npm install
 COPY docs-site/ ./
 COPY docs /build/docs
+COPY UPGRADING.md /build/UPGRADING.md
 RUN npm run build
 
 # 2) Backend-Jar bauen (Frontend-Plugin übersprungen, dist wird hineinkopiert)
