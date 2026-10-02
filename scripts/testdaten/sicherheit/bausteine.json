@@ -1,5 +1,5 @@
 {
-  "_hinweis": "Gekuerzte Bausteinliste fuer scripts/sicherheitspruefung.test.mjs (Issue #1333).",
+  "_hinweis": "Gekuerzte Bausteinliste fuer scripts/sicherheitspruefung.test.mjs (Issue #1333); basis und verwendung (Issue #1353) fuer die Pakete von Plan #1351.",
   "bausteine": [
     {
       "name": "Anwendung",
@@ -8,7 +8,8 @@
       "bezugsstelle": "ghcr.io/beispiel/anwendung:1.0.0",
       "fassung": "1.0.0",
       "pruefung": "eigen",
-      "ausgeliefert": true
+      "ausgeliefert": true,
+      "basis": "Datenbank"
     },
     {
       "name": "Datenbank",
@@ -21,13 +22,14 @@
       "ausgeliefert": true
     },
     {
-      "name": "Reverse-Proxy",
-      "zweck": "ausgeliefertes fremdes Abbild ohne Digest",
+      "name": "Bau: Werkzeug",
+      "zweck": "Bauwerkzeug ohne Digest, nur beim Bauen gebraucht",
       "art": "abbild",
       "bezugsstelle": "caddy:2.11.4",
       "fassung": "2.11.4",
       "pruefung": "bezug",
-      "ausgeliefert": true
+      "ausgeliefert": true,
+      "verwendung": "bau"
     },
     {
       "name": "IT-Suite: Mailserver",

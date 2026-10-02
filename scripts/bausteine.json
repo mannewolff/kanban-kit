@@ -12,7 +12,11 @@
     "an jeder Fundstelle als name:tag@digest und wird mit dem Tag gemeinsam angehoben, die",
     "bezugsstelle bleibt tag-foermig. ausgeliefert sagt je Abbild, ob es ein Selbsthoster ueber",
     "Compose oder eines der eigenen Abbilder bezieht (E13) — false fuer reine Testabbilder und das",
-    "Rueckweg-Overlay."
+    "Rueckweg-Overlay.",
+    "verwendung \"bau\" kennzeichnet ein Abbild, das nur beim Bauen gebraucht wird und nicht im",
+    "laufenden Stack steckt (Plan #1351, E5); ohne das Feld steckt es im Betrieb.",
+    "basis nennt bei einem eigenen Abbild den Baustein, auf dem es aufsetzt (E1); der Test haelt sie",
+    "gegen das letzte FROM von Dockerfile bzw. backup/Dockerfile."
   ],
   "bausteine": [
     {
@@ -22,7 +26,8 @@
       "bezugsstelle": "ghcr.io/mannewolff/kanban-kit:2.17.0",
       "fassung": "2.17.0",
       "pruefung": "eigen",
-      "ausgeliefert": true
+      "ausgeliefert": true,
+      "basis": "Laufzeit"
     },
     {
       "name": "Datenbank",
@@ -61,7 +66,8 @@
       "bezugsstelle": "ghcr.io/mannewolff/kanban-kit-backup:2.17.0",
       "fassung": "2.17.0",
       "pruefung": "eigen",
-      "ausgeliefert": true
+      "ausgeliefert": true,
+      "basis": "Sicherung: Basis"
     },
     {
       "name": "Sicherung: Werkzeugstufe",
@@ -71,7 +77,8 @@
       "fassung": "bookworm-20260918-slim",
       "pruefung": "bezug",
       "digest": "sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251",
-      "ausgeliefert": true
+      "ausgeliefert": true,
+      "verwendung": "bau"
     },
     {
       "name": "Sicherung: Basis",
@@ -107,7 +114,8 @@
       "fassung": "22.23.3-alpine",
       "pruefung": "bezug",
       "digest": "sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402",
-      "ausgeliefert": true
+      "ausgeliefert": true,
+      "verwendung": "bau"
     },
     {
       "name": "Bau: Backend",
@@ -117,7 +125,8 @@
       "fassung": "3.9.16-eclipse-temurin-25",
       "pruefung": "bezug",
       "digest": "sha256:93b8a14ea2f412782e4e842651273b4d903e35cc496284f178fbbe2d67d00976",
-      "ausgeliefert": true
+      "ausgeliefert": true,
+      "verwendung": "bau"
     },
     {
       "name": "Laufzeit",

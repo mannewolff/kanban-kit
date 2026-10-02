@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,7 @@ import {
   ohneDigest,
   fundstellenAbbilder,
   digestAbweichungen,
+  letztesAbbildAusDockerfile,
 } from './bezugspruefung.mjs';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
@@ -756,4 +757,80 @@ test('bausteineLesen weist einen Digest in falscher Form ab', () => {
   writeFileSync(pfad, JSON.stringify({ bausteine: [{ ...ABBILD, digest: 'sha256:abc' }] }));
   assert.throws(() => bausteineLesen(pfad), /Digest/);
   rmSync(verzeichnis, { recursive: true, force: true });
+});
+
+// --- Verwendung und Basis (Issue #1353, Plan #1351, E1/E5) ----------------
+
+function listeAnlegen(bausteine) {
+  const verzeichnis = mkdtempSync(join(tmpdir(), 'bausteine-'));
+  const pfad = join(verzeichnis, 'bausteine.json');
+  writeFileSync(pfad, JSON.stringify({ bausteine }));
+  return { verzeichnis, pfad };
+}
+
+test('bausteineLesen nimmt verwendung "bau" und einen Eintrag ohne verwendung an', () => {
+  const { verzeichnis, pfad } = listeAnlegen([{ ...ABBILD, verwendung: 'bau' }, { ...ABBILD, name: 'zwei' }]);
+  assert.equal(bausteineLesen(pfad).length, 2);
+  rmSync(verzeichnis, { recursive: true, force: true });
+});
+
+test('bausteineLesen weist jede andere verwendung als "bau" ab', () => {
+  for (const verwendung of ['betrieb', 'Bau', '', null, true]) {
+    const { verzeichnis, pfad } = listeAnlegen([{ ...ABBILD, verwendung }]);
+    assert.throws(() => bausteineLesen(pfad), /verwendung/, `verwendung ${JSON.stringify(verwendung)}`);
+    rmSync(verzeichnis, { recursive: true, force: true });
+  }
+});
+
+test('bausteineLesen nimmt eine basis an, die einen Abbild-Baustein der Liste nennt', () => {
+  const { verzeichnis, pfad } = listeAnlegen([{ ...EIGEN, basis: ABBILD.name }, ABBILD]);
+  assert.equal(bausteineLesen(pfad)[0].basis, ABBILD.name);
+  rmSync(verzeichnis, { recursive: true, force: true });
+});
+
+test('bausteineLesen weist eine basis mit unbekanntem Namen ab', () => {
+  const { verzeichnis, pfad } = listeAnlegen([{ ...EIGEN, basis: 'gibt es nicht' }, ABBILD]);
+  assert.throws(() => bausteineLesen(pfad), /basis/);
+  rmSync(verzeichnis, { recursive: true, force: true });
+});
+
+test('bausteineLesen weist eine basis ab, die ein Archiv nennt', () => {
+  const { verzeichnis, pfad } = listeAnlegen([{ ...EIGEN, basis: ARCHIV.name }, ARCHIV]);
+  assert.throws(() => bausteineLesen(pfad), /basis/);
+  rmSync(verzeichnis, { recursive: true, force: true });
+});
+
+test('letztesAbbildAusDockerfile nennt das Abbild des letzten FROM ohne Digest und ohne Schalter', () => {
+  const text = [
+    `FROM --platform=$BUILDPLATFORM node:22-alpine@${DIGEST_A} AS frontend`,
+    'RUN echo FROM nicht am Zeilenanfang',
+    `from eclipse-temurin:25-jre@${DIGEST_B} AS runtime`,
+  ].join('\n');
+  assert.equal(letztesAbbildAusDockerfile(text), 'eclipse-temurin:25-jre');
+  assert.equal(letztesAbbildAusDockerfile('RUN true\n'), null);
+});
+
+test('die Liste traegt verwendung "bau" genau an den Bauwerkzeugen', () => {
+  const bausteine = bausteineLesen(join(HIER, 'bausteine.json'));
+  const bau = bausteine.filter((b) => b.verwendung !== undefined).map((b) => b.name).sort();
+  assert.deepEqual(bau, ['Bau: Backend', 'Bau: Frontend', 'Sicherung: Werkzeugstufe']);
+});
+
+test('die Liste traegt basis genau an Anwendung und Sicherung', () => {
+  const bausteine = bausteineLesen(join(HIER, 'bausteine.json'));
+  const basis = Object.fromEntries(bausteine.filter((b) => b.basis !== undefined).map((b) => [b.name, b.basis]));
+  assert.deepEqual(basis, { Anwendung: 'Laufzeit', Sicherung: 'Sicherung: Basis' });
+});
+
+test('das letzte FROM jedes eigenen Dockerfiles ist die Bezugsstelle der basis seines Abbilds', () => {
+  const bausteine = bausteineLesen(join(HIER, 'bausteine.json'));
+  const nachName = new Map(bausteine.map((b) => [b.name, b]));
+  for (const [abbild, datei] of [
+    ['Anwendung', 'Dockerfile'],
+    ['Sicherung', join('backup', 'Dockerfile')],
+  ]) {
+    const basis = nachName.get(nachName.get(abbild).basis);
+    const letztes = letztesAbbildAusDockerfile(readFileSync(join(WURZEL, datei), 'utf-8'));
+    assert.equal(letztes, basis.bezugsstelle, `${datei}: letztes FROM gegen basis von ${abbild}`);
+  }
 });

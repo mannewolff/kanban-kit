@@ -35,6 +35,8 @@ import { fileURLToPath } from 'node:url';
 
 export const ARTEN = ['abbild', 'archiv'];
 export const PRUEFARTEN = ['bezug', 'keine', 'eigen'];
+/** Der einzige erlaubte Wert von `verwendung`; ohne das Feld steckt ein Abbild im Betrieb. */
+export const VERWENDUNG_BAU = 'bau';
 
 /**
  * Die feste Begruendung der Pruefart `eigen`. Sie traegt KEINE `ablaufversion`: Anders als bei
@@ -105,6 +107,19 @@ export function bausteineLesen(pfad) {
     }
     if (baustein.digest !== undefined && !DIGEST_FORM.test(baustein.digest)) {
       throw new Error(`Baustein ${wer} mit Digest in falscher Form`);
+    }
+    // `verwendung` trennt die Bauwerkzeuge ab (Plan #1351, E5): Die Sicherheitspruefung zeigt ihre
+    // Befunde nur. Ein vertippter Wert machte aus einem Bauwerkzeug still ein ausgeliefertes Abbild.
+    if (baustein.verwendung !== undefined && baustein.verwendung !== VERWENDUNG_BAU) {
+      throw new Error(`Baustein ${wer} mit unbekannter verwendung`);
+    }
+  }
+  // `basis` nennt den Basis-Baustein eines eigenen Abbilds (Plan #1351, E1). Erst nach dem ersten
+  // Durchgang pruefbar, weil die Basis in der Liste hinter dem Abbild stehen darf.
+  const abbildNamen = new Set(bausteine.filter((b) => b.art === 'abbild').map((b) => b.name));
+  for (const baustein of bausteine) {
+    if (baustein.basis !== undefined && !abbildNamen.has(baustein.basis)) {
+      throw new Error(`Baustein ${baustein.name} mit basis ohne Abbild-Baustein: ${baustein.basis}`);
     }
   }
   return bausteine;
@@ -360,6 +375,17 @@ export function abbilderAusDockerfile(text) {
     if (!stufen.has(wert.toLowerCase())) abbilder.add(wert);
   }
   return abbilder;
+}
+
+/**
+ * Das Abbild des letzten FROM ohne Digest — die Basis, auf der das gebaute Abbild aufsetzt. Gegen
+ * sie haelt der Test die `basis` der eigenen Abbilder (Plan #1351, E1): Hebt ein Dockerfile seine
+ * Laufzeitstufe auf einen anderen Baustein, stimmte die Zuordnung "uebernommen" sonst still nicht
+ * mehr.
+ */
+export function letztesAbbildAusDockerfile(text) {
+  const treffer = [...text.matchAll(/^FROM\s+(?:--\S+\s+)*(\S+)/gim)].at(-1);
+  return treffer ? ohneDigest(treffer[1]) : null;
 }
 
 /** Die drei Testcontainers-Muster aus E9. */
