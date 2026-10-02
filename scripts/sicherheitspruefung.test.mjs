@@ -15,6 +15,8 @@ import {
   HILFE,
   argumenteZerlegen,
   zieleBilden,
+  referenzBezugsstelle,
+  registryTagsHolen,
   trivyArgumente,
   trivyAusgabeLesen,
   ausnahmenLesen,
@@ -327,7 +329,7 @@ test('Regel 10: die Zusammenfassung wird auch bei gruenem Lauf geschrieben', asy
 
 test('eine Ausgabe ohne Results ist ein sauberes Ziel', () => {
   const befunde = trivyAusgabeLesen(fixture('sbom-ohne-ergebnisse.json'));
-  assert.deepEqual(befunde, { schwachstellen: [], geheimnisse: [] });
+  assert.deepEqual(befunde, { schwachstellen: [], geheimnisse: [], erstellt: null });
 });
 
 test('eine Ausgabe, die kein Trivy-JSON ist, wird abgelehnt', () => {
@@ -456,36 +458,47 @@ test('trivyAusfuehren bricht auf das Signal hin ab', async () => {
 
 // --- Regel 12: Zielliste --------------------------------------------------
 
-test('Regel 12: aus der Bausteinliste nur ausgelieferte fremde Abbilder mit Pruefart bezug', () => {
+/** Tag-Abfrage ohne Netz: Jede Bezugsstelle kennt nur ihren eigenen Tag. */
+const NUR_EIGENER_TAG = async (bezugsstelle) => [bezugsstelle.slice(bezugsstelle.lastIndexOf(':') + 1)];
+
+test('Regel 12: aus der Bausteinliste nur ausgelieferte fremde Abbilder mit Pruefart bezug', async () => {
   const bausteine = bausteineLesen(join(TESTDATEN, 'bausteine.json'));
-  const ziele = zieleBilden(bausteine, {
+  const ziele = await zieleBilden(bausteine, {
     abbilder: [],
     sbom: null,
     sperrdateien: [],
     arbeitsbaum: null,
-  });
+  }, { tagsHolen: NUR_EIGENER_TAG });
   assert.deepEqual(ziele, [
     {
       art: 'abbild',
       name: 'postgres:16.15',
       referenz: 'postgres:16.15@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54',
     },
+    {
+      art: 'abbild',
+      rolle: 'referenz',
+      name: 'postgres:16.15 (aktuell: 16.15)',
+      referenz: 'postgres:16.15',
+      gebunden: 'postgres:16.15',
+    },
     { art: 'abbild', name: 'caddy:2.11.4', referenz: 'caddy:2.11.4', verwendung: 'bau' },
   ]);
 });
 
-test('Regel 12: dazu die per Argument uebergebenen Ziele', () => {
+test('Regel 12: dazu die per Argument uebergebenen Ziele', async () => {
   const bausteine = bausteineLesen(join(TESTDATEN, 'bausteine.json'));
-  const ziele = zieleBilden(bausteine, {
+  const ziele = await zieleBilden(bausteine, {
     abbilder: ['kanban-kit:pruefung', 'kanban-kit-backup:pruefung'],
     sbom: 'target/bom.json',
     sperrdateien: ['frontend/package-lock.json', 'docs-site/package-lock.json'],
     arbeitsbaum: '.',
-  });
+  }, { tagsHolen: NUR_EIGENER_TAG });
   assert.deepEqual(
     ziele.map((z) => `${z.art} ${z.name}`),
     [
       'abbild postgres:16.15',
+      'abbild postgres:16.15 (aktuell: 16.15)',
       'abbild caddy:2.11.4',
       'abbild kanban-kit:pruefung',
       'abbild kanban-kit-backup:pruefung',
@@ -497,9 +510,9 @@ test('Regel 12: dazu die per Argument uebergebenen Ziele', () => {
   );
 });
 
-test('Regel 12: die echte Bausteinliste liefert kein Testabbild und kein eigenes Abbild', () => {
+test('Regel 12: die echte Bausteinliste liefert kein Testabbild und kein eigenes Abbild', async () => {
   const bausteine = bausteineLesen(join(HIER, 'bausteine.json'));
-  const namen = zieleBilden(bausteine, { abbilder: [], sbom: null, sperrdateien: [], arbeitsbaum: null })
+  const namen = (await zieleBilden(bausteine, { abbilder: [], sbom: null, sperrdateien: [], arbeitsbaum: null }, { tagsHolen: NUR_EIGENER_TAG }))
     .map((z) => z.name);
   assert.ok(namen.length > 0);
   assert.ok(!namen.some((n) => n.includes('mailpit')));
@@ -572,6 +585,286 @@ test('ein unbekannter Schalter endet mit 2 und nennt die Hilfe', () => {
   });
   assert.equal(lauf.status, 2);
   assert.match(lauf.stderr, /--gibts-nicht/);
+});
+
+// --- Referenzziele fuer uebernommene Bausteine (Issue #1356, Plan #1351 E2/E10/E11) ---
+
+const REFERENZ = {
+  art: 'abbild',
+  rolle: 'referenz',
+  name: 'postgres:16.15 (aktuell: 16.16)',
+  referenz: 'postgres:16.16',
+  gebunden: 'postgres:16.15',
+};
+
+test('Referenz: neuester Tag derselben Hauptlinie und Variante', () => {
+  assert.equal(
+    referenzBezugsstelle('postgres:16.15-bookworm', ['16.15-bookworm', '16.16-bookworm', '16.16', '17.1-bookworm']),
+    'postgres:16.16-bookworm',
+  );
+  assert.equal(referenzBezugsstelle('chrislusf/seaweedfs:4.47', ['4.47', '4.48', '5.0']), 'chrislusf/seaweedfs:4.48');
+});
+
+test('Referenz: ist der eigene Tag der hoechste, ist die Referenz derselbe Tag — auch wenn die Liste ihn nicht nennt', () => {
+  assert.equal(referenzBezugsstelle('caddy:2.11.4', ['2.11.3', '2.11.4', '2.11.4-alpine', '3.0']), 'caddy:2.11.4');
+  assert.equal(referenzBezugsstelle('caddy:2.11.4', []), 'caddy:2.11.4');
+});
+
+test('Referenz: numerisch verglichen, nicht als Text', () => {
+  assert.equal(referenzBezugsstelle('postgres:16.9', ['16.9', '16.10', '16.2']), 'postgres:16.10');
+});
+
+test('Referenz: die Baunummer nach Unterstrich zaehlt zur Fassung, nicht zur Variante', () => {
+  assert.equal(
+    referenzBezugsstelle('eclipse-temurin:25.0.4.1_1-jre', ['25.0.4.1_1-jre', '25.0.5_11-jre', '25.0.5_11-jdk', '26_35-jre']),
+    'eclipse-temurin:25.0.5_11-jre',
+  );
+});
+
+test('Referenz: Registry mit Port und Repository mit Pfad bleiben erhalten', () => {
+  assert.equal(referenzBezugsstelle('localhost:5000/team/abbild:1.2', ['1.3']), 'localhost:5000/team/abbild:1.3');
+});
+
+test('Referenz: ein Tag ohne Ziffernanfang hat keine Referenz', () => {
+  assert.equal(referenzBezugsstelle('debian:bookworm-20260918-slim', ['bookworm-20261001-slim']), null);
+  assert.equal(referenzBezugsstelle('postgres', ['16']), null);
+});
+
+test('zieleBilden: fremdes Abbild mit Digest bekommt ein Referenzziel ohne Digest, Bau-Abbilder keines', async () => {
+  const bausteine = bausteineLesen(join(TESTDATEN, 'bausteine.json'));
+  const abgefragt = [];
+  const ziele = await zieleBilden(bausteine, { abbilder: [], sbom: null, sperrdateien: [], arbeitsbaum: null }, {
+    tagsHolen: async (bezugsstelle) => {
+      abgefragt.push(bezugsstelle);
+      return ['16.15', '16.16', '16.16-bookworm', '17.1'];
+    },
+  });
+  assert.deepEqual(abgefragt, ['postgres:16.15']);
+  assert.deepEqual(ziele.filter((z) => z.rolle === 'referenz'), [REFERENZ]);
+  assert.ok(!ziele.some((z) => z.rolle === 'referenz' && z.gebunden === 'caddy:2.11.4'));
+});
+
+test('zieleBilden: ein fremdes Abbild ohne Digest bekommt kein Referenzziel', async () => {
+  const bausteine = [{ name: 'X', art: 'abbild', bezugsstelle: 'caddy:2.11.4', pruefung: 'bezug', ausgeliefert: true }];
+  const ziele = await zieleBilden(bausteine, { abbilder: [], sbom: null, sperrdateien: [], arbeitsbaum: null }, {
+    tagsHolen: async () => assert.fail('keine Abfrage ohne Digest'),
+  });
+  assert.deepEqual(ziele.map((z) => z.name), ['caddy:2.11.4']);
+});
+
+test('zieleBilden: ein Fehler beim Abfragen der Tag-Liste wird zum Referenzziel mit Fehler', async () => {
+  const bausteine = bausteineLesen(join(TESTDATEN, 'bausteine.json'));
+  const ziele = await zieleBilden(bausteine, { abbilder: [], sbom: null, sperrdateien: [], arbeitsbaum: null }, {
+    tagsHolen: async () => {
+      throw new Error('Tag-Liste antwortete 503');
+    },
+  });
+  const referenz = ziele.find((z) => z.rolle === 'referenz');
+  assert.equal(referenz.name, 'postgres:16.15 (aktuell: unbekannt)');
+  assert.equal(referenz.gebunden, 'postgres:16.15');
+  assert.equal(referenz.fehler, 'Tag-Liste nicht abrufbar: Tag-Liste antwortete 503');
+});
+
+test('zieleBilden: ein Netzfehler nennt seine Ursache', async () => {
+  const bausteine = bausteineLesen(join(TESTDATEN, 'bausteine.json'));
+  const ziele = await zieleBilden(bausteine, { abbilder: [], sbom: null, sperrdateien: [], arbeitsbaum: null }, {
+    tagsHolen: async () => {
+      throw new Error('fetch failed', { cause: new Error('getaddrinfo ENOTFOUND registry-1.docker.io') });
+    },
+  });
+  assert.equal(
+    ziele.find((z) => z.rolle === 'referenz').fehler,
+    'Tag-Liste nicht abrufbar: fetch failed: getaddrinfo ENOTFOUND registry-1.docker.io',
+  );
+});
+
+test('zieleBilden: ein Tag ohne Ziffernanfang hat kein Referenzziel und erscheint als Hinweis', async () => {
+  const bausteine = [{
+    name: 'X', art: 'abbild', bezugsstelle: 'beispiel:stabil', pruefung: 'bezug', ausgeliefert: true, digest: 'sha256:ab',
+  }];
+  const ziele = await zieleBilden(bausteine, { abbilder: [], sbom: null, sperrdateien: [], arbeitsbaum: null }, {
+    tagsHolen: async () => ['stabil'],
+  });
+  assert.equal(ziele.length, 1);
+  assert.match(ziele[0].ohneReferenz, /beginnt nicht mit einer Ziffer/);
+  const urteil = urteilen([{ ziel: ziele[0], befunde: { schwachstellen: [], geheimnisse: [], erstellt: null } }], KEINE_AUSNAHMEN, { heute: HEUTE });
+  assert.deepEqual(urteil.sperrend, []);
+  assert.equal(urteil.hinweise.length, 1);
+  assert.equal(urteil.hinweise[0].ziel, 'beispiel:stabil');
+  assert.match(urteil.hinweise[0].text, /kein Referenzziel/);
+});
+
+test('zieleBilden: ein eigenes Abbild traegt den Namen seines Basis-Ziels', async () => {
+  const bausteine = bausteineLesen(join(TESTDATEN, 'bausteine.json'));
+  const ziele = await zieleBilden(bausteine, {
+    abbilder: ['anwendung:pruefung', 'unbekannt:pruefung'], sbom: null, sperrdateien: [], arbeitsbaum: null,
+  }, { tagsHolen: NUR_EIGENER_TAG });
+  assert.deepEqual(ziele.find((z) => z.name === 'anwendung:pruefung'), {
+    art: 'abbild', name: 'anwendung:pruefung', referenz: 'anwendung:pruefung', basis: 'postgres:16.15',
+  });
+  assert.deepEqual(ziele.find((z) => z.name === 'unbekannt:pruefung'), {
+    art: 'abbild', name: 'unbekannt:pruefung', referenz: 'unbekannt:pruefung',
+  });
+});
+
+test('zieleBilden: die eigenen Abbilder der echten Liste tragen ihre Basis', async () => {
+  const bausteine = bausteineLesen(join(HIER, 'bausteine.json'));
+  const ziele = await zieleBilden(bausteine, {
+    abbilder: ['kanban-kit:pruefung', 'kanban-kit-backup:pruefung'], sbom: null, sperrdateien: [], arbeitsbaum: null,
+  }, { tagsHolen: NUR_EIGENER_TAG });
+  const basis = (name) => ziele.find((z) => z.name === name).basis;
+  assert.equal(basis('kanban-kit:pruefung'), 'eclipse-temurin:25.0.4.1_1-jre');
+  assert.equal(basis('kanban-kit-backup:pruefung'), 'postgres:16.15-bookworm');
+  for (const name of [basis('kanban-kit:pruefung'), basis('kanban-kit-backup:pruefung')]) {
+    assert.ok(ziele.some((z) => z.name === name && !z.rolle), name);
+  }
+});
+
+test('zieleBilden: die echte Liste bekommt je fremdem Betriebs-Abbild ein Referenzziel, Bauwerkzeuge keines', async () => {
+  const bausteine = bausteineLesen(join(HIER, 'bausteine.json'));
+  const ziele = await zieleBilden(bausteine, { abbilder: [], sbom: null, sperrdateien: [], arbeitsbaum: null }, {
+    tagsHolen: NUR_EIGENER_TAG,
+  });
+  const gebunden = ziele.filter((z) => z.rolle === 'referenz').map((z) => z.gebunden);
+  const erwartet = bausteine
+    .filter((b) => b.art === 'abbild' && b.ausgeliefert && b.pruefung === 'bezug' && b.digest && b.verwendung !== 'bau')
+    .map((b) => b.bezugsstelle);
+  assert.ok(erwartet.length > 0);
+  assert.deepEqual(gebunden, erwartet);
+});
+
+test('trivyAusgabeLesen: fassung je Schwachstelle und erstellt je Bericht', () => {
+  const befunde = trivyAusgabeLesen(fixture('abbild-referenz.json'));
+  assert.equal(befunde.erstellt, '2026-09-21T08:15:00Z');
+  assert.equal(befunde.schwachstellen[0].fassung, '2.9.14');
+  const ohne = trivyAusgabeLesen(fixture('abbild-befunde.json'));
+  assert.equal(ohne.erstellt, null);
+  assert.equal(ohne.schwachstellen[0].fassung, '3.0.15-1');
+  const ohneFassung = trivyAusgabeLesen(JSON.stringify({
+    Metadata: { ImageConfig: {} },
+    Results: [{ Target: 't', Vulnerabilities: [{ VulnerabilityID: 'CVE-1', PkgName: 'p', Severity: 'HIGH' }] }],
+  }));
+  assert.equal(ohneFassung.erstellt, null);
+  assert.equal(ohneFassung.schwachstellen[0].fassung, null);
+});
+
+test('urteilen: Referenzziele bekommen kein Urteil und keinen Ausnahmeabgleich', () => {
+  const liste = ausnahmen([
+    { kennung: 'CVE-2026-1002', ziel: REFERENZ.name, begruendung: 'Upstream', ablauf: '2026-12-31' },
+  ]);
+  const urteil = urteilen([ergebnis(REFERENZ, 'abbild-befunde.json')], liste, { heute: HEUTE });
+  assert.deepEqual(urteil.sperrend, []);
+  assert.deepEqual(urteil.ohneKorrektur, []);
+  assert.deepEqual(urteil.genutzt, []);
+  assert.deepEqual(urteil.hinweise.map((h) => h.ziel), [REFERENZ.name]);
+});
+
+test('urteilen: ein Fehler beim Pruefen des Referenzziels ist "Ziel nicht geprueft" und sperrt', () => {
+  const urteil = urteilen([{ ziel: REFERENZ, fehler: 'trivy endete mit 1' }], KEINE_AUSNAHMEN, { heute: HEUTE });
+  assert.deepEqual(urteil.sperrend, [{ ziel: REFERENZ.name, text: 'Ziel nicht geprueft: trivy endete mit 1' }]);
+});
+
+test('Zusammenfassung: Referenzziele stehen gekennzeichnet unter "Gepruefte Ziele"', () => {
+  const text = zusammenfassung(urteilen([ergebnis(ABBILD, 'sperrdatei-sauber.json'), ergebnis(REFERENZ, 'abbild-referenz.json')], KEINE_AUSNAHMEN, { heute: HEUTE }));
+  const ziele = text.slice(text.indexOf('### Gepruefte Ziele'));
+  assert.match(ziele, /^- abbild: postgres:16\.15$/m);
+  assert.match(ziele, /^- abbild \(Referenz\): postgres:16\.15 \(aktuell: 16\.16\)$/m);
+  assert.match(text, /keine sperrenden Befunde/);
+});
+
+test('laufen: ein Referenzziel mit Fehler aus der Tag-Abfrage wird nicht geprueft und sperrt', async () => {
+  const aufgerufen = [];
+  const kaputt = { ...REFERENZ, name: 'postgres:16.15 (aktuell: unbekannt)', referenz: null, fehler: 'Tag-Liste nicht abrufbar: 503' };
+  const { urteil, exitcode } = await laufen([kaputt], {
+    ausfuehren: async (argumente) => {
+      aufgerufen.push(argumente);
+      return fixture('sperrdatei-sauber.json');
+    },
+    ausnahmen: KEINE_AUSNAHMEN,
+    schreiben: () => {},
+    umgebung: {},
+  });
+  assert.deepEqual(aufgerufen, []);
+  assert.equal(exitcode, 1);
+  assert.deepEqual(urteil.sperrend, [{ ziel: kaputt.name, text: 'Ziel nicht geprueft: Tag-Liste nicht abrufbar: 503' }]);
+});
+
+test('laufen: ein fehlgeschlagener Werkzeugaufruf am Referenzziel sperrt unter dessen Namen', async () => {
+  const { urteil, exitcode } = await laufen([REFERENZ], {
+    ausfuehren: async (argumente) => {
+      assert.equal(argumente.at(-1), 'postgres:16.16');
+      throw new Error('trivy endete mit 1: manifest unknown');
+    },
+    ausnahmen: KEINE_AUSNAHMEN,
+    schreiben: () => {},
+    umgebung: {},
+  });
+  assert.equal(exitcode, 1);
+  assert.equal(urteil.sperrend[0].ziel, REFERENZ.name);
+  assert.match(urteil.sperrend[0].text, /Ziel nicht geprueft: trivy endete mit 1/);
+});
+
+test('Gesamtfrist: 45 Minuten, weil Referenzziele dazukommen (E11)', () => {
+  assert.equal(FRIST_GESAMT_MS, 2_700_000);
+});
+
+// --- Tag-Liste der Registry (ohne Netz: holen ist ersetzt) ------------------
+
+function antwort(status, { json = null, kopf = {} } = {}) {
+  const kleinKopf = Object.fromEntries(Object.entries(kopf).map(([k, v]) => [k.toLowerCase(), v]));
+  return { ok: status >= 200 && status < 300, status, headers: { get: (n) => kleinKopf[n.toLowerCase()] ?? null }, json: async () => json };
+}
+
+test('registryTagsHolen: anonymes Token nach 401, dann alle Seiten der Tag-Liste', async () => {
+  const aufrufe = [];
+  const holen = async (url, optionen = {}) => {
+    aufrufe.push({ url, autorisierung: optionen.headers?.Authorization ?? null });
+    if (url.startsWith('https://auth.docker.io/')) return antwort(200, { json: { token: 'T' } });
+    if (!optionen.headers?.Authorization) {
+      return antwort(401, { kopf: { 'WWW-Authenticate': 'Bearer realm="https://auth.docker.io/token",service="registry.docker.io"' } });
+    }
+    if (url.includes('last=16.16')) return antwort(200, { json: { name: 'library/postgres', tags: ['17.1'] } });
+    return antwort(200, {
+      json: { name: 'library/postgres', tags: ['16.15', '16.16'] },
+      kopf: { Link: '</v2/library/postgres/tags/list?last=16.16&n=1000>; rel="next"' },
+    });
+  };
+  const tags = await registryTagsHolen('postgres:16.15', { holen });
+  assert.deepEqual(tags, ['16.15', '16.16', '17.1']);
+  assert.equal(aufrufe[0].url, 'https://registry-1.docker.io/v2/library/postgres/tags/list?n=1000');
+  assert.equal(aufrufe[1].url, 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fpostgres%3Apull');
+  assert.equal(aufrufe[2].autorisierung, 'Bearer T');
+  assert.equal(aufrufe[3].url, 'https://registry-1.docker.io/v2/library/postgres/tags/list?last=16.16&n=1000');
+  assert.equal(aufrufe[3].autorisierung, 'Bearer T');
+});
+
+test('registryTagsHolen: andere v2-Registry ohne Anmeldung', async () => {
+  const holen = async (url) => {
+    assert.equal(url, 'https://ghcr.io/v2/team/abbild/tags/list?n=1000');
+    return antwort(200, { json: { tags: ['1.0', '1.1'] } });
+  };
+  assert.deepEqual(await registryTagsHolen('ghcr.io/team/abbild:1.0', { holen }), ['1.0', '1.1']);
+});
+
+test('registryTagsHolen: jede Fehlantwort wirft mit Grund', async () => {
+  await assert.rejects(registryTagsHolen('postgres:16.15', { holen: async () => antwort(503) }), /Tag-Liste antwortete 503/);
+  await assert.rejects(
+    registryTagsHolen('postgres:16.15', { holen: async () => antwort(401) }),
+    /401 ohne verwertbaren WWW-Authenticate-Kopf/,
+  );
+  const tokenKaputt = async (url) => (url.startsWith('https://auth.')
+    ? antwort(500)
+    : antwort(401, { kopf: { 'WWW-Authenticate': 'Bearer realm="https://auth.docker.io/token"' } }));
+  await assert.rejects(registryTagsHolen('postgres:16.15', { holen: tokenKaputt }), /Token-Abruf antwortete 500/);
+  await assert.rejects(
+    registryTagsHolen('ghcr.io/a/b:1', { holen: async () => antwort(200, { json: { tags: 'kaputt' } }) }),
+    /ohne Tag-Liste/,
+  );
+});
+
+test('registryTagsHolen: eine Seitenkette ohne Ende bricht ab', async () => {
+  const holen = async () => antwort(200, { json: { tags: ['1'] }, kopf: { Link: '</v2/a/b/tags/list?last=1>; rel="next"' } });
+  await assert.rejects(registryTagsHolen('ghcr.io/a/b:1', { holen }), /mehr als \d+ Seiten/);
 });
 
 // --- Regel 13: Ausgabe und Reihenfolge ------------------------------------

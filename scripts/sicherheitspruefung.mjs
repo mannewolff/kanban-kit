@@ -24,17 +24,20 @@ import { spawn } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { bausteineLesen } from './bezugspruefung.mjs';
+import { abbildTeile, bausteineLesen, tokenUrl, wwwAuthenticateLesen } from './bezugspruefung.mjs';
 
 /** Schwer heisst: die beiden hoechsten Schweregrade (PO-Entscheidung in #676). */
 export const SCHWERE = ['CRITICAL', 'HIGH'];
 
 /**
  * Frist je Ziel. Grosszuegig, weil der erste Lauf eines Abbilds die Schwachstellen-Datenbank und
- * das Abbild selbst laedt.
+ * das Abbild selbst laedt. Die Gesamtfrist traegt die Referenzziele mit (Plan #1351, E11).
  */
 export const FRIST_ZIEL_MS = 600_000;
-export const FRIST_GESAMT_MS = 1_800_000;
+export const FRIST_GESAMT_MS = 2_700_000;
+
+/** Frist je Abruf der Tag-Liste; eine Seite ist klein, ein Haenger soll den Lauf nicht aufhalten. */
+export const FRIST_TAGS_MS = 30_000;
 
 export const STANDARD_SPERRDATEIEN = ['frontend/package-lock.json', 'docs-site/package-lock.json'];
 
@@ -51,7 +54,9 @@ Ziele:
   --sperrdatei <pfad>   Sperrdatei (mehrfach moeglich; Standard: ${STANDARD_SPERRDATEIEN.join(', ')})
   --arbeitsbaum <pfad>  Verzeichnis fuer die Geheimnis-Suche (Standard: .)
   Dazu kommen aus der Bausteinliste alle fremden Abbilder mit art "abbild",
-  ausgeliefert true und pruefung "bezug".
+  ausgeliefert true und pruefung "bezug" — und je solchem Abbild mit digest und
+  ohne verwendung "bau" ein Referenzziel: der neueste Tag des Anbieters in
+  derselben Hauptlinie und Variante, anonym aus der Tag-Liste der Registry.
 
 Listen:
   --bausteine <pfad>    Bausteinliste (Standard: scripts/bausteine.json)
@@ -110,23 +115,175 @@ export function argumenteZerlegen(argumente) {
   return ergebnis;
 }
 
+// --- Referenz: neuester Tag der Linie ------------------------------------
+
+/** Bauwerkzeuge stecken nicht im ausgelieferten Abbild: gezeigt, nie sperrend (Plan #1351, E5). */
+const VERWENDUNG_BAU = 'bau';
+
+const ROLLE_REFERENZ = 'referenz';
+
+/**
+ * Zerlegt einen Tag in Fassung und Variante (Entscheidung in #1356): Die Fassung sind die Ziffern
+ * am Anfang, getrennt durch Punkt oder Unterstrich — der Unterstrich, weil eclipse-temurin seine
+ * Baunummer so anhaengt (`25.0.4.1_1-jre`) und sie sonst als Variante jede neuere Fassung
+ * ausschloesse. Der Rest ist die Variante (`-bookworm`, `-alpine`). Ohne Ziffernanfang: null.
+ */
+function tagZerlegen(tag) {
+  const treffer = /^(\d+(?:[._]\d+)*)(.*)$/.exec(tag);
+  if (!treffer) return null;
+  return { fassung: treffer[1].split(/[._]/).map(Number), variante: treffer[2] };
+}
+
+function fassungVergleichen(a, b) {
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const unterschied = (a[i] ?? -1) - (b[i] ?? -1);
+    if (unterschied !== 0) return unterschied;
+  }
+  return 0;
+}
+
+/** Trennt `name:tag` am letzten Doppelpunkt hinter dem letzten Schraegstrich (Registry mit Port). */
+function nameUndTag(bezugsstelle) {
+  const schraeg = bezugsstelle.lastIndexOf('/');
+  const trenner = bezugsstelle.indexOf(':', schraeg + 1);
+  return trenner === -1 ? null : { name: bezugsstelle.slice(0, trenner), tag: bezugsstelle.slice(trenner + 1) };
+}
+
+/**
+ * Die Referenz zu einer gebundenen Bezugsstelle (Plan #1351, E2): der numerisch hoechste Tag mit
+ * gleicher Hauptversion und gleicher Variante. Der eigene Tag zaehlt immer mit — ist er der hoechste,
+ * ist die Referenz sein aktueller Stand, und ein Neubau desselben Tags ist darin enthalten.
+ * Ohne Tag oder ohne Ziffernanfang: null.
+ */
+export function referenzBezugsstelle(bezugsstelle, tags) {
+  const teile = nameUndTag(bezugsstelle);
+  const eigen = teile && tagZerlegen(teile.tag);
+  if (!eigen) return null;
+  let bester = { tag: teile.tag, fassung: eigen.fassung };
+  for (const tag of tags) {
+    const kandidat = tagZerlegen(tag);
+    if (!kandidat || kandidat.variante !== eigen.variante || kandidat.fassung[0] !== eigen.fassung[0]) continue;
+    if (fassungVergleichen(kandidat.fassung, bester.fassung) > 0) bester = { tag, fassung: kandidat.fassung };
+  }
+  return `${teile.name}:${bester.tag}`;
+}
+
+const TAG_SEITEN_HOECHSTENS = 50;
+
+function tagListeUrl({ registry, repository }) {
+  return `https://${registry}/v2/${repository}/tags/list?n=1000`;
+}
+
+/** Der Link-Kopf der Registry nennt die naechste Seite relativ zur Registry. */
+function naechsteSeite(antwort, url) {
+  const link = antwort.headers.get('link');
+  const treffer = link && /<([^>]+)>\s*;\s*rel="?next"?/i.exec(link);
+  return treffer ? new URL(treffer[1], url).toString() : null;
+}
+
+/**
+ * Holt die Tag-Liste eines Abbilds anonym — Docker Hub und andere v2-Registries, nach dem Muster
+ * von `bezugspruefung.mjs`: erster Abruf ohne Anmeldung, beim 401 ein anonymes Token aus dem
+ * WWW-Authenticate-Kopf. Wirft mit Grund; der Aufrufer macht daraus "Ziel nicht geprueft".
+ */
+export async function registryTagsHolen(bezugsstelle, { holen = fetch, fristMs = FRIST_TAGS_MS } = {}) {
+  const teile = abbildTeile(bezugsstelle);
+  const abrufen = (url, kopfzeilen) => holen(url, { method: 'GET', headers: kopfzeilen, signal: AbortSignal.timeout(fristMs) });
+  let url = tagListeUrl(teile);
+  let kopfzeilen = {};
+  let antwort = await abrufen(url, kopfzeilen);
+  if (antwort.status === 401) {
+    const angabe = wwwAuthenticateLesen(antwort.headers.get('www-authenticate'));
+    if (!angabe) throw new Error('401 ohne verwertbaren WWW-Authenticate-Kopf');
+    const tokenAntwort = await abrufen(tokenUrl(angabe, teile), {});
+    if (!tokenAntwort.ok) throw new Error(`Token-Abruf antwortete ${tokenAntwort.status}`);
+    const koerper = await tokenAntwort.json();
+    kopfzeilen = { Authorization: `Bearer ${koerper.token ?? koerper.access_token}` };
+    antwort = await abrufen(url, kopfzeilen);
+  }
+  const tags = [];
+  for (let seite = 1; ; seite += 1) {
+    if (!antwort.ok) throw new Error(`Tag-Liste antwortete ${antwort.status}`);
+    const koerper = await antwort.json();
+    if (!Array.isArray(koerper?.tags)) throw new Error('Antwort ohne Tag-Liste');
+    tags.push(...koerper.tags);
+    const weiter = naechsteSeite(antwort, url);
+    if (!weiter) return tags;
+    if (seite >= TAG_SEITEN_HOECHSTENS) throw new Error(`Tag-Liste mit mehr als ${TAG_SEITEN_HOECHSTENS} Seiten`);
+    url = weiter;
+    antwort = await abrufen(url, kopfzeilen);
+  }
+}
+
 // --- Ziele ----------------------------------------------------------------
+
+/**
+ * Das Referenzziel traegt einen eigenen Namen (Plan #1351, E10): Der Name ist der Schluessel der
+ * Ausnahmeliste, und unter dem Namen des gebundenen Ziels traefe ihn jede Uebergangsausnahme.
+ * Geprueft wird ohne Digest — gemeint ist der aktuelle Stand beim Anbieter.
+ */
+async function referenzZiel(baustein, tagsHolen) {
+  const gebunden = baustein.bezugsstelle;
+  try {
+    const referenz = referenzBezugsstelle(gebunden, await tagsHolen(gebunden));
+    if (!referenz) return { ohneReferenz: `kein Referenzziel: Tag von ${gebunden} beginnt nicht mit einer Ziffer` };
+    const tag = nameUndTag(referenz).tag;
+    return { ziel: { art: 'abbild', rolle: ROLLE_REFERENZ, name: `${gebunden} (aktuell: ${tag})`, referenz, gebunden } };
+  } catch (fehler) {
+    return {
+      ziel: {
+        art: 'abbild',
+        rolle: ROLLE_REFERENZ,
+        name: `${gebunden} (aktuell: unbekannt)`,
+        referenz: null,
+        gebunden,
+        // fetch meldet Netzfehler nur als "fetch failed"; der wahre Grund steht an `cause`.
+        fehler: `Tag-Liste nicht abrufbar: ${fehler.message}${fehler.cause?.message ? `: ${fehler.cause.message}` : ''}`,
+      },
+    };
+  }
+}
+
+/** Das eigene Abbild aus dem CI-Job heisst wie das letzte Pfadsegment seiner Bezugsstelle. */
+function repositoryName(bezugsstelle) {
+  const teile = nameUndTag(bezugsstelle);
+  const name = teile ? teile.name : bezugsstelle;
+  return name.slice(name.lastIndexOf('/') + 1);
+}
+
+/** Der Name des Basis-Ziels eines eigenen Abbilds (#1353): die Bezugsstelle seines `basis`-Bausteins. */
+function basisZielName(bausteine, abbild) {
+  const eigen = bausteine.find((b) => b.pruefung === 'eigen' && b.basis && repositoryName(b.bezugsstelle) === repositoryName(abbild));
+  return bausteine.find((b) => eigen && b.name === eigen.basis)?.bezugsstelle ?? null;
+}
 
 /**
  * Bildet die Zielliste (E13). Fremde Abbilder werden mit ihrem Digest geprueft, wenn die Liste
  * einen nennt — geprueft wird so genau, was ausgeliefert wird. Der Name bleibt tag-foermig: Er ist
- * der Schluessel der Ausnahmeliste und soll nicht mit jedem Digest-Hub neu sperren.
+ * der Schluessel der Ausnahmeliste und soll nicht mit jedem Digest-Hub neu sperren. Hinter jedem
+ * gebundenen Betriebs-Abbild steht sein Referenzziel (Plan #1351, E2); `tagsHolen` ist wie
+ * `ausfuehren` austauschbar, damit die Tests ohne Netz laufen.
  */
-export function zieleBilden(bausteine, { abbilder, sbom, sperrdateien, arbeitsbaum }) {
-  const ziele = bausteine
-    .filter((b) => b.art === 'abbild' && b.ausgeliefert === true && b.pruefung === 'bezug')
-    .map((b) => ({
+export async function zieleBilden(bausteine, { abbilder, sbom, sperrdateien, arbeitsbaum }, { tagsHolen = registryTagsHolen } = {}) {
+  const ziele = [];
+  for (const b of bausteine) {
+    if (b.art !== 'abbild' || b.ausgeliefert !== true || b.pruefung !== 'bezug') continue;
+    const ziel = {
       art: 'abbild',
       name: b.bezugsstelle,
       referenz: b.digest ? `${b.bezugsstelle}@${b.digest}` : b.bezugsstelle,
       ...(b.verwendung ? { verwendung: b.verwendung } : {}),
-    }));
-  for (const name of abbilder) ziele.push({ art: 'abbild', name, referenz: name });
+    };
+    ziele.push(ziel);
+    if (!b.digest || b.verwendung === VERWENDUNG_BAU) continue;
+    const { ziel: referenz, ohneReferenz } = await referenzZiel(b, tagsHolen);
+    if (referenz) ziele.push(referenz);
+    else ziel.ohneReferenz = ohneReferenz;
+  }
+  for (const name of abbilder) {
+    const basis = basisZielName(bausteine, name);
+    ziele.push({ art: 'abbild', name, referenz: name, ...(basis ? { basis } : {}) });
+  }
   if (sbom) ziele.push({ art: 'sbom', name: sbom, referenz: sbom });
   for (const name of sperrdateien) ziele.push({ art: 'sperrdatei', name, referenz: name });
   if (arbeitsbaum) ziele.push({ art: 'arbeitsbaum', name: arbeitsbaum, referenz: arbeitsbaum });
@@ -166,6 +323,7 @@ export function trivyAusgabeLesen(text) {
         paket: v.PkgName,
         schweregrad: v.Severity,
         korrektur: v.FixedVersion || null,
+        fassung: v.InstalledVersion || null,
         bestandteil: ergebnis.Target,
         pfad: v.PkgPath || null,
       });
@@ -174,7 +332,7 @@ export function trivyAusgabeLesen(text) {
       geheimnisse.push({ kennung: g.RuleID, datei: g.Target ?? ergebnis.Target });
     }
   }
-  return { schwachstellen, geheimnisse };
+  return { schwachstellen, geheimnisse, erstellt: bericht.Metadata?.ImageConfig?.created ?? null };
 }
 
 // --- Ausnahmeliste --------------------------------------------------------
@@ -248,9 +406,6 @@ function schwachstellenText(s) {
   return `${s.kennung} (${s.schweregrad}) in ${s.paket} [${bestandteilText(s)}]`;
 }
 
-/** Bauwerkzeuge stecken nicht im ausgelieferten Abbild: gezeigt, nie sperrend (Plan #1351, E5). */
-const VERWENDUNG_BAU = 'bau';
-
 /**
  * Urteilt ueber die Ergebnisse aller Ziele. `heute` (JJJJ-MM-TT) ist der Pruefzeitpunkt: Ob eine
  * Ausnahme abgelaufen ist, entscheidet der Lauf und nicht der Tag ihres Eintrags.
@@ -277,6 +432,8 @@ export function urteilen(ergebnisse, { eintraege, formfehler }, { heute }) {
       sperrend.push({ ziel: ziel.name, text: `Ziel nicht geprueft: ${fehler}` });
       continue;
     }
+    // Referenzziele dienen nur dem Vergleich mit dem gebundenen Stand (E10): kein Urteil, keine Ausnahme.
+    if (ziel.rolle === ROLLE_REFERENZ) continue;
     for (const s of befunde.schwachstellen) {
       if (!SCHWERE.includes(s.schweregrad)) continue;
       if (ziel.verwendung === VERWENDUNG_BAU) {
@@ -309,12 +466,15 @@ export function urteilen(ergebnisse, { eintraege, formfehler }, { heute }) {
     }
   }
 
-  const hinweise = eintraege
-    .filter((e) => !beruehrt.has(e))
-    .map((e) => ({
-      ziel: e.ziel,
-      text: `Ausnahme ${e.kennung} fuer ${e.ziel} trifft keinen sperrenden Befund — Eintrag pruefen oder entfernen`,
-    }));
+  const hinweise = [
+    ...eintraege
+      .filter((e) => !beruehrt.has(e))
+      .map((e) => ({
+        ziel: e.ziel,
+        text: `Ausnahme ${e.kennung} fuer ${e.ziel} trifft keinen sperrenden Befund — Eintrag pruefen oder entfernen`,
+      })),
+    ...ergebnisse.filter((e) => e.ziel.ohneReferenz).map((e) => ({ ziel: e.ziel.name, text: e.ziel.ohneReferenz })),
+  ];
 
   return { sperrend, ohneKorrektur, bauwerkzeuge, genutzt, hinweise, ziele: ergebnisse.map((e) => e.ziel) };
 }
@@ -350,7 +510,7 @@ export function zusammenfassung(urteil) {
     ...abschnitt('Hinweise', urteil.hinweise),
     '### Gepruefte Ziele',
     '',
-    ...urteil.ziele.map((z) => `- ${z.art}: ${md(z.name)}`),
+    ...urteil.ziele.map((z) => `- ${z.art}${z.rolle === ROLLE_REFERENZ ? ' (Referenz)' : ''}: ${md(z.name)}`),
     '',
   ].join('\n');
 }
@@ -426,7 +586,9 @@ export async function laufen(ziele, {
   const beginn = jetzt();
   const ergebnisse = [];
   for (const ziel of ziele) {
-    if (jetzt() - beginn > gesamtFristMs) {
+    if (ziel.fehler) {
+      ergebnisse.push({ ziel, fehler: ziel.fehler });
+    } else if (jetzt() - beginn > gesamtFristMs) {
       ergebnisse.push({ ziel, fehler: `Gesamtfrist von ${sekunden(gesamtFristMs)} ueberschritten` });
     } else {
       ergebnisse.push(await zielPruefen(ziel, ausfuehren, fristMs));
@@ -460,7 +622,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     } catch (fehler) {
       ausnahmenText = `nicht lesbar: ${fehler.message}`;
     }
-    const { exitcode } = await laufen(zieleBilden(bausteine, argumente), { ausnahmen: ausnahmenLesen(ausnahmenText) });
+    const ziele = await zieleBilden(bausteine, argumente);
+    const { exitcode } = await laufen(ziele, { ausnahmen: ausnahmenLesen(ausnahmenText) });
     process.exitCode = exitcode;
   }
 }
