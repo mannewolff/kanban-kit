@@ -12,5 +12,714 @@
     "Ein Eintrag mit Formfehler gilt nicht und sperrt selbst; ein Eintrag ohne passenden Befund",
     "erscheint als Hinweis in der Zusammenfassung."
   ],
-  "ausnahmen": []
+  "ausnahmen": [
+    {
+      "kennung": "CVE-2026-103111",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-75804",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-84782",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-68121",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-61726",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-61729",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-25679",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-27145",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-32280",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-32281",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-32283",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33811",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33814",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33818",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39820",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39821",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39822",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39836",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-42499",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-42504",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56853",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56858",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56859",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56860",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56862",
+      "ziel": "postgres:16.15",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-68121",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-61726",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-61729",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-25679",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-27145",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-32280",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-32281",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-32283",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33811",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33814",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33818",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39820",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39821",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39822",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39836",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-42499",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-42504",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56853",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56858",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56859",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56860",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56862",
+      "ziel": "postgres:16.15-bookworm",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-84445",
+      "ziel": "chrislusf/seaweedfs:4.47",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56854",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-46600",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56852",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-84304",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-84445",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "GHSA-hrxh-6v49-42gf",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-27145",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33818",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39821",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39822",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-42504",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56853",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56858",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56859",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56860",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56862",
+      "ziel": "caddy:2.11.4",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-102276",
+      "ziel": "node:22.23.3-alpine",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-102278",
+      "ziel": "node:22.23.3-alpine",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-13149",
+      "ziel": "node:22.23.3-alpine",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-14257",
+      "ziel": "node:22.23.3-alpine",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-69152",
+      "ziel": "node:22.23.3-alpine",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-69192",
+      "ziel": "node:22.23.3-alpine",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-9496",
+      "ziel": "node:22.23.3-alpine",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33671",
+      "ziel": "node:22.23.3-alpine",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-48815",
+      "ziel": "node:22.23.3-alpine",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-84782",
+      "ziel": "maven:3.9.16-eclipse-temurin-25",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2024-45337",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-22869",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-47913",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39828",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39829",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39830",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39831",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39832",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39835",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-42508",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-46595",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-46597",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56854",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-68121",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-61726",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2025-61729",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-25679",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-27145",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-32280",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-32281",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-32283",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33811",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33814",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33818",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39820",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39821",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39822",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-39836",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-42499",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-42504",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56853",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56858",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56859",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56860",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56862",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2024-45338",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-25681",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-27136",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-46600",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-56852",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-33186",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-84304",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-84445",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "GHSA-hrxh-6v49-42gf",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
+      "ablauf": "2026-11-01"
+    }
+  ]
 }
