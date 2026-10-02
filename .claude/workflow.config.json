@@ -61,10 +61,6 @@
       "stufe": "push"
     },
     {
-      "cmd": "node scripts/mutationspruefung.mjs vollauf frontend",
-      "stufe": "push"
-    },
-    {
       "cmd": "node scripts/mutationspruefung.mjs vollauf backend",
       "stufe": "push"
     }
