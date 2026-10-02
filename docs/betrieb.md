@@ -489,6 +489,78 @@ Befehl mit einem Fehler und einem Exitcode ungleich null.
 Digest. Der Digest der eigenen Abbilder entsteht erst im Release-Lauf auf dem Tag, der Commit dieses
 Tags kann ihn also nicht tragen. Ihre Herkunft sichert stattdessen die Attestation oben.
 
+## Sicherheitsprüfung
+
+Jeder CI-Lauf prüft im Job „Sicherheit“ ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml))
+mit Trivy, was kanban-kit ausliefert, auf bekannte Schwachstellen und eingecheckte Geheimnisse. Das
+Urteil fällt [`scripts/sicherheitspruefung.mjs`](../scripts/sicherheitspruefung.mjs); die
+Ergebnisliste steht in der Zusammenfassung des Jobs „Sicherheit“ auf der Seite des CI-Laufs.
+
+**Was geprüft wird.**
+
+- die eigenen Abbilder (Anwendung und Sicherungsdienst), wie sie im CI-Lauf entstehen;
+- die Stückliste der Anwendung (`target/bom.json`);
+- die fremden Bausteine aus `bausteine.json` — Datenbank, Objektspeicher, Webserver und die
+  Bauwerkzeuge — in der Fassung, an die das Projekt gebunden ist;
+- die Sperrdateien `frontend/package-lock.json` und `docs-site/package-lock.json`;
+- den Arbeitsbaum auf eingecheckte Geheimnisse.
+
+Als schwer gelten die Schweregrade `CRITICAL` und `HIGH`. Eine schwere Lücke **ohne** Korrektur
+sperrt nie, steht aber sichtbar in der Liste. Jede Befundzeile nennt den Bestandteil, in dem die
+Lücke steckt (etwa das Betriebssystem-Paket oder das Programm samt Pfad), damit gleiche Befunde aus
+verschiedenen Programmen unterscheidbar sind. Ein Ziel, das nicht geprüft werden konnte (Frist
+überschritten, Werkzeug fehlt, Ausgabe unlesbar), sperrt als „Ziel nicht geprüft“.
+
+**Die drei Regeln für eine schwere Lücke mit Korrektur.**
+
+1. **Eigen sperrt sofort.** Steckt die Lücke in einem Bestandteil, den kanban-kit selbst
+   einbringt, sperrt sie die Veröffentlichung, bis sie behoben oder als Ausnahme eingetragen ist.
+2. **Übernommen sperrt nach 14 Tagen.** Steckt die Lücke in einem Baustein eines anderen Anbieters,
+   prüft der Lauf zusätzlich die aktuelle Anbieter-Fassung: den neuesten Tag derselben Linie
+   (gleiche Hauptversion, gleiche Variante wie `-alpine` oder `-bookworm`; der gebundene Tag zählt
+   mit). Enthält diese Fassung die Lücke noch, sperrt der Befund nicht — Grund in der Liste:
+   „Anbieter hat noch keine korrigierte Fassung“. Fehlt die Lücke dort, beginnt mit dem
+   Erstellungsdatum dieser Fassung eine Frist von **14 Tagen**: Innerhalb der Frist steht der Befund
+   mit „korrigierte Fassung seit <Datum>, Frist bis <Datum>“ in der Liste, danach sperrt er und
+   nennt Anbieter-Fassung, Datum und abgelaufene Frist. Dann ist es Zeit, die Bindung in
+   `bausteine.json` (bzw. Renovate) nachzuziehen. Ist das Erstellungsdatum unbekannt oder ein
+   Platzhalter vor 2000-01-01, sperrt der Befund mit „Erscheinungstag der Anbieter-Fassung unbekannt“.
+3. **Bauwerkzeuge informieren nur.** Bausteine mit `"verwendung": "bau"` in `bausteine.json`
+   (Bau: Frontend, Bau: Backend, Sicherung: Werkzeugstufe) stecken nicht in der ausgelieferten
+   Fassung. Ihre Befunde stehen im eigenen Abschnitt „Bauwerkzeuge (informiert, sperrt nicht)“ und
+   sperren nie.
+
+**Eigen oder übernommen — je Bestandteil.** Ein fremder Baustein ist als Ganzes übernommen. In
+einem eigenen Abbild entscheidet der Bestandteil: Ein eigenes Abbild nennt in `bausteine.json` per
+Feld `basis` den Baustein, auf dem es aufsetzt (etwa die Java-Laufzeit oder die Datenbank). Trägt
+dieser Basis-Baustein denselben Befund mit gleicher Kennung, gleichem Paket und **gleicher
+Fassung**, gilt der Befund als übernommen und folgt Regel 2 mit der Anbieter-Fassung des
+Basis-Bausteins. Alles andere — etwa Bibliotheken der Anwendung oder Werkzeuge, die der
+Sicherungsdienst selbst herunterlädt — ist eigen und folgt Regel 1.
+
+**Bekannte Unschärfe.** Baut der Anbieter denselben Tag nach der Korrektur erneut, rückt das
+Erstellungsdatum nach, und die 14-Tage-Frist beginnt von Neuem. Die Prüfung merkt sich keine
+früheren Erstellungsdaten; weil Renovate die Digests wöchentlich nachzieht, bleibt die Lücke klein.
+
+**Ausnahmeliste.** Was vorerst hingenommen wird, steht in
+[`scripts/sicherheitsausnahmen.json`](../scripts/sicherheitsausnahmen.json):
+
+```json
+{ "kennung": "CVE-…", "ziel": "postgres:16.15", "begruendung": "…", "ablauf": "JJJJ-MM-TT" }
+```
+
+Alle vier Felder sind Pflicht; `ziel` ist das Prüfziel (Abbild, Stückliste oder Sperrdatei). Die
+Ausnahme gilt einschließlich des Ablauftags, danach sperrt der nächste Lauf wieder. Ein Geheimnis
+darf nur als nachweislicher Fehlalarm ausgenommen werden — mit `"art": "fehlalarm"`, Trivys
+RuleID als `kennung` und dem Dateipfad als `ziel`, ohne `ablauf`. Ein Eintrag mit Formfehler gilt
+nicht und sperrt selbst; ein Eintrag ohne passenden Befund erscheint als Hinweis in der
+Zusammenfassung.
+
+**Übergang bis 2026-11-01.** Für die Befunde aus CI-Lauf #281 in fremden Abbildern, Bau-Abbildern
+und den übernommenen Bestandteilen der eigenen Abbilder stehen befristete Einträge in der
+Ausnahmeliste (Issue #1352), alle mit `ablauf` 2026-11-01. Ab dem 2026-11-02 urteilt die Prüfung
+für diese Befunde wieder allein nach den Regeln oben.
+
 ## Umstellung des Objektspeichers
 
 Der Speicher der Anhänge wechselt von MinIO auf SeaweedFS (Plan #1222). Für die laufende Instanz
