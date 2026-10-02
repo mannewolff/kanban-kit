@@ -6,6 +6,7 @@
 // Checkbox. Damit `[ ]`/`[x]` in allen Varianten einheitlich als Checkbox erscheinen, kanonisieren
 // wir die Marker vor dem Rendern zu `[ ]`/`[x]` — am Zeilenanfang und außerhalb von Code-Fences.
 // Nackte Marker ohne Listenmarker bekommen zusätzlich einen `- `, damit GFM sie als Liste erkennt.
+// Zeilen mit CRLF-Ende werden ebenso behandelt; das `\r` bleibt erhalten.
 // Beim Umschalten zählt `toggleTaskAt` die Checkboxen wie der Renderer: über denselben GFM-Parser.
 
 import type { ListItem, Nodes } from 'mdast'
@@ -40,33 +41,39 @@ function canonical(marker: string): string {
  */
 export function normalizeTaskLists(md: string): string {
   let inFence = false
+  const normalizeLine = (line: string): string => {
+    if (FENCE.test(line)) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) {
+      return line
+    }
+    const listed = LISTED.exec(line)
+    if (listed) {
+      const [, prefix, marker, rest] = listed
+      // Stryker disable next-line Regex: `/\s*/` statt `/^\s*/` ist gleichwertig — `\s*` passt immer schon an Stelle 0 (notfalls leer), und `replace` ohne `g` ersetzt nur diesen ersten Treffer.
+      const body = rest.replace(/^\s*/, '')
+      const suffix = body ? ` ${body}` : ''
+      return `${prefix}${canonical(marker)}${suffix}`
+    }
+    const naked = NAKED.exec(line)
+    if (naked) {
+      const [, indent, marker, rest] = naked
+      // Stryker disable next-line Regex: `/\s*/` statt `/^\s*/` ist gleichwertig — `\s*` passt immer schon an Stelle 0 (notfalls leer), und `replace` ohne `g` ersetzt nur diesen ersten Treffer.
+      const body = rest.replace(/^\s*/, '')
+      const suffix = body ? ` ${body}` : ''
+      return `${indent}- ${canonical(marker)}${suffix}`
+    }
+    return line
+  }
   return md
     .split('\n')
-    .map((line) => {
-      if (FENCE.test(line)) {
-        inFence = !inFence
-        return line
-      }
-      if (inFence) {
-        return line
-      }
-      const listed = LISTED.exec(line)
-      if (listed) {
-        const [, prefix, marker, rest] = listed
-        // Stryker disable next-line Regex: `/\s*/` statt `/^\s*/` ist gleichwertig — `\s*` passt immer schon an Stelle 0 (notfalls leer), und `replace` ohne `g` ersetzt nur diesen ersten Treffer.
-        const body = rest.replace(/^\s*/, '')
-        const suffix = body ? ` ${body}` : ''
-        return `${prefix}${canonical(marker)}${suffix}`
-      }
-      const naked = NAKED.exec(line)
-      if (naked) {
-        const [, indent, marker, rest] = naked
-        // Stryker disable next-line Regex: `/\s*/` statt `/^\s*/` ist gleichwertig — `\s*` passt immer schon an Stelle 0 (notfalls leer), und `replace` ohne `g` ersetzt nur diesen ersten Treffer.
-        const body = rest.replace(/^\s*/, '')
-        const suffix = body ? ` ${body}` : ''
-        return `${indent}- ${canonical(marker)}${suffix}`
-      }
-      return line
+    .map((raw) => {
+      // Bei CRLF bleibt das `\r` am Zeilenende stehen; `.` in LISTED/NAKED trifft es nicht.
+      // Abtrennen und wieder anhängen hält jedes Zeichen auf seiner Position (für toggleTaskAt).
+      const cr = raw.endsWith('\r') ? '\r' : ''
+      return normalizeLine(raw.slice(0, raw.length - cr.length)) + cr
     })
     .join('\n')
 }

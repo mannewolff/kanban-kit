@@ -109,6 +109,26 @@ describe('normalizeTaskLists', () => {
     expect(normalizeTaskLists('- [ ]   a')).toBe('- [ ] a')
     expect(normalizeTaskLists('[ ]   a')).toBe('- [ ] a')
   })
+
+  // Zeilen mit CRLF-Ende (Issue #1341): Das `\r` bleibt erhalten, der Marker wird trotzdem kanonisiert.
+
+  it('kanonisiert Listen-Items in Zeilen mit CRLF-Ende', () => {
+    expect(normalizeTaskLists('- [  ] a\r\n- [ ] b')).toBe('- [ ] a\r\n- [ ] b')
+    expect(normalizeTaskLists('- [] a\r\n')).toBe('- [ ] a\r\n')
+  })
+
+  it('kanonisiert nackte Marker in Zeilen mit CRLF-Ende', () => {
+    expect(normalizeTaskLists('[ ] a\r\n[x] b')).toBe('- [ ] a\r\n- [x] b')
+  })
+
+  it('kanonisiert einen Marker ohne Text in einer Zeile mit CRLF-Ende', () => {
+    expect(normalizeTaskLists('- [  ]\r\nx')).toBe('- [ ]\r\nx')
+  })
+
+  it('rührt Marker in Code-Fences mit CRLF-Ende nicht an', () => {
+    const md = '```\r\n[ ] kein Task\r\n```'
+    expect(normalizeTaskLists(md)).toBe(md)
+  })
 })
 
 describe('toggleTaskAt', () => {
@@ -198,6 +218,12 @@ describe('toggleTaskAt', () => {
   it('behandelt Tab-Einrückung wie der Renderer', () => {
     expect(toggleTaskAt('\t- [ ] a', 0)).toBe('\t- [ ] a')
     expect(toggleTaskAt('- [ ] a\n\t- [ ] b', 1)).toBe('- [ ] a\n\t- [x] b')
+  })
+
+  it('zählt und flippt Marker in Zeilen mit CRLF-Ende und erhält die Zeilenenden', () => {
+    const md = '- [  ] a\r\n- [ ] b'
+    expect(toggleTaskAt(md, 0)).toBe('- [x] a\r\n- [ ] b')
+    expect(toggleTaskAt(md, 1)).toBe('- [  ] a\r\n- [x] b')
   })
 
   it('zählt Listeneinträge ohne Checkbox nicht mit', () => {
