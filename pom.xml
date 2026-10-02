@@ -132,6 +132,15 @@
             <artifactId>minio</artifactId>
             <version>8.6.0</version>
         </dependency>
+        <!-- OkHttp-Klassen für MinIO 8.6.0 (Issue #1359, Folge von #1347): MinIO zieht
+             com.squareup.okhttp3:okhttp:5.1.0. Ab OkHttp 5 ist dieses Maven-Artefakt nur ein
+             Stummel ohne Klassen; die Klassen liegen in okhttp-jvm, und darauf verweisen nur
+             Gradles Modul-Metadaten, die Maven nicht auswertet. Fassung = die von minio für okhttp. -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp-jvm</artifactId>
+            <version>5.1.0</version>
+        </dependency>
         <!-- Content-Type-Erkennung aus Magic-Bytes -->
         <dependency>
             <groupId>org.apache.tika</groupId>
