@@ -39,7 +39,7 @@ import { boardsApi as defaultBoardsApi } from '../api/boards'
 import CircularProgress from '@mui/material/CircularProgress'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { DerivationTree } from './DerivationTree'
-import { cardsApi as defaultCardsApi, type CardActivity, type CardByNumber, type CardDetail, type CardStatus, type DerivationNode } from '../api/cards'
+import { cardsApi as defaultCardsApi, type Card, type CardActivity, type CardByNumber, type CardDetail, type CardStatus, type DerivationNode } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { NightRunsApi } from '../api/nightRuns'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
@@ -789,6 +789,28 @@ function DependencyList({
 type BeschreibungStatus = 'laedt' | 'geladen' | 'fehler'
 
 /**
+ * Der zuletzt vom Server bestätigte Stand der Felder, die Bearbeiten-Dialog und Checkbox-Klick
+ * schreiben (Issue #1328, Plan #1325, A1). Lesemodus und Checkbox-Klick lesen nur ihn — nie die
+ * `card`-Prop, die nach dem Speichern veraltet, und nie den Entwurf, den Abbrechen verwirft.
+ */
+interface KartenStand extends Pick<Card, 'title' | 'dependencies' | 'shortcode' | 'parentId' | 'dueDate' | 'derivedFrom'> {
+  description: string
+}
+
+/** Die Stand-Felder einer Karte; eine fehlende Beschreibung gilt als leer. */
+function standAus(karte: Readonly<Pick<Card, keyof KartenStand>>): KartenStand {
+  return {
+    title: karte.title,
+    description: karte.description ?? '',
+    dependencies: karte.dependencies,
+    shortcode: karte.shortcode ?? null,
+    parentId: karte.parentId,
+    dueDate: karte.dueDate,
+    derivedFrom: karte.derivedFrom ?? null,
+  }
+}
+
+/**
  * Ein Block des Kartenblatts (AK 13, #958) als Platte der Instrumententafel (#980, Entwurf
  * `.platte`, `.platte-kopf`, Z. 543–557): Fläche, Haarlinie, Schatten und ein Kopf mit dem Namen,
  * als benannter Bereich für Screenreader. Die drei Blöcke und ihr Inhalt stehen fest (Plan #932):
@@ -1231,28 +1253,42 @@ function CardDetailModalView({
   // ist (siehe Nachlade-Effekt) — sonst öffnete die Maske mit einem leeren Feld, dessen Speichern
   // den Volltext löschte.
   const [editing, setEditing] = useState(false)
-  const [title, setTitle] = useState(card.title)
-  // Der Volltext kommt nicht mehr aus der `card`-Prop: Die Board-Liste liefert ihn nicht (#771),
-  // und die synthetischen Vorhaben-Karten aus `epicToCard` haben ihn nie getragen.
-  const [body, setBody] = useState('')
-  // Zuletzt bekannter Server-Stand der Beschreibung — Ausgangspunkt jedes Bearbeiten-Klicks.
-  const [beschreibung, setBeschreibung] = useState('')
+  // Der vom Server bestätigte Stand (#1328). Die `card`-Prop des Parents bleibt nach dem Speichern
+  // veraltet, ihre Beschreibung fehlt ganz (#771) — sie ist nur der Startwert bis zum Nachladen.
+  // Kein Sync-Effect auf die Prop nötig: der Wrapper remountet die View per `key` je Karte.
+  // `startStand` ändert sich nie und dient beim Nachladen als Rückfallwert für Felder, die eine
+  // Antwort nicht trägt.
+  const [startStand] = useState<KartenStand>(() => standAus(card))
+  const [stand, setStand] = useState<KartenStand>(startStand)
   const [beschreibungStatus, setBeschreibungStatus] = useState<BeschreibungStatus>('laedt')
-  const [parentId, setParentId] = useState<number | null>(card.parentId)
-  const [shortcode, setShortcode] = useState(card.shortcode ?? '')
-  const [dueInput, setDueInput] = useState(card.dueDate ? card.dueDate.slice(0, 10) : '')
-  // Abhängigkeiten als lokaler Zustand wie Titel/Beschreibung (#537): Die `card`-Prop des Parents
-  // bleibt nach dem Speichern veraltet — ohne diesen State zeigte der Lesemodus die frisch
-  // gespeicherten Abhängigkeiten erst nach Schließen und Neuöffnen, und ein Task-Toggle hätte sie
-  // mit dem alten Prop-Stand überschrieben. Kein Sync-Effect nötig: der Wrapper remountet die View
-  // per `key` je Karte.
-  const [deps, setDeps] = useState(card.dependencies)
-  const [depsInput, setDepsInput] = useState(card.dependencies.join(', '))
+  // Der Entwurf des Bearbeiten-Dialogs. Er wird bei jedem Start des Bearbeitens aus `stand`
+  // befüllt; Abbrechen verwirft ihn, indem es nur den Editiermodus verlässt.
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [parentId, setParentId] = useState<number | null>(null)
+  const [shortcode, setShortcode] = useState('')
+  const [dueInput, setDueInput] = useState('')
+  const [depsInput, setDepsInput] = useState('')
   const [depsError, setDepsError] = useState<string | null>(null)
-  const [herkunftInput, setHerkunftInput] = useState(
-    card.derivedFrom == null ? '' : String(card.derivedFrom),
-  )
+  const [herkunftInput, setHerkunftInput] = useState('')
   const [herkunftError, setHerkunftError] = useState<string | null>(null)
+
+  // Befüllt den Entwurf aus einem Stand — gemeinsam für „Bearbeiten" und `initialEditing`. Nur
+  // Setter im Rumpf, deshalb stabil und im Nachlade-Effekt ohne Neustart verwendbar; der React
+  // Compiler verlangt sie trotzdem ausdrücklich in den Abhängigkeiten.
+  const fuelleEntwurf = useCallback((s: KartenStand) => {
+    setTitle(s.title)
+    setBody(s.description)
+    setParentId(s.parentId)
+    setShortcode(s.shortcode ?? '')
+    setDueInput(s.dueDate ? s.dueDate.slice(0, 10) : '')
+    setDepsInput(s.dependencies.join(', '))
+    setDepsError(null)
+    // Auch die Herkunft (E5): Sonst kehrte ein per Abbrechen verworfener Entwurf beim nächsten
+    // Bearbeiten zurück und würde mitgespeichert.
+    setHerkunftInput(s.derivedFrom == null ? '' : String(s.derivedFrom))
+    setHerkunftError(null)
+  }, [setTitle, setBody, setParentId, setShortcode, setDueInput, setDepsInput, setDepsError, setHerkunftInput, setHerkunftError])
   const [saving, setSaving] = useState(false)
   const notify = useSnackbar()
 
@@ -1285,23 +1321,25 @@ function CardDetailModalView({
 
   // Die volle Beschreibung beim Öffnen nachladen (Issue #769) — nach dem `aktiv`-Muster des
   // Herkunftsbaum-Effekts: Der Cleanup verwirft späte Antworten, ein Kartenwechsel setzt auf
-  // „lädt" zurück. Aus der Antwort wird ausschließlich `description` übernommen; die übrigen
-  // Felder der `card`-Prop sind bei synthetischen Vorhaben-Karten (`epicToCard`) bewusst gesetzte
-  // Ersatzwerte und dürfen nicht überschrieben werden.
+  // „lädt" zurück. Aus der Antwort werden die sieben Stand-Felder übernommen (E2): Bei synthetischen
+  // Vorhaben-Karten (`epicToCard`) sind sie in der Prop nur Ersatzwerte, und ein Checkbox-Klick
+  // schickte sie sonst als gespeicherten Stand zurück. Alle übrigen Felder (Spalte, Status,
+  // Zuständige, Labels …) kommen weiter aus der Prop.
   useEffect(() => {
     let aktiv = true
     setBeschreibungStatus('laedt')
     void cardsApi.get(card.id).then(
       (voll) => {
         if (!aktiv) return
-        const text = voll.description ?? ''
-        setBeschreibung(text)
-        // `body` ohne Editier-Guard: Bis hierhin ist der Bearbeiten-Button gesperrt und `editing`
-        // startet mit `false` — es gibt keinen Weg, während des Ladens in den Editiermodus zu
-        // kommen, dessen Eingabe hier überschrieben werden könnte.
-        setBody(text)
+        const geladen = standAus({ ...startStand, ...voll })
+        setStand(geladen)
         setBeschreibungStatus('geladen')
-        if (initialEditing) setEditing(true)
+        // Der Entwurf ohne Editier-Guard: Bis hierhin ist der Bearbeiten-Button gesperrt und
+        // `editing` startet mit `false` — es gibt keine Eingabe, die hier überschrieben würde.
+        if (initialEditing) {
+          fuelleEntwurf(geladen)
+          setEditing(true)
+        }
       },
       () => {
         if (!aktiv) return
@@ -1311,7 +1349,7 @@ function CardDetailModalView({
     return () => {
       aktiv = false
     }
-  }, [card.id, cardsApi, initialEditing])
+  }, [card.id, cardsApi, initialEditing, fuelleEntwurf, startStand])
 
   // Der Baum eines Vorhabens (Issue #644). Das Laden liegt hier und nicht mehr in
   // `DerivationTree`: Der Dialog kennt die Karte ohnehin, und Lade-, Fehler- und Leerzustand
@@ -1357,18 +1395,9 @@ function CardDetailModalView({
   }, [isEpic, baumBoardId, card.id, cardsApi])
 
   const startEditing = () => {
-    setTitle(card.title)
-    // Aus dem nachgeladenen Zustand, nicht aus der Prop — dieselbe Begründung wie bei `deps`
-    // unten: Sonst überschriebe ein zweites Bearbeiten die eigene Änderung mit dem zuerst
-    // geladenen Text.
-    setBody(beschreibung)
-    setParentId(card.parentId)
-    setShortcode(card.shortcode ?? '')
-    setDueInput(card.dueDate ? card.dueDate.slice(0, 10) : '')
-    // Aus dem lokalen Zustand, nicht aus der Prop — sonst verwürfe erneutes Bearbeiten nach
-    // einem Save die gerade gespeicherten Abhängigkeiten (#537).
-    setDepsInput(deps.join(', '))
-    setDepsError(null)
+    // Aus dem bestätigten Stand, nicht aus der Prop — sonst verwürfe erneutes Bearbeiten nach
+    // einem Save die gerade gespeicherten Werte (#537, #769).
+    fuelleEntwurf(stand)
     setEditing(true)
   }
 
@@ -1390,10 +1419,13 @@ function CardDetailModalView({
       // Herkunft zuerst und nur bei Aenderung: Sie laeuft ueber einen eigenen Endpunkt (#607),
       // damit `update` sie nicht anfassen kann. Wird sie abgelehnt, bleibt die Maske im
       // Editiermodus und der uebrige Speichervorgang unterbleibt.
-      if (!isEpic && herkunft !== (card.derivedFrom ?? null)) {
-        await cardsApi.assignDerivedFrom(card.id, herkunft)
+      // Der Stand übernimmt die Herkunft sofort aus der Antwort (E1): Scheitert `update` danach,
+      // trägt er, was der Server bereits hat.
+      if (!isEpic && herkunft !== stand.derivedFrom) {
+        const mitHerkunft = await cardsApi.assignDerivedFrom(card.id, herkunft)
+        setStand((s) => ({ ...s, derivedFrom: mitHerkunft.derivedFrom ?? null }))
       }
-      await cardsApi.update(
+      const gespeichert = await cardsApi.update(
         card.id,
         title.trim(),
         body,
@@ -1402,8 +1434,8 @@ function CardDetailModalView({
         isEpic ? undefined : parentId,
         isEpic ? undefined : dueInputToIso(dueInput),
       )
-      setDeps(parsedDeps)
-      setBeschreibung(body)
+      // Die Antwort, nicht die gesendeten Werte: Der Server normalisiert (Fälligkeit, Kürzel).
+      setStand(standAus(gespeichert))
       setEditing(false)
       onChanged?.()
       notify('Karte gespeichert.', 'success')
@@ -1423,34 +1455,32 @@ function CardDetailModalView({
   }
 
   // Klick auf eine Checkbox im View-Modus: n-ten Marker im Beschreibungstext flippen und sofort
-  // persistieren (optimistisch, Rollback bei Fehler) — ohne den Edit-Modus zu öffnen.
+  // persistieren (optimistisch, Rollback bei Fehler) — ohne den Edit-Modus zu öffnen. Gesendet wird
+  // allein der bestätigte Stand (#1328): Die Prop wäre nach einem Speichern veraltet, und der
+  // Entwurf kann ein per Abbrechen verworfener sein.
   const toggleTask = async (index: number) => {
     if (!canEdit || saving) return
-    const previous = body
+    const vorher = stand
     // `index` stammt immer aus einer real gerenderten Checkbox (MarkdownInput zählt in derselben
     // Marker-Logik wie toggleTaskAt), daher findet toggleTaskAt stets einen Treffer und flippt —
     // ein No-op-Ergebnis (next === previous) ist ausgeschlossen, kein toter Guard nötig.
-    const next = toggleTaskAt(previous, index)
-    setBody(next)
+    const next = toggleTaskAt(vorher.description, index)
+    setStand({ ...vorher, description: next })
     setSaving(true)
     try {
-      await cardsApi.update(
+      const gespeichert = await cardsApi.update(
         card.id,
-        card.title,
+        vorher.title,
         next,
-        // Lokaler Abhängigkeits-Zustand statt Prop (#537): sonst rollte ein Checkbox-Klick nach
-        // einem Abhängigkeits-Save die frisch gespeicherten Werte auf den alten Stand zurück.
-        deps,
-        isEpic ? (card.shortcode ?? null) : undefined,
-        isEpic ? undefined : card.parentId,
-        isEpic ? undefined : card.dueDate,
+        vorher.dependencies,
+        isEpic ? vorher.shortcode : undefined,
+        isEpic ? undefined : vorher.parentId,
+        isEpic ? undefined : vorher.dueDate,
       )
-      // Erst nach der Zusage des Servers: Sonst startete ein anschließendes Bearbeiten von einem
-      // Text aus, den die Karte gar nicht trägt.
-      setBeschreibung(next)
+      setStand(standAus(gespeichert))
       onChanged?.()
     } catch (error_: unknown) {
-      setBody(previous)
+      setStand(vorher)
       notify(apiErrorMessage(error_, 'Aufgabe speichern fehlgeschlagen.'), 'error')
     } finally {
       setSaving(false)
@@ -1557,7 +1587,7 @@ function CardDetailModalView({
 
   // Erledigt ist ein Arbeitspaket nach seinem Status, alles andere nach der Spalte (Plan #1294,
   // E7) — über den gemeinsamen Done-Maßstab, damit es im Frontend nur eine Antwort gibt.
-  const dueOverdue = !isEpic && isOverdue(card.dueDate, effektivDone({ status }, columnName ?? ''))
+  const dueOverdue = !isEpic && isOverdue(stand.dueDate, effektivDone({ status }, columnName ?? ''))
 
   // Aktuellen Toggle-Handler über ein Ref halten und als stabile Callback-Identität an TaskMarkdown
   // reichen, damit dessen `memo` greift (kein Remount der Beschreibung bei Kommentar-Nachladen).
@@ -1618,7 +1648,7 @@ function CardDetailModalView({
             #{card.number}
           </Typography>
           <Typography component="span" sx={{ ...ANZEIGE, fontStretch: '110%', fontSize: 19, fontWeight: 700, lineHeight: 1.25, letterSpacing: '-.01em' }}>
-            {card.title}
+            {stand.title}
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
           {canEdit && !editing && (
@@ -1701,15 +1731,15 @@ function CardDetailModalView({
             />
           ) : (
             <CardBodyView
-              derivedFrom={card.derivedFrom}
-              body={body}
+              derivedFrom={stand.derivedFrom}
+              body={stand.description}
               beschreibungStatus={beschreibungStatus}
               canEdit={canEdit}
               onToggleTask={onToggleTask}
-              dependencies={deps}
+              dependencies={stand.dependencies}
               onOpenDependency={onOpenDependency}
               isEpic={isEpic}
-              dueDate={card.dueDate}
+              dueDate={stand.dueDate}
               dueOverdue={dueOverdue}
             />
           )}
@@ -1827,11 +1857,11 @@ function CardDetailModalView({
         vorgang={
           <VorgangEroeffnenDialog
             cardId={card.id}
-            cardTitle={card.title}
+            cardTitle={stand.title}
             canEdit={canEdit}
             isEpic={isEpic}
             archived={card.archived}
-            parentId={card.parentId}
+            parentId={stand.parentId}
             cardsApi={cardsApi}
             onChanged={onChanged}
             onOpenDependency={onOpenDependency}
