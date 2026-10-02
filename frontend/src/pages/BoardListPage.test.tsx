@@ -480,35 +480,6 @@ describe('BoardListPage', () => {
     }
   })
 
-  it('filtert die Liste nach Label', async () => {
-    const labelled: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'MitLabel', description: '', archived: false, labels: [5] }
-    const other: Card = { ...base, id: 102, columnId: 10, number: 3, title: 'OhneLabel', description: '', archived: false }
-    mBoards.get.mockResolvedValue({
-      id: 1, projectId: 9, name: 'B', createdAt: '',
-      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
-    })
-    mCards.list.mockResolvedValue([labelled, other])
-    mEpics.list.mockResolvedValue([])
-    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
-    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }])
-
-    render(
-      <MemoryRouter initialEntries={['/boards/1/list']}>
-        <Routes>
-          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    expect(await screen.findByText('MitLabel')).toBeInTheDocument()
-    expect(screen.getByText('OhneLabel')).toBeInTheDocument()
-
-    fireEvent.click(await screen.findByLabelText('Label-Filter Bug'))
-
-    await waitFor(() => expect(screen.queryByText('OhneLabel')).not.toBeInTheDocument())
-    expect(screen.getByText('MitLabel')).toBeInTheDocument()
-  })
-
   it('blendet Karten einer Spalte über den Spalten-Filter aus und merkt die Auswahl', async () => {
     renderPage()
     await screen.findByText('Aufgabe')
@@ -1075,56 +1046,6 @@ describe('BoardListPage', () => {
     expect(screen.getByLabelText('Filter Archiv')).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('schaltet einen Label-Filter durch erneuten Klick wieder aus', async () => {
-    const labelled: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'MitLabel', description: '', archived: false, labels: [5] }
-    const other: Card = { ...base, id: 102, columnId: 10, number: 3, title: 'OhneLabel', description: '', archived: false }
-    mBoards.get.mockResolvedValue({
-      id: 1, projectId: 9, name: 'B', createdAt: '',
-      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
-    })
-    mCards.list.mockResolvedValue([labelled, other])
-    mEpics.list.mockResolvedValue([])
-    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }])
-    render(
-      <MemoryRouter initialEntries={['/boards/1/list']}>
-        <Routes>
-          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    fireEvent.click(await screen.findByLabelText('Label-Filter Bug'))
-    await waitFor(() => expect(screen.queryByText('OhneLabel')).not.toBeInTheDocument())
-    // Zweiter Klick entfernt das Label wieder aus dem Filter.
-    fireEvent.click(screen.getByLabelText('Label-Filter Bug'))
-    expect(await screen.findByText('OhneLabel')).toBeInTheDocument()
-  })
-
-  it('rendert den aktiven Label-Filter auch bei einer Farbe, die keine CSS-Farbe ist', async () => {
-    // Der aktive Filter-Chip rechnet seine Textfarbe aus der Labelfarbe. Die ist serverseitig nur
-    // laengenbegrenzt, und `getContrastText` wirft auf allem, was keine CSS-Farbe ist — ohne
-    // ErrorBoundary nimmt ein Klick dann die ganze Seite mit.
-    const labelled: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'MitLabel', description: '', archived: false, labels: [5] }
-    mBoards.get.mockResolvedValue({
-      id: 1, projectId: 9, name: 'B', createdAt: '',
-      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
-    })
-    mCards.list.mockResolvedValue([labelled])
-    mEpics.list.mockResolvedValue([])
-    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: 'primary.main' }])
-    render(
-      <MemoryRouter initialEntries={['/boards/1/list']}>
-        <Routes>
-          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const chip = await screen.findByLabelText('Label-Filter Bug')
-    expect(() => fireEvent.click(chip)).not.toThrow()
-    expect(screen.getByText('MitLabel')).toBeInTheDocument()
-  })
-
   it('ignoriert einen Spalten-Drop auf dieselbe Spalte (keine Umsortierung)', async () => {
     renderPage()
     await screen.findByText('Aufgabe')
@@ -1567,5 +1488,104 @@ describe('BoardListPage Gruppierung und Filter (#980)', () => {
     expect(screen.getByRole('button', { name: 'Vorhaben' })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'keine' }))
     expect(screen.getByRole('button', { name: 'keine' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+// Label-Filter als Checkbox-Menü wie „Labels“ in der Mehrfachauswahl des Boards (Issue #1346).
+describe('BoardListPage – Label-Filter als Menü', () => {
+  const bug = { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }
+  const doku = { id: 6, boardId: 1, name: 'Doku', color: '#00f', countOnEpicTile: false }
+
+  function renderMitLabels(labels: (typeof bug)[]) {
+    const mitBug: Card = { ...base, id: 100, columnId: 10, number: 1, title: 'MitBug', description: '', archived: false, labels: [5] }
+    const mitDoku: Card = { ...base, id: 101, columnId: 10, number: 2, title: 'MitDoku', description: '', archived: false, labels: [6] }
+    const ohne: Card = { ...base, id: 102, columnId: 10, number: 3, title: 'OhneLabel', description: '', archived: false }
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mCards.list.mockResolvedValue([mitBug, mitDoku, ohne])
+    mEpics.list.mockResolvedValue([])
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+    mLabels.list.mockResolvedValue(labels)
+    render(
+      <MemoryRouter initialEntries={['/boards/1/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('zeigt eine Taste „Labels“ statt einzelner Label-Tasten in der Werkzeugleiste', async () => {
+    renderMitLabels([bug, doku])
+    const taste = await screen.findByRole('button', { name: 'Label-Filter' })
+    expect(taste).toHaveTextContent('Labels')
+    expect(taste).toHaveAttribute('aria-haspopup', 'menu')
+    expect(taste).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByLabelText('Label-Filter Bug')).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Label-Filter' })).not.toBeInTheDocument()
+  })
+
+  it('öffnet ein Menü mit einem nicht gesetzten Checkbox-Eintrag je Label', async () => {
+    renderMitLabels([bug, doku])
+    fireEvent.click(await screen.findByRole('button', { name: 'Label-Filter' }))
+    const eintraege = await screen.findAllByRole('menuitemcheckbox')
+    expect(eintraege.map((e) => e.getAttribute('aria-label'))).toEqual(['Label-Filter Bug', 'Label-Filter Doku'])
+    for (const e of eintraege) expect(e).toHaveAttribute('aria-checked', 'false')
+    // Das offene Menü blendet den Rest der Seite für Hilfstechnik aus — die Taste dahinter auch.
+    expect(screen.getByRole('button', { name: 'Label-Filter', hidden: true })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('filtert per Menüeintrag, lässt das Menü offen und hebt den Filter mit dem zweiten Klick wieder auf', async () => {
+    renderMitLabels([bug, doku])
+    expect(await screen.findByText('OhneLabel')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Label-Filter' }))
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Label-Filter Bug' }))
+
+    await waitFor(() => expect(screen.queryByText('OhneLabel')).not.toBeInTheDocument())
+    expect(screen.queryByText('MitDoku')).not.toBeInTheDocument()
+    expect(screen.getByText('MitBug')).toBeInTheDocument()
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Label-Filter Bug' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Label-Filter Bug' }))
+    expect(await screen.findByText('OhneLabel')).toBeInTheDocument()
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Label-Filter Bug' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('zeigt bei zwei gewählten Labels Karten mit einem der beiden und nennt die Zahl an der Taste', async () => {
+    renderMitLabels([bug, doku])
+    await screen.findByText('OhneLabel')
+    fireEvent.click(screen.getByRole('button', { name: 'Label-Filter' }))
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Label-Filter Bug' }))
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Label-Filter Doku' }))
+
+    await waitFor(() => expect(screen.queryByText('OhneLabel')).not.toBeInTheDocument())
+    expect(screen.getByText('MitBug')).toBeInTheDocument()
+    expect(screen.getByText('MitDoku')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Label-Filter', hidden: true })).toHaveTextContent('Labels · 2')
+  })
+
+  it('schließt das Menü per Escape und behält den Filter', async () => {
+    renderMitLabels([bug, doku])
+    await screen.findByText('OhneLabel')
+    fireEvent.click(screen.getByRole('button', { name: 'Label-Filter' }))
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Label-Filter Bug' }))
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+    expect(screen.queryByText('OhneLabel')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Label-Filter' })).toHaveTextContent('Labels · 1')
+  })
+
+  it('zeigt die Taste nicht, wenn das Board keine Labels hat', async () => {
+    renderMitLabels([])
+    await screen.findByText('OhneLabel')
+    expect(screen.queryByRole('button', { name: 'Label-Filter' })).not.toBeInTheDocument()
   })
 })

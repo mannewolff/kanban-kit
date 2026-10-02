@@ -2,6 +2,10 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
+import ListItemIcon from '@mui/material/ListItemIcon'
+import ListItemText from '@mui/material/ListItemText'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
@@ -9,6 +13,8 @@ import Typography from '@mui/material/Typography'
 import type { SxProps, Theme } from '@mui/material/styles'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import CheckBoxOutlineBlankOutlinedIcon from '@mui/icons-material/CheckBoxOutlineBlankOutlined'
+import CheckBoxOutlinedIcon from '@mui/icons-material/CheckBoxOutlined'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import RestoreOutlinedIcon from '@mui/icons-material/RestoreOutlined'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -57,7 +63,6 @@ import {
 } from '../theme'
 import { epicColor } from '../lib/epicMeta'
 import { ablageflaecheSx, PLATZHALTER_SX } from '../components/boardSurfaceSx'
-import { labelChipSx } from '../components/labelChipSx'
 
 const ARCHIVED = 'archived'
 type FilterKey = number | typeof ARCHIVED
@@ -157,6 +162,54 @@ function readColumnOrder(): ColumnKey[] {
   } catch {
     return DEFAULT_ORDER
   }
+}
+
+/**
+ * Label-Filter der Werkzeugleiste als Checkbox-Menü wie „Labels“ in der Mehrfachauswahl des Boards
+ * (BulkActionBar, Issue #1346): eine Taste statt einer Taste je Label, damit die Leiste Platz für
+ * weitere Filter behält.
+ */
+function LabelFilterMenue({
+  labels,
+  gewaehlt,
+  onToggle,
+}: Readonly<{ labels: Label[]; gewaehlt: Set<number>; onToggle: (labelId: number) => void }>) {
+  const [anker, setAnker] = useState<HTMLElement | null>(null)
+  return (
+    <Box sx={CHIP_GRUPPE_SX}>
+      <Chip
+        label={gewaehlt.size === 0 ? 'Labels' : `Labels · ${gewaehlt.size}`}
+        aria-label="Label-Filter"
+        aria-haspopup="menu"
+        aria-expanded={anker !== null}
+        onClick={(e) => setAnker(e.currentTarget)}
+        size="small"
+        sx={chipSx(gewaehlt.size > 0)}
+      />
+      <Menu anchorEl={anker} open={anker !== null} onClose={() => setAnker(null)}>
+        {labels.map((label) => {
+          const aktiv = gewaehlt.has(label.id)
+          const Symbol = aktiv ? CheckBoxOutlinedIcon : CheckBoxOutlineBlankOutlinedIcon
+          return (
+            <MenuItem
+              key={label.id}
+              role="menuitemcheckbox"
+              aria-checked={aktiv}
+              aria-label={`Label-Filter ${label.name}`}
+              // Das Menü bleibt nach dem Klick offen: Mehrere Labels in einem Zug zu wählen ist der
+              // Regelfall, wie beim Setzen in der Mehrfachauswahl.
+              onClick={() => onToggle(label.id)}
+            >
+              <ListItemIcon>
+                <Symbol fontSize="small" />
+              </ListItemIcon>
+              <ListItemText primary={label.name} />
+            </MenuItem>
+          )
+        })}
+      </Menu>
+    </Box>
+  )
 }
 
 /** Gruppenkopf als eingelassene Nut (Entwurf `.gruppe`, Z. 941–953): Mal, Name, Fortschritt. */
@@ -622,24 +675,7 @@ export function BoardListPage() {
             ))}
           </TextField>
         )}
-        {labels.length > 0 && (
-          <Box role="group" aria-label="Label-Filter" sx={CHIP_GRUPPE_SX}>
-            {labels.map((label) => {
-              const aktiv = labelFilter.has(label.id)
-              return (
-                <Chip
-                  key={label.id}
-                  label={label.name}
-                  aria-label={`Label-Filter ${label.name}`}
-                  aria-pressed={aktiv}
-                  onClick={() => toggleLabel(label.id)}
-                  size="small"
-                  sx={aktiv ? { ...labelChipSx(label.color), height: 26, borderRadius: '6px' } : { ...chipSx(false), color: label.color }}
-                />
-              )
-            })}
-          </Box>
-        )}
+        {labels.length > 0 && <LabelFilterMenue labels={labels} gewaehlt={labelFilter} onToggle={toggleLabel} />}
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Typography component="span" sx={{ fontSize: 11.5, color: 'text.secondary' }}>
             Gruppieren
