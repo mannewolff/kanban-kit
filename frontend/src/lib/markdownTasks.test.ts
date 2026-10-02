@@ -67,6 +67,48 @@ describe('normalizeTaskLists', () => {
     // Gegenprobe: ein gültiger Marker mit vielen Leerzeichen wird weiterhin korrekt kanonisiert.
     expect(normalizeTaskLists(`[${' '.repeat(500)}] tief eingerückt`)).toBe('- [ ] tief eingerückt')
   })
+
+  // Ab hier: Randfälle der Muster FENCE, LISTED und NAKED (Issue #1340).
+
+  it('öffnet keinen Fence, wenn vor den Backticks Text steht', () => {
+    expect(normalizeTaskLists('Text ``` mitten\n[ ] a')).toBe('Text ``` mitten\n- [ ] a')
+  })
+
+  it('erkennt eine eingerückte Fence-Zeile als Fence', () => {
+    const md = '  ```\n[ ] im Code\n  ```'
+    expect(normalizeTaskLists(md)).toBe(md)
+  })
+
+  it('kanonisiert eingerückte Listen-Items', () => {
+    expect(normalizeTaskLists('  - [  ] a')).toBe('  - [ ] a')
+  })
+
+  it('kanonisiert mehrstellig und mit Klammer nummerierte Listen-Items', () => {
+    expect(normalizeTaskLists('12. [  ] a')).toBe('12. [ ] a')
+    expect(normalizeTaskLists('3) [  ] a')).toBe('3) [ ] a')
+  })
+
+  it('erhält mehrere Leerzeichen zwischen Listenmarker und Task-Marker', () => {
+    expect(normalizeTaskLists('-   [  ] a')).toBe('-   [ ] a')
+  })
+
+  it('lässt Zeilen mit Text vor dem Listenmarker unangetastet', () => {
+    expect(normalizeTaskLists('x- [  ] a')).toBe('x- [  ] a')
+  })
+
+  it('verliert keinen Text hinter einem Unicode-Zeilentrenner', () => {
+    expect(normalizeTaskLists('- [ ] a b')).toContain(' b')
+    expect(normalizeTaskLists('[ ] a b')).toContain(' b')
+  })
+
+  it('lässt Klammern mit weiteren Zeichen nach dem x unangetastet', () => {
+    expect(normalizeTaskLists('[xy] a')).toBe('[xy] a')
+  })
+
+  it('reduziert mehrere Leerzeichen nach dem Marker auf eines', () => {
+    expect(normalizeTaskLists('- [ ]   a')).toBe('- [ ] a')
+    expect(normalizeTaskLists('[ ]   a')).toBe('- [ ] a')
+  })
 })
 
 describe('toggleTaskAt', () => {
@@ -156,6 +198,10 @@ describe('toggleTaskAt', () => {
   it('behandelt Tab-Einrückung wie der Renderer', () => {
     expect(toggleTaskAt('\t- [ ] a', 0)).toBe('\t- [ ] a')
     expect(toggleTaskAt('- [ ] a\n\t- [ ] b', 1)).toBe('- [ ] a\n\t- [x] b')
+  })
+
+  it('zählt Listeneinträge ohne Checkbox nicht mit', () => {
+    expect(toggleTaskAt('- normal\n- [ ] a', 0)).toBe('- normal\n- [x] a')
   })
 
   it('lässt den Text bei einem Index außerhalb des Bereichs unverändert', () => {

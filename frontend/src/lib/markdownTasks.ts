@@ -53,6 +53,7 @@ export function normalizeTaskLists(md: string): string {
       const listed = LISTED.exec(line)
       if (listed) {
         const [, prefix, marker, rest] = listed
+        // Stryker disable next-line Regex: `/\s*/` statt `/^\s*/` ist gleichwertig — `\s*` passt immer schon an Stelle 0 (notfalls leer), und `replace` ohne `g` ersetzt nur diesen ersten Treffer.
         const body = rest.replace(/^\s*/, '')
         const suffix = body ? ` ${body}` : ''
         return `${prefix}${canonical(marker)}${suffix}`
@@ -60,6 +61,7 @@ export function normalizeTaskLists(md: string): string {
       const naked = NAKED.exec(line)
       if (naked) {
         const [, indent, marker, rest] = naked
+        // Stryker disable next-line Regex: `/\s*/` statt `/^\s*/` ist gleichwertig — `\s*` passt immer schon an Stelle 0 (notfalls leer), und `replace` ohne `g` ersetzt nur diesen ersten Treffer.
         const body = rest.replace(/^\s*/, '')
         const suffix = body ? ` ${body}` : ''
         return `${indent}- ${canonical(marker)}${suffix}`
@@ -78,6 +80,7 @@ const parser = unified().use(remarkParse).use(remarkGfm)
  * Checkbox gerendert, wenn `checked` ein Boolean ist.
  */
 function collectTasks(node: Nodes, tasks: ListItem[]): ListItem[] {
+  // Stryker disable next-line ConditionalExpression: `node.type === 'listItem'` → `true` ist gleichwertig — in mdast trägt nur ein `listItem` das Feld `checked`.
   if (node.type === 'listItem' && typeof node.checked === 'boolean') {
     tasks.push(node)
   }
@@ -106,6 +109,7 @@ export function toggleTaskAt(md: string, targetIndex: number): string {
   }
   // Der Parser setzt an jedem Knoten aus dem Quelltext eine Position.
   const { line, offset } = task.position!.start
+  // Stryker disable next-line ArithmeticOperator: `offset! + 1` ist gleichwertig — nach der Normalisierung folgt auf den Listenmarker einer Aufgabe stets `.`, `)` oder Whitespace auf derselben Zeile, nie ein `\n`, also findet `lastIndexOf` denselben Zeilenumbruch.
   const column = offset! - (normalized.lastIndexOf('\n', offset! - 1) + 1)
   const lines = md.split('\n')
   const original = lines[line - 1]
