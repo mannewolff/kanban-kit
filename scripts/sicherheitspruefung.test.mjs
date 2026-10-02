@@ -74,7 +74,36 @@ test('Regel 1: CRITICAL und HIGH mit Korrektur sperren', () => {
   assert.match(gesperrt[0], /3\.0\.16-1/);
   assert.match(gesperrt[1], /CVE-2026-1002/);
   assert.match(gesperrt[1], /HIGH/);
+  assert.equal(gesperrt[0], 'CVE-2026-1001 (CRITICAL) in libssl3 [postgres:16.15 (debian 12.11)] — Korrektur in 3.0.16-1');
   assert.ok(urteil.sperrend.every((e) => e.ziel === 'postgres:16.15'));
+});
+
+test('jeder Befund nennt seinen Bestandteil — gleiche Kennung in zwei Binaerdateien ergibt zwei Zeilen', () => {
+  const urteil = urteilen([ergebnis(ABBILD, 'abbild-go-binaerdateien.json')], KEINE_AUSNAHMEN, { heute: HEUTE });
+  const gesperrt = texte(urteil.sperrend);
+  assert.deepEqual(gesperrt, [
+    'CVE-2026-2001 (HIGH) in stdlib [usr/local/bin/gosu] — Korrektur in 1.24.8',
+    'CVE-2026-2001 (HIGH) in stdlib [usr/local/bin/rclone] — Korrektur in 1.24.8',
+    'CVE-2026-2002 (CRITICAL) in org.example:lib [Java: app/app.jar/BOOT-INF/lib/lib-1.0.jar] — Korrektur in 1.1',
+  ]);
+});
+
+test('ein PkgPath gleich dem Target wird nicht doppelt genannt', () => {
+  const ausgabe = JSON.stringify({
+    Results: [{ Target: 'usr/bin/x', Vulnerabilities: [
+      { VulnerabilityID: 'CVE-1', PkgName: 'p', PkgPath: 'usr/bin/x', Severity: 'HIGH', FixedVersion: '2' },
+    ] }],
+  });
+  const urteil = urteilen([{ ziel: ABBILD, befunde: trivyAusgabeLesen(ausgabe) }], KEINE_AUSNAHMEN, { heute: HEUTE });
+  assert.deepEqual(texte(urteil.sperrend), ['CVE-1 (HIGH) in p [usr/bin/x] — Korrektur in 2']);
+});
+
+test('trivyAusgabeLesen uebernimmt Target als bestandteil und PkgPath, wo vorhanden', () => {
+  const { schwachstellen } = trivyAusgabeLesen(fixture('abbild-go-binaerdateien.json'));
+  assert.equal(schwachstellen[0].bestandteil, 'usr/local/bin/gosu');
+  assert.equal(schwachstellen[0].pfad, null);
+  assert.equal(schwachstellen[2].bestandteil, 'Java');
+  assert.equal(schwachstellen[2].pfad, 'app/app.jar/BOOT-INF/lib/lib-1.0.jar');
 });
 
 test('Regel 2: schwer ohne Korrektur sperrt nicht und steht in der Zusammenfassung', () => {
@@ -83,6 +112,7 @@ test('Regel 2: schwer ohne Korrektur sperrt nicht und steht in der Zusammenfassu
   assert.equal(urteil.ohneKorrektur.length, 1);
   assert.match(urteil.ohneKorrektur[0].text, /CVE-2026-1003/);
   assert.match(urteil.ohneKorrektur[0].text, /perl-base/);
+  assert.equal(urteil.ohneKorrektur[0].text, 'CVE-2026-1003 (HIGH) in perl-base [postgres:16.15 (debian 12.11)] — keine Korrektur verfuegbar');
   assert.match(zusammenfassung(urteil), /CVE-2026-1003/);
 });
 

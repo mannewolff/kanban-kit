@@ -165,6 +165,8 @@ export function trivyAusgabeLesen(text) {
         paket: v.PkgName,
         schweregrad: v.Severity,
         korrektur: v.FixedVersion || null,
+        bestandteil: ergebnis.Target,
+        pfad: v.PkgPath || null,
       });
     }
     for (const g of ergebnis.Secrets ?? []) {
@@ -236,8 +238,13 @@ export function ausnahmeAbgelaufen(eintrag, heute) {
 
 // --- Urteil ---------------------------------------------------------------
 
+/** Der Pfad ergaenzt den Bestandteil nur, wo er ihn genauer macht (etwa ein JAR unter "Java"). */
+function bestandteilText(s) {
+  return s.pfad && s.pfad !== s.bestandteil ? `${s.bestandteil}: ${s.pfad}` : s.bestandteil;
+}
+
 function schwachstellenText(s) {
-  return `${s.kennung} (${s.schweregrad}) in ${s.paket}`;
+  return `${s.kennung} (${s.schweregrad}) in ${s.paket} [${bestandteilText(s)}]`;
 }
 
 /**
