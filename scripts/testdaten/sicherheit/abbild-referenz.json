@@ -1,0 +1,26 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "postgres:16.16",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "ImageConfig": {
+      "created": "2026-09-21T08:15:00Z"
+    }
+  },
+  "Results": [
+    {
+      "Target": "postgres:16.16 (debian 12.12)",
+      "Class": "os-pkgs",
+      "Type": "debian",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2026-1002",
+          "PkgName": "libxml2",
+          "InstalledVersion": "2.9.14",
+          "FixedVersion": "2.9.15",
+          "Severity": "HIGH"
+        }
+      ]
+    }
+  ]
+}

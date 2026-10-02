@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,9 @@ import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.common.TextLimits;
+import org.mwolff.manban.project.application.ProjectMembershipRepository;
+import org.mwolff.manban.project.domain.ProjectMembership;
+import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,6 +51,8 @@ class KanbanCompatIT extends AbstractIntegrationTest {
   @Autowired private PasswordEncoder passwordEncoder;
 
   @Autowired private ObjectMapper json;
+
+  @Autowired private ProjectMembershipRepository memberships;
 
   // --- Setup-Helfer ---------------------------------------------------------
 
@@ -255,6 +261,7 @@ class KanbanCompatIT extends AbstractIntegrationTest {
     mvc.perform(get("/api/kanban/items/" + cardId + "/comments").header("X-Kanban-Token", token))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(2))
+        .andExpect(jsonPath("$[0].id").isNumber())
         .andExpect(jsonPath("$[0].body").value("Erster"))
         .andExpect(jsonPath("$[0].author").value("Person"))
         .andExpect(jsonPath("$[0].createdAt").exists())
@@ -375,6 +382,113 @@ class KanbanCompatIT extends AbstractIntegrationTest {
             get("/api/kanban/items/" + cardId + "/activity")
                 .header("X-Kanban-Token", unboundToken(session, "activity-unbound")))
         .andExpect(status().isConflict());
+  }
+
+  /**
+   * Die Kommentar-ID beim Lesen und das Ersetzen an Ort und Stelle (Issue #1339) — der Weg, auf dem
+   * das Kit seinen Abschlussbericht und den Kommentar {@code ## Laufstand} erneuert, statt jedes
+   * Mal einen neuen anzuhängen. Rechte wie im UI-Pfad: nur der Autor selbst.
+   */
+  @Test
+  void updateComment_replacesOwnComment_inPlace() throws Exception {
+    Cookie session = loginAs("kanban-comment-update@example.com");
+    long projectId = createProject("kanban-comment-update@example.com", "Comment-Update");
+    long boardId = createBoard(session, projectId, "Update-Board");
+    String token = boundToken(session, projectId, boardId);
+    long cardId = createCard(session, boardId, firstColumnId(session, boardId), "Karte");
+    kanbanComment(token, cardId, "Laufstand alt");
+
+    // Die ID der Kit-Schnittstelle ist dieselbe wie die der Weboberfläche.
+    long commentId = kanbanComments(token, cardId).get(0).get("id").asLong();
+    mvc.perform(get("/api/cards/" + cardId + "/comments").cookie(session))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].id").value(commentId));
+
+    kanbanCommentUpdate(token, cardId, commentId, "Laufstand neu")
+        .andExpect(status().isNoContent());
+
+    // Neuer Text unter derselben ID, kein zusätzlicher Kommentar.
+    JsonNode after = kanbanComments(token, cardId);
+    assertThat(after.size()).isEqualTo(1);
+    assertThat(after.get(0).get("id").asLong()).isEqualTo(commentId);
+    assertThat(after.get(0).get("body").asText()).isEqualTo("Laufstand neu");
+
+    // Leer oder über der Grenze des Anlegens: 400, der Text bleibt.
+    kanbanCommentUpdate(token, cardId, commentId, " ").andExpect(status().isBadRequest());
+    kanbanCommentUpdate(token, cardId, commentId, "a".repeat(TextLimits.MAX_TEXT + 1))
+        .andExpect(status().isBadRequest());
+    kanbanCommentUpdate(token, cardId, commentId, "a".repeat(TextLimits.MAX_TEXT))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void updateComment_rejectsForeignAuthor_otherCard_andOtherBoard() throws Exception {
+    Cookie session = loginAs("kanban-comment-guard@example.com");
+    long projectId = createProject("kanban-comment-guard@example.com", "Comment-Guard");
+    long boardId = createBoard(session, projectId, "Guard-Board");
+    String token = boundToken(session, projectId, boardId);
+    long columnId = firstColumnId(session, boardId);
+    long cardId = createCard(session, boardId, columnId, "Karte");
+    long otherCard = createCard(session, boardId, columnId, "Andere Karte");
+
+    // Fremder Autor: ein Mitglied desselben Projekts kommentiert über die Weboberfläche.
+    Cookie member = loginAs("kanban-comment-guard-member@example.com");
+    memberships.save(
+        new ProjectMembership(
+            null,
+            projectId,
+            users.findByEmail("kanban-comment-guard-member@example.com").orElseThrow().id(),
+            ProjectRole.MEMBER,
+            Instant.now()));
+    mvc.perform(
+            post("/api/cards/" + cardId + "/comments")
+                .cookie(member)
+                .contentType("application/json")
+                .content("{\"body\":\"Fremder Text\"}"))
+        .andExpect(status().isCreated());
+    long foreignComment = kanbanComments(token, cardId).get(0).get("id").asLong();
+
+    kanbanCommentUpdate(token, cardId, foreignComment, "gekapert")
+        .andExpect(status().isForbidden());
+    assertThat(kanbanComments(token, cardId).get(0).get("body").asText()).isEqualTo("Fremder Text");
+
+    // Eigener Kommentar, aber über eine andere Karte adressiert: 404, der Text bleibt.
+    kanbanComment(token, otherCard, "Eigener Text");
+    long ownComment = kanbanComments(token, otherCard).get(0).get("id").asLong();
+    kanbanCommentUpdate(token, cardId, ownComment, "verrutscht").andExpect(status().isNotFound());
+    assertThat(kanbanComments(token, otherCard).get(0).get("body").asText())
+        .isEqualTo("Eigener Text");
+
+    // Karte eines anderen Boards desselben Projekts: 404 wie bei den übrigen Routen.
+    long board2 = createBoard(session, projectId, "Guard-Board 2");
+    long foreignCard = createCard(session, board2, firstColumnId(session, board2), "Board 2");
+    String token2 = boundToken(session, projectId, board2);
+    kanbanComment(token2, foreignCard, "Board-2-Text");
+    long board2Comment = kanbanComments(token2, foreignCard).get(0).get("id").asLong();
+    kanbanCommentUpdate(token, foreignCard, board2Comment, "verrutscht")
+        .andExpect(status().isNotFound());
+    assertThat(kanbanComments(token2, foreignCard).get(0).get("body").asText())
+        .isEqualTo("Board-2-Text");
+  }
+
+  private JsonNode kanbanComments(String token, long cardId) throws Exception {
+    String body =
+        mvc.perform(
+                get("/api/kanban/items/" + cardId + "/comments").header("X-Kanban-Token", token))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body);
+  }
+
+  private ResultActions kanbanCommentUpdate(String token, long cardId, long commentId, String body)
+      throws Exception {
+    return mvc.perform(
+        patch("/api/kanban/items/" + cardId + "/comments/" + commentId)
+            .header("X-Kanban-Token", token)
+            .contentType("application/json")
+            .content("{\"body\":\"%s\"}".formatted(body)));
   }
 
   @Test

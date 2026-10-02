@@ -20,10 +20,10 @@
 # haben dieselbe Semantik, der Spiegel loescht weiterhin nie (E5 aus Plan #825). Damit faellt eine
 # Bezugsquelle und ein Werkzeug weg.
 
-ARG AGE_VERSION=1.2.1
-ARG RCLONE_VERSION=1.68.2
+ARG AGE_VERSION=1.3.2
+ARG RCLONE_VERSION=1.75.1
 
-FROM debian:bookworm-20260918-slim AS werkzeuge
+FROM debian:bookworm-20260918-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS werkzeuge
 ARG AGE_VERSION
 ARG RCLONE_VERSION
 # TARGETARCH setzt BuildKit selbst (amd64 auf dem Server, arm64 auf einem Apple-Rechner). Fest
@@ -42,7 +42,7 @@ RUN curl -fsSL -o rclone.zip \
     && unzip -q rclone.zip \
     && install -m 0755 "rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}/rclone" /usr/local/bin/rclone
 
-FROM postgres:16.15-bookworm
+FROM postgres:16.15-bookworm@sha256:efedf3595f1d6f415c08568ba171029bf54052e754cc9f030e3f2412b21f3d67
 
 # `cron` faehrt den Takt der Basissicherung aus MANBAN_BACKUP_BASE_CRON; `util-linux` bringt
 # `flock` mit, das zwei gleichzeitige Laeufe derselben Art verhindert.

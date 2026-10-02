@@ -268,6 +268,299 @@ und wöchentlich, damit eine weggefallene Bezugsstelle als benannter Fehler auff
 erst beim nächsten Neuaufsetzen. Genau so fiel auf, dass das alte MinIO-Abbild anonym nicht mehr
 beziehbar ist.
 
+## Automatische Aktualisierung (Renovate)
+
+Abhängigkeiten und Abbilder bleiben von selbst aktuell: **Renovate** legt gebündelte
+Aktualisierungs-PRs gegen `main` an. Übernommen wird keiner von selbst — `automerge` ist aus.
+Die Konfiguration steht versioniert in [`renovate.json`](../renovate.json).
+
+**Einmal einrichten.** Die Renovate-GitHub-App von Mend auf dem Repository installieren
+(<https://github.com/apps/renovate>, Zugriff nur auf dieses Repository). Ein Secret oder Token im
+Repository braucht es dafür nicht: Die App arbeitet mit ihren eigenen, kurzlebigen Rechten, und
+ihre PRs lösen die CI wie jeder andere PR aus. Wer einen Fork selbst betreibt, installiert die App
+auf seinem Fork; ohne App bleibt `renovate.json` wirkungslos.
+
+**Gruppen und Takt.** Je Gruppe entsteht höchstens ein PR pro Woche, montags vor 6 Uhr
+(Europe/Berlin):
+
+| Gruppe | Umfang |
+|---|---|
+| `Basisabbilder` | beide Dockerfiles (`Dockerfile`, `backup/Dockerfile`), die Compose-Dateien, die Bausteinliste `scripts/bausteine.json` und die Testcontainers-Abbilder in `src/test/**/*.java` |
+| `Backend` | Maven-Abhängigkeiten aus `pom.xml` |
+| `Frontend` | npm-Abhängigkeiten unter `frontend/` |
+| `Dokumentationsseite` | npm-Abhängigkeiten unter `docs-site/` |
+
+Fremde Abbilder sind an ihren Digest gebunden; ein Aktualisierungs-PR hebt den Digest auch bei
+unverändertem Tag an und bei einem Versionswechsel Tag und Digest gemeinsam — an jeder Fundstelle
+und in der Bausteinliste in einem PR, sodass der Abgleich der Bausteinliste grün bleibt. Nicht
+erfasst sind die eigenen Abbilder `ghcr.io/mannewolff/kanban-kit*` (die schreibt der Release),
+das Rückweg-Overlay `docker-compose.altspeicher.yml` und die GitHub Actions.
+
+**Einen Aktualisierungs-PR lesen.**
+
+1. **Release-Notes:** Renovate hängt sie je Abhängigkeit an die PR-Beschreibung. Auf Brüche,
+   Formatwechsel und Hinweise zur Migration achten — bei Datenbank und Objektspeicher besonders.
+2. **CI-Ergebnis:** Gemergt wird nur ein PR mit grüner CI — dazu gehört der Job `bezug`,
+   der die Bezugsstellen anonym prüft und die Bausteinliste gegen den Bestand hält.
+3. **Dependency-Dashboard:** Ein Issue mit dem Titel „Dependency Dashboard“ listet, was gerade
+   ansteht, was auf den nächsten Takt wartet und was nicht als PR offen ist. Dort lässt sich ein
+   PR auch vorzeitig anstoßen.
+
+**Der Merge ist das GO.** Wer einen grünen Aktualisierungs-PR mergt, gibt ihn frei — das ist ein
+zweiter Weg nach `main` neben `push main`. Was das für die lokale Arbeit heißt (vor dem nächsten
+`push main` den Stand von `origin/main` nachziehen), steht im Workflow-Guide
+`.claude/CLAUDE-workflow.md` unter „Zweiter Weg nach `main`: Aktualisierungs-PRs“.
+
+## Schutz des Branches `production`
+
+Nach `production` kommt ein Stand nur über einen Pull Request mit grünen Prüfungen. Das sichert
+ein **Ruleset** des Repositorys, zusätzlich zur Regel, dass `merge production` bei roter CI
+keinen Release-PR erstellt. Ein Ruleset ist keine Datei im Repository; damit sein Zustand
+nachprüfbar bleibt, steht seine Definition hier, samt den Aufrufen zum Setzen und Nachlesen.
+
+**Die Definition.** Ziel ist `refs/heads/production`. Die Regeln: ein Pull Request ist
+erforderlich (`pull_request`), die sieben Jobs aus [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
+müssen grün sein (`required_status_checks`, ohne die Pflicht, den Branch vorher auf den
+neuesten Stand zu bringen), kein Force-Push (`non_fast_forward`) und kein Löschen
+(`deletion`). Freigaben durch Reviewer verlangt das Ruleset nicht — es gibt nur einen Menschen
+mit Schreibrechten, und der kann seinen eigenen PR nicht freigeben.
+
+```json
+{
+  "name": "production schuetzen",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/production"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "required_status_checks": [
+          { "context": "Backend (mvn verify)" },
+          { "context": "Backend (PIT Mutation -Ppit)" },
+          { "context": "Frontend (npm build)" },
+          { "context": "Bezugsquellen (anonym beziehbar)" },
+          { "context": "Abbild bauen (Anwendungs-Abbild)" },
+          { "context": "Abbild bauen (Sicherungs-Abbild)" },
+          { "context": "Sicherheit" }
+        ]
+      }
+    },
+    { "type": "non_fast_forward" },
+    { "type": "deletion" }
+  ]
+}
+```
+
+Die Namen sind die angezeigten Namen der Jobs (`name:` in `ci.yml`); die beiden Abbild-Jobs
+entstehen aus der Matrix von `abbilder`. **Kommt in `ci.yml` ein neuer Job hinzu, gehört sein
+Name in diese Liste** — und das Ruleset wird mit dem Aufruf unten aktualisiert. Ein umbenannter
+Job, der hier noch unter altem Namen steht, meldet sich nie: Der PR wartet dann auf eine
+Prüfung, die es nicht mehr gibt.
+
+**Warum keine Ausnahme eingetragen ist.** `bypass_actors` bleibt leer, auch für den
+Repo-Inhaber. Ein Bypass für den einzigen Menschen mit Schreibrechten hebt den Schutz
+vollständig auf: Jeder Merge nach `production` liefe dann an den Prüfungen vorbei. Muss im
+Notfall doch einmal an ihnen vorbei gemergt werden, wird das Ruleset bewusst auf
+`"enforcement": "disabled"` gestellt und danach wieder auf `active` — sichtbar und nicht still.
+
+**`main` bleibt ungeschützt.** Auf `main` liegt kein Ruleset, damit `push main` wie bisher
+funktioniert; daneben führt der Merge eines grünen Aktualisierungs-PRs dorthin (zweiter Weg
+nach `main`, siehe oben). Geschützt wird erst der Übergang nach `production`.
+
+**Setzen.** Den JSON-Block oben in eine Datei außerhalb des Repositorys kopieren (etwa
+`$TMPDIR/ruleset-production.json`) und mit Admin-Rechten anlegen:
+
+```bash
+gh api --method POST repos/mannewolff/kanban-kit/rulesets --input - < "$TMPDIR/ruleset-production.json"
+```
+
+Die Antwort enthält die `id` des neuen Rulesets. Eine spätere Änderung (etwa ein neuer Job)
+geht mit derselben Datei an diese `id`:
+
+```bash
+gh api --method PUT repos/mannewolff/kanban-kit/rulesets/<id> --input - < "$TMPDIR/ruleset-production.json"
+```
+
+**Nachlesen.** Die Liste zeigt Name, `id`, `target` und `enforcement` aller Rulesets — es gibt
+genau eines, `production schuetzen`, mit `"enforcement": "active"`:
+
+```bash
+gh api repos/mannewolff/kanban-kit/rulesets
+```
+
+Die Einzelansicht zeigt die Regeln:
+
+```bash
+gh api repos/mannewolff/kanban-kit/rulesets/<id>
+```
+
+Daran ist der Schutz zu erkennen:
+
+- `"bypass_actors": []` — keine Ausnahme; `"current_user_can_bypass": "never"` bestätigt es aus
+  Sicht des Aufrufers.
+- `conditions.ref_name.include` enthält genau `refs/heads/production`, nicht `main`.
+- Unter `rules` steht ein Eintrag mit `"type": "required_status_checks"`, dessen
+  `parameters.required_status_checks` die sieben Namen oben trägt, dazu `pull_request`,
+  `non_fast_forward` und `deletion`.
+
+Kurz geprüft:
+
+```bash
+gh api repos/mannewolff/kanban-kit/rulesets/<id> --jq '{bypass: .bypass_actors, ziel: .conditions.ref_name.include, pruefungen: [.rules[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context]}'
+```
+
+## Stückliste eines Release-Abbilds
+
+Zu jedem veröffentlichten Release-Abbild — `ghcr.io/mannewolff/kanban-kit` und
+`ghcr.io/mannewolff/kanban-kit-backup` — gibt es eine Stückliste im Format CycloneDX: welche
+Bestandteile in welcher Fassung darin stecken. Sie entsteht im Lauf von
+[`.github/workflows/release-images.yml`](../.github/workflows/release-images.yml) zum Tag. Die
+Stückliste des Anwendungs-Abbilds nennt die ausgelieferten Backend-Abhängigkeiten (Maven-Scopes
+`compile` und `runtime`), die des Sicherungs-Abbilds die Pakete des gebauten Abbilds.
+
+**Als Release-Asset.** Am GitHub-Release der Fassung hängen `stueckliste-kanban-kit.cdx.json` und
+`stueckliste-kanban-kit-backup.cdx.json` — abrufbar ohne `gh`, direkt von der Release-Seite. Angehängt
+werden sie von `node scripts/gh-release.mjs`; das Skript bricht ab, solange der Lauf zum Tag nicht
+grün abgeschlossen ist.
+
+**Über die Attestation.** Dieselbe Stückliste ist per GitHub Artifact Attestation an den Digest des
+Abbilds gebunden. Damit lässt sich prüfen, dass sie zu genau diesem Abbild gehört und aus dem Lauf
+dieses Repositorys stammt:
+
+```bash
+gh attestation verify oci://ghcr.io/mannewolff/kanban-kit:<fassung> --repo mannewolff/kanban-kit --predicate-type https://cyclonedx.org/bom
+```
+
+Für das Sicherungs-Abbild entsprechend mit `oci://ghcr.io/mannewolff/kanban-kit-backup:<fassung>`.
+Mit `--format json` gibt der Befehl die Stückliste selbst aus.
+
+## Herkunft eines Release-Abbilds prüfen
+
+Dass ein Release-Abbild vom Projekt stammt, belegt eine Herkunfts-Attestation (Build Provenance):
+Der Lauf von [`.github/workflows/release-images.yml`](../.github/workflows/release-images.yml) zum
+Tag bindet sie an den Digest des Abbilds und legt sie neben dem Abbild in der Registry ab. Signiert
+wird schlüssellos über die GitHub-Identität des Laufs — im Repository liegt kein Schlüsselmaterial,
+und es gibt keines zu verwalten. Geprüft wird mit einem Befehl (GitHub CLI `gh`):
+
+```bash
+gh attestation verify oci://ghcr.io/mannewolff/kanban-kit:<fassung> --repo mannewolff/kanban-kit
+gh attestation verify oci://ghcr.io/mannewolff/kanban-kit-backup:<fassung> --repo mannewolff/kanban-kit
+```
+
+Eine erfolgreiche Prüfung endet mit `✓ Verification succeeded!` und nennt Workflow und Tag, aus dem
+das Abbild stammt, etwa für die Fassung `1.4.0`:
+
+```text
+✓ Verification succeeded!
+
+The following 1 attestation matched the policy criteria
+
+- Attestation #1
+  - Build repo:..... mannewolff/kanban-kit
+  - Build workflow:. .github/workflows/release-images.yml@refs/tags/v1.4.0
+  - Signer repo:.... mannewolff/kanban-kit
+  - Signer workflow: .github/workflows/release-images.yml@refs/tags/v1.4.0
+```
+
+Stammt das Abbild aus einem anderen Repository oder Workflow, oder fehlt die Attestation, endet der
+Befehl mit einem Fehler und einem Exitcode ungleich null.
+
+**Warum die eigenen Abbilder ohne Digest stehen.** In `docker-compose.yml` und
+`docker-compose.backup.yml` stehen `ghcr.io/mannewolff/kanban-kit` und
+`ghcr.io/mannewolff/kanban-kit-backup` bewusst nur mit Tag, die fremden Betriebsabbilder dagegen mit
+Digest. Der Digest der eigenen Abbilder entsteht erst im Release-Lauf auf dem Tag, der Commit dieses
+Tags kann ihn also nicht tragen. Ihre Herkunft sichert stattdessen die Attestation oben.
+
+## Sicherheitsprüfung
+
+Jeder CI-Lauf prüft im Job „Sicherheit“ ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml))
+mit Trivy, was kanban-kit ausliefert, auf bekannte Schwachstellen und eingecheckte Geheimnisse. Das
+Urteil fällt [`scripts/sicherheitspruefung.mjs`](../scripts/sicherheitspruefung.mjs); die
+Ergebnisliste steht in der Zusammenfassung des Jobs „Sicherheit“ auf der Seite des CI-Laufs.
+
+**Was geprüft wird.**
+
+- die eigenen Abbilder (Anwendung und Sicherungsdienst), wie sie im CI-Lauf entstehen;
+- die Stückliste der Anwendung (`target/bom.json`);
+- die fremden Bausteine aus `bausteine.json` — Datenbank, Objektspeicher, Webserver und die
+  Bauwerkzeuge — in der Fassung, an die das Projekt gebunden ist;
+- die Sperrdateien `frontend/package-lock.json` und `docs-site/package-lock.json`;
+- den Arbeitsbaum auf eingecheckte Geheimnisse.
+
+Als schwer gelten die Schweregrade `CRITICAL` und `HIGH`. Eine schwere Lücke **ohne** Korrektur
+sperrt nie, steht aber sichtbar in der Liste. Jede Befundzeile nennt den Bestandteil, in dem die
+Lücke steckt (etwa das Betriebssystem-Paket oder das Programm samt Pfad), damit gleiche Befunde aus
+verschiedenen Programmen unterscheidbar sind. Ein Ziel, das nicht geprüft werden konnte (Frist
+überschritten, Werkzeug fehlt, Ausgabe unlesbar), sperrt als „Ziel nicht geprüft“.
+
+**Die drei Regeln für eine schwere Lücke mit Korrektur.**
+
+1. **Eigen sperrt sofort.** Steckt die Lücke in einem Bestandteil, den kanban-kit selbst
+   einbringt, sperrt sie die Veröffentlichung, bis sie behoben oder als Ausnahme eingetragen ist.
+2. **Übernommen sperrt nach 14 Tagen.** Steckt die Lücke in einem Baustein eines anderen Anbieters,
+   prüft der Lauf zusätzlich die aktuelle Anbieter-Fassung: den neuesten Tag derselben Linie
+   (gleiche Hauptversion, gleiche Variante wie `-alpine` oder `-bookworm`; der gebundene Tag zählt
+   mit). Enthält diese Fassung die Lücke noch, sperrt der Befund nicht — Grund in der Liste:
+   „Anbieter hat noch keine korrigierte Fassung“. Fehlt die Lücke dort, beginnt mit dem
+   Erstellungsdatum dieser Fassung eine Frist von **14 Tagen**: Innerhalb der Frist steht der Befund
+   mit „korrigierte Fassung seit `<Datum>`, Frist bis `<Datum>`“ in der Liste, danach sperrt er und
+   nennt Anbieter-Fassung, Datum und abgelaufene Frist. Dann ist es Zeit, die Bindung in
+   `bausteine.json` (bzw. Renovate) nachzuziehen. Ist das Erstellungsdatum unbekannt oder ein
+   Platzhalter vor 2000-01-01, sperrt der Befund mit „Erscheinungstag der Anbieter-Fassung unbekannt“.
+3. **Bauwerkzeuge informieren nur.** Bausteine mit `"verwendung": "bau"` in `bausteine.json`
+   (Bau: Frontend, Bau: Backend, Sicherung: Werkzeugstufe) stecken nicht in der ausgelieferten
+   Fassung. Ihre Befunde stehen im eigenen Abschnitt „Bauwerkzeuge (informiert, sperrt nicht)“ und
+   sperren nie.
+
+**Eigen oder übernommen — je Bestandteil.** Ein fremder Baustein ist als Ganzes übernommen. In
+einem eigenen Abbild entscheidet der Bestandteil: Ein eigenes Abbild nennt in `bausteine.json` per
+Feld `basis` den Baustein, auf dem es aufsetzt (etwa die Java-Laufzeit oder die Datenbank). Trägt
+dieser Basis-Baustein denselben Befund mit gleicher Kennung, gleichem Paket und **gleicher
+Fassung**, gilt der Befund als übernommen und folgt Regel 2 mit der Anbieter-Fassung des
+Basis-Bausteins. Alles andere — etwa Bibliotheken der Anwendung oder Werkzeuge, die der
+Sicherungsdienst selbst herunterlädt — ist eigen und folgt Regel 1.
+
+**Bekannte Unschärfe.** Baut der Anbieter denselben Tag nach der Korrektur erneut, rückt das
+Erstellungsdatum nach, und die 14-Tage-Frist beginnt von Neuem. Die Prüfung merkt sich keine
+früheren Erstellungsdaten; weil Renovate die Digests wöchentlich nachzieht, bleibt die Lücke klein.
+
+**Ausnahmeliste.** Was vorerst hingenommen wird, steht in
+[`scripts/sicherheitsausnahmen.json`](../scripts/sicherheitsausnahmen.json):
+
+```json
+{ "kennung": "CVE-…", "ziel": "postgres:16.15", "begruendung": "…", "ablauf": "JJJJ-MM-TT" }
+```
+
+Alle vier Felder sind Pflicht; `ziel` ist das Prüfziel (Abbild, Stückliste oder Sperrdatei). Die
+Ausnahme gilt einschließlich des Ablauftags, danach sperrt der nächste Lauf wieder. Ein Geheimnis
+darf nur als nachweislicher Fehlalarm ausgenommen werden — mit `"art": "fehlalarm"`, Trivys
+RuleID als `kennung` und dem Dateipfad als `ziel`, ohne `ablauf`. Ein Eintrag mit Formfehler gilt
+nicht und sperrt selbst; ein Eintrag ohne passenden Befund erscheint als Hinweis in der
+Zusammenfassung.
+
+**Übergang bis 2026-11-01.** Für die Befunde aus CI-Lauf #281 in fremden Abbildern, Bau-Abbildern
+und den übernommenen Bestandteilen der eigenen Abbilder stehen befristete Einträge in der
+Ausnahmeliste (Issue #1352), alle mit `ablauf` 2026-11-01. Ab dem 2026-11-02 urteilt die Prüfung
+für diese Befunde wieder allein nach den Regeln oben.
+
 ## Umstellung des Objektspeichers
 
 Der Speicher der Anhänge wechselt von MinIO auf SeaweedFS (Plan #1222). Für die laufende Instanz

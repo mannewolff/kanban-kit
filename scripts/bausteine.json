@@ -7,16 +7,27 @@
     "src/test/**/*.java). Ein neues Abbild ohne Eintrag hier laesst den Pflichtcheck des Bereichs",
     "scripts scheitern — und umgekehrt ein Eintrag, den niemand mehr faehrt.",
     "Wer eine Fassung anhebt, hebt sie an ihrer Fundstelle UND hier: Die Liste sagt dem",
-    "Selbsthoster, woher sein Stack kommt."
+    "Selbsthoster, woher sein Stack kommt.",
+    "digest bindet ein fremdes Abbild an den Digest seiner Manifest-Liste (Plan #1295, E11): Er steht",
+    "an jeder Fundstelle als name:tag@digest und wird mit dem Tag gemeinsam angehoben, die",
+    "bezugsstelle bleibt tag-foermig. ausgeliefert sagt je Abbild, ob es ein Selbsthoster ueber",
+    "Compose oder eines der eigenen Abbilder bezieht (E13) — false fuer reine Testabbilder und das",
+    "Rueckweg-Overlay.",
+    "verwendung \"bau\" kennzeichnet ein Abbild, das nur beim Bauen gebraucht wird und nicht im",
+    "laufenden Stack steckt (Plan #1351, E5); ohne das Feld steckt es im Betrieb.",
+    "basis nennt bei einem eigenen Abbild den Baustein, auf dem es aufsetzt (E1); der Test haelt sie",
+    "gegen das letzte FROM von Dockerfile bzw. backup/Dockerfile."
   ],
   "bausteine": [
     {
       "name": "Anwendung",
       "zweck": "das veroeffentlichte Anwendungs-Abbild des Basis-Stacks (docker-compose.yml)",
       "art": "abbild",
-      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit:2.17.0",
-      "fassung": "2.17.0",
-      "pruefung": "eigen"
+      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit:2.18.0",
+      "fassung": "2.18.0",
+      "pruefung": "eigen",
+      "ausgeliefert": true,
+      "basis": "Laufzeit"
     },
     {
       "name": "Datenbank",
@@ -24,7 +35,9 @@
       "art": "abbild",
       "bezugsstelle": "postgres:16.15",
       "fassung": "16.15",
-      "pruefung": "bezug"
+      "pruefung": "bezug",
+      "digest": "sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54",
+      "ausgeliefert": true
     },
     {
       "name": "Objektspeicher",
@@ -32,7 +45,9 @@
       "art": "abbild",
       "bezugsstelle": "chrislusf/seaweedfs:4.47",
       "fassung": "4.47",
-      "pruefung": "bezug"
+      "pruefung": "bezug",
+      "digest": "sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882",
+      "ausgeliefert": true
     },
     {
       "name": "Reverse-Proxy",
@@ -40,15 +55,19 @@
       "art": "abbild",
       "bezugsstelle": "caddy:2.11.4",
       "fassung": "2.11.4",
-      "pruefung": "bezug"
+      "pruefung": "bezug",
+      "digest": "sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52",
+      "ausgeliefert": true
     },
     {
       "name": "Sicherung",
       "zweck": "das veroeffentlichte Abbild des Sicherungsdienstes (docker-compose.backup.yml)",
       "art": "abbild",
-      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit-backup:2.17.0",
-      "fassung": "2.17.0",
-      "pruefung": "eigen"
+      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit-backup:2.18.0",
+      "fassung": "2.18.0",
+      "pruefung": "eigen",
+      "ausgeliefert": true,
+      "basis": "Sicherung: Basis"
     },
     {
       "name": "Sicherung: Werkzeugstufe",
@@ -56,7 +75,10 @@
       "art": "abbild",
       "bezugsstelle": "debian:bookworm-20260918-slim",
       "fassung": "bookworm-20260918-slim",
-      "pruefung": "bezug"
+      "pruefung": "bezug",
+      "digest": "sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251",
+      "ausgeliefert": true,
+      "verwendung": "bau"
     },
     {
       "name": "Sicherung: Basis",
@@ -64,22 +86,24 @@
       "art": "abbild",
       "bezugsstelle": "postgres:16.15-bookworm",
       "fassung": "16.15-bookworm",
-      "pruefung": "bezug"
+      "pruefung": "bezug",
+      "digest": "sha256:efedf3595f1d6f415c08568ba171029bf54052e754cc9f030e3f2412b21f3d67",
+      "ausgeliefert": true
     },
     {
       "name": "Sicherung: age",
       "zweck": "Verschluesselung der Sicherung; schreibt das Format, aus dem zurueckgeholt wird",
       "art": "archiv",
-      "bezugsstelle": "https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz",
-      "fassung": "1.2.1",
+      "bezugsstelle": "https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-linux-amd64.tar.gz",
+      "fassung": "1.3.2",
       "pruefung": "bezug"
     },
     {
       "name": "Sicherung: rclone",
       "zweck": "Spiegel der Anhaenge und Weg ausser Haus (backup/Dockerfile, docker-compose.backup.yml)",
       "art": "archiv",
-      "bezugsstelle": "https://downloads.rclone.org/v1.68.2/rclone-v1.68.2-linux-amd64.zip",
-      "fassung": "1.68.2",
+      "bezugsstelle": "https://downloads.rclone.org/v1.75.1/rclone-v1.75.1-linux-amd64.zip",
+      "fassung": "1.75.1",
       "pruefung": "bezug"
     },
     {
@@ -88,7 +112,10 @@
       "art": "abbild",
       "bezugsstelle": "node:22.23.3-alpine",
       "fassung": "22.23.3-alpine",
-      "pruefung": "bezug"
+      "pruefung": "bezug",
+      "digest": "sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402",
+      "ausgeliefert": true,
+      "verwendung": "bau"
     },
     {
       "name": "Bau: Backend",
@@ -96,7 +123,10 @@
       "art": "abbild",
       "bezugsstelle": "maven:3.9.16-eclipse-temurin-25",
       "fassung": "3.9.16-eclipse-temurin-25",
-      "pruefung": "bezug"
+      "pruefung": "bezug",
+      "digest": "sha256:93b8a14ea2f412782e4e842651273b4d903e35cc496284f178fbbe2d67d00976",
+      "ausgeliefert": true,
+      "verwendung": "bau"
     },
     {
       "name": "Laufzeit",
@@ -104,7 +134,9 @@
       "art": "abbild",
       "bezugsstelle": "eclipse-temurin:25.0.4.1_1-jre",
       "fassung": "25.0.4.1_1-jre",
-      "pruefung": "bezug"
+      "pruefung": "bezug",
+      "digest": "sha256:fcd7fd7b387f94bb2ac461478a7436ad8e349924c374ea8313919624dceae636",
+      "ausgeliefert": true
     },
     {
       "name": "IT-Suite: Mailserver",
@@ -112,7 +144,8 @@
       "art": "abbild",
       "bezugsstelle": "axllent/mailpit:v1.27",
       "fassung": "v1.27",
-      "pruefung": "bezug"
+      "pruefung": "bezug",
+      "ausgeliefert": false
     },
     {
       "name": "Rueckweg: Altspeicher",
@@ -122,7 +155,8 @@
       "fassung": "RELEASE.2025-09-07T16-13-09Z",
       "pruefung": "keine",
       "grund": "anonym nicht mehr beziehbar (geprueft am 2026-09-26: leere Aktionsliste im Token, Manifest antwortet 401); das Overlay laeuft nur aus dem lokalen Vorrat des Servers",
-      "ablaufversion": "2.13.0"
+      "ablaufversion": "2.13.0",
+      "ausgeliefert": false
     }
   ]
 }

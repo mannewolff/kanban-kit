@@ -123,6 +123,14 @@ Beide Endpunkte adressieren die Karte über ihre **interne Karten-ID** (das Feld
 Adressierung wie bei `/items/{id}/move` und `/items/{id}/comments`; `board.mjs` löst eine
 übergebene Board-Nummer intern in diese ID auf.
 
+Kommentare tragen in `GET /api/kanban/items/{id}/comments` zusätzlich ihr Feld `id` — dieselbe ID
+wie in `GET /api/cards/{id}/comments`. Mit ihr ersetzt
+`PATCH /api/kanban/items/{id}/comments/{commentId}` und `{"body": "…"}` den Text an Ort und Stelle
+(Antwort 204), statt einen neuen Kommentar anzuhängen; so erneuert das Kit seinen Abschlussbericht
+und den Kommentar `## Laufstand`. Ersetzen darf nur der Autor selbst (403 sonst); ein Kommentar
+einer anderen Karte oder eine Karte außerhalb des gebundenen Boards antwortet mit 404, ein leerer
+oder zu langer Text mit 400 — dieselbe Grenze wie beim Anlegen.
+
 Für Arbeitspakete (Karten außer Vorhaben, deren Titel nicht mit `[Idee]`, `[Fachlich]` oder
 `[Plan]` beginnt) trägt das Feld `column` in `GET /api/kanban/items` den Status der Karte und nicht
 mehr den Spaltennamen — ein Paket in einer eigenen Spalte wie „Anstehend" erscheint so unter

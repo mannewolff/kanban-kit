@@ -72,9 +72,35 @@ function makeApis() {
     fetchBlob: vi.fn(),
   } satisfies AttachmentsApi
   const cardsApi = {
-    // Das Modal lädt die volle Beschreibung beim Öffnen nach (Issue #769).
-    get: vi.fn().mockResolvedValue({ ...card }),
-    update: vi.fn().mockResolvedValue({ ...card }),
+    // Das Modal lädt die volle Beschreibung beim Öffnen nach (Issue #769) und übernimmt daraus den
+    // Kartenstand (Issue #1328) — eine über `#3` geöffnete Karte bekommt deshalb ihren eigenen.
+    get: vi.fn(
+      (id: number): Promise<Card> => Promise.resolve(id === linkedCard.id ? { ...card, ...linkedCard } : { ...card }),
+    ),
+    // Echo der gesendeten Werte über der Fixture (Issue #1328): Die Maske übernimmt nach dem
+    // Speichern die Antwort des Servers — ein fester Rückgabewert behauptete einen anderen Stand.
+    // Nicht gesendete Felder (`undefined`) behält der Server, hier also die Fixture.
+    update: vi.fn(
+      (
+        id: number,
+        title: string,
+        description: string | null,
+        dependencies?: number[],
+        shortcode?: string | null,
+        parentId?: number | null,
+        dueDate?: string | null,
+      ): Promise<Card> =>
+        Promise.resolve({
+          ...card,
+          id,
+          title,
+          description,
+          dependencies: dependencies ?? card.dependencies,
+          ...(shortcode === undefined ? {} : { shortcode }),
+          ...(parentId === undefined ? {} : { parentId }),
+          ...(dueDate === undefined ? {} : { dueDate }),
+        }),
+    ),
     setAssignees: vi.fn().mockResolvedValue({ ...card }),
     setLabels: vi.fn().mockResolvedValue({ ...card }),
     getActivity: vi.fn().mockResolvedValue([]),
@@ -82,7 +108,9 @@ function makeApis() {
     setStatus: vi.fn().mockResolvedValue(undefined),
     moveToIdeaStorage: vi.fn().mockResolvedValue({ ...card }),
     byNumber: vi.fn().mockResolvedValue({ ...linkedCard }),
-    assignDerivedFrom: vi.fn().mockResolvedValue({ ...card }),
+    assignDerivedFrom: vi.fn(
+      (id: number, derivedFrom: number | null): Promise<Card> => Promise.resolve({ ...card, id, derivedFrom }),
+    ),
     epicTree: vi.fn().mockResolvedValue([]),
     openEpic: vi.fn().mockResolvedValue({ ...card, id: 400, number: 9, title: 'Neues Vorhaben', type: 'EPIC' }),
   }
@@ -332,6 +360,29 @@ describe('CardDetailModal', () => {
       ),
     )
     expect(onChanged).toHaveBeenCalled()
+  })
+
+  // Issue #1327: Der Klick trifft genau die angezeigte Aufgabe — das eingerückte Code-Beispiel
+  // sieht aus wie eine Aufgabe, erscheint aber als Code und bleibt unverändert.
+  const gemischt = 'Beispiel:\n\n    - [ ] nur Code\n\n- [ ] eins\n  - [ ] verschachtelt\n\n> - [ ] zitiert'
+  it.each([
+    ['Aufgabe 1', 'Beispiel:\n\n    - [ ] nur Code\n\n- [x] eins\n  - [ ] verschachtelt\n\n> - [ ] zitiert'],
+    ['Aufgabe 2', 'Beispiel:\n\n    - [ ] nur Code\n\n- [ ] eins\n  - [x] verschachtelt\n\n> - [ ] zitiert'],
+    ['Aufgabe 3', 'Beispiel:\n\n    - [ ] nur Code\n\n- [ ] eins\n  - [ ] verschachtelt\n\n> - [x] zitiert'],
+  ])('flippt beim Klick auf %s genau deren Zeile, nie das Code-Beispiel', async (label, erwartet) => {
+    const apis = makeApis()
+    const gemischtCard: Card = { ...card, description: gemischt }
+    liefert(apis, gemischtCard)
+    render(<CardDetailModal card={gemischtCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(await screen.findByLabelText(label))
+
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(
+        100, 'Aufgabe', erwartet, [3, 4], undefined, null, null,
+      ),
+    )
+    expect(screen.queryByLabelText('Aufgabe 4')).not.toBeInTheDocument()
   })
 
   it('lässt Checkboxen ohne Bearbeiten-Recht deaktiviert', async () => {
@@ -854,6 +905,7 @@ describe('CardDetailModal', () => {
   it('zeigt den Knopf an einer bereits zugeordneten Karte nicht', async () => {
     // Stillschweigendes Umhaengen entzoege einer bestehenden Gruppierung eine Karte (#640).
     const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...card, parentId: 200 })
     render(
       <CardDetailModal card={{ ...card, parentId: 200 }} canEdit onClose={vi.fn()} {...apis} />,
       { wrapper: SnackbarProvider },
@@ -1004,6 +1056,7 @@ describe('CardDetailModal', () => {
 
   it('zeigt im Edit-Modus eines Epics nur das Kürzel-Feld', async () => {
     const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...epicCard })
     render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
 
     await klickeBearbeiten()
@@ -1044,6 +1097,7 @@ describe('CardDetailModal', () => {
 
   it('lässt eine gesetzte Epic-Zuordnung ohne ladbare Epic-Liste unangetastet', async () => {
     const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...card, parentId: 9 })
     render(
       <CardDetailModal
         card={{ ...card, parentId: 9 }}
@@ -1071,6 +1125,7 @@ describe('CardDetailModal', () => {
 
   it('schaltet die Vorhaben-Auswahl bei ausgeblendetem Vorhaben lesend', async () => {
     const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...card, parentId: 9 })
     // `epics` kennt das Vorhaben (Titelanzeige, Fortschritt), `selectableEpics` nicht: genau der
     // Zustand eines auf dem Board ausgeblendeten Vorhabens (Plan #717, A2).
     const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
@@ -1104,6 +1159,7 @@ describe('CardDetailModal', () => {
 
   it('zeigt die nackte Nummer, wenn auch die Vorhaben-Liste das Vorhaben nicht kennt', async () => {
     const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...card, parentId: 9 })
     // `epics=[]` ohne `canEditEpic` (Plan #717, A6). Ohne Eintrag in
     // `epics` gibt es keinen Titel zu zeigen — die Nummer belegt trotzdem, dass eine Zuordnung
     // besteht.
@@ -1471,6 +1527,7 @@ describe('CardDetailModal', () => {
     const apis = makeApis()
     const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     const linked: Card = { ...card, parentId: 9 }
+    apis.cardsApi.get.mockResolvedValue({ ...linked })
     render(<CardDetailModal card={linked} canEdit epics={epics} onClose={vi.fn()} {...apis} />)
 
     await klickeBearbeiten()
@@ -2261,6 +2318,7 @@ describe('CardDetailModal — Herkunft (#608)', () => {
 
   it('zeigt eine gesetzte Herkunft im Feld', async () => {
     const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...mitHerkunft })
     render(<CardDetailModal card={mitHerkunft} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
     await klickeBearbeiten()
@@ -2280,6 +2338,7 @@ describe('CardDetailModal — Herkunft (#608)', () => {
 
   it('loescht die Herkunft, wenn das Feld geleert wird', async () => {
     const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...mitHerkunft })
     render(<CardDetailModal card={mitHerkunft} canEdit columnName="In Progress" onClose={vi.fn()} {...apis} />)
 
     await klickeBearbeiten()
@@ -2742,4 +2801,217 @@ describe('CardDetailModal — drei Blöcke (AK 13, #958)', () => {
       expect(regel).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/)
     },
   )
+})
+
+// --- Vom Server bestätigter Kartenstand (Issue #1328, Plan #1325) ------------
+
+describe('CardDetailModal — bestätigter Kartenstand (#1328)', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  const aufgaben: Card = { ...card, description: '[ ] eins\n[ ] zwei' }
+  const vorhabenListe = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+
+  /** Öffnet die Karte; der Einzelabruf liefert dieselbe Karte wie die Prop. */
+  function oeffne(karte: Card, props: Partial<ComponentProps<typeof CardDetailModal>> = {}) {
+    const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...karte })
+    render(<CardDetailModal card={karte} canEdit columnName="In Progress" onClose={vi.fn()} {...props} {...apis} />)
+    return apis
+  }
+
+  /**
+   * Schließt den Editiermodus über den Hintergrund des Dialogs: MUI wertet mousedown + click auf
+   * dem Container aus. Rolle `presentation` tragen Wurzel und Container; der Container ist der
+   * innere, in Dokumentreihenfolge also der letzte.
+   */
+  function klickeDaneben() {
+    const container = screen.getAllByRole('presentation').at(-1)!
+    fireEvent.mouseDown(container)
+    fireEvent.click(container)
+  }
+
+  it('sendet beim Checkbox-Klick nach dem Speichern Titel, Fälligkeit und Vorhaben des gespeicherten Stands (AK 1, 2)', async () => {
+    const apis = oeffne(aufgaben, { epics: vorhabenListe })
+
+    await klickeBearbeiten()
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neuer Titel' } })
+    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2099-08-01' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(1))
+
+    // Kopfzeile und Lesemodus zeigen den gespeicherten Stand.
+    expect(await screen.findByText('Neuer Titel')).toBeInTheDocument()
+    expect(screen.getByLabelText('Fälligkeitsdatum')).toHaveTextContent('Fällig am')
+    // Mit gesetztem Vorhaben steht der Weg „Vorgang eröffnen" nicht mehr offen.
+    expect(screen.queryByRole('button', { name: 'Vorgang eröffnen' })).not.toBeInTheDocument()
+
+    fireEvent.click(await screen.findByLabelText('Aufgabe 2'))
+
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(2))
+    expect(apis.cardsApi.update).toHaveBeenLastCalledWith(
+      100, 'Neuer Titel', '[ ] eins\n[x] zwei', [3, 4], undefined, 9, '2099-08-01T00:00:00Z',
+    )
+    expect(screen.getByText('Neuer Titel')).toBeInTheDocument()
+  })
+
+  it('sendet beim Checkbox-Klick nach dem Speichern das gespeicherte Kürzel eines Vorhabens (AK 1)', async () => {
+    const vorhaben: Card = { ...aufgaben, id: 200, type: 'EPIC', shortcode: 'AUT' }
+    const apis = oeffne(vorhaben)
+
+    await klickeBearbeiten()
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neues Vorhaben' } })
+    fireEvent.change(screen.getByLabelText('Kürzel'), { target: { value: 'NEU' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(1))
+
+    expect(await screen.findByText('Neues Vorhaben')).toBeInTheDocument()
+    fireEvent.click(await screen.findByLabelText('Aufgabe 1'))
+
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(2))
+    expect(apis.cardsApi.update).toHaveBeenLastCalledWith(
+      200, 'Neues Vorhaben', '[x] eins\n[ ] zwei', [3, 4], 'NEU', undefined, undefined,
+    )
+  })
+
+  it.each([
+    ['Abbrechen-Button', () => fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))],
+    ['Escape', () => fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape', code: 'Escape' })],
+    ['Klick daneben', klickeDaneben],
+  ])('verwirft den Beschreibungsentwurf per %s und speichert ihn auch beim Checkbox-Klick nicht (AK 3, 4)', async (_, verlassen) => {
+    const apis = oeffne(aufgaben)
+
+    await klickeBearbeiten()
+    fireEvent.change(screen.getByLabelText('Markdown-Beschreibung'), { target: { value: '[ ] Entwurf' } })
+    verlassen()
+
+    // Sofort der gespeicherte Text, nicht der Entwurf.
+    expect(await screen.findByLabelText('Aufgabe 2')).toBeInTheDocument()
+    expect(screen.queryByText('Entwurf')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Aufgabe 1'))
+
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(1))
+    expect(apis.cardsApi.update).toHaveBeenLastCalledWith(
+      100, 'Aufgabe', '[x] eins\n[ ] zwei', [3, 4], undefined, null, null,
+    )
+  })
+
+  it('setzt eine verworfene Herkunft beim erneuten Bearbeiten auf den gespeicherten Wert zurück (E5)', async () => {
+    const apis = oeffne({ ...card, derivedFrom: 42 })
+
+    await klickeBearbeiten()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Herkunft' }), { target: { value: 'abc' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    expect(await screen.findByText('Nur eine positive Kartennummer, oder leer.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+
+    await klickeBearbeiten()
+    expect(screen.getByRole('textbox', { name: 'Herkunft' })).toHaveValue('42')
+    expect(screen.queryByText('Nur eine positive Kartennummer, oder leer.')).not.toBeInTheDocument()
+    expect(apis.cardsApi.assignDerivedFrom).not.toHaveBeenCalled()
+  })
+
+  it('sendet bei initialEditing ohne Änderung den nachgeladenen Text (Review-Fund 2)', async () => {
+    const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...card, description: 'Nachgeladen' })
+    render(<CardDetailModal card={{ ...card, description: null }} canEdit initialEditing onClose={vi.fn()} {...apis} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('Nachgeladen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', 'Nachgeladen', [3, 4], undefined, null, null),
+    )
+  })
+
+  it('übernimmt bei initialEditing die nachgeladenen Felder in den Entwurf (E2)', async () => {
+    const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...card, title: 'Vom Server', dependencies: [8], derivedFrom: 42 })
+    render(<CardDetailModal card={card} canEdit initialEditing onClose={vi.fn()} {...apis} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Titel')).toHaveValue('Vom Server'))
+    expect(screen.getByLabelText('Abhängig von')).toHaveValue('8')
+    expect(screen.getByRole('textbox', { name: 'Herkunft' })).toHaveValue('42')
+  })
+
+  it('sendet beim Checkbox-Klick einer synthetischen Vorhaben-Karte den nachgeladenen Stand, nicht die Ersatzwerte (E2)', async () => {
+    // Wie `epicToCard`: Abhängigkeiten, Fälligkeit, Vorhaben und Herkunft sind Ersatzwerte.
+    const synthetisch: Card = {
+      ...card, id: 200, type: 'EPIC', title: 'Auth', shortcode: 'AUT', description: null,
+      dependencies: [], parentId: null, dueDate: null, derivedFrom: null,
+    }
+    const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({
+      ...synthetisch, title: 'Auth', description: '[ ] eins', dependencies: [7], dueDate: '2099-01-01T00:00:00Z',
+    })
+    render(<CardDetailModal card={synthetisch} canEdit onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(await screen.findByLabelText('Aufgabe 1'))
+
+    // Fälligkeit und Vorhaben sendet ein Vorhaben nicht (Weiche wie bisher) — der Server behält sie.
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(200, 'Auth', '[x] eins', [7], 'AUT', undefined, undefined),
+    )
+  })
+
+  it('sendet beim Checkbox-Klick die nachgeladene Fälligkeit, nicht den Wert der Prop (E2)', async () => {
+    const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...aufgaben, dueDate: '2099-01-01T00:00:00Z' })
+    render(<CardDetailModal card={{ ...aufgaben, dueDate: null }} canEdit onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(await screen.findByLabelText('Aufgabe 1'))
+
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(
+        100, 'Aufgabe', '[x] eins\n[ ] zwei', [3, 4], undefined, null, '2099-01-01T00:00:00Z',
+      ),
+    )
+  })
+
+  it('zeigt die neue Herkunft, wenn sie gespeichert wurde und das Update danach scheitert (E1)', async () => {
+    const apis = oeffne(card)
+    apis.cardsApi.update.mockRejectedValue(new Error('boom'))
+
+    await klickeBearbeiten()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Herkunft' }), { target: { value: '42' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalled())
+
+    // Die Maske bleibt im Editiermodus; der Lesemodus danach zeigt, was der Server schon hat.
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+    expect(await screen.findByLabelText('Herkunft')).toHaveTextContent('Hervorgegangen aus: #42')
+  })
+
+  it('übernimmt nach dem Speichern den Stand aus der Antwort des Servers (E1)', async () => {
+    const apis = oeffne(card)
+    // Der Server normalisiert: Er trimmt und meldet einen anderen Titel zurück als gesendet.
+    apis.cardsApi.update.mockResolvedValue({ ...card, title: 'Vom Server normalisiert', dependencies: [12] })
+
+    await klickeBearbeiten()
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Gesendet' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    expect(await screen.findByText('Vom Server normalisiert')).toBeInTheDocument()
+    expect(screen.getByLabelText('Abhängigkeiten')).toHaveTextContent('Abhängig von: #12')
+  })
+
+  it('setzt nach einem gescheiterten Checkbox-Klick den vorherigen Stand zurück (E3)', async () => {
+    const apis = oeffne(aufgaben)
+    apis.cardsApi.update.mockRejectedValueOnce(new Error('boom'))
+
+    fireEvent.click(await screen.findByLabelText('Aufgabe 1'))
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByLabelText('Aufgabe 1')).not.toBeChecked())
+
+    // Der nächste Klick geht vom gespeicherten Text aus, nicht vom gescheiterten.
+    fireEvent.click(screen.getByLabelText('Aufgabe 2'))
+    await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(2))
+    expect(apis.cardsApi.update).toHaveBeenLastCalledWith(
+      100, 'Aufgabe', '[ ] eins\n[x] zwei', [3, 4], undefined, null, null,
+    )
+  })
 })

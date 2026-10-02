@@ -32,7 +32,6 @@ frontend/dist/
 
 # VitePress-Doku-Build
 docs-site/node_modules/
-docs-site/package-lock.json
 docs-site/.vitepress/dist/
 docs-site/.vitepress/cache/
 

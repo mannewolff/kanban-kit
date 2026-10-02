@@ -1,0 +1,63 @@
+{
+  "_hinweis": "Gekuerzte Bausteinliste fuer scripts/sicherheitspruefung.test.mjs (Issue #1333); basis und verwendung (Issue #1353) fuer die Pakete von Plan #1351.",
+  "bausteine": [
+    {
+      "name": "Anwendung",
+      "zweck": "eigenes Abbild",
+      "art": "abbild",
+      "bezugsstelle": "ghcr.io/beispiel/anwendung:1.0.0",
+      "fassung": "1.0.0",
+      "pruefung": "eigen",
+      "ausgeliefert": true,
+      "basis": "Datenbank"
+    },
+    {
+      "name": "Datenbank",
+      "zweck": "ausgeliefertes fremdes Abbild mit Digest",
+      "art": "abbild",
+      "bezugsstelle": "postgres:16.15",
+      "fassung": "16.15",
+      "pruefung": "bezug",
+      "digest": "sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54",
+      "ausgeliefert": true
+    },
+    {
+      "name": "Bau: Werkzeug",
+      "zweck": "Bauwerkzeug ohne Digest, nur beim Bauen gebraucht",
+      "art": "abbild",
+      "bezugsstelle": "caddy:2.11.4",
+      "fassung": "2.11.4",
+      "pruefung": "bezug",
+      "ausgeliefert": true,
+      "verwendung": "bau"
+    },
+    {
+      "name": "IT-Suite: Mailserver",
+      "zweck": "nur in den Integrationstests",
+      "art": "abbild",
+      "bezugsstelle": "axllent/mailpit:v1.29",
+      "fassung": "v1.29",
+      "pruefung": "bezug",
+      "ausgeliefert": false
+    },
+    {
+      "name": "Rueckweg: Altspeicher",
+      "zweck": "nicht anonym beziehbar",
+      "art": "abbild",
+      "bezugsstelle": "quay.io/minio/minio:RELEASE.2025",
+      "fassung": "RELEASE.2025",
+      "pruefung": "keine",
+      "grund": "gesperrt",
+      "ablaufversion": "3.0.0",
+      "ausgeliefert": true
+    },
+    {
+      "name": "Werkzeug",
+      "zweck": "Archiv im Sicherungs-Abbild",
+      "art": "archiv",
+      "bezugsstelle": "https://example.org/werkzeug.tar.gz",
+      "fassung": "1.0",
+      "pruefung": "bezug"
+    }
+  ]
+}

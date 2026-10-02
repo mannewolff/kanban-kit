@@ -6,6 +6,13 @@
 // Checkbox. Damit `[ ]`/`[x]` in allen Varianten einheitlich als Checkbox erscheinen, kanonisieren
 // wir die Marker vor dem Rendern zu `[ ]`/`[x]` — am Zeilenanfang und außerhalb von Code-Fences.
 // Nackte Marker ohne Listenmarker bekommen zusätzlich einen `- `, damit GFM sie als Liste erkennt.
+// Zeilen mit CRLF-Ende werden ebenso behandelt; das `\r` bleibt erhalten.
+// Beim Umschalten zählt `toggleTaskAt` die Checkboxen wie der Renderer: über denselben GFM-Parser.
+
+import type { ListItem, Nodes } from 'mdast'
+import remarkGfm from 'remark-gfm'
+import remarkParse from 'remark-parse'
+import { unified } from 'unified'
 
 const FENCE = /^\s*(```|~~~)/
 // Marker-Kern durchgängig `\[\s*(?:[xX]\s*)?\]` statt `\[\s*[xX]?\s*\]`: Letzteres hat zwei
@@ -34,60 +41,88 @@ function canonical(marker: string): string {
  */
 export function normalizeTaskLists(md: string): string {
   let inFence = false
+  const normalizeLine = (line: string): string => {
+    if (FENCE.test(line)) {
+      inFence = !inFence
+      return line
+    }
+    if (inFence) {
+      return line
+    }
+    const listed = LISTED.exec(line)
+    if (listed) {
+      const [, prefix, marker, rest] = listed
+      // Stryker disable next-line Regex: `/\s*/` statt `/^\s*/` ist gleichwertig — `\s*` passt immer schon an Stelle 0 (notfalls leer), und `replace` ohne `g` ersetzt nur diesen ersten Treffer.
+      const body = rest.replace(/^\s*/, '')
+      const suffix = body ? ` ${body}` : ''
+      return `${prefix}${canonical(marker)}${suffix}`
+    }
+    const naked = NAKED.exec(line)
+    if (naked) {
+      const [, indent, marker, rest] = naked
+      // Stryker disable next-line Regex: `/\s*/` statt `/^\s*/` ist gleichwertig — `\s*` passt immer schon an Stelle 0 (notfalls leer), und `replace` ohne `g` ersetzt nur diesen ersten Treffer.
+      const body = rest.replace(/^\s*/, '')
+      const suffix = body ? ` ${body}` : ''
+      return `${indent}- ${canonical(marker)}${suffix}`
+    }
+    return line
+  }
   return md
     .split('\n')
-    .map((line) => {
-      if (FENCE.test(line)) {
-        inFence = !inFence
-        return line
-      }
-      if (inFence) {
-        return line
-      }
-      const listed = LISTED.exec(line)
-      if (listed) {
-        const [, prefix, marker, rest] = listed
-        const body = rest.replace(/^\s*/, '')
-        const suffix = body ? ` ${body}` : ''
-        return `${prefix}${canonical(marker)}${suffix}`
-      }
-      const naked = NAKED.exec(line)
-      if (naked) {
-        const [, indent, marker, rest] = naked
-        const body = rest.replace(/^\s*/, '')
-        const suffix = body ? ` ${body}` : ''
-        return `${indent}- ${canonical(marker)}${suffix}`
-      }
-      return line
+    .map((raw) => {
+      // Bei CRLF bleibt das `\r` am Zeilenende stehen; `.` in LISTED/NAKED trifft es nicht.
+      // Abtrennen und wieder anhängen hält jedes Zeichen auf seiner Position (für toggleTaskAt).
+      const cr = raw.endsWith('\r') ? '\r' : ''
+      return normalizeLine(raw.slice(0, raw.length - cr.length)) + cr
     })
     .join('\n')
 }
 
+/** Derselbe Parser wie beim Rendern (react-markdown mit remark-gfm), damit beide gleich zählen. */
+const parser = unified().use(remarkParse).use(remarkGfm)
+
+/**
+ * Sammelt die Task-List-Items in Dokumentreihenfolge — rekursiv, also auch in Zitaten und
+ * verschachtelten Listen. Kriterium wie in `mdast-util-to-hast`: Ein `listItem` wird genau dann als
+ * Checkbox gerendert, wenn `checked` ein Boolean ist.
+ */
+function collectTasks(node: Nodes, tasks: ListItem[]): ListItem[] {
+  // Stryker disable next-line ConditionalExpression: `node.type === 'listItem'` → `true` ist gleichwertig — in mdast trägt nur ein `listItem` das Feld `checked`.
+  if (node.type === 'listItem' && typeof node.checked === 'boolean') {
+    tasks.push(node)
+  }
+  if ('children' in node) {
+    for (const child of node.children) {
+      collectTasks(child, tasks)
+    }
+  }
+  return tasks
+}
+
 /**
  * Schaltet die `targetIndex`-te Checkbox (0-basiert, in Dokumentreihenfolge) zwischen `[ ]` und
- * `[x]` um und schreibt sie kanonisch. Zählweise identisch zu {@link normalizeTaskLists}/GFM
- * (Code-Fences zählen nicht; Marker-Varianten wie `[  ]`/`[]`/`[ x ]` zählen mit), damit der Index
- * dem gerenderten Checkbox-Index entspricht. Kein Treffer → unveränderter Text.
+ * `[x]` um und schreibt sie kanonisch. Gezählt wird wie der Renderer: Der Text wird wie beim
+ * Rendern normalisiert ({@link normalizeTaskLists}) und mit demselben GFM-Parser gelesen — was als
+ * Checkbox erscheint, zählt (auch in Zitaten und verschachtelten Listen), eingerückter und
+ * umzäunter Code zählt nicht. Weil die Normalisierung Zeilenzahl und Startspalte der Listeneinträge
+ * erhält, wird im **Originaltext** der erste Marker ab der Startspalte des getroffenen Eintrags
+ * geflippt; der Rest der Zeile bleibt unverändert. Kein Treffer → unveränderter Text.
  */
 export function toggleTaskAt(md: string, targetIndex: number): string {
-  const lines = md.split('\n')
-  let inFence = false
-  let i = 0
-  for (let l = 0; l < lines.length; l++) {
-    const line = lines[l]
-    if (FENCE.test(line)) {
-      inFence = !inFence
-      continue
-    }
-    if (inFence || (!LISTED.test(line) && !NAKED.test(line))) {
-      continue
-    }
-    if (i === targetIndex) {
-      // Nur den führenden Marker flippen (nicht Klammern im Task-Text) und kanonisch schreiben.
-      lines[l] = line.replace(MARKER, (mk) => (/[xX]/.test(mk) ? '[ ]' : '[x]'))
-      return lines.join('\n')
-    }
-    i++
+  const normalized = normalizeTaskLists(md)
+  const task = collectTasks(parser.parse(normalized), [])[targetIndex]
+  if (!task) {
+    return md
   }
-  return md
+  // Der Parser setzt an jedem Knoten aus dem Quelltext eine Position.
+  const { line, offset } = task.position!.start
+  // Stryker disable next-line ArithmeticOperator: `offset! + 1` ist gleichwertig — nach der Normalisierung folgt auf den Listenmarker einer Aufgabe stets `.`, `)` oder Whitespace auf derselben Zeile, nie ein `\n`, also findet `lastIndexOf` denselben Zeilenumbruch.
+  const column = offset! - (normalized.lastIndexOf('\n', offset! - 1) + 1)
+  const lines = md.split('\n')
+  const original = lines[line - 1]
+  // Nur den Marker des Eintrags flippen (nicht Klammern im Task-Text) und kanonisch schreiben.
+  lines[line - 1] =
+    original.slice(0, column) +
+    original.slice(column).replace(MARKER, (mk) => (/[xX]/.test(mk) ? '[ ]' : '[x]'))
+  return lines.join('\n')
 }

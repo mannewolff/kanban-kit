@@ -259,10 +259,19 @@ cd frontend && npm test         # Vitest
 
 ```bash
 node scripts/mutationspruefung.mjs aenderung frontend   # beim Push über den Batch, Stufe push
-node scripts/mutationspruefung.mjs vollauf frontend     # an der Push-Stufe, Schwelle 80 % je Ausschnitt
+node scripts/mutationspruefung.mjs vollauf frontend     # Handlauf, etwa wöchentlich, Schwelle 80 % je Ausschnitt
 ```
 
-Beide stehen als `buildChecks` in `.claude/workflow.config.json`, beide an der Stufe `push`.
+Die Änderungsprüfung steht als `buildChecks` in `.claude/workflow.config.json` an der Stufe `push` und ist
+Pflicht. Der Vollauf ist keine Pflichtprüfung mehr (Issue #1344).
+
+**Wöchentlicher Vollauf (von Hand).** Manne startet ihn etwa einmal in der Woche mit
+`node scripts/mutationspruefung.mjs vollauf frontend`. Er misst jeden aufgenommenen Ausschnitt gegen 80 %,
+schlägt den nächsten Kandidaten ab 82 % zur Aufnahme vor und schreibt die Gedächtnisdatei
+`.claude/mutationsvollauf-frontend.json`. Liegt ein aufgenommener Ausschnitt unter 80 %, entsteht je
+betroffenem Ausschnitt eine Karte, die seine Quote wieder anhebt. Die Altlast-Bedingung 4 unten („im
+letzten Vollauf überlebt“) bezieht sich auf diesen Handlauf; je älter er ist, desto seltener greift ein
+Altlast-Vermerk.
 
 **Der Stufenplan ist die einzige Quelle des Prüfbereichs** (Plan #1270, Issues #1275, #1276):
 [`frontend/mutationsstufen.json`](frontend/mutationsstufen.json) führt die `ausnahmen` (reine Stil- und
@@ -342,7 +351,8 @@ der Abdeckung grün, in der Mutationsprüfung aber ungedeckt — er braucht Test
 `thresholds.break` steht auf `null`: Ob und wann der Lauf abbricht, regelt die Mutationsprüfung auf dem
 geänderten Code (Issue #1104), nicht eine Gesamtschwelle. Den Halt liefert der Rückgabewert von
 `scripts/mutationspruefung.mjs` — bei der Änderungsprüfung ein Überlebender in einer berührten Datei, beim
-Vollauf ein aufgenommener Ausschnitt unter 80 %.
+Vollauf ein aufgenommener Ausschnitt unter 80 %. Dieser Halt betrifft den wöchentlichen Handlauf, nicht
+`push main`.
 
 ---
 

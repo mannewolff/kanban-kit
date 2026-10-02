@@ -15,6 +15,7 @@ import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.BoardItemView;
 import org.mwolff.manban.card.application.LabelService;
+import org.mwolff.manban.comment.application.CommentNotFoundException;
 import org.mwolff.manban.comment.application.CommentService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -404,8 +405,30 @@ public class KanbanCompatService {
     long boardId = requireBound(principal);
     cardService.requireOnBoard(cardId, boardId);
     return commentService.list(principal.userId(), cardId).stream()
-        .map(c -> new Comment(c.authorName(), c.body(), c.createdAt()))
+        .map(c -> new Comment(c.id(), c.authorName(), c.body(), c.createdAt()))
         .toList();
+  }
+
+  /**
+   * Ersetzt den Text eines Kommentars an einem Item des gebundenen Boards (Issue #1339) — der Weg,
+   * auf dem das claude-workflow-kit seinen Abschlussbericht und den Kommentar {@code ## Laufstand}
+   * an Ort und Stelle erneuert, statt jedes Mal einen neuen anzuhängen.
+   *
+   * <p>Reichweite wie bei {@link #comment}: Der Board-Guard der card-Fassade schließt Karten
+   * anderer Boards mit 404 aus. Der Kommentar muss zur adressierten Karte gehören, sonst 404 — ohne
+   * diese Prüfung erreichte ein Aufruf über eine Karte des eigenen Boards jeden Kommentar eines
+   * anderen. Die Rechteregel ist die von {@link CommentService#update}: nur der Autor selbst.
+   */
+  @Transactional
+  public void updateComment(KanbanPrincipal principal, long cardId, long commentId, String body) {
+    long boardId = requireBound(principal);
+    cardService.requireOnBoard(cardId, boardId);
+    boolean onCard =
+        commentService.list(principal.userId(), cardId).stream().anyMatch(c -> c.id() == commentId);
+    if (!onCard) {
+      throw new CommentNotFoundException();
+    }
+    commentService.update(principal.userId(), commentId, body);
   }
 
   /**
@@ -588,8 +611,12 @@ public class KanbanCompatService {
       @Nullable String externalKey,
       @Nullable Integer derivedFrom) {}
 
-  /** Kommentar eines Items; {@code author} ist der Anzeigename des Autors zur Schreibzeit. */
-  public record Comment(String author, String body, Instant createdAt) {}
+  /**
+   * Kommentar eines Items; {@code id} ist dieselbe wie in {@code GET /api/cards/{id}/comments} und
+   * adressiert das Ersetzen (Issue #1339), {@code author} ist der Anzeigename des Autors zur
+   * Schreibzeit.
+   */
+  public record Comment(Long id, String author, String body, Instant createdAt) {}
 
   /**
    * Ein Eintrag des Aktivitätsverlaufs eines Items (#876). Feldgleich mit der Antwort von {@code

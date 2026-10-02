@@ -24,6 +24,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -158,6 +159,20 @@ class KanbanCompatController {
           @Size(max = MAX_IDEMPOTENCY_KEY)
           String idempotencyKey) {
     service.comment(principal(authentication), id, request.body(), idempotencyKey);
+  }
+
+  /**
+   * Ersetzt den Text eines Kommentars an Ort und Stelle (Issue #1339); nur der Autor selbst, wie im
+   * UI-Pfad. Längengrenze wie beim Anlegen.
+   */
+  @PatchMapping("/items/{id}/comments/{commentId}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void updateComment(
+      @Nullable Authentication authentication,
+      @PathVariable long id,
+      @PathVariable long commentId,
+      @Valid @RequestBody CommentRequest request) {
+    service.updateComment(principal(authentication), id, commentId, request.body());
   }
 
   @GetMapping("/items/{id}/comments")

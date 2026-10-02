@@ -16,10 +16,17 @@
  * Voraussetzungen: `gh` ist installiert und authentifiziert, der Tag existiert bereits auf origin
  * (also nach `merge production` / `git push origin vX.Y.Z`). Ohne Changelog-Block fällt das Skript
  * auf `gh --generate-notes` zurück. Idempotent: existiert das Release schon, bricht es sauber ab.
+ *
+ * Stücklisten (Issue #1337, Plan #1295, E19): `release-images.yml` legt je Abbild die CycloneDX-
+ * Stückliste als Workflow-Artefakt `stueckliste-<abbild>` ab. Vor `gh release create` holt das
+ * Skript beide aus dem Lauf zum Tag und hängt sie als Assets an. Ist der Lauf nicht abgeschlossen
+ * und grün, oder fehlt er, bricht es ab — ein Release ohne Stückliste gibt es über dieses Skript
+ * nicht; wer es dennoch will, ruft `gh release create` direkt.
  * Reines Node-Skript, nur git/gh + Dateizugriff, keine externen Abhängigkeiten.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -27,6 +34,53 @@ import { execFileSync } from 'node:child_process';
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VERSION_PATH = join(REPO_ROOT, 'VERSION');
 const CHANGELOG_PATH = join(REPO_ROOT, 'CHANGELOG.md');
+const RELEASE_WORKFLOW = 'release-images.yml';
+
+/** Die Abbilder, deren Stückliste ans Release gehört — Kurznamen wie in `release-images.yml`. */
+export const STUECKLISTEN_ABBILDER = ['kanban-kit', 'kanban-kit-backup'];
+
+/** Name des Workflow-Artefakts, das die Stückliste eines Abbilds trägt. */
+export function stuecklistenArtefakt(abbild) {
+  return `stueckliste-${abbild}`;
+}
+
+/** Die Asset-Pfade für `gh release create`, nach dem Herunterladen beider Artefakte in `verzeichnis`. */
+export function stuecklistenAssets(verzeichnis) {
+  return STUECKLISTEN_ABBILDER.map((abbild) => join(verzeichnis, `${stuecklistenArtefakt(abbild)}.cdx.json`));
+}
+
+/**
+ * Wählt aus der Antwort von `gh run list --json databaseId,status,conclusion` (neuester Lauf
+ * zuerst) den Lauf, dessen Stücklisten ans Release gehen. Maßgeblich ist der neueste Lauf zum Tag:
+ * Ein älterer grüner Lauf neben einem neueren roten beschriebe nicht, was zuletzt veröffentlicht
+ * wurde. Liefert `{ laufId }` oder `{ fehler }` mit der Abbruchmeldung.
+ */
+export function laufWaehlen(laeufe, tag) {
+  const lauf = laeufe[0];
+  if (!lauf) {
+    return { fehler: `Kein Lauf von ${RELEASE_WORKFLOW} zum Tag '${tag}' gefunden — ohne ihn gibt es keine Stücklisten. Wurde der Tag gepusht?` };
+  }
+  if (lauf.status !== 'completed') {
+    return { fehler: `Der Lauf ${lauf.databaseId} von ${RELEASE_WORKFLOW} zum Tag '${tag}' läuft noch (Status '${lauf.status}') — nach seinem Ende erneut aufrufen.` };
+  }
+  if (lauf.conclusion !== 'success') {
+    return { fehler: `Der Lauf ${lauf.databaseId} von ${RELEASE_WORKFLOW} zum Tag '${tag}' endete mit '${lauf.conclusion}' — ohne grünen Lauf keine Stücklisten, kein Release.` };
+  }
+  return { laufId: lauf.databaseId };
+}
+
+/** Was `--dry-run` zeigt: die geplanten Aufrufe samt Stücklisten-Assets und die Release-Notes. */
+export function trockenlaufText(tag, notes) {
+  const assets = stuecklistenAssets('<tmp>');
+  const zeilen = [
+    `[dry-run] gh run list --workflow ${RELEASE_WORKFLOW} --branch ${tag} --json databaseId,status,conclusion`,
+    ...STUECKLISTEN_ABBILDER.map((abbild) => `[dry-run] gh run download <lauf> --name ${stuecklistenArtefakt(abbild)} --dir <tmp>`),
+    `[dry-run] gh release create ${tag} --title ${tag} ` + (notes ? '--notes <Changelog-Block>' : '--generate-notes') + ` --verify-tag ${assets.join(' ')}`,
+    '',
+    notes ? `--- Release-Notes (${tag}) ---\n${notes}` : `(kein Changelog-Block für ${tag.slice(1)} gefunden — würde --generate-notes nutzen)`,
+  ];
+  return zeilen.join('\n') + '\n';
+}
 
 function fail(message) {
   process.stderr.write(`Fehler: ${message}\n`);
@@ -78,6 +132,25 @@ function changelogNotes(version) {
   return body || null;
 }
 
+/** Lädt beide Stücklisten aus dem Lauf zum Tag in ein Temp-Verzeichnis; bricht bei jeder Lücke ab. */
+function stuecklistenHolen(tag) {
+  const liste = tryRun('gh', ['run', 'list', '--workflow', RELEASE_WORKFLOW, '--branch', tag, '--json', 'databaseId,status,conclusion']);
+  if (!liste.ok) fail(`'gh run list' für ${RELEASE_WORKFLOW} schlug fehl.`);
+  const { laufId, fehler } = laufWaehlen(JSON.parse(liste.stdout), tag);
+  if (fehler) fail(fehler);
+
+  const verzeichnis = mkdtempSync(join(tmpdir(), 'gh-release-'));
+  for (const abbild of STUECKLISTEN_ABBILDER) {
+    const artefakt = stuecklistenArtefakt(abbild);
+    const download = tryRun('gh', ['run', 'download', String(laufId), '--name', artefakt, '--dir', verzeichnis]);
+    if (!download.ok) fail(`Artefakt '${artefakt}' fehlt im Lauf ${laufId} von ${RELEASE_WORKFLOW}.`);
+  }
+  const assets = stuecklistenAssets(verzeichnis);
+  const fehlend = assets.filter((pfad) => !existsSync(pfad));
+  if (fehlend.length > 0) fail(`Stückliste nicht im Artefakt gefunden: ${fehlend.join(', ')}`);
+  return assets;
+}
+
 function main(argv) {
   const options = parseArgs(argv);
   const version = options.tag ? normalizeTag(options.tag).slice(1) : readVersion();
@@ -93,8 +166,7 @@ function main(argv) {
   const notesArgs = notes ? ['--notes', notes] : ['--generate-notes'];
 
   if (options.dryRun) {
-    process.stdout.write(`[dry-run] gh release create ${tag} --title ${tag} ` + (notes ? '--notes <Changelog-Block>' : '--generate-notes') + '\n\n');
-    process.stdout.write(notes ? `--- Release-Notes (${tag}) ---\n${notes}\n` : `(kein Changelog-Block für ${version} gefunden — würde --generate-notes nutzen)\n`);
+    process.stdout.write(trockenlaufText(tag, notes));
     return;
   }
 
@@ -105,11 +177,15 @@ function main(argv) {
     return;
   }
 
-  execFileSync('gh', ['release', 'create', tag, '--title', tag, ...notesArgs, '--verify-tag'], {
+  const assets = stuecklistenHolen(tag);
+
+  execFileSync('gh', ['release', 'create', tag, '--title', tag, ...notesArgs, '--verify-tag', ...assets], {
     cwd: REPO_ROOT,
     stdio: 'inherit',
   });
   process.stdout.write(`\nRelease '${tag}' angelegt.\n`);
 }
 
-main(process.argv.slice(2));
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main(process.argv.slice(2));
+}

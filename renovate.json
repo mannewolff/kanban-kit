@@ -1,0 +1,70 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Aktualisierungs-PRs je Gruppe, hoechstens woechentlich; der Merge durch Manne ist das GO (Plan #1295, E8/E9; docs/betrieb.md, Automatische Aktualisierung).",
+  "extends": ["config:recommended"],
+  "timezone": "Europe/Berlin",
+  "automerge": false,
+  "dependencyDashboard": true,
+  "pinDigests": true,
+  "separateMajorMinor": false,
+  "ignorePaths": ["**/node_modules/**", "docker-compose.altspeicher.yml"],
+  "enabledManagers": ["dockerfile", "docker-compose", "maven", "npm", "custom.regex"],
+  "github-actions": {
+    "enabled": false
+  },
+  "customManagers": [
+    {
+      "description": "Bausteinliste: bezugsstelle, fassung und digest eines beziehbaren Abbilds gemeinsam anheben (E24).",
+      "customType": "regex",
+      "managerFilePatterns": ["/^scripts/bausteine\\.json$/"],
+      "matchStrings": [
+        "\"art\": \"abbild\",\\s*\"bezugsstelle\": \"(?<depName>[a-z0-9][a-z0-9._/-]*):(?<currentValue>[^\"@\\s]+)\",\\s*\"fassung\": \"[^\"]+\",\\s*\"pruefung\": \"bezug\"(?:,\\s*\"digest\": \"(?<currentDigest>sha256:[a-f0-9]{64})\")?"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Testcontainers-Abbilder in den Integrationstests, dieselben Muster wie abbilderAusJava in scripts/bezugspruefung.mjs.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^src/test/.+\\.java$/"],
+      "matchStrings": [
+        "(?:DockerImageName\\.parse|new PostgreSQLContainer<>|new GenericContainer<>)\\(\\s*\"(?<depName>[a-z0-9][a-z0-9._/-]*):(?<currentValue>[^\"@\\s]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?\""
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Basisabbilder: beide Dockerfiles, die Compose-Dateien, Bausteinliste und Testcontainers.",
+      "matchManagers": ["dockerfile", "docker-compose", "custom.regex"],
+      "groupName": "Basisabbilder",
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "Testabbilder und Bausteinliste tragen nicht ueberall einen Digest; Renovate soll dort keinen anlegen, sondern vorhandene nur anheben.",
+      "matchManagers": ["custom.regex"],
+      "pinDigests": false
+    },
+    {
+      "matchManagers": ["maven"],
+      "groupName": "Backend",
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchFileNames": ["frontend/**"],
+      "groupName": "Frontend",
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchFileNames": ["docs-site/**"],
+      "groupName": "Dokumentationsseite",
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "Die eigenen Abbilder schreibt scripts/bump-version.mjs je Release.",
+      "matchPackageNames": ["/^ghcr\\.io/mannewolff/kanban-kit/"],
+      "enabled": false
+    }
+  ]
+}
