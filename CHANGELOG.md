@@ -11,6 +11,38 @@ erzeugt von `scripts/gen-changelog.mjs`.
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.18.0] – 2026-10-02
+
+- chore: v2.17.2
+- Doku-Bau: Platzhalter <Datum> in betrieb.md maskieren ([#1360](https://github.com/mannewolff/kanban-kit/issues/1360))
+- OkHttp für MinIO 8.6.0 bereitstellen: okhttp-jvm 5.1.0 ([#1359](https://github.com/mannewolff/kanban-kit/issues/1359))
+- Betriebsdoku: Abschnitt Sicherheitsprüfung ([#1358](https://github.com/mannewolff/kanban-kit/issues/1358))
+- Sicherheitsprüfung: Urteil nach Herkunft mit 14-Tage-Frist für übernommene Bestandteile ([#1357](https://github.com/mannewolff/kanban-kit/issues/1357))
+- Sicherheitsprüfung: Referenzziele für übernommene Bausteine bilden und lesen ([#1356](https://github.com/mannewolff/kanban-kit/issues/1356))
+- Sicherheitsprüfung: Bauwerkzeuge informieren nur ([#1355](https://github.com/mannewolff/kanban-kit/issues/1355))
+- Sicherheitsprüfung: Bestandteil in jeder Befundzeile ([#1354](https://github.com/mannewolff/kanban-kit/issues/1354))
+- Bausteinliste: Felder verwendung und basis mit Formprüfung und Abgleich ([#1353](https://github.com/mannewolff/kanban-kit/issues/1353))
+- Übergangsausnahme für die Befunde aus CI-Lauf #281 ([#1352](https://github.com/mannewolff/kanban-kit/issues/1352))
+- age und rclone im Sicherungs-Abbild erneuern ([#1349](https://github.com/mannewolff/kanban-kit/issues/1349))
+- Digest des Laufzeit-Basisabbilds erneuern ([#1348](https://github.com/mannewolff/kanban-kit/issues/1348))
+- Backend-Abhängigkeiten auf Korrekturfassungen der Sicherheitsbefunde ([#1347](https://github.com/mannewolff/kanban-kit/issues/1347))
+- Label-Filter der Listenansicht als Checkbox-Menü wie in der Mehrfachauswahl ([#1346](https://github.com/mannewolff/kanban-kit/issues/1346))
+- Frontend-Vollauf als wöchentlicher Handlauf in den Regeltexten ([#1344](https://github.com/mannewolff/kanban-kit/issues/1344))
+- Frontend vollauf aus Konfig genommen
+- Task-Marker in Zeilen mit CRLF-Ende als Checkbox erkennen ([#1341](https://github.com/mannewolff/kanban-kit/issues/1341))
+- chore: v2.17.1
+- Tests für markdownTasks.ts schärfen: überlebende Mutanten aus #1327 ([#1340](https://github.com/mannewolff/kanban-kit/issues/1340))
+- Checkbox-Klick trifft genau die angezeigte Aufgabe ([#1327](https://github.com/mannewolff/kanban-kit/issues/1327))
+- Kartenmaske führt einen vom Server bestätigten Stand ([#1328](https://github.com/mannewolff/kanban-kit/issues/1328))
+- Kit-Schnittstelle: Kommentar-ID beim Lesen und Ersetzen eines Kommentars ([#1339](https://github.com/mannewolff/kanban-kit/issues/1339))
+- Herkunft der Release-Abbilder attestieren und Prüfschritt dokumentieren ([#1338](https://github.com/mannewolff/kanban-kit/issues/1338))
+- Stückliste je Release-Abbild attestieren und als Release-Asset anbieten ([#1337](https://github.com/mannewolff/kanban-kit/issues/1337))
+- Schutz von production: Ruleset beschreiben und Aufrufe dokumentieren ([#1335](https://github.com/mannewolff/kanban-kit/issues/1335))
+- Sicherheitsprüfung einbinden: Profil sbom und CI-Job Sicherheit ([#1334](https://github.com/mannewolff/kanban-kit/issues/1334))
+- Sicherheitsprüfung: Treiber mit Ausnahmeliste und Tests gegen Trivy-Ausgaben ([#1333](https://github.com/mannewolff/kanban-kit/issues/1333))
+- Renovate-Aktualisierung einrichten, Sperrdatei der Doku-Seite einchecken ([#1331](https://github.com/mannewolff/kanban-kit/issues/1331))
+- Fremde Abbilder an Digest binden, bausteine.json um digest/ausgeliefert erweitern ([#1330](https://github.com/mannewolff/kanban-kit/issues/1330))
+
 ## [2.17.0] – 2026-10-01
 
 - Statuswechsel legt Arbeitspaket in die Prozessspalte ([#1326](https://github.com/mannewolff/kanban-kit/issues/1326))
