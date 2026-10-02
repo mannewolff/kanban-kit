@@ -87,16 +87,16 @@
       "name": "Sicherung: age",
       "zweck": "Verschluesselung der Sicherung; schreibt das Format, aus dem zurueckgeholt wird",
       "art": "archiv",
-      "bezugsstelle": "https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz",
-      "fassung": "1.2.1",
+      "bezugsstelle": "https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-linux-amd64.tar.gz",
+      "fassung": "1.3.2",
       "pruefung": "bezug"
     },
     {
       "name": "Sicherung: rclone",
       "zweck": "Spiegel der Anhaenge und Weg ausser Haus (backup/Dockerfile, docker-compose.backup.yml)",
       "art": "archiv",
-      "bezugsstelle": "https://downloads.rclone.org/v1.68.2/rclone-v1.68.2-linux-amd64.zip",
-      "fassung": "1.68.2",
+      "bezugsstelle": "https://downloads.rclone.org/v1.75.1/rclone-v1.75.1-linux-amd64.zip",
+      "fassung": "1.75.1",
       "pruefung": "bezug"
     },
     {
