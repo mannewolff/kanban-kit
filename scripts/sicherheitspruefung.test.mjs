@@ -11,6 +11,7 @@ import {
   SCHWERE,
   FRIST_ZIEL_MS,
   FRIST_GESAMT_MS,
+  FRIST_UEBERNOMMEN_TAGE,
   STANDARD_SPERRDATEIEN,
   HILFE,
   argumenteZerlegen,
@@ -808,6 +809,178 @@ test('Gesamtfrist: 45 Minuten, weil Referenzziele dazukommen (E11)', () => {
   assert.equal(FRIST_GESAMT_MS, 2_700_000);
 });
 
+// --- Urteil nach Herkunft (Issue #1357, Plan #1351 E1/E3/E4/E10) -------------
+
+// abbild-befunde.json ist der gebundene Stand (CVE-2026-1001, -1002 mit Korrektur), abbild-referenz.json
+// der aktuelle Stand des Anbieters vom 2026-09-21, in dem nur noch CVE-2026-1002 steckt.
+const REGEL = '(Regel: docs/betrieb.md, Abschnitt Sicherheitsprüfung)';
+const TAG_10 = '2026-10-01';
+const TAG_15 = '2026-10-06';
+const EIGEN = { art: 'abbild', name: 'manban-backup:latest', referenz: 'manban-backup:latest', basis: 'postgres:16.15' };
+
+function herkunftUrteilen(referenzDatei, heute, { referenz = REFERENZ, liste = KEINE_AUSNAHMEN, weitere = [] } = {}) {
+  return urteilen([ergebnis(ABBILD, 'abbild-befunde.json'), ergebnis(referenz, referenzDatei), ...weitere], liste, { heute });
+}
+
+test('Frist fuer uebernommene Befunde: 14 Tage als Konstante', () => {
+  assert.equal(FRIST_UEBERNOMMEN_TAGE, 14);
+});
+
+test('Herkunft: Befund im gebundenen und im Referenzziel wartet auf den Anbieter und sperrt nicht', () => {
+  const urteil = herkunftUrteilen('abbild-referenz.json', TAG_15);
+  assert.ok(!texte(urteil.sperrend).some((t) => t.includes('CVE-2026-1002')));
+  assert.deepEqual(urteil.uebernommen.filter((e) => e.text.includes('CVE-2026-1002')), [{
+    ziel: 'postgres:16.15',
+    text: `CVE-2026-1002 (HIGH) in libxml2 [postgres:16.15 (debian 12.11)] — Korrektur in 2.9.14+dfsg-1.3 — Anbieter hat noch keine korrigierte Fassung ${REGEL}`,
+  }]);
+});
+
+test('Herkunft: Befund nur im gebundenen Ziel, Referenz 10 Tage alt — sichtbar mit Frist, sperrt nicht', () => {
+  const urteil = herkunftUrteilen('abbild-referenz.json', TAG_10);
+  assert.deepEqual(urteil.sperrend, []);
+  assert.deepEqual(urteil.uebernommen.filter((e) => e.text.includes('CVE-2026-1001')), [{
+    ziel: 'postgres:16.15',
+    text: `CVE-2026-1001 (CRITICAL) in libssl3 [postgres:16.15 (debian 12.11)] — Korrektur in 3.0.16-1 — korrigierte Fassung seit 2026-09-21, Frist bis 2026-10-05 ${REGEL}`,
+  }]);
+});
+
+test('Herkunft: am letzten Fristtag sperrt der Befund noch nicht', () => {
+  const urteil = herkunftUrteilen('abbild-referenz.json', '2026-10-05');
+  assert.deepEqual(urteil.sperrend, []);
+});
+
+test('Herkunft: dasselbe mit Referenz 15 Tage alt sperrt und nennt Referenz, Fristende und Regel', () => {
+  const urteil = herkunftUrteilen('abbild-referenz.json', TAG_15);
+  assert.deepEqual(urteil.sperrend, [{
+    ziel: 'postgres:16.15',
+    text: `CVE-2026-1001 (CRITICAL) in libssl3 [postgres:16.15 (debian 12.11)] — Korrektur in 3.0.16-1 — korrigierte Fassung des Anbieters (postgres:16.16) seit 2026-09-21, 14-Tage-Frist abgelaufen am 2026-10-05 ${REGEL}`,
+  }]);
+  assert.ok(!urteil.uebernommen.some((e) => e.text.includes('CVE-2026-1001')));
+});
+
+test('Herkunft: ein Neubau desselben Tags zaehlt wie ein neuerer Tag', () => {
+  const neubau = { ...REFERENZ, name: 'postgres:16.15 (aktuell: 16.15)', referenz: 'postgres:16.15' };
+  const neuer = herkunftUrteilen('abbild-referenz.json', TAG_15);
+  const gleich = herkunftUrteilen('abbild-referenz.json', TAG_15, { referenz: neubau });
+  assert.deepEqual(texte(gleich.uebernommen), texte(neuer.uebernommen));
+  assert.deepEqual(texte(gleich.sperrend), texte(neuer.sperrend).map((t) => t.replace('(postgres:16.16)', '(postgres:16.15)')));
+});
+
+test('Herkunft: fehlt das Erstellungsdatum der Referenz, sperrt der Befund mit benanntem Grund', () => {
+  const urteil = herkunftUrteilen('abbild-referenz-ohne-erstellt.json', TAG_10);
+  assert.deepEqual(texte(urteil.sperrend), [
+    `CVE-2026-1001 (CRITICAL) in libssl3 [postgres:16.15 (debian 12.11)] — Korrektur in 3.0.16-1 — Erscheinungstag der Anbieter-Fassung unbekannt ${REGEL}`,
+    `CVE-2026-1002 (HIGH) in libxml2 [postgres:16.15 (debian 12.11)] — Korrektur in 2.9.14+dfsg-1.3 — Erscheinungstag der Anbieter-Fassung unbekannt ${REGEL}`,
+  ]);
+});
+
+test('Herkunft: ein Erstellungsdatum vor 2000-01-01 gilt als unbekannt', () => {
+  const urteil = herkunftUrteilen('abbild-referenz-1970.json', TAG_10);
+  assert.equal(urteil.sperrend.length, 2);
+  assert.ok(texte(urteil.sperrend).every((t) => t.includes('Erscheinungstag der Anbieter-Fassung unbekannt')));
+});
+
+test('Herkunft: ein sperrender uebernommener Befund laesst sich weiter ausnehmen', () => {
+  const liste = ausnahmen([{ kennung: 'CVE-2026-1001', ziel: 'postgres:16.15', begruendung: 'Anbieter', ablauf: '2026-12-31' }]);
+  const urteil = herkunftUrteilen('abbild-referenz.json', TAG_15, { liste });
+  assert.deepEqual(urteil.sperrend, []);
+  assert.deepEqual(texte(urteil.genutzt), ['CVE-2026-1001: Anbieter (gilt bis 2026-12-31)']);
+});
+
+test('Herkunft: eine Ausnahme mit dem Namen des Referenzziels trifft nichts', () => {
+  const liste = ausnahmen([{ kennung: 'CVE-2026-1001', ziel: REFERENZ.name, begruendung: 'falsch', ablauf: '2026-12-31' }]);
+  const urteil = herkunftUrteilen('abbild-referenz.json', TAG_15, { liste });
+  assert.ok(texte(urteil.sperrend).some((t) => t.includes('CVE-2026-1001')));
+  assert.deepEqual(urteil.genutzt, []);
+  assert.deepEqual(urteil.hinweise.map((h) => h.ziel), [REFERENZ.name]);
+  assert.ok(!urteil.sperrend.some((e) => e.ziel === REFERENZ.name));
+});
+
+test('Herkunft: ein Fehler beim Referenzziel sperrt als "Ziel nicht geprueft", der gebundene Stand sperrt wie bisher', () => {
+  const urteil = urteilen([ergebnis(ABBILD, 'abbild-befunde.json'), { ziel: REFERENZ, fehler: 'trivy endete mit 1' }], KEINE_AUSNAHMEN, { heute: TAG_10 });
+  assert.deepEqual(urteil.sperrend, [
+    { ziel: 'postgres:16.15', text: 'CVE-2026-1001 (CRITICAL) in libssl3 [postgres:16.15 (debian 12.11)] — Korrektur in 3.0.16-1' },
+    { ziel: 'postgres:16.15', text: 'CVE-2026-1002 (HIGH) in libxml2 [postgres:16.15 (debian 12.11)] — Korrektur in 2.9.14+dfsg-1.3' },
+    { ziel: REFERENZ.name, text: 'Ziel nicht geprueft: trivy endete mit 1' },
+  ]);
+  assert.deepEqual(urteil.uebernommen, []);
+});
+
+test('Herkunft: ohne Referenzziel bleibt ein schwerer Befund mit Korrektur sperrend', () => {
+  const urteil = urteilen([ergebnis(ABBILD, 'abbild-befunde.json')], KEINE_AUSNAHMEN, { heute: TAG_10 });
+  assert.equal(urteil.sperrend.length, 2);
+  assert.deepEqual(urteil.uebernommen, []);
+});
+
+test('Herkunft: schwer ohne Korrektur bleibt auch im uebernommenen Baustein nur sichtbar', () => {
+  const urteil = herkunftUrteilen('abbild-referenz.json', TAG_15);
+  assert.deepEqual(texte(urteil.ohneKorrektur), ['CVE-2026-1003 (HIGH) in perl-base [postgres:16.15 (debian 12.11)] — keine Korrektur verfuegbar']);
+});
+
+test('Herkunft: im eigenen Abbild gilt ein Befund mit gleicher Kennung, Paket und Fassung wie im Basis-Ziel als uebernommen', () => {
+  const urteil = herkunftUrteilen('abbild-referenz.json', TAG_10, { weitere: [ergebnis(EIGEN, 'abbild-eigen.json')] });
+  assert.deepEqual(urteil.uebernommen.filter((e) => e.ziel === EIGEN.name), [{
+    ziel: EIGEN.name,
+    text: `CVE-2026-1001 (CRITICAL) in libssl3 [manban-backup:latest (debian 12.11)] — Korrektur in 3.0.16-1 — korrigierte Fassung seit 2026-09-21, Frist bis 2026-10-05 ${REGEL}`,
+  }]);
+  assert.deepEqual(texte(urteil.sperrend.filter((e) => e.ziel === EIGEN.name)), [
+    'CVE-2026-1002 (HIGH) in libxml2 [manban-backup:latest (debian 12.11)] — Korrektur in 2.9.14+dfsg-1.3',
+    'CVE-2026-2001 (HIGH) in stdlib [usr/local/bin/rclone] — Korrektur in 1.24.8',
+  ]);
+});
+
+test('Herkunft: nach der Frist sperrt der uebernommene Befund auch im eigenen Abbild — unter dessen Namen', () => {
+  const urteil = herkunftUrteilen('abbild-referenz.json', TAG_15, { weitere: [ergebnis(EIGEN, 'abbild-eigen.json')] });
+  assert.ok(urteil.sperrend.some((e) => e.ziel === EIGEN.name && e.text.includes('CVE-2026-1001') && e.text.includes('14-Tage-Frist abgelaufen am 2026-10-05')));
+});
+
+test('Herkunft: ein eigenes Abbild ohne geprueftes Basis-Ziel urteilt wie heute', () => {
+  const urteil = urteilen([ergebnis(EIGEN, 'abbild-eigen.json')], KEINE_AUSNAHMEN, { heute: TAG_10 });
+  assert.equal(urteil.sperrend.length, 3);
+  assert.deepEqual(urteil.uebernommen, []);
+});
+
+test('Herkunft: eigenes Abbild mit Basis ohne Referenzziel urteilt wie heute', () => {
+  const urteil = urteilen([ergebnis(ABBILD, 'abbild-befunde.json'), ergebnis(EIGEN, 'abbild-eigen.json')], KEINE_AUSNAHMEN, { heute: TAG_10 });
+  assert.equal(urteil.sperrend.filter((e) => e.ziel === EIGEN.name).length, 3);
+  assert.deepEqual(urteil.uebernommen, []);
+});
+
+test('Herkunft: Befunde in Programmen ausserhalb des Betriebssystems werden mit ihrem Bestandteil abgeglichen', () => {
+  const bericht = (ziel, ziele, erstellt) => ({
+    ziel,
+    befunde: trivyAusgabeLesen(JSON.stringify({
+      Metadata: { ImageConfig: { created: erstellt } },
+      Results: ziele.map((target) => ({ Target: target, Class: 'lang-pkgs', Vulnerabilities: [
+        { VulnerabilityID: 'CVE-2026-2001', PkgName: 'stdlib', InstalledVersion: 'v1.24.1', FixedVersion: '1.24.8', Severity: 'HIGH' },
+      ] })),
+    })),
+  });
+  const urteil = urteilen([
+    bericht(ABBILD, ['usr/local/bin/gosu', 'usr/local/bin/rclone']),
+    bericht(REFERENZ, ['usr/local/bin/rclone'], '2026-09-21T08:15:00Z'),
+  ], KEINE_AUSNAHMEN, { heute: TAG_10 });
+  assert.deepEqual(texte(urteil.uebernommen), [
+    `CVE-2026-2001 (HIGH) in stdlib [usr/local/bin/gosu] — Korrektur in 1.24.8 — korrigierte Fassung seit 2026-09-21, Frist bis 2026-10-05 ${REGEL}`,
+    `CVE-2026-2001 (HIGH) in stdlib [usr/local/bin/rclone] — Korrektur in 1.24.8 — Anbieter hat noch keine korrigierte Fassung ${REGEL}`,
+  ]);
+});
+
+test('Zusammenfassung: Abschnitt fuer uebernommene Befunde steht nach "Schwer ohne Korrektur"', () => {
+  const text = zusammenfassung(herkunftUrteilen('abbild-referenz.json', TAG_10));
+  const kopf = '### Übernommen, wartet auf Anbieter oder Frist (sichtbar, sperrt nicht)';
+  const stellen = [
+    text.indexOf('### Schwer ohne Korrektur'),
+    text.indexOf(kopf),
+    text.indexOf('CVE-2026-1001'),
+    text.indexOf('### Bauwerkzeuge'),
+  ];
+  assert.ok(stellen.every((s) => s >= 0), stellen.join(','));
+  assert.deepEqual([...stellen].sort((a, b) => a - b), stellen);
+  assert.match(text, /Frist bis 2026-10-05/);
+  assert.match(text, /keine sperrenden Befunde/);
+});
+
 // --- Tag-Liste der Registry (ohne Netz: holen ist ersetzt) ------------------
 
 function antwort(status, { json = null, kopf = {} } = {}) {
@@ -891,7 +1064,7 @@ test('Bauwerkzeuge: derselbe Befund ohne verwendung sperrt wie bisher', () => {
   assert.deepEqual(urteil.bauwerkzeuge, []);
 });
 
-test('Regel 13: Reihenfolge sperrend, ohne Korrektur, genutzte Ausnahmen, Hinweise', () => {
+test('Regel 13: Reihenfolge sperrend, ohne Korrektur, uebernommen, Bauwerkzeuge, genutzte Ausnahmen, Hinweise', () => {
   const liste = ausnahmen([
     { kennung: 'CVE-2026-1002', ziel: 'postgres:16.15', begruendung: 'Upstream', ablauf: '2026-12-31' },
     { kennung: 'CVE-2020-9999', ziel: 'postgres:16.15', begruendung: 'alt', ablauf: '2026-12-31' },
@@ -902,6 +1075,7 @@ test('Regel 13: Reihenfolge sperrend, ohne Korrektur, genutzte Ausnahmen, Hinwei
     text.indexOf('CVE-2026-1001'),
     text.indexOf('### Schwer ohne Korrektur'),
     text.indexOf('CVE-2026-1003'),
+    text.indexOf('### Übernommen, wartet auf Anbieter oder Frist (sichtbar, sperrt nicht)'),
     text.indexOf('### Bauwerkzeuge (informiert, sperrt nicht)'),
     text.indexOf('### Genutzte Ausnahmen'),
     text.indexOf('CVE-2026-1002'),
@@ -916,7 +1090,7 @@ test('Regel 13: Reihenfolge sperrend, ohne Korrektur, genutzte Ausnahmen, Hinwei
 
 test('Regel 13: leere Abschnitte sagen "keine", statt zu fehlen', () => {
   const text = zusammenfassung(urteilen([ergebnis(SPERRDATEI, 'sperrdatei-sauber.json')], KEINE_AUSNAHMEN, { heute: HEUTE }));
-  for (const kopf of ['### Sperrend', '### Schwer ohne Korrektur (sichtbar, sperrt nicht)', '### Genutzte Ausnahmen', '### Hinweise']) {
+  for (const kopf of ['### Sperrend', '### Schwer ohne Korrektur (sichtbar, sperrt nicht)', '### Übernommen, wartet auf Anbieter oder Frist (sichtbar, sperrt nicht)', '### Bauwerkzeuge (informiert, sperrt nicht)', '### Genutzte Ausnahmen', '### Hinweise']) {
     assert.ok(text.includes(`${kopf}\n\n- keine`), kopf);
   }
 });

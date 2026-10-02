@@ -39,6 +39,12 @@ export const FRIST_GESAMT_MS = 2_700_000;
 /** Frist je Abruf der Tag-Liste; eine Seite ist klein, ein Haenger soll den Lauf nicht aufhalten. */
 export const FRIST_TAGS_MS = 30_000;
 
+/**
+ * Frist fuer Befunde in uebernommenen Bausteinen ab dem Erscheinen der korrigierten Anbieter-Fassung
+ * (Plan #1351, E3): eine Frist fuer alle Bausteine, wie vom PO festgelegt — kein Config-Feld.
+ */
+export const FRIST_UEBERNOMMEN_TAGE = 14;
+
 export const STANDARD_SPERRDATEIEN = ['frontend/package-lock.json', 'docs-site/package-lock.json'];
 
 const ART_FEHLALARM = 'fehlalarm';
@@ -325,6 +331,7 @@ export function trivyAusgabeLesen(text) {
         korrektur: v.FixedVersion || null,
         fassung: v.InstalledVersion || null,
         bestandteil: ergebnis.Target,
+        klasse: ergebnis.Class ?? null,
         pfad: v.PkgPath || null,
       });
     }
@@ -406,6 +413,73 @@ function schwachstellenText(s) {
   return `${s.kennung} (${s.schweregrad}) in ${s.paket} [${bestandteilText(s)}]`;
 }
 
+/** Jeder uebernommene Befund nennt die Regel, nach der er sperrt oder nicht (Plan #1351, Paket F). */
+const REGEL_UEBERNOMMEN = '(Regel: docs/betrieb.md, Abschnitt Sicherheitsprüfung)';
+
+/** Frueher erstellte Abbilder tragen ein Platzhalterdatum (etwa 1970-01-01 bei reproduzierbaren Bauten). */
+const FRUEHESTES_ERSTELLT = Date.parse('2000-01-01T00:00:00Z');
+const TAG_MS = 86_400_000;
+
+function erscheinungstag(erstellt) {
+  const zeit = typeof erstellt === 'string' ? Date.parse(erstellt) : Number.NaN;
+  return Number.isNaN(zeit) || zeit < FRUEHESTES_ERSTELLT ? null : new Date(zeit).toISOString().slice(0, 10);
+}
+
+function tagPlus(tag, tage) {
+  return new Date(Date.parse(`${tag}T00:00:00Z`) + tage * TAG_MS).toISOString().slice(0, 10);
+}
+
+/**
+ * Derselbe Befund im gebundenen und im Referenzziel: Betriebssystem-Pakete tragen im Target den
+ * Abbildnamen und die OS-Fassung, die sich zwischen beiden unterscheiden — dort zaehlen nur Kennung
+ * und Paket. In Programmen zaehlt der Bestandteil mit: Hat der Anbieter eines davon neu gebaut, ist
+ * der Befund darin korrigiert, auch wenn ein anderes Programm ihn noch traegt.
+ */
+function befundSchluessel(s) {
+  const ort = s.klasse === 'os-pkgs' ? '' : `${s.bestandteil}|${s.pfad ?? ''}`;
+  return `${s.kennung}|${s.paket}|${ort}`;
+}
+
+/**
+ * Das Urteil ueber einen uebernommenen Befund mit Korrektur (Plan #1351, E3): Er sperrt erst, wenn
+ * der aktuelle Stand des Anbieters ihn nicht mehr enthaelt und dieser Stand aelter als die Frist ist.
+ * Baut der Anbieter denselben Tag spaeter erneut, rueckt der Erscheinungstag nach (E4, hingenommen).
+ */
+function uebernommenUrteilen(befund, referenz, heute) {
+  const schluessel = befundSchluessel(befund);
+  if (referenz.befunde.schwachstellen.some((r) => befundSchluessel(r) === schluessel)) {
+    return { sperrt: false, grund: 'Anbieter hat noch keine korrigierte Fassung' };
+  }
+  const seit = erscheinungstag(referenz.befunde.erstellt);
+  if (!seit) return { sperrt: true, grund: 'Erscheinungstag der Anbieter-Fassung unbekannt' };
+  const bis = tagPlus(seit, FRIST_UEBERNOMMEN_TAGE);
+  if (heute > bis) {
+    return {
+      sperrt: true,
+      grund: `korrigierte Fassung des Anbieters (${referenz.ziel.referenz}) seit ${seit}, ${FRIST_UEBERNOMMEN_TAGE}-Tage-Frist abgelaufen am ${bis}`,
+    };
+  }
+  return { sperrt: false, grund: `korrigierte Fassung seit ${seit}, Frist bis ${bis}` };
+}
+
+/**
+ * Woher ein Befund stammt (Plan #1351, E1): Im gebundenen fremden Abbild ist er uebernommen, wenn
+ * dessen Referenzziel geprueft wurde. Im eigenen Abbild ist er uebernommen, wenn sein Basis-Ziel ihn
+ * mit gleicher Kennung, gleichem Paket und gleicher installierter Fassung traegt — dann gilt die Regel
+ * des Basis-Ziels. Sonst null: eigen, oder ohne verwertbares Referenzziel — beides urteilt wie bisher.
+ */
+function herkunftFinden(ziel, befund, { zielErgebnisse, referenzen }) {
+  if (ziel.basis) {
+    const basis = zielErgebnisse.get(ziel.basis);
+    const gegenstueck = befund.fassung && basis?.befunde?.schwachstellen.find(
+      (b) => b.kennung === befund.kennung && b.paket === befund.paket && b.fassung === befund.fassung,
+    );
+    return gegenstueck ? herkunftFinden(basis.ziel, gegenstueck, { zielErgebnisse, referenzen }) : null;
+  }
+  const referenz = referenzen.get(ziel.name);
+  return referenz?.befunde ? { befund, referenz } : null;
+}
+
 /**
  * Urteilt ueber die Ergebnisse aller Ziele. `heute` (JJJJ-MM-TT) ist der Pruefzeitpunkt: Ob eine
  * Ausnahme abgelaufen ist, entscheidet der Lauf und nicht der Tag ihres Eintrags.
@@ -413,6 +487,7 @@ function schwachstellenText(s) {
 export function urteilen(ergebnisse, { eintraege, formfehler }, { heute }) {
   const sperrend = [];
   const ohneKorrektur = [];
+  const uebernommen = [];
   const bauwerkzeuge = [];
   const genutzt = [];
   const beruehrt = new Set();
@@ -425,6 +500,11 @@ export function urteilen(ergebnisse, { eintraege, formfehler }, { heute }) {
     if (beruehrt.has(eintrag)) return;
     beruehrt.add(eintrag);
     genutzt.push({ ziel: eintrag.ziel, text });
+  };
+
+  const herkunft = {
+    zielErgebnisse: new Map(ergebnisse.filter((e) => e.ziel.rolle !== ROLLE_REFERENZ).map((e) => [e.ziel.name, e])),
+    referenzen: new Map(ergebnisse.filter((e) => e.ziel.rolle === ROLLE_REFERENZ).map((e) => [e.ziel.gebunden, e])),
   };
 
   for (const { ziel, befunde, fehler } of ergebnisse) {
@@ -445,7 +525,16 @@ export function urteilen(ergebnisse, { eintraege, formfehler }, { heute }) {
         ohneKorrektur.push({ ziel: ziel.name, text: `${schwachstellenText(s)} — keine Korrektur verfuegbar` });
         continue;
       }
-      const text = `${schwachstellenText(s)} — Korrektur in ${s.korrektur}`;
+      let text = `${schwachstellenText(s)} — Korrektur in ${s.korrektur}`;
+      const quelle = herkunftFinden(ziel, s, herkunft);
+      if (quelle) {
+        const { sperrt, grund } = uebernommenUrteilen(quelle.befund, quelle.referenz, heute);
+        text = `${text} — ${grund} ${REGEL_UEBERNOMMEN}`;
+        if (!sperrt) {
+          uebernommen.push({ ziel: ziel.name, text });
+          continue;
+        }
+      }
       const ausnahme = schwachstellenAusnahmen.find((e) => e.kennung === s.kennung && e.ziel === ziel.name);
       if (!ausnahme) {
         sperrend.push({ ziel: ziel.name, text });
@@ -476,7 +565,7 @@ export function urteilen(ergebnisse, { eintraege, formfehler }, { heute }) {
     ...ergebnisse.filter((e) => e.ziel.ohneReferenz).map((e) => ({ ziel: e.ziel.name, text: e.ziel.ohneReferenz })),
   ];
 
-  return { sperrend, ohneKorrektur, bauwerkzeuge, genutzt, hinweise, ziele: ergebnisse.map((e) => e.ziel) };
+  return { sperrend, ohneKorrektur, uebernommen, bauwerkzeuge, genutzt, hinweise, ziele: ergebnisse.map((e) => e.ziel) };
 }
 
 // --- Zusammenfassung ------------------------------------------------------
@@ -505,6 +594,7 @@ export function zusammenfassung(urteil) {
     '',
     ...abschnitt('Sperrend', urteil.sperrend),
     ...abschnitt('Schwer ohne Korrektur (sichtbar, sperrt nicht)', urteil.ohneKorrektur),
+    ...abschnitt('Übernommen, wartet auf Anbieter oder Frist (sichtbar, sperrt nicht)', urteil.uebernommen),
     ...abschnitt('Bauwerkzeuge (informiert, sperrt nicht)', urteil.bauwerkzeuge),
     ...abschnitt('Genutzte Ausnahmen', urteil.genutzt),
     ...abschnitt('Hinweise', urteil.hinweise),

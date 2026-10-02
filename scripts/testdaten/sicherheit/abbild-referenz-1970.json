@@ -1,0 +1,18 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "postgres:16.16",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "ImageConfig": {
+      "created": "1970-01-01T00:00:00Z"
+    }
+  },
+  "Results": [
+    {
+      "Target": "postgres:16.16 (debian 12.12)",
+      "Class": "os-pkgs",
+      "Type": "debian",
+      "Vulnerabilities": []
+    }
+  ]
+}
