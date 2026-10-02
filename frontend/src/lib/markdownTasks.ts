@@ -6,6 +6,12 @@
 // Checkbox. Damit `[ ]`/`[x]` in allen Varianten einheitlich als Checkbox erscheinen, kanonisieren
 // wir die Marker vor dem Rendern zu `[ ]`/`[x]` — am Zeilenanfang und außerhalb von Code-Fences.
 // Nackte Marker ohne Listenmarker bekommen zusätzlich einen `- `, damit GFM sie als Liste erkennt.
+// Beim Umschalten zählt `toggleTaskAt` die Checkboxen wie der Renderer: über denselben GFM-Parser.
+
+import type { ListItem, Nodes } from 'mdast'
+import remarkGfm from 'remark-gfm'
+import remarkParse from 'remark-parse'
+import { unified } from 'unified'
 
 const FENCE = /^\s*(```|~~~)/
 // Marker-Kern durchgängig `\[\s*(?:[xX]\s*)?\]` statt `\[\s*[xX]?\s*\]`: Letzteres hat zwei
@@ -63,31 +69,49 @@ export function normalizeTaskLists(md: string): string {
     .join('\n')
 }
 
+/** Derselbe Parser wie beim Rendern (react-markdown mit remark-gfm), damit beide gleich zählen. */
+const parser = unified().use(remarkParse).use(remarkGfm)
+
+/**
+ * Sammelt die Task-List-Items in Dokumentreihenfolge — rekursiv, also auch in Zitaten und
+ * verschachtelten Listen. Kriterium wie in `mdast-util-to-hast`: Ein `listItem` wird genau dann als
+ * Checkbox gerendert, wenn `checked` ein Boolean ist.
+ */
+function collectTasks(node: Nodes, tasks: ListItem[]): ListItem[] {
+  if (node.type === 'listItem' && typeof node.checked === 'boolean') {
+    tasks.push(node)
+  }
+  if ('children' in node) {
+    for (const child of node.children) {
+      collectTasks(child, tasks)
+    }
+  }
+  return tasks
+}
+
 /**
  * Schaltet die `targetIndex`-te Checkbox (0-basiert, in Dokumentreihenfolge) zwischen `[ ]` und
- * `[x]` um und schreibt sie kanonisch. Zählweise identisch zu {@link normalizeTaskLists}/GFM
- * (Code-Fences zählen nicht; Marker-Varianten wie `[  ]`/`[]`/`[ x ]` zählen mit), damit der Index
- * dem gerenderten Checkbox-Index entspricht. Kein Treffer → unveränderter Text.
+ * `[x]` um und schreibt sie kanonisch. Gezählt wird wie der Renderer: Der Text wird wie beim
+ * Rendern normalisiert ({@link normalizeTaskLists}) und mit demselben GFM-Parser gelesen — was als
+ * Checkbox erscheint, zählt (auch in Zitaten und verschachtelten Listen), eingerückter und
+ * umzäunter Code zählt nicht. Weil die Normalisierung Zeilenzahl und Startspalte der Listeneinträge
+ * erhält, wird im **Originaltext** der erste Marker ab der Startspalte des getroffenen Eintrags
+ * geflippt; der Rest der Zeile bleibt unverändert. Kein Treffer → unveränderter Text.
  */
 export function toggleTaskAt(md: string, targetIndex: number): string {
-  const lines = md.split('\n')
-  let inFence = false
-  let i = 0
-  for (let l = 0; l < lines.length; l++) {
-    const line = lines[l]
-    if (FENCE.test(line)) {
-      inFence = !inFence
-      continue
-    }
-    if (inFence || (!LISTED.test(line) && !NAKED.test(line))) {
-      continue
-    }
-    if (i === targetIndex) {
-      // Nur den führenden Marker flippen (nicht Klammern im Task-Text) und kanonisch schreiben.
-      lines[l] = line.replace(MARKER, (mk) => (/[xX]/.test(mk) ? '[ ]' : '[x]'))
-      return lines.join('\n')
-    }
-    i++
+  const normalized = normalizeTaskLists(md)
+  const task = collectTasks(parser.parse(normalized), [])[targetIndex]
+  if (!task) {
+    return md
   }
-  return md
+  // Der Parser setzt an jedem Knoten aus dem Quelltext eine Position.
+  const { line, offset } = task.position!.start
+  const column = offset! - (normalized.lastIndexOf('\n', offset! - 1) + 1)
+  const lines = md.split('\n')
+  const original = lines[line - 1]
+  // Nur den Marker des Eintrags flippen (nicht Klammern im Task-Text) und kanonisch schreiben.
+  lines[line - 1] =
+    original.slice(0, column) +
+    original.slice(column).replace(MARKER, (mk) => (/[xX]/.test(mk) ? '[ ]' : '[x]'))
+  return lines.join('\n')
 }

@@ -362,6 +362,29 @@ describe('CardDetailModal', () => {
     expect(onChanged).toHaveBeenCalled()
   })
 
+  // Issue #1327: Der Klick trifft genau die angezeigte Aufgabe — das eingerückte Code-Beispiel
+  // sieht aus wie eine Aufgabe, erscheint aber als Code und bleibt unverändert.
+  const gemischt = 'Beispiel:\n\n    - [ ] nur Code\n\n- [ ] eins\n  - [ ] verschachtelt\n\n> - [ ] zitiert'
+  it.each([
+    ['Aufgabe 1', 'Beispiel:\n\n    - [ ] nur Code\n\n- [x] eins\n  - [ ] verschachtelt\n\n> - [ ] zitiert'],
+    ['Aufgabe 2', 'Beispiel:\n\n    - [ ] nur Code\n\n- [ ] eins\n  - [x] verschachtelt\n\n> - [ ] zitiert'],
+    ['Aufgabe 3', 'Beispiel:\n\n    - [ ] nur Code\n\n- [ ] eins\n  - [ ] verschachtelt\n\n> - [x] zitiert'],
+  ])('flippt beim Klick auf %s genau deren Zeile, nie das Code-Beispiel', async (label, erwartet) => {
+    const apis = makeApis()
+    const gemischtCard: Card = { ...card, description: gemischt }
+    liefert(apis, gemischtCard)
+    render(<CardDetailModal card={gemischtCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(await screen.findByLabelText(label))
+
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(
+        100, 'Aufgabe', erwartet, [3, 4], undefined, null, null,
+      ),
+    )
+    expect(screen.queryByLabelText('Aufgabe 4')).not.toBeInTheDocument()
+  })
+
   it('lässt Checkboxen ohne Bearbeiten-Recht deaktiviert', async () => {
     const apis = makeApis()
     liefert(apis, taskCard)

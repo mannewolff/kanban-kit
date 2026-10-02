@@ -1461,9 +1461,10 @@ function CardDetailModalView({
   const toggleTask = async (index: number) => {
     if (!canEdit || saving) return
     const vorher = stand
-    // `index` stammt immer aus einer real gerenderten Checkbox (MarkdownInput zählt in derselben
-    // Marker-Logik wie toggleTaskAt), daher findet toggleTaskAt stets einen Treffer und flippt —
-    // ein No-op-Ergebnis (next === previous) ist ausgeschlossen, kein toter Guard nötig.
+    // `index` stammt immer aus einer real gerenderten Checkbox, und toggleTaskAt zählt über
+    // denselben GFM-Parser wie der Renderer (MarkdownInput zählt dieselbe Dokumentreihenfolge),
+    // daher findet toggleTaskAt stets einen Treffer und flippt — ein No-op-Ergebnis
+    // (next === previous) ist ausgeschlossen, kein toter Guard nötig.
     const next = toggleTaskAt(vorher.description, index)
     setStand({ ...vorher, description: next })
     setSaving(true)
