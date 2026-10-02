@@ -34,7 +34,7 @@ COPY --from=frontend /build/docs-site/.vitepress/dist ./src/main/resources/stati
 RUN mvn -q -B -DskipTests -Dskip.frontend=true package
 
 # 3) Schlanke Runtime
-FROM eclipse-temurin:25.0.4.1_1-jre@sha256:8da0490fa9a3c26867012019565948eef0ee69438f5c75ac28146967bae984b5 AS runtime
+FROM eclipse-temurin:25.0.4.1_1-jre@sha256:fcd7fd7b387f94bb2ac461478a7436ad8e349924c374ea8313919624dceae636 AS runtime
 WORKDIR /app
 RUN groupadd --system manban && useradd --system --gid manban manban
 COPY --from=backend /build/target/manban.jar app.jar
