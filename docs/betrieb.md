@@ -521,7 +521,7 @@ verschiedenen Programmen unterscheidbar sind. Ein Ziel, das nicht geprüft werde
    mit). Enthält diese Fassung die Lücke noch, sperrt der Befund nicht — Grund in der Liste:
    „Anbieter hat noch keine korrigierte Fassung“. Fehlt die Lücke dort, beginnt mit dem
    Erstellungsdatum dieser Fassung eine Frist von **14 Tagen**: Innerhalb der Frist steht der Befund
-   mit „korrigierte Fassung seit <Datum>, Frist bis <Datum>“ in der Liste, danach sperrt er und
+   mit „korrigierte Fassung seit `<Datum>`, Frist bis `<Datum>`“ in der Liste, danach sperrt er und
    nennt Anbieter-Fassung, Datum und abgelaufene Frist. Dann ist es Zeit, die Bindung in
    `bausteine.json` (bzw. Renovate) nachzuziehen. Ist das Erstellungsdatum unbekannt oder ein
    Platzhalter vor 2000-01-01, sperrt der Befund mit „Erscheinungstag der Anbieter-Fassung unbekannt“.
