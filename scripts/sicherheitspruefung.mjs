@@ -124,6 +124,7 @@ export function zieleBilden(bausteine, { abbilder, sbom, sperrdateien, arbeitsba
       art: 'abbild',
       name: b.bezugsstelle,
       referenz: b.digest ? `${b.bezugsstelle}@${b.digest}` : b.bezugsstelle,
+      ...(b.verwendung ? { verwendung: b.verwendung } : {}),
     }));
   for (const name of abbilder) ziele.push({ art: 'abbild', name, referenz: name });
   if (sbom) ziele.push({ art: 'sbom', name: sbom, referenz: sbom });
@@ -247,6 +248,9 @@ function schwachstellenText(s) {
   return `${s.kennung} (${s.schweregrad}) in ${s.paket} [${bestandteilText(s)}]`;
 }
 
+/** Bauwerkzeuge stecken nicht im ausgelieferten Abbild: gezeigt, nie sperrend (Plan #1351, E5). */
+const VERWENDUNG_BAU = 'bau';
+
 /**
  * Urteilt ueber die Ergebnisse aller Ziele. `heute` (JJJJ-MM-TT) ist der Pruefzeitpunkt: Ob eine
  * Ausnahme abgelaufen ist, entscheidet der Lauf und nicht der Tag ihres Eintrags.
@@ -254,6 +258,7 @@ function schwachstellenText(s) {
 export function urteilen(ergebnisse, { eintraege, formfehler }, { heute }) {
   const sperrend = [];
   const ohneKorrektur = [];
+  const bauwerkzeuge = [];
   const genutzt = [];
   const beruehrt = new Set();
 
@@ -274,6 +279,11 @@ export function urteilen(ergebnisse, { eintraege, formfehler }, { heute }) {
     }
     for (const s of befunde.schwachstellen) {
       if (!SCHWERE.includes(s.schweregrad)) continue;
+      if (ziel.verwendung === VERWENDUNG_BAU) {
+        const korrektur = s.korrektur ? `Korrektur in ${s.korrektur}` : 'keine Korrektur verfuegbar';
+        bauwerkzeuge.push({ ziel: ziel.name, text: `${schwachstellenText(s)} — ${korrektur}` });
+        continue;
+      }
       if (!s.korrektur) {
         ohneKorrektur.push({ ziel: ziel.name, text: `${schwachstellenText(s)} — keine Korrektur verfuegbar` });
         continue;
@@ -306,7 +316,7 @@ export function urteilen(ergebnisse, { eintraege, formfehler }, { heute }) {
       text: `Ausnahme ${e.kennung} fuer ${e.ziel} trifft keinen sperrenden Befund — Eintrag pruefen oder entfernen`,
     }));
 
-  return { sperrend, ohneKorrektur, genutzt, hinweise, ziele: ergebnisse.map((e) => e.ziel) };
+  return { sperrend, ohneKorrektur, bauwerkzeuge, genutzt, hinweise, ziele: ergebnisse.map((e) => e.ziel) };
 }
 
 // --- Zusammenfassung ------------------------------------------------------
@@ -335,6 +345,7 @@ export function zusammenfassung(urteil) {
     '',
     ...abschnitt('Sperrend', urteil.sperrend),
     ...abschnitt('Schwer ohne Korrektur (sichtbar, sperrt nicht)', urteil.ohneKorrektur),
+    ...abschnitt('Bauwerkzeuge (informiert, sperrt nicht)', urteil.bauwerkzeuge),
     ...abschnitt('Genutzte Ausnahmen', urteil.genutzt),
     ...abschnitt('Hinweise', urteil.hinweise),
     '### Gepruefte Ziele',

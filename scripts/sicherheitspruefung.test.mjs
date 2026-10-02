@@ -470,7 +470,7 @@ test('Regel 12: aus der Bausteinliste nur ausgelieferte fremde Abbilder mit Prue
       name: 'postgres:16.15',
       referenz: 'postgres:16.15@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54',
     },
-    { art: 'abbild', name: 'caddy:2.11.4', referenz: 'caddy:2.11.4' },
+    { art: 'abbild', name: 'caddy:2.11.4', referenz: 'caddy:2.11.4', verwendung: 'bau' },
   ]);
 });
 
@@ -576,6 +576,28 @@ test('ein unbekannter Schalter endet mit 2 und nennt die Hilfe', () => {
 
 // --- Regel 13: Ausgabe und Reihenfolge ------------------------------------
 
+// --- Bauwerkzeuge (Issue #1355) --------------------------------------------
+
+const BAUWERKZEUG = { ...ABBILD, verwendung: 'bau' };
+
+test('Bauwerkzeuge: schwerer Befund mit Korrektur sperrt nicht und steht im eigenen Abschnitt', () => {
+  const urteil = urteilen([ergebnis(BAUWERKZEUG, 'abbild-befunde.json')], KEINE_AUSNAHMEN, { heute: HEUTE });
+  assert.deepEqual(urteil.sperrend, []);
+  assert.deepEqual(urteil.ohneKorrektur, []);
+  assert.ok(urteil.bauwerkzeuge.some((b) => b.text.includes('CVE-2026-1001') && b.text.includes('Korrektur in')));
+  assert.ok(urteil.bauwerkzeuge.some((b) => b.text.includes('CVE-2026-1003') && b.text.includes('keine Korrektur')));
+  const text = zusammenfassung(urteil);
+  const abschnitt = text.slice(text.indexOf('### Bauwerkzeuge (informiert, sperrt nicht)'), text.indexOf('### Genutzte Ausnahmen'));
+  assert.match(abschnitt, /CVE-2026-1001/);
+  assert.match(text, /keine sperrenden Befunde/);
+});
+
+test('Bauwerkzeuge: derselbe Befund ohne verwendung sperrt wie bisher', () => {
+  const urteil = urteilen([ergebnis(ABBILD, 'abbild-befunde.json')], KEINE_AUSNAHMEN, { heute: HEUTE });
+  assert.ok(urteil.sperrend.some((b) => b.text.includes('CVE-2026-1001')));
+  assert.deepEqual(urteil.bauwerkzeuge, []);
+});
+
 test('Regel 13: Reihenfolge sperrend, ohne Korrektur, genutzte Ausnahmen, Hinweise', () => {
   const liste = ausnahmen([
     { kennung: 'CVE-2026-1002', ziel: 'postgres:16.15', begruendung: 'Upstream', ablauf: '2026-12-31' },
@@ -587,6 +609,7 @@ test('Regel 13: Reihenfolge sperrend, ohne Korrektur, genutzte Ausnahmen, Hinwei
     text.indexOf('CVE-2026-1001'),
     text.indexOf('### Schwer ohne Korrektur'),
     text.indexOf('CVE-2026-1003'),
+    text.indexOf('### Bauwerkzeuge (informiert, sperrt nicht)'),
     text.indexOf('### Genutzte Ausnahmen'),
     text.indexOf('CVE-2026-1002'),
     text.indexOf('### Hinweise'),
