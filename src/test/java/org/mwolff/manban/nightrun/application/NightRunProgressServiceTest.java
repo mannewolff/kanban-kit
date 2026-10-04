@@ -397,6 +397,60 @@ class NightRunProgressServiceTest {
     assertThat(fortschritt.pakete()).extracting(p -> p.karte().number()).containsExactly(4);
   }
 
+  /**
+   * Eine Karte, die der Lauf nur über ihren Laufstand kennt — ohne eine Aktivität an ihr —, wird
+   * geladen und steht im Fortschritt (Issue #1383).
+   */
+  @Test
+  void karteNurAusDemLaufstandWirdGeladen() {
+    gefunden(laufend(NightRunMode.CHAIN));
+    when(comments.laufstaendeImProjekt(PROJECT))
+        .thenReturn(
+            List.of(
+                new LaufstandView(
+                    10L,
+                    "## Laufstand\n\nzuletzt begonnen: plan begonnen für #1 um "
+                        + START.plusSeconds(90))));
+    when(cards.cardsByIds(List.of(10L)))
+        .thenReturn(List.of(karte(10L, 1, "[Fachlich] Fortschritt", null, null)));
+
+    NightRunProgress fortschritt = service.progress(USER, PROJECT, RUN);
+
+    verify(cards).cardsByIds(List.of(10L));
+    assertThat(fortschritt.ketten())
+        .singleElement()
+        .satisfies(
+            k ->
+                assertThat(k.anforderung())
+                    .isEqualTo(new CardRef(1, "[Fachlich] Fortschritt", BOARD)));
+  }
+
+  /**
+   * Ist die Herkunft einer Karte schon in derselben Runde geladen, fragt der Dienst sie nicht ein
+   * zweites Mal ab (Issue #1383).
+   */
+  @Test
+  void bekannteHerkunftWirdNichtErneutGeladen() {
+    gefunden(laufend(NightRunMode.CHAIN));
+    when(cards.tokenActivitiesInWindow(PROJECT, TOKEN, START, JETZT))
+        .thenReturn(
+            List.of(
+                new TokenActivityView(20L, "CREATED", START.plusSeconds(60)),
+                new TokenActivityView(30L, "CREATED", START.plusSeconds(120))));
+    LaufKarteView plan = karte(20L, 2, "[Plan] Fortschritt", null, null);
+    LaufKarteView paket = karte(30L, 3, "Paket 1/1", "BACKLOG", 20L);
+    when(cards.cardsByIds(any()))
+        .thenAnswer(
+            inv -> {
+              Collection<Long> ids = inv.getArgument(0);
+              return List.of(plan, paket).stream().filter(k -> ids.contains(k.id())).toList();
+            });
+
+    service.progress(USER, PROJECT, RUN);
+
+    verify(cards, times(1)).cardsByIds(any());
+  }
+
   /** Ohne Aktivität und ohne Laufstand fragt der Dienst keine Karten ab. */
   @Test
   void ohneSpurenWirdNichtsGeladen() {
