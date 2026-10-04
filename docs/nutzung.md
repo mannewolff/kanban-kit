@@ -333,6 +333,57 @@ die übrigen Runs derselben Datei entstehen trotzdem. Und ein **nachgereichter R
 als alle 190 aufbewahrten, verdrängt keinen neueren — er wird angelegt und sogleich wieder verdrängt,
 erscheint also nach dem Einlesen nicht in der Liste.
 
+### Fortschritt eines laufenden Runs
+
+Klappst du die Kachel eines **noch laufenden** Runs auf, steht über den Vorgangszeilen ein eigener
+Block mit dem Stand, den das Board zur selben Zeit zeigt:
+
+- **Bei einer Kette** eine Wegleiste mit den Stufen **Plan · Prüfung · Arbeitspakete · Abdeckung ·
+  Umsetzung**. Die Stufe Umsetzung erscheint nur, wenn die Karte, die die Kette trägt (die fachliche
+  Anforderung bzw. der Plan, an dem sie begann), das Label `kit:durchziehen` trägt. Fehlt es, endet
+  die Kette planmäßig nach der Abdeckung; die Wegleiste zeigt das als **„Ende des Wegs erreicht"**,
+  nicht als ausstehende Umsetzung.
+- **Bei einer Umsetzungsnacht** nur die Umsetzung: welches Paket gerade umgesetzt wird und welche
+  schon fertig sind.
+
+Die aktuelle Stufe ist markiert — als Text, nicht allein über die Farbe. Zu jeder Stufe stehen die
+Karten, die sie hervorgebracht hat (der angelegte Plan, die Arbeitspakete samt Anzahl); jede
+Kartennummer ist ein Link und öffnet die Karte.
+
+**Welche Karten zum Run gehören.** Eine Karte zählt zum Run, wenn sie in seinem Zeitfenster
+mindestens eine Änderung über das Zugriffstoken des Runs erfahren hat, die der Runner im
+Nachtbetrieb vorgenommen hat. Das Zeitfenster reicht vom Start bis zum gemeldeten Ende, bei einem
+verstummten Run bis zu seiner letzten Meldung, sonst bis jetzt. Was ein Mensch oder eine
+interaktive Sitzung mit demselben Token bearbeitet hat, zählt darum nicht mit, ebenso wenig Karten,
+die vor dem Run schon fertig waren. Lässt sich die Zuordnung nicht feststellen, steht der Block auf
+**„unbekannt"**, statt still mitzuzählen oder wegzulassen — in drei Fällen:
+
+- Der Run kam per „Protokoll einlesen" ohne Zugriffstoken: Der ganze Fortschritt ist unbekannt.
+- Ein zweiter Nachtlauf desselben Projekts mit demselben Token überschneidet sich zeitlich: Karten
+  aus der Überschneidung stehen mit Nummer unter „unbekannt" und zählen nicht.
+- Eine Kette lässt sich keiner fachlichen Anforderung zuordnen.
+
+**Wie die Kopfzahlen vorgreifen.** Solange der Run läuft, nehmen „bearbeitet / übergangen" und die
+Paketzahlen „grün / gelb / rot" den Stand vom Board vorweg — für jedes Paket, das der Run noch
+nicht selbst gemeldet hat:
+
+- fertig umgesetzt (in „In review") → bearbeitet und grün,
+- vom Run mit Fehlschlag zurück ins Backlog gestellt → bearbeitet und rot,
+- alles andere (gerade in Umsetzung, gezogen oder eben angelegt) → in keiner Zahl.
+
+Gelb und „übergangen" kommen allein aus der Meldung des Runs. Hat der Run seinen Abschluss gemeldet,
+gelten nur noch die gemeldeten Zahlen.
+
+**Hinweis auf eine offene Frage.** Trägt eine Karte des Runs das Label `kit:klaeren` oder die
+tragende Karte das Label `lauf:wartet`, wartet der Run auf eine Antwort eines Menschen; der Block
+nennt das samt der Karte, an der die Frage steht. Dieser Hinweis bleibt **auch nach der
+Abschlussmeldung** stehen, solange das Label sitzt — maßgeblich ist der heutige Labelstand.
+
+**Auffrischen.** Die Seite lädt die Liste der Runs und den Fortschritt jeder aufgeklappten Kachel
+alle **30 Sekunden** neu, ohne dass du die Seite neu laden musst — aber nur, solange mindestens ein
+Run noch läuft und der Tab sichtbar ist. Kehrst du in den Tab zurück, frischt sie sofort auf. Ein
+eben eingelesener Run oder ein Nachtplan bleibt dabei stehen.
+
 ## Verbrauch (Leitstand)
 
 Der **Leitstand** (Sidebar-Eintrag **„Leitstand"** im Board-Kontext, Route
