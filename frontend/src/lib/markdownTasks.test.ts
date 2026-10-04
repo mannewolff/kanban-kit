@@ -27,8 +27,12 @@ describe('normalizeTaskLists', () => {
     expect(normalizeTaskLists('Text mit [ ] darin')).toBe('Text mit [ ] darin')
   })
 
-  it('rührt Marker in Code-Fences nicht an', () => {
-    const md = '```\n[ ] kein Task\n```'
+  // Die Randfälle eingerückte Fence-Zeile (Issue #1340) und CRLF-Ende (Issue #1341) gehören zum Grundfall.
+  it.each([
+    ['einem normalen Fence', '```\n[ ] kein Task\n```'],
+    ['einer eingerückten Fence-Zeile', '  ```\n[ ] im Code\n  ```'],
+    ['einem Fence mit CRLF-Ende', '```\r\n[ ] kein Task\r\n```'],
+  ])('rührt Marker in %s nicht an', (_fall, md) => {
     expect(normalizeTaskLists(md)).toBe(md)
   })
 
@@ -72,11 +76,6 @@ describe('normalizeTaskLists', () => {
 
   it('öffnet keinen Fence, wenn vor den Backticks Text steht', () => {
     expect(normalizeTaskLists('Text ``` mitten\n[ ] a')).toBe('Text ``` mitten\n- [ ] a')
-  })
-
-  it('erkennt eine eingerückte Fence-Zeile als Fence', () => {
-    const md = '  ```\n[ ] im Code\n  ```'
-    expect(normalizeTaskLists(md)).toBe(md)
   })
 
   it('kanonisiert eingerückte Listen-Items', () => {
@@ -123,11 +122,6 @@ describe('normalizeTaskLists', () => {
 
   it('kanonisiert einen Marker ohne Text in einer Zeile mit CRLF-Ende', () => {
     expect(normalizeTaskLists('- [  ]\r\nx')).toBe('- [ ]\r\nx')
-  })
-
-  it('rührt Marker in Code-Fences mit CRLF-Ende nicht an', () => {
-    const md = '```\r\n[ ] kein Task\r\n```'
-    expect(normalizeTaskLists(md)).toBe(md)
   })
 })
 
