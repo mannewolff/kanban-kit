@@ -13,9 +13,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.SerializationFeature;
+import java.lang.reflect.RecordComponent;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
@@ -23,12 +25,16 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mwolff.manban.nightrun.application.NightRunNotFoundException;
+import org.mwolff.manban.nightrun.application.NightRunProgressService;
 import org.mwolff.manban.nightrun.application.NightRunService;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRun;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRunItem;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunItemView;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunView;
+import org.mwolff.manban.nightrun.domain.CardRef;
+import org.mwolff.manban.nightrun.domain.ChainProgress;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
@@ -37,9 +43,16 @@ import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
+import org.mwolff.manban.nightrun.domain.NightRunProgress;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.nightrun.domain.PackageProgress;
+import org.mwolff.manban.nightrun.domain.PackageState;
+import org.mwolff.manban.nightrun.domain.ProgressAssignment;
+import org.mwolff.manban.nightrun.domain.ProgressStage;
+import org.mwolff.manban.nightrun.domain.StageProgress;
+import org.mwolff.manban.nightrun.domain.StageState;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.application.ProjectNotFoundException;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
@@ -61,8 +74,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * common.web} und hier nicht im Spiel, es käme nur der Statuscode an.
  */
 // Testklasse: Die Importe folgen den geprueften Typen. Issue #944 bringt NightRunOrigin
-// dazu und reisst damit die Schwelle von 40.
-@SuppressWarnings("PMD.ExcessiveImports")
+// dazu und reisst damit die Schwelle von 40. Jede Methode ist ein Fall eines Endpunkts; Issue #1375
+// bringt die Faelle des Fortschritts dazu und reisst damit die Methoden-Schwelle.
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.TooManyMethods"})
 class NightRunControllerTest {
 
   private static final long USER = 7L;
@@ -73,11 +87,13 @@ class NightRunControllerTest {
   private static final Instant ZWEITER = Instant.parse("2026-09-01T22:00:00Z");
 
   private NightRunService service;
+  private NightRunProgressService progress;
   private MockMvc mvc;
 
   @BeforeEach
   void setUp() {
     service = mock(NightRunService.class);
+    progress = mock(NightRunProgressService.class);
     // Der standalone MockMvc bringt Spring Boots Jackson-Konfiguration nicht mit; ohne die beiden
     // Einstellungen schriebe er Instants als Zeitstempel-Zahlen statt als ISO-Text. Nachgezogen
     // wird genau das, was `JacksonAutoConfiguration` in der laufenden Anwendung tut — die dortige
@@ -88,7 +104,7 @@ class NightRunControllerTest {
                 .featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                 .build());
     mvc =
-        MockMvcBuilders.standaloneSetup(new NightRunController(service))
+        MockMvcBuilders.standaloneSetup(new NightRunController(service, progress))
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .setMessageConverters(jackson)
             .build();
@@ -737,6 +753,121 @@ class NightRunControllerTest {
         .andExpect(jsonPath("$[0].items[0].stages[0].stage").value("PLAN"))
         .andExpect(jsonPath("$[0].items[0].stages[0].durationMs").value(600_000))
         .andExpect(jsonPath("$[0].items[0].stages[0].usage.turns").value(7));
+  }
+
+  // --- Fortschritt (Issue #1375) ----------------------------------------------------------
+
+  /** Die View spiegelt den Fortschritt Feld für Feld, Enums als Namen. */
+  @Test
+  void progress_returnsTheView() throws Exception {
+    CardRef anforderung = new CardRef(1364, "[Fachlich] Fortschritt", 5L);
+    CardRef plan = new CardRef(1372, "[Plan] Fortschritt", 5L);
+    PackageProgress paket =
+        new PackageProgress(new CardRef(1375, "Paket 3/7", 5L), PackageState.IN_UMSETZUNG);
+    when(progress.progress(USER, PROJECT, 11L))
+        .thenReturn(
+            new NightRunProgress(
+                ProgressAssignment.OK,
+                List.of(
+                    new ChainProgress(
+                        anforderung,
+                        plan,
+                        List.of(paket),
+                        List.of(new StageProgress(ProgressStage.PLAN, StageState.ERREICHT)),
+                        ProgressStage.ABDECKUNG,
+                        false)),
+                List.of(paket),
+                List.of(new CardRef(1400, "Fremd", 6L)),
+                List.of(anforderung)));
+
+    mvc.perform(get(PATH + "/11/progress"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.zuordnung").value("OK"))
+        .andExpect(jsonPath("$.ketten[0].anforderung.number").value(1364))
+        .andExpect(jsonPath("$.ketten[0].anforderung.title").value("[Fachlich] Fortschritt"))
+        .andExpect(jsonPath("$.ketten[0].anforderung.boardId").value(5))
+        .andExpect(jsonPath("$.ketten[0].plan.number").value(1372))
+        .andExpect(jsonPath("$.ketten[0].pakete[0].karte.number").value(1375))
+        .andExpect(jsonPath("$.ketten[0].pakete[0].zustand").value("IN_UMSETZUNG"))
+        .andExpect(jsonPath("$.ketten[0].stufen[0].stufe").value("PLAN"))
+        .andExpect(jsonPath("$.ketten[0].stufen[0].zustand").value("ERREICHT"))
+        .andExpect(jsonPath("$.ketten[0].aktuelleStufe").value("ABDECKUNG"))
+        .andExpect(jsonPath("$.ketten[0].endeErreicht").value(false))
+        .andExpect(jsonPath("$.pakete[0].karte.title").value("Paket 3/7"))
+        .andExpect(jsonPath("$.unbekannt[0].number").value(1400))
+        .andExpect(jsonPath("$.unbekannt[0].boardId").value(6))
+        .andExpect(jsonPath("$.offeneFragen[0].number").value(1364));
+  }
+
+  /** Eine Kette ohne bekannten Plan trägt {@code plan: null}, und das Ende ist erreicht. */
+  @Test
+  void progress_mapsChainWithoutPlan() throws Exception {
+    when(progress.progress(USER, PROJECT, 11L))
+        .thenReturn(
+            new NightRunProgress(
+                ProgressAssignment.UNBEKANNT,
+                List.of(
+                    new ChainProgress(
+                        new CardRef(1, "[Fachlich] A", 5L),
+                        null,
+                        List.of(),
+                        List.of(),
+                        null,
+                        true)),
+                List.of(),
+                List.of(),
+                List.of()));
+
+    mvc.perform(get(PATH + "/11/progress"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.zuordnung").value("UNBEKANNT"))
+        .andExpect(jsonPath("$.ketten[0].plan").doesNotExist())
+        .andExpect(jsonPath("$.ketten[0].aktuelleStufe").doesNotExist())
+        .andExpect(jsonPath("$.ketten[0].endeErreicht").value(true));
+  }
+
+  @Test
+  void progress_mapsUnknownRunToNotFound() throws Exception {
+    when(progress.progress(USER, PROJECT, 11L)).thenThrow(new NightRunNotFoundException());
+
+    mvc.perform(get(PATH + "/11/progress")).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void progress_propagatesNotFound_forNonMember() throws Exception {
+    when(progress.progress(USER, PROJECT, 11L)).thenThrow(new ProjectNotFoundException());
+
+    mvc.perform(get(PATH + "/11/progress")).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void progress_propagatesForbidden_forMemberWithoutOwnerRole() throws Exception {
+    when(progress.progress(USER, PROJECT, 11L)).thenThrow(new ProjectAccessDeniedException());
+
+    mvc.perform(get(PATH + "/11/progress")).andExpect(status().isForbidden());
+  }
+
+  /**
+   * E10, Nicht-Ziel „Inhalte nicht wiedergeben": Die View trägt keine Karteninhalte. Geprüft an den
+   * Feldnamen jeder Ebene, nicht an einer Beispielantwort — ein neues Feld fiele hier auf.
+   */
+  @Test
+  void progressView_carriesNoCardContentFields() {
+    assertThat(felder(NightRunProgressView.class))
+        .containsExactly("zuordnung", "ketten", "pakete", "unbekannt", "offeneFragen");
+    assertThat(felder(NightRunProgressView.ChainProgressView.class))
+        .containsExactly(
+            "anforderung", "plan", "pakete", "stufen", "aktuelleStufe", "endeErreicht");
+    assertThat(felder(NightRunProgressView.PackageProgressView.class))
+        .containsExactly("karte", "zustand");
+    assertThat(felder(NightRunProgressView.StageProgressView.class))
+        .containsExactly("stufe", "zustand");
+    assertThat(felder(NightRunProgressView.CardRefView.class))
+        .containsExactly("number", "title", "boardId");
+  }
+
+  private static List<String> felder(Class<? extends Record> typ) {
+    return Arrays.stream(typ.getRecordComponents()).map(RecordComponent::getName).toList();
   }
 
   private static String run(String startedAt, String items) {
