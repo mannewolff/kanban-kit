@@ -79,6 +79,31 @@ public final class KartenZuordnung {
   }
 
   /**
+   * Labelnamen mehrerer Karten, je Karte alphabetisch (Issue #1373). Karten ohne Labels fehlen in
+   * der Map.
+   *
+   * <p>Ein Sammelzugriff für die Zuordnung und einer je Board, das eine der Karten mit Labels trägt
+   * — nicht einer je Karte. Eine Label-ID, die das Board nicht (mehr) kennt, fällt heraus.
+   *
+   * @param boardJeKarte Board jeder Karte, in der Reihenfolge der Karten
+   */
+  public Map<Long, List<String>> labelNamenJeKarte(Map<Long, Long> boardJeKarte) {
+    Map<Long, List<Long>> labelIds = cardLabels.findByCardIds(List.copyOf(boardJeKarte.keySet()));
+    Map<Long, String> namen = new HashMap<>();
+    labelIds.keySet().stream()
+        .map(boardJeKarte::get)
+        .distinct()
+        .forEach(
+            board -> labels.findByBoardId(board).forEach(l -> namen.put(l.requireId(), l.name())));
+    Map<Long, List<String>> ergebnis = new HashMap<>();
+    labelIds.forEach(
+        (karte, ids) ->
+            ergebnis.put(
+                karte, ids.stream().map(namen::get).filter(Objects::nonNull).sorted().toList()));
+    return ergebnis;
+  }
+
+  /**
    * Prüft und setzt die Zuständigen einer Karte (Duplikate raus; jede ID muss Mitglied des Projekts
    * sein) ohne Aktivitätseintrag — den schreibt der aufrufende Use-Case.
    */

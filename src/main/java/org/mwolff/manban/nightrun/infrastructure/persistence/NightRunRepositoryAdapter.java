@@ -289,6 +289,19 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
+  public Optional<NightRun> findByIdAndProjectId(long runId, long projectId) {
+    return runs.findByIdAndProjectId(runId, projectId).map(NightRunRepositoryAdapter::toDomain);
+  }
+
+  @Override
+  public List<NightRun> findOverlapping(
+      long projectId, String tokenName, Instant von, Instant bis) {
+    return runs.findOverlapping(projectId, tokenName, von, bis).stream()
+        .map(NightRunRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
   public List<NightRunItem> findItemsByRunIds(Collection<Long> runIds) {
     if (runIds.isEmpty()) {
       return List.of();

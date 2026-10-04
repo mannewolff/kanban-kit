@@ -160,4 +160,26 @@ public interface NightRunRepository {
    * sie würde die Zahl still erhöhen.
    */
   Map<NightRunErrorClass, Long> countRunsByErrorClass(long projectId, NightRunKind kind);
+
+  /**
+   * Der Lauf mit dieser ID, sofern er zu diesem Projekt gehört (Issue #1373). Ein Lauf eines
+   * fremden Projekts ist hier so unbekannt wie eine erfundene ID.
+   */
+  Optional<NightRun> findByIdAndProjectId(long runId, long projectId);
+
+  /**
+   * Die Nachtläufe des Projekts mit diesem Token-Namen, deren Zeitraum {@code [von, bis]} berührt
+   * (Issue #1373, Plan #1372 E3); nach Startzeitpunkt, bei Gleichstand nach ID.
+   *
+   * <p><b>Nur die Gattung {@code NIGHT}</b> (A5): Interaktive Sitzungen laufen über dasselbe Token,
+   * ihre Aktivitäten tragen aber kein {@code agent} und zählen ohnehin nicht zu einem Lauf. Als
+   * Überlappung machten sie jede Kette neben einer Tagessitzung „unbekannt".
+   *
+   * <p><b>Überlappung:</b> Der Lauf beginnt spätestens bei {@code bis} und ist entweder unfertig
+   * ({@code complete = false}) oder endet — Start plus Dauer — frühestens bei {@code von}; beide
+   * Grenzen eingeschlossen. Ein unfertiger Lauf kennt sein Ende noch nicht; ob er noch läuft oder
+   * verstummt ist, entscheidet der Aufrufer mit der Stillefrist. Der Lauf, nach dessen Fenster
+   * gefragt wird, ist im Ergebnis enthalten.
+   */
+  List<NightRun> findOverlapping(long projectId, String tokenName, Instant von, Instant bis);
 }

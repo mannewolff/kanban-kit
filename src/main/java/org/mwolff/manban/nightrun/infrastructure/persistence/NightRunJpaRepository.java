@@ -1,7 +1,11 @@
 package org.mwolff.manban.nightrun.infrastructure.persistence;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /** Spring-Data-Repository für {@link NightRunEntity} (Lesepfad). */
 interface NightRunJpaRepository extends JpaRepository<NightRunEntity, Long> {
@@ -18,4 +22,24 @@ interface NightRunJpaRepository extends JpaRepository<NightRunEntity, Long> {
    */
   List<NightRunEntity> findByProjectIdAndKindOrderByStartedAtDescIdDesc(
       long projectId, String kind);
+
+  Optional<NightRunEntity> findByIdAndProjectId(long id, long projectId);
+
+  /**
+   * Die Nachtläufe eines Tokens, die das Fenster {@code [von, bis]} berühren (Issue #1373). Natives
+   * SQL, weil das Ende eines gemeldeten Laufs aus Start und Dauer in Millisekunden entsteht.
+   */
+  @Query(
+      value =
+          "SELECT * FROM night_run WHERE project_id = :projectId AND kind = 'NIGHT'"
+              + " AND token_name = :tokenName AND started_at <= :bis"
+              + " AND (complete = false"
+              + " OR started_at + duration_ms * INTERVAL '1 millisecond' >= :von)"
+              + " ORDER BY started_at, id",
+      nativeQuery = true)
+  List<NightRunEntity> findOverlapping(
+      @Param("projectId") long projectId,
+      @Param("tokenName") String tokenName,
+      @Param("von") Instant von,
+      @Param("bis") Instant bis);
 }

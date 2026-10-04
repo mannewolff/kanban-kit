@@ -37,6 +37,14 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
         .toList();
   }
 
+  @Override
+  public List<CardActivity> findTokenActivitiesInWindow(
+      long projectId, String tokenName, Instant von, Instant bis) {
+    return jpa.findTokenActivitiesInWindow(projectId, tokenName, von, bis).stream()
+        .map(CardActivityRepositoryAdapter::toDomain)
+        .toList();
+  }
+
   private static CardActivity toDomain(CardActivityEntity e) {
     String origin = e.getOrigin();
     return new CardActivity(
