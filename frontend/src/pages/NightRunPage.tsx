@@ -34,6 +34,7 @@ import {
   type NightRunErrorClassCounts,
   type NightRunItemStageView,
   type NightRunOutcomeView,
+  type NightRunProgressView,
   type NightRunServerMode,
   type NightRunStage,
   type NightRunSubmission,
@@ -49,6 +50,7 @@ import {
   type Kartenchip,
 } from '../components/nachtlauf/NachtlaufKartenchips'
 import { NachtlaufBefund } from '../components/nachtlauf/NachtlaufBefund'
+import { NachtlaufFortschritt } from '../components/nachtlauf/NachtlaufFortschritt'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
 import {
   NachtlaufLaufInstrumente,
@@ -106,9 +108,15 @@ import {
   type NightRunStufenvorgaben,
 } from '../lib/nightRunLog'
 import { ermittleErzeugnisse, type Erzeugnisse } from '../lib/kettenErzeugnisse'
+import {
+  laeufeZusammenfuehren,
+  vorwegZaehlung,
+  type FortschrittArt,
+} from '../lib/laufFortschritt'
 import { readTextFile } from '../lib/readTextFile'
 import { zyklusBeschriftung, zyklusDavor, zyklusDesStarts } from '../lib/verbrauchZeitraum'
 import { useProjectName } from '../lib/useProjectName'
+import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 /**
  * Auswertung der Nachtläufe eines Projekts (Issue #725, Plan #718).
@@ -280,6 +288,27 @@ interface AnzeigeLauf {
 
 /** Was zu einer projektweiten Kartennummer bekannt ist; `null` = nicht auflösbar (404). */
 type Kartenkatalog = ReadonlyMap<number, CardByNumber | null>
+
+/** Der Fortschritt eines Laufs (Issue #1378): vom Server geladen oder nicht abrufbar. */
+type Fortschrittsstand = NightRunProgressView | 'nicht abrufbar'
+
+/**
+ * Der Takt, in dem die Seite sich auffrischt, solange ein Lauf läuft (Plan #1372 E11) — dasselbe
+ * Maß wie im Plattform-Leitstand: Was auf dem Board neu steht, erscheint spätestens nach einer
+ * halben Minute an der Kachel.
+ */
+const AUFFRISCH_MS = 30_000
+
+/**
+ * Welche Art Fortschritt ein Lauf zeigt (Plan #1372 E8): die Kette ihren Weg, die Umsetzungsnacht
+ * ihre Pakete; `null` für alle übrigen Arten — für sie gibt es keinen Fortschritt.
+ */
+function fortschrittArt(mode: AnzeigeArt): FortschrittArt | null {
+  if (mode === 'CHAIN') {
+    return 'KETTE'
+  }
+  return mode === 'IMPLEMENTATION' ? 'UMSETZUNGSNACHT' : null
+}
 
 /**
  * Die Vorhaben je Karten-**ID** (`parentId`), nicht je Kartennummer: Die Zuordnung eines
@@ -2225,18 +2254,23 @@ function Kopfmarken({
 
 /**
  * Die Metazeile im Kopf eines Laufs (Vorlage Z. 385): Beginn, Dauer und die Stückzahlen — dazu,
- * was der Ergebnisstand über Modell, Label und Abschluss weiß.
+ * was der Ergebnisstand über Modell, Label und Abschluss weiß. Die Stückzahlen reicht der Aufrufer
+ * herein: Beim laufenden Lauf nehmen sie den Board-Stand vorweg (Issue #1378, Plan #1372 E7).
  *
  * <p>Die Zeile ist lang, und das ist Absicht: Die Vorlage zeigt dort vier Angaben, ein Lauf hat
  * aber mehr zu sagen. Weggelassen wäre die Auskunft verloren; in der Metazeile steht sie in der
  * Gestalt, die die Vorlage dafür kennt.
  */
-const metazeile = (lauf: AnzeigeLauf, stand: NightRun | undefined): string =>
+const metazeile = (
+  lauf: AnzeigeLauf,
+  stand: NightRun | undefined,
+  zahlen: { bearbeitet: number; uebergangen: number },
+): string =>
   [
     tagZeit(lauf.startedAt),
     laufDauer(lauf.durationMs),
-    `${lauf.processedCount} bearbeitet`,
-    `${lauf.skippedCount} übergangen`,
+    `${zahlen.bearbeitet} bearbeitet`,
+    `${zahlen.uebergangen} übergangen`,
     kopfText(stand),
     ...(lauf.unparsedCount > 0 ? [`Ungedeutete Zeilen: ${lauf.unparsedCount}`] : []),
   ]
@@ -2569,9 +2603,12 @@ function LaufPanel({
   zaehler,
   aufbewahrteLaeufe,
   erzeugnisse,
+  fortschritt,
   zuerst,
   onAufklappen,
+  onZuklappen,
   onOeffnen,
+  onKarteOeffnen,
 }: Readonly<{
   lauf: AnzeigeLauf
   /** `true` = in dieser Sitzung neu angelegt, `false` = lag schon vor, `undefined` = nicht gesendet. */
@@ -2594,15 +2631,35 @@ function LaufPanel({
    */
   erzeugnisse: ReadonlyMap<number, Erzeugnisse>
   /**
+   * Der Fortschritt dieses Laufs (Issue #1378); `undefined`, solange keiner geladen ist, und an
+   * jedem Lauf, der keinen hat (Plan #1372 E8).
+   */
+  fortschritt: Fortschrittsstand | undefined
+  /**
    * Der oberste Lauf der Liste steht beim Öffnen der Seite offen (#914, E7). AK 2 verlangt Kopf,
    * Instrumente und erste Vorgangszeile ohne Scrollen — genau dieser eine, nicht alle: Bis zu 30
    * aufgeklappte Läufe lösten die Anfragelawine aus, die Plan #718 (A8) vermeidet.
    */
   zuerst: boolean
   onAufklappen: () => void
+  onZuklappen: () => void
   onOeffnen: (karte: CardByNumber) => void
+  /** Öffnet eine Karte des Fortschritts, die nur als Nummer bekannt ist, im Kartendialog. */
+  onKarteOeffnen: (nummer: number) => void
 }>) {
   const [offen, setOffen] = useState(zuerst)
+  const laeuft = laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })
+  const art = fortschrittArt(lauf.mode)
+  const geladen = fortschritt === undefined || fortschritt === 'nicht abrufbar' ? null : fortschritt
+  // Die Kopfzahlen nehmen beim laufenden Lauf den Board-Stand vorweg (Plan #1372 E7); die Regel
+  // steht in `lib/laufFortschritt.ts`. Ein abgeschlossener Lauf zeigt seine Zahlen wie bisher.
+  const vorweg = vorwegZaehlung(lauf.items, geladen, laeuft)
+  const zahlen = laeuft
+    ? { bearbeitet: vorweg.bearbeitet, uebergangen: vorweg.uebergangen }
+    : { bearbeitet: lauf.processedCount, uebergangen: lauf.skippedCount }
+  const pakete = laeuft
+    ? { gruen: vorweg.gruen, gelb: vorweg.gelb, rot: vorweg.rot, gesamt: vorweg.gruen + vorweg.gelb + vorweg.rot }
+    : paketZaehlung(lauf.items)
   const rot = new Set(lauf.items.filter((item) => item.state === 'RED').map((item) => item.cardNumber))
   // Eine Fassung für alle Vorgänge: Zwei gleichlautende Abfragen nebeneinander hießen zwei Stellen,
   // an denen dieselbe Frage beantwortet wird.
@@ -2620,6 +2677,8 @@ function LaufPanel({
     setOffen(neu)
     if (neu) {
       onAufklappen()
+    } else {
+      onZuklappen()
     }
   }
 
@@ -2637,10 +2696,10 @@ function LaufPanel({
       titel={laufTitel(lauf.startedAt, lauf.laufId)}
       zyklus={zyklusBeschriftung(zyklusDesStarts(lauf.startedAt))}
       artSymbol={<LaufArtSymbol art={lauf.mode} />}
-      meta={metazeile(lauf, stand)}
+      meta={metazeile(lauf, stand, zahlen)}
       melder={melder}
       abbruchGrund={lauf.abbruchGrund}
-      pulsiert={laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })}
+      pulsiert={laeuft}
       offen={offen}
       onUmschalten={umschalten}
       marken={
@@ -2658,15 +2717,11 @@ function LaufPanel({
       <NachtlaufLaufInstrumente
         verbrauch={lauf.verbrauch}
         dauerMs={lauf.durationMs}
-        pakete={paketZaehlung(lauf.items)}
+        pakete={pakete}
         aufteilung={kostenaufteilung(lauf)}
         // Dieselbe Bedingung wie `pulsiert`: Nur ein laufender Lauf zeigt, wie lange er schon
         // läuft (#1244).
-        laeuftSeit={
-          laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })
-            ? lauf.startedAt
-            : undefined
-        }
+        laeuftSeit={laeuft ? lauf.startedAt : undefined}
       />
 
       {/* Statt eines Bandes (#873): Der Erzeugungs- und der Prüf-Lauf sortieren die große Mehrheit
@@ -2690,6 +2745,28 @@ function LaufPanel({
               {zeile}
             </Typography>
           ))}
+        </Box>
+      )}
+
+      {/* Der Fortschritt als eigener Block über den Vorgangszeilen (Plan #1372 E12). Nach dem
+          Lauf bleibt allein der Hinweis auf eine offene Frage (E9) — ohne sie entfällt der Block.
+          Ein gescheiterter Abruf nimmt der übrigen Kachel nichts; gemeldet wird er nur am
+          laufenden Lauf, an dem der Fortschritt die Auskunft ist. */}
+      {laeuft && fortschritt === 'nicht abrufbar' && (
+        <Box sx={{ px: '16px', py: '14px' }}>
+          <Typography variant="body2" color="text.secondary">
+            Fortschritt nicht abrufbar
+          </Typography>
+        </Box>
+      )}
+      {art !== null && geladen !== null && (laeuft || geladen.offeneFragen.length > 0) && (
+        <Box sx={{ px: '16px', py: '14px' }}>
+          <NachtlaufFortschritt
+            fortschritt={geladen}
+            art={art}
+            laeuft={laeuft}
+            onKarteOeffnen={onKarteOeffnen}
+          />
         </Box>
       )}
 
@@ -2787,6 +2864,10 @@ export function NightRunPage() {
     () => new Map(),
   )
   const [vorhabenKarten, setVorhabenKarten] = useState<Vorhabenkatalog>(() => new Map())
+  /** Der Fortschritt je Startzeitpunkt (Issue #1378), geladen beim Aufklappen und im Takt. */
+  const [fortschritte, setFortschritte] = useState<ReadonlyMap<string, Fortschrittsstand>>(
+    () => new Map(),
+  )
   // Leer heißt „zu keiner Klasse ist etwas bekannt" — der Zustand vor dem ersten Abruf und der
   // eines leeren Ringpuffers sind derselbe. `null` heißt dagegen: der Abruf ist gescheitert.
   const [zaehler, setZaehler] = useState<Haeufigkeiten>({})
@@ -2798,6 +2879,12 @@ export function NightRunPage() {
   // So wird jede Kartennummer je Seitenaufruf genau einmal geladen.
   const katalogRef = useRef(new Map<number, CardByNumber | null>())
   const geladeneLaeufe = useRef(new Set<string>())
+  /**
+   * Die Startzeitpunkte der aufgeklappten Läufe (Issue #1378). Anders als {@link geladeneLaeufe}
+   * verliert ein Lauf seinen Eintrag beim Zuklappen: Der Takt frischt allein den Fortschritt der
+   * Kacheln auf, die gerade jemand ansieht.
+   */
+  const offeneLaeufe = useRef(new Set<string>())
   /**
    * Die laufenden Vorhaben-Abrufe je `parentId` (#818). Der Promise wird **vor** dem Warten
    * eingetragen, ohne ein `await` dazwischen: Zwei gleichzeitig aufgeklappte Läufe mit demselben
@@ -2915,12 +3002,35 @@ export function NightRunPage() {
     setErzeugnisse((vorher) => new Map(vorher).set(lauf.startedAt, gefunden))
   }
 
+  /**
+   * Lädt den Fortschritt eines Laufs (Issue #1378) — nur für Kette und Umsetzungsnacht (Plan #1372
+   * E8), und nur für einen Lauf, den der Server führt: Ein eben eingelesener hat keine Id.
+   * Scheitert der Abruf, steht der Lauf als „nicht abrufbar" da; die übrige Kachel bleibt.
+   */
+  const ladeFortschritt = useCallback(
+    (lauf: AnzeigeLauf) => {
+      if (lauf.laufId === undefined || fortschrittArt(lauf.mode) === null) {
+        return
+      }
+      void nightRunsApi
+        .progress(id, lauf.laufId)
+        .then(
+          (stand): Fortschrittsstand => stand,
+          (): Fortschrittsstand => 'nicht abrufbar',
+        )
+        .then((stand) => setFortschritte((vorher) => new Map(vorher).set(lauf.startedAt, stand)))
+    },
+    [id],
+  )
+
   const aufklappen = useCallback(
     (lauf: AnzeigeLauf) => {
       if (geladeneLaeufe.current.has(lauf.startedAt)) {
         return
       }
       geladeneLaeufe.current.add(lauf.startedAt)
+      offeneLaeufe.current.add(lauf.startedAt)
+      ladeFortschritt(lauf)
       const stand = staende.get(lauf.startedAt)
       void ladeKetten(lauf.items, dokumentNummern(stand)).then(() =>
         stand === undefined ? ladeErzeugnisse(lauf) : undefined,
@@ -2931,8 +3041,63 @@ export function NightRunPage() {
     // verlangt. Was sie an Veränderlichem liest, steht dafür vollständig in der Liste: `staende`
     // entscheidet über die Dokumentnummern, `id` über das Projekt, alles Übrige sind Refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ladeKetten liest nur staende, id und Refs
-    [staende, id],
+    [staende, id, ladeFortschritt],
   )
+
+  /**
+   * Der Takt (Issue #1378, Plan #1372 E11): lädt die Laufliste neu und dazu den Fortschritt jeder
+   * aufgeklappten Kachel — an der Sperre {@link geladeneLaeufe} vorbei, die allein dem Aufklappen
+   * gilt. Die Liste wird **zusammengeführt**, nicht ersetzt: Ein Nachtplan oder ein eingelesener
+   * Lauf ohne servergeführtes Gegenstück verschwände sonst binnen 30 s.
+   */
+  const auffrischen = useCallback(() => {
+    void nightRunsApi
+      .list(id)
+      .then((views) => {
+        const vomServer = views.map(ausSicht)
+        setLaeufe((bisher) => laeufeZusammenfuehren(bisher, vomServer))
+        setAufbewahrteLaeufe(views.length)
+        for (const lauf of vomServer) {
+          if (offeneLaeufe.current.has(lauf.startedAt)) {
+            ladeFortschritt(lauf)
+          }
+        }
+      })
+      .catch((error_: Error) => notify(error_.message, 'error'))
+  }, [id, ladeFortschritt, notify])
+
+  // Aufgefrischt wird nur, solange ein Lauf läuft — ein abgeschlossener ändert sich nicht mehr —
+  // und nur bei sichtbarem Tab; dort sieht sonst niemand hin. Muster: `PlattformLeitstandPage`.
+  const einLaufLaeuft = laeufe.some((lauf) => laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund }))
+  useEffect(() => {
+    if (!einLaufLaeuft) {
+      return
+    }
+    const takt = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        auffrischen()
+      }
+    }, AUFFRISCH_MS)
+    return () => clearInterval(takt)
+  }, [einLaufLaeuft, auffrischen])
+
+  // Beim Zurückkehren sofort statt erst mit dem nächsten Takt — unter derselben Bedingung.
+  useRefetchOnFocus(() => {
+    if (einLaufLaeuft) {
+      auffrischen()
+    }
+  })
+
+  /**
+   * Öffnet eine Karte des Fortschritts (Issue #1378): Die Antwort trägt nur Nummer, Titel und
+   * Board, der Kartendialog braucht die Karte — sie wird beim Klick nachgeladen.
+   */
+  const karteOeffnen = (nummer: number) => {
+    void cardsApi
+      .byNumber(id, nummer)
+      .then(setDetail)
+      .catch((error_: unknown) => notify(apiErrorMessage(error_, 'Karte nicht abrufbar.'), 'error'))
+  }
 
   /**
    * Der oberste Lauf steht beim Öffnen der Seite offen (#914, E7), und damit muss auch seine
@@ -3146,8 +3311,14 @@ export function NightRunPage() {
                     zaehler={zaehler}
                     erzeugnisse={erzeugnisse.get(lauf.startedAt) ?? KEINE_ERZEUGNISSE}
                     aufbewahrteLaeufe={aufbewahrteLaeufe}
-                    onAufklappen={() => aufklappen(lauf)}
+                    fortschritt={fortschritte.get(lauf.startedAt)}
+                    onAufklappen={() => {
+                      offeneLaeufe.current.add(lauf.startedAt)
+                      aufklappen(lauf)
+                    }}
+                    onZuklappen={() => offeneLaeufe.current.delete(lauf.startedAt)}
                     onOeffnen={setDetail}
+                    onKarteOeffnen={karteOeffnen}
                   />
                 ))}
               </Box>

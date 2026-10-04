@@ -15,6 +15,7 @@ import type {
   NightRunErrorClassCounts,
   NightRunItemStageView,
   NightRunItemView,
+  NightRunProgressView,
   NightRunResult,
   NightRunUsageView,
   NightRunView,
@@ -438,6 +439,12 @@ interface Antworten {
   boards?: number[]
   boardKarten?: Record<number, Card[]>
   angelegtAm?: Record<number, string>
+  /**
+   * Je Lauf-Id die Antworten von `GET …/night-runs/{runId}/progress` (Issue #1378) — je Aufruf die
+   * nächste, die letzte gilt für alle weiteren. Ohne Eintrag scheitert der Abruf wie jede
+   * unerwartete Anfrage.
+   */
+  fortschritte?: Record<number, NightRunProgressView[]>
 }
 
 /** Alle Anfragen dieses Tests, in Reihenfolge — Grundlage der Sende- und Ladepfad-Prüfungen. */
@@ -535,9 +542,18 @@ function submitAntwort(submit: Antworten['submit']) {
   )
 }
 
+/** Der Fortschritt eines Laufs, wenn der Test einen vorgibt; sonst `undefined`. */
+function fortschrittAntwort(url: string, naechster: ReadonlyMap<number, ReturnType<typeof folge>>) {
+  const treffer = /^\/api\/projects\/5\/night-runs\/(\d+)\/progress$/.exec(url)
+  return treffer === null ? undefined : naechster.get(Number(treffer[1]))?.()
+}
+
 function stubFetch(antworten: Antworten) {
   const naechsteListe = folge(antworten.listen ?? [[]])
   const naechsterZaehler = folge(antworten.zaehler ?? [{}])
+  const naechsterFortschritt = new Map(
+    Object.entries(antworten.fortschritte ?? {}).map(([runId, staende]) => [Number(runId), folge(staende)]),
+  )
   let listenAufrufe = 0
   vi.stubGlobal(
     'fetch',
@@ -565,7 +581,10 @@ function stubFetch(antworten: Antworten) {
       if (url === '/api/projects/5/night-runs' && method === 'POST') {
         return submitAntwort(antworten.submit)
       }
-      const karte = kartenAntwort(url, antworten) ?? herkunftsAntwort(url, antworten)
+      const karte =
+        kartenAntwort(url, antworten) ??
+        herkunftsAntwort(url, antworten) ??
+        fortschrittAntwort(url, naechsterFortschritt)
       if (karte) return karte
 
       return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
@@ -6176,5 +6195,258 @@ describe('NightRunPage — nur die letzten zwei Zyklen (#1134)', () => {
 
     await screen.findByTestId(`lauf-${HEUTE_13}`)
     expect(screen.queryByRole('button', { name: /Ältere Runs anzeigen|Nur die letzten zwei Schichten/ })).toBeNull()
+  })
+})
+
+describe('NightRunPage — Fortschritt eines laufenden Laufs (#1378)', () => {
+  const JETZT = new Date('2026-10-04T15:00:00Z')
+  const START = '2026-10-04T14:00:00.000Z'
+  const LAEUFT = { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null } as const
+
+  const ref = (number: number, title = `Karte ${number}`) => ({ number, title, boardId: 1 })
+
+  /** Eine Kette mit Plan und den gegebenen Paketen, die gerade bei der Umsetzung steht. */
+  const kettenStand = (
+    pakete: NightRunProgressView['pakete'],
+    felder: Partial<NightRunProgressView> = {},
+  ): NightRunProgressView => ({
+    zuordnung: 'OK',
+    ketten: [
+      {
+        anforderung: ref(800, 'Anforderung'),
+        plan: ref(810, 'Plan'),
+        pakete,
+        stufen: [
+          { stufe: 'PLAN', zustand: 'ERREICHT' },
+          { stufe: 'REVIEW', zustand: 'ERREICHT' },
+          { stufe: 'PAKETE', zustand: 'ERREICHT' },
+          { stufe: 'ABDECKUNG', zustand: 'ERREICHT' },
+          { stufe: 'UMSETZUNG', zustand: 'LAEUFT' },
+        ],
+        aktuelleStufe: 'UMSETZUNG',
+        endeErreicht: false,
+      },
+    ],
+    pakete,
+    unbekannt: [],
+    offeneFragen: [],
+    ...felder,
+  })
+
+  const ZWEI_PAKETE = kettenStand([
+    { karte: ref(801, 'Paket eins'), zustand: 'FERTIG' },
+    { karte: ref(802, 'Paket zwei'), zustand: 'IN_UMSETZUNG' },
+  ])
+  const DREI_PAKETE = kettenStand([
+    { karte: ref(801, 'Paket eins'), zustand: 'FERTIG' },
+    { karte: ref(802, 'Paket zwei'), zustand: 'FERTIG' },
+    { karte: ref(803, 'Paket drei'), zustand: 'IN_UMSETZUNG' },
+  ])
+
+  const laufendeKette = (felder: Partial<Parameters<typeof aufbewahrt>[0]> = {}) =>
+    aufbewahrt({
+      id: 7,
+      startedAt: START,
+      mode: 'CHAIN',
+      processedCount: 0,
+      complete: false,
+      outcome: LAEUFT,
+      ...felder,
+    })
+
+  const listenAufrufe = () =>
+    anfragen.filter((a) => a.method === 'GET' && a.url === '/api/projects/5/night-runs')
+  const fortschrittAufrufe = () => anfragen.filter((a) => a.url.endsWith('/progress'))
+  const panel = () => screen.getByTestId(`lauf-${START}`)
+
+  // Der Takt läuft über `setInterval` und muss mitgefälscht werden. Ein zweiter
+  // `useFakeTimers`-Aufruf über den äußeren hinweg bliebe wirkungslos — erst zurück auf echte Zeit.
+  beforeEach(() => {
+    vi.useRealTimers()
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(JETZT)
+  })
+
+  afterEach(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+  })
+
+  it('zeigt den Fortschritt und nimmt die Kopfzahlen vorweg', async () => {
+    renderPage({ listen: [[laufendeKette()]], fortschritte: { 7: [ZWEI_PAKETE] } })
+
+    expect(await screen.findByTestId('fortschritt-kette-800')).toBeInTheDocument()
+    expect(within(panel()).getByTestId('nachtlauf-meta')).toHaveTextContent('1 bearbeitet · 0 übergangen')
+    expect(within(panel()).getByTestId('instrument-pakete-wert')).toHaveTextContent('1 grün 0 gelb 0 rot')
+    expect(fortschrittAufrufe().map((a) => a.url)).toEqual(['/api/projects/5/night-runs/7/progress'])
+  })
+
+  it('steht über den Vorgangszeilen', async () => {
+    renderPage({
+      listen: [[laufendeKette({ items: [{ id: 1, cardNumber: 800, title: 'Anforderung', state: 'GREEN' }] })]],
+      fortschritte: { 7: [ZWEI_PAKETE] },
+    })
+
+    const block = await screen.findByTestId('fortschritt')
+    const zeile = within(panel()).getByTestId('vorgang-taste-800')
+    expect(block.compareDocumentPosition(zeile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('öffnet eine Karte des Fortschritts im Kartendialog', async () => {
+    renderPage({
+      listen: [[laufendeKette()]],
+      fortschritte: { 7: [ZWEI_PAKETE] },
+      karten: { 801: karte({ id: 91, number: 801, title: 'Paket eins' }) },
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Paket #801 Paket eins' }))
+
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Karte 801')
+  })
+
+  it('meldet, wenn sich die Karte des Fortschritts nicht öffnen lässt', async () => {
+    renderPage({ listen: [[laufendeKette()]], fortschritte: { 7: [ZWEI_PAKETE] } })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Paket #801 Paket eins' }))
+
+    expect(await screen.findByText('Karte nicht gefunden')).toBeInTheDocument()
+    expect(screen.queryByTestId('karten-detail')).toBeNull()
+  })
+
+  it('zeigt nach 30 s einen neuen Board-Stand', async () => {
+    renderPage({ listen: [[laufendeKette()]], fortschritte: { 7: [ZWEI_PAKETE, DREI_PAKETE] } })
+    await screen.findByTestId('fortschritt-kette-800')
+    expect(screen.queryByRole('button', { name: 'Paket #803 Paket drei' })).toBeNull()
+
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    expect(await screen.findByRole('button', { name: 'Paket #803 Paket drei' })).toBeInTheDocument()
+    expect(within(panel()).getByTestId('nachtlauf-meta')).toHaveTextContent('2 bearbeitet')
+    expect(listenAufrufe()).toHaveLength(2)
+  })
+
+  it('lässt einen Nachtplan-Lauf nach dem 30-s-Takt in der Liste stehen', async () => {
+    renderPage({ listen: [[laufendeKette()]], fortschritte: { 7: [ZWEI_PAKETE] } })
+    await screen.findByTestId('fortschritt-kette-800')
+
+    protokollWaehlen(ECHTER_NACHTPLAN_STAND, 'night-run-2026-09-09-141506.json')
+    await screen.findByTestId(`lauf-${ECHTER_NACHTPLAN_START}`)
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    await waitFor(() => expect(listenAufrufe()).toHaveLength(2))
+
+    expect(screen.getByTestId(`lauf-${ECHTER_NACHTPLAN_START}`)).toBeInTheDocument()
+    expect(panel()).toBeInTheDocument()
+  })
+
+  it('frischt beim Zurückkehren in das Fenster auf', async () => {
+    renderPage({ listen: [[laufendeKette()]], fortschritte: { 7: [ZWEI_PAKETE, DREI_PAKETE] } })
+    await screen.findByTestId('fortschritt-kette-800')
+
+    fireEvent.focus(window)
+
+    expect(await screen.findByRole('button', { name: 'Paket #803 Paket drei' })).toBeInTheDocument()
+  })
+
+  it('frischt den Fortschritt einer zugeklappten Kachel nicht auf', async () => {
+    renderPage({ listen: [[laufendeKette()]], fortschritte: { 7: [ZWEI_PAKETE] } })
+    await screen.findByTestId('fortschritt-kette-800')
+
+    fireEvent.click(laufTaste(panel()))
+    await vi.advanceTimersByTimeAsync(30_000)
+    await waitFor(() => expect(listenAufrufe()).toHaveLength(2))
+
+    expect(fortschrittAufrufe()).toHaveLength(1)
+  })
+
+  it('zeigt am abgeschlossenen Lauf die Zahlen wie bisher und nur den Frage-Hinweis', async () => {
+    const abgeschlossen = aufbewahrt({
+      id: 7,
+      startedAt: START,
+      mode: 'CHAIN',
+      processedCount: 1,
+      items: [{ id: 1, cardNumber: 800, title: 'Anforderung', state: 'GREEN' }],
+    })
+    const mitFrage = kettenStand(
+      [
+        { karte: ref(801, 'Paket eins'), zustand: 'FERTIG' },
+        { karte: ref(802, 'Paket zwei'), zustand: 'FERTIG' },
+      ],
+      { offeneFragen: [ref(802, 'Paket zwei')] },
+    )
+    renderPage({ listen: [[abgeschlossen]], fortschritte: { 7: [mitFrage] } })
+
+    expect(await screen.findByTestId('fortschritt-frage')).toBeInTheDocument()
+    expect(screen.queryByTestId('fortschritt')).toBeNull()
+    expect(within(panel()).getByTestId('nachtlauf-meta')).toHaveTextContent('1 bearbeitet · 0 übergangen')
+    expect(within(panel()).getByTestId('instrument-pakete-wert')).toHaveTextContent('1 grün 0 gelb 0 rot')
+  })
+
+  it('zeigt am abgeschlossenen Lauf ohne offene Frage keinen Fortschritt', async () => {
+    const abgeschlossen = aufbewahrt({ id: 7, startedAt: START, mode: 'IMPLEMENTATION' })
+    renderPage({ listen: [[abgeschlossen]], fortschritte: { 7: [kettenStand([])] } })
+
+    await waitFor(() => expect(fortschrittAufrufe()).toHaveLength(1))
+    expect(screen.queryByTestId('fortschritt')).toBeNull()
+    expect(screen.queryByTestId('fortschritt-frage')).toBeNull()
+  })
+
+  it('ruft für einen Prüf-Lauf keinen Fortschritt ab', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 7, startedAt: START, mode: 'REVIEW' })]] })
+
+    await screen.findByTestId(`lauf-${START}`)
+    await waitFor(() => expect(listenAufrufe()).toHaveLength(1))
+    expect(fortschrittAufrufe()).toHaveLength(0)
+  })
+
+  it('zeigt die Umsetzungsnacht mit ihren Paketen', async () => {
+    const nacht = aufbewahrt({ id: 7, startedAt: START, complete: false, outcome: LAEUFT })
+    renderPage({
+      listen: [[nacht]],
+      fortschritte: { 7: [{ ...kettenStand([{ karte: ref(801, 'Paket eins'), zustand: 'FERTIG' }]), ketten: [] }] },
+    })
+
+    expect(await screen.findByTestId('fortschritt-umsetzungsnacht')).toBeInTheDocument()
+    expect(within(panel()).getByTestId('instrument-pakete-wert')).toHaveTextContent('1 grün 0 gelb 0 rot')
+  })
+
+  it('frischt ohne laufenden Lauf nicht auf', async () => {
+    const abgeschlossen = aufbewahrt({ id: 7, startedAt: START, mode: 'CHAIN' })
+    renderPage({ listen: [[abgeschlossen]], fortschritte: { 7: [kettenStand([])] } })
+    await waitFor(() => expect(fortschrittAufrufe()).toHaveLength(1))
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    fireEvent.focus(window)
+
+    expect(listenAufrufe()).toHaveLength(1)
+    expect(fortschrittAufrufe()).toHaveLength(1)
+  })
+
+  it('frischt bei verborgenem Tab nicht auf', async () => {
+    renderPage({ listen: [[laufendeKette()]], fortschritte: { 7: [ZWEI_PAKETE, DREI_PAKETE] } })
+    await screen.findByTestId('fortschritt-kette-800')
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    await vi.advanceTimersByTimeAsync(60_000)
+
+    expect(listenAufrufe()).toHaveLength(1)
+    expect(fortschrittAufrufe()).toHaveLength(1)
+  })
+
+  it('meldet einen gescheiterten Abruf und lässt die übrige Kachel stehen', async () => {
+    renderPage({ listen: [[laufendeKette()]] })
+
+    expect(await screen.findByText('Fortschritt nicht abrufbar')).toBeInTheDocument()
+    expect(screen.queryByTestId('fortschritt')).toBeNull()
+    expect(within(panel()).getByTestId('instrument-pakete-wert')).toHaveTextContent('0 grün 0 gelb 0 rot')
+  })
+
+  it('meldet einen gescheiterten Takt und behält die Liste', async () => {
+    renderPage({ listen: [[laufendeKette()]], listenFehlerAb: 2, fortschritte: { 7: [ZWEI_PAKETE] } })
+    await screen.findByTestId('fortschritt-kette-800')
+
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    expect(await screen.findByText('Liste nicht abrufbar')).toBeInTheDocument()
+    expect(panel()).toBeInTheDocument()
   })
 })
