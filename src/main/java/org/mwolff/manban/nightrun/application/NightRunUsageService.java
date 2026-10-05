@@ -15,7 +15,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.card.application.EpicRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
@@ -68,7 +68,7 @@ public class NightRunUsageService {
       EnumSet.of(NightRunErrorClass.HARD_ABORT, NightRunErrorClass.TIME_BUDGET_EXCEEDED);
 
   private final NightRunUsageRepository usage;
-  private final CardService cards;
+  private final CardRunQueryService cards;
   private final PermissionChecker permissions;
   private final InteractiveUsageSinceReader erfassungsbeginn;
   private final Clock clock;
@@ -76,7 +76,7 @@ public class NightRunUsageService {
 
   public NightRunUsageService(
       NightRunUsageRepository usage,
-      CardService cards,
+      CardRunQueryService cards,
       PermissionChecker permissions,
       InteractiveUsageSinceReader erfassungsbeginn,
       Clock clock,

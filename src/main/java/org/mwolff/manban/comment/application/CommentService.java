@@ -85,7 +85,7 @@ public class CommentService {
    * ersetzt den Laufstand über genau diesen Weg (A1).
    *
    * <p>Ohne Rechteprüfung: Vertrag für das Modul {@code nightrun}, das die Projekt-Rolle vor dem
-   * Aufruf selbst prüft — wie {@code CardService#existingCardNumbers}.
+   * Aufruf selbst prüft — wie {@code CardRunQueryService#existingCardNumbers}.
    */
   @Transactional(readOnly = true)
   public List<LaufstandView> laufstaendeImProjekt(long projectId) {

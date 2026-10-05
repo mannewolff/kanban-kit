@@ -5,16 +5,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * Unit-Tests der schmalen Existenzabfrage zu Kartennummern über die card-Fassade (Issue #1169).
@@ -22,35 +17,25 @@ import org.springframework.context.ApplicationEventPublisher;
  * <p>Eigene Klasse wie {@code CardServiceEpicsByCardNumberTest}: {@code CardServiceTest} steht an
  * seinen PMD-Grenzen. Als Unit-Test, weil PIT allein Unit-Tests misst.
  */
-class CardServiceExistingCardNumbersTest {
+class CardRunQueryServiceExistingCardNumbersTest {
 
-  private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
   private static final long PROJECT = 1L;
 
   private CardRepository cards;
-  private CardService service;
+  private CardRunQueryService service;
 
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
-    ActorContext actor = mock(ActorContext.class);
-    when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
-        CardServiceAufbau.ausPorts(
+        new CardRunQueryService(
             cards,
-            mock(CardDependencyRepository.class),
-            mock(BoardService.class),
-            mock(PermissionChecker.class),
-            mock(CardColumnTransitionRepository.class),
+            mock(CardActivityRepository.class),
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),
                 mock(LabelRepository.class),
                 mock(CardLabelRepository.class),
-                mock(PermissionChecker.class)),
-            mock(CardActivityRepository.class),
-            actor,
-            mock(ApplicationEventPublisher.class),
-            Clock.fixed(FIXED, ZoneOffset.UTC));
+                mock(PermissionChecker.class)));
   }
 
   @Test

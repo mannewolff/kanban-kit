@@ -8,9 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.LaufKarteView;
-import org.mwolff.manban.card.application.CardService.TokenActivityView;
+import org.mwolff.manban.card.application.CardRunQueryService;
+import org.mwolff.manban.card.application.CardRunQueryService.LaufKarteView;
+import org.mwolff.manban.card.application.CardRunQueryService.TokenActivityView;
 import org.mwolff.manban.comment.application.CommentService;
 import org.mwolff.manban.comment.application.CommentService.LaufstandView;
 import org.mwolff.manban.nightrun.domain.FortschrittErmittlung;
@@ -44,7 +44,7 @@ public class NightRunProgressService {
   private static final String HERKUNFT_TOKEN = "TOKEN";
 
   /**
-   * Platzhalter für {@code agent}: {@link CardService#tokenActivitiesInWindow} liefert nur
+   * Platzhalter für {@code agent}: {@link CardRunQueryService#tokenActivitiesInWindow} liefert nur
    * Aktivitäten mit gesetztem {@code agent} und lässt den Wert selbst weg. Die Ermittlung prüft
    * allein, dass er gesetzt ist; welches Modell es war, spielt für den Fortschritt keine Rolle.
    */
@@ -56,7 +56,7 @@ public class NightRunProgressService {
 
   private final NightRunRepository runs;
   private final PermissionChecker permissions;
-  private final CardService cards;
+  private final CardRunQueryService cards;
   private final CommentService comments;
   private final NightRunProperties properties;
   private final Clock clock;
@@ -64,7 +64,7 @@ public class NightRunProgressService {
   public NightRunProgressService(
       NightRunRepository runs,
       PermissionChecker permissions,
-      CardService cards,
+      CardRunQueryService cards,
       CommentService comments,
       NightRunProperties properties,
       Clock clock) {

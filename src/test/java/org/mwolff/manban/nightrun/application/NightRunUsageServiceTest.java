@@ -24,7 +24,7 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.card.application.EpicRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.KindTotals;
@@ -80,7 +80,7 @@ class NightRunUsageServiceTest {
       new NightRunProperties(2, null, 2, null, null);
 
   private FakeUsage usage;
-  private CardService cards;
+  private CardRunQueryService cards;
   private PermissionChecker permissions;
   private InteractiveUsageSinceReader erfassungsbeginn;
   private NightRunUsageService service;
@@ -88,7 +88,7 @@ class NightRunUsageServiceTest {
   @BeforeEach
   void setUp() {
     usage = new FakeUsage();
-    cards = mock(CardService.class);
+    cards = mock(CardRunQueryService.class);
     permissions = mock(PermissionChecker.class);
     erfassungsbeginn = mock(InteractiveUsageSinceReader.class);
     when(erfassungsbeginn.interactiveUsageSince(anyLong())).thenReturn(Optional.empty());

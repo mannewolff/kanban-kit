@@ -32,7 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.AdminAccessDeniedException;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
-import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.nightrun.application.DisruptionRepository.AckTarget;
 import org.mwolff.manban.nightrun.application.DisruptionRepository.DisruptionCandidate;
 import org.mwolff.manban.nightrun.application.DisruptionService.DisruptionView;
@@ -79,7 +79,7 @@ class DisruptionServiceTest {
 
   private DisruptionRepository disruptions;
   private NightRunRepository runs;
-  private CardService cards;
+  private CardRunQueryService cards;
   private PlatformAdminChecker platformAdminChecker;
   private DisruptionService service;
 
@@ -217,7 +217,7 @@ class DisruptionServiceTest {
 
   /**
    * Die Kartennummern, zu denen es eine Karte gibt — alle anderen gefragten fehlen in der Antwort,
-   * wie {@code CardService.existingCardNumbers} es zusagt (Issue #1169).
+   * wie {@code CardRunQueryService.existingCardNumbers} es zusagt (Issue #1169).
    */
   private void vorhandeneKarten(Integer... nummern) {
     Set<Integer> vorhanden = Set.of(nummern);
@@ -233,7 +233,7 @@ class DisruptionServiceTest {
   void setUp() {
     disruptions = mock(DisruptionRepository.class);
     runs = mock(NightRunRepository.class);
-    cards = mock(CardService.class);
+    cards = mock(CardRunQueryService.class);
     platformAdminChecker = mock(PlatformAdminChecker.class);
     when(platformAdminChecker.isPlatformAdmin(ADMIN)).thenReturn(true);
     service = mitUhr(JETZT);

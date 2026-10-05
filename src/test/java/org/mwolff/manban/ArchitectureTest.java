@@ -188,7 +188,7 @@ class ArchitectureTest {
       fassadeIstAufWhitelistBegrenzt(
           "card",
           "nur ueber CardService/CardSearchService/CardIngestService/EpicService"
-              + "/CardArchiveService/CardMoveService/LabelService"
+              + "/CardArchiveService/CardMoveService/CardRunQueryService/LabelService"
               + " und ihre geteilten Sichten CardView/LabelMarkView",
           "CardService",
           // CardSearchService ist Vertrag (Plan #1387, E1/E4): die Suche nach Kartennummern als
@@ -206,6 +206,9 @@ class ArchitectureTest {
           // CardMoveService ist Vertrag (Plan #1387, E1/E4): Verschieben, Status und Umzug als
           // eigener Zugang.
           "CardMoveService",
+          // CardRunQueryService ist Vertrag (Plan #1387, E1/E4/E10): die Lese-Abfragen fuer Laeufe
+          // als eigener Zugang, samt Records TokenActivityView und LaufKarteView.
+          "CardRunQueryService",
           "LabelService",
           // CardView und LabelMarkView sind Vertrag (Plan #1387, E5): Mehrere Karten-Dienste
           // liefern sie, darum stehen sie als eigene Typen neben den Fassaden statt in einer davon.
