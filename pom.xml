@@ -141,6 +141,14 @@
             <artifactId>okhttp-jvm</artifactId>
             <version>5.1.0</version>
         </dependency>
+        <!-- OpenAPI-Beschreibung zur Laufzeit aus dem Code (Issue #1402, Plan #1400): nur die
+             api-Variante, bewusst ohne die UI-Variante mit WebJar — die Übersicht rendert das
+             Frontend selbst. Pfad /api/openapi (application.yml, E2). -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
+            <version>2.8.17</version>
+        </dependency>
         <!-- Content-Type-Erkennung aus Magic-Bytes -->
         <dependency>
             <groupId>org.apache.tika</groupId>
@@ -220,6 +228,15 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <!-- build-info (Issue #1402, Plan #1400 E8): META-INF/build-info.properties trägt
+                     die Projektversion; OpenApiConfig liest sie über BuildProperties. -->
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build-info</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Enforcer (CLAUDE-java.md §1): erzwingt die Bauumgebung, an die frühe
@@ -497,6 +514,7 @@
                         <!-- Konfigurations-/Bean-Wiring-Klassen ohne Fachlogik. -->
                         <exclude>org/mwolff/manban/config/ClockConfig.class</exclude>
                         <exclude>org/mwolff/manban/config/SpaWebConfig.class</exclude>
+                        <exclude>org/mwolff/manban/config/OpenApiConfig.class</exclude>
                         <!-- anonymer PathResourceResolver in SpaWebConfig (SPA-Forwarding, nur via IT). -->
                         <exclude>org/mwolff/manban/config/SpaWebConfig$1.class</exclude>
                         <exclude>org/mwolff/manban/auth/infrastructure/AuthConfig.class</exclude>

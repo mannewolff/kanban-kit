@@ -56,6 +56,18 @@ spring:
       mail.smtp.timeout: 10000
       mail.smtp.writetimeout: 10000
 
+# API-Beschreibung (Issue #1402, Plan #1400): springdoc erzeugt sie zur Laufzeit aus dem Code.
+# JSON unter /api/openapi, YAML unter /api/openapi.yaml; springdocs Vorgabepfad entfällt (E2) —
+# unter /api greift das SPA-Forwarding nicht, und die Zugangsregel steht in ApiZugang (nur Session).
+# override-with-generic-response: false — sonst hängte springdoc die Antworten des
+# GlobalExceptionHandler an jede Operation; Fehlerantworten beschreibt jede Methode selbst.
+springdoc:
+  api-docs:
+    path: /api/openapi
+  default-produces-media-type: application/json
+  writer-with-order-by-keys: true
+  override-with-generic-response: false
+
 server:
   port: 8080
   forward-headers-strategy: framework  # hinter Caddy (Reverse-Proxy) korrekte Scheme/Host-Auflösung
