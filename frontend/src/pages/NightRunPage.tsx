@@ -41,6 +41,7 @@ import {
   type NightRunUsage,
   type NightRunUsageView,
   type NightRunView,
+  type ReleasePreparationView,
 } from '../api/nightRuns'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
@@ -284,6 +285,11 @@ interface AnzeigeLauf {
    * {@link kettenBudget} der eingelesene Ergebnisstand ein.
    */
   budget: Budget | undefined
+  /**
+   * Die Morgenmeldung des Laufs (Issue #1458); `undefined` ohne Meldung und beim eben geparsten
+   * Lauf — die Meldung kommt allein über den Token-Weg des Servers.
+   */
+  veroeffentlichung: ReleasePreparationView | undefined
   items: AnzeigeItem[]
 }
 
@@ -447,6 +453,7 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   // Wie die Herkunftsfelder leer: Die Vorgaben **des Laufs** meldet allein der Runner ueber den
   // Token-Weg. Was der eingelesene Stand dazu fuehrt, holt `kettenBudget` von dort (Issue #1115).
   budget: undefined,
+  veroeffentlichung: undefined,
   items: run.items.map((item) => ({
     cardNumber: item.cardNumber,
     title: item.title,
@@ -577,6 +584,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   laufId: view.id,
   verbrauch: ausVerbrauch(view.usage),
   budget: ausBudget(view.budget),
+  veroeffentlichung: view.releasePreparation ?? undefined,
   items: view.items.map((item) => {
     const stufen = ausStufen(item.stages)
     return {
@@ -2700,6 +2708,7 @@ function LaufPanel({
       meta={metazeile(lauf, stand, zahlen)}
       melder={melder}
       abbruchGrund={lauf.abbruchGrund}
+      veroeffentlichung={lauf.veroeffentlichung}
       pulsiert={laeuft}
       offen={offen}
       onUmschalten={umschalten}

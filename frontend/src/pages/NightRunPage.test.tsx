@@ -305,6 +305,7 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
       // Der Upload-Weg fuehrt keine Budgets (E14); der Server legt sie zu einem eingelesenen Lauf
       // fest als „nicht gemeldet" ab.
       budget: null,
+      releasePreparation: null,
       items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
       outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
   }
@@ -378,6 +379,7 @@ function aufbewahrt(
     noWorkReason: null,
     abortReason: null,
     budget: null,
+    releasePreparation: null,
     ...rest,
     items: (items ?? []).map(wieAufbewahrtesItem),
     outcome:
@@ -5445,6 +5447,46 @@ describe('NightRunPage — der Abbruchgrund in der Auswertung (#1145)', () => {
     const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
     expect(within(panelEl).queryByTestId('nachtlauf-abbruchgrund')).not.toBeInTheDocument()
     expect(within(laufKopfzeile(panelEl)).queryByTestId('lauf-zustand')).not.toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Morgenkachel „Veröffentlichung vorbereitet“ (#1458)', () => {
+  const kachel = (panelEl: HTMLElement) =>
+    within(panelEl).queryByRole('region', { name: 'Veröffentlichung vorbereitet' })
+
+  it('zeigt die Morgenmeldung eines aufbewahrten Laufs als Kachel', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            releasePreparation: {
+              result: 'GREEN',
+              commitHash: 'b2ae30f6',
+              version: '1.4.0',
+              redCheck: null,
+              pending: [],
+              receivedAt: '2026-10-06T05:12:00Z',
+              cards: [{ number: 1449, title: 'Stufenleiste' }],
+              redCards: [],
+            },
+          }),
+        ],
+      ],
+    })
+
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(kachel(panelEl)).toHaveTextContent('b2ae30f6')
+  })
+
+  it('zeigt ohne Meldung keine Kachel', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0) })]] })
+
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(kachel(panelEl)).not.toBeInTheDocument()
   })
 })
 

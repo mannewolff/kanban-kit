@@ -73,6 +73,7 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
   noWorkReason: null,
   abortReason: null,
   budget: null,
+  releasePreparation: null,
   items: [],
     outcome: { verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null, abortReason: null },
     ...extra,

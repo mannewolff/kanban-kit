@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { nightRunsApi, type NightRunSubmission } from './nightRuns'
+import { nightRunsApi, type NightRunSubmission, type ReleasePreparationView } from './nightRuns'
 
 function spyFetch(body = '{}') {
   return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -161,6 +161,31 @@ describe('nightRunsApi', () => {
     expect(c.url).toBe('/api/projects/4/night-runs/tonight')
     expect(c.method).toBeUndefined()
     expect(karten).toEqual([karte])
+  })
+
+  it('list liefert die Morgenmeldung eines Laufs und null ohne Meldung (Issue #1458)', async () => {
+    const meldung: ReleasePreparationView = {
+      result: 'RED',
+      commitHash: 'b2ae30f6',
+      version: '1.4.0',
+      redCheck: 'mvn verify',
+      pending: [],
+      receivedAt: '2026-10-06T05:12:00Z',
+      cards: [
+        { number: 1449, title: 'Stufenleiste' },
+        { number: 9999, title: null },
+      ],
+      redCards: [{ number: 1449, title: 'Stufenleiste' }],
+    }
+    spyFetch(
+      JSON.stringify([
+        { id: 11, items: [], releasePreparation: meldung },
+        { id: 12, items: [], releasePreparation: null },
+      ]),
+    )
+    const laeufe = await nightRunsApi.list(4)
+    expect(laeufe[0].releasePreparation).toEqual(meldung)
+    expect(laeufe[1].releasePreparation).toBeNull()
   })
 
   it('progress reicht einen Fehler des Servers durch', async () => {

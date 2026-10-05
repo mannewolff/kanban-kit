@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ReleasePreparationView } from '../../api/nightRuns'
 import { kontrast } from '../../lib/kontrast'
 import { TEXT_MATT, theme } from '../../theme'
 import { LaufMarke, NachtlaufLaufPlatte } from './NachtlaufLaufPlatte'
@@ -38,7 +39,7 @@ const kopfflaechen = [
  * auf und wieder zu" ist ohne diesen Zustand nicht prüfbar. Der Zähler zeigt, wie oft umgeschaltet
  * wurde: Ein Klick auf den Pfeil darf nicht zusätzlich den Kopf auslösen.
  */
-function zeige(offenAnfangs = false, abbruchGrund?: string) {
+function zeige(offenAnfangs = false, abbruchGrund?: string, veroeffentlichung?: ReleasePreparationView | null) {
   const umschalten = vi.fn()
 
   function Huelle() {
@@ -50,6 +51,7 @@ function zeige(offenAnfangs = false, abbruchGrund?: string) {
         meta="02:00 · 41 min · 7 bearbeitet"
         melder="gruen"
         abbruchGrund={abbruchGrund}
+        veroeffentlichung={veroeffentlichung}
         offen={offen}
         onUmschalten={() => {
           umschalten()
@@ -303,5 +305,44 @@ describe('NachtlaufLaufPlatte — Tastatur und Screenreader', () => {
     zeige()
 
     expect(screen.getAllByRole('button')).toHaveLength(1)
+  })
+})
+
+describe('NachtlaufLaufPlatte — Morgenkachel „Veröffentlichung vorbereitet“ (#1458)', () => {
+  const MELDUNG: ReleasePreparationView = {
+    result: 'GREEN',
+    commitHash: 'b2ae30f6',
+    version: '1.4.0',
+    redCheck: null,
+    pending: [],
+    receivedAt: '2026-10-06T05:12:00Z',
+    cards: [{ number: 1449, title: 'Stufenleiste' }],
+    redCards: [],
+  }
+  const kachel = () => screen.queryByRole('region', { name: 'Veröffentlichung vorbereitet' })
+
+  it('zeigt die Kachel in der aufgeklappten Platte, wenn der Lauf eine Meldung trägt', () => {
+    zeige(true, undefined, MELDUNG)
+
+    expect(kachel()).toBeInTheDocument()
+    expect(inhalt()).toBeInTheDocument()
+  })
+
+  it('zeigt ohne Meldung keine Kachel', () => {
+    zeige(true, undefined, null)
+
+    expect(kachel()).not.toBeInTheDocument()
+  })
+
+  it('zeigt keine Kachel, wo die Seite gar keine Meldung übergibt', () => {
+    zeige(true)
+
+    expect(kachel()).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Kachel nicht am zugeklappten Lauf', () => {
+    zeige(false, undefined, MELDUNG)
+
+    expect(kachel()).not.toBeInTheDocument()
   })
 })

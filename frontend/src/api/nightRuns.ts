@@ -266,7 +266,47 @@ export interface NightRunView {
    * ohne Budgets.
    */
   budget: NightRunBudgetView | null
+  /**
+   * Die Morgenmeldung des Laufs (Issue #1457, #1458, Plan #1447 E12); `null` heißt „keine Meldung“
+   * — dann zeigt die Laufplatte keine Kachel und behauptet nichts.
+   */
+  releasePreparation: ReleasePreparationView | null
   items: NightRunItemView[]
+}
+
+/**
+ * Ausgang der Morgenmeldung (Plan #1447 E12): `GREEN` von Hand veröffentlichbar, `GREEN_PENDING`
+ * grün mit offener Prüfung, `RED` eine Prüfung fehlgeschlagen, `NOT_PREPARED` nichts vorbereitet.
+ */
+export type ReleasePreparationResult = 'GREEN' | 'GREEN_PENDING' | 'RED' | 'NOT_PREPARED'
+
+/** Eine gemeldete Kartennummer mit Titel; `title` ist `null`, wo es die Nummer im Projekt nicht gibt. */
+export interface CardTitleView {
+  number: number
+  title: string | null
+}
+
+/**
+ * Die Morgenmeldung „Veröffentlichung vorbereitet“ eines Laufs (Issue #1457, #1458) — Feld für
+ * Feld die `ReleasePreparationView` des Servers. Felder ohne Wert kommen als `null`, Listen leer
+ * (Issue #734).
+ */
+export interface ReleasePreparationView {
+  result: ReleasePreparationResult
+  /** Kennung des vorbereiteten Stands, mit der der Mensch ihn außerhalb des Boards wiederfindet. */
+  commitHash: string | null
+  /** Beschriftung des Stands, etwa die Versionsnummer. */
+  version: string | null
+  /** Die fehlgeschlagene Prüfung bei `RED`. */
+  redCheck: string | null
+  /** Die offenen Prüfungen bei `GREEN_PENDING`; sonst leer. */
+  pending: string[]
+  /** Eingang der Meldung („gemeldet um“) — die Meldung trägt keinen eigenen Vorbereitungszeitpunkt. */
+  receivedAt: string
+  /** Die enthaltenen Arbeitspakete in gemeldeter Reihenfolge, auch aus anderen Ketten. */
+  cards: CardTitleView[]
+  /** Die von der fehlgeschlagenen Prüfung betroffenen Karten. */
+  redCards: CardTitleView[]
 }
 
 /**
