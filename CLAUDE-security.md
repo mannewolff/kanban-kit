@@ -50,6 +50,7 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 
 - UI-Elemente, die nur Eingeloggte sehen sollen, prüfen Auth-Status — **diese Checks sind kein Ersatz** für die serverseitige Prüfung in Spring.
 - Defensiv: alles, was sensitive Daten oder Aktionen ermöglicht, hängt nicht allein an einem UI-State-Flag.
+- Ausprobieren in der API-Übersicht: Die Oberfläche bietet es nur Plattform-Admins an — das ist Komfort. Die Grenze zieht der Server: `ApiAusprobierFilter` weist jeden Aufruf mit dem Kennzeichen `X-Api-Ausprobieren` ab, der nicht von einem aktiven Plattform-Admin kommt. Das Kennzeichen ist **keine Rechtegrenze für Daten** — der Aufruf läuft danach mit den gewöhnlichen Rechten der Sitzung bzw. des Projekt-Tokens.
 
 ### Error Messages
 

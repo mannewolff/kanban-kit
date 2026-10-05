@@ -554,7 +554,8 @@ Sidebar-Eintrag **„Administration"** ein- und ausgeschaltet:
 Unabhängig vom Editiermodus zeigt die Seite **Administration** jedem Angemeldeten den Abschnitt
 **„API-Schnittstelle"**: Er öffnet die Übersicht aller Aufrufe des Leitstands
 (`/administration/api`) und bietet ihre Beschreibung als OpenAPI 3 zum Herunterladen (JSON und
-YAML). Die Übersicht dient dem Nachschlagen — Aufrufe lassen sich dort nicht ausprobieren.
+YAML). Die Übersicht dient dem Nachschlagen; wer Aufrufe darin ausprobieren darf, steht unter
+[API-Übersicht](#api-ubersicht).
 
 ## Plattform-Leitstand
 
@@ -631,6 +632,23 @@ Ob ein Projekt teilnimmt, entscheidet ausschließlich das Projekt selbst — OWN
 echter Mitgliedschaft, über das Teilnahme-Ankreuzfeld im [Editiermodus](#editiermodus) der
 Projektliste. Der Plattform-Admin sieht nur Runs und Störungen teilnehmender Projekte und kann die
 Teilnahme selbst nicht erzwingen.
+
+## API-Übersicht {#api-ubersicht}
+
+Für alle Angemeldeten ohne Plattform-Rolle ADMIN ist die API-Übersicht (`/administration/api`) rein
+lesend: Sie zeigt Aufrufe, Eingaben und Antworten, bietet aber kein Absenden an.
+
+Ein **Plattform-Admin** kann jeden Aufruf dort **ausprobieren**: Eingaben ausfüllen, absenden und die
+echte Antwort des Leitstands sehen, Fehlermeldungen eingeschlossen. Der Aufruf läuft mit den Rechten
+der eigenen Sitzung — was der Admin im Leitstand nicht darf, wird auch hier abgelehnt. Aufrufe, die
+statt der Anmeldung ein **Projekt-Token** verlangen (Schema `projektToken`), nehmen das Token über
+**„Authorize"** entgegen und laufen dann mit genau dessen Rechten. Das Token liegt nur im Speicher der
+Seite; nach dem Verlassen oder Neuladen der Übersicht ist es fort.
+
+Vor jedem **ändernden** Aufruf — alles außer GET und HEAD — fragt die Übersicht nach: Der Aufruf
+verändert echte Daten dieser Umgebung und geht erst nach der Bestätigung ab. Lesende Aufrufe gehen
+ohne Rückfrage ab. Das gilt in jeder Umgebung, **auch in der Produktion**: Ausprobieren wirkt immer
+auf die echten Daten des Leitstands, in dem die Übersicht läuft.
 
 ## Board-Befehle unter Last {#board-befehle-unter-last}
 

@@ -110,13 +110,16 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
 
 ### Nur mit der Plattform-Rolle ADMIN
 
-Zwei Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
+Drei Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
 Zeile der [Rechte-Matrix](#projekt-rollen-rechte-matrix) oben; eine Zeile, die in jeder Rollenspalte
 leer bliebe, sähe aus wie ein vergessenes Häkchen und lüde dazu ein, es einer Rolle zu geben.
 
 - **Plattform-Leitstand ansehen** — die Übersicht über die Läufe aller teilnehmenden Projekte, siehe
   [Plattform-Leitstand](nutzung.md#plattform-leitstand).
 - **Projekt anlegen und löschen** — siehe den Absatz darunter.
+- **API-Aufrufe aus der Übersicht ausprobieren** — nur der Plattform-Admin; der Aufruf läuft mit den
+  Rechten der Sitzung bzw. des angegebenen Projekt-Tokens, und der Server prüft das Kennzeichen
+  `X-Api-Ausprobieren`. Siehe [API-Übersicht](nutzung.md#api-ubersicht).
 
 **Projekte legt ausschließlich der Plattform-Admin an und löscht sie auch nur er.** Beim Anlegen
 bestimmt er den **Owner** per E-Mail; dadurch wird er selbst nicht Mitglied, hat als Plattform-Admin
