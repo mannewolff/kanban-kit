@@ -10,8 +10,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -22,12 +24,14 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.common.Laufkennung;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -44,6 +48,11 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * <p>Die fachliche Anforderung legt das Token <b>ohne</b> Kopfzeile an: wie ein Mensch in einer
  * interaktiven Sitzung. Sie zählt damit nicht zum Lauf und kommt allein über die Herkunft des Plans
  * in die Antwort.
+ *
+ * <p>Zwei Läufe mit demselben Token und überlappendem Fenster (Issue #1430, Plan #1423): Weisen sie
+ * sich mit {@code X-Night-Run} aus, bekommt jeder genau seine Karten; ohne Ausweis stehen die
+ * Karten wie bisher unter „unbekannt". Ein Session-Aufruf mit demselben Header hinterlässt keine
+ * Laufkennung (A3).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
@@ -66,6 +75,7 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
           "pakete",
           "unbekannt",
           "offeneFragen",
+          "unbekanntOhneAusweis",
           "anforderung",
           "plan",
           "stufen",
@@ -83,6 +93,7 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
   @Autowired private ProjectMembershipRepository memberships;
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private ObjectMapper json;
+  @Autowired private JdbcTemplate jdbc;
 
   @Test
   void derFortschrittZeigtKettePlanPaketeUndOffeneFrageAusDenSpurenDesLaufs() throws Exception {
@@ -134,6 +145,121 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
     assertThat(antwort.get("offeneFragen").get(0).get("number").asInt())
         .isEqualTo(anforderung.number());
     assertThat(feldnamen(antwort)).isSubsetOf(ERLAUBTE_FELDER);
+  }
+
+  /**
+   * Issue #1430: Zwei Läufe mit demselben Token laufen gleichzeitig und weisen sich aus — jeder
+   * sieht nur seine Karten und seinen Laufstand, nichts steht unter „unbekannt".
+   */
+  @Test
+  void zweiAusgewieseneLaeufeSehenJeweilsNurIhreKartenUndIhrenLaufstand() throws Exception {
+    Aufbau a = aufbau("fort-zwei");
+    Instant startA = Instant.now().minus(Duration.ofMinutes(5)).truncatedTo(ChronoUnit.MILLIS);
+    Instant startB = Instant.now().minus(Duration.ofMinutes(4)).truncatedTo(ChronoUnit.MILLIS);
+    long laufA = laufStarten(a, startA);
+    long laufB = laufStarten(a, startB);
+
+    Item anforderungA = anlegen(a, null, "[Fachlich] Kette A", null);
+    Item anforderungB = anlegen(a, null, "[Fachlich] Kette B", null);
+    Item planA = anlegen(a, MODELL, "[Plan] Kette A", anforderungA.number(), startA);
+    Item planB = anlegen(a, MODELL, "[Plan] Kette B", anforderungB.number(), startB);
+    aendern(a, planA, "[Plan] Kette A", "Plan-Review: fable", startA);
+    Item paketA = anlegen(a, MODELL, "Kette A 1/1: Paket", planA.number(), startA);
+    Item paketB = anlegen(a, MODELL, "Kette B 1/1: Paket", planB.number(), startB);
+    verschieben(a, paketA, "IN_REVIEW", startA);
+    verschieben(a, paketB, "IN_PROGRESS", startB);
+    laufstand(a, anforderungA, "abdeckung fertig für #" + planA.number(), startA);
+    laufstand(a, anforderungB, "plan fertig für #" + anforderungB.number(), startB);
+
+    JsonNode antwortA = fortschritt(a.session(), a.projectId(), laufA, 200);
+    JsonNode antwortB = fortschritt(a.session(), a.projectId(), laufB, 200);
+
+    assertThat(antwortA.get("unbekannt")).isEmpty();
+    assertThat(antwortB.get("unbekannt")).isEmpty();
+    assertThat(antwortA.get("unbekanntOhneAusweis").asBoolean()).isFalse();
+    assertThat(antwortB.get("unbekanntOhneAusweis").asBoolean()).isFalse();
+    assertThat(nummernUndZustaende(antwortA.get("pakete")))
+        .containsExactly(paketA.number() + ":FERTIG");
+    assertThat(nummernUndZustaende(antwortB.get("pakete")))
+        .containsExactly(paketB.number() + ":IN_UMSETZUNG");
+    assertThat(antwortA.get("ketten")).hasSize(1);
+    assertThat(antwortB.get("ketten")).hasSize(1);
+    JsonNode ketteA = antwortA.get("ketten").get(0);
+    JsonNode ketteB = antwortB.get("ketten").get(0);
+    assertThat(ketteA.get("anforderung").get("number").asInt()).isEqualTo(anforderungA.number());
+    assertThat(ketteA.get("plan").get("number").asInt()).isEqualTo(planA.number());
+    assertThat(nummernUndZustaende(ketteA.get("pakete")))
+        .containsExactly(paketA.number() + ":FERTIG");
+    assertThat(ketteB.get("anforderung").get("number").asInt()).isEqualTo(anforderungB.number());
+    assertThat(ketteB.get("plan").get("number").asInt()).isEqualTo(planB.number());
+    assertThat(nummernUndZustaende(ketteB.get("pakete")))
+        .containsExactly(paketB.number() + ":IN_UMSETZUNG");
+    // A hat bis zur Abdeckung abgeschlossen, B erst den Plan — keiner sieht den Laufstand des
+    // anderen.
+    assertThat(stufen(ketteA))
+        .containsExactly(
+            "PLAN:ERREICHT", "REVIEW:ERREICHT", "PAKETE:ERREICHT", "ABDECKUNG:ERREICHT");
+    assertThat(stufen(ketteB))
+        .containsExactly("PLAN:ERREICHT", "REVIEW:LAEUFT", "PAKETE:OFFEN", "ABDECKUNG:OFFEN");
+    assertThat(laufkennungen(planA)).isNotEmpty().containsOnly(startA);
+    assertThat(laufkennungen(paketA)).isNotEmpty().containsOnly(startA);
+    assertThat(laufkennungen(planB)).isNotEmpty().containsOnly(startB);
+    assertThat(laufkennungen(paketB)).isNotEmpty().containsOnly(startB);
+  }
+
+  /** Issue #1430, A3: Ein Mensch gehört zu keinem Lauf — auch wenn er den Header mitschickt. */
+  @Test
+  void eineSessionBewegungMitLaufheaderTraegtKeineLaufkennung() throws Exception {
+    Aufbau a = aufbau("fort-session");
+    Instant start = Instant.now().minus(Duration.ofMinutes(5)).truncatedTo(ChronoUnit.MILLIS);
+    laufStarten(a, start);
+    Item ziel = anlegen(a, MODELL, "Session Ziel", null, start);
+    verschieben(a, ziel, "IN_PROGRESS", start);
+    Item karte = anlegen(a, MODELL, "Session Karte", null, start);
+    long spalte =
+        lies(get("/api/cards/" + ziel.id()).cookie(a.session()), 200).get("columnId").asLong();
+
+    lies(
+        post("/api/cards/" + karte.id() + "/move")
+            .cookie(a.session())
+            .header(Laufkennung.HEADER, start.toString())
+            .contentType(JSON)
+            .content("{\"columnId\":%d,\"position\":0}".formatted(spalte)),
+        200);
+
+    List<String> sessionSpuren =
+        jdbc.queryForList(
+            "SELECT coalesce(run_started_at::text, 'ohne') FROM card_activity"
+                + " WHERE card_id = ? AND origin = 'SESSION'",
+            String.class,
+            karte.id());
+    assertThat(sessionSpuren).containsExactly("ohne");
+    assertThat(laufkennungen(karte)).containsOnly(start);
+  }
+
+  /**
+   * Issue #1430: Zwei überlappende Läufe ohne Ausweis — die Karten passen zu beiden und stehen wie
+   * bisher unter „unbekannt", jetzt mit dem Hinweis {@code unbekanntOhneAusweis}.
+   */
+  @Test
+  void zweiLaeufeOhneAusweisStellenIhreKartenUnterUnbekannt() throws Exception {
+    Aufbau a = aufbau("fort-ohne");
+    Instant startA = Instant.now().minus(Duration.ofMinutes(5)).truncatedTo(ChronoUnit.MILLIS);
+    Instant startB = Instant.now().minus(Duration.ofMinutes(4)).truncatedTo(ChronoUnit.MILLIS);
+    long laufA = laufStarten(a, startA);
+    long laufB = laufStarten(a, startB);
+    Item paket = anlegen(a, MODELL, "Ohne Ausweis 1/1: Paket", null);
+    verschieben(a, paket, "IN_PROGRESS");
+
+    for (long lauf : List.of(laufA, laufB)) {
+      JsonNode antwort = fortschritt(a.session(), a.projectId(), lauf, 200);
+
+      assertThat(antwort.get("unbekannt")).hasSize(1);
+      assertThat(antwort.get("unbekannt").get(0).get("number").asInt()).isEqualTo(paket.number());
+      assertThat(antwort.get("pakete")).isEmpty();
+      assertThat(antwort.get("unbekanntOhneAusweis").asBoolean()).isTrue();
+    }
+    assertThat(laufkennungen(paket)).isEmpty();
   }
 
   /** E10: Wer nicht Mitglied ist, erfährt nicht einmal, dass es das Projekt gibt. */
@@ -216,7 +342,11 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
 
   /** Meldet einen laufenden Kettenlauf, der vor fünf Minuten begann, und liefert seine ID. */
   private long laufStarten(Aufbau a) throws Exception {
-    String start = Instant.now().minus(Duration.ofMinutes(5)).toString();
+    return laufStarten(a, Instant.now().minus(Duration.ofMinutes(5)));
+  }
+
+  /** Meldet einen laufenden Kettenlauf mit diesem Start und liefert seine ID. */
+  private long laufStarten(Aufbau a, Instant start) throws Exception {
     mvc.perform(
             post("/api/kanban/night-runs")
                 .header(TOKEN_HEADER, a.token())
@@ -227,17 +357,41 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
                      "skippedCount":0,"unparsedCount":0,"complete":false,"items":[]}"""
                         .formatted(start)))
         .andExpect(status().isOk());
-    return lies(get("/api/projects/" + a.projectId() + "/night-runs").cookie(a.session()), 200)
-        .get(0)
-        .get("id")
-        .asLong();
+    Instant gesucht = start.truncatedTo(ChronoUnit.MILLIS);
+    for (JsonNode lauf :
+        lies(get("/api/projects/" + a.projectId() + "/night-runs").cookie(a.session()), 200)) {
+      if (Instant.parse(lauf.get("startedAt").asText())
+          .truncatedTo(ChronoUnit.MILLIS)
+          .equals(gesucht)) {
+        return lauf.get("id").asLong();
+      }
+    }
+    throw new AssertionError("Lauf mit Start " + start + " nicht gemeldet");
   }
 
   private MockHttpServletRequestBuilder mitAgent(MockHttpServletRequestBuilder r, Aufbau a) {
-    return r.header(TOKEN_HEADER, a.token()).header(AGENT_HEADER, MODELL);
+    return mitAgent(r, a, null);
+  }
+
+  /** Mit Token und Modell, dazu der Ausweis des Laufs, wenn {@code lauf} gesetzt ist. */
+  private MockHttpServletRequestBuilder mitAgent(
+      MockHttpServletRequestBuilder r, Aufbau a, @Nullable Instant lauf) {
+    MockHttpServletRequestBuilder mit =
+        r.header(TOKEN_HEADER, a.token()).header(AGENT_HEADER, MODELL);
+    return lauf == null ? mit : mit.header(Laufkennung.HEADER, lauf.toString());
   }
 
   private Item anlegen(Aufbau a, @Nullable String agent, String titel, @Nullable Integer herkunft)
+      throws Exception {
+    return anlegen(a, agent, titel, herkunft, null);
+  }
+
+  private Item anlegen(
+      Aufbau a,
+      @Nullable String agent,
+      String titel,
+      @Nullable Integer herkunft,
+      @Nullable Instant lauf)
       throws Exception {
     MockHttpServletRequestBuilder r =
         post("/api/kanban/items")
@@ -250,13 +404,21 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
     if (agent != null) {
       r = r.header(AGENT_HEADER, agent);
     }
+    if (lauf != null) {
+      r = r.header(Laufkennung.HEADER, lauf.toString());
+    }
     JsonNode angelegt = lies(r, 201);
     return new Item(angelegt.get("id").asLong(), angelegt.get("number").asInt());
   }
 
   private void aendern(Aufbau a, Item item, String titel, String body) throws Exception {
+    aendern(a, item, titel, body, null);
+  }
+
+  private void aendern(Aufbau a, Item item, String titel, String body, @Nullable Instant lauf)
+      throws Exception {
     mvc.perform(
-            mitAgent(put("/api/kanban/items/" + item.id()), a)
+            mitAgent(put("/api/kanban/items/" + item.id()), a, lauf)
                 .contentType(JSON)
                 .content(json.writeValueAsString(new Inhalt(titel, body))))
         .andExpect(status().isOk());
@@ -267,8 +429,13 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
   private record Text(String body) {}
 
   private void verschieben(Aufbau a, Item item, String spalte) throws Exception {
+    verschieben(a, item, spalte, null);
+  }
+
+  private void verschieben(Aufbau a, Item item, String spalte, @Nullable Instant lauf)
+      throws Exception {
     mvc.perform(
-            mitAgent(put("/api/kanban/items/" + item.id() + "/move"), a)
+            mitAgent(put("/api/kanban/items/" + item.id() + "/move"), a, lauf)
                 .contentType(JSON)
                 .content("{\"column\":\"%s\",\"position\":0}".formatted(spalte)))
         .andExpect(status().isOk());
@@ -282,8 +449,13 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
   }
 
   private void laufstand(Aufbau a, Item item, String eintrag) throws Exception {
+    laufstand(a, item, eintrag, null);
+  }
+
+  private void laufstand(Aufbau a, Item item, String eintrag, @Nullable Instant lauf)
+      throws Exception {
     mvc.perform(
-            mitAgent(post("/api/kanban/items/" + item.id() + "/comments"), a)
+            mitAgent(post("/api/kanban/items/" + item.id() + "/comments"), a, lauf)
                 .contentType(JSON)
                 .content(json.writeValueAsString(new Text(laufstandText(eintrag)))))
         .andExpect(status().isCreated());
@@ -299,6 +471,19 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
                 .contentType(JSON)
                 .content(json.writeValueAsString(new Text(laufstandText(eintrag)))))
         .andExpect(status().isNoContent());
+  }
+
+  /** Die gespeicherten Laufkennungen der Aktivitäten einer Karte — Aktivitäten ohne fallen weg. */
+  private List<Instant> laufkennungen(Item item) {
+    return jdbc
+        .queryForList(
+            "SELECT run_started_at FROM card_activity"
+                + " WHERE card_id = ? AND run_started_at IS NOT NULL",
+            Timestamp.class,
+            item.id())
+        .stream()
+        .map(Timestamp::toInstant)
+        .toList();
   }
 
   private JsonNode fortschritt(Cookie wer, long projectId, long runId, int erwartet)
