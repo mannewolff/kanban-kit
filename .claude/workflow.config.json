@@ -18,7 +18,9 @@
     },
     {
       "cmd": "npm --prefix docs-site ci --no-audit --no-fund && npm --prefix docs-site run build",
-      "areas": ["doku"]
+      "areas": [
+        "doku"
+      ]
     },
     {
       "cmd": "npm --prefix frontend run build",
