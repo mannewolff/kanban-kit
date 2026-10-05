@@ -15,7 +15,7 @@
   "src/test/java/org/mwolff/manban/card/IdeenPoolRueckbauMigrationIT.java": ["src/main/resources/db/migration/V44__ideen_pool_rueckbau.sql"],
   "src/test/java/org/mwolff/manban/card/application/CardServiceCreateBatchTest.java": ["src/main/java/org/mwolff/manban/card/application/CardService.java"],
   "src/test/java/org/mwolff/manban/card/application/CardServiceEpicTreeTest.java": ["src/main/java/org/mwolff/manban/card/application/CardService.java"],
-  "src/test/java/org/mwolff/manban/card/application/CardServiceEpicsByCardNumberTest.java": ["src/main/java/org/mwolff/manban/card/application/CardService.java"],
+  "src/test/java/org/mwolff/manban/card/application/CardRunQueryServiceEpicsByCardNumberTest.java": ["src/main/java/org/mwolff/manban/card/application/CardRunQueryService.java"],
   "src/test/java/org/mwolff/manban/card/application/CardServiceListByBoardTest.java": ["src/main/java/org/mwolff/manban/card/application/CardService.java"],
   "src/test/java/org/mwolff/manban/card/application/DerivedFromResolutionTest.java": ["src/main/java/org/mwolff/manban/card/application/DerivedFrom.java"],
   "src/test/java/org/mwolff/manban/card/application/RequirementCardResolutionTest.java": ["src/main/java/org/mwolff/manban/card/application/RequirementCard.java"],
