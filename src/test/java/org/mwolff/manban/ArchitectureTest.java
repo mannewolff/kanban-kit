@@ -187,8 +187,8 @@ class ArchitectureTest {
   static final ArchRule CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
       fassadeIstAufWhitelistBegrenzt(
           "card",
-          "nur ueber CardService/CardSearchService/CardIngestService/LabelService und ihre"
-              + " geteilten Sichten CardView/LabelMarkView",
+          "nur ueber CardService/CardSearchService/CardIngestService/EpicService/LabelService"
+              + " und ihre geteilten Sichten CardView/LabelMarkView",
           "CardService",
           // CardSearchService ist Vertrag (Plan #1387, E1/E4): die Suche nach Kartennummern als
           // eigener Zugang, samt Record CardSearchHit.
@@ -196,6 +196,9 @@ class ArchitectureTest {
           // CardIngestService ist Vertrag (Plan #1387, E1/E4): das Kanban-kompatible Einliefern als
           // eigener Zugang, samt Records BoardItemView, DirectCard und CardCreation.
           "CardIngestService",
+          // EpicService ist Vertrag (Plan #1387, E1/E4): Vorhaben und Herkunft als eigener Zugang,
+          // samt Records EpicView und DerivationNodeView.
+          "EpicService",
           "LabelService",
           // CardView und LabelMarkView sind Vertrag (Plan #1387, E5): Mehrere Karten-Dienste
           // liefern sie, darum stehen sie als eigene Typen neben den Fassaden statt in einer davon.

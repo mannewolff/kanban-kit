@@ -34,6 +34,7 @@ import org.mwolff.manban.card.application.CardIngestService.BoardItemView;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardView;
+import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.comment.application.CommentNotFoundException;
@@ -55,6 +56,7 @@ class KanbanCompatServiceTest {
   private BoardService boardService;
   private CardService cardService;
   private CardIngestService ingest;
+  private EpicService epics;
   private LabelService labelService;
   private CommentService commentService;
   private KanbanCompatService service;
@@ -137,6 +139,7 @@ class KanbanCompatServiceTest {
     boardService = mock(BoardService.class);
     cardService = mock(CardService.class);
     ingest = mock(CardIngestService.class);
+    epics = mock(EpicService.class);
     labelService = mock(LabelService.class);
     commentService = mock(CommentService.class);
     idempotencyStore = new InMemoryIdempotencyRecordStore();
@@ -145,6 +148,7 @@ class KanbanCompatServiceTest {
             boardService,
             cardService,
             ingest,
+            epics,
             labelService,
             commentService,
             new IdempotencyGuard(idempotencyStore, Clock.systemUTC()));
@@ -1364,10 +1368,10 @@ class KanbanCompatServiceTest {
   @Test
   void epics_mapsProgressFromCardService() {
     // Given
-    when(cardService.listEpics(1L, BOARD))
+    when(epics.listEpics(1L, BOARD))
         .thenReturn(
             List.of(
-                new CardService.EpicView(
+                new EpicService.EpicView(
                     5L, 3, "Epic", "desc", "E", 2, 4, List.of(1, 2, 3, 4), List.of(1), 1)));
 
     // When

@@ -112,31 +112,6 @@ class CardServiceStatusTest {
     return new ColumnView(id, name, position, null);
   }
 
-  private static Card vorhaben(long id, long columnId) {
-    return new Card(
-        id,
-        BOARD,
-        columnId,
-        1,
-        "Vorhaben",
-        null,
-        0,
-        false,
-        null,
-        1L,
-        FIXED,
-        FIXED,
-        CardType.EPIC,
-        null,
-        "E",
-        null,
-        PROJECT,
-        null,
-        null,
-        null,
-        null);
-  }
-
   /** Karte mit Titel, Status und Done-Zeitstempel — für die Statusregeln der Schreibpfade. */
   private static Card paket(
       long id, long columnId, String title, @Nullable CardStatus status, @Nullable Instant done) {
@@ -223,15 +198,6 @@ class CardServiceStatusTest {
 
     assertThat(gespeichert().status()).isNull();
     assertThat(gespeichert().movedToDoneAt()).isEqualTo(FIXED);
-  }
-
-  @Test
-  void createEpic_hatKeinenStatus() {
-    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Ready", 0));
-
-    service.createEpic(1L, BOARD, "Vorhaben", null, null);
-
-    assertThat(gespeichert().status()).isNull();
   }
 
   @Test
@@ -418,29 +384,6 @@ class CardServiceStatusTest {
 
     assertThat(gespeichert().status()).isEqualTo(CardStatus.IN_REVIEW);
     verify(boardService, never()).requireColumn(anyLong(), anyLong());
-  }
-
-  @Test
-  void listEpics_zaehltArbeitspaketeNachIhremStatus() {
-    // Pakete 6 und 8 stehen auf DONE in einer eigenen Spalte und sind erledigt; Paket 7 liegt in
-    // der Done-Spalte, steht aber auf BACKLOG — für ein Arbeitspaket entscheidet der Status (E7).
-    // Nach dem Spaltennamen wäre es umgekehrt: 1 von 3.
-    when(boardService.listColumns(BOARD))
-        .thenReturn(List.of(column(21L, "Done", 4), column(22L, "Anstehend", 5)));
-    when(cards.findByBoardId(BOARD))
-        .thenReturn(
-            List.of(
-                vorhaben(5L, 21L),
-                paket(6L, 22L, "Paket", CardStatus.DONE, FIXED).withParent(5L),
-                paket(7L, 21L, "Paket", CardStatus.BACKLOG, null).withParent(5L),
-                paket(8L, 22L, "Paket", CardStatus.DONE, FIXED).withParent(5L)));
-
-    List<CardService.EpicView> result = service.listEpics(1L, BOARD);
-
-    assertThat(result)
-        .singleElement()
-        .extracting(CardService.EpicView::done, CardService.EpicView::total)
-        .containsExactly(2, 3);
   }
 
   // --- setStatus legt in die Prozessspalte (Issue #1326, Korrektur #787) -----

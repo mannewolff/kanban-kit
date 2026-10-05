@@ -13,9 +13,8 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardNumbers;
 import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.DerivationNodeView;
-import org.mwolff.manban.card.application.CardService.EpicView;
 import org.mwolff.manban.card.application.CardView;
+import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.InvalidDerivedFromException;
 import org.mwolff.manban.card.application.LabelAction;
 import org.mwolff.manban.card.application.SortDirection;
@@ -54,9 +53,11 @@ class CardController {
   static final int MAX_CARDS_PER_BATCH = 200;
 
   private final CardService cards;
+  private final EpicService epics;
 
-  CardController(CardService cards) {
+  CardController(CardService cards, EpicService epics) {
     this.cards = cards;
+    this.epics = epics;
   }
 
   @PostMapping("/api/boards/{boardId}/cards")
@@ -77,7 +78,7 @@ class CardController {
       if (request.derivedFrom() != null) {
         throw new InvalidDerivedFromException("Ein Vorhaben kann keine Herkunft tragen");
       }
-      return cards.createEpic(
+      return epics.createEpic(
           userId, boardId, request.title(), request.description(), request.shortcode());
     }
     Long columnId = request.columnId();
@@ -125,25 +126,6 @@ class CardController {
     return cards.listByBoard(userId, boardId);
   }
 
-  @GetMapping("/api/boards/{boardId}/epics")
-  List<EpicView> epics(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
-    return cards.listEpics(userId, boardId);
-  }
-
-  /**
-   * Herkunftsbaum eines Vorhabens — dieselbe Rechnung wie beim board-weiten Baum, angewandt auf die
-   * Mitglieder dieses Vorhabens (Issue #643).
-   *
-   * <p>Der Pfad endet bewusst auf {@code /tree} und wiederholt den Pfadbestandteil des board-weiten
-   * Endpunkts darüber nicht: Der kommt im Controller genau einmal vor, und daran bleibt sein
-   * Rückbau maschinell prüfbar.
-   */
-  @GetMapping("/api/boards/{boardId}/epics/{epicId}/tree")
-  List<DerivationNodeView> epicTree(
-      @AuthenticationPrincipal Long userId, @PathVariable long boardId, @PathVariable long epicId) {
-    return cards.epicDerivationTree(userId, boardId, epicId);
-  }
-
   @GetMapping("/api/cards/{cardId}")
   CardView get(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     return cards.getCard(userId, cardId);
@@ -163,64 +145,6 @@ class CardController {
         request.shortcode(),
         request.parentId(),
         request.dueDate());
-  }
-
-  /**
-   * Ordnet eine Karte einem Vorhaben zu ({@code parentId}) oder löst die Zuordnung ({@code
-   * parentId: null}).
-   */
-  @PatchMapping("/api/cards/{cardId}/parent")
-  CardView assignParent(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @RequestBody AssignParentRequest request) {
-    return cards.assignParent(userId, cardId, request.parentId());
-  }
-
-  /**
-   * Setzt die Herkunft einer Karte ({@code derivedFrom} als projektweite Kartennummer) oder löscht
-   * sie ({@code derivedFrom: null}).
-   *
-   * <p>Eigener Endpunkt statt eines Feldes in {@link UpdateCardRequest}: Jener Pfad ist ein
-   * Voll-Update, und ein fehlendes JSON-Feld ist in einem Jackson-Record nicht von {@code null} zu
-   * unterscheiden — jeder bestehende Client haette die Herkunft bei jedem Karten-Edit geloescht
-   * (Issue #607).
-   */
-  @PatchMapping("/api/cards/{cardId}/derived-from")
-  CardView assignDerivedFrom(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody AssignDerivedFromRequest request) {
-    return cards.assignDerivedFrom(userId, cardId, request.derivedFrom());
-  }
-
-  /**
-   * Eröffnet einen Vorgang an dieser Karte: Vorhaben anlegen, Karte als Anforderung setzen und ihr
-   * zuordnen — in einem Aufruf. Kartenzentriert wie {@code move}, {@code transfer} und {@code
-   * archive}; die Antwort ist die Sicht des <b>neuen Vorhabens</b>.
-   */
-  @PostMapping("/api/cards/{cardId}/open-epic")
-  @ResponseStatus(HttpStatus.CREATED)
-  CardView openEpic(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody OpenEpicRequest request) {
-    return cards.openEpicFromCard(userId, cardId, request.kuerzel(), request.name());
-  }
-
-  /**
-   * Setzt oder löscht die Anforderungskarte eines Vorhabens.
-   *
-   * <p>Schmaler Endpunkt wie {@code derived-from} (#607): Ein Voll-Update kann ein fehlendes Feld
-   * nicht von {@code null} unterscheiden und löschte die Zuordnung bei jedem Karten-Edit. Übergabe
-   * von {@code null} löscht sie ausdrücklich.
-   */
-  @PatchMapping("/api/cards/{cardId}/requirement")
-  CardView assignRequirement(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody AssignRequirementRequest request) {
-    return cards.assignRequirement(userId, cardId, request.requirementCardNumber());
   }
 
   @PostMapping("/api/cards/{cardId}/move")
@@ -418,17 +342,6 @@ class CardController {
       @Size(max = 16) String shortcode,
       Long parentId,
       @Nullable Instant dueDate) {}
-
-  record AssignParentRequest(Long parentId) {}
-
-  // Dieselben Grenzen wie im kanbancompat-Ingest (`CreateItemRequest`), damit beide Schreibpfade
-  // dieselbe Nummer akzeptieren und dieselbe ablehnen.
-  record AssignDerivedFromRequest(@Nullable @Positive @Max(CardNumbers.MAX) Integer derivedFrom) {}
-
-  record AssignRequirementRequest(
-      @Nullable @Positive @Max(CardNumbers.MAX) Integer requirementCardNumber) {}
-
-  record OpenEpicRequest(@Nullable String kuerzel, @NotBlank String name) {}
 
   record MoveCardRequest(
       @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}

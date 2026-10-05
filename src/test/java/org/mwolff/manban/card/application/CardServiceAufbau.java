@@ -6,8 +6,8 @@ import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
- * Baut die Prüflinge {@link CardService} und {@link CardIngestService} für die Unit-Tests aus ihren
- * Ports (Issue #1389, #1392).
+ * Baut die Prüflinge {@link CardService}, {@link CardIngestService} und {@link EpicService} für die
+ * Unit-Tests aus ihren Ports (Issue #1389, #1392, #1393).
  *
  * <p>Die modulinternen Bausteine {@link KartenAbhaengigkeiten}, {@link KartenGrundlage} und {@link
  * KartenSicht} entstehen hier echt aus denselben Port-Mocks, nicht als Mocks (Plan #1387, E6): So
@@ -84,6 +84,40 @@ final class CardServiceAufbau {
         cards, b.abhaengigkeiten(), boardService, permissions, b.grundlage(), b.sicht(), clock);
   }
 
+  static EpicService epicAusPorts(
+      CardRepository cards,
+      CardDependencyRepository dependencies,
+      BoardService boardService,
+      PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
+      KartenZuordnung zuordnung,
+      CardActivityRepository activity,
+      ActorContext actor,
+      ApplicationEventPublisher events,
+      Clock clock) {
+    Bausteine b =
+        bausteine(
+            cards,
+            dependencies,
+            boardService,
+            permissions,
+            transitions,
+            zuordnung,
+            activity,
+            actor,
+            events,
+            clock);
+    return new EpicService(
+        cards,
+        b.abhaengigkeiten(),
+        boardService,
+        permissions,
+        zuordnung,
+        b.grundlage(),
+        b.sicht(),
+        clock);
+  }
+
   private static Bausteine bausteine(
       CardRepository cards,
       CardDependencyRepository dependencies,
@@ -112,7 +146,7 @@ final class CardServiceAufbau {
     return new Bausteine(abhaengigkeiten, grundlage, sicht);
   }
 
-  /** Die modulinternen Bausteine, die beide Prüflinge aus denselben Ports bekommen. */
+  /** Die modulinternen Bausteine, die alle Prüflinge aus denselben Ports bekommen. */
   private record Bausteine(
       KartenAbhaengigkeiten abhaengigkeiten, KartenGrundlage grundlage, KartenSicht sicht) {}
 }

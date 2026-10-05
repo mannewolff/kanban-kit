@@ -11,14 +11,12 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.domain.Card;
-import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -215,44 +213,7 @@ class CardServiceCreateBatchTest {
     assertThat(result).extracting(CardView::movedToDoneAt).containsOnlyNulls();
   }
 
-  /**
-   * Die Done-Erkennung dient auch der Fortschrittszählung der Vorhaben ({@code listEpics}). Dort
-   * kommt der Spaltenname aus einer Map und fehlt, wenn die Spalte nicht mehr im Board steht — eine
-   * solche Karte zählt nicht als erledigt (Issue #1220).
-   */
-  @Test
-  void listEpics_mitgliedInUnbekannterSpalte_zaehltNichtAlsErledigt() {
-    // Given: Spalte 21 taucht in listColumns nicht auf, ihr Name ist also unbekannt.
-    when(boardService.listColumns(BOARD)).thenReturn(List.of(spalte("Done")));
-    when(cards.findByBoardId(BOARD))
-        .thenReturn(List.of(vorhaben(5L), mitglied(6L, 21L, 2), mitglied(7L, COLUMN, 3)));
-
-    // When
-    List<CardService.EpicView> result = service.listEpics(1L, BOARD);
-
-    // Then: nur die Karte in der bekannten Done-Spalte zählt.
-    assertThat(result)
-        .singleElement()
-        .extracting(CardService.EpicView::done, CardService.EpicView::total)
-        .containsExactly(1, 2);
-  }
-
   private void verifySave(ArgumentCaptor<Card> captor) {
     verify(cards).save(captor.capture());
-  }
-
-  private static Card vorhaben(long id) {
-    return karte(id, COLUMN, 1, CardType.EPIC, null);
-  }
-
-  private static Card mitglied(long id, long columnId, int number) {
-    return karte(id, columnId, number, CardType.CARD, 5L);
-  }
-
-  private static Card karte(
-      long id, long columnId, int number, CardType type, @Nullable Long parentId) {
-    return new Card(
-        id, BOARD, columnId, number, "Titel", null, 0, false, null, 1L, FIXED, FIXED, type,
-        parentId, null, null, PROJECT, null, null, null, null);
   }
 }

@@ -15,7 +15,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.board.application.BoardService;
-import org.mwolff.manban.card.application.CardService.DerivationNodeView;
+import org.mwolff.manban.card.application.EpicService.DerivationNodeView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
@@ -46,7 +46,7 @@ class CardServiceEpicTreeTest {
   private BoardService boardService;
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
-  private CardService service;
+  private EpicService service;
 
   @BeforeEach
   void setUp() {
@@ -58,7 +58,7 @@ class CardServiceEpicTreeTest {
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
-        CardServiceAufbau.ausPorts(
+        CardServiceAufbau.epicAusPorts(
             cards,
             dependencies,
             boardService,

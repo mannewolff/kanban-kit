@@ -15,6 +15,7 @@ import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardIngestService;
 import org.mwolff.manban.card.application.CardIngestService.BoardItemView;
 import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.comment.application.CommentNotFoundException;
 import org.mwolff.manban.comment.application.CommentService;
@@ -25,7 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Compat-Schicht für die Toolbox-Kanban-API (tbx.mjs / board.mjs). Bildet das feste
  * 5-Spalten-Protokoll (BACKLOG/READY/IN_PROGRESS/IN_REVIEW/DONE) auf ein manban-Board ab und
  * operiert ausschließlich auf dem an das Token gebundenen Board (#44). Rechte laufen über die
- * bestehenden Services (CardService/CardIngestService/CommentService → PermissionChecker).
+ * bestehenden Services (CardService/CardIngestService/EpicService/CommentService →
+ * PermissionChecker).
  *
  * <p>Spalten-Mapping ausschließlich per Namensabgleich (Backlog/Ready/In Progress/In Review/Done).
  * Eine Spalte ohne kanonischen Namen trägt <em>keinen</em> Kanban-Key: Ihre Karten gelten als
@@ -54,6 +56,7 @@ public class KanbanCompatService {
   private final BoardService boardService;
   private final CardService cardService;
   private final CardIngestService ingest;
+  private final EpicService epicService;
   private final LabelService labelService;
   private final CommentService commentService;
   private final IdempotencyGuard idempotency;
@@ -62,12 +65,14 @@ public class KanbanCompatService {
       BoardService boardService,
       CardService cardService,
       CardIngestService ingest,
+      EpicService epicService,
       LabelService labelService,
       CommentService commentService,
       IdempotencyGuard idempotency) {
     this.boardService = boardService;
     this.cardService = cardService;
     this.ingest = ingest;
+    this.epicService = epicService;
     this.labelService = labelService;
     this.commentService = commentService;
     this.idempotency = idempotency;
@@ -471,7 +476,7 @@ public class KanbanCompatService {
   @Transactional(readOnly = true)
   public List<Epic> epics(KanbanPrincipal principal) {
     long boardId = requireBound(principal);
-    return cardService.listEpics(principal.userId(), boardId).stream()
+    return epicService.listEpics(principal.userId(), boardId).stream()
         .map(e -> new Epic(e.number(), e.title(), e.shortcode(), new Progress(e.total(), e.done())))
         .toList();
   }

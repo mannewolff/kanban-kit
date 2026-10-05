@@ -13,8 +13,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.EpicView;
 import org.mwolff.manban.card.application.CardView;
+import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.InvalidStatusException;
 import org.mwolff.manban.card.application.LabelAction;
 import org.mwolff.manban.card.application.SortDirection;
@@ -33,6 +33,7 @@ class CardControllerTest {
   private static final java.time.Instant INSTANT = java.time.Instant.parse("2026-01-01T00:00:00Z");
 
   private CardService service;
+  private EpicService epics;
   private CardController controller;
 
   private static CardView card() {
@@ -62,30 +63,8 @@ class CardControllerTest {
   @BeforeEach
   void setUp() {
     service = mock(CardService.class);
-    controller = new CardController(service);
-  }
-
-  @Test
-  void assignRequirement_delegiertNummerUnveraendert() {
-    when(service.assignRequirement(3L, 1L, 7)).thenReturn(card());
-
-    CardView result =
-        controller.assignRequirement(3L, 1L, new CardController.AssignRequirementRequest(7));
-
-    assertThat(result).isNotNull();
-    verify(service).assignRequirement(3L, 1L, 7);
-  }
-
-  /**
-   * {@code null} muss durchgereicht werden — es loescht die Zuordnung, statt sie zu ueberspringen.
-   */
-  @Test
-  void assignRequirement_reichtNullDurch() {
-    when(service.assignRequirement(3L, 1L, null)).thenReturn(card());
-
-    controller.assignRequirement(3L, 1L, new CardController.AssignRequirementRequest(null));
-
-    verify(service).assignRequirement(3L, 1L, null);
+    epics = mock(EpicService.class);
+    controller = new CardController(service, epics);
   }
 
   @Test
@@ -95,7 +74,7 @@ class CardControllerTest {
     var request =
         new CardController.CreateCardRequest(
             null, "Epic", "Desc", null, CardType.EPIC, null, "EP-1", null, null, null, null);
-    when(service.createEpic(3L, 2L, "Epic", "Desc", "EP-1")).thenReturn(view);
+    when(epics.createEpic(3L, 2L, "Epic", "Desc", "EP-1")).thenReturn(view);
 
     // When
     CardView result = controller.create(3L, 2L, request);
@@ -177,20 +156,6 @@ class CardControllerTest {
   }
 
   @Test
-  void epics_delegatesToService() {
-    // Given
-    List<EpicView> views =
-        List.of(new EpicView(1L, 4, "Epic", "Desc", "EP-1", 1, 3, List.of(7, 8, 9), List.of(7), 7));
-    when(service.listEpics(3L, 2L)).thenReturn(views);
-
-    // When
-    List<EpicView> result = controller.epics(3L, 2L);
-
-    // Then
-    assertThat(result).isSameAs(views);
-  }
-
-  @Test
   void get_delegatesToService() {
     // Given
     CardView view = card();
@@ -213,19 +178,6 @@ class CardControllerTest {
 
     // When
     CardView result = controller.update(3L, 8L, request);
-
-    // Then
-    assertThat(result).isSameAs(view);
-  }
-
-  @Test
-  void assignParent_delegatesToService() {
-    // Given
-    CardView view = card();
-    when(service.assignParent(3L, 8L, 9L)).thenReturn(view);
-
-    // When
-    CardView result = controller.assignParent(3L, 8L, new CardController.AssignParentRequest(9L));
 
     // Then
     assertThat(result).isSameAs(view);
