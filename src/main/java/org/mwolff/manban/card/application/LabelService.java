@@ -59,7 +59,7 @@ public class LabelService {
    * einen Eintrag (leere Liste, wenn ihr kein Label zugeordnet ist).
    *
    * <p>Ohne eigene Rechteprüfung: die Karten-IDs stammen beim einzigen Aufrufer aus einer bereits
-   * rechtegeprüften Board-Abfrage ({@link CardService#listBoardItems}).
+   * rechtegeprüften Board-Abfrage ({@link CardIngestService#listBoardItems}).
    *
    * <p>Auch die Board-Zugehörigkeit der {@code cardIds} wird bewusst nicht geprüft (#472): Die
    * Namen kommen ausschließlich aus {@code labels.findByBoardId(boardId)}, das Ergebnis ist damit

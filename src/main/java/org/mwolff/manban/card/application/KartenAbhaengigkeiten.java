@@ -71,7 +71,7 @@ public final class KartenAbhaengigkeiten {
   /**
    * Ersetzt die Abhängigkeiten einer Karte, <strong>ohne</strong> die Zielnummern auf Existenz zu
    * prüfen (Issue #566) — der Weg des Imports aus einem anderen Tracker, siehe {@link
-   * CardService#replaceDependenciesFromIngest}. Geteilt mit {@link #ersetze} bleibt die
+   * CardIngestService#replaceDependenciesFromIngest}. Geteilt mit {@link #ersetze} bleibt die
    * Selbstverweis-Prüfung — sie hängt nicht am Wissen über andere Karten.
    */
   public void ersetzeOhneExistenzpruefung(Card card, @Nullable List<Integer> dependsOn) {

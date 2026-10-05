@@ -51,9 +51,9 @@ class ArchitectureTest {
    * hier macht ihn zum Vertrag. Der Pflegeaufwand ist der Zweck: eine neue Fassade ist eine
    * bewusste Entscheidung, kein Nebeneffekt einer Benennung.
    *
-   * <p>Whitelist-Einträge gelten samt ihrer inneren Klassen ({@code CardService$BoardItemView}),
-   * denn die View-Records einer Fassadenmethode sind Teil ihrer Signatur. Ergänzende
-   * Aufrufer-Whitelists (siehe {@link
+   * <p>Whitelist-Einträge gelten samt ihrer inneren Klassen ({@code
+   * CardIngestService$BoardItemView}), denn die View-Records einer Fassadenmethode sind Teil ihrer
+   * Signatur. Ergänzende Aufrufer-Whitelists (siehe {@link
    * PortWhitelistArchitectureTest#USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST}) bleiben davon
    * unberührt: diese Regel sagt <em>was</em> Vertrag ist, jene <em>wer</em> ihn nutzen darf.
    *
@@ -187,12 +187,15 @@ class ArchitectureTest {
   static final ArchRule CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
       fassadeIstAufWhitelistBegrenzt(
           "card",
-          "nur ueber CardService/CardSearchService/LabelService und ihre geteilten Sichten"
-              + " CardView/LabelMarkView",
+          "nur ueber CardService/CardSearchService/CardIngestService/LabelService und ihre"
+              + " geteilten Sichten CardView/LabelMarkView",
           "CardService",
           // CardSearchService ist Vertrag (Plan #1387, E1/E4): die Suche nach Kartennummern als
           // eigener Zugang, samt Record CardSearchHit.
           "CardSearchService",
+          // CardIngestService ist Vertrag (Plan #1387, E1/E4): das Kanban-kompatible Einliefern als
+          // eigener Zugang, samt Records BoardItemView, DirectCard und CardCreation.
+          "CardIngestService",
           "LabelService",
           // CardView und LabelMarkView sind Vertrag (Plan #1387, E5): Mehrere Karten-Dienste
           // liefern sie, darum stehen sie als eigene Typen neben den Fassaden statt in einer davon.

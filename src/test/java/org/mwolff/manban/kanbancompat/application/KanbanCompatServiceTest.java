@@ -29,9 +29,10 @@ import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
+import org.mwolff.manban.card.application.CardIngestService;
+import org.mwolff.manban.card.application.CardIngestService.BoardItemView;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.BoardItemView;
 import org.mwolff.manban.card.application.CardView;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.card.domain.CardType;
@@ -53,6 +54,7 @@ class KanbanCompatServiceTest {
 
   private BoardService boardService;
   private CardService cardService;
+  private CardIngestService ingest;
   private LabelService labelService;
   private CommentService commentService;
   private KanbanCompatService service;
@@ -134,6 +136,7 @@ class KanbanCompatServiceTest {
   void setUp() {
     boardService = mock(BoardService.class);
     cardService = mock(CardService.class);
+    ingest = mock(CardIngestService.class);
     labelService = mock(LabelService.class);
     commentService = mock(CommentService.class);
     idempotencyStore = new InMemoryIdempotencyRecordStore();
@@ -141,6 +144,7 @@ class KanbanCompatServiceTest {
         new KanbanCompatService(
             boardService,
             cardService,
+            ingest,
             labelService,
             commentService,
             new IdempotencyGuard(idempotencyStore, Clock.systemUTC()));
@@ -176,7 +180,7 @@ class KanbanCompatServiceTest {
   void items_groupsCardsByKanbanColumn() {
     // Given
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
+    when(ingest.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -191,7 +195,7 @@ class KanbanCompatServiceTest {
   void items_marksEpicItemsAsEpicType() {
     // Given: ein Epic auf dem Board
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.listBoardItems(1L, BOARD))
+    when(ingest.listBoardItems(1L, BOARD))
         .thenReturn(
             List.of(new BoardItemView(3L, 3, "E", "body", 100L, 0, true, null, null, null)));
 
@@ -209,7 +213,7 @@ class KanbanCompatServiceTest {
   void items_marksRegularCardsAsCardType() {
     // Given: eine gewöhnliche Karte (kein Epic)
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
+    when(ingest.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -227,11 +231,11 @@ class KanbanCompatServiceTest {
     // card-Modul; die Compat-Schicht reicht die bereits gefilterte Liste unveraendert durch. Fiele
     // der Aufruf auf eine andere Quelle zurueck, waere hier nichts zu sehen.
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of());
+    when(ingest.listBoardItems(1L, BOARD)).thenReturn(List.of());
 
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
 
-    verify(cardService).listBoardItems(1L, BOARD);
+    verify(ingest).listBoardItems(1L, BOARD);
     assertThat(grouped.get("BACKLOG")).isEmpty();
   }
 
@@ -250,7 +254,7 @@ class KanbanCompatServiceTest {
             new ColumnView(104L, "Epsilon", 4, null),
             new ColumnView(105L, "Zeta", 5, null));
     when(boardService.listColumns(BOARD)).thenReturn(sixColumns);
-    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 105L, 1)));
+    when(ingest.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 105L, 1)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -273,7 +277,7 @@ class KanbanCompatServiceTest {
                 new ColumnView(100L, "Backlog", 0, null),
                 new ColumnView(101L, "Anstehend", 1, null),
                 new ColumnView(102L, "Ready", 2, null)));
-    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 101L, 1)));
+    when(ingest.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 101L, 1)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -295,7 +299,7 @@ class KanbanCompatServiceTest {
                 new ColumnView(100L, "Backlog", 0, null),
                 new ColumnView(101L, "Anstehend", 1, null),
                 new ColumnView(102L, "Ready", 2, null)));
-    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(paket(1L, 101L, 1, "READY")));
+    when(ingest.listBoardItems(1L, BOARD)).thenReturn(List.of(paket(1L, 101L, 1, "READY")));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -313,7 +317,7 @@ class KanbanCompatServiceTest {
     // Given: Status IN_REVIEW, Karte liegt in der Prozessspalte Backlog. Der Status gewinnt auch
     // dort, wo die Spalte selbst einen Kanban-Key trüge.
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.listBoardItems(1L, BOARD))
+    when(ingest.listBoardItems(1L, BOARD))
         .thenReturn(List.of(paket(1L, 100L, 1, "IN_REVIEW"), item(2L, 100L, 2)));
 
     // When
@@ -341,7 +345,7 @@ class KanbanCompatServiceTest {
                 new ColumnView(103L, "In Review", 3, null),
                 new ColumnView(104L, "Done", 4, null),
                 new ColumnView(105L, "Zurückgestellt", 5, null)));
-    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 105L, 1)));
+    when(ingest.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 105L, 1)));
 
     // When
     Map<String, List<KanbanCompatService.Item>> grouped = service.items(bound());
@@ -375,18 +379,18 @@ class KanbanCompatServiceTest {
     // autonom ab, was ein Mensch nicht dorthin gestellt hat.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     // When
     KanbanCompatService.Created created =
         service.create(bound(), "Titel", "Body", null, null, false, null, null, null);
 
     // Then: zurück kommt id samt projektweiter Nummer (#402), damit der Adapter sofort #N zeigt.
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null));
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null));
     assertThat(created.id()).isEqualTo(42L);
     assertThat(created.number()).isEqualTo(7);
   }
@@ -396,15 +400,15 @@ class KanbanCompatServiceTest {
     // Ein bekannter Schlüssel gilt auf beiden Wegen — der Aufrufer bekommt die genannte Spalte.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.createDirect(
-            1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L, BOARD, 101L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", "READY", null, false, null, null, null);
 
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null));
+            1L, BOARD, 101L, new CardIngestService.DirectCard("Titel", "Body", null, null, null));
     verify(boardService, never()).firstColumn(anyLong());
   }
 
@@ -417,15 +421,15 @@ class KanbanCompatServiceTest {
     when(boardService.listColumns(BOARD))
         .thenReturn(List.of(new ColumnView(200L, "Eingang", 0, null)));
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(200L, "Eingang", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 200L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L, BOARD, 200L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", BACKLOG_KEY, null, false, null, null, null);
 
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 200L, new CardService.DirectCard("Titel", "Body", null, null, null));
+            1L, BOARD, 200L, new CardIngestService.DirectCard("Titel", "Body", null, null, null));
   }
 
   @ParameterizedTest
@@ -435,15 +439,15 @@ class KanbanCompatServiceTest {
     // direct zur ersten Spalte statt zu einem Fehler: Ohne direct steuert der Aufrufer ihn nicht.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", column, null, false, null, null, null);
 
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null));
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null));
   }
 
   /**
@@ -456,15 +460,15 @@ class KanbanCompatServiceTest {
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", "FOO", null, false, null, null, null);
 
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null));
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null));
   }
 
   @Test
@@ -472,18 +476,24 @@ class KanbanCompatServiceTest {
     // Given: Schlüssel mit Rand-Whitespace; der Service traf ein Duplikat (created=false).
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), false));
+    when(ingest.createDirect(
+            1L,
+            BOARD,
+            100L,
+            new CardIngestService.DirectCard("Titel", "Body", "sonar:abc", null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), false));
 
     // When
     KanbanCompatService.Created created =
         service.create(bound(), "Titel", "Body", null, "  sonar:abc  ", false, null, null, null);
 
     // Then: getrimmt durchgereicht, Duplikat als created=false gemeldet.
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null));
+            1L,
+            BOARD,
+            100L,
+            new CardIngestService.DirectCard("Titel", "Body", "sonar:abc", null, null));
     assertThat(created.created()).isFalse();
     assertThat(created.id()).isEqualTo(42L);
   }
@@ -493,23 +503,23 @@ class KanbanCompatServiceTest {
     // Given
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(anyLong(), anyLong(), anyLong(), any()))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(anyLong(), anyLong(), anyLong(), any()))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     // When: überlanger Schlüssel und blanker Schlüssel
     service.create(bound(), "Titel", "Body", null, "x".repeat(150), false, null, null, null);
     service.create(bound(), "Titel", "Body", null, "   ", false, null, null, null);
 
     // Then: gekappt auf 100 bzw. null (kein Schlüssel)
-    verify(cardService)
+    verify(ingest)
         .createDirect(
             1L,
             BOARD,
             100L,
-            new CardService.DirectCard("Titel", "Body", "x".repeat(100), null, null));
-    verify(cardService)
+            new CardIngestService.DirectCard("Titel", "Body", "x".repeat(100), null, null));
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null));
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null));
   }
 
   @Test
@@ -520,7 +530,7 @@ class KanbanCompatServiceTest {
 
     service.replaceDependencies(bound(), 42L, List.of(7, 8));
 
-    verify(cardService).replaceDependenciesFromIngest(1L, 42L, 5L, List.of(7, 8));
+    verify(ingest).replaceDependenciesFromIngest(1L, 42L, 5L, List.of(7, 8));
   }
 
   @Test
@@ -530,7 +540,7 @@ class KanbanCompatServiceTest {
 
     service.replaceDependencies(bound(), 42L, null);
 
-    verify(cardService).replaceDependenciesFromIngest(1L, 42L, 5L, null);
+    verify(ingest).replaceDependenciesFromIngest(1L, 42L, 5L, null);
   }
 
   @Test
@@ -541,7 +551,7 @@ class KanbanCompatServiceTest {
                 service.replaceDependencies(
                     new KanbanPrincipal(1L, 2L, 5L, null, "Token"), 42L, List.of(7)))
         .isInstanceOf(TokenNotBoundException.class);
-    verify(cardService, org.mockito.Mockito.never())
+    verify(ingest, org.mockito.Mockito.never())
         .replaceDependenciesFromIngest(anyLong(), anyLong(), anyLong(), any());
   }
 
@@ -550,15 +560,15 @@ class KanbanCompatServiceTest {
     // #569: Der direct-Zweig respektiert die angeforderte Spalte, statt immer die erste zu nehmen.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.createDirect(
-            1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L, BOARD, 101L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", "READY", null, true, null, null, null);
 
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 101L, new CardService.DirectCard("Titel", "Body", null, null, null));
+            1L, BOARD, 101L, new CardIngestService.DirectCard("Titel", "Body", null, null, null));
     verify(boardService, never()).firstColumn(anyLong());
   }
 
@@ -567,15 +577,15 @@ class KanbanCompatServiceTest {
     // Fehlendes column bleibt beim heutigen Verhalten — der Sonar-Sync sendet keines.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", null, null, true, null, null, null);
 
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null));
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null));
   }
 
   @Test
@@ -587,7 +597,7 @@ class KanbanCompatServiceTest {
     assertThatThrownBy(
             () -> service.create(bound(), "Titel", "Body", "   ", null, true, null, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
-    verify(cardService, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
+    verify(ingest, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
   }
 
   @Test
@@ -597,7 +607,7 @@ class KanbanCompatServiceTest {
     assertThatThrownBy(
             () -> service.create(bound(), "Titel", "Body", "FOO", null, true, null, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
-    verify(cardService, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
+    verify(ingest, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
   }
 
   @Test
@@ -612,7 +622,7 @@ class KanbanCompatServiceTest {
             () ->
                 service.create(bound(), "Titel", "Body", BACKLOG_KEY, null, true, null, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
-    verify(cardService, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
+    verify(ingest, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
   }
 
   @Test
@@ -628,7 +638,7 @@ class KanbanCompatServiceTest {
     assertThatThrownBy(
             () -> service.create(bound(), "Titel", "Body", "DONE", null, true, null, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
-    verify(cardService, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
+    verify(ingest, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
   }
 
   @Test
@@ -652,7 +662,7 @@ class KanbanCompatServiceTest {
     assertThatThrownBy(
             () -> service.create(bound(), "Titel", "Body", "DONE", null, false, null, null, null))
         .isInstanceOf(InvalidKanbanColumnException.class);
-    verify(cardService, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
+    verify(ingest, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
   }
 
   @Test
@@ -660,15 +670,21 @@ class KanbanCompatServiceTest {
     // #565: Die vorgegebene Nummer erreicht den Anlage-Pfad unveraendert.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "github#278", 278, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L,
+            BOARD,
+            100L,
+            new CardIngestService.DirectCard("Titel", "Body", "github#278", 278, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     service.create(bound(), "Titel", "Body", null, "github#278", true, 278, null, null);
 
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "github#278", 278, null));
+            1L,
+            BOARD,
+            100L,
+            new CardIngestService.DirectCard("Titel", "Body", "github#278", 278, null));
   }
 
   @Test
@@ -677,16 +693,22 @@ class KanbanCompatServiceTest {
     // Es gibt keinen Anlegeweg mehr, der eine Nummer nicht vergeben koennte.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "github#278", 278, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L,
+            BOARD,
+            100L,
+            new CardIngestService.DirectCard("Titel", "Body", "github#278", 278, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     KanbanCompatService.Created created =
         service.create(bound(), "Titel", "Body", null, "github#278", false, 278, null, null);
 
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "github#278", 278, null));
+            1L,
+            BOARD,
+            100L,
+            new CardIngestService.DirectCard("Titel", "Body", "github#278", 278, null));
     assertThat(created.id()).isEqualTo(42L);
   }
 
@@ -699,7 +721,7 @@ class KanbanCompatServiceTest {
     assertThatThrownBy(
             () -> service.create(bound(), "Titel", "Body", null, null, true, 278, null, null))
         .isInstanceOf(InvalidNumberedIngestException.class);
-    verify(cardService, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
+    verify(ingest, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
   }
 
   @Test
@@ -717,9 +739,9 @@ class KanbanCompatServiceTest {
     // Ohne Nummer ist der externalKey keine Pflicht.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     KanbanCompatService.Created created =
         service.create(bound(), "Titel", "Body", null, null, false, null, null, null);
@@ -732,18 +754,24 @@ class KanbanCompatServiceTest {
     // Given (#535): direct=true legt in der ersten Spalte des Token-Boards an.
     when(boardService.requireProjectId(BOARD)).thenReturn(5L);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(42L), true));
+    when(ingest.createDirect(
+            1L,
+            BOARD,
+            100L,
+            new CardIngestService.DirectCard("Titel", "Body", "sonar:abc", null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(42L), true));
 
     // When
     KanbanCompatService.Created created =
         service.create(bound(), "Titel", "Body", null, "sonar:abc", true, null, null, null);
 
     // Then: created durchgereicht.
-    verify(cardService)
+    verify(ingest)
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null));
+            1L,
+            BOARD,
+            100L,
+            new CardIngestService.DirectCard("Titel", "Body", "sonar:abc", null, null));
     assertThat(created.id()).isEqualTo(42L);
     assertThat(created.created()).isTrue();
   }
@@ -873,7 +901,7 @@ class KanbanCompatServiceTest {
   void update_writesContentAndReturnsItemInBoardForm() {
     // Given: die Karte liegt auf dem Board; die Fassade meldet den neuen Stand zurueck.
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.updateContent(1L, 7L, "Neuer Titel", "Neuer Rumpf"))
+    when(ingest.updateContent(1L, 7L, "Neuer Titel", "Neuer Rumpf"))
         .thenReturn(
             new BoardItemView(
                 7L, 42, "Neuer Titel", "Neuer Rumpf", 102L, 3, false, "github#7", null, null));
@@ -901,7 +929,7 @@ class KanbanCompatServiceTest {
   void update_marksEpicsAsEpic_andFallsBackToBacklog_whenColumnUnknown() {
     // Given: Epic ohne bekannte Spalte (columnId trifft keine Board-Spalte) und ohne Labels.
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.updateContent(1L, 8L, "Epic", null))
+    when(ingest.updateContent(1L, 8L, "Epic", null))
         .thenReturn(new BoardItemView(8L, 43, "Epic", null, 999L, 0, true, null, null, null));
     when(labelService.namesByCard(BOARD, List.of(8L))).thenReturn(Map.of());
 
@@ -927,7 +955,7 @@ class KanbanCompatServiceTest {
                 new ColumnView(100L, "Backlog", 0, null),
                 new ColumnView(101L, "Anstehend", 1, null),
                 new ColumnView(102L, "Ready", 2, null)));
-    when(cardService.updateContent(1L, 7L, "Neuer Titel", "Neuer Rumpf"))
+    when(ingest.updateContent(1L, 7L, "Neuer Titel", "Neuer Rumpf"))
         .thenReturn(
             new BoardItemView(
                 7L, 42, "Neuer Titel", "Neuer Rumpf", 101L, 0, false, null, null, null));
@@ -949,7 +977,7 @@ class KanbanCompatServiceTest {
             List.of(
                 new ColumnView(100L, "Backlog", 0, null),
                 new ColumnView(101L, "Anstehend", 1, null)));
-    when(cardService.updateContent(1L, 7L, "Neu", "Rumpf"))
+    when(ingest.updateContent(1L, 7L, "Neu", "Rumpf"))
         .thenReturn(
             new BoardItemView(7L, 42, "Neu", "Rumpf", 101L, 0, false, null, null, "IN_PROGRESS"));
     when(labelService.namesByCard(BOARD, List.of(7L))).thenReturn(Map.of());
@@ -965,20 +993,20 @@ class KanbanCompatServiceTest {
   void update_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard schlaegt an. Faellt der requireOnBoard-Aufruf weg (Mutant), wuerde
     // eine fremde oder im Ideen-Speicher liegende Karte ueberschrieben.
-    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(9L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(9L, BOARD);
 
     // When / Then
     KanbanPrincipal principal = bound();
     assertThatThrownBy(() -> service.update(principal, 9L, "Neu", "Neu"))
         .isInstanceOf(CardNotFoundException.class);
-    verify(cardService, never()).updateContent(anyLong(), anyLong(), any(), any());
+    verify(ingest, never()).updateContent(anyLong(), anyLong(), any(), any());
   }
 
   @Test
   void move_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard der card-Fassade schlaegt an (fremdes Board oder Ideen-Speicher).
     // Fällt der requireOnBoard-Aufruf weg (Mutant), würde die Karte fälschlich verschoben.
-    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
 
     // When / Then
     assertThatThrownBy(() -> service.move(bound(), 1L, "DONE", 0))
@@ -1048,7 +1076,7 @@ class KanbanCompatServiceTest {
 
   @Test
   void comment_withIdempotencyKey_stillChecksTheBoardFirst() {
-    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
 
     assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo", "k-1"))
         .isInstanceOf(CardNotFoundException.class);
@@ -1060,9 +1088,9 @@ class KanbanCompatServiceTest {
     // Given
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(55L), true));
+    when(ingest.createDirect(
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(55L), true));
 
     // When
     KanbanCompatService.Created first =
@@ -1073,9 +1101,9 @@ class KanbanCompatServiceTest {
     // Then: der Schlüssel wird wie der externalKey getrimmt; die Wirkung entsteht einmal.
     assertThat(first.id()).isEqualTo(55L);
     assertThat(again).isEqualTo(first);
-    verify(cardService, times(1))
+    verify(ingest, times(1))
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", null, null, null));
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null));
   }
 
   @Test
@@ -1083,18 +1111,24 @@ class KanbanCompatServiceTest {
     // Given: E8 — der fachliche Schlüssel hat Vorrang, der technische greift gar nicht erst.
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
-    when(cardService.createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null)))
-        .thenReturn(new CardService.CardCreation(angelegt(55L), true));
+    when(ingest.createDirect(
+            1L,
+            BOARD,
+            100L,
+            new CardIngestService.DirectCard("Titel", "Body", "sonar:abc", null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(55L), true));
 
     // When
     service.create(bound(), "Titel", "Body", null, "sonar:abc", false, null, null, "k-1");
     service.create(bound(), "Titel", "Body", null, "sonar:abc", false, null, null, "k-1");
 
     // Then: beide Aufrufe erreichen die card-Fassade, deren externalKey-Abgleich entscheidet.
-    verify(cardService, times(2))
+    verify(ingest, times(2))
         .createDirect(
-            1L, BOARD, 100L, new CardService.DirectCard("Titel", "Body", "sonar:abc", null, null));
+            1L,
+            BOARD,
+            100L,
+            new CardIngestService.DirectCard("Titel", "Body", "sonar:abc", null, null));
     assertThat(idempotencyStore.size()).isZero();
   }
 
@@ -1102,7 +1136,7 @@ class KanbanCompatServiceTest {
   void comment_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
     // (Mutant), würde der Kommentar fälschlich angelegt.
-    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
 
     // When / Then
     assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo", null))
@@ -1122,7 +1156,7 @@ class KanbanCompatServiceTest {
   void addLabel_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
     // (Mutant), bekäme eine Karte eines fremden Boards das Label.
-    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
 
     // When / Then
     assertThatThrownBy(() -> service.addLabel(bound(), 1L, "kit:nightrun"))
@@ -1152,7 +1186,7 @@ class KanbanCompatServiceTest {
   @Test
   void removeLabel_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: wie beim Hinzufuegen — ohne den Guard verlöre eine fremde Karte ihr Label.
-    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(1L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
 
     // When / Then
     assertThatThrownBy(() -> service.removeLabel(bound(), 1L, "kit:nightrun"))
@@ -1226,7 +1260,7 @@ class KanbanCompatServiceTest {
   @Test
   void updateComment_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard der card-Fassade schlaegt an
-    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(42L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(42L, BOARD);
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -1257,7 +1291,7 @@ class KanbanCompatServiceTest {
   void listComments_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
     // (Mutant), würden Kommentare fremder Karten lesbar.
-    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(42L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(42L, BOARD);
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -1309,7 +1343,7 @@ class KanbanCompatServiceTest {
   void listActivity_throwsCardNotFound_whenCardNotOnBoard() {
     // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
     // (Mutant), würde der Verlauf fremder Karten lesbar.
-    doThrow(new CardNotFoundException()).when(cardService).requireOnBoard(42L, BOARD);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(42L, BOARD);
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -1351,7 +1385,7 @@ class KanbanCompatServiceTest {
     // Given: die Label-Namen kommen als Batch aus der card-Fassade, abgefragt fuer genau die
     // sichtbaren Karten-IDs.
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
+    when(ingest.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
     when(labelService.namesByCard(BOARD, List.of(1L))).thenReturn(Map.of(1L, List.of("Bug", "Ux")));
 
     // When
@@ -1369,7 +1403,7 @@ class KanbanCompatServiceTest {
     // Given: die Batch-Antwort kennt die Karte nicht — die Ausgabe muss dennoch eine leere Liste
     // tragen (nicht null), damit der Adapter kein Sonderfall-Handling braucht.
     when(boardService.listColumns(BOARD)).thenReturn(standardColumns());
-    when(cardService.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
+    when(ingest.listBoardItems(1L, BOARD)).thenReturn(List.of(item(1L, 100L, 1)));
     when(labelService.namesByCard(BOARD, List.of(1L))).thenReturn(Map.of());
 
     // When

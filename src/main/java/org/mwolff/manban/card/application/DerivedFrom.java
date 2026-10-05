@@ -12,9 +12,9 @@ import org.mwolff.manban.card.domain.Card;
  * Kindes auf eine fremde Karte.
  *
  * <p><b>Eine unbekannte Nummer wird abgelehnt</b> — anders als bei {@code
- * CardService#replaceDependenciesFromIngest}, das die Existenz bewusst nicht prüft (#566). Dort
- * kommt die Zielkarte beim Tracker-Import oft später; die Herkunft dagegen entsteht im laufenden
- * Prozess, wo der Vorfahr nachweislich schon existiert. Ein unbekannter Wert ist dort ein
+ * CardIngestService#replaceDependenciesFromIngest}, das die Existenz bewusst nicht prüft (#566).
+ * Dort kommt die Zielkarte beim Tracker-Import oft später; die Herkunft dagegen entsteht im
+ * laufenden Prozess, wo der Vorfahr nachweislich schon existiert. Ein unbekannter Wert ist dort ein
  * Tippfehler — und ohne Existenz gäbe es ohnehin keine ID aufzulösen.
  *
  * <p><b>Selbstverweis und Zyklus sind über die API erreichbar</b>, seit Issue #607 die Herkunft

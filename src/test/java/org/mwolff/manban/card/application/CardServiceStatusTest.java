@@ -235,16 +235,6 @@ class CardServiceStatusTest {
   }
 
   @Test
-  void createDirect_arbeitspaket_uebernimmtDenStatusDerSpalte() {
-    stubAnlegen("Ready");
-
-    service.createDirect(
-        1L, BOARD, 20L, new CardService.DirectCard("Finding", null, "sonar:x", null, null));
-
-    assertThat(gespeichert().status()).isEqualTo(CardStatus.READY);
-  }
-
-  @Test
   void move_arbeitspaketInProzessspalte_uebernimmtDerenStatus() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.BACKLOG, null)));
@@ -428,27 +418,6 @@ class CardServiceStatusTest {
 
     assertThat(gespeichert().status()).isEqualTo(CardStatus.IN_REVIEW);
     verify(boardService, never()).requireColumn(anyLong(), anyLong());
-  }
-
-  @Test
-  void updateContent_arbeitspaketWirdDokument_raeumtDenStatus() {
-    when(cards.findById(1L))
-        .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.READY, null)));
-    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Ready", 1));
-
-    service.updateContent(1L, 1L, "[Fachlich] Paket", null);
-
-    assertThat(gespeichert().status()).isNull();
-  }
-
-  @Test
-  void updateContent_dokumentWirdArbeitspaket_bekommtDenStatusDerProzessspalte() {
-    when(cards.findById(1L)).thenReturn(Optional.of(paket(1L, 20L, "[Idee] Einfall", null, null)));
-    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "In Progress", 2));
-
-    service.updateContent(1L, 1L, "Einfall", null);
-
-    assertThat(gespeichert().status()).isEqualTo(CardStatus.IN_PROGRESS);
   }
 
   @Test

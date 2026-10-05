@@ -13,6 +13,7 @@ import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.application.CardDependencyRepository;
+import org.mwolff.manban.card.application.CardIngestService;
 import org.mwolff.manban.card.application.CardMovedConcurrentlyException;
 import org.mwolff.manban.card.application.CardNumberConflictException;
 import org.mwolff.manban.card.application.CardRepository;
@@ -50,6 +51,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
 
   @Autowired private CardService cardService;
+  @Autowired private CardIngestService ingest;
   @Autowired private BoardService boardService;
   @Autowired private ProjectStartNumberService startNumbers;
   @Autowired private CardRepository cards;
@@ -329,17 +331,17 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
     TransactionRace.Result race =
         race(
             () ->
-                cardService.createDirect(
+                ingest.createDirect(
                     user,
                     boardId,
                     backlog,
-                    new CardService.DirectCard("A", null, "k-a", 900, null)),
+                    new CardIngestService.DirectCard("A", null, "k-a", 900, null)),
             () ->
-                cardService.createDirect(
+                ingest.createDirect(
                     user,
                     boardId,
                     backlog,
-                    new CardService.DirectCard("B", null, "k-b", 900, null)));
+                    new CardIngestService.DirectCard("B", null, "k-b", 900, null)));
 
     assertThat(race.firstFailure()).isNull();
     assertThat(race.secondFailure()).isInstanceOf(CardNumberConflictException.class);
@@ -359,11 +361,8 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
 
     TransactionRace.Result race =
         race(
-            () ->
-                cardService.replaceDependenciesFromIngest(user, target, projectId, List.of(11, 12)),
-            () ->
-                cardService.replaceDependenciesFromIngest(
-                    user, target, projectId, List.of(21, 22)));
+            () -> ingest.replaceDependenciesFromIngest(user, target, projectId, List.of(11, 12)),
+            () -> ingest.replaceDependenciesFromIngest(user, target, projectId, List.of(21, 22)));
 
     assertThat(race.firstFailure()).isNull();
     assertThat(race.secondFailure()).isNull();

@@ -232,7 +232,7 @@ class KanbanCompatController {
    *
    * <p>{@code body} ist bewusst optional: Der Adapter sendet den Titel immer mit, auch wenn sich
    * nur der Rumpf ändert. Ein fehlendes Feld (und JSON-{@code null}) lässt die Beschreibung
-   * unverändert, ein blanker Wert löscht sie — siehe {@code CardService.updateContent}.
+   * unverändert, ein blanker Wert löscht sie — siehe {@code CardIngestService.updateContent}.
    */
   record UpdateRequest(
       @NotBlank @Size(max = 300) String title,
