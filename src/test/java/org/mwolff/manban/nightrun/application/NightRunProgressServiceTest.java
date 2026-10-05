@@ -315,6 +315,53 @@ class NightRunProgressServiceTest {
   }
 
   /**
+   * Laufkennung und Status danach gehen aus Aktivitäten und Laufständen in die Ermittlung (Issue
+   * #1429): Die Spur des fremden Laufs fällt weg, das eigene Paket steht mit dem Status seiner
+   * Bewegung da statt mit dem heutigen, und der eigene Laufstand trägt die Kette.
+   */
+  @Test
+  void reichtLaufkennungUndStatusDanachDurch() {
+    gefunden(laufend(NightRunMode.CHAIN));
+    when(cards.tokenActivitiesInWindow(PROJECT, TOKEN, START, JETZT))
+        .thenReturn(
+            List.of(
+                new TokenActivityView(30L, "MOVED", START.plusSeconds(60), START, "READY"),
+                new TokenActivityView(
+                    31L, "MOVED", START.plusSeconds(70), START.plusSeconds(5), "IN_REVIEW")));
+    when(comments.laufstaendeImProjekt(PROJECT))
+        .thenReturn(
+            List.of(
+                new LaufstandView(
+                    10L,
+                    "## Laufstand\n\nzuletzt begonnen: plan begonnen für #1 um "
+                        + START.plusSeconds(30),
+                    START)));
+    LaufKarteView anforderung = karte(10L, 1, "[Fachlich] Fortschritt", null, null);
+    LaufKarteView eigenes = karte(30L, 3, "Paket 1/2", "IN_REVIEW", null);
+    LaufKarteView fremdes = karte(31L, 4, "Paket 2/2", "IN_REVIEW", null);
+    when(cards.cardsByIds(any()))
+        .thenAnswer(
+            inv -> {
+              Collection<Long> ids = inv.getArgument(0);
+              return List.of(anforderung, eigenes, fremdes).stream()
+                  .filter(k -> ids.contains(k.id()))
+                  .toList();
+            });
+
+    NightRunProgress fortschritt = service.progress(USER, PROJECT, RUN);
+
+    assertThat(fortschritt.pakete())
+        .containsExactly(
+            new PackageProgress(new CardRef(3, "Paket 1/2", BOARD), PackageState.GEZOGEN));
+    assertThat(fortschritt.ketten())
+        .singleElement()
+        .satisfies(
+            k ->
+                assertThat(k.anforderung())
+                    .isEqualTo(new CardRef(1, "[Fachlich] Fortschritt", BOARD)));
+  }
+
+  /**
    * Die Anforderung eines vom Lauf angelegten Plans hat der Lauf selbst nie angefasst: Der Dienst
    * holt sie über die Herkunft nach, Stufe für Stufe bis keine neue Karte mehr dazukommt.
    */

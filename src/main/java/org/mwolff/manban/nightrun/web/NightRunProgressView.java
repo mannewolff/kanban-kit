@@ -25,13 +25,16 @@ import org.mwolff.manban.nightrun.domain.StageState;
  * @param pakete alle Arbeitspakete des Laufs
  * @param unbekannt Karten, deren Zuordnung sich nicht feststellen lässt
  * @param offeneFragen Karten mit einer offenen Frage an den Menschen
+ * @param unbekanntOhneAusweis ob unter {@code unbekannt} Karten stehen, weil der Lauf sich nicht
+ *     ausgewiesen hat (Issue #1429)
  */
 record NightRunProgressView(
     ProgressAssignment zuordnung,
     List<ChainProgressView> ketten,
     List<PackageProgressView> pakete,
     List<CardRefView> unbekannt,
-    List<CardRefView> offeneFragen) {
+    List<CardRefView> offeneFragen,
+    boolean unbekanntOhneAusweis) {
 
   static NightRunProgressView of(NightRunProgress p) {
     return new NightRunProgressView(
@@ -39,7 +42,8 @@ record NightRunProgressView(
         p.ketten().stream().map(ChainProgressView::of).toList(),
         p.pakete().stream().map(PackageProgressView::of).toList(),
         p.unbekannt().stream().map(CardRefView::of).toList(),
-        p.offeneFragen().stream().map(CardRefView::of).toList());
+        p.offeneFragen().stream().map(CardRefView::of).toList(),
+        p.unbekanntOhneAusweis());
   }
 
   /** Eine Kette des Laufs — siehe {@link ChainProgress}. */

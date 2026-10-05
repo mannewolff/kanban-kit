@@ -2,6 +2,7 @@ package org.mwolff.manban.nightrun.domain;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -30,6 +31,12 @@ import org.jspecify.annotations.Nullable;
  * Aktivität mit Herkunft {@code TOKEN}, dem Token-Namen des Laufs und gesetztem {@code agent} hat.
  * Liegt eine dieser Aktivitäten zugleich im Fenster eines anderen Nachtlaufs, ist die Karte
  * „unbekannt" (E3): gelistet, nicht gezählt.
+ *
+ * <p><b>Laufkennung (Issue #1429, Plan #1423 A1, A6, A7):</b> Kennung eines Laufs ist sein Start,
+ * auf Millisekunden gekürzt. Trägt mindestens eine übergebene Aktivität oder ein Laufstand diese
+ * Kennung, ist der Lauf ausgewiesen: Er nimmt nur Spuren mit seiner Kennung, und die fremden
+ * Fenster spielen keine Rolle mehr. Ein nicht ausgewiesener Lauf nimmt nur Spuren ohne Kennung und
+ * wird wie bisher über die Fenster abgegrenzt.
  */
 // PMD.CouplingBetweenObjects: Die Kopplung zählt die Eingabe- und Ergebnistypen der Ermittlung —
 // vier Eingabe-Records, acht Ergebnistypen des Fortschritts — und die java.util-Sammlungen, mit
@@ -100,13 +107,25 @@ public final class FortschrittErmittlung {
   private final List<Karte> laufKarten = new ArrayList<>();
   private final List<Karte> unbekannteKarten = new ArrayList<>();
 
+  /**
+   * Die Kennung, die eine Spur dieses Laufs tragen muss: die eigene, wenn der Lauf ausgewiesen ist,
+   * sonst keine (A6).
+   */
+  private final @Nullable Instant spurKennung;
+
   private FortschrittErmittlung(
+      NightRun lauf,
       String tokenName,
       Zeitfenster fenster,
       List<Zeitfenster> fremdeFenster,
       List<Aktivitaet> aktivitaeten,
       List<Karte> karten,
       List<Laufstand> laufstaende) {
+    Instant eigeneKennung = lauf.startedAt().truncatedTo(ChronoUnit.MILLIS);
+    boolean ausgewiesen =
+        aktivitaeten.stream().anyMatch(a -> eigeneKennung.equals(kennung(a.laufStart())))
+            || laufstaende.stream().anyMatch(l -> eigeneKennung.equals(kennung(l.laufStart())));
+    spurKennung = ausgewiesen ? eigeneKennung : null;
     karten.forEach(
         k -> {
           jeId.put(k.id(), k);
@@ -119,18 +138,24 @@ public final class FortschrittErmittlung {
         (id, akt) -> {
           Karte k = jeId.get(id);
           if (k != null) {
+            // Nur Spuren ohne Kennung sind mehrdeutig (A9) — und die nimmt allein ein nicht
+            // ausgewiesener Lauf.
             boolean ueberlappt =
-                akt.stream()
-                    .anyMatch(a -> fremdeFenster.stream().anyMatch(f -> f.enthaelt(a.createdAt())));
+                !ausgewiesen
+                    && akt.stream()
+                        .anyMatch(
+                            a -> fremdeFenster.stream().anyMatch(f -> f.enthaelt(a.createdAt())));
             (ueberlappt ? unbekannteKarten : laufKarten).add(k);
           }
         });
     laufKarten.sort(NACH_NUMMER);
-    laufstaende.forEach(
-        l ->
-            eintraegeJeKarte
-                .computeIfAbsent(l.cardId(), id -> new ArrayList<>())
-                .addAll(eintraege(l.body(), fenster)));
+    laufstaende.stream()
+        .filter(l -> Objects.equals(kennung(l.laufStart()), spurKennung))
+        .forEach(
+            l ->
+                eintraegeJeKarte
+                    .computeIfAbsent(l.cardId(), id -> new ArrayList<>())
+                    .addAll(eintraege(l.body(), fenster)));
   }
 
   /**
@@ -140,7 +165,8 @@ public final class FortschrittErmittlung {
    * @param fenster sein Zeitfenster (E2) — der Service bestimmt das Ende
    * @param fremdeFenster die Fenster der anderen Nachtläufe desselben Projekts mit demselben
    *     Token-Namen, die das Fenster überlappen (E3) — ohne den Lauf selbst
-   * @param aktivitaeten Kartenaktivitäten um das Fenster
+   * @param aktivitaeten Kartenaktivitäten um das Fenster — auch die anderer Läufe; ob der Lauf
+   *     ausgewiesen ist, entscheidet sich an ihnen und an den Laufständen
    * @param karten die Karten der Aktivitäten und der Laufstände samt Anforderungen und Plänen
    * @param laufstaende die Laufstand-Kommentare des Projekts
    */
@@ -160,7 +186,7 @@ public final class FortschrittErmittlung {
       return NightRunProgress.zuordnungUnbekannt();
     }
     return new FortschrittErmittlung(
-            tokenName, fenster, fremdeFenster, aktivitaeten, karten, laufstaende)
+            lauf, tokenName, fenster, fremdeFenster, aktivitaeten, karten, laufstaende)
         .ergebnis(kette);
   }
 
@@ -190,7 +216,8 @@ public final class FortschrittErmittlung {
         List.copyOf(ketten.values()),
         pakete,
         List.copyOf(unbekannt.values()),
-        List.copyOf(fragen.values()));
+        List.copyOf(fragen.values()),
+        !unbekannteKarten.isEmpty());
   }
 
   // --- Tragende Karte (E5)
@@ -311,12 +338,21 @@ public final class FortschrittErmittlung {
     return new PackageProgress(ref(k), paketZustand(k));
   }
 
+  /**
+   * Der Zustand, den das Paket durch die jüngste Bewegung dieses Laufs erreicht hat (A8); ohne
+   * festgehaltenen Status danach gilt der heutige der Karte.
+   */
   private PackageState paketZustand(Karte k) {
-    String status = k.status();
-    boolean bewegt =
+    Optional<Aktivitaet> letzte =
         laufAktivitaeten.getOrDefault(k.id(), List.of()).stream()
-            .anyMatch(a -> TYP_BEWEGT.contains(a.type()));
-    if (!bewegt || status == null) {
+            .filter(a -> TYP_BEWEGT.contains(a.type()))
+            .max(Comparator.comparing(Aktivitaet::createdAt));
+    if (letzte.isEmpty()) {
+      return PackageState.ANGELEGT;
+    }
+    String statusAfter = letzte.get().statusAfter();
+    String status = statusAfter == null ? k.status() : statusAfter;
+    if (status == null) {
       return PackageState.ANGELEGT;
     }
     return switch (status) {
@@ -331,11 +367,21 @@ public final class FortschrittErmittlung {
   // --- Hilfen
   // --------------------------------------------------------------------------------------
 
-  private static boolean gehoertZumLauf(Aktivitaet a, String tokenName, Zeitfenster fenster) {
+  /**
+   * Ob die Aktivität zum Lauf gehört: die Regel aus E2, dazu die passende Kennung (A6). Die
+   * Fensterprüfung gilt auch für einen ausgewiesenen Lauf.
+   */
+  private boolean gehoertZumLauf(Aktivitaet a, String tokenName, Zeitfenster fenster) {
     return HERKUNFT_TOKEN.equals(a.origin())
         && tokenName.equals(a.tokenName())
         && a.agent() != null
-        && fenster.enthaelt(a.createdAt());
+        && fenster.enthaelt(a.createdAt())
+        && Objects.equals(kennung(a.laufStart()), spurKennung);
+  }
+
+  /** Eine Laufkennung, auf Millisekunden gekürzt (A10) — so speichert sie das Board. */
+  private static @Nullable Instant kennung(@Nullable Instant laufStart) {
+    return laufStart == null ? null : laufStart.truncatedTo(ChronoUnit.MILLIS);
   }
 
   private static boolean istPlan(Karte k) {
@@ -467,6 +513,10 @@ public final class FortschrittErmittlung {
    * @param origin Konstantenname der Herkunft, {@code TOKEN} oder {@code SESSION}
    * @param tokenName Name des Tokens; {@code null} ohne Token
    * @param agent Modell der Session, die das Token im Nachtbetrieb führt; {@code null} sonst
+   * @param laufStart Laufkennung des Laufs, der die Aktivität auslöste (Issue #1426); {@code null}
+   *     ohne Ausweis
+   * @param statusAfter Konstantenname von {@code CardStatus} nach einer Bewegung (Issue #1427);
+   *     {@code null} sonst und bei Alt-Einträgen
    */
   public record Aktivitaet(
       long cardId,
@@ -474,7 +524,21 @@ public final class FortschrittErmittlung {
       Instant createdAt,
       String origin,
       @Nullable String tokenName,
-      @Nullable String agent) {}
+      @Nullable String agent,
+      @Nullable Instant laufStart,
+      @Nullable String statusAfter) {
+
+    /** Eine Aktivität ohne Laufkennung und ohne Status danach — wie vor Issue #1426. */
+    public Aktivitaet(
+        long cardId,
+        String type,
+        Instant createdAt,
+        String origin,
+        @Nullable String tokenName,
+        @Nullable String agent) {
+      this(cardId, type, createdAt, origin, tokenName, agent, null, null);
+    }
+  }
 
   /**
    * Eine Karte, wie die Ermittlung sie braucht.
@@ -509,6 +573,13 @@ public final class FortschrittErmittlung {
    *
    * @param cardId Karte, an der er steht
    * @param body Kommentartext
+   * @param laufStart Laufkennung des letzten Schreibers (Issue #1428); {@code null} ohne Ausweis
    */
-  public record Laufstand(long cardId, String body) {}
+  public record Laufstand(long cardId, String body, @Nullable Instant laufStart) {
+
+    /** Ein Laufstand ohne Laufkennung — wie vor Issue #1428. */
+    public Laufstand(long cardId, String body) {
+      this(cardId, body, null);
+    }
+  }
 }

@@ -36,6 +36,12 @@ class FortschrittErmittlungTest {
   private static final String TOKEN = "nacht";
   private static final String AGENT = "claude-opus-5-5";
 
+  /** Start des zweiten, parallelen Laufs B — eine halbe Stunde nach Lauf A. */
+  private static final Instant START_B = um(30);
+
+  private static final Zeitfenster FENSTER_B =
+      new Zeitfenster(START_B, START_B.plus(Duration.ofHours(2)));
+
   private final List<Karte> karten = new ArrayList<>();
   private final List<Aktivitaet> aktivitaeten = new ArrayList<>();
   private final List<Laufstand> laufstaende = new ArrayList<>();
@@ -48,10 +54,15 @@ class FortschrittErmittlungTest {
   }
 
   private static NightRun lauf(NightRunMode mode, @Nullable String tokenName, boolean complete) {
+    return lauf(mode, START, tokenName, complete);
+  }
+
+  private static NightRun lauf(
+      NightRunMode mode, Instant startedAt, @Nullable String tokenName, boolean complete) {
     return new NightRun(
         1L,
         7L,
-        START,
+        startedAt,
         mode,
         NightRunKind.NIGHT,
         0L,
@@ -114,12 +125,24 @@ class FortschrittErmittlungTest {
     aktivitaeten.add(new Aktivitaet(k.id(), typ, zeit, "TOKEN", TOKEN, AGENT));
   }
 
+  /** Eine Aktivität mit Laufkennung und Status danach (Issue #1429). */
+  private void akt(
+      Karte k, String typ, Instant zeit, @Nullable Instant laufStart, @Nullable String danach) {
+    aktivitaeten.add(new Aktivitaet(k.id(), typ, zeit, "TOKEN", TOKEN, AGENT, laufStart, danach));
+  }
+
   private void angelegt(Karte k, long minute) {
     akt(k, "CREATED", um(minute));
   }
 
   private void bewegt(Karte k, long minute) {
     akt(k, "MOVED", um(minute));
+  }
+
+  /** Ein Laufstand mit Laufkennung (Issue #1429). */
+  private void standVon(Karte k, @Nullable Instant laufStart, String... zeilen) {
+    laufstaende.add(
+        new Laufstand(k.id(), "## Laufstand\n\n" + String.join("\n", zeilen), laufStart));
   }
 
   private void stand(Karte k, String... zeilen) {
@@ -1126,5 +1149,211 @@ class FortschrittErmittlungTest {
     NightRunProgress fortschritt = ermittle(NightRunMode.CHAIN);
 
     assertThat(fortschritt.ketten()).hasSize(1);
+  }
+
+  // --- Laufkennung (Issue #1429, Plan #1423 A1, A6–A10) ------------------------------------------
+
+  private NightRunProgress ermittleA(NightRunMode mode) {
+    fremdeFenster.clear();
+    fremdeFenster.add(FENSTER_B);
+    return FortschrittErmittlung.ermittle(
+        lauf(mode, START, TOKEN, false), FENSTER, fremdeFenster, aktivitaeten, karten, laufstaende);
+  }
+
+  private NightRunProgress ermittleB(NightRunMode mode) {
+    fremdeFenster.clear();
+    fremdeFenster.add(FENSTER);
+    return FortschrittErmittlung.ermittle(
+        lauf(mode, START_B, TOKEN, false),
+        FENSTER_B,
+        fremdeFenster,
+        aktivitaeten,
+        karten,
+        laufstaende);
+  }
+
+  /** Fall 1: A legt an, B setzt um — jeder zeigt nur seine Karten, nichts ist unbekannt. */
+  @Test
+  void zweiAusgewieseneParalleleLaeufeZeigenNurIhreKarten() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    Karte a = paket(502, p, "IN_PROGRESS");
+    Karte b = paket(503, p, "BACKLOG");
+    Karte fremd = paket(504, plan(400, null), "IN_REVIEW");
+    akt(p, "CREATED", um(40), START, null);
+    akt(a, "CREATED", um(45), START, null);
+    akt(b, "CREATED", um(46), START, null);
+    akt(fremd, "MOVED", um(50), START_B, "IN_REVIEW");
+    akt(a, "MOVED", um(60), START_B, "IN_PROGRESS");
+    standVon(f, START, begonnen("pakete", p, 44));
+
+    NightRunProgress beiA = ermittleA(NightRunMode.CHAIN);
+    NightRunProgress beiB = ermittleB(NightRunMode.IMPLEMENTATION);
+
+    assertThat(beiA.unbekannt()).isEmpty();
+    assertThat(beiA.unbekanntOhneAusweis()).isFalse();
+    assertThat(beiA.ketten()).singleElement().extracting(ChainProgress::plan).isEqualTo(ref(p));
+    assertThat(beiA.pakete())
+        .containsExactly(
+            new PackageProgress(ref(a), PackageState.ANGELEGT),
+            new PackageProgress(ref(b), PackageState.ANGELEGT));
+    assertThat(beiB.unbekannt()).isEmpty();
+    assertThat(beiB.unbekanntOhneAusweis()).isFalse();
+    assertThat(beiB.pakete())
+        .containsExactly(
+            new PackageProgress(ref(a), PackageState.IN_UMSETZUNG),
+            new PackageProgress(ref(fremd), PackageState.FERTIG));
+  }
+
+  /** Fall 2: A zieht nach Ready, B schließt ab — jeder sieht den Zustand seiner Bewegung. */
+  @Test
+  void jederLaufZeigtDenZustandSeinerLetztenBewegung() {
+    Karte a = paket(502, plan(400, null), "IN_REVIEW");
+    akt(a, "MOVED", um(40), START_B, "IN_PROGRESS");
+    akt(a, "MOVED", um(10), START, "READY");
+    akt(a, "MOVED", um(70), START_B, "IN_REVIEW");
+    akt(a, "STATUS_CHANGED", um(60), START_B, "BACKLOG");
+
+    assertThat(ermittleA(NightRunMode.IMPLEMENTATION).pakete())
+        .containsExactly(new PackageProgress(ref(a), PackageState.GEZOGEN));
+    assertThat(ermittleB(NightRunMode.IMPLEMENTATION).pakete())
+        .containsExactly(new PackageProgress(ref(a), PackageState.FERTIG));
+  }
+
+  /**
+   * Fall 3: A weist sich aus, B nicht — nur B zeigt seine Karten unter „unbekannt" samt Flag, A
+   * zeigt keine Karte von B.
+   */
+  @Test
+  void mischlageZeigtUnbekanntNurBeimNichtAusgewiesenenLauf() {
+    Karte p = plan(400, null);
+    Karte vonA = paket(501, p, "IN_REVIEW");
+    Karte vonB = paket(502, p, "IN_REVIEW");
+    akt(vonA, "MOVED", um(40), START, "IN_REVIEW");
+    akt(vonB, "MOVED", um(50), null, "IN_REVIEW");
+
+    NightRunProgress beiA = ermittleA(NightRunMode.IMPLEMENTATION);
+    NightRunProgress beiB = ermittleB(NightRunMode.IMPLEMENTATION);
+
+    assertThat(nummern(beiA.pakete())).containsExactly(501);
+    assertThat(beiA.unbekannt()).isEmpty();
+    assertThat(beiA.unbekanntOhneAusweis()).isFalse();
+    assertThat(beiB.pakete()).isEmpty();
+    assertThat(beiB.unbekannt()).containsExactly(ref(vonB));
+    assertThat(beiB.unbekanntOhneAusweis()).isTrue();
+  }
+
+  /**
+   * Fall 4: Eine Kette ohne zuordenbare Anforderung ist unbekannt, aber nicht wegen des Ausweises.
+   */
+  @Test
+  void unbekannteKetteSetztDasFlagNicht() {
+    Karte p = plan(501, null);
+    stand(p, begonnen("review", p, 10));
+
+    NightRunProgress fortschritt = ermittle(NightRunMode.CHAIN);
+
+    assertThat(fortschritt.unbekannt()).containsExactly(ref(p));
+    assertThat(fortschritt.unbekanntOhneAusweis()).isFalse();
+  }
+
+  /**
+   * Fall 5: Der Laufstand eines fremden Laufs erscheint nicht in der Stufenleiste — auch einer ohne
+   * Kennung nicht, sobald der Lauf ausgewiesen ist.
+   */
+  @Test
+  void laufstandEinesFremdenLaufsErscheintNicht() {
+    Karte f1 = anforderung(500);
+    Karte p1 = plan(501, f1);
+    akt(p1, "CREATED", um(40), START, null);
+    Karte f2 = anforderung(600);
+    standVon(f2, START_B, begonnen("plan", f2, 45));
+    Karte f3 = anforderung(700);
+    standVon(f3, null, begonnen("plan", f3, 46));
+
+    NightRunProgress beiA = ermittleA(NightRunMode.CHAIN);
+
+    assertThat(beiA.ketten()).extracting(ChainProgress::anforderung).containsExactly(ref(f1));
+    assertThat(beiA.unbekannt()).isEmpty();
+  }
+
+  /** Ein nicht ausgewiesener Lauf sieht keinen Laufstand mit Kennung. */
+  @Test
+  void nichtAusgewiesenerLaufSiehtKeinenLaufstandMitKennung() {
+    Karte f = anforderung(600);
+    standVon(f, START_B, begonnen("plan", f, 45));
+
+    assertThat(ermittleA(NightRunMode.CHAIN).ketten()).isEmpty();
+  }
+
+  /** Fall 6: Eine Spur mit eigener Kennung nach dem Fensterende zählt nicht. */
+  @Test
+  void eigeneSpurNachDemFensterendeZaehltNicht() {
+    Karte p = plan(400, null);
+    Karte drin = paket(501, p, "IN_REVIEW");
+    Karte danach = paket(502, p, "IN_REVIEW");
+    akt(drin, "MOVED", um(10), START, "IN_REVIEW");
+    akt(danach, "MOVED", ENDE.plusMillis(1), START, "IN_REVIEW");
+
+    assertThat(nummern(ermittleA(NightRunMode.IMPLEMENTATION).pakete())).containsExactly(501);
+  }
+
+  /** Ein Alt-Eintrag ohne {@code statusAfter} fällt auf den heutigen Kartenstatus zurück (A8). */
+  @Test
+  void altEintragOhneStatusAfterFaelltAufDenKartenstatusZurueck() {
+    Karte a = paket(502, plan(400, null), "IN_REVIEW");
+    akt(a, "STATUS_CHANGED", um(10), START, null);
+
+    assertThat(ermittleA(NightRunMode.IMPLEMENTATION).pakete())
+        .containsExactly(new PackageProgress(ref(a), PackageState.FERTIG));
+  }
+
+  /** Ohne Status danach und ohne Kartenstatus gilt das Paket als angelegt. */
+  @Test
+  void ohneStatusAfterUndOhneKartenstatusGiltAngelegt() {
+    Karte a = paket(502, plan(400, null), null);
+    akt(a, "MOVED", um(10), START, null);
+
+    assertThat(ermittleA(NightRunMode.IMPLEMENTATION).pakete())
+        .containsExactly(new PackageProgress(ref(a), PackageState.ANGELEGT));
+  }
+
+  /** Lauf und Spuren tragen Mikrosekunden — beide Seiten werden auf Millisekunden gekürzt (A10). */
+  @Test
+  void kennungMitMikrosekundenPasstZumLauf() {
+    Karte f = anforderung(500);
+    Karte a = paket(502, plan(400, null), "IN_REVIEW");
+    akt(a, "MOVED", um(10), START.plusNanos(789_000), "READY");
+    standVon(f, START.plusNanos(456_000), begonnen("plan", f, 12));
+
+    NightRunProgress fortschritt =
+        FortschrittErmittlung.ermittle(
+            lauf(NightRunMode.CHAIN, START.plusNanos(123_456), TOKEN, false),
+            FENSTER,
+            fremdeFenster,
+            aktivitaeten,
+            karten,
+            laufstaende);
+
+    assertThat(fortschritt.pakete())
+        .containsExactly(new PackageProgress(ref(a), PackageState.GEZOGEN));
+    assertThat(fortschritt.ketten()).extracting(ChainProgress::anforderung).containsExactly(ref(f));
+  }
+
+  /**
+   * Ein Laufstand mit eigener Kennung weist den Lauf allein aus: Aktivitäten ohne Kennung gehören
+   * ihm dann nicht mehr.
+   */
+  @Test
+  void einLaufstandMitEigenerKennungWeistDenLaufAus() {
+    Karte f = anforderung(500);
+    Karte a = paket(502, plan(400, null), "IN_REVIEW");
+    bewegt(a, 10);
+    standVon(f, START, begonnen("plan", f, 12));
+
+    NightRunProgress fortschritt = ermittle(NightRunMode.CHAIN);
+
+    assertThat(fortschritt.pakete()).isEmpty();
+    assertThat(fortschritt.ketten()).extracting(ChainProgress::anforderung).containsExactly(ref(f));
   }
 }

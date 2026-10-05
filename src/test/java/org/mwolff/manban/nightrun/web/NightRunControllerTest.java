@@ -778,7 +778,8 @@ class NightRunControllerTest {
                         false)),
                 List.of(paket),
                 List.of(new CardRef(1400, "Fremd", 6L)),
-                List.of(anforderung)));
+                List.of(anforderung),
+                true));
 
     mvc.perform(get(PATH + "/11/progress"))
         .andExpect(status().isOk())
@@ -796,7 +797,8 @@ class NightRunControllerTest {
         .andExpect(jsonPath("$.pakete[0].karte.title").value("Paket 3/7"))
         .andExpect(jsonPath("$.unbekannt[0].number").value(1400))
         .andExpect(jsonPath("$.unbekannt[0].boardId").value(6))
-        .andExpect(jsonPath("$.offeneFragen[0].number").value(1364));
+        .andExpect(jsonPath("$.offeneFragen[0].number").value(1364))
+        .andExpect(jsonPath("$.unbekanntOhneAusweis").value(true));
   }
 
   /** Eine Kette ohne bekannten Plan trägt {@code plan: null}, und das Ende ist erreicht. */
@@ -816,11 +818,13 @@ class NightRunControllerTest {
                         true)),
                 List.of(),
                 List.of(),
-                List.of()));
+                List.of(),
+                false));
 
     mvc.perform(get(PATH + "/11/progress"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.zuordnung").value("UNBEKANNT"))
+        .andExpect(jsonPath("$.unbekanntOhneAusweis").value(false))
         .andExpect(jsonPath("$.ketten[0].plan").doesNotExist())
         .andExpect(jsonPath("$.ketten[0].aktuelleStufe").doesNotExist())
         .andExpect(jsonPath("$.ketten[0].endeErreicht").value(true));
@@ -854,7 +858,8 @@ class NightRunControllerTest {
   @Test
   void progressView_carriesNoCardContentFields() {
     assertThat(felder(NightRunProgressView.class))
-        .containsExactly("zuordnung", "ketten", "pakete", "unbekannt", "offeneFragen");
+        .containsExactly(
+            "zuordnung", "ketten", "pakete", "unbekannt", "offeneFragen", "unbekanntOhneAusweis");
     assertThat(felder(NightRunProgressView.ChainProgressView.class))
         .containsExactly(
             "anforderung", "plan", "pakete", "stufen", "aktuelleStufe", "endeErreicht");

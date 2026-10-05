@@ -115,10 +115,12 @@ public class NightRunProgressService {
                         a.createdAt(),
                         HERKUNFT_TOKEN,
                         tokenName,
-                        AGENT_GESETZT))
+                        AGENT_GESETZT,
+                        a.laufStart(),
+                        a.statusAfter()))
             .toList(),
         karten(aktivitaeten, laufstaende),
-        laufstaende.stream().map(l -> new Laufstand(l.cardId(), l.body())).toList());
+        laufstaende.stream().map(l -> new Laufstand(l.cardId(), l.body(), l.laufStart())).toList());
   }
 
   /**
