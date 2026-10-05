@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.web;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
@@ -22,13 +23,21 @@ import org.mwolff.manban.nightrun.domain.NightRunUsage;
  * @param modelDurationMs die Zeit, die das Modell gerechnet hat — nicht die Wanduhr-Dauer
  * @param turns Zahl der Züge der Sitzung
  */
+@Schema(
+    description =
+        "Gemeldeter Verbrauch eines Laufs, eines Vorgangs oder einer Stufe. Jedes Feld darf"
+            + " fehlen: Was fehlt, gilt als nicht gemessen, nicht als 0.")
 record NightRunUsageRequest(
-    @Nullable BigDecimal costUsd,
-    @Nullable Long inputTokens,
-    @Nullable Long outputTokens,
-    @Nullable Long cachedInputTokens,
-    @Nullable Long modelDurationMs,
-    @Nullable Integer turns) {
+    @Schema(description = "Kosten in US-Dollar.", example = "1.25") @Nullable BigDecimal costUsd,
+    @Schema(description = "Eingabe-Tokens.", example = "120000") @Nullable Long inputTokens,
+    @Schema(description = "Ausgabe-Tokens.", example = "8000") @Nullable Long outputTokens,
+    @Schema(description = "Davon aus dem Cache gelesene Eingabe-Tokens.", example = "90000")
+        @Nullable Long cachedInputTokens,
+    @Schema(
+            description = "Rechenzeit des Modells in Millisekunden, nicht die Wanduhr-Dauer.",
+            example = "420000")
+        @Nullable Long modelDurationMs,
+    @Schema(description = "Zahl der Züge der Sitzung.", example = "57") @Nullable Integer turns) {
 
   /** {@code null}, wenn gar kein Verbrauch gemeldet wurde — dann steht am Lauf „nicht gemessen". */
   static @Nullable NightRunUsage toDomain(@Nullable NightRunUsageRequest request) {

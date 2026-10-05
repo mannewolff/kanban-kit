@@ -6,6 +6,11 @@ import static org.mwolff.manban.nightrun.web.NightRunController.MAX_ITEMS_PER_RU
 import static org.mwolff.manban.nightrun.web.NightRunController.NO_WORK_REASON_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunController.TITLE_MAX;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -15,6 +20,9 @@ import java.time.Instant;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
+import org.mwolff.manban.common.web.api.ApiSchemas;
+import org.mwolff.manban.common.web.api.ApiVertrag;
+import org.mwolff.manban.common.web.api.Stabilitaet;
 import org.mwolff.manban.nightrun.application.NightRunService;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRun;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRunItem;
@@ -57,7 +65,21 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Diese Klasse ist die einzige Stelle in {@code nightrun}, die {@link KanbanPrincipal} liest;
  * die Application- und Domänenschicht kennen {@code accesstoken} nicht. Eine ArchUnit-Regel hält
  * das fest.
+ *
+ * <p>Die API-Beschreibung (Issue #1403, Plan #1400) steht an Methode und Records; der Aufruf ist
+ * verlässlich (E4), weil das Kit ihn benutzt.
  */
+// Die OpenAPI-Annotationen heben die Importzahl über die PMD-Schwelle von 40 (Plan #1400, E14);
+// die Ausnahme bleibt an dieser Klasse sichtbar, statt die Regel für alle anzuheben.
+@SuppressWarnings("PMD.ExcessiveImports")
+@Tag(
+    name = "Läufe (Runner)",
+    description =
+        "Läufe von Agenten an den Leitstand melden und auswerten. Ein Lauf ist eine Sitzung eines"
+            + " Agenten, die Karten abarbeitet — ein Nachtlauf des Runners oder eine interaktive"
+            + " Sitzung am Rechner eines Menschen. Eine Kette ist ein Lauf, der eine Anforderung"
+            + " über die Stufen PLAN, REVIEW, PAKETE und ABDECKUNG bis zur Umsetzung führt. Die"
+            + " Runner-Seite zeigt die gemeldeten Läufe.")
 @RestController
 class NightRunIngestController {
 
@@ -87,6 +109,51 @@ class NightRunIngestController {
     this.service = service;
   }
 
+  @Operation(
+      summary = "Lauf einliefern",
+      description =
+          "Meldet den vollständigen Stand eines Laufs mit einem projektgebundenen Projekt-Token"
+              + " (Header X-Kanban-Token). Das Zielprojekt kommt aus der Bindung des Tokens, nicht"
+              + " aus dem Aufruf; das Token darf nur, was die Person darf, die es angelegt hat —"
+              + " hier verlangt das die Rolle Owner im Projekt.\n\n"
+              + "Ein Lauf je Aufruf. Schlüssel ist startedAt: Die erste Meldung legt den Lauf an,"
+              + " jede weitere mit demselben startedAt ersetzt ihn vollständig (Zustand, keine"
+              + " Ergänzung). Ein Lauf meldet sich so im Verlauf mehrfach.\n\n"
+              + "kind unterscheidet den Nachtlauf (NIGHT, die Vorgabe) von der interaktiven"
+              + " Sitzung (INTERACTIVE). Bei einer Kette (mode CHAIN) tragen die Vorgänge ihre"
+              + " Stufen (stages) mit Dauer und Verbrauch; budget nennt die Zeit- und"
+              + " Kostenvorgaben, unter denen der Lauf antrat.\n\n"
+              + "Gegenstück auf der Runner-Seite ist „Protokoll einlesen“: Dort lädt ein Mensch"
+              + " das Textprotokoll eines Laufs im Browser hoch, und der Leitstand deutet es"
+              + " zeilenweise. Dieser Aufruf nimmt denselben Inhalt strukturiert an, ohne"
+              + " Textprotokoll und ohne ungedeutete Zeilen.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "Der Lauf ist angelegt (CREATED) oder ersetzt (REPLACED).")
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          "Ungültige Eingabe: ein Feld fehlt oder verletzt seine Grenzen (Details in"
+              + " fieldErrors). Ebenso: das Projekt-Token ist an kein Projekt gebunden.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "Die Person hinter dem Token ist im Projekt nicht Owner.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "Das Projekt gibt es nicht, oder die Person ist dort kein Mitglied.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(stabilitaet = Stabilitaet.VERLAESSLICH)
   @PostMapping("/api/kanban/night-runs")
   IngestResponse ingest(
       @Nullable Authentication authentication, @Valid @RequestBody IngestRequest request) {
@@ -176,13 +243,20 @@ class NightRunIngestController {
   }
 
   /** Ob der Lauf angelegt oder ein vorhandener ersetzt wurde. */
+  @Schema(description = "CREATED: neu angelegt; REPLACED: ein vorhandener Lauf ersetzt.")
   enum Outcome {
     CREATED,
     REPLACED
   }
 
   /** Antwort: der fachliche Schlüssel des Laufs und was mit ihm geschah. */
-  record IngestResponse(Instant startedAt, Outcome outcome) {}
+  @Schema(description = "Ergebnis einer Einlieferung.")
+  record IngestResponse(
+      @Schema(
+              description = "Schlüssel des Laufs: sein Startzeitpunkt.",
+              example = "2026-10-05T01:00:00Z")
+          Instant startedAt,
+      @Schema(description = "Was mit dem Lauf geschah.", example = "CREATED") Outcome outcome) {}
 
   /**
    * Ein gemeldeter Lauf — der vollständige Stand, nicht eine Ergänzung.
@@ -206,20 +280,60 @@ class NightRunIngestController {
    *     Grenze risse eine überlange Meldung dort in einen Serverfehler statt in eine benannte
    *     Ablehnung. Ob der Wert am Lauf landet, entscheidet der Dienst.
    */
+  @Schema(description = "Der vollständige Stand eines Laufs; ersetzt eine frühere Meldung.")
   record IngestRequest(
-      @NotNull Instant startedAt,
-      @NotNull NightRunMode mode,
-      @Nullable NightRunKind kind,
-      long durationMs,
-      int processedCount,
-      int skippedCount,
-      int unparsedCount,
-      @NotNull Boolean complete,
-      @Nullable @Valid NightRunUsageRequest usage,
-      @Nullable @Size(max = NO_WORK_REASON_MAX) String noWorkReason,
-      @Nullable @Valid IngestBudgetRequest budget,
-      @Nullable @Size(max = ABORT_REASON_MAX) String abortReason,
-      @NotNull @Size(max = MAX_ITEMS_PER_RUN) List<@Valid @NotNull IngestItemRequest> items) {}
+      @Schema(
+              description =
+                  "Startzeitpunkt des Laufs; zugleich sein Schlüssel im Projekt. Dieselbe"
+                      + " Kennung trägt der Header X-Night-Run der Kommentare des Laufs.",
+              example = "2026-10-05T01:00:00Z")
+          @NotNull
+          Instant startedAt,
+      @Schema(
+              description =
+                  "Art des Laufs: IMPLEMENTATION setzt Pakete aus Ready um, REVIEW begutachtet"
+                      + " Backlog-Kandidaten, CHAIN führt eine Kette, INTERACTIVE ist eine"
+                      + " Sitzung am Rechner.",
+              example = "IMPLEMENTATION")
+          @NotNull
+          NightRunMode mode,
+      @Schema(
+              description = "Gattung: NIGHT (Vorgabe, wenn das Feld fehlt) oder INTERACTIVE.",
+              example = "NIGHT")
+          @Nullable NightRunKind kind,
+      @Schema(description = "Dauer des Laufs in Millisekunden.", example = "3600000")
+          long durationMs,
+      @Schema(description = "Zahl der bearbeiteten Vorgänge.", example = "3") int processedCount,
+      @Schema(description = "Zahl der übergangenen Vorgänge.", example = "1") int skippedCount,
+      @Schema(description = "Zahl ungedeuteter Zeilen; hier stets 0.", example = "0")
+          int unparsedCount,
+      @Schema(
+              description = "true, wenn der Lauf beendet ist; false, solange er noch läuft.",
+              example = "true")
+          @NotNull
+          Boolean complete,
+      @Schema(description = "Verbrauch des ganzen Laufs, auch der Teil außerhalb der Vorgänge.")
+          @Nullable
+          @Valid
+          NightRunUsageRequest usage,
+      @Schema(
+              description = "Grund, warum nichts abzuarbeiten war; höchstens 300 Zeichen.",
+              example = "Ready ist leer.")
+          @Nullable
+          @Size(max = NO_WORK_REASON_MAX)
+          String noWorkReason,
+      @Schema(description = "Vorgaben, unter denen der Lauf antrat.") @Nullable @Valid
+          IngestBudgetRequest budget,
+      @Schema(
+              description = "Grund eines harten Abbruchs; höchstens 4000 Zeichen.",
+              example = "Sitzungszeitgrenze erreicht")
+          @Nullable
+          @Size(max = ABORT_REASON_MAX)
+          String abortReason,
+      @Schema(description = "Die Vorgänge des Laufs, höchstens 200.")
+          @NotNull
+          @Size(max = MAX_ITEMS_PER_RUN)
+          List<@Valid @NotNull IngestItemRequest> items) {}
 
   /**
    * Ein gemeldetes Arbeitspaket.
@@ -227,16 +341,40 @@ class NightRunIngestController {
    * @param stages die Stufen der Kette, die dieser Vorgang durchlaufen hat (Issue #1113). Additiv
    *     und {@code @Nullable} wie {@code budget}; fehlt das Feld, hatte der Vorgang keine Stufen.
    */
+  @Schema(description = "Ein Vorgang des Laufs: eine bearbeitete oder übergangene Karte.")
   record IngestItemRequest(
-      int cardNumber,
-      @NotBlank @Size(max = TITLE_MAX) String title,
-      @NotNull NightRunState state,
-      @Nullable NightRunErrorClass errorClass,
-      @Nullable Long durationMs,
-      @Nullable @Size(max = COMMIT_HASH_MAX) String commitHash,
-      @Nullable @Size(max = NightRunLimits.EXCERPT_MAX) String excerpt,
-      @Nullable @Valid NightRunUsageRequest usage,
-      @Nullable @Size(max = MAX_STAGES_PER_ITEM) List<@Valid @NotNull IngestStageRequest> stages) {}
+      @Schema(description = "Projektweite Nummer der Karte.", example = "1403") int cardNumber,
+      @Schema(description = "Titel der Karte, höchstens 300 Zeichen.", example = "Export als CSV")
+          @NotBlank
+          @Size(max = TITLE_MAX)
+          String title,
+      @Schema(
+              description =
+                  "Ergebnis: GREEN abgeschlossen, YELLOW mit Vorbehalt, RED nicht"
+                      + " abgeschlossen, GREY übergangen.",
+              example = "GREEN")
+          @NotNull
+          NightRunState state,
+      @Schema(description = "Fehlerklasse bei YELLOW oder RED.", example = "CHECKS_RED")
+          @Nullable NightRunErrorClass errorClass,
+      @Schema(description = "Dauer in Millisekunden.", example = "900000")
+          @Nullable Long durationMs,
+      @Schema(description = "Commit der Umsetzung, höchstens 40 Zeichen.", example = "b2ae30f6")
+          @Nullable
+          @Size(max = COMMIT_HASH_MAX)
+          String commitHash,
+      @Schema(
+              description = "Auszug aus der Ausgabe der Sitzung; höchstens 4000 Zeichen.",
+              example = "FORTSCHRITT: AK1 — Annotationen gesetzt")
+          @Nullable
+          @Size(max = NightRunLimits.EXCERPT_MAX)
+          String excerpt,
+      @Schema(description = "Verbrauch dieses Vorgangs.") @Nullable @Valid
+          NightRunUsageRequest usage,
+      @Schema(description = "Stufen einer Kette, die der Vorgang durchlief; höchstens vier.")
+          @Nullable
+          @Size(max = MAX_STAGES_PER_ITEM)
+          List<@Valid @NotNull IngestStageRequest> stages) {}
 
   /**
    * Die gemeldeten Vorgaben eines Kettenlaufs (Issue #1113, Plan #1110 E2/E3).
@@ -251,14 +389,31 @@ class NightRunIngestController {
    * budget_default_fields varchar(200)} passen muss: Ohne Grenze risse eine überlange Meldung dort
    * in einen Serverfehler statt in eine benannte Ablehnung.
    */
+  @Schema(description = "Zeit- und Kostenvorgaben eines Kettenlaufs; jedes Feld darf fehlen.")
   record IngestBudgetRequest(
-      @Nullable Integer planMin,
-      @Nullable Integer reviewMin,
-      @Nullable Integer paketeMin,
-      @Nullable Integer abdeckungMin,
-      @Nullable BigDecimal kostenUsd,
-      @Nullable NightRunBudgetOrigin origin,
-      @Nullable @Size(max = MAX_DEFAULT_FIELDS)
+      @Schema(description = "Zeitvorgabe der Stufe PLAN in Minuten.", example = "30")
+          @Nullable Integer planMin,
+      @Schema(description = "Zeitvorgabe der Stufe REVIEW in Minuten.", example = "20")
+          @Nullable Integer reviewMin,
+      @Schema(description = "Zeitvorgabe der Stufe PAKETE in Minuten.", example = "120")
+          @Nullable Integer paketeMin,
+      @Schema(description = "Zeitvorgabe der Stufe ABDECKUNG in Minuten.", example = "20")
+          @Nullable Integer abdeckungMin,
+      @Schema(description = "Kostenvorgabe in US-Dollar.", example = "25.00")
+          @Nullable BigDecimal kostenUsd,
+      @Schema(
+              description =
+                  "CONFIGURED: alle Vorgaben aus der Konfiguration; DEFAULTED: mindestens eine"
+                      + " aus den Voreinstellungen.",
+              example = "CONFIGURED")
+          @Nullable NightRunBudgetOrigin origin,
+      @Schema(
+              description =
+                  "Namen der Felder, die aus den Voreinstellungen kamen; höchstens 10 zu je 18"
+                      + " Zeichen.",
+              example = "[\"planMin\"]")
+          @Nullable
+          @Size(max = MAX_DEFAULT_FIELDS)
           List<@NotNull @Size(max = DEFAULT_FIELD_NAME_MAX) String> defaultFields) {}
 
   /**
@@ -268,8 +423,12 @@ class NightRunIngestController {
    * Eintrags, und ein Eintrag ohne sie sagt nichts — er ließe sich weder anzeigen noch einer
    * Zeitvorgabe zuordnen.
    */
+  @Schema(description = "Eine Stufe der Kette, die ein Vorgang durchlief.")
   record IngestStageRequest(
-      @NotNull NightRunStage stage,
-      @Nullable Long durationMs,
-      @Nullable @Valid NightRunUsageRequest usage) {}
+      @Schema(description = "Die Stufe: PLAN, REVIEW, PAKETE oder ABDECKUNG.", example = "PAKETE")
+          @NotNull
+          NightRunStage stage,
+      @Schema(description = "Dauer der Stufe in Millisekunden.", example = "600000")
+          @Nullable Long durationMs,
+      @Schema(description = "Verbrauch der Stufe.") @Nullable @Valid NightRunUsageRequest usage) {}
 }
