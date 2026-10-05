@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.card.application.CardRunQueryService.LaufKarteView;
 import org.mwolff.manban.card.application.CardRunQueryService.TokenActivityView;
@@ -19,10 +20,12 @@ import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Karte;
 import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Laufstand;
 import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Zeitfenster;
 import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunProgress;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.domain.Permission;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +39,15 @@ import org.springframework.transaction.annotation.Transactional;
  * <p><b>Wer darf (E10):</b> dieselbe Prüfung wie die Laufliste, {@link
  * PermissionChecker#requireNightRunAccess}. Ausgeliefert werden je Karte nur Nummer, Titel und
  * Board — dieselben Angaben, die die Lauf-Items heute schon tragen; ein neues Recht entsteht nicht.
+ *
+ * <p><b>Kettenstand einer Karte (Issue #1452, Plan #1447 E15):</b> mit dem Recht {@code
+ * TICKET_READ} an der Karte, damit auch ein MEMBER die Stufenleiste seiner Karte sieht.
  */
+// PMD.CouplingBetweenObjects: Die Kopplung zählt die Fassaden-Sichten von card und comment, die
+// Eingabe-Records der Ermittlung und die Ergebnistypen beider Use-Cases. Beide lesen dieselben
+// Spuren über dieselben Fassaden und übersetzen sie mit denselben Helfern (karte); eine
+// Aufteilung verdoppelte diese Übersetzung, ohne dass ein Schritt einfacher würde.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class NightRunProgressService {
 
@@ -124,6 +135,46 @@ public class NightRunProgressService {
   }
 
   /**
+   * Der Kettenstand der Karte {@code cardId} (Issue #1452, Plan #1447 E5, E14, E15). Den Stand
+   * leitet {@link FortschrittErmittlung} aus dem Laufstand der Karte ab; zugrunde liegt der Lauf,
+   * dessen Kennung der Laufstand trägt, ohne sie der jüngste Anlauf der Karte — nie der jüngste
+   * Lauf des Projekts, der bei parallelen Runnern ein fremder wäre (#1419).
+   *
+   * @throws org.mwolff.manban.card.application.CardNotFoundException wenn die Karte nicht existiert
+   */
+  @Transactional(readOnly = true)
+  public KettenstandDerKarte kettenstand(long userId, long cardId) {
+    long projectId = cards.requireProjectId(cardId);
+    permissions.require(userId, projectId, Permission.TICKET_READ);
+    Karte karte = karte(cards.cardsByIds(List.of(cardId)).getFirst());
+    Laufstand laufstand =
+        comments.laufstaendeImProjekt(projectId).stream()
+            .filter(l -> l.cardId() == cardId)
+            .findFirst()
+            .map(l -> new Laufstand(l.cardId(), l.body(), l.laufStart()))
+            .orElse(null);
+    List<Karte> abgeleitete =
+        cards.derivedCards(cardId).stream().map(NightRunProgressService::karte).toList();
+    return new KettenstandDerKarte(
+        FortschrittErmittlung.kettenStand(karte, laufstand),
+        FortschrittErmittlung.uebernommen(karte, laufstand),
+        FortschrittErmittlung.planReviewVorhanden(karte, abgeleitete),
+        lauf(projectId, karte, laufstand));
+  }
+
+  /** Die Laufwahl nach E15: die Kennung des Laufstands, sonst der jüngste Anlauf der Karte. */
+  private @Nullable Instant lauf(long projectId, Karte karte, @Nullable Laufstand laufstand) {
+    Instant kennung = laufstand == null ? null : laufstand.laufStart();
+    if (kennung != null) {
+      return kennung;
+    }
+    return runs.findByCard(projectId, karte.number()).stream()
+        .findFirst()
+        .map(NightRunItem::startedAt)
+        .orElse(null);
+  }
+
+  /**
    * Das Zeitfenster eines Laufs (E2): Es beginnt beim Start und endet bei Start plus Dauer, wenn
    * der Lauf gemeldet ist; bei seinem letzten Lebenszeichen, wenn er verstummt ist; sonst jetzt.
    */
@@ -159,19 +210,19 @@ public class NightRunProgressService {
           .filter(id -> id != null && !bekannt.containsKey(id))
           .forEach(offen::add);
     }
-    return bekannt.values().stream()
-        .map(
-            k ->
-                new Karte(
-                    k.id(),
-                    k.number(),
-                    k.title(),
-                    k.boardId(),
-                    k.status(),
-                    k.labels(),
-                    k.derivedFromCardId(),
-                    k.arbeitspaket(),
-                    k.description()))
-        .toList();
+    return bekannt.values().stream().map(NightRunProgressService::karte).toList();
+  }
+
+  private static Karte karte(LaufKarteView k) {
+    return new Karte(
+        k.id(),
+        k.number(),
+        k.title(),
+        k.boardId(),
+        k.status(),
+        k.labels(),
+        k.derivedFromCardId(),
+        k.arbeitspaket(),
+        k.description());
   }
 }

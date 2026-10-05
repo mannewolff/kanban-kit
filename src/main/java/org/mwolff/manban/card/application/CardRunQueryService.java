@@ -188,6 +188,26 @@ public class CardRunQueryService {
   }
 
   /**
+   * Projekt-ID der Karte für den Kettenstand (Issue #1452) — wie {@link
+   * CardService#requireProjectId}, hier, damit {@code nightrun} bei seinem einen Zugang bleibt.
+   *
+   * @throws CardNotFoundException wenn die Karte nicht existiert
+   */
+  @Transactional(readOnly = true)
+  public long requireProjectId(long cardId) {
+    return cards.findById(cardId).orElseThrow(CardNotFoundException::new).projectId();
+  }
+
+  /**
+   * Die Karten, die aus der genannten entstanden sind (Herkunft {@code derivedFrom}, Issue #1452) —
+   * mit denselben Angaben wie {@link #cardsByIds}. Ohne Rechteprüfung wie dort.
+   */
+  @Transactional(readOnly = true)
+  public List<LaufKarteView> derivedCards(long cardId) {
+    return cardsByIds(cards.findByDerivedFrom(cardId).stream().map(Card::requireId).toList());
+  }
+
+  /**
    * Eine Kartenaktivität eines Nachtlaufs als Fassaden-Sicht (Issue #1373).
    *
    * @param cardId Karte, an der die Aktivität stattfand

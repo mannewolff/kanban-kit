@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -8,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -199,5 +201,46 @@ class CardRunQueryServiceLaufspurenTest {
               assertThat(k.labels()).containsExactly("lauf:fertig");
               assertThat(k.derivedFromCardId()).isNull();
             });
+  }
+
+  // --- Kettenstand einer Karte (Issue #1452) -------------------------------------------------
+
+  @Test
+  void requireProjectIdLiefertDasProjektDerKarte() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(karte(5L, BOARD, "[Fachlich] A", CardType.CARD, null, null, null)));
+
+    assertThat(service.requireProjectId(5L)).isEqualTo(PROJECT);
+  }
+
+  @Test
+  void requireProjectIdWirftFuerEineUnbekannteKarte() {
+    when(cards.findById(99L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.requireProjectId(99L))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void derivedCardsLiefertDieAusDerKarteEntstandenenKarten() {
+    Card plan = karte(6L, BOARD, "[Plan] A", CardType.CARD, null, 5L, "Plan-Review: fable");
+    when(cards.findByDerivedFrom(5L)).thenReturn(List.of(plan));
+    when(cards.findByIds(Set.of(6L))).thenReturn(List.of(plan));
+
+    assertThat(service.derivedCards(5L))
+        .singleElement()
+        .satisfies(
+            k -> {
+              assertThat(k.id()).isEqualTo(6L);
+              assertThat(k.title()).isEqualTo("[Plan] A");
+              assertThat(k.description()).isEqualTo("Plan-Review: fable");
+            });
+  }
+
+  @Test
+  void derivedCardsOhneAbleitungIstLeer() {
+    when(cards.findByDerivedFrom(5L)).thenReturn(List.of());
+
+    assertThat(service.derivedCards(5L)).isEmpty();
   }
 }

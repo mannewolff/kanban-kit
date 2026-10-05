@@ -55,6 +55,9 @@ public final class FortschrittErmittlung {
   /** Label einer offenen Frage an den Menschen (Kit-Vorgabe, E9). */
   public static final String LABEL_KLAEREN = "kit:klaeren";
 
+  /** Label der Freigabe zur Übernahme durch den nächsten Runner (Kit-Vorgabe, Plan #1447 E15). */
+  public static final String LABEL_NIGHT = "kit:night";
+
   private static final String HERKUNFT_TOKEN = "TOKEN";
   private static final String TYP_ANGELEGT = "CREATED";
   private static final Set<String> TYP_BEWEGT = Set.of("MOVED", "STATUS_CHANGED");
@@ -62,6 +65,10 @@ public final class FortschrittErmittlung {
   /** Das Präfix eines Plandokuments — wie {@code DOKUMENT_PRAEFIX} in {@code Arbeitspaket}. */
   private static final Pattern PLAN_PRAEFIX =
       Pattern.compile("^\\s*\\[plan\\]", Pattern.CASE_INSENSITIVE);
+
+  /** Das Präfix einer fachlichen Anforderung. */
+  private static final Pattern FACHLICH_PRAEFIX =
+      Pattern.compile("^\\s*\\[fachlich\\]", Pattern.CASE_INSENSITIVE);
 
   /**
    * Die Zeile des Prüfvermerks — mit Wert gilt der Plan als geprüft ({@code PLAN_REVIEW_ZEILE}).
@@ -207,6 +214,30 @@ public final class FortschrittErmittlung {
    */
   public static KettenStand kettenStand(Karte karte, @Nullable Laufstand laufstand) {
     return KettenAbleitung.stand(karte, laufstand == null ? "" : laufstand.body());
+  }
+
+  /**
+   * Ob ein Runner die Karte übernommen hat (Issue #1452, Plan #1447 E15): Ihr Laufstand trägt eine
+   * Laufkennung, und die Freigabe {@code kit:night} ist verbraucht.
+   *
+   * @param laufstand ihr Laufstand-Kommentar; {@code null}, solange keiner steht
+   */
+  public static boolean uebernommen(Karte karte, @Nullable Laufstand laufstand) {
+    return laufstand != null
+        && laufstand.laufStart() != null
+        && !karte.labels().contains(LABEL_NIGHT);
+  }
+
+  /**
+   * Ob der Plan einer fachlichen Anforderung schon {@code Plan-Review:} trägt (Issue #1452, Plan
+   * #1447 E14): Unter den aus ihr entstandenen Karten steht ein Plan mit dieser Zeile. An jeder
+   * anderen Karte {@code false}.
+   *
+   * @param abgeleitete die Karten, deren Herkunft die Karte ist
+   */
+  public static boolean planReviewVorhanden(Karte karte, List<Karte> abgeleitete) {
+    return FACHLICH_PRAEFIX.matcher(karte.title()).find()
+        && abgeleitete.stream().anyMatch(k -> istPlan(k) && traegtPlanReview(k));
   }
 
   private NightRunProgress ergebnis(boolean kette) {
@@ -403,6 +434,16 @@ public final class FortschrittErmittlung {
     return laufStart == null ? null : laufStart.truncatedTo(ChronoUnit.MILLIS);
   }
 
+  /** Ob der Plan eine Zeile {@code Plan-Review:} mit nicht leerem Wert trägt. */
+  private static boolean traegtPlanReview(Karte plan) {
+    String text = plan.description();
+    return text != null
+        && text.lines()
+            .map(String::stripLeading)
+            .anyMatch(
+                z -> z.startsWith(PLAN_REVIEW) && !z.substring(PLAN_REVIEW.length()).isBlank());
+  }
+
   static boolean istPlan(Karte k) {
     return PLAN_PRAEFIX.matcher(k.title()).find();
   }
@@ -468,23 +509,13 @@ public final class FortschrittErmittlung {
         // Ein Plan der Kette steht am Board: vom Lauf angelegt, die tragende Karte selbst oder
         // vom Laufstand einer späteren Stufe genannt.
         case PLAN -> plan != null;
-        case REVIEW -> plan != null && geprueft(plan);
+        case REVIEW -> plan != null && traegtPlanReview(plan);
         // „abdeckung fertig" erreicht die Pakete als spätere Stufe; eigene Signale haben beide
         // nicht. Die Vorbereitung steht nie im Weg der Laufseite (Issue #1451).
         case PAKETE, ABDECKUNG, VORBEREITUNG -> false;
         case UMSETZUNG ->
             !pakete.isEmpty() && pakete.stream().allMatch(p -> p.zustand() == PackageState.FERTIG);
       };
-    }
-
-    /** Ob der Plan eine Zeile {@code Plan-Review:} mit nicht leerem Wert trägt. */
-    private boolean geprueft(Karte plan) {
-      String text = plan.description();
-      return text != null
-          && text.lines()
-              .map(String::stripLeading)
-              .anyMatch(
-                  z -> z.startsWith(PLAN_REVIEW) && !z.substring(PLAN_REVIEW.length()).isBlank());
     }
 
     /**
