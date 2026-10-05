@@ -18,7 +18,7 @@ public interface CardAssigneeRepository {
    * Benutzer-IDs.
    *
    * <p>Der Sammelzugriff ist das Gegenstück zu {@link
-   * CardDependencyRepository#findByCardIds(Collection)} und {@link
+   * KartenAbhaengigkeiten#abhaengigkeitenJeKarte(Collection)} und {@link
    * CardLabelRepository#findByCardIds(Collection)}: Eine Kartenliste braucht die Zuständigen aller
    * Karten, und mit {@link #findByCardId(long)} wäre das eine Abfrage je Karte.
    *

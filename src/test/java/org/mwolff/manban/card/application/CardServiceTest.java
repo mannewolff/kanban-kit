@@ -116,7 +116,7 @@ class CardServiceTest {
     events = mock(ApplicationEventPublisher.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
-        new CardService(
+        CardServiceAufbau.ausPorts(
             cards,
             dependencies,
             boardService,

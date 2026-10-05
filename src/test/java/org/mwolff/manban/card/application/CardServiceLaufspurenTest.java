@@ -57,7 +57,7 @@ class CardServiceLaufspurenTest {
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
-        new CardService(
+        CardServiceAufbau.ausPorts(
             cards,
             mock(CardDependencyRepository.class),
             mock(BoardService.class),

@@ -1,5 +1,12 @@
 package org.mwolff.manban.card.application;
 
+import static org.mwolff.manban.card.application.KartenGrundlage.doneStempel;
+import static org.mwolff.manban.card.application.KartenGrundlage.inSpalte;
+import static org.mwolff.manban.card.application.KartenGrundlage.normalize;
+import static org.mwolff.manban.card.application.KartenGrundlage.statusIn;
+import static org.mwolff.manban.card.application.KartenGrundlage.trimToNull;
+import static org.mwolff.manban.card.application.KartenSicht.statusName;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -81,50 +88,43 @@ public class CardService {
   private static final int POSITION_AM_ENDE = Integer.MAX_VALUE;
 
   private final CardRepository cards;
-  private final CardDependencyRepository dependencies;
+  private final KartenAbhaengigkeiten abhaengigkeiten;
   private final BoardService boardService;
   private final PermissionChecker permissions;
   private final ProjectService projects;
   private final CardColumnTransitionRepository transitions;
   private final KartenZuordnung zuordnung;
   private final CardActivityRepository activity;
-  private final ActorContext actor;
+  private final KartenGrundlage grundlage;
+  private final KartenSicht sicht;
   private final ApplicationEventPublisher events;
   private final Clock clock;
 
   public CardService(
       CardRepository cards,
-      CardDependencyRepository dependencies,
+      KartenAbhaengigkeiten abhaengigkeiten,
       BoardService boardService,
       PermissionChecker permissions,
       ProjectService projects,
       CardColumnTransitionRepository transitions,
       KartenZuordnung zuordnung,
       CardActivityRepository activity,
-      ActorContext actor,
+      KartenGrundlage grundlage,
+      KartenSicht sicht,
       ApplicationEventPublisher events,
       Clock clock) {
     this.cards = cards;
-    this.dependencies = dependencies;
+    this.abhaengigkeiten = abhaengigkeiten;
     this.boardService = boardService;
     this.permissions = permissions;
     this.projects = projects;
     this.transitions = transitions;
     this.zuordnung = zuordnung;
     this.activity = activity;
-    this.actor = actor;
+    this.grundlage = grundlage;
+    this.sicht = sicht;
     this.events = events;
     this.clock = clock;
-  }
-
-  /**
-   * Publiziert ein {@link CardBoardActivityEvent} für Live-Board-Updates. Die Composition-Root
-   * übersetzt es in den SSE-Vertrag des board-Moduls, der Board-Event-Listener reicht es
-   * transaktionsgebunden (nach Commit) an die SSE-Registry weiter — bei Rollback entsteht kein
-   * Event. Wird am erfolgreichen Ende jeder board-relevanten Karten-Mutation aufgerufen.
-   */
-  private void publishChanged(long boardId, ActivityType type, @Nullable Long cardId) {
-    events.publishEvent(new CardBoardActivityEvent(boardId, type, cardId));
   }
 
   /**
@@ -141,20 +141,22 @@ public class CardService {
       @Nullable String description,
       @Nullable List<Integer> dependsOn,
       @Nullable Long parentId) {
-    return doCreate(
+    return sicht.view(
         userId,
-        boardId,
-        columnId,
-        title,
-        description,
-        dependsOn,
-        parentId,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null);
+        grundlage.anlegen(
+            userId,
+            boardId,
+            columnId,
+            title,
+            description,
+            dependsOn,
+            parentId,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null));
   }
 
   /**
@@ -177,20 +179,22 @@ public class CardService {
       @Nullable List<Long> assigneeIds,
       @Nullable List<Long> labelIds,
       @Nullable Integer derivedFrom) {
-    return doCreate(
+    return sicht.view(
         userId,
-        boardId,
-        columnId,
-        title,
-        description,
-        dependsOn,
-        parentId,
-        dueDate,
-        assigneeIds,
-        labelIds,
-        null,
-        null,
-        derivedFrom);
+        grundlage.anlegen(
+            userId,
+            boardId,
+            columnId,
+            title,
+            description,
+            dependsOn,
+            parentId,
+            dueDate,
+            assigneeIds,
+            labelIds,
+            null,
+            null,
+            derivedFrom));
   }
 
   /**
@@ -205,11 +209,11 @@ public class CardService {
    * am Endpoint, sodass ein ungültiges Element gar nicht bis hierher gelangt.
    *
    * <p><b>Ein Ereignis je Karte</b> statt eines gebündelten: Der Stapel läuft bewusst über den
-   * gemeinsamen Anlegepfad {@code doCreate}, damit Nummern-, Positions- und Transitionsvergabe
-   * unverändert greifen — das Ereignis je Karte ist dessen Nebenwirkung, und der Board-Strom
-   * liefert ohnehin erst nach Commit aus.
+   * gemeinsamen Anlegepfad {@link KartenGrundlage#anlegen}, damit Nummern-, Positions- und
+   * Transitionsvergabe unverändert greifen — das Ereignis je Karte ist dessen Nebenwirkung, und der
+   * Board-Strom liefert ohnehin erst nach Commit aus.
    *
-   * <p>Die Karten landen in Eingabereihenfolge am Ende der Zielspalte: {@code doCreate} holt je
+   * <p>Die Karten landen in Eingabereihenfolge am Ende der Zielspalte: {@code anlegen} holt je
    * Karte eine frische aktive Position aus {@link CardRepository#allocateActivePosition(long)}.
    */
   @Transactional
@@ -218,99 +222,28 @@ public class CardService {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
     // Die Spalte einmal vorab gegen das Board prüfen: ein falsches Ziel soll scheitern, bevor die
-    // erste Karte eine Nummer verbraucht hat. doCreate prüft sie je Karte erneut (unverändert).
+    // erste Karte eine Nummer verbraucht hat. anlegen prüft sie je Karte erneut (unverändert).
     boardService.requireColumn(columnId, boardId);
     return neueKarten.stream()
         .map(
             card ->
-                doCreate(
+                sicht.view(
                     userId,
-                    boardId,
-                    columnId,
-                    card.title(),
-                    card.description(),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null))
+                    grundlage.anlegen(
+                        userId,
+                        boardId,
+                        columnId,
+                        card.title(),
+                        card.description(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null)))
         .toList();
-  }
-
-  // Kern-Logik des Anlegens ohne eigene @Transactional: wird von den öffentlichen create-
-  // Überladungen (je @Transactional) aufgerufen, ohne Self-Invocation über den Proxy (java:S6809).
-  private CardView doCreate(
-      long userId,
-      long boardId,
-      long columnId,
-      String title,
-      @Nullable String description,
-      @Nullable List<Integer> dependsOn,
-      @Nullable Long parentId,
-      @Nullable Instant dueDate,
-      @Nullable List<Long> assigneeIds,
-      @Nullable List<Long> labelIds,
-      @Nullable String externalKey,
-      @Nullable Integer givenNumber,
-      @Nullable Integer derivedFrom) {
-    long projectId = boardService.requireProjectId(boardId);
-    permissions.require(userId, projectId, Permission.TICKET_CREATE);
-    Long herkunft = DerivedFrom.resolve(cards, projectId, derivedFrom, null);
-    ColumnView column = boardService.requireColumn(columnId, boardId);
-    Long effectiveParent =
-        parentId == null ? null : requireEpicInBoard(parentId, boardId).requireId();
-
-    // Vorgegebene Nummer (#565) ersetzt die Vergabe, nicht die Sperre — die hat der Aufrufer
-    // bereits genommen und die Nummer unter ihr geprüft.
-    int number = givenNumber != null ? givenNumber : cards.allocateCardNumber(projectId);
-    int position = cards.allocateActivePosition(columnId);
-    Instant now = clock.instant();
-    Card neu =
-        new Card(
-            null,
-            boardId,
-            columnId,
-            number,
-            title.trim(),
-            normalize(description),
-            position,
-            false,
-            null,
-            userId,
-            now,
-            now,
-            CardType.CARD,
-            effectiveParent,
-            null,
-            dueDate,
-            projectId,
-            externalKey,
-            herkunft,
-            null,
-            null);
-    // Status und Done-Zeitstempel leitet inSpalte aus der Zielspalte ab (Plan #1294, E5/E7).
-    Card saved = cards.save(inSpalte(neu, column.name(), now));
-
-    transitions.open(saved.requireId(), columnId, column.name(), now);
-    activity.add(
-        saved.requireId(),
-        userId,
-        CardActivityType.CREATED,
-        "Karte angelegt",
-        now,
-        actor.current());
-    setDependencies(saved, dependsOn);
-    if (assigneeIds != null && !assigneeIds.isEmpty()) {
-      zuordnung.ersetzeZustaendige(saved.requireId(), projectId, assigneeIds);
-    }
-    if (labelIds != null && !labelIds.isEmpty()) {
-      zuordnung.ersetzeLabels(saved.requireId(), boardId, labelIds);
-    }
-    publishChanged(boardId, ActivityType.CREATED, saved.requireId());
-    return view(userId, saved);
   }
 
   /**
@@ -370,18 +303,18 @@ public class CardService {
                 null,
                 // Status: ein Vorhaben trägt keinen (Plan #1294, E2).
                 null));
-    publishChanged(boardId, ActivityType.CREATED, saved.requireId());
-    return view(userId, saved);
+    grundlage.publishChanged(boardId, ActivityType.CREATED, saved.requireId());
+    return sicht.view(userId, saved);
   }
 
   /**
    * Karten eines Boards (ohne Vorhaben) mit ihren Zusatzdaten — vier Sammelzugriffe statt vier
    * Abfragen <em>je Karte</em> (Issue #768).
    *
-   * <p>Bewusst nicht über {@link #view(Card, boolean)}: Der baut eine einzelne Karte und lädt
-   * Abhängigkeiten, Zuständige, Labels und Herkunft je Aufruf einzeln nach. Auf einer ganzen
+   * <p>Bewusst nicht über {@link KartenSicht#view(Card, boolean)}: Der baut eine einzelne Karte und
+   * lädt Abhängigkeiten, Zuständige, Labels und Herkunft je Aufruf einzeln nach. Auf einer ganzen
    * Board-Liste ergibt das ein N+1 mit vier Abfragen pro Karte; hier sind es vier für die gesamte
-   * Liste. Für die Einzelkarten-Pfade bleibt {@code view(...)} unverändert — dort ist die
+   * Liste. Für die Einzelkarten-Pfade bleibt {@code sicht.view(...)} unverändert — dort ist die
    * Kartenzahl 1, und ein Sammelzugriff brächte nichts.
    *
    * <p>Gefiltert wird wie bisher <b>nur</b> nach {@link CardType#CARD}: Archivierte Karten bleiben
@@ -400,12 +333,12 @@ public class CardService {
     Set<Long> ids = karten.stream().map(Card::requireId).collect(Collectors.toSet());
     // Karten ohne Eintrag fehlen in den Maps (Vertrag der drei findByCardIds) — die Sicht setzt
     // dort eine leere Liste, nie null.
-    Map<Long, List<Integer>> abhaengigkeiten = dependencies.findByCardIds(ids);
+    Map<Long, List<Integer>> abhaengigkeitenJeKarte = abhaengigkeiten.abhaengigkeitenJeKarte(ids);
     Map<Long, List<Long>> zustaendige = zuordnung.zustaendigeJeKarte(ids);
     Map<Long, List<Long>> labelIds = zuordnung.labelsJeKarte(ids);
-    Map<Long, Integer> nummern = herkunftsnummern(karten);
+    Map<Long, Integer> nummern = sicht.herkunftsnummern(karten);
     // Alle Karten liegen auf diesem Board: eine CARD_MOVE-Prüfung für die ganze Liste (E10).
-    boolean darfStatusSetzen = darfStatusSetzen(userId, projectId);
+    boolean darfStatusSetzen = sicht.darfStatusSetzen(userId, projectId);
     return karten.stream()
         .map(
             c ->
@@ -423,7 +356,7 @@ public class CardService {
                     c.positionInColumn(),
                     c.archived(),
                     c.movedToDoneAt(),
-                    abhaengigkeiten.getOrDefault(c.requireId(), List.of()),
+                    abhaengigkeitenJeKarte.getOrDefault(c.requireId(), List.of()),
                     c.type(),
                     c.parentId(),
                     c.shortcode(),
@@ -462,8 +395,8 @@ public class CardService {
    * Projekt-Mitgliedschaft (Leserecht).
    *
    * <p>Bewusst nicht {@link CardView}: diese Projektion kommt mit einer einzigen Abfrage aus,
-   * während {@code view(...)} je Karte Abhängigkeiten, Zuständige und Labels nachlädt (N+1). Der
-   * {@code kanbancompat}-Ingest listet ganze Boards und braucht davon nichts.
+   * während {@code sicht.view(...)} je Karte Abhängigkeiten, Zuständige und Labels nachlädt (N+1).
+   * Der {@code kanbancompat}-Ingest listet ganze Boards und braucht davon nichts.
    */
   @Transactional(readOnly = true)
   public List<BoardItemView> listBoardItems(long userId, long boardId) {
@@ -473,7 +406,7 @@ public class CardService {
             .filter(c -> !c.archived())
             .sorted(Comparator.comparingInt(Card::positionInColumn))
             .toList();
-    Map<Long, Integer> herkunftsnummern = herkunftsnummern(sichtbar);
+    Map<Long, Integer> herkunftsnummern = sicht.herkunftsnummern(sichtbar);
     return sichtbar.stream()
         .map(
             c ->
@@ -536,7 +469,7 @@ public class CardService {
     Set<Long> ids = baumKarten.stream().map(Card::requireId).collect(Collectors.toSet());
     return DerivationTree.build(
         baumKarten,
-        dependencies.findByCardIds(ids),
+        abhaengigkeiten.abhaengigkeitenJeKarte(ids),
         fremdeVorfahrenNummern(alle),
         zuordnung.gezaehlteMarken(boardId, ids));
   }
@@ -590,7 +523,7 @@ public class CardService {
   public CardView getCard(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.requireMembership(userId, card.projectId());
-    return view(userId, card);
+    return sicht.view(userId, card);
   }
 
   /**
@@ -813,7 +746,8 @@ public class CardService {
       @Nullable String shortcode,
       @Nullable Long parentId,
       @Nullable Instant dueDate) {
-    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Card card =
+        grundlage.requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     Card updated = card.withContent(title.trim(), normalize(description));
     if (card.type() == CardType.EPIC) {
       // Vorhaben tragen ein Kürzel, aber keinen Parent.
@@ -821,22 +755,19 @@ public class CardService {
     } else {
       // Karten: Vorhaben-Zuordnung im selben PUT setzen/lösen (parentId == null -> lösen).
       Long effectiveParent =
-          parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
+          parentId == null
+              ? null
+              : grundlage.requireEpicInBoard(parentId, card.boardId()).requireId();
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
-    Card saved = cards.save(folgeArtwechsel(card, updated));
-    activity.add(
-        cardId,
-        userId,
-        CardActivityType.UPDATED,
-        "Karte bearbeitet",
-        clock.instant(),
-        actor.current());
+    Card saved = cards.save(grundlage.folgeArtwechsel(card, updated));
+    grundlage.aktivitaet(
+        cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet", clock.instant());
     if (dependsOn != null) {
-      setDependencies(saved, dependsOn);
+      abhaengigkeiten.ersetze(saved, dependsOn);
     }
-    publishChanged(saved.boardId(), ActivityType.UPDATED, cardId);
-    return view(userId, saved);
+    grundlage.publishChanged(saved.boardId(), ActivityType.UPDATED, cardId);
+    return sicht.view(userId, saved);
   }
 
   /**
@@ -850,7 +781,8 @@ public class CardService {
    * kein Schlupfloch am Audit und an den Rechten vorbei öffnet.
    *
    * <p>{@code description == null} heißt „nicht ändern"; ein blanker Wert löscht die Beschreibung
-   * ({@link #normalize}). So vernichtet ein Aufrufer, der das Feld weglässt, keinen Inhalt.
+   * ({@link KartenGrundlage#normalize}). So vernichtet ein Aufrufer, der das Feld weglässt, keinen
+   * Inhalt.
    *
    * <p>Rückgabe ist die {@link BoardItemView} — dieselbe domain-freie Form, die {@link
    * #listBoardItems} liefert. Ein {@link CardView} wäre hier unbrauchbar: Er trägt {@code CardType}
@@ -860,22 +792,18 @@ public class CardService {
   @Transactional
   public BoardItemView updateContent(
       long userId, long cardId, String title, @Nullable String description) {
-    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Card card =
+        grundlage.requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     Card saved =
         cards.save(
-            folgeArtwechsel(
+            grundlage.folgeArtwechsel(
                 card,
                 card.withContent(
                     title.trim(),
                     description == null ? card.description() : normalize(description))));
-    activity.add(
-        cardId,
-        userId,
-        CardActivityType.UPDATED,
-        "Karte bearbeitet",
-        clock.instant(),
-        actor.current());
-    publishChanged(saved.boardId(), ActivityType.UPDATED, cardId);
+    grundlage.aktivitaet(
+        cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet", clock.instant());
+    grundlage.publishChanged(saved.boardId(), ActivityType.UPDATED, cardId);
     return new BoardItemView(
         saved.requireId(),
         saved.number(),
@@ -885,7 +813,7 @@ public class CardService {
         saved.positionInColumn(),
         saved.type() == CardType.EPIC,
         saved.externalKey(),
-        herkunftsnummer(saved),
+        sicht.herkunftsnummer(saved),
         statusName(saved));
   }
 
@@ -904,15 +832,10 @@ public class CardService {
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     zuordnung.ersetzeZustaendige(cardId, card.projectId(), assigneeIds);
-    activity.add(
-        cardId,
-        userId,
-        CardActivityType.ASSIGNED,
-        "Zuständige geändert",
-        clock.instant(),
-        actor.current());
-    publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
-    return view(userId, card);
+    grundlage.aktivitaet(
+        cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
+    grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
+    return sicht.view(userId, card);
   }
 
   /**
@@ -929,8 +852,8 @@ public class CardService {
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     zuordnung.ersetzeLabels(cardId, card.boardId(), labelIds);
-    publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
-    return view(userId, card);
+    grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
+    return sicht.view(userId, card);
   }
 
   /**
@@ -960,8 +883,8 @@ public class CardService {
 
     long boardId = card.boardId();
     zuordnung.aendereLabel(cardId, boardId, labelId, action);
-    publishChanged(boardId, ActivityType.UPDATED, cardId);
-    return view(userId, card);
+    grundlage.publishChanged(boardId, ActivityType.UPDATED, cardId);
+    return sicht.view(userId, card);
   }
 
   /**
@@ -969,15 +892,18 @@ public class CardService {
    */
   @Transactional
   public CardView assignParent(long userId, long cardId, @Nullable Long parentId) {
-    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Card card =
+        grundlage.requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     if (card.type() != CardType.CARD) {
       throw new InvalidDependencyException("Nur Karten können einem Epic zugeordnet werden");
     }
     Long effective =
-        parentId == null ? null : requireEpicInBoard(parentId, card.boardId()).requireId();
+        parentId == null
+            ? null
+            : grundlage.requireEpicInBoard(parentId, card.boardId()).requireId();
     Card saved = cards.save(card.withParent(effective));
-    publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
-    return view(userId, saved);
+    grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
+    return sicht.view(userId, saved);
   }
 
   /**
@@ -995,11 +921,12 @@ public class CardService {
    */
   @Transactional
   public CardView assignDerivedFrom(long userId, long cardId, @Nullable Integer derivedFrom) {
-    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Card card =
+        grundlage.requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     Long herkunft = DerivedFrom.resolve(cards, card.projectId(), derivedFrom, cardId);
     Card saved = cards.save(card.withDerivedFrom(herkunft));
-    publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
-    return view(userId, saved);
+    grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
+    return sicht.view(userId, saved);
   }
 
   /**
@@ -1035,7 +962,7 @@ public class CardService {
     Card gespeichert = cards.save(epic.withRequirement(anforderung));
     cards.save(quelle.withParent(epic.requireId()));
 
-    return view(userId, gespeichert);
+    return sicht.view(userId, gespeichert);
   }
 
   /**
@@ -1087,11 +1014,12 @@ public class CardService {
   @Transactional
   public CardView assignRequirement(
       long userId, long cardId, @Nullable Integer requirementCardNumber) {
-    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Card card =
+        grundlage.requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     Long anforderung = RequirementCard.resolve(cards, card, requirementCardNumber);
     Card saved = cards.save(card.withRequirement(anforderung));
-    publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
-    return view(userId, saved);
+    grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
+    return sicht.view(userId, saved);
   }
 
   @Transactional
@@ -1118,13 +1046,8 @@ public class CardService {
       Instant switchedAt = clock.instant();
       transitions.closeOpen(cardId, switchedAt);
       transitions.open(cardId, targetColumnId, target.name(), switchedAt);
-      activity.add(
-          cardId,
-          userId,
-          CardActivityType.MOVED,
-          "Verschoben nach " + target.name(),
-          switchedAt,
-          actor.current());
+      grundlage.aktivitaet(
+          cardId, userId, CardActivityType.MOVED, "Verschoben nach " + target.name(), switchedAt);
     }
 
     // Status nur bei echtem Spaltenwechsel (Plan #1294): Umsortieren ändert ihn nicht. Der
@@ -1136,10 +1059,10 @@ public class CardService {
     // CARD_MOVE ist oben geprüft, und die Karte bleibt im Projekt — die Sicht braucht keine zweite
     // Prüfung.
     CardView result =
-        view(
+        sicht.view(
             cards.save(moved.withMovedToDoneAt(doneStempel(moved, target.name(), clock.instant()))),
             true);
-    publishChanged(card.boardId(), ActivityType.MOVED, cardId);
+    grundlage.publishChanged(card.boardId(), ActivityType.MOVED, cardId);
     return result;
   }
 
@@ -1200,14 +1123,9 @@ public class CardService {
     cards.save(gesetzt.withMovedToDoneAt(doneStempel(gesetzt, null, jetzt)));
     transitions.closeOpen(cardId, jetzt);
     transitions.open(cardId, card.columnId(), neu.anzeigename(), jetzt);
-    activity.add(
-        cardId,
-        userId,
-        CardActivityType.STATUS_CHANGED,
-        "Status auf " + neu.anzeigename(),
-        jetzt,
-        actor.current());
-    publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
+    grundlage.aktivitaet(
+        cardId, userId, CardActivityType.STATUS_CHANGED, "Status auf " + neu.anzeigename(), jetzt);
+    grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
   }
 
   /**
@@ -1246,7 +1164,7 @@ public class CardService {
     cards.sortActiveByNumber(columnId, direction);
 
     // Ohne Karten-Bezug: betroffen ist die ganze Spalte, offene Boards laden über SSE neu.
-    publishChanged(boardId, ActivityType.MOVED, null);
+    grundlage.publishChanged(boardId, ActivityType.MOVED, null);
   }
 
   /**
@@ -1314,7 +1232,7 @@ public class CardService {
     int newNumber = sameProject ? card.number() : cards.allocateCardNumber(targetProjectId);
     cards.transfer(cardId, targetBoardId, targetColumnId, newNumber);
     if (!sameProject) {
-      dependencies.deleteByCardId(cardId);
+      abhaengigkeiten.entferne(cardId);
       zuordnung.entferneZustaendige(cardId);
     }
 
@@ -1336,7 +1254,7 @@ public class CardService {
       // Dieselbe Begruendung fuer die Anforderung: Sie ist board- und damit projekt-lokal.
       cleaned = cleaned.withRequirement(null);
     }
-    CardView result = view(userId, cards.save(cleaned));
+    CardView result = sicht.view(userId, cards.save(cleaned));
     if (!sameProject) {
       // Gegenrichtung: Auch die Kinder verlieren ihren Verweis. Sonst zeigten sie auf die NEUE
       // Nummer der abgewanderten Karte — im eigenen Projekt womoeglich eine fremde. Bewusst ohne
@@ -1352,8 +1270,8 @@ public class CardService {
       }
     }
     // Board-übergreifend: Quell- und Ziel-Board müssen beide live nachziehen.
-    publishChanged(card.boardId(), ActivityType.MOVED, cardId);
-    publishChanged(targetBoardId, ActivityType.MOVED, cardId);
+    grundlage.publishChanged(card.boardId(), ActivityType.MOVED, cardId);
+    grundlage.publishChanged(targetBoardId, ActivityType.MOVED, cardId);
     return result;
   }
 
@@ -1402,16 +1320,12 @@ public class CardService {
   }
 
   private CardView doArchive(long userId, long cardId) {
-    Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    activity.add(
-        card.requireId(),
-        userId,
-        CardActivityType.ARCHIVED,
-        "Archiviert",
-        clock.instant(),
-        actor.current());
-    CardView result = view(userId, cards.save(card.asArchived()));
-    publishChanged(card.boardId(), ActivityType.ARCHIVED, card.requireId());
+    Card card =
+        grundlage.requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
+    grundlage.aktivitaet(
+        card.requireId(), userId, CardActivityType.ARCHIVED, "Archiviert", clock.instant());
+    CardView result = sicht.view(userId, cards.save(card.asArchived()));
+    grundlage.publishChanged(card.boardId(), ActivityType.ARCHIVED, card.requireId());
     return result;
   }
 
@@ -1428,17 +1342,13 @@ public class CardService {
 
   @Transactional
   public CardView restore(long userId, long cardId) {
-    Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
+    Card card =
+        grundlage.requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     int position = cards.allocateActivePosition(card.columnId());
-    activity.add(
-        card.requireId(),
-        userId,
-        CardActivityType.RESTORED,
-        "Wiederhergestellt",
-        clock.instant(),
-        actor.current());
-    CardView result = view(userId, cards.save(card.asRestored(position)));
-    publishChanged(card.boardId(), ActivityType.RESTORED, card.requireId());
+    grundlage.aktivitaet(
+        card.requireId(), userId, CardActivityType.RESTORED, "Wiederhergestellt", clock.instant());
+    CardView result = sicht.view(userId, cards.save(card.asRestored(position)));
+    grundlage.publishChanged(card.boardId(), ActivityType.RESTORED, card.requireId());
     return result;
   }
 
@@ -1472,27 +1382,29 @@ public class CardService {
         requireMatchingNumber(existing.get(), givenNumber);
         // Idempotenz-Treffer: derivedFrom wird ignoriert wie Titel und Rumpf auch. Anders als
         // number, das requireMatchingNumber als Identitaetsfeld verifiziert (#565).
-        return new CardCreation(view(userId, existing.get()), false);
+        return new CardCreation(sicht.view(userId, existing.get()), false);
       }
     }
     if (givenNumber != null) {
       requireNumberAvailable(projectId, givenNumber);
     }
     CardView created =
-        doCreate(
+        sicht.view(
             userId,
-            boardId,
-            columnId,
-            card.title(),
-            card.description(),
-            null,
-            null,
-            null,
-            null,
-            null,
-            externalKey,
-            givenNumber,
-            card.derivedFrom());
+            grundlage.anlegen(
+                userId,
+                boardId,
+                columnId,
+                card.title(),
+                card.description(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                externalKey,
+                givenNumber,
+                card.derivedFrom()));
     return new CardCreation(created, true);
   }
 
@@ -1569,7 +1481,7 @@ public class CardService {
     permissions.requireMembership(userId, projectId);
     Card card =
         cards.findByProjectIdAndNumber(projectId, number).orElseThrow(CardNotFoundException::new);
-    return view(userId, card);
+    return sicht.view(userId, card);
   }
 
   /**
@@ -1622,7 +1534,7 @@ public class CardService {
     BoardSummary board = boardService.requireBoardSummary(boardId);
     ColumnView column = boardService.requireColumn(c.columnId(), boardId);
     return new CardSearchHit(
-        view(userId, c),
+        sicht.view(userId, c),
         c.projectId(),
         projectName,
         boardId,
@@ -1683,7 +1595,8 @@ public class CardService {
   }
 
   private void doDelete(long userId, long cardId) {
-    Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
+    Card card =
+        grundlage.requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     // Beim Löschen eines Vorhabens die Kinder lösen — die DB-„ON DELETE SET NULL"-Kaskade auf
     // parent_id feuert nur beim Hard-Delete, nicht beim Soft-Delete.
     if (card.type() == CardType.EPIC) {
@@ -1692,7 +1605,7 @@ public class CardService {
           .forEach(child -> cards.save(child.withParent(null)));
     }
     cards.softDelete(card.requireId(), clock.instant());
-    publishChanged(card.boardId(), ActivityType.DELETED, card.requireId());
+    grundlage.publishChanged(card.boardId(), ActivityType.DELETED, card.requireId());
   }
 
   /**
@@ -1712,20 +1625,20 @@ public class CardService {
    */
   @Transactional
   public CardView restoreFromTrash(long userId, long cardId) {
-    Card card = requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
+    Card card =
+        grundlage.requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     int position = cards.allocateActivePosition(card.columnId());
     cards.restoreFromTrash(card.requireId(), position);
-    activity.add(
+    grundlage.aktivitaet(
         card.requireId(),
         userId,
         CardActivityType.RESTORED,
         "Aus Papierkorb wiederhergestellt",
-        clock.instant(),
-        actor.current());
-    publishChanged(card.boardId(), ActivityType.RESTORED, card.requireId());
+        clock.instant());
+    grundlage.publishChanged(card.boardId(), ActivityType.RESTORED, card.requireId());
     // View aus der bereits geladenen Karte mit neuer Position — der JDBC-Restore hat die DB-Zeile
     // geändert; ein erneutes findById käme aus dem JPA-Cache noch mit dem alten Stand.
-    return view(userId, card.asRestored(position));
+    return sicht.view(userId, card.asRestored(position));
   }
 
   /**
@@ -1740,9 +1653,9 @@ public class CardService {
     // Vor dem Delete publizieren (Issue #503): Nachgelagerte Module (Anhänge) planen ihre
     // Aufräum-Aufträge ein, solange die Metadaten existieren — die Cascade nimmt sie gleich mit.
     events.publishEvent(new CardsPurgedEvent(List.of(card.requireId())));
-    dependencies.deleteByCardId(card.requireId());
+    abhaengigkeiten.entferne(card.requireId());
     cards.deleteById(card.requireId());
-    publishChanged(card.boardId(), ActivityType.DELETED, card.requireId());
+    grundlage.publishChanged(card.boardId(), ActivityType.DELETED, card.requireId());
   }
 
   /** Karten im Papierkorb eines Boards. Erfordert Board-Mitgliedschaft (Leserecht). */
@@ -1750,25 +1663,11 @@ public class CardService {
   public List<CardView> listTrash(long userId, long boardId) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.requireMembership(userId, projectId);
-    boolean darfStatusSetzen = darfStatusSetzen(userId, projectId);
+    boolean darfStatusSetzen = sicht.darfStatusSetzen(userId, projectId);
     return cards.findTrashByBoardId(boardId).stream()
         .filter(c -> c.type() == CardType.CARD)
-        .map(c -> view(c, darfStatusSetzen))
+        .map(c -> sicht.view(c, darfStatusSetzen))
         .toList();
-  }
-
-  /**
-   * Lädt die Karte und verlangt das je nach Kartentyp (Ticket/Vorhaben) passende Recht. Die Rechte
-   * sind projekt-basiert und werden über {@code card.projectId()} (immer gesetzt, V18) geprüft —
-   * nicht über das Board; für board-gebundene Karten ist die Prüfung identisch (die Projekt-ID
-   * stimmt mit dem Board-Projekt überein).
-   */
-  private Card requireCardOp(
-      long userId, long cardId, Permission ticketPermission, Permission epicPermission) {
-    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    permissions.require(
-        userId, card.projectId(), card.type() == CardType.EPIC ? epicPermission : ticketPermission);
-    return card;
   }
 
   /**
@@ -1789,23 +1688,15 @@ public class CardService {
         .orElse(null);
   }
 
-  private Card requireEpicInBoard(long epicId, long boardId) {
-    Card epic = cards.findById(epicId).orElseThrow(CardNotFoundException::new);
-    if (epic.type() != CardType.EPIC || epic.boardId() != boardId) {
-      throw new InvalidDependencyException("Kein Epic dieses Boards: " + epicId);
-    }
-    return epic;
-  }
-
   /**
    * Ersetzt die Abhängigkeiten einer Karte, <strong>ohne</strong> die Zielnummern auf Existenz zu
    * prüfen (Issue #566) — für den Import aus einem anderen Tracker.
    *
    * <p>Der Unterschied zum UI-Pfad ist Absicht und der Kern dieser Aufgabe: {@link
-   * #setDependencies(Card, List)} lehnt unbekannte Nummern hart ab, weil dort ein Tippfehler
-   * wahrscheinlicher ist als eine noch nicht angelegte Karte. Beim Import ist es umgekehrt — die
-   * Zielkarte kommt oft erst später an, und eine Reihenfolge zu erzwingen hieße, den Import über
-   * die Abhängigkeitsgraphen zu sortieren. Die Datenbank trägt das: {@code
+   * KartenAbhaengigkeiten#ersetze(Card, List)} lehnt unbekannte Nummern hart ab, weil dort ein
+   * Tippfehler wahrscheinlicher ist als eine noch nicht angelegte Karte. Beim Import ist es
+   * umgekehrt — die Zielkarte kommt oft erst später an, und eine Reihenfolge zu erzwingen hieße,
+   * den Import über die Abhängigkeitsgraphen zu sortieren. Die Datenbank trägt das: {@code
    * card_dependency.depends_on_card_number} ist eine Zahl ohne Fremdschlüssel, der Verweis heilt,
    * sobald die Zielkarte existiert.
    *
@@ -1814,199 +1705,18 @@ public class CardService {
    * Prüfung ist projekt- und nicht boardbezogen — der Ingest kennt sein Projekt, nicht zwingend das
    * Board der Zielkarte.
    *
-   * <p>Geteilt bleibt die Selbstverweis-Prüfung — sie hängt nicht am Wissen über andere Karten.
+   * <p>Geteilt bleibt die Selbstverweis-Prüfung — sie hängt nicht am Wissen über andere Karten
+   * ({@link KartenAbhaengigkeiten#ersetzeOhneExistenzpruefung}).
    */
   @Transactional
   public void replaceDependenciesFromIngest(
       long userId, long cardId, long expectedProjectId, @Nullable List<Integer> dependsOn) {
-    Card card = requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
+    Card card =
+        grundlage.requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     if (card.projectId() != expectedProjectId) {
       throw new CardNotFoundException();
     }
-    // Kein Sonderfall für „leer": Die Schleife läuft dann einfach nicht, und replaceDependencies
-    // bekommt eine leere Liste — dasselbe Ergebnis, ein Zweig weniger.
-    List<Integer> distinct = dependsOn == null ? List.of() : dependsOn.stream().distinct().toList();
-    int eigeneNummer = card.number();
-    for (Integer dep : distinct) {
-      if (dep == eigeneNummer) {
-        throw new InvalidDependencyException("Karte kann nicht von sich selbst abhängen");
-      }
-    }
-    dependencies.replaceDependencies(card.requireId(), distinct);
-  }
-
-  private void setDependencies(Card card, @Nullable List<Integer> dependsOn) {
-    if (dependsOn == null || dependsOn.isEmpty()) {
-      dependencies.replaceDependencies(card.requireId(), List.of());
-      return;
-    }
-    List<Integer> distinct = dependsOn.stream().distinct().toList();
-    // Querverweise werden projektweit aufgelöst: eine #N-Abhängigkeit darf auf jede Karte desselben
-    // Projekts zeigen (board-übergreifend), nicht nur auf dasselbe Board.
-    List<Integer> projectNumbers =
-        cards.findByProjectId(card.projectId()).stream().map(Card::number).toList();
-    int eigeneNummer = card.number();
-    for (Integer dep : distinct) {
-      if (dep == eigeneNummer) {
-        throw new InvalidDependencyException("Karte kann nicht von sich selbst abhängen");
-      }
-      if (!projectNumbers.contains(dep)) {
-        throw new InvalidDependencyException("Unbekannte Kartennummer: " + dep);
-      }
-    }
-    dependencies.replaceDependencies(card.requireId(), distinct);
-  }
-
-  /**
-   * Die Karte, wie sie in einer Spalte dieses Namens ankommt (Plan #1294): Status nach {@link
-   * #statusIn}, Done-Zeitstempel nach {@link #doneStempel}. Gemeinsamer Weg von Anlegen und
-   * Übertragen, damit beide dieselbe Regel sprechen.
-   */
-  private static Card inSpalte(Card card, @Nullable String spaltenname, Instant now) {
-    Card mitStatus = card.withStatus(statusIn(card, spaltenname));
-    return mitStatus.withMovedToDoneAt(doneStempel(mitStatus, spaltenname, now));
-  }
-
-  /**
-   * Status einer Karte, die in einer Spalte dieses Namens ankommt (Plan #1294, E2/E5): Eine
-   * Prozessspalte gibt ihren Status vor, eine eigene Spalte lässt den bisherigen stehen — und wer
-   * noch keinen hat, bekommt {@code BACKLOG}. Vorhaben und Dokumentarten tragen keinen.
-   */
-  private static @Nullable CardStatus statusIn(Card card, @Nullable String spaltenname) {
-    if (!Arbeitspaket.istArbeitspaket(card.type(), card.title())) {
-      return null;
-    }
-    CardStatus bisher = card.status();
-    return Arbeitspaket.statusVonSpalte(spaltenname)
-        .orElse(bisher != null ? bisher : CardStatus.BACKLOG);
-  }
-
-  /**
-   * Done-Zeitpunkt nach dem effektiven Maßstab (Plan #1294, E7): Gilt die Karte laut {@link
-   * Arbeitspaket#effektivDone} als erledigt, bleibt ein vorhandener Zeitstempel stehen, sonst gilt
-   * {@code now}; gilt sie nicht als erledigt, entfällt er. Ohne diesen Zeitstempel fiele eine
-   * erledigte Karte dauerhaft aus der Done-Aufbewahrung, die ausschließlich über ihn greift ({@code
-   * findArchivableDoneCards} verlangt {@code movedToDoneAt is not null}), und ebenso aus
-   * Abhängigkeiten, Durchlaufzeit und Überfälligkeit.
-   */
-  private static @Nullable Instant doneStempel(
-      Card card, @Nullable String spaltenname, Instant now) {
-    if (!Arbeitspaket.effektivDone(card, spaltenname)) {
-      return null;
-    }
-    Instant bisher = card.movedToDoneAt();
-    return bisher != null ? bisher : now;
-  }
-
-  /**
-   * Folge eines Artwechsels durch Umbenennen (Plan #1294): Wird eine Dokumentkarte zum
-   * Arbeitspaket, bekommt sie den Status ihrer Prozessspalte, sonst {@code BACKLOG}; wird ein
-   * Arbeitspaket zur Dokumentkarte, entfällt ihr Status, und wieder zählt die Spalte. Der
-   * Done-Zeitstempel folgt derselben Ableitung. Ohne Artwechsel bleibt alles, wie es ist — die
-   * Spalte wird dann gar nicht erst nachgeschlagen.
-   */
-  private Card folgeArtwechsel(Card vorher, Card nachher) {
-    boolean warPaket = Arbeitspaket.istArbeitspaket(vorher.type(), vorher.title());
-    if (warPaket == Arbeitspaket.istArbeitspaket(nachher.type(), nachher.title())) {
-      return nachher;
-    }
-    String spalte = boardService.requireColumn(nachher.columnId(), nachher.boardId()).name();
-    return inSpalte(nachher.withStatus(null), spalte, clock.instant());
-  }
-
-  private static @Nullable String normalize(@Nullable String description) {
-    return description == null || description.isBlank() ? null : description;
-  }
-
-  private static @Nullable String trimToNull(@Nullable String value) {
-    return value == null || value.isBlank() ? null : value.trim();
-  }
-
-  /**
-   * Herkunfts-Nummern zu einer Kartenliste — <strong>ein</strong> Sammelzugriff, unabhaengig von
-   * der Zahl verschiedener Vorfahren. Je Karte einzeln nachzuschlagen ergaebe ein N+1 auf einer
-   * Liste, die ein ganzes Board umfasst.
-   */
-  private Map<Long, Integer> herkunftsnummern(List<Card> karten) {
-    Set<Long> ids =
-        karten.stream()
-            .map(Card::derivedFromCardId)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toSet());
-    if (ids.isEmpty()) {
-      return Map.of();
-    }
-    Map<Long, Integer> nummern = new HashMap<>();
-    for (Card vorfahr : cards.findByIds(ids)) {
-      nummern.put(vorfahr.requireId(), vorfahr.number());
-    }
-    return nummern;
-  }
-
-  /**
-   * Herkunfts-Nummer einer einzelnen Karte. Liefert {@code null}, wenn keine Herkunft gesetzt ist
-   * oder der Vorfahr nicht mehr existiert — die Sicht haelt den Zustand aus, statt zu scheitern.
-   */
-  private @Nullable Integer herkunftsnummer(Card c) {
-    Long id = c.derivedFromCardId();
-    return id == null ? null : cards.findById(id).map(Card::number).orElse(null);
-  }
-
-  /**
-   * Die Sicht einer einzelnen Karte für diesen Betrachter — die {@link
-   * Permission#CARD_MOVE}-Prüfung für {@code canSetStatus} läuft hier einmal (Plan #1294, E10).
-   */
-  private CardView view(long userId, Card c) {
-    return view(c, darfStatusSetzen(userId, c.projectId()));
-  }
-
-  /**
-   * Die Sicht einer Karte. {@code canSetStatus} ist das Ergebnis der einen {@link
-   * Permission#CARD_MOVE}-Prüfung je Anfrage (E10) und greift nur, wo die Karte einen eigenen
-   * Status trägt — ohne ihn gibt es nichts zu setzen.
-   */
-  private CardView view(Card c, boolean canSetStatus) {
-    return new CardView(
-        c.requireId(),
-        c.boardId(),
-        c.columnId(),
-        c.number(),
-        c.title(),
-        c.description(),
-        // Einzelkarte: der Volltext steht schon in description, ein Auszug daneben wäre redundant.
-        null,
-        c.positionInColumn(),
-        c.archived(),
-        c.movedToDoneAt(),
-        dependencies.findByCardId(c.requireId()),
-        c.type(),
-        c.parentId(),
-        c.shortcode(),
-        zuordnung.zustaendigeVon(c.requireId()),
-        c.dueDate(),
-        zuordnung.labelsVon(c.requireId()),
-        herkunftsnummer(c),
-        statusName(c),
-        c.status() != null && canSetStatus);
-  }
-
-  /**
-   * Der Status als Text über die Modulgrenze (E24): der Konstantenname, zugleich der gespeicherte
-   * Wert; {@code null} ohne eigenen Status.
-   */
-  private static @Nullable String statusName(Card c) {
-    CardStatus status = c.status();
-    return status == null ? null : status.name();
-  }
-
-  /**
-   * Ob der Betrachter im Projekt einer Karte den Status setzen darf — dasselbe Recht wie für das
-   * Verschieben (E9). Geprüft wird das Projekt der Karte, nicht das der aufrufenden Ansicht: Eine
-   * über {@code #N} gefundene Karte kann auf einem fremden Board mit anderen Rechten liegen (E10).
-   * Die Projekt-ID der Karte stimmt mit der ihres Boards überein (siehe {@link #requireCardOp}).
-   */
-  private boolean darfStatusSetzen(long userId, long projectId) {
-    return permissions.hasPermission(userId, projectId, Permission.CARD_MOVE);
+    abhaengigkeiten.ersetzeOhneExistenzpruefung(card, dependsOn);
   }
 
   /**

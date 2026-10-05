@@ -107,7 +107,7 @@ class DerivationTreeTest {
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
-        new CardService(
+        CardServiceAufbau.ausPorts(
             cards,
             dependencies,
             boardService,

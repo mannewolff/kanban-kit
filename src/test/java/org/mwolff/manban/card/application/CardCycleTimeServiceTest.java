@@ -439,7 +439,7 @@ class CardCycleTimeServiceTest {
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     CardService karten =
-        new CardService(
+        CardServiceAufbau.ausPorts(
             cards,
             mock(CardDependencyRepository.class),
             boardService,

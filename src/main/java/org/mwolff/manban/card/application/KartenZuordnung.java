@@ -14,15 +14,16 @@ import org.springframework.stereotype.Service;
 /**
  * Zuständige und Labels einer Karte: prüfen, lesen, ersetzen (Issue #1051).
  *
- * <p>Modulintern und ausschliesslich von {@link CardService} benutzt — die Klasse steht nicht auf
- * der Fassaden-Whitelist der ArchUnit-Regel {@code CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT}.
- * Herausgelöst wurde sie, weil der Service mit den drei Ports {@link CardAssigneeRepository},
- * {@link LabelRepository} und {@link CardLabelRepository} plus {@link Label} und den beiden
- * Ablehnungen über der Kopplungsgrenze lag (SonarCloud S6539, Plan #1042).
+ * <p>Modulintern, benutzt von {@link CardService}, {@link KartenGrundlage} und {@link KartenSicht}
+ * (Issue #1389) — die Klasse steht nicht auf der Fassaden-Whitelist der ArchUnit-Regel {@code
+ * CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT}. Herausgelöst wurde sie, weil der Service mit den drei
+ * Ports {@link CardAssigneeRepository}, {@link LabelRepository} und {@link CardLabelRepository}
+ * plus {@link Label} und den beiden Ablehnungen über der Kopplungsgrenze lag (SonarCloud S6539,
+ * Plan #1042).
  *
  * <p>Ohne {@code @Transactional}: Jede Methode läuft in der Transaktion des aufrufenden
- * Use-Case-Verfahrens von {@link CardService} — eine eigene Grenze hier zerschnitte das
- * Alles-oder-nichts der Massenaktionen.
+ * Use-Case-Verfahrens — eine eigene Grenze hier zerschnitte das Alles-oder-nichts der
+ * Massenaktionen.
  *
  * <p>Die Prüfungen sind bewusst hier und nicht an den Ports: „Mitglied des Projekts" und „Label
  * dieses Boards" sind fachliche Regeln, die Persistenz kennt sie nicht.
