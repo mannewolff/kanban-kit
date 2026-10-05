@@ -20,7 +20,6 @@ import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -57,7 +56,6 @@ class CardServiceCreateBatchTest {
             mock(CardDependencyRepository.class),
             boardService,
             mock(PermissionChecker.class),
-            mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),

@@ -3,7 +3,6 @@ package org.mwolff.manban.card.application;
 import java.time.Clock;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -13,7 +12,8 @@ import org.springframework.context.ApplicationEventPublisher;
  * KartenSicht} entstehen hier echt aus denselben Port-Mocks, nicht als Mocks (Plan #1387, E6): So
  * treffen Abdeckung und Mutationsprüfung die herausgelösten Helfer weiter über die Tests des
  * Dienstes, und ein Test, der einen Port stubbt oder prüft, sieht jeden Zugriff — gleich, welcher
- * Baustein ihn macht. Die Testklassen behalten damit ihre bisherige Konstruktion aus elf Ports.
+ * Baustein ihn macht. Die Testklassen behalten damit ihre bisherige Konstruktion aus den Ports;
+ * {@code ProjectService} entfiel mit der Suche (Issue #1391).
  */
 final class CardServiceAufbau {
 
@@ -24,7 +24,6 @@ final class CardServiceAufbau {
       CardDependencyRepository dependencies,
       BoardService boardService,
       PermissionChecker permissions,
-      ProjectService projects,
       CardColumnTransitionRepository transitions,
       KartenZuordnung zuordnung,
       CardActivityRepository activity,
@@ -50,7 +49,6 @@ final class CardServiceAufbau {
         abhaengigkeiten,
         boardService,
         permissions,
-        projects,
         transitions,
         zuordnung,
         activity,

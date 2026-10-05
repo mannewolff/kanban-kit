@@ -26,7 +26,6 @@ import org.mwolff.manban.card.domain.CardColumnTransition;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Dashboard-Aggregation (Ports gemockt, feste Uhr). */
@@ -444,7 +443,6 @@ class CardCycleTimeServiceTest {
             mock(CardDependencyRepository.class),
             boardService,
             permissions,
-            mock(ProjectService.class),
             verlauf,
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),

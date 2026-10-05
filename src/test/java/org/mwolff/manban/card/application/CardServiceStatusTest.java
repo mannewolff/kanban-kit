@@ -29,7 +29,6 @@ import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
-import org.mwolff.manban.project.application.ProjectService;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -69,7 +68,6 @@ class CardServiceStatusTest {
             mock(CardDependencyRepository.class),
             boardService,
             permissions,
-            mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),

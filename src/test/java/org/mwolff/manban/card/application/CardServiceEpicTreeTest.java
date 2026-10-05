@@ -20,7 +20,6 @@ import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -64,7 +63,6 @@ class CardServiceEpicTreeTest {
             dependencies,
             boardService,
             mock(PermissionChecker.class),
-            mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             // Echte KartenZuordnung aus denselben Port-Mocks (Issue #1051) — der Baum liest die
             // gezählten Marken über sie.

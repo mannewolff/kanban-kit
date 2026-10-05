@@ -24,7 +24,6 @@ import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -62,7 +61,6 @@ class CardServiceLaufspurenTest {
             mock(CardDependencyRepository.class),
             mock(BoardService.class),
             mock(PermissionChecker.class),
-            mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),

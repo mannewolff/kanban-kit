@@ -14,7 +14,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -42,7 +41,6 @@ class CardServiceExistingCardNumbersTest {
             mock(CardDependencyRepository.class),
             mock(BoardService.class),
             mock(PermissionChecker.class),
-            mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),

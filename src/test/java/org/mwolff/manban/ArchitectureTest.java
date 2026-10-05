@@ -187,8 +187,12 @@ class ArchitectureTest {
   static final ArchRule CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
       fassadeIstAufWhitelistBegrenzt(
           "card",
-          "nur ueber CardService/LabelService und ihre geteilten Sichten CardView/LabelMarkView",
+          "nur ueber CardService/CardSearchService/LabelService und ihre geteilten Sichten"
+              + " CardView/LabelMarkView",
           "CardService",
+          // CardSearchService ist Vertrag (Plan #1387, E1/E4): die Suche nach Kartennummern als
+          // eigener Zugang, samt Record CardSearchHit.
+          "CardSearchService",
           "LabelService",
           // CardView und LabelMarkView sind Vertrag (Plan #1387, E5): Mehrere Karten-Dienste
           // liefern sie, darum stehen sie als eigene Typen neben den Fassaden statt in einer davon.

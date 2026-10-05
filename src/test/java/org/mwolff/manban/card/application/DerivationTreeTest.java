@@ -23,7 +23,6 @@ import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -112,7 +111,6 @@ class DerivationTreeTest {
             dependencies,
             boardService,
             permissions,
-            mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             // Echte KartenZuordnung aus Port-Mocks (Issue #1051), kein Mock der Zuordnung selbst.
             new KartenZuordnung(

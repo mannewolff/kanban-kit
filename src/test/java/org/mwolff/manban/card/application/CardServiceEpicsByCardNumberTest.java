@@ -18,7 +18,6 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -48,7 +47,6 @@ class CardServiceEpicsByCardNumberTest {
             mock(CardDependencyRepository.class),
             mock(BoardService.class),
             mock(PermissionChecker.class),
-            mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             // Echte KartenZuordnung aus Port-Mocks (Issue #1051), kein Mock der Zuordnung selbst.
             new KartenZuordnung(

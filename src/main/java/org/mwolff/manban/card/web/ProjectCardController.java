@@ -1,6 +1,6 @@
 package org.mwolff.manban.card.web;
 
-import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.CardSearchService;
 import org.mwolff.manban.card.application.CardView;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,15 +9,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Projektweiter Karten-Lookup: löst eine projektweite Nummer zu ihrer Karte auf. Session-Auth
- * erforderlich; Rechte prüft der {@link CardService} (Mitglied, sonst 404). Basis für klickbare
- * {@code #N}-Verweise (#403).
+ * erforderlich; Rechte prüft der {@link CardSearchService} (Mitglied, sonst 404). Basis für
+ * klickbare {@code #N}-Verweise (#403).
  */
 @RestController
 class ProjectCardController {
 
-  private final CardService cards;
+  private final CardSearchService cards;
 
-  ProjectCardController(CardService cards) {
+  ProjectCardController(CardSearchService cards) {
     this.cards = cards;
   }
 
