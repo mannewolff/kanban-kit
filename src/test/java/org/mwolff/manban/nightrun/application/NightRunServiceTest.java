@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -909,6 +910,78 @@ class NightRunServiceTest {
     service.submit(USER, PROJECT, List.of(meldungMitVorbereitung(T1, GRUEN)));
 
     assertThat(gemeldeterLauf().releasePreparation()).isNull();
+  }
+
+  // --- Morgenmeldung in der Laufliste (Issue #1457) ----------------------------------------
+
+  /** Ohne Morgenmeldung steht am Lauf null, nicht eine Meldung aus lauter fehlenden Feldern. */
+  @Test
+  void list_zeigtOhneMorgenmeldungNull() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, null));
+
+    assertThat(service.list(USER, PROJECT).getFirst().releasePreparation()).isNull();
+  }
+
+  /**
+   * Die Meldung erscheint mit allen gespeicherten Feldern und dem Eingang; die Pakete tragen ihre
+   * Titel, auch wenn sie keine Arbeitspakete dieses Laufs sind (fremde Kette desselben Projekts).
+   */
+  @Test
+  void list_zeigtDieMorgenmeldungMitAufgeloestenTiteln() {
+    when(cards.titlesByCardNumber(PROJECT, Set.of(1449, 1450)))
+        .thenReturn(Map.of(1449, "Paket A", 1450, "Paket aus fremder Kette"));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+
+    NightRunService.ReleasePreparationView sicht =
+        service.list(USER, PROJECT).getFirst().releasePreparation();
+
+    assertThat(sicht)
+        .isEqualTo(
+            new NightRunService.ReleasePreparationView(
+                ReleasePreparationResult.GREEN_PENDING,
+                "b2ae30f6",
+                "1.4.0",
+                null,
+                List.of("Mutationsprüfung Frontend"),
+                FIXED,
+                List.of(
+                    new NightRunService.CardTitleView(1449, "Paket A"),
+                    new NightRunService.CardTitleView(1450, "Paket aus fremder Kette")),
+                List.of()));
+  }
+
+  /**
+   * Eine Nummer ohne Karte im Projekt bleibt mit ihrer Nummer stehen, der Titel ist null — die Zahl
+   * der Pakete soll stimmen. Die roten Karten werden genauso aufgelöst.
+   */
+  @Test
+  void list_laesstEineUnbekannteNummerOhneTitelStehen() {
+    when(cards.titlesByCardNumber(PROJECT, Set.of(1449, 1450)))
+        .thenReturn(Map.of(1450, "Rotes Paket"));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, ROT));
+
+    NightRunService.ReleasePreparationView sicht =
+        Objects.requireNonNull(service.list(USER, PROJECT).getFirst().releasePreparation());
+
+    assertThat(sicht.cards()).containsExactly(new NightRunService.CardTitleView(1449, null));
+    assertThat(sicht.redCards())
+        .containsExactly(new NightRunService.CardTitleView(1450, "Rotes Paket"));
+    assertThat(sicht.redCheck()).isEqualTo("mvn verify");
+  }
+
+  /**
+   * Ein Abruf für alle Läufe der Liste, nicht je Nummer, und nur im Projekt der Läufe — eine Nummer
+   * eines fremden Projekts kann so nicht aufgelöst werden.
+   */
+  @Test
+  void list_fragtDieTitelEinmalUndNurImEigenenProjekt() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T2, ROT));
+
+    service.list(USER, PROJECT);
+
+    verify(cards).titlesByCardNumber(PROJECT, Set.of(1449, 1450));
+    verifyNoMoreInteractions(cards);
   }
 
   @Test

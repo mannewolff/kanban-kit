@@ -1,6 +1,7 @@
 package org.mwolff.manban.nightrun.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -28,11 +29,13 @@ import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.nightrun.application.NightRunNotFoundException;
 import org.mwolff.manban.nightrun.application.NightRunProgressService;
 import org.mwolff.manban.nightrun.application.NightRunService;
+import org.mwolff.manban.nightrun.application.NightRunService.CardTitleView;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRun;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRunItem;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunItemView;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunView;
+import org.mwolff.manban.nightrun.application.NightRunService.ReleasePreparationView;
 import org.mwolff.manban.nightrun.domain.CardRef;
 import org.mwolff.manban.nightrun.domain.ChainProgress;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe;
@@ -53,6 +56,7 @@ import org.mwolff.manban.nightrun.domain.PackageProgress;
 import org.mwolff.manban.nightrun.domain.PackageState;
 import org.mwolff.manban.nightrun.domain.ProgressAssignment;
 import org.mwolff.manban.nightrun.domain.ProgressStage;
+import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
 import org.mwolff.manban.nightrun.domain.StageProgress;
 import org.mwolff.manban.nightrun.domain.StageState;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -434,6 +438,7 @@ class NightRunControllerTest {
                     null,
                     null,
                     null,
+                    null,
                     NightRunOutcome.of(
                         true,
                         null,
@@ -471,9 +476,93 @@ class NightRunControllerTest {
         .andExpect(jsonPath("$[0].unparsedSample").value("Fehler: kaputt"))
         .andExpect(jsonPath("$[0].createdAt").value("2026-09-01T06:00:00Z"))
         .andExpect(jsonPath("$[0].items[0].cardNumber").value(721))
-        .andExpect(jsonPath("$[0].items[0].errorClass").value("CHECKS_RED"));
+        .andExpect(jsonPath("$[0].items[0].errorClass").value("CHECKS_RED"))
+        .andExpect(jsonPath("$[0].releasePreparation").value(nullValue()));
 
     verify(service).list(USER, PROJECT);
+  }
+
+  /**
+   * Die Morgenmeldung in der Laufliste (Issue #1457): alle Felder samt Eingang, die Karten mit
+   * Nummer und Titel; eine Nummer ohne Karte trägt title null.
+   */
+  @Test
+  void list_returnsReleasePreparationWithCardTitles() throws Exception {
+    when(service.list(USER, PROJECT))
+        .thenReturn(
+            List.of(
+                new NightRunView(
+                    14L,
+                    ERSTER,
+                    NightRunMode.CHAIN,
+                    1L,
+                    1,
+                    0,
+                    0,
+                    null,
+                    Instant.parse("2026-09-01T06:00:00Z"),
+                    NightRunOrigin.TOKEN,
+                    "nacht",
+                    true,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    new ReleasePreparationView(
+                        ReleasePreparationResult.RED,
+                        "c3bf41a7",
+                        "1.4.0",
+                        "mvn verify",
+                        List.of("Mutationsprüfung Frontend"),
+                        Instant.parse("2026-09-01T05:12:00Z"),
+                        List.of(new CardTitleView(1449, "Paket A"), new CardTitleView(4711, null)),
+                        List.of(new CardTitleView(1450, "Paket aus fremder Kette"))),
+                    NightRunOutcome.of(
+                        true,
+                        null,
+                        null,
+                        null,
+                        NightRunMode.CHAIN,
+                        List.of(),
+                        ERSTER,
+                        null,
+                        ERSTER,
+                        Duration.ofMinutes(90)),
+                    List.of())));
+
+    mvc.perform(get(PATH))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].releasePreparation.result").value("RED"))
+        .andExpect(jsonPath("$[0].releasePreparation.commitHash").value("c3bf41a7"))
+        .andExpect(jsonPath("$[0].releasePreparation.version").value("1.4.0"))
+        .andExpect(jsonPath("$[0].releasePreparation.redCheck").value("mvn verify"))
+        .andExpect(
+            jsonPath("$[0].releasePreparation.pending[0]").value("Mutationsprüfung Frontend"))
+        .andExpect(jsonPath("$[0].releasePreparation.receivedAt").value("2026-09-01T05:12:00Z"))
+        .andExpect(jsonPath("$[0].releasePreparation.cards[0].number").value(1449))
+        .andExpect(jsonPath("$[0].releasePreparation.cards[0].title").value("Paket A"))
+        .andExpect(jsonPath("$[0].releasePreparation.cards[1].number").value(4711))
+        .andExpect(jsonPath("$[0].releasePreparation.cards[1].title").value(nullValue()))
+        .andExpect(jsonPath("$[0].releasePreparation.redCards[0].number").value(1450))
+        .andExpect(
+            jsonPath("$[0].releasePreparation.redCards[0].title").value("Paket aus fremder Kette"));
+  }
+
+  /** Die Morgenmeldung trägt je Karte nur Nummer und Titel, nie Inhalte (Issue #1457). */
+  @Test
+  void releasePreparationView_carriesNoCardContentFields() {
+    assertThat(felder(ReleasePreparationView.class))
+        .containsExactly(
+            "result",
+            "commitHash",
+            "version",
+            "redCheck",
+            "pending",
+            "receivedAt",
+            "cards",
+            "redCards");
+    assertThat(felder(CardTitleView.class)).containsExactly("number", "title");
   }
 
   /**
@@ -497,6 +586,7 @@ class NightRunControllerTest {
                     NightRunOrigin.UPLOAD,
                     null,
                     true,
+                    null,
                     null,
                     null,
                     null,
@@ -763,6 +853,7 @@ class NightRunControllerTest {
                         new BigDecimal("50"),
                         NightRunBudgetOrigin.DEFAULTED,
                         List.of("paketeMin", "kostenUsd")),
+                    null,
                     null,
                     NightRunOutcome.of(
                         true,

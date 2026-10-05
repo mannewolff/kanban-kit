@@ -136,6 +136,29 @@ public class CardRunQueryService {
   }
 
   /**
+   * Zu den genannten Kartennummern des Projekts ihre Titel (Issue #1457) — für die Morgenmeldung,
+   * deren Pakete auch aus fremden Ketten desselben Projekts stammen können.
+   *
+   * <p>Ein Abruf für alle Nummern, nicht einer je Nummer. Gelesen wird wie bei {@link
+   * CardRepository#findByProjectId}: nur Karten dieses Projekts, Papierkorb-Karten nicht.
+   * Unbekannte Nummern fehlen im Ergebnis; eine leere Nummernmenge fragt die Datenbank nicht. Ohne
+   * Rechteprüfung wie {@link #existingCardNumbers}.
+   *
+   * @return je gefundener Nummer der Titel ihrer Karte
+   */
+  @Transactional(readOnly = true)
+  public Map<Integer, String> titlesByCardNumber(long projectId, Collection<Integer> cardNumbers) {
+    if (cardNumbers.isEmpty()) {
+      return Map.of();
+    }
+    Set<Integer> gesucht = Set.copyOf(cardNumbers);
+    return cards.findByProjectId(projectId).stream()
+        .filter(c -> gesucht.contains(c.number()))
+        // Ohne Zusammenfuehrung: Kartennummern sind projektweit eindeutig.
+        .collect(Collectors.toUnmodifiableMap(Card::number, Card::title));
+  }
+
+  /**
    * Die Kartenaktivitäten eines Nachtlaufs im Zeitfenster (Issue #1373, Plan #1372 E2): Herkunft
    * {@code TOKEN} mit diesem Token-Namen, gesetztes {@code agent}, Zeitpunkt in {@code [von, bis]}.
    * Chronologisch; je Eintrag nur Karte, Art und Zeitpunkt.

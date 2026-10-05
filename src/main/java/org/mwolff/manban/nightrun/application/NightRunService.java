@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -7,6 +8,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
@@ -233,7 +237,43 @@ public class NightRunService {
         runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.NIGHT);
     List<NightRunItem> pakete =
         runs.findItemsByRunIds(gefunden.stream().map(NightRun::requireId).toList());
-    return gefunden.stream().map(run -> view(run, pakete)).toList();
+    // Ein Abruf fuer alle Morgenmeldungen der Liste, nicht einer je Nummer (Issue #1457) — und nur
+    // im Projekt der Laeufe: Eine Nummer eines fremden Projekts bleibt so ohne Titel.
+    Map<Integer, String> titel = cards.titlesByCardNumber(projectId, gemeldeteNummern(gefunden));
+    return gefunden.stream().map(run -> view(run, pakete, titel)).toList();
+  }
+
+  /** Alle Kartennummern, die die Morgenmeldungen der Läufe nennen — enthaltene wie rote. */
+  private static Set<Integer> gemeldeteNummern(List<NightRun> laeufe) {
+    return laeufe.stream()
+        .map(NightRun::releasePreparation)
+        .filter(Objects::nonNull)
+        .flatMap(v -> Stream.concat(v.cardNumbers().stream(), v.redCards().stream()))
+        .collect(Collectors.toUnmodifiableSet());
+  }
+
+  /**
+   * Die Morgenmeldung für die Laufliste — oder {@code null} ohne Meldung (Issue #1457). Eine Nummer
+   * ohne Karte im Projekt bleibt mit {@code title = null} stehen: Die Zahl der Pakete soll stimmen.
+   */
+  private static @Nullable ReleasePreparationView vorbereitungView(
+      @Nullable ReleasePreparation vorbereitung, Map<Integer, String> titel) {
+    if (vorbereitung == null) {
+      return null;
+    }
+    return new ReleasePreparationView(
+        vorbereitung.result(),
+        vorbereitung.commitHash(),
+        vorbereitung.version(),
+        vorbereitung.redCheck(),
+        vorbereitung.pending(),
+        vorbereitung.receivedAt(),
+        mitTitel(vorbereitung.cardNumbers(), titel),
+        mitTitel(vorbereitung.redCards(), titel));
+  }
+
+  private static List<CardTitleView> mitTitel(List<Integer> nummern, Map<Integer, String> titel) {
+    return nummern.stream().map(n -> new CardTitleView(n, titel.get(n))).toList();
   }
 
   /**
@@ -440,7 +480,8 @@ public class NightRunService {
    * <p>Instanzmethode statt {@code static} seit Issue #1091: Der Befund braucht die Stillefrist aus
    * {@link NightRunProperties} und den Jetzt-Zeitpunkt aus der {@link Clock}.
    */
-  private NightRunView view(NightRun run, List<NightRunItem> alleItems) {
+  private NightRunView view(
+      NightRun run, List<NightRunItem> alleItems, Map<Integer, String> titel) {
     Long runId = run.requireId();
     // Einmal filtern, zweimal gebraucht: Die Sicht zeigt die Pakete, der Befund wertet sie aus
     // (Issue #1078). Die Reihenfolge bleibt die der Abfrage — sie entscheidet zusammen mit der
@@ -466,6 +507,7 @@ public class NightRunService {
         run.noWorkReason(),
         run.budget(),
         run.abortReason(),
+        vorbereitungView(run.releasePreparation(), titel),
         NightRunOutcome.of(
             run.complete(),
             // Die Sicht eines Projekts kennt die Kennzeichnung von Hand nicht (Issue #1197): Sie
@@ -589,6 +631,8 @@ public class NightRunService {
    *     heißt „nicht angegeben"
    * @param abortReason der Grund, warum der Lauf hart abgebrochen ist (Issue #1142); {@code null}
    *     heißt „nicht abgebrochen"
+   * @param releasePreparation die Morgenmeldung des Laufs (Issue #1457); {@code null} heißt „keine
+   *     gemeldet"
    */
   public record NightRunView(
       Long id,
@@ -608,8 +652,61 @@ public class NightRunService {
       @Nullable String noWorkReason,
       @Nullable NightRunBudget budget,
       @Nullable String abortReason,
+      @Schema(
+              description =
+                  "Morgenmeldung: ob und wie der Lauf eine Veröffentlichung vorbereitet hat; null,"
+                      + " wenn der Runner keine gemeldet hat.")
+          @Nullable ReleasePreparationView releasePreparation,
       NightRunOutcome outcome,
       List<NightRunItemView> items) {}
+
+  /**
+   * Die Morgenmeldung eines Laufs in der Laufliste (Issue #1457, Plan #1447 E12), mit aufgelösten
+   * Kartentiteln.
+   */
+  @Schema(description = "Die Morgenmeldung eines Laufs: der vorbereitete Stand und seine Pakete.")
+  public record ReleasePreparationView(
+      @Schema(
+              description =
+                  "Ausgang: GREEN grün, von Hand veröffentlichbar; GREEN_PENDING grün, eine"
+                      + " Prüfung offen (siehe pending); RED eine Prüfung fehlgeschlagen (siehe"
+                      + " redCheck und redCards); NOT_PREPARED nichts vorbereitet.",
+              example = "GREEN")
+          ReleasePreparationResult result,
+      @Schema(
+              description =
+                  "Kennung des vorbereiteten Stands, mit der er sich außerhalb des Boards"
+                      + " wiederfinden lässt.",
+              example = "b2ae30f6")
+          @Nullable String commitHash,
+      @Schema(description = "Beschriftung des Stands, etwa die Versionsnummer.", example = "1.4.0")
+          @Nullable String version,
+      @Schema(description = "Die fehlgeschlagene Prüfung bei RED.", example = "mvn verify")
+          @Nullable String redCheck,
+      @Schema(description = "Die noch offenen Prüfungen bei GREEN_PENDING; sonst leer.")
+          List<String> pending,
+      @Schema(
+              description =
+                  "Eingang der Meldung nach der Uhr des Servers („gemeldet um“); die Meldung"
+                      + " selbst trägt keinen Zeitpunkt der Vorbereitung.",
+              example = "2026-10-06T05:12:00Z")
+          Instant receivedAt,
+      @Schema(
+              description =
+                  "Die enthaltenen Arbeitspakete in gemeldeter Reihenfolge, auch aus anderen"
+                      + " Ketten des Projekts.")
+          List<CardTitleView> cards,
+      @Schema(description = "Die von der fehlgeschlagenen Prüfung betroffenen Karten.")
+          List<CardTitleView> redCards) {}
+
+  /** Eine gemeldete Kartennummer mit ihrem Titel im Projekt des Laufs (Issue #1457). */
+  @Schema(description = "Eine gemeldete Karte mit Nummer und Titel.")
+  public record CardTitleView(
+      @Schema(description = "Projektweite Nummer der Karte.", example = "1449") int number,
+      @Schema(
+              description = "Titel der Karte; null, wenn es die Nummer im Projekt nicht gibt.",
+              example = "Export als CSV")
+          @Nullable String title) {}
 
   /**
    * Darstellung eines Arbeitspakets.

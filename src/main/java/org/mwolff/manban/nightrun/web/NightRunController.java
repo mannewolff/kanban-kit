@@ -184,7 +184,10 @@ class NightRunController {
               + " REVIEW begutachtet Kandidaten, CHAIN ist eine Kette: ein Lauf, der eine"
               + " fachliche Anforderung über die Stufen PLAN, REVIEW, PAKETE und ABDECKUNG"
               + " führt. Je Projekt bleibt nur eine begrenzte Zahl Läufe aufbewahrt; ältere werden"
-              + " verdrängt. "
+              + " verdrängt. Hat der Runner eine Morgenmeldung geschickt, steht sie unter"
+              + " releasePreparation — mit Eingang (receivedAt) und den gemeldeten Karten samt"
+              + " Titel im Projekt des Laufs, auch Karten aus anderen Ketten; eine Nummer ohne"
+              + " Karte im Projekt trägt title null. "
               + LESERECHT)
   @ApiResponse(responseCode = "200", description = "Die Läufe, neueste zuerst.")
   @ApiResponse(
