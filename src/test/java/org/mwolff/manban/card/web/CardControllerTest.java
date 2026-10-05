@@ -25,9 +25,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 /** Unit-Tests des Karten-/Epic-Controllers (Service gemockt). */
-// PMD.TooManyMethods: je Endpunkt eine kleine Delegations-Prüfung — die Methodenzahl folgt der
-// Endpunktzahl des Controllers und ist kein Refactoring-Signal.
-@SuppressWarnings("PMD.TooManyMethods")
 class CardControllerTest {
 
   private static final java.time.Instant INSTANT = java.time.Instant.parse("2026-01-01T00:00:00Z");
@@ -206,46 +203,6 @@ class CardControllerTest {
   }
 
   @Test
-  void archive_delegatesToService() {
-    // Given
-    CardView view = card();
-    when(service.archive(3L, 8L)).thenReturn(view);
-
-    // When
-    CardView result = controller.archive(3L, 8L);
-
-    // Then
-    assertThat(result).isSameAs(view);
-  }
-
-  @Test
-  void restore_delegatesToService() {
-    // Given
-    CardView view = card();
-    when(service.restore(3L, 8L)).thenReturn(view);
-
-    // When
-    CardView result = controller.restore(3L, 8L);
-
-    // Then
-    assertThat(result).isSameAs(view);
-  }
-
-  @Test
-  void bulkArchive_delegatesToService() {
-    // Given
-    List<CardView> views = List.of(card());
-    var request = new CardController.BulkArchiveRequest(List.of(8L, 9L));
-    when(service.bulkArchive(3L, List.of(8L, 9L))).thenReturn(views);
-
-    // When
-    List<CardView> result = controller.bulkArchive(3L, request);
-
-    // Then
-    assertThat(result).isSameAs(views);
-  }
-
-  @Test
   void bulkLabels_delegatesToService() {
     // Given
     List<CardView> views = List.of(card());
@@ -283,27 +240,6 @@ class CardControllerTest {
 
     // Then
     assertThat(result).isSameAs(views);
-  }
-
-  @Test
-  void delete_delegatesToService() {
-    // When
-    controller.delete(3L, 8L);
-
-    // Then
-    verify(service).delete(3L, 8L);
-  }
-
-  @Test
-  void bulkDelete_delegatesToService() {
-    // Given
-    var request = new CardController.BulkDeleteRequest(List.of(8L, 9L));
-
-    // When
-    controller.bulkDelete(3L, request);
-
-    // Then
-    verify(service).bulkDelete(3L, List.of(8L, 9L));
   }
 
   @Test
@@ -367,29 +303,6 @@ class CardControllerTest {
 
     assertThat(result).isSameAs(view);
     verify(service).setLabels(3L, 8L, List.of());
-  }
-
-  @Test
-  void trash_delegatesToService() {
-    List<CardView> views = List.of(card());
-    when(service.listTrash(3L, 2L)).thenReturn(views);
-
-    assertThat(controller.trash(3L, 2L)).isSameAs(views);
-  }
-
-  @Test
-  void restoreDeleted_delegatesToService() {
-    CardView view = card();
-    when(service.restoreFromTrash(3L, 8L)).thenReturn(view);
-
-    assertThat(controller.restoreDeleted(3L, 8L)).isSameAs(view);
-  }
-
-  @Test
-  void purge_delegatesToService() {
-    controller.purge(3L, 8L);
-
-    verify(service).purge(3L, 8L);
   }
 
   @Test

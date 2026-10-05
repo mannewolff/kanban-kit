@@ -6,8 +6,8 @@ import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
- * Baut die Prüflinge {@link CardService}, {@link CardIngestService} und {@link EpicService} für die
- * Unit-Tests aus ihren Ports (Issue #1389, #1392, #1393).
+ * Baut die Prüflinge {@link CardService}, {@link CardIngestService}, {@link EpicService} und {@link
+ * CardArchiveService} für die Unit-Tests aus ihren Ports (Issue #1389, #1392, #1393, #1394).
  *
  * <p>Die modulinternen Bausteine {@link KartenAbhaengigkeiten}, {@link KartenGrundlage} und {@link
  * KartenSicht} entstehen hier echt aus denselben Port-Mocks, nicht als Mocks (Plan #1387, E6): So
@@ -53,7 +53,6 @@ final class CardServiceAufbau {
         activity,
         b.grundlage(),
         b.sicht(),
-        events,
         clock);
   }
 
@@ -115,6 +114,40 @@ final class CardServiceAufbau {
         zuordnung,
         b.grundlage(),
         b.sicht(),
+        clock);
+  }
+
+  static CardArchiveService archiveAusPorts(
+      CardRepository cards,
+      CardDependencyRepository dependencies,
+      BoardService boardService,
+      PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
+      KartenZuordnung zuordnung,
+      CardActivityRepository activity,
+      ActorContext actor,
+      ApplicationEventPublisher events,
+      Clock clock) {
+    Bausteine b =
+        bausteine(
+            cards,
+            dependencies,
+            boardService,
+            permissions,
+            transitions,
+            zuordnung,
+            activity,
+            actor,
+            events,
+            clock);
+    return new CardArchiveService(
+        cards,
+        b.abhaengigkeiten(),
+        boardService,
+        permissions,
+        b.grundlage(),
+        b.sicht(),
+        events,
         clock);
   }
 

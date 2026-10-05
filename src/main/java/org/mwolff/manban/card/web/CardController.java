@@ -22,7 +22,6 @@ import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.common.TextLimits;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -33,8 +32,8 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Karten- und Vorhaben-Verwaltung eines Boards (Anlegen, Bearbeiten, Zuordnen, Archivieren,
- * Löschen).
+ * Karten- und Vorhaben-Verwaltung eines Boards (Anlegen, Bearbeiten, Zuordnen). Archiv und
+ * Papierkorb liegen seit Issue #1394 im {@link CardArchiveController}.
  */
 // PMD.CouplingBetweenObjects: eingehender Adapter der gesamten Karten-/Vorhaben-API. Die Kopplung
 // zählt im Wesentlichen die Request-/Response-Records der einzelnen Endpunkte plus die
@@ -199,18 +198,6 @@ class CardController {
         userId, request.cardIds(), request.targetBoardId(), request.targetColumnId());
   }
 
-  @PostMapping("/api/cards/{cardId}/archive")
-  CardView archive(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    return cards.archive(userId, cardId);
-  }
-
-  /** Archiviert mehrere Karten in einer Transaktion (alles-oder-nichts). */
-  @PostMapping("/api/cards/bulk-archive")
-  List<CardView> bulkArchive(
-      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkArchiveRequest request) {
-    return cards.bulkArchive(userId, request.cardIds());
-  }
-
   /**
    * Setzt ein Label an mehreren Karten oder nimmt es ihnen ab, in einer Transaktion
    * (alles-oder-nichts). Die übrigen Labels jeder Karte bleiben unberührt.
@@ -219,45 +206,6 @@ class CardController {
   List<CardView> bulkLabels(
       @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkLabelsRequest request) {
     return cards.bulkLabels(userId, request.cardIds(), request.labelId(), request.action());
-  }
-
-  @PostMapping("/api/cards/{cardId}/restore")
-  CardView restore(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    return cards.restore(userId, cardId);
-  }
-
-  /** Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). */
-  @DeleteMapping("/api/cards/{cardId}")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void delete(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    cards.delete(userId, cardId);
-  }
-
-  /** Verschiebt mehrere Karten in einer Transaktion in den Papierkorb (alles-oder-nichts). */
-  @PostMapping("/api/cards/bulk-delete")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void bulkDelete(
-      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkDeleteRequest request) {
-    cards.bulkDelete(userId, request.cardIds());
-  }
-
-  /** Papierkorb eines Boards. */
-  @GetMapping("/api/boards/{boardId}/trash")
-  List<CardView> trash(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
-    return cards.listTrash(userId, boardId);
-  }
-
-  /** Holt eine Karte aus dem Papierkorb zurück. */
-  @PostMapping("/api/cards/{cardId}/restore-deleted")
-  CardView restoreDeleted(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    return cards.restoreFromTrash(userId, cardId);
-  }
-
-  /** Entfernt eine Karte endgültig (nur Projekt-Admin/Owner). */
-  @DeleteMapping("/api/cards/{cardId}/purge")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void purge(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    cards.purge(userId, cardId);
   }
 
   /** Ersetzt die Zuständigen der Karte (leere/fehlende Liste = keine Zuständigen). */
@@ -351,10 +299,6 @@ class CardController {
   record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
 
   record SortByNumberRequest(@NotNull SortDirection direction) {}
-
-  record BulkArchiveRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
-
-  record BulkDeleteRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
 
   record BulkTransferRequest(
       @NotEmpty @Size(max = 200) List<Long> cardIds,

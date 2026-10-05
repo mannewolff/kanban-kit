@@ -33,29 +33,28 @@ import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Karten- und Vorhaben-Use-Cases: Anlegen (projektweite Nummer, ans Spaltenende), Bearbeiten,
- * Archivieren/Wiederherstellen, Löschen, Move/Reindex und Abhängigkeiten. Vorhaben sind Karten vom
- * Typ {@link CardType#EPIC}: sie erscheinen nicht auf dem Board, halten keine Position und
- * gruppieren Karten über {@code parentId}. Rechte über den {@link PermissionChecker}.
+ * Move/Reindex und Abhängigkeiten; Archiv und Papierkorb liegen seit Issue #1394 in {@link
+ * CardArchiveService}. Vorhaben sind Karten vom Typ {@link CardType#EPIC}: sie erscheinen nicht auf
+ * dem Board, halten keine Position und gruppieren Karten über {@code parentId}. Rechte über den
+ * {@link PermissionChecker}.
  */
 // PMD.CouplingBetweenObjects: zentraler Karten-Use-Case-Service; die Kopplung an die Ports
 // (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Spaltenverlauf, Aktivität) ist fachlich
 // begründet und kein God-Class-Smell. Zuständige und Labels laufen seit Issue #1051 über die
 // modulinterne KartenZuordnung — sie trägt deren drei Ports, Label und die beiden Ablehnungen,
 // die der Service damit nicht mehr sieht (SonarCloud S6539, Plan #1042).
-// PMD.TooManyMethods: zentraler Karten-/Vorhaben-Use-Case-Service — viele kleine, kohäsive Methoden
-// (Anlegen/Bearbeiten/Move/Archiv/Zuständige/Labels je Erfolgs- und Fehlerpfad);
-// eine Aufspaltung würde denselben Use-Case-Kontext künstlich zerreißen, kein God-Class-Smell.
 // PMD.ExcessivePublicCount entfiel mit dem Kanban-kompatiblen Einliefern, das seit Issue #1392 in
 // CardIngestService liegt: Die öffentliche Oberfläche liegt wieder unter der Schwelle.
 // PMD.CyclomaticComplexity entfiel mit Vorhaben und Herkunft, die seit Issue #1393 in EpicService
 // liegen: Die Gesamtkomplexität liegt wieder unter der Schwelle.
-@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.TooManyMethods"})
+// PMD.TooManyMethods entfiel mit Archiv und Papierkorb, die seit Issue #1394 in CardArchiveService
+// liegen: Die Zahl der Methoden liegt wieder unter der Schwelle.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CardService {
 
@@ -85,7 +84,6 @@ public class CardService {
   private final CardActivityRepository activity;
   private final KartenGrundlage grundlage;
   private final KartenSicht sicht;
-  private final ApplicationEventPublisher events;
   private final Clock clock;
 
   public CardService(
@@ -98,7 +96,6 @@ public class CardService {
       CardActivityRepository activity,
       KartenGrundlage grundlage,
       KartenSicht sicht,
-      ApplicationEventPublisher events,
       Clock clock) {
     this.cards = cards;
     this.abhaengigkeiten = abhaengigkeiten;
@@ -109,7 +106,6 @@ public class CardService {
     this.activity = activity;
     this.grundlage = grundlage;
     this.sicht = sicht;
-    this.events = events;
     this.clock = clock;
   }
 
@@ -873,44 +869,6 @@ public class CardService {
         .toList();
   }
 
-  @Transactional
-  public CardView archive(long userId, long cardId) {
-    return doArchive(userId, cardId);
-  }
-
-  private CardView doArchive(long userId, long cardId) {
-    Card card =
-        grundlage.requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    grundlage.aktivitaet(
-        card.requireId(), userId, CardActivityType.ARCHIVED, "Archiviert", clock.instant());
-    CardView result = sicht.view(userId, cards.save(card.asArchived()));
-    grundlage.publishChanged(card.boardId(), ActivityType.ARCHIVED, card.requireId());
-    return result;
-  }
-
-  /**
-   * Archiviert mehrere Karten in einer Transaktion (alles-oder-nichts). Nutzt je Karte die
-   * Einzel-Logik von {@link #archive(long, long)} inklusive Rechteprüfung; fehlt an einer Karte das
-   * Recht oder existiert sie nicht, rollt der gesamte Batch zurück. Kein Positions-Reindex nötig,
-   * da archivierte Karten über {@code active_position = NULL} aus dem Namespace fallen.
-   */
-  @Transactional
-  public List<CardView> bulkArchive(long userId, List<Long> cardIds) {
-    return cardIds.stream().map(cardId -> doArchive(userId, cardId)).toList();
-  }
-
-  @Transactional
-  public CardView restore(long userId, long cardId) {
-    Card card =
-        grundlage.requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    int position = cards.allocateActivePosition(card.columnId());
-    grundlage.aktivitaet(
-        card.requireId(), userId, CardActivityType.RESTORED, "Wiederhergestellt", clock.instant());
-    CardView result = sicht.view(userId, cards.save(card.asRestored(position)));
-    grundlage.publishChanged(card.boardId(), ActivityType.RESTORED, card.requireId());
-    return result;
-  }
-
   /**
    * Eine anzulegende Board-Karte im Stapel (Issue #1200): Titel und optionale Beschreibung. Board
    * und Spalte stehen bewusst nicht hier, sondern gelten für den ganzen Stapel — er füllt genau
@@ -930,7 +888,7 @@ public class CardService {
   /**
    * Der Kern ohne Annotation, damit ihn {@link #listActivityViews(long, long)} rufen kann, ohne
    * über {@code this} an einer {@code @Transactional}-Methode vorbeizugehen (Sonar java:S6809) —
-   * dasselbe Muster wie {@code doArchive} und {@code EpicService.doCreateEpic}.
+   * dasselbe Muster wie {@code CardArchiveService.doArchive} und {@code EpicService.doCreateEpic}.
    */
   private List<CardActivity> doListActivity(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
@@ -958,90 +916,6 @@ public class CardService {
         a.origin() == null ? null : a.origin().name(),
         a.tokenName(),
         a.agent());
-  }
-
-  /**
-   * Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). Recht: TICKET/EPIC_DELETE.
-   */
-  @Transactional
-  public void delete(long userId, long cardId) {
-    doDelete(userId, cardId);
-  }
-
-  private void doDelete(long userId, long cardId) {
-    Card card =
-        grundlage.requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    // Beim Löschen eines Vorhabens die Kinder lösen — die DB-„ON DELETE SET NULL"-Kaskade auf
-    // parent_id feuert nur beim Hard-Delete, nicht beim Soft-Delete.
-    if (card.type() == CardType.EPIC) {
-      cards.findByBoardId(card.boardId()).stream()
-          .filter(c -> Objects.equals(c.parentId(), card.requireId()))
-          .forEach(child -> cards.save(child.withParent(null)));
-    }
-    cards.softDelete(card.requireId(), clock.instant());
-    grundlage.publishChanged(card.boardId(), ActivityType.DELETED, card.requireId());
-  }
-
-  /**
-   * Verschiebt mehrere Karten in einer Transaktion in den Papierkorb (alles-oder-nichts). Nutzt je
-   * Karte die Einzel-Logik von {@link #delete(long, long)} inklusive Rechteprüfung und Lösen der
-   * Vorhaben-Kinder; fehlt an einer Karte das Recht oder existiert sie nicht, rollt der gesamte
-   * Batch zurück.
-   */
-  @Transactional
-  public void bulkDelete(long userId, List<Long> cardIds) {
-    cardIds.forEach(cardId -> doDelete(userId, cardId));
-  }
-
-  /**
-   * Holt eine Karte aus dem Papierkorb zurück (ans Spaltenende). Recht wie Löschen (Member und
-   * aufwärts) — so kann ein Member eine versehentlich gelöschte Karte selbst wiederherstellen.
-   */
-  @Transactional
-  public CardView restoreFromTrash(long userId, long cardId) {
-    Card card =
-        grundlage.requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
-    int position = cards.allocateActivePosition(card.columnId());
-    cards.restoreFromTrash(card.requireId(), position);
-    grundlage.aktivitaet(
-        card.requireId(),
-        userId,
-        CardActivityType.RESTORED,
-        "Aus Papierkorb wiederhergestellt",
-        clock.instant());
-    grundlage.publishChanged(card.boardId(), ActivityType.RESTORED, card.requireId());
-    // View aus der bereits geladenen Karte mit neuer Position — der JDBC-Restore hat die DB-Zeile
-    // geändert; ein erneutes findById käme aus dem JPA-Cache noch mit dem alten Stand.
-    return sicht.view(userId, card.asRestored(position));
-  }
-
-  /**
-   * Entfernt eine Karte endgültig (Hard-Delete). Nur für Board-Verwalter (Projekt-Admin/Owner,
-   * Recht {@link Permission#BOARD_DELETE}) — bewusst restriktiver als das reversible Löschen.
-   */
-  @Transactional
-  public void purge(long userId, long cardId) {
-    Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    permissions.require(
-        userId, boardService.requireProjectId(card.boardId()), Permission.BOARD_DELETE);
-    // Vor dem Delete publizieren (Issue #503): Nachgelagerte Module (Anhänge) planen ihre
-    // Aufräum-Aufträge ein, solange die Metadaten existieren — die Cascade nimmt sie gleich mit.
-    events.publishEvent(new CardsPurgedEvent(List.of(card.requireId())));
-    abhaengigkeiten.entferne(card.requireId());
-    cards.deleteById(card.requireId());
-    grundlage.publishChanged(card.boardId(), ActivityType.DELETED, card.requireId());
-  }
-
-  /** Karten im Papierkorb eines Boards. Erfordert Board-Mitgliedschaft (Leserecht). */
-  @Transactional(readOnly = true)
-  public List<CardView> listTrash(long userId, long boardId) {
-    long projectId = boardService.requireProjectId(boardId);
-    permissions.requireMembership(userId, projectId);
-    boolean darfStatusSetzen = sicht.darfStatusSetzen(userId, projectId);
-    return cards.findTrashByBoardId(boardId).stream()
-        .filter(c -> c.type() == CardType.CARD)
-        .map(c -> sicht.view(c, darfStatusSetzen))
-        .toList();
   }
 
   /**

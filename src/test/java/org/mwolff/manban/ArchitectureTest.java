@@ -187,7 +187,8 @@ class ArchitectureTest {
   static final ArchRule CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
       fassadeIstAufWhitelistBegrenzt(
           "card",
-          "nur ueber CardService/CardSearchService/CardIngestService/EpicService/LabelService"
+          "nur ueber CardService/CardSearchService/CardIngestService/EpicService"
+              + "/CardArchiveService/LabelService"
               + " und ihre geteilten Sichten CardView/LabelMarkView",
           "CardService",
           // CardSearchService ist Vertrag (Plan #1387, E1/E4): die Suche nach Kartennummern als
@@ -199,6 +200,9 @@ class ArchitectureTest {
           // EpicService ist Vertrag (Plan #1387, E1/E4): Vorhaben und Herkunft als eigener Zugang,
           // samt Records EpicView und DerivationNodeView.
           "EpicService",
+          // CardArchiveService ist Vertrag (Plan #1387, E1/E4): Archiv und Papierkorb als eigener
+          // Zugang.
+          "CardArchiveService",
           "LabelService",
           // CardView und LabelMarkView sind Vertrag (Plan #1387, E5): Mehrere Karten-Dienste
           // liefern sie, darum stehen sie als eigene Typen neben den Fassaden statt in einer davon.
