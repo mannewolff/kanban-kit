@@ -350,17 +350,26 @@ Die aktuelle Stufe ist markiert — als Text, nicht allein über die Farbe. Zu j
 Karten, die sie hervorgebracht hat (der angelegte Plan, die Arbeitspakete samt Anzahl); jede
 Kartennummer ist ein Link und öffnet die Karte.
 
-**Welche Karten zum Run gehören.** Eine Karte zählt zum Run, wenn sie in seinem Zeitfenster
-mindestens eine Änderung über das Zugriffstoken des Runs erfahren hat, die der Runner im
-Nachtbetrieb vorgenommen hat. Das Zeitfenster reicht vom Start bis zum gemeldeten Ende, bei einem
-verstummten Run bis zu seiner letzten Meldung, sonst bis jetzt. Was ein Mensch oder eine
-interaktive Sitzung mit demselben Token bearbeitet hat, zählt darum nicht mit, ebenso wenig Karten,
-die vor dem Run schon fertig waren. Lässt sich die Zuordnung nicht feststellen, steht der Block auf
-**„unbekannt"**, statt still mitzuzählen oder wegzulassen — in drei Fällen:
+**Welche Karten zum Run gehören.** Erstes Kriterium ist die Laufkennung: Ein Runner weist sich bei
+jeder Änderung am Board mit seinem Startzeitpunkt aus (Header `X-Night-Run`). Zum Run zählen dann
+genau die Karten, die in seinem Zeitfenster mindestens eine Änderung mit dieser Kennung über das
+Zugriffstoken des Runs erfahren haben — auch wenn gleichzeitig ein zweiter Runner mit demselben Token
+arbeitet. Nur für Läufe ohne Ausweis, also ältere Runner, gilt weiter die Zeitfenster-Regel: Eine
+Karte zählt, wenn sie im Zeitfenster eine Änderung über das Zugriffstoken im Nachtbetrieb erfahren
+hat. Das Zeitfenster reicht vom Start bis zum gemeldeten Ende, bei einem verstummten Run bis zu
+seiner letzten Meldung, sonst bis jetzt. Was ein Mensch oder eine interaktive Sitzung mit demselben
+Token bearbeitet hat, zählt darum nicht mit, ebenso wenig Karten, die vor dem Run schon fertig waren.
+Jede Karte steht beim Run mit dem Zustand, den sie durch **seine eigene letzte Änderung** erreicht
+hat — spätere Änderungen anderer Läufe oder von Menschen verändern nicht, was bei ihm steht. Lässt
+sich die Zuordnung nicht feststellen, steht der Block auf **„unbekannt"**, statt still mitzuzählen
+oder wegzulassen — in drei Fällen:
 
 - Der Run kam per „Protokoll einlesen" ohne Zugriffstoken: Der ganze Fortschritt ist unbekannt.
-- Ein zweiter Nachtlauf desselben Projekts mit demselben Token überschneidet sich zeitlich: Karten
-  aus der Überschneidung stehen mit Nummer unter „unbekannt" und zählen nicht.
+- Ein Nachtlauf ohne Ausweis überschneidet sich zeitlich mit einem zweiten Nachtlauf desselben
+  Projekts mit demselben Token: Karten aus der Überschneidung, die ohne Ausweis geändert wurden,
+  stehen mit Nummer unter „unbekannt" und zählen nicht. Dort steht dann der Hinweis „Dieser Lauf hat
+  sich nicht ausgewiesen (älterer Runner)." Ein ausgewiesener Lauf zeigt seine Karten auch in der
+  Überschneidung eindeutig.
 - Eine Kette lässt sich keiner fachlichen Anforderung zuordnen.
 
 **Wie die Kopfzahlen vorgreifen.** Solange der Run läuft, nehmen „bearbeitet / übergangen" und die

@@ -191,7 +191,9 @@ setzt die Maschine; ihr Abnehmen ist die Freigabe und steht nur dem Menschen zu.
 | `kit:klaeren`, `kit:geschuetzt` abnehmen | erlaubt | abgewiesen (403) |
 
 Entscheidend ist die serververifizierte Herkunft — gebundene wie ungebundene Token —, nicht die
-Selbstauskunft im Header `X-Agent-Model`. Der Server kann Mensch und Agent am Token nicht
+Selbstauskunft im Header `X-Agent-Model`. Eine zweite Selbstauskunft ist der Header `X-Night-Run`, die
+Laufkennung eines Nachtlaufs: Das Board speichert sie nur bei Token-Herkunft, sie wirkt allein auf
+die Zuordnung der Karten auf der Runner-Seite und begründet kein Recht. Der Server kann Mensch und Agent am Token nicht
 unterscheiden: Auch wer per CLI (`board.mjs`, `tbx`) arbeitet, setzt `kit:night` und
 `kit:nightrun` nur im Board. Die Regel gilt an jedem Schreibweg: einzelnes Label setzen oder
 abnehmen, alle Labels einer Karte ersetzen (geprüft wird nur, was hinzukommt oder wegfällt), die
