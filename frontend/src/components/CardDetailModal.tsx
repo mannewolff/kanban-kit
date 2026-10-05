@@ -43,6 +43,7 @@ import { cardsApi as defaultCardsApi, type Card, type CardActivity, type CardByN
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { NightRunsApi } from '../api/nightRuns'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
+import { KettenStufenleiste, traegtStufenleiste } from './nachtlauf/KettenStufenleiste'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
@@ -1806,6 +1807,17 @@ function CardDetailModalView({
 
           {!editing && (
             <KartenBlock name="Verlauf">
+              {/* Die Stufenleiste der Nacht-Kette (Issue #1449, E1–E3): nur an [Fachlich] und [Plan],
+                  bedienbar unter denselben Bedingungen wie die Label-Sektion. */}
+              {traegtStufenleiste(stand.title) && (
+                <KettenStufenleiste
+                  titel={stand.title}
+                  labelIds={labelIds}
+                  boardLabels={boardLabels}
+                  disabled={!(canEdit && canEditLabels)}
+                  onChange={(ids) => void saveLabels(ids)}
+                />
+              )}
               {/* Nur mit Projekt gibt es etwas abzurufen: `projectId` ist am Modal optional
                   (Issue #968). */}
               {projectId != null && (

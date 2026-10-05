@@ -2739,6 +2739,55 @@ describe('CardDetailModal — Statuswechsler', () => {
       expect(screen.queryByText(/Anläufe konnten nicht geladen/)).not.toBeInTheDocument()
     })
   })
+
+  describe('Stufenleiste (Issue #1449)', () => {
+    const zielLabels = [
+      { id: 21, boardId: 1, name: 'ziel:pakete', color: '#888', countOnEpicTile: false },
+      { id: 22, boardId: 1, name: 'ziel:umsetzung', color: '#888', countOnEpicTile: false },
+    ]
+    const fachlich: Card = { ...card, title: '[Fachlich] Neue Ansicht' }
+
+    const oeffne = (c: Card, props: Partial<ComponentProps<typeof CardDetailModal>> = {}) => {
+      const apis = makeApis()
+      apis.cardsApi.get.mockResolvedValue({ ...c })
+      render(<CardDetailModal card={c} canEdit boardLabels={zielLabels} onClose={vi.fn()} {...apis} {...props} />)
+      return apis
+    }
+
+    it('zeigt die Leiste nur an Karten mit [Fachlich]- oder [Plan]-Präfix', async () => {
+      oeffne(card)
+      expect(await screen.findByText('Hallo')).toBeInTheDocument()
+      expect(screen.queryByTestId('ketten-stufenleiste')).not.toBeInTheDocument()
+    })
+
+    it('zeigt die Leiste an einer [Plan]-Karte', async () => {
+      oeffne({ ...card, title: '[Plan] Neue Ansicht' })
+      expect(await screen.findByTestId('ketten-stufenleiste')).toBeInTheDocument()
+    })
+
+    it('speichert das gewählte Ziel über den Label-Aufruf der Karte', async () => {
+      const apis = oeffne(fachlich)
+
+      const leiste = within(await screen.findByTestId('ketten-stufenleiste'))
+      fireEvent.click(leiste.getByRole('button', { name: /^Umsetzung/ }))
+
+      await waitFor(() => expect(apis.cardsApi.setLabels).toHaveBeenCalledWith(100, [22]))
+    })
+
+    it('ist bei canEdit={false} nur Anzeige', async () => {
+      oeffne(fachlich, { canEdit: false })
+
+      const leiste = await screen.findByTestId('ketten-stufenleiste')
+      expect(within(leiste).queryAllByRole('button')).toHaveLength(0)
+    })
+
+    it('ist ohne geladenen Label-Vorrat nur Anzeige', async () => {
+      oeffne(fachlich, { canEditLabels: false })
+
+      const leiste = await screen.findByTestId('ketten-stufenleiste')
+      expect(within(leiste).queryAllByRole('button')).toHaveLength(0)
+    })
+  })
 })
 
 describe('CardDetailModal — drei Blöcke (AK 13, #958)', () => {
