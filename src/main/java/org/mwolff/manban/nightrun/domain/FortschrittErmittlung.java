@@ -74,7 +74,8 @@ public final class FortschrittErmittlung {
    */
   private static final Pattern STUFEN_EINTRAG =
       Pattern.compile(
-          "(?:^|\\W)(plan|review|pakete|abdeckung|umsetzung) (begonnen|fertig) für #(\\d{1,9})"
+          "(?:^|\\W)(plan|review|pakete|abdeckung|umsetzung|vorbereitung) (begonnen|fertig) für"
+              + " #(\\d{1,9})"
               + " um (\\S+)",
           Pattern.CANON_EQ);
 
@@ -155,7 +156,13 @@ public final class FortschrittErmittlung {
             l ->
                 eintraegeJeKarte
                     .computeIfAbsent(l.cardId(), id -> new ArrayList<>())
-                    .addAll(eintraege(l.body(), fenster)));
+                    .addAll(
+                        eintraege(l.body()).stream()
+                            .filter(
+                                e ->
+                                    fenster.enthaelt(e.zeit())
+                                        && e.stufe() != ProgressStage.VORBEREITUNG)
+                            .toList()));
   }
 
   /**
@@ -188,6 +195,18 @@ public final class FortschrittErmittlung {
     return new FortschrittErmittlung(
             lauf, tokenName, fenster, fremdeFenster, aktivitaeten, karten, laufstaende)
         .ergebnis(kette);
+  }
+
+  /**
+   * Der Stand der Kette einer Karte aus ihrem Laufstand (Issue #1451, Plan #1447 E5, E10, E13) —
+   * für die Stufenleiste. Der Zustand der aktuellen Station kommt aus dem {@code lauf:*}-Label der
+   * Karte, alles andere aus dem Laufstand.
+   *
+   * @param karte die Startkarte der Kette, eine Anforderung oder ein Plan
+   * @param laufstand ihr Laufstand-Kommentar; {@code null}, solange keiner steht
+   */
+  public static KettenStand kettenStand(Karte karte, @Nullable Laufstand laufstand) {
+    return KettenAbleitung.stand(karte, laufstand == null ? "" : laufstand.body());
   }
 
   private NightRunProgress ergebnis(boolean kette) {
@@ -384,7 +403,7 @@ public final class FortschrittErmittlung {
     return laufStart == null ? null : laufStart.truncatedTo(ChronoUnit.MILLIS);
   }
 
-  private static boolean istPlan(Karte k) {
+  static boolean istPlan(Karte k) {
     return PLAN_PRAEFIX.matcher(k.title()).find();
   }
 
@@ -392,10 +411,8 @@ public final class FortschrittErmittlung {
     return new CardRef(k.number(), k.title(), k.boardId());
   }
 
-  /**
-   * Die Stufeneinträge eines Laufstands, deren Zeitstempel im Fenster liegt; der Rest fällt weg.
-   */
-  private static List<StufenEintrag> eintraege(String body, Zeitfenster fenster) {
+  /** Die Stufeneinträge eines Laufstands mit lesbarem Zeitstempel; der Rest fällt weg. */
+  static List<StufenEintrag> eintraege(String body) {
     List<StufenEintrag> ergebnis = new ArrayList<>();
     body.lines()
         .forEach(
@@ -403,7 +420,6 @@ public final class FortschrittErmittlung {
               Matcher m = STUFEN_EINTRAG.matcher(zeile);
               if (m.find()) {
                 zeitpunkt(m.group(4))
-                    .filter(fenster::enthaelt)
                     .ifPresent(
                         zeit ->
                             ergebnis.add(
@@ -454,8 +470,8 @@ public final class FortschrittErmittlung {
         case PLAN -> plan != null;
         case REVIEW -> plan != null && geprueft(plan);
         // „abdeckung fertig" erreicht die Pakete als spätere Stufe; eigene Signale haben beide
-        // nicht.
-        case PAKETE, ABDECKUNG -> false;
+        // nicht. Die Vorbereitung steht nie im Weg der Laufseite (Issue #1451).
+        case PAKETE, ABDECKUNG, VORBEREITUNG -> false;
         case UMSETZUNG ->
             !pakete.isEmpty() && pakete.stream().allMatch(p -> p.zustand() == PackageState.FERTIG);
       };
@@ -484,7 +500,7 @@ public final class FortschrittErmittlung {
   }
 
   /** Ein Stufeneintrag des Laufstands mit seinem Zeitstempel. */
-  private record StufenEintrag(ProgressStage stufe, boolean fertig, int ziel, Instant zeit) {}
+  record StufenEintrag(ProgressStage stufe, boolean fertig, int ziel, Instant zeit) {}
 
   // --- Eingaben
   // ------------------------------------------------------------------------------------

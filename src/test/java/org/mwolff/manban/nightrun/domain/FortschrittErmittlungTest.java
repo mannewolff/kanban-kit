@@ -26,8 +26,15 @@ import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Zeitfenster;
 // PMD.TooManyMethods, PMD.GodClass, PMD.CyclomaticComplexity: methodenreiche Testsuite — je Fall
 // der Ermittlung ein kleiner Test über dieselben Vorrichtungen; die Summen zählen die Tests, nicht
 // verschachtelte Logik (höchste Einzelmethode 3). Ein Zerschneiden verteilte eine Regel auf
-// Dateien, die sich dieselben Vorrichtungen teilen müssten.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.GodClass", "PMD.CyclomaticComplexity"})
+// Dateien, die sich dieselben Vorrichtungen teilen müssten. PMD.CouplingBetweenObjects: Die
+// Kopplung zählt die Eingabe- und Ergebnistypen beider Ermittlungen (Laufseite und Kettenstand),
+// die dieselben Vorrichtungen nutzen.
+@SuppressWarnings({
+  "PMD.TooManyMethods",
+  "PMD.GodClass",
+  "PMD.CyclomaticComplexity",
+  "PMD.CouplingBetweenObjects"
+})
 class FortschrittErmittlungTest {
 
   private static final Instant START = Instant.parse("2026-10-03T13:01:00Z");
@@ -1355,5 +1362,440 @@ class FortschrittErmittlungTest {
 
     assertThat(fortschritt.pakete()).isEmpty();
     assertThat(fortschritt.ketten()).extracting(ChainProgress::anforderung).containsExactly(ref(f));
+  }
+
+  /**
+   * Eine Vorbereitungszeile ändert den Weg der Laufseite nicht (Issue #1451): Die Umsetzung bleibt
+   * die aktuelle Stelle, und die Stufe {@code VORBEREITUNG} erscheint nicht.
+   */
+  @Test
+  void eineVorbereitungszeileAendertDenWegDerLaufseiteNicht() {
+    Karte f = anforderung(500, FortschrittErmittlung.LABEL_DURCHZIEHEN);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    Karte a = paket(502, p, "IN_PROGRESS");
+    angelegt(a, 30);
+    bewegt(a, 60);
+    stand(f, begonnen("vorbereitung", f, 70), fertig("abdeckung", p, 50));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette))
+        .containsEntry(ProgressStage.UMSETZUNG, StageState.LAEUFT)
+        .doesNotContainKey(ProgressStage.VORBEREITUNG);
+    assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.UMSETZUNG);
+  }
+
+  // --- Kettenstand an der Karte (Issue #1451, Plan #1447 E5, E10, E13) -------------------------
+
+  private static final String GRENZE_WARTET =
+      "wartet: Übergang abdeckung→umsetzung im Projekt nicht freigegeben — weiter mit kit:night";
+
+  private static KettenStand kettenStand(Karte k, String... zeilen) {
+    return FortschrittErmittlung.kettenStand(
+        k, new Laufstand(k.id(), "## Laufstand\n\n" + String.join("\n", zeilen)));
+  }
+
+  private static Map<ProgressStage, StationsZustand> zustaende(KettenStand stand) {
+    Map<ProgressStage, StationsZustand> m = new LinkedHashMap<>();
+    stand.stationen().forEach(s -> m.put(s.station(), s.zustand()));
+    return m;
+  }
+
+  private static StationStand station(KettenStand stand, ProgressStage stufe) {
+    return stand.stationen().stream().filter(s -> s.station() == stufe).findFirst().orElseThrow();
+  }
+
+  @Test
+  void ohneLaufstandStehenDieStationenBisZurAbdeckungAus() {
+    Karte f = anforderung(500);
+
+    KettenStand stand = FortschrittErmittlung.kettenStand(f, null);
+
+    assertThat(stand.ziel()).isNull();
+    assertThat(stand.pruefer()).isNull();
+    assertThat(stand.zielErreicht()).isFalse();
+    assertThat(stand.projektgrenze()).isNull();
+    assertThat(zustaende(stand))
+        .containsExactly(
+            Map.entry(ProgressStage.PLAN, StationsZustand.STEHT_AUS),
+            Map.entry(ProgressStage.REVIEW, StationsZustand.STEHT_AUS),
+            Map.entry(ProgressStage.PAKETE, StationsZustand.STEHT_AUS),
+            Map.entry(ProgressStage.ABDECKUNG, StationsZustand.STEHT_AUS),
+            Map.entry(ProgressStage.UMSETZUNG, StationsZustand.NICHT_VORGESEHEN),
+            Map.entry(ProgressStage.VORBEREITUNG, StationsZustand.NICHT_VORGESEHEN));
+    assertThat(station(stand, ProgressStage.PLAN))
+        .isEqualTo(
+            new StationStand(ProgressStage.PLAN, StationsZustand.STEHT_AUS, "steht aus", null));
+    assertThat(station(stand, ProgressStage.UMSETZUNG).text()).isEqualTo("nicht vorgesehen");
+  }
+
+  @Test
+  void ohneZeileZielEndetDieKetteNachDerAbdeckung() {
+    Karte f = anforderung(500, "lauf:laeuft");
+    Karte p = plan(501, f);
+
+    KettenStand stand = kettenStand(f, begonnen("pakete", p, 20), fertig("review", p, 18));
+
+    assertThat(stand.ziel()).isNull();
+    assertThat(zustaende(stand))
+        .containsExactly(
+            Map.entry(ProgressStage.PLAN, StationsZustand.ERLEDIGT),
+            Map.entry(ProgressStage.REVIEW, StationsZustand.ERLEDIGT),
+            Map.entry(ProgressStage.PAKETE, StationsZustand.LAEUFT),
+            Map.entry(ProgressStage.ABDECKUNG, StationsZustand.STEHT_AUS),
+            Map.entry(ProgressStage.UMSETZUNG, StationsZustand.NICHT_VORGESEHEN),
+            Map.entry(ProgressStage.VORBEREITUNG, StationsZustand.NICHT_VORGESEHEN));
+    assertThat(station(stand, ProgressStage.REVIEW).text()).isEqualTo("erledigt");
+    assertThat(station(stand, ProgressStage.PAKETE).text()).isEqualTo("läuft");
+  }
+
+  @Test
+  void zielPlanLaesstAllesHinterDemPlanNichtVorgesehen() {
+    Karte f = anforderung(500, "lauf:laeuft");
+
+    KettenStand stand = kettenStand(f, "Ziel: plan", begonnen("plan", f, 5));
+
+    assertThat(stand.ziel()).isEqualTo(ProgressStage.PLAN);
+    assertThat(zustaende(stand))
+        .containsExactly(
+            Map.entry(ProgressStage.PLAN, StationsZustand.LAEUFT),
+            Map.entry(ProgressStage.REVIEW, StationsZustand.NICHT_VORGESEHEN),
+            Map.entry(ProgressStage.PAKETE, StationsZustand.NICHT_VORGESEHEN),
+            Map.entry(ProgressStage.ABDECKUNG, StationsZustand.NICHT_VORGESEHEN),
+            Map.entry(ProgressStage.UMSETZUNG, StationsZustand.NICHT_VORGESEHEN),
+            Map.entry(ProgressStage.VORBEREITUNG, StationsZustand.NICHT_VORGESEHEN));
+  }
+
+  @Test
+  void zielPaketeSchliesstDieAbdeckungEin() {
+    Karte f = anforderung(500, "lauf:laeuft");
+    Karte p = plan(501, f);
+
+    KettenStand stand = kettenStand(f, "Ziel: pakete", begonnen("abdeckung", p, 40));
+
+    assertThat(stand.ziel()).isEqualTo(ProgressStage.PAKETE);
+    assertThat(zustaende(stand))
+        .containsEntry(ProgressStage.PAKETE, StationsZustand.ERLEDIGT)
+        .containsEntry(ProgressStage.ABDECKUNG, StationsZustand.LAEUFT)
+        .containsEntry(ProgressStage.UMSETZUNG, StationsZustand.NICHT_VORGESEHEN);
+  }
+
+  @Test
+  void zielUmsetzungSiehtDieUmsetzungVorAberNichtDieVorbereitung() {
+    Karte f = anforderung(500, "lauf:laeuft");
+    Karte p = plan(501, f);
+
+    KettenStand stand = kettenStand(f, "Ziel: umsetzung", fertig("abdeckung", p, 50));
+
+    assertThat(stand.ziel()).isEqualTo(ProgressStage.UMSETZUNG);
+    assertThat(zustaende(stand))
+        .containsEntry(ProgressStage.ABDECKUNG, StationsZustand.ERLEDIGT)
+        .containsEntry(ProgressStage.UMSETZUNG, StationsZustand.LAEUFT)
+        .containsEntry(ProgressStage.VORBEREITUNG, StationsZustand.NICHT_VORGESEHEN);
+  }
+
+  @Test
+  void einUnbekanntesZielZaehltWieKeines() {
+    Karte f = anforderung(500);
+
+    KettenStand stand = kettenStand(f, "Ziel: mond");
+
+    assertThat(stand.ziel()).isNull();
+    assertThat(zustaende(stand))
+        .containsEntry(ProgressStage.ABDECKUNG, StationsZustand.STEHT_AUS)
+        .containsEntry(ProgressStage.UMSETZUNG, StationsZustand.NICHT_VORGESEHEN);
+  }
+
+  @Test
+  void vorbereitungszeilenFuehrenDieStationVorbereitung() {
+    Karte f = anforderung(500, "lauf:laeuft");
+
+    KettenStand begonnen =
+        kettenStand(f, "Ziel: push-vorbereitet", begonnen("vorbereitung", f, 90));
+
+    assertThat(begonnen.ziel()).isEqualTo(ProgressStage.VORBEREITUNG);
+    assertThat(zustaende(begonnen))
+        .containsEntry(ProgressStage.UMSETZUNG, StationsZustand.ERLEDIGT)
+        .containsEntry(ProgressStage.VORBEREITUNG, StationsZustand.LAEUFT);
+
+    KettenStand fertig =
+        kettenStand(
+            f,
+            "Ziel: push-vorbereitet",
+            begonnen("vorbereitung", f, 90),
+            fertig("vorbereitung", f, 100));
+
+    assertThat(zustaende(fertig))
+        .containsEntry(ProgressStage.VORBEREITUNG, StationsZustand.ERLEDIGT);
+  }
+
+  @Test
+  void fertigBisZielSetztZielErreichtUndMarkiertDieZielstation() {
+    Karte f = anforderung(500, "lauf:fertig");
+    Karte p = plan(501, f);
+
+    KettenStand stand =
+        kettenStand(
+            f,
+            "fertig bis pakete",
+            "Als Nächstes: Pakete nach Ready ziehen",
+            "",
+            "Ziel: pakete",
+            fertig("abdeckung", p, 50));
+
+    assertThat(stand.zielErreicht()).isTrue();
+    assertThat(station(stand, ProgressStage.PAKETE))
+        .isEqualTo(
+            new StationStand(
+                ProgressStage.PAKETE, StationsZustand.ERLEDIGT, "Ziel erreicht", null));
+    assertThat(station(stand, ProgressStage.ABDECKUNG).text()).isEqualTo("erledigt");
+    assertThat(zustaende(stand))
+        .containsEntry(ProgressStage.PLAN, StationsZustand.ERLEDIGT)
+        .containsEntry(ProgressStage.UMSETZUNG, StationsZustand.NICHT_VORGESEHEN);
+  }
+
+  @Test
+  void fertigBisZielGiltAuchOhneStufenzeilenBisZumEnde() {
+    Karte f = anforderung(500, "lauf:fertig");
+
+    KettenStand stand = kettenStand(f, "fertig bis plan", "Ziel: plan");
+
+    assertThat(stand.zielErreicht()).isTrue();
+    assertThat(station(stand, ProgressStage.PLAN).text()).isEqualTo("Ziel erreicht");
+    assertThat(zustaende(stand))
+        .containsEntry(ProgressStage.REVIEW, StationsZustand.NICHT_VORGESEHEN);
+  }
+
+  @Test
+  void ohneFertigBisIstDasZielNichtErreicht() {
+    Karte f = anforderung(500, "lauf:fertig");
+    Karte p = plan(501, f);
+
+    KettenStand stand = kettenStand(f, "Ziel: pakete", fertig("abdeckung", p, 50));
+
+    assertThat(stand.zielErreicht()).isFalse();
+    assertThat(station(stand, ProgressStage.PAKETE).text()).isEqualTo("erledigt");
+  }
+
+  @Test
+  void einPruefer() {
+    Karte f = anforderung(500, "lauf:laeuft");
+    Karte p = plan(501, f);
+
+    KettenStand stand = kettenStand(f, "Ziel: pakete", "Prüfer: 1", begonnen("review", p, 15));
+
+    assertThat(stand.pruefer()).isEqualTo(1);
+    assertThat(station(stand, ProgressStage.REVIEW))
+        .isEqualTo(
+            new StationStand(
+                ProgressStage.REVIEW, StationsZustand.LAEUFT, "läuft (1 Prüfer)", null));
+  }
+
+  @Test
+  void zweiPrueferUndErledigtErstMitReviewFertig() {
+    Karte f = anforderung(500, "lauf:laeuft");
+    Karte p = plan(501, f);
+
+    KettenStand laeuft = kettenStand(f, "Prüfer: 2", begonnen("review", p, 15));
+    KettenStand fertig =
+        kettenStand(f, "Prüfer: 2", begonnen("review", p, 15), fertig("review", p, 30));
+
+    assertThat(laeuft.pruefer()).isEqualTo(2);
+    assertThat(station(laeuft, ProgressStage.REVIEW).text()).isEqualTo("läuft (2 Prüfer)");
+    assertThat(station(fertig, ProgressStage.REVIEW).zustand()).isEqualTo(StationsZustand.ERLEDIGT);
+    assertThat(station(fertig, ProgressStage.REVIEW).text()).isEqualTo("erledigt");
+  }
+
+  @Test
+  void ohnePrueferZeileLaeuftDiePruefungNur() {
+    Karte f = anforderung(500, "lauf:laeuft");
+    Karte p = plan(501, f);
+
+    KettenStand stand = kettenStand(f, begonnen("review", p, 15));
+
+    assertThat(stand.pruefer()).isNull();
+    assertThat(station(stand, ProgressStage.REVIEW).text()).isEqualTo("läuft");
+  }
+
+  @Test
+  void einePrueferzahlAusserhalbVonEinsUndZweiZaehltNicht() {
+    Karte f = anforderung(500);
+
+    assertThat(kettenStand(f, "Prüfer: 3").pruefer()).isNull();
+  }
+
+  @Test
+  void grenzeMitWartetextErgibtDieProjektgrenze() {
+    Karte f = anforderung(500, "lauf:wartet");
+    Karte p = plan(501, f);
+
+    KettenStand stand =
+        kettenStand(
+            f,
+            GRENZE_WARTET,
+            "",
+            "Ziel: umsetzung",
+            "Grenze: abdeckung",
+            fertig("abdeckung", p, 50));
+
+    assertThat(stand.projektgrenze())
+        .isEqualTo(new KettenStand.Projektgrenze(ProgressStage.ABDECKUNG, GRENZE_WARTET));
+    assertThat(stand.zielErreicht()).isFalse();
+    assertThat(station(stand, ProgressStage.ABDECKUNG).zustand())
+        .isEqualTo(StationsZustand.ERLEDIGT);
+    assertThat(station(stand, ProgressStage.UMSETZUNG))
+        .isEqualTo(
+            new StationStand(
+                ProgressStage.UMSETZUNG, StationsZustand.WARTET, "Projektgrenze", GRENZE_WARTET));
+    assertThat(station(stand, ProgressStage.VORBEREITUNG).zustand())
+        .isEqualTo(StationsZustand.NICHT_VORGESEHEN);
+  }
+
+  @Test
+  void grenzeOhneWartetextHatKeinenGrund() {
+    Karte f = anforderung(500, "lauf:laeuft");
+    Karte p = plan(501, f);
+
+    KettenStand stand =
+        kettenStand(f, "Ziel: umsetzung", "Grenze: abdeckung", begonnen("pakete", p, 30));
+
+    assertThat(stand.projektgrenze())
+        .isEqualTo(new KettenStand.Projektgrenze(ProgressStage.ABDECKUNG, null));
+    assertThat(station(stand, ProgressStage.PAKETE).zustand()).isEqualTo(StationsZustand.LAEUFT);
+    assertThat(station(stand, ProgressStage.UMSETZUNG).zustand())
+        .isEqualTo(StationsZustand.STEHT_AUS);
+  }
+
+  @Test
+  void eineUnbekannteGrenzeZaehltNicht() {
+    Karte f = anforderung(500);
+
+    assertThat(kettenStand(f, "Grenze: mond").projektgrenze()).isNull();
+  }
+
+  @Test
+  void eineWartendeStufeNenntIhrenGrundWoertlich() {
+    Karte f = anforderung(500, "lauf:wartet");
+    Karte p = plan(501, f);
+    String grund = "Halt: Frage wartet auf den Menschen — siehe `## Kette angehalten`";
+
+    KettenStand stand = kettenStand(f, grund, "", begonnen("review", p, 15), fertig("plan", f, 12));
+
+    assertThat(station(stand, ProgressStage.REVIEW))
+        .isEqualTo(new StationStand(ProgressStage.REVIEW, StationsZustand.WARTET, "wartet", grund));
+    assertThat(station(stand, ProgressStage.PAKETE).zustand()).isEqualTo(StationsZustand.STEHT_AUS);
+  }
+
+  @Test
+  void wartetVorDerGrenzeIstKeineProjektgrenze() {
+    Karte f = anforderung(500, "lauf:wartet");
+    Karte p = plan(501, f);
+
+    KettenStand stand =
+        kettenStand(f, "Halt: Frage", "Grenze: abdeckung", begonnen("review", p, 15));
+
+    assertThat(station(stand, ProgressStage.REVIEW))
+        .isEqualTo(
+            new StationStand(
+                ProgressStage.REVIEW, StationsZustand.WARTET, "wartet", "Halt: Frage"));
+  }
+
+  @Test
+  void einAbbruchNenntDieAbgebrocheneStationMitGrund() {
+    Karte f = anforderung(500, "lauf:abgebrochen");
+    Karte p = plan(501, f);
+    String grund = "abgebrochen: Stufe pakete: kein Paket entstanden";
+
+    KettenStand stand =
+        kettenStand(
+            f,
+            grund,
+            "",
+            begonnen("pakete", p, 30),
+            fertig("review", p, 25),
+            "",
+            "Protokoll: .claude/protokolle/x.log");
+
+    assertThat(station(stand, ProgressStage.PAKETE))
+        .isEqualTo(
+            new StationStand(
+                ProgressStage.PAKETE, StationsZustand.ABGEBROCHEN, "abgebrochen", grund));
+    assertThat(station(stand, ProgressStage.REVIEW).zustand()).isEqualTo(StationsZustand.ERLEDIGT);
+    assertThat(station(stand, ProgressStage.ABDECKUNG).zustand())
+        .isEqualTo(StationsZustand.STEHT_AUS);
+  }
+
+  @Test
+  void einAbbruchOhneKopfHatKeinenGrund() {
+    Karte f = anforderung(500, "lauf:abgebrochen");
+
+    KettenStand stand = kettenStand(f, "Protokoll: x.log");
+
+    assertThat(station(stand, ProgressStage.PLAN))
+        .isEqualTo(
+            new StationStand(ProgressStage.PLAN, StationsZustand.ABGEBROCHEN, "abgebrochen", null));
+  }
+
+  @Test
+  void einPlanAlsStartkarteBringtPlanUndPruefungVorDemLaufMit() {
+    Karte p = plan(501, null, "lauf:laeuft");
+
+    KettenStand stand = kettenStand(p, "Ziel: umsetzung", begonnen("pakete", p, 5));
+
+    assertThat(zustaende(stand))
+        .containsExactly(
+            Map.entry(ProgressStage.PLAN, StationsZustand.VOR_DEM_LAUF_ERBRACHT),
+            Map.entry(ProgressStage.REVIEW, StationsZustand.VOR_DEM_LAUF_ERBRACHT),
+            Map.entry(ProgressStage.PAKETE, StationsZustand.LAEUFT),
+            Map.entry(ProgressStage.ABDECKUNG, StationsZustand.STEHT_AUS),
+            Map.entry(ProgressStage.UMSETZUNG, StationsZustand.STEHT_AUS),
+            Map.entry(ProgressStage.VORBEREITUNG, StationsZustand.NICHT_VORGESEHEN));
+    assertThat(station(stand, ProgressStage.REVIEW).text()).isEqualTo("vor dem Lauf erbracht");
+  }
+
+  @Test
+  void einPlanAlsStartkarteOhneStufenzeileLaeuftAbDenPaketen() {
+    Karte p = plan(501, null, "lauf:laeuft");
+
+    KettenStand stand = kettenStand(p);
+
+    assertThat(station(stand, ProgressStage.PAKETE).zustand()).isEqualTo(StationsZustand.LAEUFT);
+  }
+
+  @Test
+  void eineZeileMitUnlesbaremZeitstempelZaehltNicht() {
+    Karte f = anforderung(500, "lauf:laeuft");
+
+    KettenStand stand = kettenStand(f, "zuletzt begonnen: pakete begonnen für #501 um gestern");
+
+    assertThat(station(stand, ProgressStage.PLAN).zustand()).isEqualTo(StationsZustand.LAEUFT);
+  }
+
+  @Test
+  void dieZeilenumbruecheVonWindowsStoerenNicht() {
+    Karte f = anforderung(500, "lauf:laeuft");
+    Karte p = plan(501, f);
+
+    KettenStand stand =
+        FortschrittErmittlung.kettenStand(
+            f,
+            new Laufstand(
+                f.id(),
+                "## Laufstand\r\n\r\nZiel: umsetzung\r\nPrüfer: 2\r\n" + begonnen("review", p, 5)));
+
+    assertThat(stand.ziel()).isEqualTo(ProgressStage.UMSETZUNG);
+    assertThat(stand.pruefer()).isEqualTo(2);
+    assertThat(station(stand, ProgressStage.REVIEW).text()).isEqualTo("läuft (2 Prüfer)");
+  }
+
+  @Test
+  void ohneLaufLabelStehtDieAktuelleStationAus() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+
+    KettenStand stand = kettenStand(f, fertig("review", p, 20));
+
+    assertThat(station(stand, ProgressStage.PAKETE).zustand()).isEqualTo(StationsZustand.STEHT_AUS);
   }
 }
