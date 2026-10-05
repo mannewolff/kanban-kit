@@ -10,6 +10,7 @@ import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
+import org.mwolff.manban.card.domain.CardStatus;
 
 /** JPA-Abbildung der Tabelle {@code card_activity}. */
 @Entity
@@ -46,6 +47,13 @@ class CardActivityEntity {
   @Column(name = "agent")
   private @Nullable String agent;
 
+  // Laufkennung und Status nach der Bewegung (Issue #1426); nullable, V47 ohne Backfill.
+  @Column(name = "run_started_at")
+  private @Nullable Instant runStartedAt;
+
+  @Column(name = "status_after")
+  private @Nullable String statusAfter;
+
   protected CardActivityEntity() {
     // für JPA
   }
@@ -56,7 +64,8 @@ class CardActivityEntity {
       String type,
       String detail,
       Instant createdAt,
-      ActorStamp stamp) {
+      ActorStamp stamp,
+      @Nullable CardStatus statusAfter) {
     this.cardId = cardId;
     this.actorUserId = actorUserId;
     this.type = type;
@@ -66,6 +75,8 @@ class CardActivityEntity {
     this.origin = stampOrigin == null ? null : stampOrigin.name();
     this.tokenName = stamp.tokenName();
     this.agent = stamp.agent();
+    this.runStartedAt = stamp.laufStart();
+    this.statusAfter = statusAfter == null ? null : statusAfter.name();
   }
 
   @Nullable Long getId() {
@@ -102,5 +113,13 @@ class CardActivityEntity {
 
   @Nullable String getAgent() {
     return agent;
+  }
+
+  @Nullable Instant getRunStartedAt() {
+    return runStartedAt;
+  }
+
+  @Nullable String getStatusAfter() {
+    return statusAfter;
   }
 }

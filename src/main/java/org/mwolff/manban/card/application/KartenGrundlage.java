@@ -96,6 +96,20 @@ public final class KartenGrundlage {
   }
 
   /**
+   * Wie {@link #aktivitaet(long, long, CardActivityType, String, Instant)}, dazu mit dem Status der
+   * Karte nach der Bewegung (Issue #1426); {@code null}, wenn die Aktivität keinen festhält.
+   */
+  public void aktivitaet(
+      long cardId,
+      long userId,
+      CardActivityType type,
+      String detail,
+      Instant zeitpunkt,
+      @Nullable CardStatus statusAfter) {
+    activity.add(cardId, userId, type, detail, zeitpunkt, actor.current(), statusAfter);
+  }
+
+  /**
    * Wie {@link #aktivitaet(long, long, CardActivityType, String, Instant)}, gestempelt mit jetzt.
    */
   public void aktivitaet(long cardId, long userId, CardActivityType type, String detail) {

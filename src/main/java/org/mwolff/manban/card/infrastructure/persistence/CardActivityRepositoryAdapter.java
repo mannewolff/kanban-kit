@@ -2,11 +2,13 @@ package org.mwolff.manban.card.infrastructure.persistence;
 
 import java.time.Instant;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardActivityRepository;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.springframework.stereotype.Component;
 
 /** Adapter des {@link CardActivityRepository}-Ports auf Spring Data JPA. */
@@ -26,8 +28,11 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
       CardActivityType type,
       String detail,
       Instant createdAt,
-      ActorStamp stamp) {
-    jpa.save(new CardActivityEntity(cardId, actorUserId, type.name(), detail, createdAt, stamp));
+      ActorStamp stamp,
+      @Nullable CardStatus statusAfter) {
+    jpa.save(
+        new CardActivityEntity(
+            cardId, actorUserId, type.name(), detail, createdAt, stamp, statusAfter));
   }
 
   @Override
@@ -47,6 +52,7 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
 
   private static CardActivity toDomain(CardActivityEntity e) {
     String origin = e.getOrigin();
+    String statusAfter = e.getStatusAfter();
     return new CardActivity(
         e.getId(),
         e.getCardId(),
@@ -56,6 +62,8 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
         e.getCreatedAt(),
         origin == null ? null : CardActivityOrigin.valueOf(origin),
         e.getTokenName(),
-        e.getAgent());
+        e.getAgent(),
+        e.getRunStartedAt(),
+        statusAfter == null ? null : CardStatus.valueOf(statusAfter));
   }
 }

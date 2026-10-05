@@ -208,7 +208,10 @@ class CardServiceTest {
     // Given — der Port liefert einen Token-Stempel; die Aktivität muss ihn unverändert tragen.
     ActorContext.ActorStamp stamp =
         new ActorContext.ActorStamp(
-            org.mwolff.manban.card.domain.CardActivityOrigin.TOKEN, "Nachtlauf", "claude-opus-5");
+            org.mwolff.manban.card.domain.CardActivityOrigin.TOKEN,
+            "Nachtlauf",
+            "claude-opus-5",
+            null);
     when(actor.current()).thenReturn(stamp);
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
@@ -830,7 +833,7 @@ class CardServiceTest {
 
   private void perToken() {
     when(actor.current())
-        .thenReturn(new ActorContext.ActorStamp(CardActivityOrigin.TOKEN, "kit", null));
+        .thenReturn(new ActorContext.ActorStamp(CardActivityOrigin.TOKEN, "kit", null, null));
   }
 
   /** Board mit {@code kit:night} (30), {@code kit:klaeren} (31) und Bug (7). */
@@ -908,7 +911,7 @@ class CardServiceTest {
   @Test
   void bulkLabels_perSession_nimmtMaschinenLabelAb() {
     when(actor.current())
-        .thenReturn(new ActorContext.ActorStamp(CardActivityOrigin.SESSION, null, null));
+        .thenReturn(new ActorContext.ActorStamp(CardActivityOrigin.SESSION, null, null, null));
     freigabeLabels();
     zweiKarten();
     when(cardLabels.findByCardId(1L)).thenReturn(List.of(31L));
@@ -1131,7 +1134,17 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
     CardActivity entry =
         new CardActivity(
-            3L, 1L, 9L, CardActivityType.CREATED, "Karte angelegt", FIXED, null, null, null);
+            3L,
+            1L,
+            9L,
+            CardActivityType.CREATED,
+            "Karte angelegt",
+            FIXED,
+            null,
+            null,
+            null,
+            null,
+            null);
     when(activity.findByCardId(1L)).thenReturn(List.of(entry));
 
     List<CardActivity> result = service.listActivity(5L, 1L);
@@ -1164,7 +1177,9 @@ class CardServiceTest {
             FIXED,
             CardActivityOrigin.TOKEN,
             "Nachtlauf",
-            "claude-opus-5");
+            "claude-opus-5",
+            null,
+            null);
     when(activity.findByCardId(1L)).thenReturn(List.of(entry));
 
     // When
@@ -1196,7 +1211,17 @@ class CardServiceTest {
         .thenReturn(
             List.of(
                 new CardActivity(
-                    3L, 1L, null, CardActivityType.CREATED, "Angelegt", FIXED, null, null, null)));
+                    3L,
+                    1L,
+                    null,
+                    CardActivityType.CREATED,
+                    "Angelegt",
+                    FIXED,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null)));
 
     // When
     List<CardService.ActivityView> result = service.listActivityViews(5L, 1L);

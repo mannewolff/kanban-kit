@@ -2,6 +2,7 @@ package org.mwolff.manban.card.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,7 +57,8 @@ class SecurityActorContextTest {
     authenticate("AUTH_SESSION", null);
 
     // When / Then
-    assertThat(context.current()).isEqualTo(new ActorStamp(CardActivityOrigin.SESSION, null, null));
+    assertThat(context.current())
+        .isEqualTo(new ActorStamp(CardActivityOrigin.SESSION, null, null, null));
   }
 
   @Test
@@ -66,7 +68,7 @@ class SecurityActorContextTest {
 
     // When / Then
     assertThat(context.current())
-        .isEqualTo(new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", null));
+        .isEqualTo(new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", null, null));
   }
 
   @Test
@@ -75,7 +77,8 @@ class SecurityActorContextTest {
     authenticate("AUTH_PAT", "etwas anderes");
 
     // When / Then
-    assertThat(context.current()).isEqualTo(new ActorStamp(CardActivityOrigin.TOKEN, null, null));
+    assertThat(context.current())
+        .isEqualTo(new ActorStamp(CardActivityOrigin.TOKEN, null, null, null));
   }
 
   @Test
@@ -124,6 +127,56 @@ class SecurityActorContextTest {
     RequestContextHolder.resetRequestAttributes();
 
     // When / Then
-    assertThat(context.current()).isEqualTo(new ActorStamp(CardActivityOrigin.SESSION, null, null));
+    assertThat(context.current())
+        .isEqualTo(new ActorStamp(CardActivityOrigin.SESSION, null, null, null));
+  }
+
+  @Test
+  void current_readsRunHeader_forToken() {
+    // Given
+    authenticate("AUTH_PAT", new KanbanPrincipal(7L, 3L, 1L, 2L, "Nachtlauf"));
+    request.addHeader("X-Night-Run", "2026-10-05T08:58:22.123Z");
+
+    // When / Then
+    assertThat(context.current().laufStart()).isEqualTo(Instant.parse("2026-10-05T08:58:22.123Z"));
+  }
+
+  @Test
+  void current_ignoresRunHeader_forSession() {
+    // Given: die Laufkennung gilt nur bei Token-Herkunft (Plan #1423, A3).
+    authenticate("AUTH_SESSION", null);
+    request.addHeader("X-Night-Run", "2026-10-05T08:58:22.123Z");
+
+    // When / Then
+    assertThat(context.current().laufStart()).isNull();
+  }
+
+  @Test
+  void current_leavesRunEmpty_forTokenWithoutHeader() {
+    // Given
+    authenticate("AUTH_PAT", new KanbanPrincipal(7L, 3L, 1L, 2L, "Nachtlauf"));
+
+    // When / Then
+    assertThat(context.current().laufStart()).isNull();
+  }
+
+  @Test
+  void current_leavesRunEmpty_forTokenWithInvalidHeader() {
+    // Given
+    authenticate("AUTH_PAT", new KanbanPrincipal(7L, 3L, 1L, 2L, "Nachtlauf"));
+    request.addHeader("X-Night-Run", "kein Zeitpunkt");
+
+    // When / Then
+    assertThat(context.current().laufStart()).isNull();
+  }
+
+  @Test
+  void current_leavesRunEmpty_forTokenWithoutRequestContext() {
+    // Given: Token-Kontext ohne gebundenen Request.
+    authenticate("AUTH_PAT", new KanbanPrincipal(7L, 3L, 1L, 2L, "Nachtlauf"));
+    RequestContextHolder.resetRequestAttributes();
+
+    // When / Then
+    assertThat(context.current().laufStart()).isNull();
   }
 }

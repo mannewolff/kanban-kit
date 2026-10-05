@@ -560,7 +560,7 @@ class LabelServiceTest {
   // --- Freigabe-Labels des Kits: Richtung je Herkunft (Issue #1421) ----------------------------
 
   private void givenHerkunft(CardActivityOrigin herkunft) {
-    when(actor.current()).thenReturn(new ActorStamp(herkunft, "kit", null));
+    when(actor.current()).thenReturn(new ActorStamp(herkunft, "kit", null, null));
   }
 
   @Test

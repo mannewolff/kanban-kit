@@ -106,7 +106,9 @@ class CardRunQueryServiceLaufspurenTest {
                     VON,
                     CardActivityOrigin.TOKEN,
                     "Nachtlauf",
-                    "claude-opus-5-5"),
+                    "claude-opus-5-5",
+                    null,
+                    null),
                 new CardActivity(
                     2L,
                     8L,
@@ -116,7 +118,9 @@ class CardRunQueryServiceLaufspurenTest {
                     BIS,
                     CardActivityOrigin.TOKEN,
                     "Nachtlauf",
-                    "claude-opus-5-5")));
+                    "claude-opus-5-5",
+                    null,
+                    null)));
 
     assertThat(service.tokenActivitiesInWindow(PROJECT, "Nachtlauf", VON, BIS))
         .containsExactly(

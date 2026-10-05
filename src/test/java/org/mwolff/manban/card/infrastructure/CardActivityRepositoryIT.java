@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
@@ -12,8 +13,10 @@ import org.mwolff.manban.card.application.CardActivityRepository;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /** Adapter-Test für den Karten-Aktivitätsverlauf (add/findByCardId). */
@@ -86,7 +89,7 @@ class CardActivityRepositoryIT extends AbstractIntegrationTest {
         CardActivityType.CREATED,
         "Idee angelegt",
         T1,
-        new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", "claude-opus-5"));
+        new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", "claude-opus-5", null));
 
     CardActivity entry = activity.findByCardId(cardId).get(0);
 
@@ -106,6 +109,41 @@ class CardActivityRepositoryIT extends AbstractIntegrationTest {
     assertThat(entry.origin()).isNull();
     assertThat(entry.tokenName()).isNull();
     assertThat(entry.agent()).isNull();
+    assertThat(entry.laufStart()).isNull();
+    assertThat(entry.statusAfter()).isNull();
+  }
+
+  @Test
+  void addPersistsRunAndStatusAfterRoundTrip() {
+    // Laufkennung aus dem Stempel und Status nach der Bewegung überstehen den Roundtrip (#1426).
+    Instant laufStart = Instant.parse("2026-01-01T09:58:22.123Z");
+    activity.add(
+        cardId,
+        userId,
+        CardActivityType.MOVED,
+        "Verschoben nach In review",
+        T1,
+        new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", "claude-opus-5", laufStart),
+        CardStatus.IN_REVIEW);
+
+    CardActivity entry = activity.findByCardId(cardId).get(0);
+
+    assertThat(entry.laufStart()).isEqualTo(laufStart);
+    assertThat(entry.statusAfter()).isEqualTo(CardStatus.IN_REVIEW);
+  }
+
+  @Test
+  void statusAfterOutsideValueListFailsAtConstraint() {
+    // Die Werteliste von chk_card_activity_status_after ist die von chk_card_status (V46).
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "INSERT INTO card_activity (card_id, actor_user_id, type, detail, created_at,"
+                        + " status_after) VALUES (?, ?, 'MOVED', 'x', now(), 'ARCHIVED')",
+                    cardId,
+                    userId))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("chk_card_activity_status_after");
   }
 
   @Test
