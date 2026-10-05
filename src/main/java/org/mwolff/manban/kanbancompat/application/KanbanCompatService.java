@@ -358,7 +358,8 @@ public class KanbanCompatService {
 
   /**
    * Ergänzt an einem Item des gebundenen Boards genau ein Label (#574) — der Weg, auf dem das
-   * claude-workflow-kit sein Routing-Label {@code kit:nightrun} setzt.
+   * claude-workflow-kit seine Labels setzt. Die Richtung der Freigabe-Labels erzwingt {@code
+   * LabelService} (Issue #1421).
    *
    * <p>Reichweite wie bei {@link #move} und {@link #comment}: Der Board-Guard der card-Fassade
    * schließt Karten anderer Boards mit 404 aus. Das gilt auch innerhalb desselben Projekts, wo die

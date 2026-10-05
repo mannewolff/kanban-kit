@@ -826,6 +826,127 @@ class CardServiceTest {
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
 
+  // --- Freigabe-Labels des Kits per Token (Issue #1421) ------------------
+
+  private void perToken() {
+    when(actor.current())
+        .thenReturn(new ActorContext.ActorStamp(CardActivityOrigin.TOKEN, "kit", null));
+  }
+
+  /** Board mit {@code kit:night} (30), {@code kit:klaeren} (31) und Bug (7). */
+  private void freigabeLabels() {
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                new Label(7L, BOARD, "Bug", "#f00", false),
+                new Label(30L, BOARD, "kit:night", "#00f", false),
+                new Label(31L, BOARD, "kit:klaeren", "#0ff", false)));
+  }
+
+  @Test
+  void setLabels_perToken_lehntNeuHinzukommendesNurMenschenLabelAb() {
+    perToken();
+    freigabeLabels();
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L));
+
+    assertThatThrownBy(() -> service.setLabels(3L, 1L, List.of(7L, 30L)))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void setLabels_perToken_lehntWeggelassenesMaschinenLabelAb() {
+    perToken();
+    freigabeLabels();
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L, 31L));
+
+    assertThatThrownBy(() -> service.setLabels(3L, 1L, List.of(7L)))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void setLabels_perToken_laesstUnveraenderteFreigabeLabelsDurch() {
+    perToken();
+    freigabeLabels();
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(30L, 31L));
+
+    service.setLabels(3L, 1L, List.of(30L, 31L, 7L));
+
+    verify(cardLabels).replaceLabels(1L, List.of(30L, 31L, 7L));
+  }
+
+  @Test
+  void bulkLabels_perToken_lehntSetzenEinesNurMenschenLabelsAb() {
+    perToken();
+    freigabeLabels();
+    zweiKarten();
+
+    assertThatThrownBy(() -> service.bulkLabels(3L, List.of(1L, 2L), 30L, LabelAction.ADD))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void bulkLabels_perToken_setztMaschinenLabel() {
+    perToken();
+    freigabeLabels();
+    zweiKarten();
+
+    service.bulkLabels(3L, List.of(1L, 2L), 31L, LabelAction.ADD);
+
+    verify(cardLabels).replaceLabels(1L, List.of(31L));
+    verify(cardLabels).replaceLabels(2L, List.of(31L));
+  }
+
+  @Test
+  void bulkLabels_perSession_nimmtMaschinenLabelAb() {
+    when(actor.current())
+        .thenReturn(new ActorContext.ActorStamp(CardActivityOrigin.SESSION, null, null));
+    freigabeLabels();
+    zweiKarten();
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(31L));
+
+    service.bulkLabels(3L, List.of(1L), 31L, LabelAction.REMOVE);
+
+    verify(cardLabels).replaceLabels(1L, List.of());
+  }
+
+  @Test
+  void create_perToken_lehntNurMenschenLabelAb() {
+    perToken();
+    freigabeLabels();
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(1);
+    when(cards.allocateActivePosition(20L)).thenReturn(0);
+
+    assertThatThrownBy(
+            () ->
+                service.create(
+                    1L, BOARD, 20L, "Titel", null, null, null, null, null, List.of(30L), null))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void create_perToken_setztMaschinenLabel() {
+    perToken();
+    freigabeLabels();
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(1);
+    when(cards.allocateActivePosition(20L)).thenReturn(0);
+
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, null, null, List.of(31L), null);
+
+    verify(cardLabels).replaceLabels(1L, List.of(31L));
+  }
+
   // --- Labels an mehreren Karten (bulkLabels) ---------------------------
 
   /** Board-Labels für die Massenaktion: 7 liegt an den Karten, 9 ist das umzuschaltende. */

@@ -266,7 +266,8 @@ public class CardService {
 
   /**
    * Ersetzt die Labels einer Karte. Nur Karten (keine Vorhaben); zugeordnet werden dürfen nur
-   * Labels desselben Boards. Recht: {@link Permission#TICKET_UPDATE} (Member und aufwärts).
+   * Labels desselben Boards. Recht: {@link Permission#TICKET_UPDATE} (Member und aufwärts). Die
+   * Freigabe-Labels des Kits ändert ein Token nur in ihrer Richtung ({@link FreigabeLabels}).
    */
   @Transactional
   public CardView setLabels(long userId, long cardId, List<Long> labelIds) {
@@ -277,7 +278,7 @@ public class CardService {
     // Projekt-basierte Rechte (#405); die Labels selbst bleiben board-scoped.
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
-    zuordnung.ersetzeLabels(cardId, card.boardId(), labelIds);
+    zuordnung.ersetzeLabels(cardId, card.boardId(), labelIds, grundlage.herkunft());
     grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
     return sicht.view(userId, card);
   }
@@ -308,7 +309,7 @@ public class CardService {
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     long boardId = card.boardId();
-    zuordnung.aendereLabel(cardId, boardId, labelId, action);
+    zuordnung.aendereLabel(cardId, boardId, labelId, action, grundlage.herkunft());
     grundlage.publishChanged(boardId, ActivityType.UPDATED, cardId);
     return sicht.view(userId, card);
   }

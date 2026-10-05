@@ -19,8 +19,10 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -47,6 +49,7 @@ class LabelServiceTest {
   private BoardService boardService;
   private PermissionChecker permissions;
   private ApplicationEventPublisher events;
+  private ActorContext actor;
   private LabelService service;
 
   @BeforeEach
@@ -57,7 +60,9 @@ class LabelServiceTest {
     boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
     events = mock(ApplicationEventPublisher.class);
-    service = new LabelService(labels, cardLabels, cards, boardService, permissions, events);
+    actor = mock(ActorContext.class);
+    when(actor.current()).thenReturn(ActorStamp.unknown());
+    service = new LabelService(labels, cardLabels, cards, boardService, permissions, events, actor);
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(labels.save(any(Label.class))).thenAnswer(inv -> inv.getArgument(0));
   }
@@ -550,5 +555,163 @@ class LabelServiceTest {
     assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "Bug"))
         .isInstanceOf(ProjectAccessDeniedException.class);
     verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
+  }
+
+  // --- Freigabe-Labels des Kits: Richtung je Herkunft (Issue #1421) ----------------------------
+
+  private void givenHerkunft(CardActivityOrigin herkunft) {
+    when(actor.current()).thenReturn(new ActorStamp(herkunft, "kit", null));
+  }
+
+  @Test
+  void addToCard_perToken_lehntNurMenschenLabelAb_undSchreibtNichts() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:night");
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "kit:night"))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:night setzt nur ein Mensch im Board");
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+    verify(events, never()).publishEvent(any());
+  }
+
+  @Test
+  void addToCard_perToken_setztMaschinenLabel() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:klaeren");
+
+    service.addToCard(USER, CARD_ID, "kit:klaeren");
+
+    verify(cardLabels).addLabel(CARD_ID, 7L);
+  }
+
+  @Test
+  void addToCard_perSession_setztNurMenschenLabel() {
+    givenHerkunft(CardActivityOrigin.SESSION);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:nightrun");
+
+    service.addToCard(USER, CARD_ID, "kit:nightrun");
+
+    verify(cardLabels).addLabel(CARD_ID, 7L);
+  }
+
+  @Test
+  void removeFromCard_perToken_lehntMaschinenLabelAb_undSchreibtNichts() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:geschuetzt");
+
+    assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "kit:geschuetzt"))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:geschuetzt nimmt nur ein Mensch im Board ab");
+    verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void removeFromCard_perToken_nimmtNurMenschenLabelAb() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:night");
+
+    service.removeFromCard(USER, CARD_ID, "kit:night");
+
+    verify(cardLabels).removeLabel(CARD_ID, 7L);
+  }
+
+  @Test
+  void removeFromCard_perSession_nimmtMaschinenLabelAb() {
+    givenHerkunft(CardActivityOrigin.SESSION);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:klaeren");
+
+    service.removeFromCard(USER, CARD_ID, "kit:klaeren");
+
+    verify(cardLabels).removeLabel(CARD_ID, 7L);
+  }
+
+  @Test
+  void update_perToken_lehntUmbenennenEinesFreigabeLabelsAb() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    when(labels.findById(1L))
+        .thenReturn(Optional.of(new Label(1L, BOARD, "kit:klaeren", "#f00", false)));
+
+    assertThatThrownBy(() -> service.update(5L, 1L, "erledigt", "#f00", null))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(labels, never()).save(any(Label.class));
+  }
+
+  @Test
+  void update_perToken_lehntUmbenennenAufFreigabeLabelAb() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
+
+    assertThatThrownBy(() -> service.update(5L, 1L, "kit:nightrun", "#f00", null))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(labels, never()).save(any(Label.class));
+  }
+
+  @Test
+  void update_perToken_erlaubtUmfaerbenEinesFreigabeLabels() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    when(labels.findById(1L))
+        .thenReturn(Optional.of(new Label(1L, BOARD, "kit:night", "#f00", false)));
+
+    service.update(5L, 1L, "kit:night", "#0f0", null);
+
+    verify(labels).save(any(Label.class));
+  }
+
+  @Test
+  void update_perSession_erlaubtUmbenennenEinesFreigabeLabels() {
+    givenHerkunft(CardActivityOrigin.SESSION);
+    when(labels.findById(1L))
+        .thenReturn(Optional.of(new Label(1L, BOARD, "kit:klaeren", "#f00", false)));
+
+    service.update(5L, 1L, "erledigt", "#f00", null);
+
+    verify(labels).save(any(Label.class));
+  }
+
+  @Test
+  void delete_perToken_lehntLoeschenEinesFreigabeLabelsAb() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    when(labels.findById(1L))
+        .thenReturn(Optional.of(new Label(1L, BOARD, "kit:klaeren", "#f00", false)));
+
+    assertThatThrownBy(() -> service.delete(5L, 1L)).isInstanceOf(FreigabeLabelException.class);
+    verify(labels, never()).deleteById(anyLong());
+  }
+
+  @Test
+  void delete_perToken_loeschtGewoehnlichesLabel() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
+
+    service.delete(5L, 1L);
+
+    verify(labels).deleteById(1L);
+  }
+
+  @Test
+  void delete_perSession_loeschtFreigabeLabel() {
+    givenHerkunft(CardActivityOrigin.SESSION);
+    when(labels.findById(1L))
+        .thenReturn(Optional.of(new Label(1L, BOARD, "kit:night", "#f00", false)));
+
+    service.delete(5L, 1L);
+
+    verify(labels).deleteById(1L);
+  }
+
+  @Test
+  void create_perToken_legtFreigabeLabelAn() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+
+    Label created = service.create(5L, BOARD, "kit:klaeren", "#f00");
+
+    assertThat(created.name()).isEqualTo("kit:klaeren");
   }
 }

@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
@@ -120,16 +122,16 @@ public final class KartenZuordnung {
   /**
    * Prüft und setzt die Labels einer Karte (Duplikate raus; jede ID muss ein Label desselben Boards
    * sein).
+   *
+   * <p>Auch die Richtung der Freigabe-Labels wird hier geprüft (Issue #1421) — an der einen Stelle,
+   * durch die jedes Ersetzen läuft, damit kein Schreibweg sie vergisst. Geprüft wird nur, was
+   * gegenüber der bisherigen Zuordnung hinzukommt oder wegfällt.
+   *
+   * @param herkunft serververifizierte Herkunft des Aufrufs, siehe {@link FreigabeLabels}
    */
-  public void ersetzeLabels(long cardId, long boardId, List<Long> labelIds) {
-    List<Long> distinct = labelIds.stream().distinct().toList();
-    List<Long> boardLabelIds = boardLabelIds(boardId);
-    for (Long labelId : distinct) {
-      if (!boardLabelIds.contains(labelId)) {
-        throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
-      }
-    }
-    cardLabels.replaceLabels(cardId, distinct);
+  public void ersetzeLabels(
+      long cardId, long boardId, List<Long> labelIds, @Nullable CardActivityOrigin herkunft) {
+    ersetze(cardId, boardLabelNamen(boardId), cardLabels.findByCardId(cardId), labelIds, herkunft);
   }
 
   /**
@@ -143,8 +145,14 @@ public final class KartenZuordnung {
    * <p>Eine Karte, die das Label schon trägt (bzw. schon nicht trägt), bleibt unverändert und ist
    * kein Fehler: Die Massenaktion beschreibt einen Zielzustand, keinen Umschalter je Karte.
    */
-  public void aendereLabel(long cardId, long boardId, long labelId, LabelAction action) {
-    if (!boardLabelIds(boardId).contains(labelId)) {
+  public void aendereLabel(
+      long cardId,
+      long boardId,
+      long labelId,
+      LabelAction action,
+      @Nullable CardActivityOrigin herkunft) {
+    Map<Long, String> namen = boardLabelNamen(boardId);
+    if (!namen.containsKey(labelId)) {
       throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
     }
     List<Long> current = cardLabels.findByCardId(cardId);
@@ -152,7 +160,23 @@ public final class KartenZuordnung {
         action == LabelAction.ADD
             ? Stream.concat(current.stream(), Stream.of(labelId)).distinct().toList()
             : current.stream().filter(id -> id.longValue() != labelId).toList();
-    ersetzeLabels(cardId, boardId, next);
+    ersetze(cardId, namen, current, next, herkunft);
+  }
+
+  private void ersetze(
+      long cardId,
+      Map<Long, String> namen,
+      List<Long> vorher,
+      List<Long> labelIds,
+      @Nullable CardActivityOrigin herkunft) {
+    List<Long> distinct = labelIds.stream().distinct().toList();
+    for (Long labelId : distinct) {
+      if (!namen.containsKey(labelId)) {
+        throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
+      }
+    }
+    FreigabeLabels.pruefeWechsel(herkunft, namen, vorher, distinct);
+    cardLabels.replaceLabels(cardId, distinct);
   }
 
   /** Entfernt alle Zuständigen einer Karte — beim Wechsel in ein fremdes Projekt. */
@@ -195,8 +219,10 @@ public final class KartenZuordnung {
     return marken;
   }
 
-  /** IDs aller Labels eines Boards — die Bezugsmenge jeder Label-Prüfung. */
-  private List<Long> boardLabelIds(long boardId) {
-    return labels.findByBoardId(boardId).stream().map(Label::requireId).toList();
+  /** Namen aller Labels eines Boards je ID — die Bezugsmenge jeder Label-Prüfung. */
+  private Map<Long, String> boardLabelNamen(long boardId) {
+    Map<Long, String> namen = new HashMap<>();
+    labels.findByBoardId(boardId).forEach(l -> namen.put(l.requireId(), l.name()));
+    return namen;
   }
 }

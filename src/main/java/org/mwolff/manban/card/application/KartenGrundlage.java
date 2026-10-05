@@ -9,6 +9,7 @@ import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.domain.Arbeitspaket;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
@@ -75,6 +76,14 @@ public final class KartenGrundlage {
    */
   public void publishChanged(long boardId, ActivityType type, @Nullable Long cardId) {
     events.publishEvent(new CardBoardActivityEvent(boardId, type, cardId));
+  }
+
+  /**
+   * Serververifizierte Herkunft der laufenden Anfrage ({@link ActorContext}) — die Grundlage der
+   * Richtungsregel für die Freigabe-Labels ({@link FreigabeLabels}, Issue #1421).
+   */
+  public @Nullable CardActivityOrigin herkunft() {
+    return actor.current().origin();
   }
 
   /**
@@ -160,7 +169,7 @@ public final class KartenGrundlage {
       zuordnung.ersetzeZustaendige(saved.requireId(), projectId, assigneeIds);
     }
     if (labelIds != null && !labelIds.isEmpty()) {
-      zuordnung.ersetzeLabels(saved.requireId(), boardId, labelIds);
+      zuordnung.ersetzeLabels(saved.requireId(), boardId, labelIds, herkunft());
     }
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
     return saved;

@@ -175,3 +175,27 @@ Ein **board-gebundenes** Token kann ausschließlich die Kanban-Compat-API (`/api
 gebundenen Boards bedienen; jeder andere `/api/**`-Zugriff wird mit **403** abgewiesen — unabhängig
 von den Rollen des Erstellers, auch bei einem Plattform-Admin. Ein **ungebundenes** Token bleibt in
 seinem bisherigen Umfang nutzbar.
+
+### Freigabe-Labels des Kits
+
+Vier Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Server erzwingt sie
+(Issue #1421). `kit:night` und `kit:nightrun` geben Arbeit für den Nachtlauf frei: Sie setzt nur ein
+Mensch, der Runner nimmt sie ab, sobald sie verbraucht sind. `kit:klaeren` und `kit:geschuetzt`
+setzt die Maschine; ihr Abnehmen ist die Freigabe und steht nur dem Menschen zu.
+
+| | Session (Mensch) | Token (Kit, Runner, Agent) |
+|---|---|---|
+| `kit:night`, `kit:nightrun` setzen | erlaubt | abgewiesen (403) |
+| `kit:night`, `kit:nightrun` abnehmen | erlaubt | erlaubt |
+| `kit:klaeren`, `kit:geschuetzt` setzen | erlaubt | erlaubt |
+| `kit:klaeren`, `kit:geschuetzt` abnehmen | erlaubt | abgewiesen (403) |
+
+Entscheidend ist die serververifizierte Herkunft — gebundene wie ungebundene Token —, nicht die
+Selbstauskunft im Header `X-Agent-Model`. Der Server kann Mensch und Agent am Token nicht
+unterscheiden: Auch wer per CLI (`board.mjs`, `tbx`) arbeitet, setzt `kit:night` und
+`kit:nightrun` nur im Board. Die Regel gilt an jedem Schreibweg: einzelnes Label setzen oder
+abnehmen, alle Labels einer Karte ersetzen (geprüft wird nur, was hinzukommt oder wegfällt), die
+Massenaktion und das Anlegen einer Karte mit Labels. Per Token darf zudem keine Definition dieser
+vier Labels gelöscht oder umbenannt und kein anderes Label auf einen ihrer Namen umbenannt werden;
+anlegen darf ein Token sie, weil das Kit seine Labels selbst anlegt. Die Namen werden getrimmt und
+mit Groß-/Kleinschreibung verglichen, genau wie bei der Label-Auflösung.
