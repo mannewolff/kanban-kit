@@ -1,5 +1,5 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Label } from '../../api/labels'
@@ -30,6 +30,10 @@ const VORRAT: Label[] = [
   label(6, 'planreview:2'),
   label(7, 'kit:durchziehen'),
   label(8, 'Bug'),
+  label(9, 'kit:night'),
+  label(10, 'review:fertig'),
+  label(11, 'kit:klaeren'),
+  label(12, 'lauf:wartet'),
 ]
 
 const FACHLICH = '[Fachlich] Neue Ansicht'
@@ -40,7 +44,16 @@ function zeige({
   labelIds = [],
   boardLabels = VORRAT,
   disabled = false,
-}: Partial<{ titel: string; labelIds: number[]; boardLabels: Label[]; disabled: boolean }> = {}) {
+  beschreibung = '',
+  kommentare = [],
+}: Partial<{
+  titel: string
+  labelIds: number[]
+  boardLabels: Label[]
+  disabled: boolean
+  beschreibung: string
+  kommentare: { body: string }[]
+}> = {}) {
   const onChange = vi.fn()
   render(
     <ThemeProvider theme={theme}>
@@ -49,6 +62,8 @@ function zeige({
         labelIds={labelIds}
         boardLabels={boardLabels}
         disabled={disabled}
+        beschreibung={beschreibung}
+        kommentare={kommentare}
         onChange={onChange}
       />
     </ThemeProvider>,
@@ -307,5 +322,188 @@ describe('KettenStufenleiste', () => {
     zeige({ disabled: true, titel: PLAN })
 
     expect(screen.queryByText(/Prüfer/)).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Start und Rücknahme der Kette (Issue #1450, Plan #1447 E3, E7, E10, E15): „Kette starten“ setzt
+ * `kit:night`, „Start zurücknehmen“ nimmt nur dieses Label ab; ab „Umsetzung“ verlangt der Start
+ * eine Bestätigung, Sperrhinweise nennen, was vor dem Start fehlt.
+ */
+describe('KettenStufenleiste — Start', () => {
+  const GO_SATZ = 'Mit diesem Ziel gibst du das GO für alle Arbeitspakete dieser Karte.'
+  const startKnopf = () => screen.getByRole('button', { name: 'Kette starten' })
+  /** Eine fachliche Anforderung mit abgeschlossener Prüfung: startbereit. */
+  const BEREIT = [10]
+  const laufstand = (rumpf: string) => ({ body: `## Laufstand\n\n${rumpf}` })
+  const MIT_LAUF_ID = laufstand(
+    'Umsetzung laeuft seit 2026-10-05T18:20:40.036Z\n\nProtokoll: .claude/protokolle/2026-10-05-175710/1450-umsetzung.log',
+  )
+
+  it('setzt kit:night mit einem Klick, solange das Ziel vor „Umsetzung“ liegt', async () => {
+    const onChange = zeige({ labelIds: [...BEREIT, 2] })
+
+    expect(screen.queryByText(GO_SATZ)).not.toBeInTheDocument()
+    await userEvent.click(startKnopf())
+
+    expect(onChange).toHaveBeenCalledWith([10, 2, 9])
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('zeigt ab „Umsetzung“ den GO-Satz schon vor dem Start', () => {
+    zeige({ labelIds: [...BEREIT, 3] })
+
+    expect(screen.getByText(GO_SATZ)).toBeInTheDocument()
+  })
+
+  it('zeigt den GO-Satz auch beim Ziel „Veröffentlichung vorbereitet“ und bei kit:durchziehen', () => {
+    zeige({ labelIds: [...BEREIT, 7] })
+
+    expect(screen.getByText(GO_SATZ)).toBeInTheDocument()
+  })
+
+  it('fragt ab „Umsetzung“ nach, der Fokus liegt zuerst auf „Abbrechen“, und Abbrechen setzt kein Label', async () => {
+    const onChange = zeige({ labelIds: [...BEREIT, 4] })
+
+    await userEvent.click(startKnopf())
+
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByText('Damit gibst du das GO für alle Arbeitspakete dieser Karte. Kette starten?')).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Abbrechen' })).toHaveFocus()
+
+    await userEvent.click(dialog.getByRole('button', { name: 'Abbrechen' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('setzt kit:night erst nach der Bestätigung im Dialog', async () => {
+    const onChange = zeige({ labelIds: [...BEREIT, 3] })
+
+    await userEvent.click(startKnopf())
+    const dialog = within(await screen.findByRole('dialog'))
+    await userEvent.click(dialog.getByRole('button', { name: 'Kette starten' }))
+
+    expect(onChange).toHaveBeenCalledWith([10, 3, 9])
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('bricht den Dialog auch per Escape ab, ohne ein Label zu setzen', async () => {
+    const onChange = zeige({ labelIds: [...BEREIT, 3] })
+
+    await userEvent.click(startKnopf())
+    await screen.findByRole('dialog')
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('nimmt beim Zurücknehmen nur kit:night ab, Ziel und Prüferzahl bleiben', async () => {
+    const onChange = zeige({ labelIds: [...BEREIT, 3, 6, 9, 8] })
+
+    expect(screen.queryByRole('button', { name: 'Kette starten' })).not.toBeInTheDocument()
+    expect(screen.getByText(/wartet auf die Übernahme durch einen Runner/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Start zurücknehmen' }))
+
+    expect(onChange).toHaveBeenCalledWith([10, 3, 6, 8])
+  })
+
+  it('lässt das Ziel nach dem Start erst nach der Rücknahme wieder ändern', async () => {
+    const onChange = zeige({ labelIds: [...BEREIT, 2, 9] })
+
+    expect(screen.queryByRole('group', { name: 'Ziel der Kette' })).not.toBeInTheDocument()
+    expect(station('pakete')).toHaveTextContent('Ziel')
+    expect(screen.queryByRole('group', { name: 'Planprüfung' })).not.toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('sperrt den Start an [Fachlich] ohne review:fertig und nennt den Grund', async () => {
+    const onChange = zeige()
+
+    expect(startKnopf()).toHaveAttribute('aria-disabled', 'true')
+    expect(startKnopf()).toHaveAccessibleDescription(/fachliche Prüfung/)
+    await userEvent.click(startKnopf())
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('sperrt den Start an [Plan] ohne Zeile „Plan-Review:“ im Body', async () => {
+    const onChange = zeige({ titel: PLAN, beschreibung: 'Ein Plan.\nPlan-Review steht noch aus.' })
+
+    expect(startKnopf()).toHaveAttribute('aria-disabled', 'true')
+    expect(startKnopf()).toHaveAccessibleDescription(/Planprüfung/)
+    await userEvent.click(startKnopf())
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('lässt einen [Plan] mit Zeile „Plan-Review:“ ohne review:fertig starten', async () => {
+    const onChange = zeige({ titel: PLAN, beschreibung: 'Ein Plan.\nPlan-Review: fable (2026-10-05)' })
+
+    expect(startKnopf()).not.toHaveAttribute('aria-disabled')
+    await userEvent.click(startKnopf())
+    expect(onChange).toHaveBeenCalledWith([9])
+  })
+
+  it.each([
+    ['kit:klaeren', 11],
+    ['lauf:wartet', 12],
+  ])('sperrt den Start, solange %s an der Karte hängt', async (name, id) => {
+    const onChange = zeige({ labelIds: [...BEREIT, id] })
+
+    expect(startKnopf()).toHaveAttribute('aria-disabled', 'true')
+    expect(startKnopf()).toHaveAccessibleDescription(/offene Frage/)
+    expect(screen.getByText(new RegExp(name))).toBeInTheDocument()
+    await userEvent.click(startKnopf())
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('nennt mehrere Sperrgründe zugleich', () => {
+    zeige({ labelIds: [11] })
+
+    expect(startKnopf()).toHaveAccessibleDescription(/fachliche Prüfung.*offene Frage/)
+  })
+
+  it('sperrt den Start, wenn das Board kein kit:night führt', async () => {
+    const onChange = zeige({ labelIds: BEREIT, boardLabels: VORRAT.filter((l) => l.name !== 'kit:night') })
+
+    expect(startKnopf()).toHaveAttribute('aria-disabled', 'true')
+    expect(startKnopf()).toHaveAccessibleDescription(/kit:night/)
+    await userEvent.click(startKnopf())
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('ist nach der Übernahme durch einen Runner nur Anzeige', () => {
+    zeige({ labelIds: [...BEREIT, 3, 6], kommentare: [{ body: 'Erst ein Wort.' }, MIT_LAUF_ID] })
+
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    expect(screen.getByText(/Ein Runner hat die Kette übernommen/)).toBeInTheDocument()
+    expect(station('umsetzung')).toHaveTextContent('Ziel')
+    expect(screen.getByText(/2 Prüfer/)).toBeInTheDocument()
+    expect(screen.queryByText(GO_SATZ)).not.toBeInTheDocument()
+  })
+
+  it('wertet einen Laufstand ohne Lauf-ID nicht als Übernahme', () => {
+    zeige({ labelIds: BEREIT, kommentare: [laufstand('Umsetzung laeuft seit 2026-10-05T18:20:40.036Z')] })
+
+    expect(startKnopf()).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('wertet einen Kommentar, der den Anker nur im Text trägt, nicht als Laufstand', () => {
+    zeige({ labelIds: BEREIT, kommentare: [{ body: 'Siehe ## Laufstand vom Lauf 2026-10-05-175710' }] })
+
+    expect(startKnopf()).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('bietet bei gesetztem kit:night trotz altem Laufstand die Rücknahme an', () => {
+    zeige({ labelIds: [...BEREIT, 9], kommentare: [MIT_LAUF_ID] })
+
+    expect(screen.getByRole('button', { name: 'Start zurücknehmen' })).toBeInTheDocument()
+  })
+
+  it('zeigt ohne Recht nur den Stand, ohne Start- und Rücknahmeknopf', () => {
+    zeige({ disabled: true, labelIds: [...BEREIT, 9] })
+
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    expect(screen.getByText(/wartet auf die Übernahme durch einen Runner/)).toBeInTheDocument()
   })
 })

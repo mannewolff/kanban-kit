@@ -1808,13 +1808,16 @@ function CardDetailModalView({
           {!editing && (
             <KartenBlock name="Verlauf">
               {/* Die Stufenleiste der Nacht-Kette (Issue #1449, E1–E3): nur an [Fachlich] und [Plan],
-                  bedienbar unter denselben Bedingungen wie die Label-Sektion. */}
+                  bedienbar unter denselben Bedingungen wie die Label-Sektion. Body und Kommentare
+                  braucht sie für Sperrhinweise und Übernahme (Issue #1450). */}
               {traegtStufenleiste(stand.title) && (
                 <KettenStufenleiste
                   titel={stand.title}
                   labelIds={labelIds}
                   boardLabels={boardLabels}
                   disabled={!(canEdit && canEditLabels)}
+                  beschreibung={stand.description}
+                  kommentare={comments}
                   onChange={(ids) => void saveLabels(ids)}
                 />
               )}

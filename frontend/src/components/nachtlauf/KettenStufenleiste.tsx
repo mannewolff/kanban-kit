@@ -3,12 +3,19 @@ import FlagIcon from '@mui/icons-material/Flag'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
+import Dialog from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogTitle from '@mui/material/DialogTitle'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import type { KeyboardEvent, ReactNode } from 'react'
+import { useId, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { Label } from '../../api/labels'
 import { KLEIN_RADIUS, KUPFER, NUT_SX, TASTE_SX, TEXT_SCHWACH } from '../../theme'
+import { dialogTitleSx } from '../dialogChromeSx'
 
 /** Ob eine Karte die Stufenleiste trägt: ihr Titel beginnt mit `[Fachlich]` oder `[Plan]` (E1). */
 export function traegtStufenleiste(titel: string): boolean {
@@ -34,6 +41,14 @@ const ZIEL_PRAEFIX = 'ziel:'
 const PRUEFER_PRAEFIX = 'planreview:'
 const DURCHZIEHEN = 'kit:durchziehen'
 const PRUEFER = ['planreview:1', 'planreview:2'] as const
+/** Das eine Start-Label des Kit-Vertrags (E10): gesetzt heißt freigegeben, noch nicht übernommen. */
+const NACHT = 'kit:night'
+const REVIEW_FERTIG = 'review:fertig'
+/** Labels, mit denen an der Karte eine offene Frage auf einen Menschen wartet. */
+const OFFENE_FRAGE = ['kit:klaeren', 'lauf:wartet'] as const
+const LAUFSTAND_ANKER = '## Laufstand'
+/** Die Lauf-ID ist der Stempel des Runners, etwa `2026-10-05-175710` im Protokollpfad. */
+const LAUF_ID = /\b\d{4}-\d{2}-\d{2}-\d{6}\b/
 
 /**
  * Die feste Texttabelle der Sperrhinweise (E8, E14). Die Leiste legt nie ein Label an: Fehlt eins,
@@ -44,7 +59,24 @@ const HINWEIS = {
     `Am Board fehlt das Label „${name}“. Die Leiste legt es nicht an — ein Mensch legt es in den Board-Labels an.`,
   durchziehen: `Die Karte trägt ${DURCHZIEHEN} und läuft damit mindestens bis zur Umsetzung; ein kürzeres Ziel bliebe wirkungslos.`,
   planKarte: 'Die Karte ist schon ein Plan: Plan und Prüfung sind vor dem Lauf erbracht.',
+  fachlichOhneReview: `Die fachliche Prüfung ist nicht abgeschlossen: Die Karte trägt kein ${REVIEW_FERTIG}.`,
+  planOhneReview: 'Die Planprüfung ist nicht abgeschlossen: Im Plan fehlt die Zeile „Plan-Review:“.',
+  offeneFrage: (name: string) => `An der Karte wartet eine offene Frage auf einen Menschen (${name}).`,
+  go: 'Mit diesem Ziel gibst du das GO für alle Arbeitspakete dieser Karte.',
+  bestaetigung: 'Damit gibst du das GO für alle Arbeitspakete dieser Karte. Kette starten?',
+  wartet: 'Kette gestartet — sie wartet auf die Übernahme durch einen Runner.',
+  uebernommen: 'Ein Runner hat die Kette übernommen — die Leiste ist nur noch Anzeige.',
 } as const
+
+/** Ob ein Kommentar der Laufstand des Runners ist: seine erste Zeile ist der Anker, wie im Kit. */
+const istLaufstand = (body: string) => body.replaceAll('\r', '').trimStart().split('\n')[0].trim() === LAUFSTAND_ANKER
+
+/**
+ * Ob ein Runner die Karte übernommen hat (E15, Gruppe A): Ihr jüngster Laufstand trägt eine Lauf-ID,
+ * und `kit:night` ist abgenommen. Die Kommentare kommen wie im Modal, der jüngste zuerst.
+ */
+const uebernommenVon = (kommentare: readonly { body: string }[], gestartet: boolean) =>
+  !gestartet && LAUF_ID.test(kommentare.find((k) => istLaufstand(k.body))?.body ?? '')
 
 type Zustand = 'erbracht' | 'ziel' | 'vorgesehen' | 'nicht-vorgesehen'
 
@@ -69,25 +101,41 @@ const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel =
  * <p>Gespeichert wird über `onChange` mit der vollen Label-Liste der Karte, dem Aufruf für
  * `PUT /api/cards/{id}/labels`, den die Label-Sektion schon nutzt. Mit `disabled` ist die Leiste
  * reine Anzeige ohne Knöpfe (E3).
+ *
+ * <p><b>Start</b> (Issue #1450): „Kette starten“ setzt `kit:night`, ab „Umsetzung“ erst nach
+ * Bestätigung im Dialog (E7); „Start zurücknehmen“ nimmt nur `kit:night` ab (E10). Solange die
+ * Kette gestartet ist, ruhen Ziel- und Prüferwahl — ein späterer Zielwechsel umginge die
+ * Bestätigung. Hat ein Runner übernommen (E15), ist die Leiste nur noch Anzeige.
  */
 export function KettenStufenleiste({
   titel,
   labelIds,
   boardLabels,
   disabled,
+  beschreibung,
+  kommentare,
   onChange,
 }: Readonly<{
   titel: string
   labelIds: readonly number[]
   boardLabels: readonly Label[]
   disabled: boolean
+  /** Der Body der Karte — an einem Plan steht dort die Zeile `Plan-Review:`. */
+  beschreibung: string
+  /** Die Kommentare der Karte, der jüngste zuerst — darunter der Laufstand des Runners. */
+  kommentare: readonly { body: string }[]
   onChange: (ids: number[]) => void
 }>) {
+
   const istPlan = titel.startsWith('[Plan]')
   const nameVon = (id: number) => boardLabels.find((l) => l.id === id)?.name
   const idVon = (name: string) => boardLabels.find((l) => l.name === name)?.id
   const gesetzt = new Set(labelIds.map(nameVon))
   const durchziehen = gesetzt.has(DURCHZIEHEN)
+  const gestartet = gesetzt.has(NACHT)
+  const uebernommen = uebernommenVon(kommentare, gestartet)
+  // Ziel und Prüferzahl sind nur vor dem Start wählbar.
+  const anzeige = disabled || uebernommen || gestartet
 
   // Das wirksame Ziel: das gesetzte Label, an einem Plan nie `ziel:plan`, ohne Label die Vorgabe
   // „Arbeitspakete“ — und mit `kit:durchziehen` mindestens „Umsetzung“ (Kit A3).
@@ -129,6 +177,14 @@ export function KettenStufenleiste({
 
   const prueferGesetzt = PRUEFER.find((p) => gesetzt.has(p))
 
+  /** Was vor dem Start fehlt — leer heißt startbereit. */
+  const sperrgruende = [
+    ...(!istPlan && !gesetzt.has(REVIEW_FERTIG) ? [HINWEIS.fachlichOhneReview] : []),
+    ...(istPlan && !/^Plan-Review:/m.test(beschreibung) ? [HINWEIS.planOhneReview] : []),
+    ...OFFENE_FRAGE.filter((name) => gesetzt.has(name)).map(HINWEIS.offeneFrage),
+    ...(idVon(NACHT) === undefined ? [HINWEIS.labelFehlt(NACHT)] : []),
+  ]
+
   return (
     <Box data-testid="ketten-stufenleiste">
       <Typography variant="subtitle2" gutterBottom>
@@ -136,7 +192,7 @@ export function KettenStufenleiste({
       </Typography>
       <Box
         component="ol"
-        {...(disabled ? {} : { role: 'group', 'aria-label': 'Ziel der Kette', onKeyDown: pfeilNavigation })}
+        {...(anzeige ? {} : { role: 'group', 'aria-label': 'Ziel der Kette', onKeyDown: pfeilNavigation })}
         sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, listStyle: 'none', m: 0, p: 0 }}
       >
         {STATIONEN.map(({ schluessel, name, ziel: zielLabel }) => {
@@ -154,7 +210,7 @@ export function KettenStufenleiste({
               )}
             </>
           )
-          const waehlbar = !disabled && zielLabel !== null
+          const waehlbar = !anzeige && zielLabel !== null
           return (
             <Box
               component="li"
@@ -188,7 +244,7 @@ export function KettenStufenleiste({
           <Typography variant="body2" color="text.secondary">
             Planprüfung:
           </Typography>
-          {disabled ? (
+          {anzeige ? (
             <Typography variant="body2">
               {prueferGesetzt === undefined ? 'Vorgabe des Projekts' : `${prueferGesetzt.slice(PRUEFER_PRAEFIX.length)} Prüfer`}
             </Typography>
@@ -228,7 +284,127 @@ export function KettenStufenleiste({
           )}
         </Box>
       )}
+      <StartBereich
+        disabled={disabled}
+        gestartet={gestartet}
+        uebernommen={uebernommen}
+        sperrgruende={sperrgruende}
+        goNoetig={index(ziel) >= index('umsetzung')}
+        onStart={() => onChange([...labelIds, ...boardLabels.filter((l) => l.name === NACHT).map((l) => l.id)])}
+        onRuecknahme={() => onChange(labelIds.filter((id) => nameVon(id) !== NACHT))}
+      />
     </Box>
+  )
+}
+
+/**
+ * Start und Rücknahme der Kette (Issue #1450): der Übernahme- und Wartehinweis, „Start
+ * zurücknehmen“, und vor dem Start der GO-Satz, „Kette starten“ mit seinen Sperrgründen und die
+ * Bestätigung ab „Umsetzung“ (E7).
+ */
+function StartBereich({
+  disabled,
+  gestartet,
+  uebernommen,
+  sperrgruende,
+  goNoetig,
+  onStart,
+  onRuecknahme,
+}: Readonly<{
+  disabled: boolean
+  gestartet: boolean
+  uebernommen: boolean
+  sperrgruende: readonly string[]
+  goNoetig: boolean
+  onStart: () => void
+  onRuecknahme: () => void
+}>) {
+  const [fragt, setFragt] = useState(false)
+  const gruendeId = useId()
+  const dialogTitelId = useId()
+  const dialogTextId = useId()
+  const gesperrt = sperrgruende.length > 0
+  const starte = () => {
+    setFragt(false)
+    onStart()
+  }
+
+  return (
+    <>
+      {uebernommen && (
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          {HINWEIS.uebernommen}
+        </Typography>
+      )}
+      {gestartet && (
+        <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Typography variant="body2">{HINWEIS.wartet}</Typography>
+          {!disabled && (
+            <Button variant="outlined" size="small" onClick={onRuecknahme}>
+              Start zurücknehmen
+            </Button>
+          )}
+        </Box>
+      )}
+      {!(disabled || uebernommen || gestartet) && (
+        <Box sx={{ mt: 1 }}>
+          {goNoetig && (
+            <Typography variant="body2" gutterBottom>
+              {HINWEIS.go}
+            </Typography>
+          )}
+          <Button
+            variant={gesperrt ? 'outlined' : 'contained'}
+            size="small"
+            aria-disabled={gesperrt ? true : undefined}
+            aria-describedby={gesperrt ? gruendeId : undefined}
+            onClick={() => {
+              if (gesperrt) return
+              if (goNoetig) setFragt(true)
+              else starte()
+            }}
+            sx={gesperrt ? { color: TEXT_SCHWACH, cursor: 'not-allowed' } : undefined}
+          >
+            Kette starten
+          </Button>
+          {gesperrt && (
+            <Box component="ul" id={gruendeId} sx={{ m: 0, mt: 0.5, pl: 2.5 }}>
+              {sperrgruende.map((g) => (
+                <Typography component="li" variant="body2" color="text.secondary" key={g}>
+                  {g}
+                </Typography>
+              ))}
+            </Box>
+          )}
+          <Dialog
+            open={fragt}
+            onClose={() => setFragt(false)}
+            maxWidth="xs"
+            fullWidth
+            aria-labelledby={dialogTitelId}
+            aria-describedby={dialogTextId}
+          >
+            <DialogTitle id={dialogTitelId} sx={dialogTitleSx}>
+              Kette starten?
+            </DialogTitle>
+            <DialogContent>
+              <DialogContentText id={dialogTextId} sx={{ mt: 2 }}>
+                {HINWEIS.bestaetigung}
+              </DialogContentText>
+            </DialogContent>
+            <DialogActions>
+              {/* Der Fokus liegt zuerst auf „Abbrechen“: Ein Enter ohne Lesen gibt kein GO (E7). */}
+              <Button onClick={() => setFragt(false)} autoFocus>
+                Abbrechen
+              </Button>
+              <Button variant="contained" onClick={starte}>
+                Kette starten
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </Box>
+      )}
+    </>
   )
 }
 
