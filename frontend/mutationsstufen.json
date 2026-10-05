@@ -216,12 +216,14 @@
       "muster": [
         "src/pages/AdminPage.tsx",
         "src/pages/AdministrationPage.tsx",
+        "src/pages/ApiUebersichtPage.tsx",
         "src/pages/RolesPage.tsx",
         "src/pages/ProfilePage.tsx"
       ],
       "testMuster": [
         "src/pages/AdminPage.test.tsx",
         "src/pages/AdministrationPage.test.tsx",
+        "src/pages/ApiUebersichtPage.test.tsx",
         "src/pages/RolesPage.test.tsx",
         "src/pages/ProfilePage.test.tsx"
       ],

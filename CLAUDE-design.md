@@ -176,6 +176,7 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/roles` | Rollen und Rechte | Rahmen; Tabelle als Platte | #978 |
 | `/profil` | Profil | Rahmen; Formular als Platte | #978 |
 | `/administration` | Administration | Rahmen; Platten | #978 |
+| `/administration/api` | API-Schnittstelle | Rahmen; Swagger UI mit ihrem Standard-CSS auf einer hellen Platte, auch im dunklen Modus | #1410 |
 | `/invitations/accept` | Einladung annehmen | Rahmen; Meldungen in Melderfarben | #978 |
 
 ---
