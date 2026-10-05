@@ -1,5 +1,6 @@
 package org.mwolff.manban.board.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -324,11 +325,26 @@ public class BoardService {
   }
 
   /** Board inkl. seiner Spalten. */
+  @Schema(description = "Ein Board samt seinen Spalten.")
   public record BoardView(
-      Long id, Long projectId, String name, Instant createdAt, List<ColumnView> columns) {}
+      @Schema(description = "Interne ID des Boards.", example = "3") Long id,
+      @Schema(description = "Interne ID des Projekts.", example = "1") Long projectId,
+      @Schema(description = "Name.", example = "Entwicklung") String name,
+      @Schema(description = "Zeitpunkt der Anlage.") Instant createdAt,
+      @Schema(description = "Die Spalten, nach Position geordnet.") List<ColumnView> columns) {}
 
   /** Spaltendarstellung. */
-  public record ColumnView(Long id, String name, int position, @Nullable Integer wipLimit) {}
+  @Schema(description = "Eine Spalte eines Boards.")
+  public record ColumnView(
+      @Schema(description = "Interne ID der Spalte.", example = "17") Long id,
+      @Schema(description = "Name.", example = "In Arbeit") String name,
+      @Schema(description = "Position von links, beginnend bei 0.", example = "1") int position,
+      @Schema(
+              description =
+                  "WIP-Limit: höchstens so viele Karten sollen gleichzeitig in der Spalte"
+                      + " liegen; null heißt kein Limit.",
+              example = "3")
+          @Nullable Integer wipLimit) {}
 
   /** Board-Kurzinfo für Ortsangaben: Name plus Archiv-Zustand (siehe requireBoardSummary). */
   public record BoardSummary(Long id, String name, boolean archived) {}
