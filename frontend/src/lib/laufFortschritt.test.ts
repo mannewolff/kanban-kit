@@ -30,6 +30,7 @@ const fortschritt = (
   ketten: [],
   pakete,
   unbekannt,
+  unbekanntOhneAusweis: false,
   offeneFragen: [],
 })
 

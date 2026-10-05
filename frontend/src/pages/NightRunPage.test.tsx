@@ -6229,6 +6229,7 @@ describe('NightRunPage — Fortschritt eines laufenden Laufs (#1378)', () => {
     ],
     pakete,
     unbekannt: [],
+    unbekanntOhneAusweis: false,
     offeneFragen: [],
     ...felder,
   })

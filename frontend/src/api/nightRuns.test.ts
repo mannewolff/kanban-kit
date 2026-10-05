@@ -109,6 +109,7 @@ describe('nightRunsApi', () => {
         ketten: [],
         pakete: [{ karte: { number: 1376, title: 'API', boardId: 3 }, zustand: 'IN_UMSETZUNG' }],
         unbekannt: [],
+        unbekanntOhneAusweis: false,
         offeneFragen: [],
       }),
     )

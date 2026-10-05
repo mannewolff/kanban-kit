@@ -352,6 +352,8 @@ export interface NightRunProgressView {
   pakete: PackageProgressView[]
   /** Karten, deren Zuordnung sich nicht feststellen lässt. */
   unbekannt: CardRefView[]
+  /** Ob Karten unter „unbekannt" stehen, weil ein Lauf ohne Ausweis sie geändert hat (Issue #1429). */
+  unbekanntOhneAusweis: boolean
   /** Karten mit einer offenen Frage an den Menschen. */
   offeneFragen: CardRefView[]
 }
