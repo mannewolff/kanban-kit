@@ -120,6 +120,32 @@ describe('nightRunsApi', () => {
     expect(fortschritt.pakete[0].zustand).toBe('IN_UMSETZUNG')
   })
 
+  it('kettenstand ruft GET /api/cards/{cardId}/night-chain und liefert den Stand (Issue #1453)', async () => {
+    const f = spyFetch(
+      JSON.stringify({
+        ziel: 'UMSETZUNG',
+        pruefer: 2,
+        zielErreicht: false,
+        grenze: null,
+        stationen: [{ station: 'REVIEW', zustand: 'LAEUFT', text: 'läuft (2 Prüfer)', grund: null }],
+        uebernommen: true,
+        planReviewVorhanden: false,
+        lauf: '2026-10-05T01:00:00Z',
+      }),
+    )
+    const stand = await nightRunsApi.kettenstand(812)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/812/night-chain')
+    expect(c.method).toBeUndefined()
+    expect(stand.stationen[0]).toEqual({
+      station: 'REVIEW',
+      zustand: 'LAEUFT',
+      text: 'läuft (2 Prüfer)',
+      grund: null,
+    })
+    expect(stand.uebernommen).toBe(true)
+  })
+
   it('progress reicht einen Fehler des Servers durch', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,

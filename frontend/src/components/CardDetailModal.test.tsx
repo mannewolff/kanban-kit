@@ -116,7 +116,11 @@ function makeApis() {
   }
   const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
   // Die Anlaeufe einer Karte (Issue #968); leer, damit der Block die uebrigen Faelle nicht beruehrt.
-  const nightRunsApi = { anlaeufeDerKarte: vi.fn().mockResolvedValue([]) }
+  // Der Kettenstand der Stufenleiste (Issue #1453) lädt nie: Die Leiste bleibt beim Stand vor dem Lauf.
+  const nightRunsApi = {
+    anlaeufeDerKarte: vi.fn().mockResolvedValue([]),
+    kettenstand: vi.fn(() => new Promise<never>(() => {})),
+  }
   return { commentsApi, attachmentsApi, cardsApi, boardsApi, nightRunsApi }
 }
 

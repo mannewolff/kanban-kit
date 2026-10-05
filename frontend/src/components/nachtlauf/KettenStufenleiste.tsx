@@ -1,5 +1,10 @@
+import BlockIcon from '@mui/icons-material/Block'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import FlagIcon from '@mui/icons-material/Flag'
+import HighlightOffIcon from '@mui/icons-material/HighlightOff'
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline'
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'
 import Box from '@mui/material/Box'
@@ -12,8 +17,12 @@ import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import { useId, useState, type KeyboardEvent, type ReactNode } from 'react'
+import TaskAltIcon from '@mui/icons-material/TaskAlt'
+import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { apiErrorMessage } from '../../api/client'
 import type { Label } from '../../api/labels'
+import { nightRunsApi, type KettenStand, type NightRunsApi } from '../../api/nightRuns'
+import { kettenAnzeige, type Stationssymbol } from '../../lib/laufFortschritt'
 import { KLEIN_RADIUS, KUPFER, NUT_SX, TASTE_SX, TEXT_SCHWACH } from '../../theme'
 import { dialogTitleSx } from '../dialogChromeSx'
 
@@ -66,14 +75,20 @@ const HINWEIS = {
   bestaetigung: 'Damit gibst du das GO für alle Arbeitspakete dieser Karte. Kette starten?',
   wartet: 'Kette gestartet — sie wartet auf die Übernahme durch einen Runner.',
   uebernommen: 'Ein Runner hat die Kette übernommen — die Leiste ist nur noch Anzeige.',
+  planReviewDa:
+    'Der Plan dieser Anforderung trägt schon „Plan-Review:“ — die Prüferzahl lässt sich nicht mehr wählen.',
+  ladefehler: (meldung: string) =>
+    `Der Stand der Kette ließ sich nicht laden: ${meldung}. Die Leiste zeigt den Stand vor dem Lauf.`,
 } as const
 
 /** Ob ein Kommentar der Laufstand des Runners ist: seine erste Zeile ist der Anker, wie im Kit. */
 const istLaufstand = (body: string) => body.replaceAll('\r', '').trimStart().split('\n')[0].trim() === LAUFSTAND_ANKER
 
 /**
- * Ob ein Runner die Karte übernommen hat (E15, Gruppe A): Ihr jüngster Laufstand trägt eine Lauf-ID,
- * und `kit:night` ist abgenommen. Die Kommentare kommen wie im Modal, der jüngste zuerst.
+ * Ob ein Runner die Karte übernommen hat — die vorläufige Erkennung aus Gruppe A (E15): Ihr
+ * jüngster Laufstand trägt eine Lauf-ID, und `kit:night` ist abgenommen. Sie gilt nur noch, solange
+ * der Kettenstand lädt oder nicht geladen werden konnte (Issue #1453); sonst entscheidet der
+ * Endpunkt. Die Kommentare kommen wie im Modal, der jüngste zuerst.
  */
 const uebernommenVon = (kommentare: readonly { body: string }[], gestartet: boolean) =>
   !gestartet && LAUF_ID.test(kommentare.find((k) => istLaufstand(k.body))?.body ?? '')
@@ -87,6 +102,25 @@ const ZUSTAND: Record<Zustand, { text: string; symbol: ReactNode }> = {
   vorgesehen: { text: 'vorgesehen', symbol: <RadioButtonUncheckedIcon fontSize="small" /> },
   'nicht-vorgesehen': { text: 'nicht vorgesehen', symbol: <RemoveCircleOutlineIcon fontSize="small" /> },
 }
+
+/** Das Symbol je Stationszustand während und nach dem Lauf (Issue #1453, E6). */
+const STATIONSSYMBOL: Record<Stationssymbol, ReactNode> = {
+  erledigt: <CheckCircleIcon fontSize="small" />,
+  'ziel-erreicht': <TaskAltIcon fontSize="small" />,
+  laeuft: <PlayCircleOutlineIcon fontSize="small" />,
+  wartet: <PauseCircleOutlineIcon fontSize="small" />,
+  projektgrenze: <BlockIcon fontSize="small" />,
+  abgebrochen: <HighlightOffIcon fontSize="small" />,
+  'steht-aus': <RadioButtonUncheckedIcon fontSize="small" />,
+  'nicht-vorgesehen': <RemoveCircleOutlineIcon fontSize="small" />,
+  erbracht: <CheckCircleOutlineIcon fontSize="small" />,
+}
+
+/** Der Ladezustand des Kettenstands: Bis er da ist, gilt der Stand aus Gruppe A. */
+type Ladung =
+  | { art: 'laden' }
+  | { art: 'geladen'; stand: KettenStand }
+  | { art: 'fehler'; meldung: string }
 
 const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel === schluessel)
 
@@ -106,6 +140,12 @@ const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel =
  * Bestätigung im Dialog (E7); „Start zurücknehmen“ nimmt nur `kit:night` ab (E10). Solange die
  * Kette gestartet ist, ruhen Ziel- und Prüferwahl — ein späterer Zielwechsel umginge die
  * Bestätigung. Hat ein Runner übernommen (E15), ist die Leiste nur noch Anzeige.
+ *
+ * <p><b>Kettenstand</b> (Issue #1453): Beim Öffnen lädt die Leiste einmal
+ * `GET /api/cards/{cardId}/night-chain`, ohne Nachladen. Ob ein Runner übernommen hat, sagt dann
+ * der Endpunkt; nach der Übernahme zeigt die Leiste je Station Symbol, Zustandstext und Grund, wie
+ * der Server sie liefert (E5). Vor der Übernahme sperrt `planReviewVorhanden` den Prüferschalter
+ * (E14). Lädt der Stand nicht, bleibt die Leiste beim Stand vor dem Lauf und nennt den Fehler.
  */
 export function KettenStufenleiste({
   titel,
@@ -115,6 +155,8 @@ export function KettenStufenleiste({
   beschreibung,
   kommentare,
   onChange,
+  cardId,
+  api = nightRunsApi,
 }: Readonly<{
   titel: string
   labelIds: readonly number[]
@@ -125,7 +167,12 @@ export function KettenStufenleiste({
   /** Die Kommentare der Karte, der jüngste zuerst — darunter der Laufstand des Runners. */
   kommentare: readonly { body: string }[]
   onChange: (ids: number[]) => void
+  /** Die interne ID der Karte, für den Kettenstand. */
+  cardId: number
+  api?: Pick<NightRunsApi, 'kettenstand'>
 }>) {
+  const ladung = useKettenstand(api, cardId)
+  const stand = ladung.art === 'geladen' ? ladung.stand : null
 
   const istPlan = titel.startsWith('[Plan]')
   const nameVon = (id: number) => boardLabels.find((l) => l.id === id)?.name
@@ -133,7 +180,8 @@ export function KettenStufenleiste({
   const gesetzt = new Set(labelIds.map(nameVon))
   const durchziehen = gesetzt.has(DURCHZIEHEN)
   const gestartet = gesetzt.has(NACHT)
-  const uebernommen = uebernommenVon(kommentare, gestartet)
+  const uebernommen = stand === null ? uebernommenVon(kommentare, gestartet) : stand.uebernommen
+  const planReviewDa = !istPlan && stand?.planReviewVorhanden === true
   // Ziel und Prüferzahl sind nur vor dem Start wählbar.
   const anzeige = disabled || uebernommen || gestartet
 
@@ -165,6 +213,12 @@ export function KettenStufenleiste({
     return null
   }
 
+  /** Der Grund, warum ein Prüferknopf gesperrt ist, oder `null` (E8, E14). */
+  const prueferSperre = (p: string): string | null => {
+    if (planReviewDa) return HINWEIS.planReviewDa
+    return idVon(p) === undefined ? HINWEIS.labelFehlt(p) : null
+  }
+
   /**
    * Tauscht alle Labels einer Familie gegen das eine gewählte; fremde Labels bleiben stehen. Die
    * Aufrufer bieten nur Labels an, die das Board führt (E8).
@@ -185,11 +239,20 @@ export function KettenStufenleiste({
     ...(idVon(NACHT) === undefined ? [HINWEIS.labelFehlt(NACHT)] : []),
   ]
 
+  if (stand?.uebernommen === true) {
+    return <LaufAnsicht stand={stand} istPlan={istPlan} />
+  }
+
   return (
     <Box data-testid="ketten-stufenleiste">
       <Typography variant="subtitle2" gutterBottom>
         Nacht-Kette
       </Typography>
+      {ladung.art === 'fehler' && (
+        <Typography variant="body2" role="status" sx={{ mb: 1 }}>
+          {HINWEIS.ladefehler(ladung.meldung)}
+        </Typography>
+      )}
       <Box
         component="ol"
         {...(anzeige ? {} : { role: 'group', 'aria-label': 'Ziel der Kette', onKeyDown: pfeilNavigation })}
@@ -240,49 +303,13 @@ export function KettenStufenleiste({
         })}
       </Box>
       {!istPlan && (
-        <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Typography variant="body2" color="text.secondary">
-            Planprüfung:
-          </Typography>
-          {anzeige ? (
-            <Typography variant="body2">
-              {prueferGesetzt === undefined ? 'Vorgabe des Projekts' : `${prueferGesetzt.slice(PRUEFER_PRAEFIX.length)} Prüfer`}
-            </Typography>
-          ) : (
-            <>
-              <Box
-                role="group"
-                aria-label="Planprüfung"
-                onKeyDown={pfeilNavigation}
-                sx={{ display: 'flex', gap: 1 }}
-              >
-                {PRUEFER.map((p) => {
-                  const grund = idVon(p) === undefined ? HINWEIS.labelFehlt(p) : null
-                  const gewaehlt = prueferGesetzt === p
-                  return (
-                    <Tooltip key={p} title={grund ?? ''} describeChild>
-                      <ButtonBase
-                        aria-pressed={gewaehlt}
-                        aria-disabled={grund === null ? undefined : true}
-                        onClick={() => {
-                          if (grund === null && !gewaehlt) tausche(PRUEFER_PRAEFIX, p)
-                        }}
-                        sx={knopfSx(gewaehlt, grund !== null)}
-                      >
-                        {`${p.slice(PRUEFER_PRAEFIX.length)} Prüfer`}
-                      </ButtonBase>
-                    </Tooltip>
-                  )
-                })}
-              </Box>
-              {prueferGesetzt === undefined && (
-                <Typography variant="body2" color="text.secondary">
-                  ohne Wahl gilt die Vorgabe des Projekts
-                </Typography>
-              )}
-            </>
-          )}
-        </Box>
+        <PrueferSchalter
+          anzeige={anzeige}
+          prueferGesetzt={prueferGesetzt}
+          planReviewDa={planReviewDa}
+          sperre={prueferSperre}
+          onWahl={(p) => tausche(PRUEFER_PRAEFIX, p)}
+        />
       )}
       <StartBereich
         disabled={disabled}
@@ -293,6 +320,154 @@ export function KettenStufenleiste({
         onStart={() => onChange([...labelIds, ...boardLabels.filter((l) => l.name === NACHT).map((l) => l.id)])}
         onRuecknahme={() => onChange(labelIds.filter((id) => nameVon(id) !== NACHT))}
       />
+    </Box>
+  )
+}
+
+/**
+ * Der Schalter für ein oder zwei Planprüfer an `[Fachlich]` (Issue #1449); gesperrt, solange ein
+ * Label fehlt oder der Plan schon `Plan-Review:` trägt (Issue #1453, E14). Als Anzeige nur die Zahl.
+ */
+function PrueferSchalter({
+  anzeige,
+  prueferGesetzt,
+  planReviewDa,
+  sperre,
+  onWahl,
+}: Readonly<{
+  anzeige: boolean
+  prueferGesetzt: string | undefined
+  planReviewDa: boolean
+  sperre: (p: string) => string | null
+  onWahl: (p: string) => void
+}>) {
+  return (
+    <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+      <Typography variant="body2" color="text.secondary">
+        Planprüfung:
+      </Typography>
+      {anzeige ? (
+        <Typography variant="body2">
+          {prueferGesetzt === undefined ? 'Vorgabe des Projekts' : `${prueferGesetzt.slice(PRUEFER_PRAEFIX.length)} Prüfer`}
+        </Typography>
+      ) : (
+        <>
+          <Box
+            role="group"
+            aria-label="Planprüfung"
+            onKeyDown={pfeilNavigation}
+            sx={{ display: 'flex', gap: 1 }}
+          >
+            {PRUEFER.map((p) => {
+              const grund = sperre(p)
+              const gewaehlt = prueferGesetzt === p
+              return (
+                <Tooltip key={p} title={grund ?? ''} describeChild>
+                  <ButtonBase
+                    aria-pressed={gewaehlt}
+                    aria-disabled={grund === null ? undefined : true}
+                    onClick={() => {
+                      if (grund === null && !gewaehlt) onWahl(p)
+                    }}
+                    sx={knopfSx(gewaehlt, grund !== null)}
+                  >
+                    {`${p.slice(PRUEFER_PRAEFIX.length)} Prüfer`}
+                  </ButtonBase>
+                </Tooltip>
+              )
+            })}
+          </Box>
+          {prueferGesetzt === undefined && !planReviewDa && (
+            <Typography variant="body2" color="text.secondary">
+              ohne Wahl gilt die Vorgabe des Projekts
+            </Typography>
+          )}
+          {planReviewDa && (
+            <Typography variant="body2" color="text.secondary">
+              {HINWEIS.planReviewDa}
+            </Typography>
+          )}
+        </>
+      )}
+    </Box>
+  )
+}
+
+/** Lädt den Kettenstand einer Karte einmal; eine Antwort nach dem Schließen verfällt. */
+function useKettenstand(api: Pick<NightRunsApi, 'kettenstand'>, cardId: number): Ladung {
+  const [ladung, setLadung] = useState<Ladung>({ art: 'laden' })
+  useEffect(() => {
+    let aktiv = true
+    setLadung({ art: 'laden' })
+    api.kettenstand(cardId).then(
+      (stand) => {
+        if (aktiv) setLadung({ art: 'geladen', stand })
+      },
+      (error: unknown) => {
+        if (aktiv) setLadung({ art: 'fehler', meldung: apiErrorMessage(error, 'unbekannter Fehler') })
+      },
+    )
+    return () => {
+      aktiv = false
+    }
+  }, [api, cardId])
+  return ladung
+}
+
+/**
+ * Die Leiste einer übernommenen Kette (Issue #1453): nur Anzeige. Je Station Symbol, Name,
+ * Zustandstext und Grund, wie der Server sie liefert; die aktuelle Station trägt
+ * `aria-current="step"` wie die Wegleiste in `NachtlaufFortschritt`, das Ziel bleibt mit Kupferrand
+ * und dem Wort „Ziel“ markiert.
+ */
+function LaufAnsicht({ stand, istPlan }: Readonly<{ stand: KettenStand; istPlan: boolean }>) {
+  return (
+    <Box data-testid="ketten-stufenleiste">
+      <Typography variant="subtitle2" gutterBottom>
+        Nacht-Kette
+      </Typography>
+      <Box
+        component="ol"
+        aria-label="Stand der Kette"
+        sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, listStyle: 'none', m: 0, p: 0 }}
+      >
+        {kettenAnzeige(stand).map((a) => (
+          <Box
+            component="li"
+            key={a.station}
+            data-testid={`kette-station-${a.station}`}
+            aria-current={a.aktuell ? 'step' : undefined}
+            sx={{ flex: '1 1 0', minWidth: 110, display: 'flex' }}
+          >
+            <Box sx={stationSx(a.ziel, false)}>
+              <Box component="span" aria-hidden data-testid={`stationssymbol-${a.symbol}`} sx={{ display: 'flex' }}>
+                {STATIONSSYMBOL[a.symbol]}
+              </Box>
+              <Box component="span" sx={{ fontWeight: 600 }}>{a.name}</Box>
+              <Box component="span" sx={{ fontSize: 12 }}>{a.text}</Box>
+              {a.grund !== null && (
+                <Box component="span" sx={{ fontSize: 12 }}>{a.grund}</Box>
+              )}
+              {a.ziel && (
+                <Box component="span" sx={{ fontSize: 12, fontWeight: 600 }}>Ziel</Box>
+              )}
+            </Box>
+          </Box>
+        ))}
+      </Box>
+      {!istPlan && (
+        <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Planprüfung:
+          </Typography>
+          <Typography variant="body2">
+            {stand.pruefer === null ? 'Vorgabe des Projekts' : `${stand.pruefer} Prüfer`}
+          </Typography>
+        </Box>
+      )}
+      <Typography variant="body2" sx={{ mt: 1 }}>
+        {HINWEIS.uebernommen}
+      </Typography>
     </Box>
   )
 }

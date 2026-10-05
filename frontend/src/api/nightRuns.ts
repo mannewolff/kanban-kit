@@ -358,6 +358,52 @@ export interface NightRunProgressView {
   offeneFragen: CardRefView[]
 }
 
+/**
+ * Die Stationen der Stufenleiste (Issue #1453, Plan #1447): der Weg einer Kette und dazu die
+ * Vorbereitung der Veröffentlichung, die nur im Kettenstand einer Karte vorkommt.
+ */
+export type KettenStation = ProgressStage | 'VORBEREITUNG'
+
+/** Zustand einer Station der Stufenleiste — die sieben des Servers (Plan #1447 E5). */
+export type StationsZustand =
+  | 'ERLEDIGT'
+  | 'LAEUFT'
+  | 'WARTET'
+  | 'ABGEBROCHEN'
+  | 'STEHT_AUS'
+  | 'NICHT_VORGESEHEN'
+  | 'VOR_DEM_LAUF_ERBRACHT'
+
+/** Eine Station mit Zustand und fertigem Text, etwa „läuft (2 Prüfer)“ oder „Ziel erreicht“. */
+export interface NightChainStationView {
+  station: KettenStation
+  zustand: StationsZustand
+  text: string
+  /** Grund bei `WARTET` und `ABGEBROCHEN`, wörtlich; sonst `null`. */
+  grund: string | null
+}
+
+/**
+ * Der Kettenstand einer Karte, wie ihn `GET /api/cards/{cardId}/night-chain` liefert (Issue #1452,
+ * #1453) — fertig abgeleitet; der Client rechnet nichts nach (E5).
+ */
+export interface KettenStand {
+  /** Gewähltes Ziel; `null` ohne Ziel — dann endet die Kette nach der Abdeckung. */
+  ziel: KettenStation | null
+  /** Gewählte Prüferzahl; `null` ohne Wahl. */
+  pruefer: number | null
+  zielErreicht: boolean
+  /** Die Projektgrenze vor dem Ziel; `null` ohne Grenze. */
+  grenze: { stufe: KettenStation; grund: string | null } | null
+  stationen: NightChainStationView[]
+  /** Ob ein Runner die Karte übernommen hat (E15). */
+  uebernommen: boolean
+  /** Ob der Plan dieser fachlichen Anforderung schon `Plan-Review:` trägt (E14). */
+  planReviewVorhanden: boolean
+  /** Start des zugrunde gelegten Laufs; `null`, solange keiner die Karte angefasst hat. */
+  lauf: string | null
+}
+
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
 export type NightRunErrorClassCounts = Partial<Record<NightRunErrorClass, number>>
 
@@ -378,6 +424,8 @@ export const nightRunsApi = {
   /** Der Fortschritt eines Laufs, ermittelt aus dem Board (Issue #1376, Plan #1372). */
   progress: (projectId: number, runId: number) =>
     apiFetch<NightRunProgressView>(`/api/projects/${projectId}/night-runs/${runId}/progress`),
+  /** Der Kettenstand einer Karte für die Stufenleiste (Issue #1453, Plan #1447). */
+  kettenstand: (cardId: number) => apiFetch<KettenStand>(`/api/cards/${cardId}/night-chain`),
 }
 
 export type NightRunsApi = typeof nightRunsApi

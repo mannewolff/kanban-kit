@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type {
   CardRefView,
   ChainProgressView,
+  KettenStand,
+  KettenStation,
+  NightChainStationView,
   NightRunProgressView,
   PackageProgressView,
   PackageState,
@@ -10,6 +13,8 @@ import type {
 import type { NightRunState } from './nightRunLog'
 import {
   ENDE_DES_WEGS,
+  kettenAnsage,
+  kettenAnzeige,
   laeufeZusammenfuehren,
   vorwegZaehlung,
   wegleiste,
@@ -247,5 +252,146 @@ describe('laeufeZusammenfuehren', () => {
   it('lässt einen servergeführten Lauf fallen, den der Server nicht mehr liefert', () => {
     const bisher = [lauf('2026-09-01T22:00:00Z', true)]
     expect(laeufeZusammenfuehren(bisher, [])).toEqual([])
+  })
+})
+
+describe('kettenAnzeige (Issue #1453, Plan #1447 E5, E6)', () => {
+  const station = (
+    s: KettenStation,
+    zustand: NightChainStationView['zustand'],
+    text: string,
+    grund: string | null = null,
+  ): NightChainStationView => ({ station: s, zustand, text, grund })
+
+  const stand = (stationen: NightChainStationView[], teil: Partial<KettenStand> = {}): KettenStand => ({
+    ziel: 'UMSETZUNG',
+    pruefer: null,
+    zielErreicht: false,
+    grenze: null,
+    stationen,
+    uebernommen: true,
+    planReviewVorhanden: false,
+    lauf: '2026-10-05T01:00:00Z',
+    ...teil,
+  })
+
+  it('bildet alle sieben Zustände auf Symbol und Text ab — der Text kommt fertig vom Server', () => {
+    const anzeige = kettenAnzeige(
+      stand([
+        station('PLAN', 'VOR_DEM_LAUF_ERBRACHT', 'vor dem Lauf erbracht'),
+        station('REVIEW', 'ERLEDIGT', 'erledigt'),
+        station('PAKETE', 'LAEUFT', 'läuft'),
+        station('ABDECKUNG', 'WARTET', 'wartet', 'wartet: Frage an den Menschen'),
+        station('UMSETZUNG', 'ABGEBROCHEN', 'abgebrochen', 'abgebrochen: Zeitgrenze'),
+        station('VORBEREITUNG', 'NICHT_VORGESEHEN', 'nicht vorgesehen'),
+      ]),
+    )
+    expect(anzeige.map((a) => [a.station, a.name, a.symbol, a.text, a.grund])).toEqual([
+      ['PLAN', 'Plan', 'erbracht', 'vor dem Lauf erbracht', null],
+      ['REVIEW', 'Prüfung', 'erledigt', 'erledigt', null],
+      ['PAKETE', 'Arbeitspakete', 'laeuft', 'läuft', null],
+      ['ABDECKUNG', 'Abdeckung', 'wartet', 'wartet', 'wartet: Frage an den Menschen'],
+      ['UMSETZUNG', 'Umsetzung', 'abgebrochen', 'abgebrochen', 'abgebrochen: Zeitgrenze'],
+      ['VORBEREITUNG', 'Veröffentlichung vorbereitet', 'nicht-vorgesehen', 'nicht vorgesehen', null],
+    ])
+    const steht = kettenAnzeige(stand([station('UMSETZUNG', 'STEHT_AUS', 'steht aus')]))[0]
+    expect([steht.symbol, steht.text]).toEqual(['steht-aus', 'steht aus'])
+  })
+
+  it('übernimmt „läuft (2 Prüfer)“ wörtlich', () => {
+    const [review] = kettenAnzeige(stand([station('REVIEW', 'LAEUFT', 'läuft (2 Prüfer)')], { pruefer: 2 }))
+    expect(review.text).toBe('läuft (2 Prüfer)')
+    expect(review.symbol).toBe('laeuft')
+  })
+
+  it('zeigt an der erreichten Zielstation „Ziel erreicht“ mit eigenem Symbol', () => {
+    const anzeige = kettenAnzeige(
+      stand(
+        [station('PAKETE', 'ERLEDIGT', 'erledigt'), station('UMSETZUNG', 'ERLEDIGT', 'Ziel erreicht')],
+        { zielErreicht: true },
+      ),
+    )
+    expect(anzeige.map((a) => [a.symbol, a.text])).toEqual([
+      ['erledigt', 'erledigt'],
+      ['ziel-erreicht', 'Ziel erreicht'],
+    ])
+  })
+
+  it('zeigt ein erledigtes Ziel ohne „fertig bis“ nicht als erreicht', () => {
+    const [umsetzung] = kettenAnzeige(stand([station('UMSETZUNG', 'ERLEDIGT', 'erledigt')]))
+    expect(umsetzung.symbol).toBe('erledigt')
+  })
+
+  it('setzt an der Projektgrenze den Grund in den Text: „Projektgrenze: <Grund>“', () => {
+    const grund = 'wartet: Übergang pakete→umsetzung im Projekt nicht freigegeben — weiter mit kit:night'
+    const [umsetzung] = kettenAnzeige(
+      stand([station('UMSETZUNG', 'WARTET', 'Projektgrenze', grund)], {
+        grenze: { stufe: 'ABDECKUNG', grund },
+      }),
+    )
+    expect(umsetzung.symbol).toBe('projektgrenze')
+    expect(umsetzung.text).toBe(`Projektgrenze: ${grund}`)
+    expect(umsetzung.grund).toBeNull()
+  })
+
+  it('zeigt die Projektgrenze ohne gemeldeten Grund als bloßes „Projektgrenze“', () => {
+    const [umsetzung] = kettenAnzeige(stand([station('UMSETZUNG', 'WARTET', 'Projektgrenze')]))
+    expect([umsetzung.symbol, umsetzung.text, umsetzung.grund]).toEqual(['projektgrenze', 'Projektgrenze', null])
+  })
+
+  it('markiert das gewählte Ziel, ohne Ziel „Arbeitspakete“, und die aktuelle Station', () => {
+    const stationen = [
+      station('PAKETE', 'ERLEDIGT', 'erledigt'),
+      station('ABDECKUNG', 'LAEUFT', 'läuft'),
+      station('UMSETZUNG', 'STEHT_AUS', 'steht aus'),
+    ]
+    expect(kettenAnzeige(stand(stationen)).map((a) => [a.ziel, a.aktuell])).toEqual([
+      [false, false],
+      [false, true],
+      [true, false],
+    ])
+    expect(kettenAnzeige(stand(stationen, { ziel: null })).map((a) => a.ziel)).toEqual([true, false, false])
+  })
+
+  it('zählt wartend und abgebrochen als aktuell, alles andere nicht', () => {
+    const aktuell = (zustand: NightChainStationView['zustand']) =>
+      kettenAnzeige(stand([station('PAKETE', zustand, 'x')]))[0].aktuell
+    expect(aktuell('WARTET')).toBe(true)
+    expect(aktuell('ABGEBROCHEN')).toBe(true)
+    expect(aktuell('STEHT_AUS')).toBe(false)
+    expect(aktuell('NICHT_VORGESEHEN')).toBe(false)
+    expect(aktuell('VOR_DEM_LAUF_ERBRACHT')).toBe(false)
+  })
+
+  it('füllt das Band: erbracht und erledigt voll, die aktuelle halb, der Rest leer und unerreicht', () => {
+    const anzeige = kettenAnzeige(
+      stand([
+        station('PLAN', 'VOR_DEM_LAUF_ERBRACHT', 'vor dem Lauf erbracht'),
+        station('REVIEW', 'ERLEDIGT', 'erledigt'),
+        station('PAKETE', 'ABGEBROCHEN', 'abgebrochen'),
+        station('ABDECKUNG', 'STEHT_AUS', 'steht aus'),
+        station('UMSETZUNG', 'NICHT_VORGESEHEN', 'nicht vorgesehen'),
+      ]),
+    )
+    expect(anzeige.map((a) => [a.fuellung, a.erreicht])).toEqual([
+      [100, true],
+      [100, true],
+      [50, true],
+      [0, false],
+      [0, false],
+    ])
+  })
+
+  it('sagt den ganzen Stand in einem Satz an, mit Grund und Ziel', () => {
+    const anzeige = kettenAnzeige(
+      stand([
+        station('REVIEW', 'ERLEDIGT', 'erledigt'),
+        station('PAKETE', 'WARTET', 'wartet', 'wartet: Frage'),
+        station('UMSETZUNG', 'STEHT_AUS', 'steht aus'),
+      ]),
+    )
+    expect(kettenAnsage(anzeige)).toBe(
+      'Nacht-Kette: Prüfung erledigt; Arbeitspakete wartet (wartet: Frage); Umsetzung steht aus, Ziel',
+    )
   })
 })

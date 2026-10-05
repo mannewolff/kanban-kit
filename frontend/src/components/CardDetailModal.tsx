@@ -1127,8 +1127,11 @@ interface Props {
     | 'openEpic'
   >
   boardsApi?: Pick<typeof defaultBoardsApi, 'get'>
-  /** Abruf der Nachtlauf-Anläufe (Issue #968); ohne Angabe der echte Endpunkt. */
-  nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte'>
+  /**
+   * Abruf der Nachtlauf-Anläufe (Issue #968) und des Kettenstands der Stufenleiste (Issue #1453);
+   * ohne Angabe die echten Endpunkte.
+   */
+  nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte' | 'kettenstand'>
 }
 
 /**
@@ -1809,7 +1812,8 @@ function CardDetailModalView({
             <KartenBlock name="Verlauf">
               {/* Die Stufenleiste der Nacht-Kette (Issue #1449, E1–E3): nur an [Fachlich] und [Plan],
                   bedienbar unter denselben Bedingungen wie die Label-Sektion. Body und Kommentare
-                  braucht sie für Sperrhinweise und Übernahme (Issue #1450). */}
+                  braucht sie für Sperrhinweise und den Rückfall, solange der Kettenstand nicht
+                  geladen ist (Issue #1450, #1453). */}
               {traegtStufenleiste(stand.title) && (
                 <KettenStufenleiste
                   titel={stand.title}
@@ -1819,6 +1823,8 @@ function CardDetailModalView({
                   beschreibung={stand.description}
                   kommentare={comments}
                   onChange={(ids) => void saveLabels(ids)}
+                  cardId={card.id}
+                  api={nightRunsApi}
                 />
               )}
               {/* Nur mit Projekt gibt es etwas abzurufen: `projectId` ist am Modal optional

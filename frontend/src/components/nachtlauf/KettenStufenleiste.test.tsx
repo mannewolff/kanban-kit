@@ -2,7 +2,9 @@ import { ThemeProvider } from '@mui/material/styles'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../../api/client'
 import type { Label } from '../../api/labels'
+import type { KettenStand, NightChainStationView } from '../../api/nightRuns'
 import { theme } from '../../theme'
 import { KettenStufenleiste, traegtStufenleiste } from './KettenStufenleiste'
 
@@ -46,6 +48,8 @@ function zeige({
   disabled = false,
   beschreibung = '',
   kommentare = [],
+  // Ohne Angabe lädt der Kettenstand nie: Die Leiste zeigt dann den Stand aus Gruppe A.
+  kettenstand = vi.fn(() => new Promise<KettenStand>(() => {})),
 }: Partial<{
   titel: string
   labelIds: number[]
@@ -53,6 +57,7 @@ function zeige({
   disabled: boolean
   beschreibung: string
   kommentare: { body: string }[]
+  kettenstand: (cardId: number) => Promise<KettenStand>
 }> = {}) {
   const onChange = vi.fn()
   render(
@@ -65,6 +70,8 @@ function zeige({
         beschreibung={beschreibung}
         kommentare={kommentare}
         onChange={onChange}
+        cardId={812}
+        api={{ kettenstand }}
       />
     </ThemeProvider>,
   )
@@ -505,5 +512,217 @@ describe('KettenStufenleiste — Start', () => {
 
     expect(screen.queryAllByRole('button')).toHaveLength(0)
     expect(screen.getByText(/wartet auf die Übernahme durch einen Runner/)).toBeInTheDocument()
+  })
+})
+
+describe('KettenStufenleiste — Kettenstand (Issue #1453)', () => {
+  const st = (
+    station: NightChainStationView['station'],
+    zustand: NightChainStationView['zustand'],
+    text: string,
+    grund: string | null = null,
+  ): NightChainStationView => ({ station, zustand, text, grund })
+
+  const VOR_DEM_START: KettenStand = {
+    ziel: null,
+    pruefer: null,
+    zielErreicht: false,
+    grenze: null,
+    stationen: [],
+    uebernommen: false,
+    planReviewVorhanden: false,
+    lauf: null,
+  }
+
+  /** Ein übernommener Stand: Plan erledigt, die übrigen Stationen nach Wahl. */
+  const uebernommen = (stationen: NightChainStationView[], teil: Partial<KettenStand> = {}): KettenStand => ({
+    ...VOR_DEM_START,
+    ziel: 'UMSETZUNG',
+    uebernommen: true,
+    lauf: '2026-10-05T01:00:00Z',
+    stationen: [st('PLAN', 'ERLEDIGT', 'erledigt'), ...stationen],
+    ...teil,
+  })
+
+  const geladen = (stand: KettenStand) => vi.fn(() => Promise.resolve(stand))
+  const kStation = (s: string) => screen.findByTestId(`kette-station-${s}`)
+
+  it('lädt den Kettenstand der Karte einmal beim Öffnen', async () => {
+    const kettenstand = geladen(VOR_DEM_START)
+    zeige({ kettenstand })
+    await waitFor(() => expect(kettenstand).toHaveBeenCalledWith(812))
+    expect(kettenstand).toHaveBeenCalledTimes(1)
+  })
+
+  it('zeigt eine laufende Prüfung mit Prüferzahl, Symbol und als aktuelle Station', async () => {
+    zeige({
+      kettenstand: geladen(
+        uebernommen([st('REVIEW', 'LAEUFT', 'läuft (2 Prüfer)'), st('PAKETE', 'STEHT_AUS', 'steht aus')], {
+          pruefer: 2,
+        }),
+      ),
+    })
+
+    const review = await kStation('REVIEW')
+    expect(review).toHaveTextContent('Prüfung')
+    expect(review).toHaveTextContent('läuft (2 Prüfer)')
+    expect(review).toHaveAttribute('aria-current', 'step')
+    expect(within(review).getByTestId('stationssymbol-laeuft')).toBeInTheDocument()
+    expect(await kStation('PAKETE')).toHaveTextContent('steht aus')
+    expect(await kStation('PAKETE')).not.toHaveAttribute('aria-current')
+    expect(screen.getByText('2 Prüfer')).toBeInTheDocument()
+  })
+
+  it('zeigt eine wartende Station mit ihrem Grund wörtlich', async () => {
+    zeige({ kettenstand: geladen(uebernommen([st('REVIEW', 'WARTET', 'wartet', 'wartet: Frage an den Menschen')])) })
+
+    const review = await kStation('REVIEW')
+    expect(review).toHaveTextContent('wartet')
+    expect(within(review).getByText('wartet: Frage an den Menschen')).toBeInTheDocument()
+    expect(within(review).getByTestId('stationssymbol-wartet')).toBeInTheDocument()
+  })
+
+  it('zeigt eine abgebrochene Kette mit Grund', async () => {
+    zeige({
+      kettenstand: geladen(
+        uebernommen([st('REVIEW', 'ABGEBROCHEN', 'abgebrochen', 'abgebrochen: Zeitgrenze erreicht')]),
+      ),
+    })
+
+    const review = await kStation('REVIEW')
+    expect(review).toHaveTextContent('abgebrochen')
+    expect(within(review).getByText('abgebrochen: Zeitgrenze erreicht')).toBeInTheDocument()
+    expect(within(review).getByTestId('stationssymbol-abgebrochen')).toBeInTheDocument()
+  })
+
+  it('zeigt an der erreichten Zielstation „Ziel erreicht“ und markiert sie als Ziel', async () => {
+    zeige({
+      kettenstand: geladen(
+        uebernommen(
+          [st('PAKETE', 'ERLEDIGT', 'erledigt'), st('UMSETZUNG', 'ERLEDIGT', 'Ziel erreicht'), st('VORBEREITUNG', 'NICHT_VORGESEHEN', 'nicht vorgesehen')],
+          { zielErreicht: true },
+        ),
+      ),
+    })
+
+    const umsetzung = await kStation('UMSETZUNG')
+    expect(umsetzung).toHaveTextContent('Ziel erreicht')
+    expect(within(umsetzung).getByText('Ziel')).toBeInTheDocument()
+    expect(within(umsetzung).getByTestId('stationssymbol-ziel-erreicht')).toBeInTheDocument()
+    expect(await kStation('VORBEREITUNG')).toHaveTextContent('nicht vorgesehen')
+  })
+
+  it('zeigt die Projektgrenze mit dem gemeldeten Grund', async () => {
+    const grund = 'wartet: Übergang abdeckung→umsetzung im Projekt nicht freigegeben — weiter mit kit:night'
+    zeige({
+      kettenstand: geladen(
+        uebernommen([st('ABDECKUNG', 'ERLEDIGT', 'erledigt'), st('UMSETZUNG', 'WARTET', 'Projektgrenze', grund)], {
+          grenze: { stufe: 'ABDECKUNG', grund },
+        }),
+      ),
+    })
+
+    const umsetzung = await kStation('UMSETZUNG')
+    expect(umsetzung).toHaveTextContent(`Projektgrenze: ${grund}`)
+    expect(within(umsetzung).getByTestId('stationssymbol-projektgrenze')).toBeInTheDocument()
+  })
+
+  it('zeigt an einem Plan Plan und Prüfung als vor dem Lauf erbracht, ohne Prüferangabe', async () => {
+    zeige({
+      titel: PLAN,
+      kettenstand: geladen({
+        ...uebernommen([]),
+        stationen: [
+          st('PLAN', 'VOR_DEM_LAUF_ERBRACHT', 'vor dem Lauf erbracht'),
+          st('REVIEW', 'VOR_DEM_LAUF_ERBRACHT', 'vor dem Lauf erbracht'),
+        ],
+      }),
+    })
+
+    expect(await kStation('REVIEW')).toHaveTextContent('vor dem Lauf erbracht')
+    expect(within(await kStation('PLAN')).getByTestId('stationssymbol-erbracht')).toBeInTheDocument()
+    expect(screen.queryByText('Planprüfung:')).not.toBeInTheDocument()
+  })
+
+  it('ist bei übernommener Karte laut Endpunkt reine Anzeige — auch ohne Laufstand in den Kommentaren', async () => {
+    zeige({ labelIds: [10, 3], kettenstand: geladen(uebernommen([st('REVIEW', 'LAEUFT', 'läuft')])) })
+
+    expect(await kStation('REVIEW')).toBeInTheDocument()
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    expect(screen.getByText(/Ein Runner hat die Kette übernommen/)).toBeInTheDocument()
+    expect(screen.getByText('Vorgabe des Projekts')).toBeInTheDocument()
+  })
+
+  it('folgt nach dem Laden dem Endpunkt, nicht den Kommentaren: nicht übernommen heißt startbar', async () => {
+    zeige({
+      labelIds: [10, 2],
+      kommentare: [{ body: '## Laufstand\n\nProtokoll: .claude/protokolle/2026-10-05-175710/x.log' }],
+      kettenstand: geladen(VOR_DEM_START),
+    })
+
+    expect(await screen.findByRole('button', { name: 'Kette starten' })).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('sperrt den Prüferschalter an [Fachlich], wenn der Plan schon Plan-Review trägt', async () => {
+    const onChange = zeige({ labelIds: [10], kettenstand: geladen({ ...VOR_DEM_START, planReviewVorhanden: true }) })
+
+    const hinweis = await screen.findByText(/Der Plan dieser Anforderung trägt schon „Plan-Review:“/)
+    expect(hinweis).toBeInTheDocument()
+    const knopf = within(screen.getByRole('group', { name: 'Planprüfung' })).getByRole('button', {
+      name: /^2 Prüfer/,
+    })
+    expect(knopf).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(knopf)
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('lässt den Prüferschalter ohne Plan-Review frei', async () => {
+    zeige({ labelIds: [10], kettenstand: geladen(VOR_DEM_START) })
+
+    await act(() => Promise.resolve())
+    const knopf = within(screen.getByRole('group', { name: 'Planprüfung' })).getByRole('button', {
+      name: /^2 Prüfer/,
+    })
+    expect(knopf).not.toHaveAttribute('aria-disabled')
+    expect(screen.queryByText(/trägt schon „Plan-Review:“/)).not.toBeInTheDocument()
+  })
+
+  it('fällt bei einem Ladefehler auf die Anzeige vor dem Lauf zurück und nennt den Fehler im Text', async () => {
+    zeige({
+      labelIds: [10, 2],
+      kettenstand: vi.fn(() => Promise.reject(new ApiError(500, 'Fehler', undefined, 'Datenbank nicht erreichbar'))),
+    })
+
+    expect(await screen.findByText(/Der Stand der Kette ließ sich nicht laden: Datenbank nicht erreichbar/)).toBeInTheDocument()
+    expect(station('fachplan')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kette starten' })).toBeInTheDocument()
+  })
+
+  it('nennt bei einem Ladefehler ohne Meldung des Servers einen allgemeinen Grund', async () => {
+    zeige({ kettenstand: vi.fn(() => Promise.reject(new Error('offline'))) })
+
+    expect(await screen.findByText(/ließ sich nicht laden: unbekannter Fehler/)).toBeInTheDocument()
+  })
+
+  it('übernimmt eine Antwort nach dem Schließen nicht mehr', async () => {
+    let loese: (s: KettenStand) => void = () => {}
+    const { unmount } = render(
+      <ThemeProvider theme={theme}>
+        <KettenStufenleiste
+          titel={FACHLICH}
+          labelIds={[]}
+          boardLabels={VORRAT}
+          disabled={false}
+          beschreibung=""
+          kommentare={[]}
+          onChange={vi.fn()}
+          cardId={812}
+          api={{ kettenstand: () => new Promise<KettenStand>((r) => (loese = r)) }}
+        />
+      </ThemeProvider>,
+    )
+    unmount()
+    await act(async () => loese(uebernommen([])))
+    expect(screen.queryByTestId('ketten-stufenleiste')).not.toBeInTheDocument()
   })
 })
