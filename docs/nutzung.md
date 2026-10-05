@@ -551,6 +551,11 @@ Sidebar-Eintrag **„Administration"** ein- und ausgeschaltet:
 - **Der Alltag bleibt unberührt:** Karten anlegen, verschieben und archivieren funktioniert
   **unabhängig** vom Editiermodus.
 
+Unabhängig vom Editiermodus zeigt die Seite **Administration** jedem Angemeldeten den Abschnitt
+**„API-Schnittstelle"**: Er öffnet die Übersicht aller Aufrufe des Leitstands
+(`/administration/api`) und bietet ihre Beschreibung als OpenAPI 3 zum Herunterladen (JSON und
+YAML). Die Übersicht dient dem Nachschlagen — Aufrufe lassen sich dort nicht ausprobieren.
+
 ## Plattform-Leitstand
 
 Der **Plattform-Leitstand** ist die Startseite eines **Plattform-Admins** nach dem Anmelden (Sidebar

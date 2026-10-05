@@ -86,6 +86,12 @@ Die Karten erscheinen live im Web-Board. Status ↔ Spalte werden abgebildet:
 `backlog↔Backlog`, `ready↔Ready`, `in_progress↔In Progress`, `in_review↔In Review`,
 `done↔Done`.
 
+> **Vollständige Beschreibung der API:** Die folgenden Abschnitte zeigen die verlässlichen Aufrufe
+> als Hand-Beispiele. Die vollständige, versionsgenaue Beschreibung aller Aufrufe samt
+> Stabilitätsangabe (verlässlich oder änderbar) steht im Leitstand unter **Administration →
+> API-Schnittstelle** (`/administration/api`) und lässt sich dort als OpenAPI 3 (JSON oder YAML)
+> herunterladen.
+
 ## 5. Karte lesen — inklusive Kommentaren
 
 `tbx issue get` liefert die Karte samt ihrer Kommentare (Autor, Text, Zeitstempel):
