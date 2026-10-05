@@ -1,5 +1,6 @@
 package org.mwolff.manban.auth.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -178,12 +179,19 @@ public class AdminService {
   }
 
   /** Nutzerdarstellung für die Admin-Verwaltung. */
+  @Schema(description = "Ein Konto aus Sicht der Plattform-Verwaltung.")
   public record UserView(
-      Long id,
-      String email,
-      String displayName,
-      PlatformRole platformRole,
-      boolean emailVerified,
-      @Nullable Instant approvedAt,
-      boolean disabled) {}
+      @Schema(description = "Interne ID des Kontos.", example = "7") Long id,
+      @Schema(description = "E-Mail-Adresse, klein geschrieben.", example = "ada@example.org")
+          String email,
+      @Schema(description = "Anzeigename.", example = "Ada Lovelace") String displayName,
+      @Schema(description = "Plattform-Rolle: ADMIN oder USER.", example = "USER")
+          PlatformRole platformRole,
+      @Schema(description = "Ob die E-Mail-Adresse bestätigt ist.", example = "true")
+          boolean emailVerified,
+      @Schema(
+              description =
+                  "Zeitpunkt der Freigabe; null, solange das Konto auf die Freigabe wartet.")
+          @Nullable Instant approvedAt,
+      @Schema(description = "Ob das Konto gesperrt ist.", example = "false") boolean disabled) {}
 }
