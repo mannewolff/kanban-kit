@@ -125,14 +125,16 @@
         "src/components/AuthCard.tsx",
         "src/components/LabelManagerDialog.tsx",
         "src/components/SpecImportDialog.tsx",
-        "src/components/AttachmentPreview.tsx"
+        "src/components/AttachmentPreview.tsx",
+        "src/components/AusprobierBestaetigung.tsx"
       ],
       "testMuster": [
         "src/components/PasswordField.test.tsx",
         "src/components/AuthCard.test.tsx",
         "src/components/LabelManagerDialog.test.tsx",
         "src/components/SpecImportDialog.test.tsx",
-        "src/components/AttachmentPreview.test.tsx"
+        "src/components/AttachmentPreview.test.tsx",
+        "src/components/AusprobierBestaetigung.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,
