@@ -31,6 +31,7 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardIngestService;
 import org.mwolff.manban.card.application.CardIngestService.BoardItemView;
+import org.mwolff.manban.card.application.CardMoveService;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardView;
@@ -39,7 +40,6 @@ import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.comment.application.CommentNotFoundException;
 import org.mwolff.manban.comment.application.CommentService;
-import org.mwolff.manban.comment.application.CommentService.CommentView;
 
 /** Unit-Tests der Kanban-Compat-Schicht (Spaltennamen-Normalisierung + Verhalten an den Ports). */
 // PMD.TooManyMethods: methodenreiche Testsuite — viele kleine @Test-Methoden je Erfolgs- und
@@ -56,6 +56,7 @@ class KanbanCompatServiceTest {
   private BoardService boardService;
   private CardService cardService;
   private CardIngestService ingest;
+  private CardMoveService moveService;
   private EpicService epics;
   private LabelService labelService;
   private CommentService commentService;
@@ -139,6 +140,7 @@ class KanbanCompatServiceTest {
     boardService = mock(BoardService.class);
     cardService = mock(CardService.class);
     ingest = mock(CardIngestService.class);
+    moveService = mock(CardMoveService.class);
     epics = mock(EpicService.class);
     labelService = mock(LabelService.class);
     commentService = mock(CommentService.class);
@@ -148,6 +150,7 @@ class KanbanCompatServiceTest {
             boardService,
             cardService,
             ingest,
+            moveService,
             epics,
             labelService,
             commentService,
@@ -840,7 +843,7 @@ class KanbanCompatServiceTest {
     service.move(bound(), 1L, "READY", 0);
 
     // Then
-    verify(cardService).move(1L, 1L, 101L, 0);
+    verify(moveService).move(1L, 1L, 101L, 0);
   }
 
   @Test
@@ -852,7 +855,7 @@ class KanbanCompatServiceTest {
     service.move(bound(), 1L, "DONE", 2);
 
     // Then
-    verify(cardService).move(1L, 1L, 104L, 2);
+    verify(moveService).move(1L, 1L, 104L, 2);
   }
 
   @Test
@@ -870,8 +873,8 @@ class KanbanCompatServiceTest {
     service.move(bound(), 1L, " ready ", 3);
 
     // Then
-    verify(cardService).setStatus(1L, 1L, "READY");
-    verify(cardService, never()).move(anyLong(), anyLong(), anyLong(), anyInt());
+    verify(moveService).setStatus(1L, 1L, "READY");
+    verify(moveService, never()).move(anyLong(), anyLong(), anyLong(), anyInt());
   }
 
   @Test
@@ -884,7 +887,7 @@ class KanbanCompatServiceTest {
     assertThatThrownBy(() -> service.move(principal, 1L, "ANSTEHEND", 0))
         .isInstanceOf(InvalidKanbanColumnException.class)
         .hasMessageContaining("Unbekannte Kanban-Spalte");
-    verify(cardService, never()).setStatus(anyLong(), anyLong(), anyString());
+    verify(moveService, never()).setStatus(anyLong(), anyLong(), anyString());
   }
 
   @Test
@@ -897,8 +900,8 @@ class KanbanCompatServiceTest {
     service.move(bound(), 1L, "READY", 1);
 
     // Then
-    verify(cardService).move(1L, 1L, 101L, 1);
-    verify(cardService, never()).setStatus(anyLong(), anyLong(), anyString());
+    verify(moveService).move(1L, 1L, 101L, 1);
+    verify(moveService, never()).setStatus(anyLong(), anyLong(), anyString());
   }
 
   @Test
@@ -1017,7 +1020,7 @@ class KanbanCompatServiceTest {
         .isInstanceOf(CardNotFoundException.class);
     // Der Guard läuft vor dem Lesen der Karte: Eine fremde Karte verrät nicht einmal ihren Status.
     verify(cardService, never()).getCard(anyLong(), anyLong());
-    verify(cardService, never()).setStatus(anyLong(), anyLong(), anyString());
+    verify(moveService, never()).setStatus(anyLong(), anyLong(), anyString());
   }
 
   @Test
@@ -1216,8 +1219,8 @@ class KanbanCompatServiceTest {
     when(commentService.list(1L, 42L))
         .thenReturn(
             List.of(
-                new CommentView(9L, 42L, 3L, "Anna", "Erster", first, first),
-                new CommentView(10L, 42L, 4L, "Bert", "Zweiter", second, second)));
+                new CommentService.CommentView(9L, 42L, 3L, "Anna", "Erster", first, first),
+                new CommentService.CommentView(10L, 42L, 4L, "Bert", "Zweiter", second, second)));
 
     // When
     List<KanbanCompatService.Comment> result = service.listComments(bound(), 42L);
@@ -1237,7 +1240,7 @@ class KanbanCompatServiceTest {
     // Given: der Kommentar 9 haengt an der Karte 42
     Instant at = Instant.parse("2026-01-01T10:00:00Z");
     when(commentService.list(1L, 42L))
-        .thenReturn(List.of(new CommentView(9L, 42L, 1L, "Anna", "Alt", at, at)));
+        .thenReturn(List.of(new CommentService.CommentView(9L, 42L, 1L, "Anna", "Alt", at, at)));
 
     // When
     service.updateComment(bound(), 42L, 9L, "Neu");
@@ -1252,7 +1255,7 @@ class KanbanCompatServiceTest {
     // (Mutant) ersetzte ein Aufruf ueber eine Karte des Boards einen Kommentar einer fremden.
     Instant at = Instant.parse("2026-01-01T10:00:00Z");
     when(commentService.list(1L, 42L))
-        .thenReturn(List.of(new CommentView(10L, 42L, 1L, "Anna", "Alt", at, at)));
+        .thenReturn(List.of(new CommentService.CommentView(10L, 42L, 1L, "Anna", "Alt", at, at)));
 
     // When / Then
     KanbanPrincipal principal = bound();

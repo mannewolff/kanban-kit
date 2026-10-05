@@ -14,6 +14,7 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardIngestService;
 import org.mwolff.manban.card.application.CardIngestService.BoardItemView;
+import org.mwolff.manban.card.application.CardMoveService;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.LabelService;
@@ -26,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Compat-Schicht für die Toolbox-Kanban-API (tbx.mjs / board.mjs). Bildet das feste
  * 5-Spalten-Protokoll (BACKLOG/READY/IN_PROGRESS/IN_REVIEW/DONE) auf ein manban-Board ab und
  * operiert ausschließlich auf dem an das Token gebundenen Board (#44). Rechte laufen über die
- * bestehenden Services (CardService/CardIngestService/EpicService/CommentService →
+ * bestehenden Services (CardService/CardIngestService/CardMoveService/EpicService/CommentService →
  * PermissionChecker).
  *
  * <p>Spalten-Mapping ausschließlich per Namensabgleich (Backlog/Ready/In Progress/In Review/Done).
@@ -56,6 +57,7 @@ public class KanbanCompatService {
   private final BoardService boardService;
   private final CardService cardService;
   private final CardIngestService ingest;
+  private final CardMoveService moveService;
   private final EpicService epicService;
   private final LabelService labelService;
   private final CommentService commentService;
@@ -65,6 +67,7 @@ public class KanbanCompatService {
       BoardService boardService,
       CardService cardService,
       CardIngestService ingest,
+      CardMoveService moveService,
       EpicService epicService,
       LabelService labelService,
       CommentService commentService,
@@ -72,6 +75,7 @@ public class KanbanCompatService {
     this.boardService = boardService;
     this.cardService = cardService;
     this.ingest = ingest;
+    this.moveService = moveService;
     this.epicService = epicService;
     this.labelService = labelService;
     this.commentService = commentService;
@@ -314,9 +318,9 @@ public class KanbanCompatService {
    * Setzt bei einem Arbeitspaket den Status, sonst verschiebt es das Item des gebundenen Boards in
    * die Ziel-Spalte an die Ziel-Position (Plan #1294, E11).
    *
-   * <p>Ein Arbeitspaket wandert über {@link CardService#setStatus} ans Ende der Prozessspalte des
-   * Status, wenn das Board eine hat, sonst bleibt es liegen (Korrektur #787, Issue #1326); {@code
-   * position} hat dabei keine Wirkung, und das Board braucht keine Spalte für den Schlüssel.
+   * <p>Ein Arbeitspaket wandert über {@link CardMoveService#setStatus} ans Ende der Prozessspalte
+   * des Status, wenn das Board eine hat, sonst bleibt es liegen (Korrektur #787, Issue #1326);
+   * {@code position} hat dabei keine Wirkung, und das Board braucht keine Spalte für den Schlüssel.
    * Vorhaben und die Dokumentarten tragen keinen Status und werden wie bisher verschoben. Pfad und
    * Antwortform bleiben für beide Fälle gleich, damit jeder bestehende Aufrufer lauffähig bleibt.
    */
@@ -326,11 +330,11 @@ public class KanbanCompatService {
     ingest.requireOnBoard(cardId, boardId);
     if (cardService.getCard(principal.userId(), cardId).status() != null) {
       // Die Kanban-Keys sind zugleich die Statusnamen der card-Fassade (E24).
-      cardService.setStatus(principal.userId(), cardId, requireKanbanKey(column));
+      moveService.setStatus(principal.userId(), cardId, requireKanbanKey(column));
       return;
     }
     long columnId = columnIdForKey(boardId, column);
-    cardService.move(principal.userId(), cardId, columnId, position);
+    moveService.move(principal.userId(), cardId, columnId, position);
   }
 
   /**

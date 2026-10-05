@@ -14,6 +14,7 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.domain.BoardColumn;
 import org.mwolff.manban.card.application.CardDependencyRepository;
 import org.mwolff.manban.card.application.CardIngestService;
+import org.mwolff.manban.card.application.CardMoveService;
 import org.mwolff.manban.card.application.CardMovedConcurrentlyException;
 import org.mwolff.manban.card.application.CardNumberConflictException;
 import org.mwolff.manban.card.application.CardRepository;
@@ -52,6 +53,7 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
 
   @Autowired private CardService cardService;
   @Autowired private CardIngestService ingest;
+  @Autowired private CardMoveService moveService;
   @Autowired private BoardService boardService;
   @Autowired private ProjectStartNumberService startNumbers;
   @Autowired private CardRepository cards;
@@ -154,8 +156,8 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
 
     TransactionRace.Result race =
         race(
-            () -> cardService.move(user, first, ready, 0),
-            () -> cardService.move(user, second, ready, 0));
+            () -> moveService.move(user, first, ready, 0),
+            () -> moveService.move(user, second, ready, 0));
 
     assertThat(race.firstFailure()).isNull();
     assertThat(race.secondFailure()).isNull();
@@ -176,8 +178,8 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
 
     TransactionRace.Result race =
         raceUnblocked(
-            () -> cardService.move(user, first, targetOfFirst, 0),
-            () -> cardService.move(user, second, targetOfSecond, 0));
+            () -> moveService.move(user, first, targetOfFirst, 0),
+            () -> moveService.move(user, second, targetOfSecond, 0));
 
     assertThat(race.firstFailure()).isNull();
     assertThat(race.secondFailure()).isNull();
@@ -196,8 +198,8 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
 
     TransactionRace.Result race =
         race(
-            () -> cardService.move(user, cardId, ready, 0),
-            () -> cardService.move(user, cardId, review, 0));
+            () -> moveService.move(user, cardId, ready, 0),
+            () -> moveService.move(user, cardId, review, 0));
 
     // Der zweite Aufruf hat die Quellspalte gesperrt, die die Karte inzwischen verlassen hat —
     // seine Sperrmenge deckt den tatsächlichen Umzug nicht ab. Ein 409 ist die ehrliche Antwort.
@@ -219,8 +221,8 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
 
     TransactionRace.Result race =
         race(
-            () -> cardService.transfer(user, first, targetBoard, targetColumn),
-            () -> cardService.transfer(user, second, targetBoard, targetColumn));
+            () -> moveService.transfer(user, first, targetBoard, targetColumn),
+            () -> moveService.transfer(user, second, targetBoard, targetColumn));
 
     assertThat(race.firstFailure()).isNull();
     assertThat(race.secondFailure()).isNull();
@@ -243,8 +245,8 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
 
     TransactionRace.Result race =
         race(
-            () -> cardService.bulkTransfer(user, List.of(bulkCard), targetBoard, targetColumn),
-            () -> cardService.transfer(user, singleCard, targetBoard, targetColumn));
+            () -> moveService.bulkTransfer(user, List.of(bulkCard), targetBoard, targetColumn),
+            () -> moveService.transfer(user, singleCard, targetBoard, targetColumn));
 
     // Der zweite Aufruf wartet — auf der Projektsperre, nicht in einer Verklemmung.
     assertThat(race.firstFailure()).isNull();

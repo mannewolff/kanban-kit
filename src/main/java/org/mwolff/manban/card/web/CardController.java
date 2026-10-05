@@ -17,7 +17,6 @@ import org.mwolff.manban.card.application.CardView;
 import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.InvalidDerivedFromException;
 import org.mwolff.manban.card.application.LabelAction;
-import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.common.TextLimits;
 import org.springframework.http.HttpStatus;
@@ -33,14 +32,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Karten- und Vorhaben-Verwaltung eines Boards (Anlegen, Bearbeiten, Zuordnen). Archiv und
- * Papierkorb liegen seit Issue #1394 im {@link CardArchiveController}.
+ * Papierkorb liegen seit Issue #1394 im {@link CardArchiveController}, Verschieben, Status und
+ * Umzug seit Issue #1395 im {@link CardMoveController}.
  */
-// PMD.CouplingBetweenObjects: eingehender Adapter der gesamten Karten-/Vorhaben-API. Die Kopplung
-// zählt im Wesentlichen die Request-/Response-Records der einzelnen Endpunkte plus die
-// Application-Typen, an die delegiert wird — jeder Endpunkt bringt sie zwangsläufig mit. Eine
-// Aufteilung würde eine zusammengehörige HTTP-Oberfläche über mehrere Controller zerreißen, ohne
-// dass ein einziger Endpunkt einfacher würde.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
+// PMD.CouplingBetweenObjects entfiel mit Verschieben, Status und Umzug, die seit Issue #1395 im
+// CardMoveController liegen: Die Kopplung liegt wieder unter der Schwelle (Plan #1387, E12).
 @RestController
 class CardController {
 
@@ -146,58 +142,6 @@ class CardController {
         request.dueDate());
   }
 
-  @PostMapping("/api/cards/{cardId}/move")
-  CardView move(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody MoveCardRequest request) {
-    return cards.move(userId, cardId, request.columnId(), request.position());
-  }
-
-  /**
-   * Setzt den Status eines Arbeitspakets, ohne es zu verschieben (Issue #1300). Ein eigener
-   * Endpunkt statt eines Felds am {@code PATCH}: Der Status hängt an {@code CARD_MOVE}, das Patch
-   * an {@code TICKET_UPDATE} — zwei Rechte in einem Endpunkt öffneten still zu weit (Plan #1294,
-   * E9).
-   */
-  @PutMapping("/api/cards/{cardId}/status")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void setStatus(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody SetStatusRequest request) {
-    cards.setStatus(userId, cardId, request.status());
-  }
-
-  /**
-   * Ordnet die aktiven Karten einer Spalte nach Kartennummer. Die Richtung kommt bei jedem Aufruf
-   * mit — das Backend merkt sich keinen Toggle-Zustand.
-   */
-  @PostMapping("/api/columns/{columnId}/cards/sort-by-number")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void sortByNumber(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long columnId,
-      @Valid @RequestBody SortByNumberRequest request) {
-    cards.sortColumnByNumber(userId, columnId, request.direction());
-  }
-
-  @PostMapping("/api/cards/{cardId}/transfer")
-  CardView transfer(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody TransferCardRequest request) {
-    return cards.transfer(userId, cardId, request.targetBoardId(), request.targetColumnId());
-  }
-
-  /** Verschiebt mehrere Karten in einer Transaktion auf ein anderes Board (alles-oder-nichts). */
-  @PostMapping("/api/cards/bulk-transfer")
-  List<CardView> bulkTransfer(
-      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkTransferRequest request) {
-    return cards.bulkTransfer(
-        userId, request.cardIds(), request.targetBoardId(), request.targetColumnId());
-  }
-
   /**
    * Setzt ein Label an mehreren Karten oder nimmt es ihnen ab, in einer Transaktion
    * (alles-oder-nichts). Die übrigen Labels jeder Karte bleiben unberührt.
@@ -290,20 +234,6 @@ class CardController {
       @Size(max = 16) String shortcode,
       Long parentId,
       @Nullable Instant dueDate) {}
-
-  record MoveCardRequest(
-      @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
-
-  record SetStatusRequest(@NotBlank String status) {}
-
-  record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
-
-  record SortByNumberRequest(@NotNull SortDirection direction) {}
-
-  record BulkTransferRequest(
-      @NotEmpty @Size(max = 200) List<Long> cardIds,
-      @NotNull Long targetBoardId,
-      @NotNull Long targetColumnId) {}
 
   record BulkLabelsRequest(
       @NotEmpty @Size(max = 200) List<Long> cardIds,

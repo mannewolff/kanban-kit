@@ -29,7 +29,7 @@ import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Dashboard-Aggregation (Ports gemockt, feste Uhr). */
-// PMD.CouplingBetweenObjects: Der E25-Test (Issue #1300) verdrahtet CardService mit dieser
+// PMD.CouplingBetweenObjects: Der E25-Test (Issue #1300) verdrahtet CardMoveService mit dieser
 // Aggregation über einen gemeinsamen Aufenthaltsverlauf — nur so ist belegt, dass ein Statuswechsel
 // die Kennzahl speist. Die Kopplung zählt die Ports beider Services, kein Design-Smell.
 @SuppressWarnings("PMD.CouplingBetweenObjects")
@@ -437,8 +437,8 @@ class CardCycleTimeServiceTest {
             });
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
-    CardService karten =
-        CardServiceAufbau.ausPorts(
+    CardMoveService karten =
+        CardServiceAufbau.moveAusPorts(
             cards,
             mock(CardDependencyRepository.class),
             boardService,
