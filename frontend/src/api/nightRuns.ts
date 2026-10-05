@@ -404,6 +404,22 @@ export interface KettenStand {
   lauf: string | null
 }
 
+/**
+ * Eine zur Übernahme freigegebene, noch nicht übernommene Karte, wie sie
+ * `GET /api/projects/{projectId}/night-runs/tonight` liefert (Issue #1454, #1455).
+ */
+export interface HeuteNachtKarte {
+  number: number
+  title: string
+  boardName: string
+  /** `FACHPLAN`: die Kette beginnt beim Plan; `PLAN`: Plan und Prüfung sind vor dem Lauf erbracht. */
+  start: 'FACHPLAN' | 'PLAN'
+  /** Die Zielstation: `PLAN`, `PAKETE`, `UMSETZUNG` oder `VORBEREITUNG`. */
+  ziel: KettenStation
+  /** Gewählte Prüferzahl; `null` ohne Wahl und an einem Plan. */
+  pruefer: number | null
+}
+
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
 export type NightRunErrorClassCounts = Partial<Record<NightRunErrorClass, number>>
 
@@ -426,6 +442,9 @@ export const nightRunsApi = {
     apiFetch<NightRunProgressView>(`/api/projects/${projectId}/night-runs/${runId}/progress`),
   /** Der Kettenstand einer Karte für die Stufenleiste (Issue #1453, Plan #1447). */
   kettenstand: (cardId: number) => apiFetch<KettenStand>(`/api/cards/${cardId}/night-chain`),
+  /** Die freigegebenen, noch nicht übernommenen Karten des Projekts (Issue #1455, Plan #1447). */
+  heuteNacht: (projectId: number) =>
+    apiFetch<HeuteNachtKarte[]>(`/api/projects/${projectId}/night-runs/tonight`),
 }
 
 export type NightRunsApi = typeof nightRunsApi

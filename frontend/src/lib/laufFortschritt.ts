@@ -178,7 +178,8 @@ export interface Stationsanzeige {
   fuellung: number
 }
 
-const STATIONSNAME: Record<KettenStation, string> = {
+/** Die Namen der Stationen der Stufenleiste — auch für die Übersicht „Heute Nacht“ (Issue #1455). */
+export const STATIONSNAME: Record<KettenStation, string> = {
   ...STUFENNAME,
   VORBEREITUNG: 'Veröffentlichung vorbereitet',
 }

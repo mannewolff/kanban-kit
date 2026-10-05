@@ -146,6 +146,23 @@ describe('nightRunsApi', () => {
     expect(stand.uebernommen).toBe(true)
   })
 
+  it('heuteNacht ruft GET /api/projects/{id}/night-runs/tonight und liefert die Karten (Issue #1455)', async () => {
+    const karte = {
+      number: 1420,
+      title: '[Fachlich] Export als CSV',
+      boardName: 'Entwicklung',
+      start: 'FACHPLAN',
+      ziel: 'UMSETZUNG',
+      pruefer: 2,
+    }
+    const f = spyFetch(JSON.stringify([karte]))
+    const karten = await nightRunsApi.heuteNacht(4)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/projects/4/night-runs/tonight')
+    expect(c.method).toBeUndefined()
+    expect(karten).toEqual([karte])
+  })
+
   it('progress reicht einen Fehler des Servers durch', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,
