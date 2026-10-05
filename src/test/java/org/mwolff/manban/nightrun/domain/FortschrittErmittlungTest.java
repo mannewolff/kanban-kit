@@ -405,6 +405,19 @@ class FortschrittErmittlungTest {
   }
 
   @Test
+  void stufeneintragMitZerlegtemUmlautWirdErkannt() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    stand(f, "zuletzt abgeschlossen: abdeckung fertig für #" + p.number() + " um " + um(50));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.ABDECKUNG, StageState.ERREICHT);
+    assertThat(kette.endeErreicht()).isTrue();
+  }
+
+  @Test
   void durchziehenNurAmVomLaufAngelegtenPlanBleibtVarianteA() {
     Karte f = anforderung(500);
     Karte p = plan(501, f, FortschrittErmittlung.LABEL_DURCHZIEHEN);

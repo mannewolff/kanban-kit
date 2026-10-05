@@ -40,7 +40,7 @@ import org.mwolff.manban.common.Identifiable;
  * @param derivedFromCardId Karte, aus der diese entstanden ist (nullable) — die Herkunft der
  *     Prozesskette fachliche Anforderung → Plandokument → Arbeitspaket. Gespeichert wird die
  *     <strong>ID</strong> und nicht die projektweite Nummer: Beim Verschieben in ein anderes
- *     Projekt vergibt {@code CardService.doTransfer} eine neue Nummer, eine gespeicherte Nummer
+ *     Projekt vergibt {@code CardMoveService.doTransfer} eine neue Nummer, eine gespeicherte Nummer
  *     zeigte danach im Projekt des Kindes auf eine fremde Karte. Die ID bleibt stabil.
  * @param requirementCardId fachliche Anforderung, aus der dieses Vorhaben eröffnet wurde (nullable;
  *     nur an EPIC gesetzt). <strong>Drei Relationen liegen hier nebeneinander und beantworten drei
@@ -325,7 +325,7 @@ public record Card(
   /**
    * Setzt oder löscht ({@code null}) die Herkunft.
    *
-   * <p>Wird von {@code CardService.doTransfer} zum Aufräumen beim Projektwechsel gebraucht: Die
+   * <p>Wird von {@code CardMoveService.doTransfer} zum Aufräumen beim Projektwechsel gebraucht: Die
    * Herkunft ist projekt-lokal, und ein Verweis über die Projektgrenze zeigte auf eine Nummer, die
    * dort einer anderen Karte gehören kann.
    */

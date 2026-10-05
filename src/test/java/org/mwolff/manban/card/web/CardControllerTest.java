@@ -2,37 +2,27 @@ package org.mwolff.manban.card.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.lang.reflect.Method;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.CardView;
-import org.mwolff.manban.card.application.CardService.EpicView;
-import org.mwolff.manban.card.application.InvalidStatusException;
+import org.mwolff.manban.card.application.CardView;
+import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.LabelAction;
-import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.CardType;
-import org.mwolff.manban.project.application.ProjectAccessDeniedException;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 
 /** Unit-Tests des Karten-/Epic-Controllers (Service gemockt). */
-// PMD.TooManyMethods: je Endpunkt eine kleine Delegations-Prüfung — die Methodenzahl folgt der
-// Endpunktzahl des Controllers und ist kein Refactoring-Signal.
-@SuppressWarnings("PMD.TooManyMethods")
 class CardControllerTest {
 
   private static final java.time.Instant INSTANT = java.time.Instant.parse("2026-01-01T00:00:00Z");
 
   private CardService service;
+  private EpicService epics;
   private CardController controller;
 
   private static CardView card() {
@@ -62,30 +52,8 @@ class CardControllerTest {
   @BeforeEach
   void setUp() {
     service = mock(CardService.class);
-    controller = new CardController(service);
-  }
-
-  @Test
-  void assignRequirement_delegiertNummerUnveraendert() {
-    when(service.assignRequirement(3L, 1L, 7)).thenReturn(card());
-
-    CardView result =
-        controller.assignRequirement(3L, 1L, new CardController.AssignRequirementRequest(7));
-
-    assertThat(result).isNotNull();
-    verify(service).assignRequirement(3L, 1L, 7);
-  }
-
-  /**
-   * {@code null} muss durchgereicht werden — es loescht die Zuordnung, statt sie zu ueberspringen.
-   */
-  @Test
-  void assignRequirement_reichtNullDurch() {
-    when(service.assignRequirement(3L, 1L, null)).thenReturn(card());
-
-    controller.assignRequirement(3L, 1L, new CardController.AssignRequirementRequest(null));
-
-    verify(service).assignRequirement(3L, 1L, null);
+    epics = mock(EpicService.class);
+    controller = new CardController(service, epics);
   }
 
   @Test
@@ -95,7 +63,7 @@ class CardControllerTest {
     var request =
         new CardController.CreateCardRequest(
             null, "Epic", "Desc", null, CardType.EPIC, null, "EP-1", null, null, null, null);
-    when(service.createEpic(3L, 2L, "Epic", "Desc", "EP-1")).thenReturn(view);
+    when(epics.createEpic(3L, 2L, "Epic", "Desc", "EP-1")).thenReturn(view);
 
     // When
     CardView result = controller.create(3L, 2L, request);
@@ -177,20 +145,6 @@ class CardControllerTest {
   }
 
   @Test
-  void epics_delegatesToService() {
-    // Given
-    List<EpicView> views =
-        List.of(new EpicView(1L, 4, "Epic", "Desc", "EP-1", 1, 3, List.of(7, 8, 9), List.of(7), 7));
-    when(service.listEpics(3L, 2L)).thenReturn(views);
-
-    // When
-    List<EpicView> result = controller.epics(3L, 2L);
-
-    // Then
-    assertThat(result).isSameAs(views);
-  }
-
-  @Test
   void get_delegatesToService() {
     // Given
     CardView view = card();
@@ -219,81 +173,6 @@ class CardControllerTest {
   }
 
   @Test
-  void assignParent_delegatesToService() {
-    // Given
-    CardView view = card();
-    when(service.assignParent(3L, 8L, 9L)).thenReturn(view);
-
-    // When
-    CardView result = controller.assignParent(3L, 8L, new CardController.AssignParentRequest(9L));
-
-    // Then
-    assertThat(result).isSameAs(view);
-  }
-
-  @Test
-  void move_delegatesToService() {
-    // Given
-    CardView view = card();
-    when(service.move(3L, 8L, 5L, 2)).thenReturn(view);
-
-    // When
-    CardView result = controller.move(3L, 8L, new CardController.MoveCardRequest(5L, 2));
-
-    // Then
-    assertThat(result).isSameAs(view);
-  }
-
-  @Test
-  void sortByNumber_delegatesToService() {
-    // When
-    controller.sortByNumber(3L, 8L, new CardController.SortByNumberRequest(SortDirection.DESC));
-
-    // Then
-    verify(service).sortColumnByNumber(3L, 8L, SortDirection.DESC);
-  }
-
-  @Test
-  void archive_delegatesToService() {
-    // Given
-    CardView view = card();
-    when(service.archive(3L, 8L)).thenReturn(view);
-
-    // When
-    CardView result = controller.archive(3L, 8L);
-
-    // Then
-    assertThat(result).isSameAs(view);
-  }
-
-  @Test
-  void restore_delegatesToService() {
-    // Given
-    CardView view = card();
-    when(service.restore(3L, 8L)).thenReturn(view);
-
-    // When
-    CardView result = controller.restore(3L, 8L);
-
-    // Then
-    assertThat(result).isSameAs(view);
-  }
-
-  @Test
-  void bulkArchive_delegatesToService() {
-    // Given
-    List<CardView> views = List.of(card());
-    var request = new CardController.BulkArchiveRequest(List.of(8L, 9L));
-    when(service.bulkArchive(3L, List.of(8L, 9L))).thenReturn(views);
-
-    // When
-    List<CardView> result = controller.bulkArchive(3L, request);
-
-    // Then
-    assertThat(result).isSameAs(views);
-  }
-
-  @Test
   void bulkLabels_delegatesToService() {
     // Given
     List<CardView> views = List.of(card());
@@ -317,54 +196,6 @@ class CardControllerTest {
     controller.bulkLabels(3L, request);
 
     verify(service).bulkLabels(3L, List.of(8L), 5L, LabelAction.REMOVE);
-  }
-
-  @Test
-  void bulkTransfer_delegatesToService() {
-    // Given
-    List<CardView> views = List.of(card());
-    var request = new CardController.BulkTransferRequest(List.of(8L, 9L), 20L, 60L);
-    when(service.bulkTransfer(3L, List.of(8L, 9L), 20L, 60L)).thenReturn(views);
-
-    // When
-    List<CardView> result = controller.bulkTransfer(3L, request);
-
-    // Then
-    assertThat(result).isSameAs(views);
-  }
-
-  @Test
-  void delete_delegatesToService() {
-    // When
-    controller.delete(3L, 8L);
-
-    // Then
-    verify(service).delete(3L, 8L);
-  }
-
-  @Test
-  void bulkDelete_delegatesToService() {
-    // Given
-    var request = new CardController.BulkDeleteRequest(List.of(8L, 9L));
-
-    // When
-    controller.bulkDelete(3L, request);
-
-    // Then
-    verify(service).bulkDelete(3L, List.of(8L, 9L));
-  }
-
-  @Test
-  void transfer_delegatesToService() {
-    // Given
-    CardView view = card();
-    when(service.transfer(3L, 8L, 20L, 60L)).thenReturn(view);
-
-    // When
-    CardView result = controller.transfer(3L, 8L, new CardController.TransferCardRequest(20L, 60L));
-
-    // Then
-    assertThat(result).isSameAs(view);
   }
 
   @Test
@@ -418,29 +249,6 @@ class CardControllerTest {
   }
 
   @Test
-  void trash_delegatesToService() {
-    List<CardView> views = List.of(card());
-    when(service.listTrash(3L, 2L)).thenReturn(views);
-
-    assertThat(controller.trash(3L, 2L)).isSameAs(views);
-  }
-
-  @Test
-  void restoreDeleted_delegatesToService() {
-    CardView view = card();
-    when(service.restoreFromTrash(3L, 8L)).thenReturn(view);
-
-    assertThat(controller.restoreDeleted(3L, 8L)).isSameAs(view);
-  }
-
-  @Test
-  void purge_delegatesToService() {
-    controller.purge(3L, 8L);
-
-    verify(service).purge(3L, 8L);
-  }
-
-  @Test
   void activity_mapsDomainToViews() {
     // Die Domänen-Abbildung liegt seit #876 in der Fassade; der Controller übernimmt ihre Sicht.
     var entry =
@@ -482,47 +290,5 @@ class CardControllerTest {
               assertThat(v.tokenName()).isNull();
               assertThat(v.agent()).isNull();
             });
-  }
-
-  // --- PUT /api/cards/{cardId}/status (Issue #1300) -------------------
-  // Die Statuscodes entstehen im GlobalExceptionHandler aus @ResponseStatus; der Endpunkt gegen
-  // die echte Kette steht in CardStatusIT.
-
-  @Test
-  void setStatus_delegiertUndAntwortet204() throws NoSuchMethodException {
-    controller.setStatus(3L, 8L, new CardController.SetStatusRequest("IN_REVIEW"));
-
-    verify(service).setStatus(3L, 8L, "IN_REVIEW");
-    Method endpunkt =
-        CardController.class.getDeclaredMethod(
-            "setStatus", Long.class, long.class, CardController.SetStatusRequest.class);
-    assertThat(endpunkt.getAnnotation(PutMapping.class).value())
-        .containsExactly("/api/cards/{cardId}/status");
-    assertThat(endpunkt.getAnnotation(ResponseStatus.class).value())
-        .isEqualTo(HttpStatus.NO_CONTENT);
-  }
-
-  @Test
-  void setStatus_unbekannterWert_ergibt400() {
-    doThrow(new InvalidStatusException("Unbekannter Status: FERTIG"))
-        .when(service)
-        .setStatus(3L, 8L, "FERTIG");
-
-    assertThatThrownBy(
-            () -> controller.setStatus(3L, 8L, new CardController.SetStatusRequest("FERTIG")))
-        .isInstanceOf(InvalidStatusException.class);
-    assertThat(InvalidStatusException.class.getAnnotation(ResponseStatus.class).value())
-        .isEqualTo(HttpStatus.BAD_REQUEST);
-  }
-
-  @Test
-  void setStatus_ohneCardMove_ergibt403() {
-    doThrow(new ProjectAccessDeniedException()).when(service).setStatus(3L, 8L, "READY");
-
-    assertThatThrownBy(
-            () -> controller.setStatus(3L, 8L, new CardController.SetStatusRequest("READY")))
-        .isInstanceOf(ProjectAccessDeniedException.class);
-    assertThat(ProjectAccessDeniedException.class.getAnnotation(ResponseStatus.class).value())
-        .isEqualTo(HttpStatus.FORBIDDEN);
   }
 }

@@ -23,7 +23,6 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -59,12 +58,11 @@ class CardServiceListByBoardTest {
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
-        new CardService(
+        CardServiceAufbau.ausPorts(
             cards,
             dependencies,
             boardService,
             mock(PermissionChecker.class),
-            mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             // Echte KartenZuordnung aus denselben Port-Mocks (Issue #1051): Die Tests halten fest,
             // welcher Sammelzugriff läuft und dass der Einzel-Finder daneben schweigt — ein Mock
@@ -119,7 +117,7 @@ class CardServiceListByBoardTest {
     when(cards.findByIds(Set.of(99L))).thenReturn(List.of(karte(99L, 88, CardType.CARD, null)));
 
     // When
-    List<CardService.CardView> result = service.listByBoard(1L, BOARD);
+    List<CardView> result = service.listByBoard(1L, BOARD);
 
     // Then: je ein Sammelzugriff ueber genau die CARD-IDs — das Vorhaben ist nicht dabei.
     verify(dependencies, times(1)).findByCardIds(KARTEN_IDS);
@@ -133,11 +131,11 @@ class CardServiceListByBoardTest {
 
     assertThat(result)
         .extracting(
-            CardService.CardView::id,
-            CardService.CardView::dependencies,
-            CardService.CardView::assignees,
-            CardService.CardView::labels,
-            CardService.CardView::derivedFrom)
+            CardView::id,
+            CardView::dependencies,
+            CardView::assignees,
+            CardView::labels,
+            CardView::derivedFrom)
         .containsExactly(
             tuple(1L, List.of(7), List.of(42L), List.of(5L), 88),
             tuple(2L, List.of(), List.of(), List.of(), null));
@@ -166,7 +164,7 @@ class CardServiceListByBoardTest {
     when(cards.findByBoardId(BOARD)).thenReturn(List.of(karteMit(1L, lang)));
 
     // When
-    CardService.CardView sicht = service.listByBoard(1L, BOARD).getFirst();
+    CardView sicht = service.listByBoard(1L, BOARD).getFirst();
 
     // Then: der Auszug traegt die Vorschau, die volle Beschreibung bleibt der Einzelabfrage.
     assertThat(sicht.excerpt()).hasSize(200).isEqualTo(lang.substring(0, 200));
@@ -197,13 +195,13 @@ class CardServiceListByBoardTest {
         .thenReturn(List.of(karteMit(1L, "Kurz und knapp"), karteMit(2L, genauGrenze)));
 
     // When
-    List<CardService.CardView> sichten = service.listByBoard(1L, BOARD);
+    List<CardView> sichten = service.listByBoard(1L, BOARD);
 
     // Then
     assertThat(sichten)
-        .extracting(CardService.CardView::excerpt)
+        .extracting(CardView::excerpt)
         .containsExactly("Kurz und knapp", genauGrenze);
-    assertThat(sichten).extracting(CardService.CardView::description).containsOnlyNulls();
+    assertThat(sichten).extracting(CardView::description).containsOnlyNulls();
   }
 
   @Test

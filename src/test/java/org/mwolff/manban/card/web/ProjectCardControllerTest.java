@@ -8,14 +8,14 @@ import static org.mockito.Mockito.when;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.CardView;
+import org.mwolff.manban.card.application.CardSearchService;
+import org.mwolff.manban.card.application.CardView;
 import org.mwolff.manban.card.domain.CardType;
 
 /** Unit-Tests des projektweiten Karten-Lookups (Service gemockt). */
 class ProjectCardControllerTest {
 
-  private CardService service;
+  private CardSearchService service;
   private ProjectCardController controller;
 
   private static CardView card() {
@@ -44,7 +44,7 @@ class ProjectCardControllerTest {
 
   @BeforeEach
   void setUp() {
-    service = mock(CardService.class);
+    service = mock(CardSearchService.class);
     controller = new ProjectCardController(service);
   }
 

@@ -9,7 +9,7 @@ import org.mwolff.manban.card.domain.CardType;
  * Auflösung der Anforderungskarte eines Vorhabens: projektweite Kartennummer → Karten-ID, mit vier
  * harten Ablehnungen.
  *
- * <p>Gespeichert wird die ID und nicht die Nummer, weil {@code CardService.doTransfer} beim
+ * <p>Gespeichert wird die ID und nicht die Nummer, weil {@code CardMoveService.doTransfer} beim
  * Projektwechsel eine neue Nummer vergibt; eine gespeicherte Nummer zeigte danach auf eine fremde
  * Karte. Dieselbe Begründung wie bei {@link DerivedFrom}.
  *

@@ -11,6 +11,25 @@ erzeugt von `scripts/gen-changelog.mjs`.
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.20.0] – 2026-10-05
+
+- chore: v2.19.1
+- Ein Test sichert den Inhalt von KartenAbhaengigkeiten.abhaengigkeitenVon ([#1435](https://github.com/mannewolff/kanban-kit/issues/1435))
+- Neue Konfigruation durch install.mjs
+- Mutationszuordnung nennt den umbenannten Test der Lauf-Abfragen ([#1434](https://github.com/mannewolff/kanban-kit/issues/1434))
+- Server erzwingt die Richtung der Freigabe-Labels des Kits ([#1421](https://github.com/mannewolff/kanban-kit/issues/1421))
+- Ausnahmen und Kopfkommentar von CardService entfernen, Verweise nachziehen ([#1397](https://github.com/mannewolff/kanban-kit/issues/1397))
+- CardRunQueryService für die Lese-Abfragen der Läufe aus CardService lösen ([#1396](https://github.com/mannewolff/kanban-kit/issues/1396))
+- CardMoveService für Verschieben, Status und Umzug aus CardService lösen ([#1395](https://github.com/mannewolff/kanban-kit/issues/1395))
+- CardArchiveService für Archiv und Papierkorb aus CardService lösen ([#1394](https://github.com/mannewolff/kanban-kit/issues/1394))
+- EpicService für Vorhaben und Herkunft aus CardService lösen ([#1393](https://github.com/mannewolff/kanban-kit/issues/1393))
+- CardIngestService für das Kanban-kompatible Einliefern aus CardService lösen ([#1392](https://github.com/mannewolff/kanban-kit/issues/1392))
+- CardSearchService für die Nummernsuche aus CardService lösen ([#1391](https://github.com/mannewolff/kanban-kit/issues/1391))
+- CardView und LabelMarkView als eigenständige Typen ([#1390](https://github.com/mannewolff/kanban-kit/issues/1390))
+- KartenGrundlage, KartenSicht und KartenAbhaengigkeiten aus CardService lösen ([#1389](https://github.com/mannewolff/kanban-kit/issues/1389))
+- Drei Sonar-Befunde in FortschrittErmittlung beheben ([#1385](https://github.com/mannewolff/kanban-kit/issues/1385))
+- Doku-Bau als Paketprüfung für den Bereich doku ([#1361](https://github.com/mannewolff/kanban-kit/issues/1361))
+
 ## [2.19.0] – 2026-10-04
 
 - chore: v2.18.1

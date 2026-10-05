@@ -57,7 +57,8 @@ class TrashRetentionServiceTest {
     cards = mock(CardRepository.class);
     dependencies = mock(CardDependencyRepository.class);
     events = mock(ApplicationEventPublisher.class);
-    service = new TrashRetentionService(cards, dependencies, events);
+    service =
+        new TrashRetentionService(cards, new KartenAbhaengigkeiten(dependencies, cards), events);
   }
 
   @Test

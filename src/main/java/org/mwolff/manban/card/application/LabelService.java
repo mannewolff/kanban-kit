@@ -9,7 +9,9 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
+import org.mwolff.manban.card.application.FreigabeLabels.Richtung;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -25,6 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Das <em>Zuordnen</em> eines vorhandenen Labels an eine Karte ist dagegen Kartenarbeit und
  * verlangt {@link Permission#TICKET_UPDATE} (siehe {@link #addToCard}/{@link #removeFromCard}) —
  * dasselbe Recht wie {@code CardService.setLabels}.
+ *
+ * <p>Die Freigabe-Labels des Kits ändert ein Token nur in ihrer Richtung, und ihre Definition gar
+ * nicht ({@link FreigabeLabels}, Issue #1421).
  */
 @Service
 public class LabelService {
@@ -35,6 +40,7 @@ public class LabelService {
   private final BoardService boardService;
   private final PermissionChecker permissions;
   private final ApplicationEventPublisher events;
+  private final ActorContext actor;
 
   public LabelService(
       LabelRepository labels,
@@ -42,13 +48,15 @@ public class LabelService {
       CardRepository cards,
       BoardService boardService,
       PermissionChecker permissions,
-      ApplicationEventPublisher events) {
+      ApplicationEventPublisher events,
+      ActorContext actor) {
     this.labels = labels;
     this.cardLabels = cardLabels;
     this.cards = cards;
     this.boardService = boardService;
     this.permissions = permissions;
     this.events = events;
+    this.actor = actor;
   }
 
   /**
@@ -59,7 +67,7 @@ public class LabelService {
    * einen Eintrag (leere Liste, wenn ihr kein Label zugeordnet ist).
    *
    * <p>Ohne eigene Rechteprüfung: die Karten-IDs stammen beim einzigen Aufrufer aus einer bereits
-   * rechtegeprüften Board-Abfrage ({@link CardService#listBoardItems}).
+   * rechtegeprüften Board-Abfrage ({@link CardIngestService#listBoardItems}).
    *
    * <p>Auch die Board-Zugehörigkeit der {@code cardIds} wird bewusst nicht geprüft (#472): Die
    * Namen kommen ausschließlich aus {@code labels.findByBoardId(boardId)}, das Ergebnis ist damit
@@ -115,6 +123,7 @@ public class LabelService {
     permissions.require(
         userId, boardService.requireProjectId(label.boardId()), Permission.BOARD_UPDATE);
     String trimmed = requireName(name);
+    FreigabeLabels.pruefeDefinition(herkunft(), label.name(), trimmed);
     if (!trimmed.equals(label.name()) && labels.existsByBoardIdAndName(label.boardId(), trimmed)) {
       throw new InvalidLabelException("Label existiert bereits: " + trimmed);
     }
@@ -127,13 +136,15 @@ public class LabelService {
     Label label = labels.findById(labelId).orElseThrow(LabelNotFoundException::new);
     permissions.require(
         userId, boardService.requireProjectId(label.boardId()), Permission.BOARD_UPDATE);
+    FreigabeLabels.pruefeDefinition(herkunft(), label.name(), null);
     labels.deleteById(labelId);
   }
 
   /**
    * Ordnet der Karte genau <em>ein</em> über seinen Namen aufgelöstes Label zu und lässt alle
-   * übrigen unangetastet (#574) — der Schreibweg, über den das claude-workflow-kit sein
-   * Routing-Label {@code kit:nightrun} setzt.
+   * übrigen unangetastet (#574) — der Schreibweg, über den das claude-workflow-kit seine Labels
+   * setzt. Die Freigabe-Labels {@code kit:night} und {@code kit:nightrun} setzt per Token seit
+   * Issue #1421 niemand mehr, nur noch ein Mensch im Board.
    *
    * <p>Bewusst kein Lesen-Ändern-Zurückschreiben über {@code CardService.setLabels}: Ein Nachtlauf,
    * der parallel zu einer Bearbeitung am Board liefe, löschte damit fremde Labels stillschweigend.
@@ -144,6 +155,9 @@ public class LabelService {
    *
    * @throws CardNotFoundException wenn die Karte fehlt
    * @throws InvalidDependencyException wenn das Item ein Vorhaben ist (400)
+   * @throws FreigabeLabelException wenn ein Token ein Freigabe-Label setzen will, das nur ein
+   *     Mensch setzt (403, Issue #1421) — geprüft nach Absicht, auch wenn das Label schon
+   *     zugeordnet ist
    * @throws LabelNotFoundException wenn das Board kein Label dieses Namens definiert (404) — ein
    *     unbekannter Name wird abgelehnt und <em>nicht</em> angelegt, sonst erzeugte ein Tippfehler
    *     im Nachtlauf dauerhaft Label-Müll
@@ -151,6 +165,7 @@ public class LabelService {
   @Transactional
   public void addToCard(long userId, long cardId, String name) {
     Card card = requireLabelableCard(userId, cardId);
+    FreigabeLabels.pruefe(herkunft(), name, Richtung.SETZEN);
     long boardId = card.boardId();
     if (cardLabels.addLabel(cardId, requireLabelId(boardId, name))) {
       events.publishEvent(new CardBoardActivityEvent(boardId, ActivityType.UPDATED, cardId));
@@ -159,11 +174,13 @@ public class LabelService {
 
   /**
    * Gegenstück zu {@link #addToCard}: entfernt genau die eine Zuordnung und lässt alle übrigen
-   * unangetastet. Ein nicht zugeordnetes Label zu entfernen ist ebenfalls Erfolg.
+   * unangetastet. Ein nicht zugeordnetes Label zu entfernen ist ebenfalls Erfolg — außer ein Token
+   * nimmt ein Freigabe-Label ab, das nur ein Mensch abnimmt (403, {@link FreigabeLabels}).
    */
   @Transactional
   public void removeFromCard(long userId, long cardId, String name) {
     Card card = requireLabelableCard(userId, cardId);
+    FreigabeLabels.pruefe(herkunft(), name, Richtung.ABNEHMEN);
     long boardId = card.boardId();
     if (cardLabels.removeLabel(cardId, requireLabelId(boardId, name))) {
       events.publishEvent(new CardBoardActivityEvent(boardId, ActivityType.UPDATED, cardId));
@@ -197,6 +214,10 @@ public class LabelService {
         .map(Label::requireId)
         .findFirst()
         .orElseThrow(LabelNotFoundException::new);
+  }
+
+  private @Nullable CardActivityOrigin herkunft() {
+    return actor.current().origin();
   }
 
   private static String requireName(String name) {

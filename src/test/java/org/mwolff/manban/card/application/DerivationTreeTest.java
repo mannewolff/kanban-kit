@@ -18,12 +18,11 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.board.application.BoardService;
-import org.mwolff.manban.card.application.CardService.DerivationNodeView;
+import org.mwolff.manban.card.application.EpicService.DerivationNodeView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -39,7 +38,7 @@ class DerivationTreeTest {
 
   private CardRepository cards;
   private CardDependencyRepository dependencies;
-  private CardService service;
+  private EpicService service;
 
   /** Karte dieses Boards. {@code derivedFrom} ist die ID des Vorfahren, nicht dessen Nummer. */
   private static Card card(long id, int number, @Nullable Long derivedFrom) {
@@ -107,12 +106,11 @@ class DerivationTreeTest {
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
-        new CardService(
+        CardServiceAufbau.epicAusPorts(
             cards,
             dependencies,
             boardService,
             permissions,
-            mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             // Echte KartenZuordnung aus Port-Mocks (Issue #1051), kein Mock der Zuordnung selbst.
             new KartenZuordnung(

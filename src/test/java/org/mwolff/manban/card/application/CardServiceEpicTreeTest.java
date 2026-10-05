@@ -15,12 +15,11 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.board.application.BoardService;
-import org.mwolff.manban.card.application.CardService.DerivationNodeView;
+import org.mwolff.manban.card.application.EpicService.DerivationNodeView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.context.ApplicationEventPublisher;
 
 /**
@@ -47,7 +46,7 @@ class CardServiceEpicTreeTest {
   private BoardService boardService;
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
-  private CardService service;
+  private EpicService service;
 
   @BeforeEach
   void setUp() {
@@ -59,12 +58,11 @@ class CardServiceEpicTreeTest {
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
-        new CardService(
+        CardServiceAufbau.epicAusPorts(
             cards,
             dependencies,
             boardService,
             mock(PermissionChecker.class),
-            mock(ProjectService.class),
             mock(CardColumnTransitionRepository.class),
             // Echte KartenZuordnung aus denselben Port-Mocks (Issue #1051) — der Baum liest die
             // gezählten Marken über sie.
@@ -328,7 +326,7 @@ class CardServiceEpicTreeTest {
               assertThat(m.color()).isEqualTo("#0f0");
             });
     // Beide Seiten: Das nicht gezaehlte Label taucht nirgends auf.
-    assertThat(z.labels()).extracting(CardService.LabelMarkView::name).doesNotContain("intern");
+    assertThat(z.labels()).extracting(LabelMarkView::name).doesNotContain("intern");
   }
 
   /**
@@ -344,7 +342,7 @@ class CardServiceEpicTreeTest {
     when(cardLabels.findByCardIds(any())).thenReturn(Map.of(6L, List.of(80L, 90L)));
 
     assertThat(zeile(baum(), 2).labels())
-        .extracting(CardService.LabelMarkView::name)
+        .extracting(LabelMarkView::name)
         .containsExactly("zuerst", "danach");
   }
 

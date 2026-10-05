@@ -29,7 +29,6 @@ import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
-import org.mwolff.manban.project.application.ProjectService;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -55,6 +54,7 @@ class CardServiceStatusTest {
   private BoardService boardService;
   private PermissionChecker permissions;
   private CardService service;
+  private CardMoveService moveService;
 
   @BeforeEach
   void setUp() {
@@ -64,12 +64,27 @@ class CardServiceStatusTest {
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
-        new CardService(
+        CardServiceAufbau.ausPorts(
             cards,
             mock(CardDependencyRepository.class),
             boardService,
             permissions,
-            mock(ProjectService.class),
+            mock(CardColumnTransitionRepository.class),
+            new KartenZuordnung(
+                mock(CardAssigneeRepository.class),
+                mock(LabelRepository.class),
+                mock(CardLabelRepository.class),
+                mock(PermissionChecker.class)),
+            mock(CardActivityRepository.class),
+            actor,
+            mock(ApplicationEventPublisher.class),
+            Clock.fixed(FIXED, ZoneOffset.UTC));
+    moveService =
+        CardServiceAufbau.moveAusPorts(
+            cards,
+            mock(CardDependencyRepository.class),
+            boardService,
+            permissions,
             mock(CardColumnTransitionRepository.class),
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),
@@ -112,31 +127,6 @@ class CardServiceStatusTest {
 
   private static ColumnView column(long id, String name, int position) {
     return new ColumnView(id, name, position, null);
-  }
-
-  private static Card vorhaben(long id, long columnId) {
-    return new Card(
-        id,
-        BOARD,
-        columnId,
-        1,
-        "Vorhaben",
-        null,
-        0,
-        false,
-        null,
-        1L,
-        FIXED,
-        FIXED,
-        CardType.EPIC,
-        null,
-        "E",
-        null,
-        PROJECT,
-        null,
-        null,
-        null,
-        null);
   }
 
   /** Karte mit Titel, Status und Done-Zeitstempel — für die Statusregeln der Schreibpfade. */
@@ -228,31 +218,12 @@ class CardServiceStatusTest {
   }
 
   @Test
-  void createEpic_hatKeinenStatus() {
-    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Ready", 0));
-
-    service.createEpic(1L, BOARD, "Vorhaben", null, null);
-
-    assertThat(gespeichert().status()).isNull();
-  }
-
-  @Test
-  void createDirect_arbeitspaket_uebernimmtDenStatusDerSpalte() {
-    stubAnlegen("Ready");
-
-    service.createDirect(
-        1L, BOARD, 20L, new CardService.DirectCard("Finding", null, "sonar:x", null, null));
-
-    assertThat(gespeichert().status()).isEqualTo(CardStatus.READY);
-  }
-
-  @Test
   void move_arbeitspaketInProzessspalte_uebernimmtDerenStatus() {
     when(cards.findById(1L))
         .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.BACKLOG, null)));
     when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "In Review", 3));
 
-    service.move(1L, 1L, 21L, 0);
+    moveService.move(1L, 1L, 21L, 0);
 
     assertThat(gespeichert().status()).isEqualTo(CardStatus.IN_REVIEW);
   }
@@ -263,7 +234,7 @@ class CardServiceStatusTest {
         .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.READY, null)));
     when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, "Anstehend", 5));
 
-    service.move(1L, 1L, 22L, 0);
+    moveService.move(1L, 1L, 22L, 0);
 
     assertThat(gespeichert().status()).isEqualTo(CardStatus.READY);
     assertThat(gespeichert().movedToDoneAt()).isNull();
@@ -276,7 +247,7 @@ class CardServiceStatusTest {
         .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.READY, null)));
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
-    service.move(1L, 1L, 20L, 3);
+    moveService.move(1L, 1L, 20L, 3);
 
     assertThat(gespeichert().status()).isEqualTo(CardStatus.READY);
   }
@@ -288,7 +259,7 @@ class CardServiceStatusTest {
         .thenReturn(Optional.of(paket(1L, 21L, "Paket", CardStatus.DONE, erledigt)));
     when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, "Anstehend", 5));
 
-    service.move(1L, 1L, 22L, 0);
+    moveService.move(1L, 1L, 22L, 0);
 
     assertThat(gespeichert().status()).isEqualTo(CardStatus.DONE);
     assertThat(gespeichert().movedToDoneAt()).isEqualTo(erledigt);
@@ -300,7 +271,7 @@ class CardServiceStatusTest {
         .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.DONE, null)));
     when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, "Anstehend", 5));
 
-    service.move(1L, 1L, 22L, 0);
+    moveService.move(1L, 1L, 22L, 0);
 
     assertThat(gespeichert().movedToDoneAt()).isEqualTo(FIXED);
   }
@@ -312,7 +283,7 @@ class CardServiceStatusTest {
         .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.BACKLOG, null)));
     when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, "Done (Archiv)", 5));
 
-    service.move(1L, 1L, 22L, 0);
+    moveService.move(1L, 1L, 22L, 0);
 
     assertThat(gespeichert().status()).isEqualTo(CardStatus.BACKLOG);
     assertThat(gespeichert().movedToDoneAt()).isNull();
@@ -323,7 +294,7 @@ class CardServiceStatusTest {
     when(cards.findById(1L)).thenReturn(Optional.of(paket(1L, 20L, "[Plan] Entwurf", null, null)));
     when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
 
-    service.move(1L, 1L, 21L, 0);
+    moveService.move(1L, 1L, 21L, 0);
 
     assertThat(gespeichert().status()).isNull();
     assertThat(gespeichert().movedToDoneAt()).isEqualTo(FIXED);
@@ -339,7 +310,7 @@ class CardServiceStatusTest {
     when(boardService.requireColumn(60L, 20L))
         .thenReturn(new ColumnView(60L, "Anstehend", 0, null));
 
-    service.transfer(1L, 100L, 20L, 60L);
+    moveService.transfer(1L, 100L, 20L, 60L);
 
     assertThat(gespeichert().status()).isEqualTo(CardStatus.DONE);
     assertThat(gespeichert().movedToDoneAt()).isEqualTo(erledigt);
@@ -352,7 +323,7 @@ class CardServiceStatusTest {
     when(boardService.requireProjectId(20L)).thenReturn(PROJECT);
     when(boardService.requireColumn(60L, 20L)).thenReturn(new ColumnView(60L, "Ready", 0, null));
 
-    service.transfer(1L, 100L, 20L, 60L);
+    moveService.transfer(1L, 100L, 20L, 60L);
 
     assertThat(gespeichert().status()).isEqualTo(CardStatus.READY);
     assertThat(gespeichert().movedToDoneAt()).isNull();
@@ -365,7 +336,7 @@ class CardServiceStatusTest {
     when(boardService.requireProjectId(20L)).thenReturn(PROJECT);
     when(boardService.requireColumn(60L, 20L)).thenReturn(new ColumnView(60L, "Done", 0, null));
 
-    service.transfer(1L, 100L, 20L, 60L);
+    moveService.transfer(1L, 100L, 20L, 60L);
 
     assertThat(gespeichert().status()).isEqualTo(CardStatus.DONE);
     assertThat(gespeichert().movedToDoneAt()).isEqualTo(FIXED);
@@ -432,50 +403,6 @@ class CardServiceStatusTest {
     verify(boardService, never()).requireColumn(anyLong(), anyLong());
   }
 
-  @Test
-  void updateContent_arbeitspaketWirdDokument_raeumtDenStatus() {
-    when(cards.findById(1L))
-        .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.READY, null)));
-    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Ready", 1));
-
-    service.updateContent(1L, 1L, "[Fachlich] Paket", null);
-
-    assertThat(gespeichert().status()).isNull();
-  }
-
-  @Test
-  void updateContent_dokumentWirdArbeitspaket_bekommtDenStatusDerProzessspalte() {
-    when(cards.findById(1L)).thenReturn(Optional.of(paket(1L, 20L, "[Idee] Einfall", null, null)));
-    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "In Progress", 2));
-
-    service.updateContent(1L, 1L, "Einfall", null);
-
-    assertThat(gespeichert().status()).isEqualTo(CardStatus.IN_PROGRESS);
-  }
-
-  @Test
-  void listEpics_zaehltArbeitspaketeNachIhremStatus() {
-    // Pakete 6 und 8 stehen auf DONE in einer eigenen Spalte und sind erledigt; Paket 7 liegt in
-    // der Done-Spalte, steht aber auf BACKLOG — für ein Arbeitspaket entscheidet der Status (E7).
-    // Nach dem Spaltennamen wäre es umgekehrt: 1 von 3.
-    when(boardService.listColumns(BOARD))
-        .thenReturn(List.of(column(21L, "Done", 4), column(22L, "Anstehend", 5)));
-    when(cards.findByBoardId(BOARD))
-        .thenReturn(
-            List.of(
-                vorhaben(5L, 21L),
-                paket(6L, 22L, "Paket", CardStatus.DONE, FIXED).withParent(5L),
-                paket(7L, 21L, "Paket", CardStatus.BACKLOG, null).withParent(5L),
-                paket(8L, 22L, "Paket", CardStatus.DONE, FIXED).withParent(5L)));
-
-    List<CardService.EpicView> result = service.listEpics(1L, BOARD);
-
-    assertThat(result)
-        .singleElement()
-        .extracting(CardService.EpicView::done, CardService.EpicView::total)
-        .containsExactly(2, 3);
-  }
-
   // --- setStatus legt in die Prozessspalte (Issue #1326, Korrektur #787) -----
 
   /** Die Spalten des Boards in Board-Reihenfolge; jede ist über requireColumn auffindbar. */
@@ -495,7 +422,7 @@ class CardServiceStatusTest {
     paketIn(20L, CardStatus.READY);
     spalten(column(20L, "Ready", 1), column(30L, "In Review", 3));
 
-    service.setStatus(1L, 5L, "IN_REVIEW");
+    moveService.setStatus(1L, 5L, "IN_REVIEW");
 
     verify(cards).move(5L, 30L, Integer.MAX_VALUE);
     assertThat(gespeichert().status()).isEqualTo(CardStatus.IN_REVIEW);
@@ -506,7 +433,7 @@ class CardServiceStatusTest {
     paketIn(20L, CardStatus.BACKLOG);
     spalten(column(20L, "Anstehend", 0), column(30L, "Ready", 1));
 
-    service.setStatus(1L, 5L, "READY");
+    moveService.setStatus(1L, 5L, "READY");
 
     verify(cards).move(5L, 30L, Integer.MAX_VALUE);
     assertThat(gespeichert().status()).isEqualTo(CardStatus.READY);
@@ -517,7 +444,7 @@ class CardServiceStatusTest {
     paketIn(20L, CardStatus.READY);
     spalten(column(20L, "Ready", 1), column(40L, "Anstehend", 2));
 
-    service.setStatus(1L, 5L, "IN_REVIEW");
+    moveService.setStatus(1L, 5L, "IN_REVIEW");
 
     verify(cards, never()).move(anyLong(), anyLong(), anyInt());
     Card nachher = gespeichert();
@@ -531,7 +458,7 @@ class CardServiceStatusTest {
     paketIn(20L, CardStatus.READY);
     spalten(column(20L, "In Review", 3));
 
-    service.setStatus(1L, 5L, "IN_REVIEW");
+    moveService.setStatus(1L, 5L, "IN_REVIEW");
 
     verify(cards, never()).move(anyLong(), anyLong(), anyInt());
     assertThat(gespeichert().status()).isEqualTo(CardStatus.IN_REVIEW);
@@ -542,7 +469,7 @@ class CardServiceStatusTest {
     paketIn(20L, CardStatus.BACKLOG);
     spalten(column(20L, "Backlog", 0), column(30L, "Ready", 1), column(31L, "ready", 2));
 
-    service.setStatus(1L, 5L, "READY");
+    moveService.setStatus(1L, 5L, "READY");
 
     verify(cards).move(5L, 30L, Integer.MAX_VALUE);
     verify(cards, never()).move(5L, 31L, Integer.MAX_VALUE);
@@ -556,7 +483,7 @@ class CardServiceStatusTest {
         .when(permissions)
         .require(1L, PROJECT, Permission.CARD_MOVE);
 
-    assertThatThrownBy(() -> service.setStatus(1L, 5L, "IN_REVIEW"))
+    assertThatThrownBy(() -> moveService.setStatus(1L, 5L, "IN_REVIEW"))
         .isInstanceOf(ProjectAccessDeniedException.class);
 
     verify(cards, never()).move(anyLong(), anyLong(), anyInt());

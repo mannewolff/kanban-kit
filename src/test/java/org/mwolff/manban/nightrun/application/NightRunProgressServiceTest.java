@@ -24,9 +24,9 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.LaufKarteView;
-import org.mwolff.manban.card.application.CardService.TokenActivityView;
+import org.mwolff.manban.card.application.CardRunQueryService;
+import org.mwolff.manban.card.application.CardRunQueryService.LaufKarteView;
+import org.mwolff.manban.card.application.CardRunQueryService.TokenActivityView;
 import org.mwolff.manban.comment.application.CommentService;
 import org.mwolff.manban.comment.application.CommentService.LaufstandView;
 import org.mwolff.manban.nightrun.domain.CardRef;
@@ -63,7 +63,7 @@ class NightRunProgressServiceTest {
 
   private NightRunRepository runs;
   private PermissionChecker permissions;
-  private CardService cards;
+  private CardRunQueryService cards;
   private CommentService comments;
   private NightRunProgressService service;
 
@@ -71,7 +71,7 @@ class NightRunProgressServiceTest {
   void setUp() {
     runs = mock(NightRunRepository.class);
     permissions = mock(PermissionChecker.class);
-    cards = mock(CardService.class);
+    cards = mock(CardRunQueryService.class);
     comments = mock(CommentService.class);
     service =
         new NightRunProgressService(

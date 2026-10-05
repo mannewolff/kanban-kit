@@ -36,7 +36,7 @@ public enum Permission {
   CARD_MOVE,
   /**
    * Karte in ein <b>anderes Projekt</b> verschieben (Issue #1165). Durchgesetzt wird das weiterhin
-   * über die Rolle OWNER in <em>beiden</em> Projekten ({@code CardService#transfer}) — dieser
+   * über die Rolle OWNER in <em>beiden</em> Projekten ({@code CardMoveService#transfer}) — dieser
    * Schlüssel beschreibt die Regel, er ersetzt die Prüfung nicht.
    */
   CARD_MOVE_PROJECT,

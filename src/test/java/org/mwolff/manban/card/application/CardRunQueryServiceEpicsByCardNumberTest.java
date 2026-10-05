@@ -5,21 +5,16 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
-import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * Unit-Tests der Vorhaben-Zuordnung zu Kartennummern über die card-Fassade (Issue #936).
@@ -27,7 +22,7 @@ import org.springframework.context.ApplicationEventPublisher;
  * <p>Eigene Klasse wie {@code CardServiceEpicTreeTest}: {@code CardServiceTest} steht an seinen
  * PMD-Grenzen. Als Unit-Test, weil PIT allein Unit-Tests misst.
  */
-class CardServiceEpicsByCardNumberTest {
+class CardRunQueryServiceEpicsByCardNumberTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
   private static final long PROJECT = 1L;
@@ -35,31 +30,21 @@ class CardServiceEpicsByCardNumberTest {
   private static final long BOARD_B = 11L;
 
   private CardRepository cards;
-  private CardService service;
+  private CardRunQueryService service;
 
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
-    ActorContext actor = mock(ActorContext.class);
-    when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
-        new CardService(
+        new CardRunQueryService(
             cards,
-            mock(CardDependencyRepository.class),
-            mock(BoardService.class),
-            mock(PermissionChecker.class),
-            mock(ProjectService.class),
-            mock(CardColumnTransitionRepository.class),
+            mock(CardActivityRepository.class),
             // Echte KartenZuordnung aus Port-Mocks (Issue #1051), kein Mock der Zuordnung selbst.
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),
                 mock(LabelRepository.class),
                 mock(CardLabelRepository.class),
-                mock(PermissionChecker.class)),
-            mock(CardActivityRepository.class),
-            actor,
-            mock(ApplicationEventPublisher.class),
-            Clock.fixed(FIXED, ZoneOffset.UTC));
+                mock(PermissionChecker.class)));
   }
 
   private static Card karte(

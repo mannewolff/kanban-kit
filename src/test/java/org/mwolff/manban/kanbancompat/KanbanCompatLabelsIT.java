@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -42,7 +43,10 @@ import org.springframework.test.web.servlet.RequestBuilder;
 class KanbanCompatLabelsIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
-  private static final String NIGHTRUN = "kit:nightrun";
+  // Ein gewöhnliches Label: kit:nightrun setzt seit Issue #1421 nur noch ein Mensch im Board.
+  private static final String ROUTING = "kit:routing";
+  private static final String NIGHT = "kit:night";
+  private static final String KLAEREN = "kit:klaeren";
 
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
@@ -55,17 +59,17 @@ class KanbanCompatLabelsIT extends AbstractIntegrationTest {
     Fixture f = fixture("labels-single");
     long bug = createLabel(f, "Bug");
     long ux = createLabel(f, "Ux");
-    createLabel(f, NIGHTRUN);
+    createLabel(f, ROUTING);
     long cardId = directIngest(f.token, "Karte");
     setLabels(f.session, cardId, List.of(bug, ux));
 
     // Hinzufügen ergänzt genau eines und lässt die übrigen stehen.
-    mvc.perform(addLabel(f.token, cardId, NIGHTRUN)).andExpect(status().isNoContent());
-    assertThat(labelsOf(f.token, cardId)).containsExactlyInAnyOrder("Bug", "Ux", NIGHTRUN);
+    mvc.perform(addLabel(f.token, cardId, ROUTING)).andExpect(status().isNoContent());
+    assertThat(labelsOf(f.token, cardId)).containsExactlyInAnyOrder("Bug", "Ux", ROUTING);
 
     // Entfernen nimmt genau eines und lässt die übrigen stehen.
     mvc.perform(removeLabel(f.token, cardId, "Ux")).andExpect(status().isNoContent());
-    assertThat(labelsOf(f.token, cardId)).containsExactlyInAnyOrder("Bug", NIGHTRUN);
+    assertThat(labelsOf(f.token, cardId)).containsExactlyInAnyOrder("Bug", ROUTING);
   }
 
   @Test
@@ -73,15 +77,15 @@ class KanbanCompatLabelsIT extends AbstractIntegrationTest {
     // Ein Nachtlauf muss nach einem Teilfehler wiederholbar sein: derselbe Aufruf zweimal ist
     // Erfolg, und der zweite verändert nichts.
     Fixture f = fixture("labels-idempotent");
-    createLabel(f, NIGHTRUN);
+    createLabel(f, ROUTING);
     long cardId = directIngest(f.token, "Karte");
 
-    mvc.perform(addLabel(f.token, cardId, NIGHTRUN)).andExpect(status().isNoContent());
-    mvc.perform(addLabel(f.token, cardId, NIGHTRUN)).andExpect(status().isNoContent());
+    mvc.perform(addLabel(f.token, cardId, ROUTING)).andExpect(status().isNoContent());
+    mvc.perform(addLabel(f.token, cardId, ROUTING)).andExpect(status().isNoContent());
     assertThat(assignmentCount(cardId)).isEqualTo(1);
 
-    mvc.perform(removeLabel(f.token, cardId, NIGHTRUN)).andExpect(status().isNoContent());
-    mvc.perform(removeLabel(f.token, cardId, NIGHTRUN)).andExpect(status().isNoContent());
+    mvc.perform(removeLabel(f.token, cardId, ROUTING)).andExpect(status().isNoContent());
+    mvc.perform(removeLabel(f.token, cardId, ROUTING)).andExpect(status().isNoContent());
     assertThat(assignmentCount(cardId)).isZero();
   }
 
@@ -121,11 +125,11 @@ class KanbanCompatLabelsIT extends AbstractIntegrationTest {
   void rejectsEpics() throws Exception {
     // GET /items liefert auch Epics; Labels gibt es dort nicht (wie im UI-Pfad).
     Fixture f = fixture("labels-epic");
-    createLabel(f, NIGHTRUN);
+    createLabel(f, ROUTING);
     long epicId = createEpic(f, "Sammel-Epic", "SAM");
 
-    mvc.perform(addLabel(f.token, epicId, NIGHTRUN)).andExpect(status().isBadRequest());
-    mvc.perform(removeLabel(f.token, epicId, NIGHTRUN)).andExpect(status().isBadRequest());
+    mvc.perform(addLabel(f.token, epicId, ROUTING)).andExpect(status().isBadRequest());
+    mvc.perform(removeLabel(f.token, epicId, ROUTING)).andExpect(status().isBadRequest());
     assertThat(assignmentCount(epicId)).isZero();
   }
 
@@ -134,7 +138,7 @@ class KanbanCompatLabelsIT extends AbstractIntegrationTest {
     // TICKET_UPDATE (ab MEMBER), nicht BOARD_UPDATE: Zuordnen ist Kartenarbeit, nicht Pflege der
     // Label-Definitionen des Boards.
     Fixture f = fixture("labels-rbac");
-    createLabel(f, NIGHTRUN);
+    createLabel(f, ROUTING);
     long cardId = directIngest(f.token, "Karte");
 
     String memberEmail = "labels-rbac-member@example.com";
@@ -142,13 +146,13 @@ class KanbanCompatLabelsIT extends AbstractIntegrationTest {
     invite(f, memberEmail, "MEMBER");
     String memberToken = boundToken(member, f.projectId, f.boardId);
 
-    mvc.perform(addLabel(memberToken, cardId, NIGHTRUN)).andExpect(status().isNoContent());
-    mvc.perform(removeLabel(memberToken, cardId, NIGHTRUN)).andExpect(status().isNoContent());
+    mvc.perform(addLabel(memberToken, cardId, ROUTING)).andExpect(status().isNoContent());
+    mvc.perform(removeLabel(memberToken, cardId, ROUTING)).andExpect(status().isNoContent());
 
     // Dieselbe Person, dasselbe Token — nur noch VIEWER.
     changeRole(f, memberEmail, "VIEWER");
-    mvc.perform(addLabel(memberToken, cardId, NIGHTRUN)).andExpect(status().isForbidden());
-    mvc.perform(removeLabel(memberToken, cardId, NIGHTRUN)).andExpect(status().isForbidden());
+    mvc.perform(addLabel(memberToken, cardId, ROUTING)).andExpect(status().isForbidden());
+    mvc.perform(removeLabel(memberToken, cardId, ROUTING)).andExpect(status().isForbidden());
     assertThat(assignmentCount(cardId)).isZero();
   }
 
@@ -174,30 +178,30 @@ class KanbanCompatLabelsIT extends AbstractIntegrationTest {
   @Test
   void requiresValidBoundTokenAndKnownCard() throws Exception {
     Fixture f = fixture("labels-token");
-    createLabel(f, NIGHTRUN);
+    createLabel(f, ROUTING);
     long cardId = directIngest(f.token, "Karte");
 
     // Ohne Token: 401.
     mvc.perform(
             post("/api/kanban/items/" + cardId + "/labels")
                 .contentType("application/json")
-                .content("{\"name\":\"" + NIGHTRUN + "\"}"))
+                .content("{\"name\":\"" + ROUTING + "\"}"))
         .andExpect(status().isUnauthorized());
-    mvc.perform(delete("/api/kanban/items/" + cardId + "/labels").param("name", NIGHTRUN))
+    mvc.perform(delete("/api/kanban/items/" + cardId + "/labels").param("name", ROUTING))
         .andExpect(status().isUnauthorized());
 
     // Ungültiges Token: 401.
-    mvc.perform(addLabel("tk_bogus", cardId, NIGHTRUN)).andExpect(status().isUnauthorized());
-    mvc.perform(removeLabel("tk_bogus", cardId, NIGHTRUN)).andExpect(status().isUnauthorized());
+    mvc.perform(addLabel("tk_bogus", cardId, ROUTING)).andExpect(status().isUnauthorized());
+    mvc.perform(removeLabel("tk_bogus", cardId, ROUTING)).andExpect(status().isUnauthorized());
 
     // Gültiges, aber an kein Board gebundenes Token: 409.
     String unbound = unboundToken(f.session);
-    mvc.perform(addLabel(unbound, cardId, NIGHTRUN)).andExpect(status().isConflict());
-    mvc.perform(removeLabel(unbound, cardId, NIGHTRUN)).andExpect(status().isConflict());
+    mvc.perform(addLabel(unbound, cardId, ROUTING)).andExpect(status().isConflict());
+    mvc.perform(removeLabel(unbound, cardId, ROUTING)).andExpect(status().isConflict());
 
     // Unbekannte Karten-ID: 404.
-    mvc.perform(addLabel(f.token, 999_999L, NIGHTRUN)).andExpect(status().isNotFound());
-    mvc.perform(removeLabel(f.token, 999_999L, NIGHTRUN)).andExpect(status().isNotFound());
+    mvc.perform(addLabel(f.token, 999_999L, ROUTING)).andExpect(status().isNotFound());
+    mvc.perform(removeLabel(f.token, 999_999L, ROUTING)).andExpect(status().isNotFound());
 
     assertThat(assignmentCount(cardId)).isZero();
   }
@@ -205,7 +209,7 @@ class KanbanCompatLabelsIT extends AbstractIntegrationTest {
   @Test
   void validatesTheLabelName() throws Exception {
     Fixture f = fixture("labels-validation");
-    createLabel(f, NIGHTRUN);
+    createLabel(f, ROUTING);
     long cardId = directIngest(f.token, "Karte");
     String tooLong = "x".repeat(61);
 
@@ -243,6 +247,123 @@ class KanbanCompatLabelsIT extends AbstractIntegrationTest {
     assertThat(labelsOf(f.token, cardId)).isEmpty();
   }
 
+  // --- Freigabe-Labels des Kits: Richtung je Herkunft (Issue #1421) --------------------------
+
+  @Test
+  void tokenSetztNurMenschenLabelsNicht_nimmtSieAberAb() throws Exception {
+    Fixture f = fixture("freigabe-mensch");
+    long night = createLabel(f, NIGHT);
+    long nightrun = createLabel(f, "kit:nightrun");
+    long cardId = directIngest(f.token, "Karte");
+
+    mvc.perform(addLabel(f.token, cardId, NIGHT))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.detail").value("Label kit:night setzt nur ein Mensch im Board"));
+    mvc.perform(addLabel(f.token, cardId, "kit:nightrun")).andExpect(status().isForbidden());
+    assertThat(assignmentCount(cardId)).isZero();
+
+    // Der Mensch setzt beide im Board, der Runner nimmt sie per Token wieder ab.
+    setLabels(f.session, cardId, List.of(night, nightrun));
+    mvc.perform(removeLabel(f.token, cardId, NIGHT)).andExpect(status().isNoContent());
+    mvc.perform(removeLabel(f.token, cardId, "kit:nightrun")).andExpect(status().isNoContent());
+    assertThat(assignmentCount(cardId)).isZero();
+  }
+
+  @Test
+  void tokenSetztMaschinenLabels_nimmtSieAberNichtAb() throws Exception {
+    Fixture f = fixture("freigabe-maschine");
+    createLabel(f, KLAEREN);
+    createLabel(f, "kit:geschuetzt");
+    long cardId = directIngest(f.token, "Karte");
+
+    mvc.perform(addLabel(f.token, cardId, KLAEREN)).andExpect(status().isNoContent());
+    mvc.perform(addLabel(f.token, cardId, "kit:geschuetzt")).andExpect(status().isNoContent());
+
+    mvc.perform(removeLabel(f.token, cardId, KLAEREN))
+        .andExpect(status().isForbidden())
+        .andExpect(
+            jsonPath("$.detail").value("Label kit:klaeren nimmt nur ein Mensch im Board ab"));
+    mvc.perform(removeLabel(f.token, cardId, "kit:geschuetzt")).andExpect(status().isForbidden());
+    assertThat(labelsOf(f.token, cardId)).containsExactlyInAnyOrder(KLAEREN, "kit:geschuetzt");
+
+    // Abnehmen ist die Freigabe — der Mensch im Board darf es.
+    setLabels(f.session, cardId, List.of());
+    assertThat(assignmentCount(cardId)).isZero();
+  }
+
+  @Test
+  void ungebundenesToken_ersetzenUndMassenaktionPruefenNurDieAenderung() throws Exception {
+    Fixture f = fixture("freigabe-ersetzen");
+    long bug = createLabel(f, "Bug");
+    long night = createLabel(f, NIGHT);
+    long klaeren = createLabel(f, KLAEREN);
+    long cardId = directIngest(f.token, "Karte");
+    setLabels(f.session, cardId, List.of(night, klaeren));
+    String unbound = unboundToken(f.session);
+
+    // Beide Freigabe-Labels bleiben stehen, nur Bug kommt hinzu: Erfolg.
+    mvc.perform(putLabels(unbound, cardId, List.of(night, klaeren, bug)))
+        .andExpect(status().isOk());
+    // kit:klaeren fällt weg: abgewiesen, die Karte bleibt unverändert.
+    mvc.perform(putLabels(unbound, cardId, List.of(night, bug))).andExpect(status().isForbidden());
+    assertThat(assignedLabelIds(cardId)).containsExactlyInAnyOrder(bug, night, klaeren);
+
+    // kit:night kommt neu hinzu — am Ersetzen wie an der Massenaktion abgewiesen.
+    setLabels(f.session, cardId, List.of(klaeren));
+    mvc.perform(putLabels(unbound, cardId, List.of(klaeren, night)))
+        .andExpect(status().isForbidden());
+    mvc.perform(bulkLabels(unbound, night, "ADD", cardId)).andExpect(status().isForbidden());
+    mvc.perform(bulkLabels(unbound, klaeren, "REMOVE", cardId)).andExpect(status().isForbidden());
+    assertThat(assignedLabelIds(cardId)).containsExactly(klaeren);
+  }
+
+  @Test
+  void sessionSetztUndNimmtAlleFreigabeLabels_anDerKarteWieInDerMassenaktion() throws Exception {
+    Fixture f = fixture("freigabe-session");
+    List<Long> alle = new ArrayList<>();
+    for (String name : List.of(NIGHT, "kit:nightrun", KLAEREN, "kit:geschuetzt")) {
+      alle.add(createLabel(f, name));
+    }
+    long cardId = directIngest(f.token, "Karte");
+
+    setLabels(f.session, cardId, alle);
+    assertThat(assignmentCount(cardId)).isEqualTo(4);
+    setLabels(f.session, cardId, List.of());
+    assertThat(assignmentCount(cardId)).isZero();
+
+    for (long labelId : alle) {
+      mvc.perform(bulkLabels(f.session, labelId, "ADD", cardId)).andExpect(status().isOk());
+    }
+    assertThat(assignmentCount(cardId)).isEqualTo(4);
+    for (long labelId : alle) {
+      mvc.perform(bulkLabels(f.session, labelId, "REMOVE", cardId)).andExpect(status().isOk());
+    }
+    assertThat(assignmentCount(cardId)).isZero();
+  }
+
+  @Test
+  void ungebundenesToken_aendertDieDefinitionEinesFreigabeLabelsNicht() throws Exception {
+    Fixture f = fixture("freigabe-definition");
+    long klaeren = createLabel(f, KLAEREN);
+    long bug = createLabel(f, "Bug");
+    String unbound = unboundToken(f.session);
+
+    mvc.perform(patchLabel(unbound, klaeren, "erledigt")).andExpect(status().isForbidden());
+    mvc.perform(patchLabel(unbound, bug, NIGHT)).andExpect(status().isForbidden());
+    mvc.perform(delete("/api/labels/" + klaeren).header("X-Kanban-Token", unbound))
+        .andExpect(status().isForbidden());
+    assertThat(labelExists(klaeren)).isTrue();
+    assertThat(labelIdOf(f.boardId, "Bug")).isEqualTo(bug);
+
+    // Anlegen bleibt erlaubt: Das Kit legt seine Labels selbst an.
+    mvc.perform(
+            post("/api/boards/" + f.boardId + "/labels")
+                .header("X-Kanban-Token", unbound)
+                .contentType("application/json")
+                .content("{\"name\":\"kit:geschuetzt\",\"color\":\"#ff0000\"}"))
+        .andExpect(status().isCreated());
+  }
+
   // --- Requests -------------------------------------------------------------
 
   private RequestBuilder addLabel(String token, long cardId, String name) throws Exception {
@@ -256,6 +377,39 @@ class KanbanCompatLabelsIT extends AbstractIntegrationTest {
     return delete("/api/kanban/items/" + cardId + "/labels")
         .header("X-Kanban-Token", token)
         .param("name", name);
+  }
+
+  private RequestBuilder putLabels(String token, long cardId, List<Long> labelIds)
+      throws Exception {
+    return put("/api/cards/" + cardId + "/labels")
+        .header("X-Kanban-Token", token)
+        .contentType("application/json")
+        .content(json.writeValueAsString(java.util.Map.of("labels", labelIds)));
+  }
+
+  private RequestBuilder bulkLabels(String token, long labelId, String action, long cardId) {
+    return post("/api/cards/bulk-labels")
+        .header("X-Kanban-Token", token)
+        .contentType("application/json")
+        .content(bulkBody(labelId, action, cardId));
+  }
+
+  private RequestBuilder bulkLabels(Cookie session, long labelId, String action, long cardId) {
+    return post("/api/cards/bulk-labels")
+        .cookie(session)
+        .contentType("application/json")
+        .content(bulkBody(labelId, action, cardId));
+  }
+
+  private static String bulkBody(long labelId, String action, long cardId) {
+    return "{\"cardIds\":[%d],\"labelId\":%d,\"action\":\"%s\"}".formatted(cardId, labelId, action);
+  }
+
+  private RequestBuilder patchLabel(String token, long labelId, String name) {
+    return patch("/api/labels/" + labelId)
+        .header("X-Kanban-Token", token)
+        .contentType("application/json")
+        .content("{\"name\":\"%s\",\"color\":\"#ff0000\"}".formatted(name));
   }
 
   private List<String> labelsOf(String token, long cardId) throws Exception {

@@ -19,7 +19,7 @@ import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.board.application.BoardService;
-import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.CardArchiveService;
 import org.mwolff.manban.outbox.application.OutboxDispatchService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -49,7 +49,7 @@ class AttachmentIT extends AbstractIntegrationTest {
   @Autowired private ObjectStorage objectStorage;
   @Autowired private OutboxDispatchService outboxDispatch;
   @Autowired private JdbcTemplate jdbc;
-  @Autowired private CardService cardService;
+  @Autowired private CardArchiveService cardArchiveService;
   @Autowired private BoardService boardService;
 
   @Autowired private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
@@ -307,7 +307,7 @@ class AttachmentIT extends AbstractIntegrationTest {
     String firstKey = objectKeyOf(first);
     String secondKey = objectKeyOf(second);
 
-    cardService.purge(userIdOf("att-purge-card@example.com"), cardId);
+    cardArchiveService.purge(userIdOf("att-purge-card@example.com"), cardId);
 
     // Cascade hat die Metadaten entfernt; die Blob-Löschung war zuvor eingeplant.
     Assertions.assertThat(

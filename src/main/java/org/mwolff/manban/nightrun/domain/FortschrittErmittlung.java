@@ -68,7 +68,8 @@ public final class FortschrittErmittlung {
   private static final Pattern STUFEN_EINTRAG =
       Pattern.compile(
           "(?:^|\\W)(plan|review|pakete|abdeckung|umsetzung) (begonnen|fertig) für #(\\d{1,9})"
-              + " um (\\S+)");
+              + " um (\\S+)",
+          Pattern.CANON_EQ);
 
   /** Die Stufen, deren Laufstand-Zeile eine Karte zur tragenden Karte macht (E5). */
   private static final Set<ProgressStage> TRAGENDE_STUFEN =
@@ -341,16 +342,6 @@ public final class FortschrittErmittlung {
     return PLAN_PRAEFIX.matcher(k.title()).find();
   }
 
-  /** Ob der Plan eine Zeile {@code Plan-Review:} mit nicht leerem Wert trägt. */
-  private static boolean geprueft(Karte plan) {
-    String text = plan.description();
-    return text != null
-        && text.lines()
-            .map(String::stripLeading)
-            .anyMatch(
-                z -> z.startsWith(PLAN_REVIEW) && !z.substring(PLAN_REVIEW.length()).isBlank());
-  }
-
   private static CardRef ref(Karte k) {
     return new CardRef(k.number(), k.title(), k.boardId());
   }
@@ -383,7 +374,7 @@ public final class FortschrittErmittlung {
   private static Optional<Instant> zeitpunkt(String iso) {
     try {
       return Optional.of(Instant.parse(iso));
-    } catch (DateTimeParseException ungueltig) {
+    } catch (DateTimeParseException _) {
       return Optional.empty();
     }
   }
@@ -422,6 +413,16 @@ public final class FortschrittErmittlung {
         case UMSETZUNG ->
             !pakete.isEmpty() && pakete.stream().allMatch(p -> p.zustand() == PackageState.FERTIG);
       };
+    }
+
+    /** Ob der Plan eine Zeile {@code Plan-Review:} mit nicht leerem Wert trägt. */
+    private boolean geprueft(Karte plan) {
+      String text = plan.description();
+      return text != null
+          && text.lines()
+              .map(String::stripLeading)
+              .anyMatch(
+                  z -> z.startsWith(PLAN_REVIEW) && !z.substring(PLAN_REVIEW.length()).isBlank());
     }
 
     /**

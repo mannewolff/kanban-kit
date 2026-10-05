@@ -14,7 +14,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
-import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.nightrun.application.DisruptionRepository.DisruptionCandidate;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunView;
 import org.mwolff.manban.nightrun.domain.NightRun;
@@ -124,7 +124,8 @@ class BefundNahtstelleTest {
     PlatformAdminChecker admins = mock(PlatformAdminChecker.class);
     when(admins.isPlatformAdmin(ADMIN)).thenReturn(true);
     DisruptionService service =
-        new DisruptionService(disruptions, runs, mock(CardService.class), admins, properties, uhr);
+        new DisruptionService(
+            disruptions, runs, mock(CardRunQueryService.class), admins, properties, uhr);
     return service.leitstand(ADMIN, ZoneId.of("UTC")).durchgefuehrte().getFirst().outcome();
   }
 

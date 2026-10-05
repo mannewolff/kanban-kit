@@ -12,8 +12,11 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
+import org.mwolff.manban.card.application.CardIngestService;
+import org.mwolff.manban.card.application.CardIngestService.BoardItemView;
+import org.mwolff.manban.card.application.CardMoveService;
 import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.BoardItemView;
+import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.comment.application.CommentNotFoundException;
 import org.mwolff.manban.comment.application.CommentService;
@@ -24,7 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Compat-Schicht für die Toolbox-Kanban-API (tbx.mjs / board.mjs). Bildet das feste
  * 5-Spalten-Protokoll (BACKLOG/READY/IN_PROGRESS/IN_REVIEW/DONE) auf ein manban-Board ab und
  * operiert ausschließlich auf dem an das Token gebundenen Board (#44). Rechte laufen über die
- * bestehenden Services (CardService/CommentService → PermissionChecker).
+ * bestehenden Services (CardService/CardIngestService/CardMoveService/EpicService/CommentService →
+ * PermissionChecker).
  *
  * <p>Spalten-Mapping ausschließlich per Namensabgleich (Backlog/Ready/In Progress/In Review/Done).
  * Eine Spalte ohne kanonischen Namen trägt <em>keinen</em> Kanban-Key: Ihre Karten gelten als
@@ -52,6 +56,9 @@ public class KanbanCompatService {
 
   private final BoardService boardService;
   private final CardService cardService;
+  private final CardIngestService ingest;
+  private final CardMoveService moveService;
+  private final EpicService epicService;
   private final LabelService labelService;
   private final CommentService commentService;
   private final IdempotencyGuard idempotency;
@@ -59,11 +66,17 @@ public class KanbanCompatService {
   public KanbanCompatService(
       BoardService boardService,
       CardService cardService,
+      CardIngestService ingest,
+      CardMoveService moveService,
+      EpicService epicService,
       LabelService labelService,
       CommentService commentService,
       IdempotencyGuard idempotency) {
     this.boardService = boardService;
     this.cardService = cardService;
+    this.ingest = ingest;
+    this.moveService = moveService;
+    this.epicService = epicService;
     this.labelService = labelService;
     this.commentService = commentService;
     this.idempotency = idempotency;
@@ -85,7 +98,7 @@ public class KanbanCompatService {
     long boardId = requireBound(principal);
     // listBoardItems prueft Board-Existenz und Projekt-Mitgliedschaft und filtert archivierte
     // sowie im Ideen-Speicher liegende Karten bereits im card-Modul heraus.
-    List<BoardItemView> visible = cardService.listBoardItems(principal.userId(), boardId);
+    List<BoardItemView> visible = ingest.listBoardItems(principal.userId(), boardId);
 
     Map<Long, String> keyByColumn = keyByColumn(boardId);
     Map<String, List<Item>> grouped = new LinkedHashMap<>();
@@ -185,12 +198,12 @@ public class KanbanCompatService {
     // ungültiges `column` denselben Fehler, egal ob der Schlüssel schon eine Karte trifft —
     // sonst hinge die Fehlermeldung davon ab, ob zufällig schon eine existiert.
     long columnId = zielSpalteId(boardId, neu.column(), neu.direct());
-    CardService.CardCreation result =
-        cardService.createDirect(
+    CardIngestService.CardCreation result =
+        ingest.createDirect(
             principal.userId(),
             boardId,
             columnId,
-            new CardService.DirectCard(
+            new CardIngestService.DirectCard(
                 neu.title(), neu.body(), neu.key(), neu.number(), neu.derivedFrom()));
     // Jede board-gebundene Karte trägt eine Nummer; requireNonNull macht das fuer NullAway
     // explizit (CardView.number() ist bis zum Pool-Rückbau noch @Nullable).
@@ -216,7 +229,7 @@ public class KanbanCompatService {
       KanbanPrincipal principal, long cardId, @Nullable List<Integer> dependsOn) {
     long boardId = requireBound(principal);
     long projectId = boardService.requireProjectId(boardId);
-    cardService.replaceDependenciesFromIngest(principal.userId(), cardId, projectId, dependsOn);
+    ingest.replaceDependenciesFromIngest(principal.userId(), cardId, projectId, dependsOn);
   }
 
   /**
@@ -305,30 +318,30 @@ public class KanbanCompatService {
    * Setzt bei einem Arbeitspaket den Status, sonst verschiebt es das Item des gebundenen Boards in
    * die Ziel-Spalte an die Ziel-Position (Plan #1294, E11).
    *
-   * <p>Ein Arbeitspaket wandert über {@link CardService#setStatus} ans Ende der Prozessspalte des
-   * Status, wenn das Board eine hat, sonst bleibt es liegen (Korrektur #787, Issue #1326); {@code
-   * position} hat dabei keine Wirkung, und das Board braucht keine Spalte für den Schlüssel.
+   * <p>Ein Arbeitspaket wandert über {@link CardMoveService#setStatus} ans Ende der Prozessspalte
+   * des Status, wenn das Board eine hat, sonst bleibt es liegen (Korrektur #787, Issue #1326);
+   * {@code position} hat dabei keine Wirkung, und das Board braucht keine Spalte für den Schlüssel.
    * Vorhaben und die Dokumentarten tragen keinen Status und werden wie bisher verschoben. Pfad und
    * Antwortform bleiben für beide Fälle gleich, damit jeder bestehende Aufrufer lauffähig bleibt.
    */
   @Transactional
   public void move(KanbanPrincipal principal, long cardId, String column, int position) {
     long boardId = requireBound(principal);
-    cardService.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(cardId, boardId);
     if (cardService.getCard(principal.userId(), cardId).status() != null) {
       // Die Kanban-Keys sind zugleich die Statusnamen der card-Fassade (E24).
-      cardService.setStatus(principal.userId(), cardId, requireKanbanKey(column));
+      moveService.setStatus(principal.userId(), cardId, requireKanbanKey(column));
       return;
     }
     long columnId = columnIdForKey(boardId, column);
-    cardService.move(principal.userId(), cardId, columnId, position);
+    moveService.move(principal.userId(), cardId, columnId, position);
   }
 
   /**
    * Ersetzt Titel und Rumpf eines Items des gebundenen Boards (#571) — der Schreibweg, über den das
    * claude-workflow-kit den geschärften Issue-Text zurückschreibt.
    *
-   * <p>Geht bewusst über {@link CardService#updateContent} statt über das Voll-Update: Sonst
+   * <p>Geht bewusst über {@link CardIngestService#updateContent} statt über das Voll-Update: Sonst
    * verlören Karten bei jedem Body-Update ihre Vorhaben-Zuordnung und ihr Fälligkeitsdatum und
    * Vorhaben ihr Kürzel, weil dieser Aufrufer diese Felder gar nicht kennt.
    *
@@ -339,13 +352,14 @@ public class KanbanCompatService {
   @Transactional
   public Item update(KanbanPrincipal principal, long cardId, String title, @Nullable String body) {
     long boardId = requireBound(principal);
-    cardService.requireOnBoard(cardId, boardId);
-    return item(boardId, cardService.updateContent(principal.userId(), cardId, title, body));
+    ingest.requireOnBoard(cardId, boardId);
+    return item(boardId, ingest.updateContent(principal.userId(), cardId, title, body));
   }
 
   /**
    * Ergänzt an einem Item des gebundenen Boards genau ein Label (#574) — der Weg, auf dem das
-   * claude-workflow-kit sein Routing-Label {@code kit:nightrun} setzt.
+   * claude-workflow-kit seine Labels setzt. Die Richtung der Freigabe-Labels erzwingt {@code
+   * LabelService} (Issue #1421).
    *
    * <p>Reichweite wie bei {@link #move} und {@link #comment}: Der Board-Guard der card-Fassade
    * schließt Karten anderer Boards mit 404 aus. Das gilt auch innerhalb desselben Projekts, wo die
@@ -357,7 +371,7 @@ public class KanbanCompatService {
   @Transactional
   public void addLabel(KanbanPrincipal principal, long cardId, String name) {
     long boardId = requireBound(principal);
-    cardService.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(cardId, boardId);
     labelService.addToCard(principal.userId(), cardId, name);
   }
 
@@ -365,7 +379,7 @@ public class KanbanCompatService {
   @Transactional
   public void removeLabel(KanbanPrincipal principal, long cardId, String name) {
     long boardId = requireBound(principal);
-    cardService.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(cardId, boardId);
     labelService.removeFromCard(principal.userId(), cardId, name);
   }
 
@@ -378,7 +392,7 @@ public class KanbanCompatService {
   public void comment(
       KanbanPrincipal principal, long cardId, String body, @Nullable String idempotencyKey) {
     long boardId = requireBound(principal);
-    cardService.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(cardId, boardId);
     String idempotent = normalizeIdempotencyKey(idempotencyKey);
     if (idempotent == null) {
       commentService.create(principal.userId(), cardId, body);
@@ -403,7 +417,7 @@ public class KanbanCompatService {
   @Transactional(readOnly = true)
   public List<Comment> listComments(KanbanPrincipal principal, long cardId) {
     long boardId = requireBound(principal);
-    cardService.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(cardId, boardId);
     return commentService.list(principal.userId(), cardId).stream()
         .map(c -> new Comment(c.id(), c.authorName(), c.body(), c.createdAt()))
         .toList();
@@ -422,7 +436,7 @@ public class KanbanCompatService {
   @Transactional
   public void updateComment(KanbanPrincipal principal, long cardId, long commentId, String body) {
     long boardId = requireBound(principal);
-    cardService.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(cardId, boardId);
     boolean onCard =
         commentService.list(principal.userId(), cardId).stream().anyMatch(c -> c.id() == commentId);
     if (!onCard) {
@@ -447,7 +461,7 @@ public class KanbanCompatService {
   @Transactional(readOnly = true)
   public List<Activity> listActivity(KanbanPrincipal principal, long cardId) {
     long boardId = requireBound(principal);
-    cardService.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(cardId, boardId);
     return cardService.listActivityViews(principal.userId(), cardId).stream()
         .map(
             a ->
@@ -467,7 +481,7 @@ public class KanbanCompatService {
   @Transactional(readOnly = true)
   public List<Epic> epics(KanbanPrincipal principal) {
     long boardId = requireBound(principal);
-    return cardService.listEpics(principal.userId(), boardId).stream()
+    return epicService.listEpics(principal.userId(), boardId).stream()
         .map(e -> new Epic(e.number(), e.title(), e.shortcode(), new Progress(e.total(), e.done())))
         .toList();
   }

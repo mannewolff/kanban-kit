@@ -16,15 +16,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class TrashRetentionService {
 
   private final CardRepository cards;
-  private final CardDependencyRepository dependencies;
+  private final KartenAbhaengigkeiten abhaengigkeiten;
   private final ApplicationEventPublisher events;
 
   public TrashRetentionService(
       CardRepository cards,
-      CardDependencyRepository dependencies,
+      KartenAbhaengigkeiten abhaengigkeiten,
       ApplicationEventPublisher events) {
     this.cards = cards;
-    this.dependencies = dependencies;
+    this.abhaengigkeiten = abhaengigkeiten;
     this.events = events;
   }
 
@@ -45,7 +45,7 @@ public class TrashRetentionService {
     // Metadaten existieren — die Cascade nimmt sie gleich mit.
     events.publishEvent(new CardsPurgedEvent(expired.stream().map(Card::requireId).toList()));
     for (Card card : expired) {
-      dependencies.deleteByCardId(card.requireId());
+      abhaengigkeiten.entferne(card.requireId());
       cards.deleteById(card.requireId());
     }
     return expired.size();

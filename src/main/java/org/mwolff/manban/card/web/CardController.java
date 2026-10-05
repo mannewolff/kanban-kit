@@ -13,17 +13,14 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardNumbers;
 import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.CardView;
-import org.mwolff.manban.card.application.CardService.DerivationNodeView;
-import org.mwolff.manban.card.application.CardService.EpicView;
+import org.mwolff.manban.card.application.CardView;
+import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.InvalidDerivedFromException;
 import org.mwolff.manban.card.application.LabelAction;
-import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.common.TextLimits;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,15 +31,12 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Karten- und Vorhaben-Verwaltung eines Boards (Anlegen, Bearbeiten, Zuordnen, Archivieren,
- * Löschen).
+ * Karten- und Vorhaben-Verwaltung eines Boards (Anlegen, Bearbeiten, Zuordnen). Archiv und
+ * Papierkorb liegen seit Issue #1394 im {@link CardArchiveController}, Verschieben, Status und
+ * Umzug seit Issue #1395 im {@link CardMoveController}.
  */
-// PMD.CouplingBetweenObjects: eingehender Adapter der gesamten Karten-/Vorhaben-API. Die Kopplung
-// zählt im Wesentlichen die Request-/Response-Records der einzelnen Endpunkte plus die
-// Application-Typen, an die delegiert wird — jeder Endpunkt bringt sie zwangsläufig mit. Eine
-// Aufteilung würde eine zusammengehörige HTTP-Oberfläche über mehrere Controller zerreißen, ohne
-// dass ein einziger Endpunkt einfacher würde.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
+// PMD.CouplingBetweenObjects entfiel mit Verschieben, Status und Umzug, die seit Issue #1395 im
+// CardMoveController liegen: Die Kopplung liegt wieder unter der Schwelle (Plan #1387, E12).
 @RestController
 class CardController {
 
@@ -54,9 +48,11 @@ class CardController {
   static final int MAX_CARDS_PER_BATCH = 200;
 
   private final CardService cards;
+  private final EpicService epics;
 
-  CardController(CardService cards) {
+  CardController(CardService cards, EpicService epics) {
     this.cards = cards;
+    this.epics = epics;
   }
 
   @PostMapping("/api/boards/{boardId}/cards")
@@ -77,7 +73,7 @@ class CardController {
       if (request.derivedFrom() != null) {
         throw new InvalidDerivedFromException("Ein Vorhaben kann keine Herkunft tragen");
       }
-      return cards.createEpic(
+      return epics.createEpic(
           userId, boardId, request.title(), request.description(), request.shortcode());
     }
     Long columnId = request.columnId();
@@ -125,25 +121,6 @@ class CardController {
     return cards.listByBoard(userId, boardId);
   }
 
-  @GetMapping("/api/boards/{boardId}/epics")
-  List<EpicView> epics(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
-    return cards.listEpics(userId, boardId);
-  }
-
-  /**
-   * Herkunftsbaum eines Vorhabens — dieselbe Rechnung wie beim board-weiten Baum, angewandt auf die
-   * Mitglieder dieses Vorhabens (Issue #643).
-   *
-   * <p>Der Pfad endet bewusst auf {@code /tree} und wiederholt den Pfadbestandteil des board-weiten
-   * Endpunkts darüber nicht: Der kommt im Controller genau einmal vor, und daran bleibt sein
-   * Rückbau maschinell prüfbar.
-   */
-  @GetMapping("/api/boards/{boardId}/epics/{epicId}/tree")
-  List<DerivationNodeView> epicTree(
-      @AuthenticationPrincipal Long userId, @PathVariable long boardId, @PathVariable long epicId) {
-    return cards.epicDerivationTree(userId, boardId, epicId);
-  }
-
   @GetMapping("/api/cards/{cardId}")
   CardView get(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
     return cards.getCard(userId, cardId);
@@ -166,128 +143,6 @@ class CardController {
   }
 
   /**
-   * Ordnet eine Karte einem Vorhaben zu ({@code parentId}) oder löst die Zuordnung ({@code
-   * parentId: null}).
-   */
-  @PatchMapping("/api/cards/{cardId}/parent")
-  CardView assignParent(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @RequestBody AssignParentRequest request) {
-    return cards.assignParent(userId, cardId, request.parentId());
-  }
-
-  /**
-   * Setzt die Herkunft einer Karte ({@code derivedFrom} als projektweite Kartennummer) oder löscht
-   * sie ({@code derivedFrom: null}).
-   *
-   * <p>Eigener Endpunkt statt eines Feldes in {@link UpdateCardRequest}: Jener Pfad ist ein
-   * Voll-Update, und ein fehlendes JSON-Feld ist in einem Jackson-Record nicht von {@code null} zu
-   * unterscheiden — jeder bestehende Client haette die Herkunft bei jedem Karten-Edit geloescht
-   * (Issue #607).
-   */
-  @PatchMapping("/api/cards/{cardId}/derived-from")
-  CardView assignDerivedFrom(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody AssignDerivedFromRequest request) {
-    return cards.assignDerivedFrom(userId, cardId, request.derivedFrom());
-  }
-
-  /**
-   * Eröffnet einen Vorgang an dieser Karte: Vorhaben anlegen, Karte als Anforderung setzen und ihr
-   * zuordnen — in einem Aufruf. Kartenzentriert wie {@code move}, {@code transfer} und {@code
-   * archive}; die Antwort ist die Sicht des <b>neuen Vorhabens</b>.
-   */
-  @PostMapping("/api/cards/{cardId}/open-epic")
-  @ResponseStatus(HttpStatus.CREATED)
-  CardView openEpic(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody OpenEpicRequest request) {
-    return cards.openEpicFromCard(userId, cardId, request.kuerzel(), request.name());
-  }
-
-  /**
-   * Setzt oder löscht die Anforderungskarte eines Vorhabens.
-   *
-   * <p>Schmaler Endpunkt wie {@code derived-from} (#607): Ein Voll-Update kann ein fehlendes Feld
-   * nicht von {@code null} unterscheiden und löschte die Zuordnung bei jedem Karten-Edit. Übergabe
-   * von {@code null} löscht sie ausdrücklich.
-   */
-  @PatchMapping("/api/cards/{cardId}/requirement")
-  CardView assignRequirement(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody AssignRequirementRequest request) {
-    return cards.assignRequirement(userId, cardId, request.requirementCardNumber());
-  }
-
-  @PostMapping("/api/cards/{cardId}/move")
-  CardView move(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody MoveCardRequest request) {
-    return cards.move(userId, cardId, request.columnId(), request.position());
-  }
-
-  /**
-   * Setzt den Status eines Arbeitspakets, ohne es zu verschieben (Issue #1300). Ein eigener
-   * Endpunkt statt eines Felds am {@code PATCH}: Der Status hängt an {@code CARD_MOVE}, das Patch
-   * an {@code TICKET_UPDATE} — zwei Rechte in einem Endpunkt öffneten still zu weit (Plan #1294,
-   * E9).
-   */
-  @PutMapping("/api/cards/{cardId}/status")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void setStatus(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody SetStatusRequest request) {
-    cards.setStatus(userId, cardId, request.status());
-  }
-
-  /**
-   * Ordnet die aktiven Karten einer Spalte nach Kartennummer. Die Richtung kommt bei jedem Aufruf
-   * mit — das Backend merkt sich keinen Toggle-Zustand.
-   */
-  @PostMapping("/api/columns/{columnId}/cards/sort-by-number")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void sortByNumber(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long columnId,
-      @Valid @RequestBody SortByNumberRequest request) {
-    cards.sortColumnByNumber(userId, columnId, request.direction());
-  }
-
-  @PostMapping("/api/cards/{cardId}/transfer")
-  CardView transfer(
-      @AuthenticationPrincipal Long userId,
-      @PathVariable long cardId,
-      @Valid @RequestBody TransferCardRequest request) {
-    return cards.transfer(userId, cardId, request.targetBoardId(), request.targetColumnId());
-  }
-
-  /** Verschiebt mehrere Karten in einer Transaktion auf ein anderes Board (alles-oder-nichts). */
-  @PostMapping("/api/cards/bulk-transfer")
-  List<CardView> bulkTransfer(
-      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkTransferRequest request) {
-    return cards.bulkTransfer(
-        userId, request.cardIds(), request.targetBoardId(), request.targetColumnId());
-  }
-
-  @PostMapping("/api/cards/{cardId}/archive")
-  CardView archive(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    return cards.archive(userId, cardId);
-  }
-
-  /** Archiviert mehrere Karten in einer Transaktion (alles-oder-nichts). */
-  @PostMapping("/api/cards/bulk-archive")
-  List<CardView> bulkArchive(
-      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkArchiveRequest request) {
-    return cards.bulkArchive(userId, request.cardIds());
-  }
-
-  /**
    * Setzt ein Label an mehreren Karten oder nimmt es ihnen ab, in einer Transaktion
    * (alles-oder-nichts). Die übrigen Labels jeder Karte bleiben unberührt.
    */
@@ -295,45 +150,6 @@ class CardController {
   List<CardView> bulkLabels(
       @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkLabelsRequest request) {
     return cards.bulkLabels(userId, request.cardIds(), request.labelId(), request.action());
-  }
-
-  @PostMapping("/api/cards/{cardId}/restore")
-  CardView restore(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    return cards.restore(userId, cardId);
-  }
-
-  /** Verschiebt eine Karte in den Papierkorb (Soft-Delete, reversibel). */
-  @DeleteMapping("/api/cards/{cardId}")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void delete(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    cards.delete(userId, cardId);
-  }
-
-  /** Verschiebt mehrere Karten in einer Transaktion in den Papierkorb (alles-oder-nichts). */
-  @PostMapping("/api/cards/bulk-delete")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void bulkDelete(
-      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkDeleteRequest request) {
-    cards.bulkDelete(userId, request.cardIds());
-  }
-
-  /** Papierkorb eines Boards. */
-  @GetMapping("/api/boards/{boardId}/trash")
-  List<CardView> trash(@AuthenticationPrincipal Long userId, @PathVariable long boardId) {
-    return cards.listTrash(userId, boardId);
-  }
-
-  /** Holt eine Karte aus dem Papierkorb zurück. */
-  @PostMapping("/api/cards/{cardId}/restore-deleted")
-  CardView restoreDeleted(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    return cards.restoreFromTrash(userId, cardId);
-  }
-
-  /** Entfernt eine Karte endgültig (nur Projekt-Admin/Owner). */
-  @DeleteMapping("/api/cards/{cardId}/purge")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void purge(@AuthenticationPrincipal Long userId, @PathVariable long cardId) {
-    cards.purge(userId, cardId);
   }
 
   /** Ersetzt die Zuständigen der Karte (leere/fehlende Liste = keine Zuständigen). */
@@ -418,35 +234,6 @@ class CardController {
       @Size(max = 16) String shortcode,
       Long parentId,
       @Nullable Instant dueDate) {}
-
-  record AssignParentRequest(Long parentId) {}
-
-  // Dieselben Grenzen wie im kanbancompat-Ingest (`CreateItemRequest`), damit beide Schreibpfade
-  // dieselbe Nummer akzeptieren und dieselbe ablehnen.
-  record AssignDerivedFromRequest(@Nullable @Positive @Max(CardNumbers.MAX) Integer derivedFrom) {}
-
-  record AssignRequirementRequest(
-      @Nullable @Positive @Max(CardNumbers.MAX) Integer requirementCardNumber) {}
-
-  record OpenEpicRequest(@Nullable String kuerzel, @NotBlank String name) {}
-
-  record MoveCardRequest(
-      @NotNull Long columnId, @jakarta.validation.constraints.PositiveOrZero int position) {}
-
-  record SetStatusRequest(@NotBlank String status) {}
-
-  record TransferCardRequest(@NotNull Long targetBoardId, @NotNull Long targetColumnId) {}
-
-  record SortByNumberRequest(@NotNull SortDirection direction) {}
-
-  record BulkArchiveRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
-
-  record BulkDeleteRequest(@NotEmpty @Size(max = 200) List<Long> cardIds) {}
-
-  record BulkTransferRequest(
-      @NotEmpty @Size(max = 200) List<Long> cardIds,
-      @NotNull Long targetBoardId,
-      @NotNull Long targetColumnId) {}
 
   record BulkLabelsRequest(
       @NotEmpty @Size(max = 200) List<Long> cardIds,

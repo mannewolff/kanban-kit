@@ -208,8 +208,9 @@ public interface CardRepository {
    *
    * <p><strong>Regel:</strong> Eine Transaktion nimmt ihre Spaltensperren in <em>einem</em> Aufruf.
    * Zwei aufeinanderfolgende Aufrufe mit überlappenden Mengen wären wieder über Kreuz greifbar und
-   * damit verklemmungsfähig — deshalb sperrt {@link org.mwolff.manban.card.application.CardService
-   * CardService} bei Sammel-Umzügen die Vereinigung aller betroffenen Spalten vorab.
+   * damit verklemmungsfähig — deshalb sperrt {@link
+   * org.mwolff.manban.card.application.CardMoveService CardMoveService} bei Sammel-Umzügen die
+   * Vereinigung aller betroffenen Spalten vorab.
    */
   void lockColumnPositions(List<Long> columnIds);
 

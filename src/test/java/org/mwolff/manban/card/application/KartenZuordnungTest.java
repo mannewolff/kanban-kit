@@ -8,13 +8,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mwolff.manban.card.domain.CardActivityOrigin.SESSION;
+import static org.mwolff.manban.card.domain.CardActivityOrigin.TOKEN;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mwolff.manban.card.application.CardService.LabelMarkView;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 
@@ -105,7 +106,7 @@ class KartenZuordnungTest {
   void ersetzeLabelsEntferntDuplikateUndSchreibt() {
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(20L, "Bug", "#f00", false)));
 
-    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L, 20L));
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L, 20L), SESSION);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(20L));
   }
@@ -114,7 +115,7 @@ class KartenZuordnungTest {
   void ersetzeLabelsLehntFremdesLabelAb() {
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(20L, "Bug", "#f00", false)));
 
-    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(99L)))
+    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(99L), SESSION))
         .isInstanceOf(InvalidLabelException.class)
         .hasMessageContaining("99");
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
@@ -125,7 +126,7 @@ class KartenZuordnungTest {
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(20L, "Bug", "#f00", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L));
 
-    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.ADD);
+    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.ADD, SESSION);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(20L));
   }
@@ -136,7 +137,7 @@ class KartenZuordnungTest {
         .thenReturn(List.of(label(20L, "Bug", "#f00", false), label(21L, "Doku", "#0f0", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L));
 
-    zuordnung.aendereLabel(KARTE, BOARD, 21L, LabelAction.ADD);
+    zuordnung.aendereLabel(KARTE, BOARD, 21L, LabelAction.ADD, SESSION);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(20L, 21L));
   }
@@ -147,7 +148,7 @@ class KartenZuordnungTest {
         .thenReturn(List.of(label(20L, "Bug", "#f00", false), label(21L, "Doku", "#0f0", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L, 21L));
 
-    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.REMOVE);
+    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.REMOVE, SESSION);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(21L));
   }
@@ -156,11 +157,101 @@ class KartenZuordnungTest {
   void aendereLabelLehntFremdesLabelAb() {
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(20L, "Bug", "#f00", false)));
 
-    assertThatThrownBy(() -> zuordnung.aendereLabel(KARTE, BOARD, 99L, LabelAction.ADD))
+    assertThatThrownBy(() -> zuordnung.aendereLabel(KARTE, BOARD, 99L, LabelAction.ADD, SESSION))
         .isInstanceOf(InvalidLabelException.class)
         .hasMessageContaining("99");
     verify(cardLabels, never()).findByCardId(KARTE);
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void ersetzeLabelsPerTokenLehntNeuesNurMenschenLabelAb() {
+    givenFreigabeLabels();
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(31L));
+
+    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(31L, 30L), TOKEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:night setzt nur ein Mensch im Board");
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void ersetzeLabelsPerTokenLehntWeggelassenesMaschinenLabelAb() {
+    givenFreigabeLabels();
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(31L, 20L));
+
+    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L), TOKEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:klaeren nimmt nur ein Mensch im Board ab");
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void ersetzeLabelsPerTokenLaesstUnveraenderteFreigabeLabelsDurch() {
+    givenFreigabeLabels();
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(30L, 31L));
+
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(30L, 31L, 20L), TOKEN);
+
+    verify(cardLabels).replaceLabels(KARTE, List.of(30L, 31L, 20L));
+  }
+
+  @Test
+  void ersetzeLabelsPerSessionDarfFreigabeLabelsInBeideRichtungen() {
+    givenFreigabeLabels();
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(31L));
+
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(30L), SESSION);
+
+    verify(cardLabels).replaceLabels(KARTE, List.of(30L));
+  }
+
+  @Test
+  void aendereLabelPerTokenLehntSetzenEinesNurMenschenLabelsAb() {
+    givenFreigabeLabels();
+
+    assertThatThrownBy(() -> zuordnung.aendereLabel(KARTE, BOARD, 30L, LabelAction.ADD, TOKEN))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void aendereLabelPerTokenLehntAbnehmenEinesMaschinenLabelsAb() {
+    givenFreigabeLabels();
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(31L));
+
+    assertThatThrownBy(() -> zuordnung.aendereLabel(KARTE, BOARD, 31L, LabelAction.REMOVE, TOKEN))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void aendereLabelPerTokenDarfInErlaubterRichtung() {
+    givenFreigabeLabels();
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(30L));
+
+    zuordnung.aendereLabel(KARTE, BOARD, 30L, LabelAction.REMOVE, TOKEN);
+
+    verify(cardLabels).replaceLabels(KARTE, List.of());
+  }
+
+  @Test
+  void aendereLabelPerSessionDarfNurMenschenLabelSetzen() {
+    givenFreigabeLabels();
+
+    zuordnung.aendereLabel(KARTE, BOARD, 30L, LabelAction.ADD, SESSION);
+
+    verify(cardLabels).replaceLabels(KARTE, List.of(30L));
+  }
+
+  /** Board mit {@code kit:night} (30), {@code kit:klaeren} (31) und einem gewöhnlichen Label. */
+  private void givenFreigabeLabels() {
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                label(20L, "Bug", "#f00", false),
+                label(30L, "kit:night", "#00f", false),
+                label(31L, "kit:klaeren", "#0ff", false)));
   }
 
   @Test

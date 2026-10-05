@@ -12,7 +12,7 @@ import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AdminAccessDeniedException;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
-import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
@@ -40,7 +40,7 @@ public class DisruptionService {
 
   private final DisruptionRepository repository;
   private final NightRunRepository runs;
-  private final CardService cards;
+  private final CardRunQueryService cards;
   private final PlatformAdminChecker platformAdminChecker;
   private final NightRunProperties properties;
   private final Clock clock;
@@ -48,7 +48,7 @@ public class DisruptionService {
   public DisruptionService(
       DisruptionRepository repository,
       NightRunRepository runs,
-      CardService cards,
+      CardRunQueryService cards,
       PlatformAdminChecker platformAdminChecker,
       NightRunProperties properties,
       Clock clock) {

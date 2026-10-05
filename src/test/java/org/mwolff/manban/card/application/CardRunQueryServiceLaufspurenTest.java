@@ -5,17 +5,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mwolff.manban.board.application.BoardService;
-import org.mwolff.manban.card.application.CardService.LaufKarteView;
-import org.mwolff.manban.card.application.CardService.TokenActivityView;
+import org.mwolff.manban.card.application.CardRunQueryService.LaufKarteView;
+import org.mwolff.manban.card.application.CardRunQueryService.TokenActivityView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
@@ -24,8 +21,6 @@ import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
-import org.mwolff.manban.project.application.ProjectService;
-import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * Unit-Tests der Lese-Abfragen für den Fortschritt eines laufenden Laufs (Issue #1373).
@@ -33,7 +28,7 @@ import org.springframework.context.ApplicationEventPublisher;
  * <p>Eigene Klasse wie {@code CardServiceExistingCardNumbersTest}: {@code CardServiceTest} steht an
  * seinen PMD-Grenzen. Als Unit-Test, weil PIT allein Unit-Tests misst.
  */
-class CardServiceLaufspurenTest {
+class CardRunQueryServiceLaufspurenTest {
 
   private static final Instant FIXED = Instant.parse("2026-10-03T15:00:00Z");
   private static final Instant VON = Instant.parse("2026-10-03T15:00:00Z");
@@ -46,7 +41,7 @@ class CardServiceLaufspurenTest {
   private CardActivityRepository activity;
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
-  private CardService service;
+  private CardRunQueryService service;
 
   @BeforeEach
   void setUp() {
@@ -54,25 +49,15 @@ class CardServiceLaufspurenTest {
     activity = mock(CardActivityRepository.class);
     labels = mock(LabelRepository.class);
     cardLabels = mock(CardLabelRepository.class);
-    ActorContext actor = mock(ActorContext.class);
-    when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     service =
-        new CardService(
+        new CardRunQueryService(
             cards,
-            mock(CardDependencyRepository.class),
-            mock(BoardService.class),
-            mock(PermissionChecker.class),
-            mock(ProjectService.class),
-            mock(CardColumnTransitionRepository.class),
+            activity,
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),
                 labels,
                 cardLabels,
-                mock(PermissionChecker.class)),
-            activity,
-            actor,
-            mock(ApplicationEventPublisher.class),
-            Clock.fixed(FIXED, ZoneOffset.UTC));
+                mock(PermissionChecker.class)));
   }
 
   private static Card karte(

@@ -10,9 +10,9 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.LaufKarteView;
-import org.mwolff.manban.card.application.CardService.TokenActivityView;
+import org.mwolff.manban.card.application.CardRunQueryService;
+import org.mwolff.manban.card.application.CardRunQueryService.LaufKarteView;
+import org.mwolff.manban.card.application.CardRunQueryService.TokenActivityView;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,7 +34,7 @@ class CardTokenActivityWindowIT extends AbstractIntegrationTest {
   private static final String TOKEN = "Nachtlauf";
   private static final String MODELL = "claude-opus-5-5";
 
-  @Autowired private CardService cards;
+  @Autowired private CardRunQueryService cards;
   @Autowired private JdbcTemplate jdbc;
 
   private long projectId;

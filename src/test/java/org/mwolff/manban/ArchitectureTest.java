@@ -51,9 +51,9 @@ class ArchitectureTest {
    * hier macht ihn zum Vertrag. Der Pflegeaufwand ist der Zweck: eine neue Fassade ist eine
    * bewusste Entscheidung, kein Nebeneffekt einer Benennung.
    *
-   * <p>Whitelist-Einträge gelten samt ihrer inneren Klassen ({@code CardService$BoardItemView}),
-   * denn die View-Records einer Fassadenmethode sind Teil ihrer Signatur. Ergänzende
-   * Aufrufer-Whitelists (siehe {@link
+   * <p>Whitelist-Einträge gelten samt ihrer inneren Klassen ({@code
+   * CardIngestService$BoardItemView}), denn die View-Records einer Fassadenmethode sind Teil ihrer
+   * Signatur. Ergänzende Aufrufer-Whitelists (siehe {@link
    * PortWhitelistArchitectureTest#USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST}) bleiben davon
    * unberührt: diese Regel sagt <em>was</em> Vertrag ist, jene <em>wer</em> ihn nutzen darf.
    *
@@ -170,8 +170,10 @@ class ArchitectureTest {
 
   // --- Modul-Grenze: card-Fassade (Issue #458, Whitelist seit #470) ---------------------------
   // Das Kartenmodell und alles in card.application ausserhalb der Whitelist sind modulintern.
-  // Fremde Module gehen ueber die fachliche Fassade (CardService/LabelService) — sonst haengt jede
-  // fremde Rechtepruefung am Aggregat und an dessen Persistenz-Ports statt an einem Use-Case.
+  // Fremde Module gehen ueber die fachliche Fassade (CardService, LabelService, CardSearchService,
+  // CardIngestService, EpicService, CardArchiveService, CardMoveService, CardRunQueryService) —
+  // sonst haengt jede fremde Rechtepruefung am Aggregat und an dessen Persistenz-Ports statt an
+  // einem Use-Case.
   // CardBoardActivityEvent ist Vertrag, weil die Composition-Root es in ein Board-Event uebersetzt.
   static final ArchRule CARD_DOMAIN_IST_MODULINTERN =
       noClasses()
@@ -187,9 +189,33 @@ class ArchitectureTest {
   static final ArchRule CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
       fassadeIstAufWhitelistBegrenzt(
           "card",
-          "nur ueber CardService/LabelService",
+          "nur ueber CardService/CardSearchService/CardIngestService/EpicService"
+              + "/CardArchiveService/CardMoveService/CardRunQueryService/LabelService"
+              + " und ihre geteilten Sichten CardView/LabelMarkView",
           "CardService",
+          // CardSearchService ist Vertrag (Plan #1387, E1/E4): die Suche nach Kartennummern als
+          // eigener Zugang, samt Record CardSearchHit.
+          "CardSearchService",
+          // CardIngestService ist Vertrag (Plan #1387, E1/E4): das Kanban-kompatible Einliefern als
+          // eigener Zugang, samt Records BoardItemView, DirectCard und CardCreation.
+          "CardIngestService",
+          // EpicService ist Vertrag (Plan #1387, E1/E4): Vorhaben und Herkunft als eigener Zugang,
+          // samt Records EpicView und DerivationNodeView.
+          "EpicService",
+          // CardArchiveService ist Vertrag (Plan #1387, E1/E4): Archiv und Papierkorb als eigener
+          // Zugang.
+          "CardArchiveService",
+          // CardMoveService ist Vertrag (Plan #1387, E1/E4): Verschieben, Status und Umzug als
+          // eigener Zugang.
+          "CardMoveService",
+          // CardRunQueryService ist Vertrag (Plan #1387, E1/E4/E10): die Lese-Abfragen fuer Laeufe
+          // als eigener Zugang, samt Records TokenActivityView und LaufKarteView.
+          "CardRunQueryService",
           "LabelService",
+          // CardView und LabelMarkView sind Vertrag (Plan #1387, E5): Mehrere Karten-Dienste
+          // liefern sie, darum stehen sie als eigene Typen neben den Fassaden statt in einer davon.
+          "CardView",
+          "LabelMarkView",
           "CardBoardActivityEvent",
           "CardsPurgedEvent",
           // EpicRef ist Vertrag (Issue #936): die Nachtlauf-Auswertung fragt je Kartennummer die
