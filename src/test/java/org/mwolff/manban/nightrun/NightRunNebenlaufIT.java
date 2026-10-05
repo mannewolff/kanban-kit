@@ -269,6 +269,7 @@ class NightRunNebenlaufIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null),
         List.of());
   }
@@ -283,6 +284,7 @@ class NightRunNebenlaufIT extends AbstractIntegrationTest {
         0,
         null,
         true,
+        null,
         null,
         null,
         null,

@@ -23,6 +23,8 @@ import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.nightrun.domain.ReleasePreparation;
+import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
 import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
@@ -51,7 +53,9 @@ import org.springframework.transaction.annotation.Transactional;
 // sie zu trennen verteilte einen zusammenhaengenden Use-Case auf zwei Klassen und dieselben Typen
 // auf beide. Dieselbe Begruendung wie am NightRunRepositoryAdapter. Issue #1454 bringt mit der
 // Uebersicht „Heute Nacht" CardRunQueryService und NachtFreigabe dazu — ein weiterer Lesepfad
-// derselben Runner-Seite mit derselben Rechtepruefung wie list.
+// derselben Runner-Seite mit derselben Rechtepruefung wie list. Issue #1456 bringt mit der
+// Morgenmeldung ReleasePreparation und ReleasePreparationResult dazu — zwei Felder mehr desselben
+// Laufs, die derselbe Use-Case schreibt.
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 public class NightRunService {
 
@@ -184,7 +188,11 @@ public class NightRunService {
             // „nicht angegeben" — der Dienst ergaenzt sie nicht aus Voreinstellungen, die er
             // gar nicht kennt (Plan #1110 E4).
             meldung.budget(),
-            abbruch);
+            abbruch,
+            // Die Morgenmeldung ersetzt wie jedes andere Feld (Issue #1456, Plan #1447 E12): Eine
+            // Meldung ohne sie raeumt eine frueher gemeldete ab. Den Eingang setzt die Uhr des
+            // Servers, denn die Meldung selbst traegt keinen Zeitpunkt der Vorbereitung.
+            vorbereitung(meldung.releasePreparation(), now));
 
     // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
     runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
@@ -308,7 +316,29 @@ public class NightRunService {
         // Fest null aus demselben Grund wie der Grund ohne Arbeit (Plan #1139, E7): Ein
         // hochgeladenes Protokoll kommt aus der Datei, nicht aus dem Runner, und traegt dessen
         // Abbruchmeldung nicht.
+        null,
+        // Fest null aus demselben Grund (Issue #1456): Die Morgenmeldung kommt allein vom Runner.
         null);
+  }
+
+  /**
+   * Die gemeldete Morgenmeldung mit dem Eingang nach der Uhr des Servers — oder {@code null}, wenn
+   * keine gemeldet wurde (Issue #1456, Plan #1447 E12).
+   */
+  private static @Nullable ReleasePreparation vorbereitung(
+      @Nullable NewReleasePreparation gemeldet, Instant eingang) {
+    if (gemeldet == null) {
+      return null;
+    }
+    return new ReleasePreparation(
+        gemeldet.result(),
+        gemeldet.commitHash(),
+        gemeldet.version(),
+        gemeldet.redCheck(),
+        gemeldet.cardNumbers(),
+        gemeldet.redCards(),
+        gemeldet.pending(),
+        eingang);
   }
 
   /**
@@ -481,6 +511,8 @@ public class NightRunService {
    *     „nicht abgebrochen". Der Upload-Weg führt ihn nicht und übergibt hier fest {@code null}
    *     (Plan #1139 E7). Ob der Wert am Lauf landet, entscheidet {@link #abbruchGrund} — gemeldet
    *     heißt nicht gesetzt.
+   * @param releasePreparation die gemeldete Morgenmeldung (Issue #1456); {@code null} heißt „keine
+   *     gemeldet". Der Upload-Weg führt sie nicht und übergibt hier fest {@code null}.
    */
   public record NewNightRun(
       Instant startedAt,
@@ -495,7 +527,35 @@ public class NightRunService {
       @Nullable String noWorkReason,
       @Nullable NightRunBudget budget,
       @Nullable String abortReason,
+      @Nullable NewReleasePreparation releasePreparation,
       List<NewNightRunItem> items) {}
+
+  /**
+   * Eine gemeldete Morgenmeldung ohne den Eingangszeitpunkt — den setzt der Dienst (Issue #1456).
+   * {@code releaseFiles} der Meldung fehlt hier mit Absicht: Das Board nimmt es an, aber speichert
+   * es nicht (Plan #1447 E12).
+   *
+   * @param cardNumbers die enthaltenen Arbeitspakete — leer statt {@code null}
+   * @param redCards die von der fehlgeschlagenen Prüfung betroffenen Karten — leer statt {@code
+   *     null}
+   * @param pending die noch offenen Prüfungen — leer statt {@code null}
+   */
+  public record NewReleasePreparation(
+      ReleasePreparationResult result,
+      @Nullable String commitHash,
+      @Nullable String version,
+      @Nullable String redCheck,
+      List<Integer> cardNumbers,
+      List<Integer> redCards,
+      List<String> pending) {
+
+    /** Die Listen werden beim Anlegen kopiert und unveränderlich gemacht. */
+    public NewReleasePreparation {
+      cardNumbers = List.copyOf(cardNumbers);
+      redCards = List.copyOf(redCards);
+      pending = List.copyOf(pending);
+    }
+  }
 
   /**
    * Ein einzulieferndes Arbeitspaket ohne technische Felder.

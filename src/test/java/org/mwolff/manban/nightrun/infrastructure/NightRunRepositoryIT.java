@@ -34,6 +34,8 @@ import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.nightrun.domain.ReleasePreparation;
+import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -118,6 +120,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         NightRunOrigin.UPLOAD,
         null,
         true,
+        null,
         null,
         null,
         null,
@@ -216,6 +219,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null);
 
     long id =
@@ -256,6 +260,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.TOKEN,
             "sitzungs-token",
             true,
+            null,
             null,
             null,
             null,
@@ -376,6 +381,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.UPLOAD,
             null,
             true,
+            null,
             null,
             null,
             null,
@@ -556,6 +562,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -726,6 +733,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.UPLOAD,
             null,
             true,
+            null,
             null,
             null,
             null,
@@ -1013,6 +1021,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             laufVerbrauch,
             null,
             null,
+            null,
             null);
     NightRunItem paket =
         new NightRunItem(
@@ -1079,6 +1088,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null);
 
     long runId = runs.insertIfAbsent(maschinell, List.of()).orElseThrow();
@@ -1113,6 +1123,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         "nacht-token",
         complete,
         Instant.parse("2026-09-10T03:22:00Z"),
+        null,
         null,
         null,
         null,
@@ -1152,7 +1163,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
-        abbruch);
+        abbruch,
+        null);
   }
 
   /**
@@ -1184,6 +1196,135 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
 
     runs.upsert(meldungMitAbbruch(T1, null), List.of());
     assertThat(gelesen(runId).abortReason()).as("und wieder abgeraeumt").isNull();
+  }
+
+  // --- Morgenmeldung (Issue #1456) --------------------------------------------------------
+
+  private static final Instant EINGANG = Instant.parse("2026-09-10T04:12:00Z");
+
+  private static final ReleasePreparation GRUEN_OFFEN =
+      new ReleasePreparation(
+          ReleasePreparationResult.GREEN_PENDING,
+          "b2ae30f6",
+          "1.4.0",
+          null,
+          List.of(1450, 1449, 1455),
+          List.of(),
+          List.of("Mutationsprüfung Frontend", "Doku-Seite"),
+          EINGANG);
+
+  private static final ReleasePreparation ROT =
+      new ReleasePreparation(
+          ReleasePreparationResult.RED,
+          "c3bf41a7",
+          null,
+          "mvn verify",
+          List.of(1449),
+          List.of(1450, 1451),
+          List.of(),
+          EINGANG.plusSeconds(60));
+
+  /** Dieselbe Meldung, zusaetzlich mit einer Morgenmeldung (Issue #1456). */
+  private NightRun meldungMitVorbereitung(
+      Instant startedAt, @Nullable ReleasePreparation vorbereitung) {
+    return new NightRun(
+        null,
+        projectId,
+        startedAt,
+        NightRunMode.CHAIN,
+        NightRunKind.NIGHT,
+        1000L,
+        0,
+        0,
+        0,
+        null,
+        ANGELEGT,
+        NightRunOrigin.TOKEN,
+        "nacht-token",
+        true,
+        Instant.parse("2026-09-10T03:22:00Z"),
+        null,
+        null,
+        null,
+        null,
+        vorbereitung);
+  }
+
+  private long eintraegeDerMorgenmeldung(long runId) {
+    Long anzahl =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM night_run_release_entry WHERE night_run_id = ?",
+            Long.class,
+            runId);
+    return anzahl == null ? 0L : anzahl;
+  }
+
+  /** Die Morgenmeldung überlebt das Einfügen samt Listen in gemeldeter Reihenfolge. */
+  @Test
+  void insertIfAbsent_schreibtUndLiestDieMorgenmeldung() {
+    long runId =
+        runs.insertIfAbsent(meldungMitVorbereitung(T1, GRUEN_OFFEN), List.of()).orElseThrow();
+
+    assertThat(gelesen(runId).releasePreparation()).isEqualTo(GRUEN_OFFEN);
+    assertThat(eintraegeDerMorgenmeldung(runId)).isEqualTo(5L);
+  }
+
+  /** Ein Lauf ohne Morgenmeldung trägt keine — und nicht eine aus lauter leeren Feldern. */
+  @Test
+  void einLaufOhneMorgenmeldungTraegtKeine() {
+    long runId = runs.insertIfAbsent(meldungMitVorbereitung(T1, null), List.of()).orElseThrow();
+
+    assertThat(gelesen(runId).releasePreparation()).isNull();
+  }
+
+  /**
+   * Ersetzt, nicht ergänzt, in beide Richtungen: Eine neue Meldung tauscht die Morgenmeldung samt
+   * Einträgen aus, und eine ohne sie räumt sie ab. Die Zählung der Einträge belegt, dass keine
+   * alten liegen bleiben.
+   */
+  @Test
+  void upsert_ersetztDieMorgenmeldungInBeideRichtungen() {
+    long runId = runs.upsert(meldungMitVorbereitung(T1, GRUEN_OFFEN), List.of()).id();
+    assertThat(gelesen(runId).releasePreparation()).as("erst grün").isEqualTo(GRUEN_OFFEN);
+
+    runs.upsert(meldungMitVorbereitung(T1, ROT), List.of());
+    assertThat(gelesen(runId).releasePreparation()).as("dann rot").isEqualTo(ROT);
+    assertThat(eintraegeDerMorgenmeldung(runId)).isEqualTo(3L);
+
+    runs.upsert(meldungMitVorbereitung(T1, null), List.of());
+    assertThat(gelesen(runId).releasePreparation()).as("und wieder abgeräumt").isNull();
+    assertThat(eintraegeDerMorgenmeldung(runId)).isZero();
+  }
+
+  /** Auch die übrigen Lesewege liefern die Morgenmeldung mit, je Lauf die eigene. */
+  @Test
+  void findByIdUndFindOverlappingLiefernDieMorgenmeldungMit() {
+    long mit = runs.insertIfAbsent(meldungMitVorbereitung(T1, ROT), List.of()).orElseThrow();
+    long ohne = runs.insertIfAbsent(meldungMitVorbereitung(T2, null), List.of()).orElseThrow();
+
+    assertThat(runs.findByIdAndProjectId(mit, projectId).orElseThrow().releasePreparation())
+        .isEqualTo(ROT);
+    assertThat(runs.findOverlapping(projectId, "nacht-token", T1, T3))
+        .extracting(NightRun::id, NightRun::releasePreparation)
+        .containsExactly(tuple(mit, ROT), tuple(ohne, null));
+  }
+
+  /** Verdrängt der Ringpuffer einen Lauf, nimmt er dessen Morgenmeldung mit (ON DELETE CASCADE). */
+  @Test
+  void dieVerdraengungEinesLaufsNimmtSeineMorgenmeldungMit() {
+    long alt =
+        runs.insertIfAbsent(meldungMitVorbereitung(T1, GRUEN_OFFEN), List.of()).orElseThrow();
+    runs.insertIfAbsent(meldungMitVorbereitung(T2, null), List.of());
+
+    runs.deleteOlderThanNewest(projectId, NightRunKind.NIGHT, 1);
+
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM night_run_release_preparation WHERE night_run_id = ?",
+                Long.class,
+                alt))
+        .isZero();
+    assertThat(eintraegeDerMorgenmeldung(alt)).isZero();
   }
 
   @Test
@@ -1261,6 +1402,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null);
     runs.upsert(alsSitzung, List.of(paket(102, NightRunState.GREEN)));
 
@@ -1293,6 +1435,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             "nacht-token",
             true,
             spaeter,
+            null,
             null,
             null,
             null,
@@ -1438,6 +1581,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             laufVerbrauch,
             null,
             null,
+            null,
             null);
 
     long runId =
@@ -1487,6 +1631,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         budget,
+        null,
         null);
   }
 

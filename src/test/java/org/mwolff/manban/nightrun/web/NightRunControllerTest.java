@@ -172,6 +172,7 @@ class NightRunControllerTest {
                 null,
                 null,
                 null,
+                null,
                 List.of(
                     new NewNightRunItem(
                         721,
@@ -194,6 +195,7 @@ class NightRunControllerTest {
                 0,
                 null,
                 true,
+                null,
                 null,
                 null,
                 null,
@@ -239,6 +241,7 @@ class NightRunControllerTest {
                 0,
                 null,
                 true,
+                null,
                 null,
                 null,
                 null,

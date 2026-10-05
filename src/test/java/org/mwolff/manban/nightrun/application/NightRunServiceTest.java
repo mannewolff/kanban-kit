@@ -48,6 +48,8 @@ import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.ProgressStage;
+import org.mwolff.manban.nightrun.domain.ReleasePreparation;
+import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
 import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -445,6 +447,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        null,
         List.of(items));
   }
 
@@ -498,6 +501,7 @@ class NightRunServiceTest {
         usage,
         null,
         budget,
+        null,
         null,
         List.of(items));
   }
@@ -812,6 +816,101 @@ class NightRunServiceTest {
     assertThat(sicht.items().getFirst().stages()).isEmpty();
   }
 
+  // --- Morgenmeldung: releasePreparation am Lauf (Issue #1456) ----------------------------
+
+  private static final NightRunService.NewReleasePreparation GRUEN =
+      new NightRunService.NewReleasePreparation(
+          ReleasePreparationResult.GREEN_PENDING,
+          "b2ae30f6",
+          "1.4.0",
+          null,
+          List.of(1449, 1450),
+          List.of(),
+          List.of("Mutationsprüfung Frontend"));
+
+  private static final NightRunService.NewReleasePreparation ROT =
+      new NightRunService.NewReleasePreparation(
+          ReleasePreparationResult.RED,
+          "c3bf41a7",
+          null,
+          "mvn verify",
+          List.of(1449),
+          List.of(1450),
+          List.of());
+
+  private static NightRunService.NewNightRun meldungMitVorbereitung(
+      Instant startedAt, NightRunService.@Nullable NewReleasePreparation vorbereitung) {
+    return new NightRunService.NewNightRun(
+        startedAt,
+        NightRunMode.CHAIN,
+        1_000L,
+        1,
+        0,
+        0,
+        null,
+        true,
+        null,
+        null,
+        null,
+        null,
+        vorbereitung,
+        List.of());
+  }
+
+  /** Die Meldung landet vollständig am Lauf; den Eingang setzt die Uhr des Servers (E12). */
+  @Test
+  void ingest_speichertDieMorgenmeldungMitDemEingangNachDerServeruhr() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+
+    assertThat(gemeldeterLauf().releasePreparation())
+        .isEqualTo(
+            new ReleasePreparation(
+                ReleasePreparationResult.GREEN_PENDING,
+                "b2ae30f6",
+                "1.4.0",
+                null,
+                List.of(1449, 1450),
+                List.of(),
+                List.of("Mutationsprüfung Frontend"),
+                FIXED));
+  }
+
+  /** Eine neue Meldung desselben Laufs ersetzt die Morgenmeldung wie die übrigen Felder. */
+  @Test
+  void ingest_ersetztDieMorgenmeldungBeiErneuterMeldungDesselbenLaufs() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, ROT));
+
+    ReleasePreparation gespeichert = gemeldeterLauf().releasePreparation();
+    assertThat(gespeichert).isNotNull();
+    assertThat(gespeichert.result()).isEqualTo(ReleasePreparationResult.RED);
+    assertThat(gespeichert.commitHash()).isEqualTo("c3bf41a7");
+    assertThat(gespeichert.version()).isNull();
+    assertThat(gespeichert.redCheck()).isEqualTo("mvn verify");
+    assertThat(gespeichert.redCards()).containsExactly(1450);
+    assertThat(gespeichert.pending()).isEmpty();
+  }
+
+  /**
+   * Zustand, keine Ergänzung: Trägt die neue Meldung keine Morgenmeldung, steht am Lauf keine mehr
+   * — dieselbe Semantik wie beim Abbruchgrund.
+   */
+  @Test
+  void ingest_raeumtDieMorgenmeldungAb_wennDieNeueMeldungSieNichtTraegt() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, null));
+
+    assertThat(gemeldeterLauf().releasePreparation()).isNull();
+  }
+
+  /** Der Upload-Weg führt keine Morgenmeldung, auch wenn der Aufrufer eine übergäbe. */
+  @Test
+  void submit_speichertNieEineMorgenmeldung() {
+    service.submit(USER, PROJECT, List.of(meldungMitVorbereitung(T1, GRUEN)));
+
+    assertThat(gemeldeterLauf().releasePreparation()).isNull();
+  }
+
   @Test
   void ingest_reichtDasErgebnisDesSchreibwegsDurch() {
     assertThat(
@@ -1016,6 +1115,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -1087,6 +1187,7 @@ class NightRunServiceTest {
         grund,
         null,
         abbruch,
+        null,
         List.of());
   }
 
@@ -1101,6 +1202,7 @@ class NightRunServiceTest {
         0,
         null,
         true,
+        null,
         null,
         null,
         null,
@@ -1297,6 +1399,7 @@ class NightRunServiceTest {
                 null,
                 null,
                 ABBRUCH_GRUND,
+                null,
                 List.of())));
 
     NightRun gespeichert = gemeldeterLauf();
@@ -1369,7 +1472,8 @@ class NightRunServiceTest {
               run.usage(),
               run.noWorkReason(),
               run.budget(),
-              run.abortReason()));
+              run.abortReason(),
+              run.releasePreparation()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -1411,7 +1515,8 @@ class NightRunServiceTest {
               run.usage(),
               run.noWorkReason(),
               run.budget(),
-              run.abortReason()));
+              run.abortReason(),
+              run.releasePreparation()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }

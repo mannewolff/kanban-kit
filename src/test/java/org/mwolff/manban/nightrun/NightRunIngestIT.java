@@ -24,6 +24,8 @@ import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.ReleasePreparation;
+import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.application.ProjectRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -785,6 +787,103 @@ class NightRunIngestIT extends AbstractIntegrationTest {
             + " WHERE i.project_id = ?",
         Long.class,
         projectId);
+  }
+
+  // --- Morgenmeldung: releasePreparation (Issue #1456) ------------------------------------
+
+  /** Eine Meldung mit Morgenmeldung — additiv wie {@code abortReason}, ein Feld mehr. */
+  private static String meldungMitVorbereitung(String vorbereitung) {
+    return """
+        {"startedAt":"%s","mode":"CHAIN","durationMs":4320000,"processedCount":1,
+         "skippedCount":0,"unparsedCount":0,"complete":true,
+         "releasePreparation":%s,
+         "items":[%s]}"""
+        .formatted(START, vorbereitung, paket(917));
+  }
+
+  private static final String GRUEN_OFFEN =
+      """
+      {"result":"GREEN_PENDING","commitHash":"b2ae30f6","version":"1.4.0",
+       "releaseFiles":["target/manban.jar"],"pending":["Mutationsprüfung Frontend"],
+       "cardNumbers":[1450,1449]}""";
+
+  private static final String ROT =
+      """
+      {"result":"RED","commitHash":"c3bf41a7","redCheck":"mvn verify",
+       "cardNumbers":[1449],"redCards":[1450]}""";
+
+  /** Die Meldung wird gespeichert, {@code releaseFiles} angenommen, aber nicht gespeichert. */
+  @Test
+  void eineMorgenmeldungWirdAmLaufGespeichert() throws Exception {
+    Aufbau aufbau = aufbau("ingest-morgen");
+    Instant vorher = Instant.now();
+
+    melde(aufbau, meldungMitVorbereitung(GRUEN_OFFEN));
+
+    ReleasePreparation gespeichert = einzigerLauf(aufbau.projectId()).releasePreparation();
+    assertThat(gespeichert).isNotNull();
+    assertThat(gespeichert.result()).isEqualTo(ReleasePreparationResult.GREEN_PENDING);
+    assertThat(gespeichert.commitHash()).isEqualTo("b2ae30f6");
+    assertThat(gespeichert.version()).isEqualTo("1.4.0");
+    assertThat(gespeichert.redCheck()).isNull();
+    assertThat(gespeichert.cardNumbers()).containsExactly(1450, 1449);
+    assertThat(gespeichert.redCards()).isEmpty();
+    assertThat(gespeichert.pending()).containsExactly("Mutationsprüfung Frontend");
+    assertThat(gespeichert.receivedAt()).isAfterOrEqualTo(vorher.minusSeconds(1));
+  }
+
+  /** Eine neue Meldung desselben Laufs ersetzt die Morgenmeldung — und eine ohne sie räumt ab. */
+  @Test
+  void eineZweitmeldungErsetztDieMorgenmeldung_undEineOhneRaeumtSieAb() throws Exception {
+    Aufbau aufbau = aufbau("ingest-morgen-ersetzt");
+
+    melde(aufbau, meldungMitVorbereitung(GRUEN_OFFEN));
+    melde(aufbau, meldungMitVorbereitung(ROT));
+
+    ReleasePreparation ersetzt = einzigerLauf(aufbau.projectId()).releasePreparation();
+    assertThat(ersetzt).isNotNull();
+    assertThat(ersetzt.result()).isEqualTo(ReleasePreparationResult.RED);
+    assertThat(ersetzt.redCheck()).isEqualTo("mvn verify");
+    assertThat(ersetzt.cardNumbers()).containsExactly(1449);
+    assertThat(ersetzt.redCards()).containsExactly(1450);
+    assertThat(ersetzt.pending()).isEmpty();
+
+    melde(aufbau, meldung(true, paket(917)));
+
+    assertThat(einzigerLauf(aufbau.projectId()).releasePreparation()).isNull();
+  }
+
+  /** Eine Meldung mit unbekanntem {@code result} wird mit 400 abgewiesen und schreibt nichts. */
+  @Test
+  void einUnbekanntesErgebnisWirdAbgewiesen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-morgen-ergebnis");
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldungMitVorbereitung("{\"result\":\"BLUE\"}")))
+        .andExpect(status().isBadRequest());
+
+    assertThat(nachtlaeufe(aufbau.projectId())).isEmpty();
+  }
+
+  /** Ein überlanger Commit-Hash wird mit 400 abgewiesen, statt in der Spalte zu reißen. */
+  @Test
+  void einUeberlangerCommitHashWirdAbgewiesen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-morgen-hash");
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(
+                    meldungMitVorbereitung(
+                        "{\"result\":\"GREEN\",\"commitHash\":\"%s\"}".formatted("a".repeat(41)))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors").exists());
+
+    assertThat(nachtlaeufe(aufbau.projectId())).isEmpty();
   }
 
   // --- Aufbau -------------------------------------------------------------------------------

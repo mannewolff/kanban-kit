@@ -566,6 +566,69 @@
       "required" : [ "state", "title" ],
       "type" : "object"
     },
+    "IngestReleasePreparationRequest" : {
+      "properties" : {
+        "cardNumbers" : {
+          "items" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "maxItems" : 500,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "commitHash" : {
+          "maxLength" : 40,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "pending" : {
+          "items" : {
+            "maxLength" : 300,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "maxItems" : 50,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "redCards" : {
+          "items" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "maxItems" : 500,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "redCheck" : {
+          "maxLength" : 300,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "releaseFiles" : {
+          "items" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "maxItems" : 1000,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "result" : {
+          "enum" : [ "GREEN", "GREEN_PENDING", "RED", "NOT_PREPARED" ],
+          "type" : "string"
+        },
+        "version" : {
+          "maxLength" : 100,
+          "minLength" : 0,
+          "type" : "string"
+        }
+      },
+      "required" : [ "result" ],
+      "type" : "object"
+    },
     "IngestRequest" : {
       "properties" : {
         "abortReason" : {
@@ -607,6 +670,9 @@
         "processedCount" : {
           "format" : "int32",
           "type" : "integer"
+        },
+        "releasePreparation" : {
+          "$ref" : "#/components/schemas/IngestReleasePreparationRequest"
         },
         "skippedCount" : {
           "format" : "int32",

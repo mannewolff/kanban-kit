@@ -89,7 +89,8 @@ class BefundNahtstelleTest {
                     null,
                     null,
                     null,
-                    abortReason)));
+                    abortReason,
+                    null)));
     when(runs.findItemsByRunIds(any())).thenReturn(List.of());
     NightRunService service =
         new NightRunService(

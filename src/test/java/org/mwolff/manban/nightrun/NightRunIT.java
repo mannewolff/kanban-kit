@@ -432,6 +432,7 @@ class NightRunIT extends AbstractIntegrationTest {
             gemeldet,
             null,
             null,
+            null,
             null),
         List.of());
 

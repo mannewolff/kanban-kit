@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -26,6 +27,7 @@ import org.mwolff.manban.common.web.api.Stabilitaet;
 import org.mwolff.manban.nightrun.application.NightRunService;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRun;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRunItem;
+import org.mwolff.manban.nightrun.application.NightRunService.NewReleasePreparation;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.TokenNotBoundForIngestException;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
@@ -37,6 +39,7 @@ import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -103,6 +106,38 @@ class NightRunIngestController {
   /** Längengrenze eines einzelnen Feldnamens; siehe {@link #MAX_DEFAULT_FIELDS}. */
   static final int DEFAULT_FIELD_NAME_MAX = 18;
 
+  /**
+   * Längengrenze der Versionsbeschriftung der Morgenmeldung (Issue #1456) — die Länge der Spalte
+   * {@code night_run_release_preparation.version} aus {@code V48}. Ohne Grenze risse eine überlange
+   * Meldung dort in einen Serverfehler statt in eine benannte Ablehnung.
+   */
+  static final int RELEASE_VERSION_MAX = 100;
+
+  /**
+   * Längengrenze der fehlgeschlagenen Prüfung und eines offenen Eintrags der Morgenmeldung — die
+   * Länge der Spalten {@code red_check} und {@code night_run_release_entry.text} aus {@code V48}.
+   */
+  static final int RELEASE_TEXT_MAX = 300;
+
+  /**
+   * Obergrenze der Kartennummern je Liste der Morgenmeldung. Ein vorbereiteter Stand kann Pakete
+   * aus mehreren Ketten enthalten (fachlich #1420), darum mehr als die {@value
+   * NightRunController#MAX_ITEMS_PER_RUN} Vorgänge eines Laufs.
+   */
+  static final int RELEASE_CARDS_MAX = 500;
+
+  /** Obergrenze der offenen Einträge der Morgenmeldung. */
+  static final int RELEASE_PENDING_MAX = 50;
+
+  /**
+   * Obergrenzen der Dateiliste der Morgenmeldung. Sie wird angenommen, aber nicht gespeichert (Plan
+   * #1447 E12); begrenzt ist sie trotzdem, damit eine Meldung nicht beliebig groß werden kann.
+   */
+  static final int RELEASE_FILES_MAX = 1000;
+
+  /** Längengrenze eines Eintrags der Dateiliste; siehe {@link #RELEASE_FILES_MAX}. */
+  static final int RELEASE_FILE_MAX = 500;
+
   private final NightRunService service;
 
   NightRunIngestController(NightRunService service) {
@@ -123,6 +158,9 @@ class NightRunIngestController {
               + " Sitzung (INTERACTIVE). Bei einer Kette (mode CHAIN) tragen die Vorgänge ihre"
               + " Stufen (stages) mit Dauer und Verbrauch; budget nennt die Zeit- und"
               + " Kostenvorgaben, unter denen der Lauf antrat.\n\n"
+              + "releasePreparation ist die Morgenmeldung: ob und wie der Lauf eine"
+              + " Veröffentlichung vorbereitet hat. Sie ersetzt wie jedes andere Feld eine früher"
+              + " gemeldete; fehlt sie, steht am Lauf keine. Den Eingang setzt der Server.\n\n"
               + "Gegenstück auf der Runner-Seite ist „Protokoll einlesen“: Dort lädt ein Mensch"
               + " das Textprotokoll eines Laufs im Browser hoch, und der Leitstand deutet es"
               + " zeilenweise. Dieser Aufruf nimmt denselben Inhalt strukturiert an, ohne"
@@ -196,7 +234,32 @@ class NightRunIngestController {
         request.noWorkReason(),
         budget(request.budget()),
         request.abortReason(),
+        vorbereitung(request.releasePreparation()),
         request.items().stream().map(NightRunIngestController::item).toList());
+  }
+
+  /**
+   * Die gemeldete Morgenmeldung als Wert des Dienstes — oder {@code null}, wenn keine gemeldet
+   * wurde (Issue #1456). Fehlende Listen werden zur leeren Liste: „keine offenen Prüfungen" ist
+   * eine Aussage. {@code releaseFiles} wird hier verworfen (Plan #1447 E12).
+   */
+  private static @Nullable NewReleasePreparation vorbereitung(
+      @Nullable IngestReleasePreparationRequest request) {
+    if (request == null) {
+      return null;
+    }
+    return new NewReleasePreparation(
+        request.result(),
+        request.commitHash(),
+        request.version(),
+        request.redCheck(),
+        leerStattNull(request.cardNumbers()),
+        leerStattNull(request.redCards()),
+        leerStattNull(request.pending()));
+  }
+
+  private static <T> List<T> leerStattNull(@Nullable List<T> liste) {
+    return liste == null ? List.of() : liste;
   }
 
   private static NewNightRunItem item(IngestItemRequest request) {
@@ -279,6 +342,9 @@ class NightRunIngestController {
    *     NightRunController#ABORT_REASON_MAX} — die Länge der Spalte, in die der Wert geht; ohne
    *     Grenze risse eine überlange Meldung dort in einen Serverfehler statt in eine benannte
    *     Ablehnung. Ob der Wert am Lauf landet, entscheidet der Dienst.
+   * @param releasePreparation die Morgenmeldung des Laufs (Issue #1456, Plan #1447 E12). Additiv
+   *     und {@code @Nullable} aus demselben Grund wie die vier davor: Eine ältere Kit-Kopie kennt
+   *     das Feld nicht und meldet unverändert weiter.
    */
   @Schema(description = "Der vollständige Stand eines Laufs; ersetzt eine frühere Meldung.")
   record IngestRequest(
@@ -330,6 +396,13 @@ class NightRunIngestController {
           @Nullable
           @Size(max = ABORT_REASON_MAX)
           String abortReason,
+      @Schema(
+              description =
+                  "Morgenmeldung: ob und wie der Lauf eine Veröffentlichung vorbereitet hat."
+                      + " Fehlt sie, trägt der Lauf keine.")
+          @Nullable
+          @Valid
+          IngestReleasePreparationRequest releasePreparation,
       @Schema(description = "Die Vorgänge des Laufs, höchstens 200.")
           @NotNull
           @Size(max = MAX_ITEMS_PER_RUN)
@@ -431,4 +504,67 @@ class NightRunIngestController {
       @Schema(description = "Dauer der Stufe in Millisekunden.", example = "600000")
           @Nullable Long durationMs,
       @Schema(description = "Verbrauch der Stufe.") @Nullable @Valid NightRunUsageRequest usage) {}
+
+  /**
+   * Die gemeldete Morgenmeldung eines Laufs (Issue #1456, Plan #1447 E12; Kit A7).
+   *
+   * <p>{@code result} ist Pflicht und keine Ausnahme von der Additivität: Es ist die Aussage der
+   * Meldung, und eine Meldung ohne sie sagt nichts. Alle übrigen Felder dürfen fehlen. Die Grenzen
+   * folgen den Spalten aus {@code V48} — ohne sie risse eine überlange Meldung dort in einen
+   * Serverfehler statt in eine benannte Ablehnung.
+   */
+  @Schema(description = "Morgenmeldung: der vorbereitete Stand einer Veröffentlichung.")
+  record IngestReleasePreparationRequest(
+      @Schema(
+              description =
+                  "Ausgang: GREEN grün, GREEN_PENDING grün mit offener Prüfung, RED rot,"
+                      + " NOT_PREPARED nichts vorbereitet.",
+              example = "GREEN")
+          @NotNull
+          ReleasePreparationResult result,
+      @Schema(
+              description =
+                  "Commit des vorbereiteten Stands, höchstens 40 Zeichen; damit findet der Mensch"
+                      + " ihn außerhalb des Boards wieder.",
+              example = "b2ae30f6")
+          @Nullable
+          @Size(max = COMMIT_HASH_MAX)
+          String commitHash,
+      @Schema(description = "Beschriftung des Stands, höchstens 100 Zeichen.", example = "1.4.0")
+          @Nullable
+          @Size(max = RELEASE_VERSION_MAX)
+          String version,
+      @Schema(
+              description =
+                  "Dateien der Veröffentlichung; höchstens 1000 zu je 500 Zeichen. Wird angenommen,"
+                      + " aber nicht gespeichert.",
+              example = "[\"target/manban.jar\"]")
+          @Nullable
+          @Size(max = RELEASE_FILES_MAX)
+          List<@NotNull @Size(max = RELEASE_FILE_MAX) String> releaseFiles,
+      @Schema(
+              description =
+                  "Noch offene Prüfungen bei GREEN_PENDING; höchstens 50 zu je 300 Zeichen.",
+              example = "[\"Mutationsprüfung Frontend\"]")
+          @Nullable
+          @Size(max = RELEASE_PENDING_MAX)
+          List<@NotBlank @Size(max = RELEASE_TEXT_MAX) String> pending,
+      @Schema(
+              description = "Nummern der enthaltenen Arbeitspakete; höchstens 500.",
+              example = "[1449, 1450]")
+          @Nullable
+          @Size(max = RELEASE_CARDS_MAX)
+          List<@NotNull @Positive Integer> cardNumbers,
+      @Schema(
+              description = "Die fehlgeschlagene Prüfung bei RED, höchstens 300 Zeichen.",
+              example = "mvn verify")
+          @Nullable
+          @Size(max = RELEASE_TEXT_MAX)
+          String redCheck,
+      @Schema(
+              description = "Nummern der Karten, die die fehlgeschlagene Prüfung betrifft.",
+              example = "[1450]")
+          @Nullable
+          @Size(max = RELEASE_CARDS_MAX)
+          List<@NotNull @Positive Integer> redCards) {}
 }

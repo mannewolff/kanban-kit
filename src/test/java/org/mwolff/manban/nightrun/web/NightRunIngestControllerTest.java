@@ -11,9 +11,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mwolff.manban.nightrun.web.NightRunController.ABORT_REASON_MAX;
+import static org.mwolff.manban.nightrun.web.NightRunController.COMMIT_HASH_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunController.NO_WORK_REASON_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunIngestController.DEFAULT_FIELD_NAME_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunIngestController.MAX_DEFAULT_FIELDS;
+import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_CARDS_MAX;
+import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_FILES_MAX;
+import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_FILE_MAX;
+import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_PENDING_MAX;
+import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_TEXT_MAX;
+import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_VERSION_MAX;
 
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -28,6 +35,7 @@ import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.nightrun.application.NightRunService;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRun;
+import org.mwolff.manban.nightrun.application.NightRunService.NewReleasePreparation;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.TokenNotBoundForIngestException;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
@@ -38,8 +46,10 @@ import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
 import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestBudgetRequest;
 import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestItemRequest;
+import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestReleasePreparationRequest;
 import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestStageRequest;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -58,7 +68,10 @@ import org.springframework.security.core.Authentication;
 // wie an NightRunIngestIT. Issue #1142 bringt die Faelle zum Abbruchgrund dazu und reisst damit
 // die Schwelle. Faelle werden nicht zusammengelegt, um eine Zahl zu druecken: Ein Fall, der zwei
 // Dinge zugleich prueft, sagt beim Fehlschlag nicht mehr, welches davon brach.
-@SuppressWarnings({"PMD.ExcessiveImports", "PMD.TooManyMethods"})
+// PMD.CouplingBetweenObjects: Die Kopplung folgt den Typen des Einlieferungsvertrags, dieselbe
+// Ursache wie bei den Importen. Issue #1456 bringt mit der Morgenmeldung
+// IngestReleasePreparationRequest, NewReleasePreparation und ReleasePreparationResult dazu.
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.TooManyMethods", "PMD.CouplingBetweenObjects"})
 class NightRunIngestControllerTest {
 
   private static final Instant START = Instant.parse("2026-09-16T22:31:00Z");
@@ -73,7 +86,7 @@ class NightRunIngestControllerTest {
   private static NightRunIngestController.IngestRequest anfrage(
       @Nullable NightRunUsageRequest usage, @Nullable NightRunKind kind, NightRunMode mode) {
     return new NightRunIngestController.IngestRequest(
-        START, mode, kind, 1000L, 1, 0, 0, Boolean.TRUE, usage, null, null, null, List.of());
+        START, mode, kind, 1000L, 1, 0, 0, Boolean.TRUE, usage, null, null, null, null, List.of());
   }
 
   @Test
@@ -194,6 +207,7 @@ class NightRunIngestControllerTest {
         grund,
         null,
         null,
+        null,
         List.of());
   }
 
@@ -253,6 +267,7 @@ class NightRunIngestControllerTest {
         null,
         null,
         abbruch,
+        null,
         List.of());
   }
 
@@ -346,6 +361,7 @@ class NightRunIngestControllerTest {
         null,
         null,
         budget,
+        null,
         null,
         List.of(
             new IngestItemRequest(
@@ -526,5 +542,223 @@ class NightRunIngestControllerTest {
 
   private static IngestBudgetRequest budgetMitFeldern(List<String> felder) {
     return new IngestBudgetRequest(30, 30, 25, 10, null, NightRunBudgetOrigin.DEFAULTED, felder);
+  }
+
+  // --- Morgenmeldung: releasePreparation (Issue #1456) ------------------------------------
+
+  private static NightRunIngestController.IngestRequest anfrageMitVorbereitung(
+      @Nullable IngestReleasePreparationRequest vorbereitung) {
+    return new NightRunIngestController.IngestRequest(
+        START,
+        NightRunMode.CHAIN,
+        NightRunKind.NIGHT,
+        1000L,
+        0,
+        0,
+        0,
+        Boolean.TRUE,
+        null,
+        null,
+        null,
+        null,
+        vorbereitung,
+        List.of());
+  }
+
+  private static IngestReleasePreparationRequest vorbereitung(@Nullable String commitHash) {
+    return new IngestReleasePreparationRequest(
+        ReleasePreparationResult.RED,
+        commitHash,
+        "1.4.0",
+        List.of("target/manban.jar"),
+        List.of("Mutationsprüfung Frontend"),
+        List.of(1449, 1450),
+        "mvn verify",
+        List.of(1450));
+  }
+
+  @Test
+  void dieMorgenmeldungKommtOhneReleaseFilesAmDienstAn() {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+
+    controller.ingest(gebunden, anfrageMitVorbereitung(vorbereitung("b2ae30f6")));
+
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    assertThat(meldung.getValue().releasePreparation())
+        .isEqualTo(
+            new NewReleasePreparation(
+                ReleasePreparationResult.RED,
+                "b2ae30f6",
+                "1.4.0",
+                "mvn verify",
+                List.of(1449, 1450),
+                List.of(1450),
+                List.of("Mutationsprüfung Frontend")));
+  }
+
+  /** Fehlende Listen kommen leer an, nicht als {@code null} — „keine" ist eine Aussage. */
+  @Test
+  void eineMorgenmeldungNurMitErgebnisTraegtLeereListen() {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+
+    controller.ingest(
+        gebunden,
+        anfrageMitVorbereitung(
+            new IngestReleasePreparationRequest(
+                ReleasePreparationResult.NOT_PREPARED, null, null, null, null, null, null, null)));
+
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    assertThat(meldung.getValue().releasePreparation())
+        .isEqualTo(
+            new NewReleasePreparation(
+                ReleasePreparationResult.NOT_PREPARED,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                List.of()));
+  }
+
+  /** Additiv wie {@code abortReason}: Ohne das Feld kommt am Dienst „keine gemeldet" an. */
+  @Test
+  void ohneMorgenmeldungKommtNullAmDienstAn() {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+
+    controller.ingest(gebunden, anfrageMitVorbereitung(null));
+
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    assertThat(meldung.getValue().releasePreparation()).isNull();
+  }
+
+  @Test
+  void eineMeldungOhneMorgenmeldungBestehtDiePruefung() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      assertThat(factory.getValidator().validate(anfrageMitVorbereitung(null))).isEmpty();
+    }
+  }
+
+  @Test
+  void eineMorgenmeldungOhneErgebnisWirdAbgewiesen() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      assertThat(
+              factory
+                  .getValidator()
+                  .validate(
+                      anfrageMitVorbereitung(
+                          new IngestReleasePreparationRequest(
+                              null, null, null, null, null, null, null, null))))
+          .hasSize(1);
+    }
+  }
+
+  /** Die Grenze des Commit-Hashs wird beidseitig belegt. */
+  @Test
+  void einCommitHashBisZurGrenzeBestehtUndEinUeberlangerWirdAbgewiesen() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      Validator validator = factory.getValidator();
+
+      assertThat(
+              validator.validate(anfrageMitVorbereitung(vorbereitung("a".repeat(COMMIT_HASH_MAX)))))
+          .isEmpty();
+      assertThat(
+              validator.validate(
+                  anfrageMitVorbereitung(vorbereitung("a".repeat(COMMIT_HASH_MAX + 1)))))
+          .hasSize(1);
+    }
+  }
+
+  /** Jede Text- und Listengrenze der Morgenmeldung greift — je ein Wert knapp darüber. */
+  @Test
+  void ueberlangeTexteUndListenDerMorgenmeldungWerdenAbgewiesen() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      Validator validator = factory.getValidator();
+      List<Integer> zuVieleKarten =
+          IntStream.rangeClosed(1, RELEASE_CARDS_MAX + 1).boxed().toList();
+
+      assertThat(
+              validator.validate(
+                  anfrageMitVorbereitung(
+                      new IngestReleasePreparationRequest(
+                          ReleasePreparationResult.RED,
+                          null,
+                          "v".repeat(RELEASE_VERSION_MAX + 1),
+                          List.of("f".repeat(RELEASE_FILE_MAX + 1)),
+                          List.of("p".repeat(RELEASE_TEXT_MAX + 1)),
+                          zuVieleKarten,
+                          "r".repeat(RELEASE_TEXT_MAX + 1),
+                          zuVieleKarten))))
+          .hasSize(6);
+      assertThat(
+              validator.validate(
+                  anfrageMitVorbereitung(
+                      new IngestReleasePreparationRequest(
+                          ReleasePreparationResult.GREEN,
+                          null,
+                          "v".repeat(RELEASE_VERSION_MAX),
+                          List.of("f".repeat(RELEASE_FILE_MAX)),
+                          List.of("p".repeat(RELEASE_TEXT_MAX)),
+                          IntStream.rangeClosed(1, RELEASE_CARDS_MAX).boxed().toList(),
+                          "r".repeat(RELEASE_TEXT_MAX),
+                          List.of(1)))))
+          .isEmpty();
+    }
+  }
+
+  /** Eine Kartennummer muss eine sein: 0 und negative Werte werden abgewiesen. */
+  @Test
+  void eineKartennummerUnterEinsWirdAbgewiesen() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      assertThat(
+              factory
+                  .getValidator()
+                  .validate(
+                      anfrageMitVorbereitung(
+                          new IngestReleasePreparationRequest(
+                              ReleasePreparationResult.RED,
+                              null,
+                              null,
+                              null,
+                              null,
+                              List.of(0),
+                              null,
+                              List.of(-1)))))
+          .hasSize(2);
+    }
+  }
+
+  /** Zu viele offene Einträge und Dateien werden abgewiesen, statt still gekürzt zu werden. */
+  @Test
+  void zuVieleOffeneEintraegeUndDateienWerdenAbgewiesen() {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      assertThat(
+              factory
+                  .getValidator()
+                  .validate(
+                      anfrageMitVorbereitung(
+                          new IngestReleasePreparationRequest(
+                              ReleasePreparationResult.GREEN_PENDING,
+                              null,
+                              null,
+                              IntStream.rangeClosed(0, RELEASE_FILES_MAX)
+                                  .mapToObj(i -> "f" + i)
+                                  .toList(),
+                              IntStream.rangeClosed(0, RELEASE_PENDING_MAX)
+                                  .mapToObj(i -> "p" + i)
+                                  .toList(),
+                              null,
+                              null,
+                              null))))
+          .hasSize(2);
+    }
   }
 }
