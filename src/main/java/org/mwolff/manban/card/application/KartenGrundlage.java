@@ -87,6 +87,13 @@ public final class KartenGrundlage {
   }
 
   /**
+   * Wie {@link #aktivitaet(long, long, CardActivityType, String, Instant)}, gestempelt mit jetzt.
+   */
+  public void aktivitaet(long cardId, long userId, CardActivityType type, String detail) {
+    aktivitaet(cardId, userId, type, detail, clock.instant());
+  }
+
+  /**
    * Kern-Logik des Anlegens einer Board-Karte, ohne eigene {@code @Transactional}: Die öffentlichen
    * Anlege-Wege rufen sie je in ihrer eigenen Transaktion auf und bauen aus der gespeicherten Karte
    * ihre Sicht ({@link KartenSicht#view(long, Card)}). {@code dueDate}, {@code assigneeIds} und

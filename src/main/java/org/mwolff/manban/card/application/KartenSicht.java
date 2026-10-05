@@ -28,6 +28,12 @@ import org.springframework.stereotype.Service;
 @Service
 public final class KartenSicht {
 
+  /**
+   * Länge des Listen-Auszugs in Codepoints (Issue #771). Reicht für die einzeilige, ohnehin
+   * abgeschnittene Vorschau der Listenansicht — mehr Text käme nie auf den Bildschirm.
+   */
+  private static final int AUSZUG_CODEPOINTS = 200;
+
   private final CardRepository cards;
   private final KartenAbhaengigkeiten abhaengigkeiten;
   private final KartenZuordnung zuordnung;
@@ -63,6 +69,79 @@ public final class KartenSicht {
       nummern.put(vorfahr.requireId(), vorfahr.number());
     }
     return nummern;
+  }
+
+  /**
+   * Die Sicht der Kartenliste eines Boards — vier Sammelzugriffe statt vier Abfragen <em>je
+   * Karte</em> (Issue #768); aus {@code CardService.listByBoard} hierher gezogen (Issue #1397).
+   *
+   * <p>Bewusst nicht über {@link #view(Card, boolean)}: Der baut eine einzelne Karte und lädt
+   * Abhängigkeiten, Zuständige, Labels und Herkunft je Aufruf einzeln nach. Auf einer ganzen
+   * Board-Liste ergibt das ein N+1 mit vier Abfragen pro Karte; hier sind es vier für die gesamte
+   * Liste.
+   *
+   * <p>Die Beschreibung kommt hier <b>nicht</b> mit (Issue #771): {@code description} ist immer
+   * {@code null}, gesetzt ist stattdessen {@code excerpt} — die ersten {@value #AUSZUG_CODEPOINTS}
+   * Codepoints. Den Volltext holt der Einzelabruf.
+   */
+  public List<CardView> listenSicht(long userId, long projectId, List<Card> karten) {
+    Set<Long> ids = karten.stream().map(Card::requireId).collect(Collectors.toSet());
+    // Karten ohne Eintrag fehlen in den Maps (Vertrag der drei findByCardIds) — die Sicht setzt
+    // dort eine leere Liste, nie null.
+    Map<Long, List<Integer>> abhaengigkeitenJeKarte = abhaengigkeiten.abhaengigkeitenJeKarte(ids);
+    Map<Long, List<Long>> zustaendige = zuordnung.zustaendigeJeKarte(ids);
+    Map<Long, List<Long>> labelIds = zuordnung.labelsJeKarte(ids);
+    Map<Long, Integer> nummern = herkunftsnummern(karten);
+    // Alle Karten liegen auf diesem Board: eine CARD_MOVE-Prüfung für die ganze Liste (E10).
+    boolean darfStatusSetzen = darfStatusSetzen(userId, projectId);
+    return karten.stream()
+        .map(
+            c ->
+                new CardView(
+                    c.requireId(),
+                    c.boardId(),
+                    c.columnId(),
+                    c.number(),
+                    c.title(),
+                    // Die Board-Liste zeigt die Beschreibung nirgends ganz: Kacheln gar nicht, die
+                    // Listenansicht nur einzeilig abgeschnitten. Der Volltext kommt über den
+                    // Einzelabruf (Issue #771).
+                    null,
+                    auszug(c.description()),
+                    c.positionInColumn(),
+                    c.archived(),
+                    c.movedToDoneAt(),
+                    abhaengigkeitenJeKarte.getOrDefault(c.requireId(), List.of()),
+                    c.type(),
+                    c.parentId(),
+                    c.shortcode(),
+                    zustaendige.getOrDefault(c.requireId(), List.of()),
+                    c.dueDate(),
+                    labelIds.getOrDefault(c.requireId(), List.of()),
+                    c.derivedFromCardId() == null ? null : nummern.get(c.derivedFromCardId()),
+                    statusName(c),
+                    c.status() != null && darfStatusSetzen))
+        .toList();
+  }
+
+  /**
+   * Vorschautext einer Karte: die ersten {@value #AUSZUG_CODEPOINTS} Codepoints der <b>rohen</b>,
+   * ungestrippten Beschreibung. Roh, weil das Strippen der Markdown-Syntax im Frontend sitzt und
+   * dort auch für die Sortierung gebraucht wird.
+   *
+   * <p>Geschnitten wird über {@link String#offsetByCodePoints(int, int)} und nicht über den
+   * char-Index: Ein Emoji belegt zwei {@code char}, und ein Schnitt mitten hinein hinterließe ein
+   * halbes Surrogatpaar — im Browser ein Ersatzzeichen.
+   *
+   * @return {@code null}, wenn keine Beschreibung gesetzt ist
+   */
+  private static @Nullable String auszug(@Nullable String beschreibung) {
+    if (beschreibung == null) {
+      return null;
+    }
+    int codepoints =
+        Math.min(beschreibung.codePointCount(0, beschreibung.length()), AUSZUG_CODEPOINTS);
+    return beschreibung.substring(0, beschreibung.offsetByCodePoints(0, codepoints));
   }
 
   /**

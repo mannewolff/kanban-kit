@@ -7,7 +7,7 @@ import org.mwolff.manban.card.domain.Card;
 /**
  * Auflösung der Herkunft: projektweite Kartennummer → Karten-ID, mit drei harten Ablehnungen.
  *
- * <p>Gespeichert wird die ID und nicht die Nummer, weil {@code CardService.doTransfer} beim
+ * <p>Gespeichert wird die ID und nicht die Nummer, weil {@code CardMoveService.doTransfer} beim
  * Projektwechsel eine neue Nummer vergibt; eine gespeicherte Nummer zeigte danach im Projekt des
  * Kindes auf eine fremde Karte.
  *

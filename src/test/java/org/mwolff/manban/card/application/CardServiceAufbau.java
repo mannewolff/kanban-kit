@@ -52,8 +52,7 @@ final class CardServiceAufbau {
         zuordnung,
         activity,
         b.grundlage(),
-        b.sicht(),
-        clock);
+        b.sicht());
   }
 
   static CardIngestService ingestAusPorts(

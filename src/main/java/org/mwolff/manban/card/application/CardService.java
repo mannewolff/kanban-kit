@@ -2,14 +2,9 @@ package org.mwolff.manban.card.application;
 
 import static org.mwolff.manban.card.application.KartenGrundlage.normalize;
 import static org.mwolff.manban.card.application.KartenGrundlage.trimToNull;
-import static org.mwolff.manban.card.application.KartenSicht.statusName;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
@@ -22,34 +17,8 @@ import org.mwolff.manban.project.domain.Permission;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Karten- und Vorhaben-Use-Cases: Anlegen (projektweite Nummer, ans Spaltenende), Bearbeiten und
- * Abhängigkeiten; Archiv und Papierkorb liegen seit Issue #1394 in {@link CardArchiveService},
- * Verschieben, Status und Umzug seit Issue #1395 in {@link CardMoveService}, die Lese-Abfragen für
- * Läufe seit Issue #1396 in {@link CardRunQueryService}. Vorhaben sind Karten vom Typ {@link
- * CardType#EPIC}: sie erscheinen nicht auf dem Board, halten keine Position und gruppieren Karten
- * über {@code parentId}. Rechte über den {@link PermissionChecker}.
- */
-// PMD.CouplingBetweenObjects: zentraler Karten-Use-Case-Service; die Kopplung an die Ports
-// (Karten, Abhängigkeiten, Boards/Spalten, Rechte, Spaltenverlauf, Aktivität) ist fachlich
-// begründet und kein God-Class-Smell. Zuständige und Labels laufen seit Issue #1051 über die
-// modulinterne KartenZuordnung — sie trägt deren drei Ports, Label und die beiden Ablehnungen,
-// die der Service damit nicht mehr sieht (SonarCloud S6539, Plan #1042).
-// PMD.ExcessivePublicCount entfiel mit dem Kanban-kompatiblen Einliefern, das seit Issue #1392 in
-// CardIngestService liegt: Die öffentliche Oberfläche liegt wieder unter der Schwelle.
-// PMD.CyclomaticComplexity entfiel mit Vorhaben und Herkunft, die seit Issue #1393 in EpicService
-// liegen: Die Gesamtkomplexität liegt wieder unter der Schwelle.
-// PMD.TooManyMethods entfiel mit Archiv und Papierkorb, die seit Issue #1394 in CardArchiveService
-// liegen: Die Zahl der Methoden liegt wieder unter der Schwelle.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CardService {
-
-  /**
-   * Länge des Listen-Auszugs in Codepoints (Issue #771). Reicht für die einzeilige, ohnehin
-   * abgeschnittene Vorschau der Listenansicht — mehr Text käme nie auf den Bildschirm.
-   */
-  private static final int AUSZUG_CODEPOINTS = 200;
 
   private final CardRepository cards;
   private final KartenAbhaengigkeiten abhaengigkeiten;
@@ -59,7 +28,6 @@ public class CardService {
   private final CardActivityRepository activity;
   private final KartenGrundlage grundlage;
   private final KartenSicht sicht;
-  private final Clock clock;
 
   public CardService(
       CardRepository cards,
@@ -69,8 +37,7 @@ public class CardService {
       KartenZuordnung zuordnung,
       CardActivityRepository activity,
       KartenGrundlage grundlage,
-      KartenSicht sicht,
-      Clock clock) {
+      KartenSicht sicht) {
     this.cards = cards;
     this.abhaengigkeiten = abhaengigkeiten;
     this.boardService = boardService;
@@ -79,7 +46,6 @@ public class CardService {
     this.activity = activity;
     this.grundlage = grundlage;
     this.sicht = sicht;
-    this.clock = clock;
   }
 
   /**
@@ -202,85 +168,20 @@ public class CardService {
   }
 
   /**
-   * Karten eines Boards (ohne Vorhaben) mit ihren Zusatzdaten — vier Sammelzugriffe statt vier
-   * Abfragen <em>je Karte</em> (Issue #768).
-   *
-   * <p>Bewusst nicht über {@link KartenSicht#view(Card, boolean)}: Der baut eine einzelne Karte und
-   * lädt Abhängigkeiten, Zuständige, Labels und Herkunft je Aufruf einzeln nach. Auf einer ganzen
-   * Board-Liste ergibt das ein N+1 mit vier Abfragen pro Karte; hier sind es vier für die gesamte
-   * Liste. Für die Einzelkarten-Pfade bleibt {@code sicht.view(...)} unverändert — dort ist die
-   * Kartenzahl 1, und ein Sammelzugriff brächte nichts.
+   * Karten eines Boards (ohne Vorhaben) mit ihren Zusatzdaten — die Sicht baut {@link
+   * KartenSicht#listenSicht} mit Sammelzugriffen statt je Karte (Issue #768, #771).
    *
    * <p>Gefiltert wird wie bisher <b>nur</b> nach {@link CardType#CARD}: Archivierte Karten bleiben
    * enthalten, die Reihenfolge ist die von {@link CardRepository#findByBoardId}.
-   *
-   * <p>Die Beschreibung kommt hier <b>nicht</b> mit (Issue #771): {@code description} ist immer
-   * {@code null}, gesetzt ist stattdessen {@code excerpt} — die ersten {@value #AUSZUG_CODEPOINTS}
-   * Codepoints. Den Volltext holt der Einzelabruf.
    */
   @Transactional(readOnly = true)
   public List<CardView> listByBoard(long userId, long boardId) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.requireMembership(userId, projectId);
-    List<Card> karten =
-        cards.findByBoardId(boardId).stream().filter(c -> c.type() == CardType.CARD).toList();
-    Set<Long> ids = karten.stream().map(Card::requireId).collect(Collectors.toSet());
-    // Karten ohne Eintrag fehlen in den Maps (Vertrag der drei findByCardIds) — die Sicht setzt
-    // dort eine leere Liste, nie null.
-    Map<Long, List<Integer>> abhaengigkeitenJeKarte = abhaengigkeiten.abhaengigkeitenJeKarte(ids);
-    Map<Long, List<Long>> zustaendige = zuordnung.zustaendigeJeKarte(ids);
-    Map<Long, List<Long>> labelIds = zuordnung.labelsJeKarte(ids);
-    Map<Long, Integer> nummern = sicht.herkunftsnummern(karten);
-    // Alle Karten liegen auf diesem Board: eine CARD_MOVE-Prüfung für die ganze Liste (E10).
-    boolean darfStatusSetzen = sicht.darfStatusSetzen(userId, projectId);
-    return karten.stream()
-        .map(
-            c ->
-                new CardView(
-                    c.requireId(),
-                    c.boardId(),
-                    c.columnId(),
-                    c.number(),
-                    c.title(),
-                    // Die Board-Liste zeigt die Beschreibung nirgends ganz: Kacheln gar nicht, die
-                    // Listenansicht nur einzeilig abgeschnitten. Der Volltext kommt über den
-                    // Einzelabruf (Issue #771).
-                    null,
-                    auszug(c.description()),
-                    c.positionInColumn(),
-                    c.archived(),
-                    c.movedToDoneAt(),
-                    abhaengigkeitenJeKarte.getOrDefault(c.requireId(), List.of()),
-                    c.type(),
-                    c.parentId(),
-                    c.shortcode(),
-                    zustaendige.getOrDefault(c.requireId(), List.of()),
-                    c.dueDate(),
-                    labelIds.getOrDefault(c.requireId(), List.of()),
-                    c.derivedFromCardId() == null ? null : nummern.get(c.derivedFromCardId()),
-                    statusName(c),
-                    c.status() != null && darfStatusSetzen))
-        .toList();
-  }
-
-  /**
-   * Vorschautext einer Karte: die ersten {@value #AUSZUG_CODEPOINTS} Codepoints der <b>rohen</b>,
-   * ungestrippten Beschreibung. Roh, weil das Strippen der Markdown-Syntax im Frontend sitzt und
-   * dort auch für die Sortierung gebraucht wird.
-   *
-   * <p>Geschnitten wird über {@link String#offsetByCodePoints(int, int)} und nicht über den
-   * char-Index: Ein Emoji belegt zwei {@code char}, und ein Schnitt mitten hinein hinterließe ein
-   * halbes Surrogatpaar — im Browser ein Ersatzzeichen.
-   *
-   * @return {@code null}, wenn keine Beschreibung gesetzt ist
-   */
-  private static @Nullable String auszug(@Nullable String beschreibung) {
-    if (beschreibung == null) {
-      return null;
-    }
-    int codepoints =
-        Math.min(beschreibung.codePointCount(0, beschreibung.length()), AUSZUG_CODEPOINTS);
-    return beschreibung.substring(0, beschreibung.offsetByCodePoints(0, codepoints));
+    return sicht.listenSicht(
+        userId,
+        projectId,
+        cards.findByBoardId(boardId).stream().filter(c -> c.type() == CardType.CARD).toList());
   }
 
   /**
@@ -335,8 +236,7 @@ public class CardService {
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
     Card saved = cards.save(grundlage.folgeArtwechsel(card, updated));
-    grundlage.aktivitaet(
-        cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet", clock.instant());
+    grundlage.aktivitaet(cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet");
     if (dependsOn != null) {
       abhaengigkeiten.ersetze(saved, dependsOn);
     }
@@ -359,8 +259,7 @@ public class CardService {
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     zuordnung.ersetzeZustaendige(cardId, card.projectId(), assigneeIds);
-    grundlage.aktivitaet(
-        cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert", clock.instant());
+    grundlage.aktivitaet(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert");
     grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
     return sicht.view(userId, card);
   }

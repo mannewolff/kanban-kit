@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  *
  * <p>Bewusst hier statt im card-Modul: {@code direct} und {@code externalKey} sind Begriffe des
  * Ingest-Protokolls, die das card-Modul nicht kennt. Die Fassaden-Regel (card.application ist von
- * außen nur über CardService/LabelService erreichbar) hätte einen Import von dort ohnehin
+ * außen nur über ihre Zugänge wie CardService erreichbar) hätte einen Import von dort ohnehin
  * verhindert — und sie hat damit recht: Wer die Protokollregel prüft, gehört zum Protokoll.
  */
 @ResponseStatus(HttpStatus.BAD_REQUEST)

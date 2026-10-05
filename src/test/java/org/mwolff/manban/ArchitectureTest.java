@@ -170,8 +170,10 @@ class ArchitectureTest {
 
   // --- Modul-Grenze: card-Fassade (Issue #458, Whitelist seit #470) ---------------------------
   // Das Kartenmodell und alles in card.application ausserhalb der Whitelist sind modulintern.
-  // Fremde Module gehen ueber die fachliche Fassade (CardService/LabelService) — sonst haengt jede
-  // fremde Rechtepruefung am Aggregat und an dessen Persistenz-Ports statt an einem Use-Case.
+  // Fremde Module gehen ueber die fachliche Fassade (CardService, LabelService, CardSearchService,
+  // CardIngestService, EpicService, CardArchiveService, CardMoveService, CardRunQueryService) —
+  // sonst haengt jede fremde Rechtepruefung am Aggregat und an dessen Persistenz-Ports statt an
+  // einem Use-Case.
   // CardBoardActivityEvent ist Vertrag, weil die Composition-Root es in ein Board-Event uebersetzt.
   static final ArchRule CARD_DOMAIN_IST_MODULINTERN =
       noClasses()
