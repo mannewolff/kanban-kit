@@ -3,6 +3,7 @@ package org.mwolff.manban.config;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.mwolff.manban.accesstoken.web.security.PatAuthenticationFilter;
+import org.mwolff.manban.auth.web.security.ApiAusprobierFilter;
 import org.mwolff.manban.auth.web.security.DisabledUserGuardFilter;
 import org.mwolff.manban.auth.web.security.SessionAuthenticationFilter;
 import org.mwolff.manban.ratelimit.web.ThroughputFilter;
@@ -39,6 +40,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *   <li>CSRF: Der Synchronizer-Token entfällt bewusst — es gibt keine Server-Session, und das
  *       Auth-Cookie ist {@code HttpOnly; SameSite=Strict}, wird also nie cross-site gesendet. Damit
  *       ist der zustandslose Cookie-Ansatz CSRF-resistent.
+ *   <li>Ausprobieren aus der API-Übersicht (Issue #1366): Ein Aufruf mit dem Kennzeichen {@code
+ *       X-Api-Ausprobieren} kommt nur für aktive Plattform-Admins durch ({@link
+ *       ApiAusprobierFilter}, vor den Auth-Filtern); trägt er ein Projekt-Token, gilt das Token.
  * </ul>
  *
  * <p>2FA-Vorbereitung: Der zweite Faktor hängt im Login-Flow (SessionController / LoginService),
@@ -59,7 +63,8 @@ class SecurityConfig {
       SessionAuthenticationFilter sessionFilter,
       PatAuthenticationFilter patFilter,
       DisabledUserGuardFilter disabledGuard,
-      ThroughputFilter throughputFilter)
+      ThroughputFilter throughputFilter,
+      ApiAusprobierFilter ausprobierFilter)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -87,6 +92,10 @@ class SecurityConfig {
                         response.sendError(HttpServletResponse.SC_UNAUTHORIZED)))
         .addFilterBefore(sessionFilter, UsernamePasswordAuthenticationFilter.class)
         .addFilterBefore(patFilter, UsernamePasswordAuthenticationFilter.class)
+        // Ausprobieren aus der API-Übersicht (Issue #1438): vor den Auth-Filtern, denn bei
+        // Kennzeichen plus Projekt-Token nimmt er das Session-Cookie aus der Anfrage, damit das
+        // Token gilt.
+        .addFilterBefore(ausprobierFilter, SessionAuthenticationFilter.class)
         // Läuft nach beiden Auth-Filtern: sperrt authentifizierte Anfragen gesperrter Konten
         // (Session wie PAT), indem der Kontext geleert wird.
         .addFilterAfter(disabledGuard, PatAuthenticationFilter.class)
@@ -129,6 +138,20 @@ class SecurityConfig {
       ThroughputFilter throughputFilter) {
     FilterRegistrationBean<ThroughputFilter> registration =
         new FilterRegistrationBean<>(throughputFilter);
+    registration.setEnabled(false);
+    return registration;
+  }
+
+  /**
+   * Hält den {@link ApiAusprobierFilter} aus der Servlet-Filterkette heraus (Issue #1438), aus
+   * demselben Grund wie beim {@link ThroughputFilter}: Er gehört ausschließlich vor die Auth-Filter
+   * der Kette oben.
+   */
+  @Bean
+  FilterRegistrationBean<ApiAusprobierFilter> ausprobierFilterOutsideTheServletChain(
+      ApiAusprobierFilter ausprobierFilter) {
+    FilterRegistrationBean<ApiAusprobierFilter> registration =
+        new FilterRegistrationBean<>(ausprobierFilter);
     registration.setEnabled(false);
     return registration;
   }

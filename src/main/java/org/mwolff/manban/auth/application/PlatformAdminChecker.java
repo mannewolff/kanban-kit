@@ -23,4 +23,17 @@ public class PlatformAdminChecker {
   public boolean isPlatformAdmin(long userId) {
     return users.findById(userId).map(u -> u.platformRole() == PlatformRole.ADMIN).orElse(false);
   }
+
+  /**
+   * Wie {@link #isPlatformAdmin(long)}, verlangt aber zusätzlich ein nicht gesperrtes Konto (Issue
+   * #1438). Für Prüfungen, die vor dem {@code DisabledUserGuardFilter} laufen und einen gesperrten
+   * Admin deshalb selbst aussieben müssen.
+   */
+  @Transactional(readOnly = true)
+  public boolean isActivePlatformAdmin(long userId) {
+    return users
+        .findById(userId)
+        .map(u -> u.platformRole() == PlatformRole.ADMIN && !u.disabled())
+        .orElse(false);
+  }
 }
