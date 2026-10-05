@@ -7,6 +7,10 @@ Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEA
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von `scripts/gen-changelog.mjs`.
 
+Änderungen an verlässlichen Aufrufen der API stehen am Anfang ihres Versionsblocks und sind als
+**API-Änderung:** gekennzeichnet. Sie entstehen aus Commit-Titeln mit dem Präfix `API:`; was eine
+fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
+
 ## Hinweise zum Upgrade
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
