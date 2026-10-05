@@ -134,7 +134,16 @@ public class CardRunQueryService {
   public List<TokenActivityView> tokenActivitiesInWindow(
       long projectId, String tokenName, Instant von, Instant bis) {
     return activity.findTokenActivitiesInWindow(projectId, tokenName, von, bis).stream()
-        .map(a -> new TokenActivityView(a.cardId(), a.type().name(), a.createdAt()))
+        .map(
+            a -> {
+              CardStatus statusAfter = a.statusAfter();
+              return new TokenActivityView(
+                  a.cardId(),
+                  a.type().name(),
+                  a.createdAt(),
+                  a.laufStart(),
+                  statusAfter == null ? null : statusAfter.name());
+            })
         .toList();
   }
 
@@ -185,8 +194,17 @@ public class CardRunQueryService {
    * @param type Konstantenname von {@code CardActivityType}, etwa {@code CREATED} oder {@code
    *     MOVED}
    * @param createdAt Zeitpunkt der Aktivität
+   * @param laufStart Laufkennung des Nachtlaufs, der die Aktivität auslöste (Issue #1426); {@code
+   *     null}, wenn er sich nicht ausgewiesen hat
+   * @param statusAfter Konstantenname von {@code CardStatus} nach einer Bewegung ({@code MOVED},
+   *     {@code STATUS_CHANGED}, Issue #1427); sonst {@code null}
    */
-  public record TokenActivityView(long cardId, String type, Instant createdAt) {}
+  public record TokenActivityView(
+      long cardId,
+      String type,
+      Instant createdAt,
+      @Nullable Instant laufStart,
+      @Nullable String statusAfter) {}
 
   /**
    * Eine Karte, wie die Ermittlung des Lauf-Fortschritts sie braucht (Issue #1373).

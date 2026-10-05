@@ -33,6 +33,7 @@ class CardRunQueryServiceLaufspurenTest {
   private static final Instant FIXED = Instant.parse("2026-10-03T15:00:00Z");
   private static final Instant VON = Instant.parse("2026-10-03T15:00:00Z");
   private static final Instant BIS = Instant.parse("2026-10-03T16:00:00Z");
+  private static final Instant LAUF = Instant.parse("2026-10-03T14:59:00.123Z");
   private static final long PROJECT = 1L;
   private static final long BOARD = 2L;
   private static final long ANDERES_BOARD = 3L;
@@ -119,12 +120,14 @@ class CardRunQueryServiceLaufspurenTest {
                     CardActivityOrigin.TOKEN,
                     "Nachtlauf",
                     "claude-opus-5-5",
-                    null,
-                    null)));
+                    LAUF,
+                    CardStatus.READY)));
 
+    // Issue #1427: Laufkennung und Status nach der Bewegung gehen mit — auch als null.
     assertThat(service.tokenActivitiesInWindow(PROJECT, "Nachtlauf", VON, BIS))
         .containsExactly(
-            new TokenActivityView(7L, "CREATED", VON), new TokenActivityView(8L, "MOVED", BIS));
+            new TokenActivityView(7L, "CREATED", VON, null, null),
+            new TokenActivityView(8L, "MOVED", BIS, LAUF, "READY"));
   }
 
   @Test

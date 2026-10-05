@@ -97,12 +97,10 @@ public class CardMoveService {
     // Spaltenverlauf: nur bei echtem Spaltenwechsel (kein Eintrag bei reinem Reindex). Ein einziger
     // Zeitstempel schließt die verlassene und eröffnet die Ziel-Spalte lückenlos.
     long fromColumn = card.columnId();
+    Instant switchedAt = clock.instant();
     if (fromColumn != targetColumnId) {
-      Instant switchedAt = clock.instant();
       transitions.closeOpen(cardId, switchedAt);
       transitions.open(cardId, targetColumnId, target.name(), switchedAt);
-      grundlage.aktivitaet(
-          cardId, userId, CardActivityType.MOVED, "Verschoben nach " + target.name(), switchedAt);
     }
 
     // Status nur bei echtem Spaltenwechsel (Plan #1294): Umsortieren ändert ihn nicht. Der
@@ -110,6 +108,14 @@ public class CardMoveService {
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (fromColumn != targetColumnId) {
       moved = moved.withStatus(statusIn(moved, target.name()));
+      // Die Aktivität hält den Status nach der Bewegung fest (Issue #1427) — darum erst hier.
+      grundlage.aktivitaet(
+          cardId,
+          userId,
+          CardActivityType.MOVED,
+          "Verschoben nach " + target.name(),
+          switchedAt,
+          moved.status());
     }
     // CARD_MOVE ist oben geprüft, und die Karte bleibt im Projekt — die Sicht braucht keine zweite
     // Prüfung.
@@ -179,7 +185,12 @@ public class CardMoveService {
     transitions.closeOpen(cardId, jetzt);
     transitions.open(cardId, card.columnId(), neu.anzeigename(), jetzt);
     grundlage.aktivitaet(
-        cardId, userId, CardActivityType.STATUS_CHANGED, "Status auf " + neu.anzeigename(), jetzt);
+        cardId,
+        userId,
+        CardActivityType.STATUS_CHANGED,
+        "Status auf " + neu.anzeigename(),
+        jetzt,
+        neu);
     grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
   }
 

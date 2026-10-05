@@ -275,9 +275,9 @@ class NightRunProgressServiceTest {
     when(cards.tokenActivitiesInWindow(PROJECT, TOKEN, START, JETZT))
         .thenReturn(
             List.of(
-                new TokenActivityView(20L, "CREATED", START.plusSeconds(60)),
-                new TokenActivityView(30L, "CREATED", START.plusSeconds(120)),
-                new TokenActivityView(30L, "STATUS_CHANGED", START.plusSeconds(180))));
+                new TokenActivityView(20L, "CREATED", START.plusSeconds(60), null, null),
+                new TokenActivityView(30L, "CREATED", START.plusSeconds(120), null, null),
+                new TokenActivityView(30L, "STATUS_CHANGED", START.plusSeconds(180), null, null)));
     when(comments.laufstaendeImProjekt(PROJECT))
         .thenReturn(
             List.of(
@@ -321,7 +321,8 @@ class NightRunProgressServiceTest {
   void holtDieHerkunftDerKartenNach() {
     gefunden(laufend(NightRunMode.CHAIN));
     when(cards.tokenActivitiesInWindow(PROJECT, TOKEN, START, JETZT))
-        .thenReturn(List.of(new TokenActivityView(30L, "CREATED", START.plusSeconds(60))));
+        .thenReturn(
+            List.of(new TokenActivityView(30L, "CREATED", START.plusSeconds(60), null, null)));
     when(comments.laufstaendeImProjekt(PROJECT)).thenReturn(List.of());
     LaufKarteView anforderung = karte(10L, 1, "[Fachlich] Fortschritt", null, null);
     LaufKarteView plan = karte(20L, 2, "[Plan] Fortschritt", null, 10L);
@@ -357,7 +358,8 @@ class NightRunProgressServiceTest {
     gefunden(selbst);
     when(runs.findOverlapping(PROJECT, TOKEN, START, JETZT)).thenReturn(List.of(selbst));
     when(cards.tokenActivitiesInWindow(PROJECT, TOKEN, START, JETZT))
-        .thenReturn(List.of(new TokenActivityView(30L, "MOVED", START.plusSeconds(60))));
+        .thenReturn(
+            List.of(new TokenActivityView(30L, "MOVED", START.plusSeconds(60), null, null)));
     when(cards.cardsByIds(any()))
         .thenReturn(List.of(karte(30L, 3, "Paket 1/1", "IN_PROGRESS", null)));
 
@@ -383,8 +385,8 @@ class NightRunProgressServiceTest {
     when(cards.tokenActivitiesInWindow(PROJECT, TOKEN, START, JETZT))
         .thenReturn(
             List.of(
-                new TokenActivityView(30L, "MOVED", START.plusSeconds(150)),
-                new TokenActivityView(31L, "MOVED", START.plusSeconds(250))));
+                new TokenActivityView(30L, "MOVED", START.plusSeconds(150), null, null),
+                new TokenActivityView(31L, "MOVED", START.plusSeconds(250), null, null)));
     when(cards.cardsByIds(any()))
         .thenReturn(
             List.of(
@@ -435,8 +437,8 @@ class NightRunProgressServiceTest {
     when(cards.tokenActivitiesInWindow(PROJECT, TOKEN, START, JETZT))
         .thenReturn(
             List.of(
-                new TokenActivityView(20L, "CREATED", START.plusSeconds(60)),
-                new TokenActivityView(30L, "CREATED", START.plusSeconds(120))));
+                new TokenActivityView(20L, "CREATED", START.plusSeconds(60), null, null),
+                new TokenActivityView(30L, "CREATED", START.plusSeconds(120), null, null)));
     LaufKarteView plan = karte(20L, 2, "[Plan] Fortschritt", null, null);
     LaufKarteView paket = karte(30L, 3, "Paket 1/1", "BACKLOG", 20L);
     when(cards.cardsByIds(any()))

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -776,7 +777,8 @@ class CardMoveServiceTest {
             CardActivityType.MOVED,
             "Verschoben nach Ready",
             FIXED,
-            ActorContext.ActorStamp.unknown());
+            ActorContext.ActorStamp.unknown(),
+            CardStatus.READY);
   }
 
   @Test
@@ -816,7 +818,8 @@ class CardMoveServiceTest {
 
     verify(transitions, never()).closeOpen(anyLong(), any());
     verify(transitions, never()).open(anyLong(), anyLong(), any(), any());
-    verify(activity, never()).add(anyLong(), anyLong(), any(), any(), any(), any());
+    verify(activity, never())
+        .add(anyLong(), anyLong(), any(), any(), any(), any(ActorContext.ActorStamp.class), any());
   }
 
   @Test
@@ -878,7 +881,49 @@ class CardMoveServiceTest {
             CardActivityType.MOVED,
             "Verschoben nach Done",
             FIXED,
-            ActorContext.ActorStamp.unknown());
+            ActorContext.ActorStamp.unknown(),
+            CardStatus.DONE);
+  }
+
+  @Test
+  void move_aktivitaetTraegtDenStatusNachDemVerschieben() {
+    // Issue #1427: Die MOVED-Aktivität hält den Status fest, den die Karte durch diese Bewegung
+    // erreicht — nicht den vorherigen.
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.READY)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "In progress", 2));
+
+    service.move(9L, 5L, 21L, 0);
+
+    verify(activity)
+        .add(
+            5L,
+            9L,
+            CardActivityType.MOVED,
+            "Verschoben nach In progress",
+            FIXED,
+            ActorContext.ActorStamp.unknown(),
+            CardStatus.IN_PROGRESS);
+  }
+
+  @Test
+  void move_inEineSpalteOhneStatus_traegtNull() {
+    // Eine Dokumentart trägt keinen eigenen Status — die Aktivität hält dann null fest.
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "[Fachlich] Anforderung", CardType.CARD, null)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Ideen", 2));
+
+    service.move(9L, 5L, 21L, 0);
+
+    verify(activity)
+        .add(
+            5L,
+            9L,
+            CardActivityType.MOVED,
+            "Verschoben nach Ideen",
+            FIXED,
+            ActorContext.ActorStamp.unknown(),
+            null);
   }
 
   // --- Zykluszeit-Tracking (card_column_transition) ---------------------
@@ -1044,7 +1089,7 @@ class CardMoveServiceTest {
 
     verify(cards, never()).save(any(Card.class));
     verify(activity, never())
-        .add(anyLong(), anyLong(), any(), any(), any(), any(ActorContext.ActorStamp.class));
+        .add(anyLong(), anyLong(), any(), any(), any(), any(ActorContext.ActorStamp.class), any());
   }
 
   @Test
@@ -1061,7 +1106,26 @@ class CardMoveServiceTest {
             CardActivityType.STATUS_CHANGED,
             "Status auf In review",
             FIXED,
-            ActorContext.ActorStamp.unknown());
+            ActorContext.ActorStamp.unknown(),
+            CardStatus.IN_REVIEW);
+  }
+
+  @Test
+  void setStatus_statusChangedTraegtDenNeuenStatus() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.BACKLOG)));
+
+    service.setStatus(1L, 5L, "READY");
+
+    verify(activity)
+        .add(
+            eq(5L),
+            eq(1L),
+            eq(CardActivityType.STATUS_CHANGED),
+            any(),
+            any(),
+            any(ActorContext.ActorStamp.class),
+            eq(CardStatus.READY));
   }
 
   @Test
@@ -1121,7 +1185,7 @@ class CardMoveServiceTest {
     verify(cards, never()).save(any(Card.class));
     verify(transitions, never()).closeOpen(anyLong(), any(Instant.class));
     verify(activity, never())
-        .add(anyLong(), anyLong(), any(), any(), any(), any(ActorContext.ActorStamp.class));
+        .add(anyLong(), anyLong(), any(), any(), any(), any(ActorContext.ActorStamp.class), any());
     verify(events, never()).publishEvent(any(Object.class));
   }
 
