@@ -13,16 +13,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
+import java.time.Duration;
 import javax.sql.DataSource;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.StellbareUhrConfig;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.auth.web.security.ApiAusprobierFilter;
+import org.mwolff.manban.ratelimit.MutableClock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -35,9 +40,14 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * Filterkette (Issue #1366, #1439): Mit Kennzeichen kommen nur aktive Plattform-Admins durch, ein
  * mitgeschicktes Projekt-Token hat dann Vorrang vor der Session, und die Rechte an den Daten prüfen
  * weiterhin die Endpunkte. Ohne Kennzeichen ändert sich nichts.
+ *
+ * <p>Mit stellbarer Uhr ({@link StellbareUhrConfig}, Issue #1460): Nur so lässt sich die
+ * Stempel-Drosselung zwischen den Methoden vergessen, siehe {@link
+ * #letTheThrottleForgetPreviousMethods()}. Die Klasse bekommt damit einen eigenen Spring-Kontext.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
+@Import(StellbareUhrConfig.class)
 class ApiAusprobierenIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
@@ -51,6 +61,19 @@ class ApiAusprobierenIT extends AbstractIntegrationTest {
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private ObjectMapper json;
   @Autowired private DataSource dataSource;
+  @Autowired private MutableClock clock;
+
+  /**
+   * Die Stempel-Drosselung merkt sich je Token-ID die letzte Minute im Arbeitsspeicher des
+   * geteilten Kontexts, und nach {@code RESTART IDENTITY} beginnen die Token-IDs jeder Methode
+   * wieder bei 1. Ohne vorgestellte Uhr fände ein früherer Stempel derselben Minute den Eintrag
+   * schon belegt, und {@code last_used_at} bliebe leer (Issue #1460) — dasselbe Muster wie in
+   * {@code AccessTokenLastUsedThrottleIT}.
+   */
+  @BeforeEach
+  void letTheThrottleForgetPreviousMethods() {
+    clock.advance(Duration.ofMinutes(10));
+  }
 
   @Test
   void adminWithMarkerReadsProjects() throws Exception {
