@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.nightrun.application.NightRunProgressService;
 import org.mwolff.manban.nightrun.application.NightRunService;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRun;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRunItem;
@@ -77,9 +78,11 @@ class NightRunController {
   static final int ABORT_REASON_MAX = NightRunLimits.EXCERPT_MAX;
 
   private final NightRunService runs;
+  private final NightRunProgressService fortschritt;
 
-  NightRunController(NightRunService runs) {
+  NightRunController(NightRunService runs, NightRunProgressService fortschritt) {
     this.runs = runs;
+    this.fortschritt = fortschritt;
   }
 
   /**
@@ -113,6 +116,19 @@ class NightRunController {
   Map<NightRunErrorClass, Long> errorClassCounts(
       @AuthenticationPrincipal Long userId, @PathVariable long projectId) {
     return runs.countRunsByErrorClass(userId, projectId);
+  }
+
+  /**
+   * Der Fortschritt eines Laufs aus seinen Spuren am Board (Issue #1375, Plan #1372): Ketten,
+   * Pakete und ihr Zustand, unbekannte Karten und offene Fragen. 404 für einen Lauf eines anderen
+   * Projekts, 404/403 aus der Rechteprüfung wie bei der Laufliste (E10).
+   */
+  @GetMapping("/api/projects/{projectId}/night-runs/{runId}/progress")
+  NightRunProgressView progress(
+      @AuthenticationPrincipal Long userId,
+      @PathVariable long projectId,
+      @PathVariable long runId) {
+    return NightRunProgressView.of(fortschritt.progress(userId, projectId, runId));
   }
 
   private static NewNightRun run(NightRunRequest request) {

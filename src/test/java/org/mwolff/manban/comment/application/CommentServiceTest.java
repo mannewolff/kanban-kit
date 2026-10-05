@@ -250,6 +250,22 @@ class CommentServiceTest {
     assertThatThrownBy(() -> service.delete(1L, 3L)).isInstanceOf(CommentNotFoundException.class);
   }
 
+  @Test
+  void laufstaendeImProjekt_liefertJeKommentarNurKarteUndBody() {
+    // Given
+    when(comments.findLaufstaendeImProjekt(1L))
+        .thenReturn(
+            List.of(
+                new Comment(3L, 5L, 1L, "Ada", "## Laufstand\n\nplan fertig", FIXED, FIXED),
+                new Comment(4L, 6L, null, "Kit", "## Laufstand\n\nreview begonnen", FIXED, FIXED)));
+
+    // When / Then
+    assertThat(service.laufstaendeImProjekt(1L))
+        .containsExactly(
+            new CommentService.LaufstandView(5L, "## Laufstand\n\nplan fertig"),
+            new CommentService.LaufstandView(6L, "## Laufstand\n\nreview begonnen"));
+  }
+
   /** Simuliert die DB: vergibt beim ersten Speichern eine ID (Issue #0080). */
   private static Comment saved(Comment c) {
     if (c.id() != null) {

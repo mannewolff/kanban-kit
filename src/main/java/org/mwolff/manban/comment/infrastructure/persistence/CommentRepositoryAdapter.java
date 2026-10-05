@@ -38,6 +38,13 @@ class CommentRepositoryAdapter implements CommentRepository {
     jpa.deleteById(id);
   }
 
+  @Override
+  public List<Comment> findLaufstaendeImProjekt(long projectId) {
+    return jpa.findLaufstaendeImProjekt(projectId).stream()
+        .map(CommentRepositoryAdapter::toDomain)
+        .toList();
+  }
+
   private static CommentEntity toEntity(Comment c) {
     return new CommentEntity(
         c.id(),

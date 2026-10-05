@@ -189,7 +189,7 @@ function LabelFilterMenue({
       <Menu anchorEl={anker} open={anker !== null} onClose={() => setAnker(null)}>
         {labels.map((label) => {
           const aktiv = gewaehlt.has(label.id)
-          const Symbol = aktiv ? CheckBoxOutlinedIcon : CheckBoxOutlineBlankOutlinedIcon
+          const Zeichen = aktiv ? CheckBoxOutlinedIcon : CheckBoxOutlineBlankOutlinedIcon
           return (
             <MenuItem
               key={label.id}
@@ -201,7 +201,7 @@ function LabelFilterMenue({
               onClick={() => onToggle(label.id)}
             >
               <ListItemIcon>
-                <Symbol fontSize="small" />
+                <Zeichen fontSize="small" />
               </ListItemIcon>
               <ListItemText primary={label.name} />
             </MenuItem>

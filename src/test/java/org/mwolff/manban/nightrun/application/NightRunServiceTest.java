@@ -1549,6 +1549,18 @@ class NightRunServiceTest {
           .forEach(e -> counts.merge(e.getKey(), 1L, Long::sum));
       return counts;
     }
+
+    // Die Abfragen für den Lauf-Fortschritt (Issue #1373) braucht kein Use-Case dieses Tests.
+    @Override
+    public Optional<NightRun> findByIdAndProjectId(long runId, long projectId) {
+      throw new UnsupportedOperationException("im Fake nicht benoetigt");
+    }
+
+    @Override
+    public List<NightRun> findOverlapping(
+        long projectId, String tokenName, Instant von, Instant bis) {
+      throw new UnsupportedOperationException("im Fake nicht benoetigt");
+    }
   }
 
   /**

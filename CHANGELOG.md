@@ -11,6 +11,20 @@ erzeugt von `scripts/gen-changelog.mjs`.
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.19.0] – 2026-10-04
+
+- chore: v2.18.1
+- Überlebende Mutanten in NightRunProgressService töten ([#1383](https://github.com/mannewolff/kanban-kit/issues/1383))
+- Fortschritt Runner-Seite 7/7: Abschnitt in docs/nutzung.md ([#1379](https://github.com/mannewolff/kanban-kit/issues/1379))
+- Fortschritt Runner-Seite 6/7: NightRunPage einbinden, Kopfzahlen vorwegnehmen, 30-s-Takt ([#1378](https://github.com/mannewolff/kanban-kit/issues/1378))
+- Fortschritt Runner-Seite 5/7: Komponente NachtlaufFortschritt ([#1377](https://github.com/mannewolff/kanban-kit/issues/1377))
+- Fortschritt Runner-Seite 4/7: API-Aufruf progress und reine Logik lib/laufFortschritt.ts ([#1376](https://github.com/mannewolff/kanban-kit/issues/1376))
+- Fortschritt Runner-Seite 3/7: Endpunkt GET …/night-runs/{runId}/progress ([#1375](https://github.com/mannewolff/kanban-kit/issues/1375))
+- Fortschritt Runner-Seite 2/7: reine Ermittlung FortschrittErmittlung ([#1374](https://github.com/mannewolff/kanban-kit/issues/1374))
+- Fortschritt Runner-Seite 1/7: Lese-Abfragen in card, comment und nightrun ([#1373](https://github.com/mannewolff/kanban-kit/issues/1373))
+- Zwei Sonar-Befunde im Frontend beheben: S2137, S5976 ([#1367](https://github.com/mannewolff/kanban-kit/issues/1367))
+- Hooks committet
+
 ## [2.18.0] – 2026-10-02
 
 - chore: v2.17.2

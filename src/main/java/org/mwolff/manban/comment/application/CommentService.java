@@ -79,6 +79,21 @@ public class CommentService {
     comments.deleteById(comment.requireId());
   }
 
+  /**
+   * Die Laufstand-Kommentare des Projekts, je Karte einer (Issue #1373, Plan #1372 E5): nur Karte
+   * und Text, <b>kein</b> {@code updatedAt} — {@link #update} schreibt ihn nicht fort, und das Kit
+   * ersetzt den Laufstand über genau diesen Weg (A1).
+   *
+   * <p>Ohne Rechteprüfung: Vertrag für das Modul {@code nightrun}, das die Projekt-Rolle vor dem
+   * Aufruf selbst prüft — wie {@code CardService#existingCardNumbers}.
+   */
+  @Transactional(readOnly = true)
+  public List<LaufstandView> laufstaendeImProjekt(long projectId) {
+    return comments.findLaufstaendeImProjekt(projectId).stream()
+        .map(c -> new LaufstandView(c.cardId(), c.body()))
+        .toList();
+  }
+
   private static CommentView view(Comment c) {
     return new CommentView(
         c.requireId(),
@@ -99,4 +114,12 @@ public class CommentService {
       String body,
       Instant createdAt,
       Instant updatedAt) {}
+
+  /**
+   * Der Laufstand-Kommentar einer Karte (Issue #1373).
+   *
+   * @param cardId Karte, an der der Kommentar steht
+   * @param body Kommentartext, beginnend mit {@code ## Laufstand}
+   */
+  public record LaufstandView(long cardId, String body) {}
 }

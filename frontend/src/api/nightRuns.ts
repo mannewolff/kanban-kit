@@ -292,6 +292,70 @@ export interface NightRunAnlauf {
   usage: NightRunUsageView | null
 }
 
+/** Ob sich die Karten eines Laufs überhaupt zuordnen lassen (Issue #1376, Plan #1372 E3). */
+export type ProgressAssignment = 'OK' | 'UNBEKANNT'
+
+/** Die Stufen des Wegs einer Kette in ihrer Reihenfolge — die Namen des Servers (Plan #1372 E4). */
+export type ProgressStage = 'PLAN' | 'REVIEW' | 'PAKETE' | 'ABDECKUNG' | 'UMSETZUNG'
+
+/** Zustand einer Stufe im Weg einer Kette. */
+export type StageState = 'OFFEN' | 'LAEUFT' | 'ERREICHT'
+
+/** Zustand eines Arbeitspakets im Lauf, aus dem heutigen Status seiner Karte (Plan #1372 E6). */
+export type PackageState = 'ANGELEGT' | 'GEZOGEN' | 'IN_UMSETZUNG' | 'FERTIG' | 'ZURUECKGESTELLT'
+
+/** Verweis auf eine Karte: Nummer, Titel und Board — nie Beschreibung oder Kommentare (E10). */
+export interface CardRefView {
+  number: number
+  title: string
+  boardId: number
+}
+
+/** Ein Arbeitspaket des Laufs mit seinem Zustand. */
+export interface PackageProgressView {
+  karte: CardRefView
+  zustand: PackageState
+}
+
+/** Eine Stufe im Weg einer Kette. */
+export interface StageProgressView {
+  stufe: ProgressStage
+  zustand: StageState
+}
+
+/**
+ * Eine Kette des Laufs (Issue #1376). Die Felder ohne Wert kommen als `null` — derselbe Grund wie
+ * bei {@link NightRunItemView} (Issue #734).
+ */
+export interface ChainProgressView {
+  anforderung: CardRefView
+  /** Der Plan der Kette; `null`, solange keiner bekannt ist. */
+  plan: CardRefView | null
+  pakete: PackageProgressView[]
+  /** Der Weg in seiner Reihenfolge — `UMSETZUNG` nur in Variante B (`kit:durchziehen`, E12). */
+  stufen: StageProgressView[]
+  /** Die aktuelle Stelle; `null`, wenn das Ende des Wegs erreicht ist. */
+  aktuelleStufe: ProgressStage | null
+  /** Ob jede Stufe des Wegs erreicht ist — in Variante A nach der Abdeckung. */
+  endeErreicht: boolean
+}
+
+/**
+ * Der Fortschritt eines Laufs, wie ihn `GET …/night-runs/{runId}/progress` liefert (Issue #1375,
+ * #1376) — Feld für Feld die `NightRunProgressView` des Servers.
+ */
+export interface NightRunProgressView {
+  zuordnung: ProgressAssignment
+  /** Die Ketten des Laufs; leer in der Umsetzungsnacht. */
+  ketten: ChainProgressView[]
+  /** Alle Arbeitspakete des Laufs. */
+  pakete: PackageProgressView[]
+  /** Karten, deren Zuordnung sich nicht feststellen lässt. */
+  unbekannt: CardRefView[]
+  /** Karten mit einer offenen Frage an den Menschen. */
+  offeneFragen: CardRefView[]
+}
+
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
 export type NightRunErrorClassCounts = Partial<Record<NightRunErrorClass, number>>
 
@@ -309,6 +373,9 @@ export const nightRunsApi = {
     apiFetch<NightRunAnlauf[]>(
       `/api/projects/${projectId}/night-runs/items?cardNumber=${encodeURIComponent(cardNumber)}`,
     ),
+  /** Der Fortschritt eines Laufs, ermittelt aus dem Board (Issue #1376, Plan #1372). */
+  progress: (projectId: number, runId: number) =>
+    apiFetch<NightRunProgressView>(`/api/projects/${projectId}/night-runs/${runId}/progress`),
 }
 
 export type NightRunsApi = typeof nightRunsApi

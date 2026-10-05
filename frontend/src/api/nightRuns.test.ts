@@ -101,4 +101,34 @@ describe('nightRunsApi', () => {
     expect(anlaeufe[0].usage).toBeNull()
     expect(anlaeufe[0].kind).toBe('NIGHT')
   })
+
+  it('progress ruft GET /api/projects/{id}/night-runs/{runId}/progress', async () => {
+    const f = spyFetch(
+      JSON.stringify({
+        zuordnung: 'OK',
+        ketten: [],
+        pakete: [{ karte: { number: 1376, title: 'API', boardId: 3 }, zustand: 'IN_UMSETZUNG' }],
+        unbekannt: [],
+        offeneFragen: [],
+      }),
+    )
+    const fortschritt = await nightRunsApi.progress(4, 77)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/projects/4/night-runs/77/progress')
+    expect(c.method).toBeUndefined()
+    expect(fortschritt.pakete[0].zustand).toBe('IN_UMSETZUNG')
+  })
+
+  it('progress reicht einen Fehler des Servers durch', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      text: () => Promise.resolve(JSON.stringify({ detail: 'Lauf nicht gefunden' })),
+    } as Response)
+    await expect(nightRunsApi.progress(4, 77)).rejects.toMatchObject({
+      status: 404,
+      detail: 'Lauf nicht gefunden',
+    })
+  })
 })

@@ -294,8 +294,11 @@ public record NightRunOutcome(
    *
    * <p>Gemessen wird an {@code updatedAt}, und ohne es an {@code startedAt}: Der Upload-Weg
    * schreibt einen Lauf nie fort, dort ist der Start das einzige Lebenszeichen, das es gibt.
+   *
+   * <p>Öffentlich seit Issue #1375: Das Zeitfenster des Lauf-Fortschritts endet bei einem
+   * verstummten Lauf an seinem letzten Lebenszeichen — dieselbe Frist, eine Rechnung.
    */
-  private static boolean verstummt(
+  public static boolean verstummt(
       Instant startedAt, @Nullable Instant updatedAt, Instant jetzt, Duration stilleFrist) {
     Instant lebenszeichen = updatedAt == null ? startedAt : updatedAt;
     return Duration.between(lebenszeichen, jetzt).compareTo(stilleFrist) > 0;
