@@ -50,6 +50,10 @@ import org.springframework.test.web.servlet.MockMvc;
  * {@value #SCHNAPPSCHUSS} überein — Pfad, Methode, Parameter, Schemas und {@code abgekuendigtSeit}.
  * Beschreibungen und Beispiele gehören nicht zum Vertrag und bleiben außen vor. Der Schnappschuss
  * bemerkt eine Änderung, er erzwingt die Abkündigungsfrist nicht; die prüft der Review am Diff.
+ *
+ * <p>Teil (b) und (c) (Issue #1409): Jeder Handler unter {@code /api/**} erscheint als Operation,
+ * und jede Operation trägt die Pflichtangaben; ein neuer Endpunkt ohne Beschreibung macht den Build
+ * rot. Die Prüfroutinen und ihre Gegenproben stehen in {@link OpenApiPflichtpruefung}.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
@@ -226,6 +230,29 @@ class OpenApiIT extends AbstractIntegrationTest {
             .getContentAsString(StandardCharsets.UTF_8);
 
     assertThat(body).startsWith("openapi: ").contains("title: " + OpenApiConfig.TITEL);
+  }
+
+  // --- Teil (b) und (c): Vollständigkeit und Pflichtangaben (Issue #1409) ------------------
+
+  @Test
+  void jederHandlerErscheintAlsOperation() throws Exception {
+    JsonNode spec = spezifikation("spec-vollstaendig@example.com");
+    Map<String, String> handler =
+        OpenApiPflichtpruefung.handler(mvc.getDispatcherServlet().getWebApplicationContext());
+
+    assertThat(handler).isNotEmpty().containsKey("POST /api/kanban/items");
+    assertThat(OpenApiPflichtpruefung.fehlendeHandler(handler, OpenApiPflichtpruefung.modell(spec)))
+        .as("Handler unter /api/** ohne Operation in /api/openapi")
+        .isEmpty();
+  }
+
+  @Test
+  void jedeOperationTraegtDiePflichtangaben() throws Exception {
+    JsonNode spec = spezifikation("spec-pflicht@example.com");
+
+    assertThat(OpenApiPflichtpruefung.pflichtangabenMaengel(OpenApiPflichtpruefung.modell(spec)))
+        .as("Operationen mit fehlenden Pflichtangaben")
+        .isEmpty();
   }
 
   // --- Teil (d): Vertragsschnappschuss der verlässlichen Aufrufe (Issue #1403) ----------------
