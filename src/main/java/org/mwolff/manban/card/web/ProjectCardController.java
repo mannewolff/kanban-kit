@@ -1,7 +1,7 @@
 package org.mwolff.manban.card.web;
 
 import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.CardView;
+import org.mwolff.manban.card.application.CardView;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

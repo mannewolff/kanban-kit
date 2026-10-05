@@ -115,7 +115,7 @@ class CardServiceCreateBatchTest {
     spalteMitNamen("Backlog");
 
     // When
-    List<CardService.CardView> result =
+    List<CardView> result =
         service.createCardsBatch(
             1L,
             BOARD,
@@ -128,10 +128,7 @@ class CardServiceCreateBatchTest {
     // Then: genau drei Karten, keine davon null, in der Reihenfolge der Eingabe.
     assertThat(result).doesNotContainNull().hasSize(3);
     assertThat(result)
-        .extracting(
-            CardService.CardView::title,
-            CardService.CardView::number,
-            CardService.CardView::positionInColumn)
+        .extracting(CardView::title, CardView::number, CardView::positionInColumn)
         .containsExactly(tuple("Erste", 1, 0), tuple("Zweite", 2, 1), tuple("Dritte", 3, 2));
   }
 
@@ -141,14 +138,14 @@ class CardServiceCreateBatchTest {
     spalteMitNamen("Backlog");
 
     // When
-    List<CardService.CardView> result =
+    List<CardView> result =
         service.createCardsBatch(
             1L, BOARD, COLUMN, List.of(new CardService.NewCard("Einzeln", null)));
 
     // Then
     assertThat(result)
         .singleElement()
-        .extracting(CardService.CardView::title, CardService.CardView::id)
+        .extracting(CardView::title, CardView::id)
         .containsExactly("Einzeln", 1L);
   }
 
@@ -158,7 +155,7 @@ class CardServiceCreateBatchTest {
     spalteMitNamen("DONE");
 
     // When
-    CardService.CardView view = service.create(1L, BOARD, COLUMN, "Titel", null, null, null);
+    CardView view = service.create(1L, BOARD, COLUMN, "Titel", null, null, null);
 
     // Then
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -173,7 +170,7 @@ class CardServiceCreateBatchTest {
     spalteMitNamen("In Progress");
 
     // When
-    CardService.CardView view = service.create(1L, BOARD, COLUMN, "Titel", null, null, null);
+    CardView view = service.create(1L, BOARD, COLUMN, "Titel", null, null, null);
 
     // Then
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
@@ -189,7 +186,7 @@ class CardServiceCreateBatchTest {
     spalteMitNamen("Fertig / Done");
 
     // When
-    List<CardService.CardView> result =
+    List<CardView> result =
         service.createCardsBatch(
             1L,
             BOARD,
@@ -199,9 +196,7 @@ class CardServiceCreateBatchTest {
                 new CardService.NewCard("[Idee] B", null)));
 
     // Then
-    assertThat(result)
-        .extracting(CardService.CardView::movedToDoneAt)
-        .containsExactly(FIXED, FIXED);
+    assertThat(result).extracting(CardView::movedToDoneAt).containsExactly(FIXED, FIXED);
   }
 
   @Test
@@ -211,7 +206,7 @@ class CardServiceCreateBatchTest {
     spalteMitNamen("Fertig / Done");
 
     // When
-    List<CardService.CardView> result =
+    List<CardView> result =
         service.createCardsBatch(
             1L,
             BOARD,
@@ -219,7 +214,7 @@ class CardServiceCreateBatchTest {
             List.of(new CardService.NewCard("A", null), new CardService.NewCard("B", null)));
 
     // Then
-    assertThat(result).extracting(CardService.CardView::movedToDoneAt).containsOnlyNulls();
+    assertThat(result).extracting(CardView::movedToDoneAt).containsOnlyNulls();
   }
 
   /**

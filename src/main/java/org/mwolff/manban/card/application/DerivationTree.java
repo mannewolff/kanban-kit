@@ -10,7 +10,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardService.DerivationNodeView;
-import org.mwolff.manban.card.application.CardService.LabelMarkView;
 import org.mwolff.manban.card.domain.Card;
 
 /**

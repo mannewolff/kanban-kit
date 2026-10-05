@@ -10,7 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.CardSearchHit;
-import org.mwolff.manban.card.application.CardService.CardView;
+import org.mwolff.manban.card.application.CardView;
 import org.mwolff.manban.card.domain.CardType;
 
 /** Unit-Tests der projektuebergreifenden Kartensuche (Service gemockt). */

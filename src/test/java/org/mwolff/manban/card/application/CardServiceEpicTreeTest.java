@@ -328,7 +328,7 @@ class CardServiceEpicTreeTest {
               assertThat(m.color()).isEqualTo("#0f0");
             });
     // Beide Seiten: Das nicht gezaehlte Label taucht nirgends auf.
-    assertThat(z.labels()).extracting(CardService.LabelMarkView::name).doesNotContain("intern");
+    assertThat(z.labels()).extracting(LabelMarkView::name).doesNotContain("intern");
   }
 
   /**
@@ -344,7 +344,7 @@ class CardServiceEpicTreeTest {
     when(cardLabels.findByCardIds(any())).thenReturn(Map.of(6L, List.of(80L, 90L)));
 
     assertThat(zeile(baum(), 2).labels())
-        .extracting(CardService.LabelMarkView::name)
+        .extracting(LabelMarkView::name)
         .containsExactly("zuerst", "danach");
   }
 

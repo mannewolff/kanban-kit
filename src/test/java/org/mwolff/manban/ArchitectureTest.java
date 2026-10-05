@@ -187,9 +187,13 @@ class ArchitectureTest {
   static final ArchRule CARD_APPLICATION_IST_AUF_FASSADE_BEGRENZT =
       fassadeIstAufWhitelistBegrenzt(
           "card",
-          "nur ueber CardService/LabelService",
+          "nur ueber CardService/LabelService und ihre geteilten Sichten CardView/LabelMarkView",
           "CardService",
           "LabelService",
+          // CardView und LabelMarkView sind Vertrag (Plan #1387, E5): Mehrere Karten-Dienste
+          // liefern sie, darum stehen sie als eigene Typen neben den Fassaden statt in einer davon.
+          "CardView",
+          "LabelMarkView",
           "CardBoardActivityEvent",
           "CardsPurgedEvent",
           // EpicRef ist Vertrag (Issue #936): die Nachtlauf-Auswertung fragt je Kartennummer die

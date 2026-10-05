@@ -32,7 +32,7 @@ import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.CardService.BoardItemView;
-import org.mwolff.manban.card.application.CardService.CardView;
+import org.mwolff.manban.card.application.CardView;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.comment.application.CommentNotFoundException;

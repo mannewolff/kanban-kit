@@ -9,7 +9,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.card.application.CardService;
-import org.mwolff.manban.card.application.CardService.CardView;
+import org.mwolff.manban.card.application.CardView;
 import org.mwolff.manban.card.domain.CardType;
 
 /** Unit-Tests des projektweiten Karten-Lookups (Service gemockt). */

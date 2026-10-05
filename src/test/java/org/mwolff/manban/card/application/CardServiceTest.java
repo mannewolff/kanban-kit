@@ -189,7 +189,7 @@ class CardServiceTest {
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
     // Die zurückgegebene View der Voll-Signatur (11 Args) wird bewusst geprüft, damit der
     // @Transactional-Einstieg (der an den privaten Kern doCreate delegiert) nicht null zurückgibt.
-    CardService.CardView result =
+    CardView result =
         service.create(1L, BOARD, 20L, "Titel", null, null, null, due, null, null, null);
 
     verify(cards).save(captor.capture());
@@ -530,10 +530,10 @@ class CardServiceTest {
                 card(2L, 20L, 2, false, null, CardType.EPIC, null, "E")));
 
     // When
-    List<CardService.CardView> result = service.listByBoard(1L, BOARD);
+    List<CardView> result = service.listByBoard(1L, BOARD);
 
     // Then
-    assertThat(result).singleElement().extracting(CardService.CardView::id).isEqualTo(1L);
+    assertThat(result).singleElement().extracting(CardView::id).isEqualTo(1L);
   }
 
   // Die Sammelzugriffe von listByBoard (Issue #768) stehen in CardServiceListByBoardTest —
@@ -1309,7 +1309,7 @@ class CardServiceTest {
     when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
-    CardService.CardView view = service.create(1L, BOARD, 20L, "Titel", null, null, null);
+    CardView view = service.create(1L, BOARD, 20L, "Titel", null, null, null);
 
     // Then
     assertThat(view.title()).isEqualTo("Titel");
@@ -1336,7 +1336,7 @@ class CardServiceTest {
     when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
 
     // When
-    CardService.CardView view = service.createEpic(1L, BOARD, "Epic", null, "SHC");
+    CardView view = service.createEpic(1L, BOARD, "Epic", null, "SHC");
 
     // Then
     assertThat(view.title()).isEqualTo("Epic");
@@ -1349,7 +1349,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
 
     // When
-    CardService.CardView view = service.update(1L, 1L, "Neu", null, null, null, null, null);
+    CardView view = service.update(1L, 1L, "Neu", null, null, null, null, null);
 
     // Then
     assertThat(view.title()).isEqualTo("Neu");
@@ -1364,7 +1364,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(30L, 20L, 5, false, null, CardType.EPIC, null, "E")));
 
     // When
-    CardService.CardView view = service.assignParent(1L, 1L, 30L);
+    CardView view = service.assignParent(1L, 1L, 30L);
 
     // Then
     assertThat(view.parentId()).isEqualTo(30L);
@@ -1392,7 +1392,7 @@ class CardServiceTest {
     when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
 
     // When
-    CardService.CardView view = service.move(1L, 1L, 21L, 0);
+    CardView view = service.move(1L, 1L, 21L, 0);
 
     // Then
     assertThat(view.id()).isEqualTo(1L);
@@ -1405,7 +1405,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
 
     // When
-    CardService.CardView view = service.archive(1L, 1L);
+    CardView view = service.archive(1L, 1L);
 
     // Then
     assertThat(view.archived()).isTrue();
@@ -1418,7 +1418,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, null, null)));
 
     // When
-    CardService.CardView view = service.restore(1L, 1L);
+    CardView view = service.restore(1L, 1L);
 
     // Then
     assertThat(view.archived()).isFalse();
@@ -1433,10 +1433,10 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
 
     // When
-    List<CardService.CardView> result = service.bulkArchive(9L, List.of(1L, 2L));
+    List<CardView> result = service.bulkArchive(9L, List.of(1L, 2L));
 
     // Then
-    assertThat(result).hasSize(2).allMatch(CardService.CardView::archived);
+    assertThat(result).hasSize(2).allMatch(CardView::archived);
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
     verify(cards, times(2)).save(captor.capture());
     assertThat(captor.getAllValues()).allMatch(Card::archived);
@@ -1461,7 +1461,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
     when(cards.allocateActivePosition(20L)).thenReturn(5);
 
-    CardService.CardView view = service.restoreFromTrash(9L, 1L);
+    CardView view = service.restoreFromTrash(9L, 1L);
 
     verify(cards).restoreFromTrash(1L, 5);
     verify(activity)
@@ -1502,10 +1502,10 @@ class CardServiceTest {
                 card(1L, 20L, 1, false, null, CardType.CARD, null, null),
                 card(2L, 20L, 2, false, null, CardType.EPIC, null, "E")));
 
-    List<CardService.CardView> trash = service.listTrash(5L, BOARD);
+    List<CardView> trash = service.listTrash(5L, BOARD);
 
     verify(permissions).requireMembership(5L, 1L);
-    assertThat(trash).extracting(CardService.CardView::id).containsExactly(1L);
+    assertThat(trash).extracting(CardView::id).containsExactly(1L);
   }
 
   // --- transfer (board-/projektübergreifend) ----------------------------
@@ -1527,7 +1527,7 @@ class CardServiceTest {
     stubTransferScenario(9L);
 
     // When
-    CardService.CardView view = service.transfer(1L, 100L, 20L, 60L);
+    CardView view = service.transfer(1L, 100L, 20L, 60L);
 
     // Then
     verify(cards).transfer(100L, 20L, 60L, 8);
@@ -1672,7 +1672,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(9L, 20L, 4, false, null, CardType.CARD, null, null)));
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardService.CardView result = service.assignDerivedFrom(1L, 1L, 4);
+    CardView result = service.assignDerivedFrom(1L, 1L, 4);
 
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().derivedFromCardId()).isEqualTo(9L);
@@ -1734,7 +1734,7 @@ class CardServiceTest {
     when(cards.findById(50L)).thenReturn(Optional.of(angelegtesEpic));
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardService.CardView ergebnis = service.openEpicFromCard(1L, 1L, "EP-1", "Vorhaben");
+    CardView ergebnis = service.openEpicFromCard(1L, 1L, "EP-1", "Vorhaben");
 
     verify(cards, times(3)).save(captor.capture());
     // 1. Das Vorhaben entsteht — auf dem Board der Quellkarte, ohne Beschreibung.
@@ -1880,7 +1880,7 @@ class CardServiceTest {
     when(cards.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardService.CardView result = service.assignRequirement(1L, 1L, 4);
+    CardView result = service.assignRequirement(1L, 1L, 4);
 
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().requirementCardId()).isEqualTo(9L);
@@ -2152,10 +2152,10 @@ class CardServiceTest {
     when(cards.allocateCardNumber(2L)).thenReturn(8);
 
     // When
-    List<CardService.CardView> result = service.bulkTransfer(1L, List.of(100L, 101L), 20L, 60L);
+    List<CardView> result = service.bulkTransfer(1L, List.of(100L, 101L), 20L, 60L);
 
     // Then — die Views je Karte werden zurückgegeben (nicht null)
-    assertThat(result).extracting(CardService.CardView::id).containsExactly(100L, 101L);
+    assertThat(result).extracting(CardView::id).containsExactly(100L, 101L);
     verify(cards).transfer(100L, 20L, 60L, 8);
     verify(cards).transfer(101L, 20L, 60L, 8);
   }
@@ -2255,7 +2255,7 @@ class CardServiceTest {
     stubSelbesBoardScenario("Ready", null);
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardService.CardView view = service.transfer(1L, 100L, BOARD, 60L);
+    CardView view = service.transfer(1L, 100L, BOARD, 60L);
 
     verify(cards).move(100L, 60L, Integer.MAX_VALUE);
     verify(cards, never()).transfer(anyLong(), anyLong(), anyLong(), anyInt());
@@ -2353,9 +2353,9 @@ class CardServiceTest {
         .thenReturn(Optional.of(card(101L, 51L, 4, false, null, CardType.CARD, 9L, null)));
     when(boardService.requireColumn(60L, BOARD)).thenReturn(column(60L, "Ready", 1));
 
-    List<CardService.CardView> result = service.bulkTransfer(1L, List.of(100L, 101L), BOARD, 60L);
+    List<CardView> result = service.bulkTransfer(1L, List.of(100L, 101L), BOARD, 60L);
 
-    assertThat(result).extracting(CardService.CardView::id).containsExactly(100L, 101L);
+    assertThat(result).extracting(CardView::id).containsExactly(100L, 101L);
     // Auswahlreihenfolge: jede Karte einzeln ans Ende — der Server sortiert nicht um.
     InOrder inOrder = inOrder(cards);
     inOrder.verify(cards).lockColumnPositions(List.of(60L, 50L, 51L));
@@ -2371,7 +2371,7 @@ class CardServiceTest {
     Instant due = FIXED.plusSeconds(86_400);
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardService.CardView view = service.update(1L, 1L, "Neu", null, null, null, null, due);
+    CardView view = service.update(1L, 1L, "Neu", null, null, null, null, due);
 
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().dueDate()).isEqualTo(due);
@@ -2388,7 +2388,7 @@ class CardServiceTest {
     when(permissions.isRealProjectMember(8L, 1L)).thenReturn(true);
     when(assignees.findByCardId(1L)).thenReturn(List.of(7L, 8L));
 
-    CardService.CardView result = service.setAssignees(3L, 1L, List.of(7L, 8L, 7L));
+    CardView result = service.setAssignees(3L, 1L, List.of(7L, 8L, 7L));
 
     verify(permissions).require(3L, 1L, Permission.TICKET_UPDATE);
     verify(assignees).replaceAssignees(1L, List.of(7L, 8L));
@@ -2460,7 +2460,7 @@ class CardServiceTest {
                 new Label(8L, BOARD, "Ux", "#0f0", false)));
     when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L, 8L));
 
-    CardService.CardView view = service.setLabels(3L, 1L, List.of(7L, 8L, 7L));
+    CardView view = service.setLabels(3L, 1L, List.of(7L, 8L, 7L));
 
     verify(permissions).require(3L, 1L, Permission.TICKET_UPDATE);
     verify(cardLabels).replaceLabels(1L, List.of(7L, 8L));
@@ -2536,11 +2536,10 @@ class CardServiceTest {
     when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L)).thenReturn(List.of(7L, 9L));
     when(cardLabels.findByCardId(2L)).thenReturn(List.of()).thenReturn(List.of(9L));
 
-    List<CardService.CardView> result =
-        service.bulkLabels(3L, List.of(1L, 2L), 9L, LabelAction.ADD);
+    List<CardView> result = service.bulkLabels(3L, List.of(1L, 2L), 9L, LabelAction.ADD);
 
     // Die Antwort trägt je Karte den neuen Stand — daran liest das Frontend die Labels ab.
-    assertThat(result).extracting(CardService.CardView::id).containsExactly(1L, 2L);
+    assertThat(result).extracting(CardView::id).containsExactly(1L, 2L);
     assertThat(result.get(0).labels()).containsExactly(7L, 9L);
     assertThat(result.get(1).labels()).containsExactly(9L);
     verify(permissions, times(2)).require(3L, PROJECT, Permission.TICKET_UPDATE);
@@ -3088,7 +3087,7 @@ class CardServiceTest {
     when(cards.findByProjectIdAndNumber(PROJECT, 42))
         .thenReturn(Optional.of(card(1L, 20L, 42, false, null, CardType.CARD, null, null)));
 
-    CardService.CardView view = service.getByNumber(5L, PROJECT, 42);
+    CardView view = service.getByNumber(5L, PROJECT, 42);
 
     assertThat(view.id()).isEqualTo(1L);
     assertThat(view.number()).isEqualTo(42);
@@ -3593,7 +3592,7 @@ class CardServiceTest {
   void getCard_returnsViewOfCard() {
     when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false)));
 
-    assertThat(service.getCard(5L, 1L)).extracting(CardService.CardView::number).isEqualTo(7);
+    assertThat(service.getCard(5L, 1L)).extracting(CardView::number).isEqualTo(7);
   }
 
   @Test
@@ -3602,7 +3601,7 @@ class CardServiceTest {
     // Volltexts. Waere hier beides gesetzt, gaebe es zwei Wahrheiten fuer denselben Text.
     when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false)));
 
-    CardService.CardView sicht = service.getCard(5L, 1L);
+    CardView sicht = service.getCard(5L, 1L);
 
     assertThat(sicht.description()).isEqualTo("Body");
     assertThat(sicht.excerpt()).isNull();
@@ -3930,7 +3929,7 @@ class CardServiceTest {
         .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.IN_REVIEW)));
     when(permissions.hasPermission(1L, PROJECT, Permission.CARD_MOVE)).thenReturn(true);
 
-    CardService.CardView sicht = service.getCard(1L, 5L);
+    CardView sicht = service.getCard(1L, 5L);
 
     assertThat(sicht.status()).isEqualTo("IN_REVIEW");
     assertThat(sicht.canSetStatus()).isTrue();
@@ -3951,7 +3950,7 @@ class CardServiceTest {
     when(cards.findById(5L)).thenReturn(Optional.of(paket(5L, "[Plan] Plan", CardType.CARD, null)));
     when(permissions.hasPermission(1L, PROJECT, Permission.CARD_MOVE)).thenReturn(true);
 
-    CardService.CardView sicht = service.getCard(1L, 5L);
+    CardView sicht = service.getCard(1L, 5L);
 
     assertThat(sicht.status()).isNull();
     assertThat(sicht.canSetStatus()).isFalse();
@@ -3967,11 +3966,11 @@ class CardServiceTest {
                 paket(3L, "[Idee] C", CardType.CARD, null)));
     when(permissions.hasPermission(1L, PROJECT, Permission.CARD_MOVE)).thenReturn(true);
 
-    List<CardService.CardView> sichten = service.listByBoard(1L, BOARD);
+    List<CardView> sichten = service.listByBoard(1L, BOARD);
 
     // Die Dokumentkarte trägt keinen Status — also auch kein Recht, ihn zu setzen.
     assertThat(sichten)
-        .extracting(CardService.CardView::status, CardService.CardView::canSetStatus)
+        .extracting(CardView::status, CardView::canSetStatus)
         .containsExactly(tuple("READY", true), tuple("DONE", true), tuple(null, false));
     verify(permissions, times(1)).hasPermission(1L, PROJECT, Permission.CARD_MOVE);
   }
@@ -3983,7 +3982,7 @@ class CardServiceTest {
     when(permissions.hasPermission(1L, PROJECT, Permission.CARD_MOVE)).thenReturn(false);
 
     assertThat(service.listByBoard(1L, BOARD))
-        .extracting(CardService.CardView::status, CardService.CardView::canSetStatus)
+        .extracting(CardView::status, CardView::canSetStatus)
         .containsExactly(tuple("READY", false));
   }
 
