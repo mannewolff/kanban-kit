@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -322,6 +323,16 @@ public class MembershipService {
   }
 
   /** Mitgliederdarstellung. */
+  @Schema(description = "Ein Mitglied eines Projekts.")
   public record MemberView(
-      Long userId, @Nullable String email, @Nullable String displayName, ProjectRole role) {}
+      @Schema(description = "Benutzer-ID.", example = "7") Long userId,
+      @Schema(
+              description = "E-Mail; null, wenn der Benutzer nicht mehr existiert.",
+              example = "erika@example.org")
+          @Nullable String email,
+      @Schema(
+              description = "Anzeigename; null, wenn der Benutzer nicht mehr existiert.",
+              example = "Erika Muster")
+          @Nullable String displayName,
+      @Schema(description = "Projekt-Rolle.", example = "MEMBER") ProjectRole role) {}
 }

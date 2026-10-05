@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -241,13 +242,20 @@ public class ProjectService {
   }
 
   /** Projektdarstellung inkl. der Rolle des anfragenden Benutzers. */
+  @Schema(description = "Ein Projekt aus Sicht des anfragenden Benutzers.")
   public record ProjectView(
-      Long id,
-      String name,
-      ProjectRole role,
-      Instant createdAt,
-      boolean dashboardParticipation,
-      boolean participationEditable) {}
+      @Schema(description = "Interne ID des Projekts.", example = "1") Long id,
+      @Schema(description = "Name.", example = "Leitstand") String name,
+      @Schema(description = "Projekt-Rolle des Aufrufers.", example = "OWNER") ProjectRole role,
+      @Schema(description = "Zeitpunkt der Anlage.") Instant createdAt,
+      @Schema(description = "Ob das Projekt am Plattform-Leitstand teilnimmt.", example = "false")
+          boolean dashboardParticipation,
+      @Schema(
+              description =
+                  "Ob der Aufrufer die Teilnahme schalten darf: echtes Mitglied mit der Rolle"
+                      + " OWNER oder ADMIN.",
+              example = "true")
+          boolean participationEditable) {}
 
   /** Projekt-Kurzinfo für modulfremde Aufrufer: Id und Name (siehe {@link #listAccessible}). */
   public record AccessibleProject(Long id, String name) {}

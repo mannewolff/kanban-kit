@@ -1,5 +1,6 @@
 package org.mwolff.manban.accesstoken.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -206,18 +207,34 @@ public class AccessTokenService {
   }
 
   /** Ergebnis der Erstellung — enthält den einmalig sichtbaren Klartext. */
-  public record CreatedAccessToken(Long id, String name, String plaintext) {}
+  @Schema(description = "Ein neu angelegtes Token samt Klartext.")
+  public record CreatedAccessToken(
+      @Schema(description = "Interne ID des Tokens.", example = "12") Long id,
+      @Schema(description = "Name.", example = "Laptop") String name,
+      @Schema(
+              description =
+                  "Klartext für den Header X-Kanban-Token. Steht nur in dieser Antwort; der"
+                      + " Leitstand speichert ihn nicht.")
+          String plaintext) {}
 
   /**
    * Listen-/Detaildarstellung ohne Hash und ohne Klartext; inkl. optionaler Bindung. {@code
    * lastUsedAt} ist minutengenau — siehe {@link #resolveBinding} (Issue #997).
    */
+  @Schema(description = "Ein Token, ohne Klartext.")
   public record AccessTokenView(
-      Long id,
-      String name,
-      @Nullable Long projectId,
-      @Nullable Long boardId,
-      Instant createdAt,
-      @Nullable Instant lastUsedAt,
-      boolean revoked) {}
+      @Schema(description = "Interne ID des Tokens.", example = "12") Long id,
+      @Schema(description = "Name.", example = "Laptop") String name,
+      @Schema(
+              description = "Projekt des gebundenen Boards; null bei einem ungebundenen Token.",
+              example = "1")
+          @Nullable Long projectId,
+      @Schema(description = "Gebundenes Board; null bei einem ungebundenen Token.", example = "3")
+          @Nullable Long boardId,
+      @Schema(description = "Zeitpunkt der Anlage.") Instant createdAt,
+      @Schema(
+              description =
+                  "Letzte Nutzung, minutengenau; null, solange das Token nie benutzt wurde.")
+          @Nullable Instant lastUsedAt,
+      @Schema(description = "Ob das Token widerrufen ist.", example = "false") boolean revoked) {}
 }

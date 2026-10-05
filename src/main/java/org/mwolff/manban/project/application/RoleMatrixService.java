@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,8 +68,27 @@ public class RoleMatrixService {
     return new PermissionView(permission.name(), parts[0], parts.length > 1 ? parts[1] : "");
   }
 
+  @Schema(description = "Die Rollen-Rechte-Matrix der Projekt-Rollen.")
   public record RoleMatrixView(
-      List<String> roles, List<PermissionView> permissions, Map<String, List<String>> grants) {}
+      @Schema(
+              description = "Die Projekt-Rollen, von wenig zu viel Rechten.",
+              example = "[\"VIEWER\", \"MEMBER\", \"ADMIN\", \"OWNER\"]")
+          List<String> roles,
+      @Schema(description = "Alle Rechte, nach Ressource gruppiert.")
+          List<PermissionView> permissions,
+      @Schema(
+              description = "Je Rolle die Schlüssel der Rechte, die sie umfasst.",
+              example = "{\"VIEWER\": [\"BOARD_READ\", \"TICKET_READ\"]}")
+          Map<String, List<String>> grants) {}
 
-  public record PermissionView(String key, String resource, String operation) {}
+  @Schema(description = "Ein Projekt-Recht.")
+  public record PermissionView(
+      @Schema(description = "Schlüssel des Rechts.", example = "TICKET_UPDATE") String key,
+      @Schema(
+              description =
+                  "Ressource, auf die es sich bezieht (EPIC heißt in der Oberfläche"
+                      + " Vorhaben).",
+              example = "TICKET")
+          String resource,
+      @Schema(description = "Operation.", example = "UPDATE") String operation) {}
 }

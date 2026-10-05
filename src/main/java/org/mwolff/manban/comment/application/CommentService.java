@@ -1,5 +1,6 @@
 package org.mwolff.manban.comment.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -128,14 +129,21 @@ public class CommentService {
   }
 
   /** Kommentardarstellung. */
+  @Schema(description = "Ein Kommentar an einer Karte.")
   public record CommentView(
-      Long id,
-      Long cardId,
-      @Nullable Long authorUserId,
-      String authorName,
-      String body,
-      Instant createdAt,
-      Instant updatedAt) {}
+      @Schema(description = "Interne ID des Kommentars.", example = "455") Long id,
+      @Schema(description = "Interne ID der Karte.", example = "812") Long cardId,
+      @Schema(
+              description =
+                  "Benutzer-ID des Autors; null, wenn kein Benutzer als Autor festgehalten ist.",
+              example = "7")
+          @Nullable Long authorUserId,
+      @Schema(description = "Anzeigename des Autors beim Anlegen.", example = "Erika Muster")
+          String authorName,
+      @Schema(description = "Text in Markdown.", example = "Sieht gut aus, bitte noch testen.")
+          String body,
+      @Schema(description = "Zeitpunkt der Anlage.") Instant createdAt,
+      @Schema(description = "Zeitpunkt der letzten Änderung.") Instant updatedAt) {}
 
   /**
    * Der Laufstand-Kommentar einer Karte (Issue #1373).
