@@ -61,7 +61,7 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
   }
 
   private Comment save(String body, Instant createdAt) {
-    return comments.save(new Comment(null, cardId, userId, "A", body, createdAt, createdAt));
+    return comments.save(new Comment(null, cardId, userId, "A", body, createdAt, createdAt, null));
   }
 
   @Test
@@ -101,6 +101,36 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
         body,
         Timestamp.from(createdAt),
         Timestamp.from(createdAt));
+  }
+
+  @Test
+  void laufkennungUebersteht_denRundwegDerSpalteRunStartedAt() {
+    // Issue #1428: die Laufkennung des letzten Schreibers liegt in comment.run_started_at.
+    Instant lauf = Instant.parse("2026-10-05T08:58:22.123Z");
+    Comment gespeichert =
+        comments.save(new Comment(null, cardId, userId, "A", "## Laufstand", T1, T1, lauf));
+
+    assertThat(gespeichert.laufStart()).isEqualTo(lauf);
+    assertThat(comments.findById(gespeichert.requireId()))
+        .get()
+        .extracting(Comment::laufStart)
+        .isEqualTo(lauf);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT run_started_at FROM comment WHERE id = ?",
+                Timestamp.class,
+                gespeichert.requireId()))
+        .isEqualTo(Timestamp.from(lauf));
+  }
+
+  @Test
+  void ohneLaufkennungBleibtDieSpalteRunStartedAtLeer() {
+    Comment gespeichert = save("ohne Kennung", T1);
+
+    assertThat(comments.findById(gespeichert.requireId()))
+        .get()
+        .extracting(Comment::laufStart)
+        .isNull();
   }
 
   @Test

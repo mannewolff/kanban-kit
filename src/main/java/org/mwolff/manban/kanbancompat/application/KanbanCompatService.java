@@ -387,22 +387,29 @@ public class KanbanCompatService {
    * Kommentiert ein Item des gebundenen Boards. Mit einem {@code idempotencyKey} entsteht der
    * Kommentar je Projekt und Schlüssel genau einmal (Issue #1001); zwei verschiedene Schlüssel mit
    * gleichem Text ergeben bewusst zwei Kommentare.
+   *
+   * <p>Die Laufkennung geht an das Anlegen (Issue #1428). Eine Wiederholung mit demselben Schlüssel
+   * fasst den Kommentar nicht an; er behält die Kennung des ersten Anlegens.
    */
   @Transactional
   public void comment(
-      KanbanPrincipal principal, long cardId, String body, @Nullable String idempotencyKey) {
+      KanbanPrincipal principal,
+      long cardId,
+      String body,
+      @Nullable String idempotencyKey,
+      @Nullable Instant laufStart) {
     long boardId = requireBound(principal);
     ingest.requireOnBoard(cardId, boardId);
     String idempotent = normalizeIdempotencyKey(idempotencyKey);
     if (idempotent == null) {
-      commentService.create(principal.userId(), cardId, body);
+      commentService.create(principal.userId(), cardId, body, laufStart);
       return;
     }
     idempotency.execute(
         boardService.requireProjectId(boardId),
         idempotent,
         "POST /items/" + cardId + "/comments",
-        () -> commentService.create(principal.userId(), cardId, body));
+        () -> commentService.create(principal.userId(), cardId, body, laufStart));
   }
 
   /**
@@ -431,10 +438,16 @@ public class KanbanCompatService {
    * <p>Reichweite wie bei {@link #comment}: Der Board-Guard der card-Fassade schließt Karten
    * anderer Boards mit 404 aus. Der Kommentar muss zur adressierten Karte gehören, sonst 404 — ohne
    * diese Prüfung erreichte ein Aufruf über eine Karte des eigenen Boards jeden Kommentar eines
-   * anderen. Die Rechteregel ist die von {@link CommentService#update}: nur der Autor selbst.
+   * anderen. Die Rechteregel ist die von {@link CommentService#update}: nur der Autor selbst. Die
+   * Laufkennung ersetzt die bisherige, auch mit {@code null} (Issue #1428, E3).
    */
   @Transactional
-  public void updateComment(KanbanPrincipal principal, long cardId, long commentId, String body) {
+  public void updateComment(
+      KanbanPrincipal principal,
+      long cardId,
+      long commentId,
+      String body,
+      @Nullable Instant laufStart) {
     long boardId = requireBound(principal);
     ingest.requireOnBoard(cardId, boardId);
     boolean onCard =
@@ -442,7 +455,7 @@ public class KanbanCompatService {
     if (!onCard) {
       throw new CommentNotFoundException();
     }
-    commentService.update(principal.userId(), commentId, body);
+    commentService.update(principal.userId(), commentId, body, laufStart);
   }
 
   /**

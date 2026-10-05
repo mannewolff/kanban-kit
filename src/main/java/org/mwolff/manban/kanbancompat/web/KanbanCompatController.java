@@ -12,6 +12,7 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.card.application.CardNumbers;
+import org.mwolff.manban.common.Laufkennung;
 import org.mwolff.manban.common.TextLimits;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Activity;
@@ -147,7 +148,10 @@ class KanbanCompatController {
     service.removeLabel(principal(authentication), id, name);
   }
 
-  /** Kommentiert ein Item; {@code Idempotency-Key} wie bei {@link #create} (Issue #1001). */
+  /**
+   * Kommentiert ein Item; {@code Idempotency-Key} wie bei {@link #create} (Issue #1001). Die
+   * Laufkennung aus {@link Laufkennung#HEADER} geht an den Kommentar (Issue #1428, A7).
+   */
   @PostMapping("/items/{id}/comments")
   @ResponseStatus(HttpStatus.CREATED)
   void comment(
@@ -157,13 +161,19 @@ class KanbanCompatController {
       @RequestHeader(name = IDEMPOTENCY_KEY, required = false)
           @Nullable
           @Size(max = MAX_IDEMPOTENCY_KEY)
-          String idempotencyKey) {
-    service.comment(principal(authentication), id, request.body(), idempotencyKey);
+          String idempotencyKey,
+      @RequestHeader(value = Laufkennung.HEADER, required = false) @Nullable String laufkennung) {
+    service.comment(
+        principal(authentication),
+        id,
+        request.body(),
+        idempotencyKey,
+        Laufkennung.ausHeader(laufkennung));
   }
 
   /**
    * Ersetzt den Text eines Kommentars an Ort und Stelle (Issue #1339); nur der Autor selbst, wie im
-   * UI-Pfad. Längengrenze wie beim Anlegen.
+   * UI-Pfad. Längengrenze wie beim Anlegen. Die Laufkennung ersetzt die bisherige (Issue #1428).
    */
   @PatchMapping("/items/{id}/comments/{commentId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -171,8 +181,14 @@ class KanbanCompatController {
       @Nullable Authentication authentication,
       @PathVariable long id,
       @PathVariable long commentId,
-      @Valid @RequestBody CommentRequest request) {
-    service.updateComment(principal(authentication), id, commentId, request.body());
+      @Valid @RequestBody CommentRequest request,
+      @RequestHeader(value = Laufkennung.HEADER, required = false) @Nullable String laufkennung) {
+    service.updateComment(
+        principal(authentication),
+        id,
+        commentId,
+        request.body(),
+        Laufkennung.ausHeader(laufkennung));
   }
 
   @GetMapping("/items/{id}/comments")

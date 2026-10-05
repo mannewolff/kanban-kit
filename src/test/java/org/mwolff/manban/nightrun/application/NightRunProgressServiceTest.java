@@ -284,7 +284,8 @@ class NightRunProgressServiceTest {
                 new LaufstandView(
                     10L,
                     "## Laufstand\n\nzuletzt fertig: review fertig für #2 um "
-                        + START.plusSeconds(90))));
+                        + START.plusSeconds(90),
+                    null)));
     LaufKarteView anforderung = karte(10L, 1, "[Fachlich] Fortschritt", null, null);
     LaufKarteView plan = karte(20L, 2, "[Plan] Fortschritt", null, 10L);
     LaufKarteView paket = karte(30L, 3, "Paket 1/1", "IN_REVIEW", 20L);
@@ -412,7 +413,8 @@ class NightRunProgressServiceTest {
                 new LaufstandView(
                     10L,
                     "## Laufstand\n\nzuletzt begonnen: plan begonnen für #1 um "
-                        + START.plusSeconds(90))));
+                        + START.plusSeconds(90),
+                    null)));
     when(cards.cardsByIds(List.of(10L)))
         .thenReturn(List.of(karte(10L, 1, "[Fachlich] Fortschritt", null, null)));
 

@@ -36,6 +36,10 @@ class CommentEntity {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
 
+  // Laufkennung des letzten Schreibers (Issue #1428); nullable, V47 ohne Backfill.
+  @Column(name = "run_started_at")
+  private @Nullable Instant laufStart;
+
   protected CommentEntity() {
     // für JPA
   }
@@ -47,7 +51,8 @@ class CommentEntity {
       String authorName,
       String body,
       Instant createdAt,
-      Instant updatedAt) {
+      Instant updatedAt,
+      @Nullable Instant laufStart) {
     this.id = id;
     this.cardId = cardId;
     this.authorUserId = authorUserId;
@@ -55,6 +60,7 @@ class CommentEntity {
     this.body = body;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
+    this.laufStart = laufStart;
   }
 
   @Nullable Long getId() {
@@ -83,5 +89,9 @@ class CommentEntity {
 
   Instant getUpdatedAt() {
     return updatedAt;
+  }
+
+  @Nullable Instant getLaufStart() {
+    return laufStart;
   }
 }
