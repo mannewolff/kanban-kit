@@ -97,7 +97,8 @@ class BefundNahtstelleTest {
             mock(PermissionChecker.class),
             mock(InteractiveUsageSinceWriter.class),
             properties,
-            uhr);
+            uhr,
+            mock(CardRunQueryService.class));
     return service.list(ADMIN, PROJEKT).stream()
         .map(NightRunView::outcome)
         .findFirst()

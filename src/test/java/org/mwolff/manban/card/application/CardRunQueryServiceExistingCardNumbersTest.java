@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.project.application.PermissionChecker;
 
 /**
@@ -35,7 +36,8 @@ class CardRunQueryServiceExistingCardNumbersTest {
                 mock(CardAssigneeRepository.class),
                 mock(LabelRepository.class),
                 mock(CardLabelRepository.class),
-                mock(PermissionChecker.class)));
+                mock(PermissionChecker.class)),
+            mock(BoardService.class));
   }
 
   @Test

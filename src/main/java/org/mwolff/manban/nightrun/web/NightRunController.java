@@ -22,10 +22,13 @@ import org.mwolff.manban.nightrun.application.NightRunService.NewNightRun;
 import org.mwolff.manban.nightrun.application.NightRunService.NewNightRunItem;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunView;
+import org.mwolff.manban.nightrun.domain.NachtFreigabe;
+import org.mwolff.manban.nightrun.domain.NachtFreigabe.Startstation;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.ProgressStage;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -245,6 +248,46 @@ class NightRunController {
   }
 
   /**
+   * Was heute Nacht ansteht (Issue #1454, Plan #1447 E4): die freigegebenen, noch nicht
+   * übernommenen Karten des Projekts über alle Boards. Ohne {@code @ApiVertrag}: Der Aufruf bedient
+   * nur die eigene Runner-Seite.
+   */
+  @Operation(
+      summary = "Heute Nacht lesen",
+      description =
+          "Liefert die Karten des Projekts, die für die nächste Nacht anstehen: fachliche"
+              + " Anforderungen ([Fachlich]) und Pläne ([Plan]) aller nicht archivierten Boards,"
+              + " die zur Übernahme durch den nächsten Runner freigegeben sind (Label kit:night)"
+              + " und die noch kein Runner übernommen hat. Je Karte kommen Nummer, Titel, Board,"
+              + " die Startstation der Kette (FACHPLAN oder PLAN), ihr Ziel (aus ziel:*, ohne"
+              + " Angabe PAKETE, mit kit:durchziehen mindestens UMSETZUNG) und die gewählte"
+              + " Prüferzahl aus planreview:*. Sortiert nach Kartennummer; leer, wenn nichts"
+              + " freigegeben ist. "
+              + LESERECHT)
+  @ApiResponse(responseCode = "200", description = "Die freigegebenen Karten, nach Nummer.")
+  @ApiResponse(
+      responseCode = "403",
+      description = LESEN_VERBOTEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description = PROJEKT_UNBEKANNT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @GetMapping("/api/projects/{projectId}/night-runs/tonight")
+  List<TonightCardView> tonight(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = BESCHREIBUNG_PROJEKT_ID, example = "7") @PathVariable
+          long projectId) {
+    return runs.heuteNacht(userId, projectId).stream().map(TonightCardView::of).toList();
+  }
+
+  /**
    * Der Fortschritt eines Laufs aus seinen Spuren am Board (Issue #1375, Plan #1372): Ketten,
    * Pakete und ihr Zustand, unbekannte Karten und offene Fragen. 404 für einen Lauf eines anderen
    * Projekts, 404/403 aus der Rechteprüfung wie bei der Laufliste (E10).
@@ -418,4 +461,33 @@ class NightRunController {
           String excerpt,
       @Schema(description = "Verbrauch dieses Arbeitspakets.")
           @Nullable NightRunUsageRequest usage) {}
+
+  /** Eine Zeile der Übersicht „Heute Nacht“ (Issue #1454). */
+  @Schema(description = "Eine zur Übernahme freigegebene Karte mit ihrem kleinen Stufenstand.")
+  record TonightCardView(
+      @Schema(description = "Projektweite Nummer der Karte.", example = "1420") int number,
+      @Schema(description = "Titel der Karte.", example = "[Fachlich] Export als CSV") String title,
+      @Schema(description = "Name des Boards der Karte.", example = "Entwicklung") String boardName,
+      @Schema(
+              description =
+                  "Startstation der Kette: FACHPLAN bei einer fachlichen Anforderung, PLAN bei"
+                      + " einem Plan (Plan und Prüfung sind dann vor dem Lauf erbracht).",
+              example = "FACHPLAN")
+          Startstation start,
+      @Schema(
+              description =
+                  "Zielstation: PLAN, PAKETE, UMSETZUNG oder VORBEREITUNG (Veröffentlichung"
+                      + " vorbereitet).",
+              example = "PAKETE")
+          ProgressStage ziel,
+      @Schema(
+              description = "Gewählte Prüferzahl (1 oder 2); null ohne Wahl und an einem Plan.",
+              example = "2")
+          @Nullable Integer pruefer) {
+
+    static TonightCardView of(NachtFreigabe f) {
+      return new TonightCardView(
+          f.number(), f.title(), f.boardName(), f.start(), f.ziel(), f.pruefer());
+    }
+  }
 }

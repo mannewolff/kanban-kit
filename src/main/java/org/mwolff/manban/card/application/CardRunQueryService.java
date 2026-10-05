@@ -10,8 +10,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.card.domain.Arbeitspaket;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
@@ -28,18 +31,28 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Ohne Rechteprüfung: Alle Methoden sind Vertrag für fremde Module (heute {@code nightrun}), die
  * ihre eigene Prüfung bereits vorgenommen haben.
  */
+// PMD.CouplingBetweenObjects: Die Fassade ist der eine Zugang von nightrun zu den Karten (Issue
+// #1452); sie kennt darum die Ports, die Zuordnung und je Abfrage ihre Sicht. Mit Issue #1454 kommt
+// die board-Fassade dazu, weil „Heute Nacht" Boardnamen und den Archiv-Zustand braucht. Eine
+// Aufteilung gaebe nightrun einen zweiten Zugang, ohne eine Abfrage einfacher zu machen.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CardRunQueryService {
 
   private final CardRepository cards;
   private final CardActivityRepository activity;
   private final KartenZuordnung zuordnung;
+  private final BoardService boards;
 
   public CardRunQueryService(
-      CardRepository cards, CardActivityRepository activity, KartenZuordnung zuordnung) {
+      CardRepository cards,
+      CardActivityRepository activity,
+      KartenZuordnung zuordnung,
+      BoardService boards) {
     this.cards = cards;
     this.activity = activity;
     this.zuordnung = zuordnung;
+    this.boards = boards;
   }
 
   /**
@@ -208,6 +221,42 @@ public class CardRunQueryService {
   }
 
   /**
+   * Die Karten des Projekts, deren Titel {@code titel} erfüllt und die das Label {@code label}
+   * tragen (Issue #1454) — für die Übersicht „Heute Nacht“ über alle Boards. Karten im Papierkorb
+   * und Karten archivierter Boards fehlen; die Reihenfolge ist die des Ports.
+   *
+   * <p>Der Titelfilter kommt vor den Labels: Nach Labels gefragt wird nur für die wenigen Karten,
+   * die ihn erfüllen, nicht für jede Karte des Projekts. Ohne Rechteprüfung wie {@link
+   * #cardsByIds}.
+   */
+  @Transactional(readOnly = true)
+  public List<FreigabeKarteView> freigegebeneKarten(
+      long projectId, String label, Predicate<String> titel) {
+    List<Card> kandidaten =
+        cards.findByProjectId(projectId).stream().filter(c -> titel.test(c.title())).toList();
+    Map<Long, BoardSummary> boardJeId = new HashMap<>();
+    kandidaten.stream()
+        .map(Card::boardId)
+        .distinct()
+        .forEach(id -> boardJeId.put(id, boards.requireBoardSummary(id)));
+    Map<Long, Long> boardJeKarte = new LinkedHashMap<>();
+    kandidaten.stream()
+        .filter(c -> !Objects.requireNonNull(boardJeId.get(c.boardId())).archived())
+        .forEach(c -> boardJeKarte.put(c.requireId(), c.boardId()));
+    Map<Long, List<String>> labelNamen = zuordnung.labelNamenJeKarte(boardJeKarte);
+    return kandidaten.stream()
+        .filter(c -> labelNamen.getOrDefault(c.requireId(), List.of()).contains(label))
+        .map(
+            c ->
+                new FreigabeKarteView(
+                    c.number(),
+                    c.title(),
+                    Objects.requireNonNull(boardJeId.get(c.boardId())).name(),
+                    labelNamen.getOrDefault(c.requireId(), List.of())))
+        .toList();
+  }
+
+  /**
    * Eine Kartenaktivität eines Nachtlaufs als Fassaden-Sicht (Issue #1373).
    *
    * @param cardId Karte, an der die Aktivität stattfand
@@ -248,4 +297,13 @@ public class CardRunQueryService {
       String type,
       boolean arbeitspaket,
       @Nullable String description) {}
+
+  /**
+   * Eine zur Übernahme freigegebene Karte (Issue #1454).
+   *
+   * @param boardName Name des Boards der Karte
+   * @param labels Labelnamen der Karte, alphabetisch
+   */
+  public record FreigabeKarteView(
+      int number, String title, String boardName, List<String> labels) {}
 }

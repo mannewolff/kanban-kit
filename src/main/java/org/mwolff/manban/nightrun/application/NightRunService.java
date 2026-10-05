@@ -3,11 +3,15 @@ package org.mwolff.manban.nightrun.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
+import org.mwolff.manban.nightrun.domain.FortschrittErmittlung;
+import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
@@ -45,7 +49,9 @@ import org.springframework.transaction.annotation.Transactional;
 // InteractiveUsageSinceWriter dazu, und der Zaehler steht bei 21 (Schwelle 20). Eine Aufteilung
 // loeste das nur nominell: submit, ingest und list teilen sich run(), items() und den Ringpuffer;
 // sie zu trennen verteilte einen zusammenhaengenden Use-Case auf zwei Klassen und dieselben Typen
-// auf beide. Dieselbe Begruendung wie am NightRunRepositoryAdapter.
+// auf beide. Dieselbe Begruendung wie am NightRunRepositoryAdapter. Issue #1454 bringt mit der
+// Uebersicht „Heute Nacht" CardRunQueryService und NachtFreigabe dazu — ein weiterer Lesepfad
+// derselben Runner-Seite mit derselben Rechtepruefung wie list.
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 public class NightRunService {
 
@@ -54,18 +60,21 @@ public class NightRunService {
   private final InteractiveUsageSinceWriter erfassungsbeginn;
   private final NightRunProperties properties;
   private final Clock clock;
+  private final CardRunQueryService cards;
 
   public NightRunService(
       NightRunRepository runs,
       PermissionChecker permissions,
       InteractiveUsageSinceWriter erfassungsbeginn,
       NightRunProperties properties,
-      Clock clock) {
+      Clock clock,
+      CardRunQueryService cards) {
     this.runs = runs;
     this.permissions = permissions;
     this.erfassungsbeginn = erfassungsbeginn;
     this.properties = properties;
     this.clock = clock;
+    this.cards = cards;
   }
 
   /**
@@ -245,6 +254,27 @@ public class NightRunService {
   public List<NightRunItem> anlaeufeDerKarte(long userId, long projectId, int cardNumber) {
     permissions.requireNightRunAccess(userId, projectId);
     return runs.findByCard(projectId, cardNumber);
+  }
+
+  /**
+   * Was heute Nacht ansteht (Issue #1454, Plan #1447 E4): die fachlichen Anforderungen und Pläne
+   * aller aktiven Boards des Projekts, die {@code kit:night} tragen — freigegeben und von keinem
+   * Runner übernommen, denn die Übernahme nimmt {@code kit:night} ab (Kit E1). Je Karte der kleine
+   * Stufenstand aus {@link NachtFreigabe}, sortiert nach Kartennummer.
+   *
+   * <p>Lesen darf, wer die Läufe liest ({@link PermissionChecker#requireNightRunAccess}): Die
+   * Sichtregel gilt hier im Backend, nicht im Client.
+   */
+  @Transactional(readOnly = true)
+  public List<NachtFreigabe> heuteNacht(long userId, long projectId) {
+    permissions.requireNightRunAccess(userId, projectId);
+    return cards
+        .freigegebeneKarten(
+            projectId, FortschrittErmittlung.LABEL_NIGHT, NachtFreigabe::istStartkarte)
+        .stream()
+        .map(k -> NachtFreigabe.aus(k.number(), k.title(), k.boardName(), k.labels()))
+        .sorted(Comparator.comparingInt(NachtFreigabe::number))
+        .toList();
   }
 
   private static NightRun run(long projectId, NewNightRun submission, Instant now) {

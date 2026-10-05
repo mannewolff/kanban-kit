@@ -12,6 +12,7 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -44,7 +45,8 @@ class CardRunQueryServiceEpicsByCardNumberTest {
                 mock(CardAssigneeRepository.class),
                 mock(LabelRepository.class),
                 mock(CardLabelRepository.class),
-                mock(PermissionChecker.class)));
+                mock(PermissionChecker.class)),
+            mock(BoardService.class));
   }
 
   private static Card karte(

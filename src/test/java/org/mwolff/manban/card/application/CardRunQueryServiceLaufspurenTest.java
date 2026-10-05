@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardRunQueryService.LaufKarteView;
 import org.mwolff.manban.card.application.CardRunQueryService.TokenActivityView;
 import org.mwolff.manban.card.domain.Card;
@@ -60,7 +61,8 @@ class CardRunQueryServiceLaufspurenTest {
                 mock(CardAssigneeRepository.class),
                 labels,
                 cardLabels,
-                mock(PermissionChecker.class)));
+                mock(PermissionChecker.class)),
+            mock(BoardService.class));
   }
 
   private static Card karte(

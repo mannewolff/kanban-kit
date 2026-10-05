@@ -63,11 +63,10 @@ public final class FortschrittErmittlung {
   private static final Set<String> TYP_BEWEGT = Set.of("MOVED", "STATUS_CHANGED");
 
   /** Das Präfix eines Plandokuments — wie {@code DOKUMENT_PRAEFIX} in {@code Arbeitspaket}. */
-  private static final Pattern PLAN_PRAEFIX =
-      Pattern.compile("^\\s*\\[plan\\]", Pattern.CASE_INSENSITIVE);
+  static final Pattern PLAN_PRAEFIX = Pattern.compile("^\\s*\\[plan\\]", Pattern.CASE_INSENSITIVE);
 
   /** Das Präfix einer fachlichen Anforderung. */
-  private static final Pattern FACHLICH_PRAEFIX =
+  static final Pattern FACHLICH_PRAEFIX =
       Pattern.compile("^\\s*\\[fachlich\\]", Pattern.CASE_INSENSITIVE);
 
   /**

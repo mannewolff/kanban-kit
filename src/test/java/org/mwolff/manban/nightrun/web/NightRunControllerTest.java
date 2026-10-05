@@ -35,6 +35,8 @@ import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunView;
 import org.mwolff.manban.nightrun.domain.CardRef;
 import org.mwolff.manban.nightrun.domain.ChainProgress;
+import org.mwolff.manban.nightrun.domain.NachtFreigabe;
+import org.mwolff.manban.nightrun.domain.NachtFreigabe.Startstation;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
@@ -532,6 +534,53 @@ class NightRunControllerTest {
     when(service.list(USER, PROJECT)).thenThrow(new ProjectNotFoundException());
 
     mvc.perform(get(PATH)).andExpect(status().isNotFound());
+  }
+
+  @Test
+  void tonight_liefertJeKarteNummerTitelBoardStartZielUndPruefer() throws Exception {
+    when(service.heuteNacht(USER, PROJECT))
+        .thenReturn(
+            List.of(
+                new NachtFreigabe(
+                    12,
+                    "[Fachlich] Import",
+                    "Entwicklung",
+                    Startstation.FACHPLAN,
+                    ProgressStage.PAKETE,
+                    2),
+                new NachtFreigabe(
+                    30,
+                    "[Plan] Export",
+                    "Betrieb",
+                    Startstation.PLAN,
+                    ProgressStage.UMSETZUNG,
+                    null)));
+
+    mvc.perform(get(PATH + "/tonight"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].number").value(12))
+        .andExpect(jsonPath("$[0].title").value("[Fachlich] Import"))
+        .andExpect(jsonPath("$[0].boardName").value("Entwicklung"))
+        .andExpect(jsonPath("$[0].start").value("FACHPLAN"))
+        .andExpect(jsonPath("$[0].ziel").value("PAKETE"))
+        .andExpect(jsonPath("$[0].pruefer").value(2))
+        .andExpect(jsonPath("$[1].start").value("PLAN"))
+        .andExpect(jsonPath("$[1].ziel").value("UMSETZUNG"))
+        .andExpect(jsonPath("$[1].pruefer").doesNotExist());
+  }
+
+  @Test
+  void tonight_propagatesForbidden_forMemberWithoutOwnerRole() throws Exception {
+    when(service.heuteNacht(USER, PROJECT)).thenThrow(new ProjectAccessDeniedException());
+
+    mvc.perform(get(PATH + "/tonight")).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void tonight_propagatesNotFound_forNonMember() throws Exception {
+    when(service.heuteNacht(USER, PROJECT)).thenThrow(new ProjectNotFoundException());
+
+    mvc.perform(get(PATH + "/tonight")).andExpect(status().isNotFound());
   }
 
   @Test
