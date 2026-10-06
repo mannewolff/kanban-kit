@@ -78,6 +78,45 @@ Klick auf eine Karte öffnet das Detail:
   als 0. Den Block sieht nur, wer auch die Auswertung der Runs sehen darf (Projekt-Rolle `OWNER`,
   oder Plattform-Admin eines teilnehmenden Projekts); Anläufe verdrängter Runs bleiben darin
   erhalten.
+- **Stufenleiste der Nacht-Kette:** Eine Karte, deren Titel mit `[Fachlich]` oder `[Plan]` beginnt,
+  trägt eine waagerechte Leiste mit den Stationen der [Nacht-Kette](#nachtlauf). Über sie legst du
+  fest, wie weit die Kette diese Karte in der Nacht führt, und startest sie — ohne Labels von Hand
+  zu setzen. Andere Karten zeigen keine Leiste.
+  - **Ziel wählen:** Wählbar sind vier Ziele, je eines mit seinem Label: **Plan** (`ziel:plan`),
+    **Arbeitspakete** (`ziel:pakete`), **Umsetzung** (`ziel:umsetzung`) und **Veröffentlichung
+    vorbereitet** (`ziel:push-vorbereitet`). Ein Klick setzt das Ziel und nimmt ein vorher gewähltes
+    ab; es gibt höchstens eines je Karte. Ohne gewähltes Ziel ist **Arbeitspakete** markiert: Die
+    Kette endet dann wie bisher nach der Abdeckungsprüfung. Trägt die Karte `kit:durchziehen`, gilt
+    sie als Ziel „Umsetzung“, und ein kürzeres Ziel bliebe wirkungslos. An einem Plan sind Plan und
+    Prüfung schon erbracht und nicht wählbar. Die Pfeiltasten wechseln zwischen den Zielen.
+  - **Planprüfung:** An einer fachlichen Anforderung wählt ein Schalter, ob ein oder zwei Modelle
+    den entstehenden Plan prüfen (`planreview:1` oder `planreview:2`); ohne Wahl gilt die Vorgabe des
+    Projekts. An einem Plan, oder wenn der Plan der Anforderung schon eine Zeile „Plan-Review:“
+    trägt, ist der Schalter gesperrt.
+  - **Kette starten:** Der Knopf setzt `kit:night` und gibt die Karte damit einmal zur Übernahme
+    durch den nächsten Runner frei; er startet keinen Runner und legt keinen Zeitpunkt fest. Ist ein
+    Ziel ab „Umsetzung“ gewählt, steht vorher unter der Leiste „Mit diesem Ziel gibst du das GO für
+    alle Arbeitspakete dieser Karte.“, und der Start verlangt eine ausdrückliche Bestätigung. Bei
+    kürzeren Zielen genügt der eine Klick.
+  - **Sperrhinweise:** Der Start ist gesperrt, und ein Hinweis nennt den Grund, wenn einer
+    fachlichen Anforderung die abgeschlossene fachliche Prüfung fehlt (kein `review:fertig`), einem
+    Plan die Zeile „Plan-Review:“, oder wenn an der Karte eine offene Frage auf einen Menschen
+    wartet (`kit:klaeren`, `lauf:wartet`). Fehlt am Board eines der Labels, legt die Leiste es nicht
+    an: Der Hinweis nennt seinen Namen, und ein Mensch legt es in den Board-Labels an.
+  - **Start zurücknehmen:** Solange kein Runner die Karte übernommen hat, nimmt „Start
+    zurücknehmen“ `kit:night` wieder ab; danach sind Ziel und Prüferzahl wieder frei wählbar.
+    Übernimmt ein Runner die Karte, nimmt er `kit:night`, `ziel:*` und `planreview:*` zusammen ab, und
+    die Leiste ist nur noch Anzeige.
+  - **Während und nach dem Lauf** zeigt die Leiste je Station Text und Symbol: „erledigt“, „läuft“
+    (an der Prüfung mit gewählter Prüferzahl etwa „läuft (2 Prüfer)“), „wartet“ mit dem Wartegrund,
+    „abgebrochen“, „steht aus“, „nicht vorgesehen“ hinter dem Ziel und „vor dem Lauf erbracht“ bei
+    einem Plan als Startkarte. Das gewählte Ziel bleibt markiert; erreicht die Kette es, steht dort
+    „Ziel erreicht“. Bleibt sie an einer Grenze stehen, die das Projekt verbietet, trägt die erste
+    nicht erreichte Station „Projektgrenze“ mit dem gemeldeten Grund. Laufen mehrere Runner, zeigt die
+    Leiste den Lauf, der diese Karte bearbeitet.
+
+  Ziel wählen, starten und zurücknehmen darf, wer die Karte bearbeiten darf (`TICKET_UPDATE`); wer
+  das nicht darf, sieht die Leiste nur. Siehe [Rollen & Rechte](rollen-und-rechte.md#projekt-rollen-rechte-matrix).
 - **Kommentare:** schreiben; eigene Kommentare löschen (Moderation durch ADMIN/OWNER).
 - **Aktivität:** ein chronologischer Verlauf am Ende des Details — „*Zeitpunkt* · *Person* · *Aktion*".
   Protokolliert werden Anlegen, Bearbeiten, Zuständige geändert, Verschieben, Archivieren und
@@ -332,6 +371,38 @@ Run, der bereits ausgewertet wurde, wird als **„lag schon vor"** gemeldet und 
 die übrigen Runs derselben Datei entstehen trotzdem. Und ein **nachgereichter Run**, der älter ist
 als alle 190 aufbewahrten, verdrängt keinen neueren — er wird angelegt und sogleich wieder verdrängt,
 erscheint also nach dem Einlesen nicht in der Liste.
+
+### Heute Nacht
+
+Die Übersicht **„Heute Nacht“** zeigt alle Karten des Projekts, deren Kette an der
+[Stufenleiste](#karten-detail) gestartet und noch von keinem Runner übernommen wurde — über alle
+Boards hinweg. Jede Zeile nennt Kartennummer (ein Link, der die Karte öffnet), Titel, Board, das
+gewählte Ziel („Ziel: Umsetzung“), die Prüferzahl, falls gewählt, und eine kleine Stufenleiste mit
+dem Weg der Kette. Übernimmt ein Runner die Karte, verlässt sie die Übersicht. Ist keine Karte
+freigegeben, steht dort „Für die nächste Nacht ist keine Karte freigegeben.“
+
+Die Übersicht sieht, wer die Runner-Seite sehen darf. Ein Projektmitglied, das eine Kette startet,
+ohne die Runner-Seite zu sehen, verfolgt Ziel und Fortschritt an der Stufenleiste der Karte.
+
+### Morgenkachel „Veröffentlichung vorbereitet“
+
+Hat ein Lauf eine Veröffentlichung vorbereitet (Ziel `ziel:push-vorbereitet`), steht in seiner
+aufgeklappten Zeile die Kachel **„Veröffentlichung vorbereitet“**. Sie nennt die Version des Stands,
+den Eingang der Meldung als „gemeldet um *Tag, Uhrzeit*“ — einen eigenen Zeitpunkt der Vorbereitung
+meldet das Kit nicht — und einen von vier Ausgängen, jeweils mit Symbol und Text neben der Lampe:
+
+- **grün:** Der vorbereitete Stand ist geprüft. Darunter steht „Der Stand kann von Hand
+  veröffentlicht werden.“
+- **grün, Prüfung offen:** Der Stand ist grün, einzelne Prüfungen stehen aber noch aus; sie stehen
+  unter „Offene Prüfungen“.
+- **rot:** Die fehlgeschlagene Prüfung steht unter „Fehlgeschlagene Prüfung“, die Karten, die sie
+  verursacht haben, unter „Betroffene Karten“.
+- **nicht vorbereitet:** In diesem Lauf wurde keine Veröffentlichung vorbereitet.
+
+Mit „Stand:“ nennt die Kachel die Kennung des vorbereiteten Stands (den Commit), mit der du ihn
+außerhalb des Boards wiederfindest. Unter „Enthaltene Arbeitspakete“ stehen alle Pakete des Stands
+mit Nummer und Titel, auch solche aus anderen Ketten. **Veröffentlicht wird von Hand**, außerhalb
+des Boards: Die Kachel bietet keinen Knopf dafür.
 
 ### Fortschritt eines laufenden Runs
 
