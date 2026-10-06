@@ -39,6 +39,11 @@ class LabelRepositoryAdapter implements LabelRepository {
   }
 
   @Override
+  public boolean insertIfAbsent(long boardId, String name, String color) {
+    return jpa.insertIfAbsent(boardId, name, color) == 1;
+  }
+
+  @Override
   public void deleteById(long id) {
     jpa.deleteById(id);
   }
