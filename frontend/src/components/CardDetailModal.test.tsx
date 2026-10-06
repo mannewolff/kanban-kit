@@ -116,7 +116,11 @@ function makeApis() {
   }
   const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
   // Die Anlaeufe einer Karte (Issue #968); leer, damit der Block die uebrigen Faelle nicht beruehrt.
-  const nightRunsApi = { anlaeufeDerKarte: vi.fn().mockResolvedValue([]) }
+  // Der Kettenstand der Stufenleiste (Issue #1453) lädt nie: Die Leiste bleibt beim Stand vor dem Lauf.
+  const nightRunsApi = {
+    anlaeufeDerKarte: vi.fn().mockResolvedValue([]),
+    kettenstand: vi.fn(() => new Promise<never>(() => {})),
+  }
   return { commentsApi, attachmentsApi, cardsApi, boardsApi, nightRunsApi }
 }
 
@@ -2737,6 +2741,98 @@ describe('CardDetailModal — Statuswechsler', () => {
       expect(screen.getByText('Anhänge')).toBeInTheDocument()
       expect(screen.queryByTestId('karten-anlaeufe')).not.toBeInTheDocument()
       expect(screen.queryByText(/Anläufe konnten nicht geladen/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Stufenleiste (Issue #1449)', () => {
+    const zielLabels = [
+      { id: 21, boardId: 1, name: 'ziel:pakete', color: '#888', countOnEpicTile: false },
+      { id: 22, boardId: 1, name: 'ziel:umsetzung', color: '#888', countOnEpicTile: false },
+    ]
+    const fachlich: Card = { ...card, title: '[Fachlich] Neue Ansicht' }
+
+    const oeffne = (c: Card, props: Partial<ComponentProps<typeof CardDetailModal>> = {}) => {
+      const apis = makeApis()
+      apis.cardsApi.get.mockResolvedValue({ ...c })
+      render(<CardDetailModal card={c} canEdit boardLabels={zielLabels} onClose={vi.fn()} {...apis} {...props} />)
+      return apis
+    }
+
+    it('zeigt die Leiste nur an Karten mit [Fachlich]- oder [Plan]-Präfix', async () => {
+      oeffne(card)
+      expect(await screen.findByText('Hallo')).toBeInTheDocument()
+      expect(screen.queryByTestId('ketten-stufenleiste')).not.toBeInTheDocument()
+    })
+
+    it('zeigt die Leiste an einer [Plan]-Karte', async () => {
+      oeffne({ ...card, title: '[Plan] Neue Ansicht' })
+      expect(await screen.findByTestId('ketten-stufenleiste')).toBeInTheDocument()
+    })
+
+    it('speichert das gewählte Ziel über den Label-Aufruf der Karte', async () => {
+      const apis = oeffne(fachlich)
+
+      const leiste = within(await screen.findByTestId('ketten-stufenleiste'))
+      fireEvent.click(leiste.getByRole('button', { name: /^Umsetzung/ }))
+
+      await waitFor(() => expect(apis.cardsApi.setLabels).toHaveBeenCalledWith(100, [22]))
+    })
+
+    it('ist bei canEdit={false} nur Anzeige', async () => {
+      oeffne(fachlich, { canEdit: false })
+
+      const leiste = await screen.findByTestId('ketten-stufenleiste')
+      expect(within(leiste).queryAllByRole('button')).toHaveLength(0)
+    })
+
+    it('ist ohne geladenen Label-Vorrat nur Anzeige', async () => {
+      oeffne(fachlich, { canEditLabels: false })
+
+      const leiste = await screen.findByTestId('ketten-stufenleiste')
+      expect(within(leiste).queryAllByRole('button')).toHaveLength(0)
+    })
+
+    it('reicht den Body an die Leiste: ein [Plan] mit Zeile Plan-Review: lässt sich starten (Issue #1450)', async () => {
+      const plan: Card = { ...card, title: '[Plan] Neue Ansicht', description: 'Plan.\nPlan-Review: fable' }
+      const apis = oeffne(plan, {
+        boardLabels: [...zielLabels, { id: 23, boardId: 1, name: 'kit:night', color: '#888', countOnEpicTile: false }],
+      })
+
+      const leiste = within(await screen.findByTestId('ketten-stufenleiste'))
+      fireEvent.click(leiste.getByRole('button', { name: 'Kette starten' }))
+
+      await waitFor(() => expect(apis.cardsApi.setLabels).toHaveBeenCalledWith(100, [23]))
+    })
+
+    it('sperrt den Start an einem [Plan] ohne Body (Issue #1450)', async () => {
+      const plan: Card = { ...card, title: '[Plan] Neue Ansicht', description: null }
+      oeffne(plan, {
+        boardLabels: [...zielLabels, { id: 23, boardId: 1, name: 'kit:night', color: '#888', countOnEpicTile: false }],
+      })
+
+      const leiste = within(await screen.findByTestId('ketten-stufenleiste'))
+      expect(leiste.getByRole('button', { name: 'Kette starten' })).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('reicht die Kommentare an die Leiste: nach der Übernahme ist sie nur Anzeige (Issue #1450)', async () => {
+      const apis = makeApis()
+      apis.cardsApi.get.mockResolvedValue({ ...fachlich })
+      apis.commentsApi.list = vi.fn().mockResolvedValue([
+        {
+          id: 1,
+          cardId: 100,
+          authorUserId: 1,
+          authorName: 'Runner',
+          body: '## Laufstand\n\nProtokoll: .claude/protokolle/2026-10-05-175710/100-umsetzung.log',
+          createdAt: '2026-10-05T18:00:00Z',
+          updatedAt: '2026-10-05T18:00:00Z',
+        },
+      ])
+      render(<CardDetailModal card={fachlich} canEdit boardLabels={zielLabels} onClose={vi.fn()} {...apis} />)
+
+      expect(await screen.findByText(/Ein Runner hat die Kette übernommen/)).toBeInTheDocument()
+      const leiste = screen.getByTestId('ketten-stufenleiste')
+      expect(within(leiste).queryAllByRole('button')).toHaveLength(0)
     })
   })
 })

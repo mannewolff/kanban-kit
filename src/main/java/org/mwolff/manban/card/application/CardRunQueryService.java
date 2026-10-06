@@ -10,8 +10,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.card.domain.Arbeitspaket;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
@@ -28,18 +31,28 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Ohne Rechteprüfung: Alle Methoden sind Vertrag für fremde Module (heute {@code nightrun}), die
  * ihre eigene Prüfung bereits vorgenommen haben.
  */
+// PMD.CouplingBetweenObjects: Die Fassade ist der eine Zugang von nightrun zu den Karten (Issue
+// #1452); sie kennt darum die Ports, die Zuordnung und je Abfrage ihre Sicht. Mit Issue #1454 kommt
+// die board-Fassade dazu, weil „Heute Nacht" Boardnamen und den Archiv-Zustand braucht. Eine
+// Aufteilung gaebe nightrun einen zweiten Zugang, ohne eine Abfrage einfacher zu machen.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CardRunQueryService {
 
   private final CardRepository cards;
   private final CardActivityRepository activity;
   private final KartenZuordnung zuordnung;
+  private final BoardService boards;
 
   public CardRunQueryService(
-      CardRepository cards, CardActivityRepository activity, KartenZuordnung zuordnung) {
+      CardRepository cards,
+      CardActivityRepository activity,
+      KartenZuordnung zuordnung,
+      BoardService boards) {
     this.cards = cards;
     this.activity = activity;
     this.zuordnung = zuordnung;
+    this.boards = boards;
   }
 
   /**
@@ -123,6 +136,29 @@ public class CardRunQueryService {
   }
 
   /**
+   * Zu den genannten Kartennummern des Projekts ihre Titel (Issue #1457) — für die Morgenmeldung,
+   * deren Pakete auch aus fremden Ketten desselben Projekts stammen können.
+   *
+   * <p>Ein Abruf für alle Nummern, nicht einer je Nummer. Gelesen wird wie bei {@link
+   * CardRepository#findByProjectId}: nur Karten dieses Projekts, Papierkorb-Karten nicht.
+   * Unbekannte Nummern fehlen im Ergebnis; eine leere Nummernmenge fragt die Datenbank nicht. Ohne
+   * Rechteprüfung wie {@link #existingCardNumbers}.
+   *
+   * @return je gefundener Nummer der Titel ihrer Karte
+   */
+  @Transactional(readOnly = true)
+  public Map<Integer, String> titlesByCardNumber(long projectId, Collection<Integer> cardNumbers) {
+    if (cardNumbers.isEmpty()) {
+      return Map.of();
+    }
+    Set<Integer> gesucht = Set.copyOf(cardNumbers);
+    return cards.findByProjectId(projectId).stream()
+        .filter(c -> gesucht.contains(c.number()))
+        // Ohne Zusammenfuehrung: Kartennummern sind projektweit eindeutig.
+        .collect(Collectors.toUnmodifiableMap(Card::number, Card::title));
+  }
+
+  /**
    * Die Kartenaktivitäten eines Nachtlaufs im Zeitfenster (Issue #1373, Plan #1372 E2): Herkunft
    * {@code TOKEN} mit diesem Token-Namen, gesetztes {@code agent}, Zeitpunkt in {@code [von, bis]}.
    * Chronologisch; je Eintrag nur Karte, Art und Zeitpunkt.
@@ -134,7 +170,16 @@ public class CardRunQueryService {
   public List<TokenActivityView> tokenActivitiesInWindow(
       long projectId, String tokenName, Instant von, Instant bis) {
     return activity.findTokenActivitiesInWindow(projectId, tokenName, von, bis).stream()
-        .map(a -> new TokenActivityView(a.cardId(), a.type().name(), a.createdAt()))
+        .map(
+            a -> {
+              CardStatus statusAfter = a.statusAfter();
+              return new TokenActivityView(
+                  a.cardId(),
+                  a.type().name(),
+                  a.createdAt(),
+                  a.laufStart(),
+                  statusAfter == null ? null : statusAfter.name());
+            })
         .toList();
   }
 
@@ -179,14 +224,79 @@ public class CardRunQueryService {
   }
 
   /**
+   * Projekt-ID der Karte für den Kettenstand (Issue #1452) — wie {@link
+   * CardService#requireProjectId}, hier, damit {@code nightrun} bei seinem einen Zugang bleibt.
+   *
+   * @throws CardNotFoundException wenn die Karte nicht existiert
+   */
+  @Transactional(readOnly = true)
+  public long requireProjectId(long cardId) {
+    return cards.findById(cardId).orElseThrow(CardNotFoundException::new).projectId();
+  }
+
+  /**
+   * Die Karten, die aus der genannten entstanden sind (Herkunft {@code derivedFrom}, Issue #1452) —
+   * mit denselben Angaben wie {@link #cardsByIds}. Ohne Rechteprüfung wie dort.
+   */
+  @Transactional(readOnly = true)
+  public List<LaufKarteView> derivedCards(long cardId) {
+    return cardsByIds(cards.findByDerivedFrom(cardId).stream().map(Card::requireId).toList());
+  }
+
+  /**
+   * Die Karten des Projekts, deren Titel {@code titel} erfüllt und die das Label {@code label}
+   * tragen (Issue #1454) — für die Übersicht „Heute Nacht“ über alle Boards. Karten im Papierkorb
+   * und Karten archivierter Boards fehlen; die Reihenfolge ist die des Ports.
+   *
+   * <p>Der Titelfilter kommt vor den Labels: Nach Labels gefragt wird nur für die wenigen Karten,
+   * die ihn erfüllen, nicht für jede Karte des Projekts. Ohne Rechteprüfung wie {@link
+   * #cardsByIds}.
+   */
+  @Transactional(readOnly = true)
+  public List<FreigabeKarteView> freigegebeneKarten(
+      long projectId, String label, Predicate<String> titel) {
+    List<Card> kandidaten =
+        cards.findByProjectId(projectId).stream().filter(c -> titel.test(c.title())).toList();
+    Map<Long, BoardSummary> boardJeId = new HashMap<>();
+    kandidaten.stream()
+        .map(Card::boardId)
+        .distinct()
+        .forEach(id -> boardJeId.put(id, boards.requireBoardSummary(id)));
+    Map<Long, Long> boardJeKarte = new LinkedHashMap<>();
+    kandidaten.stream()
+        .filter(c -> !Objects.requireNonNull(boardJeId.get(c.boardId())).archived())
+        .forEach(c -> boardJeKarte.put(c.requireId(), c.boardId()));
+    Map<Long, List<String>> labelNamen = zuordnung.labelNamenJeKarte(boardJeKarte);
+    return kandidaten.stream()
+        .filter(c -> labelNamen.getOrDefault(c.requireId(), List.of()).contains(label))
+        .map(
+            c ->
+                new FreigabeKarteView(
+                    c.number(),
+                    c.title(),
+                    Objects.requireNonNull(boardJeId.get(c.boardId())).name(),
+                    labelNamen.getOrDefault(c.requireId(), List.of())))
+        .toList();
+  }
+
+  /**
    * Eine Kartenaktivität eines Nachtlaufs als Fassaden-Sicht (Issue #1373).
    *
    * @param cardId Karte, an der die Aktivität stattfand
    * @param type Konstantenname von {@code CardActivityType}, etwa {@code CREATED} oder {@code
    *     MOVED}
    * @param createdAt Zeitpunkt der Aktivität
+   * @param laufStart Laufkennung des Nachtlaufs, der die Aktivität auslöste (Issue #1426); {@code
+   *     null}, wenn er sich nicht ausgewiesen hat
+   * @param statusAfter Konstantenname von {@code CardStatus} nach einer Bewegung ({@code MOVED},
+   *     {@code STATUS_CHANGED}, Issue #1427); sonst {@code null}
    */
-  public record TokenActivityView(long cardId, String type, Instant createdAt) {}
+  public record TokenActivityView(
+      long cardId,
+      String type,
+      Instant createdAt,
+      @Nullable Instant laufStart,
+      @Nullable String statusAfter) {}
 
   /**
    * Eine Karte, wie die Ermittlung des Lauf-Fortschritts sie braucht (Issue #1373).
@@ -210,4 +320,13 @@ public class CardRunQueryService {
       String type,
       boolean arbeitspaket,
       @Nullable String description) {}
+
+  /**
+   * Eine zur Übernahme freigegebene Karte (Issue #1454).
+   *
+   * @param boardName Name des Boards der Karte
+   * @param labels Labelnamen der Karte, alphabetisch
+   */
+  public record FreigabeKarteView(
+      int number, String title, String boardName, List<String> labels) {}
 }

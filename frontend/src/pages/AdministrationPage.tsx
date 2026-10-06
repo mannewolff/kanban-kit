@@ -8,6 +8,7 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
+import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Switch from '@mui/material/Switch'
@@ -17,11 +18,13 @@ import Typography from '@mui/material/Typography'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useEffect, useState } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 import { APP_NAME } from '../appMeta'
 import { accessTokensApi, type AccessToken, type CreatedAccessToken } from '../api/accessTokens'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { configApi } from '../api/config'
+import { OPENAPI_JSON_PFAD, OPENAPI_YAML_PFAD } from '../api/openapi'
 import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
@@ -69,6 +72,8 @@ export function AdministrationPage() {
         <DoneRetentionSection />
 
         <ApiTokensSection />
+
+        <ApiUebersichtSection />
       </Stack>
     </Box>
   )
@@ -345,6 +350,43 @@ function ApiTokensSection() {
           reloadTokens()
         }}
       />
+    </Paper>
+  )
+}
+
+/**
+ * Einstieg in die Übersicht der Schnittstelle (Issue #1410, Plan #1400 E3) samt Downloads der
+ * Beschreibung. Sichtbar für jeden Angemeldeten — die Übersicht zeigt die gesamte API.
+ */
+function ApiUebersichtSection() {
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack spacing={1.5}>
+        <Typography variant="h6" component="h2">
+          API-Schnittstelle
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Alle Aufrufe des Leitstands mit Zweck, Eingaben, Antworten und Stabilitätsangabe — zum
+          Nachschlagen, ohne Ausprobieren. Die Beschreibung lässt sich als OpenAPI 3 herunterladen.
+        </Typography>
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            size="small"
+            component={RouterLink}
+            to="/administration/api"
+            aria-label="API-Übersicht öffnen"
+          >
+            Übersicht öffnen
+          </Button>
+          <Link href={OPENAPI_JSON_PFAD} download aria-label="OpenAPI als JSON herunterladen">
+            OpenAPI (JSON)
+          </Link>
+          <Link href={OPENAPI_YAML_PFAD} download aria-label="OpenAPI als YAML herunterladen">
+            OpenAPI (YAML)
+          </Link>
+        </Stack>
+      </Stack>
     </Paper>
   )
 }

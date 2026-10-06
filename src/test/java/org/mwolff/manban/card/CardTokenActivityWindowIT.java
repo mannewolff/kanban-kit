@@ -121,8 +121,8 @@ class CardTokenActivityWindowIT extends AbstractIntegrationTest {
 
     assertThat(imFenster())
         .containsExactly(
-            new TokenActivityView(karte, "CREATED", DRIN),
-            new TokenActivityView(karte, "MOVED", DRIN.plusSeconds(60)));
+            new TokenActivityView(karte, "CREATED", DRIN, null, null),
+            new TokenActivityView(karte, "MOVED", DRIN.plusSeconds(60), null, null));
   }
 
   /** AK: Eine Aktivität ohne {@code agent} stammt nicht vom Nachtbetrieb und zählt nicht (E2). */

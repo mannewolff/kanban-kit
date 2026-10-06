@@ -51,6 +51,7 @@ class KanbanCompatServiceTest {
 
   private static final long BOARD = 10L;
   private static final long PROJECT = 5L;
+  private static final Instant LAUF = Instant.parse("2026-10-05T08:58:22.123Z");
   private static final String BACKLOG_KEY = "BACKLOG";
 
   private BoardService boardService;
@@ -1038,10 +1039,32 @@ class KanbanCompatServiceTest {
   @Test
   void comment_delegatesToCommentService() {
     // When
-    service.comment(bound(), 1L, "Hallo", null);
+    service.comment(bound(), 1L, "Hallo", null, null);
 
     // Then
-    verify(commentService).create(1L, 1L, "Hallo");
+    verify(commentService).create(1L, 1L, "Hallo", null);
+  }
+
+  @Test
+  void comment_reichtDieLaufkennungAnDenCommentServiceDurch() {
+    // Issue #1428: die Kennung aus X-Night-Run geht unverändert an das Anlegen.
+    service.comment(bound(), 1L, "Hallo", null, LAUF);
+
+    verify(commentService).create(1L, 1L, "Hallo", LAUF);
+  }
+
+  @Test
+  void comment_reichtDieLaufkennungAuchAufDemIdempotenzPfadDurch() {
+    // Given
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+
+    // When: die Wiederholung legt nichts neu an, die Kennung bleibt die des ersten Anlegens.
+    service.comment(bound(), 1L, "Hallo", "k-1", LAUF);
+    service.comment(bound(), 1L, "Hallo", "k-1", Instant.parse("2026-10-05T10:00:00Z"));
+
+    // Then
+    verify(commentService, times(1)).create(1L, 1L, "Hallo", LAUF);
+    verify(commentService, times(1)).create(anyLong(), anyLong(), anyString(), any());
   }
 
   @Test
@@ -1050,11 +1073,11 @@ class KanbanCompatServiceTest {
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
 
     // When
-    service.comment(bound(), 1L, "Hallo", "k-1");
-    service.comment(bound(), 1L, "Hallo", "k-1");
+    service.comment(bound(), 1L, "Hallo", "k-1", null);
+    service.comment(bound(), 1L, "Hallo", "k-1", null);
 
     // Then
-    verify(commentService, times(1)).create(1L, 1L, "Hallo");
+    verify(commentService, times(1)).create(1L, 1L, "Hallo", null);
     assertThat(idempotencyStore.size()).isEqualTo(1);
   }
 
@@ -1064,20 +1087,20 @@ class KanbanCompatServiceTest {
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
 
     // When
-    service.comment(bound(), 1L, "Hallo", "k-1");
-    service.comment(bound(), 1L, "Hallo", "k-2");
+    service.comment(bound(), 1L, "Hallo", "k-1", null);
+    service.comment(bound(), 1L, "Hallo", "k-2", null);
 
     // Then
-    verify(commentService, times(2)).create(1L, 1L, "Hallo");
+    verify(commentService, times(2)).create(1L, 1L, "Hallo", null);
     assertThat(idempotencyStore.size()).isEqualTo(2);
   }
 
   @Test
   void comment_withBlankIdempotencyKey_behavesAsWithout() {
-    service.comment(bound(), 1L, "Hallo", "   ");
-    service.comment(bound(), 1L, "Hallo", "   ");
+    service.comment(bound(), 1L, "Hallo", "   ", null);
+    service.comment(bound(), 1L, "Hallo", "   ", null);
 
-    verify(commentService, times(2)).create(1L, 1L, "Hallo");
+    verify(commentService, times(2)).create(1L, 1L, "Hallo", null);
     assertThat(idempotencyStore.size()).isZero();
   }
 
@@ -1085,7 +1108,7 @@ class KanbanCompatServiceTest {
   void comment_withIdempotencyKey_stillChecksTheBoardFirst() {
     doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
 
-    assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo", "k-1"))
+    assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo", "k-1", null))
         .isInstanceOf(CardNotFoundException.class);
     assertThat(idempotencyStore.size()).isZero();
   }
@@ -1146,7 +1169,7 @@ class KanbanCompatServiceTest {
     doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(1L, BOARD);
 
     // When / Then
-    assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo", null))
+    assertThatThrownBy(() -> service.comment(bound(), 1L, "Hallo", null, null))
         .isInstanceOf(CardNotFoundException.class);
   }
 
@@ -1243,10 +1266,24 @@ class KanbanCompatServiceTest {
         .thenReturn(List.of(new CommentService.CommentView(9L, 42L, 1L, "Anna", "Alt", at, at)));
 
     // When
-    service.updateComment(bound(), 42L, 9L, "Neu");
+    service.updateComment(bound(), 42L, 9L, "Neu", null);
 
     // Then
-    verify(commentService).update(1L, 9L, "Neu");
+    verify(commentService).update(1L, 9L, "Neu", null);
+  }
+
+  @Test
+  void updateComment_reichtDieLaufkennungAnDenCommentServiceDurch() {
+    // Given: der Kommentar 9 haengt an der Karte 42 (Issue #1428)
+    Instant at = Instant.parse("2026-01-01T10:00:00Z");
+    when(commentService.list(1L, 42L))
+        .thenReturn(List.of(new CommentService.CommentView(9L, 42L, 1L, "Anna", "Alt", at, at)));
+
+    // When
+    service.updateComment(bound(), 42L, 9L, "Neu", LAUF);
+
+    // Then
+    verify(commentService).update(1L, 9L, "Neu", LAUF);
   }
 
   @Test
@@ -1259,7 +1296,7 @@ class KanbanCompatServiceTest {
 
     // When / Then
     KanbanPrincipal principal = bound();
-    assertThatThrownBy(() -> service.updateComment(principal, 42L, 9L, "Neu"))
+    assertThatThrownBy(() -> service.updateComment(principal, 42L, 9L, "Neu", null))
         .isInstanceOf(CommentNotFoundException.class);
     verify(commentService, never()).update(anyLong(), anyLong(), anyString());
   }
@@ -1271,7 +1308,7 @@ class KanbanCompatServiceTest {
 
     // When / Then
     KanbanPrincipal principal = bound();
-    assertThatThrownBy(() -> service.updateComment(principal, 42L, 9L, "Neu"))
+    assertThatThrownBy(() -> service.updateComment(principal, 42L, 9L, "Neu", null))
         .isInstanceOf(CardNotFoundException.class);
     verify(commentService, never()).update(anyLong(), anyLong(), anyString());
   }
@@ -1282,7 +1319,7 @@ class KanbanCompatServiceTest {
     KanbanPrincipal unbound = new KanbanPrincipal(1L, 2L, null, null, "Token");
 
     // When / Then
-    assertThatThrownBy(() -> service.updateComment(unbound, 42L, 9L, "Neu"))
+    assertThatThrownBy(() -> service.updateComment(unbound, 42L, 9L, "Neu", null))
         .isInstanceOf(TokenNotBoundException.class);
   }
 

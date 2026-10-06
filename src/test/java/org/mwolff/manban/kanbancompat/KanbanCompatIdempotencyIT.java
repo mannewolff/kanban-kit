@@ -91,8 +91,8 @@ class KanbanCompatIdempotencyIT extends AbstractIntegrationTest {
     TransactionRace.Result race =
         new TransactionRace(transactionManager, dataSource)
             .run(
-                () -> service.comment(principal, cardId, "Einmal", "k-comment"),
-                () -> service.comment(principal, cardId, "Einmal", "k-comment"));
+                () -> service.comment(principal, cardId, "Einmal", "k-comment", null),
+                () -> service.comment(principal, cardId, "Einmal", "k-comment", null));
 
     assertThat(race.firstFailure()).isNull();
     assertThat(race.secondFailure()).isNull();

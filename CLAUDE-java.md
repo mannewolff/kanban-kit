@@ -252,6 +252,18 @@ ganze Seite aus — rund 2 Minuten —, statt anzuhalten; der sofortige Halt gil
 - ❌ `instanceof`-Ketten statt Polymorphie (außer `switch` über sealed types).
 - ❌ Zyklische Paketabhängigkeiten — ArchUnit-Test ist Pflicht.
 
+### 6.6 API-Beschreibung
+
+Die API-Übersicht (Swagger UI in der Administration) entsteht aus dem Code; eine getrennt gepflegte Fassung gibt es nicht (Issue #1411, Plan #1400).
+
+- **Jeder neue oder geänderte Endpunkt** trägt `@Operation` (Zweck, Begriffe ohne Kit-Wissen erklärt) und `@ApiResponse` für jede mögliche Antwort einschließlich der Fehlerfälle. `OpenApiIT` bricht ab, wenn eine Angabe fehlt.
+- **Stabilität und Recht** stehen in [`@ApiVertrag`](src/main/java/org/mwolff/manban/common/web/api/ApiVertrag.java). Ohne die Annotation gilt ein Aufruf als änderbar.
+- **Ein verlässlicher Aufruf ändert sich nur über Abkündigung:** zuerst `@ApiVertrag(abgekuendigtSeit = "x.y")`, Änderung oder Wegfall frühestens eine Minor-Version später. Dazu gehören immer:
+  - der nachgezogene Vertragsschnappschuss `src/test/resources/openapi/verlaessliche-aufrufe.json`,
+  - ein Commit in der festen Form `API: <METHODE> <Pfad> — neu verlässlich | abgekündigt seit x.y | geändert | entfernt (Issue #n)` — mehrere Aufrufe kommagetrennt. `scripts/gen-changelog.mjs` stellt ihn als **API-Änderung** an den Anfang des Versionsblocks im `CHANGELOG.md`,
+  - ein Anpassungshinweis in [UPGRADING.md](UPGRADING.md), wenn fremde Anbindungen etwas ändern müssen.
+- **Der Review** prüft am Diff des Schnappschusses, dass zwischen Abkündigung und Änderung oder Wegfall mindestens eine Minor-Version liegt.
+
 ---
 
 ## 7. Statische Analyse und Formatierung

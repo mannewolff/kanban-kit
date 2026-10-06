@@ -16,6 +16,7 @@
 	# rechts und kaeme damit zurecht (Issue #899, E2) — aber diese zweite Linie im Proxy haelt
 	# die Umgehung auch dann geschlossen, wenn spaeter trusted-proxy-count oder die
 	# Filterreihenfolge geaendert wird, ohne dass es jemandem auffaellt.
-	header_up X-Forwarded-For {remote_host}
-	reverse_proxy manban-api:8080
+	reverse_proxy manban-api:8080 {
+		header_up X-Forwarded-For {remote_host}
+	}
 }

@@ -11,6 +11,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Card, CardByNumber } from '../api/cards'
 import type {
+  HeuteNachtKarte,
   NightRunBudgetView,
   NightRunErrorClassCounts,
   NightRunItemStageView,
@@ -304,6 +305,7 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
       // Der Upload-Weg fuehrt keine Budgets (E14); der Server legt sie zu einem eingelesenen Lauf
       // fest als „nicht gemeldet" ab.
       budget: null,
+      releasePreparation: null,
       items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
       outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
   }
@@ -377,6 +379,7 @@ function aufbewahrt(
     noWorkReason: null,
     abortReason: null,
     budget: null,
+    releasePreparation: null,
     ...rest,
     items: (items ?? []).map(wieAufbewahrtesItem),
     outcome:
@@ -445,6 +448,11 @@ interface Antworten {
    * unerwartete Anfrage.
    */
   fortschritte?: Record<number, NightRunProgressView[]>
+  /**
+   * Die Antwort von `GET …/night-runs/tonight` (Issue #1455); `'verboten'` antwortet mit 403. Ohne
+   * Angabe ist keine Karte freigegeben.
+   */
+  heuteNacht?: HeuteNachtKarte[] | 'verboten'
 }
 
 /** Alle Anfragen dieses Tests, in Reihenfolge — Grundlage der Sende- und Ladepfad-Prüfungen. */
@@ -548,6 +556,16 @@ function fortschrittAntwort(url: string, naechster: ReadonlyMap<number, ReturnTy
   return treffer === null ? undefined : naechster.get(Number(treffer[1]))?.()
 }
 
+/** Die Übersicht „Heute Nacht“ (Issue #1455); ohne Vorgabe ist keine Karte freigegeben. */
+function heuteNachtAntwort(url: string, antworten: Antworten) {
+  if (url !== '/api/projects/5/night-runs/tonight') return undefined
+  return Promise.resolve(
+    antworten.heuteNacht === 'verboten'
+      ? antwortFehler('Kein Zugriff', 403)
+      : antwortOk(antworten.heuteNacht ?? []),
+  )
+}
+
 function stubFetch(antworten: Antworten) {
   const naechsteListe = folge(antworten.listen ?? [[]])
   const naechsterZaehler = folge(antworten.zaehler ?? [{}])
@@ -584,7 +602,8 @@ function stubFetch(antworten: Antworten) {
       const karte =
         kartenAntwort(url, antworten) ??
         herkunftsAntwort(url, antworten) ??
-        fortschrittAntwort(url, naechsterFortschritt)
+        fortschrittAntwort(url, naechsterFortschritt) ??
+        heuteNachtAntwort(url, antworten)
       if (karte) return karte
 
       return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
@@ -1049,6 +1068,58 @@ describe('NightRunPage — aufbewahrte Läufe beim Öffnen', () => {
     renderPage({ listenFehler: 'Nur der Owner darf die Auswertung sehen.' })
 
     expect(await screen.findByText('Nur der Owner darf die Auswertung sehen.')).toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Übersicht „Heute Nacht“ (Issue #1455)', () => {
+  const freigegeben = (felder: Partial<HeuteNachtKarte> & { number: number }): HeuteNachtKarte => ({
+    title: `[Fachlich] Karte ${felder.number}`,
+    boardName: 'Entwicklung',
+    start: 'FACHPLAN',
+    ziel: 'PAKETE',
+    pruefer: null,
+    ...felder,
+  })
+
+  it('bindet die Übersicht oberhalb der Laufplatten ein und öffnet ihre Karten', async () => {
+    renderPage({
+      listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0) })]],
+      heuteNacht: [
+        freigegeben({ number: 1420, ziel: 'UMSETZUNG', pruefer: 2 }),
+        freigegeben({ number: 1447, title: '[Plan] Stufenleiste', boardName: 'Betrieb', start: 'PLAN' }),
+      ],
+      karten: { 1447: karte({ id: 9, number: 1447, title: '[Plan] Stufenleiste' }) },
+    })
+
+    const uebersicht = await screen.findByTestId('heute-nacht-karte-1447')
+    expect(screen.getByTestId('heute-nacht-karte-1420')).toBeInTheDocument()
+    expect(within(uebersicht).getByText('Board: Betrieb')).toBeInTheDocument()
+    const bereich = screen.getByTestId('heute-nacht')
+    expect(screen.getByTestId('kupferwarte-bereich')).toContainElement(bereich)
+    // Oberhalb der Laufplatten: Die Übersicht steht im Dokument vor dem ersten Lauf.
+    expect(bereich.compareDocumentPosition(lauf(0)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(anfragen.filter((a) => a.url === '/api/projects/5/night-runs/tonight')).toHaveLength(1)
+
+    fireEvent.click(within(uebersicht).getByRole('button', { name: /#1447/ }))
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Karte 1447')
+  })
+
+  it('sagt ausdrücklich, wenn keine Karte freigegeben ist', async () => {
+    renderPage({ heuteNacht: [] })
+
+    expect(await screen.findByText('Für die nächste Nacht ist keine Karte freigegeben.')).toBeInTheDocument()
+    expect(screen.getByText('Noch keine Auswertung vorhanden.')).toBeInTheDocument()
+  })
+
+  it('lässt die Übersicht ohne Leserecht (403) weg', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0) })]], heuteNacht: 'verboten' })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    await waitFor(() =>
+      expect(anfragen.some((a) => a.url === '/api/projects/5/night-runs/tonight')).toBe(true),
+    )
+    expect(screen.queryByTestId('heute-nacht')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Heute Nacht' })).not.toBeInTheDocument()
   })
 })
 
@@ -5379,6 +5450,46 @@ describe('NightRunPage — der Abbruchgrund in der Auswertung (#1145)', () => {
   })
 })
 
+describe('NightRunPage — Morgenkachel „Veröffentlichung vorbereitet“ (#1458)', () => {
+  const kachel = (panelEl: HTMLElement) =>
+    within(panelEl).queryByRole('region', { name: 'Veröffentlichung vorbereitet' })
+
+  it('zeigt die Morgenmeldung eines aufbewahrten Laufs als Kachel', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            releasePreparation: {
+              result: 'GREEN',
+              commitHash: 'b2ae30f6',
+              version: '1.4.0',
+              redCheck: null,
+              pending: [],
+              receivedAt: '2026-10-06T05:12:00Z',
+              cards: [{ number: 1449, title: 'Stufenleiste' }],
+              redCards: [],
+            },
+          }),
+        ],
+      ],
+    })
+
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(kachel(panelEl)).toHaveTextContent('b2ae30f6')
+  })
+
+  it('zeigt ohne Meldung keine Kachel', async () => {
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0) })]] })
+
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(kachel(panelEl)).not.toBeInTheDocument()
+  })
+})
+
 describe('NightRunPage — Abschlussvermerk nur mit Ergebnisstand (#1070)', () => {
   /**
    * Der Prueffall aus dem Issue: der Lauf vom 17.09.2026, 17:02 — in elf Minuten fuer 10,10 $ ein
@@ -6229,6 +6340,7 @@ describe('NightRunPage — Fortschritt eines laufenden Laufs (#1378)', () => {
     ],
     pakete,
     unbekannt: [],
+    unbekanntOhneAusweis: false,
     offeneFragen: [],
     ...felder,
   })

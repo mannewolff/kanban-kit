@@ -1,5 +1,6 @@
 package org.mwolff.manban.attachment.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -60,5 +61,14 @@ public class StorageReconciliationService {
    * @param orphanedObjects Object-Keys im Speicher ohne Metadaten-Zeile
    * @param missingObjects Object-Keys aus den Metadaten ohne Objekt im Speicher
    */
-  public record ReconciliationReport(List<String> orphanedObjects, List<String> missingObjects) {}
+  @Schema(description = "Abgleich zwischen Anhang-Metadaten und Objektspeicher.")
+  public record ReconciliationReport(
+      @Schema(
+              description = "Schlüssel der Objekte im Speicher, zu denen es keinen Anhang gibt.",
+              example = "[\"cards/812/0b6c1d2e-5f3a-4c7b-9e21-7d8a6f4b3c10\"]")
+          List<String> orphanedObjects,
+      @Schema(
+              description = "Schlüssel aus den Anhängen, zu denen der Speicher kein Objekt hat.",
+              example = "[]")
+          List<String> missingObjects) {}
 }

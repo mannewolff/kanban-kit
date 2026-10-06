@@ -15,13 +15,20 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.card.application.CardNotFoundException;
+import org.mwolff.manban.nightrun.application.KettenstandDerKarte;
+import org.mwolff.manban.nightrun.application.NightRunProgressService;
 import org.mwolff.manban.nightrun.application.NightRunService;
+import org.mwolff.manban.nightrun.domain.KettenStand;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.nightrun.domain.ProgressStage;
+import org.mwolff.manban.nightrun.domain.StationStand;
+import org.mwolff.manban.nightrun.domain.StationsZustand;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -45,12 +52,17 @@ class NightRunCardControllerTest {
   private static final Instant JUENGER = Instant.parse("2026-09-02T22:00:00Z");
   private static final Instant AELTER = Instant.parse("2026-09-01T22:00:00Z");
 
+  private static final long CARD = 812L;
+  private static final String KETTE = "/api/cards/" + CARD + "/night-chain";
+
   private NightRunService service;
+  private NightRunProgressService fortschritt;
   private MockMvc mvc;
 
   @BeforeEach
   void setUp() {
     service = mock(NightRunService.class);
+    fortschritt = mock(NightRunProgressService.class);
     // Wie in NightRunControllerTest: Instants als ISO-Text, so wie in der laufenden Anwendung.
     MappingJackson2HttpMessageConverter jackson =
         new MappingJackson2HttpMessageConverter(
@@ -58,7 +70,7 @@ class NightRunCardControllerTest {
                 .featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                 .build());
     mvc =
-        MockMvcBuilders.standaloneSetup(new NightRunCardController(service))
+        MockMvcBuilders.standaloneSetup(new NightRunCardController(service, fortschritt))
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
             .setMessageConverters(jackson)
             .build();
@@ -211,5 +223,86 @@ class NightRunCardControllerTest {
     mvc.perform(get(PATH)).andExpect(status().isBadRequest());
 
     verifyNoInteractions(service);
+  }
+
+  // --- Kettenstand (Issue #1452) -------------------------------------------------------------
+
+  @Test
+  void kettenstandLiefertZielGrenzeStationenUndDieAngabenDerLeiste() throws Exception {
+    when(fortschritt.kettenstand(USER, CARD))
+        .thenReturn(
+            new KettenstandDerKarte(
+                new KettenStand(
+                    ProgressStage.UMSETZUNG,
+                    2,
+                    false,
+                    new KettenStand.Projektgrenze(
+                        ProgressStage.PAKETE, "wartet: Übergang x im Projekt nicht freigegeben"),
+                    List.of(
+                        new StationStand(
+                            ProgressStage.PLAN, StationsZustand.ERLEDIGT, "erledigt", null),
+                        new StationStand(
+                            ProgressStage.ABDECKUNG,
+                            StationsZustand.WARTET,
+                            "Projektgrenze",
+                            "wartet: Übergang x im Projekt nicht freigegeben"))),
+                true,
+                true,
+                JUENGER));
+
+    mvc.perform(get(KETTE))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.ziel").value("UMSETZUNG"))
+        .andExpect(jsonPath("$.pruefer").value(2))
+        .andExpect(jsonPath("$.zielErreicht").value(false))
+        .andExpect(jsonPath("$.grenze.stufe").value("PAKETE"))
+        .andExpect(
+            jsonPath("$.grenze.grund").value("wartet: Übergang x im Projekt nicht freigegeben"))
+        .andExpect(jsonPath("$.stationen.length()").value(2))
+        .andExpect(jsonPath("$.stationen[0].station").value("PLAN"))
+        .andExpect(jsonPath("$.stationen[0].zustand").value("ERLEDIGT"))
+        .andExpect(jsonPath("$.stationen[0].text").value("erledigt"))
+        .andExpect(jsonPath("$.stationen[0].grund").value(nullValue()))
+        .andExpect(jsonPath("$.stationen[1].station").value("ABDECKUNG"))
+        .andExpect(jsonPath("$.stationen[1].zustand").value("WARTET"))
+        .andExpect(jsonPath("$.stationen[1].text").value("Projektgrenze"))
+        .andExpect(
+            jsonPath("$.stationen[1].grund")
+                .value("wartet: Übergang x im Projekt nicht freigegeben"))
+        .andExpect(jsonPath("$.uebernommen").value(true))
+        .andExpect(jsonPath("$.planReviewVorhanden").value(true))
+        .andExpect(jsonPath("$.lauf").value("2026-09-02T22:00:00Z"));
+  }
+
+  /** Vor dem Start: ohne Ziel, Prüferzahl, Grenze und Lauf — die Felder stehen als {@code null}. */
+  @Test
+  void kettenstandVorDemStartTraegtNullStattFehlenderAngaben() throws Exception {
+    when(fortschritt.kettenstand(USER, CARD))
+        .thenReturn(
+            new KettenstandDerKarte(
+                new KettenStand(null, null, false, null, List.of()), false, false, null));
+
+    mvc.perform(get(KETTE))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.ziel").value(nullValue()))
+        .andExpect(jsonPath("$.pruefer").value(nullValue()))
+        .andExpect(jsonPath("$.grenze").value(nullValue()))
+        .andExpect(jsonPath("$.lauf").value(nullValue()))
+        .andExpect(jsonPath("$.uebernommen").value(false))
+        .andExpect(jsonPath("$.planReviewVorhanden").value(false));
+  }
+
+  @Test
+  void kettenstandReichtDieRechteablehnungDurch() throws Exception {
+    when(fortschritt.kettenstand(USER, CARD)).thenThrow(new ProjectAccessDeniedException());
+
+    mvc.perform(get(KETTE)).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void kettenstandEinerUnbekanntenKarteIst404() throws Exception {
+    when(fortschritt.kettenstand(USER, CARD)).thenThrow(new CardNotFoundException());
+
+    mvc.perform(get(KETTE)).andExpect(status().isNotFound());
   }
 }

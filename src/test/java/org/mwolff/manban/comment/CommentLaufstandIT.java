@@ -89,7 +89,7 @@ class CommentLaufstandIT extends AbstractIntegrationTest {
     assertThat(comments.laufstaendeImProjekt(projectId))
         .containsExactly(
             new LaufstandView(
-                karte, "## Laufstand\n\nplan begonnen für #1 um 2026-10-03T15:01:00Z"));
+                karte, "## Laufstand\n\nplan begonnen für #1 um 2026-10-03T15:01:00Z", null));
   }
 
   /** AK: Das Kit ersetzt den Laufstand über {@code update} — geliefert wird der neue Body (E5). */
@@ -101,7 +101,21 @@ class CommentLaufstandIT extends AbstractIntegrationTest {
     comments.update(userId, laufstand, "## Laufstand\n\nplan fertig");
 
     assertThat(comments.laufstaendeImProjekt(projectId))
-        .containsExactly(new LaufstandView(karte, "## Laufstand\n\nplan fertig"));
+        .containsExactly(new LaufstandView(karte, "## Laufstand\n\nplan fertig", null));
+  }
+
+  /** Issue #1428: Der Laufstand trägt die Kennung seines letzten Schreibers (E3). */
+  @Test
+  void einLaufstandTraegtDieLaufkennungSeinesLetztenSchreibers() {
+    long karte = karte();
+    Instant erster = Instant.parse("2026-10-05T08:00:00Z");
+    Instant zweiter = Instant.parse("2026-10-05T09:00:00.123Z");
+    long laufstand = comments.create(userId, karte, "## Laufstand\n\nplan begonnen", erster).id();
+
+    comments.update(userId, laufstand, "## Laufstand\n\nplan fertig", zweiter);
+
+    assertThat(comments.laufstaendeImProjekt(projectId))
+        .containsExactly(new LaufstandView(karte, "## Laufstand\n\nplan fertig", zweiter));
   }
 
   /** {@code updatedAt} wird nicht ausgewertet (A1/E5): Ein alter Zeitstempel hält nichts zurück. */
@@ -140,7 +154,7 @@ class CommentLaufstandIT extends AbstractIntegrationTest {
         alt);
 
     assertThat(comments.laufstaendeImProjekt(projectId))
-        .containsExactly(new LaufstandView(karte, "## Laufstand\n\nneu"));
+        .containsExactly(new LaufstandView(karte, "## Laufstand\n\nneu", null));
   }
 
   @Test

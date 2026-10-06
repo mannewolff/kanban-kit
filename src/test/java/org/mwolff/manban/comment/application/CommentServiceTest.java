@@ -28,6 +28,7 @@ import org.mwolff.manban.project.domain.Permission;
 class CommentServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
+  private static final Instant LAUF = Instant.parse("2026-10-05T08:58:22.123Z");
 
   private CommentRepository comments;
   private CardService cardService;
@@ -36,7 +37,7 @@ class CommentServiceTest {
   private CommentService service;
 
   private static Comment comment(Long authorUserId) {
-    return new Comment(3L, 5L, authorUserId, "Ada", "Hallo", FIXED, FIXED);
+    return new Comment(3L, 5L, authorUserId, "Ada", "Hallo", FIXED, FIXED, null);
   }
 
   @BeforeEach
@@ -63,6 +64,38 @@ class CommentServiceTest {
     // Then
     verify(comments).save(captor.capture());
     assertThat(captor.getValue().createdAt()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void create_ohneKennung_speichertKeineLaufkennung() {
+    // Given: Session-Kommentare über die dreistellige Signatur tragen nie eine Kennung (A3).
+    when(users.findById(1L)).thenReturn(Optional.of(new UserSummary(1L, "u@x.de", "Ada", true)));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    service.create(1L, 5L, "Hallo");
+
+    // Then
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().laufStart()).isNull();
+  }
+
+  @Test
+  void create_mitKennung_speichertDieLaufkennung() {
+    // Given
+    when(users.findById(1L)).thenReturn(Optional.of(new UserSummary(1L, "u@x.de", "Ada", true)));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    CommentService.CommentView view = service.create(1L, 5L, "Hallo", LAUF);
+
+    // Then
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().laufStart()).isEqualTo(LAUF);
+    assertThat(captor.getValue().body()).isEqualTo("Hallo");
+    assertThat(view.body()).isEqualTo("Hallo");
   }
 
   @Test
@@ -175,6 +208,57 @@ class CommentServiceTest {
   }
 
   @Test
+  void update_mitKennung_ueberschreibtDieLaufkennung() {
+    // Given: der Laufstand gehört dem letzten Schreiber (E3).
+    Comment vorhanden =
+        new Comment(
+            3L, 5L, 1L, "Ada", "Hallo", FIXED, FIXED, Instant.parse("2026-10-04T00:00:00Z"));
+    when(comments.findById(3L)).thenReturn(Optional.of(vorhanden));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    service.update(1L, 3L, "Geändert", LAUF);
+
+    // Then
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().laufStart()).isEqualTo(LAUF);
+    assertThat(captor.getValue().body()).isEqualTo("Geändert");
+  }
+
+  @Test
+  void update_ueberschreibtDieKennungMitNull() {
+    // Given: ein nicht ausgewiesener letzter Schreiber ist ein letzter Schreiber (E3).
+    Comment vorhanden = new Comment(3L, 5L, 1L, "Ada", "Hallo", FIXED, FIXED, LAUF);
+    when(comments.findById(3L)).thenReturn(Optional.of(vorhanden));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    service.update(1L, 3L, "Geändert", null);
+
+    // Then
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().laufStart()).isNull();
+  }
+
+  @Test
+  void update_ohneKennung_setztDieKennungAufNull() {
+    // Given: die dreistellige Signatur des Session-Wegs gibt null weiter (A3).
+    Comment vorhanden = new Comment(3L, 5L, 1L, "Ada", "Hallo", FIXED, FIXED, LAUF);
+    when(comments.findById(3L)).thenReturn(Optional.of(vorhanden));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    service.update(1L, 3L, "Geändert");
+
+    // Then
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().laufStart()).isNull();
+  }
+
+  @Test
   void update_returnsViewWithNewBody() {
     // Given
     when(comments.findById(3L)).thenReturn(Optional.of(comment(1L)));
@@ -251,19 +335,20 @@ class CommentServiceTest {
   }
 
   @Test
-  void laufstaendeImProjekt_liefertJeKommentarNurKarteUndBody() {
+  void laufstaendeImProjekt_liefertJeKommentarKarteBodyUndLaufkennung() {
     // Given
     when(comments.findLaufstaendeImProjekt(1L))
         .thenReturn(
             List.of(
-                new Comment(3L, 5L, 1L, "Ada", "## Laufstand\n\nplan fertig", FIXED, FIXED),
-                new Comment(4L, 6L, null, "Kit", "## Laufstand\n\nreview begonnen", FIXED, FIXED)));
+                new Comment(3L, 5L, 1L, "Ada", "## Laufstand\n\nplan fertig", FIXED, FIXED, LAUF),
+                new Comment(
+                    4L, 6L, null, "Kit", "## Laufstand\n\nreview begonnen", FIXED, FIXED, null)));
 
     // When / Then
     assertThat(service.laufstaendeImProjekt(1L))
         .containsExactly(
-            new CommentService.LaufstandView(5L, "## Laufstand\n\nplan fertig"),
-            new CommentService.LaufstandView(6L, "## Laufstand\n\nreview begonnen"));
+            new CommentService.LaufstandView(5L, "## Laufstand\n\nplan fertig", LAUF),
+            new CommentService.LaufstandView(6L, "## Laufstand\n\nreview begonnen", null));
   }
 
   /** Simuliert die DB: vergibt beim ersten Speichern eine ID (Issue #0080). */
@@ -272,6 +357,13 @@ class CommentServiceTest {
       return c;
     }
     return new Comment(
-        7L, c.cardId(), c.authorUserId(), c.authorName(), c.body(), c.createdAt(), c.updatedAt());
+        7L,
+        c.cardId(),
+        c.authorUserId(),
+        c.authorName(),
+        c.body(),
+        c.createdAt(),
+        c.updatedAt(),
+        c.laufStart());
   }
 }

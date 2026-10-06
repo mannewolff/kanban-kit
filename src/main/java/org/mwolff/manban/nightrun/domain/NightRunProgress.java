@@ -11,13 +11,16 @@ import java.util.List;
  * @param pakete alle Arbeitspakete des Laufs, nach Nummer
  * @param unbekannt Karten, deren Zuordnung sich nicht feststellen lässt — gelistet, nicht gezählt
  * @param offeneFragen Karten mit einer offenen Frage an den Menschen (E9)
+ * @param unbekanntOhneAusweis ob unter {@code unbekannt} Karten stehen, weil der Lauf sich nicht
+ *     ausgewiesen hat und seine Spuren zeitlich zu einem anderen Lauf passen (Issue #1429, A9)
  */
 public record NightRunProgress(
     ProgressAssignment zuordnung,
     List<ChainProgress> ketten,
     List<PackageProgress> pakete,
     List<CardRef> unbekannt,
-    List<CardRef> offeneFragen) {
+    List<CardRef> offeneFragen,
+    boolean unbekanntOhneAusweis) {
 
   public NightRunProgress {
     ketten = List.copyOf(ketten);
@@ -28,12 +31,13 @@ public record NightRunProgress(
 
   /** Kein Fortschritt — für Läufe ohne Kette und ohne Umsetzung (E8). */
   public static NightRunProgress leer() {
-    return new NightRunProgress(ProgressAssignment.OK, List.of(), List.of(), List.of(), List.of());
+    return new NightRunProgress(
+        ProgressAssignment.OK, List.of(), List.of(), List.of(), List.of(), false);
   }
 
   /** Der ganze Fortschritt ist unbekannt — der Lauf hat keinen Token-Namen (E3). */
   public static NightRunProgress zuordnungUnbekannt() {
     return new NightRunProgress(
-        ProgressAssignment.UNBEKANNT, List.of(), List.of(), List.of(), List.of());
+        ProgressAssignment.UNBEKANNT, List.of(), List.of(), List.of(), List.of(), false);
   }
 }

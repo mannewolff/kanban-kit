@@ -19,5 +19,11 @@ public enum ProgressStage {
   ABDECKUNG,
 
   /** Pakete umsetzen — nur in Variante B ({@code kit:durchziehen}). */
-  UMSETZUNG
+  UMSETZUNG,
+
+  /**
+   * Veröffentlichung vorbereiten (Issue #1451, Plan #1447 E13) — nur im Kettenstand der Karte, nie
+   * im Weg der Laufseite.
+   */
+  VORBEREITUNG
 }

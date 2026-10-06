@@ -36,6 +36,8 @@ hängt, gehört deshalb nicht in die Tabelle, sondern unter [Sonderregeln](#sond
 | Karten lesen (inkl. Dashboard, Papierkorb) | `TICKET_READ` | ✓ | ✓ | ✓ | ✓ |
 | Karte anlegen, Spezifikation einlesen | `TICKET_CREATE` | – | ✓ | ✓ | ✓ |
 | Karte bearbeiten (Titel, Text, Zuständige, Fälligkeit, Labels) | `TICKET_UPDATE` | – | ✓ | ✓ | ✓ |
+| Nacht-Kette an der Stufenleiste: Ziel und Prüferzahl wählen, Kette starten, Start zurücknehmen | `TICKET_UPDATE` | – | ✓ | ✓ | ✓ |
+| Kettenstand an der Stufenleiste einer Karte lesen | `TICKET_READ` | ✓ | ✓ | ✓ | ✓ |
 | Karte archivieren, in den Papierkorb legen, wiederherstellen | `TICKET_DELETE` | – | ✓ | ✓ | ✓ |
 | Karte verschieben — Spalte, **anderes Board desselben Projekts**; Spalte nach Kartennummer sortieren; Status eines Arbeitspakets setzen (`PUT /api/cards/{cardId}/status`) | `CARD_MOVE` | – | ✓ | ✓ | ✓ |
 | **Karte in ein anderes Projekt verschieben** — OWNER in **beiden** Projekten | `CARD_MOVE_PROJECT` | – | – | – | ✓ |
@@ -51,6 +53,7 @@ hängt, gehört deshalb nicht in die Tabelle, sondern unter [Sonderregeln](#sond
 | Projekt umbenennen, Karten-Startnummer setzen | `PROJECT_EDIT` | – | – | – | ✓ |
 | Eigentümerschaft übertragen | `PROJECT_OWNER_TRANSFER` | – | – | – | ✓ |
 | **Auswertung der Läufe lesen** — Plattform-Admin auch ohne OWNER, aber nur bei Teilnahme am Plattform-Leitstand | `NIGHT_RUN_READ` | – | – | – | ✓ |
+| Übersicht „Heute Nacht“ und Morgenkachel „Veröffentlichung vorbereitet“ auf der Runner-Seite sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
 | **Protokoll eines Laufs hineingeben** — der Plattform-Admin immer | `NIGHT_RUN_SUBMIT` | – | – | – | ✓ |
 
 Dieselbe Übersicht ist in der App unter **`/roles`** erreichbar (Link „Rollen & Rechte" auf der
@@ -110,13 +113,16 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
 
 ### Nur mit der Plattform-Rolle ADMIN
 
-Zwei Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
+Drei Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
 Zeile der [Rechte-Matrix](#projekt-rollen-rechte-matrix) oben; eine Zeile, die in jeder Rollenspalte
 leer bliebe, sähe aus wie ein vergessenes Häkchen und lüde dazu ein, es einer Rolle zu geben.
 
 - **Plattform-Leitstand ansehen** — die Übersicht über die Läufe aller teilnehmenden Projekte, siehe
   [Plattform-Leitstand](nutzung.md#plattform-leitstand).
 - **Projekt anlegen und löschen** — siehe den Absatz darunter.
+- **API-Aufrufe aus der Übersicht ausprobieren** — nur der Plattform-Admin; der Aufruf läuft mit den
+  Rechten der Sitzung bzw. des angegebenen Projekt-Tokens, und der Server prüft das Kennzeichen
+  `X-Api-Ausprobieren`. Siehe [API-Übersicht](nutzung.md#api-ubersicht).
 
 **Projekte legt ausschließlich der Plattform-Admin an und löscht sie auch nur er.** Beim Anlegen
 bestimmt er den **Owner** per E-Mail; dadurch wird er selbst nicht Mitglied, hat als Plattform-Admin
@@ -190,8 +196,16 @@ setzt die Maschine; ihr Abnehmen ist die Freigabe und steht nur dem Menschen zu.
 | `kit:klaeren`, `kit:geschuetzt` setzen | erlaubt | erlaubt |
 | `kit:klaeren`, `kit:geschuetzt` abnehmen | erlaubt | abgewiesen (403) |
 
+Die Labels, mit denen die [Stufenleiste](nutzung.md#karten-detail) Ziel und Prüferzahl einer Kette
+festhält — `ziel:plan`, `ziel:pakete`, `ziel:umsetzung`, `ziel:push-vorbereitet` sowie `planreview:1`
+und `planreview:2` —, tragen **keine** Freigabe-Richtung. Freigegeben wird allein mit `kit:night`.
+Ein Token darf `ziel:*` und `planreview:*` deshalb setzen und abnehmen; der Runner nimmt sie bei der
+Übernahme zusammen mit `kit:night` ab.
+
 Entscheidend ist die serververifizierte Herkunft — gebundene wie ungebundene Token —, nicht die
-Selbstauskunft im Header `X-Agent-Model`. Der Server kann Mensch und Agent am Token nicht
+Selbstauskunft im Header `X-Agent-Model`. Eine zweite Selbstauskunft ist der Header `X-Night-Run`, die
+Laufkennung eines Nachtlaufs: Das Board speichert sie nur bei Token-Herkunft, sie wirkt allein auf
+die Zuordnung der Karten auf der Runner-Seite und begründet kein Recht. Der Server kann Mensch und Agent am Token nicht
 unterscheiden: Auch wer per CLI (`board.mjs`, `tbx`) arbeitet, setzt `kit:night` und
 `kit:nightrun` nur im Board. Die Regel gilt an jedem Schreibweg: einzelnes Label setzen oder
 abnehmen, alle Labels einer Karte ersetzen (geprüft wird nur, was hinzukommt oder wegfällt), die

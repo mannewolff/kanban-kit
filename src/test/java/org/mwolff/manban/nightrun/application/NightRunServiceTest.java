@@ -9,6 +9,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -23,11 +25,16 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.card.application.CardRunQueryService;
+import org.mwolff.manban.card.application.CardRunQueryService.FreigabeKarteView;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
+import org.mwolff.manban.nightrun.domain.NachtFreigabe;
+import org.mwolff.manban.nightrun.domain.NachtFreigabe.Startstation;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
@@ -41,6 +48,9 @@ import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.nightrun.domain.ProgressStage;
+import org.mwolff.manban.nightrun.domain.ReleasePreparation;
+import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
 import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -83,6 +93,7 @@ class NightRunServiceTest {
   private NightRunRepository runs;
   private PermissionChecker permissions;
   private InteractiveUsageSinceWriter erfassungsbeginn;
+  private CardRunQueryService cards;
   private NightRunService service;
 
   @BeforeEach
@@ -90,6 +101,7 @@ class NightRunServiceTest {
     runs = spy(new FakeNightRunRepository());
     permissions = mock(PermissionChecker.class);
     erfassungsbeginn = mock(InteractiveUsageSinceWriter.class);
+    cards = mock(CardRunQueryService.class);
     service = serviceMitPuffer(30);
   }
 
@@ -101,7 +113,8 @@ class NightRunServiceTest {
         // Die Grenzen der interaktiven Sitzung stehen bewusst anders als die der Nachtlaeufe
         // (Issue #1011): Ein Test, der sie gleich setzte, saehe nicht, welche durchgereicht wird.
         new NightRunProperties(maxPerProject, 2000, 400, 4000, null),
-        Clock.fixed(FIXED, ZoneOffset.UTC));
+        Clock.fixed(FIXED, ZoneOffset.UTC),
+        cards);
   }
 
   // --- Rechte -----------------------------------------------------------------------------
@@ -435,6 +448,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        null,
         List.of(items));
   }
 
@@ -488,6 +502,7 @@ class NightRunServiceTest {
         usage,
         null,
         budget,
+        null,
         null,
         List.of(items));
   }
@@ -802,6 +817,173 @@ class NightRunServiceTest {
     assertThat(sicht.items().getFirst().stages()).isEmpty();
   }
 
+  // --- Morgenmeldung: releasePreparation am Lauf (Issue #1456) ----------------------------
+
+  private static final NightRunService.NewReleasePreparation GRUEN =
+      new NightRunService.NewReleasePreparation(
+          ReleasePreparationResult.GREEN_PENDING,
+          "b2ae30f6",
+          "1.4.0",
+          null,
+          List.of(1449, 1450),
+          List.of(),
+          List.of("Mutationsprüfung Frontend"));
+
+  private static final NightRunService.NewReleasePreparation ROT =
+      new NightRunService.NewReleasePreparation(
+          ReleasePreparationResult.RED,
+          "c3bf41a7",
+          null,
+          "mvn verify",
+          List.of(1449),
+          List.of(1450),
+          List.of());
+
+  private static NightRunService.NewNightRun meldungMitVorbereitung(
+      Instant startedAt, NightRunService.@Nullable NewReleasePreparation vorbereitung) {
+    return new NightRunService.NewNightRun(
+        startedAt,
+        NightRunMode.CHAIN,
+        1_000L,
+        1,
+        0,
+        0,
+        null,
+        true,
+        null,
+        null,
+        null,
+        null,
+        vorbereitung,
+        List.of());
+  }
+
+  /** Die Meldung landet vollständig am Lauf; den Eingang setzt die Uhr des Servers (E12). */
+  @Test
+  void ingest_speichertDieMorgenmeldungMitDemEingangNachDerServeruhr() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+
+    assertThat(gemeldeterLauf().releasePreparation())
+        .isEqualTo(
+            new ReleasePreparation(
+                ReleasePreparationResult.GREEN_PENDING,
+                "b2ae30f6",
+                "1.4.0",
+                null,
+                List.of(1449, 1450),
+                List.of(),
+                List.of("Mutationsprüfung Frontend"),
+                FIXED));
+  }
+
+  /** Eine neue Meldung desselben Laufs ersetzt die Morgenmeldung wie die übrigen Felder. */
+  @Test
+  void ingest_ersetztDieMorgenmeldungBeiErneuterMeldungDesselbenLaufs() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, ROT));
+
+    ReleasePreparation gespeichert = gemeldeterLauf().releasePreparation();
+    assertThat(gespeichert).isNotNull();
+    assertThat(gespeichert.result()).isEqualTo(ReleasePreparationResult.RED);
+    assertThat(gespeichert.commitHash()).isEqualTo("c3bf41a7");
+    assertThat(gespeichert.version()).isNull();
+    assertThat(gespeichert.redCheck()).isEqualTo("mvn verify");
+    assertThat(gespeichert.redCards()).containsExactly(1450);
+    assertThat(gespeichert.pending()).isEmpty();
+  }
+
+  /**
+   * Zustand, keine Ergänzung: Trägt die neue Meldung keine Morgenmeldung, steht am Lauf keine mehr
+   * — dieselbe Semantik wie beim Abbruchgrund.
+   */
+  @Test
+  void ingest_raeumtDieMorgenmeldungAb_wennDieNeueMeldungSieNichtTraegt() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, null));
+
+    assertThat(gemeldeterLauf().releasePreparation()).isNull();
+  }
+
+  /** Der Upload-Weg führt keine Morgenmeldung, auch wenn der Aufrufer eine übergäbe. */
+  @Test
+  void submit_speichertNieEineMorgenmeldung() {
+    service.submit(USER, PROJECT, List.of(meldungMitVorbereitung(T1, GRUEN)));
+
+    assertThat(gemeldeterLauf().releasePreparation()).isNull();
+  }
+
+  // --- Morgenmeldung in der Laufliste (Issue #1457) ----------------------------------------
+
+  /** Ohne Morgenmeldung steht am Lauf null, nicht eine Meldung aus lauter fehlenden Feldern. */
+  @Test
+  void list_zeigtOhneMorgenmeldungNull() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, null));
+
+    assertThat(service.list(USER, PROJECT).getFirst().releasePreparation()).isNull();
+  }
+
+  /**
+   * Die Meldung erscheint mit allen gespeicherten Feldern und dem Eingang; die Pakete tragen ihre
+   * Titel, auch wenn sie keine Arbeitspakete dieses Laufs sind (fremde Kette desselben Projekts).
+   */
+  @Test
+  void list_zeigtDieMorgenmeldungMitAufgeloestenTiteln() {
+    when(cards.titlesByCardNumber(PROJECT, Set.of(1449, 1450)))
+        .thenReturn(Map.of(1449, "Paket A", 1450, "Paket aus fremder Kette"));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+
+    NightRunService.ReleasePreparationView sicht =
+        service.list(USER, PROJECT).getFirst().releasePreparation();
+
+    assertThat(sicht)
+        .isEqualTo(
+            new NightRunService.ReleasePreparationView(
+                ReleasePreparationResult.GREEN_PENDING,
+                "b2ae30f6",
+                "1.4.0",
+                null,
+                List.of("Mutationsprüfung Frontend"),
+                FIXED,
+                List.of(
+                    new NightRunService.CardTitleView(1449, "Paket A"),
+                    new NightRunService.CardTitleView(1450, "Paket aus fremder Kette")),
+                List.of()));
+  }
+
+  /**
+   * Eine Nummer ohne Karte im Projekt bleibt mit ihrer Nummer stehen, der Titel ist null — die Zahl
+   * der Pakete soll stimmen. Die roten Karten werden genauso aufgelöst.
+   */
+  @Test
+  void list_laesstEineUnbekannteNummerOhneTitelStehen() {
+    when(cards.titlesByCardNumber(PROJECT, Set.of(1449, 1450)))
+        .thenReturn(Map.of(1450, "Rotes Paket"));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, ROT));
+
+    NightRunService.ReleasePreparationView sicht =
+        Objects.requireNonNull(service.list(USER, PROJECT).getFirst().releasePreparation());
+
+    assertThat(sicht.cards()).containsExactly(new NightRunService.CardTitleView(1449, null));
+    assertThat(sicht.redCards())
+        .containsExactly(new NightRunService.CardTitleView(1450, "Rotes Paket"));
+    assertThat(sicht.redCheck()).isEqualTo("mvn verify");
+  }
+
+  /**
+   * Ein Abruf für alle Läufe der Liste, nicht je Nummer, und nur im Projekt der Läufe — eine Nummer
+   * eines fremden Projekts kann so nicht aufgelöst werden.
+   */
+  @Test
+  void list_fragtDieTitelEinmalUndNurImEigenenProjekt() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T2, ROT));
+
+    service.list(USER, PROJECT);
+
+    verify(cards).titlesByCardNumber(PROJECT, Set.of(1449, 1450));
+    verifyNoMoreInteractions(cards);
+  }
+
   @Test
   void ingest_reichtDasErgebnisDesSchreibwegsDurch() {
     assertThat(
@@ -1006,6 +1188,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -1077,6 +1260,7 @@ class NightRunServiceTest {
         grund,
         null,
         abbruch,
+        null,
         List.of());
   }
 
@@ -1091,6 +1275,7 @@ class NightRunServiceTest {
         0,
         null,
         true,
+        null,
         null,
         null,
         null,
@@ -1287,6 +1472,7 @@ class NightRunServiceTest {
                 null,
                 null,
                 ABBRUCH_GRUND,
+                null,
                 List.of())));
 
     NightRun gespeichert = gemeldeterLauf();
@@ -1359,7 +1545,8 @@ class NightRunServiceTest {
               run.usage(),
               run.noWorkReason(),
               run.budget(),
-              run.abortReason()));
+              run.abortReason(),
+              run.releasePreparation()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -1401,7 +1588,8 @@ class NightRunServiceTest {
               run.usage(),
               run.noWorkReason(),
               run.budget(),
-              run.abortReason()));
+              run.abortReason(),
+              run.releasePreparation()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -1589,5 +1777,99 @@ class NightRunServiceTest {
     assertThat(runs.findItemsByRunIds(List.of(geschrieben.requireId())))
         .extracting(NightRunItem::kind)
         .containsExactly(NightRunKind.NIGHT);
+  }
+
+  // --- Heute Nacht (Issue #1454) ----------------------------------------------------------
+
+  /**
+   * Die Fassade als Fake über einer festen Kartenliste: Sie wendet Label und Titelfilter an, die
+   * der Dienst übergibt — so zeigt der Test, was der Dienst verlangt, nicht nur, dass er fragt.
+   */
+  private void kartenImProjekt(FreigabeKarteView... karten) {
+    when(cards.freigegebeneKarten(org.mockito.ArgumentMatchers.eq(PROJECT), any(), any()))
+        .thenAnswer(
+            aufruf -> {
+              String label = aufruf.getArgument(1);
+              Predicate<String> titel = aufruf.getArgument(2);
+              return List.of(karten).stream()
+                  .filter(k -> k.labels().contains(label) && titel.test(k.title()))
+                  .toList();
+            });
+  }
+
+  private static FreigabeKarteView karte(int nummer, String titel, String... labels) {
+    return new FreigabeKarteView(nummer, titel, "Entwicklung", List.of(labels));
+  }
+
+  @Test
+  void heuteNacht_verlangtDasLeserechtDesLaufs() {
+    kartenImProjekt();
+
+    service.heuteNacht(USER, PROJECT);
+
+    verify(permissions).requireNightRunAccess(USER, PROJECT);
+  }
+
+  @Test
+  void heuteNacht_fragtKeineKarte_wennDasLeserechtFehlt() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
+
+    assertThatThrownBy(() -> service.heuteNacht(USER, PROJECT))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verifyNoInteractions(cards);
+  }
+
+  @Test
+  void heuteNacht_liefertFreigegebeneAnforderungenUndPlaeneNachKartennummer() {
+    kartenImProjekt(
+        karte(30, "[Plan] Export", "kit:night", "ziel:umsetzung"),
+        karte(12, "[Fachlich] Import", "kit:night", "planreview:2"),
+        karte(20, "[Fachlich] Druck", "kit:durchziehen", "kit:night"));
+
+    assertThat(service.heuteNacht(USER, PROJECT))
+        .containsExactly(
+            new NachtFreigabe(
+                12,
+                "[Fachlich] Import",
+                "Entwicklung",
+                Startstation.FACHPLAN,
+                ProgressStage.PAKETE,
+                2),
+            new NachtFreigabe(
+                20,
+                "[Fachlich] Druck",
+                "Entwicklung",
+                Startstation.FACHPLAN,
+                ProgressStage.UMSETZUNG,
+                null),
+            new NachtFreigabe(
+                30,
+                "[Plan] Export",
+                "Entwicklung",
+                Startstation.PLAN,
+                ProgressStage.UMSETZUNG,
+                null));
+  }
+
+  @Test
+  void heuteNacht_laesstKartenOhnePraefixUndOhneKitNightWeg() {
+    kartenImProjekt(
+        karte(5, "Export", "kit:night"),
+        karte(6, "[Task] Export", "kit:night"),
+        karte(7, "[Fachlich] Ohne Freigabe", "ziel:plan"),
+        karte(8, "[Fachlich] Mit Freigabe", "kit:night"));
+
+    assertThat(service.heuteNacht(USER, PROJECT))
+        .extracting(NachtFreigabe::number)
+        .containsExactly(8);
+  }
+
+  @Test
+  void heuteNacht_ohneFreigabeIstDieListeLeer() {
+    kartenImProjekt();
+
+    assertThat(service.heuteNacht(USER, PROJECT)).isEmpty();
   }
 }

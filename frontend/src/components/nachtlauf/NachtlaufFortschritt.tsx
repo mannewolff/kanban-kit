@@ -68,6 +68,11 @@ export function NachtlaufFortschritt({
           <Typography component="div" sx={UEBERSCHRIFT_STIL}>
             unbekannt
           </Typography>
+          {fortschritt.zuordnung === 'OK' && fortschritt.unbekanntOhneAusweis && (
+            <Typography data-testid="fortschritt-unbekannt-ohne-ausweis" sx={HINWEIS_STIL}>
+              Dieser Lauf hat sich nicht ausgewiesen (älterer Runner).
+            </Typography>
+          )}
           <Box component="ul" aria-label="unbekannt" sx={ZEILENLISTE_STIL}>
             {fortschritt.unbekannt.map((k) => (
               <li key={k.number}>

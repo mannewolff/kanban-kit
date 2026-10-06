@@ -1,5 +1,6 @@
 package org.mwolff.manban.kanbancompat.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -387,22 +388,29 @@ public class KanbanCompatService {
    * Kommentiert ein Item des gebundenen Boards. Mit einem {@code idempotencyKey} entsteht der
    * Kommentar je Projekt und Schlüssel genau einmal (Issue #1001); zwei verschiedene Schlüssel mit
    * gleichem Text ergeben bewusst zwei Kommentare.
+   *
+   * <p>Die Laufkennung geht an das Anlegen (Issue #1428). Eine Wiederholung mit demselben Schlüssel
+   * fasst den Kommentar nicht an; er behält die Kennung des ersten Anlegens.
    */
   @Transactional
   public void comment(
-      KanbanPrincipal principal, long cardId, String body, @Nullable String idempotencyKey) {
+      KanbanPrincipal principal,
+      long cardId,
+      String body,
+      @Nullable String idempotencyKey,
+      @Nullable Instant laufStart) {
     long boardId = requireBound(principal);
     ingest.requireOnBoard(cardId, boardId);
     String idempotent = normalizeIdempotencyKey(idempotencyKey);
     if (idempotent == null) {
-      commentService.create(principal.userId(), cardId, body);
+      commentService.create(principal.userId(), cardId, body, laufStart);
       return;
     }
     idempotency.execute(
         boardService.requireProjectId(boardId),
         idempotent,
         "POST /items/" + cardId + "/comments",
-        () -> commentService.create(principal.userId(), cardId, body));
+        () -> commentService.create(principal.userId(), cardId, body, laufStart));
   }
 
   /**
@@ -431,10 +439,16 @@ public class KanbanCompatService {
    * <p>Reichweite wie bei {@link #comment}: Der Board-Guard der card-Fassade schließt Karten
    * anderer Boards mit 404 aus. Der Kommentar muss zur adressierten Karte gehören, sonst 404 — ohne
    * diese Prüfung erreichte ein Aufruf über eine Karte des eigenen Boards jeden Kommentar eines
-   * anderen. Die Rechteregel ist die von {@link CommentService#update}: nur der Autor selbst.
+   * anderen. Die Rechteregel ist die von {@link CommentService#update}: nur der Autor selbst. Die
+   * Laufkennung ersetzt die bisherige, auch mit {@code null} (Issue #1428, E3).
    */
   @Transactional
-  public void updateComment(KanbanPrincipal principal, long cardId, long commentId, String body) {
+  public void updateComment(
+      KanbanPrincipal principal,
+      long cardId,
+      long commentId,
+      String body,
+      @Nullable Instant laufStart) {
     long boardId = requireBound(principal);
     ingest.requireOnBoard(cardId, boardId);
     boolean onCard =
@@ -442,7 +456,7 @@ public class KanbanCompatService {
     if (!onCard) {
       throw new CommentNotFoundException();
     }
-    commentService.update(principal.userId(), commentId, body);
+    commentService.update(principal.userId(), commentId, body, laufStart);
   }
 
   /**
@@ -612,49 +626,105 @@ public class KanbanCompatService {
    * Key seiner Spalte (Plan #1294, E12) —, {@code type} ist "card" oder "epic" — das
    * Protokoll-Literal bleibt auch nach der Umbenennung auf „Vorhaben" unverändert. {@code labels}
    * enthält die zugeordneten Label-Namen in Board-Definitionsreihenfolge (leer, wenn keine).
+   *
+   * <p>Die {@code @Schema}-Angaben an diesen Records beschreiben die Antworten der
+   * Kanban-kompatiblen Strecke in der API-Beschreibung (Issue #1403).
    */
+  @Schema(description = "Eine Karte oder ein Vorhaben des gebundenen Boards.")
   public record Item(
-      Long id,
-      int number,
-      String title,
-      @Nullable String body,
-      String column,
-      int position,
-      String type,
-      List<String> labels,
-      @Nullable String externalKey,
-      @Nullable Integer derivedFrom) {}
+      @Schema(
+              description = "Interne ID; adressiert die Aufrufe unter /items/{id}.",
+              example = "4711")
+          Long id,
+      @Schema(description = "Projektweite Nummer, wie sie als #N angezeigt wird.", example = "1403")
+          int number,
+      @Schema(description = "Titel.", example = "Export als CSV") String title,
+      @Schema(description = "Beschreibung in Markdown.", example = "## Kontext\nWarum …")
+          @Nullable String body,
+      @Schema(
+              description =
+                  "Spaltenschlüssel: bei einem Arbeitspaket sein Status, sonst der Schlüssel"
+                      + " seiner Spalte; eine Spalte ohne festen Schlüssel zählt als BACKLOG.",
+              example = "READY")
+          String column,
+      @Schema(description = "Position in der Spalte ab 0.", example = "0") int position,
+      @Schema(description = "card für eine Karte, epic für ein Vorhaben.", example = "card")
+          String type,
+      @Schema(description = "Namen der gesetzten Labels.", example = "[\"kit:nightrun\"]")
+          List<String> labels,
+      @Schema(description = "Fachlicher Schlüssel aus der Anlage.", example = "sonar:AY1x")
+          @Nullable String externalKey,
+      @Schema(
+              description =
+                  "Herkunft: projektweite Nummer der Karte, aus der diese abgeleitet ist.",
+              example = "1400")
+          @Nullable Integer derivedFrom) {}
 
   /**
    * Kommentar eines Items; {@code id} ist dieselbe wie in {@code GET /api/cards/{id}/comments} und
    * adressiert das Ersetzen (Issue #1339), {@code author} ist der Anzeigename des Autors zur
    * Schreibzeit.
    */
-  public record Comment(Long id, String author, String body, Instant createdAt) {}
+  @Schema(description = "Ein Kommentar an einer Karte.")
+  public record Comment(
+      @Schema(description = "ID; adressiert das Ersetzen.", example = "815") Long id,
+      @Schema(description = "Anzeigename des Autors zur Schreibzeit.", example = "Manne")
+          String author,
+      @Schema(description = "Text in Markdown.", example = "## Laufstand\nUmsetzung läuft.")
+          String body,
+      @Schema(description = "Zeitpunkt der Anlage.", example = "2026-10-05T13:17:38Z")
+          Instant createdAt) {}
 
   /**
    * Ein Eintrag des Aktivitätsverlaufs eines Items (#876). Feldgleich mit der Antwort von {@code
    * GET /api/cards/{id}/activity} — der Endpunkt ist deren Ersatz innerhalb der Board-Grenze, und
    * eine abweichende Form wäre für jeden Aufrufer eine zweite Wahrheit über dieselbe Auskunft.
    */
+  @Schema(description = "Ein Eintrag im Aktivitätsverlauf einer Karte.")
   public record Activity(
-      @Nullable Long id,
-      @Nullable Long actorUserId,
-      String type,
-      String detail,
-      Instant createdAt,
-      @Nullable String origin,
-      @Nullable String tokenName,
-      @Nullable String agent) {}
+      @Schema(description = "ID des Eintrags.", example = "9001") @Nullable Long id,
+      @Schema(description = "ID der Person, die die Änderung auslöste.", example = "7")
+          @Nullable Long actorUserId,
+      @Schema(description = "Art der Änderung, etwa CREATED oder MOVED.", example = "MOVED")
+          String type,
+      @Schema(description = "Lesbare Einzelheiten der Änderung.", example = "Ready → In progress")
+          String detail,
+      @Schema(description = "Zeitpunkt der Änderung.", example = "2026-10-05T13:17:37Z")
+          Instant createdAt,
+      @Schema(
+              description = "Herkunft der Änderung: SESSION (Oberfläche) oder TOKEN.",
+              example = "TOKEN")
+          @Nullable String origin,
+      @Schema(description = "Name des Tokens bei Herkunft TOKEN.", example = "Nachtlauf")
+          @Nullable String tokenName,
+      @Schema(description = "Vom Aufrufer gemeldetes Agenten-Modell.", example = "claude-opus-5-5")
+          @Nullable String agent) {}
 
   /**
    * Ergebnis des Ingests: {@code created=false}, wenn ein {@code externalKey} auf eine bereits
    * existierende Karte traf und nichts angelegt wurde (#534) — {@code id}/{@code number} zeigen
    * dann die bestehende Karte.
    */
-  public record Created(long id, int number, boolean created) {}
+  @Schema(description = "Ergebnis einer Anlage.")
+  public record Created(
+      @Schema(description = "Interne ID der Karte.", example = "4711") long id,
+      @Schema(description = "Projektweite Nummer der Karte.", example = "1403") int number,
+      @Schema(
+              description =
+                  "false, wenn der externalKey eine vorhandene Karte traf und nichts angelegt"
+                      + " wurde; id und number zeigen dann diese.",
+              example = "true")
+          boolean created) {}
 
-  public record Epic(int number, String title, @Nullable String shortcode, Progress progress) {}
+  @Schema(description = "Ein Vorhaben: Klammer um zusammengehörige Karten.")
+  public record Epic(
+      @Schema(description = "Projektweite Nummer.", example = "1400") int number,
+      @Schema(description = "Titel.", example = "API-Übersicht") String title,
+      @Schema(description = "Kürzel des Vorhabens.", example = "API") @Nullable String shortcode,
+      @Schema(description = "Fortschritt über die zugeordneten Karten.") Progress progress) {}
 
-  public record Progress(int total, int done) {}
+  @Schema(description = "Fortschritt eines Vorhabens.")
+  public record Progress(
+      @Schema(description = "Zahl der zugeordneten Karten.", example = "10") int total,
+      @Schema(description = "Davon erledigt.", example = "3") int done) {}
 }

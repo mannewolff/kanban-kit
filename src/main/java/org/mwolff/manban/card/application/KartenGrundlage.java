@@ -96,6 +96,20 @@ public final class KartenGrundlage {
   }
 
   /**
+   * Wie {@link #aktivitaet(long, long, CardActivityType, String, Instant)}, dazu mit dem Status der
+   * Karte nach der Bewegung (Issue #1426); {@code null}, wenn die Aktivität keinen festhält.
+   */
+  public void aktivitaet(
+      long cardId,
+      long userId,
+      CardActivityType type,
+      String detail,
+      Instant zeitpunkt,
+      @Nullable CardStatus statusAfter) {
+    activity.add(cardId, userId, type, detail, zeitpunkt, actor.current(), statusAfter);
+  }
+
+  /**
    * Wie {@link #aktivitaet(long, long, CardActivityType, String, Instant)}, gestempelt mit jetzt.
    */
   public void aktivitaet(long cardId, long userId, CardActivityType type, String detail) {
@@ -159,8 +173,12 @@ public final class KartenGrundlage {
             herkunft,
             null,
             null);
-    // Status und Done-Zeitstempel leitet inSpalte aus der Zielspalte ab (Plan #1294, E5/E7).
-    Card saved = cards.save(inSpalte(neu, column.name(), now));
+    // Status und Done-Zeitstempel leitet KartenStatus aus der Lage der Zielspalte ab (Plan #1294,
+    // E5/E7, Issue #1474).
+    Card saved =
+        cards.save(
+            KartenStatus.inSpalte(
+                neu, KartenStatus.bis(boardService.listColumns(boardId), column), now));
 
     transitions.open(saved.requireId(), columnId, column.name(), now);
     aktivitaet(saved.requireId(), userId, CardActivityType.CREATED, "Karte angelegt", now);
@@ -199,30 +217,6 @@ public final class KartenGrundlage {
   }
 
   /**
-   * Die Karte, wie sie in einer Spalte dieses Namens ankommt (Plan #1294): Status nach {@link
-   * #statusIn}, Done-Zeitstempel nach {@link #doneStempel}. Gemeinsamer Weg von Anlegen und
-   * Übertragen, damit beide dieselbe Regel sprechen.
-   */
-  public static Card inSpalte(Card card, @Nullable String spaltenname, Instant now) {
-    Card mitStatus = card.withStatus(statusIn(card, spaltenname));
-    return mitStatus.withMovedToDoneAt(doneStempel(mitStatus, spaltenname, now));
-  }
-
-  /**
-   * Status einer Karte, die in einer Spalte dieses Namens ankommt (Plan #1294, E2/E5): Eine
-   * Prozessspalte gibt ihren Status vor, eine eigene Spalte lässt den bisherigen stehen — und wer
-   * noch keinen hat, bekommt {@code BACKLOG}. Vorhaben und Dokumentarten tragen keinen.
-   */
-  public static @Nullable CardStatus statusIn(Card card, @Nullable String spaltenname) {
-    if (!Arbeitspaket.istArbeitspaket(card.type(), card.title())) {
-      return null;
-    }
-    CardStatus bisher = card.status();
-    return Arbeitspaket.statusVonSpalte(spaltenname)
-        .orElse(bisher != null ? bisher : CardStatus.BACKLOG);
-  }
-
-  /**
    * Done-Zeitpunkt nach dem effektiven Maßstab (Plan #1294, E7): Gilt die Karte laut {@link
    * Arbeitspaket#effektivDone} als erledigt, bleibt ein vorhandener Zeitstempel stehen, sonst gilt
    * {@code now}; gilt sie nicht als erledigt, entfällt er. Ohne diesen Zeitstempel fiele eine
@@ -241,8 +235,8 @@ public final class KartenGrundlage {
 
   /**
    * Folge eines Artwechsels durch Umbenennen (Plan #1294): Wird eine Dokumentkarte zum
-   * Arbeitspaket, bekommt sie den Status ihrer Prozessspalte, sonst {@code BACKLOG}; wird ein
-   * Arbeitspaket zur Dokumentkarte, entfällt ihr Status, und wieder zählt die Spalte. Der
+   * Arbeitspaket, bekommt sie den Status nach der Lage ihrer Spalte ({@link KartenStatus}); wird
+   * ein Arbeitspaket zur Dokumentkarte, entfällt ihr Status, und wieder zählt die Spalte. Der
    * Done-Zeitstempel folgt derselben Ableitung. Ohne Artwechsel bleibt alles, wie es ist — die
    * Spalte wird dann gar nicht erst nachgeschlagen.
    */
@@ -251,8 +245,11 @@ public final class KartenGrundlage {
     if (warPaket == Arbeitspaket.istArbeitspaket(nachher.type(), nachher.title())) {
       return nachher;
     }
-    String spalte = boardService.requireColumn(nachher.columnId(), nachher.boardId()).name();
-    return inSpalte(nachher.withStatus(null), spalte, clock.instant());
+    ColumnView spalte = boardService.requireColumn(nachher.columnId(), nachher.boardId());
+    return KartenStatus.inSpalte(
+        nachher.withStatus(null),
+        KartenStatus.bis(boardService.listColumns(nachher.boardId()), spalte),
+        clock.instant());
   }
 
   /** Eine blanke Beschreibung gilt als keine. */

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { accessTokensApi } from '../api/accessTokens'
 import { boardsApi } from '../api/boards'
@@ -47,12 +48,14 @@ const boundToken = {
 
 function renderPage() {
   return render(
-    <SnackbarProvider>
-      <EditModeProvider>
-        <AdministrationPage />
-        <ModeProbe />
-      </EditModeProvider>
-    </SnackbarProvider>,
+    <MemoryRouter>
+      <SnackbarProvider>
+        <EditModeProvider>
+          <AdministrationPage />
+          <ModeProbe />
+        </EditModeProvider>
+      </SnackbarProvider>
+    </MemoryRouter>,
   )
 }
 
@@ -93,6 +96,22 @@ describe('AdministrationPage', () => {
 
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
     expect(headings.indexOf('Rechtliches')).toBeLessThan(headings.indexOf('Editiermodus'))
+  })
+
+  it('zeigt die Sektion API-Schnittstelle auch einem Nicht-Admin, mit Übersicht und Downloads', () => {
+    renderPage()
+
+    expect(screen.getByRole('heading', { name: 'API-Schnittstelle', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'API-Übersicht öffnen' })).toHaveAttribute(
+      'href',
+      '/administration/api',
+    )
+    const json = screen.getByRole('link', { name: 'OpenAPI als JSON herunterladen' })
+    expect(json).toHaveAttribute('href', '/api/openapi')
+    expect(json).toHaveAttribute('download')
+    const yaml = screen.getByRole('link', { name: 'OpenAPI als YAML herunterladen' })
+    expect(yaml).toHaveAttribute('href', '/api/openapi.yaml')
+    expect(yaml).toHaveAttribute('download')
   })
 
   it('rendert den Editiermodus-Schalter, Default aus', () => {

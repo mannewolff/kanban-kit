@@ -25,6 +25,7 @@ import org.springframework.security.core.Authentication;
 class KanbanCompatControllerTest {
 
   private static final KanbanPrincipal PRINCIPAL = new KanbanPrincipal(7L, 1L, 2L, 3L, "Token");
+  private static final Instant LAUF = Instant.parse("2026-10-05T08:58:22.123Z");
 
   private KanbanCompatService service;
   private KanbanCompatController controller;
@@ -127,9 +128,9 @@ class KanbanCompatControllerTest {
   @Test
   void comment_passesTheIdempotencyKeyHeader() {
     controller.comment(
-        boundAuthentication(), 8L, new KanbanCompatController.CommentRequest("hello"), "k-2");
+        boundAuthentication(), 8L, new KanbanCompatController.CommentRequest("hello"), "k-2", null);
 
-    verify(service).comment(PRINCIPAL, 8L, "hello", "k-2");
+    verify(service).comment(PRINCIPAL, 8L, "hello", "k-2", null);
   }
 
   @Test
@@ -150,10 +151,47 @@ class KanbanCompatControllerTest {
     var request = new KanbanCompatController.CommentRequest("hello");
 
     // When
-    controller.comment(boundAuthentication(), 8L, request, null);
+    controller.comment(boundAuthentication(), 8L, request, null, null);
 
     // Then
-    verify(service).comment(PRINCIPAL, 8L, "hello", null);
+    verify(service).comment(PRINCIPAL, 8L, "hello", null, null);
+  }
+
+  @Test
+  void comment_mitGueltigemNachtlaufHeader_reichtDieLaufkennungDurch() {
+    // Issue #1428: X-Night-Run kommt als Instant beim Service an.
+    var request = new KanbanCompatController.CommentRequest("hello");
+
+    controller.comment(boundAuthentication(), 8L, request, null, " 2026-10-05T08:58:22.123Z ");
+
+    verify(service).comment(PRINCIPAL, 8L, "hello", null, LAUF);
+  }
+
+  @Test
+  void comment_mitUngueltigemNachtlaufHeader_reichtNullDurch() {
+    var request = new KanbanCompatController.CommentRequest("hello");
+
+    controller.comment(boundAuthentication(), 8L, request, null, "gestern abend");
+
+    verify(service).comment(PRINCIPAL, 8L, "hello", null, null);
+  }
+
+  @Test
+  void updateComment_mitGueltigemNachtlaufHeader_reichtDieLaufkennungDurch() {
+    var request = new KanbanCompatController.CommentRequest("neu");
+
+    controller.updateComment(boundAuthentication(), 8L, 9L, request, "2026-10-05T08:58:22.123Z");
+
+    verify(service).updateComment(PRINCIPAL, 8L, 9L, "neu", LAUF);
+  }
+
+  @Test
+  void updateComment_mitUngueltigemNachtlaufHeader_reichtNullDurch() {
+    var request = new KanbanCompatController.CommentRequest("neu");
+
+    controller.updateComment(boundAuthentication(), 8L, 9L, request, "kein Zeitpunkt");
+
+    verify(service).updateComment(PRINCIPAL, 8L, 9L, "neu", null);
   }
 
   @Test
@@ -162,10 +200,10 @@ class KanbanCompatControllerTest {
     var request = new KanbanCompatController.CommentRequest("neu");
 
     // When
-    controller.updateComment(boundAuthentication(), 8L, 9L, request);
+    controller.updateComment(boundAuthentication(), 8L, 9L, request, null);
 
     // Then
-    verify(service).updateComment(PRINCIPAL, 8L, 9L, "neu");
+    verify(service).updateComment(PRINCIPAL, 8L, 9L, "neu", null);
   }
 
   @Test

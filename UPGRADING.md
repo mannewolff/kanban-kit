@@ -3,6 +3,14 @@
 Dies ist der **einzige** Ort, an dem steht, was ein Versionssprung von Hand verlangt. Der
 `CHANGELOG.md` sagt, *was* sich geändert hat; diese Seite sagt, *was zu tun ist*.
 
+## Fremde Anbindungen an die API
+
+Ein **verlässlicher** Aufruf der API — in der API-Übersicht der Administration als verlässlich
+gekennzeichnet — ändert sich nicht ohne Vorlauf: Er wird zuerst als **abgekündigt** gekennzeichnet
+und ändert sich oder entfällt frühestens eine Minor-Version später. Jede solche Änderung steht im
+`CHANGELOG.md` als **API-Änderung**. Muss eine fremde Anbindung daraufhin etwas anpassen, steht
+der Anpassungshinweis hier, im Abschnitt der Version, mit der die Änderung kommt.
+
 ## Der gewöhnliche Weg
 
 Im Verzeichnis neben der `docker-compose.yml`:

@@ -32,6 +32,9 @@ import org.mwolff.manban.common.Identifiable;
  *     Läufen der Gattung {@link NightRunKind#NIGHT}, die abgeschlossen gemeldet wurden und ihren
  *     Abbruch selbst gemeldet haben. {@code null} heißt „nicht abgebrochen" oder „vor der
  *     Umstellung eingeliefert" — beides ist kein Befund.
+ * @param releasePreparation die Morgenmeldung des Laufs (Issue #1456); {@code null} heißt „keine
+ *     gemeldet" — jeder Lauf vor {@code V48}, jeder hochgeladene und jeder, dessen letzte Meldung
+ *     sie nicht trug
  */
 public record NightRun(
     @Nullable Long id,
@@ -52,5 +55,6 @@ public record NightRun(
     @Nullable NightRunUsage usage,
     @Nullable String noWorkReason,
     @Nullable NightRunBudget budget,
-    @Nullable String abortReason)
+    @Nullable String abortReason,
+    @Nullable ReleasePreparation releasePreparation)
     implements Identifiable {}

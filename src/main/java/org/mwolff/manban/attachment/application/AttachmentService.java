@@ -1,5 +1,6 @@
 package org.mwolff.manban.attachment.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.io.InputStream;
 import java.time.Clock;
 import java.time.Instant;
@@ -124,8 +125,15 @@ public class AttachmentService {
   }
 
   /** Metadaten-Darstellung eines Anhangs. */
+  @Schema(description = "Die Metadaten eines Anhangs, ohne Inhalt.")
   public record AttachmentView(
-      Long id, Long cardId, String filename, String contentType, long size, Instant createdAt) {}
+      @Schema(description = "Interne ID des Anhangs.", example = "91") Long id,
+      @Schema(description = "Interne ID der Karte.", example = "812") Long cardId,
+      @Schema(description = "Dateiname beim Hochladen.", example = "skizze.png") String filename,
+      @Schema(description = "Aus dem Inhalt erkannter Medientyp.", example = "image/png")
+          String contentType,
+      @Schema(description = "Größe in Byte.", example = "48213") long size,
+      @Schema(description = "Zeitpunkt des Hochladens.") Instant createdAt) {}
 
   /** Download-Ergebnis: Metadaten + Blob-Stream. */
   public record Download(String filename, String contentType, long size, InputStream content) {}

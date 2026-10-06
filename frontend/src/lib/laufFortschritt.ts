@@ -1,5 +1,7 @@
 import type {
   ChainProgressView,
+  KettenStand,
+  KettenStation,
   NightRunProgressView,
   ProgressStage,
   StageState,
@@ -143,6 +145,96 @@ export function wegleiste(kette: ChainProgressView | null, art: FortschrittArt):
     })),
     ende: kette.endeErreicht ? ENDE_DES_WEGS : null,
   }
+}
+
+/** Das Symbol einer Station der Stufenleiste — neben dem Text, nie an seiner Stelle (E6). */
+export type Stationssymbol =
+  | 'erledigt'
+  | 'ziel-erreicht'
+  | 'laeuft'
+  | 'wartet'
+  | 'projektgrenze'
+  | 'abgebrochen'
+  | 'steht-aus'
+  | 'nicht-vorgesehen'
+  | 'erbracht'
+
+/** Eine Station der Stufenleiste während und nach dem Lauf, fertig für die Darstellung. */
+export interface Stationsanzeige {
+  station: KettenStation
+  name: string
+  symbol: Stationssymbol
+  /** Der Zustandstext des Servers; an der Projektgrenze mit ihrem Grund. */
+  text: string
+  /** Warte- oder Abbruchgrund, wörtlich; `null`, wo keiner steht oder er schon im Text steht. */
+  grund: string | null
+  /** Ob die Kette an dieser Station steht — sie läuft, wartet oder brach ab. */
+  aktuell: boolean
+  /** Ob das die Zielstation ist — ohne gewähltes Ziel „Arbeitspakete“. */
+  ziel: boolean
+}
+
+/** Die Namen der Stationen der Stufenleiste — auch für die Übersicht „Heute Nacht“ (Issue #1455). */
+export const STATIONSNAME: Record<KettenStation, string> = {
+  ...STUFENNAME,
+  VORBEREITUNG: 'Veröffentlichung vorbereitet',
+}
+
+/** Der Text, den der Server an der Station einer Projektgrenze setzt (Issue #1451). */
+const PROJEKTGRENZE = 'Projektgrenze'
+
+/**
+ * Die Stufenleiste einer übernommenen Kette (Issue #1453, Plan #1447 E5, E6). Zustand, Text und
+ * Grund kommen fertig vom Server; hier entstehen nur Symbol und Markierung. Nichts
+ * wird aus Labels abgeleitet.
+ */
+export function kettenAnzeige(stand: KettenStand): Stationsanzeige[] {
+  const ziel = stand.ziel ?? 'PAKETE'
+  return stand.stationen.map(({ station, zustand, text, grund }) => {
+    const anzeige = {
+      station,
+      name: STATIONSNAME[station],
+      text,
+      grund,
+      aktuell: zustand === 'LAEUFT' || zustand === 'WARTET' || zustand === 'ABGEBROCHEN',
+      ziel: station === ziel,
+    }
+    switch (zustand) {
+      case 'ERLEDIGT':
+        return {
+          ...anzeige,
+          symbol: stand.zielErreicht && station === stand.ziel ? 'ziel-erreicht' : 'erledigt',
+        }
+      case 'VOR_DEM_LAUF_ERBRACHT':
+        return { ...anzeige, symbol: 'erbracht' }
+      case 'LAEUFT':
+        return { ...anzeige, symbol: 'laeuft' }
+      case 'WARTET':
+        return text === PROJEKTGRENZE
+          ? {
+              ...anzeige,
+              symbol: 'projektgrenze',
+              text: grund === null ? text : `${text}: ${grund}`,
+              grund: null,
+            }
+          : { ...anzeige, symbol: 'wartet' }
+      case 'ABGEBROCHEN':
+        return { ...anzeige, symbol: 'abgebrochen' }
+      case 'STEHT_AUS':
+        return { ...anzeige, symbol: 'steht-aus' }
+      case 'NICHT_VORGESEHEN':
+        return { ...anzeige, symbol: 'nicht-vorgesehen' }
+    }
+  })
+}
+
+/** Die Ansage des Bands für Vorlesewerkzeuge: alle Stationen mit Text, Grund und Ziel. */
+export function kettenAnsage(anzeige: readonly Stationsanzeige[]): string {
+  const teile = anzeige.map((a) => {
+    const grund = a.grund === null ? '' : ' (' + a.grund + ')'
+    return `${a.name} ${a.text}${grund}${a.ziel ? ', Ziel' : ''}`
+  })
+  return `Nacht-Kette: ${teile.join('; ')}`
 }
 
 /** Was ein Lauf der Liste für das Zusammenführen mitbringen muss. */

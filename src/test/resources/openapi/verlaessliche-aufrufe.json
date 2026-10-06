@@ -1,0 +1,862 @@
+{
+  "operationen" : [ {
+    "pfad" : "/api/kanban/items/{id}/labels",
+    "methode" : "DELETE",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "id",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    }, {
+      "in" : "query",
+      "name" : "name",
+      "required" : true,
+      "schema" : {
+        "maxLength" : 60,
+        "minLength" : 0,
+        "type" : "string"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "204" : { }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/epics",
+    "methode" : "GET",
+    "parameter" : [ ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "items" : {
+                "$ref" : "#/components/schemas/Epic"
+              },
+              "type" : "array"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items",
+    "methode" : "GET",
+    "parameter" : [ ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "additionalProperties" : {
+                "items" : {
+                  "$ref" : "#/components/schemas/Item"
+                },
+                "type" : "array"
+              },
+              "type" : "object"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items/{id}/activity",
+    "methode" : "GET",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "id",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "items" : {
+                "$ref" : "#/components/schemas/Activity"
+              },
+              "type" : "array"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items/{id}/comments",
+    "methode" : "GET",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "id",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "items" : {
+                "$ref" : "#/components/schemas/Comment"
+              },
+              "type" : "array"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items/{id}/comments/{commentId}",
+    "methode" : "PATCH",
+    "parameter" : [ {
+      "in" : "header",
+      "name" : "X-Night-Run",
+      "required" : false,
+      "schema" : {
+        "type" : "string"
+      }
+    }, {
+      "in" : "path",
+      "name" : "commentId",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    }, {
+      "in" : "path",
+      "name" : "id",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/KanbanCommentRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "204" : { }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items",
+    "methode" : "POST",
+    "parameter" : [ {
+      "in" : "header",
+      "name" : "Idempotency-Key",
+      "required" : false,
+      "schema" : {
+        "maxLength" : 200,
+        "minLength" : 0,
+        "type" : "string"
+      }
+    } ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/CreateItemRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "201" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Created"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items/{id}/comments",
+    "methode" : "POST",
+    "parameter" : [ {
+      "in" : "header",
+      "name" : "Idempotency-Key",
+      "required" : false,
+      "schema" : {
+        "maxLength" : 200,
+        "minLength" : 0,
+        "type" : "string"
+      }
+    }, {
+      "in" : "header",
+      "name" : "X-Night-Run",
+      "required" : false,
+      "schema" : {
+        "type" : "string"
+      }
+    }, {
+      "in" : "path",
+      "name" : "id",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/KanbanCommentRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "201" : { }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items/{id}/labels",
+    "methode" : "POST",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "id",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/KanbanLabelRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "204" : { }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/night-runs",
+    "methode" : "POST",
+    "parameter" : [ ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/IngestRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/IngestResponse"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items/{id}",
+    "methode" : "PUT",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "id",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/UpdateRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Item"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items/{id}/move",
+    "methode" : "PUT",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "id",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/MoveRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "200" : { }
+    },
+    "abgekuendigtSeit" : null
+  } ],
+  "schemas" : {
+    "Activity" : {
+      "properties" : {
+        "actorUserId" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "agent" : {
+          "type" : "string"
+        },
+        "createdAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "detail" : {
+          "type" : "string"
+        },
+        "id" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "origin" : {
+          "type" : "string"
+        },
+        "tokenName" : {
+          "type" : "string"
+        },
+        "type" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "Comment" : {
+      "properties" : {
+        "author" : {
+          "type" : "string"
+        },
+        "body" : {
+          "type" : "string"
+        },
+        "createdAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "id" : {
+          "format" : "int64",
+          "type" : "integer"
+        }
+      },
+      "type" : "object"
+    },
+    "CreateItemRequest" : {
+      "properties" : {
+        "body" : {
+          "maxLength" : 50000,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "column" : {
+          "type" : "string"
+        },
+        "derivedFrom" : {
+          "format" : "int32",
+          "maximum" : 1000000,
+          "type" : "integer"
+        },
+        "direct" : {
+          "type" : "boolean"
+        },
+        "externalKey" : {
+          "type" : "string"
+        },
+        "ideaStored" : {
+          "deprecated" : true,
+          "type" : "boolean"
+        },
+        "number" : {
+          "format" : "int32",
+          "maximum" : 1000000,
+          "type" : "integer"
+        },
+        "title" : {
+          "maxLength" : 300,
+          "minLength" : 0,
+          "type" : "string"
+        }
+      },
+      "required" : [ "title" ],
+      "type" : "object"
+    },
+    "Created" : {
+      "properties" : {
+        "created" : {
+          "type" : "boolean"
+        },
+        "id" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "number" : {
+          "format" : "int32",
+          "type" : "integer"
+        }
+      },
+      "type" : "object"
+    },
+    "Epic" : {
+      "properties" : {
+        "number" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "progress" : {
+          "$ref" : "#/components/schemas/Progress"
+        },
+        "shortcode" : {
+          "type" : "string"
+        },
+        "title" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "IngestBudgetRequest" : {
+      "properties" : {
+        "abdeckungMin" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "defaultFields" : {
+          "items" : {
+            "maxLength" : 18,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "maxItems" : 10,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "kostenUsd" : {
+          "type" : "number"
+        },
+        "origin" : {
+          "enum" : [ "CONFIGURED", "DEFAULTED" ],
+          "type" : "string"
+        },
+        "paketeMin" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "planMin" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "reviewMin" : {
+          "format" : "int32",
+          "type" : "integer"
+        }
+      },
+      "type" : "object"
+    },
+    "IngestItemRequest" : {
+      "properties" : {
+        "cardNumber" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "commitHash" : {
+          "maxLength" : 40,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "durationMs" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "errorClass" : {
+          "enum" : [ "CHECKS_RED", "CHECKS_NOT_STARTED", "DEPENDENCY_UNMET", "UNEXPECTED_STATE", "HARD_ABORT", "AWAITING_DECISION", "REVIEWER_FAILED", "TIME_BUDGET_EXCEEDED" ],
+          "type" : "string"
+        },
+        "excerpt" : {
+          "maxLength" : 4000,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "stages" : {
+          "items" : {
+            "$ref" : "#/components/schemas/IngestStageRequest"
+          },
+          "maxItems" : 4,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "state" : {
+          "enum" : [ "GREEN", "YELLOW", "RED", "GREY" ],
+          "type" : "string"
+        },
+        "title" : {
+          "maxLength" : 300,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "usage" : {
+          "$ref" : "#/components/schemas/NightRunUsageRequest"
+        }
+      },
+      "required" : [ "state", "title" ],
+      "type" : "object"
+    },
+    "IngestReleasePreparationRequest" : {
+      "properties" : {
+        "cardNumbers" : {
+          "items" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "maxItems" : 500,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "commitHash" : {
+          "maxLength" : 40,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "pending" : {
+          "items" : {
+            "maxLength" : 300,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "maxItems" : 50,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "redCards" : {
+          "items" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "maxItems" : 500,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "redCheck" : {
+          "maxLength" : 300,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "releaseFiles" : {
+          "items" : {
+            "maxLength" : 500,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "maxItems" : 1000,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "result" : {
+          "enum" : [ "GREEN", "GREEN_PENDING", "RED", "NOT_PREPARED" ],
+          "type" : "string"
+        },
+        "version" : {
+          "maxLength" : 100,
+          "minLength" : 0,
+          "type" : "string"
+        }
+      },
+      "required" : [ "result" ],
+      "type" : "object"
+    },
+    "IngestRequest" : {
+      "properties" : {
+        "abortReason" : {
+          "maxLength" : 4000,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "budget" : {
+          "$ref" : "#/components/schemas/IngestBudgetRequest"
+        },
+        "complete" : {
+          "type" : "boolean"
+        },
+        "durationMs" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "items" : {
+          "items" : {
+            "$ref" : "#/components/schemas/IngestItemRequest"
+          },
+          "maxItems" : 200,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "kind" : {
+          "enum" : [ "NIGHT", "INTERACTIVE" ],
+          "type" : "string"
+        },
+        "mode" : {
+          "enum" : [ "IMPLEMENTATION", "REVIEW", "CHAIN", "INTERACTIVE" ],
+          "type" : "string"
+        },
+        "noWorkReason" : {
+          "maxLength" : 300,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "processedCount" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "releasePreparation" : {
+          "$ref" : "#/components/schemas/IngestReleasePreparationRequest"
+        },
+        "skippedCount" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "startedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "unparsedCount" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "usage" : {
+          "$ref" : "#/components/schemas/NightRunUsageRequest"
+        }
+      },
+      "required" : [ "complete", "items", "mode", "startedAt" ],
+      "type" : "object"
+    },
+    "IngestResponse" : {
+      "properties" : {
+        "outcome" : {
+          "enum" : [ "CREATED", "REPLACED" ],
+          "type" : "string"
+        },
+        "startedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "IngestStageRequest" : {
+      "properties" : {
+        "durationMs" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "stage" : {
+          "enum" : [ "PLAN", "REVIEW", "PAKETE", "ABDECKUNG" ],
+          "type" : "string"
+        },
+        "usage" : {
+          "$ref" : "#/components/schemas/NightRunUsageRequest"
+        }
+      },
+      "required" : [ "stage" ],
+      "type" : "object"
+    },
+    "Item" : {
+      "properties" : {
+        "body" : {
+          "type" : "string"
+        },
+        "column" : {
+          "type" : "string"
+        },
+        "derivedFrom" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "externalKey" : {
+          "type" : "string"
+        },
+        "id" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "labels" : {
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "number" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "position" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "title" : {
+          "type" : "string"
+        },
+        "type" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "KanbanCommentRequest" : {
+      "properties" : {
+        "body" : {
+          "maxLength" : 50000,
+          "minLength" : 0,
+          "type" : "string"
+        }
+      },
+      "required" : [ "body" ],
+      "type" : "object"
+    },
+    "KanbanLabelRequest" : {
+      "properties" : {
+        "name" : {
+          "maxLength" : 60,
+          "minLength" : 0,
+          "type" : "string"
+        }
+      },
+      "required" : [ "name" ],
+      "type" : "object"
+    },
+    "MoveRequest" : {
+      "properties" : {
+        "column" : {
+          "minLength" : 1,
+          "type" : "string"
+        },
+        "position" : {
+          "format" : "int32",
+          "type" : "integer"
+        }
+      },
+      "required" : [ "column" ],
+      "type" : "object"
+    },
+    "NightRunUsageRequest" : {
+      "properties" : {
+        "cachedInputTokens" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "costUsd" : {
+          "type" : "number"
+        },
+        "inputTokens" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "modelDurationMs" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "outputTokens" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "turns" : {
+          "format" : "int32",
+          "type" : "integer"
+        }
+      },
+      "type" : "object"
+    },
+    "Progress" : {
+      "properties" : {
+        "done" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "total" : {
+          "format" : "int32",
+          "type" : "integer"
+        }
+      },
+      "type" : "object"
+    },
+    "UpdateRequest" : {
+      "properties" : {
+        "body" : {
+          "maxLength" : 50000,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "title" : {
+          "maxLength" : 300,
+          "minLength" : 0,
+          "type" : "string"
+        }
+      },
+      "required" : [ "title" ],
+      "type" : "object"
+    }
+  }
+}

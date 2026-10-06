@@ -25,6 +25,14 @@
 - Innerhalb eines Projekts weitere **Boards** anlegen. Ein neues Board bekommt die Default-Spalten
   **Backlog · Ready · In Progress · In Review · Done**.
 - Spalten lassen sich anlegen, umbenennen, umsortieren und (wenn leer) löschen.
+- **Status eines Arbeitspakets:** Die fünf Prozessspalten **Backlog**, **Ready**, **In Progress**,
+  **In Review** und **Done** geben einer Karte, die dort ankommt, ihren Status. Eine **eigene
+  Spalte** (jeder andere Name) übernimmt den Status der nächsten Prozessspalte **links** davon; gibt
+  es links keine, gilt „Backlog“. Bei `Backlog · X · Y · Ready` bekommt eine Karte in X oder Y also
+  „Backlog“, auch wenn sie aus Ready zurückkommt. Das gilt bei jedem Verschieben, Anlegen und
+  Übertragen auf ein anderes Board und ersetzt einen von Hand gesetzten Status. Wer die Spalten
+  umsortiert, ändert den Status liegender Karten nicht. Vorhaben und Karten mit `[Idee]`,
+  `[Fachlich]` oder `[Plan]` im Titel tragen keinen Status.
 
 ## Karten
 
@@ -78,6 +86,45 @@ Klick auf eine Karte öffnet das Detail:
   als 0. Den Block sieht nur, wer auch die Auswertung der Runs sehen darf (Projekt-Rolle `OWNER`,
   oder Plattform-Admin eines teilnehmenden Projekts); Anläufe verdrängter Runs bleiben darin
   erhalten.
+- **Stufenleiste der Nacht-Kette:** Eine Karte, deren Titel mit `[Fachlich]` oder `[Plan]` beginnt,
+  trägt eine waagerechte Leiste mit den Stationen der [Nacht-Kette](#nachtlauf). Über sie legst du
+  fest, wie weit die Kette diese Karte in der Nacht führt, und startest sie — ohne Labels von Hand
+  zu setzen. Andere Karten zeigen keine Leiste.
+  - **Ziel wählen:** Wählbar sind vier Ziele, je eines mit seinem Label: **Plan** (`ziel:plan`),
+    **Arbeitspakete** (`ziel:pakete`), **Umsetzung** (`ziel:umsetzung`) und **Veröffentlichung
+    vorbereitet** (`ziel:push-vorbereitet`). Ein Klick setzt das Ziel und nimmt ein vorher gewähltes
+    ab; es gibt höchstens eines je Karte. Ohne gewähltes Ziel ist **Arbeitspakete** markiert: Die
+    Kette endet dann wie bisher nach der Abdeckungsprüfung. Trägt die Karte `kit:durchziehen`, gilt
+    sie als Ziel „Umsetzung“, und ein kürzeres Ziel bliebe wirkungslos. An einem Plan sind Plan und
+    Prüfung schon erbracht und nicht wählbar. Die Pfeiltasten wechseln zwischen den Zielen.
+  - **Planprüfung:** An einer fachlichen Anforderung wählt ein Schalter, ob ein oder zwei Modelle
+    den entstehenden Plan prüfen (`planreview:1` oder `planreview:2`); ohne Wahl gilt die Vorgabe des
+    Projekts. An einem Plan, oder wenn der Plan der Anforderung schon eine Zeile „Plan-Review:“
+    trägt, ist der Schalter gesperrt.
+  - **Kette starten:** Der Knopf setzt `kit:night` und gibt die Karte damit einmal zur Übernahme
+    durch den nächsten Runner frei; er startet keinen Runner und legt keinen Zeitpunkt fest. Ist ein
+    Ziel ab „Umsetzung“ gewählt, steht vorher unter der Leiste „Mit diesem Ziel gibst du das GO für
+    alle Arbeitspakete dieser Karte.“, und der Start verlangt eine ausdrückliche Bestätigung. Bei
+    kürzeren Zielen genügt der eine Klick.
+  - **Sperrhinweise:** Der Start ist gesperrt, und ein Hinweis nennt den Grund, wenn einer
+    fachlichen Anforderung die abgeschlossene fachliche Prüfung fehlt (kein `review:fertig`), einem
+    Plan die Zeile „Plan-Review:“, oder wenn an der Karte eine offene Frage auf einen Menschen
+    wartet (`kit:klaeren`, `lauf:wartet`). Fehlt am Board eines der Labels, legt die Leiste es nicht
+    an: Der Hinweis nennt seinen Namen, und ein Mensch legt es in den Board-Labels an.
+  - **Start zurücknehmen:** Solange kein Runner die Karte übernommen hat, nimmt „Start
+    zurücknehmen“ `kit:night` wieder ab; danach sind Ziel und Prüferzahl wieder frei wählbar.
+    Übernimmt ein Runner die Karte, nimmt er `kit:night`, `ziel:*` und `planreview:*` zusammen ab, und
+    die Leiste ist nur noch Anzeige.
+  - **Während und nach dem Lauf** zeigt die Leiste je Station Text und Symbol: „erledigt“, „läuft“
+    (an der Prüfung mit gewählter Prüferzahl etwa „läuft (2 Prüfer)“), „wartet“ mit dem Wartegrund,
+    „abgebrochen“, „steht aus“, „nicht vorgesehen“ hinter dem Ziel und „vor dem Lauf erbracht“ bei
+    einem Plan als Startkarte. Das gewählte Ziel bleibt markiert; erreicht die Kette es, steht dort
+    „Ziel erreicht“. Bleibt sie an einer Grenze stehen, die das Projekt verbietet, trägt die erste
+    nicht erreichte Station „Projektgrenze“ mit dem gemeldeten Grund. Laufen mehrere Runner, zeigt die
+    Leiste den Lauf, der diese Karte bearbeitet.
+
+  Ziel wählen, starten und zurücknehmen darf, wer die Karte bearbeiten darf (`TICKET_UPDATE`); wer
+  das nicht darf, sieht die Leiste nur. Siehe [Rollen & Rechte](rollen-und-rechte.md#projekt-rollen-rechte-matrix).
 - **Kommentare:** schreiben; eigene Kommentare löschen (Moderation durch ADMIN/OWNER).
 - **Aktivität:** ein chronologischer Verlauf am Ende des Details — „*Zeitpunkt* · *Person* · *Aktion*".
   Protokolliert werden Anlegen, Bearbeiten, Zuständige geändert, Verschieben, Archivieren und
@@ -333,6 +380,38 @@ die übrigen Runs derselben Datei entstehen trotzdem. Und ein **nachgereichter R
 als alle 190 aufbewahrten, verdrängt keinen neueren — er wird angelegt und sogleich wieder verdrängt,
 erscheint also nach dem Einlesen nicht in der Liste.
 
+### Heute Nacht
+
+Die Übersicht **„Heute Nacht“** zeigt alle Karten des Projekts, deren Kette an der
+[Stufenleiste](#karten-detail) gestartet und noch von keinem Runner übernommen wurde — über alle
+Boards hinweg. Jede Zeile nennt Kartennummer (ein Link, der die Karte öffnet), Titel, Board, das
+gewählte Ziel („Ziel: Umsetzung“), die Prüferzahl, falls gewählt, und eine kleine Stufenleiste mit
+dem Weg der Kette. Übernimmt ein Runner die Karte, verlässt sie die Übersicht. Ist keine Karte
+freigegeben, steht dort „Für die nächste Nacht ist keine Karte freigegeben.“
+
+Die Übersicht sieht, wer die Runner-Seite sehen darf. Ein Projektmitglied, das eine Kette startet,
+ohne die Runner-Seite zu sehen, verfolgt Ziel und Fortschritt an der Stufenleiste der Karte.
+
+### Morgenkachel „Veröffentlichung vorbereitet“
+
+Hat ein Lauf eine Veröffentlichung vorbereitet (Ziel `ziel:push-vorbereitet`), steht in seiner
+aufgeklappten Zeile die Kachel **„Veröffentlichung vorbereitet“**. Sie nennt die Version des Stands,
+den Eingang der Meldung als „gemeldet um *Tag, Uhrzeit*“ — einen eigenen Zeitpunkt der Vorbereitung
+meldet das Kit nicht — und einen von vier Ausgängen, jeweils mit Symbol und Text neben der Lampe:
+
+- **grün:** Der vorbereitete Stand ist geprüft. Darunter steht „Der Stand kann von Hand
+  veröffentlicht werden.“
+- **grün, Prüfung offen:** Der Stand ist grün, einzelne Prüfungen stehen aber noch aus; sie stehen
+  unter „Offene Prüfungen“.
+- **rot:** Die fehlgeschlagene Prüfung steht unter „Fehlgeschlagene Prüfung“, die Karten, die sie
+  verursacht haben, unter „Betroffene Karten“.
+- **nicht vorbereitet:** In diesem Lauf wurde keine Veröffentlichung vorbereitet.
+
+Mit „Stand:“ nennt die Kachel die Kennung des vorbereiteten Stands (den Commit), mit der du ihn
+außerhalb des Boards wiederfindest. Unter „Enthaltene Arbeitspakete“ stehen alle Pakete des Stands
+mit Nummer und Titel, auch solche aus anderen Ketten. **Veröffentlicht wird von Hand**, außerhalb
+des Boards: Die Kachel bietet keinen Knopf dafür.
+
 ### Fortschritt eines laufenden Runs
 
 Klappst du die Kachel eines **noch laufenden** Runs auf, steht über den Vorgangszeilen ein eigener
@@ -350,17 +429,26 @@ Die aktuelle Stufe ist markiert — als Text, nicht allein über die Farbe. Zu j
 Karten, die sie hervorgebracht hat (der angelegte Plan, die Arbeitspakete samt Anzahl); jede
 Kartennummer ist ein Link und öffnet die Karte.
 
-**Welche Karten zum Run gehören.** Eine Karte zählt zum Run, wenn sie in seinem Zeitfenster
-mindestens eine Änderung über das Zugriffstoken des Runs erfahren hat, die der Runner im
-Nachtbetrieb vorgenommen hat. Das Zeitfenster reicht vom Start bis zum gemeldeten Ende, bei einem
-verstummten Run bis zu seiner letzten Meldung, sonst bis jetzt. Was ein Mensch oder eine
-interaktive Sitzung mit demselben Token bearbeitet hat, zählt darum nicht mit, ebenso wenig Karten,
-die vor dem Run schon fertig waren. Lässt sich die Zuordnung nicht feststellen, steht der Block auf
-**„unbekannt"**, statt still mitzuzählen oder wegzulassen — in drei Fällen:
+**Welche Karten zum Run gehören.** Erstes Kriterium ist die Laufkennung: Ein Runner weist sich bei
+jeder Änderung am Board mit seinem Startzeitpunkt aus (Header `X-Night-Run`). Zum Run zählen dann
+genau die Karten, die in seinem Zeitfenster mindestens eine Änderung mit dieser Kennung über das
+Zugriffstoken des Runs erfahren haben — auch wenn gleichzeitig ein zweiter Runner mit demselben Token
+arbeitet. Nur für Läufe ohne Ausweis, also ältere Runner, gilt weiter die Zeitfenster-Regel: Eine
+Karte zählt, wenn sie im Zeitfenster eine Änderung über das Zugriffstoken im Nachtbetrieb erfahren
+hat. Das Zeitfenster reicht vom Start bis zum gemeldeten Ende, bei einem verstummten Run bis zu
+seiner letzten Meldung, sonst bis jetzt. Was ein Mensch oder eine interaktive Sitzung mit demselben
+Token bearbeitet hat, zählt darum nicht mit, ebenso wenig Karten, die vor dem Run schon fertig waren.
+Jede Karte steht beim Run mit dem Zustand, den sie durch **seine eigene letzte Änderung** erreicht
+hat — spätere Änderungen anderer Läufe oder von Menschen verändern nicht, was bei ihm steht. Lässt
+sich die Zuordnung nicht feststellen, steht der Block auf **„unbekannt"**, statt still mitzuzählen
+oder wegzulassen — in drei Fällen:
 
 - Der Run kam per „Protokoll einlesen" ohne Zugriffstoken: Der ganze Fortschritt ist unbekannt.
-- Ein zweiter Nachtlauf desselben Projekts mit demselben Token überschneidet sich zeitlich: Karten
-  aus der Überschneidung stehen mit Nummer unter „unbekannt" und zählen nicht.
+- Ein Nachtlauf ohne Ausweis überschneidet sich zeitlich mit einem zweiten Nachtlauf desselben
+  Projekts mit demselben Token: Karten aus der Überschneidung, die ohne Ausweis geändert wurden,
+  stehen mit Nummer unter „unbekannt" und zählen nicht. Dort steht dann der Hinweis „Dieser Lauf hat
+  sich nicht ausgewiesen (älterer Runner)." Ein ausgewiesener Lauf zeigt seine Karten auch in der
+  Überschneidung eindeutig.
 - Eine Kette lässt sich keiner fachlichen Anforderung zuordnen.
 
 **Wie die Kopfzahlen vorgreifen.** Solange der Run läuft, nehmen „bearbeitet / übergangen" und die
@@ -542,6 +630,12 @@ Sidebar-Eintrag **„Administration"** ein- und ausgeschaltet:
 - **Der Alltag bleibt unberührt:** Karten anlegen, verschieben und archivieren funktioniert
   **unabhängig** vom Editiermodus.
 
+Unabhängig vom Editiermodus zeigt die Seite **Administration** jedem Angemeldeten den Abschnitt
+**„API-Schnittstelle"**: Er öffnet die Übersicht aller Aufrufe des Leitstands
+(`/administration/api`) und bietet ihre Beschreibung als OpenAPI 3 zum Herunterladen (JSON und
+YAML). Die Übersicht dient dem Nachschlagen; wer Aufrufe darin ausprobieren darf, steht unter
+[API-Übersicht](#api-ubersicht).
+
 ## Plattform-Leitstand
 
 Der **Plattform-Leitstand** ist die Startseite eines **Plattform-Admins** nach dem Anmelden (Sidebar
@@ -617,6 +711,23 @@ Ob ein Projekt teilnimmt, entscheidet ausschließlich das Projekt selbst — OWN
 echter Mitgliedschaft, über das Teilnahme-Ankreuzfeld im [Editiermodus](#editiermodus) der
 Projektliste. Der Plattform-Admin sieht nur Runs und Störungen teilnehmender Projekte und kann die
 Teilnahme selbst nicht erzwingen.
+
+## API-Übersicht {#api-ubersicht}
+
+Für alle Angemeldeten ohne Plattform-Rolle ADMIN ist die API-Übersicht (`/administration/api`) rein
+lesend: Sie zeigt Aufrufe, Eingaben und Antworten, bietet aber kein Absenden an.
+
+Ein **Plattform-Admin** kann jeden Aufruf dort **ausprobieren**: Eingaben ausfüllen, absenden und die
+echte Antwort des Leitstands sehen, Fehlermeldungen eingeschlossen. Der Aufruf läuft mit den Rechten
+der eigenen Sitzung — was der Admin im Leitstand nicht darf, wird auch hier abgelehnt. Aufrufe, die
+statt der Anmeldung ein **Projekt-Token** verlangen (Schema `projektToken`), nehmen das Token über
+**„Authorize"** entgegen und laufen dann mit genau dessen Rechten. Das Token liegt nur im Speicher der
+Seite; nach dem Verlassen oder Neuladen der Übersicht ist es fort.
+
+Vor jedem **ändernden** Aufruf — alles außer GET und HEAD — fragt die Übersicht nach: Der Aufruf
+verändert echte Daten dieser Umgebung und geht erst nach der Bestätigung ab. Lesende Aufrufe gehen
+ohne Rückfrage ab. Das gilt in jeder Umgebung, **auch in der Produktion**: Ausprobieren wirkt immer
+auf die echten Daten des Leitstands, in dem die Übersicht läuft.
 
 ## Board-Befehle unter Last {#board-befehle-unter-last}
 

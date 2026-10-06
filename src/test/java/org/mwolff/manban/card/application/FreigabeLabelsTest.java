@@ -128,6 +128,33 @@ class FreigabeLabelsTest {
         .doesNotThrowAnyException();
   }
 
+  /**
+   * Der Start der Kette nimmt {@code kit:night}, {@code ziel:*} und {@code planreview:*} zusammen
+   * ab (Kit E1); beide Label-Familien stehen in keiner Sperrliste (Plan #1447, E11).
+   */
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "ziel:plan",
+        "ziel:pakete",
+        "ziel:umsetzung",
+        "ziel:push-vorbereitet",
+        "planreview:1",
+        "planreview:2"
+      })
+  void token_darfZielUndPrueferLabelAbnehmen(String name) {
+    assertThatCode(() -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.ABNEHMEN))
+        .doesNotThrowAnyException();
+    assertThatCode(
+            () ->
+                FreigabeLabels.pruefeWechsel(
+                    CardActivityOrigin.TOKEN,
+                    Map.of(1L, "kit:night", 4L, name, 3L, "bug"),
+                    List.of(1L, 4L, 3L),
+                    List.of(3L)))
+        .doesNotThrowAnyException();
+  }
+
   @Test
   void wechsel_unbekannteId_istKeinFreigabeLabel() {
     assertThatCode(

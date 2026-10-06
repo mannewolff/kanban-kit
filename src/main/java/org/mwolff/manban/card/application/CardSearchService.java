@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -128,13 +129,18 @@ public class CardSearchService {
    * @param columnId Spalte der Karte (immer gesetzt)
    * @param columnName Name der Spalte (immer gesetzt)
    */
+  @Schema(description = "Ein Treffer der Nummernsuche: die Karte und wo sie liegt.")
   public record CardSearchHit(
-      CardView card,
-      Long projectId,
-      String projectName,
-      Long boardId,
-      String boardName,
-      boolean boardArchived,
-      Long columnId,
-      String columnName) {}
+      @Schema(description = "Die gefundene Karte.") CardView card,
+      @Schema(description = "Interne ID des Projekts.", example = "1") Long projectId,
+      @Schema(description = "Name des Projekts.", example = "kanban-kit") String projectName,
+      @Schema(description = "Interne ID des Boards.", example = "3") Long boardId,
+      @Schema(description = "Name des Boards.", example = "Entwicklung") String boardName,
+      @Schema(
+              description =
+                  "Ob das Board archiviert ist; die Karte bleibt auffindbar, das Board über die"
+                      + " Board-Aufrufe aber nicht.")
+          boolean boardArchived,
+      @Schema(description = "Interne ID der Spalte.", example = "17") Long columnId,
+      @Schema(description = "Name der Spalte.", example = "In Arbeit") String columnName) {}
 }

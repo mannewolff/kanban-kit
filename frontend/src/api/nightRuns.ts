@@ -266,7 +266,47 @@ export interface NightRunView {
    * ohne Budgets.
    */
   budget: NightRunBudgetView | null
+  /**
+   * Die Morgenmeldung des Laufs (Issue #1457, #1458, Plan #1447 E12); `null` heißt „keine Meldung“
+   * — dann zeigt die Laufplatte keine Kachel und behauptet nichts.
+   */
+  releasePreparation: ReleasePreparationView | null
   items: NightRunItemView[]
+}
+
+/**
+ * Ausgang der Morgenmeldung (Plan #1447 E12): `GREEN` von Hand veröffentlichbar, `GREEN_PENDING`
+ * grün mit offener Prüfung, `RED` eine Prüfung fehlgeschlagen, `NOT_PREPARED` nichts vorbereitet.
+ */
+export type ReleasePreparationResult = 'GREEN' | 'GREEN_PENDING' | 'RED' | 'NOT_PREPARED'
+
+/** Eine gemeldete Kartennummer mit Titel; `title` ist `null`, wo es die Nummer im Projekt nicht gibt. */
+export interface CardTitleView {
+  number: number
+  title: string | null
+}
+
+/**
+ * Die Morgenmeldung „Veröffentlichung vorbereitet“ eines Laufs (Issue #1457, #1458) — Feld für
+ * Feld die `ReleasePreparationView` des Servers. Felder ohne Wert kommen als `null`, Listen leer
+ * (Issue #734).
+ */
+export interface ReleasePreparationView {
+  result: ReleasePreparationResult
+  /** Kennung des vorbereiteten Stands, mit der der Mensch ihn außerhalb des Boards wiederfindet. */
+  commitHash: string | null
+  /** Beschriftung des Stands, etwa die Versionsnummer. */
+  version: string | null
+  /** Die fehlgeschlagene Prüfung bei `RED`. */
+  redCheck: string | null
+  /** Die offenen Prüfungen bei `GREEN_PENDING`; sonst leer. */
+  pending: string[]
+  /** Eingang der Meldung („gemeldet um“) — die Meldung trägt keinen eigenen Vorbereitungszeitpunkt. */
+  receivedAt: string
+  /** Die enthaltenen Arbeitspakete in gemeldeter Reihenfolge, auch aus anderen Ketten. */
+  cards: CardTitleView[]
+  /** Die von der fehlgeschlagenen Prüfung betroffenen Karten. */
+  redCards: CardTitleView[]
 }
 
 /**
@@ -352,8 +392,72 @@ export interface NightRunProgressView {
   pakete: PackageProgressView[]
   /** Karten, deren Zuordnung sich nicht feststellen lässt. */
   unbekannt: CardRefView[]
+  /** Ob Karten unter „unbekannt" stehen, weil ein Lauf ohne Ausweis sie geändert hat (Issue #1429). */
+  unbekanntOhneAusweis: boolean
   /** Karten mit einer offenen Frage an den Menschen. */
   offeneFragen: CardRefView[]
+}
+
+/**
+ * Die Stationen der Stufenleiste (Issue #1453, Plan #1447): der Weg einer Kette und dazu die
+ * Vorbereitung der Veröffentlichung, die nur im Kettenstand einer Karte vorkommt.
+ */
+export type KettenStation = ProgressStage | 'VORBEREITUNG'
+
+/** Zustand einer Station der Stufenleiste — die sieben des Servers (Plan #1447 E5). */
+export type StationsZustand =
+  | 'ERLEDIGT'
+  | 'LAEUFT'
+  | 'WARTET'
+  | 'ABGEBROCHEN'
+  | 'STEHT_AUS'
+  | 'NICHT_VORGESEHEN'
+  | 'VOR_DEM_LAUF_ERBRACHT'
+
+/** Eine Station mit Zustand und fertigem Text, etwa „läuft (2 Prüfer)“ oder „Ziel erreicht“. */
+export interface NightChainStationView {
+  station: KettenStation
+  zustand: StationsZustand
+  text: string
+  /** Grund bei `WARTET` und `ABGEBROCHEN`, wörtlich; sonst `null`. */
+  grund: string | null
+}
+
+/**
+ * Der Kettenstand einer Karte, wie ihn `GET /api/cards/{cardId}/night-chain` liefert (Issue #1452,
+ * #1453) — fertig abgeleitet; der Client rechnet nichts nach (E5).
+ */
+export interface KettenStand {
+  /** Gewähltes Ziel; `null` ohne Ziel — dann endet die Kette nach der Abdeckung. */
+  ziel: KettenStation | null
+  /** Gewählte Prüferzahl; `null` ohne Wahl. */
+  pruefer: number | null
+  zielErreicht: boolean
+  /** Die Projektgrenze vor dem Ziel; `null` ohne Grenze. */
+  grenze: { stufe: KettenStation; grund: string | null } | null
+  stationen: NightChainStationView[]
+  /** Ob ein Runner die Karte übernommen hat (E15). */
+  uebernommen: boolean
+  /** Ob der Plan dieser fachlichen Anforderung schon `Plan-Review:` trägt (E14). */
+  planReviewVorhanden: boolean
+  /** Start des zugrunde gelegten Laufs; `null`, solange keiner die Karte angefasst hat. */
+  lauf: string | null
+}
+
+/**
+ * Eine zur Übernahme freigegebene, noch nicht übernommene Karte, wie sie
+ * `GET /api/projects/{projectId}/night-runs/tonight` liefert (Issue #1454, #1455).
+ */
+export interface HeuteNachtKarte {
+  number: number
+  title: string
+  boardName: string
+  /** `FACHPLAN`: die Kette beginnt beim Plan; `PLAN`: Plan und Prüfung sind vor dem Lauf erbracht. */
+  start: 'FACHPLAN' | 'PLAN'
+  /** Die Zielstation: `PLAN`, `PAKETE`, `UMSETZUNG` oder `VORBEREITUNG`. */
+  ziel: KettenStation
+  /** Gewählte Prüferzahl; `null` ohne Wahl und an einem Plan. */
+  pruefer: number | null
 }
 
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
@@ -376,6 +480,11 @@ export const nightRunsApi = {
   /** Der Fortschritt eines Laufs, ermittelt aus dem Board (Issue #1376, Plan #1372). */
   progress: (projectId: number, runId: number) =>
     apiFetch<NightRunProgressView>(`/api/projects/${projectId}/night-runs/${runId}/progress`),
+  /** Der Kettenstand einer Karte für die Stufenleiste (Issue #1453, Plan #1447). */
+  kettenstand: (cardId: number) => apiFetch<KettenStand>(`/api/cards/${cardId}/night-chain`),
+  /** Die freigegebenen, noch nicht übernommenen Karten des Projekts (Issue #1455, Plan #1447). */
+  heuteNacht: (projectId: number) =>
+    apiFetch<HeuteNachtKarte[]>(`/api/projects/${projectId}/night-runs/tonight`),
 }
 
 export type NightRunsApi = typeof nightRunsApi

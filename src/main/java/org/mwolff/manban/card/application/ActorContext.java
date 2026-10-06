@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.application;
 
+import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 
@@ -21,11 +22,18 @@ public interface ActorContext {
    * Herkunfts-Stempel eines Aktivitätseintrags. {@code origin} und {@code tokenName} sind
    * server-verifiziert (Authority bzw. Token-Bindung), {@code agent} ist eine Client-Selbstauskunft
    * (Header {@code X-Agent-Model}) — sie dürfen in der Darstellung nicht gleich behandelt werden.
+   *
+   * <p>{@code laufStart} ist wie {@code agent} eine Client-Selbstauskunft: der {@code startedAt}
+   * des Nachtlaufs aus dem Header {@code Laufkennung.HEADER} (Issue #1426, Plan #1423 A4), gesetzt
+   * nur bei Token-Herkunft. Er ordnet eine Aktivität einem Lauf zu, beweist aber nichts.
    */
   record ActorStamp(
-      @Nullable CardActivityOrigin origin, @Nullable String tokenName, @Nullable String agent) {
+      @Nullable CardActivityOrigin origin,
+      @Nullable String tokenName,
+      @Nullable String agent,
+      @Nullable Instant laufStart) {
 
-    private static final ActorStamp UNKNOWN = new ActorStamp(null, null, null);
+    private static final ActorStamp UNKNOWN = new ActorStamp(null, null, null, null);
 
     /** Kein authentifizierter Kontext — alle Felder leer, Speicherung wie ein Alt-Eintrag. */
     public static ActorStamp unknown() {

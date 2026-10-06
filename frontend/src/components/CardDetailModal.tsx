@@ -43,6 +43,7 @@ import { cardsApi as defaultCardsApi, type Card, type CardActivity, type CardByN
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { NightRunsApi } from '../api/nightRuns'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
+import { KettenStufenleiste, traegtStufenleiste } from './nachtlauf/KettenStufenleiste'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
@@ -1126,8 +1127,11 @@ interface Props {
     | 'openEpic'
   >
   boardsApi?: Pick<typeof defaultBoardsApi, 'get'>
-  /** Abruf der Nachtlauf-Anläufe (Issue #968); ohne Angabe der echte Endpunkt. */
-  nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte'>
+  /**
+   * Abruf der Nachtlauf-Anläufe (Issue #968) und des Kettenstands der Stufenleiste (Issue #1453);
+   * ohne Angabe die echten Endpunkte.
+   */
+  nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte' | 'kettenstand'>
 }
 
 /**
@@ -1806,6 +1810,23 @@ function CardDetailModalView({
 
           {!editing && (
             <KartenBlock name="Verlauf">
+              {/* Die Stufenleiste der Nacht-Kette (Issue #1449, E1–E3): nur an [Fachlich] und [Plan],
+                  bedienbar unter denselben Bedingungen wie die Label-Sektion. Body und Kommentare
+                  braucht sie für Sperrhinweise und den Rückfall, solange der Kettenstand nicht
+                  geladen ist (Issue #1450, #1453). */}
+              {traegtStufenleiste(stand.title) && (
+                <KettenStufenleiste
+                  titel={stand.title}
+                  labelIds={labelIds}
+                  boardLabels={boardLabels}
+                  disabled={!(canEdit && canEditLabels)}
+                  beschreibung={stand.description}
+                  kommentare={comments}
+                  onChange={(ids) => void saveLabels(ids)}
+                  cardId={card.id}
+                  api={nightRunsApi}
+                />
+              )}
               {/* Nur mit Projekt gibt es etwas abzurufen: `projectId` ist am Modal optional
                   (Issue #968). */}
               {projectId != null && (

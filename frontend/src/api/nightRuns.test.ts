@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { nightRunsApi, type NightRunSubmission } from './nightRuns'
+import { nightRunsApi, type NightRunSubmission, type ReleasePreparationView } from './nightRuns'
 
 function spyFetch(body = '{}') {
   return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -109,6 +109,7 @@ describe('nightRunsApi', () => {
         ketten: [],
         pakete: [{ karte: { number: 1376, title: 'API', boardId: 3 }, zustand: 'IN_UMSETZUNG' }],
         unbekannt: [],
+        unbekanntOhneAusweis: false,
         offeneFragen: [],
       }),
     )
@@ -117,6 +118,74 @@ describe('nightRunsApi', () => {
     expect(c.url).toBe('/api/projects/4/night-runs/77/progress')
     expect(c.method).toBeUndefined()
     expect(fortschritt.pakete[0].zustand).toBe('IN_UMSETZUNG')
+  })
+
+  it('kettenstand ruft GET /api/cards/{cardId}/night-chain und liefert den Stand (Issue #1453)', async () => {
+    const f = spyFetch(
+      JSON.stringify({
+        ziel: 'UMSETZUNG',
+        pruefer: 2,
+        zielErreicht: false,
+        grenze: null,
+        stationen: [{ station: 'REVIEW', zustand: 'LAEUFT', text: 'läuft (2 Prüfer)', grund: null }],
+        uebernommen: true,
+        planReviewVorhanden: false,
+        lauf: '2026-10-05T01:00:00Z',
+      }),
+    )
+    const stand = await nightRunsApi.kettenstand(812)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/812/night-chain')
+    expect(c.method).toBeUndefined()
+    expect(stand.stationen[0]).toEqual({
+      station: 'REVIEW',
+      zustand: 'LAEUFT',
+      text: 'läuft (2 Prüfer)',
+      grund: null,
+    })
+    expect(stand.uebernommen).toBe(true)
+  })
+
+  it('heuteNacht ruft GET /api/projects/{id}/night-runs/tonight und liefert die Karten (Issue #1455)', async () => {
+    const karte = {
+      number: 1420,
+      title: '[Fachlich] Export als CSV',
+      boardName: 'Entwicklung',
+      start: 'FACHPLAN',
+      ziel: 'UMSETZUNG',
+      pruefer: 2,
+    }
+    const f = spyFetch(JSON.stringify([karte]))
+    const karten = await nightRunsApi.heuteNacht(4)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/projects/4/night-runs/tonight')
+    expect(c.method).toBeUndefined()
+    expect(karten).toEqual([karte])
+  })
+
+  it('list liefert die Morgenmeldung eines Laufs und null ohne Meldung (Issue #1458)', async () => {
+    const meldung: ReleasePreparationView = {
+      result: 'RED',
+      commitHash: 'b2ae30f6',
+      version: '1.4.0',
+      redCheck: 'mvn verify',
+      pending: [],
+      receivedAt: '2026-10-06T05:12:00Z',
+      cards: [
+        { number: 1449, title: 'Stufenleiste' },
+        { number: 9999, title: null },
+      ],
+      redCards: [{ number: 1449, title: 'Stufenleiste' }],
+    }
+    spyFetch(
+      JSON.stringify([
+        { id: 11, items: [], releasePreparation: meldung },
+        { id: 12, items: [], releasePreparation: null },
+      ]),
+    )
+    const laeufe = await nightRunsApi.list(4)
+    expect(laeufe[0].releasePreparation).toEqual(meldung)
+    expect(laeufe[1].releasePreparation).toBeNull()
   })
 
   it('progress reicht einen Fehler des Servers durch', async () => {

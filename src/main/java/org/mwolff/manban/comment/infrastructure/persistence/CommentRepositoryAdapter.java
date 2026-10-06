@@ -53,7 +53,8 @@ class CommentRepositoryAdapter implements CommentRepository {
         c.authorName(),
         c.body(),
         c.createdAt(),
-        c.updatedAt());
+        c.updatedAt(),
+        c.laufStart());
   }
 
   private static Comment toDomain(CommentEntity e) {
@@ -64,6 +65,7 @@ class CommentRepositoryAdapter implements CommentRepository {
         e.getAuthorName(),
         e.getBody(),
         e.getCreatedAt(),
-        e.getUpdatedAt());
+        e.getUpdatedAt(),
+        e.getLaufStart());
   }
 }

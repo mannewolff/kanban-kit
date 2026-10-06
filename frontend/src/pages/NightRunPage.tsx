@@ -41,9 +41,11 @@ import {
   type NightRunUsage,
   type NightRunUsageView,
   type NightRunView,
+  type ReleasePreparationView,
 } from '../api/nightRuns'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
+import { HeuteNachtUebersicht } from '../components/nachtlauf/HeuteNachtUebersicht'
 import { Led, melderFarbe } from '../components/leitstand/LeitstandBausteine'
 import {
   NachtlaufKartenchips,
@@ -283,6 +285,11 @@ interface AnzeigeLauf {
    * {@link kettenBudget} der eingelesene Ergebnisstand ein.
    */
   budget: Budget | undefined
+  /**
+   * Die Morgenmeldung des Laufs (Issue #1458); `undefined` ohne Meldung und beim eben geparsten
+   * Lauf — die Meldung kommt allein über den Token-Weg des Servers.
+   */
+  veroeffentlichung: ReleasePreparationView | undefined
   items: AnzeigeItem[]
 }
 
@@ -446,6 +453,7 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
   // Wie die Herkunftsfelder leer: Die Vorgaben **des Laufs** meldet allein der Runner ueber den
   // Token-Weg. Was der eingelesene Stand dazu fuehrt, holt `kettenBudget` von dort (Issue #1115).
   budget: undefined,
+  veroeffentlichung: undefined,
   items: run.items.map((item) => ({
     cardNumber: item.cardNumber,
     title: item.title,
@@ -576,6 +584,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
   laufId: view.id,
   verbrauch: ausVerbrauch(view.usage),
   budget: ausBudget(view.budget),
+  veroeffentlichung: view.releasePreparation ?? undefined,
   items: view.items.map((item) => {
     const stufen = ausStufen(item.stages)
     return {
@@ -2699,6 +2708,7 @@ function LaufPanel({
       meta={metazeile(lauf, stand, zahlen)}
       melder={melder}
       abbruchGrund={lauf.abbruchGrund}
+      veroeffentlichung={lauf.veroeffentlichung}
       pulsiert={laeuft}
       offen={offen}
       onUmschalten={umschalten}
@@ -3277,53 +3287,59 @@ export function NightRunPage() {
             </Alert>
           )}
 
-          {laeufe.length === 0 &&<Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
-          {laeufe.length > 0 && sichtbareLaeufe.length === 0 && (
-            <Typography color="text.secondary">In den letzten zwei Schichten gab es keinen Run.</Typography>
-          )}
-
           {/* Die Laufblöcke haben mit #988 die Nachtlauf-Ausnahme verlassen und folgen Kupferwarte
               (`CLAUDE-design.md`) — deshalb stehen sie im `KupferwarteBereich`, der Theme und
-              Variablen für seinen Teilbaum zurückstellt. Was sonst auf dieser Seite steht, bleibt
-              in der Ausnahme. */}
-          {sichtbareLaeufe.length > 0 && (
-            <KupferwarteBereich>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {sichtbareLaeufe.map((lauf, position) => (
-                  <LaufPanel
-                    key={lauf.startedAt}
-                    lauf={lauf}
-                    // Mit `?lauf=<id>` steht genau dieser Lauf offen statt des obersten; zeigt der
-                    // Parameter ins Leere, bleibt es beim obersten (Issue #1085).
-                    zuerst={
-                      gesuchteLaufId === null
-                        ? position === 0
-                        : lauf.laufId === gesuchteLaufId
-                    }
-                    ergebnis={ergebnisse.get(lauf.startedAt)}
-                    ausErgebnisstand={ausErgebnisstand}
-                    // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser
-                    // Sitzung vorliegt; welche Darstellung daraus entsteht, entscheidet der Modus
-                    // am Anzeigelauf — er steht auch am neu geladenen.
-                    stand={staende.get(lauf.startedAt)}
-                    katalog={katalog}
-                    vorhabenKarten={vorhabenKarten}
-                    zaehler={zaehler}
-                    erzeugnisse={erzeugnisse.get(lauf.startedAt) ?? KEINE_ERZEUGNISSE}
-                    aufbewahrteLaeufe={aufbewahrteLaeufe}
-                    fortschritt={fortschritte.get(lauf.startedAt)}
-                    onAufklappen={() => {
-                      offeneLaeufe.current.add(lauf.startedAt)
-                      aufklappen(lauf)
-                    }}
-                    onZuklappen={() => offeneLaeufe.current.delete(lauf.startedAt)}
-                    onOeffnen={setDetail}
-                    onKarteOeffnen={karteOeffnen}
-                  />
-                ))}
-              </Box>
-            </KupferwarteBereich>
-          )}
+              Variablen für seinen Teilbaum zurückstellt. Mit ihnen stehen dort die Übersicht
+              „Heute Nacht“ oberhalb der Laufplatten (Issue #1455, Plan #1447) und die Hinweise, dass
+              es keine Läufe gibt — so steht der Bereich nie leer, auch wenn die Übersicht ohne
+              Leserecht ausbleibt. Was sonst auf dieser Seite steht, bleibt in der Ausnahme. */}
+          <KupferwarteBereich>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <HeuteNachtUebersicht projectId={id} onKarteOeffnen={karteOeffnen} />
+
+              {laeufe.length === 0 && <Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
+              {laeufe.length > 0 && sichtbareLaeufe.length === 0 && (
+                <Typography color="text.secondary">In den letzten zwei Schichten gab es keinen Run.</Typography>
+              )}
+
+              {sichtbareLaeufe.length > 0 && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {sichtbareLaeufe.map((lauf, position) => (
+                    <LaufPanel
+                      key={lauf.startedAt}
+                      lauf={lauf}
+                      // Mit `?lauf=<id>` steht genau dieser Lauf offen statt des obersten; zeigt der
+                      // Parameter ins Leere, bleibt es beim obersten (Issue #1085).
+                      zuerst={
+                        gesuchteLaufId === null
+                          ? position === 0
+                          : lauf.laufId === gesuchteLaufId
+                      }
+                      ergebnis={ergebnisse.get(lauf.startedAt)}
+                      ausErgebnisstand={ausErgebnisstand}
+                      // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser
+                      // Sitzung vorliegt; welche Darstellung daraus entsteht, entscheidet der Modus
+                      // am Anzeigelauf — er steht auch am neu geladenen.
+                      stand={staende.get(lauf.startedAt)}
+                      katalog={katalog}
+                      vorhabenKarten={vorhabenKarten}
+                      zaehler={zaehler}
+                      erzeugnisse={erzeugnisse.get(lauf.startedAt) ?? KEINE_ERZEUGNISSE}
+                      aufbewahrteLaeufe={aufbewahrteLaeufe}
+                      fortschritt={fortschritte.get(lauf.startedAt)}
+                      onAufklappen={() => {
+                        offeneLaeufe.current.add(lauf.startedAt)
+                        aufklappen(lauf)
+                      }}
+                      onZuklappen={() => offeneLaeufe.current.delete(lauf.startedAt)}
+                      onOeffnen={setDetail}
+                      onKarteOeffnen={karteOeffnen}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Box>
+          </KupferwarteBereich>
 
           {(alleLaeufe || ausgeblendet > 0) && (
             <Box>

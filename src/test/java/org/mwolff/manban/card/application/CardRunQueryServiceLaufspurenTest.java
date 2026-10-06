@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -8,9 +9,11 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardRunQueryService.LaufKarteView;
 import org.mwolff.manban.card.application.CardRunQueryService.TokenActivityView;
 import org.mwolff.manban.card.domain.Card;
@@ -33,6 +36,7 @@ class CardRunQueryServiceLaufspurenTest {
   private static final Instant FIXED = Instant.parse("2026-10-03T15:00:00Z");
   private static final Instant VON = Instant.parse("2026-10-03T15:00:00Z");
   private static final Instant BIS = Instant.parse("2026-10-03T16:00:00Z");
+  private static final Instant LAUF = Instant.parse("2026-10-03T14:59:00.123Z");
   private static final long PROJECT = 1L;
   private static final long BOARD = 2L;
   private static final long ANDERES_BOARD = 3L;
@@ -57,7 +61,8 @@ class CardRunQueryServiceLaufspurenTest {
                 mock(CardAssigneeRepository.class),
                 labels,
                 cardLabels,
-                mock(PermissionChecker.class)));
+                mock(PermissionChecker.class)),
+            mock(BoardService.class));
   }
 
   private static Card karte(
@@ -106,7 +111,9 @@ class CardRunQueryServiceLaufspurenTest {
                     VON,
                     CardActivityOrigin.TOKEN,
                     "Nachtlauf",
-                    "claude-opus-5-5"),
+                    "claude-opus-5-5",
+                    null,
+                    null),
                 new CardActivity(
                     2L,
                     8L,
@@ -116,11 +123,15 @@ class CardRunQueryServiceLaufspurenTest {
                     BIS,
                     CardActivityOrigin.TOKEN,
                     "Nachtlauf",
-                    "claude-opus-5-5")));
+                    "claude-opus-5-5",
+                    LAUF,
+                    CardStatus.READY)));
 
+    // Issue #1427: Laufkennung und Status nach der Bewegung gehen mit — auch als null.
     assertThat(service.tokenActivitiesInWindow(PROJECT, "Nachtlauf", VON, BIS))
         .containsExactly(
-            new TokenActivityView(7L, "CREATED", VON), new TokenActivityView(8L, "MOVED", BIS));
+            new TokenActivityView(7L, "CREATED", VON, null, null),
+            new TokenActivityView(8L, "MOVED", BIS, LAUF, "READY"));
   }
 
   @Test
@@ -192,5 +203,46 @@ class CardRunQueryServiceLaufspurenTest {
               assertThat(k.labels()).containsExactly("lauf:fertig");
               assertThat(k.derivedFromCardId()).isNull();
             });
+  }
+
+  // --- Kettenstand einer Karte (Issue #1452) -------------------------------------------------
+
+  @Test
+  void requireProjectIdLiefertDasProjektDerKarte() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(karte(5L, BOARD, "[Fachlich] A", CardType.CARD, null, null, null)));
+
+    assertThat(service.requireProjectId(5L)).isEqualTo(PROJECT);
+  }
+
+  @Test
+  void requireProjectIdWirftFuerEineUnbekannteKarte() {
+    when(cards.findById(99L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.requireProjectId(99L))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void derivedCardsLiefertDieAusDerKarteEntstandenenKarten() {
+    Card plan = karte(6L, BOARD, "[Plan] A", CardType.CARD, null, 5L, "Plan-Review: fable");
+    when(cards.findByDerivedFrom(5L)).thenReturn(List.of(plan));
+    when(cards.findByIds(Set.of(6L))).thenReturn(List.of(plan));
+
+    assertThat(service.derivedCards(5L))
+        .singleElement()
+        .satisfies(
+            k -> {
+              assertThat(k.id()).isEqualTo(6L);
+              assertThat(k.title()).isEqualTo("[Plan] A");
+              assertThat(k.description()).isEqualTo("Plan-Review: fable");
+            });
+  }
+
+  @Test
+  void derivedCardsOhneAbleitungIstLeer() {
+    when(cards.findByDerivedFrom(5L)).thenReturn(List.of());
+
+    assertThat(service.derivedCards(5L)).isEmpty();
   }
 }

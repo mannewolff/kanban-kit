@@ -3,6 +3,7 @@ package org.mwolff.manban.config;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.mwolff.manban.accesstoken.web.security.PatAuthenticationFilter;
+import org.mwolff.manban.auth.web.security.ApiAusprobierFilter;
 import org.mwolff.manban.auth.web.security.DisabledUserGuardFilter;
 import org.mwolff.manban.auth.web.security.SessionAuthenticationFilter;
 import org.mwolff.manban.ratelimit.web.ThroughputFilter;
@@ -11,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -28,7 +30,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *   <li>Zustandslos: kein Server-Session-Store; Authentifizierung über das signierte Session-Cookie
  *       ({@link SessionAuthenticationFilter}).
  *   <li>Default-Deny für {@code /api/**} (außer den öffentlichen Auth-Endpunkten); statische
- *       Inhalte und die React-App unter {@code /} bleiben offen.
+ *       Inhalte und die React-App unter {@code /} bleiben offen. Die Pfadregeln stehen geordnet in
+ *       {@link ApiZugang} (Issue #1402).
  *   <li>Unauthentifizierte API-Zugriffe → 401 (kein Redirect auf eine Login-Seite).
  *   <li>Board-Bindung (Issue #836): Ein an ein Board gebundenes Zugriffs-Token erreicht
  *       ausschließlich {@code /api/kanban/**}; die übrige {@code /api/**}-Oberfläche verlangt die
@@ -37,6 +40,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *   <li>CSRF: Der Synchronizer-Token entfällt bewusst — es gibt keine Server-Session, und das
  *       Auth-Cookie ist {@code HttpOnly; SameSite=Strict}, wird also nie cross-site gesendet. Damit
  *       ist der zustandslose Cookie-Ansatz CSRF-resistent.
+ *   <li>Ausprobieren aus der API-Übersicht (Issue #1366): Ein Aufruf mit dem Kennzeichen {@code
+ *       X-Api-Ausprobieren} kommt nur für aktive Plattform-Admins durch ({@link
+ *       ApiAusprobierFilter}, vor den Auth-Filtern); trägt er ein Projekt-Token, gilt das Token.
  * </ul>
  *
  * <p>2FA-Vorbereitung: Der zweite Faktor hängt im Login-Flow (SessionController / LoginService),
@@ -57,54 +63,28 @@ class SecurityConfig {
       SessionAuthenticationFilter sessionFilter,
       PatAuthenticationFilter patFilter,
       DisabledUserGuardFilter disabledGuard,
-      ThroughputFilter throughputFilter)
+      ThroughputFilter throughputFilter,
+      ApiAusprobierFilter ausprobierFilter)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(
-            auth ->
-                // Interne Container-Re-Dispatches (ASYNC bei SseEmitter-Streams, ERROR bei der
-                // Fehlerseite) nicht erneut autorisieren: dort ist kein SecurityContext gesetzt,
-                // sonst 403 auf dem bereits committeten SSE-Stream (Reconnect-Sturm). Der REQUEST-
-                // Dispatch bleibt voll autorisiert; DispatcherType setzt der Container, nicht der
-                // Client — nicht fälschbar.
-                auth.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR)
-                    .permitAll()
-                    .requestMatchers(
-                        "/api/auth/register",
-                        "/api/auth/verify",
-                        "/api/auth/login",
-                        "/api/auth/logout",
-                        "/api/auth/forgot",
-                        "/api/auth/reset")
-                    .permitAll()
-                    // Token-Verwaltung nur per Cookie-Login, nicht per PAT (Least Privilege).
-                    .requestMatchers("/api/access-tokens/**")
-                    .hasAuthority(SessionAuthenticationFilter.AUTHORITY)
-                    // Admin-Bereich (inkl. Bootstrap) nur per Session-Login, nicht per PAT.
-                    // Die Admin-Autorisierung selbst erledigt der AdminService pro Endpunkt.
-                    .requestMatchers("/api/admin/**")
-                    .hasAuthority(SessionAuthenticationFilter.AUTHORITY)
-                    // Kanban-Compat-API (tbx.mjs/board.mjs) ausschließlich per PAT. Seit
-                    // Issue #947 liegt hier auch POST /api/kanban/night-runs: Der
-                    // Nachtlauf meldet sich mit demselben projektgebundenen Token, ohne
-                    // Sitzung. Keine Regel ändert sich dadurch — der Matcher deckt ihn ab.
-                    .requestMatchers("/api/kanban/**")
-                    .hasAuthority(PatAuthenticationFilter.AUTHORITY)
-                    // Whitelist statt Blacklist (Issue #836): Die übrige API steht nur der Session
-                    // und dem UNGEBUNDENEN Token offen. Ein board-gebundenes Token trägt
-                    // AUTH_PAT_UNBOUND nicht und ist damit hier von sich aus gesperrt — auch bei
-                    // einem Plattform-Admin als Ersteller. Ein neuer Endpunkt unter /api/** ist
-                    // für gebundene Token folglich ab dem ersten Tag zu, und das ist die Absicht:
-                    // Eine Prüfung je Endpunkt bliebe offen, bis jemand daran denkt, sie
-                    // nachzutragen. Abgewiesen wird mit 403 über den Default-AccessDeniedHandler
-                    // (das Token ist authentifiziert, nur nicht berechtigt), nicht mit 401.
-                    .requestMatchers("/api/**")
-                    .hasAnyAuthority(
-                        SessionAuthenticationFilter.AUTHORITY,
-                        PatAuthenticationFilter.UNBOUND_AUTHORITY)
-                    .anyRequest()
-                    .permitAll())
+            auth -> {
+              // Interne Container-Re-Dispatches (ASYNC bei SseEmitter-Streams, ERROR bei der
+              // Fehlerseite) nicht erneut autorisieren: dort ist kein SecurityContext gesetzt,
+              // sonst 403 auf dem bereits committeten SSE-Stream (Reconnect-Sturm). Der REQUEST-
+              // Dispatch bleibt voll autorisiert; DispatcherType setzt der Container, nicht der
+              // Client — nicht fälschbar.
+              auth.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll();
+              // Die Pfadregeln kommen aus der geordneten Zugangs-Tabelle (Issue #1402), in
+              // ihrer Reihenfolge — der erste Treffer gilt. Die Erläuterung je Gruppe steht
+              // dort; dieselbe Tabelle nennt der API-Beschreibung den Zugang je Pfad.
+              for (ApiZugang.Pfadgruppe gruppe : ApiZugang.GRUPPEN) {
+                regelFuer(
+                    gruppe.zugang(), auth.requestMatchers(gruppe.muster().toArray(String[]::new)));
+              }
+              auth.anyRequest().permitAll();
+            })
         .exceptionHandling(
             e ->
                 e.authenticationEntryPoint(
@@ -112,6 +92,10 @@ class SecurityConfig {
                         response.sendError(HttpServletResponse.SC_UNAUTHORIZED)))
         .addFilterBefore(sessionFilter, UsernamePasswordAuthenticationFilter.class)
         .addFilterBefore(patFilter, UsernamePasswordAuthenticationFilter.class)
+        // Ausprobieren aus der API-Übersicht (Issue #1438): vor den Auth-Filtern, denn bei
+        // Kennzeichen plus Projekt-Token nimmt er das Session-Cookie aus der Anfrage, damit das
+        // Token gilt.
+        .addFilterBefore(ausprobierFilter, SessionAuthenticationFilter.class)
         // Läuft nach beiden Auth-Filtern: sperrt authentifizierte Anfragen gesperrter Konten
         // (Session wie PAT), indem der Kontext geleert wird.
         .addFilterAfter(disabledGuard, PatAuthenticationFilter.class)
@@ -121,6 +105,25 @@ class SecurityConfig {
         // Ein gesperrtes Konto kommt hier ohne Authentifizierung an und wird nicht gezählt.
         .addFilterAfter(throughputFilter, DisabledUserGuardFilter.class);
     return http.build();
+  }
+
+  /**
+   * Übersetzt die Zugangsart einer Gruppe in die Autorisierungsregel von Spring Security. Als
+   * Switch-Ausdruck, damit der Compiler eine neue Zugangsart ohne Regel ablehnt.
+   */
+  private static AuthorizeHttpRequestsConfigurer<HttpSecurity>
+          .AuthorizationManagerRequestMatcherRegistry
+      regelFuer(
+          ApiZugang.Zugangsart zugang,
+          AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizedUrl regel) {
+    return switch (zugang) {
+      case OEFFENTLICH -> regel.permitAll();
+      case NUR_SESSION -> regel.hasAuthority(SessionAuthenticationFilter.AUTHORITY);
+      case NUR_PROJEKT_TOKEN -> regel.hasAuthority(PatAuthenticationFilter.AUTHORITY);
+      case SESSION_ODER_UNGEBUNDENES_TOKEN ->
+          regel.hasAnyAuthority(
+              SessionAuthenticationFilter.AUTHORITY, PatAuthenticationFilter.UNBOUND_AUTHORITY);
+    };
   }
 
   /**
@@ -135,6 +138,20 @@ class SecurityConfig {
       ThroughputFilter throughputFilter) {
     FilterRegistrationBean<ThroughputFilter> registration =
         new FilterRegistrationBean<>(throughputFilter);
+    registration.setEnabled(false);
+    return registration;
+  }
+
+  /**
+   * Hält den {@link ApiAusprobierFilter} aus der Servlet-Filterkette heraus (Issue #1438), aus
+   * demselben Grund wie beim {@link ThroughputFilter}: Er gehört ausschließlich vor die Auth-Filter
+   * der Kette oben.
+   */
+  @Bean
+  FilterRegistrationBean<ApiAusprobierFilter> ausprobierFilterOutsideTheServletChain(
+      ApiAusprobierFilter ausprobierFilter) {
+    FilterRegistrationBean<ApiAusprobierFilter> registration =
+        new FilterRegistrationBean<>(ausprobierFilter);
     registration.setEnabled(false);
     return registration;
   }

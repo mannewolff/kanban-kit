@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -20,14 +21,32 @@ import org.jspecify.annotations.Nullable;
  * sich darauf zu verlassen, dass die einzige aufrufende Berechnung es schon richtig macht — das
  * Frontend leitet die Leerwert-Optik allein aus der Stichprobengröße ab.
  */
+@Schema(description = "Kennzahlen eines Boards; Dauern in Sekunden, null heißt keine Datenbasis.")
 public record BoardDashboardKpis(
-    List<ColumnDwell> columnDwell,
-    List<WeeklyThroughput> throughput,
-    @Nullable Long avgLeadTimeSeconds,
-    int leadTimeSampleCount,
-    @Nullable Long avgImplementationSeconds,
-    int implementationSampleCount,
-    List<OutlierCard> outliers) {
+    @Schema(description = "Durchschnittliche Verweildauer je Spalte.")
+        List<ColumnDwell> columnDwell,
+    @Schema(description = "Abgeschlossene Karten je Woche, die letzten zwölf Wochen.")
+        List<WeeklyThroughput> throughput,
+    @Schema(
+            description =
+                "Durchschnittliche Durchlaufzeit abgeschlossener Karten (Anlage bis Done).",
+            example = "432000")
+        @Nullable Long avgLeadTimeSeconds,
+    @Schema(
+            description = "Zahl der Karten, über die die Durchlaufzeit gemittelt ist.",
+            example = "42")
+        int leadTimeSampleCount,
+    @Schema(
+            description =
+                "Durchschnittliche Zeit in Spalten, in denen an der Karte gearbeitet wird.",
+            example = "86400")
+        @Nullable Long avgImplementationSeconds,
+    @Schema(
+            description = "Zahl der Karten, über die die Umsetzungszeit gemittelt ist.",
+            example = "37")
+        int implementationSampleCount,
+    @Schema(description = "Karten, die ungewöhnlich lange in einer Spalte lagen.")
+        List<OutlierCard> outliers) {
 
   public BoardDashboardKpis {
     requireSampleBasis(avgLeadTimeSeconds, leadTimeSampleCount, "leadTime");
@@ -52,13 +71,28 @@ public record BoardDashboardKpis(
   }
 
   /** Durchschnittliche Verweildauer in einer Spalte (nur abgeschlossene Aufenthalte). */
+  @Schema(description = "Durchschnittliche Verweildauer in einer Spalte.")
   public record ColumnDwell(
-      long columnId, String columnName, @Nullable Long avgDwellSeconds, int sampleCount) {}
+      @Schema(description = "Interne ID der Spalte.", example = "17") long columnId,
+      @Schema(description = "Name der Spalte.", example = "In Arbeit") String columnName,
+      @Schema(description = "Durchschnittliche Verweildauer; null ohne Messung.", example = "7200")
+          @Nullable Long avgDwellSeconds,
+      @Schema(description = "Zahl der gemessenen Aufenthalte.", example = "12") int sampleCount) {}
 
   /** Abgeschlossene Karten in einem Wochenfenster (Beginn des 7-Tage-Fensters). */
-  public record WeeklyThroughput(Instant weekStart, long doneCount) {}
+  @Schema(description = "Abgeschlossene Karten in einem Wochenfenster.")
+  public record WeeklyThroughput(
+      @Schema(description = "Beginn des Sieben-Tage-Fensters.") Instant weekStart,
+      @Schema(description = "Zahl der in diesem Fenster abgeschlossenen Karten.", example = "9")
+          long doneCount) {}
 
   /** Eine Karte, die ungewöhnlich lange in einer Spalte lag (über der Schwelle). */
+  @Schema(description = "Eine Karte, die ungewöhnlich lange in einer Spalte lag.")
   public record OutlierCard(
-      long cardId, int number, String title, String columnName, long dwellSeconds) {}
+      @Schema(description = "Interne ID der Karte.", example = "812") long cardId,
+      @Schema(description = "Projektweite Nummer.", example = "1404") int number,
+      @Schema(description = "Titel.", example = "Export als CSV") String title,
+      @Schema(description = "Name der Spalte.", example = "In Arbeit") String columnName,
+      @Schema(description = "Verweildauer in der Spalte.", example = "1209600")
+          long dwellSeconds) {}
 }

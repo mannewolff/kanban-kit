@@ -17,6 +17,9 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.board.application.BoardColumnRepository;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
@@ -47,6 +50,10 @@ import org.springframework.test.web.servlet.ResultActions;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
+// Testklasse: Jede Methode ist ein Fall oder ein Aufbauschritt der Laufliste. Issue #1457 bringt
+// mit der Morgenmeldung Board, Karten und Token als Aufbau dazu und reisst damit die Schwelle —
+// dieselbe Begruendung wie an NightRunIngestIT.
+@SuppressWarnings("PMD.TooManyMethods")
 class NightRunIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
@@ -60,6 +67,9 @@ class NightRunIT extends AbstractIntegrationTest {
   @Autowired private ObjectMapper json;
   @Autowired private NightRunRepository runs;
   @Autowired private JdbcTemplate jdbc;
+  @Autowired private BoardService boards;
+  @Autowired private BoardColumnRepository columns;
+  @Autowired private CardService cards;
 
   @Test
   void submit_reportsKnownRunAsExisting_andCreatesTheNewOne_inRequestOrder() throws Exception {
@@ -432,6 +442,7 @@ class NightRunIT extends AbstractIntegrationTest {
             gemeldet,
             null,
             null,
+            null,
             null),
         List.of());
 
@@ -636,6 +647,94 @@ class NightRunIT extends AbstractIntegrationTest {
         {"cardNumber":%d,"title":"Paket","state":"GREEN","excerpt":"Auszug",
          "usage":{"costUsd":%s}}"""
         .formatted(cardNumber, kosten);
+  }
+
+  // --- Morgenmeldung in der Laufliste (Issue #1457) ----------------------------------------
+
+  /**
+   * Der Weg Meldung → Ausgabe: Der Runner meldet per Token eine Morgenmeldung, die Laufliste zeigt
+   * sie mit den Titeln aus dem Projekt des Laufs — auch für eine Karte, die kein Arbeitspaket des
+   * Laufs ist. Eine Nummer, die es nur in einem fremden Projekt gibt, bleibt ohne Titel, und der
+   * fremde Titel erscheint nirgends in der Antwort.
+   */
+  @Test
+  void list_zeigtDieMorgenmeldungMitDenTitelnAusDemEigenenProjekt() throws Exception {
+    Cookie owner = session("nr-morgen-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-morgen-owner@example.com", "nr-morgen-admin@example.com");
+    long boardId = board(userId("nr-morgen-admin@example.com"), projectId);
+    int eigenes = karte(userId("nr-morgen-admin@example.com"), boardId, "Eigenes Paket");
+    int fremdeKette = karte(userId("nr-morgen-admin@example.com"), boardId, "Aus fremder Kette");
+    session("nr-morgen-fremd-owner@example.com", PlatformRole.USER);
+    long fremdesProjekt =
+        projectOf("nr-morgen-fremd-owner@example.com", "nr-morgen-fremd-admin@example.com");
+    long fremdesBoard = board(userId("nr-morgen-fremd-admin@example.com"), fremdesProjekt);
+    int nurFremd = 0;
+    for (int i = 0; i < 3; i++) {
+      nurFremd = karte(userId("nr-morgen-fremd-admin@example.com"), fremdesBoard, "Fremd geheim");
+    }
+    String token = token(owner, projectId, boardId);
+
+    mvc.perform(
+            post("/api/kanban/night-runs")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content(
+                    """
+                    {"startedAt":"%s","mode":"CHAIN","durationMs":1,"processedCount":1,
+                     "skippedCount":0,"unparsedCount":0,"complete":true,
+                     "releasePreparation":{"result":"RED","commitHash":"c3bf41a7",
+                       "version":"1.4.0","redCheck":"mvn verify","pending":[],
+                       "cardNumbers":[%d,%d],"redCards":[%d]},
+                     "items":[{"cardNumber":%d,"title":"Eigenes Paket","state":"GREEN"}]}"""
+                        .formatted(ERSTER, eigenes, nurFremd, fremdeKette, eigenes)))
+        .andExpect(status().isOk());
+
+    String antwort =
+        mvc.perform(get(path(projectId)).cookie(owner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].releasePreparation.result").value("RED"))
+            .andExpect(jsonPath("$[0].releasePreparation.commitHash").value("c3bf41a7"))
+            .andExpect(jsonPath("$[0].releasePreparation.version").value("1.4.0"))
+            .andExpect(jsonPath("$[0].releasePreparation.redCheck").value("mvn verify"))
+            .andExpect(jsonPath("$[0].releasePreparation.receivedAt").isNotEmpty())
+            .andExpect(jsonPath("$[0].releasePreparation.cards[0].number").value(eigenes))
+            .andExpect(jsonPath("$[0].releasePreparation.cards[0].title").value("Eigenes Paket"))
+            .andExpect(jsonPath("$[0].releasePreparation.cards[1].number").value(nurFremd))
+            .andExpect(jsonPath("$[0].releasePreparation.cards[1].title").value(nullValue()))
+            .andExpect(jsonPath("$[0].releasePreparation.redCards[0].number").value(fremdeKette))
+            .andExpect(
+                jsonPath("$[0].releasePreparation.redCards[0].title").value("Aus fremder Kette"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(antwort).doesNotContain("Fremd geheim");
+  }
+
+  private long board(long adminId, long projectId) {
+    return boards.createBoard(adminId, projectId, "Board").id();
+  }
+
+  /** Legt eine Karte in der ersten Spalte an und liefert ihre Nummer. */
+  private int karte(long adminId, long boardId, String titel) {
+    long columnId = columns.findByBoardId(boardId).getFirst().requireId();
+    return cards.create(adminId, boardId, columnId, titel, null, null, null).number();
+  }
+
+  private String token(Cookie owner, long projectId, long boardId) throws Exception {
+    return json.readTree(
+            mvc.perform(
+                    post("/api/access-tokens")
+                        .cookie(owner)
+                        .contentType("application/json")
+                        .content(
+                            "{\"name\":\"nacht\",\"projectId\":%d,\"boardId\":%d}"
+                                .formatted(projectId, boardId)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+        .get("plaintext")
+        .asText();
   }
 
   private NightRun einzigerLauf(long projectId) {

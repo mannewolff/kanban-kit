@@ -5,8 +5,10 @@ import java.sql.Types;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,6 +28,8 @@ import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.nightrun.domain.ReleasePreparation;
+import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -46,8 +50,9 @@ import org.springframework.stereotype.Component;
 // PMD.CouplingBetweenObjects: Die Kopplung folgt den Spalten: Der Adapter uebersetzt zwischen
 // Domaenentypen, Entities und JDBC-Typen, und jede neue Spalte bringt ihren Typ mit. Mit Issue
 // #944 sind es BigDecimal und NightRunOrigin mehr, mit Issue #1010 NightRunKind, mit Issue #1112
-// NightRunBudget, NightRunBudgetOrigin, NightRunStage und NightRunItemStage. Eine Aufteilung
-// verteilte das Mapping einer Tabelle auf zwei Klassen.
+// NightRunBudget, NightRunBudgetOrigin, NightRunStage und NightRunItemStage, mit Issue #1456
+// ReleasePreparation und ReleasePreparationResult. Eine Aufteilung verteilte das Mapping einer
+// Tabelle auf zwei Klassen.
 // PMD.GodClass: dieselbe Ursache, nur anders gezaehlt — WMC und ATFD summieren die je fuer sich
 // trivialen addValue-/getX-Zeilen des Mappings, die TCC ist niedrig, weil Schreib- und Lesepfad
 // derselben Tabelle sich keine Felder teilen. Das ist die Form eines Persistenz-Adapters und kein
@@ -69,6 +74,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
 
   /** Name des benannten SQL-Parameters für die Gattung (Sonar java:S1192). */
   private static final String P_KIND = "kind";
+
+  /** Spaltenname der Lauf-ID in den Abfragen der Morgenmeldung (Sonar java:S1192). */
+  private static final String C_NIGHT_RUN_ID = "night_run_id";
 
   /** Spaltenname der Fehlerklasse in der Zählabfrage (Sonar java:S1192). */
   private static final String C_ERROR_CLASS = "error_class";
@@ -158,6 +166,37 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " abort_reason = :abortReason"
           + " WHERE id = :id";
 
+  /**
+   * Die Morgenmeldung eines Laufs (Issue #1456). Beim Ersetzen wird sie gelöscht und neu
+   * geschrieben; ihre Einträge fallen über {@code ON DELETE CASCADE} mit.
+   */
+  private static final String INSERT_PREPARATION =
+      "INSERT INTO night_run_release_preparation (night_run_id, result, commit_hash, version,"
+          + " red_check, received_at)"
+          + " VALUES (:nightRunId, :result, :commitHash, :version, :redCheck, :receivedAt)";
+
+  private static final String INSERT_ENTRY =
+      "INSERT INTO night_run_release_entry (night_run_id, kind, position, card_number, text)"
+          + " VALUES (:nightRunId, :kind, :position, :cardNumber, :text)";
+
+  private static final String DELETE_PREPARATION =
+      "DELETE FROM night_run_release_preparation WHERE night_run_id = :nightRunId";
+
+  private static final String SELECT_PREPARATIONS =
+      "SELECT night_run_id, result, commit_hash, version, red_check, received_at"
+          + " FROM night_run_release_preparation WHERE night_run_id IN (:ids)";
+
+  private static final String SELECT_ENTRIES =
+      "SELECT night_run_id, kind, card_number, text FROM night_run_release_entry"
+          + " WHERE night_run_id IN (:ids) ORDER BY night_run_id, kind, position";
+
+  /** Art eines Eintrags der Morgenmeldung — die Werte des {@code CHECK} aus {@code V48}. */
+  private static final String E_CARD = "CARD";
+
+  private static final String E_RED_CARD = "RED_CARD";
+
+  private static final String E_PENDING = "PENDING";
+
   private static final String DELETE_ITEMS_OF_RUN =
       "DELETE FROM night_run_item WHERE night_run_id = :nightRunId";
 
@@ -208,6 +247,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     }
     Long runId = vergebeneId.get(0);
     insertItems(run, runId, newItems);
+    insertVorbereitung(runId, run.releasePreparation());
     return Optional.of(runId);
   }
 
@@ -234,6 +274,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     if (vorhanden.isEmpty()) {
       Long runId = jdbc.queryForList(INSERT_RUN, runParameters(run), Long.class).get(0);
       insertItems(run, runId, newItems);
+      insertVorbereitung(runId, run.releasePreparation());
       return new UpsertResult(runId, true);
     }
 
@@ -241,9 +282,58 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     MapSqlParameterSource aenderung = (MapSqlParameterSource) runParameters(run);
     aenderung.addValue("id", runId);
     jdbc.update(UPDATE_RUN, aenderung);
-    jdbc.update(DELETE_ITEMS_OF_RUN, new MapSqlParameterSource().addValue(P_NIGHT_RUN_ID, runId));
+    MapSqlParameterSource lauf = new MapSqlParameterSource().addValue(P_NIGHT_RUN_ID, runId);
+    jdbc.update(DELETE_ITEMS_OF_RUN, lauf);
     insertItems(run, runId, newItems);
+    // Ersetzt, nicht ergaenzt (Issue #1456): Eine Meldung ohne Morgenmeldung raeumt die frueher
+    // gemeldete ab, wie jedes andere Feld des Laufs.
+    jdbc.update(DELETE_PREPARATION, lauf);
+    insertVorbereitung(runId, run.releasePreparation());
     return new UpsertResult(runId, false);
+  }
+
+  /**
+   * Schreibt die Morgenmeldung samt ihren Einträgen (Issue #1456) — oder nichts, wenn keine
+   * gemeldet wurde. Die drei Listen gehen als Einträge je Art mit ihrer Position in eine Tabelle.
+   */
+  private void insertVorbereitung(Long runId, @Nullable ReleasePreparation vorbereitung) {
+    if (vorbereitung == null) {
+      return;
+    }
+    jdbc.update(
+        INSERT_PREPARATION,
+        new MapSqlParameterSource()
+            .addValue(P_NIGHT_RUN_ID, runId)
+            .addValue("result", vorbereitung.result().name())
+            .addValue("commitHash", vorbereitung.commitHash(), Types.VARCHAR)
+            .addValue("version", vorbereitung.version(), Types.VARCHAR)
+            .addValue("redCheck", vorbereitung.redCheck(), Types.VARCHAR)
+            .addValue("receivedAt", zeitpunkt(vorbereitung.receivedAt())));
+    List<SqlParameterSource> eintraege = new ArrayList<>();
+    eintraegeAnfuegen(eintraege, runId, E_CARD, vorbereitung.cardNumbers());
+    eintraegeAnfuegen(eintraege, runId, E_RED_CARD, vorbereitung.redCards());
+    eintraegeAnfuegen(eintraege, runId, E_PENDING, vorbereitung.pending());
+    if (!eintraege.isEmpty()) {
+      jdbc.batchUpdate(INSERT_ENTRY, eintraege.toArray(SqlParameterSource[]::new));
+    }
+  }
+
+  /**
+   * Ein Eintrag je Wert; eine Kartennummer geht nach {@code card_number}, ein Text nach {@code
+   * text}.
+   */
+  private static void eintraegeAnfuegen(
+      List<SqlParameterSource> eintraege, Long runId, String art, List<?> werte) {
+    for (int position = 0; position < werte.size(); position++) {
+      Object wert = werte.get(position);
+      eintraege.add(
+          new MapSqlParameterSource()
+              .addValue(P_NIGHT_RUN_ID, runId)
+              .addValue(P_KIND, art)
+              .addValue("position", position)
+              .addValue("cardNumber", wert instanceof Integer nummer ? nummer : null, Types.INTEGER)
+              .addValue("text", wert instanceof String text ? text : null, Types.VARCHAR));
+    }
   }
 
   /**
@@ -283,22 +373,77 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   @Override
   public List<NightRun> findByProjectAndKindOrderByStartedAtDesc(
       long projectId, NightRunKind kind) {
-    return runs.findByProjectIdAndKindOrderByStartedAtDescIdDesc(projectId, kind.name()).stream()
-        .map(NightRunRepositoryAdapter::toDomain)
-        .toList();
+    return mitVorbereitung(
+        runs.findByProjectIdAndKindOrderByStartedAtDescIdDesc(projectId, kind.name()));
   }
 
   @Override
   public Optional<NightRun> findByIdAndProjectId(long runId, long projectId) {
-    return runs.findByIdAndProjectId(runId, projectId).map(NightRunRepositoryAdapter::toDomain);
+    return runs.findByIdAndProjectId(runId, projectId)
+        .map(gefunden -> mitVorbereitung(List.of(gefunden)).getFirst());
   }
 
   @Override
   public List<NightRun> findOverlapping(
       long projectId, String tokenName, Instant von, Instant bis) {
-    return runs.findOverlapping(projectId, tokenName, von, bis).stream()
-        .map(NightRunRepositoryAdapter::toDomain)
-        .toList();
+    return mitVorbereitung(runs.findOverlapping(projectId, tokenName, von, bis));
+  }
+
+  /**
+   * Die Morgenmeldungen zu allen Läufen in zwei Abfragen nachgeladen (Issue #1456) und nicht je
+   * Lauf — dasselbe Muster wie bei den Stufen. Per JDBC und nicht als zweite Tabelle der Entity:
+   * {@link NightRunJpaRepository#findOverlapping} liest {@code night_run} nativ mit {@code SELECT
+   * *}, und eine {@code @SecondaryTable} verlangte dort Spalten, die die Abfrage nicht liefert.
+   */
+  private List<NightRun> mitVorbereitung(List<NightRunEntity> gefunden) {
+    if (gefunden.isEmpty()) {
+      return List.of();
+    }
+    // requireNonNull aus demselben Grund wie in mitStufen: Eine gelesene Zeile hat ihre ID.
+    List<Long> ids = gefunden.stream().map(e -> Objects.requireNonNull(e.getId())).toList();
+    MapSqlParameterSource auswahl = new MapSqlParameterSource("ids", ids);
+    Map<Long, Eintraege> eintraege = new HashMap<>();
+    jdbc.query(
+        SELECT_ENTRIES,
+        auswahl,
+        (RowCallbackHandler)
+            rs -> {
+              Eintraege liste =
+                  eintraege.computeIfAbsent(rs.getLong(C_NIGHT_RUN_ID), id -> new Eintraege());
+              switch (rs.getString(P_KIND)) {
+                case E_CARD -> liste.karten().add(rs.getInt("card_number"));
+                case E_RED_CARD -> liste.roteKarten().add(rs.getInt("card_number"));
+                default -> liste.offen().add(rs.getString("text"));
+              }
+            });
+    Map<Long, ReleasePreparation> vorbereitungen = new HashMap<>();
+    jdbc.query(
+        SELECT_PREPARATIONS,
+        auswahl,
+        (RowCallbackHandler)
+            rs -> {
+              long runId = rs.getLong(C_NIGHT_RUN_ID);
+              Eintraege liste = eintraege.getOrDefault(runId, new Eintraege());
+              vorbereitungen.put(
+                  runId,
+                  new ReleasePreparation(
+                      ReleasePreparationResult.valueOf(rs.getString("result")),
+                      rs.getString("commit_hash"),
+                      rs.getString("version"),
+                      rs.getString("red_check"),
+                      liste.karten(),
+                      liste.roteKarten(),
+                      liste.offen(),
+                      rs.getObject("received_at", OffsetDateTime.class).toInstant()));
+            });
+    return gefunden.stream().map(e -> toDomain(e, vorbereitungen.get(e.getId()))).toList();
+  }
+
+  /** Die gelesenen Einträge einer Morgenmeldung, je Art in Positionsfolge. */
+  private record Eintraege(List<Integer> karten, List<Integer> roteKarten, List<String> offen) {
+    Eintraege() {
+      this(new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+    }
   }
 
   @Override
@@ -488,7 +633,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
   }
 
-  private static NightRun toDomain(NightRunEntity e) {
+  private static NightRun toDomain(NightRunEntity e, @Nullable ReleasePreparation vorbereitung) {
     return new NightRun(
         e.getId(),
         e.getProjectId(),
@@ -508,7 +653,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         verbrauchLesen(e.getVerbrauch()),
         e.getNoWorkReason(),
         budgetLesen(e),
-        e.getAbortReason());
+        e.getAbortReason(),
+        vorbereitung);
   }
 
   private static NightRunItem toDomain(NightRunItemEntity e, List<NightRunItemStage> stages) {

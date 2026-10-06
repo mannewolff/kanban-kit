@@ -47,6 +47,7 @@ const fortschritt = (teil: Partial<NightRunProgressView> = {}): NightRunProgress
   ketten: [],
   pakete: [],
   unbekannt: [],
+  unbekanntOhneAusweis: false,
   offeneFragen: [],
   ...teil,
 })
@@ -256,6 +257,33 @@ describe('NachtlaufFortschritt', () => {
     expect(screen.queryByRole('list', { name: /^Weg der/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('list', { name: /^Pakete der/ })).not.toBeInTheDocument()
     expect(screen.getByRole('list', { name: 'unbekannt' })).toBeInTheDocument()
+  })
+
+  it('erklärt „unbekannt" bei einem Lauf ohne Ausweis', () => {
+    zeige(fortschritt({ ketten: [kette()], unbekannt: [karte(601)], unbekanntOhneAusweis: true }))
+
+    expect(screen.getByTestId('fortschritt-unbekannt-ohne-ausweis')).toHaveTextContent(
+      'Dieser Lauf hat sich nicht ausgewiesen (älterer Runner).',
+    )
+  })
+
+  it('zeigt den Satz zum Ausweis nicht ohne das Flag', () => {
+    zeige(fortschritt({ ketten: [kette()], unbekannt: [karte(601)] }))
+
+    expect(screen.queryByTestId('fortschritt-unbekannt-ohne-ausweis')).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Satz zum Ausweis nicht bei unbekannter Zuordnung', () => {
+    zeige(
+      fortschritt({
+        zuordnung: 'UNBEKANNT',
+        ketten: [kette()],
+        unbekannt: [karte(601)],
+        unbekanntOhneAusweis: true,
+      }),
+    )
+
+    expect(screen.queryByTestId('fortschritt-unbekannt-ohne-ausweis')).not.toBeInTheDocument()
   })
 
   it('zeigt den Hinweis auf eine offene Frage mit der Karte als Status', () => {

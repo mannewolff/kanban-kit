@@ -17,6 +17,9 @@ const AdminPage = lazy(() => import('./pages/AdminPage').then((m) => ({ default:
 const AdministrationPage = lazy(() =>
   import('./pages/AdministrationPage').then((m) => ({ default: m.AdministrationPage })),
 )
+const ApiUebersichtPage = lazy(() =>
+  import('./pages/ApiUebersichtPage').then((m) => ({ default: m.ApiUebersichtPage })),
+)
 const BoardListPage = lazy(() =>
   import('./pages/BoardListPage').then((m) => ({ default: m.BoardListPage })),
 )
@@ -94,6 +97,7 @@ export function App() {
             <Route path="/roles" element={<RolesPage />} />
             <Route path="/profil" element={<ProfilePage />} />
             <Route path="/administration" element={<AdministrationPage />} />
+            <Route path="/administration/api" element={<ApiUebersichtPage />} />
             <Route path="/invitations/accept" element={<AcceptInvitationPage />} />
           </Route>
         </Route>

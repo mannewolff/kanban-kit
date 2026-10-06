@@ -1,5 +1,6 @@
 package org.mwolff.manban.auth.application;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
@@ -40,10 +41,14 @@ public class MeService {
   }
 
   /** Selbstauskunft eines angemeldeten Benutzers. */
+  @Schema(description = "Selbstauskunft des angemeldeten Benutzers.")
   public record MeView(
-      Long userId,
-      String email,
-      String displayName,
-      PlatformRole platformRole,
-      List<ProjectMembershipReader.Membership> memberships) {}
+      @Schema(description = "Interne ID des Kontos.", example = "7") Long userId,
+      @Schema(description = "E-Mail-Adresse, klein geschrieben.", example = "ada@example.org")
+          String email,
+      @Schema(description = "Anzeigename.", example = "Ada Lovelace") String displayName,
+      @Schema(description = "Plattform-Rolle: ADMIN oder USER.", example = "USER")
+          PlatformRole platformRole,
+      @Schema(description = "Projekte, in denen der Benutzer Mitglied ist, mit seiner Rolle.")
+          List<ProjectMembershipReader.Membership> memberships) {}
 }

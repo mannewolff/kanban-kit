@@ -117,6 +117,7 @@ const lauf = (extra: Partial<NightRunView> = {}): NightRunView => {
   noWorkReason: null,
   abortReason: null,
   budget: null,
+  releasePreparation: null,
   items: [
     paket(917, 'GREEN', { commitHash: '9489421abcdef' }),
     paket(922, 'RED', { errorClass: 'CHECKS_RED', excerpt: '2 Tests rot in BoardViewTest' }),

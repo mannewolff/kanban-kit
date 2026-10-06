@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import { useId, type ReactNode } from 'react'
+import type { ReleasePreparationView } from '../../api/nightRuns'
 import type { Melder } from '../../lib/leitstand'
 import {
   ANZEIGE,
@@ -19,6 +20,7 @@ import {
   ZAHL,
 } from '../../theme'
 import { Led } from '../leitstand/LeitstandBausteine'
+import { MorgenkachelVeroeffentlichung } from './MorgenkachelVeroeffentlichung'
 
 /**
  * Ein Nachtlauf als aufklappbare Platte (#988, Vorlage `docs/mockup-nachtlauf-lauf.html` Z. 377–456).
@@ -73,6 +75,12 @@ export function NachtlaufLaufPlatte({
    * Marke.
    */
   abbruchGrund,
+  /**
+   * Die Morgenmeldung des Laufs (Issue #1458, Plan #1447 E12). Ohne Meldung (`null` oder nicht
+   * übergeben) steht keine Kachel da: „nicht vorbereitet“ ist eine Aussage des Kits, und ohne
+   * Meldung weiß das Board nichts.
+   */
+  veroeffentlichung,
   offen,
   onUmschalten,
   testId,
@@ -86,6 +94,7 @@ export function NachtlaufLaufPlatte({
   pulsiert?: boolean
   marken?: ReactNode
   abbruchGrund?: string
+  veroeffentlichung?: ReleasePreparationView | null
   offen: boolean
   onUmschalten: () => void
   testId: string
@@ -247,6 +256,11 @@ export function NachtlaufLaufPlatte({
               >
                 {abbruchGrund}
               </Box>
+            </Box>
+          )}
+          {veroeffentlichung != null && (
+            <Box sx={{ px: '16px', pt: '14px' }}>
+              <MorgenkachelVeroeffentlichung meldung={veroeffentlichung} />
             </Box>
           )}
           {children}

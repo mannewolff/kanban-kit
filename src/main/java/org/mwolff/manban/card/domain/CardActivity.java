@@ -12,6 +12,11 @@ import org.jspecify.annotations.Nullable;
  * oder PAT-Authentifizierung bzw. Token-Bindung), {@code agent} ist eine Client-Selbstauskunft
  * (Header {@code X-Agent-Model}). Alt-Einträge vor Einführung tragen in allen drei Feldern {@code
  * null} — die Herkunft ist für die Vergangenheit nicht rekonstruierbar.
+ *
+ * <p>Laufkennung (Issue #1426): {@code laufStart} ist der {@code startedAt} des Nachtlaufs aus dem
+ * Header {@code Laufkennung.HEADER}, eine Selbstauskunft wie {@code agent} und nur bei
+ * Token-Herkunft gesetzt. {@code statusAfter} ist der Status der Karte nach einer Bewegung.
+ * Einträge vor V47 tragen in beiden {@code null}.
  */
 public record CardActivity(
     @Nullable Long id,
@@ -22,4 +27,6 @@ public record CardActivity(
     Instant createdAt,
     @Nullable CardActivityOrigin origin,
     @Nullable String tokenName,
-    @Nullable String agent) {}
+    @Nullable String agent,
+    @Nullable Instant laufStart,
+    @Nullable CardStatus statusAfter) {}

@@ -46,6 +46,7 @@ Messung 2026-07-11 nach Einführung von Route-Level Lazy Loading (Issue #63):
 | `index.js` (Vendor) | ~408 kB | ~131 kB | 600 kB | ✅ Floor: React + MUI + Router |
 | `EpicBadge.js` (react-markdown/remark) | ~170 kB | ~52 kB | 600 kB | ✅ lazy nachgeladen |
 | Alle Route-Chunks | < 10 kB | < 4 kB | 600 kB | ✅ |
+| `ApiUebersichtPage.js` (swagger-ui-react, Messung 2026-10-05, Issue #1410) | ~1.335 kB | ~383 kB | 600 kB | ⚠️ dokumentierter Ausnahmefall: Swagger UI lässt sich nicht sinnvoll aufteilen; nur über die Administration erreichbar und lazy geladen, belastet keine andere Seite (dazu `ApiUebersichtPage.css` ~184 kB) |
 
 **Regeln:**
 - **Route-Level Lazy Loading ist Pflicht** für alle Top-Level-Routen in `App.tsx` (via `React.lazy` + `Suspense`). Kein direktes Import einer Page-Komponente in `App.tsx` ohne `lazy()`.

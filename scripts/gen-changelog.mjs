@@ -42,7 +42,10 @@ const INITIAL_SINCE = '61812816ecf16c125a7511ed762886e73de858e9';
 /** Titel-Muster, die als Release-/Format-/Prozessrauschen aus dem Changelog fallen. */
 const NOISE = [/^Release: Version/, /^Format:.*Nachtrag/];
 
-const KEEP_A_CHANGELOG_HEADER = `# Changelog
+/** Präfix eines Commit-Titels, der eine Änderung an einem verlässlichen Aufruf meldet. */
+const API_PREFIX = /^API:\s*/;
+
+export const KEEP_A_CHANGELOG_HEADER = `# Changelog
 
 Alle nennenswerten Änderungen an kanban-kit werden hier festgehalten.
 
@@ -50,6 +53,14 @@ Das Format orientiert sich an [Keep a Changelog](https://keepachangelog.com/de/1
 Versionierung folgt der dreiteiligen Betriebsversion (siehe [RELEASING.md](RELEASING.md)). Die
 Einträge je Version sind ein automatischer Auszug der Commit-Titel seit dem letzten Release,
 erzeugt von \`scripts/gen-changelog.mjs\`.
+
+Änderungen an verlässlichen Aufrufen der API stehen am Anfang ihres Versionsblocks und sind als
+**API-Änderung:** gekennzeichnet. Sie entstehen aus Commit-Titeln mit dem Präfix \`API:\`; was eine
+fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
+
+## Hinweise zum Upgrade
+
+Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 `;
 
 function fail(message) {
@@ -98,14 +109,28 @@ function previousVersionTag(currentVersion) {
     .map((entry) => entry.tag)[0];
 }
 
-function collectEntries(sinceRef, endRef, url) {
-  const raw = git(['log', '--no-merges', '--format=%s', `${sinceRef}..${endRef}`]);
-  return raw
+/**
+ * Die Einträge des Versionsblocks: Titel mit Präfix `API:` zuerst und als API-Änderung
+ * gekennzeichnet, danach die übrigen in der Reihenfolge von `git log`. Ein `API:`-Titel, der die
+ * feste Form verfehlt, wird trotzdem übernommen — Titel der Historie lassen sich nicht mehr
+ * korrigieren, ein Abbruch blockierte den Release.
+ */
+export function collectEntries(sinceRef, endRef, url, runGit = git) {
+  const titles = runGit(['log', '--no-merges', '--format=%s', `${sinceRef}..${endRef}`])
     .split('\n')
     .map((title) => title.trim())
     .filter(Boolean)
     .filter((title) => !NOISE.some((pattern) => pattern.test(title)))
     .map((title) => title.replace(/\(Issue #(\d+)\)/g, (_match, n) => `([#${n}](${url}/issues/${n}))`));
+  const api = titles
+    .filter((title) => API_PREFIX.test(title))
+    .map((title) => `**API-Änderung:** ${title.replace(API_PREFIX, '')}`);
+  return [...api, ...titles.filter((title) => !API_PREFIX.test(title))];
+}
+
+export function versionBlock(version, date, entries) {
+  const body = entries.length ? entries.map((entry) => `- ${entry}`).join('\n') : '- (keine Änderungen)';
+  return `## [${version}] – ${date}\n\n${body}\n`;
 }
 
 function releaseDate(endRef, argDate) {
@@ -136,8 +161,7 @@ function main(argv) {
   const date = releaseDate(options.end, options.date);
   const entries = collectEntries(sinceRef, options.end, url);
 
-  const body = entries.length ? entries.map((entry) => `- ${entry}`).join('\n') : '- (keine Änderungen)';
-  const block = `## [${version}] – ${date}\n\n${body}\n`;
+  const block = versionBlock(version, date, entries);
 
   const existing = existsSync(CHANGELOG_PATH)
     ? readFileSync(CHANGELOG_PATH, 'utf-8')
@@ -161,4 +185,6 @@ function main(argv) {
   );
 }
 
-main(process.argv.slice(2));
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main(process.argv.slice(2));
+}
