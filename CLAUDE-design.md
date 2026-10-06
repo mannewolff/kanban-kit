@@ -169,7 +169,7 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/projects/:projectId/nachtlauf` | Runner | Blöcke der Runs nach `docs/mockup-nachtlauf-lauf.html` in Kupferwarte; der übrige Inhalt **Ausnahme Nachtlauf** (eigener Abschnitt); Rahmen der Vorlage | #978, #988 |
 | `/boards/:boardId` | Board | Board der Vorlage (Entwurf Z. 1679–1864) | #980 |
 | `/boards/:boardId/list` | Liste | Liste der Vorlage, nach Vorhaben gruppiert (Entwurf Z. 1865–2054) | #980 |
-| `/boards/:boardId/vorhaben` | Vorhaben | Rahmen; Vorhaben als Platten mit Fortschritt | #978 |
+| `/boards/:boardId/vorhaben` | Vorhaben | Rahmen; Vorhaben als Tafel mit Zeilen und Fortschritt (Muster der Liste, Entwurf Z. 1865–2054) | #1490 |
 | `/boards/:boardId/leitstand` | Leitstand | Leitstand der Vorlage (Entwurf Z. 1200–1678); ersetzt die Kennzahlen-Ansicht, ohne Verweildauer je Spalte | #979 |
 | `/admin` | Plattform-Administration | Rahmen; Tabelle als Platte | #978 |
 | `/admin/bootstrap` | Ersten Admin festlegen | Rahmen; Formular als Platte | #978 |

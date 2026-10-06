@@ -592,11 +592,23 @@ Die Tatsachengrundlage dazu steht in
   seine Anforderung und ist ihm zugeordnet — ohne zweiten Handgriff. Der Knopf erscheint nur,
   wo das möglich ist: nicht an einem Vorhaben, nicht an einer archivierten Karte und nicht an
   einer Karte, die schon einem Vorhaben zugeordnet ist.
-- **Vorhaben-Übersicht:** Kacheln mit **Fortschrittsbalken** („X/Y Arbeitspakete fertig"). Die
-  Kachel nennt die **Anforderung**, aus der der Vorgang eröffnet wurde; der Verweis ist
-  **anklickbar** und öffnet die Karte. Trägt das Vorhaben keine Anforderung — etwa weil es von
-  Hand zum Gruppieren angelegt wurde —, steht dort nichts.
-- **Baum im Detail:** Ein Klick auf die Kachel öffnet das Vorhaben-Detail, und darin steht der
+- **Vorhaben-Übersicht:** eine **Liste**, je Vorhaben eine Zeile. Oben in der Zeile stehen
+  Kürzel, Titel und der Fortschritt „x von y fertig“. Darunter steht die **Anforderung**, aus der
+  der Vorgang eröffnet wurde; der Verweis ist **anklickbar** und öffnet die Karte. Trägt das
+  Vorhaben keine Anforderung — etwa weil es von Hand zum Gruppieren angelegt wurde —, steht dort
+  „Keine Anforderung hinterlegt.“. Daneben folgen die Zusammensetzung nach Arten (Anforderungen,
+  Pläne, Arbeitspakete) und die Marken der gezählten Labels; am Fuß der Zeile steht der
+  **Fortschrittsbalken**. Lange Titel sind gekürzt, der volle Titel erscheint beim Überfahren mit
+  der Maus.
+- **Ausblenden:** Ganz rechts trägt jede Zeile einen **Schalter**. Ein ausgeblendetes Vorhaben
+  verschwindet mit seinen Karten vom Board; das gilt je Board und nur im eigenen Browser. Ein eben
+  ausgeblendetes Vorhaben bleibt bis zum nächsten Laden der Seite **ausgegraut** in der Liste
+  stehen, damit sich ein Versehen am selben Schalter zurücknehmen lässt. Oben schaltet
+  **„Ausgeblendete zeigen (n)“** die ausgeblendeten Vorhaben dazu — abgeschwächt und mit dem
+  Vermerk „Ausgeblendet“, an ihrer gewohnten Stelle; n ist ihre Zahl.
+- **Menü an der Zeile:** Das ⋮ bietet **„Löschen“** und erscheint nur bei Bearbeitungsrecht auf
+  dem Board.
+- **Baum im Detail:** Ein Klick auf die Zeile öffnet das Vorhaben-Detail, und darin steht der
   **Baum** dieses Vorhabens: die Anforderung an der Wurzel, darunter die Pläne, darunter die
   Arbeitspakete. Der Baum ist mit den Pfeiltasten bedienbar; Eingabe auf einer Zeile öffnet die
   jeweilige Karte im selben Dialog. Ist dem Vorhaben noch nichts zugeordnet, sagt das Detail
