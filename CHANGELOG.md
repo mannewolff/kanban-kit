@@ -15,6 +15,13 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.22.0] – 2026-10-06
+
+- chore: v2.21.1
+- Doku und Designquelle: Vorhaben-Seite als Liste beschreiben ([#1491](https://github.com/mannewolff/kanban-kit/issues/1491))
+- Vorhaben-Seite: die Liste ist die einzige Ansicht ([#1490](https://github.com/mannewolff/kanban-kit/issues/1490))
+- Vorhaben-Liste: jede Zeile traegt die Angaben der Kachel ([#1489](https://github.com/mannewolff/kanban-kit/issues/1489))
+
 ## [2.21.0] – 2026-10-06
 
 - chore: v2.20.3
