@@ -31,17 +31,18 @@ export function traegtStufenleiste(titel: string): boolean {
   return titel.startsWith('[Fachlich]') || titel.startsWith('[Plan]')
 }
 
-type Station = 'fachplan' | 'plan' | 'pruefung' | 'pakete' | 'umsetzung' | 'push-vorbereitet'
+type Station = 'plan' | 'pruefung' | 'pakete' | 'abdeckung' | 'umsetzung' | 'push-vorbereitet'
 
 /**
- * Die sechs Stationen der Kette in ihrer Reihenfolge; `ziel` trägt das Label der vier wählbaren
- * (Kit-Vertrag, E10). Fachplan und Prüfung sind Stationen auf dem Weg, aber kein Ziel.
+ * Die sechs Stationen der Kette in ihrer Reihenfolge — dieselben wie während des Laufs und in
+ * „Heute Nacht“ (Fachplan #1420, Issue #1472); `ziel` trägt das Label der vier wählbaren
+ * (Kit-Vertrag, E10). Prüfung und Abdeckung sind Stationen auf dem Weg, aber kein Ziel.
  */
 const STATIONEN: ReadonlyArray<{ schluessel: Station; name: string; ziel: string | null }> = [
-  { schluessel: 'fachplan', name: 'Fachplan', ziel: null },
   { schluessel: 'plan', name: 'Plan', ziel: 'ziel:plan' },
   { schluessel: 'pruefung', name: 'Prüfung', ziel: null },
   { schluessel: 'pakete', name: 'Arbeitspakete', ziel: 'ziel:pakete' },
+  { schluessel: 'abdeckung', name: 'Abdeckung', ziel: null },
   { schluessel: 'umsetzung', name: 'Umsetzung', ziel: 'ziel:umsetzung' },
   { schluessel: 'push-vorbereitet', name: 'Veröffentlichung vorbereitet', ziel: 'ziel:push-vorbereitet' },
 ]
@@ -197,10 +198,10 @@ export function KettenStufenleiste({
       : untergrenze
 
   const zustand = (schluessel: Station): Zustand => {
-    if (schluessel === 'fachplan' || (istPlan && (schluessel === 'plan' || schluessel === 'pruefung'))) {
-      return 'erbracht'
-    }
+    if (istPlan && (schluessel === 'plan' || schluessel === 'pruefung')) return 'erbracht'
     if (schluessel === ziel) return 'ziel'
+    // Das Ziel „Arbeitspakete“ schließt die Abdeckungsprüfung ein (Fachplan #1420).
+    if (schluessel === 'abdeckung' && ziel === 'pakete') return 'vorgesehen'
     return index(schluessel) < index(ziel) ? 'vorgesehen' : 'nicht-vorgesehen'
   }
 

@@ -96,16 +96,16 @@ describe('KettenStufenleiste', () => {
     zeige()
 
     const stationen = screen.getAllByTestId(/^station-/)
+    // Dieselben sechs Stationen wie während des Laufs und in „Heute Nacht“ (Fachplan #1420, Issue #1472).
     expect(stationen.map((s) => s.dataset.testid)).toEqual([
-      'station-fachplan',
       'station-plan',
       'station-pruefung',
       'station-pakete',
+      'station-abdeckung',
       'station-umsetzung',
       'station-push-vorbereitet',
     ])
-    expect(station('fachplan')).toHaveTextContent('Fachplan')
-    expect(station('fachplan')).toHaveTextContent('vor dem Lauf erbracht')
+    expect(station('abdeckung')).toHaveTextContent('Abdeckung')
     expect(station('plan')).toHaveTextContent('vorgesehen')
     expect(station('pruefung')).toHaveTextContent('vorgesehen')
     expect(station('pakete')).toHaveTextContent('Ziel')
@@ -116,6 +116,21 @@ describe('KettenStufenleiste', () => {
     for (const s of stationen) {
       expect(within(s).getByTestId('stationssymbol')).not.toBeEmptyDOMElement()
     }
+  })
+
+  it('rechnet die Abdeckung beim Ziel „Arbeitspakete“ zum vorgesehenen Weg (Issue #1472)', () => {
+    zeige()
+
+    expect(station('pakete')).toHaveTextContent('Ziel')
+    expect(station('abdeckung')).toHaveTextContent('vorgesehen')
+    expect(station('abdeckung')).not.toHaveTextContent('nicht vorgesehen')
+  })
+
+  it('rechnet die Abdeckung beim Ziel „Plan“ als nicht vorgesehen (Issue #1472)', () => {
+    zeige({ labelIds: [1] })
+
+    expect(station('plan')).toHaveTextContent('Ziel')
+    expect(station('abdeckung')).toHaveTextContent('nicht vorgesehen')
   })
 
   it('bietet genau vier Ziele als Umschaltknöpfe an, ohne Ziel ist „Arbeitspakete“ markiert', () => {
@@ -694,7 +709,7 @@ describe('KettenStufenleiste — Kettenstand (Issue #1453)', () => {
     })
 
     expect(await screen.findByText(/Der Stand der Kette ließ sich nicht laden: Datenbank nicht erreichbar/)).toBeInTheDocument()
-    expect(station('fachplan')).toBeInTheDocument()
+    expect(station('abdeckung')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Kette starten' })).toBeInTheDocument()
   })
 
