@@ -3,6 +3,7 @@ package org.mwolff.manban.card.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -104,6 +105,43 @@ class ArbeitspaketTest {
   @Test
   void effektivDone_ohneStatusOhneSpaltennamen() {
     assertThat(Arbeitspaket.effektivDone(karte(null), null)).isFalse();
+  }
+
+  // Status nach der Lage der Zielspalte (Issue #1474): die nächste Prozessspalte links davon.
+
+  @Test
+  void statusNachLage_eigeneSpalteZwischenBacklogUndReady_istBacklog() {
+    assertThat(Arbeitspaket.statusNachLage(List.of("Backlog", "X", "Y")))
+        .isEqualTo(CardStatus.BACKLOG);
+  }
+
+  @Test
+  void statusNachLage_eigeneSpalteDirektNachBacklog_istBacklog() {
+    assertThat(Arbeitspaket.statusNachLage(List.of("Backlog", "X"))).isEqualTo(CardStatus.BACKLOG);
+  }
+
+  @Test
+  void statusNachLage_eigeneSpalteZwischenInReviewUndDone_istInReview() {
+    assertThat(
+            Arbeitspaket.statusNachLage(
+                List.of("Backlog", "Ready", "In progress", "In review", "Z")))
+        .isEqualTo(CardStatus.IN_REVIEW);
+  }
+
+  @Test
+  void statusNachLage_eigeneSpalteGanzLinks_istBacklog() {
+    assertThat(Arbeitspaket.statusNachLage(List.of("Ideen"))).isEqualTo(CardStatus.BACKLOG);
+  }
+
+  @Test
+  void statusNachLage_ohneSpalten_istBacklog() {
+    assertThat(Arbeitspaket.statusNachLage(List.of())).isEqualTo(CardStatus.BACKLOG);
+  }
+
+  @Test
+  void statusNachLage_prozessspalteGibtIhrenStatusVor() {
+    assertThat(Arbeitspaket.statusNachLage(List.of("Backlog", "X", "Ready")))
+        .isEqualTo(CardStatus.READY);
   }
 
   private static Card karte(@Nullable CardStatus status) {

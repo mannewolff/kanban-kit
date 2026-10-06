@@ -1,8 +1,6 @@
 package org.mwolff.manban.card.application;
 
 import static org.mwolff.manban.card.application.KartenGrundlage.doneStempel;
-import static org.mwolff.manban.card.application.KartenGrundlage.inSpalte;
-import static org.mwolff.manban.card.application.KartenGrundlage.statusIn;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -107,7 +105,10 @@ public class CardMoveService {
     // Done-Zeitstempel folgt dem effektiven Maßstab — bei Arbeitspaketen dem Status (E7).
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (fromColumn != targetColumnId) {
-      moved = moved.withStatus(statusIn(moved, target.name()));
+      moved =
+          moved.withStatus(
+              KartenStatus.statusIn(
+                  moved, KartenStatus.bis(boardService.listColumns(card.boardId()), target)));
       // Die Aktivität hält den Status nach der Bewegung fest (Issue #1427) — darum erst hier.
       grundlage.aktivitaet(
           cardId,
@@ -310,7 +311,11 @@ public class CardMoveService {
     Card moved = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     // Status wie bei doMove aus der Zielspalte; der Done-Zeitstempel wird daraus neu abgeleitet
     // statt gelöscht — sonst fiele ein Paket mit Status DONE aus jeder Auswertung (Plan E18).
-    Card cleaned = inSpalte(moved.withParent(null), targetColumn.name(), switchedAt);
+    Card cleaned =
+        KartenStatus.inSpalte(
+            moved.withParent(null),
+            KartenStatus.bis(boardService.listColumns(targetBoardId), targetColumn),
+            switchedAt);
     if (!sameProject) {
       // Die Herkunft ist projekt-lokal: Der Vorfahr bleibt zurueck, und ein Verweis ueber die
       // Projektgrenze zeigte auf eine Nummer, die dort einer anderen Karte gehoeren kann.

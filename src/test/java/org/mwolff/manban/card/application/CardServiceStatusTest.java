@@ -129,6 +129,14 @@ class CardServiceStatusTest {
     return new ColumnView(id, name, position, null);
   }
 
+  /** Board, dessen eigene Spalte „Anstehend“ rechts von Done liegt (Issue #1474). */
+  private static final List<ColumnView> BOARD_MIT_ABLAGE_HINTER_DONE =
+      List.of(
+          column(19L, "Backlog", 0),
+          column(20L, "Ready", 1),
+          column(21L, "Done", 4),
+          column(22L, "Anstehend", 5));
+
   /** Karte mit Titel, Status und Done-Zeitstempel — für die Statusregeln der Schreibpfade. */
   private static Card paket(
       long id, long columnId, String title, @Nullable CardStatus status, @Nullable Instant done) {
@@ -229,10 +237,18 @@ class CardServiceStatusTest {
   }
 
   @Test
-  void move_arbeitspaketInEigeneSpalte_behaeltSeinenStatus() {
+  void move_arbeitspaketInEigeneSpalte_bekommtStatusDerProzessspalteLinksDavon() {
+    // Issue #1474: Die Lage der Spalte zählt, nicht der bisherige Status.
     when(cards.findById(1L))
-        .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.READY, null)));
-    when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, "Anstehend", 5));
+        .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.IN_PROGRESS, null)));
+    when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, "Anstehend", 2));
+    when(boardService.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                column(19L, "Backlog", 0),
+                column(20L, "Ready", 1),
+                column(22L, "Anstehend", 2),
+                column(23L, "In progress", 3)));
 
     moveService.move(1L, 1L, 22L, 0);
 
@@ -253,11 +269,12 @@ class CardServiceStatusTest {
   }
 
   @Test
-  void move_erledigtesArbeitspaketInEigeneSpalte_behaeltStatusUndZeitstempel() {
+  void move_erledigtesArbeitspaketInEigeneSpalteHinterDone_behaeltStatusUndZeitstempel() {
     Instant erledigt = FIXED.minusSeconds(10);
     when(cards.findById(1L))
         .thenReturn(Optional.of(paket(1L, 21L, "Paket", CardStatus.DONE, erledigt)));
     when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, "Anstehend", 5));
+    when(boardService.listColumns(BOARD)).thenReturn(BOARD_MIT_ABLAGE_HINTER_DONE);
 
     moveService.move(1L, 1L, 22L, 0);
 
@@ -270,6 +287,7 @@ class CardServiceStatusTest {
     when(cards.findById(1L))
         .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.DONE, null)));
     when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, "Anstehend", 5));
+    when(boardService.listColumns(BOARD)).thenReturn(BOARD_MIT_ABLAGE_HINTER_DONE);
 
     moveService.move(1L, 1L, 22L, 0);
 
@@ -278,10 +296,13 @@ class CardServiceStatusTest {
 
   @Test
   void move_arbeitspaketMitStatusBacklog_inSpalteDoneArchiv_istNichtErledigt() {
-    // „Done (Archiv)" ist keine Prozessspalte: Der Status bleibt, und er entscheidet (Plan E7).
+    // „Done (Archiv)" ist keine Prozessspalte, obwohl der Name „Done" enthält: Den Status gibt die
+    // Prozessspalte links davon vor (Issue #1474), und er entscheidet über erledigt (Plan E7).
     when(cards.findById(1L))
         .thenReturn(Optional.of(paket(1L, 20L, "Paket", CardStatus.BACKLOG, null)));
-    when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, "Done (Archiv)", 5));
+    when(boardService.requireColumn(22L, BOARD)).thenReturn(column(22L, "Done (Archiv)", 1));
+    when(boardService.listColumns(BOARD))
+        .thenReturn(List.of(column(19L, "Backlog", 0), column(22L, "Done (Archiv)", 1)));
 
     moveService.move(1L, 1L, 22L, 0);
 
@@ -301,14 +322,21 @@ class CardServiceStatusTest {
   }
 
   @Test
-  void transfer_erledigtesArbeitspaketInEigeneSpalte_behaeltStatusUndZeitstempel() {
-    // Plan E18: Der Zeitstempel wird neu abgeleitet statt bedingungslos gelöscht.
+  void transfer_erledigtesArbeitspaketInEigeneSpalteHinterDone_behaeltStatusUndZeitstempel() {
+    // Plan E18: Der Zeitstempel wird neu abgeleitet statt bedingungslos gelöscht. Issue #1474:
+    // Gezählt wird nach den Spalten des Zielboards.
     Instant erledigt = FIXED.minusSeconds(10);
     when(cards.findById(100L))
         .thenReturn(Optional.of(paket(100L, 50L, "Paket", CardStatus.DONE, erledigt)));
     when(boardService.requireProjectId(20L)).thenReturn(PROJECT);
     when(boardService.requireColumn(60L, 20L))
-        .thenReturn(new ColumnView(60L, "Anstehend", 0, null));
+        .thenReturn(new ColumnView(60L, "Anstehend", 2, null));
+    when(boardService.listColumns(20L))
+        .thenReturn(
+            List.of(
+                new ColumnView(58L, "Backlog", 0, null),
+                new ColumnView(59L, "Done", 1, null),
+                new ColumnView(60L, "Anstehend", 2, null)));
 
     moveService.transfer(1L, 100L, 20L, 60L);
 

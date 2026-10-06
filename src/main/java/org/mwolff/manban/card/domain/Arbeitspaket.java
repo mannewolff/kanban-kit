@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.domain;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -50,6 +51,22 @@ public final class Arbeitspaket {
       case "done" -> Optional.of(CardStatus.DONE);
       default -> Optional.empty();
     };
+  }
+
+  /**
+   * Der Status nach der Lage der Zielspalte (Issue #1474): Die Liste nennt die Spalten des Boards
+   * von links bis einschließlich der Zielspalte. Den Status gibt die nächste Prozessspalte von
+   * rechts vor — die Zielspalte selbst, wenn sie eine ist, sonst die nächste links davon. Gibt es
+   * keine, gilt {@code BACKLOG}.
+   */
+  public static CardStatus statusNachLage(List<String> spaltenBisZiel) {
+    for (int i = spaltenBisZiel.size() - 1; i >= 0; i--) {
+      Optional<CardStatus> status = statusVonSpalte(spaltenBisZiel.get(i));
+      if (status.isPresent()) {
+        return status.get();
+      }
+    }
+    return CardStatus.BACKLOG;
   }
 
   /**

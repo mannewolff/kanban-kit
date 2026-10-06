@@ -25,6 +25,14 @@
 - Innerhalb eines Projekts weitere **Boards** anlegen. Ein neues Board bekommt die Default-Spalten
   **Backlog · Ready · In Progress · In Review · Done**.
 - Spalten lassen sich anlegen, umbenennen, umsortieren und (wenn leer) löschen.
+- **Status eines Arbeitspakets:** Die fünf Prozessspalten **Backlog**, **Ready**, **In Progress**,
+  **In Review** und **Done** geben einer Karte, die dort ankommt, ihren Status. Eine **eigene
+  Spalte** (jeder andere Name) übernimmt den Status der nächsten Prozessspalte **links** davon; gibt
+  es links keine, gilt „Backlog“. Bei `Backlog · X · Y · Ready` bekommt eine Karte in X oder Y also
+  „Backlog“, auch wenn sie aus Ready zurückkommt. Das gilt bei jedem Verschieben, Anlegen und
+  Übertragen auf ein anderes Board und ersetzt einen von Hand gesetzten Status. Wer die Spalten
+  umsortiert, ändert den Status liegender Karten nicht. Vorhaben und Karten mit `[Idee]`,
+  `[Fachlich]` oder `[Plan]` im Titel tragen keinen Status.
 
 ## Karten
 
