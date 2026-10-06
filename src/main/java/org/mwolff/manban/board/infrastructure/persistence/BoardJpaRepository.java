@@ -13,6 +13,9 @@ interface BoardJpaRepository extends JpaRepository<BoardEntity, Long> {
   /** Aktive Boards des Projekts. */
   List<BoardEntity> findByProjectIdAndArchivedAtIsNullOrderByCreatedAt(Long projectId);
 
+  /** Aktive Boards aller Projekte. */
+  List<BoardEntity> findByArchivedAtIsNullOrderByCreatedAt();
+
   /** Archivierte Boards des Projekts. */
   List<BoardEntity> findByProjectIdAndArchivedAtIsNotNullOrderByCreatedAt(Long projectId);
 }

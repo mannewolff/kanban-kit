@@ -64,7 +64,7 @@ services:
     # Wie manban-api im Basis-Stack: das veroeffentlichte Abbild statt `build:` (Issue #1265).
     # Auch ein Betrieb mit Sicherung soll ohne Bauen auskommen; das `build:` dieses Dienstes liegt
     # in docker-compose.bau.yml. Volle Fassung aus derselben Ueberlegung wie dort.
-    image: ghcr.io/mannewolff/kanban-kit-backup:2.20.0
+    image: ghcr.io/mannewolff/kanban-kit-backup:2.21.0
     # Der Dienst startet cron neben seiner eigenen Schleife — ein Init raeumt deren Kinder ab.
     init: true
     environment:

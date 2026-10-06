@@ -16,5 +16,15 @@ public interface LabelRepository {
 
   boolean existsByBoardIdAndName(long boardId, String name);
 
+  /**
+   * Legt das Label am Board an, wenn das Board diesen Namen noch nicht trägt (Issue #1485). Atomar
+   * über die Eindeutigkeitsbedingung {@code uq_label_board_name}: Auch zwei gleichzeitige Aufrufe
+   * legen es nur einmal an, und der unterlegene bricht seine Transaktion nicht ab. Ein neues Label
+   * zählt nicht auf der Kachel eines Vorhabens mit.
+   *
+   * @return {@code true}, wenn das Label neu angelegt wurde; {@code false}, wenn es schon bestand
+   */
+  boolean insertIfAbsent(long boardId, String name, String color);
+
   void deleteById(long id);
 }

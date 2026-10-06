@@ -39,6 +39,13 @@ class BoardRepositoryAdapter implements BoardRepository {
   }
 
   @Override
+  public List<Board> findAllActive() {
+    return jpa.findByArchivedAtIsNullOrderByCreatedAt().stream()
+        .map(BoardRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
   public List<Board> findArchivedByProjectId(long projectId) {
     return jpa.findByProjectIdAndArchivedAtIsNotNullOrderByCreatedAt(projectId).stream()
         .map(BoardRepositoryAdapter::toDomain)

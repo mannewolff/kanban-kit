@@ -71,7 +71,7 @@ services:
     # Volle Fassung statt eines beweglichen Tags: Ein `latest` ist genau das, was dieses Vorhaben
     # abschafft. Das Abbild dieser Nummer steht erst mit ihrem Release in der Registry — die
     # Pruefart `eigen` in scripts/bausteine.json haelt den CI-Job deshalb gruen (Issue #1264).
-    image: ghcr.io/mannewolff/kanban-kit:2.20.0
+    image: ghcr.io/mannewolff/kanban-kit:2.21.0
     environment:
       MANBAN_BASE_URL: ${MANBAN_BASE_URL:-https://localhost}
       # Dies ist der lokale Entwicklungs-Stack: Der Schalter erlaubt den Start mit den

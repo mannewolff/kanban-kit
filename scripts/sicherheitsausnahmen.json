@@ -720,6 +720,18 @@
       "ziel": "kanban-kit-backup:pruefung",
       "begruendung": "Übergang nach #1350/#1351: Befund in übernommenem Baustein bzw. Bauwerkzeug aus CI-Lauf #281; die Regel nach Herkunft entsteht in Plan #1351.",
       "ablauf": "2026-11-01"
+    },
+    {
+      "kennung": "CVE-2026-47884",
+      "ziel": "target/bom.json",
+      "begruendung": "Spring Framework XsltView-Lücke (SSRF/RCE); kanban-kit verwendet XsltView nicht, die Lücke ist hier nicht ausnutzbar. Korrektur nur in Spring Framework 7 (Spring Boot 4) — eigenes Vorhaben.",
+      "ablauf": "2027-01-06"
+    },
+    {
+      "kennung": "CVE-2026-47884",
+      "ziel": "kanban-kit:pruefung",
+      "begruendung": "Spring Framework XsltView-Lücke (SSRF/RCE); kanban-kit verwendet XsltView nicht, die Lücke ist hier nicht ausnutzbar. Korrektur nur in Spring Framework 7 (Spring Boot 4) — eigenes Vorhaben.",
+      "ablauf": "2027-01-06"
     }
   ]
 }

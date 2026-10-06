@@ -239,6 +239,18 @@ public class BoardService {
   }
 
   /**
+   * Alle aktiven Boards aller Projekte (Issue #1485), nach Anlage geordnet. <b>Ohne
+   * Rechteprüfung</b>: Der Aufrufer prüft selbst, etwa auf Plattform-Admin; die Liste überschreitet
+   * Projektgrenzen und darf nie an Projektmitglieder gehen.
+   */
+  @Transactional(readOnly = true)
+  public List<BoardSummary> listAllActiveBoards() {
+    return boards.findAllActive().stream()
+        .map(b -> new BoardSummary(b.requireId(), b.name(), false))
+        .toList();
+  }
+
+  /**
    * Spalte des Boards. Die Board-Zugehörigkeit ist Teil der Zusicherung: eine Spalte eines anderen
    * Boards gilt wie eine unbekannte Spalte (kein Existenz-Leak fremder Boards).
    *

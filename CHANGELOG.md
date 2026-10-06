@@ -15,6 +15,13 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.21.0] – 2026-10-06
+
+- chore: v2.20.3
+- Administration: Knopf Standard-Labels fuer alle Boards ([#1486](https://github.com/mannewolff/kanban-kit/issues/1486))
+- Standard-Labels: Endpunkte zum Anlegen auf allen Boards aller Projekte ([#1485](https://github.com/mannewolff/kanban-kit/issues/1485))
+- Befristete Ausnahme fuer CVE-2026-47884 in spring-webmvc ([#1482](https://github.com/mannewolff/kanban-kit/issues/1482))
+
 ## [2.20.0] – 2026-10-05
 
 - chore: v2.19.1

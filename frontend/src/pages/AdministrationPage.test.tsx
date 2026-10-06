@@ -311,6 +311,22 @@ describe('AdministrationPage', () => {
     expect(mTokens.revoke).not.toHaveBeenCalled()
   })
 
+  describe('Standard-Labels (Issue #1486)', () => {
+    it('zeigt den Knopf nur einem Plattform-Admin', async () => {
+      renderPage() // Default USER
+      expect(
+        screen.queryByRole('button', { name: 'Standard-Labels für alle Boards' }),
+      ).not.toBeInTheDocument()
+
+      authState.user = { platformRole: 'ADMIN', memberships: [] }
+      mConfig.getDoneRetention.mockResolvedValue({ effective: 30, override: null })
+      renderPage()
+      expect(
+        await screen.findByRole('button', { name: 'Standard-Labels für alle Boards' }),
+      ).toBeInTheDocument()
+    })
+  })
+
   describe('Done-Aufbewahrung', () => {
     const asAdmin = () => {
       authState.user = { platformRole: 'ADMIN', memberships: [] }

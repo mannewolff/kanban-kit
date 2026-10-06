@@ -18,6 +18,12 @@ public interface BoardRepository {
   /** Nur aktive Boards des Projekts. */
   List<Board> findByProjectId(long projectId);
 
+  /**
+   * Alle aktiven Boards aller Projekte, nach Anlage geordnet — für Verwaltungsaufgaben der ganzen
+   * Installation (Standard-Labels, Issue #1485).
+   */
+  List<Board> findAllActive();
+
   /** Nur archivierte Boards des Projekts (für die Archiv-Ansicht). */
   List<Board> findArchivedByProjectId(long projectId);
 

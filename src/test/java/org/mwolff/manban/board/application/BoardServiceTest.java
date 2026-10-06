@@ -128,6 +128,20 @@ class BoardServiceTest {
   }
 
   @Test
+  void listAllActiveBoards_nenntIdUndNameJedesAktivenBoardsOhneRechtepruefung() {
+    // Given
+    when(boards.findAllActive()).thenReturn(List.of(board()));
+
+    // When
+    List<BoardService.BoardSummary> boardsAller = service.listAllActiveBoards();
+
+    // Then
+    assertThat(boardsAller)
+        .containsExactly(new BoardService.BoardSummary(10L, board().name(), false));
+    verifyNoInteractions(permissions);
+  }
+
+  @Test
   void getBoard_returnsBoardView() {
     // Given
     when(boards.findById(10L)).thenReturn(Optional.of(board()));
