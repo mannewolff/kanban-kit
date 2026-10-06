@@ -113,7 +113,7 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
 
 ### Nur mit der Plattform-Rolle ADMIN
 
-Drei Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
+Vier Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
 Zeile der [Rechte-Matrix](#projekt-rollen-rechte-matrix) oben; eine Zeile, die in jeder Rollenspalte
 leer bliebe, sähe aus wie ein vergessenes Häkchen und lüde dazu ein, es einer Rolle zu geben.
 
@@ -123,6 +123,9 @@ leer bliebe, sähe aus wie ein vergessenes Häkchen und lüde dazu ein, es einer
 - **API-Aufrufe aus der Übersicht ausprobieren** — nur der Plattform-Admin; der Aufruf läuft mit den
   Rechten der Sitzung bzw. des angegebenen Projekt-Tokens, und der Server prüft das Kennzeichen
   `X-Api-Ausprobieren`. Siehe [API-Übersicht](nutzung.md#api-ubersicht).
+- **Standard-Labels für alle Boards anlegen** — nur der Plattform-Admin, über die Seite
+  Administration; legt den festen Label-Satz auf allen nicht archivierten Boards aller Projekte an und
+  überspringt vorhandene. Siehe [Standard-Labels](nutzung.md#standard-labels).
 
 **Projekte legt ausschließlich der Plattform-Admin an und löscht sie auch nur er.** Beim Anlegen
 bestimmt er den **Owner** per E-Mail; dadurch wird er selbst nicht Mitglied, hat als Plattform-Admin

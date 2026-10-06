@@ -110,7 +110,8 @@ Klick auf eine Karte öffnet das Detail:
     fachlichen Anforderung die abgeschlossene fachliche Prüfung fehlt (kein `review:fertig`), einem
     Plan die Zeile „Plan-Review:“, oder wenn an der Karte eine offene Frage auf einen Menschen
     wartet (`kit:klaeren`, `lauf:wartet`). Fehlt am Board eines der Labels, legt die Leiste es nicht
-    an: Der Hinweis nennt seinen Namen, und ein Mensch legt es in den Board-Labels an.
+    an: Der Hinweis nennt seinen Namen, und ein Mensch legt es in den Board-Labels an — oder ein
+    Plattform-Admin legt alle fehlenden auf einmal an, über [Standard-Labels](#standard-labels).
   - **Start zurücknehmen:** Solange kein Runner die Karte übernommen hat, nimmt „Start
     zurücknehmen“ `kit:night` wieder ab; danach sind Ziel und Prüferzahl wieder frei wählbar.
     Übernimmt ein Runner die Karte, nimmt er `kit:night`, `ziel:*` und `planreview:*` zusammen ab, und
@@ -635,6 +636,26 @@ Unabhängig vom Editiermodus zeigt die Seite **Administration** jedem Angemeldet
 (`/administration/api`) und bietet ihre Beschreibung als OpenAPI 3 zum Herunterladen (JSON und
 YAML). Die Übersicht dient dem Nachschlagen; wer Aufrufe darin ausprobieren darf, steht unter
 [API-Übersicht](#api-ubersicht).
+
+### Standard-Labels
+
+Einem **Plattform-Admin** zeigt die Seite **Administration** zusätzlich den Abschnitt
+**„Standard-Labels"** mit dem Knopf **„Standard-Labels für alle Boards"**. Er öffnet einen Dialog
+mit dem festen Satz der Labels, die das claude-workflow-kit, die Laufsteuerung und die
+[Stufenleiste](#karten-detail) erwarten, nach Gruppen und in ihrer Farbe:
+
+- **Kit:** `kit:durchziehen`, `kit:geschuetzt`, `kit:klaeren`, `kit:night`, `kit:nightrun`,
+  `kit:pruefen`, `kit:nightplan`, `kit:nightreview`, `kit:nightissues`
+- **Lauf:** `lauf:abgebrochen`, `lauf:laeuft`, `lauf:wartet`
+- **Review:** `review:offen`, `review:fertig`
+- **Stufenleiste:** `ziel:plan`, `ziel:pakete`, `ziel:umsetzung`, `ziel:push-vorbereitet`,
+  `planreview:1`, `planreview:2`
+
+Erst **„Anlegen"** legt jedes fehlende Label des Satzes auf **allen nicht archivierten Boards aller
+Projekte** an; „Abbrechen" ändert nichts. Ein Label, das ein Board schon trägt, bleibt mit Farbe und
+Zuordnungen unverändert und wird übersprungen. Danach meldet der Abschnitt, auf wie vielen Boards wie
+viele Labels neu angelegt wurden und wie viele schon vorhanden waren. Der Knopf lässt sich beliebig
+oft drücken: Ab dem zweiten Mal legt er nichts mehr an — auf einem neuen Board aber die fehlenden.
 
 ## Plattform-Leitstand
 

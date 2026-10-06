@@ -28,6 +28,7 @@ import { OPENAPI_JSON_PFAD, OPENAPI_YAML_PFAD } from '../api/openapi'
 import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { StandardLabelsSection } from '../components/StandardLabelsSection'
 import { useEditMode } from '../lib/EditModeContext'
 import { canEditCards, isPlatformAdmin } from '../lib/roles'
 
@@ -70,6 +71,8 @@ export function AdministrationPage() {
         </Paper>
 
         <DoneRetentionSection />
+
+        <StandardLabelsSection />
 
         <ApiTokensSection />
 

@@ -145,16 +145,18 @@
       "name": "bausteine-betrieb",
       "muster": [
         "src/components/BackupStatusSection.tsx",
-        "src/components/OverloadRejectionsSection.tsx"
+        "src/components/OverloadRejectionsSection.tsx",
+        "src/components/StandardLabelsSection.tsx"
       ],
       "testMuster": [
         "src/components/BackupStatusSection.test.tsx",
-        "src/components/OverloadRejectionsSection.test.tsx"
+        "src/components/OverloadRejectionsSection.test.tsx",
+        "src/components/StandardLabelsSection.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,
       "reihenfolge": 10,
-      "begruendung": "Die beiden Betriebsanzeigen der Verwaltung: Sicherungsstand und abgewiesene Anfragen unter Last."
+      "begruendung": "Die Betriebsabschnitte der Verwaltung: Sicherungsstand, abgewiesene Anfragen unter Last und Standard-Labels für alle Boards."
     },
     {
       "name": "baustein-boardview",
