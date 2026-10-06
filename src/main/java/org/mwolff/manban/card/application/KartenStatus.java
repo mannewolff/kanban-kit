@@ -28,11 +28,11 @@ final class KartenStatus {
    * von Anlegen und Übertragen, damit beide dieselbe Regel sprechen.
    *
    * @param spaltenBisZiel die Spaltennamen des Boards von links bis einschließlich der Zielspalte,
-   *     siehe {@link #bis}
+   *     siehe {@link #bis}; nie leer — enthält mindestens die Zielspalte
    */
   static Card inSpalte(Card card, List<String> spaltenBisZiel, Instant now) {
     Card mitStatus = card.withStatus(statusIn(card, spaltenBisZiel));
-    String ziel = spaltenBisZiel.isEmpty() ? null : spaltenBisZiel.getLast();
+    String ziel = spaltenBisZiel.getLast();
     return mitStatus.withMovedToDoneAt(KartenGrundlage.doneStempel(mitStatus, ziel, now));
   }
 
