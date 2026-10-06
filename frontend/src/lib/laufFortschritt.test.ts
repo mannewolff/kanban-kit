@@ -363,25 +363,6 @@ describe('kettenAnzeige (Issue #1453, Plan #1447 E5, E6)', () => {
     expect(aktuell('VOR_DEM_LAUF_ERBRACHT')).toBe(false)
   })
 
-  it('füllt das Band: erbracht und erledigt voll, die aktuelle halb, der Rest leer und unerreicht', () => {
-    const anzeige = kettenAnzeige(
-      stand([
-        station('PLAN', 'VOR_DEM_LAUF_ERBRACHT', 'vor dem Lauf erbracht'),
-        station('REVIEW', 'ERLEDIGT', 'erledigt'),
-        station('PAKETE', 'ABGEBROCHEN', 'abgebrochen'),
-        station('ABDECKUNG', 'STEHT_AUS', 'steht aus'),
-        station('UMSETZUNG', 'NICHT_VORGESEHEN', 'nicht vorgesehen'),
-      ]),
-    )
-    expect(anzeige.map((a) => [a.fuellung, a.erreicht])).toEqual([
-      [100, true],
-      [100, true],
-      [50, true],
-      [0, false],
-      [0, false],
-    ])
-  })
-
   it('sagt den ganzen Stand in einem Satz an, mit Grund und Ziel', () => {
     const anzeige = kettenAnzeige(
       stand([

@@ -172,10 +172,6 @@ export interface Stationsanzeige {
   aktuell: boolean
   /** Ob das die Zielstation ist — ohne gewähltes Ziel „Arbeitspakete“. */
   ziel: boolean
-  /** Ob die Kette die Station erreicht hat — für das Band. */
-  erreicht: boolean
-  /** Die Füllung im Band in Prozent. */
-  fuellung: number
 }
 
 /** Die Namen der Stationen der Stufenleiste — auch für die Übersicht „Heute Nacht“ (Issue #1455). */
@@ -189,7 +185,7 @@ const PROJEKTGRENZE = 'Projektgrenze'
 
 /**
  * Die Stufenleiste einer übernommenen Kette (Issue #1453, Plan #1447 E5, E6). Zustand, Text und
- * Grund kommen fertig vom Server; hier entstehen nur Symbol, Markierung und Bandfüllung. Nichts
+ * Grund kommen fertig vom Server; hier entstehen nur Symbol und Markierung. Nichts
  * wird aus Labels abgeleitet.
  */
 export function kettenAnzeige(stand: KettenStand): Stationsanzeige[] {
@@ -208,13 +204,11 @@ export function kettenAnzeige(stand: KettenStand): Stationsanzeige[] {
         return {
           ...anzeige,
           symbol: stand.zielErreicht && station === stand.ziel ? 'ziel-erreicht' : 'erledigt',
-          erreicht: true,
-          fuellung: 100,
         }
       case 'VOR_DEM_LAUF_ERBRACHT':
-        return { ...anzeige, symbol: 'erbracht', erreicht: true, fuellung: 100 }
+        return { ...anzeige, symbol: 'erbracht' }
       case 'LAEUFT':
-        return { ...anzeige, symbol: 'laeuft', erreicht: true, fuellung: 50 }
+        return { ...anzeige, symbol: 'laeuft' }
       case 'WARTET':
         return text === PROJEKTGRENZE
           ? {
@@ -222,16 +216,14 @@ export function kettenAnzeige(stand: KettenStand): Stationsanzeige[] {
               symbol: 'projektgrenze',
               text: grund === null ? text : `${text}: ${grund}`,
               grund: null,
-              erreicht: true,
-              fuellung: 50,
             }
-          : { ...anzeige, symbol: 'wartet', erreicht: true, fuellung: 50 }
+          : { ...anzeige, symbol: 'wartet' }
       case 'ABGEBROCHEN':
-        return { ...anzeige, symbol: 'abgebrochen', erreicht: true, fuellung: 50 }
+        return { ...anzeige, symbol: 'abgebrochen' }
       case 'STEHT_AUS':
-        return { ...anzeige, symbol: 'steht-aus', erreicht: false, fuellung: 0 }
+        return { ...anzeige, symbol: 'steht-aus' }
       case 'NICHT_VORGESEHEN':
-        return { ...anzeige, symbol: 'nicht-vorgesehen', erreicht: false, fuellung: 0 }
+        return { ...anzeige, symbol: 'nicht-vorgesehen' }
     }
   })
 }

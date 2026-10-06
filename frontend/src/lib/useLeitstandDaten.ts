@@ -77,6 +77,7 @@ export interface LeitstandDaten {
  * als `ohneRecht` still, und die Seite lässt die Lauf-Bereiche weg.
  */
 export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
+  // Stryker disable next-line StringLiteral: gleichwertig — Number.parseInt ergibt für '' wie für jeden anderen Nicht-Zahl-Text NaN
   const id = Number.parseInt(boardId ?? '', 10)
   const gueltigeId = Number.isInteger(id) && id > 0 ? id : null
 
