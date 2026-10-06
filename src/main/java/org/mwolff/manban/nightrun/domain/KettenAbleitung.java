@@ -126,7 +126,7 @@ final class KettenAbleitung {
     KettenStand stand() {
       ProgressStage aktuell =
           Arrays.stream(ProgressStage.values())
-              .filter(s -> imWeg(s) && !erledigt(s))
+              .filter(s -> abDerErstenStation(s) && !erledigt(s))
               .findFirst()
               .orElse(null);
       List<StationStand> stationen =
@@ -134,8 +134,14 @@ final class KettenAbleitung {
       return new KettenStand(ziel, pruefer, zielErreicht, grenze, stationen);
     }
 
-    private boolean imWeg(ProgressStage s) {
-      return s.compareTo(erste) >= 0 && s.compareTo(ende) <= 0;
+    /**
+     * Ob die Station ab der ersten Station des Wegs liegt. Eine obere Grenze braucht es nicht:
+     * Stationen hinter dem Ende zeigt {@link #station} schon vorher als nicht vorgesehen, die
+     * aktuelle Station wirkt dort nie (Issue #1475 — eine Grenze {@code ende} wäre durch keinen
+     * Test zu unterscheiden).
+     */
+    private boolean abDerErstenStation(ProgressStage s) {
+      return s.compareTo(erste) >= 0;
     }
 
     private boolean erledigt(ProgressStage s) {

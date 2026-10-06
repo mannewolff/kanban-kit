@@ -1,6 +1,7 @@
 package org.mwolff.manban.nightrun.domain;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -66,17 +67,18 @@ public record NachtFreigabe(
       int number, String titel, String boardName, Collection<String> labels) {
     boolean plan = !FortschrittErmittlung.FACHLICH_PRAEFIX.matcher(titel).find();
     boolean durchziehen = labels.contains(FortschrittErmittlung.LABEL_DURCHZIEHEN);
-    ProgressStage untergrenze = durchziehen ? ProgressStage.UMSETZUNG : ProgressStage.PAKETE;
-    // Wie die Stufenleiste: das erste gesetzte Ziel zählt; liegt es mit kit:durchziehen vor der
-    // Umsetzung, gilt die Untergrenze.
-    ProgressStage ziel =
+    // Wie die Stufenleiste: das erste gesetzte Ziel zählt; mit kit:durchziehen gilt mindestens die
+    // Umsetzung. Als Maximum statt als Grenzvergleich (Issue #1475): An der Grenze liefern beide
+    // Wege die Umsetzung, ein Vergleich dort wäre durch keinen Test zu unterscheiden.
+    ProgressStage gesetzt =
         ZIELE.stream()
             .filter(z -> labels.contains(z.getKey()))
             .map(Map.Entry::getValue)
             .filter(z -> !(plan && z == ProgressStage.PLAN))
             .findFirst()
-            .filter(z -> !durchziehen || z.compareTo(ProgressStage.UMSETZUNG) >= 0)
-            .orElse(untergrenze);
+            .orElse(ProgressStage.PAKETE);
+    ProgressStage ziel =
+        durchziehen ? Collections.max(List.of(gesetzt, ProgressStage.UMSETZUNG)) : gesetzt;
     Integer pruefer =
         plan
             ? null

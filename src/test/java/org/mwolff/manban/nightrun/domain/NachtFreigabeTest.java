@@ -88,6 +88,9 @@ class NachtFreigabeTest {
         .isEqualTo(ProgressStage.UMSETZUNG);
     assertThat(freigabe(ANFORDERUNG, "kit:durchziehen", "ziel:pakete").ziel())
         .isEqualTo(ProgressStage.UMSETZUNG);
+    // Issue #1475: Das Ziel an der Grenze selbst bleibt stehen.
+    assertThat(freigabe(ANFORDERUNG, "kit:durchziehen", "ziel:umsetzung").ziel())
+        .isEqualTo(ProgressStage.UMSETZUNG);
     assertThat(freigabe(ANFORDERUNG, "kit:durchziehen", "ziel:push-vorbereitet").ziel())
         .isEqualTo(ProgressStage.VORBEREITUNG);
   }

@@ -1387,6 +1387,59 @@ class FortschrittErmittlungTest {
     assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.UMSETZUNG);
   }
 
+  /**
+   * Issue #1475: Nennt die Vorbereitungszeile den Plan, gehört sie zur Kette — als spätere Stufe
+   * machte sie die Umsetzung erreicht. Erst der Filter beim Einlesen hält sie aus dem Weg.
+   */
+  @Test
+  void eineVorbereitungszeileZumPlanAendertDenWegDerLaufseiteNicht() {
+    Karte f = anforderung(500, FortschrittErmittlung.LABEL_DURCHZIEHEN);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    Karte a = paket(502, p, "IN_PROGRESS");
+    angelegt(a, 30);
+    bewegt(a, 60);
+    stand(f, begonnen("vorbereitung", p, 70), fertig("abdeckung", p, 50));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.UMSETZUNG, StageState.LAEUFT);
+    assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.UMSETZUNG);
+  }
+
+  // --- planReviewVorhanden (Issue #1475) ---------------------------------------------------------
+
+  @Test
+  void planReviewVorhanden_nurAnDerAnforderungMitGeprueftemPlan() {
+    Karte f = anforderung(500);
+    Karte geprueft = planMitText(501, f, "Plan-Modell: x\nPlan-Review: fable (2026-10-06)");
+
+    assertThat(FortschrittErmittlung.planReviewVorhanden(f, List.of(geprueft))).isTrue();
+  }
+
+  @Test
+  void planReviewVorhanden_nichtOhneZeilePlanReview() {
+    Karte f = anforderung(500);
+
+    assertThat(FortschrittErmittlung.planReviewVorhanden(f, List.of(plan(501, f)))).isFalse();
+  }
+
+  @Test
+  void planReviewVorhanden_nichtBeiEinerAbgeleitetenKarteDieKeinPlanIst() {
+    Karte f = anforderung(500);
+    Karte keinPlan = karte(502, "Paket", "BACKLOG", f, true, "Plan-Review: fable (2026-10-06)");
+
+    assertThat(FortschrittErmittlung.planReviewVorhanden(f, List.of(keinPlan))).isFalse();
+  }
+
+  @Test
+  void planReviewVorhanden_nichtAnEinerKarteOhneFachlich() {
+    Karte p = plan(501, null);
+    Karte geprueft = planMitText(502, p, "Plan-Review: fable (2026-10-06)");
+
+    assertThat(FortschrittErmittlung.planReviewVorhanden(p, List.of(geprueft))).isFalse();
+  }
+
   // --- Kettenstand an der Karte (Issue #1451, Plan #1447 E5, E10, E13) -------------------------
 
   private static final String GRENZE_WARTET =
