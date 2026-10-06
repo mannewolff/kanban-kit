@@ -13,7 +13,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
@@ -792,10 +794,12 @@ class KanbanCompatIT extends AbstractIntegrationTest {
     Cookie owner = loginAs("status-owner@example.com");
     long boardId = createBoard(owner, projectId, "StatusBoard");
     long anstehend = addColumn(owner, boardId, "Anstehend");
+    hinterDieErsteSpalte(owner, boardId, anstehend);
     String token = boundToken(owner, projectId, boardId);
     long cardId = createCard(owner, boardId, anstehend, "Paket");
 
-    // Vorher: in eigener Spalte angelegt, also Status Backlog
+    // Vorher: in der eigenen Spalte zwischen Backlog und Ready angelegt, also Status Backlog —
+    // den Status der nächsten Prozessspalte links davon (Issue #1474)
     mvc.perform(get("/api/kanban/items").header("X-Kanban-Token", token))
         .andExpect(status().isOk())
         .andExpect(content().json(itemsJson(cardId, "BACKLOG"), JsonCompareMode.STRICT));
@@ -900,6 +904,30 @@ class KanbanCompatIT extends AbstractIntegrationTest {
             .getResponse()
             .getContentAsString();
     return json.readTree(body).get("id").asLong();
+  }
+
+  /** Sortiert die Spalte direkt hinter die erste Spalte des Boards (Backlog) ein. */
+  private void hinterDieErsteSpalte(Cookie session, long boardId, long spalte) throws Exception {
+    String body =
+        mvc.perform(get("/api/boards/" + boardId).cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    List<Long> ids =
+        json.readTree(body)
+            .get("columns")
+            .valueStream()
+            .map(c -> c.get("id").asLong())
+            .filter(id -> id != spalte)
+            .collect(Collectors.toCollection(ArrayList::new));
+    ids.add(1, spalte);
+    mvc.perform(
+            put("/api/boards/" + boardId + "/columns/order")
+                .cookie(session)
+                .contentType("application/json")
+                .content(json.writeValueAsString(Map.of("columnIds", ids))))
+        .andExpect(status().isOk());
   }
 
   private long columnIdByName(Cookie session, long boardId, String name) throws Exception {
