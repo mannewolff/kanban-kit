@@ -315,8 +315,14 @@ export function EpicsPage() {
         <EpicVisibilityList
           epics={sortEpics(epics, cards, labels)}
           hidden={hiddenEpics}
+          cards={cards}
+          labels={labels}
+          titelZuNummer={titelZuNummer}
           onToggle={setzeAusgeblendet}
           onOpen={(epic) => setSelected(epicToCard(epic, id))}
+          onOpenCard={oeffneKarte}
+          // Nur wer bearbeiten darf, bekommt das Menü an der Zeile (Plan #1488, E7).
+          onMenu={canEdit ? (epic, anchor) => setMenu({ epic, anchor }) : undefined}
         />
       ) : (
       /* Kachelraster statt gestapelter Zeilen: Ein Vorhaben ist ein Gegenstand, den man

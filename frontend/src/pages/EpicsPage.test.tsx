@@ -1104,6 +1104,31 @@ describe('EpicsPage', () => {
         expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9]),
       )
     })
+    it('öffnet in der Liste das Menü am Vorhaben für jemanden, der bearbeiten darf (Issue #1489)', async () => {
+      stubStore([])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
+      fireEvent.click(within(await screen.findByTestId('vorhaben-zeile-9')).getByRole('button', { name: 'Menü Auth' }))
+
+      expect(await screen.findByRole('menuitem', { name: 'Löschen' })).toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('zeigt einem Nur-Leser in der Liste keinen Menü-Knopf (Issue #1489)', async () => {
+      stubStore([])
+      mBoards.get.mockResolvedValue({ id: 1, projectId: 42, name: 'B', createdAt: '', columns: [] })
+      mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
+      mEpics.list.mockResolvedValue(drei)
+      renderPage()
+
+      await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
+      fireEvent.click(umschalter())
+      const zeile = await screen.findByTestId('vorhaben-zeile-9')
+
+      expect(within(zeile).queryByRole('button', { name: /^Menü / })).not.toBeInTheDocument()
+    })
   })
 
   // --- Vorhaben-Auswahl im Detail-Dialog (Issue #756, Plan #717 A1/A2) -------
