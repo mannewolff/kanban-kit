@@ -1,9 +1,7 @@
 import AddIcon from '@mui/icons-material/Add'
-import MoreVertIcon from '@mui/icons-material/MoreVert'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import ButtonBase from '@mui/material/ButtonBase'
 import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
@@ -11,12 +9,8 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
 import FormControlLabel from '@mui/material/FormControlLabel'
-import IconButton from '@mui/material/IconButton'
-import LinearProgress from '@mui/material/LinearProgress'
-import Link from '@mui/material/Link'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
-import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Switch from '@mui/material/Switch'
 import Typography from '@mui/material/Typography'
@@ -31,38 +25,14 @@ import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
 import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from '../components/CardDetailModal'
-import { EpicBadge } from '../components/EpicBadge'
 import { EpicVisibilityList } from '../components/EpicVisibilityList'
-import { labelChipSx } from '../components/labelChipSx'
 import { NewCardModal } from '../components/NewCardModal'
 import { leseAusgeblendet, schreibeAusgeblendet } from '../lib/boardHiddenEpics'
 import { epicToCard } from '../lib/epicToCard'
-import { aggregateMarks, countKinds, selectableEpics, sortEpics, visibleEpics } from '../lib/epicTiles'
+import { selectableEpics, sortEpics, visibleEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
-import { CARD_LIFT, CARD_SHADOW, CARD_SHADOW_HOVER, PANEL_RADIUS, TABELLENZIFFERN } from '../theme'
-
-/**
- * Zeilenhöhe eines Marken-Chips auf der Vorhaben-Kachel.
- *
- * Fest gesetzt und nicht aus dem Theme abgeleitet, weil daraus die Obergrenze des Marken-Bereichs
- * gerechnet wird (zwei Zeilen). Hinge die Zeilenhöhe an der Schriftgröße des Themes, wäre die
- * Kachelhöhe von einer Theme-Änderung abhängig, ohne dass das hier sichtbar wäre.
- */
-const MARKE_ZEILENHOEHE = '1.5rem'
-
-/**
- * Eine Art in der Zusammensetzung, mit Singular- und Pluralform. Die Anzahl steht als Text neben
- * der Bezeichnung, nicht als blosse Zahl — sonst waere "1 2 5" auf der Kachel nicht lesbar.
- */
-function Art({ anzahl, eins, viele }: Readonly<{ anzahl: number; eins: string; viele: string }>) {
-  return (
-    <Typography variant="caption" color="text.secondary">
-      {`${anzahl} ${anzahl === 1 ? eins : viele}`}
-    </Typography>
-  )
-}
 
 /**
  * Der Text der Löschen-Rückfrage. „aktive" ist bewusst gewählt: `rootNumbers` lässt archivierte
@@ -94,13 +64,13 @@ export function EpicsPage() {
   const [labels, setLabels] = useState<Label[]>([])
   const [members, setMembers] = useState<Member[]>([])
   // Bis der erste Ladeversuch (alle vier Requests) abgeschlossen ist — erfolgreich oder
-  // fehlgeschlagen —, zeigt die Seite weder das (anfangs leere) Kachelraster noch "Noch keine
+  // fehlgeschlagen —, zeigt die Seite weder die (anfangs leere) Liste noch "Noch keine
   // Vorhaben.": Beides waere von einem echten leeren Board nicht zu unterscheiden (Issue #783).
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [selected, setSelected] = useState<Card | null>(null)
   const [creating, setCreating] = useState(false)
-  // Ausgeblendete Vorhaben (Plan #620, Wirkung im Kachelraster aus Plan #703, E1). Derselbe
+  // Ausgeblendete Vorhaben (Plan #620, Wirkung auf der Seite aus Plan #703, E1). Derselbe
   // Zustand, den `BoardView` liest — Schlüssel und Wertformat kommen deshalb aus
   // `lib/boardHiddenEpics`. Reine Darstellung: kein Archivieren, keine Position, nichts an der
   // Karte, deshalb liegt der Wert nur lokal.
@@ -108,6 +78,10 @@ export function EpicsPage() {
   // Der Zeige-Modus gehört zur Sitzung, nicht zum Board: Er wird nicht gespeichert und startet
   // auf jedem Board aus.
   const [zeigeAusgeblendete, setZeigeAusgeblendete] = useState(false)
+  // Eben ausgeblendete Vorhaben (Plan #1488, E5): Wer bei ausgeschaltetem „Ausgeblendete zeigen"
+  // ausblendet, sieht die Zeile bis zum nächsten Laden ausgegraut stehen und kann sich am selben
+  // Schalter umentscheiden. Nicht gespeichert — ein neues Laden der Seite beginnt leer.
+  const [frischAusgeblendet, setFrischAusgeblendet] = useState<ReadonlySet<number>>(new Set())
   const [menu, setMenu] = useState<{ epic: Epic; anchor: HTMLElement } | null>(null)
   // Das Vorhaben, für das die Löschen-Rückfrage offensteht; `null` = keine Rückfrage.
   const [deleteConfirm, setDeleteConfirm] = useState<Epic | null>(null)
@@ -120,6 +94,7 @@ export function EpicsPage() {
   useEffect(() => {
     setHiddenEpics(leseAusgeblendet(id))
     setZeigeAusgeblendete(false)
+    setFrischAusgeblendet(new Set())
   }, [id])
 
   // Fortgeschrieben wird über `schreibeAusgeblendet` — dieselbe Funktion, die `BoardPage` nutzt
@@ -136,7 +111,17 @@ export function EpicsPage() {
     }
     setHiddenEpics(next)
     schreibeAusgeblendet(id, next)
+    // Nur im Normalmodus „eben ausgeblendet": Im Zeige-Modus steht die Zeile ohnehin da und soll
+    // nach dem Ausschalten fehlen wie jede andere ausgeblendete (E5).
+    if (ausblenden && !zeigeAusgeblendete) {
+      setFrischAusgeblendet(new Set(frischAusgeblendet).add(epicId))
+    }
   }
+
+  // Was die Liste ohne Zeige-Modus auslässt: die Ausgeblendeten ohne die eben ausgeblendeten (E8).
+  const ohneFrischAusgeblendete: ReadonlySet<number> = new Set(
+    [...hiddenEpics].filter((epicId) => !frischAusgeblendet.has(epicId)),
+  )
 
   const reload = () => {
     void epicsApi.list(id).then(setEpics)
@@ -189,7 +174,7 @@ export function EpicsPage() {
    * zweites DELETE, das nach dem erfolgreichen ersten mit 404 scheiterte und einen Fehler meldete,
    * den es nicht gab (Muster aus `BoardView.confirmDelete`).
    *
-   * Bewusst nicht optimistisch: Die Kachel verschwindet erst mit dem Nachladen, nicht schon beim
+   * Bewusst nicht optimistisch: Die Zeile verschwindet erst mit dem Nachladen, nicht schon beim
    * Klick. Anders als beim Karten-Löschen im Board ist das ein seltener, durch die Rückfrage
    * abgesicherter Vorgang — ein Rollback-Pfad lohnt den Zusatzcode nicht. `load()` statt
    * `reload()`, weil nur `load()` je Teilaufruf ein `.catch` trägt (Issue #783).
@@ -283,10 +268,11 @@ export function EpicsPage() {
         )}
       </Stack>
 
-      {/* Immer sichtbar, sobald das Board ein Vorhaben hat (Plan #846, E9): Der Umschalter wechselt
-          zwischen Kachelraster und Liste und ist deshalb auch bei „0" etwas wert — die Liste ist der
-          Weg, überhaupt etwas auszublenden. Nur ein Board ganz ohne Vorhaben hätte nichts zu
-          schalten. Beschriftung und Zahl bleiben wörtlich (PO-Entscheidung, 2026-09-14). */}
+      {/* Immer sichtbar, sobald das Board ein Vorhaben hat (Plan #846, E9; Plan #1488, E10): Der
+          Umschalter holt die Ausgeblendeten in die Liste. Ausgeblendet wird am Schalter jeder
+          Zeile; die Zahl am Umschalter sagt auch bei „0", dass nichts verborgen ist. Nur ein Board
+          ganz ohne Vorhaben hätte nichts zu schalten. Beschriftung und Zahl bleiben wörtlich
+          (PO-Entscheidung, 2026-09-14). */}
       {epics.length > 0 && (
         <FormControlLabel
           sx={{ mb: 2 }}
@@ -305,15 +291,18 @@ export function EpicsPage() {
         />
       )}
 
-      {/* Zwei Zustände, kein dritter (fachlich #814, AK 2/AK 3): Im Zeige-Modus tritt die Liste an
-          die Stelle des Rasters, sie ergänzt es nicht. Die Liste bekommt `sortEpics` **ungefiltert**
-          — sie führt jedes Vorhaben, und zwar an der Stelle, die es vor dem Ausfiltern hätte
-          (AK 4). `onToggle` geht ohne Umkehrung an `setzeAusgeblendet`: beide Seiten lesen `true`
-          als „ausblenden" (Plan #846, E4). Alles übrige — Kopf, „Neues Vorhaben", Umschalter,
-          Kachel-Menü, Dialoge — steht ausserhalb der Verzweigung und gilt in beiden Ansichten. */}
-      {zeigeAusgeblendete ? (
+      {/* Die Liste ist die einzige Ansicht (Plan #1488): Bei „Ausgeblendete zeigen" an bekommt sie
+          `sortEpics` ungefiltert — jedes Vorhaben an der Stelle, die es ohne Ausfiltern hätte (E8).
+          Sonst fehlen die Ausgeblendeten, ausser denen, die eben in dieser Sitzung ausgeblendet
+          wurden: Sie bleiben ausgegraut stehen, bis die Seite neu lädt (E5). `onToggle` geht ohne
+          Umkehrung an `setzeAusgeblendet`: beide Seiten lesen `true` als „ausblenden" (Plan #846, E4). */}
+      {epics.length > 0 && (
         <EpicVisibilityList
-          epics={sortEpics(epics, cards, labels)}
+          epics={
+            zeigeAusgeblendete
+              ? sortEpics(epics, cards, labels)
+              : visibleEpics(sortEpics(epics, cards, labels), ohneFrischAusgeblendete)
+          }
           hidden={hiddenEpics}
           cards={cards}
           labels={labels}
@@ -321,257 +310,18 @@ export function EpicsPage() {
           onToggle={setzeAusgeblendet}
           onOpen={(epic) => setSelected(epicToCard(epic, id))}
           onOpenCard={oeffneKarte}
-          // Nur wer bearbeiten darf, bekommt das Menü an der Zeile (Plan #1488, E7).
+          // Nur wer bearbeiten darf, bekommt das Menü an der Zeile — es trägt nur noch
+          // „Löschen" (Plan #1488, E7).
           onMenu={canEdit ? (epic, anchor) => setMenu({ epic, anchor }) : undefined}
         />
-      ) : (
-      /* Kachelraster statt gestapelter Zeilen: Ein Vorhaben ist ein Gegenstand, den man
-          überblickt, keine Tabellenzeile. Die Kacheln sind quadratisch (`aspectRatio: '1'`) und
-          brechen um, die Seite wird bei vielen Vorhaben länger — beides Nutzerentscheidung
-          (#656). `minmax(min(240px, 100%), 1fr)` klemmt die Spalte: Mit `240px` allein liefe das
-          Raster auf schmalen Fenstern über den Rand hinaus. */
-      <Box
-        data-testid="vorhaben-raster"
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
-          gap: 2,
-        }}
-      >
-        {visibleEpics(sortEpics(epics, cards, labels), hiddenEpics).map((epic) => {
-          const pct = epic.total > 0 ? (epic.done / epic.total) * 100 : 0
-          const arten = countKinds(epic, cards)
-          const marken = aggregateMarks(epic, cards, labels)
-          // Leer heisst wie in #662: keine Mitglieder UND keine Anforderung. Ein Vorhaben mit
-          // Anforderung, aber ohne Karten ist eroeffnet, nicht leer.
-          const leer = epic.total === 0 && epic.requirementCardNumber === null
-          return (
-            <Paper
-              key={epic.id}
-              data-testid={`vorhaben-kachel-${epic.id}`}
-              variant="outlined"
-              onClick={() => setSelected(epicToCard(epic, id))}
-              sx={{
-                p: 2,
-                cursor: 'pointer',
-                minWidth: 0,
-                aspectRatio: '1',
-                // `aspectRatio` allein hält die Höhe nicht: Ein Flex-Container hat `min-height:
-                // auto`, sein Inhalt dehnt ihn also über das Quadrat hinaus — genau daher kamen
-                // die unterschiedlich hohen Kacheln. `hidden` zieht die Grenze, die drei
-                // Begrenzungen darunter (Titel, Anforderung, Mittelteil) sorgen dafür, dass sie
-                // nichts Sinntragendes abschneidet.
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                borderRadius: `${PANEL_RADIUS}px`,
-                boxShadow: CARD_SHADOW,
-                transition: 'box-shadow .2s ease, transform .2s ease',
-                // Bei abgestellter Bewegung setzt die zentrale Regel in `theme.ts` die Dauer auf null (#953).
-                '&:hover': { boxShadow: CARD_SHADOW_HOVER, transform: `translateY(${CARD_LIFT}px)` },
-              }}
-            >
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                <EpicBadge epicId={epic.id} title={epic.title} shortcode={epic.shortcode} />
-                {/* Höchstens zwei Zeilen. Einzeilig wie sonst im Bestand (`noWrap`) wäre hier zu
-                    wenig — Vorhaben-Titel sind ganze Sätze und wären fast immer beschnitten.
-                    `minWidth: 0` erlaubt dem Flex-Kind zu schrumpfen; ohne das greift die
-                    Kürzung nicht, weil der Text seine eigene Mindestbreite erzwingt. */}
-                <Typography
-                  variant="subtitle1"
-                  sx={{
-                    fontWeight: 600,
-                    flexGrow: 1,
-                    minWidth: 0,
-                    display: '-webkit-box',
-                    WebkitBoxOrient: 'vertical',
-                    WebkitLineClamp: 2,
-                    overflow: 'hidden',
-                  }}
-                >
-                  {/* Ein eigener Knopf statt der ganzen Fläche, weil die Kachel selbst Knöpfe trägt
-                      (Plan #1292, E1); sein Name ist der sichtbare Titel, damit die Überschrift ihren
-                      Titel behält (E5). Die Klickwelle änderte das Erscheinungsbild, der Fokusring
-                      kommt aus dem Theme (E6). */}
-                  <ButtonBase
-                    disableRipple
-                    onClick={(e) => {
-                      // Sonst öffnete der Flächen-Handler der Kachel dasselbe Vorhaben ein zweites Mal.
-                      e.stopPropagation()
-                      setSelected(epicToCard(epic, id))
-                    }}
-                    sx={{ display: 'inline', font: 'inherit', color: 'inherit', textAlign: 'left', verticalAlign: 'baseline' }}
-                  >
-                    {epic.title}
-                  </ButtonBase>
-                </Typography>
-                {/* Immer neutral, auch bei sortenreinen Vorhaben: `total` zaehlt ALLE
-                    Mitglieder, und sobald dieselbe Kachel Anforderungen und Plaene ausweist, waere
-                    "n Arbeitspakete fertig" schlicht falsch. Eine nur bedingte Umbenennung waere
-                    kein Fortschritt — sie liesse die Bestandstests gruen. */}
-                <Typography variant="caption" color="text.secondary" sx={TABELLENZIFFERN}>
-                  {epic.done} von {epic.total} fertig
-                </Typography>
-                {/* Kein Rechte-Check (Plan #703, E8): Ausblenden verändert nichts am Server, und
-                    einem Nur-Leser zu verbieten, seine eigene Ansicht aufzuräumen, wäre keine
-                    Schutzwirkung. */}
-                <IconButton
-                  size="small"
-                  aria-label={`Menü ${epic.title}`}
-                  onClick={(e) => {
-                    // Ohne stopPropagation öffnete derselbe Klick zusätzlich das Vorhaben-Detail —
-                    // der Kachel-Klick liegt eine Ebene darüber (E11 aus Plan #620).
-                    e.stopPropagation()
-                    setMenu({ epic, anchor: e.currentTarget })
-                  }}
-                  sx={{ mt: -0.5, mr: -0.5 }}
-                >
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
-              </Stack>
-              {/* Der veränderliche Teil der Kachel in einem eigenen, schrumpffähigen Kasten:
-                  `flex: 1` füllt den Raum zwischen Kopf und Fortschrittsbalken, `minHeight: 0`
-                  erlaubt das Unterschreiten der Inhaltshöhe (ohne das griffe `overflow` nicht),
-                  und was dann noch nicht passt, wird abgeschnitten statt die Kachel zu dehnen.
-                  Damit ist die gleiche Höhe aller Kacheln garantiert und nicht bloß wahrscheinlich
-                  — die Begrenzungen an Titel, Anforderung und Marken sorgen dafür, dass der Schnitt
-                  in der Praxis gar nicht erst nötig wird. */}
-              <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              {/* Woraus das Vorhaben entstanden ist. Traegt es keine Anforderung, steht hier
-                  nichts — kein Platzhalter und keine Ersatzanzeige aus den Wurzeln (Plan #637, E6).
-                  `component="button"` rendert ein echtes <button>: per Tab erreichbar und per Enter
-                  ausloesbar. Ein onClick auf einer Anzeigekomponente kaeme durch alle Gates —
-                  jsx-a11y prueft nur DOM-Elemente in Kleinschreibung, keine MUI-Komponenten — und
-                  waere per Tastatur trotzdem unerreichbar. */}
-              {epic.requirementCardNumber !== null && (
-                <Stack direction="row" spacing={0.5} alignItems="baseline" sx={{ mb: 1, minWidth: 0 }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                    Anforderung:
-                  </Typography>
-                  {/* Eine Zeile mit Auslassungspunkten — das Muster aus `BoardListPage`. Der
-                      Kartentitel hängt hier ungekürzt dran und war der zweite Grund, aus dem
-                      Kacheln unterschiedlich hoch wurden. */}
-                  <Link
-                    component="button"
-                    type="button"
-                    variant="caption"
-                    underline="hover"
-                    textAlign="left"
-                    sx={{
-                      minWidth: 0,
-                      display: 'block',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                    onClick={(e) => {
-                      // Ohne stopPropagation oeffnete derselbe Klick zusaetzlich das
-                      // Vorhaben-Detail — der Kachel-Klick liegt eine Ebene darueber.
-                      e.stopPropagation()
-                      oeffneKarte(epic.requirementCardNumber as number)
-                    }}
-                  >
-                    {`#${epic.requirementCardNumber} · ${titelZuNummer(epic.requirementCardNumber)}`}
-                  </Link>
-                </Stack>
-              )}
-              {/* Traegt ein Vorhaben keine Anforderung, steht das ausdruecklich da. Das revidiert
-                  bewusst Plan #637 (E6), der keinen Platzhalter wollte: Dort zaehlte Sparsamkeit,
-                  hier Unterscheidbarkeit — eine leere Stelle waere nicht von einem Ladefehler zu
-                  unterscheiden. */}
-              {epic.requirementCardNumber === null && (
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
-                  Keine Anforderung hinterlegt.
-                </Typography>
-              )}
-
-              {/* Woraus das Vorhaben besteht und was daran liegen geblieben ist (#656) — die
-                  Rechnung dazu steht in `lib/epicTiles.ts` (#662). Eine Art mit null Karten wird
-                  nicht genannt: "0 Plaene" ist keine Aussage, nur Rauschen. */}
-              {leer ? (
-                <Typography variant="caption" color="text.secondary">
-                  Noch keine Karten zugeordnet.
-                </Typography>
-              ) : (
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
-                  {arten.requirements > 0 && <Art anzahl={arten.requirements} eins="Anforderung" viele="Anforderungen" />}
-                  {arten.plans > 0 && <Art anzahl={arten.plans} eins="Plan" viele="Pläne" />}
-                  {arten.workItems > 0 && <Art anzahl={arten.workItems} eins="Arbeitspaket" viele="Arbeitspakete" />}
-                </Stack>
-              )}
-
-              {/* Höchstens zwei Zeilen Marken. Ein Vorhaben mit vielen verschiedenen Labels trieb
-                  die Kachel sonst beliebig in die Höhe — `flexWrap` kennt keine Obergrenze. Die
-                  Zeilenhöhe steht am Chip fest, damit die Rechnung nicht von der Schriftgröße des
-                  Themes abhängt; der Zuschlag ist der Zeilenabstand (`spacing={0.5}` = 4px). */}
-              {marken.length > 0 && (
-                <Stack
-                  direction="row"
-                  spacing={0.5}
-                  useFlexGap
-                  flexWrap="wrap"
-                  sx={{ mb: 1, maxHeight: `calc(2 * ${MARKE_ZEILENHOEHE} + 4px)`, overflow: 'hidden' }}
-                >
-                  {marken.map((marke) => (
-                    <Typography
-                      key={marke.name}
-                      variant="caption"
-                      component="span"
-                      sx={{
-                        ...labelChipSx(marke.color),
-                        px: 0.75,
-                        borderRadius: 10,
-                        whiteSpace: 'nowrap',
-                        lineHeight: MARKE_ZEILENHOEHE,
-                      }}
-                    >
-                      {`${marke.name} ${marke.count}`}
-                    </Typography>
-                  ))}
-                </Stack>
-              )}
-              </Box>
-              {/* Der Balken steht am Fuß der Kachel, weil der Kasten darüber den freien Raum füllt
-                  (`flex: 1`). Früher tat das ein `mt: 'auto'` am Balken selbst — das schob ihn zwar
-                  ebenso nach unten, ließ den Inhalt darüber aber ungebremst wachsen. */}
-              <LinearProgress
-                variant="determinate"
-                value={pct}
-                aria-label={`Fortschritt ${epic.title}`}
-                sx={{ height: 8, borderRadius: 1 }}
-              />
-            </Paper>
-          )
-        })}
-      </Box>
       )}
       {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
 
-      {/* Ein Menü statt eines Schalters an der Kachel (Plan #703, E2): Ein Schalter, der die
-          Kachel verschwinden lässt, auf der er sitzt, ist nach dem Umlegen selbst weg — und damit
-          unbedienbar. Keine Sicherheitsabfrage (E4): Beim Ausblenden geht nichts verloren, der
-          Vorgang ist mit einem Klick umkehrbar.
-
-          Der Eintrag blendet nur noch aus, und er heißt auch so (fachlich #814, AK 9): Seit dem
-          Wegfall der gedämpften Kacheln stehen im Raster ausschließlich eingeblendete Vorhaben, ein
-          zustandsabhängiges „Einblenden"/„Ausblenden" wäre hier unerreichbar. Eingeblendet wird in
-          der Liste. */}
       <Menu anchorEl={menu?.anchor ?? null} open={menu != null} onClose={() => setMenu(null)}>
+        {/* Anders als das Ausblenden verändert Löschen den Server — deshalb hängt das Menü am
+            Rechte-Check (`onMenu` nur bei `canEdit`). Der Server prüft ohnehin; das Gate erspart
+            einem Nur-Leser nur die 403-Antwort auf eine Möglichkeit, die ihm gar nicht offensteht. */}
         {menu && (
-          <MenuItem
-            onClick={() => {
-              const gewaehlt = menu.epic
-              setMenu(null)
-              setzeAusgeblendet(gewaehlt.id, true)
-            }}
-          >
-            Ausblenden
-          </MenuItem>
-        )}
-        {/* Anders als „Ausblenden" verändert Löschen den Server — deshalb hier der Rechte-Check.
-            Der Server prüft ohnehin; das Gate erspart einem Nur-Leser nur die 403-Antwort auf
-            eine Möglichkeit, die ihm gar nicht offensteht. */}
-        {menu && canEdit && (
           <MenuItem
             onClick={() => {
               const gewaehlt = menu.epic
@@ -628,7 +378,7 @@ export function EpicsPage() {
           boardLabels={labels}
           // Volle Liste für Titel und Fortschritt, gefilterter Vorrat für die Auswahl (Plan #717,
           // A2) — derselbe Vertrag wie am Board. Der Umschalter „Ausgeblendete zeigen" dieser Seite
-          // zieht ausdrücklich nicht mit (A1): Er steuert das Kachelraster, nicht die Zuordnung.
+          // zieht ausdrücklich nicht mit (A1): Er steuert die Liste, nicht die Zuordnung.
           epics={epics}
           selectableEpics={selectableEpics(epics, hiddenEpics)}
           onClose={() => setSelected(null)}

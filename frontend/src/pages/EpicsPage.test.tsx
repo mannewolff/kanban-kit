@@ -101,26 +101,21 @@ describe('EpicsPage', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   /**
-   * Öffnet das ⋮-Menü genau dieser Kachel. Steht auf der äußeren Ebene, weil ihn zwei Blöcke
-   * brauchen — „Ausblenden" und „Löschen" —, die eigene Vorhaben-Fixtures führen.
+   * Öffnet das ⋮-Menü genau dieser Zeile. Steht auf der äußeren Ebene, weil ihn mehrere Blöcke
+   * brauchen, die eigene Vorhaben-Fixtures führen.
    */
   const oeffneMenue = async (epic: { id: number; title: string }) => {
-    const kachel = await screen.findByTestId(`vorhaben-kachel-${epic.id}`)
-    fireEvent.click(within(kachel).getByLabelText(`Menü ${epic.title}`))
+    const zeile = await screen.findByTestId(`vorhaben-zeile-${epic.id}`)
+    fireEvent.click(within(zeile).getByLabelText(`Menü ${epic.title}`))
   }
-
-  /** Die IDs der Kacheln im Raster, in angezeigter Reihenfolge. */
-  const kachelIds = () =>
-    screen.queryAllByTestId(/^vorhaben-kachel-/).map((k) => k.dataset.testid)
 
   /** Die IDs der Zeilen in der Liste, in angezeigter Reihenfolge. */
   const zeilenIds = () =>
     screen.queryAllByTestId(/^vorhaben-zeile-/).map((z) => z.dataset.testid)
 
   /**
-   * Der Umschalter zwischen Kachel- und Listenansicht. Steht auf der äußeren Ebene, weil ihn seit
-   * Issue #848 drei Blöcke brauchen — das ⋮-Menü, die Listenansicht und die Vorhaben-Auswahl im
-   * Detail-Dialog.
+   * Der Umschalter „Ausgeblendete zeigen". Steht auf der äußeren Ebene, weil ihn mehrere Blöcke
+   * brauchen — das Ausblenden, die Listenansicht und die Vorhaben-Auswahl im Detail-Dialog.
    */
   const umschalter = () => screen.getByLabelText(/^Ausgeblendete zeigen/)
 
@@ -142,7 +137,7 @@ describe('EpicsPage', () => {
     expect(await screen.findByLabelText('Fortschritt Auth')).toBeInTheDocument()
   })
 
-  it('setzt den Fortschritt in Tabellenziffern, damit Kacheln vergleichbar bleiben (#960)', async () => {
+  it('setzt den Fortschritt in Tabellenziffern, damit Zeilen vergleichbar bleiben (#960)', async () => {
     mEpics.list.mockResolvedValue([
       { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
@@ -151,27 +146,18 @@ describe('EpicsPage', () => {
     expect(cssRegel(await screen.findByText('1 von 2 fertig'))).toContain('font-variant-numeric: tabular-nums')
   })
 
-  // Die Gestalt ist hier keine Geschmacksfrage, sondern eine ausdrückliche Nutzerentscheidung
-  // (#656): Vorhaben sind quadratische Kacheln in einem umbrechenden Raster, keine Zeilen über die
-  // volle Breite. Sie war zuvor zweimal verloren gegangen, weil kein Test sie festgehalten hat.
-  it('stellt die Vorhaben als quadratische Kacheln in einem Raster dar', async () => {
+  // Die Gestalt ist eine ausdrückliche PO-Entscheidung (#1487, AK 1): Es gibt nur noch die Liste,
+  // das Kachelraster aus #656 entfällt — auch als wählbare Alternative.
+  it('stellt die Vorhaben als Liste dar, auch bei ausgeschaltetem Umschalter, und kennt kein Raster', async () => {
     mEpics.list.mockResolvedValue([
       { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
     renderPage()
     await screen.findByText('Auth')
 
-    const raster = screen.getByTestId('vorhaben-raster')
-    expect(raster).toHaveStyle({ display: 'grid' })
-    // `auto-fill` bricht um und füllt die Breite; `auto-fit` würde eine einzelne Kachel über die
-    // ganze Zeile strecken und damit das Quadrat aufgeben.
-    expect(raster).toHaveStyle({
-      gridTemplateColumns: 'repeat(auto-fill, minmax(min(240px, 100%), 1fr))',
-    })
-
-    const kachel = screen.getByTestId('vorhaben-kachel-9')
-    expect(kachel).toHaveStyle({ aspectRatio: '1' })
-    expect(kachel).toContainElement(screen.getByLabelText('Fortschritt Auth'))
+    expect(umschalter()).not.toBeChecked()
+    expect(screen.getByTestId('vorhaben-liste')).toContainElement(screen.getByTestId('vorhaben-zeile-9'))
+    expect(screen.getByTestId('vorhaben-zeile-9')).toContainElement(screen.getByLabelText('Fortschritt Auth'))
   })
 
   it('legt über „Neues Epic" ein Epic an', async () => {
@@ -209,7 +195,7 @@ describe('EpicsPage', () => {
 
     expect(screen.getByRole('progressbar')).toBeInTheDocument()
     expect(screen.queryByText('Noch keine Vorhaben.')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('vorhaben-raster')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('vorhaben-liste')).not.toBeInTheDocument()
 
     resolveEpics([])
     await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument())
@@ -296,7 +282,7 @@ describe('EpicsPage', () => {
   /**
    * Die Aufloesung einer Nummer geht erst gegen `epics`, dann gegen `cards`: `cardsApi.list`
    * filtert serverseitig auf `type == CARD`, ein Vorhaben steht dort also nicht. Seit #644 ist
-   * dieser Weg ueber den Anforderungs-Verweis der Kachel erreichbar statt ueber den Baum.
+   * dieser Weg ueber den Anforderungs-Verweis der Zeile erreichbar statt ueber den Baum.
    */
   it('öffnet über den Verweis ein Vorhaben, das nur über epics auflösbar ist', async () => {
     mEpics.list.mockResolvedValue([
@@ -325,7 +311,7 @@ describe('EpicsPage', () => {
     expect(screen.queryByText(/epic/i)).toBeNull()
   })
 
-  it('trägt keine Reiter mehr — die Seite zeigt nur noch Kacheln', async () => {
+  it('trägt keine Reiter — die Seite zeigt nur die Liste', async () => {
     mEpics.list.mockResolvedValue([
       { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
     ])
@@ -342,11 +328,11 @@ describe('EpicsPage', () => {
     renderPage()
     await screen.findByText('Auth')
 
-    // Der Baum steht seit #644 im Detail-Dialog; die Liste auf der Kachel entfaellt (Plan #637, E7).
+    // Der Baum steht seit #644 im Detail-Dialog; die Liste an der Zeile entfaellt (Plan #637, E7).
     expect(screen.queryByRole('button', { name: /karten von/i })).toBeNull()
   })
 
-  // --- Anforderung auf der Kachel (Issue #641) ------------------------------
+  // --- Anforderung an der Zeile (Issue #641) --------------------------------
 
   /** Ein Vorhaben mit Anforderung, dazu die passende Karte in der Kartenliste. */
   function mitAnforderung(nummer: number | null) {
@@ -366,29 +352,6 @@ describe('EpicsPage', () => {
   }
 
   const anforderungsVerweis = () => screen.getByRole('button', { name: '#7 · Anforderungskarte' })
-
-  it('nennt auf der Kachel die Anforderung mit Nummer und Titel', async () => {
-    mitAnforderung(7)
-    renderPage()
-
-    expect(await screen.findByText('Anforderung:')).toBeInTheDocument()
-    expect(anforderungsVerweis()).toBeInTheDocument()
-  })
-
-  /**
-   * Revidiert Plan #637 (E6) bewusst: Dort wollte man keinen Platzhalter, hier gewinnt die
-   * Unterscheidbarkeit — eine leere Stelle waere nicht von einem Ladefehler zu unterscheiden.
-   */
-  it('sagt ausdrücklich, wenn ein Vorhaben keine Anforderung trägt', async () => {
-    mitAnforderung(null)
-    renderPage()
-    await screen.findByText('Auth')
-
-    expect(screen.getByText('Keine Anforderung hinterlegt.')).toBeInTheDocument()
-    // Der Verweis selbst bleibt aus: Es gibt nichts zu oeffnen.
-    expect(screen.queryByText('Anforderung:')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^#\d+ · / })).not.toBeInTheDocument()
-  })
 
   it('öffnet die Anforderungskarte per Klick auf den Verweis', async () => {
     mitAnforderung(7)
@@ -430,23 +393,23 @@ describe('EpicsPage', () => {
     expect(screen.queryByText(/^Karten \(/)).not.toBeInTheDocument()
   })
 
-  it('öffnet beim Klick auf die Kachelfläche weiterhin das Vorhaben-Detail', async () => {
+  it('öffnet beim Klick auf die Zeilenfläche weiterhin das Vorhaben-Detail', async () => {
     mitAnforderung(7)
     renderPage()
 
     // Die Fläche selbst, nicht der Titel: Der Titel ist seit Issue #1306 ein eigener Knopf.
-    fireEvent.click(await screen.findByTestId('vorhaben-kachel-9'))
+    fireEvent.click(await screen.findByTestId('vorhaben-zeile-9'))
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
-  describe('Titelknopf der Kachel (Issue #1306)', () => {
+  describe('Titelknopf der Zeile (Issue #1306)', () => {
     const auth = {
       id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1,
       memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null,
     }
     const titelKnopf = async () =>
-      within(await screen.findByTestId('vorhaben-kachel-9')).getByRole('button', { name: 'Auth' })
+      within(await screen.findByTestId('vorhaben-zeile-9')).getByRole('button', { name: 'Auth' })
 
     it('erreicht den Titel per Tab als Knopf und öffnet mit Enter', async () => {
       mEpics.list.mockResolvedValue([auth])
@@ -496,7 +459,7 @@ describe('EpicsPage', () => {
       expect(screen.getByLabelText('Menü Auth')).toHaveFocus()
       await user.keyboard('{Enter}')
 
-      expect(await screen.findByRole('menuitem', { name: 'Ausblenden' })).toBeInTheDocument()
+      expect(await screen.findByRole('menuitem', { name: 'Löschen' })).toBeInTheDocument()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
@@ -540,45 +503,6 @@ describe('EpicsPage', () => {
     }
   }
 
-  it('zeigt die Zusammensetzung nach Art getrennt', async () => {
-    mEpics.list.mockResolvedValue([
-      {
-        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 8,
-        memberNumbers: [1, 2, 3, 4, 5, 6, 7, 8], rootNumbers: [], requirementCardNumber: null,
-      },
-    ])
-    mCards.list.mockResolvedValue([
-      karte(1, '[Fachlich] Anforderung'),
-      karte(2, '[Plan] Weg A'),
-      karte(3, '[Plan] Weg B'),
-      ...[4, 5, 6, 7, 8].map((n) => karte(n, `Paket ${n}`)),
-    ])
-    renderPage()
-
-    expect(await screen.findByText('1 Anforderung')).toBeInTheDocument()
-    expect(screen.getByText('2 Pläne')).toBeInTheDocument()
-    expect(screen.getByText('5 Arbeitspakete')).toBeInTheDocument()
-  })
-
-  it('zeigt je gezähltem Label eine Marke mit Anzahl als Text', async () => {
-    mEpics.list.mockResolvedValue([
-      {
-        id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 2,
-        memberNumbers: [1, 2], rootNumbers: [], requirementCardNumber: null,
-      },
-    ])
-    mCards.list.mockResolvedValue([karte(1, 'A', [70]), karte(2, 'B', [70, 71])])
-    mLabels.list.mockResolvedValue([
-      { id: 70, boardId: 1, name: 'stockt', color: '#f00', countOnEpicTile: true },
-      { id: 71, boardId: 1, name: 'intern', color: '#ccc', countOnEpicTile: false },
-    ])
-    renderPage()
-
-    expect(await screen.findByText('stockt 2')).toBeInTheDocument()
-    // Beide Seiten: Das nicht gezaehlte Label erscheint nicht.
-    expect(screen.queryByText(/intern/)).not.toBeInTheDocument()
-  })
-
   it('sagt bei einem leeren Vorhaben, dass es leer ist — und zeigt trotzdem den Balken', async () => {
     mEpics.list.mockResolvedValue([
       {
@@ -589,13 +513,13 @@ describe('EpicsPage', () => {
     renderPage()
 
     expect(await screen.findByText('Noch keine Karten zugeordnet.')).toBeInTheDocument()
-    // Der Balken steht an JEDER Kachel (#656, Frage 4) — auch an der leeren.
+    // Der Balken steht an JEDER Zeile (#656, Frage 4) — auch an der leeren.
     expect(screen.getByLabelText('Fortschritt Leer')).toBeInTheDocument()
     expect(screen.getByText('0 von 0 fertig')).toBeInTheDocument()
   })
 
   /**
-   * `total` zaehlt ALLE Mitglieder. Sobald dieselbe Kachel "1 Anforderung, 2 Plaene, 5
+   * `total` zaehlt ALLE Mitglieder. Sobald dieselbe Zeile "1 Anforderung, 2 Plaene, 5
    * Arbeitspakete" ausweist, waere "8 Arbeitspakete fertig" falsch. Die Beschriftung ist deshalb
    * IMMER neutral, auch bei sortenreinen Vorhaben — eine nur bedingte Umbenennung haette die
    * Bestandstests gruen gelassen und waere kein Fortschritt gewesen.
@@ -618,7 +542,7 @@ describe('EpicsPage', () => {
     expect(screen.queryByText(/Arbeitspakete fertig/)).not.toBeInTheDocument()
   })
 
-  it('ordnet die Kacheln nach Handlungsbedarf, leere ans Ende', async () => {
+  it('ordnet die Zeilen nach Handlungsbedarf, leere ans Ende', async () => {
     mEpics.list.mockResolvedValue([
       {
         id: 1, number: 1, title: 'Leer', description: null, shortcode: 'LEE', done: 0, total: 0,
@@ -640,17 +564,13 @@ describe('EpicsPage', () => {
     renderPage()
 
     await screen.findByText('Viel')
-    // `getAllByTestId` liefert in DOM-Reihenfolge -- also genau der Reihenfolge auf dem Raster.
-    expect(screen.getAllByTestId(/^vorhaben-kachel-/).map((k) => k.dataset.testid)).toEqual([
-      'vorhaben-kachel-3',
-      'vorhaben-kachel-2',
-      'vorhaben-kachel-1',
-    ])
+    // `zeilenIds` liefert in DOM-Reihenfolge -- also genau der Reihenfolge in der Liste.
+    expect(zeilenIds()).toEqual(['vorhaben-zeile-3', 'vorhaben-zeile-2', 'vorhaben-zeile-1'])
   })
 
-  // --- Ausblenden über das ⋮-Menü (Issue #705, zuvor #669) -------------------
+  // --- Ausblenden am Schalter der Zeile (Issue #1490, zuvor ⋮-Menü #705/#669) ----
 
-  describe('⋮-Menü „Ausblenden"', () => {
+  describe('Ausblenden am Schalter', () => {
     const auth = {
       id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1,
       memberNumbers: [1], rootNumbers: [1], requirementCardNumber: null,
@@ -659,7 +579,6 @@ describe('EpicsPage', () => {
       id: 10, number: 3, title: 'Zahlung', description: null, shortcode: 'ZAH', done: 0, total: 1,
       memberNumbers: [2], rootNumbers: [2], requirementCardNumber: null,
     }
-    const vorhaben = [auth]
 
     /** Wechselt den Routen-Parameter, ohne die Seite neu zu montieren. */
     function BoardWechsler() {
@@ -678,42 +597,80 @@ describe('EpicsPage', () => {
         </MemoryRouter>,
       )
 
-    it('nimmt die Kachel über „Ausblenden" aus dem Raster', async () => {
-      stubStore([])
-      mEpics.list.mockResolvedValue([auth, zahlung])
-      renderAufBoard('/boards/1/vorhaben')
+    const schalter = (kuerzel: string, aktion: 'ausblenden' | 'einblenden') =>
+      screen.getByLabelText(`Vorhaben ${kuerzel} ${aktion}`)
 
-      await oeffneMenue(auth)
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
-
-      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-10']))
-    })
-
-    it('öffnet mit dem Klick auf das Menü nicht das Vorhaben-Detail', async () => {
-      stubStore([])
-      mEpics.list.mockResolvedValue(vorhaben)
-      renderAufBoard('/boards/1/vorhaben')
-
-      await oeffneMenue(auth)
-
-      // Ohne stopPropagation träfe derselbe Klick den Kachel-Handler eine Ebene darüber.
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      expect(screen.getByRole('menuitem', { name: 'Ausblenden' })).toBeInTheDocument()
-    })
-
-    it('lässt ein per Escape geschlossenes Menü die Kachel stehen', async () => {
+    it('lässt ein eben ausgeblendetes Vorhaben ausgegraut stehen und zählt es sofort (AK 6)', async () => {
       const store = stubStore([])
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
 
-      await oeffneMenue(auth)
-      fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Ausblenden' }), { key: 'Escape' })
+      await screen.findByTestId('vorhaben-zeile-9')
+      expect(umschalter()).not.toBeChecked()
+      fireEvent.click(schalter('AUT', 'ausblenden'))
 
-      // Das Menü zu öffnen ist noch keine Entscheidung — es wieder zu schließen darf weder das
-      // Raster ändern noch etwas festhalten.
-      await waitFor(() => expect(screen.queryByRole('menuitem')).toBeNull())
-      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
-      expect(store.has(hiddenEpicsStorageKey(1))).toBe(false)
+      // Board und Zahl wirken sofort — derselbe Schlüssel und dasselbe Format, die das Board liest.
+      await waitFor(() =>
+        expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9]),
+      )
+      expect(screen.getByLabelText('Ausgeblendete zeigen (1)')).toBeInTheDocument()
+      // Die Zeile bleibt bis zum nächsten Laden stehen, als ausgeblendet gekennzeichnet.
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
+      expect(within(screen.getByTestId('vorhaben-zeile-9')).getByText('Ausgeblendet')).toBeInTheDocument()
+      expect(umschalter()).not.toBeChecked()
+    })
+
+    it('nimmt ein versehentliches Ausblenden am selben Schalter zurück', async () => {
+      const store = stubStore([])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben')
+
+      await screen.findByTestId('vorhaben-zeile-9')
+      fireEvent.click(schalter('AUT', 'ausblenden'))
+      fireEvent.click(await screen.findByLabelText('Vorhaben AUT einblenden'))
+
+      // Die leere Menge löscht den Schlüssel, statt ein aussageloses `[]` zu hinterlassen (Plan #846, E8).
+      await waitFor(() => expect(store.has(hiddenEpicsStorageKey(1))).toBe(false))
+      expect(screen.getByLabelText('Ausgeblendete zeigen (0)')).toBeInTheDocument()
+      expect(within(screen.getByTestId('vorhaben-zeile-9')).queryByText('Ausgeblendet')).toBeNull()
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
+    })
+
+    it('lässt die Zeile beim Umlegen von „Ausgeblendete zeigen" hin und zurück stehen', async () => {
+      stubStore([])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben')
+
+      await screen.findByTestId('vorhaben-zeile-9')
+      fireEvent.click(schalter('AUT', 'ausblenden'))
+      fireEvent.click(umschalter())
+      fireEvent.click(umschalter())
+
+      // Erst das nächste Laden der Seite nimmt die Zeile heraus (Plan #1488, E5).
+      expect(umschalter()).not.toBeChecked()
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
+    })
+
+    it('zeigt ein ausgeblendetes Vorhaben nach dem nächsten Laden der Seite nicht mehr', async () => {
+      const store = stubStore([])
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      const { unmount: verlasseErsteSitzung } = renderAufBoard('/boards/1/vorhaben')
+
+      await screen.findByTestId('vorhaben-zeile-9')
+      fireEvent.click(schalter('AUT', 'ausblenden'))
+      await waitFor(() => expect(store.has(hiddenEpicsStorageKey(1))).toBe(true))
+      verlasseErsteSitzung()
+
+      // Frischer Mount auf demselben Board: der Stand kommt aus localStorage zurück.
+      const { unmount: verlasseZweiteSitzung } = renderAufBoard('/boards/1/vorhaben')
+      await screen.findByTestId('vorhaben-zeile-10')
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-10'])
+      verlasseZweiteSitzung()
+
+      // Ein anderes Board hat einen eigenen Schlüssel und ist von der Ausblendung unberührt.
+      renderAufBoard('/boards/2/vorhaben')
+      await screen.findByTestId('vorhaben-zeile-9')
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
     })
 
     it('holt Ausgeblendete über den Umschalter in die Liste und blendet sie dort wieder ein', async () => {
@@ -721,8 +678,8 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
 
-      await screen.findByTestId('vorhaben-kachel-10')
-      expect(kachelIds()).toEqual(['vorhaben-kachel-10'])
+      await screen.findByTestId('vorhaben-zeile-10')
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-10'])
 
       fireEvent.click(umschalter())
 
@@ -731,22 +688,16 @@ describe('EpicsPage', () => {
       // wahrnehmbar und im Test ohne geratenen Stilwert greifbar.
       expect(within(zeile).getByText('Ausgeblendet')).toBeInTheDocument()
 
-      // Eingeblendet wird in der Liste, nicht über das Kachel-Menü: Im Raster steht ein
-      // ausgeblendetes Vorhaben nicht mehr, sein Menü wäre unerreichbar (fachlich #814, AK 9).
       fireEvent.click(within(zeile).getByLabelText('Vorhaben AUT einblenden'))
 
-      // Die leere Menge löscht den Schlüssel, statt ein aussageloses `[]` zu hinterlassen — mit der
-      // Liste ist das Leeren der Menge der Regelfall (Plan #846, E8).
       await waitFor(() => expect(store.has(hiddenEpicsStorageKey(1))).toBe(false))
       expect(within(screen.getByTestId('vorhaben-zeile-9')).queryByText('Ausgeblendet')).toBeNull()
-      // Der Umschalter bleibt, und die Seite bleibt in der Liste: Sie zeigt jetzt alle Vorhaben,
-      // von denen keines mehr ausgeblendet ist.
       expect(umschalter()).toBeChecked()
     })
 
     it('zählt am Umschalter keine verwaiste ID mit, zu der kein Vorhaben existiert', async () => {
       // Eine ID im Schlüssel überlebt das Löschen ihres Vorhabens (Issue #704). Zählte sie mit,
-      // stünde am Umschalter eine Zahl, hinter der im Zeige-Modus weniger Kacheln erscheinen.
+      // stünde am Umschalter eine Zahl, hinter der im Zeige-Modus weniger Zeilen erscheinen.
       stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9, 4711])]])
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
@@ -759,58 +710,20 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
 
-      await screen.findByTestId('vorhaben-kachel-9')
-      // Er schaltet zwischen Raster und Liste — und die Liste ist auch dann etwas wert, wenn noch
-      // nichts ausgeblendet ist (fachlich #814, AK 1).
+      await screen.findByTestId('vorhaben-zeile-9')
+      // Beschriftung und Zahl bleiben wörtlich, auch bei „0" (PO-Entscheidung, 2026-09-14).
       expect(screen.getByLabelText('Ausgeblendete zeigen (0)')).toBeInTheDocument()
     })
 
-    it('filtert ohne gespeicherten Schlüssel keine einzige Kachel', async () => {
+    it('filtert ohne gespeicherten Schlüssel keine einzige Zeile', async () => {
       // Die Seiten-Hälfte des Belegs, dass `showAllHidden` am Board (es löscht den Schlüssel)
-      // auch die Ausblendung im Kachelraster aufhebt.
+      // auch die Ausblendung in der Liste aufhebt.
       stubStore([])
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
 
-      await screen.findByTestId('vorhaben-kachel-9')
-      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
-    })
-
-    it('schreibt beim Ausblenden denselben Schlüssel und dasselbe Format, die das Board liest', async () => {
-      const store = stubStore([])
-      mEpics.list.mockResolvedValue(vorhaben)
-      renderAufBoard('/boards/1/vorhaben')
-
-      await oeffneMenue(auth)
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
-
-      // Gegen die geteilte Funktion geprüft, nicht gegen ein Literal: ein zweiter Schlüsselname
-      // wäre ein zweiter Zustand und fiele hier sonst nicht auf.
-      await waitFor(() =>
-        expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9]),
-      )
-    })
-
-    it('behält den Stand über einen Reload und bindet ihn an das Board', async () => {
-      const store = stubStore([])
-      mEpics.list.mockResolvedValue([auth, zahlung])
-      const { unmount: verlasseErsteSitzung } = renderAufBoard('/boards/1/vorhaben')
-
-      await oeffneMenue(auth)
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
-      await waitFor(() => expect(store.has(hiddenEpicsStorageKey(1))).toBe(true))
-      verlasseErsteSitzung()
-
-      // Frischer Mount auf demselben Board: der Stand kommt aus localStorage zurück.
-      const { unmount: verlasseZweiteSitzung } = renderAufBoard('/boards/1/vorhaben')
-      await screen.findByTestId('vorhaben-kachel-10')
-      expect(kachelIds()).toEqual(['vorhaben-kachel-10'])
-      verlasseZweiteSitzung()
-
-      // Ein anderes Board hat einen eigenen Schlüssel und ist von der Ausblendung unberührt.
-      renderAufBoard('/boards/2/vorhaben')
-      await screen.findByTestId('vorhaben-kachel-9')
-      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+      await screen.findByTestId('vorhaben-zeile-9')
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
     })
 
     it('liest den Stand beim Board-Wechsel ohne Remount neu und setzt den Umschalter zurück', async () => {
@@ -826,30 +739,33 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben', true)
 
-      await screen.findByTestId('vorhaben-kachel-10')
+      await screen.findByTestId('vorhaben-zeile-10')
       fireEvent.click(umschalter())
       expect(umschalter()).toBeChecked()
 
       fireEvent.click(screen.getByText('Board wechseln'))
 
-      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-9']))
+      await waitFor(() => expect(zeilenIds()).toEqual(['vorhaben-zeile-9']))
       expect(umschalter()).not.toBeChecked()
     })
 
-    it('bietet den Menüeintrag auch einem Nur-Leser an', async () => {
-      // Ausblenden verändert nichts am Server (E8) — es einem VIEWER zu verwehren, hieße ihm zu
-      // verbieten, seine eigene Ansicht aufzuräumen.
-      stubStore([])
-      mBoards.get.mockResolvedValue({ id: 1, projectId: 42, name: 'B', createdAt: '', columns: [] })
-      mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
-      mEpics.list.mockResolvedValue(vorhaben)
-      renderAufBoard('/boards/1/vorhaben')
+    it('vergisst eben Ausgeblendetes beim Board-Wechsel', async () => {
+      // Board 2 hat AUT ausgeblendet. Trüge die Seite die eben auf Board 1 ausgeblendete Zeile
+      // über den Wechsel mit, stünde AUT dort, obwohl es auf Board 2 niemand gerade ausblendete.
+      stubStore([[hiddenEpicsStorageKey(2), JSON.stringify([9])]])
+      mBoards.get.mockImplementation((bid: number) =>
+        Promise.resolve({ id: bid, projectId: 9, name: `B${bid}`, createdAt: '', columns: [] }),
+      )
+      mEpics.list.mockResolvedValue([auth, zahlung])
+      renderAufBoard('/boards/1/vorhaben', true)
 
-      await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
-      expect(screen.queryByRole('button', { name: 'Neues Vorhaben' })).not.toBeInTheDocument()
+      await screen.findByTestId('vorhaben-zeile-9')
+      fireEvent.click(schalter('AUT', 'ausblenden'))
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
 
-      await oeffneMenue(auth)
-      expect(screen.getByRole('menuitem', { name: 'Ausblenden' })).toBeInTheDocument()
+      fireEvent.click(screen.getByText('Board wechseln'))
+
+      await waitFor(() => expect(zeilenIds()).toEqual(['vorhaben-zeile-10']))
     })
 
     it('blendet auch dann aus, wenn das Schreiben in localStorage fehlschlägt', async () => {
@@ -862,11 +778,12 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
 
-      await oeffneMenue(auth)
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
+      await screen.findByTestId('vorhaben-zeile-9')
+      fireEvent.click(schalter('AUT', 'ausblenden'))
 
-      // Der Zustand wirkt in dieser Sitzung — nur das Merken fällt aus (E8).
-      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-10']))
+      // Der Zustand wirkt in dieser Sitzung — nur das Merken fällt aus (Plan #703, E8).
+      expect(await screen.findByLabelText('Ausgeblendete zeigen (1)')).toBeInTheDocument()
+      expect(within(screen.getByTestId('vorhaben-zeile-9')).getByText('Ausgeblendet')).toBeInTheDocument()
     })
 
     it('blendet nichts aus, wenn das Lesen aus localStorage wirft', async () => {
@@ -879,8 +796,8 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue([auth, zahlung])
       renderAufBoard('/boards/1/vorhaben')
 
-      await screen.findByTestId('vorhaben-kachel-9')
-      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+      await screen.findByTestId('vorhaben-zeile-9')
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
       // Der Umschalter hängt an den Vorhaben, nicht am Ausblende-Zustand — ein defektes
       // `localStorage` nimmt ihn deshalb nicht weg, es lässt nur die Zahl bei „0".
       expect(screen.getByLabelText('Ausgeblendete zeigen (0)')).toBeInTheDocument()
@@ -888,31 +805,28 @@ describe('EpicsPage', () => {
 
     it('ist per Tastatur erreichbar und auslösbar', async () => {
       stubStore([])
-      mEpics.list.mockResolvedValue(vorhaben)
+      mEpics.list.mockResolvedValue([auth])
       const user = userEvent.setup()
       renderPage()
-      const knopf = within(await screen.findByTestId('vorhaben-kachel-9')).getByLabelText('Menü Auth')
+      await screen.findByTestId('vorhaben-zeile-9')
 
-      // Vom letzten Bedienelement vor dem Raster über den stets sichtbaren Umschalter zum
-      // ⋮-Knopf: Dieses Vorhaben trägt keine Anforderung, die Kachel enthält vor dem ⋮-Knopf also
-      // nur den Titelknopf. Das belegt, dass er in der Tab-Reihenfolge liegt und nicht bloß per
-      // Maus zu treffen ist.
+      // Vom letzten Bedienelement vor der Liste über den Umschalter, den Titelknopf und das ⋮ zum
+      // Schalter ganz rechts: Er liegt in der Tab-Reihenfolge und ist nicht bloß per Maus zu treffen.
       screen.getByRole('button', { name: 'Neues Vorhaben' }).focus()
       await user.tab()
       expect(umschalter()).toHaveFocus()
-      // Seit Issue #1306 steht der Titelknopf als erste Tab-Station der Kachel vor dem ⋮.
       await user.tab()
       await user.tab()
-      expect(knopf).toHaveFocus()
+      await user.tab()
+      expect(schalter('AUT', 'ausblenden')).toHaveFocus()
 
-      await user.keyboard('{Enter}')
-      await user.click(await screen.findByRole('menuitem', { name: 'Ausblenden' }))
+      await user.keyboard(' ')
 
-      await waitFor(() => expect(kachelIds()).toEqual([]))
+      expect(await screen.findByLabelText('Ausgeblendete zeigen (1)')).toBeInTheDocument()
     })
   })
 
-  // --- Listenansicht statt Kachelraster (Issue #848, fachlich #814) ----------
+  // --- Listenansicht (Issue #848, fachlich #814; seit #1490 die einzige Ansicht) ----
 
   /**
    * Die zehn Kriterien AK 1 bis AK 10 aus Issue #814 — je ein Testfall. AK 11 (Tastatur und
@@ -956,17 +870,17 @@ describe('EpicsPage', () => {
       expect(screen.queryByLabelText(/^Ausgeblendete zeigen/)).toBeNull()
     })
 
-    it('AK 2: zeigt bei ausgeschaltetem Umschalter das Raster ohne die Ausgeblendeten', async () => {
+    it('AK 2: zeigt bei ausgeschaltetem Umschalter die Liste ohne die Ausgeblendeten', async () => {
       stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([11])]])
       mEpics.list.mockResolvedValue(drei)
       renderPage()
 
-      await screen.findByTestId('vorhaben-kachel-9')
-      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
-      expect(screen.queryByTestId('vorhaben-liste')).toBeNull()
+      await screen.findByTestId('vorhaben-zeile-9')
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
+      expect(screen.getByTestId('vorhaben-liste')).toBeInTheDocument()
     })
 
-    it('AK 3: zeigt im Zeige-Modus kein Raster, sondern eine Zeile je Vorhaben', async () => {
+    it('AK 3: zeigt im Zeige-Modus eine Zeile je Vorhaben, Ausgeblendete eingeschlossen', async () => {
       stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([11])]])
       mEpics.list.mockResolvedValue(drei)
       renderPage()
@@ -974,12 +888,9 @@ describe('EpicsPage', () => {
       fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
 
       expect(await screen.findByTestId('vorhaben-liste')).toBeInTheDocument()
-      // Kein dritter Zustand: Das Raster ist fort, nicht bloß um die Liste ergänzt.
-      expect(screen.queryByTestId('vorhaben-raster')).toBeNull()
-      expect(kachelIds()).toEqual([])
       // Eingeblendete und Ausgeblendete gemeinsam, jedes genau einmal.
       expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-11', 'vorhaben-zeile-10'])
-      // Kopf, „Neues Vorhaben" und Umschalter stehen ausserhalb der Verzweigung.
+      // Kopf, „Neues Vorhaben" und Umschalter bleiben.
       expect(screen.getByRole('button', { name: 'Neues Vorhaben' })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Projekte' })).toBeInTheDocument()
     })
@@ -989,9 +900,9 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue(drei)
       renderPage()
 
-      // Die Kachelansicht lässt PFL aus, die Liste führt es an derselben Stelle wie ohne Filter.
-      await screen.findByTestId('vorhaben-kachel-9')
-      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+      // Ohne Zeige-Modus fehlt PFL, mit ihm steht es an derselben Stelle wie ohne Filter.
+      await screen.findByTestId('vorhaben-zeile-9')
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
 
       fireEvent.click(umschalter())
       const vorher = zeilenIds()
@@ -1005,7 +916,7 @@ describe('EpicsPage', () => {
       expect(zeilenIds()).toEqual(vorher)
     })
 
-    it('AK 5: schreibt ein Umlegen in der Liste sofort fort und filtert danach das Raster', async () => {
+    it('AK 5: schreibt ein Umlegen im Zeige-Modus sofort fort und filtert nach dem Ausschalten', async () => {
       const store = stubStore([])
       mEpics.list.mockResolvedValue(drei)
       renderPage()
@@ -1018,9 +929,11 @@ describe('EpicsPage', () => {
         expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9]),
       )
 
+      // Im Zeige-Modus ausgeblendet ist nicht „eben ausgeblendet" (Plan #1488, E5): Die Zeile war
+      // dort ohnehin sichtbar, nach dem Ausschalten fehlt sie.
       fireEvent.click(umschalter())
 
-      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-11', 'vorhaben-kachel-10']))
+      await waitFor(() => expect(zeilenIds()).toEqual(['vorhaben-zeile-11', 'vorhaben-zeile-10']))
     })
 
     it('AK 6: zieht die Zahl am Umschalter jedem Umlegen in der Liste sofort nach', async () => {
@@ -1045,7 +958,7 @@ describe('EpicsPage', () => {
 
       fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
 
-      // Ausblenden nimmt die Zeile nicht aus der Liste — anders als im Raster.
+      // Ausblenden nimmt die Zeile im Zeige-Modus nicht aus der Liste.
       fireEvent.click(zeilenSchalter(await screen.findByTestId('vorhaben-zeile-10'), 'ZAH', 'ausblenden'))
       await waitFor(() =>
         expect(zeilenSchalter(screen.getByTestId('vorhaben-zeile-10'), 'ZAH', 'einblenden')).toBeInTheDocument(),
@@ -1058,7 +971,6 @@ describe('EpicsPage', () => {
 
       expect(await screen.findByLabelText('Ausgeblendete zeigen (0)')).toBeInTheDocument()
       expect(screen.getByTestId('vorhaben-liste')).toBeInTheDocument()
-      expect(screen.queryByTestId('vorhaben-raster')).toBeNull()
     })
 
     it('AK 8: öffnet ein Vorhaben aus der Liste im Detail-Dialog', async () => {
@@ -1073,16 +985,15 @@ describe('EpicsPage', () => {
       expect(within(dialog).getByLabelText('Fortschritt')).toHaveTextContent('0 von 1 fertig')
     })
 
-    it('AK 9: blendet in der Kachelansicht weiterhin über das ⋮-Menü aus', async () => {
-      const store = stubStore([])
+    it('führt im ⋮-Menü kein „Ausblenden" mehr — das tut der Schalter (Plan #1488, E7)', async () => {
+      stubStore([])
       mEpics.list.mockResolvedValue(drei)
       renderPage()
 
       await oeffneMenue(auth)
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Ausblenden' }))
 
-      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-11', 'vorhaben-kachel-10']))
-      expect(JSON.parse(store.get(hiddenEpicsStorageKey(1)) as string)).toEqual([9])
+      expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Löschen'])
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
     it('AK 10: lässt einen Nur-Leser in der Liste schalten', async () => {
@@ -1109,7 +1020,6 @@ describe('EpicsPage', () => {
       mEpics.list.mockResolvedValue(drei)
       renderPage()
 
-      fireEvent.click(await screen.findByLabelText(/^Ausgeblendete zeigen/))
       fireEvent.click(within(await screen.findByTestId('vorhaben-zeile-9')).getByRole('button', { name: 'Menü Auth' }))
 
       expect(await screen.findByRole('menuitem', { name: 'Löschen' })).toBeInTheDocument()
@@ -1124,7 +1034,6 @@ describe('EpicsPage', () => {
       renderPage()
 
       await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
-      fireEvent.click(umschalter())
       const zeile = await screen.findByTestId('vorhaben-zeile-9')
 
       expect(within(zeile).queryByRole('button', { name: /^Menü / })).not.toBeInTheDocument()
@@ -1156,16 +1065,14 @@ describe('EpicsPage', () => {
     })
 
     it('lässt den Umschalter „Ausgeblendete zeigen" den Optionsvorrat des Formulars unberührt', async () => {
-      // Der Umschalter steuert das Kachelraster dieser Seite. Zöge er hier mit, entschiede eine
+      // Der Umschalter steuert die Liste dieser Seite. Zöge er hier mit, entschiede eine
       // Ansichtseinstellung darüber, was man einer Karte zuordnen kann (Plan #717, A1).
       stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
       mEpics.list.mockResolvedValue([auth, zahlung])
       mCards.list.mockResolvedValue([anforderung(null)])
       renderPage()
 
-      // Die Karte wird VOR dem Umschalten aus dem Raster geöffnet: Den Anforderungs-Verweis gibt es
-      // nur auf der Kachel, nicht in der Liste. Der Dialog steht ausserhalb der Verzweigung und
-      // bleibt beim Umschalten offen.
+      // Die Karte wird VOR dem Umschalten geöffnet; der Dialog bleibt beim Umschalten offen.
       fireEvent.click(await screen.findByRole('button', { name: '#4 · Anforderung' }))
       await screen.findByRole('dialog')
       fireEvent.click(umschalter())
@@ -1340,8 +1247,22 @@ describe('EpicsPage', () => {
       expect(screen.getByRole('menuitem', { name: 'Löschen' })).toBeInTheDocument()
     })
 
+    it('lässt ein per Escape geschlossenes Menü alles stehen', async () => {
+      mEpics.list.mockResolvedValue([eineKarte, zahlung])
+      renderMitSnackbar()
+
+      await oeffneMenue(eineKarte)
+      fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Löschen' }), { key: 'Escape' })
+
+      // Das Menü zu öffnen ist noch keine Entscheidung — es wieder zu schließen ändert nichts.
+      await waitFor(() => expect(screen.queryByRole('menuitem')).toBeNull())
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(mEpics.remove).not.toHaveBeenCalled()
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
+    })
+
     it('bietet „Löschen" einem Nur-Leser nicht an', async () => {
-      // Anders als „Ausblenden" verändert Löschen den Server — ein VIEWER bekommt die
+      // Anders als das Ausblenden verändert Löschen den Server — ein VIEWER bekommt die
       // Möglichkeit gar nicht erst angeboten.
       mBoards.get.mockResolvedValue({ id: 1, projectId: 42, name: 'B', createdAt: '', columns: [] })
       mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
@@ -1349,10 +1270,11 @@ describe('EpicsPage', () => {
       renderMitSnackbar()
 
       await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
-      await oeffneMenue(ohneKarten)
+      const zeile = await screen.findByTestId('vorhaben-zeile-9')
 
+      // Ohne „Löschen" bliebe das Menü leer; deshalb fehlt schon der Knopf (Plan #1488, E7).
+      expect(within(zeile).queryByRole('button', { name: /^Menü / })).not.toBeInTheDocument()
       expect(screen.queryByRole('menuitem', { name: 'Löschen' })).toBeNull()
-      expect(screen.getByRole('menuitem', { name: 'Ausblenden' })).toBeInTheDocument()
     })
 
     it.each([
@@ -1381,7 +1303,7 @@ describe('EpicsPage', () => {
       expect(screen.getByText(text)).toBeInTheDocument()
     })
 
-    it('lässt „Abbrechen" die Kachel stehen und ruft nichts auf', async () => {
+    it('lässt „Abbrechen" die Zeile stehen und ruft nichts auf', async () => {
       mEpics.list.mockResolvedValue([eineKarte, zahlung])
       renderMitSnackbar()
 
@@ -1390,12 +1312,12 @@ describe('EpicsPage', () => {
 
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
       expect(mEpics.remove).not.toHaveBeenCalled()
-      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
     })
 
-    it('löscht das Vorhaben und nimmt die Kachel aus dem Raster', async () => {
+    it('löscht das Vorhaben und nimmt die Zeile aus der Liste', async () => {
       // Zwei getrennte Antworten: die erste für den Erstaufruf, die zweite für das Nachladen
-      // nach dem Löschen. Mit einer dauerhaften Antwort bliebe die Kachel stehen, und der Test
+      // nach dem Löschen. Mit einer dauerhaften Antwort bliebe die Zeile stehen, und der Test
       // prüfte die Mock-Mechanik statt der Wirkung.
       mEpics.list.mockResolvedValueOnce([eineKarte, zahlung]).mockResolvedValueOnce([zahlung])
       mEpics.remove.mockResolvedValue(undefined)
@@ -1405,10 +1327,10 @@ describe('EpicsPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Löschen' }))
 
       await waitFor(() => expect(mEpics.remove).toHaveBeenCalledWith(9))
-      await waitFor(() => expect(kachelIds()).toEqual(['vorhaben-kachel-10']))
+      await waitFor(() => expect(zeilenIds()).toEqual(['vorhaben-zeile-10']))
     })
 
-    it('meldet einen Fehlschlag und lässt die Kachel stehen, die Rückfrage ist dann schon zu', async () => {
+    it('meldet einen Fehlschlag und lässt die Zeile stehen, die Rückfrage ist dann schon zu', async () => {
       mEpics.list.mockResolvedValue([eineKarte, zahlung])
       mEpics.remove.mockRejectedValue(new Error('kaputt'))
       renderMitSnackbar()
@@ -1419,7 +1341,7 @@ describe('EpicsPage', () => {
       expect(await screen.findByText('Löschen fehlgeschlagen.')).toBeInTheDocument()
       // Der Dialog schließt vor dem Aufruf — sonst schickte ein zweiter Klick ein zweites DELETE.
       expect(screen.queryByRole('button', { name: 'Abbrechen' })).toBeNull()
-      expect(kachelIds()).toEqual(['vorhaben-kachel-9', 'vorhaben-kachel-10'])
+      expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
     })
   })
 })
