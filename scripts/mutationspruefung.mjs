@@ -6,14 +6,17 @@
  * Nutzung:
  *   node scripts/mutationspruefung.mjs aenderung frontend|backend [--stufe paket|push]
  *   node scripts/mutationspruefung.mjs vollauf   frontend|backend
+ *   node scripts/mutationspruefung.mjs zuordnung frontend|backend
  *
  * Die Aenderungspruefung steht fuer beide Seiten: Anker, Dateilisten, Pruefbereich,
  * Test-zu-Quelle-Zuordnung, der Lauf (Stryker bzw. PIT), die Auswertung seines Berichts und die
  * gemeinsame Ausgabeform. Der Vollauf faehrt beide Seiten in ihrem vollen Umfang, prueft die
  * Schwelle je Seite und hinterlaesst die Gedaechtnisdatei, aus der die Aenderungspruefung Dauer,
- * Datum und die Mutantenliste des letzten Vollaufs liest (Issue #1215).
+ * Datum und die Mutantenliste des letzten Vollaufs liest (Issue #1215). Die Zuordnungspruefung ist
+ * die Paketpruefung beim Kartenabschluss (Issue #1522, Plan #1521): Sie misst gegen den Anker
+ * `HEAD` nur, ob jeder geaenderte Test einer Quelle zuzuordnen ist, und startet kein Werkzeug.
  *
- * Zwei Festlegungen, die sich aus dem Bestand ergeben:
+ * Vier Festlegungen, die sich aus dem Bestand und aus Plan #1528 ergeben:
  *
  * 1. Der Umfang wird IMMER gegen den Hauptzweig bestimmt (`git merge-base HEAD origin/<main>`),
  *    auch wenn `checks.mjs` an der Paketstufe gegen `HEAD` auswaehlt: Ein Push traegt oft mehrere
@@ -23,6 +26,15 @@
  * 2. Die Ausgabe des Mutationswerkzeugs wird nie durchgereicht, sondern zusammengefasst:
  *    `checks.mjs` faerbt einen Lauf schon an `[ERROR]` oder `BUILD FAILURE` im Text rot, und
  *    Mavens Log traegt beides auch in gruenen Laeufen (abstuerzende PIT-Minions auf aarch64).
+ * 3. Sperrschwelle statt Ziel: Die Aenderungspruefung beider Seiten und der Backend-Vollauf halten
+ *    erst unter `SPERRSCHWELLE` (80 %) an; 100 % bleibt das `ZIEL`. Ein Altlast-Vermerk zaehlt als
+ *    getoetet. Der Frontend-Vollauf misst weiter je Ausschnitt gegen `SCHWELLEN`.
+ * 4. Kartenanbindung (Issue #1533): Laesst ein Lauf Ueberlebende durch, schreibt er sie ueber
+ *    `umgebung.karten` — Vorgabe ist der Kindprozess `scripts/mutationskarten.mjs` — je Datei auf
+ *    eine Karte im Backlog; der Frontend-Vollauf legt keine an. `vollauf backend` prueft dazu bei
+ *    jedem Lauf die Liegezeit aller offenen Karten beider Seiten. Ein Board-Fehler und eine
+ *    ueberfaellige Karte faerben den Lauf rot. Bei Durchlass endet die Ausgabe mit dem Block fuer
+ *    den Abschlussbericht von `push main`, derselbe Inhalt steht in `.claude/mutationsdurchlass.json`.
  *
  * Eigene Glob- und Diff-Auswertung statt eines Imports aus `.claude/kit/checks.mjs`: Das Kit ist
  * nicht versioniert (`.gitignore`: `.claude/*`), ein versioniertes Werkzeug darf nicht von
@@ -35,16 +47,18 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 import { aufgenommene, kandidat as kandidatVon, mutateFuer } from '../frontend/mutationsbereich.mjs';
+import { kartenTitel } from './mutationskarten.mjs';
 
-export const KOMMANDOS = ['aenderung', 'vollauf'];
+export const KOMMANDOS = ['aenderung', 'vollauf', 'zuordnung'];
 export const SEITEN = ['frontend', 'backend'];
 
 /**
- * Die Schwellen des Vollaufs (Kriterium 8) — an EINER Stelle, nicht verstreut: Zwei Fundstellen
- * derselben Zahl gingen beim ersten Anheben auseinander. Backend 100, weil das Profil `pit` seine
- * Marke schon auf 100 fuehrt; Frontend 80 als der heute haltbare Stand (84,70 % am 2026-09-24).
+ * Die Schwelle des Frontend-Vollaufs je Ausschnitt (Kriterium 8) — an EINER Stelle, nicht
+ * verstreut: Zwei Fundstellen derselben Zahl gingen beim ersten Anheben auseinander. 80 als der
+ * heute haltbare Stand (84,70 % am 2026-09-24). Der Backend-Vollauf urteilt seit Issue #1532 wie
+ * die Aenderungspruefung mit `SPERRSCHWELLE` gegen das `ZIEL`.
  */
-export const SCHWELLEN = { frontend: 80, backend: 100 };
+export const SCHWELLEN = { frontend: 80 };
 
 /**
  * Haelt die Aenderungspruefung bei einem Test ohne Zuordnung sofort an (true) oder weicht sie auf
@@ -61,6 +75,18 @@ export const HALT_OHNE_ZUORDNUNG = { frontend: true, backend: false };
  * schwankenden Lauf wieder darunter faellt. Der Vorschlag ist eine Zeile im Bericht, mehr nicht.
  */
 export const VORSCHLAGSSCHWELLE = 82;
+
+/**
+ * Die Sperrschwelle der Aenderungspruefung und des Backend-Vollaufs (Plan #1528, Abschnitt "Zwei
+ * Groessen statt einer Schwelle"): Erst eine Quote darunter haelt an. 100 % bleibt das ZIEL, auf das Karten hinarbeiten
+ * — zwei Groessen, nicht eine Zahl mit `SCHWELLEN`, weil sie Verschiedenes sagen. Ueber
+ * `umgebung.sperrschwelle` ueberschreibbar wie `umgebung.schwellen`.
+ */
+export const SPERRSCHWELLE = 80;
+export const ZIEL = 100;
+
+/** So lange darf eine Karte zu durchgelassenen Ueberlebenden offen liegen, bevor sie sperrt. */
+export const LIEGEZEIT_TAGE = 7;
 
 const HAUPTZWEIG_VORGABE = 'main';
 
@@ -406,6 +432,7 @@ export function zuordnungAusVollauf(inhalt) {
  */
 export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {}, existiert }) {
   const dateien = new Set();
+  const testBeruehrt = new Set();
   const ohneZuordnung = [];
   for (const pfad of geaendert) {
     if (bereich.trifft(pfad)) dateien.add(pfad);
@@ -420,11 +447,16 @@ export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {},
       continue;
     }
     for (const quelle of quellen) {
-      if (bereich.trifft(quelle)) dateien.add(quelle);
+      if (!bereich.trifft(quelle)) continue;
+      dateien.add(quelle);
+      testBeruehrt.add(quelle);
     }
   }
+  // `testBeruehrt` ist die Teilmenge, die ein geaenderter Test hereinzieht: Dort zaehlt in der
+  // Aenderungspruefung jeder Mutant, nicht nur der auf einer geaenderten Zeile (Plan #1528, E2).
   return {
     dateien: [...dateien].sort(),
+    testBeruehrt: [...testBeruehrt].sort(),
     ganzeSeite: ohneZuordnung.length > 0,
     ohneZuordnung,
   };
@@ -572,7 +604,8 @@ export function pitMutanten(xml) {
  * den Klassennamen, und `Foo` traefe `Foo$1` nicht.
  *
  * `-Dpit.marke=0` schaltet die Werkzeugschwelle ab: Der Halt kommt aus dem Rueckgabewert dieses
- * Treibers, weil ein Altlast-Vermerk nicht anhalten, aber mitzaehlen soll. Keine Historie — das
+ * Treibers, weil er nur die Bezugsmenge gegen die Sperrschwelle misst und ein Altlast-Vermerk als
+ * getoetet zaehlt (Plan #1528). Keine Historie — das
  * Bestandspaket `pitest-entry-1.25.7` bringt keine `HistoryFactory` mit, ein Lauf mit
  * `withHistory` braeche ab.
  *
@@ -597,13 +630,12 @@ export function pitArgumente(dateien) {
 }
 
 /**
- * Der Vollauf des Backends faehrt das Profil `pit` mit seinem Default-Umfang UND seiner
- * Default-Marke: Anders als die Aenderungspruefung schaltet er `pit.marke` nicht ab — dort musste
- * die Werkzeugschwelle weichen, weil ein Altlast-Vermerk nicht anhalten, aber mitzaehlen soll; hier
- * gibt es keine Vermerke, und die Schwelle dieses Treibers (100) sagt dasselbe wie die des Profils.
+ * Der Vollauf des Backends faehrt das Profil `pit` mit seinem Default-Umfang und schaltet wie die
+ * Aenderungspruefung die Marke ab (Plan #1528, E12): Die Werkzeugschwelle kennt keinen
+ * Altlast-Vermerk, geurteilt wird allein ueber den Bericht gegen die Sperrschwelle.
  */
 export function pitVollaufArgumente() {
-  return ['-B', '-Ppit', '-Dskip.frontend=true', 'test'];
+  return ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test'];
 }
 
 /**
@@ -665,76 +697,107 @@ export function vollaufSchluessel(datei, zeile, mutator) {
 
 // --- Auswertung -------------------------------------------------------------
 
-/**
- * Die Entscheidung ueber Anhalten oder Durchlassen, fuer beide Seiten gleich.
- *
- * - Ueberlebende in BERUEHRTEN Dateien halten an (Kriterium 2).
- * - Ueberlebende anderswo halten nicht an und erscheinen nicht als Grund (Kriterium 4); sie
- *   stehen nur als Zahl in der Zaehlung, damit ein verengter Lauf nicht wie ein vollstaendiger
- *   aussieht.
- * - Ein Altlast-Vermerk gibt die Aenderungspruefung frei, ZAEHLT ABER WEITER MIT (Kriterium 6) —
- *   sonst verschwaende die Schuld aus der Statistik. Er greift nur, wenn ALLE vier Bedingungen
- *   zugleich erfuellt sind; die verletzte steht als `vermerkGrund` am haltenden Ueberlebenden,
- *   damit die Meldung sagen kann, warum der Vermerk diesmal nicht trug.
- */
-export function auswerten({ mutanten, quellen, istBeruehrt, zeileGeaendert, dateiGeaendert, vollauf }) {
-  const vollaufStellen = vollauf
+/** Die Stellen, die im letzten Vollauf ueberlebten, oder `null`, wenn es keine Gedaechtnisdatei gibt. */
+export function vollaufStellenAus(vollauf) {
+  return vollauf
     ? new Set((vollauf.mutanten ?? []).map((m) => vollaufSchluessel(m.datei, m.zeile, m.mutator)))
     : null;
+}
 
-  const zaehlung = { geprueft: 0, getoetet: 0, ueberlebt: 0, ausgenommen: 0, ausserhalb: 0 };
+/**
+ * Die Bezugsmenge der Aenderungspruefung (Plan #1528, E2/E3) als Frage je Mutant: Zaehlt er?
+ *
+ * - Ja, wenn seine Zeile gegenueber dem Anker geaendert ist (`zeileGeaendert`; ohne Anker und in
+ *   ungetrackten Dateien ist jede Zeile geaendert).
+ * - Ja, wenn der pruefende Test seiner Datei geaendert ist (`testBeruehrt`) — dort aber nicht, wenn
+ *   er schon im letzten Vollauf ueberlebte: Das ist eine alte Luecke, keine neue. Ohne
+ *   Gedaechtnisdatei (`vollaufStellen === null`) gibt es keine alten Luecken, dann zaehlt jeder.
+ * - Sonst nicht: Eine alte Luecke in derselben Datei sperrt die Arbeit dieser Karte nicht.
+ */
+export function bezugsmengeLeser({ zeileGeaendert, testBeruehrt, vollaufStellen }) {
+  return (mutant) => {
+    if (zeileGeaendert(mutant.datei, mutant.zeile)) return true;
+    if (!testBeruehrt(mutant.datei)) return false;
+    return !vollaufStellen?.has(vollaufSchluessel(mutant.datei, mutant.zeile, mutant.mutator));
+  };
+}
+
+/**
+ * Die Entscheidung ueber Anhalten oder Durchlassen, fuer beide Seiten gleich (Plan #1528).
+ *
+ * - Gezaehlt wird nur die Bezugsmenge (`zaehlt`); alles andere steht getrennt nach getoetet und
+ *   ueberlebt in `zaehlung.ausserhalb`, damit ein verengter Lauf nicht wie ein vollstaendiger
+ *   aussieht.
+ * - Ein tragender Altlast-Vermerk zaehlt als getoetet (E4). Er traegt nur, wenn ALLE vier
+ *   Bedingungen zugleich erfuellt sind; die verletzte steht als `vermerkGrund` an der Stelle, damit
+ *   die Meldung sagen kann, warum der Vermerk diesmal nicht trug.
+ * - Liegt die Quote unter der Sperrschwelle, halten alle gezaehlten Ueberlebenden ohne Vermerk an
+ *   (`haltende`, E5); sonst laufen sie durch (`durchgelassen`). Beide Listen schliessen sich aus.
+ */
+export function auswerten({
+  mutanten, quellen, zaehlt, zeileGeaendert, dateiGeaendert, vollauf, sperrschwelle = SPERRSCHWELLE,
+}) {
+  const vollaufStellen = vollaufStellenAus(vollauf);
+
+  const zaehlung = {
+    geprueft: 0, getoetet: 0, ueberlebt: 0, vermerkt: 0, ausgenommen: 0, ausserhalb: { getoetet: 0, ueberlebt: 0 },
+  };
   const ueberlebende = [];
-  const haltende = [];
+  const ohneVermerk = [];
 
   for (const mutant of mutanten) {
     if (mutant.zustand === 'Ignored') {
       zaehlung.ausgenommen += 1;
       continue;
     }
-    if (ZUSTAND_GETOETET.has(mutant.zustand)) {
-      zaehlung.geprueft += 1;
+    const getoetet = ZUSTAND_GETOETET.has(mutant.zustand);
+    if (!getoetet && !ZUSTAND_UEBERLEBT.has(mutant.zustand)) continue;
+    if (!zaehlt(mutant)) {
+      zaehlung.ausserhalb[getoetet ? 'getoetet' : 'ueberlebt'] += 1;
+      continue;
+    }
+    zaehlung.geprueft += 1;
+    if (getoetet) {
       zaehlung.getoetet += 1;
       continue;
     }
-    if (!ZUSTAND_UEBERLEBT.has(mutant.zustand)) continue;
 
-    zaehlung.geprueft += 1;
-    if (!istBeruehrt(mutant.datei)) {
-      zaehlung.ausserhalb += 1;
-      continue;
-    }
-    zaehlung.ueberlebt += 1;
-
-    const vermerk = altlastVermerkAn(quellen.get(mutant.datei), mutant.zeile);
-    const stelle = { ...mutant, altlast: null, vermerkGrund: null };
+    const stelle = { ...mutant, altlast: null, vermerkGrund: altlastHindernis(mutant, quellen, {
+      zeileGeaendert, dateiGeaendert, vollaufStellen,
+    }) };
     ueberlebende.push(stelle);
-
-    if (!vermerk) {
-      stelle.vermerkGrund = 'kein Altlast-Vermerk an dieser Stelle';
-      haltende.push(stelle);
+    if (stelle.vermerkGrund) {
+      zaehlung.ueberlebt += 1;
+      ohneVermerk.push(stelle);
       continue;
     }
-    if (zeileGeaendert(mutant.datei, mutant.zeile)) {
-      stelle.vermerkGrund = 'die Zeile des Mutanten ist gegenüber dem Anker geändert';
-      haltende.push(stelle);
-      continue;
-    }
-    const deckend = [...new Set([...mutant.deckendeTests, ...konventionsTests(mutant.datei)])];
-    const geaenderterTest = deckend.find((pfad) => dateiGeaendert(pfad));
-    if (geaenderterTest) {
-      stelle.vermerkGrund = `die deckende Testdatei ${geaenderterTest} hat sich geändert`;
-      haltende.push(stelle);
-      continue;
-    }
-    if (vollaufStellen && !vollaufStellen.has(vollaufSchluessel(mutant.datei, mutant.zeile, mutant.mutator))) {
-      stelle.vermerkGrund = 'im letzten Vollauf hat dieser Mutant nicht überlebt — er ist keine Altlast';
-      haltende.push(stelle);
-      continue;
-    }
-    stelle.altlast = vermerk;
+    stelle.altlast = altlastVermerkAn(quellen.get(mutant.datei), mutant.zeile);
+    zaehlung.getoetet += 1;
+    zaehlung.vermerkt += 1;
   }
 
-  return { zaehlung, ueberlebende, haltende };
+  const quote = quoteAus(zaehlung);
+  const haelt = quote < sperrschwelle;
+  return {
+    zaehlung,
+    ueberlebende,
+    quote,
+    haltende: haelt ? ohneVermerk : [],
+    durchgelassen: haelt ? [] : ohneVermerk,
+  };
+}
+
+/** Die erste verletzte Bedingung des Altlast-Vermerks als Satz, oder `null`, wenn er traegt. */
+function altlastHindernis(mutant, quellen, { zeileGeaendert, dateiGeaendert, vollaufStellen }) {
+  if (!altlastVermerkAn(quellen.get(mutant.datei), mutant.zeile)) return 'kein Altlast-Vermerk an dieser Stelle';
+  if (zeileGeaendert(mutant.datei, mutant.zeile)) return 'die Zeile des Mutanten ist gegenüber dem Anker geändert';
+  const deckend = [...new Set([...mutant.deckendeTests, ...konventionsTests(mutant.datei)])];
+  const geaenderterTest = deckend.find((pfad) => dateiGeaendert(pfad));
+  if (geaenderterTest) return `die deckende Testdatei ${geaenderterTest} hat sich geändert`;
+  if (vollaufStellen && !vollaufStellen.has(vollaufSchluessel(mutant.datei, mutant.zeile, mutant.mutator))) {
+    return 'im letzten Vollauf hat dieser Mutant nicht überlebt — er ist keine Altlast';
+  }
+  return null;
 }
 
 /** Der Grund, den der Darstellungs-Ignorer (#1277) jedem seiner Mutanten mitgibt, beginnt so. */
@@ -751,10 +814,15 @@ function ausschnittsZaehlung() {
 }
 
 /**
- * Die Auswertung des Vollaufs. Sie kennt weder Beruehrung noch Altlast-Vermerk: Im Vollauf gilt die
- * ganze Seite, und angehalten wird allein an der Schwelle (Kriterium 8) — ein Vermerk gibt die
- * AENDERUNGSpruefung frei, nicht die Gesamtquote. Gezaehlt wird wie dort, damit beide Ausgaben
- * dieselbe Zahl gleich meinen.
+ * Die Auswertung des Vollaufs. Sie kennt keine Beruehrung: Im Vollauf gilt die ganze Seite, und
+ * angehalten wird allein an der Schwelle (Kriterium 8). Gezaehlt wird wie in der
+ * Aenderungspruefung, damit beide Ausgaben dieselbe Zahl gleich meinen.
+ *
+ * Mit `quellen` (Backend, Issue #1532) zaehlt ein Ueberlebender mit Altlast-Vermerk an seiner
+ * Stelle als getoetet (E4) — im Vollauf genuegt der Vermerk an der Stelle, es gibt keinen Anker.
+ * Er bleibt trotzdem in `ueberlebende`: Die Gedaechtnisdatei fuehrt jede ueberlebende Stelle,
+ * sonst truege derselbe Vermerk in der naechsten Aenderungspruefung nicht mehr (Bedingung 4), und
+ * `zuordnungAusVollauf` verloere Eintraege. Ohne `quellen` (Frontend) gibt es keinen Vermerk.
  *
  * Mit `ausschnitte` (Issue #1278) ordnet sie jeden Mutanten seinem Ausschnitt zu und zaehlt je
  * Ausschnitt. Gesamtzaehlung und Ueberlebendenliste bleiben beim Pruefbereich, also bei den
@@ -764,8 +832,8 @@ function ausschnittsZaehlung() {
  * gemeldet statt verschluckt. Bei genau einem Ausschnitt (Backend, E11) ist er der ganze
  * Pruefbereich: Jeder Mutant, den das Werkzeug erzeugt hat, gehoert zu ihm.
  */
-export function vollaufAuswerten(mutanten, ausschnitte = null) {
-  const zaehlung = { geprueft: 0, getoetet: 0, ueberlebt: 0, ausgenommen: 0, ausserhalb: 0 };
+export function vollaufAuswerten(mutanten, ausschnitte = null, quellen = null) {
+  const zaehlung = { geprueft: 0, getoetet: 0, ueberlebt: 0, vermerkt: 0, ausgenommen: 0, ausserhalb: 0 };
   const ueberlebende = [];
   const ohneAusschnitt = [];
   const je = new Map((ausschnitte ?? []).map((a) => [a, ausschnittsZaehlung()]));
@@ -797,13 +865,23 @@ export function vollaufAuswerten(mutanten, ausschnitte = null) {
       continue;
     }
     if (!ZUSTAND_UEBERLEBT.has(mutant.zustand)) continue;
+    const altlast = quellen ? altlastVermerkAn(quellen.get(mutant.datei), mutant.zeile) : null;
     eigene.geprueft += 1;
-    eigene.ueberlebt += 1;
-    if (mutant.zustand === 'NoCoverage') eigene.ohneDeckung += 1;
+    if (altlast) {
+      eigene.getoetet += 1;
+    } else {
+      eigene.ueberlebt += 1;
+      if (mutant.zustand === 'NoCoverage') eigene.ohneDeckung += 1;
+    }
     if (gesamt) {
       zaehlung.geprueft += 1;
-      zaehlung.ueberlebt += 1;
-      ueberlebende.push({ ...mutant, altlast: null, vermerkGrund: null });
+      if (altlast) {
+        zaehlung.getoetet += 1;
+        zaehlung.vermerkt += 1;
+      } else {
+        zaehlung.ueberlebt += 1;
+      }
+      ueberlebende.push({ ...mutant, altlast, vermerkGrund: null });
     }
   }
 
@@ -1017,6 +1095,18 @@ export function schwellenZeile(quote, schwelle) {
     : `${gemessen} — unter der Schwelle ${prozentText(schwelle)} %. Der Vollauf hält an.`;
 }
 
+/**
+ * Die Quotenzeile der Aenderungspruefung (Plan #1528): gegen das Ziel UND gegen die Sperrschwelle,
+ * damit ein Durchlass unter 100 % als solcher lesbar bleibt und nicht wie ein erreichtes Ziel.
+ */
+export function sperrZeile(quote, sperrschwelle) {
+  const ziel = quote >= ZIEL ? `Ziel ${ZIEL} % erreicht` : `Ziel ${ZIEL} % nicht erreicht`;
+  const sperre = quote >= sperrschwelle
+    ? `Sperrschwelle ${prozentText(sperrschwelle)} % erfüllt: läuft durch`
+    : `Sperrschwelle ${prozentText(sperrschwelle)} % unterschritten: hält an`;
+  return `Quote ${prozentText(quote.toFixed(2))} % — ${ziel}, ${sperre}`;
+}
+
 function ausschnittsQuoteText(a, schwelle) {
   if (a.zaehlung.geprueft === 0) return 'keine Mutanten — bestanden.';
   const gemessen = `${prozentText(a.quote.toFixed(2))} %`;
@@ -1120,8 +1210,11 @@ export function meldungBauen({
   stufe,
   quote = null,
   schwelle = null,
+  sperrschwelle = null,
   ausschnittsBericht = null,
+  kartenBericht = [],
   schluss,
+  abschluss = [],
 }) {
   const zeilen = [];
   const titel = kommando === 'aenderung' ? 'Änderungsprüfung' : 'Vollauf';
@@ -1152,15 +1245,16 @@ export function meldungBauen({
   } else {
     const altlasten = ueberlebende.filter((stelle) => stelle.altlast).length;
     const zusatz = altlasten > 0
-      ? `, davon ${altlasten} mit Altlast-Vermerk — sie zählen mit, halten aber nicht an`
+      ? `, davon ${altlasten} mit Altlast-Vermerk — sie zählen als getötet`
       : '';
+    const haelt = quote !== null && sperrschwelle !== null && quote < sperrschwelle;
     zeilen.push(`Überlebende Stellen (${ueberlebende.length}${zusatz}):`);
     for (const stelle of ueberlebende) {
       zeilen.push(`  ${stelle.datei}:${stelle.zeile} — ${stelle.mutator}: ${stelle.ersetzung} überlebt`);
       if (stelle.altlast) {
         zeilen.push(`      Altlast-Vermerk (#${stelle.altlast.issue}, ${stelle.altlast.datum}): ${stelle.altlast.grund}`);
       } else if (stelle.vermerkGrund) {
-        zeilen.push(`      hält an — ${stelle.vermerkGrund}`);
+        zeilen.push(`      ${haelt || sperrschwelle === null ? 'hält an' : 'läuft durch'} — ${stelle.vermerkGrund}`);
       }
     }
   }
@@ -1173,19 +1267,29 @@ export function meldungBauen({
       ? '@ExcludeFromJacocoGeneratedReport je Einheit — solche Mutanten entstehen gar nicht erst'
       : 'Stryker-Ausnahme je Stelle';
     zeilen.push('');
-    zeilen.push(`Mutanten: ${zaehlung.geprueft} geprüft, ${zaehlung.getoetet} getötet, `
+    const vermerkt = zaehlung.vermerkt > 0 ? ` (davon ${zaehlung.vermerkt} mit Altlast-Vermerk)` : '';
+    zeilen.push(`Mutanten: ${zaehlung.geprueft} geprüft, ${zaehlung.getoetet} getötet${vermerkt}, `
       + `${zaehlung.ueberlebt} überlebt, ${zaehlung.ausgenommen} ausgenommen (${ausnahme}).`);
-    if (zaehlung.ausserhalb > 0) {
-      zeilen.push(`Dazu ${zaehlung.ausserhalb} Überlebende außerhalb der berührten Dateien — sie halten nicht an (Kriterium 4).`);
+    const aussen = kommando === 'aenderung' ? zaehlung.ausserhalb : null;
+    if (aussen && aussen.getoetet + aussen.ueberlebt > 0) {
+      zeilen.push(`Dazu ${aussen.getoetet + aussen.ueberlebt} Mutanten außerhalb der geänderten Zeilen `
+        + `(${aussen.getoetet} getötet, ${aussen.ueberlebt} überlebt) — sie zählen nicht.`);
     }
   }
 
-  if (ausschnittsBericht) {
+  if (quote !== null && sperrschwelle !== null) {
+    zeilen.push('');
+    zeilen.push(sperrZeile(quote, sperrschwelle));
+  } else if (ausschnittsBericht) {
     zeilen.push('');
     zeilen.push(...ausschnittsBericht);
   } else if (quote !== null && schwelle !== null) {
     zeilen.push('');
     zeilen.push(schwellenZeile(quote, schwelle));
+  }
+  if (kartenBericht.length > 0) {
+    zeilen.push('');
+    zeilen.push(...kartenBericht);
   }
 
   zeilen.push('');
@@ -1198,7 +1302,167 @@ export function meldungBauen({
     zeilen.push('');
     zeilen.push(schluss);
   }
+  if (abschluss.length > 0) {
+    zeilen.push('');
+    zeilen.push(...abschluss);
+  }
   return `${zeilen.join('\n')}\n`;
+}
+
+// --- Karten (Issue #1533) -----------------------------------------------------
+
+/**
+ * Die Antwort des Kartenmoduls aus seinem Kindprozess: die letzte Zeile von stdout als JSON. Ein
+ * `{ fehler }` des Moduls wird durchgereicht; alles andere ohne gueltige Antwort — Startfehler,
+ * Absturz, Unsinn auf stdout — wird zu einem `{ fehler }` mit Grund, damit der Lauf ihn nennen kann.
+ */
+export function kartenAntwort(res) {
+  const zeile = letzteZeilen(res?.stdout, 1)[0];
+  let antwort = null;
+  try {
+    antwort = zeile ? JSON.parse(zeile) : null;
+  } catch {
+    antwort = null;
+  }
+  if (typeof antwort?.fehler === 'string') return { fehler: antwort.fehler };
+  if (res?.error) return { fehler: `Kartenmodul nicht startbar: ${res.error.message}` };
+  if (res?.status !== 0 || antwort === null || typeof antwort !== 'object') {
+    const tail = letzteZeilen(res?.stderr, 3).join(' | ');
+    return { fehler: `Kartenmodul ohne gültige Antwort (Rückgabewert ${res?.status ?? 'unbekannt'})${tail ? `: ${tail}` : ''}` };
+  }
+  return antwort;
+}
+
+/**
+ * Die Vorgabe fuer `umgebung.karten`: das Kartenmodul als Kindprozess, der Auftrag als JSON auf
+ * stdin. Ein eigener Prozess, weil das Modul asynchron ans Board geht und dieser Treiber synchron
+ * laeuft; das Netz hat er, wenn `checks.mjs` den Treiber startet (Plan #1528, E10).
+ */
+function kartenProzess(wurzel) {
+  return (auftrag) => kartenAntwort(spawnSync(process.execPath, [join(wurzel, 'scripts', 'mutationskarten.mjs')], {
+    cwd: wurzel,
+    input: JSON.stringify(auftrag),
+    encoding: 'utf-8',
+  }));
+}
+
+/** Ruft den Injektionspunkt; ein Wurf und eine fehlende Antwort werden zu `{ fehler }`. */
+function kartenAuftrag(karten, auftrag) {
+  try {
+    return karten(auftrag) ?? { fehler: 'Kartenmodul ohne Antwort' };
+  } catch (err) {
+    return { fehler: err.message };
+  }
+}
+
+function anzahlText(n, einzahl, mehrzahl) {
+  return `${n} ${n === 1 ? einzahl : mehrzahl}`;
+}
+
+function stellenText(s) {
+  return `${s.datei}:${s.zeile} — ${s.mutator}: ${s.ersetzung}`;
+}
+
+function kartenText(k) {
+  return k.art === 'neu'
+    ? `Karte neu: #${k.nummer} ${kartenTitel(k.pfad)} (${anzahlText(k.neueStellen, 'Stelle', 'Stellen')})`
+    : `Karte ergänzt: #${k.nummer} ${kartenTitel(k.pfad)} (${anzahlText(k.neueStellen, 'neue Stelle', 'neue Stellen')})`;
+}
+
+/**
+ * Schreibt die durchgelassenen Stellen ans Board (Auftrag `schreiben`, Plan #1528, E6). Eine Stelle,
+ * deren Datei in der Antwort keine Karte hat, gilt als nicht erfasst — bei einem Fehler also alle:
+ * Das Modul bricht beim ersten Fehler ab und sagt nicht, welche Dateien es vorher schon schrieb.
+ * Rueckgabe sind die Karten, der Fehler (oder `null`) und die Zeilen fuer die Meldung.
+ */
+function kartenSchreiben({ karten, herkunft, stellen }) {
+  const antwort = kartenAuftrag(karten, {
+    auftrag: 'schreiben',
+    herkunft,
+    stellen: stellen.map(({ datei, zeile, mutator, ersetzung }) => ({ datei, zeile, mutator, ersetzung })),
+  });
+  const ergebnis = !antwort.fehler && Array.isArray(antwort.karten) ? antwort.karten : [];
+  const erfasst = new Set(ergebnis.map((k) => k.pfad));
+  const ohneKarte = stellen.filter((s) => !erfasst.has(s.datei));
+  const fehler = antwort.fehler
+    ?? (ohneKarte.length > 0 ? 'das Kartenmodul meldete für diese Dateien keine Karte' : null);
+  const zeilen = ergebnis.map(kartenText);
+  if (fehler) {
+    zeilen.push(`Board-Fehler: ${fehler} — der Lauf ist rot, damit die Mängel nicht verloren gehen.`);
+    zeilen.push(`Diese Stellen kamen auf keine Karte (${ohneKarte.length}):`);
+    for (const s of ohneKarte) zeilen.push(`  ${stellenText(s)}`);
+  }
+  return { karten: ergebnis, fehler, zeilen };
+}
+
+/**
+ * Die Liegezeit aller offenen Karten beider Seiten (Auftrag `liegezeit`, Plan #1528, E9). Eine
+ * ueberfaellige Karte sperrt, und eine nicht pruefbare Liegezeit gilt nicht als erfuellt (E10).
+ */
+function liegezeitPruefen(karten) {
+  const antwort = kartenAuftrag(karten, { auftrag: 'liegezeit', tage: LIEGEZEIT_TAGE });
+  if (antwort.fehler) {
+    return {
+      rot: true,
+      zeilen: [`Liegezeit nicht prüfbar — Board-Fehler: ${antwort.fehler}. Eine nicht prüfbare Liegezeit gilt nicht als erfüllt.`],
+    };
+  }
+  if (!Array.isArray(antwort.ueberfaellig)) {
+    return { rot: true, zeilen: ['Liegezeit nicht prüfbar — das Kartenmodul lieferte keine Liste.'] };
+  }
+  if (antwort.ueberfaellig.length === 0) {
+    return {
+      rot: false,
+      zeilen: [`Liegezeit: keine Karte zu durchgelassenen Überlebenden länger als ${LIEGEZEIT_TAGE} Tage offen.`],
+    };
+  }
+  return {
+    rot: true,
+    zeilen: [
+      `Überfällige Karten (${antwort.ueberfaellig.length}) — Regel (CLAUDE.md, Mutationsprüfung): Eine Karte zu `
+        + `durchgelassenen Überlebenden, die länger als ${LIEGEZEIT_TAGE} Tage offen liegt, sperrt die nächste Veröffentlichung.`,
+      ...antwort.ueberfaellig.map((k) => `  #${k.nummer} ${k.titel} — angelegt am ${String(k.angelegt).slice(0, 10)}`),
+    ],
+  };
+}
+
+/** Der Durchlass je Unterkommando und Seite, unversioniert unter `.claude/` (Plan #1528, E11). */
+function durchlassPfad(wurzel) {
+  return join(wurzel, '.claude', 'mutationsdurchlass.json');
+}
+
+/**
+ * Der Block fuer den Abschlussbericht von `push main` und derselbe Inhalt in der Durchlassdatei.
+ * Ein gescheitertes Schreiben der Datei aendert das Urteil nicht — die Karten tragen die Maengel,
+ * der Block steht in der Ausgabe —, wird aber im Block genannt.
+ */
+function durchlassMelden({ wurzel, git, jetzt, kommando, seite, quote, sperrschwelle, stellen, karten }) {
+  const titel = kommando === 'aenderung' ? 'Änderungsprüfung' : 'Vollauf';
+  const block = [
+    'Für den Abschlussbericht von push main:',
+    `- ${titel} ${seite}: Quote ${prozentText(quote.toFixed(2))} % (Ziel ${ZIEL} %, Sperrschwelle `
+      + `${prozentText(sperrschwelle)} %), ${anzahlText(stellen.length, 'überlebende Stelle', 'überlebende Stellen')} durchgelassen`,
+    ...stellen.map((s) => `- durchgelassen: ${stellenText(s)}`),
+    ...karten.map((k) => `- ${kartenText(k)}`),
+  ];
+  const bisher = jsonLesen(durchlassPfad(wurzel));
+  const inhalt = {
+    ...(bisher && typeof bisher === 'object' && !Array.isArray(bisher) ? bisher : {}),
+    [`${kommando} ${seite}`]: {
+      stand: standLesen(git),
+      datum: new Date(jetzt()).toISOString(),
+      quote,
+      sperrschwelle,
+      stellen: stellen.map(({ datei, zeile, mutator, ersetzung }) => ({ datei, zeile, mutator, ersetzung })),
+      karten,
+    },
+  };
+  try {
+    writeFileSync(durchlassPfad(wurzel), `${JSON.stringify(inhalt, null, 2)}\n`);
+  } catch (err) {
+    block.push(`- Die Datei ${durchlassPfad(wurzel)} ließ sich nicht schreiben: ${err.message}`);
+  }
+  return block;
 }
 
 // --- Lauf -------------------------------------------------------------------
@@ -1214,12 +1478,12 @@ function jsonLesen(pfad) {
 
 export const ZUORDNUNG_PFAD = 'scripts/mutationszuordnung.json';
 
-function ohneZuordnungMeldung(tests) {
-  const zeilen = ['Mutationsprüfung — Änderungsprüfung angehalten, kein Werkzeuglauf.', ''];
+function ohneZuordnungMeldung(tests, kopfzeile, begruendung) {
+  const zeilen = [kopfzeile, ''];
   for (const pfad of tests) zeilen.push(`  geänderter Test ohne zuordenbare Quelle: ${pfad}`);
   zeilen.push('');
   zeilen.push(`Eintrag in ${ZUORDNUNG_PFAD} ergänzen oder den Test nach der Quelle benennen.`);
-  zeilen.push('Ohne Zuordnung müsste die ganze Seite laufen, und das dauert länger als eine Paketrunde.');
+  zeilen.push(begruendung);
   zeilen.push('-> rot');
   return `${zeilen.join('\n')}\n`;
 }
@@ -1373,13 +1637,17 @@ function fehlenderBericht(teile, ergebnis) {
 }
 
 /**
- * Der Vollauf einer Seite: der volle Umfang des Werkzeugs, die Schwelle je Seite und die
- * Gedaechtnisdatei. Der Rueckgabewert des Werkzeugs selbst wird wie in der Aenderungspruefung nicht
- * uebernommen — geurteilt wird ueber den Bericht: Im Backend haelt das Profil an seiner eigenen
- * Marke schon an, und ein durchgereichter Exitcode sagte dann zweimal dasselbe, aber ohne Zahl.
+ * Der Vollauf einer Seite: der volle Umfang des Werkzeugs, die Schwelle und die Gedaechtnisdatei.
+ * Das Frontend misst je Ausschnitt gegen `SCHWELLEN`, das Backend wie die Aenderungspruefung gegen
+ * die Sperrschwelle, mit Altlast-Vermerk als getoetet (Issue #1532). Der Rueckgabewert des
+ * Werkzeugs selbst wird nicht uebernommen — geurteilt wird ueber den Bericht.
  */
-function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, beginn, vollauf, stufe, schwelle }) {
+function vollaufLaufen({
+  wurzel, seite, bereich, starte, git, ausgabe, liesDatei, jetzt, beginn, vollauf, stufe, schwelle, sperrschwelle, karten,
+}) {
   let mutanten;
+  let quellen = null;
+  let liegezeit = null;
   if (seite === 'frontend') {
     const mutate = bereich.vollaufMutate.flatMap(klammernAufloesen);
     const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, args: strykerArgumente(mutate) });
@@ -1390,15 +1658,19 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
     mutanten = strykerMutanten(bericht);
   } else {
     const { ergebnis, xml } = pitLaufen({ wurzel, starte, args: pitVollaufArgumente() });
+    // Die Liegezeit gilt unabhaengig vom PIT-Lauf (E9): Auch ein Lauf ohne Bericht nennt sie.
+    liegezeit = liegezeitPruefen(karten);
     if (xml === null) {
-      ausgabe(fehlenderBericht(PIT_BERICHT_TEILE, ergebnis));
+      ausgabe(`${fehlenderBericht(PIT_BERICHT_TEILE, ergebnis)}\n${liegezeit.zeilen.join('\n')}\n`);
       return 1;
     }
     mutanten = pitMutanten(xml);
+    quellen = quellenLesen(mutanten, liesDatei);
   }
 
   const gemessen = bereich.ausschnitte.filter((a) => bereich.gemessen.includes(a.name));
-  const ausgewertet = vollaufAuswerten(mutanten, gemessen);
+  const ausgewertet = vollaufAuswerten(mutanten, gemessen, quellen);
+  const grenze = seite === 'backend' ? sperrschwelle : schwelle;
   const { zaehlung, ueberlebende } = ausgewertet;
   const quote = quoteAus(zaehlung);
   const dauerMs = jetzt() - beginn;
@@ -1410,7 +1682,7 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
     ? haltBestimmen({
       ausschnitte: ausgewertet.ausschnitte, schwelle, erstmalsVorher, heute: new Date(jetzt()).toISOString().slice(0, 10),
     })
-    : { haltende: quote >= schwelle ? [] : [seite] };
+    : { haltende: quote >= grenze ? [] : [seite] };
   // Auch ein an der Schwelle gescheiterter Lauf hinterlaesst die Datei: Sein Ergebnis ist der
   // Stand, gegen den die naechste Aenderungspruefung vergleicht — ihn wegzuwerfen, weil er rot ist,
   // nahm der vierten Bedingung des Altlast-Vermerks genau dann die Grundlage, wenn sie gebraucht wird.
@@ -1430,6 +1702,17 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
     ...(mehrere ? { ausschnitte: ausgewertet.ausschnitte.map((a) => gedaechtnisAusschnitt(a, halt)) } : {}),
   });
 
+  // Karten nur aus dem Backend-Vollauf (Review-Fund 3 zu #1528): Im Frontend legt Manne je Ausschnitt
+  // unter 80 % selbst eine an. Im Backend auch fuer alte Luecken, ab dann gilt die Frist (Fund 4).
+  const durchgelassen = seite === 'backend' && halt.haltende.length === 0
+    ? ueberlebende.filter((m) => !m.altlast)
+    : [];
+  const geschrieben = durchgelassen.length > 0
+    ? kartenSchreiben({ karten, herkunft: `Vollauf ${seite}`, stellen: durchgelassen })
+    : null;
+  const gruen = halt.haltende.length === 0 && ausgewertet.ohneAusschnitt.length === 0 && !fehler
+    && !geschrieben?.fehler && !liegezeit?.rot;
+
   ausgabe(meldungBauen({
     kommando: 'vollauf',
     seite,
@@ -1441,13 +1724,20 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
     vollauf,
     stufe,
     quote,
-    schwelle,
+    schwelle: seite === 'backend' ? null : schwelle,
+    sperrschwelle: seite === 'backend' ? sperrschwelle : null,
     ausschnittsBericht: mehrere
       ? ausschnittsZeilen({ ausschnitte: ausgewertet.ausschnitte, halt, schwelle, quote, ohneAusschnitt: ausgewertet.ohneAusschnitt })
       : null,
+    kartenBericht: [...(geschrieben?.zeilen ?? []), ...(liegezeit?.zeilen ?? [])],
     schluss: fehler ?? undefined,
+    abschluss: gruen && geschrieben
+      ? durchlassMelden({
+        wurzel, git, jetzt, kommando: 'vollauf', seite, quote, sperrschwelle, stellen: durchgelassen, karten: geschrieben.karten,
+      })
+      : [],
   }));
-  return halt.haltende.length === 0 && ausgewertet.ohneAusschnitt.length === 0 && !fehler ? 0 : 1;
+  return gruen ? 0 : 1;
 }
 
 /** Ein Ausschnitt in der Gedaechtnisdatei; `erstmals80` traegt nur ein Bestandsausschnitt (E7). */
@@ -1464,7 +1754,8 @@ function gedaechtnisAusschnitt(a, halt) {
 
 /**
  * Ein Lauf, vollstaendig ueber `umgebung` steuerbar: `cwd` (Projektwurzel), `git` (Aufruf mit
- * Rueckgabe wie spawnSync), `starte` (Mutationswerkzeug), `ausgabe` (Schreiben) und `jetzt` (Uhr).
+ * Rueckgabe wie spawnSync), `starte` (Mutationswerkzeug), `ausgabe` (Schreiben), `jetzt` (Uhr) und
+ * `karten` (Auftrag ans Kartenmodul → Antwort, synchron; Vorgabe ist der Kindprozess).
  * Rueckgabe ist der Exitcode.
  */
 export function laufen(argv, umgebung = {}) {
@@ -1482,6 +1773,7 @@ export function laufen(argv, umgebung = {}) {
   const git = umgebung.git ?? ((...args) => spawnSync('git', args, { cwd: wurzel, encoding: 'utf-8' }));
   const starte = umgebung.starte
     ?? ((befehl, args, optionen) => spawnSync(befehl, args, { encoding: 'utf-8', ...optionen }));
+  const karten = umgebung.karten ?? kartenProzess(wurzel);
   const beginn = jetzt();
 
   const [kommando, seite, ...rest] = argv;
@@ -1521,14 +1813,19 @@ export function laufen(argv, umgebung = {}) {
   const config = jsonLesen(join(wurzel, '.claude', 'workflow.config.json')) ?? {};
   const vollauf = jsonLesen(vollaufPfad(wurzel, seite));
   const stufe = stufeAus(config, `mutationspruefung.mjs ${kommando} ${seite}`, stufeArgument);
-  // Ueber `umgebung.schwellen` ueberschreibbar wie `git` und `starte`: Ein Nachweis an einer
-  // kuenstlich angehobenen Schwelle braucht sonst einen zweiten halbstuendigen Vollauf.
+  // Ueber `umgebung.schwellen` (Frontend) und `umgebung.sperrschwelle` (Aenderungspruefung und
+  // Backend-Vollauf) ueberschreibbar wie `git` und `starte`: Ein Nachweis an einer kuenstlich
+  // angehobenen Schwelle braucht sonst einen zweiten halbstuendigen Vollauf.
   const schwelle = (umgebung.schwellen ?? SCHWELLEN)[seite];
+  const sperrschwelle = umgebung.sperrschwelle ?? SPERRSCHWELLE;
 
   if (kommando === 'vollauf') {
     return vollaufLaufen({
-      wurzel, seite, bereich, starte, git, ausgabe, jetzt, beginn, vollauf, stufe, schwelle,
+      wurzel, seite, bereich, starte, git, ausgabe, liesDatei, jetzt, beginn, vollauf, stufe, schwelle, sperrschwelle, karten,
     });
+  }
+  if (kommando === 'zuordnung') {
+    return zuordnungPruefen({ wurzel, seite, bereich, git, ausgabe, existiert, vollauf });
   }
 
   const { anker, vollerUmfang, satz } = ankerBestimmen(git, config.mainBranch ?? HAUPTZWEIG_VORGABE);
@@ -1544,7 +1841,11 @@ export function laufen(argv, umgebung = {}) {
   // weit laenger als eine Paketrunde (80 min am 2026-09-28, #1275), die Abhilfe ist eine Zeile.
   // Das Backend weicht auf die ganze Seite aus (Issue #1308, HALT_OHNE_ZUORDNUNG).
   if (gemessen.ohneZuordnung.length > 0 && HALT_OHNE_ZUORDNUNG[seite]) {
-    ausgabe(ohneZuordnungMeldung(gemessen.ohneZuordnung));
+    ausgabe(ohneZuordnungMeldung(
+      gemessen.ohneZuordnung,
+      'Mutationsprüfung — Änderungsprüfung angehalten, kein Werkzeuglauf.',
+      'Ohne Zuordnung müsste die ganze Seite laufen, und das dauert länger als eine Paketrunde.',
+    ));
     return 1;
   }
 
@@ -1575,7 +1876,7 @@ export function laufen(argv, umgebung = {}) {
   // Ausstiege dauern Sekunden, und der Median maesse sonst sie statt der Laeufe (Issue #1280).
   const code = aenderungMitWerkzeug({
     wurzel, seite, starte, git, ausgabe, liesDatei, jetzt, beginn, anker, vollerUmfang, stand, gemessen,
-    beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung,
+    beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung, sperrschwelle, karten,
   });
   dauerProtokollieren({
     wurzel, seite, datum: new Date(beginn).toISOString(), dauerMs: jetzt() - beginn, ausgabe,
@@ -1583,9 +1884,40 @@ export function laufen(argv, umgebung = {}) {
   return code;
 }
 
+/**
+ * Die Zuordnungspruefung beim Kartenabschluss (Issue #1522, Plan #1521 E4–E6): Anker ist `HEAD`,
+ * also genau die noch nicht committete Aenderung der Karte samt ungetrackter Dateien. Sie haelt auf
+ * BEIDEN Seiten an und liest `HALT_OHNE_ZUORDNUNG` nicht — die Konstante steuert nur das Ausweichen
+ * der Aenderungspruefung an der Push-Stufe, und dort bleibt das Backend unveraendert (AK 3). Kein
+ * Werkzeuglauf, kein Dauerprotokoll, keine Gedaechtnisdatei.
+ */
+function zuordnungPruefen({ wurzel, seite, bereich, git, ausgabe, existiert, vollauf }) {
+  const geaendert = geaenderteDateien(git, 'HEAD').alle;
+  const gemessen = beruehrung({
+    geaendert,
+    bereich,
+    zuordnung: zuordnungAusVollauf(vollauf),
+    festeZuordnung: festeZuordnungLesen(wurzel),
+    existiert,
+  });
+  if (gemessen.ohneZuordnung.length > 0) {
+    ausgabe(ohneZuordnungMeldung(
+      gemessen.ohneZuordnung,
+      `Mutationsprüfung — Zuordnungsprüfung ${seite}`,
+      'Beim Abschluss einer Karte muss jeder geänderte Test einer Quelle zuzuordnen sein (Issue #1515).',
+    ));
+    return 1;
+  }
+  const tests = geaendert.filter((pfad) => istTestdatei(pfad) && bereich.istSeitenTest(pfad)
+    && !bereich.testAusserhalb?.(pfad));
+  ausgabe(`Mutationsprüfung — Zuordnungsprüfung ${seite}: ${tests.length} geänderte Testdateien geprüft, `
+    + 'jede ist einer Quelle zugeordnet.\n');
+  return 0;
+}
+
 function aenderungMitWerkzeug({
   wurzel, seite, starte, git, ausgabe, liesDatei, jetzt, beginn, anker, vollerUmfang, stand, gemessen,
-  beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung,
+  beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung, sperrschwelle, karten,
 }) {
   let mutanten;
   let quellen;
@@ -1606,22 +1938,49 @@ function aenderungMitWerkzeug({
     quellen = quellenLesen(mutanten, liesDatei);
   }
 
+  // Gezaehlt wird nur in beruehrten Dateien des Pruefbereichs: Eine geaenderte Zeile in einem noch
+  // nicht aufgenommenen Ausschnitt gehoert nicht zur Bezugsmenge (Issue #1279).
+  const istBeruehrt = (datei) => gemessen.ganzeSeite || beruehrt.has(datei);
+  const zeileGeaendert = zeileGeaendertLeser(git, vollerUmfang ? null : anker, stand.ungetrackt);
+  const testBeruehrt = new Set(gemessen.testBeruehrt ?? []);
   const ausgewertet = auswerten({
     mutanten,
     quellen,
-    istBeruehrt: (datei) => gemessen.ganzeSeite || beruehrt.has(datei),
-    zeileGeaendert: zeileGeaendertLeser(git, vollerUmfang ? null : anker, stand.ungetrackt),
+    zaehlt: bezugsmengeLeser({
+      zeileGeaendert: (datei, zeile) => istBeruehrt(datei) && zeileGeaendert(datei, zeile),
+      testBeruehrt: (datei) => gemessen.ganzeSeite || testBeruehrt.has(datei),
+      vollaufStellen: vollaufStellenAus(vollauf),
+    }),
+    zeileGeaendert,
     dateiGeaendert: (pfad) => vollerUmfang || geaendert.has(pfad),
     vollauf,
+    sperrschwelle,
   });
+
+  // Karten nur fuer die Bezugsmenge: Alte Luecken ausserhalb der geaenderten Zeilen erscheinen hier
+  // nur als Zahl, sie erfasst der Backend-Vollauf (Plan #1528, E14).
+  const durchgelassen = ausgewertet.durchgelassen;
+  const geschrieben = durchgelassen.length > 0
+    ? kartenSchreiben({ karten, herkunft: `Änderungsprüfung ${seite}`, stellen: durchgelassen })
+    : null;
+  const gruen = ausgewertet.haltende.length === 0 && !geschrieben?.fehler;
 
   ausgabe(meldungBauen({
     ...grundmeldung,
     ueberlebende: ausgewertet.ueberlebende,
     zaehlung: ausgewertet.zaehlung,
+    quote: ausgewertet.quote,
+    sperrschwelle,
     dauerMs: jetzt() - beginn,
+    kartenBericht: geschrieben?.zeilen ?? [],
+    abschluss: gruen && geschrieben
+      ? durchlassMelden({
+        wurzel, git, jetzt, kommando: 'aenderung', seite, quote: ausgewertet.quote, sperrschwelle,
+        stellen: durchgelassen, karten: geschrieben.karten,
+      })
+      : [],
   }));
-  return ausgewertet.haltende.length > 0 ? 1 : 0;
+  return gruen ? 0 : 1;
 }
 
 const direktAufgerufen = process.argv[1]

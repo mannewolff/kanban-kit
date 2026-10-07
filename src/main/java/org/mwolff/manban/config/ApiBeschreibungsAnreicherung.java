@@ -59,6 +59,7 @@ class ApiBeschreibungsAnreicherung implements OperationCustomizer, OpenApiCustom
       "Angemeldet, aber nicht berechtigt: falsche Zugangsart für diesen Pfad (etwa ein"
           + " board-gebundenes Token außerhalb von /api/kanban/**) oder das verlangte Recht fehlt.";
 
+  private static final String TYP_STRING = "string";
   private static final Pattern MAJOR_MINOR = Pattern.compile("(\\d+)\\.(\\d+)");
 
   @Override
@@ -156,17 +157,18 @@ class ApiBeschreibungsAnreicherung implements OperationCustomizer, OpenApiCustom
                 + " Validierungs- und feldbezogenen Fehlern ergänzt um fieldErrors.")
         .addProperty(
             "type",
-            feld("string", "Kennung der Fehlerart (URI); ohne eigene Art about:blank.")
+            feld(TYP_STRING, "Kennung der Fehlerart (URI); ohne eigene Art about:blank.")
                 .format("uri"))
-        .addProperty("title", feld("string", "Kurzbezeichnung der Fehlerart."))
+        .addProperty("title", feld(TYP_STRING, "Kurzbezeichnung der Fehlerart."))
         .addProperty("status", feld("integer", "HTTP-Statuscode.").format("int32"))
-        .addProperty("detail", feld("string", "Lesbare Erklärung dieses Fehlers."))
+        .addProperty("detail", feld(TYP_STRING, "Lesbare Erklärung dieses Fehlers."))
         .addProperty(
-            "instance", feld("string", "Pfad der Anfrage, die den Fehler auslöste.").format("uri"))
+            "instance",
+            feld(TYP_STRING, "Pfad der Anfrage, die den Fehler auslöste.").format("uri"))
         .addProperty(
             "fieldErrors",
             feld("object", "Nur bei feldbezogenen Fehlern: Feldname → Meldung.")
-                .additionalProperties(feld("string", "Meldung zum Feld.")));
+                .additionalProperties(feld(TYP_STRING, "Meldung zum Feld.")));
   }
 
   /**

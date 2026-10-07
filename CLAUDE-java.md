@@ -168,35 +168,45 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
 ### 5.5 Mutationsprüfung der Backend-Seite (Issue #1104)
 
 ```bash
+node scripts/mutationspruefung.mjs zuordnung backend   # je Paket: geänderte Tests ohne Zuordnung, Anker HEAD
 node scripts/mutationspruefung.mjs aenderung backend   # beim Push über den Batch, Stufe push
-node scripts/mutationspruefung.mjs vollauf backend     # an der Push-Stufe, Schwelle 100 %
+node scripts/mutationspruefung.mjs vollauf backend     # an der Push-Stufe, Sperrschwelle 80 %
 ```
 
-Beide stehen als `buildChecks` in `.claude/workflow.config.json`, beide an der Stufe `push`.
+Alle drei stehen als `buildChecks` in `.claude/workflow.config.json`: die Zuordnungsprüfung an der
+Paketstufe, die anderen beiden an der Stufe `push`.
 
 **Die Änderungsprüfung** verengt PIT über zwei Properties des Profils `pit` in der `pom.xml`:
 
 - `pit.targetClasses` — der Prüfbereich. Default ist der volle Bereich
   (`org.mwolff.manban.*.application.*`, `*.domain.*`, `config.*`, `ratelimit.web.*`); der Treiber
   setzt `-Dpit.targetClasses=<berührte Klassen>`.
-- `pit.marke` — die Werkzeugschwelle (`mutationThreshold`), Default `100`. Die Änderungsprüfung
-  setzt `-Dpit.marke=0`: Der Halt kommt aus dem Rückgabewert des Treibers, nicht aus PIT, weil ein
-  Altlast-Vermerk nicht anhalten, aber mitzählen soll. Der Vollauf lässt die Marke stehen.
+- `pit.marke` — die Werkzeugschwelle (`mutationThreshold`), Default `100` als Ziel für Handläufe mit
+  `-Ppit`. Änderungsprüfung **und Vollauf** setzen `-Dpit.marke=0`: Das Urteil kommt allein aus dem
+  Bericht über den Rückgabewert des Treibers, nicht aus PIT, weil PIT keinen Altlast-Vermerk kennt.
 
-Ein überlebender Mutant in einer berührten Klasse hält an; Überlebende anderswo erscheinen nur als
-Zahl. `--incremental` wird nirgends benutzt — der Vollauf darf nicht auf gespeicherten Urteilen ruhen.
+**Sperrschwelle statt Ziel (Issue #1516, Ausnahme von W3 in CLAUDE.md).** 100 % ist das Ziel, gesperrt
+wird erst unter der Sperrschwelle von 80 %. Die Änderungsprüfung zählt nur ihre Bezugsmenge: Mutanten in
+gegenüber dem Anker geänderten Zeilen und in Klassen, deren prüfender Test sich geändert hat — dort ohne
+die Stellen, die schon im letzten Vollauf überlebten. Überlebende außerhalb erscheinen nur als Zahl. Der
+Vollauf urteilt über alle Mutanten der Seite mit derselben Sperrschwelle. Lässt ein Lauf Überlebende
+durch, entsteht je Datei eine Karte `Mutations-Überlebende in <Pfad>` im Backlog (eine offene wird
+ergänzt); liegt eine solche Karte länger als 7 Tage offen, sperrt sie die nächste Veröffentlichung.
+Der Vollauf prüft diese Liegezeit bei jedem Lauf für beide Seiten. `--incremental` wird nirgends benutzt — der Vollauf darf nicht auf gespeicherten Urteilen ruhen.
 Findet die Änderungsprüfung für einen geänderten Test keine Quelle (Name, letzter Vollauf oder
 [`scripts/mutationszuordnung.json`](scripts/mutationszuordnung.json)), weicht sie im Backend auf die
-ganze Seite aus — rund 2 Minuten —, statt anzuhalten; der sofortige Halt gilt nur fürs Frontend
-(Issue #1308, `HALT_OHNE_ZUORDNUNG`).
+ganze Seite aus — rund 2 Minuten —, statt anzuhalten (Issue #1308, `HALT_OHNE_ZUORDNUNG`). Ein
+Backend-Test ohne Zuordnung hält stattdessen schon beim Kartenabschluss an: `zuordnung backend` prüft
+die seit dem Anker `HEAD` geänderten Tests mit derselben Zuordnung, ohne PIT zu starten (Issue #1522).
 
 **Ausnahmen, zwei Formen:**
 
 - `@ExcludeFromJacocoGeneratedReport` **je Einheit** (Methode) — die gröbere Form, sie wirkt schon bei
   der Erzeugung: Solche Mutanten entstehen gar nicht erst. Es gelten die Regeln aus §5.4.
 - Der **Altlast-Vermerk** an der Zeile des Mutanten:
-  `// Mutations-Altlast: <Grund> (#<Issue>, <JJJJ-MM-TT>)`. Die Begründung ist Pflicht. Er gibt die
-  Änderungsprüfung frei, **zählt aber weiter mit**, und er trägt nur, wenn alle vier Bedingungen
+  `// Mutations-Altlast: <Grund> (#<Issue>, <JJJJ-MM-TT>)`. Die Begründung ist Pflicht. Ein
+  Überlebender mit tragendem Vermerk **zählt wie ein getöteter und bekommt keine Karte**; die
+  Gedächtnisdatei führt die Stelle trotzdem weiter. Er trägt nur, wenn alle vier Bedingungen
   zugleich erfüllt sind:
   1. Der Vermerk steht an der Stelle des Überlebenden.
   2. Die Zeile des Mutanten ist gegenüber dem Anker unverändert.
@@ -204,7 +214,8 @@ ganze Seite aus — rund 2 Minuten —, statt anzuhalten; der sofortige Halt gil
   4. Der Mutant hat auch im letzten Vollauf überlebt (Gedächtnisdatei `.claude/mutationsvollauf-backend.json`)
      — sonst ist er keine Altlast, sondern neu.
 
-  Welche Bedingung verletzt ist, nennt die Meldung am haltenden Mutanten.
+  Welche Bedingung verletzt ist, nennt die Meldung am Mutanten. Im Vollauf genügt der Vermerk an der
+  Stelle, weil es dort keinen Anker gibt.
 
 ---
 
@@ -257,6 +268,7 @@ ganze Seite aus — rund 2 Minuten —, statt anzuhalten; der sofortige Halt gil
 Die API-Übersicht (Swagger UI in der Administration) entsteht aus dem Code; eine getrennt gepflegte Fassung gibt es nicht (Issue #1411, Plan #1400).
 
 - **Jeder neue oder geänderte Endpunkt** trägt `@Operation` (Zweck, Begriffe ohne Kit-Wissen erklärt) und `@ApiResponse` für jede mögliche Antwort einschließlich der Fehlerfälle. `OpenApiIT` bricht ab, wenn eine Angabe fehlt.
+- **Der Vertragsvergleich** (`OpenApiIT`) läuft schon beim Kartenabschluss (Paketlauf mit `-Dit.test=OpenApiIT`). Seine Meldung nennt die abweichenden verlässlichen Aufrufe als `METHODE Pfad`, auch bei reinen Schema-Änderungen (Issue #1523).
 - **Stabilität und Recht** stehen in [`@ApiVertrag`](src/main/java/org/mwolff/manban/common/web/api/ApiVertrag.java). Ohne die Annotation gilt ein Aufruf als änderbar.
 - **Ein verlässlicher Aufruf ändert sich nur über Abkündigung:** zuerst `@ApiVertrag(abgekuendigtSeit = "x.y")`, Änderung oder Wegfall frühestens eine Minor-Version später. Dazu gehören immer:
   - der nachgezogene Vertragsschnappschuss `src/test/resources/openapi/verlaessliche-aufrufe.json`,

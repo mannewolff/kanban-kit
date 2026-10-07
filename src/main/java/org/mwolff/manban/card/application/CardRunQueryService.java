@@ -194,6 +194,10 @@ public class CardRunQueryService {
    */
   @Transactional(readOnly = true)
   public List<LaufKarteView> cardsByIds(Collection<Long> ids) {
+    return karten(ids);
+  }
+
+  private List<LaufKarteView> karten(Collection<Long> ids) {
     if (ids.isEmpty()) {
       return List.of();
     }
@@ -240,7 +244,7 @@ public class CardRunQueryService {
    */
   @Transactional(readOnly = true)
   public List<LaufKarteView> derivedCards(long cardId) {
-    return cardsByIds(cards.findByDerivedFrom(cardId).stream().map(Card::requireId).toList());
+    return karten(cards.findByDerivedFrom(cardId).stream().map(Card::requireId).toList());
   }
 
   /**

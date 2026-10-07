@@ -104,7 +104,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 ```bash
 # Backend
-mvn -Dskip.frontend=true -DskipITs -Djacoco.skip=true verify   # je Paket: Kompilieren, Unit-Tests, statische Analyse
+mvn -Dskip.frontend=true -Djacoco.skip=true -Dit.test=OpenApiIT verify   # je Paket: Kompilieren, Unit-Tests, statische Analyse, Vertragsvergleich
 mvn verify                              # beim Push: dazu Integrationstests, 100-%-Abdeckung, Doku-Seite
 
 # Frontend
@@ -121,10 +121,12 @@ node --test scripts/*.test.mjs          # Projektskripte, darunter scripts/mutat
 # Doku
 npm --prefix docs-site ci --no-audit --no-fund && npm --prefix docs-site run build   # Doku-Seite (VitePress), Bereich doku
 
-# Mutationsprüfung (Bereiche frontend bzw. backend; Pflicht an der Push-Stufe)
+# Mutationsprüfung (Bereiche frontend bzw. backend)
+node scripts/mutationspruefung.mjs zuordnung frontend  # je Paket: geänderte Tests ohne Zuordnung, ohne Werkzeuglauf
+node scripts/mutationspruefung.mjs zuordnung backend   # je Paket: dasselbe fürs Backend
 node scripts/mutationspruefung.mjs aenderung frontend   # Stufe push: Stryker über die geänderten Dateien des Batches
 node scripts/mutationspruefung.mjs aenderung backend    # Stufe push: PIT über die geänderten Klassen des Batches
-node scripts/mutationspruefung.mjs vollauf backend      # Stufe push: PIT über den ganzen Bereich, Schwelle 100 %
+node scripts/mutationspruefung.mjs vollauf backend      # Stufe push: PIT über den ganzen Bereich, Sperrschwelle 80 %
 
 # Mutationsprüfung von Hand (etwa wöchentlich — keine Pflichtprüfung, Issue #1344)
 node scripts/mutationspruefung.mjs vollauf frontend     # Handlauf: Stryker über den ganzen Bereich, Schwelle 80 %
@@ -132,9 +134,12 @@ node scripts/mutationspruefung.mjs vollauf frontend     # Handlauf: Stryker übe
 
 **Je Paket nach Bereichen eingegrenzt.** Die Checks stehen in `.claude/workflow.config.json` (`buildChecks`)
 mit Bereichen aus `checkAreas`: `backend` (`src/**`, `pom.xml`, `config/**`) →
-`mvn -Dskip.frontend=true -DskipITs -Djacoco.skip=true verify` (Kompilieren, Unit-Tests, Spotless,
-Checkstyle, PMD, SpotBugs — ohne Integrationstests, Abdeckung und Frontend-/Doku-Build);
-`frontend` (`frontend/**`, `CLAUDE-design.md`) → die drei npm-Checks; `cli` (`cli/**`) →
+`mvn -Dskip.frontend=true -Djacoco.skip=true -Dit.test=OpenApiIT verify` (Kompilieren, Unit-Tests, Spotless,
+Checkstyle, PMD, SpotBugs und der Vertragsvergleich `OpenApiIT` — ohne die übrigen Integrationstests,
+Abdeckung und Frontend-/Doku-Build) sowie `node scripts/mutationspruefung.mjs zuordnung backend`. Der
+Paketlauf des Backends setzt einen laufenden Docker-Daemon voraus (zwei Container: Postgres, SeaweedFS),
+auch nachts. `frontend` (`frontend/**`, `CLAUDE-design.md`) → die drei npm-Checks und
+`node scripts/mutationspruefung.mjs zuordnung frontend`; `cli` (`cli/**`) →
 `node --test cli/tbx.test.mjs`; `scripts` (`scripts/**`) → `node --test scripts/*.test.mjs`; `doku`
 (`docs/**`, `docs-site/**`, `README.md`) → der Bau der Doku-Seite (Issue #1361), damit ein Doku-Fehler schon
 beim Abschluss eines Pakets auffällt und nicht erst beim Push. Das volle `mvn verify` (Bereiche `backend` und `doku`, inklusive
@@ -142,19 +147,51 @@ Integrationstests, 100-%-Abdeckung und Doku-Seite) trägt `stufe: "push"` und l�
 und `merge production` — die Abdeckungsgrenze ist ohne Integrationstests nicht zu halten, deshalb
 wandert sie mit. Beim Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine Datei
 ohne Bereich (etwa `Dockerfile`, `.github/`) fährt alle der Paketstufe. **Vor `push main` laufen alle
-Prüfungen der Paket- und Push-Stufe (elf); `merge production` wiederholt keine davon.** Die Config ändert nur Manne.
+Prüfungen der Paket- und Push-Stufe (dreizehn); `merge production` wiederholt keine davon.** Jeder Eintrag
+läuft zu Ende, auch nach einem Rot: Alle Einträge tragen `gleichzeitig`, und `KIT_CHECKS_GLEICHZEITIG=1`
+hält sie nacheinander. Die Config ändert nur Manne.
 
 **Mutationsprüfung (Issue #1104).** Die Änderungsprüfung (`aenderung`) läuft an der Push-Stufe und mutiert,
 was die Karten des Batches berühren (Anker `git merge-base HEAD origin/main`). Der Prüfbereich des
 Frontends kommt aus dem Stufenplan [`frontend/mutationsstufen.json`](frontend/mutationsstufen.json):
 Er wächst Ausschnitt für Ausschnitt, die Schwelle gilt je Ausschnitt (Einzelheiten in CLAUDE-react.md).
 
+**Ausnahme von W3: Sperrschwelle statt Ziel (Issue #1516).** Die Prozessbeschreibung des Kits sagt in
+Regel W3: „Ein Vorschlag, der … eine Schwelle senkt, hebt die Mechanik auf.“ Für die Mutationsprüfung
+beim Veröffentlichen gilt davon abweichend: **100 % ist das Ziel, gesperrt wird erst unter der
+Sperrschwelle von 80 %.** Grund: Bei jedem Überlebenden anzuhalten sperrte die Veröffentlichung auch für
+alte Lücken, die mit der fertigen Arbeit nichts zu tun hatten — vier von neun Abbrüchen seit dem
+2026-09-27, einmal bei 99,3 %. Die Mängel gehen trotzdem nicht verloren, sie werden zu Karten. Diese
+Ausnahme steht hier und nicht in `.claude/CLAUDE-workflow.md`, weil jene Datei eine unversionierte
+Kit-Kopie ist; nach „Verhältnis der Guides“ hat sie Vorrang vor W3. Im Einzelnen:
+
+- **Bezugsmenge der Änderungsprüfung:** Gezählt werden die Mutanten in Zeilen, die seit dem Anker
+  geändert wurden, und in Dateien, deren prüfender Test sich geändert hat (testberührte Dateien) — dort
+  ohne die Stellen, die schon im letzten Vollauf überlebten. Alte Lücken außerhalb erscheinen nur als
+  Zahl und zählen nicht.
+- **Quote je Seite:** Änderungsprüfung und Backend-Vollauf messen je eine Quote, Backend und Frontend
+  getrennt. Ab 80 % läuft die Veröffentlichung durch, darunter sperrt sie. Der Backend-Vollauf urteilt
+  mit derselben Sperrschwelle; der Frontend-Vollauf bleibt ein Handlauf mit 80 % je Ausschnitt.
+- **Karten:** Lässt ein Lauf Überlebende durch, entsteht je Datei eine Karte
+  `Mutations-Überlebende in <Pfad>` im Backlog, die alle Stellen aufzählt; eine offene Karte derselben
+  Datei wird ergänzt, ihr Anlagedatum bleibt. Der Frontend-Vollauf legt keine Karten an. Das gilt für
+  jeden grünen Lauf des Treibers, auch für einen Handlauf.
+- **Liegezeit 7 Tage:** Liegt eine solche Karte länger als 7 Tage offen, sperrt sie die nächste
+  Veröffentlichung; die Meldung nennt Karte und Regel.
+- **Altlast-Vermerk:** Ein Überlebender mit tragendem Vermerk zählt wie ein getöteter und bekommt keine
+  Karte (Bedingungen in CLAUDE-java.md §5.5 und CLAUDE-react.md).
+- **Abschlussbericht von `push main`:** Er nennt die Einträge aus `.claude/mutationsdurchlass.json` zum
+  gepushten Commit — durchgelassene Überlebende, Quote und die neu angelegten oder ergänzten Karten.
+- **Handläufe mit Board-Zugriff** (`aenderung`, `vollauf backend`) laufen in Mannes Terminal oder über
+  `checks.mjs`: Aus einer Claude-Code-Sitzung heraus fehlt `node scripts/mutationspruefung.mjs` das
+  Netz, und ein Lauf mit Überlebenden endet dann rot.
+
 **Stufenschaltung (Issue #1280).** Der Treiber kann per `--stufe` und Dauerprotokoll
 (`.claude/mutationsdauer-<seite>.json`) zwischen `paket` und `push` schalten; die Config nutzt das nicht,
 weil die Änderungsprüfung fest an `push` steht.
-Das frühere Feld `mutationCommand` ist entfallen; PIT und Stryker laufen nur noch über den Treiber. Ein Überlebender in einer berührten Datei hält an; wie eine
+Das frühere Feld `mutationCommand` ist entfallen; PIT und Stryker laufen nur noch über den Treiber. Wie eine
 bewusst hingenommene Altlast markiert wird, steht in CLAUDE-java.md §5.5 und CLAUDE-react.md. Der
-Vollauf (`vollauf`) prüft den ganzen Bereich gegen die Schwelle (Frontend 80 %, Backend 100 %) und schreibt
+Vollauf (`vollauf`) prüft den ganzen Bereich gegen 80 % (Frontend je Ausschnitt, Backend als Sperrschwelle) und schreibt
 die Gedächtnisdatei `.claude/mutationsvollauf-<seite>.json`, aus der die Änderungsprüfung Dauer und
 Altlast-Stellen liest. Der **Backend-Vollauf** hängt wie die Änderungsprüfung an der Stufe `push`. Der
 **Frontend-Vollauf** ist keine Pflichtprüfung (Issue #1344): Er dauerte zuletzt rund 48 Minuten, und neue

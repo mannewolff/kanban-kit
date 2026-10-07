@@ -576,6 +576,73 @@ class FortschrittErmittlungTest {
     assertThat(kette.endeErreicht()).isFalse();
   }
 
+  // --- Ziel aus dem Laufstand (Issue #1529) ------------------------------------------------------
+
+  @Test
+  void zielUmsetzungOhneDurchziehenZeigtDieUmsetzung() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    stand(f, "Ziel: umsetzung", begonnen("umsetzung", p, 55), fertig("abdeckung", p, 50));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette))
+        .containsExactly(
+            Map.entry(ProgressStage.PLAN, StageState.ERREICHT),
+            Map.entry(ProgressStage.REVIEW, StageState.ERREICHT),
+            Map.entry(ProgressStage.PAKETE, StageState.ERREICHT),
+            Map.entry(ProgressStage.ABDECKUNG, StageState.ERREICHT),
+            Map.entry(ProgressStage.UMSETZUNG, StageState.LAEUFT));
+    assertThat(kette.endeErreicht()).isFalse();
+  }
+
+  @Test
+  void zielPushVorbereitetZeigtDieUmsetzung() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    stand(f, "Ziel: push-vorbereitet", fertig("abdeckung", p, 50));
+
+    assertThat(stufen(eineKette())).containsKey(ProgressStage.UMSETZUNG);
+  }
+
+  @Test
+  void zielUmsetzungImAusgewiesenenLaufGiltAuchOhneKennungImLaufstand() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    akt(p, "CREATED", um(10), START, null);
+    standVon(f, null, "Ziel: umsetzung", begonnen("umsetzung", p, 55));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsKey(ProgressStage.UMSETZUNG);
+    assertThat(kette.endeErreicht()).isFalse();
+  }
+
+  @Test
+  void zielPaketeOhneDurchziehenEndetBeiDerAbdeckung() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    stand(f, "Ziel: pakete", fertig("abdeckung", p, 50));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).doesNotContainKey(ProgressStage.UMSETZUNG);
+    assertThat(kette.endeErreicht()).isTrue();
+  }
+
+  @Test
+  void ohneZielzeileGiltWeiterDurchziehen() {
+    Karte f = anforderung(500, FortschrittErmittlung.LABEL_DURCHZIEHEN);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    stand(f, "Prüfer: 1", fertig("abdeckung", p, 50));
+
+    assertThat(stufen(eineKette())).containsEntry(ProgressStage.UMSETZUNG, StageState.LAEUFT);
+  }
+
   // --- Paketzustände -----------------------------------------------------------------------------
 
   private PackageState zustandNachBewegung(@Nullable String status, String typ) {

@@ -36,13 +36,14 @@ final class KettenAbleitung {
   /** Die Zeilen des Laufstands, aus denen der Kettenstand liest (E13). */
   private static final Pattern ZIEL_ZEILE = Pattern.compile("^Ziel: (\\S+)$");
 
-  private static final Pattern PRUEFER_ZEILE = Pattern.compile("^Prüfer: ([12])$");
+  private static final Pattern PRUEFER_ZEILE =
+      Pattern.compile("^Prüfer: ([12])$", Pattern.CANON_EQ);
   private static final Pattern GRENZE_ZEILE = Pattern.compile("^Grenze: (\\S+)$");
   private static final Pattern FERTIG_BIS = Pattern.compile("^fertig bis \\S");
 
   /** Der Wartetext des Kits an der Projektgrenze — {@code uebergangNichtFreigegeben}. */
   private static final Pattern GRENZE_WARTETEXT =
-      Pattern.compile("^wartet: Übergang .+ im Projekt nicht freigegeben");
+      Pattern.compile("^wartet: Übergang .+ im Projekt nicht freigegeben", Pattern.CANON_EQ);
 
   /**
    * Die Zeilen des Laufstands, die Daten tragen und kein Grund sind; die erste andere Zeile ist der
@@ -64,6 +65,22 @@ final class KettenAbleitung {
   /** Der Kettenstand der Karte aus dem Text ihres Laufstands. */
   static KettenStand stand(Karte karte, String laufstand) {
     return Kettenlage.aus(karte, laufstand).stand();
+  }
+
+  /**
+   * Das Ziel aus der Zeile {@code Ziel:} des Laufstands als die Station, die es markiert (Issue
+   * #1529); leer ohne Zeile oder mit unbekanntem Ziel.
+   */
+  static Optional<ProgressStage> ziel(String laufstand) {
+    return zielAus(zeilen(laufstand));
+  }
+
+  private static Optional<ProgressStage> zielAus(List<String> zeilen) {
+    return Kettenlage.gruppe(zeilen, ZIEL_ZEILE).map(ZIELE::get);
+  }
+
+  private static List<String> zeilen(String body) {
+    return body.lines().map(String::strip).filter(z -> !z.isEmpty()).toList();
   }
 
   /**
@@ -89,8 +106,8 @@ final class KettenAbleitung {
       List<StufenEintrag> eintraege) {
 
     static Kettenlage aus(Karte karte, String body) {
-      List<String> zeilen = body.lines().map(String::strip).filter(z -> !z.isEmpty()).toList();
-      ProgressStage ziel = gruppe(zeilen, ZIEL_ZEILE).map(ZIELE::get).orElse(null);
+      List<String> zeilen = zeilen(body);
+      ProgressStage ziel = zielAus(zeilen).orElse(null);
       String kopf =
           zeilen.stream()
               .filter(z -> DATENZEILEN.stream().noneMatch(z::startsWith))

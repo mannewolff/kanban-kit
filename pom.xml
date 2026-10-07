@@ -13,7 +13,7 @@
 
     <groupId>org.mwolff</groupId>
     <artifactId>manban</artifactId>
-    <version>2.23.0</version>
+    <version>2.24.0</version>
     <name>manban</name>
     <description>mannewolff Kanban Board — eigenständige, self-hostbare Trello-Alternative</description>
 
@@ -842,12 +842,13 @@
                      im Default-`verify`. -->
                 <jacoco.skip>true</jacoco.skip>
 
-                <!-- Die Schwelle als Property, damit die Änderungsprüfung
-                     (scripts/mutationspruefung.mjs) sie mit -Dpit.marke=0 abschalten kann: Dort
-                     kommt der Halt aus dem Rückgabewert des Treibers, weil ein Altlast-Vermerk
-                     nicht anhalten, aber mitzählen soll. Der Default ist die bisherige 100 —
-                     ein Aufruf ohne die Property verhält sich unverändert. Begründung der 100
-                     am <mutationThreshold> unten. -->
+                <!-- Die Schwelle als Property, damit der Treiber
+                     (scripts/mutationspruefung.mjs) sie abschalten kann: In beiden
+                     Unterkommandos (aenderung und vollauf) setzt er -Dpit.marke=0 und urteilt
+                     allein über den Bericht gegen seine Sperrschwelle, weil die Werkzeugschwelle
+                     keinen Altlast-Vermerk kennt (Plan #1528, E12). Die 100 ist das Ziel für
+                     Handläufe mit -Ppit; ein Aufruf ohne die Property hält an ihr an.
+                     Begründung der 100 am <mutationThreshold> unten. -->
                 <pit.marke>100</pit.marke>
 
                 <!-- Der Prüfbereich als Property, damit die Änderungsprüfung ihn je Lauf auf die

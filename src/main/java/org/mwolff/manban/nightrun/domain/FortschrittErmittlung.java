@@ -102,6 +102,10 @@ public final class FortschrittErmittlung {
           ProgressStage.ABDECKUNG,
           ProgressStage.UMSETZUNG);
 
+  /** Die Ziele (als markierte Station), deren Kette bis in die Umsetzung führt (Issue #1529). */
+  private static final Set<ProgressStage> ZIELE_MIT_UMSETZUNG =
+      EnumSet.of(ProgressStage.UMSETZUNG, ProgressStage.VORBEREITUNG);
+
   private static final Comparator<Karte> NACH_NUMMER = Comparator.comparingInt(Karte::number);
 
   private final Map<Long, Karte> jeId = new HashMap<>();
@@ -111,6 +115,13 @@ public final class FortschrittErmittlung {
   private final Map<Long, List<Aktivitaet>> laufAktivitaeten = new HashMap<>();
 
   private final Map<Long, List<StufenEintrag>> eintraegeJeKarte = new HashMap<>();
+
+  /**
+   * Das Ziel jeder Karte aus der Zeile {@code Ziel:} ihres Laufstands — ohne Kennungsfilter: Das
+   * Ziel steht fest, sobald die Kette beginnt, und gehört der Karte (Issue #1529).
+   */
+  private final Map<Long, ProgressStage> zielJeKarte = new HashMap<>();
+
   private final List<Karte> laufKarten = new ArrayList<>();
   private final List<Karte> unbekannteKarten = new ArrayList<>();
 
@@ -156,6 +167,8 @@ public final class FortschrittErmittlung {
           }
         });
     laufKarten.sort(NACH_NUMMER);
+    laufstaende.forEach(
+        l -> KettenAbleitung.ziel(l.body()).ifPresent(z -> zielJeKarte.putIfAbsent(l.cardId(), z)));
     laufstaende.stream()
         .filter(l -> Objects.equals(kennung(l.laufStart()), spurKennung))
         .forEach(
@@ -334,7 +347,11 @@ public final class FortschrittErmittlung {
 
   private ChainProgress ketteAus(
       Karte anforderung, @Nullable Karte plan, List<StufenEintrag> eintraege, Karte t) {
-    List<ProgressStage> weg = t.labels().contains(LABEL_DURCHZIEHEN) ? WEG_B : WEG_A;
+    // Das Ziel aus dem Laufstand entscheidet; ohne Ziel-Zeile gilt wie vor Issue #1529 das Label.
+    ProgressStage ziel = zielJeKarte.get(t.id());
+    boolean bisUmsetzung =
+        ziel == null ? t.labels().contains(LABEL_DURCHZIEHEN) : ZIELE_MIT_UMSETZUNG.contains(ziel);
+    List<ProgressStage> weg = bisUmsetzung ? WEG_B : WEG_A;
     List<PackageProgress> pakete = plan == null ? List.of() : paketeZu(plan);
     Stufenlage lage = new Stufenlage(anforderung, plan, pakete, eintraege);
     Set<ProgressStage> erreicht = EnumSet.noneOf(ProgressStage.class);

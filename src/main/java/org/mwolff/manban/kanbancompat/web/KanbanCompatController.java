@@ -56,8 +56,8 @@ import org.springframework.web.bind.annotation.RestController;
  * (E4); {@code PUT /items/{id}/dependencies} hat keinen solchen Aufrufer und bleibt änderbar. Ein
  * Vertragsschnappschuss in {@code OpenApiIT} macht jede Änderung an ihnen sichtbar.
  */
-// Die OpenAPI-Annotationen heben die Importzahl über die PMD-Schwelle von 40 (Plan #1400, E14);
-// die Ausnahme bleibt an dieser Klasse sichtbar, statt die Regel für alle anzuheben.
+// Die OpenAPI-Annotationen heben die Importzahl über die PMD-Schwelle von 40 (Plan #1400, E14).
+// Die Ausnahme bleibt an dieser Klasse sichtbar, statt die Regel für alle anzuheben.
 @SuppressWarnings("PMD.ExcessiveImports")
 @Tag(
     name = "Einliefern (Kanban-kompatibel)",

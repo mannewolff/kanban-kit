@@ -46,7 +46,8 @@ public record NachtFreigabe(
           Map.entry("ziel:umsetzung", ProgressStage.UMSETZUNG),
           Map.entry("ziel:push-vorbereitet", ProgressStage.VORBEREITUNG));
 
-  private static final Map<String, Integer> PRUEFER = Map.of("planreview:1", 1, "planreview:2", 2);
+  private static final Map<String, Integer> PRUEFER_JE_LABEL =
+      Map.of("planreview:1", 1, "planreview:2", 2);
 
   /**
    * Ob die Karte eine Kette beginnen kann: Ihr Titel beginnt mit {@code [Fachlich]} oder {@code
@@ -83,9 +84,9 @@ public record NachtFreigabe(
         plan
             ? null
             : labels.stream()
-                .filter(PRUEFER::containsKey)
+                .filter(PRUEFER_JE_LABEL::containsKey)
                 .findFirst()
-                .map(PRUEFER::get)
+                .map(PRUEFER_JE_LABEL::get)
                 .orElse(null);
     return new NachtFreigabe(
         number, titel, boardName, plan ? Startstation.PLAN : Startstation.FACHPLAN, ziel, pruefer);

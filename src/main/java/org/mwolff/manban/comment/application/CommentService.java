@@ -45,7 +45,7 @@ public class CommentService {
   /** Legt einen Kommentar ohne Laufkennung an — der Session-Weg (Plan #1423, A3). */
   @Transactional
   public CommentView create(long userId, long cardId, String body) {
-    return create(userId, cardId, body, null);
+    return anlegen(userId, cardId, body, null);
   }
 
   /**
@@ -55,6 +55,10 @@ public class CommentService {
    */
   @Transactional
   public CommentView create(long userId, long cardId, String body, @Nullable Instant laufStart) {
+    return anlegen(userId, cardId, body, laufStart);
+  }
+
+  private CommentView anlegen(long userId, long cardId, String body, @Nullable Instant laufStart) {
     long projectId = cardService.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);
     String authorName = users.findById(userId).map(UserSummary::displayName).orElse("Unbekannt");
@@ -73,7 +77,7 @@ public class CommentService {
   /** Ändert einen Kommentar ohne Laufkennung — der Session-Weg (Plan #1423, A3). */
   @Transactional
   public CommentView update(long userId, long commentId, String body) {
-    return update(userId, commentId, body, null);
+    return aendern(userId, commentId, body, null);
   }
 
   /**
@@ -82,6 +86,11 @@ public class CommentService {
    */
   @Transactional
   public CommentView update(long userId, long commentId, String body, @Nullable Instant laufStart) {
+    return aendern(userId, commentId, body, laufStart);
+  }
+
+  private CommentView aendern(
+      long userId, long commentId, String body, @Nullable Instant laufStart) {
     Comment comment = comments.findById(commentId).orElseThrow(CommentNotFoundException::new);
     permissions.require(
         userId, cardService.requireProjectId(comment.cardId()), Permission.COMMENT_UPDATE);
