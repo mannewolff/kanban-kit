@@ -65,6 +65,18 @@ export const HALT_OHNE_ZUORDNUNG = { frontend: true, backend: false };
  */
 export const VORSCHLAGSSCHWELLE = 82;
 
+/**
+ * Die Sperrschwelle der Aenderungspruefung (Plan #1528, Abschnitt "Zwei Groessen statt einer
+ * Schwelle"): Erst eine Quote darunter haelt an. 100 % bleibt das ZIEL, auf das Karten hinarbeiten
+ * — zwei Groessen, nicht eine Zahl mit `SCHWELLEN`, weil sie Verschiedenes sagen. Ueber
+ * `umgebung.sperrschwelle` ueberschreibbar wie `umgebung.schwellen`.
+ */
+export const SPERRSCHWELLE = 80;
+export const ZIEL = 100;
+
+/** So lange darf eine Karte zu durchgelassenen Ueberlebenden offen liegen, bevor sie sperrt. */
+export const LIEGEZEIT_TAGE = 7;
+
 const HAUPTZWEIG_VORGABE = 'main';
 
 /** Die beiden Stufen, auf denen die Aenderungspruefung je Seite in der Config steht (Issue #1280). */
@@ -409,6 +421,7 @@ export function zuordnungAusVollauf(inhalt) {
  */
 export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {}, existiert }) {
   const dateien = new Set();
+  const testBeruehrt = new Set();
   const ohneZuordnung = [];
   for (const pfad of geaendert) {
     if (bereich.trifft(pfad)) dateien.add(pfad);
@@ -423,11 +436,16 @@ export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {},
       continue;
     }
     for (const quelle of quellen) {
-      if (bereich.trifft(quelle)) dateien.add(quelle);
+      if (!bereich.trifft(quelle)) continue;
+      dateien.add(quelle);
+      testBeruehrt.add(quelle);
     }
   }
+  // `testBeruehrt` ist die Teilmenge, die ein geaenderter Test hereinzieht: Dort zaehlt in der
+  // Aenderungspruefung jeder Mutant, nicht nur der auf einer geaenderten Zeile (Plan #1528, E2).
   return {
     dateien: [...dateien].sort(),
+    testBeruehrt: [...testBeruehrt].sort(),
     ganzeSeite: ohneZuordnung.length > 0,
     ohneZuordnung,
   };
@@ -575,7 +593,8 @@ export function pitMutanten(xml) {
  * den Klassennamen, und `Foo` traefe `Foo$1` nicht.
  *
  * `-Dpit.marke=0` schaltet die Werkzeugschwelle ab: Der Halt kommt aus dem Rueckgabewert dieses
- * Treibers, weil ein Altlast-Vermerk nicht anhalten, aber mitzaehlen soll. Keine Historie — das
+ * Treibers, weil er nur die Bezugsmenge gegen die Sperrschwelle misst und ein Altlast-Vermerk als
+ * getoetet zaehlt (Plan #1528). Keine Historie — das
  * Bestandspaket `pitest-entry-1.25.7` bringt keine `HistoryFactory` mit, ein Lauf mit
  * `withHistory` braeche ab.
  *
@@ -668,76 +687,107 @@ export function vollaufSchluessel(datei, zeile, mutator) {
 
 // --- Auswertung -------------------------------------------------------------
 
-/**
- * Die Entscheidung ueber Anhalten oder Durchlassen, fuer beide Seiten gleich.
- *
- * - Ueberlebende in BERUEHRTEN Dateien halten an (Kriterium 2).
- * - Ueberlebende anderswo halten nicht an und erscheinen nicht als Grund (Kriterium 4); sie
- *   stehen nur als Zahl in der Zaehlung, damit ein verengter Lauf nicht wie ein vollstaendiger
- *   aussieht.
- * - Ein Altlast-Vermerk gibt die Aenderungspruefung frei, ZAEHLT ABER WEITER MIT (Kriterium 6) —
- *   sonst verschwaende die Schuld aus der Statistik. Er greift nur, wenn ALLE vier Bedingungen
- *   zugleich erfuellt sind; die verletzte steht als `vermerkGrund` am haltenden Ueberlebenden,
- *   damit die Meldung sagen kann, warum der Vermerk diesmal nicht trug.
- */
-export function auswerten({ mutanten, quellen, istBeruehrt, zeileGeaendert, dateiGeaendert, vollauf }) {
-  const vollaufStellen = vollauf
+/** Die Stellen, die im letzten Vollauf ueberlebten, oder `null`, wenn es keine Gedaechtnisdatei gibt. */
+export function vollaufStellenAus(vollauf) {
+  return vollauf
     ? new Set((vollauf.mutanten ?? []).map((m) => vollaufSchluessel(m.datei, m.zeile, m.mutator)))
     : null;
+}
 
-  const zaehlung = { geprueft: 0, getoetet: 0, ueberlebt: 0, ausgenommen: 0, ausserhalb: 0 };
+/**
+ * Die Bezugsmenge der Aenderungspruefung (Plan #1528, E2/E3) als Frage je Mutant: Zaehlt er?
+ *
+ * - Ja, wenn seine Zeile gegenueber dem Anker geaendert ist (`zeileGeaendert`; ohne Anker und in
+ *   ungetrackten Dateien ist jede Zeile geaendert).
+ * - Ja, wenn der pruefende Test seiner Datei geaendert ist (`testBeruehrt`) — dort aber nicht, wenn
+ *   er schon im letzten Vollauf ueberlebte: Das ist eine alte Luecke, keine neue. Ohne
+ *   Gedaechtnisdatei (`vollaufStellen === null`) gibt es keine alten Luecken, dann zaehlt jeder.
+ * - Sonst nicht: Eine alte Luecke in derselben Datei sperrt die Arbeit dieser Karte nicht.
+ */
+export function bezugsmengeLeser({ zeileGeaendert, testBeruehrt, vollaufStellen }) {
+  return (mutant) => {
+    if (zeileGeaendert(mutant.datei, mutant.zeile)) return true;
+    if (!testBeruehrt(mutant.datei)) return false;
+    return !vollaufStellen?.has(vollaufSchluessel(mutant.datei, mutant.zeile, mutant.mutator));
+  };
+}
+
+/**
+ * Die Entscheidung ueber Anhalten oder Durchlassen, fuer beide Seiten gleich (Plan #1528).
+ *
+ * - Gezaehlt wird nur die Bezugsmenge (`zaehlt`); alles andere steht getrennt nach getoetet und
+ *   ueberlebt in `zaehlung.ausserhalb`, damit ein verengter Lauf nicht wie ein vollstaendiger
+ *   aussieht.
+ * - Ein tragender Altlast-Vermerk zaehlt als getoetet (E4). Er traegt nur, wenn ALLE vier
+ *   Bedingungen zugleich erfuellt sind; die verletzte steht als `vermerkGrund` an der Stelle, damit
+ *   die Meldung sagen kann, warum der Vermerk diesmal nicht trug.
+ * - Liegt die Quote unter der Sperrschwelle, halten alle gezaehlten Ueberlebenden ohne Vermerk an
+ *   (`haltende`, E5); sonst laufen sie durch (`durchgelassen`). Beide Listen schliessen sich aus.
+ */
+export function auswerten({
+  mutanten, quellen, zaehlt, zeileGeaendert, dateiGeaendert, vollauf, sperrschwelle = SPERRSCHWELLE,
+}) {
+  const vollaufStellen = vollaufStellenAus(vollauf);
+
+  const zaehlung = {
+    geprueft: 0, getoetet: 0, ueberlebt: 0, vermerkt: 0, ausgenommen: 0, ausserhalb: { getoetet: 0, ueberlebt: 0 },
+  };
   const ueberlebende = [];
-  const haltende = [];
+  const ohneVermerk = [];
 
   for (const mutant of mutanten) {
     if (mutant.zustand === 'Ignored') {
       zaehlung.ausgenommen += 1;
       continue;
     }
-    if (ZUSTAND_GETOETET.has(mutant.zustand)) {
-      zaehlung.geprueft += 1;
+    const getoetet = ZUSTAND_GETOETET.has(mutant.zustand);
+    if (!getoetet && !ZUSTAND_UEBERLEBT.has(mutant.zustand)) continue;
+    if (!zaehlt(mutant)) {
+      zaehlung.ausserhalb[getoetet ? 'getoetet' : 'ueberlebt'] += 1;
+      continue;
+    }
+    zaehlung.geprueft += 1;
+    if (getoetet) {
       zaehlung.getoetet += 1;
       continue;
     }
-    if (!ZUSTAND_UEBERLEBT.has(mutant.zustand)) continue;
 
-    zaehlung.geprueft += 1;
-    if (!istBeruehrt(mutant.datei)) {
-      zaehlung.ausserhalb += 1;
-      continue;
-    }
-    zaehlung.ueberlebt += 1;
-
-    const vermerk = altlastVermerkAn(quellen.get(mutant.datei), mutant.zeile);
-    const stelle = { ...mutant, altlast: null, vermerkGrund: null };
+    const stelle = { ...mutant, altlast: null, vermerkGrund: altlastHindernis(mutant, quellen, {
+      zeileGeaendert, dateiGeaendert, vollaufStellen,
+    }) };
     ueberlebende.push(stelle);
-
-    if (!vermerk) {
-      stelle.vermerkGrund = 'kein Altlast-Vermerk an dieser Stelle';
-      haltende.push(stelle);
+    if (stelle.vermerkGrund) {
+      zaehlung.ueberlebt += 1;
+      ohneVermerk.push(stelle);
       continue;
     }
-    if (zeileGeaendert(mutant.datei, mutant.zeile)) {
-      stelle.vermerkGrund = 'die Zeile des Mutanten ist gegenüber dem Anker geändert';
-      haltende.push(stelle);
-      continue;
-    }
-    const deckend = [...new Set([...mutant.deckendeTests, ...konventionsTests(mutant.datei)])];
-    const geaenderterTest = deckend.find((pfad) => dateiGeaendert(pfad));
-    if (geaenderterTest) {
-      stelle.vermerkGrund = `die deckende Testdatei ${geaenderterTest} hat sich geändert`;
-      haltende.push(stelle);
-      continue;
-    }
-    if (vollaufStellen && !vollaufStellen.has(vollaufSchluessel(mutant.datei, mutant.zeile, mutant.mutator))) {
-      stelle.vermerkGrund = 'im letzten Vollauf hat dieser Mutant nicht überlebt — er ist keine Altlast';
-      haltende.push(stelle);
-      continue;
-    }
-    stelle.altlast = vermerk;
+    stelle.altlast = altlastVermerkAn(quellen.get(mutant.datei), mutant.zeile);
+    zaehlung.getoetet += 1;
+    zaehlung.vermerkt += 1;
   }
 
-  return { zaehlung, ueberlebende, haltende };
+  const quote = quoteAus(zaehlung);
+  const haelt = quote < sperrschwelle;
+  return {
+    zaehlung,
+    ueberlebende,
+    quote,
+    haltende: haelt ? ohneVermerk : [],
+    durchgelassen: haelt ? [] : ohneVermerk,
+  };
+}
+
+/** Die erste verletzte Bedingung des Altlast-Vermerks als Satz, oder `null`, wenn er traegt. */
+function altlastHindernis(mutant, quellen, { zeileGeaendert, dateiGeaendert, vollaufStellen }) {
+  if (!altlastVermerkAn(quellen.get(mutant.datei), mutant.zeile)) return 'kein Altlast-Vermerk an dieser Stelle';
+  if (zeileGeaendert(mutant.datei, mutant.zeile)) return 'die Zeile des Mutanten ist gegenüber dem Anker geändert';
+  const deckend = [...new Set([...mutant.deckendeTests, ...konventionsTests(mutant.datei)])];
+  const geaenderterTest = deckend.find((pfad) => dateiGeaendert(pfad));
+  if (geaenderterTest) return `die deckende Testdatei ${geaenderterTest} hat sich geändert`;
+  if (vollaufStellen && !vollaufStellen.has(vollaufSchluessel(mutant.datei, mutant.zeile, mutant.mutator))) {
+    return 'im letzten Vollauf hat dieser Mutant nicht überlebt — er ist keine Altlast';
+  }
+  return null;
 }
 
 /** Der Grund, den der Darstellungs-Ignorer (#1277) jedem seiner Mutanten mitgibt, beginnt so. */
@@ -1020,6 +1070,18 @@ export function schwellenZeile(quote, schwelle) {
     : `${gemessen} — unter der Schwelle ${prozentText(schwelle)} %. Der Vollauf hält an.`;
 }
 
+/**
+ * Die Quotenzeile der Aenderungspruefung (Plan #1528): gegen das Ziel UND gegen die Sperrschwelle,
+ * damit ein Durchlass unter 100 % als solcher lesbar bleibt und nicht wie ein erreichtes Ziel.
+ */
+export function sperrZeile(quote, sperrschwelle) {
+  const ziel = quote >= ZIEL ? `Ziel ${ZIEL} % erreicht` : `Ziel ${ZIEL} % nicht erreicht`;
+  const sperre = quote >= sperrschwelle
+    ? `Sperrschwelle ${prozentText(sperrschwelle)} % erfüllt: läuft durch`
+    : `Sperrschwelle ${prozentText(sperrschwelle)} % unterschritten: hält an`;
+  return `Quote ${prozentText(quote.toFixed(2))} % — ${ziel}, ${sperre}`;
+}
+
 function ausschnittsQuoteText(a, schwelle) {
   if (a.zaehlung.geprueft === 0) return 'keine Mutanten — bestanden.';
   const gemessen = `${prozentText(a.quote.toFixed(2))} %`;
@@ -1123,6 +1185,7 @@ export function meldungBauen({
   stufe,
   quote = null,
   schwelle = null,
+  sperrschwelle = null,
   ausschnittsBericht = null,
   schluss,
 }) {
@@ -1155,15 +1218,16 @@ export function meldungBauen({
   } else {
     const altlasten = ueberlebende.filter((stelle) => stelle.altlast).length;
     const zusatz = altlasten > 0
-      ? `, davon ${altlasten} mit Altlast-Vermerk — sie zählen mit, halten aber nicht an`
+      ? `, davon ${altlasten} mit Altlast-Vermerk — sie zählen als getötet`
       : '';
+    const haelt = quote !== null && sperrschwelle !== null && quote < sperrschwelle;
     zeilen.push(`Überlebende Stellen (${ueberlebende.length}${zusatz}):`);
     for (const stelle of ueberlebende) {
       zeilen.push(`  ${stelle.datei}:${stelle.zeile} — ${stelle.mutator}: ${stelle.ersetzung} überlebt`);
       if (stelle.altlast) {
         zeilen.push(`      Altlast-Vermerk (#${stelle.altlast.issue}, ${stelle.altlast.datum}): ${stelle.altlast.grund}`);
       } else if (stelle.vermerkGrund) {
-        zeilen.push(`      hält an — ${stelle.vermerkGrund}`);
+        zeilen.push(`      ${haelt || sperrschwelle === null ? 'hält an' : 'läuft durch'} — ${stelle.vermerkGrund}`);
       }
     }
   }
@@ -1176,14 +1240,20 @@ export function meldungBauen({
       ? '@ExcludeFromJacocoGeneratedReport je Einheit — solche Mutanten entstehen gar nicht erst'
       : 'Stryker-Ausnahme je Stelle';
     zeilen.push('');
-    zeilen.push(`Mutanten: ${zaehlung.geprueft} geprüft, ${zaehlung.getoetet} getötet, `
+    const vermerkt = zaehlung.vermerkt > 0 ? ` (davon ${zaehlung.vermerkt} mit Altlast-Vermerk)` : '';
+    zeilen.push(`Mutanten: ${zaehlung.geprueft} geprüft, ${zaehlung.getoetet} getötet${vermerkt}, `
       + `${zaehlung.ueberlebt} überlebt, ${zaehlung.ausgenommen} ausgenommen (${ausnahme}).`);
-    if (zaehlung.ausserhalb > 0) {
-      zeilen.push(`Dazu ${zaehlung.ausserhalb} Überlebende außerhalb der berührten Dateien — sie halten nicht an (Kriterium 4).`);
+    const aussen = kommando === 'aenderung' ? zaehlung.ausserhalb : null;
+    if (aussen && aussen.getoetet + aussen.ueberlebt > 0) {
+      zeilen.push(`Dazu ${aussen.getoetet + aussen.ueberlebt} Mutanten außerhalb der geänderten Zeilen `
+        + `(${aussen.getoetet} getötet, ${aussen.ueberlebt} überlebt) — sie zählen nicht.`);
     }
   }
 
-  if (ausschnittsBericht) {
+  if (kommando === 'aenderung' && quote !== null && sperrschwelle !== null) {
+    zeilen.push('');
+    zeilen.push(sperrZeile(quote, sperrschwelle));
+  } else if (ausschnittsBericht) {
     zeilen.push('');
     zeilen.push(...ausschnittsBericht);
   } else if (quote !== null && schwelle !== null) {
@@ -1527,6 +1597,7 @@ export function laufen(argv, umgebung = {}) {
   // Ueber `umgebung.schwellen` ueberschreibbar wie `git` und `starte`: Ein Nachweis an einer
   // kuenstlich angehobenen Schwelle braucht sonst einen zweiten halbstuendigen Vollauf.
   const schwelle = (umgebung.schwellen ?? SCHWELLEN)[seite];
+  const sperrschwelle = umgebung.sperrschwelle ?? SPERRSCHWELLE;
 
   if (kommando === 'vollauf') {
     return vollaufLaufen({
@@ -1585,7 +1656,7 @@ export function laufen(argv, umgebung = {}) {
   // Ausstiege dauern Sekunden, und der Median maesse sonst sie statt der Laeufe (Issue #1280).
   const code = aenderungMitWerkzeug({
     wurzel, seite, starte, git, ausgabe, liesDatei, jetzt, beginn, anker, vollerUmfang, stand, gemessen,
-    beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung,
+    beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung, sperrschwelle,
   });
   dauerProtokollieren({
     wurzel, seite, datum: new Date(beginn).toISOString(), dauerMs: jetzt() - beginn, ausgabe,
@@ -1626,7 +1697,7 @@ function zuordnungPruefen({ wurzel, seite, bereich, git, ausgabe, existiert, vol
 
 function aenderungMitWerkzeug({
   wurzel, seite, starte, git, ausgabe, liesDatei, jetzt, beginn, anker, vollerUmfang, stand, gemessen,
-  beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung,
+  beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung, sperrschwelle,
 }) {
   let mutanten;
   let quellen;
@@ -1647,19 +1718,31 @@ function aenderungMitWerkzeug({
     quellen = quellenLesen(mutanten, liesDatei);
   }
 
+  // Gezaehlt wird nur in beruehrten Dateien des Pruefbereichs: Eine geaenderte Zeile in einem noch
+  // nicht aufgenommenen Ausschnitt gehoert nicht zur Bezugsmenge (Issue #1279).
+  const istBeruehrt = (datei) => gemessen.ganzeSeite || beruehrt.has(datei);
+  const zeileGeaendert = zeileGeaendertLeser(git, vollerUmfang ? null : anker, stand.ungetrackt);
+  const testBeruehrt = new Set(gemessen.testBeruehrt ?? []);
   const ausgewertet = auswerten({
     mutanten,
     quellen,
-    istBeruehrt: (datei) => gemessen.ganzeSeite || beruehrt.has(datei),
-    zeileGeaendert: zeileGeaendertLeser(git, vollerUmfang ? null : anker, stand.ungetrackt),
+    zaehlt: bezugsmengeLeser({
+      zeileGeaendert: (datei, zeile) => istBeruehrt(datei) && zeileGeaendert(datei, zeile),
+      testBeruehrt: (datei) => gemessen.ganzeSeite || testBeruehrt.has(datei),
+      vollaufStellen: vollaufStellenAus(vollauf),
+    }),
+    zeileGeaendert,
     dateiGeaendert: (pfad) => vollerUmfang || geaendert.has(pfad),
     vollauf,
+    sperrschwelle,
   });
 
   ausgabe(meldungBauen({
     ...grundmeldung,
     ueberlebende: ausgewertet.ueberlebende,
     zaehlung: ausgewertet.zaehlung,
+    quote: ausgewertet.quote,
+    sperrschwelle,
     dauerMs: jetzt() - beginn,
   }));
   return ausgewertet.haltende.length > 0 ? 1 : 0;

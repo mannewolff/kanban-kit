@@ -50,6 +50,13 @@ import {
   DAUER_PROTOKOLL_LAENGE,
   STUFENGRENZE_MS,
   median,
+  SPERRSCHWELLE,
+  ZIEL,
+  LIEGEZEIT_TAGE,
+  bezugsmengeLeser,
+  vollaufStellenAus,
+  zeileGeaendertLeser,
+  sperrZeile,
 } from './mutationspruefung.mjs';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
@@ -395,6 +402,7 @@ test('beruehrung: geaenderte Quelldatei im Bereich zaehlt, ausserhalb nicht', ()
     existiert: () => true,
   });
   assert.deepEqual(ergebnis.dateien, ['frontend/src/lib/a.ts']);
+  assert.deepEqual(ergebnis.testBeruehrt, [], 'eine geaenderte Quelle allein ist nicht testberuehrt');
   assert.equal(ergebnis.ganzeSeite, false);
 });
 
@@ -406,6 +414,7 @@ test('beruehrung: geaenderter Test zieht seine Quelle ueber die Namenskonvention
     existiert: (pfad) => pfad === 'frontend/src/lib/a.ts',
   });
   assert.deepEqual(ergebnis.dateien, ['frontend/src/lib/a.ts']);
+  assert.deepEqual(ergebnis.testBeruehrt, ['frontend/src/lib/a.ts']);
   assert.equal(ergebnis.ganzeSeite, false);
 });
 
@@ -450,7 +459,9 @@ test('beruehrung: feste Zuordnung zieht eine Quelle im Bereich mit (Issue #1287)
     festeZuordnung: { 'frontend/src/lib/andersHeissend.test.ts': ['frontend/src/lib/a.ts'] },
     existiert: () => false,
   });
-  assert.deepEqual(ergebnis, { dateien: ['frontend/src/lib/a.ts'], ganzeSeite: false, ohneZuordnung: [] });
+  assert.deepEqual(ergebnis, {
+    dateien: ['frontend/src/lib/a.ts'], testBeruehrt: ['frontend/src/lib/a.ts'], ganzeSeite: false, ohneZuordnung: [],
+  });
 });
 
 test('beruehrung: feste Zuordnung nur ausserhalb des Bereichs macht den Test zugeordnet, ohne Datei', () => {
@@ -461,7 +472,7 @@ test('beruehrung: feste Zuordnung nur ausserhalb des Bereichs macht den Test zug
     festeZuordnung: { 'frontend/src/lib/strykerUmfang.test.ts': ['frontend/mutationTestUmfang.ts'] },
     existiert: () => false,
   });
-  assert.deepEqual(ergebnis, { dateien: [], ganzeSeite: false, ohneZuordnung: [] });
+  assert.deepEqual(ergebnis, { dateien: [], testBeruehrt: [], ganzeSeite: false, ohneZuordnung: [] });
 });
 
 test('mutationszuordnung.json: gueltiges JSON, jeder Test und jede Quelle existiert im Repo', () => {
@@ -484,7 +495,7 @@ test('mutationszuordnung.json: strykerUmfang.test.ts allein loest weder Datei no
     festeZuordnung: festeZuordnungLesen(repo),
     existiert: (pfad) => existsSync(join(repo, pfad)),
   });
-  assert.deepEqual(ergebnis, { dateien: [], ganzeSeite: false, ohneZuordnung: [] });
+  assert.deepEqual(ergebnis, { dateien: [], testBeruehrt: [], ganzeSeite: false, ohneZuordnung: [] });
 });
 
 // --- Anker und Dateilisten --------------------------------------------------
@@ -839,7 +850,7 @@ const VERMERKTER_BERICHT = bericht({
 function auswertenMit(uebersteuert = {}) {
   return auswerten({
     ...strykerMutanten(VERMERKTER_BERICHT, { mitQuellen: true }),
-    istBeruehrt: () => true,
+    zaehlt: () => true,
     zeileGeaendert: () => false,
     dateiGeaendert: () => false,
     vollauf: { mutanten: [{ datei: 'frontend/src/lib/a.ts', zeile: 3, mutator: 'ConditionalExpression' }] },
@@ -847,10 +858,10 @@ function auswertenMit(uebersteuert = {}) {
   });
 }
 
-test('auswerten: ein Ueberlebender in einer beruehrten Datei haelt an (Kriterium 2)', () => {
+test('auswerten: ein gezaehlter Ueberlebender unter der Sperrschwelle haelt an', () => {
   const ergebnis = auswerten({
     ...strykerMutanten(BERICHT_A, { mitQuellen: true }),
-    istBeruehrt: (datei) => datei === 'frontend/src/lib/a.ts',
+    zaehlt: (m) => m.datei === 'frontend/src/lib/a.ts',
     zeileGeaendert: () => true,
     dateiGeaendert: () => false,
     vollauf: null,
@@ -860,20 +871,26 @@ test('auswerten: ein Ueberlebender in einer beruehrten Datei haelt an (Kriterium
     { datei: ergebnis.haltende[0].datei, zeile: ergebnis.haltende[0].zeile, mutator: ergebnis.haltende[0].mutator },
     { datei: 'frontend/src/lib/a.ts', zeile: 2, mutator: 'ConditionalExpression' },
   );
-  assert.deepEqual(ergebnis.zaehlung, { geprueft: 2, getoetet: 1, ueberlebt: 1, ausgenommen: 0, ausserhalb: 0 });
+  assert.deepEqual(ergebnis.zaehlung, {
+    geprueft: 2, getoetet: 1, ueberlebt: 1, vermerkt: 0, ausgenommen: 0, ausserhalb: { getoetet: 0, ueberlebt: 0 },
+  });
+  assert.equal(ergebnis.quote, 50);
+  assert.deepEqual(ergebnis.durchgelassen, []);
 });
 
-test('auswerten: ein Ueberlebender ausserhalb der Beruehrung haelt nicht an und ist kein Grund (Kriterium 4)', () => {
+test('auswerten: Mutanten ausserhalb der Bezugsmenge zaehlen getrennt und sind kein Grund', () => {
   const ergebnis = auswerten({
     ...strykerMutanten(BERICHT_A, { mitQuellen: true }),
-    istBeruehrt: () => false,
+    zaehlt: () => false,
     zeileGeaendert: () => true,
     dateiGeaendert: () => false,
     vollauf: null,
   });
   assert.deepEqual(ergebnis.haltende, []);
   assert.deepEqual(ergebnis.ueberlebende, []);
-  assert.equal(ergebnis.zaehlung.ausserhalb, 1);
+  assert.deepEqual(ergebnis.zaehlung.ausserhalb, { getoetet: 1, ueberlebt: 1 });
+  assert.equal(ergebnis.zaehlung.geprueft, 0);
+  assert.equal(ergebnis.quote, 100);
 });
 
 test('auswerten: ein per Stryker ausgenommener Mutant zaehlt weder als getoetet noch als ueberlebend (Kriterium 5)', () => {
@@ -881,7 +898,7 @@ test('auswerten: ein per Stryker ausgenommener Mutant zaehlt weder als getoetet 
     ...strykerMutanten(bericht({
       'src/lib/a.ts': { source: QUELLE_A, mutants: [mutant(2, 'ConditionalExpression', 'Ignored')] },
     }), { mitQuellen: true }),
-    istBeruehrt: () => true,
+    zaehlt: () => true,
     zeileGeaendert: () => true,
     dateiGeaendert: () => false,
     vollauf: null,
@@ -891,12 +908,16 @@ test('auswerten: ein per Stryker ausgenommener Mutant zaehlt weder als getoetet 
   assert.equal(ergebnis.zaehlung.ueberlebt, 0);
 });
 
-test('auswerten: alle vier Bedingungen erfuellt — der Vermerk greift, zaehlt aber mit (Kriterium 6)', () => {
+test('auswerten: alle vier Bedingungen erfuellt — der Vermerk greift und zaehlt als getoetet (E4)', () => {
   const ergebnis = auswertenMit();
   assert.deepEqual(ergebnis.haltende, []);
+  assert.deepEqual(ergebnis.durchgelassen, []);
   assert.equal(ergebnis.ueberlebende.length, 1);
   assert.equal(ergebnis.ueberlebende[0].altlast.grund, 'Grenzfall ohne Test');
-  assert.equal(ergebnis.zaehlung.ueberlebt, 1);
+  assert.equal(ergebnis.zaehlung.ueberlebt, 0);
+  assert.equal(ergebnis.zaehlung.getoetet, 1);
+  assert.equal(ergebnis.zaehlung.vermerkt, 1);
+  assert.equal(ergebnis.quote, 100);
 });
 
 test('auswerten: Bedingung 1 verletzt — ohne Vermerk an der Stelle haelt der Ueberlebende an', () => {
@@ -904,7 +925,7 @@ test('auswerten: Bedingung 1 verletzt — ohne Vermerk an der Stelle haelt der U
     ...strykerMutanten(bericht({
       'src/lib/a.ts': { source: QUELLE_A, mutants: [mutant(2, 'ConditionalExpression', 'Survived')] },
     }), { mitQuellen: true }),
-    istBeruehrt: () => true,
+    zaehlt: () => true,
     zeileGeaendert: () => false,
     dateiGeaendert: () => false,
     vollauf: { mutanten: [{ datei: 'frontend/src/lib/a.ts', zeile: 2, mutator: 'ConditionalExpression' }] },
@@ -941,6 +962,128 @@ test('auswerten: ohne Vollauf-Bericht entfaellt die vierte Bedingung', () => {
   const ergebnis = auswertenMit({ vollauf: null });
   assert.deepEqual(ergebnis.haltende, []);
   assert.equal(ergebnis.ueberlebende[0].altlast.issue, '1213');
+});
+
+// --- Bezugsmenge und Sperrschwelle (Issue #1530, Plan #1528) ----------------
+
+/** Ein Mutant in der Form beider Berichte, ohne Umweg ueber Stryker oder PIT. */
+function m(datei, zeile, zustand, mutator = 'ConditionalExpression') {
+  return { datei, zeile, mutator, ersetzung: 'x', zustand, deckendeTests: [] };
+}
+
+function viele(anzahl, datei, zeile, zustand) {
+  return Array.from({ length: anzahl }, (_, i) => m(datei, zeile, zustand, `M${i}`));
+}
+
+const F = 'frontend/src/lib/a.ts';
+
+/** `auswerten` ueber Mutanten, die alle zaehlen, ohne Vermerk und ohne Gedaechtnisdatei. */
+function auswertenAlle(mutanten, extra = {}) {
+  return auswerten({
+    mutanten,
+    quellen: new Map(),
+    zaehlt: () => true,
+    zeileGeaendert: () => true,
+    dateiGeaendert: () => false,
+    vollauf: null,
+    ...extra,
+  });
+}
+
+test('SPERRSCHWELLE, ZIEL und LIEGEZEIT_TAGE: 80, 100 und 7', () => {
+  assert.equal(SPERRSCHWELLE, 80);
+  assert.equal(ZIEL, 100);
+  assert.equal(LIEGEZEIT_TAGE, 7);
+});
+
+test('bezugsmengeLeser: ein Mutant auf einer geaenderten Zeile zaehlt, auf einer unveraenderten nicht', () => {
+  const zaehlt = bezugsmengeLeser({
+    zeileGeaendert: (datei, zeile) => datei === F && zeile === 2,
+    testBeruehrt: () => false,
+    vollaufStellen: null,
+  });
+  assert.equal(zaehlt(m(F, 2, 'Survived')), true);
+  assert.equal(zaehlt(m(F, 3, 'Survived')), false);
+});
+
+test('bezugsmengeLeser: in einer testberuehrten Datei zaehlt jeder Mutant ausser den alten Vollauf-Ueberlebenden', () => {
+  const vollaufStellen = vollaufStellenAus({ mutanten: [{ datei: F, zeile: 5, mutator: 'ConditionalExpression' }] });
+  const zaehlt = bezugsmengeLeser({ zeileGeaendert: () => false, testBeruehrt: (datei) => datei === F, vollaufStellen });
+  assert.equal(zaehlt(m(F, 4, 'Survived')), true);
+  assert.equal(zaehlt(m(F, 5, 'Survived')), false, 'alte Luecke aus dem Vollauf');
+  assert.equal(zaehlt(m(F, 5, 'Survived', 'EqualityOperator')), true, 'andere Stelle derselben Zeile');
+  assert.equal(zaehlt(m('frontend/src/lib/b.ts', 4, 'Survived')), false, 'nicht testberuehrt');
+});
+
+test('bezugsmengeLeser: eine geaenderte Zeile zaehlt auch dann, wenn ihr Mutant schon im Vollauf ueberlebte', () => {
+  const vollaufStellen = vollaufStellenAus({ mutanten: [{ datei: F, zeile: 5, mutator: 'ConditionalExpression' }] });
+  const zaehlt = bezugsmengeLeser({ zeileGeaendert: () => true, testBeruehrt: () => true, vollaufStellen });
+  assert.equal(zaehlt(m(F, 5, 'Survived')), true);
+});
+
+test('bezugsmengeLeser: ohne Gedaechtnisdatei zaehlt in testberuehrten Dateien jeder Mutant', () => {
+  assert.equal(vollaufStellenAus(null), null);
+  const zaehlt = bezugsmengeLeser({ zeileGeaendert: () => false, testBeruehrt: () => true, vollaufStellen: null });
+  assert.equal(zaehlt(m(F, 5, 'Survived')), true);
+  assert.equal(zaehlt(m(F, 99, 'Killed')), true);
+});
+
+test('bezugsmengeLeser: ohne Anker zaehlt jeder Mutant', () => {
+  const zaehlt = bezugsmengeLeser({
+    zeileGeaendert: zeileGeaendertLeser(() => assert.fail('ohne Anker kein git-Aufruf'), null, new Set()),
+    testBeruehrt: () => false,
+    vollaufStellen: vollaufStellenAus({ mutanten: [{ datei: F, zeile: 5, mutator: 'ConditionalExpression' }] }),
+  });
+  assert.equal(zaehlt(m(F, 5, 'Survived')), true);
+  assert.equal(zaehlt(m('frontend/src/api/x.ts', 1, 'Killed')), true);
+});
+
+test('auswerten: Grenzwert 79,99 % haelt an und nennt jede Stelle, nichts wird durchgelassen', () => {
+  const ergebnis = auswertenAlle([...viele(7999, F, 2, 'Killed'), ...viele(2001, F, 2, 'Survived')]);
+  assert.equal(ergebnis.quote, 79.99);
+  assert.equal(ergebnis.haltende.length, 2001);
+  assert.deepEqual(ergebnis.durchgelassen, []);
+});
+
+test('auswerten: Grenzwert 80,00 % laeuft durch, die Ueberlebenden stehen in durchgelassen', () => {
+  const ergebnis = auswertenAlle([...viele(4, F, 2, 'Killed'), m(F, 2, 'Survived')]);
+  assert.equal(ergebnis.quote, 80);
+  assert.deepEqual(ergebnis.haltende, []);
+  assert.equal(ergebnis.durchgelassen.length, 1);
+  assert.equal(ergebnis.durchgelassen[0].zeile, 2);
+});
+
+test('auswerten: 100 % — weder Halt noch Durchlass', () => {
+  const ergebnis = auswertenAlle(viele(3, F, 2, 'Killed'));
+  assert.equal(ergebnis.quote, 100);
+  assert.deepEqual(ergebnis.haltende, []);
+  assert.deepEqual(ergebnis.durchgelassen, []);
+});
+
+test('auswerten: ein tragender Vermerk zaehlt als getoetet und hebt die Quote ueber die Sperrschwelle', () => {
+  const quelle = ['a', '// Mutations-Altlast: äquivalent (#1213, 2026-09-25)', 'b'].join('\n');
+  const mutanten = [...viele(3, F, 1, 'Killed'), m(F, 3, 'Survived', 'Vermerkt'), m(F, 1, 'Survived')];
+  const ergebnis = auswertenAlle(mutanten, {
+    quellen: new Map([[F, quelle]]),
+    zeileGeaendert: (datei, zeile) => zeile === 1,
+  });
+  assert.equal(ergebnis.zaehlung.getoetet, 4);
+  assert.equal(ergebnis.zaehlung.vermerkt, 1);
+  assert.equal(ergebnis.zaehlung.ueberlebt, 1);
+  assert.equal(ergebnis.quote, 80);
+  assert.deepEqual(ergebnis.durchgelassen.map((s) => s.mutator), ['ConditionalExpression']);
+});
+
+test('auswerten: eine uebergebene Sperrschwelle ersetzt die Konstante', () => {
+  const mutanten = [...viele(9, F, 2, 'Killed'), m(F, 2, 'Survived')];
+  assert.equal(auswertenAlle(mutanten).haltende.length, 0);
+  assert.equal(auswertenAlle(mutanten, { sperrschwelle: 95 }).haltende.length, 1);
+});
+
+test('sperrZeile: Quote gegen Ziel und Sperrschwelle', () => {
+  assert.equal(sperrZeile(93.1, 80), 'Quote 93,10 % — Ziel 100 % nicht erreicht, Sperrschwelle 80 % erfüllt: läuft durch');
+  assert.equal(sperrZeile(100, 80), 'Quote 100,00 % — Ziel 100 % erreicht, Sperrschwelle 80 % erfüllt: läuft durch');
+  assert.equal(sperrZeile(79.99, 80), 'Quote 79,99 % — Ziel 100 % nicht erreicht, Sperrschwelle 80 % unterschritten: hält an');
 });
 
 // --- Lauf mit Stryker -------------------------------------------------------
@@ -987,25 +1130,34 @@ test('laufen: ein Ueberlebender in einer nicht beruehrten Datei endet gruen und 
   assert.ok(!text.includes('fremd.ts'));
 });
 
-test('laufen: ein greifender Altlast-Vermerk laesst gruen enden und steht trotzdem in der Zaehlung', () => {
-  const vollauf = {
-    frontend: {
-      datum: '2026-09-24T11:36:00.000Z',
-      dauerMs: 1000,
-      quote: 84.7,
-      mutanten: [{ datei: 'frontend/src/lib/a.ts', zeile: 3, mutator: 'ConditionalExpression' }],
-    },
-  };
-  const { code, text } = mitProjekt((wurzel) =>
-    sammelLauf(['aenderung', 'frontend'], wurzel, {
-      ...GEAENDERT_A,
-      'diff -U0 1a2b3c4 -- frontend/src/lib/a.ts': OK('@@ -1 +1 @@\n'),
-    }, strykerDoppel(wurzel, VERMERKTER_BERICHT)),
-  { vollauf });
+/**
+ * Ein Vermerk traegt in der Aenderungspruefung nur an einer gezaehlten Stelle, deren Zeile und
+ * deckende Tests unveraendert sind: hier ueber einen Sammeltest, der seine Quelle per fester
+ * Zuordnung hereinzieht, ohne Gedaechtnisdatei (dann entfaellt die vierte Bedingung).
+ */
+function vermerkUeberSammeltest(seite, quellPfad, testPfad, gitExtra, starteFn, vorbereiten = () => {}) {
+  return mitProjekt((wurzel) => {
+    mkdirSync(join(wurzel, 'scripts'), { recursive: true });
+    writeFileSync(join(wurzel, 'scripts', 'mutationszuordnung.json'), JSON.stringify({ [testPfad]: [quellPfad] }));
+    vorbereiten(wurzel);
+    return sammelLauf(['aenderung', seite], wurzel, {
+      'diff --name-status -z 1a2b3c4': OK(`M\0${testPfad}\0`),
+      [`diff -U0 1a2b3c4 -- ${quellPfad}`]: OK(''),
+      ...gitExtra,
+    }, starteFn(wurzel));
+  });
+}
+
+test('laufen: ein greifender Altlast-Vermerk laesst gruen enden und zaehlt als getoetet (E4)', () => {
+  const { code, text } = vermerkUeberSammeltest(
+    'frontend', 'frontend/src/lib/a.ts', 'frontend/src/lib/sammel.test.ts', {},
+    (wurzel) => strykerDoppel(wurzel, VERMERKTER_BERICHT),
+  );
   assert.equal(code, 0);
   assert.match(text, /Altlast-Vermerk/);
   assert.match(text, /frontend\/src\/lib\/a\.ts:3/);
-  assert.match(text, /1 überlebt/);
+  assert.match(text, /1 getötet \(davon 1 mit Altlast-Vermerk\), 0 überlebt/);
+  assert.match(text, /sie zählen als getötet/);
 });
 
 test('laufen: eine geaenderte deckende Testdatei nimmt demselben Vermerk die Wirkung', () => {
@@ -1132,12 +1284,14 @@ test('pitMutanten: die Auswertung des Beispielberichts trennt getoetet, ueberleb
   const ergebnis = auswerten({
     mutanten,
     quellen: new Map(),
-    istBeruehrt: (datei) => datei === CARD_SERVICE,
+    zaehlt: (m) => m.datei === CARD_SERVICE,
     zeileGeaendert: () => true,
     dateiGeaendert: () => false,
     vollauf: null,
   });
-  assert.deepEqual(ergebnis.zaehlung, { geprueft: 4, getoetet: 2, ueberlebt: 1, ausgenommen: 0, ausserhalb: 1 });
+  assert.deepEqual(ergebnis.zaehlung, {
+    geprueft: 2, getoetet: 1, ueberlebt: 1, vermerkt: 0, ausgenommen: 0, ausserhalb: { getoetet: 1, ueberlebt: 1 },
+  });
   assert.equal(ergebnis.haltende.length, 1);
   assert.equal(ergebnis.haltende[0].zeile, 43);
 });
@@ -1221,10 +1375,10 @@ test('laufen: ein Ueberlebender in einer nicht beruehrten Backend-Datei endet gr
   );
   assert.equal(code, 0);
   assert.ok(!text.includes('CardService.java:43'));
-  assert.match(text, /2 Überlebende außerhalb/);
+  assert.match(text, /4 Mutanten außerhalb der geänderten Zeilen \(2 getötet, 2 überlebt\) — sie zählen nicht/);
 });
 
-test('laufen: ein Altlast-Vermerk in einer Backend-Quelle laesst gruen enden und zaehlt trotzdem mit', () => {
+test('laufen: ein Altlast-Vermerk in einer Backend-Quelle laesst gruen enden und zaehlt als getoetet (E4)', () => {
   const quelle = [
     'package org.mwolff.manban.card.application;', //                              1
     'class CardService {', //                                                      2
@@ -1232,23 +1386,18 @@ test('laufen: ein Altlast-Vermerk in einer Backend-Quelle laesst gruen enden und
     '    // Mutations-Altlast: äquivalenter Grenzfall (#1213, 2026-09-25)', //     4
     '    return n > 0 ? 1 : 2;', //                                                5
   ].join('\n');
-  const vollauf = {
-    backend: {
-      datum: '2026-09-24T11:36:00.000Z',
-      dauerMs: 1000,
-      mutanten: [{ datei: CARD_SERVICE, zeile: 5, mutator: 'ConditionalsBoundaryMutator' }],
-    },
-  };
-  const { code, text } = mitProjekt((wurzel) => {
-    javaAblegen(wurzel, CARD_SERVICE, quelle);
-    return sammelLauf(['aenderung', 'backend'], wurzel, {
-      ...GEAENDERT_SERVICE,
-      [`diff -U0 1a2b3c4 -- ${CARD_SERVICE}`]: OK('@@ -1 +1 @@\n'),
-    }, pitDoppel(wurzel, BEISPIEL_XML.replaceAll('<lineNumber>43</lineNumber>', '<lineNumber>5</lineNumber>')));
-  }, { vollauf });
+  // Nur CardService: der Ungedeckte in Card.java zaehlte in der testberuehrten Datei mit.
+  const xml = BEISPIEL_XML
+    .replaceAll('<lineNumber>43</lineNumber>', '<lineNumber>5</lineNumber>')
+    .split('\n').filter((zeile) => !zeile.includes('<sourceFile>Card.java')).join('\n');
+  const { code, text } = vermerkUeberSammeltest(
+    'backend', CARD_SERVICE, 'src/test/java/org/mwolff/manban/card/application/SammelTest.java', {},
+    (wurzel) => pitDoppel(wurzel, xml),
+    (wurzel) => javaAblegen(wurzel, CARD_SERVICE, quelle),
+  );
   assert.equal(code, 0);
   assert.match(text, /Altlast-Vermerk/);
-  assert.match(text, /1 überlebt/);
+  assert.match(text, /2 getötet \(davon 1 mit Altlast-Vermerk\), 0 überlebt/);
 });
 
 test('laufen: ein abgebrochener PIT-Lauf ohne Bericht endet ungleich 0 und sagt warum', () => {
@@ -2008,7 +2157,7 @@ test('laufen: eine beruehrte Datei in einem nicht aufgenommenen Ausschnitt wird 
   assert.equal(code, 0);
   assert.ok(!text.includes('src/k/K.tsx:'));
   assert.ok(!text.includes(`  ${K_DATEI}\n`));
-  assert.match(text, /1 Überlebende außerhalb/);
+  assert.match(text, /1 Mutanten außerhalb der geänderten Zeilen \(0 getötet, 1 überlebt\)/);
 });
 
 test('laufen: eine beruehrte Ausnahme-Datei wird nicht mutiert, auch mitten in einem aufgenommenen Ausschnitt (#1279)', () => {
@@ -2051,27 +2200,25 @@ test('beruehrung: ein Test eines nicht aufgenommenen Ausschnitts mit Zuordnung i
     zuordnung: new Map([['frontend/src/k/K.test.tsx', ['frontend/src/c/C.tsx']]]),
     existiert: () => false,
   });
-  assert.deepEqual(ergebnis, { dateien: [C_DATEI], ganzeSeite: false, ohneZuordnung: [] });
+  assert.deepEqual(ergebnis, { dateien: [C_DATEI], testBeruehrt: [C_DATEI], ganzeSeite: false, ohneZuordnung: [] });
 });
 
 test('laufen: die Altlast-Markierung greift weiterhin in einem aufgenommenen Stufen-Ausschnitt (#1279)', () => {
   const berichtInhalt = bericht({
     'src/c/C.tsx': { source: VERMERKTE_QUELLE, mutants: [mutant(3, 'ConditionalExpression', 'Survived')] },
   });
-  const vollauf = {
-    frontend: {
-      datum: '2026-09-29T08:00:00.000Z',
-      dauerMs: 1000,
-      quote: 84.7,
-      mutanten: [{ datei: C_DATEI, zeile: 3, mutator: 'ConditionalExpression' }],
-    },
-  };
-  const { code, text } = aenderungStufen([C_DATEI], berichtInhalt, {
-    [`diff -U0 1a2b3c4 -- ${C_DATEI}`]: OK('@@ -1 +1 @@\n'),
-  }, { vollauf });
+  const { code, text } = mitProjekt((wurzel) => {
+    mkdirSync(join(wurzel, 'scripts'), { recursive: true });
+    writeFileSync(join(wurzel, 'scripts', 'mutationszuordnung.json'),
+      JSON.stringify({ 'frontend/src/c/Sammel.test.tsx': [C_DATEI] }));
+    return sammelLauf(['aenderung', 'frontend'], wurzel, {
+      ...geaendert('frontend/src/c/Sammel.test.tsx'),
+      [`diff -U0 1a2b3c4 -- ${C_DATEI}`]: OK(''),
+    }, strykerDoppel(wurzel, berichtInhalt));
+  }, { plan: PLAN_STUFEN });
   assert.equal(code, 0);
   assert.match(text, /Altlast-Vermerk \(#1213, 2026-09-25\)/);
-  assert.match(text, /1 überlebt/);
+  assert.match(text, /0 überlebt/);
 });
 
 test('laufen: der Rueckgabewert haengt nur an Ueberlebenden in beruehrten Dateien aufgenommener Ausschnitte (#1279)', () => {
@@ -2105,6 +2252,114 @@ test('laufen: der Backend-Zweig bleibt unveraendert — beruehrte Klasse mutiert
   assert.deepEqual(test.aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
   assert.match(test.text, /Umfang: die ganze Seite/);
   assert.ok(test.text.includes(ohne));
+});
+
+// --- Bezugsmenge im Lauf (Issue #1530) --------------------------------------
+
+/** Je Zeile ein Mutant in a.ts; Zeile 2 ist die geaenderte. */
+function berichtZeilen(eintraege, quelle = QUELLE_A) {
+  return bericht({
+    'src/lib/a.ts': {
+      source: quelle,
+      mutants: eintraege.map(([zeile, zustand], i) => mutant(zeile, `Mut${i}`, zustand, { id: `z${i}` })),
+    },
+  });
+}
+
+const NUR_ZEILE_2 = { ...GEAENDERT_A, 'diff -U0 1a2b3c4 -- frontend/src/lib/a.ts': OK('@@ -2 +2 @@\n') };
+
+test('laufen: der Fall vom 2026-10-07 — ein geaendertes Wort, sieben alte Ueberlebende in derselben Datei: gruen', () => {
+  const eintraege = [
+    ...Array.from({ length: 5 }, () => [2, 'Killed']),
+    ...Array.from({ length: 7 }, (_, i) => [10 + i, 'Survived']),
+  ];
+  const alt = eintraege.map(([zeile], i) => ({ datei: F, zeile, mutator: `Mut${i}` })).slice(5);
+  const vollauf = { frontend: { datum: '2026-10-06T08:00:00.000Z', dauerMs: 1000, quote: 99.3, mutanten: alt } };
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, NUR_ZEILE_2, strykerDoppel(wurzel, berichtZeilen(eintraege))),
+  { vollauf });
+  assert.equal(code, 0);
+  assert.match(text, /Überlebende Stellen: keine\./);
+  assert.match(text, /7 Mutanten außerhalb der geänderten Zeilen \(0 getötet, 7 überlebt\) — sie zählen nicht/);
+  assert.match(text, /Quote 100,00 % — Ziel 100 % erreicht/);
+
+  const mutanten = strykerMutanten(berichtZeilen(eintraege), { mitQuellen: true });
+  const ergebnis = auswerten({
+    ...mutanten,
+    zaehlt: bezugsmengeLeser({
+      zeileGeaendert: (datei, zeile) => zeile === 2,
+      testBeruehrt: () => false,
+      vollaufStellen: vollaufStellenAus(vollauf.frontend),
+    }),
+    zeileGeaendert: (datei, zeile) => zeile === 2,
+    dateiGeaendert: () => false,
+    vollauf: vollauf.frontend,
+  });
+  assert.deepEqual(ergebnis.durchgelassen, []);
+  assert.deepEqual(ergebnis.haltende, []);
+});
+
+test('laufen: ueber der Sperrschwelle laeuft ein Ueberlebender auf geaenderter Zeile durch und wird genannt', () => {
+  const eintraege = [...Array.from({ length: 9 }, () => [2, 'Killed']), [2, 'Survived']];
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, NUR_ZEILE_2, strykerDoppel(wurzel, berichtZeilen(eintraege))));
+  assert.equal(code, 0);
+  assert.match(text, /frontend\/src\/lib\/a\.ts:2 — Mut9/);
+  assert.match(text, /läuft durch — kein Altlast-Vermerk/);
+  assert.match(text, /Quote 90,00 % — Ziel 100 % nicht erreicht, Sperrschwelle 80 % erfüllt: läuft durch/);
+});
+
+test('laufen: umgebung.sperrschwelle ueberschreibt die Konstante', () => {
+  const eintraege = [...Array.from({ length: 9 }, () => [2, 'Killed']), [2, 'Survived']];
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, NUR_ZEILE_2, strykerDoppel(wurzel, berichtZeilen(eintraege)),
+      { sperrschwelle: 95 }));
+  assert.equal(code, 1);
+  assert.match(text, /Sperrschwelle 95 % unterschritten: hält an/);
+  assert.match(text, /hält an — kein Altlast-Vermerk/);
+});
+
+test('laufen: ein geaenderter Test zieht seine Datei ganz herein, ohne die alten Vollauf-Ueberlebenden', () => {
+  const eintraege = [[1, 'Killed'], [3, 'Survived'], [5, 'Survived']];
+  const vollauf = {
+    frontend: { datum: '2026-10-06T08:00:00.000Z', dauerMs: 1000, mutanten: [{ datei: F, zeile: 5, mutator: 'Mut2' }] },
+  };
+  const { code, text } = mitProjekt((wurzel) => {
+    mkdirSync(join(wurzel, 'frontend', 'src', 'lib'), { recursive: true });
+    writeFileSync(join(wurzel, F), QUELLE_A);
+    return sammelLauf(['aenderung', 'frontend'], wurzel, {
+      'diff --name-status -z 1a2b3c4': OK('M\0frontend/src/lib/a.test.ts\0'),
+      'diff -U0 1a2b3c4 -- frontend/src/lib/a.ts': OK(''),
+    }, strykerDoppel(wurzel, berichtZeilen(eintraege)));
+  }, { vollauf });
+  assert.equal(code, 1);
+  assert.match(text, /a\.ts:3 — Mut1/);
+  assert.ok(!text.includes('a.ts:5 — Mut2'));
+  assert.match(text, /Mutanten: 2 geprüft, 1 getötet, 1 überlebt/);
+  assert.match(text, /1 Mutanten außerhalb der geänderten Zeilen \(0 getötet, 1 überlebt\)/);
+});
+
+test('laufen: ein Backend-Test ohne Zuordnung macht jede Datei testberuehrt, alte Vollauf-Ueberlebende bleiben draussen', () => {
+  const ohne = 'src/test/java/org/mwolff/manban/card/application/NirgendsTest.java';
+  const vollauf = {
+    backend: {
+      datum: '2026-10-06T08:00:00.000Z',
+      dauerMs: 1000,
+      mutanten: [{ datei: CARD_SERVICE, zeile: 43, mutator: 'ConditionalsBoundaryMutator' }],
+    },
+  };
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      ...geaendert(ohne),
+      [`diff -U0 1a2b3c4 -- ${CARD_SERVICE}`]: OK(''),
+      [`diff -U0 1a2b3c4 -- ${CARD}`]: OK(''),
+    }, pitDoppel(wurzel, BEISPIEL_XML)),
+  { vollauf });
+  // CardService:42 getoetet, Card:30 getoetet, Card:17 ungedeckt zaehlen; CardService:43 ist alt.
+  assert.equal(code, 1);
+  assert.match(text, /Mutanten: 3 geprüft, 2 getötet, 1 überlebt/);
+  assert.match(text, /Card\.java:17/);
+  assert.ok(!text.includes('CardService.java:43'));
 });
 
 // --- Stufenschaltung und Dauerprotokoll (Issue #1280) ------------------------
