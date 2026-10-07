@@ -300,8 +300,13 @@ darunter hält den Vollauf an und wird genannt, auch wenn alle anderen darüber 
 nie an. Die beiden Bestandsausschnitte `hilfsfunktionen` und `server-anbindung` tragen
 `gemeinsameSchwelle` und zählen zunächst gemeinsam, bis jeder von ihnen die 80 % einmal erreicht hat.
 
-**Die Änderungsprüfung** mutiert nur die berührten Dateien der aufgenommenen Ausschnitte; ein
-Überlebender in einer berührten Datei hält an, Überlebende anderswo erscheinen nur als Zahl. Der Vollauf
+**Die Änderungsprüfung** mutiert nur die berührten Dateien der aufgenommenen Ausschnitte. Sie zählt nur
+ihre Bezugsmenge: Mutanten in gegenüber dem Anker geänderten Zeilen und in Dateien, deren prüfender Test
+sich geändert hat — dort ohne die Stellen, die schon im letzten Vollauf überlebten. Überlebende außerhalb
+erscheinen nur als Zahl. **Sperrschwelle statt Ziel (Issue #1516, Ausnahme von W3 in CLAUDE.md):** 100 %
+ist das Ziel, gesperrt wird erst unter der Sperrschwelle von 80 %. Lässt sie Überlebende durch, entsteht
+je Datei eine Karte `Mutations-Überlebende in <Pfad>` im Backlog (eine offene wird ergänzt); liegt eine
+solche Karte länger als 7 Tage offen, sperrt sie die nächste Veröffentlichung. Der Vollauf
 prüft den ganzen Bereich ohne `--incremental` und schreibt die Gedächtnisdatei
 `.claude/mutationsvollauf-frontend.json`. Einen geänderten Test ordnet die Änderungsprüfung über den Namen
 (`a.test.ts` → `a.ts`), den letzten Vollauf oder die feste Zuordnung in
@@ -333,8 +338,8 @@ Ausnahme je Stelle.
   nicht zu beobachten ist. In JSX steht sie als Zeilenkommentar **im Tag vor dem Attribut**; ein
   `{/* … */}` vor dem Element greift nicht.
 - Der **Altlast-Vermerk** an der Zeile des Mutanten:
-  `// Mutations-Altlast: <Grund> (#<Issue>, <JJJJ-MM-TT>)`. Die Begründung ist Pflicht. Er gibt die
-  Änderungsprüfung frei, **zählt aber weiter mit**, und er trägt nur, wenn alle vier Bedingungen
+  `// Mutations-Altlast: <Grund> (#<Issue>, <JJJJ-MM-TT>)`. Die Begründung ist Pflicht. Ein
+  Überlebender mit tragendem Vermerk **zählt wie ein getöteter und bekommt keine Karte**. Er trägt nur, wenn alle vier Bedingungen
   zugleich erfüllt sind:
   1. Der Vermerk steht an der Stelle des Überlebenden.
   2. Die Zeile des Mutanten ist gegenüber dem Anker unverändert.
@@ -354,7 +359,7 @@ Absatz. Folge für Tests: Ein Baustein, den nur Seiten-Tests außerhalb seines A
 der Abdeckung grün, in der Mutationsprüfung aber ungedeckt — er braucht Tests im eigenen Ausschnitt.
 `thresholds.break` steht auf `null`: Ob und wann der Lauf abbricht, regelt die Mutationsprüfung auf dem
 geänderten Code (Issue #1104), nicht eine Gesamtschwelle. Den Halt liefert der Rückgabewert von
-`scripts/mutationspruefung.mjs` — bei der Änderungsprüfung ein Überlebender in einer berührten Datei, beim
+`scripts/mutationspruefung.mjs` — bei der Änderungsprüfung eine Quote unter der Sperrschwelle, beim
 Vollauf ein aufgenommener Ausschnitt unter 80 %. Dieser Halt betrifft den wöchentlichen Handlauf, nicht
 `push main`.
 
