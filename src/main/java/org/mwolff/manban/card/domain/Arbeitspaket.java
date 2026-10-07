@@ -10,10 +10,10 @@ import org.jspecify.annotations.Nullable;
  * Regeln rund um das Arbeitspaket (Plan #1294): welche Karte eines ist, welche Spalte eine
  * Prozessspalte ist und wann eine Karte als erledigt gilt.
  *
- * <p>Die Spaltenregel {@link #statusVonSpalte} ist wortgleich zur kanonischen Regel in {@code
- * KanbanCompatService.canonicalKey}. Die Doppelung ist durch die Modulgrenze erzwungen: {@code
- * kanbancompat} darf nicht auf {@code card.domain} zugreifen ({@code
- * ArchitectureTest.CARD_DOMAIN_IST_MODULINTERN}). Wer die eine Seite ändert, ändert die andere mit.
+ * <p>Die Spaltenregel {@link #statusVonSpalte} ist auch die der Kanban-kompatiblen Strecke: {@code
+ * kanbancompat} erreicht sie über {@code CardIngestService.spaltenSchluessel}, weil es nicht auf
+ * {@code card.domain} zugreifen darf ({@code ArchitectureTest.CARD_DOMAIN_IST_MODULINTERN}, Issue
+ * #1495).
  */
 public final class Arbeitspaket {
 

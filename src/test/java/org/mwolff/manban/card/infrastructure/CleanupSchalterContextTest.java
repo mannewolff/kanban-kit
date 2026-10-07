@@ -9,6 +9,7 @@ import org.mwolff.manban.card.application.CleanupProperties;
 import org.mwolff.manban.card.application.DoneRetentionService;
 import org.mwolff.manban.card.application.DoneRetentionSettingService;
 import org.mwolff.manban.card.application.TrashRetentionService;
+import org.mwolff.manban.card.application.VorhabenArchivierung;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 /**
@@ -29,6 +30,7 @@ class CleanupSchalterContextTest {
           .withBean(DoneRetentionService.class, () -> mock(DoneRetentionService.class))
           .withBean(
               DoneRetentionSettingService.class, () -> mock(DoneRetentionSettingService.class))
+          .withBean(VorhabenArchivierung.class, () -> mock(VorhabenArchivierung.class))
           .withBean(CleanupProperties.class, () -> mock(CleanupProperties.class))
           .withBean(Clock.class, Clock::systemUTC)
           .withUserConfiguration(TrashRetentionJob.class, DoneRetentionJob.class);

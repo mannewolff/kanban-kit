@@ -83,6 +83,8 @@ export interface MelderPalette {
   zinnob: string
   stahl: string
   grau: string
+  /** Erweiterung der Vorlage durch #1493 (PO-Entscheidung): Ausgang „nicht angelaufen". */
+  braun: string
 }
 
 /**
@@ -157,7 +159,8 @@ const HELL = {
 /**
  * Melder hell. Abweichungen: Entwurf `#2F8F4E` (Grün), `#B07C15` (Bernstein) und `#8A929E` (Grau)
  * verfehlen auf der Nut 3:1 (2,9 / 2,6 / 2,2:1) und sind bis zur Schwelle nachgedunkelt;
- * Zinnober und Stahl halten unverändert.
+ * Zinnober und Stahl halten unverändert. Braun (#1493) ist eine Erweiterung der Vorlage: ein
+ * entsättigtes Erdbraun, dunkler und grauer als Kupfer.
  */
 const MELDER_HELL: MelderPalette = {
   gruen: '#2E8B4C',
@@ -165,6 +168,7 @@ const MELDER_HELL: MelderPalette = {
   zinnob: '#C8393E',
   stahl: '#2F6FC9',
   grau: '#757B86',
+  braun: '#7A5A3E',
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -195,13 +199,17 @@ const DUNKEL = {
   blinkerHell: '#BFD6FB',
 } as const
 
-/** Melder dunkel: Werte des Entwurfs, sie halten 3:1 auf allen dunklen Flächen. */
+/**
+ * Melder dunkel: Werte des Entwurfs, sie halten 3:1 auf allen dunklen Flächen. Braun (#1493) ist
+ * eine Erweiterung der Vorlage, heller und grauer als Kupfer.
+ */
 const MELDER_DUNKEL: MelderPalette = {
   gruen: '#46C46F',
   bernst: '#E0AE49',
   zinnob: '#F0575C',
   stahl: '#5B96F0',
   grau: '#6E7681',
+  braun: '#B08A68',
 }
 
 type Werte = typeof HELL | typeof DUNKEL

@@ -122,6 +122,7 @@ class NightRunProgressServiceTest {
         null,
         null,
         null,
+        null,
         null);
   }
 

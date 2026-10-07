@@ -44,3 +44,15 @@ describe('Led — Wechselblinker eines laufenden Laufs (#1136)', () => {
     expect(rechts).toMatch(/background-color: var\(--[\w-]*melder-stahl[,)]/)
   })
 })
+
+describe('Led — Füllfarbe Braun (#1493)', () => {
+  it('füllt die Lampe eines nicht angelaufenen Laufs mit dem Melder Braun', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <Led melder="braun" />
+      </ThemeProvider>,
+    )
+
+    expect(cssRegel(screen.getByTestId('led-braun'))).toMatch(/background-color: var\(--[\w-]*melder-braun[,)]/)
+  })
+})

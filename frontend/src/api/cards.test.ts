@@ -204,6 +204,22 @@ describe('cardsApi', () => {
     expect(JSON.parse(String(c.body))).toEqual({ assignees: [5, 6] })
   })
 
+  it('addLabel ruft POST /api/cards/{id}/labels/{labelId}', async () => {
+    const f = spyFetch()
+    await cardsApi.addLabel(1, 7)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/1/labels/7')
+    expect(c.method).toBe('POST')
+  })
+
+  it('removeLabel ruft DELETE /api/cards/{id}/labels/{labelId}', async () => {
+    const f = spyFetch()
+    await cardsApi.removeLabel(1, 7)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/1/labels/7')
+    expect(c.method).toBe('DELETE')
+  })
+
   it('setLabels ruft PUT /api/cards/{id}/labels', async () => {
     const f = spyFetch()
     await cardsApi.setLabels(1, [2, 3])

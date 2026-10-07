@@ -102,7 +102,8 @@ function makeApis() {
         }),
     ),
     setAssignees: vi.fn().mockResolvedValue({ ...card }),
-    setLabels: vi.fn().mockResolvedValue({ ...card }),
+    addLabel: vi.fn((id: number, labelId: number): Promise<Card> => Promise.resolve({ ...card, id, labels: [labelId] })),
+    removeLabel: vi.fn((id: number): Promise<Card> => Promise.resolve({ ...card, id, labels: [] })),
     getActivity: vi.fn().mockResolvedValue([]),
     restore: vi.fn().mockResolvedValue({ ...card }),
     setStatus: vi.fn().mockResolvedValue(undefined),
@@ -537,7 +538,54 @@ describe('CardDetailModal', () => {
     fireEvent.mouseDown(await screen.findByLabelText('Labels'))
     fireEvent.click(await screen.findByText('Ux'))
 
-    await waitFor(() => expect(apis.cardsApi.setLabels).toHaveBeenCalledWith(100, [6]))
+    await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalledWith(100, 6))
+    expect(apis.cardsApi.removeLabel).not.toHaveBeenCalled()
+  })
+
+  it('schreibt ein serverseitig schon abgenommenes kit:night nicht zurück (Issue #1512)', async () => {
+    const apis = makeApis()
+    // Der Server hat kit:night (9) längst verbraucht; die Seite zeigt noch den alten Stand.
+    apis.cardsApi.addLabel = vi.fn().mockResolvedValue({ ...card, labels: [5, 6] })
+    const boardLabels = [
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false },
+      { id: 6, boardId: 1, name: 'Ux', color: '#0f0', countOnEpicTile: false },
+      { id: 9, boardId: 1, name: 'kit:night', color: '#888', countOnEpicTile: false },
+    ]
+    render(
+      <CardDetailModal
+        card={{ ...card, labels: [5, 9] }}
+        canEdit
+        boardLabels={boardLabels}
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    fireEvent.mouseDown(await screen.findByLabelText('Labels'))
+    fireEvent.click(await screen.findByText('Ux'))
+
+    await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalledTimes(1))
+    expect(apis.cardsApi.addLabel).toHaveBeenCalledWith(100, 6)
+    expect(apis.cardsApi.removeLabel).not.toHaveBeenCalled()
+    // Danach zeigt der Dialog den Stand des Servers — ohne kit:night.
+    await waitFor(() => expect(screen.queryByText('kit:night')).toBeNull())
+  })
+
+  it('nimmt ein Label einzeln ab', async () => {
+    const apis = makeApis()
+    const boardLabels = [
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false },
+      { id: 6, boardId: 1, name: 'Ux', color: '#0f0', countOnEpicTile: false },
+    ]
+    render(
+      <CardDetailModal card={{ ...card, labels: [5, 6] }} canEdit boardLabels={boardLabels} onClose={vi.fn()} {...apis} />,
+    )
+
+    // Rücktaste im leeren Eingabefeld nimmt das letzte gewählte Label ab.
+    fireEvent.keyDown(await screen.findByLabelText('Labels'), { key: 'Backspace' })
+
+    await waitFor(() => expect(apis.cardsApi.removeLabel).toHaveBeenCalledWith(100, 6))
+    expect(apis.cardsApi.addLabel).not.toHaveBeenCalled()
   })
 
   it('zeigt den Aktivitätsverlauf mit Akteur und Detail', async () => {
@@ -1192,7 +1240,8 @@ describe('CardDetailModal', () => {
     // Nummern-Fallback statt Name: Das Label ist gesetzt und bleibt sichtbar, auch ohne Vorrat.
     expect(await screen.findByText('#6')).toBeInTheDocument()
     expect(screen.queryByLabelText('Labels')).not.toBeInTheDocument()
-    expect(apis.cardsApi.setLabels).not.toHaveBeenCalled()
+    expect(apis.cardsApi.addLabel).not.toHaveBeenCalled()
+    expect(apis.cardsApi.removeLabel).not.toHaveBeenCalled()
   })
 
   it('deaktiviert den Speichern-Button bei leerem Titel im Edit-Modus', async () => {
@@ -1511,7 +1560,7 @@ describe('CardDetailModal', () => {
     fireEvent.mouseDown(await screen.findByLabelText('Labels'))
     fireEvent.click(await screen.findByText('Bug'))
 
-    await waitFor(() => expect(apis.cardsApi.setLabels).toHaveBeenCalled())
+    await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalled())
     expect(onChanged).toHaveBeenCalled()
   })
 
@@ -2014,7 +2063,7 @@ describe('CardDetailModal', () => {
 
     it('meldet den Servertext beim Speichern der Labels', async () => {
       const apis = makeApis()
-      apis.cardsApi.setLabels = vi.fn().mockRejectedValue(serverfehler('Label gehört zu einem anderen Board.'))
+      apis.cardsApi.addLabel = vi.fn().mockRejectedValue(serverfehler('Label gehört zu einem anderen Board.'))
       render(
         <CardDetailModal card={card} canEdit boardLabels={boardLabels} onClose={vi.fn()} {...apis} />,
         { wrapper: SnackbarProvider },
@@ -2028,7 +2077,7 @@ describe('CardDetailModal', () => {
 
     it('stellt die Labels nach einem Fehlschlag auf den Ausgangsstand zurück', async () => {
       const apis = makeApis()
-      apis.cardsApi.setLabels = vi.fn().mockRejectedValue(serverfehler('Label abgelehnt.'))
+      apis.cardsApi.addLabel = vi.fn().mockRejectedValue(serverfehler('Label abgelehnt.'))
       const onChanged = vi.fn()
       render(
         <CardDetailModal
@@ -2775,7 +2824,41 @@ describe('CardDetailModal — Statuswechsler', () => {
       const leiste = within(await screen.findByTestId('ketten-stufenleiste'))
       fireEvent.click(leiste.getByRole('button', { name: /^Umsetzung/ }))
 
-      await waitFor(() => expect(apis.cardsApi.setLabels).toHaveBeenCalledWith(100, [22]))
+      await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalledWith(100, 22))
+      expect(apis.cardsApi.removeLabel).not.toHaveBeenCalled()
+    })
+
+    it('tauscht das Ziel einzeln: das alte ab, das neue an (Issue #1512)', async () => {
+      const apis = oeffne({ ...fachlich, labels: [21] })
+
+      const leiste = within(await screen.findByTestId('ketten-stufenleiste'))
+      fireEvent.click(leiste.getByRole('button', { name: /^Umsetzung/ }))
+
+      await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalledWith(100, 22))
+      expect(apis.cardsApi.removeLabel).toHaveBeenCalledWith(100, 21)
+      expect(apis.cardsApi.removeLabel.mock.invocationCallOrder[0]).toBeLessThan(
+        apis.cardsApi.addLabel.mock.invocationCallOrder[0],
+      )
+    })
+
+    it('zeigt nach einem halb gescheiterten Tausch den Stand der letzten Serverantwort', async () => {
+      const apis = makeApis()
+      apis.cardsApi.get.mockResolvedValue({ ...fachlich, labels: [21] })
+      // Das Abnehmen geht durch, das Setzen scheitert: ziel:pakete ist weg, ziel:umsetzung nicht da.
+      apis.cardsApi.removeLabel.mockResolvedValue({ ...fachlich, labels: [] })
+      apis.cardsApi.addLabel.mockRejectedValue(new Error('Label abgelehnt.'))
+      render(
+        <CardDetailModal card={{ ...fachlich, labels: [21] }} canEdit boardLabels={zielLabels} onClose={vi.fn()} {...apis} />,
+      )
+      expect(await screen.findByText('ziel:pakete')).toBeInTheDocument()
+
+      const leiste = within(await screen.findByTestId('ketten-stufenleiste'))
+      fireEvent.click(leiste.getByRole('button', { name: /^Umsetzung/ }))
+
+      await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalled())
+      // Kein Rückfall auf den Ausgangsstand: Der Server trägt ziel:pakete nicht mehr.
+      await waitFor(() => expect(screen.queryByText('ziel:pakete')).toBeNull())
+      expect(screen.queryByText('ziel:umsetzung')).toBeNull()
     })
 
     it('ist bei canEdit={false} nur Anzeige', async () => {
@@ -2801,7 +2884,7 @@ describe('CardDetailModal — Statuswechsler', () => {
       const leiste = within(await screen.findByTestId('ketten-stufenleiste'))
       fireEvent.click(leiste.getByRole('button', { name: 'Kette starten' }))
 
-      await waitFor(() => expect(apis.cardsApi.setLabels).toHaveBeenCalledWith(100, [23]))
+      await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalledWith(100, 23))
     })
 
     it('sperrt den Start an einem [Plan] ohne Body (Issue #1450)', async () => {

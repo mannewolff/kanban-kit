@@ -443,6 +443,7 @@ class NightRunIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null),
         List.of());
 

@@ -5450,6 +5450,37 @@ describe('NightRunPage — der Abbruchgrund in der Auswertung (#1145)', () => {
   })
 })
 
+/**
+ * Der Lauf, der nicht anlief (Issue #1502, Plan #1498 E8): Die Kopfmarke trägt das Wort vor dem
+ * gekürzten Grund und leuchtet braun — keine zweite Marke, die Zustandsmarken schließen einander aus.
+ */
+describe('NightRunPage — der nicht angelaufene Lauf (#1502)', () => {
+  const GRUND = 'Working Tree ist nicht sauber. Bitte committen oder aufraeumen, dann neu starten.'
+
+  it('zeigt die Kopfmarke „nicht angelaufen — <Grund>" mit brauner LED', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            abortReason: GRUND,
+            outcome: { verdict: 'NOT_STARTED', decisiveItem: null, noWorkReason: null, abortReason: GRUND },
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    const marken = within(kopf).getAllByTestId('lauf-zustand')
+    expect(marken).toHaveLength(1)
+    expect(marken[0]).toHaveTextContent(`nicht angelaufen — ${GRUND}`)
+    expect(within(marken[0]).getByTestId('led-braun')).toBeInTheDocument()
+    expect(within(kopf).queryAllByTestId('led-zinnob')).toHaveLength(0)
+  })
+})
+
 describe('NightRunPage — Morgenkachel „Veröffentlichung vorbereitet“ (#1458)', () => {
   const kachel = (panelEl: HTMLElement) =>
     within(panelEl).queryByRole('region', { name: 'Veröffentlichung vorbereitet' })
@@ -5561,7 +5592,8 @@ describe('NightRunPage — adressierbarer Lauf (#1085)', () => {
   })
 
   it('klappt ohne ?lauf wie bisher den obersten Lauf auf', async () => {
-    renderPage({ listen: [dreiLaeufe] })
+    // Je eine Minute: Die Läufe überschneiden sich nicht, oben steht allein der jüngste (#1511).
+    renderPage({ listen: [dreiLaeufe.map((ansicht) => ({ ...ansicht, durationMs: 60_000 }))] })
 
     // Die Liste steht absteigend nach Startzeit: oben der juengste Lauf.
     await screen.findByTestId(`lauf-${startedAt(2)}`)
@@ -6560,5 +6592,151 @@ describe('NightRunPage — Fortschritt eines laufenden Laufs (#1378)', () => {
 
     expect(await screen.findByText('Liste nicht abrufbar')).toBeInTheDocument()
     expect(panel()).toBeInTheDocument()
+  })
+})
+
+/**
+ * Zusammen gelaufene Läufe stehen gemeinsam offen (Issue #1511): Kette und Umsetzung laufen
+ * nebeneinander, und ein kurzer Lauf oben verdeckte sonst den langen darunter.
+ */
+describe('NightRunPage — zusammen gelaufene Läufe (#1511)', () => {
+  const MINUTE = 60_000
+
+  it('klappt zwei überschneidende Läufe beide auf', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 1, startedAt: startedAt(0), durationMs: 30 * MINUTE }),
+          aufbewahrt({ id: 2, startedAt: startedAt(10), durationMs: 5 * MINUTE }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(10))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('lässt einen älteren Lauf ohne Überschneidung zu', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 1, startedAt: startedAt(0), durationMs: 5 * MINUTE }),
+          aufbewahrt({ id: 2, startedAt: startedAt(10), durationMs: 5 * MINUTE }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(10))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('öffnet mit ?lauf=<id> nur diesen Lauf, auch wenn andere überschneiden', async () => {
+    renderPage(
+      {
+        listen: [
+          [
+            aufbewahrt({ id: 1, startedAt: startedAt(0), durationMs: 30 * MINUTE }),
+            aufbewahrt({ id: 2, startedAt: startedAt(10), durationMs: 5 * MINUTE }),
+          ],
+        ],
+      },
+      '/projects/5/nachtlauf?lauf=1',
+    )
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(lauf(10))).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('öffnet höchstens drei überschneidende Läufe, die jüngsten', async () => {
+    renderPage({
+      listen: [
+        [0, 1, 2, 3].map((minute) =>
+          aufbewahrt({ id: minute + 1, startedAt: startedAt(minute), durationMs: 30 * MINUTE }),
+        ),
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(3))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(lauf(2))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(lauf(1))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('reicht bei einem abgebrochenen Lauf bis zum letzten Lebenszeichen', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            durationMs: MINUTE,
+            complete: false,
+            updatedAt: startedAt(20),
+          }),
+          aufbewahrt({ id: 2, startedAt: startedAt(10), durationMs: 5 * MINUTE }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('rechnet bei einem Lauf ohne Abschluss und ohne Lebenszeichen mit seiner Dauer', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 1, startedAt: startedAt(0), durationMs: 20 * MINUTE, complete: false }),
+          aufbewahrt({ id: 2, startedAt: startedAt(10), durationMs: 5 * MINUTE }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('reicht bei einem abgebrochenen Lauf nicht bis jetzt, sondern bis zum letzten Lebenszeichen', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            durationMs: MINUTE,
+            complete: false,
+            updatedAt: startedAt(20),
+            outcome: { verdict: 'NOT_STARTED', decisiveItem: null, noWorkReason: null, abortReason: 'Zeitgrenze' },
+          }),
+          // Der ältere läuft laut Befund nicht mehr: Sein Ende ist das Lebenszeichen um 22:20.
+          aufbewahrt({ id: 2, startedAt: startedAt(30), durationMs: 5 * MINUTE }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    expect(laufTaste(lauf(0))).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  /** Der Fall vom 2026-10-07: Run #403 (7 min) startete 18 s nach Run #402 (1 h 31 min). */
+  it('klappt den langen Lauf auf, wenn 18 s nach ihm ein kurzer startet', async () => {
+    const lang = '2026-09-01T22:00:00.000Z'
+    const kurz = '2026-09-01T22:00:18.000Z'
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 402, startedAt: lang, durationMs: 91 * MINUTE }),
+          aufbewahrt({ id: 403, startedAt: kurz, durationMs: 7 * MINUTE }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${lang}`)
+    expect(laufTaste(screen.getByTestId(`lauf-${kurz}`))).toHaveAttribute('aria-expanded', 'true')
+    expect(laufTaste(screen.getByTestId(`lauf-${lang}`))).toHaveAttribute('aria-expanded', 'true')
   })
 })

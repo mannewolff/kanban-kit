@@ -30,6 +30,7 @@ import org.mwolff.manban.nightrun.application.NightRunService.NewNightRunItem;
 import org.mwolff.manban.nightrun.application.NightRunService.NewReleasePreparation;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.TokenNotBoundForIngestException;
+import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
@@ -234,6 +235,7 @@ class NightRunIngestController {
         request.noWorkReason(),
         budget(request.budget()),
         request.abortReason(),
+        request.abortKind(),
         vorbereitung(request.releasePreparation()),
         request.items().stream().map(NightRunIngestController::item).toList());
   }
@@ -342,6 +344,11 @@ class NightRunIngestController {
    *     NightRunController#ABORT_REASON_MAX} — die Länge der Spalte, in die der Wert geht; ohne
    *     Grenze risse eine überlange Meldung dort in einen Serverfehler statt in eine benannte
    *     Ablehnung. Ob der Wert am Lauf landet, entscheidet der Dienst.
+   * @param abortKind wie der abgebrochene Lauf zu seinem Abschluss kam (Issue #1500, Plan #1498
+   *     E2). Additiv und {@code @Nullable} aus demselben Grund wie {@code abortReason}: Eine ältere
+   *     Kit-Kopie kennt das Feld nicht und meldet unverändert weiter; ihr Abbruch bleibt dann wie
+   *     bisher eine Störung (A4). Ein unbekannter Wert wird abgewiesen. Ob der Wert am Lauf landet,
+   *     entscheidet der Dienst — nur zusammen mit dem Abbruchgrund (E4).
    * @param releasePreparation die Morgenmeldung des Laufs (Issue #1456, Plan #1447 E12). Additiv
    *     und {@code @Nullable} aus demselben Grund wie die vier davor: Eine ältere Kit-Kopie kennt
    *     das Feld nicht und meldet unverändert weiter.
@@ -396,6 +403,13 @@ class NightRunIngestController {
           @Nullable
           @Size(max = ABORT_REASON_MAX)
           String abortReason,
+      @Schema(
+              description =
+                  "Wie der abgebrochene Lauf endete: REPORTED, wenn er seinen Abbruch selbst"
+                      + " gemeldet hat; SILENCED, wenn der Wächter ihn nach dem Verstummen"
+                      + " abgeschlossen hat. Gilt nur zusammen mit abortReason.",
+              example = "REPORTED")
+          @Nullable NightRunAbortKind abortKind,
       @Schema(
               description =
                   "Morgenmeldung: ob und wie der Lauf eine Veröffentlichung vorbereitet hat."

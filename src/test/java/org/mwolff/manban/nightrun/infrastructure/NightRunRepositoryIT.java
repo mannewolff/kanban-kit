@@ -22,6 +22,7 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
@@ -58,7 +59,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 // Einzelmethode liegt bei 4, weit unter jedem Schwellwert. Ein Zerschneiden nach der Summe
 // verteilte die Faelle eines Adapters auf zwei Dateien, die sich dieselben Vorrichtungen teilen
 // muessten, ohne dass ein Fall dadurch einfacher wuerde.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity"})
+// PMD.ExcessiveImports, PMD.CouplingBetweenObjects: Die Kopplung ist die des geprueften Adapters —
+// jede Spalte bringt ihren Domaenentyp mit. Issue #1500 bringt NightRunAbortKind dazu und reisst
+// damit beide Schwellen um eins. Weniger Typen gaebe es nur durch weniger geprueftes Verhalten.
+@SuppressWarnings({
+  "PMD.TooManyMethods",
+  "PMD.CyclomaticComplexity",
+  "PMD.ExcessiveImports",
+  "PMD.CouplingBetweenObjects"
+})
 class NightRunRepositoryIT extends AbstractIntegrationTest {
 
   private static final Instant T1 = Instant.parse("2026-09-01T22:00:00Z");
@@ -120,6 +129,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         NightRunOrigin.UPLOAD,
         null,
         true,
+        null,
         null,
         null,
         null,
@@ -220,6 +230,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null);
 
     long id =
@@ -260,6 +271,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.TOKEN,
             "sitzungs-token",
             true,
+            null,
             null,
             null,
             null,
@@ -381,6 +393,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.UPLOAD,
             null,
             true,
+            null,
             null,
             null,
             null,
@@ -563,6 +576,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -733,6 +747,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             NightRunOrigin.UPLOAD,
             null,
             true,
+            null,
             null,
             null,
             null,
@@ -1022,6 +1037,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null);
     NightRunItem paket =
         new NightRunItem(
@@ -1089,6 +1105,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null);
 
     long runId = runs.insertIfAbsent(maschinell, List.of()).orElseThrow();
@@ -1127,6 +1144,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -1144,6 +1162,12 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
 
   /** Dieselbe Meldung, zusaetzlich mit einem Abbruchgrund (Issue #1142). */
   private NightRun meldungMitAbbruch(Instant startedAt, @Nullable String abbruch) {
+    return meldungMitAbbruch(startedAt, abbruch, null);
+  }
+
+  /** Dieselbe Meldung mit der Abschlussart des Abbruchs (Issue #1500). */
+  private NightRun meldungMitAbbruch(
+      Instant startedAt, @Nullable String abbruch, @Nullable NightRunAbortKind art) {
     return new NightRun(
         null,
         projectId,
@@ -1164,6 +1188,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         abbruch,
+        art,
         null);
   }
 
@@ -1196,6 +1221,48 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
 
     runs.upsert(meldungMitAbbruch(T1, null), List.of());
     assertThat(gelesen(runId).abortReason()).as("und wieder abgeraeumt").isNull();
+  }
+
+  /** Die Abschlussart überlebt das Einfügen (Issue #1500) — Spalte im INSERT und im Lese-Mapper. */
+  @Test
+  void insertIfAbsent_schreibtUndLiestDieAbschlussart() {
+    long runId =
+        runs.insertIfAbsent(
+                meldungMitAbbruch(T1, "Working Tree ist nicht sauber.", NightRunAbortKind.REPORTED),
+                List.of())
+            .orElseThrow();
+
+    assertThat(gelesen(runId).abortKind()).isEqualTo(NightRunAbortKind.REPORTED);
+  }
+
+  /** Wie der Abbruchgrund wird die Art ersetzt, in beide Richtungen (Issue #1500). */
+  @Test
+  void upsert_ersetztDieAbschlussartInBeideRichtungen() {
+    long runId =
+        runs.upsert(meldungMitAbbruch(T1, "Abbruch", NightRunAbortKind.REPORTED), List.of()).id();
+    assertThat(gelesen(runId).abortKind())
+        .as("erst selbst gemeldet")
+        .isEqualTo(NightRunAbortKind.REPORTED);
+
+    runs.upsert(meldungMitAbbruch(T1, "Abbruch", NightRunAbortKind.SILENCED), List.of());
+    assertThat(gelesen(runId).abortKind())
+        .as("dann vom Waechter abgeschlossen")
+        .isEqualTo(NightRunAbortKind.SILENCED);
+
+    runs.upsert(meldungMitAbbruch(T1, null, null), List.of());
+    assertThat(gelesen(runId).abortKind()).as("und wieder abgeraeumt").isNull();
+  }
+
+  /** Ein Bestandslauf vor V49 trägt keinen Wert in der Spalte und liest sich als {@code null}. */
+  @Test
+  void einLaufOhneAbschlussartLiestSichAlsNull() {
+    long runId = runs.insertIfAbsent(meldungMitAbbruch(T1, "Abbruch"), List.of()).orElseThrow();
+
+    assertThat(gelesen(runId).abortKind()).isNull();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT abort_kind FROM night_run WHERE id = ?", String.class, runId))
+        .isNull();
   }
 
   // --- Morgenmeldung (Issue #1456) --------------------------------------------------------
@@ -1243,6 +1310,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         "nacht-token",
         true,
         Instant.parse("2026-09-10T03:22:00Z"),
+        null,
         null,
         null,
         null,
@@ -1403,6 +1471,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null);
     runs.upsert(alsSitzung, List.of(paket(102, NightRunState.GREEN)));
 
@@ -1435,6 +1504,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             "nacht-token",
             true,
             spaeter,
+            null,
             null,
             null,
             null,
@@ -1582,6 +1652,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             null,
+            null,
             null);
 
     long runId =
@@ -1631,6 +1702,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         budget,
+        null,
         null,
         null);
   }

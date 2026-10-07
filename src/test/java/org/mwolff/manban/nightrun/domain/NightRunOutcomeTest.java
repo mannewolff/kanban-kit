@@ -29,7 +29,10 @@ import org.junit.jupiter.api.Test;
 // PMD.TooManyMethods: Testklasse — jede Methode ist ein Fall der Rangfolge, und Faelle werden nicht
 // zusammengelegt, um eine Zahl zu druecken. Issue #1143 bringt die vier Faelle des Abbruchgrunds
 // dazu und reisst damit die Schwelle von 30. Dieselbe Begruendung wie an DisruptionServiceTest.
-@SuppressWarnings("PMD.TooManyMethods")
+// PMD.GodClass: Issue #1499 bringt die neun Faelle des nicht angelaufenen Laufs dazu; die Summe
+// zaehlt Testfaelle ueber dieselben Vorrichtungen, keine verschachtelte Logik. Das
+// Akzeptanzkriterium verlangt die Faelle in dieser Klasse — wie an FortschrittErmittlungTest.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.GodClass"})
 class NightRunOutcomeTest {
 
   private static final Instant FIXED = Instant.parse("2026-09-19T22:00:00Z");
@@ -60,7 +63,7 @@ class NightRunOutcomeTest {
       NightRunMode mode,
       List<NightRunItem> items) {
     return NightRunOutcome.of(
-        complete, null, noWorkReason, null, mode, items, FIXED, FIXED, FIXED, FRIST);
+        complete, null, noWorkReason, null, null, mode, items, FIXED, FIXED, FIXED, FRIST);
   }
 
   /** Derselbe Fall mit einem gemeldeten Abbruchgrund (Issue #1143). */
@@ -76,6 +79,7 @@ class NightRunOutcomeTest {
         null,
         null,
         ABBRUCH,
+        null,
         NightRunMode.IMPLEMENTATION,
         items,
         FIXED,
@@ -444,6 +448,7 @@ class NightRunOutcomeTest {
             null,
             null,
             null,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
             FIXED,
@@ -464,6 +469,7 @@ class NightRunOutcomeTest {
             null,
             null,
             null,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
             FIXED,
@@ -479,6 +485,7 @@ class NightRunOutcomeTest {
     var outcome =
         NightRunOutcome.of(
             false,
+            null,
             null,
             null,
             null,
@@ -508,6 +515,7 @@ class NightRunOutcomeTest {
             null,
             null,
             null,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
             FIXED,
@@ -517,6 +525,7 @@ class NightRunOutcomeTest {
     var darueber =
         NightRunOutcome.of(
             false,
+            null,
             null,
             null,
             null,
@@ -543,6 +552,7 @@ class NightRunOutcomeTest {
             null,
             null,
             null,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(item(1, NightRunState.GREEN, null)),
             FIXED,
@@ -566,6 +576,7 @@ class NightRunOutcomeTest {
             false,
             null,
             "Ready war leer",
+            null,
             null,
             NightRunMode.IMPLEMENTATION,
             List.of(item(1, NightRunState.RED, NightRunErrorClass.HARD_ABORT)),
@@ -670,6 +681,7 @@ class NightRunOutcomeTest {
             null,
             NightRunOutcome.GRUND_UNBEKANNT,
             ABBRUCH,
+            null,
             NightRunMode.IMPLEMENTATION,
             List.of(),
             FIXED,
@@ -682,6 +694,169 @@ class NightRunOutcomeTest {
     assertThat(outcome.noWorkReason()).isNull();
     assertThat(outcome.abortReason()).isEqualTo(ABBRUCH);
     assertThat(outcome.isDisruption()).isTrue();
+  }
+
+  // --- Nicht angelaufen (Issue #1499, Plan #1498 E1/E6, fachliche Quelle #1493) ---------------
+
+  /**
+   * Der Anlass: Der Vorflug bricht ab („Working Tree ist nicht sauber …"), bevor der Lauf eine
+   * Karte aufgenommen hat. Wer ihn startete, sah den Grund auf der Kommandozeile — der Lauf ist
+   * „nicht angelaufen" und keine Störung (AK 1–3).
+   */
+  @Test
+  void einSelbstGemeldeterAbbruchOhnePaketIstNichtAngelaufen() {
+    var outcome = mitArt(NightRunAbortKind.REPORTED, List.of());
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.NOT_STARTED);
+    assertThat(outcome.abortReason()).isEqualTo(ABBRUCH);
+    assertThat(outcome.decisiveItem()).isNull();
+    assertThat(outcome.noWorkReason()).isNull();
+    assertThat(outcome.isDisruption()).isFalse();
+  }
+
+  /**
+   * E1: Eine Kette verbucht übersprungene und liegengebliebene Karten als Grau ohne Fehlerklasse,
+   * noch bevor der Vorflug abbricht. Diese Karten hat der Lauf nicht angefasst — sie dürfen den
+   * Ausgang nicht kippen.
+   */
+  @Test
+  void uebergangenePaketeLassenDenLaufNichtAngelaufen() {
+    var outcome =
+        mitArt(
+            NightRunAbortKind.REPORTED,
+            NightRunMode.CHAIN,
+            List.of(item(8, NightRunState.GREY, null), item(9, NightRunState.GREY, null)));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.NOT_STARTED);
+    assertThat(outcome.decisiveItem()).isNull();
+    assertThat(outcome.isDisruption()).isFalse();
+  }
+
+  /**
+   * AK 1 und 5: Wer eine Karte trägt, hat begonnen — auch die Ketten-Einheit allein, die vor dem
+   * Worktree entsteht und rot gemeldet wird, wenn das Vorbereiten scheiterte.
+   */
+  @Test
+  void einRotesPaketMachtDenAbbruchZurStoerung() {
+    var paket =
+        mitArt(
+            NightRunAbortKind.REPORTED,
+            List.of(item(4, NightRunState.RED, NightRunErrorClass.HARD_ABORT)));
+    var ketteAllein =
+        mitArt(
+            NightRunAbortKind.REPORTED,
+            NightRunMode.CHAIN,
+            List.of(
+                item(993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
+                item(8, NightRunState.GREY, null)));
+
+    assertThat(paket.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(paket.decisiveItem().cardNumber()).isEqualTo(4);
+    assertThat(ketteAllein.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(ketteAllein.decisiveItem().cardNumber()).isEqualTo(993);
+    assertThat(ketteAllein.isDisruption()).isTrue();
+  }
+
+  /** AK 5: Ein grünes Paket ist angefasst — der Abbruch danach bleibt rot, wie seit #1143. */
+  @Test
+  void einGruenesPaketMachtDenAbbruchZurStoerung() {
+    var outcome = mitArt(NightRunAbortKind.REPORTED, List.of(item(1, NightRunState.GREEN, null)));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.decisiveItem()).isNull();
+    assertThat(outcome.abortReason()).isEqualTo(ABBRUCH);
+  }
+
+  /** Grau <em>mit</em> Fehlerklasse ist zurückgestellt, nicht übergangen — also angefasst. */
+  @Test
+  void einZurueckgestelltesPaketIstAngefasst() {
+    var outcome =
+        mitArt(
+            NightRunAbortKind.REPORTED,
+            List.of(item(6, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET)));
+
+    assertThat(outcome.verdict()).isNotEqualTo(NightRunOutcome.Verdict.NOT_STARTED);
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.decisiveItem().cardNumber()).isEqualTo(6);
+  }
+
+  /**
+   * AK 6: Den Grund eines verstummten Laufs, den das Kit nachträglich abschließt, hat niemand auf
+   * der Kommandozeile gesehen — er bleibt eine Störung, auch ohne angefasstes Paket.
+   */
+  @Test
+  void einNachtraeglichAlsVerstummtAbgeschlossenerLaufBleibtStoerung() {
+    var outcome = mitArt(NightRunAbortKind.SILENCED, List.of());
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.abortReason()).isEqualTo(ABBRUCH);
+    assertThat(outcome.isDisruption()).isTrue();
+  }
+
+  /**
+   * Plan #1498 A4: Ohne Abschlussart — jeder Bestand und jeder alte Runner — bleibt der Abbruch,
+   * was er seit #1143 ist.
+   */
+  @Test
+  void ohneAbschlussartBleibtDerAbbruchEineStoerung() {
+    var outcome = mitArt(null, List.of());
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.isDisruption()).isTrue();
+  }
+
+  /** E6: „Verstummt" schlägt die neue Stufe — ein unfertiger Lauf hat keinen Abbruch gemeldet. */
+  @Test
+  void einVerstummterLaufBleibtTrotzGemeldeterArtGescheitert() {
+    var outcome =
+        mitArt(
+            false,
+            null,
+            NightRunAbortKind.REPORTED,
+            NightRunMode.IMPLEMENTATION,
+            List.of(),
+            FIXED.plus(FRIST).plusSeconds(1));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.abortReason()).isNull();
+  }
+
+  /** E6: „Von Hand beendet" schlägt die neue Stufe am unfertigen Lauf wie jeden Abbruch. */
+  @Test
+  void einVonHandBeendeterLaufBleibtTrotzGemeldeterArtGeschlossen() {
+    var outcome =
+        mitArt(
+            false,
+            FIXED,
+            NightRunAbortKind.REPORTED,
+            NightRunMode.IMPLEMENTATION,
+            List.of(),
+            FIXED.plus(FRIST).plusSeconds(1));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.CLOSED);
+  }
+
+  /** Ein abgeschlossen gemeldeter Abbruch mit Abschlussart. */
+  private static NightRunOutcome mitArt(@Nullable NightRunAbortKind art, List<NightRunItem> items) {
+    return mitArt(art, NightRunMode.IMPLEMENTATION, items);
+  }
+
+  /** Derselbe Fall in einer anderen Laufart. */
+  private static NightRunOutcome mitArt(
+      @Nullable NightRunAbortKind art, NightRunMode mode, List<NightRunItem> items) {
+    return mitArt(true, null, art, mode, items, FIXED);
+  }
+
+  /** Und mit Abschluss, Kennzeichnung von Hand und Bezugszeitpunkt. */
+  private static NightRunOutcome mitArt(
+      boolean complete,
+      @Nullable Instant closedAt,
+      @Nullable NightRunAbortKind art,
+      NightRunMode mode,
+      List<NightRunItem> items,
+      Instant jetzt) {
+    return NightRunOutcome.of(
+        complete, closedAt, null, ABBRUCH, art, mode, items, FIXED, FIXED, jetzt, FRIST);
   }
 
   // --- Von Hand beendet (Issue #1197) ---------------------------------------------------------
@@ -732,6 +907,7 @@ class NightRunOutcomeTest {
     return NightRunOutcome.of(
         complete,
         FIXED,
+        null,
         null,
         null,
         NightRunMode.IMPLEMENTATION,

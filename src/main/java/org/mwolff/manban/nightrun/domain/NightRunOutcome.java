@@ -121,6 +121,19 @@ public record NightRunOutcome(
      */
     NO_WORK,
 
+    /**
+     * Nicht angelaufen: Der Lauf hat seinen Abbruch selbst gemeldet, bevor er ein Paket angefasst
+     * hat — <b>keine Störung</b> (Issue #1499, fachliche Quelle #1493, AK 1–3).
+     *
+     * <p>Wer ihn gestartet hat, sah den Grund schon auf der Kommandozeile; ihn am Morgen noch
+     * einmal zu quittieren, wäre dieselbe Nachricht zweimal. Der Grund steht in {@link
+     * NightRunOutcome#abortReason()}.
+     *
+     * <p><b>Ausdrücklich nicht {@link #NO_WORK}:</b> Der Lauf hat nicht „nichts zu tun"
+     * vorgefunden, er kam gar nicht bis zum Nachsehen.
+     */
+    NOT_STARTED,
+
     /** Noch nicht abgeschlossen; der Ausgang steht nicht fest. */
     RUNNING
   }
@@ -160,7 +173,14 @@ public record NightRunOutcome(
    *       Lauf hat noch nichts zu melden, ein verstummter meldet gar nichts mehr. <b>Das
    *       maßgebliche Paket bleibt</b> und wird weiter aus den Paketen bestimmt: „Karte #1112:
    *       harter Abbruch" ist die genauere Auskunft als der Abbruchgrund allein, und sie ist seit
-   *       #1123 eigens geschärft.
+   *       #1123 eigens geschärft. <b>Ausgenommen ist der Lauf, der nicht anlief</b> (Issue #1499,
+   *       Plan #1498 E6): Hat er seinen Abbruch selbst gemeldet ({@link
+   *       NightRunAbortKind#REPORTED}) und kein Paket angefasst, ist er {@link
+   *       Verdict#NOT_STARTED}. Angefasst ist jedes Paket außer dem übergangenen (Grau ohne
+   *       Fehlerklasse, E1) — auch die Ketten-Einheit, die rot gemeldet wird, wenn schon das
+   *       Vorbereiten scheiterte. Ein vom Wächter nachträglich als verstummt abgeschlossener Lauf
+   *       ({@link NightRunAbortKind#SILENCED}) und einer ohne Art bleiben gescheitert: Den Grund
+   *       hat dort niemand gesehen.
    *   <li><b>Rot vor Gelb vor Grau-mit-Fehlerklasse</b>, innerhalb einer Farbe das erste in
    *       Laufreihenfolge — <b>bei einer Kette das zuletzt gerissene</b> (Issue #1123, siehe {@link
    *       #auswahlreihenfolge}).
@@ -189,6 +209,9 @@ public record NightRunOutcome(
    *     <em>gesetzter</em> Wert genügt — dass ein leerer Text wie ein fehlender gilt, entscheidet
    *     schon der Dienst beim Übernehmen (Issue #1142), und ein zweites Mal hier wäre dieselbe
    *     Regel an zwei Stellen.
+   * @param abortKind wie der abgebrochene Lauf zu seinem Abschluss kam (Issue #1499); {@code null}
+   *     für jeden Bestand und jeden Runner, der sie nicht meldet — dann gilt der Abbruch wie bisher
+   *     als Störung (Plan #1498 A4)
    * @param mode die Laufart — sie entscheidet unter gleichrangigen Paketen (Issue #1123)
    * @param items die Pakete des Laufs, in Laufreihenfolge
    * @param startedAt Startzeitpunkt des Laufs — das Lebenszeichen eines Laufs, der nie
@@ -203,6 +226,7 @@ public record NightRunOutcome(
       @Nullable Instant closedAt,
       @Nullable String noWorkReason,
       @Nullable String abortReason,
+      @Nullable NightRunAbortKind abortKind,
       NightRunMode mode,
       List<NightRunItem> items,
       Instant startedAt,
@@ -222,6 +246,9 @@ public record NightRunOutcome(
     // wie die Rangfolge darunter, und zweimal ausgewaehlt liefen die beiden auseinander.
     Optional<NightRunItem> massgeblich = massgeblich(mode, items);
     if (abortReason != null) {
+      if (abortKind == NightRunAbortKind.REPORTED && keinPaketAngefasst(items)) {
+        return new NightRunOutcome(Verdict.NOT_STARTED, null, null, abortReason);
+      }
       return new NightRunOutcome(
           Verdict.FAILED,
           massgeblich.map(NightRunOutcome::decisiveItem).orElse(null),
@@ -251,6 +278,19 @@ public record NightRunOutcome(
       return new NightRunOutcome(Verdict.SUCCEEDED, null, null, null);
     }
     return new NightRunOutcome(Verdict.NO_WORK, null, noWorkReason, null);
+  }
+
+  /**
+   * Ob der Lauf kein Paket angefasst hat — jedes ist übergangen, oder es gibt keines (Issue #1499,
+   * Plan #1498 E1).
+   *
+   * <p>Nicht {@code items.isEmpty()}: Eine Kette verbucht übersprungene und liegengebliebene Karten
+   * als Grau ohne Fehlerklasse, noch bevor der Vorflug abbricht. Am Ausgang hinge sonst, welche
+   * fremden Karten gerade herumlagen.
+   */
+  private static boolean keinPaketAngefasst(List<NightRunItem> items) {
+    return items.stream()
+        .allMatch(item -> item.state() == NightRunState.GREY && item.errorClass() == null);
   }
 
   /**
@@ -309,7 +349,9 @@ public record NightRunOutcome(
    *
    * <p>{@link Verdict#NO_WORK} gehört ausdrücklich nicht dazu (Issue #1121): Eine ruhige Nacht muss
    * niemand quittieren. {@link Verdict#CLOSED} ebenso wenig (Issue #1197): Wer die Zeile gerade
-   * selbst weggeräumt hat, soll sie nicht gleich darauf als Störung wiederfinden.
+   * selbst weggeräumt hat, soll sie nicht gleich darauf als Störung wiederfinden. Und {@link
+   * Verdict#NOT_STARTED} auch nicht (Issue #1499): Wer den Lauf startete, hat seinen Grund schon
+   * gesehen.
    */
   public boolean isDisruption() {
     return verdict == Verdict.FAILED || verdict == Verdict.WAITING;

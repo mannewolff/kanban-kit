@@ -162,7 +162,17 @@ describe('KettenStufenleiste', () => {
 
     await userEvent.click(ziel('Veröffentlichung vorbereitet'))
 
-    expect(onChange).toHaveBeenCalledWith([8, 4])
+    expect(onChange).toHaveBeenCalledWith({ ab: [2], an: [4] })
+  })
+
+  it('meldet nur die eigene Änderung: ein veralteter Stand schreibt kein anderes Label zurück (Issue #1512)', async () => {
+    // Der Stand der Seite trägt noch planreview:1, das der Runner serverseitig längst abnahm.
+    const onChange = zeige({ labelIds: [10, 5, 2] })
+
+    await userEvent.click(ziel('Umsetzung'))
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(onChange).toHaveBeenCalledWith({ ab: [2], an: [3] })
   })
 
   it('ändert nichts, wenn das schon markierte Ziel gewählt wird', async () => {
@@ -199,7 +209,7 @@ describe('KettenStufenleiste', () => {
 
     await userEvent.click(ziel('Veröffentlichung vorbereitet'))
     // kit:durchziehen bleibt stehen (Kit A3), das Ziel kommt dazu.
-    expect(onChange).toHaveBeenCalledWith([7, 4])
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [4] })
   })
 
   it('lässt bei kit:durchziehen ein weiter reichendes Ziel gelten', () => {
@@ -241,7 +251,7 @@ describe('KettenStufenleiste', () => {
 
     await userEvent.click(pruefer.getByRole('button', { name: '2 Prüfer' }))
 
-    expect(onChange).toHaveBeenCalledWith([8, 6])
+    expect(onChange).toHaveBeenCalledWith({ ab: [5], an: [6] })
   })
 
   it('lässt den Prüferschalter ohne Wahl auf der Vorgabe des Projekts stehen', async () => {
@@ -253,7 +263,7 @@ describe('KettenStufenleiste', () => {
     expect(screen.getByText(/Vorgabe des Projekts/)).toBeInTheDocument()
 
     await userEvent.click(pruefer.getByRole('button', { name: '1 Prüfer' }))
-    expect(onChange).toHaveBeenCalledWith([5])
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [5] })
   })
 
   it('ändert nichts, wenn die schon gewählte Prüferzahl noch einmal gewählt wird', async () => {
@@ -305,7 +315,7 @@ describe('KettenStufenleiste', () => {
 
     await userEvent.keyboard('{ArrowRight}')
     await userEvent.keyboard(' ')
-    expect(onChange).toHaveBeenCalledWith([7, 4])
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [4] })
   })
 
   it('lässt andere Tasten unbeachtet', async () => {
@@ -368,7 +378,7 @@ describe('KettenStufenleiste — Start', () => {
     expect(screen.queryByText(GO_SATZ)).not.toBeInTheDocument()
     await userEvent.click(startKnopf())
 
-    expect(onChange).toHaveBeenCalledWith([10, 2, 9])
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [9] })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -406,7 +416,7 @@ describe('KettenStufenleiste — Start', () => {
     const dialog = within(await screen.findByRole('dialog'))
     await userEvent.click(dialog.getByRole('button', { name: 'Kette starten' }))
 
-    expect(onChange).toHaveBeenCalledWith([10, 3, 9])
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [9] })
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
@@ -428,7 +438,7 @@ describe('KettenStufenleiste — Start', () => {
     expect(screen.getByText(/wartet auf die Übernahme durch einen Runner/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Start zurücknehmen' }))
 
-    expect(onChange).toHaveBeenCalledWith([10, 3, 6, 8])
+    expect(onChange).toHaveBeenCalledWith({ ab: [9], an: [] })
   })
 
   it('lässt das Ziel nach dem Start erst nach der Rücknahme wieder ändern', async () => {
@@ -463,7 +473,7 @@ describe('KettenStufenleiste — Start', () => {
 
     expect(startKnopf()).not.toHaveAttribute('aria-disabled')
     await userEvent.click(startKnopf())
-    expect(onChange).toHaveBeenCalledWith([9])
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [9] })
   })
 
   it.each([

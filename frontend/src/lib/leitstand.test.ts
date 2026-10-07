@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { NightRunItemView, NightRunServerMode, NightRunView, Verdict } from '../api/nightRuns'
+import type { NightRunItemView, NightRunOutcomeView, NightRunServerMode, NightRunView, Verdict } from '../api/nightRuns'
 import type { NightRunErrorClass, NightRunState } from './nightRunLog'
 import { GRUND_UNBEKANNT, serverBefund } from '../test/befund'
 import { NIGHT_RUN_VERDICT_TEXT } from './nightRunHandoff'
@@ -648,12 +648,12 @@ describe('melderAusBefund — der Melder eines Laufs aus seinem Befund (#1096)',
   })
 
   /**
-   * AK 6 aus #1121 ueber **alle** sechs Ausgaenge: Ein Lauf ohne Arbeit mit gemeldetem Grund ist
-   * `NO_WORK`, und der ist nirgends rot; der von Hand beendete Lauf (#1197) ebenso wenig. Die
-   * Tabelle geht ueber die Schluessel der Wortliste und nicht ueber eine eigene Aufzaehlung — ein
-   * siebter Ausgang faellt hier auf, statt still mitzulaufen.
+   * AK 6 aus #1121 ueber **alle** sieben Ausgaenge: Ein Lauf ohne Arbeit mit gemeldetem Grund ist
+   * `NO_WORK`, und der ist nirgends rot; der von Hand beendete Lauf (#1197) ebenso wenig, der nicht
+   * angelaufene (#1502) ist braun. Die Tabelle geht ueber die Schluessel der Wortliste und nicht
+   * ueber eine eigene Aufzaehlung — ein achter Ausgang faellt hier auf, statt still mitzulaufen.
    */
-  it('ordnet jedem der sechs Ausgaenge seinen Melder zu, und nur FAILED ist rot', () => {
+  it('ordnet jedem der sieben Ausgaenge seinen Melder zu, und nur FAILED ist rot', () => {
     const je = Object.fromEntries(
       (Object.keys(NIGHT_RUN_VERDICT_TEXT) as Verdict[]).map((verdict) => [
         verdict,
@@ -673,6 +673,7 @@ describe('melderAusBefund — der Melder eines Laufs aus seinem Befund (#1096)',
       RUNNING: 'stahl',
       NO_WORK: 'grau',
       CLOSED: 'grau',
+      NOT_STARTED: 'braun',
     })
   })
 
@@ -761,6 +762,64 @@ describe('Der abgebrochene Lauf im Browser (#1144)', () => {
     expect(serverBefund({ complete: true, items: [] }).abortReason).toBeNull()
     expect(laufband(lauf({ abortReason: null })).titel).toBe('Kette abgeschlossen — 0 Vorgänge')
     expect(laufNotiz(lauf({ abortReason: null }))).toBe(laufNotiz(lauf()))
+  })
+})
+
+/**
+ * Der Lauf, der nicht anlief (Issue #1502, Plan #1498 E9): Er meldete seinen Abbruch selbst, bevor
+ * er ein Paket anfasste. Braun statt zinnober, und das Wort steht vor dem Grund — an beiden Stellen
+ * des Projekt-Leitstands, die den Abbruchgrund zeigen.
+ */
+describe('Der nicht angelaufene Lauf im Browser (#1502)', () => {
+  const GRUND = 'Working Tree ist nicht sauber. Bitte committen oder aufraeumen, dann neu starten.'
+  const nichtAngelaufen = (): NightRunOutcomeView => ({
+    verdict: 'NOT_STARTED',
+    decisiveItem: null,
+    noWorkReason: null,
+    abortReason: GRUND,
+  })
+
+  it('meldet den nicht angelaufenen Lauf braun, obwohl er einen Abbruchgrund traegt', () => {
+    expect(melderAusBefund(nichtAngelaufen())).toBe('braun')
+  })
+
+  it('laesst den gescheiterten Lauf mit Abbruchgrund zinnob', () => {
+    expect(
+      melderAusBefund({ verdict: 'FAILED', decisiveItem: null, noWorkReason: null, abortReason: GRUND }),
+    ).toBe('zinnob')
+  })
+
+  it('traegt im Laufband Wort und Grund als Titel und den braunen Melder', () => {
+    const band = laufband(lauf({ abortReason: GRUND, outcome: nichtAngelaufen() }))
+
+    expect(band.titel).toBe(`nicht angelaufen — ${GRUND}`)
+    expect(band.melder).toBe('braun')
+  })
+
+  it('haengt Wort und Grund an die Notiz der Platte „Letzter Run"', () => {
+    expect(laufNotiz(lauf({ abortReason: GRUND, outcome: nichtAngelaufen() }))).toBe(
+      `${laufNotiz(lauf())} · nicht angelaufen — ${GRUND}`,
+    )
+  })
+
+  it('serverBefund liest den selbst gemeldeten Abbruch ohne angefasstes Paket als NOT_STARTED', () => {
+    const items = [paket(7, 'GREY')]
+
+    expect(serverBefund({ complete: true, abortReason: GRUND, abortKind: 'REPORTED', items })).toEqual(
+      nichtAngelaufen(),
+    )
+  })
+
+  it('serverBefund laesst den Abbruch mit angefasstem Paket, ohne Art oder als verstummt gescheitert', () => {
+    const angefasst = [paket(7, 'GREY', { errorClass: 'DEPENDENCY_UNMET' })]
+
+    expect(serverBefund({ complete: true, abortReason: GRUND, abortKind: 'REPORTED', items: angefasst }).verdict).toBe(
+      'FAILED',
+    )
+    expect(serverBefund({ complete: true, abortReason: GRUND, items: [] }).verdict).toBe('FAILED')
+    expect(serverBefund({ complete: true, abortReason: GRUND, abortKind: 'SILENCED', items: [] }).verdict).toBe(
+      'FAILED',
+    )
   })
 })
 

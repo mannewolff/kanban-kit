@@ -634,6 +634,35 @@ describe('LeitstandPage — Verbrauch', () => {
   })
 })
 
+/**
+ * Der Lauf, der nicht anlief (Issue #1502, Plan #1498 E9): Band „Jüngster Run" und Platte „Letzter
+ * Run" tragen das Wort vor dem Grund und die braune LED aus dem Befund.
+ */
+describe('LeitstandPage — nicht angelaufener Lauf (#1502)', () => {
+  const GRUND = 'Working Tree ist nicht sauber. Bitte committen oder aufraeumen, dann neu starten.'
+
+  it('zeigt Wort und Grund in Laufband und „Letzter Run" mit brauner LED', async () => {
+    m.klassen.mockResolvedValue({})
+    m.laeufe.mockResolvedValue([
+      lauf({
+        abortReason: GRUND,
+        processedCount: 0,
+        items: [],
+        outcome: { verdict: 'NOT_STARTED', decisiveItem: null, noWorkReason: null, abortReason: GRUND },
+      }),
+    ])
+    renderPage()
+
+    const band = await screen.findByRole('region', { name: 'Jüngster Run' })
+    expect(band).toHaveTextContent(`nicht angelaufen — ${GRUND}`)
+    expect(within(band).getByTestId('led-braun')).toBeInTheDocument()
+    const platte = await screen.findByRole('region', { name: 'Letzter Run · Kette' })
+    expect(platte).toHaveTextContent(`nicht angelaufen — ${GRUND}`)
+    expect(within(platte).getByTestId('led-braun')).toBeInTheDocument()
+    expect(screen.queryAllByTestId('led-zinnob')).toHaveLength(0)
+  })
+})
+
 describe('LeitstandPage — Lauf ohne Arbeit (#1069)', () => {
   const GRUND = 'Kein Eintrag trug das Label kit:nightrun'
   const ohneArbeit = () => lauf({ noWorkReason: GRUND, processedCount: 0, items: [] })

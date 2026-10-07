@@ -43,7 +43,7 @@ import { cardsApi as defaultCardsApi, type Card, type CardActivity, type CardByN
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import type { NightRunsApi } from '../api/nightRuns'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
-import { KettenStufenleiste, traegtStufenleiste } from './nachtlauf/KettenStufenleiste'
+import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
@@ -1117,7 +1117,8 @@ interface Props {
     | 'get'
     | 'update'
     | 'setAssignees'
-    | 'setLabels'
+    | 'addLabel'
+    | 'removeLabel'
     | 'getActivity'
     | 'restore'
     | 'setStatus'
@@ -1237,21 +1238,38 @@ function CardDetailModalView({
   const [labelIds, setLabelIds] = useState<number[]>(card.labels)
   // Gleiche Race wie bei den Zuständigen: nur der juengste Aufruf darf zuruecksetzen.
   const labelsRequestSeq = useRef(0)
-  const saveLabels = async (ids: number[]) => {
+  /**
+   * Schickt genau die Änderung, je Label einen Aufruf — nie die volle Liste: Die baute sich aus dem
+   * angezeigten Stand, und ein veralteter schriebe ein inzwischen abgenommenes Label zurück, etwa
+   * ein vom Runner verbrauchtes `kit:night` (Issue #1512). Danach gilt der Stand des Servers.
+   */
+  const aendereLabels = async ({ ab, an }: LabelAenderung) => {
     // Rollback wie bei den Zuständigen: der State steht vor der Zusage des Servers.
     const vorher = labelIds
     const requestId = ++labelsRequestSeq.current
-    setLabelIds(ids)
+    setLabelIds([...labelIds.filter((id) => !ab.includes(id)), ...an.filter((id) => !labelIds.includes(id))])
+    let antwort: Card | null = null
     try {
-      await cardsApi.setLabels(card.id, ids)
+      for (const id of ab) antwort = await cardsApi.removeLabel(card.id, id)
+      for (const id of an) antwort = await cardsApi.addLabel(card.id, id)
+      if (antwort !== null && labelsRequestSeq.current === requestId) {
+        setLabelIds(antwort.labels)
+      }
       onChanged?.()
     } catch (error_: unknown) {
       if (labelsRequestSeq.current === requestId) {
-        setLabelIds(vorher)
+        // Was schon durchging, zeigt die letzte Antwort; ohne sie gilt der Ausgangsstand.
+        setLabelIds(antwort?.labels ?? vorher)
       }
       notify(apiErrorMessage(error_, 'Labels speichern fehlgeschlagen.'), 'error')
     }
   }
+  /** Die Label-Sektion meldet die volle Auswahl; gesendet wird nur, was sich daran geändert hat. */
+  const saveLabels = (ids: number[]) =>
+    aendereLabels({
+      ab: labelIds.filter((id) => !ids.includes(id)),
+      an: ids.filter((id) => !labelIds.includes(id)),
+    })
 
   // `editing` startet immer im Lesemodus: `initialEditing` greift erst, wenn die Beschreibung da
   // ist (siehe Nachlade-Effekt) — sonst öffnete die Maske mit einem leeren Feld, dessen Speichern
@@ -1822,7 +1840,7 @@ function CardDetailModalView({
                   disabled={!(canEdit && canEditLabels)}
                   beschreibung={stand.description}
                   kommentare={comments}
-                  onChange={(ids) => void saveLabels(ids)}
+                  onChange={(aenderung) => void aendereLabels(aenderung)}
                   cardId={card.id}
                   api={nightRunsApi}
                 />

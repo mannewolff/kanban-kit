@@ -238,6 +238,26 @@ class CardControllerTest {
   }
 
   @Test
+  void addLabel_setztGenauDiesesLabel() {
+    CardView view = card();
+    when(service.changeLabel(3L, 8L, 5L, LabelAction.ADD)).thenReturn(view);
+
+    CardView result = controller.addLabel(3L, 8L, 5L);
+
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
+  void removeLabel_nimmtGenauDiesesLabelAb() {
+    CardView view = card();
+    when(service.changeLabel(3L, 8L, 5L, LabelAction.REMOVE)).thenReturn(view);
+
+    CardView result = controller.removeLabel(3L, 8L, 5L);
+
+    assertThat(result).isSameAs(view);
+  }
+
+  @Test
   void setLabels_coalescesNullListToEmpty() {
     CardView view = card();
     when(service.setLabels(3L, 8L, List.of())).thenReturn(view);

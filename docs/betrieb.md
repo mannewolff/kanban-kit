@@ -149,7 +149,7 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_BASE_URL` | Basis-URL für Links in E-Mails | `https://localhost` |
 | `MANBAN_BOOTSTRAP_ADMIN_TOKEN` | Einmal-Token für den ersten Admin (leer = deaktiviert) | leer |
 | `MANBAN_MAIL_ENABLED` | echten Mailversand aktivieren | `false` (Links werden geloggt) |
-| `MANBAN_CLEANUP_ENABLED` | geplante Aufräum-Jobs aktivieren (Done-Archivierung, Papierkorb-Leerung, Outbox-Aufräumung, Aufräumung der Überlast-Abweisungen nach 90 Tagen und der Idempotenz-Schlüssel nach 24 Stunden) | `true` |
+| `MANBAN_CLEANUP_ENABLED` | geplante Aufräum-Jobs aktivieren (Done-Archivierung, Vorhaben-Archivierung, Papierkorb-Leerung, Outbox-Aufräumung, Aufräumung der Überlast-Abweisungen nach 90 Tagen und der Idempotenz-Schlüssel nach 24 Stunden). Die Vorhaben-Archivierung läuft auch bei einer Aufbewahrung von 0 Tagen, obwohl der Automationsstatus „Done-Archivierung“ im Admin dann „aus“ zeigt — er meint nur die Karten | `true` |
 | `MANBAN_DONE_RETENTION_DAYS` | Tage bis Done-Karten automatisch archiviert werden | `30` |
 | `MANBAN_OUTBOX_ENABLED` | Outbox-Worker aktivieren (abgeschaltet bleiben Aufträge liegen) | `true` |
 | `MANBAN_OUTBOX_POLL_INTERVAL_MS` | Abstand zwischen zwei Worker-Läufen in Millisekunden | `5000` |

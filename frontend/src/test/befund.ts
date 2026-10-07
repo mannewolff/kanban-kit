@@ -45,6 +45,11 @@ export function serverBefund(lauf: {
   noWorkReason?: string | null
   /** Grund eines harten Abbruchs (Issue #1143) — er schlaegt den Lauf ohne Arbeit und die Pakete. */
   abortReason?: string | null
+  /**
+   * Abschlussart des Abbruchs (Issue #1500) — nur `REPORTED` ohne angefasstes Paket ergibt
+   * `NOT_STARTED` (Issue #1499). Ohne Angabe bleibt der Abbruch gescheitert wie vor der Umstellung.
+   */
+  abortKind?: 'REPORTED' | 'SILENCED' | null
   items: readonly NightRunItemView[]
   /** Ob der Lauf ueber die Stillefrist hinaus kein Lebenszeichen gab (Issue #1091). */
   verstummt?: boolean
@@ -66,6 +71,13 @@ export function serverBefund(lauf: {
   // Paketen: Ein Lauf, der abbrach, ist nie gelungen — auch nicht nach drei gruenen Paketen. Das
   // massgebliche Paket bleibt daneben und kommt weiter aus den Paketen (E5).
   if (lauf.abortReason != null) {
+    // Der Lauf, der nicht anlief (Issue #1499): selbst gemeldet und kein Paket angefasst — jedes ist
+    // uebergangen (grau ohne Fehlerklasse), oder es gibt keines. Kein massgebliches Paket, keine
+    // Stoerung; der Grund bleibt.
+    const keinPaketAngefasst = lauf.items.every((i) => i.state === 'GREY' && i.errorClass == null)
+    if (lauf.abortKind === 'REPORTED' && keinPaketAngefasst) {
+      return { verdict: 'NOT_STARTED', decisiveItem: null, noWorkReason: null, abortReason: lauf.abortReason }
+    }
     return {
       verdict: 'FAILED',
       decisiveItem: massgeblich,

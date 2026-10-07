@@ -6,6 +6,7 @@ import {
   kurzGrund,
   KURZ_GRUND_MAX,
   nightRunZustandsText,
+  NIGHT_RUN_ERROR_CLASS_TEXT,
   NIGHT_RUN_STATE_TEXT,
   NIGHT_RUN_VERDICT_TEXT,
   type NightRunHandoffItem,
@@ -230,11 +231,19 @@ describe('nightRunZustandsText — Rueckfall wertgleich (AK 9 aus #842)', () => 
   })
 })
 
-describe('NIGHT_RUN_VERDICT_TEXT — die Woerter der sechs Ausgaenge (#1096, #1121, #1197)', () => {
-  const VERDICTS = ['SUCCEEDED', 'FAILED', 'WAITING', 'RUNNING', 'NO_WORK', 'CLOSED'] as const satisfies readonly Verdict[]
+describe('NIGHT_RUN_VERDICT_TEXT — die Woerter der sieben Ausgaenge (#1096, #1121, #1197, #1502)', () => {
+  const VERDICTS = [
+    'SUCCEEDED',
+    'FAILED',
+    'WAITING',
+    'RUNNING',
+    'NO_WORK',
+    'CLOSED',
+    'NOT_STARTED',
+  ] as const satisfies readonly Verdict[]
 
-  it('traegt zu jedem der sechs Ausgaenge einen nicht leeren Text', () => {
-    // Ueber die Schluessel der Tabelle selbst: Ein siebter Eintrag faellt hier auf, statt still
+  it('traegt zu jedem der sieben Ausgaenge einen nicht leeren Text', () => {
+    // Ueber die Schluessel der Tabelle selbst: Ein achter Eintrag faellt hier auf, statt still
     // mitzulaufen. Ein fehlender bricht schon `tsc` am `Record`.
     expect(Object.keys(NIGHT_RUN_VERDICT_TEXT).toSorted()).toEqual([...VERDICTS].toSorted())
     for (const verdict of VERDICTS) {
@@ -246,6 +255,7 @@ describe('NIGHT_RUN_VERDICT_TEXT — die Woerter der sechs Ausgaenge (#1096, #11
   // Ausgang muss ohne Farbwahrnehmung zu lesen sein. `NO_WORK` kam mit Issue #1121 dazu — sein
   // Melder ist dasselbe Grau wie das eines uebergangenen Pakets, den Sinn traegt allein das Wort.
   // `CLOSED` kam mit Issue #1197 dazu: derselbe graue Melder, und wieder traegt das Wort den Sinn.
+  // `NOT_STARTED` kam mit Issue #1502 dazu: braun und ausdruecklich als Wort (AK 8 von #1493).
   it('ordnet die Ausgaenge ihren Woertern woertlich zu', () => {
     expect(NIGHT_RUN_VERDICT_TEXT).toEqual({
       SUCCEEDED: 'gelungen',
@@ -254,6 +264,7 @@ describe('NIGHT_RUN_VERDICT_TEXT — die Woerter der sechs Ausgaenge (#1096, #11
       RUNNING: 'läuft',
       NO_WORK: 'nichts zu tun',
       CLOSED: 'von Hand beendet',
+      NOT_STARTED: 'nicht angelaufen',
     })
   })
 })
@@ -288,6 +299,10 @@ describe('kurzGrund — der Abbruchgrund in einer Zeile (#1144)', () => {
     )
   })
 
+  it('nimmt nach einer fuehrenden Leerzeile nur die erste nicht leere Zeile, ohne Rand', () => {
+    expect(kurzGrund('\n  Pruefungen rot  \nZweite Zeile')).toBe('Pruefungen rot')
+  })
+
   it('laesst einen Text unterhalb der Grenze unveraendert', () => {
     const grund = 'Harter Stopp (dirty-tree)'
 
@@ -311,5 +326,21 @@ describe('kurzGrund — der Abbruchgrund in einer Zeile (#1144)', () => {
   it('gibt zu leerem Text und zu lauter leeren Zeilen einen leeren Text', () => {
     expect(kurzGrund('')).toBe('')
     expect(kurzGrund('\n  \n\t\n')).toBe('')
+  })
+})
+
+/** Der Wortlaut jeder Fehlerklasse (Issue #1517) — ein leerer Text fiele sonst niemandem auf. */
+describe('NIGHT_RUN_ERROR_CLASS_TEXT — die Beschriftung je Fehlerklasse (#1517)', () => {
+  it.each([
+    ['CHECKS_RED', 'Prüfungen rot'],
+    ['CHECKS_NOT_STARTED', 'Prüfungen nicht gelaufen'],
+    ['DEPENDENCY_UNMET', 'Abhängigkeit offen'],
+    ['UNEXPECTED_STATE', 'Unerwarteter Zustand'],
+    ['HARD_ABORT', 'Harter Abbruch'],
+    ['AWAITING_DECISION', 'Wartet auf Entscheidung'],
+    ['REVIEWER_FAILED', 'Prüf-Session gescheitert'],
+    ['TIME_BUDGET_EXCEEDED', 'Zeitbudget erschöpft'],
+  ] as const)('%s heisst „%s“', (klasse, text) => {
+    expect(NIGHT_RUN_ERROR_CLASS_TEXT[klasse]).toBe(text)
   })
 })

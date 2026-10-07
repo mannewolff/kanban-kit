@@ -252,6 +252,15 @@ export const cardsApi = {
       method: 'PUT',
       body: JSON.stringify({ labels }),
     }),
+  /**
+   * Setzt bzw. nimmt genau ein Label; die übrigen bleiben unberührt. Anders als `setLabels` kann
+   * ein veralteter Stand der Seite so kein inzwischen abgenommenes Label zurückschreiben
+   * (Issue #1512).
+   */
+  addLabel: (cardId: number, labelId: number) =>
+    apiFetch<Card>(`/api/cards/${cardId}/labels/${labelId}`, { method: 'POST' }),
+  removeLabel: (cardId: number, labelId: number) =>
+    apiFetch<Card>(`/api/cards/${cardId}/labels/${labelId}`, { method: 'DELETE' }),
   archive: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}/archive`, { method: 'POST' }),
   bulkArchive: (cardIds: number[]) =>
     apiFetch<Card[]>(`/api/cards/bulk-archive`, { method: 'POST', body: JSON.stringify({ cardIds }) }),

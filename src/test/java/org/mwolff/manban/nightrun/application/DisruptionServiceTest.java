@@ -39,6 +39,7 @@ import org.mwolff.manban.nightrun.application.DisruptionService.DisruptionView;
 import org.mwolff.manban.nightrun.application.DisruptionService.LaufPaketeView;
 import org.mwolff.manban.nightrun.application.DisruptionService.LeitstandView;
 import org.mwolff.manban.nightrun.application.DisruptionService.PaketView;
+import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
@@ -89,7 +90,7 @@ class DisruptionServiceTest {
 
   private static DisruptionCandidate kandidat(long laufId, Instant startedAt, NightRunMode mode) {
     return new DisruptionCandidate(
-        laufId, 9L, "Projekt", mode, startedAt, null, true, null, null, null);
+        laufId, 9L, "Projekt", mode, startedAt, null, true, null, null, null, null);
   }
 
   /** Ein Lauf, der sich noch nicht als abgeschlossen gemeldet hat. */
@@ -111,11 +112,18 @@ class DisruptionServiceTest {
         false,
         null,
         null,
+        null,
         null);
   }
 
   /** Ein Lauf, der seinen harten Abbruch selbst gemeldet hat (Issue #1143). */
   private static DisruptionCandidate abgebrochen(long laufId, Instant startedAt) {
+    return abgebrochen(laufId, startedAt, null);
+  }
+
+  /** Derselbe Lauf mit der Abschlussart, die das Kit gemeldet hat (Issue #1500). */
+  private static DisruptionCandidate abgebrochen(
+      long laufId, Instant startedAt, @Nullable NightRunAbortKind art) {
     return new DisruptionCandidate(
         laufId,
         9L,
@@ -126,6 +134,7 @@ class DisruptionServiceTest {
         true,
         null,
         "Dirty-Guard: uncommittete Reste in src/main/java/Foo.java",
+        art,
         null);
   }
 
@@ -509,6 +518,7 @@ class DisruptionServiceTest {
             false,
             null,
             null,
+            null,
             null));
 
     LeitstandView leitstand = umEinsNachMittag().leitstand(ADMIN, BERLIN);
@@ -617,6 +627,7 @@ class DisruptionServiceTest {
             true,
             NightRunOutcome.GRUND_UNBEKANNT,
             null,
+            null,
             null);
     nachtLaeufe(rueckfall);
     when(disruptions.openCandidates()).thenReturn(List.of(rueckfall));
@@ -653,6 +664,7 @@ class DisruptionServiceTest {
                     true,
                     NightRunOutcome.GRUND_UNBEKANNT,
                     null,
+                    null,
                     null)));
     pakete(paket(5L, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET));
 
@@ -683,6 +695,7 @@ class DisruptionServiceTest {
             null,
             true,
             "Ready ist leer — nichts zu tun.",
+            null,
             null,
             null);
     nachtLaeufe(ruhig);
@@ -722,6 +735,53 @@ class DisruptionServiceTest {
               assertThat(v.outcome().verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
               assertThat(v.outcome().abortReason()).isEqualTo(abgebrochen.abortReason());
             });
+    assertThat(ids(leitstand.durchgefuehrte())).containsExactly(5L);
+  }
+
+  /**
+   * Issue #1500, AK 1 und 3 der fachlichen Quelle #1493: Ein Lauf, der seinen Abbruch selbst
+   * gemeldet hat ({@code REPORTED}), bevor er ein Paket anfasste, ist nicht angelaufen. Er steht
+   * unter den durchgeführten Läufen der Nacht, aber nicht unter den Störungen — der Dienst reicht
+   * die Art vom Kandidaten bis in den Befund.
+   */
+  @Test
+  void einNichtAngelaufenerLaufStehtUnterDenDurchgefuehrten_nichtUnterDenStoerungen() {
+    DisruptionCandidate nichtAngelaufen = abgebrochen(5L, JETZT, NightRunAbortKind.REPORTED);
+    nachtLaeufe(nichtAngelaufen);
+    when(disruptions.openCandidates()).thenReturn(List.of(nichtAngelaufen));
+    pakete();
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.stoerungen()).isEmpty();
+    assertThat(leitstand.durchgefuehrte())
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.nightRunId()).isEqualTo(5L);
+              assertThat(v.outcome().verdict()).isEqualTo(NightRunOutcome.Verdict.NOT_STARTED);
+              assertThat(v.outcome().abortReason()).isEqualTo(nichtAngelaufen.abortReason());
+            });
+  }
+
+  /**
+   * Issue #1500, AK 6 der fachlichen Quelle #1493: Den Lauf, den der Wächter nachträglich
+   * abgeschlossen hat ({@code SILENCED}), hat niemand auf der Kommandozeile gesehen — er bleibt
+   * eine Störung, auch ohne angefasstes Paket.
+   */
+  @Test
+  void einVomWaechterAbgeschlossenerLaufOhnePaketBleibtEineStoerung() {
+    DisruptionCandidate verstummt = abgebrochen(5L, JETZT, NightRunAbortKind.SILENCED);
+    nachtLaeufe(verstummt);
+    when(disruptions.openCandidates()).thenReturn(List.of(verstummt));
+    pakete();
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.stoerungen())
+        .singleElement()
+        .extracting(v -> v.outcome().verdict())
+        .isEqualTo(NightRunOutcome.Verdict.FAILED);
     assertThat(ids(leitstand.durchgefuehrte())).containsExactly(5L);
   }
 
@@ -772,6 +832,7 @@ class DisruptionServiceTest {
                     JETZT,
                     null,
                     true,
+                    null,
                     null,
                     null,
                     null)));
@@ -1123,6 +1184,7 @@ class DisruptionServiceTest {
         JETZT.minus(Duration.ofHours(5)),
         null,
         false,
+        null,
         null,
         null,
         closedAt);

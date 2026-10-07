@@ -1,6 +1,7 @@
 import type { WeeklyThroughput } from '../api/dashboard'
 import type { NightRunErrorClassCounts, NightRunItemView, NightRunOutcomeView, NightRunServerMode, NightRunView } from '../api/nightRuns'
 import type { NightRunErrorClass, NightRunState } from './nightRunLog'
+import { NIGHT_RUN_VERDICT_TEXT } from './nightRunHandoff'
 
 /**
  * Die Rechnung des Leitstands (#979, Entwurf `docs/entwurf-leitstand.html` Z. 1200–1678): aus den
@@ -13,7 +14,7 @@ import type { NightRunErrorClass, NightRunState } from './nightRunLog'
  */
 
 /** Die Melder des Entwurfs als Namen — die Werte liegen im Theme. */
-export type Melder = 'gruen' | 'bernst' | 'zinnob' | 'stahl' | 'grau'
+export type Melder = 'gruen' | 'bernst' | 'zinnob' | 'stahl' | 'grau' | 'braun'
 
 // Die fuenf Formatierer entstehen beim Laden des Moduls. Stryker kann einen Mutanten dort nicht
 // mehr aktivieren — das Modul ist schon ausgewertet, wenn der Lauf beginnt —, weshalb jede
@@ -151,6 +152,11 @@ export function melderAusBefund(befund: NightRunOutcomeView): Melder {
   if (befund.verdict === 'RUNNING') {
     return 'stahl'
   }
+  // Der Lauf, der nicht anlief (Issue #1502), traegt einen Abbruchgrund und steht deshalb **vor**
+  // dem Zweig darunter: Er ist keine Stoerung, sondern braun — der Mensch sah den Grund schon.
+  if (befund.verdict === 'NOT_STARTED') {
+    return 'braun'
+  }
   // Der selbst gemeldete Abbruch (Issue #1144) schlaegt das massgebliche Paket: Ein Lauf, der
   // abbrach, ist nie gelungen — auch nicht, wenn sein massgebliches Paket nur zurueckgestellt
   // (grau) oder gelb ist. Ausdruecklich nicht das Grau des Laufs ohne Arbeit: Dort gab es nichts
@@ -240,7 +246,7 @@ export function laufband(lauf: NightRunView): Laufband {
     // Der Abbruchgrund steht vor allem anderen (Issue #1144, Plan #1139 E6): Er verdraengt den
     // Rueckfalltext „Nichts abgearbeitet — Grund unbekannt" ebenso wie die Zahl der Vorgaenge —
     // die sagt an einem abgebrochenen Lauf nicht, woran er starb.
-    titel = lauf.abortReason
+    titel = abbruchText(lauf, lauf.abortReason)
   } else if (ohneArbeit != null) {
     // Der Grund steht statt „abgeschlossen — 0 Vorgaenge": Die Zahl sagt dasselbe noch einmal,
     // der Grund sagt, warum.
@@ -369,6 +375,15 @@ export function laufzeitUhr(ms: number): string {
   return `${zwei(Math.floor(sekunden / 3600))}:${zwei(Math.floor((sekunden % 3600) / 60))}:${zwei(sekunden % 60)}`
 }
 
+/**
+ * Der Abbruchgrund, wie Band und Notiz ihn zeigen: beim Lauf, der nicht anlief, mit dem Wort davor
+ * (Issue #1502, Plan #1498 E9) — sonst stuende die braune LED neben einem Grund, der wie jeder
+ * andere Abbruch klingt. Die uebrigen Abbrueche bleiben beim blossen Grund.
+ */
+function abbruchText(lauf: NightRunView, grund: string): string {
+  return lauf.outcome.verdict === 'NOT_STARTED' ? `${NIGHT_RUN_VERDICT_TEXT.NOT_STARTED} — ${grund}` : grund
+}
+
 /** Die Notiz im Kopf der Platte „Letzter Run": Beginn, Dauer, Zahl der Pakete. */
 export function laufNotiz(lauf: NightRunView): string {
   const pakete = lauf.items.length === 1 ? '1 Paket' : `${lauf.items.length} Pakete`
@@ -377,7 +392,7 @@ export function laufNotiz(lauf: NightRunView): string {
   // Vorrang vor ihr (Issue #1144, Plan #1139 E6) — beide zugleich gibt es nicht. Die Auskunft kommt
   // aus dem Befund (Issue #1186): Der Lauf mit zurueckgestellten Paketen traegt den Rueckfalltext,
   // hat aber nicht nichts gefunden — in seiner Notiz steht kein Grund (Plan #1181 E11).
-  const grund = lauf.abortReason ?? auskunftOhneArbeit(lauf)
+  const grund = lauf.abortReason == null ? auskunftOhneArbeit(lauf) : abbruchText(lauf, lauf.abortReason)
   return grund == null ? stand : `${stand} · ${grund}`
 }
 

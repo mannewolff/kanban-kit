@@ -308,6 +308,9 @@ public class DisruptionService {
             // Abbruch meldete, ist in beiden Auswertungswegen gescheitert — nicht hier gelungen
             // und dort gestört (AK 8 der fachlichen Quelle #1074).
             k.abortReason(),
+            // Die Abschlussart (Issue #1500), dieselbe wie in NightRunService.view: Ein Lauf, der
+            // nicht angelaufen ist, steht in beiden Auswertungswegen nicht als Störung.
+            k.abortKind(),
             k.mode(),
             items,
             k.startedAt(),

@@ -655,6 +655,41 @@ class NightRunIngestIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[0].items[0].stages.length()").value(0));
   }
 
+  /**
+   * Issue #1500, Plan #1498 A4: Eine Kit-Kopie vor der Abschlussart meldet einen Abbruch ohne
+   * {@code abortKind}. Ihre Meldung kommt an, und der Abbruch bleibt wie bisher gescheitert — der
+   * Server erfindet keine Art.
+   */
+  @Test
+  void eineMeldungOhneAbschlussartWirdAngenommen_undErfindetKeine() throws Exception {
+    Aufbau aufbau = aufbau("ingest-ohne-art");
+
+    melde(aufbau, meldung(true).replace("\"items\"", "\"abortReason\":\"Abbruch\",\"items\""));
+
+    mvc.perform(get(laufliste(aufbau.projectId())).cookie(aufbau.session()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].abortReason").value("Abbruch"))
+        .andExpect(jsonPath("$[0].abortKind").doesNotExist())
+        .andExpect(jsonPath("$[0].outcome.verdict").value("FAILED"));
+  }
+
+  /** Issue #1500: Eine Art, die das Board nicht kennt, wird mit 400 abgewiesen. */
+  @Test
+  void eineUnbekannteAbschlussartWirdAbgewiesen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-art-unbekannt");
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(
+                    meldung(true)
+                        .replace(
+                            "\"items\"",
+                            "\"abortReason\":\"Abbruch\",\"abortKind\":\"VERSTUMMT\",\"items\"")))
+        .andExpect(status().isBadRequest());
+  }
+
   /** E11: Ein Feldname, den das Board nicht kennt, wird angenommen statt mit 400 abgewiesen. */
   @Test
   void einUnbekannterFeldnameInDefaultFieldsWirdAngenommen() throws Exception {

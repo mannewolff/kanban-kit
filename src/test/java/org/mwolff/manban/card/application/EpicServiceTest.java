@@ -328,6 +328,55 @@ class EpicServiceTest {
   }
 
   @Test
+  void listEpics_laesstArchivierteVorhabenAus() {
+    // Given: ein aktives und ein archiviertes Vorhaben (Issue #1494, AK 4/AK 5)
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(5L, 20L, 1, false, null, CardType.EPIC, null, "A"),
+                card(6L, 20L, 2, true, null, CardType.EPIC, null, "B")));
+
+    // When
+    List<EpicService.EpicView> result = service.listEpics(1L, BOARD);
+
+    // Then
+    assertThat(result).extracting(EpicService.EpicView::id).containsExactly(5L);
+  }
+
+  @Test
+  void assignParent_archiviertesVorhaben_wirdAbgewiesen() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cards.findById(30L))
+        .thenReturn(Optional.of(card(30L, 20L, 5, true, null, CardType.EPIC, null, "E")));
+
+    // When / Then
+    assertThatThrownBy(() -> service.assignParent(1L, 1L, 30L))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessage("Das Vorhaben ist archiviert: 30");
+    verify(cards, never()).save(any());
+  }
+
+  @Test
+  void assignParent_unveraenderteZuordnungZuArchiviertemVorhaben_bleibtErlaubt() {
+    // Given: Die Karte gehört schon zum archivierten Vorhaben 30 (Plan #1504, E4).
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, 30L, null)));
+    when(cards.findById(30L))
+        .thenReturn(Optional.of(card(30L, 20L, 5, true, null, CardType.EPIC, null, "E")));
+
+    // When
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.assignParent(1L, 1L, 30L);
+
+    // Then
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().parentId()).isEqualTo(30L);
+  }
+
+  @Test
   void createEpic_allowsNullShortcode() {
     // Given
     when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));

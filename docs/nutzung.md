@@ -243,7 +243,8 @@ Von oben nach unten führt er:
 
 1. **Jüngster Run** — der jüngste Run als schmales Band: Melder (als Wechselblinker, solange er läuft),
    Titel des Runs, die berührte Karte, der Zeitpunkt, rechts „Zeit“ in Minuten und „Kosten“ in
-   Dollar.
+   Dollar. Ist der Run **nicht angelaufen** (siehe [Beendete Runs](#beendete-runs)), trägt das
+   Band eine braune LED und als Titel „nicht angelaufen — ‹Grund›“.
 2. **Kennzahlen** — vier Kacheln: **Durchsatz · Woche**, **Durchlaufzeit**,
    **Implementierungszeit** und eine Kachel zu den Runs. Die Implementierungszeit misst, wie
    lange eine erledigte Karte insgesamt in „In Progress“ lag; mehrere Aufenthalte zählen zusammen.
@@ -254,7 +255,8 @@ Von oben nach unten führt er:
 5. **Rumpf** — vier Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
    öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche,
    **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs und **„Vorhaben“** mit
-   den offenen.
+   den offenen. Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
+   braune LED und „nicht angelaufen — ‹Grund›“.
 
 **Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“ und
 „Abbruchgründe“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
@@ -618,6 +620,18 @@ Die Tatsachengrundlage dazu steht in
   Eine geerbte Karte kann deshalb im Fortschritt mitzählen und beim Filtern trotzdem fehlen —
   das ist so gewollt: Der Filter beantwortet „was liegt hier auf dem Board unter diesem
   Vorhaben", die Zählung „was gehört zu diesem Vorhaben".
+- **Abgearbeitete Vorhaben:** Der stündliche Aufräumlauf archiviert jedes Vorhaben, das keine
+  Karte mehr hat, die in seinem Fortschritt mitzählt („0 von 0 fertig“) — auch eines, das nie
+  eine Karte hatte. Karten im Papierkorb zählen dabei wie archivierte. Das geschieht auch, wenn
+  die automatische Archivierung der Karten abgeschaltet ist (Aufbewahrung 0) und Karten nur von
+  Hand archiviert werden. Ein archiviertes Vorhaben fehlt danach auf der Vorhaben-Seite (auch
+  unter „Ausgeblendete zeigen“), im Anlege-Dialog, im Karten-Detail, im Board-Vorhaben-Filter und
+  auf dem Leitstand und lässt sich keiner Karte mehr zuordnen. Im Detail einer Karte, deren
+  Vorhaben archiviert ist, steht bis zu seiner Rückkehr nur eine Nummer (`#…`) statt Kürzel und
+  Titel. Wird eine seiner Karten aus dem Archiv oder dem Papierkorb zurückgeholt und zählt sie
+  danach wieder mit, kehrt das Vorhaben samt seinen Karten und seiner Anforderung zurück; eine
+  Karte, die aus dem Papierkorb nur ins Archiv zurückkehrt, holt es nicht zurück. Der
+  Aufräumlauf löscht kein Vorhaben.
 
 ## Mitglieder
 
@@ -708,18 +722,36 @@ werden beide Abschnitte zusammen, zuerst „Diese Schicht"; was darüber hinausg
 unter dem Bereich („15 weitere Runs ausgeblendet"). Die Wahl merkt sich der Browser, Vorgabe ist 10.
 „Aktive Runs" und „Störungen" bleiben davon unberührt — sie zeigen immer alles.
 
-Der Ausgang steht als Wort da — eines von dreien:
+Der Ausgang steht als Wort da — eines von vieren:
 
 - **gelungen** — der Run ist durch, nichts steht aus.
 - **nicht gelungen** — der Run ist gescheitert, hat gar nicht gearbeitet, hat sich **selbst
-  abgebrochen** oder ist verstummt (siehe Stillefrist).
+  abgebrochen**, nachdem er eine Karte aufgenommen hatte, oder ist verstummt (siehe Stillefrist).
 - **mit Vorbehalt** — der Run ist durch, sein maßgebliches Arbeitspaket wartet aber noch auf einen
   Menschen oder wurde zurückgestellt.
+- **nicht angelaufen** — der Run hat seinen Abbruch selbst gemeldet, **bevor** er eine Karte
+  aufgenommen hat. Er trägt eine braune LED.
 
 Hat der Run sich **selbst abgebrochen**, steht hinter dem Wort sein **Grund** in einer Zeile
-(„nicht gelungen — Harter Stopp (dirty-tree)"). Ein selbst gemeldeter Abbruch ist immer „nicht
-gelungen", auch wenn das maßgebliche Arbeitspaket noch grün, gelb oder zurückgestellt war. Den
+(„nicht gelungen — Harter Stopp (dirty-tree)"). Ein selbst gemeldeter Abbruch nach aufgenommener
+Karte ist immer „nicht gelungen", auch wenn das maßgebliche Arbeitspaket noch grün, gelb oder zurückgestellt war. Den
 vollständigen Grund zeigt die Auswertung des Runs im Projekt.
+
+**„nicht angelaufen" ist keine Störung.** Meldet ein Run seinen Abbruch selbst, bevor er eine Karte
+aufgenommen hat — etwa weil die Arbeitskopie nicht sauber ist —, steht er braun als „nicht
+angelaufen — ‹Grund›" da, und es entsteht keine Störung, die jemand quittieren müsste. Der Run hat
+nichts getan, und wer ihn gestartet hat, hat den Grund schon auf der Kommandozeile gesehen. Das gilt
+für jeden Grund; entscheidend ist allein, dass noch keine Karte aufgenommen war. Davon zu
+unterscheiden sind:
+
+- Ein Run, der eine Karte aufgenommen hat (einen Plan, ein Arbeitspaket) und danach abbricht,
+  bleibt **nicht gelungen**, rot und eine Störung — auch wenn nur das Vorbereiten dieser Karte
+  scheiterte.
+- Ein Run, den der **Wächter des Kits** nachträglich als verstummt abschließt und dabei mit einem
+  Grund versieht, bleibt eine Störung, auch ohne aufgenommene Karte: Hier hat niemand eine Meldung
+  auf der Kommandozeile gesehen.
+- Runs aus der Zeit, bevor es „nicht angelaufen" gab, melden keine Abschlussart und behalten ihren
+  bisherigen Ausgang.
 
 **Die Stillefrist.** Ein unfertiger Run, der über diese Frist hinweg **kein Lebenszeichen** gibt,
 gilt als **nicht gelungen** — sonst bliebe ein abgeschossener Runner für immer als „läuft" stehen.

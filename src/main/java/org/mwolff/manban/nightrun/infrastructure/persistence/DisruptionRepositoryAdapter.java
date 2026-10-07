@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.DisruptionRepository;
+import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -45,7 +46,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
       """
       SELECT r.id AS night_run_id, r.project_id, p.name AS project_name, r.mode,
              r.started_at, r.updated_at, r.complete, r.no_work_reason, r.abort_reason,
-             r.closed_at
+             r.abort_kind, r.closed_at
         FROM night_run r
         JOIN project p ON p.id = r.project_id
         LEFT JOIN night_run_disruption_ack a ON a.night_run_id = r.id
@@ -90,7 +91,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
       """
       SELECT r.id AS night_run_id, r.project_id, p.name AS project_name, r.mode,
              r.started_at, r.updated_at, r.complete, r.no_work_reason, r.abort_reason,
-             r.closed_at
+             r.abort_kind, r.closed_at
         FROM night_run r
         JOIN project p ON p.id = r.project_id
        WHERE r.kind = 'NIGHT'
@@ -112,7 +113,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
       """
       SELECT r.id AS night_run_id, r.project_id, p.name AS project_name, r.mode,
              r.started_at, r.updated_at, r.complete, r.no_work_reason, r.abort_reason,
-             r.closed_at
+             r.abort_kind, r.closed_at
         FROM night_run r
         JOIN project p ON p.id = r.project_id
        WHERE r.id = :nightRunId
@@ -167,6 +168,7 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
               rs.getBoolean("complete"),
               rs.getString("no_work_reason"),
               rs.getString("abort_reason"),
+              abschlussart(rs.getString("abort_kind")),
               zeitpunkt(rs, "closed_at"));
 
   /**
@@ -179,6 +181,12 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
   private static Instant zeitpunkt(ResultSet rs, String spalte) throws SQLException {
     OffsetDateTime wert = rs.getObject(spalte, OffsetDateTime.class);
     return wert == null ? null : wert.toInstant();
+  }
+
+  /** Die Abschlussart eines Abbruchs — {@code null} bleibt {@code null} (Issue #1500). */
+  @Nullable
+  private static NightRunAbortKind abschlussart(@Nullable String wert) {
+    return wert == null ? null : NightRunAbortKind.valueOf(wert);
   }
 
   private final NamedParameterJdbcTemplate jdbc;

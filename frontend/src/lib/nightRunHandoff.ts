@@ -91,6 +91,11 @@ export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = {
  * <p>`NO_WORK` heisst „nichts zu tun" (Issue #1121): der Lauf, der anlief und nichts Freigegebenes
  * fand. Das Wort traegt hier den ganzen Sinn — seine Farbe ist dasselbe Grau wie das eines
  * uebergangenen Pakets, und Grau allein sagte nicht, dass es nichts zu tun gab.
+ *
+ * <p>`NOT_STARTED` heisst „nicht angelaufen" (Issue #1502): der Lauf, der abbrach, bevor er ein
+ * Paket anfasste. Ausdruecklich nicht „nichts zu tun" — er kam gar nicht bis zum Nachsehen. Das
+ * Wort steht neben der braunen LED, weil der Ausgang nicht allein an der Farbe haengen darf (AK 8
+ * von #1493).
  */
 export const NIGHT_RUN_VERDICT_TEXT: Record<Verdict, string> = {
   SUCCEEDED: 'gelungen',
@@ -99,6 +104,7 @@ export const NIGHT_RUN_VERDICT_TEXT: Record<Verdict, string> = {
   RUNNING: 'läuft',
   NO_WORK: 'nichts zu tun',
   CLOSED: 'von Hand beendet',
+  NOT_STARTED: 'nicht angelaufen',
 }
 
 /**
@@ -136,6 +142,7 @@ export function nightRunZustandsText(
   state: NightRunState,
   errorClass: NightRunErrorClass | undefined,
 ): string {
+  // Stryker disable next-line ConditionalExpression: gleichwertig — die Tabelle liefert zu undefined ebenfalls undefined
   const jeKlasse = errorClass === undefined ? undefined : NIGHT_RUN_STATE_TEXT_BY_ERROR_CLASS[errorClass]
   return jeKlasse?.[state] ?? NIGHT_RUN_STATE_TEXT[state]
 }

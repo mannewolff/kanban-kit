@@ -10,12 +10,12 @@ import org.springframework.context.ApplicationEventPublisher;
  * CardArchiveService} und {@link CardMoveService} für die Unit-Tests aus ihren Ports (Issue #1389,
  * #1392, #1393, #1394, #1395).
  *
- * <p>Die modulinternen Bausteine {@link KartenAbhaengigkeiten}, {@link KartenGrundlage} und {@link
- * KartenSicht} entstehen hier echt aus denselben Port-Mocks, nicht als Mocks (Plan #1387, E6): So
- * treffen Abdeckung und Mutationsprüfung die herausgelösten Helfer weiter über die Tests des
- * Dienstes, und ein Test, der einen Port stubbt oder prüft, sieht jeden Zugriff — gleich, welcher
- * Baustein ihn macht. Die Testklassen behalten damit ihre bisherige Konstruktion aus den Ports;
- * {@code ProjectService} entfiel mit der Suche (Issue #1391).
+ * <p>Die modulinternen Bausteine {@link KartenAbhaengigkeiten}, {@link KartenGrundlage}, {@link
+ * KartenSicht} und {@link VorhabenArchivierung} entstehen hier echt aus denselben Port-Mocks, nicht
+ * als Mocks (Plan #1387, E6): So treffen Abdeckung und Mutationsprüfung die herausgelösten Helfer
+ * weiter über die Tests des Dienstes, und ein Test, der einen Port stubbt oder prüft, sieht jeden
+ * Zugriff — gleich, welcher Baustein ihn macht. Die Testklassen behalten damit ihre bisherige
+ * Konstruktion aus den Ports; {@code ProjectService} entfiel mit der Suche (Issue #1391).
  */
 final class CardServiceAufbau {
 
@@ -146,6 +146,7 @@ final class CardServiceAufbau {
         permissions,
         b.grundlage(),
         b.sicht(),
+        new VorhabenArchivierung(cards),
         events,
         clock);
   }

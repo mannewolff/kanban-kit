@@ -133,9 +133,10 @@ const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel =
  * `ziel:*` und ein `planreview:*`, an einem Plan weder `ziel:plan` noch Prüferschalter, und mit
  * `kit:durchziehen` nur die Ziele ab „Umsetzung“ — das Label gilt als Ziel „Umsetzung“ (E10).
  *
- * <p>Gespeichert wird über `onChange` mit der vollen Label-Liste der Karte, dem Aufruf für
- * `PUT /api/cards/{id}/labels`, den die Label-Sektion schon nutzt. Mit `disabled` ist die Leiste
- * reine Anzeige ohne Knöpfe (E3).
+ * <p>Gespeichert wird über `onChange` mit genau der Änderung eines Klicks — abzunehmende und zu
+ * setzende Labels —, nie mit der vollen Liste: Ein veralteter Stand der Seite schriebe sonst ein
+ * vom Runner verbrauchtes `kit:night` zurück (Issue #1512). Mit `disabled` ist die Leiste reine
+ * Anzeige ohne Knöpfe (E3).
  *
  * <p><b>Start</b> (Issue #1450): „Kette starten“ setzt `kit:night`, ab „Umsetzung“ erst nach
  * Bestätigung im Dialog (E7); „Start zurücknehmen“ nimmt nur `kit:night` ab (E10). Solange die
@@ -148,6 +149,9 @@ const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel =
  * der Server sie liefert (E5). Vor der Übernahme sperrt `planReviewVorhanden` den Prüferschalter
  * (E14). Lädt der Stand nicht, bleibt die Leiste beim Stand vor dem Lauf und nennt den Fehler.
  */
+/** Die Änderung eines Klicks: Label-IDs, die abgenommen, und solche, die gesetzt werden. */
+export type LabelAenderung = Readonly<{ ab: number[]; an: number[] }>
+
 export function KettenStufenleiste({
   titel,
   labelIds,
@@ -167,7 +171,7 @@ export function KettenStufenleiste({
   beschreibung: string
   /** Die Kommentare der Karte, der jüngste zuerst — darunter der Laufstand des Runners. */
   kommentare: readonly { body: string }[]
-  onChange: (ids: number[]) => void
+  onChange: (aenderung: LabelAenderung) => void
   /** Die interne ID der Karte, für den Kettenstand. */
   cardId: number
   api?: Pick<NightRunsApi, 'kettenstand'>
@@ -225,10 +229,10 @@ export function KettenStufenleiste({
    * Aufrufer bieten nur Labels an, die das Board führt (E8).
    */
   const tausche = (praefix: string, neu: string) =>
-    onChange([
-      ...labelIds.filter((id) => !nameVon(id)?.startsWith(praefix)),
-      ...boardLabels.filter((l) => l.name === neu).map((l) => l.id),
-    ])
+    onChange({
+      ab: labelIds.filter((id) => nameVon(id)?.startsWith(praefix)),
+      an: boardLabels.filter((l) => l.name === neu).map((l) => l.id),
+    })
 
   const prueferGesetzt = PRUEFER.find((p) => gesetzt.has(p))
 
@@ -318,8 +322,8 @@ export function KettenStufenleiste({
         uebernommen={uebernommen}
         sperrgruende={sperrgruende}
         goNoetig={index(ziel) >= index('umsetzung')}
-        onStart={() => onChange([...labelIds, ...boardLabels.filter((l) => l.name === NACHT).map((l) => l.id)])}
-        onRuecknahme={() => onChange(labelIds.filter((id) => nameVon(id) !== NACHT))}
+        onStart={() => onChange({ ab: [], an: boardLabels.filter((l) => l.name === NACHT).map((l) => l.id) })}
+        onRuecknahme={() => onChange({ ab: labelIds.filter((id) => nameVon(id) === NACHT), an: [] })}
       />
     </Box>
   )

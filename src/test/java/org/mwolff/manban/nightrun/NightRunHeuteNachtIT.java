@@ -19,6 +19,7 @@ import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardArchiveService;
+import org.mwolff.manban.card.application.CardMoveService;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
@@ -57,6 +58,7 @@ class NightRunHeuteNachtIT extends AbstractIntegrationTest {
   @Autowired private BoardColumnRepository columns;
   @Autowired private CardService cards;
   @Autowired private CardArchiveService archiv;
+  @Autowired private CardMoveService moves;
   @Autowired private LabelService labels;
 
   @Test
@@ -81,6 +83,26 @@ class NightRunHeuteNachtIT extends AbstractIntegrationTest {
         .containsExactly(
             ausErstem + " [Fachlich] Import Board FACHPLAN PAKETE 2",
             ausZweitem + " [Plan] Export Betrieb PLAN UMSETZUNG null");
+  }
+
+  @Test
+  void archivierteUndErledigteKartenFehlenEineBacklogKarteBleibt() throws Exception {
+    Aufbau a = aufbau("heute-stand");
+    int imBacklog = karte(a, a.boardId(), "[Fachlich] Offen", NACHT);
+    int archiviert = karte(a, a.boardId(), "[Fachlich] Archiviert", NACHT);
+    archiv.archive(a.adminId(), cardId(a.projectId(), archiviert));
+    int erledigt = karte(a, a.boardId(), "[Plan] Erledigt", NACHT);
+    long done =
+        columns.findByBoardId(a.boardId()).stream()
+            .filter(s -> "Done".equals(s.name()))
+            .findFirst()
+            .orElseThrow()
+            .requireId();
+    moves.move(a.adminId(), cardId(a.projectId(), erledigt), done, 0);
+
+    JsonNode antwort = heuteNacht(a.owner(), a.projectId(), 200);
+
+    assertThat(antwort).extracting(k -> k.get("number").asInt()).containsExactly(imBacklog);
   }
 
   @Test

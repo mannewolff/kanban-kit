@@ -177,6 +177,7 @@ class NightRunControllerTest {
                 null,
                 null,
                 null,
+                null,
                 List.of(
                     new NewNightRunItem(
                         721,
@@ -199,6 +200,7 @@ class NightRunControllerTest {
                 0,
                 null,
                 true,
+                null,
                 null,
                 null,
                 null,
@@ -245,6 +247,7 @@ class NightRunControllerTest {
                 0,
                 null,
                 true,
+                null,
                 null,
                 null,
                 null,
@@ -444,6 +447,7 @@ class NightRunControllerTest {
                         null,
                         null,
                         null,
+                        null,
                         NightRunMode.IMPLEMENTATION,
                         List.of(),
                         ERSTER,
@@ -523,6 +527,7 @@ class NightRunControllerTest {
                         null,
                         null,
                         null,
+                        null,
                         NightRunMode.CHAIN,
                         List.of(),
                         ERSTER,
@@ -594,6 +599,7 @@ class NightRunControllerTest {
                     null,
                     NightRunOutcome.of(
                         true,
+                        null,
                         null,
                         null,
                         null,
@@ -857,6 +863,7 @@ class NightRunControllerTest {
                     null,
                     NightRunOutcome.of(
                         true,
+                        null,
                         null,
                         null,
                         null,

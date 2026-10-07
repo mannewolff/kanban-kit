@@ -245,8 +245,11 @@ public class CardRunQueryService {
 
   /**
    * Die Karten des Projekts, deren Titel {@code titel} erfüllt und die das Label {@code label}
-   * tragen (Issue #1454) — für die Übersicht „Heute Nacht“ über alle Boards. Karten im Papierkorb
-   * und Karten archivierter Boards fehlen; die Reihenfolge ist die des Ports.
+   * tragen (Issue #1454) — für die Übersicht „Heute Nacht“ über alle Boards. Es fehlen Karten im
+   * Papierkorb, archivierte Karten, Karten archivierter Boards und jede Karte, die nicht in Backlog
+   * steht (Issue #1495): Den Stand bestimmt {@link CardIngestService#kanbanSchluessel}, dieselbe
+   * Regel, nach der der Runner die Karte über die Kanban-kompatible Strecke sieht und nur aus
+   * Backlog aufnimmt. Die Reihenfolge ist die des Ports.
    *
    * <p>Der Titelfilter kommt vor den Labels: Nach Labels gefragt wird nur für die wenigen Karten,
    * die ihn erfüllen, nicht für jede Karte des Projekts. Ohne Rechteprüfung wie {@link
@@ -256,15 +259,22 @@ public class CardRunQueryService {
   public List<FreigabeKarteView> freigegebeneKarten(
       long projectId, String label, Predicate<String> titel) {
     List<Card> kandidaten =
-        cards.findByProjectId(projectId).stream().filter(c -> titel.test(c.title())).toList();
+        cards.findByProjectId(projectId).stream()
+            .filter(c -> !c.archived() && titel.test(c.title()))
+            .toList();
     Map<Long, BoardSummary> boardJeId = new HashMap<>();
     kandidaten.stream()
         .map(Card::boardId)
         .distinct()
         .forEach(id -> boardJeId.put(id, boards.requireBoardSummary(id)));
+    Map<Long, String> spaltenname = new HashMap<>();
+    boardJeId.values().stream()
+        .filter(b -> !b.archived())
+        .forEach(b -> boards.listColumns(b.id()).forEach(s -> spaltenname.put(s.id(), s.name())));
     Map<Long, Long> boardJeKarte = new LinkedHashMap<>();
     kandidaten.stream()
         .filter(c -> !Objects.requireNonNull(boardJeId.get(c.boardId())).archived())
+        .filter(c -> inBacklog(c, spaltenname.get(c.columnId())))
         .forEach(c -> boardJeKarte.put(c.requireId(), c.boardId()));
     Map<Long, List<String>> labelNamen = zuordnung.labelNamenJeKarte(boardJeKarte);
     return kandidaten.stream()
@@ -277,6 +287,12 @@ public class CardRunQueryService {
                     Objects.requireNonNull(boardJeId.get(c.boardId())).name(),
                     labelNamen.getOrDefault(c.requireId(), List.of())))
         .toList();
+  }
+
+  private static boolean inBacklog(Card card, @Nullable String spaltenname) {
+    return CardStatus.BACKLOG
+        .name()
+        .equals(CardIngestService.kanbanSchluessel(KartenSicht.statusName(card), spaltenname));
   }
 
   /**

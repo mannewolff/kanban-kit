@@ -86,6 +86,7 @@ class FortschrittErmittlungTest {
         null,
         null,
         null,
+        null,
         null);
   }
 

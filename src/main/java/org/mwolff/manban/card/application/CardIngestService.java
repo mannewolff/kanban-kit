@@ -11,8 +11,10 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
+import org.mwolff.manban.card.domain.Arbeitspaket;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivityType;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
@@ -52,6 +54,29 @@ public class CardIngestService {
     this.grundlage = grundlage;
     this.sicht = sicht;
     this.clock = clock;
+  }
+
+  /**
+   * Kanban-Schlüssel einer Karte (Issue #1495): ihr eigener Status, sonst der Schlüssel ihrer
+   * Spalte nach {@link #spaltenSchluessel}, sonst {@code BACKLOG}. Die eine Fassung der Regel: Die
+   * Kanban-kompatible Strecke meldet damit die Spalte einer Karte, und die Übersicht „Heute Nacht“
+   * zeigt damit nur, was der Runner über diese Strecke in Backlog sieht.
+   *
+   * @param status Konstantenname von {@code CardStatus}; {@code null} ohne eigenen Status
+   * @param spaltenname Name der Spalte, in der die Karte liegt; {@code null}, wenn unbekannt
+   */
+  public static String kanbanSchluessel(@Nullable String status, @Nullable String spaltenname) {
+    return status != null
+        ? status
+        : spaltenSchluessel(spaltenname).orElse(CardStatus.BACKLOG.name());
+  }
+
+  /**
+   * Kanban-Schlüssel einer Prozessspalte nach {@link Arbeitspaket#statusVonSpalte}; leer bei einer
+   * eigenen Spalte (Issue #1495).
+   */
+  public static Optional<String> spaltenSchluessel(@Nullable String spaltenname) {
+    return Arbeitspaket.statusVonSpalte(spaltenname).map(CardStatus::name);
   }
 
   /**
