@@ -408,6 +408,39 @@ const zaehlerLaden = (projektId: number): Promise<Haeufigkeiten> =>
 
 const nachStartAbsteigend = (a: AnzeigeLauf, b: AnzeigeLauf) => b.startedAt.localeCompare(a.startedAt)
 
+/** Mehr Läufe stehen beim Öffnen nicht gleichzeitig offen (Issue #1511) — Plan #718 (A8). */
+const HOECHSTENS_OFFEN = 3
+
+/**
+ * Das Ende eines Laufs in Millisekunden (Issue #1511): Ein abgeschlossener reicht bis Start plus
+ * Dauer, einer ohne Abschluss bis zu seinem letzten Lebenszeichen und, solange er läuft, bis jetzt.
+ */
+function laufEnde(lauf: AnzeigeLauf, jetzt: number): number {
+  const rechnerisch = Date.parse(lauf.startedAt) + lauf.durationMs
+  if (lauf.vollstaendig) {
+    return rechnerisch
+  }
+  const lebenszeichen = lauf.zuletztGemeldetAm === undefined ? rechnerisch : Date.parse(lauf.zuletztGemeldetAm)
+  const ende = Math.max(rechnerisch, lebenszeichen)
+  return laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund }) ? Math.max(ende, jetzt) : ende
+}
+
+/**
+ * Die Läufe, die beim Öffnen offen stehen (Issue #1511): der oberste und jeder, dessen Zeitraum
+ * sich mit dessen überschneidet — Kette und Umsetzung laufen nebeneinander, und ein kurzer Lauf
+ * oben verdeckte sonst den langen darunter. Erwartet die Läufe absteigend nach Start; jeder
+ * weitere begann also nicht nach dem obersten und überschneidet ihn, wenn er nach dessen Start
+ * endet. Höchstens {@link HOECHSTENS_OFFEN}, die jüngsten.
+ */
+function zusammenGelaufen(laeufe: readonly AnzeigeLauf[], jetzt: number): AnzeigeLauf[] {
+  const [oberster, ...rest] = laeufe
+  if (oberster === undefined) {
+    return []
+  }
+  const start = Date.parse(oberster.startedAt)
+  return [oberster, ...rest.filter((lauf) => laufEnde(lauf, jetzt) > start)].slice(0, HOECHSTENS_OFFEN)
+}
+
 /** Dieselbe Menge ohne einen Eintrag — die Rücknahme eines Vermerks (Issue #1116). */
 function ohneEintrag(vermerke: ReadonlySet<string>, eintrag: string): ReadonlySet<string> {
   const rest = new Set(vermerke)
@@ -3128,13 +3161,18 @@ export function NightRunPage() {
     ? laeufe
     : laeufe.filter((lauf) => imBlick(lauf, abZyklus, gesuchteLaufId, ausErgebnisstand))
   const ausgeblendet = laeufe.length - sichtbareLaeufe.length
-  const obersterSichtbarer = sichtbareLaeufe[0]
+  // Seit Issue #1511 stehen mit dem obersten alle offen, die mit ihm zusammen gelaufen sind; jeder
+  // lädt einzeln über `aufklappen`.
+  const offenBeimStart = zusammenGelaufen(sichtbareLaeufe, new Date().getTime())
+  const offenBeimStartSchluessel = offenBeimStart.map((lauf) => lauf.startedAt).join('|')
 
   useEffect(() => {
-    if (obersterSichtbarer !== undefined) {
-      aufklappen(obersterSichtbarer)
+    for (const lauf of offenBeimStart) {
+      aufklappen(lauf)
     }
-  }, [obersterSichtbarer, aufklappen])
+    // Der Schlüssel steht für die Liste: Sie entsteht in jedem Rendern neu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offenBeimStartSchluessel, aufklappen])
 
   /**
    * Springt zum angesteuerten Lauf (Issue #1085, AK 7).
@@ -3309,15 +3347,15 @@ export function NightRunPage() {
 
               {sichtbareLaeufe.length > 0 && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {sichtbareLaeufe.map((lauf, position) => (
+                  {sichtbareLaeufe.map((lauf) => (
                     <LaufPanel
                       key={lauf.startedAt}
                       lauf={lauf}
-                      // Mit `?lauf=<id>` steht genau dieser Lauf offen statt des obersten; zeigt der
-                      // Parameter ins Leere, bleibt es beim obersten (Issue #1085).
+                      // Mit `?lauf=<id>` steht genau dieser Lauf offen statt der zusammen gelaufenen
+                      // (Issue #1085, #1511).
                       zuerst={
                         gesuchteLaufId === null
-                          ? position === 0
+                          ? offenBeimStart.includes(lauf)
                           : lauf.laufId === gesuchteLaufId
                       }
                       ergebnis={ergebnisse.get(lauf.startedAt)}
