@@ -38,6 +38,7 @@ import org.mwolff.manban.nightrun.application.NightRunService.NewNightRun;
 import org.mwolff.manban.nightrun.application.NightRunService.NewReleasePreparation;
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.TokenNotBoundForIngestException;
+import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunItemStage;
@@ -86,7 +87,21 @@ class NightRunIngestControllerTest {
   private static NightRunIngestController.IngestRequest anfrage(
       @Nullable NightRunUsageRequest usage, @Nullable NightRunKind kind, NightRunMode mode) {
     return new NightRunIngestController.IngestRequest(
-        START, mode, kind, 1000L, 1, 0, 0, Boolean.TRUE, usage, null, null, null, null, List.of());
+        START,
+        mode,
+        kind,
+        1000L,
+        1,
+        0,
+        0,
+        Boolean.TRUE,
+        usage,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of());
   }
 
   @Test
@@ -208,6 +223,7 @@ class NightRunIngestControllerTest {
         null,
         null,
         null,
+        null,
         List.of());
   }
 
@@ -254,6 +270,12 @@ class NightRunIngestControllerTest {
   /** Eine Meldung mit gemeldetem Abbruchgrund. */
   private static NightRunIngestController.IngestRequest anfrageMitAbbruch(
       @Nullable String abbruch) {
+    return anfrageMitAbbruch(abbruch, null);
+  }
+
+  /** Dieselbe Meldung mit der Abschlussart (Issue #1500). */
+  private static NightRunIngestController.IngestRequest anfrageMitAbbruch(
+      @Nullable String abbruch, @Nullable NightRunAbortKind art) {
     return new NightRunIngestController.IngestRequest(
         START,
         NightRunMode.CHAIN,
@@ -267,6 +289,7 @@ class NightRunIngestControllerTest {
         null,
         null,
         abbruch,
+        art,
         null,
         List.of());
   }
@@ -338,6 +361,34 @@ class NightRunIngestControllerTest {
     assertThat(meldung.getValue().abortReason()).isNull();
   }
 
+  @Test
+  void dieGemeldeteAbschlussartWirdAnDenDienstDurchgereicht() {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+
+    controller.ingest(
+        gebunden, anfrageMitAbbruch("Working Tree ist nicht sauber.", NightRunAbortKind.REPORTED));
+
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    assertThat(meldung.getValue().abortKind()).isEqualTo(NightRunAbortKind.REPORTED);
+  }
+
+  /** Additiv wie {@code abortReason} (Issue #1500): Ohne das Feld kommt {@code null} an. */
+  @Test
+  void ohneAbschlussartKommtNullAmDienstAn() {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+
+    controller.ingest(gebunden, anfrageMitAbbruch("Working Tree ist nicht sauber."));
+
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    assertThat(meldung.getValue().abortKind()).isNull();
+  }
+
   private static Authentication mitPrincipal(KanbanPrincipal principal) {
     TestingAuthenticationToken token = new TestingAuthenticationToken("tok", "n", List.of());
     token.setDetails(principal);
@@ -361,6 +412,7 @@ class NightRunIngestControllerTest {
         null,
         null,
         budget,
+        null,
         null,
         null,
         List.of(
@@ -557,6 +609,7 @@ class NightRunIngestControllerTest {
         0,
         0,
         Boolean.TRUE,
+        null,
         null,
         null,
         null,

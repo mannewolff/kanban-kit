@@ -17,6 +17,7 @@ import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.FortschrittErmittlung;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
@@ -193,6 +194,10 @@ public class NightRunService {
             // gar nicht kennt (Plan #1110 E4).
             meldung.budget(),
             abbruch,
+            // Die Art gilt unter derselben Bedingung wie der Grund (Plan #1498 E4): Eine Art ohne
+            // uebernommenen Abbruch ist keine Auskunft, und eine Regel an zwei Stellen liefe
+            // auseinander.
+            abbruch == null ? null : meldung.abortKind(),
             // Die Morgenmeldung ersetzt wie jedes andere Feld (Issue #1456, Plan #1447 E12): Eine
             // Meldung ohne sie raeumt eine frueher gemeldete ab. Den Eingang setzt die Uhr des
             // Servers, denn die Meldung selbst traegt keinen Zeitpunkt der Vorbereitung.
@@ -357,6 +362,9 @@ public class NightRunService {
         // hochgeladenes Protokoll kommt aus der Datei, nicht aus dem Runner, und traegt dessen
         // Abbruchmeldung nicht.
         null,
+        // Die Abschlussart, fest null aus demselben Grund (Issue #1500): Ohne Abbruchgrund ist sie
+        // keine Auskunft.
+        null,
         // Fest null aus demselben Grund (Issue #1456): Die Morgenmeldung kommt allein vom Runner.
         null);
   }
@@ -520,9 +528,10 @@ public class NightRunService {
             // nie gelungen. Dieselben Argumente wie in DisruptionService.view — eine Rechnung,
             // zwei Auswertungswege (AK 8 der fachlichen Quelle #1074).
             run.abortReason(),
-            // Issue #1499: Die Abschlussart reicht erst das Folgepaket durch. Bis dahin gilt der
-            // Bestand — ohne Art bleibt jeder Abbruch eine Störung (Plan #1498 A4).
-            null,
+            // Die Abschlussart (Issue #1500): Nur ein selbst gemeldeter Abbruch ohne angefasstes
+            // Paket ist „nicht angelaufen"; ohne Art bleibt jeder Abbruch eine Störung (Plan #1498
+            // A4).
+            run.abortKind(),
             run.mode(),
             eigeneItems,
             run.startedAt(),
@@ -556,6 +565,9 @@ public class NightRunService {
    *     „nicht abgebrochen". Der Upload-Weg führt ihn nicht und übergibt hier fest {@code null}
    *     (Plan #1139 E7). Ob der Wert am Lauf landet, entscheidet {@link #abbruchGrund} — gemeldet
    *     heißt nicht gesetzt.
+   * @param abortKind wie der abgebrochene Lauf zu seinem Abschluss kam (Issue #1500); {@code null}
+   *     heißt „nicht gemeldet". Der Upload-Weg führt sie nicht und übergibt hier fest {@code null}.
+   *     Übernommen wird sie nur zusammen mit dem Abbruchgrund (Plan #1498 E4).
    * @param releasePreparation die gemeldete Morgenmeldung (Issue #1456); {@code null} heißt „keine
    *     gemeldet". Der Upload-Weg führt sie nicht und übergibt hier fest {@code null}.
    */
@@ -572,6 +584,7 @@ public class NightRunService {
       @Nullable String noWorkReason,
       @Nullable NightRunBudget budget,
       @Nullable String abortReason,
+      @Nullable NightRunAbortKind abortKind,
       @Nullable NewReleasePreparation releasePreparation,
       List<NewNightRunItem> items) {}
 

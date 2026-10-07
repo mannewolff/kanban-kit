@@ -107,6 +107,13 @@ class NightRunEntity {
   @Column(name = "abort_reason")
   private @Nullable String abortReason;
 
+  /**
+   * Abschlussart des Abbruchs (Issue #1500); wie {@code origin} als Zeichenkette abgebildet. {@code
+   * null} heisst „nicht abgebrochen", „ältere Kit-Kopie" oder „Bestand vor V49".
+   */
+  @Column(name = "abort_kind")
+  private @Nullable String abortKind;
+
   protected NightRunEntity() {
     // für JPA
   }
@@ -209,5 +216,9 @@ class NightRunEntity {
 
   @Nullable String getAbortReason() {
     return abortReason;
+  }
+
+  @Nullable String getAbortKind() {
+    return abortKind;
   }
 }

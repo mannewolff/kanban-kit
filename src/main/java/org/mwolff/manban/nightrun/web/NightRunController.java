@@ -364,6 +364,8 @@ class NightRunController {
         // Der Abbruchgrund, ebenfalls fest null und aus demselben Grund (Issue #1142, Plan #1139
         // E7): Der Upload-Weg kennt kein Feld dafuer.
         null,
+        // Die Abschlussart, fest null aus demselben Grund (Issue #1500).
+        null,
         // Die Morgenmeldung, fest null aus demselben Grund (Issue #1456): Sie kommt allein vom
         // Runner ueber POST /api/kanban/night-runs, ein hochgeladenes Protokoll traegt sie nicht.
         null,

@@ -2,6 +2,7 @@ package org.mwolff.manban.nightrun;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.DisruptionRepository;
+import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -183,6 +185,46 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
         .singleElement()
         .extracting(DisruptionRepository.DisruptionCandidate::abortReason)
         .isEqualTo("Dirty-Guard: uncommittete Reste");
+  }
+
+  /**
+   * Issue #1500: Die Abschlussart entscheidet mit, ob ein abgebrochener Lauf eine Störung ist —
+   * alle drei Abfragen lesen sie, sonst stünde derselbe Lauf je nach Liste anders da.
+   */
+  @Test
+  void derKandidatTraegtDieAbschlussartInAllenDreiAbfragen() {
+    long laufId = lauf(T1, "NIGHT", true);
+    jdbc.update(
+        "UPDATE night_run SET abort_reason = 'Abbruch', abort_kind = 'REPORTED' WHERE id = ?",
+        laufId);
+    teilnahme(true);
+
+    assertThat(disruptions.openCandidates())
+        .singleElement()
+        .extracting(DisruptionRepository.DisruptionCandidate::abortKind)
+        .isEqualTo(NightRunAbortKind.REPORTED);
+    assertThat(
+            disruptions.candidatesOfNight(
+                T1.minusSeconds(60), T1.plusSeconds(60), T1, Duration.ofMinutes(30)))
+        .singleElement()
+        .extracting(DisruptionRepository.DisruptionCandidate::abortKind)
+        .isEqualTo(NightRunAbortKind.REPORTED);
+    assertThat(disruptions.candidate(laufId))
+        .get()
+        .extracting(DisruptionRepository.DisruptionCandidate::abortKind)
+        .isEqualTo(NightRunAbortKind.REPORTED);
+  }
+
+  /** Ein Bestandslauf ohne Wert in der Spalte liest sich als {@code null} (Plan #1498 A4). */
+  @Test
+  void einKandidatOhneAbschlussartTraegtNull() {
+    lauf(T1, "NIGHT", true);
+    teilnahme(true);
+
+    assertThat(disruptions.openCandidates())
+        .singleElement()
+        .extracting(DisruptionRepository.DisruptionCandidate::abortKind)
+        .isNull();
   }
 
   /** Die Störungsliste liest die beiden neuen Felder mit; {@code complete} ist dort stets wahr. */

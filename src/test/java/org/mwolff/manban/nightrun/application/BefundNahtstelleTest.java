@@ -90,6 +90,7 @@ class BefundNahtstelleTest {
                     null,
                     null,
                     abortReason,
+                    null,
                     null)));
     when(runs.findItemsByRunIds(any())).thenReturn(List.of());
     NightRunService service =
@@ -122,6 +123,7 @@ class BefundNahtstelleTest {
                     complete,
                     null,
                     abortReason,
+                    null,
                     null)));
     PlatformAdminChecker admins = mock(PlatformAdminChecker.class);
     when(admins.isPlatformAdmin(ADMIN)).thenReturn(true);

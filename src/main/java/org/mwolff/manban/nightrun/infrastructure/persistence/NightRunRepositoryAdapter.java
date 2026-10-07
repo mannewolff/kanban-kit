@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
@@ -51,7 +52,8 @@ import org.springframework.stereotype.Component;
 // Domaenentypen, Entities und JDBC-Typen, und jede neue Spalte bringt ihren Typ mit. Mit Issue
 // #944 sind es BigDecimal und NightRunOrigin mehr, mit Issue #1010 NightRunKind, mit Issue #1112
 // NightRunBudget, NightRunBudgetOrigin, NightRunStage und NightRunItemStage, mit Issue #1456
-// ReleasePreparation und ReleasePreparationResult. Eine Aufteilung verteilte das Mapping einer
+// ReleasePreparation und ReleasePreparationResult, mit Issue #1500 NightRunAbortKind. Eine
+// Aufteilung verteilte das Mapping einer
 // Tabelle auf zwei Klassen.
 // PMD.GodClass: dieselbe Ursache, nur anders gezaehlt — WMC und ATFD summieren die je fuer sich
 // trivialen addValue-/getX-Zeilen des Mappings, die TCC ist niedrig, weil Schreib- und Lesepfad
@@ -96,13 +98,15 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " token_name, complete, updated_at, cost_usd, input_tokens, output_tokens,"
           + " cached_input_tokens, model_duration_ms, turns, no_work_reason,"
           + " budget_plan_min, budget_review_min, budget_pakete_min, budget_abdeckung_min,"
-          + " budget_kosten_usd, budget_origin, budget_default_fields, abort_reason)"
+          + " budget_kosten_usd, budget_origin, budget_default_fields, abort_reason,"
+          + " abort_kind)"
           + " VALUES (:projectId, :startedAt, :mode, :kind, :durationMs, :processedCount,"
           + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt, :origin,"
           + " :tokenName, :complete, :updatedAt, :costUsd, :inputTokens, :outputTokens,"
           + " :cachedInputTokens, :modelDurationMs, :turns, :noWorkReason,"
           + " :budgetPlanMin, :budgetReviewMin, :budgetPaketeMin, :budgetAbdeckungMin,"
-          + " :budgetKostenUsd, :budgetOrigin, :budgetDefaultFields, :abortReason)"
+          + " :budgetKostenUsd, :budgetOrigin, :budgetDefaultFields, :abortReason,"
+          + " :abortKind)"
           + " ON CONFLICT (project_id, started_at) DO NOTHING"
           + " RETURNING id";
 
@@ -163,7 +167,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           // Auch der Abbruchgrund wird ersetzt und nicht nur gesetzt (Issue #1142): Eine Meldung
           // ist der vollstaendige Stand des Laufs, und ein spaeterer Stand ohne Abbruch raeumt
           // einen frueher gemeldeten Grund wieder ab.
-          + " abort_reason = :abortReason"
+          + " abort_reason = :abortReason,"
+          // Die Abschlussart gehoert zum Abbruchgrund und wird mit ihm ersetzt (Issue #1500).
+          + " abort_kind = :abortKind"
           + " WHERE id = :id";
 
   /**
@@ -525,6 +531,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     // Einmal geholt statt zweimal gerufen: Beim doppelten Getter-Aufruf sieht Sonar (java:S4449)
     // einen Pfad, auf dem der zweite Aufruf null liefern koennte, obwohl der erste es nicht tat.
     Instant updatedAt = run.updatedAt();
+    NightRunAbortKind abortKind = run.abortKind();
     MapSqlParameterSource parameter =
         new MapSqlParameterSource()
             .addValue(P_PROJECT_ID, run.projectId())
@@ -545,7 +552,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
                 updatedAt == null ? null : zeitpunkt(updatedAt),
                 Types.TIMESTAMP_WITH_TIMEZONE)
             .addValue("noWorkReason", run.noWorkReason(), Types.VARCHAR)
-            .addValue("abortReason", run.abortReason(), Types.VARCHAR);
+            .addValue("abortReason", run.abortReason(), Types.VARCHAR)
+            .addValue("abortKind", abortKind == null ? null : abortKind.name(), Types.VARCHAR);
     verbrauchSchreiben(parameter, run.usage());
     budgetSchreiben(parameter, run.budget());
     return parameter;
@@ -634,6 +642,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   private static NightRun toDomain(NightRunEntity e, @Nullable ReleasePreparation vorbereitung) {
+    String abortKind = e.getAbortKind();
     return new NightRun(
         e.getId(),
         e.getProjectId(),
@@ -654,6 +663,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getNoWorkReason(),
         budgetLesen(e),
         e.getAbortReason(),
+        abortKind == null ? null : NightRunAbortKind.valueOf(abortKind),
         vorbereitung);
   }
 

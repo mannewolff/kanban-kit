@@ -36,6 +36,7 @@ import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe.Startstation;
 import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
@@ -449,6 +450,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        null,
         List.of(items));
   }
 
@@ -502,6 +504,7 @@ class NightRunServiceTest {
         usage,
         null,
         budget,
+        null,
         null,
         null,
         List.of(items));
@@ -854,6 +857,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        null,
         vorbereitung,
         List.of());
   }
@@ -1189,6 +1193,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        null,
         null);
   }
 
@@ -1247,6 +1252,16 @@ class NightRunServiceTest {
   /** Dieselbe Meldung, zusaetzlich mit einem gemeldeten Abbruchgrund (Issue #1142). */
   private static NightRunService.NewNightRun ohneArbeit(
       Instant startedAt, boolean complete, @Nullable String grund, @Nullable String abbruch) {
+    return ohneArbeit(startedAt, complete, grund, abbruch, null);
+  }
+
+  /** Dieselbe Meldung, zusaetzlich mit der gemeldeten Abschlussart (Issue #1500). */
+  private static NightRunService.NewNightRun ohneArbeit(
+      Instant startedAt,
+      boolean complete,
+      @Nullable String grund,
+      @Nullable String abbruch,
+      @Nullable NightRunAbortKind art) {
     return new NightRunService.NewNightRun(
         startedAt,
         NightRunMode.CHAIN,
@@ -1260,6 +1275,7 @@ class NightRunServiceTest {
         grund,
         null,
         abbruch,
+        art,
         null,
         List.of());
   }
@@ -1275,6 +1291,7 @@ class NightRunServiceTest {
         0,
         null,
         true,
+        null,
         null,
         null,
         null,
@@ -1473,6 +1490,7 @@ class NightRunServiceTest {
                 null,
                 ABBRUCH_GRUND,
                 null,
+                null,
                 List.of())));
 
     NightRun gespeichert = gemeldeterLauf();
@@ -1490,6 +1508,117 @@ class NightRunServiceTest {
     assertThat(service.list(USER, PROJECT))
         .extracting(NightRunService.NightRunView::abortReason)
         .containsExactly(ABBRUCH_GRUND);
+  }
+
+  // --- Abschlussart des Abbruchs (Issue #1500, Plan #1498 E4) -------------------------------
+
+  @Test
+  void ingest_speichertDieAbschlussartZusammenMitDemAbbruchgrund() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        ohneArbeit(T1, true, null, ABBRUCH_GRUND, NightRunAbortKind.REPORTED));
+
+    NightRun gespeichert = gemeldeterLauf();
+    assertThat(gespeichert.abortReason()).isEqualTo(ABBRUCH_GRUND);
+    assertThat(gespeichert.abortKind()).isEqualTo(NightRunAbortKind.REPORTED);
+  }
+
+  /** E4: Eine Art ohne Abbruchgrund ist keine Auskunft — ohne Grund keine Art. */
+  @Test
+  void ingest_verwirftDieAbschlussart_ohneAbbruchgrund() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        ohneArbeit(T1, true, null, null, NightRunAbortKind.REPORTED));
+
+    assertThat(gemeldeterLauf().abortKind()).isNull();
+  }
+
+  /** E4: Ein leerer Grund wird verworfen, und die Art mit ihm. */
+  @Test
+  void ingest_verwirftDieAbschlussart_wennDerAbbruchgrundLeerIst() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        ohneArbeit(T1, true, null, "   ", NightRunAbortKind.REPORTED));
+
+    assertThat(gemeldeterLauf().abortKind()).isNull();
+  }
+
+  @Test
+  void ingest_verwirftDieAbschlussart_wennDerLaufNichtAbgeschlossenIst() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        ohneArbeit(T1, false, null, ABBRUCH_GRUND, NightRunAbortKind.REPORTED));
+
+    assertThat(gemeldeterLauf().abortKind()).isNull();
+  }
+
+  @Test
+  void ingest_verwirftDieAbschlussart_beiEinerInteraktivenSitzung() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.INTERACTIVE,
+        ohneArbeit(T1, true, null, ABBRUCH_GRUND, NightRunAbortKind.REPORTED));
+
+    assertThat(gemeldeterLauf(NightRunKind.INTERACTIVE).abortKind()).isNull();
+  }
+
+  /** Der Upload-Weg speichert nie eine Art, auch wenn die Eingabe eine traegt. */
+  @Test
+  void submit_speichertNieEineAbschlussart() {
+    service.submit(
+        USER,
+        PROJECT,
+        List.of(ohneArbeit(T1, true, null, ABBRUCH_GRUND, NightRunAbortKind.REPORTED)));
+
+    assertThat(gemeldeterLauf().abortKind()).isNull();
+  }
+
+  /**
+   * AK 1 der fachlichen Quelle #1493: Ein selbst gemeldeter Abbruch ohne angefasstes Paket ist
+   * „nicht angelaufen". Der Dienst reicht die gespeicherte Art in den Befund durch.
+   */
+  @Test
+  void list_liestEinenSelbstGemeldetenAbbruchOhnePaketAlsNichtAngelaufen() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        ohneArbeit(T1, true, null, ABBRUCH_GRUND, NightRunAbortKind.REPORTED));
+
+    assertThat(service.list(USER, PROJECT))
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.outcome().verdict()).isEqualTo(NightRunOutcome.Verdict.NOT_STARTED);
+              assertThat(v.outcome().abortReason()).isEqualTo(ABBRUCH_GRUND);
+            });
+  }
+
+  /** A4: Ohne Art bleibt der Abbruch wie bisher gescheitert. */
+  @Test
+  void list_liestEinenAbbruchOhneArtWeiterAlsGescheitert() {
+    service.ingest(
+        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
+
+    assertThat(service.list(USER, PROJECT))
+        .singleElement()
+        .extracting(v -> v.outcome().verdict())
+        .isEqualTo(NightRunOutcome.Verdict.FAILED);
   }
 
   static class FakeNightRunRepository implements NightRunRepository {
@@ -1546,6 +1675,7 @@ class NightRunServiceTest {
               run.noWorkReason(),
               run.budget(),
               run.abortReason(),
+              run.abortKind(),
               run.releasePreparation()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
@@ -1589,6 +1719,7 @@ class NightRunServiceTest {
               run.noWorkReason(),
               run.budget(),
               run.abortReason(),
+              run.abortKind(),
               run.releasePreparation()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));

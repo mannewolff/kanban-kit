@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 
 /**
@@ -134,6 +135,9 @@ public interface DisruptionRepository {
    * @param abortReason Grund, warum der Lauf hart abgebrochen ist (Issue #1143); {@code null}, wenn
    *     er nicht abbrach. Der Maßstab braucht ihn, weil ein abgebrochener Lauf nie gelingt — auch
    *     nicht mit lauter grünen Paketen
+   * @param abortKind wie der abgebrochene Lauf zu seinem Abschluss kam (Issue #1500); {@code null}
+   *     ohne Abbruch, von einer älteren Kit-Kopie oder aus dem Bestand. Der Maßstab braucht sie,
+   *     weil ein selbst gemeldeter Abbruch ohne angefasstes Paket keine Störung ist
    * @param closedAt Zeitpunkt, zu dem ein Plattform-Admin den Lauf von Hand als beendet
    *     gekennzeichnet hat (Issue #1197); {@code null}, wenn niemand das tat. Der Maßstab braucht
    *     ihn, weil ein gekennzeichneter Lauf sonst für immer unter den laufenden stünde
@@ -148,6 +152,7 @@ public interface DisruptionRepository {
       boolean complete,
       @Nullable String noWorkReason,
       @Nullable String abortReason,
+      @Nullable NightRunAbortKind abortKind,
       @Nullable Instant closedAt) {}
 
   /** Der Lauf, auf den sich eine Quittung bezieht. */
