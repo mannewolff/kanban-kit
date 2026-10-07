@@ -124,9 +124,27 @@ describe('theme Werte des Entwurfs (Z. 17–108, #978)', () => {
   })
 
   it('übernimmt die Melder dunkel unverändert und Zinnober und Stahl hell', () => {
-    expect(dunkel.melder).toEqual({ gruen: '#46C46F', bernst: '#E0AE49', zinnob: '#F0575C', stahl: '#5B96F0', grau: '#6E7681' })
+    expect(dunkel.melder).toEqual({
+      gruen: '#46C46F',
+      bernst: '#E0AE49',
+      zinnob: '#F0575C',
+      stahl: '#5B96F0',
+      grau: '#6E7681',
+      braun: '#B08A68',
+    })
     expect(hell.melder.zinnob).toBe('#C8393E')
     expect(hell.melder.stahl).toBe('#2F6FC9')
+  })
+
+  it('führt hell alle Melder einschließlich der Erweiterung Braun (#1493)', () => {
+    expect(hell.melder).toEqual({
+      gruen: '#2E8B4C',
+      bernst: '#A17113',
+      zinnob: '#C8393E',
+      stahl: '#2F6FC9',
+      grau: '#757B86',
+      braun: '#7A5A3E',
+    })
   })
 
   // Abweichungen, jede mit dem Entwurfston, der die Schwelle verfehlt.
@@ -407,6 +425,46 @@ describe('theme Kontrasttabelle beider Erscheinungsbilder (AK 14)', () => {
   it.each(schemata)('%s: Schrift auf der Kupfertaste hält 4,5:1 über den ganzen Verlauf', (_, palette) => {
     expect(kontrast(palette.warte.aufKupfer, palette.warte.kupferTaste)).toBeGreaterThanOrEqual(4.5)
     expect(kontrast(palette.warte.aufKupfer, palette.primary.main)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  /**
+   * Braun (#1493, „nicht angelaufen") ist eine Erweiterung der Vorlage. Nachgerechnet am
+   * 2026-10-07: hell 4,41 (Nut) bis 6,25:1 (Platte hoch), dunkel 4,97 (Platte hoch) bis 6,31:1 (Nut).
+   */
+  const braunPaare = tabelle((name, palette) =>
+    flaechenVon(palette).map(([flaeche, wert]) => [name, flaeche, wert, palette.melder.braun] as const),
+  )
+
+  it.each(braunPaare)('%s: Melder Braun auf %s hält 3:1 als Füllung', (_, __, flaeche, braun) => {
+    expect(kontrast(flaeche, braun)).toBeGreaterThanOrEqual(3)
+  })
+})
+
+/** Sättigung im HSL-Modell (0 bis 1) eines Hexwerts `#rrggbb`. */
+const saettigung = (hex: string): number => {
+  const kanaele = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255)
+  const hoch = Math.max(...kanaele)
+  const tief = Math.min(...kanaele)
+  const helligkeit = (hoch + tief) / 2
+  return hoch === tief ? 0 : (hoch - tief) / (1 - Math.abs(2 * helligkeit - 1))
+}
+
+describe('theme Melder Braun gegen seine Nachbarn (#1493, Plan-Entscheidung E7)', () => {
+  /*
+   * Braun liegt im Farbton nahe an Kupfer (28° gegen 25–27°) und in der Leuchtdichte nahe an Kupfer,
+   * Zinnober und Bernstein (1,1–1,5:1). Getrennt wird es über die Sättigung: ein entsättigtes
+   * Erdbraun (hell 33 %, dunkel 31 %) gegen Kupfer 57–58 %, Zinnober 57–84 %, Bernstein 71–79 %.
+   * So wird die Leitfarbe Kupfer nicht als Melder gelesen. Die Schwelle: höchstens 60 % der
+   * Sättigung des Nachbarn.
+   */
+  const nachbarn = tabelle((name, palette) => [
+    [name, 'Kupfer', palette.primary.main, palette.melder.braun] as const,
+    [name, 'Zinnober', palette.melder.zinnob, palette.melder.braun] as const,
+    [name, 'Bernstein', palette.melder.bernst, palette.melder.braun] as const,
+  ])
+
+  it.each(nachbarn)('%s: Braun ist deutlich weniger gesättigt als %s', (_, __, nachbar, braun) => {
+    expect(saettigung(braun)).toBeLessThanOrEqual(0.6 * saettigung(nachbar))
   })
 })
 

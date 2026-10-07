@@ -58,6 +58,7 @@ Die Rollen und Werte der Vorlage (Entwurf Z. 10–150). Die **Leitfarbe ist Kupf
 | Zinnober | `#C8393E` | `#F0575C` | Melder: gescheitert, überfällig |
 | Stahl | `#2F6FC9` | `#5B96F0` | Melder: laufend, Information |
 | Grau | `#8A929E` | `#6E7681` | Melder: nicht bearbeitet |
+| Braun | `#7A5A3E` | `#B08A68` | Melder: nicht angelaufen — Erweiterung der Vorlage durch #1493 (PO-Entscheidung) |
 
 **Grund der Anwendung:** der Grund mit einem Kupfer-Schimmer oben links (`radial-gradient(1100px 600px at 18% -8%, Kupfer-Schimmer, transparent 62%)`, Entwurf Z. 152–160), in beiden Erscheinungsbildern.
 
@@ -113,6 +114,7 @@ Die Schattenfarbe folgt der Vorlage: hell eine dunkle Blaugrau-Tinte `rgba(18,24
 - **Text matt auf der Nut, hell:** 4,49:1.
 - **Weiße Schrift auf Kupfer, dunkel:** 2,8:1 — die Schrift auf der Kupfertaste ist dunkel die Grundtinte.
 - **Melder auf der Nut, hell:** Grün 2,9, Bernstein 2,6, Grau 2,2:1 — als Füllung auf der Nut nachgedunkelt oder auf eine Platte gesetzt.
+- **Melder Braun (Erweiterung #1493, nachgerechnet am 2026-10-07):** hell 4,41 (Nut) bis 6,25:1 (Platte hoch), dunkel 4,97 (Platte hoch) bis 6,31:1 (Nut) — hält 3:1 als Füllung ohne Abweichung. Von Kupfer, Zinnober und Bernstein trennt es die Sättigung (hell 33 %, dunkel 31 % gegen mindestens 57 %), nicht die Leuchtdichte.
 
 ---
 

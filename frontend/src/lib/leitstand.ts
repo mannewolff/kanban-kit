@@ -13,7 +13,7 @@ import type { NightRunErrorClass, NightRunState } from './nightRunLog'
  */
 
 /** Die Melder des Entwurfs als Namen — die Werte liegen im Theme. */
-export type Melder = 'gruen' | 'bernst' | 'zinnob' | 'stahl' | 'grau'
+export type Melder = 'gruen' | 'bernst' | 'zinnob' | 'stahl' | 'grau' | 'braun'
 
 // Die fuenf Formatierer entstehen beim Laden des Moduls. Stryker kann einen Mutanten dort nicht
 // mehr aktivieren — das Modul ist schon ausgewertet, wenn der Lauf beginnt —, weshalb jede
