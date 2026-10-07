@@ -49,13 +49,14 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(
     name = "Karten",
     description =
-        "Karten und Vorhaben eines Boards anlegen, lesen und bearbeiten, Zuständige und Labels"
-            + " setzen, den Aktivitätsverlauf lesen. Eine Karte trägt eine projektweite Nummer"
-            + " (number) und eine interne ID (id); die Pfade verwenden die ID. Ein Vorhaben ist"
-            + " eine Karte vom Typ EPIC, die andere Karten bündelt (parentId der Karten). Lesen"
-            + " verlangt die Mitgliedschaft im Projekt, Schreiben das genannte Projekt-Recht;"
-            + " einem Nichtmitglied antwortet der Leitstand mit 404, damit nicht erkennbar ist,"
-            + " ob es Projekt oder Karte gibt.")
+        """
+        Karten und Vorhaben eines Boards anlegen, lesen und bearbeiten, Zuständige und Labels \
+        setzen, den Aktivitätsverlauf lesen. Eine Karte trägt eine projektweite Nummer \
+        (number) und eine interne ID (id); die Pfade verwenden die ID. Ein Vorhaben ist \
+        eine Karte vom Typ EPIC, die andere Karten bündelt (parentId der Karten). Lesen \
+        verlangt die Mitgliedschaft im Projekt, Schreiben das genannte Projekt-Recht; \
+        einem Nichtmitglied antwortet der Leitstand mit 404, damit nicht erkennbar ist, \
+        ob es Projekt oder Karte gibt.""")
 @RestController
 class CardController {
 
@@ -90,9 +91,11 @@ class CardController {
       "Die Karte gibt es nicht, oder der Aufrufer ist kein Mitglied ihres Projekts.";
 
   private static final String FREIGABE_LABELS =
-      " Die Freigabe-Labels des Kits ändert ein Projekt-Token nur in einer Richtung: kit:night"
-          + " und kit:nightrun setzt nur ein Mensch im Board, kit:klaeren und kit:geschuetzt"
-          + " nimmt nur ein Mensch ab — sonst 403.";
+      " "
+          + """
+      Die Freigabe-Labels des Kits ändert ein Projekt-Token nur in einer Richtung: kit:night \
+      und kit:nightrun setzt nur ein Mensch im Board, kit:klaeren und kit:geschuetzt \
+      nimmt nur ein Mensch ab — sonst 403.""";
 
   CardController(CardService cards, EpicService epics) {
     this.cards = cards;
@@ -102,23 +105,26 @@ class CardController {
   @Operation(
       summary = "Karte oder Vorhaben anlegen",
       description =
-          "Legt eine Karte in der angegebenen Spalte des Boards an, am Ende der Spalte. Mit"
-              + " type=EPIC entsteht stattdessen ein Vorhaben in der ersten Spalte; columnId ist"
-              + " dann ohne Wirkung. Recht: TICKET_CREATE für Karten, EPIC_CREATE für Vorhaben.\n\n"
-              + "Zuständige, Labels und Fälligkeit werden mit der Anlage in einem Zug übernommen."
-              + " dependencies nennt die projektweiten Nummern der Karten, von denen diese"
-              + " abhängt; parentId ordnet die Karte einem Vorhaben desselben Boards zu.\n\n"
-              + "derivedFrom hält die Herkunft fest: die projektweite Nummer der Karte, aus der"
-              + " diese abgeleitet ist, etwa ein Arbeitspaket aus seinem Plan. Ein Vorhaben trägt"
-              + " keine Herkunft.")
+          """
+          Legt eine Karte in der angegebenen Spalte des Boards an, am Ende der Spalte. Mit \
+          type=EPIC entsteht stattdessen ein Vorhaben in der ersten Spalte; columnId ist \
+          dann ohne Wirkung. Recht: TICKET_CREATE für Karten, EPIC_CREATE für Vorhaben.\n\n\
+          Zuständige, Labels und Fälligkeit werden mit der Anlage in einem Zug übernommen. \
+          dependencies nennt die projektweiten Nummern der Karten, von denen diese \
+          abhängt; parentId ordnet die Karte einem Vorhaben desselben Boards zu.\n\n\
+          derivedFrom hält die Herkunft fest: die projektweite Nummer der Karte, aus der \
+          diese abgeleitet ist, etwa ein Arbeitspaket aus seinem Plan. Ein Vorhaben trägt \
+          keine Herkunft.""")
   @ApiResponse(responseCode = "201", description = "Die angelegte Karte.")
   @ApiResponse(
       responseCode = "400",
       description =
           UNGUELTIGE_EINGABE
-              + " Ebenso: unbekannte Abhängigkeit, parentId ist kein Vorhaben dieses Boards,"
-              + " Zuständiger ist kein Projektmitglied, Label gehört nicht zum Board, ungültige"
-              + " oder zyklische Herkunft, Herkunft an einem Vorhaben.",
+              + " "
+              + """
+                  Ebenso: unbekannte Abhängigkeit, parentId ist kein Vorhaben dieses Boards, \
+                  Zuständiger ist kein Projektmitglied, Label gehört nicht zum Board, ungültige \
+                  oder zyklische Herkunft, Herkunft an einem Vorhaben.""",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -189,9 +195,10 @@ class CardController {
   @Operation(
       summary = "Mehrere Karten anlegen",
       description =
-          "Legt bis zu 200 Karten mit Titel und optionaler Beschreibung in einem Zug am Ende"
-              + " einer Spalte des Boards an, in Eingabereihenfolge. Alles oder nichts: Verletzt"
-              + " ein Element seine Grenzen oder scheitert eine Karte, entsteht keine.")
+          """
+          Legt bis zu 200 Karten mit Titel und optionaler Beschreibung in einem Zug am Ende \
+          einer Spalte des Boards an, in Eingabereihenfolge. Alles oder nichts: Verletzt \
+          ein Element seine Grenzen oder scheitert eine Karte, entsteht keine.""")
   @ApiResponse(
       responseCode = "201",
       description = "Die angelegten Karten in Eingabereihenfolge, je mit id und number.")
@@ -233,9 +240,10 @@ class CardController {
   @Operation(
       summary = "Karten eines Boards lesen",
       description =
-          "Liefert alle Karten des Boards ohne Vorhaben, archivierte eingeschlossen. Statt der"
-              + " vollen Beschreibung trägt jede Karte nur einen Auszug (excerpt, die ersten 200"
-              + " Zeichen); die volle Beschreibung liefert GET /api/cards/{cardId}.")
+          """
+          Liefert alle Karten des Boards ohne Vorhaben, archivierte eingeschlossen. Statt der \
+          vollen Beschreibung trägt jede Karte nur einen Auszug (excerpt, die ersten 200 \
+          Zeichen); die volle Beschreibung liefert GET /api/cards/{cardId}.""")
   @ApiResponse(responseCode = "200", description = "Die Karten des Boards.")
   @ApiResponse(
       responseCode = "404",
@@ -272,18 +280,21 @@ class CardController {
   @Operation(
       summary = "Karte oder Vorhaben bearbeiten",
       description =
-          "Ersetzt Titel, Beschreibung und Abhängigkeiten. Bei einer Karte setzt der Aufruf"
-              + " zusätzlich Vorhaben-Zuordnung (parentId; fehlt sie, wird die Zuordnung gelöst)"
-              + " und Fälligkeit, bei einem Vorhaben sein Kürzel (shortcode). Fehlen"
-              + " dependencies, bleiben die Abhängigkeiten unverändert. Recht: TICKET_UPDATE für"
-              + " Karten, EPIC_UPDATE für Vorhaben.")
+          """
+          Ersetzt Titel, Beschreibung und Abhängigkeiten. Bei einer Karte setzt der Aufruf \
+          zusätzlich Vorhaben-Zuordnung (parentId; fehlt sie, wird die Zuordnung gelöst) \
+          und Fälligkeit, bei einem Vorhaben sein Kürzel (shortcode). Fehlen \
+          dependencies, bleiben die Abhängigkeiten unverändert. Recht: TICKET_UPDATE für \
+          Karten, EPIC_UPDATE für Vorhaben.""")
   @ApiResponse(responseCode = "200", description = "Die bearbeitete Karte.")
   @ApiResponse(
       responseCode = "400",
       description =
           UNGUELTIGE_EINGABE
-              + " Ebenso: unbekannte Abhängigkeit oder parentId ist kein Vorhaben dieses"
-              + " Boards.",
+              + " "
+              + """
+                  Ebenso: unbekannte Abhängigkeit oder parentId ist kein Vorhaben dieses \
+                  Boards.""",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -326,18 +337,21 @@ class CardController {
   @Operation(
       summary = "Ein Label an mehreren Karten setzen oder abnehmen",
       description =
-          "Setzt ein Label an bis zu 200 Karten (action=ADD) oder nimmt es ihnen ab"
-              + " (action=REMOVE); die übrigen Labels jeder Karte bleiben unberührt. Alles oder"
-              + " nichts: Scheitert eine Karte, ändert sich keine. Trägt eine Karte das Label"
-              + " schon (bzw. schon nicht), bleibt sie unverändert."
+          """
+          Setzt ein Label an bis zu 200 Karten (action=ADD) oder nimmt es ihnen ab \
+          (action=REMOVE); die übrigen Labels jeder Karte bleiben unberührt. Alles oder \
+          nichts: Scheitert eine Karte, ändert sich keine. Trägt eine Karte das Label \
+          schon (bzw. schon nicht), bleibt sie unverändert."""
               + FREIGABE_LABELS)
   @ApiResponse(responseCode = "200", description = "Die Karten nach der Änderung.")
   @ApiResponse(
       responseCode = "400",
       description =
           UNGUELTIGE_EINGABE
-              + " Ebenso: eine Karte ist ein Vorhaben, oder das Label gehört nicht zum Board der"
-              + " Karte.",
+              + " "
+              + """
+                  Ebenso: eine Karte ist ein Vorhaben, oder das Label gehört nicht zum Board der \
+                  Karte.""",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -367,9 +381,10 @@ class CardController {
   @Operation(
       summary = "Zuständige einer Karte ersetzen",
       description =
-          "Ersetzt die Zuständigen der Karte durch die übergebenen Benutzer-IDs; eine leere oder"
-              + " fehlende Liste entfernt alle. Zuständig sein können nur Mitglieder des"
-              + " Projekts. Vorhaben haben keine Zuständigen.")
+          """
+          Ersetzt die Zuständigen der Karte durch die übergebenen Benutzer-IDs; eine leere oder \
+          fehlende Liste entfernt alle. Zuständig sein können nur Mitglieder des \
+          Projekts. Vorhaben haben keine Zuständigen.""")
   @ApiResponse(responseCode = "200", description = "Die Karte mit den neuen Zuständigen.")
   @ApiResponse(
       responseCode = "400",
@@ -406,9 +421,10 @@ class CardController {
   @Operation(
       summary = "Labels einer Karte ersetzen",
       description =
-          "Ersetzt die Labels der Karte durch die übergebenen Label-IDs; eine leere oder"
-              + " fehlende Liste entfernt alle. Zulässig sind nur Labels des Boards der Karte."
-              + " Vorhaben haben keine Labels."
+          """
+          Ersetzt die Labels der Karte durch die übergebenen Label-IDs; eine leere oder \
+          fehlende Liste entfernt alle. Zulässig sind nur Labels des Boards der Karte. \
+          Vorhaben haben keine Labels."""
               + FREIGABE_LABELS)
   @ApiResponse(responseCode = "200", description = "Die Karte mit den neuen Labels.")
   @ApiResponse(
@@ -446,9 +462,10 @@ class CardController {
   @Operation(
       summary = "Ein Label an einer Karte setzen",
       description =
-          "Setzt das Label an der Karte; die übrigen Labels bleiben unberührt. Ein schon gesetztes"
-              + " Label erneut zu setzen ist kein Fehler. Anders als das Ersetzen der ganzen Liste"
-              + " kann diese Route kein inzwischen abgenommenes Label zurückschreiben."
+          """
+          Setzt das Label an der Karte; die übrigen Labels bleiben unberührt. Ein schon gesetztes \
+          Label erneut zu setzen ist kein Fehler. Anders als das Ersetzen der ganzen Liste \
+          kann diese Route kein inzwischen abgenommenes Label zurückschreiben."""
               + FREIGABE_LABELS)
   @ApiResponse(responseCode = "200", description = "Die Karte mit ihren Labels.")
   @ApiResponse(
@@ -485,8 +502,9 @@ class CardController {
   @Operation(
       summary = "Ein Label von einer Karte abnehmen",
       description =
-          "Nimmt das Label von der Karte ab; die übrigen Labels bleiben unberührt. Ein Label"
-              + " abzunehmen, das die Karte nicht trägt, ist kein Fehler."
+          """
+          Nimmt das Label von der Karte ab; die übrigen Labels bleiben unberührt. Ein Label \
+          abzunehmen, das die Karte nicht trägt, ist kein Fehler."""
               + FREIGABE_LABELS)
   @ApiResponse(responseCode = "200", description = "Die Karte mit ihren Labels.")
   @ApiResponse(
@@ -523,11 +541,12 @@ class CardController {
   @Operation(
       summary = "Aktivitätsverlauf einer Karte lesen",
       description =
-          "Liefert die Einträge des Aktivitätsverlaufs der Karte in zeitlicher Reihenfolge:"
-              + " Anlage, Bearbeitung, Verschieben, Zuordnungen. origin sagt, über welchen Zugang"
-              + " die Änderung kam (Anmeldung oder Projekt-Token), tokenName nennt dann das"
-              + " Token; beides prüft der Leitstand. agent ist die Selbstauskunft des Aufrufers,"
-              + " welcher Agent schrieb, und wird nicht geprüft.")
+          """
+          Liefert die Einträge des Aktivitätsverlaufs der Karte in zeitlicher Reihenfolge: \
+          Anlage, Bearbeitung, Verschieben, Zuordnungen. origin sagt, über welchen Zugang \
+          die Änderung kam (Anmeldung oder Projekt-Token), tokenName nennt dann das \
+          Token; beides prüft der Leitstand. agent ist die Selbstauskunft des Aufrufers, \
+          welcher Agent schrieb, und wird nicht geprüft.""")
   @ApiResponse(responseCode = "200", description = "Die Einträge, ältester zuerst.")
   @ApiResponse(
       responseCode = "404",
@@ -599,8 +618,9 @@ class CardController {
           @Nullable List<Long> labelIds,
       @Schema(
               description =
-                  "Herkunft: projektweite Nummer der Karte, aus der diese abgeleitet ist, etwa"
-                      + " der Plan eines Arbeitspakets. Nicht bei Vorhaben.",
+                  """
+                  Herkunft: projektweite Nummer der Karte, aus der diese abgeleitet ist, etwa \
+                  der Plan eines Arbeitspakets. Nicht bei Vorhaben.""",
               example = "1400")
           @Nullable
           @Positive
@@ -647,8 +667,9 @@ class CardController {
           String description,
       @Schema(
               description =
-                  "Projektweite Nummern der Karten, von denen diese abhängt; fehlt die Liste,"
-                      + " bleiben die Abhängigkeiten unverändert.",
+                  """
+                  Projektweite Nummern der Karten, von denen diese abhängt; fehlt die Liste, \
+                  bleiben die Abhängigkeiten unverändert.""",
               example = "[41, 42]")
           List<Integer> dependencies,
       @Schema(
@@ -658,8 +679,9 @@ class CardController {
           String shortcode,
       @Schema(
               description =
-                  "Interne ID des Vorhabens; fehlt sie, wird die Zuordnung gelöst. Nur bei"
-                      + " Karten.",
+                  """
+                  Interne ID des Vorhabens; fehlt sie, wird die Zuordnung gelöst. Nur bei \
+                  Karten.""",
               example = "640")
           Long parentId,
       @Schema(
@@ -709,8 +731,9 @@ class CardController {
           Instant createdAt,
       @Schema(
               description =
-                  "Zugang, über den die Änderung kam (etwa SESSION oder TOKEN), vom Leitstand"
-                      + " geprüft; leer bei alten Einträgen.",
+                  """
+                  Zugang, über den die Änderung kam (etwa SESSION oder TOKEN), vom Leitstand \
+                  geprüft; leer bei alten Einträgen.""",
               example = "TOKEN")
           @Nullable String origin,
       @Schema(

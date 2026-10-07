@@ -37,17 +37,18 @@ class BoardEventController {
   @Operation(
       summary = "Änderungen eines Boards live abonnieren",
       description =
-          "Öffnet einen Server-Sent-Events-Stream (text/event-stream), über den der Leitstand"
-              + " jede Änderung am Board meldet, bis der Aufrufer die Verbindung schließt oder"
-              + " sie nach 30 Minuten endet; danach neu abonnieren. Verlangt die Mitgliedschaft"
-              + " im Projekt.\n\n"
-              + "Ereignisarten: Jede Änderung kommt als Ereignis mit dem Namen board-changed;"
-              + " seine Daten sind ein JSON-Objekt mit boardId, type und cardId. type ist eine"
-              + " von CREATED (Karte angelegt), UPDATED (geändert), MOVED (verschoben), ARCHIVED"
-              + " (archiviert), RESTORED (wiederhergestellt) oder DELETED (gelöscht); cardId nennt"
-              + " die betroffene Karte oder ist null, wenn die Änderung keine einzelne Karte"
-              + " betrifft. Etwa alle 25 Sekunden kommt zusätzlich ein Kommentar ping, der die"
-              + " Verbindung durch Proxys offen hält und keine Daten trägt.")
+          """
+          Öffnet einen Server-Sent-Events-Stream (text/event-stream), über den der Leitstand \
+          jede Änderung am Board meldet, bis der Aufrufer die Verbindung schließt oder \
+          sie nach 30 Minuten endet; danach neu abonnieren. Verlangt die Mitgliedschaft \
+          im Projekt.\n\n\
+          Ereignisarten: Jede Änderung kommt als Ereignis mit dem Namen board-changed; \
+          seine Daten sind ein JSON-Objekt mit boardId, type und cardId. type ist eine \
+          von CREATED (Karte angelegt), UPDATED (geändert), MOVED (verschoben), ARCHIVED \
+          (archiviert), RESTORED (wiederhergestellt) oder DELETED (gelöscht); cardId nennt \
+          die betroffene Karte oder ist null, wenn die Änderung keine einzelne Karte \
+          betrifft. Etwa alle 25 Sekunden kommt zusätzlich ein Kommentar ping, der die \
+          Verbindung durch Proxys offen hält und keine Daten trägt.""")
   @ApiResponse(
       responseCode = "200",
       description = "Der Ereignisstrom; jedes Ereignis board-changed trägt ein solches Objekt.",

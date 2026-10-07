@@ -79,11 +79,12 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(
     name = "Läufe (Runner)",
     description =
-        "Läufe von Agenten an den Leitstand melden und auswerten. Ein Lauf ist eine Sitzung eines"
-            + " Agenten, die Karten abarbeitet — ein Nachtlauf des Runners oder eine interaktive"
-            + " Sitzung am Rechner eines Menschen. Eine Kette ist ein Lauf, der eine Anforderung"
-            + " über die Stufen PLAN, REVIEW, PAKETE und ABDECKUNG bis zur Umsetzung führt. Die"
-            + " Runner-Seite zeigt die gemeldeten Läufe.")
+        """
+        Läufe von Agenten an den Leitstand melden und auswerten. Ein Lauf ist eine Sitzung eines \
+        Agenten, die Karten abarbeitet — ein Nachtlauf des Runners oder eine interaktive \
+        Sitzung am Rechner eines Menschen. Eine Kette ist ein Lauf, der eine Anforderung \
+        über die Stufen PLAN, REVIEW, PAKETE und ABDECKUNG bis zur Umsetzung führt. Die \
+        Runner-Seite zeigt die gemeldeten Läufe.""")
 @RestController
 class NightRunIngestController {
 
@@ -148,32 +149,34 @@ class NightRunIngestController {
   @Operation(
       summary = "Lauf einliefern",
       description =
-          "Meldet den vollständigen Stand eines Laufs mit einem projektgebundenen Projekt-Token"
-              + " (Header X-Kanban-Token). Das Zielprojekt kommt aus der Bindung des Tokens, nicht"
-              + " aus dem Aufruf; das Token darf nur, was die Person darf, die es angelegt hat —"
-              + " hier verlangt das die Rolle Owner im Projekt.\n\n"
-              + "Ein Lauf je Aufruf. Schlüssel ist startedAt: Die erste Meldung legt den Lauf an,"
-              + " jede weitere mit demselben startedAt ersetzt ihn vollständig (Zustand, keine"
-              + " Ergänzung). Ein Lauf meldet sich so im Verlauf mehrfach.\n\n"
-              + "kind unterscheidet den Nachtlauf (NIGHT, die Vorgabe) von der interaktiven"
-              + " Sitzung (INTERACTIVE). Bei einer Kette (mode CHAIN) tragen die Vorgänge ihre"
-              + " Stufen (stages) mit Dauer und Verbrauch; budget nennt die Zeit- und"
-              + " Kostenvorgaben, unter denen der Lauf antrat.\n\n"
-              + "releasePreparation ist die Morgenmeldung: ob und wie der Lauf eine"
-              + " Veröffentlichung vorbereitet hat. Sie ersetzt wie jedes andere Feld eine früher"
-              + " gemeldete; fehlt sie, steht am Lauf keine. Den Eingang setzt der Server.\n\n"
-              + "Gegenstück auf der Runner-Seite ist „Protokoll einlesen“: Dort lädt ein Mensch"
-              + " das Textprotokoll eines Laufs im Browser hoch, und der Leitstand deutet es"
-              + " zeilenweise. Dieser Aufruf nimmt denselben Inhalt strukturiert an, ohne"
-              + " Textprotokoll und ohne ungedeutete Zeilen.")
+          """
+          Meldet den vollständigen Stand eines Laufs mit einem projektgebundenen Projekt-Token \
+          (Header X-Kanban-Token). Das Zielprojekt kommt aus der Bindung des Tokens, nicht \
+          aus dem Aufruf; das Token darf nur, was die Person darf, die es angelegt hat — \
+          hier verlangt das die Rolle Owner im Projekt.\n\n\
+          Ein Lauf je Aufruf. Schlüssel ist startedAt: Die erste Meldung legt den Lauf an, \
+          jede weitere mit demselben startedAt ersetzt ihn vollständig (Zustand, keine \
+          Ergänzung). Ein Lauf meldet sich so im Verlauf mehrfach.\n\n\
+          kind unterscheidet den Nachtlauf (NIGHT, die Vorgabe) von der interaktiven \
+          Sitzung (INTERACTIVE). Bei einer Kette (mode CHAIN) tragen die Vorgänge ihre \
+          Stufen (stages) mit Dauer und Verbrauch; budget nennt die Zeit- und \
+          Kostenvorgaben, unter denen der Lauf antrat.\n\n\
+          releasePreparation ist die Morgenmeldung: ob und wie der Lauf eine \
+          Veröffentlichung vorbereitet hat. Sie ersetzt wie jedes andere Feld eine früher \
+          gemeldete; fehlt sie, steht am Lauf keine. Den Eingang setzt der Server.\n\n\
+          Gegenstück auf der Runner-Seite ist „Protokoll einlesen“: Dort lädt ein Mensch \
+          das Textprotokoll eines Laufs im Browser hoch, und der Leitstand deutet es \
+          zeilenweise. Dieser Aufruf nimmt denselben Inhalt strukturiert an, ohne \
+          Textprotokoll und ohne ungedeutete Zeilen.""")
   @ApiResponse(
       responseCode = "200",
       description = "Der Lauf ist angelegt (CREATED) oder ersetzt (REPLACED).")
   @ApiResponse(
       responseCode = "400",
       description =
-          "Ungültige Eingabe: ein Feld fehlt oder verletzt seine Grenzen (Details in"
-              + " fieldErrors). Ebenso: das Projekt-Token ist an kein Projekt gebunden.",
+          """
+          Ungültige Eingabe: ein Feld fehlt oder verletzt seine Grenzen (Details in \
+          fieldErrors). Ebenso: das Projekt-Token ist an kein Projekt gebunden.""",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -357,16 +360,18 @@ class NightRunIngestController {
   record IngestRequest(
       @Schema(
               description =
-                  "Startzeitpunkt des Laufs; zugleich sein Schlüssel im Projekt. Dieselbe"
-                      + " Kennung trägt der Header X-Night-Run der Kommentare des Laufs.",
+                  """
+                  Startzeitpunkt des Laufs; zugleich sein Schlüssel im Projekt. Dieselbe \
+                  Kennung trägt der Header X-Night-Run der Kommentare des Laufs.""",
               example = "2026-10-05T01:00:00Z")
           @NotNull
           Instant startedAt,
       @Schema(
               description =
-                  "Art des Laufs: IMPLEMENTATION setzt Pakete aus Ready um, REVIEW begutachtet"
-                      + " Backlog-Kandidaten, CHAIN führt eine Kette, INTERACTIVE ist eine"
-                      + " Sitzung am Rechner.",
+                  """
+                  Art des Laufs: IMPLEMENTATION setzt Pakete aus Ready um, REVIEW begutachtet \
+                  Backlog-Kandidaten, CHAIN führt eine Kette, INTERACTIVE ist eine \
+                  Sitzung am Rechner.""",
               example = "IMPLEMENTATION")
           @NotNull
           NightRunMode mode,
@@ -405,15 +410,17 @@ class NightRunIngestController {
           String abortReason,
       @Schema(
               description =
-                  "Wie der abgebrochene Lauf endete: REPORTED, wenn er seinen Abbruch selbst"
-                      + " gemeldet hat; SILENCED, wenn der Wächter ihn nach dem Verstummen"
-                      + " abgeschlossen hat. Gilt nur zusammen mit abortReason.",
+                  """
+                  Wie der abgebrochene Lauf endete: REPORTED, wenn er seinen Abbruch selbst \
+                  gemeldet hat; SILENCED, wenn der Wächter ihn nach dem Verstummen \
+                  abgeschlossen hat. Gilt nur zusammen mit abortReason.""",
               example = "REPORTED")
           @Nullable NightRunAbortKind abortKind,
       @Schema(
               description =
-                  "Morgenmeldung: ob und wie der Lauf eine Veröffentlichung vorbereitet hat."
-                      + " Fehlt sie, trägt der Lauf keine.")
+                  """
+                  Morgenmeldung: ob und wie der Lauf eine Veröffentlichung vorbereitet hat. \
+                  Fehlt sie, trägt der Lauf keine.""")
           @Nullable
           @Valid
           IngestReleasePreparationRequest releasePreparation,
@@ -437,8 +444,9 @@ class NightRunIngestController {
           String title,
       @Schema(
               description =
-                  "Ergebnis: GREEN abgeschlossen, YELLOW mit Vorbehalt, RED nicht"
-                      + " abgeschlossen, GREY übergangen.",
+                  """
+                  Ergebnis: GREEN abgeschlossen, YELLOW mit Vorbehalt, RED nicht \
+                  abgeschlossen, GREY übergangen.""",
               example = "GREEN")
           @NotNull
           NightRunState state,
@@ -490,14 +498,16 @@ class NightRunIngestController {
           @Nullable BigDecimal kostenUsd,
       @Schema(
               description =
-                  "CONFIGURED: alle Vorgaben aus der Konfiguration; DEFAULTED: mindestens eine"
-                      + " aus den Voreinstellungen.",
+                  """
+                  CONFIGURED: alle Vorgaben aus der Konfiguration; DEFAULTED: mindestens eine \
+                  aus den Voreinstellungen.""",
               example = "CONFIGURED")
           @Nullable NightRunBudgetOrigin origin,
       @Schema(
               description =
-                  "Namen der Felder, die aus den Voreinstellungen kamen; höchstens 10 zu je 18"
-                      + " Zeichen.",
+                  """
+                  Namen der Felder, die aus den Voreinstellungen kamen; höchstens 10 zu je 18 \
+                  Zeichen.""",
               example = "[\"planMin\"]")
           @Nullable
           @Size(max = MAX_DEFAULT_FIELDS)
@@ -531,15 +541,17 @@ class NightRunIngestController {
   record IngestReleasePreparationRequest(
       @Schema(
               description =
-                  "Ausgang: GREEN grün, GREEN_PENDING grün mit offener Prüfung, RED rot,"
-                      + " NOT_PREPARED nichts vorbereitet.",
+                  """
+                  Ausgang: GREEN grün, GREEN_PENDING grün mit offener Prüfung, RED rot, \
+                  NOT_PREPARED nichts vorbereitet.""",
               example = "GREEN")
           @NotNull
           ReleasePreparationResult result,
       @Schema(
               description =
-                  "Commit des vorbereiteten Stands, höchstens 40 Zeichen; damit findet der Mensch"
-                      + " ihn außerhalb des Boards wieder.",
+                  """
+                  Commit des vorbereiteten Stands, höchstens 40 Zeichen; damit findet der Mensch \
+                  ihn außerhalb des Boards wieder.""",
               example = "b2ae30f6")
           @Nullable
           @Size(max = COMMIT_HASH_MAX)
@@ -550,8 +562,9 @@ class NightRunIngestController {
           String version,
       @Schema(
               description =
-                  "Dateien der Veröffentlichung; höchstens 1000 zu je 500 Zeichen. Wird angenommen,"
-                      + " aber nicht gespeichert.",
+                  """
+                  Dateien der Veröffentlichung; höchstens 1000 zu je 500 Zeichen. Wird angenommen, \
+                  aber nicht gespeichert.""",
               example = "[\"target/manban.jar\"]")
           @Nullable
           @Size(max = RELEASE_FILES_MAX)

@@ -58,13 +58,15 @@ class NightRunController {
 
   /** Wer die Läufe eines Projekts lesen darf — gleich für alle lesenden Aufrufe des Moduls. */
   static final String LESERECHT =
-      "Lesen darf, wer im Projekt die Rolle Owner hat; ein Plattform-Admin nur, wenn das Projekt"
-          + " am Plattform-Leitstand teilnimmt.";
+      """
+      Lesen darf, wer im Projekt die Rolle Owner hat; ein Plattform-Admin nur, wenn das Projekt \
+      am Plattform-Leitstand teilnimmt.""";
 
   /** 403 der lesenden Aufrufe. */
   static final String LESEN_VERBOTEN =
-      "Der Aufrufer ist Mitglied, aber nicht Owner — oder Plattform-Admin, und das Projekt nimmt"
-          + " nicht am Plattform-Leitstand teil.";
+      """
+      Der Aufrufer ist Mitglied, aber nicht Owner — oder Plattform-Admin, und das Projekt nimmt \
+      nicht am Plattform-Leitstand teil.""";
 
   /** 404, wenn das Projekt fehlt oder der Aufrufer dort nichts zu suchen hat. */
   static final String PROJEKT_UNBEKANNT =
@@ -123,18 +125,19 @@ class NightRunController {
   @Operation(
       summary = "Ausgewertete Läufe hochladen",
       description =
-          "Nimmt Läufe entgegen, die der Browser aus einem Textprotokoll des Runners gedeutet hat"
-              + " („Protokoll einlesen“ auf der Runner-Seite). Ein Lauf ist eine Sitzung eines"
-              + " Agenten, die Karten abarbeitet; seine Arbeitspakete (items) sind die Karten, die"
-              + " er angefasst hat, mit Ausgang (state) und gegebenenfalls Fehlerklasse. Das"
-              + " Protokoll selbst verlässt den Browser nicht.\n\n"
-              + "Schlüssel eines Laufs ist startedAt: Ein Lauf, den das Projekt schon kennt, bleibt"
-              + " unangetastet und wird als schon vorliegend gemeldet — wiederholtes Hochladen"
-              + " desselben Protokolls ist darum folgenlos. Die Antwort nennt je übergebenem Lauf,"
-              + " in Anfragereihenfolge, ob er angelegt wurde (created). Verlangt die Rolle Owner"
-              + " im Projekt; ein Plattform-Admin darf ebenfalls.\n\n"
-              + "Den strukturierten Weg ohne Browser, mit Projekt-Token, bietet POST"
-              + " /api/kanban/night-runs.")
+          """
+          Nimmt Läufe entgegen, die der Browser aus einem Textprotokoll des Runners gedeutet hat \
+          („Protokoll einlesen“ auf der Runner-Seite). Ein Lauf ist eine Sitzung eines \
+          Agenten, die Karten abarbeitet; seine Arbeitspakete (items) sind die Karten, die \
+          er angefasst hat, mit Ausgang (state) und gegebenenfalls Fehlerklasse. Das \
+          Protokoll selbst verlässt den Browser nicht.\n\n\
+          Schlüssel eines Laufs ist startedAt: Ein Lauf, den das Projekt schon kennt, bleibt \
+          unangetastet und wird als schon vorliegend gemeldet — wiederholtes Hochladen \
+          desselben Protokolls ist darum folgenlos. Die Antwort nennt je übergebenem Lauf, \
+          in Anfragereihenfolge, ob er angelegt wurde (created). Verlangt die Rolle Owner \
+          im Projekt; ein Plattform-Admin darf ebenfalls.\n\n\
+          Den strukturierten Weg ohne Browser, mit Projekt-Token, bietet POST \
+          /api/kanban/night-runs.""")
   @ApiResponse(
       responseCode = "200",
       description =
@@ -142,9 +145,10 @@ class NightRunController {
   @ApiResponse(
       responseCode = "400",
       description =
-          "Ungültige Eingabe: leere Liste, mehr als 100 Läufe oder 200 Arbeitspakete je Lauf,"
-              + " ein Pflichtfeld fehlt oder ein Feld verletzt seine Grenzen (Details in"
-              + " fieldErrors).",
+          """
+          Ungültige Eingabe: leere Liste, mehr als 100 Läufe oder 200 Arbeitspakete je Lauf, \
+          ein Pflichtfeld fehlt oder ein Feld verletzt seine Grenzen (Details in \
+          fieldErrors).""",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -176,18 +180,19 @@ class NightRunController {
   @Operation(
       summary = "Läufe des Projekts lesen",
       description =
-          "Liefert die aufbewahrten Nachtläufe des Projekts, neueste zuerst, jeden mit seinen"
-              + " Arbeitspaketen. Ein Lauf ist eine Sitzung eines Agenten, die Karten abarbeitet;"
-              + " ein Nachtlauf ist ein Lauf des Runners ohne Menschen (kind NIGHT). Interaktive"
-              + " Sitzungen (kind INTERACTIVE) stehen nicht in dieser Liste. mode nennt die Art"
-              + " — IMPLEMENTATION setzt Arbeitspakete aus Ready um,"
-              + " REVIEW begutachtet Kandidaten, CHAIN ist eine Kette: ein Lauf, der eine"
-              + " fachliche Anforderung über die Stufen PLAN, REVIEW, PAKETE und ABDECKUNG"
-              + " führt. Je Projekt bleibt nur eine begrenzte Zahl Läufe aufbewahrt; ältere werden"
-              + " verdrängt. Hat der Runner eine Morgenmeldung geschickt, steht sie unter"
-              + " releasePreparation — mit Eingang (receivedAt) und den gemeldeten Karten samt"
-              + " Titel im Projekt des Laufs, auch Karten aus anderen Ketten; eine Nummer ohne"
-              + " Karte im Projekt trägt title null. "
+          """
+          Liefert die aufbewahrten Nachtläufe des Projekts, neueste zuerst, jeden mit seinen \
+          Arbeitspaketen. Ein Lauf ist eine Sitzung eines Agenten, die Karten abarbeitet; \
+          ein Nachtlauf ist ein Lauf des Runners ohne Menschen (kind NIGHT). Interaktive \
+          Sitzungen (kind INTERACTIVE) stehen nicht in dieser Liste. mode nennt die Art \
+          — IMPLEMENTATION setzt Arbeitspakete aus Ready um, \
+          REVIEW begutachtet Kandidaten, CHAIN ist eine Kette: ein Lauf, der eine \
+          fachliche Anforderung über die Stufen PLAN, REVIEW, PAKETE und ABDECKUNG \
+          führt. Je Projekt bleibt nur eine begrenzte Zahl Läufe aufbewahrt; ältere werden \
+          verdrängt. Hat der Runner eine Morgenmeldung geschickt, steht sie unter \
+          releasePreparation — mit Eingang (receivedAt) und den gemeldeten Karten samt \
+          Titel im Projekt des Laufs, auch Karten aus anderen Ketten; eine Nummer ohne \
+          Karte im Projekt trägt title null.\s"""
               + LESERECHT)
   @ApiResponse(responseCode = "200", description = "Die Läufe, neueste zuerst.")
   @ApiResponse(
@@ -220,12 +225,13 @@ class NightRunController {
   @Operation(
       summary = "Fehlerklassen zählen",
       description =
-          "Liefert je Fehlerklasse die Zahl der aufbewahrten Nachtläufe, in denen sie mindestens"
-              + " einmal vorkam; interaktive Sitzungen zählen nicht mit. Die Fehlerklasse nennt"
-              + " den Grund, warum ein Arbeitspaket nicht"
-              + " grün endete — etwa CHECKS_RED (Pflichtprüfungen rot), DEPENDENCY_UNMET"
-              + " (Voraussetzung offen) oder HARD_ABORT (Lauf hart abgebrochen). Klassen ohne"
-              + " Vorkommen fehlen in der Antwort. "
+          """
+          Liefert je Fehlerklasse die Zahl der aufbewahrten Nachtläufe, in denen sie mindestens \
+          einmal vorkam; interaktive Sitzungen zählen nicht mit. Die Fehlerklasse nennt \
+          den Grund, warum ein Arbeitspaket nicht \
+          grün endete — etwa CHECKS_RED (Pflichtprüfungen rot), DEPENDENCY_UNMET \
+          (Voraussetzung offen) oder HARD_ABORT (Lauf hart abgebrochen). Klassen ohne \
+          Vorkommen fehlen in der Antwort.\s"""
               + LESERECHT)
   @ApiResponse(responseCode = "200", description = "Fehlerklasse → Zahl der Läufe.")
   @ApiResponse(
@@ -258,16 +264,17 @@ class NightRunController {
   @Operation(
       summary = "Heute Nacht lesen",
       description =
-          "Liefert die Karten des Projekts, die für die nächste Nacht anstehen: fachliche"
-              + " Anforderungen ([Fachlich]) und Pläne ([Plan]) aller nicht archivierten Boards,"
-              + " die zur Übernahme durch den nächsten Runner freigegeben sind (Label kit:night)"
-              + " und die noch kein Runner übernommen hat. Es erscheinen nur nicht archivierte"
-              + " Karten, die in Backlog stehen — nach eigenem Status, sonst nach ihrer Spalte;"
-              + " eine Spalte ohne festen Schlüssel zählt als Backlog. Je Karte kommen Nummer,"
-              + " Titel, Board, die Startstation der Kette (FACHPLAN oder PLAN), ihr Ziel (aus"
-              + " ziel:*, ohne Angabe PAKETE, mit kit:durchziehen mindestens UMSETZUNG) und die"
-              + " gewählte Prüferzahl aus planreview:*. Sortiert nach Kartennummer; leer, wenn"
-              + " nichts freigegeben ist. "
+          """
+          Liefert die Karten des Projekts, die für die nächste Nacht anstehen: fachliche \
+          Anforderungen ([Fachlich]) und Pläne ([Plan]) aller nicht archivierten Boards, \
+          die zur Übernahme durch den nächsten Runner freigegeben sind (Label kit:night) \
+          und die noch kein Runner übernommen hat. Es erscheinen nur nicht archivierte \
+          Karten, die in Backlog stehen — nach eigenem Status, sonst nach ihrer Spalte; \
+          eine Spalte ohne festen Schlüssel zählt als Backlog. Je Karte kommen Nummer, \
+          Titel, Board, die Startstation der Kette (FACHPLAN oder PLAN), ihr Ziel (aus \
+          ziel:*, ohne Angabe PAKETE, mit kit:durchziehen mindestens UMSETZUNG) und die \
+          gewählte Prüferzahl aus planreview:*. Sortiert nach Kartennummer; leer, wenn \
+          nichts freigegeben ist.\s"""
               + LESERECHT)
   @ApiResponse(responseCode = "200", description = "Die freigegebenen Karten, nach Nummer.")
   @ApiResponse(
@@ -300,17 +307,18 @@ class NightRunController {
   @Operation(
       summary = "Laufstand lesen",
       description =
-          "Liefert den Laufstand eines Laufs: wie weit er gekommen ist, abgelesen an seinen"
-              + " Spuren am Board — den Karten, die er angelegt oder bewegt hat, und ihren"
-              + " Kommentaren. Bei einer Kette (ein Lauf, der eine fachliche Anforderung über"
-              + " Plan, Review, Arbeitspakete und Abdeckung führt) stehen unter ketten je"
-              + " Anforderung ihr Plan, ihre Pakete und der Weg durch die Stufen (PLAN, REVIEW,"
-              + " PAKETE, ABDECKUNG; setzt die Kette ihre Pakete auch um, zusätzlich UMSETZUNG)"
-              + " mit der aktuellen Stufe."
-              + " pakete nennt alle Arbeitspakete des Laufs mit ihrem Zustand, offeneFragen die"
-              + " Karten, die auf eine Antwort eines Menschen warten, unbekannt die Karten, die"
-              + " sich keinem Lauf sicher zuordnen lassen. Je Karte kommen nur Nummer, Titel und"
-              + " Board, nie Beschreibung oder Kommentare. "
+          """
+          Liefert den Laufstand eines Laufs: wie weit er gekommen ist, abgelesen an seinen \
+          Spuren am Board — den Karten, die er angelegt oder bewegt hat, und ihren \
+          Kommentaren. Bei einer Kette (ein Lauf, der eine fachliche Anforderung über \
+          Plan, Review, Arbeitspakete und Abdeckung führt) stehen unter ketten je \
+          Anforderung ihr Plan, ihre Pakete und der Weg durch die Stufen (PLAN, REVIEW, \
+          PAKETE, ABDECKUNG; setzt die Kette ihre Pakete auch um, zusätzlich UMSETZUNG) \
+          mit der aktuellen Stufe. \
+          pakete nennt alle Arbeitspakete des Laufs mit ihrem Zustand, offeneFragen die \
+          Karten, die auf eine Antwort eines Menschen warten, unbekannt die Karten, die \
+          sich keinem Lauf sicher zuordnen lassen. Je Karte kommen nur Nummer, Titel und \
+          Board, nie Beschreibung oder Kommentare.\s"""
               + LESERECHT)
   @ApiResponse(responseCode = "200", description = "Der Laufstand.")
   @ApiResponse(
@@ -323,8 +331,9 @@ class NightRunController {
   @ApiResponse(
       responseCode = "404",
       description =
-          "Das Projekt gibt es nicht, der Aufrufer ist dort kein Mitglied, oder der Lauf gehört"
-              + " nicht zu diesem Projekt.",
+          """
+          Das Projekt gibt es nicht, der Aufrufer ist dort kein Mitglied, oder der Lauf gehört \
+          nicht zu diesem Projekt.""",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -413,9 +422,10 @@ class NightRunController {
           Instant startedAt,
       @Schema(
               description =
-                  "Art des Laufs: IMPLEMENTATION setzt Pakete aus Ready um, REVIEW begutachtet"
-                      + " Backlog-Kandidaten, CHAIN führt eine Kette, INTERACTIVE ist eine"
-                      + " Sitzung am Rechner.",
+                  """
+                  Art des Laufs: IMPLEMENTATION setzt Pakete aus Ready um, REVIEW begutachtet \
+                  Backlog-Kandidaten, CHAIN führt eine Kette, INTERACTIVE ist eine \
+                  Sitzung am Rechner.""",
               example = "IMPLEMENTATION")
           @NotNull
           NightRunMode mode,
@@ -450,8 +460,9 @@ class NightRunController {
           String title,
       @Schema(
               description =
-                  "Ergebnis: GREEN abgeschlossen, YELLOW mit Vorbehalt, RED nicht"
-                      + " abgeschlossen, GREY übergangen.",
+                  """
+                  Ergebnis: GREEN abgeschlossen, YELLOW mit Vorbehalt, RED nicht \
+                  abgeschlossen, GREY übergangen.""",
               example = "GREEN")
           @NotNull
           NightRunState state,
@@ -480,14 +491,16 @@ class NightRunController {
       @Schema(description = "Name des Boards der Karte.", example = "Entwicklung") String boardName,
       @Schema(
               description =
-                  "Startstation der Kette: FACHPLAN bei einer fachlichen Anforderung, PLAN bei"
-                      + " einem Plan (Plan und Prüfung sind dann vor dem Lauf erbracht).",
+                  """
+                  Startstation der Kette: FACHPLAN bei einer fachlichen Anforderung, PLAN bei \
+                  einem Plan (Plan und Prüfung sind dann vor dem Lauf erbracht).""",
               example = "FACHPLAN")
           Startstation start,
       @Schema(
               description =
-                  "Zielstation: PLAN, PAKETE, UMSETZUNG oder VORBEREITUNG (Veröffentlichung"
-                      + " vorbereitet).",
+                  """
+                  Zielstation: PLAN, PAKETE, UMSETZUNG oder VORBEREITUNG (Veröffentlichung \
+                  vorbereitet).""",
               example = "PAKETE")
           ProgressStage ziel,
       @Schema(
