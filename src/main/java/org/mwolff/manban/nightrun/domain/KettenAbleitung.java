@@ -36,13 +36,14 @@ final class KettenAbleitung {
   /** Die Zeilen des Laufstands, aus denen der Kettenstand liest (E13). */
   private static final Pattern ZIEL_ZEILE = Pattern.compile("^Ziel: (\\S+)$");
 
-  private static final Pattern PRUEFER_ZEILE = Pattern.compile("^Prüfer: ([12])$");
+  private static final Pattern PRUEFER_ZEILE =
+      Pattern.compile("^Prüfer: ([12])$", Pattern.CANON_EQ);
   private static final Pattern GRENZE_ZEILE = Pattern.compile("^Grenze: (\\S+)$");
   private static final Pattern FERTIG_BIS = Pattern.compile("^fertig bis \\S");
 
   /** Der Wartetext des Kits an der Projektgrenze — {@code uebergangNichtFreigegeben}. */
   private static final Pattern GRENZE_WARTETEXT =
-      Pattern.compile("^wartet: Übergang .+ im Projekt nicht freigegeben");
+      Pattern.compile("^wartet: Übergang .+ im Projekt nicht freigegeben", Pattern.CANON_EQ);
 
   /**
    * Die Zeilen des Laufstands, die Daten tragen und kein Grund sind; die erste andere Zeile ist der

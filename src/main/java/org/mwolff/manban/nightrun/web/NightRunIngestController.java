@@ -73,8 +73,8 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Die API-Beschreibung (Issue #1403, Plan #1400) steht an Methode und Records; der Aufruf ist
  * verlässlich (E4), weil das Kit ihn benutzt.
  */
-// Die OpenAPI-Annotationen heben die Importzahl über die PMD-Schwelle von 40 (Plan #1400, E14);
-// die Ausnahme bleibt an dieser Klasse sichtbar, statt die Regel für alle anzuheben.
+// Die OpenAPI-Annotationen heben die Importzahl über die PMD-Schwelle von 40 (Plan #1400, E14).
+// Die Ausnahme bleibt an dieser Klasse sichtbar, statt die Regel für alle anzuheben.
 @SuppressWarnings("PMD.ExcessiveImports")
 @Tag(
     name = "Läufe (Runner)",
