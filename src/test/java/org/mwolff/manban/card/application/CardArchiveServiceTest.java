@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -26,6 +28,7 @@ import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -38,7 +41,10 @@ import org.springframework.context.ApplicationEventPublisher;
 // Prüfling entsteht aus den Ports, die KartenGrundlage und KartenSicht echt brauchen (Plan #1387,
 // E6), wie in EpicServiceTest. Ein Mock der Bausteine senkte die Kopplung, ließe Abdeckung und
 // Mutationsprüfung der Helfer aber ins Leere laufen.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
+// PMD.TooManyMethods: Mit der Rückkehr des Vorhabens (Issue #1508) bekommen Archiv und Papierkorb
+// je Erfolgs- und Ablehnungspfad weitere Fälle, wie in CardMoveServiceTest. Ein Zerschneiden nach
+// Methodenzahl verstreute die Use-Cases über Dateien, ohne etwas zu entkoppeln.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CouplingBetweenObjects"})
 class CardArchiveServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -341,6 +347,108 @@ class CardArchiveServiceTest {
             FIXED,
             ActorContext.ActorStamp.unknown());
     assertThat(view.id()).isEqualTo(1L);
+  }
+
+  /** Die gespeicherten Stände des Vorhabens mit der ID {@code epicId} (Plan #1504, A5). */
+  private List<Card> gespeicherteVorhaben(long epicId) {
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    verify(cards, atLeast(0)).save(captor.capture());
+    return captor.getAllValues().stream().filter(c -> c.requireId() == epicId).toList();
+  }
+
+  @Test
+  void restore_holtArchiviertesVorhabenZurueck() {
+    // Given — Karte 1 gehört zum archivierten Vorhaben 5; nach dem Zurückholen zählt sie wieder.
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, 5L, null)));
+    when(cards.allocateActivePosition(20L)).thenReturn(3);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(5L, 20L, 5, true, null, CardType.EPIC, null, "E"),
+                card(1L, 20L, 1, false, null, CardType.CARD, 5L, null)));
+
+    // When
+    service.restore(9L, 1L);
+
+    // Then
+    assertThat(gespeicherteVorhaben(5L))
+        .singleElement()
+        .extracting(Card::archived)
+        .isEqualTo(false);
+  }
+
+  @Test
+  void restoreFromTrash_holtArchiviertesVorhabenZurueck() {
+    // Given — Karte 1 im Papierkorb, nicht archiviert; ihr Vorhaben 5 ist archiviert.
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, 5L, null)));
+    when(cards.allocateActivePosition(20L)).thenReturn(5);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(5L, 20L, 5, true, null, CardType.EPIC, null, "E"),
+                card(1L, 20L, 1, false, null, CardType.CARD, 5L, null)));
+
+    // When
+    service.restoreFromTrash(9L, 1L);
+
+    // Then
+    assertThat(gespeicherteVorhaben(5L))
+        .singleElement()
+        .extracting(Card::archived)
+        .isEqualTo(false);
+  }
+
+  @Test
+  void restoreFromTrash_archivierteKarte_holtVorhabenNichtZurueck() {
+    // Given — die zurückgeholte Karte ist archiviert und zählt nicht (Plan #1504, E3).
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, 5L, null)));
+    when(cards.allocateActivePosition(20L)).thenReturn(5);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(5L, 20L, 5, true, null, CardType.EPIC, null, "E"),
+                card(1L, 20L, 1, true, null, CardType.CARD, 5L, null)));
+
+    // When
+    service.restoreFromTrash(9L, 1L);
+
+    // Then
+    assertThat(gespeicherteVorhaben(5L)).isEmpty();
+  }
+
+  @Test
+  void restore_ohneRecht_speichertKeinVorhaben() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, 5L, null)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(9L, PROJECT, Permission.TICKET_DELETE);
+
+    // When / Then
+    assertThatThrownBy(() -> service.restore(9L, 1L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cards, never()).save(any(Card.class));
+    verify(cards, never()).findByBoardId(anyLong());
+  }
+
+  @Test
+  void restoreFromTrash_ohneRecht_speichertKeinVorhaben() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, 5L, null)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(9L, PROJECT, Permission.TICKET_DELETE);
+
+    // When / Then
+    assertThatThrownBy(() -> service.restoreFromTrash(9L, 1L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cards, never()).save(any(Card.class));
+    verify(cards, never()).findByBoardId(anyLong());
   }
 
   @Test

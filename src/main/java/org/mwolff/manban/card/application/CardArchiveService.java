@@ -19,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
  * einzeln und gesammelt in den Papierkorb legen, daraus zurückholen, endgültig entfernen und den
  * Papierkorb eines Boards auflisten. Transaktionen, Rechteprüfung und Ereignisse sind unverändert
  * die aus {@link CardService} (E3); die Abhängigkeiten einer endgültig entfernten Karte räumt
- * {@link KartenAbhaengigkeiten} (E11).
+ * {@link KartenAbhaengigkeiten} (E11). Wird eine Karte aus Archiv oder Papierkorb zurückgeholt,
+ * kehrt ein archiviertes Vorhaben, das damit wieder eine mitzählende Karte hat, in derselben
+ * Transaktion mit zurück ({@link VorhabenArchivierung#holeZurueck(long)}, Plan #1504 A5).
  */
 @Service
 public class CardArchiveService {
@@ -30,6 +32,7 @@ public class CardArchiveService {
   private final PermissionChecker permissions;
   private final KartenGrundlage grundlage;
   private final KartenSicht sicht;
+  private final VorhabenArchivierung vorhaben;
   private final ApplicationEventPublisher events;
   private final Clock clock;
 
@@ -40,6 +43,7 @@ public class CardArchiveService {
       PermissionChecker permissions,
       KartenGrundlage grundlage,
       KartenSicht sicht,
+      VorhabenArchivierung vorhaben,
       ApplicationEventPublisher events,
       Clock clock) {
     this.cards = cards;
@@ -48,6 +52,7 @@ public class CardArchiveService {
     this.permissions = permissions;
     this.grundlage = grundlage;
     this.sicht = sicht;
+    this.vorhaben = vorhaben;
     this.events = events;
     this.clock = clock;
   }
@@ -86,6 +91,7 @@ public class CardArchiveService {
     grundlage.aktivitaet(
         card.requireId(), userId, CardActivityType.RESTORED, "Wiederhergestellt", clock.instant());
     CardView result = sicht.view(userId, cards.save(card.asRestored(position)));
+    vorhaben.holeZurueck(card.boardId());
     grundlage.publishChanged(card.boardId(), ActivityType.RESTORED, card.requireId());
     return result;
   }
@@ -133,6 +139,7 @@ public class CardArchiveService {
         grundlage.requireCardOp(userId, cardId, Permission.TICKET_DELETE, Permission.EPIC_DELETE);
     int position = cards.allocateActivePosition(card.columnId());
     cards.restoreFromTrash(card.requireId(), position);
+    vorhaben.holeZurueck(card.boardId());
     grundlage.aktivitaet(
         card.requireId(),
         userId,
