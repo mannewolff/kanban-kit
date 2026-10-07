@@ -168,11 +168,13 @@ Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert se
 ### 5.5 Mutationsprüfung der Backend-Seite (Issue #1104)
 
 ```bash
+node scripts/mutationspruefung.mjs zuordnung backend   # je Paket: geänderte Tests ohne Zuordnung, Anker HEAD
 node scripts/mutationspruefung.mjs aenderung backend   # beim Push über den Batch, Stufe push
 node scripts/mutationspruefung.mjs vollauf backend     # an der Push-Stufe, Schwelle 100 %
 ```
 
-Beide stehen als `buildChecks` in `.claude/workflow.config.json`, beide an der Stufe `push`.
+Alle drei stehen als `buildChecks` in `.claude/workflow.config.json`: die Zuordnungsprüfung an der
+Paketstufe, die anderen beiden an der Stufe `push`.
 
 **Die Änderungsprüfung** verengt PIT über zwei Properties des Profils `pit` in der `pom.xml`:
 
@@ -187,8 +189,9 @@ Ein überlebender Mutant in einer berührten Klasse hält an; Überlebende ander
 Zahl. `--incremental` wird nirgends benutzt — der Vollauf darf nicht auf gespeicherten Urteilen ruhen.
 Findet die Änderungsprüfung für einen geänderten Test keine Quelle (Name, letzter Vollauf oder
 [`scripts/mutationszuordnung.json`](scripts/mutationszuordnung.json)), weicht sie im Backend auf die
-ganze Seite aus — rund 2 Minuten —, statt anzuhalten; der sofortige Halt gilt nur fürs Frontend
-(Issue #1308, `HALT_OHNE_ZUORDNUNG`).
+ganze Seite aus — rund 2 Minuten —, statt anzuhalten (Issue #1308, `HALT_OHNE_ZUORDNUNG`). Ein
+Backend-Test ohne Zuordnung hält stattdessen schon beim Kartenabschluss an: `zuordnung backend` prüft
+die seit dem Anker `HEAD` geänderten Tests mit derselben Zuordnung, ohne PIT zu starten (Issue #1522).
 
 **Ausnahmen, zwei Formen:**
 
@@ -257,6 +260,7 @@ ganze Seite aus — rund 2 Minuten —, statt anzuhalten; der sofortige Halt gil
 Die API-Übersicht (Swagger UI in der Administration) entsteht aus dem Code; eine getrennt gepflegte Fassung gibt es nicht (Issue #1411, Plan #1400).
 
 - **Jeder neue oder geänderte Endpunkt** trägt `@Operation` (Zweck, Begriffe ohne Kit-Wissen erklärt) und `@ApiResponse` für jede mögliche Antwort einschließlich der Fehlerfälle. `OpenApiIT` bricht ab, wenn eine Angabe fehlt.
+- **Der Vertragsvergleich** (`OpenApiIT`) läuft schon beim Kartenabschluss (Paketlauf mit `-Dit.test=OpenApiIT`). Seine Meldung nennt die abweichenden verlässlichen Aufrufe als `METHODE Pfad`, auch bei reinen Schema-Änderungen (Issue #1523).
 - **Stabilität und Recht** stehen in [`@ApiVertrag`](src/main/java/org/mwolff/manban/common/web/api/ApiVertrag.java). Ohne die Annotation gilt ein Aufruf als änderbar.
 - **Ein verlässlicher Aufruf ändert sich nur über Abkündigung:** zuerst `@ApiVertrag(abgekuendigtSeit = "x.y")`, Änderung oder Wegfall frühestens eine Minor-Version später. Dazu gehören immer:
   - der nachgezogene Vertragsschnappschuss `src/test/resources/openapi/verlaessliche-aufrufe.json`,

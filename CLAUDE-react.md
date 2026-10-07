@@ -259,6 +259,7 @@ cd frontend && npm test         # Vitest
 **Mutationsprüfung (Issue #1104):**
 
 ```bash
+node scripts/mutationspruefung.mjs zuordnung frontend   # je Paket: geänderte Tests ohne Zuordnung
 node scripts/mutationspruefung.mjs aenderung frontend   # beim Push über den Batch, Stufe push
 node scripts/mutationspruefung.mjs vollauf frontend     # Handlauf, etwa wöchentlich, Schwelle 80 % je Ausschnitt
 ```
@@ -306,7 +307,9 @@ prüft den ganzen Bereich ohne `--incremental` und schreibt die Gedächtnisdatei
 (`a.test.ts` → `a.ts`), den letzten Vollauf oder die feste Zuordnung in
 [`scripts/mutationszuordnung.json`](scripts/mutationszuordnung.json) seiner Quelle zu. Ein Test, dessen
 Name keine Quelle trifft, braucht dort einen Eintrag — sonst hält die Änderungsprüfung sofort an, statt
-die ganze Seite zu mutieren (Issue #1287). Die Stryker-Berichte (JSON und HTML) liegen unter
+die ganze Seite zu mutieren (Issue #1287). Ein solcher Test fällt schon beim Kartenabschluss auf:
+`zuordnung frontend` prüft die Zuordnung an der Paketstufe, ohne Stryker zu starten (Issue #1522); die
+Änderungsprüfung an der Push-Stufe bleibt. Die Stryker-Berichte (JSON und HTML) liegen unter
 **`.claude/stryker/`** — dort sind sie ignoriert und verschmutzen den Arbeitsbaum nicht; der Treiber liest
 den JSON-Bericht von dort.
 

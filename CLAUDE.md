@@ -104,7 +104,7 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 
 ```bash
 # Backend
-mvn -Dskip.frontend=true -DskipITs -Djacoco.skip=true verify   # je Paket: Kompilieren, Unit-Tests, statische Analyse
+mvn -Dskip.frontend=true -Djacoco.skip=true -Dit.test=OpenApiIT verify   # je Paket: Kompilieren, Unit-Tests, statische Analyse, Vertragsvergleich
 mvn verify                              # beim Push: dazu Integrationstests, 100-%-Abdeckung, Doku-Seite
 
 # Frontend
@@ -121,7 +121,9 @@ node --test scripts/*.test.mjs          # Projektskripte, darunter scripts/mutat
 # Doku
 npm --prefix docs-site ci --no-audit --no-fund && npm --prefix docs-site run build   # Doku-Seite (VitePress), Bereich doku
 
-# Mutationsprüfung (Bereiche frontend bzw. backend; Pflicht an der Push-Stufe)
+# Mutationsprüfung (Bereiche frontend bzw. backend)
+node scripts/mutationspruefung.mjs zuordnung frontend  # je Paket: geänderte Tests ohne Zuordnung, ohne Werkzeuglauf
+node scripts/mutationspruefung.mjs zuordnung backend   # je Paket: dasselbe fürs Backend
 node scripts/mutationspruefung.mjs aenderung frontend   # Stufe push: Stryker über die geänderten Dateien des Batches
 node scripts/mutationspruefung.mjs aenderung backend    # Stufe push: PIT über die geänderten Klassen des Batches
 node scripts/mutationspruefung.mjs vollauf backend      # Stufe push: PIT über den ganzen Bereich, Schwelle 100 %
@@ -132,9 +134,12 @@ node scripts/mutationspruefung.mjs vollauf frontend     # Handlauf: Stryker übe
 
 **Je Paket nach Bereichen eingegrenzt.** Die Checks stehen in `.claude/workflow.config.json` (`buildChecks`)
 mit Bereichen aus `checkAreas`: `backend` (`src/**`, `pom.xml`, `config/**`) →
-`mvn -Dskip.frontend=true -DskipITs -Djacoco.skip=true verify` (Kompilieren, Unit-Tests, Spotless,
-Checkstyle, PMD, SpotBugs — ohne Integrationstests, Abdeckung und Frontend-/Doku-Build);
-`frontend` (`frontend/**`, `CLAUDE-design.md`) → die drei npm-Checks; `cli` (`cli/**`) →
+`mvn -Dskip.frontend=true -Djacoco.skip=true -Dit.test=OpenApiIT verify` (Kompilieren, Unit-Tests, Spotless,
+Checkstyle, PMD, SpotBugs und der Vertragsvergleich `OpenApiIT` — ohne die übrigen Integrationstests,
+Abdeckung und Frontend-/Doku-Build) sowie `node scripts/mutationspruefung.mjs zuordnung backend`. Der
+Paketlauf des Backends setzt einen laufenden Docker-Daemon voraus (zwei Container: Postgres, SeaweedFS),
+auch nachts. `frontend` (`frontend/**`, `CLAUDE-design.md`) → die drei npm-Checks und
+`node scripts/mutationspruefung.mjs zuordnung frontend`; `cli` (`cli/**`) →
 `node --test cli/tbx.test.mjs`; `scripts` (`scripts/**`) → `node --test scripts/*.test.mjs`; `doku`
 (`docs/**`, `docs-site/**`, `README.md`) → der Bau der Doku-Seite (Issue #1361), damit ein Doku-Fehler schon
 beim Abschluss eines Pakets auffällt und nicht erst beim Push. Das volle `mvn verify` (Bereiche `backend` und `doku`, inklusive
@@ -142,7 +147,9 @@ Integrationstests, 100-%-Abdeckung und Doku-Seite) trägt `stufe: "push"` und l�
 und `merge production` — die Abdeckungsgrenze ist ohne Integrationstests nicht zu halten, deshalb
 wandert sie mit. Beim Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine Datei
 ohne Bereich (etwa `Dockerfile`, `.github/`) fährt alle der Paketstufe. **Vor `push main` laufen alle
-Prüfungen der Paket- und Push-Stufe (elf); `merge production` wiederholt keine davon.** Die Config ändert nur Manne.
+Prüfungen der Paket- und Push-Stufe (dreizehn); `merge production` wiederholt keine davon.** Jeder Eintrag
+läuft zu Ende, auch nach einem Rot: Alle Einträge tragen `gleichzeitig`, und `KIT_CHECKS_GLEICHZEITIG=1`
+hält sie nacheinander. Die Config ändert nur Manne.
 
 **Mutationsprüfung (Issue #1104).** Die Änderungsprüfung (`aenderung`) läuft an der Push-Stufe und mutiert,
 was die Karten des Batches berühren (Anker `git merge-base HEAD origin/main`). Der Prüfbereich des
