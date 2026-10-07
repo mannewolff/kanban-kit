@@ -444,6 +444,7 @@ class NightRunControllerTest {
                         null,
                         null,
                         null,
+                        null,
                         NightRunMode.IMPLEMENTATION,
                         List.of(),
                         ERSTER,
@@ -523,6 +524,7 @@ class NightRunControllerTest {
                         null,
                         null,
                         null,
+                        null,
                         NightRunMode.CHAIN,
                         List.of(),
                         ERSTER,
@@ -594,6 +596,7 @@ class NightRunControllerTest {
                     null,
                     NightRunOutcome.of(
                         true,
+                        null,
                         null,
                         null,
                         null,
@@ -857,6 +860,7 @@ class NightRunControllerTest {
                     null,
                     NightRunOutcome.of(
                         true,
+                        null,
                         null,
                         null,
                         null,

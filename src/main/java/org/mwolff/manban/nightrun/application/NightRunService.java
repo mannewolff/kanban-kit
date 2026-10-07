@@ -520,6 +520,9 @@ public class NightRunService {
             // nie gelungen. Dieselben Argumente wie in DisruptionService.view — eine Rechnung,
             // zwei Auswertungswege (AK 8 der fachlichen Quelle #1074).
             run.abortReason(),
+            // Issue #1499: Die Abschlussart reicht erst das Folgepaket durch. Bis dahin gilt der
+            // Bestand — ohne Art bleibt jeder Abbruch eine Störung (Plan #1498 A4).
+            null,
             run.mode(),
             eigeneItems,
             run.startedAt(),
