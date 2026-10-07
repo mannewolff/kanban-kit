@@ -1,4 +1,5 @@
 {
+  "frontend/src/components/leitstand/Led.test.tsx": ["frontend/src/components/leitstand/LeitstandBausteine.tsx"],
   "frontend/src/lib/mutationsstufen.test.ts": ["frontend/mutationTestUmfang.ts", "frontend/mutationsstufen.json"],
   "frontend/src/lib/strykerUmfang.test.ts": ["frontend/mutationTestUmfang.ts"],
   "src/test/java/org/mwolff/manban/AbstractIntegrationTest.java": ["docker-compose.yml"],
