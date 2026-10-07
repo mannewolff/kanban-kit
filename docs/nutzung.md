@@ -620,6 +620,18 @@ Die Tatsachengrundlage dazu steht in
   Eine geerbte Karte kann deshalb im Fortschritt mitzählen und beim Filtern trotzdem fehlen —
   das ist so gewollt: Der Filter beantwortet „was liegt hier auf dem Board unter diesem
   Vorhaben", die Zählung „was gehört zu diesem Vorhaben".
+- **Abgearbeitete Vorhaben:** Der stündliche Aufräumlauf archiviert jedes Vorhaben, das keine
+  Karte mehr hat, die in seinem Fortschritt mitzählt („0 von 0 fertig“) — auch eines, das nie
+  eine Karte hatte. Karten im Papierkorb zählen dabei wie archivierte. Das geschieht auch, wenn
+  die automatische Archivierung der Karten abgeschaltet ist (Aufbewahrung 0) und Karten nur von
+  Hand archiviert werden. Ein archiviertes Vorhaben fehlt danach auf der Vorhaben-Seite (auch
+  unter „Ausgeblendete zeigen“), im Anlege-Dialog, im Karten-Detail, im Board-Vorhaben-Filter und
+  auf dem Leitstand und lässt sich keiner Karte mehr zuordnen. Im Detail einer Karte, deren
+  Vorhaben archiviert ist, steht bis zu seiner Rückkehr nur eine Nummer (`#…`) statt Kürzel und
+  Titel. Wird eine seiner Karten aus dem Archiv oder dem Papierkorb zurückgeholt und zählt sie
+  danach wieder mit, kehrt das Vorhaben samt seinen Karten und seiner Anforderung zurück; eine
+  Karte, die aus dem Papierkorb nur ins Archiv zurückkehrt, holt es nicht zurück. Der
+  Aufräumlauf löscht kein Vorhaben.
 
 ## Mitglieder
 
