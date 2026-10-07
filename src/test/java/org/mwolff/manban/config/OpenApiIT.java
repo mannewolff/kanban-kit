@@ -107,6 +107,13 @@ class OpenApiIT extends AbstractIntegrationTest {
 
   private static final String GEGENPROBE_PARAMETER = "name";
 
+  /** Das Schema, dessen Feld die zweite Gegenprobe ändert, und die Operation, die es verwendet. */
+  private static final String GEGENPROBE_SCHEMA = "IngestRequest";
+
+  private static final String GEGENPROBE_SCHEMA_OPERATION = "POST /api/kanban/night-runs";
+
+  private static final String ABWEICHEND = "Abweichende verlässliche Aufrufe: ";
+
   private Cookie loginAs(String email) throws Exception {
     users.save(
         new AppUser(
@@ -296,7 +303,25 @@ class OpenApiIT extends AbstractIntegrationTest {
 
     assertThatThrownBy(() -> vergleiche(manipuliert, ist))
         .isInstanceOf(AssertionError.class)
+        .hasMessageContaining(ABWEICHEND + GEGENPROBE_OPERATION + ";")
         .hasMessageContaining("labelName");
+  }
+
+  /**
+   * Gegenprobe (Issue #1523): Ein geändertes Feld eines Schemas nennt über die Verweishülle die
+   * Operation, die es verwendet — und nur sie.
+   */
+  @Test
+  void geaendertesSchemaNenntDieVerwendendeOperation() throws Exception {
+    JsonNode ist = vertrag(spezifikation("spec-gegenprobe-schema@example.com"));
+    JsonNode manipuliert = schnappschussLesen().deepCopy();
+    JsonNode felder = manipuliert.path("schemas").path(GEGENPROBE_SCHEMA).path("properties");
+    assertThat(felder.has("complete")).as("Feld complete in %s", GEGENPROBE_SCHEMA).isTrue();
+    ((ObjectNode) felder.get("complete")).put("type", "string");
+
+    assertThatThrownBy(() -> vergleiche(manipuliert, ist))
+        .isInstanceOf(AssertionError.class)
+        .hasMessageContaining(ABWEICHEND + GEGENPROBE_SCHEMA_OPERATION + ";");
   }
 
   private JsonNode schnappschussLesen() throws IOException {
@@ -318,9 +343,73 @@ class OpenApiIT extends AbstractIntegrationTest {
         IST_STAND, json.writerWithDefaultPrettyPrinter().writeValueAsString(ist) + "\n");
     assertThat(json.writerWithDefaultPrettyPrinter().writeValueAsString(ist))
         .as(
-            "Vertrag der verlässlichen Aufrufe weicht vom Schnappschuss %s ab; Ist-Stand: %s",
-            SCHNAPPSCHUSS, IST_STAND)
+            "%s%s; Vertrag der verlässlichen Aufrufe weicht vom Schnappschuss %s ab; Ist-Stand: %s",
+            ABWEICHEND,
+            String.join(", ", abweichendeAufrufe(erwartet, ist)),
+            SCHNAPPSCHUSS,
+            IST_STAND)
         .isEqualTo(json.writerWithDefaultPrettyPrinter().writeValueAsString(erwartet));
+  }
+
+  /**
+   * Die Schlüssel {@code METHODE Pfad}, deren Vertrag neu ist, fehlt oder sich unterscheidet (Plan
+   * #1521, E8): direkt unter {@code operationen}, und über die Verweishülle für jedes neue,
+   * fehlende oder geänderte Schema unter {@code schemas}.
+   */
+  private static Set<String> abweichendeAufrufe(JsonNode erwartet, JsonNode ist) {
+    Map<String, JsonNode> alt = nachSchluessel(erwartet);
+    Map<String, JsonNode> neu = nachSchluessel(ist);
+    Set<String> abweichend = new TreeSet<>();
+    Set<String> alleOperationen = new TreeSet<>(alt.keySet());
+    alleOperationen.addAll(neu.keySet());
+    alleOperationen.forEach(
+        s -> {
+          if (!alt.containsKey(s) || !alt.get(s).equals(neu.get(s))) {
+            abweichend.add(s);
+          }
+        });
+    JsonNode altSchemas = erwartet.path("schemas");
+    JsonNode neuSchemas = ist.path("schemas");
+    Set<String> geaenderteSchemas = new TreeSet<>();
+    altSchemas.fieldNames().forEachRemaining(geaenderteSchemas::add);
+    neuSchemas.fieldNames().forEachRemaining(geaenderteSchemas::add);
+    geaenderteSchemas.removeIf(name -> altSchemas.path(name).equals(neuSchemas.path(name)));
+    if (!geaenderteSchemas.isEmpty()) {
+      alt.forEach((s, op) -> betroffen(s, op, altSchemas, geaenderteSchemas, abweichend));
+      neu.forEach((s, op) -> betroffen(s, op, neuSchemas, geaenderteSchemas, abweichend));
+    }
+    return abweichend;
+  }
+
+  private static void betroffen(
+      String schluessel,
+      JsonNode operation,
+      JsonNode schemas,
+      Set<String> geaenderteSchemas,
+      Set<String> abweichend) {
+    Set<String> start = new TreeSet<>();
+    verweise(operation, start);
+    if (huelle(start, schemas).stream().anyMatch(geaenderteSchemas::contains)) {
+      abweichend.add(schluessel);
+    }
+  }
+
+  private static Map<String, JsonNode> nachSchluessel(JsonNode vertrag) {
+    Map<String, JsonNode> operationen = new TreeMap<>();
+    vertrag.path("operationen").forEach(o -> operationen.put(schluessel(o), o));
+    return operationen;
+  }
+
+  /** Hülle über die Verweise: so lange erweitern, bis kein Schema einen neuen nennt. */
+  private static Set<String> huelle(Set<String> start, JsonNode schemas) {
+    Set<String> gesehen = new TreeSet<>(start);
+    boolean gewachsen = true;
+    while (gewachsen) {
+      Set<String> weitere = new TreeSet<>();
+      gesehen.forEach(name -> verweise(schemas.path(name), weitere));
+      gewachsen = gesehen.addAll(weitere);
+    }
+    return gesehen;
   }
 
   private static List<String> operationen(JsonNode vertrag) {
@@ -363,15 +452,8 @@ class OpenApiIT extends AbstractIntegrationTest {
     JsonNode komponenten = spec.path("components").path("schemas");
     Set<String> offen = new TreeSet<>();
     verweise(liste, offen);
-    // Hülle über die Verweise: so lange erweitern, bis kein Schema einen neuen nennt.
-    Set<String> gesehen = new TreeSet<>(offen);
-    boolean gewachsen = true;
-    while (gewachsen) {
-      Set<String> weitere = new TreeSet<>();
-      gesehen.forEach(name -> verweise(komponenten.path(name), weitere));
-      gewachsen = gesehen.addAll(weitere);
-    }
-    gesehen.forEach(name -> schemas.set(name, normalisiert(komponenten.path(name), false)));
+    huelle(offen, komponenten)
+        .forEach(name -> schemas.set(name, normalisiert(komponenten.path(name), false)));
     ObjectNode vertrag = json.createObjectNode();
     vertrag.set("operationen", liste);
     vertrag.set("schemas", schemas);
@@ -431,7 +513,8 @@ class OpenApiIT extends AbstractIntegrationTest {
       knoten.forEach(e -> kopie.add(normalisiert(e, false)));
       return kopie;
     }
-    return knoten.deepCopy();
+    // Ein fehlender Rumpf steht im Schnappschuss als null; so vergleichen die Knoten gleich.
+    return knoten.isMissingNode() ? json.nullNode() : knoten.deepCopy();
   }
 
   private static void verweise(JsonNode knoten, Set<String> namen) {
