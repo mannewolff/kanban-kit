@@ -57,6 +57,7 @@ import {
   vollaufStellenAus,
   zeileGeaendertLeser,
   sperrZeile,
+  kartenAntwort,
 } from './mutationspruefung.mjs';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
@@ -586,10 +587,33 @@ function mitProjekt(fn, {
   }
 }
 
+/**
+ * Ein Doppel fuer `umgebung.karten` (Issue #1533): Es merkt sich jeden Auftrag und antwortet wie das
+ * Kartenmodul — je Datei eine neue Karte ab Nummer 101, keine ueberfaellige. Ohne dieses Doppel
+ * startete jeder Lauf mit Durchlass den Kindprozess und ginge ans echte Board.
+ */
+function kartenDoppel({ ueberfaellig = [], fehler = null, liegezeitFehler = null } = {}) {
+  const auftraege = [];
+  const karten = (auftrag) => {
+    auftraege.push(auftrag);
+    if (auftrag.auftrag === 'liegezeit') return liegezeitFehler ? { fehler: liegezeitFehler } : { ueberfaellig };
+    if (fehler) return { fehler };
+    const pfade = [...new Set(auftrag.stellen.map((s) => s.datei))];
+    return {
+      karten: pfade.map((pfad, i) => ({
+        pfad, art: 'neu', nummer: 101 + i, neueStellen: auftrag.stellen.filter((s) => s.datei === pfad).length,
+      })),
+    };
+  };
+  return { karten, auftraege };
+}
+
 function sammelLauf(argv, wurzel, gitAntworten = {}, starte = undefined, extra = {}) {
   const zeilen = [];
   const aufrufe = [];
+  const doppel = kartenDoppel();
   const code = laufen(argv, {
+    karten: doppel.karten,
     cwd: wurzel,
     git: gitDoppel({
       'merge-base HEAD origin/main': OK('1a2b3c4\n'),
@@ -605,7 +629,7 @@ function sammelLauf(argv, wurzel, gitAntworten = {}, starte = undefined, extra =
     ausgabe: (text) => zeilen.push(text),
     ...extra,
   });
-  return { code, text: zeilen.join(''), aufrufe };
+  return { code, text: zeilen.join(''), aufrufe, kartenAuftraege: doppel.auftraege };
 }
 
 /** Die Gedaechtnisdatei des Vollaufs, gelesen im tmp-Projekt (vor dem Aufraeumen). */
@@ -1842,7 +1866,7 @@ test('laufen: der Frontend-Bereich nennt den Stufenplan als Quelle', () => {
 /**
  * Gegenprobe zur Unveraendertheit des Backends (Issue #1276): Die Meldung des Backend-Vollaufs ist
  * zeichengleich mit der vor dem Umbau auf den Stufenplan erzeugten, Rueckgabewert und
- * Gedaechtnisdatei ebenso. Die Uhr steht still, damit Dauer und Datum feste Werte tragen.
+ * Gedaechtnisdatei ebenso — ergaenzt nur um die Liegezeit-Zeile aus Issue #1533. Die Uhr steht still, damit Dauer und Datum feste Werte tragen.
  */
 const BACKEND_VOLLAUF_MELDUNG = `Mutationsprüfung — Vollauf backend
 
@@ -1861,6 +1885,8 @@ Umfang: die ganze Seite.
 Mutanten: 4 geprüft, 2 getötet, 2 überlebt, 0 ausgenommen (@ExcludeFromJacocoGeneratedReport je Einheit — solche Mutanten entstehen gar nicht erst).
 
 Quote 50,00 % — Ziel 100 % nicht erreicht, Sperrschwelle 80 % unterschritten: hält an
+
+Liegezeit: keine Karte zu durchgelassenen Überlebenden länger als 7 Tage offen.
 
 Dauer: 1 min 2 s. Letzter Vollauf backend: 29 min 49 s am 2026-09-24, Quote 97,5 %.
 Stufe: noch nicht eingetragen
@@ -2723,4 +2749,222 @@ test('zuordnung frontend: ein Test ausserhalb der aufgenommenen Ausschnitte wird
     { plan: PLAN_STUFEN });
   assert.equal(code, 0);
   assert.ok(!text.includes('ohne zuordenbare Quelle'));
+});
+
+// --- Kartenanbindung (Issue #1533) ------------------------------------------------------
+
+const DURCHLASS_90 = [...Array.from({ length: 9 }, () => [2, 'Killed']), [2, 'Survived']];
+
+function durchlassDatei(wurzel) {
+  const pfad = join(wurzel, '.claude', 'mutationsdurchlass.json');
+  return existsSync(pfad) ? JSON.parse(readFileSync(pfad, 'utf-8')) : null;
+}
+
+test('Karten: aenderung frontend mit Durchlass schreibt je Datei und nennt das Ergebnis', () => {
+  const { code, text, kartenAuftraege } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, NUR_ZEILE_2, strykerDoppel(wurzel, berichtZeilen(DURCHLASS_90))));
+  assert.equal(code, 0);
+  assert.deepEqual(kartenAuftraege, [{
+    auftrag: 'schreiben',
+    herkunft: 'Änderungsprüfung frontend',
+    stellen: [{ datei: F, zeile: 2, mutator: 'Mut9', ersetzung: 'true' }],
+  }]);
+  assert.match(text, /Karte neu: #101 Mutations-Überlebende in frontend\/src\/lib\/a\.ts \(1 Stelle\)/);
+});
+
+test('Karten: aenderung backend mit Durchlass schreibt mit Herkunft Änderungsprüfung backend', () => {
+  const { code, kartenAuftraege } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'backend'], wurzel, {
+      ...GEAENDERT_SERVICE,
+      [`diff -U0 1a2b3c4 -- ${CARD_SERVICE}`]: OK('@@ -1,3000 +1,3000 @@\n'),
+    }, pitDoppel(wurzel, pitBericht(17, 3))));
+  assert.equal(code, 0);
+  assert.equal(kartenAuftraege.length, 1);
+  assert.equal(kartenAuftraege[0].herkunft, 'Änderungsprüfung backend');
+  assert.deepEqual(kartenAuftraege[0].stellen.map((s) => `${s.datei}:${s.zeile}`), [
+    `${CARD_SERVICE}:2000`, `${CARD_SERVICE}:2001`, `${CARD_SERVICE}:2002`,
+  ]);
+});
+
+test('Karten: ohne Ueberlebende entsteht keine Karte', () => {
+  const eintraege = Array.from({ length: 4 }, () => [2, 'Killed']);
+  const { code, kartenAuftraege, datei } = mitProjekt((wurzel) => ({
+    ...sammelLauf(['aenderung', 'frontend'], wurzel, NUR_ZEILE_2, strykerDoppel(wurzel, berichtZeilen(eintraege))),
+    datei: durchlassDatei(wurzel),
+  }));
+  assert.equal(code, 0);
+  assert.deepEqual(kartenAuftraege, []);
+  assert.equal(datei, null);
+});
+
+test('Karten: unter der Sperrschwelle entsteht keine Karte', () => {
+  const eintraege = [...Array.from({ length: 3 }, () => [2, 'Killed']), [2, 'Survived']];
+  const { code, text, kartenAuftraege } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, NUR_ZEILE_2, strykerDoppel(wurzel, berichtZeilen(eintraege))));
+  assert.equal(code, 1);
+  assert.deepEqual(kartenAuftraege, []);
+  assert.ok(!text.includes('Für den Abschlussbericht'));
+});
+
+test('Karten: vollauf backend unter der Sperrschwelle schreibt keine Karte, prueft aber die Liegezeit', () => {
+  const { code, kartenAuftraege } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, pitBericht(79, 21))));
+  assert.equal(code, 1);
+  assert.deepEqual(kartenAuftraege.map((a) => a.auftrag), ['liegezeit']);
+});
+
+test('Karten: der Frontend-Vollauf ruft umgebung.karten nie', () => {
+  let gerufen = 0;
+  const { code } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_UEBER_SCHWELLE), {
+      karten: () => {
+        gerufen += 1;
+        return { karten: [] };
+      },
+    }));
+  assert.equal(code, 0);
+  assert.equal(gerufen, 0);
+});
+
+test('Karten: ein Board-Fehler macht rot und nennt Grund und die Stellen ohne Karte', () => {
+  const doppel = kartenDoppel({ fehler: 'Kein Board-Token: TBX_TOKEN setzen oder per `tbx auth login` anmelden.' });
+  const { code, text, datei } = mitProjekt((wurzel) => ({
+    ...sammelLauf(['aenderung', 'frontend'], wurzel, NUR_ZEILE_2, strykerDoppel(wurzel, berichtZeilen(DURCHLASS_90)),
+      { karten: doppel.karten }),
+    datei: durchlassDatei(wurzel),
+  }));
+  assert.equal(code, 1);
+  assert.match(text, /Board-Fehler: Kein Board-Token/);
+  assert.match(text, /Diese Stellen kamen auf keine Karte \(1\):\n {2}frontend\/src\/lib\/a\.ts:2 — Mut9: true/);
+  assert.ok(!text.includes('Für den Abschlussbericht'));
+  assert.equal(datei, null);
+});
+
+test('Karten: ein Wurf des Injektionspunkts gilt als Board-Fehler', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, NUR_ZEILE_2, strykerDoppel(wurzel, berichtZeilen(DURCHLASS_90)), {
+      karten: () => {
+        throw new Error('fetch failed');
+      },
+    }));
+  assert.equal(code, 1);
+  assert.match(text, /Board-Fehler: fetch failed/);
+});
+
+test('Karten: meldet das Kartenmodul eine Datei nicht, gilt ihre Stelle als ohne Karte', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['aenderung', 'frontend'], wurzel, NUR_ZEILE_2, strykerDoppel(wurzel, berichtZeilen(DURCHLASS_90)), {
+      karten: () => ({ karten: [] }),
+    }));
+  assert.equal(code, 1);
+  assert.match(text, /Diese Stellen kamen auf keine Karte \(1\)/);
+});
+
+const UEBERFAELLIG = [{
+  nummer: 77,
+  titel: `Mutations-Überlebende in ${CARD_SERVICE}`,
+  angelegt: '2026-09-20T08:15:00.000Z',
+}];
+
+test('Liegezeit: eine ueberfaellige Karte macht vollauf backend rot und nennt Nummer, Titel, Datum und Regel', () => {
+  const doppel = kartenDoppel({ ueberfaellig: UEBERFAELLIG });
+  const { code, text, aufrufe } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, pitBericht(17, 3)), { karten: doppel.karten }));
+  assert.equal(code, 1);
+  assert.equal(aufrufe.length, 1, 'der PIT-Lauf laeuft trotzdem');
+  assert.deepEqual(doppel.auftraege.find((a) => a.auftrag === 'liegezeit'), { auftrag: 'liegezeit', tage: 7 });
+  assert.match(text, /Quote 85,00 % — Ziel 100 % nicht erreicht, Sperrschwelle 80 % erfüllt: läuft durch/);
+  assert.match(text, /#77 Mutations-Überlebende in src\/main\/java\/org\/mwolff\/manban\/card\/application\/CardService\.java — angelegt am 2026-09-20/);
+  assert.match(text, /CLAUDE\.md/);
+  assert.match(text, /länger als 7 Tage/);
+  assert.ok(!text.includes('Für den Abschlussbericht'));
+});
+
+test('Liegezeit: auch ein vollauf backend ohne Bericht nennt die ueberfaellige Karte', () => {
+  const doppel = kartenDoppel({ ueberfaellig: UEBERFAELLIG });
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, null, 1), { karten: doppel.karten }));
+  assert.equal(code, 1);
+  assert.match(text, /keinen Bericht/);
+  assert.match(text, /#77 Mutations-Überlebende in/);
+});
+
+test('Liegezeit: ein Board-Fehler bei der Liegezeit macht vollauf backend rot', () => {
+  const doppel = kartenDoppel({ liegezeitFehler: 'GET /api/kanban/items: HTTP 503' });
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, pitBericht(20, 0)), { karten: doppel.karten }));
+  assert.equal(code, 1);
+  assert.match(text, /Liegezeit nicht prüfbar — Board-Fehler: GET \/api\/kanban\/items: HTTP 503/);
+});
+
+test('Liegezeit: ohne ueberfaellige Karte bleibt vollauf backend gruen und sagt das', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, pitBericht(20, 0))));
+  assert.equal(code, 0);
+  assert.match(text, /Liegezeit: keine Karte zu durchgelassenen Überlebenden länger als 7 Tage offen\./);
+});
+
+test('Abschluss: vollauf backend mit Durchlass endet mit dem Block und schreibt mutationsdurchlass.json', () => {
+  const { code, text, datei, kartenAuftraege } = mitProjekt((wurzel) => ({
+    ...sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, pitBericht(17, 3)), {
+      jetzt: () => Date.parse('2026-10-07T12:00:00.000Z'),
+    }),
+    datei: durchlassDatei(wurzel),
+  }));
+  assert.equal(code, 0);
+  assert.deepEqual(kartenAuftraege.map((x) => x.auftrag), ['liegezeit', 'schreiben']);
+  assert.equal(kartenAuftraege[1].herkunft, 'Vollauf backend');
+  const block = text.slice(text.indexOf('Für den Abschlussbericht von push main:'));
+  assert.ok(text.trimEnd().endsWith(block.trimEnd()), 'der Block steht am Ende');
+  assert.equal(block, [
+    'Für den Abschlussbericht von push main:',
+    '- Vollauf backend: Quote 85,00 % (Ziel 100 %, Sperrschwelle 80 %), 3 überlebende Stellen durchgelassen',
+    `- durchgelassen: ${CARD_SERVICE}:2000 — MathMutator: Replaced addition`,
+    `- durchgelassen: ${CARD_SERVICE}:2001 — MathMutator: Replaced addition`,
+    `- durchgelassen: ${CARD_SERVICE}:2002 — MathMutator: Replaced addition`,
+    `- Karte neu: #101 Mutations-Überlebende in ${CARD_SERVICE} (3 Stellen)`,
+    '',
+  ].join('\n'));
+  assert.deepEqual(datei, {
+    'vollauf backend': {
+      stand: '9f8e7d6c5b4a',
+      datum: '2026-10-07T12:00:00.000Z',
+      quote: 85,
+      sperrschwelle: 80,
+      stellen: [2000, 2001, 2002].map((zeile) => ({
+        datei: CARD_SERVICE, zeile, mutator: 'MathMutator', ersetzung: 'Replaced addition',
+      })),
+      karten: [{ pfad: CARD_SERVICE, art: 'neu', nummer: 101, neueStellen: 3 }],
+    },
+  });
+});
+
+test('Abschluss: die Durchlassdatei fuehrt Unterkommando und Seite nebeneinander, ein ergaenzte Karte steht als ergaenzt', () => {
+  const { text, datei } = mitProjekt((wurzel) => {
+    writeFileSync(join(wurzel, '.claude', 'mutationsdurchlass.json'), JSON.stringify({ 'vollauf backend': { stand: 'alt' } }));
+    return {
+      ...sammelLauf(['aenderung', 'frontend'], wurzel, NUR_ZEILE_2, strykerDoppel(wurzel, berichtZeilen(DURCHLASS_90)), {
+        karten: () => ({ karten: [{ pfad: F, art: 'ergaenzt', nummer: 55, neueStellen: 1 }] }),
+      }),
+      datei: durchlassDatei(wurzel),
+    };
+  });
+  assert.deepEqual(Object.keys(datei).sort(), ['aenderung frontend', 'vollauf backend']);
+  assert.deepEqual(datei['vollauf backend'], { stand: 'alt' });
+  assert.deepEqual(datei['aenderung frontend'].karten, [{ pfad: F, art: 'ergaenzt', nummer: 55, neueStellen: 1 }]);
+  assert.match(text, /- Karte ergänzt: #55 Mutations-Überlebende in frontend\/src\/lib\/a\.ts \(1 neue Stelle\)/);
+  assert.match(text, /- Änderungsprüfung frontend: Quote 90,00 % \(Ziel 100 %, Sperrschwelle 80 %\), 1 überlebende Stelle durchgelassen/);
+});
+
+test('kartenAntwort: liest die JSON-Zeile des Kindprozesses', () => {
+  assert.deepEqual(kartenAntwort({ status: 0, stdout: '{"ueberfaellig":[]}\n', stderr: '' }), { ueberfaellig: [] });
+  assert.deepEqual(kartenAntwort({ status: 1, stdout: '{"fehler":"kaputt"}\n', stderr: '' }), { fehler: 'kaputt' });
+});
+
+test('kartenAntwort: ohne gueltige Antwort oder bei Startfehler entsteht ein Fehler mit Grund', () => {
+  assert.match(kartenAntwort({ status: 1, stdout: 'Unsinn', stderr: 'Error: boom' }).fehler,
+    /Kartenmodul ohne gültige Antwort \(Rückgabewert 1\): Error: boom/);
+  assert.match(kartenAntwort({ status: 0, stdout: '', stderr: '' }).fehler, /Rückgabewert 0/);
+  assert.match(kartenAntwort({ error: new Error('spawn node ENOENT'), status: null, stdout: '', stderr: '' }).fehler,
+    /Kartenmodul nicht startbar: spawn node ENOENT/);
 });

@@ -16,7 +16,7 @@
  * die Paketpruefung beim Kartenabschluss (Issue #1522, Plan #1521): Sie misst gegen den Anker
  * `HEAD` nur, ob jeder geaenderte Test einer Quelle zuzuordnen ist, und startet kein Werkzeug.
  *
- * Zwei Festlegungen, die sich aus dem Bestand ergeben:
+ * Vier Festlegungen, die sich aus dem Bestand und aus Plan #1528 ergeben:
  *
  * 1. Der Umfang wird IMMER gegen den Hauptzweig bestimmt (`git merge-base HEAD origin/<main>`),
  *    auch wenn `checks.mjs` an der Paketstufe gegen `HEAD` auswaehlt: Ein Push traegt oft mehrere
@@ -26,6 +26,15 @@
  * 2. Die Ausgabe des Mutationswerkzeugs wird nie durchgereicht, sondern zusammengefasst:
  *    `checks.mjs` faerbt einen Lauf schon an `[ERROR]` oder `BUILD FAILURE` im Text rot, und
  *    Mavens Log traegt beides auch in gruenen Laeufen (abstuerzende PIT-Minions auf aarch64).
+ * 3. Sperrschwelle statt Ziel: Die Aenderungspruefung beider Seiten und der Backend-Vollauf halten
+ *    erst unter `SPERRSCHWELLE` (80 %) an; 100 % bleibt das `ZIEL`. Ein Altlast-Vermerk zaehlt als
+ *    getoetet. Der Frontend-Vollauf misst weiter je Ausschnitt gegen `SCHWELLEN`.
+ * 4. Kartenanbindung (Issue #1533): Laesst ein Lauf Ueberlebende durch, schreibt er sie ueber
+ *    `umgebung.karten` — Vorgabe ist der Kindprozess `scripts/mutationskarten.mjs` — je Datei auf
+ *    eine Karte im Backlog; der Frontend-Vollauf legt keine an. `vollauf backend` prueft dazu bei
+ *    jedem Lauf die Liegezeit aller offenen Karten beider Seiten. Ein Board-Fehler und eine
+ *    ueberfaellige Karte faerben den Lauf rot. Bei Durchlass endet die Ausgabe mit dem Block fuer
+ *    den Abschlussbericht von `push main`, derselbe Inhalt steht in `.claude/mutationsdurchlass.json`.
  *
  * Eigene Glob- und Diff-Auswertung statt eines Imports aus `.claude/kit/checks.mjs`: Das Kit ist
  * nicht versioniert (`.gitignore`: `.claude/*`), ein versioniertes Werkzeug darf nicht von
@@ -38,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 import { aufgenommene, kandidat as kandidatVon, mutateFuer } from '../frontend/mutationsbereich.mjs';
+import { kartenTitel } from './mutationskarten.mjs';
 
 export const KOMMANDOS = ['aenderung', 'vollauf', 'zuordnung'];
 export const SEITEN = ['frontend', 'backend'];
@@ -1202,7 +1212,9 @@ export function meldungBauen({
   schwelle = null,
   sperrschwelle = null,
   ausschnittsBericht = null,
+  kartenBericht = [],
   schluss,
+  abschluss = [],
 }) {
   const zeilen = [];
   const titel = kommando === 'aenderung' ? 'Änderungsprüfung' : 'Vollauf';
@@ -1275,6 +1287,10 @@ export function meldungBauen({
     zeilen.push('');
     zeilen.push(schwellenZeile(quote, schwelle));
   }
+  if (kartenBericht.length > 0) {
+    zeilen.push('');
+    zeilen.push(...kartenBericht);
+  }
 
   zeilen.push('');
   zeilen.push(`Dauer: ${dauerText(dauerMs)}. ${vollaufZeile(seite, vollauf)}`);
@@ -1286,7 +1302,167 @@ export function meldungBauen({
     zeilen.push('');
     zeilen.push(schluss);
   }
+  if (abschluss.length > 0) {
+    zeilen.push('');
+    zeilen.push(...abschluss);
+  }
   return `${zeilen.join('\n')}\n`;
+}
+
+// --- Karten (Issue #1533) -----------------------------------------------------
+
+/**
+ * Die Antwort des Kartenmoduls aus seinem Kindprozess: die letzte Zeile von stdout als JSON. Ein
+ * `{ fehler }` des Moduls wird durchgereicht; alles andere ohne gueltige Antwort — Startfehler,
+ * Absturz, Unsinn auf stdout — wird zu einem `{ fehler }` mit Grund, damit der Lauf ihn nennen kann.
+ */
+export function kartenAntwort(res) {
+  const zeile = letzteZeilen(res?.stdout, 1)[0];
+  let antwort = null;
+  try {
+    antwort = zeile ? JSON.parse(zeile) : null;
+  } catch {
+    antwort = null;
+  }
+  if (typeof antwort?.fehler === 'string') return { fehler: antwort.fehler };
+  if (res?.error) return { fehler: `Kartenmodul nicht startbar: ${res.error.message}` };
+  if (res?.status !== 0 || antwort === null || typeof antwort !== 'object') {
+    const tail = letzteZeilen(res?.stderr, 3).join(' | ');
+    return { fehler: `Kartenmodul ohne gültige Antwort (Rückgabewert ${res?.status ?? 'unbekannt'})${tail ? `: ${tail}` : ''}` };
+  }
+  return antwort;
+}
+
+/**
+ * Die Vorgabe fuer `umgebung.karten`: das Kartenmodul als Kindprozess, der Auftrag als JSON auf
+ * stdin. Ein eigener Prozess, weil das Modul asynchron ans Board geht und dieser Treiber synchron
+ * laeuft; das Netz hat er, wenn `checks.mjs` den Treiber startet (Plan #1528, E10).
+ */
+function kartenProzess(wurzel) {
+  return (auftrag) => kartenAntwort(spawnSync(process.execPath, [join(wurzel, 'scripts', 'mutationskarten.mjs')], {
+    cwd: wurzel,
+    input: JSON.stringify(auftrag),
+    encoding: 'utf-8',
+  }));
+}
+
+/** Ruft den Injektionspunkt; ein Wurf und eine fehlende Antwort werden zu `{ fehler }`. */
+function kartenAuftrag(karten, auftrag) {
+  try {
+    return karten(auftrag) ?? { fehler: 'Kartenmodul ohne Antwort' };
+  } catch (err) {
+    return { fehler: err.message };
+  }
+}
+
+function anzahlText(n, einzahl, mehrzahl) {
+  return `${n} ${n === 1 ? einzahl : mehrzahl}`;
+}
+
+function stellenText(s) {
+  return `${s.datei}:${s.zeile} — ${s.mutator}: ${s.ersetzung}`;
+}
+
+function kartenText(k) {
+  return k.art === 'neu'
+    ? `Karte neu: #${k.nummer} ${kartenTitel(k.pfad)} (${anzahlText(k.neueStellen, 'Stelle', 'Stellen')})`
+    : `Karte ergänzt: #${k.nummer} ${kartenTitel(k.pfad)} (${anzahlText(k.neueStellen, 'neue Stelle', 'neue Stellen')})`;
+}
+
+/**
+ * Schreibt die durchgelassenen Stellen ans Board (Auftrag `schreiben`, Plan #1528, E6). Eine Stelle,
+ * deren Datei in der Antwort keine Karte hat, gilt als nicht erfasst — bei einem Fehler also alle:
+ * Das Modul bricht beim ersten Fehler ab und sagt nicht, welche Dateien es vorher schon schrieb.
+ * Rueckgabe sind die Karten, der Fehler (oder `null`) und die Zeilen fuer die Meldung.
+ */
+function kartenSchreiben({ karten, herkunft, stellen }) {
+  const antwort = kartenAuftrag(karten, {
+    auftrag: 'schreiben',
+    herkunft,
+    stellen: stellen.map(({ datei, zeile, mutator, ersetzung }) => ({ datei, zeile, mutator, ersetzung })),
+  });
+  const ergebnis = !antwort.fehler && Array.isArray(antwort.karten) ? antwort.karten : [];
+  const erfasst = new Set(ergebnis.map((k) => k.pfad));
+  const ohneKarte = stellen.filter((s) => !erfasst.has(s.datei));
+  const fehler = antwort.fehler
+    ?? (ohneKarte.length > 0 ? 'das Kartenmodul meldete für diese Dateien keine Karte' : null);
+  const zeilen = ergebnis.map(kartenText);
+  if (fehler) {
+    zeilen.push(`Board-Fehler: ${fehler} — der Lauf ist rot, damit die Mängel nicht verloren gehen.`);
+    zeilen.push(`Diese Stellen kamen auf keine Karte (${ohneKarte.length}):`);
+    for (const s of ohneKarte) zeilen.push(`  ${stellenText(s)}`);
+  }
+  return { karten: ergebnis, fehler, zeilen };
+}
+
+/**
+ * Die Liegezeit aller offenen Karten beider Seiten (Auftrag `liegezeit`, Plan #1528, E9). Eine
+ * ueberfaellige Karte sperrt, und eine nicht pruefbare Liegezeit gilt nicht als erfuellt (E10).
+ */
+function liegezeitPruefen(karten) {
+  const antwort = kartenAuftrag(karten, { auftrag: 'liegezeit', tage: LIEGEZEIT_TAGE });
+  if (antwort.fehler) {
+    return {
+      rot: true,
+      zeilen: [`Liegezeit nicht prüfbar — Board-Fehler: ${antwort.fehler}. Eine nicht prüfbare Liegezeit gilt nicht als erfüllt.`],
+    };
+  }
+  if (!Array.isArray(antwort.ueberfaellig)) {
+    return { rot: true, zeilen: ['Liegezeit nicht prüfbar — das Kartenmodul lieferte keine Liste.'] };
+  }
+  if (antwort.ueberfaellig.length === 0) {
+    return {
+      rot: false,
+      zeilen: [`Liegezeit: keine Karte zu durchgelassenen Überlebenden länger als ${LIEGEZEIT_TAGE} Tage offen.`],
+    };
+  }
+  return {
+    rot: true,
+    zeilen: [
+      `Überfällige Karten (${antwort.ueberfaellig.length}) — Regel (CLAUDE.md, Mutationsprüfung): Eine Karte zu `
+        + `durchgelassenen Überlebenden, die länger als ${LIEGEZEIT_TAGE} Tage offen liegt, sperrt die nächste Veröffentlichung.`,
+      ...antwort.ueberfaellig.map((k) => `  #${k.nummer} ${k.titel} — angelegt am ${String(k.angelegt).slice(0, 10)}`),
+    ],
+  };
+}
+
+/** Der Durchlass je Unterkommando und Seite, unversioniert unter `.claude/` (Plan #1528, E11). */
+function durchlassPfad(wurzel) {
+  return join(wurzel, '.claude', 'mutationsdurchlass.json');
+}
+
+/**
+ * Der Block fuer den Abschlussbericht von `push main` und derselbe Inhalt in der Durchlassdatei.
+ * Ein gescheitertes Schreiben der Datei aendert das Urteil nicht — die Karten tragen die Maengel,
+ * der Block steht in der Ausgabe —, wird aber im Block genannt.
+ */
+function durchlassMelden({ wurzel, git, jetzt, kommando, seite, quote, sperrschwelle, stellen, karten }) {
+  const titel = kommando === 'aenderung' ? 'Änderungsprüfung' : 'Vollauf';
+  const block = [
+    'Für den Abschlussbericht von push main:',
+    `- ${titel} ${seite}: Quote ${prozentText(quote.toFixed(2))} % (Ziel ${ZIEL} %, Sperrschwelle `
+      + `${prozentText(sperrschwelle)} %), ${anzahlText(stellen.length, 'überlebende Stelle', 'überlebende Stellen')} durchgelassen`,
+    ...stellen.map((s) => `- durchgelassen: ${stellenText(s)}`),
+    ...karten.map((k) => `- ${kartenText(k)}`),
+  ];
+  const bisher = jsonLesen(durchlassPfad(wurzel));
+  const inhalt = {
+    ...(bisher && typeof bisher === 'object' && !Array.isArray(bisher) ? bisher : {}),
+    [`${kommando} ${seite}`]: {
+      stand: standLesen(git),
+      datum: new Date(jetzt()).toISOString(),
+      quote,
+      sperrschwelle,
+      stellen: stellen.map(({ datei, zeile, mutator, ersetzung }) => ({ datei, zeile, mutator, ersetzung })),
+      karten,
+    },
+  };
+  try {
+    writeFileSync(durchlassPfad(wurzel), `${JSON.stringify(inhalt, null, 2)}\n`);
+  } catch (err) {
+    block.push(`- Die Datei ${durchlassPfad(wurzel)} ließ sich nicht schreiben: ${err.message}`);
+  }
+  return block;
 }
 
 // --- Lauf -------------------------------------------------------------------
@@ -1467,10 +1643,11 @@ function fehlenderBericht(teile, ergebnis) {
  * Werkzeugs selbst wird nicht uebernommen — geurteilt wird ueber den Bericht.
  */
 function vollaufLaufen({
-  wurzel, seite, bereich, starte, git, ausgabe, liesDatei, jetzt, beginn, vollauf, stufe, schwelle, sperrschwelle,
+  wurzel, seite, bereich, starte, git, ausgabe, liesDatei, jetzt, beginn, vollauf, stufe, schwelle, sperrschwelle, karten,
 }) {
   let mutanten;
   let quellen = null;
+  let liegezeit = null;
   if (seite === 'frontend') {
     const mutate = bereich.vollaufMutate.flatMap(klammernAufloesen);
     const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, args: strykerArgumente(mutate) });
@@ -1481,8 +1658,10 @@ function vollaufLaufen({
     mutanten = strykerMutanten(bericht);
   } else {
     const { ergebnis, xml } = pitLaufen({ wurzel, starte, args: pitVollaufArgumente() });
+    // Die Liegezeit gilt unabhaengig vom PIT-Lauf (E9): Auch ein Lauf ohne Bericht nennt sie.
+    liegezeit = liegezeitPruefen(karten);
     if (xml === null) {
-      ausgabe(fehlenderBericht(PIT_BERICHT_TEILE, ergebnis));
+      ausgabe(`${fehlenderBericht(PIT_BERICHT_TEILE, ergebnis)}\n${liegezeit.zeilen.join('\n')}\n`);
       return 1;
     }
     mutanten = pitMutanten(xml);
@@ -1523,6 +1702,17 @@ function vollaufLaufen({
     ...(mehrere ? { ausschnitte: ausgewertet.ausschnitte.map((a) => gedaechtnisAusschnitt(a, halt)) } : {}),
   });
 
+  // Karten nur aus dem Backend-Vollauf (Review-Fund 3 zu #1528): Im Frontend legt Manne je Ausschnitt
+  // unter 80 % selbst eine an. Im Backend auch fuer alte Luecken, ab dann gilt die Frist (Fund 4).
+  const durchgelassen = seite === 'backend' && halt.haltende.length === 0
+    ? ueberlebende.filter((m) => !m.altlast)
+    : [];
+  const geschrieben = durchgelassen.length > 0
+    ? kartenSchreiben({ karten, herkunft: `Vollauf ${seite}`, stellen: durchgelassen })
+    : null;
+  const gruen = halt.haltende.length === 0 && ausgewertet.ohneAusschnitt.length === 0 && !fehler
+    && !geschrieben?.fehler && !liegezeit?.rot;
+
   ausgabe(meldungBauen({
     kommando: 'vollauf',
     seite,
@@ -1539,9 +1729,15 @@ function vollaufLaufen({
     ausschnittsBericht: mehrere
       ? ausschnittsZeilen({ ausschnitte: ausgewertet.ausschnitte, halt, schwelle, quote, ohneAusschnitt: ausgewertet.ohneAusschnitt })
       : null,
+    kartenBericht: [...(geschrieben?.zeilen ?? []), ...(liegezeit?.zeilen ?? [])],
     schluss: fehler ?? undefined,
+    abschluss: gruen && geschrieben
+      ? durchlassMelden({
+        wurzel, git, jetzt, kommando: 'vollauf', seite, quote, sperrschwelle, stellen: durchgelassen, karten: geschrieben.karten,
+      })
+      : [],
   }));
-  return halt.haltende.length === 0 && ausgewertet.ohneAusschnitt.length === 0 && !fehler ? 0 : 1;
+  return gruen ? 0 : 1;
 }
 
 /** Ein Ausschnitt in der Gedaechtnisdatei; `erstmals80` traegt nur ein Bestandsausschnitt (E7). */
@@ -1558,7 +1754,8 @@ function gedaechtnisAusschnitt(a, halt) {
 
 /**
  * Ein Lauf, vollstaendig ueber `umgebung` steuerbar: `cwd` (Projektwurzel), `git` (Aufruf mit
- * Rueckgabe wie spawnSync), `starte` (Mutationswerkzeug), `ausgabe` (Schreiben) und `jetzt` (Uhr).
+ * Rueckgabe wie spawnSync), `starte` (Mutationswerkzeug), `ausgabe` (Schreiben), `jetzt` (Uhr) und
+ * `karten` (Auftrag ans Kartenmodul → Antwort, synchron; Vorgabe ist der Kindprozess).
  * Rueckgabe ist der Exitcode.
  */
 export function laufen(argv, umgebung = {}) {
@@ -1576,6 +1773,7 @@ export function laufen(argv, umgebung = {}) {
   const git = umgebung.git ?? ((...args) => spawnSync('git', args, { cwd: wurzel, encoding: 'utf-8' }));
   const starte = umgebung.starte
     ?? ((befehl, args, optionen) => spawnSync(befehl, args, { encoding: 'utf-8', ...optionen }));
+  const karten = umgebung.karten ?? kartenProzess(wurzel);
   const beginn = jetzt();
 
   const [kommando, seite, ...rest] = argv;
@@ -1623,7 +1821,7 @@ export function laufen(argv, umgebung = {}) {
 
   if (kommando === 'vollauf') {
     return vollaufLaufen({
-      wurzel, seite, bereich, starte, git, ausgabe, liesDatei, jetzt, beginn, vollauf, stufe, schwelle, sperrschwelle,
+      wurzel, seite, bereich, starte, git, ausgabe, liesDatei, jetzt, beginn, vollauf, stufe, schwelle, sperrschwelle, karten,
     });
   }
   if (kommando === 'zuordnung') {
@@ -1678,7 +1876,7 @@ export function laufen(argv, umgebung = {}) {
   // Ausstiege dauern Sekunden, und der Median maesse sonst sie statt der Laeufe (Issue #1280).
   const code = aenderungMitWerkzeug({
     wurzel, seite, starte, git, ausgabe, liesDatei, jetzt, beginn, anker, vollerUmfang, stand, gemessen,
-    beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung, sperrschwelle,
+    beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung, sperrschwelle, karten,
   });
   dauerProtokollieren({
     wurzel, seite, datum: new Date(beginn).toISOString(), dauerMs: jetzt() - beginn, ausgabe,
@@ -1719,7 +1917,7 @@ function zuordnungPruefen({ wurzel, seite, bereich, git, ausgabe, existiert, vol
 
 function aenderungMitWerkzeug({
   wurzel, seite, starte, git, ausgabe, liesDatei, jetzt, beginn, anker, vollerUmfang, stand, gemessen,
-  beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung, sperrschwelle,
+  beruehrt, geaendert, dateienDesLaufs, vollauf, grundmeldung, sperrschwelle, karten,
 }) {
   let mutanten;
   let quellen;
@@ -1759,6 +1957,14 @@ function aenderungMitWerkzeug({
     sperrschwelle,
   });
 
+  // Karten nur fuer die Bezugsmenge: Alte Luecken ausserhalb der geaenderten Zeilen erscheinen hier
+  // nur als Zahl, sie erfasst der Backend-Vollauf (Plan #1528, E14).
+  const durchgelassen = ausgewertet.durchgelassen;
+  const geschrieben = durchgelassen.length > 0
+    ? kartenSchreiben({ karten, herkunft: `Änderungsprüfung ${seite}`, stellen: durchgelassen })
+    : null;
+  const gruen = ausgewertet.haltende.length === 0 && !geschrieben?.fehler;
+
   ausgabe(meldungBauen({
     ...grundmeldung,
     ueberlebende: ausgewertet.ueberlebende,
@@ -1766,8 +1972,15 @@ function aenderungMitWerkzeug({
     quote: ausgewertet.quote,
     sperrschwelle,
     dauerMs: jetzt() - beginn,
+    kartenBericht: geschrieben?.zeilen ?? [],
+    abschluss: gruen && geschrieben
+      ? durchlassMelden({
+        wurzel, git, jetzt, kommando: 'aenderung', seite, quote: ausgewertet.quote, sperrschwelle,
+        stellen: durchgelassen, karten: geschrieben.karten,
+      })
+      : [],
   }));
-  return ausgewertet.haltende.length > 0 ? 1 : 0;
+  return gruen ? 0 : 1;
 }
 
 const direktAufgerufen = process.argv[1]
