@@ -6,12 +6,15 @@
  * Nutzung:
  *   node scripts/mutationspruefung.mjs aenderung frontend|backend [--stufe paket|push]
  *   node scripts/mutationspruefung.mjs vollauf   frontend|backend
+ *   node scripts/mutationspruefung.mjs zuordnung frontend|backend
  *
  * Die Aenderungspruefung steht fuer beide Seiten: Anker, Dateilisten, Pruefbereich,
  * Test-zu-Quelle-Zuordnung, der Lauf (Stryker bzw. PIT), die Auswertung seines Berichts und die
  * gemeinsame Ausgabeform. Der Vollauf faehrt beide Seiten in ihrem vollen Umfang, prueft die
  * Schwelle je Seite und hinterlaesst die Gedaechtnisdatei, aus der die Aenderungspruefung Dauer,
- * Datum und die Mutantenliste des letzten Vollaufs liest (Issue #1215).
+ * Datum und die Mutantenliste des letzten Vollaufs liest (Issue #1215). Die Zuordnungspruefung ist
+ * die Paketpruefung beim Kartenabschluss (Issue #1522, Plan #1521): Sie misst gegen den Anker
+ * `HEAD` nur, ob jeder geaenderte Test einer Quelle zuzuordnen ist, und startet kein Werkzeug.
  *
  * Zwei Festlegungen, die sich aus dem Bestand ergeben:
  *
@@ -36,7 +39,7 @@ import { spawnSync } from 'node:child_process';
 
 import { aufgenommene, kandidat as kandidatVon, mutateFuer } from '../frontend/mutationsbereich.mjs';
 
-export const KOMMANDOS = ['aenderung', 'vollauf'];
+export const KOMMANDOS = ['aenderung', 'vollauf', 'zuordnung'];
 export const SEITEN = ['frontend', 'backend'];
 
 /**
@@ -1214,12 +1217,12 @@ function jsonLesen(pfad) {
 
 export const ZUORDNUNG_PFAD = 'scripts/mutationszuordnung.json';
 
-function ohneZuordnungMeldung(tests) {
-  const zeilen = ['Mutationsprüfung — Änderungsprüfung angehalten, kein Werkzeuglauf.', ''];
+function ohneZuordnungMeldung(tests, kopfzeile, begruendung) {
+  const zeilen = [kopfzeile, ''];
   for (const pfad of tests) zeilen.push(`  geänderter Test ohne zuordenbare Quelle: ${pfad}`);
   zeilen.push('');
   zeilen.push(`Eintrag in ${ZUORDNUNG_PFAD} ergänzen oder den Test nach der Quelle benennen.`);
-  zeilen.push('Ohne Zuordnung müsste die ganze Seite laufen, und das dauert länger als eine Paketrunde.');
+  zeilen.push(begruendung);
   zeilen.push('-> rot');
   return `${zeilen.join('\n')}\n`;
 }
@@ -1530,6 +1533,9 @@ export function laufen(argv, umgebung = {}) {
       wurzel, seite, bereich, starte, git, ausgabe, jetzt, beginn, vollauf, stufe, schwelle,
     });
   }
+  if (kommando === 'zuordnung') {
+    return zuordnungPruefen({ wurzel, seite, bereich, git, ausgabe, existiert, vollauf });
+  }
 
   const { anker, vollerUmfang, satz } = ankerBestimmen(git, config.mainBranch ?? HAUPTZWEIG_VORGABE);
   const zuordnung = zuordnungAusVollauf(vollauf);
@@ -1544,7 +1550,11 @@ export function laufen(argv, umgebung = {}) {
   // weit laenger als eine Paketrunde (80 min am 2026-09-28, #1275), die Abhilfe ist eine Zeile.
   // Das Backend weicht auf die ganze Seite aus (Issue #1308, HALT_OHNE_ZUORDNUNG).
   if (gemessen.ohneZuordnung.length > 0 && HALT_OHNE_ZUORDNUNG[seite]) {
-    ausgabe(ohneZuordnungMeldung(gemessen.ohneZuordnung));
+    ausgabe(ohneZuordnungMeldung(
+      gemessen.ohneZuordnung,
+      'Mutationsprüfung — Änderungsprüfung angehalten, kein Werkzeuglauf.',
+      'Ohne Zuordnung müsste die ganze Seite laufen, und das dauert länger als eine Paketrunde.',
+    ));
     return 1;
   }
 
@@ -1581,6 +1591,37 @@ export function laufen(argv, umgebung = {}) {
     wurzel, seite, datum: new Date(beginn).toISOString(), dauerMs: jetzt() - beginn, ausgabe,
   });
   return code;
+}
+
+/**
+ * Die Zuordnungspruefung beim Kartenabschluss (Issue #1522, Plan #1521 E4–E6): Anker ist `HEAD`,
+ * also genau die noch nicht committete Aenderung der Karte samt ungetrackter Dateien. Sie haelt auf
+ * BEIDEN Seiten an und liest `HALT_OHNE_ZUORDNUNG` nicht — die Konstante steuert nur das Ausweichen
+ * der Aenderungspruefung an der Push-Stufe, und dort bleibt das Backend unveraendert (AK 3). Kein
+ * Werkzeuglauf, kein Dauerprotokoll, keine Gedaechtnisdatei.
+ */
+function zuordnungPruefen({ wurzel, seite, bereich, git, ausgabe, existiert, vollauf }) {
+  const geaendert = geaenderteDateien(git, 'HEAD').alle;
+  const gemessen = beruehrung({
+    geaendert,
+    bereich,
+    zuordnung: zuordnungAusVollauf(vollauf),
+    festeZuordnung: festeZuordnungLesen(wurzel),
+    existiert,
+  });
+  if (gemessen.ohneZuordnung.length > 0) {
+    ausgabe(ohneZuordnungMeldung(
+      gemessen.ohneZuordnung,
+      `Mutationsprüfung — Zuordnungsprüfung ${seite}`,
+      'Beim Abschluss einer Karte muss jeder geänderte Test einer Quelle zuzuordnen sein (Issue #1515).',
+    ));
+    return 1;
+  }
+  const tests = geaendert.filter((pfad) => istTestdatei(pfad) && bereich.istSeitenTest(pfad)
+    && !bereich.testAusserhalb?.(pfad));
+  ausgabe(`Mutationsprüfung — Zuordnungsprüfung ${seite}: ${tests.length} geänderte Testdateien geprüft, `
+    + 'jede ist einer Quelle zugeordnet.\n');
+  return 0;
 }
 
 function aenderungMitWerkzeug({

@@ -2304,3 +2304,76 @@ test('ohne --stufe: selbst ein Median ueber 10 min laesst den Lauf wie bisher du
   assert.equal(ohne.code, vorher.code);
   assert.equal(ohne.text, vorher.text);
 });
+
+// --- Zuordnungspruefung beim Kartenabschluss (Issue #1522, Plan #1521) -------
+
+/** Die Zuordnungspruefung liest gegen HEAD: geaenderte Dateien aus `diff`, neue aus `status`. */
+function zuordnungLauf(seite, { diff = [], neu = [] } = {}, vorbereiten = () => {}, optionen = {}) {
+  return mitProjekt((wurzel) => {
+    vorbereiten(wurzel);
+    return sammelLauf(['zuordnung', seite], wurzel, {
+      'diff --name-status -z HEAD': OK(diff.map((p) => `M\0${p}\0`).join('')),
+      'status --porcelain -z --untracked-files=all': OK(neu.map((p) => `?? ${p}\0`).join('')),
+    }, strykerDoppel(wurzel, BERICHT_A));
+  }, optionen);
+}
+
+test('zuordnung frontend: ein Test ohne Quelle endet mit 1, nennt den Pfad und startet kein Werkzeug', () => {
+  const pfad = 'frontend/src/lib/ohnePartner.test.ts';
+  const { code, text, aufrufe } = zuordnungLauf('frontend', { diff: [pfad] });
+  assert.equal(code, 1);
+  assert.equal(aufrufe.length, 0);
+  assert.ok(text.includes('Mutationsprüfung — Zuordnungsprüfung frontend'));
+  assert.ok(text.includes(`geänderter Test ohne zuordenbare Quelle: ${pfad}`));
+  assert.ok(text.includes('scripts/mutationszuordnung.json'));
+  assert.match(text, /-> rot/);
+});
+
+test('zuordnung backend: ein Test ohne Quelle endet mit 1 und nennt den Kartenabschluss statt der Dauer', () => {
+  const pfad = 'src/test/java/org/mwolff/manban/card/application/CardServiceEpicTreeTest.java';
+  const { code, text, aufrufe } = zuordnungLauf('backend', { diff: [pfad] });
+  assert.equal(code, 1);
+  assert.equal(aufrufe.length, 0);
+  assert.ok(text.includes('Mutationsprüfung — Zuordnungsprüfung backend'));
+  assert.ok(text.includes(pfad));
+  assert.ok(text.includes(
+    'Beim Abschluss einer Karte muss jeder geänderte Test einer Quelle zuzuordnen sein (Issue #1515).'));
+  assert.ok(!text.includes('ganze Seite'));
+});
+
+test('zuordnung: Eintrag in mutationszuordnung.json oder passender Name ergibt 0', () => {
+  const eingetragen = 'frontend/src/lib/ohnePartner.test.ts';
+  const benannt = 'frontend/src/lib/a.test.ts';
+  const { code, text, aufrufe } = zuordnungLauf('frontend', { diff: [eingetragen, benannt] }, (wurzel) => {
+    mkdirSync(join(wurzel, 'scripts'), { recursive: true });
+    writeFileSync(join(wurzel, 'scripts', 'mutationszuordnung.json'),
+      JSON.stringify({ [eingetragen]: ['frontend/mutationTestUmfang.ts'] }));
+    mkdirSync(join(wurzel, 'frontend', 'src', 'lib'), { recursive: true });
+    writeFileSync(join(wurzel, 'frontend', 'src', 'lib', 'a.ts'), 'export const a = 1;\n');
+  });
+  assert.equal(code, 0);
+  assert.equal(aufrufe.length, 0);
+  assert.match(text, /2 geänderte Testdateien geprüft/);
+  assert.ok(!text.includes('ohne zuordenbare Quelle'));
+});
+
+test('zuordnung: ohne uncommittete Aenderung gegen HEAD endet sie mit 0', () => {
+  const { code, text, aufrufe } = zuordnungLauf('backend');
+  assert.equal(code, 0);
+  assert.equal(aufrufe.length, 0);
+  assert.match(text, /0 geänderte Testdateien geprüft/);
+});
+
+test('zuordnung: ein ungetrackter neuer Test wird geprueft', () => {
+  const pfad = 'src/test/java/org/mwolff/manban/ProbeTest.java';
+  const { code, text } = zuordnungLauf('backend', { neu: [pfad] });
+  assert.equal(code, 1);
+  assert.ok(text.includes(`geänderter Test ohne zuordenbare Quelle: ${pfad}`));
+});
+
+test('zuordnung frontend: ein Test ausserhalb der aufgenommenen Ausschnitte wird uebersprungen', () => {
+  const { code, text } = zuordnungLauf('frontend', { diff: ['frontend/src/k/K.test.tsx'] }, () => {},
+    { plan: PLAN_STUFEN });
+  assert.equal(code, 0);
+  assert.ok(!text.includes('ohne zuordenbare Quelle'));
+});
