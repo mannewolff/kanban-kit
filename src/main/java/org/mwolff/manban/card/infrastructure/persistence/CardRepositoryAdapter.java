@@ -105,6 +105,11 @@ class CardRepositoryAdapter implements CardRepository {
   }
 
   @Override
+  public List<Long> findBoardIdsWithEpics() {
+    return jpa.findBoardIdsWithEpics();
+  }
+
+  @Override
   public List<Long> findAllIdsByBoardId(long boardId) {
     return jpa.findAllIdsByBoardId(boardId);
   }

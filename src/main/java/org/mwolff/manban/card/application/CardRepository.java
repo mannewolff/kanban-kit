@@ -59,6 +59,16 @@ public interface CardRepository {
   List<Card> findByBoardId(long boardId);
 
   /**
+   * IDs der Boards, die mindestens ein Vorhaben tragen (Plan #1504, E6) — jedes Board höchstens
+   * einmal, Reihenfolge unspezifiziert.
+   *
+   * <p>Umfasst <strong>archivierte</strong> Vorhaben, damit der Abgleich sie zurückholen kann;
+   * Vorhaben im Papierkorb zählen nicht ({@code deleted_at IS NULL}). Boards ohne Vorhaben kosten
+   * den Abgleich so keine Abfrage.
+   */
+  List<Long> findBoardIdsWithEpics();
+
+  /**
    * IDs <strong>aller</strong> Karten des Boards — einschließlich archivierter und
    * Papierkorb-Karten. Exakt der Umfang der Datenbank-Cascade beim Board-Hard-Delete; für die
    * Purge-Kaskade (Issue #503), nicht für Anzeige-Pfade.
