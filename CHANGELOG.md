@@ -15,6 +15,27 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.23.0] – 2026-10-07
+
+- **API-Änderung:** POST /api/kanban/night-runs — geändert ([#1513](https://github.com/mannewolff/kanban-kit/issues/1513))
+- chore: v2.22.1
+- Überlebende Mutanten aus push main vom 2026-10-07 getötet ([#1517](https://github.com/mannewolff/kanban-kit/issues/1517))
+- Mutationszuordnung nennt Led.test.tsx ([#1514](https://github.com/mannewolff/kanban-kit/issues/1514))
+- Stufenleiste und Kartendialog setzen Labels einzeln ([#1512](https://github.com/mannewolff/kanban-kit/issues/1512))
+- Runner-Seite klappt gleichzeitig gelaufene Läufe gemeinsam auf ([#1511](https://github.com/mannewolff/kanban-kit/issues/1511))
+- Vorhaben-Archiv: Nutzungs- und Betriebsdoku ([#1510](https://github.com/mannewolff/kanban-kit/issues/1510))
+- Vorhaben-Archiv: Integrationstest VorhabenArchivIT Ende zu Ende ([#1509](https://github.com/mannewolff/kanban-kit/issues/1509))
+- Vorhaben-Archiv: Zurückholen einer Karte holt ihr Vorhaben mit zurück ([#1508](https://github.com/mannewolff/kanban-kit/issues/1508))
+- Vorhaben-Archiv: archivierte Vorhaben aus listEpics filtern und als Zuordnungsziel abweisen ([#1507](https://github.com/mannewolff/kanban-kit/issues/1507))
+- Vorhaben-Archiv: Aufräumlauf ruft den Vorhaben-Abgleich auch bei Aufbewahrung 0 ([#1506](https://github.com/mannewolff/kanban-kit/issues/1506))
+- Vorhaben-Archiv: Klasse VorhabenArchivierung und Port findBoardIdsWithEpics ([#1505](https://github.com/mannewolff/kanban-kit/issues/1505))
+- Doku: Ausgang „nicht angelaufen" in der Nutzungsdoku ([#1503](https://github.com/mannewolff/kanban-kit/issues/1503))
+- Frontend: Ausgang „nicht angelaufen" mit brauner LED und Grund auf Runner-Seite und Leitständen ([#1502](https://github.com/mannewolff/kanban-kit/issues/1502))
+- Leitstand-Palette: Melderfarbe Braun in Theme, Designquelle und Vorlage ([#1501](https://github.com/mannewolff/kanban-kit/issues/1501))
+- Nachtlauf-Meldung: Abschlussart abortKind annehmen, speichern und an den Befund reichen ([#1500](https://github.com/mannewolff/kanban-kit/issues/1500))
+- Nachtlauf-Befund: Ausgang NOT_STARTED für selbst gemeldeten Abbruch ohne angefasstes Paket ([#1499](https://github.com/mannewolff/kanban-kit/issues/1499))
+- "Heute Nacht" zeigt nur Karten, die der Runner aufnimmt ([#1495](https://github.com/mannewolff/kanban-kit/issues/1495))
+
 ## [2.22.0] – 2026-10-06
 
 - chore: v2.21.1
