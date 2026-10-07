@@ -5450,6 +5450,37 @@ describe('NightRunPage — der Abbruchgrund in der Auswertung (#1145)', () => {
   })
 })
 
+/**
+ * Der Lauf, der nicht anlief (Issue #1502, Plan #1498 E8): Die Kopfmarke trägt das Wort vor dem
+ * gekürzten Grund und leuchtet braun — keine zweite Marke, die Zustandsmarken schließen einander aus.
+ */
+describe('NightRunPage — der nicht angelaufene Lauf (#1502)', () => {
+  const GRUND = 'Working Tree ist nicht sauber. Bitte committen oder aufraeumen, dann neu starten.'
+
+  it('zeigt die Kopfmarke „nicht angelaufen — <Grund>" mit brauner LED', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            abortReason: GRUND,
+            outcome: { verdict: 'NOT_STARTED', decisiveItem: null, noWorkReason: null, abortReason: GRUND },
+          }),
+        ],
+      ],
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    const kopf = laufKopfzeile(lauf(0))
+    const marken = within(kopf).getAllByTestId('lauf-zustand')
+    expect(marken).toHaveLength(1)
+    expect(marken[0]).toHaveTextContent(`nicht angelaufen — ${GRUND}`)
+    expect(within(marken[0]).getByTestId('led-braun')).toBeInTheDocument()
+    expect(within(kopf).queryAllByTestId('led-zinnob')).toHaveLength(0)
+  })
+})
+
 describe('NightRunPage — Morgenkachel „Veröffentlichung vorbereitet“ (#1458)', () => {
   const kachel = (panelEl: HTMLElement) =>
     within(panelEl).queryByRole('region', { name: 'Veröffentlichung vorbereitet' })

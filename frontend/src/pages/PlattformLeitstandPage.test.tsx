@@ -1145,6 +1145,32 @@ describe('PlattformLeitstandPage (#1083)', () => {
     })
   })
 
+  /**
+   * Der Lauf, der nicht anlief (Issue #1502, fachliche Quelle #1493 AK 1–3, 7, 8): Wort, Grund und
+   * braune LED in der Zeile unter „Beendete Runs" — und keine Störung. Der Server führt ihn nicht in
+   * `stoerungen`; die Seite verweist deshalb auch nicht auf eine.
+   */
+  describe('Nicht angelaufener Lauf (#1502)', () => {
+    const GRUND = 'Working Tree ist nicht sauber. Bitte committen oder aufraeumen, dann neu starten.'
+    const nichtAngelaufen = stoerung({
+      outcome: { verdict: 'NOT_STARTED', decisiveItem: null, noWorkReason: null, abortReason: GRUND },
+    })
+
+    it('zeigt Wort, Grund und braune LED unter „Beendete Runs" und keine Störung', async () => {
+      api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: [nichtAngelaufen] }))
+
+      zeigeSeite()
+
+      const zeile = await screen.findByTestId('durchgefuehrt-5')
+      expect(zeile).toHaveTextContent(`nicht angelaufen — ${GRUND}`)
+      expect(within(zeile).getByTestId('led-braun')).toBeInTheDocument()
+      expect(within(zeile).queryByTestId('led-zinnob')).not.toBeInTheDocument()
+      expect(within(zeile).queryByRole('link', { name: 'Zur Störung von Run #5' })).not.toBeInTheDocument()
+      expect(within(zeile).queryByText('Störung')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('stoerung-5')).not.toBeInTheDocument()
+    })
+  })
+
   /** Issue #1135: „Beendete Runs" ist zweigeteilt in diese und die vorige Schicht. */
   describe('Dieser und voriger Zyklus (#1135)', () => {
     beforeEach(() => {

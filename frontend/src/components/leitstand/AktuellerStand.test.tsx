@@ -196,6 +196,30 @@ describe('AktuellerStand — Kopf eines laufenden Runs (#1193)', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  /**
+   * Der Lauf, der nicht anlief (Issue #1502, Plan #1498 E11): Der Kopf trägt Wort und braune LED
+   * aus dem Befund — den Grund nicht, der steht unter „Beendete Runs" derselben Seite.
+   */
+  it('zeigt am nicht angelaufenen Run das Wort „nicht angelaufen" mit brauner LED', () => {
+    zeige(
+      [
+        laufend({
+          outcome: {
+            abortReason: 'Working Tree ist nicht sauber.',
+            verdict: 'NOT_STARTED',
+            decisiveItem: null,
+            noWorkReason: null,
+          },
+        }),
+      ],
+      [pakete(8, [])],
+    )
+
+    const kopf = screen.getByTestId('stand-kopf-8')
+    expect(kopf).toHaveTextContent('Run #8 · gestartet 03:10 · nicht angelaufen · 0 gemeldet')
+    expect(within(kopf).getByTestId('led-braun')).toBeInTheDocument()
+  })
+
   /** Der Takt endet mit der Anzeige — ein verlassener Leitstand tickt nicht weiter. */
   it('räumt den Takt beim Verlassen ab', () => {
     const { unmount } = zeige([laufend()], [pakete(8, [paket()])])

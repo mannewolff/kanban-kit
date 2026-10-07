@@ -190,8 +190,19 @@ export interface NightRunUsageView {
  * `CLOSED` kam mit Issue #1197 dazu: ein haengender Lauf, den ein Plattform-Admin von Hand als
  * beendet gekennzeichnet hat. Auch er ist **kein Mangel** — die Kennzeichnung ersetzt nur die
  * ausgebliebene Abmeldung eines Prozesses, der laengst weg ist.
+ *
+ * `NOT_STARTED` kam mit Issue #1502 dazu (Server #1499): ein Lauf, der seinen Abbruch selbst
+ * meldete, bevor er ein Paket anfasste. **Keine Stoerung** — wer ihn startete, sah den Grund schon
+ * auf der Kommandozeile. Der Grund steht in {@link NightRunOutcomeView.abortReason}.
  */
-export type Verdict = 'SUCCEEDED' | 'FAILED' | 'WAITING' | 'RUNNING' | 'NO_WORK' | 'CLOSED'
+export type Verdict =
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'WAITING'
+  | 'RUNNING'
+  | 'NO_WORK'
+  | 'CLOSED'
+  | 'NOT_STARTED'
 
 /**
  * Der Befund eines Laufs, wie der Server ihn seit Issue #1078 mitschickt.

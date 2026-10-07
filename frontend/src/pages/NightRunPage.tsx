@@ -2226,9 +2226,14 @@ function Kopfmarken({
           eine Zeile — vollstaendig steht er in der aufgeklappten Platte (AK 4, E14). Sie schliesst
           die Marke „ohne Arbeit" aus: Der Server setzt beim abgebrochenen Lauf allein den
           Abbruchgrund (E6), und zwei Zustandsmarken waeren ein Widerspruch im selben Kopf. */}
+      {/* Beim Lauf, der nicht anlief (Issue #1502, Plan #1498 E8), steht das Wort vor dem Grund in
+          derselben Marke — eine zweite Marke waere eine zweite Zustandsmarke im selben Kopf. Die
+          braune LED kommt ueber den Melder aus dem Befund. */}
       {lauf.abbruchGrund !== undefined && (
         <LaufMarke testId="lauf-zustand" led={<Led melder={melder} />}>
-          {kurzGrund(lauf.abbruchGrund)}
+          {lauf.befund?.verdict === 'NOT_STARTED'
+            ? `${NIGHT_RUN_VERDICT_TEXT.NOT_STARTED} — ${kurzGrund(lauf.abbruchGrund)}`
+            : kurzGrund(lauf.abbruchGrund)}
         </LaufMarke>
       )}
       {/* Die Zustandsmarken schliessen einander aus: Ein Lauf ist entweder noch nicht
