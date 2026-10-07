@@ -68,6 +68,22 @@ final class KettenAbleitung {
   }
 
   /**
+   * Das Ziel aus der Zeile {@code Ziel:} des Laufstands als die Station, die es markiert (Issue
+   * #1529); leer ohne Zeile oder mit unbekanntem Ziel.
+   */
+  static Optional<ProgressStage> ziel(String laufstand) {
+    return zielAus(zeilen(laufstand));
+  }
+
+  private static Optional<ProgressStage> zielAus(List<String> zeilen) {
+    return Kettenlage.gruppe(zeilen, ZIEL_ZEILE).map(ZIELE::get);
+  }
+
+  private static List<String> zeilen(String body) {
+    return body.lines().map(String::strip).filter(z -> !z.isEmpty()).toList();
+  }
+
+  /**
    * Was der Laufstand einer Karte über ihre Kette sagt. Eine Station ist erledigt, wenn eine {@code
    * fertig}-Zeile für sie oder eine Zeile einer späteren Station steht oder der Kopf {@code fertig
    * bis} das Ziel meldet. Die erste nicht erledigte Station des Wegs ist die aktuelle.
@@ -90,8 +106,8 @@ final class KettenAbleitung {
       List<StufenEintrag> eintraege) {
 
     static Kettenlage aus(Karte karte, String body) {
-      List<String> zeilen = body.lines().map(String::strip).filter(z -> !z.isEmpty()).toList();
-      ProgressStage ziel = gruppe(zeilen, ZIEL_ZEILE).map(ZIELE::get).orElse(null);
+      List<String> zeilen = zeilen(body);
+      ProgressStage ziel = zielAus(zeilen).orElse(null);
       String kopf =
           zeilen.stream()
               .filter(z -> DATENZEILEN.stream().noneMatch(z::startsWith))
