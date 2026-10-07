@@ -15,6 +15,23 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.24.0] – 2026-10-07
+
+- chore: v2.23.1
+- Regeltexte: Sperrschwelle der Mutationsprüfung als Ausnahme von W3 ([#1534](https://github.com/mannewolff/kanban-kit/issues/1534))
+- Mutationsprüfung legt bei Durchlass Karten an und sperrt bei überfälliger Karte ([#1533](https://github.com/mannewolff/kanban-kit/issues/1533))
+- Backend-Vollauf sperrt erst unter 80 % und behält vermerkte Überlebende im Gedächtnis ([#1532](https://github.com/mannewolff/kanban-kit/issues/1532))
+- Kartenmodul für Mutations-Überlebende ([#1531](https://github.com/mannewolff/kanban-kit/issues/1531))
+- Änderungsprüfung zählt geänderte Zeilen und sperrt erst unter 80 % ([#1530](https://github.com/mannewolff/kanban-kit/issues/1530))
+- Lauf-Kachel zeigt die Station Umsetzung auch bei ziel:umsetzung ([#1529](https://github.com/mannewolff/kanban-kit/issues/1529))
+- Regeltexte nennen Zuordnungsprüfung und Vertragstest beim Kartenabschluss ([#1525](https://github.com/mannewolff/kanban-kit/issues/1525))
+- Prüfliste: alle Einträge zu Ende, Zuordnung und Vertragstest beim Kartenabschluss ([#1524](https://github.com/mannewolff/kanban-kit/issues/1524))
+- OpenApiIT nennt die abweichenden verlässlichen Aufrufe ([#1523](https://github.com/mannewolff/kanban-kit/issues/1523))
+- Unterkommando zuordnung prüft geänderte Tests beim Kartenabschluss ([#1522](https://github.com/mannewolff/kanban-kit/issues/1522))
+- API-Beschreibungen als Text-Blöcke geschrieben ([#1519](https://github.com/mannewolff/kanban-kit/issues/1519))
+- Sonar S107 für JPA-Entities versioniert ausgenommen ([#1520](https://github.com/mannewolff/kanban-kit/issues/1520))
+- Sonar-Befunde im Backend gebündelt behoben ([#1518](https://github.com/mannewolff/kanban-kit/issues/1518))
+
 ## [2.23.0] – 2026-10-07
 
 - **API-Änderung:** POST /api/kanban/night-runs — geändert ([#1513](https://github.com/mannewolff/kanban-kit/issues/1513))
