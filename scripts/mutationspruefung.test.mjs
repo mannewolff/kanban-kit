@@ -1498,8 +1498,9 @@ test('laufen: die feste Zuordnung aus scripts/mutationszuordnung.json wird geles
 
 // --- Vollauf: Schwelle und Gedaechtnisdatei (Issue #1215) --------------------
 
-test('SCHWELLEN: je Seite genau eine Zahl, Frontend 80, Backend 100', () => {
-  assert.deepEqual(SCHWELLEN, { frontend: 80, backend: 100 });
+test('SCHWELLEN: nur noch das Frontend, 80 — der Backend-Vollauf urteilt mit SPERRSCHWELLE (Issue #1532)', () => {
+  assert.deepEqual(SCHWELLEN, { frontend: 80 });
+  assert.equal(SPERRSCHWELLE, 80);
 });
 
 test('quoteAus: getoetet je geprueft in Prozent, auf zwei Stellen gerundet', () => {
@@ -1520,15 +1521,38 @@ test('vollaufAuswerten: im Vollauf gilt jede Datei, Ausnahmen zaehlen nicht mit'
     { datei: 'frontend/src/lib/b.ts', zeile: 12, mutator: 'ArrowFunction', zustand: 'CompileError', deckendeTests: [] },
     { datei: 'frontend/src/lib/c.ts', zeile: 4, mutator: 'ObjectLiteral', zustand: 'NoCoverage', deckendeTests: [] },
   ]);
-  assert.deepEqual(zaehlung, { geprueft: 4, getoetet: 2, ueberlebt: 2, ausgenommen: 1, ausserhalb: 0 });
+  assert.deepEqual(zaehlung, { geprueft: 4, getoetet: 2, ueberlebt: 2, vermerkt: 0, ausgenommen: 1, ausserhalb: 0 });
   assert.deepEqual(ueberlebende.map((m) => m.zeile), [2, 4]);
 });
 
-test('pitVollaufArgumente: Default-Umfang und Default-Marke des Profils, kein inkrementeller Zustand', () => {
+test('vollaufAuswerten: mit Quellen zaehlt ein Altlast-Vermerk an der Stelle als getoetet und bleibt in der Liste (E4)', () => {
+  const datei = 'src/main/java/org/mwolff/manban/card/application/CardService.java';
+  const quellen = new Map([[datei, ['a', '// Mutations-Altlast: äquivalent (#1213, 2026-09-25)', 'b'].join('\n')]]);
+  const { zaehlung, ueberlebende } = vollaufAuswerten([
+    { datei, zeile: 3, mutator: 'ConditionalsBoundaryMutator', zustand: 'Survived', deckendeTests: [] },
+    { datei, zeile: 9, mutator: 'MathMutator', zustand: 'Survived', deckendeTests: [] },
+    { datei, zeile: 1, mutator: 'MathMutator', zustand: 'Killed', deckendeTests: [] },
+  ], null, quellen);
+  assert.deepEqual(zaehlung, { geprueft: 3, getoetet: 2, ueberlebt: 1, vermerkt: 1, ausgenommen: 0, ausserhalb: 0 });
+  assert.deepEqual(ueberlebende.map((m) => m.zeile), [3, 9]);
+  assert.deepEqual(ueberlebende[0].altlast, { grund: 'äquivalent', issue: '1213', datum: '2026-09-25' });
+  assert.equal(ueberlebende[1].altlast, null);
+});
+
+test('vollaufAuswerten: ohne Quellen kennt der Vollauf keinen Vermerk — das Frontend bleibt unveraendert', () => {
+  const datei = 'frontend/src/lib/a.ts';
+  const { zaehlung, ueberlebende } = vollaufAuswerten([
+    { datei, zeile: 2, mutator: 'ConditionalExpression', zustand: 'Survived', deckendeTests: [] },
+  ]);
+  assert.equal(zaehlung.vermerkt, 0);
+  assert.equal(zaehlung.ueberlebt, 1);
+  assert.equal(ueberlebende[0].altlast, null);
+});
+
+test('pitVollaufArgumente: Default-Umfang des Profils, Marke abgeschaltet, kein inkrementeller Zustand (E12)', () => {
   const args = pitVollaufArgumente();
-  assert.deepEqual(args, ['-B', '-Ppit', '-Dskip.frontend=true', 'test']);
+  assert.deepEqual(args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
   assert.equal(args.some((a) => a.startsWith('-Dpit.targetClasses')), false);
-  assert.equal(args.some((a) => a.startsWith('-Dpit.marke')), false);
 });
 
 /** 6 Mutanten, 5 getoetet -> 83,33 %: ueber der Frontend-Schwelle. */
@@ -1593,7 +1617,7 @@ test('laufen: vollauf frontend unter der Schwelle endet ungleich 0 und nennt gem
 test('laufen: eine kuenstlich auf 99 gesetzte Frontend-Schwelle laesst denselben Lauf anhalten', () => {
   const { code, text } = mitProjekt((wurzel) =>
     sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, BERICHT_UEBER_SCHWELLE), {
-      schwellen: { frontend: 99, backend: 100 },
+      schwellen: { frontend: 99 },
     }),
   );
   assert.notEqual(code, 0);
@@ -1649,21 +1673,21 @@ test('laufen: vollauf frontend ohne Bericht endet ungleich 0, sagt warum und sch
   assert.match(text, /keinen Bericht/);
 });
 
-test('laufen: vollauf backend faehrt das Profil mit seinem Default-Umfang und seiner Default-Marke', () => {
+test('laufen: vollauf backend faehrt das Profil mit seinem Default-Umfang und abgeschalteter Marke', () => {
   const { aufrufe } = mitProjekt((wurzel) =>
     sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML)),
   );
   assert.equal(aufrufe[0].befehl, 'mvn');
-  assert.deepEqual(aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', 'test']);
+  assert.deepEqual(aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
 });
 
-test('laufen: vollauf backend unter 100 Prozent endet ungleich 0 und legt die Gedaechtnisdatei an', () => {
+test('laufen: vollauf backend unter der Sperrschwelle endet ungleich 0 und legt die Gedaechtnisdatei an', () => {
   const { code, text, inhalt } = mitProjekt((wurzel) => {
     const ergebnis = sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML));
     return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'backend') };
   });
   assert.notEqual(code, 0);
-  assert.match(text, /unter der Schwelle 100 %/);
+  assert.match(text, /Quote 50,00 % — Ziel 100 % nicht erreicht, Sperrschwelle 80 % unterschritten: hält an/);
   assert.equal(inhalt.quote, 50);
   assert.equal(inhalt.mutanten.length, 2);
   assert.deepEqual(inhalt.umfang, [
@@ -1687,8 +1711,76 @@ test('laufen: vollauf backend mit lauter getoeteten Mutanten endet gruen bei 100
     return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'backend') };
   });
   assert.equal(code, 0);
-  assert.match(text, /Quote: 100,00 %/);
+  assert.match(text, /Quote 100,00 % — Ziel 100 % erreicht, Sperrschwelle 80 % erfüllt: läuft durch/);
   assert.deepEqual(inhalt.mutanten, []);
+});
+
+/** Ein PIT-Bericht mit `getoetet` getoeteten und `ueberlebt` ueberlebenden Mutanten in CardService. */
+function pitBericht(getoetet, ueberlebt) {
+  const eintrag = (n, erkannt) => `<mutation detected="${erkannt}" status="${erkannt ? 'KILLED' : 'SURVIVED'}">`
+    + '<sourceFile>CardService.java</sourceFile>'
+    + '<mutatedClass>org.mwolff.manban.card.application.CardService</mutatedClass>'
+    + `<lineNumber>${n}</lineNumber><mutator>org.pitest.mutationtest.engine.gregor.mutators.MathMutator</mutator>`
+    + '<description>Replaced addition</description>'
+    + (erkannt ? '<killingTest>org.mwolff.manban.card.application.CardServiceTest.x(org.mwolff.manban.card.application.CardServiceTest)</killingTest>' : '<killingTest/>')
+    + '</mutation>';
+  const zeilen = [];
+  for (let n = 0; n < getoetet; n += 1) zeilen.push(eintrag(1000 + n, true));
+  for (let n = 0; n < ueberlebt; n += 1) zeilen.push(eintrag(2000 + n, false));
+  return `<mutations>${zeilen.join('')}</mutations>`;
+}
+
+test('laufen: vollauf backend mit 85 Prozent laeuft durch und nennt Quote gegen Ziel und Sperrschwelle (Issue #1532)', () => {
+  const { code, text, inhalt } = mitProjekt((wurzel) => {
+    const ergebnis = sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, pitBericht(17, 3)));
+    return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'backend') };
+  });
+  assert.equal(code, 0);
+  assert.match(text, /Quote 85,00 % — Ziel 100 % nicht erreicht, Sperrschwelle 80 % erfüllt: läuft durch/);
+  assert.equal(inhalt.quote, 85);
+  assert.equal(inhalt.mutanten.length, 3);
+});
+
+test('laufen: vollauf backend mit 79 Prozent haelt an (Issue #1532)', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, pitBericht(79, 21))),
+  );
+  assert.equal(code, 1);
+  assert.match(text, /Quote 79,00 % — Ziel 100 % nicht erreicht, Sperrschwelle 80 % unterschritten: hält an/);
+});
+
+test('laufen: umgebung.sperrschwelle gilt auch fuer den Backend-Vollauf', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, pitBericht(17, 3)), { sperrschwelle: 90 }),
+  );
+  assert.equal(code, 1);
+  assert.match(text, /Sperrschwelle 90 % unterschritten: hält an/);
+});
+
+test('laufen: vollauf backend zaehlt einen vermerkten Ueberlebenden als getoetet und fuehrt ihn im Gedaechtnis (E4)', () => {
+  const quelle = [
+    'package org.mwolff.manban.card.application;', //                              1
+    'class CardService {', //                                                      2
+    '  int zaehle(int n) {', //                                                    3
+    '    // Mutations-Altlast: äquivalenter Grenzfall (#1213, 2026-09-25)', //     4
+    '    return n > 0 ? 1 : 2;', //                                                5
+  ].join('\n');
+  const xml = BEISPIEL_XML.replaceAll('<lineNumber>43</lineNumber>', '<lineNumber>5</lineNumber>');
+  const { code, text, inhalt } = mitProjekt((wurzel) => {
+    javaAblegen(wurzel, CARD_SERVICE, quelle);
+    const ergebnis = sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, xml));
+    return { ...ergebnis, inhalt: gedaechtnis(wurzel, 'backend') };
+  });
+  // 4 geprueft: 2 getoetet, 1 vermerkt (zaehlt als getoetet), 1 ungedeckt ueberlebt -> 75 %.
+  assert.equal(code, 1);
+  assert.match(text, /4 geprüft, 3 getötet \(davon 1 mit Altlast-Vermerk\), 1 überlebt/);
+  assert.match(text, /Altlast-Vermerk \(#1213, 2026-09-25\): äquivalenter Grenzfall/);
+  assert.match(text, /Quote 75,00 %/);
+  assert.equal(inhalt.quote, 75);
+  assert.deepEqual(inhalt.mutanten.map((m) => `${m.datei}:${m.zeile}`), [
+    `${CARD_SERVICE}:5`,
+    'src/main/java/org/mwolff/manban/card/domain/Card.java:17',
+  ]);
 });
 
 test('laufen: vollauf backend ohne Bericht endet ungleich 0 und sagt warum', () => {
@@ -1768,7 +1860,7 @@ Umfang: die ganze Seite.
 
 Mutanten: 4 geprüft, 2 getötet, 2 überlebt, 0 ausgenommen (@ExcludeFromJacocoGeneratedReport je Einheit — solche Mutanten entstehen gar nicht erst).
 
-Quote: 50,00 % — unter der Schwelle 100 %. Der Vollauf hält an.
+Quote 50,00 % — Ziel 100 % nicht erreicht, Sperrschwelle 80 % unterschritten: hält an
 
 Dauer: 1 min 2 s. Letzter Vollauf backend: 29 min 49 s am 2026-09-24, Quote 97,5 %.
 Stufe: noch nicht eingetragen
@@ -1912,7 +2004,7 @@ test('vollaufAuswerten: zaehlt je Ausschnitt geprueft, getoetet, ueberlebt, ausg
   assert.equal(je['kandidat-k'].quote, 50);
   assert.deepEqual(ohneAusschnitt, []);
   // Gesamtwert und Ueberlebendenliste bleiben beim Pruefbereich: den aufgenommenen Ausschnitten.
-  assert.deepEqual(zaehlung, { geprueft: 6, getoetet: 4, ueberlebt: 2, ausgenommen: 3, ausserhalb: 0 });
+  assert.deepEqual(zaehlung, { geprueft: 6, getoetet: 4, ueberlebt: 2, vermerkt: 0, ausgenommen: 3, ausserhalb: 0 });
   assert.equal(ueberlebende.length, 2);
 });
 

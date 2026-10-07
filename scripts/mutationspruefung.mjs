@@ -43,11 +43,12 @@ export const KOMMANDOS = ['aenderung', 'vollauf', 'zuordnung'];
 export const SEITEN = ['frontend', 'backend'];
 
 /**
- * Die Schwellen des Vollaufs (Kriterium 8) — an EINER Stelle, nicht verstreut: Zwei Fundstellen
- * derselben Zahl gingen beim ersten Anheben auseinander. Backend 100, weil das Profil `pit` seine
- * Marke schon auf 100 fuehrt; Frontend 80 als der heute haltbare Stand (84,70 % am 2026-09-24).
+ * Die Schwelle des Frontend-Vollaufs je Ausschnitt (Kriterium 8) — an EINER Stelle, nicht
+ * verstreut: Zwei Fundstellen derselben Zahl gingen beim ersten Anheben auseinander. 80 als der
+ * heute haltbare Stand (84,70 % am 2026-09-24). Der Backend-Vollauf urteilt seit Issue #1532 wie
+ * die Aenderungspruefung mit `SPERRSCHWELLE` gegen das `ZIEL`.
  */
-export const SCHWELLEN = { frontend: 80, backend: 100 };
+export const SCHWELLEN = { frontend: 80 };
 
 /**
  * Haelt die Aenderungspruefung bei einem Test ohne Zuordnung sofort an (true) oder weicht sie auf
@@ -66,8 +67,8 @@ export const HALT_OHNE_ZUORDNUNG = { frontend: true, backend: false };
 export const VORSCHLAGSSCHWELLE = 82;
 
 /**
- * Die Sperrschwelle der Aenderungspruefung (Plan #1528, Abschnitt "Zwei Groessen statt einer
- * Schwelle"): Erst eine Quote darunter haelt an. 100 % bleibt das ZIEL, auf das Karten hinarbeiten
+ * Die Sperrschwelle der Aenderungspruefung und des Backend-Vollaufs (Plan #1528, Abschnitt "Zwei
+ * Groessen statt einer Schwelle"): Erst eine Quote darunter haelt an. 100 % bleibt das ZIEL, auf das Karten hinarbeiten
  * — zwei Groessen, nicht eine Zahl mit `SCHWELLEN`, weil sie Verschiedenes sagen. Ueber
  * `umgebung.sperrschwelle` ueberschreibbar wie `umgebung.schwellen`.
  */
@@ -619,13 +620,12 @@ export function pitArgumente(dateien) {
 }
 
 /**
- * Der Vollauf des Backends faehrt das Profil `pit` mit seinem Default-Umfang UND seiner
- * Default-Marke: Anders als die Aenderungspruefung schaltet er `pit.marke` nicht ab — dort musste
- * die Werkzeugschwelle weichen, weil ein Altlast-Vermerk nicht anhalten, aber mitzaehlen soll; hier
- * gibt es keine Vermerke, und die Schwelle dieses Treibers (100) sagt dasselbe wie die des Profils.
+ * Der Vollauf des Backends faehrt das Profil `pit` mit seinem Default-Umfang und schaltet wie die
+ * Aenderungspruefung die Marke ab (Plan #1528, E12): Die Werkzeugschwelle kennt keinen
+ * Altlast-Vermerk, geurteilt wird allein ueber den Bericht gegen die Sperrschwelle.
  */
 export function pitVollaufArgumente() {
-  return ['-B', '-Ppit', '-Dskip.frontend=true', 'test'];
+  return ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test'];
 }
 
 /**
@@ -804,10 +804,15 @@ function ausschnittsZaehlung() {
 }
 
 /**
- * Die Auswertung des Vollaufs. Sie kennt weder Beruehrung noch Altlast-Vermerk: Im Vollauf gilt die
- * ganze Seite, und angehalten wird allein an der Schwelle (Kriterium 8) — ein Vermerk gibt die
- * AENDERUNGSpruefung frei, nicht die Gesamtquote. Gezaehlt wird wie dort, damit beide Ausgaben
- * dieselbe Zahl gleich meinen.
+ * Die Auswertung des Vollaufs. Sie kennt keine Beruehrung: Im Vollauf gilt die ganze Seite, und
+ * angehalten wird allein an der Schwelle (Kriterium 8). Gezaehlt wird wie in der
+ * Aenderungspruefung, damit beide Ausgaben dieselbe Zahl gleich meinen.
+ *
+ * Mit `quellen` (Backend, Issue #1532) zaehlt ein Ueberlebender mit Altlast-Vermerk an seiner
+ * Stelle als getoetet (E4) — im Vollauf genuegt der Vermerk an der Stelle, es gibt keinen Anker.
+ * Er bleibt trotzdem in `ueberlebende`: Die Gedaechtnisdatei fuehrt jede ueberlebende Stelle,
+ * sonst truege derselbe Vermerk in der naechsten Aenderungspruefung nicht mehr (Bedingung 4), und
+ * `zuordnungAusVollauf` verloere Eintraege. Ohne `quellen` (Frontend) gibt es keinen Vermerk.
  *
  * Mit `ausschnitte` (Issue #1278) ordnet sie jeden Mutanten seinem Ausschnitt zu und zaehlt je
  * Ausschnitt. Gesamtzaehlung und Ueberlebendenliste bleiben beim Pruefbereich, also bei den
@@ -817,8 +822,8 @@ function ausschnittsZaehlung() {
  * gemeldet statt verschluckt. Bei genau einem Ausschnitt (Backend, E11) ist er der ganze
  * Pruefbereich: Jeder Mutant, den das Werkzeug erzeugt hat, gehoert zu ihm.
  */
-export function vollaufAuswerten(mutanten, ausschnitte = null) {
-  const zaehlung = { geprueft: 0, getoetet: 0, ueberlebt: 0, ausgenommen: 0, ausserhalb: 0 };
+export function vollaufAuswerten(mutanten, ausschnitte = null, quellen = null) {
+  const zaehlung = { geprueft: 0, getoetet: 0, ueberlebt: 0, vermerkt: 0, ausgenommen: 0, ausserhalb: 0 };
   const ueberlebende = [];
   const ohneAusschnitt = [];
   const je = new Map((ausschnitte ?? []).map((a) => [a, ausschnittsZaehlung()]));
@@ -850,13 +855,23 @@ export function vollaufAuswerten(mutanten, ausschnitte = null) {
       continue;
     }
     if (!ZUSTAND_UEBERLEBT.has(mutant.zustand)) continue;
+    const altlast = quellen ? altlastVermerkAn(quellen.get(mutant.datei), mutant.zeile) : null;
     eigene.geprueft += 1;
-    eigene.ueberlebt += 1;
-    if (mutant.zustand === 'NoCoverage') eigene.ohneDeckung += 1;
+    if (altlast) {
+      eigene.getoetet += 1;
+    } else {
+      eigene.ueberlebt += 1;
+      if (mutant.zustand === 'NoCoverage') eigene.ohneDeckung += 1;
+    }
     if (gesamt) {
       zaehlung.geprueft += 1;
-      zaehlung.ueberlebt += 1;
-      ueberlebende.push({ ...mutant, altlast: null, vermerkGrund: null });
+      if (altlast) {
+        zaehlung.getoetet += 1;
+        zaehlung.vermerkt += 1;
+      } else {
+        zaehlung.ueberlebt += 1;
+      }
+      ueberlebende.push({ ...mutant, altlast, vermerkGrund: null });
     }
   }
 
@@ -1250,7 +1265,7 @@ export function meldungBauen({
     }
   }
 
-  if (kommando === 'aenderung' && quote !== null && sperrschwelle !== null) {
+  if (quote !== null && sperrschwelle !== null) {
     zeilen.push('');
     zeilen.push(sperrZeile(quote, sperrschwelle));
   } else if (ausschnittsBericht) {
@@ -1446,13 +1461,16 @@ function fehlenderBericht(teile, ergebnis) {
 }
 
 /**
- * Der Vollauf einer Seite: der volle Umfang des Werkzeugs, die Schwelle je Seite und die
- * Gedaechtnisdatei. Der Rueckgabewert des Werkzeugs selbst wird wie in der Aenderungspruefung nicht
- * uebernommen — geurteilt wird ueber den Bericht: Im Backend haelt das Profil an seiner eigenen
- * Marke schon an, und ein durchgereichter Exitcode sagte dann zweimal dasselbe, aber ohne Zahl.
+ * Der Vollauf einer Seite: der volle Umfang des Werkzeugs, die Schwelle und die Gedaechtnisdatei.
+ * Das Frontend misst je Ausschnitt gegen `SCHWELLEN`, das Backend wie die Aenderungspruefung gegen
+ * die Sperrschwelle, mit Altlast-Vermerk als getoetet (Issue #1532). Der Rueckgabewert des
+ * Werkzeugs selbst wird nicht uebernommen — geurteilt wird ueber den Bericht.
  */
-function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, beginn, vollauf, stufe, schwelle }) {
+function vollaufLaufen({
+  wurzel, seite, bereich, starte, git, ausgabe, liesDatei, jetzt, beginn, vollauf, stufe, schwelle, sperrschwelle,
+}) {
   let mutanten;
+  let quellen = null;
   if (seite === 'frontend') {
     const mutate = bereich.vollaufMutate.flatMap(klammernAufloesen);
     const { ergebnis, bericht } = strykerLaufen({ wurzel, starte, args: strykerArgumente(mutate) });
@@ -1468,10 +1486,12 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
       return 1;
     }
     mutanten = pitMutanten(xml);
+    quellen = quellenLesen(mutanten, liesDatei);
   }
 
   const gemessen = bereich.ausschnitte.filter((a) => bereich.gemessen.includes(a.name));
-  const ausgewertet = vollaufAuswerten(mutanten, gemessen);
+  const ausgewertet = vollaufAuswerten(mutanten, gemessen, quellen);
+  const grenze = seite === 'backend' ? sperrschwelle : schwelle;
   const { zaehlung, ueberlebende } = ausgewertet;
   const quote = quoteAus(zaehlung);
   const dauerMs = jetzt() - beginn;
@@ -1483,7 +1503,7 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
     ? haltBestimmen({
       ausschnitte: ausgewertet.ausschnitte, schwelle, erstmalsVorher, heute: new Date(jetzt()).toISOString().slice(0, 10),
     })
-    : { haltende: quote >= schwelle ? [] : [seite] };
+    : { haltende: quote >= grenze ? [] : [seite] };
   // Auch ein an der Schwelle gescheiterter Lauf hinterlaesst die Datei: Sein Ergebnis ist der
   // Stand, gegen den die naechste Aenderungspruefung vergleicht — ihn wegzuwerfen, weil er rot ist,
   // nahm der vierten Bedingung des Altlast-Vermerks genau dann die Grundlage, wenn sie gebraucht wird.
@@ -1514,7 +1534,8 @@ function vollaufLaufen({ wurzel, seite, bereich, starte, git, ausgabe, jetzt, be
     vollauf,
     stufe,
     quote,
-    schwelle,
+    schwelle: seite === 'backend' ? null : schwelle,
+    sperrschwelle: seite === 'backend' ? sperrschwelle : null,
     ausschnittsBericht: mehrere
       ? ausschnittsZeilen({ ausschnitte: ausgewertet.ausschnitte, halt, schwelle, quote, ohneAusschnitt: ausgewertet.ohneAusschnitt })
       : null,
@@ -1594,14 +1615,15 @@ export function laufen(argv, umgebung = {}) {
   const config = jsonLesen(join(wurzel, '.claude', 'workflow.config.json')) ?? {};
   const vollauf = jsonLesen(vollaufPfad(wurzel, seite));
   const stufe = stufeAus(config, `mutationspruefung.mjs ${kommando} ${seite}`, stufeArgument);
-  // Ueber `umgebung.schwellen` ueberschreibbar wie `git` und `starte`: Ein Nachweis an einer
-  // kuenstlich angehobenen Schwelle braucht sonst einen zweiten halbstuendigen Vollauf.
+  // Ueber `umgebung.schwellen` (Frontend) und `umgebung.sperrschwelle` (Aenderungspruefung und
+  // Backend-Vollauf) ueberschreibbar wie `git` und `starte`: Ein Nachweis an einer kuenstlich
+  // angehobenen Schwelle braucht sonst einen zweiten halbstuendigen Vollauf.
   const schwelle = (umgebung.schwellen ?? SCHWELLEN)[seite];
   const sperrschwelle = umgebung.sperrschwelle ?? SPERRSCHWELLE;
 
   if (kommando === 'vollauf') {
     return vollaufLaufen({
-      wurzel, seite, bereich, starte, git, ausgabe, jetzt, beginn, vollauf, stufe, schwelle,
+      wurzel, seite, bereich, starte, git, ausgabe, liesDatei, jetzt, beginn, vollauf, stufe, schwelle, sperrschwelle,
     });
   }
   if (kommando === 'zuordnung') {
