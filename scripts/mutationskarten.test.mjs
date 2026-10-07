@@ -270,32 +270,111 @@ function loginVerzeichnis({ host, token } = {}) {
   return dir;
 }
 
+function projektVerzeichnis({ toolbox, tokenDatei } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'mutationskarten-projekt-'));
+  if (toolbox) {
+    mkdirSync(join(dir, '.claude'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'workflow.config.json'), JSON.stringify({ toolbox }));
+  }
+  if (tokenDatei !== undefined) {
+    mkdirSync(join(dir, '.claude', 'toolbox.cli'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'toolbox.cli', 'tbx.token'), tokenDatei);
+  }
+  return dir;
+}
+
+const MIT_TOKENDATEI = { host: 'https://projekt.test', tokenFile: '.claude/toolbox.cli/tbx.token' };
+
 test('zugangLesen: TBX_TOKEN vor dem tbx-Login, Host aus dessen config.json', () => {
   const dir = loginVerzeichnis({ host: 'https://eigen.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis();
   try {
-    assert.deepEqual(zugangLesen({ env: { TBX_TOKEN: ' tk_env ' }, baseDir: dir }), { host: 'https://eigen.test', token: 'tk_env' });
-    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir }), { host: 'https://eigen.test', token: 'tk_login' });
+    assert.deepEqual(zugangLesen({ env: { TBX_TOKEN: ' tk_env ' }, baseDir: dir, projektDir: projekt }), { host: 'https://eigen.test', token: 'tk_env' });
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: projekt }), { host: 'https://eigen.test', token: 'tk_login' });
   } finally {
     rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: TBX_TOKEN gewinnt auch vor toolbox.tokenFile, Host aus toolbox.host', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: MIT_TOKENDATEI, tokenDatei: 'tk_projekt\n' });
+  try {
+    assert.deepEqual(zugangLesen({ env: { TBX_TOKEN: 'tk_env' }, baseDir: dir, projektDir: projekt }), { host: 'https://projekt.test', token: 'tk_env' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: ohne TBX_TOKEN gewinnt toolbox.tokenFile vor dem globalen Login', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: MIT_TOKENDATEI, tokenDatei: '  tk_projekt\n' });
+  try {
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: projekt }), { host: 'https://projekt.test', token: 'tk_projekt' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: ohne toolbox.host kommt der Host aus dem tbx-Login', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { tokenFile: '.claude/toolbox.cli/tbx.token' }, tokenDatei: 'tk_projekt' });
+  try {
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: projekt }), { host: 'https://login.test', token: 'tk_projekt' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: leere oder fehlende toolbox.tokenFile ist ein Fehler, kein Rueckfall', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const leer = projektVerzeichnis({ toolbox: MIT_TOKENDATEI, tokenDatei: '  \n' });
+  const fehlt = projektVerzeichnis({ toolbox: MIT_TOKENDATEI });
+  try {
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: leer }), /toolbox\.tokenFile.*leer/s);
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: fehlt }), /toolbox\.tokenFile.*nicht lesbar/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(leer, { recursive: true, force: true });
+    rmSync(fehlt, { recursive: true, force: true });
   }
 });
 
 test('zugangLesen: ohne Token ein Fehler, der beide Wege nennt', () => {
   const dir = loginVerzeichnis();
+  const projekt = projektVerzeichnis();
   try {
-    assert.throws(() => zugangLesen({ env: { TBX_TOKEN: '' }, baseDir: dir }), /TBX_TOKEN.*tbx auth login/s);
+    assert.throws(() => zugangLesen({ env: { TBX_TOKEN: '' }, baseDir: dir, projektDir: projekt }), /TBX_TOKEN.*tbx auth login/s);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('ausfuehren: leere toolbox.tokenFile endet mit fehler und 1', async () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: MIT_TOKENDATEI, tokenDatei: '' });
+  try {
+    const lauf = await ausfuehren('{"auftrag":"liegezeit"}', { env: {}, baseDir: dir, projektDir: projekt });
+    assert.equal(lauf.code, 1);
+    assert.match(lauf.ausgabe.fehler, /toolbox\.tokenFile/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
   }
 });
 
 test('ausfuehren: unbekannter Auftrag und kaputte Eingabe enden mit fehler und 1', async () => {
   const dir = loginVerzeichnis({ token: 'tk' });
   try {
-    const unbekannt = await ausfuehren('{"auftrag":"loeschen"}', { env: {}, baseDir: dir });
+    const unbekannt = await ausfuehren('{"auftrag":"loeschen"}', { env: {}, baseDir: dir, projektDir: dir });
     assert.equal(unbekannt.code, 1);
     assert.match(unbekannt.ausgabe.fehler, /loeschen/);
-    const kaputt = await ausfuehren('kein json', { env: {}, baseDir: dir });
+    const kaputt = await ausfuehren('kein json', { env: {}, baseDir: dir, projektDir: dir });
     assert.equal(kaputt.code, 1);
     assert.ok(kaputt.ausgabe.fehler);
   } finally {
@@ -307,9 +386,9 @@ test('ausfuehren: liegezeit und schreiben laufen ueber den Zugang', async () => 
   const dir = loginVerzeichnis({ host: HOST, token: 'tk_test' });
   try {
     const { fetchImpl } = fakeBoard({ spalten: { BACKLOG: [] } });
-    const lz = await ausfuehren('{"auftrag":"liegezeit"}', { env: {}, baseDir: dir, fetchImpl });
+    const lz = await ausfuehren('{"auftrag":"liegezeit"}', { env: {}, baseDir: dir, projektDir: dir, fetchImpl });
     assert.deepEqual(lz, { code: 0, ausgabe: { ueberfaellig: [] } });
-    const sw = await ausfuehren(JSON.stringify({ auftrag: 'schreiben', herkunft: 'h', stellen: [stelle(1)] }), { env: {}, baseDir: dir, fetchImpl });
+    const sw = await ausfuehren(JSON.stringify({ auftrag: 'schreiben', herkunft: 'h', stellen: [stelle(1)] }), { env: {}, baseDir: dir, projektDir: dir, fetchImpl });
     assert.equal(sw.code, 0);
     assert.equal(sw.ausgabe.karten[0].art, 'neu');
   } finally {
@@ -323,7 +402,7 @@ test('Kommandozeile: ohne Token endet liegezeit mit 1 und einer JSON-Ausgabe mit
     mkdirSync(join(home, '.config'), { recursive: true });
     const env = { ...process.env, TBX_TOKEN: '', HOME: home };
     delete env.TBX_CONFIG_DIR;
-    const lauf = spawnSync(process.execPath, [SKRIPT], { input: '{"auftrag":"liegezeit"}', env, encoding: 'utf-8' });
+    const lauf = spawnSync(process.execPath, [SKRIPT], { input: '{"auftrag":"liegezeit"}', env, cwd: home, encoding: 'utf-8' });
     assert.equal(lauf.status, 1);
     assert.ok(JSON.parse(lauf.stdout).fehler);
   } finally {

@@ -18,7 +18,8 @@
  * und der Zugang ist der lokale tbx-Login statt eines CI-Tokens (E10).
  */
 import { randomUUID } from 'node:crypto';
-import { realpathSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { configPath, readJsonFile, resolveHost, tokenFetch, tokensPath } from '../cli/tbx.mjs';
@@ -219,21 +220,40 @@ export async function schreiben({ herkunft, stellen, ...zugang }) {
 
 // --- Zugang und Auftraege -------------------------------------------------------------
 
-/** Token aus `TBX_TOKEN`, sonst aus dem tbx-Login; Host aus dessen `config.json` (E10). */
-export function zugangLesen({ env = process.env, baseDir } = {}) {
+/** Token aus der Datei `toolbox.tokenFile` (relativ zum Projekt); leer oder unlesbar ist ein Fehler. */
+function projektToken(projektDir, tokenFile) {
+  let inhalt;
+  try {
+    inhalt = readFileSync(join(projektDir, tokenFile), 'utf-8').trim();
+  } catch (e) {
+    throw new Error(`toolbox.tokenFile ${tokenFile} ist nicht lesbar: ${e.message}`);
+  }
+  if (!inhalt) throw new Error(`toolbox.tokenFile ${tokenFile} ist leer.`);
+  return inhalt;
+}
+
+/**
+ * Reihenfolge wie im Kit-Adapter (Issue #1535): `TBX_TOKEN`, dann `toolbox.tokenFile` aus
+ * `.claude/workflow.config.json`, erst dann der globale tbx-Login. Host aus `toolbox.host`,
+ * sonst aus der `config.json` des tbx-Logins.
+ */
+export function zugangLesen({ env = process.env, baseDir, projektDir = process.cwd() } = {}) {
+  const toolbox = readJsonFile(join(projektDir, '.claude', 'workflow.config.json'))?.toolbox ?? {};
   const config = readJsonFile(configPath(baseDir));
-  const token = (env.TBX_TOKEN || '').trim() || (readJsonFile(tokensPath(baseDir))?.token || '').trim();
+  const token = (env.TBX_TOKEN || '').trim()
+    || (toolbox.tokenFile ? projektToken(projektDir, toolbox.tokenFile) : '')
+    || (readJsonFile(tokensPath(baseDir))?.token || '').trim();
   if (!token) {
     throw new Error('Kein Board-Token: TBX_TOKEN setzen oder per `tbx auth login` anmelden.');
   }
-  return { host: resolveHost({}, config), token };
+  return { host: toolbox.host || resolveHost({}, config), token };
 }
 
 /** Fuehrt einen Auftrag aus; wirft nie, ein Fehler wird zu `{ fehler }` mit Code 1. */
-export async function ausfuehren(eingabe, { env = process.env, baseDir, fetchImpl = fetch, jetzt = new Date() } = {}) {
+export async function ausfuehren(eingabe, { env = process.env, baseDir, projektDir, fetchImpl = fetch, jetzt = new Date() } = {}) {
   try {
     const auftrag = JSON.parse(eingabe);
-    const zugang = { ...zugangLesen({ env, baseDir }), fetchImpl };
+    const zugang = { ...zugangLesen({ env, baseDir, projektDir }), fetchImpl };
     if (auftrag?.auftrag === 'liegezeit') {
       return { code: 0, ausgabe: await liegezeit({ ...zugang, jetzt, tage: auftrag.tage ?? LIEGEZEIT_TAGE }) };
     }
