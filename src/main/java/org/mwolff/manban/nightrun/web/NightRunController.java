@@ -261,11 +261,13 @@ class NightRunController {
           "Liefert die Karten des Projekts, die für die nächste Nacht anstehen: fachliche"
               + " Anforderungen ([Fachlich]) und Pläne ([Plan]) aller nicht archivierten Boards,"
               + " die zur Übernahme durch den nächsten Runner freigegeben sind (Label kit:night)"
-              + " und die noch kein Runner übernommen hat. Je Karte kommen Nummer, Titel, Board,"
-              + " die Startstation der Kette (FACHPLAN oder PLAN), ihr Ziel (aus ziel:*, ohne"
-              + " Angabe PAKETE, mit kit:durchziehen mindestens UMSETZUNG) und die gewählte"
-              + " Prüferzahl aus planreview:*. Sortiert nach Kartennummer; leer, wenn nichts"
-              + " freigegeben ist. "
+              + " und die noch kein Runner übernommen hat. Es erscheinen nur nicht archivierte"
+              + " Karten, die in Backlog stehen — nach eigenem Status, sonst nach ihrer Spalte;"
+              + " eine Spalte ohne festen Schlüssel zählt als Backlog. Je Karte kommen Nummer,"
+              + " Titel, Board, die Startstation der Kette (FACHPLAN oder PLAN), ihr Ziel (aus"
+              + " ziel:*, ohne Angabe PAKETE, mit kit:durchziehen mindestens UMSETZUNG) und die"
+              + " gewählte Prüferzahl aus planreview:*. Sortiert nach Kartennummer; leer, wenn"
+              + " nichts freigegeben ist. "
               + LESERECHT)
   @ApiResponse(responseCode = "200", description = "Die freigegebenen Karten, nach Nummer.")
   @ApiResponse(

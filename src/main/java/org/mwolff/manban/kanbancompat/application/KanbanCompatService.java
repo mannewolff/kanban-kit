@@ -45,7 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class KanbanCompatService {
 
-  /** Kanban-Key der Backlog-Spalte; auch Fallback bei unbekannter Spalten-Zuordnung. */
+  /** Kanban-Key der Backlog-Spalte. */
   private static final String BACKLOG = "BACKLOG";
 
   /** Kanban-Key der Done-Spalte; beim Ingest ausgeschlossen (#569, E8b). */
@@ -101,7 +101,7 @@ public class KanbanCompatService {
     // sowie im Ideen-Speicher liegende Karten bereits im card-Modul heraus.
     List<BoardItemView> visible = ingest.listBoardItems(principal.userId(), boardId);
 
-    Map<Long, String> keyByColumn = keyByColumn(boardId);
+    Map<Long, String> nameByColumn = nameByColumn(boardId);
     Map<String, List<Item>> grouped = new LinkedHashMap<>();
     for (String key : COLUMNS) {
       grouped.put(key, new ArrayList<>());
@@ -111,7 +111,7 @@ public class KanbanCompatService {
         labelService.namesByCard(boardId, visible.stream().map(BoardItemView::id).toList());
 
     for (BoardItemView c : visible) {
-      String key = key(c, keyByColumn);
+      String key = key(c, nameByColumn);
       // grouped ist mit allen COLUMNS-Keys vorbelegt und key stammt aus COLUMNS;
       // requireNonNull macht das fuer NullAway explizit (Map.get liefert @Nullable).
       Objects.requireNonNull(grouped.get(key))
@@ -512,7 +512,7 @@ public class KanbanCompatService {
         card.number(),
         card.title(),
         card.description(),
-        key(card, keyByColumn(boardId)),
+        key(card, nameByColumn(boardId)),
         card.positionInColumn(),
         // Protokoll, nicht Vokabular — siehe die Erlaeuterung an der Board-Liste oben.
         card.epic() ? "epic" : "card",
@@ -522,12 +522,12 @@ public class KanbanCompatService {
   }
 
   /**
-   * Kanban-Key eines Items: bei einem Arbeitspaket sein Status, sonst der Key seiner Spalte bzw.
-   * BACKLOG für eine eigene Spalte. Ein und dieselbe Regel für Lese- und Schreibantwort.
+   * Kanban-Key eines Items nach {@link CardIngestService#kanbanSchluessel}: bei einem Arbeitspaket
+   * sein Status, sonst der Key seiner Spalte bzw. BACKLOG für eine eigene Spalte. Ein und dieselbe
+   * Regel für Lese- und Schreibantwort und für die Übersicht „Heute Nacht“ (Issue #1495).
    */
-  private static String key(BoardItemView card, Map<Long, String> keyByColumn) {
-    String status = card.status();
-    return status != null ? status : keyByColumn.getOrDefault(card.columnId(), BACKLOG);
+  private static String key(BoardItemView card, Map<Long, String> nameByColumn) {
+    return CardIngestService.kanbanSchluessel(card.status(), nameByColumn.get(card.columnId()));
   }
 
   private long requireBound(@Nullable KanbanPrincipal principal) {
@@ -536,6 +536,15 @@ public class KanbanCompatService {
     }
     // isBound() garantiert die Bindung; requireNonNull macht das fuer NullAway explizit.
     return Objects.requireNonNull(principal.boardId());
+  }
+
+  /** Bildet die Spalten-IDs des Boards auf ihren Namen ab. */
+  private Map<Long, String> nameByColumn(long boardId) {
+    Map<Long, String> map = new LinkedHashMap<>();
+    for (ColumnView c : boardService.listColumns(boardId)) {
+      map.put(c.id(), c.name());
+    }
+    return map;
   }
 
   /** Bildet Board-Spalten mit kanonischem Namen auf ihren Kanban-Key ab. */
@@ -598,25 +607,11 @@ public class KanbanCompatService {
   }
 
   /**
-   * Normalisierter Namensabgleich auf einen Kanban-Key; leer, wenn kein Treffer.
-   *
-   * <p>Wortgleich zu {@code Arbeitspaket.statusVonSpalte} im {@code card}-Modul (Plan #1294, E5):
-   * Die Doppelung erzwingt die Modulgrenze, {@code kanbancompat} darf nicht auf {@code card.domain}
-   * zugreifen. Wer die eine Seite ändert, ändert die andere mit.
+   * Normalisierter Namensabgleich auf einen Kanban-Key; leer, wenn kein Treffer. Die Regel steht im
+   * {@code card}-Modul ({@link CardIngestService#spaltenSchluessel}, Issue #1495).
    */
   static Optional<String> canonicalKey(@Nullable String columnName) {
-    if (columnName == null) {
-      return Optional.empty();
-    }
-    String n = columnName.toLowerCase(Locale.ROOT).replaceAll("[^a-z]", "");
-    return switch (n) {
-      case "backlog" -> Optional.of(BACKLOG);
-      case "ready" -> Optional.of("READY");
-      case "inprogress" -> Optional.of("IN_PROGRESS");
-      case "inreview" -> Optional.of("IN_REVIEW");
-      case "done" -> Optional.of("DONE");
-      default -> Optional.empty();
-    };
+    return CardIngestService.spaltenSchluessel(columnName);
   }
 
   // --- Response-Formen (spiegeln das tbx.mjs-Protokoll) ---------------------

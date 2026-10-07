@@ -7,12 +7,15 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardSummary;
+import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.application.CardRunQueryService.FreigabeKarteView;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -30,6 +33,9 @@ class CardRunQueryServiceFreigabenTest {
   private static final long BOARD = 2L;
   private static final long ARCHIV = 3L;
   private static final String NACHT = "kit:night";
+  private static final long SPALTE_BACKLOG = 10L;
+  private static final long SPALTE_DONE = 11L;
+  private static final long SPALTE_EIGEN = 12L;
 
   private CardRepository cards;
   private LabelRepository labels;
@@ -56,6 +62,12 @@ class CardRunQueryServiceFreigabenTest {
     when(boards.requireBoardSummary(BOARD))
         .thenReturn(new BoardSummary(BOARD, "Entwicklung", false));
     when(boards.requireBoardSummary(ARCHIV)).thenReturn(new BoardSummary(ARCHIV, "Alt", true));
+    when(boards.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                new ColumnView(SPALTE_BACKLOG, "Backlog", 0, null),
+                new ColumnView(SPALTE_DONE, "Done", 1, null),
+                new ColumnView(SPALTE_EIGEN, "Wartet", 2, null)));
     when(labels.findByBoardId(BOARD))
         .thenReturn(
             List.of(
@@ -66,15 +78,25 @@ class CardRunQueryServiceFreigabenTest {
   }
 
   private static Card karte(long id, long board, String titel) {
+    return karte(id, board, titel, SPALTE_BACKLOG, false, null);
+  }
+
+  private static Card karte(
+      long id,
+      long board,
+      String titel,
+      long spalte,
+      boolean archiviert,
+      @Nullable CardStatus status) {
     return new Card(
         id,
         board,
-        10L,
+        spalte,
         (int) id + 100,
         titel,
         null,
         0,
-        false,
+        archiviert,
         null,
         null,
         FIXED,
@@ -87,7 +109,7 @@ class CardRunQueryServiceFreigabenTest {
         null,
         null,
         null,
-        null);
+        status);
   }
 
   @Test
@@ -122,6 +144,59 @@ class CardRunQueryServiceFreigabenTest {
     assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
         .extracting(FreigabeKarteView::number)
         .containsExactly(106);
+  }
+
+  @Test
+  void eineArchivierteKarteFehlt() {
+    when(cards.findByProjectId(PROJECT))
+        .thenReturn(
+            List.of(
+                karte(5L, BOARD, "[Fachlich] A", SPALTE_BACKLOG, true, null),
+                karte(6L, BOARD, "[Fachlich] B")));
+    when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(20L)));
+
+    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+        .extracting(FreigabeKarteView::number)
+        .containsExactly(106);
+  }
+
+  @Test
+  void eineKarteMitStatusDoneFehltAuchInDerBacklogSpalte() {
+    when(cards.findByProjectId(PROJECT))
+        .thenReturn(
+            List.of(
+                karte(5L, BOARD, "Paket", SPALTE_BACKLOG, false, CardStatus.DONE),
+                karte(6L, BOARD, "Paket", SPALTE_DONE, false, CardStatus.BACKLOG)));
+    when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(20L)));
+
+    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+        .extracting(FreigabeKarteView::number)
+        .containsExactly(106);
+  }
+
+  @Test
+  void eineKarteOhneStatusInDerSpalteDoneFehlt() {
+    when(cards.findByProjectId(PROJECT))
+        .thenReturn(
+            List.of(
+                karte(5L, BOARD, "[Fachlich] A", SPALTE_DONE, false, null),
+                karte(6L, BOARD, "[Fachlich] B")));
+    when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(20L)));
+
+    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+        .extracting(FreigabeKarteView::number)
+        .containsExactly(106);
+  }
+
+  @Test
+  void eineKarteOhneStatusInEinerEigenenSpalteGiltAlsBacklog() {
+    when(cards.findByProjectId(PROJECT))
+        .thenReturn(List.of(karte(5L, BOARD, "[Plan] A", SPALTE_EIGEN, false, null)));
+    when(cardLabels.findByCardIds(List.of(5L))).thenReturn(Map.of(5L, List.of(20L)));
+
+    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+        .extracting(FreigabeKarteView::number)
+        .containsExactly(105);
   }
 
   @Test
