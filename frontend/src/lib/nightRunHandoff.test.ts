@@ -6,6 +6,7 @@ import {
   kurzGrund,
   KURZ_GRUND_MAX,
   nightRunZustandsText,
+  NIGHT_RUN_ERROR_CLASS_TEXT,
   NIGHT_RUN_STATE_TEXT,
   NIGHT_RUN_VERDICT_TEXT,
   type NightRunHandoffItem,
@@ -298,6 +299,10 @@ describe('kurzGrund — der Abbruchgrund in einer Zeile (#1144)', () => {
     )
   })
 
+  it('nimmt nach einer fuehrenden Leerzeile nur die erste nicht leere Zeile, ohne Rand', () => {
+    expect(kurzGrund('\n  Pruefungen rot  \nZweite Zeile')).toBe('Pruefungen rot')
+  })
+
   it('laesst einen Text unterhalb der Grenze unveraendert', () => {
     const grund = 'Harter Stopp (dirty-tree)'
 
@@ -321,5 +326,21 @@ describe('kurzGrund — der Abbruchgrund in einer Zeile (#1144)', () => {
   it('gibt zu leerem Text und zu lauter leeren Zeilen einen leeren Text', () => {
     expect(kurzGrund('')).toBe('')
     expect(kurzGrund('\n  \n\t\n')).toBe('')
+  })
+})
+
+/** Der Wortlaut jeder Fehlerklasse (Issue #1517) — ein leerer Text fiele sonst niemandem auf. */
+describe('NIGHT_RUN_ERROR_CLASS_TEXT — die Beschriftung je Fehlerklasse (#1517)', () => {
+  it.each([
+    ['CHECKS_RED', 'Prüfungen rot'],
+    ['CHECKS_NOT_STARTED', 'Prüfungen nicht gelaufen'],
+    ['DEPENDENCY_UNMET', 'Abhängigkeit offen'],
+    ['UNEXPECTED_STATE', 'Unerwarteter Zustand'],
+    ['HARD_ABORT', 'Harter Abbruch'],
+    ['AWAITING_DECISION', 'Wartet auf Entscheidung'],
+    ['REVIEWER_FAILED', 'Prüf-Session gescheitert'],
+    ['TIME_BUDGET_EXCEEDED', 'Zeitbudget erschöpft'],
+  ] as const)('%s heisst „%s“', (klasse, text) => {
+    expect(NIGHT_RUN_ERROR_CLASS_TEXT[klasse]).toBe(text)
   })
 })

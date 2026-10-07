@@ -2,6 +2,8 @@ package org.mwolff.manban.card.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -144,6 +146,19 @@ class CardRunQueryServiceFreigabenTest {
     assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
         .extracting(FreigabeKarteView::number)
         .containsExactly(106);
+  }
+
+  @Test
+  void dieSpaltenEinesArchiviertenBoardsWerdenNichtGelesen() {
+    when(cards.findByProjectId(PROJECT))
+        .thenReturn(List.of(karte(5L, ARCHIV, "[Plan] A"), karte(6L, BOARD, "[Plan] B")));
+    when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(20L)));
+
+    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+        .extracting(FreigabeKarteView::number)
+        .containsExactly(106);
+    verify(boards, never()).listColumns(ARCHIV);
+    verify(boards).listColumns(BOARD);
   }
 
   @Test

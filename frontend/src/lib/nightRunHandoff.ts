@@ -142,6 +142,7 @@ export function nightRunZustandsText(
   state: NightRunState,
   errorClass: NightRunErrorClass | undefined,
 ): string {
+  // Stryker disable next-line ConditionalExpression: gleichwertig — die Tabelle liefert zu undefined ebenfalls undefined
   const jeKlasse = errorClass === undefined ? undefined : NIGHT_RUN_STATE_TEXT_BY_ERROR_CLASS[errorClass]
   return jeKlasse?.[state] ?? NIGHT_RUN_STATE_TEXT[state]
 }
