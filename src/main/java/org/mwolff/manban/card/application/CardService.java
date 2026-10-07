@@ -303,6 +303,21 @@ public class CardService {
     return cardIds.stream().map(cardId -> doLabel(userId, cardId, labelId, action)).toList();
   }
 
+  /**
+   * Setzt <b>ein</b> Label an einer Karte oder nimmt es ab; die übrigen Labels bleiben unberührt.
+   * Prüfungen wie bei {@link #setLabels}, ein schon gesetztes (bzw. schon fehlendes) Label ist kein
+   * Fehler.
+   *
+   * <p><b>Warum nicht {@link #setLabels}:</b> Die ersetzende Liste baut der Aufrufer aus dem Stand,
+   * den er gerade anzeigt. Ist der veraltet, schreibt das Speichern ein inzwischen abgenommenes
+   * Label zurück — etwa ein vom Runner verbrauchtes {@code kit:night} (Issue #1512). Die
+   * Einzeländerung kann nichts zurückschreiben, was sie nicht meint.
+   */
+  @Transactional
+  public CardView changeLabel(long userId, long cardId, long labelId, LabelAction action) {
+    return doLabel(userId, cardId, labelId, action);
+  }
+
   private CardView doLabel(long userId, long cardId, long labelId, LabelAction action) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() != CardType.CARD) {

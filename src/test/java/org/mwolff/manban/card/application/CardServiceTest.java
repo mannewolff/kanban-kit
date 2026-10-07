@@ -1140,6 +1140,49 @@ class CardServiceTest {
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
 
+  // --- Ein Label an einer Karte (changeLabel, Issue #1512) ---------------
+
+  @Test
+  void changeLabel_addSetztNurDiesesLabelUndLiefertDieKarte() {
+    zweiBoardLabels();
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L)).thenReturn(List.of(7L, 9L));
+
+    CardView view = service.changeLabel(3L, 1L, 9L, LabelAction.ADD);
+
+    assertThat(view.id()).isEqualTo(1L);
+    assertThat(view.labels()).containsExactly(7L, 9L);
+    verify(permissions).require(3L, PROJECT, Permission.TICKET_UPDATE);
+    verify(cardLabels).replaceLabels(1L, List.of(7L, 9L));
+    verify(events).publishEvent(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
+  }
+
+  @Test
+  void changeLabel_removeNimmtNurDiesesLabelAb() {
+    zweiBoardLabels();
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L, 9L));
+
+    service.changeLabel(3L, 1L, 9L, LabelAction.REMOVE);
+
+    verify(cardLabels).replaceLabels(1L, List.of(7L));
+  }
+
+  @Test
+  void changeLabel_propagatesPermissionDenied() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(9L, PROJECT, Permission.TICKET_UPDATE);
+
+    assertThatThrownBy(() -> service.changeLabel(9L, 1L, 9L, LabelAction.ADD))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
   // --- Aktivitätsverlauf (card_activity) --------------------------------
 
   @Test

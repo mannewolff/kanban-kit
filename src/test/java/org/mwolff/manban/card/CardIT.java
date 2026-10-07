@@ -404,6 +404,72 @@ class CardIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.labels.length()").value(0));
   }
 
+  /**
+   * Einzelne Label-Änderung (Issue #1512): Setzen und Abnehmen berühren nur das genannte Label,
+   * wiederholt ist beides kein Fehler. Ein veralteter Stand im Frontend kann so nichts
+   * zurückschreiben, was er nicht meint.
+   */
+  @Test
+  void singleLabelAddAndRemoveTouchOnlyThatLabelAndAreIdempotent() throws Exception {
+    Cookie alice = loginAs("single-lbl-owner@example.com");
+    long projectId = createProject("single-lbl-owner@example.com", "SingleLbl");
+    JsonNode board = createBoard(alice, projectId);
+    long boardId = board.get("id").asLong();
+    long columnId = board.get("columns").get(0).get("id").asLong();
+    long c1 = createCard(alice, boardId, columnId, "Eins", null).get("id").asLong();
+    long bug = createLabel(alice, boardId, "Bug");
+    long nacht = createLabel(alice, boardId, "Nacht");
+
+    mvc.perform(post("/api/cards/" + c1 + "/labels/" + bug).cookie(alice))
+        .andExpect(status().isOk());
+    mvc.perform(post("/api/cards/" + c1 + "/labels/" + nacht).cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(c1))
+        .andExpect(jsonPath("$.labels.length()").value(2));
+    // Erneutes Setzen ändert nichts und ist kein Fehler.
+    mvc.perform(post("/api/cards/" + c1 + "/labels/" + nacht).cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.labels.length()").value(2));
+
+    mvc.perform(delete("/api/cards/" + c1 + "/labels/" + nacht).cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.labels.length()").value(1))
+        .andExpect(jsonPath("$.labels[0]").value(bug));
+    // Erneutes Abnehmen ist kein Fehler, „Bug" bleibt stehen.
+    mvc.perform(delete("/api/cards/" + c1 + "/labels/" + nacht).cookie(alice))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.labels.length()").value(1))
+        .andExpect(jsonPath("$.labels[0]").value(bug));
+  }
+
+  @Test
+  void singleLabelRejectsViewerAndForeignCard() throws Exception {
+    Cookie alice = loginAs("single-lbl-rb-owner@example.com");
+    Cookie bob = loginAs("single-lbl-rb-bob@example.com");
+    Cookie carol = loginAs("single-lbl-rb-carol@example.com");
+    long p2 = createProject("single-lbl-rb-bob@example.com", "SingleLblRb");
+    JsonNode boardB = createBoard(bob, p2);
+    long boardIdB = boardB.get("id").asLong();
+    long colB = boardB.get("columns").get(0).get("id").asLong();
+    long foreignCard = createCard(bob, boardIdB, colB, "Fremde", null).get("id").asLong();
+    long nacht = createLabel(bob, boardIdB, "Nacht");
+    mvc.perform(post("/api/cards/" + foreignCard + "/labels/" + nacht).cookie(bob))
+        .andExpect(status().isOk());
+    // alice ist in bobs Projekt nur VIEWER -> kein TICKET_UPDATE.
+    addMember(p2, "single-lbl-rb-owner@example.com", ProjectRole.VIEWER);
+
+    mvc.perform(post("/api/cards/" + foreignCard + "/labels/" + nacht).cookie(alice))
+        .andExpect(status().isForbidden());
+    mvc.perform(delete("/api/cards/" + foreignCard + "/labels/" + nacht).cookie(alice))
+        .andExpect(status().isForbidden());
+    // carol ist gar nicht Mitglied: 404, kein Existenz-Leak.
+    mvc.perform(delete("/api/cards/" + foreignCard + "/labels/" + nacht).cookie(carol))
+        .andExpect(status().isNotFound());
+
+    mvc.perform(get("/api/cards/" + foreignCard).cookie(bob))
+        .andExpect(jsonPath("$.labels.length()").value(1));
+  }
+
   @Test
   void bulkLabelsRollsBackWhenSelectionContainsEpic() throws Exception {
     Cookie alice = loginAs("bulk-lbl-epic@example.com");

@@ -29,6 +29,7 @@ import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.mwolff.manban.common.web.api.ApiVertrag;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -69,6 +70,9 @@ class CardController {
   private final EpicService epics;
 
   private static final String BESCHREIBUNG_BOARD_ID = "Interne ID des Boards.";
+
+  private static final String BESCHREIBUNG_LABEL_ID =
+      "Interne ID eines Labels des Boards der Karte.";
 
   private static final String BESCHREIBUNG_CARD_ID =
       "Interne ID der Karte (Feld id), nicht die projektweite Nummer.";
@@ -436,6 +440,83 @@ class CardController {
       @RequestBody LabelsRequest request) {
     List<Long> ids = request.labels() == null ? List.of() : request.labels();
     return cards.setLabels(userId, cardId, ids);
+  }
+
+  /** Setzt ein Label an der Karte; die übrigen Labels bleiben unberührt (Issue #1512). */
+  @Operation(
+      summary = "Ein Label an einer Karte setzen",
+      description =
+          "Setzt das Label an der Karte; die übrigen Labels bleiben unberührt. Ein schon gesetztes"
+              + " Label erneut zu setzen ist kein Fehler. Anders als das Ersetzen der ganzen Liste"
+              + " kann diese Route kein inzwischen abgenommenes Label zurückschreiben."
+              + FREIGABE_LABELS)
+  @ApiResponse(responseCode = "200", description = "Die Karte mit ihren Labels.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "Das Label gehört nicht zum Board, oder die Karte ist ein Vorhaben.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "403",
+      description = VERBOTEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description = KARTE_FEHLT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(recht = "TICKET_UPDATE")
+  @PostMapping("/api/cards/{cardId}/labels/{labelId}")
+  CardView addLabel(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = BESCHREIBUNG_CARD_ID, example = "812") @PathVariable long cardId,
+      @Parameter(description = BESCHREIBUNG_LABEL_ID, example = "9") @PathVariable long labelId) {
+    return cards.changeLabel(userId, cardId, labelId, LabelAction.ADD);
+  }
+
+  /** Nimmt ein Label von der Karte ab; die übrigen Labels bleiben unberührt (Issue #1512). */
+  @Operation(
+      summary = "Ein Label von einer Karte abnehmen",
+      description =
+          "Nimmt das Label von der Karte ab; die übrigen Labels bleiben unberührt. Ein Label"
+              + " abzunehmen, das die Karte nicht trägt, ist kein Fehler."
+              + FREIGABE_LABELS)
+  @ApiResponse(responseCode = "200", description = "Die Karte mit ihren Labels.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "Das Label gehört nicht zum Board, oder die Karte ist ein Vorhaben.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "403",
+      description = VERBOTEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description = KARTE_FEHLT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(recht = "TICKET_UPDATE")
+  @DeleteMapping("/api/cards/{cardId}/labels/{labelId}")
+  CardView removeLabel(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = BESCHREIBUNG_CARD_ID, example = "812") @PathVariable long cardId,
+      @Parameter(description = BESCHREIBUNG_LABEL_ID, example = "9") @PathVariable long labelId) {
+    return cards.changeLabel(userId, cardId, labelId, LabelAction.REMOVE);
   }
 
   /** Aktivitätsverlauf einer Karte (chronologisch, Leserecht wie Board-Ansicht). */
