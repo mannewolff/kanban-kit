@@ -424,6 +424,20 @@ class CardServiceTest {
   }
 
   @Test
+  void create_throwsInvalidDependency_whenParentEpicArchived() {
+    // Given: Ein archiviertes Vorhaben lässt sich nicht mehr zuordnen (Issue #1494, AK 5).
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.findById(30L))
+        .thenReturn(Optional.of(card(30L, 20L, 5, true, null, CardType.EPIC, null, "E")));
+
+    // When / Then
+    assertThatThrownBy(() -> service.create(1L, BOARD, 20L, "Titel", null, null, 30L))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessage("Das Vorhaben ist archiviert: 30");
+    verify(cards, never()).save(any());
+  }
+
+  @Test
   void create_throwsInvalidDependency_onSelfDependency() {
     // Given: die eigene Nummer 1 IST eine gültige Board-Nummer. So schlägt ein Umgehen des
     // Selbstbezug-Guards (Mutant) NICHT in „Unbekannte Nummer" um, sondern in einen Erfolg —
@@ -502,6 +516,39 @@ class CardServiceTest {
     // Then
     verify(cards).save(captor.capture());
     assertThat(captor.getValue().parentId()).isEqualTo(30L);
+  }
+
+  @Test
+  void update_neueZuordnungZuArchiviertemVorhaben_wirdAbgewiesen() {
+    // Given
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cards.findById(30L))
+        .thenReturn(Optional.of(card(30L, 20L, 5, true, null, CardType.EPIC, null, "E")));
+
+    // When / Then
+    assertThatThrownBy(() -> service.update(1L, 1L, "Neu", null, null, null, 30L, null))
+        .isExactlyInstanceOf(InvalidDependencyException.class)
+        .hasMessage("Das Vorhaben ist archiviert: 30");
+    verify(cards, never()).save(any());
+  }
+
+  @Test
+  void update_unveraenderteZuordnungZuArchiviertemVorhaben_wirdGespeichert() {
+    // Given: Das Formular schickt die bestehende Zuordnung im Voll-Update mit (Plan #1504, E4).
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, true, null, CardType.CARD, 30L, null)));
+    when(cards.findById(30L))
+        .thenReturn(Optional.of(card(30L, 20L, 5, true, null, CardType.EPIC, null, "E")));
+
+    // When
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.update(1L, 1L, "Neu", null, null, null, 30L, null);
+
+    // Then
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().parentId()).isEqualTo(30L);
+    assertThat(captor.getValue().title()).isEqualTo("Neu");
   }
 
   @Test

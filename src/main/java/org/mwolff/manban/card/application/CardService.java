@@ -232,7 +232,9 @@ public class CardService {
       Long effectiveParent =
           parentId == null
               ? null
-              : grundlage.requireEpicInBoard(parentId, card.boardId()).requireId();
+              : grundlage
+                  .requireZuordenbaresVorhaben(parentId, card.boardId(), card.parentId())
+                  .requireId();
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
     Card saved = cards.save(grundlage.folgeArtwechsel(card, updated));

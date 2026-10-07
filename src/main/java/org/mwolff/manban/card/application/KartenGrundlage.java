@@ -207,11 +207,27 @@ public final class KartenGrundlage {
     return card;
   }
 
-  /** Das Vorhaben zur ID, sofern es auf diesem Board liegt. */
+  /**
+   * Das Vorhaben zur ID, sofern es auf diesem Board liegt und nicht archiviert ist — ein
+   * archiviertes Vorhaben lässt sich keiner Karte mehr zuordnen (Issue #1494, AK 5).
+   */
   public Card requireEpicInBoard(long epicId, long boardId) {
+    return requireZuordenbaresVorhaben(epicId, boardId, null);
+  }
+
+  /**
+   * Wie {@link #requireEpicInBoard}, aber für eine bestehende Karte mit der Zuordnung {@code
+   * bisher}: Bleibt die Zuordnung unverändert, entfällt die Archiv-Prüfung (Plan #1504, E4). Das
+   * Bearbeiten-Formular schickt die Zuordnung im Voll-Update immer mit; ohne diese Ausnahme wäre
+   * eine Karte eines archivierten Vorhabens nicht mehr bearbeitbar.
+   */
+  public Card requireZuordenbaresVorhaben(long epicId, long boardId, @Nullable Long bisher) {
     Card epic = cards.findById(epicId).orElseThrow(CardNotFoundException::new);
     if (epic.type() != CardType.EPIC || epic.boardId() != boardId) {
       throw new InvalidDependencyException("Kein Epic dieses Boards: " + epicId);
+    }
+    if (epic.archived() && !Long.valueOf(epicId).equals(bisher)) {
+      throw new InvalidDependencyException("Das Vorhaben ist archiviert: " + epicId);
     }
     return epic;
   }

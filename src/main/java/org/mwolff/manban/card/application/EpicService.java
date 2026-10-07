@@ -207,6 +207,11 @@ public class EpicService {
    * Zugehörigkeit wird gerechnet und nirgends gespeichert (Plan #631, E1). Die Rechnung steht in
    * {@link EpicMembership}; sie filtert Archiviertes und Vorhaben selbst heraus, ohne die Kette an
    * ihnen zu kappen.
+   *
+   * <p><b>Archivierte Vorhaben fehlen</b> (Issue #1494, AK 4/AK 5): Vorhaben-Seite samt
+   * „Ausgeblendete zeigen“, die Vorhaben-Auswahl beim Anlegen und im Karten-Detail, der
+   * Board-Filter, der Leitstand und die Kanban-kompatible Strecke lesen alle diese Liste — der
+   * Filter hier deckt sie gemeinsam ab (Plan #1504, A6, E10, E11).
    */
   @Transactional(readOnly = true)
   public List<EpicView> listEpics(long userId, long boardId) {
@@ -221,7 +226,7 @@ public class EpicService {
         all.stream().collect(Collectors.toMap(Card::requireId, Function.identity()));
 
     return all.stream()
-        .filter(c -> c.type() == CardType.EPIC)
+        .filter(c -> c.type() == CardType.EPIC && !c.archived())
         .map(
             epic -> {
               Set<Card> members = membership.getOrDefault(epic.requireId(), Set.of());
@@ -270,7 +275,9 @@ public class EpicService {
     Long effective =
         parentId == null
             ? null
-            : grundlage.requireEpicInBoard(parentId, card.boardId()).requireId();
+            : grundlage
+                .requireZuordenbaresVorhaben(parentId, card.boardId(), card.parentId())
+                .requireId();
     Card saved = cards.save(card.withParent(effective));
     grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
     return sicht.view(userId, saved);
