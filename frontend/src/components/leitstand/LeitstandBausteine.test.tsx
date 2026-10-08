@@ -214,6 +214,18 @@ describe('KachelWert, KachelFuss und Kachel', () => {
     expect(screen.queryByTestId('funke')).not.toBeInTheDocument()
     expect(screen.queryByTestId(/^delta-/)).not.toBeInTheDocument()
   })
+
+  it('zeigt ohne Wert einen eigenen Leertext statt „keine Datenbasis"', () => {
+    zeige(<Kachel titel="Implementierungszeit" melder="stahl" daten={daten({ wert: null })} leerText="wird geladen" />)
+    expect(screen.getByTestId('kachel-wert')).toHaveTextContent('—')
+    expect(screen.getByText('wird geladen')).toBeInTheDocument()
+    expect(screen.queryByText('keine Datenbasis')).not.toBeInTheDocument()
+  })
+
+  it('bleibt ohne Leertext bei „keine Datenbasis"', () => {
+    zeige(<Kachel titel="Implementierungszeit" melder="stahl" daten={daten({ wert: null })} />)
+    expect(screen.getByText('keine Datenbasis')).toBeInTheDocument()
+  })
 })
 
 describe('Fuellschiene', () => {

@@ -499,16 +499,17 @@ beide Angaben stehen nebeneinander, keine ersetzt die andere.
 
 ### Was der Bereich zeigt
 
-Über den Kacheln steht der gewählte Zeitraum — **Schicht · Woche · Monat** — und daneben, aus wie
-vielen Einträgen die Zahlen stammen („*Schicht vom 17.09.2026 auf den 18.09.2026* · 2 Runs ·
-5 Sitzungen"). Die Kacheln selbst:
+Über den Kacheln steht der gewählte Zeitraum — **Schicht · Woche · Monat · Gesamt** — und daneben,
+aus wie vielen Einträgen die Zahlen stammen („*Schicht vom 17.09.2026 auf den 18.09.2026* · 2 Runs ·
+5 Sitzungen", unter „Gesamt" etwa „Gesamt · 30 Runs · 12 Sitzungen"). Alle Kacheln unter dem
+Umschalter hängen an dieser Wahl und wechseln mit ihr gemeinsam. Die Kacheln selbst:
 
 - **Eingabe-Token** mit einem Balken, der die Eingabe in **„Cache gelesen"** und **„frisch"**
   aufteilt. Der Balken beantwortet eine andere Frage als die Gattungen und wird nicht auf sie
   umgewidmet.
 - **Ausgabe-Token**, darunter der Verlauf über die Schichten des Zeitraums.
 - **Kosten**, mit dem Vergleich zum Vorzeitraum (▲/▼ und der Unterschied in Dollar).
-- **Gesamt über die Laufzeit** — siehe unten.
+- **Implementierungszeit** — siehe unten.
 
 Unter jeder Summe stehen die beiden **Anteile**: „aus Runs" und „aus interaktiven
 Sitzungen". Die Summe ist genau ihre Addition; kein Eintrag zählt in beiden.
@@ -518,12 +519,21 @@ Arbeitspaket zuzuordnen war. Er wird nicht auf die berührten Karten verteilt �
 erfände eine Genauigkeit, die niemand gemessen hat. Liegt kein gemessener Rest vor, fehlt der
 Posten ganz; eine 0 behauptete, es gäbe keinen.
 
-**Die Kachel „Gesamt über die Laufzeit"** summiert über alle aufbewahrten Runs und Sitzungen des
-Projekts und hängt nicht am gewählten Zeitraum — ein Klick auf „Woche" ändert an ihr nichts. Ihr
-Fuß nennt die **Abdeckung** dieser Summe, und zwar zweigeteilt: ab welchem Datum überhaupt ein
-Eintrag aufbewahrt ist (oder „ohne aufbewahrten Eintrag") und ab wann interaktive Sitzungen erfasst
-werden (oder „Sitzungen nicht erfasst"). Die Zahl ist damit die Summe des **Aufbewahrten**, nicht
-die des Gelebten: Was der Ringpuffer verdrängt hat, fehlt darin.
+**Die Wahl „Gesamt"** summiert über alle aufbewahrten Runs und Sitzungen des Projekts; sie ersetzt
+die frühere Kachel „Gesamt über die Laufzeit", die dauerhaft unter dem Umschalter stand. Es sind
+dieselben Kacheln wie im Zeitraum, nur ohne das, was einen Zeitraum braucht: kein Vergleich mit dem
+Vorzeitraum, kein Verlauf über die Schichten, keine Schichtzahl. Der Fuß der Kosten-Kachel nennt
+dafür die **Abdeckung** der Summe, und zwar zweigeteilt: ab welchem Datum überhaupt ein Eintrag
+aufbewahrt ist (oder „ohne aufbewahrten Eintrag") und ab wann interaktive Sitzungen erfasst werden
+(oder „Sitzungen nicht erfasst"). Die Zahl ist damit die Summe des **Aufbewahrten**, nicht die des
+Gelebten: Was der Ringpuffer verdrängt hat, fehlt darin.
+
+**Die Kachel „Implementierungszeit"** zeigt den Mittelwert, wie lange die Karten **dieses Boards**
+in Arbeit lagen, die im gewählten Zeitraum fertig wurden — nicht die der übrigen Boards, auch wenn
+der Verbrauch daneben projektweit zählt. Schicht, Woche und Monat grenzen genauso ab wie beim
+Verbrauch; unter „Gesamt" gilt der Mittelwert über alle gemessenen Karten des Boards. Der Fuß nennt,
+auf wie vielen Karten der Wert beruht. Gibt es im Zeitraum keine gemessene Karte, steht „—" mit
+„keine Datenbasis", nie 0 Minuten.
 
 ### Eine Sitzung zählt zum Zeitraum ihres Beginns
 

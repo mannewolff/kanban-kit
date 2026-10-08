@@ -2,14 +2,18 @@ import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
+import { dashboardApi, type DashboardApi, type ImplementationTime } from '../../api/dashboard'
 import {
   nightRunUsageApi,
   type NightRunUsageApi,
+  type VerbrauchAngaben,
   type VerbrauchGesamt,
+  type VerbrauchKennzahlen,
+  type VerbrauchNachtKurz,
   type VerbrauchZeitraum,
   type VerbrauchZeitraumArt,
 } from '../../api/nightRunUsage'
-import { dollar, kostenText, tokenMenge, tokenText } from '../../lib/leitstand'
+import { dollar, implementierungKachel, kostenText, tokenMenge, tokenText } from '../../lib/leitstand'
 import {
   NICHT_ERFASST_TEXT,
   TEILWEISE_ERFASST_TEXT,
@@ -23,48 +27,93 @@ import {
   type Erfassungsstand,
 } from '../../lib/verbrauchZeitraum'
 import { ETIKETT, KUPFER, KUPFER_HELL, MELDER, NUT, PLATTE, PLATTE_HOCH, RAND, SCHATTEN_NUTE, SCHATTEN_TASTE, SCHRIFT_ANZEIGE, TEXT_SCHWACH, ZAHL } from '../../theme'
-import { DeltaMarke, Funke, KACHEL_SX, KachelFuss, KachelWert } from './LeitstandBausteine'
+import { DeltaMarke, Funke, Kachel, KACHEL_SX, KachelFuss, KachelWert } from './LeitstandBausteine'
 
 /**
  * Verbrauch mit Zeitraum-Wahl (#979, Entwurf Z. 977–1017, 1340–1398): Eingabe-Token mit
- * Stapelbalken, Ausgabe-Token, Kosten. Gespeist aus `nightRunUsageApi.period` (#939).
+ * Stapelbalken, Ausgabe-Token, Kosten und Implementierungszeit. Gespeist aus
+ * `nightRunUsageApi.period` (#939) bzw. `.total` und `dashboardApi.implementationTime` (#1540).
  *
- * **Nacht · Woche · Monat.** Der Entwurf zeigt zusätzlich „Tag"; die Anwendung rechnet den Tag als
- * Nacht (Tagesgrenze 12:00, #969) — „Tag" und „Nacht" zeigten dieselben Zahlen.
+ * **Schicht · Woche · Monat · Gesamt.** Der Entwurf zeigt zusätzlich „Tag"; die Anwendung rechnet
+ * den Tag als Nacht (Tagesgrenze 12:00, #969) — „Tag" und „Nacht" zeigten dieselben Zahlen.
+ * „Gesamt" (Issue #1541) ersetzt die frühere Dauerkachel mit der Summe über die ganze Laufzeit,
+ * die neben den Zeitraum-Zahlen stand und so wirkte, als hinge sie an der Wahl. Unter „Gesamt" gelten dieselben
+ * Kacheln; es fehlen nur, was einen Zeitraum braucht: Vorzeitraum-Vergleich, Schichtverlauf und
+ * Schichtzahl. Der Fuß der Kosten nennt dann, ab wann die Summe abgedeckt ist. Die Summe wird erst
+ * bei dieser Wahl geholt.
+ *
+ * **Implementierungszeit** gilt für die Karten **dieses Boards**, die im Zeitraum fertig wurden —
+ * der Verbrauch daneben zählt projektweit. Sie wird erst geholt, wenn der Verbrauch steht, mit
+ * dessen Grenzen; unter „Gesamt" ohne Grenzen. Scheitert sie, bleiben die Verbrauchs-Kacheln
+ * stehen; scheitert der Verbrauch, entfällt sie mit.
  *
  * **Ohne Datenquelle erscheint nichts:** kein Budget („von 18,00"), kein „Cache geschrieben" und
  * keine Ersparnis durch den Zwischenspeicher — der Server kennt nur gelesene Cache-Token.
  *
  * **Beide Gattungen** (Issue #1017, #984 AK 1, 3, 4, 6): Unter der Summe jeder Kachel stehen der
  * Anteil aus Nachtläufen und der aus interaktiven Sitzungen, in der Kopfzeile die Zahl beider. Der
- * nicht zuordenbare Rest steht als Posten „ohne Karte", und daneben liegt die Summe über die ganze
- * Laufzeit. Der Stapelbalken bleibt der Anteil aus dem Zwischenspeicher — er beantwortet eine
- * andere Frage und wird nicht auf die Gattungen umgewidmet.
+ * nicht zuordenbare Rest steht als Posten „ohne Karte". Der Stapelbalken bleibt der Anteil aus dem
+ * Zwischenspeicher — er beantwortet eine andere Frage und wird nicht auf die Gattungen umgewidmet.
  */
-const ZEITRAEUME: ReadonlyArray<{ art: VerbrauchZeitraumArt; name: string }> = [
+type Wahl = VerbrauchZeitraumArt | 'TOTAL'
+
+const ZEITRAEUME: ReadonlyArray<{ art: Wahl; name: string }> = [
   { art: 'DAY', name: 'Schicht' },
   { art: 'WEEK', name: 'Woche' },
   { art: 'MONTH', name: 'Monat' },
+  { art: 'TOTAL', name: 'Gesamt' },
 ]
 
-type Zustand = { art: 'laden' } | { art: 'fehler' } | { art: 'da'; zeitraum: VerbrauchZeitraum }
-type GesamtZustand = { art: 'laden' } | { art: 'fehler' } | { art: 'da'; gesamt: VerbrauchGesamt }
+/** Was der Bereich zeigt: ein Zeitraum samt Vorzeitraum oder die Summe über alles Aufbewahrte. */
+type Ansicht = { art: 'zeitraum'; zeitraum: VerbrauchZeitraum } | { art: 'gesamt'; gesamt: VerbrauchGesamt }
+
+type Zustand = { art: 'laden' } | { art: 'fehler' } | { art: 'da'; ansicht: Ansicht }
+type ImplementierungZustand = { art: 'laden' } | { art: 'fehler' } | { art: 'da'; wert: ImplementationTime }
+
+type VerbrauchApi = Pick<NightRunUsageApi, 'period' | 'total'> & Pick<DashboardApi, 'implementationTime'>
+
+/** Ein Objekt für alle Aufrufe — ein neues je Rendern stieße den Ladeeffekt endlos neu an. */
+const STANDARD_API: VerbrauchApi = {
+  period: nightRunUsageApi.period,
+  total: nightRunUsageApi.total,
+  implementationTime: dashboardApi.implementationTime,
+}
 
 export function LeitstandVerbrauch({
   projectId,
-  api = nightRunUsageApi,
-}: Readonly<{ projectId: number; api?: Pick<NightRunUsageApi, 'period' | 'total'> }>) {
-  const [art, setArt] = useState<VerbrauchZeitraumArt>('DAY')
+  boardId,
+  api = STANDARD_API,
+}: Readonly<{ projectId: number; boardId: number; api?: VerbrauchApi }>) {
+  const [wahl, setWahl] = useState<Wahl>('DAY')
   const [zustand, setZustand] = useState<Zustand>({ art: 'laden' })
-  // Stryker disable next-line ObjectLiteral,StringLiteral: gleichwertig — der Effekt setzt vor jeder Anzeige der Lebenszeit selbst 'laden'
-  const [gesamt, setGesamt] = useState<GesamtZustand>({ art: 'laden' })
+  // Stryker disable next-line ObjectLiteral,StringLiteral: gleichwertig — der Effekt setzt vor jeder Anzeige der Kachel selbst 'laden'
+  const [implementierung, setImplementierung] = useState<ImplementierungZustand>({ art: 'laden' })
 
+  // Zweistufig: Die Implementierungszeit braucht die Grenzen, die erst der Verbrauch nennt.
   useEffect(() => {
     let aktiv = true
     setZustand({ art: 'laden' })
-    api.period(projectId, art, 0).then(
-      (zeitraum) => {
-        if (aktiv) setZustand({ art: 'da', zeitraum })
+    setImplementierung({ art: 'laden' })
+    const verbrauch: Promise<Ansicht> =
+      wahl === 'TOTAL'
+        ? api.total(projectId).then((gesamt) => ({ art: 'gesamt', gesamt }))
+        : api.period(projectId, wahl, 0).then((zeitraum) => ({ art: 'zeitraum', zeitraum }))
+    verbrauch.then(
+      (ansicht) => {
+        if (!aktiv) return
+        setZustand({ art: 'da', ansicht })
+        const grenzen =
+          ansicht.art === 'zeitraum'
+            ? { from: ansicht.zeitraum.current.from, to: ansicht.zeitraum.current.to }
+            : undefined
+        api.implementationTime(boardId, grenzen).then(
+          (wert) => {
+            if (aktiv) setImplementierung({ art: 'da', wert })
+          },
+          () => {
+            if (aktiv) setImplementierung({ art: 'fehler' })
+          },
+        )
       },
       () => {
         if (aktiv) setZustand({ art: 'fehler' })
@@ -73,26 +122,7 @@ export function LeitstandVerbrauch({
     return () => {
       aktiv = false
     }
-  }, [api, projectId, art])
-
-  // Die Lebenszeit-Summe hängt nicht am gewählten Zeitraum (Issue #1014) und wird deshalb nur beim
-  // Wechsel des Projekts neu geholt — ein Klick auf „Woche" ändert an ihr nichts.
-  useEffect(() => {
-    let aktiv = true
-    setGesamt({ art: 'laden' })
-    api.total(projectId).then(
-      (wert) => {
-        if (aktiv) setGesamt({ art: 'da', gesamt: wert })
-      },
-      () => {
-        // Stryker disable next-line ObjectLiteral,StringLiteral: gleichwertig — die Lebenszeit unterscheidet nur 'laden' von allem anderen
-        if (aktiv) setGesamt({ art: 'fehler' })
-      },
-    )
-    return () => {
-      aktiv = false
-    }
-  }, [api, projectId])
+  }, [api, projectId, boardId, wahl])
 
   return (
     <Box component="section" aria-labelledby="verbrauch-titel" sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -106,7 +136,7 @@ export function LeitstandVerbrauch({
         </Box>
         {zustand.art === 'da' && (
           <Box component="span" data-testid="verbrauch-umfang" sx={{ fontSize: 11.5, color: TEXT_SCHWACH }}>
-            {`${zeitraumBeschriftung(zustand.zeitraum.current)} · ${laeufeText(zustand.zeitraum.current.nightRunCount)} · ${sitzungenText(zustand.zeitraum.current.interactiveRunCount)}`}
+            {umfangText(zustand.ansicht)}
           </Box>
         )}
         <Box
@@ -115,12 +145,12 @@ export function LeitstandVerbrauch({
           sx={{ ml: 'auto', display: 'inline-flex', gap: '3px', p: '3px', bgcolor: NUT, border: `1px solid ${RAND}`, borderRadius: '9px', boxShadow: SCHATTEN_NUTE }}
         >
           {ZEITRAEUME.map((z) => {
-            const gewaehlt = z.art === art
+            const gewaehlt = z.art === wahl
             return (
               <ButtonBase
                 key={z.art}
                 aria-pressed={gewaehlt}
-                onClick={() => setArt(z.art)}
+                onClick={() => setWahl(z.art)}
                 sx={{
                   ...ZAHL,
                   fontSize: 11,
@@ -142,22 +172,86 @@ export function LeitstandVerbrauch({
 
       {zustand.art === 'laden' && <Typography color="text.secondary">Der Verbrauch wird geladen …</Typography>}
       {zustand.art === 'fehler' && <Typography color="text.secondary">Der Verbrauch konnte nicht geladen werden.</Typography>}
-      {zustand.art === 'da' && <VerbrauchKacheln zeitraum={zustand.zeitraum} gesamt={gesamt} />}
+      {zustand.art === 'da' && <VerbrauchKacheln {...kachelWerte(zustand.ansicht)} implementierung={implementierung} />}
     </Box>
   )
 }
 
+/** Kopfzeile: der Zeitraum bzw. „Gesamt", dahinter Läufe und Sitzungen (Issue #1541, E3). */
+function umfangText(ansicht: Ansicht): string {
+  const { titel, zaehlung } =
+    ansicht.art === 'zeitraum'
+      ? { titel: zeitraumBeschriftung(ansicht.zeitraum.current), zaehlung: ansicht.zeitraum.current }
+      : { titel: 'Gesamt', zaehlung: ansicht.gesamt }
+  return `${titel} · ${laeufeText(zaehlung.nightRunCount)} · ${sitzungenText(zaehlung.interactiveRunCount)}`
+}
+
+/** Die Größen, die Zeitraum und „Gesamt" gemeinsam haben. */
+type Gemeinsam = Pick<VerbrauchKennzahlen, 'cardCount' | 'usage' | 'usageByKind'>
+
+/** Was nur ein Zeitraum hat: Vorzeitraum zum Vergleich und die Schichten darin. */
+interface Zeitbezug {
+  vorher: VerbrauchAngaben
+  schichten: VerbrauchNachtKurz[]
+}
+
+interface KachelWerte {
+  werte: Gemeinsam
+  stand: Erfassungsstand
+  hinweis: string | null
+  zeitbezug?: Zeitbezug
+  abdeckung?: string
+}
+
+function kachelWerte(ansicht: Ansicht): KachelWerte {
+  if (ansicht.art === 'zeitraum') {
+    const { current, previous, nights } = ansicht.zeitraum
+    return {
+      werte: current,
+      stand: erfassungsstand(current),
+      hinweis: zeitraumHinweis(current),
+      zeitbezug: { vorher: previous.usage.total, schichten: nights },
+    }
+  }
+  const { gesamt } = ansicht
+  return {
+    werte: gesamt,
+    // Stryker disable next-line StringLiteral: gleichwertig — Anteile unterscheidet nur 'nicht-erfasst' und 'teilweise-erfasst'
+    stand: gesamt.interactiveUsageSince === null ? 'nicht-erfasst' : 'erfasst',
+    hinweis: null,
+    abdeckung: abdeckungText(gesamt),
+  }
+}
+
+/**
+ * Ab wann die Summe über alles Aufbewahrte reicht (Issue #1014, #984 AK 4): Der älteste
+ * aufbewahrte Eintrag zeigt, was der Ringpuffer verdrängt hat, der Erfassungsbeginn trennt davon
+ * die Zeit, in der noch keine Sitzung gemeldet wurde.
+ */
+function abdeckungText(gesamt: VerbrauchGesamt): string {
+  return [
+    gesamt.oldestRetainedRunStart === null
+      ? 'ohne aufbewahrten Eintrag'
+      : `ab ${zeitpunktDatum(gesamt.oldestRetainedRunStart)}`,
+    gesamt.interactiveUsageSince === null
+      ? `Sitzungen ${NICHT_ERFASST_TEXT}`
+      : `Sitzungen ab ${zeitpunktDatum(gesamt.interactiveUsageSince)}`,
+  ].join(' · ')
+}
+
 function VerbrauchKacheln({
-  zeitraum,
-  gesamt,
-}: Readonly<{ zeitraum: VerbrauchZeitraum; gesamt: GesamtZustand }>) {
-  const hinweis = zeitraumHinweis(zeitraum.current)
-  const summe = zeitraum.current.usage.total
-  const { night, interactive } = zeitraum.current.usageByKind
-  const stand = erfassungsstand(zeitraum.current)
+  werte,
+  stand,
+  hinweis,
+  zeitbezug,
+  abdeckung,
+  implementierung,
+}: Readonly<KachelWerte & { implementierung: ImplementierungZustand }>) {
+  const summe = werte.usage.total
+  const { night, interactive } = werte.usageByKind
   const eingabe = tokenMenge(summe.inputTokens)
   const ausgabe = tokenMenge(summe.outputTokens)
-  const karten = zeitraum.current.cardCount
+  const karten = werte.cardCount
   const gelesen = summe.cachedInputTokens
   // Eine Bedingung für die ganze Aufteilung (Issue #1281): Vorher prüften `frisch`, der Anteil und
   // die Anzeige je für sich, und die doppelten Prüfungen waren von außen nicht zu unterscheiden.
@@ -165,11 +259,12 @@ function VerbrauchKacheln({
     summe.inputTokens && gelesen !== null
       ? { gelesen, frisch: summe.inputTokens - gelesen, anteil: Math.round((gelesen / summe.inputTokens) * 100) }
       : null
-  const ausgabeVerlauf = zeitraum.nights
+  const ausgabeVerlauf = (zeitbezug?.schichten ?? [])
     .map((nacht) => nacht.usage.total.outputTokens)
     .filter((wert): wert is number => wert !== null)
-  const vergleich = vergleichMitVorzeitraum(summe, zeitraum.previous.usage.total)
-  const ohneKarte = kostenText(zeitraum.current.usage.remainder.costUsd)
+  const vergleich = zeitbezug ? vergleichMitVorzeitraum(summe, zeitbezug.vorher) : null
+  const ohneKarte = kostenText(werte.usage.remainder.costUsd)
+  const jeVorgang = summe.costUsd !== null && karten > 0 ? `${kostenText(summe.costUsd / karten)} je Vorgang` : ''
 
   return (
     <>
@@ -179,7 +274,7 @@ function VerbrauchKacheln({
         role="group"
         sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))', lg: 'repeat(4, minmax(0,1fr))' }, gap: '14px', perspective: '1100px' }}
       >
-        <Box component="article" aria-label="Eingabe-Token" sx={{ ...KACHEL_SX, gridColumn: { sm: 'span 2' } }}>
+        <Box component="article" aria-label="Eingabe-Token" sx={{ ...KACHEL_SX, gridColumn: { sm: 'span 2', lg: 'auto' } }}>
           <Box sx={ETIKETT}>Eingabe-Token</Box>
           <KachelWert
             wert={eingabe?.wert ?? null}
@@ -220,7 +315,7 @@ function VerbrauchKacheln({
                 <DeltaMarke art="neutral">{`${tokenText(Math.round(summe.outputTokens / karten))} je Vorgang`}</DeltaMarke>
               ) : undefined
             }
-            basis={zeitraum.nights.length === 1 ? '1 Schicht' : `${zeitraum.nights.length} Schichten`}
+            basis={zeitbezug ? schichtenText(zeitbezug.schichten.length) : ''}
           />
         </Box>
 
@@ -240,67 +335,52 @@ function VerbrauchKacheln({
           )}
           <KachelFuss
             delta={
-              vergleich.richtung === 'teurer' || vergleich.richtung === 'billiger' ? (
+              zeitbezug && (vergleich?.richtung === 'teurer' || vergleich?.richtung === 'billiger') ? (
                 <Box component="span" title={vergleich.text}>
                   <DeltaMarke art={vergleich.richtung === 'billiger' ? 'gut' : 'schlecht'}>
-                    {`${vergleich.richtung === 'billiger' ? '▼' : '▲'} ${dollar(Math.abs(summe.costUsd! - zeitraum.previous.usage.total.costUsd!))} $`}
+                    {`${vergleich.richtung === 'billiger' ? '▼' : '▲'} ${dollar(Math.abs(summe.costUsd! - zeitbezug.vorher.costUsd!))} $`}
                   </DeltaMarke>
                 </Box>
               ) : undefined
             }
-            basis={summe.costUsd !== null && karten > 0 ? `${kostenText(summe.costUsd / karten)} je Vorgang` : ''}
+            basis={jeVorgang}
           />
+          {/* Unter „Gesamt" sagt der Fuß, ab wann die Summe reicht (Issue #1541, E2). */}
+          {abdeckung !== undefined && <KachelFuss basis={abdeckung} />}
         </Box>
 
-        <Lebenszeit zustand={gesamt} />
+        <ImplementierungKachel zustand={implementierung} />
       </Box>
     </>
+  )
+}
+
+/** „1 Schicht" bzw. „n Schichten". */
+function schichtenText(anzahl: number): string {
+  return anzahl === 1 ? '1 Schicht' : `${anzahl} Schichten`
+}
+
+/**
+ * Die Implementierungszeit des gewählten Zeitraums (Issue #1541, #1537 AK 4–6). Bis zur Antwort
+ * und nach einem Fehler steht nur der Leerstrich mit seinem Grund, ohne Kartenzahl im Fuß — eine
+ * „0 Karten" behauptete eine Antwort, die es nicht gab.
+ */
+function ImplementierungKachel({ zustand }: Readonly<{ zustand: ImplementierungZustand }>) {
+  const daten =
+    zustand.art === 'da'
+      ? implementierungKachel(zustand.wert.avgImplementationSeconds, zustand.wert.implementationSampleCount)
+      : { ...implementierungKachel(null, 0), basis: '' }
+  const leerText = { laden: 'wird geladen', fehler: 'nicht geladen', da: undefined }[zustand.art]
+  return (
+    <Box sx={{ display: 'grid', gridColumn: { sm: 'span 2', lg: 'auto' } }}>
+      <Kachel titel="Implementierungszeit" daten={daten} melder="stahl" leerText={leerText} />
+    </Box>
   )
 }
 
 /** Eine Token-Menge als Zeilentext; `null` bleibt `null` — nicht gemessen ist nicht 0. */
 function mengeText(anzahl: number | null): string | null {
   return anzahl === null ? null : tokenText(anzahl)
-}
-
-/**
- * Die Summe über die ganze Laufzeit (Issue #1014, #984 AK 4). Der Fuß nennt, ab wann sie abgedeckt
- * ist: Der älteste aufbewahrte Eintrag zeigt, was der Ringpuffer verdrängt hat, der
- * Erfassungsbeginn trennt davon die Zeit, in der noch keine Sitzung gemeldet wurde.
- */
-function Lebenszeit({ zustand }: Readonly<{ zustand: GesamtZustand }>) {
-  const gesamt = zustand.art === 'da' ? zustand.gesamt : null
-  const summe = gesamt?.usage.total.costUsd ?? null
-  const abdeckung =
-    gesamt === null
-      ? ''
-      : [
-          gesamt.oldestRetainedRunStart === null
-            ? 'ohne aufbewahrten Eintrag'
-            : `ab ${zeitpunktDatum(gesamt.oldestRetainedRunStart)}`,
-          gesamt.interactiveUsageSince === null
-            ? `Sitzungen ${NICHT_ERFASST_TEXT}`
-            : `Sitzungen ab ${zeitpunktDatum(gesamt.interactiveUsageSince)}`,
-        ].join(' · ')
-  return (
-    <Box component="article" aria-label="Gesamt über die Laufzeit" sx={{ ...KACHEL_SX, gridColumn: { sm: 'span 2', lg: 'auto' } }}>
-      <Box sx={ETIKETT}>Gesamt über die Laufzeit</Box>
-      <KachelWert
-        wert={summe === null ? null : dollar(summe)}
-        einheit="$"
-        leerText={zustand.art === 'laden' ? 'wird geladen' : 'nicht geladen'}
-      />
-      {gesamt !== null && (
-        <Anteile
-          nacht={kostenText(gesamt.usageByKind.night.total.costUsd)}
-          sitzungen={kostenText(gesamt.usageByKind.interactive.total.costUsd)}
-          // Stryker disable next-line StringLiteral: gleichwertig — Anteile unterscheidet nur 'nicht-erfasst' und 'teilweise-erfasst'
-          stand={gesamt.interactiveUsageSince === null ? 'nicht-erfasst' : 'erfasst'}
-        />
-      )}
-      <KachelFuss basis={abdeckung} />
-    </Box>
-  )
 }
 
 /**

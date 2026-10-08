@@ -344,12 +344,20 @@ export function KachelFuss({ delta, basis }: Readonly<{ delta?: ReactNode; basis
   )
 }
 
-/** Eine Kennzahl-Kachel aus der Rechnung in `lib/leitstand.ts`. */
-export function Kachel({ titel, daten, melder }: Readonly<{ titel: string; daten: KachelDaten; melder: Melder | 'kupfer' }>) {
+/**
+ * Eine Kennzahl-Kachel aus der Rechnung in `lib/leitstand.ts`. `leerText` ersetzt „keine
+ * Datenbasis" neben dem Leerstrich, etwa solange der Wert noch geladen wird.
+ */
+export function Kachel({
+  titel,
+  daten,
+  melder,
+  leerText,
+}: Readonly<{ titel: string; daten: KachelDaten; melder: Melder | 'kupfer'; leerText?: string }>) {
   return (
     <Box component="article" aria-label={titel} sx={KACHEL_SX}>
       <Box sx={ETIKETT}>{titel}</Box>
-      <KachelWert wert={daten.wert} einheit={daten.einheit} />
+      <KachelWert wert={daten.wert} einheit={daten.einheit} leerText={leerText} />
       {daten.verlauf && <Funke werte={daten.verlauf} melder={melder} />}
       <KachelFuss
         delta={daten.delta && <DeltaMarke art={daten.delta.art}>{daten.delta.text}</DeltaMarke>}

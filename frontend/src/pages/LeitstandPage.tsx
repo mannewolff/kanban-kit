@@ -73,9 +73,10 @@ import {
  * Die Platte „Liegengeblieben" des Entwurfs entfällt (Manne, 2026-09-17, #983) — die Kennzahl
  * `outliers` bleibt im Backend, wird hier aber nicht mehr dargestellt.
  *
- * **Kein neuer Endpunkt.** Gespeist aus Board, Kennzahlen, Vorhaben, aufbewahrten Läufen,
- * Häufigkeit der Fehlerklassen und Verbrauch. Die Verweildauer je Spalte gehört nicht in den
- * Leitstand (Manne, 2026-09-16).
+ * **Gespeist aus** Board, Kennzahlen, Vorhaben, aufbewahrten Läufen, Häufigkeit der
+ * Fehlerklassen und Verbrauch; dazu die Implementierungszeit je Zeitraum aus dem Abruf
+ * `/dashboard/implementation-time` (Issue #1540, #1541). Die Verweildauer je Spalte gehört nicht
+ * in den Leitstand (Manne, 2026-09-16).
  *
  * **Die Läufe sieht nur, wer sie auch auf der Nachtlauf-Seite sieht** (Owner-Recht im Backend).
  * Ohne das Recht entfallen Laufband, Nachtlauf-Kachel, Verbrauch, Letzter Lauf und Abbruchgründe
@@ -108,7 +109,9 @@ export function LeitstandPage() {
 
       <KennzahlenBereich kpis={kpis} liste={liste} />
 
-      {projectId !== null && liste !== null && <LeitstandVerbrauch projectId={projectId} />}
+      {board.art === 'da' && liste !== null && (
+        <LeitstandVerbrauch projectId={board.wert.projectId} boardId={board.wert.id} />
+      )}
 
       {juengster && <Herkunft lauf={juengster} />}
 

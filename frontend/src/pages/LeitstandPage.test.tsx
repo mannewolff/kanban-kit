@@ -13,7 +13,7 @@ import { LeitstandPage } from './LeitstandPage'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
-vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
@@ -39,6 +39,7 @@ vi.mock('../components/CardDetailModal', () => ({
 const m = {
   board: boardsApi.get as ReturnType<typeof vi.fn>,
   kpis: dashboardApi.get as ReturnType<typeof vi.fn>,
+  implementierung: dashboardApi.implementationTime as ReturnType<typeof vi.fn>,
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
@@ -80,6 +81,7 @@ const kpis = (extra: Partial<BoardDashboardKpis> = {}): BoardDashboardKpis => ({
   leadTimeSampleCount: 86,
   avgImplementationSeconds: 53_280,
   implementationSampleCount: 61,
+  implementationWeekly: [],
   outliers: [{ cardId: 9, number: 846, title: 'Kartenverlauf als Zeitstrahl', columnName: 'Review', dwellSeconds: 14 * 86_400 }],
   ...extra,
 })
@@ -232,6 +234,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.board.mockResolvedValue({ id: 1, name: 'Entwicklung', projectId: 5, columns: [] })
   m.kpis.mockResolvedValue(kpis())
+  m.implementierung.mockResolvedValue({ avgImplementationSeconds: 5400, implementationSampleCount: 4 })
   m.epics.mockResolvedValue([epic(1, 'Nachtlauf-Auswertung', 7, 9, [917]), epic(2, 'Erledigt', 3, 3)])
   m.laeufe.mockResolvedValue([lauf({ id: 1, startedAt: '2026-09-10T21:00:00Z', items: [paket(1, 'GREEN')] }), lauf()])
   m.klassen.mockResolvedValue({ CHECKS_RED: 11, AWAITING_DECISION: 7 })
@@ -561,6 +564,14 @@ describe('LeitstandPage — Verbrauch', () => {
       'Schicht vom 14.09.2026 auf den 15.09.2026 · 1 Run · 0 Sitzungen',
     )
     expect(m.verbrauch).toHaveBeenCalledWith(5, 'DAY', 0)
+  })
+
+  it('zeigt die Implementierungszeit des Zeitraums für dieses Board', async () => {
+    renderPage()
+    const verbrauch = await screen.findByRole('group', { name: 'Verbrauch des Zeitraums' })
+    const kachelImpl = within(verbrauch).getByRole('article', { name: 'Implementierungszeit' })
+    await waitFor(() => expect(kachelImpl).toHaveTextContent('1,5Stunden'))
+    expect(m.implementierung).toHaveBeenCalledWith(1, { from: '', to: '' })
   })
 
   it('wechselt den Zeitraum und zeigt dort den Verlauf der Ausgabe', async () => {
