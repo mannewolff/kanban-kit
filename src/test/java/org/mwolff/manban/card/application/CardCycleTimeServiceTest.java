@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,6 +28,7 @@ import org.mwolff.manban.card.domain.CardColumnTransition;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectNotFoundException;
 import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Dashboard-Aggregation (Ports gemockt, feste Uhr). */
@@ -123,6 +126,8 @@ class CardCycleTimeServiceTest {
     assertThat(kpis.implementationSampleCount()).isZero();
     assertThat(kpis.throughput()).hasSize(12);
     assertThat(kpis.throughput()).allSatisfy(w -> assertThat(w.doneCount()).isZero());
+    assertThat(kpis.implementationWeekly()).hasSize(12);
+    assertThat(kpis.implementationWeekly()).allSatisfy(w -> assertThat(w.sampleCount()).isZero());
   }
 
   @Test
@@ -325,6 +330,160 @@ class CardCycleTimeServiceTest {
     assertThat(out.get(1).dwellSeconds()).isEqualTo(700_000L);
     assertThat(out.get(1).columnName()).isEqualTo("Backlog");
     assertThat(out).noneSatisfy(o -> assertThat(o.dwellSeconds()).isEqualTo(THRESHOLD));
+  }
+
+  // --- Implementierungszeit je Woche und je Zeitraum (Issue #1540, Plan #1539) --------------
+
+  /** Eine erledigte Karte mit genau einem abgeschlossenen In-Progress-Aufenthalt. */
+  private static List<CardColumnTransition> progress(long cardId, long seconds) {
+    return List.of(tr(cardId, 21L, "In progress", NOW.minusSeconds(20 * WEEK), seconds));
+  }
+
+  private void stubMeasured(List<Card> boardCards, List<CardColumnTransition> trans) {
+    stub(boardCards, trans, List.of(col(21L, "In progress", 0)));
+  }
+
+  @Test
+  void implementationWeekly_usesTheThroughputWindows_andAveragesPerWeek() {
+    List<CardColumnTransition> trans = new ArrayList<>();
+    trans.addAll(progress(1L, 600L));
+    trans.addAll(progress(2L, 1800L));
+    trans.addAll(progress(3L, 3600L));
+    trans.addAll(progress(4L, 9000L));
+    stubMeasured(
+        List.of(
+            card(1L, 22L, 1, "jetzt", NOW.minusSeconds(99), NOW),
+            card(2L, 22L, 2, "jetzt2", NOW.minusSeconds(99), NOW.minusSeconds(3600)),
+            card(3L, 22L, 3, "elf", NOW.minusSeconds(99), NOW.minusSeconds(11 * WEEK + 3600)),
+            card(4L, 22L, 4, "zwoelf", NOW.minusSeconds(99), NOW.minusSeconds(12 * WEEK))),
+        trans);
+
+    BoardDashboardKpis kpis = service.dashboard(5L, BOARD);
+    List<BoardDashboardKpis.WeeklyImplementation> weeks = kpis.implementationWeekly();
+
+    assertThat(weeks).hasSize(12);
+    assertThat(weeks)
+        .extracting(BoardDashboardKpis.WeeklyImplementation::weekStart)
+        .containsExactlyElementsOf(
+            kpis.throughput().stream()
+                .map(BoardDashboardKpis.WeeklyThroughput::weekStart)
+                .toList());
+    assertThat(weeks.get(11).avgImplementationSeconds()).isEqualTo(1200L);
+    assertThat(weeks.get(11).sampleCount()).isEqualTo(2);
+    assertThat(weeks.get(0).avgImplementationSeconds()).isEqualTo(3600L);
+    assertThat(weeks.get(0).sampleCount()).isEqualTo(1);
+    // Genau zwölf Wochen alt liegt außerhalb der Fenster, wie beim Durchsatz.
+    assertThat(weeks.stream().mapToInt(BoardDashboardKpis.WeeklyImplementation::sampleCount).sum())
+        .isEqualTo(3);
+  }
+
+  @Test
+  void implementationWeekly_weekWithoutMeasurementIsNullWithZeroSamples() {
+    stubMeasured(
+        List.of(
+            card(1L, 22L, 1, "gemessen", NOW.minusSeconds(99), NOW),
+            card(2L, 22L, 2, "ohneProgress", NOW.minusSeconds(99), NOW.minusSeconds(2 * WEEK))),
+        progress(1L, 600L));
+
+    List<BoardDashboardKpis.WeeklyImplementation> weeks =
+        service.dashboard(5L, BOARD).implementationWeekly();
+
+    // Karte 2 wurde in Woche 9 fertig, lag aber nie in In Progress — die Woche bleibt leer.
+    assertThat(weeks.get(9).avgImplementationSeconds()).isNull();
+    assertThat(weeks.get(9).sampleCount()).isZero();
+    assertThat(weeks.get(11).avgImplementationSeconds()).isEqualTo(600L);
+    assertThat(weeks.subList(0, 11))
+        .allSatisfy(
+            w -> {
+              assertThat(w.avgImplementationSeconds()).isNull();
+              assertThat(w.sampleCount()).isZero();
+            });
+  }
+
+  @Test
+  void implementationTime_requiresMembership() {
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(() -> service.implementationTime(5L, BOARD, null, null))
+        .isInstanceOf(ProjectNotFoundException.class);
+  }
+
+  @Test
+  void implementationTime_withoutBounds_equalsTheDashboardAverage() {
+    List<CardColumnTransition> trans = new ArrayList<>();
+    trans.addAll(progress(1L, 600L));
+    trans.addAll(progress(2L, 1801L));
+    stubMeasured(
+        List.of(
+            card(1L, 22L, 1, "a", NOW.minusSeconds(99), NOW),
+            card(2L, 22L, 2, "alt", NOW.minusSeconds(99), NOW.minusSeconds(40 * WEEK)),
+            card(3L, 22L, 3, "offen", NOW.minusSeconds(99), null)),
+        trans);
+
+    ImplementationTimeView view = service.implementationTime(5L, BOARD, null, null);
+    BoardDashboardKpis kpis = service.dashboard(5L, BOARD);
+
+    verify(permissions, times(2)).requireMembership(5L, PROJECT);
+    assertThat(view.avgImplementationSeconds())
+        .isEqualTo(kpis.avgImplementationSeconds())
+        .isEqualTo(1201L);
+    assertThat(view.implementationSampleCount())
+        .isEqualTo(kpis.implementationSampleCount())
+        .isEqualTo(2);
+  }
+
+  @Test
+  void implementationTime_countsFromInclusiveAndToExclusive() {
+    Instant from = NOW.minusSeconds(3 * WEEK);
+    Instant to = NOW.minusSeconds(WEEK);
+    List<CardColumnTransition> trans = new ArrayList<>();
+    trans.addAll(progress(1L, 600L));
+    trans.addAll(progress(2L, 1200L));
+    trans.addAll(progress(3L, 9999L));
+    trans.addAll(progress(4L, 7777L));
+    stubMeasured(
+        List.of(
+            card(1L, 22L, 1, "aufFrom", NOW.minusSeconds(99), from),
+            card(2L, 22L, 2, "kurzVorTo", NOW.minusSeconds(99), to.minusSeconds(1)),
+            card(3L, 22L, 3, "aufTo", NOW.minusSeconds(99), to),
+            card(4L, 22L, 4, "vorFrom", NOW.minusSeconds(99), from.minusSeconds(1))),
+        trans);
+
+    ImplementationTimeView view = service.implementationTime(5L, BOARD, from, to);
+
+    assertThat(view.avgImplementationSeconds()).isEqualTo(900L);
+    assertThat(view.implementationSampleCount()).isEqualTo(2);
+  }
+
+  @Test
+  void implementationTime_withoutMeasurementInPeriod_isNullWithZeroSamples() {
+    stubMeasured(
+        List.of(
+            card(1L, 22L, 1, "gemessen", NOW.minusSeconds(99), NOW.minusSeconds(5 * WEEK)),
+            card(2L, 22L, 2, "ohneProgress", NOW.minusSeconds(99), NOW.minusSeconds(3600))),
+        progress(1L, 600L));
+
+    ImplementationTimeView view =
+        service.implementationTime(5L, BOARD, NOW.minusSeconds(WEEK), NOW);
+
+    assertThat(view.avgImplementationSeconds()).isNull();
+    assertThat(view.implementationSampleCount()).isZero();
+  }
+
+  @Test
+  void implementationTime_rejectsHalfBounds() {
+    assertThatThrownBy(() -> service.implementationTime(5L, BOARD, NOW, null))
+        .isInstanceOf(InvalidPeriodBoundsException.class);
+    assertThatThrownBy(() -> service.implementationTime(5L, BOARD, null, NOW))
+        .isInstanceOf(InvalidPeriodBoundsException.class);
+  }
+
+  @Test
+  void implementationTime_rejectsFromNotBeforeTo() {
+    assertThatThrownBy(() -> service.implementationTime(5L, BOARD, NOW, NOW))
+        .isInstanceOf(InvalidPeriodBoundsException.class);
+    assertThatThrownBy(() -> service.implementationTime(5L, BOARD, NOW, NOW.minusSeconds(1)))
+        .isInstanceOf(InvalidPeriodBoundsException.class);
   }
 
   // --- Statuswechsel speist den Aufenthaltsverlauf (Issue #1300, Plan #1294 E25) -------------

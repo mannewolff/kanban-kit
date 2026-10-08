@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +14,7 @@ class BoardDashboardKpisTest {
   private static BoardDashboardKpis kpis(
       Long avgLead, int leadSamples, Long avgImplementation, int implementationSamples) {
     return new BoardDashboardKpis(
+        List.of(),
         List.of(),
         List.of(),
         avgLead,
@@ -72,6 +74,68 @@ class BoardDashboardKpisTest {
   @Test
   void rejects_negativeImplementationSampleCount() {
     assertThatThrownBy(() -> kpis(null, 0, 200L, -1))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("implementationSampleCount");
+  }
+
+  @Test
+  void weeklyImplementation_acceptsAverageWithSamples_andEmptyWeek() {
+    Instant start = Instant.parse("2026-07-06T00:00:00Z");
+
+    assertThatCode(() -> new BoardDashboardKpis.WeeklyImplementation(start, 600L, 2))
+        .doesNotThrowAnyException();
+    BoardDashboardKpis.WeeklyImplementation empty =
+        new BoardDashboardKpis.WeeklyImplementation(start, null, 0);
+
+    assertThat(empty.avgImplementationSeconds()).isNull();
+    assertThat(empty.sampleCount()).isZero();
+  }
+
+  @Test
+  void weeklyImplementation_rejectsAverageWithoutSamples() {
+    Instant start = Instant.parse("2026-07-06T00:00:00Z");
+
+    assertThatThrownBy(() -> new BoardDashboardKpis.WeeklyImplementation(start, 600L, 0))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("weeklyImplementation");
+  }
+
+  @Test
+  void weeklyImplementation_rejectsSamplesWithoutAverage() {
+    Instant start = Instant.parse("2026-07-06T00:00:00Z");
+
+    assertThatThrownBy(() -> new BoardDashboardKpis.WeeklyImplementation(start, null, 3))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("weeklyImplementation");
+  }
+
+  @Test
+  void weeklyImplementation_rejectsNegativeSampleCount() {
+    Instant start = Instant.parse("2026-07-06T00:00:00Z");
+
+    assertThatThrownBy(() -> new BoardDashboardKpis.WeeklyImplementation(start, 600L, -1))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("weeklyImplementationSampleCount");
+  }
+
+  @Test
+  void implementationTimeView_acceptsAverageWithSamples_andEmptyPeriod() {
+    assertThatCode(() -> new ImplementationTimeView(900L, 2)).doesNotThrowAnyException();
+    ImplementationTimeView empty = new ImplementationTimeView(null, 0);
+
+    assertThat(empty.avgImplementationSeconds()).isNull();
+    assertThat(empty.implementationSampleCount()).isZero();
+  }
+
+  @Test
+  void implementationTimeView_rejectsContradictingAverageAndSamples() {
+    assertThatThrownBy(() -> new ImplementationTimeView(900L, 0))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("implementation");
+    assertThatThrownBy(() -> new ImplementationTimeView(null, 1))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("implementation");
+    assertThatThrownBy(() -> new ImplementationTimeView(900L, -1))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("implementationSampleCount");
   }
