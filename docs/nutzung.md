@@ -252,17 +252,28 @@ Von oben nach unten führt er:
    [Verbrauch (Leitstand)](#verbrauch-leitstand).
 4. **Herkunft** — eine Zeile zum jüngsten Run: ob er eingeliefert oder im Browser hochgeladen
    wurde, dazu der Name des Tokens, die Zahl der Vorgänge und die der ungedeuteten Zeilen.
-5. **Rumpf** — vier Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
-   öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche,
-   **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs und **„Vorhaben“** mit
+5. **Rumpf** — fünf Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
+   öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche und rechts
+   daneben **„Implementierungszeit“** mit dem Mittelwert je Woche, **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs und **„Vorhaben“** mit
    den offenen. Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
    braune LED und „nicht angelaufen — ‹Grund›“.
+
+**Die beiden Wochenplatten** „Durchsatz“ und „Implementierungszeit“ zeigen dieselben zwölf
+Wochenfenster: sieben Tage, von jetzt aus rückwärts gezählt; eine Karte zählt in der Woche, in der
+sie fertig wurde. Unter jedem Balken steht die Kalenderwoche, beim Überfahren der Wert — bei der
+Implementierungszeit der Mittelwert mit der Zahl der Karten („30 Minuten · 2 Karten“, ab einer
+Stunde in Stunden). Eine Woche ohne gemessene Karte hat keinen Balken, sondern nur eine gestrichelte
+Grundlinie („keine gemessene Karte“), nie einen Balken von 0 Minuten; ohne jede Messung steht statt
+der Grafik ein Satz. Auf schmalem Bildschirm stehen die beiden Platten untereinander. **Die Fenster
+decken sich nicht mit der Woche des Umschalters** im [Verbrauch](#verbrauch-leitstand), die an der
+Tagesgrenze 12:00 hängt — der letzte Balken kann darum vom Wert der Kachel „Implementierungszeit“
+unter „Woche“ abweichen.
 
 **Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“ und
 „Abbruchgründe“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
 Projekts und **Plattform-Admins**, sofern das Projekt am
 [Plattform-Leitstand](#plattform-leitstand) teilnimmt. Ohne dieses Recht entfallen sie still; die
-Board-Kennzahlen und „Durchsatz“ bleiben.
+Board-Kennzahlen, „Durchsatz“ und „Implementierungszeit“ bleiben.
 
 **Grundlage der Board-Kennzahlen** ist die automatisch erfasste Verweildauer jeder Karte pro
 Spalte — gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API

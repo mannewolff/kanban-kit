@@ -488,6 +488,58 @@ describe('LeitstandPage — Letzter Run', () => {
 })
 
 describe('LeitstandPage — Platten des Rumpfs', () => {
+  it('zeigt die Implementierungszeit je Woche neben dem Durchsatz, eine Woche ohne Messung ohne Balken', async () => {
+    m.kpis.mockResolvedValue(
+      kpis({
+        implementationWeekly: [
+          { weekStart: '2026-06-01T09:00:00Z', avgImplementationSeconds: 1800, sampleCount: 2 },
+          { weekStart: '2026-06-08T09:00:00Z', avgImplementationSeconds: null, sampleCount: 0 },
+          { weekStart: '2026-06-15T09:00:00Z', avgImplementationSeconds: 7200, sampleCount: 1 },
+        ],
+      }),
+    )
+    renderPage()
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    expect(platte).toHaveTextContent('Mittelwert je Woche · 3 Wochen')
+    expect(within(platte).getByRole('img')).toHaveAccessibleName(
+      'Implementierungszeit der letzten 3 Wochen: 30 Minuten, keine Messung, 2,0 Stunden, zuletzt 2,0 Stunden',
+    )
+    expect(within(platte).getAllByTestId(/^balken-/).map((b) => b.dataset.testid)).toEqual(['balken-25', 'balken-100'])
+    expect(within(platte).getAllByTestId(/^balken-/).map((b) => b.getAttribute('title'))).toEqual([
+      '30 Minuten · 2 Karten',
+      '2,0 Stunden · 1 Karte',
+    ])
+    expect(within(platte).getByTestId('luecke-1')).toHaveAttribute('title', 'KW 24: keine gemessene Karte')
+    expect(platte).toHaveTextContent('232425')
+    // Der Durchsatz steht vorn, die Implementierungszeit folgt ihm.
+    const durchsatz = screen.getByRole('region', { name: 'Durchsatz' })
+    expect(durchsatz.compareDocumentPosition(platte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('zeigt ohne jede gemessene Woche den Leersatz der Implementierungszeit', async () => {
+    m.kpis.mockResolvedValue(
+      kpis({
+        implementationWeekly: Array.from({ length: 12 }, (_, i) => ({
+          weekStart: `2026-06-${String(i + 1).padStart(2, '0')}T09:00:00Z`,
+          avgImplementationSeconds: null,
+          sampleCount: 0,
+        })),
+      }),
+    )
+    renderPage()
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    expect(platte).toHaveTextContent('Noch keine gemessene Implementierungszeit in den letzten Wochen.')
+    expect(within(platte).queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('zeigt beide Wochenplatten auch ohne Recht auf die Läufe', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Implementierungszeit' })).toBeInTheDocument()
+  })
+
   it('zeigt den Durchsatz als Balkenwerk mit Kalenderwochen, eine leere Woche ohne Balken', async () => {
     m.kpis.mockResolvedValue(
       kpis({

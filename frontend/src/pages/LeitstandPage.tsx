@@ -30,6 +30,7 @@ import { epicColor } from '../lib/epicMeta'
 import {
   abbruchgruende,
   balkenHoehen,
+  balkenHoehenMitLuecken,
   durchlaufKachel,
   durchsatzKachel,
   ersteZeile,
@@ -48,6 +49,7 @@ import {
 } from '../lib/leitstand'
 import { useLeitstandDaten, type Laden } from '../lib/useLeitstandDaten'
 import {
+  BLINKER_HELL,
   ETIKETT,
   KUPFER,
   KUPFER_HELL,
@@ -59,6 +61,7 @@ import {
   PLATTE_FUSS,
   PLATTE_HOCH,
   RAND,
+  RAND_STARK,
   SCHATTEN_NUTE,
   SCHATTEN_PLATTE,
   TEXT_SCHWACH,
@@ -69,7 +72,8 @@ import {
  * Der Leitstand (#979) — die Hauptansicht eines Boards nach dem Entwurf
  * `docs/entwurf-leitstand.html` (CSS Z. 390–722, 977–1017; HTML Z. 1200–1678). Er ersetzt die
  * Kennzahlen-Ansicht: Laufband des jüngsten Laufs, vier Kennzahl-Kacheln, Verbrauch mit
- * Zeitraum-Wahl und der Rumpf aus „Letzter Lauf", „Durchsatz", „Abbruchgründe" und „Vorhaben".
+ * Zeitraum-Wahl und der Rumpf aus „Letzter Lauf", „Durchsatz", „Implementierungszeit",
+ * „Abbruchgründe" und „Vorhaben".
  * Die Platte „Liegengeblieben" des Entwurfs entfällt (Manne, 2026-09-17, #983) — die Kennzahl
  * `outliers` bleibt im Backend, wird hier aber nicht mehr dargestellt.
  *
@@ -80,7 +84,7 @@ import {
  *
  * **Die Läufe sieht nur, wer sie auch auf der Nachtlauf-Seite sieht** (Owner-Recht im Backend).
  * Ohne das Recht entfallen Laufband, Nachtlauf-Kachel, Verbrauch, Letzter Lauf und Abbruchgründe
- * still; die Board-Kennzahlen bleiben.
+ * still; die Board-Kennzahlen und beide Wochenplatten bleiben.
  */
 
 /** Die Karte, die der Dialog zeigt, mit dem Projekt, aus dem sie kam. */
@@ -157,7 +161,10 @@ function KennzahlenBereich({ kpis, liste }: Readonly<{ kpis: Laden<BoardDashboar
   )
 }
 
-/** Der Rumpf (Entwurf Z. 1410–1712): „Letzter Run", „Durchsatz", „Abbruchgründe" und „Vorhaben". */
+/**
+ * Der Rumpf (Entwurf Z. 1410–1712): „Letzter Run", „Durchsatz" mit „Implementierungszeit" daneben
+ * (Issue #1542), „Abbruchgründe" und „Vorhaben".
+ */
 function LeitstandRumpf({
   juengster,
   projectId,
@@ -188,7 +195,12 @@ function LeitstandRumpf({
             onOeffnen={(card) => onDetail({ card, projectId })}
           />
         )}
-        {kpis.art === 'da' && <Durchsatz wochen={kpis.wert.throughput} />}
+        {kpis.art === 'da' && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', md: 'repeat(2, minmax(0,1fr))' }, gap: '16px', alignItems: 'start' }}>
+            <Durchsatz wochen={kpis.wert.throughput} />
+            <ImplementierungVerlauf wochen={kpis.wert.implementationWeekly} />
+          </Box>
+        )}
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
         {klassen.art === 'da' && liste && <Abbruchgruende zaehler={klassen.wert} laeufe={liste.length} />}
@@ -435,53 +447,130 @@ function Vorgang({ item, epic, onOeffnen }: Readonly<{ item: NightRunItemView; e
 /** Durchsatz als Balkenwerk über zwölf Wochen (Entwurf Z. 642–688, 1513–1540). */
 function Durchsatz({ wochen }: Readonly<{ wochen: BoardDashboardKpis['throughput'] }>) {
   const werte = wochen.map((w) => w.doneCount)
-  const hoehen = balkenHoehen(werte)
-  const ohneDatenbasis = werte.every((w) => w === 0)
-  const spalten = `repeat(${Math.max(1, wochen.length)}, minmax(0,1fr))`
   return (
     <Platte titel="Durchsatz" notiz={`abgeschlossene Karten je Woche · ${wochen.length} Wochen`}>
-      {ohneDatenbasis ? (
-        <Typography color="text.secondary" sx={{ px: '16px', py: '14px' }}>
-          Noch keine abgeschlossene Karte in den letzten Wochen.
-        </Typography>
-      ) : (
-        <>
-          <Box
-            role="img"
-            aria-label={`Durchsatz der letzten ${wochen.length} Wochen: ${werte.join(', ')} Karten, zuletzt ${werte.at(-1)}`}
-            sx={{ display: 'grid', gridTemplateColumns: spalten, alignItems: 'end', gap: '6px', height: 132, px: '16px', pt: '16px' }}
-          >
-            {hoehen.map((hoehe, i) => {
-              const jetzt = i === hoehen.length - 1
-              return (
-                <Box key={wochen[i].weekStart} sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
-                  <Box
-                    data-testid={`balken-${hoehe}`}
-                    title={`${werte[i]} Karten`}
-                    sx={{
-                      height: `${hoehe}%`,
-                      borderRadius: '4px 4px 2px 2px',
-                      background: jetzt
-                        ? `linear-gradient(180deg, ${KUPFER_HELL}, ${KUPFER})`
-                        : `linear-gradient(180deg, color-mix(in srgb, ${KUPFER} 78%, ${PLATTE}), color-mix(in srgb, ${KUPFER} 34%, ${PLATTE}))`,
-                      border: hoehe === 0 ? 'none' : `1px solid color-mix(in srgb, ${KUPFER} 45%, ${RAND})`,
-                      boxShadow: jetzt ? `0 1px 0 rgba(255,255,255,.35) inset, 0 0 14px -4px ${KUPFER}` : `0 1px 0 rgba(255,255,255,.22) inset, 0 3px 8px -5px ${KUPFER}`,
-                    }}
-                  />
-                </Box>
-              )
-            })}
-          </Box>
-          <Box aria-hidden sx={{ display: 'grid', gridTemplateColumns: spalten, gap: '6px', px: '16px', pt: '7px', pb: '14px', borderTop: `1px solid ${RAND}`, mt: '10px' }}>
-            {wochen.map((w) => (
-              <Box key={w.weekStart} component="span" sx={{ ...ZAHL, fontSize: 9.5, color: TEXT_SCHWACH, textAlign: 'center' }}>
-                {kalenderwoche(w.weekStart)}
-              </Box>
-            ))}
-          </Box>
-        </>
-      )}
+      <Balkenwerk
+        wochen={wochen}
+        hoehen={balkenHoehen(werte)}
+        titel={(i) => `${werte[i]} Karten`}
+        ariaLabel={`Durchsatz der letzten ${wochen.length} Wochen: ${werte.join(', ')} Karten, zuletzt ${werte.at(-1)}`}
+        leer={werte.every((w) => w === 0)}
+        leersatz="Noch keine abgeschlossene Karte in den letzten Wochen."
+        farbe={KUPFER}
+        farbeHell={KUPFER_HELL}
+      />
     </Platte>
+  )
+}
+
+/** Stahl für die Implementierungszeit (Issue #1542, E10): wie Kachel und Funke der ersten Reihe. */
+const STAHL_HELL = `color-mix(in srgb, ${MELDER.stahl} 55%, ${BLINKER_HELL})`
+
+/**
+ * Implementierungszeit je Woche (Issue #1542): dieselben zwölf Fenster wie der Durchsatz, der
+ * Mittelwert in der Einheitenregel der Kachel. Eine Woche ohne gemessene Karte ist eine Lücke, nie
+ * ein Balken von 0 Minuten (E6).
+ */
+function ImplementierungVerlauf({ wochen }: Readonly<{ wochen: BoardDashboardKpis['implementationWeekly'] }>) {
+  const kacheln = wochen.map((w) => implementierungKachel(w.avgImplementationSeconds, w.sampleCount))
+  const werte = kacheln.map((k) => (k.wert === null ? null : `${k.wert} ${k.einheit}`))
+  const vorgelesen = werte.map((wert) => wert ?? 'keine Messung')
+  return (
+    <Platte titel="Implementierungszeit" notiz={`Mittelwert je Woche · ${wochen.length} Wochen`}>
+      <Balkenwerk
+        wochen={wochen}
+        hoehen={balkenHoehenMitLuecken(kacheln.map((k, i) => (k.wert === null ? null : wochen[i].avgImplementationSeconds)))}
+        titel={(i) => `${werte[i]} · ${kacheln[i].basis}`}
+        ariaLabel={`Implementierungszeit der letzten ${wochen.length} Wochen: ${vorgelesen.join(', ')}, zuletzt ${vorgelesen.at(-1)}`}
+        leer={werte.every((wert) => wert === null)}
+        leersatz="Noch keine gemessene Implementierungszeit in den letzten Wochen."
+        farbe={MELDER.stahl}
+        farbeHell={STAHL_HELL}
+      />
+    </Platte>
+  )
+}
+
+/**
+ * Das Balkenwerk der Wochenplatten (Issue #1542, A7): ein Balken je Woche, die Kalenderwoche
+ * darunter. Eine Höhe `null` ist eine Woche ohne Messung — kein Balken, sondern ein leerer Platz mit
+ * gestrichelter Grundlinie.
+ */
+function Balkenwerk({
+  wochen,
+  hoehen,
+  titel,
+  ariaLabel,
+  leer,
+  leersatz,
+  farbe,
+  farbeHell,
+}: Readonly<{
+  wochen: readonly { weekStart: string }[]
+  hoehen: readonly (number | null)[]
+  titel: (i: number) => string
+  ariaLabel: string
+  leer: boolean
+  leersatz: string
+  farbe: string
+  farbeHell: string
+}>) {
+  if (leer) {
+    return (
+      <Typography color="text.secondary" sx={{ px: '16px', py: '14px' }}>
+        {leersatz}
+      </Typography>
+    )
+  }
+  const spalten = `repeat(${Math.max(1, wochen.length)}, minmax(0,1fr))`
+  return (
+    <>
+      <Box
+        role="img"
+        aria-label={ariaLabel}
+        sx={{ display: 'grid', gridTemplateColumns: spalten, alignItems: 'end', gap: '6px', height: 132, px: '16px', pt: '16px' }}
+      >
+        {hoehen.map((hoehe, i) => {
+          const jetzt = i === hoehen.length - 1
+          if (hoehe === null) {
+            return (
+              <Box
+                key={wochen[i].weekStart}
+                data-testid={`luecke-${i}`}
+                title={`KW ${kalenderwoche(wochen[i].weekStart)}: keine gemessene Karte`}
+                sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}
+              >
+                <Box sx={{ borderTop: `1px dashed ${RAND_STARK}` }} />
+              </Box>
+            )
+          }
+          return (
+            <Box key={wochen[i].weekStart} sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
+              <Box
+                data-testid={`balken-${hoehe}`}
+                title={titel(i)}
+                sx={{
+                  height: `${hoehe}%`,
+                  borderRadius: '4px 4px 2px 2px',
+                  background: jetzt
+                    ? `linear-gradient(180deg, ${farbeHell}, ${farbe})`
+                    : `linear-gradient(180deg, color-mix(in srgb, ${farbe} 78%, ${PLATTE}), color-mix(in srgb, ${farbe} 34%, ${PLATTE}))`,
+                  border: hoehe === 0 ? 'none' : `1px solid color-mix(in srgb, ${farbe} 45%, ${RAND})`,
+                  boxShadow: jetzt ? `0 1px 0 rgba(255,255,255,.35) inset, 0 0 14px -4px ${farbe}` : `0 1px 0 rgba(255,255,255,.22) inset, 0 3px 8px -5px ${farbe}`,
+                }}
+              />
+            </Box>
+          )
+        })}
+      </Box>
+      <Box aria-hidden sx={{ display: 'grid', gridTemplateColumns: spalten, gap: '6px', px: '16px', pt: '7px', pb: '14px', borderTop: `1px solid ${RAND}`, mt: '10px' }}>
+        {wochen.map((w) => (
+          <Box key={w.weekStart} component="span" sx={{ ...ZAHL, fontSize: 9.5, color: TEXT_SCHWACH, textAlign: 'center' }}>
+            {kalenderwoche(w.weekStart)}
+          </Box>
+        ))}
+      </Box>
+    </>
   )
 }
 

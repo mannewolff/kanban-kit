@@ -7,6 +7,7 @@ import {
   abbruchgruende,
   auskunftOhneArbeit,
   balkenHoehen,
+  balkenHoehenMitLuecken,
   cacheQuote,
   durchlaufKachel,
   durchsatzKachel,
@@ -285,6 +286,15 @@ describe('leitstand Platten', () => {
   it('setzt Balkenhöhen relativ zum höchsten Wert', () => {
     expect(balkenHoehen([6, 12, 3])).toEqual([50, 100, 25])
     expect(balkenHoehen([0, 0])).toEqual([0, 0])
+  })
+
+  it('laesst bei Balkenhoehen mit Luecken eine Luecke leer und hebt kleine Werte auf 3 %', () => {
+    expect(balkenHoehenMitLuecken([600, null, 1200])).toEqual([50, null, 100])
+    expect(balkenHoehenMitLuecken([10, 3600])).toEqual([3, 100])
+    expect(balkenHoehenMitLuecken([120, 3600])).toEqual([3, 100])
+    expect(balkenHoehenMitLuecken([144, 3600])).toEqual([4, 100])
+    expect(balkenHoehenMitLuecken([null, null])).toEqual([null, null])
+    expect(balkenHoehenMitLuecken([0, null])).toEqual([3, null])
   })
 
   it('faerbt jede Fehlerklasse nach ihrer Art — Abbruch zinnober, Wartendes bernstein, Ausfall grau', () => {

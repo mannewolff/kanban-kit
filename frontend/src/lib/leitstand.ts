@@ -586,6 +586,16 @@ export function balkenHoehen(werte: readonly number[]): number[] {
   return werte.map((wert) => (max === 0 ? 0 : Math.round((wert / max) * 100)))
 }
 
+/**
+ * Balkenhöhen für Werte mit Lücken (Issue #1542, E6): Eine Woche ohne Messung bleibt `null` und
+ * bekommt keinen Balken; eine gemessene steht mindestens bei 3 %, damit ein kleiner Mittelwert neben
+ * einem großen nicht wie eine Lücke aussieht.
+ */
+export function balkenHoehenMitLuecken(werte: readonly (number | null)[]): (number | null)[] {
+  const max = Math.max(0, ...werte.filter((wert) => wert !== null))
+  return werte.map((wert) => (wert === null ? null : Math.max(3, max === 0 ? 0 : Math.round((wert / max) * 100))))
+}
+
 /** Eine Zeile der Abbruchgründe (Entwurf Z. 1606–1653): Klasse, Zahl, Breite relativ zur häufigsten. */
 export interface Klassenzeile {
   klasse: NightRunErrorClass
