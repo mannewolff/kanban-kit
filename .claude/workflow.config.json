@@ -2,19 +2,99 @@
   "codeHost": "github",
   "issueTracker": "toolbox",
   "buildChecks": [
-  { "cmd": "mvn -Dskip.frontend=true -Djacoco.skip=true -Dit.test=OpenApiIT verify", "areas": ["backend"], "gleichzeitig": true },
-  { "cmd": "mvn verify", "areas": ["backend", "doku"], "stufe": "push", "gleichzeitig": true },
-  { "cmd": "npm --prefix docs-site ci --no-audit --no-fund && npm --prefix docs-site run build", "areas": ["doku"], "gleichzeitig": true },
-  { "cmd": "npm --prefix frontend run build", "areas": ["frontend"], "gleichzeitig": true },
-  { "cmd": "npm --prefix frontend run lint", "areas": ["frontend"], "gleichzeitig": true },
-  { "cmd": "npm --prefix frontend run test:coverage", "areas": ["frontend"], "gleichzeitig": true },
-  { "cmd": "node --test cli/tbx.test.mjs", "areas": ["cli"], "gleichzeitig": true },
-  { "cmd": "node --test scripts/*.test.mjs", "areas": ["scripts"], "gleichzeitig": true },
-  { "cmd": "node scripts/mutationspruefung.mjs zuordnung frontend", "areas": ["frontend"], "gleichzeitig": true },
-  { "cmd": "node scripts/mutationspruefung.mjs zuordnung backend", "areas": ["backend"], "gleichzeitig": true },
-  { "cmd": "node scripts/mutationspruefung.mjs aenderung frontend", "areas": ["frontend"], "stufe": "push", "gleichzeitig": true },
-  { "cmd": "node scripts/mutationspruefung.mjs aenderung backend", "areas": ["backend"], "stufe": "push", "gleichzeitig": true },
-  { "cmd": "node scripts/mutationspruefung.mjs vollauf backend", "stufe": "push", "gleichzeitig": true }
+    {
+      "cmd": "mvn -Dskip.frontend=true -Djacoco.skip=true -Dit.test=OpenApiIT verify",
+      "areas": [
+        "backend"
+      ],
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "mvn verify",
+      "areas": [
+        "backend",
+        "doku"
+      ],
+      "stufe": "push",
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "npm --prefix docs-site ci --no-audit --no-fund && npm --prefix docs-site run build",
+      "areas": [
+        "doku"
+      ],
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "npm --prefix frontend run build",
+      "areas": [
+        "frontend"
+      ],
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "npm --prefix frontend run lint",
+      "areas": [
+        "frontend"
+      ],
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "npm --prefix frontend run test:coverage",
+      "areas": [
+        "frontend"
+      ],
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "node --test cli/tbx.test.mjs",
+      "areas": [
+        "cli"
+      ],
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "node --test scripts/*.test.mjs",
+      "areas": [
+        "scripts"
+      ],
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "node scripts/mutationspruefung.mjs zuordnung frontend",
+      "areas": [
+        "frontend"
+      ],
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "node scripts/mutationspruefung.mjs zuordnung backend",
+      "areas": [
+        "backend"
+      ],
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "node scripts/mutationspruefung.mjs aenderung frontend",
+      "areas": [
+        "frontend"
+      ],
+      "stufe": "push",
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "node scripts/mutationspruefung.mjs aenderung backend",
+      "areas": [
+        "backend"
+      ],
+      "stufe": "push",
+      "gleichzeitig": true
+    },
+    {
+      "cmd": "node scripts/mutationspruefung.mjs vollauf backend",
+      "stufe": "push",
+      "gleichzeitig": true
+    }
   ],
   "mutationCommand": "",
   "mainBranch": "main",
