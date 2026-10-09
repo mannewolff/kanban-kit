@@ -372,12 +372,14 @@ const PRUEF_AUSGAENGE = new Map<string, Farbe & { excerpt: string }>([
  * sie nichts; sie bleiben dort nicht unterstuetzt. `ohneErgebnis` steht bewusst NICHT
  * hier: Der Nachtplan-Lauf kennt ihn mit eigener Bedeutung (siehe {@link OHNE_PRUEFUNG}).
  */
+// Stryker disable ArrayDeclaration,StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt diese Woerter, sie enden auch ohne die Menge abgelehnt
 const NUR_PRUEFLAUF: ReadonlySet<string> = new Set([
   'ohneBefund',
   'mitBefund',
   'schaerfungFehlt',
   'syntheseOhneBeleg',
 ])
+// Stryker restore ArrayDeclaration,StringLiteral
 
 /**
  * Umgekehrt: Ein Pruef-Lauf erzeugt diese Ausgaenge nie. Sie modus-unabhaengig
@@ -426,7 +428,9 @@ const ZEITBUDGET_PRAEFIX = 'Zeitbudget '
  * Die Ausgaenge, die **nur** ein Ketten-Lauf schreibt — analog {@link NUR_PRUEFLAUF}. In
  * jedem anderen Modus sagen sie nichts und bleiben dort nicht unterstuetzt.
  */
+// Stryker disable ArrayDeclaration,StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt diese Woerter, sie enden auch ohne die Menge abgelehnt
 const NUR_KETTE: ReadonlySet<string> = new Set(['fertig', 'angehalten', 'abgebrochen'])
+// Stryker restore ArrayDeclaration,StringLiteral
 
 /**
  * Umgekehrt: Eine Kette erzeugt diese Ausgaenge nie — die vier Nachtplan-Ausgaenge, die
@@ -440,9 +444,13 @@ const NIE_IN_KETTE: ReadonlySet<string> = new Set([
   'verbraucht',
   'offen',
   'ohneErgebnis',
+  // Stryker disable next-line StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt das Wort, in der Kette endet es ohnehin abgelehnt
   'ohneBefund',
+  // Stryker disable next-line StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt das Wort, in der Kette endet es ohnehin abgelehnt
   'mitBefund',
+  // Stryker disable next-line StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt das Wort, in der Kette endet es ohnehin abgelehnt
   'schaerfungFehlt',
+  // Stryker disable next-line StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt das Wort, in der Kette endet es ohnehin abgelehnt
   'syntheseOhneBeleg',
   'erfolg',
   'fehlschlag',
@@ -651,6 +659,7 @@ function dauerDerEinheit(e: RohEinheit): number | undefined {
   if (typeof e.dauerMs === 'number') return e.dauerMs
   if (e.stufen === undefined) return undefined
   return Object.values(e.stufen).reduce<number>(
+    // Stryker disable next-line OptionalChaining: gleichwertig — eine Stufe null scheitert ohnehin in stufenwert
     (summe, stufe) => summe + (typeof stufe?.dauerMs === 'number' ? stufe.dauerMs : 0),
     0,
   )
@@ -756,9 +765,11 @@ function kettenStufenDerEinheit(stufen: RohStufen | undefined): NightRunKettenSt
 function zuegeDerEinheit(e: RohEinheit): number | undefined {
   if (typeof e.kennzahlen?.zuege === 'number') return e.kennzahlen.zuege
   if (e.stufen === undefined) return undefined
+  // Stryker disable OptionalChaining: gleichwertig — eine Stufe null scheitert ohnehin in stufenwert
   const gemeldet = Object.values(e.stufen)
     .map((stufe) => stufe?.kennzahlen?.zuege)
     .filter((zuege): zuege is number => typeof zuege === 'number')
+  // Stryker restore OptionalChaining
   return gemeldet.length === 0 ? undefined : gemeldet.reduce((summe, zuege) => summe + zuege, 0)
 }
 
@@ -810,6 +821,7 @@ function modusDeutung(
     if (NIE_IN_KETTE.has(e.ausgang)) return null
     return deuteKettenAusgang(e) ?? undefined
   }
+  // Stryker disable next-line ConditionalExpression,LogicalOperator: gleichwertig — die Woerter stehen in keinem gemeinsamen Vokabular und enden darunter ebenso abgelehnt; die Zeile benennt die Grenze
   return NUR_PRUEFLAUF.has(e.ausgang) || NUR_KETTE.has(e.ausgang) ? null : undefined
 }
 
@@ -962,11 +974,13 @@ function laufAuszug(l: RohLauf): string {
  */
 export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandResult {
   let roh: unknown
+  // Stryker disable BlockStatement: gleichwertig — ohne Rueckgabe bleibt roh undefined und endet in der Pruefung darunter als kein-json
   try {
     roh = JSON.parse(text)
   } catch {
     return { ok: false, grund: 'kein-json' }
   }
+  // Stryker restore BlockStatement
   if (typeof roh !== 'object' || roh === null || Array.isArray(roh) || !('schemaFassung' in roh)) {
     return { ok: false, grund: 'kein-json' }
   }
