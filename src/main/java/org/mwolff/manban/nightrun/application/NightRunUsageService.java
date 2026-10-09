@@ -24,6 +24,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTota
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.StageTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
+import org.mwolff.manban.nightrun.domain.Bremsbilanz;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
@@ -169,7 +170,8 @@ public class NightRunUsageService {
         teilen(summe.byKind().runUsage(), summe.byKind().itemUsage()),
         jeGattung(summe.byKind()),
         usage.oldestRetainedRunStart(projectId).orElse(null),
-        erfassungsbeginn.interactiveUsageSince(projectId).orElse(null));
+        erfassungsbeginn.interactiveUsageSince(projectId).orElse(null),
+        Bremsbilanz.of(usage.lifetimeStuckItems(projectId)));
   }
 
   private PeriodFigures kennzahlen(
@@ -184,7 +186,8 @@ public class NightRunUsageService {
         summe.cardCount(),
         teilen(summe.runUsage(), summe.itemUsage()),
         jeGattung(summe.byKind()),
-        seit);
+        seit,
+        Bremsbilanz.of(usage.stuckItems(projectId, zeitraum.from(), zeitraum.to())));
   }
 
   /**
@@ -244,6 +247,10 @@ public class NightRunUsageService {
     return new UsageSplit(lauf, pakete, lauf.minus(pakete));
   }
 
+  /**
+   * Eine festgefahrene Karte ({@code STUCK}) bricht die Nacht nicht ab: Die Bremse beendet ein
+   * Paket, und der Lauf arbeitet danach weiter (Plan #1547 E16).
+   */
   private static boolean abgebrochen(NightTotals nacht) {
     return nacht.errorClasses().stream().anyMatch(ABBRUCH::contains);
   }
@@ -363,6 +370,8 @@ public class NightRunUsageService {
    *     Projekts; {@code null}, solange keine gemeldet wurde (Plan E18). Daran unterscheidet die
    *     Anzeige „nicht erfasst" von „teilweise erfasst" — die Klassifikation selbst entsteht im
    *     Frontend, hier steht nur der Zeitpunkt.
+   * @param brakes die Bremsbilanz des Zeitraums (Issue #1550); auch im Vorzeitraum, ohne
+   *     Vergleichswert (Plan #1547 E12)
    */
   public record PeriodFigures(
       NightRunPeriod period,
@@ -373,7 +382,8 @@ public class NightRunUsageService {
       long cardCount,
       UsageSplit usage,
       KindSplit usageByKind,
-      @Nullable Instant interactiveUsageSince) {
+      @Nullable Instant interactiveUsageSince,
+      Bremsbilanz brakes) {
 
     /** Zahl aller Einträge des Zeitraums — Läufe <b>und</b> Sitzungen. */
     public long runCount() {
@@ -398,6 +408,7 @@ public class NightRunUsageService {
    * @param interactiveUsageSince Erfassungsbeginn der interaktiven Sitzungen; {@code null}, solange
    *     keine gemeldet wurde (Plan E18). Er trennt „nie erfasst" von „erfasst, dann verdrängt" —
    *     die Einordnung selbst entsteht im Frontend, hier stehen nur die beiden Zeitpunkte.
+   * @param brakes die Bremsbilanz aller aufbewahrten Läufe (Issue #1550)
    */
   public record TotalUsageView(
       long nightRunCount,
@@ -406,7 +417,8 @@ public class NightRunUsageService {
       UsageSplit usage,
       KindSplit usageByKind,
       @Nullable Instant oldestRetainedRunStart,
-      @Nullable Instant interactiveUsageSince) {
+      @Nullable Instant interactiveUsageSince,
+      Bremsbilanz brakes) {
 
     /** Zahl aller aufbewahrten Einträge — Läufe <b>und</b> Sitzungen. */
     public long runCount() {

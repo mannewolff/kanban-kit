@@ -39,6 +39,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageVi
 import org.mwolff.manban.nightrun.application.NightRunUsageService.StageUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.UsageSplit;
+import org.mwolff.manban.nightrun.domain.Bremsbilanz;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
@@ -139,7 +140,16 @@ class NightRunUsageControllerTest {
     KindSplit jeGattung = new KindSplit(teilung, sitzungen);
     return new PeriodUsageView(
         new PeriodFigures(
-            monat, Coverage.PARTIAL, 3L, 2L, 9_000L, 4L, teilung, jeGattung, erfassungsbeginn),
+            monat,
+            Coverage.PARTIAL,
+            3L,
+            2L,
+            9_000L,
+            4L,
+            teilung,
+            jeGattung,
+            erfassungsbeginn,
+            new Bremsbilanz(3L, 1L, 5_400_000L)),
         new PeriodFigures(
             monat.previous(),
             Coverage.BEFORE_RETENTION,
@@ -149,7 +159,8 @@ class NightRunUsageControllerTest {
             0L,
             LEER,
             new KindSplit(LEER, LEER),
-            erfassungsbeginn),
+            erfassungsbeginn,
+            new Bremsbilanz(1L, 0L, 600_000L)),
         List.of(new NightSummary(LocalDate.of(2026, 8, 3), 2L, 1L, teilung, jeGattung, false)),
         List.of(
             new EpicUsageView(
@@ -189,7 +200,8 @@ class NightRunUsageControllerTest {
         zusammen,
         new KindSplit(laeufe, sitzungen),
         Instant.parse("2026-05-01T00:00:00Z"),
-        erfassungsbeginn);
+        erfassungsbeginn,
+        new Bremsbilanz(4L, 2L, 7_200_000L));
   }
 
   // --- Nacht -----------------------------------------------------------------------------------
@@ -313,6 +325,13 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.previous.firstDay").value("2026-07-01"))
         .andExpect(jsonPath("$.previous.coverage").value("BEFORE_RETENTION"))
         .andExpect(jsonPath("$.previous.noRuns").value(true))
+        .andExpect(jsonPath("$.current.brakes.count").value(3))
+        .andExpect(jsonPath("$.current.brakes.withoutTimeCount").value(1))
+        .andExpect(jsonPath("$.current.brakes.savedMs").value(5400000))
+        .andExpect(jsonPath("$.previous.brakes.count").value(1))
+        .andExpect(jsonPath("$.previous.brakes.withoutTimeCount").value(0))
+        .andExpect(jsonPath("$.previous.brakes.savedMs").value(600000))
+        .andExpect(jsonPath("$.current.brakes.*", hasSize(3)))
         .andExpect(jsonPath("$.nights[0].night").value("2026-08-03"))
         .andExpect(jsonPath("$.nights[0].runCount").value(2))
         .andExpect(jsonPath("$.nights[0].cardCount").value(1))
@@ -482,7 +501,10 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.usageByKind.interactive.total.costUsd").value(2.5))
         .andExpect(jsonPath("$.usageByKind.interactive.cardShare.inputTokens").value(300))
         .andExpect(jsonPath("$.oldestRetainedRunStart").value("2026-05-01T00:00:00Z"))
-        .andExpect(jsonPath("$.interactiveUsageSince").value("2026-08-14T07:00:00Z"));
+        .andExpect(jsonPath("$.interactiveUsageSince").value("2026-08-14T07:00:00Z"))
+        .andExpect(jsonPath("$.brakes.count").value(4))
+        .andExpect(jsonPath("$.brakes.withoutTimeCount").value(2))
+        .andExpect(jsonPath("$.brakes.savedMs").value(7200000));
   }
 
   /** Ohne je gemeldete Sitzung steht der Erfassungsbeginn als {@code null} (Plan E18). */

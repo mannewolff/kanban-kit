@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
+import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
@@ -76,6 +77,27 @@ public interface NightRunUsageRepository {
    * einem Sonderfall.
    */
   LifetimeTotals lifetimeTotals(long projectId);
+
+  /**
+   * Die festgefahrenen Pakete der Spanne — Grundlage der Bremsbilanz (Issue #1550, Plan #1547 E5,
+   * E15).
+   *
+   * <p>Es gilt dieselbe Regel wie für jede Verbrauchszahl: Gezählt werden nur Pakete
+   * <b>aufbewahrter</b> Läufe, und die Spanne filtert über {@code started_at} des Laufs, nicht des
+   * Pakets — mit der Tagesgrenze, die {@code NightRunPeriod} schon in {@code from} und {@code to}
+   * gelegt hat. Ein verwaistes Paket eines verdrängten Laufs zählt nicht: Die Kachel zählte sonst
+   * Nächte, die derselbe Zeitraum als nicht mehr aufbewahrt ausweist.
+   *
+   * <p>Die Pakete kommen <b>ohne Stufen</b>: Die Bilanz liest sie nicht, und das Nachladen kostete
+   * eine zweite Abfrage für nichts.
+   */
+  List<NightRunItem> stuckItems(long projectId, Instant from, Instant to);
+
+  /**
+   * Die festgefahrenen Pakete aller aufbewahrten Läufe des Projekts — dieselbe Regel wie {@link
+   * #stuckItems}, nur ohne Zeitgrenzen (Plan #1547 E15).
+   */
+  List<NightRunItem> lifetimeStuckItems(long projectId);
 
   /**
    * Startzeitpunkt des ältesten aufbewahrten Laufs; leer, wenn das Projekt keinen hat (Plan E8).

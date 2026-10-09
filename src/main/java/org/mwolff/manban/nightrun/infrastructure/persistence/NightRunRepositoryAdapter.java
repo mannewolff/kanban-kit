@@ -681,7 +681,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         vorbereitung);
   }
 
-  private static NightRunItem toDomain(NightRunItemEntity e, List<NightRunItemStage> stages) {
+  /** Paketsichtbar für den Lesepfad der Bremsbilanz (Issue #1550) — eine Abbildung, nicht zwei. */
+  static NightRunItem toDomain(NightRunItemEntity e, List<NightRunItemStage> stages) {
     String errorClass = e.getErrorClass();
     StuckEmbeddable stuck = e.getStuck();
     return new NightRunItem(
