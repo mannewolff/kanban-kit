@@ -1118,6 +1118,78 @@ test('Regel 13: ohne GITHUB_STEP_SUMMARY geht die Zusammenfassung auf die Standa
   assert.deepEqual(ausgegeben, ['## Inhalt\n']);
 });
 
+test('Regel 13: mit GITHUB_STEP_SUMMARY steht jeder sperrende Befund zusaetzlich als Zeile im Protokoll', async () => {
+  const verzeichnis = mkdtempSync(join(tmpdir(), 'sicherheit-'));
+  try {
+    const datei = join(verzeichnis, 'summary.md');
+    const ausgegeben = [];
+    const { exitcode } = await laufen([ABBILD], {
+      ausfuehren: async () => fixture('abbild-befunde.json'),
+      ausnahmen: KEINE_AUSNAHMEN,
+      schreiben: (t) => ausgegeben.push(t),
+      umgebung: { GITHUB_STEP_SUMMARY: datei },
+    });
+    assert.equal(exitcode, 1);
+    assert.match(readFileSync(datei, 'utf-8'), /## Sicherheitspruefung/);
+    const protokoll = ausgegeben.join('');
+    assert.ok(!protokoll.includes('## Sicherheitspruefung'), 'die Zusammenfassung selbst bleibt in der Datei');
+    assert.equal(
+      protokoll,
+      'Sicherheitspruefung: 2 sperrende Befunde\n'
+        + 'sperrend: postgres:16.15: CVE-2026-1001 (CRITICAL) in libssl3 [postgres:16.15 (debian 12.11)] — Korrektur in 3.0.16-1\n'
+        + 'sperrend: postgres:16.15: CVE-2026-1002 (HIGH) in libxml2 [postgres:16.15 (debian 12.11)] — Korrektur in 2.9.14+dfsg-1.3\n',
+    );
+  } finally {
+    rmSync(verzeichnis, { recursive: true, force: true });
+  }
+});
+
+test('Regel 13: ein mehrzeiliger Befund bleibt im Protokoll eine Zeile', async () => {
+  const ausgegeben = [];
+  await laufen([ABBILD], {
+    ausfuehren: async () => {
+      throw new Error('trivy endete mit 1: erste Zeile\nzweite Zeile');
+    },
+    ausnahmen: KEINE_AUSNAHMEN,
+    schreiben: (t) => ausgegeben.push(t),
+    umgebung: { GITHUB_STEP_SUMMARY: join(tmpdir(), `sicherheit-${process.pid}-summary.md`) },
+  });
+  rmSync(join(tmpdir(), `sicherheit-${process.pid}-summary.md`), { force: true });
+  assert.deepEqual(ausgegeben.join('').split('\n'), [
+    'Sicherheitspruefung: 1 sperrender Befund',
+    'sperrend: postgres:16.15: Ziel nicht geprueft: trivy endete mit 1: erste Zeile zweite Zeile',
+    '',
+  ]);
+});
+
+test('Regel 13: mit GITHUB_STEP_SUMMARY und ohne sperrenden Befund bleibt das Protokoll leer', async () => {
+  const datei = join(tmpdir(), `sicherheit-${process.pid}-gruen.md`);
+  const ausgegeben = [];
+  try {
+    await laufen([SPERRDATEI], {
+      ausfuehren: async () => fixture('sperrdatei-sauber.json'),
+      ausnahmen: KEINE_AUSNAHMEN,
+      schreiben: (t) => ausgegeben.push(t),
+      umgebung: { GITHUB_STEP_SUMMARY: datei },
+    });
+  } finally {
+    rmSync(datei, { force: true });
+  }
+  assert.deepEqual(ausgegeben, []);
+});
+
+test('Regel 13: ohne GITHUB_STEP_SUMMARY erscheinen die Befunde nur einmal, in der Zusammenfassung', async () => {
+  const ausgegeben = [];
+  await laufen([ABBILD], {
+    ausfuehren: async () => fixture('abbild-befunde.json'),
+    ausnahmen: KEINE_AUSNAHMEN,
+    schreiben: (t) => ausgegeben.push(t),
+    umgebung: {},
+  });
+  assert.equal(ausgegeben.length, 1);
+  assert.ok(!ausgegeben[0].includes('sperrend: '));
+});
+
 test('Markdown-Steuerzeichen aus Werkzeugausgaben brechen die Zusammenfassung nicht', () => {
   const ausgabe = JSON.stringify({
     Results: [{ Target: 'x', Secrets: [{ RuleID: 'r|1', Target: 'a`b|c.txt' }] }],

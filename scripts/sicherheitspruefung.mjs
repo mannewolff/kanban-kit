@@ -70,7 +70,8 @@ Listen:
 
   --hilfe, -h           diese Hilfe
 
-Ausgabe nach $GITHUB_STEP_SUMMARY, wenn gesetzt, sonst auf die Standardausgabe.
+Ausgabe nach $GITHUB_STEP_SUMMARY, wenn gesetzt, sonst auf die Standardausgabe; mit gesetzter
+Variable steht jeder sperrende Befund zusaetzlich als eine Zeile auf der Standardausgabe.
 Rueckgabewert 1 bei mindestens einem sperrenden Befund, sonst 0; 2 bei falschem Aufruf.
 `;
 
@@ -610,6 +611,22 @@ export function zusammenfassungAusgeben(text, { umgebung = process.env, schreibe
   else schreiben(text);
 }
 
+/**
+ * Die sperrenden Befunde als Klartext, je Befund eine Zeile (Issue #1564): Mit gesetztem
+ * $GITHUB_STEP_SUMMARY steht die Zusammenfassung nur auf der Lauf-Seite, und `gh run view --log-failed`
+ * zeigte ein rotes Gate ohne Grund. Ohne die Variable traegt die Zusammenfassung sie schon selbst.
+ */
+export function sperrendeZeilen(urteil) {
+  const anzahl = urteil.sperrend.length;
+  if (anzahl === 0) return '';
+  const einzeilig = (text) => String(text).replace(/\s*\n\s*/g, ' ');
+  return [
+    `Sicherheitspruefung: ${anzahl === 1 ? '1 sperrender Befund' : `${anzahl} sperrende Befunde`}`,
+    ...urteil.sperrend.map((e) => `sperrend: ${einzeilig(e.ziel)}: ${einzeilig(e.text)}`),
+    '',
+  ].join('\n');
+}
+
 // --- Werkzeugaufruf -------------------------------------------------------
 
 /** Der Standard-Werkzeugaufruf. Loest mit der Standardausgabe auf, lehnt bei Rueckgabewert != 0 ab. */
@@ -688,6 +705,10 @@ export async function laufen(ziele, {
   const urteil = urteilen(ergebnisse, ausnahmen, { heute });
   if (ziele.length === 0) urteil.sperrend.push({ ziel: '-', text: 'kein Ziel uebergeben — nichts geprueft' });
   zusammenfassungAusgeben(zusammenfassung(urteil), { umgebung, schreiben });
+  if (umgebung.GITHUB_STEP_SUMMARY) {
+    const zeilen = sperrendeZeilen(urteil);
+    if (zeilen) schreiben(zeilen);
+  }
   return { urteil, exitcode: urteil.sperrend.length === 0 ? 0 : 1 };
 }
 
