@@ -7,13 +7,14 @@ import {
   nightRunUsageApi,
   type NightRunUsageApi,
   type VerbrauchAngaben,
+  type VerbrauchBremsen,
   type VerbrauchGesamt,
   type VerbrauchKennzahlen,
   type VerbrauchNachtKurz,
   type VerbrauchZeitraum,
   type VerbrauchZeitraumArt,
 } from '../../api/nightRunUsage'
-import { dollar, implementierungKachel, kostenText, tokenMenge, tokenText } from '../../lib/leitstand'
+import { dollar, implementierungKachel, kostenText, laufDauer, tokenMenge, tokenText } from '../../lib/leitstand'
 import {
   NICHT_ERFASST_TEXT,
   TEILWEISE_ERFASST_TEXT,
@@ -54,6 +55,10 @@ import { DeltaMarke, Funke, Kachel, KACHEL_SX, KachelFuss, KachelWert } from './
  * Anteil aus Nachtläufen und der aus interaktiven Sitzungen, in der Kopfzeile die Zahl beider. Der
  * nicht zuordenbare Rest steht als Posten „ohne Karte". Der Stapelbalken bleibt der Anteil aus dem
  * Zwischenspeicher — er beantwortet eine andere Frage und wird nicht auf die Gattungen umgewidmet.
+ *
+ * **Bremse** (Issue #1553, Plan #1547 E12, E14, E19): wie oft die Bremse des Kits im Zeitraum
+ * gegriffen hat und wie viel Zeit sie geschätzt gespart hat — aus `current.brakes`, unter „Gesamt"
+ * aus `total.brakes`, ohne Vorzeitraum-Vergleich.
  */
 type Wahl = VerbrauchZeitraumArt | 'TOTAL'
 
@@ -187,7 +192,7 @@ function umfangText(ansicht: Ansicht): string {
 }
 
 /** Die Größen, die Zeitraum und „Gesamt" gemeinsam haben. */
-type Gemeinsam = Pick<VerbrauchKennzahlen, 'cardCount' | 'usage' | 'usageByKind'>
+type Gemeinsam = Pick<VerbrauchKennzahlen, 'cardCount' | 'usage' | 'usageByKind' | 'brakes'>
 
 /** Was nur ein Zeitraum hat: Vorzeitraum zum Vergleich und die Schichten darin. */
 interface Zeitbezug {
@@ -272,7 +277,7 @@ function VerbrauchKacheln({
       <Box
         aria-label="Verbrauch des Zeitraums"
         role="group"
-        sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))', lg: 'repeat(4, minmax(0,1fr))' }, gap: '14px', perspective: '1100px' }}
+        sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))', lg: 'repeat(5, minmax(0,1fr))' }, gap: '14px', perspective: '1100px' }}
       >
         <Box component="article" aria-label="Eingabe-Token" sx={{ ...KACHEL_SX, gridColumn: { sm: 'span 2', lg: 'auto' } }}>
           <Box sx={ETIKETT}>Eingabe-Token</Box>
@@ -350,6 +355,7 @@ function VerbrauchKacheln({
         </Box>
 
         <ImplementierungKachel zustand={implementierung} />
+        <BremseKachel bremsen={werte.brakes} />
       </Box>
     </>
   )
@@ -372,8 +378,33 @@ function ImplementierungKachel({ zustand }: Readonly<{ zustand: ImplementierungZ
       : { ...implementierungKachel(null, 0), basis: '' }
   const leerText = { laden: 'wird geladen', fehler: 'nicht geladen', da: undefined }[zustand.art]
   return (
-    <Box sx={{ display: 'grid', gridColumn: { sm: 'span 2', lg: 'auto' } }}>
+    <Box sx={{ display: 'grid' }}>
       <Kachel titel="Implementierungszeit" daten={daten} melder="stahl" leerText={leerText} />
+    </Box>
+  )
+}
+
+/**
+ * Die Bremsbilanz des gewählten Zeitraums (Issue #1553, Plan #1547 E14, E19). Bei null Bremsungen
+ * steht nur „0 Bremsungen" — 0 ist gezählt, eine Zeitsumme über nichts wäre erfunden. Dasselbe gilt,
+ * wenn keine Bremsung einen Zeitwert trägt: Dann bleibt nur „davon n ohne Zeitwert".
+ */
+function BremseKachel({ bremsen }: Readonly<{ bremsen: VerbrauchBremsen }>) {
+  const { count, withoutTimeCount, savedMs } = bremsen
+  return (
+    <Box component="article" aria-label="Bremse" sx={KACHEL_SX}>
+      <Box sx={ETIKETT}>Bremse</Box>
+      <KachelWert wert={String(count)} einheit={count === 1 ? 'Bremsung' : 'Bremsungen'} />
+      {count > withoutTimeCount && (
+        <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
+          {'≈ '}
+          <Box component="b" sx={{ ...ZAHL, fontWeight: 500, color: 'text.primary' }}>
+            {laufDauer(savedMs)}
+          </Box>
+          {' gespart (geschätzt)'}
+        </Box>
+      )}
+      {withoutTimeCount > 0 && <KachelFuss basis={`davon ${withoutTimeCount} ohne Zeitwert`} />}
     </Box>
   )
 }

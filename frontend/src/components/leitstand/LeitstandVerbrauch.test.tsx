@@ -831,3 +831,78 @@ describe('LeitstandVerbrauch — Rechnungen der Kacheln (Issue #1281)', () => {
     expect(lesbar(within(kosten).getByTestId('anteil-interaktiv').textContent)).toBe('aus interaktiven Sitzungen4,00 $')
   })
 })
+
+describe('LeitstandVerbrauch — Kachel Bremse (Issue #1553, Plan #1547 E12, E14, E19)', () => {
+  /** Je Zeitraum eine eigene Bremsbilanz, damit die Kachel zeigt, dass sie der Wahl folgt. */
+  const BREMSEN = {
+    DAY: { count: 2, withoutTimeCount: 0, savedMs: 90 * 60_000 },
+    WEEK: { count: 5, withoutTimeCount: 0, savedMs: 4 * 3_600_000 + 12 * 60_000 },
+    MONTH: { count: 11, withoutTimeCount: 0, savedMs: 9 * 3_600_000 },
+  } as const
+
+  function zeigeJeZeitraum(gesamtWert: VerbrauchGesamt = gesamt()) {
+    const api = {
+      period: vi.fn((_: number, art: keyof typeof BREMSEN) =>
+        Promise.resolve(zeitraum({ current: kennzahlen({ type: art, brakes: BREMSEN[art] }) })),
+      ),
+      total: vi.fn().mockResolvedValue(gesamtWert),
+      implementationTime: vi.fn().mockResolvedValue(implementierung()),
+    }
+    render(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)
+    return api
+  }
+
+  const bremse = async () => lesbar((await kachel('Bremse')).textContent)
+
+  it('zeigt Zahl und geschätzte Summe für Schicht, Woche, Monat und Gesamt aus dem jeweiligen brakes', async () => {
+    zeigeJeZeitraum(gesamt({ brakes: { count: 30, withoutTimeCount: 0, savedMs: 25 * 3_600_000 + 5 * 60_000 } }))
+
+    expect(await bremse()).toBe('Bremse2Bremsungen≈ 1 h 30 min gespart (geschätzt)')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
+    await waitFor(async () => expect(await bremse()).toBe('Bremse5Bremsungen≈ 4 h 12 min gespart (geschätzt)'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
+    await waitFor(async () => expect(await bremse()).toBe('Bremse11Bremsungen≈ 9 h 0 min gespart (geschätzt)'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gesamt' }))
+    await waitFor(async () => expect(await bremse()).toBe('Bremse30Bremsungen≈ 25 h 5 min gespart (geschätzt)'))
+  })
+
+  it('zeigt bei null Bremsungen nur „0 Bremsungen", ohne Zeitsumme und ohne „davon"', async () => {
+    zeige()
+
+    expect(await bremse()).toBe('Bremse0Bremsungen')
+  })
+
+  it('nennt Bremsungen ohne Zeitwert, die in der Summe fehlen', async () => {
+    zeige(zeitraum({ current: kennzahlen({ brakes: { count: 3, withoutTimeCount: 1, savedMs: 40 * 60_000 } }) }))
+
+    expect(await bremse()).toBe('Bremse3Bremsungen≈ 40 min gespart (geschätzt)davon 1 ohne Zeitwert')
+  })
+
+  it('schreibt eine einzelne Bremsung in der Einzahl', async () => {
+    zeige(zeitraum({ current: kennzahlen({ brakes: { count: 1, withoutTimeCount: 0, savedMs: 20 * 60_000 } }) }))
+
+    expect(await bremse()).toBe('Bremse1Bremsung≈ 20 min gespart (geschätzt)')
+  })
+
+  it('zeigt ohne jede Zeitangabe keine Summe über nichts, nur die Zahl ohne Zeitwert', async () => {
+    zeige(zeitraum({ current: kennzahlen({ brakes: { count: 2, withoutTimeCount: 2, savedMs: 0 } }) }))
+
+    expect(await bremse()).toBe('Bremse2Bremsungendavon 2 ohne Zeitwert')
+  })
+
+  it('vergleicht nicht mit dem Vorzeitraum', async () => {
+    zeige(
+      zeitraum({
+        current: kennzahlen({ brakes: { count: 2, withoutTimeCount: 0, savedMs: 60 * 60_000 } }),
+        previous: kennzahlen({ brakes: { count: 7, withoutTimeCount: 0, savedMs: 5 * 3_600_000 } }),
+      }),
+    )
+
+    const text = await bremse()
+    expect(text).not.toMatch(/[▲▼]/)
+    expect(text).not.toContain('7')
+  })
+})
