@@ -391,6 +391,7 @@ class NightRunController {
         request.commitHash(),
         request.excerpt(),
         NightRunUsageRequest.toDomain(request.usage()),
+        IngestStuckRequest.toDomain(request.stuck()),
         // Wie das Budget am Lauf: Der Upload-Weg fuehrt keine Stufen (Issue #1113, E14).
         List.of());
   }
@@ -450,7 +451,12 @@ class NightRunController {
           @Size(max = MAX_ITEMS_PER_RUN)
           List<@Valid @NotNull NightRunItemRequest> items) {}
 
-  /** Ein einzulieferndes Arbeitspaket. */
+  /**
+   * Ein einzulieferndes Arbeitspaket.
+   *
+   * @param stuck die Angaben eines festgefahrenen Pakets (Issue #1549); derselbe Typ wie am
+   *     Ingest-Weg, damit beide Wege dieselbe Nacht gleich abbilden
+   */
   @Schema(description = "Ein Arbeitspaket des Laufs: eine bearbeitete oder übergangene Karte.")
   record NightRunItemRequest(
       @Schema(description = "Projektweite Nummer der Karte.", example = "1403") int cardNumber,
@@ -466,7 +472,12 @@ class NightRunController {
               example = "GREEN")
           @NotNull
           NightRunState state,
-      @Schema(description = "Fehlerklasse bei YELLOW oder RED.", example = "CHECKS_RED")
+      @Schema(
+              description =
+                  """
+                  Fehlerklasse bei YELLOW oder RED. STUCK: das Paket hat sich festgefahren und \
+                  wurde früh beendet; es ist RED, die Angaben dazu stehen in stuck.""",
+              example = "CHECKS_RED")
           @Nullable NightRunErrorClass errorClass,
       @Schema(description = "Dauer in Millisekunden.", example = "900000")
           @Nullable Long durationMs,
@@ -480,8 +491,15 @@ class NightRunController {
           @Nullable
           @Size(max = NightRunLimits.EXCERPT_MAX)
           String excerpt,
-      @Schema(description = "Verbrauch dieses Arbeitspakets.")
-          @Nullable NightRunUsageRequest usage) {}
+      @Schema(description = "Verbrauch dieses Arbeitspakets.") @Nullable NightRunUsageRequest usage,
+      @Schema(
+              description =
+                  """
+                  Angaben eines festgefahrenen Pakets, aus dem Protokoll gedeutet; gilt nur bei \
+                  errorClass STUCK.""")
+          @Nullable
+          @Valid
+          IngestStuckRequest stuck) {}
 
   /** Eine Zeile der Übersicht „Heute Nacht“ (Issue #1454). */
   @Schema(description = "Eine zur Übernahme freigegebene Karte mit ihrem kleinen Stufenstand.")

@@ -711,6 +711,70 @@ class NightRunIT extends AbstractIntegrationTest {
     assertThat(antwort).doesNotContain("Fremd geheim");
   }
 
+  // --- Festgefahrene Pakete (Issue #1549) --------------------------------------------------
+
+  /**
+   * Der Weg Meldung → Ausgabe für ein festgefahrenes Paket: Das Kit meldet per Token STUCK samt
+   * Angaben, die Laufliste liefert sie zurück und rechnet die geschätzte gesparte Zeit.
+   */
+  @Test
+  void ingest_einesFestgefahrenenPaketsLiefertStuckUndGesparteZeitInDerLaufliste()
+      throws Exception {
+    Cookie owner = session("nr-stuck-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-stuck-owner@example.com", "nr-stuck-admin@example.com");
+    String token = token(owner, projectId, board(userId("nr-stuck-admin@example.com"), projectId));
+
+    mvc.perform(
+            post("/api/kanban/night-runs")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content(
+                    """
+                    {"startedAt":"%s","mode":"IMPLEMENTATION","durationMs":1,"processedCount":1,
+                     "skippedCount":0,"unparsedCount":0,"complete":true,
+                     "items":[{"cardNumber":1549,"title":"Festgefahren","state":"RED",
+                       "errorClass":"STUCK","durationMs":900000,
+                       "stuck":{"check":"mvn verify","error":"OpenApiIT rot","attempts":3,
+                         "sessionLimitMs":3600000,"sessionId":"sitzung-1"}}]}"""
+                        .formatted(ERSTER)))
+        .andExpect(status().isOk());
+
+    mvc.perform(get(path(projectId)).cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].items[0].errorClass").value("STUCK"))
+        .andExpect(jsonPath("$[0].items[0].stuck.check").value("mvn verify"))
+        .andExpect(jsonPath("$[0].items[0].stuck.error").value("OpenApiIT rot"))
+        .andExpect(jsonPath("$[0].items[0].stuck.attempts").value(3))
+        .andExpect(jsonPath("$[0].items[0].stuck.sessionLimitMs").value(3_600_000))
+        .andExpect(jsonPath("$[0].items[0].stuck.sessionId").value("sitzung-1"))
+        .andExpect(jsonPath("$[0].items[0].estimatedSavedMs").value(2_700_000));
+  }
+
+  /** Eine überlange Angabe im Block stuck ist 400 mit {@code fieldErrors}, nicht 500 (E8). */
+  @Test
+  void ingest_weistEineUeberlangePruefungImBlockStuckMitFieldErrorsAb() throws Exception {
+    Cookie owner = session("nr-stuck-lang-owner@example.com", PlatformRole.USER);
+    long projectId =
+        projectOf("nr-stuck-lang-owner@example.com", "nr-stuck-lang-admin@example.com");
+    String token =
+        token(owner, projectId, board(userId("nr-stuck-lang-admin@example.com"), projectId));
+
+    mvc.perform(
+            post("/api/kanban/night-runs")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content(
+                    """
+                    {"startedAt":"%s","mode":"IMPLEMENTATION","durationMs":1,"processedCount":1,
+                     "skippedCount":0,"unparsedCount":0,"complete":true,
+                     "items":[{"cardNumber":1549,"title":"Festgefahren","state":"RED",
+                       "errorClass":"STUCK","stuck":{"check":"%s","attempts":0}}]}"""
+                        .formatted(ERSTER, "c".repeat(301))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors['items[0].stuck.check']").exists())
+        .andExpect(jsonPath("$.fieldErrors['items[0].stuck.attempts']").exists());
+  }
+
   private long board(long adminId, long projectId) {
     return boards.createBoard(adminId, projectId, "Board").id();
   }
