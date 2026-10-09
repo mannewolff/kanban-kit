@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalInt;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
@@ -190,10 +191,10 @@ public class CardCycleTimeService {
    */
   private static List<WeeklyImplementation> implementationWeekly(
       List<MeasuredCard> measured, Instant now) {
-    List<List<Long>> perWeek = new ArrayList<>(THROUGHPUT_WEEKS);
-    for (int j = 0; j < THROUGHPUT_WEEKS; j++) {
-      perWeek.add(new ArrayList<>());
-    }
+    // Ohne Zählschleife: Ihre Grenze j < 12 ließ sich zu j <= 12 verschieben, ohne dass sich etwas
+    // änderte — die dreizehnte Liste las niemand (Issue #1562).
+    List<List<Long>> perWeek =
+        Stream.<List<Long>>generate(ArrayList::new).limit(THROUGHPUT_WEEKS).toList();
     for (MeasuredCard m : measured) {
       weekIndex(m.doneAt(), now).ifPresent(i -> perWeek.get(i).add(m.seconds()));
     }
