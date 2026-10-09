@@ -1749,6 +1749,7 @@ class NightRunServiceTest {
           item.commitHash(),
           item.excerpt(),
           item.usage(),
+          item.stuck(),
           item.stages());
     }
 
@@ -1808,6 +1809,7 @@ class NightRunServiceTest {
           item.commitHash(),
           item.excerpt(),
           item.usage(),
+          item.stuck(),
           // Die Stufen haengen am Paket, nicht am Lauf (V37): Ein verwaistes Paket behaelt sie.
           item.stages());
     }

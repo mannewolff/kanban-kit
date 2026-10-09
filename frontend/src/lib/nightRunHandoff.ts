@@ -64,6 +64,7 @@ export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = {
   AWAITING_DECISION: 'Wartet auf Entscheidung',
   REVIEWER_FAILED: 'Prüf-Session gescheitert',
   TIME_BUDGET_EXCEEDED: 'Zeitbudget erschöpft',
+  STUCK: 'Festgefahren',
 }
 
 /**

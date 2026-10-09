@@ -474,6 +474,9 @@ public class NightRunService {
                     item.commitHash(),
                     item.excerpt(),
                     item.usage(),
+                    // Die Angaben eines festgefahrenen Pakets uebernimmt erst die Einlieferung
+                    // (Plan #1547); bis dahin traegt kein eingeliefertes Paket welche.
+                    null,
                     // Die Stufen kommen mit der Meldung (Issue #1113); der Upload-Weg uebergibt
                     // hier fest die leere Liste — „dieser Vorgang hatte keine".
                     item.stages()))

@@ -34,5 +34,13 @@ public enum NightRunErrorClass {
   REVIEWER_FAILED,
 
   /** Die Stufe wurde am Zeitbudget beendet, bevor sie ihr Ergebnis hatte (Issue #842). */
-  TIME_BUDGET_EXCEEDED
+  TIME_BUDGET_EXCEEDED,
+
+  /**
+   * Festgefahren: Die Bremse des Kits hat das Paket früh beendet, weil es sich an derselben Prüfung
+   * immer wieder auf dieselbe Weise festfuhr (Issue #1546). Das Kit meldet dazu den Zustand {@link
+   * NightRunState#RED}; diese Bindung wird nicht geprüft (Plan #1547, E3) — wie bei jeder anderen
+   * Fehlerklasse, siehe {@link NightRunItem}. Die Angaben dazu trägt {@link NightRunStuck}.
+   */
+  STUCK
 }

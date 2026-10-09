@@ -34,6 +34,7 @@ import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.ReleasePreparation;
 import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
@@ -154,6 +155,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         state == NightRunState.GREEN ? "4c9f42a" : null,
         "  #" + cardNumber + " -> " + state,
         null,
+        null,
         List.of());
   }
 
@@ -243,6 +245,71 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     assertThat(runs.findItemsByRunIds(List.of(id)))
         .extracting(NightRunItem::errorClass)
         .containsExactly(NightRunErrorClass.TIME_BUDGET_EXCEEDED);
+  }
+
+  // --- Festgefahrene Pakete (Issue #1546) ------------------------------------------------------
+
+  /**
+   * Die fünf Spalten aus {@code V50} gehen hinein und kommen als {@link NightRunStuck} zurück; der
+   * {@code CHECK} lässt {@code STUCK} zu. Nur die echte Datenbank belegt beides.
+   */
+  @Test
+  void einFestgefahrenesPaketTraegtSeineAngabenZurueck() {
+    NightRunStuck angaben =
+        new NightRunStuck("mvn verify", "OpenApiIT: Vertrag weicht ab", 3, 5_400_000L, "sess-1548");
+
+    long id = anlegen(T1, List.of(festgefahren(1548, angaben)));
+
+    assertThat(runs.findItemsByRunIds(List.of(id)))
+        .singleElement()
+        .extracting(NightRunItem::state, NightRunItem::errorClass, NightRunItem::stuck)
+        .containsExactly(NightRunState.RED, NightRunErrorClass.STUCK, angaben);
+  }
+
+  /** Einzelne Angaben dürfen fehlen (Plan #1547, E8) — gesetzt bleibt, was gemeldet wurde. */
+  @Test
+  void einFestgefahrenesPaketMitTeilangabenBehaeltDieLuecken() {
+    NightRunStuck angaben = new NightRunStuck(null, null, null, 5_400_000L, null);
+
+    long id = anlegen(T1, List.of(festgefahren(1548, angaben)));
+
+    assertThat(runs.findItemsByRunIds(List.of(id)))
+        .singleElement()
+        .extracting(NightRunItem::stuck)
+        .isEqualTo(angaben);
+  }
+
+  /**
+   * Ohne jede Angabe liest sich das Paket mit {@code stuck = null}, nicht mit einem leeren Record.
+   */
+  @Test
+  void einPaketOhneAngabenLiestStuckNull() {
+    long id = anlegen(T1, List.of(festgefahren(1548, null)));
+
+    assertThat(runs.findItemsByRunIds(List.of(id)))
+        .singleElement()
+        .extracting(NightRunItem::errorClass, NightRunItem::stuck)
+        .containsExactly(NightRunErrorClass.STUCK, null);
+  }
+
+  private static NightRunItem festgefahren(int cardNumber, @Nullable NightRunStuck stuck) {
+    return new NightRunItem(
+        null,
+        null,
+        PLATZHALTER_PROJEKT,
+        PLATZHALTER_START,
+        PLATZHALTER_MODUS,
+        PLATZHALTER_GATTUNG,
+        cardNumber,
+        "Paket " + cardNumber,
+        NightRunState.RED,
+        NightRunErrorClass.STUCK,
+        1_200_000L,
+        null,
+        null,
+        null,
+        stuck,
+        List.of());
   }
 
   // --- Gattung (Issue #1010) ------------------------------------------------------------------
@@ -551,6 +618,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         excerpt,
+        null,
         null,
         List.of());
   }
@@ -964,6 +1032,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
+        null,
         List.of());
   }
 
@@ -1055,6 +1124,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             paketVerbrauch,
+            null,
             List.of());
 
     long runId = runs.insertIfAbsent(mitVerbrauch, List.of(paket)).orElseThrow();
@@ -1741,6 +1811,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         "4c9f42a",
         null,
         usage,
+        null,
         stages);
   }
 

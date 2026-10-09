@@ -105,6 +105,7 @@ class NightRunOutcomeTest {
         null,
         null,
         null,
+        null,
         List.of());
   }
 
@@ -265,6 +266,40 @@ class NightRunOutcomeTest {
 
     assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
     assertThat(outcome.decisiveItem().cardNumber()).isEqualTo(5);
+  }
+
+  /**
+   * Ein festgefahrenes Paket (Issue #1546) ist rot und damit ein Scheitern — {@code
+   * NightRunOutcome} kennt dafür keinen eigenen Zweig, die Fehlerklasse reist nur mit (Plan #1547,
+   * A2).
+   */
+  @Test
+  void einFestgefahrenesPaketLaesstDenLaufScheitern() {
+    var outcome = befund(true, null, List.of(item(8, NightRunState.RED, NightRunErrorClass.STUCK)));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.decisiveItem())
+        .isEqualTo(
+            new NightRunOutcome.DecisiveItem(8, NightRunState.RED, NightRunErrorClass.STUCK));
+    assertThat(outcome.isDisruption()).isTrue();
+  }
+
+  /** Neben einem wartenden und einem gelben Paket bleibt das festgefahrene maßgeblich (A2). */
+  @Test
+  void einFestgefahrenesPaketSchlaegtGrauUndGelb() {
+    var outcome =
+        befund(
+            true,
+            null,
+            List.of(
+                item(1, NightRunState.GREY, NightRunErrorClass.AWAITING_DECISION),
+                item(2, NightRunState.YELLOW, NightRunErrorClass.CHECKS_RED),
+                item(3, NightRunState.RED, NightRunErrorClass.STUCK)));
+
+    assertThat(outcome.verdict()).isEqualTo(NightRunOutcome.Verdict.FAILED);
+    assertThat(outcome.decisiveItem())
+        .isEqualTo(
+            new NightRunOutcome.DecisiveItem(3, NightRunState.RED, NightRunErrorClass.STUCK));
   }
 
   /** Zurückgestellt ist kein Scheitern, aber auch kein Gelingen — es wartet auf etwas. */

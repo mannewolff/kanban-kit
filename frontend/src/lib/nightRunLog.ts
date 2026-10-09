@@ -34,6 +34,9 @@ export const NIGHT_RUN_ERROR_CLASSES = [
   'AWAITING_DECISION',
   'REVIEWER_FAILED',
   'TIME_BUDGET_EXCEEDED',
+  // Festgefahren (Issue #1546): kommt nur ueber die Ergebnisdatei des Kits, kein Muster deutet es
+  // aus dem Textprotokoll (Plan #1547, E10).
+  'STUCK',
 ] as const
 
 export type NightRunErrorClass = (typeof NIGHT_RUN_ERROR_CLASSES)[number]

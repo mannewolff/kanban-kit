@@ -534,7 +534,7 @@
           "type" : "integer"
         },
         "errorClass" : {
-          "enum" : [ "CHECKS_RED", "CHECKS_NOT_STARTED", "DEPENDENCY_UNMET", "UNEXPECTED_STATE", "HARD_ABORT", "AWAITING_DECISION", "REVIEWER_FAILED", "TIME_BUDGET_EXCEEDED" ],
+          "enum" : [ "CHECKS_RED", "CHECKS_NOT_STARTED", "DEPENDENCY_UNMET", "UNEXPECTED_STATE", "HARD_ABORT", "AWAITING_DECISION", "REVIEWER_FAILED", "TIME_BUDGET_EXCEEDED", "STUCK" ],
           "type" : "string"
         },
         "excerpt" : {

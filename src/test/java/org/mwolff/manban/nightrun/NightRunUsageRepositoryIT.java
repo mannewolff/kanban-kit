@@ -183,6 +183,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         verbrauch,
+        null,
         List.of());
   }
 
@@ -204,6 +205,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         NightRunState.GREEN,
         null,
         60_000L,
+        null,
         null,
         null,
         null,

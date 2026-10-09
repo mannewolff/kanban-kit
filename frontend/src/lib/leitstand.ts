@@ -49,6 +49,7 @@ export const MELDER_JE_FEHLERKLASSE: Record<NightRunErrorClass, Melder> = {
   UNEXPECTED_STATE: 'zinnob',
   HARD_ABORT: 'zinnob',
   TIME_BUDGET_EXCEEDED: 'zinnob',
+  STUCK: 'zinnob',
   AWAITING_DECISION: 'bernst',
   DEPENDENCY_UNMET: 'bernst',
   REVIEWER_FAILED: 'grau',

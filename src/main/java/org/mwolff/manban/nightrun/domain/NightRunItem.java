@@ -39,6 +39,8 @@ import org.mwolff.manban.common.Identifiable;
  * @param commitHash Commit der Session; {@code null}, wenn nichts festgeschrieben wurde
  * @param excerpt Protokollauszug, der den Zustand begründet; höchstens {@link
  *     NightRunLimits#EXCERPT_MAX} Zeichen
+ * @param stuck Angaben zu einem festgefahrenen Paket (Issue #1546); {@code null}, wenn das Kit
+ *     keine gemeldet hat
  * @param stages die Stufen der Kette, die dieser Vorgang durchlaufen hat (Issue #1112) — leer statt
  *     {@code null}, denn „dieser Vorgang hatte keine Stufen" ist eine Aussage
  */
@@ -57,6 +59,7 @@ public record NightRunItem(
     @Nullable String commitHash,
     @Nullable String excerpt,
     @Nullable NightRunUsage usage,
+    @Nullable NightRunStuck stuck,
     List<NightRunItemStage> stages)
     implements Identifiable {
 
@@ -88,6 +91,7 @@ public record NightRunItem(
         commitHash,
         excerpt,
         usage,
+        stuck,
         stages);
   }
 }

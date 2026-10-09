@@ -65,6 +65,9 @@ class NightRunItemEntity {
   /** Die sechs Verbrauchsspalten (Issue #1317); {@code null}, wenn keine davon gesetzt ist. */
   @Embedded private @Nullable VerbrauchEmbeddable verbrauch;
 
+  /** Die fünf Angaben eines festgefahrenen Pakets (Issue #1546); {@code null} ohne jede Angabe. */
+  @Embedded private @Nullable StuckEmbeddable stuck;
+
   protected NightRunItemEntity() {
     // für JPA
   }
@@ -119,6 +122,10 @@ class NightRunItemEntity {
 
   @Nullable String getExcerpt() {
     return excerpt;
+  }
+
+  @Nullable StuckEmbeddable getStuck() {
+    return stuck;
   }
 
   VerbrauchEmbeddable getVerbrauch() {

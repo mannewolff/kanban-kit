@@ -340,6 +340,7 @@ describe('NIGHT_RUN_ERROR_CLASS_TEXT — die Beschriftung je Fehlerklasse (#1517
     ['AWAITING_DECISION', 'Wartet auf Entscheidung'],
     ['REVIEWER_FAILED', 'Prüf-Session gescheitert'],
     ['TIME_BUDGET_EXCEEDED', 'Zeitbudget erschöpft'],
+    ['STUCK', 'Festgefahren'],
   ] as const)('%s heisst „%s“', (klasse, text) => {
     expect(NIGHT_RUN_ERROR_CLASS_TEXT[klasse]).toBe(text)
   })
