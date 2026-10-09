@@ -325,6 +325,8 @@ describe('LeitstandVerbrauch — Wahl „Gesamt" (Issue #1541)', () => {
     const ausgabe = await kachel('Ausgabe-Token')
     expect(within(ausgabe).queryByTestId('funke')).not.toBeInTheDocument()
     expect(ausgabe).not.toHaveTextContent('Schicht')
+    // Ohne Ausgabe-Messung und ohne Schichten bleibt der Fuß ganz leer.
+    expect(ausgabe.innerHTML).toMatch(/<span><\/span><span[^>]*><\/span><\/div>$/)
   })
 
   it('rechnet unter „Gesamt" Kosten je Vorgang aus der Kartenzahl', async () => {
@@ -340,6 +342,8 @@ describe('LeitstandVerbrauch — Wahl „Gesamt" (Issue #1541)', () => {
     const kosten = await kachel('Kosten')
     expect(screen.queryByRole('article', { name: 'Gesamt über die Laufzeit' })).not.toBeInTheDocument()
     expect(lesbar(kosten.textContent)).not.toContain('Sitzungen ab')
+    // Kein zweiter, leerer Fuß für die Abdeckung: Der letzte Fuß ist der mit den Kosten je Vorgang.
+    expect(kosten.innerHTML).toMatch(/je Vorgang<\/span><\/div>$/)
     expect(api.total).not.toHaveBeenCalled()
   })
 
@@ -595,6 +599,19 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
     rerender(<LeitstandVerbrauch projectId={6} boardId={4} api={api} />)
     await waitFor(() => expect(api.implementationTime).toHaveBeenLastCalledWith(4, undefined))
     expect(api.period).toHaveBeenCalledTimes(1)
+  })
+
+  it('holt den Zeitraum ohne übergebene Schnittstelle über die Standard-Schnittstelle', async () => {
+    const abruf = vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise<Response>(() => {}))
+    try {
+      render(<LeitstandVerbrauch projectId={5} boardId={3} />)
+
+      await waitFor(() => expect(abruf).toHaveBeenCalledTimes(1))
+      expect(String(abruf.mock.calls[0][0])).toMatch(/^\/api\/projects\/5\/night-run-usage\?type=DAY&stepsBack=0&/)
+      expect(screen.getByText('Der Verbrauch wird geladen …')).toBeInTheDocument()
+    } finally {
+      abruf.mockRestore()
+    }
   })
 
   it('zeigt schon im ersten Bild den Ladesatz, bevor ein Effekt läuft', () => {

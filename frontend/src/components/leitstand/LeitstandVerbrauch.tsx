@@ -101,7 +101,8 @@ export function LeitstandVerbrauch({
     setImplementierung({ art: 'laden' })
     const verbrauch: Promise<Ansicht> =
       wahl === 'TOTAL'
-        ? api.total(projectId).then((gesamt) => ({ art: 'gesamt', gesamt }))
+        ? // Stryker disable next-line StringLiteral: gleichwertig — kachelWerte und umfangText nehmen jedes art außer 'zeitraum' als „Gesamt"
+          api.total(projectId).then((gesamt) => ({ art: 'gesamt', gesamt }))
         : api.period(projectId, wahl, 0).then((zeitraum) => ({ art: 'zeitraum', zeitraum }))
     verbrauch.then(
       (ansicht) => {
@@ -340,6 +341,7 @@ function VerbrauchKacheln({
           )}
           <KachelFuss
             delta={
+              // Stryker disable next-line OptionalChaining: gleichwertig — mit zeitbezug ist vergleich nie null
               zeitbezug && (vergleich?.richtung === 'teurer' || vergleich?.richtung === 'billiger') ? (
                 <Box component="span" title={vergleich.text}>
                   <DeltaMarke art={vergleich.richtung === 'billiger' ? 'gut' : 'schlecht'}>
