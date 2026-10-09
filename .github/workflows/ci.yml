@@ -20,11 +20,13 @@ jobs:
       - name: Build & test (inkl. gebündeltem Frontend)
         run: mvn -B verify
 
-  # Mutation-Gate (CLAUDE-java.md §5): PIT läuft im Profil -Ppit gegen die Surefire-Unit-Tests
-  # (kein Docker/Testcontainers nötig). Eigener Job parallel zum verify-Job — voller Lauf,
-  # mutationThreshold=100 bricht bei jedem überlebenden Mutanten.
+  # Mutationsprüfung (CLAUDE-java.md §5, Issue #1567): Der Treiber fährt den Backend-Vollauf mit PIT
+  # gegen die Surefire-Unit-Tests (kein Docker/Testcontainers nötig) und urteilt wie `push main` —
+  # Sperrschwelle 80 %, Altlast-Vermerk, keine Überlebenden-Karte älter als 7 Tage (Ausnahme von W3
+  # in CLAUDE.md). Die Vorgabe pit.marke=100 aus der pom.xml gilt hier nicht. Eigener Job parallel
+  # zum verify-Job; das Board-Token braucht der Treiber für Liegezeit und Überlebenden-Karten.
   mutation:
-    name: Backend (PIT Mutation -Ppit)
+    name: Backend (PIT Mutation, Sperrschwelle 80 %)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,8 +36,14 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Mutationstests (100% Gate)
-        run: mvn -B -Ppit -Dskip.frontend=true test
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Mutationsprüfung (Sperrschwelle 80 %, Liegezeit 7 Tage)
+        env:
+          TBX_TOKEN: ${{ secrets.KANBAN_KIT_TOKEN }}
+        run: node scripts/mutationspruefung.mjs vollauf backend
 
   frontend:
     name: Frontend (npm build)

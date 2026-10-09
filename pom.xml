@@ -848,6 +848,9 @@
                      allein über den Bericht gegen seine Sperrschwelle, weil die Werkzeugschwelle
                      keinen Altlast-Vermerk kennt (Plan #1528, E12). Die 100 ist das Ziel für
                      Handläufe mit -Ppit; ein Aufruf ohne die Property hält an ihr an.
+                     Weder die CI (Job mutation in .github/workflows/ci.yml) noch push main urteilen
+                     über sie: Beide fahren den Treiber mit Sperrschwelle 80 % und Liegezeit 7 Tage
+                     (Ausnahme von W3 in CLAUDE.md, Issue #1567).
                      Begründung der 100 am <mutationThreshold> unten. -->
                 <pit.marke>100</pit.marke>
 
@@ -986,7 +989,10 @@
                                  nicht erreichbaren Zweigen und werden per FANN (s. o.) — analog zur
                                  JaCoCo-Ausnahme — aus der Mutation genommen.
                                  Eine eigene Test-Strength-Schwelle bietet pitest-maven nicht als
-                                 Parameter; sie liegt bei erreichten 100 % gleichauf. -->
+                                 Parameter; sie liegt bei erreichten 100 % gleichauf.
+                                 Die 100 bleibt das Ziel und die Vorgabe für Handläufe mit -Ppit.
+                                 CI und push main urteilen nicht über sie, sondern über den Treiber
+                                 (Sperrschwelle 80 %, Liegezeit 7 Tage; Issue #1567). -->
                             <mutationThreshold>${pit.marke}</mutationThreshold>
                         </configuration>
                     </plugin>

@@ -185,6 +185,11 @@ Kit-Kopie ist; nach „Verhältnis der Guides“ hat sie Vorrang vor W3. Im Einz
 - **Handläufe mit Board-Zugriff** (`aenderung`, `vollauf backend`) laufen in Mannes Terminal oder über
   `checks.mjs`: Aus einer Claude-Code-Sitzung heraus fehlt `node scripts/mutationspruefung.mjs` das
   Netz, und ein Lauf mit Überlebenden endet dann rot.
+- **CI (Issue #1567):** Der CI-Job „Backend (PIT Mutation)“ ruft PIT nicht direkt auf, sondern fährt
+  `node scripts/mutationspruefung.mjs vollauf backend` und urteilt damit mit derselben Sperrschwelle von
+  80 % und derselben Liegezeit von 7 Tagen; das Board-Token kommt aus dem Secret `KANBAN_KIT_TOKEN`.
+  `merge production` ist darum nicht strenger als `push main` — ein dort durchgelassener Überlebender
+  sperrt das nächste Release nicht.
 
 **Stufenschaltung (Issue #1280).** Der Treiber kann per `--stufe` und Dauerprotokoll
 (`.claude/mutationsdauer-<seite>.json`) zwischen `paket` und `push` schalten; die Config nutzt das nicht,
