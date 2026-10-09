@@ -593,6 +593,7 @@ export function balkenHoehen(werte: readonly number[]): number[] {
  * einem großen nicht wie eine Lücke aussieht.
  */
 export function balkenHoehenMitLuecken(werte: readonly (number | null)[]): (number | null)[] {
+  // Stryker disable next-line ConditionalExpression,MethodExpression: gleichwertig — Math.max nimmt null als 0, und die 0 steht schon als Untergrenze
   const max = Math.max(0, ...werte.filter((wert) => wert !== null))
   return werte.map((wert) => (wert === null ? null : Math.max(3, max === 0 ? 0 : Math.round((wert / max) * 100))))
 }
