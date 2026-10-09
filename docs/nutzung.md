@@ -355,6 +355,15 @@ Aufgeklappt zeigt er seine Arbeitspakete, jedes mit einem der **vier Zustände**
 - **rot — „gescheitert":** der Run kam an diesem Arbeitspaket nicht durch.
 - **grau — „nicht bearbeitet":** übergangen, etwa weil eine Abhängigkeit noch offen war.
 
+**Ausgang „festgefahren":** Ein rotes Arbeitspaket, das das Kit früh beendet hat, weil es sich an
+derselben Prüfung immer wieder auf dieselbe Weise festfuhr, trägt den eigenen Ausgang
+**„festgefahren"** — unterscheidbar von „Prüfungen rot", „Zeitbudget erschöpft", „Harter Abbruch"
+und „Wartet auf Entscheidung". Dazu stehen sechs Angaben: **Prüfung**, **Fehler**, **Versuche**,
+**Laufzeit bis Abbruch**, **Zeitgrenze der Sitzung** und **geschätzte gesparte Zeit** (Zeitgrenze
+minus Laufzeit, nie unter 0). Was das Kit nicht gemeldet hat, steht als „nicht gemeldet" da; ohne
+Zeitgrenze oder Laufzeit gilt das auch für die gesparte Zeit. Ältere Nächte, die ein festgefahrenes
+Paket noch als „Prüfungen rot" gemeldet haben, bleiben so, wie sie waren.
+
 Zu jedem Arbeitspaket stehen darunter der Auszug aus dem Protokoll (bei grau der Grund) und die
 Herkunftskette — die fachliche Anforderung und der Plan, aus denen es entstanden ist. Die
 Kartennummer ist ein Link und öffnet die Karte zum Lesen.
@@ -521,6 +530,12 @@ Umschalter hängen an dieser Wahl und wechseln mit ihr gemeinsam. Die Kacheln se
 - **Ausgabe-Token**, darunter der Verlauf über die Schichten des Zeitraums.
 - **Kosten**, mit dem Vergleich zum Vorzeitraum (▲/▼ und der Unterschied in Dollar).
 - **Implementierungszeit** — siehe unten.
+- **Bremse** — wie oft die Bremse des Kits gegriffen hat: die Zahl der als
+  [festgefahren](#nachtlauf) gemeldeten Pakete, darunter „≈ … gespart (geschätzt)" als Summe der
+  geschätzten gesparten Zeit (je Sitzung einmal gezählt) und im Fuß „davon *n* ohne Zeitwert" für
+  Bremsungen ohne Zeitgrenze oder Laufzeit. Bei 0 Bremsungen steht nur die 0. Gezählt wird über die
+  aufbewahrten Runs, unter „Gesamt" ohne Vergleich mit dem Vorzeitraum. Die Kachel gibt es nur im
+  Board-Leitstand.
 
 Unter jeder Summe stehen die beiden **Anteile**: „aus Runs" und „aus interaktiven
 Sitzungen". Die Summe ist genau ihre Addition; kein Eintrag zählt in beiden.
