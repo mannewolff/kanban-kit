@@ -10,6 +10,7 @@ import { type BoardDashboardKpis } from '../api/dashboard'
 import { type Epic } from '../api/epics'
 import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunView } from '../api/nightRuns'
 import { CardDetailModal } from '../components/CardDetailModal'
+import { FestgefahrenAngaben } from '../components/leitstand/FestgefahrenAngaben'
 import {
   FilterTaste,
   Fuellschiene,
@@ -387,6 +388,14 @@ function LetzterLauf({
         {zeilen.map((item) => (
           <Box component="li" key={item.id} sx={{ '&:not(:last-child)': { borderBottom: `1px solid color-mix(in srgb, ${RAND} 55%, transparent)` } }}>
             <Vorgang item={item} epic={epics.find((e) => e.memberNumbers.includes(item.cardNumber)) ?? null} onOeffnen={() => void oeffnen(item)} />
+            {/* Unter der Zeile und nicht in ihr (Issue #1552, E18): Die Zeile ist ein Knopf, und eine
+                Überschrift mit Beschreibungsliste gehört nicht in einen Knopf. Eingerückt bis zur
+                Titelspalte: 16 Rand + 14 LED + 12 + 64 Nummer + 12. */}
+            {item.errorClass === 'STUCK' && (
+              <Box sx={{ pl: '118px', pr: '16px', pb: '11px' }}>
+                <FestgefahrenAngaben stuck={item.stuck} durationMs={item.durationMs} ebene="h3" />
+              </Box>
+            )}
           </Box>
         ))}
       </Box>

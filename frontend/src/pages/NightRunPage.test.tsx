@@ -6752,3 +6752,165 @@ describe('NightRunPage — zusammen gelaufene Läufe (#1511)', () => {
     expect(laufTaste(screen.getByTestId(`lauf-${lang}`))).toHaveAttribute('aria-expanded', 'true')
   })
 })
+
+/**
+ * Das festgefahrene Paket (Issue #1552, Plan #1547 E14, E17, AK 1–3 aus #1546): Die Einlieferung
+ * trägt seine Angaben, das Paketdetail zeigt sie — am eingelesenen wie am aufbewahrten Lauf — und
+ * die Ansage nennt den Zustand „festgefahren“.
+ */
+describe('NightRunPage — festgefahrenes Paket (#1552)', () => {
+  const ZWANZIG_MIN = 20 * 60_000
+
+  /** Der Block `einheit.festgefahren`, wie das Kit ihn schreibt. */
+  const BLOCK = {
+    pruefung: 'mvn verify',
+    fehler: 'OpenApiIT: Vertrag weicht ab',
+    versuche: 3,
+    zeitgrenzeMs: 3_600_000,
+    sitzung: 'a1b2c3d4',
+  }
+
+  const FESTGEFAHREN = stand({
+    einheiten: [
+      einheit({
+        id: '722',
+        titel: 'Paket F',
+        ausgang: 'festgefahren',
+        grund: 'festgefahren an mvn verify nach 3 Versuchen',
+        dauerMs: ZWANZIG_MIN,
+        festgefahren: BLOCK,
+      }),
+      einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: GEPRUEFT }),
+    ],
+  })
+
+  /** Die Angaben eines Pakets — der Bereich mit der Überschrift „Festgefahren“. */
+  const angaben = (nummer: number) =>
+    within(screen.getByTestId(`paket-${nummer}`)).getByRole('region', { name: 'Festgefahren' })
+
+  it('reicht die Angaben des festgefahrenen Pakets in die Einlieferung durch', async () => {
+    renderPage({ submit: { ergebnis: alleNeu(FESTGEFAHREN) } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(FESTGEFAHREN)
+
+    await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
+    const gesendet = JSON.parse(anfragen.find((a) => a.method === 'POST')!.body)
+    expect(gesendet.runs[0].items[0].errorClass).toBe('STUCK')
+    expect(gesendet.runs[0].items[0].stuck).toEqual({
+      check: 'mvn verify',
+      error: 'OpenApiIT: Vertrag weicht ab',
+      attempts: 3,
+      sessionLimitMs: 3_600_000,
+      sessionId: 'a1b2c3d4',
+    })
+    // Ein Paket ohne Angaben trägt keinen leeren Schlüssel.
+    expect('stuck' in gesendet.runs[0].items[1]).toBe(false)
+  })
+
+  it('zeigt am eingelesenen, nicht eingelieferten Lauf die geschätzte gesparte Zeit', async () => {
+    renderPage({ submit: { fehler: 'Einliefern nicht möglich' } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(FESTGEFAHREN)
+
+    expect(await screen.findByText('Einliefern nicht möglich')).toBeInTheDocument()
+    aufklappen(0)
+    const bereich = angaben(722)
+    expect(bereich).toHaveTextContent('Prüfungmvn verify')
+    expect(bereich).toHaveTextContent('FehlerOpenApiIT: Vertrag weicht ab')
+    expect(bereich).toHaveTextContent('Versuche3')
+    expect(bereich).toHaveTextContent('Laufzeit bis Abbruch20 min')
+    expect(bereich).toHaveTextContent('Zeitgrenze der Sitzung1 h 0 min')
+    expect(bereich).toHaveTextContent('geschätzte gesparte Zeit40 min')
+    // Der Auszug bleibt daneben stehen — die Angaben ersetzen ihn nicht.
+    expect(within(screen.getByTestId('paket-722')).getByText(/^Auszug: festgefahren an mvn verify/)).toBeInTheDocument()
+  })
+
+  it('zeigt am aufbewahrten Lauf die Angaben, fehlende als „nicht gemeldet“', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [
+              {
+                id: 11,
+                cardNumber: 722,
+                title: 'Paket F',
+                state: 'RED',
+                errorClass: 'STUCK',
+                durationMs: ZWANZIG_MIN,
+                stuck: { check: 'mvn verify', attempts: 3 },
+              },
+            ],
+          }),
+        ],
+      ],
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    vorgaengeAufklappen(lauf(0))
+
+    const bereich = angaben(722)
+    expect(bereich).toHaveTextContent('Prüfungmvn verify')
+    expect(bereich).toHaveTextContent('Fehlernicht gemeldet')
+    expect(bereich).toHaveTextContent('Laufzeit bis Abbruch20 min')
+    expect(bereich).toHaveTextContent('Zeitgrenze der Sitzungnicht gemeldet')
+    expect(bereich).toHaveTextContent('geschätzte gesparte Zeitnicht gemeldet')
+  })
+
+  it('unterscheidet das festgefahrene Paket von Prüfungen rot, Zeitbudget, hartem Abbruch und wartender Entscheidung (AK 1)', async () => {
+    const andere = [
+      { id: 12, cardNumber: 723, errorClass: 'CHECKS_RED', state: 'RED', text: 'Prüfungen rot' },
+      { id: 13, cardNumber: 724, errorClass: 'TIME_BUDGET_EXCEEDED', state: 'RED', text: 'Zeitbudget erschöpft' },
+      { id: 14, cardNumber: 725, errorClass: 'HARD_ABORT', state: 'RED', text: 'Harter Abbruch' },
+      { id: 15, cardNumber: 726, errorClass: 'AWAITING_DECISION', state: 'YELLOW', text: 'Wartet auf Entscheidung' },
+    ] as const
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [
+              {
+                id: 11,
+                cardNumber: 722,
+                title: 'Paket F',
+                state: 'RED',
+                errorClass: 'STUCK',
+                durationMs: ZWANZIG_MIN,
+                stuck: { check: 'mvn verify', sessionLimitMs: 3_600_000 },
+              },
+              ...andere.map(({ id, cardNumber, errorClass, state }) => ({
+                id,
+                cardNumber,
+                title: `Paket ${cardNumber}`,
+                state,
+                errorClass,
+                durationMs: SIEBEN_MIN,
+              })),
+            ],
+          }),
+        ],
+      ],
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    vorgaengeAufklappen(lauf(0))
+
+    expect(screen.getByTestId('zustand-722')).toHaveTextContent('festgefahren')
+    expect(uebernahmetext(lauf(0), 722)).toContain('Fehlerklasse: Festgefahren')
+    expect(angaben(722)).toBeInTheDocument()
+    for (const { cardNumber, text } of andere) {
+      const block = screen.getByTestId(`paket-${cardNumber}`)
+      expect(block).not.toHaveTextContent(/festgefahren/i)
+      expect(within(block).queryByRole('region', { name: 'Festgefahren' })).not.toBeInTheDocument()
+      expect(uebernahmetext(lauf(0), cardNumber)).toContain(`Fehlerklasse: ${text}`)
+    }
+    // Die Ansage des Anteilsbalkens nennt den Zustand in Worten, nicht nur die Farbe.
+    expect(screen.getByTestId('laufband-abschnitt-722')).toHaveAccessibleName(/^Karte #722: festgefahren, /)
+  })
+})

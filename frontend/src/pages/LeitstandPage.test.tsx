@@ -846,3 +846,82 @@ describe('LeitstandPage — Der verstummte Lauf (#1092)', () => {
     expect(within(band).getByTestId('led-stahl')).toHaveAttribute('data-puls', 'an')
   })
 })
+
+/**
+ * Das festgefahrene Paket (Issue #1552, Plan #1547 E18, AK 1 aus #1546): Die Paketzeile trägt die
+ * Klassenmarke `STUCK` wie jede andere, darunter stehen die Angaben mit der Überschrift
+ * „Festgefahren“ — unterscheidbar von den übrigen roten und gelben Ausgängen.
+ */
+describe('LeitstandPage — festgefahrenes Paket (#1552)', () => {
+  beforeEach(() => {
+    m.laeufe.mockResolvedValue([
+      lauf({
+        mode: 'IMPLEMENTATION',
+        items: [
+          paket(940, 'RED', {
+            errorClass: 'STUCK',
+            durationMs: 1_200_000,
+            excerpt: 'festgefahren an mvn verify nach 3 Versuchen',
+            stuck: { check: 'mvn verify', error: 'OpenApiIT weicht ab', attempts: 3, sessionLimitMs: 3_600_000, sessionId: null },
+            estimatedSavedMs: 2_400_000,
+          }),
+          paket(941, 'RED', { errorClass: 'CHECKS_RED' }),
+          paket(942, 'RED', { errorClass: 'TIME_BUDGET_EXCEEDED' }),
+          paket(943, 'RED', { errorClass: 'HARD_ABORT' }),
+          paket(944, 'YELLOW', { errorClass: 'AWAITING_DECISION' }),
+        ],
+      }),
+    ])
+  })
+
+  it('zeigt die Klassenmarke STUCK und darunter die Angaben mit der Überschrift „Festgefahren“', async () => {
+    renderPage()
+    const letzter = await screen.findByRole('region', { name: 'Letzter Run · Umsetzung' })
+    const [festgefahren] = within(letzter).getAllByRole('listitem')
+
+    expect(within(festgefahren).getByText('STUCK')).toBeInTheDocument()
+    const angaben = within(festgefahren).getByRole('region', { name: 'Festgefahren' })
+    expect(within(angaben).getByRole('heading', { name: 'Festgefahren' })).toBeInTheDocument()
+    expect(angaben).toHaveTextContent('Prüfungmvn verify')
+    expect(angaben).toHaveTextContent('Versuche3')
+    expect(angaben).toHaveTextContent('Laufzeit bis Abbruch20 min')
+    expect(angaben).toHaveTextContent('Zeitgrenze der Sitzung1 h 0 min')
+    expect(angaben).toHaveTextContent('geschätzte gesparte Zeit40 min')
+  })
+
+  it('unterscheidet das festgefahrene Paket von Prüfungen rot, Zeitbudget, hartem Abbruch und wartender Entscheidung', async () => {
+    renderPage()
+    const letzter = await screen.findByRole('region', { name: 'Letzter Run · Umsetzung' })
+    const [festgefahren, ...andere] = within(letzter).getAllByRole('listitem')
+
+    expect(within(letzter).getAllByRole('region', { name: 'Festgefahren' })).toHaveLength(1)
+    expect(andere.map((zeile) => within(zeile).queryByRole('region', { name: 'Festgefahren' }))).toEqual([null, null, null, null])
+    expect(andere.map((zeile) => zeile.textContent)).toEqual([
+      expect.stringContaining('CHECKS_RED'),
+      expect.stringContaining('TIME_BUDGET_EXCEEDED'),
+      expect.stringContaining('HARD_ABORT'),
+      expect.stringContaining('AWAITING_DECISION'),
+    ])
+    for (const zeile of andere) {
+      expect(zeile).not.toHaveTextContent('STUCK')
+    }
+    expect(festgefahren).not.toHaveTextContent(/CHECKS_RED|TIME_BUDGET_EXCEEDED|HARD_ABORT|AWAITING_DECISION/)
+  })
+
+  it('lässt die Angaben auch unter dem Filter „Nur Abbrüche“ stehen', async () => {
+    renderPage()
+    const letzter = await screen.findByRole('region', { name: 'Letzter Run · Umsetzung' })
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Nur Abbrüche' }))
+
+    expect(within(letzter).getByRole('region', { name: 'Festgefahren' })).toBeInTheDocument()
+  })
+
+  it('öffnet die Karte weiterhin über die Zeile', async () => {
+    m.karteNachNummer.mockResolvedValue(karte('Paket 940 im Detail'))
+    renderPage()
+    const letzter = await screen.findByRole('region', { name: 'Letzter Run · Umsetzung' })
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Karte #940 öffnen: Paket 940' }))
+
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Paket 940 im Detail')
+  })
+})
