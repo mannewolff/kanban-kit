@@ -1,5 +1,6 @@
 import type { Verdict } from '../api/nightRuns'
-import type { NightRunErrorClass, NightRunState } from './nightRunLog'
+import { formatDuration } from './formatDuration'
+import type { NightRunErrorClass, NightRunState, NightRunStuck } from './nightRunLog'
 
 /**
  * Der Uebernahmetext eines Arbeitspakets (Issue #727, Plan #718).
@@ -39,7 +40,20 @@ export interface NightRunHandoffItem {
    * Server geladener Lauf traegt ihn nicht (Plan #744, A5).
    */
   rawLines?: readonly string[]
+  /** Laufzeit des Pakets; bei `STUCK` die Laufzeit bis zum Abbruch (Issue #1551). */
+  durationMs?: number | null
+  /**
+   * Die Angaben eines festgefahrenen Pakets — frisch geparst ohne `null`, aus der Lesesicht des
+   * Servers mit `null` je fehlender Angabe. Beides heisst „nicht gemeldet".
+   */
+  stuck?: NightRunStuckAngaben | null
 }
+
+/** {@link NightRunStuck} in beiden Lagen: fehlende Angabe als fehlendes Feld oder als `null`. */
+export type NightRunStuckAngaben = { [K in keyof NightRunStuck]?: NightRunStuck[K] | null }
+
+/** Der Platzhalter fuer eine Angabe, die das Kit nicht gemeldet hat (Plan #1547, E14). */
+export const NICHT_GEMELDET = 'nicht gemeldet'
 
 /** Die Beschriftung je Zustand — Text traegt die Aussage, nicht nur die Farbe. */
 export const NIGHT_RUN_STATE_TEXT: Record<NightRunState, string> = {
@@ -130,6 +144,8 @@ export const NIGHT_RUN_STATE_TEXT_BY_ERROR_CLASS: Partial<
     YELLOW: 'Am Zeitbudget beendet, Ergebnis liegt vor',
     RED: 'Am Zeitbudget beendet, ohne Ergebnis',
   },
+  // Ein festgefahrenes Paket ist immer rot (Plan #1547, E14).
+  STUCK: { RED: 'festgefahren' },
 }
 
 /**
@@ -180,6 +196,43 @@ export function kurzGrund(text: string): string {
 }
 
 /**
+ * Die geschaetzte gesparte Zeit eines festgefahrenen Pakets (Plan #1547, E17): die Zeitgrenze der
+ * Sitzung abzueglich der Laufzeit bis zum Abbruch, nie unter 0; `null` ohne einen der beiden Werte.
+ *
+ * <p>Hier und nicht erst im Server: Die Nachtlauf-Seite zeigt auch einen frisch eingelesenen, noch
+ * nicht eingelieferten Lauf, und dieselbe Nacht darf nicht anders aussehen, je nachdem wie sie
+ * eingeliefert wurde. Die Summen bleiben im Server (A5); er rechnet je Paket dieselbe Differenz.
+ */
+export function geschaetztGespart(
+  durationMs: number | null | undefined,
+  sessionLimitMs: number | null | undefined,
+): number | null {
+  if (durationMs == null || sessionLimitMs == null) return null
+  return Math.max(0, sessionLimitMs - durationMs)
+}
+
+/** Eine Dauer in Millisekunden als Text, ohne Wert {@link NICHT_GEMELDET}. */
+const dauerOderNichtGemeldet = (ms: number | null | undefined): string =>
+  ms == null ? NICHT_GEMELDET : formatDuration(ms / 1000)
+
+/**
+ * Die Zeilen eines festgefahrenen Pakets im Uebernahmetext (Plan #1547, E14) — jede Angabe steht
+ * immer da, eine fehlende als {@link NICHT_GEMELDET}: Gerade dass das Kit etwas nicht gemeldet hat,
+ * ist hier eine Aussage (AK 2 und 3 der fachlichen Quelle #1546).
+ */
+function festgefahrenZeilen(item: NightRunHandoffItem): string[] {
+  const stuck = item.stuck ?? {}
+  return [
+    `Prüfung: ${stuck.check ?? NICHT_GEMELDET}`,
+    `Fehler: ${stuck.error ?? NICHT_GEMELDET}`,
+    `Versuche: ${stuck.attempts ?? NICHT_GEMELDET}`,
+    `Laufzeit bis Abbruch: ${dauerOderNichtGemeldet(item.durationMs)}`,
+    `Zeitgrenze der Sitzung: ${dauerOderNichtGemeldet(stuck.sessionLimitMs)}`,
+    `geschätzte gesparte Zeit: ${dauerOderNichtGemeldet(geschaetztGespart(item.durationMs, stuck.sessionLimitMs))}`,
+  ]
+}
+
+/**
  * Der Text zu einem Arbeitspaket — `null`, wenn keiner entsteht.
  *
  * <p>Nur ein **gelbes oder rotes** Arbeitspaket bekommt einen: Zu einem gruenen gibt es nichts zu
@@ -187,7 +240,8 @@ export function kurzGrund(text: string): string {
  * Befund.
  *
  * <p>Fehlende Angaben lassen ihre Zeile weg, statt sie leer oder mit `undefined` zu schreiben: Ein
- * Text, der `Auszug: undefined` in eine fremde Sitzung traegt, behauptet dort etwas Falsches.
+ * Text, der `Auszug: undefined` in eine fremde Sitzung traegt, behauptet dort etwas Falsches. Die
+ * Ausnahme sind die Angaben eines festgefahrenen Pakets ({@link festgefahrenZeilen}).
  *
  * <p>Das Rohprotokoll haengt als letzter Abschnitt an — **woertlich**, ohne Trim und ohne
  * Filterung (Plan #744, A6). Der Auszug nennt die eine begruendende Zeile, das Rohprotokoll den
@@ -207,6 +261,9 @@ export function buildHandoffText(item: NightRunHandoffItem): string | null {
 
   if (item.errorClass !== undefined) {
     zeilen.push(`Fehlerklasse: ${NIGHT_RUN_ERROR_CLASS_TEXT[item.errorClass]}`)
+  }
+  if (item.errorClass === 'STUCK') {
+    zeilen.push(...festgefahrenZeilen(item))
   }
   // Truthiness statt `!== undefined`: Ein leerer Auszug ergaebe eine Zeile, die nichts sagt.
   if (item.excerpt) {

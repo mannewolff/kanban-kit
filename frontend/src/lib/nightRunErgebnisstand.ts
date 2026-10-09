@@ -43,6 +43,7 @@ import {
   type NightRunMode,
   type NightRunStand,
   type NightRunState,
+  type NightRunStuck,
   type NightRunStufenvorgaben,
 } from './nightRunLog'
 
@@ -148,6 +149,21 @@ interface RohEinheit {
    * den Eintraegen steht, geht diesen Parser nichts an.
    */
   erzeugt?: unknown[]
+  /**
+   * Die Angaben eines festgefahrenen Pakets — nur bei `ausgang: "festgefahren"` ausgewertet
+   * (Plan #1547, E9). Jedes Teilfeld darf fehlen; `unknown`, weil nur Zahlen bzw. Zeichenketten
+   * uebernommen werden und eine fremde Datei nichts anderes einschleusen darf.
+   */
+  festgefahren?: RohFestgefahren
+}
+
+/** Der Block `einheit.festgefahren`, additiv in Fassung 1 (Issue #1551). */
+interface RohFestgefahren {
+  pruefung?: unknown
+  fehler?: unknown
+  versuche?: unknown
+  zeitgrenzeMs?: unknown
+  sitzung?: unknown
 }
 
 /** Die Vorgaben eines Ketten-Laufs, so wie `--kette` sie aus der Config uebernimmt. */
@@ -374,6 +390,8 @@ const NIE_IM_PRUEFLAUF: ReadonlySet<string> = new Set([
   'zurueckgestellt',
   'verbraucht',
   'offen',
+  // Der Pruef-Lauf hat keine Umsetzungssitzung, die sich festfahren koennte (Plan #1547, E20).
+  'festgefahren',
 ])
 
 /**
@@ -796,12 +814,14 @@ function modusDeutung(
 }
 
 /**
- * Die beiden Ausgaenge, deren Auszug am mitgelieferten Grund haengt; `undefined` bei jedem
+ * Die drei Ausgaenge, deren Auszug am mitgelieferten Grund haengt; `undefined` bei jedem
  * anderen Ausgang.
  *
- * <p>Beide sind modus-unabhaengig (Plan #803, Entscheidung 7): `uebersprungen` kennt bereits der
- * Text-Protokoll-Parser (`nightRunLog.ts`, Muster `^#(\d+) uebersprungen: `). Der Rueckfall auf
- * den leeren Grund ({@link grundText}) gilt beiden — der Ausgang steht auch ohne ihn fest, und
+ * <p>`zurueckgestellt` und `uebersprungen` sind modus-unabhaengig (Plan #803, Entscheidung 7):
+ * `uebersprungen` kennt bereits der Text-Protokoll-Parser (`nightRunLog.ts`, Muster
+ * `^#(\d+) uebersprungen: `). `festgefahren` (Issue #1551, Plan #1547 E9) gilt ausser im
+ * Pruef-Lauf, der ihn ueber {@link NIE_IM_PRUEFLAUF} ablehnt. Der Rueckfall auf den leeren Grund
+ * ({@link grundText}) gilt allen dreien — der Ausgang steht auch ohne ihn fest, und
  * `uebersprungen` ist kein Befund, traegt also keine Fehlerklasse.
  */
 function deuteGrundAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | undefined {
@@ -813,7 +833,27 @@ function deuteGrundAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | undef
   if (e.ausgang === 'uebersprungen') {
     return { state: 'GREY', excerpt: gekuerzt(grundText(e)) }
   }
+  if (e.ausgang === 'festgefahren') {
+    return { state: 'RED', errorClass: 'STUCK', excerpt: gekuerzt(grundText(e)) }
+  }
   return undefined
+}
+
+/**
+ * Die Angaben eines festgefahrenen Pakets in den Namen des Servers; `undefined` bei jedem anderen
+ * Ausgang, ohne Block und bei einem Block ohne eine einzige verwertbare Angabe — so liest ihn
+ * auch der Server zurueck (`IngestStuckRequest.toDomain`).
+ */
+function stuckDerEinheit(e: RohEinheit): NightRunStuck | undefined {
+  const block = e.festgefahren
+  if (e.ausgang !== 'festgefahren' || typeof block !== 'object' || block === null) return undefined
+  return leerOderWert<NightRunStuck>({
+    ...textfeld('check', block.pruefung),
+    ...textfeld('error', block.fehler),
+    ...zahlenfeld('attempts', block.versuche),
+    ...zahlenfeld('sessionLimitMs', block.zeitgrenzeMs),
+    ...textfeld('sessionId', block.sitzung),
+  })
 }
 
 /**
@@ -853,6 +893,7 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRu
   const dauer = dauerDerEinheit(e)
   const kennzahlen = kennzahlenDerEinheit(e)
   const kettenStufen = kettenStufenDerEinheit(e.stufen)
+  const stuck = stuckDerEinheit(e)
   return {
     cardNumber: Number(e.id),
     title: e.titel,
@@ -872,6 +913,7 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRu
     // Unbedingt, nicht optional: `ausgang` ist in Fassung 1 zugesagt und steht an jeder
     // Einheit, noch bevor sie erstmals geschrieben wird (siehe {@link RohEinheit}).
     ausgang: e.ausgang,
+    ...(stuck === undefined ? {} : { stuck }),
   }
 }
 

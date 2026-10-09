@@ -74,6 +74,7 @@ const kennzahlen = (extra: Partial<VerbrauchKennzahlen> = {}): VerbrauchKennzahl
   usage: GESAMT,
   usageByKind: { night: NACHT, interactive: SITZUNG },
   interactiveUsageSince: '2026-09-01T08:00:00Z',
+  brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
   ...extra,
 })
 
@@ -106,6 +107,7 @@ const gesamt = (extra: Partial<VerbrauchGesamt> = {}): VerbrauchGesamt => ({
   usageByKind: { night: teilung(angaben(200), angaben(160), angaben(40)), interactive: teilung(angaben(118.5), angaben(80), angaben(38.5)) },
   oldestRetainedRunStart: '2026-05-01T00:00:00Z',
   interactiveUsageSince: '2026-09-01T08:00:00Z',
+  brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
   ...extra,
 })
 

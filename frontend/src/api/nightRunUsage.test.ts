@@ -151,6 +151,48 @@ describe('nightRunUsageApi', () => {
     expect(gesamt.oldestRetainedRunStart).toBeNull()
   })
 
+  /** Die Bremsbilanz steht an Zeitraum und Gesamt (Issue #1551, Plan #1547). */
+  it('liefert die Bremsbilanz an Zeitraum, Vorzeitraum und Gesamt', async () => {
+    const kennzahlen = (brakes: unknown) => ({
+      type: 'WEEK',
+      firstDay: '2026-10-05',
+      lastDay: '2026-10-11',
+      from: '2026-10-05T00:00:00Z',
+      to: '2026-10-12T00:00:00Z',
+      coverage: 'COMPLETE',
+      noRuns: false,
+      runCount: 1,
+      nightRunCount: 1,
+      interactiveRunCount: 0,
+      durationMs: 1,
+      cardCount: 1,
+      usage: { total: nichts, cardShare: nichts, remainder: nichts },
+      usageByKind: {
+        night: { total: nichts, cardShare: nichts, remainder: nichts },
+        interactive: { total: nichts, cardShare: nichts, remainder: nichts },
+      },
+      interactiveUsageSince: null,
+      brakes,
+    })
+    spyFetch(
+      JSON.stringify({
+        current: kennzahlen({ count: 3, withoutTimeCount: 1, savedMs: 5_400_000 }),
+        previous: kennzahlen({ count: 0, withoutTimeCount: 0, savedMs: 0 }),
+      }),
+    )
+
+    const zeitraum = await nightRunUsageApi.period(4, 'WEEK', 0, 'UTC')
+
+    expect(zeitraum.current.brakes).toEqual({ count: 3, withoutTimeCount: 1, savedMs: 5_400_000 })
+    expect(zeitraum.previous.brakes.count).toBe(0)
+
+    spyFetch(JSON.stringify({ brakes: { count: 7, withoutTimeCount: 2, savedMs: 9_000_000 } }))
+
+    const gesamt = await nightRunUsageApi.total(4)
+
+    expect(gesamt.brakes).toEqual({ count: 7, withoutTimeCount: 2, savedMs: 9_000_000 })
+  })
+
   it('reicht einen Fehlerstatus als ApiError weiter', async () => {
     spyFetch('{"detail":"verboten"}', 403)
 

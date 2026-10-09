@@ -197,6 +197,29 @@ export interface NightRunItem {
    * zweite Wahrheit in den Einlieferungs-Vertrag zu legen (E2, ausdruecklich verworfen).
    */
   ausgang?: string
+  /**
+   * Die Angaben eines festgefahrenen Pakets (`errorClass: 'STUCK'`, Issue #1551) — nur aus einem
+   * Ergebnisstand, der Textprotokoll-Parser kennt den Ausgang nicht (Plan #1547, E10). Fehlt, wenn
+   * die Einheit keinen oder einen leeren Block traegt.
+   */
+  stuck?: NightRunStuck
+}
+
+/**
+ * Was das Kit zu einem festgefahrenen Paket meldet (Plan #1547, E9) — die Namen des Servers, nicht
+ * die der Ergebnisdatei. Jede Angabe fehlt, wo das Kit sie nicht gemeldet hat; keine traegt `null`.
+ */
+export interface NightRunStuck {
+  /** Die Pruefung, an der das Paket hing. */
+  check?: string
+  /** Der wiederkehrende Fehler. */
+  error?: string
+  /** Zahl der Versuche. */
+  attempts?: number
+  /** Zeitgrenze der Sitzung dieses Pakets in Millisekunden. */
+  sessionLimitMs?: number
+  /** Kennung der Sitzung. */
+  sessionId?: string
 }
 
 export interface NightRun {

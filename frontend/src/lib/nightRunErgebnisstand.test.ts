@@ -1425,3 +1425,93 @@ describe('parseNightRunErgebnisstand gegen parseNightRunLog', () => {
     ])
   })
 })
+
+describe('parseNightRunErgebnisstand — festgefahrenes Paket (Issue #1551)', () => {
+  const VOLL = {
+    pruefung: 'mvn verify',
+    fehler: 'OpenApiIT: Vertrag weicht vom Schnappschuss ab',
+    versuche: 3,
+    zeitgrenzeMs: 3_600_000,
+    sitzung: 'a1b2c3d4',
+  }
+  const festgefahren = (felder: Record<string, unknown> = {}): Record<string, unknown> => ({
+    ausgang: 'festgefahren',
+    grund: 'festgefahren an mvn verify nach 3 Versuchen',
+    dauerMs: 1_200_000,
+    festgefahren: VOLL,
+    ...felder,
+  })
+
+  it('deutet `festgefahren` mit vollem Block rot mit STUCK und uebernimmt die Angaben', () => {
+    const item = einziges(mitEinheit(festgefahren()))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('STUCK')
+    expect(item.excerpt).toBe('festgefahren an mvn verify nach 3 Versuchen')
+    expect(item.durationMs).toBe(1_200_000)
+    expect(item.stuck).toEqual({
+      check: 'mvn verify',
+      error: 'OpenApiIT: Vertrag weicht vom Schnappschuss ab',
+      attempts: 3,
+      sessionLimitMs: 3_600_000,
+      sessionId: 'a1b2c3d4',
+    })
+  })
+
+  it('laesst fehlende Teilfelder des Blocks weg, statt sie mit null zu fuellen', () => {
+    const item = einziges(
+      mitEinheit(festgefahren({ festgefahren: { pruefung: 'npm test', versuche: null, zeitgrenzeMs: 'x' } })),
+    )
+    expect(item.errorClass).toBe('STUCK')
+    expect(item.stuck).toEqual({ check: 'npm test' })
+  })
+
+  it('deutet `festgefahren` ohne Block und ohne Grund und traegt dann keine Angaben', () => {
+    const item = einziges(mitEinheit({ ausgang: 'festgefahren' }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('STUCK')
+    expect(item.excerpt).toBe('')
+    expect(item).not.toHaveProperty('stuck')
+  })
+
+  it('laesst einen leeren Block wie einen fehlenden weg', () => {
+    expect(einziges(mitEinheit(festgefahren({ festgefahren: {} })))).not.toHaveProperty('stuck')
+  })
+
+  it('kuerzt den Auszug aus dem Grund auf die Spaltengrenze', () => {
+    const item = einziges(mitEinheit(festgefahren({ grund: 'x'.repeat(NIGHT_RUN_EXCERPT_MAX + 5) })))
+    expect(item.excerpt).toHaveLength(NIGHT_RUN_EXCERPT_MAX)
+  })
+
+  it('deutet `festgefahren` im Nachtplan-Lauf wie in der Umsetzung', () => {
+    const item = einziges(mitEinheit(festgefahren(), { art: 'erzeugung', stufe: 'plan' }))
+    expect(item.errorClass).toBe('STUCK')
+    expect(item.stuck?.attempts).toBe(3)
+  })
+
+  it('deutet `festgefahren` in der Kette und behaelt den Grund als Kopf des Auszugs', () => {
+    const item = einziges(inKette(festgefahren()))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('STUCK')
+    expect(item.excerpt.startsWith('festgefahren an mvn verify nach 3 Versuchen')).toBe(true)
+    expect(item.stuck?.check).toBe('mvn verify')
+  })
+
+  it('lehnt `festgefahren` im Pruef-Lauf ab', () => {
+    const ergebnis = ablehnung(imPrueflauf(festgefahren()))
+    expect(ergebnis.grund).toBe('nicht-unterstuetzt')
+    expect(ergebnis.wort).toBe('festgefahren')
+  })
+
+  it('traegt an keinem anderen Ausgang Angaben, auch nicht mit Block', () => {
+    const item = einziges(
+      mitEinheit({ ausgang: 'erfolg', pruefung: { id: '100', zustand: 'geprueft' }, festgefahren: VOLL }),
+    )
+    expect(item.state).toBe('GREEN')
+    expect(item).not.toHaveProperty('stuck')
+  })
+
+  it('deutet eine aeltere Datei ohne den Ausgang unveraendert (AK 5)', () => {
+    const vorher = lauf(JSON.stringify(echterLauf))
+    expect(vorher.items.some((item) => item.errorClass === 'STUCK' || 'stuck' in item)).toBe(false)
+  })
+})

@@ -97,6 +97,8 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   excerpt: null,
   usage: null,
   stages: [],
+  stuck: null,
+  estimatedSavedMs: null,
   ...extra,
 })
 
@@ -181,6 +183,7 @@ const kennzahlen = (extra: Partial<VerbrauchKennzahlen> = {}): VerbrauchKennzahl
   usage: { total: angaben(12.4), cardShare: angaben(null), remainder: angaben(null) },
   usageByKind: jeGattung(angaben(12.4)),
   interactiveUsageSince: null,
+  brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
   ...extra,
 })
 
@@ -217,6 +220,7 @@ const lebenszeit = (): VerbrauchGesamt => ({
   usageByKind: jeGattung(angaben(150)),
   oldestRetainedRunStart: '2026-08-01T00:00:00Z',
   interactiveUsageSince: null,
+  brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
 })
 
 function renderPage(pfad = '/boards/1/leitstand') {

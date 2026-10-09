@@ -3,6 +3,7 @@ import type { Verdict } from '../api/nightRuns'
 import { NIGHT_RUN_ERROR_CLASSES, type NightRunState } from './nightRunLog'
 import {
   buildHandoffText,
+  geschaetztGespart,
   kurzGrund,
   KURZ_GRUND_MAX,
   nightRunZustandsText,
@@ -211,12 +212,13 @@ describe('nightRunZustandsText — Rueckfall wertgleich (AK 9 aus #842)', () => 
   })
 
   it('liefert fuer jede bestehende Kombination denselben Text wie die Zustandstabelle', () => {
-    // Genau ein Paar ist neu; jede andere der 32 Kombinationen muss unveraendert bleiben — sonst
+    // Nur die Paare mit eigenem Text sind neu (#856, #1551); jede andere Kombination muss unveraendert bleiben — sonst
     // saehe ein Bestandslauf nach dieser Aenderung anders aus als vorher.
     for (const state of ZUSTAENDE) {
       for (const errorClass of NIGHT_RUN_ERROR_CLASSES) {
         const neu =
-          errorClass === 'TIME_BUDGET_EXCEEDED' && (state === 'YELLOW' || state === 'RED')
+          (errorClass === 'TIME_BUDGET_EXCEEDED' && (state === 'YELLOW' || state === 'RED')) ||
+          (errorClass === 'STUCK' && state === 'RED')
         if (neu) continue
         expect(nightRunZustandsText(state, errorClass)).toBe(NIGHT_RUN_STATE_TEXT[state])
       }
@@ -343,5 +345,103 @@ describe('NIGHT_RUN_ERROR_CLASS_TEXT — die Beschriftung je Fehlerklasse (#1517
     ['STUCK', 'Festgefahren'],
   ] as const)('%s heisst „%s“', (klasse, text) => {
     expect(NIGHT_RUN_ERROR_CLASS_TEXT[klasse]).toBe(text)
+  })
+})
+
+describe('geschaetztGespart (Issue #1551, Plan #1547 E17)', () => {
+  it('rechnet die Zeitgrenze abzueglich der Laufzeit', () => {
+    expect(geschaetztGespart(1_200_000, 3_600_000)).toBe(2_400_000)
+  })
+
+  it('liefert null ohne Laufzeit', () => {
+    expect(geschaetztGespart(null, 3_600_000)).toBeNull()
+    expect(geschaetztGespart(undefined, 3_600_000)).toBeNull()
+  })
+
+  it('liefert null ohne Zeitgrenze', () => {
+    expect(geschaetztGespart(1_200_000, null)).toBeNull()
+    expect(geschaetztGespart(1_200_000, undefined)).toBeNull()
+  })
+
+  it('faellt nie unter 0, wenn die Laufzeit ueber der Zeitgrenze liegt', () => {
+    expect(geschaetztGespart(4_000_000, 3_600_000)).toBe(0)
+  })
+
+  it('liefert 0, wenn Laufzeit und Zeitgrenze gleich sind', () => {
+    expect(geschaetztGespart(3_600_000, 3_600_000)).toBe(0)
+  })
+})
+
+describe('festgefahrene Pakete — Texte und Uebernahmetext (Issue #1551, Plan #1547 E14)', () => {
+  const festgefahren = (partial: Partial<NightRunHandoffItem> = {}): NightRunHandoffItem =>
+    paket({ errorClass: 'STUCK', excerpt: 'festgefahren an mvn verify', ...partial })
+
+  it('nennt den Zustand eines roten STUCK-Pakets festgefahren', () => {
+    expect(nightRunZustandsText('RED', 'STUCK')).toBe('festgefahren')
+    expect(NIGHT_RUN_ERROR_CLASS_TEXT.STUCK).toBe('Festgefahren')
+  })
+
+  it('nennt alle Angaben eines festgefahrenen Pakets samt geschaetzter gesparter Zeit', () => {
+    const text = buildHandoffText(
+      festgefahren({
+        durationMs: 1_200_000,
+        stuck: {
+          check: 'mvn verify',
+          error: 'OpenApiIT: Vertrag weicht ab',
+          attempts: 3,
+          sessionLimitMs: 3_600_000,
+          sessionId: 'a1b2c3d4',
+        },
+      }),
+    )
+
+    expect(text).toBe(
+      [
+        'Befund des Runs zu Karte #700 Paket A',
+        'Zustand: festgefahren',
+        'Fehlerklasse: Festgefahren',
+        'Prüfung: mvn verify',
+        'Fehler: OpenApiIT: Vertrag weicht ab',
+        'Versuche: 3',
+        'Laufzeit bis Abbruch: 20 Min',
+        'Zeitgrenze der Sitzung: 1 Std 0 Min',
+        'geschätzte gesparte Zeit: 40 Min',
+        'Auszug: festgefahren an mvn verify',
+      ].join('\n'),
+    )
+  })
+
+  it('schreibt fehlende Angaben als nicht gemeldet, auch ohne Block und ohne Laufzeit', () => {
+    const text = buildHandoffText(festgefahren())
+
+    expect(text).toContain('Prüfung: nicht gemeldet')
+    expect(text).toContain('Fehler: nicht gemeldet')
+    expect(text).toContain('Versuche: nicht gemeldet')
+    expect(text).toContain('Laufzeit bis Abbruch: nicht gemeldet')
+    expect(text).toContain('Zeitgrenze der Sitzung: nicht gemeldet')
+    expect(text).toContain('geschätzte gesparte Zeit: nicht gemeldet')
+  })
+
+  it('liest null-Angaben der Lesesicht wie fehlende', () => {
+    const text = buildHandoffText(
+      festgefahren({
+        durationMs: 1_200_000,
+        stuck: { check: null, error: null, attempts: null, sessionLimitMs: null, sessionId: null },
+      }),
+    )
+
+    expect(text).toContain('Prüfung: nicht gemeldet')
+    expect(text).toContain('Versuche: nicht gemeldet')
+    expect(text).toContain('Laufzeit bis Abbruch: 20 Min')
+    expect(text).toContain('Zeitgrenze der Sitzung: nicht gemeldet')
+    expect(text).toContain('geschätzte gesparte Zeit: nicht gemeldet')
+  })
+
+  it('nennt die Angaben nur bei STUCK, nicht bei einer anderen Fehlerklasse', () => {
+    const text = buildHandoffText(paket({ durationMs: 1_200_000, stuck: { check: 'mvn verify' } }))
+
+    expect(text).not.toContain('Prüfung:')
+    expect(text).not.toContain('Laufzeit bis Abbruch')
+    expect(text).not.toContain('nicht gemeldet')
   })
 })

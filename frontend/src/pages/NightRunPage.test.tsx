@@ -29,7 +29,7 @@ import echterPrueflauf from '../lib/__fixtures__/night-run-2026-09-11-103116.jso
 import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
 import { formatDuration } from '../lib/formatDuration'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
-import { buildHandoffText, KURZ_GRUND_MAX, type NightRunHandoffItem } from '../lib/nightRunHandoff'
+import { buildHandoffText, KURZ_GRUND_MAX, type NightRunHandoffItem, type NightRunStuckAngaben } from '../lib/nightRunHandoff'
 import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../nachtlaufDesign'
 import { cssRegel } from '../test/cssRegel'
 import { MELDER, theme } from '../theme'
@@ -314,8 +314,10 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
 }
 
 /** Ein Arbeitspaket in der Kurzform der Tests: Was nichts zur Sache tut, bleibt weg. */
-type ItemVorgabe = Partial<NightRunItemView> &
-  Pick<NightRunItemView, 'id' | 'cardNumber' | 'title' | 'state'>
+type ItemVorgabe = Partial<Omit<NightRunItemView, 'stuck'>> &
+  Pick<NightRunItemView, 'id' | 'cardNumber' | 'title' | 'state'> & {
+    stuck?: NightRunStuckAngaben | null
+  }
 
 /**
  * Ein Arbeitspaket so, wie der Server es schickt: Was der Lauf nicht wusste, steht als `null` im
@@ -336,6 +338,16 @@ function wieAufbewahrtesItem(item: ItemVorgabe): NightRunItemView {
     usage: item.usage ?? null,
     // Leer statt `null`: „dieser Vorgang hatte keine Stufen" ist eine Aussage (Issue #1113).
     stages: item.stages ?? [],
+    stuck: item.stuck
+      ? {
+          check: item.stuck.check ?? null,
+          error: item.stuck.error ?? null,
+          attempts: item.stuck.attempts ?? null,
+          sessionLimitMs: item.stuck.sessionLimitMs ?? null,
+          sessionId: item.stuck.sessionId ?? null,
+        }
+      : null,
+    estimatedSavedMs: item.estimatedSavedMs ?? null,
   }
 }
 

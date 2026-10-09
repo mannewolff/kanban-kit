@@ -1,4 +1,4 @@
-import type { NightRunErrorClass, NightRunMode, NightRunState } from '../lib/nightRunLog'
+import type { NightRunErrorClass, NightRunMode, NightRunState, NightRunStuck } from '../lib/nightRunLog'
 import { apiFetch } from './client'
 
 /**
@@ -59,6 +59,8 @@ export interface NightRunItemSubmission {
   commitHash?: string
   excerpt?: string
   usage?: NightRunUsage
+  /** Die Angaben eines festgefahrenen Pakets (Issue #1551); der Server uebernimmt sie nur bei `STUCK`. */
+  stuck?: NightRunStuck
 }
 
 /** Ein einzuliefernder Lauf. */
@@ -105,6 +107,22 @@ export interface NightRunItemView {
    * Aussage des Servers, kein fehlender Wert. Ein Lauf, der keine Kette ist, führt sie nie.
    */
   stages: NightRunItemStageView[]
+  /** Die Angaben eines festgefahrenen Pakets (Issue #1551); `null` ohne `STUCK` oder ohne jede Angabe. */
+  stuck: NightRunStuckView | null
+  /**
+   * Die geschaetzte gesparte Zeit in Millisekunden — dieselbe Rechnung wie `geschaetztGespart` in
+   * `lib/nightRunHandoff.ts`; `null` ohne `STUCK` und ohne Zeitgrenze oder Laufzeit.
+   */
+  estimatedSavedMs: number | null
+}
+
+/** Die Angaben eines festgefahrenen Pakets in der Lesesicht — eine fehlende Angabe kommt als `null`. */
+export interface NightRunStuckView {
+  check: string | null
+  error: string | null
+  attempts: number | null
+  sessionLimitMs: number | null
+  sessionId: string | null
 }
 
 /** Die vier Stufen, die ein Ketten-Vorgang durchläuft — die Namen des Servers, nicht die der Anzeige. */

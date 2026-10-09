@@ -70,6 +70,56 @@ describe('nightRunsApi', () => {
     expect(laeufe[0].items[0].cardNumber).toBe(721)
   })
 
+  it('submit traegt die Angaben eines festgefahrenen Pakets mit (Issue #1551)', async () => {
+    const festgefahren: NightRunSubmission = {
+      ...lauf,
+      items: [
+        {
+          cardNumber: 722,
+          title: 'Festgefahren',
+          state: 'RED',
+          errorClass: 'STUCK',
+          durationMs: 1_200_000,
+          stuck: { check: 'mvn verify', attempts: 3, sessionLimitMs: 3_600_000 },
+        },
+      ],
+    }
+    const f = spyFetch('[]')
+
+    await nightRunsApi.submit(4, [festgefahren])
+
+    const gesendet = JSON.parse(String(lastCall(f).body)) as { runs: NightRunSubmission[] }
+    expect(gesendet.runs[0].items[0].stuck).toEqual({
+      check: 'mvn verify',
+      attempts: 3,
+      sessionLimitMs: 3_600_000,
+    })
+  })
+
+  it('list liefert Angaben und geschaetzte gesparte Zeit eines festgefahrenen Pakets (Issue #1551)', async () => {
+    const stuck = { check: 'mvn verify', error: null, attempts: 3, sessionLimitMs: 3_600_000, sessionId: null }
+    spyFetch(
+      JSON.stringify([
+        {
+          id: 12,
+          startedAt: '2026-10-09T22:00:00Z',
+          mode: 'IMPLEMENTATION',
+          items: [
+            { id: 31, cardNumber: 722, state: 'RED', errorClass: 'STUCK', stuck, estimatedSavedMs: 2_400_000 },
+            { id: 32, cardNumber: 723, state: 'GREEN', errorClass: null, stuck: null, estimatedSavedMs: null },
+          ],
+        },
+      ]),
+    )
+
+    const [festgefahren] = await nightRunsApi.list(4)
+
+    expect(festgefahren.items[0].stuck).toEqual(stuck)
+    expect(festgefahren.items[0].estimatedSavedMs).toBe(2_400_000)
+    expect(festgefahren.items[1].stuck).toBeNull()
+    expect(festgefahren.items[1].estimatedSavedMs).toBeNull()
+  })
+
   it('errorClassCounts ruft GET /api/projects/{id}/night-runs/error-class-counts', async () => {
     const f = spyFetch(JSON.stringify({ CHECKS_RED: 2 }))
     const zahlen = await nightRunsApi.errorClassCounts(4)

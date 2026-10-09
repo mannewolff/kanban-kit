@@ -52,6 +52,8 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   excerpt: null,
   usage: null,
   stages: [],
+  stuck: null,
+  estimatedSavedMs: null,
   ...extra,
 })
 
