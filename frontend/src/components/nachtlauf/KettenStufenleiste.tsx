@@ -10,6 +10,7 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import ButtonBase from '@mui/material/ButtonBase'
+import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -20,43 +21,54 @@ import Typography from '@mui/material/Typography'
 import TaskAltIcon from '@mui/icons-material/TaskAlt'
 import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { apiErrorMessage } from '../../api/client'
+import { artAusTitel, boardName, namenDerSache, type KitNamen, type KitNamenZustand } from '../../api/kitNamen'
 import type { Label } from '../../api/labels'
 import { nightRunsApi, type KettenStand, type NightRunsApi } from '../../api/nightRuns'
+import { LAUFSTAND } from '../../lib/kitWortformen'
 import { kettenAnzeige, type Stationssymbol } from '../../lib/laufFortschritt'
 import { KLEIN_RADIUS, KUPFER, NUT_SX, TASTE_SX, TEXT_SCHWACH } from '../../theme'
 import { dialogTitleSx } from '../dialogChromeSx'
 
-/** Ob eine Karte die Stufenleiste trägt: ihr Titel beginnt mit `[Fachlich]` oder `[Plan]` (E1). */
-export function traegtStufenleiste(titel: string): boolean {
-  return titel.startsWith('[Fachlich]') || titel.startsWith('[Plan]')
+/**
+ * Ob eine Karte die Stufenleiste trägt: ihr Titel-Präfix nennt die Kartenart `FACHLICH` oder `PLAN`
+ * — `[Fachlich]`, `[Requirement]` oder `[Plan]` (E1; Issue #1595, Plan #1582 E2).
+ */
+export function traegtStufenleiste(daten: KitNamen, titel: string): boolean {
+  const art = artAusTitel(daten, titel)
+  return art === 'FACHLICH' || art === 'PLAN'
 }
 
 type Station = 'plan' | 'pruefung' | 'pakete' | 'abdeckung' | 'umsetzung' | 'push-vorbereitet'
 
 /**
  * Die sechs Stationen der Kette in ihrer Reihenfolge — dieselben wie während des Laufs und in
- * „Heute Nacht“ (Fachplan #1420, Issue #1472); `ziel` trägt das Label der vier wählbaren
- * (Kit-Vertrag, E10). Prüfung und Abdeckung sind Stationen auf dem Weg, aber kein Ziel.
+ * „Heute Nacht“ (Fachplan #1420, Issue #1472); `ziel` trägt die Sache des Labels der vier wählbaren
+ * (Kit-Vertrag, E10). Prüfung und Abdeckung sind Stationen auf dem Weg, aber kein Ziel. Die Namen
+ * der Sachen kommen vom Server (Issue #1595, Plan #1582 A4).
  */
 const STATIONEN: ReadonlyArray<{ schluessel: Station; name: string; ziel: string | null }> = [
-  { schluessel: 'plan', name: 'Plan', ziel: 'ziel:plan' },
+  { schluessel: 'plan', name: 'Plan', ziel: 'ZIEL_PLAN' },
   { schluessel: 'pruefung', name: 'Prüfung', ziel: null },
-  { schluessel: 'pakete', name: 'Arbeitspakete', ziel: 'ziel:pakete' },
+  { schluessel: 'pakete', name: 'Arbeitspakete', ziel: 'ZIEL_PAKETE' },
   { schluessel: 'abdeckung', name: 'Abdeckung', ziel: null },
-  { schluessel: 'umsetzung', name: 'Umsetzung', ziel: 'ziel:umsetzung' },
-  { schluessel: 'push-vorbereitet', name: 'Veröffentlichung vorbereitet', ziel: 'ziel:push-vorbereitet' },
+  { schluessel: 'umsetzung', name: 'Umsetzung', ziel: 'ZIEL_UMSETZUNG' },
+  { schluessel: 'push-vorbereitet', name: 'Veröffentlichung vorbereitet', ziel: 'ZIEL_PUSH_VORBEREITET' },
 ]
 
-const ZIEL_PRAEFIX = 'ziel:'
-const PRUEFER_PRAEFIX = 'planreview:'
-const DURCHZIEHEN = 'kit:durchziehen'
-const PRUEFER = ['planreview:1', 'planreview:2'] as const
+const ZIEL_SACHEN = STATIONEN.flatMap((s) => (s.ziel === null ? [] : [s.ziel]))
+/** Die Prüfer-Sachen mit ihrer Zahl — die Anzeige entsteht aus der Sache, nicht aus dem Namen. */
+const PRUEFER = [
+  { sache: 'PLANREVIEW_1', zahl: 1 },
+  { sache: 'PLANREVIEW_2', zahl: 2 },
+] as const
+const PRUEFER_SACHEN = PRUEFER.map((p) => p.sache)
+type PrueferSache = (typeof PRUEFER)[number]['sache']
+const prueferText = (sache: PrueferSache) => `${PRUEFER.find((p) => p.sache === sache)?.zahl} Prüfer`
 /** Das eine Start-Label des Kit-Vertrags (E10): gesetzt heißt freigegeben, noch nicht übernommen. */
-const NACHT = 'kit:night'
-const REVIEW_FERTIG = 'review:fertig'
-/** Labels, mit denen an der Karte eine offene Frage auf einen Menschen wartet. */
-const OFFENE_FRAGE = ['kit:klaeren', 'lauf:wartet'] as const
-const LAUFSTAND_ANKER = '## Laufstand'
+const NACHT = 'NIGHT'
+/** Sachen, mit denen an der Karte eine offene Frage auf einen Menschen wartet. */
+const OFFENE_FRAGE = ['KLAEREN', 'LAUF_WARTET'] as const
+const PLAN_REVIEW_ZEILE = new RegExp(`^(?:${LAUFSTAND.planReview.join('|')})`, 'm')
 /** Die Lauf-ID ist der Stempel des Runners, etwa `2026-10-05-175710` im Protokollpfad. */
 const LAUF_ID = /\b\d{4}-\d{2}-\d{2}-\d{6}\b/
 
@@ -67,9 +79,10 @@ const LAUF_ID = /\b\d{4}-\d{2}-\d{2}-\d{6}\b/
 const HINWEIS = {
   labelFehlt: (name: string) =>
     `Am Board fehlt das Label „${name}“. Die Leiste legt es nicht an — ein Mensch legt es in den Board-Labels an.`,
-  durchziehen: `Die Karte trägt ${DURCHZIEHEN} und läuft damit mindestens bis zur Umsetzung; ein kürzeres Ziel bliebe wirkungslos.`,
+  durchziehen: (name: string) =>
+    `Die Karte trägt ${name} und läuft damit mindestens bis zur Umsetzung; ein kürzeres Ziel bliebe wirkungslos.`,
   planKarte: 'Die Karte ist schon ein Plan: Plan und Prüfung sind vor dem Lauf erbracht.',
-  fachlichOhneReview: `Die fachliche Prüfung ist nicht abgeschlossen: Die Karte trägt kein ${REVIEW_FERTIG}.`,
+  fachlichOhneReview: (name: string) => `Die fachliche Prüfung ist nicht abgeschlossen: Die Karte trägt kein ${name}.`,
   planOhneReview: 'Die Planprüfung ist nicht abgeschlossen: Im Plan fehlt die Zeile „Plan-Review:“.',
   offeneFrage: (name: string) => `An der Karte wartet eine offene Frage auf einen Menschen (${name}).`,
   go: 'Mit diesem Ziel gibst du das GO für alle Arbeitspakete dieser Karte.',
@@ -80,10 +93,15 @@ const HINWEIS = {
     'Der Plan dieser Anforderung trägt schon „Plan-Review:“ — die Prüferzahl lässt sich nicht mehr wählen.',
   ladefehler: (meldung: string) =>
     `Der Stand der Kette ließ sich nicht laden: ${meldung}. Die Leiste zeigt den Stand vor dem Lauf.`,
+  kitNamenFehlen: 'Kit-Namen nicht ladbar',
 } as const
 
-/** Ob ein Kommentar der Laufstand des Runners ist: seine erste Zeile ist der Anker, wie im Kit. */
-const istLaufstand = (body: string) => body.replaceAll('\r', '').trimStart().split('\n')[0].trim() === LAUFSTAND_ANKER
+/**
+ * Ob ein Kommentar der Laufstand des Runners ist: seine erste Zeile ist der Anker in einer der
+ * beiden Sprachen, wie im Kit.
+ */
+const istLaufstand = (body: string) =>
+  (LAUFSTAND.kopf as readonly string[]).includes(body.replaceAll('\r', '').trimStart().split('\n')[0].trim())
 
 /**
  * Ob ein Runner die Karte übernommen hat — die vorläufige Erkennung aus Gruppe A (E15): Ihr
@@ -148,21 +166,17 @@ const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel =
  * der Endpunkt; nach der Übernahme zeigt die Leiste je Station Symbol, Zustandstext und Grund, wie
  * der Server sie liefert (E5). Vor der Übernahme sperrt `planReviewVorhanden` den Prüferschalter
  * (E14). Lädt der Stand nicht, bleibt die Leiste beim Stand vor dem Lauf und nennt den Fehler.
+ *
+ * <p><b>Namen des Kits</b> (Issue #1595, Plan #1582 E9, E10): Labels, Titel-Präfixe und Laufstand
+ * liest die Leiste über die Sachen des Registers aus `useKitNamen` — ein englischer Name wirkt wie
+ * sein deutsches Gegenstück. Gesetzt wird der Name, den das Board trägt, bei beiden der deutsche.
+ * Solange das Register lädt, zeigt sie den Ladezustand, scheitert es, den Hinweis „Kit-Namen nicht
+ * ladbar“ statt der Leiste.
  */
 /** Die Änderung eines Klicks: Label-IDs, die abgenommen, und solche, die gesetzt werden. */
 export type LabelAenderung = Readonly<{ ab: number[]; an: number[] }>
 
-export function KettenStufenleiste({
-  titel,
-  labelIds,
-  boardLabels,
-  disabled,
-  beschreibung,
-  kommentare,
-  onChange,
-  cardId,
-  api = nightRunsApi,
-}: Readonly<{
+type LeisteProps = Readonly<{
   titel: string
   labelIds: readonly number[]
   boardLabels: readonly Label[]
@@ -175,16 +189,63 @@ export function KettenStufenleiste({
   /** Die interne ID der Karte, für den Kettenstand. */
   cardId: number
   api?: Pick<NightRunsApi, 'kettenstand'>
-}>) {
+}>
+
+export function KettenStufenleiste({
+  kitNamen,
+  ...props
+}: LeisteProps & Readonly<{ /** Das Register aus `useKitNamen`. */ kitNamen: KitNamenZustand }>) {
+  if (kitNamen.status === 'fertig') return <Leiste daten={kitNamen.daten} {...props} />
+  return (
+    <Box>
+      <Typography variant="subtitle2" gutterBottom>
+        Nacht-Kette
+      </Typography>
+      {kitNamen.status === 'laden' ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+          <CircularProgress size={24} aria-label="Kit-Namen werden geladen" />
+        </Box>
+      ) : (
+        <Typography variant="body2" role="status">
+          {HINWEIS.kitNamenFehlen}
+        </Typography>
+      )}
+    </Box>
+  )
+}
+
+function Leiste({
+  daten,
+  titel,
+  labelIds,
+  boardLabels,
+  disabled,
+  beschreibung,
+  kommentare,
+  onChange,
+  cardId,
+  api = nightRunsApi,
+}: LeisteProps & Readonly<{ daten: KitNamen }>) {
   const ladung = useKettenstand(api, cardId)
   const stand = ladung.art === 'geladen' ? ladung.stand : null
 
-  const istPlan = titel.startsWith('[Plan]')
+  const istPlan = artAusTitel(daten, titel) === 'PLAN'
   const nameVon = (id: number) => boardLabels.find((l) => l.id === id)?.name
   const idVon = (name: string) => boardLabels.find((l) => l.name === name)?.id
-  const gesetzt = new Set(labelIds.map(nameVon))
-  const durchziehen = gesetzt.has(DURCHZIEHEN)
-  const gestartet = gesetzt.has(NACHT)
+  /** Die IDs der Karte, deren Label einen der Namen trägt — in der Reihenfolge der Karte. */
+  const idsMit = (namen: ReadonlySet<string>) =>
+    labelIds.filter((id) => boardLabels.some((l) => l.id === id && namen.has(l.name)))
+  const gesetzteNamen = labelIds.map(nameVon).filter((n): n is string => n !== undefined)
+  /** Der Name der Sache, den die Karte trägt, oder `undefined`. */
+  const getragen = (sache: string) => gesetzteNamen.find((n) => namenDerSache(daten, sache).includes(n))
+  const hat = (sache: string) => getragen(sache) !== undefined
+  /**
+   * Der Name, unter dem die Sache an diesem Board gesetzt wird (E9); kennt das Register die Sache
+   * nicht, steht ihr Schlüssel im Sperrhinweis.
+   */
+  const zuSetzen = (sache: string) => boardName(daten, sache, boardLabels.map((l) => l.name)) ?? sache
+  const durchziehen = getragen('DURCHZIEHEN')
+  const gestartet = hat(NACHT)
   const uebernommen = stand === null ? uebernommenVon(kommentare, gestartet) : stand.uebernommen
   const planReviewDa = !istPlan && stand?.planReviewVorhanden === true
   // Ziel und Prüferzahl sind nur vor dem Start wählbar.
@@ -193,11 +254,11 @@ export function KettenStufenleiste({
   // Das wirksame Ziel: das gesetzte Label, an einem Plan nie `ziel:plan`, ohne Label die Vorgabe
   // „Arbeitspakete“ — und mit `kit:durchziehen` mindestens „Umsetzung“ (Kit A3).
   const gesetztesZiel = STATIONEN.find(
-    (s) => s.ziel !== null && gesetzt.has(s.ziel) && !(istPlan && s.schluessel === 'plan'),
+    (s) => s.ziel !== null && hat(s.ziel) && !(istPlan && s.schluessel === 'plan'),
   )?.schluessel
-  const untergrenze: Station = durchziehen ? 'umsetzung' : 'pakete'
+  const untergrenze: Station = durchziehen === undefined ? 'pakete' : 'umsetzung'
   const ziel: Station =
-    gesetztesZiel !== undefined && !(durchziehen && index(gesetztesZiel) < index(untergrenze))
+    gesetztesZiel !== undefined && !(durchziehen !== undefined && index(gesetztesZiel) < index(untergrenze))
       ? gesetztesZiel
       : untergrenze
 
@@ -210,38 +271,46 @@ export function KettenStufenleiste({
   }
 
   /** Der Grund, warum eine Station nicht wählbar ist, oder `null`. */
-  const sperre = (schluessel: Station, zielLabel: string | null): string | null => {
+  const sperre = (schluessel: Station, zielSache: string | null): string | null => {
     if (istPlan && (schluessel === 'plan' || schluessel === 'pruefung')) return HINWEIS.planKarte
-    if (zielLabel === null) return null
-    if (durchziehen && index(schluessel) < index('umsetzung')) return HINWEIS.durchziehen
-    if (idVon(zielLabel) === undefined) return HINWEIS.labelFehlt(zielLabel)
+    if (zielSache === null) return null
+    if (durchziehen !== undefined && index(schluessel) < index('umsetzung')) return HINWEIS.durchziehen(durchziehen)
+    const name = zuSetzen(zielSache)
+    if (idVon(name) === undefined) return HINWEIS.labelFehlt(name)
     return null
   }
 
   /** Der Grund, warum ein Prüferknopf gesperrt ist, oder `null` (E8, E14). */
-  const prueferSperre = (p: string): string | null => {
+  const prueferSperre = (sache: PrueferSache): string | null => {
     if (planReviewDa) return HINWEIS.planReviewDa
-    return idVon(p) === undefined ? HINWEIS.labelFehlt(p) : null
+    const name = zuSetzen(sache)
+    return idVon(name) === undefined ? HINWEIS.labelFehlt(name) : null
   }
 
   /**
-   * Tauscht alle Labels einer Familie gegen das eine gewählte; fremde Labels bleiben stehen. Die
-   * Aufrufer bieten nur Labels an, die das Board führt (E8).
+   * Tauscht alle Namen einer Familie von Sachen gegen den Board-Namen der gewählten (E9); fremde
+   * Labels bleiben stehen. Die Aufrufer bieten nur Sachen an, deren Label das Board führt (E8).
    */
-  const tausche = (praefix: string, neu: string) =>
+  const tausche = (familie: readonly string[], neu: string) => {
+    const alt = new Set(familie.flatMap((sache) => namenDerSache(daten, sache)))
+    const name = zuSetzen(neu)
     onChange({
-      ab: labelIds.filter((id) => nameVon(id)?.startsWith(praefix)),
-      an: boardLabels.filter((l) => l.name === neu).map((l) => l.id),
+      ab: idsMit(alt),
+      an: boardLabels.filter((l) => l.name === name).map((l) => l.id),
     })
+  }
 
-  const prueferGesetzt = PRUEFER.find((p) => gesetzt.has(p))
+  const prueferGesetzt = PRUEFER.find((p) => hat(p.sache))?.sache
+  const nachtNamen = new Set(namenDerSache(daten, NACHT))
 
   /** Was vor dem Start fehlt — leer heißt startbereit. */
   const sperrgruende = [
-    ...(!istPlan && !gesetzt.has(REVIEW_FERTIG) ? [HINWEIS.fachlichOhneReview] : []),
-    ...(istPlan && !/^Plan-Review:/m.test(beschreibung) ? [HINWEIS.planOhneReview] : []),
-    ...OFFENE_FRAGE.filter((name) => gesetzt.has(name)).map(HINWEIS.offeneFrage),
-    ...(idVon(NACHT) === undefined ? [HINWEIS.labelFehlt(NACHT)] : []),
+    ...(!istPlan && !hat('REVIEW_FERTIG') ? [HINWEIS.fachlichOhneReview(zuSetzen('REVIEW_FERTIG'))] : []),
+    ...(istPlan && !PLAN_REVIEW_ZEILE.test(beschreibung) ? [HINWEIS.planOhneReview] : []),
+    ...OFFENE_FRAGE.flatMap((sache) => gesetzteNamen.filter((n) => namenDerSache(daten, sache).includes(n))).map(
+      HINWEIS.offeneFrage,
+    ),
+    ...(idVon(zuSetzen(NACHT)) === undefined ? [HINWEIS.labelFehlt(zuSetzen(NACHT))] : []),
   ]
 
   if (stand?.uebernommen === true) {
@@ -263,9 +332,9 @@ export function KettenStufenleiste({
         {...(anzeige ? {} : { role: 'group', 'aria-label': 'Ziel der Kette', onKeyDown: pfeilNavigation })}
         sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, listStyle: 'none', m: 0, p: 0 }}
       >
-        {STATIONEN.map(({ schluessel, name, ziel: zielLabel }) => {
+        {STATIONEN.map(({ schluessel, name, ziel: zielSache }) => {
           const z = ZUSTAND[zustand(schluessel)]
-          const grund = sperre(schluessel, zielLabel)
+          const grund = sperre(schluessel, zielSache)
           const inhalt = (
             <>
               <Box component="span" aria-hidden data-testid="stationssymbol" sx={{ display: 'flex' }}>
@@ -278,7 +347,7 @@ export function KettenStufenleiste({
               )}
             </>
           )
-          const waehlbar = !anzeige && zielLabel !== null
+          const waehlbar = !anzeige && zielSache !== null
           return (
             <Box
               component="li"
@@ -293,7 +362,7 @@ export function KettenStufenleiste({
                     aria-pressed={schluessel === ziel}
                     aria-disabled={grund === null ? undefined : true}
                     onClick={() => {
-                      if (grund === null && schluessel !== ziel) tausche(ZIEL_PRAEFIX, zielLabel)
+                      if (grund === null && schluessel !== ziel) tausche(ZIEL_SACHEN, zielSache)
                     }}
                     sx={knopfSx(schluessel === ziel, grund !== null)}
                   >
@@ -313,7 +382,7 @@ export function KettenStufenleiste({
           prueferGesetzt={prueferGesetzt}
           planReviewDa={planReviewDa}
           sperre={prueferSperre}
-          onWahl={(p) => tausche(PRUEFER_PRAEFIX, p)}
+          onWahl={(p) => tausche(PRUEFER_SACHEN, p)}
         />
       )}
       <StartBereich
@@ -322,8 +391,8 @@ export function KettenStufenleiste({
         uebernommen={uebernommen}
         sperrgruende={sperrgruende}
         goNoetig={index(ziel) >= index('umsetzung')}
-        onStart={() => onChange({ ab: [], an: boardLabels.filter((l) => l.name === NACHT).map((l) => l.id) })}
-        onRuecknahme={() => onChange({ ab: labelIds.filter((id) => nameVon(id) === NACHT), an: [] })}
+        onStart={() => onChange({ ab: [], an: boardLabels.filter((l) => l.name === zuSetzen(NACHT)).map((l) => l.id) })}
+        onRuecknahme={() => onChange({ ab: idsMit(nachtNamen), an: [] })}
       />
     </Box>
   )
@@ -341,10 +410,10 @@ function PrueferSchalter({
   onWahl,
 }: Readonly<{
   anzeige: boolean
-  prueferGesetzt: string | undefined
+  prueferGesetzt: PrueferSache | undefined
   planReviewDa: boolean
-  sperre: (p: string) => string | null
-  onWahl: (p: string) => void
+  sperre: (p: PrueferSache) => string | null
+  onWahl: (p: PrueferSache) => void
 }>) {
   return (
     <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
@@ -353,7 +422,7 @@ function PrueferSchalter({
       </Typography>
       {anzeige ? (
         <Typography variant="body2">
-          {prueferGesetzt === undefined ? 'Vorgabe des Projekts' : `${prueferGesetzt.slice(PRUEFER_PRAEFIX.length)} Prüfer`}
+          {prueferGesetzt === undefined ? 'Vorgabe des Projekts' : prueferText(prueferGesetzt)}
         </Typography>
       ) : (
         <>
@@ -363,7 +432,7 @@ function PrueferSchalter({
             onKeyDown={pfeilNavigation}
             sx={{ display: 'flex', gap: 1 }}
           >
-            {PRUEFER.map((p) => {
+            {PRUEFER_SACHEN.map((p) => {
               const grund = sperre(p)
               const gewaehlt = prueferGesetzt === p
               return (
@@ -376,7 +445,7 @@ function PrueferSchalter({
                     }}
                     sx={knopfSx(gewaehlt, grund !== null)}
                   >
-                    {`${p.slice(PRUEFER_PRAEFIX.length)} Prüfer`}
+                    {prueferText(p)}
                   </ButtonBase>
                 </Tooltip>
               )
