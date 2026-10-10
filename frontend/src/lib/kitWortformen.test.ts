@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PROTOKOLL, passe, type Wortform } from './kitWortformen'
+import { BUDGETFELDER, ERGEBNISGRUND, LAUFSTAND, PROTOKOLL, passe, type Wortform } from './kitWortformen'
 
 /**
  * Je Regel des Abschnitts Protokoll eine deutsche und eine englische Beispielzeile, wie
@@ -200,5 +200,24 @@ describe('kitWortformen — Abschnitt Protokoll', () => {
 
   it('liefert null, wenn keine der beiden Formen trifft', () => {
     expect(passe(PROTOKOLL.warnung, 'Voellig unbekannte Zeile')).toBeNull()
+  })
+})
+
+describe('kitWortformen — Abschnitte Ergebnisdatei, Laufstand und Budgetfelder (Issue #1593)', () => {
+  it('fuehrt die Freitext-Gruende der Ergebnisdatei in beiden Sprachen', () => {
+    expect(ERGEBNISGRUND).toEqual({
+      abhaengigkeit: ['Abhaengigkeit', 'dependency'],
+      klaeren: ['kit:klaeren', 'kit:clarify'],
+      ohneInReview: ['Session ohne In-review-Ergebnis', 'Session without In-review result'],
+      zeitbudget: ['Zeitbudget ', 'Time budget '],
+    })
+  })
+
+  it('fuehrt die Laufstand-Anker in beiden Sprachen', () => {
+    expect(LAUFSTAND).toEqual({ kopf: ['## Laufstand', '## Run status'], planReview: ['Plan-Review:', 'Plan review:'] })
+  })
+
+  it('fuehrt die Budgetfelder in beiden Sprachen', () => {
+    expect(BUDGETFELDER).toEqual({ paketeMin: ['paketeMin', 'packagesMin'], abdeckungMin: ['abdeckungMin', 'coverageMin'] })
   })
 })

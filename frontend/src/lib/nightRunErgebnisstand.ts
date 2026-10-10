@@ -32,6 +32,7 @@
  * wie das des Pruef-Laufs ({@link NUR_KETTE}, {@link NIE_IN_KETTE}).
  */
 
+import { ERGEBNISGRUND, type Wortpaar } from './kitWortformen'
 import {
   NIGHT_RUN_EXCERPT_MAX,
   type NightRun,
@@ -267,6 +268,12 @@ const NACH_ZUSTAND = new Map<
   ],
 ])
 
+/** Traegt der Grund eine der beiden Formen? */
+const enthaelt = (grund: string, paar: Wortpaar): boolean => paar.some((form) => grund.includes(form))
+
+/** Beginnt der Grund mit einer der beiden Formen? */
+const beginntMit = (grund: string, paar: Wortpaar): boolean => paar.some((form) => grund.startsWith(form))
+
 /**
  * Die Sonderfaelle eines zurueckgestellten Pakets, **in dieser Reihenfolge**: Der
  * Grundtext ist nicht exklusiv (eine unerfuellte Abhaengigkeit kann `kit:klaeren`
@@ -274,10 +281,10 @@ const NACH_ZUSTAND = new Map<
  * je nach Auswertungsreihenfolge auf eine andere Farbe.
  */
 const ZURUECKGESTELLT: ReadonlyArray<{ trifft: (grund: string) => boolean } & Farbe> = [
-  { trifft: (g) => g.includes('Abhaengigkeit'), state: 'GREY', errorClass: 'DEPENDENCY_UNMET' },
-  { trifft: (g) => g.includes('kit:klaeren'), state: 'RED', errorClass: 'AWAITING_DECISION' },
+  { trifft: (g) => enthaelt(g, ERGEBNISGRUND.abhaengigkeit), state: 'GREY', errorClass: 'DEPENDENCY_UNMET' },
+  { trifft: (g) => enthaelt(g, ERGEBNISGRUND.klaeren), state: 'RED', errorClass: 'AWAITING_DECISION' },
   {
-    trifft: (g) => g.startsWith('Session ohne In-review-Ergebnis'),
+    trifft: (g) => beginntMit(g, ERGEBNISGRUND.ohneInReview),
     state: 'RED',
     errorClass: 'UNEXPECTED_STATE',
   },
@@ -421,8 +428,8 @@ const KETTEN_AUSGAENGE = new Map<string, Farbe & { excerpt: string }>([
   ],
 ])
 
-/** Der Grund-Praefix, an dem `ketteSession` einen Zeitbudget-Abbruch erkennbar macht. */
-const ZEITBUDGET_PRAEFIX = 'Zeitbudget '
+/** Der Grund-Praefix, an dem `ketteSession` einen Zeitbudget-Abbruch erkennbar macht — in beiden Sprachen. */
+const ZEITBUDGET_PRAEFIX = ERGEBNISGRUND.zeitbudget
 
 /**
  * Die Ausgaenge, die **nur** ein Ketten-Lauf schreibt — analog {@link NUR_PRUEFLAUF}. In
@@ -546,7 +553,7 @@ function deuteKettenAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | null
   // Ohne Zeitbudget-Praefix ist es ein harter Abbruch; der Rueckfall auf den leeren Text
   // steht in {@link grundText}.
   const grund = grundText(e)
-  if (!grund.startsWith(ZEITBUDGET_PRAEFIX)) {
+  if (!beginntMit(grund, ZEITBUDGET_PRAEFIX)) {
     return { state: 'RED', errorClass: 'HARD_ABORT', excerpt: gekuerzt(grund) }
   }
   // Nur beim Zeitbudget rettet ein erzeugtes Dokument die Farbe. Kostenbudget und

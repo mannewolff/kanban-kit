@@ -33,7 +33,7 @@ const KLAEREN = 'kit:klaeren|kit:clarify'
 
 /**
  * Abschnitt Protokoll: die Zeilen des Textprotokolls von `night.mjs`, ohne Zeitstempel-Praefix.
- * Laufstand-Anker, Budgetfelder und Ergebnisdatei-Gruende ergaenzt Issue #1593.
+ * Laufstand-Anker, Budgetfelder und Ergebnisdatei-Gruende stehen in eigenen Abschnitten weiter unten.
  */
 export const PROTOKOLL = {
   // --- Rahmen eines Laufs
@@ -190,3 +190,31 @@ export const PROTOKOLL = {
   },
   summe: { de: /^ {2}Summe: \d+ Session\(s\)/, en: /^ {2}Total: \d+ session\(s\)/ },
 } as const satisfies Record<string, Wortform>
+
+/** Ein fester Text in beiden Sprachen: zuerst die deutsche, dann die englische Form. */
+export type Wortpaar = readonly [de: string, en: string]
+
+/**
+ * Abschnitt Ergebnisdatei: die Freitext-Gruende, an denen `nightRunErgebnisstand.ts` Zustand und
+ * Fehlerklasse festmacht (Issue #1593). Die maschinellen Kennwerte (`ausgang`, `art`,
+ * Stufenschluessel, Budgetfeldnamen) bleiben deutsch und haben kein Gegenstueck (Plan #1582, E4).
+ */
+export const ERGEBNISGRUND = {
+  abhaengigkeit: ['Abhaengigkeit', 'dependency'],
+  klaeren: ['kit:klaeren', 'kit:clarify'],
+  ohneInReview: ['Session ohne In-review-Ergebnis', 'Session without In-review result'],
+  /** Praefix eines Zeitbudget-Abbruchs, wie `ketteSession` ihn schreibt. */
+  zeitbudget: ['Zeitbudget ', 'Time budget '],
+} as const satisfies Record<string, Wortpaar>
+
+/** Abschnitt Laufstand: die Anker des Laufstand-Kommentars (Plan #1582, E12). */
+export const LAUFSTAND = {
+  kopf: ['## Laufstand', '## Run status'],
+  planReview: ['Plan-Review:', 'Plan review:'],
+} as const satisfies Record<string, Wortpaar>
+
+/** Abschnitt Budgetfelder: die Namen fuer die Anzeige der `defaultFields` (Plan #1582, E3). */
+export const BUDGETFELDER = {
+  paketeMin: ['paketeMin', 'packagesMin'],
+  abdeckungMin: ['abdeckungMin', 'coverageMin'],
+} as const satisfies Record<string, Wortpaar>
