@@ -13,10 +13,18 @@ import org.mwolff.manban.card.application.FreigabeLabels.Richtung;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 
 /** Unit-Tests der Richtungsregel für die Freigabe-Labels des Kits (Issue #1421). */
+@SuppressWarnings("PMD.TooManyMethods")
 class FreigabeLabelsTest {
 
   private static final String DEFINITION_GESPERRT =
       " ist ein Freigabe-Label; seine Definition ändert nur ein Mensch im Board";
+
+  private static final String NAMENSRAUM_SETZEN =
+      " liegt im Namensraum des Kits und ist dort unbekannt; es setzt nur ein Mensch im Board";
+
+  private static final String NAMENSRAUM_UMBENENNEN =
+      " liegt im Namensraum des Kits und ist dort unbekannt; auf diesen Namen benennt nur ein"
+          + " Mensch im Board um";
 
   private static final Map<Long, String> NAMEN =
       Map.of(1L, "kit:night", 2L, "kit:klaeren", 3L, "bug");
@@ -83,11 +91,13 @@ class FreigabeLabelsTest {
   }
 
   @Test
-  void namensvergleich_grossKleinSchreibungWieDieLabelAufloesung() {
+  void namensvergleich_grossKleinSchreibung_unbekannterNameImNamensraum() {
     // requireLabelId löst case-sensitiv auf: "Kit:Night" ist ein anderes Label als "kit:night".
-    assertThatCode(
+    // Seit Issue #1586 sperrt es trotzdem der Namensraum, nicht die Sache NIGHT.
+    assertThatThrownBy(
             () -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, "Kit:Night", Richtung.SETZEN))
-        .doesNotThrowAnyException();
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label Kit:Night" + NAMENSRAUM_SETZEN);
   }
 
   @Test
@@ -228,5 +238,136 @@ class FreigabeLabelsTest {
               FreigabeLabels.pruefeDefinition(herkunft, "bug", "kit:night");
             })
         .doesNotThrowAnyException();
+  }
+
+  // --- Beide Sprachen und Namensraum des Kits (Issue #1586, Plan #1582 E7, E8) ----------------
+
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:night", "kit:nightrun"})
+  void englisch_token_darfNurMenschenLabelNichtSetzen(String name) {
+    assertThatThrownBy(() -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.SETZEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label " + name + " setzt nur ein Mensch im Board");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:clarify", "kit:protected"})
+  void englisch_token_darfMaschinenLabelNichtAbnehmen(String name) {
+    assertThatThrownBy(
+            () -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.ABNEHMEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label " + name + " nimmt nur ein Mensch im Board ab");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:clarify", "kit:protected"})
+  void englisch_token_darfMaschinenLabelSetzen(String name) {
+    assertThatCode(() -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.SETZEN))
+        .doesNotThrowAnyException();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:protected", "kit:clarify", "kit:geschuetzt", "kit:night"})
+  void definition_token_loeschenInBeidenSprachenAbgewiesen(String name) {
+    assertThatThrownBy(() -> FreigabeLabels.pruefeDefinition(CardActivityOrigin.TOKEN, name, null))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label " + name + DEFINITION_GESPERRT);
+  }
+
+  @Test
+  void definition_token_umbenennenAufEnglischenGeschuetztenNamenAbgewiesen() {
+    assertThatThrownBy(
+            () -> FreigabeLabels.pruefeDefinition(CardActivityOrigin.TOKEN, "bug", "kit:clarify"))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:clarify" + DEFINITION_GESPERRT);
+  }
+
+  @Test
+  void definition_token_umbenennenVonEnglischemGeschuetztenNamenAbgewiesen() {
+    assertThatThrownBy(
+            () -> FreigabeLabels.pruefeDefinition(CardActivityOrigin.TOKEN, "kit:protected", "x"))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:protected" + DEFINITION_GESPERRT);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:freigabe", "KIT:night", "Review: UX", "  lauf:neu "})
+  void namensraum_token_unbekannterNameSetzenAbgewiesen(String name) {
+    assertThatThrownBy(() -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.SETZEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label " + name.trim() + NAMENSRAUM_SETZEN);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:freigabe", "KIT:night", "Review: UX"})
+  void namensraum_token_umbenennenAufUnbekanntenNamenAbgewiesen(String name) {
+    assertThatThrownBy(() -> FreigabeLabels.pruefeDefinition(CardActivityOrigin.TOKEN, "bug", name))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label " + name + NAMENSRAUM_UMBENENNEN);
+  }
+
+  @Test
+  void namensraum_token_neuerUnbekannterNameImWechselAbgewiesen() {
+    assertThatThrownBy(
+            () ->
+                FreigabeLabels.pruefeWechsel(
+                    CardActivityOrigin.TOKEN,
+                    Map.of(3L, "bug", 5L, "Review: UX"),
+                    List.of(3L),
+                    List.of(3L, 5L)))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label Review: UX" + NAMENSRAUM_SETZEN);
+  }
+
+  @Test
+  void namensraum_token_abnehmenUndLoeschenUnbekannterNamenErlaubt() {
+    // E8: Anlegen und Abnehmen bleiben erlaubt; ein angelegtes, nicht setzbares Label gibt nichts
+    // frei. Das Löschen und das Umbenennen weg vom Namen nehmen ebenso nur etwas weg.
+    assertThatCode(
+            () -> {
+              FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, "kit:freigabe", Richtung.ABNEHMEN);
+              FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, "Review: UX", Richtung.ABNEHMEN);
+              FreigabeLabels.pruefeDefinition(CardActivityOrigin.TOKEN, "Review: UX", null);
+              FreigabeLabels.pruefeDefinition(CardActivityOrigin.TOKEN, "Review: UX", "UX");
+              FreigabeLabels.pruefeDefinition(
+                  CardActivityOrigin.TOKEN, "kit:freigabe", "kit:freigabe");
+              FreigabeLabels.pruefeWechsel(
+                  CardActivityOrigin.TOKEN,
+                  Map.of(3L, "bug", 5L, "Review: UX"),
+                  List.of(3L, 5L),
+                  List.of(3L));
+            })
+        .doesNotThrowAnyException();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"run:running", "goal:plan", "review:done", "kit:check", "lauf:laeuft"})
+  void namensraum_token_bekannterNameOhneSchutzSetzbar(String name) {
+    assertThatCode(
+            () -> {
+              FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.SETZEN);
+              FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.ABNEHMEN);
+              FreigabeLabels.pruefeDefinition(CardActivityOrigin.TOKEN, "bug", name);
+            })
+        .doesNotThrowAnyException();
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = "SESSION")
+  void sessionUndUnbekannt_duerfenAllesAuchEnglischUndImNamensraum(CardActivityOrigin herkunft) {
+    for (String name :
+        List.of("kit:clarify", "kit:protected", "kit:freigabe", "KIT:night", "Review: UX")) {
+      assertThatCode(
+              () -> {
+                for (Richtung richtung : Richtung.values()) {
+                  FreigabeLabels.pruefe(herkunft, name, richtung);
+                }
+                FreigabeLabels.pruefeDefinition(herkunft, name, null);
+                FreigabeLabels.pruefeDefinition(herkunft, "bug", name);
+                FreigabeLabels.pruefeWechsel(herkunft, Map.of(5L, name), List.of(), List.of(5L));
+              })
+          .doesNotThrowAnyException();
+    }
   }
 }

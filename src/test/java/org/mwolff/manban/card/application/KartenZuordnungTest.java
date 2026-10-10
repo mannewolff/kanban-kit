@@ -26,6 +26,7 @@ import org.mwolff.manban.project.application.PermissionChecker;
  * dem Service die Prüfregeln für Zuständige und Labels selbst. Als Unit-Test, weil PIT
  * ausschliesslich Unit-Tests misst.
  */
+@SuppressWarnings("PMD.TooManyMethods")
 class KartenZuordnungTest {
 
   private static final long BOARD = 10L;
@@ -242,6 +243,62 @@ class KartenZuordnungTest {
     zuordnung.aendereLabel(KARTE, BOARD, 30L, LabelAction.ADD, SESSION);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(30L));
+  }
+
+  @Test
+  void ersetzeLabelsPerTokenLehntWeggelassenesEnglischesMaschinenLabelAb() {
+    givenEnglischeUndNamensraumLabels();
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(41L, 20L));
+
+    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L), TOKEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:protected nimmt nur ein Mensch im Board ab");
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void ersetzeLabelsPerTokenLehntNeuenUnbekanntenNamenImNamensraumAb() {
+    // Anlegen einer Karte mit Labels läuft über ersetzeLabels mit leerer Vorher-Menge.
+    givenEnglischeUndNamensraumLabels();
+
+    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L, 42L), TOKEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessageContaining("Namensraum des Kits");
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void aendereLabelPerTokenLehntAbnehmenEinesEnglischenMaschinenLabelsAb() {
+    givenEnglischeUndNamensraumLabels();
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(40L));
+
+    assertThatThrownBy(() -> zuordnung.aendereLabel(KARTE, BOARD, 40L, LabelAction.REMOVE, TOKEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:clarify nimmt nur ein Mensch im Board ab");
+    verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  @Test
+  void aendereLabelPerSessionDarfUnbekanntenNamenImNamensraumSetzen() {
+    givenEnglischeUndNamensraumLabels();
+
+    zuordnung.aendereLabel(KARTE, BOARD, 42L, LabelAction.ADD, SESSION);
+
+    verify(cardLabels).replaceLabels(KARTE, List.of(42L));
+  }
+
+  /**
+   * Board mit {@code kit:clarify} (40), {@code kit:protected} (41), dem projekteigenen {@code
+   * Review: UX} (42) und einem gewöhnlichen Label.
+   */
+  private void givenEnglischeUndNamensraumLabels() {
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                label(20L, "Bug", "#f00", false),
+                label(40L, "kit:clarify", "#0ff", false),
+                label(41L, "kit:protected", "#0ff", false),
+                label(42L, "Review: UX", "#0f0", false)));
   }
 
   /** Board mit {@code kit:night} (30), {@code kit:klaeren} (31) und einem gewöhnlichen Label. */

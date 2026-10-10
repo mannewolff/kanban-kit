@@ -1,6 +1,8 @@
 package org.mwolff.manban.common;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -9,9 +11,13 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.card.application.FreigabeLabelException;
+import org.mwolff.manban.card.application.FreigabeLabels;
+import org.mwolff.manban.card.application.FreigabeLabels.Richtung;
 import org.mwolff.manban.card.application.LabelRepository;
 import org.mwolff.manban.card.application.StandardLabelService;
 import org.mwolff.manban.card.application.StandardLabelService.StandardLabel;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.common.KitNamen.Eintrag;
 import org.mwolff.manban.common.KitNamen.Sache;
 import org.mwolff.manban.common.KitNamen.Schutz;
@@ -90,5 +96,24 @@ class KitNamenErweiterungTest {
     assertThat(namen.subList(namen.indexOf("kit:klaeren"), namen.indexOf("kit:klaeren") + 3))
         .containsExactly("kit:klaeren", "kit:clarify", ZUSATZNAME);
     assertThat(satz).contains(new StandardLabel(ZUSATZNAME, "Kit", "#6a1b9a"));
+  }
+
+  @Test
+  void freigabeLabels_sperrtDasAbnehmenDesZusatznamensPerToken() {
+    // Given
+    KitNamen register = registerMitZusatznamen();
+
+    // When / Then
+    assertThatThrownBy(
+            () ->
+                FreigabeLabels.pruefe(
+                    register, CardActivityOrigin.TOKEN, ZUSATZNAME, Richtung.ABNEHMEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label " + ZUSATZNAME + " nimmt nur ein Mensch im Board ab");
+    assertThatCode(
+            () ->
+                FreigabeLabels.pruefe(
+                    register, CardActivityOrigin.TOKEN, ZUSATZNAME, Richtung.SETZEN))
+        .doesNotThrowAnyException();
   }
 }

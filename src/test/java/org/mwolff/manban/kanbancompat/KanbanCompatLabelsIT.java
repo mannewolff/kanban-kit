@@ -43,8 +43,9 @@ import org.springframework.test.web.servlet.RequestBuilder;
 class KanbanCompatLabelsIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
-  // Ein gewöhnliches Label: kit:nightrun setzt seit Issue #1421 nur noch ein Mensch im Board.
-  private static final String ROUTING = "kit:routing";
+  // Ein Label ohne Schutz: kit:nightrun setzt seit Issue #1421 nur noch ein Mensch im Board, und
+  // ein unbekannter Name im Namensraum des Kits ist seit Issue #1586 für Token gesperrt.
+  private static final String ROUTING = "kit:pruefen";
   private static final String NIGHT = "kit:night";
   private static final String KLAEREN = "kit:klaeren";
 
@@ -362,6 +363,37 @@ class KanbanCompatLabelsIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content("{\"name\":\"kit:geschuetzt\",\"color\":\"#ff0000\"}"))
         .andExpect(status().isCreated());
+  }
+
+  // --- Beide Sprachen und Namensraum des Kits (Issue #1586) ---------------------------------
+
+  @Test
+  void tokenSetztWederNightNochUnbekanntenNamensraumNamen_undNimmtClarifyNichtAb()
+      throws Exception {
+    Fixture f = fixture("freigabe-namensraum");
+    long clarify = createLabel(f, "kit:clarify");
+    createLabel(f, NIGHT);
+    createLabel(f, "Review: UX");
+    long cardId = directIngest(f.token, "Karte");
+
+    mvc.perform(addLabel(f.token, cardId, NIGHT))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.detail").value("Label kit:night setzt nur ein Mensch im Board"));
+    mvc.perform(addLabel(f.token, cardId, "Review: UX"))
+        .andExpect(status().isForbidden())
+        .andExpect(
+            jsonPath("$.detail")
+                .value(
+                    "Label Review: UX liegt im Namensraum des Kits und ist dort unbekannt; es"
+                        + " setzt nur ein Mensch im Board"));
+    assertThat(assignmentCount(cardId)).isZero();
+
+    setLabels(f.session, cardId, List.of(clarify));
+    mvc.perform(removeLabel(f.token, cardId, "kit:clarify"))
+        .andExpect(status().isForbidden())
+        .andExpect(
+            jsonPath("$.detail").value("Label kit:clarify nimmt nur ein Mensch im Board ab"));
+    assertThat(labelsOf(f.token, cardId)).containsExactly("kit:clarify");
   }
 
   // --- Requests -------------------------------------------------------------
