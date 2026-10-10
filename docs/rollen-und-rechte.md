@@ -185,6 +185,13 @@ gebundenen Boards bedienen; jeder andere `/api/**`-Zugriff wird mit **403** abge
 von den Rollen des Erstellers, auch bei einem Plattform-Admin. Ein **ungebundenes** Token bleibt in
 seinem bisherigen Umfang nutzbar.
 
+Lesend erreicht ein board-gebundenes Token über die Kanban-Compat-API auch das **Archiv** seines
+Boards: Einzelabruf nach Nummer, Suche und Herkunftskette (siehe
+[Dogfooding](dogfooding.md#archivierte-karten-nummer-suche-herkunftskette)) liefern archivierte
+Karten mit. Karten im **Papierkorb** bleiben unsichtbar, ebenso Karten anderer Boards — beide
+antworten mit **404** wie eine unbekannte Nummer. Ein **ungebundenes** Token erhält auf diese
+Aufrufe **409**, weil ihm das Board fehlt.
+
 ### Freigabe-Labels des Kits
 
 Vier Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Server erzwingt sie

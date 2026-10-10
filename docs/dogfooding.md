@@ -117,6 +117,98 @@ Kommentare schreibt man mit `node cli/tbx.mjs issue comment 42 --text "…"`.
 > Spricht die CLI gegen eine **ältere** Instanz, die den Kommentar-Endpoint noch nicht
 > kennt, bleibt `comments` leer — der Aufruf bricht nicht ab.
 
+### Archivierte Karten: Nummer, Suche, Herkunftskette
+
+Drei lesende Aufrufe erreichen auch archivierte Karten des gebundenen Boards — Karten im
+Papierkorb und Karten anderer Boards nicht (siehe [API-Tokens](rollen-und-rechte.md#api-tokens)).
+`GET /api/kanban/items` zeigt archivierte Karten weiterhin nicht.
+
+**Einzelabruf nach Nummer** — `GET /api/kanban/items/by-number/{number}` liefert die Karte als
+`item`, dazu `archived`, `createdAt`, `movedToDoneAt` und alle `comments`:
+
+```
+curl -sk https://localhost/api/kanban/items/by-number/1571 \
+  -H "X-Kanban-Token: tk_…"
+```
+
+```json
+{
+  "item": { "id": 9123, "number": 1571, "title": "[Fachlich] Archivierte Karten lesbar", "column": "done", "labels": [], "derivedFrom": null },
+  "archived": true,
+  "createdAt": "2026-10-01T08:00:00Z",
+  "movedToDoneAt": "2026-10-09T17:30:00Z",
+  "comments": [
+    { "id": 501, "author": "Manne", "body": "PO-Entscheidung …", "createdAt": "2026-10-02T09:00:00Z" }
+  ]
+}
+```
+
+**Suche** — `GET /api/kanban/search` mit den Parametern:
+
+- `q` — Suchbegriff (höchstens 200 Zeichen) über Titel, Text und Kommentare, nicht über Anhänge;
+- `kind` — Art der Karte, mehrfach angebbar: `FACHLICH`, `PLAN`, `IDEE`, `TASK`, `MENSCH`,
+  `ARBEITSPAKET`, `VORHABEN`;
+- `epic` — Nummer eines Vorhabens;
+- `createdFrom`/`createdTo` — Zeitraum des Anlagedatums, halboffen (`createdFrom` eingeschlossen,
+  `createdTo` ausgeschlossen);
+- `cursor`/`limit` — Abruf in Teilen: `limit` Vorgabe 50, höchstens 200; den nächsten Teil holt man
+  mit `cursor` gleich dem `nextCursor` der vorigen Antwort, bis `nextCursor` `null` ist.
+
+Treffer kommen neueste zuerst (Nummer absteigend). Jeder Treffer trägt einen `excerpt`, dessen
+`source` die Fundstelle nennt — `TITLE`, `BODY` oder `COMMENT` (dann mit `commentId`); ohne `q` ist
+der Auszug der Anfang des Texts.
+
+```
+curl -sk -G https://localhost/api/kanban/search \
+  -H "X-Kanban-Token: tk_…" \
+  --data-urlencode "q=Archiv" \
+  --data-urlencode "kind=FACHLICH" --data-urlencode "kind=PLAN" \
+  --data-urlencode "createdFrom=2026-01-01T00:00:00Z" \
+  --data-urlencode "limit=2"
+```
+
+```json
+{
+  "hits": [
+    {
+      "id": 9126, "number": 1574, "title": "[Plan] Archivierte Karten lesbar", "kind": "PLAN",
+      "column": "done", "archived": true,
+      "createdAt": "2026-10-03T10:00:00Z", "movedToDoneAt": "2026-10-09T17:30:00Z",
+      "excerpt": { "text": "… lesender Zugang aufs Archiv …", "source": "BODY", "commentId": null }
+    },
+    {
+      "id": 9123, "number": 1571, "title": "[Fachlich] Archivierte Karten lesbar", "kind": "FACHLICH",
+      "column": "done", "archived": true,
+      "createdAt": "2026-10-01T08:00:00Z", "movedToDoneAt": "2026-10-09T17:30:00Z",
+      "excerpt": { "text": "… Archiv …", "source": "COMMENT", "commentId": 501 }
+    }
+  ],
+  "nextCursor": "1571"
+}
+```
+
+**Herkunftskette** — `GET /api/kanban/items/by-number/{number}/lineage` liefert die Karte als
+`card`, ihre Vorfahren in `ancestors` (von der Karte aufwärts, `depth` 1, 2, …) und ihre Nachfahren
+in `descendants` (als Baum in Präorder mit `depth`), archivierte Glieder eingeschlossen. Ein Glied,
+das es nicht mehr gibt oder das im Papierkorb liegt, erscheint als Lücke mit `gap: true` — dann
+sind nur `number` und `depth` gesetzt:
+
+```
+curl -sk https://localhost/api/kanban/items/by-number/1577/lineage \
+  -H "X-Kanban-Token: tk_…"
+```
+
+```json
+{
+  "card": { "number": 1577, "title": "Archivierte Karte nach Nummer abrufen", "kind": "ARBEITSPAKET", "column": "in_review", "archived": false, "depth": 0, "gap": false },
+  "ancestors": [
+    { "number": 1574, "title": null, "kind": null, "column": null, "archived": false, "depth": 1, "gap": true },
+    { "number": 1571, "title": "[Fachlich] Archivierte Karten lesbar", "kind": "FACHLICH", "column": "done", "archived": true, "depth": 2, "gap": false }
+  ],
+  "descendants": []
+}
+```
+
 ## 6. Labels setzen und entfernen
 
 `GET /api/kanban/items` liefert je Item die zugeordneten Label-Namen (`"labels": ["kit:nightrun"]`).
