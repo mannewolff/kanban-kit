@@ -203,8 +203,12 @@ setzt die Maschine; ihr Abnehmen ist die Freigabe und steht nur dem Menschen zu.
 |---|---|---|
 | `kit:night`, `kit:nightrun` setzen | erlaubt | abgewiesen (403) |
 | `kit:night`, `kit:nightrun` abnehmen | erlaubt | erlaubt |
-| `kit:klaeren`, `kit:geschuetzt` setzen | erlaubt | erlaubt |
-| `kit:klaeren`, `kit:geschuetzt` abnehmen | erlaubt | abgewiesen (403) |
+| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected` setzen | erlaubt | erlaubt |
+| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected` abnehmen | erlaubt | abgewiesen (403) |
+
+Das claude-workflow-kit lässt sich auf Englisch einstellen. Darum gilt jede Regel unter beiden Namen
+derselben Sache: `kit:clarify` wie `kit:klaeren`, `kit:protected` wie `kit:geschuetzt`. `kit:night`
+und `kit:nightrun` heißen in beiden Sprachen gleich und haben kein Gegenstück.
 
 Die Labels, mit denen die [Stufenleiste](nutzung.md#karten-detail) Ziel und Prüferzahl einer Kette
 festhält — `ziel:plan`, `ziel:pakete`, `ziel:umsetzung`, `ziel:push-vorbereitet` sowie `planreview:1`
@@ -223,3 +227,20 @@ Massenaktion und das Anlegen einer Karte mit Labels. Per Token darf zudem keine 
 vier Labels gelöscht oder umbenannt und kein anderes Label auf einen ihrer Namen umbenannt werden;
 anlegen darf ein Token sie, weil das Kit seine Labels selbst anlegt. Die Namen werden getrimmt und
 mit Groß-/Kleinschreibung verglichen, genau wie bei der Label-Auflösung.
+
+### Namensraum des Kits
+
+Bestimmte Präfixe gehören dem claude-workflow-kit: `kit:`, `lauf:`, `ziel:`, `review:`,
+`planreview:`, `run:` und `goal:`. Sie werden ohne Rücksicht auf Groß- und Kleinschreibung erkannt —
+`KIT:night` fällt ebenso darunter wie `Review: UX`. Ein Name in diesem Namensraum, den der Leitstand
+nicht als Kit-Label kennt, ist für ein **Token** gesperrt: Setzen an einer Karte und Umbenennen auf
+diesen Namen werden abgewiesen (403), die Meldung nennt den Namensraum als Grund. Anlegen und
+Abnehmen bleiben einem Token erlaubt. Bekannt ist ein Name nur, wenn er nach dem Trimmen exakt einem
+Kit-Label entspricht.
+
+Das trifft auch **bestehende projekteigene Labels**: Ein Label wie `Review: UX` kann ein Token nicht
+mehr setzen, ein Mensch in der Session dagegen weiterhin. In der Session bleibt alles erlaubt.
+
+Ein neuer Name im Namensraum entsteht nur über einen Eintrag in
+`src/main/java/org/mwolff/manban/common/KitNamen.java`, und der kommt über einen `[Task]` mit
+menschlicher Freigabe — kein Token legt fest, welche Namen das Kit kennt.
