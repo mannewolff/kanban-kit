@@ -3,8 +3,11 @@ package org.mwolff.manban.card.domain;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.KitNamen;
+import org.mwolff.manban.common.KitNamen.Art;
 
 /**
  * Regeln rund um das Arbeitspaket (Plan #1294): welche Karte eines ist, welche Spalte eine
@@ -18,11 +21,11 @@ import org.jspecify.annotations.Nullable;
 public final class Arbeitspaket {
 
   /**
-   * Präfixe der drei Dokumentarten (E3) — wortgleich zu {@code .claude/kit/board.mjs}. {@code
-   * [Mensch]} fehlt mit Absicht: Eine Menschenkarte ist ein Arbeitspaket (E4).
+   * Die drei Dokumentarten (E3), deren Präfixe {@link KitNamen#artAusTitel} in beiden Sprachen
+   * liest (Issue #1587). {@code MENSCH} fehlt mit Absicht: Eine Menschenkarte ist ein Arbeitspaket
+   * (E4).
    */
-  private static final Pattern DOKUMENT_PRAEFIX =
-      Pattern.compile("^\\s*\\[(idee|fachlich|plan)\\]", Pattern.CASE_INSENSITIVE);
+  private static final Set<Art> DOKUMENTARTEN = Set.of(Art.IDEE, Art.FACHLICH, Art.PLAN);
 
   private static final Pattern KEIN_BUCHSTABE = Pattern.compile("[^a-z]");
 
@@ -30,7 +33,8 @@ public final class Arbeitspaket {
 
   /** Eine Karte vom Typ {@code CARD}, deren Titel nicht mit einem Dokumentpräfix beginnt. */
   public static boolean istArbeitspaket(CardType type, String titel) {
-    return type == CardType.CARD && !DOKUMENT_PRAEFIX.matcher(titel).find();
+    return type == CardType.CARD
+        && KitNamen.artAusTitel(titel).filter(DOKUMENTARTEN::contains).isEmpty();
   }
 
   /**

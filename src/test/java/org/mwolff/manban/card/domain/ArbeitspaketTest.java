@@ -25,7 +25,11 @@ class ArbeitspaketTest {
         "[PLAN] groß",
         "  [Plan] mit Leerzeichen",
         "\t[Plan] mit Tabulator",
-        "\n[Fachlich] mit Zeilenumbruch"
+        "\n[Fachlich] mit Zeilenumbruch",
+        "[Requirement] Story",
+        "[Idea] roh",
+        "[REQUIREMENT] laut",
+        "  [idea] mit Leerzeichen"
       })
   void istArbeitspaket_nichtBeiDokumentpraefix(String titel) {
     assertThat(Arbeitspaket.istArbeitspaket(CardType.CARD, titel)).isFalse();
@@ -37,7 +41,10 @@ class ArbeitspaketTest {
         "Statusfeld an der Karte",
         "[Task] klein",
         "[Mensch] Zugang anlegen",
+        "[Human] Zugang anlegen",
+        "[human] klein",
         "Ein [Plan] mitten im Titel",
+        "Ein [Requirement] mitten im Titel",
         "[Planung] ist kein Präfix",
         ""
       })

@@ -85,6 +85,21 @@ class NightRunHeuteNachtIT extends AbstractIntegrationTest {
             ausZweitem + " [Plan] Export Betrieb PLAN UMSETZUNG null");
   }
 
+  /** Eine englische Anforderung erscheint wie eine deutsche (Issue #1587, Plan #1582 E2). */
+  @Test
+  void eineRequirementKarteErscheintWieEineFachlicheKarte() throws Exception {
+    Aufbau a = aufbau("heute-englisch");
+    int deutsch = karte(a, a.boardId(), "[Fachlich] Import", NACHT, "planreview:2");
+    int englisch = karte(a, a.boardId(), "[Requirement] Import", NACHT, "planreview:2");
+
+    JsonNode antwort = heuteNacht(a.owner(), a.projectId(), 200);
+
+    assertThat(zeilen(antwort))
+        .containsExactly(
+            deutsch + " [Fachlich] Import Board FACHPLAN PAKETE 2",
+            englisch + " [Requirement] Import Board FACHPLAN PAKETE 2");
+  }
+
   @Test
   void archivierteUndErledigteKartenFehlenEineBacklogKarteBleibt() throws Exception {
     Aufbau a = aufbau("heute-stand");

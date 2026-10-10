@@ -34,6 +34,22 @@ class KartenartTest {
     assertThat(Kartenart.von(CardType.CARD, titel)).isEqualTo(erwartet);
   }
 
+  /** Englische Titel-Präfixe aus dem Namen-Register (Issue #1587, Plan #1582 E2). */
+  @ParameterizedTest
+  @CsvSource({
+    "'[Requirement] Archiv lesen', FACHLICH",
+    "'[Idea] Archiv lesen', IDEE",
+    "'[Human] Token anlegen', MENSCH",
+    "'[REQUIREMENT] laut', FACHLICH",
+    "'[idea] leise', IDEE",
+    "'[hUmAn] gemischt', MENSCH",
+    "'  [Requirement] eingerückt', FACHLICH",
+    "'\t[Idea] Tab', IDEE"
+  })
+  void englischesPraefix_bestimmtDieArt(String titel, Kartenart erwartet) {
+    assertThat(Kartenart.von(CardType.CARD, titel)).isEqualTo(erwartet);
+  }
+
   @Test
   void fuehrendeLeerzeichen_vorDemPraefix_zaehlenNicht() {
     assertThat(Kartenart.von(CardType.CARD, "   [Plan] eingerückt")).isEqualTo(Kartenart.PLAN);

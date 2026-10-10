@@ -13,9 +13,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardRunQueryService;
+import org.mwolff.manban.common.KitNamen;
+import org.mwolff.manban.common.KitNamen.Sache;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.Bremsbilanz;
-import org.mwolff.manban.nightrun.domain.FortschrittErmittlung;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
@@ -313,9 +314,10 @@ public class NightRunService {
 
   /**
    * Was heute Nacht ansteht (Issue #1454, Plan #1447 E4): die fachlichen Anforderungen und Pläne
-   * aller aktiven Boards des Projekts, die {@code kit:night} tragen — freigegeben und von keinem
-   * Runner übernommen, denn die Übernahme nimmt {@code kit:night} ab (Kit E1). Je Karte der kleine
-   * Stufenstand aus {@link NachtFreigabe}, sortiert nach Kartennummer.
+   * aller aktiven Boards des Projekts, die einen Namen der Sache {@code NIGHT} tragen (Issue #1587)
+   * — freigegeben und von keinem Runner übernommen, denn die Übernahme nimmt {@code kit:night} ab
+   * (Kit E1). Je Karte der kleine Stufenstand aus {@link NachtFreigabe}, sortiert nach
+   * Kartennummer.
    *
    * <p>Lesen darf, wer die Läufe liest ({@link PermissionChecker#requireNightRunAccess}): Die
    * Sichtregel gilt hier im Backend, nicht im Client.
@@ -325,7 +327,9 @@ public class NightRunService {
     permissions.requireNightRunAccess(userId, projectId);
     return cards
         .freigegebeneKarten(
-            projectId, FortschrittErmittlung.LABEL_NIGHT, NachtFreigabe::istStartkarte)
+            projectId,
+            Set.copyOf(KitNamen.STANDARD.namen(Sache.NIGHT)),
+            NachtFreigabe::istStartkarte)
         .stream()
         .map(k -> NachtFreigabe.aus(k.number(), k.title(), k.boardName(), k.labels()))
         .sorted(Comparator.comparingInt(NachtFreigabe::number))

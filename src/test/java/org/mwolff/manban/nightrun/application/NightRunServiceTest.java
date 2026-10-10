@@ -32,6 +32,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.card.application.CardRunQueryService.FreigabeKarteView;
+import org.mwolff.manban.common.KitNamen;
+import org.mwolff.manban.common.KitNamen.Sache;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe.Startstation;
@@ -2001,10 +2003,11 @@ class NightRunServiceTest {
     when(cards.freigegebeneKarten(org.mockito.ArgumentMatchers.eq(PROJECT), any(), any()))
         .thenAnswer(
             aufruf -> {
-              String label = aufruf.getArgument(1);
+              Set<String> namen = aufruf.getArgument(1);
               Predicate<String> titel = aufruf.getArgument(2);
               return List.of(karten).stream()
-                  .filter(k -> k.labels().contains(label) && titel.test(k.title()))
+                  .filter(
+                      k -> k.labels().stream().anyMatch(namen::contains) && titel.test(k.title()))
                   .toList();
             });
   }
@@ -2076,6 +2079,35 @@ class NightRunServiceTest {
     assertThat(service.heuteNacht(USER, PROJECT))
         .extracting(NachtFreigabe::number)
         .containsExactly(8);
+  }
+
+  /** Die Freigabe gilt unter allen Namen der Sache NIGHT aus dem Register (Issue #1587). */
+  @Test
+  void heuteNacht_fragtNachAllenNamenDerSacheNight() {
+    kartenImProjekt();
+
+    service.heuteNacht(USER, PROJECT);
+
+    verify(cards)
+        .freigegebeneKarten(
+            org.mockito.ArgumentMatchers.eq(PROJECT),
+            org.mockito.ArgumentMatchers.eq(Set.copyOf(KitNamen.STANDARD.namen(Sache.NIGHT))),
+            any());
+  }
+
+  @Test
+  void heuteNacht_nimmtEineEnglischeAnforderungWieEineDeutsche() {
+    kartenImProjekt(karte(9, "[Requirement] Import", "kit:night"));
+
+    assertThat(service.heuteNacht(USER, PROJECT))
+        .containsExactly(
+            new NachtFreigabe(
+                9,
+                "[Requirement] Import",
+                "Entwicklung",
+                Startstation.FACHPLAN,
+                ProgressStage.PAKETE,
+                null));
   }
 
   @Test

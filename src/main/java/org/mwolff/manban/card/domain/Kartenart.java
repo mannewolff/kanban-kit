@@ -1,8 +1,6 @@
 package org.mwolff.manban.card.domain;
 
-import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import org.mwolff.manban.common.KitNamen;
 
 /**
  * Die Art einer Karte, wie die Werkzeuge sie suchen (Plan #1574, E1): ein Vorhaben nach seinem Typ,
@@ -24,16 +22,15 @@ public enum Kartenart {
   ARBEITSPAKET,
   VORHABEN;
 
-  /** Präfix am Titelanfang, führende Leerzeichen erlaubt — wortgleich zu den Präfixen des Kits. */
-  private static final Pattern PRAEFIX =
-      Pattern.compile("^\\s*\\[(fachlich|plan|idee|task|mensch)\\]", Pattern.CASE_INSENSITIVE);
-
-  /** Die Art einer Karte dieses Typs mit diesem Titel. */
+  /**
+   * Die Art einer Karte dieses Typs mit diesem Titel. Das Titel-Präfix liest {@link
+   * KitNamen#artAusTitel} in beiden Sprachen (Issue #1587, Plan #1582 E2); jede {@link
+   * KitNamen.Art} heißt wie ihre Kartenart.
+   */
   public static Kartenart von(CardType type, String titel) {
     if (type == CardType.EPIC) {
       return VORHABEN;
     }
-    Matcher m = PRAEFIX.matcher(titel);
-    return m.find() ? valueOf(m.group(1).toUpperCase(Locale.ROOT)) : ARBEITSPAKET;
+    return KitNamen.artAusTitel(titel).map(art -> valueOf(art.name())).orElse(ARBEITSPAKET);
   }
 }

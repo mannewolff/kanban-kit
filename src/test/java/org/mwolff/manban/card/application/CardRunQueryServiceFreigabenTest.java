@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ class CardRunQueryServiceFreigabenTest {
   private static final long BOARD = 2L;
   private static final long ARCHIV = 3L;
   private static final String NACHT = "kit:night";
+  private static final String ZUSATZNAME = "kit:tonight";
   private static final long SPALTE_BACKLOG = 10L;
   private static final long SPALTE_DONE = 11L;
   private static final long SPALTE_EIGEN = 12L;
@@ -74,7 +76,8 @@ class CardRunQueryServiceFreigabenTest {
         .thenReturn(
             List.of(
                 new Label(20L, BOARD, NACHT, "#000", false),
-                new Label(21L, BOARD, "ziel:umsetzung", "#000", false)));
+                new Label(21L, BOARD, "ziel:umsetzung", "#000", false),
+                new Label(22L, BOARD, ZUSATZNAME, "#000", false)));
     when(labels.findByBoardId(ARCHIV))
         .thenReturn(List.of(new Label(30L, ARCHIV, NACHT, "#000", false)));
   }
@@ -121,10 +124,39 @@ class CardRunQueryServiceFreigabenTest {
     when(cardLabels.findByCardIds(List.of(5L, 6L)))
         .thenReturn(Map.of(5L, List.of(20L, 21L), 6L, List.of(21L)));
 
-    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> t.startsWith("[Fachlich]")))
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT), t -> t.startsWith("[Fachlich]")))
         .containsExactly(
             new FreigabeKarteView(
                 105, "[Fachlich] A", "Entwicklung", List.of(NACHT, "ziel:umsetzung")));
+  }
+
+  /**
+   * Alle Namen einer Sache zählen als eins (Issue #1587, AK 7 der Quelle #1573): Gefunden wird jede
+   * Karte, die einen beliebigen der Namen trägt, auch einen, der kein Literal im Code ist.
+   */
+  @Test
+  void findetKartenMitEinemBeliebigenDerGenanntenLabels() {
+    when(cards.findByProjectId(PROJECT))
+        .thenReturn(
+            List.of(
+                karte(5L, BOARD, "[Fachlich] A"),
+                karte(6L, BOARD, "[Fachlich] B"),
+                karte(7L, BOARD, "[Fachlich] C")));
+    when(cardLabels.findByCardIds(List.of(5L, 6L, 7L)))
+        .thenReturn(Map.of(5L, List.of(20L), 6L, List.of(22L), 7L, List.of(21L)));
+
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT, ZUSATZNAME), t -> true))
+        .containsExactly(
+            new FreigabeKarteView(105, "[Fachlich] A", "Entwicklung", List.of(NACHT)),
+            new FreigabeKarteView(106, "[Fachlich] B", "Entwicklung", List.of(ZUSATZNAME)));
+  }
+
+  @Test
+  void einNameAusserhalbDerMengeGibtKeineFreigabe() {
+    when(cards.findByProjectId(PROJECT)).thenReturn(List.of(karte(6L, BOARD, "[Fachlich] B")));
+    when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(22L)));
+
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT), t -> true)).isEmpty();
   }
 
   @Test
@@ -133,7 +165,7 @@ class CardRunQueryServiceFreigabenTest {
         .thenReturn(List.of(karte(5L, BOARD, "Export"), karte(6L, BOARD, "[Plan] B")));
     when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(20L)));
 
-    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> t.startsWith("[Plan]")))
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT), t -> t.startsWith("[Plan]")))
         .containsExactly(new FreigabeKarteView(106, "[Plan] B", "Entwicklung", List.of(NACHT)));
   }
 
@@ -143,7 +175,7 @@ class CardRunQueryServiceFreigabenTest {
         .thenReturn(List.of(karte(5L, ARCHIV, "[Plan] A"), karte(6L, BOARD, "[Plan] B")));
     when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(20L)));
 
-    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT), t -> true))
         .extracting(FreigabeKarteView::number)
         .containsExactly(106);
   }
@@ -154,7 +186,7 @@ class CardRunQueryServiceFreigabenTest {
         .thenReturn(List.of(karte(5L, ARCHIV, "[Plan] A"), karte(6L, BOARD, "[Plan] B")));
     when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(20L)));
 
-    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT), t -> true))
         .extracting(FreigabeKarteView::number)
         .containsExactly(106);
     verify(boards, never()).listColumns(ARCHIV);
@@ -170,7 +202,7 @@ class CardRunQueryServiceFreigabenTest {
                 karte(6L, BOARD, "[Fachlich] B")));
     when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(20L)));
 
-    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT), t -> true))
         .extracting(FreigabeKarteView::number)
         .containsExactly(106);
   }
@@ -184,7 +216,7 @@ class CardRunQueryServiceFreigabenTest {
                 karte(6L, BOARD, "Paket", SPALTE_DONE, false, CardStatus.BACKLOG)));
     when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(20L)));
 
-    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT), t -> true))
         .extracting(FreigabeKarteView::number)
         .containsExactly(106);
   }
@@ -198,7 +230,7 @@ class CardRunQueryServiceFreigabenTest {
                 karte(6L, BOARD, "[Fachlich] B")));
     when(cardLabels.findByCardIds(List.of(6L))).thenReturn(Map.of(6L, List.of(20L)));
 
-    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT), t -> true))
         .extracting(FreigabeKarteView::number)
         .containsExactly(106);
   }
@@ -209,7 +241,7 @@ class CardRunQueryServiceFreigabenTest {
         .thenReturn(List.of(karte(5L, BOARD, "[Plan] A", SPALTE_EIGEN, false, null)));
     when(cardLabels.findByCardIds(List.of(5L))).thenReturn(Map.of(5L, List.of(20L)));
 
-    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true))
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT), t -> true))
         .extracting(FreigabeKarteView::number)
         .containsExactly(105);
   }
@@ -218,6 +250,6 @@ class CardRunQueryServiceFreigabenTest {
   void ohneKarteIstDasErgebnisLeer() {
     when(cards.findByProjectId(PROJECT)).thenReturn(List.of());
 
-    assertThat(service.freigegebeneKarten(PROJECT, NACHT, t -> true)).isEmpty();
+    assertThat(service.freigegebeneKarten(PROJECT, Set.of(NACHT), t -> true)).isEmpty();
   }
 }

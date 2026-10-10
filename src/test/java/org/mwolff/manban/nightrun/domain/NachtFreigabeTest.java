@@ -23,7 +23,14 @@ class NachtFreigabeTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"[Fachlich] Export", "  [fachlich] Export", "[FACHLICH]Export"})
+  @ValueSource(
+      strings = {
+        "[Fachlich] Export",
+        "  [fachlich] Export",
+        "[FACHLICH]Export",
+        "[Requirement] Export",
+        " [requirement] Export"
+      })
   void eineFachlicheAnforderungStartetBeimFachplan(String titel) {
     assertThat(NachtFreigabe.istStartkarte(titel)).isTrue();
     assertThat(freigabe(titel).start()).isEqualTo(Startstation.FACHPLAN);
@@ -37,7 +44,15 @@ class NachtFreigabeTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"Export", "[Task] Export", "Export [Fachlich]", "[Idee] Plan"})
+  @ValueSource(
+      strings = {
+        "Export",
+        "[Task] Export",
+        "Export [Fachlich]",
+        "[Idee] Plan",
+        "[Idea] Plan",
+        "[Human] Plan"
+      })
   void eineKarteOhnePraefixIstKeineStartkarte(String titel) {
     assertThat(NachtFreigabe.istStartkarte(titel)).isFalse();
   }

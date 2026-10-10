@@ -4,7 +4,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.KitNamen;
+import org.mwolff.manban.common.KitNamen.Art;
 
 /**
  * Eine zur Übernahme freigegebene Karte mit ihrem kleinen Stufenstand — eine Zeile der Übersicht
@@ -46,16 +49,18 @@ public record NachtFreigabe(
           Map.entry("ziel:umsetzung", ProgressStage.UMSETZUNG),
           Map.entry("ziel:push-vorbereitet", ProgressStage.VORBEREITUNG));
 
+  /** Die Arten, mit denen eine Kette beginnt; ihre Präfixe in beiden Sprachen (Issue #1587). */
+  private static final Set<Art> STARTARTEN = Set.of(Art.FACHLICH, Art.PLAN);
+
   private static final Map<String, Integer> PRUEFER_JE_LABEL =
       Map.of("planreview:1", 1, "planreview:2", 2);
 
   /**
-   * Ob die Karte eine Kette beginnen kann: Ihr Titel beginnt mit {@code [Fachlich]} oder {@code
-   * [Plan]}.
+   * Ob die Karte eine Kette beginnen kann: Ihr Titel beginnt mit {@code [Fachlich]}, {@code
+   * [Requirement]} oder {@code [Plan]}.
    */
   public static boolean istStartkarte(String titel) {
-    return FortschrittErmittlung.FACHLICH_PRAEFIX.matcher(titel).find()
-        || FortschrittErmittlung.PLAN_PRAEFIX.matcher(titel).find();
+    return KitNamen.artAusTitel(titel).filter(STARTARTEN::contains).isPresent();
   }
 
   /**
@@ -66,7 +71,7 @@ public record NachtFreigabe(
    */
   public static NachtFreigabe aus(
       int number, String titel, String boardName, Collection<String> labels) {
-    boolean plan = !FortschrittErmittlung.FACHLICH_PRAEFIX.matcher(titel).find();
+    boolean plan = KitNamen.artAusTitel(titel).filter(Art.FACHLICH::equals).isEmpty();
     boolean durchziehen = labels.contains(FortschrittErmittlung.LABEL_DURCHZIEHEN);
     // Wie die Stufenleiste: das erste gesetzte Ziel zählt; mit kit:durchziehen gilt mindestens die
     // Umsetzung. Als Maximum statt als Grenzvergleich (Issue #1475): An der Grenze liefern beide
