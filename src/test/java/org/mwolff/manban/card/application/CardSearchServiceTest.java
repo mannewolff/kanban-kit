@@ -672,4 +672,95 @@ class CardSearchServiceTest {
                 .treffer())
         .isEmpty();
   }
+
+  // --- lineageOnBoard: Herkunftskette der Kanban-Strecke (Plan #1574, A3, E11, E12) ---
+
+  private static Card herkunft(long id, long boardId, int number, String title, Long derivedFrom) {
+    return new Card(
+        id,
+        boardId,
+        20L,
+        number,
+        title,
+        null,
+        0,
+        false,
+        null,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null,
+        PROJECT,
+        null,
+        derivedFrom,
+        null,
+        null);
+  }
+
+  @Test
+  void lineageOnBoard_liefertDieKetteUeberPapierkorbLueckeBisZurVerlorenenNummer() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "In Review", 3)));
+    Card fachlich = herkunft(1L, BOARD, 10, "[Fachlich] Anlass", null);
+    Card paket = herkunft(3L, BOARD, 30, "Paket", 2L);
+    Card kind = herkunft(4L, BOARD, 40, "Kind", 3L);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(fachlich, paket, kind));
+    when(cards.findByIds(List.of(2L)))
+        .thenReturn(List.of(herkunft(2L, BOARD, 20, "[Plan] Papierkorb", 1L)));
+    when(kartenBestand.verloreneHerkunftsnummern(BOARD)).thenReturn(Map.of(1L, 5));
+
+    CardSearchService.Kette kette = service.lineageOnBoard(7L, BOARD, 30);
+
+    assertThat(kette.karte())
+        .isEqualTo(
+            new CardSearchService.KettenGlied(
+                30, "Paket", "ARBEITSPAKET", "IN_REVIEW", false, 0, false));
+    assertThat(kette.vorfahren())
+        .containsExactly(
+            new CardSearchService.KettenGlied(20, null, null, null, false, 1, true),
+            new CardSearchService.KettenGlied(
+                10, "[Fachlich] Anlass", "FACHLICH", "IN_REVIEW", false, 2, false),
+            new CardSearchService.KettenGlied(5, null, null, null, false, 3, true));
+    assertThat(kette.nachfahren())
+        .containsExactly(
+            new CardSearchService.KettenGlied(
+                40, "Kind", "ARBEITSPAKET", "IN_REVIEW", false, 1, false));
+    verify(permissions).requireMembership(7L, PROJECT);
+  }
+
+  @Test
+  void lineageOnBoard_vorfahrNichtGefunden_beendetDieKette() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    Card paket = herkunft(3L, BOARD, 30, "Paket", 2L);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(paket));
+    when(cards.findByIds(List.of(2L))).thenReturn(List.of());
+
+    assertThat(service.lineageOnBoard(7L, BOARD, 30).vorfahren()).isEmpty();
+  }
+
+  @Test
+  void lineageOnBoard_prueftDieMitgliedschaftVorDemLookup() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(() -> service.lineageOnBoard(5L, BOARD, 30))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verifyNoInteractions(cards, kartenBestand);
+  }
+
+  @Test
+  void lineageOnBoard_nummerNichtAufDemBoard_istNichtGefunden() {
+    // Board-Grenze (A3): Der Port liefert nur Karten des Boards ohne Papierkorb — eine Nummer auf
+    // einem anderen Board, im Papierkorb oder unbekannt fehlt darin gleichermaßen.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(herkunft(1L, BOARD, 10, "Da", null)));
+
+    assertThatThrownBy(() -> service.lineageOnBoard(5L, BOARD, 30))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).findByProjectId(anyLong());
+    verifyNoInteractions(kartenBestand);
+  }
 }

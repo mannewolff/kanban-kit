@@ -142,6 +142,37 @@ public class CardSearchService {
   }
 
   /**
+   * Die Herkunftskette der Karte mit dieser Nummer auf genau diesem Board — Vorfahren bis zur
+   * Wurzel, Nachfahren bis zu den Blättern, <strong>archivierte eingeschlossen</strong> (Plan
+   * #1574, Kriterium 3, E11–E13). Die Rechnung liegt in {@link HerkunftsKette}; Vorfahren außerhalb
+   * der Board-Sicht lädt sie einzeln über {@code findByIds} nach.
+   *
+   * <p>Rechte und Reichweite wie {@link #findOnBoardByNumber}: Projekt-Mitgliedschaft vor jedem
+   * Lookup; eine Nummer im Papierkorb, auf einem anderen Board oder eine unbekannte enden gleich
+   * mit {@link CardNotFoundException} (A3).
+   */
+  @Transactional(readOnly = true)
+  public Kette lineageOnBoard(long userId, long boardId, int number) {
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
+    List<Card> boardKarten = cards.findByBoardId(boardId);
+    Card karte =
+        boardKarten.stream()
+            .filter(c -> c.number() == number)
+            .findFirst()
+            .orElseThrow(CardNotFoundException::new);
+    Map<Long, String> spalten =
+        boardService.listColumns(boardId).stream()
+            .collect(Collectors.toMap(ColumnView::id, ColumnView::name));
+    return HerkunftsKette.berechne(
+        karte,
+        boardKarten,
+        id -> cards.findByIds(List.of(id)).stream().findFirst(),
+        bestand.verloreneHerkunftsnummern(boardId),
+        spalten);
+  }
+
+  /**
    * Sucht eine projektweite Kartennummer über <strong>alle Projekte, in denen der Benutzer lesen
    * darf</strong>, und liefert je Treffer die Karte samt Ortsangabe (Projekt, Board, Spalte).
    *
@@ -309,4 +340,33 @@ public class CardSearchService {
    *     {@code null}
    */
   public record SuchSeite(List<SuchTreffer> treffer, @Nullable Integer naechsterCursor) {}
+
+  /**
+   * Ein Glied der Herkunftskette (Plan #1574, E10–E13). Eine Lücke steht für eine Karte, die im
+   * Papierkorb, auf einem anderen Board oder endgültig gelöscht ist: Dann sind nur {@code number}
+   * und {@code depth} gesetzt.
+   *
+   * @param kind Konstantenname der Kartenart, bei einer Lücke {@code null}
+   * @param column Kanban-Schlüssel nach {@link CardIngestService#kanbanSchluessel}, bei einer Lücke
+   *     {@code null}
+   * @param depth Abstand zur Karte: 0 für die Karte selbst, 1 für Vorfahr oder Nachfahr erster
+   *     Stufe
+   */
+  public record KettenGlied(
+      int number,
+      @Nullable String title,
+      @Nullable String kind,
+      @Nullable String column,
+      boolean archived,
+      int depth,
+      boolean gap) {}
+
+  /**
+   * Die Herkunftskette einer Karte.
+   *
+   * @param vorfahren von der Karte aufwärts bis zur Wurzel
+   * @param nachfahren in Präorder, Geschwister nach Nummer
+   */
+  public record Kette(
+      KettenGlied karte, List<KettenGlied> vorfahren, List<KettenGlied> nachfahren) {}
 }

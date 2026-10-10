@@ -28,15 +28,15 @@ import org.springframework.test.web.servlet.ResultMatcher;
 
 /**
  * Lesender Archivzugang der Kanban-Strecke über ein board-gebundenes Token (Plan #1574):
- * Einzelabruf nach Nummer und Suche nach Text, Art, Vorhaben und Zeitraum; die Herkunftskette
- * ergänzt ihre Fälle hier.
+ * Einzelabruf nach Nummer, Suche nach Text, Art, Vorhaben und Zeitraum und die Herkunftskette.
  *
  * <p>Archiv und Papierkorb werden per SQL gesetzt ({@code archived}, {@code deleted_at}): Der Test
  * prüft die Lesesicht, nicht die Wege dorthin.
  */
-// PMD.TooManyMethods: je Fall der Archivstrecke ein Test plus die Request-Hilfen — der Testumfang
-// folgt den Kriterien des Plans, kein God-Class-Smell.
-@SuppressWarnings("PMD.TooManyMethods")
+// PMD.TooManyMethods, PMD.GodClass: je Fall der Archivstrecke ein Test plus die Request-Hilfen —
+// der Testumfang folgt den Kriterien des Plans; mit der Herkunftskette (Issue #1580) misst PMD die
+// vielen JSON-Zugriffe der Prüfungen als God Class.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.GodClass"})
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class KanbanCompatArchivIT extends AbstractIntegrationTest {
@@ -365,6 +365,80 @@ class KanbanCompatArchivIT extends AbstractIntegrationTest {
     searchText(f.token, "x".repeat(201), status().isBadRequest());
   }
 
+  // --- Herkunftskette (Kriterium 3, E11–E13) ---------------------------------
+
+  @Test
+  void kette_einesArbeitspakets_reichtUeberDenArchiviertenPlanBisZumFachlich() throws Exception {
+    Fixture f = fixture("ke-archiv");
+    long fachlich = ingest(f.token, "[Fachlich] Anlass", null);
+    long plan = ingest(f.token, "[Plan] Weg", numberOf(fachlich));
+    long paket = ingest(f.token, "Paket", numberOf(plan));
+    jdbc.update("UPDATE card SET archived = true WHERE id = ?", plan);
+
+    JsonNode kette = lineage(f.token, numberOf(paket), status().isOk());
+
+    assertThat(kette.get("card").get("number").asInt()).isEqualTo(numberOf(paket));
+    assertThat(kette.get("card").get("kind").asText()).isEqualTo("ARBEITSPAKET");
+    assertThat(kette.get("card").get("depth").asInt()).isZero();
+    JsonNode vorfahren = kette.get("ancestors");
+    assertThat(vorfahren).hasSize(2);
+    assertThat(vorfahren.get(0).get("number").asInt()).isEqualTo(numberOf(plan));
+    assertThat(vorfahren.get(0).get("title").asText()).isEqualTo("[Plan] Weg");
+    assertThat(vorfahren.get(0).get("kind").asText()).isEqualTo("PLAN");
+    assertThat(vorfahren.get(0).get("column").asText()).isEqualTo("BACKLOG");
+    assertThat(vorfahren.get(0).get("archived").asBoolean()).isTrue();
+    assertThat(vorfahren.get(0).get("depth").asInt()).isEqualTo(1);
+    assertThat(vorfahren.get(0).get("gap").asBoolean()).isFalse();
+    assertThat(vorfahren.get(1).get("number").asInt()).isEqualTo(numberOf(fachlich));
+    assertThat(vorfahren.get(1).get("kind").asText()).isEqualTo("FACHLICH");
+    assertThat(vorfahren.get(1).get("depth").asInt()).isEqualTo(2);
+    assertThat(kette.get("descendants")).isEmpty();
+
+    JsonNode vonOben = lineage(f.token, numberOf(fachlich), status().isOk());
+    List<Integer> nachfahren = new ArrayList<>();
+    vonOben.get("descendants").forEach(n -> nachfahren.add(n.get("number").asInt()));
+    assertThat(nachfahren).containsExactly(numberOf(plan), numberOf(paket));
+    assertThat(vonOben.get("ancestors")).isEmpty();
+  }
+
+  @Test
+  void kette_ueberEinenPlanImPapierkorb_zeigtDieLueckeUndDasFachlichDarueber() throws Exception {
+    Fixture f = fixture("ke-papierkorb");
+    long fachlich = ingest(f.token, "[Fachlich] Anlass", null);
+    long plan = ingest(f.token, "[Plan] Weg", numberOf(fachlich));
+    long paket = ingest(f.token, "Paket", numberOf(plan));
+    jdbc.update("UPDATE card SET deleted_at = now() WHERE id = ?", plan);
+
+    JsonNode vorfahren = lineage(f.token, numberOf(paket), status().isOk()).get("ancestors");
+
+    assertThat(vorfahren).hasSize(2);
+    JsonNode luecke = vorfahren.get(0);
+    assertThat(luecke.get("gap").asBoolean()).isTrue();
+    assertThat(luecke.get("number").asInt()).isEqualTo(numberOf(plan));
+    assertThat(luecke.get("depth").asInt()).isEqualTo(1);
+    assertThat(luecke.path("title").isNull()).isTrue();
+    assertThat(luecke.path("kind").isNull()).isTrue();
+    assertThat(luecke.path("column").isNull()).isTrue();
+    assertThat(vorfahren.get(1).get("number").asInt()).isEqualTo(numberOf(fachlich));
+    assertThat(vorfahren.get(1).get("gap").asBoolean()).isFalse();
+    assertThat(vorfahren.get(1).get("depth").asInt()).isEqualTo(2);
+    // Ein Nachfahr im Papierkorb fehlt samt Teilbaum (E13).
+    assertThat(lineage(f.token, numberOf(fachlich), status().isOk()).get("descendants")).isEmpty();
+  }
+
+  @Test
+  void kette_papierkorbNummer_istNichtGefunden() throws Exception {
+    Fixture f = fixture("ke-404");
+    long id = ingest(f.token, "Gelöscht", null);
+    jdbc.update("UPDATE card SET deleted_at = now() WHERE id = ?", id);
+
+    JsonNode papierkorb = lineage(f.token, numberOf(id), status().isNotFound());
+    JsonNode unbekannt = lineage(f.token, 999_999, status().isNotFound());
+
+    assertThat(papierkorb.get("detail")).isEqualTo(unbekannt.get("detail"));
+    lineage(unboundToken(f.owner), numberOf(id), status().isConflict());
+  }
+
   // --- Hilfen ---------------------------------------------------------------
 
   private record Fixture(long projectId, Cookie owner, String token) {}
@@ -387,6 +461,17 @@ class KanbanCompatArchivIT extends AbstractIntegrationTest {
         .andReturn()
         .getResponse()
         .getContentAsString();
+  }
+
+  private JsonNode lineage(String token, int number, ResultMatcher expected) throws Exception {
+    return json.readTree(
+        mvc.perform(
+                get("/api/kanban/items/by-number/" + number + "/lineage")
+                    .header(TOKEN_HEADER, token))
+            .andExpect(expected)
+            .andReturn()
+            .getResponse()
+            .getContentAsString());
   }
 
   private JsonNode search(String token, String query, ResultMatcher expected) throws Exception {

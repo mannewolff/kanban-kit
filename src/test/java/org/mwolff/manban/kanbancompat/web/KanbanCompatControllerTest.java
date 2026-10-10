@@ -20,6 +20,8 @@ import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.kanbancompat.application.KanbanArchivService;
 import org.mwolff.manban.kanbancompat.application.KanbanArchivService.ItemDetail;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.Lineage;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.LineageNode;
 import org.mwolff.manban.kanbancompat.application.KanbanArchivService.SearchPage;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Activity;
@@ -318,6 +320,38 @@ class KanbanCompatControllerTest {
   void itemByNumber_nullAuthentication_throwsTokenNotBound() {
     // When / Then: ohne Bindung 409 wie bei jedem anderen Endpunkt
     assertThatThrownBy(() -> controller.itemByNumber(null, 42))
+        .isInstanceOf(TokenNotBoundException.class);
+  }
+
+  @Test
+  void lineage_withBoundPrincipal_delegates() {
+    // Given (Plan #1574, E10, E11)
+    Lineage lineage =
+        new Lineage(
+            new LineageNode(42, "T", "ARBEITSPAKET", "DONE", true, 0, false), List.of(), List.of());
+    when(archiv.lineage(PRINCIPAL, 42)).thenReturn(lineage);
+
+    // When
+    Lineage result = controller.lineage(boundAuthentication(), 42);
+
+    // Then
+    assertThat(result).isSameAs(lineage);
+  }
+
+  @Test
+  void lineage_karteFehlt_bleibtNichtGefunden() {
+    // Given: unbekannt, anderes Board und Papierkorb enden im Service gleich (A3) -> 404
+    when(archiv.lineage(PRINCIPAL, 99)).thenThrow(new CardNotFoundException());
+
+    // When / Then
+    assertThatThrownBy(() -> controller.lineage(boundAuthentication(), 99))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void lineage_nullAuthentication_throwsTokenNotBound() {
+    // When / Then: ohne Bindung 409 wie bei jedem anderen Endpunkt
+    assertThatThrownBy(() -> controller.lineage(null, 42))
         .isInstanceOf(TokenNotBoundException.class);
   }
 

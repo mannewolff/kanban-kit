@@ -287,4 +287,55 @@ class KanbanArchivServiceTest {
         .searchOnBoard(
             USER, BOARD, new Suchanfrage("   ", Set.of(), null, null, null, null, 50), Map.of());
   }
+
+  // --- lineage (Plan #1574, E10, E11) ---
+
+  @Test
+  void lineage_formtKarteVorfahrenUndNachfahren_lueckeNurMitNummerUndTiefe() {
+    when(search.lineageOnBoard(USER, BOARD, 30))
+        .thenReturn(
+            new CardSearchService.Kette(
+                new CardSearchService.KettenGlied(
+                    30, "Paket", "ARBEITSPAKET", "READY", false, 0, false),
+                List.of(
+                    new CardSearchService.KettenGlied(20, null, null, null, false, 1, true),
+                    new CardSearchService.KettenGlied(
+                        10, "[Fachlich] Anlass", "FACHLICH", "DONE", true, 2, false)),
+                List.of(
+                    new CardSearchService.KettenGlied(
+                        40, "Kind", "ARBEITSPAKET", "BACKLOG", false, 1, false))));
+
+    KanbanArchivService.Lineage lineage = service.lineage(bound(), 30);
+
+    assertThat(lineage.card())
+        .isEqualTo(
+            new KanbanArchivService.LineageNode(
+                30, "Paket", "ARBEITSPAKET", "READY", false, 0, false));
+    assertThat(lineage.ancestors())
+        .containsExactly(
+            new KanbanArchivService.LineageNode(20, null, null, null, false, 1, true),
+            new KanbanArchivService.LineageNode(
+                10, "[Fachlich] Anlass", "FACHLICH", "DONE", true, 2, false));
+    assertThat(lineage.descendants())
+        .containsExactly(
+            new KanbanArchivService.LineageNode(
+                40, "Kind", "ARBEITSPAKET", "BACKLOG", false, 1, false));
+  }
+
+  @Test
+  void lineage_karteFehlt_reichtDas404Durch() {
+    when(search.lineageOnBoard(USER, BOARD, 99)).thenThrow(new CardNotFoundException());
+
+    assertThatThrownBy(() -> service.lineage(bound(), 99))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void lineage_ohneBindung_istTokenNotBound() {
+    KanbanPrincipal unbound = new KanbanPrincipal(USER, 2L, null, null, "Token");
+
+    assertThatThrownBy(() -> service.lineage(unbound, 30))
+        .isInstanceOf(TokenNotBoundException.class);
+    verify(search, never()).lineageOnBoard(anyLong(), anyLong(), anyInt());
+  }
 }

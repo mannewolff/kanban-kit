@@ -94,6 +94,31 @@
     },
     "abgekuendigtSeit" : null
   }, {
+    "pfad" : "/api/kanban/items/by-number/{number}/lineage",
+    "methode" : "GET",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "number",
+      "required" : true,
+      "schema" : {
+        "format" : "int32",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Lineage"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
     "pfad" : "/api/kanban/items/{id}/activity",
     "methode" : "GET",
     "parameter" : [ {
@@ -967,6 +992,54 @@
         }
       },
       "required" : [ "name" ],
+      "type" : "object"
+    },
+    "Lineage" : {
+      "properties" : {
+        "ancestors" : {
+          "items" : {
+            "$ref" : "#/components/schemas/LineageNode"
+          },
+          "type" : "array"
+        },
+        "card" : {
+          "$ref" : "#/components/schemas/LineageNode"
+        },
+        "descendants" : {
+          "items" : {
+            "$ref" : "#/components/schemas/LineageNode"
+          },
+          "type" : "array"
+        }
+      },
+      "type" : "object"
+    },
+    "LineageNode" : {
+      "properties" : {
+        "archived" : {
+          "type" : "boolean"
+        },
+        "column" : {
+          "type" : "string"
+        },
+        "depth" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "gap" : {
+          "type" : "boolean"
+        },
+        "kind" : {
+          "type" : "string"
+        },
+        "number" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "title" : {
+          "type" : "string"
+        }
+      },
       "type" : "object"
     },
     "MoveRequest" : {

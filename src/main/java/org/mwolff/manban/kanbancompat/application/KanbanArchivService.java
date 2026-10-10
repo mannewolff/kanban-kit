@@ -13,6 +13,8 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.card.application.CardSearchService;
 import org.mwolff.manban.card.application.CardSearchService.BoardCardView;
+import org.mwolff.manban.card.application.CardSearchService.Kette;
+import org.mwolff.manban.card.application.CardSearchService.KettenGlied;
 import org.mwolff.manban.card.application.CardSearchService.KommentarFund;
 import org.mwolff.manban.card.application.CardSearchService.SuchSeite;
 import org.mwolff.manban.card.application.CardSearchService.SuchTreffer;
@@ -123,6 +125,28 @@ public class KanbanArchivService {
         naechster == null ? null : String.valueOf(naechster));
   }
 
+  /**
+   * Die Herkunftskette einer Karte des gebundenen Boards nach ihrer projektweiten Nummer: Vorfahren
+   * bis zur Wurzel, Nachfahren bis zu den Blättern, archivierte Glieder eingeschlossen (Kriterium
+   * 3, E11). Ein Glied, das es nicht mehr gibt oder das außerhalb der Sicht liegt, erscheint als
+   * Lücke mit Nummer und Tiefe (E12). Eine Nummer im Papierkorb, auf einem anderen Board oder eine
+   * unbekannte enden gleich mit 404.
+   */
+  @Transactional(readOnly = true)
+  public Lineage lineage(KanbanPrincipal principal, int number) {
+    long boardId = requireBound(principal);
+    Kette kette = cardSearch.lineageOnBoard(principal.userId(), boardId, number);
+    return new Lineage(
+        node(kette.karte()),
+        kette.vorfahren().stream().map(KanbanArchivService::node).toList(),
+        kette.nachfahren().stream().map(KanbanArchivService::node).toList());
+  }
+
+  private static LineageNode node(KettenGlied g) {
+    return new LineageNode(
+        g.number(), g.title(), g.kind(), g.column(), g.archived(), g.depth(), g.gap());
+  }
+
   private static SearchHit hit(SuchTreffer t) {
     return new SearchHit(
         t.id(),
@@ -208,4 +232,53 @@ public class KanbanArchivService {
           String source,
       @Schema(description = "ID des Kommentars bei COMMENT; fehlt sonst.", example = "88")
           @Nullable Long commentId) {}
+
+  /** Die Herkunftskette einer Karte. */
+  @Schema(description = "Die Herkunftskette einer Karte des gebundenen Boards.")
+  public record Lineage(
+      @Schema(description = "Die angefragte Karte selbst, Tiefe 0.") LineageNode card,
+      @Schema(
+              description =
+                  "Vorfahren von der Karte aufwärts bis zur Wurzel, Tiefe 1, 2, …; archivierte"
+                      + " eingeschlossen.")
+          List<LineageNode> ancestors,
+      @Schema(
+              description =
+                  "Nachfahren in Präorder, Geschwister nach Nummer, Tiefe 1, 2, …; archivierte"
+                      + " eingeschlossen. Nachfahren im Papierkorb oder auf einem anderen Board"
+                      + " fehlen.")
+          List<LineageNode> descendants) {}
+
+  /** Ein Glied der Herkunftskette, auch eine Lücke. */
+  @Schema(
+      description =
+          "Ein Glied der Herkunftskette. Bei einer Lücke (gap = true) sind nur number und depth"
+              + " gesetzt.")
+  public record LineageNode(
+      @Schema(description = "Projektweite Nummer der Karte.", example = "1403")
+          @Nullable Integer number,
+      @Schema(
+              description = "Titel der Karte; fehlt bei einer Lücke.",
+              example = "[Fachlich] Export als CSV")
+          @Nullable String title,
+      @Schema(
+              description = "Art der Karte wie in GET /api/kanban/search; fehlt bei einer Lücke.",
+              example = "FACHLICH")
+          @Nullable String kind,
+      @Schema(
+              description =
+                  "Spaltenschlüssel wie in GET /api/kanban/items, auch bei einer archivierten"
+                      + " Karte; fehlt bei einer Lücke.",
+              example = "DONE")
+          @Nullable String column,
+      @Schema(description = "true, wenn die Karte archiviert ist.", example = "true")
+          boolean archived,
+      @Schema(description = "Abstand zur angefragten Karte: 0 für die Karte selbst.", example = "1")
+          int depth,
+      @Schema(
+              description =
+                  "true für ein Glied, das es nicht mehr gibt oder das außerhalb des Boards"
+                      + " liegt: im Papierkorb, auf einem anderen Board oder endgültig gelöscht.",
+              example = "false")
+          boolean gap) {}
 }

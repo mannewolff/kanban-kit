@@ -27,6 +27,7 @@ import org.mwolff.manban.common.web.api.ApiVertrag;
 import org.mwolff.manban.common.web.api.Stabilitaet;
 import org.mwolff.manban.kanbancompat.application.KanbanArchivService;
 import org.mwolff.manban.kanbancompat.application.KanbanArchivService.ItemDetail;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.Lineage;
 import org.mwolff.manban.kanbancompat.application.KanbanArchivService.SearchPage;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Activity;
@@ -63,7 +64,9 @@ import org.springframework.web.bind.annotation.RestController;
  */
 // Die OpenAPI-Annotationen heben die Importzahl über die PMD-Schwelle von 40 (Plan #1400, E14).
 // Die Ausnahme bleibt an dieser Klasse sichtbar, statt die Regel für alle anzuheben.
-@SuppressWarnings("PMD.ExcessiveImports")
+// PMD.CouplingBetweenObjects: Der Controller ist der eine Zugang der Kanban-Strecke; jede
+// Antwortform zählt als Kopplung, mit der Herkunftskette (Issue #1580) über die Schwelle von 20.
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.CouplingBetweenObjects"})
 @Tag(
     name = "Einliefern (Kanban-kompatibel)",
     description =
@@ -684,6 +687,48 @@ class KanbanCompatController {
           @PathVariable
           int number) {
     return archiv.itemByNumber(principal(authentication), number);
+  }
+
+  /**
+   * Herkunftskette nach projektweiter Nummer, archivierte Glieder eingeschlossen (Plan #1574,
+   * Kriterium 3, E10–E13).
+   */
+  @Operation(
+      summary = "Herkunftskette einer Karte lesen, auch archiviert",
+      description =
+          "Liefert zu einer Karte des gebundenen Boards ihre Vorfahren bis zur Wurzel und ihre"
+              + " Nachfahren bis zu den Blättern, archivierte Glieder eingeschlossen. Ein"
+              + " Vorfahr im Papierkorb erscheint als Lücke, die Kette läuft über ihn hinweg"
+              + " weiter; ein Vorfahr auf einem anderen Board oder ein endgültig gelöschter"
+              + " erscheint als Lücke und beendet sie. Nachfahren im Papierkorb oder auf einem"
+              + " anderen Board fehlen. Karten im Papierkorb und Karten anderer Boards sind als"
+              + " Ausgangspunkt nicht erreichbar. "
+              + TOKEN_BINDUNG)
+  @ApiResponse(responseCode = "200", description = "Die Herkunftskette der Karte.")
+  @ApiResponse(
+      responseCode = "404",
+      description = KARTE_FEHLT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "409",
+      description = NICHT_GEBUNDEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(stabilitaet = Stabilitaet.VERLAESSLICH)
+  @GetMapping("/items/by-number/{number}/lineage")
+  Lineage lineage(
+      @Nullable Authentication authentication,
+      @Parameter(
+              description = "Projektweite Nummer der Karte, wie sie als #N erscheint.",
+              example = "1403")
+          @PathVariable
+          int number) {
+    return archiv.lineage(principal(authentication), number);
   }
 
   /**
