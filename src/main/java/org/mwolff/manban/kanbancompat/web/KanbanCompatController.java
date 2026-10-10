@@ -23,6 +23,8 @@ import org.mwolff.manban.common.TextLimits;
 import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.mwolff.manban.common.web.api.ApiVertrag;
 import org.mwolff.manban.common.web.api.Stabilitaet;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.ItemDetail;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Activity;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
@@ -111,9 +113,11 @@ class KanbanCompatController {
       "Die Karte gibt es nicht, oder sie liegt nicht auf dem gebundenen Board.";
 
   private final KanbanCompatService service;
+  private final KanbanArchivService archiv;
 
-  KanbanCompatController(KanbanCompatService service) {
+  KanbanCompatController(KanbanCompatService service, KanbanArchivService archiv) {
     this.service = service;
+    this.archiv = archiv;
   }
 
   @Operation(
@@ -631,6 +635,46 @@ class KanbanCompatController {
       @Nullable Authentication authentication,
       @Parameter(description = BESCHREIBUNG_ID, example = "4711") @PathVariable long id) {
     return service.listActivity(principal(authentication), id);
+  }
+
+  /**
+   * Einzelabruf nach projektweiter Nummer, archivierte Karten eingeschlossen (Plan #1574, A1, A2):
+   * Eine archivierte Karte fehlt in {@code GET /items}, ihre Nummer steht aber in anderen Karten.
+   */
+  @Operation(
+      summary = "Karte nach Nummer lesen, auch archiviert",
+      description =
+          "Liefert eine Karte des gebundenen Boards über ihre projektweite Nummer, auch wenn sie"
+              + " archiviert ist: dieselben Angaben wie in GET /api/kanban/items, dazu das"
+              + " Archiv-Kennzeichen, Anlagedatum, Datum des Zugs nach Done und alle Kommentare,"
+              + " den ältesten zuerst. Karten im Papierkorb und Karten anderer Boards sind nicht"
+              + " erreichbar. "
+              + TOKEN_BINDUNG)
+  @ApiResponse(responseCode = "200", description = "Die Karte mit ihren Kommentaren.")
+  @ApiResponse(
+      responseCode = "404",
+      description = KARTE_FEHLT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "409",
+      description = NICHT_GEBUNDEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(stabilitaet = Stabilitaet.VERLAESSLICH)
+  @GetMapping("/items/by-number/{number}")
+  ItemDetail itemByNumber(
+      @Nullable Authentication authentication,
+      @Parameter(
+              description = "Projektweite Nummer der Karte, wie sie als #N erscheint.",
+              example = "1403")
+          @PathVariable
+          int number) {
+    return archiv.itemByNumber(principal(authentication), number);
   }
 
   @Operation(

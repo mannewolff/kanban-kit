@@ -75,12 +75,16 @@ class OpenApiIT extends AbstractIntegrationTest {
   /** Hierhin schreibt Teil (d) bei einer Abweichung den Ist-Stand, zum Prüfen und Übernehmen. */
   private static final Path IST_STAND = Path.of("target", "openapi", "verlaessliche-aufrufe.json");
 
-  /** Die zwölf verlässlichen Operationen zum Start (Plan #1400, E4). */
+  /**
+   * Die verlässlichen Operationen: die zwölf zum Start (Plan #1400, E4) und der Einzelabruf nach
+   * Nummer (Plan #1574, E14).
+   */
   private static final List<String> VERLAESSLICH_ZUM_START =
       List.of(
           "DELETE /api/kanban/items/{id}/labels",
           "GET /api/kanban/epics",
           "GET /api/kanban/items",
+          "GET /api/kanban/items/by-number/{number}",
           "GET /api/kanban/items/{id}/activity",
           "GET /api/kanban/items/{id}/comments",
           "PATCH /api/kanban/items/{id}/comments/{commentId}",

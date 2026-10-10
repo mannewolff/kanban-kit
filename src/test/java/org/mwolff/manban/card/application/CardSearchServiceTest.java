@@ -129,6 +129,150 @@ class CardSearchServiceTest {
         .isInstanceOf(CardNotFoundException.class);
   }
 
+  // --- findOnBoardByNumber: Einzelabruf der Kanban-Strecke (Plan #1574, A3) ---
+
+  /** Eine Karte mit Titel, Typ, Archiv-Kennzeichen, Status und Herkunft auf {@code boardId}. */
+  private static Card onBoard(
+      long boardId,
+      String title,
+      CardType type,
+      boolean archived,
+      Instant done,
+      CardStatus status,
+      Long derivedFromCardId) {
+    return new Card(
+        1L,
+        boardId,
+        20L,
+        42,
+        title,
+        "Text",
+        3,
+        archived,
+        done,
+        1L,
+        FIXED,
+        FIXED,
+        type,
+        null,
+        null,
+        null,
+        PROJECT,
+        "ext:1",
+        derivedFromCardId,
+        null,
+        status);
+  }
+
+  @Test
+  void findOnBoardByNumber_liefertDieArchivierteKarteDesBoards() {
+    Instant done = Instant.parse("2026-02-03T04:05:06Z");
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(
+            Optional.of(onBoard(BOARD, "[Plan] Archiv", CardType.CARD, true, done, null, 7L)));
+    when(cards.findById(7L))
+        .thenReturn(Optional.of(card(7L, 20L, 40, false, null, CardType.CARD, null, null)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "In Review", 3));
+
+    CardSearchService.BoardCardView view = service.findOnBoardByNumber(5L, BOARD, 42);
+
+    assertThat(view.item().id()).isEqualTo(1L);
+    assertThat(view.item().number()).isEqualTo(42);
+    assertThat(view.item().title()).isEqualTo("[Plan] Archiv");
+    assertThat(view.item().description()).isEqualTo("Text");
+    assertThat(view.item().columnId()).isEqualTo(20L);
+    assertThat(view.item().positionInColumn()).isEqualTo(3);
+    assertThat(view.item().epic()).isFalse();
+    assertThat(view.item().externalKey()).isEqualTo("ext:1");
+    assertThat(view.item().derivedFrom()).isEqualTo(40);
+    assertThat(view.item().status()).isNull();
+    assertThat(view.kind()).isEqualTo("PLAN");
+    assertThat(view.column()).isEqualTo("IN_REVIEW");
+    assertThat(view.archived()).isTrue();
+    assertThat(view.createdAt()).isEqualTo(FIXED);
+    assertThat(view.movedToDoneAt()).isEqualTo(done);
+  }
+
+  @Test
+  void findOnBoardByNumber_arbeitspaket_traegtSeinenStatusAlsSpaltenschluessel() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(
+            Optional.of(
+                onBoard(BOARD, "Paket", CardType.CARD, false, null, CardStatus.READY, null)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Eigene Spalte", 3));
+
+    CardSearchService.BoardCardView view = service.findOnBoardByNumber(5L, BOARD, 42);
+
+    assertThat(view.kind()).isEqualTo("ARBEITSPAKET");
+    assertThat(view.column()).isEqualTo("READY");
+    assertThat(view.item().status()).isEqualTo("READY");
+    assertThat(view.item().derivedFrom()).isNull();
+    assertThat(view.archived()).isFalse();
+    assertThat(view.movedToDoneAt()).isNull();
+  }
+
+  @Test
+  void findOnBoardByNumber_vorhaben_istEpicDerArtVorhaben() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(Optional.of(onBoard(BOARD, "Archiv", CardType.EPIC, false, null, null, null)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+
+    CardSearchService.BoardCardView view = service.findOnBoardByNumber(5L, BOARD, 42);
+
+    assertThat(view.item().epic()).isTrue();
+    assertThat(view.kind()).isEqualTo("VORHABEN");
+    assertThat(view.column()).isEqualTo("BACKLOG");
+  }
+
+  @Test
+  void findOnBoardByNumber_prueftDieMitgliedschaftVorDemLookup() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(() -> service.findOnBoardByNumber(5L, BOARD, 42))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(cards, never()).findByProjectIdAndNumber(anyLong(), anyInt());
+  }
+
+  @Test
+  void findOnBoardByNumber_karteAufAnderemBoard_istNichtGefunden() {
+    // Board-Grenze (A3): dieselbe Nummer im selben Projekt, aber auf einem anderen Board. Die
+    // Board-ID liegt jenseits des Long-Caches, damit ein Referenzvergleich auffiele.
+    long board = 1000L;
+    when(boardService.requireProjectId(board)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(Optional.of(onBoard(1001L, "Fremd", CardType.CARD, false, null, null, null)));
+
+    assertThatThrownBy(() -> service.findOnBoardByNumber(5L, board, 42))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void findOnBoardByNumber_gleicheBoardIdJenseitsDesLongCaches_istGefunden() {
+    long board = 1000L;
+    when(boardService.requireProjectId(board)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(
+            Optional.of(
+                onBoard(Long.valueOf(1000L), "Eigen", CardType.CARD, false, null, null, null)));
+    when(boardService.requireColumn(20L, board)).thenReturn(column(20L, "Backlog", 0));
+
+    assertThat(service.findOnBoardByNumber(5L, board, 42).item().title()).isEqualTo("Eigen");
+  }
+
+  @Test
+  void findOnBoardByNumber_unbekannteOderPapierkorbNummer_istNichtGefunden() {
+    // Der Port filtert den Papierkorb (deleted_at IS NULL): Fuer ihn sehen beide Faelle gleich aus.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 99)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.findOnBoardByNumber(5L, BOARD, 99))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
   // --- searchByNumber: projektuebergreifende Nummernsuche (#489) --------
 
   private static ProjectService.AccessibleProject accessible(long id, String name) {

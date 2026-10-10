@@ -1,0 +1,157 @@
+package org.mwolff.manban.kanbancompat.application;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.board.application.BoardService.ColumnView;
+import org.mwolff.manban.card.application.CardIngestService;
+import org.mwolff.manban.card.application.CardIngestService.BoardItemView;
+import org.mwolff.manban.card.application.CardMoveService;
+import org.mwolff.manban.card.application.CardNotFoundException;
+import org.mwolff.manban.card.application.CardSearchService;
+import org.mwolff.manban.card.application.CardSearchService.BoardCardView;
+import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.EpicService;
+import org.mwolff.manban.card.application.LabelService;
+import org.mwolff.manban.comment.application.CommentService;
+import org.mwolff.manban.comment.application.CommentService.CommentView;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.ItemDetail;
+import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
+import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Item;
+
+/** Unit-Tests des lesenden Archivzugangs der Kanban-Strecke (Plan #1574). */
+class KanbanArchivServiceTest {
+
+  private static final long BOARD = 10L;
+  private static final long USER = 1L;
+  private static final Instant ANGELEGT = Instant.parse("2026-01-02T03:04:05Z");
+  private static final Instant ERLEDIGT = Instant.parse("2026-02-03T04:05:06Z");
+
+  private BoardService boardService;
+  private LabelService labelService;
+  private CommentService commentService;
+  private CardSearchService search;
+  private KanbanArchivService service;
+
+  private static KanbanPrincipal bound() {
+    return new KanbanPrincipal(USER, 2L, 5L, BOARD, "Token");
+  }
+
+  @BeforeEach
+  void setUp() {
+    boardService = mock(BoardService.class);
+    labelService = mock(LabelService.class);
+    commentService = mock(CommentService.class);
+    search = mock(CardSearchService.class);
+    KanbanCompatService compat =
+        new KanbanCompatService(
+            boardService,
+            mock(CardService.class),
+            mock(CardIngestService.class),
+            mock(CardMoveService.class),
+            mock(EpicService.class),
+            labelService,
+            commentService,
+            new IdempotencyGuard(new InMemoryIdempotencyRecordStore(), Clock.systemUTC()));
+    service = new KanbanArchivService(compat, search, commentService);
+  }
+
+  @Test
+  void itemByNumber_liefertDieArchivierteKarteMitAllenKommentaren() {
+    BoardItemView karte =
+        new BoardItemView(77L, 42, "[Plan] Archiv", "Text", 103L, 2, false, "ext:1", 40, null);
+    when(search.findOnBoardByNumber(USER, BOARD, 42))
+        .thenReturn(new BoardCardView(karte, "PLAN", "IN_REVIEW", true, ANGELEGT, ERLEDIGT));
+    when(boardService.listColumns(BOARD))
+        .thenReturn(
+            List.of(
+                new ColumnView(100L, "Backlog", 0, null),
+                new ColumnView(103L, "In Review", 3, null)));
+    when(labelService.namesByCard(BOARD, List.of(77L)))
+        .thenReturn(Map.of(77L, List.of("kit:nightrun")));
+    Instant erster = Instant.parse("2026-01-05T00:00:00Z");
+    Instant zweiter = Instant.parse("2026-01-06T00:00:00Z");
+    when(commentService.list(USER, 77L))
+        .thenReturn(
+            List.of(
+                new CommentView(5L, 77L, 3L, "Manne", "## Review", erster, erster),
+                new CommentView(6L, 77L, null, "Nachtlauf", "## Abschluss", zweiter, zweiter)));
+
+    ItemDetail detail = service.itemByNumber(bound(), 42);
+
+    assertThat(detail.item())
+        .isEqualTo(
+            new Item(
+                77L,
+                42,
+                "[Plan] Archiv",
+                "Text",
+                "IN_REVIEW",
+                2,
+                "card",
+                List.of("kit:nightrun"),
+                "ext:1",
+                40));
+    assertThat(detail.archived()).isTrue();
+    assertThat(detail.createdAt()).isEqualTo(ANGELEGT);
+    assertThat(detail.movedToDoneAt()).isEqualTo(ERLEDIGT);
+    assertThat(detail.comments())
+        .containsExactly(
+            new Comment(5L, "Manne", "## Review", erster),
+            new Comment(6L, "Nachtlauf", "## Abschluss", zweiter));
+  }
+
+  @Test
+  void itemByNumber_vorhabenOhneKommentare_istEinEpicMitLeererListe() {
+    BoardItemView vorhaben =
+        new BoardItemView(78L, 43, "Archiv", null, 100L, 0, true, null, null, null);
+    when(search.findOnBoardByNumber(USER, BOARD, 43))
+        .thenReturn(new BoardCardView(vorhaben, "VORHABEN", "BACKLOG", false, ANGELEGT, null));
+    when(boardService.listColumns(BOARD))
+        .thenReturn(List.of(new ColumnView(100L, "Backlog", 0, null)));
+    when(labelService.namesByCard(BOARD, List.of(78L))).thenReturn(Map.of());
+    when(commentService.list(USER, 78L)).thenReturn(List.of());
+
+    ItemDetail detail = service.itemByNumber(bound(), 43);
+
+    assertThat(detail.item().type()).isEqualTo("epic");
+    assertThat(detail.item().labels()).isEmpty();
+    assertThat(detail.archived()).isFalse();
+    assertThat(detail.movedToDoneAt()).isNull();
+    assertThat(detail.comments()).isEmpty();
+  }
+
+  @Test
+  void itemByNumber_karteFehlt_reichtDas404Durch_ohneKommentareZuLesen() {
+    when(search.findOnBoardByNumber(USER, BOARD, 99)).thenThrow(new CardNotFoundException());
+
+    assertThatThrownBy(() -> service.itemByNumber(bound(), 99))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(commentService, never()).list(anyLong(), anyLong());
+  }
+
+  @Test
+  void itemByNumber_ohneBindung_istTokenNotBound() {
+    KanbanPrincipal unbound = new KanbanPrincipal(USER, 2L, null, null, "Token");
+
+    assertThatThrownBy(() -> service.itemByNumber(unbound, 42))
+        .isInstanceOf(TokenNotBoundException.class);
+    assertThatThrownBy(() -> service.itemByNumber(null, 42))
+        .isInstanceOf(TokenNotBoundException.class);
+    verify(search, never()).findOnBoardByNumber(anyLong(), anyLong(), anyInt());
+  }
+}

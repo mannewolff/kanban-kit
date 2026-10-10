@@ -12,6 +12,9 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
+import org.mwolff.manban.card.application.CardNotFoundException;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.ItemDetail;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Activity;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
@@ -28,6 +31,7 @@ class KanbanCompatControllerTest {
   private static final Instant LAUF = Instant.parse("2026-10-05T08:58:22.123Z");
 
   private KanbanCompatService service;
+  private KanbanArchivService archiv;
   private KanbanCompatController controller;
 
   private static Authentication boundAuthentication() {
@@ -39,7 +43,8 @@ class KanbanCompatControllerTest {
   @BeforeEach
   void setUp() {
     service = mock(KanbanCompatService.class);
-    controller = new KanbanCompatController(service);
+    archiv = mock(KanbanArchivService.class);
+    controller = new KanbanCompatController(service, archiv);
   }
 
   @Test
@@ -268,6 +273,42 @@ class KanbanCompatControllerTest {
   void activity_nullAuthentication_throwsTokenNotBound() {
     // When / Then: ohne Bindung endet der Aufruf wie bei jedem anderen Endpunkt mit 409
     assertThatThrownBy(() -> controller.activity(null, 8L))
+        .isInstanceOf(TokenNotBoundException.class);
+  }
+
+  @Test
+  void itemByNumber_withBoundPrincipal_delegates() {
+    // Given (Plan #1574, A2)
+    ItemDetail detail =
+        new ItemDetail(
+            new Item(8L, 42, "T", null, "DONE", 0, "card", List.of(), null, null),
+            true,
+            Instant.parse("2026-01-01T10:00:00Z"),
+            null,
+            List.of());
+    when(archiv.itemByNumber(PRINCIPAL, 42)).thenReturn(detail);
+
+    // When
+    ItemDetail result = controller.itemByNumber(boundAuthentication(), 42);
+
+    // Then
+    assertThat(result).isSameAs(detail);
+  }
+
+  @Test
+  void itemByNumber_karteFehlt_bleibtNichtGefunden() {
+    // Given: unbekannt, anderes Board und Papierkorb enden im Service gleich (A3) -> 404
+    when(archiv.itemByNumber(PRINCIPAL, 99)).thenThrow(new CardNotFoundException());
+
+    // When / Then
+    assertThatThrownBy(() -> controller.itemByNumber(boundAuthentication(), 99))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void itemByNumber_nullAuthentication_throwsTokenNotBound() {
+    // When / Then: ohne Bindung 409 wie bei jedem anderen Endpunkt
+    assertThatThrownBy(() -> controller.itemByNumber(null, 42))
         .isInstanceOf(TokenNotBoundException.class);
   }
 

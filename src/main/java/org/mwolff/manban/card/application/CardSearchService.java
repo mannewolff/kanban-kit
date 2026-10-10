@@ -1,14 +1,21 @@
 package org.mwolff.manban.card.application;
 
+import static org.mwolff.manban.card.application.KartenSicht.statusName;
+
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
+import org.mwolff.manban.card.application.CardIngestService.BoardItemView;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.domain.Kartenart;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.stereotype.Service;
@@ -53,6 +60,47 @@ public class CardSearchService {
     Card card =
         cards.findByProjectIdAndNumber(projectId, number).orElseThrow(CardNotFoundException::new);
     return sicht.view(userId, card);
+  }
+
+  /**
+   * Die Karte mit dieser projektweiten Nummer auf genau diesem Board, <strong>archivierte
+   * eingeschlossen</strong> — der Einzelabruf der Kanban-Strecke (Plan #1574, A2, A3).
+   *
+   * <p>Rechte wie {@link CardIngestService#listBoardItems}: Projekt-Mitgliedschaft (Leserecht), vor
+   * jedem Lookup. Betrachtet werden nur Karten mit {@code board_id} = {@code boardId} und {@code
+   * deleted_at IS NULL}. Eine unbekannte Nummer, eine Nummer auf einem anderen Board und eine im
+   * Papierkorb enden gleich mit {@link CardNotFoundException} — kein Existenz-Leak über die
+   * Board-Grenze.
+   */
+  @Transactional(readOnly = true)
+  public BoardCardView findOnBoardByNumber(long userId, long boardId, int number) {
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
+    Card c =
+        cards
+            .findByProjectIdAndNumber(projectId, number)
+            // Wertvergleich der Board-IDs (Long), wie in CardIngestService.requireOnBoard.
+            .filter(k -> Long.valueOf(boardId).equals(k.boardId()))
+            .orElseThrow(CardNotFoundException::new);
+    String status = statusName(c);
+    String spalte = boardService.requireColumn(c.columnId(), boardId).name();
+    return new BoardCardView(
+        new BoardItemView(
+            c.requireId(),
+            c.number(),
+            c.title(),
+            c.description(),
+            c.columnId(),
+            c.positionInColumn(),
+            c.type() == CardType.EPIC,
+            c.externalKey(),
+            sicht.herkunftsnummer(c),
+            status),
+        Kartenart.von(c.type(), c.title()).name(),
+        CardIngestService.kanbanSchluessel(status, spalte),
+        c.archived(),
+        c.createdAt(),
+        c.movedToDoneAt());
   }
 
   /**
@@ -143,4 +191,24 @@ public class CardSearchService {
           boolean boardArchived,
       @Schema(description = "Interne ID der Spalte.", example = "17") Long columnId,
       @Schema(description = "Name der Spalte.", example = "In Arbeit") String columnName) {}
+
+  /**
+   * Eine Karte des Boards für die Kanban-Strecke (Plan #1574, A4): die schlanke Projektion, die
+   * {@link CardIngestService#listBoardItems} für aktive Karten liefert, plus das, was das Archiv
+   * ausmacht. Art und Spaltenschlüssel gehen als Text, weil {@code card.domain} modulintern bleibt.
+   *
+   * @param item Karte in derselben Form wie in der Board-Übersicht
+   * @param kind Konstantenname der {@link Kartenart}
+   * @param column Kanban-Schlüssel nach {@link CardIngestService#kanbanSchluessel}
+   * @param archived ob die Karte archiviert ist
+   * @param createdAt Anlagezeitpunkt
+   * @param movedToDoneAt Zeitpunkt des Zugs nach Done, sonst {@code null}
+   */
+  public record BoardCardView(
+      BoardItemView item,
+      String kind,
+      String column,
+      boolean archived,
+      Instant createdAt,
+      @Nullable Instant movedToDoneAt) {}
 }

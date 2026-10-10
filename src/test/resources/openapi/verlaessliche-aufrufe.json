@@ -69,6 +69,31 @@
     },
     "abgekuendigtSeit" : null
   }, {
+    "pfad" : "/api/kanban/items/by-number/{number}",
+    "methode" : "GET",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "number",
+      "required" : true,
+      "schema" : {
+        "format" : "int32",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/ItemDetail"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
     "pfad" : "/api/kanban/items/{id}/activity",
     "methode" : "GET",
     "parameter" : [ {
@@ -797,6 +822,31 @@
           "type" : "string"
         },
         "type" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "ItemDetail" : {
+      "properties" : {
+        "archived" : {
+          "type" : "boolean"
+        },
+        "comments" : {
+          "items" : {
+            "$ref" : "#/components/schemas/Comment"
+          },
+          "type" : "array"
+        },
+        "createdAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "item" : {
+          "$ref" : "#/components/schemas/Item"
+        },
+        "movedToDoneAt" : {
+          "format" : "date-time",
           "type" : "string"
         }
       },
