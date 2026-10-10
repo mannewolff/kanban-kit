@@ -615,11 +615,38 @@ test('Referenz: numerisch verglichen, nicht als Text', () => {
   assert.equal(referenzBezugsstelle('postgres:16.9', ['16.9', '16.10', '16.2']), 'postgres:16.10');
 });
 
-test('Referenz: die Baunummer nach Unterstrich zaehlt zur Fassung, nicht zur Variante', () => {
+test('Referenz: die Baunummer nach Unterstrich gehoert nicht zur Variante', () => {
   assert.equal(
     referenzBezugsstelle('eclipse-temurin:25.0.4.1_1-jre', ['25.0.4.1_1-jre', '25.0.5_11-jre', '25.0.5_11-jdk', '26_35-jre']),
     'eclipse-temurin:25.0.5_11-jre',
   );
+});
+
+test('Referenz: hinter dem Unterstrich steht eine Build-Nummer — 25_36 ist Java 25.0.0, nicht 25.36 (Issue #1568)', () => {
+  assert.equal(
+    referenzBezugsstelle('eclipse-temurin:25.0.4.1_1-jre', [
+      '25_36-jre',
+      '25.0.4.1_1-jre',
+      '25.0.4_7-jre',
+      '25.0.5_3-jre',
+      '25.0.5_3-jdk',
+      '26_35-jre',
+    ]),
+    'eclipse-temurin:25.0.5_3-jre',
+  );
+});
+
+test('Referenz: ohne neuere Fassung bleibt der gebundene Tag die Referenz, auch neben einem GA-Tag', () => {
+  assert.equal(
+    referenzBezugsstelle('eclipse-temurin:25.0.4.1_1-jre', ['25_36-jre', '25.0.4.1_1-jre', '25.0.4_7-jre', '25.0.4.1_1-jdk']),
+    'eclipse-temurin:25.0.4.1_1-jre',
+  );
+});
+
+test('Referenz: bei gleicher Fassung entscheidet die Build-Nummer, fehlende Stellen zaehlen als 0', () => {
+  assert.equal(referenzBezugsstelle('eclipse-temurin:25.0.5_3-jre', ['25.0.5_11-jre', '25.0.5_2-jre']), 'eclipse-temurin:25.0.5_11-jre');
+  assert.equal(referenzBezugsstelle('eclipse-temurin:25_36-jre', ['25.0.0_37-jre']), 'eclipse-temurin:25.0.0_37-jre');
+  assert.equal(referenzBezugsstelle('eclipse-temurin:25.0.0_37-jre', ['25_36-jre']), 'eclipse-temurin:25.0.0_37-jre');
 });
 
 test('Referenz: Registry mit Port und Repository mit Pfad bleiben erhalten', () => {
