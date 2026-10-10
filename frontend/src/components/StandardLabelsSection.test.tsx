@@ -73,6 +73,23 @@ describe('StandardLabelsSection', () => {
     expect(mApi.anlegen).not.toHaveBeenCalled()
   })
 
+  it('beide Namen einer Sache stehen als eigene Einträge nebeneinander', async () => {
+    mApi.satz.mockResolvedValue([
+      { name: 'kit:klaeren', gruppe: 'Kit', farbe: '#6a1b9a' },
+      { name: 'kit:clarify', gruppe: 'Kit', farbe: '#6a1b9a' },
+      { name: 'kit:nightplan', gruppe: 'Kit', farbe: '#6a1b9a' },
+    ])
+    render(<StandardLabelsSection />)
+
+    const dialog = await dialogOeffnen()
+
+    const deutsch = await within(dialog).findByText('kit:klaeren')
+    const englisch = within(dialog).getByText('kit:clarify')
+    expect(deutsch).not.toBe(englisch)
+    expect(within(dialog).getAllByText(/^kit:(klaeren|clarify|nightplan)$/).map((e) => e.textContent))
+      .toEqual(['kit:klaeren', 'kit:clarify', 'kit:nightplan'])
+  })
+
   it('erst das Bestätigen legt an und zeigt die Rückmeldung', async () => {
     render(<StandardLabelsSection />)
     const dialog = await dialogOeffnen()

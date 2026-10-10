@@ -32,7 +32,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class StandardLabelsIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
-  private static final int SATZ = 20;
+  private static final int SATZ = 32;
   private static final String ADMIN = "standardlabels-admin@example.com";
   private static final String OWNER = "standardlabels-owner@example.com";
 
@@ -43,14 +43,16 @@ class StandardLabelsIT extends AbstractIntegrationTest {
   @Autowired private JdbcTemplate jdbc;
 
   @Test
-  void derSatzNenntZwanzigLabelsMitGruppeUndFarbe() throws Exception {
+  void derSatzNenntJedenNamenMitGruppeUndFarbe() throws Exception {
     mvc.perform(get("/api/admin/standard-labels").cookie(login(ADMIN, PlatformRole.ADMIN)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(SATZ))
         .andExpect(jsonPath("$[0].name").value("kit:durchziehen"))
         .andExpect(jsonPath("$[0].gruppe").value("Kit"))
         .andExpect(jsonPath("$[0].farbe").value("#6a1b9a"))
-        .andExpect(jsonPath("$[19].name").value("planreview:2"));
+        .andExpect(jsonPath("$[1].name").value("kit:carry-through"))
+        .andExpect(jsonPath("$[1].gruppe").value("Kit"))
+        .andExpect(jsonPath("$[31].name").value("planreview:2"));
   }
 
   @Test
@@ -67,8 +69,9 @@ class StandardLabelsIT extends AbstractIntegrationTest {
         .andExpect(status().isNoContent());
     mvc.perform(delete("/api/boards/" + archiviertB).cookie(owner))
         .andExpect(status().isNoContent());
-    // Ein vorhandenes Label mit eigener Farbe bleibt, wie es ist.
+    // Vorhandene Labels mit eigener Farbe bleiben, wie sie sind — auch ein Gegenstück.
     long vorhanden = createLabel(owner, aktivA, "kit:night", "#ff0000");
+    long gegenstueck = createLabel(owner, aktivA, "kit:clarify", "#00ff00");
 
     // Jedes Projekt bringt sein Standard-Board mit (DefaultBoardCreator): vier aktive Boards.
     int aktive = 4;
@@ -80,8 +83,8 @@ class StandardLabelsIT extends AbstractIntegrationTest {
     JsonNode erstes = anlegen(admin);
 
     assertThat(erstes.get("boards").asInt()).isEqualTo(aktive);
-    assertThat(erstes.get("angelegt").asInt()).isEqualTo(aktive * SATZ - 1);
-    assertThat(erstes.get("uebersprungen").asInt()).isEqualTo(1);
+    assertThat(erstes.get("angelegt").asInt()).isEqualTo(aktive * SATZ - 2);
+    assertThat(erstes.get("uebersprungen").asInt()).isEqualTo(2);
     assertThat(labelZahl(aktivA)).isEqualTo(SATZ);
     assertThat(labelZahl(aktivB)).isEqualTo(SATZ);
     assertThat(labelZahl(archiviertA)).isZero();
@@ -92,6 +95,15 @@ class StandardLabelsIT extends AbstractIntegrationTest {
                 String.class,
                 vorhanden))
         .isEqualTo("#ff0000");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT color FROM label WHERE id = ? AND name = 'kit:clarify'",
+                String.class,
+                gegenstueck))
+        .isEqualTo("#00ff00");
+    assertThat(namenszahl(aktivB, "kit:klaeren")).isEqualTo(1);
+    assertThat(namenszahl(aktivB, "kit:clarify")).isEqualTo(1);
+    assertThat(namenszahl(aktivB, "kit:nightplan")).isEqualTo(1);
 
     for (int aufruf = 2; aufruf <= 10; aufruf++) {
       JsonNode weiteres = anlegen(admin);
@@ -102,6 +114,17 @@ class StandardLabelsIT extends AbstractIntegrationTest {
     assertThat(labelZahl(aktivB)).isEqualTo(SATZ);
     assertThat(jdbc.queryForObject("SELECT count(*) FROM label", Integer.class))
         .isEqualTo(aktive * SATZ);
+    // Jedes Gegenstück gibt es auch nach dem zweiten Auslösen genau einmal je Board.
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM label WHERE name = 'goal:push-prepared'", Integer.class))
+        .isEqualTo(aktive);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM (SELECT board_id, name FROM label"
+                    + " GROUP BY board_id, name HAVING count(*) > 1) d",
+                Integer.class))
+        .isZero();
   }
 
   @Test
@@ -125,6 +148,16 @@ class StandardLabelsIT extends AbstractIntegrationTest {
             .getResponse()
             .getContentAsString();
     return json.readTree(body);
+  }
+
+  private int namenszahl(long board, String name) {
+    Integer zahl =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM label WHERE board_id = ? AND name = ?",
+            Integer.class,
+            board,
+            name);
+    return zahl == null ? 0 : zahl;
   }
 
   private int labelZahl(long board) {

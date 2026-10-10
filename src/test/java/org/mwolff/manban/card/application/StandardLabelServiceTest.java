@@ -19,13 +19,15 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.card.application.StandardLabelService.Ergebnis;
 import org.mwolff.manban.card.application.StandardLabelService.StandardLabel;
+import org.mwolff.manban.common.KitNamen;
+import org.mwolff.manban.common.KitNamen.Sache;
 
 /** Der Standardsatz der Labels und sein Anlegen auf allen Boards (Issue #1485), Ports gemockt. */
 class StandardLabelServiceTest {
 
   private static final long ADMIN = 1L;
   private static final long NUTZER = 2L;
-  private static final int SATZ = 20;
+  private static final int SATZ = 32;
 
   private LabelRepository labels;
   private BoardService boardService;
@@ -41,37 +43,84 @@ class StandardLabelServiceTest {
   }
 
   @Test
-  void derStandardsatzNenntAlleZwanzigLabelsMitGruppeUndFarbeInFesterReihenfolge() {
+  void derStandardsatzNenntJeSacheAlleNamenMitGruppeUndFarbeInFesterReihenfolge() {
     List<StandardLabel> satz = service.standardsatz(ADMIN);
 
     assertThat(satz)
         .extracting(StandardLabel::name)
         .containsExactly(
             "kit:durchziehen",
+            "kit:carry-through",
             "kit:geschuetzt",
+            "kit:protected",
             "kit:klaeren",
+            "kit:clarify",
             "kit:night",
             "kit:nightrun",
             "kit:pruefen",
+            "kit:check",
             "kit:nightplan",
             "kit:nightreview",
             "kit:nightissues",
             "lauf:abgebrochen",
+            "run:aborted",
             "lauf:laeuft",
+            "run:running",
             "lauf:wartet",
+            "run:waiting",
             "review:offen",
             "review:fertig",
+            "review:done",
             "ziel:plan",
+            "goal:plan",
             "ziel:pakete",
+            "goal:packages",
             "ziel:umsetzung",
+            "goal:implementation",
             "ziel:push-vorbereitet",
+            "goal:push-prepared",
             "planreview:1",
             "planreview:2");
+    assertThat(satz).hasSize(SATZ);
     assertThat(satz.get(0)).isEqualTo(new StandardLabel("kit:durchziehen", "Kit", "#6a1b9a"));
-    assertThat(satz.get(9)).isEqualTo(new StandardLabel("lauf:abgebrochen", "Lauf", "#1565c0"));
-    assertThat(satz.get(13)).isEqualTo(new StandardLabel("review:fertig", "Review", "#2e7d32"));
-    assertThat(satz.get(19))
+    assertThat(satz.get(14)).isEqualTo(new StandardLabel("run:aborted", "Lauf", "#1565c0"));
+    assertThat(satz.get(21)).isEqualTo(new StandardLabel("review:done", "Review", "#2e7d32"));
+    assertThat(satz.get(31))
         .isEqualTo(new StandardLabel("planreview:2", "Stufenleiste", "#ef6c00"));
+  }
+
+  @Test
+  void jederNameEinerSacheTraegtGruppeUndFarbeDerSache() {
+    List<StandardLabel> satz = service.standardsatz(ADMIN);
+
+    for (Sache sache : Sache.values()) {
+      List<StandardLabel> derSache =
+          satz.stream().filter(l -> KitNamen.STANDARD.namen(sache).contains(l.name())).toList();
+      assertThat(derSache)
+          .extracting(StandardLabel::name)
+          .isEqualTo(KitNamen.STANDARD.namen(sache));
+      assertThat(derSache).extracting(StandardLabel::gruppe).containsOnly(derSache.get(0).gruppe());
+      assertThat(derSache).extracting(StandardLabel::farbe).containsOnly(derSache.get(0).farbe());
+    }
+  }
+
+  @Test
+  void dasEnglischeGegenstueckStehtDirektHinterDemDeutschenNamen() {
+    List<String> namen = service.standardsatz(ADMIN).stream().map(StandardLabel::name).toList();
+
+    assertThat(namen.indexOf("kit:clarify")).isEqualTo(namen.indexOf("kit:klaeren") + 1);
+    assertThat(namen.indexOf("run:waiting")).isEqualTo(namen.indexOf("lauf:wartet") + 1);
+    assertThat(namen.indexOf("goal:push-prepared"))
+        .isEqualTo(namen.indexOf("ziel:push-vorbereitet") + 1);
+  }
+
+  @Test
+  void kitNightplanErscheintGenauEinmalUndOhneGegenstueck() {
+    List<String> namen = service.standardsatz(ADMIN).stream().map(StandardLabel::name).toList();
+
+    assertThat(namen).containsOnlyOnce("kit:nightplan");
+    assertThat(namen.get(namen.indexOf("kit:nightplan") + 1)).isEqualTo("kit:nightreview");
+    assertThat(KitNamen.STANDARD.namen(Sache.NIGHTPLAN)).containsExactly("kit:nightplan");
   }
 
   @Test

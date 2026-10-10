@@ -1,10 +1,17 @@
 package org.mwolff.manban.common;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.auth.application.PlatformAdminChecker;
+import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.card.application.LabelRepository;
+import org.mwolff.manban.card.application.StandardLabelService;
+import org.mwolff.manban.card.application.StandardLabelService.StandardLabel;
 import org.mwolff.manban.common.KitNamen.Eintrag;
 import org.mwolff.manban.common.KitNamen.Sache;
 import org.mwolff.manban.common.KitNamen.Schutz;
@@ -61,5 +68,27 @@ class KitNamenErweiterungTest {
     assertThat(KitNamen.STANDARD.sache(ZUSATZNAME)).isEmpty();
     assertThat(KitNamen.STANDARD.namen(Sache.KLAEREN))
         .containsExactly("kit:klaeren", "kit:clarify");
+  }
+
+  @Test
+  void standardLabelService_fuehrtDenZusatznamenMitGruppeUndFarbeDerSache() {
+    // Given
+    PlatformAdminChecker admins = mock(PlatformAdminChecker.class);
+    when(admins.isPlatformAdmin(1L)).thenReturn(true);
+    StandardLabelService service =
+        new StandardLabelService(
+            mock(LabelRepository.class),
+            mock(BoardService.class),
+            admins,
+            registerMitZusatznamen());
+
+    // When
+    List<StandardLabel> satz = service.standardsatz(1L);
+
+    // Then
+    List<String> namen = satz.stream().map(StandardLabel::name).toList();
+    assertThat(namen.subList(namen.indexOf("kit:klaeren"), namen.indexOf("kit:klaeren") + 3))
+        .containsExactly("kit:klaeren", "kit:clarify", ZUSATZNAME);
+    assertThat(satz).contains(new StandardLabel(ZUSATZNAME, "Kit", "#6a1b9a"));
   }
 }
