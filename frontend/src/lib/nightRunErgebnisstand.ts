@@ -43,6 +43,7 @@ import {
   type NightRunMode,
   type NightRunStand,
   type NightRunState,
+  type NightRunStuck,
   type NightRunStufenvorgaben,
 } from './nightRunLog'
 
@@ -148,6 +149,21 @@ interface RohEinheit {
    * den Eintraegen steht, geht diesen Parser nichts an.
    */
   erzeugt?: unknown[]
+  /**
+   * Die Angaben eines festgefahrenen Pakets — nur bei `ausgang: "festgefahren"` ausgewertet
+   * (Plan #1547, E9). Jedes Teilfeld darf fehlen; `unknown`, weil nur Zahlen bzw. Zeichenketten
+   * uebernommen werden und eine fremde Datei nichts anderes einschleusen darf.
+   */
+  festgefahren?: RohFestgefahren
+}
+
+/** Der Block `einheit.festgefahren`, additiv in Fassung 1 (Issue #1551). */
+interface RohFestgefahren {
+  pruefung?: unknown
+  fehler?: unknown
+  versuche?: unknown
+  zeitgrenzeMs?: unknown
+  sitzung?: unknown
 }
 
 /** Die Vorgaben eines Ketten-Laufs, so wie `--kette` sie aus der Config uebernimmt. */
@@ -356,12 +372,14 @@ const PRUEF_AUSGAENGE = new Map<string, Farbe & { excerpt: string }>([
  * sie nichts; sie bleiben dort nicht unterstuetzt. `ohneErgebnis` steht bewusst NICHT
  * hier: Der Nachtplan-Lauf kennt ihn mit eigener Bedeutung (siehe {@link OHNE_PRUEFUNG}).
  */
+// Stryker disable ArrayDeclaration,StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt diese Woerter, sie enden auch ohne die Menge abgelehnt
 const NUR_PRUEFLAUF: ReadonlySet<string> = new Set([
   'ohneBefund',
   'mitBefund',
   'schaerfungFehlt',
   'syntheseOhneBeleg',
 ])
+// Stryker restore ArrayDeclaration,StringLiteral
 
 /**
  * Umgekehrt: Ein Pruef-Lauf erzeugt diese Ausgaenge nie. Sie modus-unabhaengig
@@ -374,6 +392,8 @@ const NIE_IM_PRUEFLAUF: ReadonlySet<string> = new Set([
   'zurueckgestellt',
   'verbraucht',
   'offen',
+  // Der Pruef-Lauf hat keine Umsetzungssitzung, die sich festfahren koennte (Plan #1547, E20).
+  'festgefahren',
 ])
 
 /**
@@ -408,7 +428,9 @@ const ZEITBUDGET_PRAEFIX = 'Zeitbudget '
  * Die Ausgaenge, die **nur** ein Ketten-Lauf schreibt — analog {@link NUR_PRUEFLAUF}. In
  * jedem anderen Modus sagen sie nichts und bleiben dort nicht unterstuetzt.
  */
+// Stryker disable ArrayDeclaration,StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt diese Woerter, sie enden auch ohne die Menge abgelehnt
 const NUR_KETTE: ReadonlySet<string> = new Set(['fertig', 'angehalten', 'abgebrochen'])
+// Stryker restore ArrayDeclaration,StringLiteral
 
 /**
  * Umgekehrt: Eine Kette erzeugt diese Ausgaenge nie — die vier Nachtplan-Ausgaenge, die
@@ -422,9 +444,13 @@ const NIE_IN_KETTE: ReadonlySet<string> = new Set([
   'verbraucht',
   'offen',
   'ohneErgebnis',
+  // Stryker disable next-line StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt das Wort, in der Kette endet es ohnehin abgelehnt
   'ohneBefund',
+  // Stryker disable next-line StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt das Wort, in der Kette endet es ohnehin abgelehnt
   'mitBefund',
+  // Stryker disable next-line StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt das Wort, in der Kette endet es ohnehin abgelehnt
   'schaerfungFehlt',
+  // Stryker disable next-line StringLiteral: gleichwertig — kein gemeinsames Vokabular kennt das Wort, in der Kette endet es ohnehin abgelehnt
   'syntheseOhneBeleg',
   'erfolg',
   'fehlschlag',
@@ -633,6 +659,7 @@ function dauerDerEinheit(e: RohEinheit): number | undefined {
   if (typeof e.dauerMs === 'number') return e.dauerMs
   if (e.stufen === undefined) return undefined
   return Object.values(e.stufen).reduce<number>(
+    // Stryker disable next-line OptionalChaining: gleichwertig — eine Stufe null scheitert ohnehin in stufenwert
     (summe, stufe) => summe + (typeof stufe?.dauerMs === 'number' ? stufe.dauerMs : 0),
     0,
   )
@@ -738,9 +765,11 @@ function kettenStufenDerEinheit(stufen: RohStufen | undefined): NightRunKettenSt
 function zuegeDerEinheit(e: RohEinheit): number | undefined {
   if (typeof e.kennzahlen?.zuege === 'number') return e.kennzahlen.zuege
   if (e.stufen === undefined) return undefined
+  // Stryker disable OptionalChaining: gleichwertig — eine Stufe null scheitert ohnehin in stufenwert
   const gemeldet = Object.values(e.stufen)
     .map((stufe) => stufe?.kennzahlen?.zuege)
     .filter((zuege): zuege is number => typeof zuege === 'number')
+  // Stryker restore OptionalChaining
   return gemeldet.length === 0 ? undefined : gemeldet.reduce((summe, zuege) => summe + zuege, 0)
 }
 
@@ -792,16 +821,19 @@ function modusDeutung(
     if (NIE_IN_KETTE.has(e.ausgang)) return null
     return deuteKettenAusgang(e) ?? undefined
   }
+  // Stryker disable next-line ConditionalExpression,LogicalOperator: gleichwertig — die Woerter stehen in keinem gemeinsamen Vokabular und enden darunter ebenso abgelehnt; die Zeile benennt die Grenze
   return NUR_PRUEFLAUF.has(e.ausgang) || NUR_KETTE.has(e.ausgang) ? null : undefined
 }
 
 /**
- * Die beiden Ausgaenge, deren Auszug am mitgelieferten Grund haengt; `undefined` bei jedem
+ * Die drei Ausgaenge, deren Auszug am mitgelieferten Grund haengt; `undefined` bei jedem
  * anderen Ausgang.
  *
- * <p>Beide sind modus-unabhaengig (Plan #803, Entscheidung 7): `uebersprungen` kennt bereits der
- * Text-Protokoll-Parser (`nightRunLog.ts`, Muster `^#(\d+) uebersprungen: `). Der Rueckfall auf
- * den leeren Grund ({@link grundText}) gilt beiden — der Ausgang steht auch ohne ihn fest, und
+ * <p>`zurueckgestellt` und `uebersprungen` sind modus-unabhaengig (Plan #803, Entscheidung 7):
+ * `uebersprungen` kennt bereits der Text-Protokoll-Parser (`nightRunLog.ts`, Muster
+ * `^#(\d+) uebersprungen: `). `festgefahren` (Issue #1551, Plan #1547 E9) gilt ausser im
+ * Pruef-Lauf, der ihn ueber {@link NIE_IM_PRUEFLAUF} ablehnt. Der Rueckfall auf den leeren Grund
+ * ({@link grundText}) gilt allen dreien — der Ausgang steht auch ohne ihn fest, und
  * `uebersprungen` ist kein Befund, traegt also keine Fehlerklasse.
  */
 function deuteGrundAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | undefined {
@@ -813,7 +845,27 @@ function deuteGrundAusgang(e: RohEinheit): (Farbe & { excerpt: string }) | undef
   if (e.ausgang === 'uebersprungen') {
     return { state: 'GREY', excerpt: gekuerzt(grundText(e)) }
   }
+  if (e.ausgang === 'festgefahren') {
+    return { state: 'RED', errorClass: 'STUCK', excerpt: gekuerzt(grundText(e)) }
+  }
   return undefined
+}
+
+/**
+ * Die Angaben eines festgefahrenen Pakets in den Namen des Servers; `undefined` bei jedem anderen
+ * Ausgang, ohne Block und bei einem Block ohne eine einzige verwertbare Angabe — so liest ihn
+ * auch der Server zurueck (`IngestStuckRequest.toDomain`).
+ */
+function stuckDerEinheit(e: RohEinheit): NightRunStuck | undefined {
+  const block = e.festgefahren
+  if (e.ausgang !== 'festgefahren' || typeof block !== 'object' || block === null) return undefined
+  return leerOderWert<NightRunStuck>({
+    ...textfeld('check', block.pruefung),
+    ...textfeld('error', block.fehler),
+    ...zahlenfeld('attempts', block.versuche),
+    ...zahlenfeld('sessionLimitMs', block.zeitgrenzeMs),
+    ...textfeld('sessionId', block.sitzung),
+  })
 }
 
 /**
@@ -853,6 +905,7 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRu
   const dauer = dauerDerEinheit(e)
   const kennzahlen = kennzahlenDerEinheit(e)
   const kettenStufen = kettenStufenDerEinheit(e.stufen)
+  const stuck = stuckDerEinheit(e)
   return {
     cardNumber: Number(e.id),
     title: e.titel,
@@ -872,6 +925,7 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRu
     // Unbedingt, nicht optional: `ausgang` ist in Fassung 1 zugesagt und steht an jeder
     // Einheit, noch bevor sie erstmals geschrieben wird (siehe {@link RohEinheit}).
     ausgang: e.ausgang,
+    ...(stuck === undefined ? {} : { stuck }),
   }
 }
 
@@ -920,11 +974,13 @@ function laufAuszug(l: RohLauf): string {
  */
 export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandResult {
   let roh: unknown
+  // Stryker disable BlockStatement: gleichwertig — ohne Rueckgabe bleibt roh undefined und endet in der Pruefung darunter als kein-json
   try {
     roh = JSON.parse(text)
   } catch {
     return { ok: false, grund: 'kein-json' }
   }
+  // Stryker restore BlockStatement
   if (typeof roh !== 'object' || roh === null || Array.isArray(roh) || !('schemaFassung' in roh)) {
     return { ok: false, grund: 'kein-json' }
   }

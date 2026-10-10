@@ -41,11 +41,13 @@ import org.mwolff.manban.nightrun.application.TokenNotBoundForIngestException;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
 import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestBudgetRequest;
@@ -72,7 +74,15 @@ import org.springframework.security.core.Authentication;
 // PMD.CouplingBetweenObjects: Die Kopplung folgt den Typen des Einlieferungsvertrags, dieselbe
 // Ursache wie bei den Importen. Issue #1456 bringt mit der Morgenmeldung
 // IngestReleasePreparationRequest, NewReleasePreparation und ReleasePreparationResult dazu.
-@SuppressWarnings({"PMD.ExcessiveImports", "PMD.TooManyMethods", "PMD.CouplingBetweenObjects"})
+// PMD.GodClass: Issue #1549 bringt die Faelle des Blocks stuck dazu; die Summe der Faelle reisst
+// die Schwelle. Dieselbe Begruendung wie bei TooManyMethods: Die Faelle gehoeren zum
+// Einlieferungsvertrag und werden nicht zusammengelegt, um eine Zahl zu druecken.
+@SuppressWarnings({
+  "PMD.ExcessiveImports",
+  "PMD.TooManyMethods",
+  "PMD.CouplingBetweenObjects",
+  "PMD.GodClass"
+})
 class NightRunIngestControllerTest {
 
   private static final Instant START = Instant.parse("2026-09-16T22:31:00Z");
@@ -417,7 +427,7 @@ class NightRunIngestControllerTest {
         null,
         List.of(
             new IngestItemRequest(
-                993, "Paket 993", NightRunState.GREEN, null, 5L, null, null, null, stufen)));
+                993, "Paket 993", NightRunState.GREEN, null, 5L, null, null, null, stufen, null)));
   }
 
   private static IngestStageRequest stufe(NightRunStage stage) {
@@ -813,5 +823,154 @@ class NightRunIngestControllerTest {
                               null))))
           .hasSize(2);
     }
+  }
+
+  // --- Festgefahrene Pakete: der Block stuck (Issue #1549, Plan #1547 E8) ------------------
+
+  private static final IngestStuckRequest FESTGEFAHREN =
+      new IngestStuckRequest("mvn verify", "OpenApiIT rot", 3, 3_600_000L, "sitzung-1");
+
+  private static NightRunIngestController.IngestRequest anfrageMitPaket(
+      @Nullable NightRunErrorClass errorClass, @Nullable IngestStuckRequest stuck) {
+    return new NightRunIngestController.IngestRequest(
+        START,
+        NightRunMode.IMPLEMENTATION,
+        null,
+        1000L,
+        1,
+        0,
+        0,
+        Boolean.TRUE,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(
+            new IngestItemRequest(
+                1549,
+                "Paket 1549",
+                NightRunState.RED,
+                errorClass,
+                900_000L,
+                null,
+                null,
+                null,
+                null,
+                stuck)));
+  }
+
+  private NewNightRun gemeldet(NightRunIngestController.IngestRequest anfrage) {
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+    controller.ingest(mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht")), anfrage);
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    return meldung.getValue();
+  }
+
+  private static List<String> verletztePfade(NightRunIngestController.IngestRequest anfrage) {
+    try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+      return factory.getValidator().validate(anfrage).stream()
+          .map(v -> v.getPropertyPath().toString())
+          .toList();
+    }
+  }
+
+  private static IngestStuckRequest nurPruefung(String check) {
+    return new IngestStuckRequest(check, null, null, null, null);
+  }
+
+  @Test
+  void eineMeldungMitStuckKommtMitAllenAngabenBeimDienstAn() {
+    NewNightRun meldung = gemeldet(anfrageMitPaket(NightRunErrorClass.STUCK, FESTGEFAHREN));
+
+    assertThat(meldung.items().getFirst().errorClass()).isEqualTo(NightRunErrorClass.STUCK);
+    assertThat(meldung.items().getFirst().stuck())
+        .isEqualTo(new NightRunStuck("mvn verify", "OpenApiIT rot", 3, 3_600_000L, "sitzung-1"));
+  }
+
+  /**
+   * AK 5: Eine ältere Kit-Kopie kennt weder STUCK noch stuck — ihre Meldung kommt unverändert an.
+   */
+  @Test
+  void eineMeldungOhneStuckBestehtDiePruefungUndTraegtKeineAngaben() {
+    NightRunIngestController.IngestRequest alt =
+        anfrageMitPaket(NightRunErrorClass.CHECKS_RED, null);
+
+    assertThat(verletztePfade(alt)).isEmpty();
+    assertThat(gemeldet(alt).items().getFirst().stuck()).isNull();
+  }
+
+  /** Ein leerer Block ist keine Angabe: Er kommt wie ein fehlender als null an. */
+  @Test
+  void einLeererStuckBlockKommtAlsNullAn() {
+    NewNightRun meldung =
+        gemeldet(
+            anfrageMitPaket(
+                NightRunErrorClass.STUCK, new IngestStuckRequest(null, null, null, null, null)));
+
+    assertThat(meldung.items().getFirst().stuck()).isNull();
+  }
+
+  /** Jedes Feld einzeln gemeldet ist eine Angabe — keines wird zu einem leeren Block gezählt. */
+  @Test
+  void einzelneAngabenKommenAlsAngabenAn() {
+    assertThat(
+            gemeldet(
+                    anfrageMitPaket(
+                        NightRunErrorClass.STUCK,
+                        new IngestStuckRequest(null, null, null, 0L, null)))
+                .items()
+                .getFirst()
+                .stuck())
+        .isEqualTo(new NightRunStuck(null, null, null, 0L, null));
+  }
+
+  @Test
+  void jedeFeldgrenzeDesStuckBlocksGreiftKnappDarueber() {
+    assertThat(
+            verletztePfade(
+                anfrageMitPaket(
+                    NightRunErrorClass.STUCK,
+                    new IngestStuckRequest(
+                        "c".repeat(IngestStuckRequest.CHECK_MAX + 1),
+                        "e".repeat(IngestStuckRequest.ERROR_MAX + 1),
+                        0,
+                        -1L,
+                        "s".repeat(IngestStuckRequest.SESSION_ID_MAX + 1)))))
+        .containsExactlyInAnyOrder(
+            "items[0].stuck.check",
+            "items[0].stuck.error",
+            "items[0].stuck.attempts",
+            "items[0].stuck.sessionLimitMs",
+            "items[0].stuck.sessionId");
+  }
+
+  @Test
+  void jedeFeldgrenzeDesStuckBlocksLaesstDenGrenzwertDurch() {
+    assertThat(
+            verletztePfade(
+                anfrageMitPaket(
+                    NightRunErrorClass.STUCK,
+                    new IngestStuckRequest(
+                        "c".repeat(IngestStuckRequest.CHECK_MAX),
+                        "e".repeat(IngestStuckRequest.ERROR_MAX),
+                        1,
+                        0L,
+                        "s".repeat(IngestStuckRequest.SESSION_ID_MAX)))))
+        .isEmpty();
+  }
+
+  /** Die Grenzen gelten auch an einem Paket ohne STUCK — verworfen wird erst im Dienst (E2). */
+  @Test
+  void dieFeldgrenzenGeltenAuchOhneStuck() {
+    assertThat(
+            verletztePfade(
+                anfrageMitPaket(
+                    NightRunErrorClass.CHECKS_RED,
+                    nurPruefung("c".repeat(IngestStuckRequest.CHECK_MAX + 1)))))
+        .containsExactly("items[0].stuck.check");
   }
 }

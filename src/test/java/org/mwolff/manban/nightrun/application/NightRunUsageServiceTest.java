@@ -41,10 +41,15 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.NightUsageVie
 import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.StageUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
+import org.mwolff.manban.nightrun.domain.Bremsbilanz;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
+import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
+import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.InteractiveUsageSinceReader;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -229,6 +234,17 @@ class NightRunUsageServiceTest {
     usage.naechte = List.of(nacht(NACHT_15, NightRunErrorClass.CHECKS_RED));
 
     assertThat(service.night(USER, PROJECT, NACHT_15, BERLIN).aborted()).isFalse();
+  }
+
+  /** Die Bremse beendet ein Paket, nicht die Nacht (Plan #1547 E16). */
+  @Test
+  void eineNachtNurMitFestgefahrenenPaketenGiltNichtAlsAbgebrochen() {
+    usage.naechte = List.of(nacht(NACHT_15, NightRunErrorClass.STUCK));
+
+    assertThat(service.night(USER, PROJECT, NACHT_15, BERLIN).aborted()).isFalse();
+    assertThat(service.period(USER, PROJECT, NightRunPeriodType.DAY, 0, BERLIN).nights())
+        .extracting(NightSummary::aborted)
+        .containsExactly(false);
   }
 
   @Test
@@ -468,6 +484,64 @@ class NightRunUsageServiceTest {
     assertThat(gesamt.usageByKind().interactive().total()).isEqualTo(NICHTS);
     assertThat(gesamt.oldestRetainedRunStart()).isNull();
     assertThat(gesamt.interactiveUsageSince()).isNull();
+  }
+
+  // --- Die Bremsbilanz (Issue #1550) ----------------------------------------------------------
+
+  /** Ein festgefahrenes Paket mit Zeitgrenze einer Stunde und eigener Sitzung. */
+  private static NightRunItem bremsung(long nightRunId, long durationMs) {
+    return new NightRunItem(
+        null,
+        nightRunId,
+        PROJECT,
+        Instant.parse("2026-08-10T22:00:00Z"),
+        NightRunMode.IMPLEMENTATION,
+        NightRunKind.NIGHT,
+        1550,
+        "Bremsbilanz",
+        NightRunState.RED,
+        NightRunErrorClass.STUCK,
+        durationMs,
+        null,
+        null,
+        null,
+        new NightRunStuck("mvn verify", "rot", 3, 3_600_000L, "s-" + nightRunId),
+        List.of());
+  }
+
+  @Test
+  void zeitraumUndVorzeitraumTragenJeIhreBremsbilanz() {
+    usage.bremsungenJeBeginn.put(
+        Instant.parse("2026-08-01T10:00:00Z"), List.of(bremsung(1L, 600_000L), bremsung(2L, 0L)));
+    usage.bremsungenJeBeginn.put(
+        Instant.parse("2026-07-01T10:00:00Z"), List.of(bremsung(3L, 3_000_000L)));
+
+    PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
+
+    assertThat(monat.current().brakes()).isEqualTo(new Bremsbilanz(2L, 0L, 6_600_000L));
+    assertThat(monat.previous().brakes()).isEqualTo(new Bremsbilanz(1L, 0L, 600_000L));
+    assertThat(usage.aufrufe)
+        .contains(
+            "stuck 2026-08-01T10:00:00Z 2026-09-01T10:00:00Z",
+            "stuck 2026-07-01T10:00:00Z 2026-08-01T10:00:00Z");
+  }
+
+  @Test
+  void ohneBremsungIstDieBilanzDesZeitraumsLeer() {
+    PeriodUsageView tag = service.period(USER, PROJECT, NightRunPeriodType.DAY, 0, BERLIN);
+
+    assertThat(tag.current().brakes()).isEqualTo(new Bremsbilanz(0L, 0L, 0L));
+    assertThat(tag.previous().brakes()).isEqualTo(new Bremsbilanz(0L, 0L, 0L));
+  }
+
+  @Test
+  void dieLebenszeitSummeTraegtDieBremsbilanzAllerAufbewahrtenLaeufe() {
+    usage.bremsungenGesamt = List.of(bremsung(1L, 600_000L), bremsung(2L, 1_200_000L));
+
+    TotalUsageView gesamt = service.total(USER, PROJECT);
+
+    assertThat(gesamt.brakes()).isEqualTo(new Bremsbilanz(2L, 0L, 5_400_000L));
+    assertThat(usage.aufrufe).contains("stuckLifetime");
   }
 
   // --- Ein Zeitraum ----------------------------------------------------------------------------
@@ -800,6 +874,8 @@ class NightRunUsageServiceTest {
     Optional<Instant> aeltester = Optional.empty();
     List<RetainedByKind> retention = List.of();
     List<StageTotals> jeStufe = List.of();
+    final Map<Instant, List<NightRunItem>> bremsungenJeBeginn = new java.util.HashMap<>();
+    List<NightRunItem> bremsungenGesamt = List.of();
 
     @Override
     public List<NightTotals> totalsPerNight(long projectId, Instant from, Instant to, ZoneId zone) {
@@ -823,6 +899,18 @@ class NightRunUsageServiceTest {
     public PeriodTotals totals(long projectId, Instant from, Instant to) {
       aufrufe.add("totals " + from + " " + to);
       return summeJeBeginn.getOrDefault(from, summe);
+    }
+
+    @Override
+    public List<NightRunItem> stuckItems(long projectId, Instant from, Instant to) {
+      aufrufe.add("stuck " + from + " " + to);
+      return bremsungenJeBeginn.getOrDefault(from, List.of());
+    }
+
+    @Override
+    public List<NightRunItem> lifetimeStuckItems(long projectId) {
+      aufrufe.add("stuckLifetime");
+      return bremsungenGesamt;
     }
 
     @Override

@@ -29,6 +29,11 @@ public record BoardDashboardKpis(
         List<WeeklyThroughput> throughput,
     @Schema(
             description =
+                "Durchschnittliche Umsetzungszeit je Woche, dieselben zwölf Fenster wie der"
+                    + " Durchsatz.")
+        List<WeeklyImplementation> implementationWeekly,
+    @Schema(
+            description =
                 "Durchschnittliche Durchlaufzeit abgeschlossener Karten (Anlage bis Done).",
             example = "432000")
         @Nullable Long avgLeadTimeSeconds,
@@ -53,8 +58,12 @@ public record BoardDashboardKpis(
     requireSampleBasis(avgImplementationSeconds, implementationSampleCount, "implementation");
   }
 
-  private static void requireSampleBasis(
-      @Nullable Long averageSeconds, int sampleCount, String metric) {
+  /**
+   * Sichert zu, dass Durchschnitt und Stichprobengröße zusammenpassen: kein Durchschnitt ohne
+   * Messung, keine Messung ohne Durchschnitt, keine negative Zahl. Gilt für jede Kennzahl, die
+   * einen Mittelwert samt Datenbasis trägt.
+   */
+  static void requireSampleBasis(@Nullable Long averageSeconds, int sampleCount, String metric) {
     if (sampleCount < 0) {
       throw new IllegalArgumentException(
           metric + "SampleCount darf nicht negativ sein, war: " + sampleCount);
@@ -85,6 +94,26 @@ public record BoardDashboardKpis(
       @Schema(description = "Beginn des Sieben-Tage-Fensters.") Instant weekStart,
       @Schema(description = "Zahl der in diesem Fenster abgeschlossenen Karten.", example = "9")
           long doneCount) {}
+
+  /**
+   * Durchschnittliche Umsetzungszeit der Karten, die in einem Wochenfenster fertig wurden. Ohne
+   * gemessene Karte ist der Durchschnitt {@code null} und die Zahl der Messungen 0 — nie 0
+   * Sekunden.
+   */
+  @Schema(description = "Durchschnittliche Umsetzungszeit in einem Wochenfenster.")
+  public record WeeklyImplementation(
+      @Schema(description = "Beginn des Sieben-Tage-Fensters.") Instant weekStart,
+      @Schema(
+              description = "Durchschnittliche Umsetzungszeit; null ohne Messung.",
+              example = "5400")
+          @Nullable Long avgImplementationSeconds,
+      @Schema(description = "Zahl der Karten, über die gemittelt ist.", example = "4")
+          int sampleCount) {
+
+    public WeeklyImplementation {
+      requireSampleBasis(avgImplementationSeconds, sampleCount, "weeklyImplementation");
+    }
+  }
 
   /** Eine Karte, die ungewöhnlich lange in einer Spalte lag (über der Schwelle). */
   @Schema(description = "Eine Karte, die ungewöhnlich lange in einer Spalte lag.")

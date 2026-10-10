@@ -62,6 +62,13 @@ function lauf(text: string): NightRun {
   return ergebnis.run
 }
 
+/**
+ * Der Lauf einer Fixture, erst beim Aufruf gedeutet (Issue #1560). Ein `describe`-Rumpf, der
+ * selbst parst, laeuft beim Sammeln der Tests: Wirft die Deutung dort, scheitert die ganze Datei
+ * ohne einen einzigen roten Test — und die Mutationspruefung zaehlt den Mutanten als ueberlebt.
+ */
+const ausFixture = (fixture: unknown) => (): NightRun => lauf(JSON.stringify(fixture))
+
 /** Das einzige Arbeitspaket eines Laufs. */
 const einziges = (text: string): NightRunItem => lauf(text).items[0]
 
@@ -884,8 +891,8 @@ describe('parseNightRunErgebnisstand — harter Stopp auf Lauf-Ebene', () => {
 })
 
 describe('parseNightRunErgebnisstand — echter Lauf vom 2026-09-07', () => {
-  const r = lauf(JSON.stringify(echterLauf))
-  const nach = (nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+  const r = ausFixture(echterLauf)
+  const nach = (nummer: number) => r().items.find((i) => i.cardNumber === nummer)
 
   it('deutet die beiden erfolgreichen, aber ungeprueften Pakete als gelb', () => {
     for (const nummer of [767, 770]) {
@@ -902,34 +909,34 @@ describe('parseNightRunErgebnisstand — echter Lauf vom 2026-09-07', () => {
   })
 
   it('summiert die Laufdauer aus den fuenf Einheiten', () => {
-    expect(r.durationMs).toBe(244427 + 769668 + 980483 + 167015 + 926467)
+    expect(r().durationMs).toBe(244427 + 769668 + 980483 + 167015 + 926467)
   })
 
   it('zaehlt fuenf bearbeitete Pakete, keines uebergangen, nichts ungedeutet', () => {
-    expect(r.processedCount).toBe(5)
-    expect(r.skippedCount).toBe(0)
-    expect(r.unparsedCount).toBe(0)
+    expect(r().processedCount).toBe(5)
+    expect(r().skippedCount).toBe(0)
+    expect(r().unparsedCount).toBe(0)
   })
 })
 
 describe('parseNightRunErgebnisstand — echter Nachtplan-Lauf, hart gestoppt (2026-09-09-141506)', () => {
-  const r = lauf(JSON.stringify(echterNachtplanHarterStopp))
-  const nach = (nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+  const r = ausFixture(echterNachtplanHarterStopp)
+  const nach = (nummer: number) => r().items.find((i) => i.cardNumber === nummer)
 
   it('deutet den Lauf als NIGHTPLAN, unvollstaendig-Flag false trotz Hart-Stopp', () => {
-    expect(r.mode).toBe('NIGHTPLAN')
-    expect(r.incomplete).toBe(false)
+    expect(r().mode).toBe('NIGHTPLAN')
+    expect(r().incomplete).toBe(false)
   })
 
   it('zaehlt 2 bearbeitete und 33 uebergangene Pakete', () => {
-    expect(r.processedCount).toBe(2)
-    expect(r.skippedCount).toBe(33)
+    expect(r().processedCount).toBe(2)
+    expect(r().skippedCount).toBe(33)
   })
 
   it('setzt Lauf-Zustand und -Fehlerklasse auf den harten Stopp', () => {
-    expect(r.runState).toBe('RED')
-    expect(r.runErrorClass).toBe('HARD_ABORT')
-    expect(r.runExcerpt).toBe('Harter Stopp (harterStopp)')
+    expect(r().runState).toBe('RED')
+    expect(r().runErrorClass).toBe('HARD_ABORT')
+    expect(r().runExcerpt).toBe('Harter Stopp (harterStopp)')
   })
 
   it('deutet die beiden abgebrochenen Pakete #479 und #549 rot mit HARD_ABORT', () => {
@@ -941,22 +948,22 @@ describe('parseNightRunErgebnisstand — echter Nachtplan-Lauf, hart gestoppt (2
 })
 
 describe('parseNightRunErgebnisstand — echter Nachtplan-Lauf, regulaer beendet (2026-09-09-125621)', () => {
-  const r = lauf(JSON.stringify(echterNachtplanRegulaer))
-  const nach = (nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+  const r = ausFixture(echterNachtplanRegulaer)
+  const nach = (nummer: number) => r().items.find((i) => i.cardNumber === nummer)
 
   it('deutet den Lauf als NIGHTPLAN, vollstaendig, ohne Lauf-Zustand', () => {
-    expect(r.mode).toBe('NIGHTPLAN')
-    expect(r.incomplete).toBe(false)
-    expect(r).not.toHaveProperty('runState')
+    expect(r().mode).toBe('NIGHTPLAN')
+    expect(r().incomplete).toBe(false)
+    expect(r()).not.toHaveProperty('runState')
   })
 
   it('zaehlt 3 bearbeitete und 35 uebergangene Pakete', () => {
-    expect(r.processedCount).toBe(3)
-    expect(r.skippedCount).toBe(35)
+    expect(r().processedCount).toBe(3)
+    expect(r().skippedCount).toBe(35)
   })
 
   it('summiert die Laufdauer aus den Einheiten mit dauerMs', () => {
-    expect(r.durationMs).toBe(1858420 + 1976663 + 0)
+    expect(r().durationMs).toBe(1858420 + 1976663 + 0)
   })
 
   it('deutet die beiden `verbraucht`-Pakete #533 und #535 gruen ohne Fehlerklasse', () => {
@@ -980,24 +987,24 @@ describe('parseNightRunErgebnisstand — echter Nachtplan-Lauf, regulaer beendet
 })
 
 describe('parseNightRunErgebnisstand — echter Pruef-Lauf (2026-09-11-103116)', () => {
-  const r = lauf(JSON.stringify(echterPrueflauf))
-  const nach = (nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+  const r = ausFixture(echterPrueflauf)
+  const nach = (nummer: number) => r().items.find((i) => i.cardNumber === nummer)
 
   it('deutet den Lauf als REVIEW auf Stufe plan, vollstaendig, ohne Lauf-Zustand', () => {
-    expect(r.mode).toBe('REVIEW')
-    expect(r.stage).toBe('plan')
-    expect(r.incomplete).toBe(false)
-    expect(r).not.toHaveProperty('runState')
+    expect(r().mode).toBe('REVIEW')
+    expect(r().stage).toBe('plan')
+    expect(r().incomplete).toBe(false)
+    expect(r()).not.toHaveProperty('runState')
   })
 
   it('zaehlt ein bearbeitetes und 34 uebergangene Pakete, nichts ungedeutet', () => {
-    expect(r.processedCount).toBe(1)
-    expect(r.skippedCount).toBe(34)
-    expect(r.unparsedCount).toBe(0)
+    expect(r().processedCount).toBe(1)
+    expect(r().skippedCount).toBe(34)
+    expect(r().unparsedCount).toBe(0)
   })
 
   it('summiert die Laufdauer aus der einzigen Einheit mit dauerMs', () => {
-    expect(r.durationMs).toBe(879763)
+    expect(r().durationMs).toBe(879763)
   })
 
   it('deutet das `mitBefund`-Paket #782 gruen ohne Fehlerklasse', () => {
@@ -1013,20 +1020,20 @@ describe('parseNightRunErgebnisstand — echter Pruef-Lauf (2026-09-11-103116)',
  * die eigene Annahme, nicht das Format.
  */
 describe('parseNightRunErgebnisstand — echter Ketten-Lauf (2026-09-14-131200)', () => {
-  const r = lauf(JSON.stringify(echteKette))
-  const nach = (nummer: number) => r.items.find((i) => i.cardNumber === nummer)
+  const r = ausFixture(echteKette)
+  const nach = (nummer: number) => r().items.find((i) => i.cardNumber === nummer)
 
   it('deutet den Lauf als CHAIN, vollstaendig, ohne Lauf-Zustand und ohne Stufe', () => {
-    expect(r.mode).toBe('CHAIN')
-    expect(r.incomplete).toBe(false)
-    expect(r).not.toHaveProperty('runState')
-    expect(r).not.toHaveProperty('stage')
+    expect(r().mode).toBe('CHAIN')
+    expect(r().incomplete).toBe(false)
+    expect(r()).not.toHaveProperty('runState')
+    expect(r()).not.toHaveProperty('stage')
   })
 
   it('zaehlt drei bearbeitete Vorgaenge, keinen uebergangen, nichts ungedeutet', () => {
-    expect(r.processedCount).toBe(3)
-    expect(r.skippedCount).toBe(0)
-    expect(r.unparsedCount).toBe(0)
+    expect(r().processedCount).toBe(3)
+    expect(r().skippedCount).toBe(0)
+    expect(r().unparsedCount).toBe(0)
   })
 
   it('deutet die beiden fertigen Ketten #791 und #814 gruen ohne Fehlerklasse', () => {
@@ -1067,7 +1074,7 @@ describe('parseNightRunErgebnisstand — echter Ketten-Lauf (2026-09-14-131200)'
   })
 
   it('summiert die Laufdauer ueber alle drei Vorgaenge (AK 6)', () => {
-    expect(r.durationMs).toBe(1533322 + 1274784 + 1340225)
+    expect(r().durationMs).toBe(1533322 + 1274784 + 1340225)
   })
 })
 
@@ -1081,20 +1088,20 @@ describe('parseNightRunErgebnisstand — echter Ketten-Lauf (2026-09-14-131200)'
  * Staende decken nur, was kein echter Lauf hergibt: das durchgehende Fehlen.
  */
 describe('parseNightRunErgebnisstand — Angaben des Ergebnisstands (Issue #865)', () => {
-  const kette = lauf(JSON.stringify(echteKette))
-  const vorgang = (nummer: number) => kette.items.find((i) => i.cardNumber === nummer)
-  const implementierung = lauf(JSON.stringify(echterLauf))
+  const kette = ausFixture(echteKette)
+  const vorgang = (nummer: number) => kette().items.find((i) => i.cardNumber === nummer)
+  const implementierung = ausFixture(echterLauf)
 
   /** Ein Stand ohne jede der uebernommenen Kopfangaben — `label: null` wie im Bestand. */
   const ohneKopfangaben = (felder: Record<string, unknown> = {}): string =>
     stand({ modell: undefined, label: null, abschluss: null, ...felder })
 
   it('uebernimmt die Zeitvorgaben je Arbeitsschritt aus dem Budget des Laufs', () => {
-    expect(kette.stand?.vorgabenMin).toEqual({ plan: 20, review: 15, pakete: 15, abdeckung: 10 })
+    expect(kette().stand?.vorgabenMin).toEqual({ plan: 20, review: 15, pakete: 15, abdeckung: 10 })
   })
 
   it('uebernimmt Kostenbudget, Modell, Label, Abschlussart, Kostensumme und fehlende Kostenmeldungen', () => {
-    expect(kette.stand).toMatchObject({
+    expect(kette().stand).toMatchObject({
       kostenBudgetUsd: 50,
       modell: 'claude-opus-5',
       label: 'kit:night',
@@ -1135,16 +1142,16 @@ describe('parseNightRunErgebnisstand — Angaben des Ergebnisstands (Issue #865)
 
   it('traegt am Arbeitspaket eines Implementierungs-Laufs die Kennzahlen, aber keine Stufen', () => {
     // Die Arbeitszeit kam mit Issue #872 dazu; sie stand schon immer im Stand.
-    expect(implementierung.items[0].kennzahlen).toEqual({
+    expect(implementierung().items[0].kennzahlen).toEqual({
       kostenUsd: 2.1366104999999997,
       zuege: 38,
       arbeitszeitMs: 180563,
     })
-    expect(implementierung.items[0]).not.toHaveProperty('kettenStufen')
+    expect(implementierung().items[0]).not.toHaveProperty('kettenStufen')
   })
 
   it('laesst am Lauf ohne Budget die Zeitvorgaben und das Kostenbudget weg', () => {
-    expect(implementierung.stand).toEqual({ modell: 'claude-opus-5', abschluss: 'regulaer' })
+    expect(implementierung().stand).toEqual({ modell: 'claude-opus-5', abschluss: 'regulaer' })
   })
 
   it('laesst `stand` ganz ungesetzt, wenn der Lauf keine dieser Angaben fuehrt', () => {
@@ -1201,13 +1208,13 @@ const KENNZAHLEN_HINWEIS =
  * `ergebnisstandAnlegen` das Feld weg.
  */
 describe('parseNightRunErgebnisstand — Kennzahlen aller Lauf-Arten (Issue #870)', () => {
-  const umsetzung = lauf(JSON.stringify(echterLauf))
-  const pruefung = lauf(JSON.stringify(echterPrueflauf))
-  const erzeugung = lauf(JSON.stringify(echterNachtplanRegulaer))
+  const umsetzung = ausFixture(echterLauf)
+  const pruefung = ausFixture(echterPrueflauf)
+  const erzeugung = ausFixture(echterNachtplanRegulaer)
   const nach = (r: NightRun, nummer: number) => r.items.find((i) => i.cardNumber === nummer)
 
   it('traegt an jedem der fuenf Vorgaenge des Umsetzungs-Laufs Kosten und Zuege', () => {
-    const werte = umsetzung.items.map((i) => [i.cardNumber, i.kennzahlen?.kostenUsd, i.kennzahlen?.zuege])
+    const werte = umsetzung().items.map((i) => [i.cardNumber, i.kennzahlen?.kostenUsd, i.kennzahlen?.zuege])
     expect(werte).toEqual([
       [767, 2.1366104999999997, 38],
       [768, 5.134166000000001, 63],
@@ -1218,7 +1225,7 @@ describe('parseNightRunErgebnisstand — Kennzahlen aller Lauf-Arten (Issue #870
   })
 
   it('traegt am bearbeiteten Vorgang des Pruef-Laufs Kosten, Zuege und Arbeitszeit', () => {
-    expect(nach(pruefung, 782)?.kennzahlen).toEqual({
+    expect(nach(pruefung(), 782)?.kennzahlen).toEqual({
       kostenUsd: 21.94563399999999,
       zuege: 252,
       arbeitszeitMs: 1084627,
@@ -1226,16 +1233,16 @@ describe('parseNightRunErgebnisstand — Kennzahlen aller Lauf-Arten (Issue #870
   })
 
   it('nennt am Vorgang eines Erzeugungs-Laufs die Zahl der dort entstandenen Dokumente', () => {
-    expect(nach(erzeugung, 479)?.dokumenteAnzahl).toBe(1)
+    expect(nach(erzeugung(), 479)?.dokumenteAnzahl).toBe(1)
   })
 
   it('nennt die Dokumentenzahl auch an einem Vorgang, dessen Sitzung nichts gemeldet hat', () => {
-    expect(nach(erzeugung, 535)?.dokumenteAnzahl).toBe(1)
-    expect(nach(erzeugung, 535)).not.toHaveProperty('kennzahlen')
+    expect(nach(erzeugung(), 535)?.dokumenteAnzahl).toBe(1)
+    expect(nach(erzeugung(), 535)).not.toHaveProperty('kennzahlen')
   })
 
   it('laesst die Dokumentenzahl an einem uebergangenen Vorgang ungesetzt', () => {
-    expect(nach(erzeugung, 164)).not.toHaveProperty('dokumenteAnzahl')
+    expect(nach(erzeugung(), 164)).not.toHaveProperty('dokumenteAnzahl')
   })
 
   it('reicht den Kennzahlen-Hinweis des Lauf-Kopfs durch', () => {
@@ -1266,18 +1273,18 @@ describe('parseNightRunErgebnisstand — Kennzahlen aller Lauf-Arten (Issue #870
  * heute keinen Leser und waere unbelegt.
  */
 describe('parseNightRunErgebnisstand — Arbeitszeit des Modells (Issue #872)', () => {
-  const umsetzung = lauf(JSON.stringify(echterLauf))
-  const erzeugung = lauf(JSON.stringify(echterNachtplanRegulaer))
+  const umsetzung = ausFixture(echterLauf)
+  const erzeugung = ausFixture(echterNachtplanRegulaer)
   const nach = (r: NightRun, nummer: number) => r.items.find((i) => i.cardNumber === nummer)
 
   it('traegt an jedem der fuenf Vorgaenge des Umsetzungs-Laufs die Arbeitszeit', () => {
-    expect(umsetzung.items.map((i) => i.kennzahlen?.arbeitszeitMs)).toEqual([
+    expect(umsetzung().items.map((i) => i.kennzahlen?.arbeitszeitMs)).toEqual([
       180563, 380034, 567294, 138818, 592769,
     ])
   })
 
   it('traegt sie auch am Vorgang eines Erzeugungs-Laufs', () => {
-    expect(nach(erzeugung, 479)?.kennzahlen?.arbeitszeitMs).toBe(949907)
+    expect(nach(erzeugung(), 479)?.kennzahlen?.arbeitszeitMs).toBe(949907)
   })
 
   it('laesst sie weg, wo die Kennzahlen sie nicht fuehren', () => {
@@ -1423,5 +1430,148 @@ describe('parseNightRunErgebnisstand gegen parseNightRunLog', () => {
       ausProtokoll.state,
       ausProtokoll.errorClass,
     ])
+  })
+})
+
+describe('parseNightRunErgebnisstand — festgefahrenes Paket (Issue #1551)', () => {
+  const VOLL = {
+    pruefung: 'mvn verify',
+    fehler: 'OpenApiIT: Vertrag weicht vom Schnappschuss ab',
+    versuche: 3,
+    zeitgrenzeMs: 3_600_000,
+    sitzung: 'a1b2c3d4',
+  }
+  const festgefahren = (felder: Record<string, unknown> = {}): Record<string, unknown> => ({
+    ausgang: 'festgefahren',
+    grund: 'festgefahren an mvn verify nach 3 Versuchen',
+    dauerMs: 1_200_000,
+    festgefahren: VOLL,
+    ...felder,
+  })
+
+  it('deutet `festgefahren` mit vollem Block rot mit STUCK und uebernimmt die Angaben', () => {
+    const item = einziges(mitEinheit(festgefahren()))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('STUCK')
+    expect(item.excerpt).toBe('festgefahren an mvn verify nach 3 Versuchen')
+    expect(item.durationMs).toBe(1_200_000)
+    expect(item.stuck).toEqual({
+      check: 'mvn verify',
+      error: 'OpenApiIT: Vertrag weicht vom Schnappschuss ab',
+      attempts: 3,
+      sessionLimitMs: 3_600_000,
+      sessionId: 'a1b2c3d4',
+    })
+  })
+
+  it('laesst fehlende Teilfelder des Blocks weg, statt sie mit null zu fuellen', () => {
+    const item = einziges(
+      mitEinheit(festgefahren({ festgefahren: { pruefung: 'npm test', versuche: null, zeitgrenzeMs: 'x' } })),
+    )
+    expect(item.errorClass).toBe('STUCK')
+    expect(item.stuck).toEqual({ check: 'npm test' })
+  })
+
+  it('deutet `festgefahren` ohne Block und ohne Grund und traegt dann keine Angaben', () => {
+    const item = einziges(mitEinheit({ ausgang: 'festgefahren' }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('STUCK')
+    expect(item.excerpt).toBe('')
+    expect(item).not.toHaveProperty('stuck')
+  })
+
+  it('laesst einen leeren Block wie einen fehlenden weg', () => {
+    expect(einziges(mitEinheit(festgefahren({ festgefahren: {} })))).not.toHaveProperty('stuck')
+  })
+
+  it('kuerzt den Auszug aus dem Grund auf die Spaltengrenze', () => {
+    const item = einziges(mitEinheit(festgefahren({ grund: 'x'.repeat(NIGHT_RUN_EXCERPT_MAX + 5) })))
+    expect(item.excerpt).toHaveLength(NIGHT_RUN_EXCERPT_MAX)
+  })
+
+  it('deutet `festgefahren` im Nachtplan-Lauf wie in der Umsetzung', () => {
+    const item = einziges(mitEinheit(festgefahren(), { art: 'erzeugung', stufe: 'plan' }))
+    expect(item.errorClass).toBe('STUCK')
+    expect(item.stuck?.attempts).toBe(3)
+  })
+
+  it('deutet `festgefahren` in der Kette und behaelt den Grund als Kopf des Auszugs', () => {
+    const item = einziges(inKette(festgefahren()))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('STUCK')
+    expect(item.excerpt.startsWith('festgefahren an mvn verify nach 3 Versuchen')).toBe(true)
+    expect(item.stuck?.check).toBe('mvn verify')
+  })
+
+  it('lehnt `festgefahren` im Pruef-Lauf ab', () => {
+    const ergebnis = ablehnung(imPrueflauf(festgefahren()))
+    expect(ergebnis.grund).toBe('nicht-unterstuetzt')
+    expect(ergebnis.wort).toBe('festgefahren')
+  })
+
+  it('traegt an keinem anderen Ausgang Angaben, auch nicht mit Block', () => {
+    const item = einziges(
+      mitEinheit({ ausgang: 'erfolg', pruefung: { id: '100', zustand: 'geprueft' }, festgefahren: VOLL }),
+    )
+    expect(item.state).toBe('GREEN')
+    expect(item).not.toHaveProperty('stuck')
+  })
+
+  it('deutet eine aeltere Datei ohne den Ausgang unveraendert (AK 5)', () => {
+    const vorher = lauf(JSON.stringify(echterLauf))
+    expect(vorher.items.some((item) => item.errorClass === 'STUCK' || 'stuck' in item)).toBe(false)
+  })
+})
+
+/**
+ * Randlagen, die erst die Mutationspruefung sichtbar machte (Issue #1560): Jede haelt eine
+ * Bedingung fest, deren Wegfall sonst keinem Test auffiele.
+ */
+describe('parseNightRunErgebnisstand — Randlagen (Issue #1560)', () => {
+  it('deutet einen Lauf ohne Art mit ausdruecklich leerer Stufe als Implementierung', () => {
+    expect(lauf(stand({ art: undefined, stufe: null })).mode).toBe('IMPLEMENTATION')
+  })
+
+  it('nennt eine fehlende Art im Wort ausdruecklich als „ohne"', () => {
+    expect(ablehnung(stand({ art: undefined, stufe: 'plan' })).wort).toBe('art=ohne/stufe=plan')
+  })
+
+  it('nennt eine Paket-Stufe ohne Paket ohne angehaengte Nummern', () => {
+    const item = einziges(inKette({ ausgang: 'fertig', stufen: { pakete: { ids: [] } } }))
+    expect(item.excerpt.split('\n')[1]).toBe('pakete: gelungen')
+  })
+
+  it('zaehlt eine Stufe ohne Dauer in der Summe des Vorgangs als 0', () => {
+    const item = einziges(
+      inKette({ ausgang: 'fertig', stufen: { plan: { id: null, dauerMs: 5000 }, review: {} } }),
+    )
+    expect(item.durationMs).toBe(5000)
+  })
+
+  it('nennt an der Abdeckungs-Stufe eine leere Dokumentenliste', () => {
+    const item = einziges(inKette({ ausgang: 'fertig', stufen: { abdeckung: { dauerMs: 1000 } } }))
+    expect(item.kettenStufen?.abdeckung).toEqual({ dauerMs: 1000, dokumente: [] })
+  })
+
+  it('haengt ausserhalb der Kette keine Stufenzeilen an den Auszug', () => {
+    const item = einziges(mitEinheit({ ausgang: 'harterStopp', stufen: { plan: { id: '5' } } }))
+    expect(item.excerpt).toBe('Harter Stopp')
+  })
+
+  it('traegt keine Fehlerklasse als Feld, wo die Deutung keine nennt', () => {
+    const item = einziges(mitEinheit({ ausgang: 'erfolg', pruefung: { id: '100', zustand: 'geprueft' } }))
+    expect(item).not.toHaveProperty('errorClass')
+  })
+
+  it('laesst einen festgefahrenen Block mit null wie einen fehlenden weg', () => {
+    const item = einziges(mitEinheit({ ausgang: 'festgefahren', festgefahren: null }))
+    expect(item.errorClass).toBe('STUCK')
+    expect(item).not.toHaveProperty('stuck')
+  })
+
+  it('lehnt einen unbekannten Ausgang ab, auch wenn er einen deutbaren Pruefblock traegt', () => {
+    const ergebnis = ablehnung(mitEinheit({ ausgang: 'erfunden', pruefung: { id: '100', zustand: 'ungeprueft' } }))
+    expect(ergebnis.grund).toBe('nicht-unterstuetzt')
+    expect(ergebnis.wort).toBe('erfunden')
   })
 })

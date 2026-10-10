@@ -51,6 +51,7 @@ import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunProgress;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.PackageProgress;
 import org.mwolff.manban.nightrun.domain.PackageState;
@@ -188,6 +189,7 @@ class NightRunControllerTest {
                         "abc1234",
                         "mvn verify rot",
                         null,
+                        null,
                         List.of()))));
     assertThat(uebergeben.get(1))
         .isEqualTo(
@@ -259,6 +261,7 @@ class NightRunControllerTest {
                         "Kette",
                         NightRunState.RED,
                         NightRunErrorClass.TIME_BUDGET_EXCEEDED,
+                        null,
                         null,
                         null,
                         null,
@@ -465,6 +468,8 @@ class NightRunControllerTest {
                             "abc1234",
                             "mvn verify rot",
                             null,
+                            null,
+                            null,
                             List.of())))));
 
     mvc.perform(get(PATH))
@@ -574,6 +579,117 @@ class NightRunControllerTest {
    * Die Ausgabeseite der beiden neuen Werte (Issue #853) — als Enum-Name, nicht als Ordinalzahl.
    */
   @Test
+  // Siehe submit_passesEveryFieldToService_andAnswersInRequestOrder: derselbe Grund.
+  @SuppressWarnings("unchecked")
+  void submit_mapsStuckDetails_toService() throws Exception {
+    when(service.submit(eq(USER), eq(PROJECT), anyList()))
+        .thenReturn(List.of(new NightRunResult(ERSTER, true)));
+
+    mvc.perform(
+            post(PATH)
+                .contentType(JSON)
+                .content(
+                    """
+                    {"runs":[{"startedAt":"2026-08-31T22:00:00Z","mode":"IMPLEMENTATION",
+                              "durationMs":1,"processedCount":1,"skippedCount":0,
+                              "unparsedCount":0,
+                              "items":[{"cardNumber":1549,"title":"Festgefahren","state":"RED",
+                                        "errorClass":"STUCK","durationMs":900000,
+                                        "stuck":{"check":"mvn verify","error":"OpenApiIT rot",
+                                                 "attempts":3,"sessionLimitMs":3600000,
+                                                 "sessionId":"sitzung-1"}}]}]}
+                    """))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<List<NewNightRun>> captor = ArgumentCaptor.forClass(List.class);
+    verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
+    assertThat(captor.getValue().getFirst().items().getFirst().stuck())
+        .isEqualTo(new NightRunStuck("mvn verify", "OpenApiIT rot", 3, 3_600_000L, "sitzung-1"));
+  }
+
+  @Test
+  void submit_rejectsTooLongStuckCheck_beforeReachingService() throws Exception {
+    mvc.perform(
+            post(PATH)
+                .contentType(JSON)
+                .content(
+                    """
+                    {"runs":[{"startedAt":"2026-08-31T22:00:00Z","mode":"IMPLEMENTATION",
+                              "durationMs":1,"processedCount":1,"skippedCount":0,
+                              "unparsedCount":0,
+                              "items":[{"cardNumber":1549,"title":"Festgefahren","state":"RED",
+                                        "errorClass":"STUCK","stuck":{"check":"%s"}}]}]}
+                    """
+                        .formatted("c".repeat(IngestStuckRequest.CHECK_MAX + 1))))
+        .andExpect(status().isBadRequest());
+
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void list_returnsStuckDetailsAndEstimatedSavedTime() throws Exception {
+    when(service.list(USER, PROJECT))
+        .thenReturn(
+            List.of(
+                new NightRunView(
+                    12L,
+                    ERSTER,
+                    NightRunMode.IMPLEMENTATION,
+                    1L,
+                    1,
+                    0,
+                    0,
+                    null,
+                    Instant.parse("2026-09-01T06:00:00Z"),
+                    NightRunOrigin.TOKEN,
+                    "nacht",
+                    true,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    NightRunOutcome.of(
+                        true,
+                        null,
+                        null,
+                        null,
+                        null,
+                        NightRunMode.IMPLEMENTATION,
+                        List.of(),
+                        ERSTER,
+                        null,
+                        ERSTER,
+                        Duration.ofMinutes(90)),
+                    List.of(
+                        new NightRunItemView(
+                            22L,
+                            1549,
+                            "Festgefahren",
+                            NightRunState.RED,
+                            NightRunErrorClass.STUCK,
+                            900_000L,
+                            null,
+                            null,
+                            null,
+                            new NightRunStuck(
+                                "mvn verify", "OpenApiIT rot", 3, 3_600_000L, "sitzung-1"),
+                            2_700_000L,
+                            List.of())))));
+
+    mvc.perform(get(PATH))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].items[0].errorClass").value("STUCK"))
+        .andExpect(jsonPath("$[0].items[0].stuck.check").value("mvn verify"))
+        .andExpect(jsonPath("$[0].items[0].stuck.error").value("OpenApiIT rot"))
+        .andExpect(jsonPath("$[0].items[0].stuck.attempts").value(3))
+        .andExpect(jsonPath("$[0].items[0].stuck.sessionLimitMs").value(3_600_000))
+        .andExpect(jsonPath("$[0].items[0].stuck.sessionId").value("sitzung-1"))
+        .andExpect(jsonPath("$[0].items[0].estimatedSavedMs").value(2_700_000));
+  }
+
+  @Test
   void list_returnsChainRunWithTimeBudgetExceeded() throws Exception {
     when(service.list(USER, PROJECT))
         .thenReturn(
@@ -616,6 +732,8 @@ class NightRunControllerTest {
                             "Kette",
                             NightRunState.RED,
                             NightRunErrorClass.TIME_BUDGET_EXCEEDED,
+                            null,
+                            null,
                             null,
                             null,
                             null,
@@ -884,6 +1002,8 @@ class NightRunControllerTest {
                             null,
                             null,
                             new NightRunUsage(null, null, null, null, 900_000L, 42),
+                            null,
+                            null,
                             List.of(
                                 new NightRunItemStage(
                                     NightRunStage.PLAN,

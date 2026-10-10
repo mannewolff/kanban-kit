@@ -25,6 +25,11 @@
   "src/test/java/org/mwolff/manban/nightrun/NachtlaufOhneArbeitMigrationIT.java": ["src/main/resources/db/migration/V35__night_run_no_work_reason.sql"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunAbbruchGrundMigrationIT.java": ["src/main/resources/db/migration/V42__night_run_abort_reason.sql"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunItemUeberdauertLaufMigrationIT.java": ["src/main/resources/db/migration/V33__night_run_item_ueberdauert_lauf.sql"],
+  "src/test/java/org/mwolff/manban/nightrun/NightRunIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/NightRunController.java", "src/main/java/org/mwolff/manban/nightrun/web/NightRunIngestController.java"],
+  "src/test/java/org/mwolff/manban/nightrun/NightRunUsageRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunUsageRepositoryAdapter.java"],
+  "src/test/java/org/mwolff/manban/nightrun/NightRunUsageServiceIT.java": ["src/main/java/org/mwolff/manban/nightrun/application/NightRunUsageService.java"],
   "src/test/java/org/mwolff/manban/nightrun/PlattformLeitstandMigrationIT.java": ["src/main/resources/db/migration/V36__plattform_leitstand.sql"],
-  "src/test/java/org/mwolff/manban/nightrun/VerbrauchInteraktiveSitzungenMigrationIT.java": ["src/main/resources/db/migration/V34__verbrauch_interaktive_sitzungen.sql"]
+  "src/test/java/org/mwolff/manban/nightrun/VerbrauchInteraktiveSitzungenMigrationIT.java": ["src/main/resources/db/migration/V34__verbrauch_interaktive_sitzungen.sql"],
+  "src/test/java/org/mwolff/manban/nightrun/domain/NightRunErrorClassSyncTest.java": ["src/main/java/org/mwolff/manban/nightrun/domain/NightRunErrorClass.java"],
+  "src/test/java/org/mwolff/manban/nightrun/infrastructure/NightRunRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunRepositoryAdapter.java", "src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunItemEntity.java", "src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/StuckEmbeddable.java"]
 }

@@ -21,7 +21,7 @@
 # Bezugsquelle und ein Werkzeug weg.
 
 ARG AGE_VERSION=1.3.2
-ARG RCLONE_VERSION=1.75.1
+ARG RCLONE_VERSION=1.75.2
 
 FROM debian:bookworm-20260918-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS werkzeuge
 ARG AGE_VERSION

@@ -1116,8 +1116,8 @@ Leitstand nicht. Der Befund dazu — samt Prüfkommandos und dem Gegenbeispiel e
 Worktrees, den eine frühere Fassung des Werkzeugs noch mitversorgt hat — steht in
 [Befund: Worktrees](befund-interaktive-sitzungen.md#worktrees).
 
-**Folge für die Zahlen:** Die Kachel „Gesamt über die Laufzeit" ist die Summe des Aufbewahrten und
-Erfassten. Worktree-Sitzungen und Sitzungen ohne Token fehlen darin, ohne dass die Anzeige das sagen
+**Folge für die Zahlen:** Die Wahl „Gesamt" im Bereich Verbrauch (früher die Kachel „Gesamt über
+die Laufzeit") ist die Summe des Aufbewahrten und Erfassten. Worktree-Sitzungen und Sitzungen ohne Token fehlen darin, ohne dass die Anzeige das sagen
 könnte — sie weiß von ihnen nichts.
 
 ## Testsuite lokal starten

@@ -46,6 +46,7 @@ import {
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { HeuteNachtUebersicht } from '../components/nachtlauf/HeuteNachtUebersicht'
+import { FestgefahrenAngaben } from '../components/leitstand/FestgefahrenAngaben'
 import { Led, melderFarbe } from '../components/leitstand/LeitstandBausteine'
 import {
   NachtlaufKartenchips,
@@ -495,6 +496,7 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
     durationMs: item.durationMs,
     commitHash: item.commit,
     excerpt: item.excerpt,
+    stuck: item.stuck,
     verbrauch: undefined,
     // Wie der Verbrauch leer: Die Arbeitsschritte eines eben geparsten Laufs stehen in seinem
     // Ergebnisstand, und von dort holt sie {@link bandstufen} (Issue #1116).
@@ -628,6 +630,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
       durationMs: stufen === undefined ? (item.durationMs ?? undefined) : stufenDauer(stufen),
       commitHash: item.commitHash ?? undefined,
       excerpt: item.excerpt ?? undefined,
+      stuck: item.stuck ?? undefined,
       verbrauch: ausVerbrauch(item.usage),
       stufen,
     }
@@ -754,6 +757,8 @@ const zurEinlieferung = (run: NightRun & { mode: NightRunServerMode }): NightRun
     ...(item.commit === undefined ? {} : { commitHash: item.commit }),
     excerpt: item.excerpt,
     ...alsVerbrauch(item.kennzahlen?.kostenUsd),
+    // Die Angaben eines festgefahrenen Pakets (Issue #1552); ohne sie kein leerer Schluessel.
+    ...(item.stuck === undefined ? {} : { stuck: item.stuck }),
   })),
 })
 
@@ -2526,6 +2531,10 @@ function Vorgangszeile({
           {grund}
         </Typography>
       )}
+
+      {/* Die Angaben eines festgefahrenen Pakets stehen vor dem Auszug, nicht an seiner Stelle
+          (Issue #1552, E14) — am eingelesenen wie am aufbewahrten Lauf dieselbe Anzeige (E17). */}
+      {item.errorClass === 'STUCK' && <FestgefahrenAngaben stuck={item.stuck} durationMs={item.durationMs} />}
 
       {/* Auszüge sind Fremdtext (Claude-Ausgaben, Ergebnisse fremder Werkzeuge) und werden
           deshalb als reiner Text gerendert, nie über den Markdown-Renderer (CLAUDE-security.md).

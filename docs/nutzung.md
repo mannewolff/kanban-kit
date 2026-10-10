@@ -252,17 +252,28 @@ Von oben nach unten führt er:
    [Verbrauch (Leitstand)](#verbrauch-leitstand).
 4. **Herkunft** — eine Zeile zum jüngsten Run: ob er eingeliefert oder im Browser hochgeladen
    wurde, dazu der Name des Tokens, die Zahl der Vorgänge und die der ungedeuteten Zeilen.
-5. **Rumpf** — vier Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
-   öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche,
-   **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs und **„Vorhaben“** mit
+5. **Rumpf** — fünf Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
+   öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche und rechts
+   daneben **„Implementierungszeit“** mit dem Mittelwert je Woche, **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs und **„Vorhaben“** mit
    den offenen. Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
    braune LED und „nicht angelaufen — ‹Grund›“.
+
+**Die beiden Wochenplatten** „Durchsatz“ und „Implementierungszeit“ zeigen dieselben zwölf
+Wochenfenster: sieben Tage, von jetzt aus rückwärts gezählt; eine Karte zählt in der Woche, in der
+sie fertig wurde. Unter jedem Balken steht die Kalenderwoche, beim Überfahren der Wert — bei der
+Implementierungszeit der Mittelwert mit der Zahl der Karten („30 Minuten · 2 Karten“, ab einer
+Stunde in Stunden). Eine Woche ohne gemessene Karte hat keinen Balken, sondern nur eine gestrichelte
+Grundlinie („keine gemessene Karte“), nie einen Balken von 0 Minuten; ohne jede Messung steht statt
+der Grafik ein Satz. Auf schmalem Bildschirm stehen die beiden Platten untereinander. **Die Fenster
+decken sich nicht mit der Woche des Umschalters** im [Verbrauch](#verbrauch-leitstand), die an der
+Tagesgrenze 12:00 hängt — der letzte Balken kann darum vom Wert der Kachel „Implementierungszeit“
+unter „Woche“ abweichen.
 
 **Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“ und
 „Abbruchgründe“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
 Projekts und **Plattform-Admins**, sofern das Projekt am
 [Plattform-Leitstand](#plattform-leitstand) teilnimmt. Ohne dieses Recht entfallen sie still; die
-Board-Kennzahlen und „Durchsatz“ bleiben.
+Board-Kennzahlen, „Durchsatz“ und „Implementierungszeit“ bleiben.
 
 **Grundlage der Board-Kennzahlen** ist die automatisch erfasste Verweildauer jeder Karte pro
 Spalte — gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API
@@ -343,6 +354,15 @@ Aufgeklappt zeigt er seine Arbeitspakete, jedes mit einem der **vier Zustände**
 - **gelb — „Erfolg, Prüfung rot":** umgesetzt, aber eine Prüfung schlug fehl.
 - **rot — „gescheitert":** der Run kam an diesem Arbeitspaket nicht durch.
 - **grau — „nicht bearbeitet":** übergangen, etwa weil eine Abhängigkeit noch offen war.
+
+**Ausgang „festgefahren":** Ein rotes Arbeitspaket, das das Kit früh beendet hat, weil es sich an
+derselben Prüfung immer wieder auf dieselbe Weise festfuhr, trägt den eigenen Ausgang
+**„festgefahren"** — unterscheidbar von „Prüfungen rot", „Zeitbudget erschöpft", „Harter Abbruch"
+und „Wartet auf Entscheidung". Dazu stehen sechs Angaben: **Prüfung**, **Fehler**, **Versuche**,
+**Laufzeit bis Abbruch**, **Zeitgrenze der Sitzung** und **geschätzte gesparte Zeit** (Zeitgrenze
+minus Laufzeit, nie unter 0). Was das Kit nicht gemeldet hat, steht als „nicht gemeldet" da; ohne
+Zeitgrenze oder Laufzeit gilt das auch für die gesparte Zeit. Ältere Nächte, die ein festgefahrenes
+Paket noch als „Prüfungen rot" gemeldet haben, bleiben so, wie sie waren.
 
 Zu jedem Arbeitspaket stehen darunter der Auszug aus dem Protokoll (bei grau der Grund) und die
 Herkunftskette — die fachliche Anforderung und der Plan, aus denen es entstanden ist. Die
@@ -499,16 +519,23 @@ beide Angaben stehen nebeneinander, keine ersetzt die andere.
 
 ### Was der Bereich zeigt
 
-Über den Kacheln steht der gewählte Zeitraum — **Schicht · Woche · Monat** — und daneben, aus wie
-vielen Einträgen die Zahlen stammen („*Schicht vom 17.09.2026 auf den 18.09.2026* · 2 Runs ·
-5 Sitzungen"). Die Kacheln selbst:
+Über den Kacheln steht der gewählte Zeitraum — **Schicht · Woche · Monat · Gesamt** — und daneben,
+aus wie vielen Einträgen die Zahlen stammen („*Schicht vom 17.09.2026 auf den 18.09.2026* · 2 Runs ·
+5 Sitzungen", unter „Gesamt" etwa „Gesamt · 30 Runs · 12 Sitzungen"). Alle Kacheln unter dem
+Umschalter hängen an dieser Wahl und wechseln mit ihr gemeinsam. Die Kacheln selbst:
 
 - **Eingabe-Token** mit einem Balken, der die Eingabe in **„Cache gelesen"** und **„frisch"**
   aufteilt. Der Balken beantwortet eine andere Frage als die Gattungen und wird nicht auf sie
   umgewidmet.
 - **Ausgabe-Token**, darunter der Verlauf über die Schichten des Zeitraums.
 - **Kosten**, mit dem Vergleich zum Vorzeitraum (▲/▼ und der Unterschied in Dollar).
-- **Gesamt über die Laufzeit** — siehe unten.
+- **Implementierungszeit** — siehe unten.
+- **Bremse** — wie oft die Bremse des Kits gegriffen hat: die Zahl der als
+  [festgefahren](#nachtlauf) gemeldeten Pakete, darunter „≈ … gespart (geschätzt)" als Summe der
+  geschätzten gesparten Zeit (je Sitzung einmal gezählt) und im Fuß „davon *n* ohne Zeitwert" für
+  Bremsungen ohne Zeitgrenze oder Laufzeit. Bei 0 Bremsungen steht nur die 0. Gezählt wird über die
+  aufbewahrten Runs, unter „Gesamt" ohne Vergleich mit dem Vorzeitraum. Die Kachel gibt es nur im
+  Board-Leitstand.
 
 Unter jeder Summe stehen die beiden **Anteile**: „aus Runs" und „aus interaktiven
 Sitzungen". Die Summe ist genau ihre Addition; kein Eintrag zählt in beiden.
@@ -518,12 +545,21 @@ Arbeitspaket zuzuordnen war. Er wird nicht auf die berührten Karten verteilt �
 erfände eine Genauigkeit, die niemand gemessen hat. Liegt kein gemessener Rest vor, fehlt der
 Posten ganz; eine 0 behauptete, es gäbe keinen.
 
-**Die Kachel „Gesamt über die Laufzeit"** summiert über alle aufbewahrten Runs und Sitzungen des
-Projekts und hängt nicht am gewählten Zeitraum — ein Klick auf „Woche" ändert an ihr nichts. Ihr
-Fuß nennt die **Abdeckung** dieser Summe, und zwar zweigeteilt: ab welchem Datum überhaupt ein
-Eintrag aufbewahrt ist (oder „ohne aufbewahrten Eintrag") und ab wann interaktive Sitzungen erfasst
-werden (oder „Sitzungen nicht erfasst"). Die Zahl ist damit die Summe des **Aufbewahrten**, nicht
-die des Gelebten: Was der Ringpuffer verdrängt hat, fehlt darin.
+**Die Wahl „Gesamt"** summiert über alle aufbewahrten Runs und Sitzungen des Projekts; sie ersetzt
+die frühere Kachel „Gesamt über die Laufzeit", die dauerhaft unter dem Umschalter stand. Es sind
+dieselben Kacheln wie im Zeitraum, nur ohne das, was einen Zeitraum braucht: kein Vergleich mit dem
+Vorzeitraum, kein Verlauf über die Schichten, keine Schichtzahl. Der Fuß der Kosten-Kachel nennt
+dafür die **Abdeckung** der Summe, und zwar zweigeteilt: ab welchem Datum überhaupt ein Eintrag
+aufbewahrt ist (oder „ohne aufbewahrten Eintrag") und ab wann interaktive Sitzungen erfasst werden
+(oder „Sitzungen nicht erfasst"). Die Zahl ist damit die Summe des **Aufbewahrten**, nicht die des
+Gelebten: Was der Ringpuffer verdrängt hat, fehlt darin.
+
+**Die Kachel „Implementierungszeit"** zeigt den Mittelwert, wie lange die Karten **dieses Boards**
+in Arbeit lagen, die im gewählten Zeitraum fertig wurden — nicht die der übrigen Boards, auch wenn
+der Verbrauch daneben projektweit zählt. Schicht, Woche und Monat grenzen genauso ab wie beim
+Verbrauch; unter „Gesamt" gilt der Mittelwert über alle gemessenen Karten des Boards. Der Fuß nennt,
+auf wie vielen Karten der Wert beruht. Gibt es im Zeitraum keine gemessene Karte, steht „—" mit
+„keine Datenbasis", nie 0 Minuten.
 
 ### Eine Sitzung zählt zum Zeitraum ihres Beginns
 

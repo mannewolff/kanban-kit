@@ -1006,6 +1006,32 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(within(zeile).getByText(/^Karte #721:/)).toBeInTheDocument()
   })
 
+  /**
+   * Ein festgefahrenes Paket (Issue #1552, Plan #1547 A7): Die Störzeile nennt es über den
+   * Zustandstext „festgefahren“ — ohne eigenen Zweig in `stoerungsGrund`.
+   */
+  it('nennt ein festgefahrenes Paket als „Karte #n: festgefahren“', async () => {
+    api.leitstand.mockResolvedValue(
+      sicht({
+        stoerungen: [
+          stoerung({
+            outcome: {
+              abortReason: null,
+              verdict: 'FAILED',
+              decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'STUCK' },
+              noWorkReason: null,
+            },
+          }),
+        ],
+      }),
+    )
+
+    zeigeSeite()
+
+    const zeile = await screen.findByTestId('stoerung-5')
+    expect(within(zeile).getByText('Karte #721: festgefahren')).toBeInTheDocument()
+  })
+
   /** AK 7: Der Klick führt zur Auswertung genau dieses Laufs im betroffenen Projekt. */
   it('verweist mit der Kennung auf den Lauf im Projekt', async () => {
     api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))

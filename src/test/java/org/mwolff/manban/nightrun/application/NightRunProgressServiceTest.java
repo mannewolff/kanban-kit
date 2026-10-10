@@ -566,6 +566,7 @@ class NightRunProgressServiceTest {
         null,
         null,
         null,
+        null,
         List.of());
   }
 

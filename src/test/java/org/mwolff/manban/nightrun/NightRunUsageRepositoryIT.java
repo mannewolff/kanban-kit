@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -30,6 +31,7 @@ import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -183,6 +185,28 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         verbrauch,
+        null,
+        List.of());
+  }
+
+  /** Ein festgefahrenes Paket (Issue #1550) mit allen fünf Angaben. */
+  private static NightRunItem festgefahren(int cardNumber, long durationMs) {
+    return new NightRunItem(
+        null,
+        null,
+        0L,
+        Instant.EPOCH,
+        NightRunMode.IMPLEMENTATION,
+        NightRunKind.NIGHT,
+        cardNumber,
+        "Paket " + cardNumber,
+        NightRunState.RED,
+        NightRunErrorClass.STUCK,
+        durationMs,
+        null,
+        null,
+        null,
+        new NightRunStuck("mvn verify", "OpenApiIT rot", 3, 3_600_000L, "s-" + cardNumber),
         List.of());
   }
 
@@ -204,6 +228,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         NightRunState.GREEN,
         null,
         60_000L,
+        null,
         null,
         null,
         null,
@@ -823,5 +848,81 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
 
     assertThat(usage.totalsPerCard(projectId, NACHT_15_VON, NACHT_15_BIS)).isEmpty();
     assertThat(usage.totals(projectId, NACHT_15_VON, NACHT_15_BIS).itemUsage().costUsd()).isNull();
+  }
+
+  // --- Bremsungen (Issue #1550) ----------------------------------------------------------------
+
+  /**
+   * Die Spanne filtert über den Start des Laufs mit der Tagesgrenze 12:00, nicht über den Start des
+   * Pakets; nur {@code STUCK} zählt, ein fremdes Projekt nicht (Plan #1547 E5, E15).
+   */
+  @Test
+  void festgefahrenePaketeZaehlenNachStartzeitDesLaufsUndTagesgrenze() {
+    lauf(
+        projectId,
+        "2026-09-16T09:59:00Z", // 11:59 CEST: noch die Nacht vom 15.
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        festgefahren(721, 600_000L),
+        paket(722, NightRunState.RED, NightRunErrorClass.CHECKS_RED, 1L, null),
+        gruen(723, null));
+    lauf(
+        projectId,
+        "2026-09-16T10:00:00Z", // 12:00 CEST: die nächste Nacht
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        festgefahren(724, 600_000L));
+    lauf(
+        fremdesProjekt,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        festgefahren(725, 600_000L));
+    // Der Paketstart weicht ab: Gezählt wird trotzdem nach dem Start des Laufs.
+    jdbc.update(
+        "UPDATE night_run_item SET started_at = ? WHERE project_id = ? AND card_number = 721",
+        Timestamp.from(Instant.parse("2026-09-20T00:00:00Z")),
+        projectId);
+
+    assertThat(usage.stuckItems(projectId, NACHT_15_VON, NACHT_15_BIS))
+        .singleElement()
+        .satisfies(
+            i -> {
+              assertThat(i.cardNumber()).isEqualTo(721);
+              assertThat(i.nightRunId()).isNotNull();
+              assertThat(i.durationMs()).isEqualTo(600_000L);
+              assertThat(i.stuck())
+                  .isEqualTo(
+                      new NightRunStuck("mvn verify", "OpenApiIT rot", 3, 3_600_000L, "s-721"));
+            });
+    assertThat(usage.lifetimeStuckItems(projectId))
+        .extracting(NightRunItem::cardNumber)
+        .containsExactly(721, 724);
+  }
+
+  /** Ein festgefahrenes Paket eines verdrängten Laufs zählt nicht, auch nicht gesamt (E15). */
+  @Test
+  void einFestgefahrenesPaketEinesVerdraengtenLaufsZaehltNicht() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        festgefahren(721, 600_000L));
+    jdbc.update("DELETE FROM night_run WHERE project_id = ?", projectId);
+
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM night_run_item"
+                    + " WHERE project_id = ? AND error_class = 'STUCK'",
+                Long.class,
+                projectId))
+        .isEqualTo(1L);
+    assertThat(usage.stuckItems(projectId, NACHT_15_VON, NACHT_15_BIS)).isEmpty();
+    assertThat(usage.lifetimeStuckItems(projectId)).isEmpty();
   }
 }

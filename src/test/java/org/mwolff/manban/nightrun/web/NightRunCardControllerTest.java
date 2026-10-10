@@ -114,6 +114,7 @@ class NightRunCardControllerTest {
         state == NightRunState.GREEN ? "4c9f42a" : null,
         "Auszug",
         usage,
+        null,
         List.of());
   }
 

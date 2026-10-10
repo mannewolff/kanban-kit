@@ -27,6 +27,25 @@ interface NightRunItemJpaRepository extends JpaRepository<NightRunItemEntity, Lo
       long projectId, int cardNumber);
 
   /**
+   * Die festgefahrenen Pakete der aufbewahrten Läufe einer Spanne (Issue #1550) — die Bindung steht
+   * an {@link NightRunUsageJpaRepository#FESTGEFAHREN}.
+   */
+  @Query(
+      value = "WITH " + NightRunUsageJpaRepository.LAEUFE + NightRunUsageJpaRepository.FESTGEFAHREN,
+      nativeQuery = true)
+  List<NightRunItemEntity> findStuckInRetainedRuns(
+      @Param("projectId") long projectId, @Param("from") Instant from, @Param("to") Instant to);
+
+  /** Dieselbe Abfrage über alle aufbewahrten Läufe, ohne Spanne (Issue #1550). */
+  @Query(
+      value =
+          "WITH "
+              + NightRunUsageJpaRepository.ALLE_LAEUFE
+              + NightRunUsageJpaRepository.FESTGEFAHREN,
+      nativeQuery = true)
+  List<NightRunItemEntity> findStuckInAllRetainedRuns(@Param("projectId") long projectId);
+
+  /**
    * Löscht die verwaisten Pakete eines Laufs (Issue #965). Der Teilindex {@code
    * idx_night_run_item_orphan} aus {@code V33} trägt die Bedingung.
    *

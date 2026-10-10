@@ -7,6 +7,7 @@ import {
   abbruchgruende,
   auskunftOhneArbeit,
   balkenHoehen,
+  balkenHoehenMitLuecken,
   cacheQuote,
   durchlaufKachel,
   durchsatzKachel,
@@ -51,6 +52,8 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   excerpt: null,
   usage: null,
   stages: [],
+  stuck: null,
+  estimatedSavedMs: null,
   ...extra,
 })
 
@@ -287,6 +290,15 @@ describe('leitstand Platten', () => {
     expect(balkenHoehen([0, 0])).toEqual([0, 0])
   })
 
+  it('laesst bei Balkenhoehen mit Luecken eine Luecke leer und hebt kleine Werte auf 3 %', () => {
+    expect(balkenHoehenMitLuecken([600, null, 1200])).toEqual([50, null, 100])
+    expect(balkenHoehenMitLuecken([10, 3600])).toEqual([3, 100])
+    expect(balkenHoehenMitLuecken([120, 3600])).toEqual([3, 100])
+    expect(balkenHoehenMitLuecken([144, 3600])).toEqual([4, 100])
+    expect(balkenHoehenMitLuecken([null, null])).toEqual([null, null])
+    expect(balkenHoehenMitLuecken([0, null])).toEqual([3, null])
+  })
+
   it('faerbt jede Fehlerklasse nach ihrer Art — Abbruch zinnober, Wartendes bernstein, Ausfall grau', () => {
     expect(MELDER_JE_FEHLERKLASSE).toEqual({
       CHECKS_RED: 'zinnob',
@@ -294,6 +306,7 @@ describe('leitstand Platten', () => {
       UNEXPECTED_STATE: 'zinnob',
       HARD_ABORT: 'zinnob',
       TIME_BUDGET_EXCEEDED: 'zinnob',
+      STUCK: 'zinnob',
       AWAITING_DECISION: 'bernst',
       DEPENDENCY_UNMET: 'bernst',
       REVIEWER_FAILED: 'grau',

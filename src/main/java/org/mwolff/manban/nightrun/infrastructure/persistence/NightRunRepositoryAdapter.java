@@ -28,6 +28,7 @@ import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.ReleasePreparation;
 import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
@@ -119,12 +120,18 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   private static final String INSERT_ITEM =
       "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, kind, card_number,"
           + " title, state, error_class, duration_ms, commit_hash, excerpt, cost_usd,"
-          + " input_tokens, output_tokens, cached_input_tokens, model_duration_ms, turns)"
+          + " input_tokens, output_tokens, cached_input_tokens, model_duration_ms, turns,"
+          + " stuck_check, stuck_error, stuck_attempts, stuck_session_limit_ms, stuck_session_id)"
           + " VALUES (:nightRunId, :projectId, :startedAt, :mode, :kind, :cardNumber, :title,"
           + " :state, :errorClass,"
           + " :durationMs, :commitHash, :excerpt, :costUsd, :inputTokens, :outputTokens,"
-          + " :cachedInputTokens, :modelDurationMs, :turns)"
+          + " :cachedInputTokens, :modelDurationMs, :turns,"
+          + " :stuckCheck, :stuckError, :stuckAttempts, :stuckSessionLimitMs, :stuckSessionId)"
           + " RETURNING id";
+
+  /** Ein Paket ohne Angaben schreibt alle fünf {@code stuck_*}-Spalten als {@code NULL}. */
+  private static final NightRunStuck KEINE_STUCK_ANGABEN =
+      new NightRunStuck(null, null, null, null, null);
 
   private static final String INSERT_STAGE =
       "INSERT INTO night_run_item_stage (night_run_item_id, stage, duration_ms, cost_usd,"
@@ -629,6 +636,13 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue("commitHash", item.commitHash(), Types.VARCHAR)
             .addValue("excerpt", item.excerpt(), Types.VARCHAR);
     verbrauchSchreiben(parameter, item.usage());
+    NightRunStuck stuck = Objects.requireNonNullElse(item.stuck(), KEINE_STUCK_ANGABEN);
+    parameter
+        .addValue("stuckCheck", stuck.check(), Types.VARCHAR)
+        .addValue("stuckError", stuck.error(), Types.VARCHAR)
+        .addValue("stuckAttempts", stuck.attempts(), Types.INTEGER)
+        .addValue("stuckSessionLimitMs", stuck.sessionLimitMs(), Types.BIGINT)
+        .addValue("stuckSessionId", stuck.sessionId(), Types.VARCHAR);
     return parameter;
   }
 
@@ -667,8 +681,10 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         vorbereitung);
   }
 
-  private static NightRunItem toDomain(NightRunItemEntity e, List<NightRunItemStage> stages) {
+  /** Paketsichtbar für den Lesepfad der Bremsbilanz (Issue #1550) — eine Abbildung, nicht zwei. */
+  static NightRunItem toDomain(NightRunItemEntity e, List<NightRunItemStage> stages) {
     String errorClass = e.getErrorClass();
+    StuckEmbeddable stuck = e.getStuck();
     return new NightRunItem(
         e.getId(),
         e.getNightRunId(),
@@ -684,6 +700,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getCommitHash(),
         e.getExcerpt(),
         verbrauchLesen(e.getVerbrauch()),
+        stuck == null ? null : stuck.toDomain(),
         stages);
   }
 

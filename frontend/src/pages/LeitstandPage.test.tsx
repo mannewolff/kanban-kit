@@ -13,7 +13,7 @@ import { LeitstandPage } from './LeitstandPage'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
-vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
@@ -39,6 +39,7 @@ vi.mock('../components/CardDetailModal', () => ({
 const m = {
   board: boardsApi.get as ReturnType<typeof vi.fn>,
   kpis: dashboardApi.get as ReturnType<typeof vi.fn>,
+  implementierung: dashboardApi.implementationTime as ReturnType<typeof vi.fn>,
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
@@ -80,6 +81,7 @@ const kpis = (extra: Partial<BoardDashboardKpis> = {}): BoardDashboardKpis => ({
   leadTimeSampleCount: 86,
   avgImplementationSeconds: 53_280,
   implementationSampleCount: 61,
+  implementationWeekly: [],
   outliers: [{ cardId: 9, number: 846, title: 'Kartenverlauf als Zeitstrahl', columnName: 'Review', dwellSeconds: 14 * 86_400 }],
   ...extra,
 })
@@ -95,6 +97,8 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   excerpt: null,
   usage: null,
   stages: [],
+  stuck: null,
+  estimatedSavedMs: null,
   ...extra,
 })
 
@@ -179,6 +183,7 @@ const kennzahlen = (extra: Partial<VerbrauchKennzahlen> = {}): VerbrauchKennzahl
   usage: { total: angaben(12.4), cardShare: angaben(null), remainder: angaben(null) },
   usageByKind: jeGattung(angaben(12.4)),
   interactiveUsageSince: null,
+  brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
   ...extra,
 })
 
@@ -215,6 +220,7 @@ const lebenszeit = (): VerbrauchGesamt => ({
   usageByKind: jeGattung(angaben(150)),
   oldestRetainedRunStart: '2026-08-01T00:00:00Z',
   interactiveUsageSince: null,
+  brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
 })
 
 function renderPage(pfad = '/boards/1/leitstand') {
@@ -232,6 +238,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.board.mockResolvedValue({ id: 1, name: 'Entwicklung', projectId: 5, columns: [] })
   m.kpis.mockResolvedValue(kpis())
+  m.implementierung.mockResolvedValue({ avgImplementationSeconds: 5400, implementationSampleCount: 4 })
   m.epics.mockResolvedValue([epic(1, 'Nachtlauf-Auswertung', 7, 9, [917]), epic(2, 'Erledigt', 3, 3)])
   m.laeufe.mockResolvedValue([lauf({ id: 1, startedAt: '2026-09-10T21:00:00Z', items: [paket(1, 'GREEN')] }), lauf()])
   m.klassen.mockResolvedValue({ CHECKS_RED: 11, AWAITING_DECISION: 7 })
@@ -485,6 +492,58 @@ describe('LeitstandPage — Letzter Run', () => {
 })
 
 describe('LeitstandPage — Platten des Rumpfs', () => {
+  it('zeigt die Implementierungszeit je Woche neben dem Durchsatz, eine Woche ohne Messung ohne Balken', async () => {
+    m.kpis.mockResolvedValue(
+      kpis({
+        implementationWeekly: [
+          { weekStart: '2026-06-01T09:00:00Z', avgImplementationSeconds: 1800, sampleCount: 2 },
+          { weekStart: '2026-06-08T09:00:00Z', avgImplementationSeconds: null, sampleCount: 0 },
+          { weekStart: '2026-06-15T09:00:00Z', avgImplementationSeconds: 7200, sampleCount: 1 },
+        ],
+      }),
+    )
+    renderPage()
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    expect(platte).toHaveTextContent('Mittelwert je Woche · 3 Wochen')
+    expect(within(platte).getByRole('img')).toHaveAccessibleName(
+      'Implementierungszeit der letzten 3 Wochen: 30 Minuten, keine Messung, 2,0 Stunden, zuletzt 2,0 Stunden',
+    )
+    expect(within(platte).getAllByTestId(/^balken-/).map((b) => b.dataset.testid)).toEqual(['balken-25', 'balken-100'])
+    expect(within(platte).getAllByTestId(/^balken-/).map((b) => b.getAttribute('title'))).toEqual([
+      '30 Minuten · 2 Karten',
+      '2,0 Stunden · 1 Karte',
+    ])
+    expect(within(platte).getByTestId('luecke-1')).toHaveAttribute('title', 'KW 24: keine gemessene Karte')
+    expect(platte).toHaveTextContent('232425')
+    // Der Durchsatz steht vorn, die Implementierungszeit folgt ihm.
+    const durchsatz = screen.getByRole('region', { name: 'Durchsatz' })
+    expect(durchsatz.compareDocumentPosition(platte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('zeigt ohne jede gemessene Woche den Leersatz der Implementierungszeit', async () => {
+    m.kpis.mockResolvedValue(
+      kpis({
+        implementationWeekly: Array.from({ length: 12 }, (_, i) => ({
+          weekStart: `2026-06-${String(i + 1).padStart(2, '0')}T09:00:00Z`,
+          avgImplementationSeconds: null,
+          sampleCount: 0,
+        })),
+      }),
+    )
+    renderPage()
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    expect(platte).toHaveTextContent('Noch keine gemessene Implementierungszeit in den letzten Wochen.')
+    expect(within(platte).queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('zeigt beide Wochenplatten auch ohne Recht auf die Läufe', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Implementierungszeit' })).toBeInTheDocument()
+  })
+
   it('zeigt den Durchsatz als Balkenwerk mit Kalenderwochen, eine leere Woche ohne Balken', async () => {
     m.kpis.mockResolvedValue(
       kpis({
@@ -561,6 +620,14 @@ describe('LeitstandPage — Verbrauch', () => {
       'Schicht vom 14.09.2026 auf den 15.09.2026 · 1 Run · 0 Sitzungen',
     )
     expect(m.verbrauch).toHaveBeenCalledWith(5, 'DAY', 0)
+  })
+
+  it('zeigt die Implementierungszeit des Zeitraums für dieses Board', async () => {
+    renderPage()
+    const verbrauch = await screen.findByRole('group', { name: 'Verbrauch des Zeitraums' })
+    const kachelImpl = within(verbrauch).getByRole('article', { name: 'Implementierungszeit' })
+    await waitFor(() => expect(kachelImpl).toHaveTextContent('1,5Stunden'))
+    expect(m.implementierung).toHaveBeenCalledWith(1, { from: '', to: '' })
   })
 
   it('wechselt den Zeitraum und zeigt dort den Verlauf der Ausgabe', async () => {
@@ -777,5 +844,84 @@ describe('LeitstandPage — Der verstummte Lauf (#1092)', () => {
 
     const band = await screen.findByRole('region', { name: 'Jüngster Run' })
     expect(within(band).getByTestId('led-stahl')).toHaveAttribute('data-puls', 'an')
+  })
+})
+
+/**
+ * Das festgefahrene Paket (Issue #1552, Plan #1547 E18, AK 1 aus #1546): Die Paketzeile trägt die
+ * Klassenmarke `STUCK` wie jede andere, darunter stehen die Angaben mit der Überschrift
+ * „Festgefahren“ — unterscheidbar von den übrigen roten und gelben Ausgängen.
+ */
+describe('LeitstandPage — festgefahrenes Paket (#1552)', () => {
+  beforeEach(() => {
+    m.laeufe.mockResolvedValue([
+      lauf({
+        mode: 'IMPLEMENTATION',
+        items: [
+          paket(940, 'RED', {
+            errorClass: 'STUCK',
+            durationMs: 1_200_000,
+            excerpt: 'festgefahren an mvn verify nach 3 Versuchen',
+            stuck: { check: 'mvn verify', error: 'OpenApiIT weicht ab', attempts: 3, sessionLimitMs: 3_600_000, sessionId: null },
+            estimatedSavedMs: 2_400_000,
+          }),
+          paket(941, 'RED', { errorClass: 'CHECKS_RED' }),
+          paket(942, 'RED', { errorClass: 'TIME_BUDGET_EXCEEDED' }),
+          paket(943, 'RED', { errorClass: 'HARD_ABORT' }),
+          paket(944, 'YELLOW', { errorClass: 'AWAITING_DECISION' }),
+        ],
+      }),
+    ])
+  })
+
+  it('zeigt die Klassenmarke STUCK und darunter die Angaben mit der Überschrift „Festgefahren“', async () => {
+    renderPage()
+    const letzter = await screen.findByRole('region', { name: 'Letzter Run · Umsetzung' })
+    const [festgefahren] = within(letzter).getAllByRole('listitem')
+
+    expect(within(festgefahren).getByText('STUCK')).toBeInTheDocument()
+    const angaben = within(festgefahren).getByRole('region', { name: 'Festgefahren' })
+    expect(within(angaben).getByRole('heading', { name: 'Festgefahren' })).toBeInTheDocument()
+    expect(angaben).toHaveTextContent('Prüfungmvn verify')
+    expect(angaben).toHaveTextContent('Versuche3')
+    expect(angaben).toHaveTextContent('Laufzeit bis Abbruch20 min')
+    expect(angaben).toHaveTextContent('Zeitgrenze der Sitzung1 h 0 min')
+    expect(angaben).toHaveTextContent('geschätzte gesparte Zeit40 min')
+  })
+
+  it('unterscheidet das festgefahrene Paket von Prüfungen rot, Zeitbudget, hartem Abbruch und wartender Entscheidung', async () => {
+    renderPage()
+    const letzter = await screen.findByRole('region', { name: 'Letzter Run · Umsetzung' })
+    const [festgefahren, ...andere] = within(letzter).getAllByRole('listitem')
+
+    expect(within(letzter).getAllByRole('region', { name: 'Festgefahren' })).toHaveLength(1)
+    expect(andere.map((zeile) => within(zeile).queryByRole('region', { name: 'Festgefahren' }))).toEqual([null, null, null, null])
+    expect(andere.map((zeile) => zeile.textContent)).toEqual([
+      expect.stringContaining('CHECKS_RED'),
+      expect.stringContaining('TIME_BUDGET_EXCEEDED'),
+      expect.stringContaining('HARD_ABORT'),
+      expect.stringContaining('AWAITING_DECISION'),
+    ])
+    for (const zeile of andere) {
+      expect(zeile).not.toHaveTextContent('STUCK')
+    }
+    expect(festgefahren).not.toHaveTextContent(/CHECKS_RED|TIME_BUDGET_EXCEEDED|HARD_ABORT|AWAITING_DECISION/)
+  })
+
+  it('lässt die Angaben auch unter dem Filter „Nur Abbrüche“ stehen', async () => {
+    renderPage()
+    const letzter = await screen.findByRole('region', { name: 'Letzter Run · Umsetzung' })
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Nur Abbrüche' }))
+
+    expect(within(letzter).getByRole('region', { name: 'Festgefahren' })).toBeInTheDocument()
+  })
+
+  it('öffnet die Karte weiterhin über die Zeile', async () => {
+    m.karteNachNummer.mockResolvedValue(karte('Paket 940 im Detail'))
+    renderPage()
+    const letzter = await screen.findByRole('region', { name: 'Letzter Run · Umsetzung' })
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Karte #940 öffnen: Paket 940' }))
+
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Paket 940 im Detail')
   })
 })

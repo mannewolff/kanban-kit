@@ -278,6 +278,7 @@ class NightRunIngestController {
         request.commitHash(),
         request.excerpt(),
         NightRunUsageRequest.toDomain(request.usage()),
+        IngestStuckRequest.toDomain(request.stuck()),
         // Fehlende Stufen werden zur leeren Liste und nicht zu null: „dieser Vorgang hatte keine
         // Stufen" ist eine Aussage, und die Domaene fuehrt sie als Liste.
         stufen == null ? List.of() : stufen.stream().map(NightRunIngestController::stage).toList());
@@ -434,6 +435,9 @@ class NightRunIngestController {
    *
    * @param stages die Stufen der Kette, die dieser Vorgang durchlaufen hat (Issue #1113). Additiv
    *     und {@code @Nullable} wie {@code budget}; fehlt das Feld, hatte der Vorgang keine Stufen.
+   * @param stuck die Angaben eines festgefahrenen Pakets (Issue #1549). Additiv und
+   *     {@code @Nullable} wie {@code stages}: Eine ältere Kit-Kopie kennt das Feld nicht und meldet
+   *     unverändert weiter. Ob die Angaben am Paket landen, entscheidet der Dienst (Plan #1547 E2).
    */
   @Schema(description = "Ein Vorgang des Laufs: eine bearbeitete oder übergangene Karte.")
   record IngestItemRequest(
@@ -450,7 +454,13 @@ class NightRunIngestController {
               example = "GREEN")
           @NotNull
           NightRunState state,
-      @Schema(description = "Fehlerklasse bei YELLOW oder RED.", example = "CHECKS_RED")
+      @Schema(
+              description =
+                  """
+                  Fehlerklasse bei YELLOW oder RED. STUCK: das Paket hat sich an derselben \
+                  Prüfung immer wieder auf dieselbe Weise festgefahren und wurde früh beendet; \
+                  es ist RED, die Angaben dazu stehen in stuck.""",
+              example = "CHECKS_RED")
           @Nullable NightRunErrorClass errorClass,
       @Schema(description = "Dauer in Millisekunden.", example = "900000")
           @Nullable Long durationMs,
@@ -469,7 +479,11 @@ class NightRunIngestController {
       @Schema(description = "Stufen einer Kette, die der Vorgang durchlief; höchstens vier.")
           @Nullable
           @Size(max = MAX_STAGES_PER_ITEM)
-          List<@Valid @NotNull IngestStageRequest> stages) {}
+          List<@Valid @NotNull IngestStageRequest> stages,
+      @Schema(description = "Angaben eines festgefahrenen Pakets; gilt nur bei errorClass STUCK.")
+          @Nullable
+          @Valid
+          IngestStuckRequest stuck) {}
 
   /**
    * Die gemeldeten Vorgaben eines Kettenlaufs (Issue #1113, Plan #1110 E2/E3).

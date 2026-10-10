@@ -23,8 +23,8 @@
       "name": "Anwendung",
       "zweck": "das veroeffentlichte Anwendungs-Abbild des Basis-Stacks (docker-compose.yml)",
       "art": "abbild",
-      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit:2.24.0",
-      "fassung": "2.24.0",
+      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit:2.25.0",
+      "fassung": "2.25.0",
       "pruefung": "eigen",
       "ausgeliefert": true,
       "basis": "Laufzeit"
@@ -63,8 +63,8 @@
       "name": "Sicherung",
       "zweck": "das veroeffentlichte Abbild des Sicherungsdienstes (docker-compose.backup.yml)",
       "art": "abbild",
-      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit-backup:2.24.0",
-      "fassung": "2.24.0",
+      "bezugsstelle": "ghcr.io/mannewolff/kanban-kit-backup:2.25.0",
+      "fassung": "2.25.0",
       "pruefung": "eigen",
       "ausgeliefert": true,
       "basis": "Sicherung: Basis"
@@ -102,8 +102,8 @@
       "name": "Sicherung: rclone",
       "zweck": "Spiegel der Anhaenge und Weg ausser Haus (backup/Dockerfile, docker-compose.backup.yml)",
       "art": "archiv",
-      "bezugsstelle": "https://downloads.rclone.org/v1.75.1/rclone-v1.75.1-linux-amd64.zip",
-      "fassung": "1.75.1",
+      "bezugsstelle": "https://downloads.rclone.org/v1.75.2/rclone-v1.75.2-linux-amd64.zip",
+      "fassung": "1.75.2",
       "pruefung": "bezug"
     },
     {

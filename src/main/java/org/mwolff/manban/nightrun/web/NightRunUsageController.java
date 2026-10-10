@@ -28,6 +28,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.PeriodUsageVi
 import org.mwolff.manban.nightrun.application.NightRunUsageService.StageUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.UsageSplit;
+import org.mwolff.manban.nightrun.domain.Bremsbilanz;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
@@ -393,7 +394,8 @@ class NightRunUsageController {
                   "Beginn der Erfassung interaktiver Sitzungen; null, solange keine gemeldet"
                       + " wurde.",
               example = "2026-09-01T08:00:00Z")
-          @Nullable Instant interactiveUsageSince) {
+          @Nullable Instant interactiveUsageSince,
+      @Schema(description = "Bremsungen des Zeitraums.") BrakesResponse brakes) {
 
     static PeriodFiguresResponse of(PeriodFigures f) {
       return new PeriodFiguresResponse(
@@ -411,7 +413,8 @@ class NightRunUsageController {
           f.cardCount(),
           SplitResponse.of(f.usage()),
           KindSplitResponse.of(f.usageByKind()),
-          f.interactiveUsageSince());
+          f.interactiveUsageSince(),
+          BrakesResponse.of(f.brakes()));
     }
   }
 
@@ -522,7 +525,8 @@ class NightRunUsageController {
                   "Beginn der Erfassung interaktiver Sitzungen; null, solange keine gemeldet"
                       + " wurde.",
               example = "2026-09-01T08:00:00Z")
-          @Nullable Instant interactiveUsageSince) {
+          @Nullable Instant interactiveUsageSince,
+      @Schema(description = "Bremsungen aller aufbewahrten Läufe.") BrakesResponse brakes) {
 
     static TotalResponse of(TotalUsageView t) {
       return new TotalResponse(
@@ -533,7 +537,36 @@ class NightRunUsageController {
           SplitResponse.of(t.usage()),
           KindSplitResponse.of(t.usageByKind()),
           t.oldestRetainedRunStart(),
-          t.interactiveUsageSince());
+          t.interactiveUsageSince(),
+          BrakesResponse.of(t.brakes()));
+    }
+  }
+
+  /**
+   * Die Bremsbilanz (Issue #1550, Plan #1547): wie oft die Bremse des Kits gegriffen hat und wie
+   * viel Zeit sie ungefähr gespart hat. Ein Vergleichswert zum Vorzeitraum gehört nicht dazu (E12).
+   */
+  @Schema(
+      description =
+          "Bremsungen: Pakete, die das Kit als festgefahren (STUCK) gemeldet hat, aus den"
+              + " aufbewahrten Läufen.")
+  record BrakesResponse(
+      @Schema(description = "Zahl der festgefahrenen Pakete.", example = "3") long count,
+      @Schema(
+              description =
+                  "Davon ohne Zeitwert — ohne gemeldete Zeitgrenze oder ohne Laufzeit; sie tragen"
+                      + " nichts zu savedMs bei.",
+              example = "1")
+          long withoutTimeCount,
+      @Schema(
+              description =
+                  "Summe der geschätzten gesparten Zeit in Millisekunden: je Sitzung einmal die"
+                      + " Zeitgrenze abzüglich der Laufzeit, nie unter 0.",
+              example = "5400000")
+          long savedMs) {
+
+    static BrakesResponse of(Bremsbilanz b) {
+      return new BrakesResponse(b.brakeCount(), b.withoutTimeCount(), b.savedMs());
     }
   }
 

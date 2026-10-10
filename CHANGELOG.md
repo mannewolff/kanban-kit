@@ -15,6 +15,37 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.25.0] – 2026-10-10
+
+- chore: v2.24.5
+- Go-Lücke CVE-2026-78669 in age: Ausnahme bis 2026-10-24 ([#1572](https://github.com/mannewolff/kanban-kit/issues/1572))
+- chore: v2.24.4
+- Go-Lücken CVE-2026-78667 und CVE-2026-97031: rclone 1.75.2, Ausnahme für age ([#1569](https://github.com/mannewolff/kanban-kit/issues/1569))
+- Referenzziel der Sicherheitspruefung: Tags mit Build-Nummer richtig ordnen ([#1568](https://github.com/mannewolff/kanban-kit/issues/1568))
+- chore: v2.24.3
+- CI-Mutationsjob urteilt mit Sperrschwelle 80 % und Liegezeit wie push main ([#1567](https://github.com/mannewolff/kanban-kit/issues/1567))
+- Sperrende Befunde der Sicherheitspruefung im Protokoll, Ausnahme fuer CVE-2026-47890 ([#1564](https://github.com/mannewolff/kanban-kit/issues/1564))
+- Mutations-Überlebende in CardCycleTimeService.java abgebaut ([#1562](https://github.com/mannewolff/kanban-kit/issues/1562))
+- Mutations-Überlebende in nightRunLog.ts abgebaut ([#1561](https://github.com/mannewolff/kanban-kit/issues/1561))
+- Mutations-Überlebende in nightRunErgebnisstand.ts abgebaut ([#1560](https://github.com/mannewolff/kanban-kit/issues/1560))
+- Mutations-Überlebende in leitstand.ts als gleichwertig vermerkt ([#1559](https://github.com/mannewolff/kanban-kit/issues/1559))
+- Mutations-Überlebende in LeitstandVerbrauch.tsx abgebaut ([#1558](https://github.com/mannewolff/kanban-kit/issues/1558))
+- chore: v2.24.2
+- Doku: festgefahrene Pakete melden und im Leitstand lesen ([#1554](https://github.com/mannewolff/kanban-kit/issues/1554))
+- Kachel Bremse im Verbrauch des Board-Leitstands ([#1553](https://github.com/mannewolff/kanban-kit/issues/1553))
+- Angaben eines festgefahrenen Pakets in Nachtlauf-Seite und Leitstand ([#1552](https://github.com/mannewolff/kanban-kit/issues/1552))
+- Frontend deutet festgefahrene Pakete: Ergebnisdatei, Texte und API-Typen ([#1551](https://github.com/mannewolff/kanban-kit/issues/1551))
+- Bremsbilanz je Zeitraum und gesamt im Verbrauchsabruf ([#1550](https://github.com/mannewolff/kanban-kit/issues/1550))
+- Einlieferung und Lesesicht tragen festgefahrene Pakete samt geschätzter gesparter Zeit ([#1549](https://github.com/mannewolff/kanban-kit/issues/1549))
+- Fehlerklasse STUCK und Angaben festgefahrener Pakete in Domäne und Datenbank ([#1548](https://github.com/mannewolff/kanban-kit/issues/1548))
+- Platte Implementierungszeit als Wochenverlauf neben dem Durchsatz im Leitstand ([#1542](https://github.com/mannewolff/kanban-kit/issues/1542))
+- Wahl „Gesamt“ und Kachel Implementierungszeit im Verbrauch des Leitstands ([#1541](https://github.com/mannewolff/kanban-kit/issues/1541))
+- Wochenreihe und Zeitraum-Abruf der Implementierungszeit im Board-Leitstand ([#1540](https://github.com/mannewolff/kanban-kit/issues/1540))
+- Änderungen in Konfiguration
+- Rückgabe von CommentService.update mit Laufkennung geprüft ([#1536](https://github.com/mannewolff/kanban-kit/issues/1536))
+- chore: v2.24.1
+- Kartenmodul nimmt den Projekt-Token statt des globalen tbx-Logins ([#1535](https://github.com/mannewolff/kanban-kit/issues/1535))
+
 ## [2.24.0] – 2026-10-07
 
 - chore: v2.23.1

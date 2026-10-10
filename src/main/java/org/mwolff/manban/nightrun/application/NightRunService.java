@@ -14,6 +14,7 @@ import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
+import org.mwolff.manban.nightrun.domain.Bremsbilanz;
 import org.mwolff.manban.nightrun.domain.FortschrittErmittlung;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NightRun;
@@ -27,6 +28,7 @@ import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.ReleasePreparation;
 import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
@@ -474,6 +476,10 @@ public class NightRunService {
                     item.commitHash(),
                     item.excerpt(),
                     item.usage(),
+                    // Die Angaben eines festgefahrenen Pakets gelten nur bei STUCK (Plan #1547
+                    // E2): An jedem anderen Paket werden sie stillschweigend verworfen, wie die
+                    // Abschlussart ohne Abbruchgrund — eine Ablehnung kostete den ganzen Lauf.
+                    item.errorClass() == NightRunErrorClass.STUCK ? item.stuck() : null,
                     // Die Stufen kommen mit der Meldung (Issue #1113); der Upload-Weg uebergibt
                     // hier fest die leere Liste — „dieser Vorgang hatte keine".
                     item.stages()))
@@ -552,6 +558,8 @@ public class NightRunService {
         item.commitHash(),
         item.excerpt(),
         item.usage(),
+        item.stuck(),
+        Bremsbilanz.gespart(item),
         item.stages());
   }
 
@@ -618,6 +626,9 @@ public class NightRunService {
   /**
    * Ein einzulieferndes Arbeitspaket ohne technische Felder.
    *
+   * @param stuck die gemeldeten Angaben eines festgefahrenen Pakets (Issue #1549); {@code null}
+   *     heißt „keine gemeldet". Übernommen werden sie nur bei {@link NightRunErrorClass#STUCK}
+   *     (Plan #1547 E2).
    * @param stages die gemeldeten Stufen der Kette (Issue #1113) — leer statt {@code null}, denn
    *     „dieser Vorgang hatte keine Stufen" ist eine Aussage
    */
@@ -630,6 +641,7 @@ public class NightRunService {
       @Nullable String commitHash,
       @Nullable String excerpt,
       @Nullable NightRunUsage usage,
+      @Nullable NightRunStuck stuck,
       List<NightRunItemStage> stages) {}
 
   /**
@@ -727,6 +739,10 @@ public class NightRunService {
   /**
    * Darstellung eines Arbeitspakets.
    *
+   * @param stuck die Angaben eines festgefahrenen Pakets (Issue #1549); {@code null}, wenn keine
+   *     gemeldet wurden
+   * @param estimatedSavedMs die geschätzte gesparte Zeit aus {@link Bremsbilanz#gespart}; {@code
+   *     null} ohne STUCK und für eine Bremsung ohne Zeitwert
    * @param stages die Stufen der Kette, die dieser Vorgang durchlaufen hat (Issue #1113) — leer
    *     statt {@code null}
    */
@@ -740,5 +756,20 @@ public class NightRunService {
       @Nullable String commitHash,
       @Nullable String excerpt,
       @Nullable NightRunUsage usage,
+      @Schema(
+              description =
+                  """
+                  Angaben eines festgefahrenen Pakets (errorClass STUCK): Prüfung, Fehler, \
+                  Versuche, Zeitgrenze der Sitzung und Sitzungskennung; null, wenn keine \
+                  gemeldet wurden.""")
+          @Nullable NightRunStuck stuck,
+      @Schema(
+              description =
+                  """
+                  Geschätzte gesparte Zeit in Millisekunden: Zeitgrenze der Sitzung abzüglich \
+                  Laufzeit, nie unter 0. null ohne STUCK oder wenn Zeitgrenze oder Laufzeit \
+                  fehlen.""",
+              example = "2700000")
+          @Nullable Long estimatedSavedMs,
       List<NightRunItemStage> stages) {}
 }

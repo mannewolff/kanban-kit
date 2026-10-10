@@ -239,6 +239,19 @@ interface NightRunUsageJpaRepository extends Repository<NightRunEntity, Long> {
       nativeQuery = true)
   TotalsRow lifetimeTotals(@Param("projectId") long projectId);
 
+  /**
+   * Die festgefahrenen Pakete auf {@link #LAEUFE} bzw. {@link #ALLE_LAEUFE} (Issue #1550, Plan
+   * #1547 E15): Der {@code JOIN} bindet sie an die aufbewahrten Läufe und an die Spanne über deren
+   * {@code started_at} — dieselbe Bindung wie {@link #totalsPerCard} und {@link #lifetimeTotals}.
+   * Die Fehlerklasse steht als Literal: Sie ist eine Konstante der Domäne, keine Eingabe von außen.
+   *
+   * <p>Die Abfrage selbst steht an {@code NightRunItemJpaRepository}: Nur ein Repository dieser
+   * Entity liefert sie aus einer nativen Abfrage als Entity zurück.
+   */
+  String FESTGEFAHREN =
+      " SELECT i.* FROM night_run_item i JOIN laeufe l ON l.id = i.night_run_id"
+          + " WHERE i.error_class = 'STUCK' ORDER BY i.id";
+
   /** JPQL statt nativ: Der Typ des Startzeitpunkts kommt so als {@link Instant} aus der Entity. */
   @Query("select min(r.startedAt) from NightRunEntity r where r.projectId = :projectId")
   Optional<Instant> oldestStartedAt(@Param("projectId") long projectId);

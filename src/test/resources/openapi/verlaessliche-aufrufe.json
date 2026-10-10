@@ -534,7 +534,7 @@
           "type" : "integer"
         },
         "errorClass" : {
-          "enum" : [ "CHECKS_RED", "CHECKS_NOT_STARTED", "DEPENDENCY_UNMET", "UNEXPECTED_STATE", "HARD_ABORT", "AWAITING_DECISION", "REVIEWER_FAILED", "TIME_BUDGET_EXCEEDED" ],
+          "enum" : [ "CHECKS_RED", "CHECKS_NOT_STARTED", "DEPENDENCY_UNMET", "UNEXPECTED_STATE", "HARD_ABORT", "AWAITING_DECISION", "REVIEWER_FAILED", "TIME_BUDGET_EXCEEDED", "STUCK" ],
           "type" : "string"
         },
         "excerpt" : {
@@ -553,6 +553,9 @@
         "state" : {
           "enum" : [ "GREEN", "YELLOW", "RED", "GREY" ],
           "type" : "string"
+        },
+        "stuck" : {
+          "$ref" : "#/components/schemas/IngestStuckRequest"
         },
         "title" : {
           "maxLength" : 300,
@@ -725,6 +728,36 @@
         }
       },
       "required" : [ "stage" ],
+      "type" : "object"
+    },
+    "IngestStuckRequest" : {
+      "properties" : {
+        "attempts" : {
+          "format" : "int32",
+          "minimum" : 1,
+          "type" : "integer"
+        },
+        "check" : {
+          "maxLength" : 300,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "error" : {
+          "maxLength" : 1000,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "sessionId" : {
+          "maxLength" : 100,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "sessionLimitMs" : {
+          "format" : "int64",
+          "minimum" : 0,
+          "type" : "integer"
+        }
+      },
       "type" : "object"
     },
     "Item" : {

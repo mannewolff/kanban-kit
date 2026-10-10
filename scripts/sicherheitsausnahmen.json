@@ -732,6 +732,36 @@
       "ziel": "kanban-kit:pruefung",
       "begruendung": "Spring Framework XsltView-Lücke (SSRF/RCE); kanban-kit verwendet XsltView nicht, die Lücke ist hier nicht ausnutzbar. Korrektur nur in Spring Framework 7 (Spring Boot 4) — eigenes Vorhaben.",
       "ablauf": "2027-01-06"
+    },
+    {
+      "kennung": "CVE-2026-47890",
+      "ziel": "target/bom.json",
+      "begruendung": "Spring Framework SSE-Lücke (Stream-Korruption bei Server-Sent Events mit View-Fragmenten); kanban-kit sendet per SseEmitter nur Datenobjekte und Kommentare, ohne View-Fragmente und ohne View-Technik — die Lücke ist hier nicht ausnutzbar. Keine korrigierte 6.2.x-Fassung in Maven Central (zuletzt 6.2.19), Korrektur nur in Spring Framework 7 (Spring Boot 4) — eigenes Vorhaben (Issue #1564).",
+      "ablauf": "2027-01-06"
+    },
+    {
+      "kennung": "CVE-2026-47890",
+      "ziel": "kanban-kit:pruefung",
+      "begruendung": "Spring Framework SSE-Lücke (Stream-Korruption bei Server-Sent Events mit View-Fragmenten); kanban-kit sendet per SseEmitter nur Datenobjekte und Kommentare, ohne View-Fragmente und ohne View-Technik — die Lücke ist hier nicht ausnutzbar. Keine korrigierte 6.2.x-Fassung in Maven Central (zuletzt 6.2.19), Korrektur nur in Spring Framework 7 (Spring Boot 4) — eigenes Vorhaben (Issue #1564).",
+      "ablauf": "2027-01-06"
+    },
+    {
+      "kennung": "CVE-2026-78667",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Lücke CVE-2026-78667 in der Go-Standardbibliothek (behoben in Go 1.26.9 und 1.27.2) in /usr/local/bin/age und /usr/local/bin/age-keygen: age 1.3.2 ist das neueste Release von FiloSottile/age und mit Go 1.27.0 gebaut, eine Fassung mit behobenem Go gibt es noch nicht. Eigenbau mit neuerem Go wäre ein eigenes Vorhaben (Issue #1569).",
+      "ablauf": "2026-10-24"
+    },
+    {
+      "kennung": "CVE-2026-97031",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Lücke CVE-2026-97031 in der Go-Standardbibliothek (behoben in Go 1.26.9 und 1.27.2) in /usr/local/bin/age und /usr/local/bin/age-keygen: age 1.3.2 ist das neueste Release von FiloSottile/age und mit Go 1.27.0 gebaut, eine Fassung mit behobenem Go gibt es noch nicht. Eigenbau mit neuerem Go wäre ein eigenes Vorhaben (Issue #1569).",
+      "ablauf": "2026-10-24"
+    },
+    {
+      "kennung": "CVE-2026-78669",
+      "ziel": "kanban-kit-backup:pruefung",
+      "begruendung": "Lücke CVE-2026-78669 in der Go-Standardbibliothek (behoben in Go 1.26.9 und 1.27.2) in /usr/local/bin/age und /usr/local/bin/age-keygen: age 1.3.2 ist das neueste Release von FiloSottile/age und mit Go 1.27.0 gebaut, eine Fassung mit behobenem Go gibt es noch nicht. Eigenbau mit neuerem Go wäre ein eigenes Vorhaben (Issue #1572).",
+      "ablauf": "2026-10-24"
     }
   ]
 }

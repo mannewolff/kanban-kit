@@ -272,6 +272,20 @@ class CommentServiceTest {
   }
 
   @Test
+  void update_mitKennung_liefertDieViewMitNeuemText() {
+    // Given: auch der Ingest-Weg mit Laufkennung gibt den geänderten Kommentar zurück (#1536).
+    when(comments.findById(3L)).thenReturn(Optional.of(comment(1L)));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    CommentService.CommentView view = service.update(1L, 3L, "Geändert", LAUF);
+
+    // Then
+    assertThat(view).isNotNull();
+    assertThat(view.body()).isEqualTo("Geändert");
+  }
+
+  @Test
   void update_throwsCommentNotFound_whenUnknown() {
     // Given
     when(comments.findById(3L)).thenReturn(Optional.empty());

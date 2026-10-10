@@ -49,6 +49,7 @@ export const MELDER_JE_FEHLERKLASSE: Record<NightRunErrorClass, Melder> = {
   UNEXPECTED_STATE: 'zinnob',
   HARD_ABORT: 'zinnob',
   TIME_BUDGET_EXCEEDED: 'zinnob',
+  STUCK: 'zinnob',
   AWAITING_DECISION: 'bernst',
   DEPENDENCY_UNMET: 'bernst',
   REVIEWER_FAILED: 'grau',
@@ -584,6 +585,17 @@ export function kalenderwoche(iso: string): number {
 export function balkenHoehen(werte: readonly number[]): number[] {
   const max = Math.max(0, ...werte)
   return werte.map((wert) => (max === 0 ? 0 : Math.round((wert / max) * 100)))
+}
+
+/**
+ * Balkenhöhen für Werte mit Lücken (Issue #1542, E6): Eine Woche ohne Messung bleibt `null` und
+ * bekommt keinen Balken; eine gemessene steht mindestens bei 3 %, damit ein kleiner Mittelwert neben
+ * einem großen nicht wie eine Lücke aussieht.
+ */
+export function balkenHoehenMitLuecken(werte: readonly (number | null)[]): (number | null)[] {
+  // Stryker disable next-line ConditionalExpression,MethodExpression: gleichwertig — Math.max nimmt null als 0, und die 0 steht schon als Untergrenze
+  const max = Math.max(0, ...werte.filter((wert) => wert !== null))
+  return werte.map((wert) => (wert === null ? null : Math.max(3, max === 0 ? 0 : Math.round((wert / max) * 100))))
 }
 
 /** Eine Zeile der Abbruchgründe (Entwurf Z. 1606–1653): Klasse, Zahl, Breite relativ zur häufigsten. */

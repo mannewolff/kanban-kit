@@ -34,6 +34,9 @@ export const NIGHT_RUN_ERROR_CLASSES = [
   'AWAITING_DECISION',
   'REVIEWER_FAILED',
   'TIME_BUDGET_EXCEEDED',
+  // Festgefahren (Issue #1546): kommt nur ueber die Ergebnisdatei des Kits, kein Muster deutet es
+  // aus dem Textprotokoll (Plan #1547, E10).
+  'STUCK',
 ] as const
 
 export type NightRunErrorClass = (typeof NIGHT_RUN_ERROR_CLASSES)[number]
@@ -194,6 +197,29 @@ export interface NightRunItem {
    * zweite Wahrheit in den Einlieferungs-Vertrag zu legen (E2, ausdruecklich verworfen).
    */
   ausgang?: string
+  /**
+   * Die Angaben eines festgefahrenen Pakets (`errorClass: 'STUCK'`, Issue #1551) — nur aus einem
+   * Ergebnisstand, der Textprotokoll-Parser kennt den Ausgang nicht (Plan #1547, E10). Fehlt, wenn
+   * die Einheit keinen oder einen leeren Block traegt.
+   */
+  stuck?: NightRunStuck
+}
+
+/**
+ * Was das Kit zu einem festgefahrenen Paket meldet (Plan #1547, E9) — die Namen des Servers, nicht
+ * die der Ergebnisdatei. Jede Angabe fehlt, wo das Kit sie nicht gemeldet hat; keine traegt `null`.
+ */
+export interface NightRunStuck {
+  /** Die Pruefung, an der das Paket hing. */
+  check?: string
+  /** Der wiederkehrende Fehler. */
+  error?: string
+  /** Zahl der Versuche. */
+  attempts?: number
+  /** Zeitgrenze der Sitzung dieses Pakets in Millisekunden. */
+  sessionLimitMs?: number
+  /** Kennung der Sitzung. */
+  sessionId?: string
 }
 
 export interface NightRun {
@@ -230,6 +256,7 @@ export interface NightRunLog {
 }
 
 /** `[ISO-Zeitstempel] Text` — so schreibt `log()` in `night.mjs`. */
+// Stryker disable next-line Regex: gleichwertig — `$` unterscheidet nach dem Trennen an \n und Entfernen von \r nur bei U+2028/U+2029, die night.mjs nicht schreibt; das `^` haelt ein eigener Test
 const PRAEFIX = /^\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\] (.*)$/
 
 /** Der zweite Schreiber: `fail()` schreibt ohne Praefix und beendet den Lauf. */
@@ -344,6 +371,7 @@ const MUSTER: ReadonlyArray<{ re: RegExp; deute: (m: RegExpExecArray) => Treffer
 
   // --- Sessionbeginn: eroeffnet ein Arbeitspaket, dessen Ausgang noch aussteht.
   {
+    // Stryker disable next-line Regex: gleichwertig — `$` hinter `(.*)` unterscheidet nur bei U+2028/U+2029; Anfang und Ziffern halten eigene Tests
     re: /^(?:Review-)?Session \d+\/\d+: Issue #(\d+) — (.*)$/,
     deute: (m) => ({ cardNumber: Number(m[1]), title: m[2], eroeffnet: true }),
   },
@@ -511,12 +539,13 @@ interface Deutung {
  * @returns das Arbeitspaket, falls die Zeile es eroeffnet — sonst `undefined`
  */
 function verarbeiteTreffer(a: Aufbau, t: Treffer, inhalt: string): NightRunItem | undefined {
-  let eroeffnet: NightRunItem | undefined
+  // Stryker disable next-line ConditionalExpression: gleichwertig — jede Deutung in MUSTER nennt eine Kartennummer
   if (t.cardNumber !== undefined) {
     const item = paket(a, t.cardNumber, inhalt)
     if (t.title) item.title = t.title
-    if (t.eroeffnet) eroeffnet = item
-    else if (t.state) {
+    if (t.eroeffnet) return item
+    // Stryker disable next-line ConditionalExpression: gleichwertig — jede nicht eroeffnende Deutung in MUSTER nennt einen Zustand
+    if (t.state) {
       item.state = t.state
       item.errorClass = t.errorClass
       item.excerpt = inhalt
@@ -524,7 +553,7 @@ function verarbeiteTreffer(a: Aufbau, t: Treffer, inhalt: string): NightRunItem 
       if (t.commit !== undefined) item.commit = t.commit
     }
   }
-  return eroeffnet
+  return undefined
 }
 
 /**
@@ -546,6 +575,7 @@ function deuteZeile(a: Aufbau, inhalt: string, roh: string): Deutung {
     const eroeffnet = verarbeiteTreffer(a, t, inhalt)
     return { gedeutet: true, cardNumber: t.cardNumber, eroeffnet }
   }
+  // Stryker disable next-line ObjectLiteral: gleichwertig — ein fehlendes `gedeutet` liest sich ebenso falsch
   return { gedeutet: false }
 }
 

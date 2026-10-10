@@ -51,6 +51,7 @@ const kennzahlen = (werte: Partial<VerbrauchKennzahlen>): VerbrauchKennzahlen =>
     interactive: { total: nichts, cardShare: nichts, remainder: nichts },
   },
   interactiveUsageSince: null,
+  brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
   ...werte,
 })
 

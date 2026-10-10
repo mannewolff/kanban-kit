@@ -70,7 +70,8 @@ Listen:
 
   --hilfe, -h           diese Hilfe
 
-Ausgabe nach $GITHUB_STEP_SUMMARY, wenn gesetzt, sonst auf die Standardausgabe.
+Ausgabe nach $GITHUB_STEP_SUMMARY, wenn gesetzt, sonst auf die Standardausgabe; mit gesetzter
+Variable steht jeder sperrende Befund zusaetzlich als eine Zeile auf der Standardausgabe.
 Rueckgabewert 1 bei mindestens einem sperrenden Befund, sonst 0; 2 bei falschem Aufruf.
 `;
 
@@ -129,23 +130,32 @@ const VERWENDUNG_BAU = 'bau';
 const ROLLE_REFERENZ = 'referenz';
 
 /**
- * Zerlegt einen Tag in Fassung und Variante (Entscheidung in #1356): Die Fassung sind die Ziffern
- * am Anfang, getrennt durch Punkt oder Unterstrich — der Unterstrich, weil eclipse-temurin seine
- * Baunummer so anhaengt (`25.0.4.1_1-jre`) und sie sonst als Variante jede neuere Fassung
- * ausschloesse. Der Rest ist die Variante (`-bookworm`, `-alpine`). Ohne Ziffernanfang: null.
+ * Zerlegt einen Tag in Fassung, Build-Nummer und Variante (Entscheidung in #1356, #1568): Die
+ * Fassung sind die punktgetrennten Ziffern am Anfang. Eine Zahl hinter einem Unterstrich ist die
+ * Build-Nummer (eclipse-temurin: `25.0.4.1_1-jre`, GA-Tag `25_36-jre` = 25.0.0 Build 36) — sie
+ * gehoert weder zur Fassung noch zur Variante. Der Rest ist die Variante (`-bookworm`, `-alpine`).
+ * Ohne Ziffernanfang: null.
  */
 function tagZerlegen(tag) {
-  const treffer = /^(\d+(?:[._]\d+)*)(.*)$/.exec(tag);
+  const treffer = /^(\d+(?:\.\d+)*)(?:_(\d+))?(.*)$/.exec(tag);
   if (!treffer) return null;
-  return { fassung: treffer[1].split(/[._]/).map(Number), variante: treffer[2] };
+  const build = treffer[2] === undefined ? null : Number(treffer[2]);
+  return { fassung: treffer[1].split('.').map(Number), build, variante: treffer[3] };
 }
 
+/**
+ * Vergleicht zuerst die Fassung, bei gleicher Fassung die Build-Nummer. Traegt einer der Tags eine
+ * Build-Nummer, zaehlen fehlende Stellen der Fassung als 0 (`25` = `25.0.0`); ohne Build-Nummer
+ * bleibt es beim bisherigen Vergleich, in dem die laengere Fassung bei gleichem Anfang hoeher ist.
+ */
 function fassungVergleichen(a, b) {
-  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
-    const unterschied = (a[i] ?? -1) - (b[i] ?? -1);
+  const mitBuild = a.build !== null || b.build !== null;
+  const fehlend = mitBuild ? 0 : -1;
+  for (let i = 0; i < Math.max(a.fassung.length, b.fassung.length); i += 1) {
+    const unterschied = (a.fassung[i] ?? fehlend) - (b.fassung[i] ?? fehlend);
     if (unterschied !== 0) return unterschied;
   }
-  return 0;
+  return (a.build ?? -1) - (b.build ?? -1);
 }
 
 /** Trennt `name:tag` am letzten Doppelpunkt hinter dem letzten Schraegstrich (Registry mit Port). */
@@ -165,11 +175,11 @@ export function referenzBezugsstelle(bezugsstelle, tags) {
   const teile = nameUndTag(bezugsstelle);
   const eigen = teile && tagZerlegen(teile.tag);
   if (!eigen) return null;
-  let bester = { tag: teile.tag, fassung: eigen.fassung };
+  let bester = { tag: teile.tag, ...eigen };
   for (const tag of tags) {
     const kandidat = tagZerlegen(tag);
     if (!kandidat || kandidat.variante !== eigen.variante || kandidat.fassung[0] !== eigen.fassung[0]) continue;
-    if (fassungVergleichen(kandidat.fassung, bester.fassung) > 0) bester = { tag, fassung: kandidat.fassung };
+    if (fassungVergleichen(kandidat, bester) > 0) bester = { tag, ...kandidat };
   }
   return `${teile.name}:${bester.tag}`;
 }
@@ -610,6 +620,22 @@ export function zusammenfassungAusgeben(text, { umgebung = process.env, schreibe
   else schreiben(text);
 }
 
+/**
+ * Die sperrenden Befunde als Klartext, je Befund eine Zeile (Issue #1564): Mit gesetztem
+ * $GITHUB_STEP_SUMMARY steht die Zusammenfassung nur auf der Lauf-Seite, und `gh run view --log-failed`
+ * zeigte ein rotes Gate ohne Grund. Ohne die Variable traegt die Zusammenfassung sie schon selbst.
+ */
+export function sperrendeZeilen(urteil) {
+  const anzahl = urteil.sperrend.length;
+  if (anzahl === 0) return '';
+  const einzeilig = (text) => String(text).replace(/\s*\n\s*/g, ' ');
+  return [
+    `Sicherheitspruefung: ${anzahl === 1 ? '1 sperrender Befund' : `${anzahl} sperrende Befunde`}`,
+    ...urteil.sperrend.map((e) => `sperrend: ${einzeilig(e.ziel)}: ${einzeilig(e.text)}`),
+    '',
+  ].join('\n');
+}
+
 // --- Werkzeugaufruf -------------------------------------------------------
 
 /** Der Standard-Werkzeugaufruf. Loest mit der Standardausgabe auf, lehnt bei Rueckgabewert != 0 ab. */
@@ -688,6 +714,10 @@ export async function laufen(ziele, {
   const urteil = urteilen(ergebnisse, ausnahmen, { heute });
   if (ziele.length === 0) urteil.sperrend.push({ ziel: '-', text: 'kein Ziel uebergeben — nichts geprueft' });
   zusammenfassungAusgeben(zusammenfassung(urteil), { umgebung, schreiben });
+  if (umgebung.GITHUB_STEP_SUMMARY) {
+    const zeilen = sperrendeZeilen(urteil);
+    if (zeilen) schreiben(zeilen);
+  }
   return { urteil, exitcode: urteil.sperrend.length === 0 ? 0 : 1 };
 }
 

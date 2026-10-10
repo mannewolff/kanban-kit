@@ -240,3 +240,72 @@ gehört — Vorflug, übergreifendes Review, Aufräumen. Der Server normalisiert
 
 Fehlende Angaben in `usage` heißen **„nicht gemessen"** und nie Null; ein Feld, das nichts trägt,
 lässt man weg.
+
+### Festgefahrenes Paket melden
+
+Fährt sich ein Arbeitspaket an derselben Prüfung immer wieder auf dieselbe Weise fest, beendet das
+Kit es früh statt erst an der Zeitgrenze der Sitzung. Diesen Ausgang meldet es als Paket mit
+`"state": "RED"` und `"errorClass": "STUCK"`, dazu das Objekt `stuck` mit den Angaben der Bremse:
+
+```json
+{
+  "cardNumber": 1554,
+  "title": "Doku: festgefahrene Pakete melden",
+  "state": "RED",
+  "errorClass": "STUCK",
+  "durationMs": 1260000,
+  "stuck": {
+    "check": "mvn verify",
+    "error": "OpenApiIT: Vertrag weicht vom Schnappschuss ab",
+    "attempts": 3,
+    "sessionLimitMs": 3600000,
+    "sessionId": "a1b2c3d4"
+  }
+}
+```
+
+Die Regeln dazu:
+
+- **`stuck` gilt nur bei `STUCK`.** Steht das Objekt an einem Paket mit anderer Fehlerklasse, wird
+  es stillschweigend verworfen — keine Ablehnung, der Lauf kommt trotzdem an.
+- **`STUCK` gehört zu `RED`.** Das Kit meldet ein festgefahrenes Paket immer rot. Der Server prüft
+  die Verbindung von Zustand und Fehlerklasse nicht, er setzt sie voraus.
+- **Jede Angabe in `stuck` darf fehlen.** Der Leitstand zeigt an ihrer Stelle „nicht gemeldet“.
+  Grenzen: `check` höchstens 300 Zeichen, `error` höchstens 1000, `sessionId` höchstens 100,
+  `attempts` mindestens 1, `sessionLimitMs` mindestens 0. Eine Verletzung lehnt den Lauf mit `400`
+  ab.
+- **Die gesparte Zeit wird gerechnet, nicht gemeldet:** `max(0, sessionLimitMs − durationMs)`, die
+  Zeitgrenze der Sitzung abzüglich der Laufzeit bis zum Abbruch, nie unter 0. Fehlt einer der beiden
+  Werte, ist es eine Bremsung **ohne Zeitwert**.
+- **Je Sitzung zählt die Ersparnis einmal.** Pakete mit gleichem `nightRunId` und gleicher
+  `sessionId` bilden eine Sitzung; von ihnen zählt die kleinste gesparte Zeit. Ohne `sessionId` ist
+  jedes Paket seine eigene Sitzung. Die Zahl der Bremsungen zählt dagegen jedes Paket.
+- **Gezählt wird über die aufbewahrten Läufe** — wie jede Zahl im Verbrauch, auch unter „Gesamt“.
+  Die Pakete eines verdrängten Laufs zählen nicht mehr mit.
+
+**Ältere Meldungen gelten unverändert.** Ein Paket ohne `stuck` und ohne `STUCK` — etwa aus einer
+älteren Kit-Kopie, die ein festgefahrenes Paket noch als „Prüfungen rot“ mit Prüfung und Fehler im
+Auszug meldet — wird angenommen wie bisher und bleibt so lesbar.
+
+**In der Ergebnisdatei** (Rückfallweg „Protokoll einlesen“) heißt derselbe Ausgang
+`einheit.ausgang = "festgefahren"`, mit dem Block `einheit.festgefahren`. Er ist additiv in
+`schemaFassung: 1`, eine neue Fassung gibt es dafür nicht:
+
+```json
+{
+  "ausgang": "festgefahren",
+  "grund": "mvn verify: OpenApiIT: Vertrag weicht vom Schnappschuss ab",
+  "festgefahren": {
+    "pruefung": "mvn verify",
+    "fehler": "OpenApiIT: Vertrag weicht vom Schnappschuss ab",
+    "versuche": 3,
+    "zeitgrenzeMs": 3600000,
+    "sitzung": "a1b2c3d4"
+  }
+}
+```
+
+Der Leitstand deutet ihn als `RED` mit `STUCK` und nimmt den Auszug aus `grund`; die Namen im Block
+entsprechen `check`, `error`, `attempts`, `sessionLimitMs` und `sessionId`. Zulässig ist der Ausgang
+in Umsetzung, Nachtplanung und Kette, **im Prüf-Lauf nicht** — dort gibt es keine
+Umsetzungssitzung, die sich festfahren kann.

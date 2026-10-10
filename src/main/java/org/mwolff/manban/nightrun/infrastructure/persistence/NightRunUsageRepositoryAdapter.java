@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
+import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
@@ -25,9 +26,12 @@ import org.springframework.stereotype.Component;
 class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
 
   private final NightRunUsageJpaRepository abfragen;
+  private final NightRunItemJpaRepository pakete;
 
-  NightRunUsageRepositoryAdapter(NightRunUsageJpaRepository abfragen) {
+  NightRunUsageRepositoryAdapter(
+      NightRunUsageJpaRepository abfragen, NightRunItemJpaRepository pakete) {
     this.abfragen = abfragen;
+    this.pakete = pakete;
   }
 
   @Override
@@ -105,6 +109,21 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
   public LifetimeTotals lifetimeTotals(long projectId) {
     NightRunUsageJpaRepository.TotalsRow z = abfragen.lifetimeTotals(projectId);
     return new LifetimeTotals(z.getCardCount(), jeGattung(z));
+  }
+
+  @Override
+  public List<NightRunItem> stuckItems(long projectId, Instant from, Instant to) {
+    return ohneStufen(pakete.findStuckInRetainedRuns(projectId, from, to));
+  }
+
+  @Override
+  public List<NightRunItem> lifetimeStuckItems(long projectId) {
+    return ohneStufen(pakete.findStuckInAllRetainedRuns(projectId));
+  }
+
+  /** Ohne Stufen, wie der Port es festlegt: Die Bremsbilanz liest sie nicht. */
+  private static List<NightRunItem> ohneStufen(List<NightRunItemEntity> gefunden) {
+    return gefunden.stream().map(e -> NightRunRepositoryAdapter.toDomain(e, List.of())).toList();
   }
 
   @Override

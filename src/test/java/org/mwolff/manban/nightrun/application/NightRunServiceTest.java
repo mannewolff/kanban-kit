@@ -48,6 +48,7 @@ import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.ProgressStage;
 import org.mwolff.manban.nightrun.domain.ReleasePreparation;
@@ -465,6 +466,7 @@ class NightRunServiceTest {
         "abc1234",
         "Auszug " + cardNumber,
         null,
+        null,
         List.of());
   }
 
@@ -739,6 +741,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        null,
         List.of(stufen));
   }
 
@@ -818,6 +821,81 @@ class NightRunServiceTest {
     NightRunService.NightRunView sicht = service.list(USER, PROJECT).getFirst();
     assertThat(sicht.budget()).isNull();
     assertThat(sicht.items().getFirst().stages()).isEmpty();
+  }
+
+  // --- Festgefahrene Pakete: stuck am Vorgang (Issue #1549, Plan #1547) -------------------
+
+  private static final NightRunStuck FESTGEFAHREN =
+      new NightRunStuck("mvn verify", "OpenApiIT rot", 3, 3_600_000L, "sitzung-1");
+
+  private static NightRunService.NewNightRunItem itemMitStuck(
+      NightRunErrorClass errorClass, NightRunStuck stuck) {
+    return new NightRunService.NewNightRunItem(
+        1549,
+        "Paket 1549",
+        NightRunState.RED,
+        errorClass,
+        900_000L,
+        null,
+        null,
+        null,
+        stuck,
+        List.of());
+  }
+
+  /** Ein festgefahrenes Paket traegt seine Angaben bis in die Sicht, samt gesparter Zeit. */
+  @Test
+  void ingest_uebernimmtStuckBeiStuck_undDieSichtRechnetDieErsparnis() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(T1, true, null, itemMitStuck(NightRunErrorClass.STUCK, FESTGEFAHREN)));
+
+    assertThat(((FakeNightRunRepository) runs).allePakete())
+        .singleElement()
+        .extracting(NightRunItem::stuck)
+        .isEqualTo(FESTGEFAHREN);
+    NightRunService.NightRunItemView paket =
+        service.list(USER, PROJECT).getFirst().items().getFirst();
+    assertThat(paket.stuck()).isEqualTo(FESTGEFAHREN);
+    assertThat(paket.estimatedSavedMs()).isEqualTo(2_700_000L);
+  }
+
+  /** E2: Angaben an einem Paket ohne STUCK werden stillschweigend verworfen, nicht abgewiesen. */
+  @Test
+  void ingest_verwirftStuckOhneStuck() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(T1, true, null, itemMitStuck(NightRunErrorClass.CHECKS_RED, FESTGEFAHREN)));
+
+    assertThat(((FakeNightRunRepository) runs).allePakete())
+        .singleElement()
+        .extracting(NightRunItem::stuck)
+        .isNull();
+    NightRunService.NightRunItemView paket =
+        service.list(USER, PROJECT).getFirst().items().getFirst();
+    assertThat(paket.stuck()).isNull();
+    assertThat(paket.estimatedSavedMs()).isNull();
+  }
+
+  /** Der Upload-Weg folgt derselben Regel — beide Wege teilen die Abbildung der Pakete. */
+  @Test
+  void submit_uebernimmtStuckNurBeiStuck() {
+    service.submit(
+        USER,
+        PROJECT,
+        List.of(
+            lauf(T1, itemMitStuck(NightRunErrorClass.STUCK, FESTGEFAHREN)),
+            lauf(T2, itemMitStuck(NightRunErrorClass.TIME_BUDGET_EXCEEDED, FESTGEFAHREN))));
+
+    assertThat(((FakeNightRunRepository) runs).allePakete())
+        .extracting(NightRunItem::stuck)
+        .containsExactlyInAnyOrder(FESTGEFAHREN, null);
   }
 
   // --- Morgenmeldung: releasePreparation am Lauf (Issue #1456) ----------------------------
@@ -1013,6 +1091,7 @@ class NightRunServiceTest {
         null,
         null,
         usage,
+        null,
         List.of());
   }
 
@@ -1749,6 +1828,7 @@ class NightRunServiceTest {
           item.commitHash(),
           item.excerpt(),
           item.usage(),
+          item.stuck(),
           item.stages());
     }
 
@@ -1808,6 +1888,7 @@ class NightRunServiceTest {
           item.commitHash(),
           item.excerpt(),
           item.usage(),
+          item.stuck(),
           // Die Stufen haengen am Paket, nicht am Lauf (V37): Ein verwaistes Paket behaelt sie.
           item.stages());
     }

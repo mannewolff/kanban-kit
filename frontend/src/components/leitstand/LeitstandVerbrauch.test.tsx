@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
+import type { ImplementationTime } from '../../api/dashboard'
 import type {
   VerbrauchAngaben,
   VerbrauchAufteilung,
@@ -13,7 +14,7 @@ import { LeitstandVerbrauch } from './LeitstandVerbrauch'
 
 /**
  * Der Verbrauch im Leitstand (Issue #1017, #984 AK 1, 3, 4, 6): beide Anteile unter der Summe, der
- * Posten „ohne Karte", die Lebenszeit-Summe und die drei Aussagen zum Erfassungsbeginn.
+ * Posten „ohne Karte", die Wahl „Gesamt" (Issue #1541) und die drei Aussagen zum Erfassungsbeginn.
  */
 
 /** `Intl` setzt vor Einheiten ein geschütztes Leerzeichen; verglichen wird der Wortlaut. */
@@ -73,6 +74,7 @@ const kennzahlen = (extra: Partial<VerbrauchKennzahlen> = {}): VerbrauchKennzahl
   usage: GESAMT,
   usageByKind: { night: NACHT, interactive: SITZUNG },
   interactiveUsageSince: '2026-09-01T08:00:00Z',
+  brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
   ...extra,
 })
 
@@ -105,25 +107,47 @@ const gesamt = (extra: Partial<VerbrauchGesamt> = {}): VerbrauchGesamt => ({
   usageByKind: { night: teilung(angaben(200), angaben(160), angaben(40)), interactive: teilung(angaben(118.5), angaben(80), angaben(38.5)) },
   oldestRetainedRunStart: '2026-05-01T00:00:00Z',
   interactiveUsageSince: '2026-09-01T08:00:00Z',
+  brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
   ...extra,
 })
 
+const implementierung = (extra: Partial<ImplementationTime> = {}): ImplementationTime => ({
+  avgImplementationSeconds: 5400,
+  implementationSampleCount: 4,
+  ...extra,
+})
+
+/** Ein Abruf, der mit dem Wert antwortet oder — bei einem Fehler — scheitert. */
+const antwort = <T,>(wert: T | Error) =>
+  wert instanceof Error ? vi.fn().mockRejectedValue(wert) : vi.fn().mockResolvedValue(wert)
+
 function zeige(
-  zeitraumWert: VerbrauchZeitraum = zeitraum(),
+  zeitraumWert: VerbrauchZeitraum | Error = zeitraum(),
   gesamtWert: VerbrauchGesamt | Error = gesamt(),
+  implementierungWert: ImplementationTime | Error = implementierung(),
 ) {
   const api = {
-    period: vi.fn().mockResolvedValue(zeitraumWert),
-    total:
-      gesamtWert instanceof Error
-        ? vi.fn().mockRejectedValue(gesamtWert)
-        : vi.fn().mockResolvedValue(gesamtWert),
+    period: antwort(zeitraumWert),
+    total: antwort(gesamtWert),
+    implementationTime: antwort(implementierungWert),
   }
-  render(<LeitstandVerbrauch projectId={5} api={api} />)
+  render(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)
   return api
 }
 
 const kachel = (name: string) => screen.findByRole('article', { name })
+
+/** Zeigt den Verbrauch und wählt „Gesamt", sobald der erste Zeitraum steht. */
+async function zeigeGesamt(
+  gesamtWert: VerbrauchGesamt | Error = gesamt(),
+  implementierungWert: ImplementationTime | Error = implementierung(),
+) {
+  const api = zeige(zeitraum(), gesamtWert, implementierungWert)
+  await kachel('Kosten')
+  fireEvent.click(screen.getByRole('button', { name: 'Gesamt' }))
+  await waitFor(() => expect(api.total).toHaveBeenCalled())
+  return api
+}
 
 describe('LeitstandVerbrauch — beide Anteile (AK 1)', () => {
   it('zeigt unter der Summe den Lauf- und den Sitzungs-Anteil mit ihren Beschriftungen', async () => {
@@ -279,62 +303,196 @@ describe('LeitstandVerbrauch — Erfassungsbeginn (AK 6)', () => {
   })
 })
 
-describe('LeitstandVerbrauch — Lebenszeit (AK 4)', () => {
-  it('zeigt die Summe ueber die ganze Laufzeit samt Abdeckung und Erfassungsbeginn', async () => {
+describe('LeitstandVerbrauch — Wahl „Gesamt" (Issue #1541)', () => {
+  it('zeigt unter „Gesamt" die Summe über alle aufbewahrten Einträge samt Abdeckung an „Kosten"', async () => {
+    const api = await zeigeGesamt()
+
+    expect(await screen.findByTestId('verbrauch-umfang')).toHaveTextContent('Gesamt · 30 Runs · 12 Sitzungen')
+    const kosten = await kachel('Kosten')
+    expect(kosten).toHaveTextContent('318,50$')
+    expect(lesbar(kosten.textContent)).toContain('ab 01.05.2026 · Sitzungen ab 01.09.2026')
+    expect(lesbar(within(kosten).getByTestId('anteil-interaktiv').textContent)).toBe('aus interaktiven Sitzungen118,50 $')
+    expect(api.total).toHaveBeenCalledWith(5)
+    expect(api.period).toHaveBeenCalledTimes(1)
+  })
+
+  it('lässt unter „Gesamt" Vorzeitraum-Vergleich, Schichtverlauf und Schichtzahl weg', async () => {
+    await zeigeGesamt()
+
+    await screen.findByText(/^Gesamt ·/)
+    const kosten = await kachel('Kosten')
+    expect(within(kosten).queryByTestId(/^delta-(gut|schlecht)$/)).not.toBeInTheDocument()
+    const ausgabe = await kachel('Ausgabe-Token')
+    expect(within(ausgabe).queryByTestId('funke')).not.toBeInTheDocument()
+    expect(ausgabe).not.toHaveTextContent('Schicht')
+    // Ohne Ausgabe-Messung und ohne Schichten bleibt der Fuß ganz leer.
+    expect(ausgabe.innerHTML).toMatch(/<span><\/span><span[^>]*><\/span><\/div>$/)
+  })
+
+  it('rechnet unter „Gesamt" Kosten je Vorgang aus der Kartenzahl', async () => {
+    await zeigeGesamt()
+
+    await screen.findByText(/^Gesamt ·/)
+    expect(lesbar((await kachel('Kosten')).textContent)).toContain(lesbar(`${kostenText(318.5 / 61)} je Vorgang`))
+  })
+
+  it('zeigt unter Schicht, Woche und Monat keine Kachel „Gesamt über die Laufzeit" und keine Abdeckung', async () => {
     const api = zeige()
 
-    const lebenszeit = await kachel('Gesamt über die Laufzeit')
-    expect(lebenszeit).toHaveTextContent('318,50$')
-    expect(lesbar(lebenszeit.textContent)).toContain('ab 01.05.2026')
-    expect(lesbar(lebenszeit.textContent)).toContain('Sitzungen ab 01.09.2026')
-    expect(api.total).toHaveBeenCalledWith(5)
+    const kosten = await kachel('Kosten')
+    expect(screen.queryByRole('article', { name: 'Gesamt über die Laufzeit' })).not.toBeInTheDocument()
+    expect(lesbar(kosten.textContent)).not.toContain('Sitzungen ab')
+    // Kein zweiter, leerer Fuß für die Abdeckung: Der letzte Fuß ist der mit den Kosten je Vorgang.
+    expect(kosten.innerHTML).toMatch(/je Vorgang<\/span><\/div>$/)
+    expect(api.total).not.toHaveBeenCalled()
   })
 
-  it('meldet einen Ladefehler der Lebenszeit-Kachel wie die uebrigen Kacheln', async () => {
-    zeige(zeitraum(), new Error('Netz'))
+  it('meldet einen Ladefehler unter „Gesamt" wie beim Zeitraum', async () => {
+    await zeigeGesamt(new Error('Netz'))
 
-    const lebenszeit = await kachel('Gesamt über die Laufzeit')
-    await waitFor(() =>
-      expect(within(lebenszeit).getByTestId('kachel-wert')).toHaveTextContent('—'),
-    )
-    expect(lebenszeit).toHaveTextContent('nicht geladen')
+    expect(await screen.findByText('Der Verbrauch konnte nicht geladen werden.')).toBeInTheDocument()
+    expect(screen.queryByRole('article', { name: 'Kosten' })).not.toBeInTheDocument()
   })
 
-  it('sagt ohne gemeldete Sitzung, dass der interaktive Anteil noch nicht erfasst ist', async () => {
-    zeige(zeitraum(), gesamt({ interactiveUsageSince: null }))
+  it('sagt ohne gemeldete Sitzung „Sitzungen nicht erfasst", auch im Anteil', async () => {
+    await zeigeGesamt(gesamt({ interactiveUsageSince: null }))
 
-    const lebenszeit = await kachel('Gesamt über die Laufzeit')
-    expect(lesbar(lebenszeit.textContent)).toContain('nicht erfasst')
-  })
-
-  /** Die Lebenszeit lädt eigenständig — der Zeitraum steht schon, solange sie unterwegs ist. */
-  it('sagt, dass die Summe noch geladen wird, solange der Abruf laeuft', async () => {
-    const api = {
-      period: vi.fn().mockResolvedValue(zeitraum()),
-      total: vi.fn().mockReturnValue(new Promise(() => undefined)),
-    }
-    render(<LeitstandVerbrauch projectId={5} api={api} />)
-
-    const lebenszeit = await kachel('Gesamt über die Laufzeit')
-    expect(lebenszeit).toHaveTextContent('wird geladen')
+    await screen.findByText(/^Gesamt ·/)
+    const kosten = await kachel('Kosten')
+    expect(lesbar(kosten.textContent)).toContain('ab 01.05.2026 · Sitzungen nicht erfasst')
+    expect(lesbar(within(kosten).getByTestId('anteil-interaktiv').textContent)).toBe('aus interaktiven Sitzungennicht erfasst')
   })
 
   it('sagt es, wenn kein Eintrag aufbewahrt ist — statt ein Datum zu erfinden', async () => {
-    zeige(zeitraum(), gesamt({ oldestRetainedRunStart: null }))
+    await zeigeGesamt(gesamt({ oldestRetainedRunStart: null }))
 
-    const lebenszeit = await kachel('Gesamt über die Laufzeit')
-    expect(lesbar(lebenszeit.textContent)).toContain('ohne aufbewahrten Eintrag')
+    await screen.findByText(/^Gesamt ·/)
+    expect(lesbar((await kachel('Kosten')).textContent)).toContain('ohne aufbewahrten Eintrag')
   })
 
-  /** Eine Lebenszeit ohne gemessene Kosten bleibt leer und wird nie 0. */
+  /** Eine Summe ohne gemessene Kosten bleibt leer und wird nie 0. */
   it('zeigt eine Summe ohne gemessene Kosten als Leerwert', async () => {
-    zeige(zeitraum(), gesamt({ usage: teilung(nichts, nichts, nichts) }))
+    await zeigeGesamt(gesamt({ usage: teilung(nichts, nichts, nichts) }))
 
-    const lebenszeit = await kachel('Gesamt über die Laufzeit')
-    await waitFor(() =>
-      expect(within(lebenszeit).getByTestId('kachel-wert')).toHaveTextContent('—'),
+    await screen.findByText(/^Gesamt ·/)
+    const kosten = await kachel('Kosten')
+    expect(within(kosten).getByTestId('kachel-wert')).toHaveTextContent('—')
+    expect(lesbar(kosten.textContent)).toContain('ab 01.05.2026')
+  })
+
+  it('kehrt von „Gesamt" zum Zeitraum zurück', async () => {
+    const api = await zeigeGesamt()
+    await screen.findByText(/^Gesamt ·/)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Schicht' }))
+    await waitFor(() => expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent('Schicht vom'))
+    expect(api.period).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('LeitstandVerbrauch — Implementierungszeit (Issue #1541)', () => {
+  it('zeigt den Mittelwert der Karten des Boards im Zeitraum, mit den Grenzen aus current', async () => {
+    const api = zeige()
+
+    const kachelImpl = await kachel('Implementierungszeit')
+    await waitFor(() => expect(within(kachelImpl).getByTestId('kachel-wert')).toHaveTextContent('1,5'))
+    expect(kachelImpl).toHaveTextContent('Stunden')
+    expect(kachelImpl).toHaveTextContent('4 Karten')
+    expect(api.implementationTime).toHaveBeenCalledWith(3, { from: '2026-09-14T10:00:00Z', to: '2026-09-15T10:00:00Z' })
+  })
+
+  it('fragt unter „Gesamt" ohne Grenzen', async () => {
+    const api = await zeigeGesamt()
+
+    await waitFor(() => expect(api.implementationTime).toHaveBeenCalledTimes(2))
+    expect(api.implementationTime.mock.lastCall).toEqual([3, undefined])
+  })
+
+  it('lädt sie beim Zeitraumwechsel mit den neuen Grenzen neu', async () => {
+    const api = zeige()
+    await kachel('Implementierungszeit')
+    api.period.mockResolvedValue(
+      zeitraum({ current: kennzahlen({ type: 'WEEK', from: '2026-09-08T10:00:00Z', to: '2026-09-15T10:00:00Z' }) }),
     )
-    expect(lesbar(lebenszeit.textContent)).toContain('ab 01.05.2026')
+    api.implementationTime.mockResolvedValue(implementierung({ avgImplementationSeconds: 1080, implementationSampleCount: 1 }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
+
+    await waitFor(() =>
+      expect(api.implementationTime).toHaveBeenLastCalledWith(3, { from: '2026-09-08T10:00:00Z', to: '2026-09-15T10:00:00Z' }),
+    )
+    const kachelImpl = await kachel('Implementierungszeit')
+    await waitFor(() => expect(kachelImpl).toHaveTextContent('18Minuten'))
+    expect(kachelImpl).toHaveTextContent('1 Karte')
+  })
+
+  it('zeigt ohne gemessene Karte „—" und „keine Datenbasis", nie 0 Minuten', async () => {
+    zeige(zeitraum(), gesamt(), implementierung({ avgImplementationSeconds: null, implementationSampleCount: 0 }))
+
+    const kachelImpl = await kachel('Implementierungszeit')
+    await waitFor(() => expect(kachelImpl).toHaveTextContent('keine Datenbasis'))
+    expect(within(kachelImpl).getByTestId('kachel-wert')).toHaveTextContent('—')
+    expect(kachelImpl).not.toHaveTextContent('Minuten')
+    expect(kachelImpl).toHaveTextContent('0 Karten')
+  })
+
+  it('sagt „wird geladen", solange die Antwort aussteht, ohne Basis im Fuß', async () => {
+    render(
+      <LeitstandVerbrauch
+        projectId={5}
+        boardId={3}
+        api={{
+          period: vi.fn().mockResolvedValue(zeitraum()),
+          total: vi.fn(),
+          implementationTime: vi.fn().mockReturnValue(new Promise(() => undefined)),
+        }}
+      />,
+    )
+
+    const kachelImpl = await kachel('Implementierungszeit')
+    expect(lesbar(kachelImpl.textContent)).toBe('Implementierungszeit—wird geladen')
+  })
+
+  it('sagt „nicht geladen" bei einem Fehler und lässt die Verbrauchs-Kacheln stehen', async () => {
+    zeige(zeitraum(), gesamt(), new Error('Netz'))
+
+    const kachelImpl = await kachel('Implementierungszeit')
+    await waitFor(() => expect(lesbar(kachelImpl.textContent)).toBe('Implementierungszeit—nicht geladen'))
+    expect(await kachel('Kosten')).toHaveTextContent('12,40$')
+  })
+
+  it('entfällt mit, wenn der Verbrauch nicht geladen werden kann', async () => {
+    const api = zeige(new Error('Netz'))
+
+    expect(await screen.findByText('Der Verbrauch konnte nicht geladen werden.')).toBeInTheDocument()
+    expect(screen.queryByRole('article', { name: 'Implementierungszeit' })).not.toBeInTheDocument()
+    expect(api.implementationTime).not.toHaveBeenCalled()
+  })
+
+  it('verwirft eine verspätete Antwort des vorigen Zeitraums, ob Wert oder Fehler', async () => {
+    const altWert = aufgeschoben<ImplementationTime>()
+    const altFehler = aufgeschoben<ImplementationTime>()
+    const api = {
+      period: vi.fn().mockResolvedValue(zeitraum()),
+      total: vi.fn(),
+      implementationTime: vi
+        .fn()
+        .mockReturnValueOnce(altWert.versprechen)
+        .mockReturnValueOnce(altFehler.versprechen)
+        .mockResolvedValue(implementierung()),
+    }
+    render(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)
+    await waitFor(() => expect(api.implementationTime).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
+    await waitFor(() => expect(api.implementationTime).toHaveBeenCalledTimes(2))
+    fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
+    const kachelImpl = await kachel('Implementierungszeit')
+    await waitFor(() => expect(kachelImpl).toHaveTextContent('1,5Stunden'))
+
+    await act(async () => altWert.erfuellen(implementierung({ avgImplementationSeconds: 1080 })))
+    await act(async () => altFehler.verwerfen(new Error('zu spät')))
+    expect(kachelImpl).toHaveTextContent('1,5Stunden')
+    expect(kachelImpl).not.toHaveTextContent('nicht geladen')
   })
 })
 
@@ -399,18 +557,18 @@ const nachtMit = (night: string, outputTokens: number | null) => ({
 const zeitraumTasten = () => within(screen.getByRole('group', { name: 'Zeitraum' })).getAllByRole('button')
 
 describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () => {
-  it('bietet Schicht, Woche und Monat an und lädt zuerst die Schicht', async () => {
+  it('bietet Schicht, Woche, Monat und Gesamt an und lädt zuerst die Schicht', async () => {
     const api = zeige()
 
     await kachel('Kosten')
-    expect(zeitraumTasten().map((taste) => taste.textContent)).toEqual(['Schicht', 'Woche', 'Monat'])
+    expect(zeitraumTasten().map((taste) => taste.textContent)).toEqual(['Schicht', 'Woche', 'Monat', 'Gesamt'])
     expect(screen.getByRole('button', { name: 'Schicht' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Woche' })).toHaveAttribute('aria-pressed', 'false')
     expect(api.period).toHaveBeenCalledTimes(1)
     expect(api.period).toHaveBeenCalledWith(5, 'DAY', 0)
   })
 
-  it('lädt beim Wechsel den gewählten Zeitraum, die Lebenszeit aber nicht erneut', async () => {
+  it('lädt beim Wechsel den gewählten Zeitraum und holt „Gesamt" erst bei dieser Wahl', async () => {
     const api = zeige()
     await kachel('Kosten')
 
@@ -422,32 +580,51 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
     fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
     await waitFor(() => expect(api.period).toHaveBeenLastCalledWith(5, 'MONTH', 0))
     expect(api.period).toHaveBeenCalledTimes(3)
-    expect(api.total).toHaveBeenCalledTimes(1)
+    expect(api.total).not.toHaveBeenCalled()
   })
 
-  it('holt beide Angaben neu, wenn das Projekt wechselt', async () => {
+  it('holt die Angaben neu, wenn Projekt oder Board wechseln', async () => {
     const api = {
       period: vi.fn().mockResolvedValue(zeitraum()),
       total: vi.fn().mockResolvedValue(gesamt()),
+      implementationTime: vi.fn().mockResolvedValue(implementierung()),
     }
-    const { rerender } = render(<LeitstandVerbrauch projectId={5} api={api} />)
+    const { rerender } = render(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)
     await kachel('Kosten')
+    fireEvent.click(screen.getByRole('button', { name: 'Gesamt' }))
+    await waitFor(() => expect(api.total).toHaveBeenLastCalledWith(5))
 
-    rerender(<LeitstandVerbrauch projectId={6} api={api} />)
+    rerender(<LeitstandVerbrauch projectId={6} boardId={3} api={api} />)
     await waitFor(() => expect(api.total).toHaveBeenLastCalledWith(6))
-    expect(api.period).toHaveBeenLastCalledWith(6, 'DAY', 0)
+    rerender(<LeitstandVerbrauch projectId={6} boardId={4} api={api} />)
+    await waitFor(() => expect(api.implementationTime).toHaveBeenLastCalledWith(4, undefined))
+    expect(api.period).toHaveBeenCalledTimes(1)
+  })
+
+  it('holt den Zeitraum ohne übergebene Schnittstelle über die Standard-Schnittstelle', async () => {
+    const abruf = vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise<Response>(() => {}))
+    try {
+      render(<LeitstandVerbrauch projectId={5} boardId={3} />)
+
+      await waitFor(() => expect(abruf).toHaveBeenCalledTimes(1))
+      expect(String(abruf.mock.calls[0][0])).toMatch(/^\/api\/projects\/5\/night-run-usage\?type=DAY&stepsBack=0&/)
+      expect(screen.getByText('Der Verbrauch wird geladen …')).toBeInTheDocument()
+    } finally {
+      abruf.mockRestore()
+    }
   })
 
   it('zeigt schon im ersten Bild den Ladesatz, bevor ein Effekt läuft', () => {
-    const api = { period: vi.fn(), total: vi.fn() }
-    expect(renderToStaticMarkup(<LeitstandVerbrauch projectId={5} api={api} />)).toContain('Der Verbrauch wird geladen …')
+    const api = { period: vi.fn(), total: vi.fn(), implementationTime: vi.fn() }
+    expect(renderToStaticMarkup(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)).toContain('Der Verbrauch wird geladen …')
   })
 
   it('sagt, dass geladen wird, solange der Zeitraum unterwegs ist', () => {
     render(
       <LeitstandVerbrauch
         projectId={5}
-        api={{ period: vi.fn().mockReturnValue(new Promise(() => undefined)), total: vi.fn().mockResolvedValue(gesamt()) }}
+        boardId={3}
+        api={{ period: vi.fn().mockReturnValue(new Promise(() => undefined)), total: vi.fn(), implementationTime: vi.fn() }}
       />,
     )
     expect(screen.getByText('Der Verbrauch wird geladen …')).toBeInTheDocument()
@@ -458,9 +635,10 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
   it('zeigt beim Wechsel wieder den Ladesatz statt der alten Zahlen', async () => {
     const api = {
       period: vi.fn().mockResolvedValueOnce(zeitraum()).mockReturnValue(new Promise(() => undefined)),
-      total: vi.fn().mockResolvedValue(gesamt()),
+      total: vi.fn(),
+      implementationTime: vi.fn().mockResolvedValue(implementierung()),
     }
-    render(<LeitstandVerbrauch projectId={5} api={api} />)
+    render(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)
     await kachel('Kosten')
     expect(screen.queryByText('Der Verbrauch wird geladen …')).not.toBeInTheDocument()
 
@@ -473,7 +651,8 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
     render(
       <LeitstandVerbrauch
         projectId={5}
-        api={{ period: vi.fn().mockRejectedValue(new Error('Netz')), total: vi.fn().mockResolvedValue(gesamt()) }}
+        boardId={3}
+        api={{ period: vi.fn().mockRejectedValue(new Error('Netz')), total: vi.fn(), implementationTime: vi.fn() }}
       />,
     )
     expect(await screen.findByText('Der Verbrauch konnte nicht geladen werden.')).toBeInTheDocument()
@@ -487,9 +666,10 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
         .fn()
         .mockReturnValueOnce(alt.versprechen)
         .mockResolvedValue(zeitraum({ current: kennzahlen({ nightRunCount: 4 }) })),
-      total: vi.fn().mockResolvedValue(gesamt()),
+      total: vi.fn(),
+      implementationTime: vi.fn().mockResolvedValue(implementierung()),
     }
-    render(<LeitstandVerbrauch projectId={5} api={api} />)
+    render(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
     expect(await screen.findByTestId('verbrauch-umfang')).toHaveTextContent('4 Runs')
@@ -502,9 +682,10 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
     const alt = aufgeschoben<VerbrauchZeitraum>()
     const api = {
       period: vi.fn().mockReturnValueOnce(alt.versprechen).mockResolvedValue(zeitraum()),
-      total: vi.fn().mockResolvedValue(gesamt()),
+      total: vi.fn(),
+      implementationTime: vi.fn().mockResolvedValue(implementierung()),
     }
-    render(<LeitstandVerbrauch projectId={5} api={api} />)
+    render(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
     await kachel('Kosten')
@@ -514,7 +695,7 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
     expect(screen.getByRole('article', { name: 'Kosten' })).toBeInTheDocument()
   })
 
-  it('verwirft eine verspätete Lebenszeit des vorigen Projekts, ob Wert oder Fehler', async () => {
+  it('verwirft ein verspätetes „Gesamt" des vorigen Projekts, ob Wert oder Fehler', async () => {
     const altWert = aufgeschoben<VerbrauchGesamt>()
     const altFehler = aufgeschoben<VerbrauchGesamt>()
     const api = {
@@ -524,17 +705,19 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
         .mockReturnValueOnce(altWert.versprechen)
         .mockReturnValueOnce(altFehler.versprechen)
         .mockResolvedValue(gesamt()),
+      implementationTime: vi.fn().mockResolvedValue(implementierung()),
     }
-    const { rerender } = render(<LeitstandVerbrauch projectId={5} api={api} />)
-    rerender(<LeitstandVerbrauch projectId={6} api={api} />)
-    rerender(<LeitstandVerbrauch projectId={7} api={api} />)
-    const lebenszeit = await kachel('Gesamt über die Laufzeit')
-    await waitFor(() => expect(lebenszeit).toHaveTextContent('318,50$'))
+    const { rerender } = render(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)
+    await kachel('Kosten')
+    fireEvent.click(screen.getByRole('button', { name: 'Gesamt' }))
+    rerender(<LeitstandVerbrauch projectId={6} boardId={3} api={api} />)
+    rerender(<LeitstandVerbrauch projectId={7} boardId={3} api={api} />)
+    await waitFor(() => expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent('Gesamt · 30 Runs'))
 
-    await act(async () => altWert.erfuellen(gesamt({ usage: teilung(angaben(999), nichts, nichts) })))
+    await act(async () => altWert.erfuellen(gesamt({ nightRunCount: 999 })))
     await act(async () => altFehler.verwerfen(new Error('zu spät')))
-    expect(lebenszeit).toHaveTextContent('318,50$')
-    expect(lebenszeit).not.toHaveTextContent('nicht geladen')
+    expect(screen.getByTestId('verbrauch-umfang')).toHaveTextContent('Gesamt · 30 Runs')
+    expect(screen.queryByText('Der Verbrauch konnte nicht geladen werden.')).not.toBeInTheDocument()
   })
 })
 
@@ -666,33 +849,77 @@ describe('LeitstandVerbrauch — Rechnungen der Kacheln (Issue #1281)', () => {
   })
 })
 
-describe('LeitstandVerbrauch — Lebenszeit im Detail (Issue #1281)', () => {
-  it('nennt die Abdeckung als eine Zeile mit Mittelpunkt', async () => {
+describe('LeitstandVerbrauch — Kachel Bremse (Issue #1553, Plan #1547 E12, E14, E19)', () => {
+  /** Je Zeitraum eine eigene Bremsbilanz, damit die Kachel zeigt, dass sie der Wahl folgt. */
+  const BREMSEN = {
+    DAY: { count: 2, withoutTimeCount: 0, savedMs: 90 * 60_000 },
+    WEEK: { count: 5, withoutTimeCount: 0, savedMs: 4 * 3_600_000 + 12 * 60_000 },
+    MONTH: { count: 11, withoutTimeCount: 0, savedMs: 9 * 3_600_000 },
+  } as const
+
+  function zeigeJeZeitraum(gesamtWert: VerbrauchGesamt = gesamt()) {
+    const api = {
+      period: vi.fn((_: number, art: keyof typeof BREMSEN) =>
+        Promise.resolve(zeitraum({ current: kennzahlen({ type: art, brakes: BREMSEN[art] }) })),
+      ),
+      total: vi.fn().mockResolvedValue(gesamtWert),
+      implementationTime: vi.fn().mockResolvedValue(implementierung()),
+    }
+    render(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)
+    return api
+  }
+
+  const bremse = async () => lesbar((await kachel('Bremse')).textContent)
+
+  it('zeigt Zahl und geschätzte Summe für Schicht, Woche, Monat und Gesamt aus dem jeweiligen brakes', async () => {
+    zeigeJeZeitraum(gesamt({ brakes: { count: 30, withoutTimeCount: 0, savedMs: 25 * 3_600_000 + 5 * 60_000 } }))
+
+    expect(await bremse()).toBe('Bremse2Bremsungen≈ 1 h 30 min gespart (geschätzt)')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
+    await waitFor(async () => expect(await bremse()).toBe('Bremse5Bremsungen≈ 4 h 12 min gespart (geschätzt)'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Monat' }))
+    await waitFor(async () => expect(await bremse()).toBe('Bremse11Bremsungen≈ 9 h 0 min gespart (geschätzt)'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gesamt' }))
+    await waitFor(async () => expect(await bremse()).toBe('Bremse30Bremsungen≈ 25 h 5 min gespart (geschätzt)'))
+  })
+
+  it('zeigt bei null Bremsungen nur „0 Bremsungen", ohne Zeitsumme und ohne „davon"', async () => {
     zeige()
 
-    const lebenszeit = await kachel('Gesamt über die Laufzeit')
-    expect(lesbar(lebenszeit.textContent)).toContain('ab 01.05.2026 · Sitzungen ab 01.09.2026')
-    expect(lesbar(within(lebenszeit).getByTestId('anteil-interaktiv').textContent)).toBe('aus interaktiven Sitzungen118,50 $')
+    expect(await bremse()).toBe('Bremse0Bremsungen')
   })
 
-  it('schreibt ohne Erfassungsbeginn „Sitzungen nicht erfasst", auch im Anteil', async () => {
-    zeige(zeitraum(), gesamt({ interactiveUsageSince: null }))
+  it('nennt Bremsungen ohne Zeitwert, die in der Summe fehlen', async () => {
+    zeige(zeitraum({ current: kennzahlen({ brakes: { count: 3, withoutTimeCount: 1, savedMs: 40 * 60_000 } }) }))
 
-    const lebenszeit = await kachel('Gesamt über die Laufzeit')
-    await waitFor(() => expect(lesbar(lebenszeit.textContent)).toContain('ab 01.05.2026 · Sitzungen nicht erfasst'))
-    expect(lesbar(within(lebenszeit).getByTestId('anteil-interaktiv').textContent)).toBe('aus interaktiven Sitzungennicht erfasst')
+    expect(await bremse()).toBe('Bremse3Bremsungen≈ 40 min gespart (geschätzt)davon 1 ohne Zeitwert')
   })
 
-  it('zeigt während des Ladens weder Anteile noch Abdeckung', async () => {
-    render(
-      <LeitstandVerbrauch
-        projectId={5}
-        api={{ period: vi.fn().mockResolvedValue(zeitraum()), total: vi.fn().mockReturnValue(new Promise(() => undefined)) }}
-      />,
+  it('schreibt eine einzelne Bremsung in der Einzahl', async () => {
+    zeige(zeitraum({ current: kennzahlen({ brakes: { count: 1, withoutTimeCount: 0, savedMs: 20 * 60_000 } }) }))
+
+    expect(await bremse()).toBe('Bremse1Bremsung≈ 20 min gespart (geschätzt)')
+  })
+
+  it('zeigt ohne jede Zeitangabe keine Summe über nichts, nur die Zahl ohne Zeitwert', async () => {
+    zeige(zeitraum({ current: kennzahlen({ brakes: { count: 2, withoutTimeCount: 2, savedMs: 0 } }) }))
+
+    expect(await bremse()).toBe('Bremse2Bremsungendavon 2 ohne Zeitwert')
+  })
+
+  it('vergleicht nicht mit dem Vorzeitraum', async () => {
+    zeige(
+      zeitraum({
+        current: kennzahlen({ brakes: { count: 2, withoutTimeCount: 0, savedMs: 60 * 60_000 } }),
+        previous: kennzahlen({ brakes: { count: 7, withoutTimeCount: 0, savedMs: 5 * 3_600_000 } }),
+      }),
     )
 
-    const lebenszeit = await kachel('Gesamt über die Laufzeit')
-    expect(lesbar(lebenszeit.textContent)).toBe('Gesamt über die Laufzeit—wird geladen')
-    expect(within(lebenszeit).queryByTestId('anteil-nacht')).not.toBeInTheDocument()
+    const text = await bremse()
+    expect(text).not.toMatch(/[▲▼]/)
+    expect(text).not.toContain('7')
   })
 })

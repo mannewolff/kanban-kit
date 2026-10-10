@@ -36,6 +36,7 @@ const kpis = (): BoardDashboardKpis => ({
   leadTimeSampleCount: 86,
   avgImplementationSeconds: 53_280,
   implementationSampleCount: 61,
+  implementationWeekly: [],
   outliers: [],
 })
 

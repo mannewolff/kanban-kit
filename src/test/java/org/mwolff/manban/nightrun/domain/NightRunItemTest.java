@@ -30,6 +30,7 @@ class NightRunItemTest {
           "4c9f42a",
           "  Issue #721: gelaufen: mvn verify -> rot",
           null,
+          null,
           List.of(STUFE));
 
   @Test
@@ -57,6 +58,7 @@ class NightRunItemTest {
             NightRunItem::durationMs,
             NightRunItem::commitHash,
             NightRunItem::excerpt,
+            NightRunItem::stuck,
             NightRunItem::stages)
         .containsExactly(
             null,
@@ -71,7 +73,34 @@ class NightRunItemTest {
             92_000L,
             "4c9f42a",
             "  Issue #721: gelaufen: mvn verify -> rot",
+            null,
             List.of(STUFE));
+  }
+
+  /** Die Angaben eines festgefahrenen Pakets reisen durch die Kopie mit (Issue #1546). */
+  @Test
+  void withNightRunIdReichtDieAngabenEinesFestgefahrenenPaketsDurch() {
+    NightRunStuck angaben = new NightRunStuck("mvn verify", "rot", 3, 5_400_000L, "sess-1548");
+    NightRunItem festgefahren =
+        new NightRunItem(
+            null,
+            null,
+            42L,
+            Instant.parse("2026-09-01T22:00:00Z"),
+            NightRunMode.IMPLEMENTATION,
+            NightRunKind.NIGHT,
+            1548,
+            "Festgefahren",
+            NightRunState.RED,
+            NightRunErrorClass.STUCK,
+            1_200_000L,
+            null,
+            null,
+            null,
+            angaben,
+            List.of());
+
+    assertThat(festgefahren.withNightRunId(4711L).stuck()).isEqualTo(angaben);
   }
 
   /**
@@ -105,6 +134,7 @@ class NightRunItemTest {
         92_000L,
         "4c9f42a",
         "  Issue #721: gelaufen: mvn verify -> rot",
+        null,
         null,
         stages);
   }

@@ -75,6 +75,8 @@ export interface VerbrauchKennzahlen {
    * Null, sondern eine Zeit ohne Erfassung.
    */
   interactiveUsageSince: string | null
+  /** Die Bremsbilanz des Zeitraums (Issue #1551). */
+  brakes: VerbrauchBremsen
 }
 
 /** Eine Nacht innerhalb eines Zeitraums (#926 AK 8). */
@@ -115,6 +117,18 @@ export interface VerbrauchStufe {
   usage: VerbrauchAngaben
 }
 
+/**
+ * Die Bremsbilanz (Issue #1550, #1551): wie oft die Bremse des Kits gegriffen hat und wie viel Zeit
+ * sie ungefähr gespart hat. Gezählt werden nur Pakete, die das Kit als festgefahren gemeldet hat.
+ */
+export interface VerbrauchBremsen {
+  count: number
+  /** Davon ohne Zeitwert — ohne gemeldete Zeitgrenze oder ohne Laufzeit; sie fehlen in `savedMs`. */
+  withoutTimeCount: number
+  /** Summe der geschätzten gesparten Zeit in Millisekunden. */
+  savedMs: number
+}
+
 /** Ein Zeitraum samt Vorzeitraum, Nächten und Vorhaben-Aufstellung. */
 export interface VerbrauchZeitraum {
   current: VerbrauchKennzahlen
@@ -148,6 +162,8 @@ export interface VerbrauchGesamt {
   oldestRetainedRunStart: string | null
   /** Erfassungsbeginn der interaktiven Sitzungen; `null`, solange keine gemeldet wurde. */
   interactiveUsageSince: string | null
+  /** Die Bremsbilanz aller aufbewahrten Läufe (Issue #1551). */
+  brakes: VerbrauchBremsen
 }
 
 /** Die Zone des Lesers: „die letzte Nacht" ist seine Nacht, nicht die des Servers (Plan E4). */

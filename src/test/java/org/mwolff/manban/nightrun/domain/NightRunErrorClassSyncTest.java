@@ -74,9 +74,9 @@ class NightRunErrorClassSyncTest {
   }
 
   @Test
-  void dieAchtFehlerklassenDesPlansSindAbgedeckt() throws IOException {
+  void dieNeunFehlerklassenDesPlansSindAbgedeckt() throws IOException {
     assertThat(fehlerklassenAusParser())
-        .as("abgeschlossene Liste aus Plan #718, A13; die achte kommt aus #842")
+        .as("abgeschlossene Liste aus Plan #718, A13; die achte aus #842, die neunte aus #1546")
         .containsExactlyInAnyOrder(
             "CHECKS_RED",
             "CHECKS_NOT_STARTED",
@@ -85,7 +85,8 @@ class NightRunErrorClassSyncTest {
             "HARD_ABORT",
             "AWAITING_DECISION",
             "REVIEWER_FAILED",
-            "TIME_BUDGET_EXCEEDED");
+            "TIME_BUDGET_EXCEEDED",
+            "STUCK");
   }
 
   @Test

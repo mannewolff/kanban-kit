@@ -10,7 +10,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
@@ -27,6 +29,8 @@ import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunPeriod;
+import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -52,8 +56,9 @@ import org.springframework.test.web.servlet.ResultActions;
 @AutoConfigureMockMvc
 // Testklasse: Jede Methode ist ein Fall oder ein Aufbauschritt der Laufliste. Issue #1457 bringt
 // mit der Morgenmeldung Board, Karten und Token als Aufbau dazu und reisst damit die Schwelle —
-// dieselbe Begruendung wie an NightRunIngestIT.
-@SuppressWarnings("PMD.TooManyMethods")
+// dieselbe Begruendung wie an NightRunIngestIT. Issue #1550 rechnet den Zeitraum des Verbrauchs
+// mit NightRunPeriod und der Serveruhr nach und hebt damit die Importe ueber die Schwelle.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.ExcessiveImports"})
 class NightRunIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
@@ -709,6 +714,124 @@ class NightRunIT extends AbstractIntegrationTest {
             .getResponse()
             .getContentAsString();
     assertThat(antwort).doesNotContain("Fremd geheim");
+  }
+
+  // --- Festgefahrene Pakete (Issue #1549) --------------------------------------------------
+
+  /**
+   * Der Weg Meldung → Ausgabe für ein festgefahrenes Paket: Das Kit meldet per Token STUCK samt
+   * Angaben, die Laufliste liefert sie zurück und rechnet die geschätzte gesparte Zeit.
+   */
+  @Test
+  void ingest_einesFestgefahrenenPaketsLiefertStuckUndGesparteZeitInDerLaufliste()
+      throws Exception {
+    Cookie owner = session("nr-stuck-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-stuck-owner@example.com", "nr-stuck-admin@example.com");
+    String token = token(owner, projectId, board(userId("nr-stuck-admin@example.com"), projectId));
+
+    mvc.perform(
+            post("/api/kanban/night-runs")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content(
+                    """
+                    {"startedAt":"%s","mode":"IMPLEMENTATION","durationMs":1,"processedCount":1,
+                     "skippedCount":0,"unparsedCount":0,"complete":true,
+                     "items":[{"cardNumber":1549,"title":"Festgefahren","state":"RED",
+                       "errorClass":"STUCK","durationMs":900000,
+                       "stuck":{"check":"mvn verify","error":"OpenApiIT rot","attempts":3,
+                         "sessionLimitMs":3600000,"sessionId":"sitzung-1"}}]}"""
+                        .formatted(ERSTER)))
+        .andExpect(status().isOk());
+
+    mvc.perform(get(path(projectId)).cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].items[0].errorClass").value("STUCK"))
+        .andExpect(jsonPath("$[0].items[0].stuck.check").value("mvn verify"))
+        .andExpect(jsonPath("$[0].items[0].stuck.error").value("OpenApiIT rot"))
+        .andExpect(jsonPath("$[0].items[0].stuck.attempts").value(3))
+        .andExpect(jsonPath("$[0].items[0].stuck.sessionLimitMs").value(3_600_000))
+        .andExpect(jsonPath("$[0].items[0].stuck.sessionId").value("sitzung-1"))
+        .andExpect(jsonPath("$[0].items[0].estimatedSavedMs").value(2_700_000));
+  }
+
+  /**
+   * Die Bremsbilanz im Verbrauch (Issue #1550): Ein eingeliefertes festgefahrenes Paket erscheint
+   * im Zeitraum und über die Lebenszeit unter {@code brakes}. Der Lauf liegt im zuletzt
+   * abgeschlossenen Monat — die Spanne rechnet die Uhr des Servers, also rechnet der Test sie mit
+   * derselben.
+   */
+  @Test
+  void ingest_einesFestgefahrenenPaketsErscheintImVerbrauchUnterBrakes() throws Exception {
+    Cookie owner = session("nr-brakes-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("nr-brakes-owner@example.com", "nr-brakes-admin@example.com");
+    String token = token(owner, projectId, board(userId("nr-brakes-admin@example.com"), projectId));
+    Instant start =
+        NightRunPeriod.of(
+                NightRunPeriodType.MONTH, ZoneId.of("Europe/Berlin"), Clock.systemUTC(), 0)
+            .from()
+            .plusSeconds(3_600);
+
+    mvc.perform(
+            post("/api/kanban/night-runs")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content(
+                    """
+                    {"startedAt":"%s","mode":"IMPLEMENTATION","durationMs":1,"processedCount":2,
+                     "skippedCount":0,"unparsedCount":0,"complete":true,
+                     "items":[{"cardNumber":1550,"title":"Festgefahren","state":"RED",
+                       "errorClass":"STUCK","durationMs":900000,
+                       "stuck":{"check":"mvn verify","error":"OpenApiIT rot","attempts":3,
+                         "sessionLimitMs":3600000,"sessionId":"sitzung-1"}},
+                      {"cardNumber":1551,"title":"Ohne Zeitgrenze","state":"RED",
+                       "errorClass":"STUCK","durationMs":900000,
+                       "stuck":{"check":"mvn verify","attempts":2}}]}"""
+                        .formatted(start)))
+        .andExpect(status().isOk());
+
+    String zeitraum = "/api/projects/" + projectId + "/night-run-usage";
+    mvc.perform(
+            get(zeitraum)
+                .param("type", "MONTH")
+                .param("stepsBack", "0")
+                .param("zone", "Europe/Berlin")
+                .cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.current.brakes.count").value(2))
+        .andExpect(jsonPath("$.current.brakes.withoutTimeCount").value(1))
+        .andExpect(jsonPath("$.current.brakes.savedMs").value(2_700_000))
+        .andExpect(jsonPath("$.previous.brakes.count").value(0));
+    mvc.perform(get(zeitraum + "/total").cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.brakes.count").value(2))
+        .andExpect(jsonPath("$.brakes.withoutTimeCount").value(1))
+        .andExpect(jsonPath("$.brakes.savedMs").value(2_700_000));
+  }
+
+  /** Eine überlange Angabe im Block stuck ist 400 mit {@code fieldErrors}, nicht 500 (E8). */
+  @Test
+  void ingest_weistEineUeberlangePruefungImBlockStuckMitFieldErrorsAb() throws Exception {
+    Cookie owner = session("nr-stuck-lang-owner@example.com", PlatformRole.USER);
+    long projectId =
+        projectOf("nr-stuck-lang-owner@example.com", "nr-stuck-lang-admin@example.com");
+    String token =
+        token(owner, projectId, board(userId("nr-stuck-lang-admin@example.com"), projectId));
+
+    mvc.perform(
+            post("/api/kanban/night-runs")
+                .header("X-Kanban-Token", token)
+                .contentType("application/json")
+                .content(
+                    """
+                    {"startedAt":"%s","mode":"IMPLEMENTATION","durationMs":1,"processedCount":1,
+                     "skippedCount":0,"unparsedCount":0,"complete":true,
+                     "items":[{"cardNumber":1549,"title":"Festgefahren","state":"RED",
+                       "errorClass":"STUCK","stuck":{"check":"%s","attempts":0}}]}"""
+                        .formatted(ERSTER, "c".repeat(301))))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.fieldErrors['items[0].stuck.check']").exists())
+        .andExpect(jsonPath("$.fieldErrors['items[0].stuck.attempts']").exists());
   }
 
   private long board(long adminId, long projectId) {

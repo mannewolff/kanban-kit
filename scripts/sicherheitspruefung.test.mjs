@@ -615,11 +615,38 @@ test('Referenz: numerisch verglichen, nicht als Text', () => {
   assert.equal(referenzBezugsstelle('postgres:16.9', ['16.9', '16.10', '16.2']), 'postgres:16.10');
 });
 
-test('Referenz: die Baunummer nach Unterstrich zaehlt zur Fassung, nicht zur Variante', () => {
+test('Referenz: die Baunummer nach Unterstrich gehoert nicht zur Variante', () => {
   assert.equal(
     referenzBezugsstelle('eclipse-temurin:25.0.4.1_1-jre', ['25.0.4.1_1-jre', '25.0.5_11-jre', '25.0.5_11-jdk', '26_35-jre']),
     'eclipse-temurin:25.0.5_11-jre',
   );
+});
+
+test('Referenz: hinter dem Unterstrich steht eine Build-Nummer — 25_36 ist Java 25.0.0, nicht 25.36 (Issue #1568)', () => {
+  assert.equal(
+    referenzBezugsstelle('eclipse-temurin:25.0.4.1_1-jre', [
+      '25_36-jre',
+      '25.0.4.1_1-jre',
+      '25.0.4_7-jre',
+      '25.0.5_3-jre',
+      '25.0.5_3-jdk',
+      '26_35-jre',
+    ]),
+    'eclipse-temurin:25.0.5_3-jre',
+  );
+});
+
+test('Referenz: ohne neuere Fassung bleibt der gebundene Tag die Referenz, auch neben einem GA-Tag', () => {
+  assert.equal(
+    referenzBezugsstelle('eclipse-temurin:25.0.4.1_1-jre', ['25_36-jre', '25.0.4.1_1-jre', '25.0.4_7-jre', '25.0.4.1_1-jdk']),
+    'eclipse-temurin:25.0.4.1_1-jre',
+  );
+});
+
+test('Referenz: bei gleicher Fassung entscheidet die Build-Nummer, fehlende Stellen zaehlen als 0', () => {
+  assert.equal(referenzBezugsstelle('eclipse-temurin:25.0.5_3-jre', ['25.0.5_11-jre', '25.0.5_2-jre']), 'eclipse-temurin:25.0.5_11-jre');
+  assert.equal(referenzBezugsstelle('eclipse-temurin:25_36-jre', ['25.0.0_37-jre']), 'eclipse-temurin:25.0.0_37-jre');
+  assert.equal(referenzBezugsstelle('eclipse-temurin:25.0.0_37-jre', ['25_36-jre']), 'eclipse-temurin:25.0.0_37-jre');
 });
 
 test('Referenz: Registry mit Port und Repository mit Pfad bleiben erhalten', () => {
@@ -1116,6 +1143,78 @@ test('Regel 13: ohne GITHUB_STEP_SUMMARY geht die Zusammenfassung auf die Standa
   const ausgegeben = [];
   zusammenfassungAusgeben('## Inhalt\n', { umgebung: {}, schreiben: (t) => ausgegeben.push(t) });
   assert.deepEqual(ausgegeben, ['## Inhalt\n']);
+});
+
+test('Regel 13: mit GITHUB_STEP_SUMMARY steht jeder sperrende Befund zusaetzlich als Zeile im Protokoll', async () => {
+  const verzeichnis = mkdtempSync(join(tmpdir(), 'sicherheit-'));
+  try {
+    const datei = join(verzeichnis, 'summary.md');
+    const ausgegeben = [];
+    const { exitcode } = await laufen([ABBILD], {
+      ausfuehren: async () => fixture('abbild-befunde.json'),
+      ausnahmen: KEINE_AUSNAHMEN,
+      schreiben: (t) => ausgegeben.push(t),
+      umgebung: { GITHUB_STEP_SUMMARY: datei },
+    });
+    assert.equal(exitcode, 1);
+    assert.match(readFileSync(datei, 'utf-8'), /## Sicherheitspruefung/);
+    const protokoll = ausgegeben.join('');
+    assert.ok(!protokoll.includes('## Sicherheitspruefung'), 'die Zusammenfassung selbst bleibt in der Datei');
+    assert.equal(
+      protokoll,
+      'Sicherheitspruefung: 2 sperrende Befunde\n'
+        + 'sperrend: postgres:16.15: CVE-2026-1001 (CRITICAL) in libssl3 [postgres:16.15 (debian 12.11)] — Korrektur in 3.0.16-1\n'
+        + 'sperrend: postgres:16.15: CVE-2026-1002 (HIGH) in libxml2 [postgres:16.15 (debian 12.11)] — Korrektur in 2.9.14+dfsg-1.3\n',
+    );
+  } finally {
+    rmSync(verzeichnis, { recursive: true, force: true });
+  }
+});
+
+test('Regel 13: ein mehrzeiliger Befund bleibt im Protokoll eine Zeile', async () => {
+  const ausgegeben = [];
+  await laufen([ABBILD], {
+    ausfuehren: async () => {
+      throw new Error('trivy endete mit 1: erste Zeile\nzweite Zeile');
+    },
+    ausnahmen: KEINE_AUSNAHMEN,
+    schreiben: (t) => ausgegeben.push(t),
+    umgebung: { GITHUB_STEP_SUMMARY: join(tmpdir(), `sicherheit-${process.pid}-summary.md`) },
+  });
+  rmSync(join(tmpdir(), `sicherheit-${process.pid}-summary.md`), { force: true });
+  assert.deepEqual(ausgegeben.join('').split('\n'), [
+    'Sicherheitspruefung: 1 sperrender Befund',
+    'sperrend: postgres:16.15: Ziel nicht geprueft: trivy endete mit 1: erste Zeile zweite Zeile',
+    '',
+  ]);
+});
+
+test('Regel 13: mit GITHUB_STEP_SUMMARY und ohne sperrenden Befund bleibt das Protokoll leer', async () => {
+  const datei = join(tmpdir(), `sicherheit-${process.pid}-gruen.md`);
+  const ausgegeben = [];
+  try {
+    await laufen([SPERRDATEI], {
+      ausfuehren: async () => fixture('sperrdatei-sauber.json'),
+      ausnahmen: KEINE_AUSNAHMEN,
+      schreiben: (t) => ausgegeben.push(t),
+      umgebung: { GITHUB_STEP_SUMMARY: datei },
+    });
+  } finally {
+    rmSync(datei, { force: true });
+  }
+  assert.deepEqual(ausgegeben, []);
+});
+
+test('Regel 13: ohne GITHUB_STEP_SUMMARY erscheinen die Befunde nur einmal, in der Zusammenfassung', async () => {
+  const ausgegeben = [];
+  await laufen([ABBILD], {
+    ausfuehren: async () => fixture('abbild-befunde.json'),
+    ausnahmen: KEINE_AUSNAHMEN,
+    schreiben: (t) => ausgegeben.push(t),
+    umgebung: {},
+  });
+  assert.equal(ausgegeben.length, 1);
+  assert.ok(!ausgegeben[0].includes('sperrend: '));
 });
 
 test('Markdown-Steuerzeichen aus Werkzeugausgaben brechen die Zusammenfassung nicht', () => {
