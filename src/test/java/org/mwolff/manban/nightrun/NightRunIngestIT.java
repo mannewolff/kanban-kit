@@ -621,6 +621,32 @@ class NightRunIngestIT extends AbstractIntegrationTest {
   }
 
   /**
+   * Issue #1589 (Plan #1582 E3): Eine Einlieferung eines englischen Kits wird nicht wegen
+   * englischer Namen abgelehnt. Ausgeliefert werden die bisherigen Werte; {@code defaultFields}
+   * bleibt, wie es gemeldet wurde.
+   */
+  @Test
+  void eineMeldungMitEnglischenStufenUndBudgetnamenWirdAngenommen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-englisch");
+
+    melde(
+        aufbau,
+        meldungMitVorgaben(paketMitStufen(993, stufe("PACKAGES"), stufe("COVERAGE")))
+            .replace(
+                "\"paketeMin\":25,\"abdeckungMin\":10", "\"packagesMin\":25,\"coverageMin\":10")
+            .replace("[\"paketeMin\",\"kostenUsd\"]", "[\"packagesMin\"]"));
+
+    mvc.perform(get(laufliste(aufbau.projectId())).cookie(aufbau.session()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].budget.paketeMin").value(25))
+        .andExpect(jsonPath("$[0].budget.abdeckungMin").value(10))
+        .andExpect(jsonPath("$[0].budget.defaultFields.length()").value(1))
+        .andExpect(jsonPath("$[0].budget.defaultFields[0]").value("packagesMin"))
+        .andExpect(jsonPath("$[0].items[0].stages[0].stage").value("PAKETE"))
+        .andExpect(jsonPath("$[0].items[0].stages[1].stage").value("ABDECKUNG"));
+  }
+
+  /**
    * Issue #1150, die Gegenprobe: Die Toleranz gilt der Schreibweise, nicht dem Wertebereich. Ein
    * Stufenname, den der Vertrag nicht kennt, wird weiterhin abgewiesen.
    */

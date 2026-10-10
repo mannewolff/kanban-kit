@@ -32,12 +32,21 @@ public enum NightRunStage {
    * außerhalb des Wertebereichs bleibt ein Vertragsbruch und wird abgewiesen. Ausgeliefert wird
    * weiterhin die große Form — das Frontend liest sie so.
    *
+   * <p>Ein englisches Kit meldet {@code PACKAGES} und {@code COVERAGE}; beide stehen für die
+   * bisherige Stufe (Issue #1589, Plan #1582 E3). Die englischen Namen sind eine Vorlage für
+   * Kit-Plan #1420.
+   *
    * @param name der gemeldete Name, in beliebiger Schreibweise
    * @return die Stufe zu diesem Namen
    * @throws IllegalArgumentException wenn keine Stufe diesen Namen trägt
    */
   @JsonCreator
   public static NightRunStage vonName(String name) {
-    return valueOf(name.toUpperCase(Locale.ROOT));
+    String gross = name.toUpperCase(Locale.ROOT);
+    return switch (gross) {
+      case "PACKAGES" -> PAKETE;
+      case "COVERAGE" -> ABDECKUNG;
+      default -> valueOf(gross);
+    };
   }
 }

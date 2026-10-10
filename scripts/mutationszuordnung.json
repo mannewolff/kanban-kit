@@ -36,6 +36,7 @@
   "src/test/java/org/mwolff/manban/nightrun/NightRunItemUeberdauertLaufMigrationIT.java": ["src/main/resources/db/migration/V33__night_run_item_ueberdauert_lauf.sql"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunHeuteNachtIT.java": ["src/main/java/org/mwolff/manban/nightrun/application/NightRunService.java", "src/main/java/org/mwolff/manban/nightrun/domain/NachtFreigabe.java"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/NightRunController.java", "src/main/java/org/mwolff/manban/nightrun/web/NightRunIngestController.java"],
+  "src/test/java/org/mwolff/manban/nightrun/NightRunIngestIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/NightRunIngestController.java", "src/main/java/org/mwolff/manban/nightrun/domain/NightRunStage.java"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunUsageRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunUsageRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunUsageServiceIT.java": ["src/main/java/org/mwolff/manban/nightrun/application/NightRunUsageService.java"],
   "src/test/java/org/mwolff/manban/nightrun/PlattformLeitstandMigrationIT.java": ["src/main/resources/db/migration/V36__plattform_leitstand.sql"],

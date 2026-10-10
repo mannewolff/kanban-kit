@@ -29,6 +29,14 @@ class NightRunStageTest {
     assertThat(NightRunStage.vonName("abdeckung")).isEqualTo(NightRunStage.ABDECKUNG);
   }
 
+  @Test
+  void englischeNamenFindenDieDeutscheStufe() {
+    assertThat(NightRunStage.vonName("PACKAGES")).isEqualTo(NightRunStage.vonName("PAKETE"));
+    assertThat(NightRunStage.vonName("COVERAGE")).isEqualTo(NightRunStage.vonName("ABDECKUNG"));
+    assertThat(NightRunStage.vonName("packages")).isEqualTo(NightRunStage.PAKETE);
+    assertThat(NightRunStage.vonName("coverage")).isEqualTo(NightRunStage.ABDECKUNG);
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"umsetzung", "", " ", "plan "})
   void einNameAusserhalbDesWertebereichsWirdAbgewiesen(String name) {

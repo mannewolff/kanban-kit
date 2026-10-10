@@ -22,6 +22,7 @@ import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_PE
 import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_TEXT_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_VERSION_MAX;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
@@ -491,6 +492,47 @@ class NightRunIngestControllerTest {
     verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().budget()).isNull();
     assertThat(meldung.getValue().items().getFirst().stages()).isEmpty();
+  }
+
+  /**
+   * Englische Budgetfelder eines englischen Kits werden angenommen und unter dem bisherigen Namen
+   * gespeichert (Issue #1589, Plan #1582 E3).
+   */
+  @Test
+  void englischeBudgetfelderWerdenUnterDenBisherigenNamenGespeichert() throws Exception {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+    IngestBudgetRequest budget =
+        new ObjectMapper()
+            .readValue("{\"packagesMin\":25,\"coverageMin\":10}", IngestBudgetRequest.class);
+
+    controller.ingest(gebunden, anfrageMitVorgaben(budget, null));
+
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    NightRunBudget gespeichert = meldung.getValue().budget();
+    assertThat(gespeichert).isNotNull();
+    assertThat(gespeichert.paketeMin()).isEqualTo(25);
+    assertThat(gespeichert.abdeckungMin()).isEqualTo(10);
+  }
+
+  /** Eine Stufe mit englischem Namen wird angenommen (Issue #1589, Plan #1582 E3). */
+  @Test
+  void eineEnglischeStufeWirdAngenommen() throws Exception {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+    IngestStageRequest stufe =
+        new ObjectMapper().readValue("{\"stage\":\"PACKAGES\"}", IngestStageRequest.class);
+
+    controller.ingest(gebunden, anfrageMitVorgaben(null, List.of(stufe)));
+
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    assertThat(meldung.getValue().items().getFirst().stages())
+        .extracting(NightRunItemStage::stage)
+        .containsExactly(NightRunStage.PAKETE);
   }
 
   /**
