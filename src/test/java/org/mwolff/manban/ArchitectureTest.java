@@ -7,7 +7,9 @@ import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.common.KitNamen;
 
 /**
  * Erzwingt die Schichten- und Paketregeln aus CLAUDE-java.md (§3.1/§6.1/§6.5) mit ArchUnit.
@@ -462,6 +464,18 @@ class ArchitectureTest {
   static final ArchRule KEINE_MODUL_ZYKLEN =
       SlicesRuleDefinition.slices().matching("org.mwolff.manban.(*)..").should().beFreeOfCycles();
 
+  // --- Namen-Register: die Produktion arbeitet nur mit KitNamen.STANDARD (Issue #1584, E13) ----
+  // KitNamen.aus baut ein Register aus eigenen Eintraegen und ist Tests vorbehalten, die einen
+  // Zusatznamen einbringen. Ein Aufruf im Produktionscode schuefe eine zweite Namensliste neben
+  // der des Kits; nur KitNamen selbst baut damit STANDARD.
+  static final ArchRule NUR_KIT_NAMEN_RUFT_AUS_AUF =
+      noClasses()
+          .that()
+          .doNotBelongToAnyOf(KitNamen.class)
+          .should()
+          .callMethod(KitNamen.class, "aus", List.class)
+          .as("KitNamen.aus ist Tests vorbehalten: Produktionscode nutzt KitNamen.STANDARD");
+
   // --- §6.1: Controller liegen in web, JPA-Entities in infrastructure ------------------------
 
   static final ArchRule CONTROLLER_LIEGEN_IN_WEB =
@@ -600,6 +614,11 @@ class ArchitectureTest {
   @Test
   void keineZyklischenModulAbhaengigkeiten() {
     KEINE_MODUL_ZYKLEN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void nurKitNamenRuftAusAuf() {
+    NUR_KIT_NAMEN_RUFT_AUS_AUF.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
