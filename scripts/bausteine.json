@@ -102,8 +102,8 @@
       "name": "Sicherung: rclone",
       "zweck": "Spiegel der Anhaenge und Weg ausser Haus (backup/Dockerfile, docker-compose.backup.yml)",
       "art": "archiv",
-      "bezugsstelle": "https://downloads.rclone.org/v1.75.1/rclone-v1.75.1-linux-amd64.zip",
-      "fassung": "1.75.1",
+      "bezugsstelle": "https://downloads.rclone.org/v1.75.2/rclone-v1.75.2-linux-amd64.zip",
+      "fassung": "1.75.2",
       "pruefung": "bezug"
     },
     {
