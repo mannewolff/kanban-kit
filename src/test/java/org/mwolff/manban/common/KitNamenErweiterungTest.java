@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,15 @@ import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.common.KitNamen.Eintrag;
 import org.mwolff.manban.common.KitNamen.Sache;
 import org.mwolff.manban.common.KitNamen.Schutz;
+import org.mwolff.manban.nightrun.domain.CardRef;
+import org.mwolff.manban.nightrun.domain.FortschrittErmittlung;
+import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Aktivitaet;
+import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Karte;
+import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Zeitfenster;
+import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
+import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 
 /**
  * Ein neuer Name des Kits für eine bekannte Sache genügt als Eintrag im Register (Issue #1584,
@@ -115,5 +125,59 @@ class KitNamenErweiterungTest {
                 FreigabeLabels.pruefe(
                     register, CardActivityOrigin.TOKEN, ZUSATZNAME, Richtung.SETZEN))
         .doesNotThrowAnyException();
+  }
+
+  @Test
+  void fortschrittErmittlung_zaehltEineKarteMitDemZusatznamenInDerFragenliste() {
+    // Given
+    Instant start = Instant.parse("2026-10-10T01:00:00Z");
+    NightRun lauf =
+        new NightRun(
+            1L,
+            7L,
+            start,
+            NightRunMode.IMPLEMENTATION,
+            NightRunKind.NIGHT,
+            0L,
+            0,
+            0,
+            0,
+            null,
+            start,
+            NightRunOrigin.TOKEN,
+            "nacht",
+            false,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+    Karte paket =
+        new Karte(5010L, 501, "Paket", 3L, "BACKLOG", List.of(ZUSATZNAME), null, true, "Paket");
+    Aktivitaet bewegt =
+        new Aktivitaet(5010L, "MOVED", start.plusSeconds(60), "TOKEN", "nacht", "claude-opus-5-5");
+    Zeitfenster fenster = new Zeitfenster(start, start.plusSeconds(3600));
+
+    // When
+    List<CardRef> mitZusatz =
+        FortschrittErmittlung.ermittle(
+                lauf,
+                fenster,
+                List.of(),
+                List.of(bewegt),
+                List.of(paket),
+                List.of(),
+                registerMitZusatznamen())
+            .offeneFragen();
+    List<CardRef> ohneZusatz =
+        FortschrittErmittlung.ermittle(
+                lauf, fenster, List.of(), List.of(bewegt), List.of(paket), List.of())
+            .offeneFragen();
+
+    // Then
+    assertThat(mitZusatz).containsExactly(new CardRef(501, "Paket", 3L));
+    assertThat(ohneZusatz).isEmpty();
   }
 }

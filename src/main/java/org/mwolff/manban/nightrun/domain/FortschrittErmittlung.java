@@ -1,22 +1,22 @@
 package org.mwolff.manban.nightrun.domain;
 
 import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.KitNamen;
+import org.mwolff.manban.common.KitNamen.Art;
+import org.mwolff.manban.common.KitNamen.Sache;
+import org.mwolff.manban.nightrun.domain.LaufstandWortformen.Stufenzeile;
 
 /**
  * Ermittelt den Fortschritt eines Laufs aus seinen Spuren am Board (Issue #1374, Plan #1372) —
@@ -37,53 +37,45 @@ import org.jspecify.annotations.Nullable;
  * Kennung, ist der Lauf ausgewiesen: Er nimmt nur Spuren mit seiner Kennung, und die fremden
  * Fenster spielen keine Rolle mehr. Ein nicht ausgewiesener Lauf nimmt nur Spuren ohne Kennung und
  * wird wie bisher über die Fenster abgegrenzt.
+ *
+ * <p><b>Namen des Kits (Issue #1590, Plan #1582 A3, A5, A6, E2, E13):</b> Labels zählen als Sachen
+ * aus {@link KitNamen} — jeder Name einer Sache wirkt gleich, ein gemischtes Board zählt zusammen.
+ * Titel-Präfixe kommen über {@link KitNamen#artAusTitel}, die Wortformen des Laufstands aus {@link
+ * LaufstandWortformen}. Das Register ist ein Parameter mit der Vorgabe {@link KitNamen#STANDARD}.
  */
 // PMD.CouplingBetweenObjects: Die Kopplung zählt die Eingabe- und Ergebnistypen der Ermittlung —
 // vier Eingabe-Records, acht Ergebnistypen des Fortschritts — und die java.util-Sammlungen, mit
 // denen sie verknüpft werden. Eine Aufteilung verteilte die eine Zuordnungsregel (E2 bis E6) auf
 // mehrere Klassen, die dieselben Typen weiter kennen müssten, ohne dass ein Schritt einfacher
-// würde.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
+// würde. PMD.GodClass: Seit Issue #1590 liest die Ermittlung Labels als Sachen des Registers und
+// Titel-Präfixe als Arten (E13) — PMD zählt jede dieser Konstanten als Zugriff auf fremde Daten.
+// Die Regel bleibt dieselbe eine Zuordnung; ausgelagert sind schon die Wortformen
+// (LaufstandWortformen), das Lesen des Zeitstempels (Stufenzeile) und die Labelprüfung (Karte).
+@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.GodClass"})
 public final class FortschrittErmittlung {
 
-  /** Label einer Kette, die auf eine Frage an den Menschen wartet (Kit-Vorgabe). */
-  public static final String LABEL_WARTET = "lauf:wartet";
+  /**
+   * Deutscher Name der Sache {@link Sache#LAUF_WARTET} — eine Kette, die auf eine Frage an den
+   * Menschen wartet. Die Ermittlung selbst prüft alle Namen der Sache.
+   */
+  public static final String LABEL_WARTET = KitNamen.STANDARD.namen(Sache.LAUF_WARTET).getFirst();
 
-  /** Label der Variante B: Die Kette setzt die Pakete selbst um (Kit-Vorgabe, E12). */
-  public static final String LABEL_DURCHZIEHEN = "kit:durchziehen";
+  /**
+   * Deutscher Name der Sache {@link Sache#DURCHZIEHEN} — Variante B, die Kette setzt die Pakete
+   * selbst um (E12). Die Ermittlung selbst prüft alle Namen der Sache.
+   */
+  public static final String LABEL_DURCHZIEHEN =
+      KitNamen.STANDARD.namen(Sache.DURCHZIEHEN).getFirst();
 
-  /** Label einer offenen Frage an den Menschen (Kit-Vorgabe, E9). */
-  public static final String LABEL_KLAEREN = "kit:klaeren";
-
-  /** Label der Freigabe zur Übernahme durch den nächsten Runner (Kit-Vorgabe, Plan #1447 E15). */
-  public static final String LABEL_NIGHT = "kit:night";
+  /**
+   * Deutscher Name der Sache {@link Sache#KLAEREN} — eine offene Frage an den Menschen (E9). Die
+   * Ermittlung selbst prüft alle Namen der Sache.
+   */
+  public static final String LABEL_KLAEREN = KitNamen.STANDARD.namen(Sache.KLAEREN).getFirst();
 
   private static final String HERKUNFT_TOKEN = "TOKEN";
   private static final String TYP_ANGELEGT = "CREATED";
   private static final Set<String> TYP_BEWEGT = Set.of("MOVED", "STATUS_CHANGED");
-
-  /** Das Präfix eines Plandokuments — wie {@code DOKUMENT_PRAEFIX} in {@code Arbeitspaket}. */
-  static final Pattern PLAN_PRAEFIX = Pattern.compile("^\\s*\\[plan\\]", Pattern.CASE_INSENSITIVE);
-
-  /** Das Präfix einer fachlichen Anforderung. */
-  static final Pattern FACHLICH_PRAEFIX =
-      Pattern.compile("^\\s*\\[fachlich\\]", Pattern.CASE_INSENSITIVE);
-
-  /**
-   * Die Zeile des Prüfvermerks — mit Wert gilt der Plan als geprüft ({@code PLAN_REVIEW_ZEILE}).
-   */
-  private static final String PLAN_REVIEW = "Plan-Review:";
-
-  /**
-   * Ein Stufeneintrag des Laufstands mit Zeitstempel: {@code <stufe> begonnen|fertig für #<ziel> um
-   * <ISO>} — die Form von {@code stufeBeginnt}/{@code stufeEndet} in {@code night.mjs}.
-   */
-  private static final Pattern STUFEN_EINTRAG =
-      Pattern.compile(
-          "(?:^|\\W)(plan|review|pakete|abdeckung|umsetzung|vorbereitung) (begonnen|fertig) für"
-              + " #(\\d{1,9})"
-              + " um (\\S+)",
-          Pattern.CANON_EQ);
 
   /** Die Stufen, deren Laufstand-Zeile eine Karte zur tragenden Karte macht (E5). */
   private static final Set<ProgressStage> TRAGENDE_STUFEN =
@@ -131,7 +123,11 @@ public final class FortschrittErmittlung {
    */
   private final @Nullable Instant spurKennung;
 
+  /** Das Register, aus dem die Labels als Sachen gelesen werden (E13). */
+  private final KitNamen namen;
+
   private FortschrittErmittlung(
+      KitNamen namen,
       NightRun lauf,
       String tokenName,
       Zeitfenster fenster,
@@ -139,6 +135,7 @@ public final class FortschrittErmittlung {
       List<Aktivitaet> aktivitaeten,
       List<Karte> karten,
       List<Laufstand> laufstaende) {
+    this.namen = namen;
     Instant eigeneKennung = lauf.startedAt().truncatedTo(ChronoUnit.MILLIS);
     boolean ausgewiesen =
         aktivitaeten.stream().anyMatch(a -> eigeneKennung.equals(kennung(a.laufStart())))
@@ -203,6 +200,24 @@ public final class FortschrittErmittlung {
       List<Aktivitaet> aktivitaeten,
       List<Karte> karten,
       List<Laufstand> laufstaende) {
+    return ermittle(
+        lauf, fenster, fremdeFenster, aktivitaeten, karten, laufstaende, KitNamen.STANDARD);
+  }
+
+  /**
+   * Der Fortschritt des Laufs mit einem eigenen Register (E13) — sonst wie {@link
+   * #ermittle(NightRun, Zeitfenster, List, List, List, List)}.
+   *
+   * @param namen das Register, aus dem die Labels als Sachen gelesen werden
+   */
+  public static NightRunProgress ermittle(
+      NightRun lauf,
+      Zeitfenster fenster,
+      List<Zeitfenster> fremdeFenster,
+      List<Aktivitaet> aktivitaeten,
+      List<Karte> karten,
+      List<Laufstand> laufstaende,
+      KitNamen namen) {
     boolean kette = lauf.mode() == NightRunMode.CHAIN;
     if (!kette && lauf.mode() != NightRunMode.IMPLEMENTATION) {
       return NightRunProgress.leer();
@@ -212,7 +227,7 @@ public final class FortschrittErmittlung {
       return NightRunProgress.zuordnungUnbekannt();
     }
     return new FortschrittErmittlung(
-            lauf, tokenName, fenster, fremdeFenster, aktivitaeten, karten, laufstaende)
+            namen, lauf, tokenName, fenster, fremdeFenster, aktivitaeten, karten, laufstaende)
         .ergebnis(kette);
   }
 
@@ -230,25 +245,33 @@ public final class FortschrittErmittlung {
 
   /**
    * Ob ein Runner die Karte übernommen hat (Issue #1452, Plan #1447 E15): Ihr Laufstand trägt eine
-   * Laufkennung, und die Freigabe {@code kit:night} ist verbraucht.
+   * Laufkennung, und die Freigabe {@code kit:night} ist verbraucht — unter keinem Namen der Sache
+   * {@link Sache#NIGHT} mehr gesetzt.
    *
    * @param laufstand ihr Laufstand-Kommentar; {@code null}, solange keiner steht
    */
   public static boolean uebernommen(Karte karte, @Nullable Laufstand laufstand) {
-    return laufstand != null
-        && laufstand.laufStart() != null
-        && !karte.labels().contains(LABEL_NIGHT);
+    return uebernommen(karte, laufstand, KitNamen.STANDARD);
+  }
+
+  /**
+   * Wie {@link #uebernommen(Karte, Laufstand)} mit einem eigenen Register (E13).
+   *
+   * @param namen das Register, aus dem die Freigabe als Sache gelesen wird
+   */
+  public static boolean uebernommen(Karte karte, @Nullable Laufstand laufstand, KitNamen namen) {
+    return laufstand != null && laufstand.laufStart() != null && !karte.traegt(Sache.NIGHT, namen);
   }
 
   /**
    * Ob der Plan einer fachlichen Anforderung schon {@code Plan-Review:} trägt (Issue #1452, Plan
-   * #1447 E14): Unter den aus ihr entstandenen Karten steht ein Plan mit dieser Zeile. An jeder
-   * anderen Karte {@code false}.
+   * #1447 E14): Unter den aus ihr entstandenen Karten steht ein Plan mit dieser Zeile, in einer der
+   * Formen aus {@link LaufstandWortformen#PLAN_REVIEW}. An jeder anderen Karte {@code false}.
    *
    * @param abgeleitete die Karten, deren Herkunft die Karte ist
    */
   public static boolean planReviewVorhanden(Karte karte, List<Karte> abgeleitete) {
-    return FACHLICH_PRAEFIX.matcher(karte.title()).find()
+    return KitNamen.artAusTitel(karte.title()).filter(Art.FACHLICH::equals).isPresent()
         && abgeleitete.stream().anyMatch(k -> istPlan(k) && traegtPlanReview(k));
   }
 
@@ -257,12 +280,12 @@ public final class FortschrittErmittlung {
     unbekannteKarten.forEach(k -> unbekannt.put(k.number(), ref(k)));
     Map<Integer, CardRef> fragen = new TreeMap<>();
     laufKarten.stream()
-        .filter(k -> k.labels().contains(LABEL_KLAEREN))
+        .filter(k -> k.traegt(Sache.KLAEREN, namen))
         .forEach(k -> fragen.put(k.number(), ref(k)));
     Map<Integer, ChainProgress> ketten = new TreeMap<>();
     if (kette) {
       for (Karte t : tragendeKarten()) {
-        if (t.labels().contains(LABEL_WARTET) || t.labels().contains(LABEL_KLAEREN)) {
+        if (t.traegt(Sache.LAUF_WARTET, namen) || t.traegt(Sache.KLAEREN, namen)) {
           fragen.put(t.number(), ref(t));
         }
         kette(t)
@@ -350,7 +373,7 @@ public final class FortschrittErmittlung {
     // Das Ziel aus dem Laufstand entscheidet; ohne Ziel-Zeile gilt wie vor Issue #1529 das Label.
     ProgressStage ziel = zielJeKarte.get(t.id());
     boolean bisUmsetzung =
-        ziel == null ? t.labels().contains(LABEL_DURCHZIEHEN) : ZIELE_MIT_UMSETZUNG.contains(ziel);
+        ziel == null ? t.traegt(Sache.DURCHZIEHEN, namen) : ZIELE_MIT_UMSETZUNG.contains(ziel);
     List<ProgressStage> weg = bisUmsetzung ? WEG_B : WEG_A;
     List<PackageProgress> pakete = plan == null ? List.of() : paketeZu(plan);
     Stufenlage lage = new Stufenlage(anforderung, plan, pakete, eintraege);
@@ -450,52 +473,39 @@ public final class FortschrittErmittlung {
     return laufStart == null ? null : laufStart.truncatedTo(ChronoUnit.MILLIS);
   }
 
-  /** Ob der Plan eine Zeile {@code Plan-Review:} mit nicht leerem Wert trägt. */
+  /** Ob der Plan einen Prüfvermerk mit nicht leerem Wert trägt, in einer seiner Formen. */
   private static boolean traegtPlanReview(Karte plan) {
     String text = plan.description();
     return text != null
         && text.lines()
             .map(String::stripLeading)
             .anyMatch(
-                z -> z.startsWith(PLAN_REVIEW) && !z.substring(PLAN_REVIEW.length()).isBlank());
+                z ->
+                    LaufstandWortformen.wert(LaufstandWortformen.PLAN_REVIEW, z)
+                        .filter(w -> !w.isBlank())
+                        .isPresent());
   }
 
+  /** Ob die Karte ein Plandokument ist — Titel-Präfix {@code [Plan]} über {@link KitNamen}. */
   static boolean istPlan(Karte k) {
-    return PLAN_PRAEFIX.matcher(k.title()).find();
+    return KitNamen.artAusTitel(k.title()).filter(Art.PLAN::equals).isPresent();
   }
 
   private static CardRef ref(Karte k) {
     return new CardRef(k.number(), k.title(), k.boardId());
   }
 
-  /** Die Stufeneinträge eines Laufstands mit lesbarem Zeitstempel; der Rest fällt weg. */
+  /**
+   * Die Stufeneinträge eines Laufstands in beiden Formen ({@link LaufstandWortformen}) mit lesbarem
+   * Zeitstempel; der Rest fällt weg.
+   */
   static List<StufenEintrag> eintraege(String body) {
-    List<StufenEintrag> ergebnis = new ArrayList<>();
-    body.lines()
-        .forEach(
-            zeile -> {
-              Matcher m = STUFEN_EINTRAG.matcher(zeile);
-              if (m.find()) {
-                zeitpunkt(m.group(4))
-                    .ifPresent(
-                        zeit ->
-                            ergebnis.add(
-                                new StufenEintrag(
-                                    ProgressStage.valueOf(m.group(1).toUpperCase(Locale.ROOT)),
-                                    "fertig".equals(m.group(2)),
-                                    Integer.parseInt(m.group(3)),
-                                    zeit)));
-              }
-            });
-    return ergebnis;
-  }
-
-  private static Optional<Instant> zeitpunkt(String iso) {
-    try {
-      return Optional.of(Instant.parse(iso));
-    } catch (DateTimeParseException _) {
-      return Optional.empty();
-    }
+    return body.lines()
+        .map(LaufstandWortformen::stufenzeile)
+        .flatMap(Optional::stream)
+        .map(Stufenzeile::eintrag)
+        .flatMap(Optional::stream)
+        .toList();
   }
 
   // --- Stufen (E4)
@@ -628,6 +638,11 @@ public final class FortschrittErmittlung {
 
     public Karte {
       labels = List.copyOf(labels);
+    }
+
+    /** Ob die Karte die Sache unter einem ihrer Namen im Register trägt (A3, E13). */
+    boolean traegt(Sache sache, KitNamen namen) {
+      return namen.namen(sache).stream().anyMatch(labels::contains);
     }
   }
 

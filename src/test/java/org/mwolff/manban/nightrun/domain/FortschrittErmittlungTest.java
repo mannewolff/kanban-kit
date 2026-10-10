@@ -1188,6 +1188,149 @@ class FortschrittErmittlungTest {
     assertThat(eineKette().aktuelleStufe()).isEqualTo(ProgressStage.PLAN);
   }
 
+  // --- Englische Namen (Issue #1590, Plan #1582 A5, A6, E1, E2, E12) ----------------------------
+
+  /** Ein englischer Laufstand mit Anker {@code ## Run status}. */
+  private void standEn(Karte k, String... zeilen) {
+    laufstaende.add(new Laufstand(k.id(), "## Run status\n\n" + String.join("\n", zeilen)));
+  }
+
+  private static String startedEn(String stufe, Karte ziel, long minute) {
+    return "last started: " + stufe + " started for #" + ziel.number() + " at " + um(minute);
+  }
+
+  private static String finishedEn(String stufe, Karte ziel, long minute) {
+    return "last finished: " + stufe + " finished for #" + ziel.number() + " at " + um(minute);
+  }
+
+  @Test
+  void planStartedErgibtDasselbeWieSeinDeutschesGegenstueck() {
+    Karte f = anforderung(500);
+    stand(f, begonnen("plan", f, 10));
+    ChainProgress deutsch = eineKette();
+    laufstaende.clear();
+
+    standEn(f, startedEn("plan", f, 10));
+
+    assertThat(eineKette()).isEqualTo(deutsch);
+    assertThat(deutsch.aktuelleStufe()).isEqualTo(ProgressStage.PLAN);
+  }
+
+  @Test
+  void englischeStufeneintraegeErgebenDieselbenStufenWieDeutsche() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    angelegt(p, 5);
+    stand(f, begonnen("abdeckung", p, 45), fertig("pakete", p, 40));
+    ChainProgress deutsch = eineKette();
+    laufstaende.clear();
+
+    standEn(f, startedEn("coverage", p, 45), finishedEn("packages", p, 40));
+
+    assertThat(eineKette()).isEqualTo(deutsch);
+    assertThat(stufen(deutsch)).containsEntry(ProgressStage.ABDECKUNG, StageState.LAEUFT);
+  }
+
+  @Test
+  void planReviewAufEnglischGiltWiePlanReview() {
+    Karte f = anforderung(500);
+    angelegt(planMitText(501, f, "## Context\n  Plan review: fable, gpt-astra (2026-10-10)\n"), 10);
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.REVIEW, StageState.ERREICHT);
+    assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.PAKETE);
+  }
+
+  @Test
+  void leereZeilePlanReviewAufEnglischGiltNichtAlsGeprueft() {
+    Karte f = anforderung(500);
+    angelegt(planMitText(501, f, "Plan review:   "), 10);
+
+    assertThat(stufen(eineKette())).containsEntry(ProgressStage.REVIEW, StageState.LAEUFT);
+  }
+
+  @Test
+  void planReviewVorhanden_auchMitEnglischerZeile() {
+    Karte f = anforderung(500);
+    Karte geprueft = planMitText(501, f, "Plan review: fable (2026-10-10)");
+
+    assertThat(FortschrittErmittlung.planReviewVorhanden(f, List.of(geprueft))).isTrue();
+  }
+
+  @Test
+  void clarifyZaehltInDerFragenlisteWieKlaeren() {
+    Karte p = plan(400, null);
+    Karte a = paket(501, p, "BACKLOG", "kit:clarify");
+    bewegt(a, 10);
+
+    assertThat(ermittle(NightRunMode.IMPLEMENTATION).offeneFragen()).containsExactly(ref(a));
+  }
+
+  @Test
+  void einGemischtesBoardZaehltBeideNamenZusammen() {
+    Karte p = plan(400, null);
+    Karte a = paket(501, p, "BACKLOG", "kit:klaeren");
+    Karte b = paket(502, p, "BACKLOG", "kit:clarify");
+    bewegt(a, 10);
+    bewegt(b, 20);
+
+    assertThat(ermittle(NightRunMode.IMPLEMENTATION).offeneFragen())
+        .containsExactly(ref(a), ref(b));
+  }
+
+  @Test
+  void runWaitingUndClarifyAnDerTragendenKarteSindOffeneFragen() {
+    Karte f = anforderung(500, "run:waiting");
+    Karte g = anforderung(600, "kit:clarify");
+    standEn(f, startedEn("plan", f, 10));
+    standEn(g, startedEn("plan", g, 20));
+
+    assertThat(ermittle(NightRunMode.CHAIN).offeneFragen()).containsExactly(ref(f), ref(g));
+  }
+
+  @Test
+  void carryThroughWaehltDenPfadDerUmsetzungWieDurchziehen() {
+    Karte f = anforderung(500, "kit:carry-through");
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    standEn(f, startedEn("implementation", p, 55), finishedEn("coverage", p, 50));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.UMSETZUNG, StageState.LAEUFT);
+    assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.UMSETZUNG);
+  }
+
+  @Test
+  void eineRequirementKarteGiltWieEineFachlicheAnforderung() {
+    Karte f = karte(500, "[Requirement] Requirement", "BACKLOG", null, false, null);
+    Karte geprueft = planMitText(501, f, "Plan review: fable (2026-10-10)");
+
+    assertThat(FortschrittErmittlung.planReviewVorhanden(f, List.of(geprueft))).isTrue();
+  }
+
+  @Test
+  void eineIdeeIstKeineFachlicheAnforderungFuerDenPlanReview() {
+    Karte i = karte(500, "[Idea] Idee", "BACKLOG", null, false, null);
+    Karte geprueft = planMitText(501, i, "Plan-Review: fable (2026-10-10)");
+
+    assertThat(FortschrittErmittlung.planReviewVorhanden(i, List.of(geprueft))).isFalse();
+  }
+
+  @Test
+  void uebernommenPrueftDieFreigabeKitNight() {
+    Karte frei = anforderung(500, "kit:night");
+    Karte verbraucht = anforderung(501);
+    Laufstand mitKennung = new Laufstand(frei.id(), "## Run status", START);
+
+    assertThat(FortschrittErmittlung.uebernommen(frei, mitKennung)).isFalse();
+    assertThat(FortschrittErmittlung.uebernommen(verbraucht, mitKennung)).isTrue();
+    assertThat(FortschrittErmittlung.uebernommen(verbraucht, null)).isFalse();
+    assertThat(FortschrittErmittlung.uebernommen(verbraucht, new Laufstand(1L, "## Run status")))
+        .isFalse();
+  }
+
   // --- Mehrere Ketten ----------------------------------------------------------------------------
 
   @Test

@@ -20,9 +20,10 @@ public interface CommentRepository {
   void deleteById(long id);
 
   /**
-   * Je Karte des Projekts der Kommentar, dessen Text mit {@code ## Laufstand} beginnt (Issue #1373,
-   * Plan #1372 E5). Tragen mehrere Kommentare einer Karte den Anker, gilt der jüngste nach
-   * Erstellzeitpunkt, bei Gleichstand nach ID; sortiert nach Karten-ID.
+   * Je Karte des Projekts der Kommentar, dessen Text mit {@code ## Laufstand} oder dem englischen
+   * {@code ## Run status} beginnt (Issue #1373, Plan #1372 E5; Issue #1590, Plan #1582 E12). Tragen
+   * mehrere Kommentare einer Karte den Anker, gilt der jüngste nach Erstellzeitpunkt, bei
+   * Gleichstand nach ID; sortiert nach Karten-ID.
    *
    * <p>{@code updatedAt} spielt keine Rolle: {@code CommentService.update} schreibt ihn nicht fort,
    * und das Kit ersetzt den Laufstand über genau diesen Weg.
