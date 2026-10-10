@@ -1,12 +1,24 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Card } from '../api/cards'
 import type { Epic } from '../api/epics'
+import type { KitNamenZustand } from '../api/kitNamen'
 import type { Label } from '../api/labels'
 import { kontrast } from '../lib/kontrast'
 import { NUT, TEXT_SCHWACH, theme } from '../theme'
+import { KIT_NAMEN } from '../test/kitNamen'
 import { EpicVisibilityList } from './EpicVisibilityList'
+
+/** Das Namen-Register des Kits (Issue #1596): ohne Angabe geladen, ein Test kann es umstellen. */
+const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
+vi.mock('../api/kitNamen', async (original) => ({
+  ...(await original<typeof import('../api/kitNamen')>()),
+  useKitNamen: (): KitNamenZustand => kitNamen.zustand ?? { status: 'fertig', daten: KIT_NAMEN },
+}))
+beforeEach(() => {
+  kitNamen.zustand = null
+})
 
 function macheEpic(id: number, title: string, shortcode: string | null): Epic {
   return {
@@ -185,6 +197,41 @@ describe('EpicVisibilityList', () => {
     expect(screen.getByText('2 Pläne')).toBeInTheDocument()
     expect(screen.getByText('1 Arbeitspaket')).toBeInTheDocument()
     expect(screen.queryByText(/^0 (Anforderung|Pläne|Arbeitspakete)/)).not.toBeInTheDocument()
+  })
+
+  it('zählt [Requirement] als Anforderung (Plan #1582, E2)', () => {
+    const vorhaben = { ...AUSBLENDEN, total: 2, memberNumbers: [1, 2] }
+    zeichne({ epics: [vorhaben], cards: [karte(1, '[Requirement] Need'), karte(2, '[Plan] Way')] })
+
+    expect(screen.getByText('1 Anforderung')).toBeInTheDocument()
+    expect(screen.getByText('1 Plan')).toBeInTheDocument()
+    expect(screen.queryByText(/Arbeitspaket/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt statt der Zusammensetzung einen Ladehinweis, solange die Kit-Namen laden (E10)', () => {
+    kitNamen.zustand = { status: 'laden' }
+    const vorhaben = { ...AUSBLENDEN, total: 1, memberNumbers: [1] }
+    zeichne({ epics: [vorhaben], cards: [karte(1, '[Fachlich] Anforderung')] })
+
+    expect(screen.getByText('Kit-Namen werden geladen')).toBeInTheDocument()
+    expect(screen.queryByText(/Anforderung$/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt statt der Zusammensetzung „Kit-Namen nicht ladbar", wenn das Laden scheitert (E10)', () => {
+    kitNamen.zustand = { status: 'fehler', fehler: new Error('weg') }
+    const vorhaben = { ...AUSBLENDEN, total: 1, memberNumbers: [1] }
+    zeichne({ epics: [vorhaben], cards: [karte(1, 'Paket')] })
+
+    expect(screen.getByText('Kit-Namen nicht ladbar')).toBeInTheDocument()
+    expect(screen.queryByText('1 Arbeitspaket')).not.toBeInTheDocument()
+  })
+
+  it('braucht für ein leeres Vorhaben keine Kit-Namen', () => {
+    kitNamen.zustand = { status: 'fehler', fehler: new Error('weg') }
+    zeichne({ epics: [ZEIT] })
+
+    expect(screen.getByText('Noch keine Karten zugeordnet.')).toBeInTheDocument()
+    expect(screen.queryByText('Kit-Namen nicht ladbar')).not.toBeInTheDocument()
   })
 
   it('sagt bei einem leeren Vorhaben, dass ihm noch keine Karten zugeordnet sind', () => {

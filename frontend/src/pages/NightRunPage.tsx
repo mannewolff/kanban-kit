@@ -27,6 +27,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { cardsApi, type Card, type CardByNumber } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
+import { artAusTitel, useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import {
   nightRunsApi,
   type NightRunBudgetOrigin,
@@ -111,6 +112,7 @@ import {
   type NightRunStufenvorgaben,
 } from '../lib/nightRunLog'
 import { ermittleErzeugnisse, type Erzeugnisse } from '../lib/kettenErzeugnisse'
+import { BUDGETFELDER } from '../lib/kitWortformen'
 import {
   laeufeZusammenfuehren,
   vorwegZaehlung,
@@ -346,10 +348,13 @@ const zustandsFarbe = (zustand: NightRunState): string => melderFarbe(MELDER_JE_
  * Zuordnung läuft über die **Titel-Präfixe**, die der Workflow ohnehin vergibt (`/fachplan`,
  * `/plan`) — nicht über die Position in der `derivedFrom`-Kette: Ein Vorhaben oder eine Idee kann
  * dazwischenliegen, und dann bezeichnete die Position die falsche Stufe.
+ *
+ * <p>Welche Präfixe eine Kartenart trägt, sagt das Namen-Register des Servers (Plan #1582, E2):
+ * `[Requirement]` gilt wie `[Fachlich]`. Die Seite führt dafür keine eigene Liste.
  */
-const STUFEN: ReadonlyArray<{ label: string; praefix: string }> = [
-  { label: 'Fachliche Anforderung', praefix: '[Fachlich]' },
-  { label: 'Plan', praefix: '[Plan]' },
+const STUFEN: ReadonlyArray<{ label: string; art: string }> = [
+  { label: 'Fachliche Anforderung', art: 'FACHLICH' },
+  { label: 'Plan', art: 'PLAN' },
 ]
 
 /**
@@ -804,6 +809,8 @@ type StufenZustand =
   | { art: 'nicht-gefunden'; nummer: number }
   | { art: 'ohne' }
   | { art: 'noch-nicht-erreicht' }
+  | { art: 'kit-namen-laden' }
+  | { art: 'kit-namen-fehlen' }
   | { art: 'entfaellt' }
 
 /** Die Fälle, die eine Zeile ergeben — `entfaellt` erscheint gar nicht und ist deshalb ausgenommen. */
@@ -820,7 +827,8 @@ type SichtbarerStufenZustand = Exclude<StufenZustand, { art: 'entfaellt' }>
  * Modus `CHAIN` beide Stufenzeilen, statt eine geratene Aussage zu zeigen.
  */
 function stufenZustand(
-  praefix: string,
+  kartenart: string,
+  kitNamen: KitNamenZustand,
   glieder: readonly Kettenglied[],
   istRot: (nummer: number) => boolean,
   modus: AnzeigeArt,
@@ -828,10 +836,17 @@ function stufenZustand(
   if (modus === 'CHAIN') {
     return { art: 'entfaellt' }
   }
+  // Ohne Register ist keine Stufe zuzuordnen — der Hinweis steht an ihrer Stelle (Plan #1582, E10).
+  if (kitNamen.status === 'laden') {
+    return { art: 'kit-namen-laden' }
+  }
+  if (kitNamen.status === 'fehler') {
+    return { art: 'kit-namen-fehlen' }
+  }
   const geladen = glieder.filter(
     (glied): glied is { nummer: number; karte: CardByNumber } => glied.karte !== null,
   )
-  const treffer = geladen.find((glied) => glied.karte.title.startsWith(praefix))
+  const treffer = geladen.find((glied) => artAusTitel(kitNamen.daten, glied.karte.title) === kartenart)
   if (treffer !== undefined) {
     return {
       art: 'treffer',
@@ -847,12 +862,20 @@ function stufenZustand(
   return glieder.length === 0 ? { art: 'ohne' } : { art: 'noch-nicht-erreicht' }
 }
 
-/** Der Satzrest hinter „<Stufe>: " in den drei Fällen ohne Karte. */
+/** Der Satzrest hinter „<Stufe>: " in den Fällen ohne Karte. */
 function ohneTrefferText(zustand: Exclude<SichtbarerStufenZustand, { art: 'treffer' }>): string {
-  if (zustand.art === 'nicht-gefunden') {
-    return `Karte #${zustand.nummer} nicht gefunden`
+  switch (zustand.art) {
+    case 'nicht-gefunden':
+      return `Karte #${zustand.nummer} nicht gefunden`
+    case 'ohne':
+      return 'ohne'
+    case 'kit-namen-laden':
+      return 'Kit-Namen werden geladen'
+    case 'kit-namen-fehlen':
+      return 'Kit-Namen nicht ladbar'
+    case 'noch-nicht-erreicht':
+      return 'noch nicht erreicht'
   }
-  return zustand.art === 'ohne' ? 'ohne' : 'noch nicht erreicht'
 }
 
 /**
@@ -1195,12 +1218,15 @@ function hoechsteKosten(items: readonly AnzeigeItem[], stand: NightRun | undefin
  * `varianteBLabel`, `umsetzungMin`, `kostenUsdB`. Als `Map` und nicht als `Record`: Ein Name, den
  * das Board nicht kennt, soll `undefined` ergeben und ausgelassen werden, statt den Build zu
  * binden oder als roher Feldname auf der Seite zu erscheinen (E11).
+ *
+ * <p>Die Felder mit englischem Gegenstück kennt sie unter beiden Namen aus `kitWortformen.ts`
+ * (Plan #1582, E3): `packagesMin` steht da wie `paketeMin`.
  */
 const BUDGETFELD_TEXT = new Map<string, string>([
   ['planMin', 'Zeitvorgabe Plan'],
   ['reviewMin', 'Zeitvorgabe Prüfung'],
-  ['paketeMin', 'Zeitvorgabe Pakete'],
-  ['abdeckungMin', 'Zeitvorgabe Abdeckung'],
+  ...BUDGETFELDER.paketeMin.map((name) => [name, 'Zeitvorgabe Pakete'] as const),
+  ...BUDGETFELDER.abdeckungMin.map((name) => [name, 'Zeitvorgabe Abdeckung'] as const),
   ['kostenUsd', 'Kostenbudget'],
 ])
 
@@ -2483,6 +2509,7 @@ function Vorgangszeile({
   onOeffnen: (karte: CardByNumber) => void
 }>) {
   const [offen, setOffen] = useState(false)
+  const kitNamen = useKitNamen()
   // `undefined` = noch nicht aufgelöst (die Kette lädt), `null` = nicht auflösbar.
   const wurzel = katalog.get(item.cardNumber)
   // `null` an einem grünen oder grauen Vorgang — dort erscheint kein Befund.
@@ -2610,7 +2637,8 @@ function Vorgangszeile({
         <>
           {STUFEN.map((stufe) => {
             const zustand = stufenZustand(
-              stufe.praefix,
+              stufe.art,
+              kitNamen,
               kette(item.cardNumber, katalog),
               istRot,
               modus,

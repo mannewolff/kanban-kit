@@ -1,5 +1,6 @@
 import type { Card } from '../api/cards'
 import type { Epic } from '../api/epics'
+import type { KitArt } from '../api/kitNamen'
 import type { Label } from '../api/labels'
 import { epicShortcode } from './epicMeta'
 
@@ -44,16 +45,24 @@ function memberCards(epic: Epic, cards: Card[]): Card[] {
  * Arbeitspaket — wurde verworfen, weil ein Plan, aus dem noch keine Arbeitspakete geschnitten sind,
  * ein Blatt wäre. Genau diesen Fall will der Nutzer sehen.
  *
+ * Die Präfixe kommen als Parameter aus dem Namen-Register des Servers (Plan #1582, E10) — die Datei
+ * bleibt rein und führt keine eigene Liste. Jeder Name einer Art zählt, also `[Fachlich]` wie
+ * `[Requirement]` (E2).
+ *
  * Ein Präfix zählt nur **am Anfang** des Titels und in exakt dieser Schreibweise (Konvention des
  * Arbeitsablaufs). Alles andere ist ein Arbeitspaket — ausdrücklich auch `[Idee]` (Entscheidung
  * Manne, 2026-08-31): Eine Idee auf dem Board ist faktisch ein Arbeitspaket.
+ *
+ * @param praefixe die Titel-Präfixe je Kartenart aus `GET /api/kit-namen`
  */
-export function countKinds(epic: Epic, cards: Card[]): KindCounts {
+export function countKinds(epic: Epic, cards: Card[], praefixe: readonly KitArt[]): KindCounts {
+  const traegt = (titel: string, art: string) =>
+    praefixe.some((a) => a.art === art && a.namen.some((name) => titel.startsWith(name)))
   const counts: KindCounts = { requirements: 0, plans: 0, workItems: 0 }
   for (const card of memberCards(epic, cards)) {
-    if (card.title.startsWith('[Fachlich]')) {
+    if (traegt(card.title, 'FACHLICH')) {
       counts.requirements++
-    } else if (card.title.startsWith('[Plan]')) {
+    } else if (traegt(card.title, 'PLAN')) {
       counts.plans++
     } else {
       counts.workItems++

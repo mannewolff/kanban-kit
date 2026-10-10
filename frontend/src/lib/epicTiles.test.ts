@@ -3,6 +3,10 @@ import type { Card } from '../api/cards'
 import type { Epic } from '../api/epics'
 import type { Label } from '../api/labels'
 import { aggregateMarks, countKinds, selectableEpics, sortEpics, visibleEpics } from './epicTiles'
+import { KIT_NAMEN } from '../test/kitNamen'
+
+/** Die Titel-Präfixe, wie der Server sie liefert (Plan #1582, E10). */
+const PRAEFIXE = KIT_NAMEN.titelPraefixe
 
 function karte(number: number, title: string, labels: number[] = []): Card {
   return {
@@ -56,7 +60,7 @@ describe('countKinds', () => {
       karte(3, 'Ganz gewöhnliches Arbeitspaket'),
     ]
 
-    expect(countKinds(vorhaben({ id: 9, memberNumbers: [1, 2, 3] }), cards)).toEqual({
+    expect(countKinds(vorhaben({ id: 9, memberNumbers: [1, 2, 3] }), cards, PRAEFIXE)).toEqual({
       requirements: 1,
       plans: 1,
       workItems: 1,
@@ -69,7 +73,7 @@ describe('countKinds', () => {
   it('zählt eine [Idee] als Arbeitspaket', () => {
     const cards = [karte(1, '[Idee] Labels an allen Karten')]
 
-    expect(countKinds(vorhaben({ id: 9, memberNumbers: [1] }), cards)).toEqual({
+    expect(countKinds(vorhaben({ id: 9, memberNumbers: [1] }), cards, PRAEFIXE)).toEqual({
       requirements: 0,
       plans: 0,
       workItems: 1,
@@ -79,15 +83,37 @@ describe('countKinds', () => {
   it('zählt ein Präfix mitten im Titel als Arbeitspaket', () => {
     const cards = [karte(1, 'Nacharbeit zu [Plan] #657')]
 
-    expect(countKinds(vorhaben({ id: 9, memberNumbers: [1] }), cards)).toEqual({
+    expect(countKinds(vorhaben({ id: 9, memberNumbers: [1] }), cards, PRAEFIXE)).toEqual({
       requirements: 0,
       plans: 0,
       workItems: 1,
     })
   })
 
+  /** Englische Titel-Präfixe zählen wie ihr deutsches Gegenstück (Plan #1582, E2). */
+  it('zählt [Requirement] als fachliche Anforderung', () => {
+    const cards = [karte(1, '[Requirement] Tiles show states'), karte(2, '[Plan] Way there')]
+
+    expect(countKinds(vorhaben({ id: 9, memberNumbers: [1, 2] }), cards, PRAEFIXE)).toEqual({
+      requirements: 1,
+      plans: 1,
+      workItems: 0,
+    })
+  })
+
+  /** Die Präfixe kommen allein aus dem Parameter (E10) — ein eingebautes Literal fiele hier auf. */
+  it('kennt ohne übergebene Präfixe keine Art außer dem Arbeitspaket', () => {
+    const cards = [karte(1, '[Fachlich] Anforderung'), karte(2, '[Plan] Weg')]
+
+    expect(countKinds(vorhaben({ id: 9, memberNumbers: [1, 2] }), cards, [])).toEqual({
+      requirements: 0,
+      plans: 0,
+      workItems: 2,
+    })
+  })
+
   it('liefert für ein leeres Vorhaben überall null', () => {
-    expect(countKinds(vorhaben({ id: 9 }), [])).toEqual({
+    expect(countKinds(vorhaben({ id: 9 }), [], PRAEFIXE)).toEqual({
       requirements: 0,
       plans: 0,
       workItems: 0,
@@ -101,7 +127,7 @@ describe('countKinds', () => {
   it('ignoriert eine Mitgliedsnummer ohne zugehörige Karte', () => {
     const cards = [karte(1, '[Plan] Da')]
 
-    expect(countKinds(vorhaben({ id: 9, memberNumbers: [1, 42] }), cards)).toEqual({
+    expect(countKinds(vorhaben({ id: 9, memberNumbers: [1, 42] }), cards, PRAEFIXE)).toEqual({
       requirements: 0,
       plans: 1,
       workItems: 0,

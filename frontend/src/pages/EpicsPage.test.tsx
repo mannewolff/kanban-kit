@@ -6,13 +6,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi } from '../api/cards'
 import { epicsApi } from '../api/epics'
+import type { KitNamenZustand } from '../api/kitNamen'
 import { labelsApi } from '../api/labels'
 import { membersApi } from '../api/members'
 import { projectsApi } from '../api/projects'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
+import { KIT_NAMEN } from '../test/kitNamen'
 import { EpicsPage } from './EpicsPage'
 
+// Das Namen-Register des Kits (Issue #1596) liest die Zusammensetzung der Vorhaben-Zeilen.
+vi.mock('../api/kitNamen', async (original) => ({
+  ...(await original<typeof import('../api/kitNamen')>()),
+  useKitNamen: (): KitNamenZustand => ({ status: 'fertig', daten: KIT_NAMEN }),
+}))
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 1, memberships: [{ projectId: 9, role: 'OWNER' }] } }),
 }))
