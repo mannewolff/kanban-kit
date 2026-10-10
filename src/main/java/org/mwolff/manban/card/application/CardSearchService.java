@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
@@ -101,6 +102,34 @@ public class CardSearchService {
         c.archived(),
         c.createdAt(),
         c.movedToDoneAt());
+  }
+
+  /**
+   * Durchsucht die Karten genau dieses Boards, <strong>archivierte eingeschlossen</strong> — die
+   * Suche der Kanban-Strecke (Plan #1574, Kriterien 2 und 4): nach Art, Vorhaben und Zeitraum des
+   * Anlagedatums, nach Nummer absteigend, in Teilen (E6). Die Rechnung liegt in {@link
+   * KartenBestandSuche}.
+   *
+   * <p>Die Eingaben werden vor jedem Lookup geprüft: Eine unbekannte Art endet mit {@link
+   * UnknownCardKindException} (E2), ein Beginn, der nicht vor dem Ende liegt, mit {@link
+   * InvalidPeriodBoundsException}; eine einzelne Grenze ist erlaubt (E7). Rechte und Reichweite wie
+   * {@link #findOnBoardByNumber}: Projekt-Mitgliedschaft, nur {@code board_id} = {@code boardId},
+   * Papierkorb unsichtbar (A3).
+   *
+   * @param fundstellen Kommentar-Fundstellen je Karten-ID, die den Auszug bestimmen; ohne Textsuche
+   *     leer
+   */
+  @Transactional(readOnly = true)
+  public SuchSeite searchOnBoard(
+      long userId, long boardId, Suchanfrage anfrage, Map<Long, KommentarFund> fundstellen) {
+    KartenBestandSuche.Anfrage geprueft = KartenBestandSuche.pruefe(anfrage);
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
+    Map<Long, String> spalten =
+        boardService.listColumns(boardId).stream()
+            .collect(Collectors.toMap(ColumnView::id, ColumnView::name));
+    return KartenBestandSuche.alsSicht(
+        KartenBestandSuche.suche(cards.findByBoardId(boardId), geprueft, fundstellen), spalten);
   }
 
   /**
@@ -211,4 +240,61 @@ public class CardSearchService {
       boolean archived,
       Instant createdAt,
       @Nullable Instant movedToDoneAt) {}
+
+  /**
+   * Die Filter der Suche auf dem Board (Plan #1574, E2, E6, E7). Arten gehen als Konstantennamen
+   * der Kartenart, weil {@code card.domain} modulintern bleibt.
+   *
+   * @param arten verlangte Arten, ODER-verknüpft; leer heißt jede Art
+   * @param epic Nummer eines Vorhabens des Boards, sonst {@code null}
+   * @param createdFrom Beginn des Anlagezeitraums, eingeschlossen, sonst {@code null}
+   * @param createdTo Ende des Anlagezeitraums, ausgeschlossen, sonst {@code null}
+   * @param cursor Nummer des letzten Treffers des vorigen Teils, sonst {@code null}
+   * @param limit höchste Trefferzahl dieses Teils, mindestens 1
+   */
+  public record Suchanfrage(
+      Set<String> arten,
+      @Nullable Integer epic,
+      @Nullable Instant createdFrom,
+      @Nullable Instant createdTo,
+      @Nullable Integer cursor,
+      int limit) {}
+
+  /**
+   * Eine Fundstelle in einem Kommentar, die den Auszug eines Treffers bestimmt (Plan #1574, A5).
+   *
+   * @param commentId der Kommentar
+   * @param body sein Text
+   */
+  public record KommentarFund(long commentId, String body) {}
+
+  /**
+   * Ein Treffer der Suche auf dem Board (Plan #1574, E4, E5, E9).
+   *
+   * @param kind Konstantenname der Kartenart
+   * @param column Kanban-Schlüssel nach {@link CardIngestService#kanbanSchluessel}
+   * @param auszug höchstens 200 Zeichen, Zeilenumbrüche als Leerzeichen
+   * @param fundstelle {@code BODY} oder {@code COMMENT}
+   * @param kommentarId der Kommentar bei {@code COMMENT}, sonst {@code null}
+   */
+  public record SuchTreffer(
+      long id,
+      int number,
+      String title,
+      String kind,
+      String column,
+      boolean archived,
+      Instant createdAt,
+      @Nullable Instant movedToDoneAt,
+      String auszug,
+      String fundstelle,
+      @Nullable Long kommentarId) {}
+
+  /**
+   * Ein Teil des Suchergebnisses (E6).
+   *
+   * @param naechsterCursor Nummer des letzten Treffers, wenn danach noch Treffer folgen, sonst
+   *     {@code null}
+   */
+  public record SuchSeite(List<SuchTreffer> treffer, @Nullable Integer naechsterCursor) {}
 }

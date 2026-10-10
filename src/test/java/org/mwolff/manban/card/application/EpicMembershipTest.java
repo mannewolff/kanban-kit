@@ -208,4 +208,59 @@ class EpicMembershipTest {
     assertThat(nummern(ergebnis, 1L)).containsExactly(2, 4);
     assertThat(nummern(ergebnis, 1L)).doesNotContain(3);
   }
+
+  // --- Variante mit Archiv: Suche der Kanban-Strecke (Plan #1574, E8) ---
+
+  @Test
+  void mitArchiv_archivierteKartenZaehlenMit_aufJederEbene() {
+    Card epic = vorhaben(1L, 1);
+    Card archivierteWurzel = karte(2L, 2, CardType.CARD, 1L, null, true);
+    Card archiviertesKind = karte(3L, 3, CardType.CARD, null, 2L, true);
+    Card aktivesEnkel = karte(4L, 4, null, 3L);
+    Card fremd = karte(5L, 5, CardType.CARD, null, null, true);
+
+    Map<Long, Set<Card>> ergebnis =
+        EpicMembership.computeMitArchiv(
+            List.of(epic, archivierteWurzel, archiviertesKind, aktivesEnkel, fremd));
+
+    assertThat(nummern(ergebnis, 1L)).containsExactly(2, 3, 4);
+    assertThat(nummern(ergebnis, 1L)).doesNotContain(1, 5);
+  }
+
+  @Test
+  void mitArchiv_vorhabenZaehltWeiterhinNicht_seineNachfahrenSchon() {
+    Card epic = vorhaben(1L, 1);
+    Card wurzel = karte(2L, 2, 1L, null);
+    Card archiviertesVorhaben = karte(3L, 3, CardType.EPIC, null, 2L, true);
+    Card kindDesVorhabens = karte(4L, 4, null, 3L);
+
+    Map<Long, Set<Card>> ergebnis =
+        EpicMembership.computeMitArchiv(
+            List.of(epic, wurzel, archiviertesVorhaben, kindDesVorhabens));
+
+    assertThat(nummern(ergebnis, 1L)).containsExactly(2, 4);
+    assertThat(ergebnis.keySet()).containsExactlyInAnyOrder(1L, 3L);
+    assertThat(ergebnis.get(3L)).isEmpty();
+  }
+
+  @Test
+  void mitArchiv_laesstDieBestehendeZaehlungUnberuehrt() {
+    Card epic = vorhaben(1L, 1);
+    Card archiviert = karte(2L, 2, CardType.CARD, 1L, null, true);
+    List<Card> karten = List.of(epic, archiviert);
+
+    assertThat(nummern(EpicMembership.computeMitArchiv(karten), 1L)).containsExactly(2);
+    assertThat(EpicMembership.compute(karten).get(1L)).isEmpty();
+  }
+
+  @Test
+  @Timeout(5)
+  void mitArchiv_ringTerminiert() {
+    Card epic = vorhaben(1L, 1);
+    Card imRing = karte(2L, 2, CardType.CARD, 1L, 3L, true);
+    Card ring2 = karte(3L, 3, CardType.CARD, null, 2L, true);
+
+    assertThat(nummern(EpicMembership.computeMitArchiv(List.of(epic, imRing, ring2)), 1L))
+        .containsExactly(2, 3);
+  }
 }

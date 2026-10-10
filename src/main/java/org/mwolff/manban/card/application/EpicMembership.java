@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
@@ -48,6 +49,19 @@ final class EpicMembership {
    *     Done-Zählung die Spalten-Zuordnung braucht
    */
   static Map<Long, Set<Card>> compute(List<Card> boardCards) {
+    return berechne(boardCards, EpicMembership::zaehlt);
+  }
+
+  /**
+   * Wie {@link #compute}, aber archivierte Karten zählen mit — die Zugehörigkeit für die Suche der
+   * Kanban-Strecke (Plan #1574, E8): Ein archiviertes Arbeitspaket gehört weiter zu seinem
+   * Vorhaben. Vorhaben selbst zählen auch hier nicht. Der Fortschritt bleibt bei {@link #compute}.
+   */
+  static Map<Long, Set<Card>> computeMitArchiv(List<Card> boardCards) {
+    return berechne(boardCards, c -> c.type() != CardType.EPIC);
+  }
+
+  private static Map<Long, Set<Card>> berechne(List<Card> boardCards, Predicate<Card> zaehlt) {
     // Kanten über den Vorfahren selbst statt über dessen ID: Fehlt er auf diesem Board (oder fehlt
     // die Herkunft ganz), liefert das Nachschlagen null und die Kante entsteht nicht.
     Map<Long, Card> byId = new HashMap<>();
@@ -65,7 +79,7 @@ final class EpicMembership {
     Map<Long, Set<Card>> ergebnis = new HashMap<>();
     for (Card epic : boardCards) {
       if (epic.type() == CardType.EPIC) {
-        ergebnis.put(epic.requireId(), sammle(epic.requireId(), boardCards, kinder));
+        ergebnis.put(epic.requireId(), sammle(epic.requireId(), boardCards, kinder, zaehlt));
       }
     }
     return ergebnis;
@@ -73,7 +87,7 @@ final class EpicMembership {
 
   /** Steigt von den direkt zugeordneten Wurzeln ab und sammelt ein, was zählt. */
   private static Set<Card> sammle(
-      long epicId, List<Card> boardCards, Map<Long, List<Card>> kinder) {
+      long epicId, List<Card> boardCards, Map<Long, List<Card>> kinder, Predicate<Card> zaehlt) {
     Deque<Card> offen =
         boardCards.stream()
             .filter(c -> Long.valueOf(epicId).equals(c.parentId()))
@@ -88,7 +102,7 @@ final class EpicMembership {
       if (!besucht.add(c.requireId())) {
         continue;
       }
-      if (zaehlt(c)) {
+      if (zaehlt.test(c)) {
         zugehoerig.add(c);
       }
       offen.addAll(kinder.getOrDefault(c.requireId(), List.of()));

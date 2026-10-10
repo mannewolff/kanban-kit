@@ -6,15 +6,21 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.kanbancompat.application.KanbanArchivService;
 import org.mwolff.manban.kanbancompat.application.KanbanArchivService.ItemDetail;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.SearchPage;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Activity;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
@@ -25,6 +31,9 @@ import org.mwolff.manban.kanbancompat.application.TokenNotBoundException;
 import org.springframework.security.core.Authentication;
 
 /** Unit-Tests des Kanban-Compat-Controllers (Service + Authentication gemockt). */
+// PMD.TooManyMethods: je Aufruf der Kanban-Strecke Delegation und Bindung; mit der Suche (Plan
+// #1574) kommen die Grenzen von limit und cursor dazu.
+@SuppressWarnings("PMD.TooManyMethods")
 class KanbanCompatControllerTest {
 
   private static final KanbanPrincipal PRINCIPAL = new KanbanPrincipal(7L, 1L, 2L, 3L, "Token");
@@ -310,6 +319,69 @@ class KanbanCompatControllerTest {
     // When / Then: ohne Bindung 409 wie bei jedem anderen Endpunkt
     assertThatThrownBy(() -> controller.itemByNumber(null, 42))
         .isInstanceOf(TokenNotBoundException.class);
+  }
+
+  @Test
+  void search_withBoundPrincipal_delegates() {
+    // Given (Plan #1574, E6, E7)
+    Instant von = Instant.parse("2026-01-01T00:00:00Z");
+    Instant bis = Instant.parse("2026-02-01T00:00:00Z");
+    SearchPage page = new SearchPage(List.of(), null);
+    when(archiv.search(PRINCIPAL, List.of("PLAN"), 12, von, bis, 90, 5)).thenReturn(page);
+
+    // When
+    SearchPage result =
+        controller.search(boundAuthentication(), List.of("PLAN"), 12, von, bis, 90, 5);
+
+    // Then
+    assertThat(result).isSameAs(page);
+  }
+
+  @Test
+  void search_nullAuthentication_throwsTokenNotBound() {
+    // When / Then: ohne Bindung 409 wie bei jedem anderen Endpunkt
+    assertThatThrownBy(() -> controller.search(null, null, null, null, null, null, 50))
+        .isInstanceOf(TokenNotBoundException.class);
+  }
+
+  /**
+   * Die Grenzen von limit und cursor prüft die Methodenvalidierung von Spring vor dem Aufruf; hier
+   * dieselben Annotationen über den Validator, ohne MockMvc.
+   */
+  private static Set<ConstraintViolation<KanbanCompatController>> searchVerletzungen(
+      KanbanCompatController controller, Integer cursor, int limit) throws Exception {
+    Method search =
+        KanbanCompatController.class.getDeclaredMethod(
+            "search",
+            Authentication.class,
+            List.class,
+            Integer.class,
+            Instant.class,
+            Instant.class,
+            Integer.class,
+            int.class);
+    try (var factory = Validation.buildDefaultValidatorFactory()) {
+      Validator validator = factory.getValidator();
+      return validator
+          .forExecutables()
+          .validateParameters(
+              controller, search, new Object[] {null, null, null, null, null, cursor, limit});
+    }
+  }
+
+  @Test
+  void search_limitZwischenEinsUndZweihundert_istGueltig() throws Exception {
+    assertThat(searchVerletzungen(controller, null, 1)).isEmpty();
+    assertThat(searchVerletzungen(controller, null, 200)).isEmpty();
+    assertThat(searchVerletzungen(controller, 1, 50)).isEmpty();
+  }
+
+  @Test
+  void search_limitAusserhalb_undCursorNichtPositiv_sindUngueltig() throws Exception {
+    assertThat(searchVerletzungen(controller, null, 0)).hasSize(1);
+    assertThat(searchVerletzungen(controller, null, 201)).hasSize(1);
+    assertThat(searchVerletzungen(controller, 0, 50)).hasSize(1);
+    assertThat(searchVerletzungen(controller, -1, 50)).hasSize(1);
   }
 
   @Test

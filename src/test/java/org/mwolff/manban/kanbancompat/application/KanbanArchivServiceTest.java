@@ -2,6 +2,7 @@ package org.mwolff.manban.kanbancompat.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -13,6 +14,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
@@ -24,12 +26,18 @@ import org.mwolff.manban.card.application.CardMoveService;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardSearchService;
 import org.mwolff.manban.card.application.CardSearchService.BoardCardView;
+import org.mwolff.manban.card.application.CardSearchService.SuchSeite;
+import org.mwolff.manban.card.application.CardSearchService.SuchTreffer;
+import org.mwolff.manban.card.application.CardSearchService.Suchanfrage;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.comment.application.CommentService;
 import org.mwolff.manban.comment.application.CommentService.CommentView;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.Excerpt;
 import org.mwolff.manban.kanbancompat.application.KanbanArchivService.ItemDetail;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.SearchHit;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.SearchPage;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Item;
 
@@ -153,5 +161,91 @@ class KanbanArchivServiceTest {
     assertThatThrownBy(() -> service.itemByNumber(null, 42))
         .isInstanceOf(TokenNotBoundException.class);
     verify(search, never()).findOnBoardByNumber(anyLong(), anyLong(), anyInt());
+  }
+
+  // --- search (Plan #1574, E6, E10) ---
+
+  @Test
+  void search_reichtDieFilterDurch_undFormtDieTreffer() {
+    Instant von = Instant.parse("2026-01-01T00:00:00Z");
+    Instant bis = Instant.parse("2026-06-01T00:00:00Z");
+    Suchanfrage erwartet = new Suchanfrage(Set.of("PLAN", "FACHLICH"), 12, von, bis, 90, 5);
+    when(search.searchOnBoard(USER, BOARD, erwartet, Map.of()))
+        .thenReturn(
+            new SuchSeite(
+                List.of(
+                    new SuchTreffer(
+                        77L,
+                        42,
+                        "[Plan] Archiv",
+                        "PLAN",
+                        "DONE",
+                        true,
+                        ANGELEGT,
+                        ERLEDIGT,
+                        "Anfang",
+                        "BODY",
+                        null),
+                    new SuchTreffer(
+                        78L,
+                        41,
+                        "[Fachlich] F",
+                        "FACHLICH",
+                        "BACKLOG",
+                        false,
+                        ANGELEGT,
+                        null,
+                        "Review",
+                        "COMMENT",
+                        9L)),
+                41));
+
+    SearchPage page =
+        service.search(bound(), List.of("PLAN", "FACHLICH", "PLAN"), 12, von, bis, 90, 5);
+
+    assertThat(page.hits())
+        .containsExactly(
+            new SearchHit(
+                77L,
+                42,
+                "[Plan] Archiv",
+                "PLAN",
+                "DONE",
+                true,
+                ANGELEGT,
+                ERLEDIGT,
+                new Excerpt("Anfang", "BODY", null)),
+            new SearchHit(
+                78L,
+                41,
+                "[Fachlich] F",
+                "FACHLICH",
+                "BACKLOG",
+                false,
+                ANGELEGT,
+                null,
+                new Excerpt("Review", "COMMENT", 9L)));
+    assertThat(page.nextCursor()).isEqualTo("41");
+  }
+
+  @Test
+  void search_ohneFilter_undLetzterTeil_hatKeinenNaechstenCursor() {
+    when(search.searchOnBoard(
+            USER, BOARD, new Suchanfrage(Set.of(), null, null, null, null, 50), Map.of()))
+        .thenReturn(new SuchSeite(List.of(), null));
+
+    SearchPage page = service.search(bound(), null, null, null, null, null, 50);
+
+    assertThat(page.hits()).isEmpty();
+    assertThat(page.nextCursor()).isNull();
+  }
+
+  @Test
+  void search_ohneBindung_istTokenNotBound() {
+    KanbanPrincipal unbound = new KanbanPrincipal(USER, 2L, null, null, "Token");
+
+    assertThatThrownBy(() -> service.search(unbound, List.of(), null, null, null, null, 50))
+        .isInstanceOf(TokenNotBoundException.class);
+    verify(search, never()).searchOnBoard(anyLong(), anyLong(), any(), any());
   }
 }

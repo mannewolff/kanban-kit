@@ -5,10 +5,15 @@ import static org.mwolff.manban.kanbancompat.application.KanbanBindung.requireBo
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.card.application.CardSearchService;
 import org.mwolff.manban.card.application.CardSearchService.BoardCardView;
+import org.mwolff.manban.card.application.CardSearchService.SuchSeite;
+import org.mwolff.manban.card.application.CardSearchService.SuchTreffer;
+import org.mwolff.manban.card.application.CardSearchService.Suchanfrage;
 import org.mwolff.manban.comment.application.CommentService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Item;
@@ -28,13 +33,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class KanbanArchivService {
 
   private final KanbanCompatService compat;
-  private final CardSearchService search;
+  private final CardSearchService cardSearch;
   private final CommentService commentService;
 
   public KanbanArchivService(
       KanbanCompatService compat, CardSearchService search, CommentService commentService) {
     this.compat = compat;
-    this.search = search;
+    this.cardSearch = search;
     this.commentService = commentService;
   }
 
@@ -47,7 +52,7 @@ public class KanbanArchivService {
   public ItemDetail itemByNumber(KanbanPrincipal principal, int number) {
     long boardId = requireBound(principal);
     long userId = principal.userId();
-    BoardCardView karte = search.findOnBoardByNumber(userId, boardId, number);
+    BoardCardView karte = cardSearch.findOnBoardByNumber(userId, boardId, number);
     List<Comment> comments =
         commentService.list(userId, karte.item().id()).stream()
             .map(c -> new Comment(c.id(), c.authorName(), c.body(), c.createdAt()))
@@ -58,6 +63,52 @@ public class KanbanArchivService {
         karte.createdAt(),
         karte.movedToDoneAt(),
         comments);
+  }
+
+  /**
+   * Durchsucht das gebundene Board, archivierte Karten eingeschlossen, nach Art, Vorhaben und
+   * Zeitraum des Anlagedatums, in Teilen nach Nummer absteigend (Kriterien 2 und 4). Ohne
+   * Textfilter: Der Auszug ist der Anfang des Texts (E5).
+   *
+   * @param kinds Arten, ODER-verknüpft; fehlend oder leer heißt jede Art
+   * @param cursor Nummer des letzten Treffers des vorigen Teils
+   */
+  @Transactional(readOnly = true)
+  public SearchPage search(
+      KanbanPrincipal principal,
+      @Nullable List<String> kinds,
+      @Nullable Integer epic,
+      @Nullable Instant createdFrom,
+      @Nullable Instant createdTo,
+      @Nullable Integer cursor,
+      int limit) {
+    long boardId = requireBound(principal);
+    Suchanfrage anfrage =
+        new Suchanfrage(
+            kinds == null ? Set.of() : Set.copyOf(kinds),
+            epic,
+            createdFrom,
+            createdTo,
+            cursor,
+            limit);
+    SuchSeite seite = cardSearch.searchOnBoard(principal.userId(), boardId, anfrage, Map.of());
+    Integer naechster = seite.naechsterCursor();
+    return new SearchPage(
+        seite.treffer().stream().map(KanbanArchivService::hit).toList(),
+        naechster == null ? null : String.valueOf(naechster));
+  }
+
+  private static SearchHit hit(SuchTreffer t) {
+    return new SearchHit(
+        t.id(),
+        t.number(),
+        t.title(),
+        t.kind(),
+        t.column(),
+        t.archived(),
+        t.createdAt(),
+        t.movedToDoneAt(),
+        new Excerpt(t.auszug(), t.fundstelle(), t.kommentarId()));
   }
 
   // --- Response-Formen (Plan #1574, E10) ------------------------------------
@@ -76,4 +127,60 @@ public class KanbanArchivService {
           @Nullable Instant movedToDoneAt,
       @Schema(description = "Alle Kommentare der Karte, der älteste zuerst.")
           List<Comment> comments) {}
+
+  /** Ein Teil des Suchergebnisses. */
+  @Schema(description = "Ein Teil der Treffer einer Suche, nach Nummer absteigend.")
+  public record SearchPage(
+      @Schema(description = "Die Treffer dieses Teils, höchstens limit viele.")
+          List<SearchHit> hits,
+      @Schema(
+              description =
+                  "Wert für den Parameter cursor des nächsten Teils; fehlt, wenn keine Treffer"
+                      + " mehr folgen.",
+              example = "1403")
+          @Nullable String nextCursor) {}
+
+  /** Eine gefundene Karte mit Art, Ort, Zeitpunkten und Auszug. */
+  @Schema(description = "Eine gefundene Karte des gebundenen Boards, auch archiviert.")
+  public record SearchHit(
+      @Schema(description = "Interne ID der Karte.", example = "4711") long id,
+      @Schema(description = "Projektweite Nummer der Karte.", example = "1403") int number,
+      @Schema(description = "Titel der Karte.", example = "[Fachlich] Export als CSV") String title,
+      @Schema(
+              description =
+                  "Art der Karte: FACHLICH, PLAN, IDEE, TASK oder MENSCH nach dem Titel-Präfix,"
+                      + " ARBEITSPAKET ohne Präfix, VORHABEN für ein Vorhaben.",
+              example = "FACHLICH")
+          String kind,
+      @Schema(
+              description =
+                  "Spaltenschlüssel wie in GET /api/kanban/items, auch bei einer archivierten"
+                      + " Karte.",
+              example = "DONE")
+          String column,
+      @Schema(description = "true, wenn die Karte archiviert ist.", example = "true")
+          boolean archived,
+      @Schema(description = "Zeitpunkt der Anlage.", example = "2026-09-01T08:00:00Z")
+          Instant createdAt,
+      @Schema(
+              description = "Zeitpunkt des Zugs nach Done; fehlt, wenn es keinen gab.",
+              example = "2026-09-20T17:30:00Z")
+          @Nullable Instant movedToDoneAt,
+      @Schema(description = "Kurzer Auszug aus der Karte.") Excerpt excerpt) {}
+
+  /** Der Auszug eines Treffers und seine Fundstelle. */
+  @Schema(description = "Kurzer Auszug aus der Karte und wo er steht.")
+  public record Excerpt(
+      @Schema(
+              description = "Höchstens 200 Zeichen, Zeilenumbrüche als Leerzeichen.",
+              example = "Wer einen neuen Fachplan schreibt, soll frühere finden …")
+          String text,
+      @Schema(
+              description =
+                  "Fundstelle: TITLE (Titel), BODY (Text) oder COMMENT (ein Kommentar). Ohne"
+                      + " Suchbegriff BODY mit dem Anfang des Texts.",
+              example = "BODY")
+          String source,
+      @Schema(description = "ID des Kommentars bei COMMENT; fehlt sonst.", example = "88")
+          @Nullable Long commentId) {}
 }

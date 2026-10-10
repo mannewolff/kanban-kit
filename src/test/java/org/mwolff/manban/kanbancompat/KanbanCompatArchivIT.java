@@ -9,8 +9,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
@@ -25,8 +27,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultMatcher;
 
 /**
- * Lesender Archivzugang der Kanban-Strecke über ein board-gebundenes Token (Plan #1574). Dieses
- * Paket deckt den Einzelabruf nach Nummer ab; Suche und Herkunftskette ergänzen ihre Fälle hier.
+ * Lesender Archivzugang der Kanban-Strecke über ein board-gebundenes Token (Plan #1574):
+ * Einzelabruf nach Nummer und Suche nach Art, Vorhaben und Zeitraum; Textsuche und Herkunftskette
+ * ergänzen ihre Fälle hier.
  *
  * <p>Archiv und Papierkorb werden per SQL gesetzt ({@code archived}, {@code deleted_at}): Der Test
  * prüft die Lesesicht, nicht die Wege dorthin.
@@ -138,6 +141,133 @@ class KanbanCompatArchivIT extends AbstractIntegrationTest {
     byNumberRaw(unboundToken(f.owner), numberOf(id), status().isConflict());
   }
 
+  // --- Suche nach Art, Vorhaben und Zeitraum (Kriterien 2 und 4) ----------------
+
+  @Test
+  void suche_nachArt_liefertArchivierteTreffer_mitAngaben() throws Exception {
+    Fixture f = fixture("su-art");
+    long fachlich = ingest(f.token, "[Fachlich] Alter Fachplan", null);
+    long plan = ingest(f.token, "[Plan] Plan", null);
+    ingest(f.token, "Arbeitspaket", null);
+    jdbc.update(
+        "UPDATE card SET archived = true, moved_to_done_at = now(), description = ? WHERE id = ?",
+        "## Ziel\nFrüher entschieden",
+        fachlich);
+
+    JsonNode page = search(f.token, "?kind=FACHLICH&kind=PLAN", status().isOk());
+
+    List<Long> ids = new ArrayList<>();
+    page.get("hits").forEach(h -> ids.add(h.get("id").asLong()));
+    assertThat(ids).containsExactly(plan, fachlich);
+    assertThat(page.get("nextCursor").isNull()).isTrue();
+    JsonNode hit = page.get("hits").get(1);
+    assertThat(hit.get("number").asInt()).isEqualTo(numberOf(fachlich));
+    assertThat(hit.get("title").asText()).isEqualTo("[Fachlich] Alter Fachplan");
+    assertThat(hit.get("kind").asText()).isEqualTo("FACHLICH");
+    assertThat(hit.get("column").asText()).isEqualTo("BACKLOG");
+    assertThat(hit.get("archived").asBoolean()).isTrue();
+    assertThat(hit.get("createdAt").isNull()).isFalse();
+    assertThat(hit.get("movedToDoneAt").isNull()).isFalse();
+    assertThat(hit.get("excerpt").get("text").asText()).isEqualTo("## Ziel Früher entschieden");
+    assertThat(hit.get("excerpt").get("source").asText()).isEqualTo("BODY");
+    assertThat(hit.get("excerpt").get("commentId").isNull()).isTrue();
+  }
+
+  @Test
+  void suche_unbekannteArt_ist400() throws Exception {
+    Fixture f = fixture("su-unbekannt");
+
+    search(f.token, "?kind=FACHPLAN", status().isBadRequest());
+  }
+
+  @Test
+  void suche_ungueltigeGrenzen_sind400() throws Exception {
+    Fixture f = fixture("su-grenzen");
+
+    search(f.token, "?limit=0", status().isBadRequest());
+    search(f.token, "?limit=201", status().isBadRequest());
+    search(f.token, "?cursor=0", status().isBadRequest());
+    search(
+        f.token,
+        "?createdFrom=2026-02-01T00:00:00Z&createdTo=2026-01-01T00:00:00Z",
+        status().isBadRequest());
+  }
+
+  @Test
+  void suche_ungebundenesToken_wirdMit409Abgewiesen() throws Exception {
+    Fixture f = fixture("su-ungebunden");
+
+    search(unboundToken(f.owner), "", status().isConflict());
+  }
+
+  @Test
+  void suche_nachVorhaben_schliesstArchiviertesMitgliedEin() throws Exception {
+    Fixture f = fixture("su-vorhaben");
+    long vorhaben = ingest(f.token, "Vorhaben", null);
+    jdbc.update("UPDATE card SET type = 'EPIC', status = NULL WHERE id = ?", vorhaben);
+    long wurzel = ingest(f.token, "[Plan] Wurzel", null);
+    long kind = ingest(f.token, "Paket", numberOf(wurzel));
+    ingest(f.token, "Fremd", null);
+    jdbc.update("UPDATE card SET parent_id = ? WHERE id = ?", vorhaben, wurzel);
+    jdbc.update("UPDATE card SET archived = true WHERE id = ?", kind);
+
+    JsonNode page = search(f.token, "?epic=" + numberOf(vorhaben), status().isOk());
+    JsonNode keinVorhaben = search(f.token, "?epic=" + numberOf(wurzel), status().isOk());
+
+    List<Long> ids = new ArrayList<>();
+    page.get("hits").forEach(h -> ids.add(h.get("id").asLong()));
+    assertThat(ids).containsExactly(kind, wurzel);
+    assertThat(keinVorhaben.get("hits")).isEmpty();
+  }
+
+  @Test
+  void suche_nachZeitraum_istHalboffen() throws Exception {
+    Fixture f = fixture("su-zeitraum");
+    long frueh = ingest(f.token, "Früh", null);
+    long mitte = ingest(f.token, "Mitte", null);
+    long spaet = ingest(f.token, "Spät", null);
+    setCreated(frueh, "2026-01-01T00:00:00Z");
+    setCreated(mitte, "2026-02-01T00:00:00Z");
+    setCreated(spaet, "2026-03-01T00:00:00Z");
+
+    JsonNode page =
+        search(
+            f.token,
+            "?createdFrom=2026-02-01T00:00:00Z&createdTo=2026-03-01T00:00:00Z",
+            status().isOk());
+
+    List<Long> ids = new ArrayList<>();
+    page.get("hits").forEach(h -> ids.add(h.get("id").asLong()));
+    assertThat(ids).containsExactly(mitte);
+  }
+
+  @Test
+  void suche_zweihundertfuenfzigKarten_inTeilen_vollstaendigUndOhneDoppel() throws Exception {
+    Fixture f = fixture("su-teile");
+    Set<Long> angelegt = new HashSet<>();
+    for (int i = 0; i < 250; i++) {
+      angelegt.add(ingest(f.token, "Karte " + i, null));
+    }
+    jdbc.update("UPDATE card SET archived = true WHERE id IN (?, ?)", min(angelegt), max(angelegt));
+
+    List<Long> gesammelt = new ArrayList<>();
+    String cursor = null;
+    int teile = 0;
+    do {
+      JsonNode page =
+          search(
+              f.token, "?limit=50" + (cursor == null ? "" : "&cursor=" + cursor), status().isOk());
+      assertThat(page.get("hits").size()).isLessThanOrEqualTo(50);
+      page.get("hits").forEach(h -> gesammelt.add(h.get("id").asLong()));
+      cursor = page.get("nextCursor").isNull() ? null : page.get("nextCursor").asText();
+      teile++;
+    } while (cursor != null);
+
+    assertThat(teile).isEqualTo(5);
+    assertThat(gesammelt).hasSize(250).doesNotHaveDuplicates();
+    assertThat(new HashSet<>(gesammelt)).isEqualTo(angelegt);
+  }
+
   // --- Hilfen ---------------------------------------------------------------
 
   private record Fixture(long projectId, Cookie owner, String token) {}
@@ -160,6 +290,28 @@ class KanbanCompatArchivIT extends AbstractIntegrationTest {
         .andReturn()
         .getResponse()
         .getContentAsString();
+  }
+
+  private JsonNode search(String token, String query, ResultMatcher expected) throws Exception {
+    return json.readTree(
+        mvc.perform(get("/api/kanban/search" + query).header(TOKEN_HEADER, token))
+            .andExpect(expected)
+            .andReturn()
+            .getResponse()
+            .getContentAsString());
+  }
+
+  private void setCreated(long cardId, String instant) {
+    jdbc.update(
+        "UPDATE card SET created_at = CAST(? AS timestamptz) WHERE id = ?", instant, cardId);
+  }
+
+  private static long min(Set<Long> ids) {
+    return ids.stream().mapToLong(Long::longValue).min().orElseThrow();
+  }
+
+  private static long max(Set<Long> ids) {
+    return ids.stream().mapToLong(Long::longValue).max().orElseThrow();
   }
 
   private long ingest(String token, String title, Integer derivedFrom) throws Exception {

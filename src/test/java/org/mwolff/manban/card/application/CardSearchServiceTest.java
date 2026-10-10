@@ -14,12 +14,18 @@ import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
+import org.mwolff.manban.card.application.CardSearchService.KommentarFund;
+import org.mwolff.manban.card.application.CardSearchService.SuchSeite;
+import org.mwolff.manban.card.application.CardSearchService.SuchTreffer;
+import org.mwolff.manban.card.application.CardSearchService.Suchanfrage;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
@@ -33,6 +39,10 @@ import org.mwolff.manban.project.domain.Permission;
  * {@code CardServiceTest} (Issue #1391, Plan #1387 E6); {@link KartenSicht} entsteht echt aus
  * denselben Port-Mocks.
  */
+// PMD.TooManyMethods, PMD.CouplingBetweenObjects: Die Suche der Kanban-Strecke (Plan #1574) bringt
+// ihre Fassaden-Fälle samt Such-Records dazu; je Fall eine kleine Testmethode bleibt lesbarer als
+// eine Aufteilung der Fassaden-Tests auf mehrere Klassen.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CouplingBetweenObjects"})
 class CardSearchServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -432,5 +442,193 @@ class CardSearchServiceTest {
 
     assertThat(treffer.card().status()).isEqualTo("READY");
     assertThat(treffer.card().canSetStatus()).isFalse();
+  }
+
+  // --- searchOnBoard: Suche der Kanban-Strecke (Plan #1574, A3, E2, E7) ---
+
+  private static Suchanfrage anfrage(Set<String> arten, Instant von, Instant bis) {
+    return new Suchanfrage(arten, null, von, bis, null, 50);
+  }
+
+  private static Card bestand(
+      long id, int number, String title, boolean archived, Instant done, CardStatus status) {
+    return new Card(
+        id,
+        BOARD,
+        20L,
+        number,
+        title,
+        "Zeile\nzwei",
+        0,
+        archived,
+        done,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null,
+        PROJECT,
+        null,
+        null,
+        null,
+        status);
+  }
+
+  @Test
+  void searchOnBoard_liefertDieTrefferDesBoards_mitArtSpalteUndAuszug() {
+    Instant done = Instant.parse("2026-02-03T04:05:06Z");
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                bestand(1L, 40, "[Plan] Archiv", true, done, null),
+                bestand(2L, 41, "Paket", false, null, CardStatus.READY)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "In Review", 3)));
+
+    SuchSeite seite = service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, null), Map.of());
+
+    assertThat(seite.naechsterCursor()).isNull();
+    assertThat(seite.treffer())
+        .containsExactly(
+            new SuchTreffer(
+                2L,
+                41,
+                "Paket",
+                "ARBEITSPAKET",
+                "READY",
+                false,
+                FIXED,
+                null,
+                "Zeile zwei",
+                "BODY",
+                null),
+            new SuchTreffer(
+                1L,
+                40,
+                "[Plan] Archiv",
+                "PLAN",
+                "IN_REVIEW",
+                true,
+                FIXED,
+                done,
+                "Zeile zwei",
+                "BODY",
+                null));
+  }
+
+  @Test
+  void searchOnBoard_spalteUnbekannt_zaehltAlsBacklog() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(bestand(1L, 40, "A", false, null, null)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of());
+
+    SuchSeite seite = service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, null), Map.of());
+
+    assertThat(seite.treffer().getFirst().column()).isEqualTo("BACKLOG");
+  }
+
+  @Test
+  void searchOnBoard_filtertNachArt_undReichtDenCursorDurch() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                bestand(1L, 40, "[Plan] A", false, null, null),
+                bestand(2L, 41, "[Fachlich] B", false, null, null),
+                bestand(3L, 42, "[Plan] C", false, null, null)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+
+    SuchSeite seite =
+        service.searchOnBoard(
+            5L, BOARD, new Suchanfrage(Set.of("PLAN"), null, null, null, null, 1), Map.of());
+
+    assertThat(seite.treffer()).extracting(SuchTreffer::number).containsExactly(42);
+    assertThat(seite.naechsterCursor()).isEqualTo(42);
+  }
+
+  @Test
+  void searchOnBoard_reichtKommentarFundstellenDurch() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(bestand(1L, 40, "A", false, null, null)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+
+    SuchTreffer treffer =
+        service
+            .searchOnBoard(
+                5L,
+                BOARD,
+                anfrage(Set.of(), null, null),
+                Map.of(1L, new KommentarFund(9L, "Review")))
+            .treffer()
+            .getFirst();
+
+    assertThat(treffer.auszug()).isEqualTo("Review");
+    assertThat(treffer.fundstelle()).isEqualTo("COMMENT");
+    assertThat(treffer.kommentarId()).isEqualTo(9L);
+  }
+
+  @Test
+  void searchOnBoard_prueftDieMitgliedschaftVorDemLookup() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(
+            () -> service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, null), Map.of()))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(cards, never()).findByBoardId(anyLong());
+  }
+
+  @Test
+  void searchOnBoard_liestNurDasGebundeneBoard() {
+    // Board-Grenze (A3): Der Bestand kommt allein aus findByBoardId des gebundenen Boards, nie aus
+    // dem ganzen Projekt.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of());
+
+    assertThat(service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, null), Map.of()).treffer())
+        .isEmpty();
+    verify(cards).findByBoardId(BOARD);
+    verify(cards, never()).findByProjectId(anyLong());
+  }
+
+  @Test
+  void searchOnBoard_unbekannteArt_istEinFehlerOhneLookup() {
+    Suchanfrage a = anfrage(Set.of("PLAN", "plan"), null, null);
+
+    assertThatThrownBy(() -> service.searchOnBoard(5L, BOARD, a, Map.of()))
+        .isInstanceOf(UnknownCardKindException.class)
+        .hasMessageContaining("plan");
+    verify(cards, never()).findByBoardId(anyLong());
+  }
+
+  @Test
+  void searchOnBoard_beginnNichtVorEnde_istEinFehlerOhneLookup() {
+    Instant t = Instant.parse("2026-05-01T00:00:00Z");
+
+    assertThatThrownBy(() -> service.searchOnBoard(5L, BOARD, anfrage(Set.of(), t, t), Map.of()))
+        .isInstanceOf(InvalidPeriodBoundsException.class);
+    assertThatThrownBy(
+            () -> service.searchOnBoard(5L, BOARD, anfrage(Set.of(), t.plusNanos(1), t), Map.of()))
+        .isInstanceOf(InvalidPeriodBoundsException.class);
+    verify(cards, never()).findByBoardId(anyLong());
+  }
+
+  @Test
+  void searchOnBoard_halbeOderGueltigeGrenzen_sindErlaubt() {
+    Instant t = Instant.parse("2026-05-01T00:00:00Z");
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of());
+
+    assertThat(service.searchOnBoard(5L, BOARD, anfrage(Set.of(), t, null), Map.of()).treffer())
+        .isEmpty();
+    assertThat(service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, t), Map.of()).treffer())
+        .isEmpty();
+    assertThat(
+            service
+                .searchOnBoard(5L, BOARD, anfrage(Set.of(), t, t.plusNanos(1)), Map.of())
+                .treffer())
+        .isEmpty();
   }
 }
