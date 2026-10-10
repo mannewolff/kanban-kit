@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CardArchiveService {
 
   private final CardRepository cards;
+  private final CardBestandRepository bestand;
   private final KartenAbhaengigkeiten abhaengigkeiten;
   private final BoardService boardService;
   private final PermissionChecker permissions;
@@ -38,6 +39,7 @@ public class CardArchiveService {
 
   public CardArchiveService(
       CardRepository cards,
+      CardBestandRepository bestand,
       KartenAbhaengigkeiten abhaengigkeiten,
       BoardService boardService,
       PermissionChecker permissions,
@@ -47,6 +49,7 @@ public class CardArchiveService {
       ApplicationEventPublisher events,
       Clock clock) {
     this.cards = cards;
+    this.bestand = bestand;
     this.abhaengigkeiten = abhaengigkeiten;
     this.boardService = boardService;
     this.permissions = permissions;
@@ -165,6 +168,9 @@ public class CardArchiveService {
     // Aufräum-Aufträge ein, solange die Metadaten existieren — die Cascade nimmt sie gleich mit.
     events.publishEvent(new CardsPurgedEvent(List.of(card.requireId())));
     abhaengigkeiten.entferne(card.requireId());
+    // Plan #1574, E18: Die FK setzt die Herkunft der Kinder beim Delete auf NULL — vorher die
+    // Nummer an ihnen bewahren.
+    bestand.bewahreHerkunftsnummern(List.of(card.requireId()));
     cards.deleteById(card.requireId());
     grundlage.publishChanged(card.boardId(), ActivityType.DELETED, card.requireId());
   }

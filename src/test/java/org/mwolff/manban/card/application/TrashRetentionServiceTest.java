@@ -23,6 +23,7 @@ class TrashRetentionServiceTest {
   private static final Instant NOW = Instant.parse("2026-07-14T00:00:00Z");
 
   private CardRepository cards;
+  private CardBestandRepository bestand;
   private CardDependencyRepository dependencies;
   private ApplicationEventPublisher events;
   private TrashRetentionService service;
@@ -55,10 +56,12 @@ class TrashRetentionServiceTest {
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
+    bestand = mock(CardBestandRepository.class);
     dependencies = mock(CardDependencyRepository.class);
     events = mock(ApplicationEventPublisher.class);
     service =
-        new TrashRetentionService(cards, new KartenAbhaengigkeiten(dependencies, cards), events);
+        new TrashRetentionService(
+            cards, bestand, new KartenAbhaengigkeiten(dependencies, cards), events);
   }
 
   @Test
@@ -102,6 +105,20 @@ class TrashRetentionServiceTest {
 
     service.purgeExpiredTrash(NOW, 30);
 
-    verifyNoInteractions(events);
+    verifyNoInteractions(events, bestand);
+  }
+
+  @Test
+  void purgeExpiredTrash_bewahrtHerkunftsnummernVorDemLoeschen() {
+    Instant threshold = NOW.minus(Duration.ofDays(30));
+    when(cards.findPurgeableTrash(threshold)).thenReturn(List.of(card(1), card(2)));
+
+    service.purgeExpiredTrash(NOW, 30);
+
+    // Plan #1574, E18: einmal für alle abgelaufenen Karten, bevor die erste gelöscht wird.
+    InOrder inOrder = inOrder(bestand, cards);
+    inOrder.verify(bestand).bewahreHerkunftsnummern(List.of(1L, 2L));
+    inOrder.verify(cards).deleteById(1L);
+    inOrder.verify(cards).deleteById(2L);
   }
 }

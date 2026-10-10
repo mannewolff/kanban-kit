@@ -16,14 +16,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class TrashRetentionService {
 
   private final CardRepository cards;
+  private final CardBestandRepository bestand;
   private final KartenAbhaengigkeiten abhaengigkeiten;
   private final ApplicationEventPublisher events;
 
   public TrashRetentionService(
       CardRepository cards,
+      CardBestandRepository bestand,
       KartenAbhaengigkeiten abhaengigkeiten,
       ApplicationEventPublisher events) {
     this.cards = cards;
+    this.bestand = bestand;
     this.abhaengigkeiten = abhaengigkeiten;
     this.events = events;
   }
@@ -43,7 +46,11 @@ public class TrashRetentionService {
     }
     // Vor dem Delete publizieren (Issue #503): Anhänge planen ihre Blob-Löschung ein, solange die
     // Metadaten existieren — die Cascade nimmt sie gleich mit.
-    events.publishEvent(new CardsPurgedEvent(expired.stream().map(Card::requireId).toList()));
+    List<Long> ids = expired.stream().map(Card::requireId).toList();
+    events.publishEvent(new CardsPurgedEvent(ids));
+    // Plan #1574, E18: Die FK setzt die Herkunft der Kinder beim Delete auf NULL — vorher die
+    // Nummer an ihnen bewahren.
+    bestand.bewahreHerkunftsnummern(ids);
     for (Card card : expired) {
       abhaengigkeiten.entferne(card.requireId());
       cards.deleteById(card.requireId());
