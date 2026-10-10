@@ -20,6 +20,7 @@
   "src/test/java/org/mwolff/manban/card/application/CardRunQueryServiceEpicsByCardNumberTest.java": ["src/main/java/org/mwolff/manban/card/application/CardRunQueryService.java"],
   "src/test/java/org/mwolff/manban/card/application/CardServiceListByBoardTest.java": ["src/main/java/org/mwolff/manban/card/application/CardService.java"],
   "src/test/java/org/mwolff/manban/card/application/DerivedFromResolutionTest.java": ["src/main/java/org/mwolff/manban/card/application/DerivedFrom.java"],
+  "src/test/java/org/mwolff/manban/card/application/KartenBestandSucheTextTest.java": ["src/main/java/org/mwolff/manban/card/application/KartenBestandSuche.java"],
   "src/test/java/org/mwolff/manban/card/application/RequirementCardResolutionTest.java": ["src/main/java/org/mwolff/manban/card/application/RequirementCard.java"],
   "src/test/java/org/mwolff/manban/config/DatabasePasswordStartupCheckContextTest.java": ["src/main/java/org/mwolff/manban/config/DatabasePasswordStartupCheck.java"],
   "src/test/java/org/mwolff/manban/config/OpenApiIT.java": ["src/main/java/org/mwolff/manban/kanbancompat/web/KanbanCompatController.java"],

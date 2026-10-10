@@ -28,12 +28,15 @@ import org.springframework.test.web.servlet.ResultMatcher;
 
 /**
  * Lesender Archivzugang der Kanban-Strecke über ein board-gebundenes Token (Plan #1574):
- * Einzelabruf nach Nummer und Suche nach Art, Vorhaben und Zeitraum; Textsuche und Herkunftskette
- * ergänzen ihre Fälle hier.
+ * Einzelabruf nach Nummer und Suche nach Text, Art, Vorhaben und Zeitraum; die Herkunftskette
+ * ergänzt ihre Fälle hier.
  *
  * <p>Archiv und Papierkorb werden per SQL gesetzt ({@code archived}, {@code deleted_at}): Der Test
  * prüft die Lesesicht, nicht die Wege dorthin.
  */
+// PMD.TooManyMethods: je Fall der Archivstrecke ein Test plus die Request-Hilfen — der Testumfang
+// folgt den Kriterien des Plans, kein God-Class-Smell.
+@SuppressWarnings("PMD.TooManyMethods")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class KanbanCompatArchivIT extends AbstractIntegrationTest {
@@ -268,6 +271,100 @@ class KanbanCompatArchivIT extends AbstractIntegrationTest {
     assertThat(new HashSet<>(gesammelt)).isEqualTo(angelegt);
   }
 
+  // --- Textsuche (Kriterium 2, E3, E4, E16) -----------------------------------
+
+  @Test
+  void suche_nachText_findetTitelTextUndKommentarArchivierterKarten() throws Exception {
+    Fixture f = fixture("tx-orte");
+    long imTitel = ingest(f.token, "[Fachlich] Archivsuche im Titel", null);
+    long imText = ingest(f.token, "[Plan] Plan", null);
+    long imKommentar = ingest(f.token, "Paket", null);
+    ingest(f.token, "Unbeteiligt", null);
+    jdbc.update(
+        "UPDATE card SET description = ? WHERE id = ?",
+        "## Ziel\nWir bauen die ARCHIVSUCHE aus",
+        imText);
+    comment(f.token, imKommentar, "Ohne das Wort");
+    comment(f.token, imKommentar, "## Review\nDie Archivsuche passt");
+    comment(f.token, imKommentar, "Noch einmal Archivsuche");
+    jdbc.update(
+        "UPDATE card SET archived = true WHERE id IN (?, ?, ?)", imTitel, imText, imKommentar);
+    Long ersterTreffer =
+        jdbc.queryForObject(
+            "SELECT min(id) FROM comment WHERE card_id = ? AND body LIKE '## Review%'",
+            Long.class, imKommentar);
+
+    JsonNode page = searchText(f.token, "  archivsuche ", status().isOk());
+
+    List<Long> ids = new ArrayList<>();
+    page.get("hits").forEach(h -> ids.add(h.get("id").asLong()));
+    assertThat(ids).containsExactly(imKommentar, imText, imTitel);
+    JsonNode kommentar = page.get("hits").get(0).get("excerpt");
+    assertThat(kommentar.get("source").asText()).isEqualTo("COMMENT");
+    assertThat(kommentar.get("commentId").asLong()).isEqualTo(ersterTreffer);
+    assertThat(kommentar.get("text").asText()).isEqualTo("## Review Die Archivsuche passt");
+    JsonNode text = page.get("hits").get(1).get("excerpt");
+    assertThat(text.get("source").asText()).isEqualTo("BODY");
+    assertThat(text.get("text").asText()).isEqualTo("## Ziel Wir bauen die ARCHIVSUCHE aus");
+    assertThat(text.get("commentId").isNull()).isTrue();
+    JsonNode titel = page.get("hits").get(2).get("excerpt");
+    assertThat(titel.get("source").asText()).isEqualTo("TITLE");
+    assertThat(titel.get("text").asText()).isEqualTo("[Fachlich] Archivsuche im Titel");
+  }
+
+  @Test
+  void suche_nachText_wirktMitDenAnderenFilternZusammen() throws Exception {
+    Fixture f = fixture("tx-art");
+    long fachlich = ingest(f.token, "[Fachlich] Export", null);
+    ingest(f.token, "Paket Export", null);
+
+    JsonNode page = searchText(f.token, "export", "FACHLICH", status().isOk());
+
+    assertThat(page.get("hits")).hasSize(1);
+    assertThat(page.get("hits").get(0).get("id").asLong()).isEqualTo(fachlich);
+  }
+
+  @Test
+  void suche_prozentUndUnterstrich_geltenWoertlich() throws Exception {
+    Fixture f = fixture("tx-zeichen");
+    long prozent = ingest(f.token, "Zu 100% fertig", null);
+    ingest(f.token, "Zu 1000 fertig", null);
+    long unterstrich = ingest(f.token, "Feld a_b", null);
+    ingest(f.token, "Feld axb", null);
+    long kommentiert = ingest(f.token, "Kommentiert", null);
+    comment(f.token, kommentiert, "Rabatt 5% auf x_y");
+    long kommentiertOhne = ingest(f.token, "Kommentiert ohne", null);
+    comment(f.token, kommentiertOhne, "Rabatt 50 auf xzy");
+
+    assertThat(ids(searchText(f.token, "100%", status().isOk()))).containsExactly(prozent);
+    assertThat(ids(searchText(f.token, "a_b", status().isOk()))).containsExactly(unterstrich);
+    assertThat(ids(searchText(f.token, "5% auf x_y", status().isOk())))
+        .containsExactly(kommentiert);
+  }
+
+  @Test
+  void suche_kommentarImPapierkorbOderAufAnderemBoard_istKeinTreffer() throws Exception {
+    Fixture f = fixture("tx-grenze");
+    long geloescht = ingest(f.token, "Gelöscht", null);
+    comment(f.token, geloescht, "Geheimwort im Papierkorb");
+    jdbc.update("UPDATE card SET deleted_at = now() WHERE id = ?", geloescht);
+    long anderesBoard = createBoard(f.owner, f.projectId, "Anderes Board");
+    String andererToken = boundToken(f.owner, f.projectId, anderesBoard);
+    long fremd = ingest(andererToken, "Fremd", null);
+    comment(andererToken, fremd, "Geheimwort auf dem anderen Board");
+
+    assertThat(searchText(f.token, "geheimwort", status().isOk()).get("hits")).isEmpty();
+    assertThat(ids(searchText(andererToken, "geheimwort", status().isOk()))).containsExactly(fremd);
+  }
+
+  @Test
+  void suche_suchbegriffUeber200Zeichen_ist400() throws Exception {
+    Fixture f = fixture("tx-lang");
+
+    searchText(f.token, "x".repeat(200), status().isOk());
+    searchText(f.token, "x".repeat(201), status().isBadRequest());
+  }
+
   // --- Hilfen ---------------------------------------------------------------
 
   private record Fixture(long projectId, Cookie owner, String token) {}
@@ -299,6 +396,35 @@ class KanbanCompatArchivIT extends AbstractIntegrationTest {
             .andReturn()
             .getResponse()
             .getContentAsString());
+  }
+
+  private JsonNode searchText(String token, String q, ResultMatcher expected) throws Exception {
+    return json.readTree(
+        mvc.perform(get("/api/kanban/search").param("q", q).header(TOKEN_HEADER, token))
+            .andExpect(expected)
+            .andReturn()
+            .getResponse()
+            .getContentAsString());
+  }
+
+  private JsonNode searchText(String token, String q, String kind, ResultMatcher expected)
+      throws Exception {
+    return json.readTree(
+        mvc.perform(
+                get("/api/kanban/search")
+                    .param("q", q)
+                    .param("kind", kind)
+                    .header(TOKEN_HEADER, token))
+            .andExpect(expected)
+            .andReturn()
+            .getResponse()
+            .getContentAsString());
+  }
+
+  private static List<Long> ids(JsonNode page) {
+    List<Long> ids = new ArrayList<>();
+    page.get("hits").forEach(h -> ids.add(h.get("id").asLong()));
+    return ids;
   }
 
   private void setCreated(long cardId, String instant) {

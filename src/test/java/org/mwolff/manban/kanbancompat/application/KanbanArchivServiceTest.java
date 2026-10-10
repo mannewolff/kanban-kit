@@ -169,7 +169,7 @@ class KanbanArchivServiceTest {
   void search_reichtDieFilterDurch_undFormtDieTreffer() {
     Instant von = Instant.parse("2026-01-01T00:00:00Z");
     Instant bis = Instant.parse("2026-06-01T00:00:00Z");
-    Suchanfrage erwartet = new Suchanfrage(Set.of("PLAN", "FACHLICH"), 12, von, bis, 90, 5);
+    Suchanfrage erwartet = new Suchanfrage(null, Set.of("PLAN", "FACHLICH"), 12, von, bis, 90, 5);
     when(search.searchOnBoard(USER, BOARD, erwartet, Map.of()))
         .thenReturn(
             new SuchSeite(
@@ -201,7 +201,7 @@ class KanbanArchivServiceTest {
                 41));
 
     SearchPage page =
-        service.search(bound(), List.of("PLAN", "FACHLICH", "PLAN"), 12, von, bis, 90, 5);
+        service.search(bound(), null, List.of("PLAN", "FACHLICH", "PLAN"), 12, von, bis, 90, 5);
 
     assertThat(page.hits())
         .containsExactly(
@@ -231,10 +231,10 @@ class KanbanArchivServiceTest {
   @Test
   void search_ohneFilter_undLetzterTeil_hatKeinenNaechstenCursor() {
     when(search.searchOnBoard(
-            USER, BOARD, new Suchanfrage(Set.of(), null, null, null, null, 50), Map.of()))
+            USER, BOARD, new Suchanfrage(null, Set.of(), null, null, null, null, 50), Map.of()))
         .thenReturn(new SuchSeite(List.of(), null));
 
-    SearchPage page = service.search(bound(), null, null, null, null, null, 50);
+    SearchPage page = service.search(bound(), null, null, null, null, null, null, 50);
 
     assertThat(page.hits()).isEmpty();
     assertThat(page.nextCursor()).isNull();
@@ -244,8 +244,47 @@ class KanbanArchivServiceTest {
   void search_ohneBindung_istTokenNotBound() {
     KanbanPrincipal unbound = new KanbanPrincipal(USER, 2L, null, null, "Token");
 
-    assertThatThrownBy(() -> service.search(unbound, List.of(), null, null, null, null, 50))
+    assertThatThrownBy(() -> service.search(unbound, "x", List.of(), null, null, null, null, 50))
         .isInstanceOf(TokenNotBoundException.class);
     verify(search, never()).searchOnBoard(anyLong(), anyLong(), any(), any());
+    verify(commentService, never()).trefferAufBoard(anyLong(), anyLong(), anyLong(), any());
+  }
+
+  // --- Textsuche (Plan #1574, A5, E16) ---
+
+  @Test
+  void search_mitSuchbegriff_holtDieKommentartrefferUndReichtSieDurch() {
+    when(commentService.trefferAufBoard(USER, 5L, BOARD, "Review"))
+        .thenReturn(
+            List.of(
+                new CommentService.KommentarTrefferView(77L, 9L, "Ein Review"),
+                new CommentService.KommentarTrefferView(78L, 11L, "Noch ein Review")));
+    Suchanfrage erwartet = new Suchanfrage(" Review ", Set.of(), null, null, null, null, 50);
+    when(search.searchOnBoard(
+            USER,
+            BOARD,
+            erwartet,
+            Map.of(
+                77L, new CardSearchService.KommentarFund(9L, "Ein Review"),
+                78L, new CardSearchService.KommentarFund(11L, "Noch ein Review"))))
+        .thenReturn(new SuchSeite(List.of(), null));
+
+    SearchPage page = service.search(bound(), " Review ", null, null, null, null, null, 50);
+
+    assertThat(page.hits()).isEmpty();
+  }
+
+  @Test
+  void search_ohneOderMitLeeremSuchbegriff_fragtDasKommentarmodulNicht() {
+    when(search.searchOnBoard(anyLong(), anyLong(), any(), any()))
+        .thenReturn(new SuchSeite(List.of(), null));
+
+    service.search(bound(), null, null, null, null, null, null, 50);
+    service.search(bound(), "   ", null, null, null, null, null, 50);
+
+    verify(commentService, never()).trefferAufBoard(anyLong(), anyLong(), anyLong(), any());
+    verify(search)
+        .searchOnBoard(
+            USER, BOARD, new Suchanfrage("   ", Set.of(), null, null, null, null, 50), Map.of());
   }
 }

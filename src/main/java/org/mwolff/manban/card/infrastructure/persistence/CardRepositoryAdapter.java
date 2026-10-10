@@ -94,6 +94,15 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
   }
 
   @Override
+  public Map<Long, String> textFundstellenAufBoard(long boardId, String q) {
+    Map<Long, String> fundstellen = new HashMap<>();
+    for (Object[] zeile : jpa.findTextFundstellen(boardId, q)) {
+      fundstellen.put(((Number) zeile[0]).longValue(), (String) zeile[1]);
+    }
+    return fundstellen;
+  }
+
+  @Override
   public Optional<Card> findById(long id) {
     return jpa.findById(id).map(CardRepositoryAdapter::toDomain);
   }

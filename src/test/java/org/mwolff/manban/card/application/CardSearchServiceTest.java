@@ -10,6 +10,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -53,6 +54,7 @@ class CardSearchServiceTest {
   private static final long BOARD_B = 11L;
 
   private CardRepository cards;
+  private CardBestandRepository kartenBestand;
   private BoardService boardService;
   private PermissionChecker permissions;
   private ProjectService projects;
@@ -79,6 +81,7 @@ class CardSearchServiceTest {
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
+    kartenBestand = mock(CardBestandRepository.class);
     boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
     projects = mock(ProjectService.class);
@@ -92,7 +95,8 @@ class CardSearchServiceTest {
                 mock(CardLabelRepository.class),
                 permissions),
             permissions);
-    service = new CardSearchService(cards, boardService, permissions, projects, sicht);
+    service =
+        new CardSearchService(cards, kartenBestand, boardService, permissions, projects, sicht);
   }
 
   // --- getByNumber (#408) -----------------------------------------------
@@ -447,7 +451,7 @@ class CardSearchServiceTest {
   // --- searchOnBoard: Suche der Kanban-Strecke (Plan #1574, A3, E2, E7) ---
 
   private static Suchanfrage anfrage(Set<String> arten, Instant von, Instant bis) {
-    return new Suchanfrage(arten, null, von, bis, null, 50);
+    return new Suchanfrage(null, arten, null, von, bis, null, 50);
   }
 
   private static Card bestand(
@@ -542,7 +546,7 @@ class CardSearchServiceTest {
 
     SuchSeite seite =
         service.searchOnBoard(
-            5L, BOARD, new Suchanfrage(Set.of("PLAN"), null, null, null, null, 1), Map.of());
+            5L, BOARD, new Suchanfrage(null, Set.of("PLAN"), null, null, null, null, 1), Map.of());
 
     assertThat(seite.treffer()).extracting(SuchTreffer::number).containsExactly(42);
     assertThat(seite.naechsterCursor()).isEqualTo(42);
@@ -567,6 +571,43 @@ class CardSearchServiceTest {
     assertThat(treffer.auszug()).isEqualTo("Review");
     assertThat(treffer.fundstelle()).isEqualTo("COMMENT");
     assertThat(treffer.kommentarId()).isEqualTo(9L);
+  }
+
+  @Test
+  void searchOnBoard_mitSuchbegriff_gleichtTitelUndTextGetrimmtAb() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                bestand(1L, 40, "Archiv lesen", false, null, null),
+                bestand(2L, 41, "B", false, null, null)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(kartenBestand.textFundstellenAufBoard(BOARD, "archiv")).thenReturn(Map.of(1L, "TITLE"));
+
+    SuchSeite seite =
+        service.searchOnBoard(
+            5L,
+            BOARD,
+            new Suchanfrage("  archiv ", Set.of(), null, null, null, null, 50),
+            Map.of());
+
+    assertThat(seite.treffer()).extracting(SuchTreffer::number).containsExactly(40);
+    assertThat(seite.treffer().getFirst().fundstelle()).isEqualTo("TITLE");
+    assertThat(seite.treffer().getFirst().auszug()).isEqualTo("Archiv lesen");
+  }
+
+  @Test
+  void searchOnBoard_leererSuchbegriff_fragtDenBestandNicht_undFiltertNicht() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(bestand(1L, 40, "A", false, null, null)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+
+    SuchSeite seite =
+        service.searchOnBoard(
+            5L, BOARD, new Suchanfrage("   ", Set.of(), null, null, null, null, 50), Map.of());
+
+    assertThat(seite.treffer()).extracting(SuchTreffer::number).containsExactly(40);
+    verifyNoInteractions(kartenBestand);
   }
 
   @Test

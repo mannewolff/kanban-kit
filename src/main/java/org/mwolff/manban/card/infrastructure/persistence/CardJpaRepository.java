@@ -91,6 +91,20 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   List<Object[]> findVerloreneHerkunftsnummern(long boardId);
 
   /**
+   * Karten-ID und Fundstelle ({@code TITLE} vor {@code BODY}) des Suchbegriffs in den Karten des
+   * Boards ohne Papierkorb (Plan #1574, E3, E4). {@code strpos} statt {@code LIKE}, damit {@code %}
+   * und {@code _} wörtlich gelten; der Suchbegriff geht nur als gebundener Parameter.
+   */
+  @Query(
+      value =
+          "select id, case when strpos(lower(title), lower(?2)) > 0 then 'TITLE' else 'BODY' end "
+              + "from card where board_id = ?1 and deleted_at is null "
+              + "and (strpos(lower(title), lower(?2)) > 0 "
+              + "or strpos(lower(coalesce(description, '')), lower(?2)) > 0)",
+      nativeQuery = true)
+  List<Object[]> findTextFundstellen(long boardId, String q);
+
+  /**
    * Schreibt an alle Kinder der genannten Karten die Nummer des Vorfahren (Plan #1574, E18). Vorher
    * flushen: Eine im selben Persistenzkontext gesetzte Herkunft muss in der Tabelle stehen.
    */

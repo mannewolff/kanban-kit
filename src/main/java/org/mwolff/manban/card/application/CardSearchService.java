@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CardSearchService {
 
   private final CardRepository cards;
+  private final CardBestandRepository bestand;
   private final BoardService boardService;
   private final PermissionChecker permissions;
   private final ProjectService projects;
@@ -39,11 +40,13 @@ public class CardSearchService {
 
   public CardSearchService(
       CardRepository cards,
+      CardBestandRepository bestand,
       BoardService boardService,
       PermissionChecker permissions,
       ProjectService projects,
       KartenSicht sicht) {
     this.cards = cards;
+    this.bestand = bestand;
     this.boardService = boardService;
     this.permissions = permissions;
     this.projects = projects;
@@ -106,9 +109,11 @@ public class CardSearchService {
 
   /**
    * Durchsucht die Karten genau dieses Boards, <strong>archivierte eingeschlossen</strong> — die
-   * Suche der Kanban-Strecke (Plan #1574, Kriterien 2 und 4): nach Art, Vorhaben und Zeitraum des
-   * Anlagedatums, nach Nummer absteigend, in Teilen (E6). Die Rechnung liegt in {@link
-   * KartenBestandSuche}.
+   * Suche der Kanban-Strecke (Plan #1574, Kriterien 2 und 4): nach Text, Art, Vorhaben und Zeitraum
+   * des Anlagedatums, nach Nummer absteigend, in Teilen (E6). Die Rechnung liegt in {@link
+   * KartenBestandSuche}. Titel und Text gleicht die Datenbank nur bei gesetztem Suchbegriff ab
+   * (E3); die Kommentar-Fundstellen bringt der Aufrufer mit, weil {@code card} nicht von {@code
+   * comment} abhängt (A5).
    *
    * <p>Die Eingaben werden vor jedem Lookup geprüft: Eine unbekannte Art endet mit {@link
    * UnknownCardKindException} (E2), ein Beginn, der nicht vor dem Ende liegt, mit {@link
@@ -116,20 +121,24 @@ public class CardSearchService {
    * {@link #findOnBoardByNumber}: Projekt-Mitgliedschaft, nur {@code board_id} = {@code boardId},
    * Papierkorb unsichtbar (A3).
    *
-   * @param fundstellen Kommentar-Fundstellen je Karten-ID, die den Auszug bestimmen; ohne Textsuche
-   *     leer
+   * @param kommentarFunde erster passender Kommentar je Karten-ID; ohne Textsuche leer
    */
   @Transactional(readOnly = true)
   public SuchSeite searchOnBoard(
-      long userId, long boardId, Suchanfrage anfrage, Map<Long, KommentarFund> fundstellen) {
+      long userId, long boardId, Suchanfrage anfrage, Map<Long, KommentarFund> kommentarFunde) {
     KartenBestandSuche.Anfrage geprueft = KartenBestandSuche.pruefe(anfrage);
     long projectId = boardService.requireProjectId(boardId);
     permissions.requireMembership(userId, projectId);
     Map<Long, String> spalten =
         boardService.listColumns(boardId).stream()
             .collect(Collectors.toMap(ColumnView::id, ColumnView::name));
+    String q = geprueft.q();
+    Map<Long, String> textFundstellen =
+        q == null ? Map.of() : bestand.textFundstellenAufBoard(boardId, q);
     return KartenBestandSuche.alsSicht(
-        KartenBestandSuche.suche(cards.findByBoardId(boardId), geprueft, fundstellen), spalten);
+        KartenBestandSuche.suche(
+            cards.findByBoardId(boardId), geprueft, textFundstellen, kommentarFunde),
+        spalten);
   }
 
   /**
@@ -242,9 +251,11 @@ public class CardSearchService {
       @Nullable Instant movedToDoneAt) {}
 
   /**
-   * Die Filter der Suche auf dem Board (Plan #1574, E2, E6, E7). Arten gehen als Konstantennamen
-   * der Kartenart, weil {@code card.domain} modulintern bleibt.
+   * Die Filter der Suche auf dem Board (Plan #1574, E2, E3, E6, E7). Arten gehen als
+   * Konstantennamen der Kartenart, weil {@code card.domain} modulintern bleibt.
    *
+   * @param q Suchbegriff für Titel, Text und Kommentare; wird getrimmt, leer oder {@code null}
+   *     heißt kein Textfilter
    * @param arten verlangte Arten, ODER-verknüpft; leer heißt jede Art
    * @param epic Nummer eines Vorhabens des Boards, sonst {@code null}
    * @param createdFrom Beginn des Anlagezeitraums, eingeschlossen, sonst {@code null}
@@ -253,6 +264,7 @@ public class CardSearchService {
    * @param limit höchste Trefferzahl dieses Teils, mindestens 1
    */
   public record Suchanfrage(
+      @Nullable String q,
       Set<String> arten,
       @Nullable Integer epic,
       @Nullable Instant createdFrom,
@@ -274,7 +286,7 @@ public class CardSearchService {
    * @param kind Konstantenname der Kartenart
    * @param column Kanban-Schlüssel nach {@link CardIngestService#kanbanSchluessel}
    * @param auszug höchstens 200 Zeichen, Zeilenumbrüche als Leerzeichen
-   * @param fundstelle {@code BODY} oder {@code COMMENT}
+   * @param fundstelle {@code TITLE}, {@code BODY} oder {@code COMMENT}
    * @param kommentarId der Kommentar bei {@code COMMENT}, sonst {@code null}
    */
   public record SuchTreffer(

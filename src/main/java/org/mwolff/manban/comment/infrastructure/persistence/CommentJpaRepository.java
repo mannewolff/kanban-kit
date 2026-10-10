@@ -27,4 +27,20 @@ interface CommentJpaRepository extends JpaRepository<CommentEntity, Long> {
               + " ORDER BY c.card_id, c.created_at DESC, c.id DESC",
       nativeQuery = true)
   List<CommentEntity> findLaufstaendeImProjekt(@Param("projectId") long projectId);
+
+  /**
+   * Je Karte des Boards der erste Kommentar (kleinste ID), der den Suchbegriff enthält (Plan #1574,
+   * E3, E16). {@code strpos} statt {@code LIKE}, damit {@code %} und {@code _} wörtlich gelten;
+   * {@code q} geht nur als gebundener Parameter. Projekt, Board und Papierkorb kommen über die
+   * Karte.
+   */
+  @Query(
+      value =
+          "SELECT DISTINCT ON (c.card_id) c.* FROM comment c JOIN card k ON k.id = c.card_id"
+              + " WHERE k.board_id = :boardId AND k.project_id = :projectId"
+              + " AND k.deleted_at IS NULL AND strpos(lower(c.body), lower(:q)) > 0"
+              + " ORDER BY c.card_id, c.id",
+      nativeQuery = true)
+  List<CommentEntity> findFirstMatchPerCardOnBoard(
+      @Param("projectId") long projectId, @Param("boardId") long boardId, @Param("q") String q);
 }

@@ -3,7 +3,9 @@ package org.mwolff.manban.comment.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -363,6 +365,34 @@ class CommentServiceTest {
         .containsExactly(
             new CommentService.LaufstandView(5L, "## Laufstand\n\nplan fertig", LAUF),
             new CommentService.LaufstandView(6L, "## Laufstand\n\nreview begonnen", null));
+  }
+
+  @Test
+  void trefferAufBoard_liefertJeKarteKommentarIdUndText() {
+    // Given (Plan #1574, E16)
+    when(comments.findFirstMatchPerCardOnBoard(1L, 10L, "Review"))
+        .thenReturn(
+            List.of(
+                new Comment(3L, 5L, 1L, "Ada", "Ein Review", FIXED, FIXED, null),
+                new Comment(4L, 6L, null, "Kit", "Review fertig", FIXED, FIXED, null)));
+
+    // When / Then
+    assertThat(service.trefferAufBoard(2L, 1L, 10L, "Review"))
+        .containsExactly(
+            new CommentService.KommentarTrefferView(5L, 3L, "Ein Review"),
+            new CommentService.KommentarTrefferView(6L, 4L, "Review fertig"));
+    verify(permissions).requireMembership(2L, 1L);
+  }
+
+  @Test
+  void trefferAufBoard_ohneMitgliedschaft_liestNichts() {
+    // Given
+    doThrow(new ProjectAccessDeniedException()).when(permissions).requireMembership(2L, 1L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.trefferAufBoard(2L, 1L, 10L, "Review"))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(comments, never()).findFirstMatchPerCardOnBoard(1L, 10L, "Review");
   }
 
   /** Simuliert die DB: vergibt beim ersten Speichern eine ID (Issue #0080). */

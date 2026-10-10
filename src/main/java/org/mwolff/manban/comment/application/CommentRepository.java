@@ -28,4 +28,14 @@ public interface CommentRepository {
    * und das Kit ersetzt den Laufstand über genau diesen Weg.
    */
   List<Comment> findLaufstaendeImProjekt(long projectId);
+
+  /**
+   * Je Karte des Boards der erste Kommentar (kleinste ID), dessen Text den Suchbegriff ohne
+   * Rücksicht auf Groß- und Kleinschreibung enthält (Plan #1574, E3, E4, E16); sortiert nach
+   * Karten-ID. Betrachtet werden nur Karten mit diesem Projekt und Board, archivierte
+   * eingeschlossen, ohne Papierkorb. {@code %} und {@code _} gelten wörtlich.
+   *
+   * @param q Suchbegriff, getrimmt und nicht leer
+   */
+  List<Comment> findFirstMatchPerCardOnBoard(long projectId, long boardId, String q);
 }

@@ -150,6 +150,86 @@
     },
     "abgekuendigtSeit" : null
   }, {
+    "pfad" : "/api/kanban/search",
+    "methode" : "GET",
+    "parameter" : [ {
+      "in" : "query",
+      "name" : "createdFrom",
+      "required" : false,
+      "schema" : {
+        "format" : "date-time",
+        "type" : "string"
+      }
+    }, {
+      "in" : "query",
+      "name" : "createdTo",
+      "required" : false,
+      "schema" : {
+        "format" : "date-time",
+        "type" : "string"
+      }
+    }, {
+      "in" : "query",
+      "name" : "cursor",
+      "required" : false,
+      "schema" : {
+        "exclusiveMinimum" : 0,
+        "format" : "int32",
+        "type" : "integer"
+      }
+    }, {
+      "in" : "query",
+      "name" : "epic",
+      "required" : false,
+      "schema" : {
+        "format" : "int32",
+        "type" : "integer"
+      }
+    }, {
+      "in" : "query",
+      "name" : "kind",
+      "required" : false,
+      "schema" : {
+        "items" : {
+          "type" : "string"
+        },
+        "type" : "array"
+      }
+    }, {
+      "in" : "query",
+      "name" : "limit",
+      "required" : false,
+      "schema" : {
+        "default" : 50,
+        "format" : "int32",
+        "maximum" : 200,
+        "minimum" : 1,
+        "type" : "integer"
+      }
+    }, {
+      "in" : "query",
+      "name" : "q",
+      "required" : false,
+      "schema" : {
+        "maxLength" : 200,
+        "minLength" : 0,
+        "type" : "string"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/SearchPage"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
     "pfad" : "/api/kanban/items/{id}/comments/{commentId}",
     "methode" : "PATCH",
     "parameter" : [ {
@@ -500,6 +580,21 @@
           "type" : "string"
         },
         "title" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "Excerpt" : {
+      "properties" : {
+        "commentId" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "source" : {
+          "type" : "string"
+        },
+        "text" : {
           "type" : "string"
         }
       },
@@ -925,6 +1020,56 @@
         "total" : {
           "format" : "int32",
           "type" : "integer"
+        }
+      },
+      "type" : "object"
+    },
+    "SearchHit" : {
+      "properties" : {
+        "archived" : {
+          "type" : "boolean"
+        },
+        "column" : {
+          "type" : "string"
+        },
+        "createdAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "excerpt" : {
+          "$ref" : "#/components/schemas/Excerpt"
+        },
+        "id" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "kind" : {
+          "type" : "string"
+        },
+        "movedToDoneAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "number" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "title" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "SearchPage" : {
+      "properties" : {
+        "hits" : {
+          "items" : {
+            "$ref" : "#/components/schemas/SearchHit"
+          },
+          "type" : "array"
+        },
+        "nextCursor" : {
+          "type" : "string"
         }
       },
       "type" : "object"

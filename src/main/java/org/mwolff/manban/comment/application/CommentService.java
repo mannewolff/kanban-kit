@@ -126,6 +126,23 @@ public class CommentService {
         .toList();
   }
 
+  /**
+   * Je Karte des Boards der erste Kommentar, der den Suchbegriff enthält (Plan #1574, E3, E16) —
+   * für die Textsuche der Kanban-Strecke. Erfordert Projekt-Mitgliedschaft (Leserecht); die Abfrage
+   * bleibt auf Karten dieses Projekts und Boards ohne Papierkorb begrenzt, sodass ein Board eines
+   * anderen Projekts nichts liefert.
+   *
+   * @param q Suchbegriff, getrimmt und nicht leer
+   */
+  @Transactional(readOnly = true)
+  public List<KommentarTrefferView> trefferAufBoard(
+      long userId, long projectId, long boardId, String q) {
+    permissions.requireMembership(userId, projectId);
+    return comments.findFirstMatchPerCardOnBoard(projectId, boardId, q).stream()
+        .map(c -> new KommentarTrefferView(c.cardId(), c.requireId(), c.body()))
+        .toList();
+  }
+
   private static CommentView view(Comment c) {
     return new CommentView(
         c.requireId(),
@@ -162,4 +179,13 @@ public class CommentService {
    * @param laufStart Laufkennung des letzten Schreibers (Issue #1428); {@code null} ohne Ausweis
    */
   public record LaufstandView(long cardId, String body, @Nullable Instant laufStart) {}
+
+  /**
+   * Der erste passende Kommentar einer Karte in der Textsuche (Plan #1574, E16).
+   *
+   * @param cardId Karte, an der der Kommentar steht
+   * @param commentId der Kommentar
+   * @param body sein Text
+   */
+  public record KommentarTrefferView(long cardId, long commentId, String body) {}
 }

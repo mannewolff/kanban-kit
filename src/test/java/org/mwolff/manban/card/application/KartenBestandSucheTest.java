@@ -21,9 +21,9 @@ import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Kartenart;
 
 /**
- * Unit-Tests der Bestandssuche ohne Textfilter (Plan #1574, E5–E8). Reine Rechnung ohne Ports: PIT
- * misst nur Unit-Tests, darum stehen hier alle Grenzen, die der Integrationstest nur
- * stichprobenhaft trifft.
+ * Unit-Tests der Bestandssuche ohne Textfilter (Plan #1574, E5–E8); die Textsuche prüft {@link
+ * KartenBestandSucheTextTest}. Reine Rechnung ohne Ports: PIT misst nur Unit-Tests, darum stehen
+ * hier alle Grenzen, die der Integrationstest nur stichprobenhaft trifft.
  */
 // PMD.TooManyMethods: je Filter, Grenze und Auszugsregel eine kleine Testmethode — PIT misst nur
 // Unit-Tests, die Grenzen gehören darum alle hierher.
@@ -79,11 +79,11 @@ class KartenBestandSucheTest {
   }
 
   private static Anfrage alle(int limit) {
-    return new Anfrage(Set.of(), null, null, null, null, limit);
+    return new Anfrage(null, Set.of(), null, null, null, null, limit);
   }
 
   private static Seite suche(List<Card> karten, Anfrage anfrage) {
-    return KartenBestandSuche.suche(karten, anfrage, Map.of());
+    return KartenBestandSuche.suche(karten, anfrage, Map.of(), Map.of());
   }
 
   private static List<Integer> nummern(Seite seite) {
@@ -125,7 +125,7 @@ class KartenBestandSucheTest {
         List.of(karte(1L, 1, "[Fachlich] F"), karte(2L, 2, "[Plan] P"), karte(3L, 3, "Paket"));
 
     Seite seite =
-        suche(karten, new Anfrage(Set.of(Kartenart.FACHLICH), null, null, null, null, 50));
+        suche(karten, new Anfrage(null, Set.of(Kartenart.FACHLICH), null, null, null, null, 50));
 
     assertThat(nummern(seite)).containsExactly(1);
   }
@@ -142,7 +142,8 @@ class KartenBestandSucheTest {
     Seite seite =
         suche(
             karten,
-            new Anfrage(Set.of(Kartenart.PLAN, Kartenart.VORHABEN), null, null, null, null, 50));
+            new Anfrage(
+                null, Set.of(Kartenart.PLAN, Kartenart.VORHABEN), null, null, null, null, 50));
 
     assertThat(nummern(seite)).containsExactly(4, 2);
   }
@@ -159,7 +160,7 @@ class KartenBestandSucheTest {
     Seite seite =
         suche(
             List.of(epic, wurzel, archiviertesKind, fremd),
-            new Anfrage(Set.of(), 10, null, null, null, 50));
+            new Anfrage(null, Set.of(), 10, null, null, null, 50));
 
     assertThat(nummern(seite)).containsExactly(12, 11);
   }
@@ -170,9 +171,9 @@ class KartenBestandSucheTest {
     Card kind = karte(2L, 11, "Kind", CardType.CARD, 1L, null, false, T0, null);
 
     Seite unbekannt =
-        suche(List.of(keinVorhaben, kind), new Anfrage(Set.of(), 99, null, null, null, 50));
+        suche(List.of(keinVorhaben, kind), new Anfrage(null, Set.of(), 99, null, null, null, 50));
     Seite keinEpic =
-        suche(List.of(keinVorhaben, kind), new Anfrage(Set.of(), 10, null, null, null, 50));
+        suche(List.of(keinVorhaben, kind), new Anfrage(null, Set.of(), 10, null, null, null, 50));
 
     assertThat(unbekannt.treffer()).isEmpty();
     assertThat(unbekannt.naechsterCursor()).isNull();
@@ -191,7 +192,7 @@ class KartenBestandSucheTest {
             angelegt(3L, 3, kurzVorT1),
             angelegt(4L, 4, T1));
 
-    Seite seite = suche(karten, new Anfrage(Set.of(), null, T0, T1, null, 50));
+    Seite seite = suche(karten, new Anfrage(null, Set.of(), null, T0, T1, null, 50));
 
     assertThat(nummern(seite)).containsExactly(3, 2);
   }
@@ -201,7 +202,7 @@ class KartenBestandSucheTest {
     List<Card> karten =
         List.of(angelegt(1L, 1, T0.minusNanos(1)), angelegt(2L, 2, T0), angelegt(3L, 3, T2));
 
-    assertThat(nummern(suche(karten, new Anfrage(Set.of(), null, T0, null, null, 50))))
+    assertThat(nummern(suche(karten, new Anfrage(null, Set.of(), null, T0, null, null, 50))))
         .containsExactly(3, 2);
   }
 
@@ -210,7 +211,7 @@ class KartenBestandSucheTest {
     List<Card> karten =
         List.of(angelegt(1L, 1, T0), angelegt(2L, 2, T1.minusNanos(1)), angelegt(3L, 3, T1));
 
-    assertThat(nummern(suche(karten, new Anfrage(Set.of(), null, null, T1, null, 50))))
+    assertThat(nummern(suche(karten, new Anfrage(null, Set.of(), null, null, T1, null, 50))))
         .containsExactly(2, 1);
   }
 
@@ -227,7 +228,7 @@ class KartenBestandSucheTest {
     Seite seite =
         suche(
             List.of(epic, passt, falscheArt, falscherZeitraum, fremdesVorhaben),
-            new Anfrage(Set.of(Kartenart.PLAN), 10, T1, T2, null, 50));
+            new Anfrage(null, Set.of(Kartenart.PLAN), 10, T1, T2, null, 50));
 
     assertThat(nummern(seite)).containsExactly(11);
   }
@@ -244,7 +245,7 @@ class KartenBestandSucheTest {
     Integer cursor = null;
     int abrufe = 0;
     do {
-      Seite seite = suche(karten, new Anfrage(Set.of(), null, null, null, cursor, 5));
+      Seite seite = suche(karten, new Anfrage(null, Set.of(), null, null, null, cursor, 5));
       assertThat(seite.treffer()).hasSizeLessThanOrEqualTo(5);
       gesammelt.addAll(nummern(seite));
       cursor = seite.naechsterCursor();
@@ -263,7 +264,7 @@ class KartenBestandSucheTest {
     List<Card> karten = List.of(karte(1L, 1, "A"), karte(2L, 2, "B"), karte(3L, 3, "C"));
 
     Seite erste = suche(karten, alle(2));
-    Seite zweite = suche(karten, new Anfrage(Set.of(), null, null, null, 2, 2));
+    Seite zweite = suche(karten, new Anfrage(null, Set.of(), null, null, null, 2, 2));
 
     assertThat(nummern(erste)).containsExactly(3, 2);
     assertThat(erste.naechsterCursor()).isEqualTo(2);
@@ -273,7 +274,8 @@ class KartenBestandSucheTest {
 
   @Test
   void cursor_unterhalbAllerNummern_liefertLeereSeite() {
-    Seite seite = suche(List.of(karte(1L, 5, "A")), new Anfrage(Set.of(), null, null, null, 5, 2));
+    Seite seite =
+        suche(List.of(karte(1L, 5, "A")), new Anfrage(null, Set.of(), null, null, null, 5, 2));
 
     assertThat(seite.treffer()).isEmpty();
     assertThat(seite.naechsterCursor()).isNull();
@@ -368,7 +370,10 @@ class KartenBestandSucheTest {
 
     Auszug auszug =
         KartenBestandSuche.suche(
-                List.of(k), alle(1), Map.of(7L, new KommentarFund(55L, "Zeile\nim Kommentar")))
+                List.of(k),
+                alle(1),
+                Map.of(),
+                Map.of(7L, new KommentarFund(55L, "Zeile\nim Kommentar")))
             .treffer()
             .getFirst()
             .auszug();

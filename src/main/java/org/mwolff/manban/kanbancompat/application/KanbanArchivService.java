@@ -6,15 +6,19 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.card.application.CardSearchService;
 import org.mwolff.manban.card.application.CardSearchService.BoardCardView;
+import org.mwolff.manban.card.application.CardSearchService.KommentarFund;
 import org.mwolff.manban.card.application.CardSearchService.SuchSeite;
 import org.mwolff.manban.card.application.CardSearchService.SuchTreffer;
 import org.mwolff.manban.card.application.CardSearchService.Suchanfrage;
 import org.mwolff.manban.comment.application.CommentService;
+import org.mwolff.manban.comment.application.CommentService.KommentarTrefferView;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Item;
 import org.springframework.stereotype.Service;
@@ -66,16 +70,20 @@ public class KanbanArchivService {
   }
 
   /**
-   * Durchsucht das gebundene Board, archivierte Karten eingeschlossen, nach Art, Vorhaben und
-   * Zeitraum des Anlagedatums, in Teilen nach Nummer absteigend (Kriterien 2 und 4). Ohne
-   * Textfilter: Der Auszug ist der Anfang des Texts (E5).
+   * Durchsucht das gebundene Board, archivierte Karten eingeschlossen, nach Text, Art, Vorhaben und
+   * Zeitraum des Anlagedatums, in Teilen nach Nummer absteigend (Kriterien 2 und 4). Mit
+   * Suchbegriff holt der Dienst die Kommentar-Fundstellen aus dem Modul {@code comment} und reicht
+   * sie an die Kartensuche (A5); ohne Suchbegriff fragt er das Modul nicht und der Auszug ist der
+   * Anfang des Texts (E5).
    *
+   * @param q Suchbegriff für Titel, Text und Kommentare; leer oder fehlend heißt kein Textfilter
    * @param kinds Arten, ODER-verknüpft; fehlend oder leer heißt jede Art
    * @param cursor Nummer des letzten Treffers des vorigen Teils
    */
   @Transactional(readOnly = true)
   public SearchPage search(
       KanbanPrincipal principal,
+      @Nullable String q,
       @Nullable List<String> kinds,
       @Nullable Integer epic,
       @Nullable Instant createdFrom,
@@ -83,15 +91,32 @@ public class KanbanArchivService {
       @Nullable Integer cursor,
       int limit) {
     long boardId = requireBound(principal);
+    String suchbegriff = q == null ? "" : q.trim();
+    Map<Long, KommentarFund> kommentarFunde =
+        suchbegriff.isEmpty()
+            ? Map.of()
+            : commentService
+                .trefferAufBoard(
+                    principal.userId(),
+                    Objects.requireNonNull(principal.projectId()),
+                    boardId,
+                    suchbegriff)
+                .stream()
+                .collect(
+                    Collectors.toMap(
+                        KommentarTrefferView::cardId,
+                        t -> new KommentarFund(t.commentId(), t.body())));
     Suchanfrage anfrage =
         new Suchanfrage(
+            q,
             kinds == null ? Set.of() : Set.copyOf(kinds),
             epic,
             createdFrom,
             createdTo,
             cursor,
             limit);
-    SuchSeite seite = cardSearch.searchOnBoard(principal.userId(), boardId, anfrage, Map.of());
+    SuchSeite seite =
+        cardSearch.searchOnBoard(principal.userId(), boardId, anfrage, kommentarFunde);
     Integer naechster = seite.naechsterCursor();
     return new SearchPage(
         seite.treffer().stream().map(KanbanArchivService::hit).toList(),

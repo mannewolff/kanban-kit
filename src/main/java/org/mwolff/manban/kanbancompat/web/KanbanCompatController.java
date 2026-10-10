@@ -89,6 +89,9 @@ class KanbanCompatController {
   /** Höchstzahl der Treffer je Teil der Suche (Plan #1574, E6). */
   private static final int MAX_SEARCH_LIMIT = 200;
 
+  /** Höchstlänge des Suchbegriffs der Suche (Plan #1574, E3). */
+  private static final int MAX_SEARCH_TEXT = 200;
+
   private static final String TOKEN_BINDUNG =
       "Das Board kommt aus der Bindung des Projekt-Tokens; ein Token ohne Board-Bindung wird"
           + " mit 409 abgewiesen.";
@@ -684,15 +687,17 @@ class KanbanCompatController {
   }
 
   /**
-   * Suche im Bestand des gebundenen Boards, archivierte Karten eingeschlossen (Plan #1574, E2,
-   * E6–E10). Noch ohne Textfilter und darum ohne {@code VERLAESSLICH}: Die Form wird erst mit der
-   * Textsuche eingefroren (E14).
+   * Suche im Bestand des gebundenen Boards, archivierte Karten eingeschlossen (Plan #1574, E2–E10).
+   * Mit der Textsuche ist die Form vollständig und darum {@code VERLAESSLICH} (E14).
    */
   @Operation(
       summary = "Karten des Boards suchen, auch archivierte",
       description =
-          "Durchsucht die Karten des gebundenen Boards, archivierte eingeschlossen, nach Art,"
-              + " Vorhaben und Zeitraum des Anlagedatums; mehrere Filter wirken zusammen. Die"
+          "Durchsucht die Karten des gebundenen Boards, archivierte eingeschlossen, nach Text"
+              + " in Titel, Text und Kommentaren, nach Art, Vorhaben und Zeitraum des"
+              + " Anlagedatums; mehrere Filter wirken zusammen. Bei einer Textsuche zeigt der"
+              + " Auszug die Fundstelle, mit Vorrang Titel vor Text vor dem ersten passenden"
+              + " Kommentar. Die"
               + " Treffer kommen nach Nummer absteigend in Teilen: Der nächste Teil beginnt mit"
               + " cursor = nextCursor des vorigen. Bleibt der Bestand zwischen den Teilen"
               + " unverändert, fehlt kein Treffer und keiner kommt doppelt. Karten im Papierkorb"
@@ -702,8 +707,8 @@ class KanbanCompatController {
   @ApiResponse(
       responseCode = "400",
       description =
-          "Ungültige Eingabe: unbekannte Art, createdFrom nicht vor createdTo, cursor nicht"
-              + " positiv oder limit außerhalb von 1 bis 200.",
+          "Ungültige Eingabe: q länger als 200 Zeichen, unbekannte Art, createdFrom nicht vor"
+              + " createdTo, cursor nicht positiv oder limit außerhalb von 1 bis 200.",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -715,9 +720,20 @@ class KanbanCompatController {
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
               schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(stabilitaet = Stabilitaet.VERLAESSLICH)
   @GetMapping("/search")
   SearchPage search(
       @Nullable Authentication authentication,
+      @Parameter(
+              description =
+                  "Suchbegriff, höchstens 200 Zeichen: Treffer enthalten ihn in Titel, Text oder"
+                      + " einem Kommentar, ohne Rücksicht auf Groß- und Kleinschreibung; % und _"
+                      + " gelten wörtlich. Wird getrimmt; fehlt er oder ist er leer, wird nicht"
+                      + " nach Text gefiltert.",
+              example = "Archiv")
+          @RequestParam(required = false)
+          @Size(max = MAX_SEARCH_TEXT)
+          @Nullable String q,
       @Parameter(
               description =
                   "Art der Karte, mehrfach erlaubt (ODER): FACHLICH, PLAN, IDEE, TASK, MENSCH,"
@@ -754,7 +770,7 @@ class KanbanCompatController {
           @Max(MAX_SEARCH_LIMIT)
           int limit) {
     return archiv.search(
-        principal(authentication), kind, epic, createdFrom, createdTo, cursor, limit);
+        principal(authentication), q, kind, epic, createdFrom, createdTo, cursor, limit);
   }
 
   @Operation(

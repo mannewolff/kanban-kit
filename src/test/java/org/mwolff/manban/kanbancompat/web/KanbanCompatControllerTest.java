@@ -327,11 +327,11 @@ class KanbanCompatControllerTest {
     Instant von = Instant.parse("2026-01-01T00:00:00Z");
     Instant bis = Instant.parse("2026-02-01T00:00:00Z");
     SearchPage page = new SearchPage(List.of(), null);
-    when(archiv.search(PRINCIPAL, List.of("PLAN"), 12, von, bis, 90, 5)).thenReturn(page);
+    when(archiv.search(PRINCIPAL, "Archiv", List.of("PLAN"), 12, von, bis, 90, 5)).thenReturn(page);
 
     // When
     SearchPage result =
-        controller.search(boundAuthentication(), List.of("PLAN"), 12, von, bis, 90, 5);
+        controller.search(boundAuthentication(), "Archiv", List.of("PLAN"), 12, von, bis, 90, 5);
 
     // Then
     assertThat(result).isSameAs(page);
@@ -340,20 +340,26 @@ class KanbanCompatControllerTest {
   @Test
   void search_nullAuthentication_throwsTokenNotBound() {
     // When / Then: ohne Bindung 409 wie bei jedem anderen Endpunkt
-    assertThatThrownBy(() -> controller.search(null, null, null, null, null, null, 50))
+    assertThatThrownBy(() -> controller.search(null, null, null, null, null, null, null, 50))
         .isInstanceOf(TokenNotBoundException.class);
   }
 
   /**
-   * Die Grenzen von limit und cursor prüft die Methodenvalidierung von Spring vor dem Aufruf; hier
-   * dieselben Annotationen über den Validator, ohne MockMvc.
+   * Die Grenzen von q, limit und cursor prüft die Methodenvalidierung von Spring vor dem Aufruf;
+   * hier dieselben Annotationen über den Validator, ohne MockMvc.
    */
   private static Set<ConstraintViolation<KanbanCompatController>> searchVerletzungen(
       KanbanCompatController controller, Integer cursor, int limit) throws Exception {
+    return searchVerletzungen(controller, null, cursor, limit);
+  }
+
+  private static Set<ConstraintViolation<KanbanCompatController>> searchVerletzungen(
+      KanbanCompatController controller, String q, Integer cursor, int limit) throws Exception {
     Method search =
         KanbanCompatController.class.getDeclaredMethod(
             "search",
             Authentication.class,
+            String.class,
             List.class,
             Integer.class,
             Instant.class,
@@ -365,7 +371,7 @@ class KanbanCompatControllerTest {
       return validator
           .forExecutables()
           .validateParameters(
-              controller, search, new Object[] {null, null, null, null, null, cursor, limit});
+              controller, search, new Object[] {null, q, null, null, null, null, cursor, limit});
     }
   }
 
@@ -382,6 +388,12 @@ class KanbanCompatControllerTest {
     assertThat(searchVerletzungen(controller, null, 201)).hasSize(1);
     assertThat(searchVerletzungen(controller, 0, 50)).hasSize(1);
     assertThat(searchVerletzungen(controller, -1, 50)).hasSize(1);
+  }
+
+  @Test
+  void search_suchbegriffBisZweihundertZeichen_istGueltig_darueberUngueltig() throws Exception {
+    assertThat(searchVerletzungen(controller, "x".repeat(200), null, 50)).isEmpty();
+    assertThat(searchVerletzungen(controller, "x".repeat(201), null, 50)).hasSize(1);
   }
 
   @Test
