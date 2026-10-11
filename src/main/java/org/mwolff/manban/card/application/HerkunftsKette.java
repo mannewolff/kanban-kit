@@ -45,10 +45,9 @@ final class HerkunftsKette {
       Map<Long, String> spalten) {
     for (Card c : boardKarten) {
       aufBoard.put(c.requireId(), c);
-      Long vorfahr = c.derivedFromCardId();
-      if (vorfahr != null) {
-        kinder.computeIfAbsent(vorfahr, k -> new ArrayList<>()).add(c);
-      }
+      // Eine Wurzel hat keinen Vorfahren und ist niemandes Kind.
+      Optional.ofNullable(c.derivedFromCardId())
+          .ifPresent(vorfahr -> kinder.computeIfAbsent(vorfahr, k -> new ArrayList<>()).add(c));
     }
     this.nachlader = nachlader;
     this.verloreneNummern = verloreneNummern;
