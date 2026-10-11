@@ -45,6 +45,13 @@ class CommentRepositoryAdapter implements CommentRepository {
         .toList();
   }
 
+  @Override
+  public List<Comment> findFirstMatchPerCardOnBoard(long projectId, long boardId, String q) {
+    return jpa.findFirstMatchPerCardOnBoard(projectId, boardId, q).stream()
+        .map(CommentRepositoryAdapter::toDomain)
+        .toList();
+  }
+
   private static CommentEntity toEntity(Comment c) {
     return new CommentEntity(
         c.id(),

@@ -1,14 +1,22 @@
 package org.mwolff.manban.card.application;
 
+import static org.mwolff.manban.card.application.KartenSicht.statusName;
+
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
+import org.mwolff.manban.card.application.CardIngestService.BoardItemView;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.card.domain.Kartenart;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectService;
 import org.springframework.stereotype.Service;
@@ -24,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CardSearchService {
 
   private final CardRepository cards;
+  private final CardBestandRepository bestand;
   private final BoardService boardService;
   private final PermissionChecker permissions;
   private final ProjectService projects;
@@ -31,11 +40,13 @@ public class CardSearchService {
 
   public CardSearchService(
       CardRepository cards,
+      CardBestandRepository bestand,
       BoardService boardService,
       PermissionChecker permissions,
       ProjectService projects,
       KartenSicht sicht) {
     this.cards = cards;
+    this.bestand = bestand;
     this.boardService = boardService;
     this.permissions = permissions;
     this.projects = projects;
@@ -53,6 +64,112 @@ public class CardSearchService {
     Card card =
         cards.findByProjectIdAndNumber(projectId, number).orElseThrow(CardNotFoundException::new);
     return sicht.view(userId, card);
+  }
+
+  /**
+   * Die Karte mit dieser projektweiten Nummer auf genau diesem Board, <strong>archivierte
+   * eingeschlossen</strong> — der Einzelabruf der Kanban-Strecke (Plan #1574, A2, A3).
+   *
+   * <p>Rechte wie {@link CardIngestService#listBoardItems}: Projekt-Mitgliedschaft (Leserecht), vor
+   * jedem Lookup. Betrachtet werden nur Karten mit {@code board_id} = {@code boardId} und {@code
+   * deleted_at IS NULL}. Eine unbekannte Nummer, eine Nummer auf einem anderen Board und eine im
+   * Papierkorb enden gleich mit {@link CardNotFoundException} — kein Existenz-Leak über die
+   * Board-Grenze.
+   */
+  @Transactional(readOnly = true)
+  public BoardCardView findOnBoardByNumber(long userId, long boardId, int number) {
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
+    Card c =
+        cards
+            .findByProjectIdAndNumber(projectId, number)
+            // Wertvergleich der Board-IDs (Long), wie in CardIngestService.requireOnBoard.
+            .filter(k -> Long.valueOf(boardId).equals(k.boardId()))
+            .orElseThrow(CardNotFoundException::new);
+    String status = statusName(c);
+    String spalte = boardService.requireColumn(c.columnId(), boardId).name();
+    return new BoardCardView(
+        new BoardItemView(
+            c.requireId(),
+            c.number(),
+            c.title(),
+            c.description(),
+            c.columnId(),
+            c.positionInColumn(),
+            c.type() == CardType.EPIC,
+            c.externalKey(),
+            sicht.herkunftsnummer(c),
+            status),
+        Kartenart.von(c.type(), c.title()).name(),
+        CardIngestService.kanbanSchluessel(status, spalte),
+        c.archived(),
+        c.createdAt(),
+        c.movedToDoneAt());
+  }
+
+  /**
+   * Durchsucht die Karten genau dieses Boards, <strong>archivierte eingeschlossen</strong> — die
+   * Suche der Kanban-Strecke (Plan #1574, Kriterien 2 und 4): nach Text, Art, Vorhaben und Zeitraum
+   * des Anlagedatums, nach Nummer absteigend, in Teilen (E6). Die Rechnung liegt in {@link
+   * KartenBestandSuche}. Titel und Text gleicht die Datenbank nur bei gesetztem Suchbegriff ab
+   * (E3); die Kommentar-Fundstellen bringt der Aufrufer mit, weil {@code card} nicht von {@code
+   * comment} abhängt (A5).
+   *
+   * <p>Die Eingaben werden vor jedem Lookup geprüft: Eine unbekannte Art endet mit {@link
+   * UnknownCardKindException} (E2), ein Beginn, der nicht vor dem Ende liegt, mit {@link
+   * InvalidPeriodBoundsException}; eine einzelne Grenze ist erlaubt (E7). Rechte und Reichweite wie
+   * {@link #findOnBoardByNumber}: Projekt-Mitgliedschaft, nur {@code board_id} = {@code boardId},
+   * Papierkorb unsichtbar (A3).
+   *
+   * @param kommentarFunde erster passender Kommentar je Karten-ID; ohne Textsuche leer
+   */
+  @Transactional(readOnly = true)
+  public SuchSeite searchOnBoard(
+      long userId, long boardId, Suchanfrage anfrage, Map<Long, KommentarFund> kommentarFunde) {
+    KartenBestandSuche.Anfrage geprueft = KartenBestandSuche.pruefe(anfrage);
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
+    Map<Long, String> spalten =
+        boardService.listColumns(boardId).stream()
+            .collect(Collectors.toMap(ColumnView::id, ColumnView::name));
+    String q = geprueft.q();
+    Map<Long, String> textFundstellen =
+        q == null ? Map.of() : bestand.textFundstellenAufBoard(boardId, q);
+    return KartenBestandSuche.alsSicht(
+        KartenBestandSuche.suche(
+            cards.findByBoardId(boardId), geprueft, textFundstellen, kommentarFunde),
+        spalten);
+  }
+
+  /**
+   * Die Herkunftskette der Karte mit dieser Nummer auf genau diesem Board — Vorfahren bis zur
+   * Wurzel, Nachfahren bis zu den Blättern, <strong>archivierte eingeschlossen</strong> (Plan
+   * #1574, Kriterium 3, E11–E13). Die Rechnung liegt in {@link HerkunftsKette}; Vorfahren außerhalb
+   * der Board-Sicht lädt sie einzeln über {@code findByIds} nach.
+   *
+   * <p>Rechte und Reichweite wie {@link #findOnBoardByNumber}: Projekt-Mitgliedschaft vor jedem
+   * Lookup; eine Nummer im Papierkorb, auf einem anderen Board oder eine unbekannte enden gleich
+   * mit {@link CardNotFoundException} (A3).
+   */
+  @Transactional(readOnly = true)
+  public Kette lineageOnBoard(long userId, long boardId, int number) {
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
+    List<Card> boardKarten = cards.findByBoardId(boardId);
+    Card karte =
+        boardKarten.stream()
+            .filter(c -> c.number() == number)
+            .findFirst()
+            .orElseThrow(CardNotFoundException::new);
+    Map<Long, String> spalten =
+        boardService.listColumns(boardId).stream()
+            .collect(Collectors.toMap(ColumnView::id, ColumnView::name));
+    return HerkunftsKette.berechne(
+        karte,
+        boardKarten,
+        id -> cards.findByIds(List.of(id)).stream().findFirst(),
+        bestand.verloreneHerkunftsnummern(boardId),
+        spalten);
   }
 
   /**
@@ -143,4 +260,113 @@ public class CardSearchService {
           boolean boardArchived,
       @Schema(description = "Interne ID der Spalte.", example = "17") Long columnId,
       @Schema(description = "Name der Spalte.", example = "In Arbeit") String columnName) {}
+
+  /**
+   * Eine Karte des Boards für die Kanban-Strecke (Plan #1574, A4): die schlanke Projektion, die
+   * {@link CardIngestService#listBoardItems} für aktive Karten liefert, plus das, was das Archiv
+   * ausmacht. Art und Spaltenschlüssel gehen als Text, weil {@code card.domain} modulintern bleibt.
+   *
+   * @param item Karte in derselben Form wie in der Board-Übersicht
+   * @param kind Konstantenname der {@link Kartenart}
+   * @param column Kanban-Schlüssel nach {@link CardIngestService#kanbanSchluessel}
+   * @param archived ob die Karte archiviert ist
+   * @param createdAt Anlagezeitpunkt
+   * @param movedToDoneAt Zeitpunkt des Zugs nach Done, sonst {@code null}
+   */
+  public record BoardCardView(
+      BoardItemView item,
+      String kind,
+      String column,
+      boolean archived,
+      Instant createdAt,
+      @Nullable Instant movedToDoneAt) {}
+
+  /**
+   * Die Filter der Suche auf dem Board (Plan #1574, E2, E3, E6, E7). Arten gehen als
+   * Konstantennamen der Kartenart, weil {@code card.domain} modulintern bleibt.
+   *
+   * @param q Suchbegriff für Titel, Text und Kommentare; wird getrimmt, leer oder {@code null}
+   *     heißt kein Textfilter
+   * @param arten verlangte Arten, ODER-verknüpft; leer heißt jede Art
+   * @param epic Nummer eines Vorhabens des Boards, sonst {@code null}
+   * @param createdFrom Beginn des Anlagezeitraums, eingeschlossen, sonst {@code null}
+   * @param createdTo Ende des Anlagezeitraums, ausgeschlossen, sonst {@code null}
+   * @param cursor Nummer des letzten Treffers des vorigen Teils, sonst {@code null}
+   * @param limit höchste Trefferzahl dieses Teils, mindestens 1
+   */
+  public record Suchanfrage(
+      @Nullable String q,
+      Set<String> arten,
+      @Nullable Integer epic,
+      @Nullable Instant createdFrom,
+      @Nullable Instant createdTo,
+      @Nullable Integer cursor,
+      int limit) {}
+
+  /**
+   * Eine Fundstelle in einem Kommentar, die den Auszug eines Treffers bestimmt (Plan #1574, A5).
+   *
+   * @param commentId der Kommentar
+   * @param body sein Text
+   */
+  public record KommentarFund(long commentId, String body) {}
+
+  /**
+   * Ein Treffer der Suche auf dem Board (Plan #1574, E4, E5, E9).
+   *
+   * @param kind Konstantenname der Kartenart
+   * @param column Kanban-Schlüssel nach {@link CardIngestService#kanbanSchluessel}
+   * @param auszug höchstens 200 Zeichen, Zeilenumbrüche als Leerzeichen
+   * @param fundstelle {@code TITLE}, {@code BODY} oder {@code COMMENT}
+   * @param kommentarId der Kommentar bei {@code COMMENT}, sonst {@code null}
+   */
+  public record SuchTreffer(
+      long id,
+      int number,
+      String title,
+      String kind,
+      String column,
+      boolean archived,
+      Instant createdAt,
+      @Nullable Instant movedToDoneAt,
+      String auszug,
+      String fundstelle,
+      @Nullable Long kommentarId) {}
+
+  /**
+   * Ein Teil des Suchergebnisses (E6).
+   *
+   * @param naechsterCursor Nummer des letzten Treffers, wenn danach noch Treffer folgen, sonst
+   *     {@code null}
+   */
+  public record SuchSeite(List<SuchTreffer> treffer, @Nullable Integer naechsterCursor) {}
+
+  /**
+   * Ein Glied der Herkunftskette (Plan #1574, E10–E13). Eine Lücke steht für eine Karte, die im
+   * Papierkorb, auf einem anderen Board oder endgültig gelöscht ist: Dann sind nur {@code number}
+   * und {@code depth} gesetzt.
+   *
+   * @param kind Konstantenname der Kartenart, bei einer Lücke {@code null}
+   * @param column Kanban-Schlüssel nach {@link CardIngestService#kanbanSchluessel}, bei einer Lücke
+   *     {@code null}
+   * @param depth Abstand zur Karte: 0 für die Karte selbst, 1 für Vorfahr oder Nachfahr erster
+   *     Stufe
+   */
+  public record KettenGlied(
+      int number,
+      @Nullable String title,
+      @Nullable String kind,
+      @Nullable String column,
+      boolean archived,
+      int depth,
+      boolean gap) {}
+
+  /**
+   * Die Herkunftskette einer Karte.
+   *
+   * @param vorfahren von der Karte aufwärts bis zur Wurzel
+   * @param nachfahren in Präorder, Geschwister nach Nummer
+   */
+  public record Kette(
+      KettenGlied karte, List<KettenGlied> vorfahren, List<KettenGlied> nachfahren) {}
 }

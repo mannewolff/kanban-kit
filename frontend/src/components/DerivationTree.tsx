@@ -2,6 +2,7 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { type DerivationNode } from '../api/cards'
+import { artAusTitel, useKitNamen, type KitNamen, type KitNamenZustand } from '../api/kitNamen'
 import { MELDER } from '../theme'
 import { labelChipSx } from './labelChipSx'
 
@@ -9,8 +10,8 @@ interface Props {
   /**
    * Die Zeilen in Präorder, bereits geladen. Seit Issue #644 lädt die Komponente nicht mehr
    * selbst: Sie hängt im Vorhaben-Dialog, der die Karte ohnehin kennt und die Lade-, Fehler- und
-   * Leerzustände für alle seine Bereiche gemeinsam führt. Reine Darstellung heisst auch: ohne
-   * Netzwerk testbar.
+   * Leerzustände für alle seine Bereiche gemeinsam führt. Geladen wird hier nur noch das
+   * Namen-Register für die Hakenspalte (`useKitNamen`, Plan #1582, E10).
    */
   rows: readonly DerivationNode[]
   /** Enter auf einer Zeile. Es gibt keine Karten-Route — der Aufrufer öffnet die Karte. */
@@ -54,9 +55,6 @@ function directChildren(rows: readonly DerivationNode[], index: number): Derivat
 /** Was die Hakenspalte einer Zeile aussagt — oder `null`, wenn sie leer bleibt. */
 export type HakenArt = 'erledigt' | 'abgearbeitet' | null
 
-const PRAEFIX_FACHLICH = '[Fachlich]'
-const PRAEFIX_PLAN = '[Plan]'
-
 /**
  * Die Regel der Hakenspalte (Issue #985) als reine Funktion — ohne Rendering prüfbar.
  *
@@ -65,20 +63,38 @@ const PRAEFIX_PLAN = '[Plan]'
  * ein `[Plan]` mit mindestens einem Arbeitspaket darunter. Gezählt werden nur **direkte** Kinder —
  * Plan und Arbeitspakete hängen direkt an ihrem Vorgänger, ein Dokument zwei Ebenen tiefer gehört
  * zu einer anderen Zeile.
+ *
+ * <p>Die Art einer Zeile lesen die Titel-Präfixe des Namen-Registers (Plan #1582, E2): Ein
+ * `[Requirement]` gilt wie ein `[Fachlich]`.
  */
-export function hakenArt(rows: readonly DerivationNode[], index: number): HakenArt {
+export function hakenArt(rows: readonly DerivationNode[], index: number, kitNamen: KitNamen): HakenArt {
   const zeile = rows[index]
   if (zeile.done) {
     return 'erledigt'
   }
-  if (zeile.title.startsWith(PRAEFIX_FACHLICH)) {
-    const plaene = directChildren(rows, index).filter((kind) => kind.title.startsWith(PRAEFIX_PLAN))
+  const art = artAusTitel(kitNamen, zeile.title)
+  if (art === 'FACHLICH') {
+    const plaene = directChildren(rows, index).filter((kind) => artAusTitel(kitNamen, kind.title) === 'PLAN')
     return plaene.length > 0 ? 'abgearbeitet' : null
   }
-  if (zeile.title.startsWith(PRAEFIX_PLAN)) {
+  if (art === 'PLAN') {
     return directChildren(rows, index).length > 0 ? 'abgearbeitet' : null
   }
   return null
+}
+
+/**
+ * Was die Hakenspalte zeigt: der Haken, oder — solange das Namen-Register lädt oder wenn es fehlt —
+ * der Hinweis darauf an genau der Stelle, die ein Präfix braucht (Plan #1582, E10). Eine erledigte
+ * Karte braucht keins: Ihren Haken setzt die Spalte, nicht der Titel.
+ */
+type Hakenspalte = HakenArt | 'laden' | 'fehler'
+
+function hakenspalte(rows: readonly DerivationNode[], index: number, kitNamen: KitNamenZustand): Hakenspalte {
+  if (rows[index].done) {
+    return 'erledigt'
+  }
+  return kitNamen.status === 'fertig' ? hakenArt(rows, index, kitNamen.daten) : kitNamen.status
 }
 
 /** Sichtbar ist eine Zeile, solange kein Vorfahre zugeklappt ist. */
@@ -117,6 +133,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
   const [sprungZiel, setSprungZiel] = useState<number | undefined>(undefined)
   const [hervorgehoben, setHervorgehoben] = useState<number | undefined>(undefined)
   const zeilenRefs = useRef(new Map<number, HTMLElement>())
+  const kitNamen = useKitNamen()
 
   useEffect(() => {
     const el = sprungZiel === undefined ? undefined : zeilenRefs.current.get(sprungZiel)
@@ -284,7 +301,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
               '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
             }}
           >
-            <Haken art={hakenArt(rows, index)} />
+            <Haken art={hakenspalte(rows, index, kitNamen)} />
             <Typography
               variant="body2"
               component="span"
@@ -329,13 +346,14 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
  * oder ein Planungsdokument abgearbeitet ist. Wie {@link Marke} ohne `tabIndex` — der Baum ist ein
  * Roving Tabindex mit genau einem Tab-Stopp.
  */
-function Haken({ art }: Readonly<{ art: HakenArt }>) {
+function Haken({ art }: Readonly<{ art: Hakenspalte }>) {
+  const { name, zeichen } = HAKEN_ANZEIGE[art ?? 'leer']
   return (
     <Typography
       variant="body2"
       component="span"
       role={art === null ? undefined : 'img'}
-      aria-label={art ?? undefined}
+      aria-label={name}
       // Die leere Spalte traegt keine Rolle und keinen Namen — sie haelt nur Platz. Damit die
       // Buendigkeit trotzdem pruefbar bleibt, ist sie ueber diese Marke greifbar.
       data-testid="hakenspalte"
@@ -343,13 +361,26 @@ function Haken({ art }: Readonly<{ art: HakenArt }>) {
         width: 14,
         flexShrink: 0,
         textAlign: 'center',
-        color: MELDER.gruen,
+        color: art === 'laden' || art === 'fehler' ? 'text.secondary' : MELDER.gruen,
         fontWeight: 600,
       }}
     >
-      {art === null ? '' : '✓'}
+      {zeichen}
     </Typography>
   )
+}
+
+/**
+ * Zugänglicher Name und sichtbares Zeichen je Inhalt der Hakenspalte. Lade- und Fehlerhinweis
+ * tragen dieselben Worte wie die Stufenleiste (Plan #1582, E10); sichtbar bleibt ein Zeichen, weil
+ * die Spalte nur 14 px breit ist — der Name trägt die Aussage.
+ */
+const HAKEN_ANZEIGE: Record<NonNullable<Hakenspalte> | 'leer', { name: string | undefined; zeichen: string }> = {
+  erledigt: { name: 'erledigt', zeichen: '✓' },
+  abgearbeitet: { name: 'abgearbeitet', zeichen: '✓' },
+  laden: { name: 'Kit-Namen werden geladen', zeichen: '…' },
+  fehler: { name: 'Kit-Namen nicht ladbar', zeichen: '!' },
+  leer: { name: undefined, zeichen: '' },
 }
 
 /**

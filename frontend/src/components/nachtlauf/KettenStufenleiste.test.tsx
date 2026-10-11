@@ -3,8 +3,10 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
+import type { KitNamen, KitNamenZustand } from '../../api/kitNamen'
 import type { Label } from '../../api/labels'
 import type { KettenStand, NightChainStationView } from '../../api/nightRuns'
+import { KIT_NAMEN } from '../../test/kitNamen'
 import { theme } from '../../theme'
 import { KettenStufenleiste, traegtStufenleiste } from './KettenStufenleiste'
 
@@ -50,6 +52,7 @@ function zeige({
   kommentare = [],
   // Ohne Angabe lädt der Kettenstand nie: Die Leiste zeigt dann den Stand aus Gruppe A.
   kettenstand = vi.fn(() => new Promise<KettenStand>(() => {})),
+  kitNamen = { status: 'fertig', daten: KIT_NAMEN },
 }: Partial<{
   titel: string
   labelIds: number[]
@@ -58,6 +61,7 @@ function zeige({
   beschreibung: string
   kommentare: { body: string }[]
   kettenstand: (cardId: number) => Promise<KettenStand>
+  kitNamen: KitNamenZustand
 }> = {}) {
   const onChange = vi.fn()
   render(
@@ -72,6 +76,7 @@ function zeige({
         onChange={onChange}
         cardId={812}
         api={{ kettenstand }}
+        kitNamen={kitNamen}
       />
     </ThemeProvider>,
   )
@@ -83,11 +88,17 @@ const ziel = (name: string) => zielGruppe().getByRole('button', { name: new RegE
 const station = (name: string) => screen.getByTestId(`station-${name}`)
 
 describe('traegtStufenleiste', () => {
-  it('erkennt die beiden Präfixe und nur sie', () => {
-    expect(traegtStufenleiste('[Fachlich] x')).toBe(true)
-    expect(traegtStufenleiste('[Plan] x')).toBe(true)
-    expect(traegtStufenleiste('[Task] x')).toBe(false)
-    expect(traegtStufenleiste('Plan [Fachlich]')).toBe(false)
+  it('erkennt die Kartenarten Fachlich und Plan und nur sie', () => {
+    expect(traegtStufenleiste(KIT_NAMEN, '[Fachlich] x')).toBe(true)
+    expect(traegtStufenleiste(KIT_NAMEN, '[Plan] x')).toBe(true)
+    expect(traegtStufenleiste(KIT_NAMEN, '[Task] x')).toBe(false)
+    expect(traegtStufenleiste(KIT_NAMEN, 'Plan [Fachlich]')).toBe(false)
+  })
+
+  it('erkennt das englische Präfix [Requirement] wie [Fachlich] (Issue #1595, E2)', () => {
+    expect(traegtStufenleiste(KIT_NAMEN, '[Requirement] x')).toBe(true)
+    expect(traegtStufenleiste(KIT_NAMEN, '[Idea] x')).toBe(false)
+    expect(traegtStufenleiste(KIT_NAMEN, '[Human] x')).toBe(false)
   })
 })
 
@@ -743,11 +754,209 @@ describe('KettenStufenleiste — Kettenstand (Issue #1453)', () => {
           onChange={vi.fn()}
           cardId={812}
           api={{ kettenstand: () => new Promise<KettenStand>((r) => (loese = r)) }}
+          kitNamen={{ status: 'fertig', daten: KIT_NAMEN }}
         />
       </ThemeProvider>,
     )
     unmount()
     await act(async () => loese(uebernommen([])))
     expect(screen.queryByTestId('ketten-stufenleiste')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * Englische Namen (Issue #1595, Plan #1582 E2, E9, E10): Die Leiste liest Labels, Titel-Präfixe und
+ * Laufstand über die Sachen des Registers — ein englischer Name wirkt wie sein deutsches Gegenstück.
+ */
+describe('KettenStufenleiste — englische Namen (Issue #1595)', () => {
+  /** Derselbe Vorrat wie {@link VORRAT}, mit den englischen Namen, wo es sie gibt. */
+  const ENGLISCH: Label[] = [
+    label(31, 'goal:plan'),
+    label(32, 'goal:packages'),
+    label(33, 'goal:implementation'),
+    label(34, 'goal:push-prepared'),
+    label(35, 'planreview:1'),
+    label(36, 'planreview:2'),
+    label(37, 'kit:carry-through'),
+    label(38, 'Bug'),
+    label(39, 'kit:night'),
+    label(40, 'review:done'),
+    label(41, 'kit:clarify'),
+    label(42, 'run:waiting'),
+  ]
+  /** Ein Board mit beiden Namen je Sache, wie es der Standardsatz anlegt. */
+  const GEMISCHT: Label[] = [...VORRAT, ...ENGLISCH.filter((l) => !VORRAT.some((v) => v.name === l.name))]
+
+  /** Text und Knopfzustände der n-ten Leiste im Dokument — das, was ein Mensch von ihr sieht. */
+  const anzeige = (n: number) => {
+    const leiste = screen.getAllByTestId('ketten-stufenleiste')[n]
+    return {
+      text: leiste.textContent,
+      gedrueckt: within(leiste)
+        .getAllByRole('button')
+        .map((b) => `${b.textContent}:${b.getAttribute('aria-pressed')}:${b.getAttribute('aria-disabled')}`),
+    }
+  }
+
+  it('zeigt mit goal:packages, planreview:1, kit:carry-through und review:done dasselbe wie mit den deutschen Namen', () => {
+    zeige({ labelIds: [2, 5, 7, 10] })
+    zeige({ boardLabels: ENGLISCH, labelIds: [32, 35, 37, 40] })
+
+    expect(anzeige(1)).toEqual(anzeige(0))
+    // Die Probe trifft etwas: kit:carry-through hebt das Ziel auf „Umsetzung“, review:done gibt den Start frei.
+    const englisch = within(screen.getAllByTestId('ketten-stufenleiste')[1])
+    expect(englisch.getByTestId('station-umsetzung')).toHaveTextContent('Ziel')
+    expect(englisch.getByRole('button', { name: '1 Prüfer' })).toHaveAttribute('aria-pressed', 'true')
+    expect(englisch.getByRole('button', { name: 'Kette starten' })).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('nennt kit:carry-through im Sperrhinweis mit dem Namen an der Karte', async () => {
+    zeige({ boardLabels: ENGLISCH, labelIds: [37, 40] })
+
+    expect(ziel('Plan')).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.hover(ziel('Plan'))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Die Karte trägt kit:carry-through')
+  })
+
+  it('wertet kit:clarify und run:waiting als offene Frage und nennt den Namen wörtlich', () => {
+    zeige({ boardLabels: ENGLISCH, labelIds: [40, 41, 42] })
+
+    expect(screen.getByRole('button', { name: 'Kette starten' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText('An der Karte wartet eine offene Frage auf einen Menschen (kit:clarify).')).toBeInTheDocument()
+    expect(screen.getByText('An der Karte wartet eine offene Frage auf einen Menschen (run:waiting).')).toBeInTheDocument()
+  })
+
+  it('nennt ein fehlendes review:done mit dem Namen, den das Board trägt', () => {
+    zeige({ boardLabels: ENGLISCH })
+
+    expect(screen.getByText('Die fachliche Prüfung ist nicht abgeschlossen: Die Karte trägt kein review:done.')).toBeInTheDocument()
+  })
+
+  it('wertet einen Laufstand mit Anker „## Run status“ wie „## Laufstand“', () => {
+    zeige({
+      boardLabels: ENGLISCH,
+      labelIds: [40],
+      kommentare: [{ body: '## Run status\n\nLog: .claude/protokolle/2026-10-05-175710/1450-umsetzung.log' }],
+    })
+
+    expect(screen.getByText(/Ein Runner hat die Kette übernommen/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Kette starten' })).not.toBeInTheDocument()
+  })
+
+  it('lässt einen englischen [Plan] mit Zeile „Plan-Review:“ starten (Issue #1599)', async () => {
+    const onChange = zeige({
+      titel: PLAN,
+      boardLabels: ENGLISCH,
+      labelIds: [32],
+      beschreibung: '## Context\nPlan-Review: fable (2026-10-05)',
+    })
+
+    expect(screen.queryByText(/Im Plan fehlt die Zeile/)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Kette starten' }))
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [39] })
+  })
+
+  it('wertet „Plan review:“ nicht als Prüfvermerk — die Form führt das Kit-Register nicht (Issue #1599)', () => {
+    zeige({
+      titel: PLAN,
+      boardLabels: ENGLISCH,
+      labelIds: [32],
+      beschreibung: '## Context\nPlan review: fable (2026-10-05)',
+    })
+
+    expect(screen.getByText(/Im Plan fehlt die Zeile/)).toBeInTheDocument()
+  })
+
+  it('setzt an einem englischen Board das englische Ziel und nimmt das alte ab (E9)', async () => {
+    const onChange = zeige({ boardLabels: ENGLISCH, labelIds: [32, 38] })
+
+    await userEvent.click(ziel('Umsetzung'))
+
+    expect(onChange).toHaveBeenCalledWith({ ab: [32], an: [33] })
+  })
+
+  it('setzt an einem gemischten Board den deutschen Namen und nimmt alle Namen der Ziel-Sachen ab (E9)', async () => {
+    const onChange = zeige({ boardLabels: GEMISCHT, labelIds: [32, 1, 8] })
+
+    await userEvent.click(ziel('Umsetzung'))
+
+    expect(onChange).toHaveBeenCalledWith({ ab: [32, 1], an: [3] })
+  })
+
+  it('setzt an einem deutschen Board weiter den deutschen Namen (AK 6)', async () => {
+    const onChange = zeige({ labelIds: [2] })
+
+    await userEvent.click(ziel('Veröffentlichung vorbereitet'))
+
+    expect(onChange).toHaveBeenCalledWith({ ab: [2], an: [4] })
+  })
+
+  it('nimmt beim Tausch der Prüfer alle Namen der Prüfer-Sachen ab, ein fremdes Label im Namensraum bleibt', async () => {
+    const register: KitNamen = {
+      ...KIT_NAMEN,
+      sachen: KIT_NAMEN.sachen.map((s) =>
+        s.sache === 'PLANREVIEW_1' ? { ...s, namen: ['planreview:1', 'plan-review:one'] } : s,
+      ),
+    }
+    const board = [...VORRAT, label(51, 'plan-review:one'), label(52, 'planreview:sonst')]
+    const onChange = zeige({ boardLabels: board, labelIds: [5, 51, 52], kitNamen: { status: 'fertig', daten: register } })
+
+    await userEvent.click(screen.getByRole('button', { name: '2 Prüfer' }))
+
+    expect(onChange).toHaveBeenCalledWith({ ab: [5, 51], an: [6] })
+  })
+
+  it('zeigt die Prüferzahl aus der Sache, nicht aus dem Namen des Labels', () => {
+    const register: KitNamen = {
+      ...KIT_NAMEN,
+      sachen: KIT_NAMEN.sachen.map((s) =>
+        s.sache === 'PLANREVIEW_2' ? { ...s, namen: ['planreview:2', 'plan-review:two'] } : s,
+      ),
+    }
+    zeige({
+      boardLabels: [label(53, 'plan-review:two')],
+      labelIds: [53],
+      disabled: true,
+      kitNamen: { status: 'fertig', daten: register },
+    })
+
+    expect(screen.getByText('2 Prüfer')).toBeInTheDocument()
+  })
+
+  it('erkennt einen fehlenden kit:night über die Sache', () => {
+    zeige({ boardLabels: ENGLISCH.filter((l) => l.name !== 'kit:night'), labelIds: [40] })
+
+    expect(screen.getByText(/Am Board fehlt das Label „kit:night“/)).toBeInTheDocument()
+  })
+
+  it('sperrt den Start, wenn das Register die Sache NIGHT nicht kennt, und nennt die Sache', () => {
+    const register: KitNamen = { ...KIT_NAMEN, sachen: KIT_NAMEN.sachen.filter((s) => s.sache !== 'NIGHT') }
+    zeige({ labelIds: [10], kitNamen: { status: 'fertig', daten: register } })
+
+    expect(screen.getByRole('button', { name: 'Kette starten' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText(/Am Board fehlt das Label „NIGHT“/)).toBeInTheDocument()
+  })
+
+  it('trägt die Leiste an einer [Requirement]-Karte wie an [Fachlich]', () => {
+    zeige({ titel: '[Requirement] New view', boardLabels: ENGLISCH })
+
+    expect(screen.getByRole('group', { name: 'Planprüfung' })).toBeInTheDocument()
+    expect(station('plan')).toHaveTextContent('vorgesehen')
+  })
+
+  it('zeigt während des Ladens der Kit-Namen den Ladezustand statt der Leiste (E10)', () => {
+    zeige({ kitNamen: { status: 'laden' } })
+
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+    expect(screen.queryByTestId('ketten-stufenleiste')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('zeigt beim Fehler der Kit-Namen den Hinweis „Kit-Namen nicht ladbar“ statt der Leiste (E10)', () => {
+    zeige({ kitNamen: { status: 'fehler', fehler: new Error('weg') } })
+
+    expect(screen.getByText('Kit-Namen nicht ladbar')).toBeInTheDocument()
+    expect(screen.queryByTestId('ketten-stufenleiste')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 })

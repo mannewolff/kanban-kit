@@ -10,16 +10,23 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
+import org.mwolff.manban.card.application.CardSearchService.KommentarFund;
+import org.mwolff.manban.card.application.CardSearchService.SuchSeite;
+import org.mwolff.manban.card.application.CardSearchService.SuchTreffer;
+import org.mwolff.manban.card.application.CardSearchService.Suchanfrage;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
@@ -33,6 +40,10 @@ import org.mwolff.manban.project.domain.Permission;
  * {@code CardServiceTest} (Issue #1391, Plan #1387 E6); {@link KartenSicht} entsteht echt aus
  * denselben Port-Mocks.
  */
+// PMD.TooManyMethods, PMD.CouplingBetweenObjects: Die Suche der Kanban-Strecke (Plan #1574) bringt
+// ihre Fassaden-Fälle samt Such-Records dazu; je Fall eine kleine Testmethode bleibt lesbarer als
+// eine Aufteilung der Fassaden-Tests auf mehrere Klassen.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CouplingBetweenObjects"})
 class CardSearchServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -43,6 +54,7 @@ class CardSearchServiceTest {
   private static final long BOARD_B = 11L;
 
   private CardRepository cards;
+  private CardBestandRepository kartenBestand;
   private BoardService boardService;
   private PermissionChecker permissions;
   private ProjectService projects;
@@ -69,6 +81,7 @@ class CardSearchServiceTest {
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
+    kartenBestand = mock(CardBestandRepository.class);
     boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
     projects = mock(ProjectService.class);
@@ -82,7 +95,8 @@ class CardSearchServiceTest {
                 mock(CardLabelRepository.class),
                 permissions),
             permissions);
-    service = new CardSearchService(cards, boardService, permissions, projects, sicht);
+    service =
+        new CardSearchService(cards, kartenBestand, boardService, permissions, projects, sicht);
   }
 
   // --- getByNumber (#408) -----------------------------------------------
@@ -126,6 +140,150 @@ class CardSearchServiceTest {
     when(cards.findByProjectIdAndNumber(PROJECT, 99)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.getByNumber(5L, PROJECT, 99))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  // --- findOnBoardByNumber: Einzelabruf der Kanban-Strecke (Plan #1574, A3) ---
+
+  /** Eine Karte mit Titel, Typ, Archiv-Kennzeichen, Status und Herkunft auf {@code boardId}. */
+  private static Card onBoard(
+      long boardId,
+      String title,
+      CardType type,
+      boolean archived,
+      Instant done,
+      CardStatus status,
+      Long derivedFromCardId) {
+    return new Card(
+        1L,
+        boardId,
+        20L,
+        42,
+        title,
+        "Text",
+        3,
+        archived,
+        done,
+        1L,
+        FIXED,
+        FIXED,
+        type,
+        null,
+        null,
+        null,
+        PROJECT,
+        "ext:1",
+        derivedFromCardId,
+        null,
+        status);
+  }
+
+  @Test
+  void findOnBoardByNumber_liefertDieArchivierteKarteDesBoards() {
+    Instant done = Instant.parse("2026-02-03T04:05:06Z");
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(
+            Optional.of(onBoard(BOARD, "[Plan] Archiv", CardType.CARD, true, done, null, 7L)));
+    when(cards.findById(7L))
+        .thenReturn(Optional.of(card(7L, 20L, 40, false, null, CardType.CARD, null, null)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "In Review", 3));
+
+    CardSearchService.BoardCardView view = service.findOnBoardByNumber(5L, BOARD, 42);
+
+    assertThat(view.item().id()).isEqualTo(1L);
+    assertThat(view.item().number()).isEqualTo(42);
+    assertThat(view.item().title()).isEqualTo("[Plan] Archiv");
+    assertThat(view.item().description()).isEqualTo("Text");
+    assertThat(view.item().columnId()).isEqualTo(20L);
+    assertThat(view.item().positionInColumn()).isEqualTo(3);
+    assertThat(view.item().epic()).isFalse();
+    assertThat(view.item().externalKey()).isEqualTo("ext:1");
+    assertThat(view.item().derivedFrom()).isEqualTo(40);
+    assertThat(view.item().status()).isNull();
+    assertThat(view.kind()).isEqualTo("PLAN");
+    assertThat(view.column()).isEqualTo("IN_REVIEW");
+    assertThat(view.archived()).isTrue();
+    assertThat(view.createdAt()).isEqualTo(FIXED);
+    assertThat(view.movedToDoneAt()).isEqualTo(done);
+  }
+
+  @Test
+  void findOnBoardByNumber_arbeitspaket_traegtSeinenStatusAlsSpaltenschluessel() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(
+            Optional.of(
+                onBoard(BOARD, "Paket", CardType.CARD, false, null, CardStatus.READY, null)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Eigene Spalte", 3));
+
+    CardSearchService.BoardCardView view = service.findOnBoardByNumber(5L, BOARD, 42);
+
+    assertThat(view.kind()).isEqualTo("ARBEITSPAKET");
+    assertThat(view.column()).isEqualTo("READY");
+    assertThat(view.item().status()).isEqualTo("READY");
+    assertThat(view.item().derivedFrom()).isNull();
+    assertThat(view.archived()).isFalse();
+    assertThat(view.movedToDoneAt()).isNull();
+  }
+
+  @Test
+  void findOnBoardByNumber_vorhaben_istEpicDerArtVorhaben() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(Optional.of(onBoard(BOARD, "Archiv", CardType.EPIC, false, null, null, null)));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+
+    CardSearchService.BoardCardView view = service.findOnBoardByNumber(5L, BOARD, 42);
+
+    assertThat(view.item().epic()).isTrue();
+    assertThat(view.kind()).isEqualTo("VORHABEN");
+    assertThat(view.column()).isEqualTo("BACKLOG");
+  }
+
+  @Test
+  void findOnBoardByNumber_prueftDieMitgliedschaftVorDemLookup() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(() -> service.findOnBoardByNumber(5L, BOARD, 42))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(cards, never()).findByProjectIdAndNumber(anyLong(), anyInt());
+  }
+
+  @Test
+  void findOnBoardByNumber_karteAufAnderemBoard_istNichtGefunden() {
+    // Board-Grenze (A3): dieselbe Nummer im selben Projekt, aber auf einem anderen Board. Die
+    // Board-ID liegt jenseits des Long-Caches, damit ein Referenzvergleich auffiele.
+    long board = 1000L;
+    when(boardService.requireProjectId(board)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(Optional.of(onBoard(1001L, "Fremd", CardType.CARD, false, null, null, null)));
+
+    assertThatThrownBy(() -> service.findOnBoardByNumber(5L, board, 42))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void findOnBoardByNumber_gleicheBoardIdJenseitsDesLongCaches_istGefunden() {
+    long board = 1000L;
+    when(boardService.requireProjectId(board)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 42))
+        .thenReturn(
+            Optional.of(
+                onBoard(Long.valueOf(1000L), "Eigen", CardType.CARD, false, null, null, null)));
+    when(boardService.requireColumn(20L, board)).thenReturn(column(20L, "Backlog", 0));
+
+    assertThat(service.findOnBoardByNumber(5L, board, 42).item().title()).isEqualTo("Eigen");
+  }
+
+  @Test
+  void findOnBoardByNumber_unbekannteOderPapierkorbNummer_istNichtGefunden() {
+    // Der Port filtert den Papierkorb (deleted_at IS NULL): Fuer ihn sehen beide Faelle gleich aus.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByProjectIdAndNumber(PROJECT, 99)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.findOnBoardByNumber(5L, BOARD, 99))
         .isInstanceOf(CardNotFoundException.class);
   }
 
@@ -288,5 +446,321 @@ class CardSearchServiceTest {
 
     assertThat(treffer.card().status()).isEqualTo("READY");
     assertThat(treffer.card().canSetStatus()).isFalse();
+  }
+
+  // --- searchOnBoard: Suche der Kanban-Strecke (Plan #1574, A3, E2, E7) ---
+
+  private static Suchanfrage anfrage(Set<String> arten, Instant von, Instant bis) {
+    return new Suchanfrage(null, arten, null, von, bis, null, 50);
+  }
+
+  private static Card bestand(
+      long id, int number, String title, boolean archived, Instant done, CardStatus status) {
+    return new Card(
+        id,
+        BOARD,
+        20L,
+        number,
+        title,
+        "Zeile\nzwei",
+        0,
+        archived,
+        done,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null,
+        PROJECT,
+        null,
+        null,
+        null,
+        status);
+  }
+
+  @Test
+  void searchOnBoard_liefertDieTrefferDesBoards_mitArtSpalteUndAuszug() {
+    Instant done = Instant.parse("2026-02-03T04:05:06Z");
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                bestand(1L, 40, "[Plan] Archiv", true, done, null),
+                bestand(2L, 41, "Paket", false, null, CardStatus.READY)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "In Review", 3)));
+
+    SuchSeite seite = service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, null), Map.of());
+
+    assertThat(seite.naechsterCursor()).isNull();
+    assertThat(seite.treffer())
+        .containsExactly(
+            new SuchTreffer(
+                2L,
+                41,
+                "Paket",
+                "ARBEITSPAKET",
+                "READY",
+                false,
+                FIXED,
+                null,
+                "Zeile zwei",
+                "BODY",
+                null),
+            new SuchTreffer(
+                1L,
+                40,
+                "[Plan] Archiv",
+                "PLAN",
+                "IN_REVIEW",
+                true,
+                FIXED,
+                done,
+                "Zeile zwei",
+                "BODY",
+                null));
+  }
+
+  @Test
+  void searchOnBoard_spalteUnbekannt_zaehltAlsBacklog() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(bestand(1L, 40, "A", false, null, null)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of());
+
+    SuchSeite seite = service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, null), Map.of());
+
+    assertThat(seite.treffer().getFirst().column()).isEqualTo("BACKLOG");
+  }
+
+  @Test
+  void searchOnBoard_filtertNachArt_undReichtDenCursorDurch() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                bestand(1L, 40, "[Plan] A", false, null, null),
+                bestand(2L, 41, "[Fachlich] B", false, null, null),
+                bestand(3L, 42, "[Plan] C", false, null, null)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+
+    SuchSeite seite =
+        service.searchOnBoard(
+            5L, BOARD, new Suchanfrage(null, Set.of("PLAN"), null, null, null, null, 1), Map.of());
+
+    assertThat(seite.treffer()).extracting(SuchTreffer::number).containsExactly(42);
+    assertThat(seite.naechsterCursor()).isEqualTo(42);
+  }
+
+  @Test
+  void searchOnBoard_reichtKommentarFundstellenDurch() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(bestand(1L, 40, "A", false, null, null)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+
+    SuchTreffer treffer =
+        service
+            .searchOnBoard(
+                5L,
+                BOARD,
+                anfrage(Set.of(), null, null),
+                Map.of(1L, new KommentarFund(9L, "Review")))
+            .treffer()
+            .getFirst();
+
+    assertThat(treffer.auszug()).isEqualTo("Review");
+    assertThat(treffer.fundstelle()).isEqualTo("COMMENT");
+    assertThat(treffer.kommentarId()).isEqualTo(9L);
+  }
+
+  @Test
+  void searchOnBoard_mitSuchbegriff_gleichtTitelUndTextGetrimmtAb() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                bestand(1L, 40, "Archiv lesen", false, null, null),
+                bestand(2L, 41, "B", false, null, null)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+    when(kartenBestand.textFundstellenAufBoard(BOARD, "archiv")).thenReturn(Map.of(1L, "TITLE"));
+
+    SuchSeite seite =
+        service.searchOnBoard(
+            5L,
+            BOARD,
+            new Suchanfrage("  archiv ", Set.of(), null, null, null, null, 50),
+            Map.of());
+
+    assertThat(seite.treffer()).extracting(SuchTreffer::number).containsExactly(40);
+    assertThat(seite.treffer().getFirst().fundstelle()).isEqualTo("TITLE");
+    assertThat(seite.treffer().getFirst().auszug()).isEqualTo("Archiv lesen");
+  }
+
+  @Test
+  void searchOnBoard_leererSuchbegriff_fragtDenBestandNicht_undFiltertNicht() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(bestand(1L, 40, "A", false, null, null)));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Backlog", 0)));
+
+    SuchSeite seite =
+        service.searchOnBoard(
+            5L, BOARD, new Suchanfrage("   ", Set.of(), null, null, null, null, 50), Map.of());
+
+    assertThat(seite.treffer()).extracting(SuchTreffer::number).containsExactly(40);
+    verifyNoInteractions(kartenBestand);
+  }
+
+  @Test
+  void searchOnBoard_prueftDieMitgliedschaftVorDemLookup() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(
+            () -> service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, null), Map.of()))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(cards, never()).findByBoardId(anyLong());
+  }
+
+  @Test
+  void searchOnBoard_liestNurDasGebundeneBoard() {
+    // Board-Grenze (A3): Der Bestand kommt allein aus findByBoardId des gebundenen Boards, nie aus
+    // dem ganzen Projekt.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of());
+
+    assertThat(service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, null), Map.of()).treffer())
+        .isEmpty();
+    verify(cards).findByBoardId(BOARD);
+    verify(cards, never()).findByProjectId(anyLong());
+  }
+
+  @Test
+  void searchOnBoard_unbekannteArt_istEinFehlerOhneLookup() {
+    Suchanfrage a = anfrage(Set.of("PLAN", "plan"), null, null);
+
+    assertThatThrownBy(() -> service.searchOnBoard(5L, BOARD, a, Map.of()))
+        .isInstanceOf(UnknownCardKindException.class)
+        .hasMessageContaining("plan");
+    verify(cards, never()).findByBoardId(anyLong());
+  }
+
+  @Test
+  void searchOnBoard_beginnNichtVorEnde_istEinFehlerOhneLookup() {
+    Instant t = Instant.parse("2026-05-01T00:00:00Z");
+
+    assertThatThrownBy(() -> service.searchOnBoard(5L, BOARD, anfrage(Set.of(), t, t), Map.of()))
+        .isInstanceOf(InvalidPeriodBoundsException.class);
+    assertThatThrownBy(
+            () -> service.searchOnBoard(5L, BOARD, anfrage(Set.of(), t.plusNanos(1), t), Map.of()))
+        .isInstanceOf(InvalidPeriodBoundsException.class);
+    verify(cards, never()).findByBoardId(anyLong());
+  }
+
+  @Test
+  void searchOnBoard_halbeOderGueltigeGrenzen_sindErlaubt() {
+    Instant t = Instant.parse("2026-05-01T00:00:00Z");
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of());
+
+    assertThat(service.searchOnBoard(5L, BOARD, anfrage(Set.of(), t, null), Map.of()).treffer())
+        .isEmpty();
+    assertThat(service.searchOnBoard(5L, BOARD, anfrage(Set.of(), null, t), Map.of()).treffer())
+        .isEmpty();
+    assertThat(
+            service
+                .searchOnBoard(5L, BOARD, anfrage(Set.of(), t, t.plusNanos(1)), Map.of())
+                .treffer())
+        .isEmpty();
+  }
+
+  // --- lineageOnBoard: Herkunftskette der Kanban-Strecke (Plan #1574, A3, E11, E12) ---
+
+  private static Card herkunft(long id, long boardId, int number, String title, Long derivedFrom) {
+    return new Card(
+        id,
+        boardId,
+        20L,
+        number,
+        title,
+        null,
+        0,
+        false,
+        null,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null,
+        PROJECT,
+        null,
+        derivedFrom,
+        null,
+        null);
+  }
+
+  @Test
+  void lineageOnBoard_liefertDieKetteUeberPapierkorbLueckeBisZurVerlorenenNummer() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "In Review", 3)));
+    Card fachlich = herkunft(1L, BOARD, 10, "[Fachlich] Anlass", null);
+    Card paket = herkunft(3L, BOARD, 30, "Paket", 2L);
+    Card kind = herkunft(4L, BOARD, 40, "Kind", 3L);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(fachlich, paket, kind));
+    when(cards.findByIds(List.of(2L)))
+        .thenReturn(List.of(herkunft(2L, BOARD, 20, "[Plan] Papierkorb", 1L)));
+    when(kartenBestand.verloreneHerkunftsnummern(BOARD)).thenReturn(Map.of(1L, 5));
+
+    CardSearchService.Kette kette = service.lineageOnBoard(7L, BOARD, 30);
+
+    assertThat(kette.karte())
+        .isEqualTo(
+            new CardSearchService.KettenGlied(
+                30, "Paket", "ARBEITSPAKET", "IN_REVIEW", false, 0, false));
+    assertThat(kette.vorfahren())
+        .containsExactly(
+            new CardSearchService.KettenGlied(20, null, null, null, false, 1, true),
+            new CardSearchService.KettenGlied(
+                10, "[Fachlich] Anlass", "FACHLICH", "IN_REVIEW", false, 2, false),
+            new CardSearchService.KettenGlied(5, null, null, null, false, 3, true));
+    assertThat(kette.nachfahren())
+        .containsExactly(
+            new CardSearchService.KettenGlied(
+                40, "Kind", "ARBEITSPAKET", "IN_REVIEW", false, 1, false));
+    verify(permissions).requireMembership(7L, PROJECT);
+  }
+
+  @Test
+  void lineageOnBoard_vorfahrNichtGefunden_beendetDieKette() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    Card paket = herkunft(3L, BOARD, 30, "Paket", 2L);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(paket));
+    when(cards.findByIds(List.of(2L))).thenReturn(List.of());
+
+    assertThat(service.lineageOnBoard(7L, BOARD, 30).vorfahren()).isEmpty();
+  }
+
+  @Test
+  void lineageOnBoard_prueftDieMitgliedschaftVorDemLookup() {
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    doThrow(new ProjectNotFoundException()).when(permissions).requireMembership(5L, PROJECT);
+
+    assertThatThrownBy(() -> service.lineageOnBoard(5L, BOARD, 30))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verifyNoInteractions(cards, kartenBestand);
+  }
+
+  @Test
+  void lineageOnBoard_nummerNichtAufDemBoard_istNichtGefunden() {
+    // Board-Grenze (A3): Der Port liefert nur Karten des Boards ohne Papierkorb — eine Nummer auf
+    // einem anderen Board, im Papierkorb oder unbekannt fehlt darin gleichermaßen.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.findByBoardId(BOARD)).thenReturn(List.of(herkunft(1L, BOARD, 10, "Da", null)));
+
+    assertThatThrownBy(() -> service.lineageOnBoard(5L, BOARD, 30))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).findByProjectId(anyLong());
+    verifyNoInteractions(kartenBestand);
   }
 }

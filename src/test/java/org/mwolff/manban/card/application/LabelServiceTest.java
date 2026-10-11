@@ -714,4 +714,82 @@ class LabelServiceTest {
 
     assertThat(created.name()).isEqualTo("kit:klaeren");
   }
+
+  // --- Beide Sprachen und Namensraum des Kits (Issue #1586) -----------------------------------
+
+  @Test
+  void addToCard_perToken_lehntUnbekanntenNamenImNamensraumAb_undSchreibtNichts() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Review: UX");
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "Review: UX"))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessageContaining("Namensraum des Kits");
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void removeFromCard_perToken_lehntEnglischesMaschinenLabelAb_undSchreibtNichts() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:clarify");
+
+    assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "kit:clarify"))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:clarify nimmt nur ein Mensch im Board ab");
+    verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
+  }
+
+  @Test
+  void removeFromCard_perToken_nimmtUnbekanntenNamenImNamensraumAb() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Review: UX");
+
+    service.removeFromCard(USER, CARD_ID, "Review: UX");
+
+    verify(cardLabels).removeLabel(CARD_ID, 7L);
+  }
+
+  @Test
+  void update_perToken_lehntUmbenennenAufEnglischenFreigabeNamenAb() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
+
+    assertThatThrownBy(() -> service.update(5L, 1L, "kit:clarify", "#f00", null))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(labels, never()).save(any(Label.class));
+  }
+
+  @Test
+  void update_perToken_lehntUmbenennenAufUnbekanntenNamenImNamensraumAb() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
+
+    assertThatThrownBy(() -> service.update(5L, 1L, "kit:freigabe", "#f00", null))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessageContaining("Namensraum des Kits");
+    verify(labels, never()).save(any(Label.class));
+  }
+
+  @Test
+  void delete_perToken_lehntLoeschenEinesEnglischenFreigabeLabelsAb() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    when(labels.findById(1L))
+        .thenReturn(Optional.of(new Label(1L, BOARD, "kit:protected", "#f00", false)));
+
+    assertThatThrownBy(() -> service.delete(5L, 1L)).isInstanceOf(FreigabeLabelException.class);
+    verify(labels, never()).deleteById(anyLong());
+  }
+
+  @Test
+  void create_perToken_legtUnbekanntenNamenImNamensraumAn() {
+    // E8: Anlegen bleibt erlaubt, nur Setzen und Umbenennen auf den Namen sind gesperrt.
+    givenHerkunft(CardActivityOrigin.TOKEN);
+
+    Label created = service.create(5L, BOARD, "kit:freigabe", "#f00");
+
+    assertThat(created.name()).isEqualTo("kit:freigabe");
+  }
 }

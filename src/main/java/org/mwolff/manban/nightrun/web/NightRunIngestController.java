@@ -6,6 +6,7 @@ import static org.mwolff.manban.nightrun.web.NightRunController.MAX_ITEMS_PER_RU
 import static org.mwolff.manban.nightrun.web.NightRunController.NO_WORK_REASON_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunController.TITLE_MAX;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -505,8 +506,10 @@ class NightRunIngestController {
       @Schema(description = "Zeitvorgabe der Stufe REVIEW in Minuten.", example = "20")
           @Nullable Integer reviewMin,
       @Schema(description = "Zeitvorgabe der Stufe PAKETE in Minuten.", example = "120")
+          @JsonAlias("packagesMin")
           @Nullable Integer paketeMin,
       @Schema(description = "Zeitvorgabe der Stufe ABDECKUNG in Minuten.", example = "20")
+          @JsonAlias("coverageMin")
           @Nullable Integer abdeckungMin,
       @Schema(description = "Kostenvorgabe in US-Dollar.", example = "25.00")
           @Nullable BigDecimal kostenUsd,

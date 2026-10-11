@@ -52,6 +52,7 @@ class CardArchiveServiceTest {
   private static final long PROJECT = 1L;
 
   private CardRepository cards;
+  private CardBestandRepository bestand;
   private CardDependencyRepository dependencies;
   private BoardService boardService;
   private PermissionChecker permissions;
@@ -81,6 +82,7 @@ class CardArchiveServiceTest {
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
+    bestand = mock(CardBestandRepository.class);
     dependencies = mock(CardDependencyRepository.class);
     boardService = mock(BoardService.class);
     permissions = mock(PermissionChecker.class);
@@ -96,6 +98,7 @@ class CardArchiveServiceTest {
     service =
         CardServiceAufbau.archiveAusPorts(
             cards,
+            bestand,
             dependencies,
             boardService,
             permissions,
@@ -589,6 +592,20 @@ class CardArchiveServiceTest {
     // ein, solange die Metadaten existieren), dann löschen — die Cascade nimmt die Metadaten mit.
     InOrder inOrder = inOrder(events, cards);
     inOrder.verify(events).publishEvent(new CardsPurgedEvent(List.of(1L)));
+    inOrder.verify(cards).deleteById(1L);
+  }
+
+  @Test
+  void purge_bewahrtHerkunftsnummernVorDemLoeschen() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+
+    service.purge(9L, 1L);
+
+    // Plan #1574, E18: Die FK fk_card_derived_from setzt die Herkunft der Kinder beim Delete auf
+    // NULL — die Nummer muss vorher an ihnen stehen.
+    InOrder inOrder = inOrder(bestand, cards);
+    inOrder.verify(bestand).bewahreHerkunftsnummern(List.of(1L));
     inOrder.verify(cards).deleteById(1L);
   }
 

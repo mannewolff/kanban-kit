@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { NIGHT_RUN_ERROR_CLASSES, parseNightRunLog } from './nightRunLog'
+import protokollDe from './__fixtures__/night-run-protokoll.de.log?raw'
+import protokollEn from './__fixtures__/night-run-protokoll.en.log?raw'
+import { NIGHT_RUN_ERROR_CLASSES, parseNightRunLog, type NightRun } from './nightRunLog'
 
 /**
  * Fixtures sind **anonymisiert** (Issue #720): Pfade als `<PFAD>`, keine Sitzungs-IDs,
@@ -960,5 +962,77 @@ describe('parseNightRunLog — Muster nur am Zeilenanfang', () => {
       z(1, 'Session 1/5: Issue #100 — Paket 1'),
       'vorher\rnachher',
     ])
+  })
+})
+
+/**
+ * Ein englisches Protokoll deutet sich wie sein deutsches Gegenstueck (Issue #1592, AK 3 des
+ * Plans #1582). Beide Fixtures entstehen Zeile fuer Zeile aus derselben Liste, mit denselben
+ * Zeitstempeln; jede Rohzeile der Datei kommt nur einmal vor. Verglichen wird darum jeder Text
+ * eines Laufs ueber die Zeilennummer, an der er in seiner Datei steht — so bleibt „bis auf die
+ * Sprache der Zeile" eine pruefbare Aussage statt eines Augenmasses.
+ */
+describe('parseNightRunLog — englisches Protokoll wie sein deutsches Gegenstueck', () => {
+  const zeilennummern = (text: string) => {
+    const zeilen = text.split('\n')
+    const nummer = (gesucht: string) => {
+      const treffer = zeilen.flatMap((zeile, i) =>
+        zeile === gesucht || zeile.replace(/^\[[^\]]+\] /, '') === gesucht ? [i] : [],
+      )
+      expect(treffer, gesucht).toHaveLength(1)
+      return treffer[0]
+    }
+    return (run: NightRun) => ({
+      ...run,
+      unparsedSample: run.unparsedSample.map(nummer),
+      ...(run.runExcerpt === undefined ? {} : { runExcerpt: nummer(run.runExcerpt) }),
+      items: run.items.map((item) => ({
+        ...item,
+        excerpt: nummer(item.excerpt),
+        rawLines: item.rawLines.map(nummer),
+      })),
+    })
+  }
+
+  const de = parseNightRunLog(protokollDe)
+  const en = parseNightRunLog(protokollEn)
+
+  it('deutet beide Protokolle zu denselben Laeufen, Zustaenden und Rohzeilen je Paket', () => {
+    expect(en.dryRunCount).toBe(de.dryRunCount)
+    expect(en.runs.map(zeilennummern(protokollEn))).toEqual(de.runs.map(zeilennummern(protokollDe)))
+  })
+
+  it('deckt jede Deutung ab: Probelauf, alle Zustaende, Fehlerklassen und Lauf-Abbruch', () => {
+    expect(de.dryRunCount).toBe(1)
+    expect(de.runs.map((r) => r.mode)).toEqual(['IMPLEMENTATION', 'IMPLEMENTATION', 'REVIEW'])
+    expect(de.runs[2].stage).toBe('issue')
+    expect(de.runs[1].runErrorClass).toBe('HARD_ABORT')
+    const ausgaenge = de.runs.flatMap((r) => r.items.map((i) => `${i.cardNumber} ${i.state} ${i.errorClass ?? '-'}`))
+    expect(ausgaenge).toEqual([
+      '100 YELLOW CHECKS_RED',
+      '101 RED UNEXPECTED_STATE',
+      '102 GREY -',
+      '107 RED AWAITING_DECISION',
+      '103 GREY DEPENDENCY_UNMET',
+      '105 GREY -',
+      '108 GREY -',
+      '106 YELLOW CHECKS_NOT_STARTED',
+      '109 RED CHECKS_NOT_STARTED',
+      '110 RED HARD_ABORT',
+      '120 RED HARD_ABORT',
+      '121 RED HARD_ABORT',
+      '122 RED HARD_ABORT',
+      '200 GREEN -',
+      '201 GREEN -',
+      '202 RED AWAITING_DECISION',
+      '203 RED HARD_ABORT',
+      '204 GREY -',
+    ])
+  })
+
+  it('zaehlt in beiden Sprachen genau die eine unbekannte Zeile als ungedeutet', () => {
+    expect(de.runs.map((r) => r.unparsedCount)).toEqual([1, 0, 0])
+    expect(en.runs.map((r) => r.unparsedCount)).toEqual([1, 0, 0])
+    expect(en.runs[0].unparsedSample).toEqual(['Completely unknown runner line from an older version'])
   })
 })

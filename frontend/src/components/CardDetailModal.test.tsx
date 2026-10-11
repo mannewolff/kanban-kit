@@ -8,17 +8,29 @@ import type { Board } from '../api/boards'
 import { ApiError } from '../api/client'
 import type { Card, CardByNumber, CardDetail } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
+import type { KitNamenZustand } from '../api/kitNamen'
 import type { CardLocation } from '../lib/cardLocation'
 import { CardDetailModal, commentFieldProps, parseDependencyInput, parseHerkunftInput } from './CardDetailModal'
 import { SnackbarProvider } from './SnackbarProvider'
 import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel } from '../test/cssRegel'
+import { KIT_NAMEN } from '../test/kitNamen'
 import { theme } from '../theme'
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] } }),
 }))
+
+/** Das Namen-Register des Kits (Issue #1595): ohne Angabe geladen, ein Test kann es umstellen. */
+const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
+vi.mock('../api/kitNamen', async (original) => ({
+  ...(await original<typeof import('../api/kitNamen')>()),
+  useKitNamen: (): KitNamenZustand => kitNamen.zustand ?? { status: 'fertig', daten: KIT_NAMEN },
+}))
+beforeEach(() => {
+  kitNamen.zustand = null
+})
 
 const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
@@ -2816,6 +2828,34 @@ describe('CardDetailModal — Statuswechsler', () => {
     it('zeigt die Leiste an einer [Plan]-Karte', async () => {
       oeffne({ ...card, title: '[Plan] Neue Ansicht' })
       expect(await screen.findByTestId('ketten-stufenleiste')).toBeInTheDocument()
+    })
+
+    it('zeigt die Leiste an einer [Requirement]-Karte wie an [Fachlich] (Issue #1595)', async () => {
+      oeffne({ ...card, title: '[Requirement] New view' })
+      expect(await screen.findByTestId('ketten-stufenleiste')).toBeInTheDocument()
+    })
+
+    it('zeigt einen englischen Labelnamen wörtlich und setzt am englischen Board das englische Ziel (Issue #1595)', async () => {
+      const englisch = [
+        { id: 31, boardId: 1, name: 'goal:packages', color: '#888', countOnEpicTile: false },
+        { id: 32, boardId: 1, name: 'goal:implementation', color: '#888', countOnEpicTile: false },
+      ]
+      const apis = oeffne({ ...card, title: '[Requirement] New view', labels: [31] }, { boardLabels: englisch })
+
+      expect(await screen.findByText('goal:packages')).toBeInTheDocument()
+      const leiste = within(await screen.findByTestId('ketten-stufenleiste'))
+      fireEvent.click(leiste.getByRole('button', { name: /^Umsetzung/ }))
+
+      await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalledWith(100, 32))
+      expect(apis.cardsApi.removeLabel).toHaveBeenCalledWith(100, 31)
+    })
+
+    it('zeigt beim Fehler der Kit-Namen den Hinweis statt der Leiste (Issue #1595, E10)', async () => {
+      kitNamen.zustand = { status: 'fehler', fehler: new Error('weg') }
+      oeffne(fachlich)
+
+      expect(await screen.findByText('Kit-Namen nicht ladbar')).toBeInTheDocument()
+      expect(screen.queryByTestId('ketten-stufenleiste')).not.toBeInTheDocument()
     })
 
     it('speichert das gewählte Ziel über den Label-Aufruf der Karte', async () => {

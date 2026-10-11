@@ -10,6 +10,7 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import type { Card } from '../api/cards'
 import type { Epic } from '../api/epics'
+import { useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import type { Label } from '../api/labels'
 import { epicShortcode } from '../lib/epicMeta'
 import { aggregateMarks, countKinds } from '../lib/epicTiles'
@@ -35,6 +36,33 @@ function Art({ anzahl, eins, viele }: Readonly<{ anzahl: number; eins: string; v
     <Typography variant="caption" color="text.secondary">
       {`${anzahl} ${anzahl === 1 ? eins : viele}`}
     </Typography>
+  )
+}
+
+/**
+ * Die Zusammensetzung nach Art. Die Art lesen die Titel-Präfixe des Namen-Registers; solange es
+ * lädt oder wenn es fehlt, steht an dieser Stelle der Hinweis statt einer geratenen Zählung
+ * (Plan #1582, E10). Eine Art mit null Karten wird nicht genannt: "0 Plaene" ist keine Aussage.
+ */
+function Zusammensetzung({
+  epic,
+  cards,
+  kitNamen,
+}: Readonly<{ epic: Epic; cards: Card[]; kitNamen: KitNamenZustand }>) {
+  if (kitNamen.status !== 'fertig') {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        {kitNamen.status === 'laden' ? 'Kit-Namen werden geladen' : 'Kit-Namen nicht ladbar'}
+      </Typography>
+    )
+  }
+  const arten = countKinds(epic, cards, kitNamen.daten.titelPraefixe)
+  return (
+    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+      {arten.requirements > 0 && <Art anzahl={arten.requirements} eins="Anforderung" viele="Anforderungen" />}
+      {arten.plans > 0 && <Art anzahl={arten.plans} eins="Plan" viele="Pläne" />}
+      {arten.workItems > 0 && <Art anzahl={arten.workItems} eins="Arbeitspaket" viele="Arbeitspakete" />}
+    </Stack>
   )
 }
 
@@ -84,6 +112,7 @@ export function EpicVisibilityList({
   onOpenCard,
   onMenu,
 }: Readonly<Props>) {
+  const kitNamen = useKitNamen()
   return (
     <Box
       component="ul"
@@ -105,7 +134,6 @@ export function EpicVisibilityList({
         const istAusgeblendet = hidden.has(epic.id)
         const kuerzel = epicShortcode(epic.title, epic.shortcode)
         const pct = epic.total > 0 ? (epic.done / epic.total) * 100 : 0
-        const arten = countKinds(epic, cards)
         const marken = aggregateMarks(epic, cards, labels)
         // Leer heisst wie in #662: keine Mitglieder UND keine Anforderung. Ein Vorhaben mit
         // Anforderung, aber ohne Karten ist eroeffnet, nicht leer.
@@ -244,17 +272,12 @@ export function EpicVisibilityList({
                 </Stack>
               )}
 
-              {/* Eine Art mit null Karten wird nicht genannt: "0 Plaene" ist keine Aussage. */}
               {leer ? (
                 <Typography variant="caption" color="text.secondary">
                   Noch keine Karten zugeordnet.
                 </Typography>
               ) : (
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                  {arten.requirements > 0 && <Art anzahl={arten.requirements} eins="Anforderung" viele="Anforderungen" />}
-                  {arten.plans > 0 && <Art anzahl={arten.plans} eins="Plan" viele="Pläne" />}
-                  {arten.workItems > 0 && <Art anzahl={arten.workItems} eins="Arbeitspaket" viele="Arbeitspakete" />}
-                </Stack>
+                <Zusammensetzung epic={epic} cards={cards} kitNamen={kitNamen} />
               )}
 
               {/* Höchstens zwei Zeilen Marken; der Zuschlag ist der Zeilenabstand (4px). */}

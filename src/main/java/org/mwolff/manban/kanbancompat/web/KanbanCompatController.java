@@ -8,11 +8,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -23,6 +25,10 @@ import org.mwolff.manban.common.TextLimits;
 import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.mwolff.manban.common.web.api.ApiVertrag;
 import org.mwolff.manban.common.web.api.Stabilitaet;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.ItemDetail;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.Lineage;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.SearchPage;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Activity;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
@@ -58,7 +64,9 @@ import org.springframework.web.bind.annotation.RestController;
  */
 // Die OpenAPI-Annotationen heben die Importzahl über die PMD-Schwelle von 40 (Plan #1400, E14).
 // Die Ausnahme bleibt an dieser Klasse sichtbar, statt die Regel für alle anzuheben.
-@SuppressWarnings("PMD.ExcessiveImports")
+// PMD.CouplingBetweenObjects: Der Controller ist der eine Zugang der Kanban-Strecke; jede
+// Antwortform zählt als Kopplung, mit der Herkunftskette (Issue #1580) über die Schwelle von 20.
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.CouplingBetweenObjects"})
 @Tag(
     name = "Einliefern (Kanban-kompatibel)",
     description =
@@ -80,6 +88,12 @@ class KanbanCompatController {
 
   /** Längengrenze des Schlüssels; identisch mit der Spalte {@code idempotency_record.key}. */
   private static final int MAX_IDEMPOTENCY_KEY = 200;
+
+  /** Höchstzahl der Treffer je Teil der Suche (Plan #1574, E6). */
+  private static final int MAX_SEARCH_LIMIT = 200;
+
+  /** Höchstlänge des Suchbegriffs der Suche (Plan #1574, E3). */
+  private static final int MAX_SEARCH_TEXT = 200;
 
   private static final String TOKEN_BINDUNG =
       "Das Board kommt aus der Bindung des Projekt-Tokens; ein Token ohne Board-Bindung wird"
@@ -111,9 +125,11 @@ class KanbanCompatController {
       "Die Karte gibt es nicht, oder sie liegt nicht auf dem gebundenen Board.";
 
   private final KanbanCompatService service;
+  private final KanbanArchivService archiv;
 
-  KanbanCompatController(KanbanCompatService service) {
+  KanbanCompatController(KanbanCompatService service, KanbanArchivService archiv) {
     this.service = service;
+    this.archiv = archiv;
   }
 
   @Operation(
@@ -631,6 +647,175 @@ class KanbanCompatController {
       @Nullable Authentication authentication,
       @Parameter(description = BESCHREIBUNG_ID, example = "4711") @PathVariable long id) {
     return service.listActivity(principal(authentication), id);
+  }
+
+  /**
+   * Einzelabruf nach projektweiter Nummer, archivierte Karten eingeschlossen (Plan #1574, A1, A2):
+   * Eine archivierte Karte fehlt in {@code GET /items}, ihre Nummer steht aber in anderen Karten.
+   */
+  @Operation(
+      summary = "Karte nach Nummer lesen, auch archiviert",
+      description =
+          "Liefert eine Karte des gebundenen Boards über ihre projektweite Nummer, auch wenn sie"
+              + " archiviert ist: dieselben Angaben wie in GET /api/kanban/items, dazu das"
+              + " Archiv-Kennzeichen, Anlagedatum, Datum des Zugs nach Done und alle Kommentare,"
+              + " den ältesten zuerst. Karten im Papierkorb und Karten anderer Boards sind nicht"
+              + " erreichbar. "
+              + TOKEN_BINDUNG)
+  @ApiResponse(responseCode = "200", description = "Die Karte mit ihren Kommentaren.")
+  @ApiResponse(
+      responseCode = "404",
+      description = KARTE_FEHLT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "409",
+      description = NICHT_GEBUNDEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(stabilitaet = Stabilitaet.VERLAESSLICH)
+  @GetMapping("/items/by-number/{number}")
+  ItemDetail itemByNumber(
+      @Nullable Authentication authentication,
+      @Parameter(
+              description = "Projektweite Nummer der Karte, wie sie als #N erscheint.",
+              example = "1403")
+          @PathVariable
+          int number) {
+    return archiv.itemByNumber(principal(authentication), number);
+  }
+
+  /**
+   * Herkunftskette nach projektweiter Nummer, archivierte Glieder eingeschlossen (Plan #1574,
+   * Kriterium 3, E10–E13).
+   */
+  @Operation(
+      summary = "Herkunftskette einer Karte lesen, auch archiviert",
+      description =
+          "Liefert zu einer Karte des gebundenen Boards ihre Vorfahren bis zur Wurzel und ihre"
+              + " Nachfahren bis zu den Blättern, archivierte Glieder eingeschlossen. Ein"
+              + " Vorfahr im Papierkorb erscheint als Lücke, die Kette läuft über ihn hinweg"
+              + " weiter; ein Vorfahr auf einem anderen Board oder ein endgültig gelöschter"
+              + " erscheint als Lücke und beendet sie. Nachfahren im Papierkorb oder auf einem"
+              + " anderen Board fehlen. Karten im Papierkorb und Karten anderer Boards sind als"
+              + " Ausgangspunkt nicht erreichbar. "
+              + TOKEN_BINDUNG)
+  @ApiResponse(responseCode = "200", description = "Die Herkunftskette der Karte.")
+  @ApiResponse(
+      responseCode = "404",
+      description = KARTE_FEHLT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "409",
+      description = NICHT_GEBUNDEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(stabilitaet = Stabilitaet.VERLAESSLICH)
+  @GetMapping("/items/by-number/{number}/lineage")
+  Lineage lineage(
+      @Nullable Authentication authentication,
+      @Parameter(
+              description = "Projektweite Nummer der Karte, wie sie als #N erscheint.",
+              example = "1403")
+          @PathVariable
+          int number) {
+    return archiv.lineage(principal(authentication), number);
+  }
+
+  /**
+   * Suche im Bestand des gebundenen Boards, archivierte Karten eingeschlossen (Plan #1574, E2–E10).
+   * Mit der Textsuche ist die Form vollständig und darum {@code VERLAESSLICH} (E14).
+   */
+  @Operation(
+      summary = "Karten des Boards suchen, auch archivierte",
+      description =
+          "Durchsucht die Karten des gebundenen Boards, archivierte eingeschlossen, nach Text"
+              + " in Titel, Text und Kommentaren, nach Art, Vorhaben und Zeitraum des"
+              + " Anlagedatums; mehrere Filter wirken zusammen. Bei einer Textsuche zeigt der"
+              + " Auszug die Fundstelle, mit Vorrang Titel vor Text vor dem ersten passenden"
+              + " Kommentar. Die"
+              + " Treffer kommen nach Nummer absteigend in Teilen: Der nächste Teil beginnt mit"
+              + " cursor = nextCursor des vorigen. Bleibt der Bestand zwischen den Teilen"
+              + " unverändert, fehlt kein Treffer und keiner kommt doppelt. Karten im Papierkorb"
+              + " und Karten anderer Boards sind nicht erreichbar. "
+              + TOKEN_BINDUNG)
+  @ApiResponse(responseCode = "200", description = "Ein Teil der Treffer.")
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          "Ungültige Eingabe: q länger als 200 Zeichen, unbekannte Art, createdFrom nicht vor"
+              + " createdTo, cursor nicht positiv oder limit außerhalb von 1 bis 200.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "409",
+      description = NICHT_GEBUNDEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(stabilitaet = Stabilitaet.VERLAESSLICH)
+  @GetMapping("/search")
+  SearchPage search(
+      @Nullable Authentication authentication,
+      @Parameter(
+              description =
+                  "Suchbegriff, höchstens 200 Zeichen: Treffer enthalten ihn in Titel, Text oder"
+                      + " einem Kommentar, ohne Rücksicht auf Groß- und Kleinschreibung; % und _"
+                      + " gelten wörtlich. Wird getrimmt; fehlt er oder ist er leer, wird nicht"
+                      + " nach Text gefiltert.",
+              example = "Archiv")
+          @RequestParam(required = false)
+          @Size(max = MAX_SEARCH_TEXT)
+          @Nullable String q,
+      @Parameter(
+              description =
+                  "Art der Karte, mehrfach erlaubt (ODER): FACHLICH, PLAN, IDEE, TASK, MENSCH,"
+                      + " ARBEITSPAKET oder VORHABEN. Fehlt der Parameter, zählt jede Art.",
+              example = "FACHLICH")
+          @RequestParam(name = "kind", required = false)
+          @Nullable List<String> kind,
+      @Parameter(
+              description =
+                  "Nummer eines Vorhabens des Boards: nur Karten, die zu ihm gehören, archivierte"
+                      + " eingeschlossen. Eine Nummer ohne Vorhaben ergibt keine Treffer.",
+              example = "1380")
+          @RequestParam(required = false)
+          @Nullable Integer epic,
+      @Parameter(
+              description = "Anlage frühestens zu diesem Zeitpunkt (ISO-8601, eingeschlossen).",
+              example = "2026-09-01T00:00:00Z")
+          @RequestParam(required = false)
+          @Nullable Instant createdFrom,
+      @Parameter(
+              description = "Anlage vor diesem Zeitpunkt (ISO-8601, ausgeschlossen).",
+              example = "2026-10-01T00:00:00Z")
+          @RequestParam(required = false)
+          @Nullable Instant createdTo,
+      @Parameter(
+              description = "nextCursor des vorigen Teils; fehlt beim ersten Teil.",
+              example = "1403")
+          @RequestParam(required = false)
+          @Positive
+          @Nullable Integer cursor,
+      @Parameter(description = "Höchstzahl der Treffer dieses Teils, 1 bis 200.", example = "50")
+          @RequestParam(defaultValue = "50")
+          @Min(1)
+          @Max(MAX_SEARCH_LIMIT)
+          int limit) {
+    return archiv.search(
+        principal(authentication), q, kind, epic, createdFrom, createdTo, cursor, limit);
   }
 
   @Operation(

@@ -10,6 +10,7 @@ import {
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Card, CardByNumber } from '../api/cards'
+import type { KitNamenZustand } from '../api/kitNamen'
 import type {
   HeuteNachtKarte,
   NightRunBudgetView,
@@ -32,6 +33,7 @@ import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, KURZ_GRUND_MAX, type NightRunHandoffItem, type NightRunStuckAngaben } from '../lib/nightRunHandoff'
 import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../nachtlaufDesign'
 import { cssRegel } from '../test/cssRegel'
+import { KIT_NAMEN } from '../test/kitNamen'
 import { MELDER, theme } from '../theme'
 import { NightRunPage } from './NightRunPage'
 import appQuelle from '../App.tsx?raw'
@@ -78,6 +80,17 @@ vi.mock('../components/CardDetailModal', async () => {
     },
   }
 })
+
+/**
+ * Das Namen-Register des Kits (Issue #1596): ohne Angabe geladen, ein Test kann es umstellen. Als
+ * Hook gemockt und nicht über den `fetch`-Stub bedient — das Register lädt einmal je Sitzung, und
+ * ein geteilter Ladezustand machte die Tests voneinander abhängig.
+ */
+const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
+vi.mock('../api/kitNamen', async (original) => ({
+  ...(await original<typeof import('../api/kitNamen')>()),
+  useKitNamen: (): KitNamenZustand => kitNamen.zustand ?? { status: 'fertig', daten: KIT_NAMEN },
+}))
 
 /** Startzeitpunkt eines Laufs — der Schlüssel der Auswertung (Plan #718, A4). */
 const startedAt = (minute: number) => `2026-09-01T22:${String(minute).padStart(2, '0')}:00.000Z`
@@ -749,6 +762,7 @@ const UHR_VOR_DEN_FIXTURES = new Date('2026-09-01T00:00:00Z')
 
 beforeEach(() => {
   anfragen = []
+  kitNamen.zustand = null
   vi.clearAllMocks()
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(UHR_VOR_DEN_FIXTURES)
@@ -3122,6 +3136,67 @@ describe('NightRunPage — Herkunftskette', () => {
     expect(within(lauf(0)).queryByText('Plan: ohne')).not.toBeInTheDocument()
   })
 
+  /** Englische Titel-Präfixe wirken wie ihr deutsches Gegenstück (Plan #1582, E2). */
+  it('ordnet [Requirement] der Stufe „Fachliche Anforderung" zu', async () => {
+    renderPage({
+      listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
+      karten: {
+        700: karte({ id: 1, number: 700, title: 'Paket A', derivedFrom: 718 }),
+        718: karte({ id: 2, number: 718, title: '[Plan] Night run', derivedFrom: 715 }),
+        715: karte({ id: 3, number: 715, title: '[Requirement] Night run' }),
+      },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+
+    expect(
+      await within(lauf(0)).findByRole('button', {
+        name: 'Fachliche Anforderung #715 [Requirement] Night run',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      within(lauf(0)).getByRole('button', { name: 'Plan #718 [Plan] Night run' }),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt während des Ladens der Kit-Namen an beiden Stufen einen Ladehinweis (E10)', async () => {
+    kitNamen.zustand = { status: 'laden' }
+    renderPage({
+      listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
+      karten: {
+        700: karte({ id: 1, number: 700, title: 'Paket A', derivedFrom: 715 }),
+        715: karte({ id: 3, number: 715, title: '[Fachlich] Nachtlauf' }),
+      },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+
+    expect(
+      await within(lauf(0)).findByText('Fachliche Anforderung: Kit-Namen werden geladen'),
+    ).toBeInTheDocument()
+    expect(within(lauf(0)).getByText('Plan: Kit-Namen werden geladen')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByRole('button', { name: /^Fachliche Anforderung #715/ })).toBeNull()
+  })
+
+  it('zeigt „Kit-Namen nicht ladbar" an beiden Stufen, wenn das Laden scheitert (E10)', async () => {
+    kitNamen.zustand = { status: 'fehler', fehler: new Error('weg') }
+    renderPage({
+      listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+
+    expect(
+      await within(lauf(0)).findByText('Fachliche Anforderung: Kit-Namen nicht ladbar'),
+    ).toBeInTheDocument()
+    expect(within(lauf(0)).getByText('Plan: Kit-Namen nicht ladbar')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByText('Plan: ohne')).toBeNull()
+  })
+
   it('lädt die Kette eines Laufs nur beim ersten Aufklappen', async () => {
     renderPage({
       listen: lauf700([{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }]),
@@ -4901,6 +4976,19 @@ describe('NightRunPage — Fußzeile eines Kettenlaufs aus der Server-Antwort (#
       fuss.getByText(
         'aus Voreinstellungen: Zeitvorgabe Plan, Zeitvorgabe Prüfung, Zeitvorgabe Pakete, Zeitvorgabe Abdeckung, Kostenbudget',
       ),
+    ).toBeInTheDocument()
+  })
+
+  /** Die englischen Budgetfeldnamen wirken wie die deutschen (Plan #1582, E3). */
+  it('übersetzt packagesMin und coverageMin wie paketeMin und abdeckungMin', async () => {
+    const fuss = await fussZu(
+      kettenLauf({
+        budget: budget({ origin: 'DEFAULTED', defaultFields: ['packagesMin', 'coverageMin'] }),
+      }),
+    )
+
+    expect(
+      fuss.getByText('aus Voreinstellungen: Zeitvorgabe Pakete, Zeitvorgabe Abdeckung'),
     ).toBeInTheDocument()
   })
 

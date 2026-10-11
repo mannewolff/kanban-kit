@@ -706,12 +706,21 @@ Einem **Plattform-Admin** zeigt die Seite **Administration** zusätzlich den Abs
 mit dem festen Satz der Labels, die das claude-workflow-kit, die Laufsteuerung und die
 [Stufenleiste](#karten-detail) erwarten, nach Gruppen und in ihrer Farbe:
 
-- **Kit:** `kit:durchziehen`, `kit:geschuetzt`, `kit:klaeren`, `kit:night`, `kit:nightrun`,
-  `kit:pruefen`, `kit:nightplan`, `kit:nightreview`, `kit:nightissues`
-- **Lauf:** `lauf:abgebrochen`, `lauf:laeuft`, `lauf:wartet`
-- **Review:** `review:offen`, `review:fertig`
-- **Stufenleiste:** `ziel:plan`, `ziel:pakete`, `ziel:umsetzung`, `ziel:push-vorbereitet`,
-  `planreview:1`, `planreview:2`
+- **Kit:** `kit:durchziehen`, `kit:carry-through`, `kit:geschuetzt`, `kit:protected`,
+  `kit:klaeren`, `kit:clarify`, `kit:night`, `kit:nightrun`, `kit:pruefen`, `kit:check`,
+  `kit:nightplan`, `kit:nightreview`, `kit:nightissues`
+- **Lauf:** `lauf:abgebrochen`, `run:aborted`, `lauf:laeuft`, `run:running`, `lauf:wartet`,
+  `run:waiting`
+- **Review:** `review:offen`, `review:fertig`, `review:done`
+- **Stufenleiste:** `ziel:plan`, `goal:plan`, `ziel:pakete`, `goal:packages`, `ziel:umsetzung`,
+  `goal:implementation`, `ziel:push-vorbereitet`, `goal:push-prepared`, `planreview:1`,
+  `planreview:2`
+
+Weil das claude-workflow-kit auch auf Englisch läuft, enthält der Satz zu jedem deutschen Label sein
+englisches Gegenstück direkt dahinter. Labels ohne Gegenstück heißen in beiden Sprachen gleich und
+entstehen nur einmal. Beide Namen derselben Sache zählen, filtern und färben im Leitstand als eins.
+Ebenso liest der Leitstand Laufstand (`## Run status`), Textprotokoll und Ergebnisdatei auch in ihrer
+englischen Form; Nächte, die vorher gemeldet wurden, erscheinen unverändert.
 
 Erst **„Anlegen"** legt jedes fehlende Label des Satzes auf **allen nicht archivierten Boards aller
 Projekte** an; „Abbrechen" ändert nichts. Ein Label, das ein Board schon trägt, bleibt mit Farbe und

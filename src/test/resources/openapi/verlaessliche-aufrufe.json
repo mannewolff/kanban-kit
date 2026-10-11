@@ -69,6 +69,56 @@
     },
     "abgekuendigtSeit" : null
   }, {
+    "pfad" : "/api/kanban/items/by-number/{number}",
+    "methode" : "GET",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "number",
+      "required" : true,
+      "schema" : {
+        "format" : "int32",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/ItemDetail"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items/by-number/{number}/lineage",
+    "methode" : "GET",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "number",
+      "required" : true,
+      "schema" : {
+        "format" : "int32",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/Lineage"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
     "pfad" : "/api/kanban/items/{id}/activity",
     "methode" : "GET",
     "parameter" : [ {
@@ -118,6 +168,86 @@
                 "$ref" : "#/components/schemas/Comment"
               },
               "type" : "array"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/search",
+    "methode" : "GET",
+    "parameter" : [ {
+      "in" : "query",
+      "name" : "createdFrom",
+      "required" : false,
+      "schema" : {
+        "format" : "date-time",
+        "type" : "string"
+      }
+    }, {
+      "in" : "query",
+      "name" : "createdTo",
+      "required" : false,
+      "schema" : {
+        "format" : "date-time",
+        "type" : "string"
+      }
+    }, {
+      "in" : "query",
+      "name" : "cursor",
+      "required" : false,
+      "schema" : {
+        "exclusiveMinimum" : 0,
+        "format" : "int32",
+        "type" : "integer"
+      }
+    }, {
+      "in" : "query",
+      "name" : "epic",
+      "required" : false,
+      "schema" : {
+        "format" : "int32",
+        "type" : "integer"
+      }
+    }, {
+      "in" : "query",
+      "name" : "kind",
+      "required" : false,
+      "schema" : {
+        "items" : {
+          "type" : "string"
+        },
+        "type" : "array"
+      }
+    }, {
+      "in" : "query",
+      "name" : "limit",
+      "required" : false,
+      "schema" : {
+        "default" : 50,
+        "format" : "int32",
+        "maximum" : 200,
+        "minimum" : 1,
+        "type" : "integer"
+      }
+    }, {
+      "in" : "query",
+      "name" : "q",
+      "required" : false,
+      "schema" : {
+        "maxLength" : 200,
+        "minLength" : 0,
+        "type" : "string"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/SearchPage"
             }
           }
         }
@@ -480,6 +610,21 @@
       },
       "type" : "object"
     },
+    "Excerpt" : {
+      "properties" : {
+        "commentId" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "source" : {
+          "type" : "string"
+        },
+        "text" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
     "IngestBudgetRequest" : {
       "properties" : {
         "abdeckungMin" : {
@@ -802,6 +947,31 @@
       },
       "type" : "object"
     },
+    "ItemDetail" : {
+      "properties" : {
+        "archived" : {
+          "type" : "boolean"
+        },
+        "comments" : {
+          "items" : {
+            "$ref" : "#/components/schemas/Comment"
+          },
+          "type" : "array"
+        },
+        "createdAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "item" : {
+          "$ref" : "#/components/schemas/Item"
+        },
+        "movedToDoneAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
     "KanbanCommentRequest" : {
       "properties" : {
         "body" : {
@@ -822,6 +992,54 @@
         }
       },
       "required" : [ "name" ],
+      "type" : "object"
+    },
+    "Lineage" : {
+      "properties" : {
+        "ancestors" : {
+          "items" : {
+            "$ref" : "#/components/schemas/LineageNode"
+          },
+          "type" : "array"
+        },
+        "card" : {
+          "$ref" : "#/components/schemas/LineageNode"
+        },
+        "descendants" : {
+          "items" : {
+            "$ref" : "#/components/schemas/LineageNode"
+          },
+          "type" : "array"
+        }
+      },
+      "type" : "object"
+    },
+    "LineageNode" : {
+      "properties" : {
+        "archived" : {
+          "type" : "boolean"
+        },
+        "column" : {
+          "type" : "string"
+        },
+        "depth" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "gap" : {
+          "type" : "boolean"
+        },
+        "kind" : {
+          "type" : "string"
+        },
+        "number" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "title" : {
+          "type" : "string"
+        }
+      },
       "type" : "object"
     },
     "MoveRequest" : {
@@ -875,6 +1093,56 @@
         "total" : {
           "format" : "int32",
           "type" : "integer"
+        }
+      },
+      "type" : "object"
+    },
+    "SearchHit" : {
+      "properties" : {
+        "archived" : {
+          "type" : "boolean"
+        },
+        "column" : {
+          "type" : "string"
+        },
+        "createdAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "excerpt" : {
+          "$ref" : "#/components/schemas/Excerpt"
+        },
+        "id" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "kind" : {
+          "type" : "string"
+        },
+        "movedToDoneAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "number" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "title" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "SearchPage" : {
+      "properties" : {
+        "hits" : {
+          "items" : {
+            "$ref" : "#/components/schemas/SearchHit"
+          },
+          "type" : "array"
+        },
+        "nextCursor" : {
+          "type" : "string"
         }
       },
       "type" : "object"

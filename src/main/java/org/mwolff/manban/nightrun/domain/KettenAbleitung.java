@@ -2,13 +2,13 @@ package org.mwolff.manban.nightrun.domain;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.KitNamen;
+import org.mwolff.manban.common.KitNamen.Sache;
 import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Karte;
 import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.StufenEintrag;
 
@@ -16,55 +16,51 @@ import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.StufenEintrag;
  * Leitet den Stand der Kette einer Karte aus ihrem Laufstand ab (Issue #1451, Plan #1447 E5, E10,
  * E13) — rein, ohne I/O. Zugang ist {@link FortschrittErmittlung#kettenStand}; die Stufenzeilen
  * liest dieselbe Auswertung wie für die Laufseite.
+ *
+ * <p>Lauf-Labels kommen als Sachen aus {@link KitNamen}, die Datenzeilen des Laufstands in beiden
+ * Sprachen aus {@link LaufstandWortformen} (Issue #1591, Plan #1582 A3, A5, E13).
  */
 final class KettenAbleitung {
 
-  /** Label einer Kette, die gerade läuft (Kit-Vorgabe). */
-  private static final String LABEL_LAEUFT = "lauf:laeuft";
+  /** Die Lauf-Labels als Sachen; welche Namen sie tragen, sagt das Register (A3, E13). */
+  private static final List<Sache> LAUF_SACHEN =
+      List.of(Sache.LAUF_LAEUFT, Sache.LAUF_WARTET, Sache.LAUF_ABGEBROCHEN);
 
-  /** Label einer abgebrochenen Kette (Kit-Vorgabe). */
-  private static final String LABEL_ABGEBROCHEN = "lauf:abgebrochen";
-
-  /** Die Ziele des Kit-Vertrags (E10) und die Station, die sie markieren. */
-  private static final Map<String, ProgressStage> ZIELE =
-      Map.of(
-          "plan", ProgressStage.PLAN,
-          "pakete", ProgressStage.PAKETE,
-          "umsetzung", ProgressStage.UMSETZUNG,
-          "push-vorbereitet", ProgressStage.VORBEREITUNG);
-
-  /** Die Zeilen des Laufstands, aus denen der Kettenstand liest (E13). */
-  private static final Pattern ZIEL_ZEILE = Pattern.compile("^Ziel: (\\S+)$");
+  /** Die Zeilen des Laufstands, aus denen der Kettenstand liest (E13), in beiden Sprachen (A5). */
+  private static final Pattern ZIEL_ZEILE = zeilenmuster(LaufstandWortformen.ZIEL, " (\\S+)$");
 
   private static final Pattern PRUEFER_ZEILE =
-      Pattern.compile("^Prüfer: ([12])$", Pattern.CANON_EQ);
-  private static final Pattern GRENZE_ZEILE = Pattern.compile("^Grenze: (\\S+)$");
-  private static final Pattern FERTIG_BIS = Pattern.compile("^fertig bis \\S");
-
-  /** Der Wartetext des Kits an der Projektgrenze — {@code uebergangNichtFreigegeben}. */
-  private static final Pattern GRENZE_WARTETEXT =
-      Pattern.compile("^wartet: Übergang .+ im Projekt nicht freigegeben", Pattern.CANON_EQ);
+      zeilenmuster(LaufstandWortformen.PRUEFER, " ([12])$");
+  private static final Pattern GRENZE_ZEILE = zeilenmuster(LaufstandWortformen.GRENZE, " (\\S+)$");
+  private static final Pattern FERTIG_BIS = zeilenmuster(LaufstandWortformen.FERTIG_BIS, "\\S");
 
   /**
    * Die Zeilen des Laufstands, die Daten tragen und kein Grund sind; die erste andere Zeile ist der
    * Kopf mit dem Grund eines Halts oder Abbruchs.
    */
   private static final List<String> DATENZEILEN =
-      List.of(
-          "## Laufstand",
-          "Ziel:",
-          "Prüfer:",
-          "Grenze:",
-          "zuletzt ",
-          "fertig bis ",
-          "Als Nächstes:",
-          "Protokoll:");
+      Stream.of(
+              LaufstandWortformen.ANKER,
+              LaufstandWortformen.ZIEL,
+              LaufstandWortformen.PRUEFER,
+              LaufstandWortformen.GRENZE,
+              LaufstandWortformen.ZULETZT,
+              LaufstandWortformen.FERTIG_BIS,
+              LaufstandWortformen.ALS_NAECHSTES,
+              LaufstandWortformen.PROTOKOLL)
+          .flatMap(List::stream)
+          .toList();
 
   private KettenAbleitung() {}
 
   /** Der Kettenstand der Karte aus dem Text ihres Laufstands. */
   static KettenStand stand(Karte karte, String laufstand) {
-    return Kettenlage.aus(karte, laufstand).stand();
+    return stand(karte, laufstand, KitNamen.STANDARD);
+  }
+
+  /** Der Kettenstand der Karte, ihre Lauf-Labels gelesen über das Register {@code namen}. */
+  static KettenStand stand(Karte karte, String laufstand, KitNamen namen) {
+    return Kettenlage.aus(karte, laufstand, namen).stand();
   }
 
   /**
@@ -76,7 +72,16 @@ final class KettenAbleitung {
   }
 
   private static Optional<ProgressStage> zielAus(List<String> zeilen) {
-    return Kettenlage.gruppe(zeilen, ZIEL_ZEILE).map(ZIELE::get);
+    return Kettenlage.gruppe(zeilen, ZIEL_ZEILE).flatMap(LaufstandWortformen::zielStation);
+  }
+
+  /**
+   * Eine Zeile, die mit einer der Formen beginnt und auf {@code rest} endet. Die Formen sind Wörter
+   * ohne Sonderzeichen der Musterschreibweise und stehen darum unmaskiert: {@link Pattern#quote}
+   * vertrüge sich nicht mit {@link Pattern#CANON_EQ}, das ein zerlegtes „ü“ mitliest.
+   */
+  private static Pattern zeilenmuster(List<String> formen, String rest) {
+    return Pattern.compile("^(?:" + String.join("|", formen) + ")" + rest, Pattern.CANON_EQ);
   }
 
   private static List<String> zeilen(String body) {
@@ -92,7 +97,7 @@ final class KettenAbleitung {
    * @param ende die letzte Station der Kette — das Ziel, bei {@code pakete} und ohne Ziel die
    *     Abdeckung (E10)
    * @param kopf die erste Zeile, die keine Datenzeile ist; {@code null} ohne sie
-   * @param laufLabel das {@code lauf:*}-Label der Karte; {@code null} ohne eines
+   * @param lauf die Sache des Lauf-Labels der Karte; {@code null} ohne eines
    */
   private record Kettenlage(
       @Nullable ProgressStage ziel,
@@ -102,10 +107,10 @@ final class KettenAbleitung {
       ProgressStage erste,
       ProgressStage ende,
       @Nullable String kopf,
-      @Nullable String laufLabel,
+      @Nullable Sache lauf,
       List<StufenEintrag> eintraege) {
 
-    static Kettenlage aus(Karte karte, String body) {
+    static Kettenlage aus(Karte karte, String body, KitNamen namen) {
       List<String> zeilen = zeilen(body);
       ProgressStage ziel = zielAus(zeilen).orElse(null);
       String kopf =
@@ -115,13 +120,13 @@ final class KettenAbleitung {
               .orElse(null);
       KettenStand.Projektgrenze grenze =
           gruppe(zeilen, GRENZE_ZEILE)
-              .flatMap(KettenAbleitung::stufeNamens)
+              .flatMap(LaufstandWortformen::stufe)
               .map(
                   g ->
                       new KettenStand.Projektgrenze(
                           g,
                           zeilen.stream()
-                              .filter(z -> GRENZE_WARTETEXT.matcher(z).find())
+                              .filter(KettenAbleitung::istGrenzWartetext)
                               .findFirst()
                               .orElse(null)))
               .orElse(null);
@@ -133,10 +138,7 @@ final class KettenAbleitung {
           FortschrittErmittlung.istPlan(karte) ? ProgressStage.PAKETE : ProgressStage.PLAN,
           ziel == null || ziel == ProgressStage.PAKETE ? ProgressStage.ABDECKUNG : ziel,
           kopf,
-          Stream.of(LABEL_LAEUFT, FortschrittErmittlung.LABEL_WARTET, LABEL_ABGEBROCHEN)
-              .filter(karte.labels()::contains)
-              .findFirst()
-              .orElse(null),
+          LAUF_SACHEN.stream().filter(sache -> karte.traegt(sache, namen)).findFirst().orElse(null),
           FortschrittErmittlung.eintraege(body));
     }
 
@@ -182,22 +184,22 @@ final class KettenAbleitung {
       return s == aktuell ? aktuelleStation(s) : steht(s);
     }
 
-    /** Die aktuelle Station nach dem {@code lauf:*}-Label der Karte. */
+    /** Die aktuelle Station nach dem Lauf-Label der Karte. */
     private StationStand aktuelleStation(ProgressStage s) {
-      if (LABEL_LAEUFT.equals(laufLabel)) {
+      if (lauf == Sache.LAUF_LAEUFT) {
         String text =
             s == ProgressStage.REVIEW && pruefer != null
                 ? "läuft (" + pruefer + " Prüfer)"
                 : "läuft";
         return new StationStand(s, StationsZustand.LAEUFT, text, null);
       }
-      if (FortschrittErmittlung.LABEL_WARTET.equals(laufLabel)) {
+      if (lauf == Sache.LAUF_WARTET) {
         // Hinter der Grenze wartet die Kette auf das Projekt, davor auf den Menschen.
         return grenze != null && grenze.stufe().compareTo(s) < 0
             ? new StationStand(s, StationsZustand.WARTET, "Projektgrenze", grenze.grund())
             : new StationStand(s, StationsZustand.WARTET, "wartet", kopf);
       }
-      if (LABEL_ABGEBROCHEN.equals(laufLabel)) {
+      if (lauf == Sache.LAUF_ABGEBROCHEN) {
         return new StationStand(s, StationsZustand.ABGEBROCHEN, "abgebrochen", kopf);
       }
       return steht(s);
@@ -217,10 +219,8 @@ final class KettenAbleitung {
     }
   }
 
-  /** Die Stufe mit diesem Namen in Kleinschreibung, wie der Runner sie schreibt. */
-  private static Optional<ProgressStage> stufeNamens(String name) {
-    return Arrays.stream(ProgressStage.values())
-        .filter(s -> s.name().toLowerCase(Locale.ROOT).equals(name))
-        .findFirst();
+  /** Ob die Zeile der Wartetext des Kits an der Projektgrenze ist, gleich in welcher Sprache. */
+  private static boolean istGrenzWartetext(String zeile) {
+    return LaufstandWortformen.GRENZ_WARTETEXT.stream().anyMatch(m -> m.matcher(zeile).find());
   }
 }

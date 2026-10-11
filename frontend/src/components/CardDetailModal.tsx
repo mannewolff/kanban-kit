@@ -41,6 +41,7 @@ import { ApiError, apiErrorMessage } from '../api/client'
 import { DerivationTree } from './DerivationTree'
 import { cardsApi as defaultCardsApi, type Card, type CardActivity, type CardByNumber, type CardDetail, type CardStatus, type DerivationNode } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
+import { useKitNamen } from '../api/kitNamen'
 import type { NightRunsApi } from '../api/nightRuns'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
@@ -1315,6 +1316,8 @@ function CardDetailModalView({
   const notify = useSnackbar()
 
   const [comments, setComments] = useState<Comment[]>([])
+  // Das Namen-Register des Kits (Issue #1595): Titel-Präfixe und Labels der Stufenleiste.
+  const kitNamen = useKitNamen()
   const [newComment, setNewComment] = useState('')
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editingBody, setEditingBody] = useState('')
@@ -1831,9 +1834,11 @@ function CardDetailModalView({
               {/* Die Stufenleiste der Nacht-Kette (Issue #1449, E1–E3): nur an [Fachlich] und [Plan],
                   bedienbar unter denselben Bedingungen wie die Label-Sektion. Body und Kommentare
                   braucht sie für Sperrhinweise und den Rückfall, solange der Kettenstand nicht
-                  geladen ist (Issue #1450, #1453). */}
-              {traegtStufenleiste(stand.title) && (
+                  geladen ist (Issue #1450, #1453). Ob die Karte sie trägt, sagen erst die Kit-Namen
+                  (Issue #1595): Bis dahin steht hier ihr Lade- oder Fehlerzustand (E10). */}
+              {(kitNamen.status !== 'fertig' || traegtStufenleiste(kitNamen.daten, stand.title)) && (
                 <KettenStufenleiste
+                  kitNamen={kitNamen}
                   titel={stand.title}
                   labelIds={labelIds}
                   boardLabels={boardLabels}

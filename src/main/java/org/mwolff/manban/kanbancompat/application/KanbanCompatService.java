@@ -1,5 +1,7 @@
 package org.mwolff.manban.kanbancompat.application;
 
+import static org.mwolff.manban.kanbancompat.application.KanbanBindung.requireBound;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -504,9 +506,10 @@ public class KanbanCompatService {
 
   /**
    * Baut die Item-Form aus einer aktualisierten Karte — dieselben Felder wie in {@link #items},
-   * damit Schreib- und Leseantwort nicht auseinanderlaufen.
+   * damit Schreib- und Leseantwort nicht auseinanderlaufen. Paketintern auch für den Einzelabruf
+   * des {@link KanbanArchivService} (Plan #1574, E19).
    */
-  private Item item(long boardId, BoardItemView card) {
+  Item item(long boardId, BoardItemView card) {
     return new Item(
         card.id(),
         card.number(),
@@ -530,16 +533,8 @@ public class KanbanCompatService {
     return CardIngestService.kanbanSchluessel(card.status(), nameByColumn.get(card.columnId()));
   }
 
-  private long requireBound(@Nullable KanbanPrincipal principal) {
-    if (principal == null || !principal.isBound()) {
-      throw new TokenNotBoundException();
-    }
-    // isBound() garantiert die Bindung; requireNonNull macht das fuer NullAway explizit.
-    return Objects.requireNonNull(principal.boardId());
-  }
-
   /** Bildet die Spalten-IDs des Boards auf ihren Namen ab. */
-  private Map<Long, String> nameByColumn(long boardId) {
+  Map<Long, String> nameByColumn(long boardId) {
     Map<Long, String> map = new LinkedHashMap<>();
     for (ColumnView c : boardService.listColumns(boardId)) {
       map.put(c.id(), c.name());
@@ -548,7 +543,7 @@ public class KanbanCompatService {
   }
 
   /** Bildet Board-Spalten mit kanonischem Namen auf ihren Kanban-Key ab. */
-  private Map<Long, String> keyByColumn(long boardId) {
+  Map<Long, String> keyByColumn(long boardId) {
     Map<Long, String> map = new LinkedHashMap<>();
     for (ColumnView c : boardService.listColumns(boardId)) {
       canonicalKey(c.name()).ifPresent(key -> map.put(c.id(), key));

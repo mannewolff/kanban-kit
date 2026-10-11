@@ -15,6 +15,31 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.26.0] – 2026-10-11
+
+- **API-Änderung:** GET /api/kanban/items/by-number/{number}/lineage — Herkunftskette mit Lücken ([#1580](https://github.com/mannewolff/kanban-kit/issues/1580))
+- **API-Änderung:** GET /api/kanban/search mit Textsuche — neu verlässlich ([#1579](https://github.com/mannewolff/kanban-kit/issues/1579))
+- **API-Änderung:** GET /api/kanban/search nach Art, Vorhaben und Zeitraum ([#1578](https://github.com/mannewolff/kanban-kit/issues/1578))
+- **API-Änderung:** GET /api/kanban/items/by-number/{number} — neu verlässlich ([#1577](https://github.com/mannewolff/kanban-kit/issues/1577))
+- chore: v2.25.1
+- Laufstand-Wortformen Grenze und Plan-Review an das Kit-Register angleichen ([#1599](https://github.com/mannewolff/kanban-kit/issues/1599))
+- Doku: Freigabe-Labels in beiden Sprachen, Namensraum des Kits und englische Wortformen ([#1597](https://github.com/mannewolff/kanban-kit/issues/1597))
+- Ableitungsbaum, Vorhaben-Zeilen und Nachtlauf-Seite mit Titel-Präfixen vom Server und englischen Budgetfeldern ([#1596](https://github.com/mannewolff/kanban-kit/issues/1596))
+- Stufenleiste liest Labels, Titel-Präfixe und Laufstand in beiden Sprachen ([#1595](https://github.com/mannewolff/kanban-kit/issues/1595))
+- Frontend-Zugriff kitNamen.ts mit useKitNamen und Helfern ([#1594](https://github.com/mannewolff/kanban-kit/issues/1594))
+- Englische Freitext-Gründe der Ergebnisdatei, Laufstand-Anker und Budgetfelder in kitWortformen ([#1593](https://github.com/mannewolff/kanban-kit/issues/1593))
+- Englisches Textprotokoll: Lesetabelle kitWortformen und nightRunLog ([#1592](https://github.com/mannewolff/kanban-kit/issues/1592))
+- Englische Lauf-Labels und Laufstand-Zeilen in Kettenableitung und Nacht-Freigabe ([#1591](https://github.com/mannewolff/kanban-kit/issues/1591))
+- Englischer Laufstand und englische Labels in der Fortschrittsermittlung ([#1590](https://github.com/mannewolff/kanban-kit/issues/1590))
+- Einlieferung nimmt englische Stufen- und Budgetnamen an ([#1589](https://github.com/mannewolff/kanban-kit/issues/1589))
+- Lese-Endpunkt GET /api/kit-namen für Sachen, Titel-Präfixe und Namensraum ([#1588](https://github.com/mannewolff/kanban-kit/issues/1588))
+- Englische Titel-Präfixe in Kartenart und Arbeitspaket, Heute-Nacht über alle Namen der Sache NIGHT ([#1587](https://github.com/mannewolff/kanban-kit/issues/1587))
+- Schutzregel der Freigabe-Labels unter beiden Namen, Namensraum des Kits für Token gesperrt ([#1586](https://github.com/mannewolff/kanban-kit/issues/1586))
+- Standard-Labels legen beide Namen je Sache an ([#1585](https://github.com/mannewolff/kanban-kit/issues/1585))
+- Namen-Register KitNamen in common mit Sachen, Schutz, Titel-Präfixen und Namensraum ([#1584](https://github.com/mannewolff/kanban-kit/issues/1584))
+- Doku: lesender Archivzugang der Kanban-Strecke ([#1581](https://github.com/mannewolff/kanban-kit/issues/1581))
+- Herkunftsnummer vor dem Purge bewahren ([#1576](https://github.com/mannewolff/kanban-kit/issues/1576))
+
 ## [2.25.0] – 2026-10-10
 
 - chore: v2.24.5

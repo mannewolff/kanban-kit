@@ -2,11 +2,15 @@ package org.mwolff.manban.card.infrastructure.persistence;
 
 import jakarta.persistence.EntityManager;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.application.CardBestandRepository;
 import org.mwolff.manban.card.application.CardMovedConcurrentlyException;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.application.SortDirection;
@@ -16,12 +20,14 @@ import org.mwolff.manban.card.domain.CardType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/** Adapter des {@link CardRepository}-Ports auf Spring Data JPA. */
-// PMD.TooManyMethods: 1:1-Implementierung des CardRepository-Ports — die Methodenzahl folgt dem
+/**
+ * Adapter der Ports {@link CardRepository} und {@link CardBestandRepository} auf Spring Data JPA.
+ */
+// PMD.TooManyMethods: 1:1-Implementierung der Karten-Ports — die Methodenzahl folgt dem
 // Port-Vertrag (je Lesepfad/Reindex eine kleine Methode), kein God-Class-Smell.
 @SuppressWarnings("PMD.TooManyMethods")
 @Component
-class CardRepositoryAdapter implements CardRepository {
+class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
 
   /**
    * Temporärer Offset weit außerhalb des realen Positionsbereichs für den Reindex. Implizite
@@ -56,9 +62,44 @@ class CardRepositoryAdapter implements CardRepository {
     this.entityManager = entityManager;
   }
 
+  /**
+   * Speichert die Karte. Trägt sie eine Herkunft, verliert eine früher bewahrte Herkunftsnummer
+   * ihre Bedeutung und geht auf {@code NULL} (Plan #1574, E17) — die Spalte bildet {@link
+   * CardEntity} nicht ab, darum ein eigenes natives Update.
+   */
   @Override
   public Card save(Card card) {
-    return toDomain(jpa.save(toEntity(card)));
+    Card gespeichert = toDomain(jpa.save(toEntity(card)));
+    if (gespeichert.derivedFromCardId() != null) {
+      jpa.setzeVerloreneHerkunftsnummerZurueck(gespeichert.requireId());
+    }
+    return gespeichert;
+  }
+
+  @Override
+  public Map<Long, Integer> verloreneHerkunftsnummern(long boardId) {
+    Map<Long, Integer> nummern = new HashMap<>();
+    for (Object[] zeile : jpa.findVerloreneHerkunftsnummern(boardId)) {
+      nummern.put(((Number) zeile[0]).longValue(), ((Number) zeile[1]).intValue());
+    }
+    return nummern;
+  }
+
+  @Override
+  public void bewahreHerkunftsnummern(Collection<Long> ids) {
+    // Leere Sammlung: kein Datenbankzugriff — ein IN () wäre ungültiges SQL.
+    if (!ids.isEmpty()) {
+      jpa.bewahreHerkunftsnummern(ids);
+    }
+  }
+
+  @Override
+  public Map<Long, String> textFundstellenAufBoard(long boardId, String q) {
+    Map<Long, String> fundstellen = new HashMap<>();
+    for (Object[] zeile : jpa.findTextFundstellen(boardId, q)) {
+      fundstellen.put(((Number) zeile[0]).longValue(), (String) zeile[1]);
+    }
+    return fundstellen;
   }
 
   @Override

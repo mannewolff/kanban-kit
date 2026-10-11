@@ -1,0 +1,70 @@
+[2026-09-01T22:00:00.000Z] Nacht-Runner startet (Modus Implementierung, max 5 Sessions, Modell claude-opus-5, Label none)
+[2026-09-01T22:00:01.000Z] Dry-Run beendet: 2 Session(s) wuerden starten.
+[2026-09-01T22:00:02.000Z] Nacht-Runner startet (Modus Implementierung, max 5 Sessions, Modell claude-opus-5, Label none)
+[2026-09-01T22:00:03.000Z] WARNUNG: kein Ready-Issue traegt das Label 'no' — es wird nichts verarbeitet.
+[2026-09-01T22:00:04.000Z]   In Ready vorhandene Labels: keine
+[2026-09-01T22:00:05.000Z]   Im Backlog vorhandene Labels: Aktuell, review:offen
+[2026-09-01T22:00:06.000Z]   Tippfehler im --label-Wert?
+[2026-09-01T22:00:07.000Z] Ready ist leer — nichts zu tun.
+[2026-09-01T22:00:08.000Z]   Vorflug-Session startet (Modell claude-sonnet-5, Tracker-Probe an).
+[2026-09-01T22:00:09.000Z]   Vorflug-Session nicht auswertbar: kein Ergebnis.
+[2026-09-01T22:00:10.000Z]   Reviewer fable (claude) in runner: verfuegbar
+[2026-09-01T22:00:11.000Z]   Kein Reviewer konfiguriert: Pruefung entfaellt.
+[2026-09-01T22:00:12.000Z]   Tracker (runner): erreichbar
+[2026-09-01T22:00:13.000Z] Session 1/5: Issue #100 — Paket 1
+{"type":"assistant","lauf":2,"n":1}
+[2026-09-01T22:00:14.000Z]   #100 > Bash: npm test
+[2026-09-01T22:00:15.000Z]   buildChecks rot — einmaliger Format-Fix wird angewendet: npm run format
+[2026-09-01T22:00:16.000Z]   FORMAT-FIX angewendet, buildChecks jetzt gruen — der Lauf geht weiter.
+[2026-09-01T22:00:17.000Z]   CLI-Meldung: Rate limit erreicht.
+[2026-09-01T22:00:18.000Z]   Erfolg nach 5 min, Commit a1b2c3d, Issue #100 in In review.
+[2026-09-01T22:00:19.000Z] Session 2/5: Issue #101 — Paket 2
+[2026-09-01T22:00:20.000Z]   Fehlschlag nach 2 min: Issue #101 nicht in In review, Tree sauber — Issue ins Backlog, weiter.
+[2026-09-01T22:00:21.000Z]   #102 Paket 3 -> uebersprungen (ungeprueft (kein Issue-Review-Marker im Body))
+[2026-09-01T22:00:22.000Z]   #107 Paket 7 -> uebersprungen (kit:klaeren, offene Entscheidung)
+[2026-09-01T22:00:23.000Z] #103 zurueckgestellt: Abhaengigkeit #99 nicht erfuellt.
+[2026-09-01T22:00:24.000Z] #104 bewusst ohne Pruefung freigegeben (Pruefung: Verzicht), wird implementiert.
+[2026-09-01T22:00:25.000Z]   #105 Paket 5 -> ueber --max 5, bleibt liegen.
+[2026-09-01T22:00:26.000Z] #108 uebersprungen: Idee ([Idee]), wird nicht implementiert.
+[2026-09-01T22:00:27.000Z] Session 3/5: Issue #106 — Paket 6
+[2026-09-01T22:00:28.000Z]   SALVAGE-VERSUCH gestartet (Checks extern verifiziert gruen): Issue #106 — Zwischenstand wird gegen das Issue geprueft.
+[2026-09-01T22:00:29.000Z]   Salvage erfolgreich, Commit d4e5f6a, Issue #106 in In review.
+[2026-09-01T22:00:30.000Z] Session 4/5: Issue #109 — Paket 9
+[2026-09-01T22:00:31.000Z]   Fehlschlag nach 3 min: Issue #109 — die Session hat nichts hinterlassen, Issue ins Backlog.
+[2026-09-01T22:00:32.000Z] Session 5/5: Issue #110 — Paket 10
+[2026-09-01T22:00:33.000Z]   Salvage nicht moeglich: Checks rot.
+[2026-09-01T22:00:34.000Z]   Hinweis: die vorherige Pruef-Zusammenfassung fehlt.
+[2026-09-01T22:00:35.000Z]   SALVAGE-VERSUCH gescheitert — harter Stopp. Issue #110 weiterhin nicht in In review.
+[2026-09-01T22:00:36.000Z] Voellig unbekannte Runner-Zeile aus einer aelteren Fassung
+[2026-09-01T22:00:37.000Z] Pruefungen der Sessions:
+[2026-09-01T22:00:38.000Z]   Issue #100: gelaufen: npm test -> rot (Frontend) | ausgelassen: keine
+[2026-09-01T22:00:39.000Z]   Issue #106: ungeprueft — die Session hat keine Pruefung gefahren.
+[2026-09-01T22:00:40.000Z]   Issue #101: leeres Paket — keine Pruefung, weil nichts veraendert wurde.
+[2026-09-01T22:00:41.000Z]   Summe: 5 Session(s) — 1 mit Pruefung, 1 ohne Aenderung, 1 ungeprueft.
+[2026-09-01T22:00:42.000Z] Morgen-Ritual: /review -> Test -> push main. Protokoll: <PFAD>
+[2026-09-01T22:00:43.000Z] Nacht-Runner beendet: 2 erfolgreich, 1 zurueckgestellt, 5 Session(s) gestartet.
+[2026-09-01T22:00:44.000Z] Nacht-Runner startet (Modus Implementierung, max 3 Sessions, Modell claude-opus-5, Label none)
+[2026-09-01T22:00:45.000Z] Session 1/3: Issue #120 — Paket 20
+[2026-09-01T22:00:46.000Z]   Erfolg nach 4.5 min, Commit b2c3d4e, Issue #120 in In review.
+[2026-09-01T22:00:47.000Z]   HARTER STOPP: erfolgreiche Runde zu Issue #120 hat unkommittete Reste hinterlassen.
+[2026-09-01T22:00:48.000Z] Session 2/3: Issue #121 — Paket 21
+[2026-09-01T22:00:49.000Z]   INFRASTRUKTUR-FEHLSCHLAG nach 1 min (Exit 1): Session-Start gescheitert — harter Stopp, Issue #121 bleibt unangetastet.
+[2026-09-01T22:00:50.000Z] Session 3/3: Issue #122 — Paket 22
+{"type":"assistant","lauf":3,"n":1}
+[2026-09-01T22:00:51.000Z]   FEHLSCHLAG nach 6 min: Issue #122 nicht in In review UND Working Tree dirty — harter Stopp.
+[2026-09-01T22:00:52.000Z] Pruefungen: keine Implementierungs-Runde gelaufen.
+Fehler: Working Tree ist nicht sauber.
+[2026-09-01T22:00:53.000Z] Nacht-Runner startet (Modus Review, max 4 Sessions, Modell claude-opus-5, Label review:offen)
+[2026-09-01T22:00:54.000Z] Keine Review-Kandidaten im Backlog mit Label planreview:offen.
+[2026-09-01T22:00:55.000Z]   Tippfehler im --review-label-Wert?
+[2026-09-01T22:00:56.000Z] Review-Session 1/4: Issue #200 — Paket 200
+[2026-09-01T22:00:57.000Z]   Erfolg nach 3 min: Issue #200 geprueft ohne Befund, Marker gesetzt.
+[2026-09-01T22:00:58.000Z] Review-Session 2/4: Issue #201 — Paket 201
+[2026-09-01T22:00:59.000Z]   Erfolg nach 3.5 min: Issue #201 geprueft mit Befund — kein Marker, wartet auf dich.
+[2026-09-01T22:01:00.000Z] Review-Session 3/4: Issue #202 — Paket 202
+[2026-09-01T22:01:01.000Z]   Nach 3.2 min: Issue #202 — Synthese ohne Beleg: 2 als uebernommen bezeichnete Funde stehen nicht im Body-Vorschlag.
+[2026-09-01T22:01:02.000Z] Review-Session 4/4: Issue #203 — Paket 203
+[2026-09-01T22:01:03.000Z]   Nach 2 min: Issue #203 — Befunde vorhanden, aber kein Body-Vorschlag — Schaerfung fehlt.
+[2026-09-01T22:01:04.000Z]   HARTER STOPP: die Review-Session zu Issue #203 hat unkommittete Reste hinterlassen.
+[2026-09-01T22:01:05.000Z] #204 uebersprungen: traegt bereits einen Issue-Review-Marker.
+[2026-09-01T22:01:06.000Z] Nacht-Review beendet (Stufe issue): 1 ohne Befund, 1 mit Befund, 1 Schaerfung fehlt.

@@ -18,7 +18,12 @@
  * Ausnahme ist `Fehler: …`: `night.mjs` hat zwei Schreiber, und `fail()` schreibt ohne
  * Praefix. Ohne diese Ausnahme verschluckte die Regel ausgerechnet die haertesten
  * Abbrueche.
+ *
+ * <p><b>Die Wortformen stehen nicht hier</b>, sondern deutsch und englisch in `kitWortformen.ts`
+ * (Issue #1592): Ein englisches Protokoll deutet sich wie sein deutsches Gegenstueck.
  */
+
+import { PROTOKOLL, passe, type Wortform } from './kitWortformen'
 
 /**
  * Die Fehlerklassen als **Array**, nicht als blosse Typdeklaration: Eine TS-Union
@@ -259,16 +264,8 @@ export interface NightRunLog {
 // Stryker disable next-line Regex: gleichwertig — `$` unterscheidet nach dem Trennen an \n und Entfernen von \r nur bei U+2028/U+2029, die night.mjs nicht schreibt; das `^` haelt ein eigener Test
 const PRAEFIX = /^\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)\] (.*)$/
 
-/** Der zweite Schreiber: `fail()` schreibt ohne Praefix und beendet den Lauf. */
-const FAIL = 'Fehler: '
-
-/** Ein Lauf beginnt hier — **unmittelbar** nach dem Praefix, nie als Teilzeichenkette. */
-const START = /^Nacht-Runner startet \(Modus (\w+)/
-
-/** Abschluss eines Laufs; `Dry-Run beendet` markiert ihn zugleich als Probelauf. */
-const ABSCHLUSS = /^(Nacht-Runner beendet|Nacht-Review beendet|Dry-Run beendet)/
-const DRY_RUN = 'Dry-Run beendet'
-const STUFE = /beendet \(Stufe ([^)]+)\)/
+/** Trifft eine Regel in einer der beiden Sprachen? */
+const trifft = (form: Wortform, text: string): boolean => passe(form, text) !== null
 
 /**
  * Minuten aus einer Regex-Gruppe in Millisekunden. Der Runner schreibt sie mit
@@ -294,85 +291,84 @@ interface Treffer {
  * Muster stehen vor allgemeinen (etwa `kit:klaeren` vor dem generischen
  * „uebersprungen").
  */
-const MUSTER: ReadonlyArray<{ re: RegExp; deute: (m: RegExpExecArray) => Treffer }> = [
+const MUSTER: ReadonlyArray<{ form: Wortform; deute: (m: RegExpExecArray) => Treffer }> = [
   // --- Implementierungs-Lauf, Ausgaenge je Arbeitspaket
   {
-    re: /^ {2}Erfolg nach (\d+(?:\.\d+)?) min, Commit ([0-9a-f]{7,40}), Issue #(\d+) in In review\./,
+    form: PROTOKOLL.erfolg,
     deute: (m) => ({ cardNumber: Number(m[3]), state: "GREEN", durationMs: minuten(m[1]), commit: m[2] }),
   },
   {
-    re: /^ {2}Salvage erfolgreich, Commit ([0-9a-f]{7,40}), Issue #(\d+) in In review\./,
+    form: PROTOKOLL.salvageErfolg,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "GREEN", commit: m[1] }),
   },
   {
-    re: /^ {2}FEHLSCHLAG nach (\d+(?:\.\d+)?) min: Issue #(\d+) nicht in In review UND Working Tree dirty/,
+    form: PROTOKOLL.fehlschlagDirty,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "RED", errorClass: "HARD_ABORT", durationMs: minuten(m[1]) }),
   },
   {
-    re: /^ {2}Fehlschlag nach (\d+(?:\.\d+)?) min: Issue #(\d+) — die Session hat nichts hinterlassen/,
+    form: PROTOKOLL.fehlschlagNichts,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "RED", errorClass: "CHECKS_NOT_STARTED", durationMs: minuten(m[1]) }),
   },
   {
-    re: /^ {2}Fehlschlag nach (\d+(?:\.\d+)?) min: Issue #(\d+) nicht in In review, Tree sauber/,
+    form: PROTOKOLL.fehlschlagSauber,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "RED", errorClass: "UNEXPECTED_STATE", durationMs: minuten(m[1]) }),
   },
   {
-    re: /^ {2}INFRASTRUKTUR-FEHLSCHLAG nach (\d+(?:\.\d+)?) min .*Issue #(\d+) bleibt unangetastet\./,
+    form: PROTOKOLL.infrastruktur,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "RED", errorClass: "HARD_ABORT", durationMs: minuten(m[1]) }),
   },
   {
-    re: /^ {2}HARTER STOPP: (?:erfolgreiche Runde zu|die Review-Session zu) Issue #(\d+)/,
+    form: PROTOKOLL.harterStopp,
     deute: (m) => ({ cardNumber: Number(m[1]), state: "RED", errorClass: "HARD_ABORT" }),
   },
   {
-    re: /^ {2}SALVAGE-VERSUCH gescheitert — harter Stopp\. Issue #(\d+)/,
+    form: PROTOKOLL.salvageGescheitert,
     deute: (m) => ({ cardNumber: Number(m[1]), state: "RED", errorClass: "HARD_ABORT" }),
   },
 
   // --- Pruef-Lauf, Ausgaenge je Arbeitspaket
   {
-    re: /^ {2}Erfolg nach (\d+(?:\.\d+)?) min: Issue #(\d+) geprueft (?:ohne|mit) Befund/,
+    form: PROTOKOLL.geprueft,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "GREEN", durationMs: minuten(m[1]) }),
   },
   // Vor dem Schaerfungs-Muster: Beide Zeilen beginnen mit `  Nach <X> min: Issue #<N> — `,
   // und die Synthese ohne Beleg ist der schwerere Fall — das Kit setzt dabei
   // `kit:klaeren`, es wartet also eine Entscheidung auf einen Menschen (Issue #816).
   {
-    re: /^ {2}Nach (\d+(?:\.\d+)?) min: Issue #(\d+) — Synthese ohne Beleg: /,
+    form: PROTOKOLL.syntheseOhneBeleg,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "RED", errorClass: "AWAITING_DECISION", durationMs: minuten(m[1]) }),
   },
   {
-    re: /^ {2}Nach (\d+(?:\.\d+)?) min: Issue #(\d+) — Befunde vorhanden, aber kein Body-Vorschlag/,
+    form: PROTOKOLL.schaerfungFehlt,
     deute: (m) => ({ cardNumber: Number(m[2]), state: "YELLOW", errorClass: "CHECKS_NOT_STARTED", durationMs: minuten(m[1]) }),
   },
 
   // --- Uebergangene Arbeitspakete. `kit:klaeren` steht vor dem generischen Muster:
   // eine offene Entscheidung ist kein blosses Ueberspringen, sondern rot.
   {
-    re: /^ {2}#(\d+) (.*?) -> uebersprungen \(kit:klaeren/,
+    form: PROTOKOLL.uebersprungenKlaeren,
     deute: (m) => ({ cardNumber: Number(m[1]), title: m[2], state: "RED", errorClass: "AWAITING_DECISION" }),
   },
   {
-    re: /^ {2}#(\d+) (.*?) -> uebersprungen \(/,
+    form: PROTOKOLL.uebersprungenListe,
     deute: (m) => ({ cardNumber: Number(m[1]), title: m[2], state: "GREY" }),
   },
   {
-    re: /^ {2}#(\d+) (.*?) -> ueber --max \d+, (?:bleibt|bliebe) liegen/,
+    form: PROTOKOLL.ueberMax,
     deute: (m) => ({ cardNumber: Number(m[1]), title: m[2], state: "GREY" }),
   },
   {
-    re: /^#(\d+) zurueckgestellt: Abhaengigkeit/,
+    form: PROTOKOLL.zurueckgestellt,
     deute: (m) => ({ cardNumber: Number(m[1]), state: "GREY", errorClass: "DEPENDENCY_UNMET" }),
   },
   {
-    re: /^#(\d+) uebersprungen: /,
+    form: PROTOKOLL.uebersprungenGate,
     deute: (m) => ({ cardNumber: Number(m[1]), state: "GREY" }),
   },
 
   // --- Sessionbeginn: eroeffnet ein Arbeitspaket, dessen Ausgang noch aussteht.
   {
-    // Stryker disable next-line Regex: gleichwertig — `$` hinter `(.*)` unterscheidet nur bei U+2028/U+2029; Anfang und Ziffern halten eigene Tests
-    re: /^(?:Review-)?Session \d+\/\d+: Issue #(\d+) — (.*)$/,
+    form: PROTOKOLL.session,
     deute: (m) => ({ cardNumber: Number(m[1]), title: m[2], eroeffnet: true }),
   },
 ]
@@ -381,7 +377,7 @@ const MUSTER: ReadonlyArray<{ re: RegExp; deute: (m: RegExpExecArray) => Treffer
  * Beginn des Pruefblocks. Er schliesst das zuletzt offene Arbeitspaket (Plan #744, A1):
  * Ab hier ordnet die Nummer in der Zeile zu, nicht mehr der offene Puffer.
  */
-const PRUEFBLOCK = /^Pruefungen der Sessions:$/
+const PRUEFBLOCK = PROTOKOLL.pruefblock
 
 /**
  * Die fuehrende Kartennummer einer stummen Zeile — Sitzungsecho `  #100 > …` und die
@@ -397,35 +393,38 @@ const STUMME_NUMMER = /^ {0,2}#(\d+) /
  * Runners. Bewusst eine reine Musterliste ohne Deutungsfunktionen: Sie sind die
  * Mehrheit der Runner-Zeilen, und je eine leere Funktion waere Ballast ohne Aussage.
  */
-const STUMME_MUSTER: readonly RegExp[] = [
-  /^ {2}#\d+ > /, // Sitzungsecho — liefert die Zuordnung Zeile → Arbeitspaket
-  /^#\d+ bewusst ohne Pruefung freigegeben/,
-  /^ {2}Vorflug-Session (?:startet|nicht auswertbar)/,
-  /^ {2}Reviewer .*: /,
-  /^ {2}Kein Reviewer konfiguriert: /,
-  /^ {2}Tracker \(.*\): /,
-  /^ {2}buildChecks rot — einmaliger Format-Fix/,
-  /^ {2}FORMAT-FIX angewendet/,
-  /^ {2}SALVAGE-VERSUCH gestartet/,
-  /^ {2}Salvage nicht moeglich: /,
-  /^ {2}Hinweis: die vorherige Pruef-Zusammenfassung/,
-  /^ {2}CLI-Meldung: /,
-  /^ {2}I[nm] (?:Ready|Backlog) vorhandene Labels: /,
-  /^ {2}Tippfehler im --(?:review-)?label-Wert\?/,
-  /^WARNUNG: /,
-  /^Ready ist leer — nichts zu tun\./,
-  /^Keine Review-Kandidaten im Backlog/,
-  /^Morgen-Ritual: /,
+/** Sitzungsecho `  #100 > …` — sprachneutral, liefert die Zuordnung Zeile → Arbeitspaket. */
+const SITZUNGSECHO = /^ {2}#\d+ > /
+
+const STUMME_MUSTER: readonly Wortform[] = [
+  { de: SITZUNGSECHO, en: SITZUNGSECHO },
+  PROTOKOLL.freigegeben,
+  PROTOKOLL.vorflug,
+  PROTOKOLL.reviewer,
+  PROTOKOLL.keinReviewer,
+  PROTOKOLL.tracker,
+  PROTOKOLL.formatFix,
+  PROTOKOLL.formatFixAngewendet,
+  PROTOKOLL.salvageGestartet,
+  PROTOKOLL.salvageNichtMoeglich,
+  PROTOKOLL.hinweisZusammenfassung,
+  PROTOKOLL.cliMeldung,
+  PROTOKOLL.vorhandeneLabels,
+  PROTOKOLL.tippfehler,
+  PROTOKOLL.warnung,
+  PROTOKOLL.readyLeer,
+  PROTOKOLL.keineReviewKandidaten,
+  PROTOKOLL.morgenRitual,
   PRUEFBLOCK,
-  /^Pruefungen: keine Implementierungs-Runde gelaufen\.$/,
-  /^ {2}Summe: \d+ Session\(s\)/,
-  ABSCHLUSS,
+  PROTOKOLL.keineRunde,
+  PROTOKOLL.summe,
+  PROTOKOLL.abschluss,
 ]
 
 /** Zeilen des Pruefblocks — sie aendern den Zustand eines bereits bekannten Pakets. */
-const PRUEF_GELAUFEN = /^ {2}Issue #(\d+): gelaufen: (.*?) \| ausgelassen:/
-const PRUEF_UNGEPRUEFT = /^ {2}Issue #(\d+): ungeprueft — /
-const PRUEF_LEER = /^ {2}Issue #(\d+): leeres Paket — /
+const PRUEF_GELAUFEN = PROTOKOLL.pruefGelaufen
+const PRUEF_UNGEPRUEFT = PROTOKOLL.pruefUngeprueft
+const PRUEF_LEER = PROTOKOLL.pruefLeer
 
 /** Ein Lauf im Aufbau; `dryRun` entscheidet am Ende ueber Verwerfen. */
 interface Aufbau {
@@ -486,19 +485,19 @@ function paket(a: Aufbau, nummer: number, zeile: string): NightRunItem {
  * verworfen.
  */
 function deutePruefzeile(a: Aufbau, inhalt: string, roh: string): boolean {
-  const gelaufen = PRUEF_GELAUFEN.exec(inhalt)
+  const gelaufen = passe(PRUEF_GELAUFEN, inhalt)
   if (gelaufen) {
     const item = a.nachNummer.get(Number(gelaufen[1]))
     item?.rawLines.push(roh)
     // Nur ein als erfolgreich gemeldetes Paket kippt auf gelb — ein rotes bleibt rot.
-    if (item?.state === 'GREEN' && / -> rot /.test(gelaufen[2])) {
+    if (item?.state === 'GREEN' && trifft(PROTOKOLL.rot, gelaufen[2])) {
       item.state = 'YELLOW'
       item.errorClass = 'CHECKS_RED'
       item.excerpt = inhalt
     }
     return true
   }
-  const ungeprueft = PRUEF_UNGEPRUEFT.exec(inhalt)
+  const ungeprueft = passe(PRUEF_UNGEPRUEFT, inhalt)
   if (ungeprueft) {
     const item = a.nachNummer.get(Number(ungeprueft[1]))
     item?.rawLines.push(roh)
@@ -509,7 +508,7 @@ function deutePruefzeile(a: Aufbau, inhalt: string, roh: string): boolean {
     }
     return true
   }
-  const leer = PRUEF_LEER.exec(inhalt)
+  const leer = passe(PRUEF_LEER, inhalt)
   if (!leer) return false
   // Ein leeres Paket gilt als geprueft: Es gab nichts zu pruefen, und die
   // Erfolgszeile liegt vor. Der Zustand bleibt, wie er ist.
@@ -564,12 +563,12 @@ function verarbeiteTreffer(a: Aufbau, t: Treffer, inhalt: string): NightRunItem 
  */
 function deuteZeile(a: Aufbau, inhalt: string, roh: string): Deutung {
   if (deutePruefzeile(a, inhalt, roh)) return { gedeutet: true, eigenzuordnung: true }
-  if (STUMME_MUSTER.some((re) => re.test(inhalt))) {
+  if (STUMME_MUSTER.some((form) => trifft(form, inhalt))) {
     const nummer = STUMME_NUMMER.exec(inhalt)
     return { gedeutet: true, cardNumber: nummer ? Number(nummer[1]) : undefined }
   }
-  for (const { re, deute } of MUSTER) {
-    const m = re.exec(inhalt)
+  for (const { form, deute } of MUSTER) {
+    const m = passe(form, inhalt)
     if (!m) continue
     const t = deute(m)
     const eroeffnet = verarbeiteTreffer(a, t, inhalt)
@@ -649,7 +648,7 @@ function deutePraefixlos(a: Aufbau | null, zeile: string): void {
   // Auch bei einem harten Abbruch ist genau diese Zeile die, die man im Rohprotokoll
   // sehen will — sie gehoert noch zum Paket und schliesst es erst danach.
   a.aktuellesPaket?.rawLines.push(zeile)
-  if (!zeile.startsWith(FAIL)) return
+  if (!trifft(PROTOKOLL.fehler, zeile)) return
   a.aktuellesPaket = null
   a.runState = 'RED'
   a.runErrorClass = 'HARD_ABORT'
@@ -662,13 +661,14 @@ function deutePraefixlos(a: Aufbau | null, zeile: string): void {
  * Arbeitspaket und gehoeren selbst keinem mehr an (Plan #744, A1).
  */
 function markiereAbschluss(a: Aufbau, inhalt: string): void {
-  if (ABSCHLUSS.test(inhalt)) {
+  const abschluss = passe(PROTOKOLL.abschluss, inhalt)
+  if (abschluss) {
     a.abgeschlossen = true
-    if (inhalt.startsWith(DRY_RUN)) a.dryRun = true
-    a.stage = STUFE.exec(inhalt)?.[1] ?? a.stage
+    if (abschluss[1] !== undefined) a.dryRun = true
+    a.stage = passe(PROTOKOLL.stufe, inhalt)?.[1] ?? a.stage
     a.aktuellesPaket = null
   }
-  if (PRUEFBLOCK.test(inhalt)) a.aktuellesPaket = null
+  if (trifft(PRUEFBLOCK, inhalt)) a.aktuellesPaket = null
 }
 
 /**
@@ -708,7 +708,7 @@ export function parseNightRunLog(text: string): NightRunLog {
     }
 
     const [, zeitstempel, inhalt] = m
-    const start = START.exec(inhalt)
+    const start = passe(PROTOKOLL.start, inhalt)
     if (start) {
       schliesseAufbau(a, log)
       a = neuerAufbau(zeitstempel, start[1])

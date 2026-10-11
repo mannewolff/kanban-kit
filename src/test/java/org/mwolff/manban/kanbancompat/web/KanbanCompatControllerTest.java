@@ -6,12 +6,23 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
+import org.mwolff.manban.card.application.CardNotFoundException;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.ItemDetail;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.Lineage;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.LineageNode;
+import org.mwolff.manban.kanbancompat.application.KanbanArchivService.SearchPage;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Activity;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
@@ -22,12 +33,16 @@ import org.mwolff.manban.kanbancompat.application.TokenNotBoundException;
 import org.springframework.security.core.Authentication;
 
 /** Unit-Tests des Kanban-Compat-Controllers (Service + Authentication gemockt). */
+// PMD.TooManyMethods: je Aufruf der Kanban-Strecke Delegation und Bindung; mit der Suche (Plan
+// #1574) kommen die Grenzen von limit und cursor dazu.
+@SuppressWarnings("PMD.TooManyMethods")
 class KanbanCompatControllerTest {
 
   private static final KanbanPrincipal PRINCIPAL = new KanbanPrincipal(7L, 1L, 2L, 3L, "Token");
   private static final Instant LAUF = Instant.parse("2026-10-05T08:58:22.123Z");
 
   private KanbanCompatService service;
+  private KanbanArchivService archiv;
   private KanbanCompatController controller;
 
   private static Authentication boundAuthentication() {
@@ -39,7 +54,8 @@ class KanbanCompatControllerTest {
   @BeforeEach
   void setUp() {
     service = mock(KanbanCompatService.class);
-    controller = new KanbanCompatController(service);
+    archiv = mock(KanbanArchivService.class);
+    controller = new KanbanCompatController(service, archiv);
   }
 
   @Test
@@ -269,6 +285,149 @@ class KanbanCompatControllerTest {
     // When / Then: ohne Bindung endet der Aufruf wie bei jedem anderen Endpunkt mit 409
     assertThatThrownBy(() -> controller.activity(null, 8L))
         .isInstanceOf(TokenNotBoundException.class);
+  }
+
+  @Test
+  void itemByNumber_withBoundPrincipal_delegates() {
+    // Given (Plan #1574, A2)
+    ItemDetail detail =
+        new ItemDetail(
+            new Item(8L, 42, "T", null, "DONE", 0, "card", List.of(), null, null),
+            true,
+            Instant.parse("2026-01-01T10:00:00Z"),
+            null,
+            List.of());
+    when(archiv.itemByNumber(PRINCIPAL, 42)).thenReturn(detail);
+
+    // When
+    ItemDetail result = controller.itemByNumber(boundAuthentication(), 42);
+
+    // Then
+    assertThat(result).isSameAs(detail);
+  }
+
+  @Test
+  void itemByNumber_karteFehlt_bleibtNichtGefunden() {
+    // Given: unbekannt, anderes Board und Papierkorb enden im Service gleich (A3) -> 404
+    when(archiv.itemByNumber(PRINCIPAL, 99)).thenThrow(new CardNotFoundException());
+
+    // When / Then
+    assertThatThrownBy(() -> controller.itemByNumber(boundAuthentication(), 99))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void itemByNumber_nullAuthentication_throwsTokenNotBound() {
+    // When / Then: ohne Bindung 409 wie bei jedem anderen Endpunkt
+    assertThatThrownBy(() -> controller.itemByNumber(null, 42))
+        .isInstanceOf(TokenNotBoundException.class);
+  }
+
+  @Test
+  void lineage_withBoundPrincipal_delegates() {
+    // Given (Plan #1574, E10, E11)
+    Lineage lineage =
+        new Lineage(
+            new LineageNode(42, "T", "ARBEITSPAKET", "DONE", true, 0, false), List.of(), List.of());
+    when(archiv.lineage(PRINCIPAL, 42)).thenReturn(lineage);
+
+    // When
+    Lineage result = controller.lineage(boundAuthentication(), 42);
+
+    // Then
+    assertThat(result).isSameAs(lineage);
+  }
+
+  @Test
+  void lineage_karteFehlt_bleibtNichtGefunden() {
+    // Given: unbekannt, anderes Board und Papierkorb enden im Service gleich (A3) -> 404
+    when(archiv.lineage(PRINCIPAL, 99)).thenThrow(new CardNotFoundException());
+
+    // When / Then
+    assertThatThrownBy(() -> controller.lineage(boundAuthentication(), 99))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void lineage_nullAuthentication_throwsTokenNotBound() {
+    // When / Then: ohne Bindung 409 wie bei jedem anderen Endpunkt
+    assertThatThrownBy(() -> controller.lineage(null, 42))
+        .isInstanceOf(TokenNotBoundException.class);
+  }
+
+  @Test
+  void search_withBoundPrincipal_delegates() {
+    // Given (Plan #1574, E6, E7)
+    Instant von = Instant.parse("2026-01-01T00:00:00Z");
+    Instant bis = Instant.parse("2026-02-01T00:00:00Z");
+    SearchPage page = new SearchPage(List.of(), null);
+    when(archiv.search(PRINCIPAL, "Archiv", List.of("PLAN"), 12, von, bis, 90, 5)).thenReturn(page);
+
+    // When
+    SearchPage result =
+        controller.search(boundAuthentication(), "Archiv", List.of("PLAN"), 12, von, bis, 90, 5);
+
+    // Then
+    assertThat(result).isSameAs(page);
+  }
+
+  @Test
+  void search_nullAuthentication_throwsTokenNotBound() {
+    // When / Then: ohne Bindung 409 wie bei jedem anderen Endpunkt
+    assertThatThrownBy(() -> controller.search(null, null, null, null, null, null, null, 50))
+        .isInstanceOf(TokenNotBoundException.class);
+  }
+
+  /**
+   * Die Grenzen von q, limit und cursor prüft die Methodenvalidierung von Spring vor dem Aufruf;
+   * hier dieselben Annotationen über den Validator, ohne MockMvc.
+   */
+  private static Set<ConstraintViolation<KanbanCompatController>> searchVerletzungen(
+      KanbanCompatController controller, Integer cursor, int limit) throws Exception {
+    return searchVerletzungen(controller, null, cursor, limit);
+  }
+
+  private static Set<ConstraintViolation<KanbanCompatController>> searchVerletzungen(
+      KanbanCompatController controller, String q, Integer cursor, int limit) throws Exception {
+    Method search =
+        KanbanCompatController.class.getDeclaredMethod(
+            "search",
+            Authentication.class,
+            String.class,
+            List.class,
+            Integer.class,
+            Instant.class,
+            Instant.class,
+            Integer.class,
+            int.class);
+    try (var factory = Validation.buildDefaultValidatorFactory()) {
+      Validator validator = factory.getValidator();
+      return validator
+          .forExecutables()
+          .validateParameters(
+              controller, search, new Object[] {null, q, null, null, null, null, cursor, limit});
+    }
+  }
+
+  @Test
+  void search_limitZwischenEinsUndZweihundert_istGueltig() throws Exception {
+    assertThat(searchVerletzungen(controller, null, 1)).isEmpty();
+    assertThat(searchVerletzungen(controller, null, 200)).isEmpty();
+    assertThat(searchVerletzungen(controller, 1, 50)).isEmpty();
+  }
+
+  @Test
+  void search_limitAusserhalb_undCursorNichtPositiv_sindUngueltig() throws Exception {
+    assertThat(searchVerletzungen(controller, null, 0)).hasSize(1);
+    assertThat(searchVerletzungen(controller, null, 201)).hasSize(1);
+    assertThat(searchVerletzungen(controller, 0, 50)).hasSize(1);
+    assertThat(searchVerletzungen(controller, -1, 50)).hasSize(1);
+  }
+
+  @Test
+  void search_suchbegriffBisZweihundertZeichen_istGueltig_darueberUngueltig() throws Exception {
+    assertThat(searchVerletzungen(controller, "x".repeat(200), null, 50)).isEmpty();
+    assertThat(searchVerletzungen(controller, "x".repeat(201), null, 50)).hasSize(1);
   }
 
   @Test

@@ -5,7 +5,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Spring-Data-Repository für {@link CardEntity}. */
 interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
@@ -76,4 +78,52 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
           + "where c.columnId = ?1 and c.archived = false "
           + "and c.deletedAt is null and c.type <> 'EPIC'")
   int maxActivePositionInColumn(Long columnId);
+
+  /**
+   * Karten-ID und verlorene Herkunftsnummer der Karten des Boards (Plan #1574, E12/E17). Die Spalte
+   * {@code derived_from_lost_number} bildet {@link CardEntity} bewusst nicht ab, darum nativ.
+   */
+  @Query(
+      value =
+          "select id, derived_from_lost_number from card where board_id = ?1 "
+              + "and derived_from_lost_number is not null and derived_from_card_id is null",
+      nativeQuery = true)
+  List<Object[]> findVerloreneHerkunftsnummern(long boardId);
+
+  /**
+   * Karten-ID und Fundstelle ({@code TITLE} vor {@code BODY}) des Suchbegriffs in den Karten des
+   * Boards ohne Papierkorb (Plan #1574, E3, E4). {@code strpos} statt {@code LIKE}, damit {@code %}
+   * und {@code _} wörtlich gelten; der Suchbegriff geht nur als gebundener Parameter.
+   */
+  @Query(
+      value =
+          "select id, case when strpos(lower(title), lower(?2)) > 0 then 'TITLE' else 'BODY' end "
+              + "from card where board_id = ?1 and deleted_at is null "
+              + "and (strpos(lower(title), lower(?2)) > 0 "
+              + "or strpos(lower(coalesce(description, '')), lower(?2)) > 0)",
+      nativeQuery = true)
+  List<Object[]> findTextFundstellen(long boardId, String q);
+
+  /**
+   * Schreibt an alle Kinder der genannten Karten die Nummer des Vorfahren (Plan #1574, E18). Vorher
+   * flushen: Eine im selben Persistenzkontext gesetzte Herkunft muss in der Tabelle stehen.
+   */
+  @Transactional
+  @Modifying(flushAutomatically = true)
+  @Query(
+      value =
+          "update card child set derived_from_lost_number = parent.number from card parent "
+              + "where child.derived_from_card_id = parent.id and parent.id in (?1)",
+      nativeQuery = true)
+  void bewahreHerkunftsnummern(Collection<Long> ids);
+
+  /** Setzt die verlorene Herkunftsnummer einer Karte zurück, deren Herkunft neu gesetzt ist. */
+  @Transactional
+  @Modifying
+  @Query(
+      value =
+          "update card set derived_from_lost_number = null "
+              + "where id = ?1 and derived_from_lost_number is not null",
+      nativeQuery = true)
+  void setzeVerloreneHerkunftsnummerZurueck(long id);
 }

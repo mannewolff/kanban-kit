@@ -3,6 +3,15 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DerivationTree, hakenArt } from './DerivationTree'
 import type { DerivationNode } from '../api/cards'
+import type { KitNamenZustand } from '../api/kitNamen'
+import { KIT_NAMEN } from '../test/kitNamen'
+
+/** Das Namen-Register des Kits (Issue #1596): ohne Angabe geladen, ein Test kann es umstellen. */
+const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
+vi.mock('../api/kitNamen', async (original) => ({
+  ...(await original<typeof import('../api/kitNamen')>()),
+  useKitNamen: (): KitNamenZustand => kitNamen.zustand ?? { status: 'fertig', daten: KIT_NAMEN },
+}))
 
 vi.mock('../api/cards', async (original) => {
   const actual = await original<typeof import('../api/cards')>()
@@ -79,6 +88,7 @@ function zeilen() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  kitNamen.zustand = null
 })
 
 describe('DerivationTree', () => {
@@ -570,25 +580,25 @@ describe('DerivationTree', () => {
   it('setzt an einer erledigten Karte den Haken „erledigt"', () => {
     const rows = baum([0, '[Plan] Herkunftsbaum'], [1, 'Hakenspalte bauen', { done: true }])
 
-    expect(hakenArt(rows, 1)).toBe('erledigt')
+    expect(hakenArt(rows, 1, KIT_NAMEN)).toBe('erledigt')
   })
 
   it('setzt an einer offenen Karte keinen Haken', () => {
     const rows = baum([0, '[Plan] Herkunftsbaum'], [1, 'Hakenspalte bauen'])
 
-    expect(hakenArt(rows, 1)).toBeNull()
+    expect(hakenArt(rows, 1, KIT_NAMEN)).toBeNull()
   })
 
   it('setzt an einem [Fachlich] mit [Plan] darunter den Haken „abgearbeitet"', () => {
     const rows = baum([0, '[Fachlich] Stand links ablesbar'], [1, '[Plan] Herkunftsbaum'])
 
-    expect(hakenArt(rows, 0)).toBe('abgearbeitet')
+    expect(hakenArt(rows, 0, KIT_NAMEN)).toBe('abgearbeitet')
   })
 
   it('setzt an einem [Fachlich] ohne Kind keinen Haken', () => {
     const rows = baum([0, '[Fachlich] Stand links ablesbar'])
 
-    expect(hakenArt(rows, 0)).toBeNull()
+    expect(hakenArt(rows, 0, KIT_NAMEN)).toBeNull()
   })
 
   it('setzt an einem [Fachlich] mit nur Nicht-Plan-Kind keinen Haken', () => {
@@ -596,19 +606,32 @@ describe('DerivationTree', () => {
     // darunter belegt, dass der fachliche Weg in einen technischen ueberfuehrt wurde.
     const rows = baum([0, '[Fachlich] Stand links ablesbar'], [1, 'Irgendeine Karte'])
 
-    expect(hakenArt(rows, 0)).toBeNull()
+    expect(hakenArt(rows, 0, KIT_NAMEN)).toBeNull()
+  })
+
+  /** Englische Titel-Präfixe wirken wie ihr deutsches Gegenstück (Plan #1582, E2). */
+  it('setzt an einem [Requirement] mit [Plan] darunter den Haken „abgearbeitet"', () => {
+    const rows = baum([0, '[Requirement] Status readable on the left'], [1, '[Plan] Derivation tree'])
+
+    expect(hakenArt(rows, 0, KIT_NAMEN)).toBe('abgearbeitet')
+  })
+
+  it('setzt an einem [Requirement] ohne Kind keinen Haken', () => {
+    const rows = baum([0, '[Requirement] Status readable on the left'])
+
+    expect(hakenArt(rows, 0, KIT_NAMEN)).toBeNull()
   })
 
   it('setzt an einem [Plan] mit Arbeitspaket darunter den Haken „abgearbeitet"', () => {
     const rows = baum([0, '[Plan] Herkunftsbaum'], [1, '[Task] Hakenspalte bauen'])
 
-    expect(hakenArt(rows, 0)).toBe('abgearbeitet')
+    expect(hakenArt(rows, 0, KIT_NAMEN)).toBe('abgearbeitet')
   })
 
   it('setzt an einem [Plan] ohne Arbeitspaket keinen Haken', () => {
     const rows = baum([0, '[Fachlich] Stand links ablesbar'], [1, '[Plan] Herkunftsbaum'])
 
-    expect(hakenArt(rows, 1)).toBeNull()
+    expect(hakenArt(rows, 1, KIT_NAMEN)).toBeNull()
   })
 
   it('zählt nur direkte Kinder, keine tieferen Nachfahren', () => {
@@ -620,7 +643,7 @@ describe('DerivationTree', () => {
       [2, '[Plan] Herkunftsbaum'],
     )
 
-    expect(hakenArt(rows, 0)).toBeNull()
+    expect(hakenArt(rows, 0, KIT_NAMEN)).toBeNull()
   })
 
   it('zählt ein Kind auch dann, wenn davor ein Enkel derselben Zeile steht', () => {
@@ -633,7 +656,7 @@ describe('DerivationTree', () => {
       [1, '[Plan] Herkunftsbaum'],
     )
 
-    expect(hakenArt(rows, 0)).toBe('abgearbeitet')
+    expect(hakenArt(rows, 0, KIT_NAMEN)).toBe('abgearbeitet')
   })
 
   it('zeigt den Haken eines abgearbeiteten Plans zugänglich als „abgearbeitet"', async () => {
@@ -673,6 +696,37 @@ describe('DerivationTree', () => {
     expect(spalten[1]).toHaveTextContent('')
     expect(spalten[1]).toHaveStyle({ width: getComputedStyle(spalten[0]).width })
     expect(getComputedStyle(spalten[1]).width).not.toBe('')
+  })
+
+  // --- Kit-Namen laden oder fehlen (Plan #1582, E10) -------------------------
+
+  it('zeigt während des Ladens der Kit-Namen einen Ladehinweis in der Hakenspalte', async () => {
+    kitNamen.zustand = { status: 'laden' }
+    await zeigeBaum(baum([0, '[Requirement] Anforderung'], [1, '[Plan] Weg']))
+
+    const hinweise = screen.getAllByRole('img', { name: 'Kit-Namen werden geladen' })
+    expect(hinweise).toHaveLength(2)
+    expect(zeilen()[0]).toContainElement(hinweise[0])
+    expect(screen.queryByRole('img', { name: 'abgearbeitet' })).toBeNull()
+  })
+
+  it('zeigt „Kit-Namen nicht ladbar" in der Hakenspalte, wenn das Laden scheitert', async () => {
+    kitNamen.zustand = { status: 'fehler', fehler: new Error('weg') }
+    await zeigeBaum(baum([0, '[Fachlich] Anforderung'], [1, '[Plan] Weg']))
+
+    const hinweise = screen.getAllByRole('img', { name: 'Kit-Namen nicht ladbar' })
+    expect(hinweise).toHaveLength(2)
+    expect(zeilen()[1]).toContainElement(hinweise[1])
+    expect(screen.queryByRole('img', { name: 'abgearbeitet' })).toBeNull()
+  })
+
+  it('braucht für eine erledigte Karte keine Kit-Namen', async () => {
+    // Erledigt liest die Spalte, nicht den Titel — dort fehlt kein Präfix.
+    kitNamen.zustand = { status: 'fehler', fehler: new Error('weg') }
+    await zeigeBaum([node({ number: 1, done: true })])
+
+    expect(screen.getByRole('img', { name: 'erledigt' })).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Kit-Namen nicht ladbar' })).toBeNull()
   })
 
   it('rückt die Zeileninhalte weiterhin nach der Tiefe ein', async () => {

@@ -148,6 +148,42 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
   }
 
   /**
+   * Issue #1590 (Plan #1582 E12): Ein englischer Laufstand-Kommentar mit Kopfzeile {@code ## Run
+   * status} wird gewählt und gedeutet wie ein deutscher; {@code Plan-Review:}, das das Kit in
+   * beiden Sprachen schreibt (Issue #1599), gilt im englischen Plan als Prüfvermerk.
+   */
+  @Test
+  void einEnglischerLaufstandWirdGewaehltUndGedeutet() throws Exception {
+    Aufbau a = aufbau("fort-en");
+    long runId = laufStarten(a);
+
+    Item anforderung = anlegen(a, null, "[Requirement] Progress", null);
+    Item plan = anlegen(a, MODELL, "[Plan] Progress", anforderung.number());
+    aendern(a, plan, "[Plan] Progress", "Plan-Review: fable, gpt-astra");
+    mvc.perform(
+            mitAgent(post("/api/kanban/items/" + anforderung.id() + "/comments"), a)
+                .contentType(JSON)
+                .content(
+                    json.writeValueAsString(
+                        new Text(
+                            "## Run status\n\nlast started: packages started for #"
+                                + plan.number()
+                                + " at "
+                                + Instant.now()))))
+        .andExpect(status().isCreated());
+
+    JsonNode antwort = fortschritt(a.session(), a.projectId(), runId, 200);
+
+    assertThat(antwort.get("ketten")).hasSize(1);
+    JsonNode kette = antwort.get("ketten").get(0);
+    assertThat(kette.get("anforderung").get("number").asInt()).isEqualTo(anforderung.number());
+    assertThat(kette.get("plan").get("number").asInt()).isEqualTo(plan.number());
+    assertThat(stufen(kette))
+        .containsExactly("PLAN:ERREICHT", "REVIEW:ERREICHT", "PAKETE:LAEUFT", "ABDECKUNG:OFFEN");
+    assertThat(kette.get("aktuelleStufe").asText()).isEqualTo("PAKETE");
+  }
+
+  /**
    * Issue #1430: Zwei Läufe mit demselben Token laufen gleichzeitig und weisen sich aus — jeder
    * sieht nur seine Karten und seinen Laufstand, nichts steht unter „unbekannt".
    */

@@ -21,10 +21,13 @@ import org.springframework.stereotype.Component;
 class BoardPurgeCascade {
 
   private final CardRepository cards;
+  private final CardBestandRepository bestand;
   private final ApplicationEventPublisher events;
 
-  BoardPurgeCascade(CardRepository cards, ApplicationEventPublisher events) {
+  BoardPurgeCascade(
+      CardRepository cards, CardBestandRepository bestand, ApplicationEventPublisher events) {
     this.cards = cards;
+    this.bestand = bestand;
     this.events = events;
   }
 
@@ -32,6 +35,9 @@ class BoardPurgeCascade {
   void onBoardPurged(BoardPurgedEvent event) {
     List<Long> cardIds = cards.findAllIdsByBoardId(event.boardId());
     if (!cardIds.isEmpty()) {
+      // Plan #1574, E18: Die DB-Cascade board → card setzt die Herkunft der Kinder auf anderen
+      // Boards auf NULL — vorher die Nummer an ihnen bewahren.
+      bestand.bewahreHerkunftsnummern(cardIds);
       events.publishEvent(new CardsPurgedEvent(cardIds));
     }
   }

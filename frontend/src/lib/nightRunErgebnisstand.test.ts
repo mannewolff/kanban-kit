@@ -379,6 +379,21 @@ describe('parseNightRunErgebnisstand — Zustand je Arbeitspaket', () => {
     expect(item.errorClass).toBe('UNEXPECTED_STATE')
   })
 
+  // Englische Freitext-Gruende deuten wie ihre deutschen Gegenstuecke (Issue #1593, AK 3).
+  it.each([
+    ['Nachtlauf: dependency #99 not met — issue deferred.', 'GREY', 'DEPENDENCY_UNMET'],
+    ['Night run: carries kit:clarify — an open decision awaits a human.', 'RED', 'AWAITING_DECISION'],
+    ['Session without In-review result finished — issue deferred.', 'RED', 'UNEXPECTED_STATE'],
+  ] as const)('deutet den englischen Grund %s wie den deutschen', (grund, state, errorClass) => {
+    const item = einziges(mitEinheit({ ausgang: 'zurueckgestellt', grund }))
+    expect(item.state).toBe(state)
+    expect(item.errorClass).toBe(errorClass)
+  })
+
+  it('nimmt einen englischen Kennwert nicht als Gegenstueck an (E4)', () => {
+    expect(ablehnung(mitEinheit({ ausgang: 'checked' })).grund).toBe('nicht-unterstuetzt')
+  })
+
   it('macht jedes andere zurueckgestellte Paket grau ohne Fehlerklasse', () => {
     const grund = 'Nachtlauf: Plan-Dokument — wird nicht implementiert, bitte per /issues #100 in Arbeitspakete ueberfuehren.'
     const item = einziges(mitEinheit({ ausgang: 'zurueckgestellt', grund }))
@@ -585,6 +600,14 @@ describe('parseNightRunErgebnisstand — Ketten-Lauf (Issue #854)', () => {
     expect(item.state).toBe('RED')
     expect(item.errorClass).toBe('TIME_BUDGET_EXCEEDED')
     expect(item.excerpt).toBe(ZEITBUDGET)
+  })
+
+  it('erkennt den englischen Zeitbudget-Praefix wie den deutschen', () => {
+    const grund = 'Time budget review: the session was ended at the limit after 15.0 min'
+    const item = einziges(inKette({ ausgang: 'abgebrochen', grund }))
+    expect(item.state).toBe('RED')
+    expect(item.errorClass).toBe('TIME_BUDGET_EXCEEDED')
+    expect(item.excerpt).toBe(grund)
   })
 
   // Die Stufen-Blöcke entstehen VOR ihrem Ergebnis (`stufePlan` legt `{ id: null, … }` an,

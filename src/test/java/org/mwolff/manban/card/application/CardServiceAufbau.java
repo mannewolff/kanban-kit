@@ -118,6 +118,7 @@ final class CardServiceAufbau {
 
   static CardArchiveService archiveAusPorts(
       CardRepository cards,
+      CardBestandRepository bestand,
       CardDependencyRepository dependencies,
       BoardService boardService,
       PermissionChecker permissions,
@@ -141,6 +142,7 @@ final class CardServiceAufbau {
             clock);
     return new CardArchiveService(
         cards,
+        bestand,
         b.abhaengigkeiten(),
         boardService,
         permissions,
