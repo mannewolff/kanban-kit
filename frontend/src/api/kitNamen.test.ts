@@ -110,6 +110,66 @@ describe('useKitNamen', () => {
   })
 })
 
+/**
+ * Nach dem Abbau verwirft React ein `setState` still, `result.current` bleibt also auch ohne
+ * Schutz bei `laden`. Diese Tests beobachten darum den Setter selbst (Issue #1601).
+ */
+describe('useKitNamen — Aufrufe des Zustands-Setters', () => {
+  async function modulMitSetterSpion() {
+    const setter = vi.fn()
+    vi.doMock('react', async () => {
+      const react = await vi.importActual<typeof import('react')>('react')
+      return {
+        ...react,
+        useState: <T>(start: T) => {
+          const [wert, setzen] = react.useState(start)
+          return [
+            wert,
+            (neu: T) => {
+              setter(neu)
+              setzen(neu)
+            },
+          ] as const
+        },
+      }
+    })
+    return { setter, ...(await modul()) }
+  }
+
+  afterEach(() => vi.doUnmock('react'))
+
+  it('ruft den Setter nach dem Abbau mit Daten nicht mehr auf', async () => {
+    let freigeben: (r: Response) => void = () => {}
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(
+      new Promise<Response>((resolve) => {
+        freigeben = resolve
+      }),
+    )
+    const { setter, useKitNamen, ladeKitNamen } = await modulMitSetterSpion()
+    const { unmount } = renderHook(() => useKitNamen())
+    unmount()
+    freigeben(antwort(DATEN))
+    await ladeKitNamen()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(setter).not.toHaveBeenCalled()
+  })
+
+  it('ruft den Setter nach dem Abbau mit einem Fehler nicht mehr auf', async () => {
+    let scheitern: (e: Error) => void = () => {}
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(
+      new Promise<Response>((_, reject) => {
+        scheitern = reject
+      }),
+    )
+    const { setter, useKitNamen } = await modulMitSetterSpion()
+    const { unmount } = renderHook(() => useKitNamen())
+    unmount()
+    scheitern(new Error('zu spät'))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(setter).not.toHaveBeenCalled()
+  })
+})
+
 describe('namenDerSache', () => {
   it('liefert alle Namen der Sache, der deutsche zuerst', async () => {
     const { namenDerSache } = await modul()
