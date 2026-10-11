@@ -148,16 +148,19 @@ public final class FreigabeLabels {
       return;
     }
     String alt = alterName.trim();
-    String neu = neuerName == null ? null : neuerName.trim();
-    if (alt.equals(neu)) {
+    Optional<String> neu = Optional.ofNullable(neuerName).map(String::trim);
+    if (neu.filter(alt::equals).isPresent()) {
       return;
     }
     if (geschuetzt(register.sache(alt))) {
       throw definitionGesperrt(alt);
     }
-    if (neu == null) {
-      return;
-    }
+    // Beim Löschen fehlt der neue Name, es bleibt nichts zu prüfen.
+    neu.ifPresent(name -> pruefeNeuenNamen(register, name));
+  }
+
+  /** Prüft den Zielnamen einer Umbenennung: weder geschützt noch unbekannt im Namensraum. */
+  private static void pruefeNeuenNamen(KitNamen register, String neu) {
     Optional<Sache> sache = register.sache(neu);
     if (geschuetzt(sache)) {
       throw definitionGesperrt(neu);
