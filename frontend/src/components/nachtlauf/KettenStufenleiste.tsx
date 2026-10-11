@@ -24,7 +24,7 @@ import { apiErrorMessage } from '../../api/client'
 import { artAusTitel, boardName, namenDerSache, type KitNamen, type KitNamenZustand } from '../../api/kitNamen'
 import type { Label } from '../../api/labels'
 import { nightRunsApi, type KettenStand, type NightRunsApi } from '../../api/nightRuns'
-import { LAUFSTAND } from '../../lib/kitWortformen'
+import { LAUFSTAND, PLAN_REVIEW } from '../../lib/kitWortformen'
 import { kettenAnzeige, type Stationssymbol } from '../../lib/laufFortschritt'
 import { KLEIN_RADIUS, KUPFER, NUT_SX, TASTE_SX, TEXT_SCHWACH } from '../../theme'
 import { dialogTitleSx } from '../dialogChromeSx'
@@ -68,7 +68,7 @@ const prueferText = (sache: PrueferSache) => `${PRUEFER.find((p) => p.sache === 
 const NACHT = 'NIGHT'
 /** Sachen, mit denen an der Karte eine offene Frage auf einen Menschen wartet. */
 const OFFENE_FRAGE = ['KLAEREN', 'LAUF_WARTET'] as const
-const PLAN_REVIEW_ZEILE = new RegExp(`^(?:${LAUFSTAND.planReview.join('|')})`, 'm')
+const PLAN_REVIEW_ZEILE = new RegExp(`^${PLAN_REVIEW}`, 'm')
 /** Die Lauf-ID ist der Stempel des Runners, etwa `2026-10-05-175710` im Protokollpfad. */
 const LAUF_ID = /\b\d{4}-\d{2}-\d{2}-\d{6}\b/
 

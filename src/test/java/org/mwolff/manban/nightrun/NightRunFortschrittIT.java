@@ -149,7 +149,8 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
 
   /**
    * Issue #1590 (Plan #1582 E12): Ein englischer Laufstand-Kommentar mit Kopfzeile {@code ## Run
-   * status} wird gewählt und gedeutet wie ein deutscher; {@code Plan review:} gilt als Prüfvermerk.
+   * status} wird gewählt und gedeutet wie ein deutscher; {@code Plan-Review:}, das das Kit in
+   * beiden Sprachen schreibt (Issue #1599), gilt im englischen Plan als Prüfvermerk.
    */
   @Test
   void einEnglischerLaufstandWirdGewaehltUndGedeutet() throws Exception {
@@ -158,7 +159,7 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
 
     Item anforderung = anlegen(a, null, "[Requirement] Progress", null);
     Item plan = anlegen(a, MODELL, "[Plan] Progress", anforderung.number());
-    aendern(a, plan, "[Plan] Progress", "Plan review: fable, gpt-astra");
+    aendern(a, plan, "[Plan] Progress", "Plan-Review: fable, gpt-astra");
     mvc.perform(
             mitAgent(post("/api/kanban/items/" + anforderung.id() + "/comments"), a)
                 .contentType(JSON)

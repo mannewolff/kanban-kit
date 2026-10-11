@@ -1232,9 +1232,9 @@ class FortschrittErmittlungTest {
   }
 
   @Test
-  void planReviewAufEnglischGiltWiePlanReview() {
+  void planReviewInEinemEnglischenPlanGiltAlsGeprueft() {
     Karte f = anforderung(500);
-    angelegt(planMitText(501, f, "## Context\n  Plan review: fable, gpt-astra (2026-10-10)\n"), 10);
+    angelegt(planMitText(501, f, "## Context\n  Plan-Review: fable, gpt-astra (2026-10-10)\n"), 10);
 
     ChainProgress kette = eineKette();
 
@@ -1243,19 +1243,19 @@ class FortschrittErmittlungTest {
   }
 
   @Test
-  void leereZeilePlanReviewAufEnglischGiltNichtAlsGeprueft() {
+  void leereZeilePlanReviewInEinemEnglischenPlanGiltNichtAlsGeprueft() {
     Karte f = anforderung(500);
-    angelegt(planMitText(501, f, "Plan review:   "), 10);
+    angelegt(planMitText(501, f, "## Context\nPlan-Review:   "), 10);
 
     assertThat(stufen(eineKette())).containsEntry(ProgressStage.REVIEW, StageState.LAEUFT);
   }
 
   @Test
-  void planReviewVorhanden_auchMitEnglischerZeile() {
+  void planReviewVorhanden_nichtMitEinerFormAusserhalbDesKitRegisters() {
     Karte f = anforderung(500);
-    Karte geprueft = planMitText(501, f, "Plan review: fable (2026-10-10)");
+    Karte ungeprueft = planMitText(501, f, "Plan review: fable (2026-10-10)");
 
-    assertThat(FortschrittErmittlung.planReviewVorhanden(f, List.of(geprueft))).isTrue();
+    assertThat(FortschrittErmittlung.planReviewVorhanden(f, List.of(ungeprueft))).isFalse();
   }
 
   @Test
@@ -1305,7 +1305,7 @@ class FortschrittErmittlungTest {
   @Test
   void eineRequirementKarteGiltWieEineFachlicheAnforderung() {
     Karte f = karte(500, "[Requirement] Requirement", "BACKLOG", null, false, null);
-    Karte geprueft = planMitText(501, f, "Plan review: fable (2026-10-10)");
+    Karte geprueft = planMitText(501, f, "Plan-Review: fable (2026-10-10)");
 
     assertThat(FortschrittErmittlung.planReviewVorhanden(f, List.of(geprueft))).isTrue();
   }

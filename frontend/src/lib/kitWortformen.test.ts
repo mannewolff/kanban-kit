@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BUDGETFELDER, ERGEBNISGRUND, LAUFSTAND, PROTOKOLL, passe, type Wortform } from './kitWortformen'
+import { BUDGETFELDER, ERGEBNISGRUND, LAUFSTAND, PLAN_REVIEW, PROTOKOLL, passe, type Wortform } from './kitWortformen'
 
 /**
  * Je Regel des Abschnitts Protokoll eine deutsche und eine englische Beispielzeile, wie
@@ -214,7 +214,11 @@ describe('kitWortformen — Abschnitte Ergebnisdatei, Laufstand und Budgetfelder
   })
 
   it('fuehrt die Laufstand-Anker in beiden Sprachen', () => {
-    expect(LAUFSTAND).toEqual({ kopf: ['## Laufstand', '## Run status'], planReview: ['Plan-Review:', 'Plan review:'] })
+    expect(LAUFSTAND).toEqual({ kopf: ['## Laufstand', '## Run status'] })
+  })
+
+  it('fuehrt den Pruefvermerk des Plans in der einen Form des Kit-Registers (Issue #1599)', () => {
+    expect(PLAN_REVIEW).toBe('Plan-Review:')
   })
 
   it('fuehrt die Budgetfelder in beiden Sprachen', () => {

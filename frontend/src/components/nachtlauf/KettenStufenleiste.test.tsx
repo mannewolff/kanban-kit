@@ -843,17 +843,28 @@ describe('KettenStufenleiste — englische Namen (Issue #1595)', () => {
     expect(screen.queryByRole('button', { name: 'Kette starten' })).not.toBeInTheDocument()
   })
 
-  it('lässt einen [Plan] mit Zeile „Plan review:“ starten wie mit „Plan-Review:“', async () => {
+  it('lässt einen englischen [Plan] mit Zeile „Plan-Review:“ starten (Issue #1599)', async () => {
     const onChange = zeige({
       titel: PLAN,
       boardLabels: ENGLISCH,
       labelIds: [32],
-      beschreibung: 'A plan.\nPlan review: fable (2026-10-05)',
+      beschreibung: '## Context\nPlan-Review: fable (2026-10-05)',
     })
 
     expect(screen.queryByText(/Im Plan fehlt die Zeile/)).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Kette starten' }))
     expect(onChange).toHaveBeenCalledWith({ ab: [], an: [39] })
+  })
+
+  it('wertet „Plan review:“ nicht als Prüfvermerk — die Form führt das Kit-Register nicht (Issue #1599)', () => {
+    zeige({
+      titel: PLAN,
+      boardLabels: ENGLISCH,
+      labelIds: [32],
+      beschreibung: '## Context\nPlan review: fable (2026-10-05)',
+    })
+
+    expect(screen.getByText(/Im Plan fehlt die Zeile/)).toBeInTheDocument()
   })
 
   it('setzt an einem englischen Board das englische Ziel und nimmt das alte ab (E9)', async () => {

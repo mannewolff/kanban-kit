@@ -136,7 +136,7 @@ class KettenAbleitungTest {
                     "\n",
                     "Goal: implementation",
                     "Reviewers: 1",
-                    "Boundary: coverage",
+                    "Limit: coverage",
                     GRENZE_WAITING));
 
     assertThat(englisch.ziel()).isEqualTo(ProgressStage.UMSETZUNG);
@@ -173,7 +173,7 @@ class KettenAbleitungTest {
       value = {
         "Goal: plan",
         "Reviewers: 2",
-        "Boundary: plan",
+        "Limit: plan",
         "last started: plan started for #500 at 2026-10-06T01:00:00Z",
         "Next: review",
         "Log: .claude/protokolle/x.log"

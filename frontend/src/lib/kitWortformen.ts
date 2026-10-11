@@ -4,7 +4,8 @@
  *
  * <p>Der Leitstand muss die englischen Formen verstehen, bevor das Kit sie zum ersten Mal schreibt
  * (Plan #1582, E1). Die englischen Formen sind darum eine Vorlage fuer Kit-Plan 1420 und keine
- * Abschrift; weicht das Kit ab, gleicht ein `[Task]` diese Datei an.
+ * Abschrift; weicht das Kit ab, gleicht ein `[Task]` diese Datei an. Ausgenommen sind die Anker
+ * des Laufstands: Sie folgen dem Namen-Register des Kits (`MARKER`, Issue #1599).
  *
  * <p>Titel-Praefixe und Labelnamen stehen hier nicht — sie kommen vom Server (A4). Die einzige
  * Ausnahme ist `kit:klaeren|kit:clarify` in der Protokollzeile des Ueberspringens: Der
@@ -207,11 +208,16 @@ export const ERGEBNISGRUND = {
   zeitbudget: ['Zeitbudget ', 'Time budget '],
 } as const satisfies Record<string, Wortpaar>
 
-/** Abschnitt Laufstand: die Anker des Laufstand-Kommentars (Plan #1582, E12). */
+/**
+ * Abschnitt Laufstand: die Anker des Laufstand-Kommentars (Plan #1582, E12), wie das
+ * Namen-Register des Kits sie in `MARKER` fuehrt (Issue #1599).
+ */
 export const LAUFSTAND = {
   kopf: ['## Laufstand', '## Run status'],
-  planReview: ['Plan-Review:', 'Plan review:'],
 } as const satisfies Record<string, Wortpaar>
+
+/** Der Pruefvermerk eines Plans — das Kit schreibt ihn in beiden Sprachen gleich (Issue #1599). */
+export const PLAN_REVIEW = 'Plan-Review:'
 
 /** Abschnitt Budgetfelder: die Namen fuer die Anzeige der `defaultFields` (Plan #1582, E3). */
 export const BUDGETFELDER = {

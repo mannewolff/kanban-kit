@@ -131,7 +131,7 @@ class LaufstandWortformenTest {
   @Test
   void prueferGrenzeUndFertigBis() {
     assertThat(LaufstandWortformen.PRUEFER).containsExactly("Prüfer:", "Reviewers:");
-    assertThat(LaufstandWortformen.GRENZE).containsExactly("Grenze:", "Boundary:");
+    assertThat(LaufstandWortformen.GRENZE).containsExactly("Grenze:", "Limit:");
     assertThat(LaufstandWortformen.FERTIG_BIS).containsExactly("fertig bis ", "done up to ");
   }
 
@@ -140,7 +140,7 @@ class LaufstandWortformenTest {
     assertThat(LaufstandWortformen.ZULETZT).containsExactly("zuletzt ", "last ");
     assertThat(LaufstandWortformen.ALS_NAECHSTES).containsExactly("Als Nächstes:", "Next:");
     assertThat(LaufstandWortformen.PROTOKOLL).containsExactly("Protokoll:", "Log:");
-    assertThat(LaufstandWortformen.PLAN_REVIEW).containsExactly("Plan-Review:", "Plan review:");
+    assertThat(LaufstandWortformen.PLAN_REVIEW).containsExactly("Plan-Review:");
   }
 
   @Test
@@ -171,8 +171,10 @@ class LaufstandWortformenTest {
   void derWertNachEinemZeilenanfangInBeidenFormen() {
     assertThat(LaufstandWortformen.wert(LaufstandWortformen.PLAN_REVIEW, "Plan-Review: fable"))
         .contains(" fable");
-    assertThat(LaufstandWortformen.wert(LaufstandWortformen.PLAN_REVIEW, "Plan review:fable"))
-        .contains("fable");
+    assertThat(LaufstandWortformen.wert(LaufstandWortformen.PROTOKOLL, "Log:x.log"))
+        .contains("x.log");
+    assertThat(LaufstandWortformen.wert(LaufstandWortformen.PLAN_REVIEW, "Plan review: fable"))
+        .isEmpty();
     assertThat(LaufstandWortformen.wert(LaufstandWortformen.PLAN_REVIEW, "Kein Plan-Review: x"))
         .isEmpty();
   }

@@ -14,9 +14,12 @@ import java.util.regex.Pattern;
  * Die Lesetabelle des Laufstands in deutscher und englischer Form (Issue #1590, Plan #1582 A5, A6,
  * E1, E12) — die einzige Stelle des Backends, an der die Wortformen des Laufstands stehen.
  *
- * <p>Gelesen werden beide Formen, gespeicherte Laufstände bleiben unberührt (A6). Die englischen
- * Formen folgen dem Glossar des Kits ({@code docs/en/glossar.md}) und den englischen Ziel-Labels;
- * sie sind eine Vorlage für Kit-Plan #1420 (E1). Jede Liste trägt die deutsche Form zuerst.
+ * <p>Gelesen werden beide Formen, gespeicherte Laufstände bleiben unberührt (A6). Die Marker des
+ * Laufstands ({@link #ANKER}, {@link #ZIEL}, {@link #PRUEFER}, {@link #GRENZE}, {@link #PROTOKOLL},
+ * {@link #PLAN_REVIEW}) folgen dem Namen-Register des Kits ({@code kit/board/namen.mjs}, {@code
+ * MARKER}; Issue #1599). Die übrigen englischen Formen folgen dem Glossar des Kits ({@code
+ * docs/en/glossar.md}) und den englischen Ziel-Labels; sie sind eine Vorlage für Kit-Plan #1420
+ * (E1). Jede Liste trägt die deutsche Form zuerst.
  */
 final class LaufstandWortformen {
 
@@ -30,7 +33,7 @@ final class LaufstandWortformen {
   static final List<String> PRUEFER = List.of("Prüfer:", "Reviewers:");
 
   /** Die Zeile der Projektgrenze. */
-  static final List<String> GRENZE = List.of("Grenze:", "Boundary:");
+  static final List<String> GRENZE = List.of("Grenze:", "Limit:");
 
   /** Der Kopf einer Kette, die ihr Ziel erreicht hat. */
   static final List<String> FERTIG_BIS = List.of("fertig bis ", "done up to ");
@@ -50,8 +53,10 @@ final class LaufstandWortformen {
   /** Die Zeile mit dem Pfad des Protokolls. */
   static final List<String> PROTOKOLL = List.of("Protokoll:", "Log:");
 
-  /** Der Prüfvermerk eines Plans — mit Wert gilt der Plan als geprüft. */
-  static final List<String> PLAN_REVIEW = List.of("Plan-Review:", "Plan review:");
+  /**
+   * Der Prüfvermerk eines Plans — mit Wert gilt der Plan als geprüft; in beiden Sprachen gleich.
+   */
+  static final List<String> PLAN_REVIEW = List.of("Plan-Review:");
 
   /** Die Werte der Zeile {@link #ZIEL} und die Station, die sie markieren. */
   private static final Map<String, ProgressStage> ZIELE =
