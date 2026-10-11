@@ -994,15 +994,19 @@ describe('parseNightRunLog — englisches Protokoll wie sein deutsches Gegenstue
     })
   }
 
-  const de = parseNightRunLog(protokollDe)
-  const en = parseNightRunLog(protokollEn)
+  // Gedeutet wird erst im Test, nicht beim Sammeln (Issue #1600): Wirft die Deutung, scheitert
+  // sonst die ganze Datei beim Sammeln, kein Test wird rot, und die Mutationspruefung zaehlt den
+  // werfenden Mutanten als ueberlebt.
+  const deuteBeide = () => ({ de: parseNightRunLog(protokollDe), en: parseNightRunLog(protokollEn) })
 
   it('deutet beide Protokolle zu denselben Laeufen, Zustaenden und Rohzeilen je Paket', () => {
+    const { de, en } = deuteBeide()
     expect(en.dryRunCount).toBe(de.dryRunCount)
     expect(en.runs.map(zeilennummern(protokollEn))).toEqual(de.runs.map(zeilennummern(protokollDe)))
   })
 
   it('deckt jede Deutung ab: Probelauf, alle Zustaende, Fehlerklassen und Lauf-Abbruch', () => {
+    const { de } = deuteBeide()
     expect(de.dryRunCount).toBe(1)
     expect(de.runs.map((r) => r.mode)).toEqual(['IMPLEMENTATION', 'IMPLEMENTATION', 'REVIEW'])
     expect(de.runs[2].stage).toBe('issue')
@@ -1031,6 +1035,7 @@ describe('parseNightRunLog — englisches Protokoll wie sein deutsches Gegenstue
   })
 
   it('zaehlt in beiden Sprachen genau die eine unbekannte Zeile als ungedeutet', () => {
+    const { de, en } = deuteBeide()
     expect(de.runs.map((r) => r.unparsedCount)).toEqual([1, 0, 0])
     expect(en.runs.map((r) => r.unparsedCount)).toEqual([1, 0, 0])
     expect(en.runs[0].unparsedSample).toEqual(['Completely unknown runner line from an older version'])
