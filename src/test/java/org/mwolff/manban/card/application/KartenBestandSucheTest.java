@@ -166,6 +166,37 @@ class KartenBestandSucheTest {
   }
 
   @Test
+  void vorhaben_entscheidetDerTyp_nichtDieErsteKarteMitDerNummer() {
+    // Doppelte Nummern kommen im Bestand nicht vor; hier zeigen sie, dass die Nummer allein nicht
+    // genügt und die erste Karte der Liste nicht das Vorhaben ist.
+    Card gleicheNummer = karte(5L, 10, "Paket");
+    Card epic = karte(1L, 10, "Vorhaben", CardType.EPIC, null, null, false, T0, null);
+    Card wurzel = karte(2L, 11, "Wurzel", CardType.CARD, 1L, null, false, T0, null);
+
+    Seite seite =
+        suche(
+            List.of(gleicheNummer, epic, wurzel),
+            new Anfrage(null, Set.of(), 10, null, null, null, 50));
+
+    assertThat(nummern(seite)).containsExactly(11);
+  }
+
+  @Test
+  void vorhaben_entscheidetDieNummer_nichtDasErsteVorhaben() {
+    Card anderes = karte(1L, 20, "Anderes", CardType.EPIC, null, null, false, T0, null);
+    Card epic = karte(2L, 10, "Vorhaben", CardType.EPIC, null, null, false, T0, null);
+    Card kindDesAnderen = karte(3L, 21, "Fremd", CardType.CARD, 1L, null, false, T0, null);
+    Card wurzel = karte(4L, 11, "Wurzel", CardType.CARD, 2L, null, false, T0, null);
+
+    Seite seite =
+        suche(
+            List.of(anderes, epic, kindDesAnderen, wurzel),
+            new Anfrage(null, Set.of(), 10, null, null, null, 50));
+
+    assertThat(nummern(seite)).containsExactly(11);
+  }
+
+  @Test
   void vorhaben_nummerOhneVorhaben_liefertLeereListe() {
     Card keinVorhaben = karte(1L, 10, "Paket");
     Card kind = karte(2L, 11, "Kind", CardType.CARD, 1L, null, false, T0, null);
