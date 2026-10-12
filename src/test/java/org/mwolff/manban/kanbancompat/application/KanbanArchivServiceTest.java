@@ -130,8 +130,8 @@ class KanbanArchivServiceTest {
     assertThat(detail.movedToDoneAt()).isEqualTo(ERLEDIGT);
     assertThat(detail.comments())
         .containsExactly(
-            new Comment(5L, "Manne", "## Review", erster),
-            new Comment(6L, "Nachtlauf", "## Abschluss", zweiter));
+            new Comment(5L, "Manne", "## Review", erster, "SESSION", null, null),
+            new Comment(6L, "Nachtlauf", "## Abschluss", zweiter, "TOKEN", "kit", "opus"));
   }
 
   @Test

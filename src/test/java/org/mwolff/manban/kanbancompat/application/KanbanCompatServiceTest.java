@@ -1243,21 +1243,35 @@ class KanbanCompatServiceTest {
         .thenReturn(
             List.of(
                 new CommentService.CommentView(
-                    9L, 42L, 3L, "Anna", "Erster", first, first, null, null, null),
+                    9L,
+                    42L,
+                    3L,
+                    "Anna",
+                    "Erster",
+                    first,
+                    first,
+                    "TOKEN",
+                    "kit-nacht",
+                    "claude-opus-5-5"),
                 new CommentService.CommentView(
                     10L, 42L, 4L, "Bert", "Zweiter", second, second, null, null, null)));
 
     // When
     List<KanbanCompatService.Comment> result = service.listComments(bound(), 42L);
 
-    // Then: Reihenfolge und Feldabbildung bleiben erhalten
+    // Then: Reihenfolge und Feldabbildung samt Herkunft bleiben erhalten (Issue #1623)
     assertThat(result)
         .extracting(
             KanbanCompatService.Comment::id,
             KanbanCompatService.Comment::author,
             KanbanCompatService.Comment::body,
-            KanbanCompatService.Comment::createdAt)
-        .containsExactly(tuple(9L, "Anna", "Erster", first), tuple(10L, "Bert", "Zweiter", second));
+            KanbanCompatService.Comment::createdAt,
+            KanbanCompatService.Comment::origin,
+            KanbanCompatService.Comment::tokenName,
+            KanbanCompatService.Comment::agent)
+        .containsExactly(
+            tuple(9L, "Anna", "Erster", first, "TOKEN", "kit-nacht", "claude-opus-5-5"),
+            tuple(10L, "Bert", "Zweiter", second, null, null, null));
   }
 
   @Test
@@ -1344,9 +1358,9 @@ class KanbanCompatServiceTest {
 
   @Test
   void listComments_throwsCardNotFound_whenCardNotOnBoard() {
-    // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
-    // (Mutant), würden Kommentare fremder Karten lesbar.
-    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(42L, BOARD);
+    // Given: der Lese-Guard der card-Fassade schlaegt an (fremdes Board oder Papierkorb, Issue
+    // #1623). Fällt der Aufruf weg (Mutant), würden Kommentare fremder Karten lesbar.
+    doThrow(new CardNotFoundException()).when(ingest).requireReadableOnBoard(42L, BOARD);
 
     // When / Then
     KanbanPrincipal principal = bound();
@@ -1372,9 +1386,9 @@ class KanbanCompatServiceTest {
                     "Nachtlauf",
                     "claude-opus-5",
                     null,
-                    null),
+                    "Manne"),
                 new CardService.ActivityView(
-                    10L, null, "MOVED", "Verschoben", second, null, null, null, null, null)));
+                    10L, null, "MOVED", "Verschoben", second, null, null, null, "READY", null)));
 
     // When
     List<KanbanCompatService.Activity> result = service.listActivity(bound(), 42L);
@@ -1389,10 +1403,22 @@ class KanbanCompatServiceTest {
             KanbanCompatService.Activity::createdAt,
             KanbanCompatService.Activity::origin,
             KanbanCompatService.Activity::tokenName,
-            KanbanCompatService.Activity::agent)
+            KanbanCompatService.Activity::agent,
+            KanbanCompatService.Activity::columnKey,
+            KanbanCompatService.Activity::actorName)
         .containsExactly(
-            tuple(9L, 3L, "CREATED", "Angelegt", first, "TOKEN", "Nachtlauf", "claude-opus-5"),
-            tuple(10L, null, "MOVED", "Verschoben", second, null, null, null));
+            tuple(
+                9L,
+                3L,
+                "CREATED",
+                "Angelegt",
+                first,
+                "TOKEN",
+                "Nachtlauf",
+                "claude-opus-5",
+                null,
+                "Manne"),
+            tuple(10L, null, "MOVED", "Verschoben", second, null, null, null, "READY", null));
   }
 
   @Test
@@ -1405,9 +1431,9 @@ class KanbanCompatServiceTest {
 
   @Test
   void listActivity_throwsCardNotFound_whenCardNotOnBoard() {
-    // Given: der Board-Guard der card-Fassade schlaegt an. Fällt der requireOnBoard-Aufruf weg
-    // (Mutant), würde der Verlauf fremder Karten lesbar.
-    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(42L, BOARD);
+    // Given: der Lese-Guard der card-Fassade schlaegt an (fremdes Board oder Papierkorb, Issue
+    // #1623). Fällt der Aufruf weg (Mutant), würde der Verlauf fremder Karten lesbar.
+    doThrow(new CardNotFoundException()).when(ingest).requireReadableOnBoard(42L, BOARD);
 
     // When / Then
     KanbanPrincipal principal = bound();

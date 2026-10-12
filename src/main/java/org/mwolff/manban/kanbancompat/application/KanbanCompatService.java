@@ -421,15 +421,25 @@ public class KanbanCompatService {
    * <p>Gegenstück zu {@link #comment}: Ohne diesen Lesepfad waren über die Schnittstelle
    * geschriebene Kommentare (Abschlussberichte, Review-Befunde) für jedes Werkzeug unsichtbar, das
    * ausschließlich über kanbancompat liest. Die Zugriffskontrolle läuft wie bei den übrigen
-   * Endpoints über den Board-Guard der card-Fassade und die Mitgliedschaftsprüfung der
-   * Kommentar-Fassade — ein Nichtmitglied bekommt dadurch 404 statt 403.
+   * Endpoints über den Lese-Guard der card-Fassade und die Mitgliedschaftsprüfung der
+   * Kommentar-Fassade — ein Nichtmitglied bekommt dadurch 404 statt 403. Der Lese-Guard lässt
+   * archivierte Karten durch und sperrt Karten im Papierkorb (Issue #1623).
    */
   @Transactional(readOnly = true)
   public List<Comment> listComments(KanbanPrincipal principal, long cardId) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireReadableOnBoard(cardId, boardId);
     return commentService.list(principal.userId(), cardId).stream()
-        .map(c -> new Comment(c.id(), c.authorName(), c.body(), c.createdAt()))
+        .map(
+            c ->
+                new Comment(
+                    c.id(),
+                    c.authorName(),
+                    c.body(),
+                    c.createdAt(),
+                    c.origin(),
+                    c.tokenName(),
+                    c.agent()))
         .toList();
   }
 
@@ -471,13 +481,13 @@ public class KanbanCompatService {
    * <p>Der Weg über die Fassade {@link CardService#listActivityViews} ist die einzige zulässige
    * Kante: Die Domänenschicht des card-Moduls ist modulintern (ArchUnit-Regel), dieses Modul darf
    * ihre Typen nicht importieren. Die Zugriffskontrolle läuft wie bei {@link #listComments} über
-   * den Board-Guard der card-Fassade und deren Mitgliedschaftsprüfung — ein Nichtmitglied bekommt
-   * dadurch 404 statt 403.
+   * den Lese-Guard der card-Fassade und deren Mitgliedschaftsprüfung — ein Nichtmitglied bekommt
+   * dadurch 404 statt 403, eine Karte im Papierkorb ebenso (Issue #1623).
    */
   @Transactional(readOnly = true)
   public List<Activity> listActivity(KanbanPrincipal principal, long cardId) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireReadableOnBoard(cardId, boardId);
     return cardService.listActivityViews(principal.userId(), cardId).stream()
         .map(
             a ->
@@ -489,7 +499,9 @@ public class KanbanCompatService {
                     a.createdAt(),
                     a.origin(),
                     a.tokenName(),
-                    a.agent()))
+                    a.agent(),
+                    a.columnKey(),
+                    a.actorName()))
         .toList();
   }
 
@@ -663,7 +675,22 @@ public class KanbanCompatService {
       @Schema(description = "Text in Markdown.", example = "## Laufstand\nUmsetzung läuft.")
           String body,
       @Schema(description = "Zeitpunkt der Anlage.", example = "2026-10-05T13:17:38Z")
-          Instant createdAt) {}
+          Instant createdAt,
+      @Schema(
+              description =
+                  "Herkunft des Kommentars: SESSION (Oberfläche) oder TOKEN (Projekt-Zugang);"
+                      + " null heißt Herkunft unbekannt.",
+              example = "TOKEN")
+          @Nullable String origin,
+      @Schema(
+              description = "Name des Projekt-Zugangs bei Herkunft TOKEN; sonst null.",
+              example = "kit-nacht")
+          @Nullable String tokenName,
+      @Schema(
+              description =
+                  "Vom Werkzeug gemeldetes Modell (Header X-Agent-Model); null ohne Angabe.",
+              example = "claude-opus-5-5")
+          @Nullable String agent) {}
 
   /**
    * Ein Eintrag des Aktivitätsverlaufs eines Items (#876). Feldgleich mit der Antwort von {@code
@@ -682,13 +709,28 @@ public class KanbanCompatService {
       @Schema(description = "Zeitpunkt der Änderung.", example = "2026-10-05T13:17:37Z")
           Instant createdAt,
       @Schema(
-              description = "Herkunft der Änderung: SESSION (Oberfläche) oder TOKEN.",
+              description =
+                  "Herkunft der Änderung: SESSION (Oberfläche) oder TOKEN; null heißt Herkunft"
+                      + " unbekannt.",
               example = "TOKEN")
           @Nullable String origin,
       @Schema(description = "Name des Tokens bei Herkunft TOKEN.", example = "Nachtlauf")
           @Nullable String tokenName,
       @Schema(description = "Vom Aufrufer gemeldetes Agenten-Modell.", example = "claude-opus-5-5")
-          @Nullable String agent) {}
+          @Nullable String agent,
+      @Schema(
+              description =
+                  "Spaltenschlüssel der Zielspalte (BACKLOG, READY, …), nur bei MOVED und ohne"
+                      + " Rückfall auf BACKLOG: Eine Zielspalte ohne Schlüssel und ein älterer"
+                      + " Eintrag mit eigenem Spaltennamen tragen keinen.",
+              example = "READY")
+          @Nullable String columnKey,
+      @Schema(
+              description =
+                  "Anzeigename der auslösenden Person; bei Herkunft TOKEN der Besitzer des"
+                      + " Tokens, die Herkunft selbst steht in tokenName.",
+              example = "Manne")
+          @Nullable String actorName) {}
 
   /**
    * Ergebnis des Ingests: {@code created=false}, wenn ein {@code externalKey} auf eine bereits

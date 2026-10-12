@@ -247,7 +247,15 @@ class KanbanCompatControllerTest {
   void comments_withBoundPrincipal_delegates() {
     // Given
     List<Comment> comments =
-        List.of(new Comment(9L, "Anna", "Hallo", Instant.parse("2026-01-01T10:00:00Z")));
+        List.of(
+            new Comment(
+                9L,
+                "Anna",
+                "Hallo",
+                Instant.parse("2026-01-01T10:00:00Z"),
+                "TOKEN",
+                "kit-nacht",
+                "claude-opus-5-5"));
     when(service.listComments(PRINCIPAL, 8L)).thenReturn(comments);
 
     // When
@@ -270,7 +278,9 @@ class KanbanCompatControllerTest {
                 Instant.parse("2026-01-01T10:00:00Z"),
                 "TOKEN",
                 "Nachtlauf",
-                "claude-opus-5"));
+                "claude-opus-5",
+                null,
+                "Manne"));
     when(service.listActivity(PRINCIPAL, 8L)).thenReturn(activity);
 
     // When
