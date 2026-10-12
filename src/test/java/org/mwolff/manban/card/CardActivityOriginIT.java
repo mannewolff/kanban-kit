@@ -8,7 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.servlet.http.Cookie;
+import java.util.List;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
@@ -116,8 +118,18 @@ class CardActivityOriginIT extends AbstractIntegrationTest {
             .getResponse()
             .getContentAsString();
 
+    // Die Zusatzfelder des Werkzeugzugangs (Issue #1621, #1623) gibt es nur dort.
+    JsonNode kanban = json.readTree(viaKanban);
+    JsonNode created = kanban.get(0);
+    assertThat(created.get("type").asText()).isEqualTo("CREATED");
+    assertThat(created.get("columnKey").isNull()).isTrue();
+    assertThat(created.get("actorName").asText()).isEqualTo("P");
+    for (JsonNode eintrag : kanban) {
+      ((ObjectNode) eintrag).remove(List.of("columnKey", "actorName"));
+    }
+
     // Gleiche Felder, gleiche Werte: Der neue Weg ist ein Ersatz, keine zweite Wahrheit.
-    assertThat(json.readTree(viaKanban)).isEqualTo(json.readTree(viaCards));
+    assertThat(kanban).isEqualTo(json.readTree(viaCards));
   }
 
   private String boundToken(Cookie session, long projectId, long boardId, String name)

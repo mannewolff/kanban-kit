@@ -52,7 +52,10 @@ class StandardLabelsIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[0].farbe").value("#6a1b9a"))
         .andExpect(jsonPath("$[1].name").value("kit:carry-through"))
         .andExpect(jsonPath("$[1].gruppe").value("Kit"))
-        .andExpect(jsonPath("$[31].name").value("planreview:2"));
+        .andExpect(jsonPath("$[5].name").value("kit:clarify"))
+        .andExpect(jsonPath("$[6].name").value("kit:geklaert"))
+        .andExpect(jsonPath("$[7].name").value("kit:clarified"))
+        .andExpect(jsonPath("$[33].name").value("planreview:2"));
   }
 
   @Test
