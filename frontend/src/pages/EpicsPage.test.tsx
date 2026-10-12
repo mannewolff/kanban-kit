@@ -235,7 +235,7 @@ describe('EpicsPage', () => {
     ])
     mEpicTree.epicTree.mockResolvedValue([
       {
-        number: 3, title: 'Kind', type: 'CARD', derivedFrom: null, depth: 0, done: false,
+        number: 3, title: 'Kind', type: 'CARD', derivedFrom: null, depth: 0, done: false, inReview: false,
         blocked: false, dependencies: [], externalDependencies: [], externalOrigin: false,
         broken: false, labels: [],
       },
@@ -1131,7 +1131,7 @@ describe('EpicsPage', () => {
       memberNumbers: [3], rootNumbers: [3], requirementCardNumber: null,
     }
     const baumZeile = {
-      number: 3, title: 'Kind', type: 'CARD', derivedFrom: null, depth: 0, done: false,
+      number: 3, title: 'Kind', type: 'CARD', derivedFrom: null, depth: 0, done: false, inReview: false,
       blocked: false, dependencies: [], externalDependencies: [], externalOrigin: false,
       broken: false, labels: [],
     }

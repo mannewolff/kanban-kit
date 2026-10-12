@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
@@ -144,7 +145,7 @@ class DerivationTreeTest {
    * die Rechnung, nicht den Einstieg.
    */
   private List<DerivationNodeView> tree(List<Card> boardCards) {
-    List<Card> mitgliederUndVorhaben = new java.util.ArrayList<>();
+    List<Card> mitgliederUndVorhaben = new ArrayList<>();
     mitgliederUndVorhaben.add(
         new Card(
             VORHABEN,
@@ -288,6 +289,27 @@ class DerivationTreeTest {
 
     assertThat(baum).filteredOn(n -> n.number() == 2).allMatch(DerivationNodeView::done);
     assertThat(baum).noneMatch(DerivationNodeView::blocked);
+  }
+
+  @Test
+  void in_review_folgt_genau_dem_status_in_review() {
+    // Issue #1608: Der gelbe Haken im Herkunftsbaum haengt allein an IN_REVIEW. Jeder andere
+    // Status, auch DONE, und eine Karte ohne Status (Vorhaben, Dokumentarten) tragen ihn nicht.
+    List<Card> karten = new ArrayList<>();
+    karten.add(card(1L, 1, null));
+    karten.add(card(2L, 2, 1L).withStatus(CardStatus.IN_REVIEW));
+    int nummer = 3;
+    for (CardStatus status : CardStatus.values()) {
+      if (status != CardStatus.IN_REVIEW) {
+        karten.add(card(nummer, nummer, 1L).withStatus(status));
+        nummer++;
+      }
+    }
+    List<DerivationNodeView> baum = tree(karten);
+
+    assertThat(baum).filteredOn(n -> n.number() == 2).allMatch(DerivationNodeView::inReview);
+    assertThat(baum).filteredOn(n -> n.number() != 2).noneMatch(DerivationNodeView::inReview);
+    assertThat(baum).hasSize(2 + CardStatus.values().length - 1);
   }
 
   @Test

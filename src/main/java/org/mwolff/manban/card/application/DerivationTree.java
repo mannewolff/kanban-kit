@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.EpicService.DerivationNodeView;
 import org.mwolff.manban.card.domain.Card;
+import org.mwolff.manban.card.domain.CardStatus;
 
 /**
  * Berechnet den Herkunftsbaum eines Boards (Issue #609): aus der flachen Kartenmenge und ihren
@@ -183,6 +184,7 @@ final class DerivationTree {
         herkunftsnummer(c, ctx),
         tiefe,
         c.movedToDoneAt() != null,
+        c.status() == CardStatus.IN_REVIEW,
         blocked,
         List.copyOf(intern),
         List.copyOf(extern),

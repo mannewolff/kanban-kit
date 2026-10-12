@@ -53,12 +53,13 @@ function directChildren(rows: readonly DerivationNode[], index: number): Derivat
 }
 
 /** Was die Hakenspalte einer Zeile aussagt — oder `null`, wenn sie leer bleibt. */
-export type HakenArt = 'erledigt' | 'abgearbeitet' | null
+export type HakenArt = 'erledigt' | 'inReview' | 'abgearbeitet' | null
 
 /**
  * Die Regel der Hakenspalte (Issue #985) als reine Funktion — ohne Rendering prüfbar.
  *
- * <p>Erledigt ist eine Karte, die auf Done steht. **Abgearbeitet** ist ein Planungsdokument, aus
+ * <p>Erledigt ist eine Karte, die auf Done steht. **In review** ist eine Karte mit dem Status In
+ * review — implementiert, aber noch nicht abgenommen (Issue #1608); Done hat Vorrang. **Abgearbeitet** ist ein Planungsdokument, aus
  * dem der nächste Schritt entstanden ist: ein `[Fachlich]` mit mindestens einem `[Plan]` darunter,
  * ein `[Plan]` mit mindestens einem Arbeitspaket darunter. Gezählt werden nur **direkte** Kinder —
  * Plan und Arbeitspakete hängen direkt an ihrem Vorgänger, ein Dokument zwei Ebenen tiefer gehört
@@ -71,6 +72,9 @@ export function hakenArt(rows: readonly DerivationNode[], index: number, kitName
   const zeile = rows[index]
   if (zeile.done) {
     return 'erledigt'
+  }
+  if (zeile.inReview) {
+    return 'inReview'
   }
   const art = artAusTitel(kitNamen, zeile.title)
   if (art === 'FACHLICH') {
@@ -86,13 +90,16 @@ export function hakenArt(rows: readonly DerivationNode[], index: number, kitName
 /**
  * Was die Hakenspalte zeigt: der Haken, oder — solange das Namen-Register lädt oder wenn es fehlt —
  * der Hinweis darauf an genau der Stelle, die ein Präfix braucht (Plan #1582, E10). Eine erledigte
- * Karte braucht keins: Ihren Haken setzt die Spalte, nicht der Titel.
+ * Karte und eine in review brauchen keins: Ihren Haken setzt der Status, nicht der Titel.
  */
 type Hakenspalte = HakenArt | 'laden' | 'fehler'
 
 function hakenspalte(rows: readonly DerivationNode[], index: number, kitNamen: KitNamenZustand): Hakenspalte {
   if (rows[index].done) {
     return 'erledigt'
+  }
+  if (rows[index].inReview) {
+    return 'inReview'
   }
   return kitNamen.status === 'fertig' ? hakenArt(rows, index, kitNamen.daten) : kitNamen.status
 }
@@ -361,7 +368,7 @@ function Haken({ art }: Readonly<{ art: Hakenspalte }>) {
         width: 14,
         flexShrink: 0,
         textAlign: 'center',
-        color: art === 'laden' || art === 'fehler' ? 'text.secondary' : MELDER.gruen,
+        color: hakenFarbe(art),
         fontWeight: 600,
       }}
     >
@@ -371,12 +378,24 @@ function Haken({ art }: Readonly<{ art: Hakenspalte }>) {
 }
 
 /**
+ * Farbe des Hakens: Bernstein für „in review" — unterwegs, noch nicht abgenommen (Issue #1608) —,
+ * Grün für erledigt und abgearbeitet, gedämpft für Lade- und Fehlerhinweis.
+ */
+function hakenFarbe(art: Hakenspalte): string {
+  if (art === 'inReview') {
+    return MELDER.bernst
+  }
+  return art === 'laden' || art === 'fehler' ? 'text.secondary' : MELDER.gruen
+}
+
+/**
  * Zugänglicher Name und sichtbares Zeichen je Inhalt der Hakenspalte. Lade- und Fehlerhinweis
  * tragen dieselben Worte wie die Stufenleiste (Plan #1582, E10); sichtbar bleibt ein Zeichen, weil
  * die Spalte nur 14 px breit ist — der Name trägt die Aussage.
  */
 const HAKEN_ANZEIGE: Record<NonNullable<Hakenspalte> | 'leer', { name: string | undefined; zeichen: string }> = {
   erledigt: { name: 'erledigt', zeichen: '✓' },
+  inReview: { name: 'in review', zeichen: '✓' },
   abgearbeitet: { name: 'abgearbeitet', zeichen: '✓' },
   laden: { name: 'Kit-Namen werden geladen', zeichen: '…' },
   fehler: { name: 'Kit-Namen nicht ladbar', zeichen: '!' },

@@ -52,7 +52,7 @@ describe('cardsApi', () => {
   it('epicTree ruft GET /api/boards/{id}/epics/{epicId}/tree und liefert die geparste Antwort', async () => {
     const zeile = {
       number: 5, title: 'Karte', type: 'CARD' as const, derivedFrom: null, depth: 0,
-      done: false, blocked: false, dependencies: [], externalDependencies: [],
+      done: false, inReview: false, blocked: false, dependencies: [], externalDependencies: [],
       externalOrigin: false, broken: false,
     }
     const f = spyFetch(JSON.stringify([zeile]))
