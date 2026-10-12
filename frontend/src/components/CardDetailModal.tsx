@@ -41,15 +41,17 @@ import { ApiError, apiErrorMessage } from '../api/client'
 import { DerivationTree } from './DerivationTree'
 import { cardsApi as defaultCardsApi, type Card, type CardActivity, type CardByNumber, type CardDetail, type CardStatus, type DerivationNode } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
-import { useKitNamen } from '../api/kitNamen'
+import { artAusTitel, useKitNamen } from '../api/kitNamen'
 import type { NightRunsApi } from '../api/nightRuns'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
+import { AbnahmeSzenarienDialog } from './AbnahmeSzenarienDialog'
 import { Breadcrumbs } from './Breadcrumbs'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
+import { szenarienAus } from '../lib/abnahmeSzenarien'
 import { CardFields } from './CardFields'
 import { vorhabenFeld } from '../lib/cardEpic'
 import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
@@ -1318,6 +1320,18 @@ function CardDetailModalView({
   const [comments, setComments] = useState<Comment[]>([])
   // Das Namen-Register des Kits (Issue #1595): Titel-Präfixe und Labels der Stufenleiste.
   const kitNamen = useKitNamen()
+  // Die Szenarien der fachlichen Anforderung für die Abnahme von Hand (Issue #1629, Plan #1626).
+  const beschreibung = stand.description
+  const szenarien = useMemo(() => szenarienAus(beschreibung), [beschreibung])
+  const [abnahmeOffen, setAbnahmeOffen] = useState(false)
+  // Nur an einer fachlichen Anforderung mit Szenarien, nach dem Laden von Register und
+  // Beschreibung und nicht beim Bearbeiten (E4, E5). Keine Rechteprüfung: Die macht der Server (E6).
+  const zeigtAbnahme =
+    kitNamen.status === 'fertig' &&
+    artAusTitel(kitNamen.daten, stand.title) === 'FACHLICH' &&
+    beschreibungStatus === 'geladen' &&
+    !editing &&
+    szenarien.length > 0
   const [newComment, setNewComment] = useState('')
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editingBody, setEditingBody] = useState('')
@@ -1513,6 +1527,13 @@ function CardDetailModalView({
     }
   }
 
+  // Jede Abnahme ist ein neuer Kommentar (E11), vorne einsortiert wie bei `addComment`. Ein Fehler
+  // geht an den Dialog, der ihn zeigt und die Vermerke behält.
+  const schreibeAbnahme = async (text: string) => {
+    const created = await commentsApi.create(card.id, text)
+    setComments((c) => [created, ...c])
+  }
+
   const addComment = async () => {
     if (!newComment.trim()) return
     try {
@@ -1677,6 +1698,11 @@ function CardDetailModalView({
             {stand.title}
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
+          {zeigtAbnahme && (
+            <Button size="small" variant="outlined" onClick={() => setAbnahmeOffen(true)}>
+              Abnahme durchklicken
+            </Button>
+          )}
           {canEdit && !editing && (
             <Button
               size="small"
@@ -1914,6 +1940,14 @@ function CardDetailModalView({
         }
       />
     </Dialog>
+
+    <AbnahmeSzenarienDialog
+      open={abnahmeOffen}
+      titel={stand.title}
+      szenarien={szenarien}
+      onClose={() => setAbnahmeOffen(false)}
+      onAbschicken={schreibeAbnahme}
+    />
 
     {preview && (
       <AttachmentPreview

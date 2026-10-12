@@ -16,6 +16,7 @@ import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel } from '../test/cssRegel'
 import { KIT_NAMEN } from '../test/kitNamen'
+import { abnahmeKommentar, szenarienAus } from '../lib/abnahmeSzenarien'
 import { theme } from '../theme'
 
 vi.mock('../auth/AuthContext', () => ({
@@ -3232,5 +3233,141 @@ describe('CardDetailModal — bestätigter Kartenstand (#1328)', () => {
     expect(apis.cardsApi.update).toHaveBeenLastCalledWith(
       100, 'Aufgabe', '[ ] eins\n[x] zwei', [3, 4], undefined, null, null,
     )
+  })
+})
+
+describe('CardDetailModal — Abnahme durchklicken (Issue #1629)', () => {
+  const SZENARIEN = [
+    '## Szenarien',
+    '',
+    '### Knopf öffnet die Liste',
+    '- **Angenommen** eine fachliche Anforderung',
+    '- **Wenn** ich den Knopf klicke',
+    '- **Dann** sehe ich die Szenarien',
+    '',
+    '### Kommentar entsteht',
+    '- **Wenn** ich abschicke',
+    '- **Dann** steht der Kommentar an der Karte',
+  ].join('\n')
+  const SCENARIOS = ['## Scenarios', '', '### Button opens the list', '- **Given** a requirement', '- **Then** I see it'].join('\n')
+  const fachlich: Card = { ...card, title: '[Fachlich] Abnahme', description: SZENARIEN }
+  const knopfName = 'Abnahme durchklicken'
+
+  const oeffne = (c: Card) => {
+    const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...c })
+    render(<CardDetailModal card={c} canEdit onClose={vi.fn()} {...apis} />)
+    return apis
+  }
+
+  /** Wartet, bis die Beschreibung geladen ist — erst dann darf der Knopf erscheinen. */
+  async function beschreibungGeladen() {
+    const bearbeiten = await screen.findByRole('button', { name: 'Bearbeiten' })
+    await waitFor(() => expect(bearbeiten).toBeEnabled())
+  }
+
+  it('zeigt den Knopf an einer [Fachlich]-Karte mit Abschnitt ## Szenarien', async () => {
+    oeffne(fachlich)
+    expect(await screen.findByRole('button', { name: knopfName })).toBeInTheDocument()
+  })
+
+  it('zeigt den Knopf an einer [Requirement]-Karte mit Abschnitt ## Scenarios (E5)', async () => {
+    oeffne({ ...card, title: '[Requirement] Acceptance', description: SCENARIOS })
+    expect(await screen.findByRole('button', { name: knopfName })).toBeInTheDocument()
+  })
+
+  it('zeigt den Knopf nicht, solange die Beschreibung lädt', async () => {
+    const apis = makeApis()
+    apis.cardsApi.get.mockReturnValue(new Promise<never>(() => {}))
+    render(<CardDetailModal card={fachlich} canEdit onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: knopfName })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['fachliche Karte ohne Szenarien', { ...fachlich, description: '## Ziel\n\nEtwas.' }],
+    ['[Plan]-Karte', { ...fachlich, title: '[Plan] Abnahme' }],
+    ['gewöhnliche Karte', { ...fachlich, title: 'Abnahme' }],
+  ])('zeigt den Knopf nicht an einer %s', async (_, c: Card) => {
+    oeffne(c)
+    await beschreibungGeladen()
+    expect(screen.queryByRole('button', { name: knopfName })).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Knopf nicht im Bearbeitungsmodus', async () => {
+    oeffne(fachlich)
+    expect(await screen.findByRole('button', { name: knopfName })).toBeInTheDocument()
+    await klickeBearbeiten()
+    expect(await screen.findByRole('button', { name: 'Speichern' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: knopfName })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['solange das Namen-Register lädt', { status: 'laden' } as KitNamenZustand],
+    ['wenn das Namen-Register fehlschlägt', { status: 'fehler', fehler: new Error('weg') } as KitNamenZustand],
+  ])('zeigt den Knopf nicht, %s', async (_, zustand: KitNamenZustand) => {
+    kitNamen.zustand = zustand
+    oeffne(fachlich)
+    await beschreibungGeladen()
+    expect(screen.queryByRole('button', { name: knopfName })).not.toBeInTheDocument()
+  })
+
+  it('öffnet den Dialog mit dem Kartentitel und den Szenarien', async () => {
+    oeffne(fachlich)
+    fireEvent.click(await screen.findByRole('button', { name: knopfName }))
+
+    const dialog = within(await screen.findByRole('dialog', { name: 'Abnahme: [Fachlich] Abnahme' }))
+    expect(dialog.getByRole('heading', { name: '1. Knopf öffnet die Liste' })).toBeInTheDocument()
+    expect(dialog.getByRole('heading', { name: '2. Kommentar entsteht' })).toBeInTheDocument()
+  })
+
+  it('schreibt das Ergebnis als Kommentar, stellt ihn oben ein und bewegt nichts am Board (E11)', async () => {
+    const apis = oeffne(fachlich)
+    apis.commentsApi.create.mockResolvedValue(
+      { id: 3, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Abnahme-Ergebnis', createdAt: '', updatedAt: '' },
+    )
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: knopfName }))
+
+    const dialog = within(await screen.findByRole('dialog', { name: 'Abnahme: [Fachlich] Abnahme' }))
+    fireEvent.click(within(dialog.getByRole('group', { name: 'Vermerk zu Szenario 1' })).getByRole('button', { name: 'okay' }))
+    fireEvent.click(within(dialog.getByRole('group', { name: 'Vermerk zu Szenario 2' })).getByRole('button', { name: 'nicht okay' }))
+    fireEvent.change(dialog.getByLabelText('Notiz (optional)'), { target: { value: 'fehlt' } })
+    fireEvent.click(dialog.getByRole('button', { name: 'Ergebnis an den Fachplan schreiben' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Abnahme:/ })).not.toBeInTheDocument())
+    expect(apis.commentsApi.create).toHaveBeenCalledTimes(1)
+    const text = abnahmeKommentar(szenarienAus(SZENARIEN), [
+      { urteil: 'okay', notiz: '' },
+      { urteil: 'nicht okay', notiz: 'fehlt' },
+    ])
+    expect(text).toContain('2. **Kommentar entsteht** — nicht okay: fehlt')
+    expect(apis.commentsApi.create).toHaveBeenCalledWith(100, text)
+    const bodies = screen.getAllByTestId('comment-body')
+    expect(bodies[0]).toHaveTextContent('Abnahme-Ergebnis')
+    expect(bodies[1]).toHaveTextContent('Hallo')
+    expect(apis.commentsApi.list).toHaveBeenCalledTimes(1)
+    expect(apis.cardsApi.update).not.toHaveBeenCalled()
+    expect(apis.cardsApi.setStatus).not.toHaveBeenCalled()
+    expect(apis.cardsApi.addLabel).not.toHaveBeenCalled()
+    expect(apis.cardsApi.removeLabel).not.toHaveBeenCalled()
+    expect(apis.cardsApi.moveToIdeaStorage).not.toHaveBeenCalled()
+    expect(apis.cardsApi.openEpic).not.toHaveBeenCalled()
+  })
+
+  it('reicht einen Fehler an den Dialog weiter und behält die Vermerke (E6)', async () => {
+    const apis = oeffne(fachlich)
+    apis.commentsApi.create.mockRejectedValue(serverfehler('Keine Berechtigung'))
+    fireEvent.click(await screen.findByRole('button', { name: knopfName }))
+
+    const dialog = within(await screen.findByRole('dialog', { name: 'Abnahme: [Fachlich] Abnahme' }))
+    fireEvent.click(within(dialog.getByRole('group', { name: 'Vermerk zu Szenario 1' })).getByRole('button', { name: 'okay' }))
+    fireEvent.click(within(dialog.getByRole('group', { name: 'Vermerk zu Szenario 2' })).getByRole('button', { name: 'okay' }))
+    fireEvent.click(dialog.getByRole('button', { name: 'Ergebnis an den Fachplan schreiben' }))
+
+    expect(await dialog.findByText('Keine Berechtigung')).toBeInTheDocument()
+    expect(within(dialog.getByRole('group', { name: 'Vermerk zu Szenario 1' })).getByRole('button', { name: 'okay' }))
+      .toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getAllByTestId('comment-body')).toHaveLength(1)
   })
 })
