@@ -40,6 +40,16 @@ class CommentEntity {
   @Column(name = "run_started_at")
   private @Nullable Instant laufStart;
 
+  // Herkunft beim Anlegen (Issue #1620); nullable, V52 ohne Backfill.
+  @Column(name = "origin")
+  private @Nullable String origin;
+
+  @Column(name = "token_name")
+  private @Nullable String tokenName;
+
+  @Column(name = "agent")
+  private @Nullable String agent;
+
   protected CommentEntity() {
     // für JPA
   }
@@ -52,7 +62,10 @@ class CommentEntity {
       String body,
       Instant createdAt,
       Instant updatedAt,
-      @Nullable Instant laufStart) {
+      @Nullable Instant laufStart,
+      @Nullable String origin,
+      @Nullable String tokenName,
+      @Nullable String agent) {
     this.id = id;
     this.cardId = cardId;
     this.authorUserId = authorUserId;
@@ -61,6 +74,9 @@ class CommentEntity {
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
     this.laufStart = laufStart;
+    this.origin = origin;
+    this.tokenName = tokenName;
+    this.agent = agent;
   }
 
   @Nullable Long getId() {
@@ -93,5 +109,17 @@ class CommentEntity {
 
   @Nullable Instant getLaufStart() {
     return laufStart;
+  }
+
+  @Nullable String getOrigin() {
+    return origin;
+  }
+
+  @Nullable String getTokenName() {
+    return tokenName;
+  }
+
+  @Nullable String getAgent() {
+    return agent;
   }
 }

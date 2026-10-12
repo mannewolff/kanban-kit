@@ -19,7 +19,8 @@ class CommentControllerTest {
   private CommentController controller;
 
   private static CommentView comment() {
-    return new CommentView(1L, 5L, 3L, "Alice", "hello", Instant.EPOCH, Instant.EPOCH);
+    return new CommentView(
+        1L, 5L, 3L, "Alice", "hello", Instant.EPOCH, Instant.EPOCH, "SESSION", null, null);
   }
 
   @BeforeEach

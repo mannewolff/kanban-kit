@@ -96,8 +96,19 @@ class KanbanArchivServiceTest {
     when(commentService.list(USER, 77L))
         .thenReturn(
             List.of(
-                new CommentView(5L, 77L, 3L, "Manne", "## Review", erster, erster),
-                new CommentView(6L, 77L, null, "Nachtlauf", "## Abschluss", zweiter, zweiter)));
+                new CommentView(
+                    5L, 77L, 3L, "Manne", "## Review", erster, erster, "SESSION", null, null),
+                new CommentView(
+                    6L,
+                    77L,
+                    null,
+                    "Nachtlauf",
+                    "## Abschluss",
+                    zweiter,
+                    zweiter,
+                    "TOKEN",
+                    "kit",
+                    "opus")));
 
     ItemDetail detail = service.itemByNumber(bound(), 42);
 

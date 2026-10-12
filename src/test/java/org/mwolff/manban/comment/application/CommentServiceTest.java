@@ -19,14 +19,20 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
+import org.mwolff.manban.card.application.ActorContext;
+import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.comment.domain.Comment;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
 
 /** Verhaltenstests der Kommentar-Use-Cases (Mockito an den Ports). */
+// PMD.TooManyMethods: je Use-Case und Regel ein kleiner @Test; mit der Herkunft (Issue #1620)
+// kamen die Stempel-Fälle dazu, die das Paket ausdrücklich hier verlangt.
+@SuppressWarnings("PMD.TooManyMethods")
 class CommentServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -36,10 +42,11 @@ class CommentServiceTest {
   private CardService cardService;
   private PermissionChecker permissions;
   private UserLookup users;
+  private ActorContext actor;
   private CommentService service;
 
   private static Comment comment(Long authorUserId) {
-    return new Comment(3L, 5L, authorUserId, "Ada", "Hallo", FIXED, FIXED, null);
+    return new Comment(3L, 5L, authorUserId, "Ada", "Hallo", FIXED, FIXED, null, null, null, null);
   }
 
   @BeforeEach
@@ -48,8 +55,10 @@ class CommentServiceTest {
     cardService = mock(CardService.class);
     permissions = mock(PermissionChecker.class);
     users = mock(UserLookup.class);
+    actor = mock(ActorContext.class);
+    when(actor.current()).thenReturn(ActorStamp.unknown());
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new CommentService(comments, cardService, permissions, users, clock);
+    service = new CommentService(comments, cardService, permissions, users, actor, clock);
     when(cardService.requireProjectId(5L)).thenReturn(1L);
   }
 
@@ -195,6 +204,109 @@ class CommentServiceTest {
   }
 
   @Test
+  void create_ueberSession_stempeltDieHerkunftSession() {
+    // Given (Issue #1620, A4): dieselbe Quelle wie der Verlauf — der ActorContext.
+    when(actor.current()).thenReturn(new ActorStamp(CardActivityOrigin.SESSION, null, null, null));
+    when(users.findById(1L)).thenReturn(Optional.of(new UserSummary(1L, "u@x.de", "Ada", true)));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    CommentService.CommentView view = service.create(1L, 5L, "Hallo");
+
+    // Then
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().origin()).isEqualTo("SESSION");
+    assertThat(captor.getValue().tokenName()).isNull();
+    assertThat(captor.getValue().agent()).isNull();
+    assertThat(view.origin()).isEqualTo("SESSION");
+  }
+
+  @Test
+  void create_ueberToken_stempeltHerkunftZugangsnameUndModell() {
+    // Given
+    when(actor.current())
+        .thenReturn(new ActorStamp(CardActivityOrigin.TOKEN, "kit-nacht", "claude-opus-5-5", LAUF));
+    when(users.findById(1L)).thenReturn(Optional.of(new UserSummary(1L, "u@x.de", "Ada", true)));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    CommentService.CommentView view = service.create(1L, 5L, "Hallo", LAUF);
+
+    // Then
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().origin()).isEqualTo("TOKEN");
+    assertThat(captor.getValue().tokenName()).isEqualTo("kit-nacht");
+    assertThat(captor.getValue().agent()).isEqualTo("claude-opus-5-5");
+    assertThat(view.origin()).isEqualTo("TOKEN");
+    assertThat(view.tokenName()).isEqualTo("kit-nacht");
+    assertThat(view.agent()).isEqualTo("claude-opus-5-5");
+  }
+
+  @Test
+  void create_ohneStempel_speichertKeineHerkunft() {
+    // Given (A6): fehlende Herkunft heißt unbekannt, nicht geraten — kein Rückfall auf SESSION.
+    when(users.findById(1L)).thenReturn(Optional.of(new UserSummary(1L, "u@x.de", "Ada", true)));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    CommentService.CommentView view = service.create(1L, 5L, "Hallo");
+
+    // Then
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().origin()).isNull();
+    assertThat(captor.getValue().tokenName()).isNull();
+    assertThat(captor.getValue().agent()).isNull();
+    assertThat(view.origin()).isNull();
+    assertThat(view.tokenName()).isNull();
+    assertThat(view.agent()).isNull();
+  }
+
+  @Test
+  void update_ueberToken_laesstDieSessionHerkunftUnveraendert() {
+    // Given: die Herkunft gehört dem Anlegen, nicht dem letzten Schreiber (Issue #1620).
+    Comment vorhanden =
+        new Comment(3L, 5L, 1L, "Ada", "Hallo", FIXED, FIXED, null, "SESSION", null, null);
+    when(comments.findById(3L)).thenReturn(Optional.of(vorhanden));
+    when(actor.current())
+        .thenReturn(new ActorStamp(CardActivityOrigin.TOKEN, "kit-nacht", "claude-opus-5-5", LAUF));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    CommentService.CommentView view = service.update(1L, 3L, "Geändert", LAUF);
+
+    // Then
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().origin()).isEqualTo("SESSION");
+    assertThat(captor.getValue().tokenName()).isNull();
+    assertThat(captor.getValue().agent()).isNull();
+    assertThat(view.origin()).isEqualTo("SESSION");
+  }
+
+  @Test
+  void list_liefertDieHerkunftInDerSicht() {
+    // Given
+    when(comments.findByCardId(5L))
+        .thenReturn(
+            List.of(
+                new Comment(
+                    3L, 5L, 1L, "Ada", "Hallo", FIXED, FIXED, null, "TOKEN", "kit", "opus")));
+
+    // When / Then
+    assertThat(service.list(1L, 5L))
+        .singleElement()
+        .satisfies(
+            v -> {
+              assertThat(v.origin()).isEqualTo("TOKEN");
+              assertThat(v.tokenName()).isEqualTo("kit");
+              assertThat(v.agent()).isEqualTo("opus");
+            });
+  }
+
+  @Test
   void update_persistsNewBody_whenAuthorEditsOwnComment() {
     // Given
     when(comments.findById(3L)).thenReturn(Optional.of(comment(1L)));
@@ -214,7 +326,17 @@ class CommentServiceTest {
     // Given: der Laufstand gehört dem letzten Schreiber (E3).
     Comment vorhanden =
         new Comment(
-            3L, 5L, 1L, "Ada", "Hallo", FIXED, FIXED, Instant.parse("2026-10-04T00:00:00Z"));
+            3L,
+            5L,
+            1L,
+            "Ada",
+            "Hallo",
+            FIXED,
+            FIXED,
+            Instant.parse("2026-10-04T00:00:00Z"),
+            null,
+            null,
+            null);
     when(comments.findById(3L)).thenReturn(Optional.of(vorhanden));
     when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
@@ -231,7 +353,8 @@ class CommentServiceTest {
   @Test
   void update_ueberschreibtDieKennungMitNull() {
     // Given: ein nicht ausgewiesener letzter Schreiber ist ein letzter Schreiber (E3).
-    Comment vorhanden = new Comment(3L, 5L, 1L, "Ada", "Hallo", FIXED, FIXED, LAUF);
+    Comment vorhanden =
+        new Comment(3L, 5L, 1L, "Ada", "Hallo", FIXED, FIXED, LAUF, null, null, null);
     when(comments.findById(3L)).thenReturn(Optional.of(vorhanden));
     when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
@@ -247,7 +370,8 @@ class CommentServiceTest {
   @Test
   void update_ohneKennung_setztDieKennungAufNull() {
     // Given: die dreistellige Signatur des Session-Wegs gibt null weiter (A3).
-    Comment vorhanden = new Comment(3L, 5L, 1L, "Ada", "Hallo", FIXED, FIXED, LAUF);
+    Comment vorhanden =
+        new Comment(3L, 5L, 1L, "Ada", "Hallo", FIXED, FIXED, LAUF, null, null, null);
     when(comments.findById(3L)).thenReturn(Optional.of(vorhanden));
     when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
 
@@ -356,9 +480,30 @@ class CommentServiceTest {
     when(comments.findLaufstaendeImProjekt(1L))
         .thenReturn(
             List.of(
-                new Comment(3L, 5L, 1L, "Ada", "## Laufstand\n\nplan fertig", FIXED, FIXED, LAUF),
                 new Comment(
-                    4L, 6L, null, "Kit", "## Laufstand\n\nreview begonnen", FIXED, FIXED, null)));
+                    3L,
+                    5L,
+                    1L,
+                    "Ada",
+                    "## Laufstand\n\nplan fertig",
+                    FIXED,
+                    FIXED,
+                    LAUF,
+                    null,
+                    null,
+                    null),
+                new Comment(
+                    4L,
+                    6L,
+                    null,
+                    "Kit",
+                    "## Laufstand\n\nreview begonnen",
+                    FIXED,
+                    FIXED,
+                    null,
+                    null,
+                    null,
+                    null)));
 
     // When / Then
     assertThat(service.laufstaendeImProjekt(1L))
@@ -373,8 +518,9 @@ class CommentServiceTest {
     when(comments.findFirstMatchPerCardOnBoard(1L, 10L, "Review"))
         .thenReturn(
             List.of(
-                new Comment(3L, 5L, 1L, "Ada", "Ein Review", FIXED, FIXED, null),
-                new Comment(4L, 6L, null, "Kit", "Review fertig", FIXED, FIXED, null)));
+                new Comment(3L, 5L, 1L, "Ada", "Ein Review", FIXED, FIXED, null, null, null, null),
+                new Comment(
+                    4L, 6L, null, "Kit", "Review fertig", FIXED, FIXED, null, null, null, null)));
 
     // When / Then
     assertThat(service.trefferAufBoard(2L, 1L, 10L, "Review"))
@@ -408,6 +554,9 @@ class CommentServiceTest {
         c.body(),
         c.createdAt(),
         c.updatedAt(),
-        c.laufStart());
+        c.laufStart(),
+        c.origin(),
+        c.tokenName(),
+        c.agent());
   }
 }

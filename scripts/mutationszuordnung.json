@@ -25,6 +25,7 @@
   "src/test/java/org/mwolff/manban/card/application/DerivedFromResolutionTest.java": ["src/main/java/org/mwolff/manban/card/application/DerivedFrom.java"],
   "src/test/java/org/mwolff/manban/card/application/KartenBestandSucheTextTest.java": ["src/main/java/org/mwolff/manban/card/application/KartenBestandSuche.java"],
   "src/test/java/org/mwolff/manban/card/application/RequirementCardResolutionTest.java": ["src/main/java/org/mwolff/manban/card/application/RequirementCard.java"],
+  "src/test/java/org/mwolff/manban/comment/infrastructure/CommentRepositoryIT.java": ["src/main/java/org/mwolff/manban/comment/infrastructure/persistence/CommentRepositoryAdapter.java", "src/main/java/org/mwolff/manban/comment/infrastructure/persistence/CommentEntity.java", "src/main/resources/db/migration/V52__comment_origin.sql"],
   "src/test/java/org/mwolff/manban/common/KitNamenErweiterungTest.java": ["src/main/java/org/mwolff/manban/common/KitNamen.java"],
   "src/test/java/org/mwolff/manban/config/DatabasePasswordStartupCheckContextTest.java": ["src/main/java/org/mwolff/manban/config/DatabasePasswordStartupCheck.java"],
   "src/test/java/org/mwolff/manban/config/OpenApiIT.java": ["src/main/java/org/mwolff/manban/kanbancompat/web/KanbanCompatController.java"],

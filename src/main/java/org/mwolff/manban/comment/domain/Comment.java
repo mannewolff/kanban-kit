@@ -16,6 +16,10 @@ import org.mwolff.manban.common.Identifiable;
  * @param updatedAt letzte Änderung
  * @param laufStart Laufkennung des letzten Schreibers aus dem Header {@code X-Night-Run} (Issue
  *     #1428, Plan #1423 E3); {@code null}, wenn er sich nicht ausgewiesen hat
+ * @param origin Herkunft beim Anlegen, {@code SESSION} oder {@code TOKEN} (Issue #1620); {@code
+ *     null} = unbekannt
+ * @param tokenName Name des Projekt-Zugangs bei Herkunft {@code TOKEN}; sonst {@code null}
+ * @param agent Modell-Selbstauskunft des Werkzeugs; {@code null}, wenn keine angegeben wurde
  */
 public record Comment(
     @Nullable Long id,
@@ -25,12 +29,28 @@ public record Comment(
     String body,
     Instant createdAt,
     Instant updatedAt,
-    @Nullable Instant laufStart)
+    @Nullable Instant laufStart,
+    @Nullable String origin,
+    @Nullable String tokenName,
+    @Nullable String agent)
     implements Identifiable {
 
-  /** Neuer Text vom Schreiber mit der Laufkennung {@code newLaufStart}; sie ersetzt die alte. */
+  /**
+   * Neuer Text vom Schreiber mit der Laufkennung {@code newLaufStart}; sie ersetzt die alte. Die
+   * Herkunft bleibt die des Anlegens.
+   */
   public Comment withBody(String newBody, @Nullable Instant newLaufStart) {
     return new Comment(
-        id, cardId, authorUserId, authorName, newBody, createdAt, updatedAt, newLaufStart);
+        id,
+        cardId,
+        authorUserId,
+        authorName,
+        newBody,
+        createdAt,
+        updatedAt,
+        newLaufStart,
+        origin,
+        tokenName,
+        agent);
   }
 }

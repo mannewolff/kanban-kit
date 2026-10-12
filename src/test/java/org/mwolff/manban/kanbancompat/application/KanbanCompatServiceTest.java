@@ -1242,8 +1242,10 @@ class KanbanCompatServiceTest {
     when(commentService.list(1L, 42L))
         .thenReturn(
             List.of(
-                new CommentService.CommentView(9L, 42L, 3L, "Anna", "Erster", first, first),
-                new CommentService.CommentView(10L, 42L, 4L, "Bert", "Zweiter", second, second)));
+                new CommentService.CommentView(
+                    9L, 42L, 3L, "Anna", "Erster", first, first, null, null, null),
+                new CommentService.CommentView(
+                    10L, 42L, 4L, "Bert", "Zweiter", second, second, null, null, null)));
 
     // When
     List<KanbanCompatService.Comment> result = service.listComments(bound(), 42L);
@@ -1263,7 +1265,10 @@ class KanbanCompatServiceTest {
     // Given: der Kommentar 9 haengt an der Karte 42
     Instant at = Instant.parse("2026-01-01T10:00:00Z");
     when(commentService.list(1L, 42L))
-        .thenReturn(List.of(new CommentService.CommentView(9L, 42L, 1L, "Anna", "Alt", at, at)));
+        .thenReturn(
+            List.of(
+                new CommentService.CommentView(
+                    9L, 42L, 1L, "Anna", "Alt", at, at, null, null, null)));
 
     // When
     service.updateComment(bound(), 42L, 9L, "Neu", null);
@@ -1277,7 +1282,10 @@ class KanbanCompatServiceTest {
     // Given: der Kommentar 9 haengt an der Karte 42 (Issue #1428)
     Instant at = Instant.parse("2026-01-01T10:00:00Z");
     when(commentService.list(1L, 42L))
-        .thenReturn(List.of(new CommentService.CommentView(9L, 42L, 1L, "Anna", "Alt", at, at)));
+        .thenReturn(
+            List.of(
+                new CommentService.CommentView(
+                    9L, 42L, 1L, "Anna", "Alt", at, at, null, null, null)));
 
     // When
     service.updateComment(bound(), 42L, 9L, "Neu", LAUF);
@@ -1292,7 +1300,10 @@ class KanbanCompatServiceTest {
     // (Mutant) ersetzte ein Aufruf ueber eine Karte des Boards einen Kommentar einer fremden.
     Instant at = Instant.parse("2026-01-01T10:00:00Z");
     when(commentService.list(1L, 42L))
-        .thenReturn(List.of(new CommentService.CommentView(10L, 42L, 1L, "Anna", "Alt", at, at)));
+        .thenReturn(
+            List.of(
+                new CommentService.CommentView(
+                    10L, 42L, 1L, "Anna", "Alt", at, at, null, null, null)));
 
     // When / Then
     KanbanPrincipal principal = bound();

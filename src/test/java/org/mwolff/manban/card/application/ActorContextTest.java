@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 
 /**
  * Unit-Test des Herkunfts-Stempels (#517).
@@ -30,5 +31,19 @@ class ActorContextTest {
   void unknown_returnsTheSameInstanceEveryTime() {
     // Konstante, kein neu erzeugter Stempel je Aufruf — die Aktivitätsschreibung ruft sie oft.
     assertThat(ActorStamp.unknown()).isSameAs(ActorStamp.unknown());
+  }
+
+  @Test
+  void originName_liefertDenKonstantennamenDerHerkunft() {
+    // Issue #1620: comment liest die Herkunft als Text, ohne card.domain zu berühren.
+    assertThat(new ActorStamp(CardActivityOrigin.SESSION, null, null, null).originName())
+        .isEqualTo("SESSION");
+    assertThat(new ActorStamp(CardActivityOrigin.TOKEN, "kit", "opus", null).originName())
+        .isEqualTo("TOKEN");
+  }
+
+  @Test
+  void originName_ohneHerkunft_istNull() {
+    assertThat(ActorStamp.unknown().originName()).isNull();
   }
 }

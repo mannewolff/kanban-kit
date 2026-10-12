@@ -39,5 +39,13 @@ public interface ActorContext {
     public static ActorStamp unknown() {
       return UNKNOWN;
     }
+
+    /**
+     * Konstantenname der Herkunft ({@code SESSION}, {@code TOKEN}) oder {@code null} ohne Herkunft
+     * — für Module, die {@code card.domain} nicht berühren dürfen (Issue #1620).
+     */
+    public @Nullable String originName() {
+      return origin == null ? null : origin.name();
+    }
   }
 }
