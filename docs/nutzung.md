@@ -707,8 +707,8 @@ mit dem festen Satz der Labels, die das claude-workflow-kit, die Laufsteuerung u
 [Stufenleiste](#karten-detail) erwarten, nach Gruppen und in ihrer Farbe:
 
 - **Kit:** `kit:durchziehen`, `kit:carry-through`, `kit:geschuetzt`, `kit:protected`,
-  `kit:klaeren`, `kit:clarify`, `kit:night`, `kit:nightrun`, `kit:pruefen`, `kit:check`,
-  `kit:nightplan`, `kit:nightreview`, `kit:nightissues`
+  `kit:klaeren`, `kit:clarify`, `kit:geklaert`, `kit:clarified`, `kit:night`, `kit:nightrun`,
+  `kit:pruefen`, `kit:check`, `kit:nightplan`, `kit:nightreview`, `kit:nightissues`
 - **Lauf:** `lauf:abgebrochen`, `run:aborted`, `lauf:laeuft`, `run:running`, `lauf:wartet`,
   `run:waiting`
 - **Review:** `review:offen`, `review:fertig`, `review:done`

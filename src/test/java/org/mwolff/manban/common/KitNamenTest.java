@@ -28,6 +28,7 @@ class KitNamenTest {
           new Zeile(
               Sache.GESCHUETZT, "kit:geschuetzt", "kit:protected", Schutz.NUR_MENSCH_NIMMT_AB),
           new Zeile(Sache.KLAEREN, "kit:klaeren", "kit:clarify", Schutz.NUR_MENSCH_NIMMT_AB),
+          new Zeile(Sache.GEKLAERT, "kit:geklaert", "kit:clarified", Schutz.KEINER),
           new Zeile(Sache.NIGHT, "kit:night", null, Schutz.NUR_MENSCH_SETZT),
           new Zeile(Sache.NIGHTRUN, "kit:nightrun", null, Schutz.NUR_MENSCH_SETZT),
           new Zeile(Sache.PRUEFEN, "kit:pruefen", "kit:check", Schutz.KEINER),
@@ -77,8 +78,20 @@ class KitNamenTest {
   }
 
   @Test
-  void standard_hatZwanzigSachen() {
-    assertThat(Sache.values()).hasSize(20);
+  void standard_hatEinundzwanzigSachen() {
+    assertThat(Sache.values()).hasSize(21);
+  }
+
+  @Test
+  void geklaert_traegtBeideNamen_undStehtHinterKlaeren() {
+    // Issue #1614: das Gegenstück zu kit:klaeren, wenn eine offene Frage beantwortet ist.
+    assertThat(KitNamen.STANDARD.sache("kit:geklaert")).contains(Sache.GEKLAERT);
+    assertThat(KitNamen.STANDARD.sache("kit:clarified")).contains(Sache.GEKLAERT);
+    assertThat(KitNamen.STANDARD.namen(Sache.GEKLAERT))
+        .containsExactly("kit:geklaert", "kit:clarified");
+    assertThat(Sache.GEKLAERT.schutz()).isEqualTo(Schutz.KEINER);
+    List<String> namen = KitNamen.STANDARD.alleNamen();
+    assertThat(namen.indexOf("kit:geklaert")).isEqualTo(namen.indexOf("kit:clarify") + 1);
   }
 
   @Test
@@ -127,7 +140,7 @@ class KitNamenTest {
     assertThat(KitNamen.STANDARD.alleNamen())
         .containsExactlyElementsOf(
             KitNamen.STANDARD.eintraege().stream().map(Eintrag::name).toList())
-        .hasSize(32)
+        .hasSize(34)
         .startsWith("kit:durchziehen", "kit:carry-through", "kit:geschuetzt")
         .endsWith("planreview:1", "planreview:2");
   }

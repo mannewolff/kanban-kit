@@ -37,6 +37,12 @@ class KitNamenControllerTest {
   }
 
   @Test
+  void geklaert_traegtBeideNamen() {
+    // Then
+    assertThat(namenDerSache("GEKLAERT")).containsExactly("kit:geklaert", "kit:clarified");
+  }
+
+  @Test
   void titelPraefixe_stehenJeArtInRegisterreihenfolge() {
     // Then
     assertThat(antwort.titelPraefixe())
