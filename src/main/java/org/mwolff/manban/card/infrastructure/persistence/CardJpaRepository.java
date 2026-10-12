@@ -30,6 +30,9 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
       "select distinct c.boardId from CardEntity c where c.type = 'EPIC' and c.deletedAt is null")
   List<Long> findBoardIdsWithEpics();
 
+  /** Karte nach ID ohne Papierkorb-Karten; archivierte eingeschlossen (Issue #1622). */
+  Optional<CardEntity> findByIdAndDeletedAtIsNull(Long id);
+
   List<CardEntity> findByProjectIdAndDeletedAtIsNull(Long projectId);
 
   // Herkunfts-Kinder: bewusst OHNE DeletedAtIsNull-Filter. Beim Aufraeumen des

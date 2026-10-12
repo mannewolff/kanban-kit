@@ -108,6 +108,11 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
   }
 
   @Override
+  public Optional<Card> findByIdAndDeletedAtIsNull(long id) {
+    return jpa.findByIdAndDeletedAtIsNull(id).map(CardRepositoryAdapter::toDomain);
+  }
+
+  @Override
   public Optional<Card> findByProjectIdAndNumber(long projectId, int number) {
     return jpa.findByProjectIdAndNumberAndDeletedAtIsNull(projectId, number)
         .map(CardRepositoryAdapter::toDomain);
