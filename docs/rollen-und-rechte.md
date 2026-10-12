@@ -189,7 +189,9 @@ Lesend erreicht ein board-gebundenes Token über die Kanban-Compat-API auch das 
 Boards: Einzelabruf nach Nummer, Suche und Herkunftskette (siehe
 [Dogfooding](dogfooding.md#archivierte-karten-nummer-suche-herkunftskette)) liefern archivierte
 Karten mit. Karten im **Papierkorb** bleiben unsichtbar, ebenso Karten anderer Boards — beide
-antworten mit **404** wie eine unbekannte Nummer. Ein **ungebundenes** Token erhält auf diese
+antworten mit **404** wie eine unbekannte Nummer. Das gilt auch für Verlauf und Kommentare über die
+ID (`/api/kanban/items/{id}/activity` und `…/comments`): Eine Karte im Papierkorb liefert dort
+**404**, eine archivierte Karte bleibt lesbar. Ein **ungebundenes** Token erhält auf diese
 Aufrufe **409**, weil ihm das Board fehlt.
 
 ### Freigabe-Labels des Kits
