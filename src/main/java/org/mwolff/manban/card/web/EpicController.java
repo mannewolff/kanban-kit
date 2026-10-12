@@ -97,7 +97,8 @@ class EpicController {
       summary = "Herkunftsbaum eines Vorhabens lesen",
       description =
           "Liefert die Karten des Vorhabens als Baum ihrer Herkunft, flach in Baumreihenfolge:"
-              + " depth ist die Tiefe, derivedFrom die Nummer der Herkunftskarte. blocked heißt,"
+              + " depth ist die Tiefe, derivedFrom die Nummer der Herkunftskarte. done heißt, die"
+              + " Karte liegt in Done; inReview, sie trägt den Status In review. blocked heißt,"
               + " eine Abhängigkeit innerhalb des Vorhabens ist offen; externalDependencies nennt"
               + " Abhängigkeiten auf Karten außerhalb des Boards, externalOrigin eine Herkunft"
               + " außerhalb. Verlangt die Mitgliedschaft im Projekt.")

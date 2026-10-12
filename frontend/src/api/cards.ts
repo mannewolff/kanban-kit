@@ -147,6 +147,8 @@ export interface DerivationNode {
   derivedFrom: number | null
   depth: number
   done: boolean
+  /** Die Karte traegt den Status In review — implementiert, noch nicht abgenommen (Issue #1608). */
+  inReview: boolean
   /** Eine board-interne Abhaengigkeit liegt noch nicht in Done. Abgeleitet, nie gepflegt. */
   blocked: boolean
   dependencies: number[]

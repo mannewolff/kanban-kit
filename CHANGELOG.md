@@ -15,6 +15,17 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.27.0] – 2026-10-12
+
+- chore: v2.26.1
+- Herkunftsbaum: gelber Haken für Karten in „In review“ ([#1608](https://github.com/mannewolff/kanban-kit/issues/1608))
+- Hooks für den Commitschutz eingerichtet
+- Mutations-Überlebende in HerkunftsKette.java: äquivalenten Null-Wächter umgeformt ([#1604](https://github.com/mannewolff/kanban-kit/issues/1604))
+- Mutations-Überlebende in FreigabeLabels.java: äquivalenten Null-Wächter umgeformt ([#1603](https://github.com/mannewolff/kanban-kit/issues/1603))
+- Mutations-Überlebende in KartenBestandSuche.java: Vorhabenwahl und Auszugsgrenzen geprüft ([#1602](https://github.com/mannewolff/kanban-kit/issues/1602))
+- Mutations-Überlebende in kitNamen.ts: Setter-Aufrufe nach dem Abbau geprüft ([#1601](https://github.com/mannewolff/kanban-kit/issues/1601))
+- Mutations-Überlebende in nightRunLog.ts: Deutung des Sprachvergleichs in die Tests verlegt ([#1600](https://github.com/mannewolff/kanban-kit/issues/1600))
+
 ## [2.26.0] – 2026-10-11
 
 - **API-Änderung:** GET /api/kanban/items/by-number/{number}/lineage — Herkunftskette mit Lücken ([#1580](https://github.com/mannewolff/kanban-kit/issues/1580))

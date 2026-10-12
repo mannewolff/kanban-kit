@@ -64,6 +64,7 @@ export function useKitNamen(): KitNamenZustand {
     return () => {
       aktiv = false
     }
+    // Stryker disable next-line ArrayDeclaration: gleichwertig — eine Liste mit einem festen Wert ändert sich so wenig wie die leere, der Effekt läuft in beiden Fällen nur beim Aufbau
   }, [])
   return zustand
 }

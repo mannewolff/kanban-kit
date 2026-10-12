@@ -426,6 +426,8 @@ public class EpicService {
    * @param derivedFrom Nummer des Vorfahren; {@code null} ohne Herkunft. Bei {@code broken} bleibt
    *     die Nummer gesetzt: Sie beschreibt den gespeicherten Zustand, nicht die Baumposition
    * @param depth 0-basiert; Wurzeln tragen 0
+   * @param inReview die Karte trägt den Status {@code IN_REVIEW} — implementiert, aber noch nicht
+   *     abgenommen (Issue #1608). Karten ohne Status tragen es nie
    * @param blocked eine board-interne Abhängigkeit liegt noch nicht in Done. Abgeleitet, nie
    *     gepflegt — externe Abhängigkeiten gehen nicht ein
    * @param dependencies board-interne Abhängigkeits-Nummern
@@ -445,6 +447,7 @@ public class EpicService {
       @Nullable Integer derivedFrom,
       int depth,
       boolean done,
+      boolean inReview,
       boolean blocked,
       List<Integer> dependencies,
       List<Integer> externalDependencies,

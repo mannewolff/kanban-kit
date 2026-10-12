@@ -25,6 +25,12 @@ class KartenBestandSucheTextTest {
 
   private static final Instant T0 = Instant.parse("2026-01-01T00:00:00Z");
 
+  /** Die erste Hälfte eines Zeichens aus zwei {@code char}, allein stehend. */
+  private static final String ERSTE_HAELFTE = "😀".substring(0, 1);
+
+  /** Die zweite Hälfte eines Zeichens aus zwei {@code char}, allein stehend. */
+  private static final String ZWEITE_HAELFTE = "😀".substring(1);
+
   private static Card karte(long id, int number, String title) {
     return karte(id, number, title, "Text " + number);
   }
@@ -212,6 +218,30 @@ class KartenBestandSucheTextTest {
     String text = "a".repeat(300) + "XY";
 
     assertThat(KartenBestandSuche.fenster(text, "xy")).isEqualTo("…" + "a".repeat(197) + "XY");
+  }
+
+  @Test
+  void fenster_genau200Zeichen_bleibtGanz() {
+    String text = "a".repeat(100) + "XY" + "b".repeat(98);
+
+    assertThat(KartenBestandSuche.fenster(text, "xy")).isEqualTo(text);
+  }
+
+  @Test
+  void fenster_genau200Zeichen_behaeltEinHalbesZeichenAmEnde() {
+    // Nur ein abgeschnittener Rand verliert ein halbes Zeichen; dieser Text wird nicht gekürzt.
+    String text = "a".repeat(199) + ERSTE_HAELFTE;
+
+    assertThat(KartenBestandSuche.fenster(text, null)).isEqualTo(text);
+  }
+
+  @Test
+  void fenster_amAnfang_behaeltEinHalbesZeichenAmTextanfang() {
+    // Der linke Rand ist nicht abgeschnitten; ein halbes Zeichen dort bleibt stehen.
+    String text = ZWEITE_HAELFTE + "a".repeat(49) + "XY" + "b".repeat(300);
+
+    assertThat(KartenBestandSuche.fenster(text, "xy"))
+        .isEqualTo(ZWEITE_HAELFTE + "a".repeat(49) + "XY" + "b".repeat(147) + "…");
   }
 
   @Test

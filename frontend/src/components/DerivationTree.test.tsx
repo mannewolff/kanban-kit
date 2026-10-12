@@ -5,6 +5,7 @@ import { DerivationTree, hakenArt } from './DerivationTree'
 import type { DerivationNode } from '../api/cards'
 import type { KitNamenZustand } from '../api/kitNamen'
 import { KIT_NAMEN } from '../test/kitNamen'
+import { MELDER } from '../theme'
 
 /** Das Namen-Register des Kits (Issue #1596): ohne Angabe geladen, ein Test kann es umstellen. */
 const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
@@ -33,6 +34,7 @@ function node(overrides: Partial<DerivationNode> & { number: number }): Derivati
     derivedFrom: null,
     depth: 0,
     done: false,
+    inReview: false,
     blocked: false,
     dependencies: [],
     externalDependencies: [],
@@ -210,6 +212,40 @@ describe('DerivationTree', () => {
     const haken = screen.getByRole('img', { name: 'erledigt' })
     expect(zeilen()[1]).toContainElement(haken)
     expect(haken).toHaveTextContent('✓')
+  })
+
+  it('zeigt eine Zeile in review mit gelbem Haken „in review", eine erledigte mit grünem (Issue #1608)', async () => {
+    await zeigeBaum([
+      node({ number: 1, done: true }),
+      node({ number: 2, depth: 1, inReview: true }),
+      node({ number: 3, depth: 1 }),
+    ])
+
+    const erledigt = screen.getByRole('img', { name: 'erledigt' })
+    const inReview = screen.getByRole('img', { name: 'in review' })
+    expect(zeilen()[0]).toContainElement(erledigt)
+    expect(zeilen()[1]).toContainElement(inReview)
+    expect(inReview).toHaveTextContent('✓')
+    expect(getComputedStyle(inReview).color).toBe(MELDER.bernst)
+    expect(getComputedStyle(erledigt).color).toBe(MELDER.gruen)
+    expect(screen.getAllByTestId('hakenspalte')[2]).toHaveTextContent('')
+  })
+
+  it('zeigt an einer erledigten Zeile den grünen Haken, auch wenn sie in review markiert wäre', async () => {
+    await zeigeBaum([node({ number: 1, done: true, inReview: true })])
+
+    const haken = screen.getByRole('img', { name: 'erledigt' })
+    expect(getComputedStyle(haken).color).toBe(MELDER.gruen)
+    expect(screen.queryByRole('img', { name: 'in review' })).toBeNull()
+  })
+
+  it('braucht für eine Karte in review keine Kit-Namen', async () => {
+    // Wie erledigt: Den Zustand traegt der Status, nicht der Titel.
+    kitNamen.zustand = { status: 'laden' }
+    await zeigeBaum([node({ number: 1, inReview: true })])
+
+    expect(screen.getByRole('img', { name: 'in review' })).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Kit-Namen werden geladen' })).toBeNull()
   })
 
   it('macht eine blockierte Zeile auch textlich erkennbar', async () => {
@@ -581,6 +617,24 @@ describe('DerivationTree', () => {
     const rows = baum([0, '[Plan] Herkunftsbaum'], [1, 'Hakenspalte bauen', { done: true }])
 
     expect(hakenArt(rows, 1, KIT_NAMEN)).toBe('erledigt')
+  })
+
+  it('setzt an einer Karte in review den Haken „inReview" (Issue #1608)', () => {
+    const rows = baum([0, '[Plan] Herkunftsbaum'], [1, 'Hakenspalte bauen', { inReview: true }])
+
+    expect(hakenArt(rows, 1, KIT_NAMEN)).toBe('inReview')
+  })
+
+  it('gibt Done Vorrang vor in review', () => {
+    const rows = baum([0, '[Plan] Herkunftsbaum'], [1, 'Hakenspalte bauen', { done: true, inReview: true }])
+
+    expect(hakenArt(rows, 1, KIT_NAMEN)).toBe('erledigt')
+  })
+
+  it('gibt in review Vorrang vor abgearbeitet', () => {
+    const rows = baum([0, '[Plan] Herkunftsbaum', { inReview: true }], [1, 'Hakenspalte bauen'])
+
+    expect(hakenArt(rows, 0, KIT_NAMEN)).toBe('inReview')
   })
 
   it('setzt an einer offenen Karte keinen Haken', () => {

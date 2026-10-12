@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardSearchService.KommentarFund;
 import org.mwolff.manban.card.application.CardSearchService.SuchSeite;
@@ -282,7 +283,7 @@ final class KartenBestandSuche {
   private static String ausschnitt(String einzeilig, int stelle, int trefferLaenge) {
     int laenge = einzeilig.length();
     // Platz für den Text, wenn beide Ränder abgeschnitten sind.
-    int platz = AUSZUG_LAENGE - 2 * RAND.length();
+    int platz = AUSZUG_LAENGE - RAND.length() - RAND.length();
     int beginn = Math.max(0, stelle - Math.max(0, (platz - trefferLaenge) / 2));
     int ende = Math.min(laenge, beginn + platz);
     if (beginn == 0) {
@@ -308,12 +309,10 @@ final class KartenBestandSuche {
    * änderte.
    */
   private static int stelle(String text, String q) {
-    for (int i = 0; i + q.length() <= text.length(); i++) {
-      if (text.regionMatches(true, i, q, 0, q.length())) {
-        return i;
-      }
-    }
-    return -1;
+    return IntStream.range(0, text.length())
+        .filter(i -> text.regionMatches(true, i, q, 0, q.length()))
+        .findFirst()
+        .orElse(-1);
   }
 
   private static String einzeilig(String text) {

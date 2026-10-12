@@ -728,7 +728,7 @@ describe('CardDetailModal', () => {
   function baumZeile(nummer: number, depth = 0) {
     return {
       number: nummer, title: `Karte ${nummer}`, type: 'CARD' as const, derivedFrom: null, depth,
-      done: false, blocked: false, dependencies: [], externalDependencies: [],
+      done: false, inReview: false, blocked: false, dependencies: [], externalDependencies: [],
       externalOrigin: false, broken: false, labels: [],
     }
   }
