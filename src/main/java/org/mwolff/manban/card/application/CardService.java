@@ -4,21 +4,34 @@ import static org.mwolff.manban.card.application.KartenGrundlage.normalize;
 import static org.mwolff.manban.card.application.KartenGrundlage.trimToNull;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.auth.application.UserLookup;
+import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivity;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
+import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+// PMD.CouplingBetweenObjects: Mit Issue #1621 kommt der auth-Port UserLookup samt UserSummary und
+// der Namens-Map dazu. Plan #1617 leitet Spaltenschlüssel und Anzeigenamen an genau dieser Stelle
+// beim Lesen des Verlaufs ab; ein eigener Dienst dafür gäbe dem Verlauf einen zweiten Lesepfad.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CardService {
+
+  /** Präfix von {@code detail} eines Zugs, geschrieben von {@code CardMoveService}. */
+  private static final String PRAEFIX_VERSCHOBEN = "Verschoben nach ";
 
   private final CardRepository cards;
   private final KartenAbhaengigkeiten abhaengigkeiten;
@@ -28,6 +41,7 @@ public class CardService {
   private final CardActivityRepository activity;
   private final KartenGrundlage grundlage;
   private final KartenSicht sicht;
+  private final UserLookup users;
 
   public CardService(
       CardRepository cards,
@@ -37,7 +51,8 @@ public class CardService {
       KartenZuordnung zuordnung,
       CardActivityRepository activity,
       KartenGrundlage grundlage,
-      KartenSicht sicht) {
+      KartenSicht sicht,
+      UserLookup users) {
     this.cards = cards;
     this.abhaengigkeiten = abhaengigkeiten;
     this.boardService = boardService;
@@ -46,6 +61,7 @@ public class CardService {
     this.activity = activity;
     this.grundlage = grundlage;
     this.sicht = sicht;
+    this.users = users;
   }
 
   /**
@@ -362,22 +378,64 @@ public class CardService {
    * Derselbe Verlauf wie {@link #listActivity(long, long)}, als Fassaden-Sicht ohne Typen aus
    * {@code card.domain} — der Weg, auf dem fremde Module (heute {@code kanbancompat}, #876) den
    * Verlauf lesen. Rechte und Reihenfolge sind unverändert die von {@code listActivity}.
+   *
+   * <p>Spaltenschlüssel und Anzeigename entstehen beim Lesen (Issue #1621, Plan #1617): je
+   * verschiedenem Handelnden genau ein Nachschlagen über {@link UserLookup}.
    */
   @Transactional(readOnly = true)
   public List<ActivityView> listActivityViews(long userId, long cardId) {
-    return doListActivity(userId, cardId).stream().map(CardService::activityView).toList();
+    Map<Long, @Nullable String> namen = new HashMap<>();
+    return doListActivity(userId, cardId).stream()
+        .map(a -> activityView(a, anzeigename(a.actorUserId(), namen)))
+        .toList();
   }
 
-  private static ActivityView activityView(CardActivity a) {
+  private @Nullable String anzeigename(
+      @Nullable Long actorUserId, Map<Long, @Nullable String> namen) {
+    if (actorUserId == null) {
+      return null;
+    }
+    if (!namen.containsKey(actorUserId)) {
+      namen.put(
+          actorUserId, users.findById(actorUserId).map(UserSummary::displayName).orElse(null));
+    }
+    return namen.get(actorUserId);
+  }
+
+  /**
+   * Spaltenschlüssel eines Zugs (Plan #1617, A2): bei {@code MOVED} der gespeicherte Status nach
+   * dem Zug, sonst der Schlüssel der Prozessspalte aus dem Text „Verschoben nach &lt;Spalte&gt;“.
+   * Anders als die Board-Übersicht ohne Rückfall auf {@code BACKLOG} — was sich nicht sicher
+   * bestimmen lässt, fehlt.
+   */
+  private static @Nullable String spaltenSchluessel(CardActivity a) {
+    if (a.type() != CardActivityType.MOVED) {
+      return null;
+    }
+    CardStatus nach = a.statusAfter();
+    if (nach != null) {
+      return nach.name();
+    }
+    if (!a.detail().startsWith(PRAEFIX_VERSCHOBEN)) {
+      return null;
+    }
+    return CardIngestService.spaltenSchluessel(a.detail().substring(PRAEFIX_VERSCHOBEN.length()))
+        .orElse(null);
+  }
+
+  private static ActivityView activityView(CardActivity a, @Nullable String actorName) {
+    CardActivityOrigin origin = a.origin();
     return new ActivityView(
         a.id(),
         a.actorUserId(),
         a.type().name(),
         a.detail(),
         a.createdAt(),
-        a.origin() == null ? null : a.origin().name(),
+        origin == null ? null : origin.name(),
         a.tokenName(),
-        a.agent());
+        a.agent(),
+        spaltenSchluessel(a),
+        actorName);
   }
 
   /**
@@ -388,6 +446,10 @@ public class CardService {
    * <p>{@code origin} und {@code tokenName} sind serverseitig verifiziert, {@code agent} ist eine
    * Selbstauskunft des Clients — siehe Issue #517. Bei Alt-Einträgen aus der Zeit vor Migration V23
    * sind alle drei Felder {@code null}.
+   *
+   * <p>{@code columnKey} ist bei {@code MOVED} der Spaltenschlüssel der Zielspalte ({@code
+   * BACKLOG}, {@code READY}, …), {@code actorName} der Anzeigename von {@code actorUserId}; beide
+   * {@code null}, wenn sie sich nicht sicher bestimmen lassen (Issue #1621).
    */
   public record ActivityView(
       @Nullable Long id,
@@ -397,5 +459,7 @@ public class CardService {
       Instant createdAt,
       @Nullable String origin,
       @Nullable String tokenName,
-      @Nullable String agent) {}
+      @Nullable String agent,
+      @Nullable String columnKey,
+      @Nullable String actorName) {}
 }

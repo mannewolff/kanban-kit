@@ -23,6 +23,8 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mwolff.manban.auth.application.UserLookup;
+import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
@@ -44,9 +46,14 @@ import org.springframework.context.ApplicationEventPublisher;
 /** Verhaltenstests der Karten- und Epic-Use-Cases (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Karten + Epics, Erfolgs- und Fehlerpfade je
 // Use-Case). Viele kleine @Test-Methoden sind hier gewollt, kein God-Class-Smell.
-// PMD.ExcessiveImports entfiel mit den Tests zu Verschieben, Status und Umzug, die seit Issue #1395
-// in CardMoveServiceTest stehen.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity", "PMD.CouplingBetweenObjects"})
+// PMD.ExcessiveImports: Die Fälle zu Spaltenschlüssel und Anzeigename im Verlauf (Issue #1621)
+// gehören laut Paket in diese Klasse und brauchen UserLookup und UserSummary.
+@SuppressWarnings({
+  "PMD.TooManyMethods",
+  "PMD.CyclomaticComplexity",
+  "PMD.CouplingBetweenObjects",
+  "PMD.ExcessiveImports"
+})
 class CardServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -64,6 +71,7 @@ class CardServiceTest {
   private CardActivityRepository activity;
   private ActorContext actor;
   private ApplicationEventPublisher events;
+  private UserLookup users;
   private CardService service;
 
   private static Card card(
@@ -98,6 +106,7 @@ class CardServiceTest {
     actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     events = mock(ApplicationEventPublisher.class);
+    users = mock(UserLookup.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         CardServiceAufbau.ausPorts(
@@ -114,7 +123,8 @@ class CardServiceTest {
             activity,
             actor,
             events,
-            clock);
+            clock,
+            users);
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(cards.save(any(Card.class))).thenAnswer(inv -> withId(inv.getArgument(0)));
   }
@@ -1334,6 +1344,114 @@ class CardServiceTest {
 
     assertThatThrownBy(() -> service.listActivityViews(5L, 1L))
         .isInstanceOf(CardNotFoundException.class);
+  }
+
+  // --- Spaltenschlüssel und Anzeigename im Verlauf (Issue #1621) ------------------------
+
+  private static CardActivity verlauf(
+      long id,
+      @Nullable Long actor,
+      CardActivityType type,
+      String detail,
+      @Nullable CardStatus nach) {
+    return new CardActivity(id, 1L, actor, type, detail, FIXED, null, null, null, null, nach);
+  }
+
+  private List<CardService.ActivityView> verlaufsSicht(CardActivity... eintraege) {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(activity.findByCardId(1L)).thenReturn(List.of(eintraege));
+    return service.listActivityViews(5L, 1L);
+  }
+
+  @Test
+  void listActivityViews_columnKey_ausStatusAfter() {
+    List<CardService.ActivityView> result =
+        verlaufsSicht(
+            verlauf(3L, null, CardActivityType.MOVED, "Verschoben nach Bereit", CardStatus.READY));
+
+    assertThat(result)
+        .singleElement()
+        .extracting(CardService.ActivityView::columnKey)
+        .isEqualTo("READY");
+  }
+
+  @Test
+  void listActivityViews_columnKey_ausProzessspalteImDetail() {
+    List<CardService.ActivityView> result =
+        verlaufsSicht(
+            verlauf(3L, null, CardActivityType.MOVED, "Verschoben nach In progress", null));
+
+    assertThat(result)
+        .singleElement()
+        .extracting(CardService.ActivityView::columnKey)
+        .isEqualTo("IN_PROGRESS");
+  }
+
+  @Test
+  void listActivityViews_columnKey_fehltBeiEigenerSpalte() {
+    // Bewusst kein Rückfall auf BACKLOG wie in der Board-Übersicht (Plan #1617, A2)
+    List<CardService.ActivityView> result =
+        verlaufsSicht(
+            verlauf(3L, null, CardActivityType.MOVED, "Verschoben nach Wartet auf Kunde", null));
+
+    assertThat(result).singleElement().extracting(CardService.ActivityView::columnKey).isNull();
+  }
+
+  @Test
+  void listActivityViews_columnKey_fehltBeiDetailOhnePraefix() {
+    List<CardService.ActivityView> result =
+        verlaufsSicht(verlauf(3L, null, CardActivityType.MOVED, "Ready", null));
+
+    assertThat(result).singleElement().extracting(CardService.ActivityView::columnKey).isNull();
+  }
+
+  @Test
+  void listActivityViews_columnKey_fehltBeiNichtMoved() {
+    List<CardService.ActivityView> result =
+        verlaufsSicht(
+            verlauf(
+                3L,
+                null,
+                CardActivityType.STATUS_CHANGED,
+                "Verschoben nach Ready",
+                CardStatus.READY));
+
+    assertThat(result).singleElement().extracting(CardService.ActivityView::columnKey).isNull();
+  }
+
+  @Test
+  void listActivityViews_actorName_einNachschlagenJeNutzer() {
+    when(users.findById(9L))
+        .thenReturn(Optional.of(new UserSummary(9L, "a@example.org", "Anna", true)));
+    when(users.findById(11L))
+        .thenReturn(Optional.of(new UserSummary(11L, "b@example.org", "Bert", true)));
+
+    List<CardService.ActivityView> result =
+        verlaufsSicht(
+            verlauf(3L, 9L, CardActivityType.CREATED, "Angelegt", null),
+            verlauf(4L, 11L, CardActivityType.UPDATED, "Bearbeitet", null),
+            verlauf(5L, 9L, CardActivityType.UPDATED, "Bearbeitet", null));
+
+    assertThat(result)
+        .extracting(CardService.ActivityView::actorName)
+        .containsExactly("Anna", "Bert", "Anna");
+    verify(users, times(1)).findById(9L);
+    verify(users, times(1)).findById(11L);
+    verify(users, times(2)).findById(anyLong());
+  }
+
+  @Test
+  void listActivityViews_actorName_fehltBeiUnbekanntemOderOhneNutzer() {
+    when(users.findById(9L)).thenReturn(Optional.empty());
+
+    List<CardService.ActivityView> result =
+        verlaufsSicht(
+            verlauf(3L, 9L, CardActivityType.CREATED, "Angelegt", null),
+            verlauf(4L, null, CardActivityType.UPDATED, "Bearbeitet", null));
+
+    assertThat(result).extracting(CardService.ActivityView::actorName).containsExactly(null, null);
+    verify(users, times(1)).findById(anyLong());
   }
 
   // --- Zykluszeit-Tracking (card_column_transition) ---------------------

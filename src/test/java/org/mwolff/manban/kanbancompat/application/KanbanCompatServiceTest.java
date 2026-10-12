@@ -1363,9 +1363,18 @@ class KanbanCompatServiceTest {
         .thenReturn(
             List.of(
                 new CardService.ActivityView(
-                    9L, 3L, "CREATED", "Angelegt", first, "TOKEN", "Nachtlauf", "claude-opus-5"),
+                    9L,
+                    3L,
+                    "CREATED",
+                    "Angelegt",
+                    first,
+                    "TOKEN",
+                    "Nachtlauf",
+                    "claude-opus-5",
+                    null,
+                    null),
                 new CardService.ActivityView(
-                    10L, null, "MOVED", "Verschoben", second, null, null, null)));
+                    10L, null, "MOVED", "Verschoben", second, null, null, null, null, null)));
 
     // When
     List<KanbanCompatService.Activity> result = service.listActivity(bound(), 42L);

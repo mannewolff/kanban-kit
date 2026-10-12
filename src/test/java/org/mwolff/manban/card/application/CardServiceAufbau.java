@@ -1,6 +1,9 @@
 package org.mwolff.manban.card.application;
 
+import static org.mockito.Mockito.mock;
+
 import java.time.Clock;
+import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.context.ApplicationEventPublisher;
@@ -17,10 +20,15 @@ import org.springframework.context.ApplicationEventPublisher;
  * Zugriff — gleich, welcher Baustein ihn macht. Die Testklassen behalten damit ihre bisherige
  * Konstruktion aus den Ports; {@code ProjectService} entfiel mit der Suche (Issue #1391).
  */
+// PMD.CouplingBetweenObjects: Die Klasse baut fünf Prüflinge samt Bausteinen aus allen Ports; mit
+// Issue #1621 kommt UserLookup für CardService dazu. Eine Aufteilung trennte die gemeinsamen
+// Bausteine, die alle Prüflinge aus denselben Mocks bekommen sollen (Plan #1387, E6).
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 final class CardServiceAufbau {
 
   private CardServiceAufbau() {}
 
+  /** Wie die Voll-Signatur, mit einem stummen {@link UserLookup}-Mock (Issue #1621). */
   static CardService ausPorts(
       CardRepository cards,
       CardDependencyRepository dependencies,
@@ -32,6 +40,32 @@ final class CardServiceAufbau {
       ActorContext actor,
       ApplicationEventPublisher events,
       Clock clock) {
+    return ausPorts(
+        cards,
+        dependencies,
+        boardService,
+        permissions,
+        transitions,
+        zuordnung,
+        activity,
+        actor,
+        events,
+        clock,
+        mock(UserLookup.class));
+  }
+
+  static CardService ausPorts(
+      CardRepository cards,
+      CardDependencyRepository dependencies,
+      BoardService boardService,
+      PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
+      KartenZuordnung zuordnung,
+      CardActivityRepository activity,
+      ActorContext actor,
+      ApplicationEventPublisher events,
+      Clock clock,
+      UserLookup users) {
     Bausteine b =
         bausteine(
             cards,
@@ -52,7 +86,8 @@ final class CardServiceAufbau {
         zuordnung,
         activity,
         b.grundlage(),
-        b.sicht());
+        b.sicht(),
+        users);
   }
 
   static CardIngestService ingestAusPorts(
