@@ -589,7 +589,10 @@ class KanbanCompatController {
       summary = "Kommentare einer Karte lesen",
       description =
           "Liefert die Kommentare einer Karte des gebundenen Boards in zeitlicher Reihenfolge,"
-              + " den ältesten zuerst. "
+              + " den ältesten zuerst, auch für eine archivierte Karte. Jeder Kommentar nennt"
+              + " seine Herkunft: SESSION (Oberfläche) oder TOKEN mit Tokenname und gemeldetem"
+              + " Modell; origin = null heißt Herkunft unbekannt. Eine Karte im Papierkorb"
+              + " liefert 404. "
               + TOKEN_BINDUNG)
   @ApiResponse(responseCode = "200", description = "Die Kommentare der Karte.")
   @ApiResponse(
@@ -623,8 +626,13 @@ class KanbanCompatController {
       description =
           "Liefert den Verlauf einer Karte des gebundenen Boards in zeitlicher Reihenfolge —"
               + " Anlage, Verschiebungen, Änderungen —, je Eintrag mit Herkunft der Änderung"
-              + " (Oberfläche oder Token), Tokenname und gemeldetem Agenten. Dieselbe Auskunft"
-              + " wie in der Oberfläche, beschränkt auf das gebundene Board. "
+              + " (Oberfläche oder Token), Tokenname und gemeldetem Agenten; origin = null heißt"
+              + " Herkunft unbekannt. actorName ist bei origin = TOKEN der Besitzer des Tokens,"
+              + " die Herkunft steht in tokenName. columnKey nennt nur bei MOVED den"
+              + " Spaltenschlüssel der Zielspalte, ohne Rückfall auf BACKLOG; ein älterer Eintrag"
+              + " mit eigenem Spaltennamen trägt keinen. Dieselbe Auskunft wie in der Oberfläche,"
+              + " beschränkt auf das gebundene Board, auch für eine archivierte Karte; eine Karte"
+              + " im Papierkorb liefert 404. "
               + TOKEN_BINDUNG)
   @ApiResponse(responseCode = "200", description = "Die Einträge des Verlaufs.")
   @ApiResponse(

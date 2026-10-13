@@ -719,6 +719,51 @@ class CardIngestServiceTest {
   }
 
   @Test
+  void requireOnBoard_nimmtKarteImPapierkorbWeiterhinAn() {
+    // findById filtert den Papierkorb nicht: Die Schreibwege bleiben unveraendert (Issue #1622).
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false)));
+
+    assertThatCode(() -> service.requireOnBoard(1L, BOARD)).doesNotThrowAnyException();
+    verify(cards, never()).findByIdAndDeletedAtIsNull(1L);
+  }
+
+  @Test
+  void requireReadableOnBoard_passes_whenCardIsOnBoard() {
+    when(cards.findByIdAndDeletedAtIsNull(1L))
+        .thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false)));
+
+    assertThatCode(() -> service.requireReadableOnBoard(1L, BOARD)).doesNotThrowAnyException();
+  }
+
+  @Test
+  void requireReadableOnBoard_passes_whenCardIsArchived() {
+    when(cards.findByIdAndDeletedAtIsNull(1L))
+        .thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, true)));
+
+    assertThatCode(() -> service.requireReadableOnBoard(1L, BOARD)).doesNotThrowAnyException();
+  }
+
+  @Test
+  void requireReadableOnBoard_throwsCardNotFound_whenCardInTrash() {
+    // Papierkorb-Karten liefert die Abfrage nicht — auch wenn findById sie noch faende.
+    when(cards.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.requireReadableOnBoard(1L, BOARD))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).findById(1L);
+  }
+
+  @Test
+  void requireReadableOnBoard_throwsCardNotFound_whenCardOnOtherBoard() {
+    // Board-ID jenseits des Long-Caches: prueft zugleich den Wertvergleich.
+    when(cards.findByIdAndDeletedAtIsNull(1L))
+        .thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false)));
+
+    assertThatThrownBy(() -> service.requireReadableOnBoard(1L, 5000L))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
   void listBoardItems_traegtDenStatusAlsText() {
     when(cards.findByBoardId(BOARD))
         .thenReturn(

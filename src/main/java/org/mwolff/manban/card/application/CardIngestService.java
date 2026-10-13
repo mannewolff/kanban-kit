@@ -133,6 +133,19 @@ public class CardIngestService {
   }
 
   /**
+   * Lese-Guard (Issue #1622): wie {@link #requireOnBoard(long, long)}, lehnt zusätzlich Karten im
+   * Papierkorb mit derselben {@link CardNotFoundException} ab — Verlauf und Kommentare einer
+   * gelöschten Karte sind über ihre ID nicht mehr lesbar. Archivierte Karten bleiben lesbar.
+   */
+  @Transactional(readOnly = true)
+  public void requireReadableOnBoard(long cardId, long boardId) {
+    Card card = cards.findByIdAndDeletedAtIsNull(cardId).orElseThrow(CardNotFoundException::new);
+    if (!Long.valueOf(boardId).equals(card.boardId())) {
+      throw new CardNotFoundException();
+    }
+  }
+
+  /**
    * Ersetzt ausschließlich Titel und Beschreibung — der schmale Schreibweg für den
    * kanbancompat-Ingest (#571).
    *

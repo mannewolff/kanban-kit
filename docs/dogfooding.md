@@ -117,6 +117,43 @@ Kommentare schreibt man mit `node cli/tbx.mjs issue comment 42 --text "…"`.
 > Spricht die CLI gegen eine **ältere** Instanz, die den Kommentar-Endpoint noch nicht
 > kennt, bleibt `comments` leer — der Aufruf bricht nicht ab.
 
+### Verlauf und Herkunft
+
+`GET /api/kanban/items/{id}/comments` und `GET /api/kanban/items/{id}/activity` liefern Kommentare
+bzw. Verlauf einer Karte des gebundenen Boards, auch einer archivierten. Eine Karte im Papierkorb
+antwortet über ihre ID mit **404** wie eine unbekannte (siehe
+[API-Tokens](rollen-und-rechte.md#api-tokens)).
+
+Jeder **Kommentar** — hier und im Einzelabruf `by-number` unten — nennt seine Herkunft:
+
+- `origin` — `SESSION` (ein Mensch in der Oberfläche) oder `TOKEN` (ein Werkzeug über einen
+  Projekt-Zugang);
+- `tokenName` — Name des Zugangs bei `origin = TOKEN`, sonst `null`;
+- `agent` — das Modell, das das Werkzeug im Header `X-Agent-Model` gemeldet hat, sonst `null`.
+
+`origin = null` heißt „Herkunft unbekannt“ — die Herkunft wird nie geraten. Kommentare von vor der
+Einführung dieser Felder bleiben ohne Herkunft.
+
+```json
+{ "id": 502, "author": "Manne", "body": "Abschlussbericht …", "createdAt": "2026-10-12T16:40:00Z",
+  "origin": "TOKEN", "tokenName": "kit-nacht", "agent": "claude-opus-5-5" }
+```
+
+Jeder **Verlaufseintrag** trägt dieselbe Herkunft (`origin`, `tokenName`, `agent`) und zusätzlich:
+
+- `columnKey` — nur bei `MOVED`: der Spaltenschlüssel der Zielspalte wie in der Board-Übersicht
+  (`BACKLOG`, `READY`, …), auch bei umbenannten Spalten. Er stammt aus dem gespeicherten Zielstatus
+  oder dem Namen der Prozessspalte; lässt er sich so nicht bestimmen — eine Zielspalte ohne
+  Schlüssel, ein älterer Eintrag mit eigenem Spaltennamen —, fehlt er (`null`). Es gibt **keinen
+  Rückfall auf `BACKLOG`**.
+- `actorName` — Anzeigename der auslösenden Person. Bei `origin = TOKEN` ist das der Besitzer des
+  Tokens; welches Werkzeug es war, steht in `tokenName`.
+
+```json
+{ "type": "MOVED", "createdAt": "2026-10-12T16:39:28Z", "columnKey": "READY",
+  "actorName": "Manne", "origin": "SESSION", "tokenName": null, "agent": null }
+```
+
 ### Archivierte Karten: Nummer, Suche, Herkunftskette
 
 Drei lesende Aufrufe erreichen auch archivierte Karten des gebundenen Boards — Karten im

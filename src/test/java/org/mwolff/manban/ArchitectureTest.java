@@ -222,7 +222,11 @@ class ArchitectureTest {
           "CardsPurgedEvent",
           // EpicRef ist Vertrag (Issue #936): die Nachtlauf-Auswertung fragt je Kartennummer die
           // Vorhaben ab, ohne card.domain zu beruehren — analog CardsPurgedEvent (Issue #503).
-          "EpicRef");
+          "EpicRef",
+          // ActorContext ist Vertrag (Issue #1620, Plan #1617): comment stempelt die Herkunft eines
+          // Kommentars aus derselben Quelle wie den Verlauf, samt Record ActorStamp. Gelesen wird
+          // sie ueber ActorStamp#originName, damit card.domain modulintern bleibt.
+          "ActorContext");
 
   // --- Modul-Grenze: board-Fassade (Issue #459, Whitelist seit #470) --------------------------
   // Board und Spalte sind modulintern. Fremde Module fragen die fachliche board.application-

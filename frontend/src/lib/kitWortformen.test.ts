@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { BUDGETFELDER, ERGEBNISGRUND, LAUFSTAND, PLAN_REVIEW, PROTOKOLL, passe, type Wortform } from './kitWortformen'
+import {
+  BUDGETFELDER,
+  ERGEBNISGRUND,
+  LAUFSTAND,
+  PLAN_REVIEW,
+  PROTOKOLL,
+  SZENARIEN_ABSCHNITT,
+  SZENARIO_SCHRITT,
+  passe,
+  type Wortform,
+} from './kitWortformen'
 
 /**
  * Je Regel des Abschnitts Protokoll eine deutsche und eine englische Beispielzeile, wie
@@ -223,5 +233,29 @@ describe('kitWortformen — Abschnitte Ergebnisdatei, Laufstand und Budgetfelder
 
   it('fuehrt die Budgetfelder in beiden Sprachen', () => {
     expect(BUDGETFELDER).toEqual({ paketeMin: ['paketeMin', 'packagesMin'], abdeckungMin: ['abdeckungMin', 'coverageMin'] })
+  })
+})
+
+describe('kitWortformen — Abschnitt Szenarien (Issue #1627)', () => {
+  it('erkennt die Abschnittsueberschrift in beiden Sprachen, nur als eigene ##-Zeile', () => {
+    expect(passe(SZENARIEN_ABSCHNITT, '## Szenarien')).not.toBeNull()
+    expect(passe(SZENARIEN_ABSCHNITT, '##  Scenarios ')).not.toBeNull()
+    expect(passe(SZENARIEN_ABSCHNITT, '### Szenarien')).toBeNull()
+    expect(passe(SZENARIEN_ABSCHNITT, '## Szenarien-Liste')).toBeNull()
+    expect(passe(SZENARIEN_ABSCHNITT, 'x ## Scenarios')).toBeNull()
+  })
+
+  it('liefert in beiden Sprachen Fettdruck, Schluesselwort und Rest als Gruppen', () => {
+    expect([...(passe(SZENARIO_SCHRITT, '- **Angenommen** ein Board  ') ?? [])].slice(1)).toEqual(['**', 'Angenommen', 'ein Board'])
+    expect([...(passe(SZENARIO_SCHRITT, '12. Then it works') ?? [])].slice(1)).toEqual([undefined, 'Then', 'it works'])
+    expect([...(passe(SZENARIO_SCHRITT, 'Dann') ?? [])].slice(1)).toEqual([undefined, 'Dann', undefined])
+  })
+
+  it('verlangt das Schluesselwort als ganzes Wort und den Fettdruck paarig', () => {
+    expect(passe(SZENARIO_SCHRITT, 'Wenngleich')).toBeNull()
+    expect(passe(SZENARIO_SCHRITT, 'Andererseits')).toBeNull()
+    expect(passe(SZENARIO_SCHRITT, '**Wenn ich klicke')).toBeNull()
+    expect(passe(SZENARIO_SCHRITT, 'Text Wenn ich klicke')).toBeNull()
+    expect(passe(SZENARIO_SCHRITT, '-Wenn ich klicke')).toBeNull()
   })
 })

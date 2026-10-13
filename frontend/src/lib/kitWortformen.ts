@@ -224,3 +224,24 @@ export const BUDGETFELDER = {
   paketeMin: ['paketeMin', 'packagesMin'],
   abdeckungMin: ['abdeckungMin', 'coverageMin'],
 } as const satisfies Record<string, Wortpaar>
+
+/**
+ * Abschnitt Szenarien: die Form der Szenarien im Fachplan, die der Abnahme-Dialog liest
+ * (Issue #1627, Plan #1626, E1). Wie bei den englischen Protokollzeilen eine Vorlage fuer das Format
+ * aus mannewolff/claude-workflow-kit#1586; weicht das Kit ab, gleicht ein `[Task]` diese Datei an.
+ */
+
+/** Die Ueberschrift des Abschnitts — eine eigene `##`-Zeile, ohne Zusatz. */
+export const SZENARIEN_ABSCHNITT: Wortform = { de: /^##[ \t]+Szenarien[ \t]*$/, en: /^##[ \t]+Scenarios[ \t]*$/ }
+
+/** Optionales Listenzeichen vor einem Schritt (`-`, `*`, `+` oder `1.`). */
+const LISTENPUNKT = String.raw`^(?:(?:[-*+]|\d+\.)[ \t]+)?`
+
+/** Ein Schritt mit optional fettem Schluesselwort — Gruppen: Fettdruck, Schluesselwort, Rest. */
+const schritt = (woerter: string) => new RegExp(String.raw`${LISTENPUNKT}(\*\*)?(${woerter})\1(?:[ \t]+(.*?))?[ \t]*$`)
+
+/** Eine Schrittzeile eines Szenarios; die Zeile kommt ohne fuehrende Leerzeichen. */
+export const SZENARIO_SCHRITT: Wortform = {
+  de: schritt('Angenommen|Wenn|Dann|Und|Aber'),
+  en: schritt('Given|When|Then|And|But'),
+}

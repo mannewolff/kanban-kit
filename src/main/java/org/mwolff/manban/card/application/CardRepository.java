@@ -15,6 +15,13 @@ public interface CardRepository {
   Optional<Card> findById(long id);
 
   /**
+   * Karte nach ID, sofern sie nicht im Papierkorb liegt ({@code deleted_at IS NULL}); archivierte
+   * Karten werden geliefert. Für Lesewege, die Papierkorb-Karten nicht preisgeben dürfen (Issue
+   * #1622).
+   */
+  Optional<Card> findByIdAndDeletedAtIsNull(long id);
+
+  /**
    * Nicht-gelöschte Karte eines Projekts nach ihrer projektweiten Nummer. Nummern sind projektweit
    * eindeutig; leer, wenn keine solche Karte existiert.
    */

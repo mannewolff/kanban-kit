@@ -1,6 +1,7 @@
 package org.mwolff.manban.comment.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -11,6 +12,7 @@ import org.mwolff.manban.comment.application.CommentRepository;
 import org.mwolff.manban.comment.domain.Comment;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -61,7 +63,8 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
   }
 
   private Comment save(String body, Instant createdAt) {
-    return comments.save(new Comment(null, cardId, userId, "A", body, createdAt, createdAt, null));
+    return comments.save(
+        new Comment(null, cardId, userId, "A", body, createdAt, createdAt, null, null, null, null));
   }
 
   @Test
@@ -108,7 +111,8 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
     // Issue #1428: die Laufkennung des letzten Schreibers liegt in comment.run_started_at.
     Instant lauf = Instant.parse("2026-10-05T08:58:22.123Z");
     Comment gespeichert =
-        comments.save(new Comment(null, cardId, userId, "A", "## Laufstand", T1, T1, lauf));
+        comments.save(
+            new Comment(null, cardId, userId, "A", "## Laufstand", T1, T1, lauf, null, null, null));
 
     assertThat(gespeichert.laufStart()).isEqualTo(lauf);
     assertThat(comments.findById(gespeichert.requireId()))
@@ -131,6 +135,53 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
         .get()
         .extracting(Comment::laufStart)
         .isNull();
+  }
+
+  @Test
+  void herkunftUebersteht_denRundwegDerSpaltenOriginTokenNameAgent() {
+    // Issue #1620: die Herkunft liegt in comment.origin, token_name und agent (V52).
+    Comment gespeichert =
+        comments.save(
+            new Comment(
+                null, cardId, userId, "A", "per Token", T1, T1, null, "TOKEN", "kit", "opus"));
+
+    assertThat(comments.findById(gespeichert.requireId()))
+        .get()
+        .extracting(Comment::origin, Comment::tokenName, Comment::agent)
+        .containsExactly("TOKEN", "kit", "opus");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT origin || '/' || token_name || '/' || agent FROM comment WHERE id = ?",
+                String.class,
+                gespeichert.requireId()))
+        .isEqualTo("TOKEN/kit/opus");
+  }
+
+  @Test
+  void ohneHerkunftBleibenDieSpaltenLeer() {
+    // A6: ein Kommentar ohne Stempel trägt keine Herkunft — unbekannt, nicht geraten.
+    Comment gespeichert = save("ohne Herkunft", T1);
+
+    assertThat(comments.findById(gespeichert.requireId()))
+        .get()
+        .extracting(Comment::origin, Comment::tokenName, Comment::agent)
+        .containsOnlyNulls();
+  }
+
+  @Test
+  void pruefregelWeistUnbekannteHerkunftAb() {
+    // chk_comment_origin: nur SESSION, TOKEN oder NULL.
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "INSERT INTO comment (card_id, author_user_id, author_name, body, created_at, "
+                        + "updated_at, origin) VALUES (?, ?, 'A', 'x', ?, ?, 'UPLOAD')",
+                    cardId,
+                    userId,
+                    Timestamp.from(T1),
+                    Timestamp.from(T1)))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining("chk_comment_origin");
   }
 
   @Test

@@ -75,6 +75,15 @@ class KanbanCompatArchivIT extends AbstractIntegrationTest {
     List<String> bodies = new ArrayList<>();
     detail.get("comments").forEach(c -> bodies.add(c.get("body").asText()));
     assertThat(bodies).containsExactly("## Review\nerster", "## Abschluss\nzweiter");
+    // Herkunft der Kommentare (Issue #1623): beide über den Token, ohne gemeldetes Modell
+    detail
+        .get("comments")
+        .forEach(
+            c -> {
+              assertThat(c.get("origin").asText()).isEqualTo("TOKEN");
+              assertThat(c.get("tokenName").asText()).isEqualTo("archiv-token");
+              assertThat(c.get("agent").isNull()).isTrue();
+            });
   }
 
   @Test

@@ -214,6 +214,10 @@ describe('KettenStufenleiste', () => {
 
     await userEvent.click(ziel('Plan'))
     expect(onChange).not.toHaveBeenCalled()
+    // Der Klick oeffnet den Tooltip von „Plan“; unter Last schliesst er sonst erst, wenn der naechste
+    // schon offen ist, und findByRole faende zwei.
+    await userEvent.unhover(ziel('Plan'))
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
 
     await userEvent.hover(ziel('Arbeitspakete'))
     expect(await screen.findByRole('tooltip')).toHaveTextContent('kit:durchziehen')

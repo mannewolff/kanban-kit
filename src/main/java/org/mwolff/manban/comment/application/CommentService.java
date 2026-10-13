@@ -7,6 +7,8 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
+import org.mwolff.manban.card.application.ActorContext;
+import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.comment.domain.Comment;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -27,6 +29,7 @@ public class CommentService {
   private final CardService cardService;
   private final PermissionChecker permissions;
   private final UserLookup users;
+  private final ActorContext actor;
   private final Clock clock;
 
   public CommentService(
@@ -34,11 +37,13 @@ public class CommentService {
       CardService cardService,
       PermissionChecker permissions,
       UserLookup users,
+      ActorContext actor,
       Clock clock) {
     this.comments = comments;
     this.cardService = cardService;
     this.permissions = permissions;
     this.users = users;
+    this.actor = actor;
     this.clock = clock;
   }
 
@@ -63,8 +68,23 @@ public class CommentService {
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);
     String authorName = users.findById(userId).map(UserSummary::displayName).orElse("Unbekannt");
     Instant now = clock.instant();
+    // Herkunft aus derselben Quelle wie der Verlauf (Issue #1620, A4); ohne Stempel bleibt sie
+    // leer — unbekannt, nicht geraten (A6).
+    ActorStamp stamp = actor.current();
     Comment saved =
-        comments.save(new Comment(null, cardId, userId, authorName, body, now, now, laufStart));
+        comments.save(
+            new Comment(
+                null,
+                cardId,
+                userId,
+                authorName,
+                body,
+                now,
+                now,
+                laufStart,
+                stamp.originName(),
+                stamp.tokenName(),
+                stamp.agent()));
     return view(saved);
   }
 
@@ -151,7 +171,10 @@ public class CommentService {
         c.authorName(),
         c.body(),
         c.createdAt(),
-        c.updatedAt());
+        c.updatedAt(),
+        c.origin(),
+        c.tokenName(),
+        c.agent());
   }
 
   /** Kommentardarstellung. */
@@ -169,7 +192,22 @@ public class CommentService {
       @Schema(description = "Text in Markdown.", example = "Sieht gut aus, bitte noch testen.")
           String body,
       @Schema(description = "Zeitpunkt der Anlage.") Instant createdAt,
-      @Schema(description = "Zeitpunkt der letzten Änderung.") Instant updatedAt) {}
+      @Schema(description = "Zeitpunkt der letzten Änderung.") Instant updatedAt,
+      @Schema(
+              description =
+                  "Herkunft beim Anlegen: SESSION (Oberfläche) oder TOKEN (Projekt-Zugang); null,"
+                      + " wenn sie unbekannt ist.",
+              example = "TOKEN")
+          @Nullable String origin,
+      @Schema(
+              description = "Name des Projekt-Zugangs bei Herkunft TOKEN; sonst null.",
+              example = "kit-nacht")
+          @Nullable String tokenName,
+      @Schema(
+              description =
+                  "Modell-Selbstauskunft des Werkzeugs (Header X-Agent-Model); null ohne Angabe.",
+              example = "claude-opus-5-5")
+          @Nullable String agent) {}
 
   /**
    * Der Laufstand-Kommentar einer Karte (Issue #1373).

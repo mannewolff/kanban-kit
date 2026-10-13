@@ -99,6 +99,7 @@
   "mutationCommand": "",
   "mainBranch": "main",
   "productionBranch": "production",
+  "installCommand": "npm --prefix frontend ci --no-audit --no-fund",
   "reviewScope": "diff",
   "triggers": {
     "go": "GO",

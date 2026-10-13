@@ -126,6 +126,26 @@ Klick auf eine Karte öffnet das Detail:
 
   Ziel wählen, starten und zurücknehmen darf, wer die Karte bearbeiten darf (`TICKET_UPDATE`); wer
   das nicht darf, sieht die Leiste nur. Siehe [Rollen & Rechte](rollen-und-rechte.md#projekt-rollen-rechte-matrix).
+- **Abnahme durchklicken:** Eine fachliche Anforderung — eine Karte, deren Titel mit `[Fachlich]`
+  oder `[Requirement]` beginnt — trägt im Kopf neben „Bearbeiten“ den Knopf **„Abnahme
+  durchklicken“**, sobald ihre Beschreibung einen Abschnitt `## Szenarien` (englisch `## Scenarios`)
+  mit mindestens einem Szenario hat. Andere Karten, eine fachliche Anforderung ohne Szenarien und
+  das Bearbeiten-Formular zeigen ihn nicht.
+  - **Liste:** Der Knopf öffnet die Ansicht „Abnahme: *Titel*“ mit den Szenarien in der Reihenfolge
+    der Beschreibung, nummeriert und je mit seinen Schritten („Angenommen … Wenn … Dann …“). Du
+    klickst jedes Szenario selbst nach und vermerkst **okay** oder **nicht okay**; zu „nicht okay“
+    kannst du eine kurze Notiz schreiben (eine Zeile, höchstens 500 Zeichen). Unter der Liste steht
+    die **Zusammenfassung**: „Alle Szenarien okay“ oder wie viele okay sind, welche nicht okay sind
+    und wie viele noch offen sind.
+  - **Abschicken:** „Ergebnis an den Fachplan schreiben“ ist erst frei, wenn jedes Szenario einen
+    Vermerk trägt. Das Ergebnis steht danach als Kommentar an der Karte: die Überschrift „Abnahme der
+    Szenarien“, eine Zeile „Ergebnis: …“ und je Szenario seine Nummer, sein Name und „okay“ oder
+    „nicht okay“, bei „nicht okay“ mit der Notiz. Jede Abnahme ist ein neuer Kommentar; nach einer
+    Nachbesserung nimmst du einfach erneut ab. Schließt du die Ansicht mit Vermerken, fragt sie
+    nach, ob sie verworfen werden sollen.
+  - **Nur ein Vermerk:** Ein „nicht okay“ bewegt nichts am Board — keine Spalte, kein Label, keine
+    neue Karte. Abschicken darf, wer kommentieren darf; lehnt der Server ab, zeigt die Ansicht den
+    Fehler und behält die Vermerke.
 - **Kommentare:** schreiben; eigene Kommentare löschen (Moderation durch ADMIN/OWNER).
 - **Aktivität:** ein chronologischer Verlauf am Ende des Details — „*Zeitpunkt* · *Person* · *Aktion*".
   Protokolliert werden Anlegen, Bearbeiten, Zuständige geändert, Verschieben, Archivieren und
@@ -707,8 +727,8 @@ mit dem festen Satz der Labels, die das claude-workflow-kit, die Laufsteuerung u
 [Stufenleiste](#karten-detail) erwarten, nach Gruppen und in ihrer Farbe:
 
 - **Kit:** `kit:durchziehen`, `kit:carry-through`, `kit:geschuetzt`, `kit:protected`,
-  `kit:klaeren`, `kit:clarify`, `kit:night`, `kit:nightrun`, `kit:pruefen`, `kit:check`,
-  `kit:nightplan`, `kit:nightreview`, `kit:nightissues`
+  `kit:klaeren`, `kit:clarify`, `kit:geklaert`, `kit:clarified`, `kit:night`, `kit:nightrun`,
+  `kit:pruefen`, `kit:check`, `kit:nightplan`, `kit:nightreview`, `kit:nightissues`
 - **Lauf:** `lauf:abgebrochen`, `run:aborted`, `lauf:laeuft`, `run:running`, `lauf:wartet`,
   `run:waiting`
 - **Review:** `review:offen`, `review:fertig`, `review:done`

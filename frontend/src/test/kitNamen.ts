@@ -13,6 +13,7 @@ export const KIT_NAMEN: KitNamen = {
     { sache: 'DURCHZIEHEN', namen: ['kit:durchziehen', 'kit:carry-through'] },
     { sache: 'GESCHUETZT', namen: ['kit:geschuetzt', 'kit:protected'] },
     { sache: 'KLAEREN', namen: ['kit:klaeren', 'kit:clarify'] },
+    { sache: 'GEKLAERT', namen: ['kit:geklaert', 'kit:clarified'] },
     { sache: 'NIGHT', namen: ['kit:night'] },
     { sache: 'NIGHTRUN', namen: ['kit:nightrun'] },
     { sache: 'PRUEFEN', namen: ['kit:pruefen', 'kit:check'] },

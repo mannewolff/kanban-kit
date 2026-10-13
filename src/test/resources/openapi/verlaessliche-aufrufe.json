@@ -488,11 +488,17 @@
   "schemas" : {
     "Activity" : {
       "properties" : {
+        "actorName" : {
+          "type" : "string"
+        },
         "actorUserId" : {
           "format" : "int64",
           "type" : "integer"
         },
         "agent" : {
+          "type" : "string"
+        },
+        "columnKey" : {
           "type" : "string"
         },
         "createdAt" : {
@@ -520,6 +526,9 @@
     },
     "Comment" : {
       "properties" : {
+        "agent" : {
+          "type" : "string"
+        },
         "author" : {
           "type" : "string"
         },
@@ -533,6 +542,12 @@
         "id" : {
           "format" : "int64",
           "type" : "integer"
+        },
+        "origin" : {
+          "type" : "string"
+        },
+        "tokenName" : {
+          "type" : "string"
         }
       },
       "type" : "object"

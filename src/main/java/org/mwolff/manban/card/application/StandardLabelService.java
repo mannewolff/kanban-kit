@@ -132,6 +132,7 @@ public class StandardLabelService {
         Sache.DURCHZIEHEN,
         Sache.GESCHUETZT,
         Sache.KLAEREN,
+        Sache.GEKLAERT,
         Sache.NIGHT,
         Sache.NIGHTRUN,
         Sache.PRUEFEN,

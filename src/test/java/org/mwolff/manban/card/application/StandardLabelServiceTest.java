@@ -27,7 +27,7 @@ class StandardLabelServiceTest {
 
   private static final long ADMIN = 1L;
   private static final long NUTZER = 2L;
-  private static final int SATZ = 32;
+  private static final int SATZ = 34;
 
   private LabelRepository labels;
   private BoardService boardService;
@@ -55,6 +55,8 @@ class StandardLabelServiceTest {
             "kit:protected",
             "kit:klaeren",
             "kit:clarify",
+            "kit:geklaert",
+            "kit:clarified",
             "kit:night",
             "kit:nightrun",
             "kit:pruefen",
@@ -83,9 +85,9 @@ class StandardLabelServiceTest {
             "planreview:2");
     assertThat(satz).hasSize(SATZ);
     assertThat(satz.get(0)).isEqualTo(new StandardLabel("kit:durchziehen", "Kit", "#6a1b9a"));
-    assertThat(satz.get(14)).isEqualTo(new StandardLabel("run:aborted", "Lauf", "#1565c0"));
-    assertThat(satz.get(21)).isEqualTo(new StandardLabel("review:done", "Review", "#2e7d32"));
-    assertThat(satz.get(31))
+    assertThat(satz.get(16)).isEqualTo(new StandardLabel("run:aborted", "Lauf", "#1565c0"));
+    assertThat(satz.get(23)).isEqualTo(new StandardLabel("review:done", "Review", "#2e7d32"));
+    assertThat(satz.get(33))
         .isEqualTo(new StandardLabel("planreview:2", "Stufenleiste", "#ef6c00"));
   }
 
@@ -112,6 +114,19 @@ class StandardLabelServiceTest {
     assertThat(namen.indexOf("run:waiting")).isEqualTo(namen.indexOf("lauf:wartet") + 1);
     assertThat(namen.indexOf("goal:push-prepared"))
         .isEqualTo(namen.indexOf("ziel:push-vorbereitet") + 1);
+  }
+
+  @Test
+  void dasPaarGeklaertStehtInDerGruppeKitDirektHinterKitClarify() {
+    List<StandardLabel> satz = service.standardsatz(ADMIN);
+    List<String> namen = satz.stream().map(StandardLabel::name).toList();
+
+    int geklaert = namen.indexOf("kit:geklaert");
+    assertThat(geklaert).isEqualTo(namen.indexOf("kit:clarify") + 1);
+    assertThat(namen.indexOf("kit:clarified")).isEqualTo(geklaert + 1);
+    assertThat(satz.get(geklaert)).isEqualTo(new StandardLabel("kit:geklaert", "Kit", "#6a1b9a"));
+    assertThat(satz.get(geklaert + 1))
+        .isEqualTo(new StandardLabel("kit:clarified", "Kit", "#6a1b9a"));
   }
 
   @Test
