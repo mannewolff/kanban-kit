@@ -15,6 +15,44 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.29.0] – 2026-10-13
+
+- chore: v2.28.1
+- Werte über den Balken von Durchsatz und Implementierungszeit ([#1675](https://github.com/mannewolff/kanban-kit/issues/1675))
+- Doku: Systemlabels erklären sich selbst ([#1674](https://github.com/mannewolff/kanban-kit/issues/1674))
+- Erklärung in Menüs, Label-Auswahl und Labelverwaltung ([#1673](https://github.com/mannewolff/kanban-kit/issues/1673))
+- Erklärung am Label auf Karte, im Karten-Detail und in den Standard-Labels ([#1672](https://github.com/mannewolff/kanban-kit/issues/1672))
+- Erklärungstexte der Systemlabels in beiden Sprachen ([#1671](https://github.com/mannewolff/kanban-kit/issues/1671))
+- Kit-Namen: Schutzregel je Sache in der Antwort ([#1670](https://github.com/mannewolff/kanban-kit/issues/1670))
+- Kit-Namen: kit:on-hold ins Register aufgenommen ([#1667](https://github.com/mannewolff/kanban-kit/issues/1667))
+- Sprache: Ausnahmeliste des Wächters geleert, Kartenfelder auf Englisch ([#1661](https://github.com/mannewolff/kanban-kit/issues/1661))
+- Sprache: Administration, Admin-Bereich und API-Übersicht auf Englisch ([#1660](https://github.com/mannewolff/kanban-kit/issues/1660))
+- Sprache: Nachtlauf-Seite auf Englisch ([#1659](https://github.com/mannewolff/kanban-kit/issues/1659))
+- Sprache: Nachtlauf-Bausteine auf Englisch ([#1658](https://github.com/mannewolff/kanban-kit/issues/1658))
+- Sprache: Plattform-Leitstand auf Englisch ([#1657](https://github.com/mannewolff/kanban-kit/issues/1657))
+- Sprache: Leitstand auf Englisch ([#1656](https://github.com/mannewolff/kanban-kit/issues/1656))
+- Sprache: Vorhaben auf Englisch ([#1655](https://github.com/mannewolff/kanban-kit/issues/1655))
+- Sprache: Karten-Dialoge und Kartensuche auf Englisch ([#1654](https://github.com/mannewolff/kanban-kit/issues/1654))
+- Sprache: Karten-Detail auf Englisch ([#1653](https://github.com/mannewolff/kanban-kit/issues/1653))
+- Sprache: Board-Ansicht auf Englisch ([#1652](https://github.com/mannewolff/kanban-kit/issues/1652))
+- Sprache: Projekte, Boards, Mitglieder, Rollen und Profil auf Englisch ([#1651](https://github.com/mannewolff/kanban-kit/issues/1651))
+- Sprache: Rahmen und Navigation auf Englisch ([#1650](https://github.com/mannewolff/kanban-kit/issues/1650))
+- Sprache: Seiten vor der Anmeldung auf Englisch ([#1649](https://github.com/mannewolff/kanban-kit/issues/1649))
+- Sprache: Datumsfeld in der Schreibweise der Sprache ([#1648](https://github.com/mannewolff/kanban-kit/issues/1648))
+- Sprache: bereichsübergreifende lib-Formatierer ([#1647](https://github.com/mannewolff/kanban-kit/issues/1647))
+- Sprache: Abschnitt „Sprache / Language“ in der Administration ([#1646](https://github.com/mannewolff/kanban-kit/issues/1646))
+- Sprache: Wächtertest gegen eingebaute Literale ([#1645](https://github.com/mannewolff/kanban-kit/issues/1645))
+- Sprache: Frontend-Grundlage mit Wörterbuch, Kontext und Formatierern ([#1644](https://github.com/mannewolff/kanban-kit/issues/1644))
+- Sprache: alle sechs Mailarten in der eingestellten Sprache ([#1643](https://github.com/mannewolff/kanban-kit/issues/1643))
+- Sprache: Meldungsschlüssel in card, board, attachment, nightrun ([#1642](https://github.com/mannewolff/kanban-kit/issues/1642))
+- Sprache: Meldungsschlüssel in auth, project, accesstoken, comment, kanbancompat ([#1641](https://github.com/mannewolff/kanban-kit/issues/1641))
+- Sprache: Server-Meldungen nach Zugangsart ([#1640](https://github.com/mannewolff/kanban-kit/issues/1640))
+- Sprache der Installation: Einstellung und Endpunkte im Backend ([#1639](https://github.com/mannewolff/kanban-kit/issues/1639))
+- Standard-Labels legen nur noch die englischen Namen an ([#1636](https://github.com/mannewolff/kanban-kit/issues/1636))
+- Mutations-Überlebende in kitWortformen.ts getötet ([#1631](https://github.com/mannewolff/kanban-kit/issues/1631))
+- Mutations-Überlebende in abnahmeSzenarien.ts getötet ([#1630](https://github.com/mannewolff/kanban-kit/issues/1630))
+- Konfiguration auf installer 5.0
+
 ## [2.28.0] – 2026-10-12
 
 - chore: v2.27.1
