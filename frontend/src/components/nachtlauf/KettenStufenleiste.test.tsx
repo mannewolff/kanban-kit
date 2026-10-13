@@ -490,7 +490,7 @@ describe('KettenStufenleiste — Start', () => {
 
     expect(startKnopf()).not.toHaveAttribute('aria-disabled')
     await userEvent.click(startKnopf())
-    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [9] })
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [9, 2] })
   })
 
   it.each([
@@ -519,6 +519,60 @@ describe('KettenStufenleiste — Start', () => {
     expect(startKnopf()).toHaveAccessibleDescription(/kit:night/)
     await userEvent.click(startKnopf())
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['[Requirement] Neue Ansicht', BEREIT, ''],
+    [PLAN, [], 'Ein Plan.\nPlan-Review: fable (2026-10-05)'],
+  ])('setzt beim Start ohne Ziel-Label kit:night und ziel:pakete in einer Änderung (%s, Issue #1695)', async (titel, labelIds, beschreibung) => {
+    const onChange = zeige({ titel, labelIds, beschreibung })
+
+    await userEvent.click(startKnopf())
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [9, 2] })
+  })
+
+  it('setzt beim Start ohne Ziel-Label an einem englischen Board goal:packages (Issue #1695)', async () => {
+    const englisch = [label(32, 'goal:packages'), label(39, 'kit:night'), label(40, 'review:done')]
+    const onChange = zeige({ titel: '[Requirement] New view', boardLabels: englisch, labelIds: [40] })
+
+    await userEvent.click(startKnopf())
+
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [39, 32] })
+  })
+
+  it('setzt beim Start mit kit:durchziehen ohne Ziel-Label kein Ziel-Label (Issue #1695)', async () => {
+    const onChange = zeige({ labelIds: [...BEREIT, 7] })
+
+    await userEvent.click(startKnopf())
+    const dialog = within(await screen.findByRole('dialog'))
+    await userEvent.click(dialog.getByRole('button', { name: 'Kette starten' }))
+
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [9] })
+  })
+
+  it('sperrt den Start ohne Ziel-Label, wenn das Board das Label der Vorgabe nicht führt (Issue #1695)', async () => {
+    const onChange = zeige({ labelIds: BEREIT, boardLabels: VORRAT.filter((l) => l.name !== 'ziel:pakete') })
+
+    expect(startKnopf()).toHaveAttribute('aria-disabled', 'true')
+    expect(startKnopf()).toHaveAccessibleDescription(/Am Board fehlt das Label „ziel:pakete“/)
+    await userEvent.click(startKnopf())
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('tauscht beim Start ein unwirksames ziel:plan an einem [Plan] gegen die Vorgabe (Issue #1695)', async () => {
+    const onChange = zeige({ titel: PLAN, labelIds: [1], beschreibung: 'Plan-Review: fable (2026-10-05)' })
+
+    await userEvent.click(startKnopf())
+    expect(onChange).toHaveBeenCalledWith({ ab: [1], an: [9, 2] })
+  })
+
+  it('lässt den Start mit gesetztem Ziel-Label zu, auch wenn das Label der Vorgabe am Board fehlt (Issue #1695)', async () => {
+    const onChange = zeige({ labelIds: [...BEREIT, 1], boardLabels: VORRAT.filter((l) => l.name !== 'ziel:pakete') })
+
+    await userEvent.click(startKnopf())
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [9] })
   })
 
   it('ist nach der Übernahme durch einen Runner nur Anzeige', () => {

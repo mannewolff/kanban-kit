@@ -68,6 +68,19 @@ type PrueferSache = (typeof PRUEFER)[number]['sache']
 const PRUEFER_ZAHL = Object.fromEntries(PRUEFER.map((p) => [p.sache, p.zahl])) as Record<PrueferSache, number>
 /** Das eine Start-Label des Kit-Vertrags (E10): gesetzt heißt freigegeben, noch nicht übernommen. */
 const NACHT = 'NIGHT'
+/** Das Ziel ohne Ziel-Label: „Arbeitspakete“, wie die Leiste es markiert. */
+const VORGABE_ZIEL = 'ZIEL_PAKETE'
+/**
+ * Die Sachen, die „Kette starten“ setzt (Issue #1695): `kit:night`, und mit Vorgabe dazu das Label
+ * der markierten Vorgabe — das Kit fährt ohne Ziel-Label die volle Kette.
+ */
+const startSachen = (mitVorgabe: boolean) => (mitVorgabe ? [NACHT, VORGABE_ZIEL] : [NACHT])
+/**
+ * Die Namen, die der Start abnimmt: mit Vorgabe alle Ziel-Namen, damit ein unwirksames Ziel-Label
+ * (`ziel:plan` an einem Plan) der Vorgabe weicht — höchstens ein Ziel je Karte (E14).
+ */
+const abBeimStart = (daten: KitNamen, mitVorgabe: boolean) =>
+  new Set(mitVorgabe ? ZIEL_SACHEN.flatMap((sache) => namenDerSache(daten, sache)) : [])
 /** Sachen, mit denen an der Karte eine offene Frage auf einen Menschen wartet. */
 const OFFENE_FRAGE = ['KLAEREN', 'LAUF_WARTET'] as const
 const PLAN_REVIEW_ZEILE = new RegExp(`^${PLAN_REVIEW}`, 'm')
@@ -140,9 +153,10 @@ const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel =
  * Anzeige ohne Knöpfe (E3).
  *
  * <p><b>Start</b> (Issue #1450): „Kette starten“ setzt `kit:night`, ab „Umsetzung“ erst nach
- * Bestätigung im Dialog (E7); „Start zurücknehmen“ nimmt nur `kit:night` ab (E10). Solange die
- * Kette gestartet ist, ruhen Ziel- und Prüferwahl — ein späterer Zielwechsel umginge die
- * Bestätigung. Hat ein Runner übernommen (E15), ist die Leiste nur noch Anzeige.
+ * Bestätigung im Dialog (E7); ohne Ziel-Label und ohne `kit:durchziehen` dazu das Label der
+ * angezeigten Vorgabe, denn das Kit fährt ohne Ziel-Label die volle Kette (Issue #1695). „Start
+ * zurücknehmen“ nimmt nur `kit:night` ab (E10). Solange die Kette gestartet ist, ruhen Ziel- und
+ * Prüferwahl — ein späterer Zielwechsel umginge die Bestätigung. Hat ein Runner übernommen (E15), ist die Leiste nur noch Anzeige.
  *
  * <p><b>Kettenstand</b> (Issue #1453): Beim Öffnen lädt die Leiste einmal
  * `GET /api/cards/{cardId}/night-chain`, ohne Nachladen. Ob ein Runner übernommen hat, sagt dann
@@ -302,6 +316,9 @@ function Leiste({
 
   const prueferGesetzt = PRUEFER.find((p) => hat(p.sache))?.sache
   const nachtNamen = new Set(namenDerSache(daten, NACHT))
+  // Ohne wirksames Ziel und ohne `kit:durchziehen` ist die angezeigte Vorgabe „Arbeitspakete“ das Ziel.
+  const mitVorgabe = gesetztesZiel === undefined && durchziehen === undefined
+  const zuStarten = startSachen(mitVorgabe).map(zuSetzen)
 
   /** Was vor dem Start fehlt — leer heißt startbereit. */
   const sperrgruende = [
@@ -310,7 +327,9 @@ function Leiste({
     ...OFFENE_FRAGE.flatMap((sache) =>
       gesetzteNamen.filter((n) => namenDerSache(daten, sache).includes(n)).map((n) => genannt(sache, n)),
     ).map(t.OFFENE_FRAGE),
-    ...(idVon(zuSetzen(NACHT)) === undefined ? [t.LABEL_FEHLT(nennen(NACHT))] : []),
+    ...startSachen(mitVorgabe)
+      .filter((sache) => idVon(zuSetzen(sache)) === undefined)
+      .map((sache) => t.LABEL_FEHLT(nennen(sache))),
   ]
 
   if (stand?.uebernommen === true) {
@@ -391,7 +410,12 @@ function Leiste({
         uebernommen={uebernommen}
         sperrgruende={sperrgruende}
         goNoetig={index(ziel) >= index('umsetzung')}
-        onStart={() => onChange({ ab: [], an: boardLabels.filter((l) => l.name === zuSetzen(NACHT)).map((l) => l.id) })}
+        onStart={() =>
+          onChange({
+            ab: idsMit(abBeimStart(daten, mitVorgabe)),
+            an: zuStarten.flatMap((name) => boardLabels.filter((l) => l.name === name).map((l) => l.id)),
+          })
+        }
         onRuecknahme={() => onChange({ ab: idsMit(nachtNamen), an: [] })}
       />
     </Box>

@@ -93,8 +93,10 @@ Klick auf eine Karte öffnet das Detail:
   - **Ziel wählen:** Wählbar sind vier Ziele, je eines mit seinem Label: **Plan** (`ziel:plan`),
     **Arbeitspakete** (`ziel:pakete`), **Umsetzung** (`ziel:umsetzung`) und **Veröffentlichung
     vorbereitet** (`ziel:push-vorbereitet`). Ein Klick setzt das Ziel und nimmt ein vorher gewähltes
-    ab; es gibt höchstens eines je Karte. Ohne gewähltes Ziel ist **Arbeitspakete** markiert: Die
-    Kette endet dann wie bisher nach der Abdeckungsprüfung. Trägt die Karte `kit:durchziehen`, gilt
+    ab; es gibt höchstens eines je Karte. Ohne gewähltes Ziel ist **Arbeitspakete** markiert, und
+    „Kette starten“ setzt dieses markierte Ziel als Label `ziel:pakete` mit: Die Kette endet dann
+    nach der Abdeckungsprüfung. Wer eine Karte von Hand mit `kit:night` startet, ohne ein Ziel-Label
+    zu setzen, schickt sie durch die volle Kette bis „Veröffentlichung vorbereitet“. Trägt die Karte `kit:durchziehen`, gilt
     sie als Ziel „Umsetzung“, und ein kürzeres Ziel bliebe wirkungslos. An einem Plan sind Plan und
     Prüfung schon erbracht und nicht wählbar. Die Pfeiltasten wechseln zwischen den Zielen.
   - **Planprüfung:** An einer fachlichen Anforderung wählt ein Schalter, ob ein oder zwei Modelle
