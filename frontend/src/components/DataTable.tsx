@@ -12,6 +12,7 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Tooltip from '@mui/material/Tooltip'
 import { type ReactNode, useRef, useState } from 'react'
+import { useT } from '../i18n/SpracheContext'
 
 /** Spaltendefinition für {@link DataTable}. */
 export interface DataTableColumn<Row> {
@@ -72,6 +73,7 @@ export function DataTable<Row>({
   getRowTestId,
   storageKey,
 }: Readonly<Props<Row>>) {
+  const t = useT()
   const [widths, setWidths] = useState<Record<string, number>>(() => readWidths(storageKey))
   const [hidden, setHidden] = useState<string[]>(() => readHidden(storageKey))
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -129,7 +131,7 @@ export function DataTable<Row>({
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
           <IconButton
             size="small"
-            aria-label="Spalten ein-/ausblenden"
+            aria-label={t.RAHMEN.SPALTEN_UMSCHALTEN}
             onClick={(e) => setMenuAnchor(e.currentTarget)}
           >
             <ViewColumnIcon fontSize="small" />
@@ -140,7 +142,7 @@ export function DataTable<Row>({
                 <Checkbox
                   size="small"
                   checked={!hidden.includes(col.key)}
-                  slotProps={{ input: { readOnly: true, 'aria-label': `Spalte ${col.key} ein-/ausblenden` } }}
+                  slotProps={{ input: { readOnly: true, 'aria-label': t.RAHMEN.SPALTE_UMSCHALTEN(col.key) } }}
                 />
                 <ListItemText primary={col.header} />
               </MenuItem>
@@ -160,10 +162,10 @@ export function DataTable<Row>({
               >
                 {col.header}
                 {col.resizable && (
-                  <Tooltip title="Breite ziehen">
+                  <Tooltip title={t.RAHMEN.BREITE_ZIEHEN}>
                     <Box
                       role="separator"
-                      aria-label={`Breite von Spalte ${col.key} ändern`}
+                      aria-label={t.RAHMEN.BREITE_AENDERN(col.key)}
                       onMouseDown={(e) => startResize(col, e)}
                       sx={{
                         position: 'absolute',

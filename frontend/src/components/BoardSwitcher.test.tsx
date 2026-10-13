@@ -4,6 +4,7 @@ import { boardsApi } from '../api/boards'
 import { ApiError } from '../api/client'
 import type { BoardHistoryEntry } from '../lib/useBoardHistory'
 import { BoardSwitcher } from './BoardSwitcher'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const navigateMock = vi.fn()
 vi.mock('react-router-dom', async (orig) => {
@@ -363,5 +364,33 @@ describe('BoardSwitcher', () => {
       expect(screen.getByRole('option', { name: /Board.*Projekt A/ })).toBeInTheDocument()
       expect(screen.getByRole('option', { name: /Board.*Projekt B/ })).toBeInTheDocument()
     })
+  })
+})
+
+describe('BoardSwitcher auf Englisch', () => {
+  it('beschriftet Dialog und Liste auf Englisch und lässt die Namen unverändert', () => {
+    renderMitSprache(switcher(), 'en')
+
+    expect(screen.getByRole('dialog', { name: 'Switch board' })).toBeInTheDocument()
+    expect(screen.getByRole('listbox', { name: 'Recently visited boards' })).toBeInTheDocument()
+    expect(screen.getByText('Projekt A')).toBeInTheDocument()
+  })
+
+  it('meldet ein verschwundenes Board auf Englisch', async () => {
+    mockedBoards.get.mockRejectedValue(new ApiError(404, 'weg'))
+    renderMitSprache(switcher(), 'en')
+
+    press('Enter')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Board is no longer available.')
+  })
+
+  it('meldet einen vorübergehenden Fehlschlag auf Englisch', async () => {
+    mockedBoards.get.mockRejectedValue(new ApiError(500, 'kaputt'))
+    renderMitSprache(switcher(), 'en')
+
+    press('Enter')
+
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('The board could not be opened.', 'error'))
   })
 })

@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1650 = 'Sprache: Rahmen und Navigation auf Englisch'
 const P1651 = 'Sprache: Projekte, Boards, Mitglieder, Rollen und Profil auf Englisch'
 const P1652 = 'Sprache: Board-Ansicht auf Englisch'
 const P1653 = 'Sprache: Karten-Detail auf Englisch'
@@ -34,16 +33,9 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   // #1649
   { file: 'src/auth/AuthContext.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/AuthCard.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  // #1650
-  { file: 'src/components/AppShell.tsx', rule: 'jsx', resolvedIn: P1650 },
-  { file: 'src/components/AppShell.tsx', rule: 'literal', resolvedIn: P1650 },
-  { file: 'src/components/BoardSwitcher.tsx', rule: 'jsx', resolvedIn: P1650 },
-  { file: 'src/components/BoardSwitcher.tsx', rule: 'literal', resolvedIn: P1650 },
-  { file: 'src/components/DataTable.tsx', rule: 'jsx', resolvedIn: P1650 },
-  { file: 'src/components/DataTable.tsx', rule: 'literal', resolvedIn: P1650 },
-  { file: 'src/components/EditModeBanner.tsx', rule: 'jsx', resolvedIn: P1650 },
-  { file: 'src/components/EditModeBanner.tsx', rule: 'literal', resolvedIn: P1650 },
-  { file: 'src/layout/navItems.ts', rule: 'literal', resolvedIn: P1650 },
+  // #1650 — CSS-Werte, `rel` des Doku-Links und das Versionspraefix `v`
+  { file: 'src/components/AppShell.tsx', rule: 'jsx', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/AppShell.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1651
   { file: 'src/pages/BoardListPage.tsx', rule: 'jsx', resolvedIn: P1651 },
   { file: 'src/pages/BoardListPage.tsx', rule: 'literal', resolvedIn: P1651 },

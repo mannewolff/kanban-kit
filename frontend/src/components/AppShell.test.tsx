@@ -13,6 +13,7 @@ import { SnackbarProvider } from './SnackbarProvider'
 import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { TEXT_SCHWACH, theme } from '../theme'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const logoutMock = vi.fn().mockResolvedValue(undefined)
 const useAuthMock = vi.fn()
@@ -1272,5 +1273,89 @@ describe('AppShell Tastatur (AK 15, #955)', () => {
       }
     }
     expect([...erreicht]).toHaveLength(ziele.length)
+  })
+})
+
+describe('AppShell auf Englisch', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    vi.clearAllMocks()
+    editModeState.editMode = false
+    logoutMock.mockResolvedValue(undefined)
+    useAuthMock.mockReturnValue({ user: { ...loggedInUser, platformRole: 'ADMIN' as const }, logout: logoutMock })
+    mockedBoards.get.mockResolvedValue({ id: 1, name: 'B', projectId: 5, columns: [] })
+    mockedBoards.list.mockResolvedValue([])
+    mockedProjects.list.mockResolvedValue([
+      { id: 5, name: 'P1', role: 'OWNER', createdAt: '' },
+      { id: 6, name: 'P2', role: 'MEMBER', createdAt: '' },
+    ])
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  const aufEnglisch = (entry = '/') =>
+    renderMitSprache(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={[entry]}>
+          <LocationProbe />
+          <AppShell />
+        </MemoryRouter>
+      </SnackbarProvider>,
+      'en',
+    )
+
+  it('beschriftet Marke, Schiene und Fuß auf Englisch', async () => {
+    aufEnglisch('/boards/1')
+    const navigation = screen.getByRole('navigation', { name: 'Main navigation' })
+
+    expect(within(navigation).getByText('AI Control Room')).toBeInTheDocument()
+    expect(await within(navigation).findByRole('link', { name: 'Control Room' })).toHaveAttribute('href', '/boards/1/leitstand')
+    expect(within(navigation).getByRole('link', { name: 'Epics' })).toBeInTheDocument()
+    expect(await within(navigation).findByRole('link', { name: 'Night run' })).toBeInTheDocument()
+    expect(within(navigation).getByRole('group', { name: 'Management' })).toBeInTheDocument()
+    expect(within(navigation).getByRole('link', { name: 'Platform Control Room' })).toBeInTheDocument()
+    expect(within(navigation).getByRole('link', { name: 'Documentation' })).toHaveAttribute('href', '/docs/')
+    expect(within(navigation).getByRole('link', { name: 'Administration' })).toBeInTheDocument()
+  })
+
+  it('klappt die Schiene mit englischer Beschriftung ein und aus', () => {
+    aufEnglisch()
+    fireEvent.click(screen.getByLabelText('Collapse menu'))
+    expect(screen.getByLabelText('Expand menu')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Documentation' })).toBeInTheDocument()
+  })
+
+  it('beschriftet Kopf, Sprungmarke und Kontomenü auf Englisch', () => {
+    aufEnglisch()
+    expect(screen.getByRole('link', { name: 'Skip to content' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Switch board' })).toHaveTextContent('Board')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Account of Manne' }))
+    expect(screen.getByRole('menuitem', { name: 'Edit profile' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeInTheDocument()
+  })
+
+  it('meldet ein gescheitertes Abmelden ohne Server-Meldung auf Englisch', async () => {
+    logoutMock.mockRejectedValue(new TypeError('Failed to fetch'))
+    aufEnglisch()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Account of Manne' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+
+    await erwarteFehlerToast('Sign-out failed.')
+  })
+
+  it('zeigt den Editiermodus-Hinweis auf Englisch', () => {
+    editModeState.editMode = true
+    aufEnglisch()
+    expect(screen.getByText('Note: you are in edit mode')).toBeInTheDocument()
+  })
+
+  it('öffnet die schmale Navigation über eine englisch beschriftete Taste', async () => {
+    mitFensterbreite(768)
+    aufEnglisch()
+    fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
+    expect(await screen.findByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument()
   })
 })

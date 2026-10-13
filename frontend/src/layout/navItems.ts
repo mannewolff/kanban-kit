@@ -2,6 +2,7 @@ import type { ComponentType } from 'react'
 import type { SvgIconProps } from '@mui/material'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import FolderIcon from '@mui/icons-material/Folder'
+import type { Woerterbuch } from '../i18n/de'
 import { canManageBoards, canManageMembers } from '../lib/roles'
 import {
   BoardSymbol,
@@ -80,21 +81,22 @@ function projektEintraege(
   board: BoardContext | null,
   currentProjectId: number,
   canViewNightRun: boolean,
+  t: Woerterbuch['RAHMEN'],
 ): NavLink[] {
   const projekt: NavLink[] = []
   if (board) {
     projekt.push(
-      { kind: 'link', label: 'Leitstand', path: `/boards/${board.id}/leitstand`, icon: LeitstandSymbol },
-      { kind: 'link', label: 'Board', path: `/boards/${board.id}`, icon: BoardSymbol },
-      { kind: 'link', label: 'Liste', path: `/boards/${board.id}/list`, icon: ListeSymbol },
-      { kind: 'link', label: 'Vorhaben', path: `/boards/${board.id}/vorhaben`, icon: VorhabenSymbol },
+      { kind: 'link', label: t.NAV_LEITSTAND, path: `/boards/${board.id}/leitstand`, icon: LeitstandSymbol },
+      { kind: 'link', label: t.NAV_BOARD, path: `/boards/${board.id}`, icon: BoardSymbol },
+      { kind: 'link', label: t.NAV_LISTE, path: `/boards/${board.id}/list`, icon: ListeSymbol },
+      { kind: 'link', label: t.NAV_VORHABEN, path: `/boards/${board.id}/vorhaben`, icon: VorhabenSymbol },
     )
   }
   // „Läufe" liegt hinter einem eigenen Recht (Owner bzw. Plattform-Admin); die Shell entscheidet.
   if (canViewNightRun) {
     projekt.push({
       kind: 'link',
-      label: 'Runner',
+      label: t.NAV_NACHTLAUF,
       path: `/projects/${currentProjectId}/nachtlauf`,
       icon: NachtlaeufeSymbol,
     })
@@ -114,8 +116,11 @@ function projektEintraege(
  * - **Verwaltung** — Mitglieder (mit Recht), Rollen & Rechte, Admin (System-Admin).
  *
  * Leere Blöcke entfallen. Administration und Dokumentation stehen im Fuß der Schiene.
+ *
+ * Die Beschriftungen kommen aus dem übergebenen Wörterbuch (Issue #1650) — als Parameter statt
+ * über `useT`, damit dieses Modul ohne React bleibt.
  */
-export function buildNavItems(params: NavParams): NavGroup[] {
+export function buildNavItems(params: NavParams, woerterbuch: Woerterbuch): NavGroup[] {
   const {
     board,
     isAdmin = false,
@@ -127,56 +132,57 @@ export function buildNavItems(params: NavParams): NavGroup[] {
     projectName = null,
     canManageMembers = false,
   } = params
+  const t = woerterbuch.RAHMEN
   const bloecke: NavGroup[] = []
 
   // Projekt-Kontext: entweder aus dem offenen Board oder direkt aus einer Projekt-Route.
   const currentProjectId = board?.projectId ?? projectId
 
   if (currentProjectId !== null) {
-    const projekt = projektEintraege(board, currentProjectId, canViewNightRun)
+    const projekt = projektEintraege(board, currentProjectId, canViewNightRun, t)
     // Ohne offenes Board und ohne Nachtlauf-Recht bleibt der Block leer — seit dem Rückbau des
     // Ideen-Links (#1201) ist das ein erreichbarer Zustand, und ein Block ohne Eintrag zeigte dem
     // Nutzer nur einen Titel ohne Ziel.
     if (projekt.length > 0) {
-      bloecke.push({ kind: 'group', id: 'projekt', label: projectName ? `Projekt ${projectName}` : 'Projekt', children: projekt })
+      bloecke.push({ kind: 'group', id: 'projekt', label: projectName ? t.NAV_PROJEKT_NAME(projectName) : t.NAV_PROJEKT, children: projekt })
     }
   }
 
   const uebersicht: NavLink[] = []
   if (isAdmin || projectCount !== 1) {
-    uebersicht.push({ kind: 'link', label: 'Projekte', path: '/projects', icon: FolderIcon })
+    uebersicht.push({ kind: 'link', label: t.NAV_PROJEKTE, path: '/projects', icon: FolderIcon })
   }
   if (board && (canManageBoards || boardCount !== 1)) {
-    uebersicht.push({ kind: 'link', label: 'Boards', path: `/projects/${board.projectId}`, icon: BoardSymbol })
+    uebersicht.push({ kind: 'link', label: t.NAV_BOARDS, path: `/projects/${board.projectId}`, icon: BoardSymbol })
   }
   if (uebersicht.length > 0) {
-    bloecke.push({ kind: 'group', id: 'uebersicht', label: 'Übersicht', children: uebersicht })
+    bloecke.push({ kind: 'group', id: 'uebersicht', label: t.NAV_UEBERSICHT, children: uebersicht })
   }
 
   const verwaltung: NavLink[] = []
   if (currentProjectId !== null && canManageMembers) {
     verwaltung.push({
       kind: 'link',
-      label: 'Mitglieder',
+      label: t.NAV_MITGLIEDER,
       path: `/projects/${currentProjectId}/members`,
       icon: MitgliederSymbol,
     })
   }
-  verwaltung.push({ kind: 'link', label: 'Rollen & Rechte', path: '/roles', icon: RollenSymbol })
+  verwaltung.push({ kind: 'link', label: t.NAV_ROLLEN, path: '/roles', icon: RollenSymbol })
   if (isAdmin) {
     // Die Startseite eines Plattform-Admins (Issue #1082, AK 2): jederzeit erreichbar, nicht nur
     // beim Anmelden. Wer nicht Plattform-Admin ist, sieht den Eintrag nicht (AK 3).
     verwaltung.push(
       {
         kind: 'link',
-        label: 'Plattform-Leitstand',
+        label: t.NAV_PLATTFORM_LEITSTAND,
         path: '/plattform-leitstand',
         icon: LeitstandSymbol,
       },
-      { kind: 'link', label: 'Admin', path: '/admin', icon: AdminPanelSettingsIcon },
+      { kind: 'link', label: t.NAV_ADMIN, path: '/admin', icon: AdminPanelSettingsIcon },
     )
   }
-  bloecke.push({ kind: 'group', id: 'verwaltung', label: 'Verwaltung', children: verwaltung })
+  bloecke.push({ kind: 'group', id: 'verwaltung', label: t.NAV_VERWALTUNG, children: verwaltung })
 
   return bloecke
 }

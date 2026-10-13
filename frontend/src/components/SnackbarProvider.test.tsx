@@ -4,6 +4,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel } from '../test/cssRegel'
 import { theme } from '../theme'
 import { SnackbarProvider, useSnackbar } from './SnackbarProvider'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 function Harness() {
   const notify = useSnackbar()
@@ -131,5 +132,20 @@ describe('SnackbarProvider in beiden Erscheinungsbildern (#960)', () => {
     expect(regel).toContain(`background-color: var(--mb-palette-Alert-${zustand}FilledBg)`)
     expect(regel).toContain(`color: var(--mb-palette-Alert-${zustand}FilledColor)`)
     expect(regel).not.toMatch(/#[0-9A-Fa-f]{3,8}\b/)
+  })
+})
+
+describe('SnackbarProvider auf Englisch', () => {
+  it('zeigt die Meldung des Aufrufers unverändert und lässt einen Fehler stehen', () => {
+    renderMitSprache(
+      <SnackbarProvider>
+        <Harness />
+      </SnackbarProvider>,
+      'en',
+    )
+    fireEvent.click(screen.getByText('err'))
+
+    act(() => vi.advanceTimersByTime(3000))
+    expect(screen.getByText('Fehler')).toBeInTheDocument()
   })
 })

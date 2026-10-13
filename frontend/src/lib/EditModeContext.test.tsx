@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { EditModeProvider, useEditMode } from './EditModeContext'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 function Probe() {
   const { editMode, setEditMode, toggleEditMode } = useEditMode()
@@ -56,5 +57,18 @@ describe('EditModeContext', () => {
     await userEvent.click(screen.getByRole('button', { name: 'toggle' }))
     await userEvent.click(screen.getByRole('button', { name: 'on' }))
     expect(screen.getByTestId('mode')).toHaveTextContent('false')
+  })
+})
+
+describe('EditModeContext auf Englisch', () => {
+  it('schaltet unabhängig von der Sprache', async () => {
+    renderMitSprache(
+      <EditModeProvider>
+        <Probe />
+      </EditModeProvider>,
+      'en',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'toggle' }))
+    expect(screen.getByTestId('mode')).toHaveTextContent('true')
   })
 })

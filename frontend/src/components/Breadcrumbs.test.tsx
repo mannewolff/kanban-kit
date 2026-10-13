@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { Breadcrumbs } from './Breadcrumbs'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 describe('Breadcrumbs', () => {
   it('rendert Vorsegmente als Links und das letzte Segment als aktuelle Seite', () => {
@@ -100,5 +101,19 @@ describe('Breadcrumbs', () => {
 
     expect(screen.queryByRole('link', { name: 'In Progress' })).not.toBeInTheDocument()
     expect(screen.getByText('In Progress')).not.toHaveAttribute('aria-current', 'page')
+  })
+})
+
+describe('Breadcrumbs auf Englisch', () => {
+  it('zeigt die Segmente als Daten unverändert', () => {
+    renderMitSprache(
+      <MemoryRouter>
+        <Breadcrumbs items={[{ label: 'Projekte', to: '/' }, { label: 'Übersicht' }]} />
+      </MemoryRouter>,
+      'en',
+    )
+
+    expect(screen.getByRole('link', { name: 'Projekte' })).toHaveAttribute('href', '/')
+    expect(screen.getByText('Übersicht')).toHaveAttribute('aria-current', 'page')
   })
 })

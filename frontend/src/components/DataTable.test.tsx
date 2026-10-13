@@ -4,6 +4,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel } from '../test/cssRegel'
 import { theme } from '../theme'
 import { DataTable, type DataTableColumn } from './DataTable'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 interface Row {
   id: number
@@ -257,5 +258,32 @@ describe('DataTable Dichte aus dem Theme (#953, #957)', () => {
     expect(zelle).toHaveTextContent(lang)
     expect(cssRegel(zelle)).not.toContain('white-space: nowrap')
     expect(cssRegel(zelle)).not.toContain('text-overflow')
+  })
+})
+
+describe('DataTable auf Englisch', () => {
+  beforeEach(() => vi.stubGlobal('localStorage', fakeStorage()))
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  const aufEnglisch = () =>
+    renderMitSprache(
+      <DataTable columns={makeColumns()} rows={rows} getRowKey={(r) => r.id} storageKey="users" />,
+      'en',
+    )
+
+  it('beschriftet Spaltenmenü und Ziehgriffe auf Englisch', () => {
+    aufEnglisch()
+    expect(screen.getByLabelText('Resize column name')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Show/hide columns'))
+    expect(screen.getByLabelText('Show/hide column email')).toBeInTheDocument()
+  })
+
+  it('zeigt den Tooltip des Ziehgriffs auf Englisch', async () => {
+    aufEnglisch()
+    fireEvent.mouseOver(screen.getByLabelText('Resize column name'))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Drag to resize')
   })
 })
