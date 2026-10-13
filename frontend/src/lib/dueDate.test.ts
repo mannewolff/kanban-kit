@@ -16,6 +16,9 @@ describe('isOverdue', () => {
   it('ist false bei Datum in der Zukunft', () => {
     expect(isOverdue('2026-08-01T00:00:00Z', false, NOW)).toBe(false)
   })
+  it('ist false, wenn die Fälligkeit genau jetzt ist', () => {
+    expect(isOverdue('2026-07-14T12:00:00Z', false, NOW)).toBe(false)
+  })
 })
 
 describe('formatDueDate', () => {
