@@ -1,5 +1,6 @@
 package org.mwolff.manban.kanbancompat.application;
 
+import org.mwolff.manban.common.i18n.UebersetzbareMeldung;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
@@ -14,9 +15,17 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * verhindert — und sie hat damit recht: Wer die Protokollregel prüft, gehört zum Protokoll.
  */
 @ResponseStatus(HttpStatus.BAD_REQUEST)
-public class InvalidNumberedIngestException extends RuntimeException {
+public class InvalidNumberedIngestException extends RuntimeException
+    implements UebersetzbareMeldung {
 
-  public InvalidNumberedIngestException(String message) {
-    super(message);
+  public InvalidNumberedIngestException() {
+    super(
+        "Eine vorgegebene Nummer verlangt einen externalKey — sonst blockiert der Import sich"
+            + " nach dem ersten Aufruf selbst.");
+  }
+
+  @Override
+  public String schluessel() {
+    return "kanbancompat.nummer-ohne-externalkey";
   }
 }

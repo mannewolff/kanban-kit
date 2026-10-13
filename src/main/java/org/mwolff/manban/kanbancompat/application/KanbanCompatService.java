@@ -259,9 +259,7 @@ public class KanbanCompatService {
       return boardService.firstColumn(boardId).id();
     }
     if (DONE.equals(normalizeColumnKey(column))) {
-      throw new InvalidKanbanColumnException(
-          "Karten koennen nicht in DONE angelegt werden — dass eine Karte fertig ist, stellt ein"
-              + " Mensch auf dem Board fest.");
+      throw InvalidKanbanColumnException.doneNichtAnlegbar();
     }
     if (direct) {
       return columnIdForKey(boardId, column);
@@ -289,9 +287,7 @@ public class KanbanCompatService {
       return;
     }
     if (normalizedKey == null) {
-      throw new InvalidNumberedIngestException(
-          "Eine vorgegebene Nummer verlangt einen externalKey — sonst blockiert der Import sich"
-              + " nach dem ersten Aufruf selbst.");
+      throw new InvalidNumberedIngestException();
     }
   }
 
@@ -567,10 +563,7 @@ public class KanbanCompatService {
   private long columnIdForKey(long boardId, @Nullable String key) {
     String wanted = requireKanbanKey(key);
     return columnWithKey(boardId, wanted)
-        .orElseThrow(
-            () ->
-                new InvalidKanbanColumnException(
-                    "Board " + boardId + " hat keine Spalte für " + wanted));
+        .orElseThrow(() -> InvalidKanbanColumnException.fehltAufBoard(boardId, wanted));
   }
 
   /**
@@ -603,7 +596,7 @@ public class KanbanCompatService {
   private static String requireKanbanKey(@Nullable String key) {
     String wanted = normalizeColumnKey(key);
     if (!COLUMNS.contains(wanted)) {
-      throw new InvalidKanbanColumnException("Unbekannte Kanban-Spalte: " + key);
+      throw InvalidKanbanColumnException.unbekannt(key);
     }
     return wanted;
   }

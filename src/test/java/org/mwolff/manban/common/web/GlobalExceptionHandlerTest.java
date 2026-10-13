@@ -21,7 +21,6 @@ import org.mwolff.manban.common.i18n.Sprache;
 import org.mwolff.manban.common.i18n.Texte;
 import org.mwolff.manban.common.i18n.UebersetzbareMeldung;
 import org.mwolff.manban.config.SpracheLocaleConfig;
-import org.mwolff.manban.kanbancompat.application.TokenNotBoundException;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.springframework.core.MethodParameter;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -47,9 +46,6 @@ import org.springframework.web.context.request.ServletWebRequest;
  * RFC-9457 Problem Details, Validierungsfehler tragen eine {@code fieldErrors}-Extension, und
  * unerwartete Fehler geben keine internen Details preis.
  */
-// PMD.ExcessiveImports: Die Sprachfälle (Issue #1640) gehören laut Paket in diese Klasse und
-// brauchen Sprache, Fixture, LocaleResolver und eine übersetzbare Fixture-Exception.
-@SuppressWarnings("PMD.ExcessiveImports")
 class GlobalExceptionHandlerTest {
 
   private static final String INTERN_DE = "Interner Fehler. Bitte später erneut versuchen.";
@@ -115,15 +111,12 @@ class GlobalExceptionHandlerTest {
 
   @Test
   void annotationReasonBecomesDetailWhenExceptionHasNoMessage() {
-    // When (TokenNotBoundException trägt reason statt Message)
-    ProblemDetail problem = handler.handleException(new TokenNotBoundException());
+    // When (die Fixture trägt reason statt Message)
+    ProblemDetail problem = handler.handleException(new AnnotatedWithReasonException());
 
     // Then
     assertThat(problem.getStatus()).isEqualTo(409);
-    assertThat(problem.getDetail())
-        .isEqualTo(
-            "Token ist an kein Board gebunden."
-                + " Bitte ein board-gebundenes Kanban-Token verwenden.");
+    assertThat(problem.getDetail()).isEqualTo("Grund aus der Annotation");
   }
 
   @Test
@@ -342,8 +335,8 @@ class GlobalExceptionHandlerTest {
   void andereExceptionBehaeltIhreMeldungAuchBeiEnglisch() {
     eingestellt(Sprache.EN);
 
-    assertThat(handler.handleException(new ProjectAccessDeniedException()).getDetail())
-        .isEqualTo("Keine Berechtigung für diese Projekt-Aktion");
+    assertThat(handler.handleException(new AnnotatedWithMessageException()).getDetail())
+        .isEqualTo("Deutsche Meldung ohne Schlüssel");
   }
 
   @Test
@@ -456,6 +449,19 @@ class GlobalExceptionHandlerTest {
     @Override
     public String field() {
       return "title";
+    }
+  }
+
+  /** Annotierte Exception mit reason und ohne Message. */
+  @ResponseStatus(value = HttpStatus.CONFLICT, reason = "Grund aus der Annotation")
+  static class AnnotatedWithReasonException extends RuntimeException {}
+
+  /** Annotierte Exception mit fester Message, aber ohne Meldungsschlüssel. */
+  @ResponseStatus(HttpStatus.FORBIDDEN)
+  static class AnnotatedWithMessageException extends RuntimeException {
+
+    AnnotatedWithMessageException() {
+      super("Deutsche Meldung ohne Schlüssel");
     }
   }
 

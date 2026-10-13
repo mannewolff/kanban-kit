@@ -10,9 +10,13 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -38,7 +42,9 @@ import org.mwolff.manban.common.i18n.UebersetzbareMeldung;
  *   <li>Jede Produktionsklasse, die {@link UebersetzbareMeldung} trägt, nennt einen Schlüssel, der
  *       in beiden Sprachen existiert, und eine Exception liefert mit {@code getMessage()} genau den
  *       aufgelösten deutschen Text. Instanziiert wird über den Konstruktor mit den wenigsten
- *       Parametern, belegt aus {@link #BEISPIELWERTE}.
+ *       Parametern, belegt aus {@link #BEISPIELWERTE}. Trägt die Klasse statische Fabrikmethoden,
+ *       die sie selbst liefern, wird stattdessen jede davon geprüft (Issue #1641): Eine Meldung mit
+ *       mehreren Fassungen hat je Fassung eine Fabrikmethode.
  * </ul>
  */
 class MessagesVollstaendigkeitTest {
@@ -108,8 +114,36 @@ class MessagesVollstaendigkeitTest {
             .toList();
 
     for (JavaClass klasse : meldungsklassen) {
-      pruefe(texte, beispiel(klasse.reflect()));
+      for (UebersetzbareMeldung meldung : beispiele(klasse.reflect())) {
+        pruefe(texte, meldung);
+      }
     }
+  }
+
+  @Test
+  void fabrikmethodenWerdenJedeGeprueft() throws Exception {
+    Texte texte = SprachFixture.mit(Sprache.DE);
+
+    List<UebersetzbareMeldung> meldungen = beispiele(MeldungMitFabriken.class);
+
+    assertThat(meldungen)
+        .extracting(UebersetzbareMeldung::schluessel)
+        .containsExactlyInAnyOrder("common.fehler.intern", "common.fehler.konflikt");
+    assertThatThrownBy(
+            () -> {
+              for (UebersetzbareMeldung meldung : beispiele(MeldungMitFalscherFabrik.class)) {
+                pruefe(texte, meldung);
+              }
+            })
+        .isInstanceOf(AssertionError.class)
+        .hasMessageContaining("MeldungMitFalscherFabrik");
+  }
+
+  @Test
+  void ohneFabrikmethodeZaehltDerKonstruktor() throws Exception {
+    assertThat(beispiele(PassendeMeldung.class))
+        .singleElement()
+        .isInstanceOf(PassendeMeldung.class);
   }
 
   @Test
@@ -138,6 +172,31 @@ class MessagesVollstaendigkeitTest {
     }
   }
 
+  /**
+   * Je Fabrikmethode der Klasse ein Beispiel; ohne Fabrikmethode eines über den Konstruktor mit den
+   * wenigsten Parametern.
+   */
+  // PMD.AvoidAccessibilityAlteration: Die Meldungsklassen liegen in fremden Paketen; ihre
+  // Fabrikmethoden sind dort nicht immer öffentlich.
+  @SuppressWarnings("PMD.AvoidAccessibilityAlteration")
+  private static List<UebersetzbareMeldung> beispiele(Class<?> klasse)
+      throws InstantiationException, IllegalAccessException, InvocationTargetException {
+    List<Method> fabriken =
+        Arrays.stream(klasse.getDeclaredMethods())
+            .filter(methode -> Modifier.isStatic(methode.getModifiers()))
+            .filter(methode -> methode.getReturnType().equals(klasse))
+            .toList();
+    if (fabriken.isEmpty()) {
+      return List.of(beispiel(klasse));
+    }
+    List<UebersetzbareMeldung> meldungen = new ArrayList<>();
+    for (Method fabrik : fabriken) {
+      fabrik.setAccessible(true);
+      meldungen.add((UebersetzbareMeldung) fabrik.invoke(null, argumente(fabrik, klasse)));
+    }
+    return meldungen;
+  }
+
   // PMD.AvoidAccessibilityAlteration: Die Meldungsklassen liegen in fremden Paketen und haben oft
   // paketprivate Konstruktoren; nur so lässt sich jede einzelne prüfen.
   @SuppressWarnings("PMD.AvoidAccessibilityAlteration")
@@ -147,8 +206,15 @@ class MessagesVollstaendigkeitTest {
         Arrays.stream(klasse.getDeclaredConstructors())
             .min(Comparator.comparingInt(Constructor::getParameterCount))
             .orElseThrow();
-    Object[] argumente = new Object[konstruktor.getParameterCount()];
-    Class<?>[] typen = konstruktor.getParameterTypes();
+    Object[] argumente = argumente(konstruktor, klasse);
+    konstruktor.setAccessible(true);
+    return (UebersetzbareMeldung) konstruktor.newInstance(argumente);
+  }
+
+  /** Beispielwerte für die Parameter eines Konstruktors oder einer Fabrikmethode. */
+  private static Object[] argumente(Executable aufruf, Class<?> klasse) {
+    Object[] argumente = new Object[aufruf.getParameterCount()];
+    Class<?>[] typen = aufruf.getParameterTypes();
     for (int i = 0; i < typen.length; i++) {
       if (!BEISPIELWERTE.containsKey(typen[i])) {
         throw new AssertionError(
@@ -157,8 +223,7 @@ class MessagesVollstaendigkeitTest {
       }
       argumente[i] = BEISPIELWERTE.get(typen[i]);
     }
-    konstruktor.setAccessible(true);
-    return (UebersetzbareMeldung) konstruktor.newInstance(argumente);
+    return argumente;
   }
 
   /** Deutsch gleich dem aufgelösten Text, mit Argument. */
@@ -192,6 +257,58 @@ class MessagesVollstaendigkeitTest {
     @Override
     public String schluessel() {
       return "common.fehler.intern";
+    }
+  }
+
+  /** Zwei Fassungen, je eine Fabrikmethode, beide deutsch gleich dem aufgelösten Text. */
+  static final class MeldungMitFabriken extends RuntimeException implements UebersetzbareMeldung {
+
+    private final String meldungsschluessel;
+
+    private MeldungMitFabriken(String schluessel, String text) {
+      super(text);
+      this.meldungsschluessel = schluessel;
+    }
+
+    static MeldungMitFabriken intern() {
+      return new MeldungMitFabriken(
+          "common.fehler.intern", "Interner Fehler. Bitte später erneut versuchen.");
+    }
+
+    static MeldungMitFabriken konflikt(String unbenutzt) {
+      return new MeldungMitFabriken(
+          "common.fehler.konflikt",
+          "Die Anfrage kollidierte mit dem aktuellen Datenstand. Bitte erneut versuchen.");
+    }
+
+    @Override
+    public String schluessel() {
+      return meldungsschluessel;
+    }
+  }
+
+  /** Eine Fabrikmethode mit abweichendem Deutsch — der Konstruktor allein fiele nicht auf. */
+  static final class MeldungMitFalscherFabrik extends RuntimeException
+      implements UebersetzbareMeldung {
+
+    private final String meldungsschluessel;
+
+    private MeldungMitFalscherFabrik(String schluessel, String text) {
+      super(text);
+      this.meldungsschluessel = schluessel;
+    }
+
+    static MeldungMitFalscherFabrik richtig() {
+      return new MeldungMitFalscherFabrik("common.fehler.ungueltiger-wert", "Ungültiger Wert");
+    }
+
+    static MeldungMitFalscherFabrik falsch() {
+      return new MeldungMitFalscherFabrik("common.fehler.ungueltiger-wert", "Falscher Wert");
+    }
+
+    @Override
+    public String schluessel() {
+      return meldungsschluessel;
     }
   }
 
