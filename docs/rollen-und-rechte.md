@@ -113,7 +113,7 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
 
 ### Nur mit der Plattform-Rolle ADMIN
 
-Vier Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
+Fünf Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
 Zeile der [Rechte-Matrix](#projekt-rollen-rechte-matrix) oben; eine Zeile, die in jeder Rollenspalte
 leer bliebe, sähe aus wie ein vergessenes Häkchen und lüde dazu ein, es einer Rolle zu geben.
 
@@ -126,6 +126,8 @@ leer bliebe, sähe aus wie ein vergessenes Häkchen und lüde dazu ein, es einer
 - **Standard-Labels für alle Boards anlegen** — nur der Plattform-Admin, über die Seite
   Administration; legt den festen Label-Satz auf allen nicht archivierten Boards aller Projekte an und
   überspringt vorhandene. Siehe [Standard-Labels](nutzung.md#standard-labels).
+- **Sprache der Installation ändern** — nur der Plattform-Admin; die Einstellung gilt für alle
+  Nutzer und auch für die Seiten vor der Anmeldung. Lesen darf sie jeder, auch ohne Anmeldung.
 
 **Projekte legt ausschließlich der Plattform-Admin an und löscht sie auch nur er.** Beim Anlegen
 bestimmt er den **Owner** per E-Mail; dadurch wird er selbst nicht Mitglied, hat als Plattform-Admin
