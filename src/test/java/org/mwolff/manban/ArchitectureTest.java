@@ -398,6 +398,36 @@ class ArchitectureTest {
               "ratelimit.domain ist modulintern (Zugriff nur ueber die "
                   + "ratelimit.application-Fassade)");
 
+  // --- Modul-Grenze: language ist nur ueber den Port in common erreichbar (Issue #1639) -------
+  // Plan #1638 A3: Die Fachmodule (Server-Meldungen, Mails) brauchen die Sprache der Installation,
+  // und language braucht auth (PlatformAdminChecker). Kennte ein Fachmodul language direkt,
+  // schloesse
+  // sich ueber auth der Modulzyklus. Darum fragen sie den Port common.i18n.SpracheQuelle, den
+  // language.infrastructure implementiert — eine Fassade von language.application gibt es nicht.
+  static final ArchRule LANGUAGE_IST_NUR_UEBER_COMMON_ERREICHBAR =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.language..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.language..")
+          .as(
+              "language ist modulintern (fremde Module fragen den Port"
+                  + " common.i18n.SpracheQuelle)");
+
+  // Gegenrichtung: common ist die unterste Ebene und kennt kein Fachmodul, auch language nicht.
+  static final ArchRule COMMON_I18N_KENNT_KEIN_FACHMODUL =
+      noClasses()
+          .that()
+          .resideInAPackage("org.mwolff.manban.common.i18n..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAnyPackage(
+              "org.mwolff.manban.language..",
+              "org.mwolff.manban.auth..",
+              "org.mwolff.manban.config..")
+          .as("common.i18n kennt kein Fachmodul (der Port liegt unten, der Adapter in language)");
+
   // --- Composition-Root: verdrahten ja, Datenzugriff nein (Issue #470) ------------------------
   // org.mwolff.manban.config ist der einzige Ort im Projekt, der aus BOARD_CHANGED_EVENT_IST_
   // MODULINTERN und aus SCHICHTEN ausgenommen ist — und damit der wahrscheinlichste Landeplatz
@@ -583,6 +613,16 @@ class ArchitectureTest {
   @Test
   void outboxDomainIstModulintern() {
     OUTBOX_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void languageIstNurUeberCommonErreichbar() {
+    LANGUAGE_IST_NUR_UEBER_COMMON_ERREICHBAR.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void commonI18nKenntKeinFachmodul() {
+    COMMON_I18N_KENNT_KEIN_FACHMODUL.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
 import { ForgotPasswordPage } from './ForgotPasswordPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/auth', () => ({
   authApi: { forgot: vi.fn() },
@@ -62,5 +63,37 @@ describe('ForgotPasswordPage', () => {
     await submitForgot()
     expect(await screen.findByText(successMessage)).toBeInTheDocument()
     expect(screen.queryByText('Datenbank weg')).not.toBeInTheDocument()
+  })
+})
+
+describe('ForgotPasswordPage auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  async function submitAufEnglisch() {
+    renderMitSprache(
+      <MemoryRouter>
+        <ForgotPasswordPage />
+      </MemoryRouter>,
+      'en',
+    )
+    expect(screen.getByRole('heading', { name: 'Reset password', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to sign-in' })).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText(/Email/), 'a@b.de')
+    await userEvent.click(screen.getByRole('button', { name: 'Request link' }))
+  }
+
+  it('zeigt den Hinweis nach dem Senden auf Englisch', async () => {
+    mockedApi.forgot.mockResolvedValue(undefined)
+    await submitAufEnglisch()
+    expect(await screen.findByText(/If an account with this email exists/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Go to sign-in' })).toBeInTheDocument()
+  })
+
+  it('zeigt die Zählbremse auf Englisch', async () => {
+    mockedApi.forgot.mockRejectedValue(new ApiError(429, ''))
+    await submitAufEnglisch()
+    expect(await screen.findByText('Too many attempts. Please try again later.')).toBeInTheDocument()
   })
 })

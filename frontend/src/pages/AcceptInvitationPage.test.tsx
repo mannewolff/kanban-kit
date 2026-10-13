@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import type { Member, MembersApi } from '../api/members'
 import { AcceptInvitationPage } from './AcceptInvitationPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const member: Member = { userId: 9, email: 'neu@x.de', displayName: 'Neu', role: 'MEMBER' }
 
@@ -50,5 +51,29 @@ describe('AcceptInvitationPage', () => {
 
     expect(await screen.findByText(/ungültig oder abgelaufen/)).toBeInTheDocument()
     expect(accept).not.toHaveBeenCalled()
+  })
+})
+
+describe('AcceptInvitationPage auf Englisch', () => {
+  const aufEnglisch = (entry: string, api: MembersApi) =>
+    renderMitSprache(
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/invitations/accept" element={<AcceptInvitationPage api={api} />} />
+        </Routes>
+      </MemoryRouter>,
+      'en',
+    )
+
+  it('meldet den Beitritt auf Englisch', async () => {
+    aufEnglisch('/invitations/accept?token=gut', makeApi(vi.fn().mockResolvedValue(member)))
+    expect(screen.getByRole('heading', { name: 'Accept invitation' })).toBeInTheDocument()
+    expect(await screen.findByText('You have joined the project as MEMBER.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Go to projects' })).toBeInTheDocument()
+  })
+
+  it('zeigt den Fehler auf Englisch', async () => {
+    aufEnglisch('/invitations/accept?token=x', makeApi(vi.fn().mockRejectedValue(new Error('x'))))
+    expect(await screen.findByText('The invitation is invalid or has expired.')).toBeInTheDocument()
   })
 })

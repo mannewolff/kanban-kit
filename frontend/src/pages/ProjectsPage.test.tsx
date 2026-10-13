@@ -6,6 +6,7 @@ import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { ProjectsPage } from './ProjectsPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 /** Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457). */
 const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
@@ -604,5 +605,135 @@ describe('ProjectsPage', () => {
       expect(await screen.findByText('Projekt umbenennen')).toBeInTheDocument()
       expect(screen.queryByText(/^Ziel /)).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('ProjectsPage auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockUser = { platformRole: 'ADMIN' }
+    editMode.value = true
+    mocked.nextCardNumber.mockResolvedValue({ nextCardNumber: 5 })
+  })
+
+  const renderEn = () =>
+    renderMitSprache(
+      <SnackbarProvider>
+        <MemoryRouter>
+          <ProjectsPage />
+        </MemoryRouter>
+      </SnackbarProvider>,
+      'en',
+    )
+
+  it('zeigt Liste, Anlegeformular und Datum in US-Schreibweise auf Englisch', async () => {
+    mocked.list.mockResolvedValue([
+      { id: 1, name: 'Meins', role: 'OWNER', createdAt: '2026-10-13T12:00:00Z' },
+      { id: 2, name: 'Deins', role: 'VIEWER', createdAt: '2026-10-14T12:00:00Z' },
+    ])
+    renderEn()
+
+    expect(await screen.findByText('Meins')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Projects' })).toBeInTheDocument()
+    expect(screen.getByLabelText('New project')).toBeInTheDocument()
+    expect(screen.getByLabelText('Owner (email)')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument()
+    expect(screen.getByText('Oct 13, 2026')).toBeInTheDocument()
+    expect(screen.getByLabelText('Rename project Meins')).toBeInTheDocument()
+    expect(screen.getByLabelText('Delete project Meins')).toBeInTheDocument()
+  })
+
+  it('zeigt die Leerzustände auf Englisch', async () => {
+    mocked.list.mockResolvedValue([])
+    renderEn()
+    expect(await screen.findByText('No projects yet. Create one above.')).toBeInTheDocument()
+  })
+
+  it('zeigt den Leerzustand für Nicht-Admins auf Englisch', async () => {
+    mockUser = { platformRole: 'USER' }
+    mocked.list.mockResolvedValue([])
+    renderEn()
+    expect(await screen.findByText('No projects yet. An administrator creates projects.')).toBeInTheDocument()
+  })
+
+  it('meldet Anlegefehler auf Englisch', async () => {
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.create
+      .mockRejectedValueOnce(new ApiError(400, 'Bad Request'))
+      .mockRejectedValueOnce(new ApiError(403, 'Forbidden'))
+      .mockRejectedValueOnce(new ApiError(500, 'Boom'))
+    renderEn()
+    await screen.findByText('Meins')
+    fireEvent.change(screen.getByLabelText('New project'), { target: { value: 'Neu' } })
+    fireEvent.change(screen.getByLabelText('Owner (email)'), { target: { value: 'x@y.de' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByText('No user found with this owner email.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByText('Only administrators may create projects.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByText('Creating failed.')).toBeInTheDocument()
+  })
+
+  it('zeigt Lösch- und Umbenennen-Dialog auf Englisch', async () => {
+    mocked.list.mockResolvedValue([
+      { id: 1, name: 'Meins', role: 'OWNER', createdAt: '', participationEditable: true, dashboardParticipation: false },
+    ])
+    mocked.remove.mockRejectedValue(new ApiError(500, 'Boom'))
+    renderEn()
+    await screen.findByText('Meins')
+
+    fireEvent.click(screen.getByLabelText('Delete project Meins'))
+    expect(await screen.findByText('Delete project?')).toBeInTheDocument()
+    expect(
+      screen.getByText('The project “Meins” and all of its boards, epics and tickets will be deleted permanently.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await erwarteFehlerToast('Deleting failed.')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    fireEvent.click(screen.getByLabelText('Rename project Meins'))
+    expect(await screen.findByText('Rename project')).toBeInTheDocument()
+    expect(screen.getByLabelText('New project name')).toHaveValue('Meins')
+    expect(screen.getByText('Number the next new card gets.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Take part in the Platform Control Room')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+  })
+
+  it('meldet Fehler beim Umbenennen, bei der Nummer und bei der Teilnahme auf Englisch', async () => {
+    mocked.list.mockResolvedValue([
+      { id: 1, name: 'Meins', role: 'OWNER', createdAt: '', participationEditable: true, dashboardParticipation: false },
+    ])
+    mocked.rename.mockRejectedValueOnce(new ApiError(500, 'Boom')).mockResolvedValue({})
+    mocked.setNextCardNumber.mockRejectedValue(new ApiError(400, 'Bad Request'))
+    mocked.setDashboardParticipation.mockRejectedValue(new ApiError(500, 'Boom'))
+    renderEn()
+    await screen.findByText('Meins')
+    fireEvent.click(screen.getByLabelText('Rename project Meins'))
+    await waitFor(() => expect(screen.getByLabelText('Next card number')).toHaveValue(5))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Renaming failed.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Next card number'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(
+      await screen.findByText('The next number must be greater than the highest number in use.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Take part in the Platform Control Room'))
+    expect(await screen.findByText('Participation could not be changed.')).toBeInTheDocument()
+  })
+
+  it('bestätigt das Speichern auf Englisch', async () => {
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+    mocked.rename.mockResolvedValue({})
+    renderEn()
+    await screen.findByText('Meins')
+    fireEvent.click(screen.getByLabelText('Rename project Meins'))
+    await waitFor(() => expect(screen.getByLabelText('Next card number')).toHaveValue(5))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Project saved.')).toBeInTheDocument()
   })
 })

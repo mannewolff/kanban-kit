@@ -1,5 +1,6 @@
 import Box from '@mui/material/Box'
 import type { BoardColumn } from '../../api/boards'
+import { useT } from '../../i18n/SpracheContext'
 import { KUPFER, MELDER, NUT, SCHATTEN_NUTE } from '../../theme'
 
 /**
@@ -24,6 +25,7 @@ const segmentZustand = (belegt: boolean, grenze: boolean): string => {
  * damit die Spalte sie nicht mitträgt (Plan #1042, P12).
  */
 export function Belastungsskala({ column, count }: Readonly<{ column: BoardColumn; count: number }>) {
+  const t = useT()
   const grenze = column.wipLimit
   if (grenze == null) return null
   const segmente = Math.min(grenze, MAX_SEGMENTE)
@@ -31,11 +33,11 @@ export function Belastungsskala({ column, count }: Readonly<{ column: BoardColum
   return (
     <Box
       role="meter"
-      aria-label={`Auslastung ${column.name}`}
+      aria-label={t.BOARD.AUSLASTUNG(column.name)}
       aria-valuemin={0}
       aria-valuemax={grenze}
       aria-valuenow={Math.min(count, grenze)}
-      aria-valuetext={`${count} von ${grenze}`}
+      aria-valuetext={t.BOARD.AUSLASTUNG_WERT(count, grenze)}
       data-grenze={erreicht ? 'erreicht' : 'offen'}
       sx={{ display: 'inline-flex', gap: '2px', alignItems: 'center', flex: 'none' }}
     >

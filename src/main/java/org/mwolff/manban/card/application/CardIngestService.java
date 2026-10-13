@@ -256,12 +256,8 @@ public class CardIngestService {
    */
   private static void requireMatchingNumber(Card existing, @Nullable Integer givenNumber) {
     if (givenNumber != null && !givenNumber.equals(existing.number())) {
-      throw new CardNumberConflictException(
-          "Der Schluessel gehoert bereits zu Karte #"
-              + existing.number()
-              + ", angefordert war #"
-              + givenNumber
-              + ".");
+      throw CardNumberConflictException.schluesselGehoertAndererKarte(
+          existing.number(), givenNumber);
     }
   }
 
@@ -275,12 +271,10 @@ public class CardIngestService {
   private void requireNumberAvailable(long projectId, int number) {
     cards.lockCardNumbers(projectId);
     if (cards.hasCardWithoutExternalKey(projectId)) {
-      throw new CardNumberConflictException(
-          "Das Projekt enthaelt Karten ausserhalb eines Imports — eine vorgegebene Nummer wird nur"
-              + " in ein Projekt ohne importfremde Karten uebernommen.");
+      throw CardNumberConflictException.importfremdeKarten();
     }
     if (cards.isNumberTaken(projectId, number)) {
-      throw new CardNumberConflictException("Nummer #" + number + " ist bereits vergeben.");
+      throw CardNumberConflictException.nummerVergeben(number);
     }
   }
 

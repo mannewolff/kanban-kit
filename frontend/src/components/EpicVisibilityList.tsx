@@ -12,6 +12,7 @@ import type { Card } from '../api/cards'
 import type { Epic } from '../api/epics'
 import { useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import type { Label } from '../api/labels'
+import { useT } from '../i18n/SpracheContext'
 import { epicShortcode } from '../lib/epicMeta'
 import { aggregateMarks, countKinds } from '../lib/epicTiles'
 import { NUT, PANEL_RADIUS, PLATTE, RAND, SCHATTEN_PLATTE, TABELLENZIFFERN, TEXT_SCHWACH } from '../theme'
@@ -49,19 +50,20 @@ function Zusammensetzung({
   cards,
   kitNamen,
 }: Readonly<{ epic: Epic; cards: Card[]; kitNamen: KitNamenZustand }>) {
+  const t = useT().VORHABEN_LISTE
   if (kitNamen.status !== 'fertig') {
     return (
       <Typography variant="caption" color="text.secondary">
-        {kitNamen.status === 'laden' ? 'Kit-Namen werden geladen' : 'Kit-Namen nicht ladbar'}
+        {kitNamen.status === 'laden' ? t.KIT_NAMEN_LADEN : t.KIT_NAMEN_FEHLT}
       </Typography>
     )
   }
   const arten = countKinds(epic, cards, kitNamen.daten.titelPraefixe)
   return (
     <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-      {arten.requirements > 0 && <Art anzahl={arten.requirements} eins="Anforderung" viele="Anforderungen" />}
-      {arten.plans > 0 && <Art anzahl={arten.plans} eins="Plan" viele="Pläne" />}
-      {arten.workItems > 0 && <Art anzahl={arten.workItems} eins="Arbeitspaket" viele="Arbeitspakete" />}
+      {arten.requirements > 0 && <Art anzahl={arten.requirements} eins={t.ANFORDERUNG} viele={t.ANFORDERUNGEN} />}
+      {arten.plans > 0 && <Art anzahl={arten.plans} eins={t.PLAN} viele={t.PLAENE} />}
+      {arten.workItems > 0 && <Art anzahl={arten.workItems} eins={t.ARBEITSPAKET} viele={t.ARBEITSPAKETE} />}
     </Stack>
   )
 }
@@ -113,6 +115,7 @@ export function EpicVisibilityList({
   onMenu,
 }: Readonly<Props>) {
   const kitNamen = useKitNamen()
+  const t = useT().VORHABEN_LISTE
   return (
     <Box
       component="ul"
@@ -193,7 +196,7 @@ export function EpicVisibilityList({
                   beim Überfliegen der Zeile lesbar (Plan #846, E5). */}
               {istAusgeblendet && (
                 <Typography variant="caption" sx={{ fontStyle: 'italic', flexShrink: 0, color: TEXT_SCHWACH }}>
-                  Ausgeblendet
+                  {t.AUSGEBLENDET}
                 </Typography>
               )}
               {/* Immer neutral, auch bei sortenreinen Vorhaben: `total` zaehlt ALLE Mitglieder. */}
@@ -202,12 +205,12 @@ export function EpicVisibilityList({
                 color="text.secondary"
                 sx={{ ...TABELLENZIFFERN, flexShrink: 0, whiteSpace: 'nowrap' }}
               >
-                {epic.done} von {epic.total} fertig
+                {t.FERTIG(epic.done, epic.total)}
               </Typography>
               {onMenu && (
                 <IconButton
                   size="small"
-                  aria-label={`Menü ${epic.title}`}
+                  aria-label={t.MENUE_ARIA(epic.title)}
                   onClick={(e) => {
                     // Ohne stopPropagation öffnete derselbe Klick zusätzlich das Vorhaben-Detail.
                     e.stopPropagation()
@@ -227,7 +230,7 @@ export function EpicVisibilityList({
                 // `checked` ab, ein zusätzliches Attribut wäre nur eine zweite Wahrheit.
                 slotProps={{
                   input: {
-                    'aria-label': `Vorhaben ${kuerzel} ${istAusgeblendet ? 'einblenden' : 'ausblenden'}`,
+                    'aria-label': istAusgeblendet ? t.EINBLENDEN_ARIA(kuerzel) : t.AUSBLENDEN_ARIA(kuerzel),
                   },
                 }}
               />
@@ -247,12 +250,12 @@ export function EpicVisibilityList({
                   auslösbar. */}
               {epic.requirementCardNumber === null ? (
                 <Typography variant="caption" color="text.secondary">
-                  Keine Anforderung hinterlegt.
+                  {t.KEINE_ANFORDERUNG}
                 </Typography>
               ) : (
                 <Stack direction="row" spacing={0.5} alignItems="baseline" sx={{ minWidth: 0, maxWidth: '100%' }}>
                   <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                    Anforderung:
+                    {t.ANFORDERUNG_LABEL}
                   </Typography>
                   <Link
                     component="button"
@@ -274,7 +277,7 @@ export function EpicVisibilityList({
 
               {leer ? (
                 <Typography variant="caption" color="text.secondary">
-                  Noch keine Karten zugeordnet.
+                  {t.KEINE_KARTEN}
                 </Typography>
               ) : (
                 <Zusammensetzung epic={epic} cards={cards} kitNamen={kitNamen} />
@@ -314,7 +317,7 @@ export function EpicVisibilityList({
               value={pct}
               // Gedämpft wie die Zeile: Die Füllung verliert die Leitfarbe, der Wert bleibt lesbar.
               color={istAusgeblendet ? 'inherit' : 'primary'}
-              aria-label={`Fortschritt ${epic.title}`}
+              aria-label={t.FORTSCHRITT_ARIA(epic.title)}
               sx={{ mt: 1, height: 6, borderRadius: 1 }}
             />
           </Box>

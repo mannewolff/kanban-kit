@@ -25,3 +25,9 @@ describe('stripMarkdown', () => {
     expect(stripMarkdown('  a\n\n  b  ')).toBe('a b')
   })
 })
+
+describe('listExcerpt auf Englisch', () => {
+  it('kürzt englischen Markdown wie deutschen — das Modul trägt keinen Anzeigetext', () => {
+    expect(stripMarkdown('## Goal\n\n*Ship* the `release`')).toBe('Goal Ship the release')
+  })
+})

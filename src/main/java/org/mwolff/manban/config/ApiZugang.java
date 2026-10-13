@@ -53,7 +53,10 @@ final class ApiZugang {
                   "/api/auth/login",
                   "/api/auth/logout",
                   "/api/auth/forgot",
-                  "/api/auth/reset")),
+                  "/api/auth/reset",
+                  // Die Sprache der Installation (Plan #1638 A2): Auch die Seiten vor der
+                  // Anmeldung erscheinen in ihr. Gesetzt wird sie unter /api/admin/language.
+                  "/api/language")),
           // Token-Verwaltung nur per Cookie-Login, nicht per PAT (Least Privilege).
           new Pfadgruppe(Zugangsart.NUR_SESSION, List.of("/api/access-tokens/**")),
           // Admin-Bereich (inkl. Bootstrap) nur per Session-Login, nicht per PAT.

@@ -9,10 +9,17 @@ import { apiFetch } from './client'
  * Ersatzliste (E10) — wer die Namen braucht, zeigt während des Ladens und beim Fehler einen Hinweis.
  */
 
-/** Eine Sache des Kits mit allen ihren Label-Namen, der deutsche zuerst. */
+/**
+ * Wer ein Label der Sache setzen oder abnehmen darf — dieselbe Regel, nach der der Server eine
+ * Änderung über ein Token abweist (Issue #1670, Plan #1668 E3).
+ */
+export type KitSchutz = 'KEINER' | 'NUR_MENSCH_SETZT' | 'NUR_MENSCH_NIMMT_AB'
+
+/** Eine Sache des Kits mit allen ihren Label-Namen, der deutsche zuerst, und ihrer Schutzregel. */
 export interface KitSache {
   sache: string
   namen: string[]
+  schutz: KitSchutz
 }
 
 /** Eine Kartenart mit ihren Titel-Präfixen, das deutsche zuerst. */

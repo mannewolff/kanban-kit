@@ -1,20 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { buildNavItems, navKontext, type BoardContext, type NavKontextParams, type NavParams } from './navItems'
+import { de } from '../i18n/de'
+import { en } from '../i18n/en'
 
 const board: BoardContext = { id: 1, name: 'B', projectId: 5 }
 
 /** Titel der Blöcke in ihrer Reihenfolge. */
-const bloecke = (params: NavParams) => buildNavItems(params).map((b) => b.label)
+const bloecke = (params: NavParams) => buildNavItems(params, de).map((b) => b.label)
 
 /** Beschriftungen eines Blocks; Projekt-Block über das Präfix „Projekt". */
 const eintraege = (params: NavParams, titel: string) =>
-  buildNavItems(params)
+  buildNavItems(params, de)
     .find((b) => b.label === titel || (titel === 'Projekt' && b.label.startsWith('Projekt')))
     ?.children.map((c) => c.label) ?? []
 
 /** Alle Einträge über alle Blöcke, zum Suchen nach einem Link. */
 const link = (params: NavParams, label: string) =>
-  buildNavItems(params)
+  buildNavItems(params, de)
     .flatMap((b) => b.children)
     .find((c) => c.label === label)
 
@@ -354,5 +356,38 @@ describe('navKontext Pfad im Kopf', () => {
 
   it('bleibt ohne Projekt- und Board-Bezug leer', () => {
     expect(kontext({ board: null, boardId: null }).pfad).toEqual([])
+  })
+})
+
+describe('buildNavItems auf Englisch', () => {
+  const beschriftungen = (params: NavParams) =>
+    buildNavItems(params, en).map((b) => ({ block: b.label, eintraege: b.children.map((c) => c.label) }))
+
+  it('beschriftet Blöcke und Einträge nach dem Glossar', () => {
+    expect(
+      beschriftungen({
+        board,
+        isAdmin: true,
+        projectName: 'kanban-kit',
+        boardCount: 2,
+        canViewNightRun: true,
+        canManageMembers: true,
+      }),
+    ).toEqual([
+      { block: 'Project kanban-kit', eintraege: ['Control Room', 'Board', 'List', 'Epics', 'Night run'] },
+      { block: 'Overview', eintraege: ['Projects', 'Boards'] },
+      {
+        block: 'Management',
+        eintraege: ['Members', 'Roles & permissions', 'Platform Control Room', 'Admin'],
+      },
+    ])
+  })
+
+  it('nennt den Projekt-Block ohne bekannten Namen „Project“', () => {
+    expect(buildNavItems({ board }, en)[0].label).toBe('Project')
+  })
+
+  it('lässt den Projektnamen als Datum unverändert', () => {
+    expect(buildNavItems({ board, projectName: 'Übersetzung' }, en)[0].label).toBe('Project Übersetzung')
   })
 })

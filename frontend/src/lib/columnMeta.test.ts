@@ -55,6 +55,14 @@ describe('statusAnzeigename', () => {
   ] as const)('%s heißt „%s“', (status, name) => {
     expect(statusAnzeigename(status)).toBe(name)
   })
+
+  it.each([
+    ['BACKLOG', 'Backlog'],
+    ['IN_PROGRESS', 'In progress'],
+    ['IN_REVIEW', 'In review'],
+  ] as const)('heißt auf Englisch wie im Kit: %s „%s“', (status, name) => {
+    expect(statusAnzeigename(status, 'en')).toBe(name)
+  })
 })
 
 describe('neighbourColumns', () => {

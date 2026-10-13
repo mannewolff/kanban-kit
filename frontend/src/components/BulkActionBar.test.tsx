@@ -1,7 +1,17 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import type { KitNamenZustand } from '../api/kitNamen'
 import type { Label } from '../api/labels'
+import { de } from '../i18n/de'
+import { KIT_NAMEN } from '../test/kitNamen'
 import { BulkActionBar, type LabelOption } from './BulkActionBar'
+import { renderMitSprache } from '../i18n/renderMitSprache'
+
+vi.mock('../api/kitNamen', async (original) => ({
+  ...(await original<typeof import('../api/kitNamen')>()),
+  useKitNamen: (): KitNamenZustand => ({ status: 'fertig', daten: KIT_NAMEN }),
+}))
 
 const label = (id: number, name: string): Label => ({
   id,
@@ -103,6 +113,71 @@ describe('BulkActionBar', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
+  describe('Erklärung der Systemlabels im Menü (#1673)', () => {
+    const KLAEREN = de.LABEL_ERKLAERUNG.SACHEN.KLAEREN
+    const optionen: LabelOption[] = [
+      { label: label(1, 'Bug'), zustand: 'keine' },
+      { label: label(8, 'kit:clarify'), zustand: 'keine' },
+    ]
+
+    it('zeigt die Erklärung, wenn die Pfeiltaste den Menüpunkt kit:clarify fokussiert', async () => {
+      zeigeLeiste({ labelOptions: optionen })
+      await userEvent.click(screen.getByRole('button', { name: 'Labels' }))
+      const klaeren = screen.getByRole('menuitem', { name: 'kit:clarify — keine gewählte Karte' })
+
+      await userEvent.keyboard('{ArrowDown}')
+
+      expect(klaeren).toHaveFocus()
+      const tooltip = await screen.findByRole('tooltip')
+      expect(tooltip).toHaveTextContent(KLAEREN.bedeutung)
+      expect(klaeren).toHaveAttribute('aria-describedby', tooltip.id)
+    })
+
+    it('zeigt an einem selbst angelegten Label keine Erklärung', async () => {
+      zeigeLeiste({ labelOptions: optionen })
+      // Per Tastatur geöffnet: Der erste Punkt bekommt den Fokus wie nach einer Pfeiltaste.
+      screen.getByRole('button', { name: 'Labels' }).focus()
+      await userEvent.keyboard('{Enter}')
+      const bug = screen.getByRole('menuitem', { name: 'Bug — keine gewählte Karte' })
+      expect(bug).toHaveFocus()
+
+      await userEvent.hover(bug)
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+      expect(bug).not.toHaveAttribute('aria-describedby')
+    })
+
+    it('lässt die Menüpunkte bei der Tastenführung des Menüs: nur einer ist Tab-Halt', async () => {
+      zeigeLeiste({ labelOptions: [optionen[1], optionen[0]] })
+      await userEvent.click(screen.getByRole('button', { name: 'Labels' }))
+
+      // Der erste Punkt bekommt beim Öffnen den Fokus, auch wenn er ein Systemlabel ist.
+      expect(screen.getByRole('menuitem', { name: 'kit:clarify — keine gewählte Karte' })).toHaveFocus()
+      expect(screen.getByRole('menuitem', { name: 'Bug — keine gewählte Karte' })).toHaveAttribute('tabindex', '-1')
+    })
+
+    it('wählt einen Systemlabel-Punkt per Klick und per Enter wie bisher', async () => {
+      const rueckrufe = zeigeLeiste({ labelOptions: optionen })
+      await userEvent.click(screen.getByRole('button', { name: 'Labels' }))
+
+      await userEvent.click(screen.getByRole('menuitem', { name: 'kit:clarify — keine gewählte Karte' }))
+      expect(rueckrufe.onToggleLabel).toHaveBeenLastCalledWith(8, 'ADD')
+
+      await userEvent.keyboard('{Enter}')
+      expect(rueckrufe.onToggleLabel).toHaveBeenCalledTimes(2)
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+    })
+
+    it('öffnet die Erklärung rechts vom Menüpunkt', async () => {
+      zeigeLeiste({ labelOptions: optionen })
+      await userEvent.click(screen.getByRole('button', { name: 'Labels' }))
+
+      await userEvent.hover(screen.getByRole('menuitem', { name: 'kit:clarify — keine gewählte Karte' }))
+
+      expect(await screen.findByRole('tooltip')).toHaveAttribute('data-popper-placement', expect.stringMatching(/^right/))
+    })
+  })
+
   it('sperrt Labels mit dem Grund im Namen und im Tooltip', async () => {
     zeigeLeiste({ labelsDisabledReason: 'Vorhaben tragen keine Labels' })
 
@@ -112,5 +187,53 @@ describe('BulkActionBar', () => {
     // mit dem Titel als zugänglichem Namen versieht.
     fireEvent.mouseOver(screen.getByLabelText('Vorhaben tragen keine Labels'))
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Vorhaben tragen keine Labels')
+  })
+})
+
+describe('BulkActionBar auf Englisch', () => {
+  const zeigeEn = (over: Partial<Parameters<typeof BulkActionBar>[0]> = {}) =>
+    renderMitSprache(
+      <BulkActionBar
+        count={3}
+        canMove
+        labelOptions={[
+          { label: label(1, 'Fehler'), zustand: 'alle' },
+          { label: label(2, 'Idee'), zustand: 'einige' },
+          { label: label(3, 'Doku'), zustand: 'keine' },
+        ]}
+        labelsDisabledReason={null}
+        onToggleLabel={vi.fn()}
+        onArchive={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+        onCancel={vi.fn()}
+        {...over}
+      />,
+      'en',
+    )
+
+  it('zeigt Anzahl, Region und Knöpfe auf Englisch', () => {
+    zeigeEn()
+
+    expect(screen.getByRole('region', { name: 'Bulk actions' })).toBeInTheDocument()
+    expect(screen.getByText('3 selected')).toBeInTheDocument()
+    for (const name of ['Labels', 'Move', 'Archive', 'Move to trash', 'Cancel']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    }
+  })
+
+  it('nennt den Zustand der Labels im Menü auf Englisch', () => {
+    zeigeEn()
+    fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
+
+    expect(screen.getByRole('menuitem', { name: 'Fehler — all selected cards' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Idee — some selected cards' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Doku — no selected card' })).toBeInTheDocument()
+  })
+
+  it('nennt den Sperrgrund im Namen der Label-Taste auf Englisch', () => {
+    zeigeEn({ labelsDisabledReason: 'The board has no labels' })
+
+    expect(screen.getByRole('button', { name: 'Labels — The board has no labels' })).toBeDisabled()
   })
 })

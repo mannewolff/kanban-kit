@@ -340,3 +340,57 @@ describe('zyklusDavor (Issue #1134)', () => {
     expect(zyklusDavor('2026-10-01')).toBe('2026-09-30')
   })
 })
+
+describe('verbrauchZeitraum auf Englisch', () => {
+  it('benennt Schicht, Woche und Monat auf Englisch', () => {
+    expect(zyklusBeschriftung('2026-10-13', 'en')).toBe('Shift from Oct 13, 2026 to Oct 14, 2026')
+    expect(zeitraumBeschriftung({ type: 'DAY', firstDay: '2026-10-13', lastDay: '2026-10-13' }, 'en')).toBe(
+      'Shift from Oct 13, 2026 to Oct 14, 2026',
+    )
+    expect(zeitraumBeschriftung({ type: 'WEEK', firstDay: '2026-10-05', lastDay: '2026-10-11' }, 'en')).toBe(
+      'Week from Oct 5, 2026 to Oct 11, 2026',
+    )
+    expect(zeitraumBeschriftung({ type: 'MONTH', firstDay: '2026-10-01', lastDay: '2026-10-31' }, 'en')).toBe('October 2026')
+  })
+
+  it('zählt Runs, Sitzungen und Karten auf Englisch', () => {
+    expect([laeufeText(1, 'en'), laeufeText(2, 'en')]).toEqual(['1 run', '2 runs'])
+    expect([sitzungenText(1, 'en'), sitzungenText(3, 'en')]).toEqual(['1 session', '3 sessions'])
+    expect([kartenText(1, 'en'), kartenText(4, 'en')]).toEqual(['1 card', '4 cards'])
+  })
+
+  it('vergleicht mit dem Vorzeitraum auf Englisch mit Dezimalpunkt', () => {
+    expect(vergleichMitVorzeitraum(kosten(1234.5), kosten(0.25), 'en')).toEqual({
+      richtung: 'teurer',
+      text: '$1,234.25 more expensive than in the previous period',
+    })
+    expect(vergleichMitVorzeitraum(kosten(1), kosten(2.5), 'en')).toEqual({
+      richtung: 'billiger',
+      text: '$1.50 cheaper than in the previous period',
+    })
+    expect(vergleichMitVorzeitraum(kosten(2), kosten(2), 'en').text).toBe('as expensive as in the previous period')
+    expect(vergleichMitVorzeitraum(kosten(null), kosten(2), 'en').text).toBe(
+      'not comparable — one of the two cost figures is missing',
+    )
+  })
+
+  it('erklärt leere und angeschnittene Zeiträume auf Englisch', () => {
+    expect(zeitraumHinweis(kennzahlen({ runCount: 0 }), 'en')).toBe('Neither a run nor a session took place in this period.')
+    expect(zeitraumHinweis(kennzahlen({ coverage: 'BEFORE_RETENTION' }), 'en')).toBe(
+      'This period lies before the oldest retained run — its runs are no longer stored.',
+    )
+    expect(zeitraumHinweis(kennzahlen({ coverage: 'PARTIAL' }), 'en')).toBe(
+      'This period is only partially covered: it begins before the oldest retained run, the figures are incomplete.',
+    )
+    expect(zeitraumHinweis(kennzahlen({ usage: { total: nichts, cardShare: nichts, remainder: nichts } }), 'en')).toBe(
+      'Runs took place in this period, but their usage is not available.',
+    )
+    expect(zeitraumHinweis(kennzahlen({ interactiveUsageSince: '2026-10-13T09:00:00Z' }), 'en')).toBe(
+      'Interactive sessions are only recorded since Oct 13, 2026 — this period lies entirely before.',
+    )
+    expect(zeitraumHinweis(kennzahlen({ interactiveUsageSince: '2026-08-15T09:00:00Z' }), 'en')).toBe(
+      'Interactive sessions are only recorded since Aug 15, 2026 — this period begins before.',
+    )
+    expect(zeitraumHinweis(kennzahlen({ interactiveUsageSince: '2026-07-01T09:00:00Z' }), 'en')).toBeNull()
+  })
+})

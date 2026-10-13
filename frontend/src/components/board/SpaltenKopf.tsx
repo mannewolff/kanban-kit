@@ -9,6 +9,8 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import type { BoardColumn } from '../../api/boards'
 import type { SortDirection } from '../../api/columns'
+import { useT } from '../../i18n/SpracheContext'
+import type { Woerterbuch } from '../../i18n/de'
 import { spaltenAuswahl, type SpaltenAuswahlZustand } from '../../lib/boardOps'
 import { statusColors } from '../../lib/statusColors'
 import {
@@ -23,21 +25,18 @@ import {
 } from '../../theme'
 
 /** Zugänglicher Name des Spalten-Kästchens: Er sagt, was der nächste Klick tut. */
-const spaltenAuswahlLabel = (zustand: SpaltenAuswahlZustand, spalte: string) =>
-  zustand === 'alle' ? `Auswahl in ${spalte} aufheben` : `Alle Karten in ${spalte} auswählen`
+const spaltenAuswahlLabel = (t: Woerterbuch, zustand: SpaltenAuswahlZustand, spalte: string) =>
+  zustand === 'alle' ? t.BOARD.AUSWAHL_AUFHEBEN(spalte) : t.BOARD.ALLE_AUSWAEHLEN(spalte)
 
 /** Beschriftung des Sortier-Toggles: benennt die Richtung, die der nächste Klick auslöst. */
-const sortByNumberLabel = (columnName: string, next: SortDirection) =>
-  `Spalte ${columnName} nach Nummer ${next === 'ASC' ? 'aufsteigend' : 'absteigend'} sortieren`
+const sortByNumberLabel = (t: Woerterbuch, columnName: string, next: SortDirection) =>
+  t.BOARD.NACH_NUMMER_SORTIEREN(columnName, next === 'ASC')
 
 /**
  * Zugänglicher Name der Spaltenmarke: Zahl, Objekt und Rückweg in einem. Achsenneutral formuliert,
  * denn gezählt wird die Vereinigung aus ausgeblendeten Vorhaben und Vorhaben-Filter (Plan #620,
  * E4/E9) — eine Spalte meldet eine Zahl, nicht zwei Ursachen.
  */
-const hiddenBadgeLabel = (count: number) =>
-  `${count} ${count === 1 ? 'Karte' : 'Karten'} ausgeblendet, einblenden`
-
 /**
  * Ereignisse der Spalten-Umsortierung. Sie hängen am Kopf, weil er im Struktur-Editiermodus das
  * Ziehbild der ganzen Spalte trägt, und sie stehen als eigene Funktion da: Ihre drei Verzweigungen
@@ -136,9 +135,10 @@ export function SpaltenKopf({
   onAblage,
   onZugEnde,
 }: Readonly<Props>) {
+  const t = useT()
   const colors = statusColors(column.name)
   const spaltenZustand = spaltenAuswahl(angezeigteIds, selectedIds)
-  const sortierLabel = sortByNumberLabel(column.name, naechsteRichtung)
+  const sortierLabel = sortByNumberLabel(t, column.name, naechsteRichtung)
   return (
     <Box
       data-testid={`column-header-${column.id}`}
@@ -158,7 +158,7 @@ export function SpaltenKopf({
           disabled={angezeigteIds.length === 0}
           onChange={() => onSpaltenAuswahl(angezeigteIds)}
           onClick={(e) => e.stopPropagation()}
-          slotProps={{ input: { 'aria-label': spaltenAuswahlLabel(spaltenZustand, column.name) } }}
+          slotProps={{ input: { 'aria-label': spaltenAuswahlLabel(t, spaltenZustand, column.name) } }}
           sx={{ p: 0, flex: 'none' }}
         />
       )}
@@ -188,7 +188,7 @@ export function SpaltenKopf({
         <Button
           size="small"
           onClick={onAusblendungAufheben}
-          aria-label={hiddenBadgeLabel(hiddenCount)}
+          aria-label={t.BOARD.AUSGEBLENDET_EINBLENDEN(hiddenCount)}
           sx={{
             minWidth: 0,
             px: 0.75,
@@ -203,7 +203,7 @@ export function SpaltenKopf({
             borderRadius: '5px',
           }}
         >
-          {`${hiddenCount} ausgeblendet`}
+          {t.BOARD.AUSGEBLENDET(hiddenCount)}
         </Button>
       )}
       {canEdit && (
@@ -220,16 +220,16 @@ export function SpaltenKopf({
         </Tooltip>
       )}
       {showStructureEdit && (
-        <Tooltip title="Spalte bearbeiten">
-          <IconButton size="small" aria-label={`Spalte ${column.name} bearbeiten`}
+        <Tooltip title={t.BOARD.SPALTE_BEARBEITEN}>
+          <IconButton size="small" aria-label={t.BOARD.SPALTE_BEARBEITEN_ARIA(column.name)}
             onClick={onBearbeiten} sx={{ color: 'text.secondary' }}>
             <EditOutlinedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       )}
       {showStructureEdit && (
-        <Tooltip title="Spalte löschen">
-          <IconButton size="small" aria-label={`Spalte ${column.name} löschen`}
+        <Tooltip title={t.BOARD.SPALTE_LOESCHEN}>
+          <IconButton size="small" aria-label={t.BOARD.SPALTE_LOESCHEN_ARIA(column.name)}
             onClick={onLoeschen} sx={{ color: 'text.secondary' }}>
             <DeleteOutlineIcon fontSize="small" />
           </IconButton>

@@ -1,8 +1,6 @@
 package org.mwolff.manban.nightrun.web;
 
 import java.time.ZoneId;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Die Eingrenzung einer vom Leser gemeldeten Zone auf eine Regionszone (Issue #939, geteilt seit
@@ -25,8 +23,7 @@ final class Regionszone {
   /** Lässt allein Zonen aus der Zonendatenbank durch — nie einen festen Offset. */
   static ZoneId of(ZoneId zone) {
     if (!ZoneId.getAvailableZoneIds().contains(zone.getId())) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST, "zone muss eine Regionszone sein, etwa Europe/Berlin");
+      throw new KeineRegionszoneException();
     }
     return zone;
   }

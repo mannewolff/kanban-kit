@@ -2,6 +2,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { ReleasePreparationView } from '../../api/nightRuns'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { tagZeit } from '../../lib/leitstand'
 import { theme } from '../../theme'
 import { MorgenkachelVeroeffentlichung, VEROEFFENTLICHEN_SATZ } from './MorgenkachelVeroeffentlichung'
@@ -142,5 +143,51 @@ describe('MorgenkachelVeroeffentlichung', () => {
 
     const [eintrag] = within(pakete()).getAllByRole('listitem')
     expect(eintrag.textContent).toBe('#9999')
+  })
+})
+
+describe('MorgenkachelVeroeffentlichung auf Englisch (Issue #1658)', () => {
+  const zeigeEnglisch = (m: ReleasePreparationView) => {
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <MorgenkachelVeroeffentlichung meldung={m} />
+      </ThemeProvider>,
+      'en',
+    )
+    return screen.getByRole('region', { name: 'Release prepared' })
+  }
+
+  it('zeigt Grün mit Stand, Meldezeit, Satz und Paketen auf Englisch', () => {
+    const kachel = zeigeEnglisch(meldung())
+
+    expect(ergebnis()).toHaveTextContent('green')
+    expect(screen.getByTestId('morgenkachel-stand')).toHaveTextContent('State: b2ae30f6')
+    expect(screen.getByTestId('morgenkachel-gemeldet')).toHaveTextContent(
+      `reported at ${tagZeit('2026-10-06T05:12:00Z', 'en')}`,
+    )
+    expect(within(kachel).getByText('The state can be published by hand.')).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Included work packages' })).toHaveTextContent('#1449')
+  })
+
+  it('zeigt Grün mit offener Prüfung und Rot mit Prüfung und Karten auf Englisch', () => {
+    zeigeEnglisch(meldung({ result: 'GREEN_PENDING', pending: ['mvn verify'] }))
+    expect(ergebnis()).toHaveTextContent('green, check pending')
+    expect(screen.getByRole('list', { name: 'Pending checks' })).toHaveTextContent('mvn verify')
+  })
+
+  it('zeigt Rot mit fehlgeschlagener Prüfung und betroffenen Karten auf Englisch', () => {
+    zeigeEnglisch(meldung({ result: 'RED', redCheck: 'npm test', redCards: [{ number: 7, title: null }], cards: [] }))
+
+    expect(ergebnis()).toHaveTextContent('red')
+    expect(screen.getByTestId('morgenkachel-rotpruefung')).toHaveTextContent('Failed check: npm test')
+    expect(screen.getByRole('list', { name: 'Affected cards' })).toHaveTextContent('#7')
+    expect(screen.getByTestId('morgenkachel-keine-pakete')).toHaveTextContent('Included work packages: none')
+  })
+
+  it('sagt auf Englisch, dass nichts vorbereitet wurde', () => {
+    zeigeEnglisch(meldung({ result: 'NOT_PREPARED', commitHash: null }))
+
+    expect(ergebnis()).toHaveTextContent('not prepared')
+    expect(screen.getByText('No release was prepared in this run.')).toBeInTheDocument()
   })
 })

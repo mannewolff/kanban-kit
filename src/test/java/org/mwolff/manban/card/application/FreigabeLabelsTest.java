@@ -45,14 +45,14 @@ class FreigabeLabelsTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"kit:klaeren", "kit:geschuetzt"})
+  @ValueSource(strings = {"kit:klaeren", "kit:geschuetzt", "kit:wartet"})
   void token_darfMaschinenLabelSetzen(String name) {
     assertThatCode(() -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.SETZEN))
         .doesNotThrowAnyException();
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"kit:klaeren", "kit:geschuetzt"})
+  @ValueSource(strings = {"kit:klaeren", "kit:geschuetzt", "kit:wartet"})
   void token_darfMaschinenLabelNichtAbnehmen(String name) {
     assertThatThrownBy(
             () -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.ABNEHMEN))
@@ -64,7 +64,8 @@ class FreigabeLabelsTest {
   @NullSource
   @ValueSource(strings = "SESSION")
   void sessionUndUnbekannt_duerfenAllesInBeideRichtungen(CardActivityOrigin herkunft) {
-    for (String name : List.of("kit:night", "kit:nightrun", "kit:klaeren", "kit:geschuetzt")) {
+    for (String name :
+        List.of("kit:night", "kit:nightrun", "kit:klaeren", "kit:geschuetzt", "kit:on-hold")) {
       for (Richtung richtung : Richtung.values()) {
         assertThatCode(() -> FreigabeLabels.pruefe(herkunft, name, richtung))
             .doesNotThrowAnyException();
@@ -251,7 +252,7 @@ class FreigabeLabelsTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"kit:clarify", "kit:protected"})
+  @ValueSource(strings = {"kit:clarify", "kit:protected", "kit:on-hold"})
   void englisch_token_darfMaschinenLabelNichtAbnehmen(String name) {
     assertThatThrownBy(
             () -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.ABNEHMEN))
@@ -260,14 +261,15 @@ class FreigabeLabelsTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"kit:clarify", "kit:protected"})
+  @ValueSource(strings = {"kit:clarify", "kit:protected", "kit:on-hold"})
   void englisch_token_darfMaschinenLabelSetzen(String name) {
     assertThatCode(() -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.SETZEN))
         .doesNotThrowAnyException();
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"kit:protected", "kit:clarify", "kit:geschuetzt", "kit:night"})
+  @ValueSource(
+      strings = {"kit:protected", "kit:clarify", "kit:geschuetzt", "kit:night", "kit:on-hold"})
   void definition_token_loeschenInBeidenSprachenAbgewiesen(String name) {
     assertThatThrownBy(() -> FreigabeLabels.pruefeDefinition(CardActivityOrigin.TOKEN, name, null))
         .isInstanceOf(FreigabeLabelException.class)

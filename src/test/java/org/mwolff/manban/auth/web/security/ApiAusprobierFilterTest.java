@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.auth.application.SessionTokens;
+import org.mwolff.manban.common.i18n.SprachFixture;
+import org.mwolff.manban.common.i18n.Sprache;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -35,6 +37,7 @@ class ApiAusprobierFilterTest {
   private SessionCookieManager cookies;
   private SessionTokens tokens;
   private PlatformAdminChecker admins;
+  private Sprache eingestellt;
   private FilterChain chain;
   private ApiAusprobierFilter filter;
   private MockHttpServletRequest request;
@@ -46,7 +49,8 @@ class ApiAusprobierFilterTest {
     tokens = mock(SessionTokens.class);
     admins = mock(PlatformAdminChecker.class);
     chain = mock(FilterChain.class);
-    filter = new ApiAusprobierFilter(cookies, tokens, admins);
+    eingestellt = Sprache.DE;
+    filter = new ApiAusprobierFilter(cookies, tokens, admins, SprachFixture.mit(() -> eingestellt));
     request = new MockHttpServletRequest("POST", "/api/projects");
     response = new MockHttpServletResponse();
   }
@@ -105,6 +109,26 @@ class ApiAusprobierFilterTest {
     assertThat(response.getStatus()).isEqualTo(401);
     verify(chain, never()).doFilter(any(), any());
     verifyNoInteractions(admins);
+  }
+
+  @Test
+  void doFilter_nonAdmin_rejectsInDerEingestelltenSprache() throws Exception {
+    // Given
+    eingestellt = Sprache.EN;
+    signedInWithFlag(7L, false);
+    request.addHeader("Accept-Language", "de-DE");
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertThat(response.getStatus()).isEqualTo(403);
+    assertThat(response.getContentAsString())
+        .isEqualTo(
+            "{\"type\":\"about:blank\",\"title\":\"Forbidden\",\"status\":403,"
+                + "\"detail\":\"Trying out calls from the API overview is reserved for"
+                + " platform admins.\"}");
+    verify(chain, never()).doFilter(any(), any());
   }
 
   @Test

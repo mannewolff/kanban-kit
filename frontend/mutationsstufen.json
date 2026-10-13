@@ -7,7 +7,8 @@
     "src/components/labelChipSx.ts",
     "src/vite-env.d.ts",
     "src/test/**",
-    "src/lib/__fixtures__/**"
+    "src/lib/__fixtures__/**",
+    "src/i18n/renderMitSprache.tsx"
   ],
   "ausschnitte": [
     {
@@ -84,7 +85,9 @@
         "src/components/CardNumberSearch.tsx",
         "src/components/EpicBadge.tsx",
         "src/components/DerivationTree.tsx",
-        "src/components/AbnahmeSzenarienDialog.tsx"
+        "src/components/AbnahmeSzenarienDialog.tsx",
+        "src/components/DatumFeld.tsx",
+        "src/components/LabelErklaerung.tsx"
       ],
       "testMuster": [
         "src/components/CardDetailModal.test.tsx",
@@ -94,12 +97,14 @@
         "src/components/CardNumberSearch.test.tsx",
         "src/components/EpicBadge.test.tsx",
         "src/components/DerivationTree.test.tsx",
-        "src/components/AbnahmeSzenarienDialog.test.tsx"
+        "src/components/AbnahmeSzenarienDialog.test.tsx",
+        "src/components/DatumFeld.test.tsx",
+        "src/components/LabelErklaerung.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,
       "reihenfolge": 7,
-      "begruendung": "Alles, was eine Karte anzeigt, anlegt, verschiebt oder ihre Herkunft zeigt."
+      "begruendung": "Alles, was eine Karte anzeigt, anlegt, verschiebt oder ihre Herkunft zeigt — samt der Erklärung ihrer Labels."
     },
     {
       "name": "bausteine-tabelle",
@@ -275,6 +280,14 @@
       "phase": 4,
       "reihenfolge": 16,
       "begruendung": "Einstieg, Sitzungskontext, Weiterleitungen und Navigation — die Muster erfassen die Wurzel src bewusst nicht, damit designQuelle.test.ts ausserhalb des Sandkastens bleibt."
+    },
+    {
+      "name": "sprache",
+      "muster": ["src/i18n/**/*.{ts,tsx}"],
+      "aufgenommen": false,
+      "phase": 4,
+      "reihenfolge": 17,
+      "begruendung": "Woerterbuecher, Sprachkontext und Formatierer der Oberflaeche (Plan #1638) — die Grundlage, ueber die jede Seite ihre Texte, Daten und Zahlen in der eingestellten Sprache zeigt; zuletzt aufgenommen, weil sie mit den Seitenpaketen noch waechst."
     }
   ]
 }

@@ -22,6 +22,6 @@ class UnknownCardKindExceptionTest {
 
   @Test
   void behaeltDieMeldung() {
-    assertThat(new UnknownCardKindException("Unbekannte Art: X")).hasMessage("Unbekannte Art: X");
+    assertThat(UnknownCardKindException.unbekannt("X")).hasMessage("Unbekannte Kartenart: X");
   }
 }

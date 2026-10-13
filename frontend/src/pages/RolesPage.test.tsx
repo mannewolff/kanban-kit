@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { RoleMatrix, RolesApi } from '../api/roles'
 import { RolesPage } from './RolesPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const MATRIX: RoleMatrix = {
   roles: ['VIEWER', 'MEMBER', 'ADMIN', 'OWNER'],
@@ -131,5 +132,32 @@ describe('RolesPage', () => {
     expect(screen.getByText('PONDER')).toBeInTheDocument()
     // Fehlender Grant-Eintrag -> Checkbox nicht gesetzt (?? false).
     expect(screen.getByLabelText('MYSTERY_PONDER für GUEST')).not.toBeChecked()
+  })
+})
+
+describe('RolesPage auf Englisch', () => {
+  it('beschriftet Matrix, Fussnoten und Plattform-Rollen auf Englisch', async () => {
+    const api = { matrix: vi.fn().mockResolvedValue(MATRIX) } as unknown as RolesApi
+    renderMitSprache(<RolesPage api={api} />, 'en')
+
+    expect(await screen.findByText('Epics')).toBeInTheDocument()
+    expect(screen.getByText('Roles & permissions')).toBeInTheDocument()
+    expect(screen.getByText('Project roles')).toBeInTheDocument()
+    expect(screen.getByText('Role')).toBeInTheDocument()
+    expect(screen.getByText('Runs')).toBeInTheDocument()
+    expect(screen.getByText('Card')).toBeInTheDocument()
+    expect(screen.getByText(/^Change project/)).toBeInTheDocument()
+    expect(screen.getByText(/^Submit/)).toBeInTheDocument()
+    expect(screen.getByLabelText('EPIC_CREATE for ADMIN')).toBeChecked()
+    expect(screen.getByText(/but only if the project takes part in the Platform Control Room/)).toBeInTheDocument()
+    expect(screen.getByText(/both the source and the target project/)).toBeInTheDocument()
+    expect(screen.getByText(/The checkmarks of the built-in roles are fixed/)).toBeInTheDocument()
+    expect(screen.getByText('Platform roles')).toBeInTheDocument()
+    expect(screen.getByText(/sees and edits only their own projects/)).toBeInTheDocument()
+    expect(screen.getByText(/Super user: full access to/)).toBeInTheDocument()
+    expect(screen.getByText('Only with the platform role ADMIN')).toBeInTheDocument()
+    expect(screen.getByText(/No project role grants this/)).toBeInTheDocument()
+    expect(screen.getByText('View the Platform Control Room')).toBeInTheDocument()
+    expect(screen.getByText('Create and delete projects')).toBeInTheDocument()
   })
 })

@@ -14,10 +14,10 @@ import {
   type VerbrauchZeitraum,
   type VerbrauchZeitraumArt,
 } from '../../api/nightRunUsage'
+import { useSprache, useT } from '../../i18n/SpracheContext'
+import { woerterbuch, type Sprache } from '../../i18n/woerterbuch'
 import { dollar, implementierungKachel, kostenText, laufDauer, tokenMenge, tokenText } from '../../lib/leitstand'
 import {
-  NICHT_ERFASST_TEXT,
-  TEILWEISE_ERFASST_TEXT,
   erfassungsstand,
   laeufeText,
   sitzungenText,
@@ -62,12 +62,8 @@ import { DeltaMarke, Funke, Kachel, KACHEL_SX, KachelFuss, KachelWert } from './
  */
 type Wahl = VerbrauchZeitraumArt | 'TOTAL'
 
-const ZEITRAEUME: ReadonlyArray<{ art: Wahl; name: string }> = [
-  { art: 'DAY', name: 'Schicht' },
-  { art: 'WEEK', name: 'Woche' },
-  { art: 'MONTH', name: 'Monat' },
-  { art: 'TOTAL', name: 'Gesamt' },
-]
+/** Die Zeitraum-Wahl in ihrer Reihenfolge; die Namen stehen im Wörterbuch. */
+const ZEITRAEUME: readonly Wahl[] = ['DAY', 'WEEK', 'MONTH', 'TOTAL']
 
 /** Was der Bereich zeigt: ein Zeitraum samt Vorzeitraum oder die Summe über alles Aufbewahrte. */
 type Ansicht = { art: 'zeitraum'; zeitraum: VerbrauchZeitraum } | { art: 'gesamt'; gesamt: VerbrauchGesamt }
@@ -89,6 +85,8 @@ export function LeitstandVerbrauch({
   boardId,
   api = STANDARD_API,
 }: Readonly<{ projectId: number; boardId: number; api?: VerbrauchApi }>) {
+  const t = useT().LEITSTAND_VERBRAUCH
+  const { sprache } = useSprache()
   const [wahl, setWahl] = useState<Wahl>('DAY')
   const [zustand, setZustand] = useState<Zustand>({ art: 'laden' })
   // Stryker disable next-line ObjectLiteral,StringLiteral: gleichwertig — der Effekt setzt vor jeder Anzeige der Kachel selbst 'laden'
@@ -138,25 +136,25 @@ export function LeitstandVerbrauch({
           id="verbrauch-titel"
           sx={{ m: 0, fontFamily: SCHRIFT_ANZEIGE, fontStretch: '114%', fontSize: 13, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase' }}
         >
-          Verbrauch
+          {t.TITEL}
         </Box>
         {zustand.art === 'da' && (
           <Box component="span" data-testid="verbrauch-umfang" sx={{ fontSize: 11.5, color: TEXT_SCHWACH }}>
-            {umfangText(zustand.ansicht)}
+            {umfangText(zustand.ansicht, sprache)}
           </Box>
         )}
         <Box
           role="group"
-          aria-label="Zeitraum"
+          aria-label={t.ZEITRAUM_ARIA}
           sx={{ ml: 'auto', display: 'inline-flex', gap: '3px', p: '3px', bgcolor: NUT, border: `1px solid ${RAND}`, borderRadius: '9px', boxShadow: SCHATTEN_NUTE }}
         >
-          {ZEITRAEUME.map((z) => {
-            const gewaehlt = z.art === wahl
+          {ZEITRAEUME.map((art) => {
+            const gewaehlt = art === wahl
             return (
               <ButtonBase
-                key={z.art}
+                key={art}
                 aria-pressed={gewaehlt}
-                onClick={() => setWahl(z.art)}
+                onClick={() => setWahl(art)}
                 sx={{
                   ...ZAHL,
                   fontSize: 11,
@@ -169,27 +167,27 @@ export function LeitstandVerbrauch({
                   ...(gewaehlt && { background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE})`, boxShadow: SCHATTEN_TASTE }),
                 }}
               >
-                {z.name}
+                {t.ZEITRAUM[art]}
               </ButtonBase>
             )
           })}
         </Box>
       </Box>
 
-      {zustand.art === 'laden' && <Typography color="text.secondary">Der Verbrauch wird geladen …</Typography>}
-      {zustand.art === 'fehler' && <Typography color="text.secondary">Der Verbrauch konnte nicht geladen werden.</Typography>}
-      {zustand.art === 'da' && <VerbrauchKacheln {...kachelWerte(zustand.ansicht)} implementierung={implementierung} />}
+      {zustand.art === 'laden' && <Typography color="text.secondary">{t.LAEDT}</Typography>}
+      {zustand.art === 'fehler' && <Typography color="text.secondary">{t.FEHLER}</Typography>}
+      {zustand.art === 'da' && <VerbrauchKacheln {...kachelWerte(zustand.ansicht, sprache)} implementierung={implementierung} />}
     </Box>
   )
 }
 
 /** Kopfzeile: der Zeitraum bzw. „Gesamt", dahinter Läufe und Sitzungen (Issue #1541, E3). */
-function umfangText(ansicht: Ansicht): string {
+function umfangText(ansicht: Ansicht, sprache: Sprache): string {
   const { titel, zaehlung } =
     ansicht.art === 'zeitraum'
-      ? { titel: zeitraumBeschriftung(ansicht.zeitraum.current), zaehlung: ansicht.zeitraum.current }
-      : { titel: 'Gesamt', zaehlung: ansicht.gesamt }
-  return `${titel} · ${laeufeText(zaehlung.nightRunCount)} · ${sitzungenText(zaehlung.interactiveRunCount)}`
+      ? { titel: zeitraumBeschriftung(ansicht.zeitraum.current, sprache), zaehlung: ansicht.zeitraum.current }
+      : { titel: woerterbuch(sprache).LEITSTAND_VERBRAUCH.GESAMT, zaehlung: ansicht.gesamt }
+  return `${titel} · ${laeufeText(zaehlung.nightRunCount, sprache)} · ${sitzungenText(zaehlung.interactiveRunCount, sprache)}`
 }
 
 /** Die Größen, die Zeitraum und „Gesamt" gemeinsam haben. */
@@ -209,13 +207,13 @@ interface KachelWerte {
   abdeckung?: string
 }
 
-function kachelWerte(ansicht: Ansicht): KachelWerte {
+function kachelWerte(ansicht: Ansicht, sprache: Sprache): KachelWerte {
   if (ansicht.art === 'zeitraum') {
     const { current, previous, nights } = ansicht.zeitraum
     return {
       werte: current,
       stand: erfassungsstand(current),
-      hinweis: zeitraumHinweis(current),
+      hinweis: zeitraumHinweis(current, sprache),
       zeitbezug: { vorher: previous.usage.total, schichten: nights },
     }
   }
@@ -225,7 +223,7 @@ function kachelWerte(ansicht: Ansicht): KachelWerte {
     // Stryker disable next-line StringLiteral: gleichwertig — Anteile unterscheidet nur 'nicht-erfasst' und 'teilweise-erfasst'
     stand: gesamt.interactiveUsageSince === null ? 'nicht-erfasst' : 'erfasst',
     hinweis: null,
-    abdeckung: abdeckungText(gesamt),
+    abdeckung: abdeckungText(gesamt, sprache),
   }
 }
 
@@ -234,14 +232,15 @@ function kachelWerte(ansicht: Ansicht): KachelWerte {
  * aufbewahrte Eintrag zeigt, was der Ringpuffer verdrängt hat, der Erfassungsbeginn trennt davon
  * die Zeit, in der noch keine Sitzung gemeldet wurde.
  */
-function abdeckungText(gesamt: VerbrauchGesamt): string {
+function abdeckungText(gesamt: VerbrauchGesamt, sprache: Sprache): string {
+  const t = woerterbuch(sprache)
   return [
     gesamt.oldestRetainedRunStart === null
-      ? 'ohne aufbewahrten Eintrag'
-      : `ab ${zeitpunktDatum(gesamt.oldestRetainedRunStart)}`,
+      ? t.LEITSTAND_VERBRAUCH.OHNE_EINTRAG
+      : t.LEITSTAND_VERBRAUCH.AB(zeitpunktDatum(gesamt.oldestRetainedRunStart, sprache)),
     gesamt.interactiveUsageSince === null
-      ? `Sitzungen ${NICHT_ERFASST_TEXT}`
-      : `Sitzungen ab ${zeitpunktDatum(gesamt.interactiveUsageSince)}`,
+      ? t.LEITSTAND_VERBRAUCH.SITZUNGEN_NICHT_ERFASST(t.VERBRAUCH_ZEITRAUM.NICHT_ERFASST)
+      : t.LEITSTAND_VERBRAUCH.SITZUNGEN_AB(zeitpunktDatum(gesamt.interactiveUsageSince, sprache)),
   ].join(' · ')
 }
 
@@ -253,10 +252,12 @@ function VerbrauchKacheln({
   abdeckung,
   implementierung,
 }: Readonly<KachelWerte & { implementierung: ImplementierungZustand }>) {
+  const t = useT().LEITSTAND_VERBRAUCH
+  const { sprache } = useSprache()
   const summe = werte.usage.total
   const { night, interactive } = werte.usageByKind
-  const eingabe = tokenMenge(summe.inputTokens)
-  const ausgabe = tokenMenge(summe.outputTokens)
+  const eingabe = tokenMenge(summe.inputTokens, sprache)
+  const ausgabe = tokenMenge(summe.outputTokens, sprache)
   const karten = werte.cardCount
   const gelesen = summe.cachedInputTokens
   // Eine Bedingung für die ganze Aufteilung (Issue #1281): Vorher prüften `frisch`, der Anteil und
@@ -268,20 +269,21 @@ function VerbrauchKacheln({
   const ausgabeVerlauf = (zeitbezug?.schichten ?? [])
     .map((nacht) => nacht.usage.total.outputTokens)
     .filter((wert): wert is number => wert !== null)
-  const vergleich = zeitbezug ? vergleichMitVorzeitraum(summe, zeitbezug.vorher) : null
-  const ohneKarte = kostenText(werte.usage.remainder.costUsd)
-  const jeVorgang = summe.costUsd !== null && karten > 0 ? `${kostenText(summe.costUsd / karten)} je Vorgang` : ''
+  const vergleich = zeitbezug ? vergleichMitVorzeitraum(summe, zeitbezug.vorher, sprache) : null
+  const ohneKarte = kostenText(werte.usage.remainder.costUsd, sprache)
+  const jeVorgang = summe.costUsd !== null && karten > 0 ? t.JE_VORGANG(kostenText(summe.costUsd / karten, sprache)!) : ''
+  const menge = (anzahl: number | null) => mengeText(anzahl, sprache)
 
   return (
     <>
       {hinweis && <Typography color="text.secondary">{hinweis}</Typography>}
       <Box
-        aria-label="Verbrauch des Zeitraums"
+        aria-label={t.ZEITRAUM_GRUPPE_ARIA}
         role="group"
         sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))', lg: 'repeat(5, minmax(0,1fr))' }, gap: '14px', perspective: '1100px' }}
       >
-        <Box component="article" aria-label="Eingabe-Token" sx={{ ...KACHEL_SX, gridColumn: { sm: 'span 2', lg: 'auto' } }}>
-          <Box sx={ETIKETT}>Eingabe-Token</Box>
+        <Box component="article" aria-label={t.EINGABE} sx={{ ...KACHEL_SX, gridColumn: { sm: 'span 2', lg: 'auto' } }}>
+          <Box sx={ETIKETT}>{t.EINGABE}</Box>
           <KachelWert
             wert={eingabe?.wert ?? null}
             // Stryker disable next-line StringLiteral: gleichwertig — ohne Menge zeigt KachelWert den Leertext, nie die Einheit
@@ -291,49 +293,49 @@ function VerbrauchKacheln({
             <>
               <Box
                 role="img"
-                aria-label={`Aufteilung der Eingabe: ${aufteilung.anteil} Prozent aus dem Cache gelesen, ${100 - aufteilung.anteil} Prozent frisch`}
+                aria-label={t.AUFTEILUNG_ARIA(aufteilung.anteil, 100 - aufteilung.anteil)}
                 sx={{ display: 'flex', height: 13, borderRadius: '7px', overflow: 'hidden', bgcolor: NUT, boxShadow: SCHATTEN_NUTE }}
               >
                 <Box component="span" sx={{ display: 'block', width: `${aufteilung.anteil}%`, background: `linear-gradient(180deg, color-mix(in srgb, ${MELDER.gruen} 88%, white), ${MELDER.gruen})` }} />
                 <Box component="span" sx={{ display: 'block', width: `${100 - aufteilung.anteil}%`, background: `linear-gradient(180deg, ${KUPFER_HELL}, ${KUPFER})` }} />
               </Box>
               <Box sx={{ display: 'flex', gap: '13px', flexWrap: 'wrap', fontSize: 10.5, color: 'text.secondary' }}>
-                <Legende farbe={MELDER.gruen} text="Cache gelesen" wert={tokenText(aufteilung.gelesen)} />
-                <Legende farbe={KUPFER} text="frisch" wert={tokenText(aufteilung.frisch)} />
+                <Legende farbe={MELDER.gruen} text={t.CACHE_GELESEN} wert={tokenText(aufteilung.gelesen, sprache)} />
+                <Legende farbe={KUPFER} text={t.FRISCH} wert={tokenText(aufteilung.frisch, sprache)} />
               </Box>
             </>
           )}
-          <Anteile nacht={mengeText(night.total.inputTokens)} sitzungen={mengeText(interactive.total.inputTokens)} stand={stand} />
+          <Anteile nacht={menge(night.total.inputTokens)} sitzungen={menge(interactive.total.inputTokens)} stand={stand} />
         </Box>
 
-        <Box component="article" aria-label="Ausgabe-Token" sx={KACHEL_SX}>
-          <Box sx={ETIKETT}>Ausgabe-Token</Box>
+        <Box component="article" aria-label={t.AUSGABE} sx={KACHEL_SX}>
+          <Box sx={ETIKETT}>{t.AUSGABE}</Box>
           <KachelWert
             wert={ausgabe?.wert ?? null}
             // Stryker disable next-line StringLiteral: gleichwertig — ohne Menge zeigt KachelWert den Leertext, nie die Einheit
             einheit={ausgabe?.einheit ?? ''}
           />
           {ausgabeVerlauf.length > 1 && <Funke werte={ausgabeVerlauf} melder="stahl" />}
-          <Anteile nacht={mengeText(night.total.outputTokens)} sitzungen={mengeText(interactive.total.outputTokens)} stand={stand} />
+          <Anteile nacht={menge(night.total.outputTokens)} sitzungen={menge(interactive.total.outputTokens)} stand={stand} />
           <KachelFuss
             delta={
               summe.outputTokens !== null && karten > 0 ? (
-                <DeltaMarke art="neutral">{`${tokenText(Math.round(summe.outputTokens / karten))} je Vorgang`}</DeltaMarke>
+                <DeltaMarke art="neutral">{t.JE_VORGANG(tokenText(Math.round(summe.outputTokens / karten), sprache))}</DeltaMarke>
               ) : undefined
             }
-            basis={zeitbezug ? schichtenText(zeitbezug.schichten.length) : ''}
+            basis={zeitbezug ? t.SCHICHTEN(zeitbezug.schichten.length) : ''}
           />
         </Box>
 
-        <Box component="article" aria-label="Kosten" sx={KACHEL_SX}>
-          <Box sx={ETIKETT}>Kosten</Box>
-          <KachelWert wert={summe.costUsd === null ? null : dollar(summe.costUsd)} einheit="$" />
-          <Anteile nacht={kostenText(night.total.costUsd)} sitzungen={kostenText(interactive.total.costUsd)} stand={stand} />
+        <Box component="article" aria-label={t.KOSTEN} sx={KACHEL_SX}>
+          <Box sx={ETIKETT}>{t.KOSTEN}</Box>
+          <KachelWert wert={summe.costUsd === null ? null : dollar(summe.costUsd, sprache)} einheit="$" />
+          <Anteile nacht={kostenText(night.total.costUsd, sprache)} sitzungen={kostenText(interactive.total.costUsd, sprache)} stand={stand} />
           {/* Verbrauch ohne Kartenbezug geht nicht verloren, er hat seinen eigenen Namen (AK 3).
               Ohne gemessenen Rest bleibt der Posten weg — eine 0 behauptete, es gäbe keinen. */}
           {ohneKarte !== null && (
             <Box data-testid="posten-ohne-karte" sx={POSTEN_SX}>
-              <Box component="span">ohne Karte</Box>
+              <Box component="span">{t.OHNE_KARTE}</Box>
               <Box component="b" sx={{ ...ZAHL, fontWeight: 500, color: 'text.primary' }}>
                 {ohneKarte}
               </Box>
@@ -345,7 +347,7 @@ function VerbrauchKacheln({
               zeitbezug && (vergleich?.richtung === 'teurer' || vergleich?.richtung === 'billiger') ? (
                 <Box component="span" title={vergleich.text}>
                   <DeltaMarke art={vergleich.richtung === 'billiger' ? 'gut' : 'schlecht'}>
-                    {`${vergleich.richtung === 'billiger' ? '▼' : '▲'} ${dollar(Math.abs(summe.costUsd! - zeitbezug.vorher.costUsd!))} $`}
+                    {`${vergleich.richtung === 'billiger' ? '▼' : '▲'} ${t.BETRAG(dollar(Math.abs(summe.costUsd! - zeitbezug.vorher.costUsd!), sprache))}`}
                   </DeltaMarke>
                 </Box>
               ) : undefined
@@ -363,25 +365,22 @@ function VerbrauchKacheln({
   )
 }
 
-/** „1 Schicht" bzw. „n Schichten". */
-function schichtenText(anzahl: number): string {
-  return anzahl === 1 ? '1 Schicht' : `${anzahl} Schichten`
-}
-
 /**
  * Die Implementierungszeit des gewählten Zeitraums (Issue #1541, #1537 AK 4–6). Bis zur Antwort
  * und nach einem Fehler steht nur der Leerstrich mit seinem Grund, ohne Kartenzahl im Fuß — eine
  * „0 Karten" behauptete eine Antwort, die es nicht gab.
  */
 function ImplementierungKachel({ zustand }: Readonly<{ zustand: ImplementierungZustand }>) {
+  const t = useT().LEITSTAND_VERBRAUCH
+  const { sprache } = useSprache()
   const daten =
     zustand.art === 'da'
-      ? implementierungKachel(zustand.wert.avgImplementationSeconds, zustand.wert.implementationSampleCount)
-      : { ...implementierungKachel(null, 0), basis: '' }
-  const leerText = { laden: 'wird geladen', fehler: 'nicht geladen', da: undefined }[zustand.art]
+      ? implementierungKachel(zustand.wert.avgImplementationSeconds, zustand.wert.implementationSampleCount, sprache)
+      : { ...implementierungKachel(null, 0, sprache), basis: '' }
+  const leerText = { laden: t.WIRD_GELADEN, fehler: t.NICHT_GELADEN, da: undefined }[zustand.art]
   return (
     <Box sx={{ display: 'grid' }}>
-      <Kachel titel="Implementierungszeit" daten={daten} melder="stahl" leerText={leerText} />
+      <Kachel titel={t.IMPLEMENTIERUNGSZEIT} daten={daten} melder="stahl" leerText={leerText} />
     </Box>
   )
 }
@@ -392,28 +391,30 @@ function ImplementierungKachel({ zustand }: Readonly<{ zustand: ImplementierungZ
  * wenn keine Bremsung einen Zeitwert trägt: Dann bleibt nur „davon n ohne Zeitwert".
  */
 function BremseKachel({ bremsen }: Readonly<{ bremsen: VerbrauchBremsen }>) {
+  const t = useT().LEITSTAND_VERBRAUCH
+  const { sprache } = useSprache()
   const { count, withoutTimeCount, savedMs } = bremsen
   return (
-    <Box component="article" aria-label="Bremse" sx={KACHEL_SX}>
-      <Box sx={ETIKETT}>Bremse</Box>
-      <KachelWert wert={String(count)} einheit={count === 1 ? 'Bremsung' : 'Bremsungen'} />
+    <Box component="article" aria-label={t.BREMSE} sx={KACHEL_SX}>
+      <Box sx={ETIKETT}>{t.BREMSE}</Box>
+      <KachelWert wert={String(count)} einheit={t.BREMSUNGEN(count)} />
       {count > withoutTimeCount && (
         <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
           {'≈ '}
           <Box component="b" sx={{ ...ZAHL, fontWeight: 500, color: 'text.primary' }}>
-            {laufDauer(savedMs)}
+            {laufDauer(savedMs, sprache)}
           </Box>
-          {' gespart (geschätzt)'}
+          {t.GESPART}
         </Box>
       )}
-      {withoutTimeCount > 0 && <KachelFuss basis={`davon ${withoutTimeCount} ohne Zeitwert`} />}
+      {withoutTimeCount > 0 && <KachelFuss basis={t.OHNE_ZEITWERT(withoutTimeCount)} />}
     </Box>
   )
 }
 
 /** Eine Token-Menge als Zeilentext; `null` bleibt `null` — nicht gemessen ist nicht 0. */
-function mengeText(anzahl: number | null): string | null {
-  return anzahl === null ? null : tokenText(anzahl)
+function mengeText(anzahl: number | null, sprache: Sprache): string | null {
+  return anzahl === null ? null : tokenText(anzahl, sprache)
 }
 
 /**
@@ -427,12 +428,13 @@ function Anteile({
   sitzungen,
   stand,
 }: Readonly<{ nacht: string | null; sitzungen: string | null; stand: Erfassungsstand }>) {
-  const zusatz = stand === 'teilweise-erfasst' ? ` (${TEILWEISE_ERFASST_TEXT})` : ''
-  const interaktivText = stand === 'nicht-erfasst' ? NICHT_ERFASST_TEXT : `${sitzungen ?? '—'}${zusatz}`
+  const t = useT()
+  const zusatz = stand === 'teilweise-erfasst' ? ` (${t.VERBRAUCH_ZEITRAUM.TEILWEISE_ERFASST})` : ''
+  const interaktivText = stand === 'nicht-erfasst' ? t.VERBRAUCH_ZEITRAUM.NICHT_ERFASST : `${sitzungen ?? '—'}${zusatz}`
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: 10.5, color: 'text.secondary' }}>
-      <Anteil testId="anteil-nacht" text="aus Runs" wert={nacht ?? '—'} />
-      <Anteil testId="anteil-interaktiv" text="aus interaktiven Sitzungen" wert={interaktivText} />
+      <Anteil testId="anteil-nacht" text={t.LEITSTAND_VERBRAUCH.AUS_RUNS} wert={nacht ?? '—'} />
+      <Anteil testId="anteil-interaktiv" text={t.LEITSTAND_VERBRAUCH.AUS_SITZUNGEN} wert={interaktivText} />
     </Box>
   )
 }

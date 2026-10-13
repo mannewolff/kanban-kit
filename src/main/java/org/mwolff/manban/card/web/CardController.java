@@ -160,7 +160,7 @@ class CardController {
       // haette im Herkunftsbaum kein definiertes Verhalten. Ohne diese Ablehnung wuerde
       // `createEpic` das Feld still verschlucken.
       if (request.derivedFrom() != null) {
-        throw new InvalidDerivedFromException("Ein Vorhaben kann keine Herkunft tragen");
+        throw InvalidDerivedFromException.anVorhaben();
       }
       return epics.createEpic(
           userId, boardId, request.title(), request.description(), request.shortcode());

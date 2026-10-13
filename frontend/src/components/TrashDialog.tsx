@@ -8,6 +8,7 @@ import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import { cardsApi as defaultCardsApi, type Card } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
+import { useT } from '../i18n/SpracheContext'
 import { dialogTitleSx } from './dialogChromeSx'
 import { useSnackbar } from './SnackbarProvider'
 
@@ -33,6 +34,7 @@ export function TrashDialog({
 }: Readonly<Props>) {
   const [cards, setCards] = useState<Card[]>([])
   const notify = useSnackbar()
+  const t = useT()
 
   const reload = () => {
     void api.listTrash(boardId).then(setCards).catch(() => setCards([]))
@@ -52,7 +54,7 @@ export function TrashDialog({
       reload()
       onChanged()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Wiederherstellen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.PAPIERKORB.WIEDERHERSTELLEN_FEHLER), 'error')
     }
   }
 
@@ -62,13 +64,13 @@ export function TrashDialog({
       reload()
       onChanged()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Endgültiges Löschen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.PAPIERKORB.ENDGUELTIG_FEHLER), 'error')
     }
   }
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle sx={dialogTitleSx}>Papierkorb</DialogTitle>
+      <DialogTitle sx={dialogTitleSx}>{t.PAPIERKORB.TITEL}</DialogTitle>
       <DialogContent>
         <Stack spacing={1} sx={{ mt: 1 }}>
           {cards.map((card) => (
@@ -76,26 +78,26 @@ export function TrashDialog({
               <Typography variant="body2" sx={{ flexGrow: 1 }}>
                 #{card.number} · {card.title}
               </Typography>
-              <Button size="small" aria-label={`${card.title} wiederherstellen`} onClick={() => void restore(card)}>
-                Wiederherstellen
+              <Button size="small" aria-label={t.PAPIERKORB.WIEDERHERSTELLEN_ARIA(card.title)} onClick={() => void restore(card)}>
+                {t.ALLGEMEIN.WIEDERHERSTELLEN}
               </Button>
               {canPurge && (
                 <Button
                   size="small"
                   color="error"
-                  aria-label={`${card.title} endgültig löschen`}
+                  aria-label={t.PAPIERKORB.ENDGUELTIG_ARIA(card.title)}
                   onClick={() => void purge(card)}
                 >
-                  Endgültig löschen
+                  {t.PAPIERKORB.ENDGUELTIG}
                 </Button>
               )}
             </Stack>
           ))}
-          {cards.length === 0 && <Typography color="text.secondary">Der Papierkorb ist leer.</Typography>}
+          {cards.length === 0 && <Typography color="text.secondary">{t.PAPIERKORB.LEER}</Typography>}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Schließen</Button>
+        <Button onClick={onClose}>{t.ALLGEMEIN.SCHLIESSEN}</Button>
       </DialogActions>
     </Dialog>
   )

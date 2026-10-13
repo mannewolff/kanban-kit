@@ -10,6 +10,8 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
+import Radio from '@mui/material/Radio'
+import RadioGroup from '@mui/material/RadioGroup'
 import Stack from '@mui/material/Stack'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
@@ -19,16 +21,18 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
-import { APP_NAME } from '../appMeta'
 import { accessTokensApi, type AccessToken, type CreatedAccessToken } from '../api/accessTokens'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { configApi } from '../api/config'
 import { OPENAPI_JSON_PFAD, OPENAPI_YAML_PFAD } from '../api/openapi'
+import { languageApi } from '../api/language'
 import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { StandardLabelsSection } from '../components/StandardLabelsSection'
+import { useSprache, useT } from '../i18n/SpracheContext'
+import { istSprache, woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { useEditMode } from '../lib/EditModeContext'
 import { canEditCards, isPlatformAdmin } from '../lib/roles'
 
@@ -38,11 +42,12 @@ import { canEditCards, isPlatformAdmin } from '../lib/roles'
  */
 export function AdministrationPage() {
   const { editMode, setEditMode } = useEditMode()
+  const t = useT().ADMINISTRATION
 
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Administration
+        {t.TITEL}
       </Typography>
       <Stack spacing={2} sx={{ maxWidth: 720 }}>
         <LegalSection />
@@ -50,25 +55,25 @@ export function AdministrationPage() {
         <Paper variant="outlined" sx={{ p: 2 }}>
           <Stack spacing={1}>
             <Typography variant="h6" component="h2">
-              Editiermodus
+              {t.EDITIERMODUS}
             </Typography>
             <FormControlLabel
               control={
                 <Switch
                   checked={editMode}
                   onChange={(e) => setEditMode(e.target.checked)}
-                  slotProps={{ input: { 'aria-label': 'Editiermodus aktivieren' } }}
+                  slotProps={{ input: { 'aria-label': t.EDITIERMODUS_ARIA } }}
                 />
               }
-              label="Bearbeiten aktivieren"
+              label={t.BEARBEITEN_AKTIVIEREN}
             />
             <Typography variant="body2" color="text.secondary">
-              Ist der Editiermodus aktiv, erscheinen die Bearbeiten-Symbole (etwa zum Umbenennen von
-              Projekten, Boards und Spalten), sofern du die nötigen Rechte hast. Der Modus ist beim
-              Start immer aus und wird nicht über einen Neustart hinweg gemerkt.
+              {t.EDITIERMODUS_HINWEIS}
             </Typography>
           </Stack>
         </Paper>
+
+        <LanguageSection />
 
         <DoneRetentionSection />
 
@@ -88,18 +93,96 @@ export function AdministrationPage() {
  * und wäre eine untestbare Zeitabhängigkeit.
  */
 function LegalSection() {
+  const t = useT()
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={1}>
         <Typography variant="h6" component="h2">
-          Rechtliches
+          {t.ADMINISTRATION.RECHTLICHES}
         </Typography>
-        <Typography variant="body2">© 2026 Manfred Wolff</Typography>
+        <Typography variant="body2">{t.ADMINISTRATION.COPYRIGHT}</Typography>
         <Typography variant="body2" color="text.secondary">
-          {APP_NAME} steht unter der MIT-Lizenz. Nutzung, Änderung und Weitergabe sind gestattet,
-          sofern Copyright-Vermerk und Lizenztext erhalten bleiben. Die Software wird ohne Gewähr
-          bereitgestellt.
+          {t.ADMINISTRATION.LIZENZ(t.APP_NAME)}
         </Typography>
+      </Stack>
+    </Paper>
+  )
+}
+
+/**
+ * Feste, zweisprachige Überschrift (Issue #1646): Wer kein Deutsch liest, findet die Einstellung
+ * auch auf der deutschen Oberfläche. Steht darum nicht im Wörterbuch.
+ */
+const SPRACHE_UEBERSCHRIFT = 'Sprache / Language'
+
+/** Jede Sprache unter ihrem eigenen Namen — fest, in jeder Einstellung gleich. */
+const SPRACHNAMEN: ReadonlyArray<{ code: Sprache; name: string }> = [
+  { code: 'de', name: 'Deutsch' },
+  { code: 'en', name: 'English' },
+]
+
+/**
+ * Sprache der Installation (Plan #1638, E3): sichtbar für jeden Angemeldeten, bedienbar nur für den
+ * Plattform-Admin. Nach dem Speichern setzt der Abschnitt die Sprache im Kontext, sodass der Admin
+ * die Umstellung sofort sieht; alle anderen sehen sie beim nächsten Laden.
+ */
+function LanguageSection() {
+  const { user } = useAuth()
+  const admin = isPlatformAdmin(user)
+  const { sprache, setzeSprache } = useSprache()
+  const t = useT()
+  const [auswahl, setAuswahl] = useState<Sprache>(sprache)
+  const notify = useSnackbar()
+
+  const save = async () => {
+    try {
+      const gesetzt = await languageApi.setzen(auswahl)
+      setzeSprache(gesetzt)
+      notify(woerterbuch(gesetzt).SPRACHE.GESPEICHERT, 'success')
+    } catch (e) {
+      notify(apiErrorMessage(e, t.SPRACHE.FEHLER), 'error')
+    }
+  }
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack spacing={1.5}>
+        <Typography variant="h6" component="h2" id="sprache-ueberschrift">
+          {SPRACHE_UEBERSCHRIFT}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {t.SPRACHE.HINWEIS}
+        </Typography>
+        <RadioGroup
+          row
+          aria-labelledby="sprache-ueberschrift"
+          value={auswahl}
+          onChange={(e) => {
+            if (istSprache(e.target.value)) setAuswahl(e.target.value)
+          }}
+        >
+          {SPRACHNAMEN.map(({ code, name }) => (
+            <FormControlLabel
+              key={code}
+              value={code}
+              control={<Radio />}
+              label={name}
+              lang={code}
+              disabled={!admin}
+            />
+          ))}
+        </RadioGroup>
+        {admin ? (
+          <Box>
+            <Button variant="contained" aria-label={t.SPRACHE.SPEICHERN_ARIA} onClick={() => void save()}>
+              {t.SPRACHE.SPEICHERN}
+            </Button>
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {t.SPRACHE.NUR_ADMIN}
+          </Typography>
+        )}
       </Stack>
     </Paper>
   )
@@ -115,6 +198,8 @@ function DoneRetentionSection() {
   const [days, setDays] = useState('')
   const [effective, setEffective] = useState<number | null>(null)
   const notify = useSnackbar()
+  const tg = useT()
+  const t = tg.ADMINISTRATION
 
   useEffect(() => {
     if (!admin) {
@@ -133,16 +218,16 @@ function DoneRetentionSection() {
   const save = async () => {
     const n = Number(days)
     if (!Number.isInteger(n) || n < 0) {
-      notify('Bitte eine ganze Zahl ≥ 0 angeben (0 = kein Auto-Archiv).', 'warning')
+      notify(t.DONE_UNGUELTIG, 'warning')
       return
     }
     try {
       const r = await configApi.setDoneRetention(n)
       setEffective(r.effective)
       setDays(String(r.effective))
-      notify('Gespeichert.', 'success')
+      notify(t.GESPEICHERT, 'success')
     } catch (e) {
-      notify(e instanceof ApiError ? e.message : 'Speichern fehlgeschlagen.', 'error')
+      notify(e instanceof ApiError ? e.message : tg.ALLGEMEIN.SPEICHERN_FEHLGESCHLAGEN, 'error')
     }
   }
 
@@ -150,29 +235,29 @@ function DoneRetentionSection() {
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={1.5}>
         <Typography variant="h6" component="h2">
-          Done-Aufbewahrung
+          {t.DONE_AUFBEWAHRUNG}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Erledigte Karten werden nach dieser Anzahl Tage automatisch archiviert.{' '}
-          <strong>0 = kein Auto-Archiv.</strong> Der Wert gilt global.
+          {t.DONE_HINWEIS} <strong>{t.DONE_NULL}</strong> {t.DONE_GLOBAL}
         </Typography>
         {effective !== null && (
           <Typography variant="body2" color="text.secondary">
-            Aktuell wirksam: {effective === 0 ? 'kein Auto-Archiv' : `${effective} Tage`}
+            {t.AKTUELL_WIRKSAM}
+            {effective === 0 ? t.KEIN_AUTO_ARCHIV : t.TAGE_WERT(effective)}
           </Typography>
         )}
         <Stack direction="row" spacing={1} alignItems="flex-start">
           <TextField
             type="number"
             size="small"
-            label="Tage"
+            label={t.TAGE}
             value={days}
             onChange={(e) => setDays(e.target.value)}
-            slotProps={{ htmlInput: { min: 0, 'aria-label': 'Done-Aufbewahrung in Tagen' } }}
+            slotProps={{ htmlInput: { min: 0, 'aria-label': t.DONE_TAGE_ARIA } }}
             sx={{ width: 140 }}
           />
           <Button variant="contained" onClick={() => void save()} sx={{ mt: 0.5 }}>
-            Speichern
+            {tg.ALLGEMEIN.SPEICHERN}
           </Button>
         </Stack>
       </Stack>
@@ -185,6 +270,7 @@ function ApiTokensSection() {
   const { user } = useAuth()
   const platformAdmin = isPlatformAdmin(user)
   const notify = useSnackbar()
+  const ta = useT().ADMINISTRATION
 
   const [tokens, setTokens] = useState<AccessToken[]>([])
   const [projects, setProjects] = useState<Project[]>([])
@@ -209,9 +295,7 @@ function ApiTokensSection() {
   const projectName = (id: number): string => projects.find((p) => p.id === id)?.name ?? `#${id}`
 
   const binding = (t: AccessToken): string =>
-    t.projectId != null && t.boardId != null
-      ? `Projekt „${projectName(t.projectId)}“ · Board ${t.boardId}`
-      : 'ungebunden'
+    t.projectId != null && t.boardId != null ? ta.BINDUNG(projectName(t.projectId), t.boardId) : ta.UNGEBUNDEN
 
   const copyPlaintext = async (plaintext: string) => {
     await navigator.clipboard.writeText(plaintext)
@@ -219,14 +303,14 @@ function ApiTokensSection() {
   }
 
   const revoke = async (id: number) => {
-    if (!window.confirm('Dieses Token widerrufen? Clients, die es nutzen, verlieren den Zugriff.')) {
+    if (!window.confirm(ta.WIDERRUFEN_FRAGE)) {
       return
     }
     try {
       await accessTokensApi.revoke(id)
       reloadTokens()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Widerrufen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, ta.WIDERRUFEN_FEHLGESCHLAGEN), 'error')
     }
   }
 
@@ -235,7 +319,7 @@ function ApiTokensSection() {
       <Stack spacing={1.5}>
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography variant="h6" component="h2" sx={{ flexGrow: 1 }}>
-            API-Tokens
+            {ta.API_TOKENS}
           </Typography>
           <Button
             variant="outlined"
@@ -246,19 +330,16 @@ function ApiTokensSection() {
               setDialogOpen(true)
             }}
           >
-            Token erzeugen
+            {ta.TOKEN_ERZEUGEN}
           </Button>
         </Stack>
 
         <Typography variant="body2" color="text.secondary">
-          Ein board-gebundenes Token treibt ein Board über die API (z. B. aus einer CLI oder
-          CI-Pipeline), ohne Login — gebunden an genau ein Board. Der Klartext wird beim Erzeugen{' '}
-          <strong>nur einmal</strong> angezeigt.
+          {ta.TOKEN_HINWEIS} <strong>{ta.NUR_EINMAL}</strong> {ta.ANGEZEIGT}
         </Typography>
         {projects.length === 0 && (
           <Typography variant="body2" color="text.secondary">
-            Du bist in keinem Projekt, in dem du Karten anlegen darfst — daher kannst du kein
-            board-gebundenes Token erzeugen.
+            {ta.KEIN_PROJEKT}
           </Typography>
         )}
 
@@ -269,20 +350,20 @@ function ApiTokensSection() {
               <Button
                 color="inherit"
                 size="small"
-                aria-label="Token kopieren"
+                aria-label={ta.TOKEN_KOPIEREN}
                 startIcon={<ContentCopyIcon fontSize="small" />}
                 onClick={() => void copyPlaintext(created.plaintext)}
               >
-                {copied ? 'Kopiert' : 'Kopieren'}
+                {copied ? ta.KOPIERT : ta.KOPIEREN}
               </Button>
             }
           >
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              Token „{created.name}“ erzeugt — wird nur einmal angezeigt:
+              {ta.TOKEN_ERZEUGT(created.name)}
             </Typography>
             <Box
               component="code"
-              aria-label="Token-Klartext"
+              aria-label={ta.TOKEN_KLARTEXT}
               sx={{ display: 'block', mt: 0.5, fontFamily: 'monospace', wordBreak: 'break-all' }}
             >
               {created.plaintext}
@@ -292,7 +373,7 @@ function ApiTokensSection() {
 
         {tokens.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            Noch keine Tokens.
+            {ta.KEINE_TOKENS}
           </Typography>
         ) : (
           <Stack spacing={0.75}>
@@ -321,15 +402,15 @@ function ApiTokensSection() {
                 </Box>
                 <Chip
                   size="small"
-                  label={t.revoked ? 'Widerrufen' : 'Aktiv'}
+                  label={t.revoked ? ta.WIDERRUFEN : ta.AKTIV}
                   color={t.revoked ? 'default' : 'success'}
                   variant={t.revoked ? 'outlined' : 'filled'}
                 />
                 {!t.revoked && (
-                  <Tooltip title="Widerrufen">
+                  <Tooltip title={ta.WIDERRUFEN}>
                     <IconButton
                       size="small"
-                      aria-label={`Token ${t.name} widerrufen`}
+                      aria-label={ta.TOKEN_WIDERRUFEN_ARIA(t.name)}
                       onClick={() => void revoke(t.id)}
                     >
                       <DeleteOutlineIcon fontSize="small" />
@@ -362,15 +443,15 @@ function ApiTokensSection() {
  * Beschreibung. Sichtbar für jeden Angemeldeten — die Übersicht zeigt die gesamte API.
  */
 function ApiUebersichtSection() {
+  const t = useT()
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={1.5}>
         <Typography variant="h6" component="h2">
-          API-Schnittstelle
+          {t.ADMINISTRATION.API_SCHNITTSTELLE}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Alle Aufrufe des Leitstands mit Zweck, Eingaben, Antworten und Stabilitätsangabe — zum
-          Nachschlagen, ohne Ausprobieren. Die Beschreibung lässt sich als OpenAPI 3 herunterladen.
+          {t.ADMINISTRATION.API_HINWEIS}
         </Typography>
         <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap' }}>
           <Button
@@ -378,15 +459,15 @@ function ApiUebersichtSection() {
             size="small"
             component={RouterLink}
             to="/administration/api"
-            aria-label="API-Übersicht öffnen"
+            aria-label={t.ADMINISTRATION.UEBERSICHT_OEFFNEN_ARIA}
           >
-            Übersicht öffnen
+            {t.ADMINISTRATION.UEBERSICHT_OEFFNEN}
           </Button>
-          <Link href={OPENAPI_JSON_PFAD} download aria-label="OpenAPI als JSON herunterladen">
-            OpenAPI (JSON)
+          <Link href={OPENAPI_JSON_PFAD} download aria-label={t.OPENAPI.JSON_ARIA}>
+            {t.OPENAPI.JSON}
           </Link>
-          <Link href={OPENAPI_YAML_PFAD} download aria-label="OpenAPI als YAML herunterladen">
-            OpenAPI (YAML)
+          <Link href={OPENAPI_YAML_PFAD} download aria-label={t.OPENAPI.YAML_ARIA}>
+            {t.OPENAPI.YAML}
           </Link>
         </Stack>
       </Stack>
@@ -412,6 +493,8 @@ function CreateTokenDialog({
   const [boardId, setBoardId] = useState<number | ''>('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const tg = useT()
+  const t = tg.ADMINISTRATION
 
   useEffect(() => {
     if (!open) return
@@ -442,48 +525,42 @@ function CreateTokenDialog({
       const res = await accessTokensApi.create(name.trim(), Number(projectId), Number(boardId))
       onCreated(res)
     } catch (e) {
-      setError(
-        apiErrorMessage(
-          e,
-          'Token konnte nicht erzeugt werden. Für ein board-gebundenes Token brauchst du das Recht, ' +
-            'auf diesem Board Karten anzulegen.',
-        ),
-      )
+      setError(apiErrorMessage(e, t.ERZEUGEN_FEHLGESCHLAGEN))
       setSaving(false)
     }
   }
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Neues API-Token</DialogTitle>
+      <DialogTitle>{t.NEUES_TOKEN}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           {error && <Alert severity="error">{error}</Alert>}
           <TextField
-            label="Name"
+            label={t.NAME}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             fullWidth
             autoFocus
-            slotProps={{ htmlInput: { maxLength: 120, 'aria-label': 'Name' } }}
+            slotProps={{ htmlInput: { maxLength: 120, 'aria-label': t.NAME } }}
           />
           <TextField
             select
-            label="Projekt"
+            label={t.PROJEKT}
             value={projectId === '' ? '' : String(projectId)}
             onChange={(e) => {
               setProjectId(e.target.value === '' ? '' : Number(e.target.value))
               setBoardId('')
             }}
             slotProps={{
-              htmlInput: { 'aria-label': 'Projekt' },
+              htmlInput: { 'aria-label': t.PROJEKT },
               select: { native: true },
               inputLabel: { shrink: true },
             }}
             fullWidth
           >
-            <option value="">(Projekt wählen)</option>
+            <option value="">{t.PROJEKT_WAEHLEN}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -492,18 +569,18 @@ function CreateTokenDialog({
           </TextField>
           <TextField
             select
-            label="Board"
+            label={t.BOARD}
             value={boardId === '' ? '' : String(boardId)}
             onChange={(e) => setBoardId(e.target.value === '' ? '' : Number(e.target.value))}
             disabled={projectId === ''}
             slotProps={{
-              htmlInput: { 'aria-label': 'Board' },
+              htmlInput: { 'aria-label': t.BOARD },
               select: { native: true },
               inputLabel: { shrink: true },
             }}
             fullWidth
           >
-            <option value="">(Board wählen)</option>
+            <option value="">{t.BOARD_WAEHLEN}</option>
             {boards.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
@@ -513,9 +590,9 @@ function CreateTokenDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Abbrechen</Button>
+        <Button onClick={onClose}>{tg.ALLGEMEIN.ABBRECHEN}</Button>
         <Button variant="contained" onClick={() => void submit()} disabled={!canSubmit}>
-          Erzeugen
+          {t.ERZEUGEN}
         </Button>
       </DialogActions>
     </Dialog>

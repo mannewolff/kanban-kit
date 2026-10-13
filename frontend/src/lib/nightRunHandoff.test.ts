@@ -445,3 +445,60 @@ describe('festgefahrene Pakete — Texte und Uebernahmetext (Issue #1551, Plan #
     expect(text).not.toContain('nicht gemeldet')
   })
 })
+
+describe('Übernahmetext und Zustandswörter auf Englisch (Issue #1658)', () => {
+  it('schreibt den Übernahmetext auf Englisch, Auszug und Rohprotokoll bleiben wörtlich', () => {
+    const text = buildHandoffText(paket({ rawLines: ROHZEILEN }), 'en')
+
+    expect(text).toBe(
+      [
+        'Run finding for card #700 Paket A',
+        'State: failed',
+        'Error class: Hard abort',
+        `Excerpt: ${AUSZUG_ROT}`,
+        'Raw log:',
+        ...ROHZEILEN,
+      ].join('\n'),
+    )
+  })
+
+  it('nennt die Angaben eines festgefahrenen Pakets auf Englisch, fehlende als not reported', () => {
+    const text = buildHandoffText(
+      paket({
+        errorClass: 'STUCK',
+        excerpt: undefined,
+        durationMs: 1_200_000,
+        stuck: { check: 'mvn verify', attempts: 3, sessionLimitMs: 3_600_000 },
+      }),
+      'en',
+    )
+
+    expect(text).toBe(
+      [
+        'Run finding for card #700 Paket A',
+        'State: stuck',
+        'Error class: Stuck',
+        'Check: mvn verify',
+        'Error: not reported',
+        'Attempts: 3',
+        'Run time until abort: 20 min',
+        'Session time limit: 1 h 0 min',
+        'estimated time saved: 40 min',
+      ].join('\n'),
+    )
+  })
+
+  it('nennt die Zustandswörter auf Englisch, das Zeitbudget je Fehlerklasse eingeschlossen', () => {
+    expect(nightRunZustandsText('GREEN', undefined, 'en')).toBe('Success')
+    expect(nightRunZustandsText('YELLOW', 'CHECKS_RED', 'en')).toBe('Success, check red')
+    expect(nightRunZustandsText('GREY', 'DEPENDENCY_UNMET', 'en')).toBe('not processed')
+    expect(nightRunZustandsText('YELLOW', 'TIME_BUDGET_EXCEEDED', 'en')).toBe('Ended at the time budget, result available')
+    expect(nightRunZustandsText('RED', 'TIME_BUDGET_EXCEEDED', 'en')).toBe('Ended at the time budget, without result')
+  })
+
+  it('lässt die deutschen Tabellen als Vorgabe stehen', () => {
+    expect(NIGHT_RUN_STATE_TEXT.RED).toBe('gescheitert')
+    expect(NIGHT_RUN_VERDICT_TEXT.NOT_STARTED).toBe('nicht angelaufen')
+    expect(nightRunZustandsText('RED', undefined)).toBe('gescheitert')
+  })
+})

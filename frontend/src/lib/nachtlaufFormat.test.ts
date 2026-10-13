@@ -31,4 +31,12 @@ describe('nachtlaufFormat', () => {
     expect(ohneNull(0)).toBe(0)
     expect(ohneNull(25.98)).toBe(25.98)
   })
+  it('schreibt Betrag, Kosten und Menge auf Englisch in US-Schreibweise und mit englischer Fehlanzeige', () => {
+    expect(lesbar(betrag(25.983293, 'en'))).toBe('$25.98')
+    expect(betrag(undefined, 'en')).toBe('not specified')
+    expect(lesbar(kosten(0.94, 'en'))).toBe('$0.94')
+    expect(kosten(undefined, 'en')).toBe('not measured')
+    expect(menge(8_883_160, 'en')).toBe('8,883,160 tokens')
+    expect(menge(undefined, 'en')).toBe('not measured')
+  })
 })

@@ -23,8 +23,8 @@ import { Link as RouterLink, Outlet, useLocation, useMatch, useNavigate } from '
 import { boardsApi } from '../api/boards'
 import { apiErrorMessage } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
-import { APP_NAME } from '../appMeta'
 import { useAuth } from '../auth/AuthContext'
+import { useT } from '../i18n/SpracheContext'
 import { MarkenSymbol } from '../layout/navIcons'
 import { buildNavItems, navKontext, type BoardContext, type NavGroup, type NavLink } from '../layout/navItems'
 import { isPlatformAdmin } from '../lib/roles'
@@ -85,10 +85,10 @@ const SPRUNGMARKE_SX = {
  * Fester, vom kontextuellen Navigationsbaum abgesetzter Eintrag am unteren Rand der Seitenleiste.
  * Immer sichtbar; führt auf die Administrations-/Einstellungsseite. Bewusst nicht in
  * {@link buildNavItems}, da er positionell (unten) und semantisch getrennt und stets präsent ist.
+ * Die Beschriftung ergänzt die Schiene aus dem Wörterbuch.
  */
-const ADMINISTRATION_LINK: NavLink = {
+const ADMINISTRATION_ZIEL: Omit<NavLink, 'label'> = {
   kind: 'link',
-  label: 'Administration',
   path: '/administration',
   icon: SettingsIcon,
 }
@@ -175,10 +175,12 @@ function Schiene({
   onToggleCollapsed,
 }: Readonly<SchieneProps>) {
   const location = useLocation()
+  const t = useT()
+  const administrationLink: NavLink = { ...ADMINISTRATION_ZIEL, label: t.RAHMEN.NAV_ADMINISTRATION }
 
   // Aktiv ist der Eintrag mit dem längsten passenden Pfad: Auf `/boards/1/list` passt „Board"
   // (`/boards/1`) als Präfix ebenso wie „Liste" — gemeint ist nur die Liste.
-  const aktiverPfad = [...navItems.flatMap((block) => block.children), ADMINISTRATION_LINK]
+  const aktiverPfad = [...navItems.flatMap((block) => block.children), administrationLink]
     .map((link) => link.path)
     .filter((pfad) => location.pathname === pfad || (pfad !== '/' && location.pathname.startsWith(`${pfad}/`)))
     .sort((a, b) => b.length - a.length)[0]
@@ -216,18 +218,18 @@ function Schiene({
       href="/docs/"
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={eingeklappt ? 'Dokumentation' : undefined}
+      aria-label={eingeklappt ? t.RAHMEN.NAV_DOKUMENTATION : undefined}
       sx={{ ...NAV_EINTRAG_SX, ...(eingeklappt && { justifyContent: 'center', px: 0 }) }}
     >
       <MenuBookIcon className="nav-icon" />
-      {!eingeklappt && 'Dokumentation'}
+      {!eingeklappt && t.RAHMEN.NAV_DOKUMENTATION}
     </ButtonBase>
   )
 
   return (
     <Box
       component="nav"
-      aria-label="Hauptnavigation"
+      aria-label={t.RAHMEN.HAUPTNAVIGATION}
       sx={{
         minHeight: '100%',
         boxSizing: 'border-box',
@@ -256,7 +258,7 @@ function Schiene({
               component="span"
               sx={{ display: 'block', fontFamily: SCHRIFT_ANZEIGE, fontStretch: '118%', fontWeight: 700, fontSize: 14, letterSpacing: '-.01em' }}
             >
-              {APP_NAME}
+              {t.APP_NAME}
             </Box>
             <Box component="span" sx={{ display: 'block', fontSize: 10.5, color: TEXT_SCHWACH, letterSpacing: '.04em' }}>
               v{__APP_VERSION__}
@@ -282,9 +284,9 @@ function Schiene({
 
       {/* Fuß der Schiene (Entwurf `.schiene-fuss`, Z. 272): Administration, Dokumentation, Einklappen. */}
       <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-        {renderLink(ADMINISTRATION_LINK)}
+        {renderLink(administrationLink)}
         {eingeklappt ? (
-          <Tooltip title="Dokumentation" placement="right">
+          <Tooltip title={t.RAHMEN.NAV_DOKUMENTATION} placement="right">
             {docsLink}
           </Tooltip>
         ) : (
@@ -292,11 +294,11 @@ function Schiene({
         )}
         {!schmal && (
           <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', pt: '6px' }}>
-            <Tooltip title={collapsed ? 'Menü ausklappen' : 'Menü einklappen'} placement="right">
+            <Tooltip title={collapsed ? t.RAHMEN.MENUE_AUSKLAPPEN : t.RAHMEN.MENUE_EINKLAPPEN} placement="right">
               <IconButton
                 onClick={onToggleCollapsed}
                 size="small"
-                aria-label={collapsed ? 'Menü ausklappen' : 'Menü einklappen'}
+                aria-label={collapsed ? t.RAHMEN.MENUE_AUSKLAPPEN : t.RAHMEN.MENUE_EINKLAPPEN}
                 sx={{ color: TEXT_SCHWACH }}
               >
                 {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
@@ -313,6 +315,7 @@ function Schiene({
 export function AppShell() {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
+  const t = useT()
 
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
   // Mindestbreite 768 px (Plan #932 E5): Unterhalb des Breakpoints `md` (900 px) wird die Navigation
@@ -482,8 +485,9 @@ export function AppShell() {
         canViewNightRun,
         projectName,
         canManageMembers: canManageCurrentMembers,
-      }),
+      }, t),
     [
+      t,
       kontextBoard,
       admin,
       projectCount,
@@ -533,7 +537,7 @@ export function AppShell() {
       await logout()
       navigate('/login')
     } catch (e) {
-      notify(apiErrorMessage(e, 'Abmelden fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.RAHMEN.ABMELDEN_FEHLGESCHLAGEN), 'error')
     }
   }
 
@@ -603,7 +607,7 @@ export function AppShell() {
           inhaltRef.current?.focus()
         }}
       >
-        Zum Inhalt springen
+        {t.RAHMEN.ZUM_INHALT}
       </Box>
       <EditModeBanner />
 
@@ -672,7 +676,7 @@ export function AppShell() {
             <IconButton
               edge="start"
               sx={{ color: 'text.primary' }}
-              aria-label="Navigation öffnen"
+              aria-label={t.RAHMEN.NAVIGATION_OEFFNEN}
               aria-expanded={navOffen}
               onClick={() => setNavOffen(true)}
             >
@@ -681,7 +685,7 @@ export function AppShell() {
           )}
           <Box
             component="nav"
-            aria-label="Pfad"
+            aria-label={t.RAHMEN.PFAD}
             sx={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: 13, color: 'text.secondary', minWidth: 0 }}
           >
             {pfad.map((teil, i) => (
@@ -720,17 +724,17 @@ export function AppShell() {
                   sichtbare Zugang und trägt zugleich die Beschriftung, über die `b` bekannt wird.
                   Der Umschlag mit `span` gibt dem Tooltip auch an der deaktivierten Taste einen
                   Ereignisempfänger. */}
-              <Tooltip title="Board wechseln (Taste b)">
+              <Tooltip title={t.RAHMEN.BOARD_WECHSELN_TASTE}>
                 <span>
                   <Button
                     variant="outlined"
                     startIcon={<SwapHorizIcon />}
-                    aria-label="Board wechseln"
+                    aria-label={t.RAHMEN.BOARD_WECHSELN}
                     disabled={history.length === 0}
                     onClick={() => setSwitcherOpen(true)}
                     sx={{ color: 'text.primary' }}
                   >
-                    Board
+                    {t.RAHMEN.BOARD_TASTE}
                   </Button>
                 </span>
               </Tooltip>
@@ -739,7 +743,7 @@ export function AppShell() {
               <Tooltip title={user.displayName}>
                 <ButtonBase
                   onClick={(e) => setKontoAnker(e.currentTarget)}
-                  aria-label={`Konto von ${user.displayName}`}
+                  aria-label={t.RAHMEN.KONTO_VON(user.displayName)}
                   aria-haspopup="menu"
                   aria-expanded={kontoAnker !== null}
                   sx={{
@@ -761,7 +765,7 @@ export function AppShell() {
                 onClose={() => setKontoAnker(null)}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                 transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                slotProps={{ list: { 'aria-label': `Konto von ${user.displayName}` } }}
+                slotProps={{ list: { 'aria-label': t.RAHMEN.KONTO_VON(user.displayName) } }}
               >
                 <MenuItem
                   onClick={() => {
@@ -772,7 +776,7 @@ export function AppShell() {
                   <ListItemIcon>
                     <PersonOutlineIcon fontSize="small" />
                   </ListItemIcon>
-                  <ListItemText>Profil bearbeiten</ListItemText>
+                  <ListItemText>{t.RAHMEN.PROFIL_BEARBEITEN}</ListItemText>
                 </MenuItem>
                 <MenuItem
                   onClick={() => {
@@ -783,7 +787,7 @@ export function AppShell() {
                   <ListItemIcon>
                     <LogoutIcon fontSize="small" />
                   </ListItemIcon>
-                  <ListItemText>Abmelden</ListItemText>
+                  <ListItemText>{t.RAHMEN.ABMELDEN}</ListItemText>
                 </MenuItem>
               </Menu>
             </Box>

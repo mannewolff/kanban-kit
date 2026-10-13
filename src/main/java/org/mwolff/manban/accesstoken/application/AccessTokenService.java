@@ -89,18 +89,16 @@ public class AccessTokenService {
       return; // ungebundenes Token
     }
     if (projectId == null || boardId == null) {
-      throw new InvalidTokenBindingException(
-          "projectId und boardId müssen zusammen gesetzt sein (oder beide leer)");
+      throw InvalidTokenBindingException.unvollstaendig();
     }
     // Bewusst die Optional-Variante der Board-Fassade: ein unbekanntes Board ist hier keine
     // fehlende Ressource (404), sondern eine unschluessige Bindungsangabe (400).
     Long boardProjectId =
         boardService
             .findProjectId(boardId)
-            .orElseThrow(() -> new InvalidTokenBindingException("Board " + boardId + " unbekannt"));
+            .orElseThrow(() -> InvalidTokenBindingException.boardUnbekannt(boardId));
     if (!projectId.equals(boardProjectId)) {
-      throw new InvalidTokenBindingException(
-          "Board " + boardId + " gehört nicht zu Projekt " + projectId);
+      throw InvalidTokenBindingException.boardGehoertNichtZuProjekt(boardId, projectId);
     }
     if (!permissions.hasPermission(userId, projectId, Permission.TICKET_CREATE)) {
       throw new ProjectAccessDeniedException();

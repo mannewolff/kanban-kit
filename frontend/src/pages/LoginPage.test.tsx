@@ -6,6 +6,7 @@ import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
 import { AuthProvider } from '../auth/AuthContext'
 import { LoginPage } from './LoginPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/auth', () => ({
   authApi: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
@@ -145,5 +146,49 @@ describe('LoginPage', () => {
     await waitFor(() =>
       expect(navigateMock).toHaveBeenCalledWith('/boards/7/leitstand', { replace: true }),
     )
+  })
+})
+
+describe('LoginPage auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockedApi.me.mockRejectedValue(new Error('401'))
+  })
+
+  it('zeigt Formular und Fehlermeldung auf Englisch', async () => {
+    mockedApi.login.mockRejectedValue(new ApiError(401, 'nope'))
+    renderMitSprache(
+      <MemoryRouter>
+        <AuthProvider>
+          <LoginPage />
+        </AuthProvider>
+      </MemoryRouter>,
+      'en',
+    )
+    expect(await screen.findByRole('heading', { name: 'Sign in', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Sign up' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Forgot password?' })).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText(/Email/), 'a@b.de')
+    await userEvent.type(screen.getByLabelText(/Password/, { selector: 'input' }), 'x')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByText('Invalid credentials.')).toBeInTheDocument()
+  })
+
+  it('zeigt die Zählbremse und den allgemeinen Fehler auf Englisch', async () => {
+    mockedApi.login.mockRejectedValueOnce(new ApiError(429, '')).mockRejectedValueOnce(new Error('kaputt'))
+    renderMitSprache(
+      <MemoryRouter>
+        <AuthProvider>
+          <LoginPage />
+        </AuthProvider>
+      </MemoryRouter>,
+      'en',
+    )
+    await userEvent.type(await screen.findByLabelText(/Email/), 'a@b.de')
+    await userEvent.type(screen.getByLabelText(/Password/, { selector: 'input' }), 'x')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByText('Too many attempts. Please try again later.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByText('Sign-in failed. Please try again later.')).toBeInTheDocument()
   })
 })

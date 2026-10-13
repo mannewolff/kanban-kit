@@ -32,7 +32,8 @@ class KitNamenController {
           "Liefert die Sachen des Kits mit allen ihren Label-Namen, die Titel-Präfixe je Kartenart"
               + " und die Präfixe des Namensraums des Kits, jeweils in Registerreihenfolge, der"
               + " deutsche Name zuerst. Deutscher und englischer Name derselben Sache gelten als"
-              + " eins.")
+              + " eins. Je Sache steht ihre Schutzregel, dieselbe, nach der der Leitstand das"
+              + " Setzen und Abnehmen über ein Token abweist.")
   @ApiResponse(responseCode = "200", description = "Das Namen-Register.")
   @ApiVertrag
   @GetMapping("/api/kit-namen")
@@ -42,7 +43,7 @@ class KitNamenController {
         register.eintraege().stream()
             .map(Eintrag::sache)
             .distinct()
-            .map(s -> new SacheView(s.name(), register.namen(s)))
+            .map(s -> new SacheView(s.name(), register.namen(s), s.schutz().name()))
             .toList();
     List<ArtView> titelPraefixe =
         KitNamen.titelPraefixe().entrySet().stream()
@@ -66,13 +67,23 @@ class KitNamenController {
               schema = @Schema(example = "kit:"))
           List<String> namensraum) {}
 
-  @Schema(description = "Eine Sache des Kits mit allen ihren Label-Namen.")
+  @Schema(description = "Eine Sache des Kits mit allen ihren Label-Namen und ihrer Schutzregel.")
   record SacheView(
       @Schema(description = "Kennung der Sache.", example = "KLAEREN") String sache,
       @ArraySchema(
               arraySchema = @Schema(description = "Namen der Sache, der deutsche zuerst."),
               schema = @Schema(example = "kit:klaeren"))
-          List<String> namen) {}
+          List<String> namen,
+      @Schema(
+              description =
+                  "Schutzregel der Sache, gleich unter jedem ihrer Namen (Issue #1670):"
+                      + " KEINER — jeder mit Schreibrecht setzt und nimmt ab, per Session oder"
+                      + " Token; NUR_MENSCH_SETZT — Setzen über ein Token wird abgewiesen, nur"
+                      + " angemeldet per Session; NUR_MENSCH_NIMMT_AB — Abnehmen über ein Token"
+                      + " wird abgewiesen, nur angemeldet per Session.",
+              allowableValues = {"KEINER", "NUR_MENSCH_SETZT", "NUR_MENSCH_NIMMT_AB"},
+              example = "NUR_MENSCH_NIMMT_AB")
+          String schutz) {}
 
   @Schema(description = "Eine Kartenart mit ihren Titel-Präfixen.")
   record ArtView(

@@ -20,6 +20,8 @@ import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
 import type { Member } from '../api/members'
+import type { Woerterbuch } from '../i18n/de'
+import { useT } from '../i18n/SpracheContext'
 import { activeCardsInColumn, applyMove, spaltenAuswahlUmschalten } from '../lib/boardOps'
 import { effektivDone, neighbourColumns } from '../lib/columnMeta'
 import { useEditMode } from '../lib/EditModeContext'
@@ -61,9 +63,9 @@ const labelZustand = (treffer: number, gesamt: number): LabelZustand => {
  * Auswahl lässt den Server den ganzen Batch ablehnen — die gesperrte Taste sagt das vorher, statt
  * die Auswahl in einen Fehler laufen zu lassen.
  */
-const labelSperrgrund = (gewaehlt: Card[], boardLabels: Label[]): string | null => {
-  if (gewaehlt.some((c) => c.type === 'EPIC')) return 'Vorhaben tragen keine Labels'
-  if (boardLabels.length === 0) return 'Das Board hat keine Labels'
+const labelSperrgrund = (t: Woerterbuch, gewaehlt: Card[], boardLabels: Label[]): string | null => {
+  if (gewaehlt.some((c) => c.type === 'EPIC')) return t.BOARD.LABELS_GESPERRT_VORHABEN
+  if (boardLabels.length === 0) return t.BOARD.LABELS_GESPERRT_KEINE
   return null
 }
 
@@ -132,8 +134,8 @@ const KEINE_KARTEN: ReadonlySet<number> = new Set<number>()
  * Läuft über den Toast-Stapel, dessen `Alert` als Live-Region vorgelesen wird — ohne die Meldung
  * bliebe der Erfolg für Screenreader unsichtbar (die Kartenreihenfolge ändert sich nur visuell).
  */
-const sortedByNumberMessage = (columnName: string, sorted: SortDirection) =>
-  `Spalte ${columnName} ${sorted === 'ASC' ? 'aufsteigend' : 'absteigend'} sortiert`
+const sortedByNumberMessage = (t: Woerterbuch, columnName: string, sorted: SortDirection) =>
+  t.BOARD.SORTIERT(columnName, sorted === 'ASC')
 
 interface Props {
   board: Board
@@ -242,6 +244,7 @@ export function BoardView({
   const [specColumnId, setSpecColumnId] = useState<number | null>(null)
   const [dichte, setDichte] = useState<Dichte>('normal')
   const notify = useSnackbar()
+  const t = useT()
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
     try {
       const raw = localStorage.getItem(`manban.boardEpicFilter.${board.id}`)
@@ -320,7 +323,7 @@ export function BoardView({
     } catch (e) {
       // Der Rollback allein bliebe stumm: die zurückspringende Reihenfolge erklärt nicht, warum.
       setColumns(previous)
-      notify(apiErrorMessage(e, 'Spalten umsortieren fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.SPALTEN_UMSORTIEREN_FEHLER), 'error')
     }
   }
 
@@ -344,10 +347,10 @@ export function BoardView({
     try {
       await columnsApi.sortByNumber(column.id, direction)
       setNextSortDirection((prev) => ({ ...prev, [column.id]: direction === 'ASC' ? 'DESC' : 'ASC' }))
-      notify(sortedByNumberMessage(column.name, direction), 'success')
+      notify(sortedByNumberMessage(t, column.name, direction), 'success')
       onCardsChanged?.()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Sortieren fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.SORTIEREN_FEHLER), 'error')
     } finally {
       setSortingColumnId(null)
     }
@@ -363,12 +366,12 @@ export function BoardView({
       await columnsApi.remove(column.id)
       setColumns((cs) => cs.filter((c) => c.id !== column.id))
       setDeleteColumn(null)
-      notify('Spalte gelöscht.', 'success')
+      notify(t.BOARD.SPALTE_GELOESCHT, 'success')
     } catch (e) {
       setDeleteError(
         e instanceof ApiError && e.status === 409
-          ? 'Spalte enthält noch Karten und kann nicht gelöscht werden.'
-          : 'Löschen fehlgeschlagen.',
+          ? t.BOARD.SPALTE_NICHT_LEER
+          : t.BOARD.LOESCHEN_FEHLER,
       )
     }
   }
@@ -389,16 +392,16 @@ export function BoardView({
       if (columnDialog === 'new') {
         const created = await columnsApi.create(board.id, name, wip)
         setColumns((cs) => sortColumns([...cs, created]))
-        notify('Spalte angelegt.', 'success')
+        notify(t.BOARD.SPALTE_ANGELEGT, 'success')
       } else if (columnDialog) {
         const updated = await columnsApi.update(columnDialog.id, name, wip)
         setColumns((cs) => sortColumns(cs.map((c) => (c.id === updated.id ? updated : c))))
-        notify('Spalte gespeichert.', 'success')
+        notify(t.BOARD.SPALTE_GESPEICHERT, 'success')
       }
     } catch (e) {
       // Nur der Erfolg schließt: Bei einem Fehlschlag bliebe die getippte Eingabe sonst verloren
       // und der Nutzer müsste Name und WIP-Limit erneut eintippen, um es nochmal zu versuchen.
-      notify(apiErrorMessage(e, 'Spalte speichern fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.SPALTE_SPEICHERN_FEHLER), 'error')
       return
     }
     closeColumnDialog()
@@ -481,7 +484,7 @@ export function BoardView({
     } catch (e) {
       // Die zurückspringende Karte allein erklärt nichts — die Meldung benennt den Fehlschlag.
       setCards(previous)
-      notify(apiErrorMessage(e, 'Verschieben fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.VERSCHIEBEN_FEHLER), 'error')
     }
   }
 
@@ -518,7 +521,7 @@ export function BoardView({
       setSpecColumnId(columns[0].id)
       setSpec({ fileName: file.name, markdown })
     } catch {
-      notify('Die Datei konnte nicht gelesen werden.', 'error')
+      notify(t.BOARD.DATEI_UNLESBAR, 'error')
     }
   }
 
@@ -529,7 +532,7 @@ export function BoardView({
     const created = await api.createBatch(board.id, columnId, neueKarten)
     setCards((current) => [...current, ...created])
     onCardsChanged?.()
-    notify(`${created.length} ${created.length === 1 ? 'Karte' : 'Karten'} angelegt.`, 'success')
+    notify(t.BOARD.KARTEN_ANGELEGT(created.length), 'success')
   }
 
   const archiveCard = async (card: Card) => {
@@ -537,7 +540,7 @@ export function BoardView({
       await api.archive(card.id)
       onCardsChanged?.()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Archivieren fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.ARCHIVIEREN_FEHLER), 'error')
     }
   }
 
@@ -550,7 +553,7 @@ export function BoardView({
     try {
       full = await api.get(c.id)
     } catch (e) {
-      notify(apiErrorMessage(e, 'Karte konnte nicht geladen werden.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.KARTE_LADEN_FEHLER), 'error')
       return
     }
     // Die Kopie ist eine neue Karte und soll den kompletten Prozess durchlaufen — deshalb immer
@@ -595,7 +598,7 @@ export function BoardView({
       onCardsChanged?.()
     } catch (e) {
       setCards(previous)
-      notify(apiErrorMessage(e, 'Archivieren fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.ARCHIVIEREN_FEHLER), 'error')
     }
   }
 
@@ -613,7 +616,7 @@ export function BoardView({
       onCardsChanged?.()
     } catch (e) {
       setCards(previous)
-      notify(apiErrorMessage(e, 'In den Papierkorb verschieben fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.PAPIERKORB_FEHLER), 'error')
     }
   }
 
@@ -640,7 +643,7 @@ export function BoardView({
       )
       onCardsChanged?.()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Labels setzen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.LABELS_SETZEN_FEHLER), 'error')
     } finally {
       setLabelBusy(false)
     }
@@ -701,7 +704,7 @@ export function BoardView({
       onCardsChanged?.()
     } catch (e) {
       setCards(previous)
-      notify(apiErrorMessage(e, 'Verschieben fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.VERSCHIEBEN_FEHLER), 'error')
     }
   }
 
@@ -760,13 +763,13 @@ export function BoardView({
           }}
         >
           <ChipGruppe<KartenFilter>
-            label="Karten filtern"
+            label={t.BOARD.KARTEN_FILTERN}
             wert={kartenFilter}
             onChange={setKartenFilter}
             optionen={[
-              { wert: 'alle', text: 'Alle Karten' },
-              ...(currentUserId === null ? [] : [{ wert: 'meine' as const, text: 'Meine' }]),
-              { wert: 'ueberfaellig', text: 'Überfällig', zahl: ueberfaelligZahl },
+              { wert: 'alle', text: t.BOARD.ALLE_KARTEN },
+              ...(currentUserId === null ? [] : [{ wert: 'meine' as const, text: t.BOARD.MEINE }]),
+              { wert: 'ueberfaellig', text: t.BOARD.UEBERFAELLIG, zahl: ueberfaelligZahl },
             ]}
           />
           {sichtbareEpics.length > 0 && (
@@ -778,7 +781,7 @@ export function BoardView({
               value={epicFilter ?? ''}
               onChange={(e) => changeEpicFilter(e.target.value === '' ? null : Number(e.target.value))}
               slotProps={{
-                htmlInput: { 'aria-label': 'Vorhaben-Filter' },
+                htmlInput: { 'aria-label': t.BOARD.VORHABEN_FILTER },
                 select: { native: true },
               }}
               sx={{
@@ -793,38 +796,38 @@ export function BoardView({
                 '& .MuiNativeSelect-select': { py: '4px', pl: '9px' },
               }}
             >
-              <option value="">Vorhaben: alle</option>
+              <option value="">{t.BOARD.VORHABEN_ALLE}</option>
               {sichtbareEpics.map((epic) => (
                 <option key={epic.id} value={epic.id}>
-                  Vorhaben: {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+                  {t.BOARD.VORHABEN(epicShortcode(epic.title, epic.shortcode), epic.title)}
                 </option>
               ))}
             </TextField>
           )}
           <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <ChipGruppe<Dichte>
-              label="Dichte"
+              label={t.BOARD.DICHTE}
               wert={dichte}
               onChange={setDichte}
               optionen={[
-                { wert: 'normal', text: 'normal' },
-                { wert: 'kompakt', text: 'kompakt' },
+                { wert: 'normal', text: t.BOARD.DICHTE_NORMAL },
+                { wert: 'kompakt', text: t.BOARD.DICHTE_KOMPAKT },
               ]}
             />
             {canEdit && (
               <Button size="small" variant="outlined" onClick={toggleSelectionMode}>
-                {selectionMode ? 'Auswahl beenden' : 'Auswählen'}
+                {selectionMode ? t.BOARD.AUSWAHL_BEENDEN : t.BOARD.AUSWAEHLEN}
               </Button>
             )}
             {canEdit && (
               /* Dateiauswahl wie beim Anhang-Upload (CardDetailModal): Button als <label> mit
                  verstecktem Input — hier zusätzlich auf Markdown eingeschränkt. */
               <Button size="small" variant="outlined" component="label">
-                Spezifikation einlesen<input
+                {t.BOARD.SPEZIFIKATION_EINLESEN}<input
                   hidden
                   type="file"
                   accept=".md,.markdown,text/markdown"
-                  aria-label="Markdown-Datei auswählen"
+                  aria-label={t.BOARD.MARKDOWN_WAEHLEN}
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann — sonst bleibt
@@ -842,7 +845,7 @@ export function BoardView({
                 startIcon={<AddIcon />}
                 onClick={() => setModalColumn({ id: columns[0].id, name: columns[0].name })}
               >
-                Neu anlegen
+                {t.BOARD.NEU_ANLEGEN}
               </Button>
             )}
           </Box>
@@ -854,7 +857,7 @@ export function BoardView({
       {/* Unterhalb von 900 px passen die Spalten nicht nebeneinander (Plan #932 E5); sie rollen
           waagerecht, und der Hinweis sagt es, statt dass Spalten unbemerkt rechts verschwinden. */}
       <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'block', md: 'none' }, px: 1 }}>
-        Weitere Spalten: waagerecht rollen
+        {t.BOARD.WAAGERECHT_ROLLEN}
       </Typography>
       <Stack
         data-testid="board-surface"
@@ -930,57 +933,57 @@ export function BoardView({
         {showStructureEdit && (
           <Box sx={{ flexShrink: 0, alignSelf: 'flex-start', pt: 0.5 }}>
             <Button size="small" startIcon={<AddIcon />} onClick={() => openColumnDialog('new')}>
-              Spalte
+              {t.BOARD.SPALTE}
             </Button>
           </Box>
         )}
       </Stack>
 
       <Dialog open={columnDialog !== null} onClose={closeColumnDialog}>
-        <DialogTitle>{columnDialog === 'new' ? 'Neue Spalte' : 'Spalte bearbeiten'}</DialogTitle>
+        <DialogTitle>{columnDialog === 'new' ? t.BOARD.NEUE_SPALTE : t.BOARD.SPALTE_BEARBEITEN}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
               autoFocus
-              label="Name"
+              label={t.BOARD.NAME}
               value={columnName}
               onChange={(e) => setColumnName(e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 120, 'aria-label': 'Spaltenname' } }}
+              slotProps={{ htmlInput: { maxLength: 120, 'aria-label': t.BOARD.SPALTENNAME } }}
             />
             <TextField
-              label="WIP-Limit (optional)"
+              label={t.BOARD.WIP_LIMIT_OPTIONAL}
               type="number"
               value={columnWip}
               onChange={(e) => setColumnWip(e.target.value)}
-              slotProps={{ htmlInput: { min: 1, 'aria-label': 'WIP-Limit' } }}
+              slotProps={{ htmlInput: { min: 1, 'aria-label': t.BOARD.WIP_LIMIT } }}
             />
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeColumnDialog}>Abbrechen</Button>
+          <Button onClick={closeColumnDialog}>{t.ALLGEMEIN.ABBRECHEN}</Button>
           <Button
             variant="contained"
             disabled={!columnName.trim() || parsedWip() === undefined}
             onClick={() => void saveColumn()}
           >
-            Speichern
+            {t.ALLGEMEIN.SPEICHERN}
           </Button>
         </DialogActions>
       </Dialog>
 
       {deleteColumn && (
         <Dialog open onClose={() => setDeleteColumn(null)}>
-          <DialogTitle>Spalte löschen?</DialogTitle>
+          <DialogTitle>{t.BOARD.SPALTE_LOESCHEN_TITEL}</DialogTitle>
           <DialogContent>
             {deleteError && <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>}
             <DialogContentText>
-              Die Spalte „{deleteColumn.name}&ldquo; wird gelöscht.
+              {t.BOARD.SPALTE_LOESCHEN_TEXT(deleteColumn.name)}
             </DialogContentText>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setDeleteColumn(null)}>Abbrechen</Button>
+            <Button onClick={() => setDeleteColumn(null)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
             <Button color="error" onClick={() => void handleDeleteColumn(deleteColumn)}>
-              Löschen
+              {t.ALLGEMEIN.LOESCHEN}
             </Button>
           </DialogActions>
         </Dialog>
@@ -992,17 +995,17 @@ export function BoardView({
           // als Alltags-Aktionen erhalten.
           showStructureEdit ? (
             <MenuItem key="edit" onClick={() => { const c = menu.card; closeMenu(); onEditCard?.(c) }}>
-              Bearbeiten
+              {t.BOARD.BEARBEITEN}
             </MenuItem>
           ) : null,
           <MenuItem
             key="duplicate"
             onClick={() => { const c = menu.card; closeMenu(); void duplicateCard(c) }}
           >
-            Duplizieren
+            {t.BOARD.DUPLIZIEREN}
           </MenuItem>,
           <MenuItem key="archive" onClick={() => { const c = menu.card; closeMenu(); void archiveCard(c) }}>
-            Archivieren
+            {t.BOARD.ARCHIVIEREN}
           </MenuItem>,
           ...(canTransfer
             ? [
@@ -1010,7 +1013,7 @@ export function BoardView({
                   key="transfer"
                   onClick={() => { const c = menu.card; closeMenu(); setTransferCard(c) }}
                 >
-                  Verschieben…
+                  {t.BOARD.VERSCHIEBEN_DIALOG}
                 </MenuItem>,
               ]
             : []),
@@ -1021,7 +1024,7 @@ export function BoardView({
               key="move-left"
               onClick={() => { const c = menu.card; closeMenu(); void moveCard(c.id, moveLeft.id) }}
             >
-              Nach links verschieben
+              {t.BOARD.NACH_LINKS}
             </MenuItem>
           ) : null,
           moveRight ? (
@@ -1029,7 +1032,7 @@ export function BoardView({
               key="move-right"
               onClick={() => { const c = menu.card; closeMenu(); void moveCard(c.id, moveRight.id) }}
             >
-              Nach rechts verschieben
+              {t.BOARD.NACH_RECHTS}
             </MenuItem>
           ) : null,
           // Ganz unten und rot abgesetzt: der einzige Eintrag, der Inhalt aus dem Board nimmt —
@@ -1039,7 +1042,7 @@ export function BoardView({
             sx={{ color: 'error.main' }}
             onClick={() => { const c = menu.card; closeMenu(); setDeleteConfirm([c.id]) }}
           >
-            Löschen
+            {t.ALLGEMEIN.LOESCHEN}
           </MenuItem>,
         ]}
       </Menu>
@@ -1110,37 +1113,31 @@ export function BoardView({
       )}
 
       <Dialog open={bulkArchiveConfirm} onClose={() => setBulkArchiveConfirm(false)}>
-        <DialogTitle>Karten archivieren?</DialogTitle>
+        <DialogTitle>{t.BOARD.ARCHIVIEREN_TITEL}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {effectiveSelectedIds.size === 1
-              ? 'Die ausgewählte Karte wird archiviert.'
-              : `${effectiveSelectedIds.size} Karten werden archiviert.`}{' '}
-            Sie verschwinden aus dem Board, bleiben aber erhalten und lassen sich einzeln
-            wiederherstellen.
+            {t.BOARD.ARCHIVIEREN_ANZAHL(effectiveSelectedIds.size)} {t.BOARD.ARCHIVIEREN_HINWEIS}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setBulkArchiveConfirm(false)}>Abbrechen</Button>
+          <Button onClick={() => setBulkArchiveConfirm(false)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
           <Button color="error" onClick={() => void confirmBulkArchive()}>
-            Archivieren
+            {t.BOARD.ARCHIVIEREN}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={deleteConfirm.length > 0} onClose={() => setDeleteConfirm([])}>
-        <DialogTitle>In den Papierkorb verschieben?</DialogTitle>
+        <DialogTitle>{t.BOARD.PAPIERKORB_TITEL}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            {deleteConfirm.length === 1
-              ? 'Die Karte wird in den Papierkorb verschoben. Von dort lässt sie sich wiederherstellen oder endgültig löschen.'
-              : `${deleteConfirm.length} Karten werden in den Papierkorb verschoben. Von dort lassen sie sich wiederherstellen oder endgültig löschen.`}
+            {t.BOARD.PAPIERKORB_TEXT(deleteConfirm.length)}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteConfirm([])}>Abbrechen</Button>
+          <Button onClick={() => setDeleteConfirm([])}>{t.ALLGEMEIN.ABBRECHEN}</Button>
           <Button color="error" onClick={() => void confirmDelete()}>
-            In den Papierkorb
+            {t.BOARD.IN_DEN_PAPIERKORB}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1150,7 +1147,7 @@ export function BoardView({
           count={effectiveSelectedIds.size}
           canMove={canTransfer}
           labelOptions={labelOptions}
-          labelsDisabledReason={labelSperrgrund(gewaehlteKarten, boardLabels)}
+          labelsDisabledReason={labelSperrgrund(t, gewaehlteKarten, boardLabels)}
           onToggleLabel={(labelId, action) => void applyBulkLabel(labelId, action)}
           onArchive={() => setBulkArchiveConfirm(true)}
           onMove={() => setBulkTransferOpen(true)}

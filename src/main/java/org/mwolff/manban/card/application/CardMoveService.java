@@ -83,7 +83,7 @@ public class CardMoveService {
   private CardView doMove(long userId, long cardId, long targetColumnId, int targetPosition) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() == CardType.EPIC) {
-      throw new InvalidDependencyException("Epics werden nicht auf dem Board positioniert");
+      throw InvalidDependencyException.epicsNichtPositioniert();
     }
     permissions.require(
         userId, boardService.requireProjectId(card.boardId()), Permission.CARD_MOVE);
@@ -164,7 +164,7 @@ public class CardMoveService {
     permissions.require(userId, card.projectId(), Permission.CARD_MOVE);
     CardStatus neu = statusAus(status);
     if (!Arbeitspaket.istArbeitspaket(card.type(), card.title())) {
-      throw new InvalidStatusException("Diese Karte trägt keinen eigenen Status");
+      throw InvalidStatusException.keinEigener();
     }
     if (neu == card.status()) {
       return;
@@ -203,7 +203,7 @@ public class CardMoveService {
     try {
       return CardStatus.valueOf(status);
     } catch (IllegalArgumentException e) {
-      throw new InvalidStatusException("Unbekannter Status", e);
+      throw InvalidStatusException.unbekannt(e);
     }
   }
 
@@ -266,7 +266,7 @@ public class CardMoveService {
   private CardView doTransfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() == CardType.EPIC) {
-      throw new InvalidDependencyException("Epics können nicht verschoben werden");
+      throw InvalidDependencyException.epicsNichtVerschiebbar();
     }
     // Zielboard == Board der Karte: Das ist kein Umzug, sondern ein Spaltenwechsel, und dessen
     // Regeln stehen vollständig in doMove — Spaltenverlauf nur bei echtem Wechsel, Verlaufseintrag

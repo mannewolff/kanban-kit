@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdminApi } from '../api/admin'
 import { ApiError } from '../api/client'
 import { AdminPage } from './AdminPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 99, memberships: [] } }),
@@ -281,5 +282,74 @@ describe('AdminPage', () => {
 
     fireEvent.click(screen.getByLabelText('Carol entsperren'))
     expect(await screen.findByText('Entsperren fehlgeschlagen.')).toBeInTheDocument()
+  })
+})
+
+describe('AdminPage auf Englisch', () => {
+  beforeEach(() => {
+    editMode.value = true
+  })
+
+  it('zeigt Titel, Spalten, Zustände und Aktionen auf Englisch, Rollen und Namen unverändert', async () => {
+    renderMitSprache(<AdminPage api={makeApi()} />, 'en')
+
+    expect(screen.getByRole('heading', { name: 'Admin — User management' })).toBeInTheDocument()
+    expect(await screen.findByText('Alice')).toBeInTheDocument()
+    for (const kopf of ['Name', 'Email', 'Verified', 'Approval', 'Status', 'Role', 'Action']) {
+      expect(screen.getByRole('columnheader', { name: new RegExp(kopf) })).toBeInTheDocument()
+    }
+    expect(screen.getAllByText('Approved')).toHaveLength(2)
+    expect(screen.getByText('Awaiting approval')).toBeInTheDocument()
+    expect(screen.getByText('Blocked')).toBeInTheDocument()
+    expect(screen.getAllByText('yes')).toHaveLength(2)
+    expect(screen.getByText('no')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve Carol' })).toHaveTextContent('Approve')
+    expect(screen.getByRole('button', { name: 'Toggle role of Alice' })).toHaveTextContent('To ADMIN')
+    expect(screen.getByRole('button', { name: 'Toggle role of Bob' })).toHaveTextContent('To USER')
+    expect(screen.getByRole('button', { name: 'Block Alice' })).toHaveTextContent('Block')
+    expect(screen.getByRole('button', { name: 'Unblock Carol' })).toHaveTextContent('Unblock')
+    expect(screen.getByRole('heading', { name: 'Rejections due to load' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Edit name of Alice'))
+    expect(screen.getByLabelText('Display name of a@x.de')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save name' })).toHaveTextContent('Save')
+    expect(screen.getByRole('button', { name: 'Cancel editing' })).toHaveTextContent('Cancel')
+  })
+
+  it('meldet Fehler auf Englisch', async () => {
+    const api = makeApi()
+    api.listUsers = vi.fn().mockRejectedValue(new ApiError(403, 'Forbidden'))
+    const { unmount } = renderMitSprache(<AdminPage api={api} />, 'en')
+    expect(await screen.findByText('No admin access.')).toBeInTheDocument()
+    unmount()
+
+    const zweite = makeApi()
+    zweite.setRole = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    zweite.approve = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    zweite.disable = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    zweite.enable = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    zweite.setDisplayName = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    renderMitSprache(<AdminPage api={zweite} />, 'en')
+    await screen.findByText('Alice')
+
+    fireEvent.click(screen.getByLabelText('Toggle role of Alice'))
+    expect(await screen.findByText('Changing the role failed.')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Approve Carol'))
+    expect(await screen.findByText('Approval failed.')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Block Alice'))
+    expect(await screen.findByText('Blocking failed.')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Unblock Carol'))
+    expect(await screen.findByText('Unblocking failed.')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Edit name of Alice'))
+    fireEvent.click(screen.getByLabelText('Save name'))
+    expect(await screen.findByText('Changing the name failed.')).toBeInTheDocument()
+  })
+
+  it('meldet einen sonstigen Ladefehler auf Englisch', async () => {
+    const api = makeApi()
+    api.listUsers = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    renderMitSprache(<AdminPage api={api} />, 'en')
+
+    expect(await screen.findByText('Loading failed.')).toBeInTheDocument()
   })
 })

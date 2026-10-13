@@ -25,6 +25,9 @@ import { canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { useEditMode } from '../lib/EditModeContext'
+import { formatierer } from '../i18n/format'
+import { useSprache, useT } from '../i18n/SpracheContext'
+import type { Sprache } from '../i18n/woerterbuch'
 import { SURFACE_HOVER_SHADOW } from '../theme'
 
 const ROLE_CHIP: Record<string, 'primary' | 'info' | 'default'> = {
@@ -32,9 +35,9 @@ const ROLE_CHIP: Record<string, 'primary' | 'info' | 'default'> = {
   ADMIN: 'info',
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, sprache: Sprache): string {
   const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('de-DE')
+  return Number.isNaN(d.getTime()) ? '' : formatierer(sprache).datum(d)
 }
 
 export function ProjectsPage() {
@@ -43,6 +46,8 @@ export function ProjectsPage() {
   const { user } = useAuth()
   const { editMode } = useEditMode()
   const notify = useSnackbar()
+  const t = useT()
+  const { sprache } = useSprache()
   const admin = isPlatformAdmin(user)
   const [projects, setProjects] = useState<Project[]>([])
   const [name, setName] = useState('')
@@ -85,7 +90,7 @@ export function ProjectsPage() {
       setRenameProject(aktualisiert)
       setProjects((vorher) => vorher.map((p) => (p.id === aktualisiert.id ? aktualisiert : p)))
     } catch {
-      setRenameError('Teilnahme konnte nicht geschaltet werden.')
+      setRenameError(t.PROJEKTE.TEILNAHME_FEHLER)
     }
   }
 
@@ -99,7 +104,7 @@ export function ProjectsPage() {
     try {
       await projectsApi.rename(project.id, renameValue.trim())
     } catch {
-      setRenameError('Umbenennen fehlgeschlagen.')
+      setRenameError(t.PROJEKTE.UMBENENNEN_FEHLER)
       return
     }
     // Nur bei geänderter, gültiger Startnummer setzen. Ein zu kleiner Wert (≤ höchste vergebene
@@ -108,13 +113,11 @@ export function ProjectsPage() {
       try {
         await projectsApi.setNextCardNumber(project.id, Number(nextValue))
       } catch (e) {
-        setRenameError(
-          apiErrorMessage(e, 'Nächste Nummer muss größer als die höchste vergebene Nummer sein.'),
-        )
+        setRenameError(apiErrorMessage(e, t.PROJEKTE.NUMMER_ZU_KLEIN))
         return
       }
     }
-    notify('Projekt gespeichert.', 'success')
+    notify(t.PROJEKTE.GESPEICHERT, 'success')
     closeRename()
     await reload()
   }
@@ -147,11 +150,11 @@ export function ProjectsPage() {
       await reload()
     } catch (e) {
       if (e instanceof ApiError && e.status === 400) {
-        setError('Kein Nutzer mit dieser Owner-E-Mail gefunden.')
+        setError(t.PROJEKTE.OWNER_UNBEKANNT)
       } else if (e instanceof ApiError && e.status === 403) {
-        setError('Nur Administratoren dürfen Projekte anlegen.')
+        setError(t.PROJEKTE.NUR_ADMINS)
       } else {
-        setError('Anlegen fehlgeschlagen.')
+        setError(t.PROJEKTE.ANLEGEN_FEHLER)
       }
     }
   }
@@ -160,7 +163,7 @@ export function ProjectsPage() {
     try {
       await projectsApi.remove(id)
     } catch (e) {
-      notify(apiErrorMessage(e, 'Löschen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.PROJEKTE.LOESCHEN_FEHLER), 'error')
       return
     }
     setConfirmDelete(null)
@@ -168,24 +171,24 @@ export function ProjectsPage() {
       await reload()
     } catch (e) {
       // Geloescht ist geloescht — nur das Nachladen der Liste ist gescheitert.
-      notify(apiErrorMessage(e, 'Projekt gelöscht, Liste konnte nicht aktualisiert werden.'), 'error')
+      notify(apiErrorMessage(e, t.PROJEKTE.GELOESCHT_LISTE_FEHLER), 'error')
     }
   }
 
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
-        Projekte
+        {t.RAHMEN.NAV_PROJEKTE}
       </Typography>
 
       {admin && (
         <Box component="form" onSubmit={handleCreate} sx={{ mb: 3 }}>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <TextField size="small" label="Neues Projekt" value={name} onChange={(e) => setName(e.target.value)} />
-            <TextField size="small" type="email" label="Owner (E-Mail)" value={ownerEmail}
+            <TextField size="small" label={t.PROJEKTE.NEUES_PROJEKT} value={name} onChange={(e) => setName(e.target.value)} />
+            <TextField size="small" type="email" label={t.PROJEKTE.OWNER_EMAIL} value={ownerEmail}
               onChange={(e) => setOwnerEmail(e.target.value)} />
             <Button type="submit" variant="contained">
-              Anlegen
+              {t.ALLGEMEIN.ANLEGEN}
             </Button>
           </Stack>
           {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
@@ -194,9 +197,7 @@ export function ProjectsPage() {
 
       {projects.length === 0 ? (
         <Typography color="text.secondary">
-          {admin
-            ? 'Noch keine Projekte. Lege oben eines an.'
-            : 'Noch keine Projekte. Ein Administrator legt Projekte an.'}
+          {admin ? t.PROJEKTE.LEER_ADMIN : t.PROJEKTE.LEER}
         </Typography>
       ) : (
         <Stack spacing={1}>
@@ -234,9 +235,9 @@ export function ProjectsPage() {
                 </Link>
               </Typography>
               <Chip label={project.role} size="small" color={ROLE_CHIP[project.role] ?? 'default'} />
-              {formatDate(project.createdAt) && (
+              {formatDate(project.createdAt, sprache) && (
                 <Typography variant="caption" color="text.secondary" sx={{ minWidth: 72, textAlign: 'right' }}>
-                  {formatDate(project.createdAt)}
+                  {formatDate(project.createdAt, sprache)}
                 </Typography>
               )}
               {/* AK 15: Ein Projekt-ADMIN darf die Teilnahme schalten, kaeme ueber
@@ -245,7 +246,7 @@ export function ProjectsPage() {
                 editMode && (
                 <IconButton
                   size="small"
-                  aria-label={`Projekt ${project.name} umbenennen`}
+                  aria-label={t.PROJEKTE.UMBENENNEN_ARIA(project.name)}
                   onClick={(e) => {
                     e.stopPropagation()
                     openRename(project)
@@ -257,7 +258,7 @@ export function ProjectsPage() {
               {admin && editMode && (
                 <IconButton
                   size="small"
-                  aria-label={`Projekt ${project.name} löschen`}
+                  aria-label={t.PROJEKTE.LOESCHEN_ARIA(project.name)}
                   onClick={(e) => {
                     e.stopPropagation()
                     setConfirmDelete(project)
@@ -272,24 +273,23 @@ export function ProjectsPage() {
       )}
 
       <Dialog open={confirmDelete !== null} onClose={() => setConfirmDelete(null)}>
-        <DialogTitle>Projekt löschen?</DialogTitle>
+        <DialogTitle>{t.PROJEKTE.LOESCHEN_TITEL}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Das Projekt „{confirmDelete?.name}&ldquo; und alle zugehörigen Boards, Vorhaben und Tickets werden
-            unwiderruflich gelöscht.
+            {t.PROJEKTE.LOESCHEN_TEXT(confirmDelete?.name ?? '')}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmDelete(null)}>Abbrechen</Button>
+          <Button onClick={() => setConfirmDelete(null)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
           <Button color="error" onClick={() => { if (confirmDelete) void handleDelete(confirmDelete.id) }}>
-            Löschen
+            {t.ALLGEMEIN.LOESCHEN}
           </Button>
         </DialogActions>
       </Dialog>
 
       {renameProject && (
         <Dialog open onClose={closeRename}>
-          <DialogTitle>Projekt umbenennen</DialogTitle>
+          <DialogTitle>{t.PROJEKTE.UMBENENNEN_TITEL}</DialogTitle>
           <DialogContent>
             {renameError && <Alert severity="error" sx={{ mb: 2 }}>{renameError}</Alert>}
             {darfProjektVerwalten(renameProject) && (
@@ -297,21 +297,21 @@ export function ProjectsPage() {
                 <TextField
                   autoFocus
                   fullWidth
-                  label="Projektname"
+                  label={t.PROJEKTE.PROJEKTNAME}
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   sx={{ mt: 1 }}
-                  slotProps={{ htmlInput: { 'aria-label': 'Neuer Projektname' } }}
+                  slotProps={{ htmlInput: { 'aria-label': t.PROJEKTE.NEUER_PROJEKTNAME } }}
                 />
                 <TextField
                   fullWidth
                   type="number"
-                  label="Nächste Kartennummer"
+                  label={t.PROJEKTE.NAECHSTE_NUMMER}
                   value={nextValue}
                   onChange={(e) => setNextValue(e.target.value)}
-                  helperText="Nummer, die die nächste neue Karte bekommt."
+                  helperText={t.PROJEKTE.NAECHSTE_NUMMER_HILFE}
                   sx={{ mt: 2 }}
-                  slotProps={{ htmlInput: { 'aria-label': 'Nächste Kartennummer', min: 1 } }}
+                  slotProps={{ htmlInput: { 'aria-label': t.PROJEKTE.NAECHSTE_NUMMER, min: 1 } }}
                 />
               </>
             )}
@@ -326,18 +326,18 @@ export function ProjectsPage() {
                     onChange={(e) => void handleTeilnahme(renameProject, e.target.checked)}
                   />
                 }
-                label="Teilnahme am Plattform-Leitstand"
+                label={t.PROJEKTE.TEILNAHME}
               />
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={closeRename}>Abbrechen</Button>
+            <Button onClick={closeRename}>{t.ALLGEMEIN.ABBRECHEN}</Button>
             <Button
               variant="contained"
               disabled={!renameValue.trim()}
               onClick={() => void handleRename(renameProject)}
             >
-              Speichern
+              {t.ALLGEMEIN.SPEICHERN}
             </Button>
           </DialogActions>
         </Dialog>

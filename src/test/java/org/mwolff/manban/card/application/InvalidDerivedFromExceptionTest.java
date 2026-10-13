@@ -18,7 +18,7 @@ class InvalidDerivedFromExceptionTest {
 
   @Test
   void nenntDasFeldDerivedFrom() {
-    FieldScopedException ex = new InvalidDerivedFromException("Unbekannte Kartennummer");
+    FieldScopedException ex = InvalidDerivedFromException.unbekannteNummer(7);
 
     assertThat(ex.field()).isEqualTo("derivedFrom");
   }
@@ -26,6 +26,6 @@ class InvalidDerivedFromExceptionTest {
   @Test
   void istEinAbhaengigkeitsfehler_damitBestandserwartungenGelten() {
     // Erbt bewusst: Aufrufer und Tests, die auf die Oberklasse pruefen, bleiben gueltig.
-    assertThat(new InvalidDerivedFromException("x")).isInstanceOf(InvalidDependencyException.class);
+    assertThat(InvalidDerivedFromException.zyklus()).isInstanceOf(InvalidDependencyException.class);
   }
 }

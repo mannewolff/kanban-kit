@@ -99,7 +99,6 @@
   "mutationCommand": "",
   "mainBranch": "main",
   "productionBranch": "production",
-  "installCommand": "npm --prefix frontend ci --no-audit --no-fund",
   "reviewScope": "diff",
   "triggers": {
     "go": "GO",
@@ -116,6 +115,7 @@
     "in_review": "In review",
     "done": "Done"
   },
+  "installCommand": "npm --prefix frontend ci --no-audit --no-fund",
   "checkAreas": {
     "backend": [
       "src/**",
@@ -250,5 +250,6 @@
       ]
     },
     "statusLabels": true
-  }
+  },
+  "szenarienAb": 1638
 }

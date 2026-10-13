@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
 import type { Board } from '../api/boards'
 import { ApiError } from '../api/client'
@@ -16,8 +16,11 @@ import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel } from '../test/cssRegel'
 import { KIT_NAMEN } from '../test/kitNamen'
+import { de } from '../i18n/de'
 import { abnahmeKommentar, szenarienAus } from '../lib/abnahmeSzenarien'
 import { theme } from '../theme'
+import { renderMitSprache } from '../i18n/renderMitSprache'
+import { formatierer } from '../i18n/format'
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] } }),
@@ -496,7 +499,7 @@ describe('CardDetailModal', () => {
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
 
     await klickeBearbeiten()
-    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2026-08-01' } })
+    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '01.08.2026' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
     await waitFor(() =>
@@ -599,6 +602,139 @@ describe('CardDetailModal', () => {
 
     await waitFor(() => expect(apis.cardsApi.removeLabel).toHaveBeenCalledWith(100, 6))
     expect(apis.cardsApi.addLabel).not.toHaveBeenCalled()
+  })
+
+  describe('Erklärung der Systemlabels (#1672)', () => {
+    const systemLabels = [
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false },
+      { id: 8, boardId: 1, name: 'kit:clarify', color: '#6a1b9a', countOnEpicTile: false },
+    ]
+    // eslint-disable-next-line testing-library/no-node-access -- ein Chip hat keine Rolle; Tooltip und tabindex sitzen an seiner Wurzel, nicht am Text
+    const chip = (name: string) => screen.getByText(name).closest('.MuiChip-root') as HTMLElement
+    const KLAEREN = de.LABEL_ERKLAERUNG.SACHEN.KLAEREN
+
+    test('Szenario: Bedienung mit der Tastatur', async () => {
+      // Angenommen der Nutzer bewegt sich mit der Tabulatortaste durch das Karten-Detail
+      render(
+        <CardDetailModal
+          card={{ ...card, labels: [5, 8], derivedFrom: null }}
+          canEdit={false}
+          boardLabels={systemLabels}
+          onClose={vi.fn()}
+          {...makeApis()}
+        />,
+      )
+      const ziel = chip('kit:clarify')
+
+      // Wenn er auf ein Systemlabel springt
+      for (let i = 0; i < 50 && !ziel.matches(':focus'); i++) await userEvent.tab()
+      expect(ziel).toHaveFocus()
+
+      // Dann erscheint die Erklärung genauso wie beim Darüberfahren mit der Maus
+      const tooltip = await screen.findByRole('tooltip')
+      expect(tooltip).toHaveTextContent(KLAEREN.bedeutung)
+      expect(tooltip).toHaveTextContent(KLAEREN.handlung)
+      expect(ziel).toHaveAttribute('aria-describedby', tooltip.id)
+    })
+
+    it('erklärt ein Systemlabel der Leseansicht beim Darüberfahren, ein eigenes Label nicht', async () => {
+      render(
+        <CardDetailModal
+          card={{ ...card, labels: [5, 8], derivedFrom: null }}
+          canEdit={false}
+          boardLabels={systemLabels}
+          onClose={vi.fn()}
+          {...makeApis()}
+        />,
+      )
+
+      expect(chip('Bug')).not.toHaveAttribute('tabindex')
+      await userEvent.hover(chip('kit:clarify'))
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+    })
+
+    it('erklärt die Systemlabels unter den gewählten Labels der Bearbeitungsansicht', async () => {
+      render(
+        <CardDetailModal card={{ ...card, labels: [5, 8] }} canEdit boardLabels={systemLabels} onClose={vi.fn()} {...makeApis()} />,
+      )
+      await screen.findByLabelText('Labels')
+
+      expect(chip('kit:clarify')).toHaveAttribute('tabindex', '0')
+      expect(chip('Bug')).toHaveAttribute('tabindex', '-1')
+      await userEvent.hover(chip('kit:clarify'))
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.verschwindet)
+    })
+  })
+
+  describe('Erklärung in der Label-Auswahl (#1673)', () => {
+    const auswahl = [
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false },
+      { id: 8, boardId: 1, name: 'kit:clarify', color: '#6a1b9a', countOnEpicTile: false },
+    ]
+    const KLAEREN = de.LABEL_ERKLAERUNG.SACHEN.KLAEREN
+
+    it('zeigt die Erklärung der per Tastatur markierten Option kit:clarify, Enter wählt sie aus', async () => {
+      const apis = makeApis()
+      render(<CardDetailModal card={card} canEdit boardLabels={auswahl} onClose={vi.fn()} {...apis} />)
+      await userEvent.click(await screen.findByLabelText('Labels'))
+
+      // Erste Pfeiltaste markiert „Bug“: keine Erklärung.
+      await userEvent.keyboard('{ArrowDown}')
+      expect(screen.getByRole('option', { name: 'Bug' })).toHaveClass('Mui-focused')
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+      await userEvent.keyboard('{ArrowDown}')
+      const option = screen.getByRole('option', { name: 'kit:clarify' })
+      expect(option).toHaveClass('Mui-focused')
+      const tooltip = await screen.findByRole('tooltip')
+      expect(tooltip).toHaveTextContent(KLAEREN.bedeutung)
+      expect(option).toHaveAttribute('aria-describedby', tooltip.id)
+      expect(option).toHaveAttribute('tabindex', '-1')
+
+      await userEvent.keyboard('{Enter}')
+      await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalledWith(100, 8))
+    })
+
+    it('vergisst die Markierung, wenn die Liste schließt: Wiederöffnen zeigt keine alte Erklärung', async () => {
+      render(<CardDetailModal card={card} canEdit boardLabels={auswahl} onClose={vi.fn()} {...makeApis()} />)
+      const feld = await screen.findByLabelText('Labels')
+      await userEvent.click(feld)
+      await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+
+      await userEvent.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+      fireEvent.mouseDown(feld)
+
+      const option = await screen.findByRole('option', { name: 'kit:clarify' })
+      expect(option).not.toHaveClass('Mui-focused')
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+
+    it('schließt die Erklärung, wenn das Eintippen die markierte Option wegfiltert', async () => {
+      render(<CardDetailModal card={card} canEdit boardLabels={auswahl} onClose={vi.fn()} {...makeApis()} />)
+      await userEvent.click(await screen.findByLabelText('Labels'))
+      await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+
+      await userEvent.keyboard('zzz')
+
+      await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+      await userEvent.keyboard('{Backspace}{Backspace}{Backspace}')
+      expect(await screen.findByRole('option', { name: 'kit:clarify' })).not.toHaveClass('Mui-focused')
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+
+    it('zeigt an einer selbst angelegten Option keine Erklärung, auch nicht beim Darüberfahren', async () => {
+      render(<CardDetailModal card={card} canEdit boardLabels={auswahl} onClose={vi.fn()} {...makeApis()} />)
+      await userEvent.click(await screen.findByLabelText('Labels'))
+
+      await userEvent.hover(screen.getByRole('option', { name: 'Bug' }))
+
+      expect(screen.getByRole('option', { name: 'Bug' })).toHaveClass('Mui-focused')
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
   })
 
   it('zeigt den Aktivitätsverlauf mit Akteur und Detail', async () => {
@@ -1586,7 +1722,7 @@ describe('CardDetailModal', () => {
     await klickeBearbeiten()
 
     expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('Vorhandener Text')
-    expect(screen.getByLabelText('Fällig am')).toHaveValue('2026-08-01')
+    expect(screen.getByLabelText('Fällig am')).toHaveValue('01.08.2026')
   })
 
   it('bietet im Edit-Modus die bereits gesetzte Epic-Zuordnung an', async () => {
@@ -3058,7 +3194,7 @@ describe('CardDetailModal — bestätigter Kartenstand (#1328)', () => {
 
     await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neuer Titel' } })
-    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2099-08-01' } })
+    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '01.08.2099' } })
     fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(1))
@@ -3369,5 +3505,243 @@ describe('CardDetailModal — Abnahme durchklicken (Issue #1629)', () => {
     expect(within(dialog.getByRole('group', { name: 'Vermerk zu Szenario 1' })).getByRole('button', { name: 'okay' }))
       .toHaveAttribute('aria-pressed', 'true')
     expect(screen.getAllByTestId('comment-body')).toHaveLength(1)
+  })
+})
+
+// --- Sprache (Issue #1653) --------------------------------------------------
+
+describe('CardDetailModal auf Englisch', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  const zeigeEn = (
+    props: Partial<ComponentProps<typeof CardDetailModal>> = {},
+    apis: ReturnType<typeof makeApis> = makeApis(),
+  ) => {
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <SnackbarProvider>
+          <CardDetailModal card={card} canEdit columnName="In Progress" projectId={9} onClose={vi.fn()} {...apis} {...props} />
+        </SnackbarProvider>
+      </ThemeProvider>,
+      'en',
+    )
+    return apis
+  }
+
+  it('beschriftet Blöcke, Abschnitte und Knöpfe auf Englisch', async () => {
+    zeigeEn()
+
+    const beschreibung = screen.getByRole('region', { name: 'Description and details' })
+    const zuordnung = screen.getByRole('region', { name: 'Assignment' })
+    const verlauf = screen.getByRole('region', { name: 'History' })
+    expect(await within(beschreibung).findByRole('heading', { name: 'Titel' })).toBeInTheDocument()
+    expect(within(beschreibung).getByLabelText('Dependencies')).toHaveTextContent('Depends on: #3, #4')
+    expect(within(beschreibung).getByRole('button', { name: 'Open card #3' })).toBeInTheDocument()
+    expect(within(zuordnung).getByRole('combobox', { name: 'Assignees' })).toBeInTheDocument()
+    expect(within(zuordnung).getByLabelText('Labels')).toBeInTheDocument()
+    expect(within(verlauf).getByText('Attachments')).toBeInTheDocument()
+    expect(within(verlauf).getByText('No attachments.')).toBeInTheDocument()
+    expect(within(verlauf).getByLabelText('Attach file')).toBeInTheDocument()
+    expect(within(verlauf).getByText('Comments')).toBeInTheDocument()
+    expect(within(verlauf).getByLabelText('Write a comment')).toHaveAttribute('placeholder', 'Write a comment')
+    expect(within(verlauf).getByRole('button', { name: 'Send' })).toBeInTheDocument()
+    expect(within(verlauf).getByText('Activity')).toBeInTheDocument()
+    expect(within(verlauf).getByText('No activity.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open epic' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+  })
+
+  it('ordnet die Blöcke auch auf Englisch ihren Rasterflächen zu', async () => {
+    zeigeEn()
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+    const regeln = [...document.styleSheets].flatMap((blatt) => [...blatt.cssRules]).map((regel) => regel.cssText)
+    for (const [name, bereich] of [['Description and details', 'blatt'], ['Assignment', 'felder'], ['History', 'verlauf']]) {
+      expect(screen.getByRole('region', { name })).toHaveAttribute('data-bereich', bereich)
+      expect(regeln.some((regel) => regel.endsWith(`>[data-bereich="${bereich}"] {grid-area: ${bereich};}`))).toBe(true)
+    }
+  })
+
+  it('zeigt Leerzustände und gelesene Felder auf Englisch', async () => {
+    const apis = makeApis()
+    const leer: Card = { ...card, description: '', dependencies: [], derivedFrom: 12, dueDate: '2020-01-01T12:00:00Z' }
+    apis.cardsApi.get = vi.fn().mockResolvedValue(leer)
+    apis.commentsApi.list = vi.fn().mockResolvedValue([])
+    zeigeEn({ canEdit: false, card: leer }, apis)
+
+    expect(await screen.findByText('No description.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Origin')).toHaveTextContent('Derived from: #12')
+    const due = screen.getByLabelText('Due date')
+    expect(due).toHaveTextContent('Due Jan 1, 2020 — overdue')
+    expect(screen.getByText('Nobody assigned.')).toBeInTheDocument()
+    expect(screen.getByText('No labels.')).toBeInTheDocument()
+    expect(await screen.findByText('No comments yet.')).toBeInTheDocument()
+  })
+
+  it('meldet Laden und Ladefehler der Beschreibung auf Englisch', async () => {
+    const apis = makeApis()
+    let ablehnen: (grund: unknown) => void = () => {}
+    apis.cardsApi.get = vi.fn(() => new Promise<Card>((_, reject) => { ablehnen = reject }))
+    zeigeEn({}, apis)
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading description…')
+    ablehnen(new Error('weg'))
+    expect(await screen.findByText('The description could not be loaded.')).toBeInTheDocument()
+  })
+
+  it('zeigt Zeitpunkte von Kommentar und Aktivität in der US-Schreibweise', async () => {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([
+      { id: 1, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Hallo', createdAt: ERST, updatedAt: SPAETER },
+    ])
+    apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+      { id: 1, actorUserId: 99, type: 'CREATED', detail: 'Idee angelegt', createdAt: ERST, origin: 'TOKEN', tokenName: null, agent: 'claude-opus-5' },
+    ])
+    zeigeEn({}, apis)
+
+    const f = formatierer('en')
+    expect(await screen.findByTestId('comment-meta')).toHaveTextContent(
+      `${f.datumUhrzeit(ERST)} · edited ${f.datumUhrzeit(SPAETER)}`,
+    )
+    const token = await screen.findByTestId('activity-token')
+    expect(token).toHaveAttribute('aria-label', 'Via access token: unnamed')
+    expect(screen.getByTestId('activity-agent')).toHaveAttribute(
+      'aria-label',
+      'Model stated by the client, not verified: claude-opus-5',
+    )
+    expect(screen.getByText(`${f.datumUhrzeit(ERST)} · System · Idee angelegt`, { exact: false })).toBeInTheDocument()
+  })
+
+  it('beschriftet Kommentar- und Anhangsaktionen auf Englisch', async () => {
+    const apis = makeApis()
+    apis.attachmentsApi.list = vi.fn().mockResolvedValue([
+      { id: 5, cardId: 100, filename: 'notiz.txt', contentType: 'text/plain', size: 2048, createdAt: '' },
+    ])
+    zeigeEn({ canModerateComments: true }, apis)
+
+    expect(await screen.findByText('2 KB')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete attachment notiz.txt' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Delete comment' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit comment' }))
+    expect(screen.getByRole('textbox', { name: 'Edit comment' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+  })
+
+  it('meldet einen ungültigen Feldwert auf Englisch', async () => {
+    const apis = zeigeEn()
+
+    const knopf = await screen.findByRole('button', { name: 'Edit' })
+    await waitFor(() => expect(knopf).toBeEnabled())
+    fireEvent.click(knopf)
+    fireEvent.change(screen.getByLabelText('Depends on'), { target: { value: '12, x' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Only positive numbers, comma-separated (e.g. 12, 34).')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Depends on'), { target: { value: '12' } })
+    fireEvent.change(screen.getByLabelText('Origin'), { target: { value: 'x' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Only one positive card number, or empty.')).toBeInTheDocument()
+    expect(apis.cardsApi.update).not.toHaveBeenCalled()
+  })
+
+  it('bestätigt das Speichern auf Englisch', async () => {
+    zeigeEn()
+
+    const knopf = await screen.findByRole('button', { name: 'Edit' })
+    await waitFor(() => expect(knopf).toBeEnabled())
+    fireEvent.click(knopf)
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Card saved.')).toBeInTheDocument()
+  })
+
+  it('nennt den Rückfalltext beim Anlegen eines Kommentars auf Englisch', async () => {
+    const apis = makeApis()
+    apis.commentsApi.create = vi.fn().mockRejectedValue(new Error('roh'))
+    zeigeEn({}, apis)
+
+    fireEvent.change(screen.getByLabelText('Write a comment'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText('Creating the comment failed.')).toBeInTheDocument()
+  })
+
+  it('meldet Fehler bei Anhängen auf Englisch', async () => {
+    const apis = makeApis()
+    apis.attachmentsApi.upload = vi.fn().mockRejectedValue(new Error('roh'))
+    zeigeEn({}, apis)
+
+    const datei = new File(['x'], 'a.txt', { type: 'text/plain' })
+    fireEvent.change(screen.getByLabelText('Attach file'), { target: { files: [datei] } })
+    expect(await screen.findByText('Upload failed (attachment limit may have been reached).')).toBeInTheDocument()
+  })
+
+  it('meldet eine nicht auffindbare verknüpfte Karte auf Englisch', async () => {
+    const apis = makeApis()
+    apis.cardsApi.byNumber = vi.fn().mockRejectedValue(new Error('404'))
+    zeigeEn({}, apis)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open card #4' }))
+    expect(await screen.findByText('Card #4 not found — deleted or no access.')).toBeInTheDocument()
+  })
+
+  it('führt durch „Open epic“ auf Englisch', async () => {
+    zeigeEn()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open epic' }))
+    const dialog = within(await screen.findByRole('dialog', { name: 'Open epic' }))
+    expect(dialog.getByLabelText('Epic name')).toHaveValue('Aufgabe')
+    expect(dialog.getByLabelText('Short code (optional)')).toBeInTheDocument()
+    fireEvent.click(dialog.getByRole('button', { name: 'Open' }))
+    expect(await screen.findByText('Epic opened: Neues Vorhaben')).toBeInTheDocument()
+  })
+
+  it('zeigt Kopf und Fortschritt eines Vorhabens auf Englisch', async () => {
+    zeigeEn({
+      card: { ...card, id: 200, type: 'EPIC', shortcode: 'AUT' },
+      epics: [{ id: 200, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 2, total: 5, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }],
+    })
+
+    expect(screen.getByText('Epic')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Progress')).toHaveTextContent('2 of 5 done')
+    expect(screen.getAllByText('Progress')).toHaveLength(1)
+    expect(screen.getByText('Origin')).toBeInTheDocument()
+  })
+
+  it('meldet einen gescheiterten Herkunftsbaum auf Englisch', async () => {
+    const apis = makeApis()
+    apis.cardsApi.epicTree = vi.fn().mockRejectedValue(new Error('roh'))
+    zeigeEn({ card: { ...card, id: 200, type: 'EPIC', shortcode: 'AUT' } }, apis)
+
+    expect(await screen.findByText('The origin tree could not be loaded.')).toBeInTheDocument()
+  })
+
+  it('fragt vor „Ready“ auf Englisch nach', async () => {
+    zeigeEn({ card: paket })
+
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Status' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Ready' }))
+    const dialog = within(await screen.findByRole('dialog', { name: 'Set status to Ready?' }))
+    expect(dialog.getByRole('button', { name: 'Set status to Ready' })).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+  })
+
+  it('beschriftet Zurück und Wiederherstellen auf Englisch', async () => {
+    zeigeEn({ card: { ...card, archived: true } })
+
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Open card #3' }))
+    expect(await screen.findByRole('button', { name: 'Back to the previous card' })).toBeInTheDocument()
+  })
+
+  it('beschriftet die Checkboxen der Beschreibung auf Englisch', async () => {
+    const apis = makeApis()
+    apis.cardsApi.get = vi.fn().mockResolvedValue({ ...card, description: '- [ ] eins' })
+    zeigeEn({}, apis)
+
+    expect(await screen.findByRole('checkbox', { name: 'Task 1' })).toBeInTheDocument()
   })
 })

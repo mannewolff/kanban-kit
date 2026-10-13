@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReleasePreparationView } from '../../api/nightRuns'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { kontrast } from '../../lib/kontrast'
 import { TEXT_MATT, theme } from '../../theme'
 import { LaufMarke, NachtlaufLaufPlatte } from './NachtlaufLaufPlatte'
@@ -344,5 +345,63 @@ describe('NachtlaufLaufPlatte — Morgenkachel „Veröffentlichung vorbereitet�
     zeige(false, undefined, MELDUNG)
 
     expect(kachel()).not.toBeInTheDocument()
+  })
+})
+
+describe('NachtlaufLaufPlatte auf Englisch (Issue #1658)', () => {
+  it('beschriftet Pfeil und Abbruchgrund auf Englisch, die Morgenkachel ebenso', async () => {
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <NachtlaufLaufPlatte
+          titel="Run #86 · Sep 14, 10:05 PM"
+          zyklus="Shift"
+          meta="41 min"
+          melder="zinnob"
+          abbruchGrund="dirty tree"
+          veroeffentlichung={{
+            result: 'NOT_PREPARED',
+            commitHash: null,
+            version: null,
+            redCheck: null,
+            pending: [],
+            receivedAt: '2026-10-06T05:12:00Z',
+            cards: [],
+            redCards: [],
+          }}
+          offen={false}
+          onUmschalten={vi.fn()}
+          testId="lauf-1"
+        >
+          <div>Vorgänge</div>
+        </NachtlaufLaufPlatte>
+      </ThemeProvider>,
+      'en',
+    )
+
+    expect(screen.getByRole('button', { name: 'Expand Run #86 · Sep 14, 10:05 PM' })).toBeInTheDocument()
+  })
+
+  it('nennt den Abbruchgrund in der aufgeklappten Platte auf Englisch', () => {
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <NachtlaufLaufPlatte
+          titel="Run #86"
+          zyklus="Shift"
+          meta="41 min"
+          melder="zinnob"
+          abbruchGrund="dirty tree"
+          offen
+          onUmschalten={vi.fn()}
+          testId="lauf-1"
+        >
+          <div>Vorgänge</div>
+        </NachtlaufLaufPlatte>
+      </ThemeProvider>,
+      'en',
+    )
+
+    expect(screen.getByRole('button', { name: 'Collapse Run #86' })).toBeInTheDocument()
+    expect(screen.getByText('Reason for abort')).toBeInTheDocument()
+    expect(grundzeile()).toHaveTextContent('dirty tree')
   })
 })

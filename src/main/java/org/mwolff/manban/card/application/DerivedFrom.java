@@ -54,13 +54,10 @@ final class DerivedFrom {
     Card vorfahr =
         cards
             .findByProjectIdAndNumber(projectId, derivedFrom)
-            .orElseThrow(
-                () ->
-                    new InvalidDerivedFromException(
-                        "Unbekannte Kartennummer als Herkunft: " + derivedFrom));
+            .orElseThrow(() -> InvalidDerivedFromException.unbekannteNummer(derivedFrom));
     long vorfahrId = vorfahr.requireId();
     if (selfCardId != null && selfCardId == vorfahrId) {
-      throw new InvalidDerivedFromException("Eine Karte kann nicht von sich selbst abstammen");
+      throw InvalidDerivedFromException.vonSichSelbst();
     }
     requireNoCycle(cards, vorfahr, selfCardId);
     return vorfahrId;
@@ -73,11 +70,10 @@ final class DerivedFrom {
     while (cursor != null) {
       tiefe++;
       if (tiefe >= MAX_DEPTH) {
-        throw new InvalidDerivedFromException(
-            "Herkunftskette erreicht " + MAX_DEPTH + " Glieder — vermutlich zyklisch");
+        throw InvalidDerivedFromException.ketteZuLang(MAX_DEPTH);
       }
       if (selfCardId != null && cursor.longValue() == selfCardId.longValue()) {
-        throw new InvalidDerivedFromException("Herkunft wuerde einen Zyklus bilden");
+        throw InvalidDerivedFromException.zyklus();
       }
       Optional<Card> naechster = cards.findById(cursor);
       if (naechster.isEmpty()) {

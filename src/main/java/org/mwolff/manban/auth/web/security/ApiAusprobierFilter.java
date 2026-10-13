@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.auth.application.SessionTokens;
+import org.mwolff.manban.common.i18n.Texte;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -45,6 +46,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * <p><strong>Grenze:</strong> Das Kennzeichen grenzt allein die Funktion „Ausprobieren“ ab. Die
  * Rechte an den Daten prüfen weiterhin die Endpunkte selbst — ein Admin darf ausprobiert nicht mehr
  * als sonst auch. Wer ohne Kennzeichen aufruft, unterliegt ohnehin seinen eigenen Rechten.
+ *
+ * <p>Die Abweisung erscheint in der Sprache nach Zugangsart (Issue #1640, Plan #1638 A5/E2): Sie
+ * trifft eine Session, also in der eingestellten Sprache.
  */
 @Component
 public class ApiAusprobierFilter extends OncePerRequestFilter {
@@ -58,15 +62,23 @@ public class ApiAusprobierFilter extends OncePerRequestFilter {
    */
   static final String PROJEKT_TOKEN_HEADER = "X-Kanban-Token";
 
+  /** Schlüssel der Abweisung an Nutzer ohne Plattform-Admin-Recht. */
+  static final String NUR_PLATTFORM_ADMINS = "auth.api-ausprobieren.nur-plattform-admins";
+
   private final SessionCookieManager cookies;
   private final SessionTokens tokens;
   private final PlatformAdminChecker admins;
+  private final Texte texte;
 
   public ApiAusprobierFilter(
-      SessionCookieManager cookies, SessionTokens tokens, PlatformAdminChecker admins) {
+      SessionCookieManager cookies,
+      SessionTokens tokens,
+      PlatformAdminChecker admins,
+      Texte texte) {
     this.cookies = cookies;
     this.tokens = tokens;
     this.admins = admins;
+    this.texte = texte;
   }
 
   @Override
@@ -95,18 +107,19 @@ public class ApiAusprobierFilter extends OncePerRequestFilter {
     filterChain.doFilter(request, response);
   }
 
-  private static void rejectAsForbidden(HttpServletResponse response) throws IOException {
+  private void rejectAsForbidden(HttpServletResponse response) throws IOException {
     response.setStatus(HttpStatus.FORBIDDEN.value());
     response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
     response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-    // Konstantes Literal nach dem Vorbild RateLimitFilter.rejectAsTooManyRequests, ohne
-    // Serialisierung: Der Text ändert sich nie.
+    // Literal nach dem Vorbild RateLimitFilter.rejectAsTooManyRequests, ohne Serialisierung: Der
+    // Text stammt aus den Meldungsdateien und enthält weder Anführungszeichen noch Backslash.
+    // Gewöhnliches Literal statt Konstante: Error Prone (InlineFormatString) duldet eine einmal
+    // benutzte Formatvorlage nicht als Konstante.
     response
         .getWriter()
         .write(
-            "{\"type\":\"about:blank\",\"title\":\"Forbidden\",\"status\":403,"
-                + "\"detail\":\"Das Ausprobieren aus der API-Übersicht ist Plattform-Admins"
-                + " vorbehalten.\"}");
+            "{\"type\":\"about:blank\",\"title\":\"Forbidden\",\"status\":403,\"detail\":\"%s\"}"
+                .formatted(texte.text(texte.spracheDerAnfrage(), NUR_PLATTFORM_ADMINS)));
   }
 
   /** Die Anfrage ohne das Session-Cookie — in {@code getCookies()} wie im Cookie-Header. */

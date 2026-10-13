@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.application;
 
+import java.io.Serializable;
 import org.mwolff.manban.common.FieldScopedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -16,16 +17,49 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * Status 400 mit fast wortgleichem Text auch aus Abhängigkeits- und Herkunftsfehlern. Nur über den
  * Typ kann {@code GlobalExceptionHandler} die Meldung dem Feld {@link #FIELD_NAME} zuordnen; ohne
  * diese Zuordnung zeigte die Kachel den Fehler an einem fremden Eingabefeld an.
+ *
+ * <p>Je Fall eine Fabrikmethode mit eigenem Meldungsschlüssel (Issue #1642).
  */
 @ResponseStatus(HttpStatus.BAD_REQUEST)
-public class InvalidRequirementCardException extends InvalidDependencyException
+public final class InvalidRequirementCardException extends InvalidDependencyException
     implements FieldScopedException {
 
   /** Feldname im {@code fieldErrors}-Extension des Problemdokuments. */
   public static final String FIELD_NAME = "requirementCardNumber";
 
-  public InvalidRequirementCardException(String message) {
-    super(message);
+  private InvalidRequirementCardException(
+      String schluessel, String text, Serializable... argumente) {
+    super(schluessel, text, argumente);
+  }
+
+  /** Die Karte ist kein Vorhaben. */
+  public static InvalidRequirementCardException keinVorhaben(Integer nummer) {
+    return new InvalidRequirementCardException(
+        "card.anforderung.kein-vorhaben",
+        "Eine Anforderung laesst sich nur an einem Vorhaben setzen: " + nummer,
+        nummer);
+  }
+
+  /** Die Kartennummer der Anforderung gibt es im Projekt nicht. */
+  public static InvalidRequirementCardException unbekannteNummer(Integer nummer) {
+    return new InvalidRequirementCardException(
+        "card.anforderung.unbekannte-nummer",
+        "Unbekannte Kartennummer als Anforderung: " + nummer,
+        nummer);
+  }
+
+  /** Das Vorhaben verweist auf sich selbst. */
+  public static InvalidRequirementCardException eigene() {
+    return new InvalidRequirementCardException(
+        "card.anforderung.eigene", "Ein Vorhaben kann nicht seine eigene Anforderung sein");
+  }
+
+  /** Die Anforderung liegt auf einem anderen Board. */
+  public static InvalidRequirementCardException fremdesBoard(Integer nummer) {
+    return new InvalidRequirementCardException(
+        "card.anforderung.fremdes-board",
+        "Die Anforderung liegt nicht auf dem Board des Vorhabens: " + nummer,
+        nummer);
   }
 
   @Override

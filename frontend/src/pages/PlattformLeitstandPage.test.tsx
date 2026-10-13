@@ -14,6 +14,7 @@ import { plattformLeitstandApi } from '../api/plattformLeitstand'
 import { KURZ_GRUND_MAX } from '../lib/nightRunHandoff'
 import { cssRegel } from '../test/cssRegel'
 import PlattformLeitstandPage from './PlattformLeitstandPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/plattformLeitstand', async () => {
   const echt = await vi.importActual<typeof import('../api/plattformLeitstand')>(
@@ -2145,5 +2146,190 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(within(zeile).getByText('von Hand beendet')).toBeInTheDocument()
       expect(within(zeile).getByTestId('led-grau')).toBeInTheDocument()
     })
+  })
+})
+
+/**
+ * Der Plattform-Leitstand auf Englisch (Issue #1657, Plan #1638): Jeder fest eingebaute Text kommt
+ * aus dem Wörterbuch, Zeitpunkte in der US-Schreibweise. Projektnamen bleiben Daten.
+ */
+describe('PlattformLeitstandPage auf Englisch', () => {
+  const run = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
+    nightRunId: 5,
+    projectId: 9,
+    projectName: 'Mein Projekt',
+    mode: 'IMPLEMENTATION',
+    startedAt: '2026-09-19T21:10:00Z',
+    outcome: {
+      abortReason: null,
+      verdict: 'FAILED',
+      decisiveItem: { cardNumber: 721, state: 'RED', errorClass: 'CHECKS_RED' },
+      noWorkReason: null,
+    },
+    ...extra,
+  })
+
+  const sicht = (teil: Partial<LeitstandView> = {}): LeitstandView => ({
+    laufende: [],
+    durchgefuehrte: [],
+    durchgefuehrteVoriger: [],
+    stoerungen: [],
+    gemeldetePakete: [],
+    ...teil,
+  })
+
+  const zeigeSeite = () => renderMitSprache(<MemoryRouter><PlattformLeitstandPage /></MemoryRouter>, 'en')
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    api.quittieren.mockResolvedValue(undefined)
+    api.alsBeendetKennzeichnen.mockResolvedValue(undefined)
+    vi.stubGlobal('localStorage', fakeStorage())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('zeigt die Leersätze und Überschriften auf Englisch', async () => {
+    api.leitstand.mockResolvedValue(sicht())
+
+    zeigeSeite()
+
+    expect(await screen.findByText('No open disruption.')).toBeInTheDocument()
+    expect(screen.getByText('Current status')).toBeInTheDocument()
+    expect(screen.getByText('Finished runs')).toBeInTheDocument()
+    expect(screen.getByText('Disruptions')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Started in this shift' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Started in the previous shift' })).toBeInTheDocument()
+    expect(screen.getByTestId('keine-durchgefuehrten')).toHaveTextContent('No run of this shift has finished.')
+    expect(screen.getByTestId('zyklus-voriger-anzahl')).toHaveTextContent('0 runs')
+    expect(within(screen.getByTestId('zyklus-dieser')).getByText(/^from .+ to .+$/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Finished runs: all' })).toHaveTextContent('all')
+    expect(screen.getByRole('button', { name: 'Expand Started in the previous shift' })).toBeInTheDocument()
+  })
+
+  it('zeigt die leere vorige Schicht aufgeklappt auf Englisch', async () => {
+    api.leitstand.mockResolvedValue(sicht({ durchgefuehrteVoriger: [run({ nightRunId: 6 })] }))
+
+    zeigeSeite()
+
+    expect(await screen.findByTestId('zyklus-voriger-anzahl')).toHaveTextContent('1 run')
+    await userEvent.click(screen.getByRole('button', { name: 'Expand Started in the previous shift' }))
+    expect(screen.getByRole('button', { name: 'Collapse Started in the previous shift' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('zyklus-voriger')).getByRole('link', { name: 'Run #6 of Mein Projekt' })).toBeInTheDocument()
+  })
+
+  it('nennt den leeren vorigen Abschnitt auf Englisch', async () => {
+    localStorage.setItem('leitstand-voriger-zyklus-offen', 'true')
+    api.leitstand.mockResolvedValue(sicht())
+
+    zeigeSeite()
+
+    expect(await screen.findByTestId('keine-durchgefuehrten-voriger')).toHaveTextContent(
+      'No run of the previous shift has finished.',
+    )
+  })
+
+  it('zeigt Störzeile und beendete Zeile auf Englisch mit US-Zeitpunkt', async () => {
+    api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: [run()], stoerungen: [run()] }))
+
+    zeigeSeite()
+
+    const zeile = await screen.findByTestId('durchgefuehrt-5')
+    expect(within(zeile).getByText(/^[A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d\d\s[AP]M$/)).toBeInTheDocument()
+    expect(within(zeile).getByRole('link', { name: 'Go to the disruption of run #5' })).toHaveTextContent('Disruption')
+    const stoerzeile = screen.getByTestId('stoerung-5')
+    expect(within(stoerzeile).getByRole('link', { name: 'Run #5' })).toBeInTheDocument()
+    expect(within(stoerzeile).getByText(/^Card #721: /)).toBeInTheDocument()
+    expect(within(stoerzeile).getByText(/^[A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d\d\s[AP]M$/)).toBeInTheDocument()
+    expect(screen.getByTestId('stoergruppe-kopf-9')).toHaveTextContent('1 disruption')
+    const taste = within(stoerzeile).getByRole('button', { name: 'Delete disruption of Mein Projekt, run #5' })
+    expect(taste).toHaveTextContent('Delete disruption')
+  })
+
+  it('zählt mehrere Störungen eines Projekts auf Englisch', async () => {
+    api.leitstand.mockResolvedValue(sicht({ stoerungen: [run(), run({ nightRunId: 6 })] }))
+
+    zeigeSeite()
+
+    expect(await screen.findByTestId('stoergruppe-kopf-9')).toHaveTextContent('2 disruptions')
+  })
+
+  it('nennt ausgeblendete Runs auf Englisch', async () => {
+    const zeilen = Array.from({ length: 12 }, (_, i) => run({ nightRunId: 100 + i }))
+    api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: zeilen }))
+
+    zeigeSeite()
+
+    expect(await screen.findByTestId('ausgeblendet-hinweis')).toHaveTextContent('2 more runs hidden')
+  })
+
+  it('nennt einen einzelnen ausgeblendeten Run und einen ganz verdrängten Abschnitt auf Englisch', async () => {
+    localStorage.setItem('leitstand-voriger-zyklus-offen', 'true')
+    const zeilen = Array.from({ length: 10 }, (_, i) => run({ nightRunId: 100 + i }))
+    api.leitstand.mockResolvedValue(sicht({ durchgefuehrte: zeilen, durchgefuehrteVoriger: [run({ nightRunId: 7 })] }))
+
+    zeigeSeite()
+
+    expect(await screen.findByTestId('ausgeblendet-hinweis')).toHaveTextContent('1 more run hidden')
+    expect(screen.getByTestId('zyklus-voriger-ausgeblendet')).toHaveTextContent('1 run hidden')
+  })
+
+  it('zeigt die Fehlertexte auf Englisch', async () => {
+    api.leitstand.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    const { unmount } = zeigeSeite()
+    expect(await screen.findByText('No admin access.')).toBeInTheDocument()
+    unmount()
+
+    api.leitstand.mockRejectedValue(new Error('netz'))
+    zeigeSeite()
+    expect(await screen.findByText('Loading failed.')).toBeInTheDocument()
+  })
+
+  it('fragt vor dem Kennzeichnen auf Englisch nach und meldet den Fehler auf Englisch', async () => {
+    const haengt = run({
+      nightRunId: 8,
+      mode: 'CHAIN',
+      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+    })
+    api.leitstand.mockResolvedValue(sicht({ laufende: [haengt], gemeldetePakete: [{ nightRunId: 8, pakete: [] }] }))
+    api.alsBeendetKennzeichnen.mockRejectedValue(new ApiError(409, 'Conflict'))
+
+    zeigeSeite()
+    await userEvent.click(await screen.findByRole('button', { name: 'Mark run #8 as finished' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Mark run #8 as finished?')).toBeInTheDocument()
+    expect(dialog).toHaveTextContent(
+      'Afterwards the run of Mein Projekt appears under “Finished runs” with the note “closed by hand”. Its process is not affected.',
+    )
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark' }))
+
+    expect(await screen.findByText('Run #8 could not be marked as finished.')).toBeInTheDocument()
+  })
+
+  it('meldet einen misslungenen Kartenabruf auf Englisch', async () => {
+    const lauf = run({
+      nightRunId: 8,
+      outcome: { abortReason: null, verdict: 'RUNNING', decisiveItem: null, noWorkReason: null },
+    })
+    const paket: PaketView = {
+      cardNumber: 940,
+      title: 'Paket 940',
+      state: 'GREEN',
+      errorClass: null,
+      cardExists: true,
+      durationMs: null,
+    }
+    const pakete: LaufPaketeView = { nightRunId: 8, pakete: [paket] }
+    api.leitstand.mockResolvedValue(sicht({ laufende: [lauf], gemeldetePakete: [pakete] }))
+    karteNachNummer.mockRejectedValue(new ApiError(500, 'Server'))
+
+    zeigeSeite()
+    await userEvent.click(await screen.findByRole('button', { name: /^Open card #940/ }))
+
+    expect(await screen.findByText('Card #940 could not be loaded.')).toBeInTheDocument()
   })
 })

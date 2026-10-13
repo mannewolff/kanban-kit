@@ -113,7 +113,7 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
 
 ### Nur mit der Plattform-Rolle ADMIN
 
-Vier Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
+Fünf Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
 Zeile der [Rechte-Matrix](#projekt-rollen-rechte-matrix) oben; eine Zeile, die in jeder Rollenspalte
 leer bliebe, sähe aus wie ein vergessenes Häkchen und lüde dazu ein, es einer Rolle zu geben.
 
@@ -126,6 +126,8 @@ leer bliebe, sähe aus wie ein vergessenes Häkchen und lüde dazu ein, es einer
 - **Standard-Labels für alle Boards anlegen** — nur der Plattform-Admin, über die Seite
   Administration; legt den festen Label-Satz auf allen nicht archivierten Boards aller Projekte an und
   überspringt vorhandene. Siehe [Standard-Labels](nutzung.md#standard-labels).
+- **Sprache der Installation ändern** — nur der Plattform-Admin; die Einstellung gilt für alle
+  Nutzer und auch für die Seiten vor der Anmeldung. Lesen darf sie jeder, auch ohne Anmeldung.
 
 **Projekte legt ausschließlich der Plattform-Admin an und löscht sie auch nur er.** Beim Anlegen
 bestimmt er den **Owner** per E-Mail; dadurch wird er selbst nicht Mitglied, hat als Plattform-Admin
@@ -196,20 +198,20 @@ Aufrufe **409**, weil ihm das Board fehlt.
 
 ### Freigabe-Labels des Kits
 
-Vier Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Server erzwingt sie
-(Issue #1421). `kit:night` und `kit:nightrun` geben Arbeit für den Nachtlauf frei: Sie setzt nur ein
-Mensch, der Runner nimmt sie ab, sobald sie verbraucht sind. `kit:klaeren` und `kit:geschuetzt`
-setzt die Maschine; ihr Abnehmen ist die Freigabe und steht nur dem Menschen zu.
+Fünf Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Server erzwingt sie
+(Issue #1421, #1667). `kit:night` und `kit:nightrun` geben Arbeit für den Nachtlauf frei: Sie setzt nur ein
+Mensch, der Runner nimmt sie ab, sobald sie verbraucht sind. `kit:klaeren`, `kit:geschuetzt` und
+`kit:wartet` setzt die Maschine; ihr Abnehmen ist die Freigabe und steht nur dem Menschen zu.
 
 | | Session (Mensch) | Token (Kit, Runner, Agent) |
 |---|---|---|
 | `kit:night`, `kit:nightrun` setzen | erlaubt | abgewiesen (403) |
 | `kit:night`, `kit:nightrun` abnehmen | erlaubt | erlaubt |
-| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected` setzen | erlaubt | erlaubt |
-| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected` abnehmen | erlaubt | abgewiesen (403) |
+| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected`, `kit:wartet`/`kit:on-hold` setzen | erlaubt | erlaubt |
+| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected`, `kit:wartet`/`kit:on-hold` abnehmen | erlaubt | abgewiesen (403) |
 
 Das claude-workflow-kit lässt sich auf Englisch einstellen. Darum gilt jede Regel unter beiden Namen
-derselben Sache: `kit:clarify` wie `kit:klaeren`, `kit:protected` wie `kit:geschuetzt`. `kit:night`
+derselben Sache: `kit:clarify` wie `kit:klaeren`, `kit:protected` wie `kit:geschuetzt`, `kit:on-hold` wie `kit:wartet`. `kit:night`
 und `kit:nightrun` heißen in beiden Sprachen gleich und haben kein Gegenstück.
 
 Die Labels, mit denen die [Stufenleiste](nutzung.md#karten-detail) Ziel und Prüferzahl einer Kette

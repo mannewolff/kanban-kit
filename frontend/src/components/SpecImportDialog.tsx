@@ -13,6 +13,7 @@ import Typography from '@mui/material/Typography'
 import { useEffect, useMemo, useState } from 'react'
 import type { BoardColumn } from '../api/boards'
 import { apiErrorMessage } from '../api/client'
+import { useT } from '../i18n/SpracheContext'
 import {
   MAX_CARDS_PER_IMPORT,
   splitSpecIntoSections,
@@ -81,6 +82,7 @@ export function SpecImportDialog({
   onClose,
   onImport,
 }: Readonly<Props>) {
+  const t = useT()
   const [level, setLevel] = useState<HeadingLevel>(DEFAULT_LEVEL)
   const [deselected, setDeselected] = useState<ReadonlySet<number>>(new Set())
   const [busy, setBusy] = useState(false)
@@ -134,7 +136,7 @@ export function SpecImportDialog({
       )
       onClose()
     } catch (e) {
-      setError(apiErrorMessage(e, 'Die Karten konnten nicht angelegt werden. Bitte erneut versuchen.'))
+      setError(apiErrorMessage(e, t.SPEZIFIKATION.ANLEGEN_FEHLER))
     } finally {
       setBusy(false)
     }
@@ -144,12 +146,12 @@ export function SpecImportDialog({
   const otherLevel: HeadingLevel = level === 2 ? 1 : 2
   const emptyMessage =
     markdown.trim() === ''
-      ? 'Die Datei ist leer — es gibt nichts einzulesen.'
-      : `Keine Überschrift der Ebene H${level} gefunden — es wird nichts angelegt. Du kannst oben auf H${otherLevel} umschalten.`
+      ? t.SPEZIFIKATION.DATEI_LEER
+      : t.SPEZIFIKATION.KEINE_UEBERSCHRIFT(level, otherLevel)
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth aria-labelledby="spec-import-title">
-      <DialogTitle id="spec-import-title" sx={dialogTitleSx}>Spezifikation einlesen</DialogTitle>
+      <DialogTitle id="spec-import-title" sx={dialogTitleSx}>{t.SPEZIFIKATION.TITEL}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
           <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
@@ -159,27 +161,27 @@ export function SpecImportDialog({
             <TextField
               select
               size="small"
-              label="Ebene"
+              label={t.SPEZIFIKATION.EBENE}
               value={String(level)}
               onChange={(e) => handleLevelChange(e.target.value)}
               slotProps={{
-                htmlInput: { 'aria-label': 'Trennende Überschriftenebene' },
+                htmlInput: { 'aria-label': t.SPEZIFIKATION.EBENE_ARIA },
                 select: { native: true },
               }}
             >
-              <option value="1">H1 trennt die Karten</option>
-              <option value="2">H2 trennt die Karten</option>
+              <option value="1">{t.SPEZIFIKATION.TRENNT(1)}</option>
+              <option value="2">{t.SPEZIFIKATION.TRENNT(2)}</option>
             </TextField>
             {/* Zielspalte nach dem Muster aus `TransferCardDialog`: nativer Select, Beschriftung am
                 Feld. Ohne Leer-Option — es wird stets in genau eine Spalte eingelesen. */}
             <TextField
               select
               size="small"
-              label="Spalte"
+              label={t.SPEZIFIKATION.SPALTE}
               value={String(columnId)}
               onChange={(e) => onColumnChange(Number(e.target.value))}
               slotProps={{
-                htmlInput: { 'aria-label': 'Zielspalte' },
+                htmlInput: { 'aria-label': t.SPEZIFIKATION.ZIELSPALTE },
                 select: { native: true },
               }}
             >
@@ -192,8 +194,7 @@ export function SpecImportDialog({
           </Stack>
 
           <Typography variant="caption" color="text.secondary">
-            Die Datei wird nur im Browser gelesen — sie wird weder hochgeladen noch verändert oder
-            gelöscht. An den Server gehen ausschließlich die unten gezeigten Karten.
+            {t.SPEZIFIKATION.NUR_IM_BROWSER}
           </Typography>
 
           {error !== null && <Alert severity="error">{error}</Alert>}
@@ -204,11 +205,11 @@ export function SpecImportDialog({
             <>
               {tooMany && (
                 <Alert severity="warning">
-                  {`${selected.length} Abschnitte ausgewählt — es lassen sich höchstens ${MAX_CARDS_PER_IMPORT} auf einmal anlegen. Bitte einzelne Abschnitte abwählen.`}
+                  {t.SPEZIFIKATION.ZU_VIELE(selected.length, MAX_CARDS_PER_IMPORT)}
                 </Alert>
               )}
               <Typography variant="body2">
-                {`${selected.length} von ${sections.length} Abschnitten ausgewählt.`}
+                {t.SPEZIFIKATION.AUSGEWAEHLT(selected.length, sections.length)}
               </Typography>
               <Box>
                 {sections.map((section, index) => (
@@ -225,14 +226,14 @@ export function SpecImportDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Abbrechen</Button>
+        <Button onClick={onClose}>{t.ALLGEMEIN.ABBRECHEN}</Button>
         {sections.length > 0 && (
           <Button
             variant="contained"
             onClick={() => void handleImport()}
             disabled={selected.length === 0 || tooMany || busy}
           >
-            {`${selected.length} ${selected.length === 1 ? 'Karte' : 'Karten'} anlegen`}
+            {t.SPEZIFIKATION.ANLEGEN(selected.length)}
           </Button>
         )}
       </DialogActions>
@@ -246,26 +247,27 @@ function SectionRow({
   checked,
   onToggle,
 }: Readonly<{ section: SpecSection; checked: boolean; onToggle: () => void }>) {
+  const t = useT()
   return (
     <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ py: 0.25 }}>
       <Checkbox
         size="small"
         checked={checked}
         onChange={onToggle}
-        slotProps={{ input: { 'aria-label': `Abschnitt „${section.title}“ einlesen` } }}
+        slotProps={{ input: { 'aria-label': t.SPEZIFIKATION.ABSCHNITT_ARIA(section.title) } }}
       />
       <Box sx={{ minWidth: 0, pt: 0.5 }}>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
           <Typography variant="body2" fontWeight={600} sx={{ wordBreak: 'break-word' }}>
             {section.title}
           </Typography>
-          {section.titleTruncated && <Chip size="small" color="warning" label="Titel gekürzt" />}
+          {section.titleTruncated && <Chip size="small" color="warning" label={t.SPEZIFIKATION.TITEL_GEKUERZT} />}
           {section.descriptionTruncated && (
-            <Chip size="small" color="warning" label="Beschreibung gekürzt" />
+            <Chip size="small" color="warning" label={t.SPEZIFIKATION.BESCHREIBUNG_GEKUERZT} />
           )}
         </Stack>
         <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
-          {section.description === '' ? '(keine Beschreibung)' : previewText(section.description)}
+          {section.description === '' ? t.SPEZIFIKATION.KEINE_BESCHREIBUNG : previewText(section.description)}
         </Typography>
       </Box>
     </Stack>

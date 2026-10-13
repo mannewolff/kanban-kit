@@ -9,8 +9,10 @@ import { Link as RouterLink } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { AuthCard } from '../components/AuthCard'
+import { useT } from '../i18n/SpracheContext'
 
 export function ForgotPasswordPage() {
+  const t = useT()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -27,7 +29,7 @@ export function ForgotPasswordPage() {
         // Einzige Ausnahme vom neutralen Hinweis: Die Zählbremse weist herkunftsbezogen ab und
         // verrät nichts über die Existenz eines Kontos. Ohne diese Meldung sähe der Nutzer einen
         // Erfolg, der keiner war — er wartete auf eine Mail, die nie kommt.
-        setError(apiErrorMessage(e, 'Zu viele Versuche. Bitte später erneut versuchen.'))
+        setError(apiErrorMessage(e, t.AUTH.ZU_VIELE_VERSUCHE))
       } else {
         // Jeder andere Ausgang bleibt verschluckt: derselbe Hinweis, egal was passiert ist.
         setSent(true)
@@ -38,24 +40,24 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <AuthCard title="Passwort zurücksetzen">
+    <AuthCard title={t.AUTH.VERGESSEN_TITEL}>
       {sent ? (
         <Stack spacing={2}>
           <Alert severity="info">
-            Falls ein Konto mit dieser E-Mail existiert, wurde ein Link zum Zurücksetzen gesendet.
+            {t.AUTH.VERGESSEN_GESENDET}
           </Alert>
-          <Link component={RouterLink} to="/login">Zur Anmeldung</Link>
+          <Link component={RouterLink} to="/login">{t.AUTH.ZUR_ANMELDUNG}</Link>
         </Stack>
       ) : (
         <Box component="form" onSubmit={handleSubmit}>
           <Stack spacing={2}>
             {error && <Alert severity="error">{error}</Alert>}
-            <TextField label="E-Mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            <TextField label={t.AUTH.EMAIL} type="email" value={email} onChange={(e) => setEmail(e.target.value)}
               required fullWidth autoComplete="email" />
             <Button type="submit" variant="contained" disabled={busy} fullWidth>
-              Link anfordern
+              {t.AUTH.LINK_ANFORDERN}
             </Button>
-            <Link component={RouterLink} to="/login">Zurück zur Anmeldung</Link>
+            <Link component={RouterLink} to="/login">{t.AUTH.ZURUECK_ZUR_ANMELDUNG}</Link>
           </Stack>
         </Box>
       )}

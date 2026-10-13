@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
 import type { NightRunAnlauf, NightRunServerMode, NightRunUsageView } from '../../api/nightRuns'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { KartenAnlaeufe, LAUF_ART_TEXT, zaehleWiederaufnahmen } from './KartenAnlaeufe'
 
 /** Die Anläufe einer Karte im Karten-Detail (Issue #968). */
@@ -300,5 +301,43 @@ describe('zaehleWiederaufnahmen', () => {
 
   it('zählt jedes RED mit späterem Anlauf einzeln', () => {
     expect(zaehleWiederaufnahmen([am(3, 'GREEN'), am(2, 'RED'), am(1, 'RED')])).toBe(2)
+  })
+})
+
+describe('KartenAnlaeufe auf Englisch (Issue #1658)', () => {
+  const zeigeEnglisch = (anlaeufe: NightRunAnlauf[]) =>
+    renderMitSprache(<KartenAnlaeufe projectId={9} cardNumber={968} api={apiMit(Promise.resolve(anlaeufe))} />, 'en')
+
+  it('zeigt Überschrift, Dauer je Art, Summen und Anläufe auf Englisch', async () => {
+    zeigeEnglisch([
+      anlauf({
+        state: 'GREEN',
+        startedAt: '2026-09-03T22:00:00Z',
+        usage: verbrauch({ costUsd: 0.94, inputTokens: 1200 }),
+      }),
+      anlauf({ kind: 'INTERACTIVE', mode: 'INTERACTIVE', state: 'RED', durationMs: null, startedAt: '2026-09-01T22:00:00Z' }),
+    ])
+
+    expect(await screen.findByText('Attempts on this card')).toBeInTheDocument()
+    expect(text(screen.getByTestId('anlaeufe-dauer-IMPLEMENTATION'))).toBe('Duration Implementation:1 min')
+    expect(screen.getByTestId('anlaeufe-dauer-REVIEW')).toHaveTextContent('Duration Review:not run')
+    expect(screen.getByTestId('anlaeufe-dauer-INTERACTIVE')).toHaveTextContent('Duration Interactive session:not measured')
+    expect(text(screen.getByTestId('anlaeufe-summe-kosten'))).toBe('Cost (runs):$0.94 (from 1 of 1 attempts)')
+    expect(screen.getByTestId('anlaeufe-summe-eingabe')).toHaveTextContent('Input (runs):1,200 tokens')
+    expect(screen.getByTestId('anlaeufe-summe-ausgabe')).toHaveTextContent('Output (runs):not measured')
+    expect(screen.getByTestId('anlaeufe-wiederaufnahmen')).toHaveTextContent('Resumptions: 1')
+
+    const zeilen = within(screen.getByTestId('anlaeufe-liste')).getAllByRole('listitem')
+    expect(text(zeilen[0])).toMatch(/^Sep \d+, 2026, \d+:\d{2} [AP]M · Run · Success · 1 min · Cost \$0\.94$/)
+    expect(zeilen[1]).toHaveTextContent('Interactive session · failed · Duration not measured · Cost not measured')
+  })
+
+  it('sagt einen Ladefehler auf Englisch', async () => {
+    renderMitSprache(
+      <KartenAnlaeufe projectId={9} cardNumber={968} api={apiMit(Promise.reject(new Error('kaputt')))} />,
+      'en',
+    )
+
+    expect(await screen.findByText('The attempts could not be loaded.')).toBeInTheDocument()
   })
 })

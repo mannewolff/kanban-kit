@@ -3,6 +3,7 @@ import ButtonBase from '@mui/material/ButtonBase'
 import Link from '@mui/material/Link'
 import type { ReactNode } from 'react'
 import type { CardByNumber } from '../../api/cards'
+import { useT } from '../../i18n/SpracheContext'
 import type { Melder } from '../../lib/leitstand'
 import {
   KLEIN_RADIUS,
@@ -98,6 +99,7 @@ export function NachtlaufVorgangszeile({
   onOeffnen: (karte: CardByNumber) => void
   children?: ReactNode
 }>) {
+  const t = useT()
   return (
     <Box
       component="li"
@@ -179,7 +181,7 @@ export function NachtlaufVorgangszeile({
             color: 'text.secondary',
           }}
         >
-          {wurzel === null && <span>{`Karte #${nummer} nicht gefunden`}</span>}
+          {wurzel === null && <span>{t.AKTUELLER_STAND.KARTE_FEHLT(nummer)}</span>}
           {klasse !== null && <KlassenMarke melder={klasse.melder}>{klasse.marke}</KlassenMarke>}
           {klasse !== null && auszug !== null && (
             <Box component="span" sx={{ fontSize: 11.5 }}>
@@ -224,7 +226,7 @@ export function NachtlaufVorgangszeile({
           <>
             {'—'}
             <Box component="span" sx={NUR_LESER_SX}>
-              nicht gemessen
+              {t.LEITSTAND_BAUSTEINE.NICHT_GEMESSEN}
             </Box>
           </>
         )}

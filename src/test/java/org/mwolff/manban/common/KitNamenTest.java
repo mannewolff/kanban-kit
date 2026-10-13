@@ -35,6 +35,7 @@ class KitNamenTest {
           new Zeile(Sache.NIGHTPLAN, "kit:nightplan", null, Schutz.KEINER),
           new Zeile(Sache.NIGHTREVIEW, "kit:nightreview", null, Schutz.KEINER),
           new Zeile(Sache.NIGHTISSUES, "kit:nightissues", null, Schutz.KEINER),
+          new Zeile(Sache.WARTET_EREIGNIS, "kit:wartet", "kit:on-hold", Schutz.NUR_MENSCH_NIMMT_AB),
           new Zeile(Sache.LAUF_ABGEBROCHEN, "lauf:abgebrochen", "run:aborted", Schutz.KEINER),
           new Zeile(Sache.LAUF_LAEUFT, "lauf:laeuft", "run:running", Schutz.KEINER),
           new Zeile(Sache.LAUF_WARTET, "lauf:wartet", "run:waiting", Schutz.KEINER),
@@ -78,8 +79,18 @@ class KitNamenTest {
   }
 
   @Test
-  void standard_hatEinundzwanzigSachen() {
-    assertThat(Sache.values()).hasSize(21);
+  void standard_hatZweiundzwanzigSachen() {
+    assertThat(Sache.values()).hasSize(22);
+  }
+
+  @Test
+  void wartetEreignis_traegtBeideNamen_undNurDerMenschNimmtAb() {
+    // Issue #1667: ein Fachplan wartet auf ein äußeres Ereignis (Kit-Fachplan #1619).
+    assertThat(KitNamen.STANDARD.sache("kit:wartet")).contains(Sache.WARTET_EREIGNIS);
+    assertThat(KitNamen.STANDARD.sache("kit:on-hold")).contains(Sache.WARTET_EREIGNIS);
+    assertThat(KitNamen.STANDARD.namen(Sache.WARTET_EREIGNIS))
+        .containsExactly("kit:wartet", "kit:on-hold");
+    assertThat(Sache.WARTET_EREIGNIS.schutz()).isEqualTo(Schutz.NUR_MENSCH_NIMMT_AB);
   }
 
   @Test
@@ -140,7 +151,7 @@ class KitNamenTest {
     assertThat(KitNamen.STANDARD.alleNamen())
         .containsExactlyElementsOf(
             KitNamen.STANDARD.eintraege().stream().map(Eintrag::name).toList())
-        .hasSize(34)
+        .hasSize(36)
         .startsWith("kit:durchziehen", "kit:carry-through", "kit:geschuetzt")
         .endsWith("planreview:1", "planreview:2");
   }

@@ -20,7 +20,9 @@ import { statusColors } from '../../lib/statusColors'
 import { MELDER, NUTZER_MAL_SX, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { type Dichte, karteDichteSx, karteSx } from '../boardSurfaceSx'
 import { EpicBadge } from '../EpicBadge'
+import { LabelErklaerung } from '../LabelErklaerung'
 import { labelChipSx } from '../labelChipSx'
+import { useSprache, useT } from '../../i18n/SpracheContext'
 
 /** Initialen (max. 2 Zeichen) aus einem Anzeigenamen für Assignee-Avatare. */
 function initials(name: string): string {
@@ -40,18 +42,22 @@ function initials(name: string): string {
  * `find`-Suche nicht innerhalb der tief verschachtelten Spalten-/Karten-`map` steht.
  */
 function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: number[]; boardLabels: Label[]; cardTitle: string }>) {
+  const t = useT()
   if (labelIds.length === 0) return null
   return (
-    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={`Labels ${cardTitle}`}>
+    <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={t.BOARD.KARTE_LABELS(cardTitle)}>
       {labelIds.map((labelId) => {
         const l = boardLabels.find((b) => b.id === labelId)
+        const name = l?.name ?? `#${labelId}`
+        // Fokus und Tooltip, aber kein eigener Klick: Ein Klick öffnet weiter die Karte (Plan #1668, E5).
         return (
-          <Chip
-            key={labelId}
-            size="small"
-            label={l?.name ?? `#${labelId}`}
-            sx={{ ...labelChipSx(l?.color), height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
-          />
+          <LabelErklaerung key={labelId} name={name}>
+            <Chip
+              size="small"
+              label={name}
+              sx={{ ...labelChipSx(l?.color), height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
+            />
+          </LabelErklaerung>
         )
       })}
     </Stack>
@@ -63,13 +69,14 @@ function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: n
  * `find`-Suche aus der verschachtelten Karten-`map` zu holen.
  */
 function CardAssignees({ assigneeIds, members, cardTitle }: Readonly<{ assigneeIds: number[]; members: Member[]; cardTitle: string }>) {
+  const t = useT()
   if (assigneeIds.length === 0) return null
   return (
     <Stack direction="row" justifyContent="flex-end" sx={{ ml: 'auto', flex: 'none' }}>
       {/* Kürzel wie im Entwurf (`.kuerzel`, Z. 845–853): kleine dunkle Male. */}
       <AvatarGroup
         max={4}
-        aria-label={`Zuständige ${cardTitle}`}
+        aria-label={t.BOARD.ZUSTAENDIGE(cardTitle)}
         sx={{
           '& .MuiAvatar-root': {
             ...NUTZER_MAL_SX,
@@ -102,12 +109,14 @@ function CardAssignees({ assigneeIds, members, cardTitle }: Readonly<{ assigneeI
  * nennt den Status in Worten — das Mal ist keine reine Farbinformation.
  */
 function Statusmal({ status }: Readonly<{ status: CardStatus }>) {
-  const name = statusAnzeigename(status)
-  const farben = statusColors(name)
+  const { sprache } = useSprache()
+  const t = useT()
+  const name = statusAnzeigename(status, sprache)
+  const farben = statusColors(statusAnzeigename(status))
   return (
     <Box
       component="span"
-      aria-label={`Status ${name}`}
+      aria-label={t.BOARD.STATUS(name)}
       data-status={status}
       sx={{
         flexShrink: 0,
@@ -151,6 +160,8 @@ function KartenFuss({
   overdue: boolean
   onEpicOpen?: (epic: Epic) => void
 }>) {
+  const { sprache } = useSprache()
+  const t = useT()
   // Verbleibende Tage bis zur Aufräumung, oder `null`, wenn kein Countdown läuft. Als Wert statt
   // als Bedingung: Er trägt die Nullprüfung für `doneAt` gleich mit, und `0` bleibt ein Countdown.
   const restTage = doneAt != null && retentionDays > 0 ? cleanupDaysRemaining(doneAt, retentionDays) : null
@@ -165,7 +176,7 @@ function KartenFuss({
       )}
       {restTage != null && (
         <Box component="span" sx={{ ...ZAHL, ml: 'auto', fontSize: 10.5, color: TEXT_SCHWACH }}>
-          {cleanupCountdownLabel(restTage)}
+          {cleanupCountdownLabel(restTage, sprache)}
         </Box>
       )}
       {card.dueDate != null && (
@@ -173,11 +184,11 @@ function KartenFuss({
         // überfällig zinnoberrot.
         <Box
           component="span"
-          aria-label={`Fällig ${card.title}`}
+          aria-label={t.LISTE.FAELLIG_ARIA(card.title)}
           data-ueberfaellig={overdue ? 'ja' : undefined}
           sx={{ ...ZAHL, ml: 'auto', fontSize: 10.5, fontWeight: overdue ? 600 : 400, color: overdue ? MELDER.zinnob : TEXT_SCHWACH }}
         >
-          {`fällig ${formatDueDate(card.dueDate)}`}
+          {t.LISTE.FAELLIG(formatDueDate(card.dueDate, sprache))}
         </Box>
       )}
     </Box>
@@ -239,6 +250,7 @@ export function BoardKarte({
   onMenu,
   onEpicOpen,
 }: Readonly<Props>) {
+  const t = useT()
   const doneAt = done ? card.movedToDoneAt : null
   const overdue = isOverdue(card.dueDate, done)
   // Das Mal erscheint nur, wenn der Status nicht zur Spalte passt — sonst wäre es Rauschen (E17).
@@ -296,7 +308,7 @@ export function BoardKarte({
             checked={selected}
             onChange={onSelect}
             onClick={(e) => e.stopPropagation()}
-            slotProps={{ input: { 'aria-label': `Karte ${card.title} auswählen` } }}
+            slotProps={{ input: { 'aria-label': t.BOARD.KARTE_AUSWAEHLEN(card.title) } }}
             sx={{ p: 0 }}
           />
         )}
@@ -305,7 +317,7 @@ export function BoardKarte({
         {alltag && (
           <IconButton
             size="small"
-            aria-label={`Menü ${card.title}`}
+            aria-label={t.BOARD.MENUE(card.title)}
             onClick={(e) => {
               e.stopPropagation()
               onMenu(e.currentTarget)

@@ -10,6 +10,7 @@ import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunItemView, type NightRunView } from '../api/nightRuns'
 import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
 import { LeitstandPage } from './LeitstandPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
@@ -514,6 +515,12 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
       '2,0 Stunden · 1 Karte',
     ])
     expect(within(platte).getByTestId('luecke-1')).toHaveAttribute('title', 'KW 24: keine gemessene Karte')
+    // Der Wert steht sichtbar über jedem Balken, die Lücke trägt keinen (Issue #1675).
+    expect(within(platte).getAllByTestId(/^wert-/).map((w) => [w.dataset.testid, w.textContent])).toEqual([
+      ['wert-0', '30 Minuten'],
+      ['wert-2', '2,0 Stunden'],
+    ])
+    expect(within(platte).getByTestId('wert-0')).toHaveAttribute('aria-hidden', 'true')
     expect(platte).toHaveTextContent('232425')
     // Der Durchsatz steht vorn, die Implementierungszeit folgt ihm.
     const durchsatz = screen.getByRole('region', { name: 'Durchsatz' })
@@ -558,6 +565,8 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     const durchsatz = await screen.findByRole('region', { name: 'Durchsatz' })
     expect(within(durchsatz).getByRole('img')).toHaveAccessibleName('Durchsatz der letzten 3 Wochen: 10, 0, 12 Karten, zuletzt 12')
     expect(within(durchsatz).getAllByTestId(/^balken-/).map((b) => b.dataset.testid)).toEqual(['balken-83', 'balken-0', 'balken-100'])
+    // Der Wert steht sichtbar über jedem Balken, auch die 0 (Issue #1675).
+    expect(within(durchsatz).getAllByTestId(/^wert-/).map((w) => w.textContent)).toEqual(['10', '0', '12'])
     expect(durchsatz).toHaveTextContent('232425')
   })
 
@@ -923,5 +932,166 @@ describe('LeitstandPage — festgefahrenes Paket (#1552)', () => {
     fireEvent.click(within(letzter).getByRole('button', { name: 'Karte #940 öffnen: Paket 940' }))
 
     expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Paket 940 im Detail')
+  })
+})
+
+describe('LeitstandPage auf Englisch', () => {
+  function renderEnglisch(pfad = '/boards/1/leitstand') {
+    return renderMitSprache(
+      <MemoryRouter initialEntries={[pfad]}>
+        <Routes>
+          <Route path="/boards/:boardId/leitstand" element={<LeitstandPage />} />
+        </Routes>
+      </MemoryRouter>,
+      'en',
+    )
+  }
+
+  it('lehnt eine ungültige Board-ID auf Englisch ab', () => {
+    renderEnglisch('/boards/abc/leitstand')
+    expect(screen.getByRole('alert')).toHaveTextContent('Invalid board ID.')
+  })
+
+  it('zeigt Überschrift, Laufband und Kacheln auf Englisch mit Dezimalpunkt und AM/PM', async () => {
+    renderEnglisch()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Control Room Entwicklung' })).toBeInTheDocument()
+    const band = await screen.findByRole('region', { name: 'Latest run' })
+    expect(within(band).getByTestId('laufband-titel')).toHaveTextContent('Chain completed — 4 items')
+    expect(band.textContent).toMatch(/#930 Paket 930 · Started Sep 14, 11:10\sPM/)
+    expect(band).toHaveTextContent('Time252 min')
+    expect(band).toHaveTextContent('Cost12.40 $')
+    const durchsatz = await screen.findByRole('article', { name: 'Throughput · week' })
+    expect(durchsatz).toHaveTextContent('12cards')
+    expect(durchsatz).toHaveTextContent('2 weeks')
+    expect(screen.getByRole('article', { name: 'Lead time' })).toHaveTextContent('3.2days')
+    // Die erste Kachel dieses Namens ist die der Kennzahlen; die zweite steht im Verbrauch.
+    const implementierung = screen.getAllByRole('article', { name: 'Implementation time' })[0]
+    expect(implementierung).toHaveTextContent('14.8hours')
+    expect(implementierung).toHaveTextContent('61 cards')
+    const gruen = await screen.findByRole('article', { name: 'Run · green' })
+    expect(within(gruen).getByRole('img')).toHaveAccessibleName('2 green, 1 yellow, 1 red')
+    expect(gruen).toHaveTextContent('2 green1 yellow1 red')
+    expect(gruen).toHaveTextContent('last 4 packages')
+  })
+
+  it('nennt Herkunft und letzten Run auf Englisch', async () => {
+    renderEnglisch()
+    expect(await screen.findByText(/^Delivered by the Chain at \d{1,2}:\d\d\s[AP]M — automatically/)).toBeInTheDocument()
+    expect(screen.getByText('Token kette')).toBeInTheDocument()
+    expect(screen.getByText('4 items · 0 uninterpreted lines')).toBeInTheDocument()
+    const letzter = await screen.findByRole('region', { name: 'Last run · Chain' })
+    expect(letzter).toHaveTextContent('4 packages')
+    expect(within(letzter).getByTestId('dauer-917')).toHaveAttribute('aria-label', 'Duration 18 min 42 s')
+    expect(within(letzter).getByRole('button', { name: 'All' })).toBeInTheDocument()
+    expect(within(letzter).getByRole('button', { name: 'Open card #917: Paket 917' })).toBeInTheDocument()
+  })
+
+  it('nennt einen hochgeladenen Lauf mit einem Vorgang auf Englisch', async () => {
+    m.laeufe.mockResolvedValue([lauf({ origin: 'UPLOAD', tokenName: null, complete: false, items: [paket(1, 'GREEN')] })])
+    renderEnglisch()
+    expect(await screen.findByText(/^Uploaded in the browser at \d{1,2}:\d\d\s[AP]M\.$/)).toBeInTheDocument()
+    expect(screen.getByText('1 item · 0 uninterpreted lines')).toBeInTheDocument()
+    expect(screen.getByTestId('laufband-titel')).toHaveTextContent('Chain running — item 1 of 1')
+    expect(screen.getByRole('region', { name: 'Latest run' }).textContent).toMatch(/since \d{1,2}:\d\d\s[AP]M/)
+    const gruen = await screen.findByRole('article', { name: 'Run · green' })
+    expect(gruen).toHaveTextContent('last package')
+  })
+
+  it('sagt Leerfälle des letzten Runs auf Englisch', async () => {
+    m.laeufe.mockResolvedValue([lauf({ items: [paket(1, 'GREEN')] })])
+    const { unmount } = renderEnglisch()
+    const letzter = await screen.findByRole('region', { name: 'Last run · Chain' })
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Aborts only' }))
+    expect(letzter).toHaveTextContent('No abort in this run.')
+    unmount()
+
+    m.laeufe.mockResolvedValue([lauf({ items: [], complete: false })])
+    renderEnglisch()
+    expect(await screen.findByRole('region', { name: 'Last run · Chain' })).toHaveTextContent(
+      'The run has not reported a work package yet.',
+    )
+    expect(screen.getByTestId('laufband-titel')).toHaveTextContent('Chain running')
+  })
+
+  it('meldet eine nicht ladbare Karte auf Englisch', async () => {
+    m.karteNachNummer.mockRejectedValueOnce(new ApiError(404, 'Not Found')).mockRejectedValueOnce(new Error('Netz'))
+    renderEnglisch()
+    const letzter = await screen.findByRole('region', { name: 'Last run · Chain' })
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Open card #917: Paket 917' }))
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Card #917 not found — deleted or no access.', 'warning'))
+    fireEvent.click(within(letzter).getByRole('button', { name: 'Open card #922: Paket 922' }))
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Card could not be loaded.', 'error'))
+  })
+
+  it('meldet Laden und Fehler der Kennzahlen auf Englisch', async () => {
+    let ablehnen: (e: unknown) => void = () => undefined
+    m.kpis.mockReturnValue(new Promise((_, reject) => (ablehnen = reject)))
+    renderEnglisch()
+    expect(screen.getByText('Loading key figures …')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Control Room' })).toBeInTheDocument()
+    ablehnen(new Error('kaputt'))
+    expect(await screen.findByText('Key figures could not be loaded.')).toBeInTheDocument()
+  })
+
+  it('zeigt die Platten des Rumpfs auf Englisch', async () => {
+    m.kpis.mockResolvedValue(
+      kpis({
+        implementationWeekly: [
+          { weekStart: '2026-06-01T09:00:00Z', avgImplementationSeconds: 1800, sampleCount: 2 },
+          { weekStart: '2026-06-08T09:00:00Z', avgImplementationSeconds: null, sampleCount: 0 },
+          { weekStart: '2026-06-15T09:00:00Z', avgImplementationSeconds: 7200, sampleCount: 1 },
+        ],
+      }),
+    )
+    renderEnglisch()
+    const platte = await screen.findByRole('region', { name: 'Implementation time' })
+    expect(platte).toHaveTextContent('Average per week · 3 weeks')
+    expect(within(platte).getByRole('img')).toHaveAccessibleName(
+      'Implementation time of the last 3 weeks: 30 minutes, no measurement, 2.0 hours, latest 2.0 hours',
+    )
+    expect(within(platte).getAllByTestId(/^balken-/).map((b) => b.getAttribute('title'))).toEqual([
+      '30 minutes · 2 cards',
+      '2.0 hours · 1 card',
+    ])
+    expect(within(platte).getByTestId('luecke-1')).toHaveAttribute('title', 'CW 24: no measured card')
+    const durchsatz = screen.getByRole('region', { name: 'Throughput' })
+    expect(durchsatz).toHaveTextContent('completed cards per week · 2 weeks')
+    expect(within(durchsatz).getByRole('img')).toHaveAccessibleName('Throughput of the last 2 weeks: 10, 12 cards, latest 12')
+    expect(within(durchsatz).getAllByTestId(/^balken-/).map((b) => b.getAttribute('title'))).toEqual(['10 cards', '12 cards'])
+    const gruende = await screen.findByRole('region', { name: 'Abort reasons' })
+    expect(gruende).toHaveTextContent('2 runs')
+    const vorhaben = screen.getByRole('region', { name: 'Epics' })
+    expect(vorhaben).toHaveTextContent('open')
+  })
+
+  it('sagt die Leerzustände des Rumpfs auf Englisch', async () => {
+    m.kpis.mockResolvedValue(
+      kpis({
+        avgLeadTimeSeconds: null,
+        leadTimeSampleCount: 0,
+        throughput: [{ weekStart: '2026-06-01T09:00:00Z', doneCount: 0 }],
+        implementationWeekly: [{ weekStart: '2026-06-01T09:00:00Z', avgImplementationSeconds: null, sampleCount: 0 }],
+      }),
+    )
+    m.klassen.mockResolvedValue({})
+    m.laeufe.mockResolvedValue([lauf()])
+    m.epics.mockResolvedValue([epic(2, 'Erledigt', 3, 3)])
+    renderEnglisch()
+    expect(await screen.findByRole('article', { name: 'Lead time' })).toHaveTextContent('—no data')
+    expect(screen.getByRole('region', { name: 'Throughput' })).toHaveTextContent('No completed card in the last weeks yet.')
+    expect(screen.getByRole('region', { name: 'Implementation time' })).toHaveTextContent(
+      'No measured implementation time in the last weeks yet.',
+    )
+    const gruende = await screen.findByRole('region', { name: 'Abort reasons' })
+    expect(gruende).toHaveTextContent('No abort in the retained runs.')
+    expect(gruende).toHaveTextContent('1 run')
+    expect(screen.getByRole('region', { name: 'Epics' })).toHaveTextContent('No open epic.')
+  })
+
+  it('zeigt den Verbrauch auf Englisch', async () => {
+    renderEnglisch()
+    expect(await screen.findByRole('region', { name: 'Usage' })).toBeInTheDocument()
+    expect(await screen.findByRole('article', { name: 'Input tokens' })).toHaveTextContent('4.82M')
+    expect(screen.getByRole('article', { name: 'Cost' })).toHaveTextContent('12.40$')
   })
 })

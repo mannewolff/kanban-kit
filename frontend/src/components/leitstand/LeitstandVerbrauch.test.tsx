@@ -11,6 +11,7 @@ import type {
 } from '../../api/nightRunUsage'
 import { kostenText, tokenText } from '../../lib/leitstand'
 import { LeitstandVerbrauch } from './LeitstandVerbrauch'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 
 /**
  * Der Verbrauch im Leitstand (Issue #1017, #984 AK 1, 3, 4, 6): beide Anteile unter der Summe, der
@@ -921,5 +922,127 @@ describe('LeitstandVerbrauch — Kachel Bremse (Issue #1553, Plan #1547 E12, E14
     const text = await bremse()
     expect(text).not.toMatch(/[▲▼]/)
     expect(text).not.toContain('7')
+  })
+})
+
+describe('LeitstandVerbrauch auf Englisch', () => {
+  function zeigeEnglisch(
+    zeitraumWert: VerbrauchZeitraum | Error = zeitraum(),
+    gesamtWert: VerbrauchGesamt | Error = gesamt(),
+    implementierungWert: ImplementationTime | Error | Promise<never> = implementierung(),
+  ) {
+    const api = {
+      period: antwort(zeitraumWert),
+      total: antwort(gesamtWert),
+      implementationTime:
+        implementierungWert instanceof Promise ? vi.fn().mockReturnValue(implementierungWert) : antwort(implementierungWert),
+    }
+    renderMitSprache(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />, 'en')
+    return api
+  }
+
+  it('zeigt Kopf, Zeitraum-Wahl und Kosten auf Englisch mit Dezimalpunkt', async () => {
+    zeigeEnglisch()
+    const kosten = await kachel('Cost')
+    expect(screen.getByRole('heading', { level: 2, name: 'Usage' })).toBeInTheDocument()
+    expect(within(screen.getByRole('group', { name: 'Period' })).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Shift',
+      'Week',
+      'Month',
+      'Total',
+    ])
+    expect(screen.getByRole('group', { name: 'Usage of the period' })).toBeInTheDocument()
+    expect(lesbar(screen.getByTestId('verbrauch-umfang').textContent)).toBe(
+      'Shift from Sep 14, 2026 to Sep 15, 2026 · 1 run · 2 sessions',
+    )
+    expect(kosten).toHaveTextContent('12.40$')
+    expect(lesbar(within(kosten).getByTestId('anteil-nacht').textContent)).toBe('from runs$8.40')
+    expect(lesbar(within(kosten).getByTestId('anteil-interaktiv').textContent)).toBe('from interactive sessions$4.00')
+    expect(lesbar(within(kosten).getByTestId('posten-ohne-karte').textContent)).toBe('without card$3.40')
+    expect(within(kosten).getByTestId('delta-gut')).toHaveTextContent('▼ $1.70')
+    expect(within(kosten).getByTitle('$1.70 cheaper than in the previous period')).toBeInTheDocument()
+    expect(kosten).toHaveTextContent('$1.38 per item')
+  })
+
+  it('zeigt Eingabe und Ausgabe auf Englisch', async () => {
+    zeigeEnglisch()
+    const eingabe = await kachel('Input tokens')
+    expect(eingabe).toHaveTextContent('4.82M')
+    expect(within(eingabe).getByRole('img')).toHaveAccessibleName(
+      'Input split: 76 percent read from cache, 24 percent fresh',
+    )
+    expect(lesbar(eingabe.textContent)).toContain('Cache read 3.66 M')
+    expect(lesbar(eingabe.textContent)).toContain('fresh 1.16 M')
+    const ausgabe = await kachel('Output tokens')
+    expect(ausgabe).toHaveTextContent('186K')
+    expect(ausgabe).toHaveTextContent('21 K per item')
+    expect(ausgabe).toHaveTextContent('1 shift')
+  })
+
+  it('zeigt Implementierungszeit und Bremse auf Englisch', async () => {
+    zeigeEnglisch(
+      zeitraum({
+        current: kennzahlen({ brakes: { count: 3, withoutTimeCount: 1, savedMs: 90 * 60_000 } }),
+        nights: [],
+      }),
+    )
+    const implementierungKachel = await kachel('Implementation time')
+    await waitFor(() => expect(implementierungKachel).toHaveTextContent('1.5hours'))
+    expect(implementierungKachel).toHaveTextContent('4 cards')
+    expect(lesbar((await kachel('Brake')).textContent)).toBe('Brake3brakings≈ 1 h 30 min saved (estimated)of which 1 without time value')
+    expect(await kachel('Output tokens')).toHaveTextContent('0 shifts')
+  })
+
+  it('schreibt eine einzelne Bremsung auf Englisch in der Einzahl', async () => {
+    zeigeEnglisch(zeitraum({ current: kennzahlen({ brakes: { count: 1, withoutTimeCount: 0, savedMs: 20 * 60_000 } }) }))
+    expect(lesbar((await kachel('Brake')).textContent)).toBe('Brake1braking≈ 20 min saved (estimated)')
+  })
+
+  it('sagt Laden und Fehler der Implementierungszeit auf Englisch', async () => {
+    zeigeEnglisch(zeitraum(), gesamt(), new Promise<never>(() => undefined))
+    expect(await kachel('Implementation time')).toHaveTextContent('—loading')
+  })
+
+  it('sagt einen Fehler der Implementierungszeit auf Englisch', async () => {
+    zeigeEnglisch(zeitraum(), gesamt(), new Error('kaputt'))
+    const kachelImpl = await kachel('Implementation time')
+    await waitFor(() => expect(kachelImpl).toHaveTextContent('—not loaded'))
+  })
+
+  it('sagt Laden und Fehler des Verbrauchs auf Englisch', async () => {
+    zeigeEnglisch(new Error('kaputt'))
+    expect(screen.getByText('Loading usage …')).toBeInTheDocument()
+    expect(await screen.findByText('Usage could not be loaded.')).toBeInTheDocument()
+  })
+
+  it('zeigt „Total" mit Abdeckung auf Englisch', async () => {
+    zeigeEnglisch()
+    await kachel('Cost')
+    fireEvent.click(screen.getByRole('button', { name: 'Total' }))
+    await waitFor(() =>
+      expect(lesbar(screen.getByTestId('verbrauch-umfang').textContent)).toBe('Total · 30 runs · 12 sessions'),
+    )
+    expect(await kachel('Cost')).toHaveTextContent('since May 1, 2026 · Sessions since Sep 1, 2026')
+  })
+
+  it('sagt unter „Total" ohne Eintrag und ohne Sitzung auf Englisch, was fehlt', async () => {
+    zeigeEnglisch(zeitraum(), gesamt({ oldestRetainedRunStart: null, interactiveUsageSince: null }))
+    await kachel('Cost')
+    fireEvent.click(screen.getByRole('button', { name: 'Total' }))
+    await waitFor(async () =>
+      expect(await kachel('Cost')).toHaveTextContent('no retained entry · Sessions not recorded'),
+    )
+    expect(within(await kachel('Cost')).getByTestId('anteil-interaktiv')).toHaveTextContent('not recorded')
+  })
+
+  it('sagt einen angeschnittenen Erfassungsbeginn auf Englisch', async () => {
+    zeigeEnglisch(zeitraum({ current: kennzahlen({ interactiveUsageSince: '2026-09-14T12:00:00Z' }) }))
+    const kosten = await kachel('Cost')
+    expect(lesbar(within(kosten).getByTestId('anteil-interaktiv').textContent)).toBe(
+      'from interactive sessions$4.00 (partially recorded)',
+    )
+    expect(
+      screen.getByText('Interactive sessions are only recorded since Sep 14, 2026 — this period begins before.'),
+    ).toBeInTheDocument()
   })
 })

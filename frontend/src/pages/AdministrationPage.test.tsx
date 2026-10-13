@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { accessTokensApi } from '../api/accessTokens'
 import { boardsApi } from '../api/boards'
 import { ApiError } from '../api/client'
 import { configApi } from '../api/config'
 import { projectsApi } from '../api/projects'
 import { SnackbarProvider } from '../components/SnackbarProvider'
+import { SpracheProvider } from '../i18n/SpracheContext'
 import { EditModeProvider, useEditMode } from '../lib/EditModeContext'
 import { AdministrationPage } from './AdministrationPage'
 
@@ -48,14 +49,16 @@ const boundToken = {
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <SnackbarProvider>
-        <EditModeProvider>
-          <AdministrationPage />
-          <ModeProbe />
-        </EditModeProvider>
-      </SnackbarProvider>
-    </MemoryRouter>,
+    <SpracheProvider anfangs="de">
+      <MemoryRouter>
+        <SnackbarProvider>
+          <EditModeProvider>
+            <AdministrationPage />
+            <ModeProbe />
+          </EditModeProvider>
+        </SnackbarProvider>
+      </MemoryRouter>
+    </SpracheProvider>,
   )
 }
 
@@ -411,5 +414,248 @@ describe('AdministrationPage', () => {
 
       expect(await screen.findByText('Speichern fehlgeschlagen.')).toBeInTheDocument()
     })
+  })
+
+  describe('Sprache / Language (Issue #1646)', () => {
+    let fetchSpy: MockInstance<typeof fetch> | undefined
+
+    /** `PUT /api/admin/language` antwortet mit dem gesetzten Sprachcode (oder einem Fehler). */
+    function putAntwortet(antwort: { ok: true; language: string } | { ok: false; status: number; body: string }) {
+      const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: antwort.ok,
+        status: antwort.ok ? 200 : antwort.status,
+        statusText: antwort.ok ? 'OK' : 'Error',
+        text: () => Promise.resolve(antwort.ok ? JSON.stringify({ language: antwort.language }) : antwort.body),
+      } as Response)
+      fetchSpy = spy
+      return spy
+    }
+
+    afterEach(() => fetchSpy?.mockRestore())
+
+    it('zeigt einem Nicht-Admin den Abschnitt zweisprachig, aber nur lesbar', () => {
+      renderPage() // Default USER
+
+      expect(screen.getByRole('heading', { name: 'Sprache / Language', level: 2 })).toBeInTheDocument()
+      const gruppe = screen.getByRole('radiogroup', { name: 'Sprache / Language' })
+      expect(gruppe).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'Deutsch' })).toBeChecked()
+      expect(screen.getByRole('radio', { name: 'Deutsch' })).toBeDisabled()
+      expect(screen.getByRole('radio', { name: 'English' })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'Sprache speichern' })).not.toBeInTheDocument()
+      expect(screen.getByText('Nur ein Plattform-Admin kann die Sprache ändern.')).toBeInTheDocument()
+    })
+
+    it('lässt den Plattform-Admin die Sprache wählen', () => {
+      authState.user = { platformRole: 'ADMIN', memberships: [] }
+      renderPage()
+
+      expect(screen.getByRole('heading', { name: 'Sprache / Language', level: 2 })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'Deutsch' })).toBeEnabled()
+      expect(screen.getByRole('radio', { name: 'English' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Sprache speichern' })).toBeInTheDocument()
+      expect(screen.queryByText('Nur ein Plattform-Admin kann die Sprache ändern.')).not.toBeInTheDocument()
+      expect(screen.getByText(/beim nächsten Laden der Seite/)).toBeInTheDocument()
+    })
+
+    it('speichert über PUT /api/admin/language und schaltet sofort auf Englisch', async () => {
+      authState.user = { platformRole: 'ADMIN', memberships: [] }
+      const put = putAntwortet({ ok: true, language: 'en' })
+      renderPage()
+
+      await userEvent.click(screen.getByRole('radio', { name: 'English' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Sprache speichern' }))
+
+      await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+      const [pfad, init] = put.mock.calls[0] as [string, RequestInit]
+      expect(pfad).toBe('/api/admin/language')
+      expect(init.method).toBe('PUT')
+      expect(JSON.parse(String(init.body))).toEqual({ language: 'en' })
+
+      expect(await screen.findByText('Language saved.')).toBeInTheDocument()
+      expect(screen.getByText(/the next time they load the page/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save language' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Sprache / Language', level: 2 })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'English' })).toBeChecked()
+    })
+
+    it('zeigt die Server-Meldung, wenn das Speichern abgelehnt wird', async () => {
+      authState.user = { platformRole: 'ADMIN', memberships: [] }
+      putAntwortet({ ok: false, status: 400, body: JSON.stringify({ detail: 'Unbekannte Sprache' }) })
+      renderPage()
+
+      await userEvent.click(screen.getByRole('radio', { name: 'English' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Sprache speichern' }))
+
+      await erwarteFehlerToast('Unbekannte Sprache')
+      expect(screen.getByRole('button', { name: 'Sprache speichern' })).toBeInTheDocument()
+    })
+
+    it('fällt ohne Server-Meldung auf den eigenen Fehlertext zurück', async () => {
+      authState.user = { platformRole: 'ADMIN', memberships: [] }
+      putAntwortet({ ok: false, status: 502, body: '<html>Bad Gateway</html>' })
+      renderPage()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Sprache speichern' }))
+
+      await erwarteFehlerToast('Die Sprache konnte nicht gespeichert werden.')
+    })
+  })
+})
+
+describe('AdministrationPage auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authState.user = { platformRole: 'USER', memberships: [] }
+    mTokens.list.mockResolvedValue([])
+    mTokens.create.mockResolvedValue({ id: 1, name: 'board-cli', plaintext: 'tk_geheim' })
+    mTokens.revoke.mockResolvedValue(undefined)
+    mProjects.list.mockResolvedValue([])
+    mBoards.list.mockResolvedValue([])
+    mConfig.getDoneRetention.mockResolvedValue({ effective: 30, override: null })
+    mConfig.setDoneRetention.mockResolvedValue({ effective: 30, override: 30 })
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+  })
+
+  function renderEnglisch() {
+    return render(
+      <SpracheProvider anfangs="en">
+        <MemoryRouter>
+          <SnackbarProvider>
+            <EditModeProvider>
+              <AdministrationPage />
+            </EditModeProvider>
+          </SnackbarProvider>
+        </MemoryRouter>
+      </SpracheProvider>,
+    )
+  }
+
+  it('zeigt die Abschnitte für jeden Angemeldeten auf Englisch', () => {
+    renderEnglisch()
+
+    expect(screen.getByRole('heading', { name: 'Administration', level: 4 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Legal', level: 2 })).toBeInTheDocument()
+    expect(screen.getByText('© 2026 Manfred Wolff')).toBeInTheDocument()
+    expect(screen.getByText(/AI Control Room is licensed under the MIT License/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Edit mode', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Enable edit mode' })).not.toBeChecked()
+    expect(screen.getByText('Enable editing')).toBeInTheDocument()
+    expect(screen.getByText(/the edit icons appear/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'API tokens', level: 2 })).toBeInTheDocument()
+    expect(screen.getByText(/drives a board through the API/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'API', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open API overview' })).toHaveTextContent('Open overview')
+    expect(screen.getByRole('link', { name: 'Download OpenAPI as JSON' })).toHaveAttribute('href', '/api/openapi')
+    expect(screen.getByRole('link', { name: 'Download OpenAPI as YAML' })).toHaveAttribute('href', '/api/openapi.yaml')
+    // Admin-Abschnitte fehlen für Nicht-Admins auch auf Englisch.
+    expect(screen.queryByRole('heading', { name: 'Done retention' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Standard labels' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt Tokens, Leerzustand und Zustände auf Englisch', async () => {
+    mProjects.list.mockResolvedValue([memberProject])
+    mTokens.list.mockResolvedValue([
+      boundToken,
+      { ...boundToken, id: 2, name: 'frei', projectId: null, boardId: null },
+      { ...boundToken, id: 3, name: 'alt', revoked: true },
+    ])
+    renderEnglisch()
+
+    expect(await screen.findAllByText('Project “Dogfood” · Board 7')).toHaveLength(2)
+    expect(screen.getByText('unbound')).toBeInTheDocument()
+    expect(screen.getByText('Revoked')).toBeInTheDocument()
+    expect(screen.getAllByText('Active')).toHaveLength(2)
+    expect(screen.getByLabelText('Revoke token board-cli')).toBeInTheDocument()
+  })
+
+  it('nennt ohne Tokens und ohne berechtigtes Projekt den Grund auf Englisch', async () => {
+    renderEnglisch()
+
+    expect(await screen.findByText('No tokens yet.')).toBeInTheDocument()
+    expect(screen.getByText(/You are not in any project where you may create cards/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create token' })).toBeDisabled()
+  })
+
+  it('erzeugt ein Token über den englischen Dialog und zeigt den Klartext', async () => {
+    mProjects.list.mockResolvedValue([memberProject])
+    mBoards.list.mockResolvedValue([boardA])
+    renderEnglisch()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create token' }))
+    expect(await screen.findByRole('dialog', { name: 'New API token' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '(Choose project)' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'board-cli' } })
+    fireEvent.change(screen.getByLabelText('Project'), { target: { value: '3' } })
+    await screen.findByRole('option', { name: 'Board A' })
+    expect(screen.getByRole('option', { name: '(Choose board)' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Board'), { target: { value: '7' } })
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(screen.queryByText('New API token')).not.toBeInTheDocument())
+    expect(await screen.findByText('Token “board-cli” created — shown only once:')).toBeInTheDocument()
+    expect(screen.getByLabelText('Token plaintext')).toHaveTextContent('tk_geheim')
+    const kopieren = screen.getByRole('button', { name: 'Copy token' })
+    expect(kopieren).toHaveTextContent('Copy')
+    fireEvent.click(kopieren)
+    await waitFor(() => expect(kopieren).toHaveTextContent('Copied'))
+  })
+
+  it('meldet Fehler beim Anlegen und Widerrufen auf Englisch und fragt auf Englisch nach', async () => {
+    mProjects.list.mockResolvedValue([memberProject])
+    mBoards.list.mockResolvedValue([boardA])
+    mTokens.list.mockResolvedValue([boundToken])
+    mTokens.create.mockRejectedValue(new TypeError('Failed to fetch'))
+    mTokens.revoke.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderEnglisch()
+
+    fireEvent.click(await screen.findByLabelText('Revoke token board-cli'))
+    expect(window.confirm).toHaveBeenCalledWith('Revoke this token? Clients using it will lose access.')
+    expect(await screen.findByText('Revoking failed.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create token' }))
+    await screen.findByRole('dialog')
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'x' } })
+    fireEvent.change(screen.getByLabelText('Project'), { target: { value: '3' } })
+    await screen.findByRole('option', { name: 'Board A' })
+    fireEvent.change(screen.getByLabelText('Board'), { target: { value: '7' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(await screen.findByText(/The token could not be created/)).toBeInTheDocument()
+  })
+
+  it('zeigt dem Plattform-Admin Done-Aufbewahrung und Standard-Labels auf Englisch', async () => {
+    authState.user = { platformRole: 'ADMIN', memberships: [] }
+    renderEnglisch()
+
+    expect(screen.getByRole('heading', { name: 'Done retention', level: 2 })).toBeInTheDocument()
+    expect(await screen.findByText('Currently in effect: 30 days')).toBeInTheDocument()
+    expect(screen.getByText(/archived automatically after this number of days/)).toBeInTheDocument()
+    expect(screen.getByText('0 = no auto-archive.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Standard labels', level: 2 })).toBeInTheDocument()
+
+    const feld = screen.getByLabelText('Done retention in days')
+    fireEvent.change(feld, { target: { value: '-1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Please enter a whole number ≥ 0 (0 = no auto-archive).')).toBeInTheDocument()
+  })
+
+  it('meldet Speichern und Speicherfehler der Done-Aufbewahrung auf Englisch', async () => {
+    authState.user = { platformRole: 'ADMIN', memberships: [] }
+    mConfig.getDoneRetention.mockResolvedValue({ effective: 0, override: 0 })
+    mConfig.setDoneRetention.mockResolvedValueOnce({ effective: 1, override: 1 })
+    mConfig.setDoneRetention.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    renderEnglisch()
+
+    expect(await screen.findByText('Currently in effect: no auto-archive')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Done retention in days'), { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saved.')).toBeInTheDocument()
+    expect(await screen.findByText('Currently in effect: 1 day')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saving failed.')).toBeInTheDocument()
   })
 })

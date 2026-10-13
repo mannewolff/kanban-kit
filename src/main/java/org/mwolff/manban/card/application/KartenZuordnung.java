@@ -113,7 +113,7 @@ public final class KartenZuordnung {
     List<Long> distinct = assigneeIds.stream().distinct().toList();
     for (Long assignee : distinct) {
       if (!permissions.isRealProjectMember(assignee, projectId)) {
-        throw new InvalidAssigneeException("Kein Projektmitglied: " + assignee);
+        throw InvalidAssigneeException.keinMitglied(assignee);
       }
     }
     assignees.replaceAssignees(cardId, distinct);
@@ -153,7 +153,7 @@ public final class KartenZuordnung {
       @Nullable CardActivityOrigin herkunft) {
     Map<Long, String> namen = boardLabelNamen(boardId);
     if (!namen.containsKey(labelId)) {
-      throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
+      throw InvalidLabelException.keinLabelDesBoards(labelId);
     }
     List<Long> current = cardLabels.findByCardId(cardId);
     List<Long> next =
@@ -172,7 +172,7 @@ public final class KartenZuordnung {
     List<Long> distinct = labelIds.stream().distinct().toList();
     for (Long labelId : distinct) {
       if (!namen.containsKey(labelId)) {
-        throw new InvalidLabelException("Kein Label dieses Boards: " + labelId);
+        throw InvalidLabelException.keinLabelDesBoards(labelId);
       }
     }
     FreigabeLabels.pruefeWechsel(herkunft, namen, vorher, distinct);

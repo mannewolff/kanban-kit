@@ -4,6 +4,7 @@ import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
 import TextField, { type TextFieldProps } from '@mui/material/TextField'
 import { useState } from 'react'
+import { useT } from '../i18n/SpracheContext'
 
 /**
  * Passwort-Eingabefeld mit Augensymbol zum Ein-/Ausblenden des Klartexts. Verhält sich wie ein
@@ -11,6 +12,7 @@ import { useState } from 'react'
  * selbst. Der Umschalter belegt das End-Adornment des Feldes.
  */
 export function PasswordField({ slotProps, ...props }: Readonly<Omit<TextFieldProps, 'type'>>) {
+  const t = useT()
   const [show, setShow] = useState(false)
   return (
     <TextField
@@ -23,7 +25,7 @@ export function PasswordField({ slotProps, ...props }: Readonly<Omit<TextFieldPr
           endAdornment: (
             <InputAdornment position="end">
               <IconButton
-                aria-label={show ? 'Passwort verbergen' : 'Passwort anzeigen'}
+                aria-label={show ? t.AUTH.PASSWORT_VERBERGEN : t.AUTH.PASSWORT_ANZEIGEN}
                 onClick={() => setShow((s) => !s)}
                 // Klick auf das Auge soll den Feldfokus nicht stehlen.
                 onMouseDown={(e) => e.preventDefault()}

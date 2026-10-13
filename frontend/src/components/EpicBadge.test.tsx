@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { epicColor, epicTint } from '../lib/epicMeta'
 import { EpicBadge } from './EpicBadge'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 describe('EpicBadge', () => {
   // Bis #952 stand hier `${hue}22` — Hexwert plus Alpha-Suffix. Seit die Vorhaben-Farben
@@ -93,5 +94,16 @@ describe('EpicBadge', () => {
     await user.keyboard('{Escape}')
 
     expect(aussen).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('EpicBadge auf Englisch', () => {
+  it('benennt Anzeige und Bedienelement auf Englisch', () => {
+    const { unmount } = renderMitSprache(<EpicBadge epicId={3} title="Login" shortcode="LOG" />, 'en')
+    expect(screen.getByLabelText('Epic LOG')).toBeInTheDocument()
+    unmount()
+
+    renderMitSprache(<EpicBadge epicId={3} title="Login" shortcode="LOG" onOpen={vi.fn()} />, 'en')
+    expect(screen.getByRole('button', { name: 'Open epic LOG' })).toBeInTheDocument()
   })
 })

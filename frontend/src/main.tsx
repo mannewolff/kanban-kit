@@ -16,6 +16,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import { AuthProvider } from './auth/AuthContext'
 import { SnackbarProvider } from './components/SnackbarProvider'
+import { SpracheProvider } from './i18n/SpracheContext'
 import { EditModeProvider } from './lib/EditModeContext'
 import { theme } from './theme'
 
@@ -29,13 +30,15 @@ createRoot(container).render(
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
-        <AuthProvider>
-          <EditModeProvider>
-            <SnackbarProvider>
-              <App />
-            </SnackbarProvider>
-          </EditModeProvider>
-        </AuthProvider>
+        <SpracheProvider>
+          <AuthProvider>
+            <EditModeProvider>
+              <SnackbarProvider>
+                <App />
+              </SnackbarProvider>
+            </EditModeProvider>
+          </AuthProvider>
+        </SpracheProvider>
       </BrowserRouter>
     </ThemeProvider>
   </StrictMode>,

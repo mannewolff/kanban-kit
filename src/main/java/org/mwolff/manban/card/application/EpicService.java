@@ -270,7 +270,7 @@ public class EpicService {
     Card card =
         grundlage.requireCardOp(userId, cardId, Permission.TICKET_UPDATE, Permission.EPIC_UPDATE);
     if (card.type() != CardType.CARD) {
-      throw new InvalidDependencyException("Nur Karten können einem Epic zugeordnet werden");
+      throw InvalidDependencyException.nurKartenImEpic();
     }
     Long effective =
         parentId == null
@@ -351,20 +351,17 @@ public class EpicService {
    */
   private void requireVorgangEroeffenbar(Card quelle) {
     if (quelle.type() == CardType.EPIC) {
-      throw new InvalidDependencyException(
-          "Ein Vorhaben eroeffnet keinen Vorgang aus sich selbst: " + quelle.number());
+      throw InvalidDependencyException.vorhabenAusSichSelbst(quelle.number());
     }
     // Zwei Ruhezustaende, eine Regel: Eine ruhende Karte eroeffnet keinen Vorgang. Der Papierkorb
     // ist im Domain-Record nicht abgebildet — die Nummernsuche filtert ihn, findById nicht.
     if (quelle.archived() || liegtImPapierkorb(quelle)) {
-      throw new InvalidDependencyException(
-          "Eine ruhende Karte eroeffnet keinen Vorgang: " + quelle.number());
+      throw InvalidDependencyException.ruhendeKarte(quelle.number());
     }
     if (quelle.parentId() != null) {
       // Stillschweigendes Umhaengen entzoege einer bestehenden Gruppierung eine Karte, ohne dass
       // jemand es merkt. Erst loesen, dann eroeffnen.
-      throw new InvalidDependencyException(
-          "Die Karte ist bereits einem Vorhaben zugeordnet: " + quelle.number());
+      throw InvalidDependencyException.bereitsZugeordnet(quelle.number());
     }
   }
 

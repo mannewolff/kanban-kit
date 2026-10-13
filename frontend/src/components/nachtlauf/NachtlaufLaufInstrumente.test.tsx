@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { NachtlaufLaufInstrumente } from './NachtlaufLaufInstrumente'
 
 const PAKETE = { gruen: 1, gelb: 0, rot: 0 }
@@ -74,5 +75,37 @@ describe('NachtlaufLaufInstrumente — mitlaufende Zeit (Issue #1244)', () => {
     unmount()
 
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('NachtlaufLaufInstrumente auf Englisch (Issue #1658)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('beschriftet die Instrumente auf Englisch und schreibt Zahlen in US-Schreibweise', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-27T14:20:00Z'))
+    renderMitSprache(
+      <NachtlaufLaufInstrumente
+        verbrauch={{ kostenUsd: 1234.5, eingabe: 2_500_000, ausgabe: undefined, zwischenspeicher: undefined }}
+        dauerMs={59 * 60_000}
+        pakete={{ gruen: 3, gelb: 1, rot: 2 }}
+        aufteilung={{ planungUsd: 1.5, umsetzungUsd: undefined }}
+        laeuftSeit="2026-09-27T13:06:00Z"
+      />,
+      'en',
+    )
+
+    const instrumente = screen.getByTestId('lauf-instrumente')
+    for (const titel of ['Cost', 'Input', 'Output', 'Cache rate', 'Duration', 'Packages']) {
+      expect(instrumente).toHaveTextContent(titel)
+    }
+    expect(instrumente).toHaveTextContent('1,234.50')
+    expect(instrumente).toHaveTextContent('Planning $1.50 · Implementation not reported')
+    expect(instrumente).toHaveTextContent('2.50 M')
+    expect(instrumente).toHaveTextContent('not computable')
+    expect(screen.getByTestId('instrument-dauer-zusatz')).toHaveTextContent('running for 1:14 h')
+    expect(instrumente).toHaveTextContent('3 green 1 yellow 2 red')
   })
 })

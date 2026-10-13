@@ -1,5 +1,6 @@
 package org.mwolff.manban.auth.application;
 
+import org.mwolff.manban.common.i18n.UebersetzbareMeldung;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
@@ -23,11 +24,16 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * der Aufrufer nicht schon wüsste.
  */
 @ResponseStatus(HttpStatus.FORBIDDEN)
-public class UserNotApprovedException extends RuntimeException {
+public class UserNotApprovedException extends RuntimeException implements UebersetzbareMeldung {
 
   public UserNotApprovedException() {
     super(
         "Das Konto wartet auf die Freigabe durch einen Plattform-Admin."
             + " Bitte wenden Sie sich an den Betreiber dieser Instanz.");
+  }
+
+  @Override
+  public String schluessel() {
+    return "auth.konto-nicht-freigegeben";
   }
 }

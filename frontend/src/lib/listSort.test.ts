@@ -229,3 +229,10 @@ describe('sortCards — Gleichstand', () => {
     expect(nummern(sortCards(mitWaise, { key: 'title', dir: 'asc' }, ctxVon(columns)))).toEqual([2, 1])
   })
 })
+
+describe('sortCards — englische Titel', () => {
+  it('sortiert englische Titel nach derselben Regel wie deutsche — die Sortierung folgt nicht der Sprache', () => {
+    const cards = [card(1, { title: 'item 10' }), card(2, { title: 'Item 2' }), card(3, { title: 'éclair' })]
+    expect(nummern(sortCards(cards, { key: 'title', dir: 'asc' }, ctxVon()))).toEqual([3, 2, 1])
+  })
+})

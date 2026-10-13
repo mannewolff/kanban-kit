@@ -6,11 +6,13 @@ import { useEffect, useState } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import { AuthCard } from '../components/AuthCard'
+import { useT } from '../i18n/SpracheContext'
 
 type State = 'notice' | 'verifying' | 'success' | 'error'
 
 /** Zeigt entweder den Bestätigungs-Hinweis oder löst ein Token aus der URL ein. */
 export function VerifyNoticePage() {
+  const t = useT()
   const [params] = useSearchParams()
   const token = params.get('token')
   const [state, setState] = useState<State>(token ? 'verifying' : 'notice')
@@ -26,17 +28,17 @@ export function VerifyNoticePage() {
   }, [token])
 
   return (
-    <AuthCard title="E-Mail-Bestätigung">
+    <AuthCard title={t.AUTH.BESTAETIGUNG_TITEL}>
       <Stack spacing={2}>
         {state === 'notice' && (
           <Typography>
-            Wir haben dir eine E-Mail zur Bestätigung geschickt. Bitte öffne den Link darin.
+            {t.AUTH.BESTAETIGUNG_HINWEIS}
           </Typography>
         )}
-        {state === 'verifying' && <Typography>E-Mail wird bestätigt …</Typography>}
-        {state === 'success' && <Alert severity="success">E-Mail bestätigt. Du kannst dich jetzt anmelden.</Alert>}
-        {state === 'error' && <Alert severity="error">Der Bestätigungslink ist ungültig oder abgelaufen.</Alert>}
-        <Link component={RouterLink} to="/login">Zur Anmeldung</Link>
+        {state === 'verifying' && <Typography>{t.AUTH.BESTAETIGUNG_LAEUFT}</Typography>}
+        {state === 'success' && <Alert severity="success">{t.AUTH.BESTAETIGUNG_ERFOLG}</Alert>}
+        {state === 'error' && <Alert severity="error">{t.AUTH.BESTAETIGUNG_UNGUELTIG}</Alert>}
+        <Link component={RouterLink} to="/login">{t.AUTH.ZUR_ANMELDUNG}</Link>
       </Stack>
     </AuthCard>
   )

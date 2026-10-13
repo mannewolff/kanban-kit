@@ -3,6 +3,7 @@ package org.mwolff.manban.config;
 import jakarta.servlet.DispatcherType;
 import java.util.Arrays;
 import java.util.List;
+import org.mwolff.manban.common.i18n.Texte;
 import org.mwolff.manban.ratelimit.application.RateLimitedOperation;
 import org.mwolff.manban.ratelimit.application.RateLimiter;
 import org.mwolff.manban.ratelimit.web.ClientOriginResolver;
@@ -54,9 +55,9 @@ public class RateLimitFilterConfig {
 
   @Bean
   FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(
-      RateLimiter rateLimiter, ClientOriginResolver originResolver) {
+      RateLimiter rateLimiter, ClientOriginResolver originResolver, Texte texte) {
     FilterRegistrationBean<RateLimitFilter> registration =
-        new FilterRegistrationBean<>(new RateLimitFilter(rateLimiter, originResolver));
+        new FilterRegistrationBean<>(new RateLimitFilter(rateLimiter, originResolver, texte));
     registration.setUrlPatterns(limitedPaths());
     registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
     return registration;

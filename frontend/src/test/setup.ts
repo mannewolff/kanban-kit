@@ -32,6 +32,23 @@ class EventSourceStub {
 }
 vi.stubGlobal('EventSource', EventSourceStub)
 
+// `GET /api/language` antwortet in jedem Test mit Deutsch (Plan #1638, A10). Der `SpracheProvider`
+// lädt die Sprache vor dem ersten Rendern; ohne diese Vorgabe liefe sein Abruf ins Leere. Alle
+// anderen Pfade gehen unverändert an das bisherige `fetch` — ein Test, der `fetch` selbst
+// ersetzt (`vi.spyOn`, `vi.stubGlobal`), überdeckt die Vorgabe für seine Dauer.
+const bisherigesFetch = globalThis.fetch
+globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  if (String(input instanceof Request ? input.url : input) === '/api/language') {
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: () => Promise.resolve(JSON.stringify({ language: 'de' })),
+    } as Response)
+  }
+  return bisherigesFetch(input, init)
+}
+
 // localStorage zwischen Tests leeren. jsdom teilt localStorage über alle Tests einer Datei;
 // ohne Reset leakt z. B. ein gesetzter Board-Epic-Filter (`manban.boardEpicFilter.*`) in
 // nachfolgende Tests und blendet dort Karten aus. Unter Node 22 (CI) fällt das auf, unter

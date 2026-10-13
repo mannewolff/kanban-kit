@@ -11,6 +11,7 @@ import { configApi } from '../api/config'
 import { projectsApi } from '../api/projects'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { BoardPage } from './BoardPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 let memberships: { projectId: number; role: string }[] = []
 let platformRole = 'USER'
@@ -916,5 +917,86 @@ describe('BoardPage ausgeblendete Vorhaben', () => {
     expect(screen.queryByTestId('card-200')).not.toBeInTheDocument()
     // … und nicht mehr das von Board 1: dessen Vorhaben gibt es hier gar nicht.
     expect(screen.getByText('Board 2')).toBeInTheDocument()
+  })
+})
+
+describe('BoardPage auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+  })
+
+  const zeigeEn = (pfad = '/boards/1') =>
+    renderMitSprache(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={[pfad]}>
+          <Routes>
+            <Route path="/boards/:boardId" element={<BoardPage />} />
+            <Route path="/projects/:projectId" element={<div>Board-Liste</div>} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+      'en',
+    )
+
+  const ladeBoard = () => {
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedCards.list.mockResolvedValue([])
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+  }
+
+  it('zeigt Pfad, Umbenennen, Labels und Papierkorb auf Englisch', async () => {
+    ladeBoard()
+    zeigeEn()
+
+    expect(await screen.findByRole('link', { name: 'Projects' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Labels' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Trash' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create new' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename board' }))
+    expect(screen.getByRole('heading', { name: 'Rename board' })).toBeInTheDocument()
+    expect(screen.getByText('Board name', { selector: 'label' })).toBeInTheDocument()
+    expect(screen.getByLabelText('New board name')).toHaveValue('B')
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+
+    mockedBoards.rename.mockRejectedValue(new Error('netz'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Renaming failed.')).toBeInTheDocument()
+  })
+
+  it('zeigt eine ungültige Board-ID auf Englisch', () => {
+    zeigeEn('/boards/abc')
+
+    expect(screen.getByText('Invalid board ID.')).toBeInTheDocument()
+  })
+
+  it('meldet ein entferntes Board auf Englisch', async () => {
+    mockedBoards.get.mockRejectedValue(new ApiError(404, 'weg'))
+    mockedCards.list.mockResolvedValue([])
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    zeigeEn()
+
+    expect(await screen.findByText('This board was archived or deleted.')).toBeInTheDocument()
+  })
+
+  it('zeigt ein nicht gefundenes Board auf Englisch', async () => {
+    mockedBoards.get.mockRejectedValue(new Error('netz'))
+    mockedCards.list.mockResolvedValue([])
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    zeigeEn()
+
+    expect(await screen.findByText('Board not found.')).toBeInTheDocument()
   })
 })

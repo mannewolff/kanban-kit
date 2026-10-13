@@ -719,6 +719,18 @@ Unabhängig vom Editiermodus zeigt die Seite **Administration** jedem Angemeldet
 YAML). Die Übersicht dient dem Nachschlagen; wer Aufrufe darin ausprobieren darf, steht unter
 [API-Übersicht](#api-ubersicht).
 
+### Sprache / Language
+
+Die Seite **Administration** zeigt jedem Angemeldeten den Abschnitt **„Sprache / Language"** mit
+der Auswahl **Deutsch** und **English**. Die Überschrift und die Namen der Sprachen stehen in jeder
+Einstellung gleich, damit auch jemand ohne Deutschkenntnisse die Einstellung findet. Ändern kann
+sie **nur der Plattform-Admin**; allen anderen zeigt der Abschnitt die geltende Sprache nur an.
+
+Die Sprache gilt für die **ganze Installation** — für jeden Nutzer und auch für die Seiten vor der
+Anmeldung. Sie wirkt ohne Neustart: Der Plattform-Admin sieht die Umstellung sofort nach dem
+Speichern, alle anderen **beim nächsten Laden** der Seite. Eine neue Installation startet auf
+Deutsch.
+
 ### Standard-Labels
 
 Einem **Plattform-Admin** zeigt die Seite **Administration** zusätzlich den Abschnitt
@@ -726,21 +738,32 @@ Einem **Plattform-Admin** zeigt die Seite **Administration** zusätzlich den Abs
 mit dem festen Satz der Labels, die das claude-workflow-kit, die Laufsteuerung und die
 [Stufenleiste](#karten-detail) erwarten, nach Gruppen und in ihrer Farbe:
 
-- **Kit:** `kit:durchziehen`, `kit:carry-through`, `kit:geschuetzt`, `kit:protected`,
-  `kit:klaeren`, `kit:clarify`, `kit:geklaert`, `kit:clarified`, `kit:night`, `kit:nightrun`,
-  `kit:pruefen`, `kit:check`, `kit:nightplan`, `kit:nightreview`, `kit:nightissues`
-- **Lauf:** `lauf:abgebrochen`, `run:aborted`, `lauf:laeuft`, `run:running`, `lauf:wartet`,
-  `run:waiting`
-- **Review:** `review:offen`, `review:fertig`, `review:done`
-- **Stufenleiste:** `ziel:plan`, `goal:plan`, `ziel:pakete`, `goal:packages`, `ziel:umsetzung`,
-  `goal:implementation`, `ziel:push-vorbereitet`, `goal:push-prepared`, `planreview:1`,
-  `planreview:2`
+- **Kit:** `kit:carry-through`, `kit:protected`, `kit:clarify`, `kit:clarified`, `kit:night`,
+  `kit:nightrun`, `kit:check`, `kit:nightplan`, `kit:nightreview`, `kit:nightissues`,
+  `kit:on-hold` (ein Fachplan wartet auf ein äußeres Ereignis; nur ein Mensch hebt das Warten auf)
+- **Lauf:** `run:aborted`, `run:running`, `run:waiting`
+- **Review:** `review:offen`, `review:done`
+- **Stufenleiste:** `goal:plan`, `goal:packages`, `goal:implementation`, `goal:push-prepared`,
+  `planreview:1`, `planreview:2`
 
-Weil das claude-workflow-kit auch auf Englisch läuft, enthält der Satz zu jedem deutschen Label sein
-englisches Gegenstück direkt dahinter. Labels ohne Gegenstück heißen in beiden Sprachen gleich und
-entstehen nur einmal. Beide Namen derselben Sache zählen, filtern und färben im Leitstand als eins.
-Ebenso liest der Leitstand Laufstand (`## Run status`), Textprotokoll und Ergebnisdatei auch in ihrer
-englischen Form; Nächte, die vorher gemeldet wurden, erscheinen unverändert.
+Seit Version 5.0 kennt das claude-workflow-kit nur noch englische Labels; der Satz legt darum je Sache
+nur ihren englischen Namen an. Deutsche Labels auf alten Karten (etwa `kit:klaeren` oder
+`lauf:wartet`) erkennt der Leitstand weiter als dieselbe Sache: Sie zählen, filtern und färben wie ihr
+englischer Name. Ebenso liest der Leitstand Laufstand (`## Run status`), Textprotokoll und
+Ergebnisdatei auch in ihrer englischen Form; Nächte, die vorher gemeldet wurden, erscheinen
+unverändert.
+
+Ein Systemlabel — jedes Label dieses Satzes — **erklärt sich selbst**: Fährt man mit der Maus darüber
+oder springt man mit der Tastatur darauf, erscheint ein kurzer Hinweis. Er sagt, was das Label
+bedeutet, wer es setzt, wann und durch wen es wieder verschwindet, ob es geschützt ist (etwa: Abnehmen
+geht nur angemeldet im Leitstand, nicht über ein Token) und, wo es etwas zu tun gibt, was man tun
+soll. Das gilt auf der Karte im Board, im Karten-Detail, in der Label-Auswahl, im Label-Filter der
+Liste, im Menü „Labels" der Mehrfachauswahl, im Dialog der Labelverwaltung und in diesem Dialog
+„Standard-Labels". Im Ableitungsbaum und in den Zählmarken der Vorhaben-Kacheln erscheint der Hinweis
+nicht. Der Dialog „Standard-Labels" zeigt unter jedem Label zusätzlich seine vollständige Erklärung
+als Text, sodass sich alle Erklärungen ohne Darüberfahren lesen lassen. Ein altes deutsches Label
+zeigt die Erklärung seines englischen Namens; ein selbst angelegtes Label zeigt keine. Die Erklärung
+steht in der Sprache, die unter [Sprache / Language](#sprache-language) eingestellt ist.
 
 Erst **„Anlegen"** legt jedes fehlende Label des Satzes auf **allen nicht archivierten Boards aller
 Projekte** an; „Abbrechen" ändert nichts. Ein Label, das ein Board schon trägt, bleibt mit Farbe und

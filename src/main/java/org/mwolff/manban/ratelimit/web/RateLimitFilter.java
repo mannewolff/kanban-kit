@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.i18n.Texte;
 import org.mwolff.manban.ratelimit.application.RateLimitedOperation;
 import org.mwolff.manban.ratelimit.application.RateLimiter;
 import org.springframework.http.HttpHeaders;
@@ -38,21 +39,29 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *
  * <p>Gelesen werden nur Methode, Pfad und die Herkunft aus {@link ClientOriginResolver} —
  * <strong>nie</strong> der Request-Body. Die Bremse kennt weder E-Mail-Adresse noch Passwort (E11).
+ *
+ * <p>Die Auskunft erscheint in der eingestellten Sprache (Issue #1640, Plan #1638 A5): Die drei
+ * begrenzten Pfade sind öffentlich und tragen nie ein Projekt-Token, ein Sonderfall nach Zugangsart
+ * entfällt.
  */
 public class RateLimitFilter extends OncePerRequestFilter {
 
-  private static final String DETAIL_ONE_MINUTE =
-      "Zu viele Versuche. Bitte in einer Minute erneut versuchen.";
+  private static final String DETAIL_ONE_MINUTE = "ratelimit.zu-viele-versuche.eine-minute";
+
+  private static final String DETAIL_MINUTES = "ratelimit.zu-viele-versuche.minuten";
 
   private static final long MILLIS_PER_SECOND = 1000L;
   private static final long SECONDS_PER_MINUTE = 60L;
 
   private final RateLimiter rateLimiter;
   private final ClientOriginResolver originResolver;
+  private final Texte texte;
 
-  public RateLimitFilter(RateLimiter rateLimiter, ClientOriginResolver originResolver) {
+  public RateLimitFilter(
+      RateLimiter rateLimiter, ClientOriginResolver originResolver, Texte texte) {
     this.rateLimiter = rateLimiter;
     this.originResolver = originResolver;
+    this.texte = texte;
   }
 
   @Override
@@ -111,9 +120,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
    * <p>Der Problem-Body entsteht von Hand: Der {@code GlobalExceptionHandler} greift hier nicht, er
    * ist Teil des MVC-Stacks, den dieser Filter gerade überspringt. Ein {@code ObjectMapper} als
    * dritte Abhängigkeit hinge das Format dieser Antwort außerdem an die Jackson-Konfiguration — der
-   * eingesetzte Text ist eine Konstante mit einer Zahl darin und braucht kein Escaping.
+   * eingesetzte Text stammt aus den Meldungsdateien des Servers, enthält weder Anführungszeichen
+   * noch Backslash und braucht kein Escaping.
    */
-  private static void rejectAsTooManyRequests(HttpServletResponse response, Duration retryAfter)
+  private void rejectAsTooManyRequests(HttpServletResponse response, Duration retryAfter)
       throws IOException {
     long seconds = retryAfterSeconds(retryAfter);
     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
@@ -144,10 +154,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
   }
 
   /** Die Auskunft an den Absender: Restdauer in vollen Minuten, aufgerundet. */
-  private static String detailFor(long seconds) {
+  private String detailFor(long seconds) {
     long minutes = Math.max(1L, (seconds + SECONDS_PER_MINUTE - 1) / SECONDS_PER_MINUTE);
     return minutes == 1
-        ? DETAIL_ONE_MINUTE
-        : "Zu viele Versuche. Bitte in %d Minuten erneut versuchen.".formatted(minutes);
+        ? texte.text(texte.eingestellte(), DETAIL_ONE_MINUTE)
+        : texte.text(texte.eingestellte(), DETAIL_MINUTES, minutes);
   }
 }

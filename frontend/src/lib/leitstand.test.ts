@@ -895,3 +895,61 @@ describe('laufzeitUhr (#1246)', () => {
     expect(laufzeitUhr(-5_000)).toBe('00:00:00')
   })
 })
+
+describe('leitstand auf Englisch', () => {
+  it('rechnet Laufband und Notiz auf Englisch mit Dezimalpunkt und AM/PM', () => {
+    const fertig = laufband(
+      lauf({ usage: { costUsd: 1234.5, inputTokens: null, outputTokens: null, cachedInputTokens: null, modelDurationMs: null, turns: null }, items: [paket(1, 'GREEN')] }),
+      'en',
+    )
+    expect(fertig.titel).toBe('Chain completed — 1 item')
+    expect(fertig.zeitpunkt).toMatch(/^Started Sep 14, 11:10\sPM$/)
+    expect(fertig.kosten).toBe('1,234.50')
+    const laufend = laufband(lauf({ complete: false, mode: 'IMPLEMENTATION', items: [paket(2, 'GREEN'), paket(3, 'GREY')] }), 'en')
+    expect(laufend.titel).toBe('Implementation running — item 1 of 2')
+    expect(laufend.zeitpunkt).toMatch(/^since 11:10\sPM$/)
+    expect(laufband(lauf({ complete: false, mode: 'REVIEW' }), 'en').titel).toBe('Review running')
+    expect(laufNotiz(lauf({ items: [paket(1, 'GREEN'), paket(2, 'GREEN')] }), 'en')).toMatch(
+      /^Sep 14, 11:10\sPM · 4 h 12 min · 2 packages$/,
+    )
+    expect(laufNotiz(lauf({ items: [paket(1, 'GREEN')] }), 'en')).toMatch(/ · 1 package$/)
+    expect(tagZeit('2026-10-13T12:30:00Z', 'en')).toMatch(/^Oct 13, 2:30\sPM$/)
+  })
+
+  it('nennt Modus, Vorgänge, Kosten und Dauern auf Englisch', () => {
+    expect(modusName('INTERACTIVE', 'en')).toBe('Session')
+    expect(vorgaenge(3, 'en')).toBe('3 items')
+    expect(kostenText(1.5, 'en')).toBe('$1.50')
+    expect(kostenText(null, 'en')).toBeNull()
+    expect(laufDauer(25 * 60_000, 'en')).toBe('25 min')
+    expect(paketDauerBeschriftung(null, 'en')).toBe('Duration not measured')
+    expect(paketDauerBeschriftung(776_000, 'en')).toBe('Duration 12 min 56 s')
+    expect(paketDauerBeschriftung(3_730_000, 'en')).toBe('Duration 1 h 2 min 10 s')
+  })
+
+  it('rechnet die Kacheln auf Englisch mit Dezimalpunkt', () => {
+    expect(durchsatzKachel([woche(0, 1000), woche(1, 1500)], 'en')).toMatchObject({
+      wert: '1,500',
+      einheit: 'cards',
+      basis: '2 weeks',
+      delta: { text: '▲ 50 %', art: 'gut' },
+    })
+    expect(durchsatzKachel([woche(0, 0), woche(1, 1)], 'en')).toMatchObject({
+      einheit: 'card',
+      delta: { text: '▲ 1 vs. previous week', art: 'gut' },
+    })
+    expect(durchsatzKachel([woche(0, 0)], 'en')).toMatchObject({ wert: null, einheit: 'cards', basis: '1 week' })
+    expect(durchlaufKachel(276_480, 1, 'en')).toMatchObject({ wert: '3.2', einheit: 'days', basis: '1 card' })
+    expect(implementierungKachel(53_280, 61, 'en')).toMatchObject({ wert: '14.8', einheit: 'hours', basis: '61 cards' })
+    expect(implementierungKachel(1800, 2, 'en')).toMatchObject({ wert: '30', einheit: 'minutes' })
+    expect(implementierungKachel(null, 0, 'en')).toMatchObject({ wert: null, einheit: 'hours', basis: '0 cards' })
+  })
+
+  it('nennt Token-Mengen auf Englisch', () => {
+    expect(tokenMenge(4_820_000, 'en')).toEqual({ wert: '4.82', einheit: 'M' })
+    expect(tokenMenge(186_000, 'en')).toEqual({ wert: '186', einheit: 'K' })
+    expect(tokenMenge(512, 'en')).toEqual({ wert: '512', einheit: 'tokens' })
+    expect(tokenMenge(null, 'en')).toBeNull()
+    expect(tokenText(3_660_000, 'en')).toBe('3.66 M')
+  })
+})

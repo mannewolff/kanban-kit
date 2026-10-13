@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { NewCardModal } from './NewCardModal'
 import { MAX_TEXT_LENGTH } from '../lib/textLimits'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 describe('NewCardModal', () => {
   it('legt per Cmd/Ctrl+Enter im Titel-Feld an', async () => {
@@ -61,7 +62,7 @@ describe('NewCardModal', () => {
 
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Karte' } })
     fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '3, 4' } })
-    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2026-03-01' } })
+    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '01.03.2026' } })
     fireEvent.mouseDown(screen.getByLabelText('Zuständige'))
     fireEvent.click(await screen.findByText('Alice'))
     fireEvent.mouseDown(screen.getByLabelText('Labels'))
@@ -406,5 +407,58 @@ describe('NewCardModal', () => {
 
     expect(screen.queryByText(/\/ 50\.000 Zeichen/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Anlegen' })).toBeEnabled()
+  })
+})
+
+describe('NewCardModal auf Englisch', () => {
+  it('beschriftet die neue Karte auf Englisch und legt die englische Vorlage an', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderMitSprache(<NewCardModal open columnName="Backlog" epics={[]} onClose={vi.fn()} onSubmit={onSubmit} />, 'en')
+
+    expect(screen.getByRole('dialog', { name: 'New card in “Backlog”' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Card' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Epic' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Type')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+
+    // Die Felder der Karte stellt `CardFields` (Schlusspaket #1661); der Titel wird darum sprachneutral gesucht.
+    fireEvent.change(screen.getByRole('textbox', { name: /^(Titel|Title)$/ }), { target: { value: 'New' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: '## Context\n\n## Task\n\n## Acceptance criteria\n\n## Dependencies\n',
+        }),
+      ),
+    )
+  })
+
+  it('meldet einen Fehlschlag auf Englisch', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error('offline'))
+    renderMitSprache(
+      <NewCardModal
+        open
+        columnName="Backlog"
+        epics={[]}
+        initialValues={{ title: 'New', description: '', parentId: null }}
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+      'en',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Creating failed.')
+  })
+
+  it('beschriftet das neue Vorhaben auf Englisch', () => {
+    renderMitSprache(
+      <NewCardModal open epicOnly columnName="Backlog" epics={[]} onClose={vi.fn()} onSubmit={vi.fn()} />,
+      'en',
+    )
+    expect(screen.getByRole('dialog', { name: 'New epic' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Short code')).toBeInTheDocument()
+    expect(screen.getByText('Leave empty to derive it from the title.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Title')).toBeInTheDocument()
+    expect(screen.getByLabelText('Description')).toBeInTheDocument()
   })
 })

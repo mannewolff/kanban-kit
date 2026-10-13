@@ -126,12 +126,10 @@ public class CardCycleTimeService {
       return null;
     }
     if (from == null || to == null) {
-      throw new InvalidPeriodBoundsException(
-          "Ein Zeitraum braucht beide Grenzen from und to oder keine von beiden.");
+      throw InvalidPeriodBoundsException.halberZeitraum();
     }
     if (!from.isBefore(to)) {
-      throw new InvalidPeriodBoundsException(
-          "Der Beginn from muss vor dem Ende to liegen (from=" + from + ", to=" + to + ").");
+      throw InvalidPeriodBoundsException.beginnNichtVorEnde(from, to);
     }
     return new Period(from, to);
   }

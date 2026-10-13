@@ -130,7 +130,7 @@ class CardMoveControllerTest {
 
   @Test
   void setStatus_unbekannterWert_ergibt400() {
-    doThrow(new InvalidStatusException("Unbekannter Status: FERTIG"))
+    doThrow(InvalidStatusException.unbekannt(new IllegalArgumentException("FERTIG")))
         .when(service)
         .setStatus(3L, 8L, "FERTIG");
 

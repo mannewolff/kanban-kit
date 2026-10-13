@@ -5,6 +5,7 @@ import type { BoardColumn } from '../api/boards'
 import { ApiError } from '../api/client'
 import { MAX_CARDS_PER_IMPORT, MAX_DESCRIPTION_LENGTH, MAX_TITLE_LENGTH } from '../lib/specImport'
 import { SpecImportDialog, type SpecCard } from './SpecImportDialog'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const COLUMNS: BoardColumn[] = [
   { id: 10, name: 'Backlog', position: 0, wipLimit: null },
@@ -302,5 +303,81 @@ describe('SpecImportDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
 
     expect(onClose).toHaveBeenCalled()
+  })
+})
+
+describe('SpecImportDialog auf Englisch', () => {
+  const zeigeEn = (
+    markdown: string = SPEC,
+    onImport: (cards: SpecCard[], columnId: number) => Promise<void> = () => Promise.resolve(),
+  ) =>
+    renderMitSprache(
+      <SpecImportDialog
+        open
+        fileName="spec.md"
+        markdown={markdown}
+        columns={COLUMNS}
+        columnId={10}
+        onColumnChange={vi.fn()}
+        onClose={vi.fn()}
+        onImport={onImport}
+      />,
+      'en',
+    )
+
+  it('zeigt Titel, Felder, Hinweis, Zähler und Knöpfe auf Englisch', () => {
+    zeigeEn()
+
+    expect(screen.getByRole('heading', { name: 'Import specification' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Separating heading level')).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'H1 separates the cards' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'H2 separates the cards' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Target column')).toBeInTheDocument()
+    expect(screen.getByText(/only read in the browser.*neither uploaded nor changed or deleted/)).toBeInTheDocument()
+    expect(screen.getByText('2 of 2 sections selected.')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Import section “Anmeldung”' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create 2 cards' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Import section “Anmeldung”' }))
+    expect(screen.getByRole('button', { name: 'Create 1 card' })).toBeInTheDocument()
+  })
+
+  it('zeigt Kürzungen und fehlende Beschreibung auf Englisch', () => {
+    zeigeEn(['## ' + 'x'.repeat(MAX_TITLE_LENGTH + 1), '', '## Leer', '', '## Lang', 'y'.repeat(MAX_DESCRIPTION_LENGTH + 1)].join('\n'))
+
+    expect(screen.getByText('Title truncated')).toBeInTheDocument()
+    expect(screen.getByText('Description truncated')).toBeInTheDocument()
+    expect(screen.getAllByText('(no description)').length).toBeGreaterThan(0)
+  })
+
+  it('zeigt die Leermeldungen auf Englisch', () => {
+    const { unmount } = zeigeEn('   ')
+    expect(screen.getByText('The file is empty — there is nothing to import.')).toBeInTheDocument()
+    unmount()
+
+    zeigeEn('# Nur H1')
+    expect(
+      screen.getByText('No heading of level H2 found — nothing will be created. You can switch to H1 above.'),
+    ).toBeInTheDocument()
+  })
+
+  it('warnt bei zu vielen Abschnitten auf Englisch', () => {
+    const viele = Array.from({ length: MAX_CARDS_PER_IMPORT + 1 }, (_, i) => `## Teil ${i}`).join('\n')
+    zeigeEn(viele)
+
+    expect(
+      screen.getByText(
+        `${MAX_CARDS_PER_IMPORT + 1} sections selected — at most ${MAX_CARDS_PER_IMPORT} can be created at once. Please deselect individual sections.`,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('meldet einen Fehlschlag ohne Server-Meldung auf Englisch', async () => {
+    zeigeEn(SPEC, () => Promise.reject(new Error('netz')))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create 2 cards' }))
+
+    expect(await screen.findByText('The cards could not be created. Please try again.')).toBeInTheDocument()
   })
 })

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { projectsApi } from '../api/projects'
 import { ProjectsPage } from '../pages/ProjectsPage'
 import { StartRedirect } from './StartRedirect'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const useAuthMock = vi.fn()
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => useAuthMock() }))
@@ -95,5 +96,29 @@ describe('StartRedirect (#1082)', () => {
     )
 
     expect(await screen.findByText('Boardauswahl')).toBeInTheDocument()
+  })
+})
+
+describe('StartRedirect auf Englisch', () => {
+  it.each([
+    ['ADMIN', '/plattform-leitstand'],
+    ['USER', '/projects'],
+  ])('führt bei Rolle %s auf %s', (platformRole, ziel) => {
+    useAuthMock.mockReturnValue({
+      user: { userId: 1, email: 'a@b.de', displayName: 'A', platformRole, memberships: [] },
+      loading: false,
+    })
+    renderMitSprache(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<StartRedirect />} />
+          <Route path="/projects" element={<Ziel />} />
+          <Route path="/plattform-leitstand" element={<Ziel />} />
+        </Routes>
+      </MemoryRouter>,
+      'en',
+    )
+
+    expect(screen.getByTestId('ziel')).toHaveTextContent(ziel)
   })
 })

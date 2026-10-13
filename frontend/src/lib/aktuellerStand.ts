@@ -1,6 +1,7 @@
 import { NIGHT_RUN_STATE_TEXT } from './nightRunHandoff'
 import { nachProjekt, type Projektgruppe } from './leitstand'
 import type { NightRunState } from './nightRunLog'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 
 /**
  * Die Rechnung der Sektion „Aktueller Status" des Plattform-Leitstands (#1172, Plan #1167):
@@ -58,16 +59,17 @@ const ZUSTAENDE: readonly NightRunState[] = ['GREEN', 'YELLOW', 'RED', 'GREY']
  * Zeitbudget beendet, ohne Ergebnis: 1". Das Wort der **Zeile** ist eine andere Sache und
  * steht in der Komponente.
  */
-export function standText(pakete: readonly StandPaket[]): string {
+export function standText(pakete: readonly StandPaket[], sprache: Sprache = 'de'): string {
+  const gemeldet = woerterbuch(sprache).AKTUELLER_STAND.GEMELDET
   if (pakete.length === 0) {
-    return '0 gemeldet'
+    return gemeldet(0)
   }
   const kuebel = ZUSTAENDE.map((state) => ({
     state,
     zahl: pakete.filter((p) => p.state === state).length,
   })).filter((k) => k.zahl > 0)
   const genannt = kuebel.map((k) => `${k.zahl} ${NIGHT_RUN_STATE_TEXT[k.state]}`).join(', ')
-  return `${pakete.length} gemeldet · ${genannt}`
+  return `${gemeldet(pakete.length)} · ${genannt}`
 }
 
 /**
@@ -86,6 +88,7 @@ export function standText(pakete: readonly StandPaket[]): string {
 export function laufgruppen<P extends StandPaket>(
   laufende: readonly StandLauf[],
   gemeldetePakete: readonly StandLaufPakete<P>[],
+  sprache: Sprache = 'de',
 ): Projektgruppe<Laufeintrag<P>>[] {
   const jeLauf = new Map(gemeldetePakete.map((eintrag) => [eintrag.nightRunId, eintrag.pakete]))
   return nachProjekt(
@@ -96,7 +99,7 @@ export function laufgruppen<P extends StandPaket>(
         projectName: lauf.projectName,
         nightRunId: lauf.nightRunId,
         pakete,
-        stand: standText(pakete),
+        stand: standText(pakete, sprache),
       }
     }),
   ).map((gruppe) => ({

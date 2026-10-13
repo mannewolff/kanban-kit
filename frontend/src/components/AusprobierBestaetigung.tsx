@@ -5,7 +5,7 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
-import { HINWEIS_AENDERND } from '../lib/apiAusprobieren'
+import { useT } from '../i18n/SpracheContext'
 import { SCHRIFT_MONO } from '../theme'
 import { dialogTitleSx } from './dialogChromeSx'
 
@@ -28,6 +28,7 @@ interface Props {
  * Escape oder den Hintergrund gilt als Abbruch.
  */
 export function AusprobierBestaetigung({ offen, methode, pfad, onAbbrechen, onAbsenden }: Readonly<Props>) {
+  const t = useT()
   return (
     <Dialog
       open={offen}
@@ -38,11 +39,11 @@ export function AusprobierBestaetigung({ offen, methode, pfad, onAbbrechen, onAb
       aria-describedby={HINWEIS_ID}
     >
       <DialogTitle id={TITEL_ID} sx={dialogTitleSx}>
-        Echte Daten ändern?
+        {t.API_UEBERSICHT.BESTAETIGUNG_TITEL}
       </DialogTitle>
       <DialogContent>
         <DialogContentText id={HINWEIS_ID} sx={{ mt: 2, mb: 2 }}>
-          {HINWEIS_AENDERND}
+          {t.API_UEBERSICHT.HINWEIS_AENDERND}
         </DialogContentText>
         <Box component="code" sx={{ fontFamily: SCHRIFT_MONO, wordBreak: 'break-all' }}>
           <Box component="span" sx={{ fontWeight: 'fontWeightBold', mr: 1 }}>
@@ -53,10 +54,10 @@ export function AusprobierBestaetigung({ offen, methode, pfad, onAbbrechen, onAb
       </DialogContent>
       <DialogActions>
         <Button onClick={onAbbrechen} autoFocus>
-          Abbrechen
+          {t.ALLGEMEIN.ABBRECHEN}
         </Button>
         <Button variant="contained" onClick={onAbsenden}>
-          Absenden
+          {t.API_UEBERSICHT.ABSENDEN}
         </Button>
       </DialogActions>
     </Dialog>

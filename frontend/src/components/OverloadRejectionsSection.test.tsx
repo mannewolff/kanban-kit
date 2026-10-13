@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { OverloadRejection } from '../api/admin'
 import { OverloadRejectionsSection } from './OverloadRejectionsSection'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 function api(result: Promise<OverloadRejection[]>) {
   return { listOverloadRejections: vi.fn().mockReturnValue(result) }
@@ -69,5 +70,36 @@ describe('OverloadRejectionsSection', () => {
 
     expect(fehler).not.toHaveBeenCalled()
     fehler.mockRestore()
+  })
+})
+
+describe('OverloadRejectionsSection auf Englisch', () => {
+  it('zeigt Überschrift, Spalten und Stunde in US-Schreibweise', async () => {
+    renderMitSprache(
+      <OverloadRejectionsSection
+        api={api(Promise.resolve([{ userId: 8, displayName: 'Bob', hour: '2026-09-22T08:00:00Z', rejections: 3 }]))}
+      />,
+      'en',
+    )
+
+    expect(screen.getByRole('heading', { name: 'Rejections due to load' })).toBeInTheDocument()
+    const bob = await screen.findByRole('row', { name: /Bob/ })
+    expect(within(bob).getByText(/^Sep 22, 2026, 10:00\sAM$/)).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Person/ })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Hour/ })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /Count/ })).toBeInTheDocument()
+  })
+
+  it('zeigt Leerzustand, Laden und Fehler auf Englisch', async () => {
+    const { unmount } = renderMitSprache(<OverloadRejectionsSection api={api(new Promise(() => {}))} />, 'en')
+    expect(screen.getByLabelText('Loading rejections')).toBeInTheDocument()
+    unmount()
+
+    const { unmount: weg } = renderMitSprache(<OverloadRejectionsSection api={api(Promise.resolve([]))} />, 'en')
+    expect(await screen.findByText('No rejections due to load in the last 90 days.')).toBeInTheDocument()
+    weg()
+
+    renderMitSprache(<OverloadRejectionsSection api={api(Promise.reject(new Error('503')))} />, 'en')
+    expect(await screen.findByText('Rejections due to load could not be loaded.')).toBeInTheDocument()
   })
 })

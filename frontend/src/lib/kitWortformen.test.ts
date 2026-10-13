@@ -243,6 +243,8 @@ describe('kitWortformen — Abschnitt Szenarien (Issue #1627)', () => {
     expect(passe(SZENARIEN_ABSCHNITT, '### Szenarien')).toBeNull()
     expect(passe(SZENARIEN_ABSCHNITT, '## Szenarien-Liste')).toBeNull()
     expect(passe(SZENARIEN_ABSCHNITT, 'x ## Scenarios')).toBeNull()
+    expect(passe(SZENARIEN_ABSCHNITT, '##  Szenarien')).not.toBeNull()
+    expect(passe(SZENARIEN_ABSCHNITT, '## Scenarios-List')).toBeNull()
   })
 
   it('liefert in beiden Sprachen Fettdruck, Schluesselwort und Rest als Gruppen', () => {

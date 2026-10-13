@@ -5,6 +5,7 @@ import { ApiError } from '../api/client'
 import { abnahmeKommentar, type Szenario } from '../lib/abnahmeSzenarien'
 import { MAX_TEXT_LENGTH, tooLongMessage } from '../lib/textLimits'
 import { AbnahmeSzenarienDialog } from './AbnahmeSzenarienDialog'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const SZENARIEN: Szenario[] = [
   { name: 'Anmelden', schritte: ['Angenommen ein Konto', 'Wenn ich mich anmelde', 'Dann sehe ich das Board'] },
@@ -309,5 +310,60 @@ describe('AbnahmeSzenarienDialog', () => {
     await user.keyboard('{Enter}')
     expect(onAbschicken).toHaveBeenCalledWith(abnahmeKommentar([SZENARIEN[0]], [{ urteil: 'nicht okay', notiz: 'zu langsam' }]))
     await waitFor(() => expect(screen.getByRole('button', { name: KNOPF })).toBeDisabled())
+  })
+})
+
+describe('AbnahmeSzenarienDialog auf Englisch', () => {
+  function renderEnglisch(onAbschicken: (text: string) => Promise<void> = vi.fn(() => Promise.resolve())) {
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    renderMitSprache(
+      <AbnahmeSzenarienDialog open titel="Login" szenarien={SZENARIEN} onClose={onClose} onAbschicken={onAbschicken} />,
+      'en',
+    )
+    return { onClose, onAbschicken, user }
+  }
+
+  const gruppe = (nummer: number) => screen.getByRole('group', { name: `Verdict on scenario ${nummer}` })
+
+  it('beschriftet Titel, Vermerke, Stand und Knöpfe auf Englisch', async () => {
+    const { user } = renderEnglisch()
+    expect(screen.getByRole('dialog', { name: 'Acceptance: Login' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('0 of 3 okay — still open: 3')
+
+    await user.click(within(gruppe(2)).getByRole('button', { name: 'not okay' }))
+    expect(screen.getByLabelText('Note (optional)')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('0 of 3 okay — not okay: 2. Abmelden — still open: 2')
+
+    await user.click(within(gruppe(1)).getByRole('button', { name: 'okay' }))
+    await user.click(within(gruppe(2)).getByRole('button', { name: 'okay' }))
+    await user.click(within(gruppe(3)).getByRole('button', { name: 'okay' }))
+    expect(screen.getByRole('status')).toHaveTextContent('All scenarios okay')
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Write result to the requirement' })).toBeEnabled()
+  })
+
+  it('schreibt den Kommentar auf Englisch und meldet einen Fehler auf Englisch', async () => {
+    const onAbschicken = vi.fn(() => Promise.reject(new Error('offline')))
+    const { user } = renderEnglisch(onAbschicken)
+    for (const nummer of [1, 2, 3]) await user.click(within(gruppe(nummer)).getByRole('button', { name: 'okay' }))
+    await user.click(screen.getByRole('button', { name: 'Write result to the requirement' }))
+
+    expect(onAbschicken).toHaveBeenCalledWith(
+      abnahmeKommentar(SZENARIEN, SZENARIEN.map(() => ({ urteil: 'okay', notiz: '' })), 'en'),
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent('The result could not be written.')
+  })
+
+  it('fragt auf Englisch nach, bevor Vermerke verworfen werden', async () => {
+    const { user, onClose } = renderEnglisch()
+    await user.click(within(gruppe(1)).getByRole('button', { name: 'okay' }))
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+
+    const rueckfrage = screen.getByRole('dialog', { name: 'Discard verdicts?' })
+    expect(rueckfrage).toHaveAccessibleDescription('The verdicts of this acceptance will be lost.')
+    expect(within(rueckfrage).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    await user.click(within(rueckfrage).getByRole('button', { name: 'Discard' }))
+    expect(onClose).toHaveBeenCalled()
   })
 })

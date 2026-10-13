@@ -1,3 +1,5 @@
+import { de } from '../i18n/de'
+
 /** Feld → Meldung aus der `fieldErrors`-Extension einer RFC-9457-Fehlerantwort. */
 export type FieldErrors = Readonly<Record<string, string>>
 
@@ -24,11 +26,12 @@ export class ApiError extends Error {
 
 /**
  * Anzeigbarer Text zu einem Fehler: die Server-Meldung aus {@link ApiError.detail}, sonst der
- * übergebene Fallback. Liest ausschließlich `detail` — nie `message`, das bei einem nicht
+ * übergebene Fallback, ohne Angabe der deutsche Text aus dem Wörterbuch (Plan #1638, E6). Eine
+ * Seite in Englisch übergibt ihren Fallback aus `useT()`. Liest ausschließlich `detail` — nie `message`, das bei einem nicht
  * lesbaren Body auf den Roh-Body oder `statusText` zurückfällt (z. B. die HTML-Fehlerseite
  * eines Reverse-Proxys bei 502/504) und deshalb nicht nach außen gehört.
  */
-export function apiErrorMessage(error: unknown, fallback: string): string {
+export function apiErrorMessage(error: unknown, fallback: string = de.FEHLER_UNBEKANNT): string {
   if (!(error instanceof ApiError)) return fallback
   return error.detail !== undefined && error.detail !== '' ? error.detail : fallback
 }

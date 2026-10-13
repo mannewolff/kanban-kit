@@ -99,6 +99,17 @@ Aktuelle Struktur unter `frontend/src/`:
 
 ---
 
+## 🗣️ Texte
+
+Die Oberfläche gibt es auf Deutsch und Englisch (Plan #1638). Was der Nutzer selbst benennt, sind Daten und bleibt, wie es ist; alles fest Eingebaute kommt aus dem Wörterbuch.
+
+- **Kein Literal in JSX.** Kein JSX-Text, kein String in `label`, `title`, `placeholder`, `aria-label`, `helperText`, `alt`, `tooltip`, kein fester Text in `notify(…)` und keine Texttabelle mit Anzeigetext im Modul. Texte kommen über `useT()` aus `src/i18n/de.ts` (Quelle der Schlüssel) und `src/i18n/en.ts` (gleicher Typ — `tsc` weist eine fehlende Übersetzung ab); Parameter laufen über Funktionswerte, nicht über Platzhalter-Strings.
+- **Formatierung über `i18n/format.ts`.** Datum, Uhrzeit, Zahlen und Dauern über `formatierer(sprache)` mit `useSprache().sprache`; kein `'de-DE'` und keine handgebauten Einheiten in Komponenten. Reine `lib`-Funktionen nehmen `sprache` als letzten Parameter mit Vorgabe `'de'`, ohne Modulzustand.
+- **Wächter `sprachwaechter`.** `lib/sprachwaechter.ts` meldet zwei Regeln: `jsx` (JSX-Text, die Textattribute oben, erstes Argument von `notify`) und `literal` (String- und Template-Literale mit Umlaut, `ß` oder einem Leerzeichen zwischen zwei Wörtern). Ausgenommen sind Testdateien, `src/test/`, `src/i18n/`, `src/api/` und `src/lib/kitWortformen.ts`. Der Lauf `src/sprachwaechter.test.ts` hält eine Ausnahmeliste `{ file, rule, resolvedIn }` als Ratchet nach dem Muster von `designGuard`: Ein Fund ohne Eintrag ist rot, ein Eintrag ohne Fund ebenso. Wer eine Datei umstellt, löscht ihre Einträge; ein Literal ohne Anzeigetext (CSS-Wert, Schlüssel, Pfad) trägt `resolvedIn: 'kein Anzeigetext'`.
+- **Tests rendern standardmäßig Deutsch.** Ohne Provider liefert `useT()` das deutsche Wörterbuch; bestehende Abfragen nach deutschem Text bleiben gültig. Je umgestellter Seite kommt mindestens ein Test mit „auf Englisch“ im Namen über `renderMitSprache(…, 'en')` aus `i18n/renderMitSprache.tsx` dazu.
+
+---
+
 ## 🪝 Hooks
 
 - Nur auf Top-Level aufrufen, nie in Schleifen oder Bedingungen.

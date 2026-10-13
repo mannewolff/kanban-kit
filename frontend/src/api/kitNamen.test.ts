@@ -5,9 +5,9 @@ import type { KitNamen } from './kitNamen'
 /** Ausschnitt der Antwort von `GET /api/kit-namen` (Issue #1588). */
 const DATEN: KitNamen = {
   sachen: [
-    { sache: 'KLAEREN', namen: ['kit:klaeren', 'kit:clarify'] },
-    { sache: 'NIGHT', namen: ['kit:night'] },
-    { sache: 'ZIEL_PAKETE', namen: ['ziel:pakete', 'goal:packages'] },
+    { sache: 'KLAEREN', namen: ['kit:klaeren', 'kit:clarify'], schutz: 'NUR_MENSCH_NIMMT_AB' },
+    { sache: 'NIGHT', namen: ['kit:night'], schutz: 'NUR_MENSCH_SETZT' },
+    { sache: 'ZIEL_PAKETE', namen: ['ziel:pakete', 'goal:packages'], schutz: 'KEINER' },
   ],
   titelPraefixe: [
     { art: 'FACHLICH', namen: ['[Fachlich]', '[Requirement]'] },
@@ -47,6 +47,17 @@ describe('ladeKitNamen', () => {
     expect(c).toEqual(DATEN)
     expect(spy).toHaveBeenCalledTimes(1)
     expect(spy.mock.calls[0][0]).toBe('/api/kit-namen')
+  })
+
+  it('reicht die Schutzregel je Sache durch (Issue #1670)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(antwort(DATEN))
+    const { ladeKitNamen } = await modul()
+    const daten = await ladeKitNamen()
+    expect(daten.sachen.map((s) => [s.sache, s.schutz])).toEqual([
+      ['KLAEREN', 'NUR_MENSCH_NIMMT_AB'],
+      ['NIGHT', 'NUR_MENSCH_SETZT'],
+      ['ZIEL_PAKETE', 'KEINER'],
+    ])
   })
 
   it('lädt nach einem Fehler beim nächsten Aufruf erneut', async () => {

@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
+import { useT } from '../../i18n/SpracheContext'
 import { KLEIN_RADIUS, NUT, RAND, SCHATTEN_NUTE, SCHATTEN_PLATTE, TASTE_SX, ZAHL } from '../../theme'
 
 /**
@@ -22,12 +23,13 @@ export function NachtlaufBefund({
   text,
   onKopieren,
 }: Readonly<{ cardNumber: number; text: string; onKopieren: () => void }>) {
+  const t = useT().NACHTLAUF_BEFUND
   return (
     <Box sx={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
       <Box
         component="pre"
         data-testid={`befund-${cardNumber}`}
-        aria-label={`Übernahmetext zu Karte #${cardNumber}`}
+        aria-label={t.ARIA(cardNumber)}
         // Der Kasten scrollt bei langen Auszügen; ohne Fokus wäre sein Inhalt mit der Tastatur
         // nicht erreichbar, und ein Vorlesewerkzeug läse seine Beschriftung nie.
         tabIndex={0}
@@ -53,7 +55,7 @@ export function NachtlaufBefund({
         {text}
       </Box>
       <ButtonBase
-        aria-label={`Übernahmetext zu Karte #${cardNumber} kopieren`}
+        aria-label={t.KOPIEREN_ARIA(cardNumber)}
         onClick={onKopieren}
         sx={{
           ...TASTE_SX,
@@ -73,7 +75,7 @@ export function NachtlaufBefund({
         }}
       >
         <ContentCopyIcon sx={{ fontSize: 13 }} />
-        Kopieren
+        {t.KOPIEREN}
       </ButtonBase>
     </Box>
   )

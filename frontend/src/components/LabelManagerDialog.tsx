@@ -10,10 +10,13 @@ import IconButton from '@mui/material/IconButton'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import { useState } from 'react'
 import { apiErrorMessage } from '../api/client'
 import { labelsApi as defaultLabelsApi, type Label, type LabelsApi } from '../api/labels'
+import { useT } from '../i18n/SpracheContext'
 import { dialogTitleSx } from './dialogChromeSx'
+import { LabelErklaerung, useLabelErklaerung } from './LabelErklaerung'
 import { useSnackbar } from './SnackbarProvider'
 
 interface Props {
@@ -48,6 +51,7 @@ export function LabelManagerDialog({
   const [newColor, setNewColor] = useState(DEFAULT_COLOR)
   const [error, setError] = useState<string | null>(null)
   const notify = useSnackbar()
+  const t = useT()
 
   // Zwei Fehlerkanäle mit Absicht: Die Anlege-Zeile ist ein Formular, ihre Meldung gehört neben
   // die Eingabe. Die Zeilen-Aktionen sind keins — dort gibt es kein Formular, an dem eine Meldung
@@ -61,7 +65,7 @@ export function LabelManagerDialog({
       setError(null)
       onChanged()
     } catch (e) {
-      setError(apiErrorMessage(e, 'Label konnte nicht angelegt werden.'))
+      setError(apiErrorMessage(e, t.LABELVERWALTUNG.ANLEGEN_FEHLER))
     }
   }
 
@@ -78,7 +82,7 @@ export function LabelManagerDialog({
         : api.update(label.id, name.trim(), color, countOnEpicTile))
       onChanged()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Label konnte nicht gespeichert werden.'), 'error')
+      notify(apiErrorMessage(e, t.LABELVERWALTUNG.SPEICHERN_FEHLER), 'error')
     }
   }
 
@@ -87,40 +91,40 @@ export function LabelManagerDialog({
       await api.remove(label.id)
       onChanged()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Label konnte nicht gelöscht werden.'), 'error')
+      notify(apiErrorMessage(e, t.LABELVERWALTUNG.LOESCHEN_FEHLER), 'error')
     }
   }
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle sx={dialogTitleSx}>Labels verwalten</DialogTitle>
+      <DialogTitle sx={dialogTitleSx}>{t.LABELVERWALTUNG.TITEL}</DialogTitle>
       <DialogContent>
         <Stack spacing={1.5} sx={{ mt: 1 }}>
           {labels.map((label) => (
             <LabelRow key={label.id} label={label} onSave={save} onDelete={remove} />
           ))}
           {labels.length === 0 && (
-            <Typography color="text.secondary">Noch keine Labels.</Typography>
+            <Typography color="text.secondary">{t.LABELVERWALTUNG.LEER}</Typography>
           )}
 
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
             <TextField
               size="small"
-              label="Neues Label"
+              label={t.LABELVERWALTUNG.NEUES_LABEL}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 60, 'aria-label': 'Neues Label' } }}
+              slotProps={{ htmlInput: { maxLength: 60, 'aria-label': t.LABELVERWALTUNG.NEUES_LABEL } }}
             />
             <Box
               component="input"
               type="color"
-              aria-label="Neue Label-Farbe"
+              aria-label={t.LABELVERWALTUNG.NEUE_FARBE}
               value={newColor}
               onChange={(e) => setNewColor((e.target as HTMLInputElement).value)}
               sx={{ width: 40, height: 36, border: 'none', background: 'none' }}
             />
             <Button variant="contained" size="small" onClick={() => void create()}>
-              Anlegen
+              {t.ALLGEMEIN.ANLEGEN}
             </Button>
           </Stack>
           {error && (
@@ -131,7 +135,7 @@ export function LabelManagerDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Schließen</Button>
+        <Button onClick={onClose}>{t.ALLGEMEIN.SCHLIESSEN}</Button>
       </DialogActions>
     </Dialog>
   )
@@ -146,6 +150,8 @@ function LabelRow({
   onSave: (label: Label, name: string, color: string, countOnEpicTile?: boolean) => Promise<void>
   onDelete: (label: Label) => Promise<void>
 }>) {
+  const t = useT()
+  const systemlabel = useLabelErklaerung(label.name) !== null
   const [name, setName] = useState(label.name)
   const [color, setColor] = useState(label.color)
   const [zaehlt, setZaehlt] = useState(label.countOnEpicTile)
@@ -161,12 +167,22 @@ function LabelRow({
           size="small"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          slotProps={{ htmlInput: { maxLength: 60, 'aria-label': `Label ${label.name}` } }}
+          slotProps={{ htmlInput: { maxLength: 60, 'aria-label': t.LABELVERWALTUNG.LABEL_ARIA(label.name) } }}
         />
+        {/* Die Erklärung hängt an einem Info-Symbol neben dem Namen, nicht am Feld: Ein Tooltip über
+            einem Feld, in dem man gerade schreibt, stört (Plan #1668, E8). Maßgeblich ist der
+            gespeicherte Name, nicht der Entwurf im Feld. */}
+        {systemlabel && (
+          <LabelErklaerung name={label.name} eigenerFokus>
+            <IconButton size="small" aria-label={t.LABELVERWALTUNG.ERKLAERUNG_ARIA(label.name)}>
+              <InfoOutlinedIcon fontSize="small" />
+            </IconButton>
+          </LabelErklaerung>
+        )}
         <Box
           component="input"
           type="color"
-          aria-label={`Farbe ${label.name}`}
+          aria-label={t.LABELVERWALTUNG.FARBE_ARIA(label.name)}
           value={color}
           onChange={(e) => setColor((e.target as HTMLInputElement).value)}
           sx={{ width: 40, height: 36, border: 'none', background: 'none' }}
@@ -176,9 +192,9 @@ function LabelRow({
           disabled={!dirty || !name.trim()}
           onClick={() => void onSave(label, name, color, zaehltGeaendert ? zaehlt : undefined)}
         >
-          Speichern
+          {t.ALLGEMEIN.SPEICHERN}
         </Button>
-        <IconButton size="small" aria-label={`Label ${label.name} löschen`} onClick={() => void onDelete(label)}>
+        <IconButton size="small" aria-label={t.LABELVERWALTUNG.LOESCHEN_ARIA(label.name)} onClick={() => void onDelete(label)}>
           ✕
         </IconButton>
       </Stack>
@@ -198,10 +214,10 @@ function LabelRow({
             size="small"
             checked={zaehlt}
             onChange={(e) => setZaehlt(e.target.checked)}
-            slotProps={{ input: { 'aria-label': `${label.name}: auf der Vorhaben-Kachel zählen` } }}
+            slotProps={{ input: { 'aria-label': t.LABELVERWALTUNG.ZAEHLEN_ARIA(label.name) } }}
           />
         }
-        label="auf der Vorhaben-Kachel zählen"
+        label={t.LABELVERWALTUNG.ZAEHLEN}
         slotProps={{ typography: { variant: 'caption', color: 'text.secondary' } }}
       />
     </Stack>

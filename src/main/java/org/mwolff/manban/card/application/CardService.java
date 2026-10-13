@@ -271,7 +271,7 @@ public class CardService {
   public CardView setAssignees(long userId, long cardId, List<Long> assigneeIds) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() != CardType.CARD) {
-      throw new InvalidDependencyException("Nur Karten haben Zuständige");
+      throw InvalidDependencyException.nurKartenMitZustaendigen();
     }
     // Projekt-basierte Rechte (#405), nicht über das Board.
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
@@ -291,7 +291,7 @@ public class CardService {
   public CardView setLabels(long userId, long cardId, List<Long> labelIds) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() != CardType.CARD) {
-      throw new InvalidDependencyException("Nur Karten haben Labels");
+      throw InvalidDependencyException.nurKartenMitLabels();
     }
     // Projekt-basierte Rechte (#405); die Labels selbst bleiben board-scoped.
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
@@ -337,7 +337,7 @@ public class CardService {
   private CardView doLabel(long userId, long cardId, long labelId, LabelAction action) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() != CardType.CARD) {
-      throw new InvalidDependencyException("Nur Karten haben Labels");
+      throw InvalidDependencyException.nurKartenMitLabels();
     }
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 

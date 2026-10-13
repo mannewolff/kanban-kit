@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.application;
 
+import org.mwolff.manban.common.i18n.UebersetzbareMeldung;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
@@ -19,9 +20,15 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * arbeitet auf einem Board, das er so nicht mehr vor sich hat.
  */
 @ResponseStatus(HttpStatus.CONFLICT)
-public class CardMovedConcurrentlyException extends RuntimeException {
+public class CardMovedConcurrentlyException extends RuntimeException
+    implements UebersetzbareMeldung {
 
   public CardMovedConcurrentlyException() {
     super("Die Karte wurde zwischenzeitlich in eine andere Spalte verschoben");
+  }
+
+  @Override
+  public String schluessel() {
+    return "card.zwischenzeitlich-verschoben";
   }
 }

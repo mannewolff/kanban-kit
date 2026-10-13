@@ -5,6 +5,7 @@ import { cardsApi, type Card } from '../api/cards'
 import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { TransferCardDialog } from './TransferCardDialog'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
@@ -282,5 +283,65 @@ describe('TransferCardDialog', () => {
     fireEvent.change(screen.getByLabelText('Zielboard'), { target: { value: '11' } })
 
     expect(screen.getByLabelText('Zielspalte')).toHaveValue('112')
+  })
+})
+
+describe('TransferCardDialog auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockedProjects.list.mockResolvedValue([{ id: 1, name: 'Eigenes', role: 'OWNER', createdAt: '' }])
+    mockedBoards.list.mockResolvedValue([
+      { id: 10, name: 'Ziel', projectId: 1, createdAt: '', columns: [{ id: 100, name: 'Backlog', position: 0, wipLimit: null }] },
+      { id: 99, name: 'Aktuell', projectId: 1, createdAt: '', columns: [] },
+    ])
+  })
+
+  function renderEnglisch(cardIds: number[]) {
+    return renderMitSprache(
+      <TransferCardDialog
+        cardIds={cardIds}
+        currentBoardId={99}
+        currentProjectId={1}
+        sourceColumnPosition={0}
+        platformAdmin={false}
+        onClose={vi.fn()}
+        onTransferred={vi.fn()}
+      />,
+      'en',
+    )
+  }
+
+  it('beschriftet Dialog, Felder und Hinweise für eine Karte auf Englisch', async () => {
+    renderEnglisch([7])
+    expect(await screen.findByRole('option', { name: 'Aktuell' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Move card' })).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'The card will be moved to the selected column of this board. Number, epic assignment, dependencies, comments and attachments are kept.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Target project')).toBeInTheDocument()
+    expect(screen.getByLabelText('Target column')).toBeInTheDocument()
+    expect(screen.getAllByRole('option', { name: '(select)' })).toHaveLength(3)
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Target board'), { target: { value: '10' } })
+    expect(
+      screen.getByText(
+        'The card will be moved to the selected board. Epic assignment and dependencies are lost; comments and attachments are kept.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('nennt mehrere Karten und den Fehlschlag auf Englisch', async () => {
+    mockedCards.bulkTransfer.mockRejectedValue(new Error('offline'))
+    renderEnglisch([7, 8])
+    expect(await screen.findByRole('option', { name: 'Aktuell' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Move cards' })).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Target board'), { target: { value: '10' } })
+    expect(screen.getByText(/^The 2 cards will be moved to the selected board\./)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Moving failed.')
   })
 })

@@ -10,54 +10,17 @@ import TableRow from '@mui/material/TableRow'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import { rolesApi as defaultRolesApi, type PermissionDef, type RoleMatrix, type RolesApi } from '../api/roles'
-
-const RESOURCE_LABEL: Record<string, string> = {
-  BOARD: 'Board',
-  // Anzeige Vorhaben; der gespeicherte Schluessel bleibt EPIC_* (V4-Seed, siehe
-  // RoleMatrixService) — umbenannt wird nur, was der Nutzer sieht.
-  EPIC: 'Vorhaben',
-  TICKET: 'Ticket',
-  COMMENT: 'Kommentar',
-  ATTACHMENT: 'Anhang',
-  CARD: 'Karte',
-  MEMBER: 'Mitglieder',
-  PROJECT: 'Projekt',
-  // NIGHT_RUN_* wird zu Ressource NIGHT + Operation RUN_* zerlegt (RoleMatrixService); angezeigt
-  // wird der Begriff der Oberflaeche.
-  NIGHT: 'Läufe',
-}
-
-const OPERATION_LABEL: Record<string, string> = {
-  CREATE: 'C',
-  READ: 'R',
-  UPDATE: 'U',
-  DELETE: 'D',
-  MOVE: 'Move',
-  MOVE_PROJECT: 'Projektwechsel',
-  INVITE: 'Einladen',
-  REMOVE: 'Entfernen',
-  EDIT: 'Bearbeiten',
-  RUN_READ: 'Lesen',
-  RUN_SUBMIT: 'Einliefern',
-}
+import type { Woerterbuch } from '../i18n/de'
+import { useT } from '../i18n/SpracheContext'
 
 /**
  * Fussnoten zu Rechten, deren Regel eine Zusatzbedingung traegt, die kein Haken ausdruecken kann
- * (Issue #1165). Die Marke steht am Spaltenkopf, der Text unter der Tabelle.
+ * (Issue #1165). Die Marke steht am Spaltenkopf, der Text unter der Tabelle; er kommt aus dem
+ * Woerterbuch (`ROLLEN.FUSSNOTE`).
  */
-const FUSSNOTEN: { marke: string; keys: string[]; text: string }[] = [
-  {
-    marke: '¹',
-    keys: ['NIGHT_RUN_READ', 'NIGHT_RUN_SUBMIT'],
-    text:
-      'Ein Plattform-Admin liest die Auswertung eines Projekts auch ohne OWNER-Rolle — aber ' +
-      'nur, wenn das Projekt am Plattform-Leitstand teilnimmt. Einliefern darf er immer.',
-  },
-  {
-    marke: '²',
-    keys: ['CARD_MOVE_PROJECT'],
-    text: 'Die Rolle OWNER muss im Quell- und im Zielprojekt vorliegen.',
-  },
+const FUSSNOTEN: { marke: string; keys: string[]; text: keyof Woerterbuch['ROLLEN']['FUSSNOTE'] }[] = [
+  { marke: '¹', keys: ['NIGHT_RUN_READ', 'NIGHT_RUN_SUBMIT'], text: 'LAEUFE' },
+  { marke: '²', keys: ['CARD_MOVE_PROJECT'], text: 'PROJEKTWECHSEL' },
 ]
 
 /** Marke der Fussnote zu einem Recht, oder undefined, wenn es keine traegt. */
@@ -86,6 +49,7 @@ function groupByResource(permissions: PermissionDef[]): { resource: string; perm
  * Rollen (mit editierbaren Haken) sind einer späteren Version vorbehalten.
  */
 export function RolesPage({ api = defaultRolesApi }: { api?: RolesApi } = {}) {
+  const t = useT()
   const [matrix, setMatrix] = useState<RoleMatrix | null>(null)
 
   useEffect(() => {
@@ -93,15 +57,20 @@ export function RolesPage({ api = defaultRolesApi }: { api?: RolesApi } = {}) {
   }, [api])
 
   const groups = matrix ? groupByResource(matrix.permissions) : []
+  // Anzeige Vorhaben; der gespeicherte Schluessel bleibt EPIC_* (V4-Seed, siehe RoleMatrixService) —
+  // umbenannt wird nur, was der Nutzer sieht. NIGHT_RUN_* wird zu Ressource NIGHT + Operation RUN_*
+  // zerlegt; unbekannte Schluessel zeigen sich roh.
+  const ressourcen: Readonly<Record<string, string>> = t.ROLLEN.RESSOURCE
+  const operationen: Readonly<Record<string, string>> = t.ROLLEN.OPERATION
 
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
-        Rollen & Rechte
+        {t.RAHMEN.NAV_ROLLEN}
       </Typography>
 
       <Typography variant="subtitle1" sx={{ mt: 1, mb: 1, fontWeight: 600 }}>
-        Projekt-Rollen
+        {t.ROLLEN.PROJEKT_ROLLEN}
       </Typography>
 
       {matrix && (
@@ -109,7 +78,7 @@ export function RolesPage({ api = defaultRolesApi }: { api?: RolesApi } = {}) {
           <Table size="small" sx={{ width: 'auto' }}>
             <TableHead>
               <TableRow>
-                <TableCell rowSpan={2} sx={{ fontWeight: 600 }}>Rolle</TableCell>
+                <TableCell rowSpan={2} sx={{ fontWeight: 600 }}>{t.ALLGEMEIN.ROLLE}</TableCell>
                 {groups.map((g) => (
                   <TableCell
                     key={g.resource}
@@ -117,14 +86,14 @@ export function RolesPage({ api = defaultRolesApi }: { api?: RolesApi } = {}) {
                     colSpan={g.perms.length}
                     sx={{ fontWeight: 600, borderLeft: 1, borderColor: 'divider' }}
                   >
-                    {RESOURCE_LABEL[g.resource] ?? g.resource}
+                    {ressourcen[g.resource] ?? g.resource}
                   </TableCell>
                 ))}
               </TableRow>
               <TableRow>
                 {matrix.permissions.map((p) => (
                   <TableCell key={p.key} align="center" sx={{ px: 0.5 }}>
-                    {OPERATION_LABEL[p.operation] ?? p.operation}
+                    {operationen[p.operation] ?? p.operation}
                     {fussnotenMarke(p.key) && <sup>{fussnotenMarke(p.key)}</sup>}
                   </TableCell>
                 ))}
@@ -140,7 +109,7 @@ export function RolesPage({ api = defaultRolesApi }: { api?: RolesApi } = {}) {
                         size="small"
                         disabled
                         checked={matrix.grants[role]?.includes(p.key) ?? false}
-                        slotProps={{ input: { 'aria-label': `${p.key} für ${role}` } }}
+                        slotProps={{ input: { 'aria-label': t.ROLLEN.RECHT_FUER(p.key, role) } }}
                       />
                     </TableCell>
                   ))}
@@ -158,39 +127,35 @@ export function RolesPage({ api = defaultRolesApi }: { api?: RolesApi } = {}) {
           color="text.secondary"
           sx={{ display: 'block', mt: 1 }}
         >
-          <sup>{f.marke}</sup> {f.text}
+          <sup>{f.marke}</sup> {t.ROLLEN.FUSSNOTE[f.text]}
         </Typography>
       ))}
 
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-        Die Haken der eingebauten Rollen sind fest. Zusätzliche, frei konfigurierbare Rollen folgen später.
-        Die Teilnahme am Plattform-Leitstand schalten OWNER und Projekt-ADMIN — sie ist kein Recht der
-        Matrix und bewusst nicht Sache des Plattform-Admins.
+        {t.ROLLEN.HAKEN_FEST}
       </Typography>
 
       <Typography variant="subtitle1" sx={{ mt: 3, mb: 1, fontWeight: 600 }}>
-        Plattform-Rollen
+        {t.ROLLEN.PLATTFORM_ROLLEN}
       </Typography>
       <Typography variant="body2" component="div">
-        <b>USER</b> — sieht und bearbeitet nur eigene Projekte bzw. Projekte, in denen er Mitglied ist.
+        <b>USER</b> — {t.ROLLEN.USER_TEXT}
       </Typography>
       <Typography variant="body2" component="div" sx={{ mt: 0.5 }}>
-        <b>ADMIN</b> — Super-User: Vollzugriff auf <i>alle</i> Projekte und Nutzerverwaltung (andere zu
-        Admin ernennen).
+        <b>ADMIN</b> — {t.ROLLEN.ADMIN_TEXT_VOR} <i>{t.ROLLEN.ADMIN_TEXT_BETONT}</i> {t.ROLLEN.ADMIN_TEXT_NACH}
       </Typography>
 
       <Typography variant="subtitle2" sx={{ mt: 2, mb: 0.5, fontWeight: 600 }}>
-        Nur mit der Plattform-Rolle ADMIN
+        {t.ROLLEN.NUR_ADMIN_TITEL}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-        Keine Projekt-Rolle gewährt das — auch OWNER nicht. Deshalb stehen die beiden Punkte hier und
-        nicht als Zeile der Matrix oben.
+        {t.ROLLEN.NUR_ADMIN_HINWEIS}
       </Typography>
       <Typography variant="body2" component="div">
-        <b>Plattform-Leitstand ansehen</b> — die Übersicht über die Läufe aller teilnehmenden Projekte.
+        <b>{t.ROLLEN.LEITSTAND_ANSEHEN}</b> — {t.ROLLEN.LEITSTAND_ANSEHEN_TEXT}
       </Typography>
       <Typography variant="body2" component="div" sx={{ mt: 0.5 }}>
-        <b>Projekt anlegen und löschen</b> — beim Anlegen bestimmt der Plattform-Admin den Owner.
+        <b>{t.ROLLEN.PROJEKT_ANLEGEN}</b> — {t.ROLLEN.PROJEKT_ANLEGEN_TEXT}
       </Typography>
     </Box>
   )

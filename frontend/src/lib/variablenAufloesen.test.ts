@@ -68,3 +68,9 @@ describe('variablenAufloesen', () => {
     expect(variablenAufloesen(undefined, WERTE)).toBeUndefined()
   })
 })
+
+describe('variablenAufloesen auf Englisch', () => {
+  it('lässt Text ohne Verweis in jeder Sprache unverändert — das Modul trägt keinen Anzeigetext', () => {
+    expect(variablenAufloesen({ label: 'Due date', farbe: 'var(--mb-a)' }, WERTE)).toEqual({ label: 'Due date', farbe: '#AAAAAA' })
+  })
+})

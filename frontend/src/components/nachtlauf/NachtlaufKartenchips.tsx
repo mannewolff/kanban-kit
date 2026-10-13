@@ -2,6 +2,7 @@ import Box from '@mui/material/Box'
 import Link from '@mui/material/Link'
 import Typography from '@mui/material/Typography'
 import type { CardByNumber } from '../../api/cards'
+import { useT } from '../../i18n/SpracheContext'
 import { KUPFER, MELDER, NUT, RAND, SCHATTEN_NUTE, TEXT_SCHWACH, ZAHL } from '../../theme'
 
 /**
@@ -75,6 +76,7 @@ function ChipVerweis({
   chip,
   onOeffnen,
 }: Readonly<{ chip: Kartenchip; onOeffnen: (karte: CardByNumber) => void }>) {
+  const t = useT().NACHTLAUF_KARTENCHIPS
   if (chip.zustand.art === 'laedt') {
     return (
       <Box component="span" sx={CHIP_STIL}>
@@ -91,7 +93,7 @@ function ChipVerweis({
         <Box component="span" sx={ART_STIL}>
           {chip.art}
         </Box>
-        {`#${chip.id} nicht mehr vorhanden`}
+        {t.FORT(chip.id)}
       </Box>
     )
   }

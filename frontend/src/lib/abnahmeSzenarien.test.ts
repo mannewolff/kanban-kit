@@ -169,6 +169,24 @@ describe('szenarienAus — Abschnitt und Szenarien', () => {
     expect(szenario.schritte).toEqual(['Angenommen ein Fachplan', 'Dann bleibt der Abschnitt offen'])
   })
 
+  it('erkennt einen Codezaun nur am Zeilenanfang', () => {
+    const [szenario] = szenarienAus(
+      body('## Szenarien', '### Zaun', 'Angenommen ein Text mit ``` mitten drin', 'Dann bleibt er ein Schritt'),
+    )
+    expect(szenario.schritte).toEqual(['Angenommen ein Text mit ``` mitten drin', 'Dann bleibt er ein Schritt'])
+  })
+
+  it('erkennt einen Szenario-Kopf nur an ### mit Leerraum dahinter', () => {
+    const [szenario] = szenarienAus(body('## Szenarien', '### Eins', 'Angenommen A', '#### Unterpunkt', 'Dann B'))
+    expect(szenario).toEqual({ name: 'Eins', schritte: ['Angenommen A #### Unterpunkt', 'Dann B'] })
+  })
+
+  it('nimmt den Namen ohne den Leerraum hinter ###', () => {
+    expect(szenarienAus(body('## Szenarien', '###  \t Doppelt', 'Angenommen A'))).toEqual([
+      { name: 'Doppelt', schritte: ['Angenommen A'] },
+    ])
+  })
+
   it('erkennt den Abschnitt nicht in einem Codeblock', () => {
     expect(szenarienAus(body('```', '## Szenarien', '### Eins', 'Angenommen A', '```'))).toEqual([])
   })
@@ -248,6 +266,10 @@ describe('abnahmeKommentar', () => {
     expect(kommentar.endsWith('3. **Loeschen** — nicht okay')).toBe(true)
   })
 
+  it('nennt die Notiz eines okay-Vermerks nicht', () => {
+    expect(abnahmeKommentar(DREI, [{ urteil: 'okay', notiz: 'nebenbei' }, OKAY, OKAY])).toContain('1. **Anlegen** — okay\n')
+  })
+
   it('macht eine mehrzeilige Notiz einzeilig', () => {
     expect(abnahmeKommentar(DREI, [OKAY, OKAY, nichtOkay('erste Zeile\r\n\n  zweite Zeile\nletzte ')])).toContain(
       '3. **Loeschen** — nicht okay: erste Zeile zweite Zeile letzte',
@@ -296,5 +318,37 @@ describe('abnahmeKommentar', () => {
         '3. **Loeschen** — offen',
       ),
     )
+  })
+})
+
+describe('abnahmeKommentar auf Englisch', () => {
+  const szenarien: Szenario[] = [
+    { name: 'Sign in', schritte: ['Given an account'] },
+    { name: 'Sign out', schritte: ['When I sign out'] },
+    { name: 'Reset', schritte: ['Then a mail arrives'] },
+  ]
+
+  it('schreibt Kopf, Ergebnis und Liste auf Englisch', () => {
+    const vermerke: (Vermerk | undefined)[] = [{ urteil: 'okay', notiz: '' }, { urteil: 'nicht okay', notiz: 'broken' }]
+    expect(abnahmeKommentar(szenarien, vermerke, 'en')).toBe(
+      [
+        '## Scenario acceptance',
+        '',
+        'Result: 1 of 3 okay, not okay: 2. Sign out, open: 1.',
+        '',
+        '1. **Sign in** — okay',
+        '2. **Sign out** — not okay: broken',
+        '3. **Reset** — open',
+      ].join('\n'),
+    )
+  })
+
+  it('meldet auf Englisch, wenn alle Szenarien okay sind', () => {
+    const okay: Vermerk = { urteil: 'okay', notiz: '' }
+    expect(abnahmeKommentar(szenarien, [okay, okay, okay], 'en').split('\n')[2]).toBe('Result: all 3 scenarios okay.')
+  })
+
+  it('schreibt ohne Sprache weiter Deutsch', () => {
+    expect(abnahmeKommentar(szenarien, []).split('\n')[0]).toBe('## Abnahme der Szenarien')
   })
 })

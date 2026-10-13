@@ -1,5 +1,6 @@
 package org.mwolff.manban.auth.application;
 
+import org.mwolff.manban.common.i18n.UebersetzbareMeldung;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
@@ -9,9 +10,14 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * Meldung nach außen (Issue #881): Für den Aufrufer ist es ein Sachverhalt, nicht zwei.
  */
 @ResponseStatus(HttpStatus.CONFLICT)
-public class LastAdminException extends RuntimeException {
+public class LastAdminException extends RuntimeException implements UebersetzbareMeldung {
 
   public LastAdminException() {
     super("Mindestens ein aktiver Plattform-Administrator muss bestehen bleiben.");
+  }
+
+  @Override
+  public String schluessel() {
+    return "auth.letzter-admin";
   }
 }

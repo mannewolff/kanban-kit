@@ -24,9 +24,10 @@ import org.springframework.transaction.annotation.Transactional;
  * Zuordnungen unverändert und zählt als übersprungen — auch, wenn ein gleichzeitiger zweiter Aufruf
  * es gerade angelegt hat ({@link LabelRepository#insertIfAbsent}).
  *
- * <p>Die Namen kommen aus dem Register {@link KitNamen}: Je Sache entsteht jeder ihrer Namen als
- * eigenes Label, das englische Gegenstück direkt hinter dem deutschen (Issue #1585, Plan #1582 A3,
- * E5, E6, E13).
+ * <p>Die Namen kommen aus dem Register {@link KitNamen}: Je Sache entsteht genau ein Label, ihr
+ * englischer Name — seit Kit 5.0 kennt das Kit nur noch englische Labels (Issue #1636). Die
+ * deutschen Namen bleiben im Register, damit der Leitstand sie auf alten Karten weiter als dieselbe
+ * Sache erkennt (Issue #1585, Plan #1582 A3, E5, E13).
  */
 @Service
 public class StandardLabelService {
@@ -69,7 +70,7 @@ public class StandardLabelService {
   /**
    * Mit eigenem Register — für Tests, die einen Zusatznamen einbringen (Plan #1582 E13).
    *
-   * @param register liefert je Sache alle Namen; jeder wird ein eigener Eintrag des Satzes
+   * @param register liefert je Sache ihre Namen; der letzte wird der Eintrag des Satzes
    */
   public StandardLabelService(
       LabelRepository labels,
@@ -109,17 +110,18 @@ public class StandardLabelService {
   }
 
   /**
-   * Je Sache alle Namen des Registers in Registerreihenfolge, das Gegenstück direkt hinter dem
-   * deutschen Namen (E6); eine Sache ohne Gegenstück steht genau einmal da (E5).
+   * Je Sache genau ein Name: der letzte in Registerreihenfolge, also der englische, weil das
+   * Register je Sache „deutsch, dann englisch" führt; eine Sache mit nur einem Namen steht mit
+   * diesem da (E5, Issue #1636).
    */
   private static List<StandardLabel> satzAus(KitNamen register) {
     List<StandardLabel> eintraege = new ArrayList<>();
     // Die EnumMap liefert die Sachen in ihrer Deklarationsreihenfolge.
     DARSTELLUNG.forEach(
         (sache, darstellung) -> {
-          for (String name : register.namen(sache)) {
-            eintraege.add(new StandardLabel(name, darstellung.gruppe(), darstellung.farbe()));
-          }
+          List<String> namen = register.namen(sache);
+          String name = namen.get(namen.size() - 1);
+          eintraege.add(new StandardLabel(name, darstellung.gruppe(), darstellung.farbe()));
         });
     return List.copyOf(eintraege);
   }
@@ -138,7 +140,8 @@ public class StandardLabelService {
         Sache.PRUEFEN,
         Sache.NIGHTPLAN,
         Sache.NIGHTREVIEW,
-        Sache.NIGHTISSUES);
+        Sache.NIGHTISSUES,
+        Sache.WARTET_EREIGNIS);
     zuordnen(
         tabelle,
         new Darstellung(LAUF, FARBE_LAUF),

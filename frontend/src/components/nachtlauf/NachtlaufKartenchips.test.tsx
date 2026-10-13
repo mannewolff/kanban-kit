@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { CardByNumber } from '../../api/cards'
 import { nachtlaufTheme } from '../../nachtlaufDesign'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { NachtlaufKartenchips, type Kartenchip } from './NachtlaufKartenchips'
 
 /**
@@ -77,5 +78,23 @@ describe('NachtlaufKartenchips', () => {
     ])
 
     expect(within(screen.getByTestId('chips-791')).getAllByRole('button')).toHaveLength(3)
+  })
+})
+
+describe('NachtlaufKartenchips auf Englisch (Issue #1658)', () => {
+  it('nennt eine nicht mehr vorhandene Karte auf Englisch', () => {
+    renderMitSprache(
+      <ThemeProvider theme={nachtlaufTheme}>
+        <NachtlaufKartenchips
+          chips={[{ id: '844', art: 'Plan', zustand: { art: 'fort' } }]}
+          leer="no packages"
+          testId="chips-791"
+          onOeffnen={vi.fn()}
+        />
+      </ThemeProvider>,
+      'en',
+    )
+
+    expect(screen.getByTestId('chips-791')).toHaveTextContent('Plan#844 no longer exists')
   })
 })

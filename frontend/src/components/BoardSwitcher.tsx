@@ -8,12 +8,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { boardsApi } from '../api/boards'
 import { ApiError } from '../api/client'
+import { useT } from '../i18n/SpracheContext'
 import type { BoardHistoryEntry } from '../lib/useBoardHistory'
-
-/** Das Ziel gibt es nicht mehr oder es ist nicht mehr freigegeben — der Eintrag verschwindet. */
-const UNAVAILABLE = 'Board ist nicht mehr verfügbar.'
-/** Vorübergehender Fehlschlag: Der Verlauf bleibt, nur dieser Versuch ist gescheitert. */
-const OPEN_FAILED = 'Das Board konnte nicht geöffnet werden.'
 
 const TITLE_ID = 'board-switcher-title'
 
@@ -56,6 +52,7 @@ export function BoardSwitcher({
   onNotify,
 }: Readonly<Props>) {
   const navigate = useNavigate()
+  const t = useT()
 
   // Bei leerem Verlauf und beim einzigen Eintrag, der das aktuelle Board ist, gibt es nichts zu
   // wechseln — dann bleibt das Overlay auch bei `open` unsichtbar.
@@ -66,7 +63,8 @@ export function BoardSwitcher({
   const [shown, setShown] = useState(visible)
   const [selected, setSelected] = useState(preselect)
   const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // Das Ziel gibt es nicht mehr oder es ist nicht mehr freigegeben — der Eintrag verschwindet.
+  const [unavailable, setUnavailable] = useState(false)
   // Laufende Zielprüfung. Jeder Start und jedes Schließen erhöht den Zähler; eine Antwort mit
   // veralteter Kennung wird verworfen — sonst spränge ein geschlossenes Overlay noch nachträglich.
   const run = useRef(0)
@@ -81,7 +79,7 @@ export function BoardSwitcher({
     setShown(visible)
     setSelected(preselect)
     setPending(false)
-    setError(null)
+    setUnavailable(false)
   }
 
   // Zweite Hälfte desselben Wechsels, aber im Effekt: Eine laufende Prüfung der vorigen Sitzung
@@ -115,7 +113,7 @@ export function BoardSwitcher({
       return
     }
     setPending(true)
-    setError(null)
+    setUnavailable(false)
     const started = ++run.current
     void boardsApi
       .get(entry.id)
@@ -132,11 +130,12 @@ export function BoardSwitcher({
         // Nach jedem Fehlschlag ist die Auswahl wieder frei — ein zweiter Versuch muss möglich sein.
         setPending(false)
         if (error_ instanceof ApiError && (error_.status === 403 || error_.status === 404)) {
-          setError(UNAVAILABLE)
+          setUnavailable(true)
           onRemoveEntry(entry.id)
           return
         }
-        onNotify(OPEN_FAILED, 'error')
+        // Vorübergehender Fehlschlag: Der Verlauf bleibt, nur dieser Versuch ist gescheitert.
+        onNotify(t.RAHMEN.BOARD_OEFFNEN_FEHLGESCHLAGEN, 'error')
       })
   }
 
@@ -177,14 +176,14 @@ export function BoardSwitcher({
       // Dialogs bleibt aktiv, allein das automatische Fokussieren beim Öffnen entfällt.
       disableAutoFocus
     >
-      <DialogTitle id={TITLE_ID}>Board wechseln</DialogTitle>
+      <DialogTitle id={TITLE_ID}>{t.RAHMEN.BOARD_WECHSELN}</DialogTitle>
       <DialogContent>
-        {error && (
+        {unavailable && (
           <Alert severity="error" role="alert" sx={{ mb: 2 }}>
-            {error}
+            {t.RAHMEN.BOARD_NICHT_VERFUEGBAR}
           </Alert>
         )}
-        <Box role="listbox" aria-label="Zuletzt besuchte Boards" aria-busy={pending}>
+        <Box role="listbox" aria-label={t.RAHMEN.ZULETZT_BESUCHTE_BOARDS} aria-busy={pending}>
           {entries.map((entry, position) => (
             <Box
               key={entry.id}

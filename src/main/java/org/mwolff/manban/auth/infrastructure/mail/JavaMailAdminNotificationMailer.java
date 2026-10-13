@@ -1,5 +1,7 @@
 package org.mwolff.manban.auth.infrastructure.mail;
 
+import org.mwolff.manban.common.i18n.Sprache;
+import org.mwolff.manban.common.i18n.Texte;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +15,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>Seit Issue #502 die Zustell-Komponente hinter dem {@link AdminNotificationMailHandler}: Der
  * Aufruf kommt nach dem Commit aus dem Outbox-Worker.
+ *
+ * <p>Betreff und Text in der eingestellten Sprache, bestimmt beim Versand (Issue #1643, Plan #1638
+ * A6) — die Outbox-Payload trägt keine Sprache.
  */
 @Component
 class JavaMailAdminNotificationMailer {
@@ -23,16 +28,19 @@ class JavaMailAdminNotificationMailer {
   private final boolean mailEnabled;
   private final String from;
   private final String productName;
+  private final Texte texte;
 
   JavaMailAdminNotificationMailer(
       JavaMailSender mailSender,
       @Value("${manban.mail.enabled:false}") boolean mailEnabled,
       @Value("${manban.mail.from:no-reply@kanban-kit.local}") String from,
-      @Value("${manban.mail.product-name:kanban-kit}") String productName) {
+      @Value("${manban.mail.product-name:kanban-kit}") String productName,
+      Texte texte) {
     this.mailSender = mailSender;
     this.mailEnabled = mailEnabled;
     this.from = from;
     this.productName = productName;
+    this.texte = texte;
   }
 
   void sendNewUserPendingApproval(
@@ -48,13 +56,9 @@ class JavaMailAdminNotificationMailer {
     SimpleMailMessage message = new SimpleMailMessage();
     message.setFrom(from);
     message.setTo(adminEmail);
-    message.setSubject(productName + ": Neue Registrierung wartet auf Freigabe");
-    message.setText(
-        "Neu registriert und verifiziert: "
-            + newUserDisplayName
-            + " ("
-            + newUserEmail
-            + ").\n\nBitte in der Nutzerverwaltung freigeben.\n");
+    Sprache sprache = texte.eingestellte();
+    message.setSubject(texte.text(sprache, "mail.freigabe.betreff", productName));
+    message.setText(texte.text(sprache, "mail.freigabe.text", newUserDisplayName, newUserEmail));
     mailSender.send(message);
     log.info("Freigabe-Benachrichtigung an {} versandt", adminEmail);
   }

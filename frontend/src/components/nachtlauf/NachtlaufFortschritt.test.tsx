@@ -8,6 +8,7 @@ import type {
   PackageProgressView,
 } from '../../api/nightRuns'
 import type { FortschrittArt } from '../../lib/laufFortschritt'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { nachtlaufTheme } from '../../nachtlaufDesign'
 import { NachtlaufFortschritt } from './NachtlaufFortschritt'
 
@@ -322,5 +323,64 @@ describe('NachtlaufFortschritt', () => {
     const { container } = zeige(fortschritt({ ketten: [kette()] }), { laeuft: false })
 
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('NachtlaufFortschritt auf Englisch (Issue #1658)', () => {
+  const zeigeEnglisch = (f: NightRunProgressView, art: FortschrittArt = 'KETTE') =>
+    renderMitSprache(
+      <ThemeProvider theme={nachtlaufTheme}>
+        <NachtlaufFortschritt fortschritt={f} art={art} laeuft onKarteOeffnen={vi.fn()} />
+      </ThemeProvider>,
+      'en',
+    )
+
+  it('zeigt Weg, Verweise und Paketzustände einer Kette auf Englisch', () => {
+    zeigeEnglisch(fortschritt({ ketten: [kette({ pakete: [paket(203, 'IN_UMSETZUNG'), paket(204, 'ZURUECKGESTELLT')] })] }))
+
+    const weg = within(screen.getByRole('list', { name: 'Path of chain #100' }))
+    expect(weg.getAllByRole('listitem').map((s) => s.textContent)).toEqual([
+      'Plan: reached',
+      'Review: running',
+      'Work packages: open',
+      'Coverage: open',
+    ])
+    expect(screen.getByRole('button', { name: 'Requirement #100 Die Anforderung' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Plan #101 Der Plan' })).toBeInTheDocument()
+    const pakete = screen.getByRole('list', { name: 'Packages of chain #100' })
+    expect(within(pakete).getByRole('button', { name: 'Package #203 Karte 203' })).toBeInTheDocument()
+    expect(pakete).toHaveTextContent('in implementation')
+    expect(pakete).toHaveTextContent('deferred')
+  })
+
+  it('nennt fehlenden Plan, fehlende Pakete, Unbekanntes und die offene Frage auf Englisch', () => {
+    zeigeEnglisch(
+      fortschritt({
+        ketten: [kette({ plan: null, pakete: [] })],
+        unbekannt: [karte(400)],
+        unbekanntOhneAusweis: true,
+        offeneFragen: [karte(500)],
+      }),
+    )
+
+    expect(screen.getByText('no plan yet')).toBeInTheDocument()
+    expect(screen.getByText('no packages yet')).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'unknown' })).toBeInTheDocument()
+    expect(screen.getByTestId('fortschritt-unbekannt-ohne-ausweis')).toHaveTextContent(
+      'This run did not identify itself (older runner).',
+    )
+    expect(screen.getByTestId('fortschritt-frage')).toHaveTextContent('Open question for a person on card')
+    expect(screen.getByRole('button', { name: 'Question #500 Karte 500' })).toBeInTheDocument()
+  })
+
+  it('zeigt die Umsetzungsnacht und eine unbekannte Zuordnung auf Englisch', () => {
+    zeigeEnglisch(fortschritt({ pakete: [paket(203, 'FERTIG')] }), 'UMSETZUNGSNACHT')
+    expect(screen.getByRole('list', { name: 'Path of the implementation night' })).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Packages of the implementation night' })).toHaveTextContent('done')
+
+    zeigeEnglisch(fortschritt({ zuordnung: 'UNBEKANNT' }))
+    expect(screen.getByTestId('fortschritt-zuordnung-unbekannt')).toHaveTextContent(
+      'Which cards belong to this run cannot be determined — the progress remains unknown.',
+    )
   })
 })

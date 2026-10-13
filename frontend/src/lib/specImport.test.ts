@@ -214,3 +214,13 @@ describe('splitSpecIntoSections', () => {
     expect(MAX_CARDS_PER_IMPORT).toBe(200)
   })
 })
+
+describe('splitSpecIntoSections auf Englisch', () => {
+  it('lässt eine englische Spezifikation unverändert — Titel und Beschreibung sind Daten', () => {
+    const sections = splitSpecIntoSections(['## Sign-in', 'Users sign in with their email.'].join('\n'), 2)
+
+    expect(sections).toEqual([
+      { title: 'Sign-in', description: 'Users sign in with their email.', titleTruncated: false, descriptionTruncated: false },
+    ])
+  })
+})

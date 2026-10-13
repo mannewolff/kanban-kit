@@ -101,3 +101,12 @@ describe('laufgruppen (#1172, AK 6 und E8 aus Plan #1167)', () => {
     expect(gruppe.projectName).toBe('Leitstand')
   })
 })
+
+describe('aktuellerStand auf Englisch', () => {
+  it('zählt das Gemeldete auf Englisch', () => {
+    expect(standText([], 'en')).toBe('0 reported')
+    expect(standText([paket('GREEN'), paket('RED')], 'en')).toMatch(/^2 reported · /)
+    const [gruppe] = laufgruppen([lauf(8, 9, 'P')], [{ nightRunId: 8, pakete: [paket('GREEN')] }], 'en')
+    expect(gruppe.eintraege[0].stand).toMatch(/^1 reported · /)
+  })
+})

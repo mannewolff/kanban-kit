@@ -8,6 +8,7 @@ import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { ProjectBoardsPage } from './ProjectBoardsPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 /** Server-Ablehnung mit einer für den Nutzer formulierten Meldung in `detail` (RFC 9457). */
 const serverfehler = (text: string) => new ApiError(409, 'Conflict', undefined, text)
@@ -549,5 +550,102 @@ describe('ProjectBoardsPage RBAC', () => {
       expect(await screen.findByText('Board archivieren?')).toBeInTheDocument()
       expect(screen.queryByText(/^Ziel /)).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('ProjectBoardsPage auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const renderEn = (role: string, boards: Board[], archiv: Board[] = []) => {
+    mockedProjects.list.mockResolvedValue([{ id: 5, name: 'Team', role, createdAt: '' }])
+    mockedBoards.list.mockResolvedValue(boards)
+    mockedBoards.listArchived.mockResolvedValue(archiv)
+    return renderMitSprache(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={[{ pathname: '/projects/5', key: 'push' }]}>
+          <Routes>
+            <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+      'en',
+    )
+  }
+
+  it('zeigt Leerzustand, Anlegeformular und Mitglieder-Link auf Englisch', async () => {
+    renderEn('OWNER', [])
+    expect(await screen.findByText('No boards yet.')).toBeInTheDocument()
+    expect(screen.getByLabelText('New board')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Members' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Projects' })).toBeInTheDocument()
+  })
+
+  it('zeigt Spaltenzahl, Archiv und beide Dialoge auf Englisch', async () => {
+    const [aktiv, alt] = makeBoards(['Eins', 'Alt'], 5)
+    mockedBoards.remove.mockRejectedValue(new ApiError(500, 'Boom'))
+    renderEn('OWNER', [{ ...aktiv, columns: [{ id: 1, name: 'A', position: 0, wipLimit: null }] }], [alt])
+    expect(await screen.findByText('1 column')).toBeInTheDocument()
+    expect(screen.queryByText('2 columns')).not.toBeInTheDocument()
+    expect(await screen.findByText('Archive')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Archive board Eins'))
+    expect(await screen.findByText('Archive board?')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'The board “Eins” will be archived. It disappears from the list but keeps all of its epics and tickets and can be restored from the archive.',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    await erwarteFehlerToast('Archiving failed.')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    fireEvent.click(screen.getByLabelText('Delete board Alt permanently'))
+    expect(await screen.findByText('Delete board permanently?')).toBeInTheDocument()
+    expect(screen.getByLabelText('Board name to confirm')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete permanently' })).toBeDisabled()
+  })
+
+  it('meldet Fehler beim Anlegen, Wiederherstellen und endgültigen Löschen auf Englisch', async () => {
+    const [alt] = makeBoards(['Alt'], 5)
+    mockedBoards.create.mockRejectedValue(new ApiError(500, 'Boom'))
+    mockedBoards.restore.mockRejectedValue(new ApiError(500, 'Boom'))
+    mockedBoards.purge.mockRejectedValue(new ApiError(500, 'Boom'))
+    renderEn('OWNER', [], [alt])
+    await screen.findByText('Alt')
+
+    fireEvent.change(screen.getByLabelText('New board'), { target: { value: 'Neu' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByText('Creating the board failed.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    expect(await screen.findByText('Restoring failed.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Delete board Alt permanently'))
+    fireEvent.change(await screen.findByLabelText('Board name to confirm'), { target: { value: 'Alt' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+    expect(await screen.findByText('Permanent deletion failed.')).toBeInTheDocument()
+  })
+
+  it('zählt mehrere Spalten auf Englisch', async () => {
+    const [zwei] = makeBoards(['Zwei'], 5)
+    const spalte = { id: 1, name: 'A', position: 0, wipLimit: null }
+    renderEn('VIEWER', [{ ...zwei, columns: [spalte, { ...spalte, id: 2, position: 1 }] }])
+    expect(await screen.findByText('2 columns')).toBeInTheDocument()
+  })
+
+  it('meldet eine ungültige Projekt-ID auf Englisch', () => {
+    renderMitSprache(
+      <MemoryRouter initialEntries={['/projects/abc']}>
+        <Routes>
+          <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
+        </Routes>
+      </MemoryRouter>,
+      'en',
+    )
+    expect(screen.getByText('Invalid project ID.')).toBeInTheDocument()
   })
 })

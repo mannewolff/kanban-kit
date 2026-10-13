@@ -25,6 +25,7 @@ class InvalidPeriodBoundsExceptionTest {
 
   @Test
   void behaeltDieMeldung() {
-    assertThat(new InvalidPeriodBoundsException("from ohne to")).hasMessage("from ohne to");
+    assertThat(InvalidPeriodBoundsException.halberZeitraum())
+        .hasMessage("Ein Zeitraum braucht beide Grenzen from und to oder keine von beiden.");
   }
 }

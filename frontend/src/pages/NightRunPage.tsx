@@ -69,6 +69,9 @@ import {
 } from '../components/nachtlauf/NachtlaufStufenband'
 import { NachtlaufAnteilsbalken } from '../components/nachtlauf/NachtlaufAnteilsbalken'
 import { NachtlaufFuss, type Fussangabe as FussangabeForm } from '../components/nachtlauf/NachtlaufFuss'
+import { formatierer } from '../i18n/format'
+import { useSprache, useT } from '../i18n/SpracheContext'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { NACHTLAUF_WURZEL_SX, nachtlaufTheme } from '../nachtlaufDesign'
 import { KUPFER, NUT, RAND, TEXT_SCHWACH, ZAHL } from '../theme'
 import { useSnackbar } from '../components/SnackbarProvider'
@@ -93,8 +96,6 @@ import {
   buildHandoffText,
   kurzGrund,
   nightRunZustandsText,
-  NIGHT_RUN_ERROR_CLASS_TEXT,
-  NIGHT_RUN_VERDICT_TEXT,
   type NightRunHandoffItem,
 } from '../lib/nightRunHandoff'
 import {
@@ -330,6 +331,9 @@ type Vorhabenkatalog = ReadonlyMap<number, Card | null>
 /** Je Fehlerklasse die Zahl der aufbewahrten Läufe, in denen sie vorkam; `null` = nicht abrufbar. */
 type Haeufigkeiten = NightRunErrorClassCounts | null
 
+/** Die Texte dieser Seite in einer Sprache (Issue #1659). */
+const seite = (sprache: Sprache) => woerterbuch(sprache).NACHTLAUF_SEITE
+
 /** Ein Schritt der Herkunftskette oberhalb des Arbeitspakets. */
 interface Kettenglied {
   nummer: number
@@ -352,25 +356,7 @@ const zustandsFarbe = (zustand: NightRunState): string => melderFarbe(MELDER_JE_
  * <p>Welche Präfixe eine Kartenart trägt, sagt das Namen-Register des Servers (Plan #1582, E2):
  * `[Requirement]` gilt wie `[Fachlich]`. Die Seite führt dafür keine eigene Liste.
  */
-const STUFEN: ReadonlyArray<{ label: string; art: string }> = [
-  { label: 'Fachliche Anforderung', art: 'FACHLICH' },
-  { label: 'Plan', art: 'PLAN' },
-]
-
-/**
- * Der Grundsatz zu einem nicht deutbaren Stand — eine Zeile je Grund aus
- * {@link parseNightRunErgebnisstand}. Die drei sind bewusst unterschieden: Sie verlangen vom
- * Betreiber verschiedene Handgriffe (die falsche Datei gewählt, ein neueres Kit, oder ein Lauf,
- * den der Leitstand nicht auswertet).
- *
- * <p>„Fassung" bezeichnet hier den **Aufbau** des Protokolls und nichts sonst; die erzeugende
- * Ausgabe des Nachtlaufs heißt in der Meldung „erzeugt von" (AK 10 aus Issue #842).
- */
-const GRUNDSATZ: Record<NightRunErgebnisstandGrund, string> = {
-  'kein-json': 'Nicht auswertbar',
-  'unbekannte-fassung': 'Fassung nicht unterstützt',
-  'nicht-unterstuetzt': 'Art des Runs oder Vokabular nicht unterstützt',
-}
+const STUFEN: ReadonlyArray<'FACHLICH' | 'PLAN'> = ['FACHLICH', 'PLAN']
 
 /**
  * Was die Seite zu einem nicht deutbaren Stand sagt: der Grundsatz, das nicht gedeutete Wort —
@@ -382,25 +368,29 @@ const GRUNDSATZ: Record<NightRunErgebnisstandGrund, string> = {
  * Auslassung nicht ansieht, ließe offen, ob der Leitstand nicht nachgesehen hat oder der Stand
  * nichts hergab.
  */
-const nichtDeutbar = (ergebnis: {
-  grund: NightRunErgebnisstandGrund
-  wort?: string
-  erzeugtVon?: string
-}): string =>
-  [
-    GRUNDSATZ[ergebnis.grund],
-    ...(ergebnis.wort === undefined ? [] : [`nicht gedeutet: ${ergebnis.wort}`]),
-    ergebnis.erzeugtVon === undefined
-      ? 'Herkunft nicht angegeben'
-      : `erzeugt von ${ergebnis.erzeugtVon}`,
-  ].join(' — ')
-
-/**
- * Ein Lauf ohne Abschluss wird **angezeigt, aber nicht eingeliefert**: Der Server legt je
- * `(projectId, startedAt)` nur einmal an, ein unvollständiger Stand blockierte den späteren
- * vollständigen dauerhaft.
+/*
+ * Der Grundsatz steht im Wörterbuch (`NACHTLAUF_SEITE.GRUNDSATZ`) — eine Zeile je Grund aus
+ * {@link parseNightRunErgebnisstand}. Die drei sind bewusst unterschieden: Sie verlangen vom
+ * Betreiber verschiedene Handgriffe (die falsche Datei gewählt, ein neueres Kit, oder ein Lauf,
+ * den der Leitstand nicht auswertet). „Fassung" bezeichnet dort den **Aufbau** des Protokolls und
+ * nichts sonst; die erzeugende Ausgabe des Nachtlaufs heißt in der Meldung „erzeugt von" (AK 10
+ * aus Issue #842).
  */
-const UNVOLLSTAENDIG = 'Run noch nicht abgeschlossen — nicht gespeichert'
+const nichtDeutbar = (
+  ergebnis: {
+    grund: NightRunErgebnisstandGrund
+    wort?: string
+    erzeugtVon?: string
+  },
+  sprache: Sprache,
+): string => {
+  const t = seite(sprache)
+  return [
+    t.GRUNDSATZ[ergebnis.grund],
+    ...(ergebnis.wort === undefined ? [] : [t.NICHT_GEDEUTET(ergebnis.wort)]),
+    ergebnis.erzeugtVon === undefined ? t.HERKUNFT_NICHT_ANGEGEBEN : t.ERZEUGT_VON(ergebnis.erzeugtVon),
+  ].join(' — ')
+}
 
 /**
  * Holt die Häufigkeiten vom Server; ein Fehlschlag ergibt `null` statt einer Ausnahme. Die Zahlen
@@ -863,18 +853,22 @@ function stufenZustand(
 }
 
 /** Der Satzrest hinter „<Stufe>: " in den Fällen ohne Karte. */
-function ohneTrefferText(zustand: Exclude<SichtbarerStufenZustand, { art: 'treffer' }>): string {
+function ohneTrefferText(
+  zustand: Exclude<SichtbarerStufenZustand, { art: 'treffer' }>,
+  sprache: Sprache,
+): string {
+  const t = seite(sprache)
   switch (zustand.art) {
     case 'nicht-gefunden':
-      return `Karte #${zustand.nummer} nicht gefunden`
+      return t.KARTE_NICHT_GEFUNDEN(zustand.nummer)
     case 'ohne':
-      return 'ohne'
+      return t.OHNE
     case 'kit-namen-laden':
-      return 'Kit-Namen werden geladen'
+      return t.KIT_NAMEN_LADEN
     case 'kit-namen-fehlen':
-      return 'Kit-Namen nicht ladbar'
+      return t.KIT_NAMEN_FEHLEN
     case 'noch-nicht-erreicht':
-      return 'noch nicht erreicht'
+      return t.NOCH_NICHT_ERREICHT
   }
 }
 
@@ -893,10 +887,11 @@ function Stufenzeile({
   zustand: SichtbarerStufenZustand
   onOeffnen: (karte: CardByNumber) => void
 }>) {
+  const { sprache } = useSprache()
   if (zustand.art !== 'treffer') {
     return (
       <Typography variant="body2" color="text.secondary">
-        {`${label}: ${ohneTrefferText(zustand)}`}
+        {`${label}: ${ohneTrefferText(zustand, sprache)}`}
       </Typography>
     )
   }
@@ -912,7 +907,7 @@ function Stufenzeile({
       >
         {`#${zustand.nummer} ${zustand.karte.title}`}
       </Link>
-      {zustand.abgerissen ? ' — abgerissen' : null}
+      {zustand.abgerissen ? seite(sprache).ABGERISSEN : null}
     </Typography>
   )
 }
@@ -936,10 +931,11 @@ function Vorhabenzeile({
   vorhabenKarten: Vorhabenkatalog
   onOeffnen: (karte: CardByNumber) => void
 }>) {
+  const t = useT().NACHTLAUF_SEITE
   if (parentId === null) {
     return (
       <Typography variant="body2" color="text.secondary">
-        Vorhaben: ohne
+        {`${t.VORHABEN}: ${t.OHNE}`}
       </Typography>
     )
   }
@@ -950,18 +946,18 @@ function Vorhabenzeile({
   if (karte === null) {
     return (
       <Typography variant="body2" color="text.secondary">
-        Vorhaben: nicht auflösbar
+        {`${t.VORHABEN}: ${t.VORHABEN_NICHT_AUFLOESBAR}`}
       </Typography>
     )
   }
   return (
     <Typography variant="body2" color="text.secondary">
-      {'Vorhaben: '}
+      {`${t.VORHABEN}: `}
       <Link
         component="button"
         type="button"
         variant="body2"
-        aria-label={`Vorhaben #${karte.number} ${karte.title}`}
+        aria-label={`${t.VORHABEN} #${karte.number} ${karte.title}`}
         onClick={() => onOeffnen(karte)}
       >
         {`#${karte.number} ${karte.title}`}
@@ -986,6 +982,7 @@ function haeufigkeitsText(
   gespeichert: boolean,
   zaehler: Haeufigkeiten,
   aufbewahrteLaeufe: number,
+  sprache: Sprache,
 ): string | null {
   if (!gespeichert || item.errorClass === undefined) {
     return null
@@ -993,9 +990,10 @@ function haeufigkeitsText(
   if (item.state !== 'YELLOW' && item.state !== 'RED') {
     return null
   }
-  const beschriftung = NIGHT_RUN_ERROR_CLASS_TEXT[item.errorClass]
+  const t = seite(sprache)
+  const beschriftung = woerterbuch(sprache).NACHTLAUF_UEBERGABE.FEHLERKLASSE[item.errorClass]
   if (zaehler === null) {
-    return `${beschriftung}: Häufigkeit nicht abrufbar`
+    return t.HAEUFIGKEIT_FEHLT(beschriftung)
   }
   // Eine Klasse, die der Server nicht nennt, kam nie vor — hier also: er weiß von diesem Lauf noch
   // nichts. Eine „0" zu einem sichtbaren Befund wäre ein Widerspruch, „zum ersten Mal" eine
@@ -1005,8 +1003,8 @@ function haeufigkeitsText(
     return null
   }
   return anzahl === 1
-    ? `${beschriftung}: zum ersten Mal`
-    : `${beschriftung}: ${anzahl} von ${aufbewahrteLaeufe} aufbewahrten Runs`
+    ? t.ZUM_ERSTEN_MAL(beschriftung)
+    : t.HAEUFIGKEIT(beschriftung, anzahl, aufbewahrteLaeufe)
 }
 
 /**
@@ -1031,15 +1029,16 @@ async function inDieZwischenablage(text: string): Promise<void> {
  * derselbe Schlüsselraum wie {@link NightRunKettenStufen} und {@link NightRunStufenvorgaben}, also
  * stehen Vorgabe und Verbrauch eines Schritts unter demselben Namen.
  *
- * <p>Als Liste mit Beschriftung und nicht über `Object.keys`: Die Reihenfolge ist Teil der Aussage,
- * und ein fünfter Schritt bräuchte hier eine deutsche Benennung, statt still als Schlüssel
- * durchzurutschen — dieselbe Absicherung, die das Symbol der Laufart über seinen `Record` hat.
+ * <p>Als Liste und nicht über `Object.keys`: Die Reihenfolge ist Teil der Aussage. Die Beschriftung
+ * steht im Wörterbuch (`NACHTLAUF_SEITE.KETTEN_STUFE`) unter demselben Schlüssel — ein fünfter
+ * Schritt bräuchte dort eine Benennung, statt still als Schlüssel durchzurutschen; dieselbe
+ * Absicherung, die das Symbol der Laufart über seinen `Record` hat.
  */
-const KETTEN_STUFEN: ReadonlyArray<{ schluessel: NightRunKettenStufe; label: string }> = [
-  { schluessel: 'plan', label: 'Plan' },
-  { schluessel: 'review', label: 'Prüfung' },
-  { schluessel: 'pakete', label: 'Pakete' },
-  { schluessel: 'abdeckung', label: 'Abdeckung' },
+const KETTEN_STUFEN: ReadonlyArray<{ schluessel: NightRunKettenStufe }> = [
+  { schluessel: 'plan' },
+  { schluessel: 'review' },
+  { schluessel: 'pakete' },
+  { schluessel: 'abdeckung' },
 ]
 
 /**
@@ -1047,10 +1046,13 @@ const KETTEN_STUFEN: ReadonlyArray<{ schluessel: NightRunKettenStufe; label: str
  * nicht „vorzeitig beendet": `night.mjs` legt den Lauf ohne Abschluss an, und der Parser nimmt ihn
  * als unvollständig an.
  */
-const ABSCHLUSS_TEXT = new Map<string, string>([
-  ['regulaer', 'regulär beendet'],
-  ['harterStopp', 'vorzeitig beendet (harter Stopp)'],
-])
+const abschlussWort = (abschluss: string, sprache: Sprache): string | undefined => {
+  const t = seite(sprache)
+  return new Map<string, string>([
+    ['regulaer', t.ABSCHLUSS_REGULAER],
+    ['harterStopp', t.ABSCHLUSS_HARTER_STOPP],
+  ]).get(abschluss)
+}
 
 /**
  * Der Abschluss in Worten — **kein Fall gibt einen Rohwert aus**. `abschluss` ist im Stand eine
@@ -1064,10 +1066,10 @@ const ABSCHLUSS_TEXT = new Map<string, string>([
  * den Abschluss des Laufs auszusagen ist, trägt allein die Kopfmarke {@link
  * UNVOLLSTAENDIG_GEMELDET}, und die hängt am gemeldeten Zustand.
  */
-const abschlussText = (abschluss: string | undefined): string =>
+const abschlussText = (abschluss: string | undefined, sprache: Sprache): string =>
   abschluss === undefined
-    ? 'noch nicht abgeschlossen'
-    : (ABSCHLUSS_TEXT.get(abschluss) ?? 'Abschluss nicht deutbar')
+    ? seite(sprache).NOCH_NICHT_ABGESCHLOSSEN
+    : (abschlussWort(abschluss, sprache) ?? seite(sprache).ABSCHLUSS_NICHT_DEUTBAR)
 
 /** Eine Minute in Millisekunden — die Zeitvorgaben stehen im Stand in Minuten, die Zeiten in ms. */
 const MINUTE_MS = 60_000
@@ -1078,13 +1080,11 @@ const MINUTE_MS = 60_000
  * grobkörnig auf ganze Minuten, und ein Stufenband, dessen Zahlen alle gleich aussehen, sagt über
  * das Verhältnis zur Vorgabe nichts mehr.
  */
-const MINUTEN_FORMAT = new Intl.NumberFormat('de-DE', {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-})
+const minutenText = (wert: number, sprache: Sprache): string =>
+  formatierer(sprache).zahl(wert, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
-/** Die Zeitvorgaben stehen ohne Nachkommastelle da, aber in deutscher Schreibweise. */
-const ZAHL_FORMAT = new Intl.NumberFormat('de-DE')
+/** Die Zeitvorgaben stehen ohne Nachkommastelle da, in der Schreibweise der Sprache. */
+const zahlText = (wert: number, sprache: Sprache): string => formatierer(sprache).zahl(wert)
 
 
 /**
@@ -1099,12 +1099,12 @@ const ZAHL_FORMAT = new Intl.NumberFormat('de-DE')
 function ohneKostenmeldung(
   anzahl: number | undefined,
   eins: string,
-  viele: string,
+  viele: (anzahl: number) => string,
 ): string | null {
   if (anzahl === undefined || anzahl === 0) {
     return null
   }
-  return anzahl === 1 ? `${eins} ohne Kostenmeldung` : `${anzahl} ${viele} ohne Kostenmeldung`
+  return anzahl === 1 ? eins : viele(anzahl)
 }
 
 /** Die Dokumente eines Arbeitsschritts — leer, wo der Vorgang ihn nicht mehr erreicht hat. */
@@ -1168,10 +1168,11 @@ const grundDesVorgangs = (item: NightRunItem): string => item.excerpt.split('\n'
  * eine Aufzählung, der man die Leere nicht ansieht, ließe offen, ob nichts entstand oder nichts
  * nachgesehen wurde.
  */
-function abbruchSatz(item: NightRunItem): string {
+function abbruchSatz(item: NightRunItem, sprache: Sprache): string {
+  const t = seite(sprache)
   const nummern = dokumenteDesVorgangs(item).map((id) => `#${id}`)
-  const entstanden = nummern.length === 0 ? 'keine Karten' : nummern.join(', ')
-  return `${grundDesVorgangs(item)} — bis dahin entstanden: ${entstanden}`
+  const entstanden = nummern.length === 0 ? t.KEINE_KARTEN : nummern.join(', ')
+  return t.ABBRUCH(grundDesVorgangs(item), entstanden)
 }
 
 /**
@@ -1196,18 +1197,18 @@ function stufenZeitSumme(items: readonly NightRunItem[]): number {
  * <p>Der Zusatz „aus n von m Vorgängen" steht, sobald **nicht alle** Vorgänge Kosten tragen: Ohne
  * ihn läse sich der Höchstwert einer halb gemeldeten Nacht wie der einer ganzen.
  */
-function hoechsteKosten(items: readonly AnzeigeItem[], stand: NightRun | undefined): string {
+function hoechsteKosten(items: readonly AnzeigeItem[], stand: NightRun | undefined, sprache: Sprache): string {
   const gemeldet = items.flatMap((item) => {
     const wert = vorgangskosten(item, standVorgang(stand, item.cardNumber))
     return wert === null ? [] : [wert]
   })
   if (gemeldet.length === 0) {
-    return 'nicht angegeben'
+    return seite(sprache).NICHT_ANGEGEBEN
   }
-  const hoechste = betrag(Math.max(...gemeldet))
+  const hoechste = betrag(Math.max(...gemeldet), sprache)
   return gemeldet.length === items.length
     ? hoechste
-    : `${hoechste} (aus ${gemeldet.length} von ${items.length} Vorgängen)`
+    : seite(sprache).AUS_VORGAENGEN(hoechste, gemeldet.length, items.length)
 }
 
 /**
@@ -1222,13 +1223,16 @@ function hoechsteKosten(items: readonly AnzeigeItem[], stand: NightRun | undefin
  * <p>Die Felder mit englischem Gegenstück kennt sie unter beiden Namen aus `kitWortformen.ts`
  * (Plan #1582, E3): `packagesMin` steht da wie `paketeMin`.
  */
-const BUDGETFELD_TEXT = new Map<string, string>([
-  ['planMin', 'Zeitvorgabe Plan'],
-  ['reviewMin', 'Zeitvorgabe Prüfung'],
-  ...BUDGETFELDER.paketeMin.map((name) => [name, 'Zeitvorgabe Pakete'] as const),
-  ...BUDGETFELDER.abdeckungMin.map((name) => [name, 'Zeitvorgabe Abdeckung'] as const),
-  ['kostenUsd', 'Kostenbudget'],
-])
+const budgetfeldText = (sprache: Sprache): ReadonlyMap<string, string> => {
+  const t = seite(sprache).BUDGETFELD
+  return new Map<string, string>([
+    ['planMin', t.PLAN],
+    ['reviewMin', t.REVIEW],
+    ...BUDGETFELDER.paketeMin.map((name) => [name, t.PAKETE] as const),
+    ...BUDGETFELDER.abdeckungMin.map((name) => [name, t.ABDECKUNG] as const),
+    ['kostenUsd', t.KOSTEN],
+  ])
+}
 
 /**
  * Die Herkunft der Budgets in einer der drei Aussagen aus AK 3 — „eingestellt", „aus
@@ -1242,27 +1246,30 @@ const BUDGETFELD_TEXT = new Map<string, string>([
  * Voreinstellungen" **ohne** Aufzählung: Ein Doppelpunkt mit nichts dahinter sähe aus wie ein
  * Fehler, und der Lauf hat die Aussage ja getroffen — nur über Felder, die hier nicht stehen.
  */
-function herkunftText(budget: Budget): string {
+function herkunftText(budget: Budget, sprache: Sprache): string {
+  const t = seite(sprache)
   if (budget.herkunft === undefined) {
-    return 'nicht angegeben'
+    return t.NICHT_ANGEGEBEN
   }
   if (budget.herkunft === 'CONFIGURED') {
-    return 'eingestellt'
+    return t.EINGESTELLT
   }
+  const woerter = budgetfeldText(sprache)
   const namen = budget.voreingestellteFelder.flatMap((feld) => {
-    const wort = BUDGETFELD_TEXT.get(feld)
+    const wort = woerter.get(feld)
     return wort === undefined ? [] : [wort]
   })
-  return namen.length === 0 ? 'aus Voreinstellungen' : `aus Voreinstellungen: ${namen.join(', ')}`
+  return namen.length === 0 ? t.AUS_VOREINSTELLUNGEN : t.AUS_VOREINSTELLUNGEN_MIT(namen.join(', '))
 }
 
 /** Die Zeitvorgaben je Arbeitsschritt, in der Reihenfolge der Kette (AK 12). */
-function vorgabenText(vorgaben: NightRunStufenvorgaben | undefined): string {
-  const teile = KETTEN_STUFEN.flatMap(({ schluessel, label }) => {
+function vorgabenText(vorgaben: NightRunStufenvorgaben | undefined, sprache: Sprache): string {
+  const t = seite(sprache)
+  const teile = KETTEN_STUFEN.flatMap(({ schluessel }) => {
     const minuten = vorgaben?.[schluessel]
-    return minuten === undefined ? [] : [`${label} ${minuten}`]
+    return minuten === undefined ? [] : [`${t.KETTEN_STUFE[schluessel]} ${minuten}`]
   })
-  return teile.length === 0 ? 'nicht angegeben' : `${teile.join(' · ')} min`
+  return teile.length === 0 ? t.NICHT_ANGEGEBEN : t.MINUTEN(teile.join(' · '))
 }
 
 /**
@@ -1304,17 +1311,20 @@ function modellzeit(dauerMs: number | undefined, arbeitMs: number | undefined): 
  * Versionsverwaltung auch die Prüfung durch den Nachtlauf selbst. „Werkzeugzeit: 26 %" wäre eine
  * Zahl über etwas, das nirgends gemessen wurde.
  */
-function modellzeitText(dauerMs: number | undefined, modellzeitMs: number | undefined): string {
+function modellzeitText(
+  dauerMs: number | undefined,
+  modellzeitMs: number | undefined,
+  sprache: Sprache,
+): string {
+  const t = seite(sprache)
   const zeit = modellzeit(dauerMs, modellzeitMs)
   if (zeit.art === 'anteil') {
-    return `Modellarbeit ${zeit.prozent} % der Dauer, der Rest außerhalb`
+    return t.MODELLARBEIT_ANTEIL(zeit.prozent)
   }
   if (zeit.art === 'gleichzeitig') {
-    return 'Modellarbeit: mehrere Arbeiten liefen gleichzeitig'
+    return t.MODELLARBEIT_GLEICHZEITIG
   }
-  return zeit.art === 'ohne-dauer'
-    ? 'Modellarbeit: ohne messbare Dauer kein Anteil'
-    : 'Modellzeit nicht gemeldet'
+  return zeit.art === 'ohne-dauer' ? t.MODELLARBEIT_OHNE_DAUER : t.MODELLZEIT_FEHLT
 }
 
 /**
@@ -1335,9 +1345,11 @@ function vorgangszeile(
   item: AnzeigeItem,
   verbrauch: Vorgangsverbrauch | undefined,
   ohneKennzahlen: boolean,
+  sprache: Sprache,
 ): string {
+  const t = seite(sprache)
   const dauer =
-    item.durationMs === undefined ? 'Dauer nicht gemeldet' : formatDuration(item.durationMs / 1000)
+    item.durationMs === undefined ? t.DAUER_NICHT_GEMELDET : formatDuration(item.durationMs / 1000, sprache)
   // Ohne jede Quelle bleibt die Dauer allein: Sie stammt aus dem Lauf selbst. Die drei
   // Fehlanzeigen stünden sonst an einem Vorgang, zu dem nie etwas aufzubewahren war.
   if (ohneKennzahlen || verbrauch === undefined) {
@@ -1345,10 +1357,10 @@ function vorgangszeile(
   }
   return [
     dauer,
-    verbrauch.kostenUsd === undefined ? 'Kosten nicht gemeldet' : betrag(verbrauch.kostenUsd),
-    verbrauch.zuege === undefined ? 'Züge nicht gemeldet' : `${verbrauch.zuege} Züge`,
-    modellzeitText(item.durationMs, verbrauch.modellzeitMs),
-    ...tokenmengen(verbrauch),
+    verbrauch.kostenUsd === undefined ? t.KOSTEN_NICHT_GEMELDET : betrag(verbrauch.kostenUsd, sprache),
+    verbrauch.zuege === undefined ? t.ZUEGE_NICHT_GEMELDET : t.ZUEGE(verbrauch.zuege),
+    modellzeitText(item.durationMs, verbrauch.modellzeitMs, sprache),
+    ...tokenmengen(verbrauch, sprache),
   ].join(' · ')
 }
 
@@ -1360,27 +1372,31 @@ function vorgangszeile(
 const vorgangsKennzahlenText = (
   item: AnzeigeItem,
   verbrauch: Vorgangsverbrauch | undefined,
+  sprache: Sprache,
 ): string =>
   [
     // Die Dauer steht vorneweg. Der Entwurf führt sie in der Ergebniszeile nicht — sie steckt
     // dort im Band —, aber ein Lauf ohne Arbeitsschritte hat kein Band, und dann wäre sie ganz
     // verloren (AK 10).
-    item.durationMs === undefined ? 'Dauer nicht gemeldet' : formatDuration(item.durationMs / 1000),
-    vorgangsKennzahlen(verbrauch),
-    modellzeitText(item.durationMs, verbrauch?.modellzeitMs),
-    ...tokenmengen(verbrauch),
+    item.durationMs === undefined
+      ? seite(sprache).DAUER_NICHT_GEMELDET
+      : formatDuration(item.durationMs / 1000, sprache),
+    vorgangsKennzahlen(verbrauch, sprache),
+    modellzeitText(item.durationMs, verbrauch?.modellzeitMs, sprache),
+    ...tokenmengen(verbrauch, sprache),
   ].join(' · ')
 
 /** Kosten und Züge eines Vorgangs, dazu der Vermerk fehlender Kostenmeldungen (AK 11). */
-function vorgangsKennzahlen(verbrauch: Vorgangsverbrauch | undefined): string {
+function vorgangsKennzahlen(verbrauch: Vorgangsverbrauch | undefined, sprache: Sprache): string {
+  const t = seite(sprache)
   const vermerk = ohneKostenmeldung(
     verbrauch?.kostenUnbekannt,
-    'ein Arbeitsschritt',
-    'Arbeitsschritte',
+    t.EIN_ARBEITSSCHRITT_OHNE_KOSTEN,
+    t.ARBEITSSCHRITTE_OHNE_KOSTEN,
   )
   return [
-    verbrauch?.kostenUsd === undefined ? 'Kosten nicht gemeldet' : betrag(verbrauch.kostenUsd),
-    ...(verbrauch?.zuege === undefined ? [] : [`${verbrauch.zuege} Züge`]),
+    verbrauch?.kostenUsd === undefined ? t.KOSTEN_NICHT_GEMELDET : betrag(verbrauch.kostenUsd, sprache),
+    ...(verbrauch?.zuege === undefined ? [] : [t.ZUEGE(verbrauch.zuege)]),
     ...(vermerk === null ? [] : [vermerk]),
   ].join(' · ')
 }
@@ -1394,10 +1410,13 @@ function vorgangsKennzahlen(verbrauch: Vorgangsverbrauch | undefined): string {
  * **nie** (`NightRunKennzahlen` in `lib/nightRunLog.ts`) — ein „nicht gemessen" auf dem
  * Rückfallweg meldete eine Lücke, die diese Quelle gar nicht haben kann.
  */
-const tokenmengen = (verbrauch: Vorgangsverbrauch | undefined): string[] =>
+const tokenmengen = (verbrauch: Vorgangsverbrauch | undefined, sprache: Sprache): string[] =>
   verbrauch?.eingabe === undefined && verbrauch?.ausgabe === undefined
     ? []
-    : [`Eingabe ${menge(verbrauch.eingabe)}`, `Ausgabe ${menge(verbrauch.ausgabe)}`]
+    : [
+        seite(sprache).EINGABE(menge(verbrauch.eingabe, sprache)),
+        seite(sprache).AUSGABE(menge(verbrauch.ausgabe, sprache)),
+      ]
 
 /**
  * Die Kosten der Nacht für einen Umsetzungs-, Erzeugungs- oder Prüf-Lauf (Issue #874): die Summe
@@ -1414,22 +1433,28 @@ const tokenmengen = (verbrauch: Vorgangsverbrauch | undefined): string[] =>
  * <p><b>Ohne jede Meldung steht kein Betrag</b>: „0,00 $" behauptete eine Nacht ohne Kosten, wo nur
  * nichts gemeldet wurde.
  */
-function laufkosten(bearbeitet: readonly NightRunItem[]): { wert: string; hinweis: string | null } {
+function laufkosten(
+  bearbeitet: readonly NightRunItem[],
+  sprache: Sprache,
+): { wert: string; hinweis: string | null } {
+  const t = seite(sprache)
   const gemeldet = bearbeitet.flatMap((item) =>
     item.kennzahlen?.kostenUsd === undefined ? [] : [item.kennzahlen.kostenUsd],
   )
   if (gemeldet.length === 0) {
-    return { wert: 'Kosten unbekannt', hinweis: null }
+    return { wert: t.KOSTEN_UNBEKANNT, hinweis: null }
   }
   const fehlend = ohneKostenmeldung(
     bearbeitet.length - gemeldet.length,
-    'ein Vorgang',
-    'Vorgänge',
+    t.EIN_VORGANG_OHNE_KOSTEN,
+    t.VORGAENGE_OHNE_KOSTEN,
   )
   return {
-    wert: betrag(gemeldet.reduce((summe, wert) => summe + wert, 0)),
-    hinweis:
-      fehlend === null ? 'gerechnet, nicht im Protokoll' : `gerechnet, unvollständig — ${fehlend}`,
+    wert: betrag(
+      gemeldet.reduce((summe, wert) => summe + wert, 0),
+      sprache,
+    ),
+    hinweis: fehlend === null ? t.GERECHNET : t.GERECHNET_UNVOLLSTAENDIG(fehlend),
   }
 }
 
@@ -1438,13 +1463,16 @@ function laufkosten(bearbeitet: readonly NightRunItem[]): { wert: string; hinwei
  * Unterscheidung wie bei {@link laufkosten}: Eine Null wäre eine Behauptung über eine Nacht, die
  * gar keine Zahl gemeldet hat.
  */
-function laufZuege(bearbeitet: readonly NightRunItem[]): string {
+function laufZuege(bearbeitet: readonly NightRunItem[], sprache: Sprache): string {
   const gemeldet = bearbeitet.flatMap((item) =>
     item.kennzahlen?.zuege === undefined ? [] : [item.kennzahlen.zuege],
   )
   return gemeldet.length === 0
-    ? 'Züge unbekannt'
-    : ZAHL_FORMAT.format(gemeldet.reduce((summe, wert) => summe + wert, 0))
+    ? seite(sprache).ZUEGE_UNBEKANNT
+    : zahlText(
+        gemeldet.reduce((summe, wert) => summe + wert, 0),
+        sprache,
+      )
 }
 
 /**
@@ -1467,18 +1495,20 @@ function laufZuege(bearbeitet: readonly NightRunItem[]): string {
 function artKennzahl(
   run: NightRun,
   bearbeitet: readonly NightRunItem[],
+  sprache: Sprache,
 ): { wert: string; label: string } {
+  const t = seite(sprache)
   if (run.mode === 'IMPLEMENTATION') {
     const erledigt = run.items.filter(
       (item) => item.state === 'GREEN' || item.state === 'YELLOW',
     ).length
-    return { wert: `${erledigt} von ${run.items.length}`, label: 'Vorgänge erledigt' }
+    return { wert: t.VON(erledigt, run.items.length), label: t.VORGAENGE_ERLEDIGT }
   }
   if (run.mode === 'NIGHTPLAN') {
     const dokumente = run.items.reduce((summe, item) => summe + (item.dokumenteAnzahl ?? 0), 0)
-    return { wert: `${dokumente}`, label: 'Dokumente entstanden' }
+    return { wert: `${dokumente}`, label: t.DOKUMENTE_ENTSTANDEN }
   }
-  return { wert: `${bearbeitet.length} von ${run.items.length}`, label: 'Karten bearbeitet' }
+  return { wert: t.VON(bearbeitet.length, run.items.length), label: t.KARTEN_BEARBEITET }
 }
 
 /**
@@ -1491,15 +1521,15 @@ function artKennzahl(
  * und nicht seinen Kopfangaben: Eine hochgeladene Datei ohne Kopfangaben hat hier `stand`
  * `undefined`, sagt mit ihrem fehlenden Abschluss aber sehr wohl etwas aus.
  */
-const kopfText = (ergebnisstand: NightRun | undefined): string => {
+const kopfText = (ergebnisstand: NightRun | undefined, sprache: Sprache): string => {
   if (ergebnisstand === undefined) {
     return ''
   }
   const stand = ergebnisstand.stand
   return [
     ...(stand?.modell === undefined ? [] : [stand.modell]),
-    ...(stand?.label === undefined ? [] : [`Label ${stand.label}`]),
-    abschlussText(stand?.abschluss),
+    ...(stand?.label === undefined ? [] : [seite(sprache).LABEL(stand.label)]),
+    abschlussText(stand?.abschluss, sprache),
   ].join(' · ')
 }
 
@@ -1527,11 +1557,11 @@ const gekappt = (prozent: number): number => Math.round(Math.min(100, prozent) *
  * hoher Verbrauch allein genügt nicht — eine Kette kann auch weit unter ihrer Vorgabe an einem
  * Fehler zerbrechen.
  */
-function vermerkAmEnde(istEnde: boolean, item: Bandvorgang): string | null {
+function vermerkAmEnde(istEnde: boolean, item: Bandvorgang, sprache: Sprache): string | null {
   if (!istEnde) {
     return null
   }
-  return item.errorClass === 'TIME_BUDGET_EXCEEDED' ? 'am Zeitbudget beendet' : 'hier abgebrochen'
+  return item.errorClass === 'TIME_BUDGET_EXCEEDED' ? seite(sprache).AM_ZEITBUDGET : seite(sprache).HIER_ABGEBROCHEN
 }
 
 /**
@@ -1543,13 +1573,15 @@ type Bandvorgang = Pick<NightRunItem, 'state' | 'errorClass'>
 
 /** Ein Abschnitt des Bands: sein Anteil an der Breite, seine Füllung, seine Zahlen, sein Vermerk. */
 function bandabschnitt(
-  { schluessel, label }: { schluessel: NightRunKettenStufe; label: string },
+  { schluessel }: { schluessel: NightRunKettenStufe },
   stufen: Bandstufen,
   item: Bandvorgang,
   vorgaben: NightRunStufenvorgaben | undefined,
   letzte: NightRunKettenStufe | undefined,
   mitKosten: boolean,
+  sprache: Sprache,
 ): Bandabschnitt {
+  const t = seite(sprache)
   const stufe = stufen[schluessel]
   const erreicht = stufe !== undefined
   const verbrauchMs = stufe?.dauerMs ?? 0
@@ -1558,19 +1590,19 @@ function bandabschnitt(
   const vorgabeMin = vorgaben?.[schluessel] ?? 0
   const mitVorgabe = vorgabeMin > 0
   const istEnde = erreicht && schluessel === letzte && item.state !== 'GREEN'
-  const verbrauch = erreicht ? MINUTEN_FORMAT.format(verbrauchMs / MINUTE_MS) : '–'
+  const verbrauch = erreicht ? minutenText(verbrauchMs / MINUTE_MS, sprache) : '–'
 
   return {
     schluessel,
-    label,
+    label: t.KETTEN_STUFE[schluessel],
     anteil: mitVorgabe ? vorgabeMin : ANTEIL_OHNE_VORGABE,
     fuellung: mitVorgabe ? gekappt((verbrauchMs / (vorgabeMin * MINUTE_MS)) * 100) : 0,
     erreicht,
     zahlen: mitVorgabe
-      ? `${verbrauch} / ${ZAHL_FORMAT.format(vorgabeMin)} min`
-      : `${verbrauch} min · ohne Vorgabe`,
-    kosten: erreicht && mitKosten ? kostenText(stufe.kostenUsd ?? null) : null,
-    vermerk: erreicht ? vermerkAmEnde(istEnde, item) : 'nicht erreicht',
+      ? t.ZAHLEN_MIT_VORGABE(verbrauch, zahlText(vorgabeMin, sprache))
+      : t.ZAHLEN_OHNE_VORGABE(verbrauch),
+    kosten: erreicht && mitKosten ? kostenText(stufe.kostenUsd ?? null, sprache) : null,
+    vermerk: erreicht ? vermerkAmEnde(istEnde, item, sprache) : t.NICHT_ERREICHT,
     farbe: istEnde ? zustandsFarbe(item.state) : KUPFER,
   }
 }
@@ -1580,13 +1612,13 @@ function bandabschnitt(
  * Vermerk. Sie ist der Grund, warum das Band `role="img"` trägt — die Zahlen darunter werden damit
  * nicht ein zweites Mal einzeln vorgelesen, sondern genau einmal in dieser Reihenfolge.
  */
-const bandAnsage = (abschnitte: readonly Bandabschnitt[]): string => {
+const bandAnsage = (abschnitte: readonly Bandabschnitt[], sprache: Sprache): string => {
   const schritte = abschnitte.map((a) => {
     const kosten = a.kosten === null ? '' : `, ${a.kosten}`
     const vermerk = a.vermerk === null ? '' : `, ${a.vermerk}`
     return `${a.label} ${a.zahlen}${kosten}${vermerk}`
   })
-  return `Stufenband: ${schritte.join(' · ')}`
+  return seite(sprache).STUFENBAND(schritte.join(' · '))
 }
 
 
@@ -1600,14 +1632,19 @@ const bandAnsage = (abschnitte: readonly Bandabschnitt[]): string => {
  * der Herkunftskette ({@link Stufenzeile}), und zwei verschiedene Aussagen unter derselben
  * Satzform stünden im selben Lauf nebeneinander.
  */
-const DOKUMENT_STUFEN: ReadonlyArray<{
+const dokumentStufen = (
+  sprache: Sprache,
+): ReadonlyArray<{
   schluessel: NightRunKettenStufe
   label: string
   leer: string
-}> = [
-  { schluessel: 'plan', label: 'Plan', leer: 'kein Plan' },
-  { schluessel: 'pakete', label: 'Pakete', leer: 'keine Pakete' },
-]
+}> => {
+  const t = seite(sprache)
+  return [
+    { schluessel: 'plan', label: t.KETTEN_STUFE.plan, leer: t.KEIN_PLAN },
+    { schluessel: 'pakete', label: t.KETTEN_STUFE.pakete, leer: t.KEINE_PAKETE },
+  ]
+}
 
 /**
  * Der Zustand eines Verweises auf eine entstandene Karte (Issue #868) — die drei Fälle, die der
@@ -1657,13 +1694,21 @@ const mitDauer = (item: AnzeigeItem): item is AnzeigeItem & { durationMs: number
   (item.durationMs ?? 0) > 0
 
 /** Ein Abschnitt des Bands: sein Anteil an der Summe, seine Dauer, seine Ansage, seine Farbe. */
-function laufabschnitt(item: AnzeigeItem & { durationMs: number }, summe: number): Laufabschnitt {
-  const dauer = formatDuration(item.durationMs / 1000)
+function laufabschnitt(
+  item: AnzeigeItem & { durationMs: number },
+  summe: number,
+  sprache: Sprache,
+): Laufabschnitt {
+  const dauer = formatDuration(item.durationMs / 1000, sprache)
   return {
     cardNumber: item.cardNumber,
     anteil: Math.round((item.durationMs / summe) * 1000) / 10,
     dauer,
-    ansage: `Karte #${item.cardNumber}: ${nightRunZustandsText(item.state, item.errorClass)}, ${dauer}`,
+    ansage: seite(sprache).ANTEIL_ANSAGE(
+      item.cardNumber,
+      nightRunZustandsText(item.state, item.errorClass, sprache),
+      dauer,
+    ),
     farbe: zustandsFarbe(item.state),
   }
 }
@@ -1692,9 +1737,6 @@ type Sichtungsausgang =
   | { art: 'liegengeblieben' }
   | { art: 'unbekannt' }
 
-/** Der Ersatz für einen übersprungenen Vorgang, dessen Stand keinen Grund nennt. */
-const OHNE_GENANNTEN_GRUND = 'ohne genannten Grund'
-
 /**
  * Der Ausgang aus dem **Ausgangswort** des Ergebnisstands — der sichere Weg, den nur ein frisch
  * gedeuteter Lauf gehen kann. Jedes Wort außer den beiden benannten zählt unter „ohne bekannten
@@ -1702,9 +1744,10 @@ const OHNE_GENANNTEN_GRUND = 'ohne genannten Grund'
  * zurückgestelltes Paket), gehört in keine der Grund-Zeilen, und ihn einer zuzuschlagen wäre
  * genau das Raten, das E2 ausschließt.
  */
-function ausgangAusWort(ausgang: string, auszug: string): Sichtungsausgang {
+function ausgangAusWort(ausgang: string, auszug: string, sprache: Sprache): Sichtungsausgang {
   if (ausgang === 'uebersprungen') {
-    return { art: 'uebersprungen', grund: auszug === '' ? OHNE_GENANNTEN_GRUND : auszug }
+    // Ersatz für einen übersprungenen Vorgang, dessen Stand keinen Grund nennt.
+    return { art: 'uebersprungen', grund: auszug === '' ? seite(sprache).OHNE_GENANNTEN_GRUND : auszug }
   }
   return ausgang === 'liegengeblieben' ? { art: 'liegengeblieben' } : { art: 'unbekannt' }
 }
@@ -1743,14 +1786,14 @@ function ausgangAusSicht(
  * Vorgang kann ohne ihn ankommen, ein frisch gedeuteter trägt immer einen ({@link NightRunItem}
  * führt ihn als Pflichtfeld), und zwei Auffangstellen hätten eine davon als toten Zweig.
  */
-function sichtungsausgang(eintrag: Sichtung): Sichtungsausgang {
+function sichtungsausgang(eintrag: Sichtung, sprache: Sprache): Sichtungsausgang {
   if (eintrag.state !== 'GREY') {
     return { art: 'bearbeitet' }
   }
   const auszug = eintrag.excerpt ?? ''
   return eintrag.ausgang === undefined
     ? ausgangAusSicht(eintrag.errorClass, auszug)
-    : ausgangAusWort(eintrag.ausgang, auszug)
+    : ausgangAusWort(eintrag.ausgang, auszug, sprache)
 }
 
 /** Eine Zeile der Aufschlüsselung: ihr Text und die Karten, die sie zusammenfasst. */
@@ -1763,10 +1806,10 @@ interface Ausgangszeile {
 /** Eine Zeile, die es nur gibt, wo sie wenigstens eine Karte zusammenfasst. */
 const zeileWennBesetzt = (
   testId: string,
-  label: string,
+  text: (anzahl: number) => string,
   karten: readonly Sichtung[],
 ): Ausgangszeile[] =>
-  karten.length === 0 ? [] : [{ testId, text: `${karten.length} ${label}`, karten }]
+  karten.length === 0 ? [] : [{ testId, text: text(karten.length), karten }]
 
 /**
  * Die Aufschlüsselung eines Laufs: die Zahl der gesichteten und der bearbeiteten Karten und die
@@ -1774,17 +1817,21 @@ const zeileWennBesetzt = (
  * welche Regel am meisten weggefiltert hat; `sort` ist stabil, gleich häufige Gründe behalten
  * also die Reihenfolge des Laufs.
  */
-function aufschluesselung(items: readonly Sichtung[]): {
+function aufschluesselung(
+  items: readonly Sichtung[],
+  sprache: Sprache,
+): {
   bearbeitet: number
   zeilen: Ausgangszeile[]
 } {
+  const t = seite(sprache)
   let bearbeitet = 0
   const gruende = new Map<string, Sichtung[]>()
   const liegengeblieben: Sichtung[] = []
   const unbekannt: Sichtung[] = []
 
   for (const eintrag of items) {
-    const ausgang = sichtungsausgang(eintrag)
+    const ausgang = sichtungsausgang(eintrag, sprache)
     if (ausgang.art === 'bearbeitet') {
       bearbeitet += 1
     } else if (ausgang.art === 'liegengeblieben') {
@@ -1808,11 +1855,11 @@ function aufschluesselung(items: readonly Sichtung[]): {
         .sort(([, a], [, b]) => b.length - a.length)
         .map(([grund, karten], position) => ({
           testId: `aufschluesselung-grund-${position}`,
-          text: `${karten.length} übersprungen: ${grund}`,
+          text: t.UEBERSPRUNGEN(karten.length, grund),
           karten,
         })),
-      ...zeileWennBesetzt('aufschluesselung-liegengeblieben', 'liegengeblieben', liegengeblieben),
-      ...zeileWennBesetzt('aufschluesselung-unbekannt', 'ohne bekannten Ausgang', unbekannt),
+      ...zeileWennBesetzt('aufschluesselung-liegengeblieben', t.LIEGENGEBLIEBEN, liegengeblieben),
+      ...zeileWennBesetzt('aufschluesselung-unbekannt', t.OHNE_BEKANNTEN_AUSGANG, unbekannt),
     ],
   }
 }
@@ -1886,12 +1933,14 @@ function Ausgangsgruppe({ zeile }: Readonly<{ zeile: Ausgangszeile }>) {
  * nichts zur Summe bei.
  */
 function Aufschluesselung({ items }: Readonly<{ items: readonly Sichtung[] }>) {
-  const { bearbeitet, zeilen } = aufschluesselung(items)
+  const { sprache } = useSprache()
+  const t = seite(sprache)
+  const { bearbeitet, zeilen } = aufschluesselung(items, sprache)
 
   return (
     <Box data-testid="aufschluesselung" sx={{ mb: 2 }}>
       <Typography variant="subtitle2" data-testid="aufschluesselung-gesichtet">
-        {`${items.length} Karten gesichtet`}
+        {t.KARTEN_GESICHTET(items.length)}
       </Typography>
       <Typography
         variant="body2"
@@ -1899,7 +1948,7 @@ function Aufschluesselung({ items }: Readonly<{ items: readonly Sichtung[] }>) {
         data-testid="aufschluesselung-bearbeitet"
         sx={{ pl: 1 }}
       >
-        {`${bearbeitet} bearbeitet`}
+        {t.BEARBEITET(bearbeitet)}
       </Typography>
       {zeilen.map((zeile) => (
         <Ausgangsgruppe key={zeile.testId} zeile={zeile} />
@@ -1921,8 +1970,8 @@ interface Chipgruppe {
   chips: readonly Kartenchip[]
 }
 
-function chipgruppen(item: NightRunItem, katalog: Kartenkatalog): Chipgruppe[] {
-  return DOKUMENT_STUFEN.map(({ schluessel, label, leer }) => ({
+function chipgruppen(item: NightRunItem, katalog: Kartenkatalog, sprache: Sprache): Chipgruppe[] {
+  return dokumentStufen(sprache).map(({ schluessel, label, leer }) => ({
     label,
     leer,
     testId: `dokumente-${item.cardNumber}-${schluessel}`,
@@ -1944,18 +1993,19 @@ function kettenchips(
   standItem: NightRunItem | undefined,
   erzeugt: Erzeugnisse | undefined,
   katalog: Kartenkatalog,
+  sprache: Sprache,
 ): Chipgruppe[] {
   if (modus !== 'CHAIN') {
     return []
   }
   if (standItem !== undefined) {
-    return chipgruppen(standItem, katalog)
+    return chipgruppen(standItem, katalog, sprache)
   }
   if (erzeugt === undefined) {
     return []
   }
-  // `DOKUMENT_STUFEN` führt genau die beiden Schritte, in denen Karten entstehen: Plan und Pakete.
-  return DOKUMENT_STUFEN.map(({ schluessel, label, leer }) => ({
+  // `dokumentStufen` führt genau die beiden Schritte, in denen Karten entstehen: Plan und Pakete.
+  return dokumentStufen(sprache).map(({ schluessel, label, leer }) => ({
     label,
     leer,
     testId: `dokumente-${item.cardNumber}-${schluessel}`,
@@ -2030,6 +2080,7 @@ function vorgangsband(
   item: AnzeigeItem,
   standItem: NightRunItem | undefined,
   vorgaben: NightRunStufenvorgaben | undefined,
+  sprache: Sprache,
 ): { abschnitte: readonly Bandabschnitt[]; ansage: string } | null {
   const stufen = standItem?.kettenStufen ?? item.stufen
   if (stufen === undefined) {
@@ -2040,18 +2091,18 @@ function vorgangsband(
   const mitKosten = standItem?.kettenStufen === undefined
   const letzte = letzteErreichteStufe(stufen)
   const abschnitte = KETTEN_STUFEN.map((stufe) =>
-    bandabschnitt(stufe, stufen, item, vorgaben, letzte, mitKosten),
+    bandabschnitt(stufe, stufen, item, vorgaben, letzte, mitKosten, sprache),
   )
-  return { abschnitte, ansage: bandAnsage(abschnitte) }
+  return { abschnitte, ansage: bandAnsage(abschnitte, sprache) }
 }
 
 /**
  * Der Grund, mit dem ein Vorgang endete (AK 7) — `null` an einem regulär beendeten. Derselbe Satz,
  * der bis #916 über dem Band stand: der Grund und die bis dahin entstandenen Karten.
  */
-function vorgangsgrund(item: NightRunItem): string | null {
+function vorgangsgrund(item: NightRunItem, sprache: Sprache): string | null {
   const letzte = letzteErreichteStufe(item.kettenStufen)
-  return letzte !== undefined && item.state !== 'GREEN' ? abbruchSatz(item) : null
+  return letzte !== undefined && item.state !== 'GREEN' ? abbruchSatz(item, sprache) : null
 }
 
 /**
@@ -2064,10 +2115,11 @@ const umsetzungsKennzahlen = (
   item: AnzeigeItem,
   verbrauch: Vorgangsverbrauch | undefined,
   ohneKennzahlen: boolean,
+  sprache: Sprache,
 ): string =>
   // Ein grauer Vorgang lief nie; seine Zeile bestünde aus lauter Fehlanzeigen. Dieselbe Grenze,
   // die {@link VorgangsKennzahlen} zieht.
-  item.state === 'GREY' ? '' : vorgangszeile(item, verbrauch, ohneKennzahlen)
+  item.state === 'GREY' ? '' : vorgangszeile(item, verbrauch, ohneKennzahlen, sprache)
 
 /**
  * Die Anteile der Vorgänge eines Umsetzungs-Laufs an der Laufzeit der Nacht (#917), je Vorgang
@@ -2079,40 +2131,41 @@ const umsetzungsKennzahlen = (
  * wäre unsichtbar, obwohl er einen Ausgang trägt. Seine Angaben stehen davon unberührt in seinem
  * Block.
  */
-function laufanteile(items: readonly AnzeigeItem[]): ReadonlyMap<number, Laufabschnitt> {
+function laufanteile(items: readonly AnzeigeItem[], sprache: Sprache): ReadonlyMap<number, Laufabschnitt> {
   const gemessen = items.filter(mitDauer)
   if (gemessen.length < 2) {
     return new Map()
   }
   const summe = gemessen.reduce((wert, item) => wert + item.durationMs, 0)
-  return new Map(gemessen.map((item) => [item.cardNumber, laufabschnitt(item, summe)]))
+  return new Map(gemessen.map((item) => [item.cardNumber, laufabschnitt(item, summe, sprache)]))
 }
 
-function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): FussangabeForm[] {
+function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined, sprache: Sprache): FussangabeForm[] {
+  const t = seite(sprache)
   if (lauf.mode === 'CHAIN') {
     // Seit Issue #1115 aus dem Lauf selbst und nicht mehr allein aus dem eingelesenen Stand: Ein
     // Lauf, den der Runner eingeliefert hat, bringt seine Vorgaben mit (AK 1) — bis dahin stand
     // hier viermal „nicht angegeben", obwohl der Server die Angaben führte.
     const budget = kettenBudget(lauf, stand)
     return [
-      ...kettenAngaben(stand),
-      { label: 'Zeitvorgaben je Kette', wert: vorgabenText(budget.vorgabenMin) },
-      { label: 'Kostenbudget je Kette', wert: betrag(budget.kostenUsd) },
-      { label: 'Höchste Kosten eines Vorgangs', wert: hoechsteKosten(lauf.items, stand) },
-      { label: 'Herkunft der Budgets', wert: herkunftText(budget) },
+      ...kettenAngaben(stand, sprache),
+      { label: t.FUSS.ZEITVORGABEN, wert: vorgabenText(budget.vorgabenMin, sprache) },
+      { label: t.FUSS.KOSTENBUDGET, wert: betrag(budget.kostenUsd, sprache) },
+      { label: t.FUSS.HOECHSTE_KOSTEN, wert: hoechsteKosten(lauf.items, stand, sprache) },
+      { label: t.FUSS.HERKUNFT_BUDGETS, wert: herkunftText(budget, sprache) },
     ]
   }
   return [
-    ...standAngaben(stand),
+    ...standAngaben(stand, sprache),
     {
-      label: 'Ergebnis der Schicht',
-      wert: `${lauf.processedCount} bearbeitet · ${lauf.skippedCount} übergangen`,
+      label: t.FUSS.ERGEBNIS,
+      wert: `${t.BEARBEITET(lauf.processedCount)} · ${t.UEBERGANGEN(lauf.skippedCount)}`,
     },
     {
-      label: 'Teuerster Vorgang',
-      wert: stand === undefined ? 'nicht angegeben' : teuersterVorgang(stand.items),
+      label: t.FUSS.TEUERSTER,
+      wert: stand === undefined ? t.NICHT_ANGEGEBEN : teuersterVorgang(stand.items, sprache),
     },
-    { label: 'Herkunft des Stands', wert: stand === undefined ? 'nicht angegeben' : 'Ergebnisstand' },
+    { label: t.FUSS.HERKUNFT_STAND, wert: stand === undefined ? t.NICHT_ANGEGEBEN : t.ERGEBNISSTAND },
   ]
 }
 
@@ -2126,25 +2179,26 @@ function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined): Fussangabe
  * A1), der Server bewahrt sie nicht auf. Eine Reihe aus lauter Fehlanzeigen wäre dieselbe Wand, die
  * der Bestand schon vermeidet.
  */
-function kettenAngaben(stand: NightRun | undefined): FussangabeForm[] {
+function kettenAngaben(stand: NightRun | undefined, sprache: Sprache): FussangabeForm[] {
   if (stand === undefined) {
     return []
   }
+  const t = seite(sprache)
   const gruen = stand.items.filter((item) => item.state === 'GREEN').length
   const vermerk = ohneKostenmeldung(
     stand.stand?.kostenUnbekannt,
-    'ein Arbeitsschritt',
-    'Arbeitsschritte',
+    t.EIN_ARBEITSSCHRITT_OHNE_KOSTEN,
+    t.ARBEITSSCHRITTE_OHNE_KOSTEN,
   )
   return [
-    { label: 'Ketten durchgelaufen', wert: `${gruen} von ${stand.items.length}` },
-    { label: 'Karten entstanden', wert: `${entstandeneDokumente(stand.items).size}` },
+    { label: t.FUSS.KETTEN_DURCHGELAUFEN, wert: t.VON(gruen, stand.items.length) },
+    { label: t.FUSS.KARTEN_ENTSTANDEN, wert: `${entstandeneDokumente(stand.items).size}` },
     {
-      label: 'Laufzeit über alle Stufen',
-      wert: formatDuration(stufenZeitSumme(stand.items) / 1000),
+      label: t.FUSS.LAUFZEIT_STUFEN,
+      wert: formatDuration(stufenZeitSumme(stand.items) / 1000, sprache),
     },
-    { label: 'Kosten der Schicht', wert: betrag(stand.stand?.kostenSumme) },
-    ...(vermerk === null ? [] : [{ label: 'Zur Kostensumme', wert: vermerk, vorbehalt: true }]),
+    { label: t.FUSS.KOSTEN_SCHICHT, wert: betrag(stand.stand?.kostenSumme, sprache) },
+    ...(vermerk === null ? [] : [{ label: t.FUSS.ZUR_KOSTENSUMME, wert: vermerk, vorbehalt: true }]),
   ]
 }
 
@@ -2162,29 +2216,30 @@ function kettenAngaben(stand: NightRun | undefined): FussangabeForm[] {
  * Vorlage `docs/mockup-leitstand-laufarten.html` und hält die beiden Angaben auseinander, obwohl
  * sie dieselbe Größe messen.
  */
-function standAngaben(stand: NightRun | undefined): FussangabeForm[] {
+function standAngaben(stand: NightRun | undefined, sprache: Sprache): FussangabeForm[] {
   if (stand === undefined) {
     return []
   }
+  const t = seite(sprache)
   const bearbeitet = stand.items.filter((item) => item.state !== 'GREY')
-  const art = artKennzahl(stand, bearbeitet)
+  const art = artKennzahl(stand, bearbeitet, sprache)
   const hinweis = stand.stand?.kennzahlenHinweis
-  const kosten = laufkosten(bearbeitet)
+  const kosten = laufkosten(bearbeitet, sprache)
   return [
     { label: art.label, wert: art.wert },
     {
-      label: 'Laufzeit über alle Vorgänge',
-      wert: `${MINUTEN_FORMAT.format(stand.durationMs / MINUTE_MS)} min`,
+      label: t.FUSS.LAUFZEIT_VORGAENGE,
+      wert: t.MINUTEN(minutenText(stand.durationMs / MINUTE_MS, sprache)),
     },
     ...(hinweis === undefined
       ? [
-          { label: 'Kosten der Schicht', wert: kosten.wert },
+          { label: t.FUSS.KOSTEN_SCHICHT, wert: kosten.wert },
           ...(kosten.hinweis === null
             ? []
-            : [{ label: 'Zur Kostensumme', wert: kosten.hinweis, vorbehalt: true }]),
-          { label: 'Züge des Modells', wert: laufZuege(bearbeitet) },
+            : [{ label: t.FUSS.ZUR_KOSTENSUMME, wert: kosten.hinweis, vorbehalt: true }]),
+          { label: t.FUSS.ZUEGE_MODELL, wert: laufZuege(bearbeitet, sprache) },
         ]
-      : [{ label: 'Kennzahlen', wert: hinweis, vorbehalt: true }]),
+      : [{ label: t.FUSS.KENNZAHLEN, wert: hinweis, vorbehalt: true }]),
   ]
 }
 
@@ -2194,31 +2249,31 @@ function standAngaben(stand: NightRun | undefined): FussangabeForm[] {
  * den Betrag; der Entwurf führt hier beides („#872 mit 12,53 $"), und ohne die Nummer müsste man
  * die Vorgänge durchsehen, um den teuersten zu finden.
  */
-function teuersterVorgang(items: readonly NightRunItem[]): string {
+function teuersterVorgang(items: readonly NightRunItem[], sprache: Sprache): string {
   const gemeldet = items.flatMap((item) =>
     item.kennzahlen?.kostenUsd === undefined
       ? []
       : [{ nummer: item.cardNumber, kosten: item.kennzahlen.kostenUsd }],
   )
   if (gemeldet.length === 0) {
-    return 'nicht angegeben'
+    return seite(sprache).NICHT_ANGEGEBEN
   }
   const teuerster = gemeldet.reduce(
     (hoechster, kandidat) => (kandidat.kosten > hoechster.kosten ? kandidat : hoechster),
     gemeldet[0],
   )
-  return `#${teuerster.nummer} mit ${betrag(teuerster.kosten)}`
+  return seite(sprache).TEUERSTER(teuerster.nummer, betrag(teuerster.kosten, sprache))
 }
 
 /** Ein Zeitpunkt in der Schreibweise, die die Seite ueberall fuer Zeitpunkte fuehrt. */
-const zeitpunkt = (iso: string): string => new Date(iso).toLocaleString('de-DE')
+const zeitpunkt = (iso: string, sprache: Sprache): string => formatierer(sprache).datumUhrzeit(iso)
 
-/**
- * Was ein unvollstaendig gemeldeter Lauf im Kopf sagt. Er wird **angezeigt, aber nicht
- * eingeliefert** — der Satz gilt dem Lauf selbst, nicht seiner Speicherung, und steht seit #988 als
- * Zustandsmarke mit LED im Kopf (Vorlage Z. 387), damit er ohne Aufklappen auffaellt.
+/*
+ * Was ein unvollstaendig gemeldeter Lauf im Kopf sagt (`NACHTLAUF_SEITE.UNVOLLSTAENDIG_GEMELDET`).
+ * Er wird **angezeigt, aber nicht eingeliefert** — der Satz gilt dem Lauf selbst, nicht seiner
+ * Speicherung, und steht seit #988 als Zustandsmarke mit LED im Kopf (Vorlage Z. 387), damit er
+ * ohne Aufklappen auffaellt.
  */
-const UNVOLLSTAENDIG_GEMELDET = 'unvollständig gemeldet'
 
 /**
  * Was der Kopf ueber die Einlieferung eines Laufs sagt (Issue #949): woher er kam und wann er
@@ -2233,22 +2288,22 @@ const UNVOLLSTAENDIG_GEMELDET = 'unvollständig gemeldet'
  * zwei gleiche Zeiten nebeneinander liessen den Leser nach einem Unterschied suchen, den es nicht
  * gibt.
  */
-function einlieferungsangaben(lauf: AnzeigeLauf): string[] {
+function einlieferungsangaben(lauf: AnzeigeLauf, sprache: Sprache): string[] {
+  const t = seite(sprache)
   const herkunft: string[] = []
   if (lauf.herkunft === 'TOKEN' && lauf.eingeliefertAm !== undefined) {
     herkunft.push(
-      `maschinell eingeliefert am ${zeitpunkt(lauf.eingeliefertAm)}${
-        lauf.tokenName === undefined ? '' : ` (Token: ${lauf.tokenName})`
-      }`,
+      t.MASCHINELL_EINGELIEFERT(zeitpunkt(lauf.eingeliefertAm, sprache)) +
+        (lauf.tokenName === undefined ? '' : t.TOKEN(lauf.tokenName)),
     )
   } else if (lauf.herkunft === 'UPLOAD' && lauf.eingeliefertAm !== undefined) {
-    herkunft.push(`hochgeladen am ${zeitpunkt(lauf.eingeliefertAm)}`)
+    herkunft.push(t.HOCHGELADEN(zeitpunkt(lauf.eingeliefertAm, sprache)))
   }
   if (
     lauf.zuletztGemeldetAm !== undefined &&
     lauf.zuletztGemeldetAm !== lauf.eingeliefertAm
   ) {
-    herkunft.push(`zuletzt gemeldet am ${zeitpunkt(lauf.zuletztGemeldetAm)}`)
+    herkunft.push(t.ZULETZT_GEMELDET(zeitpunkt(lauf.zuletztGemeldetAm, sprache)))
   }
   return herkunft
 }
@@ -2275,7 +2330,10 @@ function Kopfmarken({
   ausErgebnisstand: ReadonlySet<string>
   offen: boolean
 }>) {
-  const kosten = kostenText(lauf.verbrauch?.kostenUsd ?? null)
+  const { sprache } = useSprache()
+  const t = seite(sprache)
+  const ausgang = woerterbuch(sprache).NACHTLAUF_UEBERGABE.AUSGANG
+  const kosten = kostenText(lauf.verbrauch?.kostenUsd ?? null, sprache)
   return (
     <>
       {/* Die Marke haengt am Befund und nicht an `vollstaendig` (#1092): Ein verstummter Lauf
@@ -2283,7 +2341,7 @@ function Kopfmarken({
           nicht gelungen, und das sagt bereits die rote LED der Platte. */}
       {laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund }) && (
         <LaufMarke testId="lauf-zustand" led={<Led melder="stahl" pulsiert />}>
-          {UNVOLLSTAENDIG_GEMELDET}
+          {t.UNVOLLSTAENDIG_GEMELDET}
         </LaufMarke>
       )}
       {/* Die dritte Zustandsmarke (Issue #1145): der Grund des harten Abbruchs, **gekuerzt** auf
@@ -2296,7 +2354,7 @@ function Kopfmarken({
       {lauf.abbruchGrund !== undefined && (
         <LaufMarke testId="lauf-zustand" led={<Led melder={melder} />}>
           {lauf.befund?.verdict === 'NOT_STARTED'
-            ? `${NIGHT_RUN_VERDICT_TEXT.NOT_STARTED} — ${kurzGrund(lauf.abbruchGrund)}`
+            ? `${ausgang.NOT_STARTED} — ${kurzGrund(lauf.abbruchGrund)}`
             : kurzGrund(lauf.abbruchGrund)}
         </LaufMarke>
       )}
@@ -2311,7 +2369,7 @@ function Kopfmarken({
           an der Laufplatte nicht (anders als beim Abbruchgrund daruber). */}
       {lauf.vollstaendig && lauf.abbruchGrund === undefined && lauf.ohneArbeit !== undefined && (
         <LaufMarke testId="lauf-zustand" led={<Led melder={melder} />}>
-          {`${NIGHT_RUN_VERDICT_TEXT.NO_WORK} — ${lauf.ohneArbeit}`}
+          {`${ausgang.NO_WORK} — ${lauf.ohneArbeit}`}
         </LaufMarke>
       )}
       {!offen && kosten !== null && <LaufMarke testId="lauf-kosten">{kosten}</LaufMarke>}
@@ -2320,12 +2378,12 @@ function Kopfmarken({
           also in jedem Ladepfad einzeln gesetzt werden — und der nächste vergessene Pfad zeigte
           still die falsche Herkunft (AK 9, Fall 3). */}
       <LaufMarke testId="lauf-stand">
-        {ausErgebnisstand.has(lauf.startedAt) ? 'Ergebnisstand' : 'Herkunft unbekannt'}
+        {ausErgebnisstand.has(lauf.startedAt) ? t.ERGEBNISSTAND : t.HERKUNFT_UNBEKANNT}
       </LaufMarke>
-      {einlieferungsangaben(lauf).map((angabe) => (
+      {einlieferungsangaben(lauf, sprache).map((angabe) => (
         <LaufMarke key={angabe}>{angabe}</LaufMarke>
       ))}
-      {ergebnis !== undefined && <LaufMarke>{ergebnis ? 'neu angelegt' : 'lag schon vor'}</LaufMarke>}
+      {ergebnis !== undefined && <LaufMarke>{ergebnis ? t.NEU_ANGELEGT : t.LAG_SCHON_VOR}</LaufMarke>}
     </>
   )
 }
@@ -2343,14 +2401,15 @@ const metazeile = (
   lauf: AnzeigeLauf,
   stand: NightRun | undefined,
   zahlen: { bearbeitet: number; uebergangen: number },
+  sprache: Sprache,
 ): string =>
   [
-    tagZeit(lauf.startedAt),
-    laufDauer(lauf.durationMs),
-    `${zahlen.bearbeitet} bearbeitet`,
-    `${zahlen.uebergangen} übergangen`,
-    kopfText(stand),
-    ...(lauf.unparsedCount > 0 ? [`Ungedeutete Zeilen: ${lauf.unparsedCount}`] : []),
+    tagZeit(lauf.startedAt, sprache),
+    laufDauer(lauf.durationMs, sprache),
+    seite(sprache).BEARBEITET(zahlen.bearbeitet),
+    seite(sprache).UEBERGANGEN(zahlen.uebergangen),
+    kopfText(stand, sprache),
+    ...(lauf.unparsedCount > 0 ? [seite(sprache).UNGEDEUTETE_ZEILEN(lauf.unparsedCount)] : []),
   ]
     .filter((eintrag) => eintrag !== '')
     .join(' · ')
@@ -2360,11 +2419,12 @@ const metazeile = (
  * Startdatum und Startzeit. Datum und Uhrzeit machen zwei Läufe derselben Schicht unterscheidbar.
  * Ohne Nummer (ein eben eingelesener Lauf war bei keinem Server) „Run · 14. September, 22:05".
  */
-const laufTitel = (startedAt: string, laufId: number | undefined): string => {
+const laufTitel = (startedAt: string, laufId: number | undefined, sprache: Sprache): string => {
   const start = new Date(startedAt)
-  const datum = start.toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })
-  const zeit = start.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-  const lauf = laufId === undefined ? 'Run' : `Run #${laufId}`
+  const { gebietsschema } = formatierer(sprache)
+  const datum = start.toLocaleDateString(gebietsschema, { day: 'numeric', month: 'long' })
+  const zeit = start.toLocaleTimeString(gebietsschema, { hour: '2-digit', minute: '2-digit' })
+  const lauf = laufId === undefined ? seite(sprache).RUN : seite(sprache).RUN_NUMMER(laufId)
   return `${lauf} · ${datum}, ${zeit}`
 }
 
@@ -2379,11 +2439,12 @@ const ergebniszeile = (
   item: AnzeigeItem,
   standItem: NightRunItem | undefined,
   ohneKennzahlen: boolean,
+  sprache: Sprache,
 ): string => {
   const verbrauch = vorgangsverbrauch(item, standItem)
   return modus === 'CHAIN'
-    ? vorgangsKennzahlenText(item, verbrauch)
-    : umsetzungsKennzahlen(item, verbrauch, ohneKennzahlen)
+    ? vorgangsKennzahlenText(item, verbrauch, sprache)
+    : umsetzungsKennzahlen(item, verbrauch, ohneKennzahlen, sprache)
 }
 
 /**
@@ -2510,15 +2571,17 @@ function Vorgangszeile({
 }>) {
   const [offen, setOffen] = useState(false)
   const kitNamen = useKitNamen()
+  const { sprache } = useSprache()
+  const t = woerterbuch(sprache)
   // `undefined` = noch nicht aufgelöst (die Kette lädt), `null` = nicht auflösbar.
   const wurzel = katalog.get(item.cardNumber)
   // `null` an einem grünen oder grauen Vorgang — dort erscheint kein Befund.
-  const uebernahme = buildHandoffText(item)
-  const band = modus === 'CHAIN' ? vorgangsband(item, standItem, vorgaben) : null
-  const grund = modus === 'CHAIN' && standItem !== undefined ? vorgangsgrund(standItem) : null
-  const chips = kettenchips(modus, item, standItem, erzeugt, katalog)
-  const kennzahlen = ergebniszeile(modus, item, standItem, ohneKennzahlen)
-  const zustandswort = nightRunZustandsText(item.state, item.errorClass)
+  const uebernahme = buildHandoffText(item, sprache)
+  const band = modus === 'CHAIN' ? vorgangsband(item, standItem, vorgaben, sprache) : null
+  const grund = modus === 'CHAIN' && standItem !== undefined ? vorgangsgrund(standItem, sprache) : null
+  const chips = kettenchips(modus, item, standItem, erzeugt, katalog, sprache)
+  const kennzahlen = ergebniszeile(modus, item, standItem, ohneKennzahlen, sprache)
+  const zustandswort = nightRunZustandsText(item.state, item.errorClass, sprache)
   // Das Vorhaben hängt an der **Wurzelkarte**, nicht an der Kette: Fachliche Anforderung und Plan
   // tragen ebenfalls eine `parentId`, und deren Vorhaben wäre hier eine andere Aussage.
   const vorhabenKarte = wurzel?.parentId == null ? undefined : vorhabenKarten.get(wurzel.parentId)
@@ -2543,7 +2606,7 @@ function Vorgangszeile({
           : { titel: vorhabenKarte.title, farbe: epicColor(vorhabenKarte.id) }
       }
       dauer={item.durationMs ?? null}
-      kosten={kostenText(vorgangskosten(item, standItem))}
+      kosten={kostenText(vorgangskosten(item, standItem), sprache)}
       commit={kurzHash(item.commitHash ?? null)}
       offen={offen}
       onUmschalten={() => setOffen((wert) => !wert)}
@@ -2569,7 +2632,7 @@ function Vorgangszeile({
           genauer, und der rohe Stufenblock stünde ein zweites Mal daneben (#916, AK 15 aus #859). */}
       {item.excerpt !== undefined && (modus !== 'CHAIN' || standItem === undefined) && (
         <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-          {(item.state === 'GREY' ? 'Grund: ' : 'Auszug: ') + item.excerpt}
+          {(item.state === 'GREY' ? t.NACHTLAUF_SEITE.GRUND : t.NACHTLAUF_SEITE.AUSZUG) + item.excerpt}
         </Typography>
       )}
 
@@ -2585,8 +2648,8 @@ function Vorgangszeile({
       {anteil !== undefined && (
         <NachtlaufAnteilsbalken
           anteil={anteil.anteil}
-          beschriftung={`${anteil.dauer} · ${anteil.anteil} % der Schicht`}
-          ansage={`${anteil.ansage}, ${anteil.anteil} % der Schicht`}
+          beschriftung={`${anteil.dauer} · ${t.NACHTLAUF_SEITE.ANTEIL_DER_SCHICHT(anteil.anteil)}`}
+          ansage={`${anteil.ansage}, ${t.NACHTLAUF_SEITE.ANTEIL_DER_SCHICHT(anteil.anteil)}`}
           farbe={anteil.farbe}
           schiene={NUT}
           testId={`laufband-abschnitt-${item.cardNumber}`}
@@ -2601,7 +2664,7 @@ function Vorgangszeile({
         >
           {chips.length > 0 && (
             <Typography component="span" sx={{ fontSize: 12, color: TEXT_SCHWACH, mr: '2px' }}>
-              Entstanden
+              {t.NACHTLAUF_SEITE.ENTSTANDEN}
             </Typography>
           )}
           {chips.map((gruppe) => (
@@ -2627,7 +2690,7 @@ function Vorgangszeile({
 
       {ausPlan !== undefined && (
         <Stufenzeile
-          label="Paket aus Plan"
+          label={t.NACHTLAUF_SEITE.PAKET_AUS_PLAN}
           zustand={planZustand(ausPlan, katalog)}
           onOeffnen={onOeffnen}
         />
@@ -2637,7 +2700,7 @@ function Vorgangszeile({
         <>
           {STUFEN.map((stufe) => {
             const zustand = stufenZustand(
-              stufe.art,
+              stufe,
               kitNamen,
               kette(item.cardNumber, katalog),
               istRot,
@@ -2647,8 +2710,8 @@ function Vorgangszeile({
             // (#858, siehe `stufenZustand`).
             return zustand.art === 'entfaellt' ? null : (
               <Stufenzeile
-                key={stufe.label}
-                label={stufe.label}
+                key={stufe}
+                label={t.KARTENART[stufe]}
                 zustand={zustand}
                 onOeffnen={onOeffnen}
               />
@@ -2732,6 +2795,7 @@ function LaufPanel({
   onKarteOeffnen: (nummer: number) => void
 }>) {
   const [offen, setOffen] = useState(zuerst)
+  const { sprache } = useSprache()
   const laeuft = laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund })
   const art = fortschrittArt(lauf.mode)
   const geladen = fortschritt === undefined || fortschritt === 'nicht abrufbar' ? null : fortschritt
@@ -2751,7 +2815,7 @@ function LaufPanel({
   // Einmal je Lauf gerechnet: Die Bezugsgröße ist die Summe **aller** Vorgangsdauern, also eine
   // Größe des Laufs und nicht eines Vorgangs.
   const anteile =
-    lauf.mode === 'IMPLEMENTATION' ? laufanteile(lauf.items) : new Map<number, Laufabschnitt>()
+    lauf.mode === 'IMPLEMENTATION' ? laufanteile(lauf.items, sprache) : new Map<number, Laufabschnitt>()
   // Hat der Lauf die Sitzungs-Kennzahlen gar nicht angefordert, nennt er den Grund einmal in seiner
   // Fußzeile; je Vorgang stünde sonst dreimal „fehlt“ (#874).
   const ohneKennzahlen = stand?.stand?.kennzahlenHinweis !== undefined
@@ -2777,10 +2841,10 @@ function LaufPanel({
   return (
     <NachtlaufLaufPlatte
       testId={`lauf-${lauf.startedAt}`}
-      titel={laufTitel(lauf.startedAt, lauf.laufId)}
-      zyklus={zyklusBeschriftung(zyklusDesStarts(lauf.startedAt))}
+      titel={laufTitel(lauf.startedAt, lauf.laufId, sprache)}
+      zyklus={zyklusBeschriftung(zyklusDesStarts(lauf.startedAt), sprache)}
       artSymbol={<LaufArtSymbol art={lauf.mode} />}
-      meta={metazeile(lauf, stand, zahlen)}
+      meta={metazeile(lauf, stand, zahlen, sprache)}
       melder={melder}
       abbruchGrund={lauf.abbruchGrund}
       veroeffentlichung={lauf.veroeffentlichung}
@@ -2821,7 +2885,7 @@ function LaufPanel({
 
       {lauf.unparsedSample.length > 0 && (
         <Box sx={{ px: '16px', pt: '14px' }}>
-          <Typography variant="subtitle2">Nicht gedeutete Zeilen (Auszug)</Typography>
+          <Typography variant="subtitle2">{seite(sprache).NICHT_GEDEUTETE_ZEILEN}</Typography>
           {lauf.unparsedSample.map((zeile, position) => (
             // Der Index als Schlüssel: Zwei ungedeutete Zeilen können wörtlich gleich sein, und
             // die Liste ist unveränderlich — sie wird weder sortiert noch gefiltert.
@@ -2840,7 +2904,7 @@ function LaufPanel({
       {laeuft && fortschritt === 'nicht abrufbar' && (
         <Box sx={{ px: '16px', py: '14px' }}>
           <Typography variant="body2" color="text.secondary">
-            Fortschritt nicht abrufbar
+            {seite(sprache).FORTSCHRITT_NICHT_ABRUFBAR}
           </Typography>
         </Box>
       )}
@@ -2876,7 +2940,7 @@ function LaufPanel({
             ohneKennzahlen={ohneKennzahlen}
             katalog={katalog}
             vorhabenKarten={vorhabenKarten}
-            haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe)}
+            haeufigkeit={haeufigkeitsText(item, lauf.gespeichert, zaehler, aufbewahrteLaeufe, sprache)}
             erzeugt={item.stufen === undefined ? undefined : erzeugnisse.get(item.cardNumber)}
             ausPlan={planDesPakets(item.cardNumber, erzeugnisse)}
             istRot={istRot}
@@ -2886,7 +2950,7 @@ function LaufPanel({
       </Box>
 
       <Box sx={{ borderTop: `1px solid ${RAND}` }}>
-        <NachtlaufFuss angaben={fussangaben(lauf, stand)} testId="uebersicht-fuss" />
+        <NachtlaufFuss angaben={fussangaben(lauf, stand, sprache)} testId="uebersicht-fuss" />
       </Box>
     </NachtlaufLaufPlatte>
   )
@@ -2910,6 +2974,8 @@ export function NightRunPage() {
   const validId = Number.isInteger(id) && id > 0
   const projectName = useProjectName(validId ? id : null)
   const notify = useSnackbar()
+  const { sprache } = useSprache()
+  const t = useT()
 
   const [laeufe, setLaeufe] = useState<AnzeigeLauf[]>([])
   const [ergebnisse, setErgebnisse] = useState<ReadonlyMap<string, boolean>>(() => new Map())
@@ -3181,7 +3247,7 @@ export function NightRunPage() {
     void cardsApi
       .byNumber(id, nummer)
       .then(setDetail)
-      .catch((error_: unknown) => notify(apiErrorMessage(error_, 'Karte nicht abrufbar.'), 'error'))
+      .catch((error_: unknown) => notify(apiErrorMessage(error_, t.NACHTLAUF_SEITE.KARTE_NICHT_ABRUFBAR), 'error'))
   }
 
   /**
@@ -3242,13 +3308,13 @@ export function NightRunPage() {
     try {
       text = await readTextFile(datei)
     } catch {
-      notify('Die Datei konnte nicht gelesen werden.', 'error')
+      notify(t.NACHTLAUF_SEITE.DATEI_NICHT_LESBAR, 'error')
       return
     }
 
     const ergebnis = parseNightRunErgebnisstand(text)
     if (!ergebnis.ok) {
-      setMeldung(nichtDeutbar(ergebnis))
+      setMeldung(nichtDeutbar(ergebnis, sprache))
       return
     }
 
@@ -3281,8 +3347,11 @@ export function NightRunPage() {
       )
     }
 
+    // Ein Lauf ohne Abschluss wird **angezeigt, aber nicht eingeliefert**: Der Server legt je
+    // `(projectId, startedAt)` nur einmal an, ein unvollständiger Stand blockierte den späteren
+    // vollständigen dauerhaft.
     if (run.incomplete) {
-      setMeldung(UNVOLLSTAENDIG)
+      setMeldung(t.NACHTLAUF_SEITE.UNVOLLSTAENDIG)
       return
     }
 
@@ -3296,7 +3365,7 @@ export function NightRunPage() {
     try {
       antwort = await nightRunsApi.submit(id, [zurEinlieferung(run)])
     } catch (error_) {
-      notify(apiErrorMessage(error_, 'Einliefern fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.NACHTLAUF_SEITE.EINLIEFERN_FEHLGESCHLAGEN), 'error')
       return
     }
     setErgebnisse(new Map(antwort.map((eintrag) => [eintrag.startedAt, eintrag.created])))
@@ -3316,12 +3385,12 @@ export function NightRunPage() {
       setAufbewahrteLaeufe(views.length)
       setZaehler(await zaehlerLaden(id))
     } catch (error_) {
-      notify(apiErrorMessage(error_, 'Eingeliefert, Liste konnte nicht aktualisiert werden.'), 'error')
+      notify(apiErrorMessage(error_, t.NACHTLAUF_SEITE.LISTE_NICHT_AKTUALISIERT), 'error')
     }
   }
 
   if (!validId) {
-    return <Alert severity="error">Ungültige Projekt-ID.</Alert>
+    return <Alert severity="error">{t.ALLGEMEIN.UNGUELTIGE_PROJEKT_ID}</Alert>
   }
 
   return (
@@ -3339,18 +3408,18 @@ export function NightRunPage() {
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
             <Breadcrumbs
               items={[
-                { label: 'Projekte', to: '/projects' },
-                { label: projectName ?? 'Projekt', to: `/projects/${id}` },
-                { label: 'Runner' },
+                { label: t.RAHMEN.NAV_PROJEKTE, to: '/projects' },
+                { label: projectName ?? t.RAHMEN.NAV_PROJEKT, to: `/projects/${id}` },
+                { label: t.RAHMEN.NAV_NACHTLAUF },
               ]}
             />
             {/* Dateiauswahl wie beim Spezifikations-Import: Button als <label> mit verstecktem Input. */}
             <Button variant="contained" component="label">
-              Protokoll einlesen<input
+              {t.NACHTLAUF_SEITE.PROTOKOLL_EINLESEN}<input
                 hidden
                 type="file"
                 accept=".json,application/json"
-                aria-label="Protokolldatei auswählen"
+                aria-label={t.NACHTLAUF_SEITE.PROTOKOLLDATEI_WAEHLEN}
                 onChange={(e) => {
                   const datei = e.target.files?.[0]
                   // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann.
@@ -3377,9 +3446,9 @@ export function NightRunPage() {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <HeuteNachtUebersicht projectId={id} onKarteOeffnen={karteOeffnen} />
 
-              {laeufe.length === 0 && <Typography color="text.secondary">Noch keine Auswertung vorhanden.</Typography>}
+              {laeufe.length === 0 && <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEINE_AUSWERTUNG}</Typography>}
               {laeufe.length > 0 && sichtbareLaeufe.length === 0 && (
-                <Typography color="text.secondary">In den letzten zwei Schichten gab es keinen Run.</Typography>
+                <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEIN_RUN}</Typography>
               )}
 
               {sichtbareLaeufe.length > 0 && (
@@ -3424,7 +3493,7 @@ export function NightRunPage() {
           {(alleLaeufe || ausgeblendet > 0) && (
             <Box>
               <Button variant="text" onClick={() => setAlleLaeufe((wert) => !wert)}>
-                {alleLaeufe ? 'Nur die letzten zwei Schichten zeigen' : `Ältere Runs anzeigen (${ausgeblendet})`}
+                {alleLaeufe ? t.NACHTLAUF_SEITE.NUR_ZWEI_SCHICHTEN : t.NACHTLAUF_SEITE.AELTERE_RUNS(ausgeblendet)}
               </Button>
             </Box>
           )}

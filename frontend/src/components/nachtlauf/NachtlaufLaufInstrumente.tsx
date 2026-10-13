@@ -1,4 +1,6 @@
 import Box from '@mui/material/Box'
+import { useSprache, useT } from '../../i18n/SpracheContext'
+import { woerterbuch, type Sprache } from '../../i18n/woerterbuch'
 import { cacheQuote, dollar, laufDauerGeteilt, tokenMenge } from '../../lib/leitstand'
 import { useJetzt } from '../../lib/useJetzt'
 import { RAND } from '../../theme'
@@ -28,8 +30,12 @@ export interface Kostenaufteilung {
   umsetzungUsd: number | undefined
 }
 
-const anteilText = (usd: number | undefined): string =>
-  usd === undefined ? 'nicht gemeldet' : `${dollar(usd)} $`
+const anteilText = (usd: number | undefined, sprache: Sprache): string => {
+  const t = woerterbuch(sprache)
+  return usd === undefined
+    ? t.NACHTLAUF_UEBERGABE.NICHT_GEMELDET
+    : t.NACHTLAUF_INSTRUMENTE.BETRAG(dollar(usd, sprache))
+}
 
 /** `undefined` aus dem Anzeigemodell heißt „nicht gemessen"; die Rechnung kennt dafür `null`. */
 const alsNull = (wert: number | undefined): number | null => wert ?? null
@@ -38,8 +44,8 @@ const alsNull = (wert: number | undefined): number | null => wert ?? null
 const TAKT_MS = 10_000
 
 /** Eine Token-Menge als Instrumentenwert; `null`, wo nichts gemessen wurde. */
-const mengeAlsWert = (anzahl: number | undefined): InstrumentWert[] | null => {
-  const menge = tokenMenge(alsNull(anzahl))
+const mengeAlsWert = (anzahl: number | undefined, sprache: Sprache): InstrumentWert[] | null => {
+  const menge = tokenMenge(alsNull(anzahl), sprache)
   return menge === null ? null : [menge]
 }
 
@@ -83,6 +89,8 @@ export function NachtlaufLaufInstrumente({
   laeuftSeit?: string
   testId?: string
 }>) {
+  const t = useT().NACHTLAUF_INSTRUMENTE
+  const { sprache } = useSprache()
   const dauer = laufDauerGeteilt(dauerMs)
   // Die gemeldete Dauer reicht nur bis zur letzten Meldung und steht zwischen zwei Meldungen still
   // (#1244). Was daneben steht, ist reine Rechnung im Browser — kein zweiter Abruf.
@@ -108,45 +116,45 @@ export function NachtlaufLaufInstrumente({
       }}
     >
       <Instrument
-        titel="Kosten"
+        titel={t.KOSTEN}
         heiss
         testId="instrument-kosten"
         zusatz={
           aufteilung === undefined
             ? undefined
-            : `Planung ${anteilText(aufteilung.planungUsd)} · Umsetzung ${anteilText(aufteilung.umsetzungUsd)}`
+            : t.AUFTEILUNG(anteilText(aufteilung.planungUsd, sprache), anteilText(aufteilung.umsetzungUsd, sprache))
         }
         teile={
           verbrauch?.kostenUsd === undefined
             ? null
-            : [{ wert: dollar(verbrauch.kostenUsd), einheit: '$' }]
+            : [{ wert: dollar(verbrauch.kostenUsd, sprache), einheit: '$' }]
         }
       />
-      <Instrument titel="Eingabe" testId="instrument-eingabe" teile={mengeAlsWert(verbrauch?.eingabe)} />
-      <Instrument titel="Ausgabe" testId="instrument-ausgabe" teile={mengeAlsWert(verbrauch?.ausgabe)} />
+      <Instrument titel={t.EINGABE} testId="instrument-eingabe" teile={mengeAlsWert(verbrauch?.eingabe, sprache)} />
+      <Instrument titel={t.AUSGABE} testId="instrument-ausgabe" teile={mengeAlsWert(verbrauch?.ausgabe, sprache)} />
       <Instrument
-        titel="Cache-Quote"
+        titel={t.CACHE_QUOTE}
         testId="instrument-cache"
         // Ohne Eingabe gibt es kein Verhältnis (siehe `cacheQuote`) — deshalb hier „nicht
         // berechenbar" und nicht „nicht gemessen": Der Zwischenspeicher kann gemessen sein.
-        leerText="nicht berechenbar"
+        leerText={t.NICHT_BERECHENBAR}
         teile={quote === null ? null : [{ wert: String(quote), einheit: '%' }]}
       />
       <Instrument
-        titel="Dauer"
+        titel={t.DAUER}
         testId="instrument-dauer"
         teile={[dauer]}
         // Text, keine Live-Region: Ein Vorlesewerkzeug soll die Zeile nicht alle zehn Sekunden
         // erneut ansagen.
-        zusatz={seit === undefined ? undefined : `läuft seit ${seit.wert} ${seit.einheit}`}
+        zusatz={seit === undefined ? undefined : t.LAEUFT_SEIT(seit.wert, seit.einheit)}
       />
       <Instrument
-        titel="Pakete"
+        titel={t.PAKETE}
         testId="instrument-pakete"
         teile={[
-          { wert: String(pakete.gruen), einheit: 'grün' },
-          { wert: String(pakete.gelb), einheit: 'gelb' },
-          { wert: String(pakete.rot), einheit: 'rot' },
+          { wert: String(pakete.gruen), einheit: t.GRUEN },
+          { wert: String(pakete.gelb), einheit: t.GELB },
+          { wert: String(pakete.rot), einheit: t.ROT },
         ]}
       />
     </Box>

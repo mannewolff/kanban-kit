@@ -103,8 +103,8 @@ class KitNamenErweiterungTest {
 
     // Then
     List<String> namen = satz.stream().map(StandardLabel::name).toList();
-    assertThat(namen.subList(namen.indexOf("kit:klaeren"), namen.indexOf("kit:klaeren") + 3))
-        .containsExactly("kit:klaeren", "kit:clarify", ZUSATZNAME);
+    // Der letzte Name einer Sache ist der, der entsteht (Issue #1636).
+    assertThat(namen).containsOnlyOnce(ZUSATZNAME).doesNotContain("kit:klaeren", "kit:clarify");
     assertThat(satz).contains(new StandardLabel(ZUSATZNAME, "Kit", "#6a1b9a"));
   }
 

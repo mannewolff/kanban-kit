@@ -6,19 +6,10 @@ import type {
   ChainProgressView,
   NightRunProgressView,
   PackageProgressView,
-  PackageState,
 } from '../../api/nightRuns'
+import { useSprache, useT } from '../../i18n/SpracheContext'
 import { wegleiste, type FortschrittArt, type Wegleiste } from '../../lib/laufFortschritt'
 import { KUPFER, MELDER, NUT, RAND, SCHATTEN_NUTE, TEXT_SCHWACH, ZAHL } from '../../theme'
-
-/** Der Zustand eines Pakets als Text — nie allein über die Farbe (Plan #1372 E12). */
-const PAKETZUSTAND: Record<PackageState, string> = {
-  ANGELEGT: 'angelegt',
-  GEZOGEN: 'gezogen',
-  IN_UMSETZUNG: 'in Umsetzung',
-  FERTIG: 'fertig',
-  ZURUECKGESTELLT: 'zurückgestellt',
-}
 
 /**
  * Der Fortschritt eines Laufs in der aufgeklappten Kachel (Issue #1377, Plan #1372 E12): je Kette
@@ -34,6 +25,9 @@ const PAKETZUSTAND: Record<PackageState, string> = {
  *
  * <p><b>Nach dem Lauf</b> bleibt allein der Frage-Hinweis stehen, solange eine Frage offen ist
  * (E9); sonst rendert die Komponente nichts.
+ *
+ * <p>Die Texte, auch der Zustand eines Pakets (`PackageState`), stehen im Wörterbuch
+ * (`NACHTLAUF_FORTSCHRITT`, Issue #1658).
  */
 export function NachtlaufFortschritt({
   fortschritt,
@@ -46,6 +40,7 @@ export function NachtlaufFortschritt({
   laeuft: boolean
   onKarteOeffnen: (nummer: number) => void
 }>) {
+  const t = useT().NACHTLAUF_FORTSCHRITT
   const frage =
     fortschritt.offeneFragen.length > 0 ? (
       <FrageHinweis fragen={fortschritt.offeneFragen} onKarteOeffnen={onKarteOeffnen} />
@@ -57,8 +52,7 @@ export function NachtlaufFortschritt({
     <Box data-testid="fortschritt" sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {fortschritt.zuordnung === 'UNBEKANNT' ? (
         <Typography data-testid="fortschritt-zuordnung-unbekannt" sx={HINWEIS_STIL}>
-          Welche Karten zu diesem Lauf gehören, lässt sich nicht feststellen — der Fortschritt
-          bleibt unbekannt.
+          {t.ZUORDNUNG_UNBEKANNT}
         </Typography>
       ) : (
         <Weg fortschritt={fortschritt} art={art} onKarteOeffnen={onKarteOeffnen} />
@@ -66,17 +60,17 @@ export function NachtlaufFortschritt({
       {fortschritt.unbekannt.length > 0 && (
         <Box>
           <Typography component="div" sx={UEBERSCHRIFT_STIL}>
-            unbekannt
+            {t.UNBEKANNT}
           </Typography>
           {fortschritt.zuordnung === 'OK' && fortschritt.unbekanntOhneAusweis && (
             <Typography data-testid="fortschritt-unbekannt-ohne-ausweis" sx={HINWEIS_STIL}>
-              Dieser Lauf hat sich nicht ausgewiesen (älterer Runner).
+              {t.OHNE_AUSWEIS}
             </Typography>
           )}
-          <Box component="ul" aria-label="unbekannt" sx={ZEILENLISTE_STIL}>
+          <Box component="ul" aria-label={t.UNBEKANNT} sx={ZEILENLISTE_STIL}>
             {fortschritt.unbekannt.map((k) => (
               <li key={k.number}>
-                <Kartenverweis art="unbekannt" karte={k} onKarteOeffnen={onKarteOeffnen} />
+                <Kartenverweis art={t.UNBEKANNT} karte={k} onKarteOeffnen={onKarteOeffnen} />
               </li>
             ))}
           </Box>
@@ -96,13 +90,15 @@ function Weg({
   art: FortschrittArt
   onKarteOeffnen: (nummer: number) => void
 }>) {
+  const t = useT().NACHTLAUF_FORTSCHRITT
+  const { sprache } = useSprache()
   if (art === 'UMSETZUNGSNACHT') {
     return (
       <Box data-testid="fortschritt-umsetzungsnacht" sx={BLOCK_STIL}>
-        <Stufenleiste leiste={wegleiste(null, art)} name="Weg der Umsetzungsnacht" />
+        <Stufenleiste leiste={wegleiste(null, art, sprache)} name={t.WEG_UMSETZUNGSNACHT} />
         <Paketliste
           pakete={fortschritt.pakete}
-          name="Pakete der Umsetzungsnacht"
+          name={t.PAKETE_UMSETZUNGSNACHT}
           onKarteOeffnen={onKarteOeffnen}
         />
       </Box>
@@ -121,23 +117,25 @@ function Kette({
   kette,
   onKarteOeffnen,
 }: Readonly<{ kette: ChainProgressView; onKarteOeffnen: (nummer: number) => void }>) {
+  const t = useT().NACHTLAUF_FORTSCHRITT
+  const { sprache } = useSprache()
   const nummer = kette.anforderung.number
   return (
     <Box data-testid={`fortschritt-kette-${nummer}`} sx={BLOCK_STIL}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '8px' }}>
-        <Kartenverweis art="Anforderung" karte={kette.anforderung} onKarteOeffnen={onKarteOeffnen} />
+        <Kartenverweis art={t.ART.ANFORDERUNG} karte={kette.anforderung} onKarteOeffnen={onKarteOeffnen} />
         {kette.plan === null ? (
           <Typography component="span" sx={LEER_STIL}>
-            noch kein Plan
+            {t.KEIN_PLAN}
           </Typography>
         ) : (
-          <Kartenverweis art="Plan" karte={kette.plan} onKarteOeffnen={onKarteOeffnen} />
+          <Kartenverweis art={t.ART.PLAN} karte={kette.plan} onKarteOeffnen={onKarteOeffnen} />
         )}
       </Box>
-      <Stufenleiste leiste={wegleiste(kette, 'KETTE')} name={`Weg der Kette #${nummer}`} />
+      <Stufenleiste leiste={wegleiste(kette, 'KETTE', sprache)} name={t.WEG_KETTE(nummer)} />
       <Paketliste
         pakete={kette.pakete}
-        name={`Pakete der Kette #${nummer}`}
+        name={t.PAKETE_KETTE(nummer)}
         onKarteOeffnen={onKarteOeffnen}
       />
     </Box>
@@ -178,10 +176,11 @@ function Paketliste({
   name: string
   onKarteOeffnen: (nummer: number) => void
 }>) {
+  const t = useT().NACHTLAUF_FORTSCHRITT
   if (pakete.length === 0) {
     return (
       <Typography component="div" sx={LEER_STIL}>
-        noch keine Pakete
+        {t.KEINE_PAKETE}
       </Typography>
     )
   }
@@ -193,9 +192,9 @@ function Paketliste({
           key={p.karte.number}
           sx={{ display: 'inline-flex', alignItems: 'baseline', gap: '6px' }}
         >
-          <Kartenverweis art="Paket" karte={p.karte} onKarteOeffnen={onKarteOeffnen} />
+          <Kartenverweis art={t.ART.PAKET} karte={p.karte} onKarteOeffnen={onKarteOeffnen} />
           <Typography component="span" sx={{ fontSize: 12, color: 'text.secondary' }}>
-            {PAKETZUSTAND[p.zustand]}
+            {t.PAKETZUSTAND[p.zustand]}
           </Typography>
         </Box>
       ))}
@@ -207,6 +206,7 @@ function FrageHinweis({
   fragen,
   onKarteOeffnen,
 }: Readonly<{ fragen: readonly CardRefView[]; onKarteOeffnen: (nummer: number) => void }>) {
+  const t = useT().NACHTLAUF_FORTSCHRITT
   return (
     <Box
       role="status"
@@ -214,10 +214,10 @@ function FrageHinweis({
       sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '8px' }}
     >
       <Typography component="span" sx={HINWEIS_STIL}>
-        Offene Frage an den Menschen an Karte
+        {t.FRAGE}
       </Typography>
       {fragen.map((k) => (
-        <Kartenverweis key={k.number} art="Frage" karte={k} onKarteOeffnen={onKarteOeffnen} />
+        <Kartenverweis key={k.number} art={t.ART.FRAGE} karte={k} onKarteOeffnen={onKarteOeffnen} />
       ))}
     </Box>
   )

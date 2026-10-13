@@ -1,6 +1,8 @@
 import { fireEvent, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useKeyboardShortcut } from './useKeyboardShortcut'
+import { createElement, type ComponentProps, type ReactNode } from 'react'
+import { SpracheProvider } from '../i18n/SpracheContext'
 
 /** Hängt ein Element an den Body und gibt es fokussiert zurück (Aufräumen über afterEach). */
 function mount<K extends keyof HTMLElementTagNameMap>(tag: K): HTMLElementTagNameMap[K] {
@@ -137,5 +139,23 @@ describe('useKeyboardShortcut', () => {
 
     expect(second).toHaveBeenCalledTimes(1)
     expect(first).not.toHaveBeenCalled()
+  })
+})
+
+describe('useKeyboardShortcut auf Englisch', () => {
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('greift auf derselben Taste wie auf Deutsch', () => {
+    const onTrigger = vi.fn()
+    // Die Kinder gehen als drittes Argument; der Typ des Providers verlangt sie zugleich als Prop.
+    const props = { anfangs: 'en' } as ComponentProps<typeof SpracheProvider>
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(SpracheProvider, props, children)
+    renderHook(() => useKeyboardShortcut('b', true, onTrigger), { wrapper })
+
+    fireEvent.keyDown(document.body, { key: 'b' })
+
+    expect(onTrigger).toHaveBeenCalledTimes(1)
   })
 })

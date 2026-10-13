@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography'
 import { keyframes, type Theme } from '@mui/material/styles'
 import type { SystemStyleObject } from '@mui/system'
 import { useId, type ReactNode } from 'react'
+import { useSprache, useT } from '../../i18n/SpracheContext'
 import type { DeltaArt, Kachel as KachelDaten, Melder } from '../../lib/leitstand'
 import { funkenPunkte, paketDauer, paketDauerBeschriftung } from '../../lib/leitstand'
 import {
@@ -304,9 +305,10 @@ export const KACHEL_SX = {
 export function KachelWert({
   wert,
   einheit,
-  leerText = 'keine Datenbasis',
+  leerText,
   groesse = 34,
 }: Readonly<{ wert: string | null; einheit: string; leerText?: string; groesse?: number }>) {
+  const vorgabe = useT().LEITSTAND_BAUSTEINE.KEINE_DATENBASIS
   return (
     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
       <Box
@@ -326,7 +328,7 @@ export function KachelWert({
         {wert ?? '—'}
       </Box>
       <Box component="span" sx={{ fontSize: 12, color: 'text.secondary', fontWeight: 500 }}>
-        {wert === null ? leerText : einheit}
+        {wert === null ? (leerText ?? vorgabe) : einheit}
       </Box>
     </Box>
   )
@@ -413,7 +415,7 @@ export function Instrument({
   teile,
   /** `true` gibt dem Instrument die Kupferfassung des Mockups (`.instrument-heiss`, Z. 317–318). */
   heiss = false,
-  leerText = 'nicht gemessen',
+  leerText,
   /** Eine kleine Zeile unter dem Wert, etwa die Aufteilung der Kosten (Issue #1106). */
   zusatz,
   testId,
@@ -425,6 +427,7 @@ export function Instrument({
   zusatz?: string
   testId: string
 }>) {
+  const vorgabe = useT().LEITSTAND_BAUSTEINE.NICHT_GEMESSEN
   const randFarbe = heiss ? `color-mix(in srgb, ${KUPFER} 40%, ${RAND})` : RAND
   let wertFarbe: string
   if (teile === null) {
@@ -466,7 +469,7 @@ export function Instrument({
         {teile === null ? (
           <>
             {'—'}
-            <Box component="span" sx={NUR_LESER_SX}>{leerText}</Box>
+            <Box component="span" sx={NUR_LESER_SX}>{leerText ?? vorgabe}</Box>
           </>
         ) : (
           teile.map((teil, position) => (
@@ -603,8 +606,9 @@ export function PaketDauer({
   testId,
   sx,
 }: Readonly<{ ms: number | null; testId: string; sx?: SystemStyleObject<Theme> }>) {
+  const { sprache } = useSprache()
   const { wert, einheit } = paketDauer(ms)
-  const beschriftung = paketDauerBeschriftung(ms)
+  const beschriftung = paketDauerBeschriftung(ms, sprache)
   return (
     <Box
       component="span"

@@ -6,6 +6,8 @@ import { ApiError } from '../../api/client'
 import type { KitNamen, KitNamenZustand } from '../../api/kitNamen'
 import type { Label } from '../../api/labels'
 import type { KettenStand, NightChainStationView } from '../../api/nightRuns'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
+import type { Sprache } from '../../i18n/woerterbuch'
 import { KIT_NAMEN } from '../../test/kitNamen'
 import { theme } from '../../theme'
 import { KettenStufenleiste, traegtStufenleiste } from './KettenStufenleiste'
@@ -962,5 +964,168 @@ describe('KettenStufenleiste — englische Namen (Issue #1595)', () => {
     expect(screen.getByText('Kit-Namen nicht ladbar')).toBeInTheDocument()
     expect(screen.queryByTestId('ketten-stufenleiste')).not.toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+})
+
+describe('KettenStufenleiste — Sprache (Issue #1658, Plan #1638 A11)', () => {
+  /** Ein deutsches Board: Die Labels heißen nach dem deutschen Namen. */
+  const zeigeIn = (
+    sprache: Sprache,
+    {
+      titel = FACHLICH,
+      labelIds = [] as number[],
+      boardLabels = VORRAT,
+      beschreibung = '',
+      kettenstand = vi.fn(() => new Promise<KettenStand>(() => {})),
+      kitNamen = { status: 'fertig', daten: KIT_NAMEN } as KitNamenZustand,
+    } = {},
+  ) =>
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <KettenStufenleiste
+          titel={titel}
+          labelIds={labelIds}
+          boardLabels={boardLabels}
+          disabled={false}
+          beschreibung={beschreibung}
+          kommentare={[]}
+          onChange={vi.fn()}
+          cardId={812}
+          api={{ kettenstand }}
+          kitNamen={kitNamen}
+        />
+      </ThemeProvider>,
+      sprache,
+    )
+
+  it('zeigt Stationen, Zustände, Prüferschalter und Start auf Englisch', () => {
+    zeigeIn('en', { labelIds: [10] })
+
+    expect(screen.getByText('Night chain')).toBeInTheDocument()
+    const gruppe = within(screen.getByRole('group', { name: 'Goal of the chain' }))
+    expect(gruppe.getByRole('button', { name: /^Work packages/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(station('pakete')).toHaveTextContent('Work packagesGoal')
+    expect(station('abdeckung')).toHaveTextContent('Coverageplanned')
+    expect(station('umsetzung')).toHaveTextContent('Implementationnot planned')
+    expect(station('push-vorbereitet')).toHaveTextContent('Release preparednot planned')
+    expect(screen.getByText('Plan review:')).toBeInTheDocument()
+    const pruefer = within(screen.getByRole('group', { name: 'Plan review' }))
+    expect(pruefer.getByRole('button', { name: '1 reviewer' })).toBeInTheDocument()
+    expect(pruefer.getByRole('button', { name: '2 reviewers' })).toBeInTheDocument()
+    expect(screen.getByText('without a choice the project default applies')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start chain' })).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('nennt ein Kit-Label im Sperrhinweis auf Englisch nach seinem englischen Namen', () => {
+    zeigeIn('en', { labelIds: [11, 12], boardLabels: VORRAT.filter((l) => l.name !== 'kit:night') })
+
+    expect(screen.getByText('The requirement review is not finished: the card does not carry review:done.')).toBeInTheDocument()
+    expect(screen.getByText('An open question on the card is waiting for a person (kit:clarify).')).toBeInTheDocument()
+    expect(screen.getByText('An open question on the card is waiting for a person (run:waiting).')).toBeInTheDocument()
+    expect(screen.getByText(/^The board lacks the label “kit:night”/)).toBeInTheDocument()
+  })
+
+  it('nennt kit:durchziehen und ein fehlendes Ziel-Label auf Englisch nach dem englischen Namen', async () => {
+    zeigeIn('en', { labelIds: [7, 10], boardLabels: VORRAT.filter((l) => l.name !== 'ziel:push-vorbereitet') })
+
+    const gruppe = within(screen.getByRole('group', { name: 'Goal of the chain' }))
+    await userEvent.hover(gruppe.getByRole('button', { name: /^Plan/ }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('The card carries kit:carry-through')
+    expect(station('push-vorbereitet')).toHaveTextContent('not selectable')
+  })
+
+  it('nennt dieselben Labels bei Deutsch weiter mit dem Namen des Boards', () => {
+    zeigeIn('de', { labelIds: [11], boardLabels: VORRAT.filter((l) => l.name !== 'kit:night') })
+
+    expect(screen.getByText('Die fachliche Prüfung ist nicht abgeschlossen: Die Karte trägt kein review:fertig.')).toBeInTheDocument()
+    expect(screen.getByText('An der Karte wartet eine offene Frage auf einen Menschen (kit:klaeren).')).toBeInTheDocument()
+    expect(screen.getByText(/^Am Board fehlt das Label „kit:night“/)).toBeInTheDocument()
+  })
+
+  it('fällt auf Englisch auf die Sache zurück, wenn das Register sie nicht kennt', () => {
+    const register: KitNamen = { ...KIT_NAMEN, sachen: KIT_NAMEN.sachen.filter((s) => s.sache !== 'NIGHT') }
+    zeigeIn('en', { labelIds: [10], kitNamen: { status: 'fertig', daten: register } })
+
+    expect(screen.getByText(/^The board lacks the label “NIGHT”/)).toBeInTheDocument()
+  })
+
+  it('nennt an einem Plan auf Englisch die fehlende Zeile Plan-Review: und die erbrachten Stationen', () => {
+    zeigeIn('en', { titel: PLAN })
+
+    expect(screen.getByText('The plan review is not finished: the plan lacks the line “Plan-Review:”.')).toBeInTheDocument()
+    expect(station('plan')).toHaveTextContent('done before the run')
+  })
+
+  it('fragt ab „Umsetzung“ auf Englisch nach und bietet Abbrechen an', async () => {
+    zeigeIn('en', { labelIds: [3, 10] })
+
+    expect(screen.getByText('With this goal you give the GO for all work packages of this card.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Start chain' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'Start chain?' }))
+    expect(dialog.getByText('This gives the GO for all work packages of this card. Start the chain?')).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+  })
+
+  it('zeigt eine gestartete Kette auf Englisch mit Rücknahme', () => {
+    zeigeIn('en', { labelIds: [9, 10] })
+
+    expect(screen.getByText('Chain started — it is waiting for a runner to take it over.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Withdraw start' })).toBeInTheDocument()
+    expect(screen.getByText('Project default')).toBeInTheDocument()
+  })
+
+  it('zeigt eine übernommene Kette auf Englisch', async () => {
+    const stand: KettenStand = {
+      ziel: 'PAKETE',
+      pruefer: 2,
+      zielErreicht: false,
+      grenze: null,
+      stationen: [
+        { station: 'PLAN', zustand: 'ERLEDIGT', text: 'erledigt', grund: null },
+        { station: 'PAKETE', zustand: 'STEHT_AUS', text: 'steht aus', grund: null },
+      ],
+      uebernommen: true,
+      planReviewVorhanden: false,
+      lauf: '2026-10-05T01:00:00Z',
+    }
+    zeigeIn('en', { kettenstand: vi.fn(() => Promise.resolve(stand)) })
+
+    expect(await screen.findByRole('list', { name: 'Chain status' })).toBeInTheDocument()
+    expect(screen.getByTestId('kette-station-PAKETE')).toHaveTextContent('Goal')
+    expect(screen.getByText('2 reviewers')).toBeInTheDocument()
+    expect(screen.getByText('A runner has taken over the chain — the bar is now display only.')).toBeInTheDocument()
+  })
+
+  it('nennt Ladefehler, Planprüfung am Plan und Kit-Namen auf Englisch', async () => {
+    zeigeIn('en', {
+      kettenstand: vi.fn(() =>
+        Promise.resolve({
+          ziel: null,
+          pruefer: null,
+          zielErreicht: false,
+          grenze: null,
+          stationen: [],
+          uebernommen: false,
+          planReviewVorhanden: true,
+          lauf: null,
+        }),
+      ),
+    })
+    expect(
+      await screen.findByText(
+        'The plan of this requirement already carries “Plan-Review:” — the number of reviewers can no longer be chosen.',
+      ),
+    ).toBeInTheDocument()
+
+    zeigeIn('en', { kettenstand: vi.fn(() => Promise.reject(new ApiError(500, ''))) })
+    expect(
+      await screen.findByText('The chain status could not be loaded: unknown error. The bar shows the status before the run.'),
+    ).toBeInTheDocument()
+
+    zeigeIn('en', { kitNamen: { status: 'laden' } })
+    expect(screen.getByRole('progressbar', { name: 'Loading kit names' })).toBeInTheDocument()
+
+    zeigeIn('en', { kitNamen: { status: 'fehler', fehler: new Error('weg') } })
+    expect(screen.getByText('Kit names could not be loaded')).toBeInTheDocument()
   })
 })

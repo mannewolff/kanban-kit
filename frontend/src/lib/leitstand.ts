@@ -2,6 +2,8 @@ import type { WeeklyThroughput } from '../api/dashboard'
 import type { NightRunErrorClassCounts, NightRunItemView, NightRunOutcomeView, NightRunServerMode, NightRunView } from '../api/nightRuns'
 import type { NightRunErrorClass, NightRunState } from './nightRunLog'
 import { NIGHT_RUN_VERDICT_TEXT } from './nightRunHandoff'
+import { formatierer } from '../i18n/format'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 
 /**
  * Die Rechnung des Leitstands (#979, Entwurf `docs/entwurf-leitstand.html` Z. 1200–1678): aus den
@@ -16,20 +18,26 @@ import { NIGHT_RUN_VERDICT_TEXT } from './nightRunHandoff'
 /** Die Melder des Entwurfs als Namen — die Werte liegen im Theme. */
 export type Melder = 'gruen' | 'bernst' | 'zinnob' | 'stahl' | 'grau' | 'braun'
 
-// Die fuenf Formatierer entstehen beim Laden des Moduls. Stryker kann einen Mutanten dort nicht
-// mehr aktivieren — das Modul ist schon ausgewertet, wenn der Lauf beginnt —, weshalb jede
-// Aenderung an ihren Zeichenketten ohne Wirkung ueberlebt. Die Ausnahme steht je Stelle, damit die
-// Zaehlung sie als ausgenommen fuehrt und nicht als offenen Ueberlebenden (#1245).
-// Stryker disable next-line StringLiteral: statischer Mutant — der Formatierer steht beim Laden des Moduls fest
-const ZAHL_1 = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-// Stryker disable next-line StringLiteral: statischer Mutant — der Formatierer steht beim Laden des Moduls fest
-const ZAHL_2 = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-// Stryker disable next-line StringLiteral: statischer Mutant — der Formatierer steht beim Laden des Moduls fest
-const GANZ = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 })
-// Stryker disable next-line StringLiteral: statischer Mutant — der Formatierer steht beim Laden des Moduls fest
-const TAG_ZEIT = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-// Stryker disable next-line StringLiteral: statischer Mutant — der Formatierer steht beim Laden des Moduls fest
-const ZEIT = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' })
+// Die Formatierer entstehen je Aufruf aus der Sprache (Plan #1638, A7): Deutsch bleibt bei der
+// bisherigen Schreibweise, Englisch nimmt die US-Form mit Dezimalpunkt und AM/PM.
+const zahl1 = (wert: number, sprache: Sprache) =>
+  formatierer(sprache).zahl(wert, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const zahl2 = (wert: number, sprache: Sprache) =>
+  formatierer(sprache).zahl(wert, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const ganz = (wert: number, sprache: Sprache) => formatierer(sprache).zahl(wert, { maximumFractionDigits: 0 })
+
+const TAG_ZEIT: Readonly<Record<Sprache, Intl.DateTimeFormatOptions>> = {
+  de: { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' },
+  en: { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' },
+}
+
+const ZEIT: Readonly<Record<Sprache, Intl.DateTimeFormatOptions>> = {
+  de: { hour: '2-digit', minute: '2-digit' },
+  en: { hour: 'numeric', minute: '2-digit' },
+}
+
+const zeitFormat = (optionen: Readonly<Record<Sprache, Intl.DateTimeFormatOptions>>, sprache: Sprache) =>
+  new Intl.DateTimeFormat(formatierer(sprache).gebietsschema, optionen[sprache])
 
 /** Der Zustand eines Arbeitspakets als Melder (Entwurf: LED grün, gelb, rot, grau). */
 export const MELDER_JE_ZUSTAND: Record<NightRunState, Melder> = {
@@ -56,26 +64,19 @@ export const MELDER_JE_FEHLERKLASSE: Record<NightRunErrorClass, Melder> = {
 }
 
 /**
- * Ein `Record` über `NightRunServerMode` — ein neuer Modus ohne Eintrag bricht `tsc`. `INTERACTIVE`
- * steht seit Issue #1016 dabei, damit der Typ vollständig gepflegt ist; die Platte „Letzter Lauf"
- * des Leitstands liest ihre Läufe weiterhin aus der serverseitig auf Nachtläufe beschränkten
- * Laufliste (`NightRunService.list`, Issue #1012) und zeigt das Wort deshalb heute nicht.
+ * Der Name der Betriebsart eines Laufs. Das Wörterbuch führt ihn als Eintrag über
+ * `NightRunServerMode` — ein neuer Modus ohne Eintrag bricht `tsc`. `INTERACTIVE` steht seit Issue
+ * #1016 dabei, damit der Typ vollständig gepflegt ist; die Platte „Letzter Lauf" des Leitstands
+ * liest ihre Läufe weiterhin aus der serverseitig auf Nachtläufe beschränkten Laufliste
+ * (`NightRunService.list`, Issue #1012) und zeigt das Wort deshalb heute nicht.
  */
-const MODUS: Record<NightRunServerMode, string> = {
-  CHAIN: 'Kette',
-  IMPLEMENTATION: 'Umsetzung',
-  REVIEW: 'Prüfung',
-  INTERACTIVE: 'Sitzung',
-}
-
-/** Der Name der Betriebsart eines Laufs. */
-export function modusName(mode: NightRunServerMode): string {
-  return MODUS[mode]
+export function modusName(mode: NightRunServerMode, sprache: Sprache = 'de'): string {
+  return woerterbuch(sprache).LEITSTAND_RECHNUNG.MODUS[mode]
 }
 
 /** „1 Vorgang" bzw. „n Vorgänge". */
-export function vorgaenge(anzahl: number): string {
-  return anzahl === 1 ? '1 Vorgang' : `${anzahl} Vorgänge`
+export function vorgaenge(anzahl: number, sprache: Sprache = 'de'): string {
+  return woerterbuch(sprache).LEITSTAND_RECHNUNG.VORGAENGE(anzahl)
 }
 
 /** Der jüngste Lauf nach Startzeit; `null` ohne Lauf. Die Reihenfolge der Antwort ist nicht zugesichert. */
@@ -233,11 +234,11 @@ export interface Laufband {
   kosten: string | null
 }
 
-export function laufband(lauf: NightRunView): Laufband {
-  const modus = modusName(lauf.mode)
+export function laufband(lauf: NightRunView, sprache: Sprache = 'de'): Laufband {
+  const t = woerterbuch(sprache).LEITSTAND_RECHNUNG
+  const modus = modusName(lauf.mode, sprache)
   const gesamt = lauf.items.length
   const letzter = lauf.items.at(-1)
-  const beginn = new Date(lauf.startedAt)
   // Die Auskunft kommt aus dem Befund und nicht aus `lauf.noWorkReason` (Issue #1186): Ein Lauf, der
   // alle Pakete zurueckstellte, traegt den Rueckfalltext am Datensatz, ist aber „mit Vorbehalt" —
   // sein Titel bleibt der regulaere (Plan #1181 E11).
@@ -253,12 +254,12 @@ export function laufband(lauf: NightRunView): Laufband {
     // der Grund sagt, warum.
     titel = ohneArbeit
   } else if (lauf.complete) {
-    titel = `${modus} abgeschlossen — ${vorgaenge(gesamt)}`
+    titel = t.LAUF_ABGESCHLOSSEN(modus, vorgaenge(gesamt, sprache))
   } else if (gesamt === 0) {
-    titel = `${modus} läuft`
+    titel = t.LAUF_LAEUFT(modus)
   } else {
     const bearbeitet = lauf.items.filter((item) => item.state !== 'GREY').length
-    titel = `${modus} läuft — Vorgang ${bearbeitet} von ${gesamt}`
+    titel = t.LAUF_LAEUFT_VORGANG(modus, bearbeitet, gesamt)
   }
   // Puls und Zeitpunkt kommen aus dem Befund, nicht aus `complete` (#1092): Ein verstummter Lauf
   // pulste sonst gruen mit „seit HH:MM" weiter, waehrend der Plattform-Leitstand ihn als nicht
@@ -269,20 +270,20 @@ export function laufband(lauf: NightRunView): Laufband {
     melder: laufMelder(lauf),
     laeuft,
     vorgang: letzter ? { nummer: letzter.cardNumber, titel: letzter.title } : null,
-    zeitpunkt: laeuft ? `seit ${uhrzeit(lauf.startedAt)}` : `Beginn ${TAG_ZEIT.format(beginn)}`,
+    zeitpunkt: laeuft ? t.SEIT(uhrzeit(lauf.startedAt, sprache)) : t.BEGINN(tagZeit(lauf.startedAt, sprache)),
     minuten: Math.round(lauf.durationMs / 60_000),
-    kosten: lauf.usage?.costUsd == null ? null : dollar(lauf.usage.costUsd),
+    kosten: lauf.usage?.costUsd == null ? null : dollar(lauf.usage.costUsd, sprache),
   }
 }
 
 /** Ein Dollarbetrag mit zwei Nachkommastellen, ohne Einheit. */
-export function dollar(usd: number): string {
-  return ZAHL_2.format(usd)
+export function dollar(usd: number, sprache: Sprache = 'de'): string {
+  return zahl2(usd, sprache)
 }
 
 /** Dollar mit zwei Nachkommastellen und Einheit; `null` bleibt `null` — nicht gemessen ist nicht 0. */
-export function kostenText(usd: number | null): string | null {
-  return usd === null ? null : `${dollar(usd)} $`
+export function kostenText(usd: number | null, sprache: Sprache = 'de'): string | null {
+  return usd === null ? null : woerterbuch(sprache).LEITSTAND_RECHNUNG.KOSTEN(dollar(usd, sprache))
 }
 
 /** Die Teile einer Paketdauer: `mm`/`h`, `mm`, `ss` — Grundlage beider Schreibweisen. */
@@ -315,19 +316,21 @@ export function paketDauer(ms: number | null): { wert: string; einheit: string }
  * 12 min 56 s", ab einer Stunde „Dauer 1 h 2 min 10 s", ohne Messung „Dauer nicht gemessen".
  * Ausgeschrieben statt `mm:ss`, weil ein Vorlesewerkzeug „12:56" als Uhrzeit spricht.
  */
-export function paketDauerBeschriftung(ms: number | null): string {
+export function paketDauerBeschriftung(ms: number | null, sprache: Sprache = 'de'): string {
+  const t = woerterbuch(sprache).LEITSTAND_RECHNUNG
   if (ms === null) {
-    return 'Dauer nicht gemessen'
+    return t.DAUER_NICHT_GEMESSEN
   }
   const { h, m, s } = paketDauerTeile(ms)
-  return h > 0 ? `Dauer ${h} h ${m} min ${s} s` : `Dauer ${m} min ${s} s`
+  return h > 0 ? t.DAUER_STUNDEN(h, m, s) : t.DAUER_MINUTEN(m, s)
 }
 
 /** Dauer eines Laufs als „4 h 12 min" bzw. „12 min". */
-export function laufDauer(ms: number): string {
+export function laufDauer(ms: number, sprache: Sprache = 'de'): string {
+  const t = woerterbuch(sprache).LEITSTAND_RECHNUNG
   const minuten = Math.round(ms / 60_000)
   const h = Math.floor(minuten / 60)
-  return h > 0 ? `${h} h ${minuten % 60} min` : `${minuten} min`
+  return h > 0 ? t.LAUFDAUER_STUNDEN(h, minuten % 60) : t.LAUFDAUER_MINUTEN(minuten)
 }
 
 /**
@@ -345,9 +348,12 @@ export function laufDauerGeteilt(ms: number): { wert: string; einheit: string } 
     : { wert: String(minuten), einheit: 'min' }
 }
 
-/** Ein Zeitpunkt als Tag und Uhrzeit („14.09. 23:10") — Beginn eines Laufs in Notiz und Metazeile. */
-export function tagZeit(iso: string): string {
-  return TAG_ZEIT.format(new Date(iso))
+/**
+ * Ein Zeitpunkt als Tag und Uhrzeit („14.09. 23:10", englisch „Sep 14, 11:10 PM") — Beginn eines
+ * Laufs in Notiz und Metazeile.
+ */
+export function tagZeit(iso: string, sprache: Sprache = 'de'): string {
+  return zeitFormat(TAG_ZEIT, sprache).format(new Date(iso))
 }
 
 /**
@@ -358,8 +364,8 @@ export function tagZeit(iso: string): string {
  * HH:MM" und {@link laufband} sagt „seit HH:MM" — zwei Stellen, ein Format. Ein zweiter
  * `Intl.DateTimeFormat` daneben liefe beim naechsten Feinschliff auseinander.
  */
-export function uhrzeit(iso: string): string {
-  return ZEIT.format(new Date(iso))
+export function uhrzeit(iso: string, sprache: Sprache = 'de'): string {
+  return zeitFormat(ZEIT, sprache).format(new Date(iso))
 }
 
 /**
@@ -386,9 +392,9 @@ function abbruchText(lauf: NightRunView, grund: string): string {
 }
 
 /** Die Notiz im Kopf der Platte „Letzter Run": Beginn, Dauer, Zahl der Pakete. */
-export function laufNotiz(lauf: NightRunView): string {
-  const pakete = lauf.items.length === 1 ? '1 Paket' : `${lauf.items.length} Pakete`
-  const stand = `${tagZeit(lauf.startedAt)} · ${laufDauer(lauf.durationMs)} · ${pakete}`
+export function laufNotiz(lauf: NightRunView, sprache: Sprache = 'de'): string {
+  const pakete = woerterbuch(sprache).LEITSTAND_RECHNUNG.PAKETE(lauf.items.length)
+  const stand = `${tagZeit(lauf.startedAt, sprache)} · ${laufDauer(lauf.durationMs, sprache)} · ${pakete}`
   // Der Abbruchgrund haengt an derselben Stelle wie die Auskunft eines Laufs ohne Arbeit und hat
   // Vorrang vor ihr (Issue #1144, Plan #1139 E6) — beide zugleich gibt es nicht. Die Auskunft kommt
   // aus dem Befund (Issue #1186): Der Lauf mit zurueckgestellten Paketen traegt den Rueckfalltext,
@@ -457,23 +463,24 @@ export interface Kachel {
 }
 
 /** Durchsatz · Woche (Entwurf Z. 1236–1258): letzte Woche, Verlauf über zwölf, Delta zur Vorwoche. */
-export function durchsatzKachel(wochen: readonly WeeklyThroughput[]): Kachel {
+export function durchsatzKachel(wochen: readonly WeeklyThroughput[], sprache: Sprache = 'de'): Kachel {
+  const t = woerterbuch(sprache).LEITSTAND_RECHNUNG
   const werte = wochen.map((w) => w.doneCount)
   if (werte.every((w) => w === 0)) {
-    return { wert: null, einheit: 'Karten', basis: `${werte.length} Wochen`, verlauf: null, delta: null }
+    return { wert: null, einheit: t.KARTEN, basis: t.WOCHEN(werte.length), verlauf: null, delta: null }
   }
   const letzte = werte.at(-1)!
   const vorige = werte.at(-2) ?? 0
   return {
-    wert: GANZ.format(letzte),
-    einheit: letzte === 1 ? 'Karte' : 'Karten',
-    basis: `${werte.length} Wochen`,
+    wert: ganz(letzte, sprache),
+    einheit: letzte === 1 ? t.KARTE : t.KARTEN,
+    basis: t.WOCHEN(werte.length),
     verlauf: werte,
-    delta: wochenDelta(letzte, vorige),
+    delta: wochenDelta(letzte, vorige, sprache),
   }
 }
 
-function wochenDelta(letzte: number, vorige: number): Delta {
+function wochenDelta(letzte: number, vorige: number, sprache: Sprache): Delta {
   if (letzte === vorige) {
     return { text: '± 0', art: 'neutral' }
   }
@@ -484,17 +491,18 @@ function wochenDelta(letzte: number, vorige: number): Delta {
   // Stryker disable next-line EqualityOperator: gleichwertiger Mutant — Gleichstand ist oben abgefangen
   const pfeil = letzte > vorige ? '▲' : '▼'
   if (vorige === 0) {
-    return { text: `${pfeil} ${letzte} zur Vorwoche`, art }
+    return { text: woerterbuch(sprache).LEITSTAND_RECHNUNG.ZUR_VORWOCHE(pfeil, letzte), art }
   }
-  return { text: `${pfeil} ${GANZ.format(Math.round((Math.abs(letzte - vorige) / vorige) * 100))} %`, art }
+  return { text: `${pfeil} ${ganz(Math.round((Math.abs(letzte - vorige) / vorige) * 100), sprache)} %`, art }
 }
 
 /** Durchlaufzeit in Tagen (Entwurf Z. 1260–1282). Kein Verlauf, kein Delta: Die Antwort trägt nur den Schnitt. */
-export function durchlaufKachel(sekunden: number | null, stichprobe: number): Kachel {
+export function durchlaufKachel(sekunden: number | null, stichprobe: number, sprache: Sprache = 'de'): Kachel {
+  const t = woerterbuch(sprache).LEITSTAND_RECHNUNG
   return {
-    wert: sekunden === null ? null : ZAHL_1.format(sekunden / 86_400),
-    einheit: 'Tage',
-    basis: stichprobe === 1 ? '1 Karte' : `${stichprobe} Karten`,
+    wert: sekunden === null ? null : zahl1(sekunden / 86_400, sprache),
+    einheit: t.TAGE,
+    basis: t.KARTEN_ANZAHL(stichprobe),
     verlauf: null,
     delta: null,
   }
@@ -505,17 +513,18 @@ export function durchlaufKachel(sekunden: number | null, stichprobe: number): Ka
  * Unter einer Stunde in Minuten — KI-Umsetzungen dauern oft weniger, und „0,3 Stunden" liest sich
  * schlecht.
  */
-export function implementierungKachel(sekunden: number | null, stichprobe: number): Kachel {
-  const basis = stichprobe === 1 ? '1 Karte' : `${stichprobe} Karten`
+export function implementierungKachel(sekunden: number | null, stichprobe: number, sprache: Sprache = 'de'): Kachel {
+  const t = woerterbuch(sprache).LEITSTAND_RECHNUNG
+  const basis = t.KARTEN_ANZAHL(stichprobe)
   if (sekunden === null || stichprobe === 0) {
-    return { wert: null, einheit: 'Stunden', basis, verlauf: null, delta: null }
+    return { wert: null, einheit: t.STUNDEN, basis, verlauf: null, delta: null }
   }
   // Die Grenze liegt bei den gerundeten Minuten: 3570 s wären sonst „60 Minuten" statt „1,0 Stunden".
   const minuten = Math.round(sekunden / 60)
   const inMinuten = minuten < 60
   return {
-    wert: inMinuten ? GANZ.format(minuten) : ZAHL_1.format(sekunden / 3600),
-    einheit: inMinuten ? 'Minuten' : 'Stunden',
+    wert: inMinuten ? ganz(minuten, sprache) : zahl1(sekunden / 3600, sprache),
+    einheit: inMinuten ? t.MINUTEN : t.STUNDEN,
     basis,
     verlauf: null,
     delta: null,
@@ -620,17 +629,18 @@ export function abbruchgruende(zaehler: NightRunErrorClassCounts): Klassenzeile[
 }
 
 /** Eine Token-Menge in der Einheit des Entwurfs: „4,82 Mio", „186 Tsd" oder die Zahl selbst. */
-export function tokenMenge(anzahl: number | null): { wert: string; einheit: string } | null {
+export function tokenMenge(anzahl: number | null, sprache: Sprache = 'de'): { wert: string; einheit: string } | null {
   if (anzahl === null) {
     return null
   }
+  const t = woerterbuch(sprache).LEITSTAND_RECHNUNG
   if (anzahl >= 1_000_000) {
-    return { wert: ZAHL_2.format(anzahl / 1_000_000), einheit: 'Mio' }
+    return { wert: zahl2(anzahl / 1_000_000, sprache), einheit: t.MIO }
   }
   if (anzahl >= 1000) {
-    return { wert: GANZ.format(Math.round(anzahl / 1000)), einheit: 'Tsd' }
+    return { wert: ganz(Math.round(anzahl / 1000), sprache), einheit: t.TSD }
   }
-  return { wert: GANZ.format(anzahl), einheit: 'Token' }
+  return { wert: ganz(anzahl, sprache), einheit: t.TOKEN }
 }
 
 /** Die Eintraege **eines** Projekts, in der Reihenfolge der Server-Antwort (#1087). */
@@ -669,7 +679,7 @@ export function nachProjekt<T extends { projectId: number; projectName: string }
 }
 
 /** Eine Token-Menge als Fließtext („3,66 Mio", „710 Tsd"). */
-export function tokenText(anzahl: number): string {
-  const menge = tokenMenge(anzahl)!
+export function tokenText(anzahl: number, sprache: Sprache = 'de'): string {
+  const menge = tokenMenge(anzahl, sprache)!
   return `${menge.wert} ${menge.einheit}`
 }

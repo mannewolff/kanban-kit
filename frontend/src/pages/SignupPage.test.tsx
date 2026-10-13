@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
 import { SignupPage } from './SignupPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/auth', () => ({
   authApi: { register: vi.fn() },
@@ -73,5 +74,47 @@ describe('SignupPage', () => {
     )
     await submitSignup()
     expect(await screen.findByText('Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.')).toBeInTheDocument()
+  })
+})
+
+describe('SignupPage auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  async function submitAufEnglisch() {
+    renderMitSprache(
+      <MemoryRouter>
+        <SignupPage />
+      </MemoryRouter>,
+      'en',
+    )
+    await userEvent.type(screen.getByLabelText(/Display name/), 'Ada')
+    await userEvent.type(screen.getByLabelText(/Email/), 'a@b.de')
+    await userEvent.type(screen.getByLabelText(/Password/, { selector: 'input' }), 'geheim123')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+  }
+
+  it('zeigt Formular und Konflikt auf Englisch', async () => {
+    mockedApi.register.mockRejectedValue(new ApiError(409, 'x'))
+    await submitAufEnglisch()
+    expect(screen.getByRole('heading', { name: 'Sign up', level: 2 })).toBeInTheDocument()
+    expect(screen.getByText('At least 8 characters')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to sign-in' })).toBeInTheDocument()
+    expect(await screen.findByText('This email address is already registered.')).toBeInTheDocument()
+  })
+
+  it('zeigt Zählbremse und allgemeinen Fehler auf Englisch', async () => {
+    mockedApi.register.mockRejectedValue(new ApiError(429, ''))
+    await submitAufEnglisch()
+    expect(await screen.findByText('Too many attempts. Please try again later.')).toBeInTheDocument()
+  })
+
+  it('zeigt den allgemeinen Fehler auf Englisch', async () => {
+    mockedApi.register.mockRejectedValue(new ApiError(400, 'x'))
+    await submitAufEnglisch()
+    expect(
+      await screen.findByText('Sign-up failed. Please check your input (password at least 8 characters).'),
+    ).toBeInTheDocument()
   })
 })

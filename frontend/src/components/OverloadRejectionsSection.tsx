@@ -4,15 +4,16 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import type { AdminApi, OverloadRejection } from '../api/admin'
+import { formatierer } from '../i18n/format'
+import { useSprache, useT } from '../i18n/SpracheContext'
+import type { Sprache } from '../i18n/woerterbuch'
 import { DataTable, type DataTableColumn } from './DataTable'
 
-const STUNDE = new Intl.DateTimeFormat('de-DE', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-})
+/** Die Stunde minutengenau: `22.09.2026, 10:00` bzw. `Sep 22, 2026, 10:00 AM`. */
+const STUNDE: Readonly<Record<Sprache, Intl.DateTimeFormatOptions>> = {
+  de: { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' },
+  en: { dateStyle: 'medium', timeStyle: 'short' },
+}
 
 type Zustand =
   | { art: 'laedt' }
@@ -23,11 +24,6 @@ interface Props {
   api: Pick<AdminApi, 'listOverloadRejections'>
 }
 
-const spalten: DataTableColumn<OverloadRejection>[] = [
-  { key: 'person', header: 'Person', render: (r) => r.displayName, defaultWidth: 200, minWidth: 120, resizable: true },
-  { key: 'stunde', header: 'Stunde', render: (r) => STUNDE.format(new Date(r.hour)), defaultWidth: 180, resizable: true },
-  { key: 'anzahl', header: 'Anzahl', render: (r) => r.rejections, align: 'right', defaultWidth: 100 },
-]
 
 /**
  * Abschnitt der Admin-Seite: wann und bei wem die Durchsatzbremse wegen Last abgewiesen hat, je
@@ -35,6 +31,14 @@ const spalten: DataTableColumn<OverloadRejection>[] = [
  */
 export function OverloadRejectionsSection({ api }: Readonly<Props>) {
   const [zustand, setZustand] = useState<Zustand>({ art: 'laedt' })
+  const t = useT().ABWEISUNGEN
+  const { sprache } = useSprache()
+  const stunde = new Intl.DateTimeFormat(formatierer(sprache).gebietsschema, STUNDE[sprache])
+  const spalten: DataTableColumn<OverloadRejection>[] = [
+    { key: 'person', header: t.PERSON, render: (r) => r.displayName, defaultWidth: 200, minWidth: 120, resizable: true },
+    { key: 'stunde', header: t.STUNDE, render: (r) => stunde.format(new Date(r.hour)), defaultWidth: 180, resizable: true },
+    { key: 'anzahl', header: t.ANZAHL, render: (r) => r.rejections, align: 'right', defaultWidth: 100 },
+  ]
 
   useEffect(() => {
     let aktiv = true
@@ -50,14 +54,12 @@ export function OverloadRejectionsSection({ api }: Readonly<Props>) {
   return (
     <Box component="section" aria-labelledby="abweisungen-last" sx={{ mt: 4 }}>
       <Typography id="abweisungen-last" variant="h6" component="h2" gutterBottom>
-        Abweisungen wegen Last
+        {t.TITEL}
       </Typography>
-      {zustand.art === 'laedt' && <CircularProgress size={24} aria-label="Abweisungen werden geladen" />}
-      {zustand.art === 'fehler' && (
-        <Alert severity="error">Abweisungen wegen Last konnten nicht geladen werden.</Alert>
-      )}
+      {zustand.art === 'laedt' && <CircularProgress size={24} aria-label={t.LAEDT} />}
+      {zustand.art === 'fehler' && <Alert severity="error">{t.FEHLER}</Alert>}
       {zustand.art === 'geladen' && zustand.zeilen.length === 0 && (
-        <Typography color="text.secondary">Keine Abweisungen wegen Last in den letzten 90 Tagen.</Typography>
+        <Typography color="text.secondary">{t.LEER}</Typography>
       )}
       {zustand.art === 'geladen' && zustand.zeilen.length > 0 && (
         <DataTable

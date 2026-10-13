@@ -4,6 +4,7 @@ import type { BackupKindStatus, BackupStatus, BackupVerdict } from '../api/backu
 import { ApiError } from '../api/client'
 import { AMPEL } from '../theme'
 import { BackupStatusSection } from './BackupStatusSection'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 /**
  * Die Statuskachel der Sicherung (Issue #833, Plan #825 E6/E11). Geprüft wird, was der Betreiber
@@ -154,5 +155,52 @@ describe('BackupStatusSection', () => {
 
     expect(fehler).not.toHaveBeenCalled()
     fehler.mockRestore()
+  })
+})
+
+describe('BackupStatusSection auf Englisch', () => {
+  it('zeigt Zustand, letzten Lauf in US-Schreibweise und Ziel auf Englisch', async () => {
+    renderMitSprache(<BackupStatusSection api={api(Promise.resolve(stand()))} />, 'en')
+
+    expect(await screen.findByRole('region', { name: 'Backup — Running' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Backup' })).toBeInTheDocument()
+    expect(screen.getByText('Running')).toBeInTheDocument()
+    // Tests laufen in Europe/Berlin: 03:00Z ist 5:00 AM Ortszeit.
+    expect(screen.getByText(/^Last successful run: Sep 23, 2026, 5:00\sAM$/)).toBeInTheDocument()
+    expect(screen.getByText('Target: Nextcloud')).toBeInTheDocument()
+  })
+
+  it('nennt auf Englisch die fehlende Sicherung und den fehlenden Lauf', async () => {
+    renderMitSprache(
+      <BackupStatusSection
+        api={api(
+          Promise.resolve(
+            stand({ verdict: 'ABGESCHALTET', enabled: false, kinds: [art('BASIS', null)] }),
+          ),
+        )}
+      />,
+      'en',
+    )
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No backup configured')
+    expect(screen.getByText('Last successful run: none yet')).toBeInTheDocument()
+    expect(screen.getByText('Disabled')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Set up backup' })).toHaveAttribute('href', '/docs/backup')
+  })
+
+  it('zeigt Laden, Mail-Hinweis und Fehler auf Englisch', async () => {
+    const { unmount } = renderMitSprache(<BackupStatusSection api={api(new Promise(() => {}))} />, 'en')
+    expect(screen.getByLabelText('Loading backup status')).toBeInTheDocument()
+    unmount()
+
+    const { unmount: weg } = renderMitSprache(
+      <BackupStatusSection api={api(Promise.resolve(stand({ alertMailEnabled: false })))} />,
+      'en',
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mail delivery is disabled')
+    weg()
+
+    renderMitSprache(<BackupStatusSection api={api(Promise.reject(new TypeError('Failed to fetch')))} />, 'en')
+    expect(await screen.findByText('The backup status could not be loaded.')).toBeInTheDocument()
   })
 })

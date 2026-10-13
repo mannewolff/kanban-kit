@@ -12,6 +12,9 @@ import java.io.IOException;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.common.i18n.SprachFixture;
+import org.mwolff.manban.common.i18n.Sprache;
+import org.mwolff.manban.common.i18n.Texte;
 import org.mwolff.manban.ratelimit.application.RateLimitProperties;
 import org.mwolff.manban.ratelimit.application.RateLimiter;
 import org.mwolff.manban.ratelimit.web.ClientOriginResolver;
@@ -56,6 +59,7 @@ class RateLimitFilterConfigTest {
   private WebApplicationContextRunner runnerWithConfig() {
     return runner
         .withBean(RateLimiter.class, () -> mock(RateLimiter.class))
+        .withBean(Texte.class, () -> SprachFixture.mit(Sprache.DE))
         .withBean(
             ClientOriginResolver.class,
             () ->
@@ -204,6 +208,7 @@ class RateLimitFilterConfigTest {
   void ohneServletUmgebung_traegtDieKonfigurationNichtsBei() {
     new ApplicationContextRunner()
         .withBean(RateLimiter.class, () -> mock(RateLimiter.class))
+        .withBean(Texte.class, () -> SprachFixture.mit(Sprache.DE))
         .withBean(
             ClientOriginResolver.class,
             () ->

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AdminApi } from '../api/admin'
 import { ApiError } from '../api/client'
 import { BootstrapAdminPage } from './BootstrapAdminPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const refresh = vi.fn().mockResolvedValue(undefined)
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ refresh }) }))
@@ -80,5 +81,31 @@ describe('BootstrapAdminPage', () => {
     expect(
       await screen.findByText('Ungültiger oder nicht konfigurierter Token.'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('BootstrapAdminPage auf Englisch', () => {
+  const aufEnglisch = (api: AdminApi) =>
+    renderMitSprache(
+      <MemoryRouter>
+        <BootstrapAdminPage api={api} />
+      </MemoryRouter>,
+      'en',
+    )
+
+  it('zeigt Seite und Konflikt auf Englisch', async () => {
+    aufEnglisch(makeApi(vi.fn().mockRejectedValue(new ApiError(409, 'x'))))
+    expect(screen.getByRole('heading', { name: 'Admin bootstrap' })).toBeInTheDocument()
+    expect(screen.getByText(/On a fresh instance/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Bootstrap token'), { target: { value: 'geheim' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Become admin' }))
+    expect(await screen.findByText('An admin already exists — bootstrap is no longer possible.')).toBeInTheDocument()
+  })
+
+  it('zeigt den Token-Fehler auf Englisch', async () => {
+    aufEnglisch(makeApi(vi.fn().mockRejectedValue(new ApiError(400, 'x'))))
+    fireEvent.change(screen.getByLabelText('Bootstrap token'), { target: { value: 'geheim' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Become admin' }))
+    expect(await screen.findByText('Invalid or unconfigured token.')).toBeInTheDocument()
   })
 })

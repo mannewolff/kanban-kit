@@ -7,7 +7,6 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -114,15 +113,14 @@ final class KartenBestandSuche {
     for (String name : anfrage.arten()) {
       Kartenart art = ARTEN.get(name);
       if (art == null) {
-        throw new UnknownCardKindException(
-            String.format(Locale.ROOT, "Unbekannte Kartenart: %s", name));
+        throw UnknownCardKindException.unbekannt(name);
       }
       arten.add(art);
     }
     Instant von = anfrage.createdFrom();
     Instant bis = anfrage.createdTo();
     if (von != null && bis != null && !von.isBefore(bis)) {
-      throw new InvalidPeriodBoundsException("createdFrom muss vor createdTo liegen");
+      throw InvalidPeriodBoundsException.angelegtNichtVorBis();
     }
     return new Anfrage(
         suchbegriff(anfrage.q()),

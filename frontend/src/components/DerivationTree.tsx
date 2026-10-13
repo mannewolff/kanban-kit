@@ -3,6 +3,7 @@ import Typography from '@mui/material/Typography'
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { type DerivationNode } from '../api/cards'
 import { artAusTitel, useKitNamen, type KitNamen, type KitNamenZustand } from '../api/kitNamen'
+import { useT } from '../i18n/SpracheContext'
 import { MELDER } from '../theme'
 import { labelChipSx } from './labelChipSx'
 
@@ -141,6 +142,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
   const [hervorgehoben, setHervorgehoben] = useState<number | undefined>(undefined)
   const zeilenRefs = useRef(new Map<number, HTMLElement>())
   const kitNamen = useKitNamen()
+  const t = useT()
 
   useEffect(() => {
     const el = sprungZiel === undefined ? undefined : zeilenRefs.current.get(sprungZiel)
@@ -158,9 +160,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
     // Satz ueber das Board waere hier die falsche Aussage. Kein Fehler — ein Vorhaben ohne
     // zugeordnete Karten ist ein gueltiger Zustand.
     return (
-      <Typography color="text.secondary">
-        Diesem Vorhaben sind noch keine Karten zugeordnet.
-      </Typography>
+      <Typography color="text.secondary">{t.BAUM.LEER}</Typography>
     )
   }
 
@@ -267,7 +267,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
   }
 
   return (
-    <Box role="tree" aria-label="Herkunft">
+    <Box role="tree" aria-label={t.BAUM.HERKUNFT}>
       {sichtbareIndizes.map((index) => {
         const zeile = rows[index]
         const kinderDa = hasChildren(rows, index)
@@ -322,10 +322,10 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
             <Typography variant="body2" component="span" sx={{ flexGrow: 1 }}>
               {zeile.title}
             </Typography>
-            {zeile.type === 'EPIC' && <Marke text="Vorhaben" />}
-            {zeile.blocked && <Marke text="blockiert" />}
-            {zeile.broken && <Marke text="Herkunftskette unterbrochen" />}
-            {zeile.externalOrigin && <Marke text={`Herkunft extern: #${zeile.derivedFrom}`} />}
+            {zeile.type === 'EPIC' && <Marke text={t.BAUM.VORHABEN} />}
+            {zeile.blocked && <Marke text={t.BAUM.BLOCKIERT} />}
+            {zeile.broken && <Marke text={t.BAUM.KETTE_UNTERBROCHEN} />}
+            {zeile.externalOrigin && <Marke text={t.BAUM.HERKUNFT_EXTERN(zeile.derivedFrom)} />}
             {zeile.dependencies.map((nummer) => (
               <Sprungmarke
                 key={`i${nummer}`}
@@ -335,7 +335,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
               />
             ))}
             {zeile.externalDependencies.map((nummer) => (
-              <Marke key={`e${nummer}`} text={`⇠ extern #${nummer}`} />
+              <Marke key={`e${nummer}`} text={t.BAUM.EXTERN(nummer)} />
             ))}
           </Box>
         )
@@ -354,7 +354,9 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
  * Roving Tabindex mit genau einem Tab-Stopp.
  */
 function Haken({ art }: Readonly<{ art: Hakenspalte }>) {
-  const { name, zeichen } = HAKEN_ANZEIGE[art ?? 'leer']
+  const t = useT()
+  const zeichen = HAKEN_ZEICHEN[art ?? 'leer']
+  const name = art === null ? undefined : t.BAUM.HAKEN[art]
   return (
     <Typography
       variant="body2"
@@ -389,17 +391,17 @@ function hakenFarbe(art: Hakenspalte): string {
 }
 
 /**
- * Zugänglicher Name und sichtbares Zeichen je Inhalt der Hakenspalte. Lade- und Fehlerhinweis
- * tragen dieselben Worte wie die Stufenleiste (Plan #1582, E10); sichtbar bleibt ein Zeichen, weil
- * die Spalte nur 14 px breit ist — der Name trägt die Aussage.
+ * Sichtbares Zeichen je Inhalt der Hakenspalte; den zugänglichen Namen nennt das Wörterbuch
+ * (`BAUM.HAKEN`). Lade- und Fehlerhinweis tragen dieselben Worte wie die Stufenleiste (Plan #1582,
+ * E10); sichtbar bleibt ein Zeichen, weil die Spalte nur 14 px breit ist — der Name trägt die Aussage.
  */
-const HAKEN_ANZEIGE: Record<NonNullable<Hakenspalte> | 'leer', { name: string | undefined; zeichen: string }> = {
-  erledigt: { name: 'erledigt', zeichen: '✓' },
-  inReview: { name: 'in review', zeichen: '✓' },
-  abgearbeitet: { name: 'abgearbeitet', zeichen: '✓' },
-  laden: { name: 'Kit-Namen werden geladen', zeichen: '…' },
-  fehler: { name: 'Kit-Namen nicht ladbar', zeichen: '!' },
-  leer: { name: undefined, zeichen: '' },
+const HAKEN_ZEICHEN: Record<NonNullable<Hakenspalte> | 'leer', string> = {
+  erledigt: '✓',
+  inReview: '✓',
+  abgearbeitet: '✓',
+  laden: '…',
+  fehler: '!',
+  leer: '',
 }
 
 /**
@@ -420,12 +422,13 @@ function Sprungmarke({
   aktiv,
   onSpringen,
 }: Readonly<{ nummer: number; aktiv: boolean; onSpringen: (nummer: number) => void }>) {
+  const t = useT()
   return (
     <Box
       component="button"
       type="button"
       tabIndex={aktiv ? 0 : -1}
-      aria-label={`Zur Karte #${nummer} springen`}
+      aria-label={t.BAUM.SPRINGEN_ARIA(nummer)}
       onClick={(event: MouseEvent<HTMLElement>) => {
         event.stopPropagation()
         onSpringen(nummer)

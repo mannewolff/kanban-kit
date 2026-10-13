@@ -4,9 +4,9 @@ import type {
   KettenStation,
   NightRunProgressView,
   ProgressStage,
-  StageState,
 } from '../api/nightRuns'
 import type { NightRunState } from './nightRunLog'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 
 /**
  * Die reine Rechenlogik des Fortschritts auf der Runner-Seite (Issue #1376, Plan #1372).
@@ -81,14 +81,12 @@ export function vorwegZaehlung(
 /** Welche Art von Lauf den Fortschritt zeigt: eine Kette oder eine Umsetzungsnacht. */
 export type FortschrittArt = 'KETTE' | 'UMSETZUNGSNACHT'
 
-/** Der Zustand einer Stufe als Text — nie allein über die Farbe (E12). */
-export type Stufentext = 'erreicht' | 'läuft' | 'offen'
-
 /** Eine Stufe der Wegleiste. */
 export interface Wegstufe {
   stufe: ProgressStage
   name: string
-  zustand: Stufentext
+  /** Der Zustand der Stufe als Text — nie allein über die Farbe (E12). */
+  zustand: string
   /** Ob der Lauf gerade an dieser Stelle steht. */
   aktuell: boolean
 }
@@ -100,22 +98,8 @@ export interface Wegleiste {
   ende: string | null
 }
 
-/** Der Endzustand eines Wegs, der planmäßig endet — in Variante A nach der Abdeckung. */
-export const ENDE_DES_WEGS = 'Ende des Wegs erreicht'
-
-const STUFENNAME: Record<ProgressStage, string> = {
-  PLAN: 'Plan',
-  REVIEW: 'Prüfung',
-  PAKETE: 'Arbeitspakete',
-  ABDECKUNG: 'Abdeckung',
-  UMSETZUNG: 'Umsetzung',
-}
-
-const STUFENTEXT: Record<StageState, Stufentext> = {
-  ERREICHT: 'erreicht',
-  LAEUFT: 'läuft',
-  OFFEN: 'offen',
-}
+/** Der Endzustand eines Wegs, der planmäßig endet — in Variante A nach der Abdeckung. Deutsche Fassung. */
+export const ENDE_DES_WEGS = woerterbuch('de').LAUF_FORTSCHRITT.ENDE_DES_WEGS
 
 /**
  * Die Wegleiste einer Kette (Plan #1372 E12).
@@ -126,10 +110,11 @@ const STUFENTEXT: Record<StageState, Stufentext> = {
  *
  * @param kette die Kette; `null`, wo es keine gibt — in der Umsetzungsnacht immer
  */
-export function wegleiste(kette: ChainProgressView | null, art: FortschrittArt): Wegleiste {
+export function wegleiste(kette: ChainProgressView | null, art: FortschrittArt, sprache: Sprache = 'de'): Wegleiste {
+  const t = woerterbuch(sprache).LAUF_FORTSCHRITT
   if (art === 'UMSETZUNGSNACHT') {
     return {
-      stufen: [{ stufe: 'UMSETZUNG', name: STUFENNAME.UMSETZUNG, zustand: 'läuft', aktuell: true }],
+      stufen: [{ stufe: 'UMSETZUNG', name: t.STUFE.UMSETZUNG, zustand: t.ZUSTAND.LAEUFT, aktuell: true }],
       ende: null,
     }
   }
@@ -139,11 +124,11 @@ export function wegleiste(kette: ChainProgressView | null, art: FortschrittArt):
   return {
     stufen: kette.stufen.map((s) => ({
       stufe: s.stufe,
-      name: STUFENNAME[s.stufe],
-      zustand: STUFENTEXT[s.zustand],
+      name: t.STUFE[s.stufe],
+      zustand: t.ZUSTAND[s.zustand],
       aktuell: s.stufe === kette.aktuelleStufe,
     })),
-    ende: kette.endeErreicht ? ENDE_DES_WEGS : null,
+    ende: kette.endeErreicht ? t.ENDE_DES_WEGS : null,
   }
 }
 
@@ -174,11 +159,14 @@ export interface Stationsanzeige {
   ziel: boolean
 }
 
-/** Die Namen der Stationen der Stufenleiste — auch für die Übersicht „Heute Nacht“ (Issue #1455). */
-export const STATIONSNAME: Record<KettenStation, string> = {
-  ...STUFENNAME,
-  VORBEREITUNG: 'Veröffentlichung vorbereitet',
+/** Die Namen der Stationen der Stufenleiste in einer Sprache. */
+export function stationsnamen(sprache: Sprache): Record<KettenStation, string> {
+  const t = woerterbuch(sprache).LAUF_FORTSCHRITT
+  return { ...t.STUFE, VORBEREITUNG: t.VORBEREITUNG }
 }
+
+/** Die Namen der Stationen der Stufenleiste — auch für die Übersicht „Heute Nacht“ (Issue #1455). Deutsche Fassung. */
+export const STATIONSNAME: Record<KettenStation, string> = stationsnamen('de')
 
 /** Der Text, den der Server an der Station einer Projektgrenze setzt (Issue #1451). */
 const PROJEKTGRENZE = 'Projektgrenze'
@@ -188,12 +176,13 @@ const PROJEKTGRENZE = 'Projektgrenze'
  * Grund kommen fertig vom Server; hier entstehen nur Symbol und Markierung. Nichts
  * wird aus Labels abgeleitet.
  */
-export function kettenAnzeige(stand: KettenStand): Stationsanzeige[] {
+export function kettenAnzeige(stand: KettenStand, sprache: Sprache = 'de'): Stationsanzeige[] {
   const ziel = stand.ziel ?? 'PAKETE'
+  const namen = stationsnamen(sprache)
   return stand.stationen.map(({ station, zustand, text, grund }) => {
     const anzeige = {
       station,
-      name: STATIONSNAME[station],
+      name: namen[station],
       text,
       grund,
       aktuell: zustand === 'LAEUFT' || zustand === 'WARTET' || zustand === 'ABGEBROCHEN',
@@ -229,12 +218,13 @@ export function kettenAnzeige(stand: KettenStand): Stationsanzeige[] {
 }
 
 /** Die Ansage des Bands für Vorlesewerkzeuge: alle Stationen mit Text, Grund und Ziel. */
-export function kettenAnsage(anzeige: readonly Stationsanzeige[]): string {
+export function kettenAnsage(anzeige: readonly Stationsanzeige[], sprache: Sprache = 'de'): string {
+  const t = woerterbuch(sprache).LAUF_FORTSCHRITT
   const teile = anzeige.map((a) => {
     const grund = a.grund === null ? '' : ' (' + a.grund + ')'
-    return `${a.name} ${a.text}${grund}${a.ziel ? ', Ziel' : ''}`
+    return `${a.name} ${a.text}${grund}${a.ziel ? t.ZIEL : ''}`
   })
-  return `Nacht-Kette: ${teile.join('; ')}`
+  return t.ANSAGE(teile.join('; '))
 }
 
 /** Was ein Lauf der Liste für das Zusammenführen mitbringen muss. */

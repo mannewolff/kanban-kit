@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { authApi } from '../api/auth'
 import { AuthProvider } from '../auth/AuthContext'
 import { ProtectedRoute } from './ProtectedRoute'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/auth', () => ({
   authApi: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
@@ -70,5 +71,27 @@ describe('ProtectedRoute', () => {
     )
 
     expect(await screen.findByTestId('herkunft')).toHaveTextContent('/boards/7/leitstand?filter=x')
+  })
+})
+
+describe('ProtectedRoute auf Englisch', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('leitet auch auf Englisch ohne Anmeldung auf die Login-Seite um', async () => {
+    mockedApi.me.mockRejectedValue(new Error('401'))
+    renderMitSprache(
+      <MemoryRouter initialEntries={['/']}>
+        <AuthProvider>
+          <Routes>
+            <Route element={<ProtectedRoute />}>
+              <Route path="/" element={<div>GESCHÜTZTER INHALT</div>} />
+            </Route>
+            <Route path="/login" element={<div>LOGIN-SEITE</div>} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+      'en',
+    )
+    expect(await screen.findByText('LOGIN-SEITE')).toBeInTheDocument()
   })
 })

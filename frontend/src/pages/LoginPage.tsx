@@ -10,8 +10,10 @@ import { ApiError, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { AuthCard } from '../components/AuthCard'
 import { PasswordField } from '../components/PasswordField'
+import { useT } from '../i18n/SpracheContext'
 
 export function LoginPage() {
+  const t = useT()
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -40,16 +42,16 @@ export function LoginPage() {
       if (e instanceof ApiError && e.status === 429) {
         // Zählbremse: vor dem 401-Zweig, weil ein abgewiesener Versuch sonst als falsche
         // Zugangsdaten erschiene und der Nutzer weiterprobierte, statt zu warten.
-        setError(apiErrorMessage(e, 'Zu viele Versuche. Bitte später erneut versuchen.'))
+        setError(apiErrorMessage(e, t.AUTH.ZU_VIELE_VERSUCHE))
       } else if (e instanceof ApiError && e.status === 401) {
         // Falsche Zugangsdaten: generische Meldung (verrät nicht, ob E-Mail oder Passwort falsch).
-        setError('Ungültige Anmeldedaten.')
+        setError(t.AUTH.ANMELDEDATEN_UNGUELTIG)
       } else {
         // Backend liefert die konkrete RFC-9457-Meldung (403: E-Mail nicht bestätigt / noch nicht
         // freigegeben / Konto gesperrt). Gelesen wird `detail` über apiErrorMessage, nie `message`:
         // das fällt bei unlesbarem Body auf den Roh-Body bzw. statusText zurück und ist damit nicht
         // anzeigbar — bei einem 429 eines vorgelagerten Proxys stünde sonst dessen HTML im Formular.
-        setError(apiErrorMessage(e, 'Anmeldung fehlgeschlagen. Bitte später erneut versuchen.'))
+        setError(apiErrorMessage(e, t.AUTH.ANMELDUNG_FEHLGESCHLAGEN))
       }
     } finally {
       setBusy(false)
@@ -57,20 +59,20 @@ export function LoginPage() {
   }
 
   return (
-    <AuthCard title="Anmelden">
+    <AuthCard title={t.AUTH.ANMELDEN}>
       <Box component="form" onSubmit={handleSubmit}>
         <Stack spacing={2}>
           {error && <Alert severity="error">{error}</Alert>}
-          <TextField label="E-Mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          <TextField label={t.AUTH.EMAIL} type="email" value={email} onChange={(e) => setEmail(e.target.value)}
             required fullWidth autoComplete="email" />
-          <PasswordField label="Passwort" value={password} onChange={(e) => setPassword(e.target.value)}
+          <PasswordField label={t.AUTH.PASSWORT} value={password} onChange={(e) => setPassword(e.target.value)}
             required fullWidth autoComplete="current-password" />
           <Button type="submit" variant="contained" disabled={busy} fullWidth>
-            Anmelden
+            {t.AUTH.ANMELDEN}
           </Button>
           <Stack direction="row" justifyContent="space-between">
-            <Link component={RouterLink} to="/signup">Registrieren</Link>
-            <Link component={RouterLink} to="/forgot">Passwort vergessen?</Link>
+            <Link component={RouterLink} to="/signup">{t.AUTH.REGISTRIEREN}</Link>
+            <Link component={RouterLink} to="/forgot">{t.AUTH.PASSWORT_VERGESSEN}</Link>
           </Stack>
         </Stack>
       </Box>

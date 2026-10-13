@@ -10,6 +10,7 @@ import { columnsApi } from '../api/columns'
 import { boardsApi } from '../api/boards'
 import { projectsApi } from '../api/projects'
 import { BoardView } from './BoardView'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 import { SnackbarProvider } from './SnackbarProvider'
 import { statusColors } from '../lib/statusColors'
 import { cssRegel, cssRegelMit } from '../test/cssRegel'
@@ -3215,5 +3216,263 @@ describe('BoardView', () => {
       expect(screen.getByRole('button', { name: 'Anlegen' })).toBeInTheDocument()
       expect(onEpicsChanged).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('BoardView auf Englisch', () => {
+  beforeEach(() => {
+    editMode.value = true
+    mColumns.create.mockReset()
+    mColumns.update.mockReset()
+    mColumns.remove.mockReset()
+    mColumns.reorder.mockReset()
+    mColumns.sortByNumber.mockReset()
+  })
+
+  const rechts: Card = { ...card, id: 101, number: 2, title: 'Rechts', columnId: 20 }
+  const epics = [{ id: 9, number: 5, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
+
+  const zeigeEn = (props: Partial<ComponentProps<typeof BoardView>> = {}) =>
+    renderMitSprache(
+      <SnackbarProvider>
+        <BoardView board={board} initialCards={[card, rechts]} canEdit currentUserId={7} api={mkApi()} {...props} />
+      </SnackbarProvider>,
+      'en',
+    )
+
+  it('zeigt die Werkzeugleiste auf Englisch', () => {
+    zeigeEn({ epics })
+
+    const filter = screen.getByRole('group', { name: 'Filter cards' })
+    for (const name of ['All cards', 'Mine', 'Overdue']) {
+      expect(within(filter).getByRole('button', { name })).toBeInTheDocument()
+    }
+    const dichte = screen.getByRole('group', { name: 'Density' })
+    expect(within(dichte).getByRole('button', { name: 'normal' })).toBeInTheDocument()
+    expect(within(dichte).getByRole('button', { name: 'compact' })).toBeInTheDocument()
+    const vorhaben = screen.getByLabelText('Epic filter')
+    expect(within(vorhaben).getByRole('option', { name: 'Epics: all' })).toBeInTheDocument()
+    expect(within(vorhaben).getByRole('option', { name: 'Epic: AUT – Auth' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import specification' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Choose Markdown file')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create new' })).toBeInTheDocument()
+    expect(screen.getByText('More columns: scroll horizontally')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+    expect(screen.getByRole('button', { name: 'End selection' })).toBeInTheDocument()
+  })
+
+  it('benennt Spaltenkopf und Belastungsskala auf Englisch', () => {
+    const mitGrenze: Board = { ...board, columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: 2 }, board.columns[1]] }
+    zeigeEn({ board: mitGrenze })
+
+    expect(screen.getByRole('button', { name: 'Edit column Backlog' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete column Backlog' })).toBeInTheDocument()
+    expect(screen.getByRole('meter', { name: 'Load Backlog' })).toHaveAttribute('aria-valuetext', '1 of 2')
+  })
+
+  it('meldet das Sortieren in beiden Richtungen und seinen Fehlschlag auf Englisch', async () => {
+    mColumns.sortByNumber.mockResolvedValue(undefined)
+    zeigeEn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sort column Backlog by number ascending' }))
+    expect(await screen.findByText('Column Backlog sorted ascending')).toBeInTheDocument()
+    fireEvent.click(await screen.findByRole('button', { name: 'Sort column Backlog by number descending' }))
+    expect(await screen.findByText('Column Backlog sorted descending')).toBeInTheDocument()
+
+    mColumns.sortByNumber.mockRejectedValue(new Error('netz'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Sort column Backlog by number ascending' }))
+    expect(await screen.findByText('Sorting failed.')).toBeInTheDocument()
+  })
+
+  it('legt Spalten an und bearbeitet sie auf Englisch', async () => {
+    mColumns.create.mockResolvedValue({ id: 30, name: 'Test', position: 2, wipLimit: null })
+    zeigeEn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Column' }))
+    expect(screen.getByRole('heading', { name: 'New column' })).toBeInTheDocument()
+    expect(screen.getByText('WIP limit (optional)', { selector: 'label' })).toBeInTheDocument()
+    expect(screen.getByLabelText('WIP limit')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Column name'), { target: { value: 'Test' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Column created.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    mColumns.update.mockRejectedValueOnce(new Error('netz')).mockResolvedValueOnce({ id: 10, name: 'Neu', position: 0, wipLimit: null })
+    fireEvent.click(screen.getByRole('button', { name: 'Edit column Backlog' }))
+    expect(screen.getByRole('heading', { name: 'Edit column' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saving the column failed.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Column saved.')).toBeInTheDocument()
+  })
+
+  it('löscht eine Spalte mit Rückfrage und meldet beide Fehlschläge auf Englisch', async () => {
+    mColumns.remove
+      .mockRejectedValueOnce(new ApiError(409, 'Conflict'))
+      .mockRejectedValueOnce(new Error('netz'))
+      .mockResolvedValueOnce(undefined)
+    zeigeEn()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete column Backlog' }))
+    expect(screen.getByRole('heading', { name: 'Delete column?' })).toBeInTheDocument()
+    expect(screen.getByText('The column “Backlog” will be deleted.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('The column still contains cards and cannot be deleted.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('Deleting failed.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('Column deleted.')).toBeInTheDocument()
+  })
+
+  it('meldet ein gescheitertes Umsortieren der Spalten auf Englisch', async () => {
+    mColumns.reorder.mockRejectedValue(new Error('netz'))
+    zeigeEn()
+
+    fireEvent.dragStart(screen.getByTestId('column-header-20'))
+    fireEvent.drop(screen.getByTestId('column-header-10'))
+
+    expect(await screen.findByText('Reordering columns failed.')).toBeInTheDocument()
+  })
+
+  it('zeigt das Kartenmenü auf Englisch und meldet seine Fehlschläge', async () => {
+    const api = mkApi({
+      archive: vi.fn().mockRejectedValue(new Error('netz')),
+      get: vi.fn().mockRejectedValue(new Error('netz')),
+      move: vi.fn().mockRejectedValue(new Error('netz')),
+      bulkDelete: vi.fn().mockRejectedValue(new Error('netz')),
+    })
+    zeigeEn({ api, canTransfer: true })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Aufgabe' }))
+    for (const name of ['Edit', 'Duplicate', 'Archive', 'Move…', 'Move right', 'Delete']) {
+      expect(screen.getByRole('menuitem', { name })).toBeInTheDocument()
+    }
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Archive' }))
+    expect(await screen.findByText('Archiving failed.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Aufgabe' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }))
+    expect(await screen.findByText('The card could not be loaded.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Rechts' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move left' }))
+    expect(await screen.findByText('Moving failed.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Menu Aufgabe' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }))
+    expect(screen.getByRole('heading', { name: 'Move to trash?' })).toBeInTheDocument()
+    expect(
+      screen.getByText('The card will be moved to the trash. From there it can be restored or deleted permanently.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Move to trash' }))
+    expect(await screen.findByText('Moving to the trash failed.')).toBeInTheDocument()
+  })
+
+  it('zeigt Auswahl, Massenaktionen und ihre Rückfragen auf Englisch', async () => {
+    const api = mkApi({
+      bulkArchive: vi.fn().mockRejectedValue(new Error('netz')),
+      bulkLabels: vi.fn().mockRejectedValue(new Error('netz')),
+    })
+    const labels = [{ id: 3, boardId: 1, name: 'Fehler', color: '#ff0000', countOnEpicTile: false }]
+    zeigeEn({ api, boardLabels: labels, initialCards: [card, { ...card, id: 102, number: 3, title: 'Zweite' }, rechts] })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all cards in Backlog' }))
+    expect(screen.getByRole('checkbox', { name: 'Clear selection in Backlog' })).toBeChecked()
+    expect(screen.getByRole('region', { name: 'Bulk actions' })).toHaveTextContent('2 selected')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(screen.getByRole('heading', { name: 'Archive cards?' })).toBeInTheDocument()
+    expect(
+      screen.getByText('2 cards will be archived. They disappear from the board but are kept and can be restored one by one.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move to trash' }))
+    expect(
+      screen.getByText('2 cards will be moved to the trash. From there they can be restored or deleted permanently.'),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Fehler — no selected card' }))
+    expect(await screen.findByText('Setting labels failed.')).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select card Zweite' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(
+      screen.getByText('The selected card will be archived. They disappear from the board but are kept and can be restored one by one.'),
+    ).toBeInTheDocument()
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archive' }))
+    expect(await screen.findByText('Archiving failed.')).toBeInTheDocument()
+  })
+
+  it('nennt die Sperrgründe der Label-Taste auf Englisch', () => {
+    const vorhaben: Card = { ...card, id: 103, number: 4, title: 'Vorhaben', type: 'EPIC' }
+    const { unmount } = zeigeEn({ initialCards: [card] })
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select card Aufgabe' }))
+    expect(screen.getByRole('button', { name: 'Labels — The board has no labels' })).toBeDisabled()
+    unmount()
+
+    zeigeEn({ initialCards: [vorhaben] })
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select card Vorhaben' }))
+    expect(screen.getByRole('button', { name: 'Labels — Epics carry no labels' })).toBeDisabled()
+  })
+
+  it('meldet ausgeblendete Karten auf Englisch', () => {
+    const imVorhaben: Card = { ...card, parentId: 9 }
+    const zweite: Card = { ...card, id: 102, number: 3, title: 'Zweite', parentId: 9 }
+    const viele = [{ ...epics[0], memberNumbers: [1, 3], rootNumbers: [1, 3] }]
+    const { unmount } = zeigeEn({ epics: viele, hiddenEpics: new Set([9]), initialCards: [imVorhaben, zweite] })
+    expect(screen.getByRole('button', { name: '2 cards hidden, show' })).toHaveTextContent('2 hidden')
+    unmount()
+
+    zeigeEn({ epics: [{ ...epics[0], memberNumbers: [1], rootNumbers: [1] }], hiddenEpics: new Set([9]), initialCards: [imVorhaben] })
+    expect(screen.getByRole('button', { name: '1 card hidden, show' })).toHaveTextContent('1 hidden')
+  })
+
+  it('liest eine Spezifikation ein und meldet die angelegten Karten auf Englisch', async () => {
+    const angelegt = (n: number) => Array.from({ length: n }, (_, i) => ({ ...card, id: 300 + i, number: 10 + i, title: `Neu ${i}` }))
+    const api = mkApi({ createBatch: vi.fn().mockResolvedValueOnce(angelegt(2)).mockResolvedValueOnce(angelegt(1)) })
+    zeigeEn({ api })
+
+    const waehlen = (inhalt: string) => {
+      const input = screen.getByLabelText('Choose Markdown file')
+      Object.defineProperty(input, 'files', { value: [new File([inhalt], 'spec.md', { type: 'text/markdown' })], configurable: true })
+      fireEvent.change(input)
+    }
+
+    waehlen('## Eins\nA\n\n## Zwei\nB')
+    fireEvent.click(await screen.findByRole('button', { name: 'Create 2 cards' }))
+    expect(await screen.findByText('2 cards created.')).toBeInTheDocument()
+
+    waehlen('## Eins\nA')
+    fireEvent.click(await screen.findByRole('button', { name: 'Create 1 card' }))
+    expect(await screen.findByText('1 card created.')).toBeInTheDocument()
+  })
+
+  it('meldet eine unlesbare Spezifikationsdatei auf Englisch', async () => {
+    zeigeEn()
+
+    class FailingReader {
+      onerror: (() => void) | null = null
+      readAsText(): void {
+        this.onerror?.()
+      }
+    }
+    vi.stubGlobal('FileReader', FailingReader)
+    const input = screen.getByLabelText('Choose Markdown file')
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'spec.md', { type: 'text/markdown' })], configurable: true })
+    fireEvent.change(input)
+
+    expect(await screen.findByText('The file could not be read.')).toBeInTheDocument()
+    vi.unstubAllGlobals()
   })
 })
