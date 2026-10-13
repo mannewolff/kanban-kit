@@ -5,6 +5,7 @@ import { epicShortcode } from '../lib/epicMeta'
 import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { useSprache } from '../i18n/SpracheContext'
+import { DatumFeld } from './DatumFeld'
 
 /**
  * Native Vorhaben-Auswahl: „(kein Vorhaben)" plus alle übergebenen Vorhaben mit Kürzel. Eigene
@@ -164,17 +165,7 @@ export function CardFields({
           fullWidth
         />
       )}
-      <TextField
-        type="date"
-        label="Fällig am"
-        value={dueInput}
-        onChange={(e) => onDueInputChange(e.target.value)}
-        slotProps={{
-          htmlInput: { 'aria-label': 'Fällig am' },
-          inputLabel: { shrink: true },
-        }}
-        sx={{ maxWidth: 200 }}
-      />
+      <DatumFeld label="Fällig am" value={dueInput} onChange={onDueInputChange} />
     </>
   )
   return (

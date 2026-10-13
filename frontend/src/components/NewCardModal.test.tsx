@@ -61,7 +61,7 @@ describe('NewCardModal', () => {
 
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Karte' } })
     fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '3, 4' } })
-    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2026-03-01' } })
+    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '01.03.2026' } })
     fireEvent.mouseDown(screen.getByLabelText('Zuständige'))
     fireEvent.click(await screen.findByText('Alice'))
     fireEvent.mouseDown(screen.getByLabelText('Labels'))

@@ -42,7 +42,7 @@ describe('CardFields', () => {
     expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('B')
     expect(screen.getByLabelText('Vorhaben')).toBeInTheDocument()
     expect(screen.getByLabelText('Abhängig von')).toHaveValue('12')
-    expect(screen.getByLabelText('Fällig am')).toHaveValue('2026-02-01')
+    expect(screen.getByLabelText('Fällig am')).toHaveValue('01.02.2026')
     expect(screen.queryByLabelText('Kürzel')).not.toBeInTheDocument()
   })
 
@@ -110,7 +110,7 @@ describe('CardFields', () => {
     fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
     fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '' } })
     fireEvent.change(screen.getByLabelText('Abhängig von'), { target: { value: '3' } })
-    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2026-03-01' } })
+    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '01.03.2026' } })
 
     expect(h.onTitleChange).toHaveBeenCalledWith('Neu')
     expect(h.onBodyChange).toHaveBeenCalledWith('Text')

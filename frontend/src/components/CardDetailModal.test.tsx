@@ -496,7 +496,7 @@ describe('CardDetailModal', () => {
     render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
 
     await klickeBearbeiten()
-    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2026-08-01' } })
+    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '01.08.2026' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
     await waitFor(() =>
@@ -1586,7 +1586,7 @@ describe('CardDetailModal', () => {
     await klickeBearbeiten()
 
     expect(screen.getByLabelText('Markdown-Beschreibung')).toHaveValue('Vorhandener Text')
-    expect(screen.getByLabelText('Fällig am')).toHaveValue('2026-08-01')
+    expect(screen.getByLabelText('Fällig am')).toHaveValue('01.08.2026')
   })
 
   it('bietet im Edit-Modus die bereits gesetzte Epic-Zuordnung an', async () => {
@@ -3058,7 +3058,7 @@ describe('CardDetailModal — bestätigter Kartenstand (#1328)', () => {
 
     await klickeBearbeiten()
     fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neuer Titel' } })
-    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '2099-08-01' } })
+    fireEvent.change(screen.getByLabelText('Fällig am'), { target: { value: '01.08.2099' } })
     fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(() => expect(apis.cardsApi.update).toHaveBeenCalledTimes(1))

@@ -85,7 +85,8 @@
         "src/components/CardNumberSearch.tsx",
         "src/components/EpicBadge.tsx",
         "src/components/DerivationTree.tsx",
-        "src/components/AbnahmeSzenarienDialog.tsx"
+        "src/components/AbnahmeSzenarienDialog.tsx",
+        "src/components/DatumFeld.tsx"
       ],
       "testMuster": [
         "src/components/CardDetailModal.test.tsx",
@@ -95,7 +96,8 @@
         "src/components/CardNumberSearch.test.tsx",
         "src/components/EpicBadge.test.tsx",
         "src/components/DerivationTree.test.tsx",
-        "src/components/AbnahmeSzenarienDialog.test.tsx"
+        "src/components/AbnahmeSzenarienDialog.test.tsx",
+        "src/components/DatumFeld.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,

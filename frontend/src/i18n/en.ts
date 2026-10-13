@@ -59,4 +59,9 @@ export const en: Woerterbuch = {
     GESPEICHERT: 'Language saved.',
     FEHLER: 'The language could not be saved.',
   },
+
+  DATUMSFELD: {
+    MUSTER: 'MM/DD/YYYY',
+    UNGUELTIG: 'Not a valid date — use MM/DD/YYYY',
+  },
 }

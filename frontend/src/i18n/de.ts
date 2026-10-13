@@ -60,6 +60,12 @@ export const de = {
     GESPEICHERT: 'Sprache gespeichert.',
     FEHLER: 'Die Sprache konnte nicht gespeichert werden.',
   },
+
+  /** Datumsfeld zum Eingeben (`DatumFeld`, Issue #1648): Schreibweise und Meldung bei ungültiger Eingabe. */
+  DATUMSFELD: {
+    MUSTER: 'TT.MM.JJJJ',
+    UNGUELTIG: 'Kein gültiges Datum — Schreibweise TT.MM.JJJJ',
+  },
 } as const
 
 /** Weitet die Literale des deutschen Wörterbuchs zu `string`, rekursiv und durch Funktionen hindurch. */
