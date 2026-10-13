@@ -2,7 +2,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { theme } from '../../theme'
-import { LaufArtSymbol, laufArtName, type LaufArt } from './LaufArtSymbol'
+import { LaufArtSymbol, SYMBOL, laufArtName, type LaufArt } from './LaufArtSymbol'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 
 const ARTEN: ReadonlyArray<readonly [LaufArt, string]> = [
@@ -40,6 +40,22 @@ describe('LaufArtSymbol — die Art eines Laufs als Symbol (#1141)', () => {
     expect(breiten).toHaveLength(ARTEN.length)
     expect(new Set(breiten).size).toBe(1)
     expect(breiten[0]).toBe('16')
+  })
+
+  it('benennt jedes Symbol in den React-Entwicklerwerkzeugen nach seiner Art (#1680)', () => {
+    expect({
+      CHAIN: SYMBOL.CHAIN.displayName,
+      IMPLEMENTATION: SYMBOL.IMPLEMENTATION.displayName,
+      REVIEW: SYMBOL.REVIEW.displayName,
+      INTERACTIVE: SYMBOL.INTERACTIVE.displayName,
+      NIGHTPLAN: SYMBOL.NIGHTPLAN.displayName,
+    }).toEqual({
+      CHAIN: 'KetteSymbol',
+      IMPLEMENTATION: 'UmsetzungSymbol',
+      REVIEW: 'PruefungSymbol',
+      INTERACTIVE: 'SitzungSymbol',
+      NIGHTPLAN: 'NachtplanSymbol',
+    })
   })
 
   it('nennt das Wort jeder Art aus einem einzigen Wörterbuch', () => {
