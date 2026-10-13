@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { openapiApi } from '../api/openapi'
-import { ABGEBROCHEN, AUSPROBIER_HEADER, HINWEIS_AENDERND } from '../lib/apiAusprobieren'
+import { AUSPROBIER_HEADER, abgebrochenText, hinweisAendernd } from '../lib/apiAusprobieren'
 import { ApiUebersichtPage } from './ApiUebersichtPage'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 
@@ -242,7 +242,7 @@ describe('ApiUebersichtPage', () => {
         ergebnis = interceptor({ url: '/api/projects/7', method: 'DELETE', headers: {} })
       })
       await screen.findByRole('dialog')
-      const abgewiesen = expect(ergebnis).rejects.toThrow(ABGEBROCHEN)
+      const abgewiesen = expect(ergebnis).rejects.toThrow(abgebrochenText('de'))
       await userEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
 
       await abgewiesen
@@ -256,14 +256,14 @@ describe('ApiUebersichtPage', () => {
       const Umhuellt = plugins[0].wrapComponents.execute(Original)
 
       const { unmount } = render(<Umhuellt method="post" />)
-      const hinweis = screen.getByText(HINWEIS_AENDERND)
+      const hinweis = screen.getByText(hinweisAendernd('de'))
       const knopf = screen.getByRole('button', { name: 'Ausführen post' })
       expect(hinweis.compareDocumentPosition(knopf)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
       unmount()
 
       render(<Umhuellt method="get" />)
       expect(screen.getByRole('button', { name: 'Ausführen get' })).toBeInTheDocument()
-      expect(screen.queryByText(HINWEIS_AENDERND)).not.toBeInTheDocument()
+      expect(screen.queryByText(hinweisAendernd('de'))).not.toBeInTheDocument()
     })
   })
 })

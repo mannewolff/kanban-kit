@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { HINWEIS_AENDERND } from '../lib/apiAusprobieren'
+import { hinweisAendernd } from '../lib/apiAusprobieren'
 import { AusprobierBestaetigung } from './AusprobierBestaetigung'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 
@@ -30,7 +30,7 @@ describe('AusprobierBestaetigung', () => {
   it('ist über Titel und Hinweis benannt und zeigt Methode und Pfad', async () => {
     await oeffneDialog()
     const dialog = screen.getByRole('dialog', { name: 'Echte Daten ändern?' })
-    expect(dialog).toHaveAccessibleDescription(expect.stringContaining(HINWEIS_AENDERND))
+    expect(dialog).toHaveAccessibleDescription(expect.stringContaining(hinweisAendernd('de')))
     expect(screen.getByText('DELETE')).toBeInTheDocument()
     expect(screen.getByText('/api/projects/7')).toBeInTheDocument()
   })
