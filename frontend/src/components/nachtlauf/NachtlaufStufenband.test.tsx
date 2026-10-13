@@ -2,6 +2,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { NACHTLAUF_FARBEN, nachtlaufTheme } from '../../nachtlaufDesign'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { NachtlaufStufenband, type Bandabschnitt } from './NachtlaufStufenband'
 
 /**
@@ -104,5 +105,25 @@ describe('NachtlaufStufenband — Kosten je Schritt (#1106)', () => {
   it('zeigt ohne gemeldete Kosten keine Zeile — und nie eine 0', () => {
     zeige([abschnitt({ kosten: null })])
     expect(screen.queryByTestId('stufe-791-plan-kosten')).toBeNull()
+  })
+})
+
+describe('NachtlaufStufenband auf Englisch (Issue #1658)', () => {
+  it('zeigt Beschriftung, Zahlen, Kosten und Vermerk der Seite auf Englisch unverändert', () => {
+    renderMitSprache(
+      <ThemeProvider theme={nachtlaufTheme}>
+        <NachtlaufStufenband
+          abschnitte={[abschnitt({ label: 'Plan', zahlen: '7.8 / 20 min', kosten: '$0.40', vermerk: 'aborted here' })]}
+          ansage="Stage band: Plan 7.8 / 20 min"
+          testId="stufenband-791"
+          abschnittTestId="stufe-791"
+        />
+      </ThemeProvider>,
+      'en',
+    )
+
+    expect(screen.getByRole('img', { name: 'Stage band: Plan 7.8 / 20 min' })).toHaveTextContent(
+      'Plan7.8 / 20 min$0.40aborted here',
+    )
   })
 })

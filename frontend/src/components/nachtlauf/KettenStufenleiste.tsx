@@ -23,9 +23,10 @@ import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from '
 import { apiErrorMessage } from '../../api/client'
 import { artAusTitel, boardName, namenDerSache, type KitNamen, type KitNamenZustand } from '../../api/kitNamen'
 import type { Label } from '../../api/labels'
-import { nightRunsApi, type KettenStand, type NightRunsApi } from '../../api/nightRuns'
+import { nightRunsApi, type KettenStand, type KettenStation, type NightRunsApi } from '../../api/nightRuns'
+import { useSprache, useT } from '../../i18n/SpracheContext'
 import { LAUFSTAND, PLAN_REVIEW } from '../../lib/kitWortformen'
-import { kettenAnzeige, type Stationssymbol } from '../../lib/laufFortschritt'
+import { kettenAnzeige, stationsnamen, type Stationssymbol } from '../../lib/laufFortschritt'
 import { KLEIN_RADIUS, KUPFER, NUT_SX, TASTE_SX, TEXT_SCHWACH } from '../../theme'
 import { dialogTitleSx } from '../dialogChromeSx'
 
@@ -44,15 +45,16 @@ type Station = 'plan' | 'pruefung' | 'pakete' | 'abdeckung' | 'umsetzung' | 'pus
  * Die sechs Stationen der Kette in ihrer Reihenfolge — dieselben wie während des Laufs und in
  * „Heute Nacht“ (Fachplan #1420, Issue #1472); `ziel` trägt die Sache des Labels der vier wählbaren
  * (Kit-Vertrag, E10). Prüfung und Abdeckung sind Stationen auf dem Weg, aber kein Ziel. Die Namen
- * der Sachen kommen vom Server (Issue #1595, Plan #1582 A4).
+ * der Sachen kommen vom Server (Issue #1595, Plan #1582 A4); der angezeigte Name einer Station ist
+ * der ihrer `KettenStation` aus dem Wörterbuch (Issue #1658).
  */
-const STATIONEN: ReadonlyArray<{ schluessel: Station; name: string; ziel: string | null }> = [
-  { schluessel: 'plan', name: 'Plan', ziel: 'ZIEL_PLAN' },
-  { schluessel: 'pruefung', name: 'Prüfung', ziel: null },
-  { schluessel: 'pakete', name: 'Arbeitspakete', ziel: 'ZIEL_PAKETE' },
-  { schluessel: 'abdeckung', name: 'Abdeckung', ziel: null },
-  { schluessel: 'umsetzung', name: 'Umsetzung', ziel: 'ZIEL_UMSETZUNG' },
-  { schluessel: 'push-vorbereitet', name: 'Veröffentlichung vorbereitet', ziel: 'ZIEL_PUSH_VORBEREITET' },
+const STATIONEN: ReadonlyArray<{ schluessel: Station; station: KettenStation; ziel: string | null }> = [
+  { schluessel: 'plan', station: 'PLAN', ziel: 'ZIEL_PLAN' },
+  { schluessel: 'pruefung', station: 'REVIEW', ziel: null },
+  { schluessel: 'pakete', station: 'PAKETE', ziel: 'ZIEL_PAKETE' },
+  { schluessel: 'abdeckung', station: 'ABDECKUNG', ziel: null },
+  { schluessel: 'umsetzung', station: 'UMSETZUNG', ziel: 'ZIEL_UMSETZUNG' },
+  { schluessel: 'push-vorbereitet', station: 'VORBEREITUNG', ziel: 'ZIEL_PUSH_VORBEREITET' },
 ]
 
 const ZIEL_SACHEN = STATIONEN.flatMap((s) => (s.ziel === null ? [] : [s.ziel]))
@@ -63,7 +65,7 @@ const PRUEFER = [
 ] as const
 const PRUEFER_SACHEN = PRUEFER.map((p) => p.sache)
 type PrueferSache = (typeof PRUEFER)[number]['sache']
-const prueferText = (sache: PrueferSache) => `${PRUEFER.find((p) => p.sache === sache)?.zahl} Prüfer`
+const PRUEFER_ZAHL = Object.fromEntries(PRUEFER.map((p) => [p.sache, p.zahl])) as Record<PrueferSache, number>
 /** Das eine Start-Label des Kit-Vertrags (E10): gesetzt heißt freigegeben, noch nicht übernommen. */
 const NACHT = 'NIGHT'
 /** Sachen, mit denen an der Karte eine offene Frage auf einen Menschen wartet. */
@@ -72,29 +74,10 @@ const PLAN_REVIEW_ZEILE = new RegExp(`^${PLAN_REVIEW}`, 'm')
 /** Die Lauf-ID ist der Stempel des Runners, etwa `2026-10-05-175710` im Protokollpfad. */
 const LAUF_ID = /\b\d{4}-\d{2}-\d{2}-\d{6}\b/
 
-/**
- * Die feste Texttabelle der Sperrhinweise (E8, E14). Die Leiste legt nie ein Label an: Fehlt eins,
- * nennt der Hinweis seinen Namen, und ein Mensch legt es am Board an.
+/*
+ * Die Sperrhinweise (E8, E14) stehen im Wörterbuch (`NACHT_KETTE`, Issue #1658). Die Leiste legt nie
+ * ein Label an: Fehlt eins, nennt der Hinweis seinen Namen, und ein Mensch legt es am Board an.
  */
-const HINWEIS = {
-  labelFehlt: (name: string) =>
-    `Am Board fehlt das Label „${name}“. Die Leiste legt es nicht an — ein Mensch legt es in den Board-Labels an.`,
-  durchziehen: (name: string) =>
-    `Die Karte trägt ${name} und läuft damit mindestens bis zur Umsetzung; ein kürzeres Ziel bliebe wirkungslos.`,
-  planKarte: 'Die Karte ist schon ein Plan: Plan und Prüfung sind vor dem Lauf erbracht.',
-  fachlichOhneReview: (name: string) => `Die fachliche Prüfung ist nicht abgeschlossen: Die Karte trägt kein ${name}.`,
-  planOhneReview: 'Die Planprüfung ist nicht abgeschlossen: Im Plan fehlt die Zeile „Plan-Review:“.',
-  offeneFrage: (name: string) => `An der Karte wartet eine offene Frage auf einen Menschen (${name}).`,
-  go: 'Mit diesem Ziel gibst du das GO für alle Arbeitspakete dieser Karte.',
-  bestaetigung: 'Damit gibst du das GO für alle Arbeitspakete dieser Karte. Kette starten?',
-  wartet: 'Kette gestartet — sie wartet auf die Übernahme durch einen Runner.',
-  uebernommen: 'Ein Runner hat die Kette übernommen — die Leiste ist nur noch Anzeige.',
-  planReviewDa:
-    'Der Plan dieser Anforderung trägt schon „Plan-Review:“ — die Prüferzahl lässt sich nicht mehr wählen.',
-  ladefehler: (meldung: string) =>
-    `Der Stand der Kette ließ sich nicht laden: ${meldung}. Die Leiste zeigt den Stand vor dem Lauf.`,
-  kitNamenFehlen: 'Kit-Namen nicht ladbar',
-} as const
 
 /**
  * Ob ein Kommentar der Laufstand des Runners ist: seine erste Zeile ist der Anker in einer der
@@ -114,12 +97,12 @@ const uebernommenVon = (kommentare: readonly { body: string }[], gestartet: bool
 
 type Zustand = 'erbracht' | 'ziel' | 'vorgesehen' | 'nicht-vorgesehen'
 
-/** Zustandstext und Symbol je Zustand — lesbar ohne Farbe (E6). */
-const ZUSTAND: Record<Zustand, { text: string; symbol: ReactNode }> = {
-  erbracht: { text: 'vor dem Lauf erbracht', symbol: <CheckCircleOutlineIcon fontSize="small" /> },
-  ziel: { text: 'Ziel', symbol: <FlagIcon fontSize="small" /> },
-  vorgesehen: { text: 'vorgesehen', symbol: <RadioButtonUncheckedIcon fontSize="small" /> },
-  'nicht-vorgesehen': { text: 'nicht vorgesehen', symbol: <RemoveCircleOutlineIcon fontSize="small" /> },
+/** Wörterbuchschlüssel des Zustandstexts und Symbol je Zustand — lesbar ohne Farbe (E6). */
+const ZUSTAND: Record<Zustand, { text: 'ERBRACHT' | 'ZIEL' | 'VORGESEHEN' | 'NICHT_VORGESEHEN'; symbol: ReactNode }> = {
+  erbracht: { text: 'ERBRACHT', symbol: <CheckCircleOutlineIcon fontSize="small" /> },
+  ziel: { text: 'ZIEL', symbol: <FlagIcon fontSize="small" /> },
+  vorgesehen: { text: 'VORGESEHEN', symbol: <RadioButtonUncheckedIcon fontSize="small" /> },
+  'nicht-vorgesehen': { text: 'NICHT_VORGESEHEN', symbol: <RemoveCircleOutlineIcon fontSize="small" /> },
 }
 
 /** Das Symbol je Stationszustand während und nach dem Lauf (Issue #1453, E6). */
@@ -172,6 +155,11 @@ const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel =
  * sein deutsches Gegenstück. Gesetzt wird der Name, den das Board trägt, bei beiden der deutsche.
  * Solange das Register lädt, zeigt sie den Ladezustand, scheitert es, den Hinweis „Kit-Namen nicht
  * ladbar“ statt der Leiste.
+ *
+ * <p><b>Sprache</b> (Issue #1658, Plan #1638 A11): Nennt ein Hinweis ein Kit-Label, heißt es bei
+ * Englisch nach seinem englischen Namen aus dem Register (dem letzten der Sache), bei Deutsch wie
+ * bisher nach {@link boardName} bzw. dem Namen an der Karte. Gesetzt wird unverändert der Name, den
+ * das Board trägt.
  */
 /** Die Änderung eines Klicks: Label-IDs, die abgenommen, und solche, die gesetzt werden. */
 export type LabelAenderung = Readonly<{ ab: number[]; an: number[] }>
@@ -195,19 +183,20 @@ export function KettenStufenleiste({
   kitNamen,
   ...props
 }: LeisteProps & Readonly<{ /** Das Register aus `useKitNamen`. */ kitNamen: KitNamenZustand }>) {
+  const t = useT().NACHT_KETTE
   if (kitNamen.status === 'fertig') return <Leiste daten={kitNamen.daten} {...props} />
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
-        Nacht-Kette
+        {t.TITEL}
       </Typography>
       {kitNamen.status === 'laden' ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-          <CircularProgress size={24} aria-label="Kit-Namen werden geladen" />
+          <CircularProgress size={24} aria-label={t.KIT_NAMEN_LADEN} />
         </Box>
       ) : (
         <Typography variant="body2" role="status">
-          {HINWEIS.kitNamenFehlen}
+          {t.KIT_NAMEN_FEHLEN}
         </Typography>
       )}
     </Box>
@@ -226,7 +215,11 @@ function Leiste({
   cardId,
   api = nightRunsApi,
 }: LeisteProps & Readonly<{ daten: KitNamen }>) {
-  const ladung = useKettenstand(api, cardId)
+  const alleT = useT()
+  const t = alleT.NACHT_KETTE
+  const { sprache } = useSprache()
+  const stationsname = stationsnamen(sprache)
+  const ladung = useKettenstand(api, cardId, alleT.FEHLER_UNBEKANNT)
   const stand = ladung.art === 'geladen' ? ladung.stand : null
 
   const istPlan = artAusTitel(daten, titel) === 'PLAN'
@@ -244,6 +237,13 @@ function Leiste({
    * nicht, steht ihr Schlüssel im Sperrhinweis.
    */
   const zuSetzen = (sache: string) => boardName(daten, sache, boardLabels.map((l) => l.name)) ?? sache
+  /**
+   * Der Name, unter dem ein Hinweis das Label der Sache nennt (A11): bei Englisch der englische des
+   * Registers, bei Deutsch `deutsch` — der Name an der Karte oder der zu setzende.
+   */
+  const genannt = (sache: string, deutsch: string) =>
+    sprache === 'en' ? (namenDerSache(daten, sache).at(-1) ?? deutsch) : deutsch
+  const nennen = (sache: string) => genannt(sache, zuSetzen(sache))
   const durchziehen = getragen('DURCHZIEHEN')
   const gestartet = hat(NACHT)
   const uebernommen = stand === null ? uebernommenVon(kommentare, gestartet) : stand.uebernommen
@@ -272,19 +272,19 @@ function Leiste({
 
   /** Der Grund, warum eine Station nicht wählbar ist, oder `null`. */
   const sperre = (schluessel: Station, zielSache: string | null): string | null => {
-    if (istPlan && (schluessel === 'plan' || schluessel === 'pruefung')) return HINWEIS.planKarte
+    if (istPlan && (schluessel === 'plan' || schluessel === 'pruefung')) return t.PLAN_KARTE
     if (zielSache === null) return null
-    if (durchziehen !== undefined && index(schluessel) < index('umsetzung')) return HINWEIS.durchziehen(durchziehen)
-    const name = zuSetzen(zielSache)
-    if (idVon(name) === undefined) return HINWEIS.labelFehlt(name)
+    if (durchziehen !== undefined && index(schluessel) < index('umsetzung')) {
+      return t.DURCHZIEHEN(genannt('DURCHZIEHEN', durchziehen))
+    }
+    if (idVon(zuSetzen(zielSache)) === undefined) return t.LABEL_FEHLT(nennen(zielSache))
     return null
   }
 
   /** Der Grund, warum ein Prüferknopf gesperrt ist, oder `null` (E8, E14). */
   const prueferSperre = (sache: PrueferSache): string | null => {
-    if (planReviewDa) return HINWEIS.planReviewDa
-    const name = zuSetzen(sache)
-    return idVon(name) === undefined ? HINWEIS.labelFehlt(name) : null
+    if (planReviewDa) return t.PLAN_REVIEW_DA(PLAN_REVIEW)
+    return idVon(zuSetzen(sache)) === undefined ? t.LABEL_FEHLT(nennen(sache)) : null
   }
 
   /**
@@ -305,12 +305,12 @@ function Leiste({
 
   /** Was vor dem Start fehlt — leer heißt startbereit. */
   const sperrgruende = [
-    ...(!istPlan && !hat('REVIEW_FERTIG') ? [HINWEIS.fachlichOhneReview(zuSetzen('REVIEW_FERTIG'))] : []),
-    ...(istPlan && !PLAN_REVIEW_ZEILE.test(beschreibung) ? [HINWEIS.planOhneReview] : []),
-    ...OFFENE_FRAGE.flatMap((sache) => gesetzteNamen.filter((n) => namenDerSache(daten, sache).includes(n))).map(
-      HINWEIS.offeneFrage,
-    ),
-    ...(idVon(zuSetzen(NACHT)) === undefined ? [HINWEIS.labelFehlt(zuSetzen(NACHT))] : []),
+    ...(!istPlan && !hat('REVIEW_FERTIG') ? [t.FACHLICH_OHNE_REVIEW(nennen('REVIEW_FERTIG'))] : []),
+    ...(istPlan && !PLAN_REVIEW_ZEILE.test(beschreibung) ? [t.PLAN_OHNE_REVIEW(PLAN_REVIEW)] : []),
+    ...OFFENE_FRAGE.flatMap((sache) =>
+      gesetzteNamen.filter((n) => namenDerSache(daten, sache).includes(n)).map((n) => genannt(sache, n)),
+    ).map(t.OFFENE_FRAGE),
+    ...(idVon(zuSetzen(NACHT)) === undefined ? [t.LABEL_FEHLT(nennen(NACHT))] : []),
   ]
 
   if (stand?.uebernommen === true) {
@@ -320,19 +320,19 @@ function Leiste({
   return (
     <Box data-testid="ketten-stufenleiste">
       <Typography variant="subtitle2" gutterBottom>
-        Nacht-Kette
+        {t.TITEL}
       </Typography>
       {ladung.art === 'fehler' && (
         <Typography variant="body2" role="status" sx={{ mb: 1 }}>
-          {HINWEIS.ladefehler(ladung.meldung)}
+          {t.LADEFEHLER(ladung.meldung)}
         </Typography>
       )}
       <Box
         component="ol"
-        {...(anzeige ? {} : { role: 'group', 'aria-label': 'Ziel der Kette', onKeyDown: pfeilNavigation })}
+        {...(anzeige ? {} : { role: 'group', 'aria-label': t.ZIEL_DER_KETTE, onKeyDown: pfeilNavigation })}
         sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, listStyle: 'none', m: 0, p: 0 }}
       >
-        {STATIONEN.map(({ schluessel, name, ziel: zielSache }) => {
+        {STATIONEN.map(({ schluessel, station, ziel: zielSache }) => {
           const z = ZUSTAND[zustand(schluessel)]
           const grund = sperre(schluessel, zielSache)
           const inhalt = (
@@ -340,10 +340,10 @@ function Leiste({
               <Box component="span" aria-hidden data-testid="stationssymbol" sx={{ display: 'flex' }}>
                 {z.symbol}
               </Box>
-              <Box component="span" sx={{ fontWeight: 600 }}>{name}</Box>
-              <Box component="span" sx={{ fontSize: 12 }}>{z.text}</Box>
+              <Box component="span" sx={{ fontWeight: 600 }}>{stationsname[station]}</Box>
+              <Box component="span" sx={{ fontSize: 12 }}>{t.ZUSTAND[z.text]}</Box>
               {grund !== null && (
-                <Box component="span" sx={{ fontSize: 12 }}>nicht wählbar</Box>
+                <Box component="span" sx={{ fontSize: 12 }}>{t.NICHT_WAEHLBAR}</Box>
               )}
             </>
           )
@@ -415,20 +415,21 @@ function PrueferSchalter({
   sperre: (p: PrueferSache) => string | null
   onWahl: (p: PrueferSache) => void
 }>) {
+  const t = useT().NACHT_KETTE
   return (
     <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
       <Typography variant="body2" color="text.secondary">
-        Planprüfung:
+        {t.PLANPRUEFUNG_ANGABE}
       </Typography>
       {anzeige ? (
         <Typography variant="body2">
-          {prueferGesetzt === undefined ? 'Vorgabe des Projekts' : prueferText(prueferGesetzt)}
+          {prueferGesetzt === undefined ? t.VORGABE : t.PRUEFER(PRUEFER_ZAHL[prueferGesetzt])}
         </Typography>
       ) : (
         <>
           <Box
             role="group"
-            aria-label="Planprüfung"
+            aria-label={t.PLANPRUEFUNG}
             onKeyDown={pfeilNavigation}
             sx={{ display: 'flex', gap: 1 }}
           >
@@ -445,7 +446,7 @@ function PrueferSchalter({
                     }}
                     sx={knopfSx(gewaehlt, grund !== null)}
                   >
-                    {prueferText(p)}
+                    {t.PRUEFER(PRUEFER_ZAHL[p])}
                   </ButtonBase>
                 </Tooltip>
               )
@@ -453,12 +454,12 @@ function PrueferSchalter({
           </Box>
           {prueferGesetzt === undefined && !planReviewDa && (
             <Typography variant="body2" color="text.secondary">
-              ohne Wahl gilt die Vorgabe des Projekts
+              {t.OHNE_WAHL}
             </Typography>
           )}
           {planReviewDa && (
             <Typography variant="body2" color="text.secondary">
-              {HINWEIS.planReviewDa}
+              {t.PLAN_REVIEW_DA(PLAN_REVIEW)}
             </Typography>
           )}
         </>
@@ -468,7 +469,7 @@ function PrueferSchalter({
 }
 
 /** Lädt den Kettenstand einer Karte einmal; eine Antwort nach dem Schließen verfällt. */
-function useKettenstand(api: Pick<NightRunsApi, 'kettenstand'>, cardId: number): Ladung {
+function useKettenstand(api: Pick<NightRunsApi, 'kettenstand'>, cardId: number, fallback: string): Ladung {
   const [ladung, setLadung] = useState<Ladung>({ art: 'laden' })
   useEffect(() => {
     let aktiv = true
@@ -478,13 +479,13 @@ function useKettenstand(api: Pick<NightRunsApi, 'kettenstand'>, cardId: number):
         if (aktiv) setLadung({ art: 'geladen', stand })
       },
       (error: unknown) => {
-        if (aktiv) setLadung({ art: 'fehler', meldung: apiErrorMessage(error, 'unbekannter Fehler') })
+        if (aktiv) setLadung({ art: 'fehler', meldung: apiErrorMessage(error, fallback) })
       },
     )
     return () => {
       aktiv = false
     }
-  }, [api, cardId])
+  }, [api, cardId, fallback])
   return ladung
 }
 
@@ -495,17 +496,19 @@ function useKettenstand(api: Pick<NightRunsApi, 'kettenstand'>, cardId: number):
  * und dem Wort „Ziel“ markiert.
  */
 function LaufAnsicht({ stand, istPlan }: Readonly<{ stand: KettenStand; istPlan: boolean }>) {
+  const t = useT().NACHT_KETTE
+  const { sprache } = useSprache()
   return (
     <Box data-testid="ketten-stufenleiste">
       <Typography variant="subtitle2" gutterBottom>
-        Nacht-Kette
+        {t.TITEL}
       </Typography>
       <Box
         component="ol"
-        aria-label="Stand der Kette"
+        aria-label={t.STAND_DER_KETTE}
         sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, listStyle: 'none', m: 0, p: 0 }}
       >
-        {kettenAnzeige(stand).map((a) => (
+        {kettenAnzeige(stand, sprache).map((a) => (
           <Box
             component="li"
             key={a.station}
@@ -523,7 +526,7 @@ function LaufAnsicht({ stand, istPlan }: Readonly<{ stand: KettenStand; istPlan:
                 <Box component="span" sx={{ fontSize: 12 }}>{a.grund}</Box>
               )}
               {a.ziel && (
-                <Box component="span" sx={{ fontSize: 12, fontWeight: 600 }}>Ziel</Box>
+                <Box component="span" sx={{ fontSize: 12, fontWeight: 600 }}>{t.ZUSTAND.ZIEL}</Box>
               )}
             </Box>
           </Box>
@@ -532,15 +535,15 @@ function LaufAnsicht({ stand, istPlan }: Readonly<{ stand: KettenStand; istPlan:
       {!istPlan && (
         <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            Planprüfung:
+            {t.PLANPRUEFUNG_ANGABE}
           </Typography>
           <Typography variant="body2">
-            {stand.pruefer === null ? 'Vorgabe des Projekts' : `${stand.pruefer} Prüfer`}
+            {stand.pruefer === null ? t.VORGABE : t.PRUEFER(stand.pruefer)}
           </Typography>
         </Box>
       )}
       <Typography variant="body2" sx={{ mt: 1 }}>
-        {HINWEIS.uebernommen}
+        {t.UEBERNOMMEN}
       </Typography>
     </Box>
   )
@@ -568,6 +571,8 @@ function StartBereich({
   onStart: () => void
   onRuecknahme: () => void
 }>) {
+  const alleT = useT()
+  const t = alleT.NACHT_KETTE
   const [fragt, setFragt] = useState(false)
   const gruendeId = useId()
   const dialogTitelId = useId()
@@ -582,15 +587,15 @@ function StartBereich({
     <>
       {uebernommen && (
         <Typography variant="body2" sx={{ mt: 1 }}>
-          {HINWEIS.uebernommen}
+          {t.UEBERNOMMEN}
         </Typography>
       )}
       {gestartet && (
         <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Typography variant="body2">{HINWEIS.wartet}</Typography>
+          <Typography variant="body2">{t.WARTET}</Typography>
           {!disabled && (
             <Button variant="outlined" size="small" onClick={onRuecknahme}>
-              Start zurücknehmen
+              {t.START_ZURUECKNEHMEN}
             </Button>
           )}
         </Box>
@@ -599,7 +604,7 @@ function StartBereich({
         <Box sx={{ mt: 1 }}>
           {goNoetig && (
             <Typography variant="body2" gutterBottom>
-              {HINWEIS.go}
+              {t.GO}
             </Typography>
           )}
           <Button
@@ -614,7 +619,7 @@ function StartBereich({
             }}
             sx={gesperrt ? { color: TEXT_SCHWACH, cursor: 'not-allowed' } : undefined}
           >
-            Kette starten
+            {t.STARTEN}
           </Button>
           {gesperrt && (
             <Box component="ul" id={gruendeId} sx={{ m: 0, mt: 0.5, pl: 2.5 }}>
@@ -634,20 +639,20 @@ function StartBereich({
             aria-describedby={dialogTextId}
           >
             <DialogTitle id={dialogTitelId} sx={dialogTitleSx}>
-              Kette starten?
+              {t.STARTEN_FRAGE}
             </DialogTitle>
             <DialogContent>
               <DialogContentText id={dialogTextId} sx={{ mt: 2 }}>
-                {HINWEIS.bestaetigung}
+                {t.BESTAETIGUNG}
               </DialogContentText>
             </DialogContent>
             <DialogActions>
               {/* Der Fokus liegt zuerst auf „Abbrechen“: Ein Enter ohne Lesen gibt kein GO (E7). */}
               <Button onClick={() => setFragt(false)} autoFocus>
-                Abbrechen
+                {alleT.ALLGEMEIN.ABBRECHEN}
               </Button>
               <Button variant="contained" onClick={starte}>
-                Kette starten
+                {t.STARTEN}
               </Button>
             </DialogActions>
           </Dialog>

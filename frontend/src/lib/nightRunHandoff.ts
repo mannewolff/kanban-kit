@@ -1,4 +1,6 @@
 import type { Verdict } from '../api/nightRuns'
+import { de } from '../i18n/de'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { formatDuration } from './formatDuration'
 import type { NightRunErrorClass, NightRunState, NightRunStuck } from './nightRunLog'
 
@@ -18,6 +20,11 @@ import type { NightRunErrorClass, NightRunState, NightRunStuck } from './nightRu
  * das Arbeitspaket entgegen, die Funktion muss die Texte also selbst kennen. Zwei Quellen fuer
  * dieselbe Beschriftung liefen auseinander, und dann sagte der Uebernahmetext etwas anderes als die
  * Anzeige daneben. Die Seite importiert sie von hier.
+ *
+ * <p>Seit Issue #1658 stehen die Woerter im Woerterbuch (`NACHTLAUF_UEBERGABE`); die Funktionen
+ * nehmen die Sprache als letzten Parameter mit Vorgabe Deutsch, die Tabellen sind die deutschen
+ * Eintraege. Auszug und Rohprotokoll sind Daten und bleiben, wie sie sind (Kriterium 4 der Quelle
+ * #1637).
  */
 
 /**
@@ -53,15 +60,10 @@ export interface NightRunHandoffItem {
 export type NightRunStuckAngaben = { [K in keyof NightRunStuck]?: NightRunStuck[K] | null }
 
 /** Der Platzhalter fuer eine Angabe, die das Kit nicht gemeldet hat (Plan #1547, E14). */
-export const NICHT_GEMELDET = 'nicht gemeldet'
+export const NICHT_GEMELDET = de.NACHTLAUF_UEBERGABE.NICHT_GEMELDET
 
 /** Die Beschriftung je Zustand — Text traegt die Aussage, nicht nur die Farbe. */
-export const NIGHT_RUN_STATE_TEXT: Record<NightRunState, string> = {
-  GREEN: 'Erfolg',
-  YELLOW: 'Erfolg, Prüfung rot',
-  RED: 'gescheitert',
-  GREY: 'nicht bearbeitet',
-}
+export const NIGHT_RUN_STATE_TEXT: Record<NightRunState, string> = de.NACHTLAUF_UEBERGABE.ZUSTAND
 
 /**
  * Die Beschriftung je Fehlerklasse. Der Typ ist `Record<NightRunErrorClass, string>` und **nicht**
@@ -69,17 +71,7 @@ export const NIGHT_RUN_STATE_TEXT: Record<NightRunState, string> = {
  * kaeme dort eine hinzu, braeche hier der Build, statt dass eine Klasse stumm ohne Beschriftung
  * erschiene. Deshalb zaehlt diese Datei die Klassen auch nirgends selbst auf.
  */
-export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = {
-  CHECKS_RED: 'Prüfungen rot',
-  CHECKS_NOT_STARTED: 'Prüfungen nicht gelaufen',
-  DEPENDENCY_UNMET: 'Abhängigkeit offen',
-  UNEXPECTED_STATE: 'Unerwarteter Zustand',
-  HARD_ABORT: 'Harter Abbruch',
-  AWAITING_DECISION: 'Wartet auf Entscheidung',
-  REVIEWER_FAILED: 'Prüf-Session gescheitert',
-  TIME_BUDGET_EXCEEDED: 'Zeitbudget erschöpft',
-  STUCK: 'Festgefahren',
-}
+export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = de.NACHTLAUF_UEBERGABE.FEHLERKLASSE
 
 /**
  * Das Wort je Ausgang eines Laufs (Issue #1096, Kriterien 10 und 11 der fachlichen Quelle #1086).
@@ -112,15 +104,7 @@ export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = {
  * Wort steht neben der braunen LED, weil der Ausgang nicht allein an der Farbe haengen darf (AK 8
  * von #1493).
  */
-export const NIGHT_RUN_VERDICT_TEXT: Record<Verdict, string> = {
-  SUCCEEDED: 'gelungen',
-  FAILED: 'nicht gelungen',
-  WAITING: 'mit Vorbehalt',
-  RUNNING: 'läuft',
-  NO_WORK: 'nichts zu tun',
-  CLOSED: 'von Hand beendet',
-  NOT_STARTED: 'nicht angelaufen',
-}
+export const NIGHT_RUN_VERDICT_TEXT: Record<Verdict, string> = de.NACHTLAUF_UEBERGABE.AUSGANG
 
 /**
  * Wo die Fehlerklasse den Zustand genauer sagt als die Ampel allein (Issue #856).
@@ -137,31 +121,35 @@ export const NIGHT_RUN_VERDICT_TEXT: Record<Verdict, string> = {
  * `deuteKettenAusgang` (`lib/nightRunErgebnisstand.ts`) zu dieser Klasse ueberhaupt vergibt — gelb,
  * wenn bis zum Abbruch ein Dokument entstand, rot ohne.
  */
-export const NIGHT_RUN_STATE_TEXT_BY_ERROR_CLASS: Partial<
-  Record<NightRunErrorClass, Partial<Record<NightRunState, string>>>
-> = {
-  TIME_BUDGET_EXCEEDED: {
-    YELLOW: 'Am Zeitbudget beendet, Ergebnis liegt vor',
-    RED: 'Am Zeitbudget beendet, ohne Ergebnis',
-  },
-  // Ein festgefahrenes Paket ist immer rot (Plan #1547, E14).
-  STUCK: { RED: 'festgefahren' },
+export function nightRunStateTextByErrorClass(
+  sprache: Sprache = 'de',
+): Partial<Record<NightRunErrorClass, Partial<Record<NightRunState, string>>>> {
+  const t = woerterbuch(sprache).NACHTLAUF_UEBERGABE
+  return {
+    TIME_BUDGET_EXCEEDED: {
+      YELLOW: t.ZEITBUDGET_MIT_ERGEBNIS,
+      RED: t.ZEITBUDGET_OHNE_ERGEBNIS,
+    },
+    // Ein festgefahrenes Paket ist immer rot (Plan #1547, E14).
+    STUCK: { RED: t.FESTGEFAHREN },
+  }
 }
 
 /**
  * Der Zustandstext neben der Ampel und im Uebernahmetext — die eine Quelle fuer beide.
  *
- * <p>Zuerst {@link NIGHT_RUN_STATE_TEXT_BY_ERROR_CLASS}, sonst {@link NIGHT_RUN_STATE_TEXT}. Der
+ * <p>Zuerst {@link nightRunStateTextByErrorClass}, sonst {@link NIGHT_RUN_STATE_TEXT}. Der
  * Rueckfall ist wertgleich mit dem frueheren direkten Zugriff: Fuer jede Kombination ausser den
  * beiden neuen aendert sich nichts (AK 9 aus Issue #842).
  */
 export function nightRunZustandsText(
   state: NightRunState,
   errorClass: NightRunErrorClass | undefined,
+  sprache: Sprache = 'de',
 ): string {
   // Stryker disable next-line ConditionalExpression: gleichwertig — die Tabelle liefert zu undefined ebenfalls undefined
-  const jeKlasse = errorClass === undefined ? undefined : NIGHT_RUN_STATE_TEXT_BY_ERROR_CLASS[errorClass]
-  return jeKlasse?.[state] ?? NIGHT_RUN_STATE_TEXT[state]
+  const jeKlasse = errorClass === undefined ? undefined : nightRunStateTextByErrorClass(sprache)[errorClass]
+  return jeKlasse?.[state] ?? woerterbuch(sprache).NACHTLAUF_UEBERGABE.ZUSTAND[state]
 }
 
 /**
@@ -211,24 +199,26 @@ export function geschaetztGespart(
   return Math.max(0, sessionLimitMs - durationMs)
 }
 
-/** Eine Dauer in Millisekunden als Text, ohne Wert {@link NICHT_GEMELDET}. */
-const dauerOderNichtGemeldet = (ms: number | null | undefined): string =>
-  ms == null ? NICHT_GEMELDET : formatDuration(ms / 1000)
+/** Eine Dauer in Millisekunden als Text, ohne Wert {@link NICHT_GEMELDET} in der Sprache. */
+const dauerOderNichtGemeldet = (ms: number | null | undefined, sprache: Sprache): string =>
+  ms == null ? woerterbuch(sprache).NACHTLAUF_UEBERGABE.NICHT_GEMELDET : formatDuration(ms / 1000, sprache)
 
 /**
  * Die Zeilen eines festgefahrenen Pakets im Uebernahmetext (Plan #1547, E14) — jede Angabe steht
  * immer da, eine fehlende als {@link NICHT_GEMELDET}: Gerade dass das Kit etwas nicht gemeldet hat,
  * ist hier eine Aussage (AK 2 und 3 der fachlichen Quelle #1546).
  */
-function festgefahrenZeilen(item: NightRunHandoffItem): string[] {
+function festgefahrenZeilen(item: NightRunHandoffItem, sprache: Sprache): string[] {
   const stuck = item.stuck ?? {}
+  const t = woerterbuch(sprache).NACHTLAUF_UEBERGABE
+  const dauer = (ms: number | null | undefined) => dauerOderNichtGemeldet(ms, sprache)
   return [
-    `Prüfung: ${stuck.check ?? NICHT_GEMELDET}`,
-    `Fehler: ${stuck.error ?? NICHT_GEMELDET}`,
-    `Versuche: ${stuck.attempts ?? NICHT_GEMELDET}`,
-    `Laufzeit bis Abbruch: ${dauerOderNichtGemeldet(item.durationMs)}`,
-    `Zeitgrenze der Sitzung: ${dauerOderNichtGemeldet(stuck.sessionLimitMs)}`,
-    `geschätzte gesparte Zeit: ${dauerOderNichtGemeldet(geschaetztGespart(item.durationMs, stuck.sessionLimitMs))}`,
+    t.PRUEFUNG(stuck.check ?? t.NICHT_GEMELDET),
+    t.FEHLER(stuck.error ?? t.NICHT_GEMELDET),
+    t.VERSUCHE(stuck.attempts == null ? t.NICHT_GEMELDET : String(stuck.attempts)),
+    t.LAUFZEIT(dauer(item.durationMs)),
+    t.ZEITGRENZE(dauer(stuck.sessionLimitMs)),
+    t.GESPART(dauer(geschaetztGespart(item.durationMs, stuck.sessionLimitMs))),
   ]
 }
 
@@ -249,28 +239,26 @@ function festgefahrenZeilen(item: NightRunHandoffItem): string[] {
  * wird er nur hier: Eine zweite Textbaustelle formatierte frueher oder spaeter anders als das,
  * was tatsaechlich kopiert wird.
  */
-export function buildHandoffText(item: NightRunHandoffItem): string | null {
+export function buildHandoffText(item: NightRunHandoffItem, sprache: Sprache = 'de'): string | null {
   if (item.state !== 'YELLOW' && item.state !== 'RED') {
     return null
   }
+  const t = woerterbuch(sprache).NACHTLAUF_UEBERGABE
   const karte = item.title === '' ? `#${item.cardNumber}` : `#${item.cardNumber} ${item.title}`
-  const zeilen = [
-    `Befund des Runs zu Karte ${karte}`,
-    `Zustand: ${nightRunZustandsText(item.state, item.errorClass)}`,
-  ]
+  const zeilen = [t.KOPF(karte), t.ZUSTAND_ZEILE(nightRunZustandsText(item.state, item.errorClass, sprache))]
 
   if (item.errorClass !== undefined) {
-    zeilen.push(`Fehlerklasse: ${NIGHT_RUN_ERROR_CLASS_TEXT[item.errorClass]}`)
+    zeilen.push(t.FEHLERKLASSE_ZEILE(t.FEHLERKLASSE[item.errorClass]))
   }
   if (item.errorClass === 'STUCK') {
-    zeilen.push(...festgefahrenZeilen(item))
+    zeilen.push(...festgefahrenZeilen(item, sprache))
   }
   // Truthiness statt `!== undefined`: Ein leerer Auszug ergaebe eine Zeile, die nichts sagt.
   if (item.excerpt) {
-    zeilen.push(`Auszug: ${item.excerpt}`)
+    zeilen.push(t.AUSZUG(item.excerpt))
   }
   if (item.rawLines !== undefined && item.rawLines.length > 0) {
-    zeilen.push('Rohprotokoll:', ...item.rawLines)
+    zeilen.push(t.ROHPROTOKOLL, ...item.rawLines)
   }
   return zeilen.join('\n')
 }

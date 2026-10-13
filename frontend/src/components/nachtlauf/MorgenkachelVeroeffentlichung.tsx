@@ -5,6 +5,8 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'
 import Box from '@mui/material/Box'
 import { useId, type ReactNode } from 'react'
 import type { CardTitleView, ReleasePreparationResult, ReleasePreparationView } from '../../api/nightRuns'
+import { de } from '../../i18n/de'
+import { useSprache, useT } from '../../i18n/SpracheContext'
 import { tagZeit, type Melder } from '../../lib/leitstand'
 import {
   ANZEIGE,
@@ -18,14 +20,17 @@ import {
 import { Led } from '../leitstand/LeitstandBausteine'
 
 /** Der Satz bei Grün (Fachplan #1420): Veröffentlicht wird von Hand, die Kachel hat keinen Knopf dafür. */
-export const VEROEFFENTLICHEN_SATZ = 'Der Stand kann von Hand veröffentlicht werden.'
+export const VEROEFFENTLICHEN_SATZ = de.MORGENKACHEL.VEROEFFENTLICHEN
 
-/** Text, Symbol und Lampe je Ausgang — lesbar ohne Farbe (E6): Symbol und Text stehen neben der Lampe. */
-const ERGEBNIS: Record<ReleasePreparationResult, { text: string; symbol: ReactNode; melder: Melder }> = {
-  GREEN: { text: 'grün', symbol: <CheckCircleOutlineIcon fontSize="inherit" />, melder: 'gruen' },
-  GREEN_PENDING: { text: 'grün, Prüfung offen', symbol: <HourglassEmptyIcon fontSize="inherit" />, melder: 'bernst' },
-  RED: { text: 'rot', symbol: <HighlightOffIcon fontSize="inherit" />, melder: 'zinnob' },
-  NOT_PREPARED: { text: 'nicht vorbereitet', symbol: <RemoveCircleOutlineIcon fontSize="inherit" />, melder: 'grau' },
+/**
+ * Symbol und Lampe je Ausgang — lesbar ohne Farbe (E6): Symbol und Text stehen neben der Lampe. Der
+ * Text kommt aus dem Wörterbuch (`MORGENKACHEL.ERGEBNIS`).
+ */
+const ERGEBNIS: Record<ReleasePreparationResult, { symbol: ReactNode; melder: Melder }> = {
+  GREEN: { symbol: <CheckCircleOutlineIcon fontSize="inherit" />, melder: 'gruen' },
+  GREEN_PENDING: { symbol: <HourglassEmptyIcon fontSize="inherit" />, melder: 'bernst' },
+  RED: { symbol: <HighlightOffIcon fontSize="inherit" />, melder: 'zinnob' },
+  NOT_PREPARED: { symbol: <RemoveCircleOutlineIcon fontSize="inherit" />, melder: 'grau' },
 }
 
 /**
@@ -38,6 +43,8 @@ const ERGEBNIS: Record<ReleasePreparationResult, { text: string; symbol: ReactNo
  */
 export function MorgenkachelVeroeffentlichung({ meldung }: Readonly<{ meldung: ReleasePreparationView }>) {
   const ueberschriftId = useId()
+  const t = useT().MORGENKACHEL
+  const { sprache } = useSprache()
   const ergebnis = ERGEBNIS[meldung.result]
 
   return (
@@ -49,7 +56,7 @@ export function MorgenkachelVeroeffentlichung({ meldung }: Readonly<{ meldung: R
     >
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 1.5, rowGap: 0.5 }}>
         <Box component="h4" id={ueberschriftId} sx={{ ...ANZEIGE, m: 0, fontSize: 14, fontWeight: 600 }}>
-          Veröffentlichung vorbereitet
+          {t.TITEL}
         </Box>
         {meldung.version !== null && (
           <Box component="span" data-testid="morgenkachel-version" sx={{ ...ZAHL, fontSize: 12, fontWeight: 600 }}>
@@ -57,7 +64,7 @@ export function MorgenkachelVeroeffentlichung({ meldung }: Readonly<{ meldung: R
           </Box>
         )}
         <Box component="span" data-testid="morgenkachel-gemeldet" sx={{ ...ZAHL, fontSize: 11, color: TEXT_SCHWACH }}>
-          {`gemeldet um ${tagZeit(meldung.receivedAt)}`}
+          {t.GEMELDET(tagZeit(meldung.receivedAt, sprache))}
         </Box>
       </Box>
 
@@ -71,12 +78,12 @@ export function MorgenkachelVeroeffentlichung({ meldung }: Readonly<{ meldung: R
         >
           {ergebnis.symbol}
         </Box>
-        <span>{ergebnis.text}</span>
+        <span>{t.ERGEBNIS[meldung.result]}</span>
       </Box>
 
       {meldung.commitHash !== null && (
         <Box data-testid="morgenkachel-stand" sx={{ fontSize: 13 }}>
-          Stand:{' '}
+          {t.STAND}{' '}
           <Box component="span" sx={ZAHL}>
             {meldung.commitHash}
           </Box>
@@ -85,16 +92,16 @@ export function MorgenkachelVeroeffentlichung({ meldung }: Readonly<{ meldung: R
 
       {meldung.result === 'GREEN' && (
         <Box component="p" sx={{ m: 0, fontSize: 13 }}>
-          {VEROEFFENTLICHEN_SATZ}
+          {t.VEROEFFENTLICHEN}
         </Box>
       )}
       {meldung.result === 'NOT_PREPARED' && (
         <Box component="p" sx={{ m: 0, fontSize: 13, color: TEXT_MATT }}>
-          In diesem Lauf wurde keine Veröffentlichung vorbereitet.
+          {t.NICHT_VORBEREITET}
         </Box>
       )}
       {meldung.result === 'GREEN_PENDING' && meldung.pending.length > 0 && (
-        <Liste titel="Offene Prüfungen">
+        <Liste titel={t.OFFENE_PRUEFUNGEN}>
           {meldung.pending.map((eintrag, position) => (
             // Zwei offene Prüfungen dürfen gleich lauten; die Liste wird nicht umsortiert.
             <Box component="li" key={position /* NOSONAR */} sx={{ ...ZAHL, fontSize: 12.5 }}>
@@ -105,14 +112,14 @@ export function MorgenkachelVeroeffentlichung({ meldung }: Readonly<{ meldung: R
       )}
       {meldung.result === 'RED' && meldung.redCheck !== null && (
         <Box data-testid="morgenkachel-rotpruefung" sx={{ fontSize: 13 }}>
-          Fehlgeschlagene Prüfung:{' '}
+          {t.ROTE_PRUEFUNG}{' '}
           <Box component="span" sx={ZAHL}>
             {meldung.redCheck}
           </Box>
         </Box>
       )}
       {meldung.result === 'RED' && meldung.redCards.length > 0 && (
-        <Liste titel="Betroffene Karten">
+        <Liste titel={t.BETROFFENE_KARTEN}>
           {meldung.redCards.map((karte, position) => (
             <Karte key={`${karte.number}-${position}`} karte={karte} />
           ))}
@@ -120,14 +127,14 @@ export function MorgenkachelVeroeffentlichung({ meldung }: Readonly<{ meldung: R
       )}
 
       {meldung.cards.length > 0 ? (
-        <Liste titel="Enthaltene Arbeitspakete">
+        <Liste titel={t.ENTHALTENE_PAKETE}>
           {meldung.cards.map((karte, position) => (
             <Karte key={`${karte.number}-${position}`} karte={karte} />
           ))}
         </Liste>
       ) : (
         <Box data-testid="morgenkachel-keine-pakete" sx={{ fontSize: 13, color: TEXT_MATT }}>
-          Enthaltene Arbeitspakete: keine
+          {t.KEINE_PAKETE}
         </Box>
       )}
     </Box>

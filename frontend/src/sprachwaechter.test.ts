@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1658 = 'Sprache: Nachtlauf-Bausteine auf Englisch'
 const P1659 = 'Sprache: Nachtlauf-Seite auf Englisch'
 const P1660 = 'Sprache: Administration, Admin-Bereich und API-Übersicht auf Englisch'
 const P1661 = 'Sprache: Ausnahmeliste des Wächters leeren und Abnahme'
@@ -55,31 +54,21 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/pages/LeitstandPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1657 — CSS-Werte (Haarlinien, Farbmischung, Übergang) des Plattform-Leitstands
   { file: 'src/pages/PlattformLeitstandPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  // #1658
-  { file: 'src/components/nachtlauf/HeuteNachtUebersicht.tsx', rule: 'jsx', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/HeuteNachtUebersicht.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/KartenAnlaeufe.tsx', rule: 'jsx', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/KartenAnlaeufe.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/KettenStufenleiste.tsx', rule: 'jsx', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/KettenStufenleiste.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/MorgenkachelVeroeffentlichung.tsx', rule: 'jsx', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/MorgenkachelVeroeffentlichung.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufAnteilsbalken.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufBefund.tsx', rule: 'jsx', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufBefund.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufFortschritt.tsx', rule: 'jsx', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufFortschritt.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufFuss.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufKartenchips.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufLaufInstrumente.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufLaufPlatte.tsx', rule: 'jsx', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufLaufPlatte.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufStufenband.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufVorgangszeile.tsx', rule: 'jsx', resolvedIn: P1658 },
-  { file: 'src/components/nachtlauf/NachtlaufVorgangszeile.tsx', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/lib/nachtlaufFormat.ts', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/lib/nightRunErgebnisstand.ts', rule: 'literal', resolvedIn: P1658 },
-  { file: 'src/lib/nightRunHandoff.ts', rule: 'literal', resolvedIn: P1658 },
+  // #1658 — CSS-Werte (Rahmen, Fokusrand, Raster, Übergänge, Schraffur) der Nachtlauf-Bausteine
+  { file: 'src/components/nachtlauf/HeuteNachtUebersicht.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/nachtlauf/KettenStufenleiste.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/nachtlauf/NachtlaufAnteilsbalken.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/nachtlauf/NachtlaufBefund.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/nachtlauf/NachtlaufFortschritt.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/nachtlauf/NachtlaufFuss.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/nachtlauf/NachtlaufKartenchips.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/nachtlauf/NachtlaufLaufInstrumente.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/nachtlauf/NachtlaufLaufPlatte.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/nachtlauf/NachtlaufStufenband.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/nachtlauf/NachtlaufVorgangszeile.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  // #1658 — die Auszüge des Ergebnisstands gehen mit dem Lauf an den Server und werden dort
+  // wiedererkannt: Daten wie die Protokollauszüge (Kriterium 4 der Quelle #1637), kein Anzeigetext
+  { file: 'src/lib/nightRunErgebnisstand.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1659
   { file: 'src/pages/NightRunPage.tsx', rule: 'jsx', resolvedIn: P1659 },
   { file: 'src/pages/NightRunPage.tsx', rule: 'literal', resolvedIn: P1659 },

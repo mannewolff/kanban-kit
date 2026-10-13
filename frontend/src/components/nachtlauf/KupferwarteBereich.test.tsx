@@ -2,6 +2,7 @@ import { ThemeProvider, useTheme } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { NACHTLAUF_WURZEL_SX, nachtlaufTheme } from '../../nachtlaufDesign'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { theme } from '../../theme'
 import { KupferwarteBereich } from './KupferwarteBereich'
 
@@ -60,5 +61,18 @@ describe('KupferwarteBereich', () => {
     )
 
     expect(screen.getByTestId('kupferwarte-bereich')).toContainElement(screen.getByTestId('inhalt'))
+  })
+})
+
+describe('KupferwarteBereich auf Englisch (Issue #1658)', () => {
+  it('führt keinen eigenen Text und gibt den Inhalt auf Englisch unverändert wieder', () => {
+    renderMitSprache(
+      <KupferwarteBereich>
+        <span>Night run</span>
+      </KupferwarteBereich>,
+      'en',
+    )
+
+    expect(screen.getByTestId('kupferwarte-bereich')).toHaveTextContent(/^Night run$/)
   })
 })

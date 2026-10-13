@@ -2,6 +2,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { MELDER, theme } from '../../theme'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { NachtlaufFuss, type Fussangabe } from './NachtlaufFuss'
 
 /**
@@ -61,5 +62,20 @@ describe('NachtlaufFuss', () => {
     const wert = screen.getByText('nicht angegeben')
     expect(getComputedStyle(wert).color).not.toBe(MELDER.bernst)
     expect(getComputedStyle(wert).color).toContain('text-secondary')
+  })
+})
+
+describe('NachtlaufFuss auf Englisch (Issue #1658)', () => {
+  it('zeigt die Angaben der Seite auf Englisch als Paare', () => {
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <NachtlaufFuss angaben={[{ label: 'Cost budget per chain', wert: '$50.00' }]} testId="uebersicht-fuss" />
+      </ThemeProvider>,
+      'en',
+    )
+
+    const fuss = within(screen.getByTestId('uebersicht-fuss'))
+    expect(fuss.getByText('Cost budget per chain').tagName).toBe('DT')
+    expect(fuss.getByText('$50.00').tagName).toBe('DD')
   })
 })

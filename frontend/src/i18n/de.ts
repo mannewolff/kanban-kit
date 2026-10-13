@@ -978,6 +978,223 @@ export const de = {
     LOESCHEN_ARIA: (projekt: string, lauf: number) => `Störung von ${projekt}, Run #${lauf} löschen`,
     STOERUNG_LOESCHEN: 'Störung löschen',
   },
+
+  /** Formatierer der Nachtlauf-Anzeigen, `lib/nachtlaufFormat.ts` (Issue #1658). */
+  NACHTLAUF_FORMAT: {
+    NICHT_ANGEGEBEN: 'nicht angegeben',
+    NICHT_GEMESSEN: 'nicht gemessen',
+    TOKEN: (menge: string) => `${menge} Token`,
+  },
+
+  /**
+   * Zustände, Fehlerklassen, Ausgänge und Übernahmetext eines Laufs, `lib/nightRunHandoff.ts`
+   * (Issue #1658). Auszug und Rohprotokoll im Übernahmetext sind Daten und bleiben, wie sie sind.
+   */
+  NACHTLAUF_UEBERGABE: {
+    NICHT_GEMELDET: 'nicht gemeldet',
+    ZUSTAND: {
+      GREEN: 'Erfolg',
+      YELLOW: 'Erfolg, Prüfung rot',
+      RED: 'gescheitert',
+      GREY: 'nicht bearbeitet',
+    },
+    FEHLERKLASSE: {
+      CHECKS_RED: 'Prüfungen rot',
+      CHECKS_NOT_STARTED: 'Prüfungen nicht gelaufen',
+      DEPENDENCY_UNMET: 'Abhängigkeit offen',
+      UNEXPECTED_STATE: 'Unerwarteter Zustand',
+      HARD_ABORT: 'Harter Abbruch',
+      AWAITING_DECISION: 'Wartet auf Entscheidung',
+      REVIEWER_FAILED: 'Prüf-Session gescheitert',
+      TIME_BUDGET_EXCEEDED: 'Zeitbudget erschöpft',
+      STUCK: 'Festgefahren',
+    },
+    AUSGANG: {
+      SUCCEEDED: 'gelungen',
+      FAILED: 'nicht gelungen',
+      WAITING: 'mit Vorbehalt',
+      RUNNING: 'läuft',
+      NO_WORK: 'nichts zu tun',
+      CLOSED: 'von Hand beendet',
+      NOT_STARTED: 'nicht angelaufen',
+    },
+    ZEITBUDGET_MIT_ERGEBNIS: 'Am Zeitbudget beendet, Ergebnis liegt vor',
+    ZEITBUDGET_OHNE_ERGEBNIS: 'Am Zeitbudget beendet, ohne Ergebnis',
+    FESTGEFAHREN: 'festgefahren',
+    KOPF: (karte: string) => `Befund des Runs zu Karte ${karte}`,
+    ZUSTAND_ZEILE: (wert: string) => `Zustand: ${wert}`,
+    FEHLERKLASSE_ZEILE: (wert: string) => `Fehlerklasse: ${wert}`,
+    PRUEFUNG: (wert: string) => `Prüfung: ${wert}`,
+    FEHLER: (wert: string) => `Fehler: ${wert}`,
+    VERSUCHE: (wert: string) => `Versuche: ${wert}`,
+    LAUFZEIT: (wert: string) => `Laufzeit bis Abbruch: ${wert}`,
+    ZEITGRENZE: (wert: string) => `Zeitgrenze der Sitzung: ${wert}`,
+    GESPART: (wert: string) => `geschätzte gesparte Zeit: ${wert}`,
+    AUSZUG: (wert: string) => `Auszug: ${wert}`,
+    ROHPROTOKOLL: 'Rohprotokoll:',
+  },
+
+  /** Stufenleiste der Nacht-Kette an der Karte, `KettenStufenleiste` (Issue #1658). */
+  NACHT_KETTE: {
+    TITEL: 'Nacht-Kette',
+    KIT_NAMEN_LADEN: 'Kit-Namen werden geladen',
+    ZUSTAND: {
+      ERBRACHT: 'vor dem Lauf erbracht',
+      ZIEL: 'Ziel',
+      VORGESEHEN: 'vorgesehen',
+      NICHT_VORGESEHEN: 'nicht vorgesehen',
+    },
+    LABEL_FEHLT: (name: string) =>
+      `Am Board fehlt das Label „${name}“. Die Leiste legt es nicht an — ein Mensch legt es in den Board-Labels an.`,
+    DURCHZIEHEN: (name: string) =>
+      `Die Karte trägt ${name} und läuft damit mindestens bis zur Umsetzung; ein kürzeres Ziel bliebe wirkungslos.`,
+    PLAN_KARTE: 'Die Karte ist schon ein Plan: Plan und Prüfung sind vor dem Lauf erbracht.',
+    FACHLICH_OHNE_REVIEW: (name: string) => `Die fachliche Prüfung ist nicht abgeschlossen: Die Karte trägt kein ${name}.`,
+    PLAN_OHNE_REVIEW: (zeile: string) => `Die Planprüfung ist nicht abgeschlossen: Im Plan fehlt die Zeile „${zeile}“.`,
+    OFFENE_FRAGE: (name: string) => `An der Karte wartet eine offene Frage auf einen Menschen (${name}).`,
+    GO: 'Mit diesem Ziel gibst du das GO für alle Arbeitspakete dieser Karte.',
+    BESTAETIGUNG: 'Damit gibst du das GO für alle Arbeitspakete dieser Karte. Kette starten?',
+    WARTET: 'Kette gestartet — sie wartet auf die Übernahme durch einen Runner.',
+    UEBERNOMMEN: 'Ein Runner hat die Kette übernommen — die Leiste ist nur noch Anzeige.',
+    PLAN_REVIEW_DA: (zeile: string) =>
+      `Der Plan dieser Anforderung trägt schon „${zeile}“ — die Prüferzahl lässt sich nicht mehr wählen.`,
+    LADEFEHLER: (meldung: string) =>
+      `Der Stand der Kette ließ sich nicht laden: ${meldung}. Die Leiste zeigt den Stand vor dem Lauf.`,
+    KIT_NAMEN_FEHLEN: 'Kit-Namen nicht ladbar',
+    ZIEL_DER_KETTE: 'Ziel der Kette',
+    NICHT_WAEHLBAR: 'nicht wählbar',
+    PLANPRUEFUNG: 'Planprüfung',
+    PLANPRUEFUNG_ANGABE: 'Planprüfung:',
+    VORGABE: 'Vorgabe des Projekts',
+    OHNE_WAHL: 'ohne Wahl gilt die Vorgabe des Projekts',
+    PRUEFER: (anzahl: number) => `${anzahl} Prüfer`,
+    STAND_DER_KETTE: 'Stand der Kette',
+    START_ZURUECKNEHMEN: 'Start zurücknehmen',
+    STARTEN: 'Kette starten',
+    STARTEN_FRAGE: 'Kette starten?',
+  },
+
+  /** Übersicht „Heute Nacht“ auf der Runner-Seite, `HeuteNachtUebersicht` (Issue #1658). */
+  HEUTE_NACHT: {
+    LEER: 'Für die nächste Nacht ist keine Karte freigegeben.',
+    TITEL: 'Heute Nacht',
+    LADEFEHLER: (meldung: string) => `Die Übersicht ließ sich nicht laden: ${meldung}`,
+    BOARD: (name: string) => `Board: ${name}`,
+    ZIEL: (station: string) => `Ziel: ${station}`,
+    PRUEFER: (anzahl: number) => `Planprüfung: ${anzahl} Prüfer`,
+    STUFENSTAND: (nummer: number) => `Stufenstand von #${nummer}`,
+  },
+
+  /** Anläufe einer Karte im Karten-Detail, `KartenAnlaeufe` (Issue #1658). */
+  KARTEN_ANLAEUFE: {
+    LAUF_ART: {
+      IMPLEMENTATION: 'Umsetzung',
+      REVIEW: 'Prüfung',
+      CHAIN: 'Kette',
+      INTERACTIVE: 'Interaktive Sitzung',
+    },
+    GATTUNG: {
+      NIGHT: 'Run',
+      INTERACTIVE: 'Interaktive Sitzung',
+    },
+    SUMME_KOSTEN: 'Kosten (Runs)',
+    SUMME_EINGABE: 'Eingabe (Runs)',
+    SUMME_AUSGABE: 'Ausgabe (Runs)',
+    SUMME_ZWISCHENSPEICHER: 'Zwischenspeicher (Runs)',
+    NICHT_GELAUFEN: 'nicht gelaufen',
+    NICHT_GEMESSEN: 'nicht gemessen',
+    GRUNDLAGE: (summe: string, mit: number, alle: number) => `${summe} (aus ${mit} von ${alle} Anläufen)`,
+    TITEL: 'Anläufe dieser Karte',
+    LADEFEHLER: 'Die Anläufe konnten nicht geladen werden.',
+    DAUER: (art: string) => `Dauer ${art}`,
+    WIEDERAUFNAHMEN: (anzahl: number) => `Wiederaufnahmen: ${anzahl}`,
+    DAUER_NICHT_GEMESSEN: 'Dauer nicht gemessen',
+    KOSTEN: (betrag: string) => `Kosten ${betrag}`,
+  },
+
+  /** Morgenkachel „Veröffentlichung vorbereitet“, `MorgenkachelVeroeffentlichung` (Issue #1658). */
+  MORGENKACHEL: {
+    VEROEFFENTLICHEN: 'Der Stand kann von Hand veröffentlicht werden.',
+    ERGEBNIS: {
+      GREEN: 'grün',
+      GREEN_PENDING: 'grün, Prüfung offen',
+      RED: 'rot',
+      NOT_PREPARED: 'nicht vorbereitet',
+    },
+    TITEL: 'Veröffentlichung vorbereitet',
+    GEMELDET: (zeit: string) => `gemeldet um ${zeit}`,
+    STAND: 'Stand:',
+    NICHT_VORBEREITET: 'In diesem Lauf wurde keine Veröffentlichung vorbereitet.',
+    OFFENE_PRUEFUNGEN: 'Offene Prüfungen',
+    ROTE_PRUEFUNG: 'Fehlgeschlagene Prüfung:',
+    BETROFFENE_KARTEN: 'Betroffene Karten',
+    ENTHALTENE_PAKETE: 'Enthaltene Arbeitspakete',
+    KEINE_PAKETE: 'Enthaltene Arbeitspakete: keine',
+  },
+
+  /** Befund eines Abbruchs mit Kopierknopf, `NachtlaufBefund` (Issue #1658). */
+  NACHTLAUF_BEFUND: {
+    ARIA: (nummer: number) => `Übernahmetext zu Karte #${nummer}`,
+    KOPIEREN_ARIA: (nummer: number) => `Übernahmetext zu Karte #${nummer} kopieren`,
+    KOPIEREN: 'Kopieren',
+  },
+
+  /** Fortschritt eines laufenden Laufs, `NachtlaufFortschritt` (Issue #1658). */
+  NACHTLAUF_FORTSCHRITT: {
+    PAKETZUSTAND: {
+      ANGELEGT: 'angelegt',
+      GEZOGEN: 'gezogen',
+      IN_UMSETZUNG: 'in Umsetzung',
+      FERTIG: 'fertig',
+      ZURUECKGESTELLT: 'zurückgestellt',
+    },
+    ZUORDNUNG_UNBEKANNT:
+      'Welche Karten zu diesem Lauf gehören, lässt sich nicht feststellen — der Fortschritt bleibt unbekannt.',
+    UNBEKANNT: 'unbekannt',
+    OHNE_AUSWEIS: 'Dieser Lauf hat sich nicht ausgewiesen (älterer Runner).',
+    WEG_UMSETZUNGSNACHT: 'Weg der Umsetzungsnacht',
+    PAKETE_UMSETZUNGSNACHT: 'Pakete der Umsetzungsnacht',
+    KEIN_PLAN: 'noch kein Plan',
+    WEG_KETTE: (nummer: number) => `Weg der Kette #${nummer}`,
+    PAKETE_KETTE: (nummer: number) => `Pakete der Kette #${nummer}`,
+    KEINE_PAKETE: 'noch keine Pakete',
+    FRAGE: 'Offene Frage an den Menschen an Karte',
+    ART: {
+      ANFORDERUNG: 'Anforderung',
+      PLAN: 'Plan',
+      PAKET: 'Paket',
+      FRAGE: 'Frage',
+    },
+  },
+
+  /** Kartenchips eines Vorgangs, `NachtlaufKartenchips` (Issue #1658). */
+  NACHTLAUF_KARTENCHIPS: {
+    FORT: (nummer: string) => `#${nummer} nicht mehr vorhanden`,
+  },
+
+  /** Instrumente eines Laufs, `NachtlaufLaufInstrumente` (Issue #1658). */
+  NACHTLAUF_INSTRUMENTE: {
+    BETRAG: (wert: string) => `${wert} $`,
+    KOSTEN: 'Kosten',
+    AUFTEILUNG: (planung: string, umsetzung: string) => `Planung ${planung} · Umsetzung ${umsetzung}`,
+    EINGABE: 'Eingabe',
+    AUSGABE: 'Ausgabe',
+    CACHE_QUOTE: 'Cache-Quote',
+    NICHT_BERECHENBAR: 'nicht berechenbar',
+    DAUER: 'Dauer',
+    LAEUFT_SEIT: (wert: string, einheit: string) => `läuft seit ${wert} ${einheit}`,
+    PAKETE: 'Pakete',
+    GRUEN: 'grün',
+    GELB: 'gelb',
+    ROT: 'rot',
+  },
+
+  /** Aufklappbare Platte eines Laufs, `NachtlaufLaufPlatte` (Issue #1658). */
+  NACHTLAUF_PLATTE: {
+    AUFKLAPPEN: (titel: string) => `${titel} aufklappen`,
+    ZUKLAPPEN: (titel: string) => `${titel} zuklappen`,
+    ABBRUCHGRUND: 'Abbruchgrund',
+  },
 } as const
 
 /** Weitet die Literale des deutschen Wörterbuchs zu `string`, rekursiv und durch Funktionen hindurch. */

@@ -2,6 +2,7 @@ import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import { useId, type ReactNode } from 'react'
 import type { ReleasePreparationView } from '../../api/nightRuns'
+import { useT } from '../../i18n/SpracheContext'
 import type { Melder } from '../../lib/leitstand'
 import {
   ANZEIGE,
@@ -101,6 +102,7 @@ export function NachtlaufLaufPlatte({
   children: ReactNode
 }>) {
   const inhaltId = useId()
+  const t = useT().NACHTLAUF_PLATTE
 
   /**
    * Ein Klick in die Kopfzeile schaltet um — außer er beendet gerade eine Textauswahl. Herkunft
@@ -150,7 +152,7 @@ export function NachtlaufLaufPlatte({
         <ButtonBase
           aria-expanded={offen}
           aria-controls={offen ? inhaltId : undefined}
-          aria-label={`${titel} ${offen ? 'zuklappen' : 'aufklappen'}`}
+          aria-label={offen ? t.ZUKLAPPEN(titel) : t.AUFKLAPPEN(titel)}
           // Die Kopfzeile schaltet ebenfalls um — ohne gestoppte Weitergabe schaltete der Pfeil
           // zweimal und damit gar nicht.
           onClick={(ereignis) => {
@@ -243,7 +245,7 @@ export function NachtlaufLaufPlatte({
               `pre-wrap` hält die Zeilen des Runners und bricht die langen davon um. */}
           {abbruchGrund !== undefined && (
             <Box sx={{ px: '16px', pt: '14px' }}>
-              <Box sx={{ ...ETIKETT, mb: '2px' }}>Abbruchgrund</Box>
+              <Box sx={{ ...ETIKETT, mb: '2px' }}>{t.ABBRUCHGRUND}</Box>
               <Box
                 data-testid="nachtlauf-abbruchgrund"
                 sx={{

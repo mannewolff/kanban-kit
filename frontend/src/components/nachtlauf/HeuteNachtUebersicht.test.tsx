@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
 import type { HeuteNachtKarte } from '../../api/nightRuns'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { theme } from '../../theme'
 import { HeuteNachtUebersicht, LEER_SATZ } from './HeuteNachtUebersicht'
 
@@ -210,5 +211,46 @@ describe('HeuteNachtUebersicht', () => {
     aufloesen([karte()])
     await Promise.resolve()
     expect(screen.queryByTestId('heute-nacht-karte-1420')).not.toBeInTheDocument()
+  })
+})
+
+describe('HeuteNachtUebersicht auf Englisch (Issue #1658)', () => {
+  const zeigeEnglisch = (heuteNacht: (projectId: number) => Promise<HeuteNachtKarte[]>) =>
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <HeuteNachtUebersicht projectId={5} api={{ heuteNacht: vi.fn(heuteNacht) }} onKarteOeffnen={vi.fn()} />
+      </ThemeProvider>,
+      'en',
+    )
+
+  it('zeigt Überschrift, Board, Weg, Ziel, Prüferzahl und Stufenstand auf Englisch', async () => {
+    zeigeEnglisch(() => Promise.resolve([karte({ ziel: 'UMSETZUNG', pruefer: 2 })]))
+
+    const erste = await zeile(1420)
+    expect(screen.getByRole('heading', { name: 'Tonight' })).toBeInTheDocument()
+    expect(within(erste).getByText('Board: Entwicklung')).toBeInTheDocument()
+    expect(within(erste).getByText('Plan → Implementation')).toBeInTheDocument()
+    expect(within(erste).getByText('Goal: Implementation')).toBeInTheDocument()
+    expect(within(erste).getByText('Plan review: 2 reviewers')).toBeInTheDocument()
+    expect(within(erste).getByRole('list', { name: 'Stage status of #1420' })).toBeInTheDocument()
+    expect(station(erste, 1420, 'PLAN')).toHaveTextContent('Plan: planned')
+    expect(station(erste, 1420, 'UMSETZUNG')).toHaveTextContent('Implementation: Goal')
+    expect(station(erste, 1420, 'VORBEREITUNG')).toHaveTextContent('Release prepared: not planned')
+  })
+
+  it('nennt an einem Plan Plan und Prüfung auf Englisch als vor dem Lauf erbracht', async () => {
+    zeigeEnglisch(() => Promise.resolve([karte({ start: 'PLAN', pruefer: 1 })]))
+
+    const erste = await zeile(1420)
+    expect(station(erste, 1420, 'REVIEW')).toHaveTextContent('Review: done before the run')
+    expect(within(erste).getByText('Plan review: 1 reviewer')).toBeInTheDocument()
+  })
+
+  it('sagt den leeren Fall und einen Ladefehler auf Englisch', async () => {
+    zeigeEnglisch(() => Promise.resolve([]))
+    expect(await screen.findByText('No card is released for the next night.')).toBeInTheDocument()
+
+    zeigeEnglisch(() => Promise.reject(new Error('')))
+    expect(await screen.findByText('The overview could not be loaded: unknown error')).toBeInTheDocument()
   })
 })

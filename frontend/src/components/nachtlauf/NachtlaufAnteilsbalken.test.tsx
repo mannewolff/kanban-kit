@@ -2,6 +2,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { NACHTLAUF_FARBEN, nachtlaufTheme } from '../../nachtlaufDesign'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { NachtlaufAnteilsbalken } from './NachtlaufAnteilsbalken'
 
 /**
@@ -59,3 +60,25 @@ function alsRgb(hex: string): string {
   const kanal = (position: number) => Number.parseInt(hex.slice(position, position + 2), 16)
   return `rgb(${kanal(1)}, ${kanal(3)}, ${kanal(5)})`
 }
+
+describe('NachtlaufAnteilsbalken auf Englisch (Issue #1658)', () => {
+  it('zeigt Beschriftung und Ansage der Seite auf Englisch unverändert', () => {
+    renderMitSprache(
+      <ThemeProvider theme={nachtlaufTheme}>
+        <NachtlaufAnteilsbalken
+          anteil={15}
+          beschriftung="12 min · 15 % of the shift"
+          ansage="Card #869: Success, 12 min, 15 % of the shift"
+          farbe={NACHTLAUF_FARBEN.gut}
+          testId="anteil-869"
+          fuellungTestId="anteil-869-balken"
+        />
+      </ThemeProvider>,
+      'en',
+    )
+
+    expect(screen.getByRole('img', { name: 'Card #869: Success, 12 min, 15 % of the shift' })).toHaveTextContent(
+      '12 min · 15 % of the shift',
+    )
+  })
+})

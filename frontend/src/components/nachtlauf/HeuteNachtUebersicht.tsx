@@ -12,7 +12,9 @@ import {
   type KettenStation,
   type NightRunsApi,
 } from '../../api/nightRuns'
-import { STATIONSNAME } from '../../lib/laufFortschritt'
+import { de } from '../../i18n/de'
+import { useSprache, useT } from '../../i18n/SpracheContext'
+import { stationsnamen } from '../../lib/laufFortschritt'
 import {
   ANZEIGE,
   KLEIN_RADIUS,
@@ -28,19 +30,22 @@ import {
 } from '../../theme'
 
 /** Der Satz für den leeren Fall (Fachplan #1420: „sagt das ausdrücklich, statt leer zu bleiben“). */
-export const LEER_SATZ = 'Für die nächste Nacht ist keine Karte freigegeben.'
+export const LEER_SATZ = de.HEUTE_NACHT.LEER
 
 /** Die Stationen der Kette in ihrer Reihenfolge, wie die Stufenleiste der Karte sie zeigt. */
 const STATIONEN: readonly KettenStation[] = ['PLAN', 'REVIEW', 'PAKETE', 'ABDECKUNG', 'UMSETZUNG', 'VORBEREITUNG']
 
 type Zustand = 'erbracht' | 'vorgesehen' | 'ziel' | 'nicht-vorgesehen'
 
-/** Zustandstext und Symbol je Zustand — lesbar ohne Farbe (E6), dieselben wie an der Leiste. */
-const ZUSTAND: Record<Zustand, { text: string; symbol: ReactNode }> = {
-  erbracht: { text: 'vor dem Lauf erbracht', symbol: <CheckCircleOutlineIcon fontSize="inherit" /> },
-  vorgesehen: { text: 'vorgesehen', symbol: <RadioButtonUncheckedIcon fontSize="inherit" /> },
-  ziel: { text: 'Ziel', symbol: <FlagIcon fontSize="inherit" /> },
-  'nicht-vorgesehen': { text: 'nicht vorgesehen', symbol: <RemoveCircleOutlineIcon fontSize="inherit" /> },
+/**
+ * Wörterbuchschlüssel und Symbol je Zustand — lesbar ohne Farbe (E6), dieselben wie an der Leiste
+ * (`NACHT_KETTE.ZUSTAND`).
+ */
+const ZUSTAND: Record<Zustand, { text: 'ERBRACHT' | 'VORGESEHEN' | 'ZIEL' | 'NICHT_VORGESEHEN'; symbol: ReactNode }> = {
+  erbracht: { text: 'ERBRACHT', symbol: <CheckCircleOutlineIcon fontSize="inherit" /> },
+  vorgesehen: { text: 'VORGESEHEN', symbol: <RadioButtonUncheckedIcon fontSize="inherit" /> },
+  ziel: { text: 'ZIEL', symbol: <FlagIcon fontSize="inherit" /> },
+  'nicht-vorgesehen': { text: 'NICHT_VORGESEHEN', symbol: <RemoveCircleOutlineIcon fontSize="inherit" /> },
 }
 
 /**
@@ -84,7 +89,9 @@ export function HeuteNachtUebersicht({
   onKarteOeffnen: (nummer: number) => void
   api?: Pick<NightRunsApi, 'heuteNacht'>
 }>) {
-  const ladung = useHeuteNacht(api, projectId)
+  const alleT = useT()
+  const t = alleT.HEUTE_NACHT
+  const ladung = useHeuteNacht(api, projectId, alleT.FEHLER_UNBEKANNT)
   const ueberschriftId = useId()
 
   if (ladung.art === 'laden' || ladung.art === 'verboten') {
@@ -105,16 +112,16 @@ export function HeuteNachtUebersicht({
       }}
     >
       <Box component="h2" id={ueberschriftId} sx={{ ...ANZEIGE, m: 0, mb: 1, fontSize: 15, fontWeight: 600 }}>
-        Heute Nacht
+        {t.TITEL}
       </Box>
       {ladung.art === 'fehler' && (
         <Box component="p" sx={{ m: 0, color: TEXT_MATT }}>
-          Die Übersicht ließ sich nicht laden: {ladung.meldung}
+          {t.LADEFEHLER(ladung.meldung)}
         </Box>
       )}
       {ladung.art === 'geladen' && ladung.karten.length === 0 && (
         <Box component="p" sx={{ m: 0, color: TEXT_MATT }}>
-          {LEER_SATZ}
+          {t.LEER}
         </Box>
       )}
       {ladung.art === 'geladen' && ladung.karten.length > 0 && (
@@ -130,6 +137,11 @@ export function HeuteNachtUebersicht({
 
 /** Eine freigegebene Karte: Kopf mit Verweis, Board, Weg und Ziel, darunter der Stufenstand. */
 function KartenZeile({ karte, onOeffnen }: Readonly<{ karte: HeuteNachtKarte; onOeffnen: () => void }>) {
+  const { sprache } = useSprache()
+  const alleT = useT()
+  const t = alleT.HEUTE_NACHT
+  const zustandT = alleT.NACHT_KETTE.ZUSTAND
+  const name = stationsnamen(sprache)
   const start = karte.start === 'PLAN' ? 'PAKETE' : 'PLAN'
   return (
     <Box
@@ -154,16 +166,16 @@ function KartenZeile({ karte, onOeffnen }: Readonly<{ karte: HeuteNachtKarte; on
           <Box component="span" sx={ZAHL}>{`#${karte.number}`}</Box>
           <Box component="span" sx={{ fontWeight: 600 }}>{karte.title}</Box>
         </ButtonBase>
-        <Box component="span" sx={{ fontSize: 13, color: TEXT_MATT }}>{`Board: ${karte.boardName}`}</Box>
-        <Box component="span" sx={{ fontSize: 13 }}>{`${STATIONSNAME[start]} → ${STATIONSNAME[karte.ziel]}`}</Box>
-        <Box component="span" sx={{ fontSize: 13, fontWeight: 600 }}>{`Ziel: ${STATIONSNAME[karte.ziel]}`}</Box>
+        <Box component="span" sx={{ fontSize: 13, color: TEXT_MATT }}>{t.BOARD(karte.boardName)}</Box>
+        <Box component="span" sx={{ fontSize: 13 }}>{`${name[start]} → ${name[karte.ziel]}`}</Box>
+        <Box component="span" sx={{ fontSize: 13, fontWeight: 600 }}>{t.ZIEL(name[karte.ziel])}</Box>
         {karte.pruefer !== null && (
-          <Box component="span" sx={{ fontSize: 13 }}>{`Planprüfung: ${karte.pruefer} Prüfer`}</Box>
+          <Box component="span" sx={{ fontSize: 13 }}>{t.PRUEFER(karte.pruefer)}</Box>
         )}
       </Box>
       <Box
         component="ol"
-        aria-label={`Stufenstand von #${karte.number}`}
+        aria-label={t.STUFENSTAND(karte.number)}
         sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, listStyle: 'none', m: 0, p: 0 }}
       >
         {STATIONEN.map((station) => {
@@ -189,7 +201,7 @@ function KartenZeile({ karte, onOeffnen }: Readonly<{ karte: HeuteNachtKarte; on
               <Box component="span" aria-hidden data-testid={`heute-nacht-symbol-${z}`} sx={{ display: 'flex', fontSize: 14 }}>
                 {ZUSTAND[z].symbol}
               </Box>
-              <span>{`${STATIONSNAME[station]}: ${ZUSTAND[z].text}`}</span>
+              <span>{`${name[station]}: ${zustandT[ZUSTAND[z].text]}`}</span>
             </Box>
           )
         })}
@@ -199,7 +211,7 @@ function KartenZeile({ karte, onOeffnen }: Readonly<{ karte: HeuteNachtKarte; on
 }
 
 /** Lädt die Übersicht einmal; eine Antwort nach dem Schließen verfällt. */
-function useHeuteNacht(api: Pick<NightRunsApi, 'heuteNacht'>, projectId: number): Ladung {
+function useHeuteNacht(api: Pick<NightRunsApi, 'heuteNacht'>, projectId: number, fallback: string): Ladung {
   const [ladung, setLadung] = useState<Ladung>({ art: 'laden' })
   useEffect(() => {
     let aktiv = true
@@ -212,13 +224,13 @@ function useHeuteNacht(api: Pick<NightRunsApi, 'heuteNacht'>, projectId: number)
         setLadung(
           error instanceof ApiError && error.status === 403
             ? { art: 'verboten' }
-            : { art: 'fehler', meldung: apiErrorMessage(error, 'unbekannter Fehler') },
+            : { art: 'fehler', meldung: apiErrorMessage(error, fallback) },
         )
       },
     )
     return () => {
       aktiv = false
     }
-  }, [api, projectId])
+  }, [api, projectId, fallback])
   return ladung
 }

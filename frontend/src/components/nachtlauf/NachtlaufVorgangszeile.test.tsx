@@ -2,6 +2,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { theme } from '../../theme'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { NachtlaufVorgangszeile } from './NachtlaufVorgangszeile'
 
 /**
@@ -60,5 +61,38 @@ describe('NachtlaufVorgangszeile — Dauer', () => {
     expect(dauer).toHaveTextContent('—')
     expect(dauer.textContent).not.toMatch(/min|h/)
     expect(dauer).toHaveAttribute('aria-label', 'Dauer nicht gemessen')
+  })
+})
+
+describe('NachtlaufVorgangszeile auf Englisch (Issue #1658)', () => {
+  it('nennt eine fehlende Karte, fehlende Kosten und die Dauer auf Englisch', () => {
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <ul>
+          <NachtlaufVorgangszeile
+            nummer={92}
+            titel="Paket 92"
+            wurzel={null}
+            melder="gruen"
+            zustandswort="Success"
+            klasse={null}
+            auszug={null}
+            haeufigkeit={null}
+            vorhaben={null}
+            dauer={null}
+            kosten={null}
+            commit={null}
+            offen={false}
+            onUmschalten={() => {}}
+            onOeffnen={() => {}}
+          />
+        </ul>
+      </ThemeProvider>,
+      'en',
+    )
+
+    expect(screen.getByText('Card #92 not found')).toBeInTheDocument()
+    expect(screen.getByTestId('kosten-92')).toHaveTextContent('—not measured')
+    expect(screen.getByTestId('dauer-92')).toHaveAttribute('aria-label', 'Duration not measured')
   })
 })

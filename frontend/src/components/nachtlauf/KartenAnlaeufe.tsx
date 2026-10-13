@@ -15,8 +15,10 @@ import {
 import { formatDuration } from '../../lib/formatDuration'
 import { kosten, menge } from '../../lib/nachtlaufFormat'
 import { nightRunZustandsText } from '../../lib/nightRunHandoff'
-import { useSprache } from '../../i18n/SpracheContext'
-import type { Sprache } from '../../i18n/woerterbuch'
+import { de } from '../../i18n/de'
+import { formatierer } from '../../i18n/format'
+import { useSprache, useT } from '../../i18n/SpracheContext'
+import { woerterbuch, type Sprache } from '../../i18n/woerterbuch'
 
 /**
  * Die Lauf-Arten, die eingeliefert werden, in fester Reihenfolge. Als `Record` über
@@ -28,13 +30,11 @@ import type { Sprache } from '../../i18n/woerterbuch'
  * Laufliste legt der Abruf der Anläufe keine Gattung fest (Issue #1015) — eine Karte wird nachts
  * und am Tag angefasst, und beides gehört auf ihr Blatt. Ohne Anlauf dieser Art steht die Kachel
  * auf „nicht gelaufen", wie bei jeder anderen nie gelaufenen Art.
+ *
+ * Die Wörter stehen im Wörterbuch (`KARTEN_ANLAEUFE.LAUF_ART`, Issue #1658); die Tabelle hier ist
+ * der deutsche Eintrag.
  */
-export const LAUF_ART_TEXT: Record<NightRunServerMode, string> = {
-  IMPLEMENTATION: 'Umsetzung',
-  REVIEW: 'Prüfung',
-  CHAIN: 'Kette',
-  INTERACTIVE: 'Interaktive Sitzung',
-}
+export const LAUF_ART_TEXT: Record<NightRunServerMode, string> = de.KARTEN_ANLAEUFE.LAUF_ART
 
 const LAUF_ARTEN = Object.keys(LAUF_ART_TEXT) as NightRunServerMode[]
 
@@ -43,10 +43,7 @@ const LAUF_ARTEN = Object.keys(LAUF_ART_TEXT) as NightRunServerMode[]
  * Karte stehen seit Issue #1015 beide Gattungen nebeneinander, und ohne das Wort wäre einer Zeile
  * nicht anzusehen, ob sie aus der Nacht oder aus dem Gespräch stammt.
  */
-const GATTUNG_TEXT: Record<NightRunKind, string> = {
-  NIGHT: 'Run',
-  INTERACTIVE: 'Interaktive Sitzung',
-}
+const gattungText = (kind: NightRunKind, sprache: Sprache): string => woerterbuch(sprache).KARTEN_ANLAEUFE.GATTUNG[kind]
 
 /**
  * Die Gattung eines Anlaufs; ohne Angabe gilt er als Lauf — die Gattung, die es vor der
@@ -66,24 +63,25 @@ function gattung(anlauf: NightRunAnlauf): NightRunKind {
 const SUMMEN: ReadonlyArray<{
   schluessel: keyof NightRunUsageView
   testId: string
-  label: string
-  format: (wert: number | undefined) => string
+  label: 'SUMME_KOSTEN' | 'SUMME_EINGABE' | 'SUMME_AUSGABE' | 'SUMME_ZWISCHENSPEICHER'
+  format: (wert: number | undefined, sprache: Sprache) => string
 }> = [
-  { schluessel: 'costUsd', testId: 'kosten', label: 'Kosten (Runs)', format: kosten },
-  { schluessel: 'inputTokens', testId: 'eingabe', label: 'Eingabe (Runs)', format: menge },
-  { schluessel: 'outputTokens', testId: 'ausgabe', label: 'Ausgabe (Runs)', format: menge },
+  { schluessel: 'costUsd', testId: 'kosten', label: 'SUMME_KOSTEN', format: kosten },
+  { schluessel: 'inputTokens', testId: 'eingabe', label: 'SUMME_EINGABE', format: menge },
+  { schluessel: 'outputTokens', testId: 'ausgabe', label: 'SUMME_AUSGABE', format: menge },
   {
     schluessel: 'cachedInputTokens',
     testId: 'zwischenspeicher',
-    label: 'Zwischenspeicher (Runs)',
+    label: 'SUMME_ZWISCHENSPEICHER',
     format: menge,
   },
 ]
 
-const ZEITPUNKT_FORMAT = new Intl.DateTimeFormat('de-DE', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
+/** Der Startzeitpunkt eines Anlaufs: Datum mittel, Uhrzeit kurz, in der Schreibweise der Sprache. */
+const zeitpunkt = (iso: string, sprache: Sprache): string =>
+  new Intl.DateTimeFormat(formatierer(sprache).gebietsschema, { dateStyle: 'medium', timeStyle: 'short' }).format(
+    new Date(iso),
+  )
 
 type Zustand =
   | { art: 'laden' }
@@ -110,13 +108,14 @@ export function zaehleWiederaufnahmen(anlaeufe: readonly NightRunAnlauf[]): numb
 
 /** Die Dauer einer Lauf-Art über alle ihre Anläufe — oder die ausdrückliche Fehlanzeige. */
 function dauerDerArt(anlaeufe: readonly NightRunAnlauf[], art: NightRunServerMode, sprache: Sprache): string {
+  const t = woerterbuch(sprache).KARTEN_ANLAEUFE
   const derArt = anlaeufe.filter((anlauf) => anlauf.mode === art)
   if (derArt.length === 0) {
-    return 'nicht gelaufen'
+    return t.NICHT_GELAUFEN
   }
   const gemessen = derArt.flatMap((anlauf) => (anlauf.durationMs === null ? [] : [anlauf.durationMs]))
   if (gemessen.length === 0) {
-    return 'nicht gemessen'
+    return t.NICHT_GEMESSEN
   }
   return formatDuration(gemessen.reduce((summe, wert) => summe + wert, 0) / 1000, sprache)
 }
@@ -129,17 +128,18 @@ function dauerDerArt(anlaeufe: readonly NightRunAnlauf[], art: NightRunServerMod
 function summeMitGrundlage(
   anlaeufe: readonly NightRunAnlauf[],
   schluessel: keyof NightRunUsageView,
-  format: (wert: number | undefined) => string,
+  format: (wert: number | undefined, sprache: Sprache) => string,
+  sprache: Sprache,
 ): string {
   const werte = anlaeufe.flatMap((anlauf) => {
     const wert = anlauf.usage?.[schluessel]
     return wert === null || wert === undefined ? [] : [wert]
   })
   if (werte.length === 0) {
-    return format(undefined)
+    return format(undefined, sprache)
   }
   const summe = werte.reduce((gesamt, wert) => gesamt + wert, 0)
-  return `${format(summe)} (aus ${werte.length} von ${anlaeufe.length} Anläufen)`
+  return woerterbuch(sprache).KARTEN_ANLAEUFE.GRUNDLAGE(format(summe, sprache), werte.length, anlaeufe.length)
 }
 
 /**
@@ -161,6 +161,7 @@ export function KartenAnlaeufe({
   cardNumber: number
   api?: Pick<NightRunsApi, 'anlaeufeDerKarte'>
 }>) {
+  const t = useT().KARTEN_ANLAEUFE
   const [zustand, setZustand] = useState<Zustand>({ art: 'laden' })
 
   useEffect(() => {
@@ -195,10 +196,10 @@ export function KartenAnlaeufe({
       <Box data-testid="karten-anlaeufe">
         {/* Nicht mehr „Nachtlauf-Anläufe": Seit Issue #1018 steht hier auch die interaktive Sitzung. */}
         <Typography variant="subtitle2" gutterBottom>
-          Anläufe dieser Karte
+          {t.TITEL}
         </Typography>
         {zustand.art === 'fehler' ? (
-          <Typography color="text.secondary">Die Anläufe konnten nicht geladen werden.</Typography>
+          <Typography color="text.secondary">{t.LADEFEHLER}</Typography>
         ) : (
           <AnlaufInhalt anlaeufe={zustand.anlaeufe} />
         )}
@@ -209,6 +210,7 @@ export function KartenAnlaeufe({
 
 function AnlaufInhalt({ anlaeufe }: Readonly<{ anlaeufe: NightRunAnlauf[] }>) {
   const { sprache } = useSprache()
+  const t = useT().KARTEN_ANLAEUFE
   const juengsterZuerst = [...anlaeufe].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
   const nachtlaeufe = anlaeufe.filter((anlauf) => gattung(anlauf) === 'NIGHT')
   return (
@@ -218,7 +220,7 @@ function AnlaufInhalt({ anlaeufe }: Readonly<{ anlaeufe: NightRunAnlauf[] }>) {
           <Angabe
             key={art}
             testId={`anlaeufe-dauer-${art}`}
-            label={`Dauer ${LAUF_ART_TEXT[art]}`}
+            label={t.DAUER(t.LAUF_ART[art])}
             wert={dauerDerArt(anlaeufe, art, sprache)}
           />
         ))}
@@ -226,13 +228,13 @@ function AnlaufInhalt({ anlaeufe }: Readonly<{ anlaeufe: NightRunAnlauf[] }>) {
           <Angabe
             key={schluessel}
             testId={`anlaeufe-summe-${testId}`}
-            label={label}
-            wert={summeMitGrundlage(nachtlaeufe, schluessel, format)}
+            label={t[label]}
+            wert={summeMitGrundlage(nachtlaeufe, schluessel, format, sprache)}
           />
         ))}
       </Box>
       <Typography variant="body2" data-testid="anlaeufe-wiederaufnahmen">
-        Wiederaufnahmen: {zaehleWiederaufnahmen(anlaeufe)}
+        {t.WIEDERAUFNAHMEN(zaehleWiederaufnahmen(anlaeufe))}
       </Typography>
       <Box component="ul" data-testid="anlaeufe-liste" sx={{ m: 0, pl: 2.5 }}>
         {juengsterZuerst.map((anlauf, index) => (
@@ -244,11 +246,11 @@ function AnlaufInhalt({ anlaeufe }: Readonly<{ anlaeufe: NightRunAnlauf[] }>) {
             key={`${anlauf.startedAt}-${index}`}
           >
             {[
-              ZEITPUNKT_FORMAT.format(new Date(anlauf.startedAt)),
-              GATTUNG_TEXT[gattung(anlauf)],
-              nightRunZustandsText(anlauf.state, anlauf.errorClass ?? undefined),
-              anlauf.durationMs === null ? 'Dauer nicht gemessen' : formatDuration(anlauf.durationMs / 1000, sprache),
-              `Kosten ${kosten(anlauf.usage?.costUsd ?? undefined)}`,
+              zeitpunkt(anlauf.startedAt, sprache),
+              gattungText(gattung(anlauf), sprache),
+              nightRunZustandsText(anlauf.state, anlauf.errorClass ?? undefined, sprache),
+              anlauf.durationMs === null ? t.DAUER_NICHT_GEMESSEN : formatDuration(anlauf.durationMs / 1000, sprache),
+              t.KOSTEN(kosten(anlauf.usage?.costUsd ?? undefined, sprache)),
             ].join(' · ')}
           </Typography>
         ))}
