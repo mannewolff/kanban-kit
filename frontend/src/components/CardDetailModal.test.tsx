@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
 import type { Board } from '../api/boards'
 import { ApiError } from '../api/client'
@@ -16,6 +16,7 @@ import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel } from '../test/cssRegel'
 import { KIT_NAMEN } from '../test/kitNamen'
+import { de } from '../i18n/de'
 import { abnahmeKommentar, szenarienAus } from '../lib/abnahmeSzenarien'
 import { theme } from '../theme'
 import { renderMitSprache } from '../i18n/renderMitSprache'
@@ -601,6 +602,68 @@ describe('CardDetailModal', () => {
 
     await waitFor(() => expect(apis.cardsApi.removeLabel).toHaveBeenCalledWith(100, 6))
     expect(apis.cardsApi.addLabel).not.toHaveBeenCalled()
+  })
+
+  describe('Erklärung der Systemlabels (#1672)', () => {
+    const systemLabels = [
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false },
+      { id: 8, boardId: 1, name: 'kit:clarify', color: '#6a1b9a', countOnEpicTile: false },
+    ]
+    // eslint-disable-next-line testing-library/no-node-access -- ein Chip hat keine Rolle; Tooltip und tabindex sitzen an seiner Wurzel, nicht am Text
+    const chip = (name: string) => screen.getByText(name).closest('.MuiChip-root') as HTMLElement
+    const KLAEREN = de.LABEL_ERKLAERUNG.SACHEN.KLAEREN
+
+    test('Szenario: Bedienung mit der Tastatur', async () => {
+      // Angenommen der Nutzer bewegt sich mit der Tabulatortaste durch das Karten-Detail
+      render(
+        <CardDetailModal
+          card={{ ...card, labels: [5, 8], derivedFrom: null }}
+          canEdit={false}
+          boardLabels={systemLabels}
+          onClose={vi.fn()}
+          {...makeApis()}
+        />,
+      )
+      const ziel = chip('kit:clarify')
+
+      // Wenn er auf ein Systemlabel springt
+      for (let i = 0; i < 50 && !ziel.matches(':focus'); i++) await userEvent.tab()
+      expect(ziel).toHaveFocus()
+
+      // Dann erscheint die Erklärung genauso wie beim Darüberfahren mit der Maus
+      const tooltip = await screen.findByRole('tooltip')
+      expect(tooltip).toHaveTextContent(KLAEREN.bedeutung)
+      expect(tooltip).toHaveTextContent(KLAEREN.handlung)
+      expect(ziel).toHaveAttribute('aria-describedby', tooltip.id)
+    })
+
+    it('erklärt ein Systemlabel der Leseansicht beim Darüberfahren, ein eigenes Label nicht', async () => {
+      render(
+        <CardDetailModal
+          card={{ ...card, labels: [5, 8], derivedFrom: null }}
+          canEdit={false}
+          boardLabels={systemLabels}
+          onClose={vi.fn()}
+          {...makeApis()}
+        />,
+      )
+
+      expect(chip('Bug')).not.toHaveAttribute('tabindex')
+      await userEvent.hover(chip('kit:clarify'))
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+    })
+
+    it('erklärt die Systemlabels unter den gewählten Labels der Bearbeitungsansicht', async () => {
+      render(
+        <CardDetailModal card={{ ...card, labels: [5, 8] }} canEdit boardLabels={systemLabels} onClose={vi.fn()} {...makeApis()} />,
+      )
+      await screen.findByLabelText('Labels')
+
+      expect(chip('kit:clarify')).toHaveAttribute('tabindex', '0')
+      expect(chip('Bug')).toHaveAttribute('tabindex', '-1')
+      await userEvent.hover(chip('kit:clarify'))
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.verschwindet)
+    })
   })
 
   it('zeigt den Aktivitätsverlauf mit Akteur und Detail', async () => {

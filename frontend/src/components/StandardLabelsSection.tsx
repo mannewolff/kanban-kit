@@ -10,6 +10,7 @@ import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import { useState } from 'react'
 import { apiErrorMessage } from '../api/client'
+import { useKitNamen } from '../api/kitNamen'
 import {
   standardLabelsApi,
   type StandardLabel,
@@ -17,7 +18,9 @@ import {
 } from '../api/standardLabels'
 import { useAuth } from '../auth/AuthContext'
 import { useT } from '../i18n/SpracheContext'
+import { labelErklaerung } from '../lib/labelErklaerung'
 import { isPlatformAdmin } from '../lib/roles'
+import { ErklaerungsText, LabelErklaerung } from './LabelErklaerung'
 import { labelChipSx } from './labelChipSx'
 
 /**
@@ -91,19 +94,7 @@ export function StandardLabelsSection() {
               {t.STANDARD_LABELS.DIALOG_HINWEIS}
             </Typography>
             {fehler && <Alert severity="error">{fehler}</Alert>}
-            {satz &&
-              gruppieren(satz).map(([gruppe, labels]) => (
-                <Stack key={gruppe} spacing={0.75}>
-                  <Typography variant="subtitle2" component="h3">
-                    {gruppe}
-                  </Typography>
-                  <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
-                    {labels.map((l) => (
-                      <Chip key={l.name} size="small" label={l.name} sx={labelChipSx(l.farbe)} />
-                    ))}
-                  </Stack>
-                </Stack>
-              ))}
+            {satz && <SatzListe satz={satz} />}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -119,6 +110,35 @@ export function StandardLabelsSection() {
       </Dialog>
     </Paper>
   )
+}
+
+/**
+ * Der Satz nach Gruppen; unter jedem Label steht seine Erklärung als Text, damit der PO alle ohne
+ * Darüberfahren liest (Issue #1672, Plan #1668 E9). Das Namen-Register lädt erst mit dem Dialog.
+ */
+function SatzListe({ satz }: Readonly<{ satz: StandardLabel[] }>) {
+  const t = useT()
+  const kitNamen = useKitNamen()
+  return gruppieren(satz).map(([gruppe, labels]) => (
+    <Stack key={gruppe} spacing={0.75}>
+      <Typography variant="subtitle2" component="h3">
+        {gruppe}
+      </Typography>
+      <Stack component="ul" spacing={1} sx={{ listStyle: 'none', m: 0, p: 0 }}>
+        {labels.map((l) => {
+          const teile = kitNamen.status === 'fertig' ? labelErklaerung(kitNamen.daten, l.name, t) : null
+          return (
+            <Stack key={l.name} component="li" spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+              <LabelErklaerung name={l.name}>
+                <Chip size="small" label={l.name} sx={labelChipSx(l.farbe)} />
+              </LabelErklaerung>
+              {teile && <ErklaerungsText teile={teile} variant="body2" color="text.secondary" />}
+            </Stack>
+          )
+        })}
+      </Stack>
+    </Stack>
+  ))
 }
 
 /** Der Satz nach Gruppen, in der Reihenfolge, in der die Gruppen zuerst auftreten. */

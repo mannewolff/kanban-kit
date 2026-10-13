@@ -2,6 +2,10 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
+import type { KitNamenZustand } from '../api/kitNamen'
+import { de } from '../i18n/de'
+import { labelErklaerung } from '../lib/labelErklaerung'
+import { KIT_NAMEN } from '../test/kitNamen'
 import { standardLabelsApi } from '../api/standardLabels'
 import { StandardLabelsSection } from './StandardLabelsSection'
 import { renderMitSprache } from '../i18n/renderMitSprache'
@@ -10,6 +14,11 @@ const authState = vi.hoisted(() => ({
   user: { platformRole: 'ADMIN', memberships: [] } as { platformRole: string; memberships: [] },
 }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => authState }))
+const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
+vi.mock('../api/kitNamen', async (original) => ({
+  ...(await original<typeof import('../api/kitNamen')>()),
+  useKitNamen: (): KitNamenZustand => kitNamen.zustand ?? { status: 'fertig', daten: KIT_NAMEN },
+}))
 vi.mock('../api/standardLabels', () => ({
   standardLabelsApi: { satz: vi.fn(), anlegen: vi.fn() },
 }))
@@ -36,6 +45,7 @@ async function dialogOeffnen() {
 describe('StandardLabelsSection', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    kitNamen.zustand = null
     authState.user = { platformRole: 'ADMIN', memberships: [] }
     mApi.satz.mockResolvedValue(SATZ)
     mApi.anlegen.mockResolvedValue({ boards: 3, angelegt: 10, uebersprungen: 2 })
@@ -55,6 +65,44 @@ describe('StandardLabelsSection', () => {
     expect(screen.getByRole('heading', { name: 'Standard-Labels' })).toBeInTheDocument()
     expect(screen.getByRole('button', KNOPF)).toBeInTheDocument()
     expect(mApi.satz).not.toHaveBeenCalled()
+  })
+
+  it('zeigt zu jedem Label des Satzes seine Erklärung als Text, in derselben Reihenfolge (#1672)', async () => {
+    render(<StandardLabelsSection />)
+
+    const dialog = await dialogOeffnen()
+
+    await within(dialog).findByText(SATZ[0].name)
+    const eintraege = within(dialog).getAllByRole('listitem')
+    expect(eintraege).toHaveLength(SATZ.length)
+    SATZ.forEach((label, i) => {
+      const teile = labelErklaerung(KIT_NAMEN, label.name, de) ?? []
+      expect(teile).not.toHaveLength(0)
+      // Zuerst das Label, darunter seine Erklärung Teil für Teil.
+      expect(within(eintraege[i]).getAllByText(/.+/).map((e) => e.textContent)).toEqual([
+        label.name,
+        ...teile.map((teil) => teil.text),
+      ])
+    })
+  })
+
+  it('legt das Tooltip mit der Erklärung um jedes Label des Satzes (#1672)', async () => {
+    render(<StandardLabelsSection />)
+    const dialog = await dialogOeffnen()
+
+    await userEvent.hover(await within(dialog).findByText('kit:clarify'))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.handlung)
+  })
+
+  it('zeigt die Labels ohne Erklärung, solange das Namen-Register lädt (#1672)', async () => {
+    kitNamen.zustand = { status: 'laden' }
+    render(<StandardLabelsSection />)
+
+    const dialog = await dialogOeffnen()
+
+    expect(await within(dialog).findByText('kit:clarify')).toBeInTheDocument()
+    expect(within(dialog).queryByText(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.bedeutung)).not.toBeInTheDocument()
   })
 
   it('der Dialog zeigt jedes Label des Satzes nach Gruppen und erklärt die Wirkung', async () => {

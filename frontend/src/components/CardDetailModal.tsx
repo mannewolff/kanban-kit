@@ -61,6 +61,7 @@ import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
 import { statusColors } from '../lib/statusColors'
 import { ANZEIGE, CODE_BG, GRUND, PANEL_RADIUS, PLATTE, PLATTE_HOCH, SCHATTEN_HOCH, SCHATTEN_PLATTE, theme, ZAHL } from '../theme'
+import { LabelErklaerung } from './LabelErklaerung'
 import { labelChipSx } from './labelChipSx'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
@@ -362,13 +363,11 @@ export function LabelSection({
       <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
         {labelIds.map((id) => {
           const l = boardLabels.find((b) => b.id === id)
+          const name = l?.name ?? `#${id}`
           return (
-            <Chip
-              key={id}
-              size="small"
-              label={l?.name ?? `#${id}`}
-              sx={labelChipSx(l?.color)}
-            />
+            <LabelErklaerung key={id} name={name}>
+              <Chip size="small" label={name} sx={labelChipSx(l?.color)} />
+            </LabelErklaerung>
           )
         })}
       </Stack>
@@ -391,13 +390,9 @@ export function LabelSection({
           onChange={(_, selected) => onChange(selected.map((l) => l.id))}
           renderTags={(value, getTagProps) =>
             value.map((l, index) => (
-              <Chip
-                {...getTagProps({ index })}
-                key={l.id}
-                size="small"
-                label={l.name}
-                sx={labelChipSx(l.color)}
-              />
+              <LabelErklaerung key={l.id} name={l.name}>
+                <Chip {...getTagProps({ index })} key={l.id} size="small" label={l.name} sx={labelChipSx(l.color)} />
+              </LabelErklaerung>
             ))
           }
           renderInput={(params) => (

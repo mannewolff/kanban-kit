@@ -86,7 +86,8 @@
         "src/components/EpicBadge.tsx",
         "src/components/DerivationTree.tsx",
         "src/components/AbnahmeSzenarienDialog.tsx",
-        "src/components/DatumFeld.tsx"
+        "src/components/DatumFeld.tsx",
+        "src/components/LabelErklaerung.tsx"
       ],
       "testMuster": [
         "src/components/CardDetailModal.test.tsx",
@@ -97,12 +98,13 @@
         "src/components/EpicBadge.test.tsx",
         "src/components/DerivationTree.test.tsx",
         "src/components/AbnahmeSzenarienDialog.test.tsx",
-        "src/components/DatumFeld.test.tsx"
+        "src/components/DatumFeld.test.tsx",
+        "src/components/LabelErklaerung.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,
       "reihenfolge": 7,
-      "begruendung": "Alles, was eine Karte anzeigt, anlegt, verschiebt oder ihre Herkunft zeigt."
+      "begruendung": "Alles, was eine Karte anzeigt, anlegt, verschiebt oder ihre Herkunft zeigt — samt der Erklärung ihrer Labels."
     },
     {
       "name": "bausteine-tabelle",

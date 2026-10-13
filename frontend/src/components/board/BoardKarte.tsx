@@ -20,6 +20,7 @@ import { statusColors } from '../../lib/statusColors'
 import { MELDER, NUTZER_MAL_SX, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { type Dichte, karteDichteSx, karteSx } from '../boardSurfaceSx'
 import { EpicBadge } from '../EpicBadge'
+import { LabelErklaerung } from '../LabelErklaerung'
 import { labelChipSx } from '../labelChipSx'
 import { useSprache, useT } from '../../i18n/SpracheContext'
 
@@ -47,13 +48,16 @@ function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: n
     <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', mb: 0.5 }} aria-label={t.BOARD.KARTE_LABELS(cardTitle)}>
       {labelIds.map((labelId) => {
         const l = boardLabels.find((b) => b.id === labelId)
+        const name = l?.name ?? `#${labelId}`
+        // Fokus und Tooltip, aber kein eigener Klick: Ein Klick öffnet weiter die Karte (Plan #1668, E5).
         return (
-          <Chip
-            key={labelId}
-            size="small"
-            label={l?.name ?? `#${labelId}`}
-            sx={{ ...labelChipSx(l?.color), height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
-          />
+          <LabelErklaerung key={labelId} name={name}>
+            <Chip
+              size="small"
+              label={name}
+              sx={{ ...labelChipSx(l?.color), height: 18, '& .MuiChip-label': { px: 0.75, fontSize: '0.65rem' } }}
+            />
+          </LabelErklaerung>
         )
       })}
     </Stack>
