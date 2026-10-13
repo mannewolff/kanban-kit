@@ -15,6 +15,22 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [2.28.0] – 2026-10-12
+
+- chore: v2.27.1
+- Knopf „Abnahme durchklicken“ im Karten-Detail und Doku ([#1629](https://github.com/mannewolff/kanban-kit/issues/1629))
+- Abnahme-Dialog zum Durchklicken der Szenarien ([#1628](https://github.com/mannewolff/kanban-kit/issues/1628))
+- Szenarien aus dem Fachplan lesen und Abnahme-Kommentar bauen ([#1627](https://github.com/mannewolff/kanban-kit/issues/1627))
+- Integrationstests nach Verlaufsfeldern und neuem Labelpaar nachziehen ([#1625](https://github.com/mannewolff/kanban-kit/issues/1625))
+- Doku: Verlauf und Kommentar-Herkunft am Werkzeugzugang ([#1624](https://github.com/mannewolff/kanban-kit/issues/1624))
+- Kompat-Zugang liefert Spaltenschlüssel und Herkunft, sperrt Papierkorb ([#1623](https://github.com/mannewolff/kanban-kit/issues/1623))
+- Lese-Guard sperrt Karten im Papierkorb ([#1622](https://github.com/mannewolff/kanban-kit/issues/1622))
+- Verlaufseintrag mit Spaltenschlüssel und Anzeigename ([#1621](https://github.com/mannewolff/kanban-kit/issues/1621))
+- Kommentare tragen ihre Herkunft ([#1620](https://github.com/mannewolff/kanban-kit/issues/1620))
+- installcommand in workflow config eingetragen
+- Standard-Labels um kit:geklaert / kit:clarified ergänzen ([#1614](https://github.com/mannewolff/kanban-kit/issues/1614))
+- Mutations-Überlebende in kitNamen.ts: Stryker-Ausnahme als Block um den Effekt ([#1609](https://github.com/mannewolff/kanban-kit/issues/1609))
+
 ## [2.27.0] – 2026-10-12
 
 - chore: v2.26.1
