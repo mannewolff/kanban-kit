@@ -1,3 +1,5 @@
+import { de } from './i18n/de'
+
 /**
  * Anzeigename der Anwendung, an einer Stelle.
  *
@@ -11,5 +13,8 @@
  * ihn die Kopfzeile, die Anmeldekarte, der Lizenzhinweis und der Browser-Tab jeweils als
  * eigenes Literal; ein späterer Rename hätte sie einzeln finden müssen. Der Titel in
  * `index.html` bleibt als Literal bestehen — statisches HTML kann kein Modul lesen.
+ *
+ * Der Text selbst steht im Wörterbuch (Plan #1638, E8): Den Fenstertitel setzt der
+ * `SpracheProvider` in der geladenen Sprache, diese Konstante ist der deutsche Name.
  */
-export const APP_NAME = 'KI-Leitstand'
+export const APP_NAME = de.APP_NAME

@@ -7,7 +7,8 @@
     "src/components/labelChipSx.ts",
     "src/vite-env.d.ts",
     "src/test/**",
-    "src/lib/__fixtures__/**"
+    "src/lib/__fixtures__/**",
+    "src/i18n/renderMitSprache.tsx"
   ],
   "ausschnitte": [
     {
@@ -275,6 +276,14 @@
       "phase": 4,
       "reihenfolge": 16,
       "begruendung": "Einstieg, Sitzungskontext, Weiterleitungen und Navigation — die Muster erfassen die Wurzel src bewusst nicht, damit designQuelle.test.ts ausserhalb des Sandkastens bleibt."
+    },
+    {
+      "name": "sprache",
+      "muster": ["src/i18n/**/*.{ts,tsx}"],
+      "aufgenommen": false,
+      "phase": 4,
+      "reihenfolge": 17,
+      "begruendung": "Woerterbuecher, Sprachkontext und Formatierer der Oberflaeche (Plan #1638) — die Grundlage, ueber die jede Seite ihre Texte, Daten und Zahlen in der eingestellten Sprache zeigt; zuletzt aufgenommen, weil sie mit den Seitenpaketen noch waechst."
     }
   ]
 }

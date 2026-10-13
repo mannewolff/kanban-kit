@@ -6,6 +6,7 @@ import {
   notifyUnauthorized,
   setUnauthorizedHandler,
 } from './client'
+import { en } from '../i18n/en'
 
 function mockErrorResponse(status: number, body: string, statusText = 'Error') {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -315,5 +316,19 @@ describe('apiErrorMessage', () => {
     ['String', 'Irgendein Text'],
   ])('meldet den Fallback bei %s als Fehler', (_fall, error) => {
     expect(apiErrorMessage(error, 'Fallback')).toBe('Fallback')
+  })
+
+  it('meldet ohne Fallback den deutschen Text aus dem Wörterbuch', () => {
+    expect(apiErrorMessage(new Error('x'))).toBe('unbekannter Fehler')
+  })
+
+  it('meldet einen englischen Fallback aus dem Wörterbuch', () => {
+    expect(apiErrorMessage(new Error('x'), en.FEHLER_UNBEKANNT)).toBe('unknown error')
+  })
+
+  it('zieht detail auch einem englischen Fallback vor', () => {
+    expect(apiErrorMessage(new ApiError(409, 'x', undefined, 'Column not empty'), en.FEHLER_UNBEKANNT)).toBe(
+      'Column not empty',
+    )
   })
 })
