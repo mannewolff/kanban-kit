@@ -37,6 +37,22 @@ class KitNamenControllerTest {
   }
 
   @Test
+  void schutz_stehtJeSacheGleichDerRegelDerSache() {
+    // Then
+    assertThat(antwort.sachen())
+        .allSatisfy(
+            s -> assertThat(s.schutz()).isEqualTo(Sache.valueOf(s.sache()).schutz().name()));
+  }
+
+  @Test
+  void schutz_klaerenNimmtNurDerMenschAb_nightSetztNurDerMensch_laufLaeuftOhneSchutz() {
+    // Then
+    assertThat(schutzDerSache("KLAEREN")).isEqualTo("NUR_MENSCH_NIMMT_AB");
+    assertThat(schutzDerSache("NIGHT")).isEqualTo("NUR_MENSCH_SETZT");
+    assertThat(schutzDerSache("LAUF_LAEUFT")).isEqualTo("KEINER");
+  }
+
+  @Test
   void geklaert_traegtBeideNamen() {
     // Then
     assertThat(namenDerSache("GEKLAERT")).containsExactly("kit:geklaert", "kit:clarified");
@@ -65,10 +81,14 @@ class KitNamenControllerTest {
   }
 
   private List<String> namenDerSache(String sache) {
-    return antwort.sachen().stream()
-        .filter(s -> s.sache().equals(sache))
-        .findFirst()
-        .orElseThrow()
-        .namen();
+    return sacheView(sache).namen();
+  }
+
+  private String schutzDerSache(String sache) {
+    return sacheView(sache).schutz();
+  }
+
+  private SacheView sacheView(String sache) {
+    return antwort.sachen().stream().filter(s -> s.sache().equals(sache)).findFirst().orElseThrow();
   }
 }
