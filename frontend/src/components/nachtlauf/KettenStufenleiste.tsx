@@ -140,6 +140,27 @@ type Ladung =
 const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel === schluessel)
 
 /**
+ * Das wirksame Ziel der Kette: das gesetzte Label, ohne Label vor dem Start die Vorgabe
+ * „Arbeitspakete“ — und mit `kit:durchziehen` mindestens „Umsetzung“ (Kit A3). Ist die Kette ohne
+ * Ziel-Label und ohne `kit:durchziehen` gestartet, fährt das Kit die volle Kette (`volleKette`,
+ * Issue #1702).
+ */
+function wirksamesZiel(
+  gesetztesZiel: Station | undefined,
+  durchziehen: boolean,
+  gestartet: boolean,
+): { ziel: Station; volleKette: boolean } {
+  const volleKette = gestartet && gesetztesZiel === undefined && !durchziehen
+  const vorgabe: Station = volleKette ? 'push-vorbereitet' : 'pakete'
+  const untergrenze: Station = durchziehen ? 'umsetzung' : vorgabe
+  const ziel =
+    gesetztesZiel !== undefined && !(durchziehen && index(gesetztesZiel) < index(untergrenze))
+      ? gesetztesZiel
+      : untergrenze
+  return { ziel, volleKette }
+}
+
+/**
  * Die Stufenleiste an `[Fachlich]`- und `[Plan]`-Karten (Issue #1449, Plan #1447): Ziel der
  * Nacht-Kette und Prüferzahl wählen, statt die Labels des Kit-Vertrags von Hand zu setzen.
  *
@@ -157,6 +178,9 @@ const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel =
  * angezeigten Vorgabe, denn das Kit fährt ohne Ziel-Label die volle Kette (Issue #1695). „Start
  * zurücknehmen“ nimmt nur `kit:night` ab (E10). Solange die Kette gestartet ist, ruhen Ziel- und
  * Prüferwahl — ein späterer Zielwechsel umginge die Bestätigung. Hat ein Runner übernommen (E15), ist die Leiste nur noch Anzeige.
+ * Trägt eine gestartete Karte weder Ziel-Label noch `kit:durchziehen` — `kit:night` kam von Hand
+ * oder aus einem anderen Werkzeug —, ist das Ziel „Veröffentlichung vorbereitet“, und ein Hinweis
+ * unter der Leiste sagt, warum (Issue #1702).
  *
  * <p><b>Kettenstand</b> (Issue #1453): Beim Öffnen lädt die Leiste einmal
  * `GET /api/cards/{cardId}/night-chain`, ohne Nachladen. Ob ein Runner übernommen hat, sagt dann
@@ -265,16 +289,11 @@ function Leiste({
   // Ziel und Prüferzahl sind nur vor dem Start wählbar.
   const anzeige = disabled || uebernommen || gestartet
 
-  // Das wirksame Ziel: das gesetzte Label, an einem Plan nie `ziel:plan`, ohne Label die Vorgabe
-  // „Arbeitspakete“ — und mit `kit:durchziehen` mindestens „Umsetzung“ (Kit A3).
+  // Das an einem Plan nie wirksame `ziel:plan` zählt nicht als gesetztes Ziel.
   const gesetztesZiel = STATIONEN.find(
     (s) => s.ziel !== null && hat(s.ziel) && !(istPlan && s.schluessel === 'plan'),
   )?.schluessel
-  const untergrenze: Station = durchziehen === undefined ? 'pakete' : 'umsetzung'
-  const ziel: Station =
-    gesetztesZiel !== undefined && !(durchziehen !== undefined && index(gesetztesZiel) < index(untergrenze))
-      ? gesetztesZiel
-      : untergrenze
+  const { ziel, volleKette } = wirksamesZiel(gesetztesZiel, durchziehen !== undefined, gestartet)
 
   const zustand = (schluessel: Station): Zustand => {
     if (istPlan && (schluessel === 'plan' || schluessel === 'pruefung')) return 'erbracht'
@@ -395,6 +414,11 @@ function Leiste({
           )
         })}
       </Box>
+      {volleKette && (
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          {t.VOLLE_KETTE}
+        </Typography>
+      )}
       {!istPlan && (
         <PrueferSchalter
           anzeige={anzeige}

@@ -603,6 +603,43 @@ describe('KettenStufenleiste — Start', () => {
     expect(screen.getByRole('button', { name: 'Start zurücknehmen' })).toBeInTheDocument()
   })
 
+  describe('Ziel einer gestarteten Karte ohne Ziel-Label (Issue #1702)', () => {
+    const HINWEIS = /Kein Ziel-Label gesetzt — die Kette läuft bis zur vorbereiteten Veröffentlichung/
+
+    it('zeigt gestartet ohne Ziel-Label „Veröffentlichung vorbereitet“ als Ziel und den Hinweis', () => {
+      zeige({ labelIds: [...BEREIT, 9] })
+
+      expect(station('push-vorbereitet')).toHaveTextContent('Ziel')
+      expect(station('pakete')).toHaveTextContent('vorgesehen')
+      expect(station('pakete')).not.toHaveTextContent('Ziel')
+      expect(screen.getByText(HINWEIS)).toBeInTheDocument()
+    })
+
+    it('zeigt gestartet mit Ziel-Label dieses Ziel und keinen Hinweis', () => {
+      zeige({ labelIds: [...BEREIT, 2, 9] })
+
+      expect(station('pakete')).toHaveTextContent('Ziel')
+      expect(station('push-vorbereitet')).toHaveTextContent('nicht vorgesehen')
+      expect(screen.queryByText(HINWEIS)).not.toBeInTheDocument()
+    })
+
+    it('zeigt gestartet mit kit:durchziehen „Umsetzung“ als Ziel und keinen Hinweis', () => {
+      zeige({ labelIds: [...BEREIT, 7, 9] })
+
+      expect(station('umsetzung')).toHaveTextContent('Ziel')
+      expect(station('push-vorbereitet')).toHaveTextContent('nicht vorgesehen')
+      expect(screen.queryByText(HINWEIS)).not.toBeInTheDocument()
+    })
+
+    it('zeigt vor dem Start ohne Ziel-Label die Vorgabe „Arbeitspakete“ und keinen Hinweis', () => {
+      zeige({ labelIds: BEREIT })
+
+      expect(station('pakete')).toHaveTextContent('Ziel')
+      expect(station('push-vorbereitet')).toHaveTextContent('nicht vorgesehen')
+      expect(screen.queryByText(HINWEIS)).not.toBeInTheDocument()
+    })
+  })
+
   it('zeigt ohne Recht nur den Stand, ohne Start- und Rücknahmeknopf', () => {
     zeige({ disabled: true, labelIds: [...BEREIT, 9] })
 

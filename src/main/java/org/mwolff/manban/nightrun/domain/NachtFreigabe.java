@@ -16,15 +16,18 @@ import org.mwolff.manban.common.KitNamen.Sache;
  * „Heute Nacht“ (Issue #1454, Plan #1447 E4, E10).
  *
  * <p>Vor der Übernahme gibt es keinen Laufstand; abzuleiten sind allein Start und Ziel. Das Ziel
- * folgt denselben Vorgaben wie die Stufenleiste der Karte: ein {@code ziel:*}-Label, an einem Plan
- * nie {@code ziel:plan}; ohne Label „Arbeitspakete“, und mit {@code kit:durchziehen} mindestens
- * „Umsetzung“ (Kit A3). Ziel, Prüferzahl und Durchziehen gelten unter jedem Namen ihrer Sache in
- * {@link KitNamen} (Issue #1591).
+ * folgt denselben Vorgaben wie die Stufenleiste einer gestarteten Karte: ein {@code ziel:*}-Label,
+ * an einem Plan nie {@code ziel:plan}, und mit {@code kit:durchziehen} mindestens „Umsetzung“ (Kit
+ * A3). Ohne Ziel-Label und ohne {@code kit:durchziehen} fährt das Kit die volle Kette, das Ziel ist
+ * dann „Veröffentlichung vorbereitet“ (Issue #1702) — die Übersicht führt nur Karten mit {@code
+ * kit:night}, die Vorgabe „Arbeitspakete“ vor dem Start gilt hier nie. Ziel, Prüferzahl und
+ * Durchziehen gelten unter jedem Namen ihrer Sache in {@link KitNamen} (Issue #1591).
  *
  * @param start wo die Kette beginnt — beim Fachplan einer fachlichen Anforderung, beim Plan eines
  *     Plandokuments
  * @param ziel die Zielstation: {@code PLAN}, {@code PAKETE}, {@code UMSETZUNG} oder {@code
- *     VORBEREITUNG}
+ *     VORBEREITUNG}; ohne Ziel-Label {@code VORBEREITUNG}, mit {@code kit:durchziehen} {@code
+ *     UMSETZUNG}
  * @param pruefer die gewählte Prüferzahl aus {@code planreview:*}; {@code null} ohne Wahl und an
  *     einem Plan, der seine Prüfung schon hinter sich hat (Kit A1)
  */
@@ -95,16 +98,17 @@ public record NachtFreigabe(
     boolean durchziehen = traegt.test(Sache.DURCHZIEHEN);
     // Wie die Stufenleiste: das erste gesetzte Ziel zählt; mit kit:durchziehen gilt mindestens die
     // Umsetzung. Als Maximum statt als Grenzvergleich (Issue #1475): An der Grenze liefern beide
-    // Wege die Umsetzung, ein Vergleich dort wäre durch keinen Test zu unterscheiden.
-    ProgressStage gesetzt =
+    // Wege die Umsetzung, ein Vergleich dort wäre durch keinen Test zu unterscheiden. Ohne Ziel
+    // fährt das Kit die volle Kette, mit kit:durchziehen bis zur Umsetzung (Issue #1702).
+    ProgressStage ohneZiel = durchziehen ? ProgressStage.UMSETZUNG : ProgressStage.VORBEREITUNG;
+    ProgressStage ziel =
         ZIELE.stream()
             .filter(z -> traegt.test(z.getKey()))
             .map(Map.Entry::getValue)
             .filter(z -> !(plan && z == ProgressStage.PLAN))
             .findFirst()
-            .orElse(ProgressStage.PAKETE);
-    ProgressStage ziel =
-        durchziehen ? Collections.max(List.of(gesetzt, ProgressStage.UMSETZUNG)) : gesetzt;
+            .map(z -> durchziehen ? Collections.max(List.of(z, ProgressStage.UMSETZUNG)) : z)
+            .orElse(ohneZiel);
     Integer pruefer =
         plan
             ? null

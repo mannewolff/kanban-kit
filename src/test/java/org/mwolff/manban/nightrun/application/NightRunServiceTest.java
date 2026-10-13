@@ -2050,7 +2050,7 @@ class NightRunServiceTest {
                 "[Fachlich] Import",
                 "Entwicklung",
                 Startstation.FACHPLAN,
-                ProgressStage.PAKETE,
+                ProgressStage.VORBEREITUNG,
                 2),
             new NachtFreigabe(
                 20,
@@ -2106,7 +2106,7 @@ class NightRunServiceTest {
                 "[Requirement] Import",
                 "Entwicklung",
                 Startstation.FACHPLAN,
-                ProgressStage.PAKETE,
+                ProgressStage.VORBEREITUNG,
                 null));
   }
 

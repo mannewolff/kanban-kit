@@ -1073,6 +1073,7 @@ export const de = {
     OFFENE_FRAGE: (name: string) => `An der Karte wartet eine offene Frage auf einen Menschen (${name}).`,
     GO: 'Mit diesem Ziel gibst du das GO für alle Arbeitspakete dieser Karte.',
     BESTAETIGUNG: 'Damit gibst du das GO für alle Arbeitspakete dieser Karte. Kette starten?',
+    VOLLE_KETTE: 'Kein Ziel-Label gesetzt — die Kette läuft bis zur vorbereiteten Veröffentlichung.',
     WARTET: 'Kette gestartet — sie wartet auf die Übernahme durch einen Runner.',
     UEBERNOMMEN: 'Ein Runner hat die Kette übernommen — die Leiste ist nur noch Anzeige.',
     PLAN_REVIEW_DA: (zeile: string) =>
