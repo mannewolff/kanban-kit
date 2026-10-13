@@ -105,7 +105,7 @@ class ProjectStartNumberControllerTest {
   @Test
   void set_propagatesBadRequest_whenNumberAlreadyTaken() throws Exception {
     when(service.setNextCardNumber(USER, PROJECT, 13457))
-        .thenThrow(new InvalidCardNumberException("bereits vergeben"));
+        .thenThrow(InvalidCardNumberException.nichtUeberHoechster(13457));
 
     mvc.perform(put(PATH).contentType(MediaType.APPLICATION_JSON).content(body(13457)))
         .andExpect(status().isBadRequest());

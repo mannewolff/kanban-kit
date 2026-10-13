@@ -48,13 +48,11 @@ public class ProjectStartNumberService {
   public int setNextCardNumber(long userId, long projectId, int value) {
     permissions.require(userId, projectId, Permission.PROJECT_EDIT);
     if (value > CardNumbers.MAX) {
-      throw new InvalidCardNumberException(
-          "Nächste Nummer darf höchstens " + CardNumbers.MAX + " sein");
+      throw InvalidCardNumberException.ueberObergrenze(CardNumbers.MAX);
     }
     int highest = cards.highestNumberInProject(projectId);
     if (value <= highest) {
-      throw new InvalidCardNumberException(
-          "Nächste Nummer muss größer als die höchste vergebene Nummer " + highest + " sein");
+      throw InvalidCardNumberException.nichtUeberHoechster(highest);
     }
     projects.setNextCardNumber(projectId, value);
     return cards.nextCardNumber(projectId);

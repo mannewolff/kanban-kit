@@ -59,10 +59,10 @@ public final class KartenAbhaengigkeiten {
     int eigeneNummer = card.number();
     for (Integer dep : distinct) {
       if (dep == eigeneNummer) {
-        throw new InvalidDependencyException("Karte kann nicht von sich selbst abhängen");
+        throw InvalidDependencyException.vonSichSelbst();
       }
       if (!projectNumbers.contains(dep)) {
-        throw new InvalidDependencyException("Unbekannte Kartennummer: " + dep);
+        throw InvalidDependencyException.unbekannteNummer(dep);
       }
     }
     dependencies.replaceDependencies(card.requireId(), distinct);
@@ -81,7 +81,7 @@ public final class KartenAbhaengigkeiten {
     int eigeneNummer = card.number();
     for (Integer dep : distinct) {
       if (dep == eigeneNummer) {
-        throw new InvalidDependencyException("Karte kann nicht von sich selbst abhängen");
+        throw InvalidDependencyException.vonSichSelbst();
       }
     }
     dependencies.replaceDependencies(card.requireId(), distinct);

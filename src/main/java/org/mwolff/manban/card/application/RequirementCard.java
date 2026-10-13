@@ -40,8 +40,7 @@ final class RequirementCard {
     // Die Typprüfung steht vor der null-Prüfung: Eine gewöhnliche Karte trägt das Feld nie, also
     // ist auch ein Löschen an ihr kein sinnvoller Aufruf, sondern ein Irrtum des Aufrufers.
     if (epic.type() != CardType.EPIC) {
-      throw new InvalidRequirementCardException(
-          "Eine Anforderung laesst sich nur an einem Vorhaben setzen: " + epic.number());
+      throw InvalidRequirementCardException.keinVorhaben(epic.number());
     }
     if (requirementNumber == null) {
       return null;
@@ -49,20 +48,15 @@ final class RequirementCard {
     Card anforderung =
         cards
             .findByProjectIdAndNumber(epic.projectId(), requirementNumber)
-            .orElseThrow(
-                () ->
-                    new InvalidRequirementCardException(
-                        "Unbekannte Kartennummer als Anforderung: " + requirementNumber));
+            .orElseThrow(() -> InvalidRequirementCardException.unbekannteNummer(requirementNumber));
     long anforderungId = anforderung.requireId();
     if (anforderungId == epic.requireId()) {
-      throw new InvalidRequirementCardException(
-          "Ein Vorhaben kann nicht seine eigene Anforderung sein");
+      throw InvalidRequirementCardException.eigene();
     }
     // Board-gebunden wie die Zugehörigkeit selbst (Plan #631, E4): Ein board-fremder Verweis wäre
     // im Baum des Vorhabens nicht auflösbar — dieselbe Grenze zieht `requireEpicInBoard`.
     if (!Objects.equals(anforderung.boardId(), epic.boardId())) {
-      throw new InvalidRequirementCardException(
-          "Die Anforderung liegt nicht auf dem Board des Vorhabens: " + requirementNumber);
+      throw InvalidRequirementCardException.fremdesBoard(requirementNumber);
     }
     return anforderungId;
   }

@@ -224,10 +224,10 @@ public final class KartenGrundlage {
   public Card requireZuordenbaresVorhaben(long epicId, long boardId, @Nullable Long bisher) {
     Card epic = cards.findById(epicId).orElseThrow(CardNotFoundException::new);
     if (epic.type() != CardType.EPIC || epic.boardId() != boardId) {
-      throw new InvalidDependencyException("Kein Epic dieses Boards: " + epicId);
+      throw InvalidDependencyException.keinEpicDesBoards(epicId);
     }
     if (epic.archived() && !Long.valueOf(epicId).equals(bisher)) {
-      throw new InvalidDependencyException("Das Vorhaben ist archiviert: " + epicId);
+      throw InvalidDependencyException.vorhabenArchiviert(epicId);
     }
     return epic;
   }

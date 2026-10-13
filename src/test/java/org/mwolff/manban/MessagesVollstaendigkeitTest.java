@@ -15,6 +15,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,23 +52,17 @@ class MessagesVollstaendigkeitTest {
 
   /** Beispielwerte je Parametertyp für die Konstruktoren der Meldungsklassen. */
   private static final Map<Class<?>, Object> BEISPIELWERTE =
-      Map.of(
-          String.class,
-          "Beispiel",
-          long.class,
-          7L,
-          Long.class,
-          7L,
-          int.class,
-          7,
-          Integer.class,
-          7,
-          boolean.class,
-          true,
-          Boolean.class,
-          true,
-          UUID.class,
-          UUID.fromString("00000000-0000-0000-0000-000000000007"));
+      Map.ofEntries(
+          Map.entry(String.class, "Beispiel"),
+          Map.entry(long.class, 7L),
+          Map.entry(Long.class, 7L),
+          Map.entry(int.class, 7),
+          Map.entry(Integer.class, 7),
+          Map.entry(boolean.class, true),
+          Map.entry(Boolean.class, true),
+          Map.entry(UUID.class, UUID.fromString("00000000-0000-0000-0000-000000000007")),
+          Map.entry(Instant.class, Instant.parse("2026-10-13T07:00:00Z")),
+          Map.entry(Throwable.class, new IllegalArgumentException("Beispiel")));
 
   private static Properties laden(String pfad) throws IOException {
     InputStream stream =
@@ -161,7 +156,7 @@ class MessagesVollstaendigkeitTest {
     assertThatThrownBy(() -> beispiel(MeldungMitUnbekanntemParameter.class))
         .isInstanceOf(AssertionError.class)
         .hasMessageContaining("MeldungMitUnbekanntemParameter")
-        .hasMessageContaining("java.time.Instant");
+        .hasMessageContaining("java.time.Duration");
   }
 
   private static void pruefe(Texte texte, UebersetzbareMeldung meldung) {
@@ -316,8 +311,8 @@ class MessagesVollstaendigkeitTest {
   static final class MeldungMitUnbekanntemParameter extends RuntimeException
       implements UebersetzbareMeldung {
 
-    MeldungMitUnbekanntemParameter(Instant zeitpunkt) {
-      super(zeitpunkt.toString());
+    MeldungMitUnbekanntemParameter(Duration dauer) {
+      super(dauer.toString());
     }
 
     @Override

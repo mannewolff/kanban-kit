@@ -103,7 +103,7 @@ public class LabelService {
     permissions.require(userId, boardService.requireProjectId(boardId), Permission.BOARD_UPDATE);
     String trimmed = requireName(name);
     if (labels.existsByBoardIdAndName(boardId, trimmed)) {
-      throw new InvalidLabelException("Label existiert bereits: " + trimmed);
+      throw InvalidLabelException.existiertBereits(trimmed);
     }
     return labels.save(new Label(null, boardId, trimmed, color, false));
   }
@@ -125,7 +125,7 @@ public class LabelService {
     String trimmed = requireName(name);
     FreigabeLabels.pruefeDefinition(herkunft(), label.name(), trimmed);
     if (!trimmed.equals(label.name()) && labels.existsByBoardIdAndName(label.boardId(), trimmed)) {
-      throw new InvalidLabelException("Label existiert bereits: " + trimmed);
+      throw InvalidLabelException.existiertBereits(trimmed);
     }
     boolean counts = countOnEpicTile == null ? label.countOnEpicTile() : countOnEpicTile;
     return labels.save(label.withContent(trimmed, color, counts));
@@ -196,7 +196,7 @@ public class LabelService {
   private Card requireLabelableCard(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     if (card.type() != CardType.CARD) {
-      throw new InvalidDependencyException("Nur Karten haben Labels");
+      throw InvalidDependencyException.nurKartenMitLabels();
     }
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
     return card;
@@ -223,7 +223,7 @@ public class LabelService {
   private static String requireName(String name) {
     String trimmed = name.trim();
     if (trimmed.isEmpty()) {
-      throw new InvalidLabelException("Labelname darf nicht leer sein");
+      throw InvalidLabelException.nameLeer();
     }
     return trimmed;
   }

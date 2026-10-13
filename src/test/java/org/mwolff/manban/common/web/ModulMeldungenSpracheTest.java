@@ -2,12 +2,21 @@ package org.mwolff.manban.common.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.accesstoken.application.AccessTokenNotFoundException;
 import org.mwolff.manban.accesstoken.application.InvalidTokenBindingException;
+import org.mwolff.manban.attachment.application.AttachmentLimitExceededException;
+import org.mwolff.manban.attachment.application.AttachmentNotFoundException;
 import org.mwolff.manban.auth.application.InvalidCredentialsException;
 import org.mwolff.manban.auth.application.UserNotApprovedException;
+import org.mwolff.manban.board.application.BoardNotFoundException;
+import org.mwolff.manban.board.application.ColumnNotEmptyException;
+import org.mwolff.manban.card.application.CardNotFoundException;
+import org.mwolff.manban.card.application.FreigabeLabelException;
+import org.mwolff.manban.card.application.InvalidDependencyException;
+import org.mwolff.manban.card.application.InvalidDerivedFromException;
 import org.mwolff.manban.comment.application.CommentNotFoundException;
 import org.mwolff.manban.common.i18n.SprachFixture;
 import org.mwolff.manban.common.i18n.Sprache;
@@ -18,9 +27,11 @@ import org.mwolff.manban.project.application.MemberNotApprovedException;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 
 /**
- * Die Meldungen der Module {@code auth}, {@code project}, {@code accesstoken}, {@code comment} und
- * {@code kanbancompat} kommen über den {@link GlobalExceptionHandler} bei Session-Anfrage und
- * Sprache Englisch englisch an, bei Token-Anfrage weiter deutsch (Issue #1641, Plan #1638 A5).
+ * Die Meldungen der Module {@code auth}, {@code project}, {@code accesstoken}, {@code comment},
+ * {@code kanbancompat} (Issue #1641) sowie {@code card}, {@code board} und {@code attachment}
+ * (Issue #1642) kommen über den {@link GlobalExceptionHandler} bei Session-Anfrage und Sprache
+ * Englisch englisch an, bei Token-Anfrage weiter deutsch (Plan #1638 A5). Die Meldung aus {@code
+ * nightrun} prüft {@code nightrun.web.RegionszoneTest}, weil ihre Exception paketprivat ist.
  */
 class ModulMeldungenSpracheTest {
 
@@ -86,5 +97,48 @@ class ModulMeldungenSpracheTest {
         .isEqualTo(
             "Idempotency-Key 'k1' wurde bereits für POST /x verwendet — für einen neuen Befehl"
                 + " einen neuen Schlüssel wählen.");
+  }
+
+  @Test
+  void cardMeldungenAufEnglisch() {
+    assertThat(englischesDetail(new CardNotFoundException())).isEqualTo("Card not found");
+    assertThat(englischesDetail(InvalidDependencyException.unbekannteNummer(42)))
+        .isEqualTo("Unknown card number: 42");
+    assertThat(englischesDetail(FreigabeLabelException.nurMenschSetzt("kit:clarify")))
+        .isEqualTo("Only a human on the board sets label kit:clarify");
+  }
+
+  @Test
+  void cardFeldmeldungAufEnglisch() {
+    SprachFixture.angemeldetMit("ROLE_USER");
+
+    assertThat(
+            handler
+                .handleException(InvalidDerivedFromException.unbekannteNummer(1234))
+                .getProperties())
+        .containsEntry("fieldErrors", Map.of("derivedFrom", "Unknown card number as origin: 1234"));
+  }
+
+  @Test
+  void cardMeldungFuerTokenBleibtDeutsch() {
+    SprachFixture.angemeldetMit("AUTH_PAT");
+
+    assertThat(handler.handleException(InvalidDependencyException.unbekannteNummer(42)).getDetail())
+        .isEqualTo("Unbekannte Kartennummer: 42");
+  }
+
+  @Test
+  void boardMeldungenAufEnglisch() {
+    assertThat(englischesDetail(new BoardNotFoundException())).isEqualTo("Board not found");
+    assertThat(englischesDetail(new ColumnNotEmptyException()))
+        .isEqualTo("Column still contains cards and cannot be deleted");
+  }
+
+  @Test
+  void attachmentMeldungenAufEnglisch() {
+    assertThat(englischesDetail(new AttachmentNotFoundException()))
+        .isEqualTo("Attachment not found");
+    assertThat(englischesDetail(new AttachmentLimitExceededException(20)))
+        .isEqualTo("At most 20 attachments per card are allowed");
   }
 }
