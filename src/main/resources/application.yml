@@ -2,6 +2,12 @@ spring:
   application:
     name: manban
 
+  # Server-Meldungen in der Sprache der Anfrage (Issue #1640, Plan #1638 A5). Ohne Rückfall auf die
+  # Locale des Systems: Ein fehlender englischer Text fiele sonst still auf die Sprache des Hosts.
+  messages:
+    basename: i18n/messages
+    fallback-to-system-locale: false
+
   datasource:
     url: ${MANBAN_DB_URL:jdbc:postgresql://localhost:5432/manban}
     username: ${MANBAN_DB_USER:manban}

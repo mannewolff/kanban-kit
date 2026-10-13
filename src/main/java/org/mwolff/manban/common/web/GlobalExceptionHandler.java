@@ -5,6 +5,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.FieldScopedException;
+import org.mwolff.manban.common.i18n.Sprache;
+import org.mwolff.manban.common.i18n.Texte;
+import org.mwolff.manban.common.i18n.UebersetzbareMeldung;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -42,27 +45,43 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
  *       ResponseEntityExceptionHandler} mit unveränderten Statuscodes ebenfalls als Problem
  *       Details.
  * </ul>
+ *
+ * <p><strong>Sprache (Issue #1640, Plan #1638 A5).</strong> Die eigenen Texte dieses Handlers und
+ * die einer {@link UebersetzbareMeldung} erscheinen in der Sprache der Anfrage nach Zugangsart
+ * ({@link Texte#spracheDerAnfrage()}): Deutsch bei Token-Autorität, sonst die eingestellte Sprache.
+ * Andere Exceptions behalten ihre {@code getMessage()}. Scheitert die Abfrage der
+ * Spracheinstellung, gilt Deutsch — ein Datenbankfehler darf seine eigene Fehlerantwort nicht
+ * verhindern.
  */
 @RestControllerAdvice
 class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-  /** Generisches {@code detail} für unerwartete Fehler — bewusst ohne interne Details. */
-  static final String INTERNAL_ERROR_DETAIL = "Interner Fehler. Bitte später erneut versuchen.";
+  /** Schlüssel des generischen {@code detail} für unerwartete Fehler — ohne interne Details. */
+  static final String INTERNAL_ERROR_DETAIL = "common.fehler.intern";
 
-  /** {@code detail} für Bean-Validation-Fehler; Einzelheiten stehen in {@code fieldErrors}. */
-  static final String VALIDATION_DETAIL = "Validierung fehlgeschlagen";
+  /**
+   * Schlüssel des {@code detail} für Bean-Validation-Fehler; Einzelheiten in {@code fieldErrors}.
+   */
+  static final String VALIDATION_DETAIL = "common.fehler.validierung";
 
-  /** Fallback-Meldung für Feldfehler ohne eigene Message. */
-  static final String FIELD_ERROR_FALLBACK = "Ungültiger Wert";
+  /** Schlüssel der Fallback-Meldung für Feldfehler ohne eigene Message. */
+  static final String FIELD_ERROR_FALLBACK = "common.fehler.ungueltiger-wert";
 
-  /** {@code detail} für Unique-Kollisionen — bewusst ohne Constraint-Namen oder Treibermeldung. */
-  static final String CONFLICT_DETAIL =
-      "Die Anfrage kollidierte mit dem aktuellen Datenstand. Bitte erneut versuchen.";
+  /**
+   * Schlüssel des {@code detail} für Unique-Kollisionen — ohne Constraint-Namen oder Treibertext.
+   */
+  static final String CONFLICT_DETAIL = "common.fehler.konflikt";
 
   /** SQLState einer Unique-Verletzung ({@code unique_violation}, SQL-Standard-Klasse 23). */
   private static final String SQLSTATE_UNIQUE_VIOLATION = "23505";
+
+  private final Texte texte;
+
+  GlobalExceptionHandler(Texte texte) {
+    this.texte = texte;
+  }
 
   /**
    * Mappt {@code @ResponseStatus}-annotierte Domänenexceptions generisch auf ihren annotierten
@@ -75,7 +94,7 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     if (responseStatus == null) {
       LOG.error("Unerwarteter Fehler", ex);
       return ProblemDetail.forStatusAndDetail(
-          HttpStatus.INTERNAL_SERVER_ERROR, INTERNAL_ERROR_DETAIL);
+          HttpStatus.INTERNAL_SERVER_ERROR, text(INTERNAL_ERROR_DETAIL));
     }
     HttpStatus status = responseStatus.code();
     // Detail einmal berechnen und wiederverwenden: `detailOf` behandelt den Fall einer fehlenden
@@ -117,10 +136,10 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     if (!isUniqueViolation(ex)) {
       LOG.error("Integritätsverstoß ohne Wiederholungsaussicht", ex);
       return ProblemDetail.forStatusAndDetail(
-          HttpStatus.INTERNAL_SERVER_ERROR, INTERNAL_ERROR_DETAIL);
+          HttpStatus.INTERNAL_SERVER_ERROR, text(INTERNAL_ERROR_DETAIL));
     }
     LOG.warn("Unique-Kollision — als 409 beantwortet", ex);
-    return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, CONFLICT_DETAIL);
+    return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, text(CONFLICT_DETAIL));
   }
 
   /**
@@ -144,6 +163,9 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
    * Rückgabewert genau damit als nullable, und Sonar java:S2638 gleicht Overrides gegen exakt diese
    * Spring-eigene Annotation ab, nicht gegen unsere {@code @NullMarked}/JSpecify-Konvention. Diese
    * Implementierung gibt trotzdem nie null zurück.
+   *
+   * <p>Die Feldmeldungen interpoliert Bean Validation schon vorher, in der Locale aus {@code
+   * config.SpracheLocaleConfig}; hier wird nur der Rückfall für eine fehlende Meldung übersetzt.
    */
   @Override
   @org.springframework.lang.Nullable
@@ -152,19 +174,33 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
       HttpHeaders headers,
       HttpStatusCode status,
       WebRequest request) {
-    ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, VALIDATION_DETAIL);
+    Sprache sprache = texte.spracheDerAnfrage();
+    ProblemDetail problem =
+        ProblemDetail.forStatusAndDetail(status, texte.text(sprache, VALIDATION_DETAIL));
     Map<String, String> fieldErrors = new LinkedHashMap<>();
     for (FieldError fieldError : ex.getBindingResult().getFieldErrors()) {
       String message = fieldError.getDefaultMessage();
       fieldErrors.putIfAbsent(
-          fieldError.getField(), message == null ? FIELD_ERROR_FALLBACK : message);
+          fieldError.getField(),
+          message == null ? texte.text(sprache, FIELD_ERROR_FALLBACK) : message);
     }
     problem.setProperty("fieldErrors", fieldErrors);
     return ResponseEntity.status(status).headers(headers).body(problem);
   }
 
-  /** Kuratiertes {@code detail}: Annotation-{@code reason}, sonst Message, sonst Status-Phrase. */
-  private static String detailOf(Exception ex, ResponseStatus responseStatus, HttpStatus status) {
+  /** Ein eigener Text dieses Handlers in der Sprache der Anfrage. */
+  private String text(String schluessel) {
+    return texte.text(texte.spracheDerAnfrage(), schluessel);
+  }
+
+  /**
+   * Kuratiertes {@code detail}: der übersetzte Text einer {@link UebersetzbareMeldung}, sonst
+   * Annotation-{@code reason}, sonst Message, sonst Status-Phrase.
+   */
+  private String detailOf(Exception ex, ResponseStatus responseStatus, HttpStatus status) {
+    if (ex instanceof UebersetzbareMeldung meldung) {
+      return texte.text(texte.spracheDerAnfrage(), meldung);
+    }
     if (!responseStatus.reason().isEmpty()) {
       return responseStatus.reason();
     }

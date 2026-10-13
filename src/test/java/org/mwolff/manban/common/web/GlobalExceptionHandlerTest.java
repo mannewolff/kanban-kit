@@ -11,9 +11,16 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.sql.SQLException;
 import java.util.Map;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.card.application.CardNotFoundException;
+import org.mwolff.manban.common.FieldScopedException;
+import org.mwolff.manban.common.i18n.SprachFixture;
+import org.mwolff.manban.common.i18n.Sprache;
+import org.mwolff.manban.common.i18n.Texte;
+import org.mwolff.manban.common.i18n.UebersetzbareMeldung;
+import org.mwolff.manban.config.SpracheLocaleConfig;
 import org.mwolff.manban.kanbancompat.application.TokenNotBoundException;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.springframework.core.MethodParameter;
@@ -22,7 +29,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
-import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -41,16 +47,47 @@ import org.springframework.web.context.request.ServletWebRequest;
  * RFC-9457 Problem Details, Validierungsfehler tragen eine {@code fieldErrors}-Extension, und
  * unerwartete Fehler geben keine internen Details preis.
  */
+// PMD.ExcessiveImports: Die Sprachfälle (Issue #1640) gehören laut Paket in diese Klasse und
+// brauchen Sprache, Fixture, LocaleResolver und eine übersetzbare Fixture-Exception.
+@SuppressWarnings("PMD.ExcessiveImports")
 class GlobalExceptionHandlerTest {
+
+  private static final String INTERN_DE = "Interner Fehler. Bitte später erneut versuchen.";
+  private static final String INTERN_EN = "Internal error. Please try again later.";
+  private static final String VALIDIERUNG_DE = "Validierung fehlgeschlagen";
+  private static final String VALIDIERUNG_EN = "Validation failed";
+  private static final String UNGUELTIG_DE = "Ungültiger Wert";
+  private static final String UNGUELTIG_EN = "Invalid value";
+  private static final String KONFLIKT_DE =
+      "Die Anfrage kollidierte mit dem aktuellen Datenstand. Bitte erneut versuchen.";
+  private static final String KONFLIKT_EN =
+      "The request conflicted with the current state of the data. Please try again.";
 
   private GlobalExceptionHandler handler;
   private MockMvc mvc;
 
   @BeforeEach
   void setUp() {
-    handler = new GlobalExceptionHandler();
+    eingestellt(Sprache.DE);
+  }
+
+  @AfterEach
+  void tearDown() {
+    SprachFixture.abmelden();
+  }
+
+  /** Handler und MockMvc bei eingestellter Sprache {@code sprache}. */
+  private void eingestellt(Sprache sprache) {
+    aufbauen(SprachFixture.mit(sprache));
+  }
+
+  private void aufbauen(Texte texte) {
+    handler = new GlobalExceptionHandler(texte);
     mvc =
-        MockMvcBuilders.standaloneSetup(new ProbeController()).setControllerAdvice(handler).build();
+        MockMvcBuilders.standaloneSetup(new ProbeController())
+            .setControllerAdvice(handler)
+            .setLocaleResolver(new SpracheLocaleConfig().localeResolver(texte))
+            .build();
   }
 
   // --- Generischer Annotation-Lookup (@ResponseStatus der Domänenexceptions) -----------------
@@ -108,7 +145,7 @@ class GlobalExceptionHandlerTest {
         .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
         .andExpect(jsonPath("$.title").value("Internal Server Error"))
         .andExpect(jsonPath("$.status").value(500))
-        .andExpect(jsonPath("$.detail").value(GlobalExceptionHandler.INTERNAL_ERROR_DETAIL));
+        .andExpect(jsonPath("$.detail").value(INTERN_DE));
   }
 
   @Test
@@ -130,7 +167,7 @@ class GlobalExceptionHandlerTest {
         .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
         .andExpect(jsonPath("$.title").value("Conflict"))
         .andExpect(jsonPath("$.status").value(409))
-        .andExpect(jsonPath("$.detail").value(GlobalExceptionHandler.CONFLICT_DETAIL));
+        .andExpect(jsonPath("$.detail").value(KONFLIKT_DE));
   }
 
   @Test
@@ -147,7 +184,7 @@ class GlobalExceptionHandlerTest {
 
     // Then
     assertThat(problem.getStatus()).isEqualTo(409);
-    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.CONFLICT_DETAIL);
+    assertThat(problem.getDetail()).isEqualTo(KONFLIKT_DE);
   }
 
   @Test
@@ -174,7 +211,7 @@ class GlobalExceptionHandlerTest {
 
     // Then
     assertThat(problem.getStatus()).isEqualTo(500);
-    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.INTERNAL_ERROR_DETAIL);
+    assertThat(problem.getDetail()).isEqualTo(INTERN_DE);
   }
 
   @Test
@@ -185,7 +222,7 @@ class GlobalExceptionHandlerTest {
 
     // Then
     assertThat(problem.getStatus()).isEqualTo(500);
-    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.INTERNAL_ERROR_DETAIL);
+    assertThat(problem.getDetail()).isEqualTo(INTERN_DE);
   }
 
   // --- Bean-Validation: 400 + fieldErrors-Extension -------------------------------------------
@@ -197,7 +234,7 @@ class GlobalExceptionHandlerTest {
         .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
         .andExpect(jsonPath("$.title").value("Bad Request"))
         .andExpect(jsonPath("$.status").value(400))
-        .andExpect(jsonPath("$.detail").value(GlobalExceptionHandler.VALIDATION_DETAIL))
+        .andExpect(jsonPath("$.detail").value(VALIDIERUNG_DE))
         .andExpect(jsonPath("$.fieldErrors.title").isNotEmpty());
   }
 
@@ -213,7 +250,7 @@ class GlobalExceptionHandlerTest {
             new MethodParameter(Object.class.getMethod("equals", Object.class), 0), binding);
 
     // When
-    ResponseEntity<Object> response =
+    var response =
         handler.handleMethodArgumentNotValid(
             exception,
             new HttpHeaders(),
@@ -224,18 +261,203 @@ class GlobalExceptionHandlerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     ProblemDetail problem = (ProblemDetail) response.getBody();
     assertThat(problem).isNotNull();
-    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.VALIDATION_DETAIL);
+    assertThat(problem.getDetail()).isEqualTo(VALIDIERUNG_DE);
     assertThat(problem.getProperties())
         .containsEntry(
-            "fieldErrors",
-            Map.of(
-                "title",
-                "darf nicht leer sein",
-                "name",
-                GlobalExceptionHandler.FIELD_ERROR_FALLBACK));
+            "fieldErrors", Map.of("title", "darf nicht leer sein", "name", UNGUELTIG_DE));
+  }
+
+  // --- Sprache nach Zugangsart (Issue #1640, Plan #1638 A5) -----------------------------------
+
+  @Test
+  void englischFuerSession() {
+    // Given
+    eingestellt(Sprache.EN);
+    SprachFixture.angemeldetMit("ROLE_USER");
+
+    // When / Then
+    assertThat(handler.handleException(new IllegalStateException("x")).getDetail())
+        .isEqualTo(INTERN_EN);
+    assertThat(handler.handleException(new UebersetzteKollision()).getDetail())
+        .isEqualTo(KONFLIKT_EN);
+  }
+
+  @Test
+  void englischFuerAnonym() throws Exception {
+    eingestellt(Sprache.EN);
+
+    mvc.perform(get("/probe/unexpected"))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.detail").value(INTERN_EN));
+    mvc.perform(get("/probe/uebersetzt"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.detail").value(KONFLIKT_EN));
+  }
+
+  @Test
+  void deutschFuerTokenBeiEnglisch() {
+    // Given
+    eingestellt(Sprache.EN);
+    SprachFixture.angemeldetMit("AUTH_PAT");
+
+    // When / Then
+    assertThat(handler.handleException(new UebersetzteKollision()).getDetail())
+        .isEqualTo(KONFLIKT_DE);
+    assertThat(handler.handleException(new IllegalStateException("x")).getDetail())
+        .isEqualTo(INTERN_DE);
+  }
+
+  @Test
+  void deutschFuerUngebundenesTokenBeiEnglisch() {
+    // Given
+    eingestellt(Sprache.EN);
+    SprachFixture.angemeldetMit("AUTH_PAT_UNBOUND");
+
+    // When / Then
+    assertThat(handler.handleException(new UebersetzteKollision()).getDetail())
+        .isEqualTo(KONFLIKT_DE);
+    assertThat(
+            handler
+                .handleDataIntegrityViolation(
+                    new DataIntegrityViolationException(
+                        "dup", new SQLException("duplicate key", "23505")))
+                .getDetail())
+        .isEqualTo(KONFLIKT_DE);
+  }
+
+  @Test
+  void uebersetzbareMeldungFuelltAuchDieFeldmeldung() {
+    // Given
+    eingestellt(Sprache.EN);
+
+    // When
+    ProblemDetail problem = handler.handleException(new UebersetzteFeldmeldung());
+
+    // Then
+    assertThat(problem.getDetail()).isEqualTo(UNGUELTIG_EN);
+    assertThat(problem.getProperties()).containsEntry("fieldErrors", Map.of("title", UNGUELTIG_EN));
+  }
+
+  @Test
+  void andereExceptionBehaeltIhreMeldungAuchBeiEnglisch() {
+    eingestellt(Sprache.EN);
+
+    assertThat(handler.handleException(new ProjectAccessDeniedException()).getDetail())
+        .isEqualTo("Keine Berechtigung für diese Projekt-Aktion");
+  }
+
+  @Test
+  void konfliktUndIntegritaetsverstossAufEnglisch() {
+    eingestellt(Sprache.EN);
+
+    assertThat(
+            handler
+                .handleDataIntegrityViolation(
+                    new DataIntegrityViolationException(
+                        "dup", new SQLException("duplicate key", "23505")))
+                .getDetail())
+        .isEqualTo(KONFLIKT_EN);
+    assertThat(
+            handler
+                .handleDataIntegrityViolation(new DataIntegrityViolationException("ohne Ursache"))
+                .getDetail())
+        .isEqualTo(INTERN_EN);
+  }
+
+  @Test
+  void feldmeldungFolgtDerEinstellungStattAcceptLanguage() throws Exception {
+    eingestellt(Sprache.EN);
+    mvc.perform(
+            post("/probe/validated")
+                .header(HttpHeaders.ACCEPT_LANGUAGE, "de-DE")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.detail").value(VALIDIERUNG_EN))
+        .andExpect(jsonPath("$.fieldErrors.title").value("must not be blank"));
+
+    eingestellt(Sprache.DE);
+    mvc.perform(
+            post("/probe/validated")
+                .header(HttpHeaders.ACCEPT_LANGUAGE, "en-US")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.detail").value(VALIDIERUNG_DE))
+        .andExpect(jsonPath("$.fieldErrors.title").value("darf nicht leer sein"));
+  }
+
+  @Test
+  void feldfehlerOhneMeldungFaelltAufEnglischenRueckfall() throws Exception {
+    // Given
+    eingestellt(Sprache.EN);
+    var binding = new BeanPropertyBindingResult(new Object(), "request");
+    binding.addError(new FieldError("request", "name", null, false, null, null, null));
+    var exception =
+        new MethodArgumentNotValidException(
+            new MethodParameter(Object.class.getMethod("equals", Object.class), 0), binding);
+
+    // When
+    var response =
+        handler.handleMethodArgumentNotValid(
+            exception,
+            new HttpHeaders(),
+            HttpStatus.BAD_REQUEST,
+            new ServletWebRequest(new MockHttpServletRequest()));
+
+    // Then
+    ProblemDetail problem = (ProblemDetail) response.getBody();
+    assertThat(problem).isNotNull();
+    assertThat(problem.getDetail()).isEqualTo(VALIDIERUNG_EN);
+    assertThat(problem.getProperties()).containsEntry("fieldErrors", Map.of("name", UNGUELTIG_EN));
+  }
+
+  @Test
+  void fehler500MitScheiternderSprachabfrageTraegtDeutschesDetail() throws Exception {
+    // Given: Die Spracheinstellung ist nicht lesbar (Datenbank weg)
+    aufbauen(SprachFixture.mitScheiternderQuelle());
+
+    // When / Then
+    mvc.perform(get("/probe/unexpected"))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.detail").value(INTERN_DE));
   }
 
   // --- Test-Fixtures ---------------------------------------------------------------------------
+
+  /** Übersetzbare Domänenexception mit Statuscode, deutsch wie {@code messages_de}. */
+  @ResponseStatus(HttpStatus.CONFLICT)
+  static class UebersetzteKollision extends RuntimeException implements UebersetzbareMeldung {
+
+    UebersetzteKollision() {
+      super(KONFLIKT_DE);
+    }
+
+    @Override
+    public String schluessel() {
+      return "common.fehler.konflikt";
+    }
+  }
+
+  /** Übersetzbare feldbezogene Domänenexception. */
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  static class UebersetzteFeldmeldung extends RuntimeException
+      implements UebersetzbareMeldung, FieldScopedException {
+
+    UebersetzteFeldmeldung() {
+      super(UNGUELTIG_DE);
+    }
+
+    @Override
+    public String schluessel() {
+      return "common.fehler.ungueltiger-wert";
+    }
+
+    @Override
+    public String field() {
+      return "title";
+    }
+  }
 
   /** Annotierte Exception ohne Message und ohne reason (Fallback auf die Status-Phrase). */
   @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -248,6 +470,11 @@ class GlobalExceptionHandlerTest {
     @GetMapping("/probe/not-found")
     String notFound() {
       throw new CardNotFoundException();
+    }
+
+    @GetMapping("/probe/uebersetzt")
+    String uebersetzt() {
+      throw new UebersetzteKollision();
     }
 
     @GetMapping("/probe/unexpected")

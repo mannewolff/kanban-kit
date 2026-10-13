@@ -16,6 +16,8 @@ import java.time.Duration;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.common.i18n.SprachFixture;
+import org.mwolff.manban.common.i18n.Sprache;
 import org.mwolff.manban.ratelimit.application.RateLimitProperties;
 import org.mwolff.manban.ratelimit.application.RateLimitedOperation;
 import org.mwolff.manban.ratelimit.application.RateLimiter;
@@ -46,6 +48,7 @@ class RateLimitFilterTest {
 
   private RateLimiter rateLimiter;
   private RateLimitFilter filter;
+  private Sprache eingestellt;
 
   /** Eine Kette, die genau das tut, was der begrenzte Endpunkt täte: einen Status setzen. */
   private static final class StatusServlet extends HttpServlet {
@@ -65,10 +68,12 @@ class RateLimitFilterTest {
   @BeforeEach
   void setUp() {
     rateLimiter = mock(RateLimiter.class);
+    eingestellt = Sprache.DE;
     filter =
         new RateLimitFilter(
             rateLimiter,
-            new ClientOriginResolver(new RateLimitProperties(true, 0, null, null, null, null)));
+            new ClientOriginResolver(new RateLimitProperties(true, 0, null, null, null, null)),
+            SprachFixture.mit(() -> eingestellt));
   }
 
   private static MockFilterChain chainAnswering(int status) {
@@ -211,6 +216,43 @@ class RateLimitFilterTest {
         .isEqualTo(
             "{\"type\":\"about:blank\",\"title\":\"Too Many Requests\",\"status\":429,"
                 + "\"detail\":\"Zu viele Versuche. Bitte in 2 Minuten erneut versuchen.\"}");
+  }
+
+  @Test
+  void auskunftErscheintInDerEingestelltenSprache() throws Exception {
+    // Given — eingestellt ist Englisch, der Browser bittet um Deutsch: kein Header-Sonderfall
+    eingestellt = Sprache.EN;
+    when(rateLimiter.isEnabled()).thenReturn(true);
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+        .thenReturn(Optional.of(Duration.ofSeconds(90)));
+    MockHttpServletRequest request = request("POST", "/api/auth/login");
+    request.addHeader("Accept-Language", "de-DE");
+
+    // When
+    MockHttpServletResponse response = runFilter(request, chainAnswering(200));
+
+    // Then
+    assertThat(response.getContentAsString())
+        .isEqualTo(
+            "{\"type\":\"about:blank\",\"title\":\"Too Many Requests\",\"status\":429,"
+                + "\"detail\":\"Too many attempts. Please try again in 2 minutes.\"}");
+  }
+
+  @Test
+  void eineMinuteErscheintInDerEingestelltenSprache() throws Exception {
+    // Given
+    eingestellt = Sprache.EN;
+    when(rateLimiter.isEnabled()).thenReturn(true);
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.FORGOT))
+        .thenReturn(Optional.of(Duration.ofSeconds(30)));
+
+    // When
+    MockHttpServletResponse response =
+        runFilter(request("POST", "/api/auth/forgot"), chainAnswering(200));
+
+    // Then
+    assertThat(response.getContentAsString())
+        .contains("\"detail\":\"Too many attempts. Please try again in one minute.\"");
   }
 
   @Test

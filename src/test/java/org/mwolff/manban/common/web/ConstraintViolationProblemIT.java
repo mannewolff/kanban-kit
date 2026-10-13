@@ -35,6 +35,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @AutoConfigureMockMvc
 class ConstraintViolationProblemIT extends AbstractIntegrationTest {
 
+  /**
+   * Die deutschen Texte aus {@code i18n/messages_de} — eine frische Installation steht auf Deutsch.
+   */
+  private static final String KONFLIKT =
+      "Die Anfrage kollidierte mit dem aktuellen Datenstand. Bitte erneut versuchen.";
+
+  private static final String INTERN = "Interner Fehler. Bitte später erneut versuchen.";
+
   @Autowired private GlobalExceptionHandler handler;
   @Autowired private JdbcTemplate jdbc;
   @Autowired private AppUserRepository users;
@@ -68,7 +76,7 @@ class ConstraintViolationProblemIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(problem.getStatus()).isEqualTo(409);
-    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.CONFLICT_DETAIL);
+    assertThat(problem.getDetail()).isEqualTo(KONFLIKT);
   }
 
   @Test
@@ -78,7 +86,7 @@ class ConstraintViolationProblemIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(problem.getStatus()).isEqualTo(409);
-    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.CONFLICT_DETAIL);
+    assertThat(problem.getDetail()).isEqualTo(KONFLIKT);
   }
 
   @Test
@@ -100,7 +108,7 @@ class ConstraintViolationProblemIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(problem.getStatus()).isEqualTo(409);
-    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.CONFLICT_DETAIL);
+    assertThat(problem.getDetail()).isEqualTo(KONFLIKT);
   }
 
   @Test
@@ -133,7 +141,7 @@ class ConstraintViolationProblemIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(problem.getStatus()).isEqualTo(500);
-    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.INTERNAL_ERROR_DETAIL);
+    assertThat(problem.getDetail()).isEqualTo(INTERN);
   }
 
   @Test
@@ -158,7 +166,7 @@ class ConstraintViolationProblemIT extends AbstractIntegrationTest {
 
     // Then
     assertThat(problem.getStatus()).isEqualTo(500);
-    assertThat(problem.getDetail()).isEqualTo(GlobalExceptionHandler.INTERNAL_ERROR_DETAIL);
+    assertThat(problem.getDetail()).isEqualTo(INTERN);
   }
 
   /** Führt den kollidierenden Insert aus und liefert die dabei geworfene Exception. */
