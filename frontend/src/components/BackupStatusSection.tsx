@@ -13,25 +13,28 @@ import {
   type BackupVerdict,
 } from '../api/backup'
 import { apiErrorMessage } from '../api/client'
+import { formatierer } from '../i18n/format'
+import { useSprache, useT } from '../i18n/SpracheContext'
+import type { Woerterbuch } from '../i18n/de'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { AMPEL } from '../theme'
 
-const ZEITPUNKT = new Intl.DateTimeFormat('de-DE', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-})
+/** Der Zeitpunkt minutengenau: `23.09.2026, 05:00` bzw. `Sep 23, 2026, 5:00 AM`. */
+const ZEITPUNKT: Readonly<Record<Sprache, Intl.DateTimeFormatOptions>> = {
+  de: { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' },
+  en: { dateStyle: 'medium', timeStyle: 'short' },
+}
 
 /**
- * Zustandstext und Ampellampe je Urteil. Der Text steht sichtbar neben dem Punkt **und** im
- * zugänglichen Namen des Bereichs: Der Zustand hängt nie allein an der Farbe.
+ * Ampellampe je Urteil; der Zustandstext steht im Wörterbuch (`SICHERUNG.ZUSTAND`). Er steht
+ * sichtbar neben dem Punkt **und** im zugänglichen Namen des Bereichs: Der Zustand hängt nie allein
+ * an der Farbe.
  */
-const ZUSTAND: Readonly<Record<BackupVerdict, { text: string; lampe: keyof typeof AMPEL }>> = {
-  OK: { text: 'Läuft', lampe: 'green' },
-  VERALTET: { text: 'Veraltet', lampe: 'yellow' },
-  FEHLGESCHLAGEN: { text: 'Fehlgeschlagen', lampe: 'red' },
-  ABGESCHALTET: { text: 'Abgeschaltet', lampe: 'grey' },
+const LAMPE: Readonly<Record<BackupVerdict, keyof typeof AMPEL>> = {
+  OK: 'green',
+  VERALTET: 'yellow',
+  FEHLGESCHLAGEN: 'red',
+  ABGESCHALTET: 'grey',
 }
 
 type Zustand =
@@ -57,8 +60,8 @@ function letzterErfolg(kinds: BackupKindStatus[]): Date | null {
 }
 
 /** Der Name des Bereichs trägt den Zustand mit — sonst bliebe er dem Screenreader die Ampel schuldig. */
-function bereichsname(zustand: Zustand): string {
-  return zustand.art === 'geladen' ? `Sicherung — ${ZUSTAND[zustand.stand.verdict].text}` : 'Sicherung'
+function bereichsname(zustand: Zustand, t: Woerterbuch['SICHERUNG']): string {
+  return zustand.art === 'geladen' ? t.BEREICH(t.ZUSTAND[zustand.stand.verdict]) : t.TITEL
 }
 
 /**
@@ -74,6 +77,9 @@ function bereichsname(zustand: Zustand): string {
  */
 export function BackupStatusSection({ api = backupApi }: Readonly<Props>) {
   const [zustand, setZustand] = useState<Zustand>({ art: 'laedt' })
+  const t = useT().SICHERUNG
+  const { sprache } = useSprache()
+  const ladefehler = t.LADEN_FEHLGESCHLAGEN
 
   useEffect(() => {
     let aktiv = true
@@ -85,22 +91,20 @@ export function BackupStatusSection({ api = backupApi }: Readonly<Props>) {
           aktiv &&
           setZustand({
             art: 'fehler',
-            meldung: apiErrorMessage(e, 'Stand der Sicherung konnte nicht geladen werden.'),
+            meldung: apiErrorMessage(e, ladefehler),
           }),
       )
     return () => {
       aktiv = false
     }
-  }, [api])
+  }, [api, ladefehler])
 
   return (
-    <Box component="section" aria-label={bereichsname(zustand)} sx={{ mb: 4 }}>
+    <Box component="section" aria-label={bereichsname(zustand, t)} sx={{ mb: 4 }}>
       <Typography variant="h6" component="h2" gutterBottom>
-        Sicherung
+        {t.TITEL}
       </Typography>
-      {zustand.art === 'laedt' && (
-        <CircularProgress size={24} aria-label="Stand der Sicherung wird geladen" />
-      )}
+      {zustand.art === 'laedt' && <CircularProgress size={24} aria-label={t.LAEDT} />}
       {zustand.art === 'fehler' && <Alert severity="error">{zustand.meldung}</Alert>}
       {zustand.art === 'geladen' && (
         <Stack spacing={1.5} alignItems="flex-start">
@@ -113,30 +117,28 @@ export function BackupStatusSection({ api = backupApi }: Readonly<Props>) {
                 height: 12,
                 borderRadius: '50%',
                 flexShrink: 0,
-                bgcolor: AMPEL[ZUSTAND[zustand.stand.verdict].lampe],
+                bgcolor: AMPEL[LAMPE[zustand.stand.verdict]],
               }}
             />
-            <Typography>{ZUSTAND[zustand.stand.verdict].text}</Typography>
+            <Typography>{t.ZUSTAND[zustand.stand.verdict]}</Typography>
           </Box>
           <Typography variant="body2" color="text.secondary">
-            {`Letzter gelungener Lauf: ${zeitpunktText(zustand.stand.kinds)}`}
+            {t.LETZTER_LAUF(zeitpunktText(zustand.stand.kinds, sprache))}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {`Ziel: ${zustand.stand.targetLabel}`}
+            {t.ZIEL(zustand.stand.targetLabel)}
           </Typography>
           {!zustand.stand.enabled && (
             <Alert severity="warning">
-              Keine Sicherung eingerichtet — es wird nichts gesichert, und es ist nichts
-              zurückzuholen.{' '}
+              {t.NICHT_EINGERICHTET}{' '}
               <Link href="/docs/backup" target="_blank" rel="noopener noreferrer">
-                Sicherung einrichten
+                {t.EINRICHTEN}
               </Link>
             </Alert>
           )}
           {zustand.stand.enabled && !zustand.stand.alertMailEnabled && (
             <Alert severity="info">
-              Der Mailversand ist abgeschaltet: Ein Alarm über eine ausbleibende Sicherung landet nur
-              im Protokoll. Diese Ansicht ist der verlässliche Weg.
+              {t.MAIL_AUS}
             </Alert>
           )}
         </Stack>
@@ -145,7 +147,9 @@ export function BackupStatusSection({ api = backupApi }: Readonly<Props>) {
   )
 }
 
-function zeitpunktText(kinds: BackupKindStatus[]): string {
+function zeitpunktText(kinds: BackupKindStatus[], sprache: Sprache): string {
   const zeitpunkt = letzterErfolg(kinds)
-  return zeitpunkt === null ? 'noch keiner' : ZEITPUNKT.format(zeitpunkt)
+  return zeitpunkt === null
+    ? woerterbuch(sprache).SICHERUNG.NOCH_KEINER
+    : new Intl.DateTimeFormat(formatierer(sprache).gebietsschema, ZEITPUNKT[sprache]).format(zeitpunkt)
 }

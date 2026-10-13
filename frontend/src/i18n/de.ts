@@ -1334,6 +1334,169 @@ export const de = {
     NUR_ZWEI_SCHICHTEN: 'Nur die letzten zwei Schichten zeigen',
     AELTERE_RUNS: (anzahl: number) => `Ältere Runs anzeigen (${anzahl})`,
   },
+  /** Administration (Issue #1660): Rechtliches, Editiermodus, Done-Aufbewahrung, API-Tokens und Einstieg in die API-Übersicht. */
+  ADMINISTRATION: {
+    TITEL: 'Administration',
+    RECHTLICHES: 'Rechtliches',
+    COPYRIGHT: '© 2026 Manfred Wolff',
+    LIZENZ: (appName: string) =>
+      `${appName} steht unter der MIT-Lizenz. Nutzung, Änderung und Weitergabe sind gestattet, sofern Copyright-Vermerk und Lizenztext erhalten bleiben. Die Software wird ohne Gewähr bereitgestellt.`,
+    EDITIERMODUS: 'Editiermodus',
+    EDITIERMODUS_ARIA: 'Editiermodus aktivieren',
+    BEARBEITEN_AKTIVIEREN: 'Bearbeiten aktivieren',
+    EDITIERMODUS_HINWEIS:
+      'Ist der Editiermodus aktiv, erscheinen die Bearbeiten-Symbole (etwa zum Umbenennen von Projekten, Boards und Spalten), sofern du die nötigen Rechte hast. Der Modus ist beim Start immer aus und wird nicht über einen Neustart hinweg gemerkt.',
+    DONE_AUFBEWAHRUNG: 'Done-Aufbewahrung',
+    DONE_UNGUELTIG: 'Bitte eine ganze Zahl ≥ 0 angeben (0 = kein Auto-Archiv).',
+    GESPEICHERT: 'Gespeichert.',
+    DONE_HINWEIS: 'Erledigte Karten werden nach dieser Anzahl Tage automatisch archiviert.',
+    DONE_NULL: '0 = kein Auto-Archiv.',
+    DONE_GLOBAL: 'Der Wert gilt global.',
+    AKTUELL_WIRKSAM: 'Aktuell wirksam: ',
+    KEIN_AUTO_ARCHIV: 'kein Auto-Archiv',
+    TAGE_WERT: (tage: number) => `${tage} Tage`,
+    TAGE: 'Tage',
+    DONE_TAGE_ARIA: 'Done-Aufbewahrung in Tagen',
+    API_TOKENS: 'API-Tokens',
+    TOKEN_ERZEUGEN: 'Token erzeugen',
+    BINDUNG: (projekt: string, boardId: number) => `Projekt „${projekt}“ · Board ${boardId}`,
+    UNGEBUNDEN: 'ungebunden',
+    WIDERRUFEN_FRAGE: 'Dieses Token widerrufen? Clients, die es nutzen, verlieren den Zugriff.',
+    WIDERRUFEN_FEHLGESCHLAGEN: 'Widerrufen fehlgeschlagen.',
+    TOKEN_HINWEIS:
+      'Ein board-gebundenes Token treibt ein Board über die API (z. B. aus einer CLI oder CI-Pipeline), ohne Login — gebunden an genau ein Board. Der Klartext wird beim Erzeugen',
+    NUR_EINMAL: 'nur einmal',
+    ANGEZEIGT: 'angezeigt.',
+    KEIN_PROJEKT:
+      'Du bist in keinem Projekt, in dem du Karten anlegen darfst — daher kannst du kein board-gebundenes Token erzeugen.',
+    TOKEN_KOPIEREN: 'Token kopieren',
+    KOPIERT: 'Kopiert',
+    KOPIEREN: 'Kopieren',
+    TOKEN_ERZEUGT: (name: string) => `Token „${name}“ erzeugt — wird nur einmal angezeigt:`,
+    TOKEN_KLARTEXT: 'Token-Klartext',
+    KEINE_TOKENS: 'Noch keine Tokens.',
+    WIDERRUFEN: 'Widerrufen',
+    AKTIV: 'Aktiv',
+    TOKEN_WIDERRUFEN_ARIA: (name: string) => `Token ${name} widerrufen`,
+    API_SCHNITTSTELLE: 'API-Schnittstelle',
+    API_HINWEIS:
+      'Alle Aufrufe des Leitstands mit Zweck, Eingaben, Antworten und Stabilitätsangabe — zum Nachschlagen, ohne Ausprobieren. Die Beschreibung lässt sich als OpenAPI 3 herunterladen.',
+    UEBERSICHT_OEFFNEN_ARIA: 'API-Übersicht öffnen',
+    UEBERSICHT_OEFFNEN: 'Übersicht öffnen',
+    NEUES_TOKEN: 'Neues API-Token',
+    NAME: 'Name',
+    PROJEKT: 'Projekt',
+    BOARD: 'Board',
+    PROJEKT_WAEHLEN: '(Projekt wählen)',
+    BOARD_WAEHLEN: '(Board wählen)',
+    ERZEUGEN: 'Erzeugen',
+    ERZEUGEN_FEHLGESCHLAGEN:
+      'Token konnte nicht erzeugt werden. Für ein board-gebundenes Token brauchst du das Recht, auf diesem Board Karten anzulegen.',
+  },
+
+  /** Downloads der OpenAPI-Beschreibung, in Administration und API-Übersicht (Issue #1660). */
+  OPENAPI: {
+    JSON: 'OpenAPI (JSON)',
+    YAML: 'OpenAPI (YAML)',
+    JSON_ARIA: 'OpenAPI als JSON herunterladen',
+    YAML_ARIA: 'OpenAPI als YAML herunterladen',
+  },
+
+  /** Admin-Bereich mit der Nutzerverwaltung (Issue #1660); die Plattform-Rollen USER/ADMIN sind Schlüssel. */
+  ADMIN_SEITE: {
+    TITEL: 'Admin — Nutzerverwaltung',
+    KEIN_ZUGRIFF: 'Kein Admin-Zugriff.',
+    LADEN_FEHLGESCHLAGEN: 'Laden fehlgeschlagen.',
+    ROLLE_FEHLGESCHLAGEN: 'Rollenänderung fehlgeschlagen.',
+    FREIGABE_FEHLGESCHLAGEN: 'Freigabe fehlgeschlagen.',
+    NAME_FEHLGESCHLAGEN: 'Namensänderung fehlgeschlagen.',
+    ENTSPERREN_FEHLGESCHLAGEN: 'Entsperren fehlgeschlagen.',
+    SPERREN_FEHLGESCHLAGEN: 'Sperren fehlgeschlagen.',
+    ANZEIGENAME_ARIA: (email: string) => `Anzeigename von ${email}`,
+    NAMEN_SPEICHERN: 'Namen speichern',
+    BEARBEITEN_ABBRECHEN: 'Bearbeiten abbrechen',
+    NAMEN_BEARBEITEN_ARIA: (name: string) => `Namen von ${name} bearbeiten`,
+    FREIGEBEN_ARIA: (name: string) => `${name} freigeben`,
+    FREIGEBEN: 'Freigeben',
+    ROLLE_UMSCHALTEN_ARIA: (name: string) => `Rolle von ${name} umschalten`,
+    ZU_ROLLE: (rolle: string) => `Zu ${rolle}`,
+    ENTSPERREN_ARIA: (name: string) => `${name} entsperren`,
+    SPERREN_ARIA: (name: string) => `${name} sperren`,
+    ENTSPERREN: 'Entsperren',
+    SPERREN: 'Sperren',
+    NAME: 'Name',
+    EMAIL: 'E-Mail',
+    VERIFIZIERT: 'Verifiziert',
+    JA: 'ja',
+    NEIN: 'nein',
+    FREIGABE: 'Freigabe',
+    FREIGEGEBEN: 'Freigegeben',
+    WARTET_AUF_FREIGABE: 'Wartet auf Freigabe',
+    STATUS: 'Status',
+    GESPERRT: 'Gesperrt',
+    AKTIV: 'Aktiv',
+    AKTION: 'Aktion',
+  },
+
+  /** Statuskachel der Sicherung im Admin-Bereich (Issue #1660); das Ziel ist ein Datenwert. */
+  SICHERUNG: {
+    TITEL: 'Sicherung',
+    ZUSTAND: {
+      OK: 'Läuft',
+      VERALTET: 'Veraltet',
+      FEHLGESCHLAGEN: 'Fehlgeschlagen',
+      ABGESCHALTET: 'Abgeschaltet',
+    },
+    BEREICH: (zustand: string) => `Sicherung — ${zustand}`,
+    LADEN_FEHLGESCHLAGEN: 'Stand der Sicherung konnte nicht geladen werden.',
+    LAEDT: 'Stand der Sicherung wird geladen',
+    LETZTER_LAUF: (zeitpunkt: string) => `Letzter gelungener Lauf: ${zeitpunkt}`,
+    NOCH_KEINER: 'noch keiner',
+    ZIEL: (ziel: string) => `Ziel: ${ziel}`,
+    NICHT_EINGERICHTET: 'Keine Sicherung eingerichtet — es wird nichts gesichert, und es ist nichts zurückzuholen.',
+    EINRICHTEN: 'Sicherung einrichten',
+    MAIL_AUS:
+      'Der Mailversand ist abgeschaltet: Ein Alarm über eine ausbleibende Sicherung landet nur im Protokoll. Diese Ansicht ist der verlässliche Weg.',
+  },
+
+  /** Abschnitt „Abweisungen wegen Last“ im Admin-Bereich (Issue #1660). */
+  ABWEISUNGEN: {
+    TITEL: 'Abweisungen wegen Last',
+    LAEDT: 'Abweisungen werden geladen',
+    FEHLER: 'Abweisungen wegen Last konnten nicht geladen werden.',
+    LEER: 'Keine Abweisungen wegen Last in den letzten 90 Tagen.',
+    PERSON: 'Person',
+    STUNDE: 'Stunde',
+    ANZAHL: 'Anzahl',
+  },
+
+  /** Standard-Labels der Installation in der Administration (Issue #1660); Label- und Gruppennamen sind Daten. */
+  STANDARD_LABELS: {
+    TITEL: 'Standard-Labels',
+    HINWEIS:
+      'Legt die Labels, die Kit, Laufsteuerung und Stufenleiste erwarten, auf allen Boards aller Projekte an. Fehlende kommen dazu, vorhandene bleiben, wie sie sind — der Knopf lässt sich beliebig oft drücken.',
+    KNOPF: 'Standard-Labels für alle Boards',
+    ERGEBNIS: (boards: number, angelegt: number, uebersprungen: number) =>
+      `Auf ${boards} Boards: ${angelegt} Labels neu angelegt, ${uebersprungen} schon vorhanden.`,
+    DIALOG_HINWEIS:
+      'Diese Labels werden auf allen nicht archivierten Boards aller Projekte angelegt. Vorhandene Labels bleiben unverändert und werden übersprungen.',
+    LADEN_FEHLGESCHLAGEN: 'Die Standard-Labels konnten nicht geladen werden.',
+    ANLEGEN_FEHLGESCHLAGEN: 'Die Standard-Labels konnten nicht angelegt werden.',
+  },
+
+  /** Seitenrahmen der API-Übersicht und Ausprobieren (Issue #1660, E2); Swagger UI und das OpenAPI-Dokument bleiben, wie sie sind. */
+  API_UEBERSICHT: {
+    TITEL: 'API-Schnittstelle',
+    ZURUECK: 'Zurück zur Administration',
+    LADEN_FEHLGESCHLAGEN: 'Die API-Beschreibung konnte nicht geladen werden.',
+    LAEDT: 'API-Beschreibung wird geladen',
+    ERKLAERUNG:
+      'Aufrufe mit Anmeldung laufen mit Ihrer Sitzung; ein Projekt-Token geben Sie unter ‚Authorize‘ bei projektToken an.',
+    ABGEBROCHEN: 'Abgebrochen, nichts gesendet',
+    HINWEIS_AENDERND: 'Dieser Aufruf verändert echte Daten dieser Umgebung.',
+    BESTAETIGUNG_TITEL: 'Echte Daten ändern?',
+    ABSENDEN: 'Absenden',
+  },
 } as const
 
 /** Weitet die Literale des deutschen Wörterbuchs zu `string`, rekursiv und durch Funktionen hindurch. */

@@ -6,6 +6,7 @@ import { ApiError } from '../api/client'
 import { openapiApi } from '../api/openapi'
 import { ABGEBROCHEN, AUSPROBIER_HEADER, HINWEIS_AENDERND } from '../lib/apiAusprobieren'
 import { ApiUebersichtPage } from './ApiUebersichtPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 // Rolle je Test umschaltbar: Default USER (Nicht-Admin, Seite rein lesend wie in #1410).
 const authState = vi.hoisted(() => ({ user: { platformRole: 'USER' } as { platformRole: string } }))
@@ -264,5 +265,79 @@ describe('ApiUebersichtPage', () => {
       expect(screen.getByRole('button', { name: 'Ausführen get' })).toBeInTheDocument()
       expect(screen.queryByText(HINWEIS_AENDERND)).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('ApiUebersichtPage auf Englisch', () => {
+  type Anfrage = { url: string; method: string; headers: Record<string, string> }
+  type Interceptor = (anfrage: Anfrage) => Anfrage | Promise<Anfrage>
+  type Execute = (
+    original: (props: { method: string }) => React.JSX.Element,
+  ) => (props: { method: string }) => React.JSX.Element
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    swaggerProps.zuletzt = null
+    authState.user = { platformRole: 'ADMIN' }
+    mOpenapi.lade.mockResolvedValue(spec)
+  })
+
+  function renderEnglisch() {
+    return renderMitSprache(
+      <MemoryRouter initialEntries={['/administration/api']}>
+        <Routes>
+          <Route path="/administration/api" element={<ApiUebersichtPage />} />
+          <Route path="/administration" element={<p>Administrationsseite</p>} />
+        </Routes>
+      </MemoryRouter>,
+      'en',
+    )
+  }
+
+  it('zeigt Rahmen, Downloads und Erklärsatz auf Englisch', async () => {
+    renderEnglisch()
+
+    expect(screen.getByRole('heading', { name: 'API', level: 1 })).toBeInTheDocument()
+    expect(screen.getByLabelText('Loading API description')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Download OpenAPI as JSON' })).toHaveAttribute('href', '/api/openapi')
+    expect(screen.getByRole('link', { name: 'Download OpenAPI as YAML' })).toHaveAttribute('href', '/api/openapi.yaml')
+    await screen.findByTestId('swagger-ui')
+    expect(
+      screen.getByText(
+        'Calls that require login run with your session; enter a project token under ‘Authorize’ at projektToken.',
+      ),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Back to Administration' }))
+    expect(screen.getByText('Administrationsseite')).toBeInTheDocument()
+  })
+
+  it('fällt auf Englisch ohne Server-Meldung auf den englischen Fehlertext zurück', async () => {
+    mOpenapi.lade.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderEnglisch()
+
+    expect(await screen.findByText('The API description could not be loaded.')).toBeInTheDocument()
+  })
+
+  it('fragt auf Englisch nach, bricht mit englischem Text ab und warnt am Knopf auf Englisch', async () => {
+    renderEnglisch()
+    await screen.findByTestId('swagger-ui')
+    const props = swaggerProps.zuletzt as Record<string, unknown>
+    const interceptor = props.requestInterceptor as Interceptor
+
+    let ergebnis!: Anfrage | Promise<Anfrage>
+    act(() => {
+      ergebnis = interceptor({ url: '/api/projects/7', method: 'DELETE', headers: {} })
+    })
+    await screen.findByRole('dialog', { name: 'Change real data?' })
+    const abgewiesen = expect(ergebnis).rejects.toThrow('Cancelled, nothing sent')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await abgewiesen
+
+    const plugins = props.plugins as { wrapComponents: { execute: Execute } }[]
+    const Original = ({ method }: { method: string }) => <button type="button">Execute {method}</button>
+    const Umhuellt = plugins[0].wrapComponents.execute(Original)
+    render(<Umhuellt method="post" />)
+    expect(screen.getByText('This call changes real data in this environment.')).toBeInTheDocument()
   })
 })

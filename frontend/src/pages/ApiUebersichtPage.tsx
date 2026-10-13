@@ -7,7 +7,7 @@ import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { useCallback, useEffect, useState, type ComponentProps, type ComponentType } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ComponentType } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import SwaggerUI from 'swagger-ui-react'
 import 'swagger-ui-react/swagger-ui.css'
@@ -15,7 +15,8 @@ import { apiErrorMessage } from '../api/client'
 import { OPENAPI_JSON_PFAD, OPENAPI_YAML_PFAD, openapiApi } from '../api/openapi'
 import { useAuth } from '../auth/AuthContext'
 import { AusprobierBestaetigung } from '../components/AusprobierBestaetigung'
-import { ABGEBROCHEN, HINWEIS_AENDERND, istAendernd, markiere } from '../lib/apiAusprobieren'
+import { useSprache, useT } from '../i18n/SpracheContext'
+import { abgebrochenText, hinweisAendernd, istAendernd, markiere } from '../lib/apiAusprobieren'
 import { isPlatformAdmin } from '../lib/roles'
 
 /**
@@ -44,23 +45,26 @@ type ExecuteProps = { method: string }
 /**
  * Setzt den Hinweis unmittelbar vor den Knopf „Ausführen“ eines ändernden Aufrufs (Plan #1437,
  * „Bestätigung im Interceptor, Hinweis am Knopf“). Der Authorize-Dialog bleibt sichtbar (E7/E8).
+ * Der Hinweis kommt als Text herein: Die Swagger UI rendert den Knopf in ihrem eigenen System.
  */
-const AUSPROBIEREN = {
-  wrapComponents: {
-    execute: (Original: ComponentType<ExecuteProps>) =>
-      function MitHinweis(props: ExecuteProps) {
-        return (
-          <>
-            {istAendernd(props.method) && (
-              <Alert severity="warning" sx={{ my: 1 }}>
-                {HINWEIS_AENDERND}
-              </Alert>
-            )}
-            <Original {...props} />
-          </>
-        )
-      },
-  },
+function ausprobieren(hinweis: string) {
+  return {
+    wrapComponents: {
+      execute: (Original: ComponentType<ExecuteProps>) =>
+        function MitHinweis(props: ExecuteProps) {
+          return (
+            <>
+              {istAendernd(props.method) && (
+                <Alert severity="warning" sx={{ my: 1 }}>
+                  {hinweis}
+                </Alert>
+              )}
+              <Original {...props} />
+            </>
+          )
+        },
+    },
+  }
 }
 
 /** Abfang-Haken der Swagger UI; seine Anfrage ist dort nur lose typisiert. */
@@ -94,6 +98,9 @@ export function ApiUebersichtPage() {
   const [rueckfrage, setRueckfrage] = useState<Rueckfrage | null>(null)
   const { user } = useAuth()
   const admin = isPlatformAdmin(user)
+  const t = useT()
+  const { sprache } = useSprache()
+  const ausprobierPlugin = useMemo(() => ausprobieren(hinweisAendernd(sprache)), [sprache])
 
   // Jede Anfrage trägt das Kennzeichen, das der Server prüft (#1438). Ein ändernder Aufruf geht
   // erst nach „Absenden“ ab; „Abbrechen“ verwirft ihn, und Swagger UI zeigt ABGEBROCHEN an.
@@ -111,46 +118,44 @@ export function ApiUebersichtPage() {
         },
         abbrechen: () => {
           setRueckfrage(null)
-          reject(new Error(ABGEBROCHEN))
+          reject(new Error(abgebrochenText(sprache)))
         },
       })
     })
-  }, [])
+  }, [sprache])
 
+  const ladefehler = t.API_UEBERSICHT.LADEN_FEHLGESCHLAGEN
   useEffect(() => {
-    openapiApi.lade().then(setSpec, (e: unknown) =>
-      setFehler(apiErrorMessage(e, 'Die API-Beschreibung konnte nicht geladen werden.')),
-    )
-  }, [])
+    openapiApi.lade().then(setSpec, (e: unknown) => setFehler(apiErrorMessage(e, ladefehler)))
+  }, [ladefehler])
 
   return (
     <Box>
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2, flexWrap: 'wrap' }}>
         <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
-          API-Schnittstelle
+          {t.API_UEBERSICHT.TITEL}
         </Typography>
         <Button component={RouterLink} to="/administration" startIcon={<ArrowBackIcon />}>
-          Zurück zur Administration
+          {t.API_UEBERSICHT.ZURUECK}
         </Button>
       </Stack>
       <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-        <Link href={OPENAPI_JSON_PFAD} download aria-label="OpenAPI als JSON herunterladen">
-          OpenAPI (JSON)
+        <Link href={OPENAPI_JSON_PFAD} download aria-label={t.OPENAPI.JSON_ARIA}>
+          {t.OPENAPI.JSON}
         </Link>
-        <Link href={OPENAPI_YAML_PFAD} download aria-label="OpenAPI als YAML herunterladen">
-          OpenAPI (YAML)
+        <Link href={OPENAPI_YAML_PFAD} download aria-label={t.OPENAPI.YAML_ARIA}>
+          {t.OPENAPI.YAML}
         </Link>
       </Stack>
       {fehler !== null && <Alert severity="error">{fehler}</Alert>}
       {fehler === null && spec === null && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress aria-label="API-Beschreibung wird geladen" />
+          <CircularProgress aria-label={t.API_UEBERSICHT.LAEDT} />
         </Box>
       )}
       {spec !== null && admin && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Aufrufe mit Anmeldung laufen mit Ihrer Sitzung; ein Projekt-Token geben Sie unter ‚Authorize‘
-          bei projektToken an.
+          {t.API_UEBERSICHT.ERKLAERUNG}
         </Typography>
       )}
       {spec !== null && (
@@ -164,7 +169,7 @@ export function ApiUebersichtPage() {
               persistAuthorization={false}
               requestInterceptor={requestInterceptor}
               docExpansion="list"
-              plugins={[AUSPROBIEREN]}
+              plugins={[ausprobierPlugin]}
             />
           ) : (
             <SwaggerUI

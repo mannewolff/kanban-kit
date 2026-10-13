@@ -16,6 +16,7 @@ import {
   type StandardLabelErgebnis,
 } from '../api/standardLabels'
 import { useAuth } from '../auth/AuthContext'
+import { useT } from '../i18n/SpracheContext'
 import { isPlatformAdmin } from '../lib/roles'
 import { labelChipSx } from './labelChipSx'
 
@@ -27,6 +28,7 @@ import { labelChipSx } from './labelChipSx'
  */
 export function StandardLabelsSection() {
   const { user } = useAuth()
+  const t = useT()
   const [offen, setOffen] = useState(false)
   const [satz, setSatz] = useState<StandardLabel[] | null>(null)
   const [fehler, setFehler] = useState<string | null>(null)
@@ -44,7 +46,7 @@ export function StandardLabelsSection() {
     standardLabelsApi
       .satz()
       .then(setSatz)
-      .catch(() => setFehler('Die Standard-Labels konnten nicht geladen werden.'))
+      .catch(() => setFehler(t.STANDARD_LABELS.LADEN_FEHLGESCHLAGEN))
   }
 
   const anlegen = async () => {
@@ -54,7 +56,7 @@ export function StandardLabelsSection() {
       setErgebnis(await standardLabelsApi.anlegen())
       setOffen(false)
     } catch (e) {
-      setFehler(apiErrorMessage(e, 'Die Standard-Labels konnten nicht angelegt werden.'))
+      setFehler(apiErrorMessage(e, t.STANDARD_LABELS.ANLEGEN_FEHLGESCHLAGEN))
     } finally {
       setLaeuft(false)
     }
@@ -64,33 +66,29 @@ export function StandardLabelsSection() {
     <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack spacing={1.5}>
         <Typography variant="h6" component="h2">
-          Standard-Labels
+          {t.STANDARD_LABELS.TITEL}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Legt die Labels, die Kit, Laufsteuerung und Stufenleiste erwarten, auf allen Boards aller
-          Projekte an. Fehlende kommen dazu, vorhandene bleiben, wie sie sind — der Knopf lässt sich
-          beliebig oft drücken.
+          {t.STANDARD_LABELS.HINWEIS}
         </Typography>
         <Stack direction="row">
           <Button variant="outlined" size="small" onClick={oeffnen}>
-            Standard-Labels für alle Boards
+            {t.STANDARD_LABELS.KNOPF}
           </Button>
         </Stack>
         {ergebnis && (
           <Alert severity="success">
-            Auf {ergebnis.boards} Boards: {ergebnis.angelegt} Labels neu angelegt,{' '}
-            {ergebnis.uebersprungen} schon vorhanden.
+            {t.STANDARD_LABELS.ERGEBNIS(ergebnis.boards, ergebnis.angelegt, ergebnis.uebersprungen)}
           </Alert>
         )}
       </Stack>
 
       <Dialog open={offen} onClose={() => setOffen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>Standard-Labels für alle Boards</DialogTitle>
+        <DialogTitle>{t.STANDARD_LABELS.KNOPF}</DialogTitle>
         <DialogContent>
           <Stack spacing={2}>
             <Typography variant="body2">
-              Diese Labels werden auf allen nicht archivierten Boards aller Projekte angelegt.
-              Vorhandene Labels bleiben unverändert und werden übersprungen.
+              {t.STANDARD_LABELS.DIALOG_HINWEIS}
             </Typography>
             {fehler && <Alert severity="error">{fehler}</Alert>}
             {satz &&
@@ -109,13 +107,13 @@ export function StandardLabelsSection() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOffen(false)}>Abbrechen</Button>
+          <Button onClick={() => setOffen(false)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
           <Button
             variant="contained"
             onClick={() => void anlegen()}
             disabled={satz === null || laeuft}
           >
-            Anlegen
+            {t.ALLGEMEIN.ANLEGEN}
           </Button>
         </DialogActions>
       </Dialog>

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { standardLabelsApi } from '../api/standardLabels'
 import { StandardLabelsSection } from './StandardLabelsSection'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const authState = vi.hoisted(() => ({
   user: { platformRole: 'ADMIN', memberships: [] } as { platformRole: string; memberships: [] },
@@ -147,5 +148,51 @@ describe('StandardLabelsSection', () => {
       await within(dialog).findByText('Die Standard-Labels konnten nicht geladen werden.'),
     ).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Anlegen' })).toBeDisabled()
+  })
+})
+
+describe('StandardLabelsSection auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authState.user = { platformRole: 'ADMIN', memberships: [] }
+    mApi.satz.mockResolvedValue(SATZ)
+    mApi.anlegen.mockResolvedValue({ boards: 3, angelegt: 10, uebersprungen: 2 })
+  })
+
+  it('zeigt Abschnitt, Dialog und Ergebnis auf Englisch, Label- und Gruppennamen unverändert', async () => {
+    renderMitSprache(<StandardLabelsSection />, 'en')
+
+    expect(screen.getByRole('heading', { name: 'Standard labels' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Standard labels for all boards' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/non-archived boards of all projects/)).toBeInTheDocument()
+    expect(await within(dialog).findByRole('heading', { name: 'Stufenleiste' })).toBeInTheDocument()
+    expect(within(dialog).getByText('kit:night')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
+
+    expect(await screen.findByText('On 3 boards: 10 labels created, 2 already present.')).toBeInTheDocument()
+  })
+
+  it('meldet Ladefehler und Anlegefehler auf Englisch', async () => {
+    mApi.satz.mockRejectedValueOnce(new Error('503'))
+    renderMitSprache(<StandardLabelsSection />, 'en')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Standard labels for all boards' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('The standard labels could not be loaded.')).toBeInTheDocument()
+  })
+
+  it('fällt beim Anlegen auf Englisch ohne Server-Meldung auf den englischen Text zurück', async () => {
+    mApi.anlegen.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderMitSprache(<StandardLabelsSection />, 'en')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Standard labels for all boards' }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText('kit:night')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
+
+    expect(await within(dialog).findByText('The standard labels could not be created.')).toBeInTheDocument()
   })
 })

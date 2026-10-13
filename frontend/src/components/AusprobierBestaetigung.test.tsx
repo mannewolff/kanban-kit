@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { HINWEIS_AENDERND } from '../lib/apiAusprobieren'
 import { AusprobierBestaetigung } from './AusprobierBestaetigung'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 function renderDialog(offen: boolean) {
   const onAbbrechen = vi.fn()
@@ -63,5 +64,21 @@ describe('AusprobierBestaetigung', () => {
   it('zeigt geschlossen nichts', () => {
     renderDialog(false)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+describe('AusprobierBestaetigung auf Englisch', () => {
+  it('zeigt Titel, Hinweis und Knöpfe auf Englisch, Methode und Pfad unverändert', async () => {
+    renderMitSprache(
+      <AusprobierBestaetigung offen methode="DELETE" pfad="/api/projects/7" onAbbrechen={vi.fn()} onAbsenden={vi.fn()} />,
+      'en',
+    )
+
+    const dialog = await screen.findByRole('dialog', { name: 'Change real data?' })
+    expect(dialog).toHaveAccessibleDescription('This call changes real data in this environment.')
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument()
+    expect(screen.getByText('DELETE')).toBeInTheDocument()
+    expect(screen.getByText('/api/projects/7')).toBeInTheDocument()
   })
 })

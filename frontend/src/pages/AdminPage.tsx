@@ -13,6 +13,7 @@ import { useAuth } from '../auth/AuthContext'
 import { BackupStatusSection } from '../components/BackupStatusSection'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { OverloadRejectionsSection } from '../components/OverloadRejectionsSection'
+import { useT } from '../i18n/SpracheContext'
 import { useEditMode } from '../lib/EditModeContext'
 
 interface Props {
@@ -22,16 +23,19 @@ interface Props {
 export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
   const { user: currentUser } = useAuth()
   const { editMode } = useEditMode()
+  const t = useT()
+  const ta = t.ADMIN_SEITE
   const [users, setUsers] = useState<AdminUser[]>([])
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<{ id: number; name: string } | null>(null)
 
+  const { KEIN_ZUGRIFF, LADEN_FEHLGESCHLAGEN } = ta
   const reload = useCallback(() => {
     api
       .listUsers()
       .then(setUsers)
-      .catch((e) => setError(e instanceof ApiError && e.status === 403 ? 'Kein Admin-Zugriff.' : 'Laden fehlgeschlagen.'))
-  }, [api])
+      .catch((e) => setError(e instanceof ApiError && e.status === 403 ? KEIN_ZUGRIFF : LADEN_FEHLGESCHLAGEN))
+  }, [api, KEIN_ZUGRIFF, LADEN_FEHLGESCHLAGEN])
 
   useEffect(() => {
     reload()
@@ -44,7 +48,7 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
       await api.setRole(u.id, next)
       reload()
     } catch (e) {
-      setError(apiErrorMessage(e, 'Rollenänderung fehlgeschlagen.'))
+      setError(apiErrorMessage(e, ta.ROLLE_FEHLGESCHLAGEN))
     }
   }
 
@@ -54,7 +58,7 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
       await api.approve(u.id)
       reload()
     } catch (e) {
-      setError(apiErrorMessage(e, 'Freigabe fehlgeschlagen.'))
+      setError(apiErrorMessage(e, ta.FREIGABE_FEHLGESCHLAGEN))
     }
   }
 
@@ -68,7 +72,7 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
       setEditing(null)
       reload()
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Namensänderung fehlgeschlagen.')
+      setError(e instanceof ApiError ? e.message : ta.NAME_FEHLGESCHLAGEN)
     }
   }
 
@@ -78,7 +82,7 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
       await (u.disabled ? api.enable(u.id) : api.disable(u.id))
       reload()
     } catch (e) {
-      setError(apiErrorMessage(e, u.disabled ? 'Entsperren fehlgeschlagen.' : 'Sperren fehlgeschlagen.'))
+      setError(apiErrorMessage(e, u.disabled ? ta.ENTSPERREN_FEHLGESCHLAGEN : ta.SPERREN_FEHLGESCHLAGEN))
     }
   }
 
@@ -89,13 +93,13 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
           size="small"
           value={editing.name}
           onChange={(e) => setEditing({ id: u.id, name: e.target.value })}
-          slotProps={{ htmlInput: { maxLength: 120, 'aria-label': `Anzeigename von ${u.email}` } }}
+          slotProps={{ htmlInput: { maxLength: 120, 'aria-label': ta.ANZEIGENAME_ARIA(u.email) } }}
         />
-        <Button size="small" aria-label="Namen speichern" onClick={saveDisplayName}>
-          Speichern
+        <Button size="small" aria-label={ta.NAMEN_SPEICHERN} onClick={saveDisplayName}>
+          {t.ALLGEMEIN.SPEICHERN}
         </Button>
-        <Button size="small" aria-label="Bearbeiten abbrechen" onClick={() => setEditing(null)}>
-          Abbrechen
+        <Button size="small" aria-label={ta.BEARBEITEN_ABBRECHEN} onClick={() => setEditing(null)}>
+          {t.ALLGEMEIN.ABBRECHEN}
         </Button>
       </Box>
     ) : (
@@ -104,7 +108,7 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
         {editMode && (
           <IconButton
             size="small"
-            aria-label={`Namen von ${u.displayName} bearbeiten`}
+            aria-label={ta.NAMEN_BEARBEITEN_ARIA(u.displayName)}
             onClick={() => setEditing({ id: u.id, name: u.displayName })}
           >
             <EditIcon fontSize="inherit" />
@@ -118,40 +122,40 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
       {!u.approvedAt && (
         <Button
           size="small"
-          aria-label={`${u.displayName} freigeben`}
+          aria-label={ta.FREIGEBEN_ARIA(u.displayName)}
           onClick={() => approve(u)}
           sx={{ mr: 1 }}
         >
-          Freigeben
+          {ta.FREIGEBEN}
         </Button>
       )}
-      <Button size="small" aria-label={`Rolle von ${u.displayName} umschalten`} onClick={() => toggleRole(u)}>
-        {u.platformRole === 'ADMIN' ? 'Zu USER' : 'Zu ADMIN'}
+      <Button size="small" aria-label={ta.ROLLE_UMSCHALTEN_ARIA(u.displayName)} onClick={() => toggleRole(u)}>
+        {ta.ZU_ROLLE(u.platformRole === 'ADMIN' ? 'USER' : 'ADMIN')}
       </Button>
       {u.id !== currentUser?.userId && (
         <Button
           size="small"
           color={u.disabled ? 'success' : 'error'}
-          aria-label={u.disabled ? `${u.displayName} entsperren` : `${u.displayName} sperren`}
+          aria-label={u.disabled ? ta.ENTSPERREN_ARIA(u.displayName) : ta.SPERREN_ARIA(u.displayName)}
           onClick={() => toggleDisabled(u)}
           sx={{ ml: 1 }}
         >
-          {u.disabled ? 'Entsperren' : 'Sperren'}
+          {u.disabled ? ta.ENTSPERREN : ta.SPERREN}
         </Button>
       )}
     </>
   )
 
   const columns: DataTableColumn<AdminUser>[] = [
-    { key: 'name', header: 'Name', render: nameCell, defaultWidth: 180, minWidth: 120, hideable: true, resizable: true },
-    { key: 'email', header: 'E-Mail', render: (u) => u.email, defaultWidth: 200, minWidth: 120, hideable: true, resizable: true },
-    { key: 'verified', header: 'Verifiziert', render: (u) => (u.emailVerified ? 'ja' : 'nein'), defaultWidth: 100, hideable: true, resizable: true },
+    { key: 'name', header: ta.NAME, render: nameCell, defaultWidth: 180, minWidth: 120, hideable: true, resizable: true },
+    { key: 'email', header: ta.EMAIL, render: (u) => u.email, defaultWidth: 200, minWidth: 120, hideable: true, resizable: true },
+    { key: 'verified', header: ta.VERIFIZIERT, render: (u) => (u.emailVerified ? ta.JA : ta.NEIN), defaultWidth: 100, hideable: true, resizable: true },
     {
       key: 'approval',
-      header: 'Freigabe',
+      header: ta.FREIGABE,
       render: (u) => (
         <Chip
-          label={u.approvedAt ? 'Freigegeben' : 'Wartet auf Freigabe'}
+          label={u.approvedAt ? ta.FREIGEGEBEN : ta.WARTET_AUF_FREIGABE}
           size="small"
           color={u.approvedAt ? 'success' : 'warning'}
         />
@@ -162,9 +166,9 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
     },
     {
       key: 'status',
-      header: 'Status',
+      header: ta.STATUS,
       render: (u) => (
-        <Chip label={u.disabled ? 'Gesperrt' : 'Aktiv'} size="small" color={u.disabled ? 'error' : 'success'} />
+        <Chip label={u.disabled ? ta.GESPERRT : ta.AKTIV} size="small" color={u.disabled ? 'error' : 'success'} />
       ),
       defaultWidth: 110,
       hideable: true,
@@ -172,7 +176,7 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
     },
     {
       key: 'role',
-      header: 'Rolle',
+      header: t.ALLGEMEIN.ROLLE,
       render: (u) => (
         <Chip label={u.platformRole} size="small" color={u.platformRole === 'ADMIN' ? 'primary' : 'default'} />
       ),
@@ -180,13 +184,13 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
       hideable: true,
       resizable: true,
     },
-    { key: 'actions', header: 'Aktion', render: actionsCell, align: 'right', defaultWidth: 260 },
+    { key: 'actions', header: ta.AKTION, render: actionsCell, align: 'right', defaultWidth: 260 },
   ]
 
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
-        Admin — Nutzerverwaltung
+        {ta.TITEL}
       </Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 

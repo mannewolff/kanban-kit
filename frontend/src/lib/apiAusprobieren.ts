@@ -1,3 +1,5 @@
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
+
 /**
  * Reine Logik fuers Ausprobieren aus der API-Uebersicht (Plan #1437, E1/E10): das Kennzeichen,
  * an dem der Server einen ausprobierten Aufruf erkennt, die Unterscheidung lesend/aendernd und die
@@ -8,10 +10,20 @@
 export const AUSPROBIER_HEADER = 'X-Api-Ausprobieren'
 
 /** Fehlertext, wenn der Admin die Rueckfrage vor einem aendernden Aufruf abbricht. */
-export const ABGEBROCHEN = 'Abgebrochen, nichts gesendet'
+export function abgebrochenText(sprache: Sprache): string {
+  return woerterbuch(sprache).API_UEBERSICHT.ABGEBROCHEN
+}
 
 /** Hinweis an der Stelle des Absendens eines aendernden Aufrufs. */
-export const HINWEIS_AENDERND = 'Dieser Aufruf verändert echte Daten dieser Umgebung.'
+export function hinweisAendernd(sprache: Sprache): string {
+  return woerterbuch(sprache).API_UEBERSICHT.HINWEIS_AENDERND
+}
+
+/** Der Abbruchtext, deutsche Fassung. */
+export const ABGEBROCHEN = abgebrochenText('de')
+
+/** Der Hinweis vor einem aendernden Aufruf, deutsche Fassung. */
+export const HINWEIS_AENDERND = hinweisAendernd('de')
 
 const LESEND = new Set(['GET', 'HEAD'])
 

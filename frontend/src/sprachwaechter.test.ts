@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1660 = 'Sprache: Administration, Admin-Bereich und API-Übersicht auf Englisch'
 const P1661 = 'Sprache: Ausnahmeliste des Wächters leeren und Abnahme'
 const KEIN_ANZEIGETEXT = 'kein Anzeigetext'
 
@@ -70,21 +69,9 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/lib/nightRunErgebnisstand.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1659 — CSS-Werte (Haarlinien) und der Zustandswert `nicht abrufbar` eines Fortschritts (Schluessel, angezeigt wird das Woerterbuch)
   { file: 'src/pages/NightRunPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  // #1660
-  { file: 'src/components/AusprobierBestaetigung.tsx', rule: 'jsx', resolvedIn: P1660 },
-  { file: 'src/components/BackupStatusSection.tsx', rule: 'jsx', resolvedIn: P1660 },
-  { file: 'src/components/BackupStatusSection.tsx', rule: 'literal', resolvedIn: P1660 },
-  { file: 'src/components/OverloadRejectionsSection.tsx', rule: 'jsx', resolvedIn: P1660 },
-  { file: 'src/components/OverloadRejectionsSection.tsx', rule: 'literal', resolvedIn: P1660 },
-  { file: 'src/components/StandardLabelsSection.tsx', rule: 'jsx', resolvedIn: P1660 },
-  { file: 'src/components/StandardLabelsSection.tsx', rule: 'literal', resolvedIn: P1660 },
-  { file: 'src/lib/apiAusprobieren.ts', rule: 'literal', resolvedIn: P1660 },
-  { file: 'src/pages/AdminPage.tsx', rule: 'jsx', resolvedIn: P1660 },
-  { file: 'src/pages/AdminPage.tsx', rule: 'literal', resolvedIn: P1660 },
-  { file: 'src/pages/AdministrationPage.tsx', rule: 'jsx', resolvedIn: P1660 },
-  { file: 'src/pages/AdministrationPage.tsx', rule: 'literal', resolvedIn: P1660 },
-  { file: 'src/pages/ApiUebersichtPage.tsx', rule: 'jsx', resolvedIn: P1660 },
-  { file: 'src/pages/ApiUebersichtPage.tsx', rule: 'literal', resolvedIn: P1660 },
+  // #1660 — CSS-Wert (Rahmen der Token-Zeile) und `rel` des Doku-Links der Sicherung
+  { file: 'src/components/BackupStatusSection.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/pages/AdministrationPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1661
   { file: 'src/components/CardFields.tsx', rule: 'jsx', resolvedIn: P1661 },
   { file: 'src/components/CardFields.tsx', rule: 'literal', resolvedIn: P1661 },
