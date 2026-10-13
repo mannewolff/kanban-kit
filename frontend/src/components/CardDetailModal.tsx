@@ -66,6 +66,7 @@ import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
 import { useSnackbar } from './SnackbarProvider'
 import { dialogTitleSx } from './dialogChromeSx'
+import { useSprache } from '../i18n/SpracheContext'
 
 /** Bilder und PDF werden in der Lightbox angezeigt; andere Typen nur heruntergeladen. */
 const isPreviewable = (contentType: string) =>
@@ -504,6 +505,7 @@ function CommentsSection({
   onNewCommentChange: (value: string) => void
   onAdd: () => void
 }>) {
+  const { sprache } = useSprache()
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
@@ -547,7 +549,7 @@ function CommentsSection({
                   <TextField {...commentFieldProps} size="small" value={editingBody}
                     onChange={(e) => onEditingBodyChange(e.target.value)}
                     error={isTooLong(editingBody)}
-                    helperText={isTooLong(editingBody) ? tooLongMessage(editingBody.length) : undefined}
+                    helperText={isTooLong(editingBody) ? tooLongMessage(editingBody.length, sprache) : undefined}
                     slotProps={{ htmlInput: { 'aria-label': 'Kommentar bearbeiten' } }} />
                   <Stack direction="row" spacing={1}>
                     <Button size="small" variant="contained" onClick={onSaveEdit} disabled={isTooLong(editingBody)}>Speichern</Button>
@@ -567,7 +569,7 @@ function CommentsSection({
         <TextField {...commentFieldProps} size="small" fullWidth placeholder="Kommentar schreiben" value={newComment}
           onChange={(e) => onNewCommentChange(e.target.value)}
           error={isTooLong(newComment)}
-          helperText={isTooLong(newComment) ? tooLongMessage(newComment.length) : undefined}
+          helperText={isTooLong(newComment) ? tooLongMessage(newComment.length, sprache) : undefined}
           slotProps={{ htmlInput: { 'aria-label': 'Kommentar schreiben' } }} />
         <Button variant="contained" size="small" onClick={onAdd} disabled={isTooLong(newComment)}>
           Senden
@@ -668,6 +670,7 @@ function CardStatusChip({
   editing: boolean
   onSetStatus: (status: CardStatus) => Promise<void>
 }>) {
+  const { sprache } = useSprache()
   // Läuft ein Wechsel, ist die Auswahl gesperrt; die Rückfrage gilt nur für „Ready".
   const [pending, setPending] = useState(false)
   const [confirmReady, setConfirmReady] = useState(false)
@@ -678,9 +681,9 @@ function CardStatusChip({
     return <Chip label={columnName} size="small" sx={statusChipSx(statusColors(columnName))} />
   }
 
-  const name = statusAnzeigename(status)
+  const name = statusAnzeigename(status, sprache)
   if (archived || !canSetStatus) {
-    return <Chip label={name} size="small" sx={statusChipSx(statusColors(name))} />
+    return <Chip label={name} size="small" sx={statusChipSx(statusColors(statusAnzeigename(status)))} />
   }
 
   const setze = async (ziel: CardStatus) => {
@@ -707,7 +710,7 @@ function CardStatusChip({
         // Der gewählte Wert erscheint als derselbe Chip wie im lesenden Fall — Melderfarbe und
         // Radius kommen so aus `statusColors` und dem Theme, nicht aus eigenen Werten.
         renderValue={(wert) => (
-          <Chip label={statusAnzeigename(wert)} size="small" sx={statusChipSx(statusColors(statusAnzeigename(wert)))} />
+          <Chip label={statusAnzeigename(wert, sprache)} size="small" sx={statusChipSx(statusColors(statusAnzeigename(wert)))} />
         )}
         onChange={(e) => {
           // Nur die übrigen Zustände lösen `onChange` aus — der aktuelle Eintrag ist `disabled`.
@@ -719,9 +722,9 @@ function CardStatusChip({
           void setze(ziel)
         }}
       >
-        {STATUS_NAMEN.map(([s, anzeige]) => (
+        {STATUS_NAMEN.map(([s]) => (
           <MenuItem key={s} value={s} disabled={s === status}>
-            {anzeige}
+            {statusAnzeigename(s, sprache)}
           </MenuItem>
         ))}
       </Select>
@@ -864,6 +867,7 @@ function CardBodyView({
   dueOverdue: boolean
   derivedFrom: number | null
 }>) {
+  const { sprache } = useSprache()
   return (
     <>
       <Box aria-label="Beschreibung" data-testid="description-view" sx={descriptionSx}>
@@ -897,7 +901,7 @@ function CardBodyView({
           color={dueOverdue ? 'error' : 'text.secondary'}
           sx={{ fontWeight: dueOverdue ? 600 : 400 }}
         >
-          Fällig am {formatDueDate(dueDate)}
+          Fällig am {formatDueDate(dueDate, sprache)}
           {dueOverdue && ' — überfällig'}
         </Typography>
       )}

@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1647 = 'Sprache: bereichsübergreifende lib-Formatierer'
 const P1649 = 'Sprache: Seiten vor der Anmeldung auf Englisch'
 const P1650 = 'Sprache: Rahmen und Navigation auf Englisch'
 const P1651 = 'Sprache: Projekte, Boards, Mitglieder, Rollen und Profil auf Englisch'
@@ -33,10 +32,6 @@ const P1661 = 'Sprache: Ausnahmeliste des Wächters leeren und Abnahme'
 const KEIN_ANZEIGETEXT = 'kein Anzeigetext'
 
 const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
-  // #1647
-  { file: 'src/lib/cleanupCountdown.ts', rule: 'literal', resolvedIn: P1647 },
-  { file: 'src/lib/columnMeta.ts', rule: 'literal', resolvedIn: P1647 },
-  { file: 'src/lib/formatDuration.ts', rule: 'literal', resolvedIn: P1647 },
   // #1649
   { file: 'src/auth/AuthContext.tsx', rule: 'literal', resolvedIn: P1649 },
   { file: 'src/components/AuthCard.tsx', rule: 'literal', resolvedIn: P1649 },

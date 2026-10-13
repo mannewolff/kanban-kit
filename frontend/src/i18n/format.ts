@@ -27,12 +27,12 @@ const GEBIETSSCHEMA: Readonly<Record<Sprache, string>> = { de: 'de-DE', en: 'en-
  * ausgeschriebenem Monat (Kriterium 9 der Quelle #1637).
  */
 const DATUM: Readonly<Record<Sprache, Intl.DateTimeFormatOptions>> = {
-  de: { day: '2-digit', month: '2-digit', year: 'numeric' },
+  de: { day: 'numeric', month: 'numeric', year: 'numeric' },
   en: { dateStyle: 'medium' },
 }
 
 const DATUM_UHRZEIT: Readonly<Record<Sprache, Intl.DateTimeFormatOptions>> = {
-  de: { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' },
+  de: { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' },
   en: { dateStyle: 'medium', timeStyle: 'medium' },
 }
 

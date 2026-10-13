@@ -63,6 +63,7 @@ import {
 } from '../theme'
 import { epicColor } from '../lib/epicMeta'
 import { ablageflaecheSx, PLATZHALTER_SX } from '../components/boardSurfaceSx'
+import { useSprache } from '../i18n/SpracheContext'
 
 const ARCHIVED = 'archived'
 type FilterKey = number | typeof ARCHIVED
@@ -241,6 +242,7 @@ function GruppenKopf({ epic, zahl }: Readonly<{ epic: Epic | null; zahl: number 
 }
 
 export function BoardListPage() {
+  const { sprache } = useSprache()
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
@@ -574,7 +576,7 @@ export function BoardListPage() {
                 data-ueberfaellig={overdue ? 'ja' : undefined}
                 sx={{ ...ZAHL, whiteSpace: 'nowrap', fontSize: 11, fontWeight: overdue ? 600 : 400, color: overdue ? MELDER.zinnob : TEXT_SCHWACH }}
               >
-                {`fällig ${formatDueDate(card.dueDate)}`}
+                {`fällig ${formatDueDate(card.dueDate, sprache)}`}
               </Typography>
             )}
           </Box>

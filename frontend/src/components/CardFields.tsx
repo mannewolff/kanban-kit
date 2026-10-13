@@ -4,6 +4,7 @@ import type { Epic } from '../api/epics'
 import { epicShortcode } from '../lib/epicMeta'
 import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
+import { useSprache } from '../i18n/SpracheContext'
 
 /**
  * Native Vorhaben-Auswahl: „(kein Vorhaben)" plus alle übergebenen Vorhaben mit Kürzel. Eigene
@@ -121,6 +122,7 @@ export function CardFields({
   /** Optionaler KeyDown-Handler am Titel (Anlege-Dialog: Cmd/Ctrl+Enter legt an). */
   onTitleKeyDown?: (event: KeyboardEvent) => void
 }>) {
+  const { sprache } = useSprache()
   const bodyShortcut = useCheckboxShortcut(onBodyChange)
   const nonEpicFields = (
     <>
@@ -199,7 +201,7 @@ export function CardFields({
         rows={8}
         fullWidth
         error={isTooLong(body)}
-        helperText={isTooLong(body) ? tooLongMessage(body.length) : undefined}
+        helperText={isTooLong(body) ? tooLongMessage(body.length, sprache) : undefined}
         slotProps={{ htmlInput: { 'aria-label': 'Markdown-Beschreibung' } }}
         sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
       />

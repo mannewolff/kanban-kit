@@ -34,6 +34,22 @@ export const en: Woerterbuch = {
   DAUER_STUNDEN: (stunden, minuten) => `${stunden} h ${minuten} min`,
   DAUER_TAGE: (tage, stunden) => `${tage} d ${stunden} h`,
 
+  STATUS: {
+    BACKLOG: 'Backlog',
+    READY: 'Ready',
+    IN_PROGRESS: 'In progress',
+    IN_REVIEW: 'In review',
+    DONE: 'Done',
+  },
+
+  TEXT_ZU_LANG: (laenge, grenze) => `${laenge} / ${grenze} characters`,
+
+  ARCHIVIERUNG: {
+    HEUTE: 'archived today',
+    MORGEN: 'archived tomorrow',
+    IN_TAGEN: (tage) => `archived in ${tage} days`,
+  },
+
   SPRACHE: {
     HINWEIS:
       'The language applies to all users and to the pages before sign-in. Users who are signed in see the change the next time they load the page.',

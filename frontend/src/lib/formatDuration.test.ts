@@ -25,4 +25,10 @@ describe('formatDuration', () => {
   it('rundet Sekunden-Bruchteile', () => {
     expect(formatDuration(44.6)).toBe('45 s')
   })
+
+  it('schreibt die Einheiten auf Englisch', () => {
+    expect(formatDuration(null, 'en')).toBe('n/a')
+    expect(formatDuration(3 * 3600 + 25 * 60, 'en')).toBe('3 h 25 min')
+    expect(formatDuration(2 * 86_400 + 5 * 3600, 'en')).toBe('2 d 5 h')
+  })
 })

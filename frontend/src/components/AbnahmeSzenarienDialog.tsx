@@ -22,6 +22,7 @@ import {
 } from '../lib/abnahmeSzenarien'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { dialogTitleSx } from './dialogChromeSx'
+import { useSprache } from '../i18n/SpracheContext'
 
 const TITEL_ID = 'abnahme-szenarien-titel'
 const RUECKFRAGE_TITEL_ID = 'abnahme-verwerfen-titel'
@@ -70,6 +71,7 @@ function Schritt({ text }: Readonly<{ text: string }>) {
  * den Aufrufer. Die Vermerke leben nur hier (E7) und hängen an der Position des Szenarios (E12).
  */
 export function AbnahmeSzenarienDialog({ open, titel, szenarien, onClose, onAbschicken }: Readonly<Props>) {
+  const { sprache } = useSprache()
   const [vermerke, setVermerke] = useState<(Vermerk | undefined)[]>([])
   const [sendet, setSendet] = useState(false)
   const [fehler, setFehler] = useState<string | null>(null)
@@ -173,7 +175,7 @@ export function AbnahmeSzenarienDialog({ open, titel, szenarien, onClose, onAbsc
             </Typography>
             {zuLang && (
               <Typography variant="body2" color="error">
-                {tooLongMessage(text.length)}
+                {tooLongMessage(text.length, sprache)}
               </Typography>
             )}
             {fehler && <Alert severity="error">{fehler}</Alert>}

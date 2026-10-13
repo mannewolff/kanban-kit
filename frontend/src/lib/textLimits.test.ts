@@ -16,4 +16,8 @@ describe('textLimits', () => {
   it('formatiert den Fehlertext als Ist/Grenze mit Tausenderpunkten', () => {
     expect(tooLongMessage(60_000)).toBe('60.000 / 50.000 Zeichen')
   })
+
+  it('formatiert den Fehlertext auf Englisch mit Tausenderkommas', () => {
+    expect(tooLongMessage(60_000, 'en')).toBe('60,000 / 50,000 characters')
+  })
 })

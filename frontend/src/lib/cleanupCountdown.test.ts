@@ -22,4 +22,10 @@ describe('cleanupCountdownLabel', () => {
     expect(cleanupCountdownLabel(1)).toBe('wird morgen archiviert')
     expect(cleanupCountdownLabel(5)).toBe('wird in 5 Tagen archiviert')
   })
+
+  it('formatiert heute/morgen/Tage auf Englisch', () => {
+    expect(cleanupCountdownLabel(0, 'en')).toBe('archived today')
+    expect(cleanupCountdownLabel(1, 'en')).toBe('archived tomorrow')
+    expect(cleanupCountdownLabel(5, 'en')).toBe('archived in 5 days')
+  })
 })

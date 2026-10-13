@@ -1,3 +1,5 @@
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
+
 /**
  * Verbleibender Cleanup-Countdown einer Done-Karte (portiert aus der Toolbox). Reine Funktion,
  * damit sie deterministisch (mit fixem `now`) getestet werden kann.
@@ -17,9 +19,10 @@ export function cleanupDaysRemaining(
   return Math.max(0, Math.ceil(remaining / 86_400_000))
 }
 
-/** Label-Text für den Done-Archivierungs-Hinweis. */
-export function cleanupCountdownLabel(days: number): string {
-  if (days === 0) return 'wird heute archiviert'
-  if (days === 1) return 'wird morgen archiviert'
-  return `wird in ${days} Tagen archiviert`
+/** Label-Text für den Done-Archivierungs-Hinweis in der Sprache. */
+export function cleanupCountdownLabel(days: number, sprache: Sprache = 'de'): string {
+  const t = woerterbuch(sprache).ARCHIVIERUNG
+  if (days === 0) return t.HEUTE
+  if (days === 1) return t.MORGEN
+  return t.IN_TAGEN(days)
 }

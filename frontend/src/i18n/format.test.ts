@@ -15,6 +15,11 @@ describe('formatierer – Deutsch', () => {
     expect(f.datum(OKT_13)).toBe('13.10.2026')
   })
 
+  it('schreibt Tag und Monat ohne führende Null wie toLocaleDateString', () => {
+    expect(f.datum('2026-08-01T12:00:00Z')).toBe('1.8.2026')
+    expect(f.datumUhrzeit('2026-08-01T07:05:09Z')).toBe('1.8.2026, 09:05:09')
+  })
+
   it('nimmt Datum, Zeichenkette und Millisekunden gleich', () => {
     expect(f.datum(new Date(OKT_13))).toBe('13.10.2026')
     expect(f.datum(Date.parse(OKT_13))).toBe('13.10.2026')

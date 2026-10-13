@@ -31,6 +31,25 @@ export const de = {
   DAUER_STUNDEN: (stunden: number, minuten: number) => `${stunden} Std ${minuten} Min`,
   DAUER_TAGE: (tage: number, stunden: number) => `${tage} T ${stunden} Std`,
 
+  /** Die fünf Prozesszustände (`columnMeta`); wie im Kit, in beiden Sprachen gleich (Kriterium 6). */
+  STATUS: {
+    BACKLOG: 'Backlog',
+    READY: 'Ready',
+    IN_PROGRESS: 'In progress',
+    IN_REVIEW: 'In review',
+    DONE: 'Done',
+  },
+
+  /** Fehlertext eines zu langen Freitexts (`textLimits`); die Zahlen kommen formatiert. */
+  TEXT_ZU_LANG: (laenge: string, grenze: string) => `${laenge} / ${grenze} Zeichen`,
+
+  /** Archivierungs-Hinweis einer Done-Karte (`cleanupCountdown`). */
+  ARCHIVIERUNG: {
+    HEUTE: 'wird heute archiviert',
+    MORGEN: 'wird morgen archiviert',
+    IN_TAGEN: (tage: number) => `wird in ${tage} Tagen archiviert`,
+  },
+
   /** Abschnitt „Sprache / Language“ der Administration (Issue #1646); Überschrift und Sprachnamen stehen fest. */
   SPRACHE: {
     HINWEIS:

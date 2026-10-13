@@ -21,6 +21,7 @@ import { MELDER, NUTZER_MAL_SX, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { type Dichte, karteDichteSx, karteSx } from '../boardSurfaceSx'
 import { EpicBadge } from '../EpicBadge'
 import { labelChipSx } from '../labelChipSx'
+import { useSprache } from '../../i18n/SpracheContext'
 
 /** Initialen (max. 2 Zeichen) aus einem Anzeigenamen für Assignee-Avatare. */
 function initials(name: string): string {
@@ -102,8 +103,9 @@ function CardAssignees({ assigneeIds, members, cardTitle }: Readonly<{ assigneeI
  * nennt den Status in Worten — das Mal ist keine reine Farbinformation.
  */
 function Statusmal({ status }: Readonly<{ status: CardStatus }>) {
-  const name = statusAnzeigename(status)
-  const farben = statusColors(name)
+  const { sprache } = useSprache()
+  const name = statusAnzeigename(status, sprache)
+  const farben = statusColors(statusAnzeigename(status))
   return (
     <Box
       component="span"
@@ -151,6 +153,7 @@ function KartenFuss({
   overdue: boolean
   onEpicOpen?: (epic: Epic) => void
 }>) {
+  const { sprache } = useSprache()
   // Verbleibende Tage bis zur Aufräumung, oder `null`, wenn kein Countdown läuft. Als Wert statt
   // als Bedingung: Er trägt die Nullprüfung für `doneAt` gleich mit, und `0` bleibt ein Countdown.
   const restTage = doneAt != null && retentionDays > 0 ? cleanupDaysRemaining(doneAt, retentionDays) : null
@@ -165,7 +168,7 @@ function KartenFuss({
       )}
       {restTage != null && (
         <Box component="span" sx={{ ...ZAHL, ml: 'auto', fontSize: 10.5, color: TEXT_SCHWACH }}>
-          {cleanupCountdownLabel(restTage)}
+          {cleanupCountdownLabel(restTage, sprache)}
         </Box>
       )}
       {card.dueDate != null && (
@@ -177,7 +180,7 @@ function KartenFuss({
           data-ueberfaellig={overdue ? 'ja' : undefined}
           sx={{ ...ZAHL, ml: 'auto', fontSize: 10.5, fontWeight: overdue ? 600 : 400, color: overdue ? MELDER.zinnob : TEXT_SCHWACH }}
         >
-          {`fällig ${formatDueDate(card.dueDate)}`}
+          {`fällig ${formatDueDate(card.dueDate, sprache)}`}
         </Box>
       )}
     </Box>

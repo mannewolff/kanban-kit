@@ -19,6 +19,7 @@ import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 import { AssigneeSection, LabelSection, parseDependencyInput } from './CardDetailModal'
 import { dialogTitleSx } from './dialogChromeSx'
+import { useSprache } from '../i18n/SpracheContext'
 
 const BODY_TEMPLATE = '## Kontext\n\n## Aufgabe\n\n## Akzeptanzkriterium\n\n## Abhängigkeiten\n'
 
@@ -80,6 +81,7 @@ export function NewCardModal({
   members = [],
   boardLabels = [],
 }: Readonly<Props>) {
+  const { sprache } = useSprache()
   const [type, setType] = useState<CardType>(epicOnly ? 'EPIC' : 'CARD')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState(BODY_TEMPLATE)
@@ -317,7 +319,7 @@ export function NewCardModal({
                 rows={8}
                 fullWidth
                 error={isTooLong(body)}
-                helperText={isTooLong(body) ? tooLongMessage(body.length) : undefined}
+                helperText={isTooLong(body) ? tooLongMessage(body.length, sprache) : undefined}
                 slotProps={{ htmlInput: { 'aria-label': 'Beschreibung' } }}
                 sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
               />

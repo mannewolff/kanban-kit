@@ -1,5 +1,7 @@
 import type { BoardColumn } from '../api/boards'
 import type { CardStatus } from '../api/cards'
+import { de } from '../i18n/de'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 
 /** Ob eine Spalte fachlich "Done" ist (aus dem Namen). */
 export const isDoneColumn = (name: string): boolean => name.toLowerCase().includes('done')
@@ -17,18 +19,16 @@ export function effektivDone(card: Readonly<{ status: CardStatus | null }>, spal
  * Die fünf Prozesszustände in ihrer Reihenfolge, mit dem kanonischen Prozessnamen wortgleich zu
  * `workflow.config.json` → `columns` und `CardStatus.anzeigename()` im Backend (Plan #1294, E24).
  * Der Name speist zugleich `statusColors` — so trägt jede Anzeige des Status die Melderfarbe der
- * gleichnamigen Spalte.
+ * gleichnamigen Spalte. Die Namen stehen im Wörterbuch und heißen in beiden Sprachen wie im Kit
+ * (Kriterium 6 der Quelle #1637); der kanonische Name ist der deutsche Eintrag.
  */
-export const STATUS_NAMEN: ReadonlyArray<readonly [CardStatus, string]> = [
-  ['BACKLOG', 'Backlog'],
-  ['READY', 'Ready'],
-  ['IN_PROGRESS', 'In progress'],
-  ['IN_REVIEW', 'In review'],
-  ['DONE', 'Done'],
-]
+export const STATUS_NAMEN: ReadonlyArray<readonly [CardStatus, string]> = (
+  ['BACKLOG', 'READY', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'] as const
+).map((status) => [status, de.STATUS[status]] as const)
 
-/** Der kanonische Prozessname eines Status. */
-export const statusAnzeigename = (status: CardStatus): string => STATUS_NAMEN.find(([s]) => s === status)![1]
+/** Der Prozessname eines Status in der Sprache; ohne Sprache der kanonische. */
+export const statusAnzeigename = (status: CardStatus, sprache: Sprache = 'de'): string =>
+  woerterbuch(sprache).STATUS[status]
 
 /**
  * Ob der Status einer Karte nicht zum kanonischen Namen ihrer Spalte passt — in einer eigenen Spalte
