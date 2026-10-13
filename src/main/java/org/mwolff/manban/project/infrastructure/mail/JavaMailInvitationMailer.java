@@ -1,5 +1,7 @@
 package org.mwolff.manban.project.infrastructure.mail;
 
+import org.mwolff.manban.common.i18n.Sprache;
+import org.mwolff.manban.common.i18n.Texte;
 import org.mwolff.manban.project.domain.ProjectRole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +16,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>Seit Issue #502 die Zustell-Komponente hinter {@link InvitationMailHandler} und {@link
  * ProjectAssignedMailHandler}: Der Aufruf kommt nach dem Commit aus dem Outbox-Worker.
+ *
+ * <p>Betreff und Text in der eingestellten Sprache, bestimmt beim Versand (Issue #1643, Plan #1638
+ * A6) — die Outbox-Payload trägt keine Sprache.
  */
 @Component
 class JavaMailInvitationMailer {
@@ -24,16 +29,19 @@ class JavaMailInvitationMailer {
   private final boolean mailEnabled;
   private final String from;
   private final String productName;
+  private final Texte texte;
 
   JavaMailInvitationMailer(
       JavaMailSender mailSender,
       @Value("${manban.mail.enabled:false}") boolean mailEnabled,
       @Value("${manban.mail.from:no-reply@kanban-kit.local}") String from,
-      @Value("${manban.mail.product-name:kanban-kit}") String productName) {
+      @Value("${manban.mail.product-name:kanban-kit}") String productName,
+      Texte texte) {
     this.mailSender = mailSender;
     this.mailEnabled = mailEnabled;
     this.from = from;
     this.productName = productName;
+    this.texte = texte;
   }
 
   void sendInvitationEmail(String toEmail, String projectName, String invitationUrl) {
@@ -44,19 +52,9 @@ class JavaMailInvitationMailer {
     SimpleMailMessage message = new SimpleMailMessage();
     message.setFrom(from);
     message.setTo(toEmail);
-    message.setSubject(productName + ": Einladung ins Projekt " + projectName);
-    message.setText(
-        "Du wurdest ins Projekt '"
-            + projectName
-            + "' eingeladen.\n\n"
-            + "So nimmst du die Einladung an:\n"
-            + "1. Registriere dich mit genau dieser E-Mail-Adresse (der, an die diese Nachricht"
-            + " ging).\n"
-            + "2. Bestätige deine E-Mail über den Link aus der Bestätigungs-Mail.\n"
-            + "3. Öffne anschließend diesen Link, um die Einladung anzunehmen:\n\n"
-            + invitationUrl
-            + "\n\n"
-            + "Hast du bereits ein Konto mit dieser E-Mail-Adresse, genügt Schritt 3.\n");
+    Sprache sprache = texte.eingestellte();
+    message.setSubject(texte.text(sprache, "mail.einladung.betreff", productName, projectName));
+    message.setText(texte.text(sprache, "mail.einladung.text", projectName, invitationUrl));
     mailSender.send(message);
     log.info("Einladungs-E-Mail an {} versandt", toEmail);
   }
@@ -75,15 +73,10 @@ class JavaMailInvitationMailer {
     SimpleMailMessage message = new SimpleMailMessage();
     message.setFrom(from);
     message.setTo(toEmail);
-    message.setSubject(productName + ": Du wurdest dem Projekt " + projectName + " hinzugefügt");
+    Sprache sprache = texte.eingestellte();
+    message.setSubject(texte.text(sprache, "mail.zuordnung.betreff", productName, projectName));
     message.setText(
-        "Du wurdest dem Projekt '"
-            + projectName
-            + "' als "
-            + role
-            + " hinzugefügt. Zum Projekt:\n\n"
-            + projectUrl
-            + "\n");
+        texte.text(sprache, "mail.zuordnung.text", projectName, role.name(), projectUrl));
     mailSender.send(message);
     log.info("Zuordnungs-E-Mail an {} versandt", toEmail);
   }

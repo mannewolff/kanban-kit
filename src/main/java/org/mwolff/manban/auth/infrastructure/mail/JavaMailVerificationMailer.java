@@ -1,5 +1,7 @@
 package org.mwolff.manban.auth.infrastructure.mail;
 
+import org.mwolff.manban.common.i18n.Sprache;
+import org.mwolff.manban.common.i18n.Texte;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +18,9 @@ import org.springframework.stereotype.Component;
  * <p>Der Versand ist über {@code manban.mail.enabled} schaltbar. In Dev/Test (Default: aus) wird
  * der Verifikations-Link nur geloggt, sodass kein SMTP-Server nötig ist — genau der Punkt, der in
  * der Toolbox (#262) blockierte.
+ *
+ * <p>Betreff und Text in der eingestellten Sprache, bestimmt beim Versand (Issue #1643, Plan #1638
+ * A6) — die Outbox-Payload trägt keine Sprache.
  */
 @Component
 class JavaMailVerificationMailer {
@@ -26,16 +31,19 @@ class JavaMailVerificationMailer {
   private final boolean mailEnabled;
   private final String from;
   private final String productName;
+  private final Texte texte;
 
   JavaMailVerificationMailer(
       JavaMailSender mailSender,
       @Value("${manban.mail.enabled:false}") boolean mailEnabled,
       @Value("${manban.mail.from:no-reply@kanban-kit.local}") String from,
-      @Value("${manban.mail.product-name:kanban-kit}") String productName) {
+      @Value("${manban.mail.product-name:kanban-kit}") String productName,
+      Texte texte) {
     this.mailSender = mailSender;
     this.mailEnabled = mailEnabled;
     this.from = from;
     this.productName = productName;
+    this.texte = texte;
   }
 
   void sendVerificationEmail(String toEmail, String verificationUrl) {
@@ -46,9 +54,9 @@ class JavaMailVerificationMailer {
     SimpleMailMessage message = new SimpleMailMessage();
     message.setFrom(from);
     message.setTo(toEmail);
-    message.setSubject(productName + ": E-Mail bestätigen");
-    message.setText(
-        "Bitte bestätige deine E-Mail-Adresse über diesen Link:\n\n" + verificationUrl + "\n");
+    Sprache sprache = texte.eingestellte();
+    message.setSubject(texte.text(sprache, "mail.verifikation.betreff", productName));
+    message.setText(texte.text(sprache, "mail.verifikation.text", verificationUrl));
     mailSender.send(message);
     log.info("Verifikations-E-Mail an {} versandt", toEmail);
   }
