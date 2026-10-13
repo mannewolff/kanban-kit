@@ -30,6 +30,7 @@ import echterPrueflauf from '../lib/__fixtures__/night-run-2026-09-11-103116.jso
 import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
 import { formatDuration } from '../lib/formatDuration'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
+import { NIGHT_RUN_AUSZUG_LIEGENGEBLIEBEN } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, KURZ_GRUND_MAX, type NightRunHandoffItem, type NightRunStuckAngaben } from '../lib/nightRunHandoff'
 import { NACHTLAUF_FARBEN, NACHTLAUF_SCHRIFTEN } from '../nachtlaufDesign'
 import { cssRegel } from '../test/cssRegel'
@@ -37,6 +38,7 @@ import { KIT_NAMEN } from '../test/kitNamen'
 import { MELDER, theme } from '../theme'
 import { NightRunPage } from './NightRunPage'
 import appQuelle from '../App.tsx?raw'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 /**
  * Die Seite wird gegen einen **`fetch`-Stub** getestet, nicht gegen gemockte API-Module. Nur so
@@ -7000,5 +7002,439 @@ describe('NightRunPage — festgefahrenes Paket (#1552)', () => {
     }
     // Die Ansage des Anteilsbalkens nennt den Zustand in Worten, nicht nur die Farbe.
     expect(screen.getByTestId('laufband-abschnitt-722')).toHaveAccessibleName(/^Karte #722: festgefahren, /)
+  })
+})
+
+/** Dieselbe Seite wie {@link renderPage}, aber bei Englisch (Issue #1659, A10). */
+function renderPageAufEnglisch(antworten: Antworten = {}, pfad = '/projects/5/nachtlauf') {
+  stubFetch(antworten)
+  return renderMitSprache(
+    <ThemeProvider theme={theme}>
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={[pfad]}>
+          <Routes>
+            <Route path="/projects/:projectId/nachtlauf" element={<NightRunPage />} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>
+    </ThemeProvider>,
+    'en',
+  )
+}
+
+describe('NightRunPage — auf Englisch (Issue #1659)', () => {
+  it('meldet eine ungültige Projekt-ID auf Englisch', async () => {
+    renderPageAufEnglisch({}, '/projects/abc/nachtlauf')
+
+    expect(await screen.findByText('Invalid project ID.')).toBeInTheDocument()
+  })
+
+  it('zeigt Kopf, Leerzustand und Dateiauswahl auf Englisch', async () => {
+    renderPageAufEnglisch()
+
+    expect(await screen.findByText('No evaluation yet.')).toBeInTheDocument()
+    expect(screen.getByText('Read log')).toBeInTheDocument()
+    expect(screen.getByLabelText('Choose log file')).toBeInTheDocument()
+    expect(screen.getByText('Night run')).toBeInTheDocument()
+  })
+
+  it('nennt die Kartenart der Herkunftskette auf Englisch', async () => {
+    renderPageAufEnglisch({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }],
+          }),
+        ],
+      ],
+      karten: {
+        700: karte({ id: 1, number: 700, title: 'Paket A', derivedFrom: 715 }),
+        715: karte({ id: 3, number: 715, title: '[Fachlich] Nachtlauf' }),
+      },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+
+    expect(
+      await within(lauf(0)).findByRole('button', { name: 'Requirement #715 [Fachlich] Nachtlauf' }),
+    ).toBeInTheDocument()
+    expect(within(lauf(0)).getByText('Plan: not reached yet')).toBeInTheDocument()
+    expect(within(lauf(0)).getByText('Epic: none')).toBeInTheDocument()
+    expect(within(lauf(0)).queryByText(/Fachliche Anforderung/)).toBeNull()
+  })
+
+  it('nennt Dauer und Ergebnis eines Vorgangs auf Englisch', async () => {
+    renderPageAufEnglisch({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            processedCount: 1,
+            skippedCount: 2,
+            items: [
+              {
+                id: 11,
+                cardNumber: 700,
+                title: 'Paket A',
+                state: 'YELLOW',
+                errorClass: 'CHECKS_RED',
+                durationMs: SIEBEN_MIN,
+                excerpt: 'Issue #700: npm test -> rot',
+              },
+            ],
+          }),
+        ],
+      ],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A' }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    aufklappen(0)
+    await within(lauf(0)).findByText('Epic: none')
+
+    const zeile = within(lauf(0)).getByTestId('paket-700')
+    expect(within(zeile).getByTestId('kennzahlen-700')).toHaveTextContent('7 min')
+    expect(within(zeile).getByTestId('kennzahlen-700')).not.toHaveTextContent('Min')
+    // Der Auszug ist Fremdtext und bleibt, wie er ist; nur das Wort davor ist eingebaut.
+    expect(within(zeile).getByText('Excerpt: Issue #700: npm test -> rot', { selector: 'p' })).toBeInTheDocument()
+    expect(within(lauf(0)).getByTestId('nachtlauf-meta')).toHaveTextContent('1 processed · 2 skipped')
+    expect(within(lauf(0)).getByTestId('fussangabe-Shift result')).toHaveTextContent('1 processed · 2 skipped')
+    expect(within(lauf(0)).getByText('Origin unknown')).toBeInTheDocument()
+    expect(within(lauf(0)).getByText(/^uploaded on Sep 2, 2026/)).toBeInTheDocument()
+  })
+
+  it('meldet einen nicht deutbaren Stand auf Englisch', async () => {
+    renderPageAufEnglisch()
+    await screen.findByText('No evaluation yet.')
+
+    const input = screen.getByLabelText('Choose log file')
+    Object.defineProperty(input, 'files', {
+      value: [new File(['kein json'], 'night-run.json', { type: 'application/json' })],
+      configurable: true,
+    })
+    fireEvent.change(input)
+
+    expect(await screen.findByText('Not evaluable — origin not stated')).toBeInTheDocument()
+  })
+
+  it('bietet die älteren Runs auf Englisch an', async () => {
+    vi.setSystemTime(new Date('2026-10-01T12:00:00Z'))
+    renderPageAufEnglisch({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0) })]] })
+
+    expect(await screen.findByText('There was no run in the last two shifts.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show older runs (1)' }))
+    expect(screen.getByRole('button', { name: 'Show only the last two shifts' })).toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Auswertung auf Englisch (Issue #1659)', () => {
+  /** Liest einen Stand bei Englisch ein, lässt ihn neu anlegen und klappt den Lauf auf. */
+  async function eingelesenAufEnglisch(ergebnisstand: string, start = startedAt(0)) {
+    renderPageAufEnglisch({
+      submit: { ergebnis: alleNeu(ergebnisstand) },
+      listen: [[], wieAufbewahrt(ergebnisstand)],
+    })
+    await screen.findByText('No evaluation yet.')
+    const input = screen.getByLabelText('Choose log file')
+    Object.defineProperty(input, 'files', {
+      value: [new File([ergebnisstand], 'night-run.json', { type: 'application/json' })],
+      configurable: true,
+    })
+    fireEvent.change(input)
+    const panelEl = await screen.findByTestId(`lauf-${start}`)
+    await waitFor(() => expect(laufKopfzeile(panelEl)).toHaveTextContent('newly created'))
+    panelAufklappen(panelEl)
+    await within(panelEl).findByTestId(FUSSZEILE)
+    return panelEl
+  }
+
+  it('zeigt Stufenband, Kennzahlen und Fußzeile einer Kette auf Englisch', async () => {
+    const panelEl = await eingelesenAufEnglisch(ECHTE_KETTE_STAND, ECHTE_KETTE_START)
+
+    const fuss = within(within(panelEl).getByTestId(FUSSZEILE))
+    expect(fuss.getByTestId('fussangabe-Chains completed')).toHaveTextContent(/\d+ of \d+/)
+    expect(fuss.getByTestId('fussangabe-Time limits per chain')).toHaveTextContent(/Plan \d+ · Review \d+ .* min/)
+    const band = within(panelEl).getAllByTestId(/^stufenband-\d+$/)[0]
+    expect(band).toHaveAccessibleName(/^Stage band: Plan .* min/)
+    expect(within(panelEl).getAllByTestId(/^kennzahlen-\d+$/)[0]).toHaveTextContent(/turns/)
+    expect(panelEl).not.toHaveTextContent(/Stufenband|Züge|Prüfung \d/)
+  })
+
+  it('nennt Label, Abbruch und fehlende Kostenmeldungen einer Kette auf Englisch', async () => {
+    const panelEl = await eingelesenAufEnglisch(ECHTE_KETTE_STAND, ECHTE_KETTE_START)
+
+    expect(metazeile()).toHaveTextContent('claude-opus-5 · Label kit:night · ended regularly')
+    expect(within(panelEl).getByTestId('abbruch-842')).toHaveTextContent(/ — created until then: /)
+    const fuss = within(panelEl).getByTestId(FUSSZEILE)
+    expect(fussangabe(fuss, 'On the cost total')).toHaveTextContent('one work step without cost report')
+    expect(fussangabe(fuss, 'Runtime across all stages')).toHaveTextContent('1 h 9 min')
+    expect(within(panelEl).getAllByTestId(/^kennzahlen-\d+$/)[0]).toHaveTextContent(
+      /^25 min · \$11\.52 · 89 turns · Model time not reported$/,
+    )
+  })
+
+  it('nennt einen hart gestoppten Lauf und einen Schritt ohne Vorgabe auf Englisch', async () => {
+    const ergebnisstand = kettenStand({
+      abschluss: 'harterStopp',
+      kostenSumme: 3.5,
+      kostenUnbekannt: 2,
+      einheiten: [{ id: '900', titel: 'Ohne Budget', ausgang: 'fertig', stufen: { plan: { id: '901' } } }],
+    })
+    const panelEl = await eingelesenAufEnglisch(ergebnisstand)
+
+    expect(metazeile()).toHaveTextContent('ended early (hard stop)')
+    expect(within(panelEl).getByTestId(FUSSZEILE)).toHaveTextContent('2 work steps without cost report')
+    expect(within(panelEl).getByTestId('stufenband-900')).toHaveAccessibleName(/^Stage band: Plan 0\.0 min · no time limit/)
+  })
+
+  it.each([
+    ['de', 'gerechnet, unvollständig — 2 Vorgänge ohne Kostenmeldung'],
+    ['en', 'calculated, incomplete — 2 items without cost report'],
+  ] as const)('zählt mehrere Vorgänge ohne Kostenmeldung (%s, auch auf Englisch)', async (sprache, text) => {
+    const ergebnisstand = stand({
+      einheiten: [
+        einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: GEPRUEFT, kennzahlen: { kostenUsd: 2.5 } }),
+        einheit({ id: '701', titel: 'Paket B', ausgang: 'fehlschlag', pruefung: { zustand: 'ungeprueft' } }),
+        einheit({ id: '702', titel: 'Paket C', ausgang: 'fehlschlag', pruefung: { zustand: 'ungeprueft' } }),
+      ],
+    })
+    stubFetch({ submit: { ergebnis: alleNeu(ergebnisstand) }, listen: [[], wieAufbewahrt(ergebnisstand)] })
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <SnackbarProvider>
+          <MemoryRouter initialEntries={['/projects/5/nachtlauf']}>
+            <Routes>
+              <Route path="/projects/:projectId/nachtlauf" element={<NightRunPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SnackbarProvider>
+      </ThemeProvider>,
+      sprache,
+    )
+    const input = await screen.findByLabelText(sprache === 'de' ? 'Protokolldatei auswählen' : 'Choose log file')
+    Object.defineProperty(input, 'files', {
+      value: [new File([ergebnisstand], 'night-run.json', { type: 'application/json' })],
+      configurable: true,
+    })
+    fireEvent.change(input)
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+    panelAufklappen(panelEl)
+
+    expect(await within(panelEl).findByText(text)).toBeInTheDocument()
+  })
+
+  it('schlüsselt einen Prüf-Lauf auf Englisch auf', async () => {
+    renderPageAufEnglisch({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            mode: 'REVIEW',
+            processedCount: 1,
+            skippedCount: 3,
+            items: [
+              { id: 10, cardNumber: 699, title: 'Paket Z', state: 'GREEN' },
+              { id: 11, cardNumber: 700, title: 'Paket A', state: 'GREY', excerpt: "kein Label 'review:offen'" },
+              { id: 12, cardNumber: 701, title: 'Paket B', state: 'GREY', excerpt: NIGHT_RUN_AUSZUG_LIEGENGEBLIEBEN },
+              { id: 13, cardNumber: 702, title: 'Paket C', state: 'GREY' },
+            ],
+          }),
+        ],
+      ],
+    })
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+    panelAufklappen(panelEl)
+
+    expect(await within(panelEl).findByTestId('aufschluesselung-gesichtet')).toHaveTextContent('4 cards reviewed')
+    expect(within(panelEl).getByTestId('aufschluesselung-bearbeitet')).toHaveTextContent('1 processed')
+    // Der Grund ist ein Datum des Laufs und bleibt, wie er ist.
+    expect(within(panelEl).getByTestId('aufschluesselung-grund-0')).toHaveTextContent(
+      "1 skipped: kein Label 'review:offen'",
+    )
+    expect(within(panelEl).getByTestId('aufschluesselung-liegengeblieben')).toHaveTextContent('1 left over')
+    expect(within(panelEl).getByTestId('aufschluesselung-unbekannt')).toHaveTextContent('1 without known outcome')
+  })
+
+  it('nennt Anteile, Kosten und Züge eines Umsetzungs-Laufs auf Englisch', async () => {
+    const ergebnisstand = stand({
+      einheiten: [
+        einheit({
+          ausgang: 'erfolg',
+          commit: 'a1b2c3d',
+          pruefung: GEPRUEFT,
+          kennzahlen: { kostenUsd: 2.5, zuege: 12, apiDauerMs: 3 * 60_000 },
+        }),
+        einheit({ id: '701', titel: 'Paket B', ausgang: 'fehlschlag', pruefung: { zustand: 'ungeprueft' } }),
+      ],
+    })
+    const panelEl = await eingelesenAufEnglisch(ergebnisstand)
+
+    expect(within(panelEl).getByTestId('laufband-abschnitt-700')).toHaveAccessibleName(
+      /^Card #700: .+, 7 min, 50% of the shift$/,
+    )
+    expect(within(panelEl).getByTestId('kennzahlen-700')).toHaveTextContent(
+      '7 min · $2.50 · 12 turns · Model work 43% of the duration, the rest outside',
+    )
+    const fuss = within(within(panelEl).getByTestId(FUSSZEILE))
+    expect(fuss.getByTestId('fussangabe-Items done')).toHaveTextContent('1 of 2')
+    expect(fuss.getByTestId('fussangabe-On the cost total')).toHaveTextContent(
+      'calculated, incomplete — one item without cost report',
+    )
+    expect(fuss.getByTestId('fussangabe-Most expensive item')).toHaveTextContent('#700 with $2.50')
+  })
+
+  it('nennt Tokenmengen eines aufbewahrten Vorgangs auf Englisch', async () => {
+    renderPageAufEnglisch({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [
+              {
+                id: 11,
+                cardNumber: 700,
+                title: 'Paket A',
+                state: 'GREEN',
+                durationMs: SIEBEN_MIN,
+                usage: verbraucht({ costUsd: 1.5, inputTokens: 1200, outputTokens: 300, turns: 4 }),
+              },
+            ],
+          }),
+        ],
+      ],
+    })
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+    panelAufklappen(panelEl)
+
+    expect(await within(panelEl).findByTestId('kennzahlen-700')).toHaveTextContent(/Input .+ · Output .+/)
+  })
+
+  it('nennt die Häufigkeit einer Fehlerklasse auf Englisch', async () => {
+    const laeufe = [
+      aufbewahrt({
+        id: 3,
+        startedAt: startedAt(30),
+        items: [
+          { id: 11, cardNumber: 700, title: 'Paket A', state: 'YELLOW', errorClass: 'CHECKS_RED' },
+          { id: 12, cardNumber: 701, title: 'Paket B', state: 'RED', errorClass: 'HARD_ABORT' },
+        ],
+      }),
+      aufbewahrt({ id: 2, startedAt: startedAt(10) }),
+    ]
+    renderPageAufEnglisch({ listen: [laeufe], zaehler: [{ CHECKS_RED: 2, HARD_ABORT: 1 }] })
+    await screen.findByTestId(`lauf-${startedAt(30)}`)
+    aufklappen(30)
+
+    expect(await within(lauf(30)).findByTestId('haeufigkeit-700')).toHaveTextContent(': 2 of 2 retained runs')
+    expect(within(lauf(30)).getByTestId('haeufigkeit-701')).toHaveTextContent(': for the first time')
+  })
+
+  it('meldet eine nicht abrufbare Häufigkeit auf Englisch', async () => {
+    renderPageAufEnglisch({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'YELLOW', errorClass: 'CHECKS_RED' }],
+          }),
+        ],
+      ],
+      zaehlerFehler: 'kein Zugriff',
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    expect(await within(lauf(0)).findByTestId('haeufigkeit-700')).toHaveTextContent(': frequency not available')
+  })
+
+  it('nennt Herkunft und ungedeutete Zeilen eines aufbewahrten Laufs auf Englisch', async () => {
+    renderPageAufEnglisch({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            origin: 'TOKEN',
+            tokenName: 'runner',
+            updatedAt: '2026-09-02T07:00:00.000Z',
+            unparsedCount: 1,
+            unparsedSample: UNGEDEUTET,
+          }),
+        ],
+      ],
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    const kopf = laufKopfzeile(lauf(0))
+    expect(kopf).toHaveTextContent(/delivered automatically on Sep 2, 2026, .+ \(token: runner\)/)
+    expect(kopf).toHaveTextContent(/last reported on Sep 2, 2026/)
+    expect(kopf).toHaveTextContent('Uninterpreted lines: 1')
+  })
+
+  it('nennt die Budgets einer eingelieferten Kette auf Englisch', async () => {
+    renderPageAufEnglisch({
+      listen: [
+        [
+          aufbewahrt({
+            id: 1,
+            startedAt: startedAt(0),
+            mode: 'CHAIN',
+            budget: {
+              planMin: 20,
+              reviewMin: null,
+              paketeMin: 15,
+              abdeckungMin: null,
+              kostenUsd: 50,
+              origin: 'DEFAULTED',
+              defaultFields: ['kostenUsd', 'planMin'],
+            },
+            items: [
+              { id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN', usage: verbraucht({ costUsd: 11.52 }) },
+              { id: 12, cardNumber: 701, title: 'Paket B', state: 'GREY' },
+            ],
+          }),
+        ],
+      ],
+    })
+    const panelEl = await screen.findByTestId(`lauf-${startedAt(0)}`)
+    panelAufklappen(panelEl)
+    const fuss = within(await within(panelEl).findByTestId(FUSSZEILE))
+
+    expect(fuss.getByText('Plan 20 · Packages 15 min')).toBeInTheDocument()
+    expect(fuss.getByText('$11.52 (from 1 of 2 items)')).toBeInTheDocument()
+    expect(fuss.getByText('from defaults: Cost budget, Time limit plan')).toBeInTheDocument()
+  })
+
+  it('meldet eine nicht auflösbare Stufe und ein unbekanntes Vokabular auf Englisch', async () => {
+    renderPageAufEnglisch({
+      listen: [
+        [aufbewahrt({ id: 1, startedAt: startedAt(0), items: [{ id: 11, cardNumber: 700, title: 'Paket A', state: 'GREEN' }] })],
+      ],
+      karten: { 700: karte({ id: 1, number: 700, title: 'Paket A', derivedFrom: 999 }) },
+    })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    aufklappen(0)
+
+    expect(await within(lauf(0)).findByText('Plan: Card #999 not found')).toBeInTheDocument()
+
+    const input = screen.getByLabelText('Choose log file')
+    Object.defineProperty(input, 'files', {
+      value: [new File([stand({ art: 'review', stufe: 'sonstwas' })], 'night-run.json', { type: 'application/json' })],
+      configurable: true,
+    })
+    fireEvent.change(input)
+
+    expect(
+      await screen.findByText(
+        'Kind of run or vocabulary not supported — not interpreted: art=review/stufe=sonstwas — generated by 1.47.0',
+      ),
+    ).toBeInTheDocument()
   })
 })

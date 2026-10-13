@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1659 = 'Sprache: Nachtlauf-Seite auf Englisch'
 const P1660 = 'Sprache: Administration, Admin-Bereich und API-Übersicht auf Englisch'
 const P1661 = 'Sprache: Ausnahmeliste des Wächters leeren und Abnahme'
 const KEIN_ANZEIGETEXT = 'kein Anzeigetext'
@@ -69,9 +68,8 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   // #1658 — die Auszüge des Ergebnisstands gehen mit dem Lauf an den Server und werden dort
   // wiedererkannt: Daten wie die Protokollauszüge (Kriterium 4 der Quelle #1637), kein Anzeigetext
   { file: 'src/lib/nightRunErgebnisstand.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  // #1659
-  { file: 'src/pages/NightRunPage.tsx', rule: 'jsx', resolvedIn: P1659 },
-  { file: 'src/pages/NightRunPage.tsx', rule: 'literal', resolvedIn: P1659 },
+  // #1659 — CSS-Werte (Haarlinien) und der Zustandswert `nicht abrufbar` eines Fortschritts (Schluessel, angezeigt wird das Woerterbuch)
+  { file: 'src/pages/NightRunPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1660
   { file: 'src/components/AusprobierBestaetigung.tsx', rule: 'jsx', resolvedIn: P1660 },
   { file: 'src/components/BackupStatusSection.tsx', rule: 'jsx', resolvedIn: P1660 },
