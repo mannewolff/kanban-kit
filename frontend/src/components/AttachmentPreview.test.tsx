@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AttachmentPreview } from './AttachmentPreview'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 describe('AttachmentPreview', () => {
   it('rendert ein Bild inline', () => {
@@ -52,5 +53,24 @@ describe('AttachmentPreview', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Schließen' }))
     expect(onClose).toHaveBeenCalled()
+  })
+})
+
+describe('AttachmentPreview auf Englisch', () => {
+  it('beschriftet Vorschau, Download und Schließen auf Englisch', () => {
+    renderMitSprache(
+      <AttachmentPreview
+        filename="doc.pdf"
+        contentType="application/pdf"
+        url="blob:doc"
+        downloadHref="/api/attachments/2"
+        onClose={vi.fn()}
+      />,
+      'en',
+    )
+
+    expect(screen.getByLabelText('Preview doc.pdf')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Download' })).toHaveAttribute('href', '/api/attachments/2')
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
   })
 })

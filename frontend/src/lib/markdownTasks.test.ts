@@ -230,3 +230,10 @@ describe('toggleTaskAt', () => {
     expect(toggleTaskAt(md, -1)).toBe(md)
   })
 })
+
+describe('markdownTasks auf Englisch', () => {
+  it('behandelt Aufgabenlisten mit englischem Text wie deutsche — das Modul trägt keinen Anzeigetext', () => {
+    expect(normalizeTaskLists('[ ] write tests\n[x] ship it')).toBe('- [ ] write tests\n- [x] ship it')
+    expect(toggleTaskAt('- [ ] write tests\n- [x] ship it', 1)).toBe('- [ ] write tests\n- [ ] ship it')
+  })
+})

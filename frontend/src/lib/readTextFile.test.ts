@@ -24,3 +24,19 @@ describe('readTextFile', () => {
     await expect(readTextFile(new Blob(['x']))).rejects.toThrow('Datei konnte nicht gelesen werden.')
   })
 })
+
+describe('readTextFile auf Englisch', () => {
+  it('bricht mit einem englischen Fehler ab, wenn die Datei nicht lesbar ist', async () => {
+    class FailingReader {
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      result: string | null = null
+      readAsText(): void {
+        this.onerror?.()
+      }
+    }
+    vi.stubGlobal('FileReader', FailingReader)
+
+    await expect(readTextFile(new Blob(['x']), 'en')).rejects.toThrow('The file could not be read.')
+  })
+})

@@ -66,7 +66,9 @@ import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
 import { useSnackbar } from './SnackbarProvider'
 import { dialogTitleSx } from './dialogChromeSx'
-import { useSprache } from '../i18n/SpracheContext'
+import { useSprache, useT } from '../i18n/SpracheContext'
+import { formatierer } from '../i18n/format'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 
 /** Bilder und PDF werden in der Lightbox angezeigt; andere Typen nur heruntergeladen. */
 const isPreviewable = (contentType: string) =>
@@ -140,6 +142,7 @@ function MarkdownInput(props: Readonly<ComponentPropsWithoutRef<'input'>>) {
   // Nicht null: MarkdownInput wird ausschließlich innerhalb von TaskCheckboxContext.Provider
   // gerendert (siehe TaskMarkdown unten).
   const ctx = useContext(TaskCheckboxContext)!
+  const t = useT()
   const index = ctx.nextIndex()
   return (
     <input
@@ -147,7 +150,7 @@ function MarkdownInput(props: Readonly<ComponentPropsWithoutRef<'input'>>) {
       checked={props.checked === true}
       disabled={!ctx.canEdit}
       onChange={() => ctx.onToggle(index)}
-      aria-label={`Aufgabe ${index + 1}`}
+      aria-label={t.KARTE.AUFGABE_ARIA(index + 1)}
     />
   )
 }
@@ -266,22 +269,23 @@ function CommentBody({ body }: Readonly<{ body: string }>) {
  * Zeitpunkt eines Kommentars als Text. Ein leerer oder nicht parsbarer Wert ergibt `''` statt eines
  * sichtbaren „Invalid Date" — dasselbe Muster wie `formatDate` in `ProjectsPage`.
  */
-function formatCommentTime(iso: string): string {
+function formatCommentTime(iso: string, sprache: Sprache): string {
   const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('de-DE')
+  return Number.isNaN(d.getTime()) ? '' : formatierer(sprache).datumUhrzeit(d)
 }
 
 /**
  * Zeitzeile eines Kommentars (#843): Erstellzeitpunkt, bei nachträglicher Bearbeitung ergänzt um
  * „bearbeitet <Zeitpunkt>". Ohne den Zusatz wäre ein spät bearbeiteter alter Kommentar von einem
  * neuen nicht zu unterscheiden — und genau die zeitliche Einordnung ist der Zweck der Anzeige.
- * Ohne darstellbaren Erstellzeitpunkt bleibt die Zeile leer und wird gar nicht gerendert.
+ * Ohne darstellbaren Erstellzeitpunkt bleibt die Zeile leer und wird gar nicht gerendert. Zeitpunkte
+ * und Zusatz folgen `sprache`.
  */
-export function commentMetaText(c: Readonly<Pick<Comment, 'createdAt' | 'updatedAt'>>): string {
-  const erstellt = formatCommentTime(c.createdAt)
+export function commentMetaText(c: Readonly<Pick<Comment, 'createdAt' | 'updatedAt'>>, sprache: Sprache = 'de'): string {
+  const erstellt = formatCommentTime(c.createdAt, sprache)
   if (!erstellt) return ''
-  const bearbeitet = c.updatedAt === c.createdAt ? '' : formatCommentTime(c.updatedAt)
-  return bearbeitet ? `${erstellt} · bearbeitet ${bearbeitet}` : erstellt
+  const bearbeitet = c.updatedAt === c.createdAt ? '' : formatCommentTime(c.updatedAt, sprache)
+  return bearbeitet ? `${erstellt} · ${woerterbuch(sprache).KARTE.BEARBEITET(bearbeitet)}` : erstellt
 }
 
 /**
@@ -302,6 +306,7 @@ export function AssigneeSection({
   assigneeIds: number[]
   onChange: (ids: number[]) => void
 }>) {
+  const t = useT()
   const memberName = (userId: number) =>
     members.find((m) => m.userId === userId)?.displayName ?? `#${userId}`
   const readOnly =
@@ -312,12 +317,12 @@ export function AssigneeSection({
         ))}
       </Stack>
     ) : (
-      <Typography color="text.secondary">Niemand zugewiesen.</Typography>
+      <Typography color="text.secondary">{t.KARTE.NIEMAND_ZUGEWIESEN}</Typography>
     )
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
-        Zuständige
+        {t.KARTE.ZUSTAENDIGE}
       </Typography>
       {canEdit ? (
         <Autocomplete
@@ -329,7 +334,7 @@ export function AssigneeSection({
           value={members.filter((m) => assigneeIds.includes(m.userId))}
           onChange={(_, selected) => onChange(selected.map((m) => m.userId))}
           renderInput={(params) => (
-            <TextField {...params} label="Zuständige" slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': 'Zuständige' } }} />
+            <TextField {...params} label={t.KARTE.ZUSTAENDIGE} slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': t.KARTE.ZUSTAENDIGE } }} />
           )}
         />
       ) : (
@@ -351,6 +356,7 @@ export function LabelSection({
   labelIds: number[]
   onChange: (ids: number[]) => void
 }>) {
+  const t = useT()
   const readOnly =
     labelIds.length > 0 ? (
       <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
@@ -367,12 +373,12 @@ export function LabelSection({
         })}
       </Stack>
     ) : (
-      <Typography color="text.secondary">Keine Labels.</Typography>
+      <Typography color="text.secondary">{t.KARTE.KEINE_LABELS}</Typography>
     )
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
-        Labels
+        {t.KARTE.LABELS}
       </Typography>
       {canEdit ? (
         <Autocomplete
@@ -395,7 +401,7 @@ export function LabelSection({
             ))
           }
           renderInput={(params) => (
-            <TextField {...params} label="Labels" slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': 'Labels' } }} />
+            <TextField {...params} label={t.KARTE.LABELS} slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': t.KARTE.LABELS } }} />
           )}
         />
       ) : (
@@ -423,10 +429,11 @@ function AttachmentsSection({
   onDelete: (id: number) => void
   onUpload: (file: File) => void
 }>) {
+  const t = useT()
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
-        Anhänge
+        {t.KARTE.ANHAENGE}
       </Typography>
       {uploadError && <Alert severity="error" sx={{ mb: 1 }}>{uploadError}</Alert>}
       <Stack spacing={1}>
@@ -441,10 +448,10 @@ function AttachmentsSection({
                 <Link href={`/api/attachments/${a.id}`}>{a.filename}</Link>
               )}
               <Typography variant="caption" color="text.secondary">
-                {Math.round(a.size / 1024)} KB
+                {t.KARTE.GROESSE_KB(Math.round(a.size / 1024))}
               </Typography>
               {canEdit && (
-                <IconButton size="small" aria-label={`Anhang ${a.filename} löschen`} onClick={() => onDelete(a.id)}>
+                <IconButton size="small" aria-label={t.KARTE.ANHANG_LOESCHEN_ARIA(a.filename)} onClick={() => onDelete(a.id)}>
                   ✕
                 </IconButton>
               )}
@@ -456,14 +463,14 @@ function AttachmentsSection({
             )}
           </Box>
         ))}
-        {attachments.length === 0 && <Typography color="text.secondary">Keine Anhänge.</Typography>}
+        {attachments.length === 0 && <Typography color="text.secondary">{t.KARTE.KEINE_ANHAENGE}</Typography>}
       </Stack>
       {canEdit && (
         <Button component="label" size="small" sx={{ mt: 1 }}>
-          Datei anhängen<input
+          {t.KARTE.DATEI_ANHAENGEN}<input
             hidden
             type="file"
-            aria-label="Datei anhängen"
+            aria-label={t.KARTE.DATEI_ANHAENGEN}
             onChange={(e) => {
               const f = e.target.files?.[0]
               if (f) onUpload(f)
@@ -506,15 +513,16 @@ function CommentsSection({
   onAdd: () => void
 }>) {
   const { sprache } = useSprache()
+  const t = useT()
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
-        Kommentare
+        {t.KARTE.KOMMENTARE}
       </Typography>
       <Stack spacing={1}>
         {comments.map((c) => {
           const isAuthor = c.authorUserId === currentUserId
-          const meta = commentMetaText(c)
+          const meta = commentMetaText(c, sprache)
           return (
             <Box key={c.id}>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -532,13 +540,13 @@ function CommentsSection({
                 <Stack direction="row" spacing={0.5}>
                   {/* Bearbeiten darf nur der Autor selbst. */}
                   {isAuthor && editingCommentId !== c.id && (
-                    <IconButton size="small" aria-label="Kommentar bearbeiten" onClick={() => onStartEdit(c)}>
+                    <IconButton size="small" aria-label={t.KARTE.KOMMENTAR_BEARBEITEN} onClick={() => onStartEdit(c)}>
                       ✎
                     </IconButton>
                   )}
                   {/* Löschen ist Moderation: nur Admin/Owner (bzw. Plattform-Admin). */}
                   {canModerateComments && (
-                    <IconButton size="small" aria-label="Kommentar löschen" onClick={() => onDelete(c.id)}>
+                    <IconButton size="small" aria-label={t.KARTE.KOMMENTAR_LOESCHEN} onClick={() => onDelete(c.id)}>
                       ✕
                     </IconButton>
                   )}
@@ -550,10 +558,10 @@ function CommentsSection({
                     onChange={(e) => onEditingBodyChange(e.target.value)}
                     error={isTooLong(editingBody)}
                     helperText={isTooLong(editingBody) ? tooLongMessage(editingBody.length, sprache) : undefined}
-                    slotProps={{ htmlInput: { 'aria-label': 'Kommentar bearbeiten' } }} />
+                    slotProps={{ htmlInput: { 'aria-label': t.KARTE.KOMMENTAR_BEARBEITEN } }} />
                   <Stack direction="row" spacing={1}>
-                    <Button size="small" variant="contained" onClick={onSaveEdit} disabled={isTooLong(editingBody)}>Speichern</Button>
-                    <Button size="small" onClick={onCancelEdit}>Abbrechen</Button>
+                    <Button size="small" variant="contained" onClick={onSaveEdit} disabled={isTooLong(editingBody)}>{t.ALLGEMEIN.SPEICHERN}</Button>
+                    <Button size="small" onClick={onCancelEdit}>{t.ALLGEMEIN.ABBRECHEN}</Button>
                   </Stack>
                 </Stack>
               ) : (
@@ -562,17 +570,17 @@ function CommentsSection({
             </Box>
           )
         })}
-        {comments.length === 0 && <Typography color="text.secondary">Noch keine Kommentare.</Typography>}
+        {comments.length === 0 && <Typography color="text.secondary">{t.KARTE.KEINE_KOMMENTARE}</Typography>}
       </Stack>
       {/* alignItems explizit: sonst zieht der Default `stretch` den Senden-Button auf Feldhöhe. */}
       <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
-        <TextField {...commentFieldProps} size="small" fullWidth placeholder="Kommentar schreiben" value={newComment}
+        <TextField {...commentFieldProps} size="small" fullWidth placeholder={t.KARTE.KOMMENTAR_SCHREIBEN} value={newComment}
           onChange={(e) => onNewCommentChange(e.target.value)}
           error={isTooLong(newComment)}
           helperText={isTooLong(newComment) ? tooLongMessage(newComment.length, sprache) : undefined}
-          slotProps={{ htmlInput: { 'aria-label': 'Kommentar schreiben' } }} />
+          slotProps={{ htmlInput: { 'aria-label': t.KARTE.KOMMENTAR_SCHREIBEN } }} />
         <Button variant="contained" size="small" onClick={onAdd} disabled={isTooLong(newComment)}>
-          Senden
+          {t.KARTE.SENDEN}
         </Button>
       </Stack>
     </Box>
@@ -594,35 +602,38 @@ function ActivitySection({
   activities: CardActivity[]
   actorName: (userId: number | null) => string
 }>) {
+  const { sprache } = useSprache()
+  const t = useT()
+  const f = formatierer(sprache)
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
-        Aktivität
+        {t.KARTE.AKTIVITAET}
       </Typography>
       <Stack spacing={0.5}>
         {activities.map((a) => (
           <Stack key={a.id} direction="row" spacing={0.5} alignItems="center" flexWrap="wrap">
             <Typography variant="caption" color="text.secondary">
-              {new Date(a.createdAt).toLocaleString('de-DE')} · {actorName(a.actorUserId)} ·{' '}
+              {f.datumUhrzeit(a.createdAt)} · {actorName(a.actorUserId)} ·{' '}
               {a.detail}
             </Typography>
             {a.origin === 'TOKEN' && (
               <Chip
                 data-testid="activity-token"
                 size="small"
-                label={a.tokenName ?? 'Token'}
-                aria-label={`Über Access-Token: ${a.tokenName ?? 'unbenannt'}`}
+                label={a.tokenName ?? t.KARTE.TOKEN}
+                aria-label={t.KARTE.TOKEN_ARIA(a.tokenName)}
                 sx={{ height: 18, fontSize: '0.65rem' }}
               />
             )}
             {a.agent && (
-              <Tooltip title="Angabe des Clients, nicht verifiziert">
+              <Tooltip title={t.KARTE.AGENT_HINWEIS}>
                 <Chip
                   data-testid="activity-agent"
                   size="small"
                   variant="outlined"
                   label={a.agent}
-                  aria-label={`Modell-Angabe des Clients, nicht verifiziert: ${a.agent}`}
+                  aria-label={t.KARTE.AGENT_ARIA(a.agent)}
                   sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic' }}
                 />
               </Tooltip>
@@ -630,7 +641,7 @@ function ActivitySection({
           </Stack>
         ))}
         {activities.length === 0 && (
-          <Typography color="text.secondary">Keine Aktivität.</Typography>
+          <Typography color="text.secondary">{t.KARTE.KEINE_AKTIVITAET}</Typography>
         )}
       </Stack>
     </Box>
@@ -671,11 +682,12 @@ function CardStatusChip({
   onSetStatus: (status: CardStatus) => Promise<void>
 }>) {
   const { sprache } = useSprache()
+  const t = useT()
   // Läuft ein Wechsel, ist die Auswahl gesperrt; die Rückfrage gilt nur für „Ready".
   const [pending, setPending] = useState(false)
   const [confirmReady, setConfirmReady] = useState(false)
 
-  if (isEpic) return <Chip label="Vorhaben" size="small" color="secondary" />
+  if (isEpic) return <Chip label={t.KARTE.VORHABEN} size="small" color="secondary" />
   if (status === null) {
     if (!columnName) return null
     return <Chip label={columnName} size="small" sx={statusChipSx(statusColors(columnName))} />
@@ -706,7 +718,7 @@ function CardStatusChip({
         value={status}
         disabled={pending || editing}
         disableUnderline
-        SelectDisplayProps={{ 'aria-label': 'Status' }}
+        SelectDisplayProps={{ 'aria-label': t.KARTE.STATUS }}
         // Der gewählte Wert erscheint als derselbe Chip wie im lesenden Fall — Melderfarbe und
         // Radius kommen so aus `statusColors` und dem Theme, nicht aus eigenen Werten.
         renderValue={(wert) => (
@@ -735,9 +747,9 @@ function CardStatusChip({
       */}
       {confirmReady && (
         <Dialog open onClose={() => setConfirmReady(false)}>
-          <DialogTitle sx={dialogTitleSx}>Status auf Ready setzen?</DialogTitle>
+          <DialogTitle sx={dialogTitleSx}>{t.KARTE.READY_FRAGE}</DialogTitle>
           <DialogActions>
-            <Button onClick={() => setConfirmReady(false)}>Abbrechen</Button>
+            <Button onClick={() => setConfirmReady(false)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
             <Button
               variant="contained"
               onClick={() => {
@@ -745,7 +757,7 @@ function CardStatusChip({
                 void setze('READY')
               }}
             >
-              Status auf Ready setzen
+              {t.KARTE.READY_SETZEN}
             </Button>
           </DialogActions>
         </Dialog>
@@ -763,9 +775,10 @@ function DependencyList({
   dependencies,
   onOpen,
 }: Readonly<{ dependencies: number[]; onOpen?: (number: number) => void }>) {
+  const t = useT()
   return (
-    <Typography variant="body2" color="text.secondary" aria-label="Abhängigkeiten">
-      Abhängig von:{' '}
+    <Typography variant="body2" color="text.secondary" aria-label={t.KARTE.ABHAENGIGKEITEN}>
+      {t.KARTE.ABHAENGIG_VON}{' '}
       {dependencies.map((n, index) => (
         <Fragment key={n}>
           {index > 0 && ', '}
@@ -774,7 +787,7 @@ function DependencyList({
               component="button"
               type="button"
               variant="body2"
-              aria-label={`Karte #${n} öffnen`}
+              aria-label={t.KARTE.KARTE_OEFFNEN_ARIA(n)}
               onClick={() => onOpen(n)}
             >
               #{n}
@@ -821,13 +834,15 @@ function standAus(karte: Readonly<Pick<Card, keyof KartenStand>>): KartenStand {
  * Ein Block des Kartenblatts (AK 13, #958) als Platte der Instrumententafel (#980, Entwurf
  * `.platte`, `.platte-kopf`, Z. 543–557): Fläche, Haarlinie, Schatten und ein Kopf mit dem Namen,
  * als benannter Bereich für Screenreader. Die drei Blöcke und ihr Inhalt stehen fest (Plan #932):
- * Beschreibung und Details, Zuordnung, Verlauf.
+ * Beschreibung und Details, Zuordnung, Verlauf. `bereich` ist die Rasterfläche des Blocks — ein
+ * fester Schlüssel, weil der Name der Sprache folgt.
  */
-function KartenBlock({ name, children }: Readonly<{ name: string; children: ReactNode }>) {
+function KartenBlock({ name, bereich, children }: Readonly<{ name: string; bereich: 'blatt' | 'felder' | 'verlauf'; children: ReactNode }>) {
   return (
     <Box
       component="section"
       aria-label={name}
+      data-bereich={bereich}
       sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: `${PANEL_RADIUS}px`, boxShadow: SCHATTEN_PLATTE, overflow: 'hidden', minWidth: 0 }}
     >
       <Box
@@ -868,41 +883,42 @@ function CardBodyView({
   derivedFrom: number | null
 }>) {
   const { sprache } = useSprache()
+  const t = useT()
   return (
     <>
-      <Box aria-label="Beschreibung" data-testid="description-view" sx={descriptionSx}>
+      <Box aria-label={t.KARTE.BESCHREIBUNG} data-testid="description-view" sx={descriptionSx}>
         {beschreibungStatus === 'laedt' && (
           <Typography role="status" color="text.secondary">
-            Beschreibung wird geladen…
+            {t.KARTE.BESCHREIBUNG_LAEDT}
           </Typography>
         )}
         {beschreibungStatus === 'fehler' && (
-          <Alert severity="error">Beschreibung konnte nicht geladen werden.</Alert>
+          <Alert severity="error">{t.KARTE.BESCHREIBUNG_FEHLER}</Alert>
         )}
         {beschreibungStatus === 'geladen' &&
           (body ? (
             <TaskMarkdown body={body} canEdit={canEdit} onToggle={onToggleTask} />
           ) : (
-            <Typography color="text.secondary">Keine Beschreibung.</Typography>
+            <Typography color="text.secondary">{t.KARTE.KEINE_BESCHREIBUNG}</Typography>
           ))}
       </Box>
       {dependencies.length > 0 && (
         <DependencyList dependencies={dependencies} onOpen={onOpenDependency} />
       )}
       {!isEpic && derivedFrom != null && (
-        <Typography variant="body2" color="text.secondary" aria-label="Herkunft">
-          Hervorgegangen aus: #{derivedFrom}
+        <Typography variant="body2" color="text.secondary" aria-label={t.KARTE.HERKUNFT}>
+          {t.KARTE.HERVORGEGANGEN_AUS(derivedFrom)}
         </Typography>
       )}
       {!isEpic && dueDate && (
         <Typography
           variant="body2"
-          aria-label="Fälligkeitsdatum"
+          aria-label={t.KARTE.FAELLIGKEIT}
           color={dueOverdue ? 'error' : 'text.secondary'}
           sx={{ fontWeight: dueOverdue ? 600 : 400 }}
         >
-          Fällig am {formatDueDate(dueDate, sprache)}
-          {dueOverdue && ' — überfällig'}
+          {t.KARTE.FAELLIG_AM(formatDueDate(dueDate, sprache))}
+          {dueOverdue && t.KARTE.UEBERFAELLIG}
         </Typography>
       )}
     </>
@@ -940,6 +956,7 @@ function VorgangEroeffnenDialog({
   onOpenDependency?: (number: number) => void
 }>) {
   const notify = useSnackbar()
+  const t = useT()
   // Der Name ist mit dem Kartentitel vorbelegt und ueberschreibbar; das Kuerzel ist optional wie
   // beim Anlegen eines Vorhabens.
   const [offen, setOffen] = useState(false)
@@ -958,14 +975,14 @@ function VorgangEroeffnenDialog({
       const vorhaben = await cardsApi.openEpic(cardId, name.trim(), (kuerzel.trim() === '' ? null : kuerzel.trim()))
       setOffen(false)
       onChanged?.()
-      notify(`Vorgang eröffnet: ${vorhaben.title}`, 'success')
+      notify(t.KARTE.VORGANG_EROEFFNET(vorhaben.title), 'success')
       // Zum neuen Vorhaben: ueber denselben Verweis-Stack wie die `#N`-Spruenge. Fehlt die
       // Projekt-ID, gibt es keine Aufloesung — dann bleibt es bei der Meldung.
       onOpenDependency?.(vorhaben.number)
     } catch (error_: unknown) {
       // Die Meldung des Servers, nicht eine eigene: Die Ablehnungen aus #640 tragen einen
       // Feldbezug, und ein verschluckter Text liesse den Nutzer raten.
-      notify(apiErrorMessage(error_, 'Vorgang eröffnen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.KARTE.VORGANG_FEHLER), 'error')
     }
   }
 
@@ -982,23 +999,23 @@ function VorgangEroeffnenDialog({
           setOffen(true)
         }}
       >
-        Vorgang eröffnen
+        {t.KARTE.VORGANG_EROEFFNEN}
       </Button>
       {/* Eigener Dialog statt Inline-Feldern, damit die Kartenmaske im Lesemodus nicht zwei
           Eingabefelder traegt, die fast nie gebraucht werden. */}
       <Dialog open={offen} onClose={() => setOffen(false)} fullWidth maxWidth="xs">
-        <DialogTitle sx={dialogTitleSx}>Vorgang eröffnen</DialogTitle>
+        <DialogTitle sx={dialogTitleSx}>{t.KARTE.VORGANG_EROEFFNEN}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="Name des Vorhabens"
+              label={t.KARTE.VORHABEN_NAME}
               value={name}
               onChange={(e) => setName(e.target.value)}
               fullWidth
               autoFocus
             />
             <TextField
-              label="Kürzel (optional)"
+              label={t.KARTE.KUERZEL_OPTIONAL}
               value={kuerzel}
               onChange={(e) => setKuerzel(e.target.value)}
               fullWidth
@@ -1006,13 +1023,13 @@ function VorgangEroeffnenDialog({
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOffen(false)}>Abbrechen</Button>
+          <Button onClick={() => setOffen(false)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
           <Button
             variant="contained"
             onClick={() => void eroeffneVorgang()}
             disabled={name.trim() === ''}
           >
-            Eröffnen
+            {t.KARTE.EROEFFNEN}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1047,21 +1064,22 @@ function KartenDialogAktionen({
   onClose: () => void
   vorgang: ReactNode
 }>) {
+  const t = useT()
   if (editing) {
     return (
       <DialogActions>
-        <Button onClick={onAbbrechen}>Abbrechen</Button>
+        <Button onClick={onAbbrechen}>{t.ALLGEMEIN.ABBRECHEN}</Button>
         <Button variant="contained" onClick={onSpeichern} disabled={speichernGesperrt}>
-          Speichern
+          {t.ALLGEMEIN.SPEICHERN}
         </Button>
       </DialogActions>
     )
   }
   return (
     <DialogActions>
-      {canEdit && archived && <Button onClick={onWiederherstellen}>Wiederherstellen</Button>}
+      {canEdit && archived && <Button onClick={onWiederherstellen}>{t.ALLGEMEIN.WIEDERHERSTELLEN}</Button>}
       {vorgang}
-      <Button onClick={onClose}>Schließen</Button>
+      <Button onClick={onClose}>{t.ALLGEMEIN.SCHLIESSEN}</Button>
     </DialogActions>
   )
 }
@@ -1187,6 +1205,7 @@ function CardDetailModalView({
   onBack,
 }: Readonly<ViewProps>) {
   const { user } = useAuth()
+  const t = useT()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
   // Zaehlt Aufrufe von saveAssignees: Loest ein spaeter gestarteter Request seinen Rollback vor
@@ -1207,7 +1226,7 @@ function CardDetailModalView({
       if (assigneesRequestSeq.current === requestId) {
         setAssigneeIds(vorher)
       }
-      notify(apiErrorMessage(error_, 'Zuständige speichern fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.KARTE.ZUSTAENDIGE_FEHLER), 'error')
     }
   }
 
@@ -1220,7 +1239,7 @@ function CardDetailModalView({
     try {
       await cardsApi.setStatus(card.id, ziel)
     } catch (error_: unknown) {
-      notify(apiErrorMessage(error_, 'Status setzen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.KARTE.STATUS_FEHLER), 'error')
       throw error_
     }
     setStatus(ziel)
@@ -1234,13 +1253,13 @@ function CardDetailModalView({
       onClose()
     } catch (error_: unknown) {
       // Bei einem Fehler bleibt der Dialog offen — die Karte bleibt sichtbar, wie sie ist.
-      notify(apiErrorMessage(error_, 'Wiederherstellen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.KARTE.WIEDERHERSTELLEN_FEHLER), 'error')
     }
   }
 
   const [activities, setActivities] = useState<CardActivity[]>([])
   const actorName = (userId: number | null) =>
-    members.find((m) => m.userId === userId)?.displayName ?? 'System'
+    members.find((m) => m.userId === userId)?.displayName ?? t.KARTE.SYSTEM
 
   const [labelIds, setLabelIds] = useState<number[]>(card.labels)
   // Gleiche Race wie bei den Zuständigen: nur der juengste Aufruf darf zuruecksetzen.
@@ -1268,7 +1287,7 @@ function CardDetailModalView({
         // Was schon durchging, zeigt die letzte Antwort; ohne sie gilt der Ausgangsstand.
         setLabelIds(antwort?.labels ?? vorher)
       }
-      notify(apiErrorMessage(error_, 'Labels speichern fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.KARTE.LABELS_FEHLER), 'error')
     }
   }
   /** Die Label-Sektion meldet die volle Auswahl; gesendet wird nur, was sich daran geändert hat. */
@@ -1422,7 +1441,7 @@ function CardDetailModalView({
         (zeilen) => ({ zeilen, fehler: null as string | null }),
         (error_: unknown) => ({
           zeilen: null,
-          fehler: apiErrorMessage(error_, 'Der Herkunftsbaum konnte nicht geladen werden.'),
+          fehler: apiErrorMessage(error_, t.KARTE.BAUM_FEHLER),
         }),
       )
       .then((ergebnis) => {
@@ -1435,7 +1454,7 @@ function CardDetailModalView({
     return () => {
       aktiv = false
     }
-  }, [isEpic, baumBoardId, card.id, cardsApi])
+  }, [isEpic, baumBoardId, card.id, cardsApi, t])
 
   const startEditing = () => {
     // Aus dem bestätigten Stand, nicht aus der Prop — sonst verwürfe erneutes Bearbeiten nach
@@ -1449,12 +1468,12 @@ function CardDetailModalView({
     // der exakt unter diesen Bedingungen disabled ist (siehe DialogActions) — der Guard wäre tot.
     const { deps: parsedDeps, valid } = parseDependencyInput(depsInput)
     if (!valid) {
-      setDepsError('Nur positive Nummern, kommagetrennt (z. B. 12, 34).')
+      setDepsError(t.KARTE.ABHAENGIGKEITEN_UNGUELTIG)
       return
     }
     const { herkunft, valid: herkunftValid } = parseHerkunftInput(herkunftInput)
     if (!herkunftValid) {
-      setHerkunftError('Nur eine positive Kartennummer, oder leer.')
+      setHerkunftError(t.KARTE.HERKUNFT_UNGUELTIG)
       return
     }
     setSaving(true)
@@ -1481,7 +1500,7 @@ function CardDetailModalView({
       setStand(standAus(gespeichert))
       setEditing(false)
       onChanged?.()
-      notify('Karte gespeichert.', 'success')
+      notify(t.KARTE.GESPEICHERT, 'success')
     } catch (err) {
       // Die drei Herkunfts-Ablehnungen kommen feldbezogen (#607). Sie gehoeren ans Feld, nicht in
       // einen Toast: Im selben Aufruf entstehen fast wortgleiche Abhaengigkeits-Fehler, und die
@@ -1490,7 +1509,7 @@ function CardDetailModalView({
       if (feldmeldung) {
         setHerkunftError(feldmeldung)
       } else {
-        notify(apiErrorMessage(err, 'Speichern fehlgeschlagen.'), 'error')
+        notify(apiErrorMessage(err, t.ALLGEMEIN.SPEICHERN_FEHLGESCHLAGEN), 'error')
       }
     } finally {
       setSaving(false)
@@ -1525,7 +1544,7 @@ function CardDetailModalView({
       onChanged?.()
     } catch (error_: unknown) {
       setStand(vorher)
-      notify(apiErrorMessage(error_, 'Aufgabe speichern fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.KARTE.AUFGABE_FEHLER), 'error')
     } finally {
       setSaving(false)
     }
@@ -1549,7 +1568,7 @@ function CardDetailModalView({
       // irgendwo läge.
       setNewComment('')
     } catch (error_: unknown) {
-      notify(apiErrorMessage(error_, 'Kommentar anlegen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.KARTE.KOMMENTAR_ANLEGEN_FEHLER), 'error')
     }
   }
 
@@ -1558,7 +1577,7 @@ function CardDetailModalView({
       await commentsApi.remove(id)
       setComments((c) => c.filter((x) => x.id !== id))
     } catch (error_: unknown) {
-      notify(apiErrorMessage(error_, 'Kommentar löschen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.KARTE.KOMMENTAR_LOESCHEN_FEHLER), 'error')
     }
   }
 
@@ -1575,7 +1594,7 @@ function CardDetailModalView({
       // Das Bearbeitungsfeld schließt erst nach der Zusage — sonst wäre die Änderung verloren.
       setEditingCommentId(null)
     } catch (error_: unknown) {
-      notify(apiErrorMessage(error_, 'Kommentar speichern fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.KARTE.KOMMENTAR_SPEICHERN_FEHLER), 'error')
     }
   }
 
@@ -1585,7 +1604,7 @@ function CardDetailModalView({
     try {
       created = await attachmentsApi.upload(card.id, file)
     } catch (error_: unknown) {
-      setUploadError(apiErrorMessage(error_, 'Upload fehlgeschlagen (evtl. Anhangslimit erreicht).'))
+      setUploadError(apiErrorMessage(error_, t.KARTE.UPLOAD_FEHLER))
       return
     }
     setAttachments((a) => [...a, created])
@@ -1596,7 +1615,7 @@ function CardDetailModalView({
         const blob = await attachmentsApi.fetchBlob(created.id)
         setPreviews((p) => ({ ...p, [created.id]: URL.createObjectURL(blob) }))
       } catch (error_: unknown) {
-        setUploadError(apiErrorMessage(error_, 'Anhang hochgeladen, Vorschau konnte nicht geladen werden.'))
+        setUploadError(apiErrorMessage(error_, t.KARTE.VORSCHAU_NACH_UPLOAD_FEHLER))
       }
     }
   }
@@ -1606,7 +1625,7 @@ function CardDetailModalView({
       await attachmentsApi.remove(id)
       setAttachments((a) => a.filter((x) => x.id !== id))
     } catch (error_: unknown) {
-      notify(apiErrorMessage(error_, 'Anhang löschen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(error_, t.KARTE.ANHANG_LOESCHEN_FEHLER), 'error')
     }
   }
 
@@ -1616,7 +1635,7 @@ function CardDetailModalView({
       const blob = await attachmentsApi.fetchBlob(attachment.id)
       setPreview({ attachment, url: URL.createObjectURL(blob) })
     } catch (error_: unknown) {
-      setUploadError(apiErrorMessage(error_, 'Vorschau konnte nicht geladen werden.'))
+      setUploadError(apiErrorMessage(error_, t.KARTE.VORSCHAU_FEHLER))
     }
   }
 
@@ -1680,7 +1699,7 @@ function CardDetailModalView({
       <DialogTitle sx={dialogTitleSx}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
           {onBack && (
-            <IconButton size="small" aria-label="Zurück zur vorherigen Karte" onClick={onBack}>
+            <IconButton size="small" aria-label={t.KARTE.ZURUECK} onClick={onBack}>
               <ArrowBackIcon fontSize="small" />
             </IconButton>
           )}
@@ -1704,7 +1723,7 @@ function CardDetailModalView({
           <Box sx={{ flexGrow: 1 }} />
           {zeigtAbnahme && (
             <Button size="small" variant="outlined" onClick={() => setAbnahmeOffen(true)}>
-              Abnahme durchklicken
+              {t.KARTE.ABNAHME}
             </Button>
           )}
           {canEdit && !editing && (
@@ -1716,7 +1735,7 @@ function CardDetailModalView({
               disabled={beschreibungStatus !== 'geladen'}
               onClick={startEditing}
             >
-              Bearbeiten
+              {t.KARTE.BEARBEITEN}
             </Button>
           )}
         </Stack>
@@ -1750,12 +1769,12 @@ function CardDetailModalView({
             alignItems: 'start',
             gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: isEpic ? 'minmax(0,1fr)' : 'minmax(0,1.9fr) minmax(0,1fr)' },
             gridTemplateAreas: { xs: '"blatt" "felder" "verlauf"', lg: isEpic ? '"blatt" "verlauf"' : '"blatt felder" "verlauf felder"' },
-            '& > [aria-label="Beschreibung und Details"]': { gridArea: 'blatt' },
-            '& > [aria-label="Zuordnung"]': { gridArea: 'felder' },
-            '& > [aria-label="Verlauf"]': { gridArea: 'verlauf' },
+            '& > [data-bereich="blatt"]': { gridArea: 'blatt' },
+            '& > [data-bereich="felder"]': { gridArea: 'felder' },
+            '& > [data-bereich="verlauf"]': { gridArea: 'verlauf' },
           }}
         >
-          <KartenBlock name="Beschreibung und Details">
+          <KartenBlock name={t.KARTE.BLOCK_BESCHREIBUNG} bereich="blatt">
           {editing ? (
             <CardFields
               isEpic={isEpic}
@@ -1805,10 +1824,10 @@ function CardDetailModalView({
               <Divider />
               <Box>
                 <Typography variant="subtitle2" gutterBottom>
-                  Fortschritt
+                  {t.KARTE.FORTSCHRITT}
                 </Typography>
-                <Typography variant="body2" color="text.secondary" aria-label="Fortschritt">
-                  {`${fortschritt.done} von ${fortschritt.total} fertig`}
+                <Typography variant="body2" color="text.secondary" aria-label={t.KARTE.FORTSCHRITT}>
+                  {t.LISTE.FORTSCHRITT(fortschritt.done, fortschritt.total)}
                 </Typography>
               </Box>
             </>
@@ -1819,7 +1838,7 @@ function CardDetailModalView({
               <Divider />
               <Box>
                 <Typography variant="subtitle2" gutterBottom>
-                  Herkunft
+                  {t.KARTE.HERKUNFT}
                 </Typography>
                 {baumFehler !== null && <Alert severity="error">{baumFehler}</Alert>}
                 {baumFehler === null && baum === null && (
@@ -1843,7 +1862,7 @@ function CardDetailModalView({
 
           {/* Ein Vorhaben trägt weder Zuständige noch Labels — ohne Inhalt entfällt der Block. */}
           {!isEpic && (
-            <KartenBlock name="Zuordnung">
+            <KartenBlock name={t.KARTE.BLOCK_ZUORDNUNG} bereich="felder">
               <AssigneeSection
                 canEdit={canEdit}
                 members={members}
@@ -1860,7 +1879,7 @@ function CardDetailModalView({
           )}
 
           {!editing && (
-            <KartenBlock name="Verlauf">
+            <KartenBlock name={t.KARTE.BLOCK_VERLAUF} bereich="verlauf">
               {/* Die Stufenleiste der Nacht-Kette (Issue #1449, E1–E3): nur an [Fachlich] und [Plan],
                   bedienbar unter denselben Bedingungen wie die Label-Sektion. Body und Kommentare
                   braucht sie für Sperrhinweise und den Rückfall, solange der Kettenstand nicht
@@ -2009,6 +2028,7 @@ export function CardDetailModal(props: Readonly<Props>) {
   const { projectId, cardsApi = defaultCardsApi, boardsApi = defaultBoardsApi } = props
   const [stack, setStack] = useState<LinkedCard[]>([])
   const notify = useSnackbar()
+  const t = useT()
   const top = stack.at(-1)
 
   // Nicht auflösbar (gelöscht, kein Zugriff): Hinweis statt totem Sprung — die aktuelle Karte
@@ -2019,7 +2039,7 @@ export function CardDetailModal(props: Readonly<Props>) {
       const columnName = await resolveColumnName(linked, boardsApi)
       setStack((s) => [...s, { card: linked, columnName }])
     } catch {
-      notify(`Karte #${number} nicht gefunden — gelöscht oder kein Zugriff.`, 'error')
+      notify(t.KARTE.NICHT_GEFUNDEN(number), 'error')
     }
   }
   const onOpenDependency =
