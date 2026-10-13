@@ -20,9 +20,9 @@ const mApi = standardLabelsApi as unknown as {
 
 const SATZ = [
   { name: 'kit:night', gruppe: 'Kit', farbe: '#6a1b9a' },
-  { name: 'kit:klaeren', gruppe: 'Kit', farbe: '#6a1b9a' },
-  { name: 'lauf:wartet', gruppe: 'Lauf', farbe: '#1565c0' },
-  { name: 'ziel:umsetzung', gruppe: 'Stufenleiste', farbe: '#ef6c00' },
+  { name: 'kit:clarify', gruppe: 'Kit', farbe: '#6a1b9a' },
+  { name: 'run:waiting', gruppe: 'Lauf', farbe: '#1565c0' },
+  { name: 'goal:implementation', gruppe: 'Stufenleiste', farbe: '#ef6c00' },
 ]
 
 const KNOPF = { name: 'Standard-Labels für alle Boards' }
@@ -71,23 +71,6 @@ describe('StandardLabelsSection', () => {
       .toBeInTheDocument()
     expect(within(dialog).getByText(/Vorhandene Labels bleiben unverändert/)).toBeInTheDocument()
     expect(mApi.anlegen).not.toHaveBeenCalled()
-  })
-
-  it('beide Namen einer Sache stehen als eigene Einträge nebeneinander', async () => {
-    mApi.satz.mockResolvedValue([
-      { name: 'kit:klaeren', gruppe: 'Kit', farbe: '#6a1b9a' },
-      { name: 'kit:clarify', gruppe: 'Kit', farbe: '#6a1b9a' },
-      { name: 'kit:nightplan', gruppe: 'Kit', farbe: '#6a1b9a' },
-    ])
-    render(<StandardLabelsSection />)
-
-    const dialog = await dialogOeffnen()
-
-    const deutsch = await within(dialog).findByText('kit:klaeren')
-    const englisch = within(dialog).getByText('kit:clarify')
-    expect(deutsch).not.toBe(englisch)
-    expect(within(dialog).getAllByText(/^kit:(klaeren|clarify|nightplan)$/).map((e) => e.textContent))
-      .toEqual(['kit:klaeren', 'kit:clarify', 'kit:nightplan'])
   })
 
   it('erst das Bestätigen legt an und zeigt die Rückmeldung', async () => {

@@ -726,21 +726,19 @@ Einem **Plattform-Admin** zeigt die Seite **Administration** zusätzlich den Abs
 mit dem festen Satz der Labels, die das claude-workflow-kit, die Laufsteuerung und die
 [Stufenleiste](#karten-detail) erwarten, nach Gruppen und in ihrer Farbe:
 
-- **Kit:** `kit:durchziehen`, `kit:carry-through`, `kit:geschuetzt`, `kit:protected`,
-  `kit:klaeren`, `kit:clarify`, `kit:geklaert`, `kit:clarified`, `kit:night`, `kit:nightrun`,
-  `kit:pruefen`, `kit:check`, `kit:nightplan`, `kit:nightreview`, `kit:nightissues`
-- **Lauf:** `lauf:abgebrochen`, `run:aborted`, `lauf:laeuft`, `run:running`, `lauf:wartet`,
-  `run:waiting`
-- **Review:** `review:offen`, `review:fertig`, `review:done`
-- **Stufenleiste:** `ziel:plan`, `goal:plan`, `ziel:pakete`, `goal:packages`, `ziel:umsetzung`,
-  `goal:implementation`, `ziel:push-vorbereitet`, `goal:push-prepared`, `planreview:1`,
-  `planreview:2`
+- **Kit:** `kit:carry-through`, `kit:protected`, `kit:clarify`, `kit:clarified`, `kit:night`,
+  `kit:nightrun`, `kit:check`, `kit:nightplan`, `kit:nightreview`, `kit:nightissues`
+- **Lauf:** `run:aborted`, `run:running`, `run:waiting`
+- **Review:** `review:offen`, `review:done`
+- **Stufenleiste:** `goal:plan`, `goal:packages`, `goal:implementation`, `goal:push-prepared`,
+  `planreview:1`, `planreview:2`
 
-Weil das claude-workflow-kit auch auf Englisch läuft, enthält der Satz zu jedem deutschen Label sein
-englisches Gegenstück direkt dahinter. Labels ohne Gegenstück heißen in beiden Sprachen gleich und
-entstehen nur einmal. Beide Namen derselben Sache zählen, filtern und färben im Leitstand als eins.
-Ebenso liest der Leitstand Laufstand (`## Run status`), Textprotokoll und Ergebnisdatei auch in ihrer
-englischen Form; Nächte, die vorher gemeldet wurden, erscheinen unverändert.
+Seit Version 5.0 kennt das claude-workflow-kit nur noch englische Labels; der Satz legt darum je Sache
+nur ihren englischen Namen an. Deutsche Labels auf alten Karten (etwa `kit:klaeren` oder
+`lauf:wartet`) erkennt der Leitstand weiter als dieselbe Sache: Sie zählen, filtern und färben wie ihr
+englischer Name. Ebenso liest der Leitstand Laufstand (`## Run status`), Textprotokoll und
+Ergebnisdatei auch in ihrer englischen Form; Nächte, die vorher gemeldet wurden, erscheinen
+unverändert.
 
 Erst **„Anlegen"** legt jedes fehlende Label des Satzes auf **allen nicht archivierten Boards aller
 Projekte** an; „Abbrechen" ändert nichts. Ein Label, das ein Board schon trägt, bleibt mit Farbe und
