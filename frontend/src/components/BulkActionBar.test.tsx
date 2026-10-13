@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Label } from '../api/labels'
 import { BulkActionBar, type LabelOption } from './BulkActionBar'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const label = (id: number, name: string): Label => ({
   id,
@@ -112,5 +113,53 @@ describe('BulkActionBar', () => {
     // mit dem Titel als zugänglichem Namen versieht.
     fireEvent.mouseOver(screen.getByLabelText('Vorhaben tragen keine Labels'))
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Vorhaben tragen keine Labels')
+  })
+})
+
+describe('BulkActionBar auf Englisch', () => {
+  const zeigeEn = (over: Partial<Parameters<typeof BulkActionBar>[0]> = {}) =>
+    renderMitSprache(
+      <BulkActionBar
+        count={3}
+        canMove
+        labelOptions={[
+          { label: label(1, 'Fehler'), zustand: 'alle' },
+          { label: label(2, 'Idee'), zustand: 'einige' },
+          { label: label(3, 'Doku'), zustand: 'keine' },
+        ]}
+        labelsDisabledReason={null}
+        onToggleLabel={vi.fn()}
+        onArchive={vi.fn()}
+        onMove={vi.fn()}
+        onDelete={vi.fn()}
+        onCancel={vi.fn()}
+        {...over}
+      />,
+      'en',
+    )
+
+  it('zeigt Anzahl, Region und Knöpfe auf Englisch', () => {
+    zeigeEn()
+
+    expect(screen.getByRole('region', { name: 'Bulk actions' })).toBeInTheDocument()
+    expect(screen.getByText('3 selected')).toBeInTheDocument()
+    for (const name of ['Labels', 'Move', 'Archive', 'Move to trash', 'Cancel']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    }
+  })
+
+  it('nennt den Zustand der Labels im Menü auf Englisch', () => {
+    zeigeEn()
+    fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
+
+    expect(screen.getByRole('menuitem', { name: 'Fehler — all selected cards' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Idee — some selected cards' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Doku — no selected card' })).toBeInTheDocument()
+  })
+
+  it('nennt den Sperrgrund im Namen der Label-Taste auf Englisch', () => {
+    zeigeEn({ labelsDisabledReason: 'The board has no labels' })
+
+    expect(screen.getByRole('button', { name: 'Labels — The board has no labels' })).toBeDisabled()
   })
 })

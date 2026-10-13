@@ -16,6 +16,7 @@ import IndeterminateCheckBoxOutlinedIcon from '@mui/icons-material/Indeterminate
 import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined'
 import type { LabelAction } from '../api/cards'
 import type { Label } from '../api/labels'
+import { useT } from '../i18n/SpracheContext'
 import { SURFACE_HOVER_SHADOW } from '../theme'
 
 /** Wie weit ein Label in der Auswahl vertreten ist. */
@@ -24,17 +25,6 @@ export type LabelZustand = 'alle' | 'einige' | 'keine'
 export interface LabelOption {
   label: Label
   zustand: LabelZustand
-}
-
-/**
- * Der Zustand steht im zugänglichen Namen des Menüeintrags, nicht nur im Häkchen-Symbol: Ein
- * Vollhaken und ein Strich sind rein visuelle Unterschiede, die ohne Bildschirm verschwänden —
- * und genau an ihnen hängt, was ein Klick tut.
- */
-const ZUSTAND_TEXT: Record<LabelZustand, string> = {
-  alle: 'alle gewählten Karten',
-  einige: 'einige gewählte Karten',
-  keine: 'keine gewählte Karte',
 }
 
 const ZUSTAND_SYMBOL: Record<LabelZustand, typeof CheckBoxOutlinedIcon> = {
@@ -75,6 +65,7 @@ export function BulkActionBar({
   onDelete,
   onCancel,
 }: Readonly<Props>) {
+  const t = useT()
   const [labelAnchor, setLabelAnchor] = useState<HTMLElement | null>(null)
   const labelsGesperrt = labelsDisabledReason !== null
 
@@ -85,10 +76,10 @@ export function BulkActionBar({
       disabled={labelsGesperrt}
       // Der Grund steht im Namen der Taste, nicht nur im Tooltip: Ein gesperrter Button ist für
       // Tastatur und Screenreader nicht erreichbar, der Tooltip käme dort also nie an.
-      aria-label={labelsGesperrt ? `Labels — ${labelsDisabledReason}` : undefined}
+      aria-label={labelsGesperrt ? t.MASSENAKTION.LABELS_GESPERRT(labelsDisabledReason) : undefined}
       onClick={(e) => setLabelAnchor(e.currentTarget)}
     >
-      Labels
+      {t.MASSENAKTION.LABELS}
     </Button>
   )
 
@@ -96,7 +87,7 @@ export function BulkActionBar({
     <Paper
       elevation={0}
       role="region"
-      aria-label="Massenaktionen"
+      aria-label={t.MASSENAKTION.REGION}
       sx={{
         // E3, Auslegung „schwebende Ebene": Die Aktionsleiste liegt ueber beliebigem Inhalt, ihre
         // Abhebung ist Funktion und nicht Dekoration. Marken-Schatten statt MUI-Standardschatten.
@@ -115,7 +106,7 @@ export function BulkActionBar({
       }}
     >
       <Typography variant="body2" sx={{ fontWeight: 600 }}>
-        {count} ausgewählt
+        {t.MASSENAKTION.AUSGEWAEHLT(count)}
       </Typography>
       {labelsGesperrt ? (
         // Ein deaktivierter Button meldet keine Mausereignisse; ohne den span-Wrapper bliebe der
@@ -132,7 +123,10 @@ export function BulkActionBar({
           return (
             <MenuItem
               key={label.id}
-              aria-label={`${label.name} — ${ZUSTAND_TEXT[zustand]}`}
+              // Der Zustand steht im zugänglichen Namen, nicht nur im Häkchen-Symbol: Ein Vollhaken
+              // und ein Strich sind rein visuelle Unterschiede, die ohne Bildschirm verschwänden —
+              // und genau an ihnen hängt, was ein Klick tut.
+              aria-label={`${label.name} — ${t.MASSENAKTION.ZUSTAND[zustand]}`}
               // Das Menü bleibt nach dem Klick offen: Mehrere Labels in einem Zug zu setzen ist der
               // Regelfall, ein Schließen zwänge zum erneuten Öffnen je Label.
               onClick={() => onToggleLabel(label.id, zustand === 'alle' ? 'REMOVE' : 'ADD')}
@@ -147,17 +141,17 @@ export function BulkActionBar({
       </Menu>
       {canMove && (
         <Button size="small" startIcon={<DriveFileMoveOutlinedIcon />} onClick={onMove}>
-          Verschieben
+          {t.MASSENAKTION.VERSCHIEBEN}
         </Button>
       )}
       <Button size="small" startIcon={<ArchiveOutlinedIcon />} onClick={onArchive}>
-        Archivieren
+        {t.MASSENAKTION.ARCHIVIEREN}
       </Button>
       <Button size="small" color="error" startIcon={<DeleteOutlineIcon />} onClick={onDelete}>
-        In den Papierkorb
+        {t.MASSENAKTION.IN_DEN_PAPIERKORB}
       </Button>
       <Button size="small" onClick={onCancel}>
-        Abbrechen
+        {t.ALLGEMEIN.ABBRECHEN}
       </Button>
     </Paper>
   )

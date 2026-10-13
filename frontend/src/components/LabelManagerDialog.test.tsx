@@ -4,6 +4,7 @@ import { ApiError } from '../api/client'
 import type { Label } from '../api/labels'
 import { LabelManagerDialog } from './LabelManagerDialog'
 import { SnackbarProvider } from './SnackbarProvider'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const labels: Label[] = [{ id: 1, boardId: 9, name: 'Bug', color: '#ff0000', countOnEpicTile: false }]
 
@@ -294,5 +295,57 @@ describe('LabelManagerDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() => expect(api.create).toHaveBeenCalledWith(9, 'Ux', '#1976d2'))
+  })
+})
+
+describe('LabelManagerDialog auf Englisch', () => {
+  const zeigeEn = (api = mkApi(), liste: Label[] = labels) =>
+    renderMitSprache(
+      <SnackbarProvider>
+        <LabelManagerDialog open boardId={9} labels={liste} onClose={vi.fn()} onChanged={vi.fn()} api={api} />
+      </SnackbarProvider>,
+      'en',
+    )
+
+  it('zeigt Titel, Felder und Knöpfe auf Englisch', () => {
+    zeigeEn()
+
+    expect(screen.getByRole('heading', { name: 'Manage labels' })).toBeInTheDocument()
+    expect(screen.getByLabelText('New label')).toBeInTheDocument()
+    expect(screen.getByLabelText('New label color')).toBeInTheDocument()
+    expect(screen.getByLabelText('Label Bug')).toHaveValue('Bug')
+    expect(screen.getByLabelText('Color Bug')).toBeInTheDocument()
+    expect(screen.getByLabelText('Delete label Bug')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Bug: count on the epic tile' })).toBeInTheDocument()
+    expect(screen.getByText('count on the epic tile')).toBeInTheDocument()
+    for (const name of ['Save', 'Create', 'Close']) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    }
+  })
+
+  it('zeigt den Leerzustand auf Englisch', () => {
+    zeigeEn(mkApi(), [])
+
+    expect(screen.getByText('No labels yet.')).toBeInTheDocument()
+  })
+
+  it('meldet Fehlschläge ohne Server-Meldung auf Englisch', async () => {
+    const api = {
+      create: vi.fn().mockRejectedValue(new Error('netz')),
+      update: vi.fn().mockRejectedValue(new Error('netz')),
+      remove: vi.fn().mockRejectedValue(new Error('netz')),
+    }
+    zeigeEn(api)
+
+    fireEvent.change(screen.getByLabelText('New label'), { target: { value: 'Ux' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByText('The label could not be created.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Label Bug'), { target: { value: 'Defekt' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('The label could not be saved.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Delete label Bug'))
+    expect(await screen.findByText('The label could not be deleted.')).toBeInTheDocument()
   })
 })

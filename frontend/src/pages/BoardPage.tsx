@@ -27,6 +27,7 @@ import { CardDetailModal } from '../components/CardDetailModal'
 import { LabelManagerDialog } from '../components/LabelManagerDialog'
 import { TrashDialog } from '../components/TrashDialog'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { useT } from '../i18n/SpracheContext'
 import { leseAusgeblendet, schreibeAusgeblendet } from '../lib/boardHiddenEpics'
 import { useEditMode } from '../lib/EditModeContext'
 import { epicToCard } from '../lib/epicToCard'
@@ -44,6 +45,7 @@ export function BoardPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const notify = useSnackbar()
+  const t = useT()
   const [board, setBoard] = useState<Board | null>(null)
   const [cards, setCards] = useState<Card[]>([])
   const [epics, setEpics] = useState<Epic[]>([])
@@ -99,10 +101,10 @@ export function BoardPage() {
       return
     }
     goneRef.current = true
-    notify('Dieses Board wurde archiviert oder gelöscht.', 'warning')
+    notify(t.BOARD.ENTFERNT, 'warning')
     const projectId = projectIdRef.current
     navigate(projectId ? `/projects/${projectId}` : '/', { replace: true })
-  }, [navigate, notify])
+  }, [navigate, notify, t])
 
   const load = useCallback(() => {
     if (!validId || goneRef.current) {
@@ -184,12 +186,12 @@ export function BoardPage() {
       setBoard(updated)
       setRenameOpen(false)
     } catch (e) {
-      notify(apiErrorMessage(e, 'Umbenennen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARD.UMBENENNEN_FEHLER), 'error')
     }
   }
 
   if (!validId) {
-    return <Alert severity="error">Ungültige Board-ID.</Alert>
+    return <Alert severity="error">{t.LISTE.UNGUELTIGE_BOARD_ID}</Alert>
   }
 
   if (loading) {
@@ -201,7 +203,7 @@ export function BoardPage() {
   }
 
   if (!board) {
-    return <Typography color="text.secondary">Board nicht gefunden.</Typography>
+    return <Typography color="text.secondary">{t.BOARD.NICHT_GEFUNDEN}</Typography>
   }
 
   // Spalte der geöffneten Karte — Status-Chip und Ortspfad im Detail-Modal lesen dieselbe Angabe.
@@ -212,24 +214,24 @@ export function BoardPage() {
       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 2 }}>
         <Breadcrumbs
           items={[
-            { label: 'Projekte', to: '/projects' },
+            { label: t.RAHMEN.NAV_PROJEKTE, to: '/projects' },
             ...(projectName ? [{ label: projectName, to: `/projects/${board.projectId}` }] : []),
             { label: board.name },
           ]}
         />
         {canEditStructure && (
-          <IconButton size="small" aria-label="Board umbenennen" onClick={openRename}>
+          <IconButton size="small" aria-label={t.BOARD.UMBENENNEN} onClick={openRename}>
             <EditOutlinedIcon fontSize="small" />
           </IconButton>
         )}
         {canEditStructure && (
           <Button size="small" onClick={() => setLabelManagerOpen(true)}>
-            Labels
+            {t.BOARD.LABELS}
           </Button>
         )}
         {canEdit && (
           <Button size="small" onClick={() => setTrashOpen(true)}>
-            Papierkorb
+            {t.BOARD.PAPIERKORB}
           </Button>
         )}
       </Stack>
@@ -302,22 +304,22 @@ export function BoardPage() {
       />
 
       <Dialog open={renameOpen} onClose={() => setRenameOpen(false)}>
-        <DialogTitle>Board umbenennen</DialogTitle>
+        <DialogTitle>{t.BOARD.UMBENENNEN}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             fullWidth
-            label="Board-Name"
+            label={t.BOARDS.BOARD_NAME}
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             sx={{ mt: 1 }}
-            slotProps={{ htmlInput: { 'aria-label': 'Neuer Board-Name' } }}
+            slotProps={{ htmlInput: { 'aria-label': t.BOARD.NEUER_NAME } }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRenameOpen(false)}>Abbrechen</Button>
+          <Button onClick={() => setRenameOpen(false)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
           <Button variant="contained" disabled={!renameValue.trim()} onClick={() => void handleRename(board)}>
-            Speichern
+            {t.ALLGEMEIN.SPEICHERN}
           </Button>
         </DialogActions>
       </Dialog>

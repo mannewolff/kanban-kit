@@ -4,6 +4,7 @@ import { ApiError } from '../api/client'
 import type { Card } from '../api/cards'
 import { SnackbarProvider } from './SnackbarProvider'
 import { TrashDialog } from './TrashDialog'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const base = {
   boardId: 1, columnId: 10, positionInColumn: 0, archived: false, movedToDoneAt: null as string | null,
@@ -121,5 +122,48 @@ describe('TrashDialog', () => {
     render(<TrashDialog open boardId={1} canPurge={false} onClose={vi.fn()} onChanged={vi.fn()} api={api} />)
 
     expect(await screen.findByText('Der Papierkorb ist leer.')).toBeInTheDocument()
+  })
+})
+
+describe('TrashDialog auf Englisch', () => {
+  it('zeigt Titel, Knöpfe und Namen auf Englisch', async () => {
+    renderMitSprache(
+      <TrashDialog open boardId={1} canPurge onClose={vi.fn()} onChanged={vi.fn()} api={mkApi()} />,
+      'en',
+    )
+
+    expect(await screen.findByLabelText('Restore Gelöscht')).toHaveTextContent('Restore')
+    expect(screen.getByLabelText('Delete Gelöscht permanently')).toHaveTextContent('Delete permanently')
+    expect(screen.getByRole('heading', { name: 'Trash' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+  })
+
+  it('zeigt den leeren Papierkorb auf Englisch', async () => {
+    const api = { ...mkApi(), listTrash: vi.fn().mockResolvedValue([]) }
+    renderMitSprache(
+      <TrashDialog open boardId={1} canPurge={false} onClose={vi.fn()} onChanged={vi.fn()} api={api} />,
+      'en',
+    )
+
+    expect(await screen.findByText('The trash is empty.')).toBeInTheDocument()
+  })
+
+  it('meldet Fehlschläge ohne Server-Meldung auf Englisch', async () => {
+    const api = {
+      ...mkApi(),
+      restoreDeleted: vi.fn().mockRejectedValue(new Error('netz')),
+      purge: vi.fn().mockRejectedValue(new Error('netz')),
+    }
+    renderMitSprache(
+      <SnackbarProvider>
+        <TrashDialog open boardId={1} canPurge onClose={vi.fn()} onChanged={vi.fn()} api={api} />
+      </SnackbarProvider>,
+      'en',
+    )
+
+    fireEvent.click(await screen.findByLabelText('Restore Gelöscht'))
+    expect(await screen.findByText('Restoring failed.')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Delete Gelöscht permanently'))
+    expect(await screen.findByText('Permanent deletion failed.')).toBeInTheDocument()
   })
 })

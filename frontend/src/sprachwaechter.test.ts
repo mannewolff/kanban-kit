@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1652 = 'Sprache: Board-Ansicht auf Englisch'
 const P1653 = 'Sprache: Karten-Detail auf Englisch'
 const P1654 = 'Sprache: Karten-Dialoge und Kartensuche auf Englisch'
 const P1655 = 'Sprache: Vorhaben auf Englisch'
@@ -38,25 +37,11 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   // #1651 — CSS-Werte der Liste und die Plattform-Rollen USER/ADMIN (Schluessel, in beiden Sprachen gleich)
   { file: 'src/pages/BoardListPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/pages/RolesPage.tsx', rule: 'jsx', resolvedIn: KEIN_ANZEIGETEXT },
-  // #1652
-  { file: 'src/components/BoardView.tsx', rule: 'jsx', resolvedIn: P1652 },
-  { file: 'src/components/BoardView.tsx', rule: 'literal', resolvedIn: P1652 },
-  { file: 'src/components/BulkActionBar.tsx', rule: 'jsx', resolvedIn: P1652 },
-  { file: 'src/components/BulkActionBar.tsx', rule: 'literal', resolvedIn: P1652 },
-  { file: 'src/components/LabelManagerDialog.tsx', rule: 'jsx', resolvedIn: P1652 },
-  { file: 'src/components/LabelManagerDialog.tsx', rule: 'literal', resolvedIn: P1652 },
-  { file: 'src/components/SpecImportDialog.tsx', rule: 'jsx', resolvedIn: P1652 },
-  { file: 'src/components/SpecImportDialog.tsx', rule: 'literal', resolvedIn: P1652 },
-  { file: 'src/components/TrashDialog.tsx', rule: 'jsx', resolvedIn: P1652 },
-  { file: 'src/components/TrashDialog.tsx', rule: 'literal', resolvedIn: P1652 },
-  { file: 'src/components/board/Belastungsskala.tsx', rule: 'jsx', resolvedIn: P1652 },
-  { file: 'src/components/board/BoardKarte.tsx', rule: 'jsx', resolvedIn: P1652 },
-  { file: 'src/components/board/BoardKarte.tsx', rule: 'literal', resolvedIn: P1652 },
-  { file: 'src/components/board/BoardSpalte.tsx', rule: 'literal', resolvedIn: P1652 },
-  { file: 'src/components/board/SpaltenKopf.tsx', rule: 'jsx', resolvedIn: P1652 },
-  { file: 'src/components/board/SpaltenKopf.tsx', rule: 'literal', resolvedIn: P1652 },
-  { file: 'src/pages/BoardPage.tsx', rule: 'jsx', resolvedIn: P1652 },
-  { file: 'src/pages/BoardPage.tsx', rule: 'literal', resolvedIn: P1652 },
+  // #1652 — CSS-Werte (Rahmen, Farbmischungen, Verläufe, Leuchtschatten) der Board-Ansicht
+  { file: 'src/components/BoardView.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/board/BoardKarte.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/board/BoardSpalte.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/board/SpaltenKopf.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1653
   { file: 'src/components/AttachmentPreview.tsx', rule: 'jsx', resolvedIn: P1653 },
   { file: 'src/components/CardDetailModal.tsx', rule: 'jsx', resolvedIn: P1653 },
