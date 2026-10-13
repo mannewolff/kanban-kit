@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { NightRunItemView, NightRunOutcomeView, NightRunServerMode, NightRunView, Verdict } from '../api/nightRuns'
 import type { NightRunErrorClass, NightRunState } from './nightRunLog'
 import { GRUND_UNBEKANNT, serverBefund } from '../test/befund'
@@ -9,6 +9,7 @@ import {
   balkenHoehen,
   balkenHoehenMitLuecken,
   cacheQuote,
+  dollar,
   durchlaufKachel,
   durchsatzKachel,
   ersteZeile,
@@ -38,6 +39,7 @@ import {
   tagZeit,
   tokenMenge,
   tokenText,
+  uhrzeit,
   vorgaenge,
 } from './leitstand'
 
@@ -951,5 +953,24 @@ describe('leitstand auf Englisch', () => {
     expect(tokenMenge(512, 'en')).toEqual({ wert: '512', einheit: 'tokens' })
     expect(tokenMenge(null, 'en')).toBeNull()
     expect(tokenText(3_660_000, 'en')).toBe('3.66 M')
+  })
+})
+
+describe('leitstand ohne Sprachangabe (#1676)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('schreibt einen Dollarbetrag ohne Sprachangabe deutsch', () => {
+    // Der Spion fängt das Gebietsschema ab: Auf einem Rechner mit deutscher Systemsprache sähe
+    // das Ergebnis auch ohne `de-DE` deutsch aus.
+    const zahlformat = vi.spyOn(Intl, 'NumberFormat')
+    expect(dollar(1234.5)).toBe('1.234,50')
+    expect(zahlformat).toHaveBeenCalledWith('de-DE', expect.anything())
+  })
+
+  it('schreibt eine Uhrzeit ohne Sprachangabe deutsch als HH:MM', () => {
+    expect(uhrzeit('2026-09-14T21:10:00Z')).toMatch(/^\d{2}:\d{2}$/)
+    expect(uhrzeit('2026-09-14T21:10:00Z')).toBe(uhrzeit('2026-09-14T21:10:00Z', 'de'))
   })
 })
