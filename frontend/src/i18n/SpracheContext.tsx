@@ -35,7 +35,7 @@ export function SpracheProvider({ children, anfangs }: Readonly<{ children: Reac
   useEffect(() => {
     if (anfangs !== undefined) return
     let aktiv = true
-    languageApi
+    void languageApi
       .lesen()
       .catch((): Sprache => 'de')
       .then((geladen) => {
