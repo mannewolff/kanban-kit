@@ -169,6 +169,24 @@ describe('szenarienAus — Abschnitt und Szenarien', () => {
     expect(szenario.schritte).toEqual(['Angenommen ein Fachplan', 'Dann bleibt der Abschnitt offen'])
   })
 
+  it('erkennt einen Codezaun nur am Zeilenanfang', () => {
+    const [szenario] = szenarienAus(
+      body('## Szenarien', '### Zaun', 'Angenommen ein Text mit ``` mitten drin', 'Dann bleibt er ein Schritt'),
+    )
+    expect(szenario.schritte).toEqual(['Angenommen ein Text mit ``` mitten drin', 'Dann bleibt er ein Schritt'])
+  })
+
+  it('erkennt einen Szenario-Kopf nur an ### mit Leerraum dahinter', () => {
+    const [szenario] = szenarienAus(body('## Szenarien', '### Eins', 'Angenommen A', '#### Unterpunkt', 'Dann B'))
+    expect(szenario).toEqual({ name: 'Eins', schritte: ['Angenommen A #### Unterpunkt', 'Dann B'] })
+  })
+
+  it('nimmt den Namen ohne den Leerraum hinter ###', () => {
+    expect(szenarienAus(body('## Szenarien', '###  \t Doppelt', 'Angenommen A'))).toEqual([
+      { name: 'Doppelt', schritte: ['Angenommen A'] },
+    ])
+  })
+
   it('erkennt den Abschnitt nicht in einem Codeblock', () => {
     expect(szenarienAus(body('```', '## Szenarien', '### Eins', 'Angenommen A', '```'))).toEqual([])
   })
@@ -246,6 +264,10 @@ describe('abnahmeKommentar', () => {
     const kommentar = abnahmeKommentar(DREI, [OKAY, nichtOkay(), nichtOkay('   ')])
     expect(kommentar).toContain('2. **Ziehen** — nicht okay\n')
     expect(kommentar.endsWith('3. **Loeschen** — nicht okay')).toBe(true)
+  })
+
+  it('nennt die Notiz eines okay-Vermerks nicht', () => {
+    expect(abnahmeKommentar(DREI, [{ urteil: 'okay', notiz: 'nebenbei' }, OKAY, OKAY])).toContain('1. **Anlegen** — okay\n')
   })
 
   it('macht eine mehrzeilige Notiz einzeilig', () => {

@@ -33,10 +33,12 @@ export interface AbnahmeStand {
 
 const ZAUN = /^(?:```|~~~)/
 const ABSCHNITT_ENDE = /^#{1,2}[ \t]/
-const SZENARIO_KOPF = /^###[ \t]+(.*\S)[ \t]*$/
+// Die Zeile ist schon getrimmt: Der Name endet ohne Leerraum, ein Anker am Ende waere wirkungslos.
+const SZENARIO_KOPF = /^###[ \t]+(.+)/
 
 /** Die Zeilen des Szenarien-Abschnitts ausserhalb von Codebloecken, getrimmt und ohne Leerzeilen. */
 function abschnittsZeilen(body: string): string[] {
+  // Stryker disable next-line ArrayDeclaration: gleichwertig — eine Zeile vor dem ersten Szenario-Kopf verwirft szenarienAus ohnehin
   const zeilen: string[] = []
   let imAbschnitt = false
   let imCode = false
