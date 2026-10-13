@@ -473,6 +473,7 @@ function Durchsatz({ wochen }: Readonly<{ wochen: BoardDashboardKpis['throughput
         wochen={wochen}
         hoehen={balkenHoehen(werte)}
         titel={(i) => t.KARTEN(werte[i])}
+        wert={(i) => String(werte[i])}
         ariaLabel={t.DURCHSATZ_ARIA(wochen.length, werte.join(', '), werte.at(-1))}
         leer={werte.every((w) => w === 0)}
         leersatz={t.DURCHSATZ_LEER}
@@ -503,6 +504,7 @@ function ImplementierungVerlauf({ wochen }: Readonly<{ wochen: BoardDashboardKpi
         wochen={wochen}
         hoehen={balkenHoehenMitLuecken(kacheln.map((k, i) => (k.wert === null ? null : wochen[i].avgImplementationSeconds)))}
         titel={(i) => `${werte[i]} · ${kacheln[i].basis}`}
+        wert={(i) => vorgelesen[i]}
         ariaLabel={t.IMPLEMENTIERUNG_ARIA(wochen.length, vorgelesen.join(', '), vorgelesen.at(-1))}
         leer={werte.every((wert) => wert === null)}
         leersatz={t.IMPLEMENTIERUNG_LEER}
@@ -513,15 +515,20 @@ function ImplementierungVerlauf({ wochen }: Readonly<{ wochen: BoardDashboardKpi
   )
 }
 
+/** Zeilenhöhe der Zahl über dem Balken; um sie lässt der höchste Balken oben Platz (Issue #1675). */
+const WERT_HOEHE = 14
+
 /**
  * Das Balkenwerk der Wochenplatten (Issue #1542, A7): ein Balken je Woche, die Kalenderwoche
  * darunter. Eine Höhe `null` ist eine Woche ohne Messung — kein Balken, sondern ein leerer Platz mit
- * gestrichelter Grundlinie.
+ * gestrichelter Grundlinie. Über jedem Balken steht sein Wert sichtbar (Issue #1675); vorgelesen wird
+ * er über das `aria-label` des Ganzen, darum ist die Zahl selbst `aria-hidden`.
  */
 function Balkenwerk({
   wochen,
   hoehen,
   titel,
+  wert,
   ariaLabel,
   leer,
   leersatz,
@@ -531,6 +538,7 @@ function Balkenwerk({
   wochen: readonly { weekStart: string }[]
   hoehen: readonly (number | null)[]
   titel: (i: number) => string
+  wert: (i: number) => string
   ariaLabel: string
   leer: boolean
   leersatz: string
@@ -570,10 +578,18 @@ function Balkenwerk({
           return (
             <Box key={wochen[i].weekStart} sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
               <Box
+                component="span"
+                aria-hidden
+                data-testid={`wert-${i}`}
+                sx={{ ...ZAHL, fontSize: 9.5, lineHeight: `${WERT_HOEHE}px`, color: TEXT_SCHWACH, textAlign: 'center', whiteSpace: 'nowrap' }}
+              >
+                {wert(i)}
+              </Box>
+              <Box
                 data-testid={`balken-${hoehe}`}
                 title={titel(i)}
                 sx={{
-                  height: `${hoehe}%`,
+                  height: `calc((100% - ${WERT_HOEHE}px) * ${hoehe / 100})`,
                   borderRadius: '4px 4px 2px 2px',
                   background: jetzt
                     ? `linear-gradient(180deg, ${farbeHell}, ${farbe})`

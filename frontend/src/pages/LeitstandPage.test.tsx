@@ -515,6 +515,12 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
       '2,0 Stunden · 1 Karte',
     ])
     expect(within(platte).getByTestId('luecke-1')).toHaveAttribute('title', 'KW 24: keine gemessene Karte')
+    // Der Wert steht sichtbar über jedem Balken, die Lücke trägt keinen (Issue #1675).
+    expect(within(platte).getAllByTestId(/^wert-/).map((w) => [w.dataset.testid, w.textContent])).toEqual([
+      ['wert-0', '30 Minuten'],
+      ['wert-2', '2,0 Stunden'],
+    ])
+    expect(within(platte).getByTestId('wert-0')).toHaveAttribute('aria-hidden', 'true')
     expect(platte).toHaveTextContent('232425')
     // Der Durchsatz steht vorn, die Implementierungszeit folgt ihm.
     const durchsatz = screen.getByRole('region', { name: 'Durchsatz' })
@@ -559,6 +565,8 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     const durchsatz = await screen.findByRole('region', { name: 'Durchsatz' })
     expect(within(durchsatz).getByRole('img')).toHaveAccessibleName('Durchsatz der letzten 3 Wochen: 10, 0, 12 Karten, zuletzt 12')
     expect(within(durchsatz).getAllByTestId(/^balken-/).map((b) => b.dataset.testid)).toEqual(['balken-83', 'balken-0', 'balken-100'])
+    // Der Wert steht sichtbar über jedem Balken, auch die 0 (Issue #1675).
+    expect(within(durchsatz).getAllByTestId(/^wert-/).map((w) => w.textContent)).toEqual(['10', '0', '12'])
     expect(durchsatz).toHaveTextContent('232425')
   })
 
