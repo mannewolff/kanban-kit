@@ -588,6 +588,22 @@ export const en: Woerterbuch = {
     TITEL: 'Title',
   },
 
+  KARTENFELDER: {
+    VORHABEN: 'Epic',
+    KEIN_VORHABEN: '(no epic)',
+    VORHABEN_NUR_LESEN: 'Epic not selectable here (hidden or list unavailable) — the assignment stays unchanged.',
+    ABHAENGIG: 'Depends on (numbers, comma-separated)',
+    ABHAENGIG_KURZ: 'Depends on',
+    ABHAENGIG_BEISPIEL: 'e.g. 12, 34',
+    HERKUNFT: 'Origin (card number)',
+    HERKUNFT_KURZ: 'Origin',
+    HERKUNFT_HINWEIS: 'Number of the card this one came from — empty = none',
+    FAELLIG: 'Due on',
+    TITEL: 'Title',
+    BESCHREIBUNG: 'Markdown description',
+    KUERZEL: 'Short code',
+  },
+
   VERSCHIEBEN: {
     TITEL: (anzahl) => (anzahl === 1 ? 'Move card' : 'Move cards'),
     SUBJEKT: (anzahl) => (anzahl === 1 ? 'The card' : `The ${anzahl} cards`),

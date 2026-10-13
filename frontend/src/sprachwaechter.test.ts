@@ -14,9 +14,8 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * `kein Anzeigetext`.
  *
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
- * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
+ * Plans (E10). `CardFields.tsx` nannte kein Bereichspaket; das Schlusspaket #1661 hat es umgestellt.
  */
-const P1661 = 'Sprache: Ausnahmeliste des Wächters leeren und Abnahme'
 const KEIN_ANZEIGETEXT = 'kein Anzeigetext'
 
 const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
@@ -72,11 +71,9 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   // #1660 — CSS-Wert (Rahmen der Token-Zeile) und `rel` des Doku-Links der Sicherung
   { file: 'src/components/BackupStatusSection.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/pages/AdministrationPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  // #1661
-  { file: 'src/components/CardFields.tsx', rule: 'jsx', resolvedIn: P1661 },
-  { file: 'src/components/CardFields.tsx', rule: 'literal', resolvedIn: P1661 },
-  { file: 'src/lib/kontrast.ts', rule: 'literal', resolvedIn: P1661 },
-  { file: 'src/main.tsx', rule: 'literal', resolvedIn: P1661 },
+  // #1661 — Entwicklerfehler, die keine Oberflaeche anzeigt: ungueltiger Hexwert im Theme, fehlendes `#root`
+  { file: 'src/lib/kontrast.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/main.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // Literale ohne Anzeigetext (CSS-Werte, Schriftstapel)
   { file: 'src/components/boardSurfaceSx.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/dialogChromeSx.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
@@ -111,5 +108,9 @@ describe('Sprachwaechter im Bestand', () => {
 
   it('fuehrt keine Ausnahme, die kein Fund mehr deckt', () => {
     expect(deadAllowlistEntries(funde, ALLOWLIST)).toEqual([])
+  })
+
+  it('duldet nach den Bereichspaketen nur noch Literale ohne Anzeigetext (A9)', () => {
+    expect(ALLOWLIST.filter((eintrag) => eintrag.resolvedIn !== KEIN_ANZEIGETEXT)).toEqual([])
   })
 })

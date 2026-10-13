@@ -4,7 +4,7 @@ import type { Epic } from '../api/epics'
 import { epicShortcode } from '../lib/epicMeta'
 import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
-import { useSprache } from '../i18n/SpracheContext'
+import { useSprache, useT } from '../i18n/SpracheContext'
 import { DatumFeld } from './DatumFeld'
 
 /**
@@ -21,20 +21,21 @@ export function EpicSelectField({
   epics: Epic[]
   onParentIdChange: (value: number | null) => void
 }>) {
+  const t = useT().KARTENFELDER
   return (
     <TextField
       select
-      label="Vorhaben"
+      label={t.VORHABEN}
       value={parentId ?? ''}
       onChange={(e) => onParentIdChange(e.target.value === '' ? null : Number(e.target.value))}
       slotProps={{
-        htmlInput: { 'aria-label': 'Vorhaben' },
+        htmlInput: { 'aria-label': t.VORHABEN },
         select: { native: true },
         inputLabel: { shrink: true },
       }}
       fullWidth
     >
-      <option value="">(kein Vorhaben)</option>
+      <option value="">{t.KEIN_VORHABEN}</option>
       {epics.map((epic) => (
         <option key={epic.id} value={epic.id}>
           {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
@@ -124,6 +125,7 @@ export function CardFields({
   onTitleKeyDown?: (event: KeyboardEvent) => void
 }>) {
   const { sprache } = useSprache()
+  const t = useT().KARTENFELDER
   const bodyShortcut = useCheckboxShortcut(onBodyChange)
   const nonEpicFields = (
     <>
@@ -132,11 +134,11 @@ export function CardFields({
         // belegt sichtbar, dass eine Zuordnung besteht, und hält sie zugleich außer Reichweite
         // jeder versehentlichen Änderung.
         <TextField
-          label="Vorhaben"
-          value={parentId === null ? '(kein Vorhaben)' : (epicReadOnlyLabel ?? `#${parentId}`)}
-          helperText="Vorhaben hier nicht auswählbar (ausgeblendet oder Liste nicht verfügbar) — die Zuordnung bleibt unverändert."
+          label={t.VORHABEN}
+          value={parentId === null ? t.KEIN_VORHABEN : (epicReadOnlyLabel ?? `#${parentId}`)}
+          helperText={t.VORHABEN_NUR_LESEN}
           slotProps={{
-            htmlInput: { 'aria-label': 'Vorhaben' },
+            htmlInput: { 'aria-label': t.VORHABEN },
             input: { readOnly: true },
             inputLabel: { shrink: true },
           }}
@@ -146,32 +148,32 @@ export function CardFields({
         <EpicSelectField parentId={parentId} epics={epics} onParentIdChange={onParentIdChange} />
       )}
       <TextField
-        label="Abhängig von (Nummern, kommagetrennt)"
+        label={t.ABHAENGIG}
         value={depsInput}
         onChange={(e) => onDepsInputChange(e.target.value)}
         error={depsError != null}
-        helperText={depsError ?? 'z. B. 12, 34'}
-        slotProps={{ htmlInput: { 'aria-label': 'Abhängig von' } }}
+        helperText={depsError ?? t.ABHAENGIG_BEISPIEL}
+        slotProps={{ htmlInput: { 'aria-label': t.ABHAENGIG_KURZ } }}
         fullWidth
       />
       {!isEpic && onHerkunftInputChange && (
         <TextField
-          label="Herkunft (Kartennummer)"
+          label={t.HERKUNFT}
           value={herkunftInput}
           onChange={(e) => onHerkunftInputChange(e.target.value)}
           error={herkunftError != null}
-          helperText={herkunftError ?? 'Nummer der Karte, aus der diese hervorging — leer = keine'}
-          slotProps={{ htmlInput: { 'aria-label': 'Herkunft' } }}
+          helperText={herkunftError ?? t.HERKUNFT_HINWEIS}
+          slotProps={{ htmlInput: { 'aria-label': t.HERKUNFT_KURZ } }}
           fullWidth
         />
       )}
-      <DatumFeld label="Fällig am" value={dueInput} onChange={onDueInputChange} />
+      <DatumFeld label={t.FAELLIG} value={dueInput} onChange={onDueInputChange} />
     </>
   )
   return (
     <>
       <TextField
-        label="Titel"
+        label={t.TITEL}
         value={title}
         onChange={(e) => onTitleChange(e.target.value)}
         required
@@ -181,10 +183,10 @@ export function CardFields({
         onKeyDown={onTitleKeyDown}
         error={titleError != null}
         helperText={titleError ?? undefined}
-        slotProps={{ htmlInput: { maxLength: 300, 'aria-label': 'Titel' } }}
+        slotProps={{ htmlInput: { maxLength: 300, 'aria-label': t.TITEL } }}
       />
       <TextField
-        label="Markdown-Beschreibung"
+        label={t.BESCHREIBUNG}
         value={body}
         onChange={bodyShortcut.onChange}
         onKeyDown={bodyShortcut.onKeyDown}
@@ -193,15 +195,15 @@ export function CardFields({
         fullWidth
         error={isTooLong(body)}
         helperText={isTooLong(body) ? tooLongMessage(body.length, sprache) : undefined}
-        slotProps={{ htmlInput: { 'aria-label': 'Markdown-Beschreibung' } }}
+        slotProps={{ htmlInput: { 'aria-label': t.BESCHREIBUNG } }}
         sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
       />
       {isEpic ? (
         <TextField
-          label="Kürzel"
+          label={t.KUERZEL}
           value={shortcode}
           onChange={(e) => onShortcodeChange(e.target.value)}
-          slotProps={{ htmlInput: { maxLength: 16, 'aria-label': 'Kürzel' } }}
+          slotProps={{ htmlInput: { maxLength: 16, 'aria-label': t.KUERZEL } }}
           sx={{ maxWidth: 200 }}
         />
       ) : (

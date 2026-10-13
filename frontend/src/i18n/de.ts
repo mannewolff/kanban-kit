@@ -615,6 +615,23 @@ export const de = {
     TITEL: 'Titel',
   },
 
+  /** Gemeinsame Felder des Anlege- und Bearbeiten-Formulars einer Karte (Issue #1661). */
+  KARTENFELDER: {
+    VORHABEN: 'Vorhaben',
+    KEIN_VORHABEN: '(kein Vorhaben)',
+    VORHABEN_NUR_LESEN: 'Vorhaben hier nicht auswählbar (ausgeblendet oder Liste nicht verfügbar) — die Zuordnung bleibt unverändert.',
+    ABHAENGIG: 'Abhängig von (Nummern, kommagetrennt)',
+    ABHAENGIG_KURZ: 'Abhängig von',
+    ABHAENGIG_BEISPIEL: 'z. B. 12, 34',
+    HERKUNFT: 'Herkunft (Kartennummer)',
+    HERKUNFT_KURZ: 'Herkunft',
+    HERKUNFT_HINWEIS: 'Nummer der Karte, aus der diese hervorging — leer = keine',
+    FAELLIG: 'Fällig am',
+    TITEL: 'Titel',
+    BESCHREIBUNG: 'Markdown-Beschreibung',
+    KUERZEL: 'Kürzel',
+  },
+
   /** Verschieben einer oder mehrerer Karten (Issue #1654). */
   VERSCHIEBEN: {
     TITEL: (anzahl: number) => (anzahl === 1 ? 'Karte verschieben' : 'Karten verschieben'),

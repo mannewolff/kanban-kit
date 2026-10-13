@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Epic } from '../api/epics'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 
@@ -347,5 +348,86 @@ describe('CardFields', () => {
     )
 
     expect(screen.getByLabelText('Vorhaben')).toHaveValue('(kein Vorhaben)')
+  })
+
+  describe('auf Englisch', () => {
+    it('beschriftet die Kartenfelder englisch', () => {
+      const h = handlers()
+      renderMitSprache(
+        <CardFields
+          isEpic={false}
+          title="T"
+          body="B"
+          shortcode=""
+          parentId={null}
+          epics={epics}
+          depsInput=""
+          depsError={null}
+          herkunftInput=""
+          onHerkunftInputChange={vi.fn()}
+          dueInput=""
+          {...h}
+        />,
+        'en',
+      )
+
+      expect(screen.getByLabelText('Title')).toHaveValue('T')
+      expect(screen.getByLabelText('Markdown description')).toHaveValue('B')
+      expect(screen.getByLabelText('Epic')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: '(no epic)' })).toBeInTheDocument()
+      expect(screen.getByLabelText('Depends on')).toBeInTheDocument()
+      expect(screen.getByText('Depends on (numbers, comma-separated)', { selector: 'label' })).toBeInTheDocument()
+      expect(screen.getByText('e.g. 12, 34')).toBeInTheDocument()
+      expect(screen.getByLabelText('Origin')).toBeInTheDocument()
+      expect(screen.getByText('Origin (card number)', { selector: 'label' })).toBeInTheDocument()
+      expect(screen.getByText('Number of the card this one came from — empty = none')).toBeInTheDocument()
+      expect(screen.getByText('Due on', { selector: 'label' })).toBeInTheDocument()
+    })
+
+    it('beschriftet die lesende Vorhaben-Zuordnung englisch', () => {
+      const h = handlers()
+      renderMitSprache(
+        <CardFields
+          isEpic={false}
+          title="T"
+          body=""
+          shortcode=""
+          parentId={null}
+          epics={[]}
+          epicReadOnly
+          depsInput=""
+          depsError={null}
+          dueInput=""
+          {...h}
+        />,
+        'en',
+      )
+
+      expect(screen.getByLabelText('Epic')).toHaveValue('(no epic)')
+      expect(
+        screen.getByText('Epic not selectable here (hidden or list unavailable) — the assignment stays unchanged.'),
+      ).toBeInTheDocument()
+    })
+
+    it('beschriftet das Kürzel eines Vorhabens englisch', () => {
+      const h = handlers()
+      renderMitSprache(
+        <CardFields
+          isEpic
+          title="T"
+          body=""
+          shortcode="AUT"
+          parentId={null}
+          epics={[]}
+          depsInput=""
+          depsError={null}
+          dueInput=""
+          {...h}
+        />,
+        'en',
+      )
+
+      expect(screen.getByLabelText('Short code')).toHaveValue('AUT')
+    })
   })
 })
