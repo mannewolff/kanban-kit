@@ -753,6 +753,18 @@ englischer Name. Ebenso liest der Leitstand Laufstand (`## Run status`), Textpro
 Ergebnisdatei auch in ihrer englischen Form; Nächte, die vorher gemeldet wurden, erscheinen
 unverändert.
 
+Ein Systemlabel — jedes Label dieses Satzes — **erklärt sich selbst**: Fährt man mit der Maus darüber
+oder springt man mit der Tastatur darauf, erscheint ein kurzer Hinweis. Er sagt, was das Label
+bedeutet, wer es setzt, wann und durch wen es wieder verschwindet, ob es geschützt ist (etwa: Abnehmen
+geht nur angemeldet im Leitstand, nicht über ein Token) und, wo es etwas zu tun gibt, was man tun
+soll. Das gilt auf der Karte im Board, im Karten-Detail, in der Label-Auswahl, im Label-Filter der
+Liste, im Menü „Labels" der Mehrfachauswahl, im Dialog der Labelverwaltung und in diesem Dialog
+„Standard-Labels". Im Ableitungsbaum und in den Zählmarken der Vorhaben-Kacheln erscheint der Hinweis
+nicht. Der Dialog „Standard-Labels" zeigt unter jedem Label zusätzlich seine vollständige Erklärung
+als Text, sodass sich alle Erklärungen ohne Darüberfahren lesen lassen. Ein altes deutsches Label
+zeigt die Erklärung seines englischen Namens; ein selbst angelegtes Label zeigt keine. Die Erklärung
+steht in der Sprache, die unter [Sprache / Language](#sprache-language) eingestellt ist.
+
 Erst **„Anlegen"** legt jedes fehlende Label des Satzes auf **allen nicht archivierten Boards aller
 Projekte** an; „Abbrechen" ändert nichts. Ein Label, das ein Board schon trägt, bleibt mit Farbe und
 Zuordnungen unverändert und wird übersprungen. Danach meldet der Abschnitt, auf wie vielen Boards wie
