@@ -6,6 +6,7 @@ import {
   isDoneColumn,
   neighbourColumns,
   otherCanonicalColumns,
+  STATUS_NAMEN,
   statusAnzeigename,
   statusWeichtAb,
 } from './columnMeta'
@@ -42,6 +43,18 @@ describe('statusWeichtAb', () => {
     [null, 'Anstehend', false],
   ] as const)('Status %s in Spalte „%s“ weicht ab=%s', (status, spaltenname, expected) => {
     expect(statusWeichtAb(status, spaltenname)).toBe(expected)
+  })
+})
+
+describe('STATUS_NAMEN', () => {
+  it('nennt die fünf Zustände in Prozessreihenfolge mit ihrem kanonischen Namen', () => {
+    expect(STATUS_NAMEN).toEqual([
+      ['BACKLOG', 'Backlog'],
+      ['READY', 'Ready'],
+      ['IN_PROGRESS', 'In progress'],
+      ['IN_REVIEW', 'In review'],
+      ['DONE', 'Done'],
+    ])
   })
 })
 
