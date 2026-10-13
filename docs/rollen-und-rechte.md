@@ -196,6 +196,12 @@ ID (`/api/kanban/items/{id}/activity` und `…/comments`): Eine Karte im Papierk
 **404**, eine archivierte Karte bleibt lesbar. Ein **ungebundenes** Token erhält auf diese
 Aufrufe **409**, weil ihm das Board fehlt.
 
+Die **Anhänge** der Karten seines Boards erreicht ein board-gebundenes Token lesend — auflisten und
+herunterladen (siehe [Dogfooding](dogfooding.md#anhange-einer-karte-lesen)), ohne eigene Erlaubnis.
+Hochladen oder löschen kann es keinen Anhang. Ein unerreichbarer Anhang — an einer Karte eines
+anderen Boards oder im Papierkorb, oder bereits gelöscht — wird mit **404** beantwortet wie einer, den
+es nicht gibt.
+
 ### Freigabe-Labels des Kits
 
 Fünf Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Server erzwingt sie
