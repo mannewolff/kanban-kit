@@ -30,6 +30,17 @@ export const de = {
   DAUER_MINUTEN: (minuten: number) => `${minuten} Min`,
   DAUER_STUNDEN: (stunden: number, minuten: number) => `${stunden} Std ${minuten} Min`,
   DAUER_TAGE: (tage: number, stunden: number) => `${tage} T ${stunden} Std`,
+
+  /** Abschnitt „Sprache / Language“ der Administration (Issue #1646); Überschrift und Sprachnamen stehen fest. */
+  SPRACHE: {
+    HINWEIS:
+      'Die Sprache gilt für alle Nutzer und für die Seiten vor der Anmeldung. Wer gerade angemeldet ist, sieht die Umstellung beim nächsten Laden der Seite.',
+    NUR_ADMIN: 'Nur ein Plattform-Admin kann die Sprache ändern.',
+    SPEICHERN: 'Speichern',
+    SPEICHERN_ARIA: 'Sprache speichern',
+    GESPEICHERT: 'Sprache gespeichert.',
+    FEHLER: 'Die Sprache konnte nicht gespeichert werden.',
+  },
 } as const
 
 /** Weitet die Literale des deutschen Wörterbuchs zu `string`, rekursiv und durch Funktionen hindurch. */

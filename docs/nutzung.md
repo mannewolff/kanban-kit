@@ -719,6 +719,18 @@ Unabhängig vom Editiermodus zeigt die Seite **Administration** jedem Angemeldet
 YAML). Die Übersicht dient dem Nachschlagen; wer Aufrufe darin ausprobieren darf, steht unter
 [API-Übersicht](#api-ubersicht).
 
+### Sprache / Language
+
+Die Seite **Administration** zeigt jedem Angemeldeten den Abschnitt **„Sprache / Language"** mit
+der Auswahl **Deutsch** und **English**. Die Überschrift und die Namen der Sprachen stehen in jeder
+Einstellung gleich, damit auch jemand ohne Deutschkenntnisse die Einstellung findet. Ändern kann
+sie **nur der Plattform-Admin**; allen anderen zeigt der Abschnitt die geltende Sprache nur an.
+
+Die Sprache gilt für die **ganze Installation** — für jeden Nutzer und auch für die Seiten vor der
+Anmeldung. Sie wirkt ohne Neustart: Der Plattform-Admin sieht die Umstellung sofort nach dem
+Speichern, alle anderen **beim nächsten Laden** der Seite. Eine neue Installation startet auf
+Deutsch.
+
 ### Standard-Labels
 
 Einem **Plattform-Admin** zeigt die Seite **Administration** zusätzlich den Abschnitt

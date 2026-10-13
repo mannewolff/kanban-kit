@@ -33,4 +33,14 @@ export const en: Woerterbuch = {
   DAUER_MINUTEN: (minuten) => `${minuten} min`,
   DAUER_STUNDEN: (stunden, minuten) => `${stunden} h ${minuten} min`,
   DAUER_TAGE: (tage, stunden) => `${tage} d ${stunden} h`,
+
+  SPRACHE: {
+    HINWEIS:
+      'The language applies to all users and to the pages before sign-in. Users who are signed in see the change the next time they load the page.',
+    NUR_ADMIN: 'Only a platform admin can change the language.',
+    SPEICHERN: 'Save',
+    SPEICHERN_ARIA: 'Save language',
+    GESPEICHERT: 'Language saved.',
+    FEHLER: 'The language could not be saved.',
+  },
 }

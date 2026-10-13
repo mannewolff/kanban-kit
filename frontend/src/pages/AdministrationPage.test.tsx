@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { accessTokensApi } from '../api/accessTokens'
 import { boardsApi } from '../api/boards'
 import { ApiError } from '../api/client'
 import { configApi } from '../api/config'
 import { projectsApi } from '../api/projects'
 import { SnackbarProvider } from '../components/SnackbarProvider'
+import { SpracheProvider } from '../i18n/SpracheContext'
 import { EditModeProvider, useEditMode } from '../lib/EditModeContext'
 import { AdministrationPage } from './AdministrationPage'
 
@@ -48,14 +49,16 @@ const boundToken = {
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <SnackbarProvider>
-        <EditModeProvider>
-          <AdministrationPage />
-          <ModeProbe />
-        </EditModeProvider>
-      </SnackbarProvider>
-    </MemoryRouter>,
+    <SpracheProvider anfangs="de">
+      <MemoryRouter>
+        <SnackbarProvider>
+          <EditModeProvider>
+            <AdministrationPage />
+            <ModeProbe />
+          </EditModeProvider>
+        </SnackbarProvider>
+      </MemoryRouter>
+    </SpracheProvider>,
   )
 }
 
@@ -410,6 +413,92 @@ describe('AdministrationPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
       expect(await screen.findByText('Speichern fehlgeschlagen.')).toBeInTheDocument()
+    })
+  })
+
+  describe('Sprache / Language (Issue #1646)', () => {
+    let fetchSpy: MockInstance<typeof fetch> | undefined
+
+    /** `PUT /api/admin/language` antwortet mit dem gesetzten Sprachcode (oder einem Fehler). */
+    function putAntwortet(antwort: { ok: true; language: string } | { ok: false; status: number; body: string }) {
+      const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: antwort.ok,
+        status: antwort.ok ? 200 : antwort.status,
+        statusText: antwort.ok ? 'OK' : 'Error',
+        text: () => Promise.resolve(antwort.ok ? JSON.stringify({ language: antwort.language }) : antwort.body),
+      } as Response)
+      fetchSpy = spy
+      return spy
+    }
+
+    afterEach(() => fetchSpy?.mockRestore())
+
+    it('zeigt einem Nicht-Admin den Abschnitt zweisprachig, aber nur lesbar', () => {
+      renderPage() // Default USER
+
+      expect(screen.getByRole('heading', { name: 'Sprache / Language', level: 2 })).toBeInTheDocument()
+      const gruppe = screen.getByRole('radiogroup', { name: 'Sprache / Language' })
+      expect(gruppe).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'Deutsch' })).toBeChecked()
+      expect(screen.getByRole('radio', { name: 'Deutsch' })).toBeDisabled()
+      expect(screen.getByRole('radio', { name: 'English' })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: 'Sprache speichern' })).not.toBeInTheDocument()
+      expect(screen.getByText('Nur ein Plattform-Admin kann die Sprache ändern.')).toBeInTheDocument()
+    })
+
+    it('lässt den Plattform-Admin die Sprache wählen', () => {
+      authState.user = { platformRole: 'ADMIN', memberships: [] }
+      renderPage()
+
+      expect(screen.getByRole('heading', { name: 'Sprache / Language', level: 2 })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'Deutsch' })).toBeEnabled()
+      expect(screen.getByRole('radio', { name: 'English' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Sprache speichern' })).toBeInTheDocument()
+      expect(screen.queryByText('Nur ein Plattform-Admin kann die Sprache ändern.')).not.toBeInTheDocument()
+      expect(screen.getByText(/beim nächsten Laden der Seite/)).toBeInTheDocument()
+    })
+
+    it('speichert über PUT /api/admin/language und schaltet sofort auf Englisch', async () => {
+      authState.user = { platformRole: 'ADMIN', memberships: [] }
+      const put = putAntwortet({ ok: true, language: 'en' })
+      renderPage()
+
+      await userEvent.click(screen.getByRole('radio', { name: 'English' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Sprache speichern' }))
+
+      await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+      const [pfad, init] = put.mock.calls[0] as [string, RequestInit]
+      expect(pfad).toBe('/api/admin/language')
+      expect(init.method).toBe('PUT')
+      expect(JSON.parse(String(init.body))).toEqual({ language: 'en' })
+
+      expect(await screen.findByText('Language saved.')).toBeInTheDocument()
+      expect(screen.getByText(/the next time they load the page/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Save language' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Sprache / Language', level: 2 })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'English' })).toBeChecked()
+    })
+
+    it('zeigt die Server-Meldung, wenn das Speichern abgelehnt wird', async () => {
+      authState.user = { platformRole: 'ADMIN', memberships: [] }
+      putAntwortet({ ok: false, status: 400, body: JSON.stringify({ detail: 'Unbekannte Sprache' }) })
+      renderPage()
+
+      await userEvent.click(screen.getByRole('radio', { name: 'English' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Sprache speichern' }))
+
+      await erwarteFehlerToast('Unbekannte Sprache')
+      expect(screen.getByRole('button', { name: 'Sprache speichern' })).toBeInTheDocument()
+    })
+
+    it('fällt ohne Server-Meldung auf den eigenen Fehlertext zurück', async () => {
+      authState.user = { platformRole: 'ADMIN', memberships: [] }
+      putAntwortet({ ok: false, status: 502, body: '<html>Bad Gateway</html>' })
+      renderPage()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Sprache speichern' }))
+
+      await erwarteFehlerToast('Die Sprache konnte nicht gespeichert werden.')
     })
   })
 })

@@ -10,6 +10,8 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
+import Radio from '@mui/material/Radio'
+import RadioGroup from '@mui/material/RadioGroup'
 import Stack from '@mui/material/Stack'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
@@ -25,10 +27,13 @@ import { boardsApi, type Board } from '../api/boards'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { configApi } from '../api/config'
 import { OPENAPI_JSON_PFAD, OPENAPI_YAML_PFAD } from '../api/openapi'
+import { languageApi } from '../api/language'
 import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { StandardLabelsSection } from '../components/StandardLabelsSection'
+import { useSprache, useT } from '../i18n/SpracheContext'
+import { istSprache, woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { useEditMode } from '../lib/EditModeContext'
 import { canEditCards, isPlatformAdmin } from '../lib/roles'
 
@@ -70,6 +75,8 @@ export function AdministrationPage() {
           </Stack>
         </Paper>
 
+        <LanguageSection />
+
         <DoneRetentionSection />
 
         <StandardLabelsSection />
@@ -100,6 +107,85 @@ function LegalSection() {
           sofern Copyright-Vermerk und Lizenztext erhalten bleiben. Die Software wird ohne Gewähr
           bereitgestellt.
         </Typography>
+      </Stack>
+    </Paper>
+  )
+}
+
+/**
+ * Feste, zweisprachige Überschrift (Issue #1646): Wer kein Deutsch liest, findet die Einstellung
+ * auch auf der deutschen Oberfläche. Steht darum nicht im Wörterbuch.
+ */
+const SPRACHE_UEBERSCHRIFT = 'Sprache / Language'
+
+/** Jede Sprache unter ihrem eigenen Namen — fest, in jeder Einstellung gleich. */
+const SPRACHNAMEN: ReadonlyArray<{ code: Sprache; name: string }> = [
+  { code: 'de', name: 'Deutsch' },
+  { code: 'en', name: 'English' },
+]
+
+/**
+ * Sprache der Installation (Plan #1638, E3): sichtbar für jeden Angemeldeten, bedienbar nur für den
+ * Plattform-Admin. Nach dem Speichern setzt der Abschnitt die Sprache im Kontext, sodass der Admin
+ * die Umstellung sofort sieht; alle anderen sehen sie beim nächsten Laden.
+ */
+function LanguageSection() {
+  const { user } = useAuth()
+  const admin = isPlatformAdmin(user)
+  const { sprache, setzeSprache } = useSprache()
+  const t = useT()
+  const [auswahl, setAuswahl] = useState<Sprache>(sprache)
+  const notify = useSnackbar()
+
+  const save = async () => {
+    try {
+      const gesetzt = await languageApi.setzen(auswahl)
+      setzeSprache(gesetzt)
+      notify(woerterbuch(gesetzt).SPRACHE.GESPEICHERT, 'success')
+    } catch (e) {
+      notify(apiErrorMessage(e, t.SPRACHE.FEHLER), 'error')
+    }
+  }
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack spacing={1.5}>
+        <Typography variant="h6" component="h2" id="sprache-ueberschrift">
+          {SPRACHE_UEBERSCHRIFT}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {t.SPRACHE.HINWEIS}
+        </Typography>
+        <RadioGroup
+          row
+          aria-labelledby="sprache-ueberschrift"
+          value={auswahl}
+          onChange={(e) => {
+            if (istSprache(e.target.value)) setAuswahl(e.target.value)
+          }}
+        >
+          {SPRACHNAMEN.map(({ code, name }) => (
+            <FormControlLabel
+              key={code}
+              value={code}
+              control={<Radio />}
+              label={name}
+              lang={code}
+              disabled={!admin}
+            />
+          ))}
+        </RadioGroup>
+        {admin ? (
+          <Box>
+            <Button variant="contained" aria-label={t.SPRACHE.SPEICHERN_ARIA} onClick={() => void save()}>
+              {t.SPRACHE.SPEICHERN}
+            </Button>
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {t.SPRACHE.NUR_ADMIN}
+          </Typography>
+        )}
       </Stack>
     </Paper>
   )
