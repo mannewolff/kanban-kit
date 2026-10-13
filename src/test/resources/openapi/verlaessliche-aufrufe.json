@@ -147,6 +147,83 @@
     },
     "abgekuendigtSeit" : null
   }, {
+    "pfad" : "/api/kanban/items/{id}/attachments",
+    "methode" : "GET",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "id",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "items" : {
+                "$ref" : "#/components/schemas/AttachmentView"
+              },
+              "type" : "array"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/items/{id}/attachments/{attachmentId}",
+    "methode" : "GET",
+    "parameter" : [ {
+      "in" : "path",
+      "name" : "attachmentId",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    }, {
+      "in" : "path",
+      "name" : "id",
+      "required" : true,
+      "schema" : {
+        "format" : "int64",
+        "type" : "integer"
+      }
+    } ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/octet-stream" : {
+            "schema" : {
+              "format" : "binary",
+              "type" : "string"
+            }
+          }
+        },
+        "headers" : {
+          "Content-Disposition" : {
+            "schema" : {
+              "type" : "string"
+            },
+            "style" : "simple"
+          },
+          "Content-Length" : {
+            "schema" : {
+              "format" : "int64",
+              "type" : "integer"
+            },
+            "style" : "simple"
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
     "pfad" : "/api/kanban/items/{id}/comments",
     "methode" : "GET",
     "parameter" : [ {
@@ -520,6 +597,33 @@
         },
         "type" : {
           "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "AttachmentView" : {
+      "properties" : {
+        "cardId" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "contentType" : {
+          "type" : "string"
+        },
+        "createdAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "filename" : {
+          "type" : "string"
+        },
+        "id" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
+        "size" : {
+          "format" : "int64",
+          "type" : "integer"
         }
       },
       "type" : "object"

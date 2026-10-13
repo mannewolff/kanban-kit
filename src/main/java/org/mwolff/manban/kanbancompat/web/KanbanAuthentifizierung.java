@@ -16,8 +16,10 @@ final class KanbanAuthentifizierung {
 
   static final String TAG_BESCHREIBUNG =
       "Karten, Kommentare und Labels über ein board-gebundenes Projekt-Token lesen und"
-          + " schreiben, ohne Anmeldung im Browser. Das Board kommt aus der Bindung des Tokens"
-          + " (Header X-Kanban-Token), nicht aus dem Aufruf: Jeder Aufruf wirkt nur auf das"
+          + " schreiben und die Anhänge einer Karte lesen, ohne Anmeldung im Browser. Hochladen"
+          + " und Löschen von Anhängen gibt es über das Token nicht. Das Board kommt aus der"
+          + " Bindung des Tokens (Header X-Kanban-Token), nicht aus dem Aufruf: Jeder Aufruf"
+          + " wirkt nur auf das"
           + " Board, für das das Token ausgestellt wurde, und das Token darf nie mehr als die"
           + " Person, die es angelegt hat. Spalten heißen hier mit festen Schlüsseln BACKLOG,"
           + " READY, IN_PROGRESS, IN_REVIEW und DONE.";

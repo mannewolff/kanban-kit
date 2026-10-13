@@ -77,7 +77,8 @@ class OpenApiIT extends AbstractIntegrationTest {
 
   /**
    * Die verlässlichen Operationen: die zwölf zum Start (Plan #1400, E4), der Einzelabruf nach
-   * Nummer, die Herkunftskette und die Suche (Plan #1574, E14).
+   * Nummer, die Herkunftskette und die Suche (Plan #1574, E14) sowie Liste und Download der Anhänge
+   * einer Karte (Plan #1694, Issue #1699).
    */
   private static final List<String> VERLAESSLICH_ZUM_START =
       List.of(
@@ -87,6 +88,8 @@ class OpenApiIT extends AbstractIntegrationTest {
           "GET /api/kanban/items/by-number/{number}",
           "GET /api/kanban/items/by-number/{number}/lineage",
           "GET /api/kanban/items/{id}/activity",
+          "GET /api/kanban/items/{id}/attachments",
+          "GET /api/kanban/items/{id}/attachments/{attachmentId}",
           "GET /api/kanban/items/{id}/comments",
           "GET /api/kanban/search",
           "PATCH /api/kanban/items/{id}/comments/{commentId}",
