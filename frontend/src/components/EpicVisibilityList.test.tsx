@@ -9,6 +9,7 @@ import { kontrast } from '../lib/kontrast'
 import { NUT, TEXT_SCHWACH, theme } from '../theme'
 import { KIT_NAMEN } from '../test/kitNamen'
 import { EpicVisibilityList } from './EpicVisibilityList'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 /** Das Namen-Register des Kits (Issue #1596): ohne Angabe geladen, ein Test kann es umstellen. */
 const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
@@ -374,5 +375,55 @@ describe('EpicVisibilityList', () => {
     ['dunkel', theme.colorSchemes.dark!.palette],
   ])('%s: schwache Schrift auf der eingelassenen Fläche hält 4,5:1', (_, palette) => {
     expect(kontrast(palette.warte.nute, palette.warte.textSchwach)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('EpicVisibilityList auf Englisch', () => {
+  function zeichneEnglisch(overrides: Partial<Parameters<typeof EpicVisibilityList>[0]> = {}) {
+    renderMitSprache(
+      <EpicVisibilityList
+        epics={VORHABEN}
+        hidden={AUSGEBLENDET}
+        cards={[]}
+        labels={[]}
+        titelZuNummer={(nummer) => `Karte ${nummer}`}
+        onToggle={vi.fn()}
+        onOpen={vi.fn()}
+        onOpenCard={vi.fn()}
+        onMenu={vi.fn()}
+        {...overrides}
+      />,
+      'en',
+    )
+  }
+
+  it('beschriftet Zustand, Fortschritt, Schalter und Menü auf Englisch', () => {
+    zeichneEnglisch()
+    expect(screen.getByText('Hidden')).toBeInTheDocument()
+    expect(screen.getAllByText('0 of 0 done')).toHaveLength(3)
+    expect(screen.getByLabelText('Show epic BRD')).toBeInTheDocument()
+    expect(screen.getByLabelText('Hide epic AUS')).toBeInTheDocument()
+    expect(screen.getByLabelText('Menu Board-Umbau')).toBeInTheDocument()
+    expect(screen.getByLabelText('Progress Board-Umbau')).toBeInTheDocument()
+    expect(screen.getAllByText('No requirement linked.')).toHaveLength(3)
+    expect(screen.getAllByText('No cards assigned yet.')).toHaveLength(3)
+  })
+
+  it('nennt Anforderung und Zusammensetzung auf Englisch', () => {
+    const epic = { ...BOARD, total: 3, memberNumbers: [1, 2, 3], requirementCardNumber: 1 }
+    zeichneEnglisch({
+      epics: [epic],
+      cards: [karte(1, '[Requirement] A'), karte(2, '[Plan] B'), karte(3, 'C')],
+    })
+    expect(screen.getByText('Requirement:')).toBeInTheDocument()
+    expect(screen.getByText('1 requirement')).toBeInTheDocument()
+    expect(screen.getByText('1 plan')).toBeInTheDocument()
+    expect(screen.getByText('1 work item')).toBeInTheDocument()
+  })
+
+  it('meldet das Namen-Register auf Englisch', () => {
+    kitNamen.zustand = { status: 'laden' }
+    zeichneEnglisch({ epics: [{ ...BOARD, total: 1 }] })
+    expect(screen.getByText('Loading kit names')).toBeInTheDocument()
   })
 })

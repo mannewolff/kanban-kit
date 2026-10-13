@@ -694,6 +694,48 @@ export const de = {
     ARIA: (kuerzel: string) => `Vorhaben ${kuerzel}`,
     OEFFNEN_ARIA: (kuerzel: string) => `Vorhaben ${kuerzel} öffnen`,
   },
+  /** Seite „Vorhaben“ (Issue #1655). */
+  VORHABEN_SEITE: {
+    RUECKFRAGE_ENDE: 'Das lässt sich nicht rückgängig machen.',
+    RUECKFRAGE_KEINE: (titel: string) => `„${titel}" wird gelöscht. Keine aktive Karte ist direkt zugeordnet.`,
+    RUECKFRAGE_EINE: (titel: string) =>
+      `„${titel}" wird gelöscht. 1 direkt zugeordnete aktive Karte bleibt erhalten und zeigt danach „(kein Vorhaben)".`,
+    RUECKFRAGE_VIELE: (titel: string, anzahl: number) =>
+      `„${titel}" wird gelöscht. ${anzahl} direkt zugeordnete aktive Karten bleiben erhalten und zeigen danach „(kein Vorhaben)".`,
+    NOCH_NICHT_GELADEN: 'noch nicht geladen',
+    LOESCHEN_FEHLER: 'Löschen fehlgeschlagen.',
+    UNGUELTIGE_ID: 'Ungültige Board-ID.',
+    LADEN_FEHLER: 'Vorhaben konnten nicht geladen werden.',
+    PROJEKTE: 'Projekte',
+    TITEL: 'Vorhaben',
+    NEU: 'Neues Vorhaben',
+    AUSGEBLENDETE_ZEIGEN: (anzahl: number) => `Ausgeblendete zeigen (${anzahl})`,
+    KEINE: 'Noch keine Vorhaben.',
+    LOESCHEN: 'Löschen',
+    LOESCHEN_TITEL: 'Vorhaben löschen?',
+    ABBRECHEN: 'Abbrechen',
+  },
+
+  /** Sichtbarkeitsliste der Vorhaben (Issue #1655). */
+  VORHABEN_LISTE: {
+    KIT_NAMEN_LADEN: 'Kit-Namen werden geladen',
+    KIT_NAMEN_FEHLT: 'Kit-Namen nicht ladbar',
+    ANFORDERUNG: 'Anforderung',
+    ANFORDERUNGEN: 'Anforderungen',
+    PLAN: 'Plan',
+    PLAENE: 'Pläne',
+    ARBEITSPAKET: 'Arbeitspaket',
+    ARBEITSPAKETE: 'Arbeitspakete',
+    AUSGEBLENDET: 'Ausgeblendet',
+    FERTIG: (done: number, total: number) => `${done} von ${total} fertig`,
+    MENUE_ARIA: (titel: string) => `Menü ${titel}`,
+    EINBLENDEN_ARIA: (kuerzel: string) => `Vorhaben ${kuerzel} einblenden`,
+    AUSBLENDEN_ARIA: (kuerzel: string) => `Vorhaben ${kuerzel} ausblenden`,
+    KEINE_ANFORDERUNG: 'Keine Anforderung hinterlegt.',
+    ANFORDERUNG_LABEL: 'Anforderung:',
+    KEINE_KARTEN: 'Noch keine Karten zugeordnet.',
+    FORTSCHRITT_ARIA: (titel: string) => `Fortschritt ${titel}`,
+  },
 } as const
 
 /** Weitet die Literale des deutschen Wörterbuchs zu `string`, rekursiv und durch Funktionen hindurch. */

@@ -14,6 +14,7 @@ import { SnackbarProvider } from '../components/SnackbarProvider'
 import { hiddenEpicsStorageKey } from '../lib/boardHiddenEpics'
 import { KIT_NAMEN } from '../test/kitNamen'
 import { EpicsPage } from './EpicsPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 // Das Namen-Register des Kits (Issue #1596) liest die Zusammensetzung der Vorhaben-Zeilen.
 vi.mock('../api/kitNamen', async (original) => ({
@@ -1350,5 +1351,92 @@ describe('EpicsPage', () => {
       expect(screen.queryByRole('button', { name: 'Abbrechen' })).toBeNull()
       expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
     })
+  })
+})
+
+describe('EpicsPage auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mBoards.get.mockResolvedValue({ id: 1, projectId: 9, name: 'B', createdAt: '', columns: [] })
+    mCards.list.mockResolvedValue([])
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+    mLabels.list.mockResolvedValue([])
+    mMembers.list.mockResolvedValue([])
+  })
+
+  function renderEnglisch(pfad = '/boards/1/vorhaben') {
+    return renderMitSprache(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={[pfad]}>
+          <Routes>
+            <Route path="/boards/:boardId/vorhaben" element={<EpicsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+      'en',
+    )
+  }
+
+  it('zeigt Pfad, Knopf und Leerzustand auf Englisch', async () => {
+    mEpics.list.mockResolvedValue([])
+    renderEnglisch()
+    expect(await screen.findByRole('link', { name: 'Projects' })).toHaveAttribute('href', '/projects')
+    expect(screen.getByText('Epics')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New epic' })).toBeInTheDocument()
+    expect(screen.getByText('No epics yet.')).toBeInTheDocument()
+  })
+
+  it('zeigt Umschalter und Löschen-Rückfrage auf Englisch', async () => {
+    mEpics.list.mockResolvedValue([
+      { id: 4, number: 4, title: 'Auth', description: null, shortcode: 'AUT', done: 1, total: 2,
+        memberNumbers: [], rootNumbers: [11, 12], requirementCardNumber: null },
+    ])
+    renderEnglisch()
+    expect(await screen.findByLabelText('Show hidden (0)')).toBeInTheDocument()
+    fireEvent.click(within(await screen.findByTestId('vorhaben-zeile-4')).getByLabelText('Menu Auth'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    expect(await screen.findByText('Delete epic?')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '"Auth" will be deleted. 2 directly assigned active cards are kept and then show "(no epic)". This cannot be undone.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+  })
+
+  it.each([
+    [[], '"Auth" will be deleted. No active card is directly assigned. This cannot be undone.'],
+    [[11], '"Auth" will be deleted. 1 directly assigned active card is kept and then shows "(no epic)". This cannot be undone.'],
+  ])('formuliert die Rückfrage auf Englisch für %j', async (rootNumbers, text) => {
+    mEpics.list.mockResolvedValue([
+      { id: 4, number: 4, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 0,
+        memberNumbers: [], rootNumbers, requirementCardNumber: null },
+    ])
+    renderEnglisch()
+    fireEvent.click(within(await screen.findByTestId('vorhaben-zeile-4')).getByLabelText('Menu Auth'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    expect(await screen.findByText(text)).toBeInTheDocument()
+  })
+
+  it('meldet einen fehlgeschlagenen Löschversuch auf Englisch', async () => {
+    mEpics.list.mockResolvedValue([
+      { id: 4, number: 4, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 0,
+        memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
+    ])
+    mEpics.remove.mockRejectedValue(new Error('x'))
+    renderEnglisch()
+    fireEvent.click(within(await screen.findByTestId('vorhaben-zeile-4')).getByLabelText('Menu Auth'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('Delete failed.')).toBeInTheDocument()
+  })
+
+  it('meldet einen Ladefehler und eine ungültige ID auf Englisch', async () => {
+    mEpics.list.mockRejectedValue(new Error('x'))
+    const { unmount } = renderEnglisch()
+    expect(await screen.findByText('Epics could not be loaded.')).toBeInTheDocument()
+    unmount()
+    renderEnglisch('/boards/abc/vorhaben')
+    expect(screen.getByText('Invalid board ID.')).toBeInTheDocument()
   })
 })

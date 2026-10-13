@@ -32,6 +32,8 @@ import { epicToCard } from '../lib/epicToCard'
 import { selectableEpics, sortEpics, visibleEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
+import { useT } from '../i18n/SpracheContext'
+import type { Woerterbuch } from '../i18n/de'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 
 /**
@@ -42,16 +44,15 @@ import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
  * Der Hinweis auf die Unumkehrbarkeit steht da, weil ein gelöschtes Vorhaben in keinem
  * Papierkorb-Dialog auftaucht: Der Server filtert die Papierkorb-Liste auf gewöhnliche Karten.
  */
-function rueckfrageText(epic: Epic): string {
+function rueckfrageText(epic: Epic, t: Woerterbuch['VORHABEN_SEITE']): string {
   const anzahl = epic.rootNumbers.length
-  const ende = 'Das lässt sich nicht rückgängig machen.'
   if (anzahl === 0) {
-    return `„${epic.title}" wird gelöscht. Keine aktive Karte ist direkt zugeordnet. ${ende}`
+    return `${t.RUECKFRAGE_KEINE(epic.title)} ${t.RUECKFRAGE_ENDE}`
   }
   if (anzahl === 1) {
-    return `„${epic.title}" wird gelöscht. 1 direkt zugeordnete aktive Karte bleibt erhalten und zeigt danach „(kein Vorhaben)". ${ende}`
+    return `${t.RUECKFRAGE_EINE(epic.title)} ${t.RUECKFRAGE_ENDE}`
   }
-  return `„${epic.title}" wird gelöscht. ${anzahl} direkt zugeordnete aktive Karten bleiben erhalten und zeigen danach „(kein Vorhaben)". ${ende}`
+  return `${t.RUECKFRAGE_VIELE(epic.title, anzahl)} ${t.RUECKFRAGE_ENDE}`
 }
 
 export function EpicsPage() {
@@ -86,6 +87,7 @@ export function EpicsPage() {
   // Das Vorhaben, für das die Löschen-Rückfrage offensteht; `null` = keine Rückfrage.
   const [deleteConfirm, setDeleteConfirm] = useState<Epic | null>(null)
   const notify = useSnackbar()
+  const t = useT().VORHABEN_SEITE
 
   // Die Route `/boards/:boardId/vorhaben` hält die Komponente bei einem reinen Parameterwechsel
   // gemountet — der `useState`-Initializer läuft dann nicht erneut (Plan #703, E11). Ohne dieses
@@ -135,7 +137,7 @@ export function EpicsPage() {
    * beantwortet sind — die Nummer allein bleibt dann sichtbar und die Zeile springt nicht.
    */
   const titelZuNummer = (nummer: number) =>
-    cards.find((c) => c.number === nummer)?.title ?? 'noch nicht geladen'
+    cards.find((c) => c.number === nummer)?.title ?? t.NOCH_NICHT_GELADEN
 
   // Jeder der vier Ladeaufrufe traegt sein eigenes `.catch` (statt eines gemeinsamen ueber
   // `Promise.all`): Ein Fehlschlag eines einzelnen Aufrufs darf die anderen drei nicht verwerfen,
@@ -188,7 +190,7 @@ export function EpicsPage() {
       await epicsApi.remove(epic.id)
       load()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Löschen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.LOESCHEN_FEHLER), 'error')
     }
   }
 
@@ -231,7 +233,7 @@ export function EpicsPage() {
   const ausgeblendeteAnzahl = epics.filter((epic) => hiddenEpics.has(epic.id)).length
 
   if (!validId) {
-    return <Alert severity="error">Ungültige Board-ID.</Alert>
+    return <Alert severity="error">{t.UNGUELTIGE_ID}</Alert>
   }
 
   if (loading) {
@@ -243,7 +245,7 @@ export function EpicsPage() {
   }
 
   if (loadError) {
-    return <Alert severity="error">Vorhaben konnten nicht geladen werden.</Alert>
+    return <Alert severity="error">{t.LADEN_FEHLER}</Alert>
   }
 
   return (
@@ -251,19 +253,19 @@ export function EpicsPage() {
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Breadcrumbs
           items={[
-            { label: 'Projekte', to: '/projects' },
+            { label: t.PROJEKTE, to: '/projects' },
             // `board` ist ab hier immer gesetzt: Dieser Zweig wird nur erreicht, wenn `load()`
             // erfolgreich war (weder `loading` noch `loadError`, siehe die Returns oben) — die
             // Zusicherung dient nur der Typverengung, die TypeScript ueber die fruehen Returns
             // hinweg nicht selbst zieht (Issue #783 machte `board` hier erstmals verlaesslich).
             ...(projectName ? [{ label: projectName, to: `/projects/${board!.projectId}` }] : []),
             { label: board!.name, to: `/boards/${id}` },
-            { label: 'Vorhaben' },
+            { label: t.TITEL },
           ]}
         />
         {canEdit && (
           <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setCreating(true)}>
-            Neues Vorhaben
+            {t.NEU}
           </Button>
         )}
       </Stack>
@@ -285,7 +287,7 @@ export function EpicsPage() {
           }
           label={
             <Typography variant="caption" color="text.secondary">
-              {`Ausgeblendete zeigen (${ausgeblendeteAnzahl})`}
+              {t.AUSGEBLENDETE_ZEIGEN(ausgeblendeteAnzahl)}
             </Typography>
           }
         />
@@ -315,7 +317,7 @@ export function EpicsPage() {
           onMenu={canEdit ? (epic, anchor) => setMenu({ epic, anchor }) : undefined}
         />
       )}
-      {epics.length === 0 && <Typography color="text.secondary">Noch keine Vorhaben.</Typography>}
+      {epics.length === 0 && <Typography color="text.secondary">{t.KEINE}</Typography>}
 
       <Menu anchorEl={menu?.anchor ?? null} open={menu != null} onClose={() => setMenu(null)}>
         {/* Anders als das Ausblenden verändert Löschen den Server — deshalb hängt das Menü am
@@ -329,7 +331,7 @@ export function EpicsPage() {
               setDeleteConfirm(gewaehlt)
             }}
           >
-            Löschen
+            {t.LOESCHEN}
           </MenuItem>
         )}
       </Menu>
@@ -341,14 +343,14 @@ export function EpicsPage() {
         // Escape, Backdrop-Klick und „Abbrechen" teilen sich einen Handler: Das Schließen ohne
         // Wirkung ist ein Vorgang, nicht drei — und eine zweite Fassung davon könnte abweichen.
         <Dialog open onClose={schliesseRueckfrage}>
-          <DialogTitle>Vorhaben löschen?</DialogTitle>
+          <DialogTitle>{t.LOESCHEN_TITEL}</DialogTitle>
           <DialogContent>
-            <DialogContentText>{rueckfrageText(deleteConfirm)}</DialogContentText>
+            <DialogContentText>{rueckfrageText(deleteConfirm, t)}</DialogContentText>
           </DialogContent>
           <DialogActions>
-            <Button onClick={schliesseRueckfrage}>Abbrechen</Button>
+            <Button onClick={schliesseRueckfrage}>{t.ABBRECHEN}</Button>
             <Button color="error" onClick={() => void confirmDeleteEpic(deleteConfirm)}>
-              Löschen
+              {t.LOESCHEN}
             </Button>
           </DialogActions>
         </Dialog>
