@@ -942,6 +942,42 @@ export const de = {
     OFFEN: 'offen',
     KEIN_VORHABEN: 'Kein offenes Vorhaben.',
   },
+
+  /** Seite „Plattform-Leitstand“ (Issue #1657). */
+  PLATTFORM_LEITSTAND: {
+    KEIN_ADMIN: 'Kein Admin-Zugriff.',
+    LADEN_FEHLGESCHLAGEN: 'Laden fehlgeschlagen.',
+    KENNZEICHNEN_FEHLER: (lauf: number) => `Run #${lauf} konnte nicht als beendet gekennzeichnet werden.`,
+    KARTE_FEHLER: (nummer: number) => `Karte #${nummer} konnte nicht geladen werden.`,
+    AKTUELLER_STATUS: 'Aktueller Status',
+    BEENDETE_RUNS: 'Beendete Runs',
+    DIESE_SCHICHT: 'Begonnen in dieser Schicht',
+    VORIGE_SCHICHT: 'Begonnen in der vorigen Schicht',
+    KEIN_RUN_DIESER: 'Kein Run dieser Schicht ist beendet.',
+    KEIN_RUN_VORIGER: 'Kein Run der vorigen Schicht ist beendet.',
+    WEITERE_AUSGEBLENDET: (anzahl: number) =>
+      anzahl === 1 ? '1 weiterer Run ausgeblendet' : `${anzahl} weitere Runs ausgeblendet`,
+    STOERUNGEN: 'Störungen',
+    NACHFRAGE_TITEL: (lauf: number) => `Run #${lauf} als beendet kennzeichnen?`,
+    NACHFRAGE_TEXT: (projekt: string) =>
+      `Der Run von ${projekt} steht danach unter „Beendete Runs" mit dem Vermerk „von Hand beendet". Seinen Prozess berührt das nicht.`,
+    KENNZEICHNEN: 'Kennzeichnen',
+    ANZAHL_ALLE: 'alle',
+    ANZAHL_ARIA: (wert: string) => `Beendete Runs: ${wert}`,
+    RUN: (lauf: number) => `Run #${lauf}`,
+    RUN_ARIA: (lauf: number, projekt: string) => `Run #${lauf} von ${projekt}`,
+    AUFKLAPPEN: (titel: string) => `${titel} aufklappen`,
+    ZUKLAPPEN: (titel: string) => `${titel} zuklappen`,
+    RUNS: (anzahl: number) => (anzahl === 1 ? '1 Run' : `${anzahl} Runs`),
+    AUSGEBLENDET: (runs: string) => `${runs} ausgeblendet`,
+    ZUR_STOERUNG_ARIA: (lauf: number) => `Zur Störung von Run #${lauf}`,
+    STOERUNG: 'Störung',
+    KEINE_STOERUNG: 'Keine offene Störung.',
+    STOERUNGEN_ANZAHL: (anzahl: number) => (anzahl === 1 ? '1 Störung' : `${anzahl} Störungen`),
+    KARTE_GRUND: (nummer: number, zustand: string) => `Karte #${nummer}: ${zustand}`,
+    LOESCHEN_ARIA: (projekt: string, lauf: number) => `Störung von ${projekt}, Run #${lauf} löschen`,
+    STOERUNG_LOESCHEN: 'Störung löschen',
+  },
 } as const
 
 /** Weitet die Literale des deutschen Wörterbuchs zu `string`, rekursiv und durch Funktionen hindurch. */

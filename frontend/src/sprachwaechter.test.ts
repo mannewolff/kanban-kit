@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1657 = 'Sprache: Plattform-Leitstand auf Englisch'
 const P1658 = 'Sprache: Nachtlauf-Bausteine auf Englisch'
 const P1659 = 'Sprache: Nachtlauf-Seite auf Englisch'
 const P1660 = 'Sprache: Administration, Admin-Bereich und API-Übersicht auf Englisch'
@@ -54,9 +53,8 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/components/leitstand/LeitstandBausteine.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/leitstand/LeitstandVerbrauch.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/pages/LeitstandPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  // #1657
-  { file: 'src/pages/PlattformLeitstandPage.tsx', rule: 'jsx', resolvedIn: P1657 },
-  { file: 'src/pages/PlattformLeitstandPage.tsx', rule: 'literal', resolvedIn: P1657 },
+  // #1657 — CSS-Werte (Haarlinien, Farbmischung, Übergang) des Plattform-Leitstands
+  { file: 'src/pages/PlattformLeitstandPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1658
   { file: 'src/components/nachtlauf/HeuteNachtUebersicht.tsx', rule: 'jsx', resolvedIn: P1658 },
   { file: 'src/components/nachtlauf/HeuteNachtUebersicht.tsx', rule: 'literal', resolvedIn: P1658 },

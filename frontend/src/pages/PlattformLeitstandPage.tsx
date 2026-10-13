@@ -19,6 +19,8 @@ import {
 } from '../api/plattformLeitstand'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
+import { useSprache, useT } from '../i18n/SpracheContext'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { AktuellerStand, karteSchluessel } from '../components/leitstand/AktuellerStand'
 import { LaufArtSymbol } from '../components/leitstand/LaufArtSymbol'
 import {
@@ -120,10 +122,6 @@ function grenzeVon(wahl: AnzahlWahl): number {
   return wahl === 'alle' ? Number.POSITIVE_INFINITY : Number(wahl)
 }
 
-function runWort(anzahl: number): string {
-  return anzahl === 1 ? '1 Run' : `${anzahl} Runs`
-}
-
 /**
  * Ein gescheiterter Abruf — sein Text und ob es das fehlende Recht war.
  *
@@ -181,6 +179,9 @@ interface Auswahl {
  * neuen Gestaltung (Plan #1072 E15).
  */
 export default function PlattformLeitstandPage() {
+  const woerter = useT()
+  const { sprache } = useSprache()
+  const t = woerter.PLATTFORM_LEITSTAND
   // Zwei Zustaende statt einer Sicht mit `null`: Solange nicht geladen ist, zeigt die Seite keinen
   // der drei Leersaetze — sonst blitzte „Keine offene Stoerung." auf, bevor die erste Antwort da
   // ist. Getrennt gehalten, damit das Quittieren keinen Rueckfall auf eine leere Sicht braucht,
@@ -220,6 +221,8 @@ export default function PlattformLeitstandPage() {
     schreibeAnzahl(anzahlWahl)
   }, [anzahlWahl])
 
+  // Die Texte kommen aus dem Wörterbuch der Sprache und nicht aus `t`: Sonst hinge `laden` an
+  // einem Objekt, und Takt und Fokus-Haken setzten bei jedem Rendern neu auf.
   const laden = useCallback(() => {
     plattformLeitstandApi
       .leitstand()
@@ -230,9 +233,10 @@ export default function PlattformLeitstandPage() {
       })
       .catch((e) => {
         const verboten = e instanceof ApiError && e.status === 403
-        setFehler({ text: verboten ? 'Kein Admin-Zugriff.' : 'Laden fehlgeschlagen.', verboten })
+        const texte = woerterbuch(sprache).PLATTFORM_LEITSTAND
+        setFehler({ text: verboten ? texte.KEIN_ADMIN : texte.LADEN_FEHLGESCHLAGEN, verboten })
       })
-  }, [])
+  }, [sprache])
 
   useEffect(() => {
     laden()
@@ -295,7 +299,7 @@ export default function PlattformLeitstandPage() {
       await plattformLeitstandApi.alsBeendetKennzeichnen(lauf.nightRunId)
       laden()
     } catch {
-      setSchlussFehler(`Run #${lauf.nightRunId} konnte nicht als beendet gekennzeichnet werden.`)
+      setSchlussFehler(t.KENNZEICHNEN_FEHLER(lauf.nightRunId))
     }
   }
 
@@ -324,7 +328,7 @@ export default function PlattformLeitstandPage() {
         setVerschwunden((vorher) => new Set(vorher).add(karteSchluessel(projectId, nummer)))
         return
       }
-      setKarteFehler(`Karte #${nummer} konnte nicht geladen werden.`)
+      setKarteFehler(t.KARTE_FEHLER(nummer))
     }
   }
 
@@ -365,7 +369,7 @@ export default function PlattformLeitstandPage() {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Die oberste Platte (AK 1 der Quelle #1153, Issue #1193): Was gerade arbeitet und was
               es gemeldet hat, steht an **einer** Stelle. */}
-          <Platte titel="Aktueller Status">
+          <Platte titel={t.AKTUELLER_STATUS}>
             <AktuellerStand
               laufende={geladen ? sicht.laufende : null}
               gemeldetePakete={sicht.gemeldetePakete}
@@ -381,15 +385,15 @@ export default function PlattformLeitstandPage() {
               sagt etwas ueber den Klick, nichts ueber den Stand der Laeufe. */}
           {schlussFehler !== null && <Alert severity="error">{schlussFehler}</Alert>}
           <Platte
-            titel="Beendete Runs"
+            titel={t.BEENDETE_RUNS}
             werkzeug={<AnzahlWahlTasten wahl={anzahlWahl} onWaehlen={setAnzahlWahl} />}
           >
             {/* Die Titel nennen den Start, nicht das Ende (#1191): Der Server ordnet beide Listen
                 ueber `startedAt` zu, und die Schichtgrenze liegt auf 12:00 — ein Run ueber die
                 Mittagsgrenze endet in der einen und zaehlt zur anderen Schicht. */}
             <ZyklusAbschnitt
-              titel="Begonnen in dieser Schicht"
-              spanne={zyklusSpanne(dieserZyklus)}
+              titel={t.DIESE_SCHICHT}
+              spanne={zyklusSpanne(dieserZyklus, sprache)}
               testId="zyklus-dieser"
             >
               <DurchgefuehrteListe
@@ -397,12 +401,12 @@ export default function PlattformLeitstandPage() {
                 verdeckt={verdecktDieser}
                 testId="zyklus-dieser"
                 mitStoerung={mitStoerung}
-                leer={{ testId: 'keine-durchgefuehrten', text: 'Kein Run dieser Schicht ist beendet.' }}
+                leer={{ testId: 'keine-durchgefuehrten', text: t.KEIN_RUN_DIESER }}
               />
             </ZyklusAbschnitt>
             <ZyklusAbschnitt
-              titel="Begonnen in der vorigen Schicht"
-              spanne={zyklusSpanne(zyklusDavor(dieserZyklus))}
+              titel={t.VORIGE_SCHICHT}
+              spanne={zyklusSpanne(zyklusDavor(dieserZyklus), sprache)}
               testId="zyklus-voriger"
               anzahl={geladen ? sicht.durchgefuehrteVoriger.length : null}
               offen={vorigeOffen}
@@ -415,19 +419,17 @@ export default function PlattformLeitstandPage() {
                 mitStoerung={mitStoerung}
                 leer={{
                   testId: 'keine-durchgefuehrten-voriger',
-                  text: 'Kein Run der vorigen Schicht ist beendet.',
+                  text: t.KEIN_RUN_VORIGER,
                 }}
               />
             </ZyklusAbschnitt>
             {geladen && verdecktDieser + verdecktVoriger > 0 && (
               <VerdecktSatz testId="ausgeblendet-hinweis">
-                {verdecktDieser + verdecktVoriger === 1
-                  ? '1 weiterer Run ausgeblendet'
-                  : `${verdecktDieser + verdecktVoriger} weitere Runs ausgeblendet`}
+                {t.WEITERE_AUSGEBLENDET(verdecktDieser + verdecktVoriger)}
               </VerdecktSatz>
             )}
           </Platte>
-          <Platte titel="Störungen">
+          <Platte titel={t.STOERUNGEN}>
             <Stoerungen liste={geladen ? sicht.stoerungen : null} onQuittieren={quittieren} />
           </Platte>
         </Box>
@@ -441,17 +443,14 @@ export default function PlattformLeitstandPage() {
           der Dialog stuende darin hell im dunklen Erscheinungsbild. */}
       {schlussNachfrage !== null && (
         <Dialog open onClose={() => setSchlussNachfrage(null)}>
-          <DialogTitle>{`Run #${schlussNachfrage.nightRunId} als beendet kennzeichnen?`}</DialogTitle>
+          <DialogTitle>{t.NACHFRAGE_TITEL(schlussNachfrage.nightRunId)}</DialogTitle>
           <DialogContent>
-            <DialogContentText>
-              {`Der Run von ${schlussNachfrage.projectName} steht danach unter „Beendete Runs" mit dem`}
-              {' Vermerk „von Hand beendet". Seinen Prozess berührt das nicht.'}
-            </DialogContentText>
+            <DialogContentText>{t.NACHFRAGE_TEXT(schlussNachfrage.projectName)}</DialogContentText>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setSchlussNachfrage(null)}>Abbrechen</Button>
+            <Button onClick={() => setSchlussNachfrage(null)}>{woerter.ALLGEMEIN.ABBRECHEN}</Button>
             <Button onClick={() => void alsBeendetKennzeichnen(schlussNachfrage)}>
-              Kennzeichnen
+              {t.KENNZEICHNEN}
             </Button>
           </DialogActions>
         </Dialog>
@@ -479,20 +478,26 @@ function AnzahlWahlTasten({
   wahl,
   onWaehlen,
 }: Readonly<{ wahl: AnzahlWahl; onWaehlen: (wahl: AnzahlWahl) => void }>) {
+  const t = useT().PLATTFORM_LEITSTAND
   return (
     <>
       {ANZAHL_WERTE.map((wert) => (
         <FilterTaste
           key={wert}
           gewaehlt={wert === wahl}
-          ariaLabel={`Beendete Runs: ${wert}`}
+          ariaLabel={t.ANZAHL_ARIA(anzahlText(wert, t.ANZAHL_ALLE))}
           onClick={() => onWaehlen(wert)}
         >
-          {wert}
+          {anzahlText(wert, t.ANZAHL_ALLE)}
         </FilterTaste>
       ))}
     </>
   )
+}
+
+/** Die Aufschrift einer Taste: die Zahl selbst, für „alle" das Wort der Sprache. */
+function anzahlText(wert: AnzahlWahl, alle: string): string {
+  return wert === 'alle' ? alle : wert
 }
 
 /**
@@ -532,14 +537,15 @@ const LAUF_ZEILE_SX = {
  * **und** unter den Stoerungen, gaebe es sonst zweimal denselben Verweisnamen „Lauf #5".
  */
 function LaufVerweis({ zeile }: Readonly<{ zeile: DisruptionView }>) {
+  const t = useT().PLATTFORM_LEITSTAND
   return (
     <Typography
       component={RouterLink}
       to={`/projects/${zeile.projectId}/nachtlauf?lauf=${zeile.nightRunId}`}
-      aria-label={`Run #${zeile.nightRunId} von ${zeile.projectName}`}
+      aria-label={t.RUN_ARIA(zeile.nightRunId, zeile.projectName)}
       sx={{ fontSize: 12, fontFamily: 'monospace' }}
     >
-      Run #{zeile.nightRunId}
+      {t.RUN(zeile.nightRunId)}
     </Typography>
   )
 }
@@ -574,6 +580,7 @@ function ZyklusAbschnitt({
   onUmschalten?: () => void
   children: ReactNode
 }>) {
+  const t = useT().PLATTFORM_LEITSTAND
   const id = useId()
   const inhaltId = useId()
   const klappbar = onUmschalten !== undefined
@@ -614,7 +621,7 @@ function ZyklusAbschnitt({
           <ButtonBase
             aria-expanded={zeigtInhalt}
             aria-controls={zeigtInhalt ? inhaltId : undefined}
-            aria-label={`${titel} ${zeigtInhalt ? 'zuklappen' : 'aufklappen'}`}
+            aria-label={zeigtInhalt ? t.ZUKLAPPEN(titel) : t.AUFKLAPPEN(titel)}
             // Ohne gestoppte Weitergabe schaltete die Kopfzeile ein zweites Mal — und damit gar nicht.
             onClick={(ereignis) => {
               ereignis.stopPropagation()
@@ -663,7 +670,7 @@ function ZyklusAbschnitt({
         <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{spanne}</Typography>
         {anzahl !== null && (
           <Typography data-testid={`${testId}-anzahl`} sx={{ fontSize: 12, color: 'text.secondary' }}>
-            {runWort(anzahl)}
+            {t.RUNS(anzahl)}
           </Typography>
         )}
       </Box>
@@ -688,6 +695,7 @@ function DurchgefuehrteListe({
   mitStoerung: ReadonlySet<number>
   leer: { testId: string; text: string }
 }>) {
+  const t = useT().PLATTFORM_LEITSTAND
   if (zeilen === null) {
     return null
   }
@@ -695,7 +703,7 @@ function DurchgefuehrteListe({
     // Ein ganz verdrängter Abschnitt hat sehr wohl Runs — der Leersatz wäre dort schlicht falsch
     // und ließe eine arbeitsreiche Schicht wie eine leere aussehen (#1140).
     return verdeckt > 0 ? (
-      <VerdecktSatz testId={`${testId}-ausgeblendet`}>{`${runWort(verdeckt)} ausgeblendet`}</VerdecktSatz>
+      <VerdecktSatz testId={`${testId}-ausgeblendet`}>{t.AUSGEBLENDET(t.RUNS(verdeckt))}</VerdecktSatz>
     ) : (
       <LeerSatz testId={leer.testId}>{leer.text}</LeerSatz>
     )
@@ -745,6 +753,9 @@ function DurchgefuehrteZeile({
   zeile,
   hatStoerung,
 }: Readonly<{ zeile: DisruptionView; hatStoerung: boolean }>) {
+  const woerter = useT()
+  const { sprache } = useSprache()
+  const t = woerter.PLATTFORM_LEITSTAND
   const nachsatz = zeile.outcome.abortReason || auskunftOhneArbeit(zeile)
   return (
     <Box component="li" data-testid={`durchgefuehrt-${zeile.nightRunId}`} sx={LAUF_ZEILE_SX}>
@@ -752,7 +763,7 @@ function DurchgefuehrteZeile({
       <LaufArtSymbol art={zeile.mode} />
       <Projektname name={zeile.projectName} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-        {tagZeit(zeile.startedAt)}
+        {tagZeit(zeile.startedAt, sprache)}
       </Typography>
       <LaufVerweis zeile={zeile} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
@@ -763,10 +774,10 @@ function DurchgefuehrteZeile({
         <Typography
           component="a"
           href={`#stoerung-${zeile.nightRunId}`}
-          aria-label={`Zur Störung von Run #${zeile.nightRunId}`}
+          aria-label={t.ZUR_STOERUNG_ARIA(zeile.nightRunId)}
           sx={{ fontSize: 12 }}
         >
-          Störung
+          {t.STOERUNG}
         </Typography>
       )}
     </Box>
@@ -786,6 +797,7 @@ function Stoerungen({
   liste: DisruptionView[] | null
   onQuittieren: (stoerung: DisruptionView) => Promise<void>
 }>) {
+  const t = useT().PLATTFORM_LEITSTAND
   if (liste === null) {
     return null
   }
@@ -793,7 +805,7 @@ function Stoerungen({
     // AK 14: Eine leere Flaeche waere von einer kaputten Anzeige nicht zu unterscheiden — und eine
     // Gruppenliste ohne Gruppen genauso wenig (#1087). Derselbe LeerSatz wie in den beiden
     // Lauf-Bereichen, damit der Satz unter der Überschrift eingerückt steht wie dort.
-    return <LeerSatz testId="keine-stoerungen">Keine offene Störung.</LeerSatz>
+    return <LeerSatz testId="keine-stoerungen">{t.KEINE_STOERUNG}</LeerSatz>
   }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -827,6 +839,7 @@ function Projektblock({
   gruppe: Projektgruppe<DisruptionView>
   onQuittieren: (stoerung: DisruptionView) => Promise<void>
 }>) {
+  const t = useT().PLATTFORM_LEITSTAND
   const nameId = useId()
   const zahl = gruppe.eintraege.length
   return (
@@ -851,7 +864,7 @@ function Projektblock({
           {gruppe.projectName}
         </Box>
         <Box component="span" sx={{ fontSize: 11.5, color: TEXT_SCHWACH }}>
-          {zahl === 1 ? '1 Störung' : `${zahl} Störungen`}
+          {t.STOERUNGEN_ANZAHL(zahl)}
         </Box>
       </Box>
       <Box component="ul" aria-labelledby={nameId} sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -878,7 +891,7 @@ function Projektblock({
  * des Laufs bereits als eigene Angabe, und die Laufzeit eines einzelnen Pakets sagt ueber die
  * Stoerung nichts.
  */
-export function stoerungsGrund(outcome: DisruptionView['outcome']): string {
+export function stoerungsGrund(outcome: DisruptionView['outcome'], sprache: Sprache = 'de'): string {
   // Der selbst gemeldete Abbruch steht vor dem massgeblichen Paket (Issue #1146, AK 4): Er sagt,
   // warum der Lauf abbrach — nach einem harten Stopp ist der Zustand des Pakets nur noch der letzte
   // Stand vor dem Riss.
@@ -894,7 +907,10 @@ export function stoerungsGrund(outcome: DisruptionView['outcome']): string {
   if (paket === null) {
     return ''
   }
-  return `Karte #${paket.cardNumber}: ${nightRunZustandsText(paket.state, paket.errorClass ?? undefined)}`
+  return woerterbuch(sprache).PLATTFORM_LEITSTAND.KARTE_GRUND(
+    paket.cardNumber,
+    nightRunZustandsText(paket.state, paket.errorClass ?? undefined),
+  )
 }
 
 /**
@@ -918,6 +934,9 @@ function Stoerzeile({
   stoerung,
   onQuittieren,
 }: Readonly<{ stoerung: DisruptionView; onQuittieren: () => void }>) {
+  const woerter = useT()
+  const { sprache } = useSprache()
+  const t = woerter.PLATTFORM_LEITSTAND
   return (
     <Box
       component="li"
@@ -930,7 +949,7 @@ function Stoerzeile({
       <Led melder={melderAusBefund(stoerung.outcome)} />
       <LaufArtSymbol art={stoerung.mode} />
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-        {tagZeit(stoerung.startedAt)}
+        {tagZeit(stoerung.startedAt, sprache)}
       </Typography>
       {/* AK 7: Die Kennung fuehrt zur Auswertung genau dieses Laufs — auch ohne Mitgliedschaft. */}
       <Typography
@@ -938,16 +957,16 @@ function Stoerzeile({
         to={`/projects/${stoerung.projectId}/nachtlauf?lauf=${stoerung.nightRunId}`}
         sx={{ fontSize: 12, fontFamily: 'monospace' }}
       >
-        Run #{stoerung.nightRunId}
+        {t.RUN(stoerung.nightRunId)}
       </Typography>
       <Typography sx={{ fontSize: 12, color: 'text.secondary', flex: 1, minWidth: 0 }}>
-        {stoerungsGrund(stoerung.outcome)}
+        {stoerungsGrund(stoerung.outcome, sprache)}
       </Typography>
       <Taste
-        ariaLabel={`Störung von ${stoerung.projectName}, Run #${stoerung.nightRunId} löschen`}
+        ariaLabel={t.LOESCHEN_ARIA(stoerung.projectName, stoerung.nightRunId)}
         onClick={onQuittieren}
       >
-        Störung löschen
+        {t.STOERUNG_LOESCHEN}
       </Taste>
     </Box>
   )
