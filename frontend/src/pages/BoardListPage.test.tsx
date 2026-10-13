@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { ApiError } from '../api/client'
+import type { KitNamenZustand } from '../api/kitNamen'
 import { labelsApi } from '../api/labels'
 import { projectsApi } from '../api/projects'
 import { epicsApi, type Epic } from '../api/epics'
@@ -16,6 +17,8 @@ import { ARCHIVED_STATUS_COLOR } from '../lib/statusColors'
 import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { theme } from '../theme'
+import { de } from '../i18n/de'
+import { KIT_NAMEN } from '../test/kitNamen'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -47,6 +50,10 @@ vi.mock('../api/cards', () => ({
   },
 }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
+vi.mock('../api/kitNamen', async (original) => ({
+  ...(await original<typeof import('../api/kitNamen')>()),
+  useKitNamen: (): KitNamenZustand => ({ status: 'fertig', daten: KIT_NAMEN }),
+}))
 vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/members', () => ({ membersApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
@@ -1582,6 +1589,50 @@ describe('BoardListPage – Label-Filter als Menü', () => {
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     expect(screen.queryByText('OhneLabel')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Label-Filter' })).toHaveTextContent('Labels · 1')
+  })
+
+  describe('Erklärung der Systemlabels (#1673)', () => {
+    const klaeren = { id: 8, boardId: 1, name: 'kit:clarify', color: '#6a1b9a', countOnEpicTile: false }
+    const KLAEREN = de.LABEL_ERKLAERUNG.SACHEN.KLAEREN
+
+    it('zeigt die Erklärung, wenn die Pfeiltaste den Menüpunkt kit:clarify fokussiert', async () => {
+      renderMitLabels([bug, klaeren])
+      await userEvent.click(await screen.findByRole('button', { name: 'Label-Filter' }))
+      const punkt = await screen.findByRole('menuitemcheckbox', { name: 'Label-Filter kit:clarify' })
+
+      await userEvent.keyboard('{ArrowDown}')
+
+      expect(punkt).toHaveFocus()
+      const tooltip = await screen.findByRole('tooltip')
+      expect(tooltip).toHaveTextContent(KLAEREN.bedeutung)
+      expect(punkt).toHaveAttribute('aria-describedby', tooltip.id)
+      expect(tooltip).toHaveAttribute('data-popper-placement', expect.stringMatching(/^right/))
+    })
+
+    it('zeigt an einem selbst angelegten Label keine Erklärung', async () => {
+      renderMitLabels([bug, klaeren])
+      ;(await screen.findByRole('button', { name: 'Label-Filter' })).focus()
+      await userEvent.keyboard('{Enter}')
+      const punkt = await screen.findByRole('menuitemcheckbox', { name: 'Label-Filter Bug' })
+      expect(punkt).toHaveFocus()
+
+      await userEvent.hover(punkt)
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+      expect(punkt).not.toHaveAttribute('aria-describedby')
+    })
+
+    it('filtert mit dem Systemlabel-Punkt per Enter wie bisher', async () => {
+      renderMitLabels([bug, klaeren])
+      await userEvent.click(await screen.findByRole('button', { name: 'Label-Filter' }))
+      await screen.findByRole('menuitemcheckbox', { name: 'Label-Filter kit:clarify' })
+
+      await userEvent.keyboard('{ArrowDown}{Enter}')
+
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Label-Filter kit:clarify' })).toHaveAttribute('aria-checked', 'true')
+      await waitFor(() => expect(screen.queryByText('MitBug')).not.toBeInTheDocument())
+      expect(screen.getByRole('menu')).toBeInTheDocument()
+    })
   })
 
   it('zeigt die Taste nicht, wenn das Board keine Labels hat', async () => {

@@ -10,11 +10,13 @@ import IconButton from '@mui/material/IconButton'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import { useState } from 'react'
 import { apiErrorMessage } from '../api/client'
 import { labelsApi as defaultLabelsApi, type Label, type LabelsApi } from '../api/labels'
 import { useT } from '../i18n/SpracheContext'
 import { dialogTitleSx } from './dialogChromeSx'
+import { LabelErklaerung, useLabelErklaerung } from './LabelErklaerung'
 import { useSnackbar } from './SnackbarProvider'
 
 interface Props {
@@ -149,6 +151,7 @@ function LabelRow({
   onDelete: (label: Label) => Promise<void>
 }>) {
   const t = useT()
+  const systemlabel = useLabelErklaerung(label.name) !== null
   const [name, setName] = useState(label.name)
   const [color, setColor] = useState(label.color)
   const [zaehlt, setZaehlt] = useState(label.countOnEpicTile)
@@ -166,6 +169,16 @@ function LabelRow({
           onChange={(e) => setName(e.target.value)}
           slotProps={{ htmlInput: { maxLength: 60, 'aria-label': t.LABELVERWALTUNG.LABEL_ARIA(label.name) } }}
         />
+        {/* Die Erklärung hängt an einem Info-Symbol neben dem Namen, nicht am Feld: Ein Tooltip über
+            einem Feld, in dem man gerade schreibt, stört (Plan #1668, E8). Maßgeblich ist der
+            gespeicherte Name, nicht der Entwurf im Feld. */}
+        {systemlabel && (
+          <LabelErklaerung name={label.name} eigenerFokus>
+            <IconButton size="small" aria-label={t.LABELVERWALTUNG.ERKLAERUNG_ARIA(label.name)}>
+              <InfoOutlinedIcon fontSize="small" />
+            </IconButton>
+          </LabelErklaerung>
+        )}
         <Box
           component="input"
           type="color"

@@ -1,5 +1,5 @@
 import Box from '@mui/material/Box'
-import Tooltip from '@mui/material/Tooltip'
+import Tooltip, { type TooltipProps } from '@mui/material/Tooltip'
 import Typography, { type TypographyProps } from '@mui/material/Typography'
 import { cloneElement, type ReactElement } from 'react'
 import { useKitNamen } from '../api/kitNamen'
@@ -22,6 +22,13 @@ export function ErklaerungsText({
   )
 }
 
+/** Die Erklärung eines Systemlabels, oder `null`, solange das Register lädt, fehlt oder das Label keins ist. */
+export function useLabelErklaerung(name: string): ErklaerungsTeil[] | null {
+  const t = useT()
+  const kitNamen = useKitNamen()
+  return kitNamen.status === 'fertig' ? labelErklaerung(kitNamen.daten, name, t) : null
+}
+
 /**
  * Legt die Erklärung eines Systemlabels als Tooltip um das Label (Issue #1672, Plan #1668 E4).
  *
@@ -29,20 +36,34 @@ export function ErklaerungsText({
  * Stufenleiste. Ein Systemlabel wird mit `tabIndex={0}` fokussierbar, damit die Erklärung auch mit
  * der Tastatur erscheint. Ein anderes Label kommt unverändert zurück, ebenso jedes Label, solange
  * das Namen-Register lädt oder nicht geladen werden konnte (E10). `open` steuert das Tooltip von
- * außen, etwa in einem Menü; ohne `open` öffnet es bei Maus und Fokus selbst.
+ * außen, etwa in einer Auswahlliste; ohne `open` öffnet es bei Maus und Fokus selbst.
+ *
+ * `eigenerFokus` lässt den `tabIndex` des Kindes unangetastet — für Menüpunkte, Optionen und
+ * Knöpfe, deren Fokus ihr Behälter oder sie selbst führen (Issue #1673, E6–E8). `autoFocus` und
+ * `tabIndex` gehen an das Kind weiter: Ein `MenuList` klont seine direkten Kinder mit genau diesen
+ * beiden, um den ersten Menüpunkt zu fokussieren.
  */
 export function LabelErklaerung({
   name,
   open,
+  placement,
+  eigenerFokus = false,
   children,
-}: Readonly<{ name: string; open?: boolean; children: ReactElement }>) {
-  const t = useT()
-  const kitNamen = useKitNamen()
-  const teile = kitNamen.status === 'fertig' ? labelErklaerung(kitNamen.daten, name, t) : null
-  if (teile === null) return children
+  ...weiter
+}: Readonly<{
+  name: string
+  open?: boolean
+  placement?: TooltipProps['placement']
+  eigenerFokus?: boolean
+  children: ReactElement
+  autoFocus?: boolean
+  tabIndex?: number
+}>) {
+  const teile = useLabelErklaerung(name)
+  if (teile === null) return cloneElement(children, weiter)
   return (
-    <Tooltip title={<ErklaerungsText teile={teile} />} describeChild open={open}>
-      {cloneElement(children, { tabIndex: 0 })}
+    <Tooltip title={<ErklaerungsText teile={teile} />} describeChild open={open} placement={placement}>
+      {cloneElement(children, eigenerFokus ? weiter : { tabIndex: 0, ...weiter })}
     </Tooltip>
   )
 }

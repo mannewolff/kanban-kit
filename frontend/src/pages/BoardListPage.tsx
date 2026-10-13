@@ -29,6 +29,7 @@ import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { EpicBadge } from '../components/EpicBadge'
+import { LabelErklaerung } from '../components/LabelErklaerung'
 import { epicOfCard } from '../lib/cardEpic'
 import { effektivDone } from '../lib/columnMeta'
 import { epicToCard } from '../lib/epicToCard'
@@ -192,21 +193,24 @@ function LabelFilterMenue({
         {labels.map((label) => {
           const aktiv = gewaehlt.has(label.id)
           const Zeichen = aktiv ? CheckBoxOutlinedIcon : CheckBoxOutlineBlankOutlinedIcon
+          // Die Erklärung eines Systemlabels hängt rechts am Menüpunkt; sein Fokus bleibt beim Menü
+          // (Plan #1668, E6), sodass sie bei den Pfeiltasten erscheint wie beim Darüberfahren.
           return (
-            <MenuItem
-              key={label.id}
-              role="menuitemcheckbox"
-              aria-checked={aktiv}
-              aria-label={t.LISTE.LABEL_FILTER_NAME(label.name)}
-              // Das Menü bleibt nach dem Klick offen: Mehrere Labels in einem Zug zu wählen ist der
-              // Regelfall, wie beim Setzen in der Mehrfachauswahl.
-              onClick={() => onToggle(label.id)}
-            >
-              <ListItemIcon>
-                <Zeichen fontSize="small" />
-              </ListItemIcon>
-              <ListItemText primary={label.name} />
-            </MenuItem>
+            <LabelErklaerung key={label.id} name={label.name} placement="right" eigenerFokus>
+              <MenuItem
+                role="menuitemcheckbox"
+                aria-checked={aktiv}
+                aria-label={t.LISTE.LABEL_FILTER_NAME(label.name)}
+                // Das Menü bleibt nach dem Klick offen: Mehrere Labels in einem Zug zu wählen ist der
+                // Regelfall, wie beim Setzen in der Mehrfachauswahl.
+                onClick={() => onToggle(label.id)}
+              >
+                <ListItemIcon>
+                  <Zeichen fontSize="small" />
+                </ListItemIcon>
+                <ListItemText primary={label.name} />
+              </MenuItem>
+            </LabelErklaerung>
           )
         })}
       </Menu>

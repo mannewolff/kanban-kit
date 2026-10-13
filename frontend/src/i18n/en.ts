@@ -450,6 +450,7 @@ export const en: Woerterbuch = {
     LABEL_ARIA: (name) => `Label ${name}`,
     FARBE_ARIA: (name) => `Color ${name}`,
     LOESCHEN_ARIA: (name) => `Delete label ${name}`,
+    ERKLAERUNG_ARIA: (name) => `Explanation of ${name}`,
     ZAEHLEN: 'count on the epic tile',
     ZAEHLEN_ARIA: (name) => `${name}: count on the epic tile`,
     ANLEGEN_FEHLER: 'The label could not be created.',

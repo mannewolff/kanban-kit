@@ -666,6 +666,77 @@ describe('CardDetailModal', () => {
     })
   })
 
+  describe('Erklärung in der Label-Auswahl (#1673)', () => {
+    const auswahl = [
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false },
+      { id: 8, boardId: 1, name: 'kit:clarify', color: '#6a1b9a', countOnEpicTile: false },
+    ]
+    const KLAEREN = de.LABEL_ERKLAERUNG.SACHEN.KLAEREN
+
+    it('zeigt die Erklärung der per Tastatur markierten Option kit:clarify, Enter wählt sie aus', async () => {
+      const apis = makeApis()
+      render(<CardDetailModal card={card} canEdit boardLabels={auswahl} onClose={vi.fn()} {...apis} />)
+      await userEvent.click(await screen.findByLabelText('Labels'))
+
+      // Erste Pfeiltaste markiert „Bug“: keine Erklärung.
+      await userEvent.keyboard('{ArrowDown}')
+      expect(screen.getByRole('option', { name: 'Bug' })).toHaveClass('Mui-focused')
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+      await userEvent.keyboard('{ArrowDown}')
+      const option = screen.getByRole('option', { name: 'kit:clarify' })
+      expect(option).toHaveClass('Mui-focused')
+      const tooltip = await screen.findByRole('tooltip')
+      expect(tooltip).toHaveTextContent(KLAEREN.bedeutung)
+      expect(option).toHaveAttribute('aria-describedby', tooltip.id)
+      expect(option).toHaveAttribute('tabindex', '-1')
+
+      await userEvent.keyboard('{Enter}')
+      await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalledWith(100, 8))
+    })
+
+    it('vergisst die Markierung, wenn die Liste schließt: Wiederöffnen zeigt keine alte Erklärung', async () => {
+      render(<CardDetailModal card={card} canEdit boardLabels={auswahl} onClose={vi.fn()} {...makeApis()} />)
+      const feld = await screen.findByLabelText('Labels')
+      await userEvent.click(feld)
+      await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+
+      await userEvent.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+      fireEvent.mouseDown(feld)
+
+      const option = await screen.findByRole('option', { name: 'kit:clarify' })
+      expect(option).not.toHaveClass('Mui-focused')
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+
+    it('schließt die Erklärung, wenn das Eintippen die markierte Option wegfiltert', async () => {
+      render(<CardDetailModal card={card} canEdit boardLabels={auswahl} onClose={vi.fn()} {...makeApis()} />)
+      await userEvent.click(await screen.findByLabelText('Labels'))
+      await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+
+      await userEvent.keyboard('zzz')
+
+      await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+      await userEvent.keyboard('{Backspace}{Backspace}{Backspace}')
+      expect(await screen.findByRole('option', { name: 'kit:clarify' })).not.toHaveClass('Mui-focused')
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+
+    it('zeigt an einer selbst angelegten Option keine Erklärung, auch nicht beim Darüberfahren', async () => {
+      render(<CardDetailModal card={card} canEdit boardLabels={auswahl} onClose={vi.fn()} {...makeApis()} />)
+      await userEvent.click(await screen.findByLabelText('Labels'))
+
+      await userEvent.hover(screen.getByRole('option', { name: 'Bug' }))
+
+      expect(screen.getByRole('option', { name: 'Bug' })).toHaveClass('Mui-focused')
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+  })
+
   it('zeigt den Aktivitätsverlauf mit Akteur und Detail', async () => {
     const apis = makeApis()
     apis.cardsApi.getActivity = vi.fn().mockResolvedValue([

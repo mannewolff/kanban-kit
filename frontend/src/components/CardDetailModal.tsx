@@ -358,6 +358,13 @@ export function LabelSection({
   onChange: (ids: number[]) => void
 }>) {
   const t = useT()
+  // Die Optionen haben keinen echten Fokus, die Tastatur markiert über `aria-activedescendant`.
+  // Darum öffnet die markierte Option ihr Tooltip gesteuert (Plan #1668, E7) — die Maus markiert
+  // beim Darüberfahren ebenso, damit gilt für beide dasselbe. MUI meldet nur Markierungen durch
+  // Maus, Tastatur und Touch, nicht ihr Zurücksetzen beim Schließen oder Filtern; das holen
+  // `onClose` und `onInputChange` nach, sonst ginge beim Wiederöffnen ein altes Tooltip auf.
+  const [markiert, setMarkiert] = useState<BoardLabel | null>(null)
+  const markierungWeg = () => setMarkiert(null)
   const readOnly =
     labelIds.length > 0 ? (
       <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
@@ -388,6 +395,14 @@ export function LabelSection({
           isOptionEqualToValue={(a, b) => a.id === b.id}
           value={boardLabels.filter((l) => labelIds.includes(l.id))}
           onChange={(_, selected) => onChange(selected.map((l) => l.id))}
+          onHighlightChange={(_, option) => setMarkiert(option)}
+          onClose={markierungWeg}
+          onInputChange={markierungWeg}
+          renderOption={({ key, ...props }, option) => (
+            <LabelErklaerung key={key} name={option.name} open={markiert?.id === option.id} placement="right" eigenerFokus>
+              <li {...props}>{option.name}</li>
+            </LabelErklaerung>
+          )}
           renderTags={(value, getTagProps) =>
             value.map((l, index) => (
               <LabelErklaerung key={l.id} name={l.name}>

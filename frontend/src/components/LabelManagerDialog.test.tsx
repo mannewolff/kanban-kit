@@ -1,10 +1,20 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
+import type { KitNamenZustand } from '../api/kitNamen'
 import type { Label } from '../api/labels'
+import { de } from '../i18n/de'
+import { en } from '../i18n/en'
+import { KIT_NAMEN } from '../test/kitNamen'
 import { LabelManagerDialog } from './LabelManagerDialog'
 import { SnackbarProvider } from './SnackbarProvider'
 import { renderMitSprache } from '../i18n/renderMitSprache'
+
+vi.mock('../api/kitNamen', async (original) => ({
+  ...(await original<typeof import('../api/kitNamen')>()),
+  useKitNamen: (): KitNamenZustand => ({ status: 'fertig', daten: KIT_NAMEN }),
+}))
 
 const labels: Label[] = [{ id: 1, boardId: 9, name: 'Bug', color: '#ff0000', countOnEpicTile: false }]
 
@@ -295,6 +305,57 @@ describe('LabelManagerDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
 
     await waitFor(() => expect(api.create).toHaveBeenCalledWith(9, 'Ux', '#1976d2'))
+  })
+})
+
+describe('LabelManagerDialog: Erklärung der Systemlabels (#1673)', () => {
+  const mitSystemlabel: Label[] = [
+    { id: 1, boardId: 9, name: 'Bug', color: '#ff0000', countOnEpicTile: false },
+    { id: 8, boardId: 9, name: 'kit:clarify', color: '#6a1b9a', countOnEpicTile: false },
+  ]
+  const KLAEREN = de.LABEL_ERKLAERUNG.SACHEN.KLAEREN
+  const zeigen = () =>
+    render(<LabelManagerDialog open boardId={9} labels={mitSystemlabel} onClose={vi.fn()} onChanged={vi.fn()} api={mkApi()} />)
+
+  it('gibt einem Systemlabel ein Info-Symbol, das bei Fokus die Erklärung zeigt', async () => {
+    zeigen()
+    const info = screen.getByRole('button', { name: 'Erklärung zu kit:clarify' })
+
+    for (let i = 0; i < 30 && !info.matches(':focus'); i++) await userEvent.tab()
+
+    expect(info).toHaveFocus()
+    const tooltip = await screen.findByRole('tooltip')
+    expect(tooltip).toHaveTextContent(KLAEREN.bedeutung)
+    expect(tooltip).toHaveTextContent(KLAEREN.handlung)
+    expect(info).toHaveAttribute('aria-describedby', tooltip.id)
+  })
+
+  it('gibt einem selbst angelegten Label kein Info-Symbol', () => {
+    zeigen()
+
+    expect(screen.queryByRole('button', { name: 'Erklärung zu Bug' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^Erklärung zu / })).toHaveLength(1)
+  })
+
+  it('legt kein Tooltip an das Namensfeld eines Systemlabels', async () => {
+    zeigen()
+    const feld = screen.getByLabelText('Label kit:clarify')
+
+    await userEvent.click(feld)
+    await userEvent.hover(feld)
+
+    expect(feld).toHaveFocus()
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('beschriftet das Info-Symbol auf Englisch', () => {
+    renderMitSprache(
+      <LabelManagerDialog open boardId={9} labels={mitSystemlabel} onClose={vi.fn()} onChanged={vi.fn()} api={mkApi()} />,
+      'en',
+    )
+
+    expect(screen.getByRole('button', { name: en.LABELVERWALTUNG.ERKLAERUNG_ARIA('kit:clarify') })).toBeInTheDocument()
+    expect(en.LABELVERWALTUNG.ERKLAERUNG_ARIA('kit:clarify')).toBe('Explanation of kit:clarify')
   })
 })
 

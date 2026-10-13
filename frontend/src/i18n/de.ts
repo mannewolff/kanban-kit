@@ -470,6 +470,8 @@ export const de = {
     LABEL_ARIA: (name: string) => `Label ${name}`,
     FARBE_ARIA: (name: string) => `Farbe ${name}`,
     LOESCHEN_ARIA: (name: string) => `Label ${name} löschen`,
+    /** Info-Symbol neben dem Namen eines Systemlabels, das dessen Erklärung trägt (Issue #1673). */
+    ERKLAERUNG_ARIA: (name: string) => `Erklärung zu ${name}`,
     ZAEHLEN: 'auf der Vorhaben-Kachel zählen',
     ZAEHLEN_ARIA: (name: string) => `${name}: auf der Vorhaben-Kachel zählen`,
     ANLEGEN_FEHLER: 'Label konnte nicht angelegt werden.',

@@ -17,6 +17,7 @@ import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined'
 import type { LabelAction } from '../api/cards'
 import type { Label } from '../api/labels'
 import { useT } from '../i18n/SpracheContext'
+import { LabelErklaerung } from './LabelErklaerung'
 import { SURFACE_HOVER_SHADOW } from '../theme'
 
 /** Wie weit ein Label in der Auswahl vertreten ist. */
@@ -120,22 +121,25 @@ export function BulkActionBar({
       <Menu anchorEl={labelAnchor} open={labelAnchor !== null} onClose={() => setLabelAnchor(null)}>
         {labelOptions.map(({ label, zustand }) => {
           const ZustandSymbol = ZUSTAND_SYMBOL[zustand]
+          // Die Erklärung eines Systemlabels hängt rechts am Menüpunkt; sein Fokus bleibt beim Menü
+          // (Plan #1668, E6), sodass sie bei den Pfeiltasten erscheint wie beim Darüberfahren.
           return (
-            <MenuItem
-              key={label.id}
-              // Der Zustand steht im zugänglichen Namen, nicht nur im Häkchen-Symbol: Ein Vollhaken
-              // und ein Strich sind rein visuelle Unterschiede, die ohne Bildschirm verschwänden —
-              // und genau an ihnen hängt, was ein Klick tut.
-              aria-label={`${label.name} — ${t.MASSENAKTION.ZUSTAND[zustand]}`}
-              // Das Menü bleibt nach dem Klick offen: Mehrere Labels in einem Zug zu setzen ist der
-              // Regelfall, ein Schließen zwänge zum erneuten Öffnen je Label.
-              onClick={() => onToggleLabel(label.id, zustand === 'alle' ? 'REMOVE' : 'ADD')}
-            >
-              <ListItemIcon>
-                <ZustandSymbol fontSize="small" />
-              </ListItemIcon>
-              <ListItemText primary={label.name} />
-            </MenuItem>
+            <LabelErklaerung key={label.id} name={label.name} placement="right" eigenerFokus>
+              <MenuItem
+                // Der Zustand steht im zugänglichen Namen, nicht nur im Häkchen-Symbol: Ein Vollhaken
+                // und ein Strich sind rein visuelle Unterschiede, die ohne Bildschirm verschwänden —
+                // und genau an ihnen hängt, was ein Klick tut.
+                aria-label={`${label.name} — ${t.MASSENAKTION.ZUSTAND[zustand]}`}
+                // Das Menü bleibt nach dem Klick offen: Mehrere Labels in einem Zug zu setzen ist der
+                // Regelfall, ein Schließen zwänge zum erneuten Öffnen je Label.
+                onClick={() => onToggleLabel(label.id, zustand === 'alle' ? 'REMOVE' : 'ADD')}
+              >
+                <ListItemIcon>
+                  <ZustandSymbol fontSize="small" />
+                </ListItemIcon>
+                <ListItemText primary={label.name} />
+              </MenuItem>
+            </LabelErklaerung>
           )
         })}
       </Menu>

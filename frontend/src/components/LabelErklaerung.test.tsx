@@ -109,4 +109,28 @@ describe('LabelErklaerung', () => {
 
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
+
+  it.each(['kit:clarify', 'Aktuell'])('lässt mit eigenerFokus den tabIndex von %s beim Kind und reicht tabIndex durch', (name) => {
+    renderMitSprache(
+      <LabelErklaerung name={name} eigenerFokus tabIndex={-1}>
+        <Chip size="small" label={name} />
+      </LabelErklaerung>,
+      'de',
+    )
+
+    expect(label(name)).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('öffnet das Tooltip an der verlangten Seite', async () => {
+    renderMitSprache(
+      <LabelErklaerung name="kit:clarify" placement="right">
+        <Chip size="small" label="kit:clarify" />
+      </LabelErklaerung>,
+      'de',
+    )
+
+    await userEvent.hover(label('kit:clarify'))
+
+    expect(await screen.findByRole('tooltip')).toHaveAttribute('data-popper-placement', expect.stringMatching(/^right/))
+  })
 })
