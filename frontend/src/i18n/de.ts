@@ -1501,6 +1501,164 @@ export const de = {
     ANLEGEN_FEHLGESCHLAGEN: 'Die Standard-Labels konnten nicht angelegt werden.',
   },
 
+  /**
+   * Erklärungen der Systemlabels (Issue #1671, Plan #1668 E1, E2): je Sache des Namen-Registers
+   * Bedeutung, wer setzt und wann es verschwindet, `handlung` nur, wo der Mensch etwas tun soll;
+   * je Schutzregel des Servers ein Satz (E3), bei `KEINER` keiner. Quelle: Kit-Dokumentation 5.0
+   * und `docs/nutzung.md`, im Zweifel weggelassen statt geraten (E12).
+   */
+  LABEL_ERKLAERUNG: {
+    SACHEN: {
+      DURCHZIEHEN: {
+        bedeutung:
+          'Die Nacht-Kette setzt die Arbeitspakete dieser Karte nach der Abdeckung selbst um. Das Label ist das GO für alle ihre Pakete.',
+        setzt: 'Ein Mensch, an der fachlichen Anforderung oder am Plan.',
+        verschwindet: 'Nur, wenn ein Mensch es abnimmt; danach endet die Kette wieder nach der Abdeckung.',
+      },
+      GESCHUETZT: {
+        bedeutung:
+          'Das Arbeitspaket ändert eine geschützte Datei, die nur ein Mensch schreiben darf. Es wurde darum nicht umgesetzt und liegt im Backlog.',
+        setzt: 'Die Umsetzung des Kits, wenn das Paket eine geschützte Datei nennt oder ein Schreibzugriff darauf abgewiesen wird.',
+        verschwindet:
+          'Nur, wenn ein Mensch es abnimmt, nachdem er die Änderung an der Datei selbst vorgenommen hat. Erst dann gilt das Paket als freigegeben.',
+        handlung: 'Nimm die Änderung an der genannten Datei selbst vor und nimm danach das Label ab.',
+      },
+      KLAEREN: {
+        bedeutung:
+          'An der Karte wartet eine offene Frage auf einen Menschen. Umsetzung, Prüflauf und Nacht-Kette arbeiten an ihr nicht weiter.',
+        setzt: 'Eine Sitzung des Kits, der Prüflauf oder die Nacht-Kette, wenn sie an einer Frage anhalten, die nur ein Mensch beantworten kann.',
+        verschwindet: 'Nur, wenn ein Mensch es abnimmt; keine Maschine nimmt es ab.',
+        handlung: 'Beantworte die Frage im Kommentar und nimm das Label ab.',
+      },
+      GEKLAERT: {
+        bedeutung:
+          'An dieser fachlichen Anforderung ist keine Frage an den PO mehr offen. Es ist eine Hilfe für den Menschen, kein Kriterium der Nacht-Kette.',
+        setzt: '/issue-review oder /groom, sobald unter „Offene Fragen an den PO“ „Keine“ steht.',
+        verschwindet: 'Nur, wenn ein Mensch es abnimmt; das Kit nimmt es nie ab.',
+      },
+      NIGHT: {
+        bedeutung:
+          'Gibt die Karte einmal für die Nacht-Kette frei: Der nächste Runner übernimmt sie. Jedes Setzen erlaubt genau eine Kette.',
+        setzt: 'Ein Mensch, etwa mit „Kette starten“ in der Stufenleiste der Karte.',
+        verschwindet:
+          'Der Runner nimmt es ab, sobald er die Karte übernimmt. Vorher kann ein Mensch den Start mit „Start zurücknehmen“ widerrufen.',
+      },
+      NIGHTRUN: {
+        bedeutung:
+          'Gibt ein Arbeitspaket in Ready für den Nacht-Runner frei. Pakete ohne dieses Label lässt der Runner liegen.',
+        setzt: 'Ein Mensch.',
+        verschwindet: 'Der Runner nimmt es ab, sobald es verbraucht ist; ein Mensch kann es jederzeit abnehmen.',
+      },
+      PRUEFEN: {
+        bedeutung:
+          'Meldet eine fachliche Anforderung für den Prüflauf an: Modelle, die sie nicht geschrieben haben, prüfen sie mit /issue-review.',
+        setzt: 'Ein Mensch, an einer Karte mit dem Titel-Präfix [Requirement].',
+        verschwindet: 'Der Prüflauf nimmt es unmittelbar vor der Prüfung der Karte ab; jedes Setzen erlaubt genau eine Prüfung.',
+      },
+      NIGHTPLAN: {
+        bedeutung:
+          'Ein altes Steuerlabel der Nacht-Kette, das es seit Stufe 2 des Kits nicht mehr gibt. Es hat keine Wirkung; die Kette startet mit kit:night.',
+        setzt: 'Niemand mehr; es stammt aus einer früheren Fassung des Kits.',
+        verschwindet: 'Nur, wenn ein Mensch es abnimmt. Die Nacht-Kette weist in ihrem Protokoll darauf hin.',
+        handlung: 'Nimm das Label ab. Soll die Kette laufen, setze kit:night.',
+      },
+      NIGHTREVIEW: {
+        bedeutung:
+          'Ein altes Steuerlabel der Nacht-Kette, das es seit Stufe 2 des Kits nicht mehr gibt. Es hat keine Wirkung; die Kette startet mit kit:night.',
+        setzt: 'Niemand mehr; es stammt aus einer früheren Fassung des Kits.',
+        verschwindet: 'Nur, wenn ein Mensch es abnimmt. Die Nacht-Kette weist in ihrem Protokoll darauf hin.',
+        handlung: 'Nimm das Label ab. Soll die Kette laufen, setze kit:night.',
+      },
+      NIGHTISSUES: {
+        bedeutung:
+          'Ein altes Steuerlabel der Nacht-Kette, das es seit Stufe 2 des Kits nicht mehr gibt. Es hat keine Wirkung; die Kette startet mit kit:night.',
+        setzt: 'Niemand mehr; es stammt aus einer früheren Fassung des Kits.',
+        verschwindet: 'Nur, wenn ein Mensch es abnimmt. Die Nacht-Kette weist in ihrem Protokoll darauf hin.',
+        handlung: 'Nimm das Label ab. Soll die Kette laufen, setze kit:night.',
+      },
+      WARTET_EREIGNIS: {
+        bedeutung: 'Der Fachplan wartet auf ein äußeres Ereignis. Die Nacht-Kette baut nichts aus ihm.',
+        setzt: 'Das Kit.',
+        verschwindet: 'Nur, wenn ein Mensch es abnimmt; damit hebt er das Warten auf.',
+        handlung: 'Nimm das Label ab, sobald das Ereignis eingetreten ist.',
+      },
+      LAUF_ABGEBROCHEN: {
+        bedeutung:
+          'Ein Lauf des Nacht-Runners ist an dieser Karte abgebrochen; der Kommentar „Laufstand“ nennt den Stand. Wiederholen genügt.',
+        setzt: 'Der Nacht-Runner.',
+        verschwindet:
+          'Der Runner tauscht es aus, wenn sich der Laufstand der Karte ändert; eine Karte trägt höchstens eines der drei Lauf-Labels.',
+        handlung: 'Wiederhole den Lauf mit derselben Geste, bei einer Kette mit kit:night an der Karte.',
+      },
+      LAUF_LAEUFT: {
+        bedeutung: 'Ein Lauf des Nacht-Runners bearbeitet diese Karte gerade; der Kommentar „Laufstand“ zeigt den Stand.',
+        setzt: 'Der Nacht-Runner.',
+        verschwindet:
+          'Der Runner tauscht es aus, wenn sich der Laufstand der Karte ändert; eine Karte trägt höchstens eines der drei Lauf-Labels.',
+      },
+      LAUF_WARTET: {
+        bedeutung: 'Der Lauf an dieser Karte hält an und wartet. Worauf, steht wörtlich im Kommentar „Laufstand“.',
+        setzt: 'Der Nacht-Runner.',
+        verschwindet:
+          'Der Runner tauscht es aus, wenn sich der Laufstand der Karte ändert; eine Karte trägt höchstens eines der drei Lauf-Labels.',
+        handlung: 'Lies im Laufstand, worauf der Lauf wartet, und erledige das; weiter geht es mit kit:night an der Karte.',
+      },
+      REVIEW_OFFEN: {
+        bedeutung:
+          'Kennzeichen des früheren Prüf-Laufs, der eine Karte damit zur Prüfung anmeldete. Das Kit 5.0 kennt diesen Lauf nicht mehr; zur Prüfung meldet heute kit:check an.',
+        setzt: 'Niemand mehr; es stammt aus einer früheren Fassung des Kits.',
+        verschwindet: 'Nur, wenn ein Mensch es abnimmt.',
+      },
+      REVIEW_FERTIG: {
+        bedeutung:
+          'Die Karte wurde mit /issue-review geprüft. Das ist eine Spur, keine Freigabe; die Nacht-Kette verlangt sie aber an fachlicher Anforderung und Plan.',
+        setzt: '/issue-review nach einer abgeschlossenen Prüfung, auch im Prüflauf und in der Nacht-Kette.',
+        verschwindet: 'Es bleibt als Spur der Prüfung stehen; ein Mensch kann es abnehmen.',
+      },
+      ZIEL_PLAN: {
+        bedeutung: 'Ziel der Nacht-Kette an dieser Karte: Sie endet nach Plan und Planprüfung.',
+        setzt: 'Ein Mensch, über die Stufenleiste der Karte.',
+        verschwindet:
+          'Der Runner nimmt es zusammen mit kit:night ab, wenn er die Karte übernimmt. Vorher ersetzt ein anderes Ziel in der Stufenleiste es.',
+      },
+      ZIEL_PAKETE: {
+        bedeutung:
+          'Ziel der Nacht-Kette an dieser Karte: Sie endet nach den Arbeitspaketen und der Abdeckungsprüfung. Ohne gewähltes Ziel gilt dieses.',
+        setzt: 'Ein Mensch, über die Stufenleiste der Karte.',
+        verschwindet:
+          'Der Runner nimmt es zusammen mit kit:night ab, wenn er die Karte übernimmt. Vorher ersetzt ein anderes Ziel in der Stufenleiste es.',
+      },
+      ZIEL_UMSETZUNG: {
+        bedeutung:
+          'Ziel der Nacht-Kette an dieser Karte: Sie setzt die Arbeitspakete auch um. Das Ziel ist zugleich das GO für alle Pakete dieser Karte.',
+        setzt: 'Ein Mensch, über die Stufenleiste der Karte, mit ausdrücklicher Bestätigung.',
+        verschwindet:
+          'Der Runner nimmt es zusammen mit kit:night ab, wenn er die Karte übernimmt. Vorher ersetzt ein anderes Ziel in der Stufenleiste es.',
+      },
+      ZIEL_PUSH_VORBEREITET: {
+        bedeutung:
+          'Ziel der Nacht-Kette an dieser Karte: Sie setzt die Pakete um und bereitet die Veröffentlichung vor; veröffentlicht wird von Hand. Das Ziel ist zugleich das GO für alle Pakete dieser Karte.',
+        setzt: 'Ein Mensch, über die Stufenleiste der Karte, mit ausdrücklicher Bestätigung.',
+        verschwindet:
+          'Der Runner nimmt es zusammen mit kit:night ab, wenn er die Karte übernimmt. Vorher ersetzt ein anderes Ziel in der Stufenleiste es.',
+      },
+      PLANREVIEW_1: {
+        bedeutung: 'Ein Modell prüft den Plan, den die Nacht-Kette aus dieser fachlichen Anforderung macht.',
+        setzt: 'Ein Mensch, über den Schalter „Planprüfung“ der Stufenleiste. Ohne Wahl gilt die Vorgabe des Projekts.',
+        verschwindet: 'Der Runner nimmt es zusammen mit kit:night ab, wenn er die Karte übernimmt.',
+      },
+      PLANREVIEW_2: {
+        bedeutung: 'Zwei Modelle prüfen den Plan, den die Nacht-Kette aus dieser fachlichen Anforderung macht.',
+        setzt: 'Ein Mensch, über den Schalter „Planprüfung“ der Stufenleiste. Ohne Wahl gilt die Vorgabe des Projekts.',
+        verschwindet: 'Der Runner nimmt es zusammen mit kit:night ab, wenn er die Karte übernimmt.',
+      },
+    },
+    SCHUTZ: {
+      NUR_MENSCH_SETZT: 'Setzen geht nur angemeldet im Leitstand, nicht über ein Token.',
+      NUR_MENSCH_NIMMT_AB: 'Abnehmen geht nur angemeldet im Leitstand, nicht über ein Token.',
+    },
+  },
+
   /** Seitenrahmen der API-Übersicht und Ausprobieren (Issue #1660, E2); Swagger UI und das OpenAPI-Dokument bleiben, wie sie sind. */
   API_UEBERSICHT: {
     TITEL: 'API-Schnittstelle',

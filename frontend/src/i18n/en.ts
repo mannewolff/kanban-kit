@@ -1426,6 +1426,158 @@ export const en: Woerterbuch = {
     ANLEGEN_FEHLGESCHLAGEN: 'The standard labels could not be created.',
   },
 
+  LABEL_ERKLAERUNG: {
+    SACHEN: {
+      DURCHZIEHEN: {
+        bedeutung:
+          'After the coverage check, the night chain implements the work packages of this card itself. The label is the GO for all its packages.',
+        setzt: 'A human, on the requirement or on the plan.',
+        verschwindet: 'Only when a human removes it; the chain then ends after the coverage check again.',
+      },
+      GESCHUETZT: {
+        bedeutung:
+          'The work package changes a protected file that only a human may write. It was therefore not implemented and lies in the backlog.',
+        setzt: 'The kit’s implementation, when the package names a protected file or a write to it is rejected.',
+        verschwindet:
+          'Only when a human removes it after making the change to the file themselves. Only then does the package count as released.',
+        handlung: 'Make the change to the named file yourself, then remove the label.',
+      },
+      KLAEREN: {
+        bedeutung:
+          'An open question on this card is waiting for a human. Implementation, check run and night chain do not continue with it.',
+        setzt: 'A kit session, the check run or the night chain, when they stop at a question only a human can answer.',
+        verschwindet: 'Only when a human removes it; no machine removes it.',
+        handlung: 'Answer the question in the comment and remove the label.',
+      },
+      GEKLAERT: {
+        bedeutung:
+          'No question to the PO is open on this requirement any more. It is an aid for humans, not a criterion of the night chain.',
+        setzt: '/issue-review or /groom, as soon as “None” stands under “Open questions for the PO”.',
+        verschwindet: 'Only when a human removes it; the kit never removes it.',
+      },
+      NIGHT: {
+        bedeutung:
+          'Releases the card once for the night chain: the next runner takes it over. Each time it is set allows exactly one chain.',
+        setzt: 'A human, for example with “Start chain” in the card’s stage bar.',
+        verschwindet:
+          'The runner removes it as soon as it takes over the card. Before that, a human can withdraw the start with “Withdraw start”.',
+      },
+      NIGHTRUN: {
+        bedeutung:
+          'Releases a work package in Ready for the night runner. The runner leaves packages without this label alone.',
+        setzt: 'A human.',
+        verschwindet: 'The runner removes it once it is used up; a human can remove it at any time.',
+      },
+      PRUEFEN: {
+        bedeutung:
+          'Signs up a requirement for the check run: models that did not write it review it with /issue-review.',
+        setzt: 'A human, on a card with the title prefix [Requirement].',
+        verschwindet: 'The check run removes it right before reviewing the card; each time it is set allows exactly one review.',
+      },
+      NIGHTPLAN: {
+        bedeutung:
+          'An old control label of the night chain that no longer exists since stage 2 of the kit. It has no effect; the chain starts with kit:night.',
+        setzt: 'Nobody any more; it comes from an earlier version of the kit.',
+        verschwindet: 'Only when a human removes it. The night chain points it out in its log.',
+        handlung: 'Remove the label. If the chain should run, set kit:night.',
+      },
+      NIGHTREVIEW: {
+        bedeutung:
+          'An old control label of the night chain that no longer exists since stage 2 of the kit. It has no effect; the chain starts with kit:night.',
+        setzt: 'Nobody any more; it comes from an earlier version of the kit.',
+        verschwindet: 'Only when a human removes it. The night chain points it out in its log.',
+        handlung: 'Remove the label. If the chain should run, set kit:night.',
+      },
+      NIGHTISSUES: {
+        bedeutung:
+          'An old control label of the night chain that no longer exists since stage 2 of the kit. It has no effect; the chain starts with kit:night.',
+        setzt: 'Nobody any more; it comes from an earlier version of the kit.',
+        verschwindet: 'Only when a human removes it. The night chain points it out in its log.',
+        handlung: 'Remove the label. If the chain should run, set kit:night.',
+      },
+      WARTET_EREIGNIS: {
+        bedeutung: 'The requirement is waiting for an external event. The night chain builds nothing from it.',
+        setzt: 'The kit.',
+        verschwindet: 'Only when a human removes it; doing so ends the wait.',
+        handlung: 'Remove the label as soon as the event has occurred.',
+      },
+      LAUF_ABGEBROCHEN: {
+        bedeutung:
+          'A night runner’s run was aborted on this card; the comment “Run status” shows the state. Repeating is enough.',
+        setzt: 'The night runner.',
+        verschwindet:
+          'The runner swaps it when the card’s run status changes; a card carries at most one of the three run labels.',
+        handlung: 'Repeat the run with the same gesture, for a chain with kit:night on the card.',
+      },
+      LAUF_LAEUFT: {
+        bedeutung: 'A night runner’s run is working on this card right now; the comment “Run status” shows the state.',
+        setzt: 'The night runner.',
+        verschwindet:
+          'The runner swaps it when the card’s run status changes; a card carries at most one of the three run labels.',
+      },
+      LAUF_WARTET: {
+        bedeutung: 'The run on this card has stopped and is waiting. What for is stated verbatim in the comment “Run status”.',
+        setzt: 'The night runner.',
+        verschwindet:
+          'The runner swaps it when the card’s run status changes; a card carries at most one of the three run labels.',
+        handlung: 'Read in the run status what the run is waiting for and take care of it; it continues with kit:night on the card.',
+      },
+      REVIEW_OFFEN: {
+        bedeutung:
+          'Marker of the former review run, which used it to sign up a card for review. Kit 5.0 no longer has this run; today kit:check signs up a card for review.',
+        setzt: 'Nobody any more; it comes from an earlier version of the kit.',
+        verschwindet: 'Only when a human removes it.',
+      },
+      REVIEW_FERTIG: {
+        bedeutung:
+          'The card was reviewed with /issue-review. This is a trace, not a release; the night chain does require it on requirement and plan, though.',
+        setzt: '/issue-review after a completed review, also in the check run and in the night chain.',
+        verschwindet: 'It stays as a trace of the review; a human can remove it.',
+      },
+      ZIEL_PLAN: {
+        bedeutung: 'Goal of the night chain on this card: it ends after the plan and the plan review.',
+        setzt: 'A human, via the card’s stage bar.',
+        verschwindet:
+          'The runner removes it together with kit:night when it takes over the card. Before that, another goal in the stage bar replaces it.',
+      },
+      ZIEL_PAKETE: {
+        bedeutung:
+          'Goal of the night chain on this card: it ends after the work packages and the coverage check. Without a chosen goal, this one applies.',
+        setzt: 'A human, via the card’s stage bar.',
+        verschwindet:
+          'The runner removes it together with kit:night when it takes over the card. Before that, another goal in the stage bar replaces it.',
+      },
+      ZIEL_UMSETZUNG: {
+        bedeutung:
+          'Goal of the night chain on this card: it also implements the work packages. The goal is at the same time the GO for all packages of this card.',
+        setzt: 'A human, via the card’s stage bar, with explicit confirmation.',
+        verschwindet:
+          'The runner removes it together with kit:night when it takes over the card. Before that, another goal in the stage bar replaces it.',
+      },
+      ZIEL_PUSH_VORBEREITET: {
+        bedeutung:
+          'Goal of the night chain on this card: it implements the packages and prepares the release; releasing is done by hand. The goal is at the same time the GO for all packages of this card.',
+        setzt: 'A human, via the card’s stage bar, with explicit confirmation.',
+        verschwindet:
+          'The runner removes it together with kit:night when it takes over the card. Before that, another goal in the stage bar replaces it.',
+      },
+      PLANREVIEW_1: {
+        bedeutung: 'One model reviews the plan that the night chain makes from this requirement.',
+        setzt: 'A human, via the “Plan review” switch of the stage bar. Without a choice, the project default applies.',
+        verschwindet: 'The runner removes it together with kit:night when it takes over the card.',
+      },
+      PLANREVIEW_2: {
+        bedeutung: 'Two models review the plan that the night chain makes from this requirement.',
+        setzt: 'A human, via the “Plan review” switch of the stage bar. Without a choice, the project default applies.',
+        verschwindet: 'The runner removes it together with kit:night when it takes over the card.',
+      },
+    },
+    SCHUTZ: {
+      NUR_MENSCH_SETZT: 'Setting it is only possible when signed in to the Control Room, not via a token.',
+      NUR_MENSCH_NIMMT_AB: 'Removing it is only possible when signed in to the Control Room, not via a token.',
+    },
+  },
+
   API_UEBERSICHT: {
     TITEL: 'API',
     ZURUECK: 'Back to Administration',
