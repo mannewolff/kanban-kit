@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { PasswordField } from './PasswordField'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 describe('PasswordField', () => {
   it('startet verborgen (type=password) mit Anzeige-Auge', () => {
@@ -31,5 +32,13 @@ describe('PasswordField', () => {
   it('nimmt das Auge aus dem Tab-Fluss', () => {
     render(<PasswordField label="Passwort" />)
     expect(screen.getByRole('button', { name: 'Passwort anzeigen' })).toHaveAttribute('tabindex', '-1')
+  })
+})
+
+describe('PasswordField auf Englisch', () => {
+  it('beschriftet das Auge auf Englisch', async () => {
+    renderMitSprache(<PasswordField label="Password" />, 'en')
+    await userEvent.click(screen.getByRole('button', { name: 'Show password' }))
+    expect(screen.getByRole('button', { name: 'Hide password' })).toBeInTheDocument()
   })
 })

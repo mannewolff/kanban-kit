@@ -1,11 +1,12 @@
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
-import { APP_NAME } from '../appMeta'
 import { EPIC_EDGE_WIDTH } from '../theme'
+import { useT } from '../i18n/SpracheContext'
 
 /** Zentrierte Karte für Auth-Screens. */
 export function AuthCard({ title, children }: Readonly<{ title: string; children: React.ReactNode }>) {
+  const t = useT()
   return (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', p: 2 }}>
       <Paper
@@ -20,7 +21,7 @@ export function AuthCard({ title, children }: Readonly<{ title: string; children
         }}
       >
         <Typography variant="h4" component="h1" gutterBottom>
-          {APP_NAME}
+          {t.APP_NAME}
         </Typography>
         <Typography variant="h6" component="h2" sx={{ mb: 2 }} color="text.secondary">
           {title}

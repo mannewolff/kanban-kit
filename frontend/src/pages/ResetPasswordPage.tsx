@@ -8,8 +8,10 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import { AuthCard } from '../components/AuthCard'
 import { PasswordField } from '../components/PasswordField'
+import { useT } from '../i18n/SpracheContext'
 
 export function ResetPasswordPage() {
+  const t = useT()
   const [params] = useSearchParams()
   const token = params.get('token') ?? ''
   const [password, setPassword] = useState('')
@@ -25,29 +27,29 @@ export function ResetPasswordPage() {
       await authApi.reset(token, password)
       setDone(true)
     } catch {
-      setError('Der Link ist ungültig oder abgelaufen.')
+      setError(t.AUTH.LINK_UNGUELTIG)
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <AuthCard title="Neues Passwort setzen">
+    <AuthCard title={t.AUTH.NEUES_PASSWORT_TITEL}>
       {done ? (
         <Stack spacing={2}>
-          <Alert severity="success">Passwort gesetzt. Du kannst dich jetzt anmelden.</Alert>
-          <Link component={RouterLink} to="/login">Zur Anmeldung</Link>
+          <Alert severity="success">{t.AUTH.PASSWORT_GESETZT}</Alert>
+          <Link component={RouterLink} to="/login">{t.AUTH.ZUR_ANMELDUNG}</Link>
         </Stack>
       ) : (
         <Box component="form" onSubmit={handleSubmit}>
           <Stack spacing={2}>
             {error && <Alert severity="error">{error}</Alert>}
-            {!token && <Alert severity="warning">Kein Token in der URL gefunden.</Alert>}
-            <PasswordField label="Neues Passwort" value={password}
+            {!token && <Alert severity="warning">{t.AUTH.KEIN_TOKEN}</Alert>}
+            <PasswordField label={t.AUTH.NEUES_PASSWORT} value={password}
               onChange={(e) => setPassword(e.target.value)} required fullWidth autoComplete="new-password"
-              helperText="Mindestens 8 Zeichen" />
+              helperText={t.AUTH.MINDESTENS_8_ZEICHEN} />
             <Button type="submit" variant="contained" disabled={busy || !token} fullWidth>
-              Passwort setzen
+              {t.AUTH.PASSWORT_SETZEN}
             </Button>
           </Stack>
         </Box>

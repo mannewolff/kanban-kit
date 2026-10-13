@@ -5,6 +5,7 @@ import Alert from '@mui/material/Alert'
 import { AuthCard } from './AuthCard'
 import { cssRegel } from '../test/cssRegel'
 import { EPIC_EDGE_WIDTH, theme } from '../theme'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 describe('AuthCard', () => {
   const karte = () =>
@@ -60,5 +61,12 @@ describe('AuthCard', () => {
     const regel = cssRegel(screen.getByRole('alert'))
     expect(regel).toContain('color: var(--mb-palette-Alert-errorColor)')
     expect(regel).toContain('background-color: var(--mb-palette-Alert-errorStandardBg)')
+  })
+})
+
+describe('AuthCard auf Englisch', () => {
+  it('zeigt den englischen Anwendungsnamen', () => {
+    renderMitSprache(<AuthCard title="Sign in"><p>Form</p></AuthCard>, 'en')
+    expect(screen.getByRole('heading', { name: 'AI Control Room', level: 1 })).toBeInTheDocument()
   })
 })

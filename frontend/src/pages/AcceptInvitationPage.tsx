@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { membersApi as defaultMembersApi, type Member, type MembersApi } from '../api/members'
+import { useT } from '../i18n/SpracheContext'
 
 interface Props {
   api?: MembersApi
@@ -17,6 +18,7 @@ type State =
   | { status: 'error' }
 
 export function AcceptInvitationPage({ api = defaultMembersApi }: Readonly<Props>) {
+  const t = useT()
   const [params] = useSearchParams()
   const token = params.get('token')
   const [state, setState] = useState<State>({ status: 'loading' })
@@ -35,22 +37,22 @@ export function AcceptInvitationPage({ api = defaultMembersApi }: Readonly<Props
   return (
     <Box sx={{ maxWidth: 480 }}>
       <Typography variant="h5" sx={{ mb: 2 }}>
-        Einladung annehmen
+        {t.AUTH.EINLADUNG_TITEL}
       </Typography>
 
       {state.status === 'loading' && <CircularProgress />}
 
       {state.status === 'error' && (
-        <Alert severity="error">Die Einladung ist ungültig oder abgelaufen.</Alert>
+        <Alert severity="error">{t.AUTH.EINLADUNG_UNGUELTIG}</Alert>
       )}
 
       {state.status === 'ok' && (
         <Box>
           <Alert severity="success" sx={{ mb: 2 }}>
-            Du bist dem Projekt als {state.member.role} beigetreten.
+            {t.AUTH.EINLADUNG_BEIGETRETEN(state.member.role)}
           </Alert>
           <Button component={RouterLink} to="/projects" variant="contained">
-            Zu den Projekten
+            {t.AUTH.ZU_DEN_PROJEKTEN}
           </Button>
         </Box>
       )}

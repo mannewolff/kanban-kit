@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1649 = 'Sprache: Seiten vor der Anmeldung auf Englisch'
 const P1650 = 'Sprache: Rahmen und Navigation auf Englisch'
 const P1651 = 'Sprache: Projekte, Boards, Mitglieder, Rollen und Profil auf Englisch'
 const P1652 = 'Sprache: Board-Ansicht auf Englisch'
@@ -33,22 +32,8 @@ const KEIN_ANZEIGETEXT = 'kein Anzeigetext'
 
 const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   // #1649
-  { file: 'src/auth/AuthContext.tsx', rule: 'literal', resolvedIn: P1649 },
-  { file: 'src/components/AuthCard.tsx', rule: 'literal', resolvedIn: P1649 },
-  { file: 'src/components/PasswordField.tsx', rule: 'literal', resolvedIn: P1649 },
-  { file: 'src/pages/AcceptInvitationPage.tsx', rule: 'jsx', resolvedIn: P1649 },
-  { file: 'src/pages/BootstrapAdminPage.tsx', rule: 'jsx', resolvedIn: P1649 },
-  { file: 'src/pages/BootstrapAdminPage.tsx', rule: 'literal', resolvedIn: P1649 },
-  { file: 'src/pages/ForgotPasswordPage.tsx', rule: 'jsx', resolvedIn: P1649 },
-  { file: 'src/pages/ForgotPasswordPage.tsx', rule: 'literal', resolvedIn: P1649 },
-  { file: 'src/pages/LoginPage.tsx', rule: 'jsx', resolvedIn: P1649 },
-  { file: 'src/pages/LoginPage.tsx', rule: 'literal', resolvedIn: P1649 },
-  { file: 'src/pages/ResetPasswordPage.tsx', rule: 'jsx', resolvedIn: P1649 },
-  { file: 'src/pages/ResetPasswordPage.tsx', rule: 'literal', resolvedIn: P1649 },
-  { file: 'src/pages/SignupPage.tsx', rule: 'jsx', resolvedIn: P1649 },
-  { file: 'src/pages/SignupPage.tsx', rule: 'literal', resolvedIn: P1649 },
-  { file: 'src/pages/VerifyNoticePage.tsx', rule: 'jsx', resolvedIn: P1649 },
-  { file: 'src/pages/VerifyNoticePage.tsx', rule: 'literal', resolvedIn: P1649 },
+  { file: 'src/auth/AuthContext.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/AuthCard.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1650
   { file: 'src/components/AppShell.tsx', rule: 'jsx', resolvedIn: P1650 },
   { file: 'src/components/AppShell.tsx', rule: 'literal', resolvedIn: P1650 },

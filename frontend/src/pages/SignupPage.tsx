@@ -10,8 +10,10 @@ import { authApi } from '../api/auth'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { AuthCard } from '../components/AuthCard'
 import { PasswordField } from '../components/PasswordField'
+import { useT } from '../i18n/SpracheContext'
 
 export function SignupPage() {
+  const t = useT()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,11 +32,11 @@ export function SignupPage() {
       if (e instanceof ApiError && e.status === 429) {
         // Zählbremse vor dem 409-Zweig. Die Abweisung ist herkunftsbezogen und verrät nichts
         // darüber, ob die E-Mail bereits registriert ist.
-        setError(apiErrorMessage(e, 'Zu viele Versuche. Bitte später erneut versuchen.'))
+        setError(apiErrorMessage(e, t.AUTH.ZU_VIELE_VERSUCHE))
       } else if (e instanceof ApiError && e.status === 409) {
-        setError('Diese E-Mail-Adresse ist bereits registriert.')
+        setError(t.AUTH.EMAIL_BEREITS_REGISTRIERT)
       } else {
-        setError('Registrierung fehlgeschlagen. Bitte Eingaben prüfen (Passwort mind. 8 Zeichen).')
+        setError(t.AUTH.REGISTRIERUNG_FEHLGESCHLAGEN)
       }
     } finally {
       setBusy(false)
@@ -42,20 +44,20 @@ export function SignupPage() {
   }
 
   return (
-    <AuthCard title="Registrieren">
+    <AuthCard title={t.AUTH.REGISTRIEREN}>
       <Box component="form" onSubmit={handleSubmit}>
         <Stack spacing={2}>
           {error && <Alert severity="error">{error}</Alert>}
-          <TextField label="Anzeigename" value={displayName} onChange={(e) => setDisplayName(e.target.value)}
+          <TextField label={t.AUTH.ANZEIGENAME} value={displayName} onChange={(e) => setDisplayName(e.target.value)}
             required fullWidth />
-          <TextField label="E-Mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          <TextField label={t.AUTH.EMAIL} type="email" value={email} onChange={(e) => setEmail(e.target.value)}
             required fullWidth autoComplete="email" />
-          <PasswordField label="Passwort" value={password} onChange={(e) => setPassword(e.target.value)}
-            required fullWidth autoComplete="new-password" helperText="Mindestens 8 Zeichen" />
+          <PasswordField label={t.AUTH.PASSWORT} value={password} onChange={(e) => setPassword(e.target.value)}
+            required fullWidth autoComplete="new-password" helperText={t.AUTH.MINDESTENS_8_ZEICHEN} />
           <Button type="submit" variant="contained" disabled={busy} fullWidth>
-            Konto erstellen
+            {t.AUTH.KONTO_ERSTELLEN}
           </Button>
-          <Link component={RouterLink} to="/login">Zurück zur Anmeldung</Link>
+          <Link component={RouterLink} to="/login">{t.AUTH.ZURUECK_ZUR_ANMELDUNG}</Link>
         </Stack>
       </Box>
     </AuthCard>
