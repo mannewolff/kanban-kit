@@ -320,3 +320,35 @@ describe('abnahmeKommentar', () => {
     )
   })
 })
+
+describe('abnahmeKommentar auf Englisch', () => {
+  const szenarien: Szenario[] = [
+    { name: 'Sign in', schritte: ['Given an account'] },
+    { name: 'Sign out', schritte: ['When I sign out'] },
+    { name: 'Reset', schritte: ['Then a mail arrives'] },
+  ]
+
+  it('schreibt Kopf, Ergebnis und Liste auf Englisch', () => {
+    const vermerke: (Vermerk | undefined)[] = [{ urteil: 'okay', notiz: '' }, { urteil: 'nicht okay', notiz: 'broken' }]
+    expect(abnahmeKommentar(szenarien, vermerke, 'en')).toBe(
+      [
+        '## Scenario acceptance',
+        '',
+        'Result: 1 of 3 okay, not okay: 2. Sign out, open: 1.',
+        '',
+        '1. **Sign in** — okay',
+        '2. **Sign out** — not okay: broken',
+        '3. **Reset** — open',
+      ].join('\n'),
+    )
+  })
+
+  it('meldet auf Englisch, wenn alle Szenarien okay sind', () => {
+    const okay: Vermerk = { urteil: 'okay', notiz: '' }
+    expect(abnahmeKommentar(szenarien, [okay, okay, okay], 'en').split('\n')[2]).toBe('Result: all 3 scenarios okay.')
+  })
+
+  it('schreibt ohne Sprache weiter Deutsch', () => {
+    expect(abnahmeKommentar(szenarien, []).split('\n')[0]).toBe('## Abnahme der Szenarien')
+  })
+})

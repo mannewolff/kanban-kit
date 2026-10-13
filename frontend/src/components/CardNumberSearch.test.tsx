@@ -9,6 +9,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { kontrast } from '../lib/kontrast'
 import { theme } from '../theme'
 import { CardNumberSearch } from './CardNumberSearch'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/cards', () => ({ cardsApi: { searchByNumber: vi.fn() } }))
 vi.mock('../api/members', () => ({ membersApi: { list: vi.fn() } }))
@@ -765,5 +766,74 @@ describe('CardNumberSearch als Nut im Kopf (#978)', () => {
   ] as const)('hält %s Schrift und Platzhalter auf der Nut mit 4,5:1', (_, palette) => {
     expect(kontrast(palette.warte.nute, palette.text.primary)).toBeGreaterThanOrEqual(4.5)
     expect(kontrast(palette.warte.nute, palette.warte.textSchwach)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('CardNumberSearch auf Englisch', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    loginAs('OWNER')
+    mockedCards.searchByNumber.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([member(1, 'Manne')])
+    mockedEpics.list.mockResolvedValue([epic])
+    mockedLabels.list.mockResolvedValue([label])
+    mockedProjects.list.mockResolvedValue([])
+  })
+
+  const feld = () => screen.getByRole('textbox', { name: 'Search card number' })
+  const suche = (wert: string) => {
+    fireEvent.change(feld(), { target: { value: wert } })
+    fireEvent.submit(screen.getByRole('search'))
+  }
+
+  it('beschriftet Feld und Knopf auf Englisch', () => {
+    renderMitSprache(<CardNumberSearch />, 'en')
+    expect(feld()).toHaveAttribute('placeholder', 'Card #number')
+    expect(screen.getByRole('button', { name: 'Search card' })).toBeInTheDocument()
+  })
+
+  it('meldet ungültige Eingabe, keinen Treffer und einen Fehlschlag auf Englisch', async () => {
+    renderMitSprache(<CardNumberSearch />, 'en')
+    suche('abc')
+    expect(mNotify).toHaveBeenCalledWith('Please enter a card number, e.g. 345 or #345.', 'warning')
+
+    suche('345')
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('No card with number 345 found.', 'warning'))
+
+    mockedCards.searchByNumber.mockRejectedValueOnce(new Error('offline'))
+    suche('346')
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('The search failed.', 'error'))
+  })
+
+  it('zeigt die Suche läuft und die Trefferauswahl auf Englisch', async () => {
+    let antworten: (treffer: CardSearchHit[]) => void = () => {}
+    mockedCards.searchByNumber.mockReturnValueOnce(new Promise((resolve) => (antworten = resolve)))
+    renderMitSprache(<CardNumberSearch />, 'en')
+    suche('345')
+    expect(screen.getByLabelText('Searching')).toBeInTheDocument()
+
+    await act(async () => antworten([hit(), hit({ card: card({ id: 8 }), projectId: 6 })]))
+    expect(screen.getByRole('menu', { name: 'Choose a match' })).toBeInTheDocument()
+  })
+
+  it('meldet Lade- und Nachladefehler auf Englisch', async () => {
+    mockedCards.searchByNumber.mockResolvedValueOnce([hit()])
+    mockedMembers.list.mockRejectedValue(new Error('offline'))
+    renderMitSprache(<CardNumberSearch />, 'en')
+    suche('345')
+    await waitFor(() =>
+      expect(mNotify).toHaveBeenCalledWith(
+        'The editing data could not be loaded completely — the card stays read-only.',
+        'error',
+      ),
+    )
+
+    mockedCards.searchByNumber.mockRejectedValueOnce(new Error('offline'))
+    fireEvent.click(screen.getByRole('button', { name: 'Gespeichert' }))
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('The current state could not be loaded.', 'error'))
+
+    mockedCards.searchByNumber.mockResolvedValueOnce([])
+    fireEvent.click(screen.getByRole('button', { name: 'Gespeichert' }))
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('The card can no longer be found.', 'warning'))
   })
 })

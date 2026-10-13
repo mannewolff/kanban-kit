@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1654 = 'Sprache: Karten-Dialoge und Kartensuche auf Englisch'
 const P1655 = 'Sprache: Vorhaben auf Englisch'
 const P1656 = 'Sprache: Leitstand auf Englisch'
 const P1657 = 'Sprache: Plattform-Leitstand auf Englisch'
@@ -43,20 +42,12 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/components/board/SpaltenKopf.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1653 — CSS-Werte (Haarlinien, Code-Selektor, Rasterflächen) des Karten-Details
   { file: 'src/components/CardDetailModal.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  // #1654
-  { file: 'src/components/AbnahmeSzenarienDialog.tsx', rule: 'jsx', resolvedIn: P1654 },
-  { file: 'src/components/AbnahmeSzenarienDialog.tsx', rule: 'literal', resolvedIn: P1654 },
-  { file: 'src/components/CardNumberSearch.tsx', rule: 'jsx', resolvedIn: P1654 },
-  { file: 'src/components/CardNumberSearch.tsx', rule: 'literal', resolvedIn: P1654 },
-  { file: 'src/components/DerivationTree.tsx', rule: 'jsx', resolvedIn: P1654 },
-  { file: 'src/components/DerivationTree.tsx', rule: 'literal', resolvedIn: P1654 },
-  { file: 'src/components/EpicBadge.tsx', rule: 'jsx', resolvedIn: P1654 },
-  { file: 'src/components/EpicBadge.tsx', rule: 'literal', resolvedIn: P1654 },
-  { file: 'src/components/NewCardModal.tsx', rule: 'jsx', resolvedIn: P1654 },
-  { file: 'src/components/NewCardModal.tsx', rule: 'literal', resolvedIn: P1654 },
-  { file: 'src/components/TransferCardDialog.tsx', rule: 'jsx', resolvedIn: P1654 },
-  { file: 'src/components/TransferCardDialog.tsx', rule: 'literal', resolvedIn: P1654 },
-  { file: 'src/lib/abnahmeSzenarien.ts', rule: 'literal', resolvedIn: P1654 },
+  // #1654 — CSS-Werte (Rahmen, Fokusrand) und der Urteilswert `nicht okay` eines Vermerks (Schluessel, angezeigt wird das Woerterbuch)
+  { file: 'src/components/AbnahmeSzenarienDialog.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/CardNumberSearch.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/DerivationTree.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/EpicBadge.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/lib/abnahmeSzenarien.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1655
   { file: 'src/components/EpicVisibilityList.tsx', rule: 'jsx', resolvedIn: P1655 },
   { file: 'src/components/EpicVisibilityList.tsx', rule: 'literal', resolvedIn: P1655 },

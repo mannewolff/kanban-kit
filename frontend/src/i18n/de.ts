@@ -600,6 +600,100 @@ export const de = {
     FORTSCHRITT: 'Fortschritt',
     NICHT_GEFUNDEN: (nummer: number) => `Karte #${nummer} nicht gefunden — gelöscht oder kein Zugriff.`,
   },
+
+  /** Anlegen einer Karte oder eines Vorhabens (Issue #1654); die Vorlage nennt die Abschnitte des Kits. */
+  NEUE_KARTE: {
+    VORLAGE: '## Kontext\n\n## Aufgabe\n\n## Akzeptanzkriterium\n\n## Abhängigkeiten\n',
+    TITEL_VORHABEN: 'Neues Vorhaben',
+    TITEL_KARTE: (spalte: string) => `Neue Karte in „${spalte}“`,
+    ANLEGEN_FEHLER: 'Anlegen fehlgeschlagen.',
+    TYP: 'Typ',
+    TYP_KARTE: 'Karte',
+    TYP_VORHABEN: 'Vorhaben',
+    KUERZEL: 'Kürzel',
+    KUERZEL_HINWEIS: 'Leer lassen, um es aus dem Titel abzuleiten.',
+    TITEL: 'Titel',
+  },
+
+  /** Verschieben einer oder mehrerer Karten (Issue #1654). */
+  VERSCHIEBEN: {
+    TITEL: (anzahl: number) => (anzahl === 1 ? 'Karte verschieben' : 'Karten verschieben'),
+    SUBJEKT: (anzahl: number) => (anzahl === 1 ? 'Die Karte wird' : `Die ${anzahl} Karten werden`),
+    EIGENES_BOARD: (subjekt: string) =>
+      `${subjekt} in die gewählte Spalte dieses Boards verschoben. Nummer, Vorhaben-Zuordnung, Abhängigkeiten, Kommentare und Anhänge bleiben erhalten.`,
+    FREMDES_BOARD: (subjekt: string) =>
+      `${subjekt} in das gewählte Board verschoben. Dabei gehen Vorhaben-Zuordnung und Abhängigkeiten verloren; Kommentare und Anhänge bleiben erhalten.`,
+    PROJEKT: 'Projekt',
+    ZIELPROJEKT: 'Zielprojekt',
+    BOARD: 'Board',
+    ZIELBOARD: 'Zielboard',
+    ZIELSPALTE: 'Zielspalte',
+    WAEHLEN: '(wählen)',
+    VERSCHIEBEN: 'Verschieben',
+  },
+
+  /** Herkunftsbaum eines Vorhabens (Issue #1654); HAKEN nennt den Inhalt der Hakenspalte. */
+  BAUM: {
+    LEER: 'Diesem Vorhaben sind noch keine Karten zugeordnet.',
+    HERKUNFT: 'Herkunft',
+    VORHABEN: 'Vorhaben',
+    BLOCKIERT: 'blockiert',
+    KETTE_UNTERBROCHEN: 'Herkunftskette unterbrochen',
+    HERKUNFT_EXTERN: (nummer: number | null) => `Herkunft extern: #${nummer}`,
+    EXTERN: (nummer: number) => `⇠ extern #${nummer}`,
+    SPRINGEN_ARIA: (nummer: number) => `Zur Karte #${nummer} springen`,
+    HAKEN: {
+      erledigt: 'erledigt',
+      inReview: 'in review',
+      abgearbeitet: 'abgearbeitet',
+      laden: 'Kit-Namen werden geladen',
+      fehler: 'Kit-Namen nicht ladbar',
+    },
+  },
+
+  /** Abnahme der Szenarien: Dialog und Ergebnis-Kommentar (Issue #1654). */
+  ABNAHME: {
+    KOMMENTAR_KOPF: '## Abnahme der Szenarien',
+    ERGEBNIS_ALLE: (anzahl: number) => `Ergebnis: alle ${anzahl} Szenarien okay.`,
+    ERGEBNIS: (teile: string) => `Ergebnis: ${teile}.`,
+    OKAY_VON: (okay: number, anzahl: number) => `${okay} von ${anzahl} okay`,
+    NICHT_OKAY_LISTE: (liste: string) => `nicht okay: ${liste}`,
+    OFFEN_ANZAHL: (anzahl: number) => `offen: ${anzahl}`,
+    NOCH_OFFEN: (anzahl: number) => `noch offen: ${anzahl}`,
+    OFFEN: 'offen',
+    OKAY: 'okay',
+    NICHT_OKAY: 'nicht okay',
+    ALLE_OKAY: 'Alle Szenarien okay',
+    TITEL: (titel: string) => `Abnahme: ${titel}`,
+    VERMERK_ARIA: (nummer: number) => `Vermerk zu Szenario ${nummer}`,
+    NOTIZ: 'Notiz (optional)',
+    SCHREIBEN: 'Ergebnis an den Fachplan schreiben',
+    SCHREIBEN_FEHLER: 'Das Ergebnis konnte nicht geschrieben werden.',
+    VERWERFEN_TITEL: 'Vermerke verwerfen?',
+    VERWERFEN_TEXT: 'Die Vermerke dieser Abnahme gehen verloren.',
+    VERWERFEN: 'Verwerfen',
+  },
+
+  /** Kartensuche der Kopfzeile (Issue #1654). */
+  SUCHE: {
+    BEARBEITUNGSDATEN_FEHLER: 'Die Bearbeitungsdaten konnten nicht vollständig geladen werden — die Karte bleibt lesend.',
+    KEINE_KARTE: (nummer: number) => `Keine Karte mit der Nummer ${nummer} gefunden.`,
+    FEHLER: 'Die Suche ist fehlgeschlagen.',
+    NICHT_MEHR_AUFFINDBAR: 'Die Karte ist nicht mehr auffindbar.',
+    STAND_FEHLER: 'Der aktuelle Stand konnte nicht geladen werden.',
+    NUMMER_EINGEBEN: 'Bitte eine Kartennummer eingeben, z. B. 345 oder #345.',
+    KARTE_SUCHEN: 'Karte suchen',
+    PLATZHALTER: 'Karte #Nummer',
+    NUMMER_SUCHEN: 'Kartennummer suchen',
+    LAEUFT: 'Suche läuft',
+    TREFFER_WAEHLEN: 'Treffer auswählen',
+  },
+
+  /** Kürzel-Schild eines Vorhabens (Issue #1654). */
+  VORHABEN_SCHILD: {
+    ARIA: (kuerzel: string) => `Vorhaben ${kuerzel}`,
+    OEFFNEN_ARIA: (kuerzel: string) => `Vorhaben ${kuerzel} öffnen`,
+  },
 } as const
 
 /** Weitet die Literale des deutschen Wörterbuchs zu `string`, rekursiv und durch Funktionen hindurch. */

@@ -19,9 +19,7 @@ import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 import { AssigneeSection, LabelSection, parseDependencyInput } from './CardDetailModal'
 import { dialogTitleSx } from './dialogChromeSx'
-import { useSprache } from '../i18n/SpracheContext'
-
-const BODY_TEMPLATE = '## Kontext\n\n## Aufgabe\n\n## Akzeptanzkriterium\n\n## Abhängigkeiten\n'
+import { useSprache, useT } from '../i18n/SpracheContext'
 
 /** Feldschlüssel, für die dieser Dialog ein eigenes Feld hat und die Meldung dort anzeigt. */
 const GEBUNDENE_FELDER = new Set(['title', 'shortcode', 'dependencies'])
@@ -82,9 +80,12 @@ export function NewCardModal({
   boardLabels = [],
 }: Readonly<Props>) {
   const { sprache } = useSprache()
+  const t = useT()
+  // Die Vorlage nennt die Abschnitte des Kits in der Sprache der Oberfläche (Issue #1654).
+  const bodyTemplate = t.NEUE_KARTE.VORLAGE
   const [type, setType] = useState<CardType>(epicOnly ? 'EPIC' : 'CARD')
   const [title, setTitle] = useState('')
-  const [body, setBody] = useState(BODY_TEMPLATE)
+  const [body, setBody] = useState(bodyTemplate)
   const bodyShortcut = useCheckboxShortcut(setBody)
   const [parentId, setParentId] = useState<number | null>(null)
   const [shortcode, setShortcode] = useState('')
@@ -103,7 +104,7 @@ export function NewCardModal({
     if (!open) return
     setType(epicOnly ? 'EPIC' : 'CARD')
     setTitle(initialValues?.title ?? '')
-    setBody(initialValues?.description ?? BODY_TEMPLATE)
+    setBody(initialValues?.description ?? bodyTemplate)
     setParentId(initialValues?.parentId ?? null)
     setShortcode('')
     setDepsInput('')
@@ -119,7 +120,7 @@ export function NewCardModal({
     // Beim ersten Effektlauf ist der Input wegen der Dialog-Transition ggf. noch nicht gemountet
     // (current === null); bei späteren Läufen (z. B. geänderte initialValues) greift die Selektion.
     titleInputRef.current?.select()
-  }, [open, epicOnly, initialValues])
+  }, [open, epicOnly, initialValues, bodyTemplate])
 
   // Die Laengensperre haengt am selben Praedikat wie die Feldmeldung: Was rot markiert ist,
   // laesst sich nicht abschicken (Issue #572).
@@ -128,7 +129,7 @@ export function NewCardModal({
   // Fälligkeit, Zuständige und Labels.
   const fullCard = type === 'CARD'
 
-  const dialogTitle = type === 'EPIC' ? 'Neues Vorhaben' : `Neue Karte in „${columnName}“`
+  const dialogTitle = type === 'EPIC' ? t.NEUE_KARTE.TITEL_VORHABEN : t.NEUE_KARTE.TITEL_KARTE(columnName)
 
   /**
    * Verteilt einen Fehlschlag des Anlegens auf die Anzeigeorte des Dialogs: Feldmeldungen zu
@@ -144,7 +145,7 @@ export function NewCardModal({
     const ungebunden = Object.entries(felder)
       .filter(([key]) => !GEBUNDENE_FELDER.has(key))
       .map(([, message]) => message)
-    setFormError([apiErrorMessage(error, 'Anlegen fehlgeschlagen.'), ...ungebunden].join(' '))
+    setFormError([apiErrorMessage(error, t.NEUE_KARTE.ANLEGEN_FEHLER), ...ungebunden].join(' '))
   }
 
   const handleCreate = async () => {
@@ -160,7 +161,7 @@ export function NewCardModal({
     if (fullCard) {
       const parsed = parseDependencyInput(depsInput)
       if (!parsed.valid) {
-        setDepsError('Nur positive Nummern, kommagetrennt (z. B. 12, 34).')
+        setDepsError(t.KARTE.ABHAENGIGKEITEN_UNGUELTIG)
         return
       }
       dependencies = parsed.deps
@@ -222,14 +223,14 @@ export function NewCardModal({
           {!epicOnly && (
             <TextField
               select
-              label="Typ"
+              label={t.NEUE_KARTE.TYP}
               value={type}
               onChange={(e) => setType(e.target.value as CardType)}
-              slotProps={{ htmlInput: { 'aria-label': 'Typ' }, select: { native: true } }}
+              slotProps={{ htmlInput: { 'aria-label': t.NEUE_KARTE.TYP }, select: { native: true } }}
               fullWidth
             >
-              <option value="CARD">Karte</option>
-              <option value="EPIC">Vorhaben</option>
+              <option value="CARD">{t.NEUE_KARTE.TYP_KARTE}</option>
+              <option value="EPIC">{t.NEUE_KARTE.TYP_VORHABEN}</option>
             </TextField>
           )}
 
@@ -281,7 +282,7 @@ export function NewCardModal({
               {/* Das Vorhaben bleibt bewusst schlank: nur die bisherigen Felder, keine
                   Zuständigen/Labels/Fälligkeit/Abhängigkeiten. */}
               <TextField
-                label="Kürzel (optional)"
+                label={t.KARTE.KUERZEL_OPTIONAL}
                 value={shortcode}
                 onChange={(e) => {
                   setShortcode(e.target.value)
@@ -289,13 +290,13 @@ export function NewCardModal({
                 }}
                 placeholder={epicShortcode(title)}
                 error={shortcodeError != null}
-                helperText={shortcodeError ?? 'Leer lassen, um es aus dem Titel abzuleiten.'}
-                slotProps={{ htmlInput: { maxLength: 16, 'aria-label': 'Kürzel' } }}
+                helperText={shortcodeError ?? t.NEUE_KARTE.KUERZEL_HINWEIS}
+                slotProps={{ htmlInput: { maxLength: 16, 'aria-label': t.NEUE_KARTE.KUERZEL } }}
                 fullWidth
               />
 
               <TextField
-                label="Titel"
+                label={t.NEUE_KARTE.TITEL}
                 value={title}
                 onChange={(e) => {
                   setTitle(e.target.value)
@@ -307,11 +308,11 @@ export function NewCardModal({
                 inputRef={titleInputRef}
                 error={titleError != null}
                 helperText={titleError ?? undefined}
-                slotProps={{ htmlInput: { maxLength: 300, 'aria-label': 'Titel' } }}
+                slotProps={{ htmlInput: { maxLength: 300, 'aria-label': t.NEUE_KARTE.TITEL } }}
                 onKeyDown={handleTitleKeyDown}
               />
               <TextField
-                label="Beschreibung"
+                label={t.KARTE.BESCHREIBUNG}
                 value={body}
                 onChange={bodyShortcut.onChange}
                 onKeyDown={bodyShortcut.onKeyDown}
@@ -320,7 +321,7 @@ export function NewCardModal({
                 fullWidth
                 error={isTooLong(body)}
                 helperText={isTooLong(body) ? tooLongMessage(body.length, sprache) : undefined}
-                slotProps={{ htmlInput: { 'aria-label': 'Beschreibung' } }}
+                slotProps={{ htmlInput: { 'aria-label': t.KARTE.BESCHREIBUNG } }}
                 sx={{ '& textarea': { fontFamily: 'monospace', resize: 'vertical' } }}
               />
             </>
@@ -328,9 +329,9 @@ export function NewCardModal({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Abbrechen</Button>
+        <Button onClick={onClose}>{t.ALLGEMEIN.ABBRECHEN}</Button>
         <Button variant="contained" onClick={() => void handleCreate()} disabled={!canSubmit}>
-          Anlegen
+          {t.ALLGEMEIN.ANLEGEN}
         </Button>
       </DialogActions>
     </Dialog>

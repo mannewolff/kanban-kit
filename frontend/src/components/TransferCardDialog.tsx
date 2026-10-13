@@ -12,6 +12,7 @@ import { boardsApi, type Board } from '../api/boards'
 import { cardsApi } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
+import { useT } from '../i18n/SpracheContext'
 import { dialogTitleSx } from './dialogChromeSx'
 
 interface Props {
@@ -60,6 +61,7 @@ export function TransferCardDialog({
   onClose,
   onTransferred,
 }: Readonly<Props>) {
+  const t = useT()
   const [projects, setProjects] = useState<Project[]>([])
   const [boards, setBoards] = useState<Board[]>([])
   const [projectId, setProjectId] = useState<number | ''>(currentProjectId)
@@ -99,7 +101,7 @@ export function TransferCardDialog({
   // ist der Umzug ein Spaltenwechsel und lässt alles stehen. Solange kein Board gewählt ist, steht
   // die Warnung — sie ist die vorsichtigere der beiden Aussagen.
   const aufEigenemBoard = boardId === currentBoardId
-  const subjekt = cardIds.length === 1 ? 'Die Karte wird' : `Die ${cardIds.length} Karten werden`
+  const subjekt = t.VERSCHIEBEN.SUBJEKT(cardIds.length)
 
   const submit = async () => {
     setBusy(true)
@@ -112,7 +114,7 @@ export function TransferCardDialog({
       await cardsApi.bulkTransfer(cardIds, zielBoard, zielSpalte)
       onTransferred(zielBoard, zielSpalte)
     } catch (e) {
-      setError(apiErrorMessage(e, 'Verschieben fehlgeschlagen.'))
+      setError(apiErrorMessage(e, t.BOARD.VERSCHIEBEN_FEHLER))
       setBusy(false)
     }
   }
@@ -122,21 +124,13 @@ export function TransferCardDialog({
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={dialogTitleSx}>
-        {cardIds.length === 1 ? 'Karte verschieben' : 'Karten verschieben'}
+        {t.VERSCHIEBEN.TITEL(cardIds.length)}
       </DialogTitle>
       <DialogContent>
         <DialogContentText sx={{ mb: 2 }}>
-          {aufEigenemBoard ? (
-            <>
-              {subjekt} in die gewählte Spalte dieses Boards verschoben. Nummer,
-              Vorhaben-Zuordnung, Abhängigkeiten, Kommentare und Anhänge bleiben erhalten.
-            </>
-          ) : (
-            <>
-              {subjekt} in das gewählte Board verschoben. Dabei gehen Vorhaben-Zuordnung und
-              Abhängigkeiten verloren; Kommentare und Anhänge bleiben erhalten.
-            </>
-          )}
+          {aufEigenemBoard
+            ? t.VERSCHIEBEN.EIGENES_BOARD(subjekt)
+            : t.VERSCHIEBEN.FREMDES_BOARD(subjekt)}
         </DialogContentText>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -146,12 +140,12 @@ export function TransferCardDialog({
         <Stack spacing={2} sx={{ mt: 1 }}>
           <TextField
             {...nativeSelect}
-            label="Projekt"
+            label={t.VERSCHIEBEN.PROJEKT}
             value={projectId}
             onChange={(e) => setProjectId(e.target.value === '' ? '' : Number(e.target.value))}
-            slotProps={{ htmlInput: { 'aria-label': 'Zielprojekt' } }}
+            slotProps={{ htmlInput: { 'aria-label': t.VERSCHIEBEN.ZIELPROJEKT } }}
           >
-            <option value="">(wählen)</option>
+            <option value="">{t.VERSCHIEBEN.WAEHLEN}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -160,7 +154,7 @@ export function TransferCardDialog({
           </TextField>
           <TextField
             {...nativeSelect}
-            label="Board"
+            label={t.VERSCHIEBEN.BOARD}
             value={boardId}
             disabled={projectId === ''}
             onChange={(e) => {
@@ -172,9 +166,9 @@ export function TransferCardDialog({
               // zuvor manuell gewählte Spalte nicht auf das nächste Board durchschlägt.
               setColumnId(target ? spalteAnPosition(target, sourceColumnPosition) : '')
             }}
-            slotProps={{ htmlInput: { 'aria-label': 'Zielboard' } }}
+            slotProps={{ htmlInput: { 'aria-label': t.VERSCHIEBEN.ZIELBOARD } }}
           >
-            <option value="">(wählen)</option>
+            <option value="">{t.VERSCHIEBEN.WAEHLEN}</option>
             {boards.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
@@ -183,13 +177,13 @@ export function TransferCardDialog({
           </TextField>
           <TextField
             {...nativeSelect}
-            label="Spalte"
+            label={t.BOARD.SPALTE}
             value={columnId}
             disabled={boardId === ''}
             onChange={(e) => setColumnId(e.target.value === '' ? '' : Number(e.target.value))}
-            slotProps={{ htmlInput: { 'aria-label': 'Zielspalte' } }}
+            slotProps={{ htmlInput: { 'aria-label': t.VERSCHIEBEN.ZIELSPALTE } }}
           >
-            <option value="">(wählen)</option>
+            <option value="">{t.VERSCHIEBEN.WAEHLEN}</option>
             {columns.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -199,13 +193,13 @@ export function TransferCardDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Abbrechen</Button>
+        <Button onClick={onClose}>{t.ALLGEMEIN.ABBRECHEN}</Button>
         <Button
           variant="contained"
           disabled={busy || boardId === '' || columnId === ''}
           onClick={() => void submit()}
         >
-          Verschieben
+          {t.VERSCHIEBEN.VERSCHIEBEN}
         </Button>
       </DialogActions>
     </Dialog>

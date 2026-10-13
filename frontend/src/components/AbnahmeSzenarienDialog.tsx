@@ -16,13 +16,15 @@ import { apiErrorMessage } from '../api/client'
 import {
   abnahmeKommentar,
   abnahmeStand,
+  urteilText,
   type AbnahmeStand,
   type Szenario,
   type Vermerk,
 } from '../lib/abnahmeSzenarien'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { dialogTitleSx } from './dialogChromeSx'
-import { useSprache } from '../i18n/SpracheContext'
+import type { Woerterbuch } from '../i18n/de'
+import { useSprache, useT } from '../i18n/SpracheContext'
 
 const TITEL_ID = 'abnahme-szenarien-titel'
 const RUECKFRAGE_TITEL_ID = 'abnahme-verwerfen-titel'
@@ -42,14 +44,14 @@ interface Props {
 }
 
 /** Die Zusammenfassung unter der Liste (AK 3): okay, nicht okay mit Nummer, noch offen. */
-function zusammenfassung(anzahl: number, stand: AbnahmeStand): string {
-  if (stand.okay === anzahl) return 'Alle Szenarien okay'
-  const teile = [`${stand.okay} von ${anzahl} okay`]
+function zusammenfassung(anzahl: number, stand: AbnahmeStand, t: Woerterbuch): string {
+  if (stand.okay === anzahl) return t.ABNAHME.ALLE_OKAY
+  const teile = [t.ABNAHME.OKAY_VON(stand.okay, anzahl)]
   if (stand.nichtOkay > 0) {
     const liste = stand.nichtOkaySzenarien.map(({ nummer, name }) => `${nummer}. ${name}`).join(', ')
-    teile.push(`nicht okay: ${liste}`)
+    teile.push(t.ABNAHME.NICHT_OKAY_LISTE(liste))
   }
-  if (stand.offen > 0) teile.push(`noch offen: ${stand.offen}`)
+  if (stand.offen > 0) teile.push(t.ABNAHME.NOCH_OFFEN(stand.offen))
   return teile.join(' — ')
 }
 
@@ -72,13 +74,14 @@ function Schritt({ text }: Readonly<{ text: string }>) {
  */
 export function AbnahmeSzenarienDialog({ open, titel, szenarien, onClose, onAbschicken }: Readonly<Props>) {
   const { sprache } = useSprache()
+  const t = useT()
   const [vermerke, setVermerke] = useState<(Vermerk | undefined)[]>([])
   const [sendet, setSendet] = useState(false)
   const [fehler, setFehler] = useState<string | null>(null)
   const [rueckfrage, setRueckfrage] = useState(false)
 
   const stand = abnahmeStand(szenarien, vermerke)
-  const text = abnahmeKommentar(szenarien, vermerke)
+  const text = abnahmeKommentar(szenarien, vermerke, sprache)
   const zuLang = isTooLong(text)
   const vollstaendig = stand.offen === 0
 
@@ -110,7 +113,7 @@ export function AbnahmeSzenarienDialog({ open, titel, szenarien, onClose, onAbsc
       await onAbschicken(text)
       schliessen()
     } catch (e) {
-      setFehler(apiErrorMessage(e, 'Das Ergebnis konnte nicht geschrieben werden.'))
+      setFehler(apiErrorMessage(e, t.ABNAHME.SCHREIBEN_FEHLER))
     } finally {
       setSendet(false)
     }
@@ -120,7 +123,7 @@ export function AbnahmeSzenarienDialog({ open, titel, szenarien, onClose, onAbsc
     <>
       <Dialog open={open} onClose={schliessenAnfragen} maxWidth="md" fullWidth aria-labelledby={TITEL_ID}>
         <DialogTitle id={TITEL_ID} sx={dialogTitleSx}>
-          Abnahme: {titel}
+          {t.ABNAHME.TITEL(titel)}
         </DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 2 }}>
@@ -147,18 +150,18 @@ export function AbnahmeSzenarienDialog({ open, titel, szenarien, onClose, onAbsc
                     onChange={(_, urteil: Vermerk['urteil'] | null) => {
                       if (urteil) setzeVermerk(index, { urteil })
                     }}
-                    aria-label={`Vermerk zu Szenario ${nummer}`}
+                    aria-label={t.ABNAHME.VERMERK_ARIA(nummer)}
                   >
                     <ToggleButton value="okay" color="success">
-                      okay
+                      {urteilText('okay', t)}
                     </ToggleButton>
                     <ToggleButton value="nicht okay" color="error">
-                      nicht okay
+                      {urteilText('nicht okay', t)}
                     </ToggleButton>
                   </ToggleButtonGroup>
                   {vermerk?.urteil === 'nicht okay' && (
                     <TextField
-                      label="Notiz (optional)"
+                      label={t.ABNAHME.NOTIZ}
                       size="small"
                       fullWidth
                       value={vermerk.notiz}
@@ -171,7 +174,7 @@ export function AbnahmeSzenarienDialog({ open, titel, szenarien, onClose, onAbsc
               )
             })}
             <Typography role="status" sx={{ fontWeight: 'fontWeightBold' }}>
-              {zusammenfassung(szenarien.length, stand)}
+              {zusammenfassung(szenarien.length, stand, t)}
             </Typography>
             {zuLang && (
               <Typography variant="body2" color="error">
@@ -183,10 +186,10 @@ export function AbnahmeSzenarienDialog({ open, titel, szenarien, onClose, onAbsc
         </DialogContent>
         <DialogActions>
           <Button onClick={schliessenAnfragen} disabled={sendet}>
-            Schließen
+            {t.ALLGEMEIN.SCHLIESSEN}
           </Button>
           <Button variant="contained" onClick={() => void abschicken()} disabled={!vollstaendig || zuLang || sendet}>
-            Ergebnis an den Fachplan schreiben
+            {t.ABNAHME.SCHREIBEN}
           </Button>
         </DialogActions>
       </Dialog>
@@ -199,19 +202,19 @@ export function AbnahmeSzenarienDialog({ open, titel, szenarien, onClose, onAbsc
         aria-describedby={RUECKFRAGE_HINWEIS_ID}
       >
         <DialogTitle id={RUECKFRAGE_TITEL_ID} sx={dialogTitleSx}>
-          Vermerke verwerfen?
+          {t.ABNAHME.VERWERFEN_TITEL}
         </DialogTitle>
         <DialogContent>
           <DialogContentText id={RUECKFRAGE_HINWEIS_ID} sx={{ mt: 2 }}>
-            Die Vermerke dieser Abnahme gehen verloren.
+            {t.ABNAHME.VERWERFEN_TEXT}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRueckfrage(false)} autoFocus>
-            Abbrechen
+            {t.ALLGEMEIN.ABBRECHEN}
           </Button>
           <Button variant="contained" color="error" onClick={schliessen}>
-            Verwerfen
+            {t.ABNAHME.VERWERFEN}
           </Button>
         </DialogActions>
       </Dialog>

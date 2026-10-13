@@ -1,3 +1,5 @@
+import type { Woerterbuch } from '../i18n/de'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { SZENARIEN_ABSCHNITT, SZENARIO_SCHRITT, passe } from './kitWortformen'
 
 /**
@@ -109,28 +111,39 @@ const maskiert = (text: string) => text.replace(/[\\*_`[\]|]/g, '\\$&')
 /** Macht eine Notiz einzeilig (E9). */
 const einzeilig = (text: string) => text.trim().replace(/\s*\n\s*/g, ' ')
 
-function ergebnisZeile(anzahl: number, stand: AbnahmeStand): string {
-  if (stand.okay === anzahl) return `Ergebnis: alle ${anzahl} Szenarien okay.`
-  const teile = [`${stand.okay} von ${anzahl} okay`]
+function ergebnisZeile(anzahl: number, stand: AbnahmeStand, t: Woerterbuch): string {
+  if (stand.okay === anzahl) return t.ABNAHME.ERGEBNIS_ALLE(anzahl)
+  const teile = [t.ABNAHME.OKAY_VON(stand.okay, anzahl)]
   if (stand.nichtOkay > 0) {
     const liste = stand.nichtOkaySzenarien.map(({ nummer, name }) => `${nummer}. ${maskiert(name)}`).join(', ')
-    teile.push(`nicht okay: ${liste}`)
+    teile.push(t.ABNAHME.NICHT_OKAY_LISTE(liste))
   }
-  if (stand.offen > 0) teile.push(`offen: ${stand.offen}`)
-  return `Ergebnis: ${teile.join(', ')}.`
+  if (stand.offen > 0) teile.push(t.ABNAHME.OFFEN_ANZAHL(stand.offen))
+  return t.ABNAHME.ERGEBNIS(teile.join(', '))
 }
 
-function listenZeile(nummer: number, szenario: Szenario, vermerk: Vermerk | undefined): string {
+/** Das angezeigte Urteil; der Vermerk selbst traegt den sprachneutralen Wert. */
+export function urteilText(urteil: Vermerk['urteil'], t: Woerterbuch): string {
+  return urteil === 'okay' ? t.ABNAHME.OKAY : t.ABNAHME.NICHT_OKAY
+}
+
+function listenZeile(nummer: number, szenario: Szenario, vermerk: Vermerk | undefined, t: Woerterbuch): string {
   const kopf = `${nummer}. **${maskiert(szenario.name)}** — `
-  if (!vermerk) return `${kopf}offen`
+  if (!vermerk) return `${kopf}${t.ABNAHME.OFFEN}`
   const notiz = vermerk.urteil === 'nicht okay' ? einzeilig(vermerk.notiz) : ''
-  return notiz ? `${kopf}${vermerk.urteil}: ${maskiert(notiz)}` : `${kopf}${vermerk.urteil}`
+  const urteil = urteilText(vermerk.urteil, t)
+  return notiz ? `${kopf}${urteil}: ${maskiert(notiz)}` : `${kopf}${urteil}`
 }
 
-/** Baut den Ergebnis-Kommentar fuer den Fachplan (E10). */
-export function abnahmeKommentar(szenarien: Szenario[], vermerke: (Vermerk | undefined)[]): string {
-  const liste = szenarien.map((szenario, index) => listenZeile(index + 1, szenario, vermerke[index]))
-  return ['## Abnahme der Szenarien', '', ergebnisZeile(szenarien.length, abnahmeStand(szenarien, vermerke)), '', ...liste].join(
+/** Baut den Ergebnis-Kommentar fuer den Fachplan (E10) in der Sprache der Oberflaeche, Vorgabe Deutsch. */
+export function abnahmeKommentar(
+  szenarien: Szenario[],
+  vermerke: (Vermerk | undefined)[],
+  sprache: Sprache = 'de',
+): string {
+  const t = woerterbuch(sprache)
+  const liste = szenarien.map((szenario, index) => listenZeile(index + 1, szenario, vermerke[index], t))
+  return [t.ABNAHME.KOMMENTAR_KOPF, '', ergebnisZeile(szenarien.length, abnahmeStand(szenarien, vermerke), t), '', ...liste].join(
     '\n',
   )
 }

@@ -17,6 +17,7 @@ import { cardLocationLabel, type CardLocation } from '../lib/cardLocation'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { useProjectRole } from '../lib/useProjectRole'
 import { NUT_SX, RAND, RAND_STARK, TEXT_SCHWACH, ZAHL } from '../theme'
+import { useT } from '../i18n/SpracheContext'
 import { useSnackbar } from './SnackbarProvider'
 
 /**
@@ -121,6 +122,7 @@ export interface CardNumberSearchProps {
  */
 export function CardNumberSearch({ aktuellesProjekt = null }: Readonly<CardNumberSearchProps>) {
   const notify = useSnackbar()
+  const t = useT()
   const [query, setQuery] = useState('')
   // Auf schmalen Breiten ist das Feld zu einem Icon eingeklappt (wie der Benutzername in der
   // Kopfzeile); ab `sm` ist es unabhängig davon immer sichtbar.
@@ -184,10 +186,7 @@ export function CardNumberSearch({ aktuellesProjekt = null }: Readonly<CardNumbe
     const fail = () => {
       if (!reported) {
         reported = true
-        notify(
-          'Die Bearbeitungsdaten konnten nicht vollständig geladen werden — die Karte bleibt lesend.',
-          'error',
-        )
+        notify(t.SUCHE.BEARBEITUNGSDATEN_FEHLER, 'error')
       }
       settle({ failed: true })
     }
@@ -210,14 +209,14 @@ export function CardNumberSearch({ aktuellesProjekt = null }: Readonly<CardNumbe
     return () => {
       active = false
     }
-  }, [openedCardId, openedProjectId, openedBoardId, notify])
+  }, [openedCardId, openedProjectId, openedBoardId, notify, t])
 
   const run = async (number: number) => {
     setBusy(true)
     try {
       const hits = await cardsApi.searchByNumber(number)
       if (hits.length === 0) {
-        notify(`Keine Karte mit der Nummer ${number} gefunden.`, 'warning')
+        notify(t.SUCHE.KEINE_KARTE(number), 'warning')
         return
       }
       setQuery('')
@@ -235,7 +234,7 @@ export function CardNumberSearch({ aktuellesProjekt = null }: Readonly<CardNumbe
       }
       setChoices(hits.map((hit) => ({ hit, number })))
     } catch {
-      notify('Die Suche ist fehlgeschlagen.', 'error')
+      notify(t.SUCHE.FEHLER, 'error')
     } finally {
       setBusy(false)
     }
@@ -252,13 +251,13 @@ export function CardNumberSearch({ aktuellesProjekt = null }: Readonly<CardNumbe
       const hits = await cardsApi.searchByNumber(opened.number)
       const again = hits.find((h) => h.card.id === opened.hit.card.id)
       if (again === undefined) {
-        notify('Die Karte ist nicht mehr auffindbar.', 'warning')
+        notify(t.SUCHE.NICHT_MEHR_AUFFINDBAR, 'warning')
         setSelected(null)
         return
       }
       setSelected({ hit: again, number: opened.number })
     } catch {
-      notify('Der aktuelle Stand konnte nicht geladen werden.', 'error')
+      notify(t.SUCHE.STAND_FEHLER, 'error')
     }
   }
 
@@ -276,7 +275,7 @@ export function CardNumberSearch({ aktuellesProjekt = null }: Readonly<CardNumbe
     }
     const number = parseCardNumber(query)
     if (number === null) {
-      notify('Bitte eine Kartennummer eingeben, z. B. 345 oder #345.', 'warning')
+      notify(t.SUCHE.NUMMER_EINGEBEN, 'warning')
       return
     }
     void run(number)
@@ -293,9 +292,9 @@ export function CardNumberSearch({ aktuellesProjekt = null }: Readonly<CardNumbe
 
   return (
     <>
-      <Tooltip title="Karte suchen">
+      <Tooltip title={t.SUCHE.KARTE_SUCHEN}>
         <IconButton
-          aria-label="Karte suchen"
+          aria-label={t.SUCHE.KARTE_SUCHEN}
           onClick={() => setExpanded(true)}
           sx={{ color: 'text.primary', display: expanded ? 'none' : { xs: 'inline-flex', sm: 'none' } }}
         >
@@ -315,16 +314,16 @@ export function CardNumberSearch({ aktuellesProjekt = null }: Readonly<CardNumbe
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Karte #Nummer"
+          placeholder={t.SUCHE.PLATZHALTER}
           slotProps={{
             // Kein `inputMode="numeric"`: Es widerspräche der zugesagten Toleranz gegenüber `#345`,
             // weil die Ziffern-Tastatur mobiler Geräte das Lattenkreuz nicht anbietet.
-            htmlInput: { 'aria-label': 'Kartennummer suchen', maxLength: 12 },
+            htmlInput: { 'aria-label': t.SUCHE.NUMMER_SUCHEN, maxLength: 12 },
             input: {
               endAdornment: (
                 <InputAdornment position="end">
                   {busy ? (
-                    <CircularProgress size={14} sx={{ color: 'text.primary' }} aria-label="Suche läuft" />
+                    <CircularProgress size={14} sx={{ color: 'text.primary' }} aria-label={t.SUCHE.LAEUFT} />
                   ) : (
                     // Tastenkappe des Kürzels, wie der Entwurf sie zeigt — mit dem echten Kürzel `/`.
                     <Box
@@ -372,7 +371,7 @@ export function CardNumberSearch({ aktuellesProjekt = null }: Readonly<CardNumbe
         anchorEl={anchor}
         open={choices !== null}
         onClose={() => setChoices(null)}
-        slotProps={{ list: { 'aria-label': 'Treffer auswählen' } }}
+        slotProps={{ list: { 'aria-label': t.SUCHE.TREFFER_WAEHLEN } }}
       >
         {choices?.map((choice) => (
           <MenuItem

@@ -1,6 +1,7 @@
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import type { SxProps, Theme } from '@mui/material/styles'
+import { useT } from '../i18n/SpracheContext'
 import { epicColor, epicShortcode, epicTint } from '../lib/epicMeta'
 
 interface Props {
@@ -22,6 +23,7 @@ const AKTIVIERUNGSTASTEN = new Set(['Enter', ' '])
 
 /** Kürzel eines Vorhabens als Schild: Kürzel mit Rand in der Vorhaben-Farbe auf ihrer Tönung. */
 export function EpicBadge({ epicId, title, shortcode, sx, onOpen }: Readonly<Props>) {
+  const t = useT()
   const hue = epicColor(epicId)
   const label = epicShortcode(title, shortcode)
   // Die Fläche trägt einen eigenen Tint-Wert (#952): `hue` ist ein Variablen-Verweis, und ein
@@ -56,7 +58,7 @@ export function EpicBadge({ epicId, title, shortcode, sx, onOpen }: Readonly<Pro
         alignItems="center"
         spacing={0.5}
         title={title}
-        aria-label={`Vorhaben ${label} öffnen`}
+        aria-label={t.VORHABEN_SCHILD.OEFFNEN_ARIA(label)}
         onClick={(e) => {
           // Ohne stopPropagation traefe derselbe Klick den Handler der umgebenden Ebene
           // (Kachel, Listenzeile) und oeffnete Vorhaben und Karte zugleich.
@@ -83,7 +85,7 @@ export function EpicBadge({ epicId, title, shortcode, sx, onOpen }: Readonly<Pro
       alignItems="center"
       spacing={0.5}
       title={title}
-      aria-label={`Vorhaben ${label}`}
+      aria-label={t.VORHABEN_SCHILD.ARIA(label)}
       sx={{ ...grund, ...sx }}
     >
       {inhalt}

@@ -6,6 +6,7 @@ import type { DerivationNode } from '../api/cards'
 import type { KitNamenZustand } from '../api/kitNamen'
 import { KIT_NAMEN } from '../test/kitNamen'
 import { MELDER } from '../theme'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 /** Das Namen-Register des Kits (Issue #1596): ohne Angabe geladen, ein Test kann es umstellen. */
 const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
@@ -789,5 +790,53 @@ describe('DerivationTree', () => {
     const abstand = (text: string) => getComputedStyle(screen.getByText(text)).marginLeft
     expect(abstand('#1')).not.toBe(abstand('#2'))
     expect(abstand('#2')).not.toBe(abstand('#3'))
+  })
+})
+
+describe('DerivationTree auf Englisch', () => {
+  beforeEach(() => {
+    kitNamen.zustand = null
+  })
+
+  it('meldet den leeren Baum auf Englisch', () => {
+    renderMitSprache(<DerivationTree rows={[]} onOpenCard={vi.fn()} />, 'en')
+    expect(screen.getByText('No cards are assigned to this epic yet.')).toBeInTheDocument()
+  })
+
+  it('beschriftet Baum, Marken und Haken auf Englisch', () => {
+    renderMitSprache(
+      <DerivationTree
+        rows={[
+          node({ number: 1, type: 'EPIC', done: true }),
+          node({ number: 2, depth: 1, inReview: true, blocked: true, broken: true }),
+          node({ number: 3, depth: 1, externalOrigin: true, derivedFrom: 40, dependencies: [2], externalDependencies: [50] }),
+          node({ number: 4, title: '[Plan] Plan', depth: 1 }),
+          node({ number: 5, depth: 2 }),
+        ]}
+        onOpenCard={vi.fn()}
+      />,
+      'en',
+    )
+    expect(screen.getByRole('tree', { name: 'Origin' })).toBeInTheDocument()
+    expect(screen.getByText('Epic')).toBeInTheDocument()
+    expect(screen.getByText('blocked')).toBeInTheDocument()
+    expect(screen.getByText('Origin chain broken')).toBeInTheDocument()
+    expect(screen.getByText('External origin: #40')).toBeInTheDocument()
+    expect(screen.getByText('⇠ external #50')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Jump to card #2' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'done' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'in review' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'processed' })).toBeInTheDocument()
+  })
+
+  it('nennt Lade- und Fehlerzustand des Namen-Registers auf Englisch', () => {
+    kitNamen.zustand = { status: 'laden' }
+    const { unmount } = renderMitSprache(<DerivationTree rows={[node({ number: 1 })]} onOpenCard={vi.fn()} />, 'en')
+    expect(screen.getByRole('img', { name: 'Loading kit names' })).toBeInTheDocument()
+    unmount()
+
+    kitNamen.zustand = { status: 'fehler', fehler: new Error('weg') }
+    renderMitSprache(<DerivationTree rows={[node({ number: 1 })]} onOpenCard={vi.fn()} />, 'en')
+    expect(screen.getByRole('img', { name: 'Kit names unavailable' })).toBeInTheDocument()
   })
 })
