@@ -8,6 +8,7 @@ import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { useT } from '../i18n/SpracheContext'
 
 /** Selbstpflege des Profils: Anzeigenamen des angemeldeten Benutzers ändern. */
 export function ProfilePage() {
@@ -15,6 +16,7 @@ export function ProfilePage() {
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [busy, setBusy] = useState(false)
   const notify = useSnackbar()
+  const t = useT()
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -22,9 +24,9 @@ export function ProfilePage() {
     try {
       await authApi.updateProfile(displayName)
       await refresh()
-      notify('Anzeigename gespeichert.', 'success')
+      notify(t.PROFIL.GESPEICHERT, 'success')
     } catch (e) {
-      notify(e instanceof ApiError ? e.message : 'Speichern fehlgeschlagen.', 'error')
+      notify(e instanceof ApiError ? e.message : t.ALLGEMEIN.SPEICHERN_FEHLGESCHLAGEN, 'error')
     } finally {
       setBusy(false)
     }
@@ -33,21 +35,21 @@ export function ProfilePage() {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Profil
+        {t.PROFIL.TITEL}
       </Typography>
       <Box component="form" onSubmit={handleSubmit} sx={{ maxWidth: 480 }}>
         <Stack spacing={2}>
-          <TextField label="E-Mail" value={user?.email ?? ''} disabled fullWidth />
+          <TextField label={t.AUTH.EMAIL} value={user?.email ?? ''} disabled fullWidth />
           <TextField
-            label="Anzeigename"
+            label={t.AUTH.ANZEIGENAME}
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             required
             fullWidth
-            slotProps={{ htmlInput: { maxLength: 120, 'aria-label': 'Anzeigename' } }}
+            slotProps={{ htmlInput: { maxLength: 120, 'aria-label': t.AUTH.ANZEIGENAME } }}
           />
           <Button type="submit" variant="contained" disabled={busy || displayName.trim().length === 0}>
-            Speichern
+            {t.ALLGEMEIN.SPEICHERN}
           </Button>
         </Stack>
       </Box>

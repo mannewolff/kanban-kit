@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1651 = 'Sprache: Projekte, Boards, Mitglieder, Rollen und Profil auf Englisch'
 const P1652 = 'Sprache: Board-Ansicht auf Englisch'
 const P1653 = 'Sprache: Karten-Detail auf Englisch'
 const P1654 = 'Sprache: Karten-Dialoge und Kartensuche auf Englisch'
@@ -36,19 +35,9 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   // #1650 — CSS-Werte, `rel` des Doku-Links und das Versionspraefix `v`
   { file: 'src/components/AppShell.tsx', rule: 'jsx', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/AppShell.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  // #1651
-  { file: 'src/pages/BoardListPage.tsx', rule: 'jsx', resolvedIn: P1651 },
-  { file: 'src/pages/BoardListPage.tsx', rule: 'literal', resolvedIn: P1651 },
-  { file: 'src/pages/ProfilePage.tsx', rule: 'jsx', resolvedIn: P1651 },
-  { file: 'src/pages/ProfilePage.tsx', rule: 'literal', resolvedIn: P1651 },
-  { file: 'src/pages/ProjectBoardsPage.tsx', rule: 'jsx', resolvedIn: P1651 },
-  { file: 'src/pages/ProjectBoardsPage.tsx', rule: 'literal', resolvedIn: P1651 },
-  { file: 'src/pages/ProjectMembersPage.tsx', rule: 'jsx', resolvedIn: P1651 },
-  { file: 'src/pages/ProjectMembersPage.tsx', rule: 'literal', resolvedIn: P1651 },
-  { file: 'src/pages/ProjectsPage.tsx', rule: 'jsx', resolvedIn: P1651 },
-  { file: 'src/pages/ProjectsPage.tsx', rule: 'literal', resolvedIn: P1651 },
-  { file: 'src/pages/RolesPage.tsx', rule: 'jsx', resolvedIn: P1651 },
-  { file: 'src/pages/RolesPage.tsx', rule: 'literal', resolvedIn: P1651 },
+  // #1651 — CSS-Werte der Liste und die Plattform-Rollen USER/ADMIN (Schluessel, in beiden Sprachen gleich)
+  { file: 'src/pages/BoardListPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/pages/RolesPage.tsx', rule: 'jsx', resolvedIn: KEIN_ANZEIGETEXT },
   // #1652
   { file: 'src/components/BoardView.tsx', rule: 'jsx', resolvedIn: P1652 },
   { file: 'src/components/BoardView.tsx', rule: 'literal', resolvedIn: P1652 },

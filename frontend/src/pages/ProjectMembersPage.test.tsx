@@ -6,6 +6,7 @@ import type { Member, MembersApi } from '../api/members'
 import { projectsApi } from '../api/projects'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { ProjectMembersPage } from './ProjectMembersPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn(), transferOwner: vi.fn() } }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: { userId: 1 } }) }))
@@ -509,5 +510,101 @@ describe('ProjectMembersPage', () => {
 
     expect(await screen.findByRole('link', { name: 'Mein Projekt' })).toHaveAttribute('href', '/projects/5')
     expect(await screen.findByLabelText(/E-Mail einladen/)).toBeInTheDocument()
+  })
+})
+
+describe('ProjectMembersPage auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    editMode.value = true
+  })
+
+  const renderEn = (api: MembersApi, role: string) =>
+    renderMitSprache(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/projects/5/members']}>
+          <Routes>
+            <Route
+              path="/projects/:projectId/members"
+              element={<ProjectMembersPage api={api} loadRole={() => Promise.resolve(role)} />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+      'en',
+    )
+
+  it('beschriftet Tabelle, Einladung und Aktionen auf Englisch', async () => {
+    renderEn(makeApi(), 'OWNER')
+    expect(await screen.findByText('Olga Owner')).toBeInTheDocument()
+    expect(screen.getByText('Actions')).toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Invite user' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Email to invite')).toBeInTheDocument()
+    expect(screen.getByLabelText('Invitation role')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Invite' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Role of Mika Member')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Mika Member' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Make Mika Member owner' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Roles & permissions' })).toBeInTheDocument()
+  })
+
+  it('zeigt Namensbearbeitung und Übertragungsdialog auf Englisch', async () => {
+    mProjects.transferOwner.mockRejectedValue(new ApiError(500, 'Boom'))
+    renderEn(makeApi(), 'OWNER')
+    await screen.findByText('Mika Member')
+
+    fireEvent.click(screen.getByLabelText('Edit name of Mika Member'))
+    expect(screen.getByLabelText('Display name of member@x.de')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save name' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel editing' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Make Mika Member owner' }))
+    expect(await screen.findByText('Make owner?')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '“Mika Member” becomes the owner of this project. You lose your owner rights and are downgraded to admin.',
+      ),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Transfer' }))
+    expect(await screen.findByText('Changing the owner failed.')).toBeInTheDocument()
+  })
+
+  it('meldet Einladung und Fehler auf Englisch', async () => {
+    const api = makeApi({
+      invite: vi
+        .fn()
+        .mockResolvedValueOnce({ status: 'invited' })
+        .mockResolvedValueOnce({ status: 'added' })
+        .mockRejectedValueOnce(new ApiError(422, 'Unprocessable'))
+        .mockRejectedValueOnce(new ApiError(500, 'Boom')),
+      changeRole: vi.fn().mockRejectedValue(new ApiError(409, 'Conflict')),
+      remove: vi.fn().mockRejectedValue(new ApiError(500, 'Boom')),
+    })
+    renderEn(api, 'OWNER')
+    await screen.findByText('Mika Member')
+    const einladen = async (text: string) => {
+      fireEvent.change(screen.getByLabelText('Email to invite'), { target: { value: 'neu@x.de' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Invite' }))
+      expect(await screen.findByText(text)).toBeInTheDocument()
+    }
+    await einladen('Invitation sent.')
+    await einladen('User was added.')
+    await einladen('User has not been approved by the admin yet.')
+    await einladen('Invitation failed.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Mika Member' }))
+    expect(await screen.findByText('Removing failed.')).toBeInTheDocument()
+  })
+
+  it('meldet eine ungültige Projekt-ID auf Englisch', () => {
+    renderMitSprache(
+      <MemoryRouter initialEntries={['/projects/abc/members']}>
+        <Routes>
+          <Route path="/projects/:projectId/members" element={<ProjectMembersPage api={makeApi()} />} />
+        </Routes>
+      </MemoryRouter>,
+      'en',
+    )
+    expect(screen.getByText('Invalid project ID.')).toBeInTheDocument()
   })
 })

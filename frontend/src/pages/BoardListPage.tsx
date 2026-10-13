@@ -39,7 +39,6 @@ import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
-import { kartenText } from '../lib/verbrauchZeitraum'
 import {
   ETIKETT,
   GRUND_TIEF,
@@ -63,17 +62,18 @@ import {
 } from '../theme'
 import { epicColor } from '../lib/epicMeta'
 import { ablageflaecheSx, PLATZHALTER_SX } from '../components/boardSurfaceSx'
-import { useSprache } from '../i18n/SpracheContext'
+import { useSprache, useT } from '../i18n/SpracheContext'
 
 const ARCHIVED = 'archived'
 type FilterKey = number | typeof ARCHIVED
 
-const COLUMN_META: Record<ColumnKey, { label: string; sx: SxProps<Theme> }> = {
-  number: { label: 'Nr', sx: { flexShrink: 0, width: 48 } },
-  status: { label: 'Status', sx: { flexShrink: 0, width: 108 } },
-  epic: { label: 'Vorhaben', sx: { flexShrink: 0, width: 76 } },
-  title: { label: 'Titel', sx: { flex: 1, minWidth: 0 } },
-  excerpt: { label: 'Beschreibung', sx: { flex: '0 0 30%', minWidth: 0 } },
+/** Breiten der Spalten; die Beschriftungen stehen im Wörterbuch unter `LISTE.SPALTE`. */
+const COLUMN_META: Record<ColumnKey, { sx: SxProps<Theme> }> = {
+  number: { sx: { flexShrink: 0, width: 48 } },
+  status: { sx: { flexShrink: 0, width: 108 } },
+  epic: { sx: { flexShrink: 0, width: 76 } },
+  title: { sx: { flex: 1, minWidth: 0 } },
+  excerpt: { sx: { flex: '0 0 30%', minWidth: 0 } },
 }
 const DEFAULT_ORDER: ColumnKey[] = ['number', 'status', 'epic', 'title', 'excerpt']
 const ALL_KEYS = new Set<ColumnKey>(DEFAULT_ORDER)
@@ -175,12 +175,13 @@ function LabelFilterMenue({
   gewaehlt,
   onToggle,
 }: Readonly<{ labels: Label[]; gewaehlt: Set<number>; onToggle: (labelId: number) => void }>) {
+  const t = useT()
   const [anker, setAnker] = useState<HTMLElement | null>(null)
   return (
     <Box sx={CHIP_GRUPPE_SX}>
       <Chip
-        label={gewaehlt.size === 0 ? 'Labels' : `Labels · ${gewaehlt.size}`}
-        aria-label="Label-Filter"
+        label={gewaehlt.size === 0 ? t.LISTE.LABELS : t.LISTE.LABELS_ZAHL(gewaehlt.size)}
+        aria-label={t.LISTE.LABEL_FILTER}
         aria-haspopup="menu"
         aria-expanded={anker !== null}
         onClick={(e) => setAnker(e.currentTarget)}
@@ -196,7 +197,7 @@ function LabelFilterMenue({
               key={label.id}
               role="menuitemcheckbox"
               aria-checked={aktiv}
-              aria-label={`Label-Filter ${label.name}`}
+              aria-label={t.LISTE.LABEL_FILTER_NAME(label.name)}
               // Das Menü bleibt nach dem Klick offen: Mehrere Labels in einem Zug zu wählen ist der
               // Regelfall, wie beim Setzen in der Mehrfachauswahl.
               onClick={() => onToggle(label.id)}
@@ -215,8 +216,9 @@ function LabelFilterMenue({
 
 /** Gruppenkopf als eingelassene Nut (Entwurf `.gruppe`, Z. 941–953): Mal, Name, Fortschritt. */
 function GruppenKopf({ epic, zahl }: Readonly<{ epic: Epic | null; zahl: number }>) {
+  const t = useT()
   const farbe = epic === null ? TEXT_SCHWACH : epicColor(epic.id)
-  const name = epic?.title ?? 'Ohne Vorhaben'
+  const name = epic?.title ?? t.LISTE.OHNE_VORHABEN
   return (
     <Box
       role="heading"
@@ -230,7 +232,7 @@ function GruppenKopf({ epic, zahl }: Readonly<{ epic: Epic | null; zahl: number 
         {name}
       </Box>
       <Box component="span" sx={{ ...ZAHL, fontSize: 11, color: TEXT_SCHWACH }}>
-        {epic === null ? kartenText(zahl) : `${epic.done} von ${epic.total} fertig`}
+        {epic === null ? t.LISTE.KARTEN(zahl) : t.LISTE.FORTSCHRITT(epic.done, epic.total)}
       </Box>
       {epic !== null && epic.total > 0 && (
         <Box sx={{ width: 96, height: 5, borderRadius: '3px', ml: 'auto', bgcolor: `color-mix(in srgb, ${GRUND_TIEF} 70%, transparent)`, boxShadow: SCHATTEN_NUTE, overflow: 'hidden' }}>
@@ -243,6 +245,7 @@ function GruppenKopf({ epic, zahl }: Readonly<{ epic: Epic | null; zahl: number 
 
 export function BoardListPage() {
   const { sprache } = useSprache()
+  const t = useT()
   const { boardId } = useParams()
   const id = Number.parseInt(boardId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
@@ -292,7 +295,7 @@ export function BoardListPage() {
     try {
       await cardsApi.restore(cardId)
     } catch (e) {
-      notify(apiErrorMessage(e, 'Karte wiederherstellen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.LISTE.WIEDERHERSTELLEN_FEHLER), 'error')
     } finally {
       reloadCards()
     }
@@ -393,9 +396,9 @@ export function BoardListPage() {
    * `role="columnheader"`-Struktur voraussetzt, die den Zeilen ihre eigene Button-Rolle nähme.
    */
   const headerLabel = (key: ColumnKey): string => {
-    const label = `Spalte ${COLUMN_META[key].label}`
+    const label = t.LISTE.SPALTE_ARIA(t.LISTE.SPALTE[key])
     if (sort?.key !== key) return label
-    return `${label}, ${sort.dir === 'asc' ? 'aufsteigend' : 'absteigend'} sortiert`
+    return t.LISTE.SORTIERT_ARIA(label, sort.dir === 'asc')
   }
 
   const toggleSort = (key: ColumnKey) => setSort((prev) => nextSortState(prev, key))
@@ -511,7 +514,7 @@ export function BoardListPage() {
     try {
       await cardsApi.move(dragId, target.columnId, target.positionInColumn)
     } catch (e) {
-      notify(apiErrorMessage(e, 'Verschieben fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.LISTE.VERSCHIEBEN_FEHLER), 'error')
     } finally {
       reloadCards()
     }
@@ -534,7 +537,7 @@ export function BoardListPage() {
       case 'status': {
         // Die Farbe traegt allein die linke Zeilenkante; der Text bleibt, weil Farbe nie
         // alleiniger Informationstraeger sein darf (#650).
-        const label = card.archived ? 'Archiv' : col?.name ?? ''
+        const label = card.archived ? t.LISTE.ARCHIV : col?.name ?? ''
         // Zustandsplakette des Entwurfs (`.zustand`, Z. 955–965): LED in der Statusfarbe und Name.
         return (
           <Box
@@ -572,11 +575,11 @@ export function BoardListPage() {
             {card.dueDate != null && (
               <Typography
                 variant="caption"
-                aria-label={`Fällig ${card.title}`}
+                aria-label={t.LISTE.FAELLIG_ARIA(card.title)}
                 data-ueberfaellig={overdue ? 'ja' : undefined}
                 sx={{ ...ZAHL, whiteSpace: 'nowrap', fontSize: 11, fontWeight: overdue ? 600 : 400, color: overdue ? MELDER.zinnob : TEXT_SCHWACH }}
               >
-                {`fällig ${formatDueDate(card.dueDate, sprache)}`}
+                {t.LISTE.FAELLIG(formatDueDate(card.dueDate, sprache))}
               </Typography>
             )}
           </Box>
@@ -588,7 +591,7 @@ export function BoardListPage() {
   }
 
   if (!validId) {
-    return <Alert severity="error">Ungültige Board-ID.</Alert>
+    return <Alert severity="error">{t.LISTE.UNGUELTIGE_BOARD_ID}</Alert>
   }
 
   // Der Hinweis unter den Filtern: bei aktiver Sortierung erklärt er sie, sonst — und nur, wo das
@@ -599,13 +602,11 @@ export function BoardListPage() {
   // Ansichtsfunktion und steht auch Nur-Lesern offen.
   let listHint: string | null = null
   if (sort !== null) {
-    listHint = `Sortiert nach ${COLUMN_META[sort.key].label}.${
-      canEdit ? ' Zum Ändern der Kartenreihenfolge die Sortierung aufheben.' : ''
-    }`
+    listHint = t.LISTE.HINWEIS_SORTIERT(t.LISTE.SPALTE[sort.key], canEdit)
   } else if (canEdit && gruppierung === 'vorhaben') {
-    listHint = 'Kartenreihenfolge ändern: dazu die Gruppierung aufheben.'
+    listHint = t.LISTE.HINWEIS_GRUPPIERUNG
   } else if (canEdit && !sortable) {
-    listHint = 'Kartenreihenfolge ändern: dazu genau einen Status-Filter wählen und den Archiv-Filter abwählen.'
+    listHint = t.LISTE.HINWEIS_FILTER
   }
 
   return (
@@ -613,10 +614,10 @@ export function BoardListPage() {
       <Box sx={{ mb: 2 }}>
         <Breadcrumbs
           items={[
-            { label: 'Projekte', to: '/projects' },
+            { label: t.RAHMEN.NAV_PROJEKTE, to: '/projects' },
             ...(board && projectName ? [{ label: projectName, to: `/projects/${board.projectId}` }] : []),
             ...(board ? [{ label: board.name, to: `/boards/${id}` }] : []),
-            { label: 'Liste' },
+            { label: t.RAHMEN.NAV_LISTE },
           ]}
         />
       </Box>
@@ -625,22 +626,22 @@ export function BoardListPage() {
       <Box
         sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', mb: '14px', px: '11px', py: '9px', borderRadius: '10px', border: `1px solid ${RAND}`, background: `linear-gradient(180deg, ${PLATTE_HOCH}, ${PLATTE_FUSS})`, boxShadow: SCHATTEN_PLATTE }}
       >
-        <Box role="group" aria-label="Status-Filter" sx={CHIP_GRUPPE_SX}>
+        <Box role="group" aria-label={t.LISTE.STATUS_FILTER} sx={CHIP_GRUPPE_SX}>
           {columns.map((col) => {
             const aktiv = activeFilters.has(col.id)
             return (
-              <Chip key={col.id} label={col.name} aria-label={`Filter ${col.name}`} aria-pressed={aktiv}
+              <Chip key={col.id} label={col.name} aria-label={t.LISTE.FILTER(col.name)} aria-pressed={aktiv}
                 onClick={() => toggleFilter(col.id)} size="small" sx={chipSx(aktiv)} />
             )
           })}
-          <Chip label="Archiv" aria-label="Filter Archiv" aria-pressed={archiveActive}
+          <Chip label={t.LISTE.ARCHIV} aria-label={t.LISTE.FILTER(t.LISTE.ARCHIV)} aria-pressed={archiveActive}
             onClick={() => toggleFilter(ARCHIVED)} size="small" sx={chipSx(archiveActive)} />
         </Box>
         <Box sx={CHIP_GRUPPE_SX}>
           <Chip
             label={
               <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                Überfällig
+                {t.LISTE.UEBERFAELLIG}
                 {ueberfaelligZahl > 0 && (
                   <Box component="span" sx={{ ...ZAHL, fontSize: 10, px: '4px', borderRadius: '4px', color: MELDER.zinnob, bgcolor: `color-mix(in srgb, ${MELDER.zinnob} 18%, transparent)` }}>
                     {ueberfaelligZahl}
@@ -648,7 +649,7 @@ export function BoardListPage() {
                 )}
               </Box>
             }
-            aria-label="Filter Überfällig"
+            aria-label={t.LISTE.FILTER(t.LISTE.UEBERFAELLIG)}
             aria-pressed={nurUeberfaellig}
             onClick={() => setNurUeberfaellig((v) => !v)}
             size="small"
@@ -663,16 +664,16 @@ export function BoardListPage() {
             size="small"
             value={zustaendig ?? ''}
             onChange={(e) => setZustaendig(e.target.value === '' ? null : Number(e.target.value))}
-            slotProps={{ htmlInput: { 'aria-label': 'Zuständig' }, select: { native: true } }}
+            slotProps={{ htmlInput: { 'aria-label': t.LISTE.ZUSTAENDIG }, select: { native: true } }}
             sx={{
               '& .MuiOutlinedInput-root': { bgcolor: NUT, boxShadow: SCHATTEN_NUTE, borderRadius: '7px', fontSize: '11.5px', fontWeight: 500, color: 'text.secondary' },
               '& .MuiNativeSelect-select': { py: '4px', pl: '9px' },
             }}
           >
-            <option value="">Zuständig: alle</option>
+            <option value="">{t.LISTE.ZUSTAENDIG_ALLE}</option>
             {members.map((m) => (
               <option key={m.userId} value={m.userId}>
-                Zuständig: {m.displayName}
+                {t.LISTE.ZUSTAENDIG_NAME(m.displayName)}
               </option>
             ))}
           </TextField>
@@ -680,11 +681,11 @@ export function BoardListPage() {
         {labels.length > 0 && <LabelFilterMenue labels={labels} gewaehlt={labelFilter} onToggle={toggleLabel} />}
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Typography component="span" sx={{ fontSize: 11.5, color: 'text.secondary' }}>
-            Gruppieren
+            {t.LISTE.GRUPPIEREN}
           </Typography>
-          <Box role="group" aria-label="Gruppieren" sx={CHIP_GRUPPE_SX}>
-            <Chip label="Vorhaben" aria-pressed={gruppierung === 'vorhaben'} onClick={() => gruppierungWaehlen('vorhaben')} size="small" sx={chipSx(gruppierung === 'vorhaben')} />
-            <Chip label="keine" aria-pressed={gruppierung === 'keine'} onClick={() => gruppierungWaehlen('keine')} size="small" sx={chipSx(gruppierung === 'keine')} />
+          <Box role="group" aria-label={t.LISTE.GRUPPIEREN} sx={CHIP_GRUPPE_SX}>
+            <Chip label={t.LISTE.GRUPPE_VORHABEN} aria-pressed={gruppierung === 'vorhaben'} onClick={() => gruppierungWaehlen('vorhaben')} size="small" sx={chipSx(gruppierung === 'vorhaben')} />
+            <Chip label={t.LISTE.GRUPPE_KEINE} aria-pressed={gruppierung === 'keine'} onClick={() => gruppierungWaehlen('keine')} size="small" sx={chipSx(gruppierung === 'keine')} />
           </Box>
         </Box>
       </Box>
@@ -697,12 +698,12 @@ export function BoardListPage() {
 
       {visible.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-          Keine Karten
+          {t.LISTE.KEINE_KARTEN}
         </Typography>
       ) : (
         <Box
           component="section"
-          aria-label="Karten als Liste"
+          aria-label={t.LISTE.KARTEN_ALS_LISTE}
           sx={{ borderRadius: `${PANEL_RADIUS}px`, border: `1px solid ${RAND}`, bgcolor: PLATTE, boxShadow: SCHATTEN_PLATTE, overflow: 'clip' }}
         >
         {/* Kopfzeile: erhaben und mitlaufend (Entwurf `.tafel thead th`, Z. 880–893); Spalten per Drag
@@ -747,7 +748,7 @@ export function BoardListPage() {
               {key === 'excerpt' && (
                 <Box
                   role="separator"
-                  aria-label="Beschreibung-Spalte breiter ziehen"
+                  aria-label={t.LISTE.BREITER_ZIEHEN}
                   onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); startResize(e) }}
                   onDragStart={(e) => e.preventDefault()}
                   onClick={(e) => e.stopPropagation()}
@@ -764,7 +765,7 @@ export function BoardListPage() {
                 />
               )}
               <Typography component="span" sx={{ ...ETIKETT, fontStretch: '116%', letterSpacing: '.13em', color: sort?.key === key ? KUPFER : TEXT_SCHWACH }}>
-                {COLUMN_META[key].label}
+                {t.LISTE.SPALTE[key]}
               </Typography>
               {sort?.key === key &&
                 (sort.dir === 'asc'
@@ -784,7 +785,7 @@ export function BoardListPage() {
               key={card.id}
               role="button"
               tabIndex={0}
-              aria-label={`Detail öffnen: ${card.title}`}
+              aria-label={t.LISTE.DETAIL_OEFFNEN(card.title)}
               draggable={sortable}
               onDragStart={(e) => {
                 setRowDrag(card.id)
@@ -828,7 +829,7 @@ export function BoardListPage() {
               {sortable && (
                 <DragIndicatorIcon
                   fontSize="small"
-                  aria-label="Reihenfolge ändern"
+                  aria-label={t.LISTE.REIHENFOLGE_AENDERN}
                   sx={{ flexShrink: 0, color: 'action.disabled' }}
                 />
               )}
@@ -838,10 +839,10 @@ export function BoardListPage() {
                 </Box>
               ))}
               {canEdit && card.archived && (
-                <Tooltip title="Wiederherstellen">
+                <Tooltip title={t.ALLGEMEIN.WIEDERHERSTELLEN}>
                   <IconButton
                     size="small"
-                    aria-label={`Karte ${card.title} wiederherstellen`}
+                    aria-label={t.LISTE.KARTE_WIEDERHERSTELLEN(card.title)}
                     onClick={(e) => {
                       e.stopPropagation()
                       void restoreCard(card.id)

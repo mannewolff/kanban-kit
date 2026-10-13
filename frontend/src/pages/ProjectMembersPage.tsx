@@ -24,6 +24,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useEditMode } from '../lib/EditModeContext'
 import { canManageMembers, type ProjectRole } from '../lib/roles'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { useT } from '../i18n/SpracheContext'
 
 const ROLES: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']
 
@@ -38,6 +39,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
   const validId = Number.isInteger(id) && id > 0
   const { user } = useAuth()
   const notify = useSnackbar()
+  const t = useT()
   const [members, setMembers] = useState<Member[]>([])
   const [role, setRole] = useState<string>('VIEWER')
   const [projectName, setProjectName] = useState<string | null>(null)
@@ -90,7 +92,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
     try {
       await projectsApi.transferOwner(id, target.userId)
     } catch (e) {
-      setTransferError(apiErrorMessage(e, 'Eigentümer-Wechsel fehlgeschlagen.'))
+      setTransferError(apiErrorMessage(e, t.MITGLIEDER.TRANSFER_FEHLER))
       return
     }
     setTransferTarget(null)
@@ -101,7 +103,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
     } catch (e) {
       // Der Wechsel ist durch — der Dialog ist schon zu, daher ueber den Snackbar statt
       // transferError (das nur im Dialog sichtbar ist).
-      notify(apiErrorMessage(e, 'Eigentümer gewechselt, Mitgliederliste konnte nicht aktualisiert werden.'), 'error')
+      notify(apiErrorMessage(e, t.MITGLIEDER.TRANSFER_LISTE_FEHLER), 'error')
     }
   }
 
@@ -116,18 +118,18 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
       const result = await api.invite(id, inviteEmail.trim(), inviteRole)
       setInviteEmail('')
       if (result.status === 'added') {
-        setMessage({ kind: 'success', text: 'Nutzer wurde hinzugefügt.' })
+        setMessage({ kind: 'success', text: t.MITGLIEDER.HINZUGEFUEGT })
         await reload()
       } else {
-        setMessage({ kind: 'success', text: 'Einladung verschickt.' })
+        setMessage({ kind: 'success', text: t.MITGLIEDER.EINLADUNG_VERSCHICKT })
       }
     } catch (error) {
       setMessage({
         kind: 'error',
         text:
           error instanceof ApiError && error.status === 422
-            ? 'Nutzer ist noch nicht vom Admin freigegeben.'
-            : 'Einladung fehlgeschlagen.',
+            ? t.MITGLIEDER.NICHT_FREIGEGEBEN
+            : t.MITGLIEDER.EINLADUNG_FEHLER,
       })
     } finally {
       setInviting(false)
@@ -143,8 +145,8 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
       setMessage({
         kind: 'error',
         text: error instanceof ApiError && error.status === 409
-          ? 'Der letzte Owner kann nicht herabgestuft werden.'
-          : 'Rollenänderung fehlgeschlagen.',
+          ? t.MITGLIEDER.LETZTER_OWNER_HERABSTUFEN
+          : t.MITGLIEDER.ROLLE_FEHLER,
       })
     }
   }
@@ -161,7 +163,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
     } catch (error) {
       setMessage({
         kind: 'error',
-        text: error instanceof ApiError ? error.message : 'Namensänderung fehlgeschlagen.',
+        text: error instanceof ApiError ? error.message : t.MITGLIEDER.NAME_FEHLER,
       })
     }
   }
@@ -175,14 +177,14 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
       setMessage({
         kind: 'error',
         text: error instanceof ApiError && error.status === 409
-          ? 'Der letzte Owner kann nicht entfernt werden.'
-          : 'Entfernen fehlgeschlagen.',
+          ? t.MITGLIEDER.LETZTER_OWNER_ENTFERNEN
+          : t.MITGLIEDER.ENTFERNEN_FEHLER,
       })
     }
   }
 
   if (!validId) {
-    return <Alert severity="error">Ungültige Projekt-ID.</Alert>
+    return <Alert severity="error">{t.ALLGEMEIN.UNGUELTIGE_PROJEKT_ID}</Alert>
   }
 
   const nameCell = (member: Member) =>
@@ -193,23 +195,23 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
           variant="standard"
           value={editingName.name}
           onChange={(e) => setEditingName({ userId: member.userId, name: e.target.value })}
-          slotProps={{ htmlInput: { maxLength: 120, 'aria-label': `Anzeigename von ${member.email}` } }}
+          slotProps={{ htmlInput: { maxLength: 120, 'aria-label': t.MITGLIEDER.ANZEIGENAME_VON(member.email) } }}
         />
-        <Button size="small" aria-label="Namen speichern" onClick={handleChangeDisplayName}>
-          Speichern
+        <Button size="small" aria-label={t.MITGLIEDER.NAMEN_SPEICHERN} onClick={handleChangeDisplayName}>
+          {t.ALLGEMEIN.SPEICHERN}
         </Button>
-        <Button size="small" aria-label="Bearbeiten abbrechen" onClick={() => setEditingName(null)}>
-          Abbrechen
+        <Button size="small" aria-label={t.MITGLIEDER.BEARBEITEN_ABBRECHEN} onClick={() => setEditingName(null)}>
+          {t.ALLGEMEIN.ABBRECHEN}
         </Button>
       </Box>
     ) : (
       <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
         {member.displayName}
         {manage && editMode && (
-          <Tooltip title="Anzeigename ändern (global, projektübergreifend)">
+          <Tooltip title={t.MITGLIEDER.NAME_AENDERN_HINWEIS}>
             <IconButton
               size="small"
-              aria-label={`Namen von ${member.displayName} bearbeiten`}
+              aria-label={t.MITGLIEDER.NAMEN_BEARBEITEN(member.displayName)}
               onClick={() => setEditingName({ userId: member.userId, name: member.displayName })}
             >
               <EditIcon fontSize="inherit" />
@@ -229,7 +231,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
         disabled={isLastOwner(member)}
         sx={{ minWidth: 110 }}
         onChange={(e) => handleChangeRole(member, e.target.value as ProjectRole)}
-        slotProps={{ htmlInput: { 'aria-label': `Rolle von ${member.displayName}` } }}
+        slotProps={{ htmlInput: { 'aria-label': t.MITGLIEDER.ROLLE_VON(member.displayName) } }}
       >
         {ROLES.map((r) => (
           <MenuItem key={r} value={r}>
@@ -247,30 +249,30 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
         <Button
           size="small"
           sx={{ mr: 1 }}
-          aria-label={`${member.displayName} zum Eigentümer machen`}
+          aria-label={t.MITGLIEDER.ZUM_EIGENTUEMER_ARIA(member.displayName)}
           onClick={() => setTransferTarget(member)}
         >
-          Zum Eigentümer machen
+          {t.MITGLIEDER.ZUM_EIGENTUEMER}
         </Button>
       )}
       <Button
         size="small"
         color="error"
         disabled={isLastOwner(member)}
-        aria-label={`${member.displayName} entfernen`}
+        aria-label={t.MITGLIEDER.ENTFERNEN_ARIA(member.displayName)}
         onClick={() => handleRemove(member)}
       >
-        Entfernen
+        {t.ALLGEMEIN.ENTFERNEN}
       </Button>
     </>
   )
 
   const columns: DataTableColumn<Member>[] = [
-    { key: 'name', header: 'Name', render: nameCell, defaultWidth: 200, minWidth: 120, hideable: true, resizable: true },
-    { key: 'email', header: 'E-Mail', render: (m) => m.email, defaultWidth: 220, minWidth: 120, hideable: true, resizable: true },
-    { key: 'role', header: 'Rolle', render: roleCell, defaultWidth: 140, minWidth: 100, hideable: true, resizable: true },
+    { key: 'name', header: t.MITGLIEDER.SPALTE_NAME, render: nameCell, defaultWidth: 200, minWidth: 120, hideable: true, resizable: true },
+    { key: 'email', header: t.MITGLIEDER.SPALTE_EMAIL, render: (m) => m.email, defaultWidth: 220, minWidth: 120, hideable: true, resizable: true },
+    { key: 'role', header: t.ALLGEMEIN.ROLLE, render: roleCell, defaultWidth: 140, minWidth: 100, hideable: true, resizable: true },
     ...(manage
-      ? [{ key: 'actions', header: 'Aktionen', render: actionsCell, align: 'right' as const, defaultWidth: 260 }]
+      ? [{ key: 'actions', header: t.MITGLIEDER.SPALTE_AKTIONEN, render: actionsCell, align: 'right' as const, defaultWidth: 260 }]
       : []),
   ]
 
@@ -279,28 +281,28 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Breadcrumbs
           items={[
-            { label: 'Projekte', to: '/projects' },
+            { label: t.RAHMEN.NAV_PROJEKTE, to: '/projects' },
             ...(projectName ? [{ label: projectName, to: `/projects/${id}` }] : []),
-            { label: 'Mitglieder' },
+            { label: t.RAHMEN.NAV_MITGLIEDER },
           ]}
         />
-        <Link component={RouterLink} to="/roles">Rollen &amp; Rechte</Link>
+        <Link component={RouterLink} to="/roles">{t.RAHMEN.NAV_ROLLEN}</Link>
       </Stack>
 
       {message && <Alert severity={message.kind} sx={{ mb: 2 }}>{message.text}</Alert>}
 
       {manage && (
-        <Box component="form" aria-label="Nutzer einladen" onSubmit={handleInvite} sx={{ mb: 3 }}>
+        <Box component="form" aria-label={t.MITGLIEDER.EINLADEN_FORMULAR} onSubmit={handleInvite} sx={{ mb: 3 }}>
           <Stack direction="row" spacing={1} alignItems="center">
-            <TextField size="small" type="email" label="E-Mail einladen" value={inviteEmail}
+            <TextField size="small" type="email" label={t.MITGLIEDER.EMAIL_EINLADEN} value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)} />
-            <TextField size="small" select label="Rolle" value={inviteRole} sx={{ minWidth: 120 }}
+            <TextField size="small" select label={t.ALLGEMEIN.ROLLE} value={inviteRole} sx={{ minWidth: 120 }}
               onChange={(e) => setInviteRole(e.target.value as ProjectRole)}
-              slotProps={{ htmlInput: { 'aria-label': 'Einladungsrolle' } }}>
+              slotProps={{ htmlInput: { 'aria-label': t.MITGLIEDER.EINLADUNGSROLLE } }}>
               {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
             </TextField>
             <Button type="submit" variant="contained" disabled={inviting || !inviteEmail.trim()}>
-              Einladen
+              {t.MITGLIEDER.EINLADEN}
             </Button>
           </Stack>
         </Box>
@@ -316,18 +318,17 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
 
       {transferTarget && (
         <Dialog open onClose={() => setTransferTarget(null)}>
-          <DialogTitle>Zum Eigentümer machen?</DialogTitle>
+          <DialogTitle>{t.MITGLIEDER.TRANSFER_TITEL}</DialogTitle>
           <DialogContent>
             {transferError && <Alert severity="error" sx={{ mb: 2 }}>{transferError}</Alert>}
             <DialogContentText>
-              „{transferTarget.displayName}&ldquo; wird Eigentümer dieses Projekts. Du verlierst
-              dabei deine Owner-Rechte und wirst zum Admin herabgestuft.
+              {t.MITGLIEDER.TRANSFER_TEXT(transferTarget.displayName)}
             </DialogContentText>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setTransferTarget(null)}>Abbrechen</Button>
+            <Button onClick={() => setTransferTarget(null)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
             <Button variant="contained" onClick={() => void handleTransferOwner(transferTarget)}>
-              Übertragen
+              {t.MITGLIEDER.UEBERTRAGEN}
             </Button>
           </DialogActions>
         </Dialog>

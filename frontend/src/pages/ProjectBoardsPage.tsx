@@ -21,6 +21,7 @@ import { apiErrorMessage } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { useT } from '../i18n/SpracheContext'
 import { canManageBoards, canManageMembers } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
 import { SURFACE_HOVER_SHADOW, TABELLENZIFFERN } from '../theme'
@@ -32,6 +33,7 @@ export function ProjectBoardsPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const notify = useSnackbar()
+  const t = useT()
   const [boards, setBoards] = useState<Board[]>([])
   const [archived, setArchived] = useState<Board[]>([])
   const [role, setRole] = useState<string>('VIEWER')
@@ -110,7 +112,7 @@ export function ProjectBoardsPage() {
     try {
       await boardsApi.create(id, name.trim())
     } catch (e) {
-      notify(apiErrorMessage(e, 'Board anlegen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARDS.ANLEGEN_FEHLER), 'error')
       return
     }
     setName('')
@@ -118,7 +120,7 @@ export function ProjectBoardsPage() {
       await reload()
     } catch (e) {
       // Das Board wurde angelegt — nur das Nachladen der Liste ist gescheitert.
-      notify(apiErrorMessage(e, 'Board angelegt, Liste konnte nicht aktualisiert werden.'), 'error')
+      notify(apiErrorMessage(e, t.BOARDS.ANGELEGT_LISTE_FEHLER), 'error')
     }
   }
 
@@ -130,7 +132,7 @@ export function ProjectBoardsPage() {
       setConfirmBoard(null)
       await reload()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Archivieren fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARDS.ARCHIVIEREN_FEHLER), 'error')
     }
   }
 
@@ -139,7 +141,7 @@ export function ProjectBoardsPage() {
       await boardsApi.restore(boardId)
       await reload()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Wiederherstellen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARDS.WIEDERHERSTELLEN_FEHLER), 'error')
     }
   }
 
@@ -154,36 +156,36 @@ export function ProjectBoardsPage() {
       closePurge()
       await reload()
     } catch (e) {
-      notify(apiErrorMessage(e, 'Endgültig löschen fehlgeschlagen.'), 'error')
+      notify(apiErrorMessage(e, t.BOARDS.ENDGUELTIG_FEHLER), 'error')
     }
   }
 
   if (!validId) {
-    return <Alert severity="error">Ungültige Projekt-ID.</Alert>
+    return <Alert severity="error">{t.ALLGEMEIN.UNGUELTIGE_PROJEKT_ID}</Alert>
   }
 
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-        <Breadcrumbs items={[{ label: 'Projekte', to: '/projects' }, { label: projectName || 'Projekt' }]} />
+        <Breadcrumbs items={[{ label: t.RAHMEN.NAV_PROJEKTE, to: '/projects' }, { label: projectName || t.RAHMEN.NAV_PROJEKT }]} />
         {canManageMembers(role) && (
-          <Link component={RouterLink} to={`/projects/${id}/members`}>Mitglieder</Link>
+          <Link component={RouterLink} to={`/projects/${id}/members`}>{t.RAHMEN.NAV_MITGLIEDER}</Link>
         )}
       </Stack>
 
       {canManage && (
         <Box component="form" onSubmit={handleCreate} sx={{ mb: 3 }}>
           <Stack direction="row" spacing={1}>
-            <TextField size="small" label="Neues Board" value={name} onChange={(e) => setName(e.target.value)} />
+            <TextField size="small" label={t.BOARDS.NEUES_BOARD} value={name} onChange={(e) => setName(e.target.value)} />
             <Button type="submit" variant="contained">
-              Anlegen
+              {t.ALLGEMEIN.ANLEGEN}
             </Button>
           </Stack>
         </Box>
       )}
 
       {boards.length === 0 ? (
-        <Typography color="text.secondary">Noch keine Boards.</Typography>
+        <Typography color="text.secondary">{t.BOARDS.LEER}</Typography>
       ) : (
         <Stack spacing={1}>
           {boards.map((board) => (
@@ -218,12 +220,12 @@ export function ProjectBoardsPage() {
               </Typography>
               {/* Die Zahlen stehen je Board untereinander: gleich breite Ziffern (AK 10, #960). */}
               <Typography variant="caption" color="text.secondary" sx={TABELLENZIFFERN}>
-                {board.columns.length} Spalten
+                {t.BOARDS.SPALTEN(board.columns.length)}
               </Typography>
               {canManage && (
                 <IconButton
                   size="small"
-                  aria-label={`Board ${board.name} archivieren`}
+                  aria-label={t.BOARDS.ARCHIVIEREN_ARIA(board.name)}
                   onClick={(e) => {
                     e.stopPropagation()
                     setConfirmBoard(board)
@@ -240,7 +242,7 @@ export function ProjectBoardsPage() {
       {canManage && archived.length > 0 && (
         <Box sx={{ mt: 4 }}>
           <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
-            Archiv
+            {t.BOARDS.ARCHIV}
           </Typography>
           <Stack spacing={1}>
             {archived.map((board) => (
@@ -253,12 +255,12 @@ export function ProjectBoardsPage() {
                   {board.name}
                 </Typography>
                 <Button size="small" onClick={() => void handleRestoreBoard(board.id)}>
-                  Wiederherstellen
+                  {t.ALLGEMEIN.WIEDERHERSTELLEN}
                 </Button>
                 <IconButton
                   size="small"
                   color="error"
-                  aria-label={`Board ${board.name} endgültig löschen`}
+                  aria-label={t.BOARDS.ENDGUELTIG_ARIA(board.name)}
                   onClick={() => setPurgeBoard(board)}
                 >
                   <DeleteOutlineIcon fontSize="small" />
@@ -270,46 +272,43 @@ export function ProjectBoardsPage() {
       )}
 
       <Dialog open={confirmBoard !== null} onClose={() => setConfirmBoard(null)}>
-        <DialogTitle>Board archivieren?</DialogTitle>
+        <DialogTitle>{t.BOARDS.ARCHIVIEREN_TITEL}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Das Board „{confirmBoard?.name}&ldquo; wird archiviert. Es verschwindet aus der Liste,
-            bleibt aber mit allen Vorhaben und Tickets erhalten und lässt sich im Archiv
-            wiederherstellen.
+            {t.BOARDS.ARCHIVIEREN_TEXT(confirmBoard?.name ?? '')}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmBoard(null)}>Abbrechen</Button>
+          <Button onClick={() => setConfirmBoard(null)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
           <Button color="error" onClick={() => { if (confirmBoard) void handleArchiveBoard(confirmBoard.id) }}>
-            Archivieren
+            {t.BOARDS.ARCHIVIEREN}
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={purgeBoard !== null} onClose={closePurge}>
-        <DialogTitle>Board endgültig löschen?</DialogTitle>
+        <DialogTitle>{t.BOARDS.ENDGUELTIG_TITEL}</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
-            Das Board „{purgeBoard?.name}&ldquo; und alle zugehörigen Vorhaben und Tickets werden
-            unwiderruflich gelöscht. Gib zur Bestätigung den Board-Namen ein.
+            {t.BOARDS.ENDGUELTIG_TEXT(purgeBoard?.name ?? '')}
           </DialogContentText>
           <TextField
             fullWidth
             size="small"
-            label="Board-Name"
+            label={t.BOARDS.BOARD_NAME}
             value={purgeInput}
             onChange={(e) => setPurgeInput(e.target.value)}
-            slotProps={{ htmlInput: { 'aria-label': 'Board-Name zur Bestätigung' } }}
+            slotProps={{ htmlInput: { 'aria-label': t.BOARDS.BOARD_NAME_BESTAETIGUNG } }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={closePurge}>Abbrechen</Button>
+          <Button onClick={closePurge}>{t.ALLGEMEIN.ABBRECHEN}</Button>
           <Button
             color="error"
             disabled={purgeInput !== purgeBoard?.name}
             onClick={() => { if (purgeBoard) void handlePurgeBoard(purgeBoard.id) }}
           >
-            Endgültig löschen
+            {t.BOARDS.ENDGUELTIG_LOESCHEN}
           </Button>
         </DialogActions>
       </Dialog>

@@ -11,6 +11,7 @@ import { epicsApi, type Epic } from '../api/epics'
 import { membersApi } from '../api/members'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { BoardListPage } from './BoardListPage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 import { ARCHIVED_STATUS_COLOR } from '../lib/statusColors'
 import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel, cssRegelMit } from '../test/cssRegel'
@@ -1587,5 +1588,127 @@ describe('BoardListPage – Label-Filter als Menü', () => {
     renderMitLabels([])
     await screen.findByText('OhneLabel')
     expect(screen.queryByRole('button', { name: 'Label-Filter' })).not.toBeInTheDocument()
+  })
+})
+
+describe('BoardListPage auf Englisch', () => {
+  const mMembers = membersApi as unknown as { list: ReturnType<typeof vi.fn> }
+  const faellig: Card = { ...active, dueDate: '2099-10-13' }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('localStorage', fakeStorage())
+    mMembers.list.mockResolvedValue([{ userId: 3, displayName: 'Anna', email: 'a@x', role: 'MEMBER' }])
+    mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }])
+  })
+
+  const renderEn = (cards: Card[], epics: Epic[] = [], projectId = 9) => {
+    mBoards.get.mockResolvedValue({
+      id: 1, projectId, name: 'B', createdAt: '',
+      columns: [
+        { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+        { id: 20, name: 'Done', position: 1, wipLimit: null },
+      ],
+    })
+    mCards.list.mockResolvedValue(cards)
+    mEpics.list.mockResolvedValue(epics)
+    if (projectId === 9) mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+    return renderMitSprache(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/boards/1/list']}>
+          <Routes>
+            <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+      'en',
+    )
+  }
+
+  it('beschriftet Werkzeugleiste, Kopfzeile und Zeilen auf Englisch', async () => {
+    renderEn([faellig, archived], [epic])
+    expect(await screen.findByLabelText('Open details: Aufgabe')).toBeInTheDocument()
+
+    expect(screen.getByRole('group', { name: 'Status filter' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Filter Archive' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Filter Overdue' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Assignee')).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Assignee: all' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Assignee: Anna' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Label filter' })).toHaveTextContent('Labels')
+    expect(screen.getByRole('group', { name: 'Group by' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Epic' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'none' })).toBeInTheDocument()
+    expect(screen.getByText('To change the card order, clear the grouping.')).toBeInTheDocument()
+
+    expect(screen.getByRole('region', { name: 'Cards as list' })).toBeInTheDocument()
+    for (const spalte of ['#', 'Status', 'Epic', 'Title', 'Description']) {
+      expect(screen.getByLabelText(`Column ${spalte}`)).toBeInTheDocument()
+    }
+    expect(screen.getByRole('separator', { name: 'Drag to widen the description column' })).toBeInTheDocument()
+    expect(await screen.findByText('0 of 1 done')).toBeInTheDocument()
+    expect(screen.getByLabelText('Due Aufgabe')).toHaveTextContent('due Oct 13, 2099')
+    expect(screen.getByRole('link', { name: 'Projects' })).toBeInTheDocument()
+    expect(screen.getByText('List')).toBeInTheDocument()
+  })
+
+  it('zeigt Gruppe ohne Vorhaben, Archiv-Zeile und Sortierhinweis auf Englisch', async () => {
+    mCards.restore.mockRejectedValue(new ApiError(500, 'Boom'))
+    renderEn([active, archived])
+    await screen.findByLabelText('Open details: Aufgabe')
+
+    expect(screen.getByRole('heading', { name: 'No epic' })).toBeInTheDocument()
+    expect(screen.getByText('1 card')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'none' }))
+    expect(
+      screen.getByText('To change the card order, select exactly one status filter and deselect the archive filter.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Column Title'))
+    expect(screen.getByLabelText('Column Title, sorted ascending')).toBeInTheDocument()
+    expect(screen.getByText('Sorted by Title. Clear the sorting to change the card order.')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Column Title, sorted ascending'))
+    expect(screen.getByLabelText('Column Title, sorted descending')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter Archive' }))
+    expect(await screen.findByText('Archive', { selector: '[data-testid="zustand-101"]' })).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Restore card AlteKarte'))
+    await erwarteFehlerToast('Restoring the card failed.')
+  })
+
+  it('zählt Karten und gewählte Labels auf Englisch', async () => {
+    renderEn([active, { ...active, id: 103, number: 3, title: 'Zweite' }])
+    await screen.findByLabelText('Open details: Zweite')
+    expect(screen.getByText('2 cards')).toBeInTheDocument()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Label filter' }))
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Label filter Bug' }))
+    expect(screen.getByRole('button', { name: 'Label filter', hidden: true })).toHaveTextContent('Labels · 1')
+  })
+
+  it('nennt einem Nur-Leser die Sortierung ohne Umordnen auf Englisch', async () => {
+    mProjects.list.mockResolvedValue([{ id: 42, name: 'Fremd', role: 'VIEWER', createdAt: '' }])
+    renderEn([active], [], 42)
+    await screen.findByLabelText('Open details: Aufgabe')
+    await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByLabelText('Column #'))
+    expect(await screen.findByText('Sorted by #.')).toBeInTheDocument()
+  })
+
+  it('zeigt den Leerzustand und eine ungültige Board-ID auf Englisch', async () => {
+    renderEn([])
+    expect(await screen.findByText('No cards')).toBeInTheDocument()
+
+    renderMitSprache(
+      <MemoryRouter initialEntries={['/boards/abc/list']}>
+        <Routes>
+          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+        </Routes>
+      </MemoryRouter>,
+      'en',
+    )
+    expect(screen.getByText('Invalid board ID.')).toBeInTheDocument()
   })
 })

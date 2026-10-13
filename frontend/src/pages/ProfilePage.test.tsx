@@ -7,6 +7,7 @@ import { ApiError } from '../api/client'
 import { AuthProvider, useAuth } from '../auth/AuthContext'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import { ProfilePage } from './ProfilePage'
+import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/auth', () => ({
   authApi: { me: vi.fn(), updateProfile: vi.fn(), login: vi.fn(), logout: vi.fn() },
@@ -95,5 +96,43 @@ describe('ProfilePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Speichern' }))
 
     expect(await screen.findByText('Speichern fehlgeschlagen.')).toBeInTheDocument()
+  })
+})
+
+describe('ProfilePage auf Englisch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockedApi.me.mockResolvedValue({ ...alt })
+  })
+
+  const renderEn = () =>
+    renderMitSprache(
+      <MemoryRouter>
+        <AuthProvider>
+          <SnackbarProvider>
+            <Gate />
+          </SnackbarProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+      'en',
+    )
+
+  it('beschriftet das Profil auf Englisch und bestätigt das Speichern', async () => {
+    mockedApi.updateProfile.mockResolvedValue({ ...alt, displayName: 'Neu' })
+    renderEn()
+    expect(await screen.findByRole('heading', { name: 'Profile' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toHaveValue('a@b.de')
+    const feld = screen.getByLabelText('Display name')
+    await userEvent.clear(feld)
+    await userEvent.type(feld, 'Neu')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Display name saved.')).toBeInTheDocument()
+  })
+
+  it('meldet einen Fehlschlag ohne Server-Meldung auf Englisch', async () => {
+    mockedApi.updateProfile.mockRejectedValue(new Error('netz'))
+    renderEn()
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Saving failed.')).toBeInTheDocument()
   })
 })
