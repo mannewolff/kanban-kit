@@ -1,12 +1,15 @@
 import Box from '@mui/material/Box'
 import { useId } from 'react'
+import { useSprache, useT } from '../../i18n/SpracheContext'
+import type { Sprache } from '../../i18n/woerterbuch'
 import { laufDauer } from '../../lib/leitstand'
 import { geschaetztGespart, NICHT_GEMELDET, type NightRunStuckAngaben } from '../../lib/nightRunHandoff'
 import { ANZEIGE, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { Led } from './LeitstandBausteine'
 
 /** Eine Dauer im Format des Verbrauchs („1 h 0 min", „40 min") oder {@link NICHT_GEMELDET}. */
-const dauer = (ms: number | null | undefined): string => (ms == null ? NICHT_GEMELDET : laufDauer(ms))
+const dauer = (ms: number | null | undefined, sprache: Sprache): string =>
+  ms == null ? NICHT_GEMELDET : laufDauer(ms, sprache)
 
 /**
  * Die Angaben eines festgefahrenen Pakets (Issue #1552, Plan #1547 E14, E17): Prüfung, Fehler,
@@ -36,14 +39,16 @@ export function FestgefahrenAngaben({
   ebene?: 'h3' | 'h4'
 }>) {
   const ueberschriftId = useId()
+  const t = useT().FESTGEFAHREN
+  const { sprache } = useSprache()
   const angaben = stuck ?? {}
   const zeilen: readonly [string, string][] = [
-    ['Prüfung', angaben.check ?? NICHT_GEMELDET],
-    ['Fehler', angaben.error ?? NICHT_GEMELDET],
-    ['Versuche', angaben.attempts == null ? NICHT_GEMELDET : String(angaben.attempts)],
-    ['Laufzeit bis Abbruch', dauer(durationMs)],
-    ['Zeitgrenze der Sitzung', dauer(angaben.sessionLimitMs)],
-    ['geschätzte gesparte Zeit', dauer(geschaetztGespart(durationMs, angaben.sessionLimitMs))],
+    [t.PRUEFUNG, angaben.check ?? NICHT_GEMELDET],
+    [t.FEHLER, angaben.error ?? NICHT_GEMELDET],
+    [t.VERSUCHE, angaben.attempts == null ? NICHT_GEMELDET : String(angaben.attempts)],
+    [t.LAUFZEIT, dauer(durationMs, sprache)],
+    [t.ZEITGRENZE, dauer(angaben.sessionLimitMs, sprache)],
+    [t.GESPART, dauer(geschaetztGespart(durationMs, angaben.sessionLimitMs), sprache)],
   ]
 
   return (
@@ -51,7 +56,7 @@ export function FestgefahrenAngaben({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <Led melder="zinnob" />
         <Box component={ebene} id={ueberschriftId} sx={{ ...ANZEIGE, m: 0, fontSize: 13, fontWeight: 600 }}>
-          Festgefahren
+          {t.TITEL}
         </Box>
       </Box>
       <Box

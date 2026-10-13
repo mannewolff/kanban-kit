@@ -1,6 +1,8 @@
 import Box from '@mui/material/Box'
 import Tooltip from '@mui/material/Tooltip'
 import type { NightRunServerMode } from '../../api/nightRuns'
+import { useSprache } from '../../i18n/SpracheContext'
+import { woerterbuch, type Sprache } from '../../i18n/woerterbuch'
 import { modusName } from '../../lib/leitstand'
 import type { NightRunMode } from '../../lib/nightRunLog'
 import { strichSymbol, strich } from '../../layout/navIcons'
@@ -75,8 +77,8 @@ const SYMBOL: Record<LaufArt, ReturnType<typeof strichSymbol>> = {
  * `lib/leitstand.ts`. Allein `NIGHTPLAN` steht hier, weil `modusName` den browser-only-Modus nicht
  * kennt.
  */
-export function laufArtName(art: LaufArt): string {
-  return art === 'NIGHTPLAN' ? 'Nachtplan' : modusName(art)
+export function laufArtName(art: LaufArt, sprache: Sprache = 'de'): string {
+  return art === 'NIGHTPLAN' ? woerterbuch(sprache).LEITSTAND_BAUSTEINE.NACHTPLAN : modusName(art, sprache)
 }
 
 /**
@@ -92,7 +94,8 @@ export function laufArtName(art: LaufArt): string {
  * Ansichten den Zustand (das Lämpchen), und eine zweite Farbaussage daneben führte in die Irre.
  */
 export function LaufArtSymbol({ art }: Readonly<{ art: LaufArt }>) {
-  const wort = laufArtName(art)
+  const { sprache } = useSprache()
+  const wort = laufArtName(art, sprache)
   const Zeichen = SYMBOL[art]
   return (
     <Tooltip title={wort}>

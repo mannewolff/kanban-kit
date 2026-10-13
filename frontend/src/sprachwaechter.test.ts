@@ -16,7 +16,6 @@ import { deadAllowlistEntries, scanSource, unmatchedFindings, type SprachAllowan
  * Startbestand aus #1645: alle Funde je Datei und Regel, geordnet nach den Bereichspaketen des
  * Plans (E10). `CardFields.tsx` nennt kein Bereichspaket; es faellt dem Schlusspaket zu.
  */
-const P1656 = 'Sprache: Leitstand auf Englisch'
 const P1657 = 'Sprache: Plattform-Leitstand auf Englisch'
 const P1658 = 'Sprache: Nachtlauf-Bausteine auf Englisch'
 const P1659 = 'Sprache: Nachtlauf-Seite auf Englisch'
@@ -49,19 +48,12 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/lib/abnahmeSzenarien.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1655 — CSS-Werte (Haarlinien) der Vorhaben-Liste
   { file: 'src/components/EpicVisibilityList.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  // #1656
-  { file: 'src/components/leitstand/AktuellerStand.tsx', rule: 'jsx', resolvedIn: P1656 },
-  { file: 'src/components/leitstand/AktuellerStand.tsx', rule: 'literal', resolvedIn: P1656 },
-  { file: 'src/components/leitstand/FestgefahrenAngaben.tsx', rule: 'jsx', resolvedIn: P1656 },
-  { file: 'src/components/leitstand/FestgefahrenAngaben.tsx', rule: 'literal', resolvedIn: P1656 },
-  { file: 'src/components/leitstand/LeitstandBausteine.tsx', rule: 'literal', resolvedIn: P1656 },
-  { file: 'src/components/leitstand/LeitstandVerbrauch.tsx', rule: 'jsx', resolvedIn: P1656 },
-  { file: 'src/components/leitstand/LeitstandVerbrauch.tsx', rule: 'literal', resolvedIn: P1656 },
-  { file: 'src/lib/laufFortschritt.ts', rule: 'literal', resolvedIn: P1656 },
-  { file: 'src/lib/leitstand.ts', rule: 'literal', resolvedIn: P1656 },
-  { file: 'src/lib/verbrauchZeitraum.ts', rule: 'literal', resolvedIn: P1656 },
-  { file: 'src/pages/LeitstandPage.tsx', rule: 'jsx', resolvedIn: P1656 },
-  { file: 'src/pages/LeitstandPage.tsx', rule: 'literal', resolvedIn: P1656 },
+  // #1656 — CSS-Werte (Rahmen, Raster, Farbmischungen, Verläufe, Übergänge, SVG-Pfad) des Leitstands
+  { file: 'src/components/leitstand/AktuellerStand.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/leitstand/FestgefahrenAngaben.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/leitstand/LeitstandBausteine.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/components/leitstand/LeitstandVerbrauch.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  { file: 'src/pages/LeitstandPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1657
   { file: 'src/pages/PlattformLeitstandPage.tsx', rule: 'jsx', resolvedIn: P1657 },
   { file: 'src/pages/PlattformLeitstandPage.tsx', rule: 'literal', resolvedIn: P1657 },

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { NightRunStuckAngaben } from '../../lib/nightRunHandoff'
 import { theme } from '../../theme'
 import { FestgefahrenAngaben } from './FestgefahrenAngaben'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 
 /** Alle Angaben eines festgefahrenen Pakets, wie das Kit sie meldet (Plan #1547, E9). */
 const VOLL: NightRunStuckAngaben = {
@@ -107,5 +108,21 @@ describe('FestgefahrenAngaben (Issue #1552, Plan #1547 E14, E17)', () => {
     zeige({ ...VOLL, sessionLimitMs: 3_600_000 }, 4_000_000)
 
     expect(wert('geschätzte gesparte Zeit')).toBe('0 min')
+  })
+})
+
+describe('FestgefahrenAngaben auf Englisch', () => {
+  it('beschriftet Überschrift und Angaben auf Englisch', () => {
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <FestgefahrenAngaben stuck={VOLL} durationMs={ZWANZIG_MIN} />
+      </ThemeProvider>,
+      'en',
+    )
+    const bereich = screen.getByRole('region', { name: 'Stuck' })
+    const begriffe = within(bereich).getAllByRole('term').map((b) => b.textContent)
+    const werte = within(bereich).getAllByRole('definition').map((w) => w.textContent)
+    expect(begriffe).toEqual(['Check', 'Error', 'Attempts', 'Runtime until abort', 'Session time limit', 'estimated time saved'])
+    expect(werte).toEqual(['mvn verify', 'OpenApiIT: Vertrag weicht ab', '3', '20 min', '1 h 0 min', '40 min'])
   })
 })

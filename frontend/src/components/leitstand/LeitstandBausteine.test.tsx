@@ -23,6 +23,7 @@ import {
   Taste,
   ZEILE_HOVER_SX,
 } from './LeitstandBausteine'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 
 // Verhaltenstests der Leitstand-Bausteine (Issue #1281): Die Bausteine waren über die Seiten-Tests
 // abgedeckt, aber die Mutationsprüfung des Ausschnitts `bausteine-leitstand` fährt nur die Tests
@@ -334,5 +335,30 @@ describe('PaketDauer', () => {
     const dauer = screen.getByTestId('dauer')
     expect(dauer.textContent).toBe('—')
     expect(dauer.innerHTML).toBe('—')
+  })
+})
+
+describe('LeitstandBausteine auf Englisch', () => {
+  const zeigeEnglisch = (ui: ReactNode) => renderMitSprache(<ThemeProvider theme={theme}>{ui}</ThemeProvider>, 'en')
+
+  it('nennt den Grund eines fehlenden Kachelwerts auf Englisch', () => {
+    zeigeEnglisch(<KachelWert wert={null} einheit="Tage" />)
+    expect(screen.getByText('no data')).toBeInTheDocument()
+  })
+
+  it('liest einem nicht gemessenen Instrument den Grund auf Englisch vor', () => {
+    zeigeEnglisch(<Instrument titel="Cost" teile={null} testId="kosten" />)
+    expect(screen.getByTestId('kosten-wert')).toHaveTextContent('—not measured')
+  })
+
+  it('schreibt die Dauer eines Pakets auf Englisch aus', () => {
+    zeigeEnglisch(
+      <>
+        <PaketDauer ms={3_730_000} testId="lang" />
+        <PaketDauer ms={null} testId="ohne" />
+      </>,
+    )
+    expect(screen.getByTestId('lang')).toHaveAttribute('aria-label', 'Duration 1 h 2 min 10 s')
+    expect(screen.getByTestId('ohne')).toHaveAttribute('title', 'Duration not measured')
   })
 })

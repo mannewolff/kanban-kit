@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DisruptionView, LaufPaketeView, PaketView } from '../../api/plattformLeitstand'
 import { AktuellerStand, karteSchluessel } from './AktuellerStand'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 
 const laufend = (extra: Partial<DisruptionView> = {}): DisruptionView => ({
   nightRunId: 8,
@@ -351,5 +352,57 @@ describe('AktuellerStand — Leerzustand, Projektblock und Paketzeile', () => {
       [pakete(8, [paket({ state: 'RED', errorClass: 'TIME_BUDGET_EXCEEDED' })])],
     )
     expect(screen.getByTestId('stand-paket-8-721')).toHaveTextContent('Am Zeitbudget beendet, ohne Ergebnis')
+  })
+})
+
+describe('AktuellerStand auf Englisch', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(new Date('2026-09-21T02:33:22Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const zeigeEnglisch = (
+    laufende: DisruptionView[],
+    gemeldetePakete: LaufPaketeView[],
+    verschwunden: ReadonlySet<string> = new Set(),
+  ) =>
+    renderMitSprache(
+      <MemoryRouter>
+        <AktuellerStand
+          laufende={laufende}
+          gemeldetePakete={gemeldetePakete}
+          verschwunden={verschwunden}
+          onKarteOeffnen={() => {}}
+          onAlsBeendetKennzeichnen={() => {}}
+        />
+      </MemoryRouter>,
+      'en',
+    )
+
+  it('sagt den Leerzustand auf Englisch', () => {
+    zeigeEnglisch([], [])
+    expect(screen.getByTestId('kein-aktueller-stand')).toHaveTextContent('No run is working right now — nothing reported.')
+  })
+
+  it('zeigt Kopf, Taste und Paketzeile auf Englisch mit AM/PM', () => {
+    zeigeEnglisch([laufend()], [pakete(8, [paket(), paket({ cardNumber: 722, title: 'Zweites Paket', cardExists: false })])])
+
+    const kopf = screen.getByTestId('stand-kopf-8')
+    expect(within(kopf).getByRole('link', { name: 'Run #8 of Mein Projekt' })).toHaveTextContent('Run #8')
+    expect(kopf.textContent).toMatch(/^Run #8 · started 3:10\sAM · .+ for 01:23:22 · 2 reported · /)
+    expect(within(kopf).getByRole('button', { name: 'Mark run #8 as finished' })).toHaveTextContent('Mark as finished')
+    const zeile = screen.getByTestId('stand-paket-8-721')
+    expect(within(zeile).getByRole('button', { name: 'Open card #721: Erstes Paket' })).toBeInTheDocument()
+    expect(within(zeile).getByRole('link', { name: 'Erstes Paket — show run #8' })).toBeInTheDocument()
+    expect(screen.getByTestId('stand-paket-8-722')).toHaveTextContent('Card #722 not found')
+  })
+
+  it('zählt einen Lauf ohne gemeldetes Paket auf Englisch', () => {
+    zeigeEnglisch([laufend({ nightRunId: 6 })], [pakete(6, [])])
+    expect(screen.getByTestId('stand-kopf-6')).toHaveTextContent('· 0 reported')
   })
 })

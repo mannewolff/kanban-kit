@@ -27,6 +27,7 @@ import {
 } from '../components/leitstand/LeitstandBausteine'
 import { LeitstandVerbrauch } from '../components/leitstand/LeitstandVerbrauch'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { useSprache, useT } from '../i18n/SpracheContext'
 import { epicColor } from '../lib/epicMeta'
 import {
   abbruchgruende,
@@ -47,6 +48,8 @@ import {
   MELDER_JE_FEHLERKLASSE,
   MELDER_JE_ZUSTAND,
   modusName,
+  uhrzeit,
+  vorgaenge,
 } from '../lib/leitstand'
 import { useLeitstandDaten, type Laden } from '../lib/useLeitstandDaten'
 import {
@@ -93,13 +96,14 @@ type Auswahl = { card: CardByNumber; projectId: number }
 
 export function LeitstandPage() {
   const { boardId } = useParams()
+  const t = useT().LEITSTAND
   const daten = useLeitstandDaten(boardId)
   // Die Karte kommt aus „Letzter Lauf" und damit immer aus einem bekannten Projekt; das Projekt
   // reist im Zustand mit, statt beim Rendern des Dialogs noch einmal gegen `null` geprüft zu werden.
   const [detail, setDetail] = useState<Auswahl | null>(null)
 
   if (!daten.validId) {
-    return <Alert severity="error">Ungültige Board-ID.</Alert>
+    return <Alert severity="error">{t.UNGUELTIGE_ID}</Alert>
   }
 
   const { board, kpis, epics, klassen, projectId, liste, juengster, epicListe } = daten
@@ -107,7 +111,7 @@ export function LeitstandPage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <Box component="h1" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-        {board.art === 'da' ? `Leitstand ${board.wert.name}` : 'Leitstand'}
+        {board.art === 'da' ? t.TITEL_BOARD(board.wert.name) : t.TITEL}
       </Box>
 
       {juengster && <LaufbandBereich lauf={juengster} />}
@@ -140,21 +144,23 @@ export function LeitstandPage() {
 
 /** Die Kennzahlen-Zeile (Entwurf Z. 1240–1323): drei Board-Kacheln und die Nachtlauf-Kachel. */
 function KennzahlenBereich({ kpis, liste }: Readonly<{ kpis: Laden<BoardDashboardKpis>; liste: readonly NightRunView[] | null }>) {
+  const t = useT().LEITSTAND
+  const { sprache } = useSprache()
   return (
     <Box
       component="section"
-      aria-label="Kennzahlen"
+      aria-label={t.KENNZAHLEN}
       sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))', lg: 'repeat(4, minmax(0,1fr))' }, gap: '14px', perspective: '1100px' }}
     >
       {kpis.art === 'da' ? (
         <>
-          <Kachel titel="Durchsatz · Woche" daten={durchsatzKachel(kpis.wert.throughput)} melder="kupfer" />
-          <Kachel titel="Durchlaufzeit" daten={durchlaufKachel(kpis.wert.avgLeadTimeSeconds, kpis.wert.leadTimeSampleCount)} melder="gruen" />
-          <Kachel titel="Implementierungszeit" daten={implementierungKachel(kpis.wert.avgImplementationSeconds, kpis.wert.implementationSampleCount)} melder="stahl" />
+          <Kachel titel={t.DURCHSATZ_WOCHE} daten={durchsatzKachel(kpis.wert.throughput, sprache)} melder="kupfer" />
+          <Kachel titel={t.DURCHLAUFZEIT} daten={durchlaufKachel(kpis.wert.avgLeadTimeSeconds, kpis.wert.leadTimeSampleCount, sprache)} melder="gruen" />
+          <Kachel titel={t.IMPLEMENTIERUNGSZEIT} daten={implementierungKachel(kpis.wert.avgImplementationSeconds, kpis.wert.implementationSampleCount, sprache)} melder="stahl" />
         </>
       ) : (
         <Typography color="text.secondary">
-          {kpis.art === 'laedt' ? 'Kennzahlen werden geladen …' : 'Kennzahlen konnten nicht geladen werden.'}
+          {kpis.art === 'laedt' ? t.KENNZAHLEN_LAEDT : t.KENNZAHLEN_FEHLER}
         </Typography>
       )}
       {liste && <NachtlaufKachel laeufe={liste} />}
@@ -213,11 +219,13 @@ function LeitstandRumpf({
 
 /** Laufband (Entwurf Z. 393–468, 1203–1230): der jüngste Lauf auf einen Blick. */
 function LaufbandBereich({ lauf }: Readonly<{ lauf: NightRunView }>) {
-  const band = laufband(lauf)
+  const t = useT().LEITSTAND
+  const { sprache } = useSprache()
+  const band = laufband(lauf, sprache)
   return (
     <Box
       component="section"
-      aria-label="Jüngster Run"
+      aria-label={t.JUENGSTER_RUN}
       sx={{
         display: 'grid',
         gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(260px, 1.5fr) auto' },
@@ -257,8 +265,8 @@ function LaufbandBereich({ lauf }: Readonly<{ lauf: NightRunView }>) {
         </Box>
       </Box>
       <Box sx={{ display: 'flex', gap: '20px', flex: 'none' }}>
-        <Budget etikett="Zeit" wert={String(band.minuten)} einheit="min" />
-        {band.kosten && <Budget etikett="Kosten" wert={band.kosten} einheit="$" />}
+        <Budget etikett={t.ZEIT} wert={String(band.minuten)} einheit="min" />
+        {band.kosten && <Budget etikett={t.KOSTEN} wert={band.kosten} einheit="$" />}
       </Box>
     </Box>
   )
@@ -278,17 +286,18 @@ function Budget({ etikett, wert, einheit }: Readonly<{ etikett: string; wert: st
 
 /** Run · grün (Entwurf Z. 1308–1323): Anteil grüner Pakete mit Aufschlüsselung. */
 function NachtlaufKachel({ laeufe }: Readonly<{ laeufe: readonly NightRunView[] }>) {
+  const t = useT().LEITSTAND
   const anteil = gruenAnteil(laeufe)
   const breite = (zahl: number) => `${(zahl / Math.max(1, anteil.gesamt)) * 100}%`
   return (
-    <Box component="article" aria-label="Run · grün" sx={KACHEL_SX}>
-      <Box sx={ETIKETT}>Run · grün</Box>
+    <Box component="article" aria-label={t.RUN_GRUEN} sx={KACHEL_SX}>
+      <Box sx={ETIKETT}>{t.RUN_GRUEN}</Box>
       <KachelWert wert={anteil.prozent === null ? null : String(anteil.prozent)} einheit="%" />
       {anteil.gesamt > 0 && (
         <>
           <Box
             role="img"
-            aria-label={`${anteil.gruen} grün, ${anteil.gelb} gelb, ${anteil.rot} rot`}
+            aria-label={t.ANTEIL_ARIA(anteil.gruen, anteil.gelb, anteil.rot)}
             sx={{ display: 'flex', height: 12, borderRadius: '6px', overflow: 'hidden', bgcolor: NUT, boxShadow: SCHATTEN_NUTE }}
           >
             <Box sx={{ width: breite(anteil.gruen), bgcolor: MELDER.gruen }} />
@@ -296,32 +305,32 @@ function NachtlaufKachel({ laeufe }: Readonly<{ laeufe: readonly NightRunView[] 
             <Box sx={{ width: breite(anteil.rot), bgcolor: MELDER.zinnob }} />
           </Box>
           <Box aria-hidden sx={{ ...ZAHL, display: 'flex', gap: '12px', fontSize: 9.5, color: TEXT_SCHWACH }}>
-            <span>{`${anteil.gruen} grün`}</span>
-            <span>{`${anteil.gelb} gelb`}</span>
-            <span>{`${anteil.rot} rot`}</span>
+            <span>{t.GRUEN(anteil.gruen)}</span>
+            <span>{t.GELB(anteil.gelb)}</span>
+            <span>{t.ROT(anteil.rot)}</span>
           </Box>
         </>
       )}
-      <KachelFuss basis={anteil.gesamt === 1 ? 'letztes Paket' : `letzte ${anteil.gesamt} Pakete`} />
+      <KachelFuss basis={t.LETZTE_PAKETE(anteil.gesamt)} />
     </Box>
   )
 }
 
 /** Herkunftszeile der Einlieferung (Entwurf Z. 1400–1406). */
 function Herkunft({ lauf }: Readonly<{ lauf: NightRunView }>) {
-  const zeitpunkt = new Date(lauf.updatedAt ?? lauf.createdAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  const t = useT().LEITSTAND
+  const { sprache } = useSprache()
+  const zeitpunkt = uhrzeit(lauf.updatedAt ?? lauf.createdAt, sprache)
   const text =
-    lauf.origin === 'TOKEN'
-      ? `Eingeliefert von der ${modusName(lauf.mode)} um ${zeitpunkt} — automatisch, ohne Handgriff im Browser.`
-      : `Im Browser hochgeladen um ${zeitpunkt}.`
-  const vorgaengeText = lauf.items.length === 1 ? '1 Vorgang' : `${lauf.items.length} Vorgänge`
+    lauf.origin === 'TOKEN' ? t.EINGELIEFERT(modusName(lauf.mode, sprache), zeitpunkt) : t.HOCHGELADEN(zeitpunkt)
+  const vorgaengeText = vorgaenge(lauf.items.length, sprache)
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: 12, color: 'text.secondary' }}>
       <Led melder={laufMelder(lauf) === 'stahl' ? 'stahl' : 'gruen'} />
       <span>{text}</span>
       <Box sx={{ ml: 'auto', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-        {lauf.tokenName && <Zustand>{`Token ${lauf.tokenName}`}</Zustand>}
-        <Zustand>{`${vorgaengeText} · ${lauf.unparsedCount} ungedeutete Zeilen`}</Zustand>
+        {lauf.tokenName && <Zustand>{t.TOKEN(lauf.tokenName)}</Zustand>}
+        <Zustand>{t.UNGEDEUTET(vorgaengeText, lauf.unparsedCount)}</Zustand>
       </Box>
     </Box>
   )
@@ -346,6 +355,8 @@ function LetzterLauf({
   projectId,
   onOeffnen,
 }: Readonly<{ lauf: NightRunView; epics: readonly Epic[]; projectId: number; onOeffnen: (card: CardByNumber) => void }>) {
+  const t = useT().LEITSTAND
+  const { sprache } = useSprache()
   const notify = useSnackbar()
   const [nurAbbrueche, setNurAbbrueche] = useState(false)
   const zeilen = nurAbbrueche ? lauf.items.filter(istAbbruch) : lauf.items
@@ -355,9 +366,7 @@ function LetzterLauf({
       onOeffnen(await cardsApi.byNumber(projectId, item.cardNumber))
     } catch (err) {
       notify(
-        err instanceof ApiError && err.status === 404
-          ? `Karte #${item.cardNumber} nicht gefunden — gelöscht oder kein Zugriff.`
-          : 'Karte konnte nicht geladen werden.',
+        err instanceof ApiError && err.status === 404 ? t.KARTE_FEHLT(item.cardNumber) : t.KARTE_FEHLER,
         err instanceof ApiError && err.status === 404 ? 'warning' : 'error',
       )
     }
@@ -365,23 +374,23 @@ function LetzterLauf({
 
   return (
     <Platte
-      titel={`Letzter Run · ${modusName(lauf.mode)}`}
-      notiz={laufNotiz(lauf)}
+      titel={t.LETZTER_RUN(modusName(lauf.mode, sprache))}
+      notiz={laufNotiz(lauf, sprache)}
       led={<Led melder={laufMelder(lauf)} pulsiert={laeuftNoch(lauf)} />}
       werkzeug={
         <>
           <FilterTaste gewaehlt={!nurAbbrueche} onClick={() => setNurAbbrueche(false)}>
-            Alle
+            {t.ALLE}
           </FilterTaste>
           <FilterTaste gewaehlt={nurAbbrueche} onClick={() => setNurAbbrueche(true)}>
-            Nur Abbrüche
+            {t.NUR_ABBRUECHE}
           </FilterTaste>
         </>
       }
     >
       {zeilen.length === 0 && (
         <Typography color="text.secondary" sx={{ px: '16px', py: '11px' }}>
-          {nurAbbrueche ? 'Kein Abbruch in diesem Run.' : 'Der Run hat noch kein Arbeitspaket gemeldet.'}
+          {nurAbbrueche ? t.KEIN_ABBRUCH_RUN : t.KEIN_PAKET}
         </Typography>
       )}
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -404,12 +413,13 @@ function LetzterLauf({
 }
 
 function Vorgang({ item, epic, onOeffnen }: Readonly<{ item: NightRunItemView; epic: Epic | null; onOeffnen: () => void }>) {
+  const t = useT().LEITSTAND
   const auszug = ersteZeile(item.excerpt)
   const hash = kurzHash(item.commitHash)
   return (
     <ButtonBase
       onClick={onOeffnen}
-      aria-label={`Karte #${item.cardNumber} öffnen: ${item.title}`}
+      aria-label={t.KARTE_OEFFNEN_ARIA(item.cardNumber, item.title)}
       sx={{
         width: '100%',
         display: 'grid',
@@ -455,16 +465,17 @@ function Vorgang({ item, epic, onOeffnen }: Readonly<{ item: NightRunItemView; e
 
 /** Durchsatz als Balkenwerk über zwölf Wochen (Entwurf Z. 642–688, 1513–1540). */
 function Durchsatz({ wochen }: Readonly<{ wochen: BoardDashboardKpis['throughput'] }>) {
+  const t = useT().LEITSTAND
   const werte = wochen.map((w) => w.doneCount)
   return (
-    <Platte titel="Durchsatz" notiz={`abgeschlossene Karten je Woche · ${wochen.length} Wochen`}>
+    <Platte titel={t.DURCHSATZ} notiz={t.DURCHSATZ_NOTIZ(wochen.length)}>
       <Balkenwerk
         wochen={wochen}
         hoehen={balkenHoehen(werte)}
-        titel={(i) => `${werte[i]} Karten`}
-        ariaLabel={`Durchsatz der letzten ${wochen.length} Wochen: ${werte.join(', ')} Karten, zuletzt ${werte.at(-1)}`}
+        titel={(i) => t.KARTEN(werte[i])}
+        ariaLabel={t.DURCHSATZ_ARIA(wochen.length, werte.join(', '), werte.at(-1))}
         leer={werte.every((w) => w === 0)}
-        leersatz="Noch keine abgeschlossene Karte in den letzten Wochen."
+        leersatz={t.DURCHSATZ_LEER}
         farbe={KUPFER}
         farbeHell={KUPFER_HELL}
       />
@@ -481,18 +492,20 @@ const STAHL_HELL = `color-mix(in srgb, ${MELDER.stahl} 55%, ${BLINKER_HELL})`
  * ein Balken von 0 Minuten (E6).
  */
 function ImplementierungVerlauf({ wochen }: Readonly<{ wochen: BoardDashboardKpis['implementationWeekly'] }>) {
-  const kacheln = wochen.map((w) => implementierungKachel(w.avgImplementationSeconds, w.sampleCount))
+  const t = useT().LEITSTAND
+  const { sprache } = useSprache()
+  const kacheln = wochen.map((w) => implementierungKachel(w.avgImplementationSeconds, w.sampleCount, sprache))
   const werte = kacheln.map((k) => (k.wert === null ? null : `${k.wert} ${k.einheit}`))
-  const vorgelesen = werte.map((wert) => wert ?? 'keine Messung')
+  const vorgelesen = werte.map((wert) => wert ?? t.KEINE_MESSUNG)
   return (
-    <Platte titel="Implementierungszeit" notiz={`Mittelwert je Woche · ${wochen.length} Wochen`}>
+    <Platte titel={t.IMPLEMENTIERUNGSZEIT} notiz={t.IMPLEMENTIERUNG_NOTIZ(wochen.length)}>
       <Balkenwerk
         wochen={wochen}
         hoehen={balkenHoehenMitLuecken(kacheln.map((k, i) => (k.wert === null ? null : wochen[i].avgImplementationSeconds)))}
         titel={(i) => `${werte[i]} · ${kacheln[i].basis}`}
-        ariaLabel={`Implementierungszeit der letzten ${wochen.length} Wochen: ${vorgelesen.join(', ')}, zuletzt ${vorgelesen.at(-1)}`}
+        ariaLabel={t.IMPLEMENTIERUNG_ARIA(wochen.length, vorgelesen.join(', '), vorgelesen.at(-1))}
         leer={werte.every((wert) => wert === null)}
-        leersatz="Noch keine gemessene Implementierungszeit in den letzten Wochen."
+        leersatz={t.IMPLEMENTIERUNG_LEER}
         farbe={MELDER.stahl}
         farbeHell={STAHL_HELL}
       />
@@ -524,6 +537,7 @@ function Balkenwerk({
   farbe: string
   farbeHell: string
 }>) {
+  const t = useT().LEITSTAND
   if (leer) {
     return (
       <Typography color="text.secondary" sx={{ px: '16px', py: '14px' }}>
@@ -546,7 +560,7 @@ function Balkenwerk({
               <Box
                 key={wochen[i].weekStart}
                 data-testid={`luecke-${i}`}
-                title={`KW ${kalenderwoche(wochen[i].weekStart)}: keine gemessene Karte`}
+                title={t.LUECKE(kalenderwoche(wochen[i].weekStart))}
                 sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}
               >
                 <Box sx={{ borderTop: `1px dashed ${RAND_STARK}` }} />
@@ -585,12 +599,13 @@ function Balkenwerk({
 
 /** Abbruchgründe (Entwurf Z. 690–711, 1606–1653): je Fehlerklasse die Zahl der Läufe. */
 function Abbruchgruende({ zaehler, laeufe }: Readonly<{ zaehler: NightRunErrorClassCounts; laeufe: number }>) {
+  const t = useT().LEITSTAND
   const zeilen = abbruchgruende(zaehler)
   return (
-    <Platte titel="Abbruchgründe" notiz={laeufe === 1 ? '1 Run' : `${laeufe} Runs`}>
+    <Platte titel={t.ABBRUCHGRUENDE} notiz={t.RUNS(laeufe)}>
       {zeilen.length === 0 ? (
         <Typography color="text.secondary" sx={{ px: '16px', py: '14px' }}>
-          Kein Abbruch in den aufbewahrten Runs.
+          {t.KEIN_ABBRUCH}
         </Typography>
       ) : (
         <Box component="ul" sx={{ listStyle: 'none', m: 0, display: 'flex', flexDirection: 'column', gap: '9px', px: '16px', pt: '14px', pb: '16px' }}>
@@ -611,12 +626,13 @@ function Abbruchgruende({ zaehler, laeufe }: Readonly<{ zaehler: NightRunErrorCl
 
 /** Vorhaben mit Fortschritt (Entwurf Z. 1682–1712): nur offene, in der Farbe ihres Schilds. */
 function VorhabenPlatte({ epics }: Readonly<{ epics: readonly Epic[] }>) {
+  const t = useT().LEITSTAND
   const offen = useMemo(() => epics.filter((e) => e.done < e.total), [epics])
   return (
-    <Platte titel="Vorhaben" notiz="offen">
+    <Platte titel={t.VORHABEN} notiz={t.OFFEN}>
       {offen.length === 0 ? (
         <Typography color="text.secondary" sx={{ px: '16px', py: '14px' }}>
-          Kein offenes Vorhaben.
+          {t.KEIN_VORHABEN}
         </Typography>
       ) : (
         <Box component="ul" sx={{ listStyle: 'none', m: 0, display: 'flex', flexDirection: 'column', gap: '9px', px: '16px', pt: '14px', pb: '16px' }}>

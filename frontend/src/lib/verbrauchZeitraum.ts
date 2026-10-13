@@ -1,6 +1,7 @@
 import type { VerbrauchAngaben, VerbrauchKennzahlen } from '../api/nightRunUsage'
 import { leserZone } from '../api/nightRunUsage'
-import { betrag } from './nachtlaufFormat'
+import { formatierer } from '../i18n/format'
+import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 
 /**
  * Die Textrechnung der Verbrauchs-Auswertung (Issue #940, Plan #933): Beschriftung der Zeiträume,
@@ -10,29 +11,23 @@ import { betrag } from './nachtlaufFormat'
  * Der Kern ist derselbe wie im Backend: **„nicht gemessen" ist nicht 0** (Plan E5).
  */
 
-/**
- * Der Satz aus #926 AK 9 — ausschließlich für einen aufbewahrten Zeitraum ohne jeden Eintrag.
- *
- * Seit Issue #1017 zählt der Zeitraum Läufe **und** Sitzungen (#984 AK 1): An einem Tag ohne
- * Nachtlauf, an dem im Gespräch gearbeitet wurde, stehen Zahlen — der Satz erschiene sonst über
- * einer Arbeit, die stattgefunden hat.
- */
-const KEIN_LAUF_TEXT = 'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.'
+/** Ein Zeitraum ganz vor dem Erfassungsbeginn — und niemals eine 0 (#984 AK 6). Deutsche Fassung. */
+export const NICHT_ERFASST_TEXT = woerterbuch('de').VERBRAUCH_ZEITRAUM.NICHT_ERFASST
 
-/** Ein Zeitraum ganz vor dem Erfassungsbeginn — und niemals eine 0 (#984 AK 6). */
-export const NICHT_ERFASST_TEXT = 'nicht erfasst'
+/** Ein Zeitraum, der den Erfassungsbeginn schneidet: Zahlen sind da, aber unvollständig. Deutsche Fassung. */
+export const TEILWEISE_ERFASST_TEXT = woerterbuch('de').VERBRAUCH_ZEITRAUM.TEILWEISE_ERFASST
 
-/** Ein Zeitraum, der den Erfassungsbeginn schneidet: Zahlen sind da, aber unvollständig. */
-export const TEILWEISE_ERFASST_TEXT = 'teilweise erfasst'
+/** Das Kalenderdatum je Sprache: `21.09.2026` bzw. `Sep 21, 2026`, stets in UTC. */
+const DATUM: Readonly<Record<Sprache, Intl.DateTimeFormatOptions>> = {
+  de: { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' },
+  en: { dateStyle: 'medium', timeZone: 'UTC' },
+}
 
-const DATUM = new Intl.DateTimeFormat('de-DE', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  timeZone: 'UTC',
-})
+const datum = (wert: Date, sprache: Sprache): string =>
+  new Intl.DateTimeFormat(formatierer(sprache).gebietsschema, DATUM[sprache]).format(wert)
 
-const MONAT = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+const monat = (wert: Date, sprache: Sprache): string =>
+  new Intl.DateTimeFormat(formatierer(sprache).gebietsschema, { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(wert)
 
 /**
  * Ein Kalenderdatum `JJJJ-MM-TT` als Mitternacht UTC. Formatiert wird ebenfalls in UTC — so kann
@@ -50,13 +45,13 @@ const folgetag = (tag: string): Date => {
  * Der Name eines Zyklus (Issue #1127): Er läuft von 12:00 bis 12:00 und heißt nach seinem
  * Beginn und dem Folgetag. `tag` ist sein Beginn als Kalendertag `JJJJ-MM-TT`.
  */
-export function zyklusBeschriftung(tag: string): string {
-  return `Schicht ${zyklusSpanne(tag)}`
+export function zyklusBeschriftung(tag: string, sprache: Sprache = 'de'): string {
+  return woerterbuch(sprache).VERBRAUCH_ZEITRAUM.SCHICHT(zyklusSpanne(tag, sprache))
 }
 
 /** Die Spanne eines Zyklus ohne das Wort davor — „vom 21.09.2026 auf den 22.09.2026" (#1135). */
-export function zyklusSpanne(tag: string): string {
-  return `vom ${DATUM.format(alsDatum(tag))} auf den ${DATUM.format(folgetag(tag))}`
+export function zyklusSpanne(tag: string, sprache: Sprache = 'de'): string {
+  return woerterbuch(sprache).VERBRAUCH_ZEITRAUM.SPANNE(datum(alsDatum(tag), sprache), datum(folgetag(tag), sprache))
 }
 
 /** Die Teile eines Zeitpunkts in einer Zone — Kalendertag und Stunde, wie die Wanduhr dort sie zeigt. */
@@ -100,35 +95,39 @@ export function zyklusDavor(tag: string): string {
  */
 export function zeitraumBeschriftung(
   kennzahlen: Pick<VerbrauchKennzahlen, 'type' | 'firstDay' | 'lastDay'>,
+  sprache: Sprache = 'de',
 ): string {
   switch (kennzahlen.type) {
     case 'DAY':
-      return zyklusBeschriftung(kennzahlen.firstDay)
+      return zyklusBeschriftung(kennzahlen.firstDay, sprache)
     case 'WEEK':
-      return `Woche vom ${DATUM.format(alsDatum(kennzahlen.firstDay))} bis ${DATUM.format(alsDatum(kennzahlen.lastDay))}`
+      return woerterbuch(sprache).VERBRAUCH_ZEITRAUM.WOCHE(
+        datum(alsDatum(kennzahlen.firstDay), sprache),
+        datum(alsDatum(kennzahlen.lastDay), sprache),
+      )
     case 'MONTH':
-      return MONAT.format(alsDatum(kennzahlen.firstDay))
+      return monat(alsDatum(kennzahlen.firstDay), sprache)
   }
 }
 
 /** Ein ISO-Zeitpunkt als Kalendertag — für Grenzen wie den Erfassungs- oder Aufbewahrungsbeginn. */
-export function zeitpunktDatum(zeitpunkt: string): string {
-  return DATUM.format(new Date(zeitpunkt))
+export function zeitpunktDatum(zeitpunkt: string, sprache: Sprache = 'de'): string {
+  return datum(new Date(zeitpunkt), sprache)
 }
 
 /** „1 Run" bzw. „n Runs" — die Zahl steht in Kopfzeilen, Einordnungen und Nächte-Zeilen. */
-export function laeufeText(anzahl: number): string {
-  return anzahl === 1 ? '1 Run' : `${anzahl} Runs`
+export function laeufeText(anzahl: number, sprache: Sprache = 'de'): string {
+  return woerterbuch(sprache).VERBRAUCH_ZEITRAUM.LAEUFE(anzahl)
 }
 
 /** „1 Sitzung" bzw. „n Sitzungen" — der Anteil neben den Läufen (#984 AK 1). */
-export function sitzungenText(anzahl: number): string {
-  return anzahl === 1 ? '1 Sitzung' : `${anzahl} Sitzungen`
+export function sitzungenText(anzahl: number, sprache: Sprache = 'de'): string {
+  return woerterbuch(sprache).VERBRAUCH_ZEITRAUM.SITZUNGEN(anzahl)
 }
 
 /** „1 Karte" bzw. „n Karten". */
-export function kartenText(anzahl: number): string {
-  return anzahl === 1 ? '1 Karte' : `${anzahl} Karten`
+export function kartenText(anzahl: number, sprache: Sprache = 'de'): string {
+  return woerterbuch(sprache).VERBRAUCH_ZEITRAUM.KARTEN(anzahl)
 }
 
 export type VergleichsRichtung = 'teurer' | 'billiger' | 'unveraendert' | 'nicht-vergleichbar'
@@ -144,23 +143,21 @@ const MIKRODOLLAR = 1_000_000
 export function vergleichMitVorzeitraum(
   aktuell: VerbrauchAngaben,
   vorher: VerbrauchAngaben,
+  sprache: Sprache = 'de',
 ): { richtung: VergleichsRichtung; text: string } {
+  const t = woerterbuch(sprache).VERBRAUCH_ZEITRAUM
   if (aktuell.costUsd === null || vorher.costUsd === null) {
-    return {
-      richtung: 'nicht-vergleichbar',
-      text: 'nicht vergleichbar — eine der beiden Kostenangaben fehlt',
-    }
+    return { richtung: 'nicht-vergleichbar', text: t.NICHT_VERGLEICHBAR }
   }
   const differenz =
     Math.round(aktuell.costUsd * MIKRODOLLAR) - Math.round(vorher.costUsd * MIKRODOLLAR)
   if (differenz === 0) {
-    return { richtung: 'unveraendert', text: 'genauso teuer wie im Vorzeitraum' }
+    return { richtung: 'unveraendert', text: t.UNVERAENDERT }
   }
-  const richtung = differenz > 0 ? 'teurer' : 'billiger'
-  return {
-    richtung,
-    text: `${betrag(Math.abs(differenz) / MIKRODOLLAR)} ${richtung} als im Vorzeitraum`,
-  }
+  const betrag = formatierer(sprache).geld(Math.abs(differenz) / MIKRODOLLAR)
+  return differenz > 0
+    ? { richtung: 'teurer', text: t.TEURER(betrag) }
+    : { richtung: 'billiger', text: t.BILLIGER(betrag) }
 }
 
 type ZeitraumFall =
@@ -191,15 +188,20 @@ function zeitraumFall(kennzahlen: VerbrauchKennzahlen): ZeitraumFall {
   return kennzahlen.usage.total.costUsd === null ? 'nicht-gemessen' : 'vollstaendig'
 }
 
-const HINWEIS: Record<Exclude<ZeitraumFall, 'vollstaendig'>, string> = {
-  'kein-lauf': KEIN_LAUF_TEXT,
-  'vor-aufbewahrung':
-    'Dieser Zeitraum liegt vor dem ältesten aufbewahrten Run — seine Runs sind nicht mehr gespeichert.',
-  teilweise:
-    'Dieser Zeitraum ist nur teilweise abgedeckt: Er beginnt vor dem ältesten aufbewahrten Run, die Zahlen sind unvollständig.',
-  // „Nicht gemessen" bleibt dem Kartenblatt vorbehalten, wo es einen bekannten Lauf ohne Zahl
-  // meint (#984 AK 6). Hier geht es um einen ganzen Zeitraum, und der Satz benennt das.
-  'nicht-gemessen': 'In diesem Zeitraum liefen Runs, ihr Verbrauch liegt aber nicht vor.',
+/**
+ * Der Hinweis je Fall. „Nicht gemessen" bleibt dem Kartenblatt vorbehalten, wo es einen bekannten
+ * Lauf ohne Zahl meint (#984 AK 6); hier geht es um einen ganzen Zeitraum, und der Satz benennt das.
+ * `kein-lauf` ist der Satz aus #926 AK 9 — seit Issue #1017 über Läufe **und** Sitzungen (#984 AK 1).
+ */
+function hinweis(fall: Exclude<ZeitraumFall, 'vollstaendig'>, sprache: Sprache): string {
+  const t = woerterbuch(sprache).VERBRAUCH_ZEITRAUM
+  const texte: Record<Exclude<ZeitraumFall, 'vollstaendig'>, string> = {
+    'kein-lauf': t.KEIN_LAUF,
+    'vor-aufbewahrung': t.VOR_AUFBEWAHRUNG,
+    teilweise: t.TEILWEISE,
+    'nicht-gemessen': t.NICHT_GEMESSEN,
+  }
+  return texte[fall]
 }
 
 /** Was der Erfassungsbeginn über den interaktiven Anteil eines Zeitraums aussagt (#984 AK 6). */
@@ -229,16 +231,17 @@ export function erfassungsstand(kennzahlen: Erfassung): Erfassungsstand {
  * ebenfalls: Dass ein Projekt noch nie eine Sitzung gemeldet hat, ist sein Zustand und kein Befund
  * über diesen Zeitraum — der Anteil selbst sagt dort {@link NICHT_ERFASST_TEXT}.
  */
-function erfassungsHinweis(kennzahlen: Erfassung): string | null {
+function erfassungsHinweis(kennzahlen: Erfassung, sprache: Sprache): string | null {
   if (kennzahlen.interactiveUsageSince === null) {
     return null
   }
-  const seit = DATUM.format(new Date(kennzahlen.interactiveUsageSince))
+  const t = woerterbuch(sprache).VERBRAUCH_ZEITRAUM
+  const seit = datum(new Date(kennzahlen.interactiveUsageSince), sprache)
   switch (erfassungsstand(kennzahlen)) {
     case 'nicht-erfasst':
-      return `Interaktive Sitzungen werden erst seit dem ${seit} erfasst — dieser Zeitraum liegt ganz davor.`
+      return t.ERFASSUNG_DAVOR(seit)
     case 'teilweise-erfasst':
-      return `Interaktive Sitzungen werden erst seit dem ${seit} erfasst — dieser Zeitraum beginnt davor.`
+      return t.ERFASSUNG_BEGINNT_DAVOR(seit)
     case 'erfasst':
       return null
   }
@@ -249,9 +252,9 @@ function erfassungsHinweis(kennzahlen: Erfassung): string | null {
  * Abdeckungslücke zusammen, steht die Erfassung vorn — sie erklärt die größere Lücke: Die
  * Abdeckung fehlt für aufbewahrte Läufe, die Erfassung für eine ganze Gattung.
  */
-export function zeitraumHinweis(kennzahlen: VerbrauchKennzahlen): string | null {
+export function zeitraumHinweis(kennzahlen: VerbrauchKennzahlen, sprache: Sprache = 'de'): string | null {
   const fall = zeitraumFall(kennzahlen)
-  const teile = [erfassungsHinweis(kennzahlen), fall === 'vollstaendig' ? null : HINWEIS[fall]]
+  const teile = [erfassungsHinweis(kennzahlen, sprache), fall === 'vollstaendig' ? null : hinweis(fall, sprache)]
   const text = teile.filter((teil): teil is string => teil !== null).join(' ')
   return text === '' ? null : text
 }

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { theme } from '../../theme'
 import { LaufArtSymbol, laufArtName, type LaufArt } from './LaufArtSymbol'
+import { renderMitSprache } from '../../i18n/renderMitSprache'
 
 const ARTEN: ReadonlyArray<readonly [LaufArt, string]> = [
   ['IMPLEMENTATION', 'Umsetzung'],
@@ -45,5 +46,24 @@ describe('LaufArtSymbol — die Art eines Laufs als Symbol (#1141)', () => {
     for (const [art, wort] of ARTEN) {
       expect(laufArtName(art)).toBe(wort)
     }
+  })
+})
+
+describe('LaufArtSymbol auf Englisch', () => {
+  it.each([
+    ['IMPLEMENTATION', 'Implementation'],
+    ['CHAIN', 'Chain'],
+    ['REVIEW', 'Review'],
+    ['INTERACTIVE', 'Session'],
+    ['NIGHTPLAN', 'Night plan'],
+  ] as const)('benennt %s auf Englisch als %s', (art, wort) => {
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <LaufArtSymbol art={art} />
+      </ThemeProvider>,
+      'en',
+    )
+    expect(screen.getByTestId(`art-${art}`)).toHaveAccessibleName(wort)
+    expect(laufArtName(art, 'en')).toBe(wort)
   })
 })

@@ -376,3 +376,45 @@ describe('kettenAnzeige (Issue #1453, Plan #1447 E5, E6)', () => {
     )
   })
 })
+
+describe('laufFortschritt auf Englisch', () => {
+  it('benennt die Wegleiste auf Englisch', () => {
+    const k = kette({
+      stufen: [stufe('PLAN', 'ERREICHT'), stufe('REVIEW', 'LAEUFT'), stufe('PAKETE', 'OFFEN')],
+      aktuelleStufe: 'REVIEW',
+      endeErreicht: true,
+    })
+    expect(wegleiste(k, 'KETTE', 'en')).toEqual({
+      stufen: [
+        { stufe: 'PLAN', name: 'Plan', zustand: 'reached', aktuell: false },
+        { stufe: 'REVIEW', name: 'Review', zustand: 'running', aktuell: true },
+        { stufe: 'PAKETE', name: 'Work packages', zustand: 'open', aktuell: false },
+      ],
+      ende: 'End of the path reached',
+    })
+    expect(wegleiste(null, 'UMSETZUNGSNACHT', 'en').stufen).toEqual([
+      { stufe: 'UMSETZUNG', name: 'Implementation', zustand: 'running', aktuell: true },
+    ])
+  })
+
+  it('benennt Stationen und Ansage der Kette auf Englisch', () => {
+    const anzeige = kettenAnzeige(
+      {
+        ziel: 'VORBEREITUNG',
+        pruefer: null,
+        zielErreicht: false,
+        grenze: null,
+        stationen: [
+          { station: 'ABDECKUNG', zustand: 'ERLEDIGT', text: 'done', grund: null },
+          { station: 'VORBEREITUNG', zustand: 'WARTET', text: 'waiting', grund: 'question' },
+        ],
+        uebernommen: true,
+        planReviewVorhanden: false,
+        lauf: '2026-10-05T01:00:00Z',
+      },
+      'en',
+    )
+    expect(anzeige.map((a) => a.name)).toEqual(['Coverage', 'Release prepared'])
+    expect(kettenAnsage(anzeige, 'en')).toBe('Night chain: Coverage done; Release prepared waiting (question), target')
+  })
+})

@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography'
 import { useId } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import type { DisruptionView, LaufPaketeView, PaketView } from '../../api/plattformLeitstand'
+import { useSprache, useT } from '../../i18n/SpracheContext'
 import { laufgruppen, type Laufeintrag } from '../../lib/aktuellerStand'
 import {
   melderAusBefund,
@@ -83,6 +84,8 @@ export function AktuellerStand({
     gemeldetePakete: LaufPaketeView[]
   } & Laufwege
 >) {
+  const t = useT().AKTUELLER_STAND
+  const { sprache } = useSprache()
   if (laufende === null) {
     return null
   }
@@ -90,7 +93,7 @@ export function AktuellerStand({
     // Der Satz nennt beides — dass nichts arbeitet und dass darum nichts gemeldet ist (E9). Seit
     // die zweite Platte ueber dieselbe Liste entfallen ist (#1193), sagt ihn keine andere Sektion.
     return (
-      <LeerSatz testId="kein-aktueller-stand">Gerade arbeitet kein Run — nichts gemeldet.</LeerSatz>
+      <LeerSatz testId="kein-aktueller-stand">{t.LEER}</LeerSatz>
     )
   }
   // Die Rechnung kennt vom Lauf nur Kennung und Projekt; Art und Befund holt der Kopf hier —
@@ -98,7 +101,7 @@ export function AktuellerStand({
   const jeLauf = new Map(laufende.map((lauf) => [lauf.nightRunId, lauf]))
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {laufgruppen(laufende, gemeldetePakete).map((gruppe) => (
+      {laufgruppen(laufende, gemeldetePakete, sprache).map((gruppe) => (
         <Standgruppe key={gruppe.projectId} gruppe={gruppe} jeLauf={jeLauf} {...wege} />
       ))}
     </Box>
@@ -189,6 +192,8 @@ function Standlauf({
 }: Readonly<
   { eintrag: Laufeintrag<PaketView>; lauf: DisruptionView; projectId: number } & Laufwege
 >) {
+  const t = useT().AKTUELLER_STAND
+  const { sprache } = useSprache()
   const kopfId = useId()
   const standId = useId()
   const laeuft = lauf.outcome.verdict === 'RUNNING'
@@ -207,16 +212,16 @@ function Standlauf({
             <Typography
               component={RouterLink}
               to={`/projects/${projectId}/nachtlauf?lauf=${eintrag.nightRunId}`}
-              aria-label={`Run #${eintrag.nightRunId} von ${lauf.projectName}`}
+              aria-label={t.RUN_ARIA(eintrag.nightRunId, lauf.projectName)}
               sx={{ fontSize: 12, fontFamily: 'monospace' }}
             >
               {`Run #${eintrag.nightRunId}`}
             </Typography>
-            {` · gestartet ${uhrzeit(lauf.startedAt)} · ${NIGHT_RUN_VERDICT_TEXT[lauf.outcome.verdict]}`}
+            {t.GESTARTET(uhrzeit(lauf.startedAt, sprache), NIGHT_RUN_VERDICT_TEXT[lauf.outcome.verdict])}
           </Box>
           {laeuft && (
             <>
-              {' seit '}
+              {t.SEIT}
               <Box
                 component="span"
                 data-testid={`stand-laufzeit-${eintrag.nightRunId}`}
@@ -234,10 +239,10 @@ function Standlauf({
             unterscheiden. */}
         <Box sx={{ ml: 'auto', flex: 'none' }}>
           <Taste
-            ariaLabel={`Run #${eintrag.nightRunId} als beendet kennzeichnen`}
+            ariaLabel={t.BEENDET_ARIA(eintrag.nightRunId)}
             onClick={() => onAlsBeendetKennzeichnen(lauf)}
           >
-            Als beendet kennzeichnen
+            {t.BEENDET}
           </Taste>
         </Box>
       </Box>
@@ -289,6 +294,7 @@ function Paketzeile({
   verschwunden,
   onKarteOeffnen,
 }: Readonly<{ lauf: number; projectId: number; paket: PaketView } & Zeilenwege>) {
+  const t = useT().AKTUELLER_STAND
   const fehlt = !paket.cardExists || verschwunden.has(karteSchluessel(projectId, paket.cardNumber))
   return (
     <Box
@@ -315,7 +321,7 @@ function Paketzeile({
           component="button"
           type="button"
           underline="hover"
-          aria-label={`Karte #${paket.cardNumber} öffnen: ${paket.title}`}
+          aria-label={t.KARTE_OEFFNEN_ARIA(paket.cardNumber, paket.title)}
           onClick={() => onKarteOeffnen(projectId, paket.cardNumber)}
           sx={{ ...NUMMER_SX, textAlign: 'left', justifySelf: 'start' }}
         >
@@ -327,7 +333,7 @@ function Paketzeile({
       <Typography
         component={RouterLink}
         to={`/projects/${projectId}/nachtlauf?lauf=${lauf}`}
-        aria-label={`${paket.title} — Run #${lauf} anzeigen`}
+        aria-label={t.RUN_ANZEIGEN_ARIA(paket.title, lauf)}
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -362,7 +368,7 @@ function Paketzeile({
       </Typography>
       {fehlt && (
         <Typography sx={{ fontSize: 11.5, color: TEXT_SCHWACH }}>
-          {`Karte #${paket.cardNumber} nicht gefunden`}
+          {t.KARTE_FEHLT(paket.cardNumber)}
         </Typography>
       )}
     </Box>
