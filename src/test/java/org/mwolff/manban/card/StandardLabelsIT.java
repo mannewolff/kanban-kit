@@ -32,7 +32,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class StandardLabelsIT extends AbstractIntegrationTest {
 
   private static final String PASSWORD = "sup3r-secret";
-  private static final int SATZ = 21;
+  private static final int SATZ = 22;
   private static final String ADMIN = "standardlabels-admin@example.com";
   private static final String OWNER = "standardlabels-owner@example.com";
 
@@ -52,7 +52,9 @@ class StandardLabelsIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[0].farbe").value("#6a1b9a"))
         .andExpect(jsonPath("$[2].name").value("kit:clarify"))
         .andExpect(jsonPath("$[3].name").value("kit:clarified"))
-        .andExpect(jsonPath("$[20].name").value("planreview:2"));
+        .andExpect(jsonPath("$[10].name").value("kit:on-hold"))
+        .andExpect(jsonPath("$[10].gruppe").value("Kit"))
+        .andExpect(jsonPath("$[21].name").value("planreview:2"));
   }
 
   @Test
@@ -105,13 +107,14 @@ class StandardLabelsIT extends AbstractIntegrationTest {
     assertThat(
             jdbc.queryForObject(
                 "SELECT count(*) FROM label WHERE name IN ('kit:klaeren', 'kit:geschuetzt',"
-                    + " 'kit:durchziehen', 'kit:pruefen', 'kit:geklaert', 'lauf:laeuft',"
-                    + " 'lauf:abgebrochen', 'lauf:wartet', 'review:fertig', 'ziel:plan',"
-                    + " 'ziel:pakete', 'ziel:umsetzung', 'ziel:push-vorbereitet')",
+                    + " 'kit:durchziehen', 'kit:pruefen', 'kit:geklaert', 'kit:wartet',"
+                    + " 'lauf:laeuft', 'lauf:abgebrochen', 'lauf:wartet', 'review:fertig',"
+                    + " 'ziel:plan', 'ziel:pakete', 'ziel:umsetzung', 'ziel:push-vorbereitet')",
                 Integer.class))
         .isZero();
     assertThat(namenszahl(aktivB, "kit:clarify")).isEqualTo(1);
     assertThat(namenszahl(aktivB, "kit:nightplan")).isEqualTo(1);
+    assertThat(namenszahl(aktivB, "kit:on-hold")).isEqualTo(1);
 
     for (int aufruf = 2; aufruf <= 10; aufruf++) {
       JsonNode weiteres = anlegen(admin);

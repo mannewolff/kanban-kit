@@ -15,11 +15,11 @@ import org.mwolff.manban.common.KitNamen.Schutz;
  * Richtung der Freigabe-Labels des claude-workflow-kits, vom Server erzwungen (Issue #1421, #1586).
  *
  * <p>Die Labels der Sachen {@code NIGHT} und {@code NIGHTRUN} geben Arbeit frei und setzt nur ein
- * Mensch; der Runner darf sie abnehmen, sobald sie verbraucht sind. Die Labels von {@code KLAEREN}
- * und {@code GESCHUETZT} setzt die Maschine; das Abnehmen ist die Freigabe und steht nur dem
- * Menschen zu. Ohne diese Regel könnte sich eine Session am Kit vorbei selbst freigeben. Welche
- * Sache ein Name trägt und welchen {@link Schutz} sie hat, sagt allein {@link KitNamen}: Deutscher
- * und englischer Name einer Sache sind gleich geschützt.
+ * Mensch; der Runner darf sie abnehmen, sobald sie verbraucht sind. Die Labels von {@code KLAEREN},
+ * {@code GESCHUETZT} und {@code WARTET_EREIGNIS} setzt die Maschine; das Abnehmen ist die Freigabe
+ * und steht nur dem Menschen zu. Ohne diese Regel könnte sich eine Session am Kit vorbei selbst
+ * freigeben. Welche Sache ein Name trägt und welchen {@link Schutz} sie hat, sagt allein {@link
+ * KitNamen}: Deutscher und englischer Name einer Sache sind gleich geschützt.
  *
  * <p>Ein Name im Namensraum des Kits, den das Register nicht kennt, ist für ein Token weder setzbar
  * noch per Umbenennen erzeugbar (Plan #1582, E7). Sonst legte ein Token fest, welche Namen

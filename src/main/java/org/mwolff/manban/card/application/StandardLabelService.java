@@ -140,7 +140,8 @@ public class StandardLabelService {
         Sache.PRUEFEN,
         Sache.NIGHTPLAN,
         Sache.NIGHTREVIEW,
-        Sache.NIGHTISSUES);
+        Sache.NIGHTISSUES,
+        Sache.WARTET_EREIGNIS);
     zuordnen(
         tabelle,
         new Darstellung(LAUF, FARBE_LAUF),

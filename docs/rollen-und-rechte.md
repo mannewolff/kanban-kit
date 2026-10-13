@@ -198,20 +198,20 @@ Aufrufe **409**, weil ihm das Board fehlt.
 
 ### Freigabe-Labels des Kits
 
-Vier Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Server erzwingt sie
-(Issue #1421). `kit:night` und `kit:nightrun` geben Arbeit für den Nachtlauf frei: Sie setzt nur ein
-Mensch, der Runner nimmt sie ab, sobald sie verbraucht sind. `kit:klaeren` und `kit:geschuetzt`
-setzt die Maschine; ihr Abnehmen ist die Freigabe und steht nur dem Menschen zu.
+Fünf Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Server erzwingt sie
+(Issue #1421, #1667). `kit:night` und `kit:nightrun` geben Arbeit für den Nachtlauf frei: Sie setzt nur ein
+Mensch, der Runner nimmt sie ab, sobald sie verbraucht sind. `kit:klaeren`, `kit:geschuetzt` und
+`kit:wartet` setzt die Maschine; ihr Abnehmen ist die Freigabe und steht nur dem Menschen zu.
 
 | | Session (Mensch) | Token (Kit, Runner, Agent) |
 |---|---|---|
 | `kit:night`, `kit:nightrun` setzen | erlaubt | abgewiesen (403) |
 | `kit:night`, `kit:nightrun` abnehmen | erlaubt | erlaubt |
-| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected` setzen | erlaubt | erlaubt |
-| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected` abnehmen | erlaubt | abgewiesen (403) |
+| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected`, `kit:wartet`/`kit:on-hold` setzen | erlaubt | erlaubt |
+| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected`, `kit:wartet`/`kit:on-hold` abnehmen | erlaubt | abgewiesen (403) |
 
 Das claude-workflow-kit lässt sich auf Englisch einstellen. Darum gilt jede Regel unter beiden Namen
-derselben Sache: `kit:clarify` wie `kit:klaeren`, `kit:protected` wie `kit:geschuetzt`. `kit:night`
+derselben Sache: `kit:clarify` wie `kit:klaeren`, `kit:protected` wie `kit:geschuetzt`, `kit:on-hold` wie `kit:wartet`. `kit:night`
 und `kit:nightrun` heißen in beiden Sprachen gleich und haben kein Gegenstück.
 
 Die Labels, mit denen die [Stufenleiste](nutzung.md#karten-detail) Ziel und Prüferzahl einer Kette

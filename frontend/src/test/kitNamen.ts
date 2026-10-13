@@ -20,6 +20,7 @@ export const KIT_NAMEN: KitNamen = {
     { sache: 'NIGHTPLAN', namen: ['kit:nightplan'] },
     { sache: 'NIGHTREVIEW', namen: ['kit:nightreview'] },
     { sache: 'NIGHTISSUES', namen: ['kit:nightissues'] },
+    { sache: 'WARTET_EREIGNIS', namen: ['kit:wartet', 'kit:on-hold'] },
     { sache: 'LAUF_ABGEBROCHEN', namen: ['lauf:abgebrochen', 'run:aborted'] },
     { sache: 'LAUF_LAEUFT', namen: ['lauf:laeuft', 'run:running'] },
     { sache: 'LAUF_WARTET', namen: ['lauf:wartet', 'run:waiting'] },

@@ -27,7 +27,7 @@ class StandardLabelServiceTest {
 
   private static final long ADMIN = 1L;
   private static final long NUTZER = 2L;
-  private static final int SATZ = 21;
+  private static final int SATZ = 22;
 
   private LabelRepository labels;
   private BoardService boardService;
@@ -59,6 +59,7 @@ class StandardLabelServiceTest {
             "kit:nightplan",
             "kit:nightreview",
             "kit:nightissues",
+            "kit:on-hold",
             "run:aborted",
             "run:running",
             "run:waiting",
@@ -72,9 +73,10 @@ class StandardLabelServiceTest {
             "planreview:2");
     assertThat(satz).hasSize(SATZ);
     assertThat(satz.get(0)).isEqualTo(new StandardLabel("kit:carry-through", "Kit", "#6a1b9a"));
-    assertThat(satz.get(10)).isEqualTo(new StandardLabel("run:aborted", "Lauf", "#1565c0"));
-    assertThat(satz.get(14)).isEqualTo(new StandardLabel("review:done", "Review", "#2e7d32"));
-    assertThat(satz.get(20))
+    assertThat(satz.get(10)).isEqualTo(new StandardLabel("kit:on-hold", "Kit", "#6a1b9a"));
+    assertThat(satz.get(11)).isEqualTo(new StandardLabel("run:aborted", "Lauf", "#1565c0"));
+    assertThat(satz.get(15)).isEqualTo(new StandardLabel("review:done", "Review", "#2e7d32"));
+    assertThat(satz.get(21))
         .isEqualTo(new StandardLabel("planreview:2", "Stufenleiste", "#ef6c00"));
   }
 
@@ -92,7 +94,7 @@ class StandardLabelServiceTest {
   }
 
   @Test
-  void keinerDerDreizehnDeutschenNamenStehtImSatz() {
+  void keinerDerVierzehnDeutschenNamenStehtImSatz() {
     List<String> namen = service.standardsatz(ADMIN).stream().map(StandardLabel::name).toList();
 
     assertThat(namen)
@@ -103,6 +105,7 @@ class StandardLabelServiceTest {
                 "kit:durchziehen",
                 "kit:pruefen",
                 "kit:geklaert",
+                "kit:wartet",
                 "lauf:laeuft",
                 "lauf:abgebrochen",
                 "lauf:wartet",
