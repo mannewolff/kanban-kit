@@ -147,13 +147,16 @@ public record RunnerLage(
    * Das Ende eines beendeten Laufs. Von Hand beendet heißt: Der Lauf meldete sich nie ab, sein Ende
    * ist die Beendigung. Meldet er sich danach doch noch vollständig, gilt seine Meldung — dieselbe
    * Rangfolge wie im Befund.
+   *
+   * <p>Nur für beendete Läufe ({@link #beendet}): Wer sich nicht vollständig gemeldet hat, trägt
+   * dann zwingend {@code closedAt} — eine eigene Prüfung darauf wäre nicht zu unterscheiden und
+   * ließe einen äquivalenten Mutanten stehen (Issue #1734).
    */
   private static Instant ende(NightRun lauf) {
-    Instant closedAt = lauf.closedAt();
-    if (!lauf.complete() && closedAt != null) {
-      return closedAt;
+    if (lauf.complete()) {
+      return lauf.startedAt().plusMillis(lauf.durationMs());
     }
-    return lauf.startedAt().plusMillis(lauf.durationMs());
+    return Objects.requireNonNull(lauf.closedAt(), "ende nur für beendete Läufe");
   }
 
   private static AktiverLauf aktiv(NightRun lauf, Instant jetzt, Duration stilleFrist) {
