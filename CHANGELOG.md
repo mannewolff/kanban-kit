@@ -15,6 +15,33 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [3.1.0] – 2026-10-14
+
+- chore: v3.0.1
+- Abdeckung der Nachtlauf-Klassen aus Wartegrund und Runner jetzt geschlossen ([#1735](https://github.com/mannewolff/kanban-kit/issues/1735))
+- Äquivalenten Mutanten in RunnerLage.ende aufgelöst ([#1734](https://github.com/mannewolff/kanban-kit/issues/1734))
+- Test: beendeter Upload-Lauf verwirft seine Stufen ([#1733](https://github.com/mannewolff/kanban-kit/issues/1733))
+- Stryker-Ausnahme für die Abhängigkeitsliste von starteZug wirksam gemacht ([#1732](https://github.com/mannewolff/kanban-kit/issues/1732))
+- Doku: Runner jetzt und Wartegrund ([#1731](https://github.com/mannewolff/kanban-kit/issues/1731))
+- Kartendialog: Abschnitt Wartegrund ([#1730](https://github.com/mannewolff/kanban-kit/issues/1730))
+- Nachtlauf-Seite: Bereich Runner jetzt ([#1729](https://github.com/mannewolff/kanban-kit/issues/1729))
+- Wartegrund einer Ready-Karte ableiten und unter /night-wait lesen ([#1728](https://github.com/mannewolff/kanban-kit/issues/1728))
+- Runner-Lage ableiten und unter /night-runs/now lesen ([#1727](https://github.com/mannewolff/kanban-kit/issues/1727))
+- Bewertung der Ready-Karten annehmen und speichern ([#1726](https://github.com/mannewolff/kanban-kit/issues/1726))
+- Laufbericht nimmt die laufenden Stufen an ([#1725](https://github.com/mannewolff/kanban-kit/issues/1725))
+- Knopf kit:nightrun im Kopf der Ready-Spalte ([#1708](https://github.com/mannewolff/kanban-kit/issues/1708))
+- Mutations-Überlebende in useFingerZiehen.ts beseitigt ([#1720](https://github.com/mannewolff/kanban-kit/issues/1720))
+- Mutations-Überlebende in tabletQuer.ts beseitigt ([#1719](https://github.com/mannewolff/kanban-kit/issues/1719))
+- Mutations-Überlebende in fingerZiehen.ts beseitigt ([#1718](https://github.com/mannewolff/kanban-kit/issues/1718))
+- Tablet quer: Dialoghöhe, Gerätekennzeichen, Nutzerdoku und Desktop-Gegenprobe ([#1717](https://github.com/mannewolff/kanban-kit/issues/1717))
+- Tablet quer: Erklärungen an gesperrten Elementen, Vorhaben-Kennzeichen und Leitstand ([#1716](https://github.com/mannewolff/kanban-kit/issues/1716))
+- Tablet quer: Erklärungen in Kartenansicht, Labelverwaltung, Sammelaktion und Filter ([#1715](https://github.com/mannewolff/kanban-kit/issues/1715))
+- Tablet quer: Bausteine Erklaerung und ErklaerungInfo, Labels auf der Karte ([#1714](https://github.com/mannewolff/kanban-kit/issues/1714))
+- Tablet quer: Listenansicht und Spaltenbreiten per Finger ([#1713](https://github.com/mannewolff/kanban-kit/issues/1713))
+- Tablet quer: Karten und Spalten des Boards per Finger ziehen ([#1712](https://github.com/mannewolff/kanban-kit/issues/1712))
+- Tablet quer: Logik und Hook für das Ziehen per Finger ([#1711](https://github.com/mannewolff/kanban-kit/issues/1711))
+- Tablet quer: Erkennung der Betriebsart und Board-Layout für fünf Spalten ([#1710](https://github.com/mannewolff/kanban-kit/issues/1710))
+
 ## [3.0.0] – 2026-10-14
 
 - chore: v2.29.1
