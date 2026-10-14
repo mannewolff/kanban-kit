@@ -183,6 +183,7 @@ export function useFingerZiehen({ aktiv, onAblage }: FingerZiehenOptionen): Fing
     abbrechenRef.current = () => schritt({ typ: 'abbruch' })
     setZustand('wartet')
     setGezogenId(id)
+    // Stryker disable next-line ArrayDeclaration: gleichwertig — eine feste Abhängigkeit hält die Funktion ebenso stabil wie keine
   }, [])
 
   const griff = useCallback(

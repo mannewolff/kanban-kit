@@ -107,6 +107,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.useRealTimers()
   vi.unstubAllGlobals()
   document.body.innerHTML = ''
@@ -120,6 +121,14 @@ describe('useFingerZiehen — ohne Tablet-Modus und ohne Finger', () => {
     expect(result.current.zustand).toBe('bereit')
     expect(result.current.gezogenId).toBeNull()
     expect(result.current.ziel).toBeNull()
+  })
+
+  it('liefert Handler, sobald der Tablet-Modus beginnt', () => {
+    const { result, rerender, onAblage } = anzeigen(undefined, false)
+    expect(result.current.griff('1').onPointerDown).toBeUndefined()
+    rerender({ aktiv: true, onAblage })
+    greifen(result.current.griff('1').onPointerDown)
+    expect(result.current.zustand).toBe('wartet')
   })
 
   it('reagiert nicht auf die Maus', () => {
@@ -155,6 +164,7 @@ describe('useFingerZiehen — Greifen, Ziehen, Ablegen', () => {
     expect(schwebend?.style.transform).toBe('scale(1.02)')
     expect(schwebend?.style.boxShadow).toBe(SCHATTEN_HOCH)
     expect(schwebend?.style.width).toBe('200px')
+    expect(schwebend?.style.height).toBe('50px')
     // Griffpunkt 50/120 auf der Karte bei 10/100: die Kopie liegt deckungsgleich unter dem Finger.
     expect(schwebend?.style.left).toBe('10px')
     expect(schwebend?.style.top).toBe('100px')
@@ -226,6 +236,67 @@ describe('useFingerZiehen — Greifen, Ziehen, Ablegen', () => {
     } finally {
       window.matchMedia = bisher
     }
+  })
+
+  it('setzt den Außenabstand der Kopie auf null, auch wenn die Karte einen trägt', () => {
+    karte1.style.margin = '8px'
+    const { result } = anzeigen()
+    greifen(result.current.griff('1').onPointerDown)
+    warten(HALTEZEIT_MS)
+    expect(kopie()?.style.margin).toBe('0px')
+  })
+
+  it('wechselt die Ablagestelle in eine andere Spalte an derselben Stelle', () => {
+    const { result, onAblage } = anzeigen()
+    greifen(result.current.griff('1').onPointerDown)
+    warten(HALTEZEIT_MS)
+    unterFinger = ready
+    bewegen(50, 120)
+    expect(result.current.ziel).toEqual({ spalteId: 'ready', index: 0 })
+    unterFinger = doing
+    bewegen(450, 120)
+    expect(result.current.ziel).toEqual({ spalteId: 'doing', index: 0 })
+    loslassen()
+    expect(onAblage).toHaveBeenCalledWith('1', { spalteId: 'doing', index: 0 })
+  })
+
+  it('behält die Ablagestelle bei, solange sie sich nicht ändert', () => {
+    const { result } = anzeigen()
+    greifen(result.current.griff('1').onPointerDown)
+    warten(HALTEZEIT_MS)
+    unterFinger = doing
+    bewegen(450, 300)
+    const erstes = result.current.ziel
+    bewegen(460, 310)
+    expect(result.current.ziel).toBe(erstes)
+  })
+
+  it('meldet den touchmove-Listener ausdrücklich als nicht passiv an', () => {
+    const anmelden = vi.spyOn(document, 'addEventListener')
+    const { result } = anzeigen()
+    greifen(result.current.griff('1').onPointerDown)
+    expect(anmelden).toHaveBeenCalledWith('touchmove', expect.any(Function), { passive: false })
+  })
+
+  it('meldet nach dem Ablegen jeden Listener wieder ab', () => {
+    const anmelden = vi.spyOn(window, 'addEventListener')
+    const abmelden = vi.spyOn(window, 'removeEventListener')
+    const dokumentAn = vi.spyOn(document, 'addEventListener')
+    const dokumentAb = vi.spyOn(document, 'removeEventListener')
+    const { result } = anzeigen()
+    greifen(result.current.griff('1').onPointerDown)
+    warten(HALTEZEIT_MS)
+    unterFinger = doing
+    bewegen(450, 300)
+    loslassen()
+    for (const typ of ['pointermove', 'pointerup', 'pointercancel']) {
+      const angemeldet = anmelden.mock.calls.find(([t]) => t === typ)?.[1]
+      expect(angemeldet).toBeTypeOf('function')
+      expect(abmelden).toHaveBeenCalledWith(typ, angemeldet)
+    }
+    const touch = dokumentAn.mock.calls.find(([t]) => t === 'touchmove')?.[1]
+    expect(touch).toBeTypeOf('function')
+    expect(dokumentAb).toHaveBeenCalledWith('touchmove', touch)
   })
 
   it('ruft den zuletzt übergebenen Ablage-Callback', () => {
