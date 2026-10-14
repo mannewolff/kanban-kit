@@ -67,9 +67,10 @@ import org.springframework.web.bind.annotation.RestController;
  * NightRunKind#NIGHT} — die Erweiterung ist additiv, und eine ältere Kit-Kopie meldet unverändert
  * weiter. Ein zweiter Endpunkt mit gleichem Rumpf liefe mit der Zeit auseinander.
  *
- * <p>Diese Klasse ist die einzige Stelle in {@code nightrun}, die {@link KanbanPrincipal} liest;
- * die Application- und Domänenschicht kennen {@code accesstoken} nicht. Eine ArchUnit-Regel hält
- * das fest.
+ * <p>Diese Klasse und der {@code NightRunNowController} mit der Bewertung der Ready-Karten (Issue
+ * #1726) sind die beiden Stellen in {@code nightrun}, die {@link KanbanPrincipal} lesen; die
+ * Application- und Domänenschicht kennen {@code accesstoken} nicht. Eine ArchUnit-Regel hält das
+ * fest.
  *
  * <p>Die API-Beschreibung (Issue #1403, Plan #1400) steht an Methode und Records; der Aufruf ist
  * verlässlich (E4), weil das Kit ihn benutzt.

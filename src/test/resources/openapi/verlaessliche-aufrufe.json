@@ -502,6 +502,32 @@
     },
     "abgekuendigtSeit" : null
   }, {
+    "pfad" : "/api/kanban/night-runs/ready-assessment",
+    "methode" : "POST",
+    "parameter" : [ ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/AssessmentRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/AssessmentResponse"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
     "pfad" : "/api/kanban/items/{id}",
     "methode" : "PUT",
     "parameter" : [ {
@@ -596,6 +622,101 @@
           "type" : "string"
         },
         "type" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "AssessmentEntryRequest" : {
+      "properties" : {
+        "cardNumber" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "position" : {
+          "format" : "int32",
+          "minimum" : 1,
+          "type" : "integer"
+        },
+        "reasons" : {
+          "items" : {
+            "$ref" : "#/components/schemas/AssessmentReasonRequest"
+          },
+          "type" : "array"
+        }
+      },
+      "type" : "object"
+    },
+    "AssessmentReasonRequest" : {
+      "properties" : {
+        "cardNumbers" : {
+          "items" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "type" : "array"
+        },
+        "code" : {
+          "maxLength" : 40,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "kind" : {
+          "maxLength" : 40,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "paths" : {
+          "items" : {
+            "minLength" : 1,
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "text" : {
+          "maxLength" : 500,
+          "minLength" : 0,
+          "type" : "string"
+        }
+      },
+      "required" : [ "code", "text" ],
+      "type" : "object"
+    },
+    "AssessmentRequest" : {
+      "properties" : {
+        "assessedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "entries" : {
+          "items" : {
+            "$ref" : "#/components/schemas/AssessmentEntryRequest"
+          },
+          "maxItems" : 500,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "label" : {
+          "maxLength" : 100,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "runStartedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        }
+      },
+      "required" : [ "assessedAt", "entries", "label" ],
+      "type" : "object"
+    },
+    "AssessmentResponse" : {
+      "properties" : {
+        "assessedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "result" : {
+          "enum" : [ "STORED" ],
           "type" : "string"
         }
       },
