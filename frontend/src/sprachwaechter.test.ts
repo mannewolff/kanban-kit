@@ -63,6 +63,8 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/components/nachtlauf/NachtlaufLaufPlatte.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufStufenband.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufVorgangszeile.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  // #1729 — CSS-Wert (Rahmen) des Bereichs „Runner jetzt“
+  { file: 'src/components/nachtlauf/RunnerJetzt.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1658 — die Auszüge des Ergebnisstands gehen mit dem Lauf an den Server und werden dort
   // wiedererkannt: Daten wie die Protokollauszüge (Kriterium 4 der Quelle #1637), kein Anzeigetext
   { file: 'src/lib/nightRunErgebnisstand.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },

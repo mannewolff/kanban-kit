@@ -33,6 +33,13 @@
   Übertragen auf ein anderes Board und ersetzt einen von Hand gesetzten Status. Wer die Spalten
   umsortiert, ändert den Status liegender Karten nicht. Vorhaben und Karten mit `[Idee]`,
   `[Fachlich]` oder `[Plan]` im Titel tragen keinen Status.
+- **Knopf `kit:nightrun` in Ready:** Führt das Board das Label `kit:nightrun`, trägt der Kopf der
+  Spalte Ready neben Kartenzahl und Sortier-Symbol einen kleinen Knopf mit diesem Namen. Ein Druck
+  setzt das Label ohne Rückfrage an alle Karten, die die Spalte gerade zeigt — bei aktivem Filter
+  also nur an die sichtbaren. Ausgenommen sind Vorhaben und Karten mit `[Mensch]` bzw. `[Human]` im
+  Titel. Tragen alle Karten das Label schon oder kann keine es bekommen, ist der Knopf gesperrt und
+  nennt beim Darüberfahren den Grund. Abnehmen lässt sich das Label wie jedes andere an der Karte
+  oder über die [Mehrfachauswahl](#mehrfachauswahl).
 
 ## Karten
 
@@ -225,6 +232,37 @@ Papierkorb wird über den Button **„Papierkorb"** in der Board-Kopfzeile geöf
 - **Beschreibung verbreitern:** den Griff links der „Beschreibung"-Spalte ziehen. Auch diese Breite
   gilt **global** für alle Boards (nur der Spaltenfilter oben bleibt pro Board).
 - **Zeilen umsortieren:** über den Drag-Handle links (innerhalb derselben Spalte).
+
+## Bedienung auf dem Tablet {#tablet}
+
+Der Leitstand lässt sich auf einem **Tablet im Querformat** per Finger bedienen — gedacht für
+**Safari auf dem iPad (iPadOS)** und **Chrome auf Android-Tablets**, jeweils in aktueller Version, bei
+etwa 1024 bis 1366 px Breite. Im **Hochformat** und auf dem **Handy** sieht und bedient sich der
+Leitstand wie bisher. Ein Tablet mit angeschlossener **Maus oder Trackpad** zeigt die
+Desktop-Darstellung, ebenso ein Laptop mit Touchscreen.
+
+- **Board:** Ein Board mit bis zu fünf Spalten passt ganz auf den Bildschirm; ab sechs Spalten
+  rollt die Fläche seitlich. Die Navigation links ist beim Öffnen eingeklappt und lässt sich über
+  das Menü-Symbol aufklappen.
+- **Karten verschieben:** Den Finger etwa eine halbe Sekunde auf eine Karte legen — sie hebt sich
+  an und folgt dem Finger. So zieht man sie in eine andere Spalte oder an eine andere Stelle
+  derselben Spalte; die Ablagestelle wird beim Ziehen angezeigt. Am Rand einer Spalte oder des
+  Boards rollt der Inhalt mit.
+- **Wischen und Antippen:** Kurzes Wischen über eine Karte rollt Spalte oder Board und verschiebt
+  nichts. Kurzes Antippen öffnet die Karte.
+- **Spalten umordnen:** Im [Editiermodus](#editiermodus) den Spaltenkopf lange antippen und die
+  Spalte ziehen — wie eine Karte.
+- **Listen-Ansicht:** Zeilen und Spaltenköpfe werden ebenfalls per langem Antippen gezogen; die
+  Breite der Beschreibung lässt sich mit dem Finger am Griff ändern.
+- **Erklärungen:** Was am Desktop beim Darüberfahren erscheint, öffnet auf dem Tablet ein
+  **Antippen** — etwa an einem Label auf einer Karte, einer gesperrten Station oder einem gesperrten
+  Knopf. Erneutes Antippen oder Antippen daneben schließt die Erklärung; offen ist immer nur eine.
+  Das Antippen eines Labels öffnet seine Erklärung, nicht die Karte.
+- **Info-Symbol:** Bei Elementen, die beim Antippen etwas tun — etwa einem Eintrag im Label-Filter
+  oder in einer Auswahl —, löst Antippen die Aktion aus wie gewohnt. Ihre Erklärung öffnet das
+  **Info-Symbol** daneben.
+- **Dialoge** passen auf den Bildschirm, auch bei eingeblendeter Bildschirmtastatur: Ihr Inhalt
+  rollt senkrecht, die Knöpfe bleiben erreichbar.
 
 ## Spezifikation einlesen {#spezifikations-import}
 
@@ -426,6 +464,77 @@ Run, der bereits ausgewertet wurde, wird als **„lag schon vor"** gemeldet und 
 die übrigen Runs derselben Datei entstehen trotzdem. Und ein **nachgereichter Run**, der älter ist
 als alle 190 aufbewahrten, verdrängt keinen neueren — er wird angelegt und sogleich wieder verdrängt,
 erscheint also nach dem Einlesen nicht in der Liste.
+
+### Runner jetzt
+
+Ganz oben auf der Runner-Seite sagt der Bereich **„Runner jetzt“**, was der Runner gerade tut. Er
+nennt jeden Lauf, der noch nicht beendet ist, mit seiner Art (Kette oder Umsetzungsnacht) und genau
+einem Zustand:
+
+- **läuft:** Der Lauf hat sich innerhalb der Stillefrist gemeldet. Dabei stehen sein Beginn und
+  seine letzte Meldung.
+- **verstummt:** Der Lauf gilt als laufend, hat sich aber länger als die Stillefrist nicht gemeldet.
+  Dann steht dort: „Runner verstummt seit *Zeit* (letzte Stufe: *Stufe*), vermutlich abgebrochen;
+  die Umsetzung gilt womöglich noch als belegt.“ Hat der Lauf keine Stufe gemeldet, steht als
+  Stufe „nicht gemeldet“.
+
+Die **Stillefrist** ist dieselbe, nach der die Auswertung einen Lauf als verstummt führt
+(`manban.nightrun.stille-frist`, Vorgabe 90 Minuten). Meldet sich ein verstummter Lauf doch noch,
+läuft er wieder.
+
+Zu einem Lauf stehen seine **laufenden Stufen**: Karte und Stufe (etwa „#1665 Vorbereitung“),
+Beginn, Frist und der Teilschritt in Worten, etwa „wartet auf freie Umsetzung“ oder „Prüfungen der
+Veröffentlichung laufen“. Als Frist erscheint nur, was das Kit für die Stufe tatsächlich anwendet,
+sonst „keine Frist vorgesehen“. Hält eine Stufe die Umsetzung, steht „hält die Umsetzung“ dabei.
+Eine Stufe oder einen Teilschritt, den die Seite noch nicht kennt, zeigt sie mit dem Namen des Kits.
+
+Läuft kein Lauf und ist keiner verstummt, steht **„kein Runner aktiv“**. Wurde im Projekt noch nie
+ein Lauf gestartet, steht **„kein Runner aktiv – noch kein Lauf gestartet“**. Darunter nennt der
+Bereich den **letzten Lauf** mit Art, Ende und Ergebnis, auch neben laufenden Läufen. Endete eine
+Umsetzungsnacht ohne Paket, steht ihr Grund dabei, etwa „ohne Paket beendet – Umsetzung belegt
+durch Kette #1665, Stufe VORBEREITUNG“. Solange ein Lauf läuft oder verstummt ist, frischt sich der
+Bereich alle 30 Sekunden auf, wenn der Tab sichtbar ist.
+
+### Warum ein Paket wartet
+
+Im [Karten-Detail](#karten-detail) eines Pakets in Ready steht im Block „Verlauf“ der Abschnitt
+**„Wartegrund“**. Er sagt, warum der Runner das Paket nicht zieht. Die Gründe kommen aus zwei Quellen:
+
+- **Bewertung des Runners:** Der Runner meldet zu Beginn und nach jeder Runde einer Umsetzungsnacht
+  sowie bei jedem Probelauf, wie er die Karten in Ready bewertet. Daraus stammen die Gründe der
+  Karte: kein Arbeitspaket, sondern ein Dokument oder ein Schritt für einen Menschen; nicht für die
+  Nacht freigegeben (`kit:nightrun` fehlt); wartet auf eine andere Karte; wartet auf Klärung;
+  berührt eine geschützte Datei; die nötige Prüfung (Review) fehlt. Das Board bildet die Regeln des
+  Runners nicht nach. Einen Grund, den die Seite noch nicht kennt, zeigt sie mit dem Wortlaut des
+  Runners.
+- **Laufzustand:** Aus den Läufen leitet das Board ab, ob **keine Umsetzungsnacht aktiv** ist, ob der
+  **Runner verstummt** ist (derselbe Satz wie unter „Runner jetzt“) und ob die **Umsetzung belegt**
+  ist, also ein anderer Lauf sie für eine andere Karte hält, bei einer Kette mit Stufe. Ob ein Paket
+  wartet, weil keine Umsetzung läuft, bestimmen allein die Umsetzungsnächte. Eine Kette zählt nur,
+  wenn sie die Umsetzung belegt.
+
+Treffen mehrere Gründe zu, erscheinen alle. **„Pakete davor: *n*“** nennt, wie viele startbare
+Pakete in der Reihenfolge davor stehen. Trifft kein Grund zu, steht **„startbereit – kein
+Hinderungsgrund festgestellt“**: Die Karte ist bewertet, trägt keinen Grund, aus den Läufen spricht
+nichts dagegen, und sie wurde seit der Bewertung nicht geändert. Das ist keine Zusage, wann sie
+startet.
+
+Zwei Vermerke sagen, wie alt das Wissen des Boards ist. Sie sind keine Wartegründe:
+
+- **„noch nicht vom Runner bewertet (letzte Bewertung *Zeit*)“:** Die Karte steht nicht in der
+  jüngsten Bewertung, etwa weil sie erst danach nach Ready kam. Gibt es noch gar keine Bewertung,
+  steht „noch keine Bewertung“.
+- **„seit der Bewertung geändert“:** Die Karte wurde nach der jüngsten Bewertung geändert. Dann heißt
+  sie nicht startbereit, bis der Runner sie neu bewertet hat.
+
+**In Ready** heißt hier, was auch der Runner meint: zuerst der eigene Status der Karte, ohne eigenen
+Status ihre Spalte. Eine Karte mit Status „Ready“ in einer anderen Spalte trägt also einen
+Wartegrund, eine Karte mit Status „Backlog“ in der Spalte Ready nicht. Steht die Karte nicht in
+Ready, fehlt der Abschnitt.
+
+Wartegrund und „Runner jetzt“ sieht, wer die Auswertung der Läufe sehen darf: der Projekt-Owner und
+der Plattform-Admin, wenn das Projekt am Plattform-Leitstand teilnimmt. Andere Mitglieder sehen
+keines von beiden.
 
 ### Heute Nacht
 

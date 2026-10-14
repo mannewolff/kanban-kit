@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
 import type { Board } from '../api/boards'
 import { ApiError } from '../api/client'
+import type { Wartegruende } from '../api/nightRuns'
 import type { Card, CardByNumber, CardDetail } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
 import type { KitNamenZustand } from '../api/kitNamen'
@@ -16,6 +17,9 @@ import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel } from '../test/cssRegel'
 import { KIT_NAMEN } from '../test/kitNamen'
+import { setzeMedien } from '../test/setup'
+import { TabletQuerProvider } from '../lib/tabletQuer'
+import { ErklaerungOffenProvider } from './Erklaerung'
 import { de } from '../i18n/de'
 import { abnahmeKommentar, szenarienAus } from '../lib/abnahmeSzenarien'
 import { theme } from '../theme'
@@ -134,9 +138,11 @@ function makeApis() {
   const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
   // Die Anlaeufe einer Karte (Issue #968); leer, damit der Block die uebrigen Faelle nicht beruehrt.
   // Der Kettenstand der Stufenleiste (Issue #1453) lädt nie: Die Leiste bleibt beim Stand vor dem Lauf.
+  // Der Wartegrund (Issue #1730) meldet 404: Die Karte steht nicht in Ready, der Abschnitt bleibt weg.
   const nightRunsApi = {
     anlaeufeDerKarte: vi.fn().mockResolvedValue([]),
     kettenstand: vi.fn(() => new Promise<never>(() => {})),
+    wartegrund: vi.fn<(cardId: number) => Promise<Wartegruende>>(() => Promise.reject(new ApiError(404, 'Not Found'))),
   }
   return { commentsApi, attachmentsApi, cardsApi, boardsApi, nightRunsApi }
 }
@@ -734,6 +740,110 @@ describe('CardDetailModal', () => {
 
       expect(screen.getByRole('option', { name: 'Bug' })).toHaveClass('Mui-focused')
       expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Erklärungen auf dem Tablet im Querformat (Plan #1707, E7)', () => {
+    const auswahl = [
+      { id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false },
+      { id: 8, boardId: 1, name: 'kit:clarify', color: '#6a1b9a', countOnEpicTile: false },
+    ]
+    const KLAEREN = de.LABEL_ERKLAERUNG.SACHEN.KLAEREN
+    // eslint-disable-next-line testing-library/no-node-access -- ein Chip hat keine Rolle; das Antippen gilt seiner Wurzel
+    const chip = (name: string) => screen.getByText(name).closest('.MuiChip-root') as HTMLElement
+    const info = (name: string) => screen.queryByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN(name) })
+    const mitAgent = () => {
+      const apis = makeApis()
+      apis.cardsApi.getActivity = vi.fn().mockResolvedValue([
+        { id: 1, actorUserId: 5, type: 'CREATED', detail: 'Idee angelegt', createdAt: '2026-01-01T10:00:00Z', origin: 'TOKEN', tokenName: 'Nachtlauf', agent: 'claude-opus-5' },
+      ])
+      return apis
+    }
+    const zeigen = (props: Partial<ComponentProps<typeof CardDetailModal>>, apis = makeApis()) =>
+      render(
+        <TabletQuerProvider>
+          <ErklaerungOffenProvider>
+            <CardDetailModal card={card} canEdit={false} boardLabels={auswahl} onClose={vi.fn()} {...apis} {...props} />
+          </ErklaerungOffenProvider>
+        </TabletQuerProvider>,
+      )
+
+    it('öffnet die Erklärung eines Labels der Kartenansicht per Antippen', () => {
+      setzeMedien({ tabletQuer: true })
+      zeigen({ card: { ...card, labels: [5, 8] } })
+
+      fireEvent.click(chip('kit:clarify'))
+
+      expect(screen.getByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+    })
+
+    it('öffnet die Erklärung des Agent-Kennzeichens per Antippen', async () => {
+      setzeMedien({ tabletQuer: true })
+      zeigen({}, mitAgent())
+
+      fireEvent.click(await screen.findByTestId('activity-agent'))
+
+      expect(screen.getByRole('tooltip')).toHaveTextContent(de.KARTE.AGENT_HINWEIS)
+    })
+
+    it('setzt an eine Option mit Erklärung ein Info-Symbol; es öffnet sie, ohne die Auswahl zu ändern', async () => {
+      setzeMedien({ tabletQuer: true })
+      const apis = makeApis()
+      zeigen({ canEdit: true }, apis)
+      fireEvent.mouseDown(await screen.findByLabelText('Labels'))
+      const option = await screen.findByRole('option', { name: /kit:clarify/ })
+      expect(info('Bug')).not.toBeInTheDocument()
+
+      fireEvent.click(within(option).getByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') }))
+
+      expect(screen.getByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+      expect(apis.cardsApi.addLabel).not.toHaveBeenCalled()
+      expect(option).toBeInTheDocument()
+
+      // Das Antippen der Option selbst wählt sie aus wie heute.
+      fireEvent.click(option)
+      await waitFor(() => expect(apis.cardsApi.addLabel).toHaveBeenCalledWith(100, 8))
+    })
+
+    it('öffnet an einer markierten Option keine Erklärung von selbst', async () => {
+      setzeMedien({ tabletQuer: true })
+      zeigen({ canEdit: true })
+      fireEvent.mouseDown(await screen.findByLabelText('Labels'))
+
+      fireEvent.mouseMove(await screen.findByRole('option', { name: /kit:clarify/ }))
+
+      expect(screen.getByRole('option', { name: /kit:clarify/ })).toHaveClass('Mui-focused')
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+
+    it('setzt neben einen Tag-Chip mit Erklärung ein Info-Symbol; Antippen des Chips öffnet nichts', async () => {
+      setzeMedien({ tabletQuer: true })
+      zeigen({ canEdit: true, card: { ...card, labels: [5, 8] } })
+      await screen.findByLabelText('Labels')
+      expect(info('Bug')).not.toBeInTheDocument()
+
+      fireEvent.click(chip('kit:clarify'))
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+      fireEvent.click(info('kit:clarify') as HTMLElement)
+      expect(screen.getByRole('tooltip')).toHaveTextContent(KLAEREN.verschwindet)
+      expect(chip('kit:clarify')).toBeInTheDocument()
+    })
+
+    it('zeigt am Desktop kein Info-Symbol und die Erklärungen beim Darüberfahren wie heute (AK 7)', async () => {
+      zeigen({ canEdit: true, card: { ...card, labels: [8] } }, mitAgent())
+      await userEvent.hover(await screen.findByTestId('activity-agent'))
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(de.KARTE.AGENT_HINWEIS)
+      await userEvent.unhover(screen.getByTestId('activity-agent'))
+      await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+
+      expect(info('kit:clarify')).not.toBeInTheDocument()
+      await userEvent.hover(chip('kit:clarify'))
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.verschwindet)
+
+      fireEvent.mouseDown(screen.getByLabelText('Labels'))
+      await screen.findByRole('listbox')
+      expect(info('kit:clarify')).not.toBeInTheDocument()
     })
   })
 
@@ -2898,6 +3008,33 @@ describe('CardDetailModal — Statuswechsler', () => {
       />,
     )
     expect(screen.getByLabelText('Fälligkeitsdatum')).not.toHaveTextContent('überfällig')
+  })
+
+  describe('Wartegrund (Issue #1730)', () => {
+    it('zeigt den Abschnitt im Block „Verlauf“, wenn der Server einen Wartegrund liefert', async () => {
+      const apis = makeApis()
+      apis.nightRunsApi.wartegrund.mockResolvedValue({
+        runReasons: [],
+        cardReasons: [],
+        packagesAhead: 0,
+        notes: [],
+        startable: true,
+      })
+      render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+      const abschnitt = await screen.findByTestId('wartegrund')
+      expect(apis.nightRunsApi.wartegrund).toHaveBeenCalledWith(card.id)
+      expect(within(abschnitt).getByText('startbereit – kein Hinderungsgrund festgestellt')).toBeInTheDocument()
+    })
+
+    it('fragt für jede Karte, ohne die Spalte zu prüfen, und zeigt bei 404 nichts', async () => {
+      const apis = makeApis()
+      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+      await waitFor(() => expect(apis.nightRunsApi.wartegrund).toHaveBeenCalledWith(card.id))
+      expect(await screen.findByText('Anhänge')).toBeInTheDocument()
+      expect(screen.queryByTestId('wartegrund')).not.toBeInTheDocument()
+    })
   })
 
   describe('Nachtlauf-Anläufe (Issue #968)', () => {

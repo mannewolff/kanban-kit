@@ -13,6 +13,9 @@ import { useT } from '../../i18n/SpracheContext'
 import type { Woerterbuch } from '../../i18n/de'
 import { spaltenAuswahl, type SpaltenAuswahlZustand } from '../../lib/boardOps'
 import { statusColors } from '../../lib/statusColors'
+import { useTabletQuer } from '../../lib/tabletQuer'
+import type { FingerZiehen } from '../../lib/useFingerZiehen'
+import { FINGER_GRIFF_SX } from '../boardSurfaceSx'
 import {
   LED_RING,
   MELDER,
@@ -23,6 +26,7 @@ import {
   TEXT_SCHWACH,
   ZAHL,
 } from '../../theme'
+import { Belastungsskala } from './Belastungsskala'
 
 /** Zugänglicher Name des Spalten-Kästchens: Er sagt, was der nächste Klick tut. */
 const spaltenAuswahlLabel = (t: Woerterbuch, zustand: SpaltenAuswahlZustand, spalte: string) =>
@@ -76,6 +80,58 @@ function spaltenZiehHandler(
   }
 }
 
+/**
+ * Knopf im Kopf der Ready-Spalte, der das Label der Sache `NIGHTRUN` an die Karten der Spalte setzt
+ * (Issue #1708). Fehlt er, führt die Spalte keinen.
+ */
+export interface NachtlaufKnopf {
+  /** Board-Name des Labels — die Aufschrift des Knopfes. */
+  label: string
+  /** Warum der Knopf gesperrt ist; `null` heißt bedienbar. */
+  sperrgrund: string | null
+  /** Ein Aufruf läuft gerade; gegen den Doppelklick. */
+  beschaeftigt: boolean
+  onNachtlaufMarkieren: () => void
+}
+
+/**
+ * Der Knopf aus {@link NachtlaufKnopf}. Gesperrt nennt er den Grund als Tooltip und als
+ * zugänglichen Namen; der span trägt den Tooltip, weil ein gesperrter Button keine Zeigerereignisse
+ * erhält, und `describeChild` hält den Namen allein am Button.
+ */
+function NachtlaufTaste({ knopf }: Readonly<{ knopf: NachtlaufKnopf }>) {
+  const t = useT()
+  const name = knopf.sperrgrund ?? t.BOARD.NACHTLAUF_MARKIEREN(knopf.label)
+  return (
+    <Tooltip title={name} describeChild>
+      <Box component="span" sx={{ display: 'inline-flex', flex: 'none' }}>
+        <Button
+          size="small"
+          aria-label={name}
+          disabled={knopf.sperrgrund !== null || knopf.beschaeftigt}
+          onClick={knopf.onNachtlaufMarkieren}
+          sx={{
+            ...ZAHL,
+            minWidth: 0,
+            px: 0.75,
+            py: 0,
+            textTransform: 'none',
+            fontSize: 10.5,
+            lineHeight: 1.6,
+            color: 'primary.main',
+            bgcolor: NUT,
+            border: `1px solid ${RAND}`,
+            boxShadow: SCHATTEN_NUTE,
+            borderRadius: '5px',
+          }}
+        >
+          {knopf.label}
+        </Button>
+      </Box>
+    </Tooltip>
+  )
+}
+
 interface Props {
   column: BoardColumn
   /** Zähler über den vollen Bestand der Spalte — er trägt die Belastungsgrenze. */
@@ -104,11 +160,19 @@ interface Props {
   onZugBeginn: () => void
   onAblage: (fromId: number) => void
   onZugEnde: () => void
+  /** Handler des Fingerzugs aus `useFingerZiehen` (Plan #1707, E3); greifen nur im Tablet-Modus. */
+  fingerGriff?: ReturnType<FingerZiehen['griff']>
+  /** Stand des Fingerzugs, solange diese Spalte gegriffen ist. */
+  fingerZustand?: 'wartet' | 'zieht'
+  /** Knopf `kit:nightrun` — nur an der Ready-Spalte (Issue #1708). */
+  nachtlauf?: NachtlaufKnopf
 }
 
 /**
  * Kopf einer Spalte: Status-LED, Name, Zähler mit Belastungsgrenze, Marke der ausgeblendeten
- * Karten, Sortieren und — im Struktur-Editiermodus — Bearbeiten, Löschen und das Ziehen der Spalte.
+ * Karten, an der Ready-Spalte der Knopf `kit:nightrun`, Sortieren und — im Struktur-Editiermodus — Bearbeiten, Löschen und das Ziehen der Spalte.
+ * Die Belastungsskala gehört seit Plan #1707 (E6) mit hierher, weil sie auf dem Tablet quer in die
+ * zweite Zeile des Kopfes wandert.
  *
  * Eigene Datei seit Plan #1042 (P12): In der Spalten-Schleife von `BoardView` trug der Callback die
  * kognitive Komplexität 31.
@@ -134,19 +198,31 @@ export function SpaltenKopf({
   onZugBeginn,
   onAblage,
   onZugEnde,
+  fingerGriff,
+  fingerZustand,
+  nachtlauf,
 }: Readonly<Props>) {
   const t = useT()
+  const tabletQuer = useTabletQuer()
   const colors = statusColors(column.name)
   const spaltenZustand = spaltenAuswahl(angezeigteIds, selectedIds)
   const sortierLabel = sortByNumberLabel(t, column.name, naechsteRichtung)
-  return (
-    <Box
-      data-testid={`column-header-${column.id}`}
-      draggable={showStructureEdit}
-      {...spaltenZiehHandler(showStructureEdit, { columnId: column.id, colDrag, onZugBeginn, onAblage, onZugEnde })}
-      onDragEnd={onZugEnde}
-      sx={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, cursor: showStructureEdit ? 'grab' : undefined }}
-    >
+  // Auf dem Tablet quer ist die Spalte rund 160 px schmal; mit drei Symbolknöpfen und Skala in
+  // einer Zeile bliebe vom Namen nichts. Darum dort zwei Zeilen, am Desktop eine wie bisher (E6).
+  const zweizeilig = tabletQuer && showStructureEdit
+  // Auf dem Tablet quer greift der Finger den Kopf über Pointer-Ereignisse (Plan #1707, E3); natives
+  // Ziehen bleibt dort aus, damit iPadOS-Safari kein zweites Ziehen daneben startet.
+  const kopf = {
+    'data-testid': `column-header-${column.id}`,
+    draggable: showStructureEdit && !tabletQuer,
+    ...spaltenZiehHandler(showStructureEdit, { columnId: column.id, colDrag, onZugBeginn, onAblage, onZugEnde }),
+    onDragEnd: onZugEnde,
+    'data-zieh-zustand': fingerZustand,
+    ...(zweizeilig ? fingerGriff : {}),
+  }
+  const griffSx = zweizeilig ? FINGER_GRIFF_SX : {}
+  const kennung = (
+    <>
       {selectionMode && (
         // Ganze Spalte auf einmal: dieselbe Bildsprache wie der Haken an der Karte, mit
         // dem Strich für „einige". Der Klick bleibt im Kästchen, damit die Handler des
@@ -206,6 +282,11 @@ export function SpaltenKopf({
           {t.BOARD.AUSGEBLENDET(hiddenCount)}
         </Button>
       )}
+    </>
+  )
+  const knoepfe = (
+    <>
+      {nachtlauf && <NachtlaufTaste knopf={nachtlauf} />}
       {canEdit && (
         <Tooltip title={sortierLabel}>
           {/* Kein span-Wrapper um den Button: MUI legt den Tooltip-Titel als aria-label auf
@@ -235,6 +316,32 @@ export function SpaltenKopf({
           </IconButton>
         </Tooltip>
       )}
-    </Box>
+    </>
+  )
+  const skala = <Belastungsskala column={column} count={count} />
+  if (zweizeilig) {
+    // Beide Zeilen liegen im ziehbaren Kopf: Die Spalte bleibt an jeder Stelle des Kopfes greifbar.
+    return (
+      <Box {...kopf} sx={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: 0, cursor: 'grab', ...griffSx }}>
+        <Box data-testid={`column-header-kennung-${column.id}`} sx={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          {kennung}
+        </Box>
+        <Box data-testid={`column-header-werkzeuge-${column.id}`} sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {skala}
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>{knoepfe}</Box>
+        </Box>
+      </Box>
+    )
+  }
+  // Am Desktop steht die Skala wie bisher neben dem Kopf, nicht in ihm: Das Fragment legt sie als
+  // Geschwister in die Kopfzeile der Spalte.
+  return (
+    <>
+      <Box {...kopf} sx={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, cursor: showStructureEdit ? 'grab' : undefined }}>
+        {kennung}
+        {knoepfe}
+      </Box>
+      {skala}
+    </>
   )
 }

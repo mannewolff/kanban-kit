@@ -9,6 +9,8 @@ import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunItemView, type NightRunView } from '../api/nightRuns'
 import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
+import { TabletQuerProvider } from '../lib/tabletQuer'
+import { setzeMedien } from '../test/setup'
 import { LeitstandPage } from './LeitstandPage'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 
@@ -226,12 +228,14 @@ const lebenszeit = (): VerbrauchGesamt => ({
 
 function renderPage(pfad = '/boards/1/leitstand') {
   return render(
-    <MemoryRouter initialEntries={[pfad]}>
-      <Routes>
-        <Route path="/boards/:boardId/leitstand" element={<LeitstandPage />} />
-        <Route path="/boards/leitstand" element={<LeitstandPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <TabletQuerProvider>
+      <MemoryRouter initialEntries={[pfad]}>
+        <Routes>
+          <Route path="/boards/:boardId/leitstand" element={<LeitstandPage />} />
+          <Route path="/boards/leitstand" element={<LeitstandPage />} />
+        </Routes>
+      </MemoryRouter>
+    </TabletQuerProvider>,
   )
 }
 
@@ -605,6 +609,47 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     m.epics.mockResolvedValue([epic(2, 'Erledigt', 3, 3)])
     renderPage()
     expect(await screen.findByRole('region', { name: 'Vorhaben' })).toHaveTextContent('Kein offenes Vorhaben.')
+  })
+})
+
+describe('LeitstandPage — Diagrammbalken auf dem Tablet im Querformat (Plan #1707, E7)', () => {
+  beforeEach(() => {
+    m.kpis.mockResolvedValue(
+      kpis({
+        implementationWeekly: [
+          { weekStart: '2026-06-01T09:00:00Z', avgImplementationSeconds: 1800, sampleCount: 2 },
+          { weekStart: '2026-06-08T09:00:00Z', avgImplementationSeconds: null, sampleCount: 0 },
+        ],
+      }),
+    )
+  })
+
+  it('öffnet an Balken und Lücke die Erklärung per Antippen', async () => {
+    setzeMedien({ tabletQuer: true })
+    renderPage()
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    const balken = within(platte).getByTestId('balken-100')
+    const luecke = within(platte).getByTestId('luecke-1')
+    expect(balken).not.toHaveAttribute('title')
+    expect(luecke).not.toHaveAttribute('title')
+
+    fireEvent.click(balken)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('30 Minuten · 2 Karten')
+
+    fireEvent.click(balken)
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+    fireEvent.click(luecke)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('KW 24: keine gemessene Karte')
+  })
+
+  it('trägt am Desktop das native title wie heute und öffnet per Klick nichts', async () => {
+    renderPage()
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+
+    fireEvent.click(within(platte).getByTestId('balken-100'))
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    expect(within(platte).getByTestId('balken-100')).toHaveAttribute('title', '30 Minuten · 2 Karten')
+    expect(within(platte).getByTestId('luecke-1')).toHaveAttribute('title', 'KW 24: keine gemessene Karte')
   })
 })
 

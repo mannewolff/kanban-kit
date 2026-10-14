@@ -698,7 +698,14 @@ export const theme = createTheme({
     },
     MuiDialog: {
       styleOverrides: {
-        paper: { border: `1px solid ${RAND}`, boxShadow: SCHATTEN_HOCH, borderRadius: PANEL_RADIUS },
+        paper: {
+          border: `1px solid ${RAND}`,
+          boxShadow: SCHATTEN_HOCH,
+          borderRadius: PANEL_RADIUS,
+          // Tablet quer: Der Dialog passt in den sichtbaren Ausschnitt, auch mit Bildschirmtastatur;
+          // `DialogContent` scrollt senkrecht, `DialogActions` bleiben stehen (Plan #1707, E10).
+          'html[data-geraet="tablet-quer"] &': { maxHeight: 'calc(var(--sichtbare-hoehe, 100dvh) - 32px)' },
+        },
       },
     },
     // Tasten (Entwurf Z. 322–348): umrandet = Taste, gefüllt primär = Kupfertaste.

@@ -16,7 +16,6 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
-import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import TaskAltIcon from '@mui/icons-material/TaskAlt'
 import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from 'react'
@@ -29,6 +28,7 @@ import { LAUFSTAND, PLAN_REVIEW } from '../../lib/kitWortformen'
 import { kettenAnzeige, stationsnamen, type Stationssymbol } from '../../lib/laufFortschritt'
 import { KLEIN_RADIUS, KUPFER, NUT_SX, TASTE_SX, TEXT_SCHWACH } from '../../theme'
 import { dialogTitleSx } from '../dialogChromeSx'
+import { Erklaerung } from '../Erklaerung'
 
 /**
  * Ob eine Karte die Stufenleiste trägt: ihr Titel-Präfix nennt die Kartenart `FACHLICH` oder `PLAN`
@@ -395,7 +395,8 @@ function Leiste({
               sx={{ flex: '1 1 0', minWidth: 110, display: 'flex' }}
             >
               {waehlbar ? (
-                <Tooltip title={grund ?? ''} describeChild>
+                // Auf dem Tablet quer öffnet Antippen einer gesperrten Station den Grund (Plan #1707, E7).
+                <Erklaerung title={grund ?? ''} describeChild>
                   <ButtonBase
                     aria-pressed={schluessel === ziel}
                     aria-disabled={grund === null ? undefined : true}
@@ -406,7 +407,7 @@ function Leiste({
                   >
                     {inhalt}
                   </ButtonBase>
-                </Tooltip>
+                </Erklaerung>
               ) : (
                 <Box sx={stationSx(schluessel === ziel, grund !== null)}>{inhalt}</Box>
               )}
@@ -485,7 +486,7 @@ function PrueferSchalter({
               const grund = sperre(p)
               const gewaehlt = prueferGesetzt === p
               return (
-                <Tooltip key={p} title={grund ?? ''} describeChild>
+                <Erklaerung key={p} title={grund ?? ''} describeChild>
                   <ButtonBase
                     aria-pressed={gewaehlt}
                     aria-disabled={grund === null ? undefined : true}
@@ -496,7 +497,7 @@ function PrueferSchalter({
                   >
                     {t.PRUEFER(PRUEFER_ZAHL[p])}
                   </ButtonBase>
-                </Tooltip>
+                </Erklaerung>
               )
             })}
           </Box>

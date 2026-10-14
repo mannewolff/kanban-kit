@@ -1,7 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { de } from '../i18n/de'
 import { epicColor, epicTint } from '../lib/epicMeta'
+import { TabletQuerProvider } from '../lib/tabletQuer'
+import { setzeMedien } from '../test/setup'
 import { EpicBadge } from './EpicBadge'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 
@@ -94,6 +97,60 @@ describe('EpicBadge', () => {
     await user.keyboard('{Escape}')
 
     expect(aussen).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('EpicBadge auf dem Tablet im Querformat (Plan #1707, E7)', () => {
+  it('öffnet am Kennzeichen ohne Aktion die Erklärung per Antippen, nicht die Ebene ringsum', async () => {
+    setzeMedien({ tabletQuer: true })
+    const aussen = vi.fn()
+    render(
+      <TabletQuerProvider>
+        <div role="presentation" onClick={aussen}>
+          <EpicBadge epicId={9} title="Authentifizierung" shortcode="AUT" />
+        </div>
+      </TabletQuerProvider>,
+    )
+    const badge = screen.getByLabelText('Vorhaben AUT')
+    expect(badge).not.toHaveAttribute('title')
+
+    fireEvent.click(badge)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Authentifizierung')
+    expect(aussen).not.toHaveBeenCalled()
+
+    fireEvent.click(badge)
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+  })
+
+  it('setzt an den Vorhaben-Knopf kein Info-Symbol; Antippen zeigt das Vorhaben wie heute', () => {
+    setzeMedien({ tabletQuer: true })
+    const onOpen = vi.fn()
+    render(
+      <TabletQuerProvider>
+        <EpicBadge epicId={9} title="Authentifizierung" shortcode="AUT" onOpen={onOpen} />
+      </TabletQuerProvider>,
+    )
+
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('Authentifizierung') })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Vorhaben AUT öffnen' }))
+
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Vorhaben AUT öffnen' })).toHaveAttribute('title', 'Authentifizierung')
+  })
+
+  it('trägt am Desktop das native title wie heute und öffnet per Klick nichts', () => {
+    render(
+      <TabletQuerProvider>
+        <EpicBadge epicId={9} title="Authentifizierung" shortcode="AUT" />
+      </TabletQuerProvider>,
+    )
+    const badge = screen.getByLabelText('Vorhaben AUT')
+
+    expect(badge).toHaveAttribute('title', 'Authentifizierung')
+    fireEvent.click(badge)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 })
 

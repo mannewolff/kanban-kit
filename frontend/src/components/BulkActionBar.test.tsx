@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vitest'
 import type { KitNamenZustand } from '../api/kitNamen'
 import type { Label } from '../api/labels'
 import { de } from '../i18n/de'
+import { TabletQuerProvider } from '../lib/tabletQuer'
 import { KIT_NAMEN } from '../test/kitNamen'
+import { setzeMedien } from '../test/setup'
 import { BulkActionBar, type LabelOption } from './BulkActionBar'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 
@@ -35,7 +37,11 @@ function zeigeLeiste(over: Partial<Parameters<typeof BulkActionBar>[0]> = {}) {
     onCancel: vi.fn(),
     ...over,
   }
-  render(<BulkActionBar {...eigenschaften} />)
+  render(
+    <TabletQuerProvider>
+      <BulkActionBar {...eigenschaften} />
+    </TabletQuerProvider>,
+  )
   return eigenschaften
 }
 
@@ -187,6 +193,49 @@ describe('BulkActionBar', () => {
     // mit dem Titel als zugänglichem Namen versieht.
     fireEvent.mouseOver(screen.getByLabelText('Vorhaben tragen keine Labels'))
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Vorhaben tragen keine Labels')
+  })
+})
+
+describe('BulkActionBar auf dem Tablet im Querformat (Plan #1707, E7)', () => {
+  const KLAEREN = de.LABEL_ERKLAERUNG.SACHEN.KLAEREN
+  const optionen: LabelOption[] = [
+    { label: label(1, 'Bug'), zustand: 'keine' },
+    { label: label(8, 'kit:clarify'), zustand: 'keine' },
+  ]
+
+  it('öffnet am gesperrten Labels-Knopf die Erklärung per Antippen', async () => {
+    setzeMedien({ tabletQuer: true })
+    zeigeLeiste({ labelsDisabledReason: 'Vorhaben tragen keine Labels' })
+
+    fireEvent.click(screen.getByLabelText('Vorhaben tragen keine Labels'))
+
+    // Sofort, ohne die Verzögerung des Darüberfahrens: Das Antippen öffnet die Erklärung selbst.
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Vorhaben tragen keine Labels')
+  })
+
+  it('setzt an Label-Einträge mit Erklärung ein Info-Symbol; Antippen des Eintrags setzt das Label', async () => {
+    setzeMedien({ tabletQuer: true })
+    const rueckrufe = zeigeLeiste({ labelOptions: optionen })
+    fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'kit:clarify — keine gewählte Karte' }))
+    expect(rueckrufe.onToggleLabel).toHaveBeenCalledWith(8, 'ADD')
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+    expect(screen.queryByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('Bug') })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') }))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+    expect(rueckrufe.onToggleLabel).toHaveBeenCalledTimes(1)
+  })
+
+  it('zeigt am Desktop kein Info-Symbol und die Erklärungen beim Darüberfahren wie heute (AK 7)', async () => {
+    zeigeLeiste({ labelOptions: optionen })
+    fireEvent.click(screen.getByRole('button', { name: 'Labels' }))
+
+    expect(screen.queryByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') })).not.toBeInTheDocument()
+    await userEvent.hover(screen.getByRole('menuitem', { name: 'kit:clarify — keine gewählte Karte' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
   })
 })
 

@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import pkg from '../../package.json'
 import { APP_NAME } from '../appMeta'
@@ -14,6 +14,8 @@ import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { TEXT_SCHWACH, theme } from '../theme'
 import { renderMitSprache } from '../i18n/renderMitSprache'
+import { useTabletQuer } from '../lib/tabletQuer'
+import { setzeMedien } from '../test/setup'
 
 const logoutMock = vi.fn().mockResolvedValue(undefined)
 const useAuthMock = vi.fn()
@@ -646,6 +648,18 @@ describe('AppShell', () => {
       expect(switcherEntries()).toEqual(['DreiP1', 'ZweiP2', 'BP1'])
     })
 
+    it('öffnet auf dem Tablet quer an der freien Taste den Wechsel, keine Erklärung (Plan #1707, E7)', async () => {
+      setzeMedien({ tabletQuer: true })
+      renderBoardShell()
+      await visitBoard(1)
+      await leaveBoard()
+
+      openSwitcher()
+
+      expect(switcherIsOpen()).toBe(true)
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+
     it('hebt einen wiederholten Besuch nach vorne, ohne ein Duplikat anzulegen', async () => {
       renderBoardShell()
       await visitBoard(1)
@@ -1098,15 +1112,17 @@ describe('AppShell Inhaltsbereich', () => {
 })
 
 /**
- * Stellt eine Fensterbreite nach, soweit `useMediaQuery` sie sieht. jsdom kennt kein `matchMedia`
- * (und `src/test/setup.ts` stubbt es nicht); ohne Stub gilt jede Media-Query als nicht erfüllt, die
- * Bestandstests oben laufen damit im breiten Zweig.
+ * Stellt ein Desktop-Fenster der gegebenen Breite nach, soweit `useMediaQuery` es sieht. jsdom kennt
+ * kein `matchMedia`; die Attrappe aus `src/test/setup.ts` meldet jede Query außer der Tablet-Query als
+ * nicht erfüllt, die Bestandstests oben laufen damit im breiten Zweig. Ein Desktop-Fenster wird mit
+ * Maus bedient: Die Tablet-Query (`hover: none`, `pointer: coarse`) trifft hier nie zu (Plan #1707).
  */
 function mitFensterbreite(breite: number) {
   vi.stubGlobal('matchMedia', (query: string) => {
     const max = /max-width:\s*([\d.]+)px/.exec(query)
     const min = /min-width:\s*([\d.]+)px/.exec(query)
-    const matches = (!max || breite <= Number(max[1])) && (!min || breite >= Number(min[1]))
+    const mitFinger = query.includes('pointer: coarse')
+    const matches = !mitFinger && (!max || breite <= Number(max[1])) && (!min || breite >= Number(min[1]))
     return {
       matches,
       media: query,
@@ -1357,5 +1373,223 @@ describe('AppShell auf Englisch', () => {
     aufEnglisch()
     fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
     expect(await screen.findByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument()
+  })
+})
+
+describe('AppShell auf dem Tablet im Querformat (Plan #1707, E1/E9)', () => {
+  beforeEach(() => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
+    vi.stubGlobal('localStorage', fakeStorage())
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  /** Liest auf der Seite im Rahmen die Betriebsart, wie es jede Kind-Komponente tut. */
+  function ModusProbe() {
+    return <span data-testid="modus">{useTabletQuer() ? 'tablet' : 'desktop'}</span>
+  }
+
+  function renderShellMitSeite() {
+    return render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/" element={<ModusProbe />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+  }
+
+  const inhaltLinks = () => document.documentElement.style.getPropertyValue('--app-content-left')
+
+  it('startet mit eingeklappter Schiene, auch wenn ausgeklappt gemerkt ist', () => {
+    localStorage.setItem('sidebar-collapsed', 'false')
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    expect(screen.getByLabelText('Menü ausklappen')).toBeInTheDocument()
+    expect(inhaltLinks()).toBe('64px')
+  })
+
+  it('klappt für die Sitzung auf und wieder ein, ohne den gemerkten Wert zu schreiben', () => {
+    localStorage.setItem('sidebar-collapsed', 'true')
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    fireEvent.click(screen.getByLabelText('Menü ausklappen'))
+    expect(inhaltLinks()).toBe('224px')
+    expect(localStorage.getItem('sidebar-collapsed')).toBe('true')
+
+    fireEvent.click(screen.getByLabelText('Menü einklappen'))
+    expect(inhaltLinks()).toBe('64px')
+    expect(localStorage.getItem('sidebar-collapsed')).toBe('true')
+  })
+
+  it('lässt am Desktop den gemerkten Wert wirken wie bisher', () => {
+    localStorage.setItem('sidebar-collapsed', 'false')
+    renderShell()
+
+    expect(screen.getByLabelText('Menü einklappen')).toBeInTheDocument()
+    expect(inhaltLinks()).toBe('224px')
+    fireEvent.click(screen.getByLabelText('Menü einklappen'))
+    expect(localStorage.getItem('sidebar-collapsed')).toBe('true')
+  })
+
+  it('setzt den Bühnenrand auf 12 px', () => {
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    expect(getComputedStyle(screen.getByRole('main')).paddingLeft).toBe('12px')
+    expect(getComputedStyle(screen.getByRole('main')).paddingRight).toBe('12px')
+  })
+
+  it('reicht die Betriebsart an die Seiten im Rahmen weiter', () => {
+    setzeMedien({ tabletQuer: true })
+    renderShellMitSeite()
+
+    expect(screen.getByTestId('modus')).toHaveTextContent('tablet')
+  })
+
+  it('meldet den Seiten am Desktop den Desktop', () => {
+    renderShellMitSeite()
+
+    expect(screen.getByTestId('modus')).toHaveTextContent('desktop')
+  })
+
+  it('öffnet an der gesperrten Board-Taste die Erklärung per Antippen (E7)', async () => {
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+    expect(screen.getByRole('button', { name: 'Board wechseln' })).toBeDisabled()
+
+    // Eine deaktivierte Taste meldet keinen Klick; angetippt wird der Umschlag, der die Erklärung trägt.
+    fireEvent.click(screen.getByLabelText('Board wechseln (Taste b)'))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Board wechseln (Taste b)')
+
+    fireEvent.click(screen.getByLabelText('Board wechseln (Taste b)'))
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+  })
+
+  it('zeigt an der gesperrten Board-Taste am Desktop den Tooltip beim Darüberfahren wie heute', async () => {
+    renderShell()
+    const umschlag = screen.getByLabelText('Board wechseln (Taste b)')
+
+    fireEvent.click(umschlag)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    await userEvent.hover(umschlag)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Board wechseln (Taste b)')
+  })
+})
+
+describe('AppShell Kennzeichen und sichtbare Höhe für Dialoge (Plan #1707, E10)', () => {
+  /** Attrappe von `window.visualViewport`: Höhe setzbar, `resize` wird an die Abonnenten verteilt. */
+  function sichtbarerAusschnitt(hoehe: number) {
+    const hoerer = new Set<EventListener>()
+    const ausschnitt = {
+      height: hoehe,
+      addEventListener: vi.fn((typ: string, h: EventListener) => typ === 'resize' && hoerer.add(h)),
+      removeEventListener: vi.fn((typ: string, h: EventListener) => typ === 'resize' && hoerer.delete(h)),
+      groesse(neu: number) {
+        ausschnitt.height = neu
+        hoerer.forEach((h) => h(new Event('resize')))
+      },
+      hoerer,
+    }
+    vi.stubGlobal('visualViewport', ausschnitt)
+    return ausschnitt
+  }
+
+  /** `matchMedia`, dessen Tablet-Query sich im Test umschalten lässt und ihre Abonnenten benachrichtigt. */
+  function umschaltbareMedien(tabletQuer: boolean) {
+    let aktiv = tabletQuer
+    const hoerer = new Set<() => void>()
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      get matches() {
+        return query.includes('pointer: coarse') && aktiv
+      },
+      media: query,
+      onchange: null,
+      addEventListener: (_typ: string, h: () => void) => hoerer.add(h),
+      removeEventListener: (_typ: string, h: () => void) => hoerer.delete(h),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+    return (neu: boolean) => {
+      aktiv = neu
+      hoerer.forEach((h) => h())
+    }
+  }
+
+  const wurzel = () => document.documentElement
+  const hoehe = () => wurzel().style.getPropertyValue('--sichtbare-hoehe')
+
+  beforeEach(() => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
+    vi.stubGlobal('localStorage', fakeStorage())
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('setzt im Tablet-Modus Kennzeichen und sichtbare Höhe an das Dokument', () => {
+    sichtbarerAusschnitt(700)
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    expect(wurzel()).toHaveAttribute('data-geraet', 'tablet-quer')
+    expect(hoehe()).toBe('700px')
+  })
+
+  it('übernimmt eine neue Höhe beim Ereignis resize, etwa bei eingeblendeter Bildschirmtastatur', () => {
+    const ausschnitt = sichtbarerAusschnitt(700)
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    act(() => ausschnitt.groesse(420))
+    expect(hoehe()).toBe('420px')
+  })
+
+  it('entfernt beides und meldet den Hörer ab, wenn die Shell abgebaut wird', () => {
+    const ausschnitt = sichtbarerAusschnitt(700)
+    setzeMedien({ tabletQuer: true })
+    const { unmount } = renderShell()
+
+    unmount()
+    expect(wurzel()).not.toHaveAttribute('data-geraet')
+    expect(hoehe()).toBe('')
+    expect(ausschnitt.hoerer.size).toBe(0)
+  })
+
+  it('entfernt beides und meldet den Hörer ab beim Wechsel auf den Desktop', () => {
+    const ausschnitt = sichtbarerAusschnitt(700)
+    const schalte = umschaltbareMedien(true)
+    renderShell()
+    expect(wurzel()).toHaveAttribute('data-geraet', 'tablet-quer')
+
+    act(() => schalte(false))
+    expect(wurzel()).not.toHaveAttribute('data-geraet')
+    expect(hoehe()).toBe('')
+    expect(ausschnitt.hoerer.size).toBe(0)
+    expect(ausschnitt.removeEventListener).toHaveBeenCalledWith('resize', expect.any(Function))
+  })
+
+  it('setzt am Desktop weder Kennzeichen noch Höhe', () => {
+    const ausschnitt = sichtbarerAusschnitt(700)
+    renderShell()
+
+    expect(wurzel()).not.toHaveAttribute('data-geraet')
+    expect(hoehe()).toBe('')
+    expect(ausschnitt.addEventListener).not.toHaveBeenCalled()
+  })
+
+  it('setzt ohne visualViewport nur das Kennzeichen; die Höhe fällt im Theme auf 100dvh zurück', () => {
+    vi.stubGlobal('visualViewport', undefined)
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    expect(wurzel()).toHaveAttribute('data-geraet', 'tablet-quer')
+    expect(hoehe()).toBe('')
   })
 })

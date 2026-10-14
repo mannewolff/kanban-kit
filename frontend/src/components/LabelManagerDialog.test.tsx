@@ -6,7 +6,9 @@ import type { KitNamenZustand } from '../api/kitNamen'
 import type { Label } from '../api/labels'
 import { de } from '../i18n/de'
 import { en } from '../i18n/en'
+import { TabletQuerProvider } from '../lib/tabletQuer'
 import { KIT_NAMEN } from '../test/kitNamen'
+import { setzeMedien } from '../test/setup'
 import { LabelManagerDialog } from './LabelManagerDialog'
 import { SnackbarProvider } from './SnackbarProvider'
 import { renderMitSprache } from '../i18n/renderMitSprache'
@@ -346,6 +348,34 @@ describe('LabelManagerDialog: Erklärung der Systemlabels (#1673)', () => {
 
     expect(feld).toHaveFocus()
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('öffnet auf dem Tablet quer die Erklärung per Antippen des vorhandenen Info-Symbols (Plan #1707, E7)', () => {
+    setzeMedien({ tabletQuer: true })
+    render(
+      <TabletQuerProvider>
+        <LabelManagerDialog open boardId={9} labels={mitSystemlabel} onClose={vi.fn()} onChanged={vi.fn()} api={mkApi()} />
+      </TabletQuerProvider>,
+    )
+
+    // Kein zweites Info-Symbol: Das vorhandene trägt die Erklärung auch auf dem Tablet.
+    expect(screen.getAllByRole('button', { name: /^Erklärung zu / })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Erklärung zu kit:clarify' }))
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+  })
+
+  it('zeigt am Desktop die Erklärung beim Darüberfahren des Info-Symbols wie heute (AK 7)', async () => {
+    render(
+      <TabletQuerProvider>
+        <LabelManagerDialog open boardId={9} labels={mitSystemlabel} onClose={vi.fn()} onChanged={vi.fn()} api={mkApi()} />
+      </TabletQuerProvider>,
+    )
+
+    expect(screen.getAllByRole('button', { name: /^Erklärung zu / })).toHaveLength(1)
+    await userEvent.hover(screen.getByRole('button', { name: 'Erklärung zu kit:clarify' }))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
   })
 
   it('beschriftet das Info-Symbol auf Englisch', () => {

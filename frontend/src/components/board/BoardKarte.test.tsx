@@ -1,10 +1,14 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, test, vi } from 'vitest'
 import type { Card } from '../../api/cards'
 import type { KitNamenZustand } from '../../api/kitNamen'
 import { de } from '../../i18n/de'
+import { TabletQuerProvider } from '../../lib/tabletQuer'
 import { KIT_NAMEN } from '../../test/kitNamen'
+import { cssRegel } from '../../test/cssRegel'
+import { setzeMedien } from '../../test/setup'
+import { ErklaerungOffenProvider } from '../Erklaerung'
 import { BoardKarte } from './BoardKarte'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 
@@ -47,6 +51,125 @@ describe('BoardKarte — Ziehbarkeit (#1324)', () => {
     zeigen({ selectionMode: true, selected: true, canEdit: true })
 
     expect(screen.queryByLabelText('Menü Aufgabe')).not.toBeInTheDocument()
+  })
+})
+
+describe('BoardKarte auf dem Tablet im Querformat (Plan #1707, E3/E4)', () => {
+  const zeigenTablet = (
+    over: Partial<{ selectionMode: boolean; selected: boolean; canEdit: boolean; fingerZustand: 'wartet' | 'zieht' }> = {},
+  ) => {
+    const onOpen = vi.fn()
+    const onPointerDown = vi.fn()
+    render(
+      <TabletQuerProvider>
+        <BoardKarte
+          card={card} epic={undefined} done={false} spaltenname="Backlog" dichte="normal" bewegt={false}
+          members={[]} boardLabels={[]} retentionDays={30} selectionMode={false} selected={false} canEdit
+          fingerGriff={{ onPointerDown }}
+          onDragStart={vi.fn()} onDragEnd={vi.fn()} onSelect={vi.fn()} onOpen={onOpen} onMenu={vi.fn()}
+          {...over}
+        />
+      </TabletQuerProvider>,
+    )
+    return { onOpen, onPointerDown, karte: screen.getByTestId('card-100') }
+  }
+
+  it('ist nicht nativ ziehbar, trägt ihre Kennung und die Touch-Stile', () => {
+    setzeMedien({ tabletQuer: true })
+    const { karte } = zeigenTablet()
+
+    expect(karte).toHaveAttribute('draggable', 'false')
+    expect(karte).toHaveAttribute('data-karte-id', '100')
+    // jsdom kennt `touch-action` im berechneten Stil nicht; die erzeugte Regel belegt es.
+    expect(cssRegel(karte)).toContain('touch-action: pan-x pan-y')
+    expect(cssRegel(karte)).toContain('-webkit-touch-callout: none')
+    expect(cssRegel(karte)).toContain('user-select: none')
+  })
+
+  it('reicht das Aufsetzen des Fingers an den Griff und öffnet beim kurzen Antippen wie heute', () => {
+    setzeMedien({ tabletQuer: true })
+    const { karte, onOpen, onPointerDown } = zeigenTablet()
+
+    fireEvent.pointerDown(karte)
+    fireEvent.click(karte)
+
+    expect(onPointerDown).toHaveBeenCalledTimes(1)
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('gibt einer nicht ziehbaren Karte keinen Griff', () => {
+    setzeMedien({ tabletQuer: true })
+    const { karte, onPointerDown } = zeigenTablet({ selectionMode: true, selected: false })
+
+    fireEvent.pointerDown(karte)
+
+    expect(onPointerDown).not.toHaveBeenCalled()
+  })
+
+  it('zeigt den Stand des Fingerzugs an', () => {
+    setzeMedien({ tabletQuer: true })
+    const { karte } = zeigenTablet({ fingerZustand: 'zieht' })
+
+    expect(karte).toHaveAttribute('data-zieh-zustand', 'zieht')
+  })
+
+  it('bleibt am Desktop nativ ziehbar, ohne Kennung und ohne Griff', () => {
+    const { karte, onPointerDown } = zeigenTablet()
+
+    fireEvent.pointerDown(karte)
+
+    expect(karte).toHaveAttribute('draggable', 'true')
+    expect(karte).not.toHaveAttribute('data-karte-id')
+    expect(cssRegel(karte)).not.toContain('touch-action')
+    expect(onPointerDown).not.toHaveBeenCalled()
+  })
+})
+
+describe('BoardKarte: Erklärungen der Labels auf dem Tablet im Querformat (Plan #1707, E7)', () => {
+  it("Szenario: Erklärung eines Labels", async () => {
+    // Angenommen ein Mensch bedient ein Board auf einem Tablet im Querformat per Finger
+    setzeMedien({ tabletQuer: true })
+    // Und eine Karte trägt ein Systemlabel mit einer Erklärung
+    const onOpen = vi.fn()
+    renderMitSprache(
+      <TabletQuerProvider>
+        <ErklaerungOffenProvider>
+          <BoardKarte
+            card={{ ...card, labels: [1, 2] }} epic={undefined} done={false} spaltenname="Backlog" dichte="normal"
+            bewegt={false} selectionMode={false} selected={false} canEdit members={[]} retentionDays={30}
+            boardLabels={[
+              { id: 1, boardId: 1, name: 'kit:clarify', color: '#ff0000', countOnEpicTile: false },
+              { id: 2, boardId: 1, name: 'run:running', color: '#00ff00', countOnEpicTile: false },
+            ]}
+            onDragStart={vi.fn()} onDragEnd={vi.fn()} onSelect={vi.fn()} onOpen={onOpen} onMenu={vi.fn()}
+          />
+        </ErklaerungOffenProvider>
+      </TabletQuerProvider>,
+    )
+
+    // Wenn er das Label antippt
+    fireEvent.click(screen.getByText('kit:clarify'))
+
+    // Dann öffnet sich die Erklärung des Labels
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.bedeutung)
+    // Und die Karte öffnet sich nicht
+    expect(onOpen).not.toHaveBeenCalled()
+
+    // Wenn er danach neben die Erklärung tippt
+    await act(() => new Promise((fertig) => setTimeout(fertig, 0)))
+    fireEvent.touchEnd(document.body)
+    fireEvent.click(document.body)
+
+    // Dann schließt sie sich
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+
+    // Das Öffnen einer zweiten Erklärung schließt die erste
+    fireEvent.click(screen.getByText('kit:clarify'))
+    await screen.findByRole('tooltip')
+    fireEvent.click(screen.getByText('run:running'))
+    await waitFor(() => expect(screen.getAllByRole('tooltip')).toHaveLength(1))
+    expect(screen.getByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.LAUF_LAEUFT.bedeutung)
+    expect(onOpen).not.toHaveBeenCalled()
   })
 })
 

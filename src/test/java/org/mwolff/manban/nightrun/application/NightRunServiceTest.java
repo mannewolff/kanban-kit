@@ -55,6 +55,7 @@ import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.ProgressStage;
 import org.mwolff.manban.nightrun.domain.ReleasePreparation;
 import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
+import org.mwolff.manban.nightrun.domain.RunnerStufe;
 import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
@@ -1702,6 +1703,116 @@ class NightRunServiceTest {
         .isEqualTo(NightRunOutcome.Verdict.FAILED);
   }
 
+  // --- Laufende Stufen und Beendigung von Hand (Issue #1725) ------------------------------
+
+  private static final RunnerStufe VORBEREITUNG =
+      new RunnerStufe(
+          1665, "VORBEREITUNG", T1, T1.plusSeconds(7200), "WAITING_FOR_IMPLEMENTATION", true);
+
+  private static NightRunService.NewNightRun mitStufen(boolean complete) {
+    NightRunService.NewNightRun ohne = meldung(T1, complete, null);
+    return new NightRunService.NewNightRun(
+        ohne.startedAt(),
+        ohne.mode(),
+        ohne.durationMs(),
+        ohne.processedCount(),
+        ohne.skippedCount(),
+        ohne.unparsedCount(),
+        ohne.unparsedSample(),
+        ohne.complete(),
+        ohne.usage(),
+        ohne.noWorkReason(),
+        ohne.budget(),
+        ohne.abortReason(),
+        ohne.abortKind(),
+        ohne.releasePreparation(),
+        ohne.items(),
+        List.of(VORBEREITUNG));
+  }
+
+  @Test
+  void ingest_uebergibtDieLaufendenStufenAnDenLauf() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, mitStufen(false));
+
+    assertThat(gemeldeterLauf().current()).containsExactly(VORBEREITUNG);
+  }
+
+  @Test
+  void ingest_verwirftDieStufenEinesBeendetenLaufs() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, mitStufen(true));
+
+    assertThat(gemeldeterLauf().current()).isEmpty();
+  }
+
+  @Test
+  void ingest_setztDieBeendigungVonHandNie() {
+    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, mitStufen(false));
+
+    assertThat(gemeldeterLauf().closedAt()).isNull();
+  }
+
+  /** Der Upload-Weg reicht die Stufen durch wie jedes andere Feld (Issue #1725). */
+  @Test
+  void submit_uebergibtDieStufenEinesUnfertigenLaufs() {
+    service.submit(USER, PROJECT, List.of(mitStufen(false)));
+
+    assertThat(gemeldeterLauf().current()).containsExactly(VORBEREITUNG);
+  }
+
+  /** Ein hochgeladenes, beendetes Protokoll traegt keine laufenden Stufen (Issue #1733). */
+  @Test
+  void submit_verwirftDieStufenEinesBeendetenLaufs() {
+    service.submit(USER, PROJECT, List.of(mitStufen(true)));
+
+    assertThat(gemeldeterLauf().current()).isEmpty();
+  }
+
+  @Test
+  void submit_ohneStufenFeldTraegtDerLaufKeine() {
+    service.submit(USER, PROJECT, List.of(lauf(T1)));
+
+    assertThat(gemeldeterLauf().current()).isEmpty();
+  }
+
+  /**
+   * Seit Issue #1725 reicht die Sicht des Projekts die Beendigung von Hand durch: Ein so beendeter
+   * Lauf ist beendet (CLOSED) und nicht verstummt.
+   */
+  @Test
+  void list_nenntEinenVonHandBeendetenLaufBeendet() {
+    runs.insertIfAbsent(
+        new NightRun(
+            null,
+            PROJECT,
+            T1,
+            NightRunMode.IMPLEMENTATION,
+            NightRunKind.NIGHT,
+            1_000L,
+            0,
+            0,
+            0,
+            null,
+            T1,
+            NightRunOrigin.TOKEN,
+            TOKEN,
+            false,
+            T1,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            T1.plusSeconds(60)),
+        List.of());
+
+    assertThat(service.list(USER, PROJECT))
+        .singleElement()
+        .extracting(v -> v.outcome().verdict())
+        .isEqualTo(NightRunOutcome.Verdict.CLOSED);
+  }
+
   static class FakeNightRunRepository implements NightRunRepository {
 
     private final List<NightRun> gespeicherteLaeufe = new ArrayList<>();
@@ -1757,7 +1868,9 @@ class NightRunServiceTest {
               run.budget(),
               run.abortReason(),
               run.abortKind(),
-              run.releasePreparation()));
+              run.releasePreparation(),
+              run.current(),
+              run.closedAt()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -1801,7 +1914,9 @@ class NightRunServiceTest {
               run.budget(),
               run.abortReason(),
               run.abortKind(),
-              run.releasePreparation()));
+              run.releasePreparation(),
+              run.current(),
+              run.closedAt()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }

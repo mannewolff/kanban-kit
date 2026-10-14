@@ -54,6 +54,8 @@ hängt, gehört deshalb nicht in die Tabelle, sondern unter [Sonderregeln](#sond
 | Eigentümerschaft übertragen | `PROJECT_OWNER_TRANSFER` | – | – | – | ✓ |
 | **Auswertung der Läufe lesen** — Plattform-Admin auch ohne OWNER, aber nur bei Teilnahme am Plattform-Leitstand | `NIGHT_RUN_READ` | – | – | – | ✓ |
 | Übersicht „Heute Nacht“ und Morgenkachel „Veröffentlichung vorbereitet“ auf der Runner-Seite sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
+| Bereich „Runner jetzt“ auf der Runner-Seite sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
+| Abschnitt „Wartegrund“ im Kartendialog eines Pakets in Ready sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
 | **Protokoll eines Laufs hineingeben** — der Plattform-Admin immer | `NIGHT_RUN_SUBMIT` | – | – | – | ✓ |
 
 Dieselbe Übersicht ist in der App unter **`/roles`** erreichbar (Link „Rollen & Rechte" auf der

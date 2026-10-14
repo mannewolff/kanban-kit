@@ -10,6 +10,8 @@ import type {
   VerbrauchZeitraum,
 } from '../../api/nightRunUsage'
 import { kostenText, tokenText } from '../../lib/leitstand'
+import { TabletQuerProvider } from '../../lib/tabletQuer'
+import { setzeMedien } from '../../test/setup'
 import { LeitstandVerbrauch } from './LeitstandVerbrauch'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 
@@ -922,6 +924,38 @@ describe('LeitstandVerbrauch — Kachel Bremse (Issue #1553, Plan #1547 E12, E14
     const text = await bremse()
     expect(text).not.toMatch(/[▲▼]/)
     expect(text).not.toContain('7')
+  })
+})
+
+describe('LeitstandVerbrauch auf dem Tablet im Querformat (Plan #1707, E7)', () => {
+  function zeigeMitModus() {
+    const api = { period: antwort(zeitraum()), total: antwort(gesamt()), implementationTime: antwort(implementierung()) }
+    render(
+      <TabletQuerProvider>
+        <LeitstandVerbrauch projectId={5} boardId={3} api={api} />
+      </TabletQuerProvider>,
+    )
+  }
+
+  it('öffnet den Vergleich mit dem Vorzeitraum per Antippen', async () => {
+    setzeMedien({ tabletQuer: true })
+    zeigeMitModus()
+
+    const kosten = await kachel('Kosten')
+    expect(within(kosten).queryByTitle(/billiger als im Vorzeitraum/)).not.toBeInTheDocument()
+    fireEvent.click(within(kosten).getByTestId('delta-gut'))
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent(/billiger als im Vorzeitraum/)
+  })
+
+  it('trägt am Desktop das native title wie heute und öffnet per Klick nichts', async () => {
+    zeigeMitModus()
+
+    const kosten = await kachel('Kosten')
+    fireEvent.click(within(kosten).getByTestId('delta-gut'))
+
+    expect(within(kosten).getByTitle(/billiger als im Vorzeitraum/)).toContainElement(within(kosten).getByTestId('delta-gut'))
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 })
 

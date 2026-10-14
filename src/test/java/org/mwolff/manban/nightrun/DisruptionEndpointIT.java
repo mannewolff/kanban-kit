@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -15,6 +16,7 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,6 +54,7 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
+  @Autowired private NightRunRepository runs;
 
   private long projectId;
   private long laufId;
@@ -370,6 +373,22 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
     // Zwei Admins räumen dieselbe Zeile weg — der zweite darf nichts Rotes sehen.
     mvc.perform(post(SCHLIESSEN + "/" + haengt + "/close").cookie(admin))
         .andExpect(status().isNoContent());
+  }
+
+  /**
+   * Issue #1725: Der Lauf-Datensatz des Projekts liest die Beendigung von Hand mit. Ohne sie bliebe
+   * ein so beendeter Lauf in der Runner-Lage für immer verstummt.
+   */
+  @Test
+  void einVonHandBeendeterLaufTraegtSeinenZeitpunktImLaufDatensatz() throws Exception {
+    Cookie admin = session("de-closed-at@example.com", PlatformRole.ADMIN);
+    long haengt = laufend();
+    assertThat(runs.findByIdAndProjectId(haengt, projectId).orElseThrow().closedAt()).isNull();
+
+    mvc.perform(post(SCHLIESSEN + "/" + haengt + "/close").cookie(admin))
+        .andExpect(status().isNoContent());
+
+    assertThat(runs.findByIdAndProjectId(haengt, projectId).orElseThrow().closedAt()).isNotNull();
   }
 
   /**

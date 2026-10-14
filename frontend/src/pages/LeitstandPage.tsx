@@ -10,6 +10,7 @@ import { type BoardDashboardKpis } from '../api/dashboard'
 import { type Epic } from '../api/epics'
 import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunView } from '../api/nightRuns'
 import { CardDetailModal } from '../components/CardDetailModal'
+import { Erklaerung } from '../components/Erklaerung'
 import { FestgefahrenAngaben } from '../components/leitstand/FestgefahrenAngaben'
 import {
   FilterTaste,
@@ -563,16 +564,17 @@ function Balkenwerk({
       >
         {hoehen.map((hoehe, i) => {
           const jetzt = i === hoehen.length - 1
+          // Auf dem Tablet quer öffnet Antippen von Lücke und Balken die Erklärung (Plan #1707, E7).
           if (hoehe === null) {
             return (
-              <Box
-                key={wochen[i].weekStart}
-                data-testid={`luecke-${i}`}
-                title={t.LUECKE(kalenderwoche(wochen[i].weekStart))}
-                sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}
-              >
-                <Box sx={{ borderTop: `1px dashed ${RAND_STARK}` }} />
-              </Box>
+              <Erklaerung key={wochen[i].weekStart} nativ title={t.LUECKE(kalenderwoche(wochen[i].weekStart))}>
+                <Box
+                  data-testid={`luecke-${i}`}
+                  sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}
+                >
+                  <Box sx={{ borderTop: `1px dashed ${RAND_STARK}` }} />
+                </Box>
+              </Erklaerung>
             )
           }
           return (
@@ -585,19 +587,20 @@ function Balkenwerk({
               >
                 {wert(i)}
               </Box>
-              <Box
-                data-testid={`balken-${hoehe}`}
-                title={titel(i)}
-                sx={{
-                  height: `calc((100% - ${WERT_HOEHE}px) * ${hoehe / 100})`,
-                  borderRadius: '4px 4px 2px 2px',
-                  background: jetzt
-                    ? `linear-gradient(180deg, ${farbeHell}, ${farbe})`
-                    : `linear-gradient(180deg, color-mix(in srgb, ${farbe} 78%, ${PLATTE}), color-mix(in srgb, ${farbe} 34%, ${PLATTE}))`,
-                  border: hoehe === 0 ? 'none' : `1px solid color-mix(in srgb, ${farbe} 45%, ${RAND})`,
-                  boxShadow: jetzt ? `0 1px 0 rgba(255,255,255,.35) inset, 0 0 14px -4px ${farbe}` : `0 1px 0 rgba(255,255,255,.22) inset, 0 3px 8px -5px ${farbe}`,
-                }}
-              />
+              <Erklaerung nativ title={titel(i)}>
+                <Box
+                  data-testid={`balken-${hoehe}`}
+                  sx={{
+                    height: `calc((100% - ${WERT_HOEHE}px) * ${hoehe / 100})`,
+                    borderRadius: '4px 4px 2px 2px',
+                    background: jetzt
+                      ? `linear-gradient(180deg, ${farbeHell}, ${farbe})`
+                      : `linear-gradient(180deg, color-mix(in srgb, ${farbe} 78%, ${PLATTE}), color-mix(in srgb, ${farbe} 34%, ${PLATTE}))`,
+                    border: hoehe === 0 ? 'none' : `1px solid color-mix(in srgb, ${farbe} 45%, ${RAND})`,
+                    boxShadow: jetzt ? `0 1px 0 rgba(255,255,255,.35) inset, 0 0 14px -4px ${farbe}` : `0 1px 0 rgba(255,255,255,.22) inset, 0 3px 8px -5px ${farbe}`,
+                  }}
+                />
+              </Erklaerung>
             </Box>
           )
         })}

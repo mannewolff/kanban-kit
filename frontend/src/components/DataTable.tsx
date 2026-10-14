@@ -13,6 +13,7 @@ import TableRow from '@mui/material/TableRow'
 import Tooltip from '@mui/material/Tooltip'
 import { type ReactNode, useRef, useState } from 'react'
 import { useT } from '../i18n/SpracheContext'
+import { useTabletQuer } from '../lib/tabletQuer'
 
 /** Spaltendefinition für {@link DataTable}. */
 export interface DataTableColumn<Row> {
@@ -74,6 +75,7 @@ export function DataTable<Row>({
   storageKey,
 }: Readonly<Props<Row>>) {
   const t = useT()
+  const tabletQuer = useTabletQuer()
   const [widths, setWidths] = useState<Record<string, number>>(() => readWidths(storageKey))
   const [hidden, setHidden] = useState<string[]>(() => readHidden(storageKey))
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -91,9 +93,14 @@ export function DataTable<Row>({
     }
   }
 
-  const startResize = (col: DataTableColumn<Row>, event: React.MouseEvent) => {
-    event.preventDefault()
-    const startX = event.clientX
+  // Maus am Desktop und Finger im Tablet-Modus (Plan #1707, E12) teilen sich die Breitenberechnung;
+  // sie unterscheiden sich nur in den Ereignissen, die den Zug tragen.
+  const beginneBreitenzug = (
+    col: DataTableColumn<Row>,
+    startX: number,
+    bewegung: 'mousemove' | 'pointermove',
+    ende: 'mouseup' | 'pointerup',
+  ) => {
     const startWidth = columnWidth(col) ?? 150
     const minWidth = col.minWidth ?? 40
     const onMove = (ev: MouseEvent) => {
@@ -101,8 +108,8 @@ export function DataTable<Row>({
       setWidths((current) => ({ ...current, [col.key]: next }))
     }
     const detach = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      document.removeEventListener(bewegung, onMove)
+      document.removeEventListener(ende, onUp)
       resizeCleanupRef.current = null
     }
     const onUp = () => {
@@ -112,9 +119,22 @@ export function DataTable<Row>({
         return current
       })
     }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    document.addEventListener(bewegung, onMove)
+    document.addEventListener(ende, onUp)
     resizeCleanupRef.current = detach
+  }
+
+  const startResize = (col: DataTableColumn<Row>, event: React.MouseEvent) => {
+    event.preventDefault()
+    beginneBreitenzug(col, event.clientX, 'mousemove', 'mouseup')
+  }
+
+  // Nur der Finger nimmt diesen Weg; Maus und Stift bleiben bei `onMouseDown`. `preventDefault`
+  // unterdrückt die Maus-Ereignisse, die der Browser sonst zusätzlich zum Touch-Pointer schickt.
+  const startResizeFinger = (col: DataTableColumn<Row>, event: React.PointerEvent) => {
+    if (event.pointerType !== 'touch') return
+    event.preventDefault()
+    beginneBreitenzug(col, event.clientX, 'pointermove', 'pointerup')
   }
 
   const toggleHidden = (key: string) => {
@@ -167,6 +187,7 @@ export function DataTable<Row>({
                       role="separator"
                       aria-label={t.RAHMEN.BREITE_AENDERN(col.key)}
                       onMouseDown={(e) => startResize(col, e)}
+                      {...(tabletQuer ? { onPointerDown: (e: React.PointerEvent) => startResizeFinger(col, e) } : {})}
                       sx={{
                         position: 'absolute',
                         top: 0,
@@ -175,6 +196,8 @@ export function DataTable<Row>({
                         width: 6,
                         cursor: 'col-resize',
                         userSelect: 'none',
+                        // Auf dem Tablet zieht der Finger am Griff, statt die Seite zu scrollen (E12).
+                        ...(tabletQuer && { touchAction: 'none' }),
                         // Immer sichtbare, dezente Haarlinie am Spaltenrand (Marken-BORDER).
                         '&::before': {
                           content: '""',

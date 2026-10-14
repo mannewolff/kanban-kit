@@ -32,6 +32,7 @@ import { lastBoardOfProject, useBoardHistory, type BoardHistoryEntry } from '../
 import { useEditMode } from '../lib/EditModeContext'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
+import { TabletQuerProvider, useTabletQuer } from '../lib/tabletQuer'
 import {
   ANZEIGE,
   CARD_RADIUS,
@@ -53,6 +54,7 @@ import {
 import { BoardSwitcher } from './BoardSwitcher'
 import { CardNumberSearch } from './CardNumberSearch'
 import { EditModeBanner, EDIT_MODE_BANNER_HEIGHT } from './EditModeBanner'
+import { Erklaerung, ErklaerungOffenProvider } from './Erklaerung'
 import { useSnackbar } from './SnackbarProvider'
 
 /** Breite der Schiene (Entwurf `.warte`, Z. 199). */
@@ -311,13 +313,32 @@ function Schiene({
   )
 }
 
-/** Rahmen für angemeldete Bereiche: Schiene links, Kopf und Bühne rechts (Entwurf Z. 196–389). */
+/**
+ * Rahmen für angemeldete Bereiche: Schiene links, Kopf und Bühne rechts (Entwurf Z. 196–389).
+ * Fragt die Betriebsart „Tablet im Querformat“ genau einmal ab und stellt sie allen Seiten im Rahmen
+ * bereit (Plan #1707, E1). Hält zudem höchstens eine per Finger geöffnete Erklärung offen (E7).
+ */
 export function AppShell() {
+  return (
+    <TabletQuerProvider>
+      <ErklaerungOffenProvider>
+        <Rahmen />
+      </ErklaerungOffenProvider>
+    </TabletQuerProvider>
+  )
+}
+
+function Rahmen() {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
   const t = useT()
+  const tabletQuer = useTabletQuer()
 
-  const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
+  const [gemerktEingeklappt, setGemerktEingeklappt] = useState<boolean>(readCollapsed)
+  // Auf dem Tablet quer startet die Schiene eingeklappt, gleich was am Desktop gemerkt ist; Aufklappen
+  // gilt für die Sitzung und schreibt den gemerkten Wert nicht (Plan #1707, E9).
+  const [tabletAusgeklappt, setTabletAusgeklappt] = useState(false)
+  const collapsed = tabletQuer ? !tabletAusgeklappt : gemerktEingeklappt
   // Mindestbreite 768 px (Plan #932 E5): Unterhalb des Breakpoints `md` (900 px) wird die Navigation
   // zur temporären Schublade hinter einer Schaltfläche, damit 768 vollständig im schmalen Zweig liegt.
   // `noSsr`, damit der erste Render schon den richtigen Zweig trägt statt kurz den breiten.
@@ -542,7 +563,11 @@ export function AppShell() {
   }
 
   const toggleCollapsed = () => {
-    setCollapsed((prev) => {
+    if (tabletQuer) {
+      setTabletAusgeklappt((prev) => !prev)
+      return
+    }
+    setGemerktEingeklappt((prev) => {
       const next = !prev
       writeCollapsed(next)
       return next
@@ -585,6 +610,27 @@ export function AppShell() {
       root.style.removeProperty('--app-content-top')
     }
   }, [inhaltLinks, bannerOffset])
+
+  // Dialoge rendern per Portal unter `document.body`, außerhalb dieses Baums. Kennzeichen und sichtbare
+  // Höhe stehen darum an `:root`, wo der Selektor des Themes sie findet (Plan #1707, E10). Die Höhe
+  // kommt aus `visualViewport`, weil iPadOS-Safari bei eingeblendeter Tastatur nur diesen Ausschnitt
+  // verkleinert; ohne `visualViewport` greift im Theme der Rückfall `100dvh`.
+  useEffect(() => {
+    if (!tabletQuer) return
+    const root = document.documentElement
+    const ausschnitt = window.visualViewport
+    const hoeheSetzen = () => {
+      if (ausschnitt) root.style.setProperty('--sichtbare-hoehe', `${ausschnitt.height}px`)
+    }
+    root.setAttribute('data-geraet', 'tablet-quer')
+    hoeheSetzen()
+    ausschnitt?.addEventListener('resize', hoeheSetzen)
+    return () => {
+      ausschnitt?.removeEventListener('resize', hoeheSetzen)
+      root.removeAttribute('data-geraet')
+      root.style.removeProperty('--sichtbare-hoehe')
+    }
+  }, [tabletQuer])
   // Kürzel des Nutzers wie im Entwurf: die Anfangsbuchstaben der ersten beiden Namensteile.
   const kuerzel =
     user?.displayName
@@ -593,6 +639,18 @@ export function AppShell() {
       .slice(0, 2)
       .map((teil) => teil.charAt(0).toUpperCase())
       .join('') || '?'
+  const boardTaste = (
+    <Button
+      variant="outlined"
+      startIcon={<SwapHorizIcon />}
+      aria-label={t.RAHMEN.BOARD_WECHSELN}
+      disabled={history.length === 0}
+      onClick={() => setSwitcherOpen(true)}
+      sx={{ color: 'text.primary' }}
+    >
+      {t.RAHMEN.BOARD_TASTE}
+    </Button>
+  )
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -723,21 +781,17 @@ export function AppShell() {
               {/* Ein unsichtbares Kürzel gibt es für die Hälfte der Nutzer nicht: Die Taste ist der
                   sichtbare Zugang und trägt zugleich die Beschriftung, über die `b` bekannt wird.
                   Der Umschlag mit `span` gibt dem Tooltip auch an der deaktivierten Taste einen
-                  Ereignisempfänger. */}
-              <Tooltip title={t.RAHMEN.BOARD_WECHSELN_TASTE}>
-                <span>
-                  <Button
-                    variant="outlined"
-                    startIcon={<SwapHorizIcon />}
-                    aria-label={t.RAHMEN.BOARD_WECHSELN}
-                    disabled={history.length === 0}
-                    onClick={() => setSwitcherOpen(true)}
-                    sx={{ color: 'text.primary' }}
-                  >
-                    {t.RAHMEN.BOARD_TASTE}
-                  </Button>
-                </span>
-              </Tooltip>
+                  Ereignisempfänger. Gesperrt öffnet auf dem Tablet quer Antippen die Erklärung
+                  (Plan #1707, E7); die freie Taste behält ihre Aktion. */}
+              {history.length === 0 ? (
+                <Erklaerung title={t.RAHMEN.BOARD_WECHSELN_TASTE}>
+                  <span>{boardTaste}</span>
+                </Erklaerung>
+              ) : (
+                <Tooltip title={t.RAHMEN.BOARD_WECHSELN_TASTE}>
+                  <span>{boardTaste}</span>
+                </Tooltip>
+              )}
               {/* Nutzer-Mal (Entwurf `.nutzer`): öffnet Profil und Abmelden, statt beides als eigene
                   Tasten in den Kopf zu stellen. */}
               <Tooltip title={user.displayName}>
@@ -802,7 +856,8 @@ export function AppShell() {
           id="inhalt"
           ref={inhaltRef}
           tabIndex={-1}
-          sx={{ flexGrow: 1, pt: '22px', px: { xs: '16px', md: '26px' }, pb: '44px', minWidth: 0, '&:focus': { outline: 'none' } }}
+          // Auf dem Tablet quer ein schmaler Bühnenrand, damit fünf Spalten auf 1024 px passen (E6).
+          sx={{ flexGrow: 1, pt: '22px', px: tabletQuer ? '12px' : { xs: '16px', md: '26px' }, pb: '44px', minWidth: 0, '&:focus': { outline: 'none' } }}
         >
           <Outlet />
         </Box>

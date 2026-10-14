@@ -18,7 +18,9 @@ import { statusAnzeigename, statusWeichtAb } from '../../lib/columnMeta'
 import { formatDueDate, isOverdue } from '../../lib/dueDate'
 import { statusColors } from '../../lib/statusColors'
 import { MELDER, NUTZER_MAL_SX, TEXT_SCHWACH, ZAHL } from '../../theme'
-import { type Dichte, karteDichteSx, karteSx } from '../boardSurfaceSx'
+import type { FingerZiehen } from '../../lib/useFingerZiehen'
+import { useTabletQuer } from '../../lib/tabletQuer'
+import { type Dichte, FINGER_GRIFF_SX, karteDichteSx, karteSx } from '../boardSurfaceSx'
 import { EpicBadge } from '../EpicBadge'
 import { LabelErklaerung } from '../LabelErklaerung'
 import { labelChipSx } from '../labelChipSx'
@@ -50,6 +52,7 @@ function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: n
         const l = boardLabels.find((b) => b.id === labelId)
         const name = l?.name ?? `#${labelId}`
         // Fokus und Tooltip, aber kein eigener Klick: Ein Klick öffnet weiter die Karte (Plan #1668, E5).
+        // Auf dem Tablet quer öffnet Antippen eines Systemlabels seine Erklärung statt der Karte (Plan #1707, E7).
         return (
           <LabelErklaerung key={labelId} name={name}>
             <Chip
@@ -221,6 +224,10 @@ interface Props {
   /** Das ⋮-Menü öffnen; der Aufrufer bekommt die Taste als Anker. */
   onMenu: (anchor: HTMLElement) => void
   onEpicOpen?: (epic: Epic) => void
+  /** Handler des Fingerzugs aus `useFingerZiehen` (Plan #1707, E3); greifen nur im Tablet-Modus. */
+  fingerGriff?: ReturnType<FingerZiehen['griff']>
+  /** Stand des Fingerzugs, solange diese Karte gegriffen ist. */
+  fingerZustand?: 'wartet' | 'zieht'
 }
 
 /**
@@ -249,8 +256,11 @@ export function BoardKarte({
   onOpen,
   onMenu,
   onEpicOpen,
+  fingerGriff,
+  fingerZustand,
 }: Readonly<Props>) {
   const t = useT()
+  const tabletQuer = useTabletQuer()
   const doneAt = done ? card.movedToDoneAt : null
   const overdue = isOverdue(card.dueDate, done)
   // Das Mal erscheint nur, wenn der Status nicht zur Spalte passt — sonst wäre es Rauschen (E17).
@@ -262,15 +272,21 @@ export function BoardKarte({
   // ausgewählte bleibt unbeweglich, ihr Klick wählt sie aus.
   const ziehbar = alltag || (canEdit && selected)
   const normal = dichte === 'normal'
+  // Auf dem Tablet quer zieht der Finger über Pointer-Ereignisse (Plan #1707, E3). Natives Ziehen
+  // bleibt dort aus, sonst startete iPadOS-Safari beim langen Antippen ein zweites, eigenes Ziehen.
+  const finger = tabletQuer
+    ? { 'data-karte-id': card.id, ...(ziehbar ? fingerGriff : {}) }
+    : {}
   return (
     <Paper
       component="article"
       data-testid={`card-${card.id}`}
       data-dichte={dichte}
-      draggable={ziehbar}
+      draggable={ziehbar && !tabletQuer}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      data-zieh-zustand={bewegt ? 'bewegt' : undefined}
+      data-zieh-zustand={fingerZustand ?? (bewegt ? 'bewegt' : undefined)}
+      {...finger}
       onClick={selectionMode ? onSelect : onOpen}
       elevation={0}
       sx={{
@@ -280,6 +296,7 @@ export function BoardKarte({
         ...karteSx({ gewaehlt: selected, bewegt }),
         cursor: ziehbar ? 'grab' : 'pointer',
         '&:active': { cursor: ziehbar ? 'grabbing' : 'pointer' },
+        ...(tabletQuer ? FINGER_GRIFF_SX : {}),
       }}
     >
       {/* Der Titel steht im DOM vor dem Kopf: Das Öffnen ist die erste Tab-Station der Karte, vor

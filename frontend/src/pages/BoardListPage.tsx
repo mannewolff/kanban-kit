@@ -29,7 +29,8 @@ import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { EpicBadge } from '../components/EpicBadge'
-import { LabelErklaerung } from '../components/LabelErklaerung'
+import { LabelErklaerung, LabelErklaerungInfo } from '../components/LabelErklaerung'
+import { ablagePosition, activeCardsInColumn } from '../lib/boardOps'
 import { epicOfCard } from '../lib/cardEpic'
 import { effektivDone } from '../lib/columnMeta'
 import { epicToCard } from '../lib/epicToCard'
@@ -38,6 +39,8 @@ import { nextSortState, sortCards, type ColumnKey, type SortState } from '../lib
 import { useBoardEvents } from '../lib/useBoardEvents'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
+import { useTabletQuer } from '../lib/tabletQuer'
+import { useFingerZiehen, type FingerZiehen, type FingerZiel } from '../lib/useFingerZiehen'
 import { formatDueDate, isOverdue } from '../lib/dueDate'
 import { ARCHIVED_STATUS_COLOR, statusColors } from '../lib/statusColors'
 import {
@@ -62,7 +65,7 @@ import {
   ZAHL,
 } from '../theme'
 import { epicColor } from '../lib/epicMeta'
-import { ablageflaecheSx, PLATZHALTER_SX } from '../components/boardSurfaceSx'
+import { ablageflaecheSx, FINGER_GRIFF_SX, PLATZHALTER_SX } from '../components/boardSurfaceSx'
 import { useSprache, useT } from '../i18n/SpracheContext'
 
 const ARCHIVED = 'archived'
@@ -78,6 +81,39 @@ const COLUMN_META: Record<ColumnKey, { sx: SxProps<Theme> }> = {
 }
 const DEFAULT_ORDER: ColumnKey[] = ['number', 'status', 'epic', 'title', 'excerpt']
 const ALL_KEYS = new Set<ColumnKey>(DEFAULT_ORDER)
+
+/** Ob eine Kennung aus dem Fingerzug ein Spaltenschlüssel ist — die Zeilenfläche ist keiner. */
+function istSpaltenSchluessel(kennung: string): kennung is ColumnKey {
+  return (ALL_KEYS as ReadonlySet<string>).has(kennung)
+}
+
+/**
+ * Kennung der Zeilenfläche für den Fingerzug (Plan #1707, E12). Der Hook sucht die Ablage über
+ * `data-spalte-id`; die Spaltenköpfe tragen dort ihren Schlüssel, die Zeilenfläche diese Kennung.
+ */
+const ZEILEN_FLAECHE = 'zeilen'
+
+/** Stand des Fingerzugs für das Element `id`, solange er läuft; sonst `undefined`. */
+function laufenderZug(zug: FingerZiehen, id: string): string | undefined {
+  return zug.gezogenId === id ? zug.zustand : undefined
+}
+
+/** Kennung unter dem Finger, solange gezogen wird; sonst `null`. */
+function zielKennung(zug: FingerZiehen): string | null {
+  return zug.zustand === 'zieht' ? (zug.ziel?.spalteId ?? null) : null
+}
+
+/** Ein Wert, den es nur im Tablet-Modus gibt — am Desktop bleibt das Attribut weg (E2). */
+function nurImTablet<T>(tablet: boolean, wert: T): T | undefined {
+  return tablet ? wert : undefined
+}
+
+/** Die Zeile, vor der die gezogene per Finger landet; gezählt ohne die gezogene, wie der Hook zählt. */
+function zeileVorAblage(zug: FingerZiehen, angezeigt: readonly Card[]): number | undefined {
+  const ziel = zug.zustand === 'zieht' ? zug.ziel : null
+  if (ziel?.spalteId !== ZEILEN_FLAECHE) return undefined
+  return angezeigt.filter((c) => String(c.id) !== zug.gezogenId).at(ziel.index)?.id
+}
 
 function filterKey(boardId: number): string {
   return `manban.listFilters.${boardId}`
@@ -194,9 +230,10 @@ function LabelFilterMenue({
           const aktiv = gewaehlt.has(label.id)
           const Zeichen = aktiv ? CheckBoxOutlinedIcon : CheckBoxOutlineBlankOutlinedIcon
           // Die Erklärung eines Systemlabels hängt rechts am Menüpunkt; sein Fokus bleibt beim Menü
-          // (Plan #1668, E6), sodass sie bei den Pfeiltasten erscheint wie beim Darüberfahren.
+          // (Plan #1668, E6), sodass sie bei den Pfeiltasten erscheint wie beim Darüberfahren. Auf dem
+          // Tablet quer wählt Antippen den Eintrag, die Erklärung öffnet das Info-Symbol (Plan #1707, E7).
           return (
-            <LabelErklaerung key={label.id} name={label.name} placement="right" eigenerFokus>
+            <LabelErklaerung key={label.id} name={label.name} placement="right" eigenerFokus eigeneAktion>
               <MenuItem
                 role="menuitemcheckbox"
                 aria-checked={aktiv}
@@ -209,6 +246,7 @@ function LabelFilterMenue({
                   <Zeichen fontSize="small" />
                 </ListItemIcon>
                 <ListItemText primary={label.name} />
+                <LabelErklaerungInfo name={label.name} placement="right" />
               </MenuItem>
             </LabelErklaerung>
           )
@@ -359,9 +397,10 @@ export function BoardListPage() {
   // Laufenden Resize-Drag bei Unmount abräumen.
   useEffect(() => () => resizeCleanupRef.current?.(), [])
 
-  const startResize = (e: React.MouseEvent) => {
+  // Maus am Desktop und Finger im Tablet-Modus (Plan #1707, E12) teilen sich die Breitenberechnung;
+  // sie unterscheiden sich nur in den Ereignissen, die den Zug tragen.
+  const beginneBreitenzug = (startX: number, bewegung: 'mousemove' | 'pointermove', ende: 'mouseup' | 'pointerup') => {
     const width = viewRef.current?.getBoundingClientRect().width ?? 0
-    const startX = e.clientX
     const startPct = excerptWidth
     resizingRef.current = true
     const onMove = (ev: MouseEvent) => {
@@ -370,8 +409,8 @@ export function BoardListPage() {
       setExcerptWidth(clampExcerptWidth(startPct + ((startX - ev.clientX) / width) * 100))
     }
     const detach = () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
+      document.removeEventListener(bewegung, onMove)
+      document.removeEventListener(ende, onUp)
       resizeCleanupRef.current = null
     }
     const onUp = () => {
@@ -389,9 +428,20 @@ export function BoardListPage() {
         resizingRef.current = false
       }, 0)
     }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
+    document.addEventListener(bewegung, onMove)
+    document.addEventListener(ende, onUp)
     resizeCleanupRef.current = detach
+  }
+
+  const startResize = (e: React.MouseEvent) => beginneBreitenzug(e.clientX, 'mousemove', 'mouseup')
+
+  // Nur der Finger nimmt diesen Weg; Maus und Stift bleiben bei `onMouseDown`. `stopPropagation`
+  // hält den Fingerzug des Spaltenkopfs fern, `preventDefault` die zusätzlichen Maus-Ereignisse.
+  const startResizeFinger = (e: React.PointerEvent) => {
+    e.stopPropagation()
+    if (e.pointerType !== 'touch') return
+    e.preventDefault()
+    beginneBreitenzug(e.clientX, 'pointermove', 'pointerup')
   }
 
   /**
@@ -509,6 +559,46 @@ export function BoardListPage() {
   // Prüfung ist damit redundant; es bleibt: ein laufender Drag, nicht auf sich selbst.
   const validRowDrop = (target: Card): boolean =>
     sortable && rowDrag !== null && rowDrag !== target.id
+
+  const tabletQuer = useTabletQuer()
+
+  // Ablage per Finger (Plan #1707, E12): anders als der Mauspfad zählt `position` wie der Server
+  // ohne die Karte selbst — dieselbe Regel wie auf dem Board. Liegt sie schon dort, gibt es nichts zu tun.
+  const zeileAbgelegtAn = async (cardId: number, columnId: number, position: number) => {
+    if (activeCardsInColumn(cards, columnId).findIndex((c) => c.id === cardId) === position) return
+    try {
+      await cardsApi.move(cardId, columnId, position)
+    } catch (e) {
+      notify(apiErrorMessage(e, t.LISTE.VERSCHIEBEN_FEHLER), 'error')
+    } finally {
+      reloadCards()
+    }
+  }
+
+  // Zeilen per Finger, unter derselben Bedingung wie per Maus (`sortable`): genau eine Spalte, alle
+  // angezeigten Zeilen liegen darin. Der Hook zählt die Stelle unter den angezeigten Zeilen; ein
+  // Filter kann Karten verdecken, die der Server mitzählt.
+  const zeilenGriff = tabletQuer && sortable
+  const zeilenZug = useFingerZiehen({
+    aktiv: zeilenGriff,
+    onAblage: (zeilenId: string, ziel: FingerZiel) => {
+      if (ziel.spalteId !== ZEILEN_FLAECHE) return
+      const cardId = Number(zeilenId)
+      const columnId = activeColumns[0].id
+      const ohneZeile = (liste: Card[]) => liste.filter((c) => c.id !== cardId)
+      void zeileAbgelegtAn(cardId, columnId, ablagePosition(ohneZeile(activeCardsInColumn(cards, columnId)), ohneZeile(visible), ziel.index))
+    },
+  })
+  const kopfZug = useFingerZiehen({
+    aktiv: tabletQuer,
+    onAblage: (von: string, ziel: FingerZiel) => {
+      // Gegriffen wird nur ein Kopf; abgelegt werden kann der Finger auch über den Zeilen.
+      if (istSpaltenSchluessel(ziel.spalteId)) reorderColumns(von as ColumnKey, ziel.spalteId)
+    },
+  })
+  // Die Ablagestelle per Finger zeigt die Zeile, vor der die gezogene landet, und den Kopf unter dem Finger.
+  const fingerAblageZeile = zeileVorAblage(zeilenZug, visible)
+  const fingerAblageKopf = zielKennung(kopfZug)
 
   const onRowDrop = async (target: Card) => {
     const dragId = rowDrag
@@ -720,7 +810,13 @@ export function BoardListPage() {
           {order.map((key) => (
             <Box
               key={key}
-              draggable
+              // Auf dem Tablet quer greift der Finger über Pointer-Ereignisse (E3); natives Ziehen
+              // bleibt dort aus, damit iPadOS-Safari kein zweites Ziehen daneben startet.
+              draggable={!tabletQuer}
+              {...kopfZug.griff(key)}
+              data-spalte-id={nurImTablet(tabletQuer, key)}
+              data-zieh-zustand={laufenderZug(kopfZug, key)}
+              data-ablage={fingerAblageKopf === key ? 'aktiv' : undefined}
               role="button"
               tabIndex={0}
               aria-label={headerLabel(key)}
@@ -746,7 +842,8 @@ export function BoardListPage() {
                 cursor: 'grab',
                 userSelect: 'none',
                 borderBottom: '2px solid',
-                borderColor: colOver === key ? KUPFER : 'transparent',
+                borderColor: colOver === key || fingerAblageKopf === key ? KUPFER : 'transparent',
+                ...(tabletQuer ? FINGER_GRIFF_SX : {}),
               }}
             >
               {key === 'excerpt' && (
@@ -754,6 +851,7 @@ export function BoardListPage() {
                   role="separator"
                   aria-label={t.LISTE.BREITER_ZIEHEN}
                   onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); startResize(e) }}
+                  {...(tabletQuer ? { onPointerDown: startResizeFinger } : {})}
                   onDragStart={(e) => e.preventDefault()}
                   onClick={(e) => e.stopPropagation()}
                   sx={{
@@ -765,6 +863,8 @@ export function BoardListPage() {
                     borderRight: '2px solid',
                     borderColor: 'divider',
                     '&:hover': { borderColor: 'primary.main' },
+                    // Auf dem Tablet zieht der Finger am Griff, statt die Seite zu scrollen (E12).
+                    ...(tabletQuer && { touchAction: 'none' }),
                   }}
                 />
               )}
@@ -781,7 +881,7 @@ export function BoardListPage() {
 
         {/* Dichte (AK 12, Plan #932 E16 a): Die Liste ist keine MUI-Tabelle, ihre Dichte steht deshalb
             hier. Vor #957 zeigte sie auf 1440 x 900 13 Zeilen bei 8 px Polsterung und 6 px Abstand. */}
-        <Stack spacing={0.25} useFlexGap data-testid="listen-zeilen">
+        <Stack spacing={0.25} useFlexGap data-testid="listen-zeilen" data-spalte-id={nurImTablet(zeilenGriff, ZEILEN_FLAECHE)}>
           {gruppen.map((gruppe) => [
             gruppierung === 'vorhaben' && <GruppenKopf key={`gruppe-${gruppe.epic?.id ?? 'ohne'}`} epic={gruppe.epic} zahl={gruppe.karten.length} />,
             ...gruppe.karten.map((card) => (
@@ -790,7 +890,9 @@ export function BoardListPage() {
               role="button"
               tabIndex={0}
               aria-label={t.LISTE.DETAIL_OEFFNEN(card.title)}
-              draggable={sortable}
+              draggable={sortable && !tabletQuer}
+              {...zeilenZug.griff(String(card.id))}
+              data-karte-id={nurImTablet(zeilenGriff, card.id)}
               onDragStart={(e) => {
                 setRowDrag(card.id)
                 e.dataTransfer.setData('text/plain', String(card.id))
@@ -805,8 +907,8 @@ export function BoardListPage() {
                 setRowOver(null)
                 setBewegteZeile(null)
               }}
-              data-zieh-zustand={bewegteZeile === card.id ? 'bewegt' : undefined}
-              data-ablage={rowOver === card.id ? 'aktiv' : undefined}
+              data-zieh-zustand={laufenderZug(zeilenZug, String(card.id)) ?? (bewegteZeile === card.id ? 'bewegt' : undefined)}
+              data-ablage={rowOver === card.id || fingerAblageZeile === card.id ? 'aktiv' : undefined}
               onClick={() => { if (!resizingRef.current) setDetailCard(card) }}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailCard(card) } }}
               sx={{
@@ -826,8 +928,9 @@ export function BoardListPage() {
                 '&:hover': { background: `color-mix(in srgb, ${PLATTE_HOCH} 80%, ${KUPFER_SCHIMMER})` },
                 // Dieselben Bausteine wie auf dem Board: Platzhalter an der verlassenen Stelle,
                 // Ablagefläche an der Zeile, an deren Platz die bewegte landet.
-                ...(bewegteZeile === card.id ? PLATZHALTER_SX : {}),
-                ...ablageflaecheSx(rowOver === card.id),
+                ...(bewegteZeile === card.id || laufenderZug(zeilenZug, String(card.id)) === 'zieht' ? PLATZHALTER_SX : {}),
+                ...ablageflaecheSx(rowOver === card.id || fingerAblageZeile === card.id),
+                ...(zeilenGriff ? FINGER_GRIFF_SX : {}),
               }}
             >
               {sortable && (

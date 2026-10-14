@@ -26,6 +26,7 @@ import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.ReleasePreparation;
 import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
+import org.mwolff.manban.nightrun.domain.RunnerStufe;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.application.ProjectRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -960,6 +961,116 @@ class NightRunIngestIT extends AbstractIntegrationTest {
 
   private List<NightRun> sitzungen(long projectId) {
     return runs.findByProjectAndKindOrderByStartedAtDesc(projectId, NightRunKind.INTERACTIVE);
+  }
+
+  // --- Laufende Stufen (Issue #1725, Plan #1724 Vertrag V1) ---
+
+  private static String meldungMitStufen(boolean complete, String stufen) {
+    return """
+        {"startedAt":"%s","mode":"CHAIN","durationMs":60000,"processedCount":0,
+         "skippedCount":0,"unparsedCount":0,"complete":%s,
+         "current":{"stages":[%s]},
+         "items":[]}"""
+        .formatted(START, complete, stufen);
+  }
+
+  private static final String KETTEN_STUFEN =
+      """
+      {"cardNumber":1665,"stage":"UMSETZUNG","startedAt":"2026-09-16T22:35:00Z",
+       "deadline":"2026-09-17T00:35:00Z","step":"SESSION","holdsImplementation":true},
+      {"cardNumber":1665,"stage":"VORBEREITUNG","startedAt":"2026-09-16T22:41:00Z",
+       "deadline":null,"step":"NEUER_SCHRITT","holdsImplementation":false}""";
+
+  @Test
+  void einLaufenderLaufLiestSeineStufenInReihenfolgeZurueck() throws Exception {
+    Aufbau aufbau = aufbau("ingest-stufen");
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldungMitStufen(false, KETTEN_STUFEN)))
+        .andExpect(status().isOk());
+
+    assertThat(einzigerLauf(aufbau.projectId()).current())
+        .containsExactly(
+            new RunnerStufe(
+                1665,
+                "UMSETZUNG",
+                Instant.parse("2026-09-16T22:35:00Z"),
+                Instant.parse("2026-09-17T00:35:00Z"),
+                "SESSION",
+                true),
+            new RunnerStufe(
+                1665,
+                "VORBEREITUNG",
+                Instant.parse("2026-09-16T22:41:00Z"),
+                null,
+                "NEUER_SCHRITT",
+                false));
+  }
+
+  @Test
+  void eineAbschlussmeldungHinterlaesstKeineStufe() throws Exception {
+    Aufbau aufbau = aufbau("ingest-stufen-ende");
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldungMitStufen(false, KETTEN_STUFEN)))
+        .andExpect(status().isOk());
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldungMitStufen(true, KETTEN_STUFEN)))
+        .andExpect(status().isOk());
+
+    NightRun beendet = einzigerLauf(aufbau.projectId());
+    assertThat(beendet.current()).isEmpty();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM night_run_current_stage WHERE night_run_id = ?",
+                Integer.class,
+                beendet.requireId()))
+        .isZero();
+  }
+
+  @Test
+  void eineMeldungOhneStufenfeldTraegtKeineStufen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-ohne-stufen");
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldung(false, paket(917))))
+        .andExpect(status().isOk());
+
+    assertThat(einzigerLauf(aufbau.projectId()).current()).isEmpty();
+  }
+
+  @Test
+  void elfLaufendeStufenWerdenAbgewiesen() throws Exception {
+    Aufbau aufbau = aufbau("ingest-stufen-zuviel");
+    String elf =
+        String.join(
+            ",",
+            java.util.Collections.nCopies(
+                11,
+                """
+                {"cardNumber":1,"stage":"PLAN","startedAt":"2026-09-16T22:35:00Z",\
+                "step":"SESSION","holdsImplementation":false}"""));
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldungMitStufen(false, elf)))
+        .andExpect(status().isBadRequest());
+
+    assertThat(nachtlaeufe(aufbau.projectId())).isEmpty();
   }
 
   private List<NightRun> nachtlaeufe(long projectId) {

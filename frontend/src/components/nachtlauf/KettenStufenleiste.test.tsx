@@ -1,5 +1,5 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
@@ -8,7 +8,9 @@ import type { Label } from '../../api/labels'
 import type { KettenStand, NightChainStationView } from '../../api/nightRuns'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import type { Sprache } from '../../i18n/woerterbuch'
+import { TabletQuerProvider } from '../../lib/tabletQuer'
 import { KIT_NAMEN } from '../../test/kitNamen'
+import { setzeMedien } from '../../test/setup'
 import { theme } from '../../theme'
 import { KettenStufenleiste, traegtStufenleiste } from './KettenStufenleiste'
 
@@ -68,18 +70,20 @@ function zeige({
   const onChange = vi.fn()
   render(
     <ThemeProvider theme={theme}>
-      <KettenStufenleiste
-        titel={titel}
-        labelIds={labelIds}
-        boardLabels={boardLabels}
-        disabled={disabled}
-        beschreibung={beschreibung}
-        kommentare={kommentare}
-        onChange={onChange}
-        cardId={812}
-        api={{ kettenstand }}
-        kitNamen={kitNamen}
-      />
+      <TabletQuerProvider>
+        <KettenStufenleiste
+          titel={titel}
+          labelIds={labelIds}
+          boardLabels={boardLabels}
+          disabled={disabled}
+          beschreibung={beschreibung}
+          kommentare={kommentare}
+          onChange={onChange}
+          cardId={812}
+          api={{ kettenstand }}
+          kitNamen={kitNamen}
+        />
+      </TabletQuerProvider>
     </ThemeProvider>,
   )
   return onChange
@@ -379,6 +383,51 @@ describe('KettenStufenleiste', () => {
  * `kit:night`, „Start zurücknehmen“ nimmt nur dieses Label ab; ab „Umsetzung“ verlangt der Start
  * eine Bestätigung, Sperrhinweise nennen, was vor dem Start fehlt.
  */
+describe('KettenStufenleiste auf dem Tablet im Querformat (Plan #1707, E7)', () => {
+  it('öffnet an der gesperrten Station die Erklärung per Antippen und schließt sie wieder', async () => {
+    setzeMedien({ tabletQuer: true })
+    const onChange = zeige({ boardLabels: VORRAT.filter((l) => l.name !== 'ziel:umsetzung') })
+
+    fireEvent.click(ziel('Umsetzung'))
+    // Sofort, ohne die Verzögerung des Darüberfahrens: Das Antippen öffnet die Erklärung selbst.
+    expect(screen.getByRole('tooltip')).toHaveTextContent('ziel:umsetzung')
+    expect(onChange).not.toHaveBeenCalled()
+
+    fireEvent.click(ziel('Umsetzung'))
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+  })
+
+  it('öffnet am gesperrten Prüfer die Erklärung per Antippen', () => {
+    setzeMedien({ tabletQuer: true })
+    const onChange = zeige({ boardLabels: VORRAT.filter((l) => l.name !== 'planreview:2') })
+
+    fireEvent.click(screen.getByRole('button', { name: '2 Prüfer' }))
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent('planreview:2')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('wählt an einer freien Station das Ziel wie heute', () => {
+    setzeMedien({ tabletQuer: true })
+    const onChange = zeige()
+
+    fireEvent.click(ziel('Umsetzung'))
+
+    expect(onChange).toHaveBeenCalledWith({ ab: [], an: [3] })
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('öffnet am Desktop die Erklärung nicht per Klick, sondern beim Darüberfahren wie heute', async () => {
+    zeige({ boardLabels: VORRAT.filter((l) => l.name !== 'planreview:2') })
+    const knopf = screen.getByRole('button', { name: '2 Prüfer' })
+
+    fireEvent.click(knopf)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    await userEvent.hover(knopf)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('planreview:2')
+  })
+})
+
 describe('KettenStufenleiste — Start', () => {
   const GO_SATZ = 'Mit diesem Ziel gibst du das GO für alle Arbeitspakete dieser Karte.'
   const startKnopf = () => screen.getByRole('button', { name: 'Kette starten' })

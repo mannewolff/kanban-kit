@@ -437,6 +437,9 @@ export const de = {
     ALLE_AUSWAEHLEN: (spalte: string) => `Alle Karten in ${spalte} auswählen`,
     NACH_NUMMER_SORTIEREN: (spalte: string, aufsteigend: boolean) =>
       `Spalte ${spalte} nach Nummer ${aufsteigend ? 'aufsteigend' : 'absteigend'} sortieren`,
+    NACHTLAUF_MARKIEREN: (label: string) => `${label} an alle Karten in Ready setzen`,
+    NACHTLAUF_ALLE_MARKIERT: (label: string) => `Alle Karten in Ready tragen ${label} schon`,
+    NACHTLAUF_KEINE_KARTE: (label: string) => `In Ready steht keine Karte, die ${label} bekommen kann`,
     AUSGEBLENDET: (anzahl: number) => `${anzahl} ausgeblendet`,
     AUSGEBLENDET_EINBLENDEN: (anzahl: number) =>
       `${anzahl} ${anzahl === 1 ? 'Karte' : 'Karten'} ausgeblendet, einblenden`,
@@ -1105,6 +1108,76 @@ export const de = {
     STUFENSTAND: (nummer: number) => `Stufenstand von #${nummer}`,
   },
 
+  /** Der Bereich „Runner jetzt“ auf der Runner-Seite, `RunnerJetzt` (Issue #1729, Plan #1724). */
+  RUNNER_JETZT: {
+    TITEL: 'Runner jetzt',
+    LADEFEHLER: (meldung: string) => `Der Stand des Runners ließ sich nicht laden: ${meldung}`,
+    ART: {
+      CHAIN: 'Kette',
+      IMPLEMENTATION: 'Umsetzungsnacht',
+      REVIEW: 'Prüflauf',
+      INTERACTIVE: 'Interaktive Sitzung',
+    },
+    LAEUFT: 'läuft',
+    SEIT: (zeit: string) => `seit ${zeit}`,
+    LETZTE_MELDUNG: (zeit: string) => `letzte Meldung ${zeit}`,
+    /** Der Satz für „verstummt“ — auch der Kartendialog nutzt ihn (Fachplan #1721, E12). */
+    VERSTUMMT: (zeit: string, stufe: string) =>
+      `Runner verstummt seit ${zeit} (letzte Stufe: ${stufe}), vermutlich abgebrochen; die Umsetzung gilt womöglich noch als belegt.`,
+    NICHT_GEMELDET: 'nicht gemeldet',
+    STUFE: {
+      PLAN: 'Plan',
+      REVIEW: 'Prüfung',
+      PAKETE: 'Arbeitspakete',
+      ABDECKUNG: 'Abdeckung',
+      UMSETZUNG: 'Umsetzung',
+      VORBEREITUNG: 'Vorbereitung',
+    },
+    STUFEN: (lauf: string) => `Stufen: ${lauf}`,
+    KARTE_STUFE: (karte: number, stufe: string) => `#${karte} ${stufe}`,
+    BEGINN: (zeit: string) => `Beginn ${zeit}`,
+    FRIST: (zeit: string) => `Frist ${zeit}`,
+    KEINE_FRIST: 'keine Frist vorgesehen',
+    SCHRITT: {
+      SESSION: 'Sitzung arbeitet',
+      WAITING_FOR_IMPLEMENTATION: 'wartet auf freie Umsetzung',
+      RELEASE_CHECKS: 'Prüfungen der Veröffentlichung laufen',
+    },
+    SCHRITT_UNBEKANNT: (code: string) => `Teilschritt: ${code}`,
+    HAELT: 'hält die Umsetzung',
+    KEIN_RUNNER: 'kein Runner aktiv',
+    NIE: 'kein Runner aktiv – noch kein Lauf gestartet',
+    LETZTER_LAUF: (art: string, ende: string, ergebnis: string) => `Letzter Lauf: ${art}, beendet ${ende} – ${ergebnis}`,
+    OHNE_PAKET: (grund: string) => `ohne Paket beendet – ${grund}`,
+  },
+
+  /** Der Abschnitt „Wartegrund“ im Kartendialog, `Wartegrund` (Issue #1730, Plan #1724). Den Satz für „verstummt“ liefert `RUNNER_JETZT.VERSTUMMT`. */
+  WARTEGRUND: {
+    TITEL: 'Wartegrund',
+    LADEFEHLER: (meldung: string) => `Der Wartegrund ließ sich nicht laden: ${meldung}`,
+    STARTBEREIT: 'startbereit – kein Hinderungsgrund festgestellt',
+    KEINE_UMSETZUNGSNACHT: 'keine Umsetzungsnacht aktiv',
+    BELEGT_KETTE: (karte: number, stufe: string) => `Umsetzung belegt durch einen anderen Lauf: Kette #${karte}, Stufe ${stufe}`,
+    BELEGT_LAUF: (art: string, karte: number) => `Umsetzung belegt durch einen anderen Lauf: ${art} #${karte}`,
+    KEIN_ARBEITSPAKET: {
+      REQUIREMENT: 'kein Arbeitspaket, sondern eine fachliche Anforderung',
+      IDEA: 'kein Arbeitspaket, sondern eine Idee',
+      PLAN: 'kein Arbeitspaket, sondern ein Plan',
+      HUMAN: 'kein Arbeitspaket, sondern ein Schritt für einen Menschen',
+    },
+    KEIN_ARBEITSPAKET_SONST: 'kein Arbeitspaket, sondern ein Dokument oder ein Schritt für einen Menschen',
+    NO_LABEL: 'nicht für die Nacht freigegeben (kit:nightrun fehlt)',
+    DEPENDENCY: (karten: string) => `wartet auf eine andere Karte (${karten})`,
+    CLARIFY: 'wartet auf Klärung (kit:klaeren)',
+    PROTECTED_LABEL: 'berührt eine geschützte Datei (kit:geschuetzt)',
+    PROTECTED_FILE: (pfade: string) => `berührt eine geschützte Datei (${pfade})`,
+    REVIEW_MISSING: 'die nötige Prüfung (Review) fehlt',
+    PAKETE_DAVOR: (anzahl: number) => `Pakete davor: ${anzahl}`,
+    NICHT_BEWERTET: (zeit: string) => `noch nicht vom Runner bewertet (letzte Bewertung ${zeit})`,
+    NIE_BEWERTET: 'noch nicht vom Runner bewertet (noch keine Bewertung)',
+    SEIT_BEWERTUNG_GEAENDERT: 'seit der Bewertung geändert',
+  },
+
   /** Anläufe einer Karte im Karten-Detail, `KartenAnlaeufe` (Issue #1658). */
   KARTEN_ANLAEUFE: {
     LAUF_ART: {
@@ -1488,6 +1561,11 @@ export const de = {
     PERSON: 'Person',
     STUNDE: 'Stunde',
     ANZAHL: 'Anzahl',
+  },
+
+  /** Info-Symbol neben einem Element mit eigener Aktion, das auf dem Tablet quer die Erklärung öffnet (Plan #1707, E7). */
+  ERKLAERUNG_INFO: {
+    ZEIGEN: (name: string) => `Erklärung zu ${name}`,
   },
 
   /** Standard-Labels der Installation in der Administration (Issue #1660); Label- und Gruppennamen sind Daten. */

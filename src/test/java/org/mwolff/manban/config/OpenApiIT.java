@@ -97,6 +97,7 @@ class OpenApiIT extends AbstractIntegrationTest {
           "POST /api/kanban/items/{id}/comments",
           "POST /api/kanban/items/{id}/labels",
           "POST /api/kanban/night-runs",
+          "POST /api/kanban/night-runs/ready-assessment",
           "PUT /api/kanban/items/{id}",
           "PUT /api/kanban/items/{id}/move");
 

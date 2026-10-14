@@ -28,6 +28,7 @@ import {
   type Erfassungsstand,
 } from '../../lib/verbrauchZeitraum'
 import { ETIKETT, KUPFER, KUPFER_HELL, MELDER, NUT, PLATTE, PLATTE_HOCH, RAND, SCHATTEN_NUTE, SCHATTEN_TASTE, SCHRIFT_ANZEIGE, TEXT_SCHWACH, ZAHL } from '../../theme'
+import { Erklaerung } from '../Erklaerung'
 import { DeltaMarke, Funke, Kachel, KACHEL_SX, KachelFuss, KachelWert } from './LeitstandBausteine'
 
 /**
@@ -345,11 +346,14 @@ function VerbrauchKacheln({
             delta={
               // Stryker disable next-line OptionalChaining: gleichwertig — mit zeitbezug ist vergleich nie null
               zeitbezug && (vergleich?.richtung === 'teurer' || vergleich?.richtung === 'billiger') ? (
-                <Box component="span" title={vergleich.text}>
-                  <DeltaMarke art={vergleich.richtung === 'billiger' ? 'gut' : 'schlecht'}>
-                    {`${vergleich.richtung === 'billiger' ? '▼' : '▲'} ${t.BETRAG(dollar(Math.abs(summe.costUsd! - zeitbezug.vorher.costUsd!), sprache))}`}
-                  </DeltaMarke>
-                </Box>
+                // Auf dem Tablet quer öffnet Antippen den Vergleich (Plan #1707, E7).
+                <Erklaerung nativ title={vergleich.text}>
+                  <Box component="span">
+                    <DeltaMarke art={vergleich.richtung === 'billiger' ? 'gut' : 'schlecht'}>
+                      {`${vergleich.richtung === 'billiger' ? '▼' : '▲'} ${t.BETRAG(dollar(Math.abs(summe.costUsd! - zeitbezug.vorher.costUsd!), sprache))}`}
+                    </DeltaMarke>
+                  </Box>
+                </Erklaerung>
               ) : undefined
             }
             basis={jeVorgang}

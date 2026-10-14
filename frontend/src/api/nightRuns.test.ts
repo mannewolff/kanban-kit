@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { nightRunsApi, type NightRunSubmission, type ReleasePreparationView } from './nightRuns'
+import { nightRunsApi, type NightRunSubmission, type ReleasePreparationView, type RunnerJetzt, type Wartegruende } from './nightRuns'
 
 function spyFetch(body = '{}') {
   return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -211,6 +211,62 @@ describe('nightRunsApi', () => {
     expect(c.url).toBe('/api/projects/4/night-runs/tonight')
     expect(c.method).toBeUndefined()
     expect(karten).toEqual([karte])
+  })
+
+  it('jetzt ruft GET /api/projects/{id}/night-runs/now und liefert die Lage des Runners (Issue #1729)', async () => {
+    const lage: RunnerJetzt = {
+      state: 'AKTIV',
+      runs: [
+        {
+          runId: 312,
+          mode: 'CHAIN',
+          startedAt: '2026-10-13T22:39:12Z',
+          lastReportAt: '2026-10-13T23:05:00Z',
+          state: 'LAEUFT',
+          stages: [
+            {
+              cardNumber: 1665,
+              stage: 'VORBEREITUNG',
+              startedAt: '2026-10-13T22:41:07Z',
+              deadline: null,
+              step: 'WAITING_FOR_IMPLEMENTATION',
+              holdsImplementation: true,
+            },
+          ],
+          lastStage: null,
+        },
+      ],
+      lastRun: {
+        runId: 311,
+        mode: 'IMPLEMENTATION',
+        startedAt: '2026-10-13T22:39:12Z',
+        endedAt: '2026-10-13T22:39:14Z',
+        outcome: 'NO_WORK',
+        noWorkReason: 'Umsetzung belegt',
+      },
+    }
+    const f = spyFetch(JSON.stringify(lage))
+    const antwort = await nightRunsApi.jetzt(4)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/projects/4/night-runs/now')
+    expect(c.method).toBeUndefined()
+    expect(antwort).toEqual(lage)
+  })
+
+  it('wartegrund ruft GET /api/cards/{id}/night-wait und liefert die Gründe (Issue #1730)', async () => {
+    const gruende: Wartegruende = {
+      runReasons: [{ code: 'BELEGT', since: null, stage: 'VORBEREITUNG', runMode: 'CHAIN', cardNumber: 1665 }],
+      cardReasons: [{ code: 'DEPENDENCY', kind: null, cardNumbers: [1698], paths: [], text: 'Abhaengigkeit' }],
+      packagesAhead: null,
+      notes: [{ code: 'NICHT_BEWERTET', assessedAt: null }],
+      startable: false,
+    }
+    const f = spyFetch(JSON.stringify(gruende))
+    const antwort = await nightRunsApi.wartegrund(77)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/77/night-wait')
+    expect(c.method).toBeUndefined()
+    expect(antwort).toEqual(gruende)
   })
 
   it('list liefert die Morgenmeldung eines Laufs und null ohne Meldung (Issue #1458)', async () => {

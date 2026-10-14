@@ -588,7 +588,8 @@ const grundregeln = (): Record<string, Record<string, unknown>> =>
 
 describe('theme Bewegung reduzieren (AK 16, #953)', () => {
   // Geprüft wird das Theme-Objekt, nicht das Verhalten: jsdom wertet Media-Queries nicht aus, und
-  // `src/test/setup.ts` stubbt kein `matchMedia` — ein Verhaltenstest wäre nur scheinbar grün.
+  // die `matchMedia`-Attrappe in `src/test/setup.ts` kennt nur die Tablet-Query — ein Verhaltenstest
+  // wäre nur scheinbar grün.
   const regel = () =>
     grundregeln()['@media (prefers-reduced-motion: reduce)']?.['*, *::before, *::after'] as
       | Record<string, string>
@@ -761,4 +762,28 @@ describe('theme Meldungen in beiden Erscheinungsbildern (#960)', () => {
       expect(kontrast(alsHex(palette.Alert[`${zustand}StandardBg`]), alsHex(palette.Alert[`${zustand}Color`]))).toBeGreaterThanOrEqual(4.5)
     },
   )
+})
+
+describe('theme Dialoghöhe auf dem Tablet quer (Plan #1707, E10)', () => {
+  const TABLET_SELEKTOR = 'html[data-geraet="tablet-quer"] &'
+  const papier = (): Record<string, unknown> =>
+    theme.components?.MuiDialog?.styleOverrides?.paper as Record<string, unknown>
+
+  it('begrenzt die Dialoghöhe nur unter dem Kennzeichen des Tablets', () => {
+    expect(papier()[TABLET_SELEKTOR]).toEqual({ maxHeight: 'calc(var(--sichtbare-hoehe, 100dvh) - 32px)' })
+    expect(papier()).not.toHaveProperty('maxHeight')
+  })
+
+  it('lässt die übrigen Werte des Papiers am Desktop unverändert', () => {
+    expect(Object.keys(papier()).sort()).toEqual(['border', 'borderRadius', 'boxShadow', TABLET_SELEKTOR].sort())
+    expect(papier().borderRadius).toBe(PANEL_RADIUS)
+    expect(papier().border).toMatch(/^1px solid /)
+  })
+
+  it('führt keinen eigenen Eintrag für Tooltips und lässt Inhalt und Knöpfe der Dialoge bei MUI', () => {
+    // `DialogContent` scrollt bei MUI von selbst senkrecht, `DialogActions` bleibt stehen.
+    expect(theme.components).not.toHaveProperty('MuiTooltip')
+    expect(theme.components).not.toHaveProperty('MuiDialogContent')
+    expect(theme.components).not.toHaveProperty('MuiDialogActions')
+  })
 })

@@ -114,6 +114,14 @@ class NightRunEntity {
   @Column(name = "abort_kind")
   private @Nullable String abortKind;
 
+  /**
+   * Wann ein Plattform-Admin den Lauf von Hand beendet hat (Issue #1197, gelesen seit #1725);
+   * {@code null} heisst „nicht von Hand beendet". Geschrieben wird die Spalte allein vom
+   * Plattform-Leitstand, nie über diese Entity.
+   */
+  @Column(name = "closed_at", insertable = false, updatable = false)
+  private @Nullable Instant closedAt;
+
   protected NightRunEntity() {
     // für JPA
   }
@@ -220,5 +228,9 @@ class NightRunEntity {
 
   @Nullable String getAbortKind() {
     return abortKind;
+  }
+
+  @Nullable Instant getClosedAt() {
+    return closedAt;
   }
 }

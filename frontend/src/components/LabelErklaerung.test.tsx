@@ -1,13 +1,15 @@
 import Chip from '@mui/material/Chip'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 import type { KitNamenZustand } from '../api/kitNamen'
 import { de } from '../i18n/de'
 import { en } from '../i18n/en'
 import { renderMitSprache } from '../i18n/renderMitSprache'
+import { TabletQuerProvider } from '../lib/tabletQuer'
 import { KIT_NAMEN } from '../test/kitNamen'
-import { LabelErklaerung } from './LabelErklaerung'
+import { setzeMedien } from '../test/setup'
+import { LabelErklaerung, LabelErklaerungInfo } from './LabelErklaerung'
 
 const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
 vi.mock('../api/kitNamen', async (original) => ({
@@ -132,5 +134,106 @@ describe('LabelErklaerung', () => {
     await userEvent.hover(label('kit:clarify'))
 
     expect(await screen.findByRole('tooltip')).toHaveAttribute('data-popper-placement', expect.stringMatching(/^right/))
+  })
+
+  it('öffnet auf dem Tablet quer beim Antippen und reicht das Antippen nicht weiter (Plan #1707, E7)', async () => {
+    setzeMedien({ tabletQuer: true })
+    const elternKlick = vi.fn()
+    renderMitSprache(
+      <TabletQuerProvider>
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- Attrappe der Karte, nur ihr Klick zählt */}
+        <div onClick={elternKlick}>
+          <LabelErklaerung name="kit:clarify">
+            <Chip size="small" label="kit:clarify" />
+          </LabelErklaerung>
+        </div>
+      </TabletQuerProvider>,
+      'de',
+    )
+
+    await userEvent.hover(label('kit:clarify'))
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+    fireEvent.click(label('kit:clarify'))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.bedeutung)
+    expect(elternKlick).not.toHaveBeenCalled()
+  })
+
+  it('lässt auf dem Tablet quer ein selbst angelegtes Label das Antippen weiterreichen', () => {
+    setzeMedien({ tabletQuer: true })
+    const elternKlick = vi.fn()
+    renderMitSprache(
+      <TabletQuerProvider>
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- Attrappe der Karte, nur ihr Klick zählt */}
+        <div onClick={elternKlick}>
+          <LabelErklaerung name="Aktuell">
+            <Chip size="small" label="Aktuell" />
+          </LabelErklaerung>
+        </div>
+      </TabletQuerProvider>,
+      'de',
+    )
+
+    fireEvent.click(label('Aktuell'))
+
+    expect(elternKlick).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('lässt auf dem Tablet quer einem Element mit eigener Aktion das Antippen (Plan #1707, E7)', () => {
+    setzeMedien({ tabletQuer: true })
+    const elternKlick = vi.fn()
+    renderMitSprache(
+      <TabletQuerProvider>
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- Attrappe des Eintrags, nur sein Klick zählt */}
+        <div onClick={elternKlick}>
+          <LabelErklaerung name="kit:clarify" eigeneAktion>
+            <Chip size="small" label="kit:clarify" />
+          </LabelErklaerung>
+        </div>
+      </TabletQuerProvider>,
+      'de',
+    )
+
+    fireEvent.click(label('kit:clarify'))
+
+    expect(elternKlick).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    expect(label('kit:clarify')).not.toHaveAttribute('tabindex')
+  })
+
+  it('erklärt ein Element mit eigener Aktion am Desktop beim Darüberfahren wie heute', async () => {
+    renderMitSprache(
+      <TabletQuerProvider>
+        <LabelErklaerung name="kit:clarify" eigeneAktion>
+          <Chip size="small" label="kit:clarify" />
+        </LabelErklaerung>
+        <LabelErklaerungInfo name="kit:clarify" />
+      </TabletQuerProvider>,
+      'de',
+    )
+
+    expect(screen.queryByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') })).not.toBeInTheDocument()
+    await userEvent.hover(label('kit:clarify'))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.bedeutung)
+  })
+
+  it('öffnet auf dem Tablet quer per Info-Symbol die Erklärung eines Systemlabels, ein eigenes Label hat keins', () => {
+    setzeMedien({ tabletQuer: true })
+    renderMitSprache(
+      <TabletQuerProvider>
+        <LabelErklaerungInfo name="kit:clarify" placement="right" />
+        <LabelErklaerungInfo name="Aktuell" />
+      </TabletQuerProvider>,
+      'de',
+    )
+
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') }))
+
+    const tooltip = screen.getByRole('tooltip')
+    expect(tooltip).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.bedeutung)
+    expect(tooltip).toHaveAttribute('data-popper-placement', expect.stringMatching(/^right/))
   })
 })

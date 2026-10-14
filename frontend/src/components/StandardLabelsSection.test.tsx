@@ -1,11 +1,13 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { KitNamenZustand } from '../api/kitNamen'
 import { de } from '../i18n/de'
 import { labelErklaerung } from '../lib/labelErklaerung'
+import { TabletQuerProvider } from '../lib/tabletQuer'
 import { KIT_NAMEN } from '../test/kitNamen'
+import { setzeMedien } from '../test/setup'
 import { standardLabelsApi } from '../api/standardLabels'
 import { StandardLabelsSection } from './StandardLabelsSection'
 import { renderMitSprache } from '../i18n/renderMitSprache'
@@ -92,6 +94,38 @@ describe('StandardLabelsSection', () => {
 
     await userEvent.hover(await within(dialog).findByText('kit:clarify'))
 
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.handlung)
+  })
+
+  it('öffnet auf dem Tablet quer die Erklärung eines Labels per Antippen (Plan #1707, E7)', async () => {
+    setzeMedien({ tabletQuer: true })
+    render(
+      <TabletQuerProvider>
+        <StandardLabelsSection />
+      </TabletQuerProvider>,
+    )
+    const dialog = await dialogOeffnen()
+
+    fireEvent.click(await within(dialog).findByText('kit:clarify'))
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.handlung)
+    expect(screen.queryByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') })).not.toBeInTheDocument()
+  })
+
+  it('zeigt am Desktop kein Info-Symbol und die Erklärung beim Darüberfahren wie heute (AK 7)', async () => {
+    render(
+      <TabletQuerProvider>
+        <StandardLabelsSection />
+      </TabletQuerProvider>,
+    )
+    const dialog = await dialogOeffnen()
+    const label = await within(dialog).findByText('kit:clarify')
+
+    fireEvent.click(label)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') })).not.toBeInTheDocument()
+
+    await userEvent.hover(label)
     expect(await screen.findByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.handlung)
   })
 

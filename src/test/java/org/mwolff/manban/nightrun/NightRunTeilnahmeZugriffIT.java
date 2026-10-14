@@ -32,7 +32,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * versehentliches 404 durchgehen — und der Board-Leitstand eines Plattform-Admins sähe dann bei
  * „Letzter Lauf", „Abbruchgründe" und Verbrauch defekt aus statt still.
  *
- * <p>Alle sechs Lesewege stehen einzeln in den Tests, nicht in einer Schleife über eine Liste: Ein
+ * <p>Alle sieben Lesewege stehen einzeln in den Tests, nicht in einer Schleife über eine Liste: Ein
  * vergessener Endpunkt fällt so beim Lesen auf, und der Fehlschlag nennt den Weg beim Namen.
  */
 @SpringBootTest
@@ -49,7 +49,7 @@ class NightRunTeilnahmeZugriffIT extends AbstractIntegrationTest {
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
 
-  /** Die sechs lesenden Wege, wie sie der Browser aufruft. */
+  /** Die sieben lesenden Wege, wie sie der Browser aufruft. */
   private List<String> leseWege(long projectId) {
     String p = "/api/projects/" + projectId;
     return List.of(
@@ -58,7 +58,8 @@ class NightRunTeilnahmeZugriffIT extends AbstractIntegrationTest {
         p + "/night-runs/items?cardNumber=721",
         p + "/night-run-usage/night?date=2026-09-15&zone=" + ZONE,
         p + "/night-run-usage?type=WEEK&stepsBack=0&zone=" + ZONE,
-        p + "/night-run-usage/total");
+        p + "/night-run-usage/total",
+        p + "/night-runs/now");
   }
 
   private Cookie session(String email, PlatformRole role) throws Exception {
@@ -96,39 +97,40 @@ class NightRunTeilnahmeZugriffIT extends AbstractIntegrationTest {
         "UPDATE project SET dashboard_participation = ? WHERE id = ?", teilnehmend, projectId);
   }
 
-  private void erwarteAlleSechs(Cookie wer, long projectId, int status) throws Exception {
+  private void erwarteAlleSieben(Cookie wer, long projectId, int status) throws Exception {
     for (String weg : leseWege(projectId)) {
       mvc.perform(get(weg).cookie(wer)).andExpect(status().is(status));
     }
   }
 
   @Test
-  void derPlattformAdminBekommtAmNichtTeilnehmendenProjektAufAllenSechsWegen403() throws Exception {
+  void derPlattformAdminBekommtAmNichtTeilnehmendenProjektAufAllenSiebenWegen403()
+      throws Exception {
     session("t403-owner@example.com", PlatformRole.USER);
     long projectId = projectOf("t403-owner@example.com", "t403-admin@example.com");
     Cookie admin = session("t403-admin@example.com", PlatformRole.ADMIN);
     teilnahme(projectId, false);
 
-    erwarteAlleSechs(admin, projectId, 403);
+    erwarteAlleSieben(admin, projectId, 403);
   }
 
   @Test
-  void derPlattformAdminKommtAmTeilnehmendenProjektAufAllenSechsWegenDurch() throws Exception {
+  void derPlattformAdminKommtAmTeilnehmendenProjektAufAllenSiebenWegenDurch() throws Exception {
     session("t200-owner@example.com", PlatformRole.USER);
     long projectId = projectOf("t200-owner@example.com", "t200-admin@example.com");
     Cookie admin = session("t200-admin@example.com", PlatformRole.ADMIN);
     teilnahme(projectId, true);
 
-    erwarteAlleSechs(admin, projectId, 200);
+    erwarteAlleSieben(admin, projectId, 200);
   }
 
   @Test
-  void derEchteOwnerKommtAuchOhneTeilnahmeAufAllenSechsWegenDurch() throws Exception {
+  void derEchteOwnerKommtAuchOhneTeilnahmeAufAllenSiebenWegenDurch() throws Exception {
     Cookie owner = session("towner-owner@example.com", PlatformRole.USER);
     long projectId = projectOf("towner-owner@example.com", "towner-admin@example.com");
     teilnahme(projectId, false);
 
-    erwarteAlleSechs(owner, projectId, 200);
+    erwarteAlleSieben(owner, projectId, 200);
   }
 
   /**
@@ -146,7 +148,7 @@ class NightRunTeilnahmeZugriffIT extends AbstractIntegrationTest {
             null, projectId, adminId, ProjectRole.MEMBER, java.time.Instant.now()));
     teilnahme(projectId, false);
 
-    erwarteAlleSechs(admin, projectId, 403);
+    erwarteAlleSieben(admin, projectId, 403);
   }
 
   /**

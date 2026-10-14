@@ -15,7 +15,6 @@ import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
-import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import {
   createContext,
@@ -45,6 +44,7 @@ import { artAusTitel, useKitNamen } from '../api/kitNamen'
 import type { NightRunsApi } from '../api/nightRuns'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
+import { Wartegrund } from './nachtlauf/Wartegrund'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
@@ -61,7 +61,8 @@ import { normalizeTaskLists, toggleTaskAt } from '../lib/markdownTasks'
 import { safeImageSrc, safeLinkHref } from '../lib/markdownUrls'
 import { statusColors } from '../lib/statusColors'
 import { ANZEIGE, CODE_BG, GRUND, PANEL_RADIUS, PLATTE, PLATTE_HOCH, SCHATTEN_HOCH, SCHATTEN_PLATTE, theme, ZAHL } from '../theme'
-import { LabelErklaerung } from './LabelErklaerung'
+import { Erklaerung } from './Erklaerung'
+import { LabelErklaerung, LabelErklaerungInfo } from './LabelErklaerung'
 import { labelChipSx } from './labelChipSx'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
@@ -398,16 +399,24 @@ export function LabelSection({
           onHighlightChange={(_, option) => setMarkiert(option)}
           onClose={markierungWeg}
           onInputChange={markierungWeg}
+          // Auf dem Tablet quer wählt Antippen die Option bzw. bleibt dem Chip; die Erklärung öffnet
+          // das Info-Symbol daneben (Plan #1707, E7).
           renderOption={({ key, ...props }, option) => (
-            <LabelErklaerung key={key} name={option.name} open={markiert?.id === option.id} placement="right" eigenerFokus>
-              <li {...props}>{option.name}</li>
+            <LabelErklaerung key={key} name={option.name} open={markiert?.id === option.id} placement="right" eigenerFokus eigeneAktion>
+              <li {...props}>
+                {option.name}
+                <LabelErklaerungInfo name={option.name} placement="right" />
+              </li>
             </LabelErklaerung>
           )}
           renderTags={(value, getTagProps) =>
             value.map((l, index) => (
-              <LabelErklaerung key={l.id} name={l.name}>
-                <Chip {...getTagProps({ index })} key={l.id} size="small" label={l.name} sx={labelChipSx(l.color)} />
-              </LabelErklaerung>
+              <Fragment key={l.id}>
+                <LabelErklaerung name={l.name} eigeneAktion>
+                  <Chip {...getTagProps({ index })} key={l.id} size="small" label={l.name} sx={labelChipSx(l.color)} />
+                </LabelErklaerung>
+                <LabelErklaerungInfo name={l.name} />
+              </Fragment>
             ))
           }
           renderInput={(params) => (
@@ -637,7 +646,7 @@ function ActivitySection({
               />
             )}
             {a.agent && (
-              <Tooltip title={t.KARTE.AGENT_HINWEIS}>
+              <Erklaerung title={t.KARTE.AGENT_HINWEIS}>
                 <Chip
                   data-testid="activity-agent"
                   size="small"
@@ -646,7 +655,7 @@ function ActivitySection({
                   aria-label={t.KARTE.AGENT_ARIA(a.agent)}
                   sx={{ height: 18, fontSize: '0.65rem', fontStyle: 'italic' }}
                 />
-              </Tooltip>
+              </Erklaerung>
             )}
           </Stack>
         ))}
@@ -1167,7 +1176,7 @@ interface Props {
    * Abruf der Nachtlauf-Anläufe (Issue #968) und des Kettenstands der Stufenleiste (Issue #1453);
    * ohne Angabe die echten Endpunkte.
    */
-  nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte' | 'kettenstand'>
+  nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte' | 'kettenstand' | 'wartegrund'>
 }
 
 /**
@@ -1911,6 +1920,9 @@ function CardDetailModalView({
               )}
               {/* Nur mit Projekt gibt es etwas abzurufen: `projectId` ist am Modal optional
                   (Issue #968). */}
+              {/* Warum die Karte in Ready wartet (Issue #1730): für jede Karte, ohne eigene Prüfung
+                  der Spalte — ob Ready gilt, entscheidet der Server (Plan #1724 E12). */}
+              <Wartegrund cardId={card.id} api={nightRunsApi} />
               {projectId != null && (
                 <KartenAnlaeufe projectId={projectId} cardNumber={card.number} api={nightRunsApi} />
               )}

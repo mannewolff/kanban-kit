@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { configure } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
+import { TABLET_QUER_QUERY } from '../lib/tabletQuer'
 
 // `findBy…` und `waitFor` geben nach dem Default von 1000 ms auf — unter der vollen Suite mit
 // Coverage und paralleler Last zu knapp: Am 2026-09-24 scheiterten so Tests mit „Unable to find
@@ -62,3 +63,28 @@ afterEach(() => {
     // localStorage nicht verfügbar (Node 26 nativ, deaktiviert) — kein Leak, kein Reset nötig.
   }
 })
+
+// `matchMedia`-Attrappe (Plan #1707, E13). jsdom wertet keine Media-Query aus; ohne Attrappe gälte
+// jede als nicht erfüllt. Die Attrappe beantwortet allein die Tablet-Query nach dem Umschalter und
+// jede andere mit „nicht erfüllt“ — wie bisher. Standard ist der Desktop, nach jedem Test zurück.
+// Direkt zugewiesen statt `vi.stubGlobal`: Ein Test, der `matchMedia` selbst stubbt und danach
+// `vi.unstubAllGlobals()` ruft, bekommt so wieder diese Attrappe und nicht `undefined`.
+const medien = { tabletQuer: false }
+
+/** Schaltet die Attrappe auf Tablet im Querformat (`true`) oder Desktop (`false`). */
+export function setzeMedien(werte: Readonly<{ tabletQuer: boolean }>): void {
+  medien.tabletQuer = werte.tabletQuer
+}
+
+window.matchMedia = (query: string): MediaQueryList => ({
+  matches: query === TABLET_QUER_QUERY && medien.tabletQuer,
+  media: query,
+  onchange: null,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  addListener: () => {},
+  removeListener: () => {},
+  dispatchEvent: () => false,
+})
+
+afterEach(() => setzeMedien({ tabletQuer: false }))

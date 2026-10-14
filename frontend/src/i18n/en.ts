@@ -420,6 +420,9 @@ export const en: Woerterbuch = {
     ALLE_AUSWAEHLEN: (spalte) => `Select all cards in ${spalte}`,
     NACH_NUMMER_SORTIEREN: (spalte, aufsteigend) =>
       `Sort column ${spalte} by number ${aufsteigend ? 'ascending' : 'descending'}`,
+    NACHTLAUF_MARKIEREN: (label) => `Set ${label} on all cards in Ready`,
+    NACHTLAUF_ALLE_MARKIERT: (label) => `All cards in Ready already carry ${label}`,
+    NACHTLAUF_KEINE_KARTE: (label) => `No card in Ready can take ${label}`,
     AUSGEBLENDET: (anzahl) => `${anzahl} hidden`,
     AUSGEBLENDET_EINBLENDEN: (anzahl) => `${anzahl} ${anzahl === 1 ? 'card' : 'cards'} hidden, show`,
     SPALTE_BEARBEITEN_ARIA: (spalte) => `Edit column ${spalte}`,
@@ -1047,6 +1050,73 @@ export const en: Woerterbuch = {
     STUFENSTAND: (nummer) => `Stage status of #${nummer}`,
   },
 
+  RUNNER_JETZT: {
+    TITEL: 'Runner now',
+    LADEFEHLER: (meldung) => `The runner status could not be loaded: ${meldung}`,
+    ART: {
+      CHAIN: 'Chain',
+      IMPLEMENTATION: 'Implementation night',
+      REVIEW: 'Review run',
+      INTERACTIVE: 'Interactive session',
+    },
+    LAEUFT: 'running',
+    SEIT: (zeit) => `since ${zeit}`,
+    LETZTE_MELDUNG: (zeit) => `last report ${zeit}`,
+    VERSTUMMT: (zeit, stufe) =>
+      `Runner silent since ${zeit} (last stage: ${stufe}), probably aborted; the implementation may still count as occupied.`,
+    NICHT_GEMELDET: 'not reported',
+    STUFE: {
+      PLAN: 'Plan',
+      REVIEW: 'Review',
+      PAKETE: 'Work packages',
+      ABDECKUNG: 'Coverage',
+      UMSETZUNG: 'Implementation',
+      VORBEREITUNG: 'Preparation',
+    },
+    STUFEN: (lauf) => `Stages: ${lauf}`,
+    KARTE_STUFE: (karte, stufe) => `#${karte} ${stufe}`,
+    BEGINN: (zeit) => `Started ${zeit}`,
+    FRIST: (zeit) => `Deadline ${zeit}`,
+    KEINE_FRIST: 'no deadline set',
+    SCHRITT: {
+      SESSION: 'session at work',
+      WAITING_FOR_IMPLEMENTATION: 'waiting for the implementation to be free',
+      RELEASE_CHECKS: 'release checks running',
+    },
+    SCHRITT_UNBEKANNT: (code) => `Step: ${code}`,
+    HAELT: 'holds the implementation',
+    KEIN_RUNNER: 'no runner active',
+    NIE: 'no runner active – no run started yet',
+    LETZTER_LAUF: (art, ende, ergebnis) => `Last run: ${art}, ended ${ende} – ${ergebnis}`,
+    OHNE_PAKET: (grund) => `ended without a package – ${grund}`,
+  },
+
+  WARTEGRUND: {
+    TITEL: 'Why it waits',
+    LADEFEHLER: (meldung) => `The waiting reason could not be loaded: ${meldung}`,
+    STARTBEREIT: 'ready to start – no obstacle found',
+    KEINE_UMSETZUNGSNACHT: 'no implementation night active',
+    BELEGT_KETTE: (karte, stufe) => `Implementation occupied by another run: chain #${karte}, stage ${stufe}`,
+    BELEGT_LAUF: (art, karte) => `Implementation occupied by another run: ${art} #${karte}`,
+    KEIN_ARBEITSPAKET: {
+      REQUIREMENT: 'not a work package but a requirement',
+      IDEA: 'not a work package but an idea',
+      PLAN: 'not a work package but a plan',
+      HUMAN: 'not a work package but a step for a human',
+    },
+    KEIN_ARBEITSPAKET_SONST: 'not a work package but a document or a step for a human',
+    NO_LABEL: 'not released for the night (kit:nightrun missing)',
+    DEPENDENCY: (karten) => `waiting for another card (${karten})`,
+    CLARIFY: 'waiting for clarification (kit:clarify)',
+    PROTECTED_LABEL: 'touches a protected file (kit:protected)',
+    PROTECTED_FILE: (pfade) => `touches a protected file (${pfade})`,
+    REVIEW_MISSING: 'the required review is missing',
+    PAKETE_DAVOR: (anzahl) => `Packages ahead: ${anzahl}`,
+    NICHT_BEWERTET: (zeit) => `not yet assessed by the runner (last assessment ${zeit})`,
+    NIE_BEWERTET: 'not yet assessed by the runner (no assessment yet)',
+    SEIT_BEWERTUNG_GEAENDERT: 'changed since the assessment',
+  },
+
   KARTEN_ANLAEUFE: {
     LAUF_ART: {
       IMPLEMENTATION: 'Implementation',
@@ -1413,6 +1483,10 @@ export const en: Woerterbuch = {
     PERSON: 'Person',
     STUNDE: 'Hour',
     ANZAHL: 'Count',
+  },
+
+  ERKLAERUNG_INFO: {
+    ZEIGEN: (name) => `Explanation of ${name}`,
   },
 
   STANDARD_LABELS: {
