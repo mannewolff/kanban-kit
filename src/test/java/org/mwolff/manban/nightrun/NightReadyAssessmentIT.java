@@ -129,6 +129,24 @@ class NightReadyAssessmentIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void einProbelaufOhneEintraegeSpeichertNurDenKopf() throws Exception {
+    Aufbau aufbau = aufbau("bewertung-probelauf");
+    melde(aufbau.token(), meldung(T1, ZWEI_KARTEN), 200);
+
+    melde(
+        aufbau.token(),
+        """
+        {"assessedAt":"%s","runStartedAt":null,"label":"kit:nightrun","entries":[]}"""
+            .formatted(T2),
+        200);
+
+    ReadyBewertung gespeichert = bewertungen.findByProjectId(aufbau.projectId()).orElseThrow();
+    assertThat(gespeichert.assessedAt()).isEqualTo(Instant.parse(T2));
+    assertThat(gespeichert.runStartedAt()).isNull();
+    assertThat(gespeichert.entries()).isEmpty();
+  }
+
+  @Test
   void eineAeltereErgibt409_undLaesstDieJuengereStehen() throws Exception {
     Aufbau aufbau = aufbau("bewertung-aelter");
     melde(aufbau.token(), meldung(T2, ZWEI_KARTEN), 200);
