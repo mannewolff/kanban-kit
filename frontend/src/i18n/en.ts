@@ -420,6 +420,9 @@ export const en: Woerterbuch = {
     ALLE_AUSWAEHLEN: (spalte) => `Select all cards in ${spalte}`,
     NACH_NUMMER_SORTIEREN: (spalte, aufsteigend) =>
       `Sort column ${spalte} by number ${aufsteigend ? 'ascending' : 'descending'}`,
+    NACHTLAUF_MARKIEREN: (label) => `Set ${label} on all cards in Ready`,
+    NACHTLAUF_ALLE_MARKIERT: (label) => `All cards in Ready already carry ${label}`,
+    NACHTLAUF_KEINE_KARTE: (label) => `No card in Ready can take ${label}`,
     AUSGEBLENDET: (anzahl) => `${anzahl} hidden`,
     AUSGEBLENDET_EINBLENDEN: (anzahl) => `${anzahl} ${anzahl === 1 ? 'card' : 'cards'} hidden, show`,
     SPALTE_BEARBEITEN_ARIA: (spalte) => `Edit column ${spalte}`,

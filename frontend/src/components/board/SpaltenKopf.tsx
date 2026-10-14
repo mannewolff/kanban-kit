@@ -80,6 +80,58 @@ function spaltenZiehHandler(
   }
 }
 
+/**
+ * Knopf im Kopf der Ready-Spalte, der das Label der Sache `NIGHTRUN` an die Karten der Spalte setzt
+ * (Issue #1708). Fehlt er, führt die Spalte keinen.
+ */
+export interface NachtlaufKnopf {
+  /** Board-Name des Labels — die Aufschrift des Knopfes. */
+  label: string
+  /** Warum der Knopf gesperrt ist; `null` heißt bedienbar. */
+  sperrgrund: string | null
+  /** Ein Aufruf läuft gerade; gegen den Doppelklick. */
+  beschaeftigt: boolean
+  onNachtlaufMarkieren: () => void
+}
+
+/**
+ * Der Knopf aus {@link NachtlaufKnopf}. Gesperrt nennt er den Grund als Tooltip und als
+ * zugänglichen Namen; der span trägt den Tooltip, weil ein gesperrter Button keine Zeigerereignisse
+ * erhält, und `describeChild` hält den Namen allein am Button.
+ */
+function NachtlaufTaste({ knopf }: Readonly<{ knopf: NachtlaufKnopf }>) {
+  const t = useT()
+  const name = knopf.sperrgrund ?? t.BOARD.NACHTLAUF_MARKIEREN(knopf.label)
+  return (
+    <Tooltip title={name} describeChild>
+      <Box component="span" sx={{ display: 'inline-flex', flex: 'none' }}>
+        <Button
+          size="small"
+          aria-label={name}
+          disabled={knopf.sperrgrund !== null || knopf.beschaeftigt}
+          onClick={knopf.onNachtlaufMarkieren}
+          sx={{
+            ...ZAHL,
+            minWidth: 0,
+            px: 0.75,
+            py: 0,
+            textTransform: 'none',
+            fontSize: 10.5,
+            lineHeight: 1.6,
+            color: 'primary.main',
+            bgcolor: NUT,
+            border: `1px solid ${RAND}`,
+            boxShadow: SCHATTEN_NUTE,
+            borderRadius: '5px',
+          }}
+        >
+          {knopf.label}
+        </Button>
+      </Box>
+    </Tooltip>
+  )
+}
+
 interface Props {
   column: BoardColumn
   /** Zähler über den vollen Bestand der Spalte — er trägt die Belastungsgrenze. */
@@ -112,11 +164,13 @@ interface Props {
   fingerGriff?: ReturnType<FingerZiehen['griff']>
   /** Stand des Fingerzugs, solange diese Spalte gegriffen ist. */
   fingerZustand?: 'wartet' | 'zieht'
+  /** Knopf `kit:nightrun` — nur an der Ready-Spalte (Issue #1708). */
+  nachtlauf?: NachtlaufKnopf
 }
 
 /**
  * Kopf einer Spalte: Status-LED, Name, Zähler mit Belastungsgrenze, Marke der ausgeblendeten
- * Karten, Sortieren und — im Struktur-Editiermodus — Bearbeiten, Löschen und das Ziehen der Spalte.
+ * Karten, an der Ready-Spalte der Knopf `kit:nightrun`, Sortieren und — im Struktur-Editiermodus — Bearbeiten, Löschen und das Ziehen der Spalte.
  * Die Belastungsskala gehört seit Plan #1707 (E6) mit hierher, weil sie auf dem Tablet quer in die
  * zweite Zeile des Kopfes wandert.
  *
@@ -146,6 +200,7 @@ export function SpaltenKopf({
   onZugEnde,
   fingerGriff,
   fingerZustand,
+  nachtlauf,
 }: Readonly<Props>) {
   const t = useT()
   const tabletQuer = useTabletQuer()
@@ -231,6 +286,7 @@ export function SpaltenKopf({
   )
   const knoepfe = (
     <>
+      {nachtlauf && <NachtlaufTaste knopf={nachtlauf} />}
       {canEdit && (
         <Tooltip title={sortierLabel}>
           {/* Kein span-Wrapper um den Button: MUI legt den Tooltip-Titel als aria-label auf

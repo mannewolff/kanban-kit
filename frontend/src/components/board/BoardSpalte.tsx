@@ -9,13 +9,13 @@ import type { Epic } from '../../api/epics'
 import type { Label } from '../../api/labels'
 import type { Member } from '../../api/members'
 import { epicOfCard } from '../../lib/cardEpic'
-import { effektivDone } from '../../lib/columnMeta'
+import { canonicalColumnKey, effektivDone } from '../../lib/columnMeta'
 import { MELDER, NUT, PANEL_RADIUS, RAND, SCHATTEN_NUTE } from '../../theme'
 import { useTabletQuer } from '../../lib/tabletQuer'
 import type { FingerZiehen } from '../../lib/useFingerZiehen'
 import { ablageflaecheSx, spaltenMass, type Dichte } from '../boardSurfaceSx'
 import { BoardKarte } from './BoardKarte'
-import { SpaltenKopf } from './SpaltenKopf'
+import { SpaltenKopf, type NachtlaufKnopf } from './SpaltenKopf'
 
 interface Props {
   column: BoardColumn
@@ -76,6 +76,8 @@ interface Props {
   spaltenZug: FingerZiehen
   /** Stelle unter den angezeigten Karten (ohne die gezogene), an der die Einfügelinie steht; `null` = keine. */
   einfuegeIndex: number | null
+  /** Knopf `kit:nightrun`; die Spalte zeigt ihn nur, wenn sie als Ready erkannt wird (Issue #1708). */
+  nachtlauf?: NachtlaufKnopf
 }
 
 /** Stand des Fingerzugs für das Element `id`, solange er läuft; sonst `undefined`. */
@@ -143,6 +145,7 @@ export function BoardSpalte({
   kartenZug,
   spaltenZug,
   einfuegeIndex,
+  nachtlauf,
 }: Readonly<Props>) {
   // Einmal berechnet, zweimal gebraucht (Rand der Spalte, Zähler im Kopf). Zwei Fassungen desselben
   // Vergleichs liefen bei einer Änderung auseinander (Plan #1042, P12).
@@ -207,6 +210,7 @@ export function BoardSpalte({
           onZugEnde={onZugEnde}
           fingerGriff={spaltenZug.griff(String(column.id))}
           fingerZustand={laufenderZug(spaltenZug, column.id)}
+          nachtlauf={canonicalColumnKey(column.name) === 'READY' ? nachtlauf : undefined}
         />
       </Box>
 

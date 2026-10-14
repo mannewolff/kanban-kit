@@ -3855,3 +3855,158 @@ describe('BoardView — Gegenprobe am Desktop (Plan #1707, E2)', () => {
     await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
   })
 })
+
+describe('BoardView — Knopf kit:nightrun im Kopf der Ready-Spalte (Issue #1708)', () => {
+  beforeEach(() => {
+    kitNamen.geladen = true
+  })
+
+  afterEach(() => {
+    kitNamen.geladen = false
+  })
+
+  const readyBoard: Board = {
+    ...board,
+    columns: [
+      { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+      { id: 30, name: 'Ready', position: 1, wipLimit: null },
+      { id: 20, name: 'Done', position: 2, wipLimit: null },
+    ],
+  }
+  const nightrun = { id: 9, boardId: 1, name: 'kit:nightrun', color: '#00ff00', countOnEpicTile: false }
+  const paket = (id: number, title: string, over: Partial<Card> = {}): Card =>
+    ({ ...card, id, number: id, title, columnId: 30, positionInColumn: id, ...over })
+  const knopfName = de.BOARD.NACHTLAUF_MARKIEREN('kit:nightrun')
+
+  it('erscheint nur an der Ready-Spalte und nur, wenn das Board das Label führt', () => {
+    const { unmount } = render(
+      <BoardView board={readyBoard} initialCards={[paket(1, 'Eins')]} canEdit boardLabels={[nightrun]} api={mkApi()} />,
+    )
+    expect(screen.getAllByRole('button', { name: knopfName })).toHaveLength(1)
+    expect(within(screen.getByTestId('column-header-30')).getByRole('button', { name: knopfName })).toHaveTextContent('kit:nightrun')
+    unmount()
+
+    render(<BoardView board={readyBoard} initialCards={[paket(1, 'Eins')]} canEdit boardLabels={[]} api={mkApi()} />)
+    expect(screen.queryByRole('button', { name: knopfName })).not.toBeInTheDocument()
+  })
+
+  it('entfällt ohne Bearbeitungsrecht', () => {
+    render(<BoardView board={readyBoard} initialCards={[paket(1, 'Eins')]} canEdit={false} boardLabels={[nightrun]} api={mkApi()} />)
+    expect(screen.queryByRole('button', { name: knopfName })).not.toBeInTheDocument()
+  })
+
+  it('setzt das Label an die sichtbaren Ready-Karten ohne Vorhaben, Menschenschritte und Karten mit dem Label', async () => {
+    const eins = paket(1, '[Task] Eins')
+    const zwei = paket(2, 'Zwei')
+    const vorhaben = paket(3, 'Vorhaben', { type: 'EPIC' })
+    const mensch = paket(4, '[Human] Schritt')
+    const schon = paket(5, 'Schon', { labels: [9] })
+    const meins = paket(6, 'Fremd', { assignees: [] })
+    const anderswo = { ...paket(7, 'Backlog-Karte'), columnId: 10 }
+    const api = mkApi({
+      bulkLabels: vi.fn().mockResolvedValue([{ ...eins, labels: [9] }, { ...zwei, labels: [9] }]),
+    })
+    render(
+      <BoardView
+        board={readyBoard}
+        initialCards={[eins, zwei, vorhaben, mensch, schon, meins, anderswo]}
+        canEdit
+        boardLabels={[nightrun]}
+        api={api}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: knopfName }))
+
+    await waitFor(() => expect(api.bulkLabels).toHaveBeenCalledWith([1, 2, 6], 9, 'ADD'))
+    // Danach tragen die Karten das Label in der Anzeige.
+    await waitFor(() => expect(within(screen.getByTestId('card-1')).getByText('kit:nightrun')).toBeInTheDocument())
+    expect(within(screen.getByTestId('card-2')).getByText('kit:nightrun')).toBeInTheDocument()
+  })
+
+  it('lässt Karten aus, die der Filter der Werkzeugleiste verdeckt', async () => {
+    const eigene = paket(1, 'Eigene', { assignees: [42] })
+    const fremde = paket(2, 'Fremde')
+    const api = mkApi()
+    render(
+      <BoardView board={readyBoard} initialCards={[eigene, fremde]} canEdit boardLabels={[nightrun]} currentUserId={42} api={api} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Meine' }))
+    fireEvent.click(screen.getByRole('button', { name: knopfName }))
+
+    await waitFor(() => expect(api.bulkLabels).toHaveBeenCalledWith([1], 9, 'ADD'))
+  })
+
+  it('ist gesperrt und nennt den Grund, wenn alle Karten das Label schon tragen', () => {
+    render(
+      <BoardView
+        board={readyBoard}
+        initialCards={[paket(1, 'Eins', { labels: [9] }), paket(2, '[Human] Schritt')]}
+        canEdit
+        boardLabels={[nightrun]}
+        api={mkApi()}
+      />,
+    )
+
+    const grund = de.BOARD.NACHTLAUF_ALLE_MARKIERT('kit:nightrun')
+    const knopf = screen.getByRole('button', { name: grund })
+    expect(knopf).toBeDisabled()
+    // Der Tooltip hängt an der Hülle, weil der gesperrte Knopf keine Zeigerereignisse erhält.
+    expect(screen.getByTitle(grund)).toContainElement(knopf)
+  })
+
+  it('ist gesperrt und nennt den Grund, wenn keine Karte das Label brauchen kann', () => {
+    render(
+      <BoardView board={readyBoard} initialCards={[paket(3, 'Vorhaben', { type: 'EPIC' })]} canEdit boardLabels={[nightrun]} api={mkApi()} />,
+    )
+
+    expect(screen.getByRole('button', { name: de.BOARD.NACHTLAUF_KEINE_KARTE('kit:nightrun') })).toBeDisabled()
+  })
+
+  it('meldet einen Fehler der Schnittstelle', async () => {
+    const api = mkApi({ bulkLabels: vi.fn().mockRejectedValue(new Error('netz')) })
+    render(
+      <BoardView board={readyBoard} initialCards={[paket(1, 'Eins')]} canEdit boardLabels={[nightrun]} api={api} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: knopfName }))
+
+    await erwarteFehlerToast('Labels setzen fehlgeschlagen.')
+  })
+
+  it('nennt Knopf und Sperrgründe auf Englisch', () => {
+    const { unmount } = renderMitSprache(
+      <BoardView board={readyBoard} initialCards={[paket(1, 'One')]} canEdit boardLabels={[nightrun]} api={mkApi()} />,
+      'en',
+    )
+    expect(screen.getByRole('button', { name: 'Set kit:nightrun on all cards in Ready' })).toBeEnabled()
+    unmount()
+
+    const { unmount: weg } = renderMitSprache(
+      <BoardView board={readyBoard} initialCards={[paket(1, 'One', { labels: [9] })]} canEdit boardLabels={[nightrun]} api={mkApi()} />,
+      'en',
+    )
+    expect(screen.getByRole('button', { name: 'All cards in Ready already carry kit:nightrun' })).toBeDisabled()
+    weg()
+
+    renderMitSprache(<BoardView board={readyBoard} initialCards={[]} canEdit boardLabels={[nightrun]} api={mkApi()} />, 'en')
+    expect(screen.getByRole('button', { name: 'No card in Ready can take kit:nightrun' })).toBeDisabled()
+  })
+
+  it('schickt bei einem Doppelklick nur einen Aufruf los', async () => {
+    let antwort: (cards: Card[]) => void = () => {}
+    const eins = paket(1, 'Eins')
+    const api = mkApi({ bulkLabels: vi.fn(() => new Promise<Card[]>((resolve) => { antwort = resolve })) })
+    render(<BoardView board={readyBoard} initialCards={[eins]} canEdit boardLabels={[nightrun]} api={api} />)
+
+    const knopf = screen.getByRole('button', { name: knopfName })
+    fireEvent.click(knopf)
+    fireEvent.click(knopf)
+
+    expect(api.bulkLabels).toHaveBeenCalledTimes(1)
+    expect(knopf).toBeDisabled()
+    await act(async () => antwort([{ ...eins, labels: [9] }]))
+  })
+})

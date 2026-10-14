@@ -33,6 +33,13 @@
   Übertragen auf ein anderes Board und ersetzt einen von Hand gesetzten Status. Wer die Spalten
   umsortiert, ändert den Status liegender Karten nicht. Vorhaben und Karten mit `[Idee]`,
   `[Fachlich]` oder `[Plan]` im Titel tragen keinen Status.
+- **Knopf `kit:nightrun` in Ready:** Führt das Board das Label `kit:nightrun`, trägt der Kopf der
+  Spalte Ready neben Kartenzahl und Sortier-Symbol einen kleinen Knopf mit diesem Namen. Ein Druck
+  setzt das Label ohne Rückfrage an alle Karten, die die Spalte gerade zeigt — bei aktivem Filter
+  also nur an die sichtbaren. Ausgenommen sind Vorhaben und Karten mit `[Mensch]` bzw. `[Human]` im
+  Titel. Tragen alle Karten das Label schon oder kann keine es bekommen, ist der Knopf gesperrt und
+  nennt beim Darüberfahren den Grund. Abnehmen lässt sich das Label wie jedes andere an der Karte
+  oder über die [Mehrfachauswahl](#mehrfachauswahl).
 
 ## Karten
 

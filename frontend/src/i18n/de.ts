@@ -437,6 +437,9 @@ export const de = {
     ALLE_AUSWAEHLEN: (spalte: string) => `Alle Karten in ${spalte} auswählen`,
     NACH_NUMMER_SORTIEREN: (spalte: string, aufsteigend: boolean) =>
       `Spalte ${spalte} nach Nummer ${aufsteigend ? 'aufsteigend' : 'absteigend'} sortieren`,
+    NACHTLAUF_MARKIEREN: (label: string) => `${label} an alle Karten in Ready setzen`,
+    NACHTLAUF_ALLE_MARKIERT: (label: string) => `Alle Karten in Ready tragen ${label} schon`,
+    NACHTLAUF_KEINE_KARTE: (label: string) => `In Ready steht keine Karte, die ${label} bekommen kann`,
     AUSGEBLENDET: (anzahl: number) => `${anzahl} ausgeblendet`,
     AUSGEBLENDET_EINBLENDEN: (anzahl: number) =>
       `${anzahl} ${anzahl === 1 ? 'Karte' : 'Karten'} ausgeblendet, einblenden`,

@@ -20,6 +20,7 @@ import { cardsApi, type Card, type CardsApi, type LabelAction } from '../api/car
 import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
+import { artAusTitel, boardName, useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import type { Member } from '../api/members'
 import type { Woerterbuch } from '../i18n/de'
 import { useT } from '../i18n/SpracheContext'
@@ -48,6 +49,7 @@ import {
   ZAHL,
 } from '../theme'
 import { BoardSpalte } from './board/BoardSpalte'
+import type { NachtlaufKnopf } from './board/SpaltenKopf'
 import { spaltenMass, SPALTEN_OHNE_ROLLEN, type Dichte } from './boardSurfaceSx'
 import { BulkActionBar, type LabelOption, type LabelZustand } from './BulkActionBar'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
@@ -70,6 +72,27 @@ const labelSperrgrund = (t: Woerterbuch, gewaehlt: Card[], boardLabels: Label[])
   if (gewaehlt.some((c) => c.type === 'EPIC')) return t.BOARD.LABELS_GESPERRT_VORHABEN
   if (boardLabels.length === 0) return t.BOARD.LABELS_GESPERRT_KEINE
   return null
+}
+
+/**
+ * Das Label der Sache `NIGHTRUN`, wie es dieses Board führt (Issue #1708); `undefined`, solange die
+ * Kit-Namen fehlen oder das Board das Label nicht kennt — dann entfällt der Knopf in Ready.
+ */
+const nachtlaufLabelVon = (
+  kitNamen: KitNamenZustand,
+  boardLabels: Label[],
+): { label: Label; istMensch: (titel: string) => boolean } | undefined => {
+  if (kitNamen.status !== 'fertig') return undefined
+  const { daten } = kitNamen
+  const name = boardName(daten, 'NIGHTRUN', boardLabels.map((l) => l.name))
+  const label = boardLabels.find((l) => l.name === name)
+  return label && { label, istMensch: (titel) => artAusTitel(daten, titel) === 'MENSCH' }
+}
+
+/** Sperrgrund des Knopfes `kit:nightrun`: keine Karte kann das Label bekommen, oder alle tragen es. */
+const nachtlaufSperrgrund = (t: Woerterbuch, label: string, moeglich: number, ziel: number): string | null => {
+  if (moeglich === 0) return t.BOARD.NACHTLAUF_KEINE_KARTE(label)
+  return ziel === 0 ? t.BOARD.NACHTLAUF_ALLE_MARKIERT(label) : null
 }
 
 type KartenFilter = 'alle' | 'meine' | 'ueberfaellig'
@@ -291,6 +314,7 @@ export function BoardView({
   const [dichte, setDichte] = useState<Dichte>('normal')
   const notify = useSnackbar()
   const t = useT()
+  const nachtlauf = nachtlaufLabelVon(useKitNamen(), boardLabels)
   const [epicFilter, setEpicFilter] = useState<number | null>(() => {
     try {
       const raw = localStorage.getItem(`manban.boardEpicFilter.${board.id}`)
@@ -672,13 +696,17 @@ export function BoardView({
    * Setzt ein Label an der Auswahl oder nimmt es ihr ab. Die Auswahl bleibt in beiden Ausgängen
    * bestehen — das Menü bleibt offen, damit mehrere Labels in einem Zug gehen.
    */
-  const applyBulkLabel = async (labelId: number, action: LabelAction) => {
+  const applyBulkLabel = (labelId: number, action: LabelAction) =>
+    setzeLabels([...effectiveSelectedIds], labelId, action)
+
+  /** Gemeinsamer Weg der Label-Massenaktion und des Knopfes `kit:nightrun` in Ready (Issue #1708). */
+  const setzeLabels = async (ids: number[], labelId: number, action: LabelAction) => {
     // Doppelklickschutz: Ein zweiter Klick vor der Antwort schickte denselben Batch erneut los,
     // denn der Zustand im Menü zeigt bis dahin noch den alten Stand.
     if (labelBusy) return
     setLabelBusy(true)
     try {
-      const geaendert = await api.bulkLabels([...effectiveSelectedIds], labelId, action)
+      const geaendert = await api.bulkLabels(ids, labelId, action)
       // Nur die Labels aus der Antwort übernehmen: Sie ist eine Einzelkarten-Sicht (Volltext in
       // `description`, `excerpt` leer), die Board-Liste genau umgekehrt (#771). Die ganze Karte zu
       // ersetzen mischte beide Antwortformen in einen Zustand.
@@ -694,6 +722,24 @@ export function BoardView({
       notify(apiErrorMessage(e, t.BOARD.LABELS_SETZEN_FEHLER), 'error')
     } finally {
       setLabelBusy(false)
+    }
+  }
+
+  /**
+   * Knopf `kit:nightrun` für die angezeigten Karten einer Spalte (Issue #1708). Ziel sind die
+   * sichtbaren Karten ohne Vorhaben (für sie ist die Label-Massenaktion gesperrt), ohne
+   * Menschenschritte (der Runner stellte sie nur zurück) und ohne Karten, die das Label schon tragen.
+   */
+  const nachtlaufKnopf = (angezeigt: Card[]): NachtlaufKnopf | undefined => {
+    if (!canEdit || nachtlauf === undefined) return undefined
+    const { label, istMensch } = nachtlauf
+    const moeglich = angezeigt.filter((c) => c.type !== 'EPIC' && !istMensch(c.title))
+    const ziel = moeglich.filter((c) => !c.labels.includes(label.id)).map((c) => c.id)
+    return {
+      label: label.name,
+      sperrgrund: nachtlaufSperrgrund(t, label.name, moeglich.length, ziel.length),
+      beschaeftigt: labelBusy,
+      onNachtlaufMarkieren: () => void setzeLabels(ziel, label.id, 'ADD'),
     }
   }
 
@@ -972,6 +1018,7 @@ export function BoardView({
           // filteredCards, meldete er bei gesetztem Vorhaben-Filter eine eingehaltene Grenze,
           // die tatsächlich verletzt ist. Dargestellt wird weiterhin filteredCards.
           const columnCards = activeCardsInColumn(cards, column.id)
+          const angezeigteKarten = activeCardsInColumn(sichtbareKarten, column.id)
           return (
             <BoardSpalte
               key={column.id}
@@ -980,7 +1027,8 @@ export function BoardView({
               // Eine Zahl je Spalte: die Vereinigung beider Achsen, keine zwei Zählungen (E4).
               hiddenCount={columnCards.filter((c) => hiddenNumbers.has(c.number)).length}
               // Was die Spalte gerade zeigt — Grundlage des Spalten-Kästchens und der Karten.
-              angezeigteKarten={activeCardsInColumn(sichtbareKarten, column.id)}
+              angezeigteKarten={angezeigteKarten}
+              nachtlauf={nachtlaufKnopf(angezeigteKarten)}
               epics={epics}
               dichte={dichte}
               selectionMode={selectionMode}
