@@ -465,6 +465,77 @@ die übrigen Runs derselben Datei entstehen trotzdem. Und ein **nachgereichter R
 als alle 190 aufbewahrten, verdrängt keinen neueren — er wird angelegt und sogleich wieder verdrängt,
 erscheint also nach dem Einlesen nicht in der Liste.
 
+### Runner jetzt
+
+Ganz oben auf der Runner-Seite sagt der Bereich **„Runner jetzt“**, was der Runner gerade tut. Er
+nennt jeden Lauf, der noch nicht beendet ist, mit seiner Art (Kette oder Umsetzungsnacht) und genau
+einem Zustand:
+
+- **läuft:** Der Lauf hat sich innerhalb der Stillefrist gemeldet. Dabei stehen sein Beginn und
+  seine letzte Meldung.
+- **verstummt:** Der Lauf gilt als laufend, hat sich aber länger als die Stillefrist nicht gemeldet.
+  Dann steht dort: „Runner verstummt seit *Zeit* (letzte Stufe: *Stufe*), vermutlich abgebrochen;
+  die Umsetzung gilt womöglich noch als belegt.“ Hat der Lauf keine Stufe gemeldet, steht als
+  Stufe „nicht gemeldet“.
+
+Die **Stillefrist** ist dieselbe, nach der die Auswertung einen Lauf als verstummt führt
+(`manban.nightrun.stille-frist`, Vorgabe 90 Minuten). Meldet sich ein verstummter Lauf doch noch,
+läuft er wieder.
+
+Zu einem Lauf stehen seine **laufenden Stufen**: Karte und Stufe (etwa „#1665 Vorbereitung“),
+Beginn, Frist und der Teilschritt in Worten, etwa „wartet auf freie Umsetzung“ oder „Prüfungen der
+Veröffentlichung laufen“. Als Frist erscheint nur, was das Kit für die Stufe tatsächlich anwendet,
+sonst „keine Frist vorgesehen“. Hält eine Stufe die Umsetzung, steht „hält die Umsetzung“ dabei.
+Eine Stufe oder einen Teilschritt, den die Seite noch nicht kennt, zeigt sie mit dem Namen des Kits.
+
+Läuft kein Lauf und ist keiner verstummt, steht **„kein Runner aktiv“**. Wurde im Projekt noch nie
+ein Lauf gestartet, steht **„kein Runner aktiv – noch kein Lauf gestartet“**. Darunter nennt der
+Bereich den **letzten Lauf** mit Art, Ende und Ergebnis, auch neben laufenden Läufen. Endete eine
+Umsetzungsnacht ohne Paket, steht ihr Grund dabei, etwa „ohne Paket beendet – Umsetzung belegt
+durch Kette #1665, Stufe VORBEREITUNG“. Solange ein Lauf läuft oder verstummt ist, frischt sich der
+Bereich alle 30 Sekunden auf, wenn der Tab sichtbar ist.
+
+### Warum ein Paket wartet
+
+Im [Karten-Detail](#karten-detail) eines Pakets in Ready steht im Block „Verlauf“ der Abschnitt
+**„Wartegrund“**. Er sagt, warum der Runner das Paket nicht zieht. Die Gründe kommen aus zwei Quellen:
+
+- **Bewertung des Runners:** Der Runner meldet zu Beginn und nach jeder Runde einer Umsetzungsnacht
+  sowie bei jedem Probelauf, wie er die Karten in Ready bewertet. Daraus stammen die Gründe der
+  Karte: kein Arbeitspaket, sondern ein Dokument oder ein Schritt für einen Menschen; nicht für die
+  Nacht freigegeben (`kit:nightrun` fehlt); wartet auf eine andere Karte; wartet auf Klärung;
+  berührt eine geschützte Datei; die nötige Prüfung (Review) fehlt. Das Board bildet die Regeln des
+  Runners nicht nach. Einen Grund, den die Seite noch nicht kennt, zeigt sie mit dem Wortlaut des
+  Runners.
+- **Laufzustand:** Aus den Läufen leitet das Board ab, ob **keine Umsetzungsnacht aktiv** ist, ob der
+  **Runner verstummt** ist (derselbe Satz wie unter „Runner jetzt“) und ob die **Umsetzung belegt**
+  ist, also ein anderer Lauf sie für eine andere Karte hält, bei einer Kette mit Stufe. Ob ein Paket
+  wartet, weil keine Umsetzung läuft, bestimmen allein die Umsetzungsnächte. Eine Kette zählt nur,
+  wenn sie die Umsetzung belegt.
+
+Treffen mehrere Gründe zu, erscheinen alle. **„Pakete davor: *n*“** nennt, wie viele startbare
+Pakete in der Reihenfolge davor stehen. Trifft kein Grund zu, steht **„startbereit – kein
+Hinderungsgrund festgestellt“**: Die Karte ist bewertet, trägt keinen Grund, aus den Läufen spricht
+nichts dagegen, und sie wurde seit der Bewertung nicht geändert. Das ist keine Zusage, wann sie
+startet.
+
+Zwei Vermerke sagen, wie alt das Wissen des Boards ist. Sie sind keine Wartegründe:
+
+- **„noch nicht vom Runner bewertet (letzte Bewertung *Zeit*)“:** Die Karte steht nicht in der
+  jüngsten Bewertung, etwa weil sie erst danach nach Ready kam. Gibt es noch gar keine Bewertung,
+  steht „noch keine Bewertung“.
+- **„seit der Bewertung geändert“:** Die Karte wurde nach der jüngsten Bewertung geändert. Dann heißt
+  sie nicht startbereit, bis der Runner sie neu bewertet hat.
+
+**In Ready** heißt hier, was auch der Runner meint: zuerst der eigene Status der Karte, ohne eigenen
+Status ihre Spalte. Eine Karte mit Status „Ready“ in einer anderen Spalte trägt also einen
+Wartegrund, eine Karte mit Status „Backlog“ in der Spalte Ready nicht. Steht die Karte nicht in
+Ready, fehlt der Abschnitt.
+
+Wartegrund und „Runner jetzt“ sieht, wer die Auswertung der Läufe sehen darf: der Projekt-Owner und
+der Plattform-Admin, wenn das Projekt am Plattform-Leitstand teilnimmt. Andere Mitglieder sehen
+keines von beiden.
+
 ### Heute Nacht
 
 Die Übersicht **„Heute Nacht“** zeigt alle Karten des Projekts, deren Kette an der
