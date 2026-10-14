@@ -44,6 +44,7 @@ import { artAusTitel, useKitNamen } from '../api/kitNamen'
 import type { NightRunsApi } from '../api/nightRuns'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
+import { Wartegrund } from './nachtlauf/Wartegrund'
 import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
@@ -1175,7 +1176,7 @@ interface Props {
    * Abruf der Nachtlauf-Anläufe (Issue #968) und des Kettenstands der Stufenleiste (Issue #1453);
    * ohne Angabe die echten Endpunkte.
    */
-  nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte' | 'kettenstand'>
+  nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte' | 'kettenstand' | 'wartegrund'>
 }
 
 /**
@@ -1919,6 +1920,9 @@ function CardDetailModalView({
               )}
               {/* Nur mit Projekt gibt es etwas abzurufen: `projectId` ist am Modal optional
                   (Issue #968). */}
+              {/* Warum die Karte in Ready wartet (Issue #1730): für jede Karte, ohne eigene Prüfung
+                  der Spalte — ob Ready gilt, entscheidet der Server (Plan #1724 E12). */}
+              <Wartegrund cardId={card.id} api={nightRunsApi} />
               {projectId != null && (
                 <KartenAnlaeufe projectId={projectId} cardNumber={card.number} api={nightRunsApi} />
               )}

@@ -1151,6 +1151,33 @@ export const de = {
     OHNE_PAKET: (grund: string) => `ohne Paket beendet – ${grund}`,
   },
 
+  /** Der Abschnitt „Wartegrund“ im Kartendialog, `Wartegrund` (Issue #1730, Plan #1724). Den Satz für „verstummt“ liefert `RUNNER_JETZT.VERSTUMMT`. */
+  WARTEGRUND: {
+    TITEL: 'Wartegrund',
+    LADEFEHLER: (meldung: string) => `Der Wartegrund ließ sich nicht laden: ${meldung}`,
+    STARTBEREIT: 'startbereit – kein Hinderungsgrund festgestellt',
+    KEINE_UMSETZUNGSNACHT: 'keine Umsetzungsnacht aktiv',
+    BELEGT_KETTE: (karte: number, stufe: string) => `Umsetzung belegt durch einen anderen Lauf: Kette #${karte}, Stufe ${stufe}`,
+    BELEGT_LAUF: (art: string, karte: number) => `Umsetzung belegt durch einen anderen Lauf: ${art} #${karte}`,
+    KEIN_ARBEITSPAKET: {
+      REQUIREMENT: 'kein Arbeitspaket, sondern eine fachliche Anforderung',
+      IDEA: 'kein Arbeitspaket, sondern eine Idee',
+      PLAN: 'kein Arbeitspaket, sondern ein Plan',
+      HUMAN: 'kein Arbeitspaket, sondern ein Schritt für einen Menschen',
+    },
+    KEIN_ARBEITSPAKET_SONST: 'kein Arbeitspaket, sondern ein Dokument oder ein Schritt für einen Menschen',
+    NO_LABEL: 'nicht für die Nacht freigegeben (kit:nightrun fehlt)',
+    DEPENDENCY: (karten: string) => `wartet auf eine andere Karte (${karten})`,
+    CLARIFY: 'wartet auf Klärung (kit:klaeren)',
+    PROTECTED_LABEL: 'berührt eine geschützte Datei (kit:geschuetzt)',
+    PROTECTED_FILE: (pfade: string) => `berührt eine geschützte Datei (${pfade})`,
+    REVIEW_MISSING: 'die nötige Prüfung (Review) fehlt',
+    PAKETE_DAVOR: (anzahl: number) => `Pakete davor: ${anzahl}`,
+    NICHT_BEWERTET: (zeit: string) => `noch nicht vom Runner bewertet (letzte Bewertung ${zeit})`,
+    NIE_BEWERTET: 'noch nicht vom Runner bewertet (noch keine Bewertung)',
+    SEIT_BEWERTUNG_GEAENDERT: 'seit der Bewertung geändert',
+  },
+
   /** Anläufe einer Karte im Karten-Detail, `KartenAnlaeufe` (Issue #1658). */
   KARTEN_ANLAEUFE: {
     LAUF_ART: {

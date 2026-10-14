@@ -1091,6 +1091,32 @@ export const en: Woerterbuch = {
     OHNE_PAKET: (grund) => `ended without a package – ${grund}`,
   },
 
+  WARTEGRUND: {
+    TITEL: 'Why it waits',
+    LADEFEHLER: (meldung) => `The waiting reason could not be loaded: ${meldung}`,
+    STARTBEREIT: 'ready to start – no obstacle found',
+    KEINE_UMSETZUNGSNACHT: 'no implementation night active',
+    BELEGT_KETTE: (karte, stufe) => `Implementation occupied by another run: chain #${karte}, stage ${stufe}`,
+    BELEGT_LAUF: (art, karte) => `Implementation occupied by another run: ${art} #${karte}`,
+    KEIN_ARBEITSPAKET: {
+      REQUIREMENT: 'not a work package but a requirement',
+      IDEA: 'not a work package but an idea',
+      PLAN: 'not a work package but a plan',
+      HUMAN: 'not a work package but a step for a human',
+    },
+    KEIN_ARBEITSPAKET_SONST: 'not a work package but a document or a step for a human',
+    NO_LABEL: 'not released for the night (kit:nightrun missing)',
+    DEPENDENCY: (karten) => `waiting for another card (${karten})`,
+    CLARIFY: 'waiting for clarification (kit:clarify)',
+    PROTECTED_LABEL: 'touches a protected file (kit:protected)',
+    PROTECTED_FILE: (pfade) => `touches a protected file (${pfade})`,
+    REVIEW_MISSING: 'the required review is missing',
+    PAKETE_DAVOR: (anzahl) => `Packages ahead: ${anzahl}`,
+    NICHT_BEWERTET: (zeit) => `not yet assessed by the runner (last assessment ${zeit})`,
+    NIE_BEWERTET: 'not yet assessed by the runner (no assessment yet)',
+    SEIT_BEWERTUNG_GEAENDERT: 'changed since the assessment',
+  },
+
   KARTEN_ANLAEUFE: {
     LAUF_ART: {
       IMPLEMENTATION: 'Implementation',

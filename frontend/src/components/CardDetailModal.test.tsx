@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 import type { AttachmentsApi } from '../api/attachments'
 import type { Board } from '../api/boards'
 import { ApiError } from '../api/client'
+import type { Wartegruende } from '../api/nightRuns'
 import type { Card, CardByNumber, CardDetail } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
 import type { KitNamenZustand } from '../api/kitNamen'
@@ -137,9 +138,11 @@ function makeApis() {
   const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
   // Die Anlaeufe einer Karte (Issue #968); leer, damit der Block die uebrigen Faelle nicht beruehrt.
   // Der Kettenstand der Stufenleiste (Issue #1453) lädt nie: Die Leiste bleibt beim Stand vor dem Lauf.
+  // Der Wartegrund (Issue #1730) meldet 404: Die Karte steht nicht in Ready, der Abschnitt bleibt weg.
   const nightRunsApi = {
     anlaeufeDerKarte: vi.fn().mockResolvedValue([]),
     kettenstand: vi.fn(() => new Promise<never>(() => {})),
+    wartegrund: vi.fn<(cardId: number) => Promise<Wartegruende>>(() => Promise.reject(new ApiError(404, 'Not Found'))),
   }
   return { commentsApi, attachmentsApi, cardsApi, boardsApi, nightRunsApi }
 }
@@ -3005,6 +3008,33 @@ describe('CardDetailModal — Statuswechsler', () => {
       />,
     )
     expect(screen.getByLabelText('Fälligkeitsdatum')).not.toHaveTextContent('überfällig')
+  })
+
+  describe('Wartegrund (Issue #1730)', () => {
+    it('zeigt den Abschnitt im Block „Verlauf“, wenn der Server einen Wartegrund liefert', async () => {
+      const apis = makeApis()
+      apis.nightRunsApi.wartegrund.mockResolvedValue({
+        runReasons: [],
+        cardReasons: [],
+        packagesAhead: 0,
+        notes: [],
+        startable: true,
+      })
+      render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+      const abschnitt = await screen.findByTestId('wartegrund')
+      expect(apis.nightRunsApi.wartegrund).toHaveBeenCalledWith(card.id)
+      expect(within(abschnitt).getByText('startbereit – kein Hinderungsgrund festgestellt')).toBeInTheDocument()
+    })
+
+    it('fragt für jede Karte, ohne die Spalte zu prüfen, und zeigt bei 404 nichts', async () => {
+      const apis = makeApis()
+      render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+      await waitFor(() => expect(apis.nightRunsApi.wartegrund).toHaveBeenCalledWith(card.id))
+      expect(await screen.findByText('Anhänge')).toBeInTheDocument()
+      expect(screen.queryByTestId('wartegrund')).not.toBeInTheDocument()
+    })
   })
 
   describe('Nachtlauf-Anläufe (Issue #968)', () => {

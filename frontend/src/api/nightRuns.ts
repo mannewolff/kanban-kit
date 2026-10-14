@@ -547,6 +547,55 @@ export interface RunnerJetzt {
   lastRun: RunnerLetzterLauf | null
 }
 
+/**
+ * Ein Grund, den das Board aus den Läufen ableitet (Issue #1728, Plan #1724 E8):
+ * `KEINE_UMSETZUNGSNACHT`, `VERSTUMMT` (mit letzter Meldung und zuletzt begonnener Stufe) oder
+ * `BELEGT` (mit Art, Karte und Stufe des haltenden Laufs).
+ */
+export type WartegrundAusLauf =
+  | { code: 'KEINE_UMSETZUNGSNACHT'; since: null; stage: null; runMode: null; cardNumber: null }
+  | {
+      code: 'VERSTUMMT'
+      /** Die letzte Meldung des verstummten Laufs. */
+      since: string
+      /** Die zuletzt begonnene Stufe; `null`, wenn keine gemeldet ist. */
+      stage: string | null
+      runMode: NightRunServerMode
+      cardNumber: null
+    }
+  | { code: 'BELEGT'; since: null; stage: string; runMode: NightRunServerMode; cardNumber: number }
+
+/**
+ * Ein Grund des Runners aus seiner jüngsten Bewertung (Vertrag V2), wie gemeldet. `code` ist heute
+ * `NO_LABEL`, `NOT_A_WORK_PACKAGE`, `CLARIFY`, `PROTECTED_LABEL`, `PROTECTED_FILE`,
+ * `REVIEW_MISSING` oder `DEPENDENCY`; einen unbekannten zeigt die Anzeige mit `text`.
+ */
+export interface Wartegrund {
+  code: string
+  kind: string | null
+  cardNumbers: number[]
+  paths: string[]
+  text: string
+}
+
+/** Ein Vermerk über das Alter der Bewertung (E9) — kein Wartegrund. */
+export interface WartegrundVermerk {
+  code: 'NICHT_BEWERTET' | 'SEIT_BEWERTUNG_GEAENDERT'
+  /** Zeitpunkt der jüngsten Bewertung; `null`, wenn es keine gibt. */
+  assessedAt: string | null
+}
+
+/** Warum eine Karte in Ready wartet, wie `GET /api/cards/{cardId}/night-wait` es liefert. */
+export interface Wartegruende {
+  runReasons: WartegrundAusLauf[]
+  cardReasons: Wartegrund[]
+  /** Startbare Pakete vor der Karte (`position − 1`, E11); `null` ohne Position. */
+  packagesAhead: number | null
+  notes: WartegrundVermerk[]
+  /** Kein Hinderungsgrund festgestellt (E10). */
+  startable: boolean
+}
+
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
 export type NightRunErrorClassCounts = Partial<Record<NightRunErrorClass, number>>
 
@@ -574,6 +623,8 @@ export const nightRunsApi = {
     apiFetch<HeuteNachtKarte[]>(`/api/projects/${projectId}/night-runs/tonight`),
   /** Was der Runner des Projekts jetzt tut (Issue #1729, Plan #1724). */
   jetzt: (projectId: number) => apiFetch<RunnerJetzt>(`/api/projects/${projectId}/night-runs/now`),
+  /** Warum eine Karte in Ready wartet (Issue #1730, Plan #1724); 404 außerhalb von Ready. */
+  wartegrund: (cardId: number) => apiFetch<Wartegruende>(`/api/cards/${cardId}/night-wait`),
 }
 
 export type NightRunsApi = typeof nightRunsApi

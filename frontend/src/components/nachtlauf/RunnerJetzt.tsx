@@ -9,12 +9,10 @@ import {
   type RunnerLetzterLauf,
   type RunnerStufe,
 } from '../../api/nightRuns'
-import type { Woerterbuch } from '../../i18n/de'
 import { useSprache, useT } from '../../i18n/SpracheContext'
 import { tagZeit } from '../../lib/leitstand'
+import { stufenname, verstummtSatz, type RunnerJetztTexte } from '../../lib/runnerJetzt'
 import { ANZEIGE, KLEIN_RADIUS, NUT_SX, PANEL_RADIUS, PLATTE, RAND, SCHATTEN_PLATTE, TEXT_MATT, ZAHL } from '../../theme'
-
-type Texte = Woerterbuch['RUNNER_JETZT']
 
 type Ladung =
   | { art: 'laden' }
@@ -22,22 +20,9 @@ type Ladung =
   | { art: 'verboten' }
   | { art: 'fehler'; meldung: string }
 
-/** Der Name einer Stufe; einen unbekannten Code zeigt die Anzeige wörtlich (Plan #1724 E5). */
-function stufenname(t: Texte, stage: string): string {
-  return stage in t.STUFE ? t.STUFE[stage as keyof Texte['STUFE']] : stage
-}
-
 /** Der Teilschritt in Worten; ein unbekannter Code erscheint als „Teilschritt: <Code>“ (E5). */
-function schritt(t: Texte, step: string): string {
-  return step in t.SCHRITT ? t.SCHRITT[step as keyof Texte['SCHRITT']] : t.SCHRITT_UNBEKANNT(step)
-}
-
-/**
- * Der Satz für „verstummt“ — derselbe am wartenden Paket (Fachplan #1721): Zeit der letzten
- * Meldung und die zuletzt begonnene Stufe, ohne gemeldete Stufe „nicht gemeldet“.
- */
-function verstummtSatz(t: Texte, zeit: string, stage: string | null): string {
-  return t.VERSTUMMT(zeit, stage === null ? t.NICHT_GEMELDET : stufenname(t, stage))
+function schritt(t: RunnerJetztTexte, step: string): string {
+  return step in t.SCHRITT ? t.SCHRITT[step as keyof RunnerJetztTexte['SCHRITT']] : t.SCHRITT_UNBEKANNT(step)
 }
 
 /**
