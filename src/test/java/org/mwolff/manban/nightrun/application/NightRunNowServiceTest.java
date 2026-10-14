@@ -11,17 +11,32 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
+import org.mwolff.manban.nightrun.domain.NightRun;
+import org.mwolff.manban.nightrun.domain.NightRunItem;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
+import org.mwolff.manban.nightrun.domain.NightRunMode;
+import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunOutcome.Verdict;
+import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.ReadyBewertung;
+import org.mwolff.manban.nightrun.domain.RunnerLage;
+import org.mwolff.manban.nightrun.domain.RunnerLage.Gesamt;
+import org.mwolff.manban.nightrun.domain.RunnerLage.LaufZustand;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 
-/** Der Meldeweg der Bewertung der Ready-Karten (Issue #1726). */
+/**
+ * Der Meldeweg der Bewertung der Ready-Karten (Issue #1726) und die Lage des Runners (Issue #1727).
+ */
 class NightRunNowServiceTest {
 
   private static final long USER = 7L;
@@ -32,7 +47,59 @@ class NightRunNowServiceTest {
       mock(NightReadyAssessmentRepository.class);
   private final NightRunRepository runs = mock(NightRunRepository.class);
   private final PermissionChecker permissions = mock(PermissionChecker.class);
-  private final NightRunNowService service = new NightRunNowService(bewertungen, runs, permissions);
+  private static final Instant JETZT = Instant.parse("2026-10-14T02:00:00Z");
+  private static final Duration FRIST = Duration.ofMinutes(30);
+
+  private final NightRunProperties properties =
+      new NightRunProperties(null, null, null, null, FRIST);
+  private final NightRunNowService service =
+      new NightRunNowService(
+          bewertungen, runs, permissions, properties, Clock.fixed(JETZT, ZoneOffset.UTC));
+
+  private static NightRun lauf(long id, Instant startedAt, boolean complete, Instant updatedAt) {
+    return new NightRun(
+        id,
+        PROJECT,
+        startedAt,
+        NightRunMode.IMPLEMENTATION,
+        NightRunKind.NIGHT,
+        60_000,
+        0,
+        0,
+        0,
+        null,
+        startedAt,
+        NightRunOrigin.TOKEN,
+        "runner",
+        complete,
+        updatedAt,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
+
+  private static NightRunItem paket(long runId, NightRunState state) {
+    return new NightRunItem(
+        null,
+        runId,
+        PROJECT,
+        JETZT,
+        NightRunMode.IMPLEMENTATION,
+        NightRunKind.NIGHT,
+        1700,
+        "P",
+        state,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of());
+  }
 
   private static ReadyBewertung bewertung(Instant am) {
     return new ReadyBewertung(
@@ -90,5 +157,65 @@ class NightRunNowServiceTest {
         .isInstanceOf(NightReadyAssessmentOutdatedException.class);
 
     verify(bewertungen, never()).ersetze(anyLong(), ArgumentMatchers.any());
+  }
+
+  @Test
+  void jetzt_verlangtDenNachtlaufZugriff_undLiestSonstNichts() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
+
+    assertThatThrownBy(() -> service.jetzt(USER, PROJECT))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+
+    verifyNoInteractions(runs, bewertungen);
+  }
+
+  /**
+   * Nur Nachtläufe, nie interaktive Sitzungen; die Frist kommt aus den Properties, jetzt aus der
+   * Uhr.
+   */
+  @Test
+  void jetzt_liestDieNachtlaeufe_undMisstGegenDieStillefristDerProperties() {
+    // Eine Minute über der Frist der Properties: verstummt — unter der Vorgabe von 90 min liefe er.
+    NightRun verstummt =
+        lauf(1L, JETZT.minus(Duration.ofHours(1)), false, JETZT.minus(FRIST).minusSeconds(60));
+    when(runs.findByProjectAndKindOrderByStartedAtDesc(PROJECT, NightRunKind.NIGHT))
+        .thenReturn(List.of(verstummt));
+
+    RunnerLage lage = service.jetzt(USER, PROJECT);
+
+    verify(permissions).requireNightRunAccess(USER, PROJECT);
+    verify(runs, never())
+        .findByProjectAndKindOrderByStartedAtDesc(PROJECT, NightRunKind.INTERACTIVE);
+    verify(runs, never()).findItemsByRunIds(ArgumentMatchers.any());
+    assertThat(lage.gesamt()).isEqualTo(Gesamt.AKTIV);
+    assertThat(lage.laeufe().getFirst().zustand()).isEqualTo(LaufZustand.VERSTUMMT);
+  }
+
+  /** Geladen werden nur die Pakete des letzten beendeten Laufs, und das Ergebnis wertet sie aus. */
+  @Test
+  void jetzt_laedtNurDiePaketeDesLetztenBeendetenLaufs() {
+    NightRun letzter = lauf(3L, JETZT.minus(Duration.ofHours(2)), true, JETZT);
+    NightRun frueher = lauf(2L, JETZT.minus(Duration.ofHours(5)), true, JETZT);
+    when(runs.findByProjectAndKindOrderByStartedAtDesc(PROJECT, NightRunKind.NIGHT))
+        .thenReturn(List.of(letzter, frueher));
+    when(runs.findItemsByRunIds(List.of(3L))).thenReturn(List.of(paket(3L, NightRunState.RED)));
+
+    RunnerLage lage = service.jetzt(USER, PROJECT);
+
+    assertThat(lage.gesamt()).isEqualTo(Gesamt.KEIN_RUNNER);
+    assertThat(lage.letzterLauf())
+        .extracting(RunnerLage.LetzterLauf::runId, RunnerLage.LetzterLauf::ergebnis)
+        .containsExactly(3L, Verdict.FAILED);
+  }
+
+  @Test
+  void jetzt_ohneLaeufe_istNie() {
+    when(runs.findByProjectAndKindOrderByStartedAtDesc(PROJECT, NightRunKind.NIGHT))
+        .thenReturn(List.of());
+
+    assertThat(service.jetzt(USER, PROJECT).gesamt()).isEqualTo(Gesamt.NIE);
+    verify(runs, never()).findItemsByRunIds(ArgumentMatchers.any());
   }
 }

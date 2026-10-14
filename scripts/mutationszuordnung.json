@@ -48,6 +48,8 @@
   "src/test/java/org/mwolff/manban/nightrun/NightRunHeuteNachtIT.java": ["src/main/java/org/mwolff/manban/nightrun/application/NightRunService.java", "src/main/java/org/mwolff/manban/nightrun/domain/NachtFreigabe.java"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/NightRunController.java", "src/main/java/org/mwolff/manban/nightrun/web/NightRunIngestController.java"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunIngestIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/NightRunIngestController.java", "src/main/java/org/mwolff/manban/nightrun/domain/NightRunStage.java"],
+  "src/test/java/org/mwolff/manban/nightrun/NightRunNowIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/NightRunNowController.java", "src/main/java/org/mwolff/manban/nightrun/application/NightRunNowService.java"],
+  "src/test/java/org/mwolff/manban/nightrun/NightRunTeilnahmeZugriffIT.java": ["src/main/java/org/mwolff/manban/project/application/PermissionChecker.java", "src/main/java/org/mwolff/manban/nightrun/web/NightRunNowController.java"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunUsageRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunUsageRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunUsageServiceIT.java": ["src/main/java/org/mwolff/manban/nightrun/application/NightRunUsageService.java"],
   "src/test/java/org/mwolff/manban/nightrun/PlattformLeitstandMigrationIT.java": ["src/main/resources/db/migration/V36__plattform_leitstand.sql"],
