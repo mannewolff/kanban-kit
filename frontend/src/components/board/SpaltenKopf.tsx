@@ -13,6 +13,7 @@ import { useT } from '../../i18n/SpracheContext'
 import type { Woerterbuch } from '../../i18n/de'
 import { spaltenAuswahl, type SpaltenAuswahlZustand } from '../../lib/boardOps'
 import { statusColors } from '../../lib/statusColors'
+import { useTabletQuer } from '../../lib/tabletQuer'
 import {
   LED_RING,
   MELDER,
@@ -23,6 +24,7 @@ import {
   TEXT_SCHWACH,
   ZAHL,
 } from '../../theme'
+import { Belastungsskala } from './Belastungsskala'
 
 /** Zugänglicher Name des Spalten-Kästchens: Er sagt, was der nächste Klick tut. */
 const spaltenAuswahlLabel = (t: Woerterbuch, zustand: SpaltenAuswahlZustand, spalte: string) =>
@@ -109,6 +111,8 @@ interface Props {
 /**
  * Kopf einer Spalte: Status-LED, Name, Zähler mit Belastungsgrenze, Marke der ausgeblendeten
  * Karten, Sortieren und — im Struktur-Editiermodus — Bearbeiten, Löschen und das Ziehen der Spalte.
+ * Die Belastungsskala gehört seit Plan #1707 (E6) mit hierher, weil sie auf dem Tablet quer in die
+ * zweite Zeile des Kopfes wandert.
  *
  * Eigene Datei seit Plan #1042 (P12): In der Spalten-Schleife von `BoardView` trug der Callback die
  * kognitive Komplexität 31.
@@ -139,14 +143,17 @@ export function SpaltenKopf({
   const colors = statusColors(column.name)
   const spaltenZustand = spaltenAuswahl(angezeigteIds, selectedIds)
   const sortierLabel = sortByNumberLabel(t, column.name, naechsteRichtung)
-  return (
-    <Box
-      data-testid={`column-header-${column.id}`}
-      draggable={showStructureEdit}
-      {...spaltenZiehHandler(showStructureEdit, { columnId: column.id, colDrag, onZugBeginn, onAblage, onZugEnde })}
-      onDragEnd={onZugEnde}
-      sx={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, cursor: showStructureEdit ? 'grab' : undefined }}
-    >
+  // Auf dem Tablet quer ist die Spalte rund 160 px schmal; mit drei Symbolknöpfen und Skala in
+  // einer Zeile bliebe vom Namen nichts. Darum dort zwei Zeilen, am Desktop eine wie bisher (E6).
+  const zweizeilig = useTabletQuer() && showStructureEdit
+  const kopf = {
+    'data-testid': `column-header-${column.id}`,
+    draggable: showStructureEdit,
+    ...spaltenZiehHandler(showStructureEdit, { columnId: column.id, colDrag, onZugBeginn, onAblage, onZugEnde }),
+    onDragEnd: onZugEnde,
+  }
+  const kennung = (
+    <>
       {selectionMode && (
         // Ganze Spalte auf einmal: dieselbe Bildsprache wie der Haken an der Karte, mit
         // dem Strich für „einige". Der Klick bleibt im Kästchen, damit die Handler des
@@ -206,6 +213,10 @@ export function SpaltenKopf({
           {t.BOARD.AUSGEBLENDET(hiddenCount)}
         </Button>
       )}
+    </>
+  )
+  const knoepfe = (
+    <>
       {canEdit && (
         <Tooltip title={sortierLabel}>
           {/* Kein span-Wrapper um den Button: MUI legt den Tooltip-Titel als aria-label auf
@@ -235,6 +246,32 @@ export function SpaltenKopf({
           </IconButton>
         </Tooltip>
       )}
-    </Box>
+    </>
+  )
+  const skala = <Belastungsskala column={column} count={count} />
+  if (zweizeilig) {
+    // Beide Zeilen liegen im ziehbaren Kopf: Die Spalte bleibt an jeder Stelle des Kopfes greifbar.
+    return (
+      <Box {...kopf} sx={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: 0, cursor: 'grab' }}>
+        <Box data-testid={`column-header-kennung-${column.id}`} sx={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+          {kennung}
+        </Box>
+        <Box data-testid={`column-header-werkzeuge-${column.id}`} sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {skala}
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>{knoepfe}</Box>
+        </Box>
+      </Box>
+    )
+  }
+  // Am Desktop steht die Skala wie bisher neben dem Kopf, nicht in ihm: Das Fragment legt sie als
+  // Geschwister in die Kopfzeile der Spalte.
+  return (
+    <>
+      <Box {...kopf} sx={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, cursor: showStructureEdit ? 'grab' : undefined }}>
+        {kennung}
+        {knoepfe}
+      </Box>
+      {skala}
+    </>
   )
 }

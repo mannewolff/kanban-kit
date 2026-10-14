@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import pkg from '../../package.json'
 import { APP_NAME } from '../appMeta'
@@ -14,6 +14,8 @@ import { ThemeProvider } from '@mui/material/styles'
 import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { TEXT_SCHWACH, theme } from '../theme'
 import { renderMitSprache } from '../i18n/renderMitSprache'
+import { useTabletQuer } from '../lib/tabletQuer'
+import { setzeMedien } from '../test/setup'
 
 const logoutMock = vi.fn().mockResolvedValue(undefined)
 const useAuthMock = vi.fn()
@@ -1098,15 +1100,17 @@ describe('AppShell Inhaltsbereich', () => {
 })
 
 /**
- * Stellt eine Fensterbreite nach, soweit `useMediaQuery` sie sieht. jsdom kennt kein `matchMedia`
- * (und `src/test/setup.ts` stubbt es nicht); ohne Stub gilt jede Media-Query als nicht erfüllt, die
- * Bestandstests oben laufen damit im breiten Zweig.
+ * Stellt ein Desktop-Fenster der gegebenen Breite nach, soweit `useMediaQuery` es sieht. jsdom kennt
+ * kein `matchMedia`; die Attrappe aus `src/test/setup.ts` meldet jede Query außer der Tablet-Query als
+ * nicht erfüllt, die Bestandstests oben laufen damit im breiten Zweig. Ein Desktop-Fenster wird mit
+ * Maus bedient: Die Tablet-Query (`hover: none`, `pointer: coarse`) trifft hier nie zu (Plan #1707).
  */
 function mitFensterbreite(breite: number) {
   vi.stubGlobal('matchMedia', (query: string) => {
     const max = /max-width:\s*([\d.]+)px/.exec(query)
     const min = /min-width:\s*([\d.]+)px/.exec(query)
-    const matches = (!max || breite <= Number(max[1])) && (!min || breite >= Number(min[1]))
+    const mitFinger = query.includes('pointer: coarse')
+    const matches = !mitFinger && (!max || breite <= Number(max[1])) && (!min || breite >= Number(min[1]))
     return {
       matches,
       media: query,
@@ -1357,5 +1361,89 @@ describe('AppShell auf Englisch', () => {
     aufEnglisch()
     fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }))
     expect(await screen.findByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument()
+  })
+})
+
+describe('AppShell auf dem Tablet im Querformat (Plan #1707, E1/E9)', () => {
+  beforeEach(() => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
+    vi.stubGlobal('localStorage', fakeStorage())
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  /** Liest auf der Seite im Rahmen die Betriebsart, wie es jede Kind-Komponente tut. */
+  function ModusProbe() {
+    return <span data-testid="modus">{useTabletQuer() ? 'tablet' : 'desktop'}</span>
+  }
+
+  function renderShellMitSeite() {
+    return render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/" element={<ModusProbe />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+  }
+
+  const inhaltLinks = () => document.documentElement.style.getPropertyValue('--app-content-left')
+
+  it('startet mit eingeklappter Schiene, auch wenn ausgeklappt gemerkt ist', () => {
+    localStorage.setItem('sidebar-collapsed', 'false')
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    expect(screen.getByLabelText('Menü ausklappen')).toBeInTheDocument()
+    expect(inhaltLinks()).toBe('64px')
+  })
+
+  it('klappt für die Sitzung auf und wieder ein, ohne den gemerkten Wert zu schreiben', () => {
+    localStorage.setItem('sidebar-collapsed', 'true')
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    fireEvent.click(screen.getByLabelText('Menü ausklappen'))
+    expect(inhaltLinks()).toBe('224px')
+    expect(localStorage.getItem('sidebar-collapsed')).toBe('true')
+
+    fireEvent.click(screen.getByLabelText('Menü einklappen'))
+    expect(inhaltLinks()).toBe('64px')
+    expect(localStorage.getItem('sidebar-collapsed')).toBe('true')
+  })
+
+  it('lässt am Desktop den gemerkten Wert wirken wie bisher', () => {
+    localStorage.setItem('sidebar-collapsed', 'false')
+    renderShell()
+
+    expect(screen.getByLabelText('Menü einklappen')).toBeInTheDocument()
+    expect(inhaltLinks()).toBe('224px')
+    fireEvent.click(screen.getByLabelText('Menü einklappen'))
+    expect(localStorage.getItem('sidebar-collapsed')).toBe('true')
+  })
+
+  it('setzt den Bühnenrand auf 12 px', () => {
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    expect(getComputedStyle(screen.getByRole('main')).paddingLeft).toBe('12px')
+    expect(getComputedStyle(screen.getByRole('main')).paddingRight).toBe('12px')
+  })
+
+  it('reicht die Betriebsart an die Seiten im Rahmen weiter', () => {
+    setzeMedien({ tabletQuer: true })
+    renderShellMitSeite()
+
+    expect(screen.getByTestId('modus')).toHaveTextContent('tablet')
+  })
+
+  it('meldet den Seiten am Desktop den Desktop', () => {
+    renderShellMitSeite()
+
+    expect(screen.getByTestId('modus')).toHaveTextContent('desktop')
   })
 })

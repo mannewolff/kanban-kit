@@ -15,6 +15,8 @@ import { SnackbarProvider } from './SnackbarProvider'
 import { statusColors } from '../lib/statusColors'
 import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { PANEL_RADIUS } from '../theme'
+import { TabletQuerProvider } from '../lib/tabletQuer'
+import { setzeMedien } from '../test/setup'
 
 vi.mock('../api/columns', () => ({
   columnsApi: {
@@ -3216,6 +3218,81 @@ describe('BoardView', () => {
       expect(screen.getByRole('button', { name: 'Anlegen' })).toBeInTheDocument()
       expect(onEpicsChanged).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('BoardView auf dem Tablet im Querformat (Plan #1707, E6)', () => {
+  const namen = ['Backlog', 'Ready', 'In Arbeit', 'In Prüfung', 'Done', 'Archiv']
+  const boardMit = (anzahl: number): Board => ({
+    ...board,
+    columns: namen.slice(0, anzahl).map((name, i) => ({ id: (i + 1) * 10, name, position: i, wipLimit: null })),
+  })
+  const renderBoard = (anzahl: number) =>
+    render(
+      <TabletQuerProvider>
+        <BoardView board={boardMit(anzahl)} initialCards={[card]} canEdit api={mkApi()} />
+      </TabletQuerProvider>,
+    )
+  /** Abstand zwischen zwei Spalten: `Stack` setzt ihn als linken Rand ab der zweiten Spalte. */
+  const abstand = () => getComputedStyle(screen.getByTestId('column-20')).marginLeft
+  /** Ob der Rollhinweis ohne Breakpoint ausgeblendet ist. */
+  const hinweisRegel = () => cssRegel(screen.getByText('Weitere Spalten: waagerecht rollen'))
+
+  beforeEach(() => {
+    editMode.value = true
+  })
+
+  it('Szenario: Board auf dem kleinen Tablet', () => {
+    setzeMedien({ tabletQuer: true })
+    renderBoard(5)
+
+    for (const id of [10, 20, 30, 40, 50]) {
+      expect(cssRegel(screen.getByTestId(`column-${id}`))).toContain('min-width: 160px')
+    }
+    expect(abstand()).toBe('8px')
+    expect(getComputedStyle(screen.getByTestId('board-surface')).overflowX).toBe('auto')
+  })
+
+  it('lässt am Desktop Spaltenbreite und Abstand wie bisher (Gegenprobe)', () => {
+    renderBoard(5)
+
+    for (const id of [10, 20, 30, 40, 50]) {
+      expect(cssRegel(screen.getByTestId(`column-${id}`))).toContain('min-width: 230px')
+    }
+    expect(abstand()).toBe('16px')
+  })
+
+  it('blendet den Rollhinweis bei fünf Spalten aus, weil alle nebeneinander stehen', () => {
+    setzeMedien({ tabletQuer: true })
+    renderBoard(5)
+
+    expect(hinweisRegel()).toContain('display: none')
+  })
+
+  it('zeigt den Rollhinweis ab sechs Spalten, denn dann rollt die Fläche', () => {
+    setzeMedien({ tabletQuer: true })
+    renderBoard(6)
+
+    expect(hinweisRegel()).toContain('display: block')
+  })
+
+  it('macht „+ Spalte“ zum schmalen Symbolknopf mit Beschriftung, der den Anlage-Dialog öffnet', () => {
+    setzeMedien({ tabletQuer: true })
+    renderBoard(5)
+
+    const knopf = screen.getByRole('button', { name: 'Neue Spalte' })
+    expect(knopf).toHaveClass('MuiIconButton-root')
+    expect(knopf).not.toHaveTextContent('Spalte')
+    fireEvent.click(knopf)
+    expect(screen.getByRole('dialog', { name: 'Neue Spalte' })).toBeInTheDocument()
+  })
+
+  it('zeigt den Symbolknopf nur im Bearbeitungsmodus', () => {
+    editMode.value = false
+    setzeMedien({ tabletQuer: true })
+    renderBoard(5)
+
+    expect(screen.queryByRole('button', { name: 'Neue Spalte' })).not.toBeInTheDocument()
   })
 })
 

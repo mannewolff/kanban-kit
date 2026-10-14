@@ -32,6 +32,7 @@ import { lastBoardOfProject, useBoardHistory, type BoardHistoryEntry } from '../
 import { useEditMode } from '../lib/EditModeContext'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
+import { TabletQuerProvider, useTabletQuer } from '../lib/tabletQuer'
 import {
   ANZEIGE,
   CARD_RADIUS,
@@ -311,13 +312,30 @@ function Schiene({
   )
 }
 
-/** Rahmen für angemeldete Bereiche: Schiene links, Kopf und Bühne rechts (Entwurf Z. 196–389). */
+/**
+ * Rahmen für angemeldete Bereiche: Schiene links, Kopf und Bühne rechts (Entwurf Z. 196–389).
+ * Fragt die Betriebsart „Tablet im Querformat“ genau einmal ab und stellt sie allen Seiten im Rahmen
+ * bereit (Plan #1707, E1).
+ */
 export function AppShell() {
+  return (
+    <TabletQuerProvider>
+      <Rahmen />
+    </TabletQuerProvider>
+  )
+}
+
+function Rahmen() {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
   const t = useT()
+  const tabletQuer = useTabletQuer()
 
-  const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
+  const [gemerktEingeklappt, setGemerktEingeklappt] = useState<boolean>(readCollapsed)
+  // Auf dem Tablet quer startet die Schiene eingeklappt, gleich was am Desktop gemerkt ist; Aufklappen
+  // gilt für die Sitzung und schreibt den gemerkten Wert nicht (Plan #1707, E9).
+  const [tabletAusgeklappt, setTabletAusgeklappt] = useState(false)
+  const collapsed = tabletQuer ? !tabletAusgeklappt : gemerktEingeklappt
   // Mindestbreite 768 px (Plan #932 E5): Unterhalb des Breakpoints `md` (900 px) wird die Navigation
   // zur temporären Schublade hinter einer Schaltfläche, damit 768 vollständig im schmalen Zweig liegt.
   // `noSsr`, damit der erste Render schon den richtigen Zweig trägt statt kurz den breiten.
@@ -542,7 +560,11 @@ export function AppShell() {
   }
 
   const toggleCollapsed = () => {
-    setCollapsed((prev) => {
+    if (tabletQuer) {
+      setTabletAusgeklappt((prev) => !prev)
+      return
+    }
+    setGemerktEingeklappt((prev) => {
       const next = !prev
       writeCollapsed(next)
       return next
@@ -802,7 +824,8 @@ export function AppShell() {
           id="inhalt"
           ref={inhaltRef}
           tabIndex={-1}
-          sx={{ flexGrow: 1, pt: '22px', px: { xs: '16px', md: '26px' }, pb: '44px', minWidth: 0, '&:focus': { outline: 'none' } }}
+          // Auf dem Tablet quer ein schmaler Bühnenrand, damit fünf Spalten auf 1024 px passen (E6).
+          sx={{ flexGrow: 1, pt: '22px', px: tabletQuer ? '12px' : { xs: '16px', md: '26px' }, pb: '44px', minWidth: 0, '&:focus': { outline: 'none' } }}
         >
           <Outlet />
         </Box>

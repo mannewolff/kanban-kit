@@ -8,6 +8,7 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogTitle from '@mui/material/DialogTitle'
+import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
@@ -25,6 +26,7 @@ import { useT } from '../i18n/SpracheContext'
 import { activeCardsInColumn, applyMove, spaltenAuswahlUmschalten } from '../lib/boardOps'
 import { effektivDone, neighbourColumns } from '../lib/columnMeta'
 import { useEditMode } from '../lib/EditModeContext'
+import { useTabletQuer } from '../lib/tabletQuer'
 import type { Label } from '../api/labels'
 import { isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
@@ -45,7 +47,7 @@ import {
   ZAHL,
 } from '../theme'
 import { BoardSpalte } from './board/BoardSpalte'
-import { type Dichte } from './boardSurfaceSx'
+import { spaltenMass, SPALTEN_OHNE_ROLLEN, type Dichte } from './boardSurfaceSx'
 import { BulkActionBar, type LabelOption, type LabelZustand } from './BulkActionBar'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
 import { useSnackbar } from './SnackbarProvider'
@@ -221,6 +223,7 @@ export function BoardView({
   // Struktur-Affordances (Spalten anlegen/bearbeiten/löschen/umsortieren, Karte bearbeiten) sind
   // nur im Editiermodus sichtbar. Karten-Alltag (anlegen, verschieben, archivieren) bleibt an canEdit.
   const showStructureEdit = canEdit && editMode
+  const tabletQuer = useTabletQuer()
   const [cards, setCards] = useState<Card[]>(initialCards)
   const [modalColumn, setModalColumn] = useState<{ id: number; name: string } | null>(null)
   const [duplicateValues, setDuplicateValues] = useState<NewCardInitialValues | null>(null)
@@ -271,6 +274,8 @@ export function BoardView({
 
   const sortColumns = (cols: BoardColumn[]) => [...cols].sort((a, b) => a.position - b.position)
   const [columns, setColumns] = useState<BoardColumn[]>(() => sortColumns(board.columns))
+  // Fünf Spalten passen nebeneinander; der Rollhinweis gilt erst ab der sechsten.
+  const hinweisAufDemTablet = columns.length > SPALTEN_OHNE_ROLLEN ? 'block' : 'none'
   useEffect(() => setColumns(sortColumns(board.columns)), [board.columns])
 
   // Die Taste „+“ tut dasselbe wie der Button „Neu anlegen“: anlegen in der ersten Spalte. Ohne
@@ -856,13 +861,19 @@ export function BoardView({
           seit #713 der Grund der ganzen Anwendung (theme.ts, APP_BACKGROUND). */}
       {/* Unterhalb von 900 px passen die Spalten nicht nebeneinander (Plan #932 E5); sie rollen
           waagerecht, und der Hinweis sagt es, statt dass Spalten unbemerkt rechts verschwinden. */}
-      <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'block', md: 'none' }, px: 1 }}>
+      {/* Auf dem Tablet quer stehen bis fünf Spalten nebeneinander (Plan #1707, E6); erst ab der
+          sechsten rollt die Fläche, und erst dann steht der Hinweis da. */}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: tabletQuer ? hinweisAufDemTablet : { xs: 'block', md: 'none' }, px: 1 }}
+      >
         {t.BOARD.WAAGERECHT_ROLLEN}
       </Typography>
       <Stack
         data-testid="board-surface"
         direction="row"
-        spacing={2}
+        spacing={spaltenMass(tabletQuer).abstand}
         sx={{
           overflowX: 'auto',
           pb: 2,
@@ -932,9 +943,16 @@ export function BoardView({
         })}
         {showStructureEdit && (
           <Box sx={{ flexShrink: 0, alignSelf: 'flex-start', pt: 0.5 }}>
-            <Button size="small" startIcon={<AddIcon />} onClick={() => openColumnDialog('new')}>
-              {t.BOARD.SPALTE}
-            </Button>
+            {tabletQuer ? (
+              // Schmal, damit die fünfte Spalte daneben noch Platz hat; der Name sagt, was er tut.
+              <IconButton size="small" aria-label={t.BOARD.NEUE_SPALTE} onClick={() => openColumnDialog('new')}>
+                <AddIcon fontSize="small" />
+              </IconButton>
+            ) : (
+              <Button size="small" startIcon={<AddIcon />} onClick={() => openColumnDialog('new')}>
+                {t.BOARD.SPALTE}
+              </Button>
+            )}
           </Box>
         )}
       </Stack>

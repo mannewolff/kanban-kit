@@ -99,3 +99,23 @@ export function ablageflaecheSx(aktiv: boolean): Record<string, unknown> {
     borderRadius: `${CARD_RADIUS}px`,
   }
 }
+
+/** Mindestbreite einer Spalte am Desktop. */
+export const SPALTE_MIN_BREITE = 230
+
+/**
+ * Mindestbreite einer Spalte auf dem Tablet im Querformat (Plan #1707, E6): Bei 1024 px bleiben nach
+ * eingeklappter Navigation (64 px), Bühnenrand und Abständen rund 177 px je Spalte — fünf Spalten
+ * stehen so nebeneinander, ab der sechsten rollt die Fläche wie am Desktop.
+ */
+export const SPALTE_MIN_BREITE_TABLET = 160
+
+/** So viele Spalten stehen auf dem Tablet quer ohne seitliches Rollen nebeneinander (E6). */
+export const SPALTEN_OHNE_ROLLEN = 5
+
+/** Mindestbreite und Abstand der Spalten je Betriebsart; am Desktop die bisherigen Werte. */
+export function spaltenMass(tabletQuer: boolean): { minBreite: number; abstand: string } {
+  return tabletQuer
+    ? { minBreite: SPALTE_MIN_BREITE_TABLET, abstand: '8px' }
+    : { minBreite: SPALTE_MIN_BREITE, abstand: '16px' }
+}

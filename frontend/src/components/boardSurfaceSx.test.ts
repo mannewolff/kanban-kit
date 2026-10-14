@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { AUSWAHL, CARD_LIFT, CARD_RADIUS, CARD_SHADOW, CARD_SHADOW_HOVER, KUPFER_SCHIMMER, RAND, SCHATTEN_NUTE } from '../theme'
-import { ablageflaecheSx, karteDichteSx, karteSx, PLATZHALTER_SX } from './boardSurfaceSx'
+import {
+  ablageflaecheSx,
+  karteDichteSx,
+  karteSx,
+  PLATZHALTER_SX,
+  SPALTE_MIN_BREITE,
+  SPALTE_MIN_BREITE_TABLET,
+  spaltenMass,
+} from './boardSurfaceSx'
 
 describe('karteSx (#980)', () => {
   it('legt die Karte als Platte mit Haarlinie, Verlauf und Schatten an', () => {
@@ -74,5 +82,17 @@ describe('ablageflaecheSx', () => {
 
   it('trägt außerhalb eines Ziehvorgangs nichts', () => {
     expect(ablageflaecheSx(false)).toEqual({})
+  })
+})
+
+describe('spaltenMass (Plan #1707, E6)', () => {
+  it('lässt die Spalte am Desktop bei 230 px und 16 px Abstand wie bisher', () => {
+    expect(SPALTE_MIN_BREITE).toBe(230)
+    expect(spaltenMass(false)).toEqual({ minBreite: 230, abstand: '16px' })
+  })
+
+  it('macht die Spalte auf dem Tablet quer schmaler und rückt sie enger, damit fünf auf 1024 px passen', () => {
+    expect(SPALTE_MIN_BREITE_TABLET).toBe(160)
+    expect(spaltenMass(true)).toEqual({ minBreite: 160, abstand: '8px' })
   })
 })

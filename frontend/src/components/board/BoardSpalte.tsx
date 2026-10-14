@@ -10,8 +10,8 @@ import type { Member } from '../../api/members'
 import { epicOfCard } from '../../lib/cardEpic'
 import { effektivDone } from '../../lib/columnMeta'
 import { MELDER, NUT, PANEL_RADIUS, RAND, SCHATTEN_NUTE } from '../../theme'
-import { ablageflaecheSx, type Dichte } from '../boardSurfaceSx'
-import { Belastungsskala } from './Belastungsskala'
+import { useTabletQuer } from '../../lib/tabletQuer'
+import { ablageflaecheSx, spaltenMass, type Dichte } from '../boardSurfaceSx'
 import { BoardKarte } from './BoardKarte'
 import { SpaltenKopf } from './SpaltenKopf'
 
@@ -124,6 +124,7 @@ export function BoardSpalte({
   // (#1028, S4624) — verschachtelt war der Ausdruck kaum noch zu lesen.
   const randFarbe = grenzeErreicht ? `color-mix(in srgb, ${MELDER.bernst} 42%, ${RAND})` : RAND
   const angezeigteIds = angezeigteKarten.map((c) => c.id)
+  const tabletQuer = useTabletQuer()
   return (
     <Paper
       data-testid={`column-${column.id}`}
@@ -138,7 +139,7 @@ export function BoardSpalte({
       }}
       sx={{
         flex: '1 1 0',
-        minWidth: 230,
+        minWidth: spaltenMass(tabletQuer).minBreite,
         display: 'flex',
         flexDirection: 'column',
         gap: '9px',
@@ -172,7 +173,6 @@ export function BoardSpalte({
           onAblage={onAblage}
           onZugEnde={onZugEnde}
         />
-        <Belastungsskala column={column} count={count} />
       </Box>
 
       <Stack

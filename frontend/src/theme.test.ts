@@ -588,7 +588,8 @@ const grundregeln = (): Record<string, Record<string, unknown>> =>
 
 describe('theme Bewegung reduzieren (AK 16, #953)', () => {
   // Geprüft wird das Theme-Objekt, nicht das Verhalten: jsdom wertet Media-Queries nicht aus, und
-  // `src/test/setup.ts` stubbt kein `matchMedia` — ein Verhaltenstest wäre nur scheinbar grün.
+  // die `matchMedia`-Attrappe in `src/test/setup.ts` kennt nur die Tablet-Query — ein Verhaltenstest
+  // wäre nur scheinbar grün.
   const regel = () =>
     grundregeln()['@media (prefers-reduced-motion: reduce)']?.['*, *::before, *::after'] as
       | Record<string, string>
