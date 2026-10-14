@@ -1108,6 +1108,49 @@ export const de = {
     STUFENSTAND: (nummer: number) => `Stufenstand von #${nummer}`,
   },
 
+  /** Der Bereich „Runner jetzt“ auf der Runner-Seite, `RunnerJetzt` (Issue #1729, Plan #1724). */
+  RUNNER_JETZT: {
+    TITEL: 'Runner jetzt',
+    LADEFEHLER: (meldung: string) => `Der Stand des Runners ließ sich nicht laden: ${meldung}`,
+    ART: {
+      CHAIN: 'Kette',
+      IMPLEMENTATION: 'Umsetzungsnacht',
+      REVIEW: 'Prüflauf',
+      INTERACTIVE: 'Interaktive Sitzung',
+    },
+    LAEUFT: 'läuft',
+    SEIT: (zeit: string) => `seit ${zeit}`,
+    LETZTE_MELDUNG: (zeit: string) => `letzte Meldung ${zeit}`,
+    /** Der Satz für „verstummt“ — auch der Kartendialog nutzt ihn (Fachplan #1721, E12). */
+    VERSTUMMT: (zeit: string, stufe: string) =>
+      `Runner verstummt seit ${zeit} (letzte Stufe: ${stufe}), vermutlich abgebrochen; die Umsetzung gilt womöglich noch als belegt.`,
+    NICHT_GEMELDET: 'nicht gemeldet',
+    STUFE: {
+      PLAN: 'Plan',
+      REVIEW: 'Prüfung',
+      PAKETE: 'Arbeitspakete',
+      ABDECKUNG: 'Abdeckung',
+      UMSETZUNG: 'Umsetzung',
+      VORBEREITUNG: 'Vorbereitung',
+    },
+    STUFEN: (lauf: string) => `Stufen: ${lauf}`,
+    KARTE_STUFE: (karte: number, stufe: string) => `#${karte} ${stufe}`,
+    BEGINN: (zeit: string) => `Beginn ${zeit}`,
+    FRIST: (zeit: string) => `Frist ${zeit}`,
+    KEINE_FRIST: 'keine Frist vorgesehen',
+    SCHRITT: {
+      SESSION: 'Sitzung arbeitet',
+      WAITING_FOR_IMPLEMENTATION: 'wartet auf freie Umsetzung',
+      RELEASE_CHECKS: 'Prüfungen der Veröffentlichung laufen',
+    },
+    SCHRITT_UNBEKANNT: (code: string) => `Teilschritt: ${code}`,
+    HAELT: 'hält die Umsetzung',
+    KEIN_RUNNER: 'kein Runner aktiv',
+    NIE: 'kein Runner aktiv – noch kein Lauf gestartet',
+    LETZTER_LAUF: (art: string, ende: string, ergebnis: string) => `Letzter Lauf: ${art}, beendet ${ende} – ${ergebnis}`,
+    OHNE_PAKET: (grund: string) => `ohne Paket beendet – ${grund}`,
+  },
+
   /** Anläufe einer Karte im Karten-Detail, `KartenAnlaeufe` (Issue #1658). */
   KARTEN_ANLAEUFE: {
     LAUF_ART: {

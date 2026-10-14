@@ -56,6 +56,7 @@ import {
 import { NachtlaufBefund } from '../components/nachtlauf/NachtlaufBefund'
 import { NachtlaufFortschritt } from '../components/nachtlauf/NachtlaufFortschritt'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
+import { RunnerJetzt } from '../components/nachtlauf/RunnerJetzt'
 import {
   NachtlaufLaufInstrumente,
   type Kostenaufteilung,
@@ -3439,11 +3440,13 @@ export function NightRunPage() {
           {/* Die Laufblöcke haben mit #988 die Nachtlauf-Ausnahme verlassen und folgen Kupferwarte
               (`CLAUDE-design.md`) — deshalb stehen sie im `KupferwarteBereich`, der Theme und
               Variablen für seinen Teilbaum zurückstellt. Mit ihnen stehen dort die Übersicht
-              „Heute Nacht“ oberhalb der Laufplatten (Issue #1455, Plan #1447) und die Hinweise, dass
+              „Heute Nacht“ oberhalb der Laufplatten (Issue #1455, Plan #1447), darüber „Runner jetzt“
+              (Issue #1729, Plan #1724 E14), und die Hinweise, dass
               es keine Läufe gibt — so steht der Bereich nie leer, auch wenn die Übersicht ohne
               Leserecht ausbleibt. Was sonst auf dieser Seite steht, bleibt in der Ausnahme. */}
           <KupferwarteBereich>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <RunnerJetzt projectId={id} taktMs={AUFFRISCH_MS} />
               <HeuteNachtUebersicht projectId={id} onKarteOeffnen={karteOeffnen} />
 
               {laeufe.length === 0 && <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEINE_AUSWERTUNG}</Typography>}

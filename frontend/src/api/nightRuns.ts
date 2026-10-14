@@ -489,6 +489,64 @@ export interface HeuteNachtKarte {
   pruefer: number | null
 }
 
+/**
+ * Der Zustand des Runners als Ganzes, wie ihn `GET /api/projects/{projectId}/night-runs/now`
+ * liefert (Issue #1727, #1729): `AKTIV`, solange ein Lauf läuft oder verstummt ist, sonst
+ * `KEIN_RUNNER` — oder `NIE`, wenn im Projekt noch kein Lauf gestartet wurde.
+ */
+export type RunnerGesamt = 'AKTIV' | 'KEIN_RUNNER' | 'NIE'
+
+/** `LAEUFT`: innerhalb der Stillefrist gemeldet; `VERSTUMMT`: länger nicht. */
+export type RunnerLaufZustand = 'LAEUFT' | 'VERSTUMMT'
+
+/**
+ * Eine Stufe, die ein Lauf gerade fährt (Plan #1724, Vertrag V1). `stage` und `step` sind Codes
+ * des Runners; einen unbekannten zeigt die Anzeige wörtlich (E5).
+ */
+export interface RunnerStufe {
+  cardNumber: number
+  /** Heute `PLAN`, `REVIEW`, `PAKETE`, `ABDECKUNG`, `UMSETZUNG` oder `VORBEREITUNG`. */
+  stage: string
+  startedAt: string
+  /** Ende der Frist; `null` heißt „keine Frist vorgesehen“ (E6). */
+  deadline: string | null
+  /** Heute `SESSION`, `WAITING_FOR_IMPLEMENTATION` oder `RELEASE_CHECKS`. */
+  step: string
+  holdsImplementation: boolean
+}
+
+/** Ein Lauf, der läuft oder verstummt ist. */
+export interface RunnerLauf {
+  runId: number
+  mode: NightRunServerMode
+  startedAt: string
+  /** Letztes Lebenszeichen: die letzte Meldung, ohne sie der Beginn. */
+  lastReportAt: string
+  state: RunnerLaufZustand
+  stages: RunnerStufe[]
+  /** Nur bei `VERSTUMMT`: die zuletzt begonnene Stufe; sonst und ohne gemeldete Stufe `null`. */
+  lastStage: RunnerStufe | null
+}
+
+/** Der zuletzt beendete Lauf. */
+export interface RunnerLetzterLauf {
+  runId: number
+  mode: NightRunServerMode
+  startedAt: string
+  /** Von Hand beendet: die Beendigung; sonst Beginn plus Dauer. */
+  endedAt: string
+  outcome: Verdict
+  noWorkReason: string | null
+}
+
+/** Was der Runner des Projekts jetzt tut (Issue #1727, #1729). */
+export interface RunnerJetzt {
+  state: RunnerGesamt
+  runs: RunnerLauf[]
+  /** Steht auch neben laufenden Läufen (Plan #1724 E14); `null`, wenn keiner beendet ist. */
+  lastRun: RunnerLetzterLauf | null
+}
+
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
 export type NightRunErrorClassCounts = Partial<Record<NightRunErrorClass, number>>
 
@@ -514,6 +572,8 @@ export const nightRunsApi = {
   /** Die freigegebenen, noch nicht übernommenen Karten des Projekts (Issue #1455, Plan #1447). */
   heuteNacht: (projectId: number) =>
     apiFetch<HeuteNachtKarte[]>(`/api/projects/${projectId}/night-runs/tonight`),
+  /** Was der Runner des Projekts jetzt tut (Issue #1729, Plan #1724). */
+  jetzt: (projectId: number) => apiFetch<RunnerJetzt>(`/api/projects/${projectId}/night-runs/now`),
 }
 
 export type NightRunsApi = typeof nightRunsApi

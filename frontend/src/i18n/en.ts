@@ -1050,6 +1050,47 @@ export const en: Woerterbuch = {
     STUFENSTAND: (nummer) => `Stage status of #${nummer}`,
   },
 
+  RUNNER_JETZT: {
+    TITEL: 'Runner now',
+    LADEFEHLER: (meldung) => `The runner status could not be loaded: ${meldung}`,
+    ART: {
+      CHAIN: 'Chain',
+      IMPLEMENTATION: 'Implementation night',
+      REVIEW: 'Review run',
+      INTERACTIVE: 'Interactive session',
+    },
+    LAEUFT: 'running',
+    SEIT: (zeit) => `since ${zeit}`,
+    LETZTE_MELDUNG: (zeit) => `last report ${zeit}`,
+    VERSTUMMT: (zeit, stufe) =>
+      `Runner silent since ${zeit} (last stage: ${stufe}), probably aborted; the implementation may still count as occupied.`,
+    NICHT_GEMELDET: 'not reported',
+    STUFE: {
+      PLAN: 'Plan',
+      REVIEW: 'Review',
+      PAKETE: 'Work packages',
+      ABDECKUNG: 'Coverage',
+      UMSETZUNG: 'Implementation',
+      VORBEREITUNG: 'Preparation',
+    },
+    STUFEN: (lauf) => `Stages: ${lauf}`,
+    KARTE_STUFE: (karte, stufe) => `#${karte} ${stufe}`,
+    BEGINN: (zeit) => `Started ${zeit}`,
+    FRIST: (zeit) => `Deadline ${zeit}`,
+    KEINE_FRIST: 'no deadline set',
+    SCHRITT: {
+      SESSION: 'session at work',
+      WAITING_FOR_IMPLEMENTATION: 'waiting for the implementation to be free',
+      RELEASE_CHECKS: 'release checks running',
+    },
+    SCHRITT_UNBEKANNT: (code) => `Step: ${code}`,
+    HAELT: 'holds the implementation',
+    KEIN_RUNNER: 'no runner active',
+    NIE: 'no runner active – no run started yet',
+    LETZTER_LAUF: (art, ende, ergebnis) => `Last run: ${art}, ended ${ende} – ${ergebnis}`,
+    OHNE_PAKET: (grund) => `ended without a package – ${grund}`,
+  },
+
   KARTEN_ANLAEUFE: {
     LAUF_ART: {
       IMPLEMENTATION: 'Implementation',
