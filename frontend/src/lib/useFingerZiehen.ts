@@ -87,6 +87,7 @@ export function useFingerZiehen({ aktiv, onAblage }: FingerZiehenOptionen): Fing
   // Endet der Tablet-Modus oder hängt die Komponente aus, endet auch ein laufender Zug.
   useEffect(() => () => abbrechenRef.current?.(), [aktiv])
 
+  // Stryker disable ArrayDeclaration: gleichwertig — eine feste Abhängigkeit hält die Funktion ebenso stabil wie keine; ein next-line-Kommentar im Funktionskörper erreicht die Liste nicht
   const starteZug = useCallback((id: string, element: HTMLElement, pointerId: number, startX: number, startY: number) => {
     let stand = ziehSchritt(STAND_BEREIT, { typ: 'runter', x: startX, y: startY, zeit: Date.now() })
     let x = startX
@@ -183,8 +184,8 @@ export function useFingerZiehen({ aktiv, onAblage }: FingerZiehenOptionen): Fing
     abbrechenRef.current = () => schritt({ typ: 'abbruch' })
     setZustand('wartet')
     setGezogenId(id)
-    // Stryker disable next-line ArrayDeclaration: gleichwertig — eine feste Abhängigkeit hält die Funktion ebenso stabil wie keine
   }, [])
+  // Stryker restore ArrayDeclaration
 
   const griff = useCallback(
     (id: string) =>
