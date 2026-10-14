@@ -508,7 +508,7 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
       }),
     )
     renderPage()
-    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit (Minuten)' })
     expect(platte).toHaveTextContent('Mittelwert je Woche · 3 Wochen')
     expect(within(platte).getByRole('img')).toHaveAccessibleName(
       'Implementierungszeit der letzten 3 Wochen: 30 Minuten, keine Messung, 2,0 Stunden, zuletzt 2,0 Stunden',
@@ -521,8 +521,8 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     expect(within(platte).getByTestId('luecke-1')).toHaveAttribute('title', 'KW 24: keine gemessene Karte')
     // Der Wert steht sichtbar über jedem Balken, die Lücke trägt keinen (Issue #1675).
     expect(within(platte).getAllByTestId(/^wert-/).map((w) => [w.dataset.testid, w.textContent])).toEqual([
-      ['wert-0', '30 Minuten'],
-      ['wert-2', '2,0 Stunden'],
+      ['wert-0', '30'],
+      ['wert-2', '120'],
     ])
     expect(within(platte).getByTestId('wert-0')).toHaveAttribute('aria-hidden', 'true')
     expect(platte).toHaveTextContent('232425')
@@ -542,7 +542,7 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
       }),
     )
     renderPage()
-    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit (Minuten)' })
     expect(platte).toHaveTextContent('Noch keine gemessene Implementierungszeit in den letzten Wochen.')
     expect(within(platte).queryByRole('img')).not.toBeInTheDocument()
   })
@@ -552,7 +552,7 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
     renderPage()
     expect(await screen.findByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Implementierungszeit' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Implementierungszeit (Minuten)' })).toBeInTheDocument()
   })
 
   it('zeigt den Durchsatz als Balkenwerk mit Kalenderwochen, eine leere Woche ohne Balken', async () => {
@@ -627,7 +627,7 @@ describe('LeitstandPage — Diagrammbalken auf dem Tablet im Querformat (Plan #1
   it('öffnet an Balken und Lücke die Erklärung per Antippen', async () => {
     setzeMedien({ tabletQuer: true })
     renderPage()
-    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit (Minuten)' })
     const balken = within(platte).getByTestId('balken-100')
     const luecke = within(platte).getByTestId('luecke-1')
     expect(balken).not.toHaveAttribute('title')
@@ -644,7 +644,7 @@ describe('LeitstandPage — Diagrammbalken auf dem Tablet im Querformat (Plan #1
 
   it('trägt am Desktop das native title wie heute und öffnet per Klick nichts', async () => {
     renderPage()
-    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit (Minuten)' })
 
     fireEvent.click(within(platte).getByTestId('balken-100'))
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
@@ -1089,7 +1089,7 @@ describe('LeitstandPage auf Englisch', () => {
       }),
     )
     renderEnglisch()
-    const platte = await screen.findByRole('region', { name: 'Implementation time' })
+    const platte = await screen.findByRole('region', { name: 'Implementation time (minutes)' })
     expect(platte).toHaveTextContent('Average per week · 3 weeks')
     expect(within(platte).getByRole('img')).toHaveAccessibleName(
       'Implementation time of the last 3 weeks: 30 minutes, no measurement, 2.0 hours, latest 2.0 hours',
@@ -1099,6 +1099,7 @@ describe('LeitstandPage auf Englisch', () => {
       '2.0 hours · 1 card',
     ])
     expect(within(platte).getByTestId('luecke-1')).toHaveAttribute('title', 'CW 24: no measured card')
+    expect(within(platte).getAllByTestId(/^wert-/).map((w) => w.textContent)).toEqual(['30', '120'])
     const durchsatz = screen.getByRole('region', { name: 'Throughput' })
     expect(durchsatz).toHaveTextContent('completed cards per week · 2 weeks')
     expect(within(durchsatz).getByRole('img')).toHaveAccessibleName('Throughput of the last 2 weeks: 10, 12 cards, latest 12')
@@ -1124,7 +1125,7 @@ describe('LeitstandPage auf Englisch', () => {
     renderEnglisch()
     expect(await screen.findByRole('article', { name: 'Lead time' })).toHaveTextContent('—no data')
     expect(screen.getByRole('region', { name: 'Throughput' })).toHaveTextContent('No completed card in the last weeks yet.')
-    expect(screen.getByRole('region', { name: 'Implementation time' })).toHaveTextContent(
+    expect(screen.getByRole('region', { name: 'Implementation time (minutes)' })).toHaveTextContent(
       'No measured implementation time in the last weeks yet.',
     )
     const gruende = await screen.findByRole('region', { name: 'Abort reasons' })

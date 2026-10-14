@@ -952,6 +952,7 @@ export const de = {
       `Durchsatz der letzten ${wochen} Wochen: ${werte} Karten, zuletzt ${zuletzt}`,
     DURCHSATZ_LEER: 'Noch keine abgeschlossene Karte in den letzten Wochen.',
     KEINE_MESSUNG: 'keine Messung',
+    IMPLEMENTIERUNG_VERLAUF_TITEL: 'Implementierungszeit (Minuten)',
     IMPLEMENTIERUNG_NOTIZ: (wochen: number) => `Mittelwert je Woche · ${wochen} Wochen`,
     IMPLEMENTIERUNG_ARIA: (wochen: number, werte: string, zuletzt: string | undefined) =>
       `Implementierungszeit der letzten ${wochen} Wochen: ${werte}, zuletzt ${zuletzt}`,

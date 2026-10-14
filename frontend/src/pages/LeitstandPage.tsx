@@ -28,6 +28,7 @@ import {
 } from '../components/leitstand/LeitstandBausteine'
 import { LeitstandVerbrauch } from '../components/leitstand/LeitstandVerbrauch'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { formatierer } from '../i18n/format'
 import { useSprache, useT } from '../i18n/SpracheContext'
 import { epicColor } from '../lib/epicMeta'
 import {
@@ -500,12 +501,13 @@ function ImplementierungVerlauf({ wochen }: Readonly<{ wochen: BoardDashboardKpi
   const werte = kacheln.map((k) => (k.wert === null ? null : `${k.wert} ${k.einheit}`))
   const vorgelesen = werte.map((wert) => wert ?? t.KEINE_MESSUNG)
   return (
-    <Platte titel={t.IMPLEMENTIERUNGSZEIT} notiz={t.IMPLEMENTIERUNG_NOTIZ(wochen.length)}>
+    <Platte titel={t.IMPLEMENTIERUNG_VERLAUF_TITEL} notiz={t.IMPLEMENTIERUNG_NOTIZ(wochen.length)}>
       <Balkenwerk
         wochen={wochen}
         hoehen={balkenHoehenMitLuecken(kacheln.map((k, i) => (k.wert === null ? null : wochen[i].avgImplementationSeconds)))}
         titel={(i) => `${werte[i]} · ${kacheln[i].basis}`}
-        wert={(i) => vorgelesen[i]}
+        // Über dem Balken nur die ganze Minutenzahl, die Einheit steht im Kopf (Issue #1741); eine Lücke fragt nie.
+        wert={(i) => formatierer(sprache).zahl(Math.round(Number(wochen[i].avgImplementationSeconds) / 60), { maximumFractionDigits: 0 })}
         ariaLabel={t.IMPLEMENTIERUNG_ARIA(wochen.length, vorgelesen.join(', '), vorgelesen.at(-1))}
         leer={werte.every((wert) => wert === null)}
         leersatz={t.IMPLEMENTIERUNG_LEER}

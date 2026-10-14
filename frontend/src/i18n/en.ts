@@ -903,6 +903,7 @@ export const en: Woerterbuch = {
     DURCHSATZ_ARIA: (wochen, werte, zuletzt) => `Throughput of the last ${wochen} weeks: ${werte} cards, latest ${zuletzt}`,
     DURCHSATZ_LEER: 'No completed card in the last weeks yet.',
     KEINE_MESSUNG: 'no measurement',
+    IMPLEMENTIERUNG_VERLAUF_TITEL: 'Implementation time (minutes)',
     IMPLEMENTIERUNG_NOTIZ: (wochen) => `Average per week · ${wochen} weeks`,
     IMPLEMENTIERUNG_ARIA: (wochen, werte, zuletzt) =>
       `Implementation time of the last ${wochen} weeks: ${werte}, latest ${zuletzt}`,
