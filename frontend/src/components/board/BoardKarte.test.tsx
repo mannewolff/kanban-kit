@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, test, vi } from 'vitest'
 import type { Card } from '../../api/cards'
@@ -8,6 +8,7 @@ import { TabletQuerProvider } from '../../lib/tabletQuer'
 import { KIT_NAMEN } from '../../test/kitNamen'
 import { cssRegel } from '../../test/cssRegel'
 import { setzeMedien } from '../../test/setup'
+import { ErklaerungOffenProvider } from '../Erklaerung'
 import { BoardKarte } from './BoardKarte'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 
@@ -121,6 +122,54 @@ describe('BoardKarte auf dem Tablet im Querformat (Plan #1707, E3/E4)', () => {
     expect(karte).not.toHaveAttribute('data-karte-id')
     expect(cssRegel(karte)).not.toContain('touch-action')
     expect(onPointerDown).not.toHaveBeenCalled()
+  })
+})
+
+describe('BoardKarte: Erklärungen der Labels auf dem Tablet im Querformat (Plan #1707, E7)', () => {
+  it("Szenario: Erklärung eines Labels", async () => {
+    // Angenommen ein Mensch bedient ein Board auf einem Tablet im Querformat per Finger
+    setzeMedien({ tabletQuer: true })
+    // Und eine Karte trägt ein Systemlabel mit einer Erklärung
+    const onOpen = vi.fn()
+    renderMitSprache(
+      <TabletQuerProvider>
+        <ErklaerungOffenProvider>
+          <BoardKarte
+            card={{ ...card, labels: [1, 2] }} epic={undefined} done={false} spaltenname="Backlog" dichte="normal"
+            bewegt={false} selectionMode={false} selected={false} canEdit members={[]} retentionDays={30}
+            boardLabels={[
+              { id: 1, boardId: 1, name: 'kit:clarify', color: '#ff0000', countOnEpicTile: false },
+              { id: 2, boardId: 1, name: 'run:running', color: '#00ff00', countOnEpicTile: false },
+            ]}
+            onDragStart={vi.fn()} onDragEnd={vi.fn()} onSelect={vi.fn()} onOpen={onOpen} onMenu={vi.fn()}
+          />
+        </ErklaerungOffenProvider>
+      </TabletQuerProvider>,
+    )
+
+    // Wenn er das Label antippt
+    fireEvent.click(screen.getByText('kit:clarify'))
+
+    // Dann öffnet sich die Erklärung des Labels
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.bedeutung)
+    // Und die Karte öffnet sich nicht
+    expect(onOpen).not.toHaveBeenCalled()
+
+    // Wenn er danach neben die Erklärung tippt
+    await act(() => new Promise((fertig) => setTimeout(fertig, 0)))
+    fireEvent.touchEnd(document.body)
+    fireEvent.click(document.body)
+
+    // Dann schließt sie sich
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+
+    // Das Öffnen einer zweiten Erklärung schließt die erste
+    fireEvent.click(screen.getByText('kit:clarify'))
+    await screen.findByRole('tooltip')
+    fireEvent.click(screen.getByText('run:running'))
+    await waitFor(() => expect(screen.getAllByRole('tooltip')).toHaveLength(1))
+    expect(screen.getByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.LAUF_LAEUFT.bedeutung)
+    expect(onOpen).not.toHaveBeenCalled()
   })
 })
 

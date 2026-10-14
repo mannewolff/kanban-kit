@@ -87,7 +87,9 @@
         "src/components/DerivationTree.tsx",
         "src/components/AbnahmeSzenarienDialog.tsx",
         "src/components/DatumFeld.tsx",
-        "src/components/LabelErklaerung.tsx"
+        "src/components/LabelErklaerung.tsx",
+        "src/components/Erklaerung.tsx",
+        "src/components/ErklaerungInfo.tsx"
       ],
       "testMuster": [
         "src/components/CardDetailModal.test.tsx",
@@ -99,7 +101,9 @@
         "src/components/DerivationTree.test.tsx",
         "src/components/AbnahmeSzenarienDialog.test.tsx",
         "src/components/DatumFeld.test.tsx",
-        "src/components/LabelErklaerung.test.tsx"
+        "src/components/LabelErklaerung.test.tsx",
+        "src/components/Erklaerung.test.tsx",
+        "src/components/ErklaerungInfo.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,

@@ -54,6 +54,7 @@ import {
 import { BoardSwitcher } from './BoardSwitcher'
 import { CardNumberSearch } from './CardNumberSearch'
 import { EditModeBanner, EDIT_MODE_BANNER_HEIGHT } from './EditModeBanner'
+import { ErklaerungOffenProvider } from './Erklaerung'
 import { useSnackbar } from './SnackbarProvider'
 
 /** Breite der Schiene (Entwurf `.warte`, Z. 199). */
@@ -315,12 +316,14 @@ function Schiene({
 /**
  * Rahmen für angemeldete Bereiche: Schiene links, Kopf und Bühne rechts (Entwurf Z. 196–389).
  * Fragt die Betriebsart „Tablet im Querformat“ genau einmal ab und stellt sie allen Seiten im Rahmen
- * bereit (Plan #1707, E1).
+ * bereit (Plan #1707, E1). Hält zudem höchstens eine per Finger geöffnete Erklärung offen (E7).
  */
 export function AppShell() {
   return (
     <TabletQuerProvider>
-      <Rahmen />
+      <ErklaerungOffenProvider>
+        <Rahmen />
+      </ErklaerungOffenProvider>
     </TabletQuerProvider>
   )
 }

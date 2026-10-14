@@ -52,6 +52,7 @@ function CardLabels({ labelIds, boardLabels, cardTitle }: Readonly<{ labelIds: n
         const l = boardLabels.find((b) => b.id === labelId)
         const name = l?.name ?? `#${labelId}`
         // Fokus und Tooltip, aber kein eigener Klick: Ein Klick öffnet weiter die Karte (Plan #1668, E5).
+        // Auf dem Tablet quer öffnet Antippen eines Systemlabels seine Erklärung statt der Karte (Plan #1707, E7).
         return (
           <LabelErklaerung key={labelId} name={name}>
             <Chip

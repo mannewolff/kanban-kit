@@ -1415,6 +1415,10 @@ export const en: Woerterbuch = {
     ANZAHL: 'Count',
   },
 
+  ERKLAERUNG_INFO: {
+    ZEIGEN: (name) => `Explanation of ${name}`,
+  },
+
   STANDARD_LABELS: {
     TITEL: 'Standard labels',
     HINWEIS:

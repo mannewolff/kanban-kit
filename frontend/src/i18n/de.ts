@@ -1490,6 +1490,11 @@ export const de = {
     ANZAHL: 'Anzahl',
   },
 
+  /** Info-Symbol neben einem Element mit eigener Aktion, das auf dem Tablet quer die Erklärung öffnet (Plan #1707, E7). */
+  ERKLAERUNG_INFO: {
+    ZEIGEN: (name: string) => `Erklärung zu ${name}`,
+  },
+
   /** Standard-Labels der Installation in der Administration (Issue #1660); Label- und Gruppennamen sind Daten. */
   STANDARD_LABELS: {
     TITEL: 'Standard-Labels',
