@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { ApiError } from '../api/client'
@@ -19,6 +19,9 @@ import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { theme } from '../theme'
 import { de } from '../i18n/de'
 import { KIT_NAMEN } from '../test/kitNamen'
+import { HALTEZEIT_MS } from '../lib/fingerZiehen'
+import { TabletQuerProvider } from '../lib/tabletQuer'
+import { setzeMedien } from '../test/setup'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -1761,5 +1764,220 @@ describe('BoardListPage auf Englisch', () => {
       'en',
     )
     expect(screen.getByText('Invalid board ID.')).toBeInTheDocument()
+  })
+})
+
+describe('BoardListPage — Ziehen und Spaltenbreite per Finger auf dem Tablet (Plan #1707, E12)', () => {
+  // jsdom kennt weder `PointerEvent` noch `elementFromPoint` (E13): Die Attrappe trägt `pointerId`
+  // und `pointerType`, `elementFromPoint` liefert, was der Test unter den Finger legt.
+  class PointerEventAttrappe extends MouseEvent {
+    readonly pointerId: number
+    readonly pointerType: string
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init)
+      this.pointerId = init.pointerId ?? 0
+      this.pointerType = init.pointerType ?? ''
+    }
+  }
+
+  const finger = { pointerType: 'touch', pointerId: 1 }
+  let unterFinger: Element | null = null
+
+  /** Einspaltige Liste in Board-Reihenfolge Beta, Zebra, Anton — dort ist Umordnen zugelassen. */
+  const zeigen = async () => {
+    mBoards.get.mockResolvedValue(einspaltigesBoard(1))
+    mCards.list.mockResolvedValue([beta, zebra, anton])
+    mEpics.list.mockResolvedValue([])
+    mCards.move.mockResolvedValue({})
+    render(
+      <TabletQuerProvider>
+        <SnackbarProvider>
+          <MemoryRouter initialEntries={['/boards/1/list']}>
+            <Routes>
+              <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+            </Routes>
+          </MemoryRouter>
+        </SnackbarProvider>
+      </TabletQuerProvider>,
+    )
+    await screen.findByText('Anton')
+  }
+  /** Die Zeile in der Liste, nicht ihre schwebende Kopie, die dieselbe Beschriftung trägt. */
+  const zeile = (titel: string) => within(screen.getByTestId('listen-zeilen')).getByLabelText(`Detail öffnen: ${titel}`)
+  /** Legt die Zeilen untereinander: je 30 px hoch, ab y = 100 im Abstand von 40 px. */
+  const stapeln = (...titel: string[]) =>
+    titel.forEach((t, i) => {
+      const top = 100 + i * 40
+      zeile(t).getBoundingClientRect = () =>
+        ({ left: 0, top, width: 600, height: 30, right: 600, bottom: top + 30, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+    })
+  const greifen = (element: HTMLElement) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] })
+    fireEvent.pointerDown(element, { ...finger, clientX: 50, clientY: 20 })
+  }
+  const warten = (ms: number) => act(() => { vi.advanceTimersByTime(ms) })
+  const ueber = (element: Element, clientY: number) => {
+    unterFinger = element
+    fireEvent.pointerMove(window, { ...finger, clientX: 300, clientY })
+  }
+  const loslassen = () => {
+    fireEvent.pointerUp(window, finger)
+    vi.useRealTimers()
+  }
+  const kopfReihenfolge = () =>
+    within(screen.getByTestId('list-header')).getAllByLabelText(/^Spalte /).map((el) => el.getAttribute('aria-label'))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('localStorage', fakeStorage())
+    localStorage.setItem('manban.listGruppierung', 'keine')
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+    setzeMedien({ tabletQuer: true })
+    vi.stubGlobal('PointerEvent', PointerEventAttrappe)
+    unterFinger = null
+    document.elementFromPoint = vi.fn(() => unterFinger)
+  })
+
+  // Ohne `vi.unstubAllGlobals()`: Es nähme auch den `EventSource`-Stub aus `test/setup.ts` weg,
+  // den die Liste über `useBoardEvents` braucht. Die Attrappe ist ein voller `MouseEvent`.
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('verschiebt eine Zeile nach langem Antippen an die angezeigte Stelle', async () => {
+    await zeigen()
+    stapeln('Beta', 'Zebra')
+
+    greifen(zeile('Anton'))
+    warten(HALTEZEIT_MS)
+    expect(zeile('Anton')).toHaveAttribute('data-zieh-zustand', 'zieht')
+    ueber(screen.getByTestId('listen-zeilen'), 110)
+    // Die Ablagestelle zeigt die Zeile, vor der die gezogene landet: Beta.
+    expect(zeile('Beta')).toHaveAttribute('data-ablage', 'aktiv')
+    expect(zeile('Zebra')).not.toHaveAttribute('data-ablage')
+    loslassen()
+
+    await waitFor(() => expect(mCards.move).toHaveBeenCalledWith(102, 10, 0))
+    expect(mCards.move).toHaveBeenCalledTimes(1)
+    expect(zeile('Anton')).not.toHaveAttribute('data-zieh-zustand')
+  })
+
+  it('ruft nichts, wenn die Zeile an ihrer eigenen Stelle abgelegt wird', async () => {
+    await zeigen()
+    stapeln('Beta', 'Anton')
+
+    greifen(zeile('Zebra'))
+    warten(HALTEZEIT_MS)
+    ueber(screen.getByTestId('listen-zeilen'), 140)
+    loslassen()
+
+    expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  it('verschiebt keine Zeile, wenn der Finger außerhalb der Zeilen losgelassen wird', async () => {
+    await zeigen()
+
+    greifen(zeile('Anton'))
+    warten(HALTEZEIT_MS)
+    ueber(screen.getByLabelText('Spalte Titel'), 10)
+    loslassen()
+
+    expect(mCards.move).not.toHaveBeenCalled()
+    expect(kopfReihenfolge()[0]).toBe('Spalte Nr')
+  })
+
+  it('zeigt die Server-Meldung, wenn das Ablegen per Finger scheitert, und lädt nach', async () => {
+    await zeigen()
+    stapeln('Beta', 'Zebra')
+    mCards.move.mockRejectedValue(serverfehler('Karte wurde inzwischen verschoben.'))
+    mCards.list.mockClear()
+
+    greifen(zeile('Anton'))
+    warten(HALTEZEIT_MS)
+    ueber(screen.getByTestId('listen-zeilen'), 110)
+    loslassen()
+
+    await erwarteFehlerToast('Karte wurde inzwischen verschoben.')
+    expect(mCards.list).toHaveBeenCalled()
+  })
+
+  it('ordnet eine Spalte nach langem Antippen des Kopfs per Finger um und merkt die Reihenfolge', async () => {
+    await zeigen()
+
+    greifen(screen.getByLabelText('Spalte Beschreibung'))
+    warten(HALTEZEIT_MS)
+    ueber(screen.getByLabelText('Spalte Nr'), 10)
+    expect(screen.getByLabelText('Spalte Nr')).toHaveAttribute('data-ablage', 'aktiv')
+    loslassen()
+
+    expect(kopfReihenfolge()[0]).toBe('Spalte Beschreibung')
+    expect(JSON.parse(localStorage.getItem('manban.listColumns')!)).toEqual(['excerpt', 'number', 'status', 'epic', 'title'])
+  })
+
+  it('ordnet keine Spalte um, wenn der Kopf über den Zeilen losgelassen wird', async () => {
+    await zeigen()
+
+    greifen(screen.getByLabelText('Spalte Beschreibung'))
+    warten(HALTEZEIT_MS)
+    ueber(screen.getByTestId('listen-zeilen'), 110)
+    loslassen()
+
+    expect(kopfReihenfolge()[0]).toBe('Spalte Nr')
+    expect(localStorage.getItem('manban.listColumns')).toBeNull()
+  })
+
+  it('ändert die Beschreibungs-Breite über einen Touch-Pointer am Griff, ohne die Spalte zu greifen', async () => {
+    await zeigen()
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 1000, height: 0, top: 0, left: 0, right: 1000, bottom: 0, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect)
+    const griff = screen.getByLabelText('Beschreibung-Spalte breiter ziehen')
+
+    try {
+      fireEvent.pointerDown(griff, { ...finger, clientX: 500 })
+      fireEvent.pointerMove(document, { ...finger, clientX: 400 }) // 100 px nach links → +10 %
+      fireEvent.pointerUp(document, finger)
+    } finally {
+      rectSpy.mockRestore()
+    }
+
+    expect(localStorage.getItem('manban.listExcerptWidth')).toBe('40')
+    expect(screen.getByLabelText('Spalte Beschreibung')).not.toHaveAttribute('data-zieh-zustand')
+    expect(cssRegel(griff)).toContain('touch-action: none')
+  })
+
+  it('ändert über den Pointer-Weg nichts, wenn der Pointer eine Maus ist', async () => {
+    await zeigen()
+    const griff = screen.getByLabelText('Beschreibung-Spalte breiter ziehen')
+
+    fireEvent.pointerDown(griff, { pointerType: 'mouse', pointerId: 1, clientX: 500 })
+    fireEvent.pointerMove(document, { pointerType: 'mouse', pointerId: 1, clientX: 400 })
+    fireEvent.pointerUp(document, { pointerType: 'mouse', pointerId: 1 })
+
+    expect(localStorage.getItem('manban.listExcerptWidth')).toBeNull()
+  })
+
+  it('schaltet im Tablet-Modus das native Ziehen an Zeile und Spaltenkopf ab', async () => {
+    await zeigen()
+
+    expect(zeile('Anton')).toHaveAttribute('draggable', 'false')
+    expect(screen.getByLabelText('Spalte Titel')).toHaveAttribute('draggable', 'false')
+    expect(cssRegel(zeile('Anton'))).toContain('touch-action: pan-x pan-y')
+    expect(cssRegel(screen.getByLabelText('Spalte Titel'))).toContain('touch-action: pan-x pan-y')
+  })
+
+  it('lässt am Desktop Zeile und Spaltenkopf nativ ziehbar und ohne Finger-Weg (Gegenprobe)', async () => {
+    setzeMedien({ tabletQuer: false })
+    await zeigen()
+
+    expect(zeile('Anton')).toHaveAttribute('draggable', 'true')
+    expect(screen.getByLabelText('Spalte Titel')).toHaveAttribute('draggable', 'true')
+    expect(cssRegel(zeile('Anton'))).not.toContain('touch-action')
+    expect(cssRegel(screen.getByLabelText('Beschreibung-Spalte breiter ziehen'))).not.toContain('touch-action')
+
+    greifen(zeile('Anton'))
+    warten(HALTEZEIT_MS)
+    expect(zeile('Anton')).not.toHaveAttribute('data-zieh-zustand')
+    loslassen()
   })
 })

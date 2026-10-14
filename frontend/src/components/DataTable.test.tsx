@@ -5,6 +5,8 @@ import { cssRegel } from '../test/cssRegel'
 import { theme } from '../theme'
 import { DataTable, type DataTableColumn } from './DataTable'
 import { renderMitSprache } from '../i18n/renderMitSprache'
+import { TabletQuerProvider } from '../lib/tabletQuer'
+import { setzeMedien } from '../test/setup'
 
 interface Row {
   id: number
@@ -285,5 +287,66 @@ describe('DataTable auf Englisch', () => {
     aufEnglisch()
     fireEvent.mouseOver(screen.getByLabelText('Resize column name'))
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Drag to resize')
+  })
+})
+
+describe('DataTable — Spaltenbreite per Finger auf dem Tablet (Plan #1707, E12)', () => {
+  // jsdom kennt kein `PointerEvent` (E13): Die Attrappe trägt `pointerId` und `pointerType`.
+  class PointerEventAttrappe extends MouseEvent {
+    readonly pointerId: number
+    readonly pointerType: string
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init)
+      this.pointerId = init.pointerId ?? 0
+      this.pointerType = init.pointerType ?? ''
+    }
+  }
+
+  const zeigen = () =>
+    render(
+      <TabletQuerProvider>
+        <DataTable columns={makeColumns()} rows={rows} getRowKey={(r) => r.id} storageKey="users" />
+      </TabletQuerProvider>,
+    )
+  const breiteZiehen = (pointerType: string) => {
+    const griff = screen.getByLabelText('Breite von Spalte name ändern')
+    fireEvent.pointerDown(griff, { pointerType, pointerId: 1, clientX: 100 })
+    fireEvent.pointerMove(document, { pointerType, pointerId: 1, clientX: 170 })
+    fireEvent.pointerUp(document, { pointerType, pointerId: 1 })
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    vi.stubGlobal('PointerEvent', PointerEventAttrappe)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('ändert im Tablet-Modus die Breite über einen Touch-Pointer am Griff', () => {
+    setzeMedien({ tabletQuer: true })
+    zeigen()
+
+    breiteZiehen('touch')
+
+    // 120 (defaultWidth) + (170 - 100) = 190, wie beim Ziehen mit der Maus.
+    expect(localStorage.getItem('manban.table.users.widths')).toBe(JSON.stringify({ name: 190 }))
+    expect(cssRegel(screen.getByLabelText('Breite von Spalte name ändern'))).toContain('touch-action: none')
+  })
+
+  it('ändert über den Pointer-Weg nichts, wenn der Pointer eine Maus ist', () => {
+    setzeMedien({ tabletQuer: true })
+    zeigen()
+
+    breiteZiehen('mouse')
+
+    expect(localStorage.getItem('manban.table.users.widths')).toBeNull()
+  })
+
+  it('lässt den Griff am Desktop ohne Pointer-Weg (Gegenprobe)', () => {
+    zeigen()
+
+    breiteZiehen('touch')
+
+    expect(localStorage.getItem('manban.table.users.widths')).toBeNull()
+    expect(cssRegel(screen.getByLabelText('Breite von Spalte name ändern'))).not.toContain('touch-action')
   })
 })
