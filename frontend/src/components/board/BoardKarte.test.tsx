@@ -1,10 +1,13 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, test, vi } from 'vitest'
 import type { Card } from '../../api/cards'
 import type { KitNamenZustand } from '../../api/kitNamen'
 import { de } from '../../i18n/de'
+import { TabletQuerProvider } from '../../lib/tabletQuer'
 import { KIT_NAMEN } from '../../test/kitNamen'
+import { cssRegel } from '../../test/cssRegel'
+import { setzeMedien } from '../../test/setup'
 import { BoardKarte } from './BoardKarte'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 
@@ -47,6 +50,77 @@ describe('BoardKarte — Ziehbarkeit (#1324)', () => {
     zeigen({ selectionMode: true, selected: true, canEdit: true })
 
     expect(screen.queryByLabelText('Menü Aufgabe')).not.toBeInTheDocument()
+  })
+})
+
+describe('BoardKarte auf dem Tablet im Querformat (Plan #1707, E3/E4)', () => {
+  const zeigenTablet = (
+    over: Partial<{ selectionMode: boolean; selected: boolean; canEdit: boolean; fingerZustand: 'wartet' | 'zieht' }> = {},
+  ) => {
+    const onOpen = vi.fn()
+    const onPointerDown = vi.fn()
+    render(
+      <TabletQuerProvider>
+        <BoardKarte
+          card={card} epic={undefined} done={false} spaltenname="Backlog" dichte="normal" bewegt={false}
+          members={[]} boardLabels={[]} retentionDays={30} selectionMode={false} selected={false} canEdit
+          fingerGriff={{ onPointerDown }}
+          onDragStart={vi.fn()} onDragEnd={vi.fn()} onSelect={vi.fn()} onOpen={onOpen} onMenu={vi.fn()}
+          {...over}
+        />
+      </TabletQuerProvider>,
+    )
+    return { onOpen, onPointerDown, karte: screen.getByTestId('card-100') }
+  }
+
+  it('ist nicht nativ ziehbar, trägt ihre Kennung und die Touch-Stile', () => {
+    setzeMedien({ tabletQuer: true })
+    const { karte } = zeigenTablet()
+
+    expect(karte).toHaveAttribute('draggable', 'false')
+    expect(karte).toHaveAttribute('data-karte-id', '100')
+    // jsdom kennt `touch-action` im berechneten Stil nicht; die erzeugte Regel belegt es.
+    expect(cssRegel(karte)).toContain('touch-action: pan-x pan-y')
+    expect(cssRegel(karte)).toContain('-webkit-touch-callout: none')
+    expect(cssRegel(karte)).toContain('user-select: none')
+  })
+
+  it('reicht das Aufsetzen des Fingers an den Griff und öffnet beim kurzen Antippen wie heute', () => {
+    setzeMedien({ tabletQuer: true })
+    const { karte, onOpen, onPointerDown } = zeigenTablet()
+
+    fireEvent.pointerDown(karte)
+    fireEvent.click(karte)
+
+    expect(onPointerDown).toHaveBeenCalledTimes(1)
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('gibt einer nicht ziehbaren Karte keinen Griff', () => {
+    setzeMedien({ tabletQuer: true })
+    const { karte, onPointerDown } = zeigenTablet({ selectionMode: true, selected: false })
+
+    fireEvent.pointerDown(karte)
+
+    expect(onPointerDown).not.toHaveBeenCalled()
+  })
+
+  it('zeigt den Stand des Fingerzugs an', () => {
+    setzeMedien({ tabletQuer: true })
+    const { karte } = zeigenTablet({ fingerZustand: 'zieht' })
+
+    expect(karte).toHaveAttribute('data-zieh-zustand', 'zieht')
+  })
+
+  it('bleibt am Desktop nativ ziehbar, ohne Kennung und ohne Griff', () => {
+    const { karte, onPointerDown } = zeigenTablet()
+
+    fireEvent.pointerDown(karte)
+
+    expect(karte).toHaveAttribute('draggable', 'true')
+    expect(karte).not.toHaveAttribute('data-karte-id')
+    expect(cssRegel(karte)).not.toContain('touch-action')
+    expect(onPointerDown).not.toHaveBeenCalled()
   })
 })
 

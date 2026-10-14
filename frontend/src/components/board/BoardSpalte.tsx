@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
+import { Fragment } from 'react'
 import type { BoardColumn } from '../../api/boards'
 import type { Card } from '../../api/cards'
 import type { SortDirection } from '../../api/columns'
@@ -11,6 +12,7 @@ import { epicOfCard } from '../../lib/cardEpic'
 import { effektivDone } from '../../lib/columnMeta'
 import { MELDER, NUT, PANEL_RADIUS, RAND, SCHATTEN_NUTE } from '../../theme'
 import { useTabletQuer } from '../../lib/tabletQuer'
+import type { FingerZiehen } from '../../lib/useFingerZiehen'
 import { ablageflaecheSx, spaltenMass, type Dichte } from '../boardSurfaceSx'
 import { BoardKarte } from './BoardKarte'
 import { SpaltenKopf } from './SpaltenKopf'
@@ -68,6 +70,30 @@ interface Props {
   onZugBeginn: () => void
   onAblage: (fromId: number) => void
   onZugEnde: () => void
+  /** Fingerzug der Karten im Tablet-Modus (Plan #1707, E3). */
+  kartenZug: FingerZiehen
+  /** Fingerzug der Spaltenköpfe im Bearbeitungsmodus. */
+  spaltenZug: FingerZiehen
+  /** Stelle unter den angezeigten Karten (ohne die gezogene), an der die Einfügelinie steht; `null` = keine. */
+  einfuegeIndex: number | null
+}
+
+/** Stand des Fingerzugs für das Element `id`, solange er läuft; sonst `undefined`. */
+function laufenderZug(zug: FingerZiehen, id: number): 'wartet' | 'zieht' | undefined {
+  return zug.gezogenId === String(id) ? (zug.zustand as 'wartet' | 'zieht') : undefined
+}
+
+/**
+ * Wo die Karte unter dem Finger landen wird (Plan #1707, E5): eine Linie in Kupfer aus dem Theme.
+ * Sie nimmt keinen Platz ein — der negative Rand hebt den Abstand des Stapels auf —, damit die
+ * Karten beim Ziehen nicht springen und die berechnete Stelle unter dem Finger stehen bleibt.
+ */
+function Einfuegelinie() {
+  return (
+    <Box data-testid="einfuegelinie" aria-hidden sx={{ position: 'relative', height: 0, mb: '-9px' }}>
+      <Box sx={{ position: 'absolute', left: 0, right: 0, top: '-5.5px', height: 2, borderRadius: 1, bgcolor: 'primary.main' }} />
+    </Box>
+  )
 }
 
 /**
@@ -114,6 +140,9 @@ export function BoardSpalte({
   onZugBeginn,
   onAblage,
   onZugEnde,
+  kartenZug,
+  spaltenZug,
+  einfuegeIndex,
 }: Readonly<Props>) {
   // Einmal berechnet, zweimal gebraucht (Rand der Spalte, Zähler im Kopf). Zwei Fassungen desselben
   // Vergleichs liefen bei einer Änderung auseinander (Plan #1042, P12).
@@ -125,9 +154,13 @@ export function BoardSpalte({
   const randFarbe = grenzeErreicht ? `color-mix(in srgb, ${MELDER.bernst} 42%, ${RAND})` : RAND
   const angezeigteIds = angezeigteKarten.map((c) => c.id)
   const tabletQuer = useTabletQuer()
+  // Vor dieser Karte steht die Einfügelinie; gezählt ohne die gezogene, wie der Hook zählt.
+  const ohneGezogene = angezeigteKarten.filter((c) => String(c.id) !== kartenZug.gezogenId)
+  const linieVor: number | 'ende' | null = einfuegeIndex === null ? null : (ohneGezogene.at(einfuegeIndex)?.id ?? 'ende')
   return (
     <Paper
       data-testid={`column-${column.id}`}
+      data-spalte-id={tabletQuer ? column.id : undefined}
       elevation={0}
       onDragOver={(e) => {
         e.preventDefault()
@@ -172,6 +205,8 @@ export function BoardSpalte({
           onZugBeginn={onZugBeginn}
           onAblage={onAblage}
           onZugEnde={onZugEnde}
+          fingerGriff={spaltenZug.griff(String(column.id))}
+          fingerZustand={laufenderZug(spaltenZug, column.id)}
         />
       </Box>
 
@@ -188,30 +223,35 @@ export function BoardSpalte({
         }}
       >
         {angezeigteKarten.map((card) => (
-          <BoardKarte
-            key={card.id}
-            card={card}
-            epic={epicOfCard(card, epics)}
-            // Erledigt nach dem gemeinsamen Maßstab: ein Arbeitspaket nach seinem Status, alles
-            // andere nach der Spalte (Plan #1294, E7).
-            done={effektivDone(card, column.name)}
-            spaltenname={column.name}
-            dichte={dichte}
-            selectionMode={selectionMode}
-            selected={selectedIds.has(card.id)}
-            canEdit={canEdit}
-            bewegt={dragCardIds.has(card.id)}
-            members={members}
-            boardLabels={boardLabels}
-            retentionDays={retentionDays}
-            onDragStart={(e) => onKarteZugBeginn(e, card)}
-            onDragEnd={onKarteZugEnde}
-            onSelect={() => onKarteWaehlen(card)}
-            onOpen={() => onKarteOeffnen(card)}
-            onMenu={(anchor) => onKarteMenu(card, anchor)}
-            onEpicOpen={onEpicOpen}
-          />
+          <Fragment key={card.id}>
+            {linieVor === card.id && <Einfuegelinie />}
+            <BoardKarte
+              card={card}
+              epic={epicOfCard(card, epics)}
+              // Erledigt nach dem gemeinsamen Maßstab: ein Arbeitspaket nach seinem Status, alles
+              // andere nach der Spalte (Plan #1294, E7).
+              done={effektivDone(card, column.name)}
+              spaltenname={column.name}
+              dichte={dichte}
+              selectionMode={selectionMode}
+              selected={selectedIds.has(card.id)}
+              canEdit={canEdit}
+              bewegt={dragCardIds.has(card.id)}
+              members={members}
+              boardLabels={boardLabels}
+              retentionDays={retentionDays}
+              onDragStart={(e) => onKarteZugBeginn(e, card)}
+              onDragEnd={onKarteZugEnde}
+              onSelect={() => onKarteWaehlen(card)}
+              onOpen={() => onKarteOeffnen(card)}
+              onMenu={(anchor) => onKarteMenu(card, anchor)}
+              onEpicOpen={onEpicOpen}
+              fingerGriff={kartenZug.griff(String(card.id))}
+              fingerZustand={laufenderZug(kartenZug, card.id)}
+            />
+          </Fragment>
         ))}
+        {linieVor === 'ende' && <Einfuegelinie />}
       </Stack>
     </Paper>
   )

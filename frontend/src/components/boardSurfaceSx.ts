@@ -84,6 +84,17 @@ export const PLATZHALTER_SX = {
 } as const
 
 /**
+ * Was der Finger im Tablet-Modus greift — Karte und Spaltenkopf (Plan #1707, E4): Wischen scrollt
+ * weiter (`pan-x pan-y`, nicht `none`), langes Antippen öffnet weder Kontextmenü noch Textauswahl.
+ */
+export const FINGER_GRIFF_SX = {
+  touchAction: 'pan-x pan-y',
+  WebkitTouchCallout: 'none',
+  WebkitUserSelect: 'none',
+  userSelect: 'none',
+} as const
+
+/**
  * Ablagefläche während eines Ziehvorgangs (AK 8, #956): ein gestrichelter Rahmen in Kupfer auf
  * kupfernem Schimmer, nach innen versetzt, damit er die Kanten der Spalte nicht überdeckt.
  */

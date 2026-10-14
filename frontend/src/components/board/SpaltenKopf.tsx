@@ -14,6 +14,8 @@ import type { Woerterbuch } from '../../i18n/de'
 import { spaltenAuswahl, type SpaltenAuswahlZustand } from '../../lib/boardOps'
 import { statusColors } from '../../lib/statusColors'
 import { useTabletQuer } from '../../lib/tabletQuer'
+import type { FingerZiehen } from '../../lib/useFingerZiehen'
+import { FINGER_GRIFF_SX } from '../boardSurfaceSx'
 import {
   LED_RING,
   MELDER,
@@ -106,6 +108,10 @@ interface Props {
   onZugBeginn: () => void
   onAblage: (fromId: number) => void
   onZugEnde: () => void
+  /** Handler des Fingerzugs aus `useFingerZiehen` (Plan #1707, E3); greifen nur im Tablet-Modus. */
+  fingerGriff?: ReturnType<FingerZiehen['griff']>
+  /** Stand des Fingerzugs, solange diese Spalte gegriffen ist. */
+  fingerZustand?: 'wartet' | 'zieht'
 }
 
 /**
@@ -138,20 +144,28 @@ export function SpaltenKopf({
   onZugBeginn,
   onAblage,
   onZugEnde,
+  fingerGriff,
+  fingerZustand,
 }: Readonly<Props>) {
   const t = useT()
+  const tabletQuer = useTabletQuer()
   const colors = statusColors(column.name)
   const spaltenZustand = spaltenAuswahl(angezeigteIds, selectedIds)
   const sortierLabel = sortByNumberLabel(t, column.name, naechsteRichtung)
   // Auf dem Tablet quer ist die Spalte rund 160 px schmal; mit drei Symbolknöpfen und Skala in
   // einer Zeile bliebe vom Namen nichts. Darum dort zwei Zeilen, am Desktop eine wie bisher (E6).
-  const zweizeilig = useTabletQuer() && showStructureEdit
+  const zweizeilig = tabletQuer && showStructureEdit
+  // Auf dem Tablet quer greift der Finger den Kopf über Pointer-Ereignisse (Plan #1707, E3); natives
+  // Ziehen bleibt dort aus, damit iPadOS-Safari kein zweites Ziehen daneben startet.
   const kopf = {
     'data-testid': `column-header-${column.id}`,
-    draggable: showStructureEdit,
+    draggable: showStructureEdit && !tabletQuer,
     ...spaltenZiehHandler(showStructureEdit, { columnId: column.id, colDrag, onZugBeginn, onAblage, onZugEnde }),
     onDragEnd: onZugEnde,
+    'data-zieh-zustand': fingerZustand,
+    ...(zweizeilig ? fingerGriff : {}),
   }
+  const griffSx = zweizeilig ? FINGER_GRIFF_SX : {}
   const kennung = (
     <>
       {selectionMode && (
@@ -252,7 +266,7 @@ export function SpaltenKopf({
   if (zweizeilig) {
     // Beide Zeilen liegen im ziehbaren Kopf: Die Spalte bleibt an jeder Stelle des Kopfes greifbar.
     return (
-      <Box {...kopf} sx={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: 0, cursor: 'grab' }}>
+      <Box {...kopf} sx={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: 0, cursor: 'grab', ...griffSx }}>
         <Box data-testid={`column-header-kennung-${column.id}`} sx={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
           {kennung}
         </Box>

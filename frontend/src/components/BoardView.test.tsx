@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState, type ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,6 +17,7 @@ import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { PANEL_RADIUS } from '../theme'
 import { TabletQuerProvider } from '../lib/tabletQuer'
 import { setzeMedien } from '../test/setup'
+import { HALTEZEIT_MS } from '../lib/fingerZiehen'
 
 vi.mock('../api/columns', () => ({
   columnsApi: {
@@ -3293,6 +3294,251 @@ describe('BoardView auf dem Tablet im Querformat (Plan #1707, E6)', () => {
     renderBoard(5)
 
     expect(screen.queryByRole('button', { name: 'Neue Spalte' })).not.toBeInTheDocument()
+  })
+})
+
+describe('BoardView — Ziehen per Finger auf dem Tablet (Plan #1707, E3–E5, E15)', () => {
+  // jsdom kennt weder `PointerEvent` noch `elementFromPoint` (E13): Die Attrappe trägt `pointerId`
+  // und `pointerType`, `elementFromPoint` liefert, was der Test unter den Finger legt.
+  class PointerEventAttrappe extends MouseEvent {
+    readonly pointerId: number
+    readonly pointerType: string
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init)
+      this.pointerId = init.pointerId ?? 0
+      this.pointerType = init.pointerType ?? ''
+    }
+  }
+
+  const fuenfSpalten: Board = {
+    ...board,
+    columns: ['Backlog', 'Ready', 'In Arbeit', 'In Prüfung', 'Done'].map((name, i) => ({
+      id: (i + 1) * 10, name, position: i, wipLimit: null,
+    })),
+  }
+  const karte = (id: number, columnId: number, positionInColumn: number): Card =>
+    ({ ...card, id, number: id, title: `Karte ${id}`, columnId, positionInColumn })
+  const karten = [karte(201, 20, 0), karte(202, 20, 1), karte(203, 20, 2), karte(301, 30, 0), karte(302, 30, 1)]
+  const finger = { pointerType: 'touch', pointerId: 1 }
+
+  let unterFinger: Element | null = null
+
+  const zeigen = (api: ReturnType<typeof mkApi>) =>
+    render(
+      <TabletQuerProvider>
+        <SnackbarProvider>
+          <BoardView board={fuenfSpalten} initialCards={karten} canEdit api={api} />
+        </SnackbarProvider>
+      </TabletQuerProvider>,
+    )
+
+  /** Legt die Karten einer Spalte untereinander: je 50 px hoch, ab y = 100 im Abstand von 60 px. */
+  const stapeln = (...ids: number[]) =>
+    ids.forEach((id, i) => {
+      const top = 100 + i * 60
+      screen.getByTestId(`card-${id}`).getBoundingClientRect = () =>
+        ({ left: 0, top, width: 150, height: 50, right: 150, bottom: top + 50, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+    })
+
+  const greifen = (element: HTMLElement) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'] })
+    fireEvent.pointerDown(element, { ...finger, clientX: 50, clientY: 20 })
+  }
+  const warten = (ms: number) => act(() => { vi.advanceTimersByTime(ms) })
+  const ueber = (spalteId: number, clientY: number) => {
+    unterFinger = screen.getByTestId(`column-${spalteId}`)
+    fireEvent.pointerMove(window, { ...finger, clientX: 400, clientY })
+  }
+  const loslassen = () => {
+    fireEvent.pointerUp(window, finger)
+    vi.useRealTimers()
+  }
+  const kartenIn = (columnId: number) =>
+    within(screen.getByTestId(`column-${columnId}`)).queryAllByTestId(/^card-/).map((el) => el.dataset.testid)
+  /** Die angehobene Kopie, die dem Finger folgt: dieselbe Test-ID, aber für Hilfsmittel verborgen. */
+  const schwebendeKopie = (testId: string) =>
+    screen.queryAllByTestId(testId).find((el) => el.getAttribute('aria-hidden') === 'true') ?? null
+  /** Das Element auf dem Board, nicht seine schwebende Kopie, die dieselbe Test-ID trägt. */
+  const aufDemBoard = (testId: string) => within(screen.getByTestId('board-surface')).getByTestId(testId)
+
+  beforeEach(() => {
+    editMode.value = true
+    mColumns.reorder.mockReset()
+    setzeMedien({ tabletQuer: true })
+    vi.stubGlobal('PointerEvent', PointerEventAttrappe)
+    unterFinger = null
+    document.elementFromPoint = vi.fn(() => unterFinger)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('Szenario: Karte per Finger verschieben', async () => {
+    const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+    zeigen(api)
+    stapeln(301, 302)
+
+    greifen(screen.getByTestId('card-201'))
+    warten(HALTEZEIT_MS)
+
+    expect(aufDemBoard('card-201')).toHaveAttribute('data-zieh-zustand', 'zieht')
+    expect(schwebendeKopie('card-201')).toHaveTextContent('Karte 201')
+    ueber(30, 170)
+    // Die Einfügelinie steht an der Stelle, an der die Karte landen wird: zwischen 301 und 302.
+    const ablage = screen.getByTestId('ablage-30')
+    const reihenfolge = within(ablage).getAllByTestId(/^(card-\d+|einfuegelinie)$/).map((el) => el.dataset.testid)
+    expect(reihenfolge).toEqual(['card-301', 'einfuegelinie', 'card-302'])
+    expect(ablage).toHaveAttribute('data-ablage', 'aktiv')
+    loslassen()
+
+    expect(api.move).toHaveBeenCalledWith(201, 30, 1)
+    expect(kartenIn(30)).toEqual(['card-301', 'card-201', 'card-302'])
+    expect(kartenIn(20)).toEqual(['card-202', 'card-203'])
+    expect(schwebendeKopie('card-201')).toBeNull()
+    expect(screen.queryByTestId('einfuegelinie')).not.toBeInTheDocument()
+    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1))
+  })
+
+  it('Szenario: Wischen scrollt statt zu verschieben', () => {
+    const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+    zeigen(api)
+
+    greifen(screen.getByTestId('card-202'))
+    warten(100)
+    ueber(20, 20 - 30)
+    const touchmove = new Event('touchmove', { cancelable: true, bubbles: true })
+    fireEvent(document, touchmove)
+    warten(HALTEZEIT_MS)
+    loslassen()
+
+    expect(touchmove.defaultPrevented).toBe(false)
+    expect(api.move).not.toHaveBeenCalled()
+    expect(api.bulkTransfer).not.toHaveBeenCalled()
+    expect(screen.getByTestId('card-202')).not.toHaveAttribute('data-zieh-zustand', 'zieht')
+    expect(kartenIn(20)).toEqual(['card-201', 'card-202', 'card-203'])
+  })
+
+  it('ordnet innerhalb derselben Spalte um und ruft move mit der Stelle', () => {
+    const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+    zeigen(api)
+    stapeln(201, 202)
+
+    greifen(screen.getByTestId('card-203'))
+    warten(HALTEZEIT_MS)
+    ueber(20, 110)
+    loslassen()
+
+    expect(api.move).toHaveBeenCalledWith(203, 20, 0)
+    expect(kartenIn(20)).toEqual(['card-203', 'card-201', 'card-202'])
+  })
+
+  it('ruft nichts, wenn die Karte an ihrer eigenen Stelle abgelegt wird', () => {
+    const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+    zeigen(api)
+    stapeln(201, 203)
+
+    greifen(screen.getByTestId('card-202'))
+    warten(HALTEZEIT_MS)
+    ueber(20, 140)
+    loslassen()
+
+    expect(api.move).not.toHaveBeenCalled()
+    expect(kartenIn(20)).toEqual(['card-201', 'card-202', 'card-203'])
+  })
+
+  it('stellt bei einem Fehler die alte Reihenfolge her und meldet ihn', async () => {
+    const api = mkApi({ move: vi.fn().mockRejectedValue(new Error('netz')) })
+    zeigen(api)
+    stapeln(201, 202)
+
+    greifen(screen.getByTestId('card-203'))
+    warten(HALTEZEIT_MS)
+    ueber(20, 110)
+    loslassen()
+
+    await erwarteFehlerToast('Verschieben fehlgeschlagen.')
+    expect(kartenIn(20)).toEqual(['card-201', 'card-202', 'card-203'])
+  })
+
+  it('ordnet Spalten im Bearbeitungsmodus per Finger um', async () => {
+    mColumns.reorder.mockResolvedValue(fuenfSpalten.columns)
+    zeigen(mkApi())
+
+    greifen(screen.getByTestId('column-header-30'))
+    warten(HALTEZEIT_MS)
+    expect(aufDemBoard('column-header-30')).toHaveAttribute('data-zieh-zustand', 'zieht')
+    ueber(10, 300)
+    loslassen()
+
+    await waitFor(() => expect(mColumns.reorder).toHaveBeenCalledWith(1, [30, 10, 20, 40, 50]))
+  })
+
+  it('greift Spalten außerhalb des Bearbeitungsmodus nicht', () => {
+    editMode.value = false
+    zeigen(mkApi())
+
+    greifen(screen.getByTestId('column-header-30'))
+    warten(HALTEZEIT_MS)
+    ueber(10, 300)
+    loslassen()
+
+    expect(screen.getByTestId('column-header-30')).not.toHaveAttribute('data-zieh-zustand')
+    expect(mColumns.reorder).not.toHaveBeenCalled()
+  })
+
+  it('zieht im Auswahlmodus die ganze Auswahl über moveCards ans Ende der Zielspalte', async () => {
+    const api = mkApi({ bulkTransfer: vi.fn().mockResolvedValue([]) })
+    zeigen(api)
+    stapeln(301, 302)
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-202'))
+    fireEvent.click(screen.getByTestId('card-201'))
+
+    greifen(screen.getByTestId('card-202'))
+    warten(HALTEZEIT_MS)
+    ueber(30, 110)
+    // Die Einfügestelle gilt nur für die Einzelkarte (E15): keine Linie beim Sammelzug.
+    expect(screen.queryByTestId('einfuegelinie')).not.toBeInTheDocument()
+    expect(screen.getByTestId('card-201')).toHaveAttribute('data-zieh-zustand', 'bewegt')
+    loslassen()
+
+    expect(api.bulkTransfer).toHaveBeenCalledWith([201, 202], 1, 30)
+    expect(api.move).not.toHaveBeenCalled()
+    await waitFor(() => expect(kartenIn(30)).toEqual(['card-301', 'card-302', 'card-201', 'card-202']))
+  })
+
+  it('greift im Auswahlmodus eine nicht ausgewählte Karte nicht', () => {
+    const api = mkApi({ bulkTransfer: vi.fn().mockResolvedValue([]) })
+    zeigen(api)
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    fireEvent.click(screen.getByTestId('card-201'))
+
+    greifen(screen.getByTestId('card-202'))
+    warten(HALTEZEIT_MS)
+    ueber(30, 110)
+    loslassen()
+
+    expect(api.bulkTransfer).not.toHaveBeenCalled()
+    expect(api.move).not.toHaveBeenCalled()
+  })
+
+  it('bricht bei pointercancel ohne Aufruf ab', () => {
+    const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+    zeigen(api)
+
+    greifen(screen.getByTestId('card-201'))
+    warten(HALTEZEIT_MS)
+    ueber(30, 110)
+    fireEvent.pointerCancel(window, finger)
+    vi.useRealTimers()
+
+    expect(api.move).not.toHaveBeenCalled()
+    expect(screen.getByTestId('card-201')).not.toHaveAttribute('data-zieh-zustand')
+    expect(screen.queryByTestId('einfuegelinie')).not.toBeInTheDocument()
+    expect(schwebendeKopie('card-201')).toBeNull()
+    expect(kartenIn(20)).toEqual(['card-201', 'card-202', 'card-203'])
   })
 })
 

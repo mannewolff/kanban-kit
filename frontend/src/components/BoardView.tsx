@@ -23,10 +23,11 @@ import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/ep
 import type { Member } from '../api/members'
 import type { Woerterbuch } from '../i18n/de'
 import { useT } from '../i18n/SpracheContext'
-import { activeCardsInColumn, applyMove, spaltenAuswahlUmschalten } from '../lib/boardOps'
+import { ablagePosition, activeCardsInColumn, applyMove, applyMoveAt, spaltenAuswahlUmschalten } from '../lib/boardOps'
 import { effektivDone, neighbourColumns } from '../lib/columnMeta'
 import { useEditMode } from '../lib/EditModeContext'
 import { useTabletQuer } from '../lib/tabletQuer'
+import { useFingerZiehen, type FingerZiehen, type FingerZiel } from '../lib/useFingerZiehen'
 import type { Label } from '../api/labels'
 import { isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
@@ -191,6 +192,48 @@ interface Props {
     | 'bulkLabels'
   >
   epicsApi?: Pick<EpicsApi, 'create'>
+}
+
+/** Was ein laufender Fingerzug auf dem Board zeigt (Plan #1707, E5); ohne ihn gilt der Mauspfad. */
+interface FingerZugAnzeige {
+  /** Die wandernden Karten — eine oder die ganze Auswahl. */
+  readonly kartenIds: ReadonlySet<number>
+  /** Spalte unter dem Finger, `null` außerhalb jeder Spalte. */
+  readonly spalteId: number | null
+  /** Stelle der Einfügelinie; nur die Einzelkarte hat eine (E15), der Sammelzug landet am Ende. */
+  readonly einfuegung: FingerZiel | null
+}
+
+function fingerZugAnzeige(
+  zug: FingerZiehen,
+  sammelZug: (cardId: number) => boolean,
+  wanderndeIds: (cardId: number) => number[],
+): FingerZugAnzeige | null {
+  if (zug.zustand !== 'zieht') {
+    return null
+  }
+  const cardId = Number(zug.gezogenId)
+  return {
+    kartenIds: new Set(wanderndeIds(cardId)),
+    spalteId: zug.ziel ? Number(zug.ziel.spalteId) : null,
+    einfuegung: sammelZug(cardId) ? null : zug.ziel,
+  }
+}
+
+/**
+ * Die Spalte, die alle wandernden Karten schon enthält, ist keine Ablage. Stammen sie aus mehreren
+ * Spalten, gibt es keine solche, und jede Spalte nimmt sie an — die schon dort liegenden bleiben.
+ * Die einzelne Karte unter dem Finger darf auch in ihrer eigenen Spalte die Stelle wechseln.
+ */
+function herkunftsSpalte(cards: Card[], ids: ReadonlySet<number>, anzeige: FingerZugAnzeige | null): number | undefined {
+  const spalten = new Set(cards.filter((c) => ids.has(c.id)).map((c) => c.columnId))
+  return spalten.size === 1 && !anzeige?.einfuegung ? [...spalten][0] : undefined
+}
+
+/** Stelle der Einfügelinie in dieser Spalte; `null`, wenn sie dort keine trägt. */
+function einfuegeIndexIn(anzeige: FingerZugAnzeige | null, columnId: number): number | null {
+  const einfuegung = anzeige?.einfuegung
+  return einfuegung && Number(einfuegung.spalteId) === columnId ? einfuegung.index : null
 }
 
 /**
@@ -687,11 +730,6 @@ export function BoardView({
     setAblageSpalteId(null)
   }
 
-  // Die Spalte, die alle wandernden Karten schon enthält, ist keine Ablage. Stammen sie aus mehreren
-  // Spalten, gibt es keine solche, und jede Spalte nimmt sie an — die schon dort liegenden bleiben.
-  const herkunftsSpalten = new Set(cards.filter((c) => dragCardIds.has(c.id)).map((c) => c.columnId))
-  const herkunftsSpalteId = herkunftsSpalten.size === 1 ? [...herkunftsSpalten][0] : undefined
-
   // Sammel-Ablage auf dem eigenen Board: ein Aufruf für alle, alles oder nichts — einzelne
   // `move`-Aufrufe ließen bei einem Fehler halb verschobene Karten zurück. Karten, die schon in der
   // Zielspalte liegen, bleiben an ihrem Platz (dieselbe Regel wie `moveCard`).
@@ -717,6 +755,50 @@ export function BoardView({
     if (sammelZug(cardId)) void moveCards(selectedIdsInViewOrder(), toColumnId)
     else void moveCard(cardId, toColumnId)
   }
+
+  // Einzelkarte an einer Stelle (Plan #1707, E3): anders als `moveCard` auch innerhalb derselben
+  // Spalte. `position` zählt wie der Server ohne die Karte selbst; liegt sie schon dort, gibt es
+  // nichts zu tun.
+  const moveCardAt = async (cardId: number, toColumnId: number, position: number) => {
+    if (activeCardsInColumn(cards, toColumnId).findIndex((c) => c.id === cardId) === position) {
+      return
+    }
+    const previous = cards
+    setCards(applyMoveAt(previous, cardId, toColumnId, position))
+    try {
+      await api.move(cardId, toColumnId, position)
+    } catch (e) {
+      setCards(previous)
+      notify(apiErrorMessage(e, t.BOARD.VERSCHIEBEN_FEHLER), 'error')
+    }
+  }
+
+  // Ablage per Finger (E3, E15): Die Auswahl wandert wie bei der Maus gesammelt ans Spaltenende;
+  // die angezeigte Einfügestelle gilt nur für die Einzelkarte.
+  const karteAbgelegtAn = (cardId: number, toColumnId: number, position: number) =>
+    void (sammelZug(cardId) ? moveCards(selectedIdsInViewOrder(), toColumnId) : moveCardAt(cardId, toColumnId, position))
+
+  // Ziehen per Finger auf dem Tablet quer (Plan #1707, E3), neben dem unveränderten Mauspfad. Der
+  // Hook zählt die Stelle unter den angezeigten Karten; der Server zählt verdeckte mit.
+  const kartenZug = useFingerZiehen({
+    aktiv: tabletQuer,
+    onAblage: (id: string, ziel: FingerZiel) => {
+      const cardId = Number(id)
+      const toColumnId = Number(ziel.spalteId)
+      const ohneKarte = (liste: Card[]) => activeCardsInColumn(liste, toColumnId).filter((c) => c.id !== cardId)
+      karteAbgelegtAn(cardId, toColumnId, ablagePosition(ohneKarte(cards), ohneKarte(sichtbareKarten), ziel.index))
+    },
+  })
+  const spaltenZug = useFingerZiehen({
+    aktiv: tabletQuer && showStructureEdit,
+    onAblage: (id: string, ziel: FingerZiel) => void reorderColumn(Number(id), Number(ziel.spalteId)),
+  })
+  // Solange der Finger eine Karte zieht, trägt er die Darstellung, die sonst der Mauspfad setzt:
+  // Platzhalter der wandernden Karten und Ablagefläche unter dem Finger.
+  const fingerAnzeige = fingerZugAnzeige(kartenZug, sammelZug, wanderndeIds)
+  const zugKartenIds = fingerAnzeige?.kartenIds ?? dragCardIds
+  const zugSpalteId = fingerAnzeige ? fingerAnzeige.spalteId : ablageSpalteId
+  const herkunftsSpalteId = herkunftsSpalte(cards, zugKartenIds, fingerAnzeige)
 
   // Ordnungsposition der Quellspalte für die Vorbelegung der Zielspalte im Verschieben-Dialog.
   // Eindeutig nur, wenn alle zu verschiebenden Karten in derselben Spalte liegen — sonst null,
@@ -910,9 +992,12 @@ export function BoardView({
               retentionDays={retentionDays}
               naechsteRichtung={nextSortDirection[column.id] ?? 'ASC'}
               sortiertGerade={sortingColumnId === column.id}
-              dragCardIds={dragCardIds}
-              ablageSpalteId={ablageSpalteId}
+              dragCardIds={zugKartenIds}
+              ablageSpalteId={zugSpalteId}
               herkunftsSpalteId={herkunftsSpalteId}
+              kartenZug={kartenZug}
+              spaltenZug={spaltenZug}
+              einfuegeIndex={einfuegeIndexIn(fingerAnzeige, column.id)}
               colDrag={colDrag}
               onKarteUeber={() => setAblageSpalteId(column.id)}
               onKarteAbgelegt={(cardId) => {
