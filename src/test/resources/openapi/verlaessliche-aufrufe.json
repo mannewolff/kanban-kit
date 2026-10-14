@@ -782,6 +782,51 @@
       },
       "type" : "object"
     },
+    "IngestCurrentRequest" : {
+      "properties" : {
+        "stages" : {
+          "items" : {
+            "$ref" : "#/components/schemas/IngestCurrentStageRequest"
+          },
+          "maxItems" : 10,
+          "minItems" : 0,
+          "type" : "array"
+        }
+      },
+      "required" : [ "stages" ],
+      "type" : "object"
+    },
+    "IngestCurrentStageRequest" : {
+      "properties" : {
+        "cardNumber" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "deadline" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "holdsImplementation" : {
+          "type" : "boolean"
+        },
+        "stage" : {
+          "maxLength" : 40,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "startedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "step" : {
+          "maxLength" : 40,
+          "minLength" : 0,
+          "type" : "string"
+        }
+      },
+      "required" : [ "stage", "startedAt", "step" ],
+      "type" : "object"
+    },
     "IngestItemRequest" : {
       "properties" : {
         "cardNumber" : {
@@ -912,6 +957,9 @@
         },
         "complete" : {
           "type" : "boolean"
+        },
+        "current" : {
+          "$ref" : "#/components/schemas/IngestCurrentRequest"
         },
         "durationMs" : {
           "format" : "int64",

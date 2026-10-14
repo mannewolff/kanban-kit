@@ -33,6 +33,7 @@ import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.ReleasePreparation;
 import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
+import org.mwolff.manban.nightrun.domain.RunnerStufe;
 import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
@@ -204,7 +205,14 @@ public class NightRunService {
             // Die Morgenmeldung ersetzt wie jedes andere Feld (Issue #1456, Plan #1447 E12): Eine
             // Meldung ohne sie raeumt eine frueher gemeldete ab. Den Eingang setzt die Uhr des
             // Servers, denn die Meldung selbst traegt keinen Zeitpunkt der Vorbereitung.
-            vorbereitung(meldung.releasePreparation(), now));
+            vorbereitung(meldung.releasePreparation(), now),
+            // Die laufenden Stufen ersetzen wie jedes andere Feld (Issue #1725). Ein beendeter
+            // Lauf faehrt keine Stufe mehr; meldet er doch welche, sind sie keine Auskunft.
+            meldung.complete() ? List.of() : meldung.current(),
+            // Die Beendigung von Hand setzt allein der Plattform-Leitstand (Issue #1197); eine
+            // Meldung des Runners setzt sie nie, der Adapter laesst die Spalte beim Ersetzen
+            // stehen.
+            null);
 
     // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
     runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
@@ -372,6 +380,10 @@ public class NightRunService {
         // keine Auskunft.
         null,
         // Fest null aus demselben Grund (Issue #1456): Die Morgenmeldung kommt allein vom Runner.
+        null,
+        // Durchgereicht wie jedes andere Feld (Issue #1725); ein hochgeladenes Protokoll ist
+        // beendet und traegt darum keine laufenden Stufen.
+        submission.complete() ? List.of() : submission.current(),
         null);
   }
 
@@ -528,11 +540,10 @@ public class NightRunService {
         vorbereitungView(run.releasePreparation(), titel),
         NightRunOutcome.of(
             run.complete(),
-            // Die Sicht eines Projekts kennt die Kennzeichnung von Hand nicht (Issue #1197): Sie
-            // wird auf dem Plattform-Leitstand gesetzt und dort gelesen; der Lauf-Datensatz dieser
-            // Sicht fuehrt die Spalte nicht. Ein gekennzeichneter Lauf steht hier also weiter als
-            // verstummt — dieselbe Auskunft wie vor der Kennzeichnung, keine falsche.
-            null,
+            // Die Kennzeichnung von Hand setzt der Plattform-Leitstand (Issue #1197); seit Issue
+            // #1725 fuehrt der Lauf-Datensatz die Spalte, und die Sicht des Projekts nennt einen
+            // so beendeten Lauf wie der Leitstand beendet statt verstummt.
+            run.closedAt(),
             run.noWorkReason(),
             // Seit Issue #1143 wirkt der Abbruchgrund auf den Ausgang: Ein Lauf, der abbrach, ist
             // nie gelungen. Dieselben Argumente wie in DisruptionService.view — eine Rechnung,
@@ -582,6 +593,8 @@ public class NightRunService {
    *     Übernommen wird sie nur zusammen mit dem Abbruchgrund (Plan #1498 E4).
    * @param releasePreparation die gemeldete Morgenmeldung (Issue #1456); {@code null} heißt „keine
    *     gemeldet". Der Upload-Weg führt sie nicht und übergibt hier fest {@code null}.
+   * @param current die gemeldeten laufenden Stufen (Issue #1725); leer statt {@code null}. Der
+   *     Upload-Weg führt sie nicht und übergibt hier die leere Liste.
    */
   public record NewNightRun(
       Instant startedAt,
@@ -598,7 +611,51 @@ public class NightRunService {
       @Nullable String abortReason,
       @Nullable NightRunAbortKind abortKind,
       @Nullable NewReleasePreparation releasePreparation,
-      List<NewNightRunItem> items) {}
+      List<NewNightRunItem> items,
+      List<RunnerStufe> current) {
+
+    public NewNightRun {
+      current = List.copyOf(current);
+    }
+
+    /**
+     * Ein Lauf ohne laufende Stufen — der Upload-Weg und jede Meldung ohne das Feld (Issue #1725).
+     */
+    public NewNightRun(
+        Instant startedAt,
+        NightRunMode mode,
+        long durationMs,
+        int processedCount,
+        int skippedCount,
+        int unparsedCount,
+        @Nullable String unparsedSample,
+        boolean complete,
+        @Nullable NightRunUsage usage,
+        @Nullable String noWorkReason,
+        @Nullable NightRunBudget budget,
+        @Nullable String abortReason,
+        @Nullable NightRunAbortKind abortKind,
+        @Nullable NewReleasePreparation releasePreparation,
+        List<NewNightRunItem> items) {
+      this(
+          startedAt,
+          mode,
+          durationMs,
+          processedCount,
+          skippedCount,
+          unparsedCount,
+          unparsedSample,
+          complete,
+          usage,
+          noWorkReason,
+          budget,
+          abortReason,
+          abortKind,
+          releasePreparation,
+          items,
+          List.of());
+    }
+  }
 
   /**
    * Eine gemeldete Morgenmeldung ohne den Eingangszeitpunkt — den setzt der Dienst (Issue #1456).

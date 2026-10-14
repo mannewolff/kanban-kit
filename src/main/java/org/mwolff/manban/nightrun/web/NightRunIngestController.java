@@ -165,6 +165,8 @@ class NightRunIngestController {
           releasePreparation ist die Morgenmeldung: ob und wie der Lauf eine \
           Veröffentlichung vorbereitet hat. Sie ersetzt wie jedes andere Feld eine früher \
           gemeldete; fehlt sie, steht am Lauf keine. Den Eingang setzt der Server.\n\n\
+          current nennt die Stufen, die der Lauf gerade fährt. Auch sie ersetzen die \
+          früher gemeldeten; ein beendeter Lauf trägt keine.\n\n\
           Gegenstück auf der Runner-Seite ist „Protokoll einlesen“: Dort lädt ein Mensch \
           das Textprotokoll eines Laufs im Browser hoch, und der Leitstand deutet es \
           zeilenweise. Dieser Aufruf nimmt denselben Inhalt strukturiert an, ohne \
@@ -241,7 +243,8 @@ class NightRunIngestController {
         request.abortReason(),
         request.abortKind(),
         vorbereitung(request.releasePreparation()),
-        request.items().stream().map(NightRunIngestController::item).toList());
+        request.items().stream().map(NightRunIngestController::item).toList(),
+        IngestCurrentRequest.toDomain(request.current()));
   }
 
   /**
@@ -357,6 +360,9 @@ class NightRunIngestController {
    * @param releasePreparation die Morgenmeldung des Laufs (Issue #1456, Plan #1447 E12). Additiv
    *     und {@code @Nullable} aus demselben Grund wie die vier davor: Eine ältere Kit-Kopie kennt
    *     das Feld nicht und meldet unverändert weiter.
+   * @param current die laufenden Stufen (Issue #1725, Plan #1724 Vertrag V1). Additiv und
+   *     {@code @Nullable} aus demselben Grund wie die fünf davor. Ob die Stufen am Lauf landen,
+   *     entscheidet der Dienst — ein beendeter Lauf trägt keine.
    */
   @Schema(description = "Der vollständige Stand eines Laufs; ersetzt eine frühere Meldung.")
   record IngestRequest(
@@ -426,6 +432,15 @@ class NightRunIngestController {
           @Nullable
           @Valid
           IngestReleasePreparationRequest releasePreparation,
+      @Schema(
+              description =
+                  """
+                  Die Stufen, die der Lauf gerade fährt, mit Karte, Beginn, Frist, Teilschritt \
+                  und ob sie die Umsetzung hält. Fehlt das Feld, trägt der Lauf keine; ein \
+                  beendeter Lauf (complete true) trägt nie welche.""")
+          @Nullable
+          @Valid
+          IngestCurrentRequest current,
       @Schema(description = "Die Vorgänge des Laufs, höchstens 200.")
           @NotNull
           @Size(max = MAX_ITEMS_PER_RUN)

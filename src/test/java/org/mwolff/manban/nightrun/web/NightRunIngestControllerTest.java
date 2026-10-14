@@ -51,6 +51,7 @@ import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
+import org.mwolff.manban.nightrun.domain.RunnerStufe;
 import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestBudgetRequest;
 import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestItemRequest;
 import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestReleasePreparationRequest;
@@ -107,6 +108,7 @@ class NightRunIngestControllerTest {
         0,
         Boolean.TRUE,
         usage,
+        null,
         null,
         null,
         null,
@@ -235,6 +237,7 @@ class NightRunIngestControllerTest {
         null,
         null,
         null,
+        null,
         List.of());
   }
 
@@ -301,6 +304,7 @@ class NightRunIngestControllerTest {
         null,
         abbruch,
         art,
+        null,
         null,
         List.of());
   }
@@ -423,6 +427,7 @@ class NightRunIngestControllerTest {
         null,
         null,
         budget,
+        null,
         null,
         null,
         null,
@@ -667,6 +672,7 @@ class NightRunIngestControllerTest {
         null,
         null,
         vorbereitung,
+        null,
         List.of());
   }
 
@@ -889,6 +895,7 @@ class NightRunIngestControllerTest {
         null,
         null,
         null,
+        null,
         List.of(
             new IngestItemRequest(
                 1549,
@@ -1014,5 +1021,121 @@ class NightRunIngestControllerTest {
                     NightRunErrorClass.CHECKS_RED,
                     nurPruefung("c".repeat(IngestStuckRequest.CHECK_MAX + 1)))))
         .containsExactly("items[0].stuck.check");
+  }
+
+  // --- Laufende Stufen (Issue #1725, Plan #1724 Vertrag V1) ---
+
+  private static final Instant STUFENBEGINN = Instant.parse("2026-09-16T22:41:00Z");
+
+  private static IngestCurrentStageRequest laufendeStufe(String stage, String step) {
+    return new IngestCurrentStageRequest(
+        1665, stage, STUFENBEGINN, STUFENBEGINN.plusSeconds(7200), step, true);
+  }
+
+  private static NightRunIngestController.IngestRequest anfrageMitStufen(
+      @Nullable IngestCurrentRequest current) {
+    return new NightRunIngestController.IngestRequest(
+        START,
+        NightRunMode.CHAIN,
+        null,
+        1000L,
+        0,
+        0,
+        0,
+        Boolean.FALSE,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        current,
+        List.of());
+  }
+
+  @Test
+  void gueltigeStufenBestehenDiePruefungUndKommenAmDienstAn() {
+    NightRunIngestController.IngestRequest anfrage =
+        anfrageMitStufen(
+            new IngestCurrentRequest(
+                List.of(laufendeStufe("VORBEREITUNG", "WAITING_FOR_IMPLEMENTATION"))));
+
+    assertThat(verletztePfade(anfrage)).isEmpty();
+    assertThat(gemeldet(anfrage).current())
+        .containsExactly(
+            new RunnerStufe(
+                1665,
+                "VORBEREITUNG",
+                STUFENBEGINN,
+                STUFENBEGINN.plusSeconds(7200),
+                "WAITING_FOR_IMPLEMENTATION",
+                true));
+  }
+
+  @Test
+  void ohneStufenKommtDieLeereListeAmDienstAn() {
+    assertThat(gemeldet(anfrageMitStufen(null)).current()).isEmpty();
+  }
+
+  @Test
+  void zehnStufenBestehen_elfWerdenAbgewiesen() {
+    List<IngestCurrentStageRequest> zehn =
+        IntStream.range(0, IngestCurrentRequest.MAX_STAGES)
+            .mapToObj(i -> laufendeStufe("PLAN", "SESSION"))
+            .toList();
+    List<IngestCurrentStageRequest> elf =
+        IntStream.range(0, IngestCurrentRequest.MAX_STAGES + 1)
+            .mapToObj(i -> laufendeStufe("PLAN", "SESSION"))
+            .toList();
+
+    assertThat(verletztePfade(anfrageMitStufen(new IngestCurrentRequest(zehn)))).isEmpty();
+    assertThat(verletztePfade(anfrageMitStufen(new IngestCurrentRequest(elf))))
+        .containsExactly("current.stages");
+  }
+
+  @Test
+  void eineStufeOderEinTeilschrittUeberVierzigZeichenWirdAbgewiesen() {
+    String zuLang = "X".repeat(IngestCurrentStageRequest.CODE_MAX + 1);
+    String genau = "X".repeat(IngestCurrentStageRequest.CODE_MAX);
+
+    assertThat(
+            verletztePfade(
+                anfrageMitStufen(new IngestCurrentRequest(List.of(laufendeStufe(genau, genau))))))
+        .isEmpty();
+    assertThat(
+            verletztePfade(
+                anfrageMitStufen(
+                    new IngestCurrentRequest(List.of(laufendeStufe(zuLang, "SESSION"))))))
+        .containsExactly("current.stages[0].stage");
+    assertThat(
+            verletztePfade(
+                anfrageMitStufen(new IngestCurrentRequest(List.of(laufendeStufe("PLAN", zuLang))))))
+        .containsExactly("current.stages[0].step");
+  }
+
+  /** Plan #1724 E5: Ein neueres Kit mit einem weiteren Code verliert seinen Laufbericht nicht. */
+  @Test
+  void einUnbekannterTeilschrittUndEineUnbekannteStufeWerdenAngenommen() {
+    NightRunIngestController.IngestRequest anfrage =
+        anfrageMitStufen(
+            new IngestCurrentRequest(List.of(laufendeStufe("NEUE_STUFE", "NEUER_SCHRITT"))));
+
+    assertThat(verletztePfade(anfrage)).isEmpty();
+    assertThat(gemeldet(anfrage).current().getFirst().step()).isEqualTo("NEUER_SCHRITT");
+  }
+
+  @Test
+  void eineStufeOhneFristBestehtDiePruefung() {
+    IngestCurrentStageRequest ohneFrist =
+        new IngestCurrentStageRequest(1665, "UMSETZUNG", STUFENBEGINN, null, "SESSION", false);
+
+    assertThat(verletztePfade(anfrageMitStufen(new IngestCurrentRequest(List.of(ohneFrist)))))
+        .isEmpty();
+    assertThat(
+            gemeldet(anfrageMitStufen(new IngestCurrentRequest(List.of(ohneFrist))))
+                .current()
+                .getFirst()
+                .deadline())
+        .isNull();
   }
 }

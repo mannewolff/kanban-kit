@@ -1,6 +1,7 @@
 package org.mwolff.manban.nightrun.domain;
 
 import java.time.Instant;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.Identifiable;
 
@@ -39,6 +40,11 @@ import org.mwolff.manban.common.Identifiable;
  * @param releasePreparation die Morgenmeldung des Laufs (Issue #1456); {@code null} heißt „keine
  *     gemeldet" — jeder Lauf vor {@code V48}, jeder hochgeladene und jeder, dessen letzte Meldung
  *     sie nicht trug
+ * @param current die Stufen, die der Lauf laut seiner letzten Meldung gerade fährt (Issue #1725);
+ *     leer statt {@code null} — bei jedem beendeten, hochgeladenen und vor {@code V53} gemeldeten
+ *     Lauf und bei jedem, dessen Kit keine Stufen meldet
+ * @param closedAt wann ein Plattform-Admin den Lauf von Hand beendet hat (Issue #1197, gelesen seit
+ *     #1725); {@code null} heißt „nicht von Hand beendet“
  */
 public record NightRun(
     @Nullable Long id,
@@ -61,5 +67,64 @@ public record NightRun(
     @Nullable NightRunBudget budget,
     @Nullable String abortReason,
     @Nullable NightRunAbortKind abortKind,
-    @Nullable ReleasePreparation releasePreparation)
-    implements Identifiable {}
+    @Nullable ReleasePreparation releasePreparation,
+    List<RunnerStufe> current,
+    @Nullable Instant closedAt)
+    implements Identifiable {
+
+  public NightRun {
+    current = List.copyOf(current);
+  }
+
+  /**
+   * Ein Lauf ohne laufende Stufen und ohne Beendigung von Hand — der Stand jedes Erzeugungspfads,
+   * der beides nicht kennt (Issue #1725).
+   */
+  public NightRun(
+      @Nullable Long id,
+      Long projectId,
+      Instant startedAt,
+      NightRunMode mode,
+      NightRunKind kind,
+      long durationMs,
+      int processedCount,
+      int skippedCount,
+      int unparsedCount,
+      @Nullable String unparsedSample,
+      Instant createdAt,
+      NightRunOrigin origin,
+      @Nullable String tokenName,
+      boolean complete,
+      @Nullable Instant updatedAt,
+      @Nullable NightRunUsage usage,
+      @Nullable String noWorkReason,
+      @Nullable NightRunBudget budget,
+      @Nullable String abortReason,
+      @Nullable NightRunAbortKind abortKind,
+      @Nullable ReleasePreparation releasePreparation) {
+    this(
+        id,
+        projectId,
+        startedAt,
+        mode,
+        kind,
+        durationMs,
+        processedCount,
+        skippedCount,
+        unparsedCount,
+        unparsedSample,
+        createdAt,
+        origin,
+        tokenName,
+        complete,
+        updatedAt,
+        usage,
+        noWorkReason,
+        budget,
+        abortReason,
+        abortKind,
+        releasePreparation,
+        List.of(),
+        null);
+  }
+}

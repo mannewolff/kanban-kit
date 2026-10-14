@@ -32,6 +32,7 @@ import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.nightrun.domain.ReleasePreparation;
 import org.mwolff.manban.nightrun.domain.ReleasePreparationResult;
+import org.mwolff.manban.nightrun.domain.RunnerStufe;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -203,6 +204,24 @@ class NightRunRepositoryAdapter implements NightRunRepository {
       "SELECT night_run_id, kind, card_number, text FROM night_run_release_entry"
           + " WHERE night_run_id IN (:ids) ORDER BY night_run_id, kind, position";
 
+  /**
+   * Die laufenden Stufen eines Laufs (Issue #1725). Beim Ersetzen werden sie gelöscht und neu
+   * geschrieben, wie die Morgenmeldung — eine Meldung ist der vollständige Stand des Laufs.
+   */
+  private static final String INSERT_CURRENT_STAGE =
+      "INSERT INTO night_run_current_stage (night_run_id, position, card_number, stage,"
+          + " started_at, deadline, step, holds_implementation)"
+          + " VALUES (:nightRunId, :position, :cardNumber, :stage, :startedAt, :deadline, :step,"
+          + " :holdsImplementation)";
+
+  private static final String DELETE_CURRENT_STAGES =
+      "DELETE FROM night_run_current_stage WHERE night_run_id = :nightRunId";
+
+  private static final String SELECT_CURRENT_STAGES =
+      "SELECT night_run_id, card_number, stage, started_at, deadline, step, holds_implementation"
+          + " FROM night_run_current_stage WHERE night_run_id IN (:ids)"
+          + " ORDER BY night_run_id, position";
+
   /** Art eines Eintrags der Morgenmeldung — die Werte des {@code CHECK} aus {@code V48}. */
   private static final String E_CARD = "CARD";
 
@@ -261,6 +280,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     Long runId = vergebeneId.get(0);
     insertItems(run, runId, newItems);
     insertVorbereitung(runId, run.releasePreparation());
+    insertStufen(runId, run.current());
     return Optional.of(runId);
   }
 
@@ -288,6 +308,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
       Long runId = jdbc.queryForList(INSERT_RUN, runParameters(run), Long.class).get(0);
       insertItems(run, runId, newItems);
       insertVorbereitung(runId, run.releasePreparation());
+      insertStufen(runId, run.current());
       return new UpsertResult(runId, true);
     }
 
@@ -302,7 +323,37 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     // gemeldete ab, wie jedes andere Feld des Laufs.
     jdbc.update(DELETE_PREPARATION, lauf);
     insertVorbereitung(runId, run.releasePreparation());
+    // Ebenso die laufenden Stufen (Issue #1725): Ein beendeter Lauf meldet keine, und seine
+    // frueher gemeldeten fallen damit weg.
+    jdbc.update(DELETE_CURRENT_STAGES, lauf);
+    insertStufen(runId, run.current());
     return new UpsertResult(runId, false);
+  }
+
+  /** Schreibt die laufenden Stufen in ihrer Reihenfolge (Issue #1725) — oder nichts. */
+  private void insertStufen(Long runId, List<RunnerStufe> stufen) {
+    if (stufen.isEmpty()) {
+      return;
+    }
+    SqlParameterSource[] batch = new SqlParameterSource[stufen.size()];
+    for (int position = 0; position < stufen.size(); position++) {
+      RunnerStufe stufe = stufen.get(position);
+      Instant frist = stufe.deadline();
+      batch[position] =
+          new MapSqlParameterSource()
+              .addValue(P_NIGHT_RUN_ID, runId)
+              .addValue("position", position)
+              .addValue("cardNumber", stufe.cardNumber())
+              .addValue("stage", stufe.stage())
+              .addValue(P_STARTED_AT, zeitpunkt(stufe.startedAt()))
+              .addValue(
+                  "deadline",
+                  frist == null ? null : zeitpunkt(frist),
+                  Types.TIMESTAMP_WITH_TIMEZONE)
+              .addValue("step", stufe.step())
+              .addValue("holdsImplementation", stufe.holdsImplementation());
+    }
+    jdbc.batchUpdate(INSERT_CURRENT_STAGE, batch);
   }
 
   /**
@@ -449,7 +500,30 @@ class NightRunRepositoryAdapter implements NightRunRepository {
                       liste.offen(),
                       rs.getObject("received_at", OffsetDateTime.class).toInstant()));
             });
-    return gefunden.stream().map(e -> toDomain(e, vorbereitungen.get(e.getId()))).toList();
+    Map<Long, List<RunnerStufe>> stufen = new HashMap<>();
+    jdbc.query(
+        SELECT_CURRENT_STAGES,
+        auswahl,
+        (RowCallbackHandler)
+            rs -> {
+              OffsetDateTime frist = rs.getObject("deadline", OffsetDateTime.class);
+              stufen
+                  .computeIfAbsent(rs.getLong(C_NIGHT_RUN_ID), id -> new ArrayList<>())
+                  .add(
+                      new RunnerStufe(
+                          rs.getInt("card_number"),
+                          rs.getString("stage"),
+                          rs.getObject("started_at", OffsetDateTime.class).toInstant(),
+                          frist == null ? null : frist.toInstant(),
+                          rs.getString("step"),
+                          rs.getBoolean("holds_implementation")));
+            });
+    return gefunden.stream()
+        .map(
+            e ->
+                toDomain(
+                    e, vorbereitungen.get(e.getId()), stufen.getOrDefault(e.getId(), List.of())))
+        .toList();
   }
 
   /** Die gelesenen Einträge einer Morgenmeldung, je Art in Positionsfolge. */
@@ -655,7 +729,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
   }
 
-  private static NightRun toDomain(NightRunEntity e, @Nullable ReleasePreparation vorbereitung) {
+  private static NightRun toDomain(
+      NightRunEntity e, @Nullable ReleasePreparation vorbereitung, List<RunnerStufe> stufen) {
     String abortKind = e.getAbortKind();
     return new NightRun(
         e.getId(),
@@ -678,7 +753,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         budgetLesen(e),
         e.getAbortReason(),
         abortKind == null ? null : NightRunAbortKind.valueOf(abortKind),
-        vorbereitung);
+        vorbereitung,
+        stufen,
+        e.getClosedAt());
   }
 
   /** Paketsichtbar für den Lesepfad der Bremsbilanz (Issue #1550) — eine Abbildung, nicht zwei. */
