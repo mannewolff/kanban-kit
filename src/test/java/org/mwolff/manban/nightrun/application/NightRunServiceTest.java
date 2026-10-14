@@ -1759,6 +1759,14 @@ class NightRunServiceTest {
     assertThat(gemeldeterLauf().current()).containsExactly(VORBEREITUNG);
   }
 
+  /** Ein hochgeladenes, beendetes Protokoll traegt keine laufenden Stufen (Issue #1733). */
+  @Test
+  void submit_verwirftDieStufenEinesBeendetenLaufs() {
+    service.submit(USER, PROJECT, List.of(mitStufen(true)));
+
+    assertThat(gemeldeterLauf().current()).isEmpty();
+  }
+
   @Test
   void submit_ohneStufenFeldTraegtDerLaufKeine() {
     service.submit(USER, PROJECT, List.of(lauf(T1)));
