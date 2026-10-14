@@ -29,7 +29,7 @@ import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { EpicBadge } from '../components/EpicBadge'
-import { LabelErklaerung } from '../components/LabelErklaerung'
+import { LabelErklaerung, LabelErklaerungInfo } from '../components/LabelErklaerung'
 import { ablagePosition, activeCardsInColumn } from '../lib/boardOps'
 import { epicOfCard } from '../lib/cardEpic'
 import { effektivDone } from '../lib/columnMeta'
@@ -230,9 +230,10 @@ function LabelFilterMenue({
           const aktiv = gewaehlt.has(label.id)
           const Zeichen = aktiv ? CheckBoxOutlinedIcon : CheckBoxOutlineBlankOutlinedIcon
           // Die Erklärung eines Systemlabels hängt rechts am Menüpunkt; sein Fokus bleibt beim Menü
-          // (Plan #1668, E6), sodass sie bei den Pfeiltasten erscheint wie beim Darüberfahren.
+          // (Plan #1668, E6), sodass sie bei den Pfeiltasten erscheint wie beim Darüberfahren. Auf dem
+          // Tablet quer wählt Antippen den Eintrag, die Erklärung öffnet das Info-Symbol (Plan #1707, E7).
           return (
-            <LabelErklaerung key={label.id} name={label.name} placement="right" eigenerFokus>
+            <LabelErklaerung key={label.id} name={label.name} placement="right" eigenerFokus eigeneAktion>
               <MenuItem
                 role="menuitemcheckbox"
                 aria-checked={aktiv}
@@ -245,6 +246,7 @@ function LabelFilterMenue({
                   <Zeichen fontSize="small" />
                 </ListItemIcon>
                 <ListItemText primary={label.name} />
+                <LabelErklaerungInfo name={label.name} placement="right" />
               </MenuItem>
             </LabelErklaerung>
           )

@@ -1520,11 +1520,13 @@ describe('BoardListPage – Label-Filter als Menü', () => {
     mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
     mLabels.list.mockResolvedValue(labels)
     render(
-      <MemoryRouter initialEntries={['/boards/1/list']}>
-        <Routes>
-          <Route path="/boards/:boardId/list" element={<BoardListPage />} />
-        </Routes>
-      </MemoryRouter>,
+      <TabletQuerProvider>
+        <MemoryRouter initialEntries={['/boards/1/list']}>
+          <Routes>
+            <Route path="/boards/:boardId/list" element={<BoardListPage />} />
+          </Routes>
+        </MemoryRouter>
+      </TabletQuerProvider>,
     )
   }
 
@@ -1635,6 +1637,48 @@ describe('BoardListPage – Label-Filter als Menü', () => {
       expect(screen.getByRole('menuitemcheckbox', { name: 'Label-Filter kit:clarify' })).toHaveAttribute('aria-checked', 'true')
       await waitFor(() => expect(screen.queryByText('MitBug')).not.toBeInTheDocument())
       expect(screen.getByRole('menu')).toBeInTheDocument()
+    })
+
+    it('Szenario: Auswahl im Filter', async () => {
+      // Angenommen ein Mensch bedient den Leitstand auf einem Tablet im Querformat per Finger
+      setzeMedien({ tabletQuer: true })
+      // Und der Filter eines Boards zeigt eine Liste von Labels mit Erklärungen
+      renderMitLabels([bug, klaeren])
+      fireEvent.click(await screen.findByRole('button', { name: 'Label-Filter' }))
+      const punkt = await screen.findByRole('menuitemcheckbox', { name: 'Label-Filter kit:clarify' })
+
+      // Wenn er einen Eintrag antippt
+      fireEvent.click(punkt)
+
+      // Dann ist der Eintrag ausgewählt — ohne dass sich eine Erklärung öffnet
+      expect(punkt).toHaveAttribute('aria-checked', 'true')
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+      // Und wenn er das Info-Symbol neben dem Eintrag antippt, öffnet sich dessen Erklärung
+      fireEvent.click(screen.getByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') }))
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
+      // — die Auswahl bleibt, wie sie war
+      expect(punkt).toHaveAttribute('aria-checked', 'true')
+    })
+
+    it('setzt auf dem Tablet quer kein Info-Symbol an ein selbst angelegtes Label', async () => {
+      setzeMedien({ tabletQuer: true })
+      renderMitLabels([bug, klaeren])
+      fireEvent.click(await screen.findByRole('button', { name: 'Label-Filter' }))
+      await screen.findByRole('menuitemcheckbox', { name: 'Label-Filter Bug' })
+
+      expect(screen.queryByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('Bug') })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') })).toBeInTheDocument()
+    })
+
+    it('zeigt am Desktop kein Info-Symbol und die Erklärung beim Darüberfahren wie heute (AK 7)', async () => {
+      renderMitLabels([bug, klaeren])
+      fireEvent.click(await screen.findByRole('button', { name: 'Label-Filter' }))
+      const punkt = await screen.findByRole('menuitemcheckbox', { name: 'Label-Filter kit:clarify' })
+
+      expect(screen.queryByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') })).not.toBeInTheDocument()
+      await userEvent.hover(punkt)
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(KLAEREN.bedeutung)
     })
   })
 

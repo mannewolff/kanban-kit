@@ -5,7 +5,6 @@ import ListItemText from '@mui/material/ListItemText'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
-import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined'
 import CheckBoxOutlineBlankOutlinedIcon from '@mui/icons-material/CheckBoxOutlineBlankOutlined'
@@ -17,7 +16,8 @@ import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined'
 import type { LabelAction } from '../api/cards'
 import type { Label } from '../api/labels'
 import { useT } from '../i18n/SpracheContext'
-import { LabelErklaerung } from './LabelErklaerung'
+import { Erklaerung } from './Erklaerung'
+import { LabelErklaerung, LabelErklaerungInfo } from './LabelErklaerung'
 import { SURFACE_HOVER_SHADOW } from '../theme'
 
 /** Wie weit ein Label in der Auswahl vertreten ist. */
@@ -111,10 +111,11 @@ export function BulkActionBar({
       </Typography>
       {labelsGesperrt ? (
         // Ein deaktivierter Button meldet keine Mausereignisse; ohne den span-Wrapper bliebe der
-        // Hinweis, warum er gesperrt ist, auch am Zeigegerät unsichtbar.
-        <Tooltip title={labelsDisabledReason}>
+        // Hinweis, warum er gesperrt ist, auch am Zeigegerät unsichtbar. Auf dem Tablet quer öffnet
+        // Antippen den Hinweis (Plan #1707, E7).
+        <Erklaerung title={labelsDisabledReason}>
           <span>{labelTaste}</span>
-        </Tooltip>
+        </Erklaerung>
       ) : (
         labelTaste
       )}
@@ -122,9 +123,10 @@ export function BulkActionBar({
         {labelOptions.map(({ label, zustand }) => {
           const ZustandSymbol = ZUSTAND_SYMBOL[zustand]
           // Die Erklärung eines Systemlabels hängt rechts am Menüpunkt; sein Fokus bleibt beim Menü
-          // (Plan #1668, E6), sodass sie bei den Pfeiltasten erscheint wie beim Darüberfahren.
+          // (Plan #1668, E6), sodass sie bei den Pfeiltasten erscheint wie beim Darüberfahren. Auf dem
+          // Tablet quer setzt Antippen das Label, die Erklärung öffnet das Info-Symbol (Plan #1707, E7).
           return (
-            <LabelErklaerung key={label.id} name={label.name} placement="right" eigenerFokus>
+            <LabelErklaerung key={label.id} name={label.name} placement="right" eigenerFokus eigeneAktion>
               <MenuItem
                 // Der Zustand steht im zugänglichen Namen, nicht nur im Häkchen-Symbol: Ein Vollhaken
                 // und ein Strich sind rein visuelle Unterschiede, die ohne Bildschirm verschwänden —
@@ -138,6 +140,7 @@ export function BulkActionBar({
                   <ZustandSymbol fontSize="small" />
                 </ListItemIcon>
                 <ListItemText primary={label.name} />
+                <LabelErklaerungInfo name={label.name} placement="right" />
               </MenuItem>
             </LabelErklaerung>
           )
