@@ -226,6 +226,37 @@ Papierkorb wird über den Button **„Papierkorb"** in der Board-Kopfzeile geöf
   gilt **global** für alle Boards (nur der Spaltenfilter oben bleibt pro Board).
 - **Zeilen umsortieren:** über den Drag-Handle links (innerhalb derselben Spalte).
 
+## Bedienung auf dem Tablet {#tablet}
+
+Der Leitstand lässt sich auf einem **Tablet im Querformat** per Finger bedienen — gedacht für
+**Safari auf dem iPad (iPadOS)** und **Chrome auf Android-Tablets**, jeweils in aktueller Version, bei
+etwa 1024 bis 1366 px Breite. Im **Hochformat** und auf dem **Handy** sieht und bedient sich der
+Leitstand wie bisher. Ein Tablet mit angeschlossener **Maus oder Trackpad** zeigt die
+Desktop-Darstellung, ebenso ein Laptop mit Touchscreen.
+
+- **Board:** Ein Board mit bis zu fünf Spalten passt ganz auf den Bildschirm; ab sechs Spalten
+  rollt die Fläche seitlich. Die Navigation links ist beim Öffnen eingeklappt und lässt sich über
+  das Menü-Symbol aufklappen.
+- **Karten verschieben:** Den Finger etwa eine halbe Sekunde auf eine Karte legen — sie hebt sich
+  an und folgt dem Finger. So zieht man sie in eine andere Spalte oder an eine andere Stelle
+  derselben Spalte; die Ablagestelle wird beim Ziehen angezeigt. Am Rand einer Spalte oder des
+  Boards rollt der Inhalt mit.
+- **Wischen und Antippen:** Kurzes Wischen über eine Karte rollt Spalte oder Board und verschiebt
+  nichts. Kurzes Antippen öffnet die Karte.
+- **Spalten umordnen:** Im [Editiermodus](#editiermodus) den Spaltenkopf lange antippen und die
+  Spalte ziehen — wie eine Karte.
+- **Listen-Ansicht:** Zeilen und Spaltenköpfe werden ebenfalls per langem Antippen gezogen; die
+  Breite der Beschreibung lässt sich mit dem Finger am Griff ändern.
+- **Erklärungen:** Was am Desktop beim Darüberfahren erscheint, öffnet auf dem Tablet ein
+  **Antippen** — etwa an einem Label auf einer Karte, einer gesperrten Station oder einem gesperrten
+  Knopf. Erneutes Antippen oder Antippen daneben schließt die Erklärung; offen ist immer nur eine.
+  Das Antippen eines Labels öffnet seine Erklärung, nicht die Karte.
+- **Info-Symbol:** Bei Elementen, die beim Antippen etwas tun — etwa einem Eintrag im Label-Filter
+  oder in einer Auswahl —, löst Antippen die Aktion aus wie gewohnt. Ihre Erklärung öffnet das
+  **Info-Symbol** daneben.
+- **Dialoge** passen auf den Bildschirm, auch bei eingeblendeter Bildschirmtastatur: Ihr Inhalt
+  rollt senkrecht, die Knöpfe bleiben erreichbar.
+
 ## Spezifikation einlesen {#spezifikations-import}
 
 Eine Markdown-Spezifikation lässt sich in einem Zug in Karten auflösen: Jeder Abschnitt der

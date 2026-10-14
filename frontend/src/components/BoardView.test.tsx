@@ -17,6 +17,9 @@ import { cssRegel, cssRegelMit } from '../test/cssRegel'
 import { PANEL_RADIUS } from '../theme'
 import { TabletQuerProvider } from '../lib/tabletQuer'
 import { setzeMedien } from '../test/setup'
+import type { KitNamenZustand } from '../api/kitNamen'
+import { KIT_NAMEN } from '../test/kitNamen'
+import { de } from '../i18n/de'
 import { HALTEZEIT_MS } from '../lib/fingerZiehen'
 
 vi.mock('../api/columns', () => ({
@@ -35,6 +38,16 @@ const editMode = vi.hoisted(() => ({ value: true }))
 vi.mock('../lib/EditModeContext', () => ({
   useEditMode: () => ({ editMode: editMode.value, setEditMode: vi.fn(), toggleEditMode: vi.fn() }),
 }))
+// Kit-Namen nur für die Desktop-Gegenprobe geladen; alle übrigen Tests sehen das Original.
+const kitNamen = vi.hoisted(() => ({ geladen: false }))
+vi.mock('../api/kitNamen', async (original) => {
+  const echt = await original<typeof import('../api/kitNamen')>()
+  return {
+    ...echt,
+    useKitNamen: (): KitNamenZustand =>
+      kitNamen.geladen ? { status: 'fertig', daten: KIT_NAMEN } : echt.useKitNamen(),
+  }
+})
 const mColumns = columnsApi as unknown as {
   create: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
@@ -3797,5 +3810,48 @@ describe('BoardView auf Englisch', () => {
 
     expect(await screen.findByText('The file could not be read.')).toBeInTheDocument()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('BoardView — Gegenprobe am Desktop (Plan #1707, E2)', () => {
+  beforeEach(() => {
+    kitNamen.geladen = true
+  })
+
+  afterEach(() => {
+    kitNamen.geladen = false
+  })
+
+  it('Szenario: Desktop bleibt, wie er ist', async () => {
+    // Angenommen ein Mensch arbeitet am Desktop mit der Maus in einem Browserfenster von 1024 px Breite
+    const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+    const klaeren = { id: 7, boardId: 1, name: 'kit:clarify', color: '#ff0000', countOnEpicTile: false }
+    render(
+      <TabletQuerProvider>
+        <BoardView board={board} initialCards={[{ ...card, labels: [7] }]} canEdit boardLabels={[klaeren]} api={api} />
+      </TabletQuerProvider>,
+    )
+
+    // Wenn er mit der Maus über ein Label fährt
+    await userEvent.hover(screen.getByText('kit:clarify'))
+    // Dann erscheint die Erklärung beim Darüberfahren
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(de.LABEL_ERKLAERUNG.SACHEN.KLAEREN.bedeutung)
+    await userEvent.unhover(screen.getByText('kit:clarify'))
+
+    // Und die Spalten haben ihre bisherige Breite
+    for (const id of [10, 20]) {
+      expect(cssRegel(screen.getByTestId(`column-${id}`))).toContain('min-width: 230px')
+    }
+
+    // Wenn er eine Karte in eine andere Spalte zieht, folgt sie der Maus wie bisher (HTML5-Drag)
+    const karte = screen.getByTestId('card-100')
+    expect(karte).toHaveAttribute('draggable', 'true')
+    const setData = vi.fn()
+    fireEvent.dragStart(karte, { dataTransfer: { setData } })
+    fireEvent.dragOver(screen.getByTestId('column-20'), { dataTransfer: {} })
+    dropOnColumn(20, 100)
+
+    expect(setData).toHaveBeenCalledWith('text/plain', '100')
+    await waitFor(() => expect(api.move).toHaveBeenCalledWith(100, 20, 0))
   })
 })

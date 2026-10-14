@@ -610,6 +610,27 @@ function Rahmen() {
       root.style.removeProperty('--app-content-top')
     }
   }, [inhaltLinks, bannerOffset])
+
+  // Dialoge rendern per Portal unter `document.body`, außerhalb dieses Baums. Kennzeichen und sichtbare
+  // Höhe stehen darum an `:root`, wo der Selektor des Themes sie findet (Plan #1707, E10). Die Höhe
+  // kommt aus `visualViewport`, weil iPadOS-Safari bei eingeblendeter Tastatur nur diesen Ausschnitt
+  // verkleinert; ohne `visualViewport` greift im Theme der Rückfall `100dvh`.
+  useEffect(() => {
+    if (!tabletQuer) return
+    const root = document.documentElement
+    const ausschnitt = window.visualViewport
+    const hoeheSetzen = () => {
+      if (ausschnitt) root.style.setProperty('--sichtbare-hoehe', `${ausschnitt.height}px`)
+    }
+    root.setAttribute('data-geraet', 'tablet-quer')
+    hoeheSetzen()
+    ausschnitt?.addEventListener('resize', hoeheSetzen)
+    return () => {
+      ausschnitt?.removeEventListener('resize', hoeheSetzen)
+      root.removeAttribute('data-geraet')
+      root.style.removeProperty('--sichtbare-hoehe')
+    }
+  }, [tabletQuer])
   // Kürzel des Nutzers wie im Entwurf: die Anfangsbuchstaben der ersten beiden Namensteile.
   const kuerzel =
     user?.displayName

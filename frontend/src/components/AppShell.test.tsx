@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
@@ -1480,5 +1480,116 @@ describe('AppShell auf dem Tablet im Querformat (Plan #1707, E1/E9)', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
     await userEvent.hover(umschlag)
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Board wechseln (Taste b)')
+  })
+})
+
+describe('AppShell Kennzeichen und sichtbare Höhe für Dialoge (Plan #1707, E10)', () => {
+  /** Attrappe von `window.visualViewport`: Höhe setzbar, `resize` wird an die Abonnenten verteilt. */
+  function sichtbarerAusschnitt(hoehe: number) {
+    const hoerer = new Set<EventListener>()
+    const ausschnitt = {
+      height: hoehe,
+      addEventListener: vi.fn((typ: string, h: EventListener) => typ === 'resize' && hoerer.add(h)),
+      removeEventListener: vi.fn((typ: string, h: EventListener) => typ === 'resize' && hoerer.delete(h)),
+      groesse(neu: number) {
+        ausschnitt.height = neu
+        hoerer.forEach((h) => h(new Event('resize')))
+      },
+      hoerer,
+    }
+    vi.stubGlobal('visualViewport', ausschnitt)
+    return ausschnitt
+  }
+
+  /** `matchMedia`, dessen Tablet-Query sich im Test umschalten lässt und ihre Abonnenten benachrichtigt. */
+  function umschaltbareMedien(tabletQuer: boolean) {
+    let aktiv = tabletQuer
+    const hoerer = new Set<() => void>()
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      get matches() {
+        return query.includes('pointer: coarse') && aktiv
+      },
+      media: query,
+      onchange: null,
+      addEventListener: (_typ: string, h: () => void) => hoerer.add(h),
+      removeEventListener: (_typ: string, h: () => void) => hoerer.delete(h),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }))
+    return (neu: boolean) => {
+      aktiv = neu
+      hoerer.forEach((h) => h())
+    }
+  }
+
+  const wurzel = () => document.documentElement
+  const hoehe = () => wurzel().style.getPropertyValue('--sichtbare-hoehe')
+
+  beforeEach(() => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, logout: logoutMock })
+    vi.stubGlobal('localStorage', fakeStorage())
+  })
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('setzt im Tablet-Modus Kennzeichen und sichtbare Höhe an das Dokument', () => {
+    sichtbarerAusschnitt(700)
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    expect(wurzel()).toHaveAttribute('data-geraet', 'tablet-quer')
+    expect(hoehe()).toBe('700px')
+  })
+
+  it('übernimmt eine neue Höhe beim Ereignis resize, etwa bei eingeblendeter Bildschirmtastatur', () => {
+    const ausschnitt = sichtbarerAusschnitt(700)
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    act(() => ausschnitt.groesse(420))
+    expect(hoehe()).toBe('420px')
+  })
+
+  it('entfernt beides und meldet den Hörer ab, wenn die Shell abgebaut wird', () => {
+    const ausschnitt = sichtbarerAusschnitt(700)
+    setzeMedien({ tabletQuer: true })
+    const { unmount } = renderShell()
+
+    unmount()
+    expect(wurzel()).not.toHaveAttribute('data-geraet')
+    expect(hoehe()).toBe('')
+    expect(ausschnitt.hoerer.size).toBe(0)
+  })
+
+  it('entfernt beides und meldet den Hörer ab beim Wechsel auf den Desktop', () => {
+    const ausschnitt = sichtbarerAusschnitt(700)
+    const schalte = umschaltbareMedien(true)
+    renderShell()
+    expect(wurzel()).toHaveAttribute('data-geraet', 'tablet-quer')
+
+    act(() => schalte(false))
+    expect(wurzel()).not.toHaveAttribute('data-geraet')
+    expect(hoehe()).toBe('')
+    expect(ausschnitt.hoerer.size).toBe(0)
+    expect(ausschnitt.removeEventListener).toHaveBeenCalledWith('resize', expect.any(Function))
+  })
+
+  it('setzt am Desktop weder Kennzeichen noch Höhe', () => {
+    const ausschnitt = sichtbarerAusschnitt(700)
+    renderShell()
+
+    expect(wurzel()).not.toHaveAttribute('data-geraet')
+    expect(hoehe()).toBe('')
+    expect(ausschnitt.addEventListener).not.toHaveBeenCalled()
+  })
+
+  it('setzt ohne visualViewport nur das Kennzeichen; die Höhe fällt im Theme auf 100dvh zurück', () => {
+    vi.stubGlobal('visualViewport', undefined)
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+
+    expect(wurzel()).toHaveAttribute('data-geraet', 'tablet-quer')
+    expect(hoehe()).toBe('')
   })
 })

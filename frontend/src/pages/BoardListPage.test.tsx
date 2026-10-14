@@ -1671,6 +1671,21 @@ describe('BoardListPage – Label-Filter als Menü', () => {
       expect(screen.getByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN('kit:clarify') })).toBeInTheDocument()
     })
 
+    it('Szenario: Desktop bleibt, wie er ist', async () => {
+      // Angenommen ein Mensch arbeitet am Desktop mit der Maus in einem Browserfenster von 1024 px Breite
+      renderMitLabels([bug, doku, klaeren])
+      // Wenn er den Filter öffnet
+      fireEvent.click(await screen.findByRole('button', { name: 'Label-Filter' }))
+      const eintraege = await screen.findAllByRole('menuitemcheckbox')
+
+      // Dann steht neben keinem Eintrag im Filter ein Info-Symbol
+      expect(eintraege).toHaveLength(3)
+      for (const name of ['Bug', 'Doku', 'kit:clarify']) {
+        expect(screen.queryByRole('button', { name: de.ERKLAERUNG_INFO.ZEIGEN(name) })).not.toBeInTheDocument()
+      }
+      expect(within(screen.getByRole('menu')).queryAllByRole('button')).toHaveLength(0)
+    })
+
     it('zeigt am Desktop kein Info-Symbol und die Erklärung beim Darüberfahren wie heute (AK 7)', async () => {
       renderMitLabels([bug, klaeren])
       fireEvent.click(await screen.findByRole('button', { name: 'Label-Filter' }))
