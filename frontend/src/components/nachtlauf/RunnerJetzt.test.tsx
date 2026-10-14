@@ -31,6 +31,7 @@ const lauf = (felder: Partial<RunnerLauf> = {}): RunnerLauf => ({
   runId: 312,
   mode: 'CHAIN',
   startedAt: '2026-10-13T22:39:12Z',
+  tokenName: 'runner',
   lastReportAt: '2026-10-13T23:05:00Z',
   state: 'LAEUFT',
   stages: [stufe()],
@@ -144,6 +145,43 @@ describe('RunnerJetzt', () => {
       ),
     ).toBeInTheDocument()
     expect(within(zeile).queryByText(t.LAEUFT)).not.toBeInTheDocument()
+  })
+
+  it('nennt in der Zeile eines laufenden und eines verstummten Laufs Beginn, Token und letzte Meldung', async () => {
+    zeige(() =>
+      Promise.resolve({
+        state: 'AKTIV',
+        runs: [
+          lauf(),
+          lauf({
+            runId: 313,
+            mode: 'IMPLEMENTATION',
+            startedAt: '2026-09-17T22:00:00Z',
+            tokenName: 'nacht-token',
+            lastReportAt: '2026-09-17T23:10:00Z',
+            state: 'VERSTUMMT',
+            stages: [],
+          }),
+        ],
+        lastRun: null,
+      }),
+    )
+
+    const laeuft = await laufZeile(312)
+    expect(within(laeuft).getByText(t.BEGINN(tagZeit('2026-10-13T22:39:12Z')))).toBeInTheDocument()
+    expect(within(laeuft).getByText(t.TOKEN('runner'))).toBeInTheDocument()
+    expect(within(laeuft).getByText(t.LETZTE_MELDUNG(tagZeit('2026-10-13T23:05:00Z')))).toBeInTheDocument()
+    const stumm = await laufZeile(313)
+    expect(within(stumm).getByText(t.BEGINN(tagZeit('2026-09-17T22:00:00Z')))).toBeInTheDocument()
+    expect(within(stumm).getByText(t.TOKEN('nacht-token'))).toBeInTheDocument()
+    expect(within(stumm).getByText(t.LETZTE_MELDUNG(tagZeit('2026-09-17T23:10:00Z')))).toBeInTheDocument()
+  })
+
+  it('nennt ein fehlendes Token „nicht gemeldet“', async () => {
+    zeige(() => Promise.resolve({ state: 'AKTIV', runs: [lauf({ tokenName: null })], lastRun: null }))
+
+    const zeile = await laufZeile(312)
+    expect(within(zeile).getByText(t.TOKEN(t.NICHT_GEMELDET))).toBeInTheDocument()
   })
 
   it('nennt einen verstummten Lauf ohne Stufe mit „nicht gemeldet“', async () => {
@@ -279,11 +317,11 @@ describe('RunnerJetzt', () => {
     expect(within(kette).getByText('Chain')).toBeInTheDocument()
     expect(within(kette).getByRole('list', { name: 'Stages: Chain' })).toBeInTheDocument()
     expect(within(kette).getByText('#1665 Preparation')).toBeInTheDocument()
-    expect(within(kette).getAllByText(/^Started /)).toHaveLength(2)
+    expect(within(kette).getAllByText(/^Started /)).toHaveLength(3)
     expect(within(kette).getAllByText(/^Deadline /)).toHaveLength(1)
     expect(within(kette).getByText('no deadline set')).toBeInTheDocument()
     expect(within(kette).getByText('Step: NEU')).toBeInTheDocument()
-    expect(within(kette).getByText(/^since /)).toBeInTheDocument()
+    expect(within(kette).getByText('Token runner')).toBeInTheDocument()
     expect(within(kette).getByText(/^last report /)).toBeInTheDocument()
     const stumm = screen.getByTestId('runner-jetzt-lauf-313')
     expect(within(stumm).getByText(/^Runner silent since .* \(last stage: Implementation\)/)).toBeInTheDocument()

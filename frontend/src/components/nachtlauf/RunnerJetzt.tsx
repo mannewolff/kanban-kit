@@ -100,7 +100,11 @@ function Lage({ lage }: Readonly<{ lage: RunnerJetztDaten }>) {
   )
 }
 
-/** Ein laufender oder verstummter Lauf: Kopf mit Art und Zustand, darunter seine Stufen. */
+/**
+ * Ein laufender oder verstummter Lauf: Kopf mit Art und Zustand, darunter Beginn, Token und letzte
+ * Meldung — unter Beginn und Token zeigt auch der Plattform-Leitstand den Lauf (Issue #1742) —,
+ * darunter seine Stufen.
+ */
 function LaufZeile({ lauf }: Readonly<{ lauf: RunnerLauf }>) {
   const { sprache } = useSprache()
   const t = useT().RUNNER_JETZT
@@ -113,18 +117,17 @@ function LaufZeile({ lauf }: Readonly<{ lauf: RunnerLauf }>) {
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 2, rowGap: 0.5 }}>
         <Box component="span" sx={{ fontWeight: 600 }}>{t.ART[lauf.mode]}</Box>
         {lauf.state === 'LAEUFT' ? (
-          <>
-            <Box component="span" sx={{ fontWeight: 600 }}>{t.LAEUFT}</Box>
-            <Box component="span" sx={{ fontSize: 13, color: TEXT_MATT }}>{t.SEIT(tagZeit(lauf.startedAt, sprache))}</Box>
-            <Box component="span" sx={{ fontSize: 13, color: TEXT_MATT }}>
-              {t.LETZTE_MELDUNG(tagZeit(lauf.lastReportAt, sprache))}
-            </Box>
-          </>
+          <Box component="span" sx={{ fontWeight: 600 }}>{t.LAEUFT}</Box>
         ) : (
           <Box component="span" sx={{ fontWeight: 600 }}>
             {verstummtSatz(t, tagZeit(lauf.lastReportAt, sprache), lauf.lastStage?.stage ?? null)}
           </Box>
         )}
+      </Box>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 2, rowGap: 0.25, fontSize: 13, color: TEXT_MATT }}>
+        <span>{t.BEGINN(tagZeit(lauf.startedAt, sprache))}</span>
+        <span>{t.TOKEN(lauf.tokenName ?? t.NICHT_GEMELDET)}</span>
+        <span>{t.LETZTE_MELDUNG(tagZeit(lauf.lastReportAt, sprache))}</span>
       </Box>
       {lauf.stages.length > 0 && (
         <Box

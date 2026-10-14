@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -172,6 +173,52 @@ class NightRunNowIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.lastRun.outcome").value("NO_WORK"))
         .andExpect(jsonPath("$.lastRun.noWorkReason").value("Umsetzung belegt"))
         .andExpect(jsonPath("$.lastRun.endedAt").value(start.plusSeconds(62).toString()));
+  }
+
+  /**
+   * Issue #1742: Nach dem Quittieren seiner Störung fehlt der verstummte Lauf; ein laufender Lauf
+   * nennt sein Token.
+   */
+  @Test
+  void nachDemQuittieren_fehltDerVerstummteLauf_undDieZeileNenntDasToken() throws Exception {
+    Cookie owner = session("now-ack-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("now-ack-owner@example.com", "now-ack-admin@example.com");
+    Cookie admin = session("now-ack-admin@example.com", PlatformRole.ADMIN);
+    teilnahme(projectId, true);
+    Instant start = Instant.now().minus(Duration.ofDays(20)).truncatedTo(ChronoUnit.SECONDS);
+    long verstummt =
+        runs.upsert(lauf(projectId, NightRunMode.CHAIN, start, false, "", List.of()), List.of())
+            .id();
+    long bleibt =
+        runs.upsert(
+                lauf(
+                    projectId,
+                    NightRunMode.IMPLEMENTATION,
+                    start.minus(Duration.ofDays(1)),
+                    false,
+                    "",
+                    List.of()),
+                List.of())
+            .id();
+    jdbc.update(
+        "UPDATE night_run SET updated_at = started_at WHERE id IN (?, ?)", verstummt, bleibt);
+
+    mvc.perform(get(jetzt(projectId)).cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.runs.length()").value(2))
+        .andExpect(jsonPath("$.runs[0].runId").value(verstummt))
+        .andExpect(jsonPath("$.runs[0].state").value("VERSTUMMT"))
+        .andExpect(jsonPath("$.runs[0].tokenName").value("runner"));
+
+    mvc.perform(delete("/api/admin/disruptions/" + verstummt).cookie(admin))
+        .andExpect(status().isNoContent());
+
+    mvc.perform(get(jetzt(projectId)).cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.state").value("AKTIV"))
+        .andExpect(jsonPath("$.runs.length()").value(1))
+        .andExpect(jsonPath("$.runs[0].runId").value(bleibt))
+        .andExpect(jsonPath("$.lastRun").doesNotExist());
   }
 
   @Test

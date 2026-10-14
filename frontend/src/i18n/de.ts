@@ -1120,7 +1120,8 @@ export const de = {
       INTERACTIVE: 'Interaktive Sitzung',
     },
     LAEUFT: 'läuft',
-    SEIT: (zeit: string) => `seit ${zeit}`,
+    /** Das Token, unter dem der Lauf gemeldet wurde (Issue #1742). */
+    TOKEN: (name: string) => `Token ${name}`,
     LETZTE_MELDUNG: (zeit: string) => `letzte Meldung ${zeit}`,
     /** Der Satz für „verstummt“ — auch der Kartendialog nutzt ihn (Fachplan #1721, E12). */
     VERSTUMMT: (zeit: string, stufe: string) =>

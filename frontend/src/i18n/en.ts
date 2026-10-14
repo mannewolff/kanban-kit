@@ -1061,7 +1061,7 @@ export const en: Woerterbuch = {
       INTERACTIVE: 'Interactive session',
     },
     LAEUFT: 'running',
-    SEIT: (zeit) => `since ${zeit}`,
+    TOKEN: (name) => `Token ${name}`,
     LETZTE_MELDUNG: (zeit) => `last report ${zeit}`,
     VERSTUMMT: (zeit, stufe) =>
       `Runner silent since ${zeit} (last stage: ${stufe}), probably aborted; the implementation may still count as occupied.`,

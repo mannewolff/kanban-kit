@@ -28,7 +28,11 @@ record RunnerNowView(
                 aber es gab schon einen. NIE: noch kein Lauf gestartet.""",
             example = "AKTIV")
         Gesamt state,
-    @Schema(description = "Die laufenden und verstummten Läufe, jüngster Start zuerst.")
+    @Schema(
+            description =
+                """
+                Die laufenden und verstummten Läufe, jüngster Start zuerst; ein verstummter \
+                Lauf, dessen Störung quittiert ist, fehlt.""")
         List<ActiveRunView> runs,
     @Schema(description = "Der zuletzt beendete Lauf; null, wenn keiner beendet ist.")
         @Nullable LastRunView lastRun) {
@@ -50,6 +54,11 @@ record RunnerNowView(
       @Schema(description = "Beginn des Laufs.", example = "2026-10-13T22:39:12Z")
           Instant startedAt,
       @Schema(
+              description =
+                  "Das Token, unter dem der Lauf gemeldet wurde; null, wenn er keines trägt.",
+              example = "runner")
+          @Nullable String tokenName,
+      @Schema(
               description = "Letztes Lebenszeichen: die letzte Meldung, ohne sie der Beginn.",
               example = "2026-10-13T23:05:00Z")
           Instant lastReportAt,
@@ -69,6 +78,7 @@ record RunnerNowView(
           lauf.runId(),
           lauf.mode(),
           lauf.startedAt(),
+          lauf.tokenName(),
           lauf.letzteMeldung(),
           lauf.zustand(),
           lauf.stufen().stream().map(StageView::of).toList(),

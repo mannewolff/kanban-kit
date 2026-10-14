@@ -221,6 +221,7 @@ describe('nightRunsApi', () => {
           runId: 312,
           mode: 'CHAIN',
           startedAt: '2026-10-13T22:39:12Z',
+          tokenName: 'runner',
           lastReportAt: '2026-10-13T23:05:00Z',
           state: 'LAEUFT',
           stages: [

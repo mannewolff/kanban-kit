@@ -471,16 +471,23 @@ Ganz oben auf der Runner-Seite sagt der Bereich **„Runner jetzt“**, was der 
 nennt jeden Lauf, der noch nicht beendet ist, mit seiner Art (Kette oder Umsetzungsnacht) und genau
 einem Zustand:
 
-- **läuft:** Der Lauf hat sich innerhalb der Stillefrist gemeldet. Dabei stehen sein Beginn und
-  seine letzte Meldung.
+- **läuft:** Der Lauf hat sich innerhalb der Stillefrist gemeldet.
 - **verstummt:** Der Lauf gilt als laufend, hat sich aber länger als die Stillefrist nicht gemeldet.
   Dann steht dort: „Runner verstummt seit *Zeit* (letzte Stufe: *Stufe*), vermutlich abgebrochen;
   die Umsetzung gilt womöglich noch als belegt.“ Hat der Lauf keine Stufe gemeldet, steht als
   Stufe „nicht gemeldet“.
 
+Jede Zeile nennt **Beginn, Token und letzte Meldung** des Laufs, auch beim verstummten. Unter
+Beginn und Token zeigt auch der Plattform-Leitstand den Lauf, so findet man ihn dort wieder.
+
 Die **Stillefrist** ist dieselbe, nach der die Auswertung einen Lauf als verstummt führt
 (`manban.nightrun.stille-frist`, Vorgabe 90 Minuten). Meldet sich ein verstummter Lauf doch noch,
 läuft er wieder.
+
+Ein verstummter Lauf bleibt sichtbar, wie alt er auch ist, **bis seine Störung im
+Plattform-Leitstand quittiert ist**. Danach erscheint er hier nicht mehr und ist auch am wartenden
+Paket kein Grund „Runner verstummt“ mehr. Meldet sich ein quittierter Lauf später doch wieder,
+erscheint er wieder als „läuft“. Den letzten Lauf darunter berührt die Quittung nicht.
 
 Zu einem Lauf stehen seine **laufenden Stufen**: Karte und Stufe (etwa „#1665 Vorbereitung“),
 Beginn, Frist und der Teilschritt in Worten, etwa „wartet auf freie Umsetzung“ oder „Prüfungen der

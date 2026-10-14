@@ -520,6 +520,8 @@ export interface RunnerLauf {
   runId: number
   mode: NightRunServerMode
   startedAt: string
+  /** Das Token, unter dem der Lauf gemeldet wurde; `null`, wenn er keines trägt (Issue #1742). */
+  tokenName: string | null
   /** Letztes Lebenszeichen: die letzte Meldung, ohne sie der Beginn. */
   lastReportAt: string
   state: RunnerLaufZustand

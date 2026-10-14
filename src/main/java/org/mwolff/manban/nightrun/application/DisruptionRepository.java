@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
@@ -95,6 +96,16 @@ public interface DisruptionRepository {
    * Quittierende bleibt vermerkt, und der zweite bekommt keinen Fehler (AK 8).
    */
   void acknowledge(long nightRunId, long userId, Instant at);
+
+  /**
+   * Die Läufe des Projekts, deren Störung quittiert ist (Issue #1742).
+   *
+   * <p>Gelesen von der Lage des Runners, die einen verstummten, quittierten Lauf nicht mehr zeigt.
+   * <b>Ohne</b> Teilnahme-Bedingung: Die Quittung bleibt stehen, wenn das Projekt später nicht mehr
+   * teilnimmt, und die Seite des Projekts prüft ihr eigenes Recht. Die Rechteprüfung liegt wie bei
+   * allen Methoden hier beim Aufrufer.
+   */
+  Set<Long> acknowledgedRunIds(long projectId);
 
   /**
    * Der Lauf, der von Hand als beendet gekennzeichnet werden soll — mit allem, was sein Ausgang

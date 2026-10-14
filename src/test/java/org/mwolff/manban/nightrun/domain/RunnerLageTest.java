@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -126,7 +127,8 @@ class RunnerLageTest {
             null);
     NightRun frueher = beendet(2L, start.minus(Duration.ofDays(1)), 1_000);
 
-    RunnerLage lage = RunnerLage.ermittle(List.of(letzter, frueher), List.of(), JETZT, FRIST);
+    RunnerLage lage =
+        RunnerLage.ermittle(List.of(letzter, frueher), List.of(), JETZT, FRIST, Set.of());
 
     assertThat(lage.gesamt()).isEqualTo(Gesamt.KEIN_RUNNER);
     assertThat(lage.laeufe()).isEmpty();
@@ -144,7 +146,7 @@ class RunnerLageTest {
   @Test
   @DisplayName("Szenario: Noch nie ein Lauf")
   void nochNieEinLauf() {
-    RunnerLage lage = RunnerLage.ermittle(List.of(), List.of(), JETZT, FRIST);
+    RunnerLage lage = RunnerLage.ermittle(List.of(), List.of(), JETZT, FRIST, Set.of());
 
     assertThat(lage).isEqualTo(new RunnerLage(Gesamt.NIE, List.of(), null));
   }
@@ -159,7 +161,8 @@ class RunnerLageTest {
         laufend(5L, NightRunMode.IMPLEMENTATION, letzteMeldung, List.of(spaet, frueh));
     NightRun ohneStufen = laufend(6L, NightRunMode.CHAIN, letzteMeldung, List.of());
 
-    RunnerLage lage = RunnerLage.ermittle(List.of(mitStufen, ohneStufen), List.of(), JETZT, FRIST);
+    RunnerLage lage =
+        RunnerLage.ermittle(List.of(mitStufen, ohneStufen), List.of(), JETZT, FRIST, Set.of());
 
     assertThat(lage.gesamt()).isEqualTo(Gesamt.AKTIV);
     assertThat(lage.laeufe())
@@ -168,6 +171,7 @@ class RunnerLageTest {
                 5L,
                 NightRunMode.IMPLEMENTATION,
                 mitStufen.startedAt(),
+                "runner",
                 letzteMeldung,
                 LaufZustand.VERSTUMMT,
                 List.of(spaet, frueh),
@@ -176,6 +180,7 @@ class RunnerLageTest {
                 6L,
                 NightRunMode.CHAIN,
                 ohneStufen.startedAt(),
+                "runner",
                 letzteMeldung,
                 LaufZustand.VERSTUMMT,
                 List.of(),
@@ -189,7 +194,7 @@ class RunnerLageTest {
     RunnerStufe s = stufe(1701, "UMSETZUNG", letzteMeldung, true);
     NightRun lauf = laufend(5L, NightRunMode.IMPLEMENTATION, letzteMeldung, List.of(s));
 
-    RunnerLage lage = RunnerLage.ermittle(List.of(lauf), List.of(), JETZT, FRIST);
+    RunnerLage lage = RunnerLage.ermittle(List.of(lauf), List.of(), JETZT, FRIST, Set.of());
 
     assertThat(lage.laeufe())
         .containsExactly(
@@ -197,6 +202,7 @@ class RunnerLageTest {
                 5L,
                 NightRunMode.IMPLEMENTATION,
                 lauf.startedAt(),
+                "runner",
                 letzteMeldung,
                 LaufZustand.LAEUFT,
                 List.of(s),
@@ -210,7 +216,7 @@ class RunnerLageTest {
     NightRun lauf =
         lauf(5L, NightRunMode.IMPLEMENTATION, start, 0, false, null, null, List.of(), null);
 
-    RunnerLage lage = RunnerLage.ermittle(List.of(lauf), List.of(), JETZT, FRIST);
+    RunnerLage lage = RunnerLage.ermittle(List.of(lauf), List.of(), JETZT, FRIST, Set.of());
 
     assertThat(lage.laeufe().getFirst().letzteMeldung()).isEqualTo(start);
     assertThat(lage.laeufe().getFirst().zustand()).isEqualTo(LaufZustand.LAEUFT);
@@ -232,7 +238,7 @@ class RunnerLageTest {
             List.of(stufe(1665, "VORBEREITUNG", start, true)),
             geschlossen);
 
-    RunnerLage lage = RunnerLage.ermittle(List.of(lauf), List.of(), JETZT, FRIST);
+    RunnerLage lage = RunnerLage.ermittle(List.of(lauf), List.of(), JETZT, FRIST, Set.of());
 
     assertThat(lage.gesamt()).isEqualTo(Gesamt.KEIN_RUNNER);
     assertThat(lage.laeufe()).isEmpty();
@@ -253,7 +259,7 @@ class RunnerLageTest {
     NightRun nacht =
         laufend(11L, NightRunMode.IMPLEMENTATION, JETZT.minus(FRIST).minusSeconds(5), List.of());
 
-    RunnerLage lage = RunnerLage.ermittle(List.of(kette, nacht), List.of(), JETZT, FRIST);
+    RunnerLage lage = RunnerLage.ermittle(List.of(kette, nacht), List.of(), JETZT, FRIST, Set.of());
 
     assertThat(lage.gesamt()).isEqualTo(Gesamt.AKTIV);
     assertThat(lage.laeufe())
@@ -286,7 +292,7 @@ class RunnerLageTest {
             List.of(),
             null);
 
-    RunnerLage lage = RunnerLage.ermittle(List.of(kette, nacht), List.of(), JETZT, FRIST);
+    RunnerLage lage = RunnerLage.ermittle(List.of(kette, nacht), List.of(), JETZT, FRIST, Set.of());
 
     assertThat(lage.gesamt()).isEqualTo(Gesamt.AKTIV);
     assertThat(lage.letzterLauf())
@@ -308,7 +314,8 @@ class RunnerLageTest {
     NightRun kurzerSpaeterer = beendet(2L, start.plus(Duration.ofHours(1)), 60_000);
 
     RunnerLage lage =
-        RunnerLage.ermittle(List.of(kurzerSpaeterer, langerFrueherer), List.of(), JETZT, FRIST);
+        RunnerLage.ermittle(
+            List.of(kurzerSpaeterer, langerFrueherer), List.of(), JETZT, FRIST, Set.of());
 
     assertThat(lage.letzterLauf()).extracting(LetzterLauf::runId).isEqualTo(1L);
   }
@@ -323,10 +330,11 @@ class RunnerLageTest {
             List.of(letzter),
             List.of(paket(3L, 1700, NightRunState.GREEN), paket(99L, 1701, NightRunState.RED)),
             JETZT,
-            FRIST);
+            FRIST,
+            Set.of());
     RunnerLage rot =
         RunnerLage.ermittle(
-            List.of(letzter), List.of(paket(3L, 1700, NightRunState.RED)), JETZT, FRIST);
+            List.of(letzter), List.of(paket(3L, 1700, NightRunState.RED)), JETZT, FRIST, Set.of());
 
     assertThat(gruen.letzterLauf()).extracting(LetzterLauf::ergebnis).isEqualTo(Verdict.SUCCEEDED);
     assertThat(rot.letzterLauf()).extracting(LetzterLauf::ergebnis).isEqualTo(Verdict.FAILED);
@@ -369,7 +377,7 @@ class RunnerLageTest {
             List.of(),
             JETZT.minus(Duration.ofHours(1)));
 
-    RunnerLage lage = RunnerLage.ermittle(List.of(lauf), List.of(), JETZT, FRIST);
+    RunnerLage lage = RunnerLage.ermittle(List.of(lauf), List.of(), JETZT, FRIST, Set.of());
 
     assertThat(lage.letzterLauf())
         .isEqualTo(
@@ -382,12 +390,83 @@ class RunnerLageTest {
                 null));
   }
 
+  // --- Quittung (Issue #1742) ----------------------------------------------------------------
+
+  /**
+   * Mit nur einem verstummten, quittierten Lauf gibt es weder laufende Läufe noch einen letzten.
+   */
+  @Test
+  void einVerstummterQuittierterLauf_erscheintNicht_undDieLageIstKeinRunnerOhneLetztenLauf() {
+    NightRun verstummt =
+        laufend(5L, NightRunMode.IMPLEMENTATION, JETZT.minus(FRIST).minusSeconds(1), List.of());
+
+    RunnerLage lage = RunnerLage.ermittle(List.of(verstummt), List.of(), JETZT, FRIST, Set.of(5L));
+
+    assertThat(lage).isEqualTo(new RunnerLage(Gesamt.KEIN_RUNNER, List.of(), null));
+  }
+
+  /** Ohne Quittung bleibt ein verstummter Lauf sichtbar, wie alt er auch ist — kein Zeitfenster. */
+  @Test
+  void einVerstummterNichtQuittierterLauf_bleibtVerstummt_auchWochenAlt() {
+    NightRun alt =
+        laufend(5L, NightRunMode.IMPLEMENTATION, JETZT.minus(Duration.ofDays(27)), List.of());
+    NightRun quittiert =
+        laufend(6L, NightRunMode.CHAIN, JETZT.minus(Duration.ofDays(20)), List.of());
+
+    RunnerLage lage =
+        RunnerLage.ermittle(List.of(alt, quittiert), List.of(), JETZT, FRIST, Set.of(6L));
+
+    assertThat(lage.gesamt()).isEqualTo(Gesamt.AKTIV);
+    assertThat(lage.laeufe())
+        .extracting(AktiverLauf::runId, AktiverLauf::zustand)
+        .containsExactly(tuple(5L, LaufZustand.VERSTUMMT));
+  }
+
+  /** Die Quittung blendet nur „verstummt“ aus: Wer sich wieder meldet, läuft. */
+  @Test
+  void einQuittierterLaufDerSichInnerhalbDerFristMeldet_laeuft() {
+    NightRun lauf = laufend(5L, NightRunMode.IMPLEMENTATION, JETZT.minus(FRIST), List.of());
+
+    RunnerLage lage = RunnerLage.ermittle(List.of(lauf), List.of(), JETZT, FRIST, Set.of(5L));
+
+    assertThat(lage.gesamt()).isEqualTo(Gesamt.AKTIV);
+    assertThat(lage.laeufe())
+        .extracting(AktiverLauf::runId, AktiverLauf::zustand)
+        .containsExactly(tuple(5L, LaufZustand.LAEUFT));
+  }
+
+  /** Der letzte beendete Lauf steht da, ob er quittiert ist oder nicht. */
+  @Test
+  void derLetzteBeendeteLauf_erscheintUnabhaengigVonQuittungen() {
+    NightRun verstummt =
+        laufend(5L, NightRunMode.CHAIN, JETZT.minus(FRIST).minusSeconds(1), List.of());
+    NightRun beendet = beendet(4L, JETZT.minus(Duration.ofHours(4)), 60_000);
+
+    RunnerLage lage =
+        RunnerLage.ermittle(List.of(verstummt, beendet), List.of(), JETZT, FRIST, Set.of(4L, 5L));
+
+    assertThat(lage.gesamt()).isEqualTo(Gesamt.KEIN_RUNNER);
+    assertThat(lage.laeufe()).isEmpty();
+    assertThat(lage.letzterLauf()).extracting(LetzterLauf::runId).isEqualTo(4L);
+  }
+
+  /** Jede Zeile trägt das Token, unter dem der Lauf gemeldet wurde. */
+  @Test
+  void einAktiverLauf_traegtSeinToken() {
+    NightRun lauf = laufend(5L, NightRunMode.IMPLEMENTATION, JETZT, List.of());
+
+    RunnerLage lage = RunnerLage.ermittle(List.of(lauf), List.of(), JETZT, FRIST, Set.of());
+
+    assertThat(lage.laeufe()).extracting(AktiverLauf::tokenName).containsExactly("runner");
+  }
+
   @Test
   void dieListenSindUnveraenderlich() {
     RunnerStufe s = stufe(1, "PLAN", JETZT, false);
     List<RunnerStufe> stufen = new ArrayList<>(List.of(s));
     AktiverLauf lauf =
-        new AktiverLauf(1L, NightRunMode.CHAIN, JETZT, JETZT, LaufZustand.LAEUFT, stufen, null);
+        new AktiverLauf(
+            1L, NightRunMode.CHAIN, JETZT, "runner", JETZT, LaufZustand.LAEUFT, stufen, null);
     List<AktiverLauf> laeufe = new ArrayList<>(List.of(lauf));
     RunnerLage lage = new RunnerLage(Gesamt.AKTIV, laeufe, null);
     stufen.clear();
