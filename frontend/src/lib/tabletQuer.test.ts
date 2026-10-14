@@ -34,6 +34,23 @@ describe('tabletQuer (Plan #1707, E1)', () => {
     expect(renderHook(() => useTabletQuer(), { wrapper: mitAbfrage }).result.current).toBe(true)
   })
 
+  // `noSsr` wirkt nur beim Hydrieren: Ohne die Option läse der erste Render dort den Vorgabewert
+  // `false` und zeigte kurz den Desktop.
+  it('trägt schon im ersten Render den Tablet-Zweig, auch beim Hydrieren (noSsr)', () => {
+    setzeMedien({ tabletQuer: true })
+    const werte: boolean[] = []
+    renderHook(
+      () => {
+        const tabletQuer = useTabletQuer()
+        werte.push(tabletQuer)
+        return tabletQuer
+      },
+      { wrapper: mitAbfrage, hydrate: true },
+    )
+    expect(werte[0]).toBe(true)
+    expect(werte).not.toContain(false)
+  })
+
   it('setzt die Attrappe nach jedem Test auf den Desktop zurück', () => {
     expect(window.matchMedia(TABLET_QUER_QUERY).matches).toBe(false)
   })
