@@ -239,6 +239,30 @@ public class CardRunQueryService {
   }
 
   /**
+   * Die Karte, deren Wartegrund gelesen wird (Issue #1728, Plan #1724 E12), samt Projekt und
+   * letztem Änderungszeitpunkt.
+   *
+   * <p>Ready heißt: Der Kanban-Schlüssel nach {@link CardIngestService#kanbanSchluessel} ist {@code
+   * READY} — der eigene Status vor der Spalte, dieselbe Regel, nach der der Runner seine
+   * Ready-Liste holt. Eine archivierte Karte sieht der Runner nicht; sie ist nie Ready. Ohne
+   * Rechteprüfung wie {@link #requireProjectId}.
+   *
+   * @throws CardNotFoundException wenn die Karte nicht existiert oder im Papierkorb liegt
+   */
+  @Transactional(readOnly = true)
+  public WarteKarteView warteKarte(long cardId) {
+    Card card = cards.findByIdAndDeletedAtIsNull(cardId).orElseThrow(CardNotFoundException::new);
+    String spaltenname = boards.requireColumn(card.columnId(), card.boardId()).name();
+    boolean ready =
+        !card.archived()
+            && CardStatus.READY
+                .name()
+                .equals(
+                    CardIngestService.kanbanSchluessel(KartenSicht.statusName(card), spaltenname));
+    return new WarteKarteView(card.projectId(), card.number(), ready, card.updatedAt());
+  }
+
+  /**
    * Die Karten, die aus der genannten entstanden sind (Herkunft {@code derivedFrom}, Issue #1452) —
    * mit denselben Angaben wie {@link #cardsByIds}. Ohne Rechteprüfung wie dort.
    */
@@ -344,6 +368,16 @@ public class CardRunQueryService {
       String type,
       boolean arbeitspaket,
       @Nullable String description) {}
+
+  /**
+   * Eine Karte, deren Wartegrund gelesen wird (Issue #1728).
+   *
+   * @param projectId Projekt der Karte — für die Rechteprüfung des Aufrufers
+   * @param number projektweite Nummer der Karte
+   * @param ready ob der Kanban-Schlüssel READY ist und die Karte nicht archiviert
+   * @param updatedAt letzter Änderungszeitpunkt der Karte
+   */
+  public record WarteKarteView(long projectId, int number, boolean ready, Instant updatedAt) {}
 
   /**
    * Eine zur Übernahme freigegebene Karte (Issue #1454).

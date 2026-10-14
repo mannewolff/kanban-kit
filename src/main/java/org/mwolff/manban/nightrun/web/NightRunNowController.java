@@ -23,15 +23,7 @@ import org.mwolff.manban.common.web.api.ApiVertrag;
 import org.mwolff.manban.common.web.api.Stabilitaet;
 import org.mwolff.manban.nightrun.application.NightRunNowService;
 import org.mwolff.manban.nightrun.application.TokenNotBoundForIngestException;
-import org.mwolff.manban.nightrun.domain.NightRunMode;
-import org.mwolff.manban.nightrun.domain.NightRunOutcome.Verdict;
 import org.mwolff.manban.nightrun.domain.ReadyBewertung;
-import org.mwolff.manban.nightrun.domain.RunnerLage;
-import org.mwolff.manban.nightrun.domain.RunnerLage.AktiverLauf;
-import org.mwolff.manban.nightrun.domain.RunnerLage.Gesamt;
-import org.mwolff.manban.nightrun.domain.RunnerLage.LaufZustand;
-import org.mwolff.manban.nightrun.domain.RunnerLage.LetzterLauf;
-import org.mwolff.manban.nightrun.domain.RunnerStufe;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,7 +34,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Was der Runner jetzt tut und warum ein Paket wartet (Plan #1724): der Meldeweg der Bewertung der
- * Ready-Karten (Issue #1726, Vertrag V2) und die Lage des Runners (Issue #1727).
+ * Ready-Karten (Issue #1726, Vertrag V2), die Lage des Runners (Issue #1727) und der Wartegrund
+ * einer Ready-Karte (Issue #1728).
  *
  * <p>Wie der Laufbericht im {@link NightRunIngestController} kommt das Zielprojekt aus der Bindung
  * des Tokens und nicht aus dem Aufruf. Diese beiden Controller sind die Stellen in {@code
@@ -167,6 +160,54 @@ class NightRunNowController {
           @PathVariable
           long projectId) {
     return RunnerNowView.of(service.jetzt(userId, projectId));
+  }
+
+  /**
+   * Warum eine Karte in Ready wartet (Issue #1728, Plan #1724 E7 bis E12).
+   *
+   * <p>Ohne {@code @ApiVertrag}: Der Aufruf bedient nur den Kartendialog.
+   */
+  @Operation(
+      summary = "Wartegrund einer Ready-Karte lesen",
+      description =
+          """
+          Liefert, warum eine Karte in Ready wartet. runReasons leitet das Board aus den \
+          Läufen des Projekts ab: KEINE_UMSETZUNGSNACHT, wenn keine Umsetzungsnacht läuft \
+          oder verstummt ist; VERSTUMMT mit der letzten Meldung und der zuletzt begonnenen \
+          Stufe, wenn eine Umsetzungsnacht verstummt ist oder ein verstummter Lauf die \
+          Umsetzung hielt; BELEGT mit Art, Karte und Stufe, wenn ein laufender Lauf die \
+          Umsetzung für eine andere Karte hält. cardReasons sind die Gründe aus der jüngsten \
+          Bewertung des Runners, wie gemeldet; ein unbekannter code kommt mit dem Wortlaut \
+          text. packagesAhead ist position − 1. notes sagen, ob die Karte nicht bewertet \
+          (NICHT_BEWERTET) oder seit der Bewertung geändert ist (SEIT_BEWERTUNG_GEAENDERT). \
+          startable ist true, wenn die Karte bewertet ist, keinen Grund trägt, kein Grund \
+          aus den Läufen zutrifft und sie seit der Bewertung nicht geändert wurde. Ready \
+          heißt: der eigene Status der Karte ist READY, ohne eigenen Status ihre Spalte; \
+          für jede andere Karte antwortet der Aufruf mit 404.\s"""
+              + NightRunController.LESERECHT)
+  @ApiResponse(responseCode = "200", description = "Der Wartegrund der Karte.")
+  @ApiResponse(
+      responseCode = "403",
+      description = NightRunController.LESEN_VERBOTEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          """
+          Die Karte gibt es nicht, sie liegt im Papierkorb, ist archiviert oder steht nicht \
+          in Ready — oder der Aufrufer ist im Projekt der Karte kein Mitglied.""",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @GetMapping("/api/cards/{cardId}/night-wait")
+  NightWaitView wartegrund(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = "Kennung der Karte.", example = "4711") @PathVariable long cardId) {
+    return NightWaitView.of(service.wartegrund(userId, cardId));
   }
 
   private static KanbanPrincipal principal(@Nullable Authentication authentication) {
@@ -297,139 +338,6 @@ class NightRunNowController {
           cardNumbers == null ? List.of() : cardNumbers,
           paths == null ? List.of() : paths,
           text);
-    }
-  }
-
-  /** Antwort von {@code /night-runs/now}: die Lage des Runners. */
-  @Schema(description = "Was der Runner des Projekts jetzt tut.")
-  record RunnerNowView(
-      @Schema(
-              description =
-                  """
-                  AKTIV: mindestens ein Lauf läuft oder ist verstummt. KEIN_RUNNER: keiner, \
-                  aber es gab schon einen. NIE: noch kein Lauf gestartet.""",
-              example = "AKTIV")
-          Gesamt state,
-      @Schema(description = "Die laufenden und verstummten Läufe, jüngster Start zuerst.")
-          List<ActiveRunView> runs,
-      @Schema(description = "Der zuletzt beendete Lauf; null, wenn keiner beendet ist.")
-          @Nullable LastRunView lastRun) {
-
-    static RunnerNowView of(RunnerLage lage) {
-      LetzterLauf letzter = lage.letzterLauf();
-      return new RunnerNowView(
-          lage.gesamt(),
-          lage.laeufe().stream().map(ActiveRunView::of).toList(),
-          letzter == null ? null : LastRunView.of(letzter));
-    }
-  }
-
-  /** Ein laufender oder verstummter Lauf. */
-  @Schema(description = "Ein Lauf, der läuft oder verstummt ist.")
-  record ActiveRunView(
-      @Schema(description = "Kennung des Laufs.", example = "312") long runId,
-      @Schema(description = "Art des Laufs: CHAIN oder IMPLEMENTATION.", example = "CHAIN")
-          NightRunMode mode,
-      @Schema(description = "Beginn des Laufs.", example = "2026-10-13T22:39:12Z")
-          Instant startedAt,
-      @Schema(
-              description = "Letztes Lebenszeichen: die letzte Meldung, ohne sie der Beginn.",
-              example = "2026-10-13T23:05:00Z")
-          Instant lastReportAt,
-      @Schema(description = "LAEUFT oder VERSTUMMT.", example = "LAEUFT") LaufZustand state,
-      @Schema(description = "Die laufenden Stufen, wie der Runner sie meldet.")
-          List<StageView> stages,
-      @Schema(
-              description =
-                  """
-                  Nur bei VERSTUMMT: die zuletzt begonnene Stufe; null, wenn der Lauf läuft \
-                  oder keine Stufe gemeldet hat.""")
-          @Nullable StageView lastStage) {
-
-    static ActiveRunView of(AktiverLauf lauf) {
-      RunnerStufe letzte = lauf.letzteStufe();
-      return new ActiveRunView(
-          lauf.runId(),
-          lauf.mode(),
-          lauf.startedAt(),
-          lauf.letzteMeldung(),
-          lauf.zustand(),
-          lauf.stufen().stream().map(StageView::of).toList(),
-          letzte == null ? null : StageView.of(letzte));
-    }
-  }
-
-  /** Eine laufende Stufe (Vertrag V1). */
-  @Schema(description = "Eine Stufe, die der Lauf gerade fährt.")
-  record StageView(
-      @Schema(description = "Die Karte, an der die Stufe arbeitet.", example = "1665")
-          int cardNumber,
-      @Schema(
-              description =
-                  """
-                  Die Stufe: heute PLAN, REVIEW, PAKETE, ABDECKUNG, UMSETZUNG oder \
-                  VORBEREITUNG; ein anderer Wert wird wörtlich durchgereicht.""",
-              example = "VORBEREITUNG")
-          String stage,
-      @Schema(description = "Beginn der Stufe.", example = "2026-10-13T22:41:07Z")
-          Instant startedAt,
-      @Schema(
-              description = "Ende der Frist der Stufe; null heißt: keine Frist vorgesehen.",
-              example = "2026-10-14T00:41:07Z")
-          @Nullable Instant deadline,
-      @Schema(
-              description =
-                  """
-                  Der Teilschritt: heute SESSION, WAITING_FOR_IMPLEMENTATION oder \
-                  RELEASE_CHECKS; ein anderer Wert wird wörtlich durchgereicht.""",
-              example = "WAITING_FOR_IMPLEMENTATION")
-          String step,
-      @Schema(description = "Ob die Stufe die Umsetzung hält.", example = "false")
-          boolean holdsImplementation) {
-
-    static StageView of(RunnerStufe stufe) {
-      return new StageView(
-          stufe.cardNumber(),
-          stufe.stage(),
-          stufe.startedAt(),
-          stufe.deadline(),
-          stufe.step(),
-          stufe.holdsImplementation());
-    }
-  }
-
-  /** Der zuletzt beendete Lauf. */
-  @Schema(description = "Der zuletzt beendete Lauf.")
-  record LastRunView(
-      @Schema(description = "Kennung des Laufs.", example = "311") long runId,
-      @Schema(description = "Art des Laufs: CHAIN oder IMPLEMENTATION.", example = "IMPLEMENTATION")
-          NightRunMode mode,
-      @Schema(description = "Beginn des Laufs.", example = "2026-10-13T22:39:12Z")
-          Instant startedAt,
-      @Schema(
-              description = "Ende: von Hand beendet die Beendigung, sonst Beginn plus Dauer.",
-              example = "2026-10-13T22:39:14Z")
-          Instant endedAt,
-      @Schema(
-              description =
-                  """
-                  Ausgang des Laufs, wie in der Auswertung der Läufe: SUCCEEDED, FAILED, \
-                  WAITING, CLOSED, NO_WORK oder NOT_STARTED.""",
-              example = "NO_WORK")
-          Verdict outcome,
-      @Schema(
-              description = "Grund eines Laufs ohne Arbeit; null, wenn er keinen meldet.",
-              example = "Umsetzung belegt")
-          @Nullable String noWorkReason) {
-
-    static LastRunView of(LetzterLauf lauf) {
-      return new LastRunView(
-          lauf.runId(),
-          lauf.mode(),
-          lauf.startedAt(),
-          lauf.ende(),
-          lauf.ergebnis(),
-          lauf.noWorkReason());
     }
   }
 }

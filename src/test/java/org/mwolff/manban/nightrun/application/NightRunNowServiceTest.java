@@ -20,6 +20,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
+import org.mwolff.manban.card.application.CardRunQueryService;
+import org.mwolff.manban.card.application.CardRunQueryService.WarteKarteView;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
@@ -31,11 +33,14 @@ import org.mwolff.manban.nightrun.domain.ReadyBewertung;
 import org.mwolff.manban.nightrun.domain.RunnerLage;
 import org.mwolff.manban.nightrun.domain.RunnerLage.Gesamt;
 import org.mwolff.manban.nightrun.domain.RunnerLage.LaufZustand;
+import org.mwolff.manban.nightrun.domain.Wartegrund;
+import org.mwolff.manban.nightrun.domain.Wartegrund.LaufgrundArt;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 
 /**
- * Der Meldeweg der Bewertung der Ready-Karten (Issue #1726) und die Lage des Runners (Issue #1727).
+ * Der Meldeweg der Bewertung der Ready-Karten (Issue #1726), die Lage des Runners (Issue #1727) und
+ * der Wartegrund einer Ready-Karte (Issue #1728).
  */
 class NightRunNowServiceTest {
 
@@ -52,9 +57,10 @@ class NightRunNowServiceTest {
 
   private final NightRunProperties properties =
       new NightRunProperties(null, null, null, null, FRIST);
+  private final CardRunQueryService cards = mock(CardRunQueryService.class);
   private final NightRunNowService service =
       new NightRunNowService(
-          bewertungen, runs, permissions, properties, Clock.fixed(JETZT, ZoneOffset.UTC));
+          bewertungen, runs, permissions, properties, Clock.fixed(JETZT, ZoneOffset.UTC), cards);
 
   private static NightRun lauf(long id, Instant startedAt, boolean complete, Instant updatedAt) {
     return new NightRun(
@@ -217,5 +223,52 @@ class NightRunNowServiceTest {
 
     assertThat(service.jetzt(USER, PROJECT).gesamt()).isEqualTo(Gesamt.NIE);
     verify(runs, never()).findItemsByRunIds(ArgumentMatchers.any());
+  }
+
+  private static final long CARD = 99L;
+
+  @Test
+  void wartegrund_prueftDasRechtVorDerSpalte_undVerraetSonstNichts() {
+    when(cards.warteKarte(CARD)).thenReturn(new WarteKarteView(PROJECT, 1695, false, JETZT));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
+
+    assertThatThrownBy(() -> service.wartegrund(USER, CARD))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+
+    verifyNoInteractions(runs, bewertungen);
+  }
+
+  @Test
+  void wartegrund_einerKarteAusserhalbVonReady_ist404() {
+    when(cards.warteKarte(CARD)).thenReturn(new WarteKarteView(PROJECT, 1695, false, JETZT));
+
+    assertThatThrownBy(() -> service.wartegrund(USER, CARD))
+        .isInstanceOf(KarteNichtInReadyException.class);
+
+    verify(permissions).requireNightRunAccess(USER, PROJECT);
+    verifyNoInteractions(runs, bewertungen);
+  }
+
+  /** Bewertung, Läufe und Änderungszeitpunkt fließen in die Ableitung. */
+  @Test
+  void wartegrund_leitetAusLageBewertungUndAenderungAb() {
+    when(cards.warteKarte(CARD))
+        .thenReturn(new WarteKarteView(PROJECT, 1695, true, T1.plusSeconds(1)));
+    when(runs.findByProjectAndKindOrderByStartedAtDesc(PROJECT, NightRunKind.NIGHT))
+        .thenReturn(List.of());
+    when(bewertungen.findByProjectId(PROJECT)).thenReturn(Optional.of(bewertung(T1)));
+
+    Wartegrund w = service.wartegrund(USER, CARD);
+
+    assertThat(w.laufgruende())
+        .extracting(Wartegrund.Laufgrund::art)
+        .containsExactly(LaufgrundArt.KEINE_UMSETZUNGSNACHT);
+    assertThat(w.vermerke())
+        .extracting(Wartegrund.Vermerk::art)
+        .containsExactly(Wartegrund.VermerkArt.SEIT_BEWERTUNG_GEAENDERT);
+    assertThat(w.paketeDavor()).isZero();
+    assertThat(w.startbereit()).isFalse();
   }
 }
