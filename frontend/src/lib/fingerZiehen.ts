@@ -50,17 +50,25 @@ function imWarten(stand: ZiehStand, ereignis: Exclude<ZiehEreignis, { typ: 'runt
     case 'hoch':
       return abgebrochen(stand, 'angetippt')
     case 'bewegt':
-    case 'uhr': {
       // Ist die Haltezeit um, gilt der Griff — auch wenn die Uhr erst mit der Bewegung kommt.
-      if (ereignis.zeit - stand.startZeit >= HALTEZEIT_MS) {
-        return { ...stand, zustand: 'zieht' }
+      if (haltezeitUm(stand, ereignis.zeit)) {
+        return gegriffen(stand)
       }
-      if (ereignis.typ === 'bewegt' && Math.hypot(ereignis.x - stand.startX, ereignis.y - stand.startY) > RUHE_TOLERANZ_PX) {
+      if (Math.hypot(ereignis.x - stand.startX, ereignis.y - stand.startY) > RUHE_TOLERANZ_PX) {
         return abgebrochen(stand, 'gewischt')
       }
       return stand
-    }
+    case 'uhr':
+      return haltezeitUm(stand, ereignis.zeit) ? gegriffen(stand) : stand
   }
+}
+
+function haltezeitUm(stand: ZiehStand, zeit: number): boolean {
+  return zeit - stand.startZeit >= HALTEZEIT_MS
+}
+
+function gegriffen(stand: ZiehStand): ZiehStand {
+  return { ...stand, zustand: 'zieht' }
 }
 
 function imZiehen(stand: ZiehStand, ereignis: Exclude<ZiehEreignis, { typ: 'runter' }>): ZiehStand {
@@ -119,9 +127,7 @@ export function randGeschwindigkeit(position: number, anfang: number, ende: numb
   if (tiefeAnfang > 0) {
     return -(Math.min(tiefeAnfang, RAND_BAND_PX) / RAND_BAND_PX) * RAND_SCROLL_MAX_PX
   }
-  const tiefeEnde = position - (ende - RAND_BAND_PX)
-  if (tiefeEnde > 0) {
-    return (Math.min(tiefeEnde, RAND_BAND_PX) / RAND_BAND_PX) * RAND_SCROLL_MAX_PX
-  }
-  return 0
+  // Ohne Vergleich: Eine Grenze `> 0` wäre gleichwertig zu `>= 0`, denn Tiefe 0 ergibt ohnehin 0.
+  const tiefeEnde = Math.max(position - (ende - RAND_BAND_PX), 0)
+  return (Math.min(tiefeEnde, RAND_BAND_PX) / RAND_BAND_PX) * RAND_SCROLL_MAX_PX
 }
