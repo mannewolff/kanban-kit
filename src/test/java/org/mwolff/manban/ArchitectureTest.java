@@ -226,7 +226,9 @@ class ArchitectureTest {
           // ActorContext ist Vertrag (Issue #1620, Plan #1617): comment stempelt die Herkunft eines
           // Kommentars aus derselben Quelle wie den Verlauf, samt Record ActorStamp. Gelesen wird
           // sie ueber ActorStamp#originName, damit card.domain modulintern bleibt.
-          "ActorContext");
+          "ActorContext",
+          // Exception-Vokabular als Vertrag, Plan #1694 (A4)
+          "CardNotFoundException");
 
   // --- Modul-Grenze: board-Fassade (Issue #459, Whitelist seit #470) --------------------------
   // Board und Spalte sind modulintern. Fremde Module fragen die fachliche board.application-
@@ -322,7 +324,9 @@ class ArchitectureTest {
           "InteractiveUsageSinceReader",
           "DashboardParticipationReader",
           "ProjectCreatedEvent",
-          "ProjectAccessDeniedException");
+          "ProjectAccessDeniedException",
+          // Exception-Vokabular als Vertrag, Plan #1694 (A4)
+          "ProjectNotFoundException");
 
   // Gegenstueck zu CARD_/BOARD_/AUTH_DOMAIN_IST_MODULINTERN, mit einer bewussten Ausnahme:
   // Permission ist das Vokabular der Fassade selbst (Parametertyp von PermissionChecker.require/

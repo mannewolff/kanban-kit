@@ -10,10 +10,10 @@ import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
  */
 
 /** Die Kosten des Nachtlaufs stehen im Ergebnisstand in US-Dollar. */
-const kostenFormat = (wert: number, sprache: Sprache = 'de'): string => formatierer(sprache).geld(wert)
+const kostenFormat = (wert: number, sprache: Sprache): string => formatierer(sprache).geld(wert)
 
 /** Die Mengen des Verbrauchs stehen als Token da — „Zuege" ist im Leitstand die Zahl der Sitzungen. */
-const tokenFormat = (wert: number, sprache: Sprache = 'de'): string => formatierer(sprache).zahl(wert)
+const tokenFormat = (wert: number, sprache: Sprache): string => formatierer(sprache).zahl(wert)
 
 /**
  * Ein Betrag oder die ausdrückliche Auskunft, dass der Stand keinen führt. „0 $" wäre eine

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 
 /** Zustand und Steuerung des globalen Editiermodus. */
 export interface EditModeState {
@@ -24,11 +24,11 @@ const EditModeContext = createContext<EditModeState>({
 export function EditModeProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [editMode, setEditMode] = useState(false)
 
-  const toggleEditMode = useCallback(() => setEditMode((prev) => !prev), [])
-
+  // Der Umschalter entsteht im selben Memo: Eine eigene useCallback-Liste ohne Abhängigkeiten wäre
+  // ein äquivalenter Mutant, den kein Test töten kann (#1682).
   const value = useMemo<EditModeState>(
-    () => ({ editMode, setEditMode, toggleEditMode }),
-    [editMode, toggleEditMode],
+    () => ({ editMode, setEditMode, toggleEditMode: () => setEditMode((prev) => !prev) }),
+    [editMode],
   )
 
   return <EditModeContext.Provider value={value}>{children}</EditModeContext.Provider>

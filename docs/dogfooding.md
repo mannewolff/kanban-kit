@@ -154,6 +154,56 @@ Jeder **Verlaufseintrag** trägt dieselbe Herkunft (`origin`, `tokenName`, `agen
   "actorName": "Manne", "origin": "SESSION", "tokenName": null, "agent": null }
 ```
 
+### Anhänge einer Karte lesen
+
+Ein board-gebundenes Token listet die Anhänge einer Karte seines Boards auf und lädt sie herunter.
+Eine eigene Erlaubnis braucht es dafür nicht, jedes gültige board-gebundene Token darf lesen.
+
+**Liste:** `GET /api/kanban/items/{id}/attachments` liefert die Metadaten aller Anhänge der Karte,
+ohne Inhalt — dieselben Angaben, die der angemeldete Mensch über `GET /api/cards/{cardId}/attachments`
+bekommt:
+
+```
+curl -H "X-Kanban-Token: …" https://localhost/api/kanban/items/4711/attachments
+```
+
+```json
+[
+  { "id": 91, "cardId": 4711, "filename": "skizze.png", "contentType": "image/png",
+    "size": 48213, "createdAt": "2026-10-13T09:12:00Z" }
+]
+```
+
+- `id` — ID des Anhangs, für den Download;
+- `cardId` — die Karte, an der er hängt;
+- `filename` — der ursprüngliche Dateiname;
+- `contentType` — die beim Hochladen erkannte Art der Datei;
+- `size` — Größe in Byte;
+- `createdAt` — Zeitpunkt des Hochladens.
+
+**Download:** `GET /api/kanban/items/{id}/attachments/{attachmentId}` liefert den Inhalt Byte für
+Byte wie hochgeladen. Die Antwort trägt immer `Content-Disposition: attachment` mit dem ursprünglichen
+Dateinamen; `curl -OJ` speichert die Datei unter diesem Namen:
+
+```
+curl -OJ -H "X-Kanban-Token: …" https://localhost/api/kanban/items/4711/attachments/91
+```
+
+**Grenze:** Erreichbar sind nur Karten des gebundenen Boards. Archivierte Karten bleiben lesbar,
+Karten im Papierkorb nicht (siehe [API-Tokens](rollen-und-rechte.md#api-tokens)).
+
+**Antworten:**
+
+- **404** „Anhang nicht gefunden“ — für eine unbekannte oder unerreichbare Karte (anderes Board,
+  anderes Projekt, Papierkorb) ebenso wie für einen unbekannten, unerreichbaren oder gelöschten
+  Anhang, bei Liste und Download gleich. Das Token erfährt nicht, ob der Anhang existiert.
+- **401** — das Token ist widerrufen.
+- **409** — das Token ist an kein Board gebunden.
+
+Hochladen und Löschen bleiben dem angemeldeten Menschen vorbehalten: Über das Token wird ein
+Hochladen mit **403**, ein Löschen mit **405** abgewiesen, die Anhänge bleiben unverändert. Das
+Lesen hinterlässt keinen Eintrag im Verlauf der Karte.
+
 ### Archivierte Karten: Nummer, Suche, Herkunftskette
 
 Drei lesende Aufrufe erreichen auch archivierte Karten des gebundenen Boards — Karten im

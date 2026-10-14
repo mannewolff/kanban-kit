@@ -97,6 +97,25 @@ public class AttachmentService {
   public Download download(long userId, long attachmentId) {
     Attachment attachment =
         attachments.findById(attachmentId).orElseThrow(AttachmentNotFoundException::new);
+    return deliver(userId, attachment);
+  }
+
+  /**
+   * Download über die Karte adressiert (Issue #1697). Hängt der Anhang an einer anderen Karte,
+   * lautet die Antwort wie für einen unbekannten Anhang — geprüft, bevor Mitgliedschaft und
+   * Objektspeicher berührt werden, damit der Aufrufer nicht erfährt, ob er existiert.
+   */
+  @Transactional(readOnly = true)
+  public Download downloadOnCard(long userId, long cardId, long attachmentId) {
+    Attachment attachment =
+        attachments
+            .findById(attachmentId)
+            .filter(a -> a.cardId() == cardId)
+            .orElseThrow(AttachmentNotFoundException::new);
+    return deliver(userId, attachment);
+  }
+
+  private Download deliver(long userId, Attachment attachment) {
     permissions.requireMembership(userId, cardService.requireProjectId(attachment.cardId()));
     return new Download(
         attachment.filename(),

@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import type { VerbrauchAngaben, VerbrauchKennzahlen } from '../api/nightRunUsage'
+import { woerterbuch } from '../i18n/woerterbuch'
 import {
-  NICHT_ERFASST_TEXT,
-  TEILWEISE_ERFASST_TEXT,
   erfassungsstand,
   kartenText,
   laeufeText,
   sitzungenText,
   vergleichMitVorzeitraum,
+  zeitpunktDatum,
   zeitraumBeschriftung,
   zyklusBeschriftung,
   zyklusDavor,
   zyklusDesStarts,
+  zyklusSpanne,
   zeitraumHinweis,
 } from './verbrauchZeitraum'
 
@@ -256,8 +257,8 @@ describe('erfassungsstand', () => {
   })
 
   it('schreibt die beiden Aussagen aus, ohne 0 zu sagen', () => {
-    expect(NICHT_ERFASST_TEXT).toBe('nicht erfasst')
-    expect(TEILWEISE_ERFASST_TEXT).toBe('teilweise erfasst')
+    expect(woerterbuch('de').VERBRAUCH_ZEITRAUM.NICHT_ERFASST).toBe('nicht erfasst')
+    expect(woerterbuch('de').VERBRAUCH_ZEITRAUM.TEILWEISE_ERFASST).toBe('teilweise erfasst')
   })
 })
 
@@ -302,6 +303,22 @@ describe('zeitraumHinweis mit Erfassungsluecke', () => {
   it('schweigt, wenn der Zeitraum ganz nach dem Erfassungsbeginn liegt', () => {
     expect(zeitraumHinweis(august({ interactiveUsageSince: '2026-07-01T00:00:00Z' }))).toBeNull()
   })
+
+  /** Beide Hinweise stehen als zwei Sätze hintereinander, getrennt durch ein Leerzeichen (Issue #1679). */
+  it('trennt Erfassungs- und Abdeckungs-Hinweis durch ein Leerzeichen', () => {
+    const t = woerterbuch('de').VERBRAUCH_ZEITRAUM
+
+    expect(
+      zeitraumHinweis(august({ coverage: 'PARTIAL', interactiveUsageSince: '2026-08-14T07:00:00Z' })),
+    ).toBe(`${t.ERFASSUNG_BEGINNT_DAVOR('14.08.2026')} ${t.TEILWEISE}`)
+  })
+
+  /** Ist die Erfassung vollständig, steht der Abdeckungs-Hinweis allein, ohne Rand (Issue #1679). */
+  it('zeigt bei vollständiger Erfassung nur den Abdeckungs-Hinweis', () => {
+    expect(
+      zeitraumHinweis(august({ coverage: 'PARTIAL', interactiveUsageSince: '2026-07-01T00:00:00Z' })),
+    ).toBe(woerterbuch('de').VERBRAUCH_ZEITRAUM.TEILWEISE)
+  })
 })
 
 describe('zyklusDesStarts (Issue #1127)', () => {
@@ -331,6 +348,16 @@ describe('zyklusDesStarts (Issue #1127)', () => {
 describe('zyklusBeschriftung (Issue #1127)', () => {
   it('nennt Beginn und Folgetag', () => {
     expect(zyklusBeschriftung('2026-09-14')).toBe('Schicht vom 14.09.2026 auf den 15.09.2026')
+  })
+})
+
+describe('Sprachvorgabe Deutsch (Issue #1679)', () => {
+  it('nennt die Spanne eines Zyklus ohne Sprachangabe auf Deutsch', () => {
+    expect(zyklusSpanne('2026-09-21')).toBe('vom 21.09.2026 auf den 22.09.2026')
+  })
+
+  it('schreibt einen Zeitpunkt ohne Sprachangabe als deutsches Datum', () => {
+    expect(zeitpunktDatum('2026-09-21T10:00:00Z')).toBe('21.09.2026')
   })
 })
 

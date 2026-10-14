@@ -25,6 +25,7 @@ describe('languageApi', () => {
     ['ein Objekt ohne language', {}],
     ['kein Objekt', 'de'],
     ['null', null],
+    ['eine leere Antwort', undefined],
   ])('lesen weist %s ab', async (_fall, body) => {
     antwort(body)
     await expect(languageApi.lesen()).rejects.toThrow('Unbekannte Sprache')

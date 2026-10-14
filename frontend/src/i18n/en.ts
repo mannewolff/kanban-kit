@@ -1016,6 +1016,7 @@ export const en: Woerterbuch = {
     OFFENE_FRAGE: (name) => `An open question on the card is waiting for a person (${name}).`,
     GO: 'With this goal you give the GO for all work packages of this card.',
     BESTAETIGUNG: 'This gives the GO for all work packages of this card. Start the chain?',
+    VOLLE_KETTE: 'No goal label set — the chain runs through to the prepared release.',
     WARTET: 'Chain started — it is waiting for a runner to take it over.',
     UEBERNOMMEN: 'A runner has taken over the chain — the bar is now display only.',
     PLAN_REVIEW_DA: (zeile) =>

@@ -81,7 +81,7 @@ class NightRunHeuteNachtIT extends AbstractIntegrationTest {
 
     assertThat(zeilen(antwort))
         .containsExactly(
-            ausErstem + " [Fachlich] Import Board FACHPLAN PAKETE 2",
+            ausErstem + " [Fachlich] Import Board FACHPLAN VORBEREITUNG 2",
             ausZweitem + " [Plan] Export Betrieb PLAN UMSETZUNG null");
   }
 
@@ -96,8 +96,8 @@ class NightRunHeuteNachtIT extends AbstractIntegrationTest {
 
     assertThat(zeilen(antwort))
         .containsExactly(
-            deutsch + " [Fachlich] Import Board FACHPLAN PAKETE 2",
-            englisch + " [Requirement] Import Board FACHPLAN PAKETE 2");
+            deutsch + " [Fachlich] Import Board FACHPLAN VORBEREITUNG 2",
+            englisch + " [Requirement] Import Board FACHPLAN VORBEREITUNG 2");
   }
 
   @Test

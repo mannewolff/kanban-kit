@@ -70,14 +70,26 @@ class NachtFreigabeTest {
     assertThat(f.boardName()).isEqualTo("Entwicklung");
   }
 
-  @Test
-  void ohneZielLabelIstDasZielArbeitspakete() {
-    assertThat(freigabe(ANFORDERUNG, "kit:night").ziel()).isEqualTo(ProgressStage.PAKETE);
+  // Issue #1702: Ohne Ziel-Label fährt das Kit die volle Kette; „Heute Nacht“ führt nur gestartete
+  // Karten, also gilt dort immer das.
+  @ParameterizedTest
+  @ValueSource(strings = {"[Requirement] Export", "[Plan] Export"})
+  void ohneZielLabelIstDasZielDieVorbereiteteVeroeffentlichung(String titel) {
+    assertThat(freigabe(titel, "kit:night").ziel()).isEqualTo(ProgressStage.VORBEREITUNG);
   }
 
-  @Test
-  void mitDurchziehenUndOhneZielLabelIstDasZielUmsetzung() {
-    assertThat(freigabe(ANFORDERUNG, "kit:durchziehen", "kit:night").ziel())
+  @ParameterizedTest
+  @ValueSource(strings = {"[Requirement] Export", "[Plan] Export"})
+  void mitDurchziehenUndOhneZielLabelIstDasZielUmsetzung(String titel) {
+    assertThat(freigabe(titel, "kit:durchziehen", "kit:night").ziel())
+        .isEqualTo(ProgressStage.UMSETZUNG);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"[Requirement] Export", "[Plan] Export"})
+  void einGesetztesZielLabelBleibtDasZiel(String titel) {
+    assertThat(freigabe(titel, "ziel:pakete", "kit:night").ziel()).isEqualTo(ProgressStage.PAKETE);
+    assertThat(freigabe(titel, "ziel:umsetzung", "kit:night").ziel())
         .isEqualTo(ProgressStage.UMSETZUNG);
   }
 
@@ -92,12 +104,12 @@ class NachtFreigabeTest {
 
   @Test
   void einUnbekanntesZielLabelZaehltNicht() {
-    assertThat(freigabe(ANFORDERUNG, "ziel:mond").ziel()).isEqualTo(ProgressStage.PAKETE);
+    assertThat(freigabe(ANFORDERUNG, "ziel:mond").ziel()).isEqualTo(ProgressStage.VORBEREITUNG);
   }
 
   @Test
   void anEinemPlanZaehltZielPlanNicht() {
-    assertThat(freigabe(PLAN, "ziel:plan").ziel()).isEqualTo(ProgressStage.PAKETE);
+    assertThat(freigabe(PLAN, "ziel:plan").ziel()).isEqualTo(ProgressStage.VORBEREITUNG);
     assertThat(freigabe(PLAN, "ziel:umsetzung").ziel()).isEqualTo(ProgressStage.UMSETZUNG);
   }
 
@@ -188,6 +200,6 @@ class NachtFreigabeTest {
     assertThat(mitZiel.ziel()).isEqualTo(ProgressStage.UMSETZUNG);
     assertThat(mitPruefern.pruefer()).isEqualTo(2);
     assertThat(mitDurchziehen.ziel()).isEqualTo(ProgressStage.UMSETZUNG);
-    assertThat(freigabe(ANFORDERUNG, "goal:build").ziel()).isEqualTo(ProgressStage.PAKETE);
+    assertThat(freigabe(ANFORDERUNG, "goal:build").ziel()).isEqualTo(ProgressStage.VORBEREITUNG);
   }
 }

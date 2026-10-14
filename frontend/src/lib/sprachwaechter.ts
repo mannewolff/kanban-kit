@@ -33,7 +33,8 @@ export interface SprachAllowance {
   resolvedIn: string
 }
 
-const TEXT_ATTRIBUTES = new Set(['label', 'title', 'placeholder', 'aria-label', 'helperText', 'alt', 'tooltip'])
+/** `unknown`, weil ein Attribut mit Namensraum (`xlink:title`) als Namen einen Knoten traegt — nie ein Eintrag. */
+const TEXT_ATTRIBUTES: ReadonlySet<unknown> = new Set(['label', 'title', 'placeholder', 'aria-label', 'helperText', 'alt', 'tooltip'])
 
 /** Woerterbuch, Server-Anbindung und die Kit-Wortformen tragen ihre Texte per Auftrag. */
 const EXCLUDED = [/\.test\.tsx?$/, /^src\/test\//, /^src\/i18n\//, /^src\/api\//, /^src\/lib\/kitWortformen\.ts$/]
@@ -65,30 +66,31 @@ function literalText(node: Node | null | undefined): string | null {
 /** Ein Literal, das in einem Textattribut, als JSX-Text oder in `notify` steht. */
 function jsxText(node: Node): string | null {
   if (node.type === 'JSXText') return node.value.trim()
-  if (node.type === 'JSXAttribute' && node.name.type === 'JSXIdentifier' && TEXT_ATTRIBUTES.has(node.name.name)) {
+  if (node.type === 'JSXAttribute' && TEXT_ATTRIBUTES.has(node.name.name)) {
     const value = node.value?.type === 'JSXExpressionContainer' ? node.value.expression : node.value
     return literalText(value as Node | null | undefined)
   }
-  if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'notify') {
+  // Nur ein schlichter Bezeichner traegt `name`; `api.notify(…)` hat als Aufrufziel keinen.
+  if (node.type === 'CallExpression' && (node.callee as { name?: unknown }).name === 'notify') {
     return literalText(node.arguments[0] as Node | undefined)
   }
   return null
 }
 
-/** Knoten, deren Literale kein Anzeigetext sind: Modulpfade und Typen. */
+/** Knoten, deren Literale kein Anzeigetext sind: Typen. Modulpfade faengt `source` ab (siehe `visit`). */
 const SKIPPED = new Set([
-  'ImportDeclaration',
-  'ExportAllDeclaration',
   'TSLiteralType',
   'TSImportType',
   'TSExternalModuleReference',
 ])
 
-/** Die Kindknoten eines Knotens, ohne Positions- und Kommentarangaben. */
+/**
+ * Die Kindknoten eines Knotens: alle Werte mit `type`. Positionsangaben tragen keinen; Kommentare
+ * tragen einen, liefern aber keinen Fund.
+ */
 function children(node: Node): Node[] {
-  return Object.entries(node)
-    .filter(([key]) => key !== 'loc' && !key.endsWith('Comments'))
-    .flatMap(([, value]) => (Array.isArray(value) ? value : [value]))
+  return Object.values(node)
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
     .filter((value): value is Node => typeof value?.type === 'string')
 }
 
@@ -102,7 +104,8 @@ export function scanSource(file: string, source: string): SprachFund[] {
   const funde: SprachFund[] = []
 
   const visit = (node: Node) => {
-    if (SKIPPED.has(node.type) || (node.type === 'ExportNamedDeclaration' && node.source)) return
+    // Import- und Export-Anweisungen mit Modulpfad tragen ihn in `source`; nur sie haben eines.
+    if (SKIPPED.has(node.type) || (node as { source?: unknown }).source) return
     // Babel setzt `loc` an jedem Knoten; der Typ laesst es nur fuer selbst gebaute Knoten offen.
     const push = (rule: SprachRegel, text: string) =>
       funde.push({ file, line: (node.loc as SourceLocation).start.line, rule, text })
@@ -110,8 +113,8 @@ export function scanSource(file: string, source: string): SprachFund[] {
     const jsx = jsxText(node)
     if (jsx !== null && LETTER.test(jsx)) push('jsx', jsx)
 
-    const literal = literalText(node)
-    if (literal !== null && (UMLAUT.test(literal) || WORD_SPACE_WORD.test(literal))) push('literal', literal)
+    const literal = literalText(node) ?? ''
+    if (UMLAUT.test(literal) || WORD_SPACE_WORD.test(literal)) push('literal', literal)
 
     children(node).forEach(visit)
   }

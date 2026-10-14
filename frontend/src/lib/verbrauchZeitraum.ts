@@ -11,12 +11,6 @@ import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
  * Der Kern ist derselbe wie im Backend: **„nicht gemessen" ist nicht 0** (Plan E5).
  */
 
-/** Ein Zeitraum ganz vor dem Erfassungsbeginn — und niemals eine 0 (#984 AK 6). Deutsche Fassung. */
-export const NICHT_ERFASST_TEXT = woerterbuch('de').VERBRAUCH_ZEITRAUM.NICHT_ERFASST
-
-/** Ein Zeitraum, der den Erfassungsbeginn schneidet: Zahlen sind da, aber unvollständig. Deutsche Fassung. */
-export const TEILWEISE_ERFASST_TEXT = woerterbuch('de').VERBRAUCH_ZEITRAUM.TEILWEISE_ERFASST
-
 /** Das Kalenderdatum je Sprache: `21.09.2026` bzw. `Sep 21, 2026`, stets in UTC. */
 const DATUM: Readonly<Record<Sprache, Intl.DateTimeFormatOptions>> = {
   de: { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' },
@@ -155,6 +149,7 @@ export function vergleichMitVorzeitraum(
     return { richtung: 'unveraendert', text: t.UNVERAENDERT }
   }
   const betrag = formatierer(sprache).geld(Math.abs(differenz) / MIKRODOLLAR)
+  // Stryker disable next-line EqualityOperator: `differenz === 0` endet schon oben, `>= 0` ist hier gleichwertig (#1679).
   return differenz > 0
     ? { richtung: 'teurer', text: t.TEURER(betrag) }
     : { richtung: 'billiger', text: t.BILLIGER(betrag) }
@@ -229,7 +224,7 @@ export function erfassungsstand(kennzahlen: Erfassung): Erfassungsstand {
 /**
  * Der Hinweis zur Erfassungslücke; `null`, wenn es keine gibt. Ohne gemeldeten Beginn schweigt er
  * ebenfalls: Dass ein Projekt noch nie eine Sitzung gemeldet hat, ist sein Zustand und kein Befund
- * über diesen Zeitraum — der Anteil selbst sagt dort {@link NICHT_ERFASST_TEXT}.
+ * über diesen Zeitraum — der Anteil selbst sagt dort `VERBRAUCH_ZEITRAUM.NICHT_ERFASST`.
  */
 function erfassungsHinweis(kennzahlen: Erfassung, sprache: Sprache): string | null {
   if (kennzahlen.interactiveUsageSince === null) {

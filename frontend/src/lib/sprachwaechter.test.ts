@@ -46,11 +46,27 @@ describe('scanSource: Regel jsx', () => {
     expect(regeln("api.notify('Gespeichert')")).toEqual([])
     expect(regeln('notify()')).toEqual([])
   })
+
+  it('meldet kein Textattribut mit Namensraum', () => {
+    expect(regeln('const x = <A xlink:title="Wort" />')).toEqual([])
+  })
+
+  it('liest .tsx mit TypeScript- und JSX-Plugin', () => {
+    expect(regeln('const x: string = <p>Hallo</p>')).toEqual(['jsx'])
+  })
 })
 
 describe('scanSource: Regel literal', () => {
   it('meldet ein Literal mit Leerzeichen zwischen zwei Wörtern', () => {
     expect(regeln("const HINWEIS = 'Am Board fehlt'", 'src/lib/fixture.ts')).toEqual(['literal'])
+  })
+
+  it('meldet ein Literal mit mehreren Leerzeichen zwischen zwei Wörtern', () => {
+    expect(regeln("const HINWEIS = 'Am  Board'", 'src/lib/fixture.ts')).toEqual(['literal'])
+  })
+
+  it('meldet Literale auch in einer Export-Anweisung ohne Modulpfad', () => {
+    expect(regeln("export const HINWEIS = 'Am Board fehlt'", 'src/lib/fixture.ts')).toEqual(['literal'])
   })
 
   it('meldet ein Literal mit Umlaut oder ß', () => {
@@ -78,6 +94,8 @@ describe('scanSource: Regel literal', () => {
   it('meldet keine Modulpfade und keine Literale in Typen', () => {
     expect(regeln("import x from './a b'\nexport { y } from './c d'\nexport * from './e f'", 'src/lib/f.ts')).toEqual([])
     expect(regeln("type Zustand = 'In progress' | 'In review'", 'src/lib/fixture.ts')).toEqual([])
+    expect(regeln("type T = import('./a b').X", 'src/lib/fixture.ts')).toEqual([])
+    expect(regeln("import x = require('./a b')", 'src/lib/fixture.ts')).toEqual([])
   })
 
   it('meldet ein Textattribut mit Satz unter beiden Regeln', () => {
@@ -96,6 +114,16 @@ describe('scanSource: Fundangaben', () => {
       { file: 'src/lib/fixture.ts', line: 2, rule: 'literal', text: 'Am Board fehlt' },
     ])
   })
+
+  it('nennt JSX-Text ohne umgebenden Leerraum', () => {
+    expect(scanSource('src/components/Fixture.tsx', 'const x = <p> Hallo </p>').map((f) => f.text)).toEqual(['Hallo'])
+  })
+
+  it('verbindet die Stücke eines Template-Literals mit einem Leerzeichen', () => {
+    expect(scanSource('src/lib/fixture.ts', 'const a = `Karten ${n} offen`').map((f) => f.text)).toEqual([
+      'Karten   offen',
+    ])
+  })
 })
 
 describe('isExcluded: ausgenommene Pfade', () => {
@@ -112,6 +140,11 @@ describe('isExcluded: ausgenommene Pfade', () => {
     expect(isExcluded('src/components/A.tsx')).toBe(false)
     expect(isExcluded('src/lib/kitWortformen.tsx')).toBe(false)
     expect(isExcluded('src/pages/api/A.tsx')).toBe(false)
+    expect(isExcluded('src/lib/a.test.tsHelfer.ts')).toBe(false)
+    expect(isExcluded('src/pages/src/test/A.tsx')).toBe(false)
+    expect(isExcluded('src/pages/src/i18n/A.tsx')).toBe(false)
+    expect(isExcluded('src/pages/src/api/A.tsx')).toBe(false)
+    expect(isExcluded('src/pages/src/lib/kitWortformen.ts')).toBe(false)
   })
 
   it('meldet in ausgenommenen Dateien nichts', () => {
@@ -131,6 +164,7 @@ describe('Ausnahmeliste', () => {
     expect(unmatchedFindings([fund], [eintrag])).toEqual([])
     expect(unmatchedFindings([fund], [{ ...eintrag, rule: 'jsx' }])).toEqual([fund])
     expect(unmatchedFindings([fund], [{ ...eintrag, file: 'src/lib/b.ts' }])).toEqual([fund])
+    expect(unmatchedFindings([fund], [{ ...eintrag, file: 'src/lib/b.ts' }, eintrag])).toEqual([])
   })
 
   it('meldet eine tote Ausnahme: Datei ohne Fund dieser Regel', () => {

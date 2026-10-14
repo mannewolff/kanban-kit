@@ -12,7 +12,6 @@ import type {
 } from '../api/nightRuns'
 import type { NightRunState } from './nightRunLog'
 import {
-  ENDE_DES_WEGS,
   kettenAnsage,
   kettenAnzeige,
   laeufeZusammenfuehren,
@@ -164,9 +163,8 @@ describe('wegleiste', () => {
         { stufe: 'PAKETE', name: 'Arbeitspakete', zustand: 'erreicht', aktuell: false },
         { stufe: 'ABDECKUNG', name: 'Abdeckung', zustand: 'erreicht', aktuell: false },
       ],
-      ende: ENDE_DES_WEGS,
+      ende: 'Ende des Wegs erreicht',
     })
-    expect(ENDE_DES_WEGS).toBe('Ende des Wegs erreicht')
   })
 
   it('zeigt Variante B mit Umsetzung und markiert die aktuelle Stufe', () => {

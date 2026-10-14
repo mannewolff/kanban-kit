@@ -68,6 +68,19 @@ type PrueferSache = (typeof PRUEFER)[number]['sache']
 const PRUEFER_ZAHL = Object.fromEntries(PRUEFER.map((p) => [p.sache, p.zahl])) as Record<PrueferSache, number>
 /** Das eine Start-Label des Kit-Vertrags (E10): gesetzt heißt freigegeben, noch nicht übernommen. */
 const NACHT = 'NIGHT'
+/** Das Ziel ohne Ziel-Label: „Arbeitspakete“, wie die Leiste es markiert. */
+const VORGABE_ZIEL = 'ZIEL_PAKETE'
+/**
+ * Die Sachen, die „Kette starten“ setzt (Issue #1695): `kit:night`, und mit Vorgabe dazu das Label
+ * der markierten Vorgabe — das Kit fährt ohne Ziel-Label die volle Kette.
+ */
+const startSachen = (mitVorgabe: boolean) => (mitVorgabe ? [NACHT, VORGABE_ZIEL] : [NACHT])
+/**
+ * Die Namen, die der Start abnimmt: mit Vorgabe alle Ziel-Namen, damit ein unwirksames Ziel-Label
+ * (`ziel:plan` an einem Plan) der Vorgabe weicht — höchstens ein Ziel je Karte (E14).
+ */
+const abBeimStart = (daten: KitNamen, mitVorgabe: boolean) =>
+  new Set(mitVorgabe ? ZIEL_SACHEN.flatMap((sache) => namenDerSache(daten, sache)) : [])
 /** Sachen, mit denen an der Karte eine offene Frage auf einen Menschen wartet. */
 const OFFENE_FRAGE = ['KLAEREN', 'LAUF_WARTET'] as const
 const PLAN_REVIEW_ZEILE = new RegExp(`^${PLAN_REVIEW}`, 'm')
@@ -127,6 +140,27 @@ type Ladung =
 const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel === schluessel)
 
 /**
+ * Das wirksame Ziel der Kette: das gesetzte Label, ohne Label vor dem Start die Vorgabe
+ * „Arbeitspakete“ — und mit `kit:durchziehen` mindestens „Umsetzung“ (Kit A3). Ist die Kette ohne
+ * Ziel-Label und ohne `kit:durchziehen` gestartet, fährt das Kit die volle Kette (`volleKette`,
+ * Issue #1702).
+ */
+function wirksamesZiel(
+  gesetztesZiel: Station | undefined,
+  durchziehen: boolean,
+  gestartet: boolean,
+): { ziel: Station; volleKette: boolean } {
+  const volleKette = gestartet && gesetztesZiel === undefined && !durchziehen
+  const vorgabe: Station = volleKette ? 'push-vorbereitet' : 'pakete'
+  const untergrenze: Station = durchziehen ? 'umsetzung' : vorgabe
+  const ziel =
+    gesetztesZiel !== undefined && !(durchziehen && index(gesetztesZiel) < index(untergrenze))
+      ? gesetztesZiel
+      : untergrenze
+  return { ziel, volleKette }
+}
+
+/**
  * Die Stufenleiste an `[Fachlich]`- und `[Plan]`-Karten (Issue #1449, Plan #1447): Ziel der
  * Nacht-Kette und Prüferzahl wählen, statt die Labels des Kit-Vertrags von Hand zu setzen.
  *
@@ -140,9 +174,13 @@ const index = (schluessel: Station) => STATIONEN.findIndex((s) => s.schluessel =
  * Anzeige ohne Knöpfe (E3).
  *
  * <p><b>Start</b> (Issue #1450): „Kette starten“ setzt `kit:night`, ab „Umsetzung“ erst nach
- * Bestätigung im Dialog (E7); „Start zurücknehmen“ nimmt nur `kit:night` ab (E10). Solange die
- * Kette gestartet ist, ruhen Ziel- und Prüferwahl — ein späterer Zielwechsel umginge die
- * Bestätigung. Hat ein Runner übernommen (E15), ist die Leiste nur noch Anzeige.
+ * Bestätigung im Dialog (E7); ohne Ziel-Label und ohne `kit:durchziehen` dazu das Label der
+ * angezeigten Vorgabe, denn das Kit fährt ohne Ziel-Label die volle Kette (Issue #1695). „Start
+ * zurücknehmen“ nimmt nur `kit:night` ab (E10). Solange die Kette gestartet ist, ruhen Ziel- und
+ * Prüferwahl — ein späterer Zielwechsel umginge die Bestätigung. Hat ein Runner übernommen (E15), ist die Leiste nur noch Anzeige.
+ * Trägt eine gestartete Karte weder Ziel-Label noch `kit:durchziehen` — `kit:night` kam von Hand
+ * oder aus einem anderen Werkzeug —, ist das Ziel „Veröffentlichung vorbereitet“, und ein Hinweis
+ * unter der Leiste sagt, warum (Issue #1702).
  *
  * <p><b>Kettenstand</b> (Issue #1453): Beim Öffnen lädt die Leiste einmal
  * `GET /api/cards/{cardId}/night-chain`, ohne Nachladen. Ob ein Runner übernommen hat, sagt dann
@@ -251,16 +289,11 @@ function Leiste({
   // Ziel und Prüferzahl sind nur vor dem Start wählbar.
   const anzeige = disabled || uebernommen || gestartet
 
-  // Das wirksame Ziel: das gesetzte Label, an einem Plan nie `ziel:plan`, ohne Label die Vorgabe
-  // „Arbeitspakete“ — und mit `kit:durchziehen` mindestens „Umsetzung“ (Kit A3).
+  // Das an einem Plan nie wirksame `ziel:plan` zählt nicht als gesetztes Ziel.
   const gesetztesZiel = STATIONEN.find(
     (s) => s.ziel !== null && hat(s.ziel) && !(istPlan && s.schluessel === 'plan'),
   )?.schluessel
-  const untergrenze: Station = durchziehen === undefined ? 'pakete' : 'umsetzung'
-  const ziel: Station =
-    gesetztesZiel !== undefined && !(durchziehen !== undefined && index(gesetztesZiel) < index(untergrenze))
-      ? gesetztesZiel
-      : untergrenze
+  const { ziel, volleKette } = wirksamesZiel(gesetztesZiel, durchziehen !== undefined, gestartet)
 
   const zustand = (schluessel: Station): Zustand => {
     if (istPlan && (schluessel === 'plan' || schluessel === 'pruefung')) return 'erbracht'
@@ -302,6 +335,9 @@ function Leiste({
 
   const prueferGesetzt = PRUEFER.find((p) => hat(p.sache))?.sache
   const nachtNamen = new Set(namenDerSache(daten, NACHT))
+  // Ohne wirksames Ziel und ohne `kit:durchziehen` ist die angezeigte Vorgabe „Arbeitspakete“ das Ziel.
+  const mitVorgabe = gesetztesZiel === undefined && durchziehen === undefined
+  const zuStarten = startSachen(mitVorgabe).map(zuSetzen)
 
   /** Was vor dem Start fehlt — leer heißt startbereit. */
   const sperrgruende = [
@@ -310,7 +346,9 @@ function Leiste({
     ...OFFENE_FRAGE.flatMap((sache) =>
       gesetzteNamen.filter((n) => namenDerSache(daten, sache).includes(n)).map((n) => genannt(sache, n)),
     ).map(t.OFFENE_FRAGE),
-    ...(idVon(zuSetzen(NACHT)) === undefined ? [t.LABEL_FEHLT(nennen(NACHT))] : []),
+    ...startSachen(mitVorgabe)
+      .filter((sache) => idVon(zuSetzen(sache)) === undefined)
+      .map((sache) => t.LABEL_FEHLT(nennen(sache))),
   ]
 
   if (stand?.uebernommen === true) {
@@ -376,6 +414,11 @@ function Leiste({
           )
         })}
       </Box>
+      {volleKette && (
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          {t.VOLLE_KETTE}
+        </Typography>
+      )}
       {!istPlan && (
         <PrueferSchalter
           anzeige={anzeige}
@@ -391,7 +434,12 @@ function Leiste({
         uebernommen={uebernommen}
         sperrgruende={sperrgruende}
         goNoetig={index(ziel) >= index('umsetzung')}
-        onStart={() => onChange({ ab: [], an: boardLabels.filter((l) => l.name === zuSetzen(NACHT)).map((l) => l.id) })}
+        onStart={() =>
+          onChange({
+            ab: idsMit(abBeimStart(daten, mitVorgabe)),
+            an: zuStarten.flatMap((name) => boardLabels.filter((l) => l.name === name).map((l) => l.id)),
+          })
+        }
         onRuecknahme={() => onChange({ ab: idsMit(nachtNamen), an: [] })}
       />
     </Box>

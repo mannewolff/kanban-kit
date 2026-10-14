@@ -6,6 +6,7 @@ import {
   geschaetztGespart,
   kurzGrund,
   KURZ_GRUND_MAX,
+  nightRunStateTextByErrorClass,
   nightRunZustandsText,
   NIGHT_RUN_ERROR_CLASS_TEXT,
   NIGHT_RUN_STATE_TEXT,
@@ -500,5 +501,12 @@ describe('Übernahmetext und Zustandswörter auf Englisch (Issue #1658)', () => 
     expect(NIGHT_RUN_STATE_TEXT.RED).toBe('gescheitert')
     expect(NIGHT_RUN_VERDICT_TEXT.NOT_STARTED).toBe('nicht angelaufen')
     expect(nightRunZustandsText('RED', undefined)).toBe('gescheitert')
+  })
+
+  it('liefert die Zustandswörter je Fehlerklasse ohne Sprachangabe auf Deutsch (Issue #1678)', () => {
+    const jeKlasse = nightRunStateTextByErrorClass()
+
+    expect(jeKlasse.TIME_BUDGET_EXCEEDED?.YELLOW).toBe('Am Zeitbudget beendet, Ergebnis liegt vor')
+    expect(jeKlasse.STUCK?.RED).toBe('festgefahren')
   })
 })

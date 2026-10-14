@@ -19,12 +19,6 @@ export function hinweisAendernd(sprache: Sprache): string {
   return woerterbuch(sprache).API_UEBERSICHT.HINWEIS_AENDERND
 }
 
-/** Der Abbruchtext, deutsche Fassung. */
-export const ABGEBROCHEN = abgebrochenText('de')
-
-/** Der Hinweis vor einem aendernden Aufruf, deutsche Fassung. */
-export const HINWEIS_AENDERND = hinweisAendernd('de')
-
 const LESEND = new Set(['GET', 'HEAD'])
 
 /** Aendernd ist jede Methode ausser GET und HEAD, gleich in welcher Schreibweise. */

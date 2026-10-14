@@ -94,12 +94,9 @@ export interface Wegstufe {
 /** Die Wegleiste einer Kette: ihre Stufen und, wenn erreicht, das Ende des Wegs. */
 export interface Wegleiste {
   stufen: Wegstufe[]
-  /** {@link ENDE_DES_WEGS}, wenn jede Stufe erreicht ist; sonst `null`. */
+  /** Der Endzustand des Wegs, wenn jede Stufe erreicht ist; sonst `null`. */
   ende: string | null
 }
-
-/** Der Endzustand eines Wegs, der planmäßig endet — in Variante A nach der Abdeckung. Deutsche Fassung. */
-export const ENDE_DES_WEGS = woerterbuch('de').LAUF_FORTSCHRITT.ENDE_DES_WEGS
 
 /**
  * Die Wegleiste einer Kette (Plan #1372 E12).
@@ -164,9 +161,6 @@ export function stationsnamen(sprache: Sprache): Record<KettenStation, string> {
   const t = woerterbuch(sprache).LAUF_FORTSCHRITT
   return { ...t.STUFE, VORBEREITUNG: t.VORBEREITUNG }
 }
-
-/** Die Namen der Stationen der Stufenleiste — auch für die Übersicht „Heute Nacht“ (Issue #1455). Deutsche Fassung. */
-export const STATIONSNAME: Record<KettenStation, string> = stationsnamen('de')
 
 /** Der Text, den der Server an der Station einer Projektgrenze setzt (Issue #1451). */
 const PROJEKTGRENZE = 'Projektgrenze'

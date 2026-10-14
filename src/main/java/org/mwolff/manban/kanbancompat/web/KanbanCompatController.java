@@ -1,5 +1,13 @@
 package org.mwolff.manban.kanbancompat.web;
 
+import static org.mwolff.manban.kanbancompat.web.KanbanAuthentifizierung.BESCHREIBUNG_ID;
+import static org.mwolff.manban.kanbancompat.web.KanbanAuthentifizierung.KARTE_FEHLT;
+import static org.mwolff.manban.kanbancompat.web.KanbanAuthentifizierung.NICHT_GEBUNDEN;
+import static org.mwolff.manban.kanbancompat.web.KanbanAuthentifizierung.TAG_BESCHREIBUNG;
+import static org.mwolff.manban.kanbancompat.web.KanbanAuthentifizierung.TAG_NAME;
+import static org.mwolff.manban.kanbancompat.web.KanbanAuthentifizierung.TOKEN_BINDUNG;
+import static org.mwolff.manban.kanbancompat.web.KanbanAuthentifizierung.principal;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -18,7 +26,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.card.application.CardNumbers;
 import org.mwolff.manban.common.Laufkennung;
 import org.mwolff.manban.common.TextLimits;
@@ -35,7 +42,6 @@ import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Created;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Epic;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Item;
-import org.mwolff.manban.kanbancompat.application.TokenNotBoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -64,18 +70,8 @@ import org.springframework.web.bind.annotation.RestController;
  */
 // Die OpenAPI-Annotationen heben die Importzahl über die PMD-Schwelle von 40 (Plan #1400, E14).
 // Die Ausnahme bleibt an dieser Klasse sichtbar, statt die Regel für alle anzuheben.
-// PMD.CouplingBetweenObjects: Der Controller ist der eine Zugang der Kanban-Strecke; jede
-// Antwortform zählt als Kopplung, mit der Herkunftskette (Issue #1580) über die Schwelle von 20.
-@SuppressWarnings({"PMD.ExcessiveImports", "PMD.CouplingBetweenObjects"})
-@Tag(
-    name = "Einliefern (Kanban-kompatibel)",
-    description =
-        "Karten, Kommentare und Labels über ein board-gebundenes Projekt-Token lesen und"
-            + " schreiben, ohne Anmeldung im Browser. Das Board kommt aus der Bindung des Tokens"
-            + " (Header X-Kanban-Token), nicht aus dem Aufruf: Jeder Aufruf wirkt nur auf das"
-            + " Board, für das das Token ausgestellt wurde, und das Token darf nie mehr als die"
-            + " Person, die es angelegt hat. Spalten heißen hier mit festen Schlüsseln BACKLOG,"
-            + " READY, IN_PROGRESS, IN_REVIEW und DONE.")
+@SuppressWarnings("PMD.ExcessiveImports")
+@Tag(name = TAG_NAME, description = TAG_BESCHREIBUNG)
 @RestController
 @RequestMapping("/api/kanban")
 class KanbanCompatController {
@@ -95,10 +91,6 @@ class KanbanCompatController {
   /** Höchstlänge des Suchbegriffs der Suche (Plan #1574, E3). */
   private static final int MAX_SEARCH_TEXT = 200;
 
-  private static final String TOKEN_BINDUNG =
-      "Das Board kommt aus der Bindung des Projekt-Tokens; ein Token ohne Board-Bindung wird"
-          + " mit 409 abgewiesen.";
-
   private static final String BESCHREIBUNG_IDEMPOTENCY_KEY =
       "Optionaler Idempotenz-Schlüssel (höchstens 200 Zeichen). Derselbe Schlüssel im selben"
           + " Projekt bewirkt den Befehl genau einmal; jede Wiederholung bekommt dieselbe Antwort."
@@ -112,17 +104,8 @@ class KanbanCompatController {
           + " Aufrufers, die der Leitstand nicht prüft; ein unlesbarer Wert gilt als keine"
           + " Kennung.";
 
-  private static final String BESCHREIBUNG_ID =
-      "Interne ID der Karte (Feld id aus GET /api/kanban/items), nicht die projektweite Nummer.";
-
-  private static final String NICHT_GEBUNDEN =
-      "Das Projekt-Token ist an kein Board gebunden; ein board-gebundenes Token verwenden.";
-
   private static final String UNGUELTIGE_EINGABE =
       "Ungültige Eingabe: ein Feld verletzt seine Grenzen (Details in fieldErrors).";
-
-  private static final String KARTE_FEHLT =
-      "Die Karte gibt es nicht, oder sie liegt nicht auf dem gebundenen Board.";
 
   private final KanbanCompatService service;
   private final KanbanArchivService archiv;
@@ -848,13 +831,6 @@ class KanbanCompatController {
   }
 
   /** Zieht die Token-Bindung aus den Authentication-details; ohne Bindung → 409. */
-  private static KanbanPrincipal principal(@Nullable Authentication authentication) {
-    if (authentication != null && authentication.getDetails() instanceof KanbanPrincipal p) {
-      return p;
-    }
-    throw new TokenNotBoundException();
-  }
-
   @Schema(description = "Eine neue Karte.")
   record CreateItemRequest(
       @Schema(description = "Titel, höchstens 300 Zeichen.", example = "Export als CSV")

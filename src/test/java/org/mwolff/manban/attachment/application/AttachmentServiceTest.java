@@ -24,6 +24,7 @@ import org.mwolff.manban.attachment.domain.Attachment;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectNotFoundException;
 import org.mwolff.manban.project.domain.Permission;
 
 /** Verhaltenstests der Anhang-Use-Cases (Mockito an den Ports). */
@@ -271,6 +272,62 @@ class AttachmentServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.download(1L, 7L))
         .isInstanceOf(AttachmentNotFoundException.class);
+  }
+
+  @Test
+  void downloadOnCard_returnsMetadataAndStream_whenAttachmentBelongsToCard() {
+    // Given
+    when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
+    cardResolves();
+    ByteArrayInputStream content = new ByteArrayInputStream(new byte[] {1, 2, 3});
+    when(storage.get("cards/5/key")).thenReturn(content);
+
+    // When
+    AttachmentService.Download download = service.downloadOnCard(1L, 5L, 7L);
+
+    // Then
+    assertThat(download)
+        .isEqualTo(new AttachmentService.Download("note.txt", "text/plain", 3, content));
+    verify(permissions).requireMembership(1L, 1L);
+  }
+
+  @Test
+  void downloadOnCard_throwsNotFound_withoutTouchingStorage_whenAttachmentOnOtherCard() {
+    // Given — der Anhang hängt an Karte 5, gefragt wird über Karte 6 (Issue #1697): Die Antwort
+    // gleicht der für einen unbekannten Anhang, und weder Mitgliedschaft noch Speicher werden
+    // berührt.
+    when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
+
+    // When / Then
+    assertThatThrownBy(() -> service.downloadOnCard(1L, 6L, 7L))
+        .isInstanceOf(AttachmentNotFoundException.class);
+    verify(storage, never()).get(any());
+    verify(cardService, never()).requireProjectId(5L);
+    verify(permissions, never()).requireMembership(1L, 1L);
+  }
+
+  @Test
+  void downloadOnCard_throwsNotFound_whenAttachmentUnknown() {
+    // Given — unbekannt oder gelöscht: das Repository findet keine Zeile mehr.
+    when(attachments.findById(7L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.downloadOnCard(1L, 5L, 7L))
+        .isInstanceOf(AttachmentNotFoundException.class);
+    verify(storage, never()).get(any());
+  }
+
+  @Test
+  void downloadOnCard_throwsProjectNotFound_withoutTouchingStorage_whenUserIsNoMember() {
+    // Given — dasselbe Verhalten wie download für Nichtmitglieder.
+    when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
+    cardResolves();
+    when(permissions.requireMembership(1L, 1L)).thenThrow(new ProjectNotFoundException());
+
+    // When / Then
+    assertThatThrownBy(() -> service.downloadOnCard(1L, 5L, 7L))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(storage, never()).get(any());
   }
 
   @Test

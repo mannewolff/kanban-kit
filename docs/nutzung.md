@@ -93,8 +93,12 @@ Klick auf eine Karte öffnet das Detail:
   - **Ziel wählen:** Wählbar sind vier Ziele, je eines mit seinem Label: **Plan** (`ziel:plan`),
     **Arbeitspakete** (`ziel:pakete`), **Umsetzung** (`ziel:umsetzung`) und **Veröffentlichung
     vorbereitet** (`ziel:push-vorbereitet`). Ein Klick setzt das Ziel und nimmt ein vorher gewähltes
-    ab; es gibt höchstens eines je Karte. Ohne gewähltes Ziel ist **Arbeitspakete** markiert: Die
-    Kette endet dann wie bisher nach der Abdeckungsprüfung. Trägt die Karte `kit:durchziehen`, gilt
+    ab; es gibt höchstens eines je Karte. Ohne gewähltes Ziel ist **Arbeitspakete** markiert, und
+    „Kette starten“ setzt dieses markierte Ziel als Label `ziel:pakete` mit: Die Kette endet dann
+    nach der Abdeckungsprüfung. Wer eine Karte von Hand mit `kit:night` startet, ohne ein Ziel-Label
+    zu setzen, schickt sie durch die volle Kette bis „Veröffentlichung vorbereitet“: Die Leiste
+    markiert dann dieses Ziel, weil das Kit genau das fährt, und darunter steht „Kein Ziel-Label
+    gesetzt — die Kette läuft bis zur vorbereiteten Veröffentlichung.“ Trägt die Karte `kit:durchziehen`, gilt
     sie als Ziel „Umsetzung“, und ein kürzeres Ziel bliebe wirkungslos. An einem Plan sind Plan und
     Prüfung schon erbracht und nicht wählbar. Die Pfeiltasten wechseln zwischen den Zielen.
   - **Planprüfung:** An einer fachlichen Anforderung wählt ein Schalter, ob ein oder zwei Modelle
@@ -429,7 +433,9 @@ Die Übersicht **„Heute Nacht“** zeigt alle Karten des Projekts, deren Kette
 [Stufenleiste](#karten-detail) gestartet und noch von keinem Runner übernommen wurde — über alle
 Boards hinweg. Jede Zeile nennt Kartennummer (ein Link, der die Karte öffnet), Titel, Board, das
 gewählte Ziel („Ziel: Umsetzung“), die Prüferzahl, falls gewählt, und eine kleine Stufenleiste mit
-dem Weg der Kette. Übernimmt ein Runner die Karte, verlässt sie die Übersicht. Ist keine Karte
+dem Weg der Kette. Trägt eine Karte kein Ziel-Label — etwa weil `kit:night` von Hand gesetzt wurde —,
+steht dort „Veröffentlichung vorbereitet“: Ohne Ziel-Label fährt das Kit die volle Kette. Mit
+`kit:durchziehen` ist es „Umsetzung“. Übernimmt ein Runner die Karte, verlässt sie die Übersicht. Ist keine Karte
 freigegeben, steht dort „Für die nächste Nacht ist keine Karte freigegeben.“
 
 Die Übersicht sieht, wer die Runner-Seite sehen darf. Ein Projektmitglied, das eine Kette startet,

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ABGEBROCHEN, AUSPROBIER_HEADER, HINWEIS_AENDERND, istAendernd, markiere } from './apiAusprobieren'
-import { abgebrochenText, hinweisAendernd } from './apiAusprobieren'
+import { AUSPROBIER_HEADER, abgebrochenText, hinweisAendernd, istAendernd, markiere } from './apiAusprobieren'
 
 describe('istAendernd', () => {
   it.each([
@@ -54,19 +53,17 @@ describe('markiere', () => {
 
 describe('Texte', () => {
   it('nennt den Abbruch wörtlich', () => {
-    expect(ABGEBROCHEN).toBe('Abgebrochen, nichts gesendet')
+    expect(abgebrochenText('de')).toBe('Abgebrochen, nichts gesendet')
   })
 
   it('warnt, dass echte Daten dieser Umgebung verändert werden', () => {
-    expect(HINWEIS_AENDERND).toBe('Dieser Aufruf verändert echte Daten dieser Umgebung.')
+    expect(hinweisAendernd('de')).toBe('Dieser Aufruf verändert echte Daten dieser Umgebung.')
   })
 })
 
 describe('Texte auf Englisch', () => {
-  it('nennt Abbruch und Hinweis auf Englisch und auf Deutsch wie die Konstanten', () => {
+  it('nennt Abbruch und Hinweis auf Englisch', () => {
     expect(abgebrochenText('en')).toBe('Cancelled, nothing sent')
     expect(hinweisAendernd('en')).toBe('This call changes real data in this environment.')
-    expect(abgebrochenText('de')).toBe(ABGEBROCHEN)
-    expect(hinweisAendernd('de')).toBe(HINWEIS_AENDERND)
   })
 })

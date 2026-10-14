@@ -60,9 +60,10 @@ const NachtplanSymbol = strichSymbol(
 /**
  * Das Symbol je Art als `Record` über {@link LaufArt}: Eine weitere Art ohne Eintrag bricht `tsc`,
  * statt still eine Lücke in die Zeile zu reißen — und genau die Lücke wäre wieder das Flattern,
- * das dieses Symbol abstellt (Issue #1141).
+ * das dieses Symbol abstellt (Issue #1141). Exportiert, damit der Test die Namen der Symbole in
+ * den React-Entwicklerwerkzeugen festhält (Issue #1680).
  */
-const SYMBOL: Record<LaufArt, ReturnType<typeof strichSymbol>> = {
+export const SYMBOL: Record<LaufArt, ReturnType<typeof strichSymbol>> = {
   CHAIN: KetteSymbol,
   IMPLEMENTATION: UmsetzungSymbol,
   REVIEW: PruefungSymbol,

@@ -15,6 +15,32 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [3.0.0] – 2026-10-14
+
+- chore: v2.29.1
+- Leitstand: gestartete Karte ohne Ziel-Label zeigt die volle Kette als Ziel ([#1702](https://github.com/mannewolff/kanban-kit/issues/1702))
+- Mutation: Vorgabesprache von formatDueDate über das Gebietsschema prüfen ([#1705](https://github.com/mannewolff/kanban-kit/issues/1705))
+- Stufenleiste: Kette starten setzt das angezeigte Ziel als Label mit ([#1695](https://github.com/mannewolff/kanban-kit/issues/1695))
+- Doku: Anhänge einer Karte über das Projekt-Token lesen ([#1701](https://github.com/mannewolff/kanban-kit/issues/1701))
+- Kanban-Compat: Integrationstest für Anhänge über das Projekt-Token ([#1700](https://github.com/mannewolff/kanban-kit/issues/1700))
+- Kanban-Compat: KanbanAnhangController mit Liste und Download als verlässlicher Vertrag ([#1699](https://github.com/mannewolff/kanban-kit/issues/1699))
+- Kanban-Compat: Lese-Dienst KanbanAnhangService mit Board-Grenze ([#1698](https://github.com/mannewolff/kanban-kit/issues/1698))
+- AttachmentService: kartenbezogener Download downloadOnCard ([#1697](https://github.com/mannewolff/kanban-kit/issues/1697))
+- Principal-Hilfe und Beschreibungstexte in KanbanAuthentifizierung ausgelagert ([#1696](https://github.com/mannewolff/kanban-kit/issues/1696))
+- Sonar: Ladekette der Sprache mit void kennzeichnen ([#1693](https://github.com/mannewolff/kanban-kit/issues/1693))
+- Mutations-Überlebende in sprachwaechter.ts beseitigt ([#1687](https://github.com/mannewolff/kanban-kit/issues/1687))
+- Statische Mutanten in laufFortschritt.ts beseitigt ([#1686](https://github.com/mannewolff/kanban-kit/issues/1686))
+- Mutant der Fälligkeitsgrenze in dueDate.ts getötet ([#1685](https://github.com/mannewolff/kanban-kit/issues/1685))
+- Mutanten von STATUS_NAMEN in columnMeta.ts getötet ([#1684](https://github.com/mannewolff/kanban-kit/issues/1684))
+- Statische Mutanten in apiAusprobieren.ts beseitigt ([#1683](https://github.com/mannewolff/kanban-kit/issues/1683))
+- Äquivalenten Mutanten in EditModeContext.tsx beseitigt ([#1682](https://github.com/mannewolff/kanban-kit/issues/1682))
+- Mutant der Objektprüfung in language.ts getötet ([#1681](https://github.com/mannewolff/kanban-kit/issues/1681))
+- Mutanten der Symbolnamen in LaufArtSymbol.tsx getötet ([#1680](https://github.com/mannewolff/kanban-kit/issues/1680))
+- Mutanten in verbrauchZeitraum.ts getötet ([#1679](https://github.com/mannewolff/kanban-kit/issues/1679))
+- Mutant der Sprachvorgabe in nightRunHandoff.ts getötet ([#1678](https://github.com/mannewolff/kanban-kit/issues/1678))
+- Tote Sprachvorgabe in nachtlaufFormat.ts entfernt ([#1677](https://github.com/mannewolff/kanban-kit/issues/1677))
+- Mutanten der Sprachvorgabe in leitstand.ts getötet ([#1676](https://github.com/mannewolff/kanban-kit/issues/1676))
+
 ## [2.29.0] – 2026-10-13
 
 - chore: v2.28.1
