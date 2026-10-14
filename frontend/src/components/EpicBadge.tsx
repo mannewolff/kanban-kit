@@ -3,6 +3,7 @@ import Typography from '@mui/material/Typography'
 import type { SxProps, Theme } from '@mui/material/styles'
 import { useT } from '../i18n/SpracheContext'
 import { epicColor, epicShortcode, epicTint } from '../lib/epicMeta'
+import { Erklaerung } from './Erklaerung'
 
 interface Props {
   epicId: number
@@ -79,16 +80,13 @@ export function EpicBadge({ epicId, title, shortcode, sx, onOpen }: Readonly<Pro
     )
   }
 
+  // Das Kennzeichen ohne Aktion öffnet auf dem Tablet quer den vollen Titel per Antippen (Plan #1707,
+  // E7). Der Knopf oben bleibt beim nativen `title`: Sein Antippen zeigt das Vorhaben samt Titel.
   return (
-    <Stack
-      direction="row"
-      alignItems="center"
-      spacing={0.5}
-      title={title}
-      aria-label={t.VORHABEN_SCHILD.ARIA(label)}
-      sx={{ ...grund, ...sx }}
-    >
-      {inhalt}
-    </Stack>
+    <Erklaerung nativ title={title}>
+      <Stack direction="row" alignItems="center" spacing={0.5} aria-label={t.VORHABEN_SCHILD.ARIA(label)} sx={{ ...grund, ...sx }}>
+        {inhalt}
+      </Stack>
+    </Erklaerung>
   )
 }

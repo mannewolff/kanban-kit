@@ -648,6 +648,18 @@ describe('AppShell', () => {
       expect(switcherEntries()).toEqual(['DreiP1', 'ZweiP2', 'BP1'])
     })
 
+    it('öffnet auf dem Tablet quer an der freien Taste den Wechsel, keine Erklärung (Plan #1707, E7)', async () => {
+      setzeMedien({ tabletQuer: true })
+      renderBoardShell()
+      await visitBoard(1)
+      await leaveBoard()
+
+      openSwitcher()
+
+      expect(switcherIsOpen()).toBe(true)
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+
     it('hebt einen wiederholten Besuch nach vorne, ohne ein Duplikat anzulegen', async () => {
       renderBoardShell()
       await visitBoard(1)
@@ -1445,5 +1457,28 @@ describe('AppShell auf dem Tablet im Querformat (Plan #1707, E1/E9)', () => {
     renderShellMitSeite()
 
     expect(screen.getByTestId('modus')).toHaveTextContent('desktop')
+  })
+
+  it('öffnet an der gesperrten Board-Taste die Erklärung per Antippen (E7)', async () => {
+    setzeMedien({ tabletQuer: true })
+    renderShell()
+    expect(screen.getByRole('button', { name: 'Board wechseln' })).toBeDisabled()
+
+    // Eine deaktivierte Taste meldet keinen Klick; angetippt wird der Umschlag, der die Erklärung trägt.
+    fireEvent.click(screen.getByLabelText('Board wechseln (Taste b)'))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Board wechseln (Taste b)')
+
+    fireEvent.click(screen.getByLabelText('Board wechseln (Taste b)'))
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+  })
+
+  it('zeigt an der gesperrten Board-Taste am Desktop den Tooltip beim Darüberfahren wie heute', async () => {
+    renderShell()
+    const umschlag = screen.getByLabelText('Board wechseln (Taste b)')
+
+    fireEvent.click(umschlag)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    await userEvent.hover(umschlag)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Board wechseln (Taste b)')
   })
 })

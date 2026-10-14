@@ -7,6 +7,7 @@ import { useId, type ReactNode } from 'react'
 import { useSprache, useT } from '../../i18n/SpracheContext'
 import type { DeltaArt, Kachel as KachelDaten, Melder } from '../../lib/leitstand'
 import { funkenPunkte, paketDauer, paketDauerBeschriftung } from '../../lib/leitstand'
+import { Erklaerung } from '../Erklaerung'
 import {
   ANZEIGE,
   BLINKER_HELL,
@@ -599,7 +600,7 @@ export function Taste({
  * Projekt-Leitstands und die Paketzeile in „Aktueller Status" des Plattform-Leitstands (#1247):
  * Dieselbe Angabe sähe sonst an mehreren Stellen verschieden aus. Die
  * ausgeschriebene Beschriftung steht als `aria-label` und `title`, weil „12:56" vorgelesen wie
- * eine Uhrzeit klingt.
+ * eine Uhrzeit klingt. Auf dem Tablet quer öffnet Antippen die Beschriftung (Plan #1707, E7).
  */
 export function PaketDauer({
   ms,
@@ -610,19 +611,20 @@ export function PaketDauer({
   const { wert, einheit } = paketDauer(ms)
   const beschriftung = paketDauerBeschriftung(ms, sprache)
   return (
-    <Box
-      component="span"
-      data-testid={testId}
-      aria-label={beschriftung}
-      title={beschriftung}
-      sx={[{ ...ZAHL, fontSize: 12, color: ms === null ? TEXT_SCHWACH : 'text.secondary' }, sx ?? {}]}
-    >
-      {wert}
-      {einheit !== '' && (
-        <Box component="span" sx={{ fontSize: 10.5, fontWeight: 400, color: TEXT_SCHWACH }}>
-          {` ${einheit}`}
-        </Box>
-      )}
-    </Box>
+    <Erklaerung nativ title={beschriftung}>
+      <Box
+        component="span"
+        data-testid={testId}
+        aria-label={beschriftung}
+        sx={[{ ...ZAHL, fontSize: 12, color: ms === null ? TEXT_SCHWACH : 'text.secondary' }, sx ?? {}]}
+      >
+        {wert}
+        {einheit !== '' && (
+          <Box component="span" sx={{ fontSize: 10.5, fontWeight: 400, color: TEXT_SCHWACH }}>
+            {` ${einheit}`}
+          </Box>
+        )}
+      </Box>
+    </Erklaerung>
   )
 }

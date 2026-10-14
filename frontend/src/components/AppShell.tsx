@@ -54,7 +54,7 @@ import {
 import { BoardSwitcher } from './BoardSwitcher'
 import { CardNumberSearch } from './CardNumberSearch'
 import { EditModeBanner, EDIT_MODE_BANNER_HEIGHT } from './EditModeBanner'
-import { ErklaerungOffenProvider } from './Erklaerung'
+import { Erklaerung, ErklaerungOffenProvider } from './Erklaerung'
 import { useSnackbar } from './SnackbarProvider'
 
 /** Breite der Schiene (Entwurf `.warte`, Z. 199). */
@@ -618,6 +618,18 @@ function Rahmen() {
       .slice(0, 2)
       .map((teil) => teil.charAt(0).toUpperCase())
       .join('') || '?'
+  const boardTaste = (
+    <Button
+      variant="outlined"
+      startIcon={<SwapHorizIcon />}
+      aria-label={t.RAHMEN.BOARD_WECHSELN}
+      disabled={history.length === 0}
+      onClick={() => setSwitcherOpen(true)}
+      sx={{ color: 'text.primary' }}
+    >
+      {t.RAHMEN.BOARD_TASTE}
+    </Button>
+  )
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -748,21 +760,17 @@ function Rahmen() {
               {/* Ein unsichtbares Kürzel gibt es für die Hälfte der Nutzer nicht: Die Taste ist der
                   sichtbare Zugang und trägt zugleich die Beschriftung, über die `b` bekannt wird.
                   Der Umschlag mit `span` gibt dem Tooltip auch an der deaktivierten Taste einen
-                  Ereignisempfänger. */}
-              <Tooltip title={t.RAHMEN.BOARD_WECHSELN_TASTE}>
-                <span>
-                  <Button
-                    variant="outlined"
-                    startIcon={<SwapHorizIcon />}
-                    aria-label={t.RAHMEN.BOARD_WECHSELN}
-                    disabled={history.length === 0}
-                    onClick={() => setSwitcherOpen(true)}
-                    sx={{ color: 'text.primary' }}
-                  >
-                    {t.RAHMEN.BOARD_TASTE}
-                  </Button>
-                </span>
-              </Tooltip>
+                  Ereignisempfänger. Gesperrt öffnet auf dem Tablet quer Antippen die Erklärung
+                  (Plan #1707, E7); die freie Taste behält ihre Aktion. */}
+              {history.length === 0 ? (
+                <Erklaerung title={t.RAHMEN.BOARD_WECHSELN_TASTE}>
+                  <span>{boardTaste}</span>
+                </Erklaerung>
+              ) : (
+                <Tooltip title={t.RAHMEN.BOARD_WECHSELN_TASTE}>
+                  <span>{boardTaste}</span>
+                </Tooltip>
+              )}
               {/* Nutzer-Mal (Entwurf `.nutzer`): öffnet Profil und Abmelden, statt beides als eigene
                   Tasten in den Kopf zu stellen. */}
               <Tooltip title={user.displayName}>

@@ -1,9 +1,11 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Kachel as KachelDaten } from '../../lib/leitstand'
+import { TabletQuerProvider } from '../../lib/tabletQuer'
 import { cssRegel } from '../../test/cssRegel'
+import { setzeMedien } from '../../test/setup'
 import { KUPFER, KUPFER_SCHIMMER, LED_RING, MELDER, PLATTE_HOCH, RAND, TEXT_SCHWACH, theme } from '../../theme'
 import {
   DeltaMarke,
@@ -335,6 +337,33 @@ describe('PaketDauer', () => {
     const dauer = screen.getByTestId('dauer')
     expect(dauer.textContent).toBe('—')
     expect(dauer.innerHTML).toBe('—')
+  })
+})
+
+describe('PaketDauer auf dem Tablet im Querformat (Plan #1707, E7)', () => {
+  const zeigeMitModus = (knoten: ReactNode) => zeige(<TabletQuerProvider>{knoten}</TabletQuerProvider>)
+
+  it('öffnet die ausgeschriebene Dauer per Antippen und schließt sie wieder', async () => {
+    setzeMedien({ tabletQuer: true })
+    zeigeMitModus(<PaketDauer ms={125_000} testId="dauer" />)
+    const dauer = screen.getByTestId('dauer')
+    expect(dauer).not.toHaveAttribute('title')
+    expect(dauer).toHaveAttribute('aria-label', 'Dauer 2 min 5 s')
+
+    fireEvent.click(dauer)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Dauer 2 min 5 s')
+
+    fireEvent.click(dauer)
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
+  })
+
+  it('trägt am Desktop das native title wie heute und öffnet per Klick nichts', () => {
+    zeigeMitModus(<PaketDauer ms={125_000} testId="dauer" />)
+    const dauer = screen.getByTestId('dauer')
+
+    expect(dauer).toHaveAttribute('title', 'Dauer 2 min 5 s')
+    fireEvent.click(dauer)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 })
 
