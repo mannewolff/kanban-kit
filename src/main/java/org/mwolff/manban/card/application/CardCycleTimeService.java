@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.OptionalInt;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
@@ -22,6 +21,7 @@ import org.mwolff.manban.card.application.BoardDashboardKpis.WeeklyThroughput;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardColumnTransition;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.common.Wochenfenster;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,9 +42,6 @@ public class CardCycleTimeService {
 
   /** Ab dieser Verweildauer in einer Spalte gilt eine Karte als Ausreißer (7 Tage). */
   private static final long OUTLIER_THRESHOLD_SECONDS = Duration.ofDays(7).toSeconds();
-
-  private static final int THROUGHPUT_WEEKS = 12;
-  private static final long WEEK_SECONDS = Duration.ofDays(7).toSeconds();
 
   private final CardRepository cards;
   private final CardColumnTransitionRepository transitions;
@@ -167,17 +164,17 @@ public class CardCycleTimeService {
   }
 
   private static List<WeeklyThroughput> throughput(List<Card> workCards, Instant now) {
-    long[] counts = new long[THROUGHPUT_WEEKS];
+    long[] counts = new long[Wochenfenster.ANZAHL];
     for (Card card : workCards) {
       Instant done = card.movedToDoneAt();
       if (done != null) {
-        weekIndex(done, now).ifPresent(i -> counts[i]++);
+        Wochenfenster.index(done, now).ifPresent(i -> counts[i]++);
       }
     }
 
-    List<WeeklyThroughput> result = new ArrayList<>(THROUGHPUT_WEEKS);
-    for (int j = 0; j < THROUGHPUT_WEEKS; j++) {
-      result.add(new WeeklyThroughput(weekStart(j, now), counts[j]));
+    List<WeeklyThroughput> result = new ArrayList<>(Wochenfenster.ANZAHL);
+    for (int j = 0; j < Wochenfenster.ANZAHL; j++) {
+      result.add(new WeeklyThroughput(Wochenfenster.beginn(j, now), counts[j]));
     }
     return result;
   }
@@ -192,34 +189,18 @@ public class CardCycleTimeService {
     // Ohne Zählschleife: Ihre Grenze j < 12 ließ sich zu j <= 12 verschieben, ohne dass sich etwas
     // änderte — die dreizehnte Liste las niemand (Issue #1562).
     List<List<Long>> perWeek =
-        Stream.<List<Long>>generate(ArrayList::new).limit(THROUGHPUT_WEEKS).toList();
+        Stream.<List<Long>>generate(ArrayList::new).limit(Wochenfenster.ANZAHL).toList();
     for (MeasuredCard m : measured) {
-      weekIndex(m.doneAt(), now).ifPresent(i -> perWeek.get(i).add(m.seconds()));
+      Wochenfenster.index(m.doneAt(), now).ifPresent(i -> perWeek.get(i).add(m.seconds()));
     }
 
-    List<WeeklyImplementation> result = new ArrayList<>(THROUGHPUT_WEEKS);
-    for (int j = 0; j < THROUGHPUT_WEEKS; j++) {
+    List<WeeklyImplementation> result = new ArrayList<>(Wochenfenster.ANZAHL);
+    for (int j = 0; j < Wochenfenster.ANZAHL; j++) {
       long[] values = perWeek.get(j).stream().mapToLong(Long::longValue).toArray();
-      result.add(new WeeklyImplementation(weekStart(j, now), average(values), values.length));
+      result.add(
+          new WeeklyImplementation(Wochenfenster.beginn(j, now), average(values), values.length));
     }
     return result;
-  }
-
-  /**
-   * Das Wochenfenster (0 = ältestes, 11 = jüngstes), in das ein Abschluss fällt; leer, wenn er in
-   * der Zukunft oder zwölf Wochen und mehr zurück liegt.
-   */
-  private static OptionalInt weekIndex(Instant done, Instant now) {
-    long secondsAgo = Duration.between(done, now).toSeconds();
-    long weeksAgo = secondsAgo / WEEK_SECONDS;
-    if (secondsAgo >= 0 && weeksAgo < THROUGHPUT_WEEKS) {
-      return OptionalInt.of((int) (THROUGHPUT_WEEKS - 1 - weeksAgo));
-    }
-    return OptionalInt.empty();
-  }
-
-  private static Instant weekStart(int index, Instant now) {
-    return now.minusSeconds((THROUGHPUT_WEEKS - index) * WEEK_SECONDS);
   }
 
   /** Lead Times aller abgeschlossenen Karten — je Karte ein Wert, offene Karten fallen heraus. */
