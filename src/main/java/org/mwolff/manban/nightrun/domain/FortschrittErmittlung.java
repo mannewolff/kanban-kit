@@ -379,8 +379,16 @@ public final class FortschrittErmittlung {
     List<ProgressStage> weg = bisUmsetzung ? WEG_B : WEG_A;
     List<PackageProgress> pakete = plan == null ? List.of() : paketeZu(plan);
     Stufenlage lage = new Stufenlage(anforderung, plan, pakete, eintraege);
+    // Folgerichtig (Issue #1783): Ist eine Stufe erreicht, sind es alle früheren des Wegs auch —
+    // ein Paket in Umsetzung belegt, dass Prüfung und Schnitt vorbei sind.
+    int letzte = -1;
+    for (int i = 0; i < weg.size(); i++) {
+      if (lage.erreicht(weg.get(i))) {
+        letzte = i;
+      }
+    }
     Set<ProgressStage> erreicht = EnumSet.noneOf(ProgressStage.class);
-    weg.stream().filter(lage::erreicht).forEach(erreicht::add);
+    erreicht.addAll(weg.subList(0, letzte + 1));
     // Die erste offene Stufe ist die aus „zuletzt begonnen:", sofern sie im Fenster liegt und noch
     // nicht fertig ist: Eine begonnene Stufe macht alle früheren erreicht.
     ProgressStage aktuell =
