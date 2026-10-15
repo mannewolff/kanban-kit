@@ -15,6 +15,7 @@ import { FestgefahrenAngaben } from '../components/leitstand/FestgefahrenAngaben
 import {
   FilterTaste,
   Fuellschiene,
+  Grundlinie,
   Kachel,
   KACHEL_SX,
   KachelFuss,
@@ -24,6 +25,8 @@ import {
   melderFarbe,
   PaketDauer,
   Platte,
+  WochenLeiste,
+  wochenSpalten,
   ZEILE_HOVER_SX,
 } from '../components/leitstand/LeitstandBausteine'
 import { LeitstandVerbrauch } from '../components/leitstand/LeitstandVerbrauch'
@@ -67,7 +70,6 @@ import {
   PLATTE_FUSS,
   PLATTE_HOCH,
   RAND,
-  RAND_STARK,
   SCHATTEN_NUTE,
   SCHATTEN_PLATTE,
   TEXT_SCHWACH,
@@ -556,13 +558,12 @@ function Balkenwerk({
       </Typography>
     )
   }
-  const spalten = `repeat(${Math.max(1, wochen.length)}, minmax(0,1fr))`
   return (
     <>
       <Box
         role="img"
         aria-label={ariaLabel}
-        sx={{ display: 'grid', gridTemplateColumns: spalten, alignItems: 'end', gap: '6px', height: 132, px: '16px', pt: '16px' }}
+        sx={{ display: 'grid', gridTemplateColumns: wochenSpalten(wochen.length), alignItems: 'end', gap: '6px', height: 132, px: '16px', pt: '16px' }}
       >
         {hoehen.map((hoehe, i) => {
           const jetzt = i === hoehen.length - 1
@@ -574,7 +575,7 @@ function Balkenwerk({
                   data-testid={`luecke-${i}`}
                   sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}
                 >
-                  <Box sx={{ borderTop: `1px dashed ${RAND_STARK}` }} />
+                  <Grundlinie />
                 </Box>
               </Erklaerung>
             )
@@ -607,13 +608,7 @@ function Balkenwerk({
           )
         })}
       </Box>
-      <Box aria-hidden sx={{ display: 'grid', gridTemplateColumns: spalten, gap: '6px', px: '16px', pt: '7px', pb: '14px', borderTop: `1px solid ${RAND}`, mt: '10px' }}>
-        {wochen.map((w) => (
-          <Box key={w.weekStart} component="span" sx={{ ...ZAHL, fontSize: 9.5, color: TEXT_SCHWACH, textAlign: 'center' }}>
-            {kalenderwoche(w.weekStart)}
-          </Box>
-        ))}
-      </Box>
+      <WochenLeiste wochen={wochen} />
     </>
   )
 }
