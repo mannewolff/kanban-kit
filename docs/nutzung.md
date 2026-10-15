@@ -314,9 +314,10 @@ Von oben nach unten führt er:
    [Verbrauch (Leitstand)](#verbrauch-leitstand).
 4. **Herkunft** — eine Zeile zum jüngsten Run: ob er eingeliefert oder im Browser hochgeladen
    wurde, dazu der Name des Tokens, die Zahl der Vorgänge und die der ungedeuteten Zeilen.
-5. **Rumpf** — fünf Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
+5. **Rumpf** — sechs Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
    öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche und rechts
-   daneben **„Implementierungszeit“** mit dem Mittelwert je Woche, **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs und **„Vorhaben“** mit
+   daneben **„Implementierungszeit“** mit dem Mittelwert je Woche, **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs, **„Nacharbeit“**
+   (siehe unten) und **„Vorhaben“** mit
    den offenen. Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
    braune LED und „nicht angelaufen — ‹Grund›“.
 
@@ -331,8 +332,29 @@ decken sich nicht mit der Woche des Umschalters** im [Verbrauch](#verbrauch-leit
 Tagesgrenze 12:00 hängt — der letzte Balken kann darum vom Wert der Kachel „Implementierungszeit“
 unter „Woche“ abweichen.
 
-**Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“ und
-„Abbruchgründe“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
+**Die Platte „Nacharbeit“** zeigt, ob die Arbeit des Runners Nacharbeit erzeugt und wo. Sie zählt
+zwei Signale: Ein Arbeitspaket geht in einem Run aus In Progress zurück nach Ready oder Backlog
+(**„Pakete zurückgezogen“**), oder der Run hängt an einen Fachplan oder Plan das Halt-Label
+`kit:clarify` bzw. `run:waiting` — in deutscher Projektsprache `kit:klaeren` bzw. `lauf:wartet`
+(**„Dokumente angehalten“**). Es zählt nur, was ein Run des Runners tut, unabhängig von der Uhrzeit,
+also auch eine tagsüber über „Kette starten“ gestartete Kette; was du selbst an denselben Karten
+bewegst oder an Labels setzt und abnimmst, ändert keine Zahl. Jede Zeile zeigt eine Quote wie
+„2 von 14“: Die Bezugszahl sind die Karten, die die Runs **bearbeitet** haben — Pakete, die ein Run
+nach In Progress gezogen hat, und Fachpläne oder Pläne, an denen er einen Schritt ausgeführt hat;
+jede Karte zählt höchstens einmal. Der Kopf nennt den Zeitraum, „letzte 12 Wochen“ oder „seit
+‹Datum›“, wenn die Daten später beginnen. Darunter steht der Verlauf über dieselben zwölf
+Wochenfenster wie „Durchsatz“, je Woche ein Balken für Pakete und einer für Dokumente. Eine Woche hat
+einen von drei Zuständen: einen Balken mit der Quote (auch 0 %), eine gestrichelte Grundlinie (Daten
+vorhanden, aber keine bearbeitete Karte der Gruppe) oder eine leere Woche mit „keine Daten“ beim
+Überfahren. Ein Klick auf eine Quote öffnet die Kartenliste mit der Anzahl je Karte („#1712 · 2×
+zurückgezogen“); die Kartennummer öffnet die Karte zum Lesen. **Grenzen der Zählung:** Halt-Labels
+werden erst seit dem Einspielen der Version erfasst, die die Platte mitbringt — davor zeigt die
+Dokument-Zeile „keine Daten“. Den Laufstand-Kommentar einer Karte schreibt jeder Run neu, er bezeugt
+darum nur den letzten Schreiber; frühere Runs zählen über ihre übrigen Spuren. Ein Rückzug zählt nur,
+wenn der Status der Karte vor der Bewegung bekannt ist.
+
+**Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“,
+„Abbruchgründe“ und „Nacharbeit“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
 Projekts und **Plattform-Admins**, sofern das Projekt am
 [Plattform-Leitstand](#plattform-leitstand) teilnimmt. Ohne dieses Recht entfallen sie still; die
 Board-Kennzahlen, „Durchsatz“ und „Implementierungszeit“ bleiben.
