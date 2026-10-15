@@ -1,4 +1,4 @@
-package org.mwolff.manban.nightrun.web;
+package org.mwolff.manban.common.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

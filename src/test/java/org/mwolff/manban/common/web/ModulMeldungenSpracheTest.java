@@ -31,7 +31,7 @@ import org.mwolff.manban.project.application.ProjectAccessDeniedException;
  * {@code kanbancompat} (Issue #1641) sowie {@code card}, {@code board} und {@code attachment}
  * (Issue #1642) kommen über den {@link GlobalExceptionHandler} bei Session-Anfrage und Sprache
  * Englisch englisch an, bei Token-Anfrage weiter deutsch (Plan #1638 A5). Die Meldung aus {@code
- * nightrun} prüft {@code nightrun.web.RegionszoneTest}, weil ihre Exception paketprivat ist.
+ * nightrun} prüft {@code common.web.RegionszoneTest} (Plan #1765 E14).
  */
 class ModulMeldungenSpracheTest {
 

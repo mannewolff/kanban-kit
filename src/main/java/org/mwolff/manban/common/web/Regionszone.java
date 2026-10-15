@@ -1,4 +1,4 @@
-package org.mwolff.manban.nightrun.web;
+package org.mwolff.manban.common.web;
 
 import java.time.ZoneId;
 
@@ -14,14 +14,15 @@ import java.time.ZoneId;
  * <p><b>Eigener Typ statt einer privaten Methode je Controller</b> (Plan #1088 E6): Die
  * Verbrauchs-Auswertung und der Plattform-Leitstand ziehen ihre Nachtgrenzen nach derselben Regel.
  * Zweimal geschrieben liefe sie bei der nächsten Änderung auseinander, und eine verschobene
- * Nachtgrenze fällt niemandem auf — sie zeigt nur die falschen Läufe.
+ * Nachtgrenze fällt niemandem auf — sie zeigt nur die falschen Läufe. Seit Plan #1765 E14 liegt die
+ * Prüfung in {@code common.web}, weil auch die Platte „Fluss“ in {@code card.web} sie braucht.
  */
-final class Regionszone {
+public final class Regionszone {
 
   private Regionszone() {}
 
   /** Lässt allein Zonen aus der Zonendatenbank durch — nie einen festen Offset. */
-  static ZoneId of(ZoneId zone) {
+  public static ZoneId of(ZoneId zone) {
     if (!ZoneId.getAvailableZoneIds().contains(zone.getId())) {
       throw new KeineRegionszoneException();
     }
