@@ -773,6 +773,16 @@ export const en: Woerterbuch = {
     STUNDEN: (anzahl) => `${anzahl} h`,
     TAGE: (anzahl) => (anzahl === 1 ? '1 day' : `${anzahl} days`),
     MINDESTENS: (alter) => `at least ${alter}`,
+    TITEL: 'Flow',
+    NOTIZ: (kopf) => `Cards per state at the end of each day · ${kopf}`,
+    DONE_HINWEIS: 'Done counts the cards finished since the start of the period.',
+    HINWEIS: 'Hover over a day or reach it with Tab to see its numbers.',
+    LEGENDE: 'Legend',
+    TAGE_GRUPPE: 'Days in the flow',
+    LEER: 'There are no days for this period.',
+    TAG_ARIA: (datum, zahlen) => `${datum}: ${zahlen}`,
+    ARIA: (tage, datum, zahlen) =>
+      `Flow over ${tage} days, stacked from the bottom Done, In Review, In Progress, Ready, Backlog. Last day ${datum}: ${zahlen}`,
   },
 
   VERBRAUCH_ZEITRAUM: {

@@ -811,6 +811,17 @@ export const de = {
     STUNDEN: (anzahl: number) => `${anzahl} Std`,
     TAGE: (anzahl: number) => (anzahl === 1 ? '1 Tag' : `${anzahl} Tage`),
     MINDESTENS: (alter: string) => `mindestens ${alter}`,
+    /** Die Platte „Fluss“ (Issue #1776). */
+    TITEL: 'Fluss',
+    NOTIZ: (kopf: string) => `Karten je Zustand am Tagesende · ${kopf}`,
+    DONE_HINWEIS: 'Done zählt die seit Beginn des Zeitraums fertig gewordenen Karten.',
+    HINWEIS: 'Einen Tag überfahren oder per Tab ansteuern, um seine Zahlen zu sehen.',
+    LEGENDE: 'Legende',
+    TAGE_GRUPPE: 'Tage im Fluss',
+    LEER: 'Für diesen Zeitraum liegen keine Tage vor.',
+    TAG_ARIA: (datum: string, zahlen: string) => `${datum}: ${zahlen}`,
+    ARIA: (tage: number, datum: string, zahlen: string) =>
+      `Fluss über ${tage} Tage, gestapelt von unten Done, In Review, In Progress, Ready, Backlog. Letzter Tag ${datum}: ${zahlen}`,
   },
 
   /** Textrechnung der Verbrauchs-Auswertung, `lib/verbrauchZeitraum.ts` (Issue #1656). */
