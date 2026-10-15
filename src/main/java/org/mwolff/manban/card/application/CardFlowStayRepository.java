@@ -38,6 +38,15 @@ public interface CardFlowStayRepository {
   /** Schreibt die Aufenthalte des Nachtrags so, wie sie sind (E6). */
   void nachtragen(List<FlussStay> aufenthalte);
 
+  /**
+   * Die Aufenthalte, die spätestens zum Zeitpunkt begannen — offen oder schon geschlossen. Mit dem
+   * Beginn der Erfassung ({@code since}) sind das die Saat aus {@code V56} (E20).
+   */
+  List<FlussStay> findEnteredUpTo(Instant zeitpunkt);
+
+  /** Setzt den Beginn eines Aufenthalts auf den rekonstruierten Eintritt (E8, E20). */
+  void eintrittKorrigieren(long stayId, Instant enteredAt, boolean enteredKnown);
+
   /** Liest die Marke. */
   ErfassungsMarke marke();
 

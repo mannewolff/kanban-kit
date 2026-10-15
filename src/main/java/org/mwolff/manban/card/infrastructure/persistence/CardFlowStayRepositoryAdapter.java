@@ -110,6 +110,25 @@ class CardFlowStayRepositoryAdapter implements CardFlowStayRepository {
             .toArray(MapSqlParameterSource[]::new));
   }
 
+  @Override
+  public List<FlussStay> findEnteredUpTo(Instant zeitpunkt) {
+    return jdbc.query(
+        SPALTEN + " WHERE entered_at <= :zeitpunkt ORDER BY card_id, entered_at, id",
+        Map.of("zeitpunkt", utc(zeitpunkt)),
+        STAY);
+  }
+
+  @Override
+  public void eintrittKorrigieren(long stayId, Instant enteredAt, boolean enteredKnown) {
+    jdbc.update(
+        "UPDATE card_flow_stay SET entered_at = :enteredAt, entered_known = :enteredKnown"
+            + " WHERE id = :id",
+        new MapSqlParameterSource()
+            .addValue("id", stayId)
+            .addValue("enteredAt", utc(enteredAt))
+            .addValue("enteredKnown", enteredKnown));
+  }
+
   /**
    * Die eine Zeile, die V56 anlegt. Fehlt sie, ist das Schema beschädigt — {@code queryForObject}
    * scheitert dann laut, statt einen Beginn zu erfinden.
