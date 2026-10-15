@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AgingCard, AgingState, AgingWip } from '../../api/dashboard'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { cssRegel } from '../../test/cssRegel'
+import { RAND } from '../../theme'
 import { AlterInArbeitPlatte } from './AlterInArbeitPlatte'
 
 /** Die Platte „Alter in Arbeit“ (Issue #1777, Plan #1765 E15, E16, E18, E19). */
@@ -149,6 +150,23 @@ describe('AlterInArbeitPlatte', () => {
     expect(within(spalte('inReview')).getByText('Keine Karte in In Review')).toBeInTheDocument()
     expect(within(spalte('inProgress')).queryByText(/Keine Karte/)).not.toBeInTheDocument()
     expect(within(spalte('ready')).queryByRole('list')).not.toBeInTheDocument()
+    expect(screen.getByTestId('alter-leer-ready')).toHaveTextContent('Keine Karte in Ready')
+    expect(screen.getByTestId('alter-leer-inReview')).toHaveTextContent('Keine Karte in In Review')
+  })
+
+  it('trennt die Spalten schmal oben, ab md links — vor der ersten Spalte nicht', () => {
+    zeige(alter())
+
+    const erste = spalte('ready')
+    expect(cssRegel(erste)).not.toContain('border')
+    expect(breitRegel(erste, 0)).not.toContain('border')
+    expect(breitRegel(erste, 900)).not.toContain('border')
+    for (const name of ['inProgress', 'inReview']) {
+      expect(cssRegel(spalte(name))).toContain(`border-color: ${RAND}`)
+      expect(breitRegel(spalte(name), 0)).toMatch(/border-top: 1px solid/)
+      expect(breitRegel(spalte(name), 900)).toMatch(/border-top: 0/)
+      expect(breitRegel(spalte(name), 900)).toMatch(/border-left: 1px solid/)
+    }
   })
 
   it('öffnet die Karte über die Taste der Kartennummer', async () => {
