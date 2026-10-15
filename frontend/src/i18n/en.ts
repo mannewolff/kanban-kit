@@ -783,6 +783,11 @@ export const en: Woerterbuch = {
     TAG_ARIA: (datum, zahlen) => `${datum}: ${zahlen}`,
     ARIA: (tage, datum, zahlen) =>
       `Flow over ${tage} days, stacked from the bottom Done, In Review, In Progress, Ready, Backlog. Last day ${datum}: ${zahlen}`,
+    ALTER_TITEL: 'Work item age',
+    ALTER_NOTIZ: 'Amber: longer than 85 % of the stays in this state over the last 12 weeks',
+    ALTER_LEER: (spalte) => `No card in ${spalte}`,
+    ALTER_MELDER: 'unusually long',
+    ALTER_KARTE_OEFFNEN: (nummer, titel) => `Open card #${nummer}: ${titel}`,
   },
 
   VERBRAUCH_ZEITRAUM: {

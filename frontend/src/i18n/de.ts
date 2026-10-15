@@ -822,6 +822,12 @@ export const de = {
     TAG_ARIA: (datum: string, zahlen: string) => `${datum}: ${zahlen}`,
     ARIA: (tage: number, datum: string, zahlen: string) =>
       `Fluss über ${tage} Tage, gestapelt von unten Done, In Review, In Progress, Ready, Backlog. Letzter Tag ${datum}: ${zahlen}`,
+    /** Die Platte „Alter in Arbeit“ (Issue #1777). */
+    ALTER_TITEL: 'Alter in Arbeit',
+    ALTER_NOTIZ: 'Bernstein: länger als 85 % der Aufenthalte der letzten 12 Wochen in diesem Zustand',
+    ALTER_LEER: (spalte: string) => `Keine Karte in ${spalte}`,
+    ALTER_MELDER: 'ungewöhnlich lange',
+    ALTER_KARTE_OEFFNEN: (nummer: number, titel: string) => `Karte #${nummer} öffnen: ${titel}`,
   },
 
   /** Textrechnung der Verbrauchs-Auswertung, `lib/verbrauchZeitraum.ts` (Issue #1656). */
