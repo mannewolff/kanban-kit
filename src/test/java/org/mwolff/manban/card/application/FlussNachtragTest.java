@@ -106,6 +106,21 @@ class FlussNachtragTest {
   }
 
   @Test
+  void derSchnittLiegtAmBeginnDerSaatNichtAmBeginnDerErfassung() {
+    // Die Saat beginnt bei T1, der Verlauf führt Done erst ab T2: Der Backlog-Aufenthalt reicht
+    // über den Schnitt T1 und wird bis dorthin eine unbekannte Spanne, nicht bis T2 ein bekannter.
+    karte(CardStatus.DONE, T2, zeile("Backlog", BOARD, T0, T2), zeile("Done", BOARD, T2, null));
+    saat(CardStatus.DONE, BOARD, T1, true);
+
+    nachtrag.nachtragen();
+
+    verify(aufenthalte, never()).eintrittKorrigieren(anyLong(), any(), anyBoolean());
+    assertThat(geschrieben())
+        .containsExactly(
+            new FlussStay(null, KARTEN_ID, BOARD, null, T0, T1, false, EndedBy.STATUS));
+  }
+
+  @Test
   void einFruehererDoneEintrittAlsDieSaatAendertDieBekannteSaatNicht() {
     karte(CardStatus.DONE, T2, zeile("Done", BOARD, T0, null));
     saat(CardStatus.DONE, BOARD, T2, true);
