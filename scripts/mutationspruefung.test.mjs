@@ -552,6 +552,16 @@ test('stufeAus: eingetragene Stufe wird uebernommen', () => {
   assert.equal(stufeAus(config, 'node scripts/mutationspruefung.mjs aenderung backend'), 'push');
 });
 
+test('stufeAus: Stufe unter stage wird uebernommen (Issue #1743)', () => {
+  const config = { buildChecks: [{ cmd: 'node scripts/mutationspruefung.mjs aenderung backend', stage: 'push' }] };
+  assert.equal(stufeAus(config, 'node scripts/mutationspruefung.mjs aenderung backend'), 'push');
+});
+
+test('stufeAus: traegt ein Eintrag stage und stufe, gilt stage (Issue #1743)', () => {
+  const config = { buildChecks: [{ cmd: 'node scripts/mutationspruefung.mjs aenderung backend', stage: 'push', stufe: 'paket' }] };
+  assert.equal(stufeAus(config, 'node scripts/mutationspruefung.mjs aenderung backend'), 'push');
+});
+
 test('dauerText: Sekunden und Minuten', () => {
   assert.equal(dauerText(1500), '1,5 s');
   assert.equal(dauerText(65000), '1 min 5 s');

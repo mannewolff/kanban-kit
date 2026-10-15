@@ -1041,13 +1041,15 @@ export function ankerBestimmen(git, hauptzweig) {
  * Die Stufe, auf der die Pruefung dieser Seite laut Config gerade haengt (Kriterium 12). Mit
  * `stufeArgument` zaehlt nur der Eintrag, dessen `cmd` dasselbe `--stufe`-Argument traegt: Mit zwei
  * Eintraegen je Seite faende der blosse Teilstring sonst in beiden Laeufen den ersten (Issue #1280).
+ * Die Stufe steht unter `stage` (englischer Name seit dem Kit-Update) oder unter `stufe`; traegt ein
+ * Eintrag beide, gilt `stage` wie im Kit (Issue #1743).
  */
 export function stufeAus(config, kommandoText, stufeArgument = null) {
   const argumentMuster = stufeArgument ? new RegExp(`--stufe\\s+${stufeArgument}(\\s|$)`) : null;
   for (const eintrag of config?.buildChecks ?? []) {
     const cmd = typeof eintrag === 'string' ? eintrag : eintrag?.cmd;
     if (typeof cmd === 'string' && cmd.includes(kommandoText) && (!argumentMuster || argumentMuster.test(cmd))) {
-      return (typeof eintrag === 'string' ? null : eintrag.stufe) ?? 'paket';
+      return (typeof eintrag === 'string' ? null : eintrag.stage ?? eintrag.stufe) ?? 'paket';
     }
   }
   return null;
