@@ -159,10 +159,11 @@ public final class FlussRekonstruktion {
       Kartenstand karte, List<Spaltenzeile> verlauf, List<Spaltenfolge> folgen) {
     List<Abschnitt> abschnitte = new ArrayList<>();
     Instant ersterEintritt = verlauf.getFirst().enteredAt();
-    if (karte.createdAt().isBefore(ersterEintritt)) {
-      // Anlage vor V9: Der Backfill öffnete die erste Zeile erst bei der Migration (E7 a).
-      abschnitte.add(new Abschnitt(new Spanne(karte.createdAt(), ersterEintritt), null, null));
-    }
+    // Anlage vor V9: Der Backfill öffnete die erste Zeile erst bei der Migration (E7 a). Liegt
+    // die Anlage nicht vor der ersten Zeile, enthält die Spanne keinen Zeitpunkt, und eine Grenze
+    // an ihr teilt höchstens einen Aufenthalt, den das Verschmelzen wieder zusammenfügt. Darum
+    // ohne Fallunterscheidung — jede ergäbe hier einen äquivalenten Mutanten (Issue #1790).
+    abschnitte.add(new Abschnitt(new Spanne(karte.createdAt(), ersterEintritt), null, null));
     for (Spaltenzeile zeile : verlauf) {
       Spaltenort ort = zeile.ort();
       abschnitte.add(

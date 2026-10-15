@@ -445,4 +445,82 @@ class FlussRekonstruktionTest {
     assertThat(FlussRekonstruktion.AUS_DEM_PAPIERKORB)
         .isEqualTo("Aus Papierkorb wiederhergestellt");
   }
+
+  @Test
+  void dieLageZaehltNurInDerSpaltenfolgeDesEigenenBoards() {
+    List<Spaltenfolge> folgen =
+        List.of(
+            new Spaltenfolge(B2, List.of(new Spalte(20, "Backlog"), READY_B2, PARKEN)),
+            FOLGEN.get(1));
+
+    assertThat(
+            FlussRekonstruktion.rekonstruiere(
+                karte(CardStatus.BACKLOG), List.of(zeile(PARKEN, 0, null)), List.of(), folgen))
+        .containsExactly(stay(B1, CardStatus.BACKLOG, 0, null, true, null));
+  }
+
+  @Test
+  void dieRueckholungAusDemPapierkorbBeendetDasArchivNicht() {
+    List<FlussStay> aufenthalte =
+        rekonstruiere(
+            karte(CardStatus.IN_PROGRESS),
+            List.of(zeile(IN_PROGRESS, 0, null)),
+            List.of(
+                new Archivereignis(CardActivityType.ARCHIVED, um(2), "Archiviert"),
+                new Archivereignis(
+                    CardActivityType.RESTORED, um(4), FlussRekonstruktion.AUS_DEM_PAPIERKORB)));
+
+    assertThat(aufenthalte)
+        .containsExactly(stay(B1, CardStatus.IN_PROGRESS, 0, 2, true, EndedBy.EXIT));
+  }
+
+  @Test
+  void dieRueckholungAusDemArchivMachtKeineZeitUnbekannt() {
+    List<FlussStay> aufenthalte =
+        rekonstruiere(
+            karte(CardStatus.DONE),
+            List.of(zeile(DONE, 0, null)),
+            List.of(
+                new Archivereignis(CardActivityType.ARCHIVED, um(3), "Archiviert"),
+                new Archivereignis(
+                    CardActivityType.RESTORED, um(6), FlussRekonstruktion.AUS_DEM_ARCHIV)));
+
+    assertThat(aufenthalte).containsExactly(stay(B1, CardStatus.DONE, 0, null, true, null));
+  }
+
+  @Test
+  void nurEineRueckholungMachtDieZeitDavorUnbekannt() {
+    List<FlussStay> aufenthalte =
+        rekonstruiere(
+            karte(CardStatus.DONE),
+            List.of(zeile(DONE, 0, null)),
+            List.of(
+                new Archivereignis(
+                    CardActivityType.ARCHIVED, um(3), FlussRekonstruktion.AUS_DEM_PAPIERKORB)));
+
+    assertThat(aufenthalte).containsExactly(stay(B1, CardStatus.DONE, 0, null, true, null));
+  }
+
+  @Test
+  void einEintrittNachEinerLueckeHinterEinerUnbekanntenSpanneIstBekannt() {
+    List<FlussStay> aufenthalte =
+        rekonstruiere(
+            karte(CardStatus.READY), List.of(geloescht(0, 1), zeile(READY, 2, null)), List.of());
+
+    assertThat(aufenthalte)
+        .containsExactly(
+            stay(B1, null, 0, 1, false, EndedBy.EXIT),
+            stay(B1, CardStatus.READY, 2, null, true, null));
+  }
+
+  @Test
+  void eineAnlageNachDerErstenZeileTeiltDenAufenthaltNicht() {
+    List<FlussStay> aufenthalte =
+        rekonstruiere(
+            new Kartenstand(KARTEN_ID, CardStatus.READY, um(1), null, null),
+            List.of(zeile(READY, 0, null)),
+            List.of());
+
+    assertThat(aufenthalte).containsExactly(stay(B1, CardStatus.READY, 0, null, true, null));
+  }
 }
