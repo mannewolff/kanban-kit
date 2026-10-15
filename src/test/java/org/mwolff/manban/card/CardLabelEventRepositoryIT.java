@@ -90,6 +90,16 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
   }
 
   @Test
+  void einEreignisOhneHerkunftKommtMitHerkunftNullZurueck() {
+    long karte = karte();
+
+    events.add(karte, "kit:clarify", GESETZT, new ActorStamp(null, null, null, LAUF));
+
+    assertThat(events.findLaufEreignisse(List.of(karte), VON))
+        .containsExactly(new CardLabelEvent(karte, "kit:clarify", GESETZT, null, null, null, LAUF));
+  }
+
+  @Test
   void einEreignisOhneLaufkennungGehoertZuKeinemLauf() {
     long karte = karte();
 

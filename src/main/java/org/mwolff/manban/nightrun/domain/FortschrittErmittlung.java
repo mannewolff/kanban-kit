@@ -565,9 +565,10 @@ public final class FortschrittErmittlung {
         // Kette Pakete hat; die Abdeckung, sobald eines über „angelegt" hinaus ist.
         case PAKETE -> !pakete.isEmpty();
         case ABDECKUNG -> pakete.stream().anyMatch(p -> p.zustand() != PackageState.ANGELEGT);
-        // Die Vorbereitung steht nie im Weg der Laufseite (Issue #1451).
-        case VORBEREITUNG -> false;
-        case UMSETZUNG ->
+        // Die Vorbereitung steht nie im Weg der Laufseite (Issue #1451): erreicht(...) wird nur für
+        // die Stufen aus WEG_A und WEG_B gerufen. Ein eigener Zweig für sie wäre toter Code
+        // (Issue #1796); sie teilt sich darum den Zweig der Umsetzung.
+        case UMSETZUNG, VORBEREITUNG ->
             !pakete.isEmpty() && pakete.stream().allMatch(p -> p.zustand() == PackageState.FERTIG);
       };
     }
