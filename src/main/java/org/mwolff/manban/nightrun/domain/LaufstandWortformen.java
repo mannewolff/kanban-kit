@@ -1,6 +1,8 @@
 package org.mwolff.manban.nightrun.domain;
 
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -52,6 +54,16 @@ final class LaufstandWortformen {
 
   /** Die Zeile mit dem Pfad des Protokolls. */
   static final List<String> PROTOKOLL = List.of("Protokoll:", "Log:");
+
+  /**
+   * Die Zeile der Lauf-ID {@code <rechner>/<pid>/<JJJJ-MM-TT-hhmmss>} — der letzte Teil ist der
+   * Laufstart in UTC, auf Sekunden gekürzt (Issue #1764).
+   */
+  static final List<String> LAUF_ID = List.of("Lauf-ID:", "Run-ID:");
+
+  /** Der Laufstart am Ende einer Lauf-ID. */
+  private static final DateTimeFormatter LAUF_ID_STEMPEL =
+      DateTimeFormatter.ofPattern("uuuu-MM-dd-HHmmss").withZone(ZoneOffset.UTC);
 
   /**
    * Der Prüfvermerk eines Plans — mit Wert gilt der Plan als geprüft; in beiden Sprachen gleich.
@@ -110,6 +122,27 @@ final class LaufstandWortformen {
         .filter(zeile::startsWith)
         .findFirst()
         .map(form -> zeile.substring(form.length()));
+  }
+
+  /**
+   * Der Laufstart aus der Zeile {@link #LAUF_ID} des Laufstands, auf Sekunden genau; leer ohne
+   * Zeile oder mit unlesbarem Stempel.
+   */
+  static Optional<Instant> laufIdStart(String body) {
+    return body.lines()
+        .map(z -> wert(LAUF_ID, z))
+        .flatMap(Optional::stream)
+        .findFirst()
+        .flatMap(LaufstandWortformen::stempel);
+  }
+
+  private static Optional<Instant> stempel(String laufId) {
+    try {
+      return Optional.of(
+          Instant.from(LAUF_ID_STEMPEL.parse(laufId.substring(laufId.lastIndexOf('/') + 1))));
+    } catch (DateTimeParseException _) {
+      return Optional.empty();
+    }
   }
 
   /**

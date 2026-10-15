@@ -36,7 +36,9 @@ import org.mwolff.manban.nightrun.domain.LaufstandWortformen.Stufenzeile;
  * auf Millisekunden gekürzt. Trägt mindestens eine übergebene Aktivität oder ein Laufstand diese
  * Kennung, ist der Lauf ausgewiesen: Er nimmt nur Spuren mit seiner Kennung, und die fremden
  * Fenster spielen keine Rolle mehr. Ein nicht ausgewiesener Lauf nimmt nur Spuren ohne Kennung und
- * wird wie bisher über die Fenster abgegrenzt.
+ * wird wie bisher über die Fenster abgegrenzt. Einen Laufstand ohne Kennung nimmt ein ausgewiesener
+ * Lauf, wenn die Lauf-ID im Text seinen Start nennt (Issue #1764): Der Runner schreibt den
+ * Laufstand selbst, ohne Header.
  *
  * <p><b>Namen des Kits (Issue #1590, Plan #1582 A3, A5, A6, E2, E13):</b> Labels zählen als Sachen
  * aus {@link KitNamen} — jeder Name einer Sache wirkt gleich, ein gemischtes Board zählt zusammen.
@@ -167,7 +169,7 @@ public final class FortschrittErmittlung {
     laufstaende.forEach(
         l -> KettenAbleitung.ziel(l.body()).ifPresent(z -> zielJeKarte.putIfAbsent(l.cardId(), z)));
     laufstaende.stream()
-        .filter(l -> Objects.equals(kennung(l.laufStart()), spurKennung))
+        .filter(this::gehoertZumLauf)
         .forEach(
             l ->
                 eintraegeJeKarte
@@ -468,6 +470,21 @@ public final class FortschrittErmittlung {
         && Objects.equals(kennung(a.laufStart()), spurKennung);
   }
 
+  /**
+   * Ob der Laufstand zum Lauf gehört: über seine Kennung (A6) oder — ohne Kennung im ausgewiesenen
+   * Lauf — über die Lauf-ID im Text (Issue #1764). Der Runner schreibt den Laufstand mit eigenen
+   * Board-Aufrufen ohne Header {@code X-Night-Run}; nur seine Sessions tragen die Kennung. Die
+   * Lauf-ID nennt denselben Laufstart, auf Sekunden gekürzt.
+   */
+  private boolean gehoertZumLauf(Laufstand l) {
+    Instant k = kennung(l.laufStart());
+    if (k != null || spurKennung == null) {
+      return Objects.equals(k, spurKennung);
+    }
+    Instant sekunde = spurKennung.truncatedTo(ChronoUnit.SECONDS);
+    return LaufstandWortformen.laufIdStart(l.body()).filter(sekunde::equals).isPresent();
+  }
+
   /** Eine Laufkennung, auf Millisekunden gekürzt (A10) — so speichert sie das Board. */
   private static @Nullable Instant kennung(@Nullable Instant laufStart) {
     return laufStart == null ? null : laufStart.truncatedTo(ChronoUnit.MILLIS);
@@ -536,9 +553,12 @@ public final class FortschrittErmittlung {
         // vom Laufstand einer späteren Stufe genannt.
         case PLAN -> plan != null;
         case REVIEW -> plan != null && traegtPlanReview(plan);
-        // „abdeckung fertig" erreicht die Pakete als spätere Stufe; eigene Signale haben beide
-        // nicht. Die Vorbereitung steht nie im Weg der Laufseite (Issue #1451).
-        case PAKETE, ABDECKUNG, VORBEREITUNG -> false;
+        // Eigene Signale neben dem Laufstand (Issue #1764): Die Pakete sind erreicht, sobald die
+        // Kette Pakete hat; die Abdeckung, sobald eines über „angelegt" hinaus ist.
+        case PAKETE -> !pakete.isEmpty();
+        case ABDECKUNG -> pakete.stream().anyMatch(p -> p.zustand() != PackageState.ANGELEGT);
+        // Die Vorbereitung steht nie im Weg der Laufseite (Issue #1451).
+        case VORBEREITUNG -> false;
         case UMSETZUNG ->
             !pakete.isEmpty() && pakete.stream().allMatch(p -> p.zustand() == PackageState.FERTIG);
       };
