@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { BoardFlow, FlowDay } from '../../api/dashboard'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
+import { flussPfade } from '../../lib/fluss'
 import { statusColors } from '../../lib/statusColors'
 import { cssRegel } from '../../test/cssRegel'
 import { FlussPlatte } from './FlussPlatte'
@@ -156,6 +157,17 @@ describe('FlussPlatte', () => {
     expect(screen.getByRole('img')).toHaveAccessibleName(
       'Fluss über 84 Tage, gestapelt von unten Done, In Review, In Progress, Ready, Backlog. Letzter Tag 14.10.2026: Backlog: 10, Ready: 4, In Progress: 2, In Review: 21, Done: 11',
     )
+  })
+
+  it('spannt die Bänder über die Tage und setzt jeden Punkt in die Mitte seiner Taste', () => {
+    const tage = [bekannt(0), bekannt(1, { done: 3 }), bekannt(2, { done: 6 })]
+    renderMitSprache(<FlussPlatte daten={fluss(tage)} />)
+
+    const bild = screen.getByRole('img')
+    // Je Tag zehn Einheiten breit; die Punkte reichen vom ersten bis zum letzten Tag, um einen halben Tag versetzt.
+    expect(bild).toHaveAttribute('viewBox', '0 0 30 120')
+    expect(screen.getByTestId('fluss-versatz')).toHaveAttribute('transform', 'translate(5 0)')
+    expect(screen.getByTestId('fluss-band-done')).toHaveAttribute('d', flussPfade(tage, 20, 120).done)
   })
 
   it('sagt „keine Daten“ in der Zusammenfassung, wenn der letzte Tag unbekannt ist', () => {

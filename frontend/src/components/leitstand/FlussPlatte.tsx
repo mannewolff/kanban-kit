@@ -79,7 +79,7 @@ function Bild({
         sx={{ display: 'block', width: '100%', height: '100%' }}
       >
         {/* Um einen halben Tag verschoben: Punkt i liegt so in der Mitte seiner Taste. */}
-        <g transform={`translate(${TAG_BREITE / 2} 0)`}>
+        <g data-testid="fluss-versatz" transform={`translate(${TAG_BREITE / 2} 0)`}>
           {FLUSS_BAENDER.map((band) => (
             <Box
               component="path"
