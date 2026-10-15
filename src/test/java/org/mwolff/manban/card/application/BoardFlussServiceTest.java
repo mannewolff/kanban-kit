@@ -188,6 +188,19 @@ class BoardFlussServiceTest {
   }
 
   @Test
+  void flow_nachDemNachtragSindAuchDieTageVorDemErfassungsbeginnBekannt() {
+    Instant since = NOW.minus(Duration.ofDays(10));
+    when(aufenthalte.marke()).thenReturn(new ErfassungsMarke(since, NOW.minusSeconds(60)));
+    when(aufenthalte.findByBoardId(BOARD)).thenReturn(List.of());
+
+    BoardFlowView view = service.flow(USER, BOARD, BERLIN);
+
+    assertThat(view.days().getFirst().known()).isTrue();
+    assertThat(view.days().getFirst().backlog()).isZero();
+    assertThat(view.dataSince()).isNull();
+  }
+
+  @Test
   void flow_rechnetDieTageInDerZoneDesLesers() {
     when(aufenthalte.findByBoardId(BOARD)).thenReturn(List.of());
 
