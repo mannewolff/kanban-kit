@@ -13,6 +13,7 @@
   "src/test/java/org/mwolff/manban/card/CardActivityOriginIT.java": ["src/main/java/org/mwolff/manban/card/application/CardService.java", "src/main/java/org/mwolff/manban/kanbancompat/application/KanbanCompatService.java"],
   "src/test/java/org/mwolff/manban/card/CardColumnTransitionBackfillIT.java": ["src/main/resources/db/migration/V9__card_column_transition.sql"],
   "src/test/java/org/mwolff/manban/card/CardDerivedFromPersistenceIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardRepositoryAdapter.java"],
+  "src/test/java/org/mwolff/manban/card/CardFlowStayRepositoryAdapterIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardFlowStayRepositoryAdapter.java", "src/main/resources/db/migration/V56__card_flow_stay.sql"],
   "src/test/java/org/mwolff/manban/card/CardLabelEventMigrationIT.java": ["src/main/resources/db/migration/V55__card_label_event.sql"],
   "src/test/java/org/mwolff/manban/card/CardLabelEventRepositoryIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardLabelEventRepositoryAdapter.java", "src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardLabelEventJpaRepository.java", "src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardLabelEventEntity.java", "src/main/resources/db/migration/V55__card_label_event.sql"],
   "src/test/java/org/mwolff/manban/card/CardNumberProjectScopedMigrationIT.java": ["src/main/resources/db/migration/V19__card_number_project_scoped.sql"],
