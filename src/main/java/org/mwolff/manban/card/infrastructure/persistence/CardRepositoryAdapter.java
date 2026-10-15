@@ -19,9 +19,16 @@ import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Adapter der Ports {@link CardRepository} und {@link CardBestandRepository} auf Spring Data JPA.
+ *
+ * <p>Jeder Schreibweg auf eine Karte ({@code save}, {@code move}, {@code transfer}, {@code
+ * softDelete}, {@code restoreFromTrash}) meldet sie vor dem Schreiben bei der {@link
+ * FlussErfassung} (Issue #1768, Plan #1765 E2) — kein Dienst kann die Erfassung der Zustandswechsel
+ * umgehen. Diese Wege sind {@code @Transactional}: Im Dienst treten sie dessen Transaktion bei,
+ * ohne eine eröffnen sie eine eigene, an deren Commit die Erfassung schreibt.
  */
 // PMD.TooManyMethods: 1:1-Implementierung der Karten-Ports — die Methodenzahl folgt dem
 // Port-Vertrag (je Lesepfad/Reindex eine kleine Methode), kein God-Class-Smell.
@@ -55,21 +62,38 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
   private final CardJpaRepository jpa;
   private final JdbcTemplate jdbc;
   private final EntityManager entityManager;
+  private final FlussErfassung erfassung;
 
-  CardRepositoryAdapter(CardJpaRepository jpa, JdbcTemplate jdbc, EntityManager entityManager) {
+  CardRepositoryAdapter(
+      CardJpaRepository jpa,
+      JdbcTemplate jdbc,
+      EntityManager entityManager,
+      FlussErfassung erfassung) {
     this.jpa = jpa;
     this.jdbc = jdbc;
     this.entityManager = entityManager;
+    this.erfassung = erfassung;
   }
 
   /**
    * Speichert die Karte. Trägt sie eine Herkunft, verliert eine früher bewahrte Herkunftsnummer
    * ihre Bedeutung und geht auf {@code NULL} (Plan #1574, E17) — die Spalte bildet {@link
    * CardEntity} nicht ab, darum ein eigenes natives Update.
+   *
+   * <p>Eine neue Karte hat vor {@code jpa.save} keine ID — die vergibt erst die Identity-Spalte.
+   * Sie meldet sich darum danach mit der vergebenen ID und gilt vorher als nicht im Fluss.
    */
   @Override
+  @Transactional
   public Card save(Card card) {
+    Long id = card.id();
+    if (id != null) {
+      erfassung.beruehrt(id);
+    }
     Card gespeichert = toDomain(jpa.save(toEntity(card)));
+    if (id == null) {
+      erfassung.neu(gespeichert.requireId());
+    }
     if (gespeichert.derivedFromCardId() != null) {
       jpa.setzeVerloreneHerkunftsnummerZurueck(gespeichert.requireId());
     }
@@ -307,7 +331,9 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
   }
 
   @Override
+  @Transactional
   public void move(long cardId, long newColumnId, int newPosition) {
+    erfassung.beruehrt(cardId);
     entityManager.flush();
 
     Long oldColumnId = columnIdOf(cardId);
@@ -393,7 +419,9 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
   }
 
   @Override
+  @Transactional
   public void transfer(long cardId, long targetBoardId, long targetColumnId, int newNumber) {
+    erfassung.beruehrt(cardId);
     entityManager.flush();
 
     Long oldColumnId = columnIdOf(cardId);
@@ -472,13 +500,17 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
   }
 
   @Override
+  @Transactional
   public void softDelete(long cardId, java.time.Instant when) {
+    erfassung.beruehrt(cardId);
     jdbc.update(
         "UPDATE card SET deleted_at = ? WHERE id = ?", java.sql.Timestamp.from(when), cardId);
   }
 
   @Override
+  @Transactional
   public void restoreFromTrash(long cardId, int newPosition) {
+    erfassung.beruehrt(cardId);
     jdbc.update(
         "UPDATE card SET deleted_at = NULL, position_in_column = ? WHERE id = ?",
         newPosition,

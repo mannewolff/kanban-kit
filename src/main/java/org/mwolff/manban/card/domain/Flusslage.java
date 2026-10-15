@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.domain;
 
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Wo eine Karte im Fluss der Arbeit steht: auf welchem Board, in welchem Zustand (Plan #1765, E3).
@@ -22,10 +23,18 @@ public record Flusslage(long boardId, CardStatus status) {
    *     nicht
    */
   public static Optional<Flusslage> von(Card card, boolean imPapierkorb) {
-    CardStatus status = card.status();
-    if (status == null || imPapierkorb || (card.archived() && status != CardStatus.DONE)) {
+    return von(card.boardId(), card.status(), card.archived(), imPapierkorb);
+  }
+
+  /**
+   * Dieselbe Regel über die einzelnen Spalten der Karte — für die Erfassung, die den Stand per JDBC
+   * liest (Issue #1768, E2) und keine {@link Card} baut.
+   */
+  public static Optional<Flusslage> von(
+      long boardId, @Nullable CardStatus status, boolean archived, boolean imPapierkorb) {
+    if (status == null || imPapierkorb || (archived && status != CardStatus.DONE)) {
       return Optional.empty();
     }
-    return Optional.of(new Flusslage(card.boardId(), status));
+    return Optional.of(new Flusslage(boardId, status));
   }
 }

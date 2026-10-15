@@ -64,4 +64,15 @@ class FlusslageTest {
     assertThat(Flusslage.von(karte("[Task] Paket", CardType.CARD, true, CardStatus.DONE), true))
         .isEmpty();
   }
+
+  @Test
+  void dieSpaltenformSprichtDieselbeRegel() {
+    assertThat(Flusslage.von(BOARD, CardStatus.READY, false, false))
+        .contains(new Flusslage(BOARD, CardStatus.READY));
+    assertThat(Flusslage.von(BOARD, null, false, false)).isEmpty();
+    assertThat(Flusslage.von(BOARD, CardStatus.DONE, true, false))
+        .contains(new Flusslage(BOARD, CardStatus.DONE));
+    assertThat(Flusslage.von(BOARD, CardStatus.READY, true, false)).isEmpty();
+    assertThat(Flusslage.von(BOARD, CardStatus.DONE, false, true)).isEmpty();
+  }
 }
