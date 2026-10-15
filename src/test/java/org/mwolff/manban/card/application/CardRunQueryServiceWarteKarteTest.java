@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -46,7 +47,10 @@ class CardRunQueryServiceWarteKarteTest {
                 mock(CardAssigneeRepository.class),
                 mock(LabelRepository.class),
                 mock(CardLabelRepository.class),
-                mock(PermissionChecker.class)),
+                mock(PermissionChecker.class),
+                mock(CardLabelEventRepository.class),
+                ActorContext.ActorStamp::unknown,
+                Clock.systemUTC()),
             boards);
     when(boards.requireColumn(SPALTE_READY, BOARD))
         .thenReturn(new ColumnView(SPALTE_READY, "Ready", 1, null));

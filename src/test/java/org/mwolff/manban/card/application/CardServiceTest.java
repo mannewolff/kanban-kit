@@ -70,6 +70,7 @@ class CardServiceTest {
   private CardLabelRepository cardLabels;
   private CardActivityRepository activity;
   private ActorContext actor;
+  private CardLabelEventRepository labelEvents;
   private ApplicationEventPublisher events;
   private UserLookup users;
   private CardService service;
@@ -107,6 +108,7 @@ class CardServiceTest {
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     events = mock(ApplicationEventPublisher.class);
     users = mock(UserLookup.class);
+    labelEvents = mock(CardLabelEventRepository.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         CardServiceAufbau.ausPorts(
@@ -119,7 +121,8 @@ class CardServiceTest {
             // Zuständige und Labels sind nur aus dem Service herausgezogen, nicht ersetzt — ein
             // Mock der Zuordnung ließe die Tests zu InvalidAssigneeException/InvalidLabelException
             // ins Leere laufen.
-            new KartenZuordnung(assignees, labels, cardLabels, permissions),
+            new KartenZuordnung(
+                assignees, labels, cardLabels, permissions, labelEvents, actor, clock),
             activity,
             actor,
             events,
@@ -1191,6 +1194,75 @@ class CardServiceTest {
     assertThatThrownBy(() -> service.changeLabel(9L, 1L, 9L, LabelAction.ADD))
         .isInstanceOf(ProjectAccessDeniedException.class);
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
+  }
+
+  // --- Label-Ereignisse über die Karten-API (Issue #1754, Plan #1752 E11) ---
+
+  /** Stempel eines Nachtlaufs per Token. */
+  private ActorContext.ActorStamp laufStempel() {
+    ActorContext.ActorStamp stempel =
+        new ActorContext.ActorStamp(
+            CardActivityOrigin.TOKEN,
+            "Nachtlauf",
+            "claude-opus-5-5",
+            Instant.parse("2025-12-31T22:00:00Z"));
+    when(actor.current()).thenReturn(stempel);
+    return stempel;
+  }
+
+  @Test
+  void setLabels_erfasstDasNeuHinzugekommeneLabel() {
+    ActorContext.ActorStamp stempel = laufStempel();
+    zweiBoardLabels();
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L));
+
+    service.setLabels(3L, 1L, List.of(7L, 9L));
+
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
+    verify(labelEvents, never()).add(1L, "Bug", FIXED, stempel);
+  }
+
+  @Test
+  void changeLabel_addErfasstDasLabel() {
+    ActorContext.ActorStamp stempel = laufStempel();
+    zweiBoardLabels();
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L));
+
+    service.changeLabel(3L, 1L, 9L, LabelAction.ADD);
+
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
+  }
+
+  @Test
+  void bulkLabels_erfasstDasLabelJeKarte() {
+    ActorContext.ActorStamp stempel = laufStempel();
+    zweiKarten();
+    zweiBoardLabels();
+    when(cardLabels.findByCardId(1L)).thenReturn(List.of(7L));
+    when(cardLabels.findByCardId(2L)).thenReturn(List.of(9L));
+
+    service.bulkLabels(3L, List.of(1L, 2L), 9L, LabelAction.ADD);
+
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
+    verify(labelEvents, never()).add(2L, "Nacht", FIXED, stempel);
+  }
+
+  @Test
+  void create_erfasstDieMitgegebenenLabels() {
+    ActorContext.ActorStamp stempel = laufStempel();
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(1);
+    when(cards.allocateActivePosition(20L)).thenReturn(0);
+    zweiBoardLabels();
+
+    service.create(1L, BOARD, 20L, "Titel", null, null, null, null, null, List.of(7L, 9L), null);
+
+    verify(labelEvents).add(1L, "Bug", FIXED, stempel);
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
   }
 
   // --- Aktivitätsverlauf (card_activity) --------------------------------

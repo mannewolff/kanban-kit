@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -61,7 +62,10 @@ class CardRunQueryServiceFreigabenTest {
                 mock(CardAssigneeRepository.class),
                 labels,
                 cardLabels,
-                mock(PermissionChecker.class)),
+                mock(PermissionChecker.class),
+                mock(CardLabelEventRepository.class),
+                ActorContext.ActorStamp::unknown,
+                Clock.systemUTC()),
             boards);
     when(boards.requireBoardSummary(BOARD))
         .thenReturn(new BoardSummary(BOARD, "Entwicklung", false));

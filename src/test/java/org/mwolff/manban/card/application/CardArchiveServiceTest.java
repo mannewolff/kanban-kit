@@ -107,7 +107,14 @@ class CardArchiveServiceTest {
             // Zuständige und Labels sind nur aus dem Service herausgezogen, nicht ersetzt — ein
             // Mock der Zuordnung ließe die Tests zu InvalidAssigneeException/InvalidLabelException
             // ins Leere laufen.
-            new KartenZuordnung(assignees, labels, cardLabels, permissions),
+            new KartenZuordnung(
+                assignees,
+                labels,
+                cardLabels,
+                permissions,
+                mock(CardLabelEventRepository.class),
+                ActorContext.ActorStamp::unknown,
+                Clock.systemUTC()),
             activity,
             actor,
             events,
