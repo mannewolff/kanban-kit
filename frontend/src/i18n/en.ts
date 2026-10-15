@@ -757,6 +757,24 @@ export const en: Woerterbuch = {
     TOKEN: 'tokens',
   },
 
+  LEITSTAND_FLUSS: {
+    BAND: {
+      done: 'Done',
+      inReview: 'In Review',
+      inProgress: 'In Progress',
+      ready: 'Ready',
+      backlog: 'Backlog',
+    },
+    TAG_ZEILE: (band, anzahl) => `${band}: ${anzahl}`,
+    KEINE_DATEN: 'no data',
+    SEIT: (datum) => `since ${datum}`,
+    LETZTE_WOCHEN: 'last 12 weeks',
+    UNTER_EINER_STUNDE: 'under 1 h',
+    STUNDEN: (anzahl) => `${anzahl} h`,
+    TAGE: (anzahl) => (anzahl === 1 ? '1 day' : `${anzahl} days`),
+    MINDESTENS: (alter) => `at least ${alter}`,
+  },
+
   VERBRAUCH_ZEITRAUM: {
     KEIN_LAUF: 'Neither a run nor a session took place in this period.',
     NICHT_ERFASST: 'not recorded',

@@ -794,6 +794,25 @@ export const de = {
     TOKEN: 'Token',
   },
 
+  /** Rechnung der Platten „Fluss“ und „Alter in Arbeit“, `lib/fluss.ts` (Plan #1765). */
+  LEITSTAND_FLUSS: {
+    BAND: {
+      done: 'Done',
+      inReview: 'In Review',
+      inProgress: 'In Progress',
+      ready: 'Ready',
+      backlog: 'Backlog',
+    },
+    TAG_ZEILE: (band: string, anzahl: number) => `${band}: ${anzahl}`,
+    KEINE_DATEN: 'keine Daten',
+    SEIT: (datum: string) => `seit ${datum}`,
+    LETZTE_WOCHEN: 'letzte 12 Wochen',
+    UNTER_EINER_STUNDE: 'unter 1 Std',
+    STUNDEN: (anzahl: number) => `${anzahl} Std`,
+    TAGE: (anzahl: number) => (anzahl === 1 ? '1 Tag' : `${anzahl} Tage`),
+    MINDESTENS: (alter: string) => `mindestens ${alter}`,
+  },
+
   /** Textrechnung der Verbrauchs-Auswertung, `lib/verbrauchZeitraum.ts` (Issue #1656). */
   VERBRAUCH_ZEITRAUM: {
     KEIN_LAUF: 'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.',
