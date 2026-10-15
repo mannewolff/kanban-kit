@@ -66,7 +66,8 @@ class CardRunQueryServiceFreigabenTest {
                 mock(CardLabelEventRepository.class),
                 ActorContext.ActorStamp::unknown,
                 Clock.systemUTC()),
-            boards);
+            boards,
+            mock(CardLabelEventRepository.class));
     when(boards.requireBoardSummary(BOARD))
         .thenReturn(new BoardSummary(BOARD, "Entwicklung", false));
     when(boards.requireBoardSummary(ARCHIV)).thenReturn(new BoardSummary(ARCHIV, "Alt", true));

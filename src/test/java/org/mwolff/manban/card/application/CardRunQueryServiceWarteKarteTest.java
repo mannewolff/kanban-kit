@@ -51,7 +51,8 @@ class CardRunQueryServiceWarteKarteTest {
                 mock(CardLabelEventRepository.class),
                 ActorContext.ActorStamp::unknown,
                 Clock.systemUTC()),
-            boards);
+            boards,
+            mock(CardLabelEventRepository.class));
     when(boards.requireColumn(SPALTE_READY, BOARD))
         .thenReturn(new ColumnView(SPALTE_READY, "Ready", 1, null));
     when(boards.requireColumn(SPALTE_BACKLOG, BOARD))

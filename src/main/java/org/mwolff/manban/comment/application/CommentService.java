@@ -3,6 +3,7 @@ package org.mwolff.manban.comment.application;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.UserLookup;
@@ -147,6 +148,21 @@ public class CommentService {
   }
 
   /**
+   * Die Kommentare der Karten, deren letzter Schreiber ein Lauf ab {@code von} war (Issue #1755,
+   * Plan #1752 E5): je Kommentar Karte und Laufkennung, <b>kein</b> Text. Maßgeblich ist die
+   * Laufkennung, nicht der Erstellzeitpunkt — {@link #update} ersetzt sie beim Laufstand und lässt
+   * {@code createdAt} stehen.
+   *
+   * <p>Ohne Rechteprüfung wie {@link #laufstaendeImProjekt}.
+   */
+  @Transactional(readOnly = true)
+  public List<LaufKommentarView> laufKommentare(Collection<Long> cardIds, Instant von) {
+    return comments.findLaufKommentare(cardIds, von).stream()
+        .map(k -> new LaufKommentarView(k.cardId(), k.laufStart()))
+        .toList();
+  }
+
+  /**
    * Je Karte des Boards der erste Kommentar, der den Suchbegriff enthält (Plan #1574, E3, E16) —
    * für die Textsuche der Kanban-Strecke. Erfordert Projekt-Mitgliedschaft (Leserecht); die Abfrage
    * bleibt auf Karten dieses Projekts und Boards ohne Papierkorb begrenzt, sodass ein Board eines
@@ -217,6 +233,14 @@ public class CommentService {
    * @param laufStart Laufkennung des letzten Schreibers (Issue #1428); {@code null} ohne Ausweis
    */
   public record LaufstandView(long cardId, String body, @Nullable Instant laufStart) {}
+
+  /**
+   * Ein Kommentar eines Laufs (Issue #1755), ohne Text.
+   *
+   * @param cardId Karte, an der der Kommentar steht
+   * @param laufStart Laufkennung des letzten Schreibers
+   */
+  public record LaufKommentarView(long cardId, Instant laufStart) {}
 
   /**
    * Der erste passende Kommentar einer Karte in der Textsuche (Plan #1574, E16).

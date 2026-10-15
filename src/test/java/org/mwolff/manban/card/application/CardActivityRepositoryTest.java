@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardStatus;
+import org.mwolff.manban.card.domain.LaufBewegung;
 
 /**
  * Die Default-Methode {@link CardActivityRepository#add(long, long, CardActivityType, String,
@@ -60,6 +62,11 @@ class CardActivityRepositoryTest {
     @Override
     public List<CardActivity> findTokenActivitiesInWindow(
         long projectId, String tokenName, Instant von, Instant bis) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<LaufBewegung> findLaufBewegungen(Collection<Long> cardIds, Instant von) {
       throw new UnsupportedOperationException();
     }
   }

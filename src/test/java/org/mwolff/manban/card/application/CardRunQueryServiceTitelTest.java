@@ -47,7 +47,8 @@ class CardRunQueryServiceTitelTest {
                 mock(CardLabelEventRepository.class),
                 ActorContext.ActorStamp::unknown,
                 Clock.systemUTC()),
-            mock(BoardService.class));
+            mock(BoardService.class),
+            mock(CardLabelEventRepository.class));
   }
 
   private static Card karte(long id, int number, String titel) {

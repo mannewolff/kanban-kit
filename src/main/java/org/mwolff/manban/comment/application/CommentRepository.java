@@ -1,8 +1,11 @@
 package org.mwolff.manban.comment.application;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.comment.domain.Comment;
+import org.mwolff.manban.comment.domain.LaufKommentar;
 
 /** Ausgehender Port für die Persistenz von Kommentaren. */
 public interface CommentRepository {
@@ -39,4 +42,12 @@ public interface CommentRepository {
    * @param q Suchbegriff, getrimmt und nicht leer
    */
   List<Comment> findFirstMatchPerCardOnBoard(long projectId, long boardId, String q);
+
+  /**
+   * Die Kommentare der Karten, deren Laufkennung gesetzt und nicht vor {@code von} ist (Issue
+   * #1755, Plan #1752 E5) — gefiltert nach {@code run_started_at}, nicht nach {@code created_at}:
+   * Ein überschriebener Laufstand trägt die Kennung des letzten Schreibers bei altem
+   * Erstellzeitpunkt. Nach Laufkennung, bei Gleichstand nach ID. Ohne Karten-IDs eine leere Liste.
+   */
+  List<LaufKommentar> findLaufKommentare(Collection<Long> cardIds, Instant von);
 }

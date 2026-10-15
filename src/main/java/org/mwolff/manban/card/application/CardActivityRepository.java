@@ -1,12 +1,14 @@
 package org.mwolff.manban.card.application;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.domain.CardActivity;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardStatus;
+import org.mwolff.manban.card.domain.LaufBewegung;
 
 /** Ausgehender Port für den Aktivitätsverlauf einer Karte. */
 public interface CardActivityRepository {
@@ -52,4 +54,14 @@ public interface CardActivityRepository {
    */
   List<CardActivity> findTokenActivitiesInWindow(
       long projectId, String tokenName, Instant von, Instant bis);
+
+  /**
+   * Die Bewegungen der Karten, die ein Lauf auslöste (Issue #1755, Plan #1752 E1, E16): Laufkennung
+   * gesetzt und Zeitpunkt nicht vor {@code von}, je Bewegung mit dem Status nach der unmittelbar
+   * vorangehenden Aktivität mit bekanntem Status. Der Vorgänger wird über die ganze Historie der
+   * Karte gebildet, gleich welcher Herkunft und wie alt; Aktivitäten ohne Status nach der Bewegung
+   * (etwa {@code CREATED}) zählen weder als Bewegung noch als Vorgänger. Chronologisch, bei
+   * Gleichstand nach ID. Ohne Karten-IDs eine leere Liste.
+   */
+  List<LaufBewegung> findLaufBewegungen(Collection<Long> cardIds, Instant von);
 }

@@ -50,7 +50,8 @@ class CardRunQueryServiceEpicsByCardNumberTest {
                 mock(CardLabelEventRepository.class),
                 ActorContext.ActorStamp::unknown,
                 Clock.systemUTC()),
-            mock(BoardService.class));
+            mock(BoardService.class),
+            mock(CardLabelEventRepository.class));
   }
 
   private static Card karte(

@@ -5,11 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.comment.application.CommentRepository;
 import org.mwolff.manban.comment.domain.Comment;
+import org.mwolff.manban.comment.domain.LaufKommentar;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -91,6 +93,37 @@ class CommentRepositoryIT extends AbstractIntegrationTest {
     assertThat(comments.findByCardId(cardId))
         .extracting(Comment::body)
         .containsExactly("erster", "zweiter");
+  }
+
+  @Test
+  void laufKommentareFiltertNachLaufkennungNichtNachErstellzeitpunkt() {
+    // Issue #1755, Plan #1752 E5: Der Laufstand wird je Run ersetzt und behält sein altes
+    // created_at; er zählt über die Laufkennung des letzten Schreibers.
+    Instant von = T2;
+    Instant alterLauf = T1.minusSeconds(60);
+    Instant neuerLauf = T2.plusSeconds(60);
+    Comment laufstand =
+        comments.save(
+            new Comment(
+                null, cardId, userId, "A", "## Laufstand", T1, T1, alterLauf, null, null, null));
+    comments.save(laufstand.withBody("## Laufstand neu", neuerLauf));
+    comments.save(
+        new Comment(
+            null, cardId, userId, "A", "spaet, alter Lauf", T2, T2, alterLauf, null, null, null));
+    comments.save(
+        new Comment(null, cardId, userId, "A", "ohne Kennung", T2, T2, null, null, null, null));
+    comments.save(new Comment(null, cardId, userId, "A", "auf von", T1, T1, von, null, null, null));
+
+    assertThat(comments.findLaufKommentare(List.of(cardId), von))
+        .containsExactly(new LaufKommentar(cardId, von), new LaufKommentar(cardId, neuerLauf));
+  }
+
+  @Test
+  void laufKommentareNurDerGefragtenKarten() {
+    comments.save(new Comment(null, cardId, userId, "A", "Lauf", T2, T2, T2, null, null, null));
+
+    assertThat(comments.findLaufKommentare(List.of(cardId + 1), T1)).isEmpty();
+    assertThat(comments.findLaufKommentare(List.of(), T1)).isEmpty();
   }
 
   /** Legt einen Kommentar mit fest vorgegebener ID an — die Sequenz vergibt nur aufsteigend. */
