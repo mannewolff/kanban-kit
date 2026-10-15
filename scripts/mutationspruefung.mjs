@@ -429,6 +429,9 @@ export function zuordnungAusVollauf(inhalt) {
  * Zeigt sie nur auf Quellen ausserhalb des Bereichs, ist der Test zugeordnet und steuert nichts bei.
  * Ein Test eines noch nicht aufgenommenen Ausschnitts ohne Zuordnung steuert ebenfalls nichts bei
  * (Issue #1279): Pruefbereich sind die aufgenommenen Ausschnitte, alles andere ist aussen vor.
+ * Ein Test ohne Quelle, der nach der Aenderung nicht mehr existiert — der alte Pfad eines verlegten
+ * oder ein geloeschter Test —, wird uebergangen (Anlass #1766): Gemutiert wird nur, was existiert,
+ * und der neue Pfad eines verlegten Tests durchlaeuft die Zuordnung weiter.
  */
 export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {}, existiert }) {
   const dateien = new Set();
@@ -443,6 +446,7 @@ export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {},
     if (konvention && existiert(konvention)) quellen.add(konvention);
     if (quellen.size === 0) {
       if (bereich.testAusserhalb?.(pfad)) continue;
+      if (!existiert(pfad)) continue;
       ohneZuordnung.push(pfad);
       continue;
     }
