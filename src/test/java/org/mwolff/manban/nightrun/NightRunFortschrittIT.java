@@ -201,7 +201,10 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
     Item planB = anlegen(a, MODELL, "[Plan] Kette B", anforderungB.number(), startB);
     aendern(a, planA, "[Plan] Kette A", "Plan-Review: fable", startA);
     Item paketA = anlegen(a, MODELL, "Kette A 1/1: Paket", planA.number(), startA);
-    Item paketB = anlegen(a, MODELL, "Kette B 1/1: Paket", planB.number(), startB);
+    // Das Paket von B hängt an keinem Plan: Ein Paket in Umsetzung machte die Prüfung von B
+    // folgerichtig erreicht (Issue #1783), und die Kette zeigte dann nicht mehr, dass B den
+    // Laufstand von A nicht sieht.
+    Item paketB = anlegen(a, MODELL, "Kette B 1/1: Paket", null, startB);
     verschieben(a, paketA, "IN_REVIEW", startA);
     verschieben(a, paketB, "IN_PROGRESS", startB);
     laufstand(a, anforderungA, "abdeckung fertig für #" + planA.number(), startA);
@@ -228,8 +231,7 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
         .containsExactly(paketA.number() + ":FERTIG");
     assertThat(ketteB.get("anforderung").get("number").asInt()).isEqualTo(anforderungB.number());
     assertThat(ketteB.get("plan").get("number").asInt()).isEqualTo(planB.number());
-    assertThat(nummernUndZustaende(ketteB.get("pakete")))
-        .containsExactly(paketB.number() + ":IN_UMSETZUNG");
+    assertThat(ketteB.get("pakete")).isEmpty();
     // A hat bis zur Abdeckung abgeschlossen, B erst den Plan — keiner sieht den Laufstand des
     // anderen.
     assertThat(stufen(ketteA))

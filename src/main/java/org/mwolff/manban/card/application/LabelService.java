@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.application;
 
+import java.time.Clock;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -41,6 +42,8 @@ public class LabelService {
   private final PermissionChecker permissions;
   private final ApplicationEventPublisher events;
   private final ActorContext actor;
+  private final CardLabelEventRepository labelEvents;
+  private final Clock clock;
 
   public LabelService(
       LabelRepository labels,
@@ -49,7 +52,9 @@ public class LabelService {
       BoardService boardService,
       PermissionChecker permissions,
       ApplicationEventPublisher events,
-      ActorContext actor) {
+      ActorContext actor,
+      CardLabelEventRepository labelEvents,
+      Clock clock) {
     this.labels = labels;
     this.cardLabels = cardLabels;
     this.cards = cards;
@@ -57,6 +62,8 @@ public class LabelService {
     this.permissions = permissions;
     this.events = events;
     this.actor = actor;
+    this.labelEvents = labelEvents;
+    this.clock = clock;
   }
 
   /**
@@ -152,6 +159,7 @@ public class LabelService {
    * <p>Nach außen idempotent — ein bereits zugeordnetes Label erneut hinzuzufügen ist Erfolg, damit
    * ein Nachtlauf nach einem Teilfehler wiederholbar bleibt. Das Board-Ereignis entsteht nur bei
    * einer tatsächlichen Änderung; sonst meldete ein wiederholter Lauf Änderungen, die es nicht gab.
+   * Dasselbe gilt für das Label-Ereignis mit dem Stempel des Aufrufs (Issue #1754, Plan #1752 E11).
    *
    * @throws CardNotFoundException wenn die Karte fehlt
    * @throws InvalidDependencyException wenn das Item ein Vorhaben ist (400)
@@ -167,7 +175,9 @@ public class LabelService {
     Card card = requireLabelableCard(userId, cardId);
     FreigabeLabels.pruefe(herkunft(), name, Richtung.SETZEN);
     long boardId = card.boardId();
-    if (cardLabels.addLabel(cardId, requireLabelId(boardId, name))) {
+    Label label = requireLabel(boardId, name);
+    if (cardLabels.addLabel(cardId, label.requireId())) {
+      labelEvents.add(cardId, label.name(), clock.instant(), actor.current());
       events.publishEvent(new CardBoardActivityEvent(boardId, ActivityType.UPDATED, cardId));
     }
   }
@@ -182,7 +192,7 @@ public class LabelService {
     Card card = requireLabelableCard(userId, cardId);
     FreigabeLabels.pruefe(herkunft(), name, Richtung.ABNEHMEN);
     long boardId = card.boardId();
-    if (cardLabels.removeLabel(cardId, requireLabelId(boardId, name))) {
+    if (cardLabels.removeLabel(cardId, requireLabel(boardId, name).requireId())) {
       events.publishEvent(new CardBoardActivityEvent(boardId, ActivityType.UPDATED, cardId));
     }
   }
@@ -207,11 +217,10 @@ public class LabelService {
    * — dieselbe Bezeichnung kann auf einem anderen Board eine andere Label-ID meinen. Der Vergleich
    * ist nach dem Trimmen case-sensitiv, genau wie die Eindeutigkeitsprüfung in {@link #create}.
    */
-  private long requireLabelId(long boardId, String name) {
+  private Label requireLabel(long boardId, String name) {
     String trimmed = requireName(name);
     return labels.findByBoardId(boardId).stream()
         .filter(l -> trimmed.equals(l.name()))
-        .map(Label::requireId)
         .findFirst()
         .orElseThrow(LabelNotFoundException::new);
   }

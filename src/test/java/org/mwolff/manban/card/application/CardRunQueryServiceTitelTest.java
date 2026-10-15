@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -42,8 +43,12 @@ class CardRunQueryServiceTitelTest {
                 mock(CardAssigneeRepository.class),
                 mock(LabelRepository.class),
                 mock(CardLabelRepository.class),
-                mock(PermissionChecker.class)),
-            mock(BoardService.class));
+                mock(PermissionChecker.class),
+                mock(CardLabelEventRepository.class),
+                ActorContext.ActorStamp::unknown,
+                Clock.systemUTC()),
+            mock(BoardService.class),
+            mock(CardLabelEventRepository.class));
   }
 
   private static Card karte(long id, int number, String titel) {

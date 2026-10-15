@@ -72,15 +72,19 @@ public class ThroughputFilter extends OncePerRequestFilter {
       filterChain.doFilter(request, response);
       return;
     }
+    // Typ-Muster statt Record-Muster (Issue #1796): Für ein Record-Muster legt javac um jeden
+    // Accessor einen Handler an, der dessen Ausnahme in eine MatchException hüllt — unerreichbar,
+    // weil die Accessoren nicht werfen, und darum in der Abdeckung dauerhaft offen.
     switch (limiter.tryAcquire(person)) {
-      case Admitted(Permit permit) -> {
+      case Admitted admitted -> {
+        Permit permit = admitted.permit();
         try (permit) {
           filterChain.doFilter(request, response);
         }
       }
-      case Rejected(Duration retryAfter) -> {
+      case Rejected rejected -> {
         recorder.recordRejection(person);
-        rejectAsOverloaded(response, retryAfter);
+        rejectAsOverloaded(response, rejected.retryAfter());
       }
     }
   }

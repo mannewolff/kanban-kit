@@ -6,7 +6,7 @@ import type { SystemStyleObject } from '@mui/system'
 import { useId, type ReactNode } from 'react'
 import { useSprache, useT } from '../../i18n/SpracheContext'
 import type { DeltaArt, Kachel as KachelDaten, Melder } from '../../lib/leitstand'
-import { funkenPunkte, paketDauer, paketDauerBeschriftung } from '../../lib/leitstand'
+import { funkenPunkte, kalenderwoche, paketDauer, paketDauerBeschriftung } from '../../lib/leitstand'
 import { Erklaerung } from '../Erklaerung'
 import {
   ANZEIGE,
@@ -25,6 +25,7 @@ import {
   PLATTE_FUSS,
   PLATTE_HOCH,
   RAND,
+  RAND_STARK,
   SCHATTEN_HOCH,
   SCHATTEN_NUTE,
   SCHATTEN_PLATTE,
@@ -35,7 +36,7 @@ import {
 
 /**
  * Bausteine des Leitstands (#979) nach dem Entwurf `docs/entwurf-leitstand.html`: LED, Platte,
- * Kachel, Sparkline, Delta, Filtertaste, Schiene eines Balkens. Farben ausschließlich aus den
+ * Kachel, Sparkline, Delta, Filtertaste, Schiene eines Balkens, Wochenleiste und Grundlinie. Farben ausschließlich aus den
  * Tokens des Themes; die Zeilenangaben verweisen auf die Vorlage.
  */
 
@@ -389,6 +390,35 @@ export function Fuellschiene({ breite, farbe }: Readonly<{ breite: number; farbe
   )
 }
 
+/** Das Spaltenraster der Wochenplatten: eine gleich breite Spalte je Woche, mindestens eine. */
+export const wochenSpalten = (anzahl: number): string => `repeat(${Math.max(1, anzahl)}, minmax(0,1fr))`
+
+/**
+ * Die Kalenderwochen-Leiste unter den Balken einer Wochenplatte (Issue #1542, Plan #1752 E13): je
+ * Woche die Kalenderwoche ihres Wochenbeginns, im selben Raster wie die Balken darüber. Vorgelesen
+ * wird sie nicht — das `aria-label` des Balkenwerks nennt die Wochen schon.
+ */
+export function WochenLeiste({ wochen }: Readonly<{ wochen: readonly { weekStart: string }[] }>) {
+  return (
+    <Box
+      aria-hidden
+      data-testid="wochen-leiste"
+      sx={{ display: 'grid', gridTemplateColumns: wochenSpalten(wochen.length), gap: '6px', px: '16px', pt: '7px', pb: '14px', borderTop: `1px solid ${RAND}`, mt: '10px' }}
+    >
+      {wochen.map((w) => (
+        <Box key={w.weekStart} component="span" sx={{ ...ZAHL, fontSize: 9.5, color: TEXT_SCHWACH, textAlign: 'center' }}>
+          {kalenderwoche(w.weekStart)}
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+/** Die gestrichelte Grundlinie einer Woche ohne Balken (Issue #1542, Plan #1752 E13). */
+export function Grundlinie() {
+  return <Box data-testid="grundlinie" sx={{ borderTop: `1px dashed ${RAND_STARK}` }} />
+}
+
 /**
  * Ein Wert eines Instruments: die Zahl und ihre kleine Einheit dahinter. Die Einheit ist Pflicht —
  * jede Zahl der Vorlage trägt eine, und eine Zahl ohne Einheit ließe offen, was sie zählt.
@@ -563,11 +593,23 @@ export const ZEILE_HOVER_SX = `color-mix(in srgb, ${PLATTE_HOCH} 75%, ${KUPFER_S
 export function Taste({
   ariaLabel,
   onClick,
+  ariaExpanded,
+  ariaControls,
   children,
-}: Readonly<{ ariaLabel: string; onClick: () => void; children: ReactNode }>) {
+}: Readonly<{
+  ariaLabel: string
+  onClick: () => void
+  /** Für eine Taste, die einen Bereich auf- und zuklappt (Issue #1759): ihr Zustand. */
+  ariaExpanded?: boolean
+  /** Die `id` des Bereichs, den die Taste aufklappt. */
+  ariaControls?: string
+  children: ReactNode
+}>) {
   return (
     <ButtonBase
       aria-label={ariaLabel}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
       onClick={onClick}
       sx={{
         fontSize: 11.5,

@@ -18,6 +18,7 @@ import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.card.domain.Arbeitspaket;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
+import org.mwolff.manban.card.domain.Kartenart;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +35,8 @@ import org.springframework.transaction.annotation.Transactional;
 // PMD.CouplingBetweenObjects: Die Fassade ist der eine Zugang von nightrun zu den Karten (Issue
 // #1452); sie kennt darum die Ports, die Zuordnung und je Abfrage ihre Sicht. Mit Issue #1454 kommt
 // die board-Fassade dazu, weil „Heute Nacht" Boardnamen und den Archiv-Zustand braucht. Eine
-// Aufteilung gaebe nightrun einen zweiten Zugang, ohne eine Abfrage einfacher zu machen.
+// Aufteilung gaebe nightrun einen zweiten Zugang, ohne eine Abfrage einfacher zu machen. Mit Issue
+// #1755 kommen die Label-Ereignisse fuer die Nacharbeit dazu.
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CardRunQueryService {
@@ -43,16 +45,19 @@ public class CardRunQueryService {
   private final CardActivityRepository activity;
   private final KartenZuordnung zuordnung;
   private final BoardService boards;
+  private final CardLabelEventRepository labelEvents;
 
   public CardRunQueryService(
       CardRepository cards,
       CardActivityRepository activity,
       KartenZuordnung zuordnung,
-      BoardService boards) {
+      BoardService boards,
+      CardLabelEventRepository labelEvents) {
     this.cards = cards;
     this.activity = activity;
     this.zuordnung = zuordnung;
     this.boards = boards;
+    this.labelEvents = labelEvents;
   }
 
   /**
@@ -321,6 +326,68 @@ public class CardRunQueryService {
         .toList();
   }
 
+  /**
+   * Die Karten des Boards für die Nacharbeit (Issue #1755, Plan #1752 E5, E10) — Karten im
+   * Papierkorb fehlen, archivierte bleiben. Je Karte ihre {@link KartenGruppe}. Ohne Rechteprüfung
+   * wie {@link #cardsByIds}.
+   */
+  @Transactional(readOnly = true)
+  public List<BoardKarteView> boardKarten(long boardId) {
+    return cards.findByBoardId(boardId).stream()
+        .map(c -> new BoardKarteView(c.requireId(), c.number(), c.title(), gruppe(c)))
+        .toList();
+  }
+
+  private static KartenGruppe gruppe(Card card) {
+    if (Arbeitspaket.istArbeitspaket(card.type(), card.title())) {
+      return KartenGruppe.PAKET;
+    }
+    Kartenart art = Kartenart.von(card.type(), card.title());
+    return art == Kartenart.FACHLICH || art == Kartenart.PLAN
+        ? KartenGruppe.DOKUMENT
+        : KartenGruppe.ANDERE;
+  }
+
+  /**
+   * Die Bewegungen der Karten, die ein Lauf ab {@code von} auslöste, je mit dem Status davor (Issue
+   * #1755, Plan #1752 E1, E16) — Regeln wie {@link CardActivityRepository#findLaufBewegungen}. Ohne
+   * Rechteprüfung wie {@link #cardsByIds}.
+   */
+  @Transactional(readOnly = true)
+  public List<LaufBewegungView> laufBewegungen(Collection<Long> cardIds, Instant von) {
+    return activity.findLaufBewegungen(cardIds, von).stream()
+        .map(
+            b -> {
+              CardStatus vorher = b.statusVorher();
+              return new LaufBewegungView(
+                  b.cardId(),
+                  b.type().name(),
+                  b.createdAt(),
+                  b.laufStart(),
+                  b.statusAfter().name(),
+                  vorher == null ? null : vorher.name());
+            })
+        .toList();
+  }
+
+  /**
+   * Die Labels, die ein Lauf ab {@code von} an die Karten setzte (Issue #1755, Plan #1752 E2) —
+   * Regeln wie {@link CardLabelEventRepository#findLaufEreignisse}. Ohne Rechteprüfung wie {@link
+   * #cardsByIds}.
+   */
+  @Transactional(readOnly = true)
+  public List<LabelEreignisView> labelEreignisse(Collection<Long> cardIds, Instant von) {
+    return labelEvents.findLaufEreignisse(cardIds, von).stream()
+        .map(e -> new LabelEreignisView(e.cardId(), e.labelName(), e.createdAt(), e.laufStart()))
+        .toList();
+  }
+
+  /** Seit wann Label-Ereignisse erfasst werden (Issue #1755, Plan #1752 E7). */
+  @Transactional(readOnly = true)
+  public Instant labelErfassungSeit() {
+    return labelEvents.erfassungSeit();
+  }
+
   private static boolean inBacklog(Card card, @Nullable String spaltenname) {
     return CardStatus.BACKLOG
         .name()
@@ -387,4 +454,47 @@ public class CardRunQueryService {
    */
   public record FreigabeKarteView(
       int number, String title, String boardName, List<String> labels) {}
+
+  /** Die Gruppe einer Karte für die Nacharbeit (Issue #1755, Plan #1752 E5). */
+  public enum KartenGruppe {
+    /** Ein Arbeitspaket nach {@code Arbeitspaket.istArbeitspaket}. */
+    PAKET,
+    /** Ein Fachplan oder Plan ({@code Kartenart} FACHLICH oder PLAN). */
+    DOKUMENT,
+    /** Jede übrige Karte, etwa Vorhaben und Ideen. */
+    ANDERE
+  }
+
+  /**
+   * Eine Karte des Boards für die Nacharbeit (Issue #1755).
+   *
+   * @param number projektweite Nummer der Karte
+   */
+  public record BoardKarteView(long id, int number, String title, KartenGruppe gruppe) {}
+
+  /**
+   * Eine Bewegung eines Laufs mit dem Status davor (Issue #1755).
+   *
+   * @param type Konstantenname von {@code CardActivityType}, {@code MOVED} oder {@code
+   *     STATUS_CHANGED}
+   * @param laufStart Laufkennung des Laufs, der die Bewegung auslöste
+   * @param statusAfter Konstantenname von {@code CardStatus} nach der Bewegung
+   * @param statusVorher Konstantenname von {@code CardStatus} davor; {@code null}, wenn unbekannt
+   */
+  public record LaufBewegungView(
+      long cardId,
+      String type,
+      Instant createdAt,
+      Instant laufStart,
+      String statusAfter,
+      @Nullable String statusVorher) {}
+
+  /**
+   * Ein Label, das ein Lauf an eine Karte setzte (Issue #1755).
+   *
+   * @param labelName Name des Labels beim Setzen
+   * @param laufStart Laufkennung des Laufs, der es setzte
+   */
+  public record LabelEreignisView(
+      long cardId, String labelName, Instant createdAt, Instant laufStart) {}
 }

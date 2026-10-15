@@ -1,17 +1,18 @@
 import { ThemeProvider } from '@mui/material/styles'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Kachel as KachelDaten } from '../../lib/leitstand'
 import { TabletQuerProvider } from '../../lib/tabletQuer'
 import { cssRegel } from '../../test/cssRegel'
 import { setzeMedien } from '../../test/setup'
-import { KUPFER, KUPFER_SCHIMMER, LED_RING, MELDER, PLATTE_HOCH, RAND, TEXT_SCHWACH, theme } from '../../theme'
+import { KUPFER, KUPFER_SCHIMMER, LED_RING, MELDER, PLATTE_HOCH, RAND, RAND_STARK, TEXT_SCHWACH, theme } from '../../theme'
 import {
   DeltaMarke,
   FilterTaste,
   Fuellschiene,
   Funke,
+  Grundlinie,
   Instrument,
   Kachel,
   KachelFuss,
@@ -23,6 +24,8 @@ import {
   Platte,
   Projektname,
   Taste,
+  WochenLeiste,
+  wochenSpalten,
   ZEILE_HOVER_SX,
 } from './LeitstandBausteine'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
@@ -238,6 +241,40 @@ describe('Fuellschiene', () => {
   })
 })
 
+describe('WochenLeiste', () => {
+  const wochen = [{ weekStart: '2026-06-01T00:00:00Z' }, { weekStart: '2026-06-08T00:00:00Z' }, { weekStart: '2026-12-28T00:00:00Z' }]
+
+  it('beschriftet je Woche die Kalenderwoche ihres Wochenbeginns, in der Reihenfolge der Wochen', () => {
+    zeige(<WochenLeiste wochen={wochen} />)
+    const leiste = screen.getByTestId('wochen-leiste')
+    expect(within(leiste).getAllByText(/^\d+$/).map((kw) => kw.textContent)).toEqual(['23', '24', '53'])
+  })
+
+  it('liest nichts vor und teilt sich das Raster mit den Balken darüber', () => {
+    zeige(<WochenLeiste wochen={wochen} />)
+    const leiste = screen.getByTestId('wochen-leiste')
+    expect(leiste).toHaveAttribute('aria-hidden', 'true')
+    const regel = cssRegel(leiste)
+    expect(regel).toContain(`grid-template-columns: ${wochenSpalten(3)}`)
+    expect(regel).toContain(`border-top: 1px solid ${RAND}`)
+    expect(cssRegel(within(leiste).getByText('23'))).toContain(`color: ${TEXT_SCHWACH}`)
+  })
+})
+
+describe('wochenSpalten', () => {
+  it('teilt die Breite in gleiche Spalten je Woche, mindestens eine', () => {
+    expect(wochenSpalten(12)).toBe('repeat(12, minmax(0,1fr))')
+    expect(wochenSpalten(0)).toBe('repeat(1, minmax(0,1fr))')
+  })
+})
+
+describe('Grundlinie', () => {
+  it('zieht eine gestrichelte Linie in der starken Randfarbe', () => {
+    zeige(<Grundlinie />)
+    expect(cssRegel(screen.getByTestId('grundlinie'))).toContain(`border-top: 1px dashed ${RAND_STARK}`)
+  })
+})
+
 describe('Instrument', () => {
   it('zeigt nicht Gemessenes als Strich mit vorgelesenem Grund, gedämpft', () => {
     zeige(<Instrument titel="Kosten" teile={null} testId="kosten" />)
@@ -316,6 +353,25 @@ describe('kleine Bausteine', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Lauf 12 öffnen' }))
     expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('Taste trägt ohne Angabe kein aria-expanded und sonst Aufklappzustand und Ziel', () => {
+    const { rerender } = zeige(
+      <Taste ariaLabel="einfach" onClick={() => undefined}>
+        x
+      </Taste>,
+    )
+    expect(screen.getByRole('button', { name: 'einfach' })).not.toHaveAttribute('aria-expanded')
+    rerender(
+      <ThemeProvider theme={theme}>
+        <Taste ariaLabel="einfach" onClick={() => undefined} ariaExpanded={false} ariaControls="liste">
+          x
+        </Taste>
+      </ThemeProvider>,
+    )
+    const taste = screen.getByRole('button', { name: 'einfach' })
+    expect(taste).toHaveAttribute('aria-expanded', 'false')
+    expect(taste).toHaveAttribute('aria-controls', 'liste')
   })
 
   it('ZEILE_HOVER_SX mischt die helle Platte mit dem Kupferschimmer', () => {

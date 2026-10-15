@@ -39,7 +39,14 @@ class WartegrundTest {
       List<RunnerStufe> stufen,
       @Nullable RunnerStufe letzte) {
     return new AktiverLauf(
-        id, mode, JETZT.minusSeconds(3600), JETZT.minusSeconds(120), zustand, stufen, letzte);
+        id,
+        mode,
+        JETZT.minusSeconds(3600),
+        "runner",
+        JETZT.minusSeconds(120),
+        zustand,
+        stufen,
+        letzte);
   }
 
   private static RunnerLage lage(AktiverLauf... laeufe) {

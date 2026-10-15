@@ -314,11 +314,14 @@ Von oben nach unten führt er:
    [Verbrauch (Leitstand)](#verbrauch-leitstand).
 4. **Herkunft** — eine Zeile zum jüngsten Run: ob er eingeliefert oder im Browser hochgeladen
    wurde, dazu der Name des Tokens, die Zahl der Vorgänge und die der ungedeuteten Zeilen.
-5. **Rumpf** — fünf Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
+5. **Rumpf** — sechs Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
    öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche und rechts
-   daneben **„Implementierungszeit“** mit dem Mittelwert je Woche, **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs und **„Vorhaben“** mit
+   daneben **„Implementierungszeit“** mit dem Mittelwert je Woche, **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs, **„Nacharbeit“**
+   (siehe unten) und **„Vorhaben“** mit
    den offenen. Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
    braune LED und „nicht angelaufen — ‹Grund›“.
+6. **Fluss und Alter in Arbeit** — darunter in voller Breite **„Fluss“** und darunter **„Alter in
+   Arbeit“** (siehe unten).
 
 **Die beiden Wochenplatten** „Durchsatz“ und „Implementierungszeit“ zeigen dieselben zwölf
 Wochenfenster: sieben Tage, von jetzt aus rückwärts gezählt; eine Karte zählt in der Woche, in der
@@ -331,11 +334,61 @@ decken sich nicht mit der Woche des Umschalters** im [Verbrauch](#verbrauch-leit
 Tagesgrenze 12:00 hängt — der letzte Balken kann darum vom Wert der Kachel „Implementierungszeit“
 unter „Woche“ abweichen.
 
-**Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“ und
-„Abbruchgründe“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
+**Die Platte „Nacharbeit“** zeigt, ob die Arbeit des Runners Nacharbeit erzeugt und wo. Sie zählt
+zwei Signale: Ein Arbeitspaket geht in einem Run aus In Progress zurück nach Ready oder Backlog
+(**„Pakete zurückgezogen“**), oder der Run hängt an einen Fachplan oder Plan das Halt-Label
+`kit:clarify` bzw. `run:waiting` — in deutscher Projektsprache `kit:klaeren` bzw. `lauf:wartet`
+(**„Dokumente angehalten“**). Es zählt nur, was ein Run des Runners tut, unabhängig von der Uhrzeit,
+also auch eine tagsüber über „Kette starten“ gestartete Kette; was du selbst an denselben Karten
+bewegst oder an Labels setzt und abnimmst, ändert keine Zahl. Jede Zeile zeigt eine Quote wie
+„2 von 14“: Die Bezugszahl sind die Karten, die die Runs **bearbeitet** haben — Pakete, die ein Run
+nach In Progress gezogen hat, und Fachpläne oder Pläne, an denen er einen Schritt ausgeführt hat;
+jede Karte zählt höchstens einmal. Der Kopf nennt den Zeitraum, „letzte 12 Wochen“ oder „seit
+‹Datum›“, wenn die Daten später beginnen. Darunter steht der Verlauf über dieselben zwölf
+Wochenfenster wie „Durchsatz“, je Woche ein Balken für Pakete und einer für Dokumente. Eine Woche hat
+einen von drei Zuständen: einen Balken mit der Quote (auch 0 %), eine gestrichelte Grundlinie (Daten
+vorhanden, aber keine bearbeitete Karte der Gruppe) oder eine leere Woche mit „keine Daten“ beim
+Überfahren. Ein Klick auf eine Quote öffnet die Kartenliste mit der Anzahl je Karte („#1712 · 2×
+zurückgezogen“); die Kartennummer öffnet die Karte zum Lesen. **Grenzen der Zählung:** Halt-Labels
+werden erst seit dem Einspielen der Version erfasst, die die Platte mitbringt — davor zeigt die
+Dokument-Zeile „keine Daten“. Den Laufstand-Kommentar einer Karte schreibt jeder Run neu, er bezeugt
+darum nur den letzten Schreiber; frühere Runs zählen über ihre übrigen Spuren. Ein Rückzug zählt nur,
+wenn der Status der Karte vor der Bewegung bekannt ist.
+
+**Die Platten „Fluss“ und „Alter in Arbeit“** zeigen, wo sich die Arbeit staut und welche Karte
+schon auffällig lange in Arbeit liegt. **Gezählt wird nach dem Zustand eines Arbeitspakets, nicht
+nach der Spalte, in der es liegt:** Ein Paket in „Anstehend“ mit Zustand Ready zählt unter Ready;
+die Backlog-Spalten des Owners („Anstehend“, „In Arbeit“, „Parken“ und jede Zusatzspalte) bewegen
+nichts, solange der Zustand gleich bleibt. Es zählen alle Arbeitspakete, auch von Hand angelegte
+Karten ohne Präfix; **Dokumente zählen nicht** — Fachpläne, Pläne, Ideen und Vorhaben erscheinen in
+keiner der beiden Platten.
+
+- **„Fluss“** zeigt die letzten zwölf Wochen (84 Kalendertage in deiner Zeitzone), je Tag fünf
+  gestapelte Bänder, von unten Done, In Review, In Progress, Ready und Backlog. Jeder Tag zeigt den
+  Stand an seinem Ende, der heutige den Stand jetzt. Done beginnt am Anfang des Zeitraums bei null
+  und zählt die seither fertig gewordenen Pakete; verlässt eine Karte Done wieder, sinkt das Band.
+  Beim Überfahren (oder per Tab) steht unter dem Bild die Zahl je Zustand. Ein Tag, dessen Stand
+  sich aus dem Kartenverlauf nicht sicher bestimmen lässt, bleibt leer und zeigt **„keine Daten“**;
+  beginnen die sicheren Daten später als vor zwölf Wochen, nennt der Kopf den Beginn
+  (**„seit ‹Datum›“**).
+- **„Alter in Arbeit“** listet je Zustand Ready, In Progress und In Review die Pakete, die älteste
+  oben, mit Nummer, Titel und Alter seit dem letzten Wechsel in diesen Zustand; frühere Aufenthalte
+  zählen nicht mit. Auf schmalem Bildschirm stehen die drei Spalten untereinander; eine leere Spalte
+  sagt „Keine Karte in ‹Zustand›“. Die Kartennummer öffnet die Karte zum Lesen. Den
+  **Bernstein-Melder** trägt eine Karte, die länger im Zustand liegt als 85 % der in den letzten
+  zwölf Wochen abgeschlossenen Aufenthalte **desselben Boards im selben Zustand** — jeder Aufenthalt
+  zählt einzeln, Karten, die noch dort liegen, nicht. **Unter fünf solchen Vergleichswerten gibt es
+  keine Schwelle**: Die Karten stehen dann mit Alter, aber ohne Melder. Ist der Eintritt einer Karte
+  unbekannt (der Verlauf reicht nicht so weit zurück), steht **„mindestens ‹n› Tage“** ab dem
+  frühesten bekannten Zeitpunkt; der Melder erscheint, wenn schon dieser Mindestwert über der
+  Schwelle liegt. Ein Aufenthalt mit unbekanntem Beginn zählt nicht als Vergleichswert.
+
+**Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“,
+„Abbruchgründe“ und „Nacharbeit“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
 Projekts und **Plattform-Admins**, sofern das Projekt am
 [Plattform-Leitstand](#plattform-leitstand) teilnimmt. Ohne dieses Recht entfallen sie still; die
-Board-Kennzahlen, „Durchsatz“ und „Implementierungszeit“ bleiben.
+Board-Kennzahlen, „Durchsatz“, „Implementierungszeit“, „Fluss“ und „Alter in Arbeit“ bleiben — die
+beiden letzten sieht wie „Durchsatz“ jeder, der das Board sehen darf.
 
 **Grundlage der Board-Kennzahlen** ist die automatisch erfasste Verweildauer jeder Karte pro
 Spalte — gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API
@@ -471,16 +524,23 @@ Ganz oben auf der Runner-Seite sagt der Bereich **„Runner jetzt“**, was der 
 nennt jeden Lauf, der noch nicht beendet ist, mit seiner Art (Kette oder Umsetzungsnacht) und genau
 einem Zustand:
 
-- **läuft:** Der Lauf hat sich innerhalb der Stillefrist gemeldet. Dabei stehen sein Beginn und
-  seine letzte Meldung.
+- **läuft:** Der Lauf hat sich innerhalb der Stillefrist gemeldet.
 - **verstummt:** Der Lauf gilt als laufend, hat sich aber länger als die Stillefrist nicht gemeldet.
   Dann steht dort: „Runner verstummt seit *Zeit* (letzte Stufe: *Stufe*), vermutlich abgebrochen;
   die Umsetzung gilt womöglich noch als belegt.“ Hat der Lauf keine Stufe gemeldet, steht als
   Stufe „nicht gemeldet“.
 
+Jede Zeile nennt **Beginn, Token und letzte Meldung** des Laufs, auch beim verstummten. Unter
+Beginn und Token zeigt auch der Plattform-Leitstand den Lauf, so findet man ihn dort wieder.
+
 Die **Stillefrist** ist dieselbe, nach der die Auswertung einen Lauf als verstummt führt
 (`manban.nightrun.stille-frist`, Vorgabe 90 Minuten). Meldet sich ein verstummter Lauf doch noch,
 läuft er wieder.
+
+Ein verstummter Lauf bleibt sichtbar, wie alt er auch ist, **bis seine Störung im
+Plattform-Leitstand quittiert ist**. Danach erscheint er hier nicht mehr und ist auch am wartenden
+Paket kein Grund „Runner verstummt“ mehr. Meldet sich ein quittierter Lauf später doch wieder,
+erscheint er wieder als „läuft“. Den letzten Lauf darunter berührt die Quittung nicht.
 
 Zu einem Lauf stehen seine **laufenden Stufen**: Karte und Stufe (etwa „#1665 Vorbereitung“),
 Beginn, Frist und der Teilschritt in Worten, etwa „wartet auf freie Umsetzung“ oder „Prüfungen der

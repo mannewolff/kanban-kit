@@ -1,6 +1,9 @@
 package org.mwolff.manban.comment.infrastructure.persistence;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import org.mwolff.manban.comment.domain.LaufKommentar;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -45,4 +48,13 @@ interface CommentJpaRepository extends JpaRepository<CommentEntity, Long> {
       nativeQuery = true)
   List<CommentEntity> findFirstMatchPerCardOnBoard(
       @Param("projectId") long projectId, @Param("boardId") long boardId, @Param("q") String q);
+
+  /** Karte und Laufkennung der Kommentare mit Laufkennung ab {@code von} (Issue #1755). */
+  @Query(
+      "select new org.mwolff.manban.comment.domain.LaufKommentar(c.cardId, c.laufStart)"
+          + " from CommentEntity c"
+          + " where c.cardId in :cardIds and c.laufStart is not null and c.laufStart >= :von"
+          + " order by c.laufStart, c.id")
+  List<LaufKommentar> findLaufKommentare(
+      @Param("cardIds") Collection<Long> cardIds, @Param("von") Instant von);
 }

@@ -7,10 +7,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.time.Instant;
+import java.time.ZoneId;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.application.AgingWipView;
 import org.mwolff.manban.card.application.BoardDashboardKpis;
+import org.mwolff.manban.card.application.BoardFlowView;
+import org.mwolff.manban.card.application.BoardFlussService;
 import org.mwolff.manban.card.application.CardCycleTimeService;
 import org.mwolff.manban.card.application.ImplementationTimeView;
+import org.mwolff.manban.common.web.Regionszone;
 import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,10 +28,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class DashboardController {
 
-  private final CardCycleTimeService kennzahlen;
+  private static final String NICHT_GEFUNDEN =
+      "Das Board gibt es nicht, es ist archiviert, oder der Aufrufer ist kein Mitglied seines"
+          + " Projekts.";
 
-  DashboardController(CardCycleTimeService kennzahlen) {
+  private final CardCycleTimeService kennzahlen;
+  private final BoardFlussService fluss;
+
+  DashboardController(CardCycleTimeService kennzahlen, BoardFlussService fluss) {
     this.kennzahlen = kennzahlen;
+    this.fluss = fluss;
   }
 
   @Operation(
@@ -95,5 +106,67 @@ class DashboardController {
           @RequestParam(required = false)
           @Nullable Instant to) {
     return kennzahlen.implementationTime(userId, boardId, from, to);
+  }
+
+  @Operation(
+      summary = "Fluss eines Boards lesen",
+      description =
+          "Liefert die Platte „Fluss“: für die 84 Kalendertage bis einschließlich heute in der"
+              + " übergebenen Zone je Tag die Zahl der Arbeitspakete in Backlog, Ready, In Progress"
+              + " und In Review am Tagesende, heute zum Stand jetzt, und die seit Beginn des"
+              + " Zeitraums fertig gewordenen. Ein Tag ohne sicher bestimmbaren Stand trägt known ="
+              + " false und keine Zahlen; dataSince nennt dann den ersten Tag mit Daten. Verlangt"
+              + " die Mitgliedschaft im Projekt.")
+  @ApiResponse(responseCode = "200", description = "Die Tage der Platte „Fluss“.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "zone fehlt, ist unbekannt oder ein fester Versatz statt einer Regionszone.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description = NICHT_GEFUNDEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @GetMapping("/api/boards/{boardId}/dashboard/flow")
+  BoardFlowView flow(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = "Interne ID des Boards.", example = "3") @PathVariable long boardId,
+      @Parameter(
+              description =
+                  "Regionszone des Lesers, in der die Kalendertage beginnen und enden; ein fester"
+                      + " Versatz wie +05:30 wird abgewiesen.",
+              example = "Europe/Berlin")
+          @RequestParam
+          ZoneId zone) {
+    return fluss.flow(userId, boardId, Regionszone.of(zone));
+  }
+
+  @Operation(
+      summary = "Alter in Arbeit eines Boards lesen",
+      description =
+          "Liefert die Platte „Alter in Arbeit“: je Zustand Ready, In Progress und In Review die"
+              + " Arbeitspakete nach der Zeit seit ihrem letzten Eintritt, die älteste zuerst, die"
+              + " Zahl der Vergleichswerte der letzten zwölf Wochen und die 85-%-Schwelle in"
+              + " Sekunden (null unter fünf Vergleichswerten). Verlangt die Mitgliedschaft im"
+              + " Projekt.")
+  @ApiResponse(responseCode = "200", description = "Die Zustände der Platte „Alter in Arbeit“.")
+  @ApiResponse(
+      responseCode = "404",
+      description = NICHT_GEFUNDEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @GetMapping("/api/boards/{boardId}/dashboard/aging")
+  AgingWipView aging(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = "Interne ID des Boards.", example = "3") @PathVariable
+          long boardId) {
+    return fluss.aging(userId, boardId);
   }
 }

@@ -429,6 +429,9 @@ export function zuordnungAusVollauf(inhalt) {
  * Zeigt sie nur auf Quellen ausserhalb des Bereichs, ist der Test zugeordnet und steuert nichts bei.
  * Ein Test eines noch nicht aufgenommenen Ausschnitts ohne Zuordnung steuert ebenfalls nichts bei
  * (Issue #1279): Pruefbereich sind die aufgenommenen Ausschnitte, alles andere ist aussen vor.
+ * Ein Test ohne Quelle, der nach der Aenderung nicht mehr existiert — der alte Pfad eines verlegten
+ * oder ein geloeschter Test —, wird uebergangen (Anlass #1766): Gemutiert wird nur, was existiert,
+ * und der neue Pfad eines verlegten Tests durchlaeuft die Zuordnung weiter.
  */
 export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {}, existiert }) {
   const dateien = new Set();
@@ -443,6 +446,7 @@ export function beruehrung({ geaendert, bereich, zuordnung, festeZuordnung = {},
     if (konvention && existiert(konvention)) quellen.add(konvention);
     if (quellen.size === 0) {
       if (bereich.testAusserhalb?.(pfad)) continue;
+      if (!existiert(pfad)) continue;
       ohneZuordnung.push(pfad);
       continue;
     }
@@ -1041,13 +1045,15 @@ export function ankerBestimmen(git, hauptzweig) {
  * Die Stufe, auf der die Pruefung dieser Seite laut Config gerade haengt (Kriterium 12). Mit
  * `stufeArgument` zaehlt nur der Eintrag, dessen `cmd` dasselbe `--stufe`-Argument traegt: Mit zwei
  * Eintraegen je Seite faende der blosse Teilstring sonst in beiden Laeufen den ersten (Issue #1280).
+ * Die Stufe steht unter `stage` (englischer Name seit dem Kit-Update) oder unter `stufe`; traegt ein
+ * Eintrag beide, gilt `stage` wie im Kit (Issue #1743).
  */
 export function stufeAus(config, kommandoText, stufeArgument = null) {
   const argumentMuster = stufeArgument ? new RegExp(`--stufe\\s+${stufeArgument}(\\s|$)`) : null;
   for (const eintrag of config?.buildChecks ?? []) {
     const cmd = typeof eintrag === 'string' ? eintrag : eintrag?.cmd;
     if (typeof cmd === 'string' && cmd.includes(kommandoText) && (!argumentMuster || argumentMuster.test(cmd))) {
-      return (typeof eintrag === 'string' ? null : eintrag.stufe) ?? 'paket';
+      return (typeof eintrag === 'string' ? null : eintrag.stage ?? eintrag.stufe) ?? 'paket';
     }
   }
   return null;

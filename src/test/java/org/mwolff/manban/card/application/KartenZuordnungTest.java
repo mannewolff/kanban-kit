@@ -2,20 +2,28 @@ package org.mwolff.manban.card.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mwolff.manban.card.domain.CardActivityOrigin.SESSION;
 import static org.mwolff.manban.card.domain.CardActivityOrigin.TOKEN;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
 
@@ -32,11 +40,16 @@ class KartenZuordnungTest {
   private static final long BOARD = 10L;
   private static final long PROJECT = 1L;
   private static final long KARTE = 7L;
+  private static final Instant JETZT = Instant.parse("2026-10-15T08:00:00Z");
+  private static final Instant LAUF = Instant.parse("2026-10-15T02:00:00Z");
+  private static final ActorStamp STEMPEL =
+      new ActorStamp(TOKEN, "Nachtlauf", "claude-opus-5-5", LAUF);
 
   private CardAssigneeRepository assignees;
   private LabelRepository labels;
   private CardLabelRepository cardLabels;
   private PermissionChecker permissions;
+  private CardLabelEventRepository labelEvents;
   private KartenZuordnung zuordnung;
 
   private static Label label(long id, String name, String color, boolean countOnEpicTile) {
@@ -49,7 +62,16 @@ class KartenZuordnungTest {
     labels = mock(LabelRepository.class);
     cardLabels = mock(CardLabelRepository.class);
     permissions = mock(PermissionChecker.class);
-    zuordnung = new KartenZuordnung(assignees, labels, cardLabels, permissions);
+    labelEvents = mock(CardLabelEventRepository.class);
+    zuordnung =
+        new KartenZuordnung(
+            assignees,
+            labels,
+            cardLabels,
+            permissions,
+            labelEvents,
+            () -> STEMPEL,
+            Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
   @Test
@@ -152,6 +174,82 @@ class KartenZuordnungTest {
     zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.REMOVE, SESSION);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(21L));
+  }
+
+  /**
+   * Issue #1754 (Plan #1752 E11): Je tatsächlich neu hinzugekommenem Label genau ein Ereignis mit
+   * dem Namen des Boards und dem Stempel des Aufrufs — ein Duplikat in der Anfrage zählt einmal.
+   */
+  @Test
+  void ersetzeLabelsErfasstJedesNeueLabelMitNameUndStempel() {
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                label(20L, "Bug", "#f00", false),
+                label(21L, "kit:clarify", "#0f0", false),
+                label(22L, "run:waiting", "#00f", false)));
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L));
+
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L, 21L, 22L, 21L), SESSION);
+
+    verify(labelEvents).add(KARTE, "kit:clarify", JETZT, STEMPEL);
+    verify(labelEvents).add(KARTE, "run:waiting", JETZT, STEMPEL);
+    verify(labelEvents, never()).add(anyLong(), eq("Bug"), any(), any());
+  }
+
+  /** Ein schon gesetztes Label ist kein Ereignis, das Abnehmen auch nicht (Plan #1752 E11). */
+  @Test
+  void ersetzeLabelsErfasstNichtsBeimAbnehmenUndBeiVorhandenem() {
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(label(20L, "Bug", "#f00", false), label(21L, "Doku", "#0f0", false)));
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L, 21L));
+
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L), SESSION);
+
+    verifyNoInteractions(labelEvents);
+  }
+
+  @Test
+  void aendereLabelErfasstDasHinzugefuegteLabel() {
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(label(20L, "Bug", "#f00", false), label(21L, "Doku", "#0f0", false)));
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L));
+
+    zuordnung.aendereLabel(KARTE, BOARD, 21L, LabelAction.ADD, SESSION);
+
+    verify(labelEvents).add(KARTE, "Doku", JETZT, STEMPEL);
+  }
+
+  @Test
+  void aendereLabelErfasstNichtsFuerEinSchonGesetztesLabel() {
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(20L, "Bug", "#f00", false)));
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L));
+
+    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.ADD, SESSION);
+
+    verifyNoInteractions(labelEvents);
+  }
+
+  @Test
+  void aendereLabelErfasstDasAbnehmenNicht() {
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(label(20L, "Bug", "#f00", false), label(21L, "Doku", "#0f0", false)));
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L, 21L));
+
+    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.REMOVE, SESSION);
+
+    verify(labelEvents, never()).add(anyLong(), anyString(), any(), any());
+  }
+
+  /** Eine abgewiesene Ersetzung hinterlässt kein Ereignis (Freigabe-Prüfung vor dem Schreiben). */
+  @Test
+  void ersetzeLabelsErfasstNichtsWennDieFreigabePruefungAbweist() {
+    givenFreigabeLabels();
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(31L));
+
+    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(31L, 30L), TOKEN))
+        .isInstanceOf(FreigabeLabelException.class);
+    verifyNoInteractions(labelEvents);
   }
 
   @Test

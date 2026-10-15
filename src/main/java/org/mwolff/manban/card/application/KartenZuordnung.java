@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.application;
 
+import java.time.Clock;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -7,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -26,6 +28,10 @@ import org.springframework.stereotype.Service;
  * Use-Case-Verfahrens — eine eigene Grenze hier zerschnitte das Alles-oder-nichts der
  * Massenaktionen.
  *
+ * <p>Jedes tatsächliche Hinzufügen eines Labels hält {@link #ersetze} als Label-Ereignis fest
+ * (Issue #1754, Plan #1752 E11) — an der Stelle, durch die jedes Ersetzen läuft, wie die Prüfung
+ * der Freigabe-Labels.
+ *
  * <p>Die Prüfungen sind bewusst hier und nicht an den Ports: „Mitglied des Projekts" und „Label
  * dieses Boards" sind fachliche Regeln, die Persistenz kennt sie nicht.
  */
@@ -36,16 +42,25 @@ public final class KartenZuordnung {
   private final LabelRepository labels;
   private final CardLabelRepository cardLabels;
   private final PermissionChecker permissions;
+  private final CardLabelEventRepository labelEvents;
+  private final ActorContext actor;
+  private final Clock clock;
 
   public KartenZuordnung(
       CardAssigneeRepository assignees,
       LabelRepository labels,
       CardLabelRepository cardLabels,
-      PermissionChecker permissions) {
+      PermissionChecker permissions,
+      CardLabelEventRepository labelEvents,
+      ActorContext actor,
+      Clock clock) {
     this.assignees = assignees;
     this.labels = labels;
     this.cardLabels = cardLabels;
     this.permissions = permissions;
+    this.labelEvents = labelEvents;
+    this.actor = actor;
+    this.clock = clock;
   }
 
   /** Benutzer-IDs der Zuständigen einer Karte, aufsteigend. */
@@ -177,6 +192,19 @@ public final class KartenZuordnung {
     }
     FreigabeLabels.pruefeWechsel(herkunft, namen, vorher, distinct);
     cardLabels.replaceLabels(cardId, distinct);
+    erfasseHinzugekommene(cardId, namen, vorher, distinct);
+  }
+
+  /**
+   * Ein Label-Ereignis je Label, das gegenüber {@code vorher} hinzukam (Issue #1754). Abnehmen wird
+   * nicht erfasst: Die Platte „Nacharbeit“ zählt einen Halt auch nach dem Abnehmen (Plan E11).
+   */
+  private void erfasseHinzugekommene(
+      long cardId, Map<Long, String> namen, List<Long> vorher, List<Long> nachher) {
+    ActorStamp stempel = actor.current();
+    for (Long labelId : nachher.stream().filter(id -> !vorher.contains(id)).toList()) {
+      labelEvents.add(cardId, Objects.requireNonNull(namen.get(labelId)), clock.instant(), stempel);
+    }
   }
 
   /** Entfernt alle Zuständigen einer Karte — beim Wechsel in ein fremdes Projekt. */

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.RecordComponent;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -25,6 +26,7 @@ import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.comment.domain.Comment;
+import org.mwolff.manban.comment.domain.LaufKommentar;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
@@ -539,6 +541,24 @@ class CommentServiceTest {
     assertThatThrownBy(() -> service.trefferAufBoard(2L, 1L, 10L, "Review"))
         .isInstanceOf(ProjectAccessDeniedException.class);
     verify(comments, never()).findFirstMatchPerCardOnBoard(1L, 10L, "Review");
+  }
+
+  @Test
+  void laufKommentare_liefertJeKommentarKarteUndLaufkennungOhneText() {
+    // Given (Issue #1755): Die Auswahl nach Laufkennung trifft der Port; die Fassade reicht
+    // Karte und Kennung durch und gibt keinen Text heraus.
+    Instant von = LAUF.minusSeconds(3600);
+    when(comments.findLaufKommentare(List.of(5L, 6L), von))
+        .thenReturn(List.of(new LaufKommentar(5L, LAUF), new LaufKommentar(6L, von)));
+
+    // When / Then
+    assertThat(service.laufKommentare(List.of(5L, 6L), von))
+        .containsExactly(
+            new CommentService.LaufKommentarView(5L, LAUF),
+            new CommentService.LaufKommentarView(6L, von));
+    assertThat(CommentService.LaufKommentarView.class.getRecordComponents())
+        .extracting(RecordComponent::getName)
+        .containsExactly("cardId", "laufStart");
   }
 
   /** Simuliert die DB: vergibt beim ersten Speichern eine ID (Issue #0080). */

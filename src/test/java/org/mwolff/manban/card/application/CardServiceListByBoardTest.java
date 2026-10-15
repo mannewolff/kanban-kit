@@ -68,7 +68,13 @@ class CardServiceListByBoardTest {
             // welcher Sammelzugriff läuft und dass der Einzel-Finder daneben schweigt — ein Mock
             // der Zuordnung verdeckte genau das.
             new KartenZuordnung(
-                assignees, mock(LabelRepository.class), cardLabels, mock(PermissionChecker.class)),
+                assignees,
+                mock(LabelRepository.class),
+                cardLabels,
+                mock(PermissionChecker.class),
+                mock(CardLabelEventRepository.class),
+                ActorContext.ActorStamp::unknown,
+                Clock.systemUTC()),
             mock(CardActivityRepository.class),
             actor,
             mock(ApplicationEventPublisher.class),

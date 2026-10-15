@@ -435,7 +435,7 @@ test('beruehrung: Test ohne Zuordnung macht die ganze Seite beruehrt', () => {
     geaendert: ['frontend/src/lib/ohnePartner.test.ts'],
     bereich: frontendBereich(PLAN),
     zuordnung: new Map(),
-    existiert: () => false,
+    existiert: (pfad) => pfad === 'frontend/src/lib/ohnePartner.test.ts',
   });
   assert.equal(ergebnis.ganzeSeite, true);
   assert.deepEqual(ergebnis.ohneZuordnung, ['frontend/src/lib/ohnePartner.test.ts']);
@@ -474,6 +474,58 @@ test('beruehrung: feste Zuordnung nur ausserhalb des Bereichs macht den Test zug
     existiert: () => false,
   });
   assert.deepEqual(ergebnis, { dateien: [], testBeruehrt: [], ganzeSeite: false, ohneZuordnung: [] });
+});
+
+const ALT_TEST = 'src/test/java/org/mwolff/manban/nightrun/web/RegionszoneTest.java';
+const NEU_TEST = 'src/test/java/org/mwolff/manban/common/web/RegionszoneTest.java';
+const NEU_QUELLE = 'src/main/java/org/mwolff/manban/common/web/Regionszone.java';
+const ALT_QUELLE = 'src/main/java/org/mwolff/manban/nightrun/web/Regionszone.java';
+const GANZES_BACKEND = { quelle: 'property', ziel: ['org.mwolff.manban.*'], aus: [] };
+
+test('beruehrung: ein verlegter Test zaehlt mit dem alten Pfad nicht als ohne Zuordnung (#1766)', () => {
+  const ergebnis = beruehrung({
+    geaendert: [ALT_TEST, NEU_TEST, ALT_QUELLE, NEU_QUELLE],
+    bereich: backendBereich(GANZES_BACKEND),
+    zuordnung: new Map(),
+    existiert: (pfad) => pfad === NEU_TEST || pfad === NEU_QUELLE,
+  });
+  assert.deepEqual(ergebnis.ohneZuordnung, []);
+  assert.equal(ergebnis.ganzeSeite, false);
+  assert.ok(ergebnis.dateien.includes(NEU_QUELLE));
+});
+
+test('beruehrung: ein geloeschter Test ohne verbleibende Quelle zaehlt nicht als ohne Zuordnung (#1766)', () => {
+  const ergebnis = beruehrung({
+    geaendert: [ALT_TEST],
+    bereich: backendBereich(GANZES_BACKEND),
+    zuordnung: new Map(),
+    existiert: () => false,
+  });
+  assert.deepEqual(ergebnis.ohneZuordnung, []);
+  assert.equal(ergebnis.ganzeSeite, false);
+});
+
+test('beruehrung: ein geloeschter Test zieht seine noch existierende Konventionsquelle weiter mit (#1766)', () => {
+  const ergebnis = beruehrung({
+    geaendert: [ALT_TEST],
+    bereich: backendBereich(GANZES_BACKEND),
+    zuordnung: new Map(),
+    existiert: (pfad) => pfad === ALT_QUELLE,
+  });
+  assert.deepEqual(ergebnis.dateien, [ALT_QUELLE]);
+  assert.deepEqual(ergebnis.testBeruehrt, [ALT_QUELLE]);
+  assert.deepEqual(ergebnis.ohneZuordnung, []);
+});
+
+test('beruehrung: ein existierender Test ohne Quelle wird weiter gemeldet (Gegenprobe zu #1766)', () => {
+  const ergebnis = beruehrung({
+    geaendert: [ALT_TEST],
+    bereich: backendBereich(GANZES_BACKEND),
+    zuordnung: new Map(),
+    existiert: (pfad) => pfad === ALT_TEST,
+  });
+  assert.deepEqual(ergebnis.ohneZuordnung, [ALT_TEST]);
+  assert.equal(ergebnis.ganzeSeite, true);
 });
 
 test('mutationszuordnung.json: gueltiges JSON, jeder Test und jede Quelle existiert im Repo', () => {
@@ -549,6 +601,16 @@ test('stufeAus: Eintrag ohne stufe gilt als Paketstufe', () => {
 
 test('stufeAus: eingetragene Stufe wird uebernommen', () => {
   const config = { buildChecks: [{ cmd: 'node scripts/mutationspruefung.mjs aenderung backend', stufe: 'push' }] };
+  assert.equal(stufeAus(config, 'node scripts/mutationspruefung.mjs aenderung backend'), 'push');
+});
+
+test('stufeAus: Stufe unter stage wird uebernommen (Issue #1743)', () => {
+  const config = { buildChecks: [{ cmd: 'node scripts/mutationspruefung.mjs aenderung backend', stage: 'push' }] };
+  assert.equal(stufeAus(config, 'node scripts/mutationspruefung.mjs aenderung backend'), 'push');
+});
+
+test('stufeAus: traegt ein Eintrag stage und stufe, gilt stage (Issue #1743)', () => {
+  const config = { buildChecks: [{ cmd: 'node scripts/mutationspruefung.mjs aenderung backend', stage: 'push', stufe: 'paket' }] };
   assert.equal(stufeAus(config, 'node scripts/mutationspruefung.mjs aenderung backend'), 'push');
 });
 
@@ -1192,12 +1254,13 @@ test('laufen: eine geaenderte deckende Testdatei nimmt demselben Vermerk die Wir
       mutanten: [{ datei: 'frontend/src/lib/a.ts', zeile: 3, mutator: 'ConditionalExpression' }],
     },
   };
-  const { code } = mitProjekt((wurzel) =>
-    sammelLauf(['aenderung', 'frontend'], wurzel, {
+  const { code } = mitProjekt((wurzel) => {
+    javaAblegen(wurzel, 'frontend/src/lib/andersHeissend.test.ts', '');
+    return sammelLauf(['aenderung', 'frontend'], wurzel, {
       'diff --name-status -z 1a2b3c4': OK('M\0frontend/src/lib/a.ts\0M\0frontend/src/lib/andersHeissend.test.ts\0'),
       'diff -U0 1a2b3c4 -- frontend/src/lib/a.ts': OK('@@ -1 +1 @@\n'),
-    }, strykerDoppel(wurzel, VERMERKTER_BERICHT)),
-  { vollauf });
+    }, strykerDoppel(wurzel, VERMERKTER_BERICHT));
+  }, { vollauf });
   assert.notEqual(code, 0);
 });
 
@@ -1476,11 +1539,12 @@ test('laufen: unaufloesbarer Anker fuehrt zum vollen Umfang und sagt das', () =>
 });
 
 test('laufen: ein Test ohne Zuordnung haelt sofort an, ohne Werkzeuglauf (Issue #1287)', () => {
-  const { code, text, aufrufe } = mitProjekt((wurzel) =>
-    sammelLauf(['aenderung', 'frontend'], wurzel, {
+  const { code, text, aufrufe } = mitProjekt((wurzel) => {
+    javaAblegen(wurzel, 'frontend/src/lib/ohnePartner.test.ts', '');
+    return sammelLauf(['aenderung', 'frontend'], wurzel, {
       'diff --name-status -z 1a2b3c4': OK('M\0frontend/src/lib/ohnePartner.test.ts\0'),
-    }, strykerDoppel(wurzel, BERICHT_A)),
-  );
+    }, strykerDoppel(wurzel, BERICHT_A));
+  });
   assert.equal(code, 1);
   assert.equal(aufrufe.length, 0);
   assert.ok(text.includes('frontend/src/lib/ohnePartner.test.ts'));
@@ -1490,11 +1554,12 @@ test('laufen: ein Test ohne Zuordnung haelt sofort an, ohne Werkzeuglauf (Issue 
 
 test('laufen: im Backend weicht ein Test ohne Zuordnung auf die ganze Seite aus (Issue #1308)', () => {
   const test = 'src/test/java/org/mwolff/manban/card/application/CardServiceEpicTreeTest.java';
-  const { text, aufrufe } = mitProjekt((wurzel) =>
-    sammelLauf(['aenderung', 'backend'], wurzel, {
+  const { text, aufrufe } = mitProjekt((wurzel) => {
+    javaAblegen(wurzel, test, '');
+    return sammelLauf(['aenderung', 'backend'], wurzel, {
       'diff --name-status -z 1a2b3c4': OK(`M\0${test}\0`),
-    }, pitDoppel(wurzel, BEISPIEL_XML)),
-  );
+    }, pitDoppel(wurzel, BEISPIEL_XML));
+  });
   assert.equal(aufrufe.length, 1);
   assert.deepEqual(aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
   assert.match(text, /Umfang: die ganze Seite/);
@@ -2304,7 +2369,7 @@ test('beruehrung: ein Test ohne Zuordnung ausserhalb jedes Ausschnitts haelt wei
     geaendert: ['frontend/src/sonstwo/lose.test.ts', 'frontend/src/c/Ohne.test.tsx', 'frontend/src/k/K.test.tsx'],
     bereich: frontendBereich(PLAN_STUFEN),
     zuordnung: new Map(),
-    existiert: () => false,
+    existiert: (pfad) => pfad.endsWith('.test.ts') || pfad.endsWith('.test.tsx'),
   });
   // lose.test.ts liegt in keinem Ausschnitt, Ohne.test.tsx in einem aufgenommenen: beide bleiben
   // unbekannt und halten an. Nur K.test.tsx faellt als Test eines fremden Ausschnitts heraus.
@@ -2363,9 +2428,10 @@ test('laufen: der Backend-Zweig bleibt unveraendert — beruehrte Klasse mutiert
   assert.match(beruehrt.text, /CardService\.java:43 — ConditionalsBoundaryMutator/);
 
   const ohne = 'src/test/java/org/mwolff/manban/card/application/NirgendsTest.java';
-  const test = mitProjekt((wurzel) =>
-    sammelLauf(['aenderung', 'backend'], wurzel, geaendert(ohne), pitDoppel(wurzel, BEISPIEL_XML)),
-  { plan: PLAN_STUFEN });
+  const test = mitProjekt((wurzel) => {
+    javaAblegen(wurzel, ohne, '');
+    return sammelLauf(['aenderung', 'backend'], wurzel, geaendert(ohne), pitDoppel(wurzel, BEISPIEL_XML));
+  }, { plan: PLAN_STUFEN });
   assert.equal(test.aufrufe.length, 1);
   assert.deepEqual(test.aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
   assert.match(test.text, /Umfang: die ganze Seite/);
@@ -2466,13 +2532,14 @@ test('laufen: ein Backend-Test ohne Zuordnung macht jede Datei testberuehrt, alt
       mutanten: [{ datei: CARD_SERVICE, zeile: 43, mutator: 'ConditionalsBoundaryMutator' }],
     },
   };
-  const { code, text } = mitProjekt((wurzel) =>
-    sammelLauf(['aenderung', 'backend'], wurzel, {
+  const { code, text } = mitProjekt((wurzel) => {
+    javaAblegen(wurzel, ohne, '');
+    return sammelLauf(['aenderung', 'backend'], wurzel, {
       ...geaendert(ohne),
       [`diff -U0 1a2b3c4 -- ${CARD_SERVICE}`]: OK(''),
       [`diff -U0 1a2b3c4 -- ${CARD}`]: OK(''),
-    }, pitDoppel(wurzel, BEISPIEL_XML)),
-  { vollauf });
+    }, pitDoppel(wurzel, BEISPIEL_XML));
+  }, { vollauf });
   // CardService:42 getoetet, Card:30 getoetet, Card:17 ungedeckt zaehlen; CardService:43 ist alt.
   assert.equal(code, 1);
   assert.match(text, /Mutanten: 3 geprüft, 2 getötet, 1 überlebt/);
@@ -2683,6 +2750,7 @@ test('ohne --stufe: selbst ein Median ueber 10 min laesst den Lauf wie bisher du
 /** Die Zuordnungspruefung liest gegen HEAD: geaenderte Dateien aus `diff`, neue aus `status`. */
 function zuordnungLauf(seite, { diff = [], neu = [] } = {}, vorbereiten = () => {}, optionen = {}) {
   return mitProjekt((wurzel) => {
+    for (const pfad of [...diff, ...neu]) javaAblegen(wurzel, pfad, '');
     vorbereiten(wurzel);
     return sammelLauf(['zuordnung', seite], wurzel, {
       'diff --name-status -z HEAD': OK(diff.map((p) => `M\0${p}\0`).join('')),

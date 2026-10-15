@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.DisruptionRepository;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
@@ -155,6 +156,15 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
       ON CONFLICT (night_run_id) DO NOTHING
       """;
 
+  /** Die quittierten Läufe eines Projekts (Issue #1742). */
+  private static final String QUITTIERTE_LAEUFE =
+      """
+      SELECT a.night_run_id
+        FROM night_run_disruption_ack a
+        JOIN night_run r ON r.id = a.night_run_id
+       WHERE r.project_id = :projectId
+      """;
+
   /** Beide Abfragen liefern dieselben Spalten — ein Mapper, damit sie nicht auseinanderlaufen. */
   private static final RowMapper<DisruptionCandidate> KANDIDAT =
       (rs, zeile) ->
@@ -241,6 +251,13 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
             .addValue(P_NIGHT_RUN_ID, nightRunId)
             .addValue("userId", userId)
             .addValue("at", OffsetDateTime.ofInstant(at, ZoneOffset.UTC)));
+  }
+
+  @Override
+  public Set<Long> acknowledgedRunIds(long projectId) {
+    return Set.copyOf(
+        jdbc.queryForList(
+            QUITTIERTE_LAEUFE, new MapSqlParameterSource("projectId", projectId), Long.class));
   }
 
   @Override

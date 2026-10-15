@@ -1,4 +1,5 @@
 import { apiFetch } from './client'
+import { leserZone } from './nightRunUsage'
 
 /** Durchschnittliche Verweildauer in einer Spalte (nur abgeschlossene Aufenthalte). */
 export interface ColumnDwell {
@@ -65,6 +66,55 @@ export interface ImplementationTime {
   implementationSampleCount: number
 }
 
+/**
+ * Ein Kalendertag der Platte „Fluss“ in der Zone des Lesers (Issue #1773, Plan #1765 E9). Ist sein
+ * Stand unbekannt (`known = false`), sind alle fünf Zahlen `null` — eine Lücke, keine Null.
+ */
+export interface FlowDay {
+  /** Kalendertag, `YYYY-MM-DD`. */
+  date: string
+  known: boolean
+  backlog: number | null
+  ready: number | null
+  inProgress: number | null
+  inReview: number | null
+  /** Seit Beginn des Zeitraums fertig gewordene Arbeitspakete. */
+  done: number | null
+}
+
+/** Die Platte „Fluss“: die 84 Tage bis heute, der älteste zuerst (Issue #1773). */
+export interface BoardFlow {
+  days: FlowDay[]
+  /** Der erste Tag mit sicherem Stand, wenn er nach dem ersten Tag des Zeitraums liegt; sonst `null`. */
+  dataSince: string | null
+}
+
+/** Eine Karte der Platte „Alter in Arbeit“ mit ihrem Alter seit dem letzten Eintritt. */
+export interface AgingCard {
+  id: number
+  number: number
+  title: string
+  ageSeconds: number
+  /** Eintritt unbekannt: `ageSeconds` ist nur der Mindestwert ab dem frühesten bekannten Zeitpunkt. */
+  ageIsMinimum: boolean
+  overThreshold: boolean
+}
+
+/** Ein Zustand der Platte „Alter in Arbeit“: Vergleichswerte, Schwelle und Karten, die älteste zuerst. */
+export interface AgingState {
+  comparisonCount: number
+  /** Die 85-%-Schwelle in Sekunden; `null` unter fünf Vergleichswerten. */
+  thresholdSeconds: number | null
+  cards: AgingCard[]
+}
+
+/** Die Platte „Alter in Arbeit“ je Zustand Ready, In Progress und In Review (Issue #1773). */
+export interface AgingWip {
+  ready: AgingState
+  inProgress: AgingState
+  inReview: AgingState
+}
+
 export const dashboardApi = {
   get: (boardId: number) => apiFetch<BoardDashboardKpis>(`/api/boards/${boardId}/dashboard`),
   /**
@@ -75,6 +125,11 @@ export const dashboardApi = {
     const abfrage = grenzen ? '?' + new URLSearchParams(grenzen).toString() : ''
     return apiFetch<ImplementationTime>(`/api/boards/${boardId}/dashboard/implementation-time${abfrage}`)
   },
+  /** Die Tage der Platte „Fluss“ in der Zone des Lesers (Plan #1765, E9). */
+  flow: (boardId: number, zone: string = leserZone()) =>
+    apiFetch<BoardFlow>(`/api/boards/${boardId}/dashboard/flow?${new URLSearchParams({ zone })}`),
+  /** Die Platte „Alter in Arbeit“. */
+  aging: (boardId: number) => apiFetch<AgingWip>(`/api/boards/${boardId}/dashboard/aging`),
 }
 
 export type DashboardApi = typeof dashboardApi

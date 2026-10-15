@@ -32,6 +32,7 @@ public class NightRunNowService {
   private final NightRunProperties properties;
   private final Clock clock;
   private final CardRunQueryService cards;
+  private final DisruptionRepository disruptions;
 
   public NightRunNowService(
       NightReadyAssessmentRepository bewertungen,
@@ -39,13 +40,15 @@ public class NightRunNowService {
       PermissionChecker permissions,
       NightRunProperties properties,
       Clock clock,
-      CardRunQueryService cards) {
+      CardRunQueryService cards,
+      DisruptionRepository disruptions) {
     this.bewertungen = bewertungen;
     this.runs = runs;
     this.permissions = permissions;
     this.properties = properties;
     this.clock = clock;
     this.cards = cards;
+    this.disruptions = disruptions;
   }
 
   /**
@@ -55,7 +58,8 @@ public class NightRunNowService {
    * <p>Gelesen werden die Nachtläufe — Ketten und Umsetzungsnächte —, nie interaktive Sitzungen:
    * Eine Sitzung am Rechner eines Menschen ist kein Runner. Die Schweigefrist ist die Stillefrist
    * aus {@link NightRunProperties} (E3). Pakete werden nur für den letzten beendeten Lauf geladen,
-   * denn nur sein Ergebnis wird gezeigt.
+   * denn nur sein Ergebnis wird gezeigt. Die Quittungen des Plattform-Leitstands blenden verstummte
+   * Läufe aus (Issue #1742).
    */
   @Transactional(readOnly = true)
   public RunnerLage jetzt(long userId, long projectId) {
@@ -94,7 +98,12 @@ public class NightRunNowService {
         RunnerLage.letzterBeendeter(laeufe)
             .map(lauf -> runs.findItemsByRunIds(List.of(lauf.requireId())))
             .orElse(List.of());
-    return RunnerLage.ermittle(laeufe, pakete, clock.instant(), properties.stilleFrist());
+    return RunnerLage.ermittle(
+        laeufe,
+        pakete,
+        clock.instant(),
+        properties.stilleFrist(),
+        disruptions.acknowledgedRunIds(projectId));
   }
 
   /**

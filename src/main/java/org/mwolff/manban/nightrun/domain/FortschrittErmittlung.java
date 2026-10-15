@@ -36,7 +36,9 @@ import org.mwolff.manban.nightrun.domain.LaufstandWortformen.Stufenzeile;
  * auf Millisekunden gekürzt. Trägt mindestens eine übergebene Aktivität oder ein Laufstand diese
  * Kennung, ist der Lauf ausgewiesen: Er nimmt nur Spuren mit seiner Kennung, und die fremden
  * Fenster spielen keine Rolle mehr. Ein nicht ausgewiesener Lauf nimmt nur Spuren ohne Kennung und
- * wird wie bisher über die Fenster abgegrenzt.
+ * wird wie bisher über die Fenster abgegrenzt. Einen Laufstand ohne Kennung nimmt ein ausgewiesener
+ * Lauf, wenn die Lauf-ID im Text seinen Start nennt (Issue #1764): Der Runner schreibt den
+ * Laufstand selbst, ohne Header.
  *
  * <p><b>Namen des Kits (Issue #1590, Plan #1582 A3, A5, A6, E2, E13):</b> Labels zählen als Sachen
  * aus {@link KitNamen} — jeder Name einer Sache wirkt gleich, ein gemischtes Board zählt zusammen.
@@ -167,7 +169,7 @@ public final class FortschrittErmittlung {
     laufstaende.forEach(
         l -> KettenAbleitung.ziel(l.body()).ifPresent(z -> zielJeKarte.putIfAbsent(l.cardId(), z)));
     laufstaende.stream()
-        .filter(l -> Objects.equals(kennung(l.laufStart()), spurKennung))
+        .filter(this::gehoertZumLauf)
         .forEach(
             l ->
                 eintraegeJeKarte
@@ -377,8 +379,16 @@ public final class FortschrittErmittlung {
     List<ProgressStage> weg = bisUmsetzung ? WEG_B : WEG_A;
     List<PackageProgress> pakete = plan == null ? List.of() : paketeZu(plan);
     Stufenlage lage = new Stufenlage(anforderung, plan, pakete, eintraege);
+    // Folgerichtig (Issue #1783): Ist eine Stufe erreicht, sind es alle früheren des Wegs auch —
+    // ein Paket in Umsetzung belegt, dass Prüfung und Schnitt vorbei sind.
+    int letzte = -1;
+    for (int i = 0; i < weg.size(); i++) {
+      if (lage.erreicht(weg.get(i))) {
+        letzte = i;
+      }
+    }
     Set<ProgressStage> erreicht = EnumSet.noneOf(ProgressStage.class);
-    weg.stream().filter(lage::erreicht).forEach(erreicht::add);
+    erreicht.addAll(weg.subList(0, letzte + 1));
     // Die erste offene Stufe ist die aus „zuletzt begonnen:", sofern sie im Fenster liegt und noch
     // nicht fertig ist: Eine begonnene Stufe macht alle früheren erreicht.
     ProgressStage aktuell =
@@ -468,6 +478,21 @@ public final class FortschrittErmittlung {
         && Objects.equals(kennung(a.laufStart()), spurKennung);
   }
 
+  /**
+   * Ob der Laufstand zum Lauf gehört: über seine Kennung (A6) oder — ohne Kennung im ausgewiesenen
+   * Lauf — über die Lauf-ID im Text (Issue #1764). Der Runner schreibt den Laufstand mit eigenen
+   * Board-Aufrufen ohne Header {@code X-Night-Run}; nur seine Sessions tragen die Kennung. Die
+   * Lauf-ID nennt denselben Laufstart, auf Sekunden gekürzt.
+   */
+  private boolean gehoertZumLauf(Laufstand l) {
+    Instant k = kennung(l.laufStart());
+    if (k != null || spurKennung == null) {
+      return Objects.equals(k, spurKennung);
+    }
+    Instant sekunde = spurKennung.truncatedTo(ChronoUnit.SECONDS);
+    return LaufstandWortformen.laufIdStart(l.body()).filter(sekunde::equals).isPresent();
+  }
+
   /** Eine Laufkennung, auf Millisekunden gekürzt (A10) — so speichert sie das Board. */
   private static @Nullable Instant kennung(@Nullable Instant laufStart) {
     return laufStart == null ? null : laufStart.truncatedTo(ChronoUnit.MILLIS);
@@ -536,10 +561,14 @@ public final class FortschrittErmittlung {
         // vom Laufstand einer späteren Stufe genannt.
         case PLAN -> plan != null;
         case REVIEW -> plan != null && traegtPlanReview(plan);
-        // „abdeckung fertig" erreicht die Pakete als spätere Stufe; eigene Signale haben beide
-        // nicht. Die Vorbereitung steht nie im Weg der Laufseite (Issue #1451).
-        case PAKETE, ABDECKUNG, VORBEREITUNG -> false;
-        case UMSETZUNG ->
+        // Eigene Signale neben dem Laufstand (Issue #1764): Die Pakete sind erreicht, sobald die
+        // Kette Pakete hat; die Abdeckung, sobald eines über „angelegt" hinaus ist.
+        case PAKETE -> !pakete.isEmpty();
+        case ABDECKUNG -> pakete.stream().anyMatch(p -> p.zustand() != PackageState.ANGELEGT);
+        // Die Vorbereitung steht nie im Weg der Laufseite (Issue #1451): erreicht(...) wird nur für
+        // die Stufen aus WEG_A und WEG_B gerufen. Ein eigener Zweig für sie wäre toter Code
+        // (Issue #1796); sie teilt sich darum den Zweig der Umsetzung.
+        case UMSETZUNG, VORBEREITUNG ->
             !pakete.isEmpty() && pakete.stream().allMatch(p -> p.zustand() == PackageState.FERTIG);
       };
     }

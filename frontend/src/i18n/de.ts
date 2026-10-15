@@ -794,6 +794,42 @@ export const de = {
     TOKEN: 'Token',
   },
 
+  /** Rechnung der Platten „Fluss“ und „Alter in Arbeit“, `lib/fluss.ts` (Plan #1765). */
+  LEITSTAND_FLUSS: {
+    BAND: {
+      done: 'Done',
+      inReview: 'In Review',
+      inProgress: 'In Progress',
+      ready: 'Ready',
+      backlog: 'Backlog',
+    },
+    TAG_ZEILE: (band: string, anzahl: number) => `${band}: ${anzahl}`,
+    KEINE_DATEN: 'keine Daten',
+    SEIT: (datum: string) => `seit ${datum}`,
+    LETZTE_WOCHEN: 'letzte 12 Wochen',
+    UNTER_EINER_STUNDE: 'unter 1 Std',
+    STUNDEN: (anzahl: number) => `${anzahl} Std`,
+    TAGE: (anzahl: number) => (anzahl === 1 ? '1 Tag' : `${anzahl} Tage`),
+    MINDESTENS: (alter: string) => `mindestens ${alter}`,
+    /** Die Platte „Fluss“ (Issue #1776). */
+    TITEL: 'Fluss',
+    NOTIZ: (kopf: string) => `Karten je Zustand am Tagesende · ${kopf}`,
+    DONE_HINWEIS: 'Done zählt die seit Beginn des Zeitraums fertig gewordenen Karten.',
+    HINWEIS: 'Einen Tag überfahren oder per Tab ansteuern, um seine Zahlen zu sehen.',
+    LEGENDE: 'Legende',
+    TAGE_GRUPPE: 'Tage im Fluss',
+    LEER: 'Für diesen Zeitraum liegen keine Tage vor.',
+    TAG_ARIA: (datum: string, zahlen: string) => `${datum}: ${zahlen}`,
+    ARIA: (tage: number, datum: string, zahlen: string) =>
+      `Fluss über ${tage} Tage, gestapelt von unten Done, In Review, In Progress, Ready, Backlog. Letzter Tag ${datum}: ${zahlen}`,
+    /** Die Platte „Alter in Arbeit“ (Issue #1777). */
+    ALTER_TITEL: 'Alter in Arbeit',
+    ALTER_NOTIZ: 'Bernstein: länger als 85 % der Aufenthalte der letzten 12 Wochen in diesem Zustand',
+    ALTER_LEER: (spalte: string) => `Keine Karte in ${spalte}`,
+    ALTER_MELDER: 'ungewöhnlich lange',
+    ALTER_KARTE_OEFFNEN: (nummer: number, titel: string) => `Karte #${nummer} öffnen: ${titel}`,
+  },
+
   /** Textrechnung der Verbrauchs-Auswertung, `lib/verbrauchZeitraum.ts` (Issue #1656). */
   VERBRAUCH_ZEITRAUM: {
     KEIN_LAUF: 'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.',
@@ -952,6 +988,7 @@ export const de = {
       `Durchsatz der letzten ${wochen} Wochen: ${werte} Karten, zuletzt ${zuletzt}`,
     DURCHSATZ_LEER: 'Noch keine abgeschlossene Karte in den letzten Wochen.',
     KEINE_MESSUNG: 'keine Messung',
+    IMPLEMENTIERUNG_VERLAUF_TITEL: 'Implementierungszeit (Minuten)',
     IMPLEMENTIERUNG_NOTIZ: (wochen: number) => `Mittelwert je Woche · ${wochen} Wochen`,
     IMPLEMENTIERUNG_ARIA: (wochen: number, werte: string, zuletzt: string | undefined) =>
       `Implementierungszeit der letzten ${wochen} Wochen: ${werte}, zuletzt ${zuletzt}`,
@@ -960,6 +997,26 @@ export const de = {
     ABBRUCHGRUENDE: 'Abbruchgründe',
     RUNS: (anzahl: number) => (anzahl === 1 ? '1 Run' : `${anzahl} Runs`),
     KEIN_ABBRUCH: 'Kein Abbruch in den aufbewahrten Runs.',
+    NACHARBEIT: 'Nacharbeit',
+    NACHARBEIT_LETZTE_WOCHEN: (wochen: number) => `letzte ${wochen} Wochen`,
+    NACHARBEIT_SEIT: (datum: string) => `seit ${datum}`,
+    NACHARBEIT_PAKETE: 'Pakete zurückgezogen',
+    NACHARBEIT_DOKUMENTE: 'Dokumente angehalten',
+    NACHARBEIT_QUOTE: (betroffen: number, bearbeitet: number) => `${betroffen} von ${bearbeitet}`,
+    NACHARBEIT_QUOTE_ARIA: (zeile: string, quote: string) => `${zeile}: ${quote} — Karten zeigen`,
+    NACHARBEIT_KEINE_RUNS: 'Im Bezugszeitraum gab es keinen Run.',
+    NACHARBEIT_KEIN_PAKET: 'Die Runs haben kein Paket bearbeitet.',
+    NACHARBEIT_KEIN_DOKUMENT: 'Die Runs haben kein Dokument bearbeitet.',
+    NACHARBEIT_ZURUECKGEZOGEN: (anzahl: number) => `${anzahl}× zurückgezogen`,
+    NACHARBEIT_ANGEHALTEN: (anzahl: number) => `${anzahl}× angehalten`,
+    NACHARBEIT_GRUPPE_PAKETE: 'Pakete',
+    NACHARBEIT_GRUPPE_DOKUMENTE: 'Dokumente',
+    NACHARBEIT_HINWEIS_QUOTE: (gruppe: string, quote: string) => `${gruppe} ${quote}`,
+    NACHARBEIT_HINWEIS_OHNE_KARTE: (gruppe: string) => `${gruppe} keine bearbeitete Karte`,
+    NACHARBEIT_HINWEIS_KEINE_DATEN: (gruppe: string) => `${gruppe} keine Daten`,
+    NACHARBEIT_KEINE_DATEN: 'keine Daten',
+    NACHARBEIT_WOCHE_ARIA: (woche: number, hinweis: string) => `KW ${woche}: ${hinweis}`,
+    NACHARBEIT_VERLAUF_ARIA: (wochen: number) => `Verlauf der Nacharbeit über ${wochen} Wochen`,
     VORHABEN: 'Vorhaben',
     OFFEN: 'offen',
     KEIN_VORHABEN: 'Kein offenes Vorhaben.',
@@ -1119,7 +1176,8 @@ export const de = {
       INTERACTIVE: 'Interaktive Sitzung',
     },
     LAEUFT: 'läuft',
-    SEIT: (zeit: string) => `seit ${zeit}`,
+    /** Das Token, unter dem der Lauf gemeldet wurde (Issue #1742). */
+    TOKEN: (name: string) => `Token ${name}`,
     LETZTE_MELDUNG: (zeit: string) => `letzte Meldung ${zeit}`,
     /** Der Satz für „verstummt“ — auch der Kartendialog nutzt ihn (Fachplan #1721, E12). */
     VERSTUMMT: (zeit: string, stufe: string) =>

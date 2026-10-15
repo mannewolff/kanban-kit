@@ -4,13 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,6 +53,7 @@ class LabelServiceTest {
   private PermissionChecker permissions;
   private ApplicationEventPublisher events;
   private ActorContext actor;
+  private CardLabelEventRepository labelEvents;
   private LabelService service;
 
   @BeforeEach
@@ -62,7 +66,18 @@ class LabelServiceTest {
     events = mock(ApplicationEventPublisher.class);
     actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorStamp.unknown());
-    service = new LabelService(labels, cardLabels, cards, boardService, permissions, events, actor);
+    labelEvents = mock(CardLabelEventRepository.class);
+    service =
+        new LabelService(
+            labels,
+            cardLabels,
+            cards,
+            boardService,
+            permissions,
+            events,
+            actor,
+            labelEvents,
+            Clock.fixed(FIXED, ZoneOffset.UTC));
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(labels.save(any(Label.class))).thenAnswer(inv -> inv.getArgument(0));
   }
@@ -354,6 +369,50 @@ class LabelServiceTest {
     service.addToCard(USER, CARD_ID, "kit:nightrun");
 
     verify(events, never()).publishEvent(any(CardBoardActivityEvent.class));
+  }
+
+  /**
+   * Issue #1754 (Plan #1752 E11): Der Weg des Kits erfasst ein Label-Ereignis mit dem Namen des
+   * Boards und dem Stempel des Aufrufs — nur, wenn das Label tatsächlich hinzukam.
+   */
+  @Test
+  void addToCard_erfasstEinLabelEreignis_wennDasLabelHinzukam() {
+    ActorStamp stempel =
+        new ActorStamp(
+            CardActivityOrigin.TOKEN,
+            "Nachtlauf",
+            "claude-opus-5-5",
+            Instant.parse("2025-12-31T23:00:00Z"));
+    when(actor.current()).thenReturn(stempel);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "run:waiting");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.addToCard(USER, CARD_ID, "  run:waiting ");
+
+    verify(labelEvents).add(CARD_ID, "run:waiting", FIXED, stempel);
+  }
+
+  @Test
+  void addToCard_erfasstKeinEreignis_wennDasLabelSchonGesetztWar() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "run:waiting");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(false);
+
+    service.addToCard(USER, CARD_ID, "run:waiting");
+
+    verify(labelEvents, never()).add(anyLong(), anyString(), any(), any());
+  }
+
+  @Test
+  void removeFromCard_erfasstKeinEreignis() {
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "run:waiting");
+    when(cardLabels.removeLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.removeFromCard(USER, CARD_ID, "run:waiting");
+
+    verify(labelEvents, never()).add(anyLong(), anyString(), any(), any());
   }
 
   @Test

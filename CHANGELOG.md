@@ -15,6 +15,50 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
 
+## [3.2.0] – 2026-10-15
+
+- chore: v3.1.1
+- Abdeckung auf 100 %: FortschrittErmittlung, CardLabelEventRepositoryAdapter, ThroughputFilter ([#1796](https://github.com/mannewolff/kanban-kit/issues/1796))
+- Mutations-Überlebende in BoardFlussService beseitigt ([#1795](https://github.com/mannewolff/kanban-kit/issues/1795))
+- Mutations-Überlebende in NacharbeitErmittlung beseitigt ([#1794](https://github.com/mannewolff/kanban-kit/issues/1794))
+- Mutations-Überlebende in FlussNachtrag beseitigt ([#1793](https://github.com/mannewolff/kanban-kit/issues/1793))
+- Mutations-Überlebende in AlterErmittlung beseitigt ([#1792](https://github.com/mannewolff/kanban-kit/issues/1792))
+- Mutations-Überlebende in FlussErmittlung beseitigt ([#1791](https://github.com/mannewolff/kanban-kit/issues/1791))
+- Mutations-Überlebende in FlussRekonstruktion beseitigt ([#1790](https://github.com/mannewolff/kanban-kit/issues/1790))
+- Mutations-Überlebende in nacharbeit.ts beseitigt ([#1789](https://github.com/mannewolff/kanban-kit/issues/1789))
+- Mutations-Überlebende in fluss.ts getötet ([#1788](https://github.com/mannewolff/kanban-kit/issues/1788))
+- Mutations-Überlebende in NacharbeitPlatte getötet ([#1787](https://github.com/mannewolff/kanban-kit/issues/1787))
+- Mutations-Überlebende in FlussPlatte getötet ([#1786](https://github.com/mannewolff/kanban-kit/issues/1786))
+- Mutations-Überlebende in AlterInArbeitPlatte getötet ([#1785](https://github.com/mannewolff/kanban-kit/issues/1785))
+- Nachtlauf-Fortschritt: Wegleiste folgerichtig ([#1783](https://github.com/mannewolff/kanban-kit/issues/1783))
+- Leitstand-Fluss: Platten in die Leitstand-Seite einbauen und dokumentieren ([#1778](https://github.com/mannewolff/kanban-kit/issues/1778))
+- Leitstand-Alter: Komponente AlterInArbeitPlatte ([#1777](https://github.com/mannewolff/kanban-kit/issues/1777))
+- Leitstand-Fluss: Komponente FlussPlatte ([#1776](https://github.com/mannewolff/kanban-kit/issues/1776))
+- Leitstand-Fluss: Frontend-API flow/aging und reine Rechnung lib/fluss.ts ([#1775](https://github.com/mannewolff/kanban-kit/issues/1775))
+- Leitstand-Fluss: Szenario-Integrationstest FlussUndAlterSzenarienIT ([#1774](https://github.com/mannewolff/kanban-kit/issues/1774))
+- Leitstand-Fluss: BoardFlussService und Endpunkte /dashboard/flow und /dashboard/aging ([#1773](https://github.com/mannewolff/kanban-kit/issues/1773))
+- Leitstand-Fluss: Regionszone nach common.web verlegen ([#1766](https://github.com/mannewolff/kanban-kit/issues/1766))
+- Zuordnungsprüfung: verlegten oder gelöschten Test ohne Quelle übergehen ([#1779](https://github.com/mannewolff/kanban-kit/issues/1779))
+- Leitstand-Alter: reine Altersermittlung AlterErmittlung mit 85-%-Schwelle ([#1772](https://github.com/mannewolff/kanban-kit/issues/1772))
+- Leitstand-Fluss: reine Tagesermittlung FlussErmittlung ([#1771](https://github.com/mannewolff/kanban-kit/issues/1771))
+- Leitstand-Fluss: einmaliger Nachtrag aus dem Spaltenverlauf ([#1770](https://github.com/mannewolff/kanban-kit/issues/1770))
+- Leitstand-Fluss: reine Rekonstruktion FlussRekonstruktion aus dem Spaltenverlauf ([#1769](https://github.com/mannewolff/kanban-kit/issues/1769))
+- Leitstand-Fluss: Erfassung der Zustandswechsel im CardRepositoryAdapter ([#1768](https://github.com/mannewolff/kanban-kit/issues/1768))
+- Leitstand-Fluss: Tabelle der Zustandsaufenthalte (V56), Flusslage und Port ([#1767](https://github.com/mannewolff/kanban-kit/issues/1767))
+- Nachtlauf-Fortschritt: Laufstand des Runners über die Lauf-ID zuordnen, eigene Signale für Pakete und Abdeckung ([#1764](https://github.com/mannewolff/kanban-kit/issues/1764))
+- Leitstand-Nacharbeit: Doku zur Platte und zum Recht ([#1761](https://github.com/mannewolff/kanban-kit/issues/1761))
+- Leitstand-Nacharbeit: Platte in den Board-Leitstand einbinden ([#1760](https://github.com/mannewolff/kanban-kit/issues/1760))
+- Leitstand-Nacharbeit: Komponente NacharbeitPlatte mit Verlauf und Kartenliste ([#1759](https://github.com/mannewolff/kanban-kit/issues/1759))
+- Leitstand-Nacharbeit: Wochenleiste und Grundlinie in die Leitstand-Bausteine auslagern ([#1758](https://github.com/mannewolff/kanban-kit/issues/1758))
+- Leitstand-Nacharbeit: Endpunkt GET /api/boards/{boardId}/night-run-rework ([#1757](https://github.com/mannewolff/kanban-kit/issues/1757))
+- Leitstand-Nacharbeit: reine Ermittlung NacharbeitErmittlung ([#1756](https://github.com/mannewolff/kanban-kit/issues/1756))
+- Leitstand-Nacharbeit: Lauf-Spuren über die Fassaden von card und comment ([#1755](https://github.com/mannewolff/kanban-kit/issues/1755))
+- Leitstand-Nacharbeit: Label-Ereignisse mit Herkunft erfassen (V55) ([#1754](https://github.com/mannewolff/kanban-kit/issues/1754))
+- Leitstand-Nacharbeit: Wochenfenster nach common auslagern ([#1753](https://github.com/mannewolff/kanban-kit/issues/1753))
+- Mutationsprüfung liest die Stufe eines Prüfkommandos auch unter stage ([#1743](https://github.com/mannewolff/kanban-kit/issues/1743))
+- Runner jetzt: quittierter, verstummter Lauf fällt heraus, Zeile nennt Beginn, Token und letzte Meldung ([#1742](https://github.com/mannewolff/kanban-kit/issues/1742))
+- Leitstand: Einheit der Implementierungszeit im Kopf, auf den Balken nur die Minutenzahl ([#1741](https://github.com/mannewolff/kanban-kit/issues/1741))
+
 ## [3.1.0] – 2026-10-14
 
 - chore: v3.0.1

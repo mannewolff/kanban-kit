@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
@@ -58,9 +59,16 @@ class NightRunNowServiceTest {
   private final NightRunProperties properties =
       new NightRunProperties(null, null, null, null, FRIST);
   private final CardRunQueryService cards = mock(CardRunQueryService.class);
+  private final DisruptionRepository disruptions = mock(DisruptionRepository.class);
   private final NightRunNowService service =
       new NightRunNowService(
-          bewertungen, runs, permissions, properties, Clock.fixed(JETZT, ZoneOffset.UTC), cards);
+          bewertungen,
+          runs,
+          permissions,
+          properties,
+          Clock.fixed(JETZT, ZoneOffset.UTC),
+          cards,
+          disruptions);
 
   private static NightRun lauf(long id, Instant startedAt, boolean complete, Instant updatedAt) {
     return new NightRun(
@@ -174,7 +182,7 @@ class NightRunNowServiceTest {
     assertThatThrownBy(() -> service.jetzt(USER, PROJECT))
         .isInstanceOf(ProjectAccessDeniedException.class);
 
-    verifyNoInteractions(runs, bewertungen);
+    verifyNoInteractions(runs, bewertungen, disruptions);
   }
 
   /**
@@ -237,7 +245,7 @@ class NightRunNowServiceTest {
     assertThatThrownBy(() -> service.wartegrund(USER, CARD))
         .isInstanceOf(ProjectAccessDeniedException.class);
 
-    verifyNoInteractions(runs, bewertungen);
+    verifyNoInteractions(runs, bewertungen, disruptions);
   }
 
   @Test
@@ -248,7 +256,7 @@ class NightRunNowServiceTest {
         .isInstanceOf(KarteNichtInReadyException.class);
 
     verify(permissions).requireNightRunAccess(USER, PROJECT);
-    verifyNoInteractions(runs, bewertungen);
+    verifyNoInteractions(runs, bewertungen, disruptions);
   }
 
   /** Bewertung, Läufe und Änderungszeitpunkt fließen in die Ableitung. */
@@ -270,5 +278,41 @@ class NightRunNowServiceTest {
         .containsExactly(Wartegrund.VermerkArt.SEIT_BEWERTUNG_GEAENDERT);
     assertThat(w.paketeDavor()).isZero();
     assertThat(w.startbereit()).isFalse();
+  }
+
+  /** Die Quittungen des Projekts fließen in die Lage: ein quittierter, verstummter Lauf fehlt. */
+  @Test
+  void jetzt_liestDieQuittungenDesProjekts_undLaesstDenQuittiertenVerstummtenWeg() {
+    NightRun verstummt =
+        lauf(1L, JETZT.minus(Duration.ofDays(20)), false, JETZT.minus(Duration.ofDays(20)));
+    when(runs.findByProjectAndKindOrderByStartedAtDesc(PROJECT, NightRunKind.NIGHT))
+        .thenReturn(List.of(verstummt));
+    when(disruptions.acknowledgedRunIds(PROJECT)).thenReturn(Set.of(1L));
+
+    RunnerLage lage = service.jetzt(USER, PROJECT);
+
+    assertThat(lage).isEqualTo(new RunnerLage(Gesamt.KEIN_RUNNER, List.of(), null));
+  }
+
+  /**
+   * Issue #1742: Ein verstummter, quittierter Lauf ist am wartenden Paket kein Grund „verstummt“.
+   */
+  @Test
+  void wartegrund_nenntEinenQuittiertenVerstummtenLaufNicht() {
+    NightRun nacht = lauf(1L, JETZT.minusSeconds(600), false, JETZT.minusSeconds(60));
+    NightRun verstummt =
+        lauf(2L, JETZT.minus(Duration.ofDays(20)), false, JETZT.minus(Duration.ofDays(20)));
+    when(cards.warteKarte(CARD)).thenReturn(new WarteKarteView(PROJECT, 1695, true, T1));
+    when(runs.findByProjectAndKindOrderByStartedAtDesc(PROJECT, NightRunKind.NIGHT))
+        .thenReturn(List.of(nacht, verstummt));
+    when(disruptions.acknowledgedRunIds(PROJECT)).thenReturn(Set.of(2L));
+    when(bewertungen.findByProjectId(PROJECT)).thenReturn(Optional.of(bewertung(T1)));
+
+    Wartegrund w = service.wartegrund(USER, CARD);
+
+    assertThat(w.laufgruende())
+        .extracting(Wartegrund.Laufgrund::art)
+        .doesNotContain(LaufgrundArt.VERSTUMMT);
+    assertThat(w.startbereit()).isTrue();
   }
 }

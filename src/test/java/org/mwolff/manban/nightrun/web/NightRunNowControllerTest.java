@@ -108,10 +108,11 @@ class NightRunNowControllerTest {
     RunnerStufe stufe = new RunnerStufe(1665, "UMSETZUNG", T, null, "SESSION", true);
     AktiverLauf lauf =
         new AktiverLauf(
-            312L, NightRunMode.CHAIN, T, T, LaufZustand.VERSTUMMT, List.of(stufe), stufe);
+            312L, NightRunMode.CHAIN, T, "runner", T, LaufZustand.VERSTUMMT, List.of(stufe), stufe);
     when(service.jetzt(7L, 3L)).thenReturn(new RunnerLage(Gesamt.AKTIV, List.of(lauf), null));
 
     StageView erwartet = new StageView(1665, "UMSETZUNG", T, null, "SESSION", true);
     assertThat(controller.jetzt(7L, 3L).runs().getFirst().lastStage()).isEqualTo(erwartet);
+    assertThat(controller.jetzt(7L, 3L).runs().getFirst().tokenName()).isEqualTo("runner");
   }
 }

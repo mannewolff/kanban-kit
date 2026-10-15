@@ -6,15 +6,18 @@ import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
-import { type BoardDashboardKpis } from '../api/dashboard'
+import { type AgingWip, type BoardDashboardKpis, type BoardFlow } from '../api/dashboard'
 import { type Epic } from '../api/epics'
-import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunView } from '../api/nightRuns'
+import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { Erklaerung } from '../components/Erklaerung'
+import { AlterInArbeitPlatte } from '../components/leitstand/AlterInArbeitPlatte'
 import { FestgefahrenAngaben } from '../components/leitstand/FestgefahrenAngaben'
+import { FlussPlatte } from '../components/leitstand/FlussPlatte'
 import {
   FilterTaste,
   Fuellschiene,
+  Grundlinie,
   Kachel,
   KACHEL_SX,
   KachelFuss,
@@ -24,10 +27,14 @@ import {
   melderFarbe,
   PaketDauer,
   Platte,
+  WochenLeiste,
+  wochenSpalten,
   ZEILE_HOVER_SX,
 } from '../components/leitstand/LeitstandBausteine'
 import { LeitstandVerbrauch } from '../components/leitstand/LeitstandVerbrauch'
+import { NacharbeitPlatte } from '../components/leitstand/NacharbeitPlatte'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { formatierer } from '../i18n/format'
 import { useSprache, useT } from '../i18n/SpracheContext'
 import { epicColor } from '../lib/epicMeta'
 import {
@@ -66,7 +73,6 @@ import {
   PLATTE_FUSS,
   PLATTE_HOCH,
   RAND,
-  RAND_STARK,
   SCHATTEN_NUTE,
   SCHATTEN_PLATTE,
   TEXT_SCHWACH,
@@ -78,7 +84,8 @@ import {
  * `docs/entwurf-leitstand.html` (CSS Z. 390–722, 977–1017; HTML Z. 1200–1678). Er ersetzt die
  * Kennzahlen-Ansicht: Laufband des jüngsten Laufs, vier Kennzahl-Kacheln, Verbrauch mit
  * Zeitraum-Wahl und der Rumpf aus „Letzter Lauf", „Durchsatz", „Implementierungszeit",
- * „Abbruchgründe" und „Vorhaben".
+ * „Abbruchgründe", „Nacharbeit" und „Vorhaben"; darunter in voller Breite „Fluss" und „Alter in
+ * Arbeit" (Issue #1778).
  * Die Platte „Liegengeblieben" des Entwurfs entfällt (Manne, 2026-09-17, #983) — die Kennzahl
  * `outliers` bleibt im Backend, wird hier aber nicht mehr dargestellt.
  *
@@ -88,8 +95,8 @@ import {
  * in den Leitstand (Manne, 2026-09-16).
  *
  * **Die Läufe sieht nur, wer sie auch auf der Nachtlauf-Seite sieht** (Owner-Recht im Backend).
- * Ohne das Recht entfallen Laufband, Nachtlauf-Kachel, Verbrauch, Letzter Lauf und Abbruchgründe
- * still; die Board-Kennzahlen und beide Wochenplatten bleiben.
+ * Ohne das Recht entfallen Laufband, Nachtlauf-Kachel, Verbrauch, Letzter Lauf, Abbruchgründe und
+ * Nacharbeit still; die Board-Kennzahlen, beide Wochenplatten, „Fluss" und „Alter in Arbeit" bleiben.
  */
 
 /** Die Karte, die der Dialog zeigt, mit dem Projekt, aus dem sie kam. */
@@ -99,15 +106,15 @@ export function LeitstandPage() {
   const { boardId } = useParams()
   const t = useT().LEITSTAND
   const daten = useLeitstandDaten(boardId)
-  // Die Karte kommt aus „Letzter Lauf" und damit immer aus einem bekannten Projekt; das Projekt
-  // reist im Zustand mit, statt beim Rendern des Dialogs noch einmal gegen `null` geprüft zu werden.
+  // Die Karte kommt aus „Letzter Lauf", „Nacharbeit" oder „Alter in Arbeit" und damit immer aus einem
+  // bekannten Projekt; das Projekt reist im Zustand mit, statt beim Rendern des Dialogs noch einmal gegen `null` geprüft zu werden.
   const [detail, setDetail] = useState<Auswahl | null>(null)
 
   if (!daten.validId) {
     return <Alert severity="error">{t.UNGUELTIGE_ID}</Alert>
   }
 
-  const { board, kpis, epics, klassen, projectId, liste, juengster, epicListe } = daten
+  const { board, kpis, fluss, alter, epics, klassen, nacharbeit, projectId, liste, juengster, epicListe } = daten
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -130,11 +137,14 @@ export function LeitstandPage() {
         projectId={projectId}
         kpis={kpis}
         klassen={klassen}
+        nacharbeit={nacharbeit}
         epics={epics}
         epicListe={epicListe}
         liste={liste}
         onDetail={setDetail}
       />
+
+      <FlussBereich fluss={fluss} alter={alter} projectId={projectId} onDetail={setDetail} />
 
       {detail && (
         <CardDetailModal card={detail.card} canEdit={false} projectId={detail.projectId} onClose={() => setDetail(null)} />
@@ -171,13 +181,16 @@ function KennzahlenBereich({ kpis, liste }: Readonly<{ kpis: Laden<BoardDashboar
 
 /**
  * Der Rumpf (Entwurf Z. 1410–1712): „Letzter Run", „Durchsatz" mit „Implementierungszeit" daneben
- * (Issue #1542), „Abbruchgründe" und „Vorhaben".
+ * (Issue #1542), „Abbruchgründe", „Nacharbeit" (Issue #1760) und „Vorhaben".
+ *
+ * Beide Platten mit Kartennummern öffnen die Karte über denselben Weg ({@link useKarteOeffnen}).
  */
 function LeitstandRumpf({
   juengster,
   projectId,
   kpis,
   klassen,
+  nacharbeit,
   epics,
   epicListe,
   liste,
@@ -187,20 +200,24 @@ function LeitstandRumpf({
   projectId: number | null
   kpis: Laden<BoardDashboardKpis>
   klassen: Laden<NightRunErrorClassCounts>
+  nacharbeit: Laden<NightRunRework>
   epics: Laden<Epic[]>
   epicListe: readonly Epic[]
   liste: readonly NightRunView[] | null
   onDetail: (auswahl: Auswahl) => void
 }>) {
+  const oeffnen = useKarteOeffnen(onDetail)
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.55fr) minmax(0,1fr)' }, gap: '16px', alignItems: 'start' }}>
+    <Box
+      data-testid="leitstand-rumpf"
+      sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.55fr) minmax(0,1fr)' }, gap: '16px', alignItems: 'start' }}
+    >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
         {juengster && projectId !== null && (
           <LetzterLauf
             lauf={juengster}
             epics={epicListe}
-            projectId={projectId}
-            onOeffnen={(card) => onDetail({ card, projectId })}
+            onOeffnen={(nummer) => void oeffnen(projectId, nummer)}
           />
         )}
         {kpis.art === 'da' && (
@@ -212,10 +229,55 @@ function LeitstandRumpf({
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
         {klassen.art === 'da' && liste && <Abbruchgruende zaehler={klassen.wert} laeufe={liste.length} />}
+        {/* Nur mit Run-Recht (AK 7): Die Läufe sind da, wo das Recht besteht. */}
+        {liste && projectId !== null && nacharbeit.art === 'da' && (
+          <NacharbeitPlatte daten={nacharbeit.wert} onOeffnen={(nummer) => void oeffnen(projectId, nummer)} />
+        )}
         {epics.art === 'da' && <VorhabenPlatte epics={epics.wert} />}
       </Box>
     </Box>
   )
+}
+
+/**
+ * Der Abschnitt unter dem Rumpf (Issue #1778, Plan #1765 E15): „Fluss“ und darunter „Alter in Arbeit“,
+ * beide in voller Seitenbreite und wie „Durchsatz“ für alle, die das Board sehen dürfen. Fällt ein
+ * Abruf aus, fehlt nur seine Platte. Die Kartennummer öffnet die Karte wie in „Letzter Run“ (E18).
+ */
+function FlussBereich({
+  fluss,
+  alter,
+  projectId,
+  onDetail,
+}: Readonly<{ fluss: Laden<BoardFlow>; alter: Laden<AgingWip>; projectId: number | null; onDetail: (auswahl: Auswahl) => void }>) {
+  const oeffnen = useKarteOeffnen(onDetail)
+  return (
+    <Box data-testid="leitstand-fluss" sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
+      {fluss.art === 'da' && <FlussPlatte daten={fluss.wert} />}
+      {alter.art === 'da' && projectId !== null && (
+        <AlterInArbeitPlatte daten={alter.wert} onOeffnen={(nummer) => void oeffnen(projectId, nummer)} />
+      )}
+    </Box>
+  )
+}
+
+/**
+ * Öffnet eine Karte des Projekts über ihre Nummer zum Lesen (E14): erst `cardsApi.byNumber`, dann
+ * der Dialog; eine nicht gefundene Karte meldet sich als Warnung, jeder andere Fehler als Fehler.
+ */
+function useKarteOeffnen(onDetail: (auswahl: Auswahl) => void) {
+  const t = useT().LEITSTAND
+  const notify = useSnackbar()
+  return async (projectId: number, nummer: number) => {
+    try {
+      onDetail({ card: await cardsApi.byNumber(projectId, nummer), projectId })
+    } catch (err) {
+      notify(
+        err instanceof ApiError && err.status === 404 ? t.KARTE_FEHLT(nummer) : t.KARTE_FEHLER,
+        err instanceof ApiError && err.status === 404 ? 'warning' : 'error',
+      )
+    }
+  }
 }
 
 /** Laufband (Entwurf Z. 393–468, 1203–1230): der jüngste Lauf auf einen Blick. */
@@ -353,25 +415,12 @@ function Zustand({ children }: Readonly<{ children: string }>) {
 function LetzterLauf({
   lauf,
   epics,
-  projectId,
   onOeffnen,
-}: Readonly<{ lauf: NightRunView; epics: readonly Epic[]; projectId: number; onOeffnen: (card: CardByNumber) => void }>) {
+}: Readonly<{ lauf: NightRunView; epics: readonly Epic[]; onOeffnen: (nummer: number) => void }>) {
   const t = useT().LEITSTAND
   const { sprache } = useSprache()
-  const notify = useSnackbar()
   const [nurAbbrueche, setNurAbbrueche] = useState(false)
   const zeilen = nurAbbrueche ? lauf.items.filter(istAbbruch) : lauf.items
-
-  const oeffnen = async (item: NightRunItemView) => {
-    try {
-      onOeffnen(await cardsApi.byNumber(projectId, item.cardNumber))
-    } catch (err) {
-      notify(
-        err instanceof ApiError && err.status === 404 ? t.KARTE_FEHLT(item.cardNumber) : t.KARTE_FEHLER,
-        err instanceof ApiError && err.status === 404 ? 'warning' : 'error',
-      )
-    }
-  }
 
   return (
     <Platte
@@ -397,7 +446,7 @@ function LetzterLauf({
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
         {zeilen.map((item) => (
           <Box component="li" key={item.id} sx={{ '&:not(:last-child)': { borderBottom: `1px solid color-mix(in srgb, ${RAND} 55%, transparent)` } }}>
-            <Vorgang item={item} epic={epics.find((e) => e.memberNumbers.includes(item.cardNumber)) ?? null} onOeffnen={() => void oeffnen(item)} />
+            <Vorgang item={item} epic={epics.find((e) => e.memberNumbers.includes(item.cardNumber)) ?? null} onOeffnen={() => onOeffnen(item.cardNumber)} />
             {/* Unter der Zeile und nicht in ihr (Issue #1552, E18): Die Zeile ist ein Knopf, und eine
                 Überschrift mit Beschreibungsliste gehört nicht in einen Knopf. Eingerückt bis zur
                 Titelspalte: 16 Rand + 14 LED + 12 + 64 Nummer + 12. */}
@@ -500,12 +549,13 @@ function ImplementierungVerlauf({ wochen }: Readonly<{ wochen: BoardDashboardKpi
   const werte = kacheln.map((k) => (k.wert === null ? null : `${k.wert} ${k.einheit}`))
   const vorgelesen = werte.map((wert) => wert ?? t.KEINE_MESSUNG)
   return (
-    <Platte titel={t.IMPLEMENTIERUNGSZEIT} notiz={t.IMPLEMENTIERUNG_NOTIZ(wochen.length)}>
+    <Platte titel={t.IMPLEMENTIERUNG_VERLAUF_TITEL} notiz={t.IMPLEMENTIERUNG_NOTIZ(wochen.length)}>
       <Balkenwerk
         wochen={wochen}
         hoehen={balkenHoehenMitLuecken(kacheln.map((k, i) => (k.wert === null ? null : wochen[i].avgImplementationSeconds)))}
         titel={(i) => `${werte[i]} · ${kacheln[i].basis}`}
-        wert={(i) => vorgelesen[i]}
+        // Über dem Balken nur die ganze Minutenzahl, die Einheit steht im Kopf (Issue #1741); eine Lücke fragt nie.
+        wert={(i) => formatierer(sprache).zahl(Math.round(Number(wochen[i].avgImplementationSeconds) / 60), { maximumFractionDigits: 0 })}
         ariaLabel={t.IMPLEMENTIERUNG_ARIA(wochen.length, vorgelesen.join(', '), vorgelesen.at(-1))}
         leer={werte.every((wert) => wert === null)}
         leersatz={t.IMPLEMENTIERUNG_LEER}
@@ -554,13 +604,12 @@ function Balkenwerk({
       </Typography>
     )
   }
-  const spalten = `repeat(${Math.max(1, wochen.length)}, minmax(0,1fr))`
   return (
     <>
       <Box
         role="img"
         aria-label={ariaLabel}
-        sx={{ display: 'grid', gridTemplateColumns: spalten, alignItems: 'end', gap: '6px', height: 132, px: '16px', pt: '16px' }}
+        sx={{ display: 'grid', gridTemplateColumns: wochenSpalten(wochen.length), alignItems: 'end', gap: '6px', height: 132, px: '16px', pt: '16px' }}
       >
         {hoehen.map((hoehe, i) => {
           const jetzt = i === hoehen.length - 1
@@ -572,7 +621,7 @@ function Balkenwerk({
                   data-testid={`luecke-${i}`}
                   sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}
                 >
-                  <Box sx={{ borderTop: `1px dashed ${RAND_STARK}` }} />
+                  <Grundlinie />
                 </Box>
               </Erklaerung>
             )
@@ -605,13 +654,7 @@ function Balkenwerk({
           )
         })}
       </Box>
-      <Box aria-hidden sx={{ display: 'grid', gridTemplateColumns: spalten, gap: '6px', px: '16px', pt: '7px', pb: '14px', borderTop: `1px solid ${RAND}`, mt: '10px' }}>
-        {wochen.map((w) => (
-          <Box key={w.weekStart} component="span" sx={{ ...ZAHL, fontSize: 9.5, color: TEXT_SCHWACH, textAlign: 'center' }}>
-            {kalenderwoche(w.weekStart)}
-          </Box>
-        ))}
-      </Box>
+      <WochenLeiste wochen={wochen} />
     </>
   )
 }

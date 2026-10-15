@@ -1,9 +1,12 @@
 package org.mwolff.manban.comment.infrastructure.persistence;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.comment.application.CommentRepository;
 import org.mwolff.manban.comment.domain.Comment;
+import org.mwolff.manban.comment.domain.LaufKommentar;
 import org.springframework.stereotype.Component;
 
 /** Adapter des {@link CommentRepository}-Ports auf Spring Data JPA. */
@@ -50,6 +53,14 @@ class CommentRepositoryAdapter implements CommentRepository {
     return jpa.findFirstMatchPerCardOnBoard(projectId, boardId, q).stream()
         .map(CommentRepositoryAdapter::toDomain)
         .toList();
+  }
+
+  @Override
+  public List<LaufKommentar> findLaufKommentare(Collection<Long> cardIds, Instant von) {
+    if (cardIds.isEmpty()) {
+      return List.of();
+    }
+    return jpa.findLaufKommentare(cardIds, von);
   }
 
   private static CommentEntity toEntity(Comment c) {

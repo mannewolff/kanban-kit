@@ -5,9 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { ApiError } from '../api/client'
-import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
+import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
-import { nightRunsApi, type NightRunItemView, type NightRunView } from '../api/nightRuns'
+import { nightRunsApi, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
 import { TabletQuerProvider } from '../lib/tabletQuer'
 import { setzeMedien } from '../test/setup'
@@ -16,9 +16,9 @@ import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
-vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn(), flow: vi.fn(), aging: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
-vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn() } }))
+vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
   ...(await original<typeof import('../api/nightRunUsage')>()),
   nightRunUsageApi: { period: vi.fn(), total: vi.fn() },
@@ -29,8 +29,8 @@ vi.mock('../components/SnackbarProvider', () => ({ useSnackbar: () => mNotify })
 
 // Der Kartendialog ist eigenständig getestet; hier zählt, mit welcher Karte er geöffnet wird.
 vi.mock('../components/CardDetailModal', () => ({
-  CardDetailModal: ({ card, onClose }: Readonly<{ card: Card; onClose: () => void }>) => (
-    <div data-testid="karten-detail">
+  CardDetailModal: ({ card, canEdit, onClose }: Readonly<{ card: Card; canEdit: boolean; onClose: () => void }>) => (
+    <div data-testid="karten-detail" data-can-edit={String(canEdit)}>
       <span>{card.title}</span>
       <button type="button" onClick={onClose}>
         Detail schließen
@@ -43,9 +43,12 @@ const m = {
   board: boardsApi.get as ReturnType<typeof vi.fn>,
   kpis: dashboardApi.get as ReturnType<typeof vi.fn>,
   implementierung: dashboardApi.implementationTime as ReturnType<typeof vi.fn>,
+  fluss: dashboardApi.flow as ReturnType<typeof vi.fn>,
+  alter: dashboardApi.aging as ReturnType<typeof vi.fn>,
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
+  nacharbeit: nightRunsApi.rework as ReturnType<typeof vi.fn>,
   karteNachNummer: cardsApi.byNumber as ReturnType<typeof vi.fn>,
   verbrauch: nightRunUsageApi.period as ReturnType<typeof vi.fn>,
   lebenszeit: nightRunUsageApi.total as ReturnType<typeof vi.fn>,
@@ -226,6 +229,39 @@ const lebenszeit = (): VerbrauchGesamt => ({
   brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
 })
 
+/** Die Antwort der Platte „Nacharbeit“ (Issue #1760); der Verlauf ist in `NacharbeitPlatte.test.tsx` geprüft. */
+const nacharbeit = (): NightRunRework => ({
+  dataSince: '2026-07-01T22:00:00Z',
+  runsInPeriod: true,
+  packages: { dataSince: '2026-07-01T22:00:00Z', affected: 1, processed: 14, cards: [{ number: 1712, title: 'Endpunkt bereitstellen', count: 2 }] },
+  documents: { dataSince: '2026-07-01T22:00:00Z', affected: 0, processed: 6, cards: [] },
+  weeks: [],
+})
+
+/** Die Antwort der Platte „Fluss“ (Issue #1778); Bänder und Anzeige sind in `FlussPlatte.test.tsx` geprüft. */
+const fluss = (): BoardFlow => ({
+  days: [
+    { date: '2026-10-14', known: true, backlog: 4, ready: 2, inProgress: 1, inReview: 2, done: 3 },
+    { date: '2026-10-15', known: true, backlog: 4, ready: 2, inProgress: 1, inReview: 3, done: 5 },
+  ],
+  dataSince: null,
+})
+
+/** Die Antwort der Platte „Alter in Arbeit“ (Issue #1778); Ready ist leer. */
+const alter = (): AgingWip => ({
+  ready: { comparisonCount: 0, thresholdSeconds: null, cards: [] },
+  inProgress: {
+    comparisonCount: 2,
+    thresholdSeconds: null,
+    cards: [{ id: 4, number: 1720, title: 'Port anlegen', ageSeconds: 7_200, ageIsMinimum: false, overThreshold: false }],
+  },
+  inReview: {
+    comparisonCount: 6,
+    thresholdSeconds: 86_400,
+    cards: [{ id: 3, number: 1712, title: 'Endpunkt bereitstellen', ageSeconds: 172_800, ageIsMinimum: false, overThreshold: true }],
+  },
+})
+
 function renderPage(pfad = '/boards/1/leitstand') {
   return render(
     <TabletQuerProvider>
@@ -249,6 +285,9 @@ beforeEach(() => {
   m.klassen.mockResolvedValue({ CHECKS_RED: 11, AWAITING_DECISION: 7 })
   m.verbrauch.mockResolvedValue(zeitraum())
   m.lebenszeit.mockResolvedValue(lebenszeit())
+  m.nacharbeit.mockResolvedValue(nacharbeit())
+  m.fluss.mockResolvedValue(fluss())
+  m.alter.mockResolvedValue(alter())
 })
 
 describe('LeitstandPage (#979)', () => {
@@ -508,7 +547,7 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
       }),
     )
     renderPage()
-    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit (Minuten)' })
     expect(platte).toHaveTextContent('Mittelwert je Woche · 3 Wochen')
     expect(within(platte).getByRole('img')).toHaveAccessibleName(
       'Implementierungszeit der letzten 3 Wochen: 30 Minuten, keine Messung, 2,0 Stunden, zuletzt 2,0 Stunden',
@@ -521,8 +560,8 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     expect(within(platte).getByTestId('luecke-1')).toHaveAttribute('title', 'KW 24: keine gemessene Karte')
     // Der Wert steht sichtbar über jedem Balken, die Lücke trägt keinen (Issue #1675).
     expect(within(platte).getAllByTestId(/^wert-/).map((w) => [w.dataset.testid, w.textContent])).toEqual([
-      ['wert-0', '30 Minuten'],
-      ['wert-2', '2,0 Stunden'],
+      ['wert-0', '30'],
+      ['wert-2', '120'],
     ])
     expect(within(platte).getByTestId('wert-0')).toHaveAttribute('aria-hidden', 'true')
     expect(platte).toHaveTextContent('232425')
@@ -542,7 +581,7 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
       }),
     )
     renderPage()
-    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit (Minuten)' })
     expect(platte).toHaveTextContent('Noch keine gemessene Implementierungszeit in den letzten Wochen.')
     expect(within(platte).queryByRole('img')).not.toBeInTheDocument()
   })
@@ -552,7 +591,7 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
     renderPage()
     expect(await screen.findByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Implementierungszeit' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Implementierungszeit (Minuten)' })).toBeInTheDocument()
   })
 
   it('zeigt den Durchsatz als Balkenwerk mit Kalenderwochen, eine leere Woche ohne Balken', async () => {
@@ -612,6 +651,132 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
   })
 })
 
+describe('LeitstandPage — Nacharbeit (Issue #1760)', () => {
+  it('zeigt die Platte in der rechten Spalte zwischen „Abbruchgründe“ und „Vorhaben“', async () => {
+    renderPage()
+    const nacharbeitPlatte = await screen.findByRole('region', { name: 'Nacharbeit' })
+    const gruende = screen.getByRole('region', { name: 'Abbruchgründe' })
+    expect(gruende.compareDocumentPosition(nacharbeitPlatte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(nacharbeitPlatte.compareDocumentPosition(screen.getByRole('region', { name: 'Vorhaben' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(nacharbeitPlatte).toHaveTextContent('1 von 14')
+    expect(m.nacharbeit).toHaveBeenCalledWith(1)
+  })
+
+  it('Szenario: Ohne Recht auf die Runs', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.nacharbeit.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
+    await waitFor(() => expect(m.nacharbeit).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Nacharbeit' })).not.toBeInTheDocument()
+    expect(screen.getByRole('article', { name: 'Durchlaufzeit' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /^Implementierungszeit/ })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Vorhaben' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Platte ohne die Läufe nicht, auch wenn die Nacharbeit da ist', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Vorhaben' })).toBeInTheDocument()
+    await waitFor(() => expect(m.laeufe).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Nacharbeit' })).not.toBeInTheDocument()
+  })
+
+  it('lässt die Platte bei einem Fehler der Nacharbeit still weg und zeigt „Abbruchgründe“ weiter', async () => {
+    m.nacharbeit.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Abbruchgründe' })).toBeInTheDocument()
+    await waitFor(() => expect(m.nacharbeit).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Nacharbeit' })).not.toBeInTheDocument()
+  })
+
+  it('öffnet die Karte über ihre Nummer wie „Letzter Run“, nur zum Lesen', async () => {
+    m.karteNachNummer.mockResolvedValue(karte('Endpunkt im Detail'))
+    renderPage()
+    const nacharbeitPlatte = await screen.findByRole('region', { name: 'Nacharbeit' })
+    fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Pakete zurückgezogen: 1 von 14 — Karten zeigen' }))
+    fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Karte #1712 öffnen: Endpunkt bereitstellen' }))
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Endpunkt im Detail')
+    expect(screen.getByTestId('karten-detail')).toHaveAttribute('data-can-edit', 'false')
+    expect(m.karteNachNummer).toHaveBeenCalledWith(5, 1712)
+  })
+
+  it('meldet eine nicht gefundene Karte wie „Letzter Run“ als Warnung', async () => {
+    m.karteNachNummer.mockRejectedValue(new ApiError(404, 'Not Found'))
+    renderPage()
+    const nacharbeitPlatte = await screen.findByRole('region', { name: 'Nacharbeit' })
+    fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Pakete zurückgezogen: 1 von 14 — Karten zeigen' }))
+    fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Karte #1712 öffnen: Endpunkt bereitstellen' }))
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Karte #1712 nicht gefunden — gelöscht oder kein Zugriff.', 'warning'))
+  })
+})
+
+describe('LeitstandPage — Fluss und Alter in Arbeit (Issue #1778)', () => {
+  it('stellt „Fluss“ und darunter „Alter in Arbeit“ nach dem Rumpf-Raster in voller Breite (AK 12)', async () => {
+    renderPage()
+    const flussPlatte = await screen.findByRole('region', { name: 'Fluss' })
+    const alterPlatte = await screen.findByRole('region', { name: 'Alter in Arbeit' })
+    expect(m.fluss).toHaveBeenCalledWith(1)
+    expect(m.alter).toHaveBeenCalledWith(1)
+    for (const platte of [screen.getByRole('region', { name: 'Durchsatz' }), await screen.findByRole('region', { name: 'Vorhaben' })]) {
+      expect(platte.compareDocumentPosition(flussPlatte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(platte.contains(flussPlatte)).toBe(false)
+    }
+    expect(flussPlatte.compareDocumentPosition(alterPlatte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Voller Breite: Der Abschnitt liegt neben dem Rumpf-Raster, nicht in einer seiner Spalten.
+    const abschnitt = screen.getByTestId('leitstand-fluss')
+    expect(abschnitt).toContainElement(flussPlatte)
+    expect(abschnitt).toContainElement(alterPlatte)
+    expect(abschnitt.contains(screen.getByRole('region', { name: 'Durchsatz' }))).toBe(false)
+    const rumpf = screen.getByTestId('leitstand-rumpf')
+    expect(rumpf).not.toContainElement(abschnitt)
+    expect(rumpf.compareDocumentPosition(abschnitt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('trägt in einer leeren Spalte ihren Leersatz (AK 13)', async () => {
+    renderPage()
+    const alterPlatte = await screen.findByRole('region', { name: 'Alter in Arbeit' })
+    expect(within(alterPlatte).getByTestId('alter-leer-ready')).toHaveTextContent('Keine Karte in Ready')
+  })
+
+  it('öffnet die Karte über ihre Nummer wie „Letzter Run“, nur zum Lesen (AK 9)', async () => {
+    m.karteNachNummer.mockResolvedValue(karte('Endpunkt im Detail'))
+    renderPage()
+    const alterPlatte = await screen.findByRole('region', { name: 'Alter in Arbeit' })
+    fireEvent.click(within(alterPlatte).getByRole('button', { name: 'Karte #1712 öffnen: Endpunkt bereitstellen' }))
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Endpunkt im Detail')
+    expect(screen.getByTestId('karten-detail')).toHaveAttribute('data-can-edit', 'false')
+    expect(m.karteNachNummer).toHaveBeenCalledWith(5, 1712)
+  })
+
+  it('zeigt beide Platten auch ohne Recht auf die Runs (AK 10)', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.nacharbeit.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Fluss' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Alter in Arbeit' })).toBeInTheDocument()
+  })
+
+  it('lässt eine Platte bei einem Fehler still weg und zeigt die andere weiter', async () => {
+    m.fluss.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Alter in Arbeit' })).toBeInTheDocument()
+    await waitFor(() => expect(m.fluss).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Fluss' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt „Fluss“ weiter, wenn „Alter in Arbeit“ ausfällt', async () => {
+    m.alter.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Fluss' })).toBeInTheDocument()
+    await waitFor(() => expect(m.alter).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Alter in Arbeit' })).not.toBeInTheDocument()
+  })
+})
+
 describe('LeitstandPage — Diagrammbalken auf dem Tablet im Querformat (Plan #1707, E7)', () => {
   beforeEach(() => {
     m.kpis.mockResolvedValue(
@@ -627,7 +792,7 @@ describe('LeitstandPage — Diagrammbalken auf dem Tablet im Querformat (Plan #1
   it('öffnet an Balken und Lücke die Erklärung per Antippen', async () => {
     setzeMedien({ tabletQuer: true })
     renderPage()
-    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit (Minuten)' })
     const balken = within(platte).getByTestId('balken-100')
     const luecke = within(platte).getByTestId('luecke-1')
     expect(balken).not.toHaveAttribute('title')
@@ -644,7 +809,7 @@ describe('LeitstandPage — Diagrammbalken auf dem Tablet im Querformat (Plan #1
 
   it('trägt am Desktop das native title wie heute und öffnet per Klick nichts', async () => {
     renderPage()
-    const platte = await screen.findByRole('region', { name: 'Implementierungszeit' })
+    const platte = await screen.findByRole('region', { name: 'Implementierungszeit (Minuten)' })
 
     fireEvent.click(within(platte).getByTestId('balken-100'))
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
@@ -1089,7 +1254,7 @@ describe('LeitstandPage auf Englisch', () => {
       }),
     )
     renderEnglisch()
-    const platte = await screen.findByRole('region', { name: 'Implementation time' })
+    const platte = await screen.findByRole('region', { name: 'Implementation time (minutes)' })
     expect(platte).toHaveTextContent('Average per week · 3 weeks')
     expect(within(platte).getByRole('img')).toHaveAccessibleName(
       'Implementation time of the last 3 weeks: 30 minutes, no measurement, 2.0 hours, latest 2.0 hours',
@@ -1099,6 +1264,7 @@ describe('LeitstandPage auf Englisch', () => {
       '2.0 hours · 1 card',
     ])
     expect(within(platte).getByTestId('luecke-1')).toHaveAttribute('title', 'CW 24: no measured card')
+    expect(within(platte).getAllByTestId(/^wert-/).map((w) => w.textContent)).toEqual(['30', '120'])
     const durchsatz = screen.getByRole('region', { name: 'Throughput' })
     expect(durchsatz).toHaveTextContent('completed cards per week · 2 weeks')
     expect(within(durchsatz).getByRole('img')).toHaveAccessibleName('Throughput of the last 2 weeks: 10, 12 cards, latest 12')
@@ -1124,7 +1290,7 @@ describe('LeitstandPage auf Englisch', () => {
     renderEnglisch()
     expect(await screen.findByRole('article', { name: 'Lead time' })).toHaveTextContent('—no data')
     expect(screen.getByRole('region', { name: 'Throughput' })).toHaveTextContent('No completed card in the last weeks yet.')
-    expect(screen.getByRole('region', { name: 'Implementation time' })).toHaveTextContent(
+    expect(screen.getByRole('region', { name: 'Implementation time (minutes)' })).toHaveTextContent(
       'No measured implementation time in the last weeks yet.',
     )
     const gruende = await screen.findByRole('region', { name: 'Abort reasons' })

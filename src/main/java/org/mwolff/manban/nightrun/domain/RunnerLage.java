@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome.Verdict;
 
@@ -19,6 +20,10 @@ import org.mwolff.manban.nightrun.domain.NightRunOutcome.Verdict;
  *
  * <p>Der letzte beendete Lauf steht auch dann da, wenn ein anderer läuft: Szenario 1 (E14) zeigt
  * die laufende Kette neben der Umsetzungsnacht, die ohne Paket endete.
+ *
+ * <p>Ein verstummter Lauf, dessen Störung im Plattform-Leitstand quittiert ist, erscheint nicht
+ * mehr (Issue #1742): Die Quittung blendet nur den Zustand „verstummt“ aus. Meldet sich der Lauf
+ * danach wieder, läuft er und steht wieder da. Den letzten beendeten Lauf berührt sie nicht.
  *
  * @param gesamt ob ein Lauf läuft oder verstummt ist, sonst ob es je einen gab
  * @param laeufe die laufenden und verstummten Läufe, in der Reihenfolge der Eingabe
@@ -60,6 +65,8 @@ public record RunnerLage(
    * @param runId der Lauf
    * @param mode Art des Laufs — Kette oder Umsetzungsnacht
    * @param startedAt Beginn des Laufs
+   * @param tokenName das Token, unter dem der Lauf gemeldet wurde (Issue #1742); {@code null}, wenn
+   *     der Lauf keines trägt
    * @param letzteMeldung das letzte Lebenszeichen: die letzte Meldung, ohne sie der Start
    * @param zustand läuft oder verstummt
    * @param stufen die Stufen aus {@code current}, wie gemeldet
@@ -70,6 +77,7 @@ public record RunnerLage(
       long runId,
       NightRunMode mode,
       Instant startedAt,
+      @Nullable String tokenName,
       Instant letzteMeldung,
       LaufZustand zustand,
       List<RunnerStufe> stufen,
@@ -107,9 +115,15 @@ public record RunnerLage(
    *     {@link #letzterBeendeter}), fremde Pakete werden übergangen
    * @param jetzt der Zeitpunkt, gegen den die Stillefrist gemessen wird
    * @param stilleFrist die Stille, die ein unfertiger Lauf sich erlauben darf
+   * @param quittiert die Läufe, deren Störung im Plattform-Leitstand quittiert ist (Issue #1742);
+   *     ein verstummter unter ihnen fällt aus {@code laeufe} heraus
    */
   public static RunnerLage ermittle(
-      List<NightRun> laeufe, List<NightRunItem> pakete, Instant jetzt, Duration stilleFrist) {
+      List<NightRun> laeufe,
+      List<NightRunItem> pakete,
+      Instant jetzt,
+      Duration stilleFrist,
+      Set<Long> quittiert) {
     if (laeufe.isEmpty()) {
       return new RunnerLage(Gesamt.NIE, List.of(), null);
     }
@@ -117,6 +131,8 @@ public record RunnerLage(
         laeufe.stream()
             .filter(lauf -> !beendet(lauf))
             .map(lauf -> aktiv(lauf, jetzt, stilleFrist))
+            .filter(
+                lauf -> lauf.zustand() == LaufZustand.LAEUFT || !quittiert.contains(lauf.runId()))
             .toList();
     LetzterLauf letzter =
         letzterBeendeter(laeufe)
@@ -167,6 +183,7 @@ public record RunnerLage(
         lauf.requireId(),
         lauf.mode(),
         lauf.startedAt(),
+        lauf.tokenName(),
         letzteMeldung,
         verstummt ? LaufZustand.VERSTUMMT : LaufZustand.LAEUFT,
         lauf.current(),

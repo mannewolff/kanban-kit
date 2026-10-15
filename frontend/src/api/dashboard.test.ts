@@ -58,3 +58,49 @@ describe('dashboardApi.implementationTime', () => {
     )
   })
 })
+
+describe('dashboardApi.flow und aging', () => {
+  const antwort = (body: unknown) =>
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: () => Promise.resolve(JSON.stringify(body)),
+    } as Response)
+
+  it('flow ruft ohne Zone die Zone des Lesers ab', async () => {
+    const fluss = { days: [], dataSince: null }
+    const f = antwort(fluss)
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    const result = await dashboardApi.flow(7)
+
+    expect(f.mock.calls[f.mock.calls.length - 1][0]).toBe(
+      `/api/boards/7/dashboard/flow?zone=${encodeURIComponent(zone)}`,
+    )
+    expect(result).toEqual(fluss)
+  })
+
+  it('flow hängt eine übergebene Zone URL-kodiert an', async () => {
+    const f = antwort({ days: [], dataSince: null })
+
+    await dashboardApi.flow(7, 'America/Argentina/Buenos_Aires')
+
+    expect(f.mock.calls[f.mock.calls.length - 1][0]).toBe(
+      '/api/boards/7/dashboard/flow?zone=America%2FArgentina%2FBuenos_Aires',
+    )
+  })
+
+  it('aging ruft GET /api/boards/{id}/dashboard/aging', async () => {
+    const leer = { comparisonCount: 0, thresholdSeconds: null, cards: [] }
+    const alter = { ready: leer, inProgress: leer, inReview: leer }
+    const f = antwort(alter)
+
+    const result = await dashboardApi.aging(7)
+
+    const [url, init] = f.mock.calls[f.mock.calls.length - 1]
+    expect(url).toBe('/api/boards/7/dashboard/aging')
+    expect(init?.method).toBeUndefined()
+    expect(result).toEqual(alter)
+  })
+})

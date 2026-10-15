@@ -2,22 +2,25 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError } from '../api/client'
-import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
+import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
-import { nightRunsApi, type NightRunView } from '../api/nightRuns'
+import { nightRunsApi, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { useLeitstandDaten } from './useLeitstandDaten'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
-vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), flow: vi.fn(), aging: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
-vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn() } }))
+vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn() } }))
 
 const m = {
   board: boardsApi.get as ReturnType<typeof vi.fn>,
   kpis: dashboardApi.get as ReturnType<typeof vi.fn>,
+  fluss: dashboardApi.flow as ReturnType<typeof vi.fn>,
+  alter: dashboardApi.aging as ReturnType<typeof vi.fn>,
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
+  nacharbeit: nightRunsApi.rework as ReturnType<typeof vi.fn>,
 }
 
 const board = (extra: Partial<Board> = {}): Board => ({
@@ -38,6 +41,21 @@ const kpis = (): BoardDashboardKpis => ({
   implementationSampleCount: 61,
   implementationWeekly: [],
   outliers: [],
+})
+
+const fluss = (): BoardFlow => ({
+  days: [{ date: '2026-10-15', known: true, backlog: 4, ready: 2, inProgress: 1, inReview: 3, done: 5 }],
+  dataSince: null,
+})
+
+const alter = (): AgingWip => ({
+  ready: { comparisonCount: 0, thresholdSeconds: null, cards: [] },
+  inProgress: { comparisonCount: 0, thresholdSeconds: null, cards: [] },
+  inReview: {
+    comparisonCount: 6,
+    thresholdSeconds: 86_400,
+    cards: [{ id: 3, number: 1712, title: 'Endpunkt', ageSeconds: 172_800, ageIsMinimum: false, overThreshold: true }],
+  },
 })
 
 const epic = (id: number, title: string): Epic => ({
@@ -76,6 +94,14 @@ const lauf = (id: number, startedAt: string): NightRunView => ({
   items: [],
 })
 
+const nacharbeit = (): NightRunRework => ({
+  dataSince: '2026-07-01T22:00:00Z',
+  runsInPeriod: true,
+  packages: { dataSince: '2026-07-01T22:00:00Z', affected: 2, processed: 14, cards: [] },
+  documents: { dataSince: '2026-07-01T22:00:00Z', affected: 1, processed: 6, cards: [] },
+  weeks: [],
+})
+
 /** Ein Versprechen, das der Test von Hand einlöst — für die Zustände vor der Antwort. */
 function offen<T>() {
   let einloesen: (wert: T) => void = () => undefined
@@ -91,9 +117,12 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.board.mockResolvedValue(board())
   m.kpis.mockResolvedValue(kpis())
+  m.fluss.mockResolvedValue(fluss())
+  m.alter.mockResolvedValue(alter())
   m.epics.mockResolvedValue([epic(1, 'Nachtlauf-Auswertung')])
   m.laeufe.mockResolvedValue([lauf(1, '2026-09-10T21:00:00Z'), lauf(3, '2026-09-14T21:10:00Z')])
   m.klassen.mockResolvedValue({ CHECKS_RED: 11 })
+  m.nacharbeit.mockResolvedValue(nacharbeit())
 })
 
 describe('useLeitstandDaten — Board-ID', () => {
@@ -123,6 +152,9 @@ describe('useLeitstandDaten — Board-ID', () => {
     expect(m.kpis).not.toHaveBeenCalled()
     expect(m.epics).not.toHaveBeenCalled()
     expect(m.laeufe).not.toHaveBeenCalled()
+    expect(m.nacharbeit).not.toHaveBeenCalled()
+    expect(m.fluss).not.toHaveBeenCalled()
+    expect(m.alter).not.toHaveBeenCalled()
   })
 
   it('lädt zu einer neuen Board-ID neu und beginnt dabei wieder beim Laden', async () => {
@@ -208,6 +240,72 @@ describe('useLeitstandDaten — Läufe am Projekt des Boards', () => {
     const { result } = renderHook(() => useLeitstandDaten('7'))
     await waitFor(() => expect(result.current.liste).toEqual([]))
     expect(result.current.juengster).toBeNull()
+  })
+})
+
+describe('useLeitstandDaten — Nacharbeit (Issue #1760)', () => {
+  it('lädt die Nacharbeit zum Board, ohne auf das Projekt zu warten', async () => {
+    const erstes = offen<Board>()
+    m.board.mockReturnValue(erstes.versprechen)
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    expect(result.current.nacharbeit).toEqual({ art: 'laedt' })
+    expect(m.nacharbeit).toHaveBeenCalledWith(7)
+    await waitFor(() => expect(result.current.nacharbeit).toEqual({ art: 'da', wert: nacharbeit() }))
+  })
+
+  it('lädt zu einer neuen Board-ID die Nacharbeit neu', async () => {
+    const { result, rerender } = renderHook((boardId: string) => useLeitstandDaten(boardId), { initialProps: '7' })
+    await waitFor(() => expect(result.current.nacharbeit.art).toBe('da'))
+    rerender('8')
+    expect(m.nacharbeit).toHaveBeenLastCalledWith(8)
+  })
+
+  it.each([
+    ['403 als „ohne Recht"', new ApiError(403, 'Forbidden'), { art: 'ohneRecht' }],
+    ['404 ohne Sonderregel als Fehler', new ApiError(404, 'Not Found'), { art: 'fehler' }],
+    ['einen anderen Fehler als Fehler', new Error('Netz'), { art: 'fehler' }],
+  ])('deutet %s', async (_name, fehler, erwartet) => {
+    m.nacharbeit.mockRejectedValue(fehler)
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.nacharbeit).toEqual(erwartet))
+  })
+})
+
+describe('useLeitstandDaten — Fluss und Alter in Arbeit (Issue #1778)', () => {
+  it('lädt Fluss und Alter zum Board neben den Kennzahlen, ohne auf das Projekt zu warten', async () => {
+    const erstes = offen<Board>()
+    m.board.mockReturnValue(erstes.versprechen)
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    expect(result.current.fluss).toEqual({ art: 'laedt' })
+    expect(result.current.alter).toEqual({ art: 'laedt' })
+    expect(m.fluss).toHaveBeenCalledWith(7)
+    expect(m.alter).toHaveBeenCalledWith(7)
+    await waitFor(() => expect(result.current.fluss).toEqual({ art: 'da', wert: fluss() }))
+    await waitFor(() => expect(result.current.alter).toEqual({ art: 'da', wert: alter() }))
+  })
+
+  it('lädt zu einer neuen Board-ID Fluss und Alter neu', async () => {
+    const { result, rerender } = renderHook((boardId: string) => useLeitstandDaten(boardId), { initialProps: '7' })
+    await waitFor(() => expect(result.current.alter.art).toBe('da'))
+    rerender('8')
+    expect(m.fluss).toHaveBeenLastCalledWith(8)
+    expect(m.alter).toHaveBeenLastCalledWith(8)
+  })
+
+  it('lässt bei einem Fehler des Flusses die übrigen Abrufe stehen', async () => {
+    m.fluss.mockRejectedValue(new Error('Netz'))
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.fluss).toEqual({ art: 'fehler' }))
+    await waitFor(() => expect(result.current.alter).toEqual({ art: 'da', wert: alter() }))
+    expect(result.current.kpis).toEqual({ art: 'da', wert: kpis() })
+  })
+
+  it('deutet 403 beim Alter als „ohne Recht" und lässt Fluss und Kennzahlen stehen', async () => {
+    m.alter.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.alter).toEqual({ art: 'ohneRecht' }))
+    await waitFor(() => expect(result.current.fluss).toEqual({ art: 'da', wert: fluss() }))
+    expect(result.current.kpis).toEqual({ art: 'da', wert: kpis() })
   })
 })
 

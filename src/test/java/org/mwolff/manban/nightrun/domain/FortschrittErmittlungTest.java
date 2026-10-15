@@ -352,10 +352,12 @@ class FortschrittErmittlungTest {
     assertThat(kette.pakete())
         .extracting(PackageProgress::zustand)
         .containsOnly(PackageState.ANGELEGT);
+    // Angelegte Pakete erreichen die Stufe auch ohne fertig-Zeile (Issue #1764).
     assertThat(stufen(kette))
         .containsEntry(ProgressStage.REVIEW, StageState.ERREICHT)
-        .containsEntry(ProgressStage.PAKETE, StageState.LAEUFT);
-    assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.PAKETE);
+        .containsEntry(ProgressStage.PAKETE, StageState.ERREICHT)
+        .containsEntry(ProgressStage.ABDECKUNG, StageState.LAEUFT);
+    assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.ABDECKUNG);
     assertThat(nummern(fortschritt.pakete())).containsExactly(502, 503);
   }
 
@@ -413,6 +415,77 @@ class FortschrittErmittlungTest {
 
     assertThat(nummern(fortschritt.ketten().get(0).pakete())).containsExactly(502);
     assertThat(nummern(fortschritt.pakete())).containsExactly(502, 503, 504, 505);
+  }
+
+  // --- Folgerichtige Wegleiste (Issue #1783) -----------------------------------------------------
+
+  @Test
+  void paketInUmsetzungOhnePruefvermerkMachtAlleFrueherenStufenErreicht() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    Karte a = paket(502, p, "IN_PROGRESS");
+    angelegt(a, 30);
+    bewegt(a, 31);
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette))
+        .containsExactly(
+            Map.entry(ProgressStage.PLAN, StageState.ERREICHT),
+            Map.entry(ProgressStage.REVIEW, StageState.ERREICHT),
+            Map.entry(ProgressStage.PAKETE, StageState.ERREICHT),
+            Map.entry(ProgressStage.ABDECKUNG, StageState.ERREICHT));
+    assertThat(kette.aktuelleStufe()).isNull();
+    assertThat(kette.endeErreicht()).isTrue();
+  }
+
+  @Test
+  void paketNurAngelegtOhnePruefvermerkMachtDiePruefungErreicht() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    angelegt(paket(502, p, "BACKLOG"), 30);
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette))
+        .containsExactly(
+            Map.entry(ProgressStage.PLAN, StageState.ERREICHT),
+            Map.entry(ProgressStage.REVIEW, StageState.ERREICHT),
+            Map.entry(ProgressStage.PAKETE, StageState.ERREICHT),
+            Map.entry(ProgressStage.ABDECKUNG, StageState.LAEUFT));
+    assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.ABDECKUNG);
+  }
+
+  @Test
+  void ohnePaketUndOhnePruefvermerkLaeuftDiePruefung() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+
+    assertThat(stufen(eineKette()))
+        .containsExactly(
+            Map.entry(ProgressStage.PLAN, StageState.ERREICHT),
+            Map.entry(ProgressStage.REVIEW, StageState.LAEUFT),
+            Map.entry(ProgressStage.PAKETE, StageState.OFFEN),
+            Map.entry(ProgressStage.ABDECKUNG, StageState.OFFEN));
+  }
+
+  @Test
+  void mitDurchziehenMachtEineFertigeUmsetzungAlleFrueherenStufenErreicht() {
+    Karte f = anforderung(500, FortschrittErmittlung.LABEL_DURCHZIEHEN);
+    Karte p = plan(501, f);
+    angelegt(p, 10);
+    Karte a = paket(502, p, "DONE");
+    angelegt(a, 30);
+    bewegt(a, 31);
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette).values()).containsOnly(StageState.ERREICHT);
+    assertThat(stufen(kette)).containsKey(ProgressStage.UMSETZUNG);
+    assertThat(kette.endeErreicht()).isTrue();
   }
 
   // --- Abdeckung und Variante A ------------------------------------------------------------------
@@ -2062,5 +2135,210 @@ class FortschrittErmittlungTest {
     KettenStand stand = kettenStand(f, fertig("review", p, 20));
 
     assertThat(station(stand, ProgressStage.PAKETE).zustand()).isEqualTo(StationsZustand.STEHT_AUS);
+  }
+
+  // --- Laufstand des Runners ohne Kennung (Issue #1764) ------------------------------------------
+
+  /** Laufstart, wie ihn der Runner meldet: mit Millisekunden, die Lauf-ID kürzt auf Sekunden. */
+  private static final Instant LAUFSTART = START.plusMillis(417);
+
+  /** Die Lauf-ID des Laufs {@link #LAUFSTART}, wie der Runner sie in den Laufstand schreibt. */
+  private static final String LAUF_ID = "Lauf-ID: MBPvonwdwolffde/77989/2026-10-03-130100";
+
+  private NightRunProgress ermittleAbLaufstart() {
+    return FortschrittErmittlung.ermittle(
+        lauf(NightRunMode.CHAIN, LAUFSTART, TOKEN, false),
+        FENSTER,
+        fremdeFenster,
+        aktivitaeten,
+        karten,
+        laufstaende);
+  }
+
+  private ChainProgress eineKetteAbLaufstart() {
+    NightRunProgress p = ermittleAbLaufstart();
+    assertThat(p.ketten()).hasSize(1);
+    return p.ketten().get(0);
+  }
+
+  /**
+   * Eine Kette in der Umsetzung, wie sie die Sessions am Board hinterlassen: Plan und sechs Pakete,
+   * alle Aktivitäten mit der Kennung des Laufs; fünf Pakete fertig, eines in Umsetzung.
+   */
+  private Karte planInDerUmsetzung(Karte f, String planText) {
+    Karte p = planMitText(501, f, planText);
+    akt(p, "CREATED", um(10), LAUFSTART, null);
+    for (int i = 0; i < 6; i++) {
+      boolean fertig = i < 5;
+      Karte a = paket(502 + i, p, fertig ? "IN_REVIEW" : "IN_PROGRESS");
+      akt(a, "CREATED", um(30), LAUFSTART, null);
+      akt(a, "MOVED", um(60L + i), LAUFSTART, fertig ? "IN_REVIEW" : "IN_PROGRESS");
+    }
+    return p;
+  }
+
+  /**
+   * Ein Plan, den der Lauf mit seiner Kennung angelegt hat, noch ohne Pakete: Ohne Prüfvermerk
+   * bringen allein die Stufeneinträge die Kette über die Prüfung hinaus — Pakete in Umsetzung
+   * machten die früheren Stufen schon selbst erreicht (Issue #1783).
+   */
+  private Karte planOhnePaketeAbLaufstart(Karte f) {
+    Karte p = planMitText(501, f, "## Kontext\nPlan");
+    akt(p, "CREATED", um(10), LAUFSTART, null);
+    return p;
+  }
+
+  private static void erwarteUmsetzungLaeuft(ChainProgress kette) {
+    assertThat(stufen(kette))
+        .containsExactly(
+            Map.entry(ProgressStage.PLAN, StageState.ERREICHT),
+            Map.entry(ProgressStage.REVIEW, StageState.ERREICHT),
+            Map.entry(ProgressStage.PAKETE, StageState.ERREICHT),
+            Map.entry(ProgressStage.ABDECKUNG, StageState.ERREICHT),
+            Map.entry(ProgressStage.UMSETZUNG, StageState.LAEUFT));
+    assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.UMSETZUNG);
+  }
+
+  /**
+   * Die Ursache: Der Runner schreibt den Laufstand mit eigenen Board-Aufrufen ohne Header {@code
+   * X-Night-Run} — der Kommentar trägt keine Kennung, der Lauf ist über die Aktivitäten seiner
+   * Sessions trotzdem ausgewiesen. Die Lauf-ID im Text ordnet den Laufstand dem Lauf zu. Der Plan
+   * trägt keinen Prüfvermerk und hat keine Pakete: Die Prüfung ist allein über die Stufeneinträge
+   * erreicht.
+   */
+  @Test
+  void laufstandDesRunnersOhneKennungZaehltUeberDieLaufId() {
+    Karte f = anforderung(500);
+    Karte p = planOhnePaketeAbLaufstart(f);
+    standVon(
+        f,
+        null,
+        "Ziel: umsetzung",
+        begonnen("umsetzung", p, 55),
+        fertig("abdeckung", p, 54),
+        "",
+        LAUF_ID);
+
+    erwarteUmsetzungLaeuft(eineKetteAbLaufstart());
+  }
+
+  @Test
+  void geprueftePlanketteMitBegonnenerUmsetzungZeigtDieUmsetzungAlsLaufend() {
+    Karte f = anforderung(500);
+    Karte p = planInDerUmsetzung(f, "## Kontext\nPlan-Review: fable (2026-10-03)");
+    standVon(f, null, "Ziel: umsetzung", begonnen("umsetzung", p, 55), LAUF_ID);
+
+    ChainProgress kette = eineKetteAbLaufstart();
+
+    erwarteUmsetzungLaeuft(kette);
+    assertThat(kette.pakete())
+        .extracting(PackageProgress::zustand)
+        .containsExactly(
+            PackageState.FERTIG,
+            PackageState.FERTIG,
+            PackageState.FERTIG,
+            PackageState.FERTIG,
+            PackageState.FERTIG,
+            PackageState.IN_UMSETZUNG);
+  }
+
+  @Test
+  void dieRunIdDesEnglischenLaufstandsZaehltEbenso() {
+    Karte f = anforderung(500);
+    Karte p = planOhnePaketeAbLaufstart(f);
+    standVon(
+        f,
+        null,
+        "Goal: implementation",
+        "last started: implementation started for #" + p.number() + " at " + um(55),
+        "Run-ID: MBPvonwdwolffde/77989/2026-10-03-130100");
+
+    erwarteUmsetzungLaeuft(eineKetteAbLaufstart());
+  }
+
+  @Test
+  void einLaufstandMitDerLaufIdEinesAnderenLaufsZaehltNicht() {
+    Karte f = anforderung(500);
+    Karte p = planOhnePaketeAbLaufstart(f);
+    standVon(
+        f,
+        null,
+        "Ziel: umsetzung",
+        begonnen("umsetzung", p, 55),
+        "Lauf-ID: MBPvonwdwolffde/77989/2026-10-03-130101");
+
+    assertThat(stufen(eineKetteAbLaufstart()))
+        .containsEntry(ProgressStage.REVIEW, StageState.LAEUFT);
+  }
+
+  @Test
+  void eineLaufIdMitUnlesbaremZeitstempelZaehltNicht() {
+    Karte f = anforderung(500);
+    Karte p = planOhnePaketeAbLaufstart(f);
+    standVon(
+        f,
+        null,
+        "Ziel: umsetzung",
+        begonnen("umsetzung", p, 55),
+        "Lauf-ID: MBPvonwdwolffde/77989/gestern");
+
+    assertThat(stufen(eineKetteAbLaufstart()))
+        .containsEntry(ProgressStage.REVIEW, StageState.LAEUFT);
+  }
+
+  /** Eine Lauf-ID ersetzt die Kennung nicht: Trägt der Laufstand eine fremde, zählt er nicht. */
+  @Test
+  void eineFremdeKennungGehtDerPassendenLaufIdVor() {
+    Karte f = anforderung(500);
+    Karte p = planOhnePaketeAbLaufstart(f);
+    standVon(f, START_B, "Ziel: umsetzung", begonnen("umsetzung", p, 55), LAUF_ID);
+
+    assertThat(stufen(eineKetteAbLaufstart()))
+        .containsEntry(ProgressStage.REVIEW, StageState.LAEUFT);
+  }
+
+  // --- Eigene Signale für Arbeitspakete und Abdeckung (Issue #1764) ------------------------------
+
+  @Test
+  void ohneLaufstandEintraegeErreichenPaketeUndAbdeckungUeberDiePakete() {
+    Karte f = anforderung(500, FortschrittErmittlung.LABEL_DURCHZIEHEN);
+    planInDerUmsetzung(f, "## Kontext\nPlan-Review: fable (2026-10-03)");
+
+    erwarteUmsetzungLaeuft(eineKetteAbLaufstart());
+  }
+
+  @Test
+  void nurAngelegtePaketeErreichenDiePaketeUndDieAbdeckungLaeuft() {
+    Karte f = anforderung(500, FortschrittErmittlung.LABEL_DURCHZIEHEN);
+    Karte p = planMitText(501, f, "## Kontext\nPlan-Review: fable (2026-10-03)");
+    angelegt(p, 10);
+    angelegt(paket(502, p, "BACKLOG"), 30);
+    angelegt(paket(503, p, "BACKLOG"), 31);
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette))
+        .containsExactly(
+            Map.entry(ProgressStage.PLAN, StageState.ERREICHT),
+            Map.entry(ProgressStage.REVIEW, StageState.ERREICHT),
+            Map.entry(ProgressStage.PAKETE, StageState.ERREICHT),
+            Map.entry(ProgressStage.ABDECKUNG, StageState.LAEUFT),
+            Map.entry(ProgressStage.UMSETZUNG, StageState.OFFEN));
+    assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.ABDECKUNG);
+  }
+
+  @Test
+  void einGezogenesPaketErreichtDieAbdeckung() {
+    Karte f = anforderung(500, FortschrittErmittlung.LABEL_DURCHZIEHEN);
+    Karte p = planMitText(501, f, "## Kontext\nPlan-Review: fable (2026-10-03)");
+    angelegt(p, 10);
+    Karte a = paket(502, p, "READY");
+    angelegt(a, 30);
+    akt(a, "MOVED", um(40), null, "READY");
+    angelegt(paket(503, p, "BACKLOG"), 31);
+
+    assertThat(stufen(eineKette()))
+        .containsEntry(ProgressStage.ABDECKUNG, StageState.ERREICHT)
+        .containsEntry(ProgressStage.UMSETZUNG, StageState.LAEUFT);
   }
 }
