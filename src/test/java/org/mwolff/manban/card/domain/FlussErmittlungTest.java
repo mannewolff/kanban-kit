@@ -379,6 +379,22 @@ class FlussErmittlungTest {
   }
 
   @Test
+  void dasEndeEinerAnderenKarteBegrenztDieUnbekannteSpanneNicht() {
+    LocalDate raus = HEUTE.minusDays(30);
+    LocalDate wieder = HEUTE.minusDays(20);
+    Fluss fluss =
+        ermittle(
+            List.of(
+                stay(2, ANDERES_BOARD, CardStatus.READY, LANGE_VORHER, lokal(raus, 10, 0), true),
+                stay(1, BOARD, CardStatus.IN_REVIEW, lokal(wieder, 10, 0), null, false)));
+
+    assertThat(tag(fluss, raus.minusDays(1)).known()).isFalse();
+    assertThat(tag(fluss, raus).known()).isFalse();
+    assertThat(tag(fluss, wieder).known()).isTrue();
+    assertThat(fluss.dataSince()).isEqualTo(wieder);
+  }
+
+  @Test
   void ohneNachtragSindDieTageVorDemErfassungsbeginnLeer() {
     LocalDate erfassungstag = HEUTE.minusDays(3);
     Instant seit = lokal(erfassungstag, 9, 0);

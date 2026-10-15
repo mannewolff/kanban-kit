@@ -158,14 +158,14 @@ public final class FlussErmittlung {
     for (CardStatus status : CardStatus.values()) {
       baender.put(status, 0);
     }
-    for (FlussStay aufenthalt : amBoard) {
-      CardStatus status = aufenthalt.status();
-      if (status != null
-          && new Spanne(aufenthalt.enteredAt(), aufenthalt.leftAt()).traegt(stich)
-          && (status != CardStatus.DONE || zaehltAlsFertig(aufenthalt, zeitraumBeginn))) {
-        baender.merge(status, 1, Integer::sum);
-      }
-    }
+    // Ein Aufenthalt ohne Zustand, der den Stich trägt, macht den Tag unbekannt (E7) — hier bleibt
+    // er ohne Band.
+    amBoard.stream()
+        .filter(a -> new Spanne(a.enteredAt(), a.leftAt()).traegt(stich))
+        .filter(a -> a.status() != CardStatus.DONE || zaehltAlsFertig(a, zeitraumBeginn))
+        .map(FlussStay::status)
+        .flatMap(Stream::ofNullable)
+        .forEach(status -> baender.merge(status, 1, Integer::sum));
     return baender;
   }
 
