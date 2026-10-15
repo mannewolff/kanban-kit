@@ -217,6 +217,19 @@ class NacharbeitErmittlungTest {
   }
 
   @Test
+  @DisplayName("Pakete zählen in der Kartenliste je Rückzug, auch zweimal im selben Run (E9)")
+  void einPaketScheitertZweimalImSelbenRun() {
+    Nacharbeit nacharbeit =
+        vierzehnPaketeEinesZurueck()
+            .aktivitaet(nachInProgress(5, NACHT))
+            .aktivitaet(zurueck(5, NACHT))
+            .ermittle();
+
+    assertThat(nacharbeit.pakete().betroffen()).isEqualTo(1);
+    assertThat(nacharbeit.pakete().karten()).containsExactly(new Karteneintrag(1005, "Paket 5", 2));
+  }
+
+  @Test
   @DisplayName("Szenario: Übersprungene Pakete zählen nicht")
   void uebersprungenePaketeZaehlenNicht() {
     Nacharbeit nacharbeit =

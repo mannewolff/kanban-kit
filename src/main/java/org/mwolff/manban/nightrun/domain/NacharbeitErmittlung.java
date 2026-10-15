@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.KitNamen;
 import org.mwolff.manban.common.KitNamen.Sache;
@@ -226,8 +227,8 @@ public final class NacharbeitErmittlung {
     private final @Nullable Instant datenbeginn;
     private final boolean jeLauf;
     private final Instant jetzt;
-    private final List<Set<Long>> bearbeitetJeWoche = new ArrayList<>();
-    private final List<Set<Long>> betroffenJeWoche = new ArrayList<>();
+    private final List<Set<Long>> bearbeitetJeWoche = leereWochen();
+    private final List<Set<Long>> betroffenJeWoche = leereWochen();
     private final Map<BoardKarte, List<Instant>> signaleJeKarte = new HashMap<>();
 
     /**
@@ -239,10 +240,10 @@ public final class NacharbeitErmittlung {
       this.datenbeginn = datenbeginn;
       this.jeLauf = jeLauf;
       this.jetzt = jetzt;
-      for (int i = 0; i < Wochenfenster.ANZAHL; i++) {
-        bearbeitetJeWoche.add(new HashSet<>());
-        betroffenJeWoche.add(new HashSet<>());
-      }
+    }
+
+    private static List<Set<Long>> leereWochen() {
+      return Stream.<Set<Long>>generate(HashSet::new).limit(Wochenfenster.ANZAHL).toList();
     }
 
     void bearbeitet(Spur spur) {
