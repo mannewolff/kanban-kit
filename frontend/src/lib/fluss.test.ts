@@ -78,6 +78,13 @@ describe('flussPfade', () => {
     expect(einzeln.backlog).toBe('M0,0 L100,0 L100,25 L0,25 Z')
   })
 
+  it('zeichnet einen einzelnen Tag in einer Fläche der Breite 0 ohne NaN-Koordinaten', () => {
+    // So ruft die Platte „Fluss“ einen einzelnen Tag auf: Breite (Tage − 1) × Tagesbreite = 0.
+    const schmal = flussPfade([tag('2026-10-15', { backlog: 0, ready: 0, inProgress: 0, inReview: 0, done: 2 })], 0, 40)
+
+    expect(schmal.done).toBe('M0,0 L0,0 L0,40 L0,40 Z')
+  })
+
   it('zeichnet einen Tag mitten zwischen zwei Lücken als Säule um seinen Punkt', () => {
     const mitte = flussPfade(
       [tag('2026-10-13', null), tag('2026-10-14', { backlog: 0, ready: 0, inProgress: 0, inReview: 0, done: 2 }), tag('2026-10-15', null)],
