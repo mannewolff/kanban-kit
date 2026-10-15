@@ -127,7 +127,7 @@ function Zeile({
           {titel}
         </Box>
         {seit !== null && (
-          <Box component="span" sx={{ fontSize: 11, color: TEXT_SCHWACH }}>
+          <Box component="span" data-testid={`nacharbeit-seit-${gruppe}`} sx={{ fontSize: 11, color: TEXT_SCHWACH }}>
             {seit}
           </Box>
         )}

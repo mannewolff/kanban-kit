@@ -178,6 +178,13 @@ describe('NacharbeitPlatte', () => {
     expect(platte()).toHaveTextContent('letzte 12 Wochen')
     expect(screen.getByTestId('nacharbeit-zeile-dokumente')).toHaveTextContent('seit 11.9.2026')
     expect(screen.getByTestId('nacharbeit-zeile-pakete')).not.toHaveTextContent('seit')
+    expect(screen.getByTestId('nacharbeit-seit-dokumente')).toHaveTextContent('seit 11.9.2026')
+    expect(screen.queryByTestId('nacharbeit-seit-pakete')).not.toBeInTheDocument()
+  })
+
+  it('setzt ohne späteren Beginn kein leeres „seit“ in die Dokument-Zeile', () => {
+    zeige(daten())
+    expect(screen.queryByTestId('nacharbeit-seit-dokumente')).not.toBeInTheDocument()
   })
 
   it('zeigt die drei Wochenzustände sichtbar verschieden', () => {
