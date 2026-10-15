@@ -593,11 +593,23 @@ export const ZEILE_HOVER_SX = `color-mix(in srgb, ${PLATTE_HOCH} 75%, ${KUPFER_S
 export function Taste({
   ariaLabel,
   onClick,
+  ariaExpanded,
+  ariaControls,
   children,
-}: Readonly<{ ariaLabel: string; onClick: () => void; children: ReactNode }>) {
+}: Readonly<{
+  ariaLabel: string
+  onClick: () => void
+  /** Für eine Taste, die einen Bereich auf- und zuklappt (Issue #1759): ihr Zustand. */
+  ariaExpanded?: boolean
+  /** Die `id` des Bereichs, den die Taste aufklappt. */
+  ariaControls?: string
+  children: ReactNode
+}>) {
   return (
     <ButtonBase
       aria-label={ariaLabel}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
       onClick={onClick}
       sx={{
         fontSize: 11.5,

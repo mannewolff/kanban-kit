@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { nightRunsApi, type NightRunSubmission, type ReleasePreparationView, type RunnerJetzt, type Wartegruende } from './nightRuns'
+import {
+  nightRunsApi,
+  type NightRunRework,
+  type NightRunSubmission,
+  type ReleasePreparationView,
+  type RunnerJetzt,
+  type Wartegruende,
+} from './nightRuns'
 
 function spyFetch(body = '{}') {
   return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -306,5 +313,27 @@ describe('nightRunsApi', () => {
       status: 404,
       detail: 'Lauf nicht gefunden',
     })
+  })
+
+  it('rework ruft GET /api/boards/{boardId}/night-run-rework und liefert den typisierten Aufbau', async () => {
+    const antwort: NightRunRework = {
+      dataSince: '2026-08-01T22:00:00Z',
+      runsInPeriod: true,
+      packages: { dataSince: '2026-08-01T22:00:00Z', affected: 1, processed: 14, cards: [{ number: 1712, title: 'Endpunkt', count: 2 }] },
+      documents: { dataSince: '2026-10-01T22:00:00Z', affected: 0, processed: 6, cards: [] },
+      weeks: [
+        {
+          weekStart: '2026-10-08T06:00:00Z',
+          packages: { state: 'QUOTE', affected: 1, processed: 14 },
+          documents: { state: 'KEINE_DATEN', affected: 0, processed: 0 },
+        },
+      ],
+    }
+    const f = spyFetch(JSON.stringify(antwort))
+    const ergebnis = await nightRunsApi.rework(9)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/boards/9/night-run-rework')
+    expect(c.method).toBeUndefined()
+    expect(ergebnis).toEqual(antwort)
   })
 })

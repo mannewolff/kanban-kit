@@ -355,6 +355,25 @@ describe('kleine Bausteine', () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
+  it('Taste trägt ohne Angabe kein aria-expanded und sonst Aufklappzustand und Ziel', () => {
+    const { rerender } = zeige(
+      <Taste ariaLabel="einfach" onClick={() => undefined}>
+        x
+      </Taste>,
+    )
+    expect(screen.getByRole('button', { name: 'einfach' })).not.toHaveAttribute('aria-expanded')
+    rerender(
+      <ThemeProvider theme={theme}>
+        <Taste ariaLabel="einfach" onClick={() => undefined} ariaExpanded={false} ariaControls="liste">
+          x
+        </Taste>
+      </ThemeProvider>,
+    )
+    const taste = screen.getByRole('button', { name: 'einfach' })
+    expect(taste).toHaveAttribute('aria-expanded', 'false')
+    expect(taste).toHaveAttribute('aria-controls', 'liste')
+  })
+
   it('ZEILE_HOVER_SX mischt die helle Platte mit dem Kupferschimmer', () => {
     expect(ZEILE_HOVER_SX).toBe(`color-mix(in srgb, ${PLATTE_HOCH} 75%, ${KUPFER_SCHIMMER})`)
   })

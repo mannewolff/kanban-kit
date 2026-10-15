@@ -598,6 +598,53 @@ export interface Wartegruende {
   startable: boolean
 }
 
+/**
+ * Zustand einer Gruppe in einem Wochenfenster der Platte „Nacharbeit“ (Issue #1759, Plan #1752 AK 14):
+ * vor dem Datenbeginn, Daten ohne bearbeitete Karte, oder eine Quote.
+ */
+export type NightRunReworkState = 'KEINE_DATEN' | 'KEINE_KARTE' | 'QUOTE'
+
+/** Eine Karte der Kartenliste: wie oft der Rückzug bzw. Halt geschah (E9). */
+export interface NightRunReworkCard {
+  number: number
+  title: string
+  count: number
+}
+
+/** Eine Zeile der Platte über alle Wochen mit Daten. */
+export interface NightRunReworkLine {
+  /** Ab wann die Gruppe Daten hat; `null` ohne aufbewahrten Lauf. */
+  dataSince: string | null
+  affected: number
+  processed: number
+  /** Nach Anzahl absteigend, dann nach Nummer. */
+  cards: NightRunReworkCard[]
+}
+
+/** Wert einer Gruppe in einer Woche. */
+export interface NightRunReworkWeekValue {
+  state: NightRunReworkState
+  affected: number
+  processed: number
+}
+
+/** Ein Wochenfenster des Verlaufs. */
+export interface NightRunReworkWeek {
+  weekStart: string
+  packages: NightRunReworkWeekValue
+  documents: NightRunReworkWeekValue
+}
+
+/** Antwort von `GET /api/boards/{boardId}/night-run-rework` (Issue #1757). */
+export interface NightRunRework {
+  dataSince: string | null
+  runsInPeriod: boolean
+  packages: NightRunReworkLine
+  documents: NightRunReworkLine
+  /** Die zwölf Wochenfenster, das älteste zuerst. */
+  weeks: NightRunReworkWeek[]
+}
+
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
 export type NightRunErrorClassCounts = Partial<Record<NightRunErrorClass, number>>
 
@@ -627,6 +674,8 @@ export const nightRunsApi = {
   jetzt: (projectId: number) => apiFetch<RunnerJetzt>(`/api/projects/${projectId}/night-runs/now`),
   /** Warum eine Karte in Ready wartet (Issue #1730, Plan #1724); 404 außerhalb von Ready. */
   wartegrund: (cardId: number) => apiFetch<Wartegruende>(`/api/cards/${cardId}/night-wait`),
+  /** Die Nacharbeit der Runs an einem Board (Issue #1759, Plan #1752). */
+  rework: (boardId: number) => apiFetch<NightRunRework>(`/api/boards/${boardId}/night-run-rework`),
 }
 
 export type NightRunsApi = typeof nightRunsApi
