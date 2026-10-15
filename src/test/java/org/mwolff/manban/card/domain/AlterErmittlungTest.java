@@ -138,6 +138,18 @@ class AlterErmittlungTest {
   }
 
   @Test
+  @DisplayName("Ein Aufenthalt ohne Ende zählt nie als Vergleichswert, auch mit Endegrund")
+  void aufenthaltOhneEndeZaehltNieAlsVergleichswert() {
+    List<FlussStay> aufenthalte =
+        List.of(stay(1, BOARD, CardStatus.READY, JETZT.minus(TAG), null, true, EndedBy.STATUS));
+
+    Zustand ready = zustand(aufenthalte, CardStatus.READY);
+
+    assertThat(ready.comparisonCount()).isZero();
+    assertThat(ready.cards()).containsExactly(new Karte(1, TAG, false, false));
+  }
+
+  @Test
   @DisplayName("Mehrere Aufenthalte derselben Karte zählen einzeln (AK 7)")
   void mehrereAufenthalteDerselbenKarteZaehlenEinzeln() {
     List<FlussStay> aufenthalte = new ArrayList<>();
