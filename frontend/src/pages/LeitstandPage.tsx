@@ -8,7 +8,7 @@ import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
 import { type BoardDashboardKpis } from '../api/dashboard'
 import { type Epic } from '../api/epics'
-import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunView } from '../api/nightRuns'
+import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { Erklaerung } from '../components/Erklaerung'
 import { FestgefahrenAngaben } from '../components/leitstand/FestgefahrenAngaben'
@@ -30,6 +30,7 @@ import {
   ZEILE_HOVER_SX,
 } from '../components/leitstand/LeitstandBausteine'
 import { LeitstandVerbrauch } from '../components/leitstand/LeitstandVerbrauch'
+import { NacharbeitPlatte } from '../components/leitstand/NacharbeitPlatte'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { formatierer } from '../i18n/format'
 import { useSprache, useT } from '../i18n/SpracheContext'
@@ -81,7 +82,7 @@ import {
  * `docs/entwurf-leitstand.html` (CSS Z. 390–722, 977–1017; HTML Z. 1200–1678). Er ersetzt die
  * Kennzahlen-Ansicht: Laufband des jüngsten Laufs, vier Kennzahl-Kacheln, Verbrauch mit
  * Zeitraum-Wahl und der Rumpf aus „Letzter Lauf", „Durchsatz", „Implementierungszeit",
- * „Abbruchgründe" und „Vorhaben".
+ * „Abbruchgründe", „Nacharbeit" und „Vorhaben".
  * Die Platte „Liegengeblieben" des Entwurfs entfällt (Manne, 2026-09-17, #983) — die Kennzahl
  * `outliers` bleibt im Backend, wird hier aber nicht mehr dargestellt.
  *
@@ -91,8 +92,8 @@ import {
  * in den Leitstand (Manne, 2026-09-16).
  *
  * **Die Läufe sieht nur, wer sie auch auf der Nachtlauf-Seite sieht** (Owner-Recht im Backend).
- * Ohne das Recht entfallen Laufband, Nachtlauf-Kachel, Verbrauch, Letzter Lauf und Abbruchgründe
- * still; die Board-Kennzahlen und beide Wochenplatten bleiben.
+ * Ohne das Recht entfallen Laufband, Nachtlauf-Kachel, Verbrauch, Letzter Lauf, Abbruchgründe und
+ * Nacharbeit still; die Board-Kennzahlen und beide Wochenplatten bleiben.
  */
 
 /** Die Karte, die der Dialog zeigt, mit dem Projekt, aus dem sie kam. */
@@ -102,7 +103,7 @@ export function LeitstandPage() {
   const { boardId } = useParams()
   const t = useT().LEITSTAND
   const daten = useLeitstandDaten(boardId)
-  // Die Karte kommt aus „Letzter Lauf" und damit immer aus einem bekannten Projekt; das Projekt
+  // Die Karte kommt aus „Letzter Lauf" oder „Nacharbeit" und damit immer aus einem bekannten Projekt; das Projekt
   // reist im Zustand mit, statt beim Rendern des Dialogs noch einmal gegen `null` geprüft zu werden.
   const [detail, setDetail] = useState<Auswahl | null>(null)
 
@@ -110,7 +111,7 @@ export function LeitstandPage() {
     return <Alert severity="error">{t.UNGUELTIGE_ID}</Alert>
   }
 
-  const { board, kpis, epics, klassen, projectId, liste, juengster, epicListe } = daten
+  const { board, kpis, epics, klassen, nacharbeit, projectId, liste, juengster, epicListe } = daten
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -133,6 +134,7 @@ export function LeitstandPage() {
         projectId={projectId}
         kpis={kpis}
         klassen={klassen}
+        nacharbeit={nacharbeit}
         epics={epics}
         epicListe={epicListe}
         liste={liste}
@@ -174,13 +176,16 @@ function KennzahlenBereich({ kpis, liste }: Readonly<{ kpis: Laden<BoardDashboar
 
 /**
  * Der Rumpf (Entwurf Z. 1410–1712): „Letzter Run", „Durchsatz" mit „Implementierungszeit" daneben
- * (Issue #1542), „Abbruchgründe" und „Vorhaben".
+ * (Issue #1542), „Abbruchgründe", „Nacharbeit" (Issue #1760) und „Vorhaben".
+ *
+ * Beide Platten mit Kartennummern öffnen die Karte über denselben Weg ({@link useKarteOeffnen}).
  */
 function LeitstandRumpf({
   juengster,
   projectId,
   kpis,
   klassen,
+  nacharbeit,
   epics,
   epicListe,
   liste,
@@ -190,11 +195,13 @@ function LeitstandRumpf({
   projectId: number | null
   kpis: Laden<BoardDashboardKpis>
   klassen: Laden<NightRunErrorClassCounts>
+  nacharbeit: Laden<NightRunRework>
   epics: Laden<Epic[]>
   epicListe: readonly Epic[]
   liste: readonly NightRunView[] | null
   onDetail: (auswahl: Auswahl) => void
 }>) {
+  const oeffnen = useKarteOeffnen(onDetail)
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.55fr) minmax(0,1fr)' }, gap: '16px', alignItems: 'start' }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
@@ -202,8 +209,7 @@ function LeitstandRumpf({
           <LetzterLauf
             lauf={juengster}
             epics={epicListe}
-            projectId={projectId}
-            onOeffnen={(card) => onDetail({ card, projectId })}
+            onOeffnen={(nummer) => void oeffnen(projectId, nummer)}
           />
         )}
         {kpis.art === 'da' && (
@@ -215,10 +221,33 @@ function LeitstandRumpf({
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
         {klassen.art === 'da' && liste && <Abbruchgruende zaehler={klassen.wert} laeufe={liste.length} />}
+        {/* Nur mit Run-Recht (AK 7): Die Läufe sind da, wo das Recht besteht. */}
+        {liste && projectId !== null && nacharbeit.art === 'da' && (
+          <NacharbeitPlatte daten={nacharbeit.wert} onOeffnen={(nummer) => void oeffnen(projectId, nummer)} />
+        )}
         {epics.art === 'da' && <VorhabenPlatte epics={epics.wert} />}
       </Box>
     </Box>
   )
+}
+
+/**
+ * Öffnet eine Karte des Projekts über ihre Nummer zum Lesen (E14): erst `cardsApi.byNumber`, dann
+ * der Dialog; eine nicht gefundene Karte meldet sich als Warnung, jeder andere Fehler als Fehler.
+ */
+function useKarteOeffnen(onDetail: (auswahl: Auswahl) => void) {
+  const t = useT().LEITSTAND
+  const notify = useSnackbar()
+  return async (projectId: number, nummer: number) => {
+    try {
+      onDetail({ card: await cardsApi.byNumber(projectId, nummer), projectId })
+    } catch (err) {
+      notify(
+        err instanceof ApiError && err.status === 404 ? t.KARTE_FEHLT(nummer) : t.KARTE_FEHLER,
+        err instanceof ApiError && err.status === 404 ? 'warning' : 'error',
+      )
+    }
+  }
 }
 
 /** Laufband (Entwurf Z. 393–468, 1203–1230): der jüngste Lauf auf einen Blick. */
@@ -356,25 +385,12 @@ function Zustand({ children }: Readonly<{ children: string }>) {
 function LetzterLauf({
   lauf,
   epics,
-  projectId,
   onOeffnen,
-}: Readonly<{ lauf: NightRunView; epics: readonly Epic[]; projectId: number; onOeffnen: (card: CardByNumber) => void }>) {
+}: Readonly<{ lauf: NightRunView; epics: readonly Epic[]; onOeffnen: (nummer: number) => void }>) {
   const t = useT().LEITSTAND
   const { sprache } = useSprache()
-  const notify = useSnackbar()
   const [nurAbbrueche, setNurAbbrueche] = useState(false)
   const zeilen = nurAbbrueche ? lauf.items.filter(istAbbruch) : lauf.items
-
-  const oeffnen = async (item: NightRunItemView) => {
-    try {
-      onOeffnen(await cardsApi.byNumber(projectId, item.cardNumber))
-    } catch (err) {
-      notify(
-        err instanceof ApiError && err.status === 404 ? t.KARTE_FEHLT(item.cardNumber) : t.KARTE_FEHLER,
-        err instanceof ApiError && err.status === 404 ? 'warning' : 'error',
-      )
-    }
-  }
 
   return (
     <Platte
@@ -400,7 +416,7 @@ function LetzterLauf({
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
         {zeilen.map((item) => (
           <Box component="li" key={item.id} sx={{ '&:not(:last-child)': { borderBottom: `1px solid color-mix(in srgb, ${RAND} 55%, transparent)` } }}>
-            <Vorgang item={item} epic={epics.find((e) => e.memberNumbers.includes(item.cardNumber)) ?? null} onOeffnen={() => void oeffnen(item)} />
+            <Vorgang item={item} epic={epics.find((e) => e.memberNumbers.includes(item.cardNumber)) ?? null} onOeffnen={() => onOeffnen(item.cardNumber)} />
             {/* Unter der Zeile und nicht in ihr (Issue #1552, E18): Die Zeile ist ein Knopf, und eine
                 Überschrift mit Beschreibungsliste gehört nicht in einen Knopf. Eingerückt bis zur
                 Titelspalte: 16 Rand + 14 LED + 12 + 64 Nummer + 12. */}

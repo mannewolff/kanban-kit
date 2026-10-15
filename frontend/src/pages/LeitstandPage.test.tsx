@@ -7,7 +7,7 @@ import { cardsApi, type Card } from '../api/cards'
 import { ApiError } from '../api/client'
 import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
-import { nightRunsApi, type NightRunItemView, type NightRunView } from '../api/nightRuns'
+import { nightRunsApi, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
 import { TabletQuerProvider } from '../lib/tabletQuer'
 import { setzeMedien } from '../test/setup'
@@ -18,7 +18,7 @@ vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
 vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
-vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn() } }))
+vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
   ...(await original<typeof import('../api/nightRunUsage')>()),
   nightRunUsageApi: { period: vi.fn(), total: vi.fn() },
@@ -29,8 +29,8 @@ vi.mock('../components/SnackbarProvider', () => ({ useSnackbar: () => mNotify })
 
 // Der Kartendialog ist eigenständig getestet; hier zählt, mit welcher Karte er geöffnet wird.
 vi.mock('../components/CardDetailModal', () => ({
-  CardDetailModal: ({ card, onClose }: Readonly<{ card: Card; onClose: () => void }>) => (
-    <div data-testid="karten-detail">
+  CardDetailModal: ({ card, canEdit, onClose }: Readonly<{ card: Card; canEdit: boolean; onClose: () => void }>) => (
+    <div data-testid="karten-detail" data-can-edit={String(canEdit)}>
       <span>{card.title}</span>
       <button type="button" onClick={onClose}>
         Detail schließen
@@ -46,6 +46,7 @@ const m = {
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
+  nacharbeit: nightRunsApi.rework as ReturnType<typeof vi.fn>,
   karteNachNummer: cardsApi.byNumber as ReturnType<typeof vi.fn>,
   verbrauch: nightRunUsageApi.period as ReturnType<typeof vi.fn>,
   lebenszeit: nightRunUsageApi.total as ReturnType<typeof vi.fn>,
@@ -226,6 +227,15 @@ const lebenszeit = (): VerbrauchGesamt => ({
   brakes: { count: 0, withoutTimeCount: 0, savedMs: 0 },
 })
 
+/** Die Antwort der Platte „Nacharbeit“ (Issue #1760); der Verlauf ist in `NacharbeitPlatte.test.tsx` geprüft. */
+const nacharbeit = (): NightRunRework => ({
+  dataSince: '2026-07-01T22:00:00Z',
+  runsInPeriod: true,
+  packages: { dataSince: '2026-07-01T22:00:00Z', affected: 1, processed: 14, cards: [{ number: 1712, title: 'Endpunkt bereitstellen', count: 2 }] },
+  documents: { dataSince: '2026-07-01T22:00:00Z', affected: 0, processed: 6, cards: [] },
+  weeks: [],
+})
+
 function renderPage(pfad = '/boards/1/leitstand') {
   return render(
     <TabletQuerProvider>
@@ -249,6 +259,7 @@ beforeEach(() => {
   m.klassen.mockResolvedValue({ CHECKS_RED: 11, AWAITING_DECISION: 7 })
   m.verbrauch.mockResolvedValue(zeitraum())
   m.lebenszeit.mockResolvedValue(lebenszeit())
+  m.nacharbeit.mockResolvedValue(nacharbeit())
 })
 
 describe('LeitstandPage (#979)', () => {
@@ -609,6 +620,68 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     m.epics.mockResolvedValue([epic(2, 'Erledigt', 3, 3)])
     renderPage()
     expect(await screen.findByRole('region', { name: 'Vorhaben' })).toHaveTextContent('Kein offenes Vorhaben.')
+  })
+})
+
+describe('LeitstandPage — Nacharbeit (Issue #1760)', () => {
+  it('zeigt die Platte in der rechten Spalte zwischen „Abbruchgründe“ und „Vorhaben“', async () => {
+    renderPage()
+    const nacharbeitPlatte = await screen.findByRole('region', { name: 'Nacharbeit' })
+    const gruende = screen.getByRole('region', { name: 'Abbruchgründe' })
+    expect(gruende.compareDocumentPosition(nacharbeitPlatte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(nacharbeitPlatte.compareDocumentPosition(screen.getByRole('region', { name: 'Vorhaben' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(nacharbeitPlatte).toHaveTextContent('1 von 14')
+    expect(m.nacharbeit).toHaveBeenCalledWith(1)
+  })
+
+  it('Szenario: Ohne Recht auf die Runs', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.nacharbeit.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
+    await waitFor(() => expect(m.nacharbeit).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Nacharbeit' })).not.toBeInTheDocument()
+    expect(screen.getByRole('article', { name: 'Durchlaufzeit' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /^Implementierungszeit/ })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Vorhaben' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Platte ohne die Läufe nicht, auch wenn die Nacharbeit da ist', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Vorhaben' })).toBeInTheDocument()
+    await waitFor(() => expect(m.laeufe).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Nacharbeit' })).not.toBeInTheDocument()
+  })
+
+  it('lässt die Platte bei einem Fehler der Nacharbeit still weg und zeigt „Abbruchgründe“ weiter', async () => {
+    m.nacharbeit.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Abbruchgründe' })).toBeInTheDocument()
+    await waitFor(() => expect(m.nacharbeit).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Nacharbeit' })).not.toBeInTheDocument()
+  })
+
+  it('öffnet die Karte über ihre Nummer wie „Letzter Run“, nur zum Lesen', async () => {
+    m.karteNachNummer.mockResolvedValue(karte('Endpunkt im Detail'))
+    renderPage()
+    const nacharbeitPlatte = await screen.findByRole('region', { name: 'Nacharbeit' })
+    fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Pakete zurückgezogen: 1 von 14 — Karten zeigen' }))
+    fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Karte #1712 öffnen: Endpunkt bereitstellen' }))
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Endpunkt im Detail')
+    expect(screen.getByTestId('karten-detail')).toHaveAttribute('data-can-edit', 'false')
+    expect(m.karteNachNummer).toHaveBeenCalledWith(5, 1712)
+  })
+
+  it('meldet eine nicht gefundene Karte wie „Letzter Run“ als Warnung', async () => {
+    m.karteNachNummer.mockRejectedValue(new ApiError(404, 'Not Found'))
+    renderPage()
+    const nacharbeitPlatte = await screen.findByRole('region', { name: 'Nacharbeit' })
+    fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Pakete zurückgezogen: 1 von 14 — Karten zeigen' }))
+    fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Karte #1712 öffnen: Endpunkt bereitstellen' }))
+    await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Karte #1712 nicht gefunden — gelöscht oder kein Zugriff.', 'warning'))
   })
 })
 
