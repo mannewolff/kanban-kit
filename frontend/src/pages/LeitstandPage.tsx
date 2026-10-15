@@ -6,12 +6,14 @@ import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
-import { type BoardDashboardKpis } from '../api/dashboard'
+import { type AgingWip, type BoardDashboardKpis, type BoardFlow } from '../api/dashboard'
 import { type Epic } from '../api/epics'
 import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { Erklaerung } from '../components/Erklaerung'
+import { AlterInArbeitPlatte } from '../components/leitstand/AlterInArbeitPlatte'
 import { FestgefahrenAngaben } from '../components/leitstand/FestgefahrenAngaben'
+import { FlussPlatte } from '../components/leitstand/FlussPlatte'
 import {
   FilterTaste,
   Fuellschiene,
@@ -82,7 +84,8 @@ import {
  * `docs/entwurf-leitstand.html` (CSS Z. 390–722, 977–1017; HTML Z. 1200–1678). Er ersetzt die
  * Kennzahlen-Ansicht: Laufband des jüngsten Laufs, vier Kennzahl-Kacheln, Verbrauch mit
  * Zeitraum-Wahl und der Rumpf aus „Letzter Lauf", „Durchsatz", „Implementierungszeit",
- * „Abbruchgründe", „Nacharbeit" und „Vorhaben".
+ * „Abbruchgründe", „Nacharbeit" und „Vorhaben"; darunter in voller Breite „Fluss" und „Alter in
+ * Arbeit" (Issue #1778).
  * Die Platte „Liegengeblieben" des Entwurfs entfällt (Manne, 2026-09-17, #983) — die Kennzahl
  * `outliers` bleibt im Backend, wird hier aber nicht mehr dargestellt.
  *
@@ -93,7 +96,7 @@ import {
  *
  * **Die Läufe sieht nur, wer sie auch auf der Nachtlauf-Seite sieht** (Owner-Recht im Backend).
  * Ohne das Recht entfallen Laufband, Nachtlauf-Kachel, Verbrauch, Letzter Lauf, Abbruchgründe und
- * Nacharbeit still; die Board-Kennzahlen und beide Wochenplatten bleiben.
+ * Nacharbeit still; die Board-Kennzahlen, beide Wochenplatten, „Fluss" und „Alter in Arbeit" bleiben.
  */
 
 /** Die Karte, die der Dialog zeigt, mit dem Projekt, aus dem sie kam. */
@@ -103,15 +106,15 @@ export function LeitstandPage() {
   const { boardId } = useParams()
   const t = useT().LEITSTAND
   const daten = useLeitstandDaten(boardId)
-  // Die Karte kommt aus „Letzter Lauf" oder „Nacharbeit" und damit immer aus einem bekannten Projekt; das Projekt
-  // reist im Zustand mit, statt beim Rendern des Dialogs noch einmal gegen `null` geprüft zu werden.
+  // Die Karte kommt aus „Letzter Lauf", „Nacharbeit" oder „Alter in Arbeit" und damit immer aus einem
+  // bekannten Projekt; das Projekt reist im Zustand mit, statt beim Rendern des Dialogs noch einmal gegen `null` geprüft zu werden.
   const [detail, setDetail] = useState<Auswahl | null>(null)
 
   if (!daten.validId) {
     return <Alert severity="error">{t.UNGUELTIGE_ID}</Alert>
   }
 
-  const { board, kpis, epics, klassen, nacharbeit, projectId, liste, juengster, epicListe } = daten
+  const { board, kpis, fluss, alter, epics, klassen, nacharbeit, projectId, liste, juengster, epicListe } = daten
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -140,6 +143,8 @@ export function LeitstandPage() {
         liste={liste}
         onDetail={setDetail}
       />
+
+      <FlussBereich fluss={fluss} alter={alter} projectId={projectId} onDetail={setDetail} />
 
       {detail && (
         <CardDetailModal card={detail.card} canEdit={false} projectId={detail.projectId} onClose={() => setDetail(null)} />
@@ -203,7 +208,10 @@ function LeitstandRumpf({
 }>) {
   const oeffnen = useKarteOeffnen(onDetail)
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.55fr) minmax(0,1fr)' }, gap: '16px', alignItems: 'start' }}>
+    <Box
+      data-testid="leitstand-rumpf"
+      sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,1.55fr) minmax(0,1fr)' }, gap: '16px', alignItems: 'start' }}
+    >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
         {juengster && projectId !== null && (
           <LetzterLauf
@@ -227,6 +235,28 @@ function LeitstandRumpf({
         )}
         {epics.art === 'da' && <VorhabenPlatte epics={epics.wert} />}
       </Box>
+    </Box>
+  )
+}
+
+/**
+ * Der Abschnitt unter dem Rumpf (Issue #1778, Plan #1765 E15): „Fluss“ und darunter „Alter in Arbeit“,
+ * beide in voller Seitenbreite und wie „Durchsatz“ für alle, die das Board sehen dürfen. Fällt ein
+ * Abruf aus, fehlt nur seine Platte. Die Kartennummer öffnet die Karte wie in „Letzter Run“ (E18).
+ */
+function FlussBereich({
+  fluss,
+  alter,
+  projectId,
+  onDetail,
+}: Readonly<{ fluss: Laden<BoardFlow>; alter: Laden<AgingWip>; projectId: number | null; onDetail: (auswahl: Auswahl) => void }>) {
+  const oeffnen = useKarteOeffnen(onDetail)
+  return (
+    <Box data-testid="leitstand-fluss" sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
+      {fluss.art === 'da' && <FlussPlatte daten={fluss.wert} />}
+      {alter.art === 'da' && projectId !== null && (
+        <AlterInArbeitPlatte daten={alter.wert} onOeffnen={(nummer) => void oeffnen(projectId, nummer)} />
+      )}
     </Box>
   )
 }

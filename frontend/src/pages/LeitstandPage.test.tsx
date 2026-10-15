@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { ApiError } from '../api/client'
-import { dashboardApi, type BoardDashboardKpis } from '../api/dashboard'
+import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
@@ -16,7 +16,7 @@ import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
-vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn(), flow: vi.fn(), aging: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
@@ -43,6 +43,8 @@ const m = {
   board: boardsApi.get as ReturnType<typeof vi.fn>,
   kpis: dashboardApi.get as ReturnType<typeof vi.fn>,
   implementierung: dashboardApi.implementationTime as ReturnType<typeof vi.fn>,
+  fluss: dashboardApi.flow as ReturnType<typeof vi.fn>,
+  alter: dashboardApi.aging as ReturnType<typeof vi.fn>,
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
@@ -236,6 +238,30 @@ const nacharbeit = (): NightRunRework => ({
   weeks: [],
 })
 
+/** Die Antwort der Platte „Fluss“ (Issue #1778); Bänder und Anzeige sind in `FlussPlatte.test.tsx` geprüft. */
+const fluss = (): BoardFlow => ({
+  days: [
+    { date: '2026-10-14', known: true, backlog: 4, ready: 2, inProgress: 1, inReview: 2, done: 3 },
+    { date: '2026-10-15', known: true, backlog: 4, ready: 2, inProgress: 1, inReview: 3, done: 5 },
+  ],
+  dataSince: null,
+})
+
+/** Die Antwort der Platte „Alter in Arbeit“ (Issue #1778); Ready ist leer. */
+const alter = (): AgingWip => ({
+  ready: { comparisonCount: 0, thresholdSeconds: null, cards: [] },
+  inProgress: {
+    comparisonCount: 2,
+    thresholdSeconds: null,
+    cards: [{ id: 4, number: 1720, title: 'Port anlegen', ageSeconds: 7_200, ageIsMinimum: false, overThreshold: false }],
+  },
+  inReview: {
+    comparisonCount: 6,
+    thresholdSeconds: 86_400,
+    cards: [{ id: 3, number: 1712, title: 'Endpunkt bereitstellen', ageSeconds: 172_800, ageIsMinimum: false, overThreshold: true }],
+  },
+})
+
 function renderPage(pfad = '/boards/1/leitstand') {
   return render(
     <TabletQuerProvider>
@@ -260,6 +286,8 @@ beforeEach(() => {
   m.verbrauch.mockResolvedValue(zeitraum())
   m.lebenszeit.mockResolvedValue(lebenszeit())
   m.nacharbeit.mockResolvedValue(nacharbeit())
+  m.fluss.mockResolvedValue(fluss())
+  m.alter.mockResolvedValue(alter())
 })
 
 describe('LeitstandPage (#979)', () => {
@@ -682,6 +710,70 @@ describe('LeitstandPage — Nacharbeit (Issue #1760)', () => {
     fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Pakete zurückgezogen: 1 von 14 — Karten zeigen' }))
     fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Karte #1712 öffnen: Endpunkt bereitstellen' }))
     await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Karte #1712 nicht gefunden — gelöscht oder kein Zugriff.', 'warning'))
+  })
+})
+
+describe('LeitstandPage — Fluss und Alter in Arbeit (Issue #1778)', () => {
+  it('stellt „Fluss“ und darunter „Alter in Arbeit“ nach dem Rumpf-Raster in voller Breite (AK 12)', async () => {
+    renderPage()
+    const flussPlatte = await screen.findByRole('region', { name: 'Fluss' })
+    const alterPlatte = await screen.findByRole('region', { name: 'Alter in Arbeit' })
+    expect(m.fluss).toHaveBeenCalledWith(1)
+    expect(m.alter).toHaveBeenCalledWith(1)
+    for (const platte of [screen.getByRole('region', { name: 'Durchsatz' }), await screen.findByRole('region', { name: 'Vorhaben' })]) {
+      expect(platte.compareDocumentPosition(flussPlatte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(platte.contains(flussPlatte)).toBe(false)
+    }
+    expect(flussPlatte.compareDocumentPosition(alterPlatte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Voller Breite: Der Abschnitt liegt neben dem Rumpf-Raster, nicht in einer seiner Spalten.
+    const abschnitt = screen.getByTestId('leitstand-fluss')
+    expect(abschnitt).toContainElement(flussPlatte)
+    expect(abschnitt).toContainElement(alterPlatte)
+    expect(abschnitt.contains(screen.getByRole('region', { name: 'Durchsatz' }))).toBe(false)
+    const rumpf = screen.getByTestId('leitstand-rumpf')
+    expect(rumpf).not.toContainElement(abschnitt)
+    expect(rumpf.compareDocumentPosition(abschnitt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('trägt in einer leeren Spalte ihren Leersatz (AK 13)', async () => {
+    renderPage()
+    const alterPlatte = await screen.findByRole('region', { name: 'Alter in Arbeit' })
+    expect(within(alterPlatte).getByTestId('alter-leer-ready')).toHaveTextContent('Keine Karte in Ready')
+  })
+
+  it('öffnet die Karte über ihre Nummer wie „Letzter Run“, nur zum Lesen (AK 9)', async () => {
+    m.karteNachNummer.mockResolvedValue(karte('Endpunkt im Detail'))
+    renderPage()
+    const alterPlatte = await screen.findByRole('region', { name: 'Alter in Arbeit' })
+    fireEvent.click(within(alterPlatte).getByRole('button', { name: 'Karte #1712 öffnen: Endpunkt bereitstellen' }))
+    expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Endpunkt im Detail')
+    expect(screen.getByTestId('karten-detail')).toHaveAttribute('data-can-edit', 'false')
+    expect(m.karteNachNummer).toHaveBeenCalledWith(5, 1712)
+  })
+
+  it('zeigt beide Platten auch ohne Recht auf die Runs (AK 10)', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.nacharbeit.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Fluss' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Alter in Arbeit' })).toBeInTheDocument()
+  })
+
+  it('lässt eine Platte bei einem Fehler still weg und zeigt die andere weiter', async () => {
+    m.fluss.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Alter in Arbeit' })).toBeInTheDocument()
+    await waitFor(() => expect(m.fluss).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Fluss' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt „Fluss“ weiter, wenn „Alter in Arbeit“ ausfällt', async () => {
+    m.alter.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Fluss' })).toBeInTheDocument()
+    await waitFor(() => expect(m.alter).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Alter in Arbeit' })).not.toBeInTheDocument()
   })
 })
 
