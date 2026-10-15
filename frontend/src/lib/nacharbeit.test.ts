@@ -122,6 +122,10 @@ describe('balkenZustand', () => {
   it('zeigt eine Quote ohne Bezugszahl als Grundlinie, nie als Balken', () => {
     expect(balkenZustand({ state: 'QUOTE', affected: 0, processed: 0 })).toEqual({ art: 'grundlinie' })
   })
+
+  it('zeigt eine Woche ohne Karte als Grundlinie, auch wenn eine Bezugszahl mitkommt', () => {
+    expect(balkenZustand({ state: 'KEINE_KARTE', affected: 1, processed: 4 })).toEqual({ art: 'grundlinie' })
+  })
 })
 
 describe('wochenHinweis', () => {
@@ -156,5 +160,13 @@ describe('wochenHinweis', () => {
       w({ state: 'KEINE_KARTE', affected: 0, processed: 0 }, { state: 'KEINE_DATEN', affected: 0, processed: 0 }),
     )
     expect(englisch).toBe('Packages no processed card · Documents no data')
+  })
+
+  it('nennt beide Gruppen, wenn nur die Pakete keine Daten haben', () => {
+    const hinweis = wochenHinweis(
+      de.LEITSTAND,
+      w({ state: 'KEINE_DATEN', affected: 0, processed: 0 }, { state: 'QUOTE', affected: 0, processed: 6 }),
+    )
+    expect(hinweis).toBe('Pakete keine Daten · Dokumente 0 von 6')
   })
 })

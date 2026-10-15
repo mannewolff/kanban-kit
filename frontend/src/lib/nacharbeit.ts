@@ -11,17 +11,19 @@ type Texte = Woerterbuch['LEITSTAND']
 /** Formatiert einen Zeitpunkt als Datum der Oberflächensprache. */
 type Datum = (iso: string) => string
 
-/** Ob `iso` echt nach `bezug` liegt. */
-const spaeter = (iso: string, bezug: string): boolean => Date.parse(iso) > Date.parse(bezug)
+/**
+ * `iso`, wenn es echt nach `bezug` liegt, sonst `null`. Ein fehlender Zeitpunkt wird über `String` zu
+ * „null“ bzw. „undefined“, `Date.parse` daraus zu NaN — und NaN liegt nie später (#1789).
+ */
+const spaeterAls = (iso: string | null, bezug: string | undefined): string | null =>
+  Date.parse(String(iso)) > Date.parse(String(bezug)) ? iso : null
 
 /**
  * Der Beginn, den der Kopf nennt (E8): der Beginn der Paket-Daten, wenn er nach dem ältesten
  * Wochenfenster liegt, sonst `null` für „letzte 12 Wochen“.
  */
 function kopfBeginn(d: NightRunRework): string | null {
-  const erstes = d.weeks[0]?.weekStart
-  const beginn = d.packages.dataSince
-  return erstes !== undefined && beginn !== null && spaeter(beginn, erstes) ? beginn : null
+  return spaeterAls(d.packages.dataSince, d.weeks[0]?.weekStart)
 }
 
 /** Der Bezugszeitraum im Kopf der Platte: „letzte 12 Wochen“ oder „seit ‹Datum›“ (AK 4, E8). */
@@ -35,9 +37,8 @@ export function kopfText(t: Texte, d: NightRunRework, datum: Datum): string {
  * Kopf nennt; sonst `null`.
  */
 export function dokumentSeit(t: Texte, d: NightRunRework, datum: Datum): string | null {
-  const bezug = kopfBeginn(d) ?? d.weeks[0]?.weekStart
-  const beginn = d.documents.dataSince
-  return bezug !== undefined && beginn !== null && spaeter(beginn, bezug) ? t.NACHARBEIT_SEIT(datum(beginn)) : null
+  const beginn = spaeterAls(d.documents.dataSince, kopfBeginn(d) ?? d.weeks[0]?.weekStart)
+  return beginn === null ? null : t.NACHARBEIT_SEIT(datum(beginn))
 }
 
 /** Was eine Zeile zeigt: nie „0 von 0“, sondern einen Satz (AK 6). */
