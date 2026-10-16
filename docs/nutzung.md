@@ -538,7 +538,8 @@ Die **Stillefrist** ist dieselbe, nach der die Auswertung einen Lauf als verstum
 läuft er wieder.
 
 Ein verstummter Lauf bleibt sichtbar, wie alt er auch ist, **bis seine Störung im
-Plattform-Leitstand quittiert ist**. Danach erscheint er hier nicht mehr und ist auch am wartenden
+Plattform-Leitstand quittiert ist**: Er steht dort unter „Störungen“ und wird über **„Störung
+löschen“** in seiner Zeile quittiert. Danach erscheint er hier nicht mehr und ist auch am wartenden
 Paket kein Grund „Runner verstummt“ mehr. Meldet sich ein quittierter Lauf später doch wieder,
 erscheint er wieder als „läuft“. Den letzten Lauf darunter berührt die Quittung nicht.
 
@@ -1022,8 +1023,10 @@ Die Frist ist ein **Einstellwert der Plattform** (`manban.nightrun.stille-frist`
 Minuten): Sie gilt für alle Projekte gleich und hat bewusst **keine Oberfläche** — wer sie ändern
 will, ändert die Konfiguration der Instanz.
 
-Ein durch Stille beendeter Run ist **keine Störung**. Er erscheint hier als „nicht gelungen" und
-taucht im Bereich „Störungen" nicht auf.
+Ein verstummter Run ist **eine Störung**: Er erscheint als „nicht gelungen" und steht im Bereich
+„Störungen" — wie alt er auch ist, denn er hat sich nie abgemeldet. Erst die Quittung dort nimmt ihn
+auch aus [„Runner jetzt“](#runner-jetzt) heraus. Ein Run, der sich noch innerhalb der Frist
+gemeldet hat, steht dort nicht, ebenso wenig ein von Hand beendeter.
 
 ### Störungen
 

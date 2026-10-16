@@ -26,6 +26,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * <em>abgeleitet</em> wird, braucht AK 12, 18 und 19 keine eigene Regel.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+// Jede Bedingung der Störungsabfrage braucht ihren eigenen Fall gegen die echte Datenbank; die
+// Methodenzahl ist der Umfang der Abfrage, kein Refactoring-Signal (Issue #1800).
+@SuppressWarnings("PMD.TooManyMethods")
 class DisruptionRepositoryIT extends AbstractIntegrationTest {
 
   private static final Instant T1 = Instant.parse("2026-09-18T22:00:00Z");
@@ -33,6 +36,12 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
 
   /** Letzte Meldung eines Laufs — was {@code night_run.updated_at} trägt. */
   private static final Instant LETZTE_MELDUNG = Instant.parse("2026-09-19T23:30:00Z");
+
+  /** Bezugszeitpunkt der Störungsliste — Wochen nach den Läufen, wie auf Mannes Instanz. */
+  private static final Instant JETZT = Instant.parse("2026-10-16T10:00:00Z");
+
+  /** Die Stille, die ein unfertiger Lauf sich erlauben darf. */
+  private static final Duration STILLE_FRIST = Duration.ofMinutes(90);
 
   @Autowired private DisruptionRepository disruptions;
   @Autowired private JdbcTemplate jdbc;
@@ -89,7 +98,7 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
   void einNichtTeilnehmendesProjektLiefertKeineKandidaten() {
     lauf(T1, "NIGHT", true);
 
-    assertThat(disruptions.openCandidates()).isEmpty();
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST)).isEmpty();
   }
 
   /** AK 18: Beim Anhaken erscheinen auch Läufe aus der Zeit davor. */
@@ -99,7 +108,7 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
 
     teilnahme(true);
 
-    assertThat(disruptions.openCandidates())
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
         .extracting(DisruptionRepository.DisruptionCandidate::nightRunId)
         .containsExactly(alt);
   }
@@ -113,10 +122,10 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     disruptions.acknowledge(quittiert, userId, Instant.now());
 
     teilnahme(false);
-    assertThat(disruptions.openCandidates()).isEmpty();
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST)).isEmpty();
 
     teilnahme(true);
-    assertThat(disruptions.openCandidates())
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
         .extracting(DisruptionRepository.DisruptionCandidate::nightRunId)
         .containsExactly(behalten);
   }
@@ -127,16 +136,60 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     lauf(T1, "INTERACTIVE", true);
     teilnahme(true);
 
-    assertThat(disruptions.openCandidates()).isEmpty();
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST)).isEmpty();
   }
 
-  /** Vorspann der fachlichen Kriterien: Ein laufender Lauf hat noch keinen Ausgang. */
+  /**
+   * Vorspann der fachlichen Kriterien: Ein laufender Lauf hat noch keinen Ausgang. Genau auf der
+   * Frist lebt er noch — derselbe Rand wie in {@code NightRunOutcome}.
+   */
   @Test
-  void einUnabgeschlossenerLaufIstKeinKandidat() {
-    lauf(T1, "NIGHT", false);
+  void einUnabgeschlossenerLaufInnerhalbDerFristIstKeinKandidat() {
+    long laufend = lauf(T1, "NIGHT", false);
+    letzteMeldung(laufend, JETZT.minus(STILLE_FRIST));
     teilnahme(true);
 
-    assertThat(disruptions.openCandidates()).isEmpty();
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST)).isEmpty();
+  }
+
+  /**
+   * Issue #1800: Ein unfertiger Lauf, dessen letztes Lebenszeichen älter als die Stillefrist ist,
+   * ist verstummt und damit Kandidat — auch Wochen später, ohne Zeitfenster.
+   */
+  @Test
+  void einVerstummterLaufIstKandidat_auchWochenSpaeter() {
+    long verstummt = lauf(T1, "NIGHT", false);
+    letzteMeldung(verstummt, LETZTE_MELDUNG);
+    long knappDrueber = lauf(T2, "NIGHT", false);
+    letzteMeldung(knappDrueber, JETZT.minus(STILLE_FRIST).minusSeconds(1));
+    teilnahme(true);
+
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
+        .extracting(DisruptionRepository.DisruptionCandidate::nightRunId)
+        .containsExactly(knappDrueber, verstummt);
+  }
+
+  /** Ohne {@code updated_at} ist der Start das einzige Lebenszeichen (Upload-Weg). */
+  @Test
+  void ohneLetzteMeldungZaehltDerStartAlsLebenszeichen() {
+    long verstummt = lauf(T1, "NIGHT", false);
+    teilnahme(true);
+
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
+        .extracting(DisruptionRepository.DisruptionCandidate::nightRunId)
+        .containsExactly(verstummt);
+    assertThat(disruptions.openCandidates(T1.plus(STILLE_FRIST), STILLE_FRIST)).isEmpty();
+  }
+
+  /** Issue #1800: Die Quittung nimmt auch einen verstummten Lauf aus der Liste. */
+  @Test
+  void einQuittierterVerstummterLaufIstKeinKandidat() {
+    long verstummt = lauf(T1, "NIGHT", false);
+    teilnahme(true);
+
+    disruptions.acknowledge(verstummt, userId, Instant.now());
+
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST)).isEmpty();
   }
 
   /** AK 13: jüngster Lauf zuoberst. */
@@ -146,7 +199,7 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     long juenger = lauf(T2, "NIGHT", true);
     teilnahme(true);
 
-    assertThat(disruptions.openCandidates())
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
         .extracting(DisruptionRepository.DisruptionCandidate::nightRunId)
         .containsExactly(juenger, aelter);
   }
@@ -158,7 +211,7 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     jdbc.update("UPDATE night_run SET no_work_reason = 'Ready war leer' WHERE id = ?", laufId);
     teilnahme(true);
 
-    assertThat(disruptions.openCandidates())
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
         .singleElement()
         .satisfies(
             k -> {
@@ -181,7 +234,7 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
         laufId);
     teilnahme(true);
 
-    assertThat(disruptions.openCandidates())
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
         .singleElement()
         .extracting(DisruptionRepository.DisruptionCandidate::abortReason)
         .isEqualTo("Dirty-Guard: uncommittete Reste");
@@ -199,7 +252,7 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
         laufId);
     teilnahme(true);
 
-    assertThat(disruptions.openCandidates())
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
         .singleElement()
         .extracting(DisruptionRepository.DisruptionCandidate::abortKind)
         .isEqualTo(NightRunAbortKind.REPORTED);
@@ -221,20 +274,20 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     lauf(T1, "NIGHT", true);
     teilnahme(true);
 
-    assertThat(disruptions.openCandidates())
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
         .singleElement()
         .extracting(DisruptionRepository.DisruptionCandidate::abortKind)
         .isNull();
   }
 
-  /** Die Störungsliste liest die beiden neuen Felder mit; {@code complete} ist dort stets wahr. */
+  /** Die Störungsliste liest die beiden neuen Felder mit. */
   @Test
   void derKandidatTraegtAbschlussUndLetzteMeldung() {
     long laufId = lauf(T1, "NIGHT", true);
     letzteMeldung(laufId, LETZTE_MELDUNG);
     teilnahme(true);
 
-    assertThat(disruptions.openCandidates())
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
         .singleElement()
         .satisfies(
             k -> {
@@ -253,7 +306,7 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     laufart(laufId, "CHAIN");
     teilnahme(true);
 
-    assertThat(disruptions.openCandidates())
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
         .singleElement()
         .extracting(DisruptionRepository.DisruptionCandidate::mode)
         .isEqualTo(NightRunMode.CHAIN);
@@ -269,7 +322,7 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
 
     disruptions.acknowledge(laufId, userId, Instant.now());
 
-    assertThat(disruptions.openCandidates()).isEmpty();
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST)).isEmpty();
   }
 
   @Test
@@ -352,7 +405,7 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     jdbc.update("DELETE FROM app_user WHERE id = ?", quittierer);
 
     assertThat(anzahlQuittungen()).isEqualTo(1);
-    assertThat(disruptions.openCandidates()).isEmpty();
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST)).isEmpty();
   }
 
   // --- Kennzeichnung von Hand (Issue #1197) ---------------------------------------------------

@@ -447,6 +447,47 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
         .andExpect(status().isForbidden());
   }
 
+  /**
+   * Issue #1800: Ein verstummter Lauf steht unter den Störungen — auch wenn sein letztes
+   * Lebenszeichen Wochen zurückliegt. Er hat sich nie abgemeldet ({@code complete = false}), und
+   * ohne ihn in der Liste gäbe es keinen Knopf, der ihn aus „Runner jetzt" nimmt.
+   *
+   * <p>Daneben drei unfertige Läufe, die <b>nicht</b> dorthin gehören: einer, der noch arbeitet,
+   * einer, den ein Admin von Hand beendete, und einer, dessen Störung schon quittiert ist.
+   */
+  @Test
+  void einVerstummterLaufStehtUnterDenStoerungen_dieDreiAnderenUnfertigenNicht() throws Exception {
+    Cookie admin = session("de-verstummt@example.com", PlatformRole.ADMIN);
+    long verstummt = verstummt(28);
+    long arbeitet = laufend();
+    long beendet = verstummt(27);
+    jdbc.update("UPDATE night_run SET closed_at = now() WHERE id = ?", beendet);
+    long quittiert = verstummt(26);
+    mvc.perform(delete(QUITTIEREN + "/" + quittiert).cookie(admin))
+        .andExpect(status().isNoContent());
+
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.stoerungen.length()").value(2))
+        .andExpect(jsonPath("$.stoerungen[0].nightRunId").value(laufId))
+        .andExpect(jsonPath("$.stoerungen[1].nightRunId").value(verstummt))
+        .andExpect(jsonPath("$.stoerungen[1].outcome.verdict").value("FAILED"))
+        .andExpect(jsonPath("$.laufende.length()").value(1))
+        .andExpect(jsonPath("$.laufende[0].nightRunId").value(arbeitet));
+  }
+
+  /** Ein unfertiger Lauf, dessen einziges Lebenszeichen sein Start vor so vielen Tagen ist. */
+  private long verstummt(int tage) {
+    return id(
+        "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms, processed_count,"
+            + " skipped_count, unparsed_count, created_at, updated_at, origin, complete)"
+            + " VALUES (?, now() - make_interval(days => ?), 'CHAIN', 'NIGHT', 1, 0, 0, 0,"
+            + " now(), now() - make_interval(days => ?), 'TOKEN', false) RETURNING id",
+        projectId,
+        tage,
+        tage);
+  }
+
   /** Ein Lauf, der arbeitet: unfertig, mit frischem Lebenszeichen. */
   private long laufend() {
     return id(

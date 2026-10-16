@@ -138,10 +138,11 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
   @Test
   void einUnabgeschlossenerLaufDerNachtErscheint() {
     long laufend = lauf(DRIN, "NIGHT", false);
+    letzteMeldung(laufend, FRISCH);
     teilnahme(true);
 
     assertThat(nacht()).containsExactly(laufend);
-    assertThat(disruptions.openCandidates()).isEmpty();
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST)).isEmpty();
   }
 
   /** Kriterium 13: Das Quittieren ändert den Ausgang nicht — der Lauf bleibt in der Nacht. */
@@ -152,7 +153,7 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
     disruptions.acknowledge(quittiert, userId, Instant.now());
 
     assertThat(nacht()).containsExactly(quittiert);
-    assertThat(disruptions.openCandidates()).isEmpty();
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST)).isEmpty();
   }
 
   /** Kriterium 15/16: weder interaktive Sitzungen noch Läufe abgehakter Projekte. */
@@ -267,17 +268,19 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
 
   /**
    * Kriterium 17: Die Störungsliste behält ihr Verhalten. Von denselben drei Läufen nimmt sie nur
-   * den abgeschlossenen, nicht quittierten — die Nacht nimmt alle drei.
+   * den abgeschlossenen, nicht quittierten — die Nacht nimmt alle drei. Der laufende meldet sich
+   * frisch; verstummt nähme ihn auch die Störungsliste auf (Issue #1800).
    */
   @Test
   void dieStoerungslisteBleibtBeiDenAbgeschlossenenUndNichtQuittierten() {
     long offen = lauf(DRIN, "NIGHT", true);
     long laufend = lauf(DRIN.plusSeconds(60), "NIGHT", false);
     long quittiert = lauf(DRIN.plusSeconds(120), "NIGHT", true);
+    letzteMeldung(laufend, FRISCH);
     teilnahme(true);
     disruptions.acknowledge(quittiert, userId, Instant.now());
 
-    assertThat(disruptions.openCandidates())
+    assertThat(disruptions.openCandidates(JETZT, STILLE_FRIST))
         .extracting(DisruptionRepository.DisruptionCandidate::nightRunId)
         .containsExactly(offen);
     assertThat(nacht()).containsExactlyInAnyOrder(offen, laufend, quittiert);

@@ -30,12 +30,20 @@ public interface DisruptionRepository {
    * Die Kandidaten für die Störungsliste, jüngster Lauf zuoberst (AK 13).
    *
    * <p>Gefiltert wird auf das, was die Datenbank entscheiden kann: Gattung {@code NIGHT}
-   * (interaktive Sitzungen sind keine Nachtläufe), abgeschlossener Lauf, teilnehmendes Projekt und
-   * fehlende Quittung. <b>Ob ein Lauf tatsächlich gestört ist</b>, entscheidet danach {@link
-   * org.mwolff.manban.nightrun.domain.NightRunOutcome} — dieser Maßstab gehört in die Domäne und
-   * nicht in SQL, sonst gäbe es ihn zweimal.
+   * (interaktive Sitzungen sind keine Nachtläufe), abgeschlossener <em>oder verstummter</em> Lauf,
+   * teilnehmendes Projekt und fehlende Quittung. <b>Ob ein Lauf tatsächlich gestört ist</b>,
+   * entscheidet danach {@link org.mwolff.manban.nightrun.domain.NightRunOutcome} — dieser Maßstab
+   * gehört in die Domäne und nicht in SQL, sonst gäbe es ihn zweimal.
+   *
+   * <p><b>Verstummt</b> (Issue #1800) heißt: unfertig, und das letzte Lebenszeichen liegt länger
+   * als die Stillefrist vor {@code jetzt}. Ein solcher Lauf hat sich nie abgemeldet; ohne ihn in
+   * der Liste gäbe es keine Zeile, über die man ihn quittiert. Kein Zeitfenster: Auch ein Wochen
+   * alter verstummter Lauf ist Kandidat.
+   *
+   * @param jetzt Bezugszeitpunkt der Stillefrist — derselbe, mit dem der Befund rechnet
+   * @param stilleFrist die Stille, die ein unfertiger Lauf sich erlauben darf
    */
-  List<DisruptionCandidate> openCandidates();
+  List<DisruptionCandidate> openCandidates(Instant jetzt, Duration stilleFrist);
 
   /**
    * Die Kandidaten der beiden Lauf-Bereiche des Leitstands, jüngster zuoberst (Issue #1094, Plan
@@ -139,8 +147,8 @@ public interface DisruptionRepository {
    * @param startedAt Startzeitpunkt des Laufs
    * @param updatedAt letztes Lebenszeichen des Laufs; {@code null}, wenn er nie fortgeschrieben
    *     wurde — der Upload-Weg lässt es bewusst leer, dort ist der Start das einzige Lebenszeichen
-   * @param complete ob der Lauf sich als abgeschlossen gemeldet hat; über {@link #openCandidates()}
-   *     stets {@code true}, weil jene Abfrage darauf filtert
+   * @param complete ob der Lauf sich als abgeschlossen gemeldet hat; über {@link #openCandidates}
+   *     {@code false} nur für einen verstummten Lauf (Issue #1800)
    * @param noWorkReason Grund, warum der Lauf nichts abgearbeitet hat; {@code null}, wenn er
    *     gearbeitet hat
    * @param abortReason Grund, warum der Lauf hart abgebrochen ist (Issue #1143); {@code null}, wenn
