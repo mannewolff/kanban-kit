@@ -19,6 +19,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param login Grenzwerte der Anmeldung
  * @param register Grenzwerte der Registrierung
  * @param forgot Grenzwerte der Reset-Anforderung
+ * @param codeRequest Grenzwerte der Anforderung eines Anmeldecodes
+ * @param codeVerify Grenzwerte der Eingabe eines Anmeldecodes, zugleich des Links aus der Mail
  */
 @ConfigurationProperties(prefix = "manban.ratelimit")
 public record RateLimitProperties(
@@ -27,11 +29,13 @@ public record RateLimitProperties(
     Integer maxTrackedOrigins,
     Limits login,
     Limits register,
-    Limits forgot) {
+    Limits forgot,
+    Limits codeRequest,
+    Limits codeVerify) {
 
   /**
-   * Grenzwerte eines Vorgangs. Drei gleich aufgebaute Blöcke statt eines gemeinsamen Wertesatzes
-   * mit Überschreibungen (E9): AK 6 gibt den Vorgabewert, AK 4 verlangt getrennte Stellschrauben.
+   * Grenzwerte eines Vorgangs. Gleich aufgebaute Blöcke statt eines gemeinsamen Wertesatzes mit
+   * Überschreibungen (E9): AK 6 gibt den Vorgabewert, AK 4 verlangt getrennte Stellschrauben.
    *
    * @param maxAttempts Zahl der Versuche, ab der die Grenze ausgeschöpft ist
    * @param window Dauer des Zählfensters
@@ -84,6 +88,12 @@ public record RateLimitProperties(
     if (forgot == null) {
       forgot = Limits.defaults();
     }
+    if (codeRequest == null) {
+      codeRequest = Limits.defaults();
+    }
+    if (codeVerify == null) {
+      codeVerify = Limits.defaults();
+    }
   }
 
   /** Die Grenzwerte des Vorgangs in der Form, die die Domäne verarbeitet. */
@@ -92,6 +102,8 @@ public record RateLimitProperties(
       case LOGIN -> login.toDomain();
       case REGISTER -> register.toDomain();
       case FORGOT -> forgot.toDomain();
+      case CODE_REQUEST -> codeRequest.toDomain();
+      case CODE_VERIFY, CODE_LINK -> codeVerify.toDomain();
     };
   }
 }

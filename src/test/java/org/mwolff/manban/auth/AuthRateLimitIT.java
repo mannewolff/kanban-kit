@@ -73,6 +73,10 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
   private static final String LOGIN_PATH = "/api/auth/login";
   private static final String REGISTER_PATH = "/api/auth/register";
   private static final String FORGOT_PATH = "/api/auth/forgot";
+  private static final String CODE_REQUEST_PATH = "/api/auth/code/request";
+  private static final String CODE_VERIFY_PATH = "/api/auth/code/verify";
+  private static final String CODE_LINK_PATH = "/api/auth/code/link";
+  private static final String WRONG_CODE = "000000";
   private static final String JSON = "application/json";
   private static final String FORWARDED_FOR = "X-Forwarded-For";
 
@@ -210,6 +214,43 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
                 .header(FORWARDED_FOR, SPOOFED + ", " + origin)
                 .contentType(JSON)
                 .content("{\"email\":\"%s\"}".formatted(email)))
+        .andReturn()
+        .getResponse();
+  }
+
+  /**
+   * Eine Code-Anforderung aus {@code origin}.
+   *
+   * <p>Wer die Bremse je Herkunft ausschöpft, wechselt die Adresse: Je Adresse greift sonst schon
+   * nach fünf Anforderungen die eigene Grenze des Dienstes, und die Bremse je Herkunft bliebe
+   * ungeprüft.
+   */
+  private MockHttpServletResponse requestCode(String origin, String email) throws Exception {
+    return mvc.perform(
+            post(CODE_REQUEST_PATH)
+                .header(FORWARDED_FOR, SPOOFED + ", " + origin)
+                .contentType(JSON)
+                .content("{\"email\":\"%s\"}".formatted(email)))
+        .andReturn()
+        .getResponse();
+  }
+
+  private MockHttpServletResponse verifyCode(String origin, String code) throws Exception {
+    return mvc.perform(
+            post(CODE_VERIFY_PATH)
+                .header(FORWARDED_FOR, SPOOFED + ", " + origin)
+                .contentType(JSON)
+                .content("{\"email\":\"%s\",\"code\":\"%s\"}".formatted(KNOWN_EMAIL, code)))
+        .andReturn()
+        .getResponse();
+  }
+
+  private MockHttpServletResponse redeemLink(String origin, String token) throws Exception {
+    return mvc.perform(
+            post(CODE_LINK_PATH)
+                .header(FORWARDED_FOR, SPOOFED + ", " + origin)
+                .contentType(JSON)
+                .content("{\"token\":\"%s\"}".formatted(token)))
         .andReturn()
         .getResponse();
   }
@@ -361,6 +402,82 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
     assertThat(warnungen.get(0))
         .contains(ORIGIN_A, RateLimitedOperation.LOGIN.name())
         .doesNotContain(KNOWN_EMAIL, WRONG_PASSWORD);
+  }
+
+  @Test
+  void codeAnforderung_zaehltJedenAufruf_undSperrtNachZehnJeHerkunft() throws Exception {
+    // Given / When — zehn angenommene Anforderungen für zehn verschiedene Adressen: Auch hier
+    // entsteht der Schaden durch die gelungenen Aufrufe, die Mails verschicken (Plan #1801 A7).
+    for (int aufruf = 1; aufruf <= MAX_ATTEMPTS; aufruf++) {
+      assertThat(requestCode(ORIGIN_A, "code" + aufruf + "@example.com").getStatus())
+          .isEqualTo(HttpStatus.ACCEPTED.value());
+    }
+
+    // Then — die elfte ist abgewiesen, eine andere Herkunft bleibt offen.
+    MockHttpServletResponse abweisung = requestCode(ORIGIN_A, "code-zu-viel@example.com");
+    assertThat(abweisung.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+    assertThat(retryAfterOf(abweisung)).isEqualTo(BLOCK.toSeconds());
+    assertThat(requestCode(ORIGIN_B, "code-zu-viel@example.com").getStatus())
+        .isEqualTo(HttpStatus.ACCEPTED.value());
+  }
+
+  @Test
+  void codeEingabe_zaehltFehlschlaege_undSperrtNachZehnJeHerkunft() throws Exception {
+    // Given — zehn falsche Codes, jeder regulär mit 401 beantwortet.
+    for (int versuch = 1; versuch <= MAX_ATTEMPTS; versuch++) {
+      assertThat(verifyCode(ORIGIN_A, WRONG_CODE).getStatus())
+          .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    // When / Then — der elfte ist abgewiesen, eine andere Herkunft bleibt offen.
+    MockHttpServletResponse abweisung = verifyCode(ORIGIN_A, WRONG_CODE);
+    assertThat(abweisung.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+    assertThat(retryAfterOf(abweisung)).isEqualTo(BLOCK.toSeconds());
+    assertThat(verifyCode(ORIGIN_B, WRONG_CODE).getStatus())
+        .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+  }
+
+  @Test
+  void codeEingabeUndCodeAnforderung_fuehrenGetrennteZaehler() throws Exception {
+    // Given — die Code-Eingabe dieser Herkunft ist gesperrt.
+    for (int versuch = 1; versuch <= MAX_ATTEMPTS; versuch++) {
+      verifyCode(ORIGIN_A, WRONG_CODE);
+    }
+    assertThat(verifyCode(ORIGIN_A, WRONG_CODE).getStatus())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+
+    // When / Then — die Anforderung eines neuen Codes bleibt offen (AK 7 aus #1781: getrennt für
+    // Anforderung und Eingabe), ebenso die Anmeldung mit Passwort bis zu ihrem Wegfall.
+    assertThat(requestCode(ORIGIN_A, KNOWN_EMAIL).getStatus())
+        .isEqualTo(HttpStatus.ACCEPTED.value());
+    assertThat(login(ORIGIN_A, KNOWN_EMAIL, PASSWORD).getStatus()).isEqualTo(HttpStatus.OK.value());
+  }
+
+  @Test
+  void codeAnforderungAusgeschoepft_sperrtDieCodeEingabeNicht() throws Exception {
+    // Given — die Anforderung dieser Herkunft ist gesperrt.
+    for (int aufruf = 1; aufruf <= MAX_ATTEMPTS; aufruf++) {
+      requestCode(ORIGIN_A, "voll" + aufruf + "@example.com");
+    }
+    assertThat(requestCode(ORIGIN_A, KNOWN_EMAIL).getStatus())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+
+    // When / Then — wer schon einen Code hat, kann ihn noch eingeben.
+    assertThat(verifyCode(ORIGIN_A, WRONG_CODE).getStatus())
+        .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+  }
+
+  @Test
+  void linkEinloesung_zaehltFehlschlaege_mitDenGrenzwertenDerCodeEingabe() throws Exception {
+    // Given — zehn unbekannte Links, jeder regulär mit 401 beantwortet.
+    for (int versuch = 1; versuch <= MAX_ATTEMPTS; versuch++) {
+      assertThat(redeemLink(ORIGIN_A, "unbekannt-" + versuch).getStatus())
+          .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    // When / Then
+    assertThat(redeemLink(ORIGIN_A, "unbekannt-zu-viel").getStatus())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
   }
 
   /**

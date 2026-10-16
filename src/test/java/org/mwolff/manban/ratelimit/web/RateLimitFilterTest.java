@@ -72,7 +72,8 @@ class RateLimitFilterTest {
     filter =
         new RateLimitFilter(
             rateLimiter,
-            new ClientOriginResolver(new RateLimitProperties(true, 0, null, null, null, null)),
+            new ClientOriginResolver(
+                new RateLimitProperties(true, 0, null, null, null, null, null, null)),
             SprachFixture.mit(() -> eingestellt));
   }
 

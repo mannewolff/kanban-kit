@@ -40,7 +40,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * <p>Gelesen werden nur Methode, Pfad und die Herkunft aus {@link ClientOriginResolver} —
  * <strong>nie</strong> der Request-Body. Die Bremse kennt weder E-Mail-Adresse noch Passwort (E11).
  *
- * <p>Die Auskunft erscheint in der eingestellten Sprache (Issue #1640, Plan #1638 A5): Die drei
+ * <p>Die Auskunft erscheint in der eingestellten Sprache (Issue #1640, Plan #1638 A5): Die
  * begrenzten Pfade sind öffentlich und tragen nie ein Projekt-Token, ein Sonderfall nach Zugangsart
  * entfällt.
  */

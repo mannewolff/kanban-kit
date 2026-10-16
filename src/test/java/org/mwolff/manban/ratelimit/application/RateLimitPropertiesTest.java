@@ -15,7 +15,8 @@ class RateLimitPropertiesTest {
   @Test
   void defaults_applyWhenNothingIsConfigured() {
     // Given / When
-    RateLimitProperties properties = new RateLimitProperties(null, null, null, null, null, null);
+    RateLimitProperties properties =
+        new RateLimitProperties(null, null, null, null, null, null, null, null);
 
     // Then
     assertThat(properties)
@@ -27,6 +28,8 @@ class RateLimitPropertiesTest {
     assertThat(properties.login()).isEqualTo(new Limits(10, DEFAULT_WINDOW, DEFAULT_WINDOW));
     assertThat(properties.register()).isEqualTo(new Limits(10, DEFAULT_WINDOW, DEFAULT_WINDOW));
     assertThat(properties.forgot()).isEqualTo(new Limits(10, DEFAULT_WINDOW, DEFAULT_WINDOW));
+    assertThat(properties.codeRequest()).isEqualTo(new Limits(10, DEFAULT_WINDOW, DEFAULT_WINDOW));
+    assertThat(properties.codeVerify()).isEqualTo(new Limits(10, DEFAULT_WINDOW, DEFAULT_WINDOW));
   }
 
   @Test
@@ -40,7 +43,9 @@ class RateLimitPropertiesTest {
             250,
             new Limits(3, Duration.ofMinutes(1), Duration.ofMinutes(2)),
             new Limits(4, Duration.ofMinutes(3), Duration.ofMinutes(4)),
-            new Limits(5, Duration.ofMinutes(5), Duration.ofMinutes(6)));
+            new Limits(5, Duration.ofMinutes(5), Duration.ofMinutes(6)),
+            new Limits(6, Duration.ofMinutes(7), Duration.ofMinutes(8)),
+            new Limits(7, Duration.ofMinutes(9), Duration.ofMinutes(10)));
 
     // Then
     assertThat(properties)
@@ -52,12 +57,15 @@ class RateLimitPropertiesTest {
     assertThat(properties.login().maxAttempts()).isEqualTo(3);
     assertThat(properties.register().maxAttempts()).isEqualTo(4);
     assertThat(properties.forgot().maxAttempts()).isEqualTo(5);
+    assertThat(properties.codeRequest().maxAttempts()).isEqualTo(6);
+    assertThat(properties.codeVerify().maxAttempts()).isEqualTo(7);
   }
 
   @Test
   void negativeProxyCount_fallsBackToTheDefault() {
     // Given / When
-    RateLimitProperties properties = new RateLimitProperties(true, -1, 250, null, null, null);
+    RateLimitProperties properties =
+        new RateLimitProperties(true, -1, 250, null, null, null, null, null);
 
     // Then
     assertThat(properties.trustedProxyCount()).isEqualTo(1);
@@ -66,7 +74,8 @@ class RateLimitPropertiesTest {
   @Test
   void nonPositiveMaxTrackedOrigins_fallsBackToTheDefault() {
     // Given / When
-    RateLimitProperties properties = new RateLimitProperties(true, 2, 0, null, null, null);
+    RateLimitProperties properties =
+        new RateLimitProperties(true, 2, 0, null, null, null, null, null);
 
     // Then
     assertThat(properties.maxTrackedOrigins()).isEqualTo(100_000);
@@ -77,7 +86,14 @@ class RateLimitPropertiesTest {
     // Given / When — 1 liegt bei beiden Feldern genau auf der Grenze und ist ein gültiger Wert.
     RateLimitProperties properties =
         new RateLimitProperties(
-            true, 1, 1, new Limits(1, Duration.ofMillis(1), Duration.ofMillis(1)), null, null);
+            true,
+            1,
+            1,
+            new Limits(1, Duration.ofMillis(1), Duration.ofMillis(1)),
+            null,
+            null,
+            null,
+            null);
 
     // Then
     assertThat(properties.maxTrackedOrigins()).isEqualTo(1);
@@ -138,7 +154,9 @@ class RateLimitPropertiesTest {
             10,
             new Limits(3, Duration.ofMinutes(1), Duration.ofMinutes(2)),
             new Limits(4, Duration.ofMinutes(3), Duration.ofMinutes(4)),
-            new Limits(5, Duration.ofMinutes(5), Duration.ofMinutes(6)));
+            new Limits(5, Duration.ofMinutes(5), Duration.ofMinutes(6)),
+            new Limits(6, Duration.ofMinutes(7), Duration.ofMinutes(8)),
+            new Limits(7, Duration.ofMinutes(9), Duration.ofMinutes(10)));
 
     // When / Then
     assertThat(properties.limitsFor(RateLimitedOperation.LOGIN))
@@ -147,5 +165,29 @@ class RateLimitPropertiesTest {
         .isEqualTo(new OriginAttempts.Limits(4, Duration.ofMinutes(3), Duration.ofMinutes(4)));
     assertThat(properties.limitsFor(RateLimitedOperation.FORGOT))
         .isEqualTo(new OriginAttempts.Limits(5, Duration.ofMinutes(5), Duration.ofMinutes(6)));
+    assertThat(properties.limitsFor(RateLimitedOperation.CODE_REQUEST))
+        .isEqualTo(new OriginAttempts.Limits(6, Duration.ofMinutes(7), Duration.ofMinutes(8)));
+    assertThat(properties.limitsFor(RateLimitedOperation.CODE_VERIFY))
+        .isEqualTo(new OriginAttempts.Limits(7, Duration.ofMinutes(9), Duration.ofMinutes(10)));
+  }
+
+  @Test
+  void limitsFor_theLinkSharesTheLimitsOfTheCodeEntry() {
+    // Given — Plan #1801 A7: Der Link ist eine zweite Form der Code-Eingabe und hat keinen eigenen
+    // Block; eine eigene Stellschraube wäre eine, die der Betreiber vergessen kann.
+    RateLimitProperties properties =
+        new RateLimitProperties(
+            true,
+            1,
+            10,
+            null,
+            null,
+            null,
+            null,
+            new Limits(7, Duration.ofMinutes(9), Duration.ofMinutes(10)));
+
+    // When / Then
+    assertThat(properties.limitsFor(RateLimitedOperation.CODE_LINK))
+        .isEqualTo(properties.limitsFor(RateLimitedOperation.CODE_VERIFY));
   }
 }

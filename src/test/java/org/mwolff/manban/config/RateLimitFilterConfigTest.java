@@ -63,7 +63,8 @@ class RateLimitFilterConfigTest {
         .withBean(
             ClientOriginResolver.class,
             () ->
-                new ClientOriginResolver(new RateLimitProperties(true, 1, null, null, null, null)))
+                new ClientOriginResolver(
+                    new RateLimitProperties(true, 1, null, null, null, null, null, null)))
         .withUserConfiguration(RateLimitFilterConfig.class);
   }
 
@@ -142,14 +143,20 @@ class RateLimitFilterConfigTest {
   }
 
   @Test
-  void dieBremseGreiftNurAnDenDreiBegrenztenPfaden() {
+  void dieBremseGreiftNurAnDenBegrenztenPfaden() {
     // Given / When
     runnerWithConfig()
         .run(
             context ->
                 // Then
                 assertThat(onlyRegistrationOf(context, RateLimitFilter.class).getUrlPatterns())
-                    .containsExactly(LOGIN_PATH, "/api/auth/register", "/api/auth/forgot"));
+                    .containsExactly(
+                        LOGIN_PATH,
+                        "/api/auth/register",
+                        "/api/auth/forgot",
+                        "/api/auth/code/request",
+                        "/api/auth/code/verify",
+                        "/api/auth/code/link"));
   }
 
   @Test
@@ -212,7 +219,8 @@ class RateLimitFilterConfigTest {
         .withBean(
             ClientOriginResolver.class,
             () ->
-                new ClientOriginResolver(new RateLimitProperties(true, 1, null, null, null, null)))
+                new ClientOriginResolver(
+                    new RateLimitProperties(true, 1, null, null, null, null, null, null)))
         .withUserConfiguration(RateLimitFilterConfig.class)
         .run(
             context ->

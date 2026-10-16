@@ -186,6 +186,18 @@ manban:
       max-attempts: ${MANBAN_RATELIMIT_FORGOT_MAX_ATTEMPTS:10}
       window: ${MANBAN_RATELIMIT_FORGOT_WINDOW:PT15M}
       block-duration: ${MANBAN_RATELIMIT_FORGOT_BLOCK_DURATION:PT15M}
+    # Anmeldung per Einmalcode (Issue #1807, Plan #1801 A7). Ohne eigene Variable gilt der Wert
+    # der alten Variable — die Code-Eingabe (und der Link aus der Mail) erbt von der Anmeldung,
+    # die Code-Anforderung von der Reset-Anforderung. So bleibt eine schon gesetzte Einstellung
+    # des Betreibers wirksam.
+    code-request:
+      max-attempts: ${MANBAN_RATELIMIT_CODE_REQUEST_MAX_ATTEMPTS:${MANBAN_RATELIMIT_FORGOT_MAX_ATTEMPTS:10}}
+      window: ${MANBAN_RATELIMIT_CODE_REQUEST_WINDOW:${MANBAN_RATELIMIT_FORGOT_WINDOW:PT15M}}
+      block-duration: ${MANBAN_RATELIMIT_CODE_REQUEST_BLOCK_DURATION:${MANBAN_RATELIMIT_FORGOT_BLOCK_DURATION:PT15M}}
+    code-verify:
+      max-attempts: ${MANBAN_RATELIMIT_CODE_VERIFY_MAX_ATTEMPTS:${MANBAN_RATELIMIT_LOGIN_MAX_ATTEMPTS:10}}
+      window: ${MANBAN_RATELIMIT_CODE_VERIFY_WINDOW:${MANBAN_RATELIMIT_LOGIN_WINDOW:PT15M}}
+      block-duration: ${MANBAN_RATELIMIT_CODE_VERIFY_BLOCK_DURATION:${MANBAN_RATELIMIT_LOGIN_BLOCK_DURATION:PT15M}}
     # Durchsatzbremse (Issue #999/#1002) — ein ZWEITER, von der Zaehlbremse oben getrennter
     # Mechanismus. Sie greift nur auf Aufrufe mit Zugriffstoken (CLI, Nachtlauf), nie auf die
     # Weboberflaeche, und zaehlt je Person ueber alle ihre Token: hoechstens per-minute Befehle je

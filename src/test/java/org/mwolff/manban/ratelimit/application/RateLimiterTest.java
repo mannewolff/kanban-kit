@@ -64,7 +64,7 @@ class RateLimiterTest {
 
   private static RateLimitProperties properties(boolean enabled) {
     Limits limits = new Limits(3, WINDOW, BLOCK);
-    return new RateLimitProperties(enabled, 1, 1000, limits, limits, limits);
+    return new RateLimitProperties(enabled, 1, 1000, limits, limits, limits, limits, limits);
   }
 
   /** Zählt {@code count} Versuche der Anmeldung von {@link #ORIGIN}, alle zur aktuellen Uhrzeit. */
