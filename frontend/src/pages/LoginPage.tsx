@@ -7,41 +7,30 @@ import TextField from '@mui/material/TextField'
 import { useState } from 'react'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import { authApi } from '../api/auth'
-import { ApiError, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { AuthCard } from '../components/AuthCard'
 import { useT } from '../i18n/SpracheContext'
+import { codeFehlermeldung } from '../lib/codeFehlermeldung'
 
 /**
  * Anmeldung per Einmalcode in zwei Schritten (Plan #1801): erst die E-Mail-Adresse, danach die
  * neutrale Antwort und das Feld für den sechsstelligen Code aus der Mail. Kein Passwort.
+ * Nach der Registrierung kommt der Code sofort (E3): `state.codeFuer` trägt die Adresse, und die
+ * Seite beginnt im Code-Schritt, ohne selbst einen Code anzufordern.
  */
 export function LoginPage() {
   const t = useT()
   const { loginWithCode } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [email, setEmail] = useState('')
+  const codeFuer = (location.state as { codeFuer?: string } | null)?.codeFuer
+  const [email, setEmail] = useState(codeFuer ?? '')
   const [code, setCode] = useState('')
-  const [codeAngefordert, setCodeAngefordert] = useState(false)
+  const [codeAngefordert, setCodeAngefordert] = useState(codeFuer != null && codeFuer !== '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const fehlerAnzeigen = (e: unknown) => {
-    if (e instanceof ApiError && e.status === 429) {
-      // Grenze je Adresse bzw. Bremse je Herkunft: vor dem 401-Zweig, damit niemand weiterprobiert,
-      // statt zu warten. Der Server nennt den Fall in `detail`.
-      setError(apiErrorMessage(e, t.AUTH.ZU_VIELE_VERSUCHE))
-    } else if (e instanceof ApiError && e.status === 401) {
-      // Falsch, abgelaufen, verbraucht, ersetzt oder unbekannte Adresse — bewusst ununterscheidbar (E6).
-      setError(t.AUTH.CODE_UNGUELTIG)
-    } else {
-      // 403 (gesperrt, wartet auf Freigabe) trägt die konkrete Meldung in `detail`. Gelesen wird
-      // `detail` über apiErrorMessage, nie `message`: das fällt bei unlesbarem Body auf den Roh-Body
-      // zurück — bei einem Fehler eines vorgelagerten Proxys stünde sonst dessen HTML im Formular.
-      setError(apiErrorMessage(e, t.AUTH.ANMELDUNG_FEHLGESCHLAGEN))
-    }
-  }
+  const fehlerAnzeigen = (e: unknown) => setError(codeFehlermeldung(e, t))
 
   const codeAnfordern = async () => {
     setError(null)

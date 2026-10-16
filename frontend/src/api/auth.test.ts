@@ -123,13 +123,13 @@ describe('authApi – restliche Endpunkte', () => {
     expect(c.method).toBe('POST')
   })
 
-  it('register ruft POST /api/auth/register mit E-Mail, Passwort und Anzeigenamen', async () => {
+  it('register ruft POST /api/auth/register mit E-Mail und Anzeigenamen, ohne Passwort', async () => {
     const f = mockJsonResponse({ id: 1, email: 'a@x.de' })
-    const result = await authApi.register('a@x.de', 'geheim', 'Ada')
+    const result = await authApi.register('a@x.de', 'Ada')
     const c = lastCall(f)
     expect(c.url).toBe('/api/auth/register')
     expect(c.method).toBe('POST')
-    expect(JSON.parse(String(c.body))).toEqual({ email: 'a@x.de', password: 'geheim', displayName: 'Ada' })
+    expect(JSON.parse(String(c.body))).toEqual({ email: 'a@x.de', displayName: 'Ada' })
     expect(result).toEqual({ id: 1, email: 'a@x.de' })
   })
 })

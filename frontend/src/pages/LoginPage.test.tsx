@@ -108,6 +108,18 @@ describe('LoginPage', () => {
     )
   })
 
+  /** E3 (Plan #1801): Nach der Registrierung kommt der Code sofort, die Seite beginnt im Code-Schritt. */
+  it('beginnt nach der Registrierung im Code-Schritt, ohne selbst einen Code anzufordern', async () => {
+    mockedApi.verifyCode.mockResolvedValue(meFixture)
+    renderLogin([{ pathname: '/login', state: { codeFuer: 'neu@b.de' } }])
+    const feld = await screen.findByRole('textbox', { name: /Code aus der E-Mail/ })
+    expect(screen.getByText(NEUTRALE_ANTWORT)).toBeInTheDocument()
+    expect(mockedApi.requestCode).not.toHaveBeenCalled()
+    await userEvent.type(feld, '123456')
+    await userEvent.click(screen.getByRole('button', { name: 'Anmelden' }))
+    expect(mockedApi.verifyCode).toHaveBeenCalledWith('neu@b.de', '123456')
+  })
+
   it('fordert auf Wunsch einen neuen Code an und leert das Code-Feld', async () => {
     renderLogin()
     const feld = await codeAnfordern()

@@ -160,6 +160,7 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | Route | Ansicht | Regel | Umsetzung |
 |---|---|---|---|
 | `/login` | Anmelden | Rahmenlose Platte auf dem Grund der Vorlage; Kupfertaste; Meldungen in Melderfarben | #978 |
+| `/login/link` | Anmelden per Link aus der Mail | wie Anmelden; Fortschrittsring, Meldungen in Melderfarben | #1815 |
 | `/signup` | Registrieren | wie Anmelden | #978 |
 | `/verify` | E-Mail bestätigen | wie Anmelden | #978 |
 | `/forgot` | Passwort vergessen | wie Anmelden | #978 |

@@ -31,6 +31,9 @@ const BootstrapAdminPage = lazy(() =>
   import('./pages/BootstrapAdminPage').then((m) => ({ default: m.BootstrapAdminPage })),
 )
 const EpicsPage = lazy(() => import('./pages/EpicsPage').then((m) => ({ default: m.EpicsPage })))
+const LinkLoginPage = lazy(() =>
+  import('./pages/LinkLoginPage').then((m) => ({ default: m.LinkLoginPage })),
+)
 const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })))
 const NightRunPage = lazy(() => import('./pages/NightRunPage').then((m) => ({ default: m.NightRunPage })))
 const ProjectBoardsPage = lazy(() =>
@@ -62,8 +65,9 @@ export function App() {
     <Suspense fallback={<PageFallback />}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/login/link" element={<LinkLoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        {/* Entfallene Passwort- und Bestätigungsseiten: alte Links aus Mails landen auf der Anmeldung (Plan #1801). */}
+        {/* Entfallene Zurücksetzungs- und Bestätigungsseiten: alte Links aus Mails landen auf der Anmeldung (Plan #1801). */}
         <Route path="/verify" element={<Navigate to="/login" replace />} />
         <Route path="/forgot" element={<Navigate to="/login" replace />} />
         <Route path="/reset" element={<Navigate to="/login" replace />} />

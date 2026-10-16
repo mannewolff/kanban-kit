@@ -45,6 +45,6 @@ export const authApi = {
     apiFetch<Me>('/api/auth/code/verify', jsonBody({ email, code }), parseMe),
   linkLogin: (token: string) => apiFetch<Me>('/api/auth/code/link', jsonBody({ token }), parseMe),
   logout: () => apiFetch<void>('/api/auth/logout', { method: 'POST' }),
-  register: (email: string, password: string, displayName: string) =>
-    apiFetch<{ id: number; email: string }>('/api/auth/register', jsonBody({ email, password, displayName })),
+  register: (email: string, displayName: string) =>
+    apiFetch<{ id: number; email: string }>('/api/auth/register', jsonBody({ email, displayName })),
 }
