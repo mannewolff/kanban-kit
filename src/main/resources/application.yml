@@ -99,6 +99,12 @@ manban:
     session-ttl: P30D
     cookie-secure: ${MANBAN_COOKIE_SECURE:true}
     reset-ttl: PT1H
+    # Code-Anmeldung (Plan #1801, A6): Gültigkeit, Fehlversuche je Code, Anforderungen je Adresse
+    # und gleitender Stunde.
+    login-code:
+      ttl: ${MANBAN_AUTH_LOGIN_CODE_TTL:PT10M}
+      max-attempts: ${MANBAN_AUTH_LOGIN_CODE_MAX_ATTEMPTS:5}
+      max-requests-per-hour: ${MANBAN_AUTH_LOGIN_CODE_MAX_REQUESTS_PER_HOUR:5}
   mail:
     enabled: ${MANBAN_MAIL_ENABLED:false}
     from: ${MANBAN_MAIL_FROM:no-reply@kanban-kit.local}

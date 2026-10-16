@@ -36,7 +36,8 @@ class RequestPasswordResetServiceTest {
     tokens = mock(PasswordResetTokenRepository.class);
     mailer = mock(PasswordResetMailer.class);
     AuthProperties properties =
-        new AuthProperties("https://app.example", null, null, null, null, Duration.ofHours(1));
+        new AuthProperties(
+            "https://app.example", null, null, null, null, Duration.ofHours(1), null);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service = new RequestPasswordResetService(users, tokens, mailer, properties, clock);
   }

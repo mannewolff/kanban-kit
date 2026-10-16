@@ -54,7 +54,7 @@
   "src/test/java/org/mwolff/manban/kanbancompat/KanbanCompatAttachmentIT.java": ["src/main/java/org/mwolff/manban/kanbancompat/application/KanbanAnhangService.java", "src/main/java/org/mwolff/manban/kanbancompat/web/KanbanAnhangController.java", "src/main/java/org/mwolff/manban/attachment/application/AttachmentService.java"],
   "src/test/java/org/mwolff/manban/kanbancompat/KanbanCompatArchivIT.java": ["src/main/java/org/mwolff/manban/kanbancompat/application/KanbanArchivService.java"],
   "src/test/java/org/mwolff/manban/kanbancompat/KanbanVerlaufHerkunftIT.java": ["src/main/java/org/mwolff/manban/kanbancompat/application/KanbanCompatService.java", "src/main/java/org/mwolff/manban/kanbancompat/application/KanbanArchivService.java"],
-  "src/test/java/org/mwolff/manban/kanbancompat/KanbanCompatLabelsIT.java":["src/main/java/org/mwolff/manban/card/application/FreigabeLabels.java"],
+  "src/test/java/org/mwolff/manban/kanbancompat/KanbanCompatLabelsIT.java": ["src/main/java/org/mwolff/manban/card/application/FreigabeLabels.java"],
   "src/test/java/org/mwolff/manban/nightrun/DisruptionRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/DisruptionRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/nightrun/LaeufeDerNachtRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/DisruptionRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/nightrun/DisruptionEndpointIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/DisruptionController.java", "src/main/java/org/mwolff/manban/nightrun/application/DisruptionService.java", "src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunRepositoryAdapter.java"],
@@ -78,5 +78,9 @@
   "src/test/java/org/mwolff/manban/nightrun/domain/NightRunErrorClassSyncTest.java": ["src/main/java/org/mwolff/manban/nightrun/domain/NightRunErrorClass.java"],
   "src/test/java/org/mwolff/manban/nightrun/infrastructure/NightRunRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunRepositoryAdapter.java", "src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunItemEntity.java", "src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/StuckEmbeddable.java"],
   "src/test/java/org/mwolff/manban/PortWhitelistArchitectureTest.java": ["src/test/java/org/mwolff/manban/ArchitekturKlassen.java"],
-  "src/test/java/org/mwolff/manban/auth/LoginCodeConcurrencyIT.java": ["src/main/java/org/mwolff/manban/auth/infrastructure/persistence/LoginCodeRepositoryAdapter.java", "src/main/java/org/mwolff/manban/auth/infrastructure/persistence/LoginCodeJpaRepository.java"]
+  "src/test/java/org/mwolff/manban/auth/LoginCodeConcurrencyIT.java": ["src/main/java/org/mwolff/manban/auth/infrastructure/persistence/LoginCodeRepositoryAdapter.java", "src/main/java/org/mwolff/manban/auth/infrastructure/persistence/LoginCodeJpaRepository.java"],
+  "src/test/java/org/mwolff/manban/auth/infrastructure/security/SessionSecretStartupCheckContextTest.java": ["src/main/java/org/mwolff/manban/auth/infrastructure/security/SessionSecretStartupCheck.java"],
+  "src/test/java/org/mwolff/manban/project/application/MembershipInvitationTest.java": ["src/main/java/org/mwolff/manban/project/application/MembershipService.java"],
+  "src/test/java/org/mwolff/manban/project/application/ProjectServiceParticipationViewTest.java": ["src/main/java/org/mwolff/manban/project/application/ProjectService.java"],
+  "src/test/java/org/mwolff/manban/project/application/ProjectServiceParticipationWriteTest.java": ["src/main/java/org/mwolff/manban/project/application/ProjectService.java"]
 }

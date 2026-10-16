@@ -79,7 +79,7 @@ class MembershipServiceTest {
     users = mock(UserLookup.class);
     displayNames = mock(UserDisplayNameWriter.class);
     AuthProperties authProperties =
-        new AuthProperties("https://app.example", null, null, null, null, null);
+        new AuthProperties("https://app.example", null, null, null, null, null, null);
     ProjectProperties projectProperties = new ProjectProperties(Duration.ofDays(7));
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =

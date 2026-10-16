@@ -11,7 +11,7 @@ class AuthPropertiesTest {
   @Test
   void appliesDefaults_whenAllValuesNull() {
     // When
-    AuthProperties props = new AuthProperties(null, null, null, null, null, null);
+    AuthProperties props = new AuthProperties(null, null, null, null, null, null, null);
 
     // Then
     assertThat(props.baseUrl()).isEqualTo("http://localhost:8080");
@@ -25,7 +25,7 @@ class AuthPropertiesTest {
   @Test
   void appliesDefaults_whenStringsAreBlank() {
     // When
-    AuthProperties props = new AuthProperties("   ", null, "   ", null, null, null);
+    AuthProperties props = new AuthProperties("   ", null, "   ", null, null, null, null);
 
     // Then
     assertThat(props.baseUrl()).isEqualTo("http://localhost:8080");
@@ -42,7 +42,8 @@ class AuthPropertiesTest {
             "s3cr3t",
             Duration.ofDays(1),
             Boolean.FALSE,
-            Duration.ofMinutes(30));
+            Duration.ofMinutes(30),
+            new AuthProperties.LoginCode(Duration.ofMinutes(5), 3, 7));
 
     // Then
     assertThat(props.baseUrl()).isEqualTo("https://manban.example");
@@ -51,5 +52,30 @@ class AuthPropertiesTest {
     assertThat(props.sessionTtl()).isEqualTo(Duration.ofDays(1));
     assertThat(props.cookieSecure()).isFalse();
     assertThat(props.resetTtl()).isEqualTo(Duration.ofMinutes(30));
+    assertThat(props.loginCode().ttl()).isEqualTo(Duration.ofMinutes(5));
+    assertThat(props.loginCode().maxAttempts()).isEqualTo(3);
+    assertThat(props.loginCode().maxRequestsPerHour()).isEqualTo(7);
+  }
+
+  @Test
+  void loginCode_appliesDefaults_whenBlockMissing() {
+    // When
+    AuthProperties props = new AuthProperties(null, null, null, null, null, null, null);
+
+    // Then — Plan #1801, A6: 10 Minuten, 5 Fehlversuche, 5 Anforderungen je Stunde
+    assertThat(props.loginCode().ttl()).isEqualTo(Duration.ofMinutes(10));
+    assertThat(props.loginCode().maxAttempts()).isEqualTo(5);
+    assertThat(props.loginCode().maxRequestsPerHour()).isEqualTo(5);
+  }
+
+  @Test
+  void loginCode_appliesDefaults_whenValuesNull() {
+    // When
+    AuthProperties.LoginCode loginCode = new AuthProperties.LoginCode(null, null, null);
+
+    // Then
+    assertThat(loginCode.ttl()).isEqualTo(Duration.ofMinutes(10));
+    assertThat(loginCode.maxAttempts()).isEqualTo(5);
+    assertThat(loginCode.maxRequestsPerHour()).isEqualTo(5);
   }
 }

@@ -22,7 +22,7 @@ class SessionCookieManagerTest {
   private SessionCookieManager cookies;
 
   private static AuthProperties properties(boolean secure) {
-    return new AuthProperties(null, null, "secret", TTL, secure, null);
+    return new AuthProperties(null, null, "secret", TTL, secure, null, null);
   }
 
   @BeforeEach

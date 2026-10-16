@@ -41,7 +41,8 @@ class RegisterUserServiceTest {
     encoder = mock(PasswordEncoder.class);
     approvalPolicy = mock(RegistrationApprovalPolicy.class);
     AuthProperties properties =
-        new AuthProperties("https://app.example", Duration.ofHours(24), null, null, null, null);
+        new AuthProperties(
+            "https://app.example", Duration.ofHours(24), null, null, null, null, null);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         new RegisterUserService(users, tokens, mailer, encoder, properties, clock, approvalPolicy);

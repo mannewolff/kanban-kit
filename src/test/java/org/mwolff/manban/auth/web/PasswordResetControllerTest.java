@@ -37,7 +37,7 @@ class PasswordResetControllerTest {
     resetPassword = mock(ResetPasswordService.class);
     var cookies =
         new SessionCookieManager(
-            new AuthProperties(null, null, "secret", Duration.ofDays(7), true, null));
+            new AuthProperties(null, null, "secret", Duration.ofDays(7), true, null, null));
     mvc =
         MockMvcBuilders.standaloneSetup(
                 new PasswordResetController(requestReset, resetPassword, cookies))

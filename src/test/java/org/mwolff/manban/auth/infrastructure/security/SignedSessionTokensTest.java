@@ -48,7 +48,7 @@ class SignedSessionTokensTest {
   }
 
   private static AuthProperties properties() {
-    return new AuthProperties(null, null, SECRET, TTL, null, null);
+    return new AuthProperties(null, null, SECRET, TTL, null, null, null);
   }
 
   private SignedSessionTokens at(Instant instant) {

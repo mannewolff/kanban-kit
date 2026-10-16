@@ -7,7 +7,8 @@ import com.tngtech.archunit.lang.ArchRule;
 import org.junit.jupiter.api.Test;
 
 /**
- * Aufrufer-Whitelists der rechtepruefungsfreien Ports (Issue #463, #1012, #1013, #1076, #1803).
+ * Aufrufer-Whitelists der rechtepruefungsfreien Ports (Issue #463, #1012, #1013, #1076, #1803,
+ * #1804).
  *
  * <p>Diese Ports pruefen bewusst keine Rechte; die Autorisierung liegt beim Aufrufer. Deshalb ist
  * ihr Aufruferkreis maschinell begrenzt: Ein neues Modul, das einen solchen Port injiziert, umginge
@@ -105,6 +106,21 @@ class PortWhitelistArchitectureTest {
               "LoginCodeRepository prueft keine Rechte: Aufrufer nur auth.application und der"
                   + " Adapter in auth.infrastructure");
 
+  // Sechster Port (Issue #1804, Plan #1801 A12): Der Mailer bekommt Code und Link im Klartext.
+  // Wer ihn ausserhalb des Moduls auth aufruft, verschickte Anmeldecodes an der Grenze je Adresse
+  // und am Ersetzen offener Anforderungen vorbei.
+  static final ArchRule LOGIN_CODE_MAILER_HAT_AUFRUFER_WHITELIST =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages(
+              "org.mwolff.manban.auth.application..", "org.mwolff.manban.auth.infrastructure..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching("org\\.mwolff\\.manban\\.auth\\.application\\.LoginCodeMailer")
+          .as(
+              "LoginCodeMailer verschickt Anmeldecodes: Aufrufer nur auth.application und der"
+                  + " Adapter in auth.infrastructure");
+
   @Test
   void userDisplayNameWriterHatAufruferWhitelist() {
     USER_DISPLAY_NAME_WRITER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
@@ -128,5 +144,10 @@ class PortWhitelistArchitectureTest {
   @Test
   void loginCodeRepositoryHatAufruferWhitelist() {
     LOGIN_CODE_REPOSITORY_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void loginCodeMailerHatAufruferWhitelist() {
+    LOGIN_CODE_MAILER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
   }
 }

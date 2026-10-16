@@ -17,6 +17,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     verlängert sich bei Nutzung gleitend (Plan #1801, A10)
  * @param cookieSecure ob das Session-Cookie das Secure-Flag trägt (Default true; hinter Caddy-TLS
  *     korrekt. Nur für lokalen Klartext-HTTP-Dev auf false setzen.)
+ * @param resetTtl Gültigkeitsdauer eines Passwort-Reset-Tokens
+ * @param loginCode Grenzen der Code-Anmeldung (Plan #1801, A6)
  */
 @ConfigurationProperties(prefix = "manban.auth")
 public record AuthProperties(
@@ -25,7 +27,8 @@ public record AuthProperties(
     String sessionSecret,
     Duration sessionTtl,
     Boolean cookieSecure,
-    Duration resetTtl) {
+    Duration resetTtl,
+    LoginCode loginCode) {
 
   /**
    * Der mitgelieferte Standard-Signaturschlüssel. Er steht im öffentlichen Repository und ist
@@ -54,6 +57,40 @@ public record AuthProperties(
     }
     if (cookieSecure == null) {
       cookieSecure = Boolean.TRUE;
+    }
+    if (loginCode == null) {
+      loginCode = LoginCode.DEFAULTS;
+    }
+  }
+
+  /**
+   * Grenzen der Code-Anmeldung (Plan #1801, A6), Präfix {@code manban.auth.login-code}.
+   *
+   * @param ttl Gültigkeitsdauer eines Codes samt Link (Vorgabe 10 Minuten)
+   * @param maxAttempts falsche Eingaben, nach denen ein Code verfällt (Vorgabe 5)
+   * @param maxRequestsPerHour angenommene Anforderungen je Adresse in einer gleitenden Stunde
+   *     (Vorgabe 5)
+   */
+  public record LoginCode(Duration ttl, Integer maxAttempts, Integer maxRequestsPerHour) {
+
+    private static final Duration DEFAULT_TTL = Duration.ofMinutes(10);
+    private static final int DEFAULT_MAX_ATTEMPTS = 5;
+    private static final int DEFAULT_MAX_REQUESTS_PER_HOUR = 5;
+
+    /** Alle Vorgaben — für einen fehlenden Block {@code manban.auth.login-code}. */
+    static final LoginCode DEFAULTS =
+        new LoginCode(DEFAULT_TTL, DEFAULT_MAX_ATTEMPTS, DEFAULT_MAX_REQUESTS_PER_HOUR);
+
+    public LoginCode {
+      if (ttl == null) {
+        ttl = DEFAULT_TTL;
+      }
+      if (maxAttempts == null) {
+        maxAttempts = DEFAULT_MAX_ATTEMPTS;
+      }
+      if (maxRequestsPerHour == null) {
+        maxRequestsPerHour = DEFAULT_MAX_REQUESTS_PER_HOUR;
+      }
     }
   }
 }

@@ -26,7 +26,13 @@ class SessionSecretStartupCheckContextTest {
               AuthProperties.class,
               () ->
                   new AuthProperties(
-                      null, null, AuthProperties.INSECURE_DEFAULT_SESSION_SECRET, null, null, null))
+                      null,
+                      null,
+                      AuthProperties.INSECURE_DEFAULT_SESSION_SECRET,
+                      null,
+                      null,
+                      null,
+                      null))
           .withUserConfiguration(SessionSecretStartupCheck.class);
 
   @Test
