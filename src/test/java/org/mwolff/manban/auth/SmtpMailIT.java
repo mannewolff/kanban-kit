@@ -66,7 +66,6 @@ class SmtpMailIT extends AbstractIntegrationTest {
   private static final int HTTP_API_PORT = 8025;
   private static final String FROM = "no-reply@manban.test";
   private static final String LOGIN_CODE_SUBJECT_PREFIX = "kanban-kit: Dein Anmeldecode ";
-  private static final String RESET_SUBJECT = "kanban-kit: Passwort zurücksetzen";
   private static final String APPROVAL_NOTIFICATION_SUBJECT =
       "kanban-kit: Neue Registrierung wartet auf Freigabe";
 
@@ -209,23 +208,6 @@ class SmtpMailIT extends AbstractIntegrationTest {
     assertThat(users.findByEmail(email))
         .get()
         .satisfies(u -> assertThat(u.emailVerified()).isTrue());
-  }
-
-  @Test
-  void passwordResetSendsMailOverSmtp() throws Exception {
-    String email = "smtp-reset@example.com";
-    assertThat(post("/api/auth/register", registerBody(email)).statusCode()).isEqualTo(201);
-
-    assertThat(post("/api/auth/forgot", "{\"email\":\"%s\"}".formatted(email)).statusCode())
-        .isEqualTo(200);
-
-    String message = awaitMessage(email, RESET_SUBJECT);
-    assertThat(JsonPath.<String>read(message, "$.From.Address")).isEqualTo(FROM);
-    assertThat(JsonPath.<String>read(message, "$.To[0].Address")).isEqualTo(email);
-    // Mail verlinkt auf die Frontend-Seite /reset (nicht den API-Endpunkt).
-    assertThat(JsonPath.<String>read(message, "$.Text"))
-        .contains("/reset?token=")
-        .doesNotContain("/api/auth/reset");
   }
 
   @Test

@@ -7,16 +7,16 @@ import java.util.Optional;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.common.SecureTokens;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Prüft Anmeldedaten und liefert bei Erfolg den authentifizierten Benutzer.
+ * Löst Anmeldecode oder Link ein und liefert bei Erfolg den authentifizierten Benutzer. Eine
+ * Anmeldung mit Passwort gibt es nicht mehr (Plan #1801, A13).
  *
- * <p>2FA-Vorbereitung: Der Login ist so geschnitten, dass ein optionaler zweiter Faktor später hier
- * andockt — statt {@link AppUser} könnte künftig ein {@code LoginOutcome} zurückgegeben werden
- * (authentifiziert vs. MFA-Challenge), ohne die aufrufende {@code SessionController}-Logik
+ * <p>2FA-Vorbereitung: Die Anmeldung ist so geschnitten, dass ein optionaler zweiter Faktor später
+ * hier andockt — statt {@link AppUser} könnte künftig ein {@code LoginOutcome} zurückgegeben werden
+ * (authentifiziert vs. MFA-Challenge), ohne die aufrufende {@code LoginCodeController}-Logik
  * grundlegend zu ändern.
  *
  * <p><strong>Code-Anmeldung (Plan #1801, A8, E5, E6):</strong> {@link #loginWithCode} und {@link
@@ -30,7 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class LoginService {
 
   private final AppUserRepository users;
-  private final PasswordEncoder passwordEncoder;
   private final LoginCodeRepository codes;
   private final LoginCodeCrypto crypto;
   private final AdminNotificationMailer adminNotificationMailer;
@@ -39,14 +38,12 @@ public class LoginService {
 
   public LoginService(
       AppUserRepository users,
-      PasswordEncoder passwordEncoder,
       LoginCodeRepository codes,
       LoginCodeCrypto crypto,
       AdminNotificationMailer adminNotificationMailer,
       AuthProperties properties,
       Clock clock) {
     this.users = users;
-    this.passwordEncoder = passwordEncoder;
     this.codes = codes;
     this.crypto = crypto;
     this.adminNotificationMailer = adminNotificationMailer;
@@ -112,8 +109,14 @@ public class LoginService {
     if (user.disabled()) {
       throw new UserDisabledException();
     }
-    // (3) Freigabe, mit den Ausnahmen aus login(). Benachrichtigt wird nur beim Übergang
-    // unbestätigt → bestätigt, damit wiederholte Versuche die Admins nicht fluten.
+    // (3) Freigabe (Issue #0097). Zwei Ausnahmen, beide gegen das Aussperren:
+    // 1. Solange noch kein Plattform-Admin existiert, darf sich der (noch nicht freigegebene) erste
+    //    Nutzer anmelden, um sich per Bootstrap-Token zum ersten Admin zu erheben — sonst gäbe es
+    //    niemanden, der freigeben könnte.
+    // 2. Ein Plattform-Admin braucht keine Freigabe (Issue #556); die Regel steckt seit Issue #561
+    //    in AppUser.effectivelyApproved() und gilt damit überall gleich.
+    // Benachrichtigt wird nur beim Übergang unbestätigt → bestätigt, damit wiederholte Versuche die
+    // Admins nicht fluten.
     if (!user.effectivelyApproved()) {
       if (newlyVerified) {
         notifyAdminsOfPendingApproval(user);
@@ -126,45 +129,12 @@ public class LoginService {
     return user;
   }
 
-  // Aus VerifyEmailService übernommen; dort bleibt sie bis zum Entfernungspaket (Plan #1801).
+  /** Meldet den Plattform-Admins ein Konto, das nach bestätigter Adresse auf Freigabe wartet. */
   private void notifyAdminsOfPendingApproval(AppUser pendingUser) {
     for (AppUser admin : users.findByPlatformRole(PlatformRole.ADMIN)) {
       adminNotificationMailer.sendNewUserPendingApproval(
           admin.email(), pendingUser.email(), pendingUser.displayName());
     }
-  }
-
-  @Transactional(readOnly = true)
-  public AppUser login(String email, String rawPassword) {
-    AppUser user =
-        users
-            .findByEmail(email.trim().toLowerCase(Locale.ROOT))
-            .orElseThrow(InvalidCredentialsException::new);
-
-    if (!passwordEncoder.matches(rawPassword, user.passwordHash())) {
-      throw new InvalidCredentialsException();
-    }
-    if (user.disabled()) {
-      throw new UserDisabledException();
-    }
-    if (!user.emailVerified()) {
-      throw new EmailNotVerifiedException();
-    }
-    // Freigabe-Gate (Issue #0097). Zwei Ausnahmen, beide gegen das Aussperren:
-    // 1. Solange noch kein Plattform-Admin existiert, darf sich der (noch nicht freigegebene) erste
-    //    Nutzer einloggen, um sich per Bootstrap-Token zum ersten Admin zu erheben — sonst gäbe es
-    //    niemanden, der freigeben könnte.
-    // 2. Ein Plattform-Admin braucht keine Freigabe (Issue #556): ein „auf Freigabe wartender
-    //    Admin" ist sinnlos, weil niemand über ihm steht. Ohne diese Ausnahme kippt Ausnahme 1
-    //    genau in dem Moment, in dem der Nutzer selbst zum Admin wird — er blockierte damit seine
-    //    eigene Anmeldung. Die Regel steckt seit Issue #561 in AppUser.effectivelyApproved() und
-    //    gilt damit überall gleich, auch bei Projektanlage und Einladung; sie sitzt in der Domäne
-    //    und nicht nur im Rollenwechsel-Service, damit sie auch beim rohen SQL-UPDATE greift, das
-    //    jeden Service umgeht.
-    if (!user.effectivelyApproved() && anyAdminExists()) {
-      throw new UserNotApprovedException();
-    }
-    return user;
   }
 
   private boolean anyAdminExists() {

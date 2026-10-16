@@ -64,13 +64,15 @@ class RateLimiterTest {
 
   private static RateLimitProperties properties(boolean enabled) {
     Limits limits = new Limits(3, WINDOW, BLOCK);
-    return new RateLimitProperties(enabled, 1, 1000, limits, limits, limits, limits, limits);
+    return new RateLimitProperties(enabled, 1, 1000, limits, limits, limits);
   }
 
-  /** Zählt {@code count} Versuche der Anmeldung von {@link #ORIGIN}, alle zur aktuellen Uhrzeit. */
-  private void recordLoginAttempts(int count) {
+  /**
+   * Zählt {@code count} Versuche der Code-Eingabe von {@link #ORIGIN}, alle zur aktuellen Uhrzeit.
+   */
+  private void recordCodeVerifyAttempts(int count) {
     for (int i = 0; i < count; i++) {
-      rateLimiter.recordAttempt(ORIGIN, RateLimitedOperation.LOGIN);
+      rateLimiter.recordAttempt(ORIGIN, RateLimitedOperation.CODE_VERIFY);
     }
   }
 
@@ -91,30 +93,30 @@ class RateLimiterTest {
   @Test
   void checkBlocked_withoutAnyAttempt_isNotBlocked() {
     // Given / When / Then — für eine unbekannte Herkunft steht nichts im Speicher.
-    assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN)).isEmpty();
+    assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY)).isEmpty();
   }
 
   @Test
   void checkBlocked_belowTheLimit_isNotBlocked() {
     // Given
-    recordLoginAttempts(2);
+    recordCodeVerifyAttempts(2);
 
     // When / Then
-    assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN)).isEmpty();
+    assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY)).isEmpty();
     assertThat(warnings()).isEmpty();
   }
 
   @Test
   void checkBlocked_whenTheLimitIsExhausted_blocksAndReportsTheRemainingTime() {
     // Given
-    recordLoginAttempts(3);
+    recordCodeVerifyAttempts(3);
 
     // When
     clock.advance(Duration.ofMinutes(1));
 
     // Then
-    assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN)).contains(BLOCK);
-    assertThat(store.get(new AttemptStore.Key(ORIGIN, RateLimitedOperation.LOGIN)))
+    assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY)).contains(BLOCK);
+    assertThat(store.get(new AttemptStore.Key(ORIGIN, RateLimitedOperation.CODE_VERIFY)))
         .isNotNull()
         .extracting(OriginAttempts::blockedUntil)
         .isEqualTo(NOW.plusSeconds(60).plus(BLOCK));
@@ -123,15 +125,15 @@ class RateLimiterTest {
   @Test
   void checkBlocked_withinTheSameBlock_doesNotExtendIt() {
     // Given — der erste abgewiesene Versuch setzt die Sperruhr.
-    recordLoginAttempts(3);
-    rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN);
+    recordCodeVerifyAttempts(3);
+    rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY);
     int writesAfterTheBlock = store.writtenKeys.size();
 
     // When
     clock.advance(Duration.ofMinutes(1));
 
     // Then — vier statt fünf Minuten: die Sperre läuft weiter, sie beginnt nicht neu.
-    assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+    assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY))
         .contains(Duration.ofMinutes(4));
     assertThat(store.writtenKeys).hasSize(writesAfterTheBlock);
   }
@@ -139,38 +141,38 @@ class RateLimiterTest {
   @Test
   void checkBlocked_writesExactlyOneWarningPerBlock() {
     // Given
-    recordLoginAttempts(3);
+    recordCodeVerifyAttempts(3);
 
     // When
-    rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN);
+    rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY);
     clock.advance(Duration.ofMinutes(1));
-    rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN);
+    rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY);
 
     // Then — Herkunft, Vorgang und Dauer stehen drin, die E-Mail-Adresse kennt die Fassade nicht.
     assertThat(warnings()).hasSize(1);
-    assertThat(warnings().get(0)).contains(ORIGIN, "LOGIN", BLOCK.toString());
+    assertThat(warnings().get(0)).contains(ORIGIN, "CODE_VERIFY", BLOCK.toString());
   }
 
   @Test
   void checkBlocked_afterTheBlockHasElapsed_releasesTheOrigin() {
     // Given
-    recordLoginAttempts(3);
-    rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN);
+    recordCodeVerifyAttempts(3);
+    rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY);
 
     // When
     clock.advance(BLOCK);
 
     // Then
-    assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN)).isEmpty();
+    assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY)).isEmpty();
   }
 
   @Test
   void recordAttempt_countsUp() {
     // Given / When
-    recordLoginAttempts(2);
+    recordCodeVerifyAttempts(2);
 
     // Then
-    assertThat(store.get(new AttemptStore.Key(ORIGIN, RateLimitedOperation.LOGIN)))
+    assertThat(store.get(new AttemptStore.Key(ORIGIN, RateLimitedOperation.CODE_VERIFY)))
         .isNotNull()
         .extracting(OriginAttempts::attempts)
         .isEqualTo(2);
@@ -179,14 +181,14 @@ class RateLimiterTest {
   @Test
   void recordAttempt_countsPerOriginAndOperation() {
     // Given
-    recordLoginAttempts(3);
+    recordCodeVerifyAttempts(3);
 
     // When / Then — weder eine andere Herkunft noch ein anderer Vorgang erbt die Sperre.
-    assertThat(rateLimiter.checkBlocked(OTHER_ORIGIN, RateLimitedOperation.LOGIN)).isEmpty();
+    assertThat(rateLimiter.checkBlocked(OTHER_ORIGIN, RateLimitedOperation.CODE_VERIFY)).isEmpty();
     assertThat(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.REGISTER)).isEmpty();
     assertThat(store.writtenKeys)
         .extracting(AttemptStore.Key::origin, AttemptStore.Key::operation)
-        .containsOnly(tuple(ORIGIN, RateLimitedOperation.LOGIN));
+        .containsOnly(tuple(ORIGIN, RateLimitedOperation.CODE_VERIFY));
   }
 
   /** Fake statt Mock: Der Speicher ist hier Zustand, kein Kollaborateur mit prüfbarem Protokoll. */

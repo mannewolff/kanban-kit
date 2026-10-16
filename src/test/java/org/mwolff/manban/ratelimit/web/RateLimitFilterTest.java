@@ -72,8 +72,7 @@ class RateLimitFilterTest {
     filter =
         new RateLimitFilter(
             rateLimiter,
-            new ClientOriginResolver(
-                new RateLimitProperties(true, 0, null, null, null, null, null, null)),
+            new ClientOriginResolver(new RateLimitProperties(true, 0, null, null, null, null)),
             SprachFixture.mit(() -> eingestellt));
   }
 
@@ -101,48 +100,48 @@ class RateLimitFilterTest {
   }
 
   @Test
-  void anmeldungZaehltDenFehlversuch() throws Exception {
-    // Given — der Fehlversuch ist bei der Anmeldung das Angriffsmuster (E4).
+  void codeEingabeZaehltDenFehlversuch() throws Exception {
+    // Given — der Fehlversuch ist bei der Code-Eingabe das Angriffsmuster (E4).
     limiterRunningAndOriginFree();
 
     // When
-    runFilter(request("POST", "/api/auth/login"), chainAnswering(401));
+    runFilter(request("POST", "/api/auth/code/verify"), chainAnswering(401));
 
     // Then
-    verify(rateLimiter).recordAttempt(ORIGIN, RateLimitedOperation.LOGIN);
+    verify(rateLimiter).recordAttempt(ORIGIN, RateLimitedOperation.CODE_VERIFY);
   }
 
   @Test
-  void anmeldungZaehltDieAbweisungDurchDenServer() throws Exception {
-    // Given — 403 ist ebenfalls ein abgewiesener Anmeldeversuch.
+  void codeEingabeZaehltDieAbweisungDurchDenServer() throws Exception {
+    // Given — 403 ist ebenfalls ein abgewiesener Eingabeversuch.
     limiterRunningAndOriginFree();
 
     // When
-    runFilter(request("POST", "/api/auth/login"), chainAnswering(403));
+    runFilter(request("POST", "/api/auth/code/verify"), chainAnswering(403));
 
     // Then
-    verify(rateLimiter).recordAttempt(ORIGIN, RateLimitedOperation.LOGIN);
+    verify(rateLimiter).recordAttempt(ORIGIN, RateLimitedOperation.CODE_VERIFY);
   }
 
   @Test
-  void anmeldungZaehltDenFormfehlerNicht() throws Exception {
-    // Given — ein Formfehler ist kein Passwortversuch (E4).
+  void codeEingabeZaehltDenFormfehlerNicht() throws Exception {
+    // Given — ein Formfehler ist kein Rateversuch (E4).
     limiterRunningAndOriginFree();
 
     // When
-    runFilter(request("POST", "/api/auth/login"), chainAnswering(400));
+    runFilter(request("POST", "/api/auth/code/verify"), chainAnswering(400));
 
     // Then
     verify(rateLimiter, never()).recordAttempt(anyString(), any());
   }
 
   @Test
-  void anmeldungZaehltDenErfolgNicht() throws Exception {
+  void codeEingabeZaehltDenErfolgNicht() throws Exception {
     // Given
     limiterRunningAndOriginFree();
 
     // When
-    runFilter(request("POST", "/api/auth/login"), chainAnswering(200));
+    runFilter(request("POST", "/api/auth/code/verify"), chainAnswering(200));
 
     // Then
     verify(rateLimiter, never()).recordAttempt(anyString(), any());
@@ -161,27 +160,27 @@ class RateLimitFilterTest {
   }
 
   @Test
-  void resetAnforderungZaehltAuchDenErfolg() throws Exception {
-    // Given — dasselbe für die Reset-Anforderung: jede versandte Mail zählt (E5).
+  void codeAnforderungZaehltAuchDenErfolg() throws Exception {
+    // Given — dasselbe für die Code-Anforderung: jede versandte Mail zählt (E5).
     limiterRunningAndOriginFree();
 
     // When
-    runFilter(request("POST", "/api/auth/forgot"), chainAnswering(200));
+    runFilter(request("POST", "/api/auth/code/request"), chainAnswering(200));
 
     // Then
-    verify(rateLimiter).recordAttempt(ORIGIN, RateLimitedOperation.FORGOT);
+    verify(rateLimiter).recordAttempt(ORIGIN, RateLimitedOperation.CODE_REQUEST);
   }
 
   @Test
   void gesperrteHerkunftErreichtDieKetteNicht() throws Exception {
     // Given — die Sperre läuft noch 90 Sekunden.
     when(rateLimiter.isEnabled()).thenReturn(true);
-    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY))
         .thenReturn(Optional.of(Duration.ofSeconds(90)));
     MockFilterChain chain = chainAnswering(200);
 
     // When
-    MockHttpServletResponse response = runFilter(request("POST", "/api/auth/login"), chain);
+    MockHttpServletResponse response = runFilter(request("POST", "/api/auth/code/verify"), chain);
 
     // Then — der Endpunkt sieht den Aufruf gar nicht erst (AK 5 aus #840).
     assertThat(chain.getRequest()).isNull();
@@ -203,12 +202,12 @@ class RateLimitFilterTest {
   void problemBodyIstZeichenGenau() throws Exception {
     // Given — dieselbe Lage wie oben, hier aber auf den ganzen Body gesehen.
     when(rateLimiter.isEnabled()).thenReturn(true);
-    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY))
         .thenReturn(Optional.of(Duration.ofSeconds(90)));
 
     // When
     MockHttpServletResponse response =
-        runFilter(request("POST", "/api/auth/login"), chainAnswering(200));
+        runFilter(request("POST", "/api/auth/code/verify"), chainAnswering(200));
 
     // Then — kein Feld, kein Komma, kein Leerzeichen darf sich verschieben: Der Body entsteht von
     // Hand aus einer Vorlage, und ein umgebauter Literal-Aufbau (Issue #1050) fiele sonst nur über
@@ -224,9 +223,9 @@ class RateLimitFilterTest {
     // Given — eingestellt ist Englisch, der Browser bittet um Deutsch: kein Header-Sonderfall
     eingestellt = Sprache.EN;
     when(rateLimiter.isEnabled()).thenReturn(true);
-    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY))
         .thenReturn(Optional.of(Duration.ofSeconds(90)));
-    MockHttpServletRequest request = request("POST", "/api/auth/login");
+    MockHttpServletRequest request = request("POST", "/api/auth/code/verify");
     request.addHeader("Accept-Language", "de-DE");
 
     // When
@@ -244,12 +243,12 @@ class RateLimitFilterTest {
     // Given
     eingestellt = Sprache.EN;
     when(rateLimiter.isEnabled()).thenReturn(true);
-    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.FORGOT))
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_REQUEST))
         .thenReturn(Optional.of(Duration.ofSeconds(30)));
 
     // When
     MockHttpServletResponse response =
-        runFilter(request("POST", "/api/auth/forgot"), chainAnswering(200));
+        runFilter(request("POST", "/api/auth/code/request"), chainAnswering(200));
 
     // Then
     assertThat(response.getContentAsString())
@@ -260,12 +259,12 @@ class RateLimitFilterTest {
   void restdauerUnterEinerMinuteWirdAlsEineMinuteGenannt() throws Exception {
     // Given — 30 Sekunden Restdauer; „in 0 Minuten" wäre eine falsche Auskunft.
     when(rateLimiter.isEnabled()).thenReturn(true);
-    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.FORGOT))
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_REQUEST))
         .thenReturn(Optional.of(Duration.ofSeconds(30)));
 
     // When
     MockHttpServletResponse response =
-        runFilter(request("POST", "/api/auth/forgot"), chainAnswering(200));
+        runFilter(request("POST", "/api/auth/code/request"), chainAnswering(200));
 
     // Then
     assertThat(response.getHeader("Retry-After")).isEqualTo("30");
@@ -277,12 +276,12 @@ class RateLimitFilterTest {
     // Given — 60 Sekunden liegen genau auf der Grenze: Wer hier aufrundet, nennt zwei Minuten und
     // schickt den Absender eine Minute länger weg als nötig.
     when(rateLimiter.isEnabled()).thenReturn(true);
-    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY))
         .thenReturn(Optional.of(Duration.ofSeconds(60)));
 
     // When
     MockHttpServletResponse response =
-        runFilter(request("POST", "/api/auth/login"), chainAnswering(200));
+        runFilter(request("POST", "/api/auth/code/verify"), chainAnswering(200));
 
     // Then
     assertThat(response.getHeader("Retry-After")).isEqualTo("60");
@@ -293,12 +292,12 @@ class RateLimitFilterTest {
   void restdauerVonGenauZweiMinutenWirdAlsZweiMinutenGenannt() throws Exception {
     // Given — dieselbe Grenze eine Minute weiter: 120 Sekunden sind zwei Minuten, nicht drei.
     when(rateLimiter.isEnabled()).thenReturn(true);
-    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY))
         .thenReturn(Optional.of(Duration.ofMinutes(2)));
 
     // When
     MockHttpServletResponse response =
-        runFilter(request("POST", "/api/auth/login"), chainAnswering(200));
+        runFilter(request("POST", "/api/auth/code/verify"), chainAnswering(200));
 
     // Then
     assertThat(response.getHeader("Retry-After")).isEqualTo("120");
@@ -310,12 +309,12 @@ class RateLimitFilterTest {
     // Given — 500 Millisekunden Restdauer; ein abgeschnittenes `Retry-After: 0` lüde zum
     // sofortigen nächsten Versuch ein, der wieder abgewiesen würde.
     when(rateLimiter.isEnabled()).thenReturn(true);
-    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.LOGIN))
+    when(rateLimiter.checkBlocked(ORIGIN, RateLimitedOperation.CODE_VERIFY))
         .thenReturn(Optional.of(Duration.ofMillis(500)));
 
     // When
     MockHttpServletResponse response =
-        runFilter(request("POST", "/api/auth/login"), chainAnswering(200));
+        runFilter(request("POST", "/api/auth/code/verify"), chainAnswering(200));
 
     // Then
     assertThat(response.getHeader("Retry-After")).isEqualTo("1");
@@ -328,7 +327,7 @@ class RateLimitFilterTest {
     MockFilterChain chain = chainAnswering(401);
 
     // When
-    MockHttpServletResponse response = runFilter(request("POST", "/api/auth/login"), chain);
+    MockHttpServletResponse response = runFilter(request("POST", "/api/auth/code/verify"), chain);
 
     // Then
     assertThat(chain.getRequest()).isNotNull();
@@ -357,7 +356,7 @@ class RateLimitFilterTest {
     MockFilterChain chain = chainAnswering(200);
 
     // When
-    runFilter(request("GET", "/api/auth/login"), chain);
+    runFilter(request("GET", "/api/auth/code/verify"), chain);
 
     // Then
     assertThat(chain.getRequest()).isNotNull();
@@ -366,15 +365,15 @@ class RateLimitFilterTest {
 
   @Test
   void derContextPathZaehltNichtZumPfad() throws Exception {
-    // Given — unter einem Context-Path lautet die URI /app/api/auth/login.
+    // Given — unter einem Context-Path lautet die URI /app/api/auth/code/verify.
     limiterRunningAndOriginFree();
-    MockHttpServletRequest request = request("POST", "/app/api/auth/login");
+    MockHttpServletRequest request = request("POST", "/app/api/auth/code/verify");
     request.setContextPath("/app");
 
     // When
     runFilter(request, chainAnswering(401));
 
     // Then — der Vorgang wird trotzdem erkannt.
-    verify(rateLimiter).recordAttempt(ORIGIN, RateLimitedOperation.LOGIN);
+    verify(rateLimiter).recordAttempt(ORIGIN, RateLimitedOperation.CODE_VERIFY);
   }
 }

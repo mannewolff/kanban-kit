@@ -45,7 +45,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *       ApiAusprobierFilter}, vor den Auth-Filtern); trägt er ein Projekt-Token, gilt das Token.
  * </ul>
  *
- * <p>2FA-Vorbereitung: Der zweite Faktor hängt im Login-Flow (SessionController / LoginService),
+ * <p>2FA-Vorbereitung: Der zweite Faktor hängt im Login-Flow (LoginCodeController / LoginService),
  * nicht hier — die Filterkette bleibt unverändert.
  */
 @Configuration

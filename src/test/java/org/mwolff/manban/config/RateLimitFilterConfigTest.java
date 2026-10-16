@@ -47,8 +47,6 @@ import org.springframework.web.filter.ForwardedHeaderFilter;
  */
 class RateLimitFilterConfigTest {
 
-  private static final String LOGIN_PATH = "/api/auth/login";
-
   /** Kontext mit Boots Servlet-Auto-Konfiguration und der Weiterleitungs-Strategie der App. */
   private final WebApplicationContextRunner runner =
       new WebApplicationContextRunner()
@@ -63,8 +61,7 @@ class RateLimitFilterConfigTest {
         .withBean(
             ClientOriginResolver.class,
             () ->
-                new ClientOriginResolver(
-                    new RateLimitProperties(true, 1, null, null, null, null, null, null)))
+                new ClientOriginResolver(new RateLimitProperties(true, 1, null, null, null, null)))
         .withUserConfiguration(RateLimitFilterConfig.class);
   }
 
@@ -151,9 +148,7 @@ class RateLimitFilterConfigTest {
                 // Then
                 assertThat(onlyRegistrationOf(context, RateLimitFilter.class).getUrlPatterns())
                     .containsExactly(
-                        LOGIN_PATH,
                         "/api/auth/register",
-                        "/api/auth/forgot",
                         "/api/auth/code/request",
                         "/api/auth/code/verify",
                         "/api/auth/code/link"));
@@ -219,8 +214,7 @@ class RateLimitFilterConfigTest {
         .withBean(
             ClientOriginResolver.class,
             () ->
-                new ClientOriginResolver(
-                    new RateLimitProperties(true, 1, null, null, null, null, null, null)))
+                new ClientOriginResolver(new RateLimitProperties(true, 1, null, null, null, null)))
         .withUserConfiguration(RateLimitFilterConfig.class)
         .run(
             context ->

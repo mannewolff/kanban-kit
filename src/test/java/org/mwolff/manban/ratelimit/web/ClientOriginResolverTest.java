@@ -26,7 +26,7 @@ class ClientOriginResolverTest {
 
   private static ClientOriginResolver resolverWith(int trustedProxyCount) {
     return new ClientOriginResolver(
-        new RateLimitProperties(true, trustedProxyCount, null, null, null, null, null, null));
+        new RateLimitProperties(true, trustedProxyCount, null, null, null, null));
   }
 
   private static MockHttpServletRequest requestFrom(String peer, String... forwardedFor) {

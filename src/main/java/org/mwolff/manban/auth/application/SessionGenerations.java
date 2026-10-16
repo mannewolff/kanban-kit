@@ -15,6 +15,9 @@ import java.util.OptionalLong;
  * alten Stand zurück — die per SQL erhöhte Generation fiele zurück, und Sitzungen, die hätten enden
  * müssen, liefen weiter.
  */
+// PMD.ImplicitFunctionalInterface: bewusst KEIN @FunctionalInterface — der Port ist ein Lesepfad
+// mit JPA-Adapter, kein Lambda-Ziel.
+@SuppressWarnings("PMD.ImplicitFunctionalInterface")
 public interface SessionGenerations {
 
   /**
@@ -24,19 +27,4 @@ public interface SessionGenerations {
    * @return die Generation, oder leer, wenn es das Konto nicht (mehr) gibt
    */
   OptionalLong current(long userId);
-
-  /**
-   * Zählt die Generation hoch und beendet damit alle Sitzungen des Kontos.
-   *
-   * <p>Bedingungslos hochgezählt (Plan #883, E4): Zwei gleichzeitige Aufrufe für dasselbe Konto —
-   * etwa zwei parallele Passwort-Resets — dürfen sich nicht gegenseitig überschreiben. Eine nicht
-   * erfolgte Erhöhung hieße: eine Sitzung, die hätte enden müssen, läuft weiter.
-   *
-   * <p><strong>Prüft keine Rechte.</strong> Der Aufrufer hat dafür bereits ein gültiges Einmal-
-   * Token verbraucht; die Autorisierung liegt in diesem Verbrauch, nicht hier. Ein unbekanntes
-   * Konto ist kein Fehlerfall — es hat keine Sitzungen, die weiterlaufen könnten.
-   *
-   * @param userId technische ID des Kontos
-   */
-  void invalidateSessions(long userId);
 }

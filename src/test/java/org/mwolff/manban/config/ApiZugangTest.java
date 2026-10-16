@@ -18,11 +18,7 @@ class ApiZugangTest {
   @ParameterizedTest
   @CsvSource({
     "/api/auth/register, OEFFENTLICH",
-    "/api/auth/verify, OEFFENTLICH",
-    "/api/auth/login, OEFFENTLICH",
     "/api/auth/logout, OEFFENTLICH",
-    "/api/auth/forgot, OEFFENTLICH",
-    "/api/auth/reset, OEFFENTLICH",
     "/api/auth/code/request, OEFFENTLICH",
     "/api/auth/code/verify, OEFFENTLICH",
     "/api/auth/code/link, OEFFENTLICH",

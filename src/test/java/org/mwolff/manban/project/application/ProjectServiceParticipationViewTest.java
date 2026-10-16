@@ -58,7 +58,7 @@ class ProjectServiceParticipationViewTest {
     InvitationMailer mailer = mock(InvitationMailer.class);
     ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     AuthProperties authProperties =
-        new AuthProperties("https://app.example", null, null, null, null, null, null);
+        new AuthProperties("https://app.example", null, null, null, null);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         new ProjectService(

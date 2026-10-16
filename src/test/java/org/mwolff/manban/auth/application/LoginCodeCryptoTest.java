@@ -17,7 +17,7 @@ class LoginCodeCryptoTest {
   private static final String SECRET = "test-sitzungsgeheimnis-mit-genug-laenge";
 
   private static AuthProperties properties(String secret) {
-    return new AuthProperties(null, null, secret, Duration.ofDays(30), true, null, null);
+    return new AuthProperties(null, secret, Duration.ofDays(30), true, null);
   }
 
   private static final LoginCodeCrypto CRYPTO = new LoginCodeCrypto(properties(SECRET));

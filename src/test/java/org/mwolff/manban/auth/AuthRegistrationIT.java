@@ -1,19 +1,14 @@
 package org.mwolff.manban.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.application.EmailVerificationTokenRepository;
-import org.mwolff.manban.auth.domain.EmailVerificationToken;
-import org.mwolff.manban.common.SecureTokens;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -32,8 +27,6 @@ class AuthRegistrationIT extends AbstractIntegrationTest {
   @Autowired private MockMvc mvc;
 
   @Autowired private AppUserRepository users;
-
-  @Autowired private EmailVerificationTokenRepository tokens;
 
   @Autowired private JdbcTemplate jdbc;
 
@@ -109,38 +102,6 @@ class AuthRegistrationIT extends AbstractIntegrationTest {
         .andExpect(status().isTooManyRequests());
 
     assertThat(users.findByEmail(email)).isEmpty();
-  }
-
-  @Test
-  void invalidTokenReturns400() throws Exception {
-    mvc.perform(get("/api/auth/verify").param("token", "does-not-exist"))
-        .andExpect(status().isBadRequest());
-  }
-
-  @Test
-  void expiredTokenReturns400() throws Exception {
-    String email = "expired@example.com";
-    mvc.perform(
-            post("/api/auth/register").contentType("application/json").content(registerBody(email)))
-        .andExpect(status().isCreated());
-    Long userId = users.findByEmail(email).orElseThrow().id();
-
-    String plaintext = "abgelaufenes-token";
-    tokens.save(
-        new EmailVerificationToken(
-            null,
-            userId,
-            SecureTokens.sha256Hex(plaintext),
-            Instant.now().minusSeconds(3600),
-            null));
-
-    mvc.perform(get("/api/auth/verify").param("token", plaintext))
-        .andExpect(status().isBadRequest());
-
-    // Das abgelaufene Token darf die E-Mail NICHT verifiziert haben.
-    assertThat(users.findByEmail(email))
-        .get()
-        .satisfies(u -> assertThat(u.emailVerified()).isFalse());
   }
 
   @Test

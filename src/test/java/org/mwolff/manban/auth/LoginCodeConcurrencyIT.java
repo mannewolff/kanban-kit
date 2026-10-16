@@ -24,8 +24,8 @@ import org.springframework.transaction.PlatformTransactionManager;
  * Weist nach, dass eine Code-Anforderung auch bei echter Nebenläufigkeit genau einmal eingelöst
  * wird und Fehlversuche das Maximum nicht überschreiten (Plan #1801, A2).
  *
- * <p>Wie {@link SingleUseTokenConcurrencyIT} synchronisiert {@link TransactionRace} über Zustände:
- * A hält die Zeilensperre offen, B wartet nachweislich darauf, erst dann committet A. PostgreSQL
+ * <p>Wie die übrigen Nebenläufigkeitstests synchronisiert {@link TransactionRace} über Zustände: A
+ * hält die Zeilensperre offen, B wartet nachweislich darauf, erst dann committet A. PostgreSQL
  * wertet B's {@code WHERE} auf der neuen Zeilenversion aus — B trifft keine Zeile mehr. Ein Lesen,
  * Prüfen und Schreiben nacheinander ließe unter READ COMMITTED beide gewinnen.
  */

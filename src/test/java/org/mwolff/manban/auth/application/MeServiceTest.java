@@ -59,12 +59,12 @@ class MeServiceTest {
   }
 
   @Test
-  void load_throwsInvalidCredentials_whenUserUnknown() {
+  void load_throwsUserNotFound_whenUserUnknown() {
     // Given
     when(users.findById(2L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> service.load(2L)).isInstanceOf(InvalidCredentialsException.class);
+    assertThatThrownBy(() -> service.load(2L)).isInstanceOf(UserNotFoundException.class);
   }
 
   @Test
@@ -87,12 +87,12 @@ class MeServiceTest {
   }
 
   @Test
-  void updateDisplayName_throwsInvalidCredentials_whenUserUnknown() {
+  void updateDisplayName_throwsUserNotFound_whenUserUnknown() {
     // Given
     when(users.findById(2L)).thenReturn(Optional.empty());
 
     // When / Then
     assertThatThrownBy(() -> service.updateDisplayName(2L, "Neu"))
-        .isInstanceOf(InvalidCredentialsException.class);
+        .isInstanceOf(UserNotFoundException.class);
   }
 }

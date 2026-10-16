@@ -7,11 +7,11 @@ import org.mwolff.manban.auth.domain.LoginCode;
 /**
  * Ausgehender Port für die Anforderungen der Code-Anmeldung (Plan #1801, A1, A2).
  *
- * <p><strong>Warum Verbrauch und Fehlversuch je ein eigener Aufruf sind:</strong> Wie bei {@link
- * SingleUseTokenRepository#consume} (Issue #497) dürfen Prüfen und Schreiben nicht nacheinander
- * laufen. Unter READ COMMITTED sähen zwei gleichzeitige Einlösungen beide eine offene Anforderung
- * und gewännen beide, und gleichzeitige Rateversuche zählten über das Maximum hinaus. Jede der
- * Methoden {@link #consumeByCode}, {@link #consumeByLink} und {@link #recordFailure} ist deshalb
+ * <p><strong>Warum Verbrauch und Fehlversuch je ein eigener Aufruf sind:</strong> Wie früher bei
+ * den Einmal-Tokens (Issue #497) dürfen Prüfen und Schreiben nicht nacheinander laufen. Unter READ
+ * COMMITTED sähen zwei gleichzeitige Einlösungen beide eine offene Anforderung und gewännen beide,
+ * und gleichzeitige Rateversuche zählten über das Maximum hinaus. Jede der Methoden {@link
+ * #consumeByCode}, {@link #consumeByLink} und {@link #recordFailure} ist deshalb
  * <strong>eine</strong> Anweisung in der Datenbank.
  *
  * <p>Offen ist eine Anforderung, solange sie weder verbraucht noch ersetzt noch abgelaufen ist

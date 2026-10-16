@@ -1,7 +1,6 @@
 package org.mwolff.manban.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.util.OptionalLong;
 import org.junit.jupiter.api.Test;
@@ -12,6 +11,7 @@ import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Die Zusagen des {@link SessionGenerations}-Ports gegen echtes Postgres (Issue #884).
@@ -30,6 +30,8 @@ class SessionGenerationsAdapterIT extends AbstractIntegrationTest {
 
   @Autowired private AppUserRepository users;
 
+  @Autowired private JdbcTemplate jdbc;
+
   @Test
   void beginntBeiNullFuerEinFrischAngelegtesKonto() {
     long userId = neuesKonto("start@example.com").id();
@@ -37,27 +39,20 @@ class SessionGenerationsAdapterIT extends AbstractIntegrationTest {
     assertThat(generations.current(userId)).hasValue(0L);
   }
 
-  @Test
-  void zaehltJeAufrufUmGenauEinsHoch() {
-    long userId = neuesKonto("bump@example.com").id();
-
-    generations.invalidateSessions(userId);
-    assertThat(generations.current(userId)).hasValue(1L);
-
-    generations.invalidateSessions(userId);
-    assertThat(generations.current(userId)).hasValue(2L);
-  }
-
   /**
    * Die Generation hängt nicht am Aggregat {@code AppUser} (Plan #883, E5). Würde die Spalte an
    * {@code AppUserEntity} gemappt, schriebe dieses {@code save} den beim Laden gesehenen alten Wert
-   * zurück — die beendeten Sitzungen lebten wieder auf.
+   * zurück — die beendeten Sitzungen lebten wieder auf. Hochgezählt wird per SQL, so wie es eine
+   * Migration tut, die alle Sitzungen beendet; den Port-Aufruf dafür gibt es seit dem Wegfall des
+   * Passwort-Resets nicht mehr (Issue #1816).
    */
   @Test
   void haeltDieGenerationGegenEinSpaeteresSpeichern() {
     AppUser geladen = neuesKonto("mapping@example.com");
 
-    generations.invalidateSessions(geladen.id());
+    jdbc.update(
+        "update app_user set session_generation = session_generation + 1 where id = ?",
+        geladen.id());
     users.save(geladen);
 
     assertThat(generations.current(geladen.id())).hasValue(1L);
@@ -66,16 +61,6 @@ class SessionGenerationsAdapterIT extends AbstractIntegrationTest {
   @Test
   void liefertNichtsFuerEinUnbekanntesKonto() {
     assertThat(generations.current(UNBEKANNTE_USER_ID)).isEqualTo(OptionalLong.empty());
-  }
-
-  /**
-   * Ein Konto, das es nicht (mehr) gibt, hat keine Sitzungen, die weiterlaufen könnten — das
-   * Hochzählen trifft null Zeilen und ist damit erfüllt, kein Fehlerfall.
-   */
-  @Test
-  void bleibtStillFuerEinUnbekanntesKonto() {
-    assertThatCode(() -> generations.invalidateSessions(UNBEKANNTE_USER_ID))
-        .doesNotThrowAnyException();
   }
 
   private AppUser neuesKonto(String email) {

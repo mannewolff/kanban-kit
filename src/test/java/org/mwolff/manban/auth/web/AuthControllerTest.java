@@ -2,13 +2,11 @@ package org.mwolff.manban.auth.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.RegisterUserService;
-import org.mwolff.manban.auth.application.VerifyEmailService;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 
@@ -16,14 +14,12 @@ import org.mwolff.manban.auth.domain.PlatformRole;
 class AuthControllerTest {
 
   private RegisterUserService registerUser;
-  private VerifyEmailService verifyEmail;
   private AuthController controller;
 
   @BeforeEach
   void setUp() {
     registerUser = mock(RegisterUserService.class);
-    verifyEmail = mock(VerifyEmailService.class);
-    controller = new AuthController(registerUser, verifyEmail);
+    controller = new AuthController(registerUser);
   }
 
   @Test
@@ -38,14 +34,5 @@ class AuthControllerTest {
 
     // Then
     assertThat(result).isEqualTo(new AuthController.RegisteredUserResponse(42L, "a@b.de", false));
-  }
-
-  @Test
-  void verify_delegatesToken() {
-    // When
-    controller.verify("the-token");
-
-    // Then
-    verify(verifyEmail).verify("the-token");
   }
 }

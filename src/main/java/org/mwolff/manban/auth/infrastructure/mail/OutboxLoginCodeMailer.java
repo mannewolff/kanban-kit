@@ -8,11 +8,11 @@ import org.mwolff.manban.outbox.application.OutboxWriter;
 import org.springframework.stereotype.Component;
 
 /**
- * Merkt die Anmeldecode-Mail in der Outbox vor (Plan #1801, A12). Semantik wie beim {@link
- * OutboxPasswordResetMailer}: Vormerkung in der fachlichen Transaktion, Zustellung nach Commit über
- * den {@link LoginCodeMailHandler}, Schlüssel = Hash der Link-URL (eindeutig je Anforderung, das
- * Geheimnis bleibt draußen). Code und Link stehen bis zur Outbox-Aufbewahrung im Klartext in der
- * Nutzlast (Plan #1801, E7).
+ * Merkt die Anmeldecode-Mail in der Outbox vor (Plan #1801, A12). Semantik wie bei den übrigen
+ * Outbox-Mails: Vormerkung in der fachlichen Transaktion, Zustellung nach Commit über den {@link
+ * LoginCodeMailHandler}, Schlüssel = Hash der Link-URL (eindeutig je Anforderung, das Geheimnis
+ * bleibt draußen). Code und Link stehen bis zur Outbox-Aufbewahrung im Klartext in der Nutzlast
+ * (Plan #1801, E7).
  */
 @Component
 class OutboxLoginCodeMailer implements LoginCodeMailer {

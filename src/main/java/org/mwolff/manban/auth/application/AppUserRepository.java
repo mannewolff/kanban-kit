@@ -36,9 +36,9 @@ public interface AppUserRepository {
    * letzte Admin darf nicht degradiert werden" ist eine Bedingung über eine <em>Zeilenmenge</em>,
    * geprüft vor dem Schreiben. Ohne Sperre sähen zwei gleichzeitige Degradierungen der letzten
    * beiden Admins beide noch zwei Admins, bestünden beide die Prüfung — und danach gäbe es keinen
-   * mehr. Ein bedingtes Update wie bei den Einmal-Tokens ({@link SingleUseTokenRepository#consume},
-   * Issue #497) hilft hier nicht: Beide Transaktionen schreiben <em>verschiedene</em> Zeilen und
-   * kämen sich über Zeilensperren nie in die Quere.
+   * mehr. Ein bedingtes Update wie bei den Einmal-Tokens (früher bei den Einmal-Tokens, Issue #497)
+   * hilft hier nicht: Beide Transaktionen schreiben <em>verschiedene</em> Zeilen und kämen sich
+   * über Zeilensperren nie in die Quere.
    *
    * <p>Gesperrt werden deshalb genau die Träger der Invariante — die Admin-Zeilen selbst — in
    * aufsteigender ID-Reihenfolge (stabile Sperrreihenfolge, damit zwei Aufrufer nicht verklemmen).

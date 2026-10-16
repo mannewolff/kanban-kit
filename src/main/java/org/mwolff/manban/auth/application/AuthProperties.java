@@ -6,8 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Auth-Konfiguration.
  *
- * @param baseUrl öffentliche Basis-URL für Links in E-Mails (z. B. Verifikation)
- * @param verificationTtl Gültigkeitsdauer eines E-Mail-Verifikations-Tokens
+ * @param baseUrl öffentliche Basis-URL für Links in E-Mails (z. B. Anmeldelink)
  * @param sessionSecret HMAC-Geheimnis zum Signieren des Session-Cookies. In Produktion zwingend
  *     über die Umgebung setzen (stabil über Neustarts/Instanzen). Der Rückfall auf {@link
  *     #INSECURE_DEFAULT_SESSION_SECRET} ist seit Issue #890 nur noch im ausdrücklich
@@ -17,17 +16,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     verlängert sich bei Nutzung gleitend (Plan #1801, A10)
  * @param cookieSecure ob das Session-Cookie das Secure-Flag trägt (Default true; hinter Caddy-TLS
  *     korrekt. Nur für lokalen Klartext-HTTP-Dev auf false setzen.)
- * @param resetTtl Gültigkeitsdauer eines Passwort-Reset-Tokens
  * @param loginCode Grenzen der Code-Anmeldung (Plan #1801, A6)
  */
 @ConfigurationProperties(prefix = "manban.auth")
 public record AuthProperties(
     String baseUrl,
-    Duration verificationTtl,
     String sessionSecret,
     Duration sessionTtl,
     Boolean cookieSecure,
-    Duration resetTtl,
     LoginCode loginCode) {
 
   /**
@@ -42,12 +38,6 @@ public record AuthProperties(
   public AuthProperties {
     if (baseUrl == null || baseUrl.isBlank()) {
       baseUrl = "http://localhost:8080";
-    }
-    if (verificationTtl == null) {
-      verificationTtl = Duration.ofHours(24);
-    }
-    if (resetTtl == null) {
-      resetTtl = Duration.ofHours(1);
     }
     if (sessionSecret == null || sessionSecret.isBlank()) {
       sessionSecret = INSECURE_DEFAULT_SESSION_SECRET;

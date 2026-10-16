@@ -14,6 +14,7 @@
   "src/test/java/org/mwolff/manban/auth/AuthSessionIT.java": ["src/main/java/org/mwolff/manban/auth/web/LoginCodeController.java", "src/main/java/org/mwolff/manban/auth/web/AuthController.java", "src/main/java/org/mwolff/manban/auth/web/security/SessionCookieManager.java"],
   "src/test/java/org/mwolff/manban/auth/BootstrapIT.java": ["src/main/java/org/mwolff/manban/auth/web/BootstrapController.java", "src/main/java/org/mwolff/manban/auth/application/BootstrapService.java"],
   "src/test/java/org/mwolff/manban/auth/AuthRateLimitIT.java": ["src/main/java/org/mwolff/manban/ratelimit/web/RateLimitFilter.java", "src/main/java/org/mwolff/manban/ratelimit/application/RateLimitedOperation.java"],
+  "src/test/java/org/mwolff/manban/auth/SessionGenerationsAdapterIT.java": ["src/main/java/org/mwolff/manban/auth/infrastructure/persistence/SessionGenerationsAdapter.java"],
   "src/test/java/org/mwolff/manban/project/PendingPlatformAdminIT.java": ["src/main/java/org/mwolff/manban/project/application/ProjectService.java", "src/main/java/org/mwolff/manban/project/application/MembershipService.java", "src/main/java/org/mwolff/manban/auth/application/LoginService.java"],
   "src/test/java/org/mwolff/manban/ratelimit/RateLimitAltvariablenIT.java": ["src/main/resources/application.yml", "src/main/java/org/mwolff/manban/ratelimit/application/RateLimitProperties.java"],
   "src/test/java/org/mwolff/manban/card/CardActivityHistorischeTypenIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardActivityRepositoryAdapter.java"],

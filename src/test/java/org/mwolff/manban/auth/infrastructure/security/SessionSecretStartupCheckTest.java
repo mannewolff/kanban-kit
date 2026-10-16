@@ -174,7 +174,7 @@ class SessionSecretStartupCheckTest {
 
   /** Echter Record — trägt jeden Wert, den der Kompaktkonstruktor durchlässt. */
   private static AuthProperties mitSchluessel(String sessionSecret) {
-    return new AuthProperties(null, null, sessionSecret, null, null, null, null);
+    return new AuthProperties(null, sessionSecret, null, null, null);
   }
 
   /**

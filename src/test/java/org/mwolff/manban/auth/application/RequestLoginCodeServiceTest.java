@@ -47,9 +47,7 @@ class RequestLoginCodeServiceTest {
     AuthProperties properties =
         new AuthProperties(
             "https://app.example",
-            null,
             "geheim",
-            null,
             null,
             null,
             new AuthProperties.LoginCode(Duration.ofMinutes(10), 5, 5));

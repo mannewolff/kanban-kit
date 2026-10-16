@@ -22,9 +22,9 @@ import org.springframework.test.web.servlet.MvcResult;
 
 /**
  * Security-Slice: volle Filterkette gegen echtes Postgres. Deckt die Anmeldung per Code (Cookie),
- * /api/me, Default-Deny ohne Cookie (401) und das Abmelden ab: Es löscht das Cookie dieses Geräts,
- * danach antwortet /api/me mit 401 (Plan #1801, E4; Issue #1813). Falsche, abgelaufene und erratene
- * Codes prüft {@link AnmeldungPerCodeSzenarienIT}.
+ * /api/me, Default-Deny ohne Cookie (401), den Wegfall der Passwort-Anmeldung und das Abmelden ab:
+ * Es löscht das Cookie dieses Geräts, danach antwortet /api/me mit 401 (Plan #1801, E4; Issue
+ * #1813). Falsche, abgelaufene und erratene Codes prüft {@link AnmeldungPerCodeSzenarienIT}.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
@@ -103,6 +103,29 @@ class AuthSessionIT extends AbstractIntegrationTest {
     // Der Browser übernimmt das gelöschte Cookie und schickt danach nur noch dieses mit.
     mvc.perform(get("/api/me").cookie(cleared)).andExpect(status().isUnauthorized());
     mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
+  }
+
+  /**
+   * Die Anmeldung mit Passwort ist entfallen (Plan #1801, A13; Issue #1816): Auch mit gültiger
+   * Sitzung gibt es den Endpunkt nicht mehr. Ohne Sitzung antwortete schon der Default-Deny mit 401
+   * und verdeckte, ob es ihn noch gibt.
+   */
+  @Test
+  void passwordLoginNoLongerExists() throws Exception {
+    anmeldung.konto("ohne-passwort@example.com", PlatformRole.USER);
+    Cookie session = anmeldung.perCode(mvc, "ohne-passwort@example.com");
+
+    int status =
+        mvc.perform(
+                post("/api/auth/{pfad}", "login")
+                    .cookie(session)
+                    .contentType("application/json")
+                    .content("{\"email\":\"ohne-passwort@example.com\",\"password\":\"x\"}"))
+            .andReturn()
+            .getResponse()
+            .getStatus();
+
+    assertThat(status).isIn(HttpStatus.NOT_FOUND.value(), HttpStatus.METHOD_NOT_ALLOWED.value());
   }
 
   @Test

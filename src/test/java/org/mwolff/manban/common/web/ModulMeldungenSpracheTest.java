@@ -9,7 +9,7 @@ import org.mwolff.manban.accesstoken.application.AccessTokenNotFoundException;
 import org.mwolff.manban.accesstoken.application.InvalidTokenBindingException;
 import org.mwolff.manban.attachment.application.AttachmentLimitExceededException;
 import org.mwolff.manban.attachment.application.AttachmentNotFoundException;
-import org.mwolff.manban.auth.application.InvalidCredentialsException;
+import org.mwolff.manban.auth.application.InvalidLoginCodeException;
 import org.mwolff.manban.auth.application.UserNotApprovedException;
 import org.mwolff.manban.board.application.BoardNotFoundException;
 import org.mwolff.manban.board.application.ColumnNotEmptyException;
@@ -51,8 +51,8 @@ class ModulMeldungenSpracheTest {
 
   @Test
   void authMeldungenAufEnglisch() {
-    assertThat(englischesDetail(new InvalidCredentialsException()))
-        .isEqualTo("Invalid credentials");
+    assertThat(englischesDetail(new InvalidLoginCodeException()))
+        .isEqualTo("Code invalid or expired — request a new one");
     assertThat(englischesDetail(new UserNotApprovedException()))
         .isEqualTo(
             "This account is waiting for approval by a platform admin."

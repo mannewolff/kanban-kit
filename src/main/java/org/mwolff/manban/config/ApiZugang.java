@@ -49,11 +49,7 @@ final class ApiZugang {
               Zugangsart.OEFFENTLICH,
               List.of(
                   "/api/auth/register",
-                  "/api/auth/verify",
-                  "/api/auth/login",
                   "/api/auth/logout",
-                  "/api/auth/forgot",
-                  "/api/auth/reset",
                   // Anmeldung per Einmalcode (Plan #1801, A4): anfordern, Code eingeben, Link
                   // einlösen — alle drei vor jeder Anmeldung.
                   "/api/auth/code/request",

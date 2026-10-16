@@ -207,7 +207,7 @@ class OpenApiIT extends AbstractIntegrationTest {
         .isNotBlank()
         .isNotEqualTo(OpenApiConfig.VERSION_UNBEKANNT);
     // Zugang je Pfad aus derselben Tabelle wie die Security-Regeln.
-    assertThat(spec.at("/paths/~1api~1auth~1login/post/x-zugang").asText())
+    assertThat(spec.at("/paths/~1api~1auth~1code~1request/post/x-zugang").asText())
         .isEqualTo("oeffentlich");
     assertThat(spec.at("/paths/~1api~1kanban~1items/get/x-zugang").asText())
         .isEqualTo("nur-projekt-token");

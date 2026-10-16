@@ -148,7 +148,7 @@ class ApiBeschreibungsAnreicherungTest {
   @Test
   void oeffentlicherPfadHatKeineSicherheitUndKeine401oder403() {
     Operation post = new Operation();
-    OpenAPI api = spezifikation("/api/auth/login", new PathItem().post(post));
+    OpenAPI api = spezifikation("/api/auth/code/request", new PathItem().post(post));
 
     anreicherung.customise(api);
 

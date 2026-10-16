@@ -34,12 +34,11 @@ class InMemoryAttemptStoreTest {
   private InMemoryAttemptStore store(int maxTrackedOrigins) {
     Limits limits = new Limits(10, WINDOW, BLOCK);
     return new InMemoryAttemptStore(
-        new RateLimitProperties(true, 1, maxTrackedOrigins, limits, limits, limits, limits, limits),
-        clock);
+        new RateLimitProperties(true, 1, maxTrackedOrigins, limits, limits, limits), clock);
   }
 
   private static AttemptStore.Key key(int index) {
-    return new AttemptStore.Key("203.0.113." + index, RateLimitedOperation.LOGIN);
+    return new AttemptStore.Key("203.0.113." + index, RateLimitedOperation.CODE_VERIFY);
   }
 
   @Test

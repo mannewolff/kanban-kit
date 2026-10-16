@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -58,21 +57,4 @@ interface AppUserJpaRepository extends JpaRepository<AppUserEntity, Long> {
    */
   @Query(value = "select session_generation from app_user where id = :id", nativeQuery = true)
   Optional<Long> findSessionGeneration(@Param("id") long id);
-
-  /**
-   * Zählt die Sitzungs-Generation des Kontos um eins hoch (Issue #884).
-   *
-   * <p>Bedingungsloses Inkrement in der Datenbank statt Lesen-Rechnen-Schreiben (Plan #883, E4):
-   * PostgreSQL sperrt die Zeile und wertet {@code session_generation + 1} nach dem Commit einer
-   * gleichzeitig laufenden zweiten Transaktion auf der <em>neuen</em> Zeilenversion aus. Beide
-   * Erhöhungen zählen damit; ein Lesen mit anschließendem Schreiben verlöre eine davon — und eine
-   * verlorene Erhöhung heißt: eine Sitzung, die hätte enden müssen, läuft weiter.
-   *
-   * @return Zahl der geänderten Zeilen; {@code 0} für ein Konto, das es nicht (mehr) gibt
-   */
-  @Modifying
-  @Query(
-      value = "update app_user set session_generation = session_generation + 1 where id = :id",
-      nativeQuery = true)
-  int bumpSessionGeneration(@Param("id") long id);
 }

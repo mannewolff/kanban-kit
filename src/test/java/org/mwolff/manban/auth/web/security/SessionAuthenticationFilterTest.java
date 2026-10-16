@@ -54,7 +54,7 @@ class SessionAuthenticationFilterTest {
         new SessionAuthenticationFilter(
             cookies,
             tokens,
-            new AuthProperties(null, null, "secret", TTL, true, null, null),
+            new AuthProperties(null, "secret", TTL, true, null),
             Clock.fixed(NOW, ZoneOffset.UTC));
     SecurityContextHolder.clearContext();
   }

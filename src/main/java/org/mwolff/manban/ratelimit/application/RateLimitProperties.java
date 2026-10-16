@@ -16,9 +16,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param enabled ob die Bremse greift; abgeschaltet wird nichts gezählt und nichts abgewiesen
  * @param trustedProxyCount Zahl der vertrauenswürdigen Proxies vor der Anwendung (E3)
  * @param maxTrackedOrigins Obergrenze der gleichzeitig verfolgten Herkünfte (E7)
- * @param login Grenzwerte der Anmeldung
  * @param register Grenzwerte der Registrierung
- * @param forgot Grenzwerte der Reset-Anforderung
  * @param codeRequest Grenzwerte der Anforderung eines Anmeldecodes
  * @param codeVerify Grenzwerte der Eingabe eines Anmeldecodes, zugleich des Links aus der Mail
  */
@@ -27,9 +25,7 @@ public record RateLimitProperties(
     Boolean enabled,
     Integer trustedProxyCount,
     Integer maxTrackedOrigins,
-    Limits login,
     Limits register,
-    Limits forgot,
     Limits codeRequest,
     Limits codeVerify) {
 
@@ -79,14 +75,8 @@ public record RateLimitProperties(
     if (maxTrackedOrigins == null || maxTrackedOrigins < 1) {
       maxTrackedOrigins = 100_000;
     }
-    if (login == null) {
-      login = Limits.defaults();
-    }
     if (register == null) {
       register = Limits.defaults();
-    }
-    if (forgot == null) {
-      forgot = Limits.defaults();
     }
     if (codeRequest == null) {
       codeRequest = Limits.defaults();
@@ -99,9 +89,7 @@ public record RateLimitProperties(
   /** Die Grenzwerte des Vorgangs in der Form, die die Domäne verarbeitet. */
   public OriginAttempts.Limits limitsFor(RateLimitedOperation operation) {
     return switch (operation) {
-      case LOGIN -> login.toDomain();
       case REGISTER -> register.toDomain();
-      case FORGOT -> forgot.toDomain();
       case CODE_REQUEST -> codeRequest.toDomain();
       case CODE_VERIFY, CODE_LINK -> codeVerify.toDomain();
     };

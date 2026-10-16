@@ -1,43 +1,36 @@
 package org.mwolff.manban.auth.web;
 
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.mwolff.manban.auth.application.RegisterUserService;
-import org.mwolff.manban.auth.application.VerifyEmailService;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Öffentliche Auth-Endpunkte für Registrierung und E-Mail-Verifikation. */
+/** Öffentlicher Auth-Endpunkt für die Registrierung. */
 @Tag(
     name = "Anmeldung",
     description =
-        "Registrierung, E-Mail-Bestätigung, Anmelden und Abmelden sowie das Zurücksetzen des"
-            + " Passworts. Diese Aufrufe gehen ohne Anmeldung. Eine erfolgreiche Anmeldung setzt"
-            + " ein signiertes Session-Cookie (HttpOnly), mit dem der Browser alle weiteren"
-            + " Aufrufe stellt.")
+        "Registrierung, Anmelden per Einmalcode und Abmelden. Diese Aufrufe gehen ohne"
+            + " Anmeldung. Eine erfolgreiche Anmeldung setzt ein signiertes Session-Cookie"
+            + " (HttpOnly), mit dem der Browser alle weiteren Aufrufe stellt.")
 @RestController
 @RequestMapping("/api/auth")
 class AuthController {
 
   private final RegisterUserService registerUser;
-  private final VerifyEmailService verifyEmail;
 
-  AuthController(RegisterUserService registerUser, VerifyEmailService verifyEmail) {
+  AuthController(RegisterUserService registerUser) {
     this.registerUser = registerUser;
-    this.verifyEmail = verifyEmail;
   }
 
   @Operation(
@@ -86,29 +79,6 @@ class AuthController {
     AppUser user =
         registerUser.register(request.email(), request.password(), request.displayName());
     return new RegisteredUserResponse(user.requireId(), user.email(), user.emailVerified());
-  }
-
-  @Operation(
-      summary = "E-Mail-Adresse bestätigen",
-      description =
-          "Ohne Anmeldung. Löst das Token aus dem Bestätigungslink ein und markiert die"
-              + " E-Mail-Adresse als bestätigt. Das Token gilt genau einmal und nur bis zu seinem"
-              + " Ablauf. Wartet das Konto danach noch auf Freigabe, erhalten die Plattform-Admins"
-              + " eine Benachrichtigung.")
-  @ApiResponse(responseCode = "200", description = "Die E-Mail-Adresse ist bestätigt.")
-  @ApiResponse(
-      responseCode = "400",
-      description = "Das Token fehlt, ist unbekannt, abgelaufen oder schon eingelöst.",
-      content =
-          @Content(
-              mediaType = ApiSchemas.PROBLEM_JSON,
-              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
-  @GetMapping("/verify")
-  @ResponseStatus(HttpStatus.OK)
-  void verify(
-      @Parameter(description = "Token aus dem Bestätigungslink der Mail.") @RequestParam("token")
-          String token) {
-    verifyEmail.verify(token);
   }
 
   @Schema(description = "Ein neu registriertes Konto.")
