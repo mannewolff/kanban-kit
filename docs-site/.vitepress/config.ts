@@ -37,7 +37,7 @@ export default defineConfig({
         items: [
           { text: "Start & Aufruf", link: "/betrieb" },
           { text: "Umgebungsvariablen", link: "/betrieb#umgebungsvariablen" },
-          { text: "E-Mail-Bestätigung", link: "/betrieb#e-mail-bestatigung-ohne-mailserver" },
+          { text: "Anmeldecode und Mails", link: "/betrieb#anmeldecode-und-mails-ohne-mailserver" },
           { text: "Ersten Admin einrichten", link: "/betrieb#den-ersten-admin-einrichten" },
           { text: "Testsuite lokal starten", link: "/betrieb#testsuite-lokal-starten" },
           { text: "Upgrade", link: "/upgrading" },

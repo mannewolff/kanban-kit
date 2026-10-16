@@ -14,6 +14,8 @@ fremde Anbindung daraufhin anpassen muss, steht in [UPGRADING.md](UPGRADING.md).
 ## Hinweise zum Upgrade
 
 Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADING.md](UPGRADING.md).
+Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
+benennt Variablen der Zählbremse um — Einzelheiten dort.
 
 ## [3.2.0] – 2026-10-15
 
