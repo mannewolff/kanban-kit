@@ -53,6 +53,7 @@ class AnmeldungPerCodeSzenarienIT extends AbstractIntegrationTest {
   private static final String UNBEKANNT = "niemand@example.com";
   private static final String LOGIN_CODE = "mail.login-code";
   private static final String ADMIN_MAIL = "mail.user-approval";
+  private static final String VERIFIKATION = "mail.verification";
 
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
@@ -256,7 +257,50 @@ class AnmeldungPerCodeSzenarienIT extends AbstractIntegrationTest {
     assertThat(empfaengerDerAdminMails()).containsExactlyInAnyOrder(ADMIN, ZWEITER_ADMIN);
   }
 
+  @Test
+  @DisplayName("Szenario: Registrierung ohne Passwort, erste Code-Anmeldung bestätigt die Adresse")
+  void registrierungOhnePasswort() throws Exception {
+    Geraet rechner = new Geraet();
+
+    MockHttpServletResponse registrierung =
+        rechner.senden(
+            json(
+                "/api/auth/register",
+                "{\"email\":\"Neu@Example.com\",\"displayName\":\"Neue Person\"}"));
+
+    assertThat(registrierung.getStatus()).isEqualTo(HttpStatus.CREATED.value());
+    assertThat(registrierung.getContentAsString()).contains("\"emailVerified\":false");
+    assertThat(mails("neu@example.com")).hasSize(1);
+    assertThat(anzahlMails(LOGIN_CODE)).isEqualTo(1);
+    assertThat(anzahlMails(VERIFIKATION)).isZero();
+
+    // Die Freigabe durch einen Admin steht hier für sich; geprüft wird die Bestätigung der Adresse.
+    jdbc.update(
+        "UPDATE app_user SET approved_at = now(), approved_by = ? WHERE email = ?",
+        admin,
+        "neu@example.com");
+    MockHttpServletResponse eingabe =
+        rechner.senden(code("neu@example.com", letzteMail("neu@example.com").code()));
+
+    assertThat(eingabe.getStatus()).isEqualTo(HttpStatus.OK.value());
+    assertThat(rechner.angemeldet()).isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT email_verified FROM app_user WHERE email = ?",
+                Boolean.class,
+                "neu@example.com"))
+        .isTrue();
+    assertThat(anzahlMails(VERIFIKATION)).isZero();
+  }
+
   // --- Hilfen ---
+
+  private int anzahlMails(String typ) {
+    Integer anzahl =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM outbox_entry WHERE event_type = ?", Integer.class, typ);
+    return anzahl == null ? 0 : anzahl;
+  }
 
   private void mitgliedAnlegen() {
     konto(new AppUser(null, MITGLIED, "unbenutzt", "Mitglied", true, PlatformRole.USER));

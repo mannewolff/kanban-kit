@@ -43,18 +43,23 @@ class AuthController {
   @Operation(
       summary = "Konto registrieren",
       description =
-          "Ohne Anmeldung. Legt ein Konto mit unbestätigter E-Mail-Adresse an und verschickt"
-              + " einen Bestätigungslink. Die Adresse wird klein geschrieben gespeichert. Anmelden"
-              + " kann sich das Konto erst nach der Bestätigung und — außer bei per Einladung"
-              + " registrierten Adressen — nach der Freigabe durch einen Plattform-Admin. Der"
-              + " Erfolg bestätigt die angelegte Registrierung, nicht die Zustellung der Mail.")
-  @ApiResponse(responseCode = "201", description = "Das angelegte, noch unbestätigte Konto.")
+          "Ohne Anmeldung. Braucht nur E-Mail-Adresse und Anzeigename. Legt ein Konto mit"
+              + " unbestätigter E-Mail-Adresse an und fordert im selben Zug einen Anmeldecode an"
+              + " (wie POST /api/auth/code/request, zählt auf dieselbe Grenze je Adresse); eine"
+              + " eigene Bestätigungsmail gibt es nicht. Die erste Anmeldung mit dem Code bestätigt"
+              + " die Adresse. Die Adresse wird klein geschrieben gespeichert. Angemeldet wird das"
+              + " Konto — außer bei per Einladung registrierten Adressen — erst nach der Freigabe"
+              + " durch einen Plattform-Admin. Der Erfolg bestätigt die angelegte Registrierung,"
+              + " nicht die Zustellung der Mail.")
+  @ApiResponse(
+      responseCode = "201",
+      description = "Das angelegte, noch unbestätigte Konto; die Mail mit dem Code ist vorgemerkt.")
   @ApiResponse(
       responseCode = "400",
       description =
-          "Ungültige Eingabe: E-Mail leer, ungültig oder länger als 320 Zeichen, Passwort kürzer"
-              + " als 8 oder länger als 200 Zeichen, Anzeigename leer oder länger als 120"
-              + " Zeichen (Details in fieldErrors).",
+          "Ungültige Eingabe: E-Mail leer, ungültig oder länger als 320 Zeichen, Anzeigename"
+              + " leer oder länger als 120 Zeichen, ein mitgeschicktes Passwort kürzer als 8 oder"
+              + " länger als 200 Zeichen (Details in fieldErrors).",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -62,6 +67,15 @@ class AuthController {
   @ApiResponse(
       responseCode = "409",
       description = "Die E-Mail-Adresse ist schon registriert.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "429",
+      description =
+          "Für diese Adresse wurden in der letzten Stunde schon zu viele Codes angefordert; es"
+              + " wird kein Konto angelegt.",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
