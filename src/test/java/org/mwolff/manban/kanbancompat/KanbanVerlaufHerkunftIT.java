@@ -14,14 +14,13 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultMatcher;
 
@@ -38,7 +37,6 @@ import org.springframework.test.web.servlet.ResultMatcher;
 @AutoConfigureMockMvc
 class KanbanVerlaufHerkunftIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
   private static final String TOKEN_HEADER = "X-Kanban-Token";
   private static final String TOKEN_NAME = "verlauf-token";
   private static final String AGENT = "claude-opus-5-5";
@@ -46,7 +44,7 @@ class KanbanVerlaufHerkunftIT extends AbstractIntegrationTest {
 
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
 
@@ -348,18 +346,8 @@ class KanbanVerlaufHerkunftIT extends AbstractIntegrationTest {
         .asLong();
   }
 
-  private Cookie session(String email, String displayName, PlatformRole role) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(null, email, passwordEncoder.encode(PASSWORD), displayName, true, role));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie session(String email, String displayName, PlatformRole role) {
+    users.save(anmeldung.konto(email, role).withDisplayName(displayName));
+    return anmeldung.anmelden(email, role);
   }
 }

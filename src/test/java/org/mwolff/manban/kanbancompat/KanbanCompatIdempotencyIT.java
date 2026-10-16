@@ -15,11 +15,10 @@ import javax.sql.DataSource;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.TransactionRace;
 import org.mwolff.manban.accesstoken.application.AccessTokenService;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.kanbancompat.application.IdempotencyRecordStore;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
@@ -29,7 +28,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 
@@ -46,12 +44,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 @AutoConfigureMockMvc
 class KanbanCompatIdempotencyIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
   private static final String HEADER = "Idempotency-Key";
 
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
   @Autowired private AccessTokenService accessTokens;
@@ -363,17 +359,7 @@ class KanbanCompatIdempotencyIT extends AbstractIntegrationTest {
             .getContentAsString());
   }
 
-  private Cookie session(String email, PlatformRole role) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, role));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie session(String email, PlatformRole role) {
+    return anmeldung.anmelden(email, role);
   }
 }
