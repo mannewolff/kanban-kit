@@ -11,8 +11,8 @@ import java.time.Instant;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -21,7 +21,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -37,12 +36,10 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class CardSortByNumberIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
   @Autowired private ProjectMembershipRepository memberships;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
 
@@ -52,23 +49,9 @@ class CardSortByNumberIT extends AbstractIntegrationTest {
   private long backlog;
   private long ready;
 
-  private Cookie loginAs(String email, PlatformRole role) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, role));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
-  }
-
   private void setup(String email) throws Exception {
-    login = loginAs(email, PlatformRole.USER);
-    Cookie admin = loginAs("sort-admin@example.com", PlatformRole.ADMIN);
+    login = anmeldung.anmelden(email, PlatformRole.USER);
+    Cookie admin = anmeldung.anmelden("sort-admin@example.com", PlatformRole.ADMIN);
     String project =
         mvc.perform(
                 post("/api/projects")
@@ -219,7 +202,7 @@ class CardSortByNumberIT extends AbstractIntegrationTest {
   @Test
   void memberWithoutCardMoveIsForbidden() throws Exception {
     setup("sort-403-owner@example.com");
-    Cookie viewer = loginAs("sort-403-viewer@example.com", PlatformRole.USER);
+    Cookie viewer = anmeldung.anmelden("sort-403-viewer@example.com", PlatformRole.USER);
     memberships.save(
         new ProjectMembership(
             null,
@@ -234,7 +217,7 @@ class CardSortByNumberIT extends AbstractIntegrationTest {
   @Test
   void nonMemberIsNotFound() throws Exception {
     setup("sort-stranger-owner@example.com");
-    Cookie stranger = loginAs("sort-stranger@example.com", PlatformRole.USER);
+    Cookie stranger = anmeldung.anmelden("sort-stranger@example.com", PlatformRole.USER);
 
     // Nichtmitglied: 404 statt 403 — kein Existenz-Leak.
     sort(stranger, backlog, "ASC").andExpect(status().isNotFound());

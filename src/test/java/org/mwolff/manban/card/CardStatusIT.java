@@ -13,8 +13,8 @@ import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -23,7 +23,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -35,28 +34,12 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class CardStatusIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
   @Autowired private ProjectMembershipRepository memberships;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
-
-  private Cookie session(String email, PlatformRole role) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, role));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
-  }
 
   private long userId(String email) {
     return users.findByEmail(email).orElseThrow().id();
@@ -138,8 +121,8 @@ class CardStatusIT extends AbstractIntegrationTest {
    */
   @Test
   void setztDenStatus_undLegtDieKarteInDieProzessspalte() throws Exception {
-    Cookie admin = session("wandert-admin@example.com", PlatformRole.ADMIN);
-    Cookie owner = session("wandert-owner@example.com", PlatformRole.USER);
+    Cookie admin = anmeldung.anmelden("wandert-admin@example.com", PlatformRole.ADMIN);
+    Cookie owner = anmeldung.anmelden("wandert-owner@example.com", PlatformRole.USER);
     long projectId = project(admin, "wandert-owner@example.com", "Wandert");
     JsonNode board = board(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -178,8 +161,8 @@ class CardStatusIT extends AbstractIntegrationTest {
    */
   @Test
   void setztDenStatus_ohneProzessspalte_ohneDieKarteZuVerschieben() throws Exception {
-    Cookie admin = session("status-admin@example.com", PlatformRole.ADMIN);
-    Cookie owner = session("status-owner@example.com", PlatformRole.USER);
+    Cookie admin = anmeldung.anmelden("status-admin@example.com", PlatformRole.ADMIN);
+    Cookie owner = anmeldung.anmelden("status-owner@example.com", PlatformRole.USER);
     long projectId = project(admin, "status-owner@example.com", "Status");
     JsonNode board = board(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -237,8 +220,8 @@ class CardStatusIT extends AbstractIntegrationTest {
 
   @Test
   void unbekannterWertUndDokumentart_ergeben400() throws Exception {
-    Cookie admin = session("status-400-admin@example.com", PlatformRole.ADMIN);
-    Cookie owner = session("status-400-owner@example.com", PlatformRole.USER);
+    Cookie admin = anmeldung.anmelden("status-400-admin@example.com", PlatformRole.ADMIN);
+    Cookie owner = anmeldung.anmelden("status-400-owner@example.com", PlatformRole.USER);
     long projectId = project(admin, "status-400-owner@example.com", "Status400");
     JsonNode board = board(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -273,9 +256,9 @@ class CardStatusIT extends AbstractIntegrationTest {
 
   @Test
   void fremdesBoardOhneCardMove_canSetStatusFalsch_und403() throws Exception {
-    Cookie admin = session("status-fremd-admin@example.com", PlatformRole.ADMIN);
-    Cookie alice = session("status-fremd-alice@example.com", PlatformRole.USER);
-    Cookie bob = session("status-fremd-bob@example.com", PlatformRole.USER);
+    Cookie admin = anmeldung.anmelden("status-fremd-admin@example.com", PlatformRole.ADMIN);
+    Cookie alice = anmeldung.anmelden("status-fremd-alice@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("status-fremd-bob@example.com", PlatformRole.USER);
     long eigenes = project(admin, "status-fremd-alice@example.com", "Eigen");
     long fremdes = project(admin, "status-fremd-bob@example.com", "Fremd");
     JsonNode eigenesBoard = board(alice, eigenes);

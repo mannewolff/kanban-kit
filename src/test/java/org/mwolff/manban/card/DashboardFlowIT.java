@@ -1,8 +1,6 @@
 package org.mwolff.manban.card;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,8 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.StellbareUhrConfig;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardView;
@@ -30,7 +27,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -43,14 +39,12 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import(StellbareUhrConfig.class)
 class DashboardFlowIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
   private static final String OWNER = "flow-owner@example.com";
   private static final String FREMD = "flow-fremd@example.com";
   private static final String ZONE = "Europe/Berlin";
 
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ProjectService projects;
   @Autowired private BoardService boards;
   @Autowired private CardService cardService;
@@ -74,7 +68,7 @@ class DashboardFlowIT extends AbstractIntegrationTest {
   @Test
   void einMitgliedLiestBeidePlatten() throws Exception {
     marke(uhr.instant().minus(Duration.ofDays(200)), true);
-    Cookie mitglied = session(OWNER);
+    Cookie mitglied = anmeldung.anmelden(OWNER, PlatformRole.USER);
 
     mvc.perform(get(flow()).param("zone", ZONE).cookie(mitglied)).andExpect(status().isOk());
     mvc.perform(get(aging()).cookie(mitglied)).andExpect(status().isOk());
@@ -83,7 +77,7 @@ class DashboardFlowIT extends AbstractIntegrationTest {
   @Test
   void einNichtmitgliedBekommt404() throws Exception {
     marke(uhr.instant().minus(Duration.ofDays(200)), true);
-    Cookie fremd = session(FREMD);
+    Cookie fremd = anmeldung.anmelden(FREMD, PlatformRole.USER);
 
     mvc.perform(get(flow()).param("zone", ZONE).cookie(fremd)).andExpect(status().isNotFound());
     mvc.perform(get(aging()).cookie(fremd)).andExpect(status().isNotFound());
@@ -93,7 +87,7 @@ class DashboardFlowIT extends AbstractIntegrationTest {
   void einArchiviertesBoardIst404() throws Exception {
     marke(uhr.instant().minus(Duration.ofDays(200)), true);
     boards.deleteBoard(owner, board.id());
-    Cookie mitglied = session(OWNER);
+    Cookie mitglied = anmeldung.anmelden(OWNER, PlatformRole.USER);
 
     mvc.perform(get(flow()).param("zone", ZONE).cookie(mitglied)).andExpect(status().isNotFound());
     mvc.perform(get(aging()).cookie(mitglied)).andExpect(status().isNotFound());
@@ -102,7 +96,7 @@ class DashboardFlowIT extends AbstractIntegrationTest {
   @Test
   void eineOffsetZoneIst400() throws Exception {
     marke(uhr.instant().minus(Duration.ofDays(200)), true);
-    Cookie mitglied = session(OWNER);
+    Cookie mitglied = anmeldung.anmelden(OWNER, PlatformRole.USER);
 
     mvc.perform(get(flow()).param("zone", "+05:30").cookie(mitglied))
         .andExpect(status().isBadRequest());
@@ -117,7 +111,7 @@ class DashboardFlowIT extends AbstractIntegrationTest {
     anlegen("Ready", "Paket");
     // Der Stand „jetzt“ zählt, was vor dem Stichzeitpunkt begann.
     uhr.advance(Duration.ofMinutes(1));
-    Cookie mitglied = session(OWNER);
+    Cookie mitglied = anmeldung.anmelden(OWNER, PlatformRole.USER);
     LocalDate heute = LocalDate.ofInstant(uhr.instant(), ZoneId.of(ZONE));
 
     mvc.perform(get(flow()).param("zone", ZONE).cookie(mitglied))
@@ -142,7 +136,7 @@ class DashboardFlowIT extends AbstractIntegrationTest {
     long karte = anlegen("In Progress", "Paket in Arbeit");
     int nummer = nummer(karte);
     uhr.advance(Duration.ofHours(2));
-    Cookie mitglied = session(OWNER);
+    Cookie mitglied = anmeldung.anmelden(OWNER, PlatformRole.USER);
 
     mvc.perform(get(aging()).cookie(mitglied))
         .andExpect(status().isOk())
@@ -170,23 +164,7 @@ class DashboardFlowIT extends AbstractIntegrationTest {
   }
 
   private long nutzer(String email, PlatformRole rolle) {
-    return users
-        .save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, rolle))
-        .id();
-  }
-
-  private Cookie session(String email) throws Exception {
-    Cookie cookie =
-        mvc.perform(
-                post("/api/auth/login")
-                    .contentType("application/json")
-                    .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-            .andExpect(status().isOk())
-            .andReturn()
-            .getResponse()
-            .getCookie("manban_session");
-    assertThat(cookie).isNotNull();
-    return cookie;
+    return anmeldung.konto(email, rolle).requireId();
   }
 
   /** Die Erfassungsmarke; der Reset vor jeder Methode leert auch {@code card_flow_capture}. */

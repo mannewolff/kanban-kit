@@ -21,8 +21,8 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.board.application.BoardChangedEvent;
 import org.mwolff.manban.board.application.BoardChangedEvent.ChangeType;
@@ -34,7 +34,6 @@ import org.mwolff.manban.project.domain.ProjectRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -49,19 +48,17 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class BoardCardBatchIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
   @Autowired private ProjectMembershipRepository memberships;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
 
   @MockitoSpyBean private BoardEventRegistry registry;
 
   @Test
   void batch_appendsCardsToColumnEnd_inInputOrder() throws Exception {
-    Cookie owner = session("batch-card-order@example.com", PlatformRole.USER);
+    Cookie owner = anmeldung.anmelden("batch-card-order@example.com", PlatformRole.USER);
     long projectId = createProject("batch-card-order@example.com");
     JsonNode board = createBoard(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -117,7 +114,7 @@ class BoardCardBatchIT extends AbstractIntegrationTest {
 
   @Test
   void batch_withOneInvalidItem_createsNothing() throws Exception {
-    Cookie owner = session("batch-card-invalid@example.com", PlatformRole.USER);
+    Cookie owner = anmeldung.anmelden("batch-card-invalid@example.com", PlatformRole.USER);
     long projectId = createProject("batch-card-invalid@example.com");
     JsonNode board = createBoard(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -157,7 +154,7 @@ class BoardCardBatchIT extends AbstractIntegrationTest {
 
   @Test
   void batch_rejectsEmptyAndOversizedList() throws Exception {
-    Cookie owner = session("batch-card-limit@example.com", PlatformRole.USER);
+    Cookie owner = anmeldung.anmelden("batch-card-limit@example.com", PlatformRole.USER);
     long projectId = createProject("batch-card-limit@example.com");
     JsonNode board = createBoard(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -195,8 +192,8 @@ class BoardCardBatchIT extends AbstractIntegrationTest {
 
   @Test
   void batch_forbiddenForMemberWithoutTicketCreate() throws Exception {
-    Cookie owner = session("batch-card-rights@example.com", PlatformRole.USER);
-    Cookie viewer = session("batch-card-viewer@example.com", PlatformRole.USER);
+    Cookie owner = anmeldung.anmelden("batch-card-rights@example.com", PlatformRole.USER);
+    Cookie viewer = anmeldung.anmelden("batch-card-viewer@example.com", PlatformRole.USER);
     long projectId = createProject("batch-card-rights@example.com");
     JsonNode board = createBoard(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -223,7 +220,7 @@ class BoardCardBatchIT extends AbstractIntegrationTest {
 
   @Test
   void batch_intoDoneColumn_setsMovedToDoneAt() throws Exception {
-    Cookie owner = session("batch-card-done@example.com", PlatformRole.USER);
+    Cookie owner = anmeldung.anmelden("batch-card-done@example.com", PlatformRole.USER);
     long projectId = createProject("batch-card-done@example.com");
     JsonNode board = createBoard(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -245,7 +242,7 @@ class BoardCardBatchIT extends AbstractIntegrationTest {
 
   @Test
   void singleCreate_intoDoneColumn_setsMovedToDoneAt() throws Exception {
-    Cookie owner = session("single-card-done@example.com", PlatformRole.USER);
+    Cookie owner = anmeldung.anmelden("single-card-done@example.com", PlatformRole.USER);
     long projectId = createProject("single-card-done@example.com");
     JsonNode board = createBoard(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -260,7 +257,7 @@ class BoardCardBatchIT extends AbstractIntegrationTest {
 
   @Test
   void batch_deliversOneEventPerCreatedCard() throws Exception {
-    Cookie owner = session("batch-card-events@example.com", PlatformRole.USER);
+    Cookie owner = anmeldung.anmelden("batch-card-events@example.com", PlatformRole.USER);
     long projectId = createProject("batch-card-events@example.com");
     JsonNode board = createBoard(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -297,7 +294,7 @@ class BoardCardBatchIT extends AbstractIntegrationTest {
 
   @Test
   void batch_rolledBackTransaction_deliversNoEvent() throws Exception {
-    Cookie owner = session("batch-card-rollback@example.com", PlatformRole.USER);
+    Cookie owner = anmeldung.anmelden("batch-card-rollback@example.com", PlatformRole.USER);
     long projectId = createProject("batch-card-rollback@example.com");
     JsonNode board = createBoard(owner, projectId);
     long boardId = board.get("id").asLong();
@@ -343,7 +340,7 @@ class BoardCardBatchIT extends AbstractIntegrationTest {
   }
 
   private long createProject(String ownerEmail) throws Exception {
-    Cookie admin = session("batch-card-admin@example.com", PlatformRole.ADMIN);
+    Cookie admin = anmeldung.anmelden("batch-card-admin@example.com", PlatformRole.ADMIN);
     return json.readTree(
             mvc.perform(
                     post("/api/projects")
@@ -373,19 +370,5 @@ class BoardCardBatchIT extends AbstractIntegrationTest {
 
   private long userId(String email) {
     return users.findByEmail(email).orElseThrow().id();
-  }
-
-  private Cookie session(String email, PlatformRole role) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, role));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
   }
 }

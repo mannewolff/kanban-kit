@@ -13,13 +13,11 @@ import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -29,40 +27,12 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class EpicIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
 
-  private Cookie loginAs(String email) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
-  }
-
   private long createProject(String ownerEmail, String name) throws Exception {
-    if (users.findByEmail(ownerEmail).isEmpty()) {
-      users.save(
-          new AppUser(
-              null,
-              ownerEmail,
-              passwordEncoder.encode(PASSWORD),
-              "Person",
-              true,
-              PlatformRole.USER));
-    }
+    anmeldung.konto(ownerEmail, PlatformRole.USER);
     Cookie admin = platformAdminSession();
     String body =
         mvc.perform(
@@ -77,21 +47,8 @@ class EpicIT extends AbstractIntegrationTest {
     return json.readTree(body).get("id").asLong();
   }
 
-  private Cookie platformAdminSession() throws Exception {
-    String email = "project-admin@example.com";
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie platformAdminSession() {
+    return anmeldung.anmelden("project-admin@example.com", PlatformRole.ADMIN);
   }
 
   private JsonNode createBoard(Cookie session, long projectId) throws Exception {
@@ -172,7 +129,7 @@ class EpicIT extends AbstractIntegrationTest {
 
   @Test
   void epicProgressReflectsChildrenInDone() throws Exception {
-    Cookie alice = loginAs("epic-owner@example.com");
+    Cookie alice = anmeldung.anmelden("epic-owner@example.com", PlatformRole.USER);
     long projectId = createProject("epic-owner@example.com", "P");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -210,7 +167,7 @@ class EpicIT extends AbstractIntegrationTest {
 
   @Test
   void epicHoldsNoPositionSoCardsReindexCleanly() throws Exception {
-    Cookie alice = loginAs("epic-pos@example.com");
+    Cookie alice = anmeldung.anmelden("epic-pos@example.com", PlatformRole.USER);
     long projectId = createProject("epic-pos@example.com", "P");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -232,7 +189,7 @@ class EpicIT extends AbstractIntegrationTest {
 
   @Test
   void deletingEpicKeepsChildrenButUnassigned() throws Exception {
-    Cookie alice = loginAs("epic-del@example.com");
+    Cookie alice = anmeldung.anmelden("epic-del@example.com", PlatformRole.USER);
     long projectId = createProject("epic-del@example.com", "P");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -253,7 +210,7 @@ class EpicIT extends AbstractIntegrationTest {
 
   @Test
   void updateAssignsAndUnassignsEpicInOnePut() throws Exception {
-    Cookie alice = loginAs("epic-upd@example.com");
+    Cookie alice = anmeldung.anmelden("epic-upd@example.com", PlatformRole.USER);
     long projectId = createProject("epic-upd@example.com", "P");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -290,7 +247,7 @@ class EpicIT extends AbstractIntegrationTest {
 
   @Test
   void epicsAreNotMovableOnTheBoard() throws Exception {
-    Cookie alice = loginAs("epic-move@example.com");
+    Cookie alice = anmeldung.anmelden("epic-move@example.com", PlatformRole.USER);
     long projectId = createProject("epic-move@example.com", "P");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -332,7 +289,7 @@ class EpicIT extends AbstractIntegrationTest {
    */
   @Test
   void epicProgressCountsDerivedDescendants() throws Exception {
-    Cookie alice = loginAs("epic-derived@example.com");
+    Cookie alice = anmeldung.anmelden("epic-derived@example.com", PlatformRole.USER);
     long projectId = createProject("epic-derived@example.com", "P");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -368,7 +325,7 @@ class EpicIT extends AbstractIntegrationTest {
    */
   @Test
   void releasingTheRootRemovesTheWholeSubtree() throws Exception {
-    Cookie alice = loginAs("epic-release@example.com");
+    Cookie alice = anmeldung.anmelden("epic-release@example.com", PlatformRole.USER);
     long projectId = createProject("epic-release@example.com", "P");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();

@@ -12,14 +12,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -31,20 +29,19 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class StandardLabelsIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
   private static final int SATZ = 22;
   private static final String ADMIN = "standardlabels-admin@example.com";
   private static final String OWNER = "standardlabels-owner@example.com";
 
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
 
   @Test
   void derSatzNenntJedenNamenMitGruppeUndFarbe() throws Exception {
-    mvc.perform(get("/api/admin/standard-labels").cookie(login(ADMIN, PlatformRole.ADMIN)))
+    mvc.perform(
+            get("/api/admin/standard-labels").cookie(anmeldung.anmelden(ADMIN, PlatformRole.ADMIN)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(SATZ))
         .andExpect(jsonPath("$[0].name").value("kit:carry-through"))
@@ -59,8 +56,8 @@ class StandardLabelsIT extends AbstractIntegrationTest {
 
   @Test
   void legtDenSatzAufAllenAktivenBoardsAllerProjekteAn_undIstIdempotent() throws Exception {
-    Cookie admin = login(ADMIN, PlatformRole.ADMIN);
-    Cookie owner = login(OWNER, PlatformRole.USER);
+    Cookie admin = anmeldung.anmelden(ADMIN, PlatformRole.ADMIN);
+    Cookie owner = anmeldung.anmelden(OWNER, PlatformRole.USER);
     long projektA = createProject(admin, "Projekt A");
     long projektB = createProject(admin, "Projekt B");
     long aktivA = createBoard(owner, projektA, "Aktiv A");
@@ -140,8 +137,8 @@ class StandardLabelsIT extends AbstractIntegrationTest {
 
   @Test
   void einNichtAdminErhaelt403UndEsWirdNichtsAngelegt() throws Exception {
-    Cookie admin = login(ADMIN, PlatformRole.ADMIN);
-    Cookie owner = login(OWNER, PlatformRole.USER);
+    Cookie admin = anmeldung.anmelden(ADMIN, PlatformRole.ADMIN);
+    Cookie owner = anmeldung.anmelden(OWNER, PlatformRole.USER);
     long board = createBoard(owner, createProject(admin, "Projekt"), "Aktiv");
 
     mvc.perform(post("/api/admin/standard-labels/anlegen").cookie(owner))
@@ -175,20 +172,6 @@ class StandardLabelsIT extends AbstractIntegrationTest {
     Integer zahl =
         jdbc.queryForObject("SELECT count(*) FROM label WHERE board_id = ?", Integer.class, board);
     return zahl == null ? 0 : zahl;
-  }
-
-  private Cookie login(String email, PlatformRole rolle) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, rolle));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
   }
 
   private long createProject(Cookie admin, String name) throws Exception {
