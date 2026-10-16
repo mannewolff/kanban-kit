@@ -1,7 +1,6 @@
 package org.mwolff.manban.backup;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -12,14 +11,12 @@ import java.time.Instant;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -42,7 +39,6 @@ import org.springframework.test.web.servlet.MockMvc;
     })
 class BackupStatusIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
   private static final String ENDPOINT = "/api/admin/backup/status";
 
   /** Reihenfolge der Arten in der Antwort — die Deklarationsreihenfolge von {@code BackupKind}. */
@@ -53,8 +49,7 @@ class BackupStatusIT extends AbstractIntegrationTest {
   private static final int OFFSITE = 3;
 
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private JdbcTemplate jdbc;
 
   private void lauf(String art, Duration vor, String ergebnis) {
@@ -78,26 +73,14 @@ class BackupStatusIT extends AbstractIntegrationTest {
     lauf("offsite", Duration.ofHours(2), "erfolg");
   }
 
-  /**
-   * Meldet {@code email} mit der Rolle an. Die Sitzung entsteht über den übergebenen {@code
-   * MockMvc}, damit die verschachtelte Klasse ihren eigenen Kontext benutzt statt des äußeren.
-   */
-  private Cookie session(MockMvc ueber, String email, PlatformRole role) throws Exception {
-    users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, role));
-    return ueber
-        .perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  /** Meldet {@code email} mit der Rolle an. */
+  private Cookie session(String email, PlatformRole role) {
+    return anmeldung.anmelden(email, role);
   }
 
   @Test
   void ok_wennJedeArtEinenFrischenErfolgHat() throws Exception {
-    Cookie admin = session(mvc, "backup-ok@example.com", PlatformRole.ADMIN);
+    Cookie admin = session("backup-ok@example.com", PlatformRole.ADMIN);
     alleArtenFrisch();
 
     mvc.perform(get(ENDPOINT).cookie(admin))
@@ -127,7 +110,7 @@ class BackupStatusIT extends AbstractIntegrationTest {
 
   @Test
   void veraltet_wennDerSpiegelLaengerAlsSeineWarnfristSchweigt() throws Exception {
-    Cookie admin = session(mvc, "backup-alt@example.com", PlatformRole.ADMIN);
+    Cookie admin = session("backup-alt@example.com", PlatformRole.ADMIN);
     lauf("basis", Duration.ofHours(2), "erfolg");
     lauf("wal", Duration.ofMinutes(1), "erfolg");
     lauf("offsite", Duration.ofHours(2), "erfolg");
@@ -142,7 +125,7 @@ class BackupStatusIT extends AbstractIntegrationTest {
 
   @Test
   void veraltet_auchWennNochNieEinLaufProtokolliertWurde() throws Exception {
-    Cookie admin = session(mvc, "backup-leer@example.com", PlatformRole.ADMIN);
+    Cookie admin = session("backup-leer@example.com", PlatformRole.ADMIN);
 
     mvc.perform(get(ENDPOINT).cookie(admin))
         .andExpect(status().isOk())
@@ -155,7 +138,7 @@ class BackupStatusIT extends AbstractIntegrationTest {
 
   @Test
   void fehlgeschlagen_wennDerJuengsteLaufEinerArtScheiterte() throws Exception {
-    Cookie admin = session(mvc, "backup-kaputt@example.com", PlatformRole.ADMIN);
+    Cookie admin = session("backup-kaputt@example.com", PlatformRole.ADMIN);
     alleArtenFrisch();
     lauf("offsite", Duration.ofMinutes(1), "fehlschlag");
 
@@ -172,7 +155,7 @@ class BackupStatusIT extends AbstractIntegrationTest {
 
   @Test
   void werNurGewoehnlicherNutzerIstBekommt403() throws Exception {
-    Cookie nutzer = session(mvc, "backup-fremd@example.com", PlatformRole.USER);
+    Cookie nutzer = session("backup-fremd@example.com", PlatformRole.USER);
 
     mvc.perform(get(ENDPOINT).cookie(nutzer)).andExpect(status().isForbidden());
   }
@@ -192,7 +175,7 @@ class BackupStatusIT extends AbstractIntegrationTest {
 
     @Test
     void abgeschaltet_auchWennEinGescheiterterLaufImProtokollSteht() throws Exception {
-      Cookie admin = session(ausgeschaltetesMvc, "backup-aus@example.com", PlatformRole.ADMIN);
+      Cookie admin = session("backup-aus@example.com", PlatformRole.ADMIN);
       lauf("basis", Duration.ofMinutes(1), "fehlschlag");
 
       ausgeschaltetesMvc

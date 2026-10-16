@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
@@ -30,15 +31,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** End-to-End-Test der Mitglieder-Einladung und -Verwaltung. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class MembershipIT extends AbstractIntegrationTest {
-
-  private static final String PASSWORD = "sup3r-secret";
 
   @TestConfiguration
   static class MailTestConfig {
@@ -73,7 +71,7 @@ class MembershipIT extends AbstractIntegrationTest {
   @Autowired private AppUserRepository users;
   @Autowired private ProjectMembershipRepository memberships;
   @Autowired private ProjectInvitationRepository invitations;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private CapturingInvitationMailer mailer;
 
@@ -81,32 +79,13 @@ class MembershipIT extends AbstractIntegrationTest {
     return users.findByEmail(email).orElseThrow().id();
   }
 
-  private Cookie loginAs(String email) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie loginAs(String email) {
+    return anmeldung.anmelden(email, PlatformRole.USER);
   }
 
   private long createProject(String ownerEmail, String name) throws Exception {
     if (users.findByEmail(ownerEmail).isEmpty()) {
-      users.save(
-          new AppUser(
-              null,
-              ownerEmail,
-              passwordEncoder.encode(PASSWORD),
-              "Person",
-              true,
-              PlatformRole.USER));
+      users.save(new AppUser(null, ownerEmail, "hash", "Person", true, PlatformRole.USER));
     }
     Cookie admin = platformAdminSession();
     String body =
@@ -122,21 +101,8 @@ class MembershipIT extends AbstractIntegrationTest {
     return json.readTree(body).get("id").asLong();
   }
 
-  private Cookie platformAdminSession() throws Exception {
-    String email = "project-admin@example.com";
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie platformAdminSession() {
+    return anmeldung.anmelden("project-admin@example.com", PlatformRole.ADMIN);
   }
 
   @Test
@@ -312,14 +278,7 @@ class MembershipIT extends AbstractIntegrationTest {
     // Registrierter, aber noch nicht freigegebener Nutzer (approvedAt=null).
     users.save(
         new AppUser(
-            null,
-            "pending@example.com",
-            passwordEncoder.encode(PASSWORD),
-            "Pending",
-            true,
-            PlatformRole.USER,
-            null,
-            null));
+            null, "pending@example.com", "hash", "Pending", true, PlatformRole.USER, null, null));
 
     mvc.perform(
             post("/api/projects/" + projectId + "/invitations")
