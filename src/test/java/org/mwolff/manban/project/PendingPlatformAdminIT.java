@@ -8,13 +8,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -24,41 +24,29 @@ import org.springframework.test.web.servlet.MockMvc;
  * <p>Dieser Zustand entsteht, wenn die Rolle per rohem {@code UPDATE} gesetzt wurde, das jeden
  * Service umgeht. Vor dieser Änderung meldete sich ein solcher Admin erfolgreich an und lief beim
  * ersten Projekt erneut in die Freigabe-Sperre, diesmal als HTTP 422 ohne Ausweg. Die Gegenproben
- * sichern, dass ein wartender Nutzer mit Rolle USER weiterhin abgewiesen wird.
+ * sichern, dass ein wartender Nutzer mit Rolle USER weiterhin abgewiesen wird. Angemeldet wird über
+ * den echten Code-Ablauf (fachliche Quelle #1781, AK 12; Issue #1813).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class PendingPlatformAdminIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
 
   /** Legt einen Benutzer mit der gewünschten Rolle und ohne Freigabe-Zeitstempel an. */
   private void createPending(String email, PlatformRole role) {
-    users.save(
-        new AppUser(
-            null, email, passwordEncoder.encode(PASSWORD), "Person", true, role, null, null));
+    users.save(new AppUser(null, email, "unbenutzt", "Person", true, role, null, null));
   }
 
   private void createApprovedAdmin(String email) {
-    users.save(
-        new AppUser(
-            null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
+    anmeldung.konto(email, PlatformRole.ADMIN);
   }
 
   private Cookie loginAs(String email) throws Exception {
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+    return anmeldung.perCode(mvc, email);
   }
 
   private long createProjectAs(Cookie session, String name, String ownerEmail) throws Exception {

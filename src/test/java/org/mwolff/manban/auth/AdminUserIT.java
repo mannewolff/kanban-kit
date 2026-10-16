@@ -1,9 +1,7 @@
 package org.mwolff.manban.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.everyItem;
-import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -14,13 +12,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -29,8 +29,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class AdminUserIT extends AbstractIntegrationTest {
-
-  private static final String PASSWORD = "sup3r-secret";
 
   /**
    * Die gemeinsame Ablehnung von Herabstufen und Sperren — wörtlich wie in {@code
@@ -41,17 +39,10 @@ class AdminUserIT extends AbstractIntegrationTest {
 
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
 
   private long ensureUser(String email, PlatformRole role) {
-    return users
-        .findByEmail(email)
-        .orElseGet(
-            () ->
-                users.save(
-                    new AppUser(
-                        null, email, passwordEncoder.encode(PASSWORD), "Person", true, role)))
-        .id();
+    return anmeldung.konto(email, role).requireId();
   }
 
   /** Verifizierter, aber noch nicht freigegebener Benutzer ({@code approvedAt=null}). */
@@ -62,35 +53,17 @@ class AdminUserIT extends AbstractIntegrationTest {
             () ->
                 users.save(
                     new AppUser(
-                        null,
-                        email,
-                        passwordEncoder.encode(PASSWORD),
-                        "Person",
-                        true,
-                        PlatformRole.USER,
-                        null,
-                        null)))
-        .id();
+                        null, email, "unbenutzt", "Person", true, PlatformRole.USER, null, null)))
+        .requireId();
   }
 
-  private org.springframework.test.web.servlet.ResultActions attemptLogin(String email)
-      throws Exception {
-    return mvc.perform(
-        post("/api/auth/login")
-            .contentType("application/json")
-            .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)));
+  /** Der echte Code-Ablauf — die Freigabe-Sperre greift bei der Anmeldung selbst. */
+  private MockHttpServletResponse attemptLogin(String email) throws Exception {
+    return anmeldung.codeEinloesen(mvc, email);
   }
 
-  private Cookie login(String email, PlatformRole role) throws Exception {
-    ensureUser(email, role);
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie login(String email, PlatformRole role) {
+    return anmeldung.anmelden(email, role);
   }
 
   @Test
@@ -124,11 +97,12 @@ class AdminUserIT extends AbstractIntegrationTest {
 
     // Nicht freigegebener Nutzer: Login abgelehnt (403). Die ProblemDetail-Meldung trägt Grund
     // und Ausweg-Hinweis nach außen (Issue #562): Verweis auf den Betreiber, kein Repo-Dokument.
-    attemptLogin("ap-pending@example.com")
-        .andExpect(status().isForbidden())
-        .andExpect(jsonPath("$.detail", containsString("Freigabe durch einen Plattform-Admin")))
-        .andExpect(jsonPath("$.detail", containsString("Betreiber dieser Instanz")))
-        .andExpect(jsonPath("$.detail", not(containsString("betrieb.md"))));
+    MockHttpServletResponse abgelehnt = attemptLogin("ap-pending@example.com");
+    assertThat(abgelehnt.getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
+    assertThat(abgelehnt.getContentAsString())
+        .contains("Freigabe durch einen Plattform-Admin")
+        .contains("Betreiber dieser Instanz")
+        .doesNotContain("betrieb.md");
 
     // Nicht-Admin darf nicht freigeben (403).
     Cookie plain = login("ap-user@example.com", PlatformRole.USER);
@@ -141,7 +115,7 @@ class AdminUserIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.approvedAt").isNotEmpty());
 
     // Jetzt gelingt der Login.
-    attemptLogin("ap-pending@example.com").andExpect(status().isOk());
+    assertThat(attemptLogin("ap-pending@example.com").getStatus()).isEqualTo(HttpStatus.OK.value());
   }
 
   @Test

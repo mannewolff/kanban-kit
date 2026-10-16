@@ -7,43 +7,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** End-to-End-Test des Admin-Bootstraps (Token konfiguriert, frische Instanz ohne Admin). */
+/**
+ * End-to-End-Test des Admin-Bootstraps (Token konfiguriert, frische Instanz ohne Admin): Der erste
+ * Nutzer meldet sich per Code an und hebt sich mit dem Bootstrap-Token zum Plattform-Admin
+ * (fachliche Quelle #1781, AK 10; Issue #1813).
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @TestPropertySource(properties = "manban.bootstrap.admin-token=it-boot-token")
 class BootstrapIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
-
-  private Cookie login(String email) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
-  }
+  @Autowired private TestAnmeldung anmeldung;
 
   @Test
   void unauthenticatedBootstrapRejected() throws Exception {
@@ -56,7 +41,8 @@ class BootstrapIT extends AbstractIntegrationTest {
 
   @Test
   void loggedInUserBecomesAdminWithCorrectToken() throws Exception {
-    Cookie user = login("boot-first@example.com");
+    anmeldung.konto("boot-first@example.com", PlatformRole.USER);
+    Cookie user = anmeldung.perCode(mvc, "boot-first@example.com");
 
     mvc.perform(
             post("/api/admin/bootstrap")

@@ -13,9 +13,11 @@ import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** Prüft die Testhilfe {@link TestAnmeldung} selbst (Plan #1801, A15). */
+/** Prüft die Testhilfe {@link TestAnmeldung} selbst (Plan #1801, A15; Issue #1813). */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class TestAnmeldungIT extends AbstractIntegrationTest {
@@ -49,5 +51,36 @@ class TestAnmeldungIT extends AbstractIntegrationTest {
     mvc.perform(get("/api/me").cookie(cookie))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.userId").value(id));
+  }
+
+  @Test
+  void codeAblaufMeldetUeberDenEchtenEndpunktAn() throws Exception {
+    long id = anmeldung.konto("hilfe-code@example.com", PlatformRole.USER).requireId();
+
+    Cookie cookie = anmeldung.perCode(mvc, "hilfe-code@example.com");
+
+    mvc.perform(get("/api/me").cookie(cookie))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.userId").value(id));
+  }
+
+  @Test
+  void codeAblaufLiefertDieAblehnungEinesWartendenKontos() throws Exception {
+    anmeldung.konto("hilfe-admin@example.com", PlatformRole.ADMIN);
+    users.save(
+        new AppUser(
+            null,
+            "hilfe-wartend@example.com",
+            "unbenutzt",
+            "Wartend",
+            true,
+            PlatformRole.USER,
+            null,
+            null));
+
+    MockHttpServletResponse antwort = anmeldung.codeEinloesen(mvc, "hilfe-wartend@example.com");
+
+    assertThat(antwort.getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
+    assertThat(antwort.getCookie("manban_session")).isNull();
   }
 }
