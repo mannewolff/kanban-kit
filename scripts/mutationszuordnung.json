@@ -76,5 +76,7 @@
   "src/test/java/org/mwolff/manban/nightrun/PlattformLeitstandMigrationIT.java": ["src/main/resources/db/migration/V36__plattform_leitstand.sql"],
   "src/test/java/org/mwolff/manban/nightrun/VerbrauchInteraktiveSitzungenMigrationIT.java": ["src/main/resources/db/migration/V34__verbrauch_interaktive_sitzungen.sql"],
   "src/test/java/org/mwolff/manban/nightrun/domain/NightRunErrorClassSyncTest.java": ["src/main/java/org/mwolff/manban/nightrun/domain/NightRunErrorClass.java"],
-  "src/test/java/org/mwolff/manban/nightrun/infrastructure/NightRunRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunRepositoryAdapter.java", "src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunItemEntity.java", "src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/StuckEmbeddable.java"]
+  "src/test/java/org/mwolff/manban/nightrun/infrastructure/NightRunRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunRepositoryAdapter.java", "src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunItemEntity.java", "src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/StuckEmbeddable.java"],
+  "src/test/java/org/mwolff/manban/PortWhitelistArchitectureTest.java": ["src/test/java/org/mwolff/manban/ArchitekturKlassen.java"],
+  "src/test/java/org/mwolff/manban/auth/LoginCodeConcurrencyIT.java": ["src/main/java/org/mwolff/manban/auth/infrastructure/persistence/LoginCodeRepositoryAdapter.java", "src/main/java/org/mwolff/manban/auth/infrastructure/persistence/LoginCodeJpaRepository.java"]
 }
