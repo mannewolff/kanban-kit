@@ -54,6 +54,11 @@ final class ApiZugang {
                   "/api/auth/logout",
                   "/api/auth/forgot",
                   "/api/auth/reset",
+                  // Anmeldung per Einmalcode (Plan #1801, A4): anfordern, Code eingeben, Link
+                  // einlösen — alle drei vor jeder Anmeldung.
+                  "/api/auth/code/request",
+                  "/api/auth/code/verify",
+                  "/api/auth/code/link",
                   // Die Sprache der Installation (Plan #1638 A2): Auch die Seiten vor der
                   // Anmeldung erscheinen in ihr. Gesetzt wird sie unter /api/admin/language.
                   "/api/language")),
