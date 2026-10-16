@@ -263,7 +263,7 @@ class LoginCodeControllerTest {
   }
 
   private static AppUser user() {
-    return new AppUser(7L, EMAIL, "hash", "Ada", true, PlatformRole.USER);
+    return new AppUser(7L, EMAIL, "Ada", true, PlatformRole.USER);
   }
 
   private static ResponseCookie cookie() {

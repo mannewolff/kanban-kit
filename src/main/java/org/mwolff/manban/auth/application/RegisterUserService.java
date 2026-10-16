@@ -3,11 +3,8 @@ package org.mwolff.manban.auth.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
-import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
-import org.mwolff.manban.common.SecureTokens;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,11 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
  * Registriert einen neuen Benutzer: legt ihn unverifiziert an und fordert im selben Zug einen
  * Anmeldecode an (Plan #1801, E3). Eine eigene Bestätigungsmail gibt es nicht mehr — die erste
  * Anmeldung per Code bestätigt die Adresse.
- *
- * <p><strong>Passwort im Übergang:</strong> Wer noch ein Passwort schickt, bekommt es als
- * Argon2id-Hash gespeichert. Ohne Passwort trägt das Konto den Hash eines Zufallsgeheimnisses, das
- * niemand kennt; eine Anmeldung mit Passwort ist dann nicht möglich. Beides entfällt mit dem
- * Passwort selbst.
  *
  * <p><strong>Grenze je Adresse:</strong> Die Code-Anforderung zählt auf die Grenze der Adresse. Ist
  * sie schon erreicht, wirft sie {@link LoginCodeLimitExceededException}, und die ganze
@@ -34,19 +26,16 @@ public class RegisterUserService {
 
   private final AppUserRepository users;
   private final RequestLoginCodeService loginCodes;
-  private final PasswordEncoder passwordEncoder;
   private final Clock clock;
   private final RegistrationApprovalPolicy approvalPolicy;
 
   public RegisterUserService(
       AppUserRepository users,
       RequestLoginCodeService loginCodes,
-      PasswordEncoder passwordEncoder,
       Clock clock,
       RegistrationApprovalPolicy approvalPolicy) {
     this.users = users;
     this.loginCodes = loginCodes;
-    this.passwordEncoder = passwordEncoder;
     this.clock = clock;
     this.approvalPolicy = approvalPolicy;
   }
@@ -54,12 +43,11 @@ public class RegisterUserService {
   /**
    * Legt das Konto an und fordert einen Anmeldecode an.
    *
-   * @param rawPassword Passwort aus dem Übergang; {@code null}, wenn keines geschickt wurde
    * @throws EmailAlreadyRegisteredException wenn die Adresse schon registriert ist
    * @throws LoginCodeLimitExceededException wenn die Grenze je Adresse erreicht ist
    */
   @Transactional
-  public AppUser register(String email, @Nullable String rawPassword, String displayName) {
+  public AppUser register(String email, String displayName) {
     String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
     if (users.existsByEmail(normalizedEmail)) {
       throw new EmailAlreadyRegisteredException();
@@ -68,14 +56,12 @@ public class RegisterUserService {
     // Per Token eingeladene E-Mails werden sofort freigegeben (Issue #0099, „Einladung =
     // Freigabe"); alle anderen Selbst-Registrierer warten auf die Admin-Freigabe (Issue #0097).
     Instant approvedAt = approvalPolicy.shouldAutoApprove(normalizedEmail) ? clock.instant() : null;
-    String secret = rawPassword != null ? rawPassword : SecureTokens.newToken();
 
     AppUser user =
         users.save(
             new AppUser(
                 null,
                 normalizedEmail,
-                passwordEncoder.encode(secret),
                 displayName.trim(),
                 false,
                 PlatformRole.USER,

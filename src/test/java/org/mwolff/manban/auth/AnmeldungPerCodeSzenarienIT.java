@@ -65,7 +65,7 @@ class AnmeldungPerCodeSzenarienIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void seed() {
-    admin = konto(new AppUser(null, ADMIN, "unbenutzt", "Admin", true, PlatformRole.ADMIN));
+    admin = konto(new AppUser(null, ADMIN, "Admin", true, PlatformRole.ADMIN));
   }
 
   @Test
@@ -205,7 +205,6 @@ class AnmeldungPerCodeSzenarienIT extends AbstractIntegrationTest {
         new AppUser(
             null,
             "gesperrt@example.com",
-            "unbenutzt",
             "Gesperrt",
             true,
             PlatformRole.USER,
@@ -229,18 +228,11 @@ class AnmeldungPerCodeSzenarienIT extends AbstractIntegrationTest {
   @Test
   @DisplayName("Szenario: Konto wartet auf Freigabe")
   void kontoWartetAufFreigabe() throws Exception {
-    konto(new AppUser(null, ZWEITER_ADMIN, "unbenutzt", "Admin 2", true, PlatformRole.ADMIN));
+    konto(new AppUser(null, ZWEITER_ADMIN, "Admin 2", true, PlatformRole.ADMIN));
     long wartend =
         konto(
             new AppUser(
-                null,
-                "wartend@example.com",
-                "unbenutzt",
-                "Wartend",
-                false,
-                PlatformRole.USER,
-                null,
-                null));
+                null, "wartend@example.com", "Wartend", false, PlatformRole.USER, null, null));
     Geraet geraet = new Geraet();
 
     anfordern(geraet, "wartend@example.com");
@@ -303,7 +295,7 @@ class AnmeldungPerCodeSzenarienIT extends AbstractIntegrationTest {
   }
 
   private void mitgliedAnlegen() {
-    konto(new AppUser(null, MITGLIED, "unbenutzt", "Mitglied", true, PlatformRole.USER));
+    konto(new AppUser(null, MITGLIED, "Mitglied", true, PlatformRole.USER));
   }
 
   private long konto(AppUser user) {

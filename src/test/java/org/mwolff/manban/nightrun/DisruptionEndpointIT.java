@@ -69,8 +69,8 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
   void seed() {
     long owner =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('de-owner@example.com', 'x', 'O') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('de-owner@example.com', 'O') RETURNING id");
     projectId =
         id(
             "INSERT INTO project (name, owner_user_id, dashboard_participation)"

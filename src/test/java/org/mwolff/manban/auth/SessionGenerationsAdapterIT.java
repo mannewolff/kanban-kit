@@ -64,7 +64,6 @@ class SessionGenerationsAdapterIT extends AbstractIntegrationTest {
   }
 
   private AppUser neuesKonto(String email) {
-    return users.save(
-        new AppUser(null, email, "argon2-hash", "Testkonto", true, PlatformRole.USER));
+    return users.save(new AppUser(null, email, "Testkonto", true, PlatformRole.USER));
   }
 }

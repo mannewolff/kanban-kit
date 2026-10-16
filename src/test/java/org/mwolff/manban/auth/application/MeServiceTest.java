@@ -34,7 +34,7 @@ class MeServiceTest {
   void load_returnsUserIdentity_whenUserExists() {
     // Given
     when(users.findById(2L))
-        .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "Ada", true, PlatformRole.USER)));
     when(memberships.findByUserId(2L)).thenReturn(List.of());
 
     // When
@@ -48,7 +48,7 @@ class MeServiceTest {
   void load_includesMemberships_fromReader() {
     // Given
     when(users.findById(2L))
-        .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "hash", "Ada", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "Ada", true, PlatformRole.USER)));
     when(memberships.findByUserId(2L)).thenReturn(List.of(new Membership(7L, "OWNER")));
 
     // When
@@ -71,7 +71,7 @@ class MeServiceTest {
   void updateDisplayName_trimsPersistsAndReturnsUpdatedView() {
     // Given
     when(users.findById(2L))
-        .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "hash", "Alt", true, PlatformRole.USER)));
+        .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "Alt", true, PlatformRole.USER)));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
     when(memberships.findByUserId(2L)).thenReturn(List.of());
 

@@ -83,8 +83,8 @@ class NightRunNebenlaufIT extends AbstractIntegrationTest {
   void aufbau() {
     userId =
         insert(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('nebenlauf@example.com', 'x', 'N') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('nebenlauf@example.com', 'N') RETURNING id");
     projektA = projekt("Projekt A");
   }
 

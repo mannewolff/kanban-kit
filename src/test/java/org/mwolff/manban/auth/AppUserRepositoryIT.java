@@ -27,9 +27,7 @@ class AppUserRepositoryIT extends AbstractIntegrationTest {
   @Test
   void savesAndReadsAppUser() {
     AppUser saved =
-        users.save(
-            new AppUser(
-                null, "alice@example.com", "argon2-hash", "Alice", false, PlatformRole.USER));
+        users.save(new AppUser(null, "alice@example.com", "Alice", false, PlatformRole.USER));
 
     assertThat(saved.id()).isNotNull();
     assertThat(users.existsByEmail("alice@example.com")).isTrue();

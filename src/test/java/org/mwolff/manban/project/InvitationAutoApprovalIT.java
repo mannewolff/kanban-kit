@@ -47,8 +47,7 @@ class InvitationAutoApprovalIT extends AbstractIntegrationTest {
   private String createOpenInvitation(String email) {
     long ownerId =
         users
-            .save(
-                new AppUser(null, "owner-" + email, "unbenutzt", "Owner", true, PlatformRole.USER))
+            .save(new AppUser(null, "owner-" + email, "Owner", true, PlatformRole.USER))
             .requireId();
     long projectId =
         projects
@@ -117,8 +116,7 @@ class InvitationAutoApprovalIT extends AbstractIntegrationTest {
   @Test
   void invitedPersonRegistersWithoutPasswordLogsInWithCodeAndAcceptsInvitation() throws Exception {
     // Ein Admin besteht: Ohne die automatische Freigabe wiese die Code-Anmeldung das Konto ab.
-    users.save(
-        new AppUser(null, "admin@example.com", "unbenutzt", "Admin", true, PlatformRole.ADMIN));
+    users.save(new AppUser(null, "admin@example.com", "Admin", true, PlatformRole.ADMIN));
     String token = createOpenInvitation("invited@example.com");
 
     register("invited@example.com");

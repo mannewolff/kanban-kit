@@ -47,9 +47,6 @@ class BackupWatchdogIT extends AbstractIntegrationTest {
 
   private static final String ALARM_TYPE = "mail.backup-alert";
 
-  /** Der Wachhund liest nur E-Mail-Adressen; ein echter Hash wird dafür nicht gebraucht. */
-  private static final String HASH = "{noop}irrelevant";
-
   // ObjectProvider statt direkter Injektion: Die verschachtelte Klasse fährt denselben Test mit
   // abgeschalteter Sicherung, und dort existiert die Bean gerade nicht — genau das ist ihr Punkt.
   @Autowired private ObjectProvider<BackupWatchdogJob> wachhund;
@@ -59,7 +56,7 @@ class BackupWatchdogIT extends AbstractIntegrationTest {
   @Autowired private JdbcTemplate jdbc;
 
   private void admin(String email) {
-    users.save(new AppUser(null, email, HASH, "Admin", true, PlatformRole.ADMIN));
+    users.save(new AppUser(null, email, "Admin", true, PlatformRole.ADMIN));
   }
 
   private void lauf(String art, Duration vor, String ergebnis) {

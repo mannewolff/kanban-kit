@@ -55,8 +55,8 @@ class ConstraintViolationProblemIT extends AbstractIntegrationTest {
   void seedBoardWithOneCard() {
     long userId =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('konflikt@example.com', 'x', 'K') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('konflikt@example.com', 'K') RETURNING id");
     long projectId =
         id("INSERT INTO project (name, owner_user_id) VALUES ('P', " + userId + ") RETURNING id");
     boardId =
@@ -99,8 +99,7 @@ class ConstraintViolationProblemIT extends AbstractIntegrationTest {
             DataIntegrityViolationException.class,
             () ->
                 users.save(
-                    new AppUser(
-                        null, "konflikt@example.com", "y", "Doppelt", true, PlatformRole.USER)));
+                    new AppUser(null, "konflikt@example.com", "Doppelt", true, PlatformRole.USER)));
     assertThat(thrown).isNotNull();
 
     // When

@@ -36,8 +36,8 @@ class ProjectInteractiveUsageIT extends AbstractIntegrationTest {
   void seed() {
     Long userId =
         jdbc.queryForObject(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('erfassung@example.com', 'x', 'E') RETURNING id",
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('erfassung@example.com', 'E') RETURNING id",
             Long.class);
     Long id =
         jdbc.queryForObject(

@@ -51,9 +51,7 @@ class AdminUserIT extends AbstractIntegrationTest {
         .findByEmail(email)
         .orElseGet(
             () ->
-                users.save(
-                    new AppUser(
-                        null, email, "unbenutzt", "Person", true, PlatformRole.USER, null, null)))
+                users.save(new AppUser(null, email, "Person", true, PlatformRole.USER, null, null)))
         .requireId();
   }
 

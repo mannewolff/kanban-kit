@@ -51,8 +51,7 @@ class AuthController {
       responseCode = "400",
       description =
           "Ungültige Eingabe: E-Mail leer, ungültig oder länger als 320 Zeichen, Anzeigename"
-              + " leer oder länger als 120 Zeichen, ein mitgeschicktes Passwort kürzer als 8 oder"
-              + " länger als 200 Zeichen (Details in fieldErrors).",
+              + " leer oder länger als 120 Zeichen (Details in fieldErrors).",
       content =
           @Content(
               mediaType = ApiSchemas.PROBLEM_JSON,
@@ -76,8 +75,7 @@ class AuthController {
   @PostMapping("/register")
   @ResponseStatus(HttpStatus.CREATED)
   RegisteredUserResponse register(@Valid @RequestBody RegisterRequest request) {
-    AppUser user =
-        registerUser.register(request.email(), request.password(), request.displayName());
+    AppUser user = registerUser.register(request.email(), request.displayName());
     return new RegisteredUserResponse(user.requireId(), user.email(), user.emailVerified());
   }
 

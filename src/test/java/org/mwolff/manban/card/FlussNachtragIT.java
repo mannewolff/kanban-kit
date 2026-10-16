@@ -124,10 +124,9 @@ class FlussNachtragIT extends AbstractIntegrationTest {
   void bestandAnlegen() {
     long admin =
         users
-            .save(
-                new AppUser(null, "nachtrag-admin@example.com", "x", "A", true, PlatformRole.ADMIN))
+            .save(new AppUser(null, "nachtrag-admin@example.com", "A", true, PlatformRole.ADMIN))
             .id();
-    owner = users.save(new AppUser(null, OWNER, "x", "O", true, PlatformRole.USER)).id();
+    owner = users.save(new AppUser(null, OWNER, "O", true, PlatformRole.USER)).id();
     projectId = projects.create(admin, "Nachtrag", OWNER).id();
     board = boardMitPruefung("B");
     zweitesBoard = boards.createBoard(owner, projectId, "Zweites");

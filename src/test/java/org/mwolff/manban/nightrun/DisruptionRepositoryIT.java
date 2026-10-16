@@ -58,8 +58,8 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
   void seed() {
     userId =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('stoerung@example.com', 'x', 'S') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('stoerung@example.com', 'S') RETURNING id");
     projectId =
         id("INSERT INTO project (name, owner_user_id) VALUES ('P', ?) RETURNING id", userId);
   }
@@ -331,8 +331,8 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     teilnahme(true);
     long zweiter =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('zweiter@example.com', 'x', 'Z') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('zweiter@example.com', 'Z') RETURNING id");
     disruptions.acknowledge(laufId, userId, Instant.now());
 
     disruptions.acknowledge(laufId, zweiter, Instant.now());
@@ -398,8 +398,8 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     teilnahme(true);
     long quittierer =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('geht@example.com', 'x', 'G') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('geht@example.com', 'G') RETURNING id");
     disruptions.acknowledge(laufId, quittierer, Instant.now());
 
     jdbc.update("DELETE FROM app_user WHERE id = ?", quittierer);
@@ -448,8 +448,8 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     teilnahme(true);
     long zweiter =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('zweiter-schluss@example.com', 'x', 'Z') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('zweiter-schluss@example.com', 'Z') RETURNING id");
     disruptions.close(laufId, userId, LETZTE_MELDUNG);
 
     disruptions.close(laufId, zweiter, LETZTE_MELDUNG.plusSeconds(60));
@@ -473,8 +473,8 @@ class DisruptionRepositoryIT extends AbstractIntegrationTest {
     teilnahme(true);
     long geht =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('kennzeichner@example.com', 'x', 'K') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('kennzeichner@example.com', 'K') RETURNING id");
     disruptions.close(laufId, geht, LETZTE_MELDUNG);
 
     jdbc.update("DELETE FROM app_user WHERE id = ?", geht);

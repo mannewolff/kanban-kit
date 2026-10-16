@@ -132,7 +132,7 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void seedUserAndResetTheBrake() {
-    users.save(new AppUser(null, KNOWN_EMAIL, "unbenutzt", "Bremse", true, PlatformRole.USER));
+    users.save(new AppUser(null, KNOWN_EMAIL, "Bremse", true, PlatformRole.USER));
     clearAttempts(attempts);
   }
 

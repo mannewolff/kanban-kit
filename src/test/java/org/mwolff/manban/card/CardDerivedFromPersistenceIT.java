@@ -39,8 +39,8 @@ class CardDerivedFromPersistenceIT extends AbstractIntegrationTest {
   void seed() {
     long userId =
         insert(
-            "INSERT INTO app_user (email, password_hash, display_name) "
-                + "VALUES ('h@example.com', 'x', 'H') RETURNING id");
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('h@example.com', 'H') RETURNING id");
     projectId =
         insert(
             "INSERT INTO project (name, owner_user_id) VALUES ('P', " + userId + ") RETURNING id");

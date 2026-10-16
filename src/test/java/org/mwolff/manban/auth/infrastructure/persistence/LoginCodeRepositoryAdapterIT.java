@@ -35,7 +35,7 @@ class LoginCodeRepositoryAdapterIT extends AbstractIntegrationTest {
 
   private Long konto() {
     return users
-        .save(new AppUser(null, "person@example.com", "hash", "Person", true, PlatformRole.USER))
+        .save(new AppUser(null, "person@example.com", "Person", true, PlatformRole.USER))
         .id();
   }
 

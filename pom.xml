@@ -61,9 +61,9 @@
          Transitiv gezogene Versionen kollidieren; hier auf je eine konsistente Version gepinnt.
          Weder bcprov noch checker-qual werden vom Spring-Boot-Parent verwaltet, daher wird
          jeweils die höhere, bereits von Maven per Mediation gewählte Version festgeschrieben:
-           - bcprov-jdk18on: direkt deklariert (Argon2id/Krypto) und transitiv über io.minio:minio
-             → auf 1.85 gepinnt. Grund für 1.85 statt 1.78.1: Sicherheitsprüfung (Issue #1347,
-             CI-Lauf #281) — CVE-2025-14813, CVE-2026-8763, CVE-2026-13506.
+           - bcprov-jdk18on: transitiv über io.minio:minio → auf 1.85 gepinnt. Grund für 1.85
+             statt 1.78.1: Sicherheitsprüfung (Issue #1347, CI-Lauf #281) — CVE-2025-14813,
+             CVE-2026-8763, CVE-2026-13506.
            - checker-qual: 3.48.3 (über org.postgresql:postgresql) vs. 3.37.0 (über
              io.minio:minio → com.google.guava:guava) → auf 3.48.3 gepinnt. -->
     <dependencyManagement>
@@ -99,16 +99,10 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
-        <!-- Web-Security + Argon2id-Passwort-Hashing (spring-security-crypto ist transitiv). -->
+        <!-- Web-Security. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.bouncycastle</groupId>
-            <artifactId>bcprov-jdk18on</artifactId>
-            <version>1.85</version>
-            <scope>runtime</scope>
         </dependency>
 
         <!-- Datenbank: Postgres-Treiber + Flyway (inkl. Postgres-Modul für Flyway 10+) -->

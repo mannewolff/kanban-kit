@@ -35,12 +35,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @TestComponent
 public class TestAnmeldung {
 
-  /**
-   * Platzhalter für den Passwort-Hash, solange {@link AppUser} einen verlangt. Kein gültiger Hash —
-   * eine Passwort-Anmeldung mit diesem Konto schlägt fehl. Entfällt mit dem Passwort-Hash (#1817).
-   */
-  private static final String KEIN_PASSWORT = "kein-passwort";
-
   /** Typ der Outbox-Einträge mit Anmeldecode; Nutzlast: Adresse, Code, Link. */
   private static final String LOGIN_CODE_MAIL = "mail.login-code";
 
@@ -61,8 +55,7 @@ public class TestAnmeldung {
   public AppUser konto(String email, PlatformRole rolle) {
     return users
         .findByEmail(email)
-        .orElseGet(
-            () -> users.save(new AppUser(null, email, KEIN_PASSWORT, "Person", true, rolle)));
+        .orElseGet(() -> users.save(new AppUser(null, email, "Person", true, rolle)));
   }
 
   /** Wie {@link #konto}, liefert dazu das Cookie einer gültigen Sitzung dieses Kontos. */

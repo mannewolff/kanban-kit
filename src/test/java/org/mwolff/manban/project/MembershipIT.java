@@ -85,7 +85,7 @@ class MembershipIT extends AbstractIntegrationTest {
 
   private long createProject(String ownerEmail, String name) throws Exception {
     if (users.findByEmail(ownerEmail).isEmpty()) {
-      users.save(new AppUser(null, ownerEmail, "hash", "Person", true, PlatformRole.USER));
+      users.save(new AppUser(null, ownerEmail, "Person", true, PlatformRole.USER));
     }
     Cookie admin = platformAdminSession();
     String body =
@@ -277,8 +277,7 @@ class MembershipIT extends AbstractIntegrationTest {
     long projectId = createProject("owner-pend@example.com", "Pending");
     // Registrierter, aber noch nicht freigegebener Nutzer (approvedAt=null).
     users.save(
-        new AppUser(
-            null, "pending@example.com", "hash", "Pending", true, PlatformRole.USER, null, null));
+        new AppUser(null, "pending@example.com", "Pending", true, PlatformRole.USER, null, null));
 
     mvc.perform(
             post("/api/projects/" + projectId + "/invitations")

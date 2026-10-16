@@ -181,9 +181,7 @@ class SmtpMailIT extends AbstractIntegrationTest {
 
   /** Legt einen bereits freigegebenen Admin an (Bequem-Konstruktor, kein Registrierungspfad). */
   private long seedApprovedAdmin(String email) {
-    return users
-        .save(new AppUser(null, email, "hash", "Admin", true, PlatformRole.ADMIN))
-        .requireId();
+    return users.save(new AppUser(null, email, "Admin", true, PlatformRole.ADMIN)).requireId();
   }
 
   @Test

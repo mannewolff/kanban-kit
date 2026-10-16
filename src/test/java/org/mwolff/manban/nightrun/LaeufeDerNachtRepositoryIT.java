@@ -72,8 +72,8 @@ class LaeufeDerNachtRepositoryIT extends AbstractIntegrationTest {
   void seed() {
     userId =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('nacht@example.com', 'x', 'N') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('nacht@example.com', 'N') RETURNING id");
     projectId =
         id("INSERT INTO project (name, owner_user_id) VALUES ('P', ?) RETURNING id", userId);
   }

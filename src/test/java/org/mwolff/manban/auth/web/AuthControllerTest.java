@@ -25,9 +25,9 @@ class AuthControllerTest {
   @Test
   void register_mapsRegisteredUserToResponse() {
     // Given
-    var user = new AppUser(42L, "a@b.de", "hash", "Alice", false, PlatformRole.USER);
-    var request = new RegisterRequest("a@b.de", "password1", "Alice");
-    when(registerUser.register("a@b.de", "password1", "Alice")).thenReturn(user);
+    var user = new AppUser(42L, "a@b.de", "Alice", false, PlatformRole.USER);
+    var request = new RegisterRequest("a@b.de", "Alice");
+    when(registerUser.register("a@b.de", "Alice")).thenReturn(user);
 
     // When
     AuthController.RegisteredUserResponse result = controller.register(request);

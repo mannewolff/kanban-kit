@@ -155,12 +155,7 @@ class LoginCodeConcurrencyIT extends AbstractIntegrationTest {
                     users
                         .save(
                             new AppUser(
-                                null,
-                                "rennen@example.com",
-                                "hash",
-                                "Person",
-                                true,
-                                PlatformRole.USER))
+                                null, "rennen@example.com", "Person", true, PlatformRole.USER))
                         .id());
     return codes
         .save(

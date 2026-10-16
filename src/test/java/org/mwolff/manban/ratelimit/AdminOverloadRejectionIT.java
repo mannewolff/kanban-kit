@@ -76,7 +76,7 @@ class AdminOverloadRejectionIT extends AbstractIntegrationTest {
   }
 
   private long user(String email, String name) {
-    return users.save(new AppUser(null, email, "hash", name, true, PlatformRole.USER)).requireId();
+    return users.save(new AppUser(null, email, name, true, PlatformRole.USER)).requireId();
   }
 
   private String unboundToken(Cookie session) throws Exception {

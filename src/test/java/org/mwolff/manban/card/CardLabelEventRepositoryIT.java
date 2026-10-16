@@ -47,8 +47,8 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
   void seed() {
     long userId =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('label@example.com', 'x', 'L') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('label@example.com', 'L') RETURNING id");
     long projectId =
         id("INSERT INTO project (name, owner_user_id) VALUES ('P', ?) RETURNING id", userId);
     boardId = id("INSERT INTO board (project_id, name) VALUES (?, 'B') RETURNING id", projectId);

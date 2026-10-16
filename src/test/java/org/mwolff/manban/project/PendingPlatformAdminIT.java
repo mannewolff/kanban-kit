@@ -38,7 +38,7 @@ class PendingPlatformAdminIT extends AbstractIntegrationTest {
 
   /** Legt einen Benutzer mit der gewünschten Rolle und ohne Freigabe-Zeitstempel an. */
   private void createPending(String email, PlatformRole role) {
-    users.save(new AppUser(null, email, "unbenutzt", "Person", true, role, null, null));
+    users.save(new AppUser(null, email, "Person", true, role, null, null));
   }
 
   private void createApprovedAdmin(String email) {

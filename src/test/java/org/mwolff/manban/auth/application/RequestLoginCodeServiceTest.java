@@ -59,8 +59,7 @@ class RequestLoginCodeServiceTest {
   }
 
   private static AppUser konto(Instant approvedAt, Instant disabledAt) {
-    return new AppUser(
-        7L, EMAIL, "hash", "Ada", true, PlatformRole.USER, approvedAt, null, disabledAt);
+    return new AppUser(7L, EMAIL, "Ada", true, PlatformRole.USER, approvedAt, null, disabledAt);
   }
 
   private LoginCode gespeichert() {

@@ -78,8 +78,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
   private long projekt(String email) {
     Long userId =
         jdbc.queryForObject(
-            "INSERT INTO app_user (email, password_hash, display_name) VALUES (?, 'x', 'U')"
-                + " RETURNING id",
+            "INSERT INTO app_user (email, display_name) VALUES (?, 'U')" + " RETURNING id",
             Long.class,
             email);
     Long id =

@@ -58,12 +58,14 @@ class AuthRegistrationIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void registerWithPasswordStillWorksDuringTransition() throws Exception {
+  void passwordFromAnOldClientIsIgnored() throws Exception {
+    // Das Feld gibt es nicht mehr; ein alter Client mit (auch zu kurzem) Passwort registriert
+    // trotzdem, und das Passwort landet nirgends.
     mvc.perform(
             post("/api/auth/register")
                 .contentType("application/json")
                 .content(
-                    "{\"email\":\"alt@example.com\",\"password\":\"sup3r-secret\","
+                    "{\"email\":\"alt@example.com\",\"password\":\"x\","
                         + "\"displayName\":\"Alt\"}"))
         .andExpect(status().isCreated());
 
@@ -110,16 +112,6 @@ class AuthRegistrationIT extends AbstractIntegrationTest {
             post("/api/auth/register")
                 .contentType("application/json")
                 .content("{\"email\":\"not-an-email\",\"displayName\":\"\"}"))
-        .andExpect(status().isBadRequest());
-  }
-
-  @Test
-  void tooShortPasswordStillReturns400() throws Exception {
-    mvc.perform(
-            post("/api/auth/register")
-                .contentType("application/json")
-                .content(
-                    "{\"email\":\"kurz@example.com\",\"password\":\"x\",\"displayName\":\"K\"}"))
         .andExpect(status().isBadRequest());
   }
 }

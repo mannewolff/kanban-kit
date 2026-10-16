@@ -37,7 +37,7 @@ class LoginServiceTest {
   private static final String EMAIL_HASH = SecureTokens.sha256Hex("a@x.de");
   private static final int MAX_ATTEMPTS = 5;
   private static final AppUser ADMIN =
-      new AppUser(1L, "admin@x.de", "h", "Ad", true, PlatformRole.ADMIN);
+      new AppUser(1L, "admin@x.de", "Ad", true, PlatformRole.ADMIN);
 
   private AppUserRepository users;
   private LoginCodeRepository codes;
@@ -74,7 +74,6 @@ class LoginServiceTest {
     return new AppUser(
         2L,
         "a@x.de",
-        "storedHash",
         "Ada",
         verified,
         PlatformRole.USER,
@@ -224,7 +223,7 @@ class LoginServiceTest {
 
   @Test
   void wartendesKonto_adminsGenauEinmalBenachrichtigt() {
-    AppUser admin2 = new AppUser(3L, "admin2@x.de", "h", "Ad2", true, PlatformRole.ADMIN);
+    AppUser admin2 = new AppUser(3L, "admin2@x.de", "Ad2", true, PlatformRole.ADMIN);
     when(users.findByPlatformRole(PlatformRole.ADMIN)).thenReturn(List.of(ADMIN, admin2));
     when(users.findAll()).thenReturn(List.of(ADMIN, admin2, konto(false, false, false)));
     codeGilt("111111");
@@ -269,7 +268,7 @@ class LoginServiceTest {
   void wartenderPlattformAdmin_wirdAngemeldet_ohneBenachrichtigung() {
     // effectivelyApproved (Issue #561): Ein Admin ohne Freigabe-Zeitstempel wartet auf niemanden.
     AppUser pendingUnverifiedAdmin =
-        new AppUser(2L, "a@x.de", "storedHash", "Ada", false, PlatformRole.ADMIN, null, null);
+        new AppUser(2L, "a@x.de", "Ada", false, PlatformRole.ADMIN, null, null);
     codeGilt("123456");
     when(users.findById(2L)).thenReturn(Optional.of(pendingUnverifiedAdmin));
     when(users.findAll()).thenReturn(List.of(pendingUnverifiedAdmin));

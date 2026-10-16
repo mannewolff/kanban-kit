@@ -69,14 +69,7 @@ class TestAnmeldungIT extends AbstractIntegrationTest {
     anmeldung.konto("hilfe-admin@example.com", PlatformRole.ADMIN);
     users.save(
         new AppUser(
-            null,
-            "hilfe-wartend@example.com",
-            "unbenutzt",
-            "Wartend",
-            true,
-            PlatformRole.USER,
-            null,
-            null));
+            null, "hilfe-wartend@example.com", "Wartend", true, PlatformRole.USER, null, null));
 
     MockHttpServletResponse antwort = anmeldung.codeEinloesen(mvc, "hilfe-wartend@example.com");
 

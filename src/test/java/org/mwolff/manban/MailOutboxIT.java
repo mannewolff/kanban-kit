@@ -118,7 +118,7 @@ class MailOutboxIT extends AbstractIntegrationTest {
             () ->
                 tx.executeWithoutResult(
                     status -> {
-                      registerService.register("rollback@example.org", null, "Rolli");
+                      registerService.register("rollback@example.org", "Rolli");
                       throw new IllegalStateException("fachlicher Abbruch nach der Registrierung");
                     }))
         .isInstanceOf(IllegalStateException.class);
@@ -133,7 +133,7 @@ class MailOutboxIT extends AbstractIntegrationTest {
   @Test
   void commit_deliversOnceAndClearsTheSecretLink() {
     // Given
-    registerService.register("alice@example.org", null, "Alice");
+    registerService.register("alice@example.org", "Alice");
 
     // When
     int dispatched = dispatch.dispatchDue();
@@ -160,7 +160,7 @@ class MailOutboxIT extends AbstractIntegrationTest {
         .doNothing()
         .when(mailSender)
         .send(any(SimpleMailMessage.class));
-    registerService.register("bob@example.org", null, "Bob");
+    registerService.register("bob@example.org", "Bob");
 
     // When — Fehlversuch: Eintrag bleibt offen, die Registrierung bleibt unangetastet.
     assertThat(dispatch.dispatchDue()).isZero();
@@ -202,7 +202,7 @@ class MailOutboxIT extends AbstractIntegrationTest {
     // Given — ein Projekt mit OWNER; der Mailversand ist dauerhaft kaputt.
     long ownerId =
         users
-            .save(new AppUser(null, "owner@example.org", "hash", "Owner", true, PlatformRole.USER))
+            .save(new AppUser(null, "owner@example.org", "Owner", true, PlatformRole.USER))
             .requireId();
     long projectId =
         projects.save(new Project(null, "P", ownerId, Instant.now(), null, false)).requireId();

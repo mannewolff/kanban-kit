@@ -52,7 +52,7 @@ class ProjectIT extends AbstractIntegrationTest {
 
   private long createProject(String ownerEmail, String name) throws Exception {
     if (users.findByEmail(ownerEmail).isEmpty()) {
-      users.save(new AppUser(null, ownerEmail, "hash", "Person", true, PlatformRole.USER));
+      users.save(new AppUser(null, ownerEmail, "Person", true, PlatformRole.USER));
     }
     Cookie admin = platformAdminSession();
     String body =
