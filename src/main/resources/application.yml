@@ -96,7 +96,7 @@ manban:
     base-url: ${MANBAN_BASE_URL:http://localhost:8080}
     verification-ttl: PT24H
     session-secret: ${MANBAN_SESSION_SECRET:dev-only-insecure-secret-change-me}
-    session-ttl: P7D
+    session-ttl: P30D
     cookie-secure: ${MANBAN_COOKIE_SECURE:true}
     reset-ttl: PT1H
   mail:

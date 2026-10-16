@@ -3,12 +3,15 @@ package org.mwolff.manban.auth.infrastructure.security;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Base64;
+import java.util.Optional;
 import java.util.OptionalLong;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AuthProperties;
+import org.mwolff.manban.auth.application.SessionCheck;
 import org.mwolff.manban.auth.application.SessionGenerations;
 import org.mwolff.manban.auth.application.SessionTokens;
 import org.mwolff.manban.common.ExcludeFromJacocoGeneratedReport;
@@ -84,19 +87,19 @@ public class SignedSessionTokens implements SessionTokens {
   }
 
   /**
-   * Verifiziert Signatur, Ablauf und Sitzungs-Generation; liefert die userId oder leer bei
-   * Ungültigkeit. Der Parameter ist bewusst {@code @Nullable}: der Verifizierer toleriert {@code
-   * null} defensiv (leeres Ergebnis statt NPE), auch wenn der aktuelle Aufrufer stets non-null
-   * übergibt.
+   * Verifiziert Signatur, Ablauf und Sitzungs-Generation; liefert userId und den im Token
+   * festgehaltenen Ablauf oder leer bei Ungültigkeit. Der Parameter ist bewusst {@code @Nullable}:
+   * der Verifizierer toleriert {@code null} defensiv (leeres Ergebnis statt NPE), auch wenn der
+   * aktuelle Aufrufer stets non-null übergibt.
    */
   @Override
-  public OptionalLong verify(@Nullable String token) {
+  public Optional<SessionCheck> verify(@Nullable String token) {
     if (token == null) {
-      return OptionalLong.empty();
+      return Optional.empty();
     }
     int dot = token.indexOf('.');
     if (dot < 0) {
-      return OptionalLong.empty();
+      return Optional.empty();
     }
     String encodedPayload = token.substring(0, dot);
     String providedSignature = token.substring(dot + 1);
@@ -106,33 +109,33 @@ public class SignedSessionTokens implements SessionTokens {
     try {
       provided = DECODER.decode(providedSignature);
     } catch (IllegalArgumentException _) {
-      return OptionalLong.empty();
+      return Optional.empty();
     }
     if (!MessageDigest.isEqual(expected, provided)) {
-      return OptionalLong.empty();
+      return Optional.empty();
     }
 
     try {
       String payload = new String(DECODER.decode(encodedPayload), StandardCharsets.UTF_8);
       String[] fields = payload.split(":", -1);
       if (fields.length != PAYLOAD_FIELDS) {
-        return OptionalLong.empty();
+        return Optional.empty();
       }
       long userId = Long.parseLong(fields[0]);
       long expiry = Long.parseLong(fields[1]);
       long generation = Long.parseLong(fields[2]);
       if (clock.instant().toEpochMilli() > expiry) {
-        return OptionalLong.empty();
+        return Optional.empty();
       }
       // Gleichheit über OptionalLong statt über isEmpty() + Vergleich: Ein unbekanntes Konto hat
       // keine Generation und ist damit ungleich jeder Tokenangabe — der unsichere Zweig "leer gilt
       // als gültig" (Plan #883, E9) entsteht so gar nicht erst.
       if (!generations.current(userId).equals(OptionalLong.of(generation))) {
-        return OptionalLong.empty();
+        return Optional.empty();
       }
-      return OptionalLong.of(userId);
+      return Optional.of(new SessionCheck(userId, Instant.ofEpochMilli(expiry)));
     } catch (RuntimeException _) {
-      return OptionalLong.empty();
+      return Optional.empty();
     }
   }
 

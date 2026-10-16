@@ -13,7 +13,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     #INSECURE_DEFAULT_SESSION_SECRET} ist seit Issue #890 nur noch im ausdrücklich
  *     eingeschalteten Entwicklungs- oder Testbetrieb ({@code manban.dev-mode=true}) zulässig; sonst
  *     verweigert die Anwendung den Start.
- * @param sessionTtl Gültigkeitsdauer eines Session-Cookies
+ * @param sessionTtl volle Gültigkeitsdauer eines Session-Cookies (Vorgabe 30 Tage); die Sitzung
+ *     verlängert sich bei Nutzung gleitend (Plan #1801, A10)
  * @param cookieSecure ob das Session-Cookie das Secure-Flag trägt (Default true; hinter Caddy-TLS
  *     korrekt. Nur für lokalen Klartext-HTTP-Dev auf false setzen.)
  */
@@ -49,7 +50,7 @@ public record AuthProperties(
       sessionSecret = INSECURE_DEFAULT_SESSION_SECRET;
     }
     if (sessionTtl == null) {
-      sessionTtl = Duration.ofDays(7);
+      sessionTtl = Duration.ofDays(30);
     }
     if (cookieSecure == null) {
       cookieSecure = Boolean.TRUE;

@@ -18,7 +18,7 @@ class AuthPropertiesTest {
     assertThat(props.verificationTtl()).isEqualTo(Duration.ofHours(24));
     assertThat(props.resetTtl()).isEqualTo(Duration.ofHours(1));
     assertThat(props.sessionSecret()).isEqualTo(AuthProperties.INSECURE_DEFAULT_SESSION_SECRET);
-    assertThat(props.sessionTtl()).isEqualTo(Duration.ofDays(7));
+    assertThat(props.sessionTtl()).isEqualTo(Duration.ofDays(30));
     assertThat(props.cookieSecure()).isTrue();
   }
 
