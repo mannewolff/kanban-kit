@@ -70,19 +70,49 @@ describe('authApi – restliche Endpunkte', () => {
     expect(result.userId).toBe(1)
   })
 
-  it('login ruft POST /api/auth/login mit E-Mail und Passwort und validiert die Antwort', async () => {
-    const f = mockJsonResponse(validMe)
-    const result = await authApi.login('a@x.de', 'geheim')
+  it('requestCode ruft POST /api/auth/code/request mit der E-Mail', async () => {
+    const f = mockEmptyResponse()
+    await authApi.requestCode('a@x.de')
     const c = lastCall(f)
-    expect(c.url).toBe('/api/auth/login')
+    expect(c.url).toBe('/api/auth/code/request')
     expect(c.method).toBe('POST')
-    expect(JSON.parse(String(c.body))).toEqual({ email: 'a@x.de', password: 'geheim' })
+    expect(JSON.parse(String(c.body))).toEqual({ email: 'a@x.de' })
+  })
+
+  it('verifyCode ruft POST /api/auth/code/verify mit E-Mail und Code und validiert die Antwort', async () => {
+    const f = mockJsonResponse(validMe)
+    const result = await authApi.verifyCode('a@x.de', '042817')
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/auth/code/verify')
+    expect(c.method).toBe('POST')
+    expect(JSON.parse(String(c.body))).toEqual({ email: 'a@x.de', code: '042817' })
     expect(result.userId).toBe(1)
   })
 
-  it('login wirft ApiError bei typverletzter Server-Antwort', async () => {
+  it('verifyCode wirft ApiError bei typverletzter Server-Antwort', async () => {
     mockJsonResponse({ nope: true })
-    await expect(authApi.login('a@x.de', 'geheim')).rejects.toBeInstanceOf(ApiError)
+    await expect(authApi.verifyCode('a@x.de', '042817')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('linkLogin ruft POST /api/auth/code/link mit dem Token und validiert die Antwort', async () => {
+    const f = mockJsonResponse(validMe)
+    const result = await authApi.linkLogin('tok-123')
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/auth/code/link')
+    expect(c.method).toBe('POST')
+    expect(JSON.parse(String(c.body))).toEqual({ token: 'tok-123' })
+    expect(result.userId).toBe(1)
+  })
+
+  it('linkLogin wirft ApiError bei typverletzter Server-Antwort', async () => {
+    mockJsonResponse({ nope: true })
+    await expect(authApi.linkLogin('tok-123')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('bietet keine Passwort-Aufrufe mehr an', () => {
+    for (const entfallen of ['login', 'verify', 'forgot', 'reset']) {
+      expect(authApi).not.toHaveProperty(entfallen)
+    }
   })
 
   it('logout ruft POST /api/auth/logout', async () => {
@@ -101,30 +131,5 @@ describe('authApi – restliche Endpunkte', () => {
     expect(c.method).toBe('POST')
     expect(JSON.parse(String(c.body))).toEqual({ email: 'a@x.de', password: 'geheim', displayName: 'Ada' })
     expect(result).toEqual({ id: 1, email: 'a@x.de' })
-  })
-
-  it('verify ruft GET /api/auth/verify mit URL-kodiertem Token', async () => {
-    const f = mockEmptyResponse()
-    await authApi.verify('a token/with?chars')
-    const c = lastCall(f)
-    expect(c.url).toBe(`/api/auth/verify?token=${encodeURIComponent('a token/with?chars')}`)
-  })
-
-  it('forgot ruft POST /api/auth/forgot mit der E-Mail', async () => {
-    const f = mockEmptyResponse()
-    await authApi.forgot('a@x.de')
-    const c = lastCall(f)
-    expect(c.url).toBe('/api/auth/forgot')
-    expect(c.method).toBe('POST')
-    expect(JSON.parse(String(c.body))).toEqual({ email: 'a@x.de' })
-  })
-
-  it('reset ruft POST /api/auth/reset mit Token und neuem Passwort', async () => {
-    const f = mockEmptyResponse()
-    await authApi.reset('tok-123', 'neuesPasswort')
-    const c = lastCall(f)
-    expect(c.url).toBe('/api/auth/reset')
-    expect(c.method).toBe('POST')
-    expect(JSON.parse(String(c.body))).toEqual({ token: 'tok-123', newPassword: 'neuesPasswort' })
   })
 })

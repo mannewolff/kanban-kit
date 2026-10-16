@@ -39,12 +39,12 @@ export const authApi = {
   me: () => apiFetch<Me>('/api/me', {}, parseMe),
   updateProfile: (displayName: string) =>
     apiFetch<Me>('/api/me', { method: 'PATCH', body: JSON.stringify({ displayName }) }, parseMe),
-  login: (email: string, password: string) =>
-    apiFetch<Me>('/api/auth/login', jsonBody({ email, password }), parseMe),
+  // Anmeldung per Einmalcode (Plan #1801): anfordern, abgetippten Code oder Link aus der Mail einlösen.
+  requestCode: (email: string) => apiFetch<void>('/api/auth/code/request', jsonBody({ email })),
+  verifyCode: (email: string, code: string) =>
+    apiFetch<Me>('/api/auth/code/verify', jsonBody({ email, code }), parseMe),
+  linkLogin: (token: string) => apiFetch<Me>('/api/auth/code/link', jsonBody({ token }), parseMe),
   logout: () => apiFetch<void>('/api/auth/logout', { method: 'POST' }),
   register: (email: string, password: string, displayName: string) =>
     apiFetch<{ id: number; email: string }>('/api/auth/register', jsonBody({ email, password, displayName })),
-  verify: (token: string) => apiFetch<void>(`/api/auth/verify?token=${encodeURIComponent(token)}`),
-  forgot: (email: string) => apiFetch<void>('/api/auth/forgot', jsonBody({ email })),
-  reset: (token: string, newPassword: string) => apiFetch<void>('/api/auth/reset', jsonBody({ token, newPassword })),
 }
