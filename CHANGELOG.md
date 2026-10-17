@@ -17,6 +17,28 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.3.0] – 2026-10-16
+
+- chore: v3.2.1
+- Doku: Anmeldung per Einmalcode, Betriebsvariablen und Upgrade-Hinweise ([#1818](https://github.com/mannewolff/kanban-kit/issues/1818))
+- Passwort-Hash und Encoder entfernen, Migration V58 ([#1817](https://github.com/mannewolff/kanban-kit/issues/1817))
+- Passwort-Login, Reset und Verifikationsmail entfernen ([#1816](https://github.com/mannewolff/kanban-kit/issues/1816))
+- Link-Seite, Registrierung ohne Passwort und Routen ([#1815](https://github.com/mannewolff/kanban-kit/issues/1815))
+- Anmeldeschirm mit Code statt Passwort ([#1814](https://github.com/mannewolff/kanban-kit/issues/1814))
+- Auth-Integrationstests auf den Code-Ablauf umstellen ([#1813](https://github.com/mannewolff/kanban-kit/issues/1813))
+- Integrationstests der übrigen Module auf TestAnmeldung umstellen ([#1812](https://github.com/mannewolff/kanban-kit/issues/1812))
+- Integrationstests im Modul nightrun auf TestAnmeldung umstellen ([#1811](https://github.com/mannewolff/kanban-kit/issues/1811))
+- Integrationstests im Modul kanbancompat auf TestAnmeldung umstellen ([#1810](https://github.com/mannewolff/kanban-kit/issues/1810))
+- Testhilfe TestAnmeldung, Integrationstests im Modul card umstellen ([#1809](https://github.com/mannewolff/kanban-kit/issues/1809))
+- Registrierung ohne Passwort mit sofortigem Anmeldecode ([#1808](https://github.com/mannewolff/kanban-kit/issues/1808))
+- Bremse je Herkunft für Code-Anforderung und Code-Eingabe ([#1807](https://github.com/mannewolff/kanban-kit/issues/1807))
+- Endpunkte /api/auth/code und Szenarien der Code-Anmeldung ([#1806](https://github.com/mannewolff/kanban-kit/issues/1806))
+- Code und Link einlösen im LoginService ([#1805](https://github.com/mannewolff/kanban-kit/issues/1805))
+- Code anfordern: Dienst, Grenze je Adresse, Mail mit Code und Link ([#1804](https://github.com/mannewolff/kanban-kit/issues/1804))
+- Tabelle login_code mit atomarem Verbrauch und Code-HMAC ([#1803](https://github.com/mannewolff/kanban-kit/issues/1803))
+- Sitzung 30 Tage, gleitend verlängert ([#1802](https://github.com/mannewolff/kanban-kit/issues/1802))
+- Verstummte Läufe im Plattform-Leitstand als Störung quittierbar ([#1800](https://github.com/mannewolff/kanban-kit/issues/1800))
+
 ## [3.2.0] – 2026-10-15
 
 - chore: v3.1.1
