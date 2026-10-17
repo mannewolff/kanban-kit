@@ -367,6 +367,32 @@ Dokument-Zeile „keine Daten“. Den Laufstand-Kommentar einer Karte schreibt j
 darum nur den letzten Schreiber; frühere Runs zählen über ihre übrigen Spuren. Ein Rückzug zählt nur,
 wenn der Status der Karte vor der Bewegung bekannt ist.
 
+**Die Platte „Vorhaben“** zeigt jedes Vorhaben des Boards, bis es archiviert ist — von Hand oder
+automatisch, sobald alle zugehörigen Karten archiviert sind; auch ein Vorhaben ohne Pakete und eines,
+dessen Pakete alle umgesetzt sind, bleibt bis dahin stehen. Der Fortschritt zählt **nur
+Arbeitspakete**, und ein Paket in In Review zählt schon als fertig; alle minus fertige ergibt die Zahl
+der offenen Pakete, auch im Backlog und nach einem Zurückziehen durch den Runner.
+Die Zahl weicht bewusst vom Fortschritt der Vorhaben-Seite ab: Dort zählen alle zugehörigen Karten
+und nur Done als fertig. Darunter steht die **Prognose** „voraussichtlich fertig: 50 % bis ‹Datum› · 85 % bis
+‹Datum›“ mit „‹n› offene Pakete“: Mit dieser Wahrscheinlichkeit sind bis zu diesem Tag alle offenen
+Pakete umgesetzt, gerechnet aus dem Durchsatz der letzten 30 abgeschlossenen Tage, zu dem alle
+Arbeitspakete des Boards zählen, auch solche ohne Vorhaben. Ein Tag reicht von 12 bis 12 Uhr in
+deiner Zeitzone und trägt das Datum seines **Endes** — anders als der [Verbrauch](#verbrauch-leitstand),
+der einen Zeitraum nach seinem Beginn benennt; der laufende Tag ist der erste vorhergesagte. Der
+Hinweis beim Überfahren erklärt das und sagt „Gilt, wenn das Board nur an diesem Vorhaben
+arbeitet.“; haben weitere Vorhaben offene Pakete, ergänzt er „‹X› weitere Vorhaben teilen sich den
+Durchsatz.“ Sonderfälle, in dieser Rangfolge:
+
+- **„noch keine Pakete geschnitten“** — das Vorhaben hat noch kein Arbeitspaket.
+- **„alle Pakete umgesetzt“** — alle Pakete liegen in In Review oder Done; folgt aus einem Plan oder
+  Fachplan noch etwas, steht „alle Pakete umgesetzt, weitere folgen aus ‹Dokument›“.
+- **„Zu wenig Durchsatz für eine Prognose“** — in den letzten 30 Tagen wurde an weniger als fünf
+  Tagen ein Paket fertig. Der Satz erscheint auch, wenn die offenen Pakete bei diesem Durchsatz nicht
+  in absehbarer Zeit fertig werden (mehr als 1 000 offene Pakete oder mehr als 100 Jahre).
+- **„frühestens“ statt „bis“** — ein Plan außerhalb von Done hat noch kein Paket oder ein Fachplan
+  außerhalb von Done noch keinen Plan; der Hinweis nennt das Dokument, denn daraus kommen weitere
+  Pakete.
+
 **Die Platten „Fluss“ und „Alter in Arbeit“** zeigen, wo sich die Arbeit staut und welche Karte
 schon auffällig lange in Arbeit liegt. **Gezählt wird nach dem Zustand eines Arbeitspakets, nicht
 nach der Spalte, in der es liegt:** Ein Paket in „Anstehend“ mit Zustand Ready zählt unter Ready;
