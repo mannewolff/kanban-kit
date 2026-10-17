@@ -157,6 +157,33 @@ export interface EpicForecast {
   epics: EpicForecastEntry[]
 }
 
+/** Versuche eines Wochenfensters der Platte „Auslieferung“ (dieselben Fenster wie beim Durchsatz). */
+export interface DeliveryWeek {
+  weekStart: string
+  successCount: number
+  failureCount: number
+}
+
+/**
+ * Die Platte „Auslieferung“ mit den DORA-Kennzahlen eines Board-Projekts (Plan #1831, E5). Dauern in
+ * Sekunden; `null` heißt „keine Grundlage“, bei der Time to Restore „kein Ausfall“.
+ */
+export interface DeliveryView {
+  /** Ob für das Projekt je ein Versuch gemeldet wurde; ohne Meldung zeigt die Platte keine Zahl. */
+  hasReports: boolean
+  /** Der früheste gemeldete Ausgang, wenn er im Fenster liegt; sonst `null` („letzte 12 Wochen“). */
+  dataSince: string | null
+  /** Erfolgreiche Auslieferungen im Fenster — eine 0 ist eine echte Null. */
+  deploymentCount: number
+  leadTimeMedianSeconds: number | null
+  changeFailurePercent: number | null
+  /** Median der im Fenster abgeschlossenen Ausfälle; ein laufender zählt nicht mit. */
+  timeToRestoreMedianSeconds: number | null
+  /** Beginn eines noch laufenden Ausfalls; `null` ohne laufenden Ausfall. */
+  outageSince: string | null
+  weeks: DeliveryWeek[]
+}
+
 export const dashboardApi = {
   get: (boardId: number) => apiFetch<BoardDashboardKpis>(`/api/boards/${boardId}/dashboard`),
   /**
@@ -175,6 +202,8 @@ export const dashboardApi = {
     apiFetch<EpicForecast>(`/api/boards/${boardId}/dashboard/epic-forecast?${new URLSearchParams({ zone })}`),
   /** Die Platte „Alter in Arbeit“. */
   aging: (boardId: number) => apiFetch<AgingWip>(`/api/boards/${boardId}/dashboard/aging`),
+  /** Die Platte „Auslieferung“ mit den Daten des ganzen Projekts (Plan #1831, E1, E5). */
+  delivery: (boardId: number) => apiFetch<DeliveryView>(`/api/boards/${boardId}/dashboard/delivery`),
 }
 
 export type DashboardApi = typeof dashboardApi

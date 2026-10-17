@@ -779,6 +779,37 @@ export const en: Woerterbuch = {
     ALTER_KARTE_OEFFNEN: (nummer, titel) => `Open card #${nummer}: ${titel}`,
   },
 
+  LEITSTAND_AUSLIEFERUNG: {
+    TITEL: 'Delivery',
+    LETZTE_WOCHEN: 'last 12 weeks',
+    SEIT: (datum) => `since ${datum}`,
+    LEER: 'no delivery yet',
+    KEINE_GRUNDLAGE: 'no basis',
+    KEIN_AUSFALL: 'no outage',
+    AUSFALL_LAEUFT: (dauer) => `Outage ongoing for ${dauer}`,
+    UNTER_EINER_STUNDE: 'under 1 hour',
+    STUNDEN_ANZAHL: (anzahl) => (anzahl === 1 ? '1 hour' : `${anzahl} hours`),
+    TAGE_ANZAHL: (anzahl) => (anzahl === 1 ? '1 day' : `${anzahl} days`),
+    STUNDEN: 'hours',
+    TAGE: 'days',
+    FREQUENZ_FENSTER: (anzahl) => (anzahl === 1 ? 'delivery in 12 weeks' : 'deliveries in 12 weeks'),
+    FREQUENZ_SEIT: (anzahl, datum) => (anzahl === 1 ? `delivery since ${datum}` : `deliveries since ${datum}`),
+    FREQUENZ: 'Deployment frequency',
+    LEAD_TIME: 'Lead time for changes',
+    CHANGE_FAILURE_RATE: 'Change failure rate',
+    TIME_TO_RESTORE: 'Time to restore',
+    FREQUENZ_HINWEIS: 'Counts the successful deliveries in the window.',
+    LEAD_TIME_HINWEIS: 'Median per delivered change, from the commit to the successful delivery.',
+    CHANGE_FAILURE_RATE_HINWEIS:
+      'Share of failed among all reported deliveries. Only reported failures count, not defects that only surface after a successful delivery.',
+    TIME_TO_RESTORE_HINWEIS:
+      'Median of the finished outages, from the first failed attempt to the next successful delivery.',
+    ERFOLGREICH: 'successful',
+    GESCHEITERT: 'failed',
+    WOCHE_ARIA: (kw, erfolg, fehlschlag) => `CW ${kw}: ${erfolg} successful, ${fehlschlag} failed`,
+    WOCHEN_ARIA: (wochen) => `Delivery attempts per week — ${wochen}`,
+  },
+
   VERBRAUCH_ZEITRAUM: {
     KEIN_LAUF: 'Neither a run nor a session took place in this period.',
     NICHT_ERFASST: 'not recorded',

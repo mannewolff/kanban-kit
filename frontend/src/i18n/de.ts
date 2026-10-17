@@ -819,6 +819,40 @@ export const de = {
     ALTER_KARTE_OEFFNEN: (nummer: number, titel: string) => `Karte #${nummer} öffnen: ${titel}`,
   },
 
+  /** Die Platte „Auslieferung“ mit den DORA-Kennzahlen, `lib/auslieferung.ts` (Plan #1831). */
+  LEITSTAND_AUSLIEFERUNG: {
+    TITEL: 'Auslieferung',
+    LETZTE_WOCHEN: 'letzte 12 Wochen',
+    SEIT: (datum: string) => `seit ${datum}`,
+    LEER: 'noch keine Auslieferung',
+    KEINE_GRUNDLAGE: 'keine Grundlage',
+    KEIN_AUSFALL: 'kein Ausfall',
+    AUSFALL_LAEUFT: (dauer: string) => `Ausfall läuft seit ${dauer}`,
+    UNTER_EINER_STUNDE: 'unter 1 Stunde',
+    STUNDEN_ANZAHL: (anzahl: number) => (anzahl === 1 ? '1 Stunde' : `${anzahl} Stunden`),
+    TAGE_ANZAHL: (anzahl: number) => (anzahl === 1 ? '1 Tag' : `${anzahl} Tage`),
+    STUNDEN: 'Stunden',
+    TAGE: 'Tage',
+    FREQUENZ_FENSTER: (anzahl: number) => (anzahl === 1 ? 'Auslieferung in 12 Wochen' : 'Auslieferungen in 12 Wochen'),
+    FREQUENZ_SEIT: (anzahl: number, datum: string) =>
+      anzahl === 1 ? `Auslieferung seit ${datum}` : `Auslieferungen seit ${datum}`,
+    FREQUENZ: 'Deployment-Frequenz',
+    LEAD_TIME: 'Lead Time for Changes',
+    CHANGE_FAILURE_RATE: 'Change Failure Rate',
+    TIME_TO_RESTORE: 'Time to Restore',
+    FREQUENZ_HINWEIS: 'Zählt die erfolgreichen Auslieferungen im Fenster.',
+    LEAD_TIME_HINWEIS: 'Median je ausgelieferter Änderung, vom Commit bis zur erfolgreichen Auslieferung.',
+    CHANGE_FAILURE_RATE_HINWEIS:
+      'Anteil gescheiterter an allen gemeldeten Auslieferungen. Es zählen nur gemeldete Fehlschläge, nicht Fehler, die erst nach einer erfolgreichen Auslieferung auffallen.',
+    TIME_TO_RESTORE_HINWEIS:
+      'Median der abgeschlossenen Ausfälle, vom ersten gescheiterten Versuch bis zur nächsten erfolgreichen Auslieferung.',
+    ERFOLGREICH: 'erfolgreich',
+    GESCHEITERT: 'gescheitert',
+    WOCHE_ARIA: (kw: number, erfolg: number, fehlschlag: number) =>
+      `KW ${kw}: ${erfolg} erfolgreich, ${fehlschlag} gescheitert`,
+    WOCHEN_ARIA: (wochen: string) => `Auslieferungsversuche je Woche — ${wochen}`,
+  },
+
   /** Textrechnung der Verbrauchs-Auswertung, `lib/verbrauchZeitraum.ts` (Issue #1656). */
   VERBRAUCH_ZEITRAUM: {
     KEIN_LAUF: 'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.',

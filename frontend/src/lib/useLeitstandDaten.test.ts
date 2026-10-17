@@ -2,13 +2,13 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError } from '../api/client'
-import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type EpicForecast } from '../api/dashboard'
+import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { useLeitstandDaten } from './useLeitstandDaten'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
-vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn(), delivery: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn() } }))
 
@@ -18,6 +18,7 @@ const m = {
   fluss: dashboardApi.flow as ReturnType<typeof vi.fn>,
   alter: dashboardApi.aging as ReturnType<typeof vi.fn>,
   prognose: dashboardApi.epicForecast as ReturnType<typeof vi.fn>,
+  auslieferung: dashboardApi.delivery as ReturnType<typeof vi.fn>,
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
@@ -77,6 +78,17 @@ const alter = (): AgingWip => ({
     thresholdSeconds: 86_400,
     cards: [{ id: 3, number: 1712, title: 'Endpunkt', ageSeconds: 172_800, ageIsMinimum: false, overThreshold: true }],
   },
+})
+
+const auslieferung = (): DeliveryView => ({
+  hasReports: true,
+  dataSince: null,
+  deploymentCount: 4,
+  leadTimeMedianSeconds: 7200,
+  changeFailurePercent: 20,
+  timeToRestoreMedianSeconds: null,
+  outageSince: null,
+  weeks: [{ weekStart: '2026-10-10T12:00:00Z', successCount: 4, failureCount: 1 }],
 })
 
 const epic = (id: number, title: string): Epic => ({
@@ -141,6 +153,7 @@ beforeEach(() => {
   m.fluss.mockResolvedValue(fluss())
   m.alter.mockResolvedValue(alter())
   m.prognose.mockResolvedValue(prognose())
+  m.auslieferung.mockResolvedValue(auslieferung())
   m.epics.mockResolvedValue([epic(1, 'Nachtlauf-Auswertung')])
   m.laeufe.mockResolvedValue([lauf(1, '2026-09-10T21:00:00Z'), lauf(3, '2026-09-14T21:10:00Z')])
   m.klassen.mockResolvedValue({ CHECKS_RED: 11 })
@@ -178,6 +191,7 @@ describe('useLeitstandDaten — Board-ID', () => {
     expect(m.fluss).not.toHaveBeenCalled()
     expect(m.alter).not.toHaveBeenCalled()
     expect(m.prognose).not.toHaveBeenCalled()
+    expect(m.auslieferung).not.toHaveBeenCalled()
   })
 
   it('lädt zu einer neuen Board-ID neu und beginnt dabei wieder beim Laden', async () => {
@@ -392,5 +406,35 @@ describe('useLeitstandDaten — Prognose der Vorhaben (Issue #1828)', () => {
     const { result } = renderHook(() => useLeitstandDaten('7'))
     await waitFor(() => expect(result.current.prognose).toEqual({ art: 'fehler' }))
     await waitFor(() => expect(result.current.fluss).toEqual({ art: 'da', wert: fluss() }))
+  })
+})
+
+describe('useLeitstandDaten — Auslieferung (Issue #1836)', () => {
+  it('lädt die Auslieferung sofort mit der Board-ID, ohne auf das Projekt zu warten', async () => {
+    const erstes = offen<Board>()
+    m.board.mockReturnValue(erstes.versprechen)
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    expect(result.current.auslieferung).toEqual({ art: 'laedt' })
+    expect(m.auslieferung).toHaveBeenCalledWith(7)
+    await waitFor(() => expect(result.current.auslieferung).toEqual({ art: 'da', wert: auslieferung() }))
+  })
+
+  it('lädt zu einer neuen Board-ID die Auslieferung neu', async () => {
+    const { result, rerender } = renderHook((boardId: string) => useLeitstandDaten(boardId), { initialProps: '7' })
+    await waitFor(() => expect(result.current.auslieferung.art).toBe('da'))
+    rerender('8')
+    expect(m.auslieferung).toHaveBeenLastCalledWith(8)
+  })
+
+  it.each([
+    ['403 als „ohne Recht"', new ApiError(403, 'Forbidden'), { art: 'ohneRecht' }],
+    ['einen anderen Fehler als Fehler', new Error('Netz'), { art: 'fehler' }],
+  ])('deutet %s und lässt die übrigen Abrufe stehen', async (_name, fehler, erwartet) => {
+    m.auslieferung.mockRejectedValue(fehler)
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.auslieferung).toEqual(erwartet))
+    await waitFor(() => expect(result.current.alter).toEqual({ art: 'da', wert: alter() }))
+    expect(result.current.fluss).toEqual({ art: 'da', wert: fluss() })
+    expect(result.current.kpis).toEqual({ art: 'da', wert: kpis() })
   })
 })

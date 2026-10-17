@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError } from '../api/client'
-import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type EpicForecast } from '../api/dashboard'
+import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunErrorClassCounts, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { juengsterLauf } from './leitstand'
@@ -64,6 +64,8 @@ export interface LeitstandDaten {
   alter: Laden<AgingWip>
   /** Die Prognose der Platte „Vorhaben“ (Issue #1828); lädt wie der Fluss sofort zum Board. */
   prognose: Laden<EpicForecast>
+  /** Die Platte „Auslieferung“ (Issue #1836) mit den Daten des ganzen Projekts; lädt sofort zum Board. */
+  auslieferung: Laden<DeliveryView>
   epics: Laden<Epic[]>
   klassen: Laden<NightRunErrorClassCounts>
   /** Die Nacharbeit der Runs auf diesem Board (Issue #1760); ohne Run-Recht `ohneRecht`. */
@@ -81,7 +83,7 @@ export interface LeitstandDaten {
  * Lädt die Daten des Leitstands zu einem Board und leitet die Sichtwerte ab (Issue #1053).
  *
  * Die Läufe, die Fehlerklassen und damit der Verbrauch hängen am Projekt des Boards und beginnen
- * erst, wenn das Board da ist; Nacharbeit, Fluss, Alter und Prognose hängen am Board selbst und laden sofort. Wer die
+ * erst, wenn das Board da ist; Nacharbeit, Fluss, Alter, Prognose und Auslieferung hängen am Board selbst und laden sofort. Wer die
  * Läufe nicht sehen darf, bekommt vom Server 403 — das bleibt als `ohneRecht` still, und die Seite
  * lässt die Lauf-Bereiche weg.
  */
@@ -95,6 +97,7 @@ export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
   const fluss = useLadenWenn(gueltigeId, (bid) => dashboardApi.flow(bid), [gueltigeId])
   const alter = useLadenWenn(gueltigeId, (bid) => dashboardApi.aging(bid), [gueltigeId])
   const prognose = useLadenWenn(gueltigeId, (bid) => dashboardApi.epicForecast(bid), [gueltigeId])
+  const auslieferung = useLadenWenn(gueltigeId, (bid) => dashboardApi.delivery(bid), [gueltigeId])
   const epics = useLadenWenn(gueltigeId, (bid) => epicsApi.list(bid), [gueltigeId])
   const nacharbeit = useLadenWenn(gueltigeId, (bid) => nightRunsApi.rework(bid), [gueltigeId])
   const projectId = board.art === 'da' ? board.wert.projectId : null
@@ -105,5 +108,5 @@ export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
   const juengster = liste === null ? null : juengsterLauf(liste)
   const epicListe = epics.art === 'da' ? epics.wert : []
 
-  return { validId: gueltigeId !== null, board, kpis, fluss, alter, prognose, epics, klassen, nacharbeit, projectId, liste, juengster, epicListe }
+  return { validId: gueltigeId !== null, board, kpis, fluss, alter, prognose, auslieferung, epics, klassen, nacharbeit, projectId, liste, juengster, epicListe }
 }

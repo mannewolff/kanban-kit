@@ -137,3 +137,31 @@ describe('dashboardApi.epicForecast (Issue #1828)', () => {
     )
   })
 })
+
+describe('dashboardApi.delivery (Issue #1836)', () => {
+  it('ruft GET /api/boards/{id}/dashboard/delivery', async () => {
+    const auslieferung = {
+      hasReports: true,
+      dataSince: null,
+      deploymentCount: 4,
+      leadTimeMedianSeconds: 7200,
+      changeFailurePercent: 20,
+      timeToRestoreMedianSeconds: null,
+      outageSince: null,
+      weeks: [{ weekStart: '2026-10-10T12:00:00Z', successCount: 4, failureCount: 1 }],
+    }
+    const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: () => Promise.resolve(JSON.stringify(auslieferung)),
+    } as Response)
+
+    const result = await dashboardApi.delivery(7)
+
+    const [url, init] = f.mock.calls[f.mock.calls.length - 1]
+    expect(url).toBe('/api/boards/7/dashboard/delivery')
+    expect(init?.method).toBeUndefined()
+    expect(result).toEqual(auslieferung)
+  })
+})
