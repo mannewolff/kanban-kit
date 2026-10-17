@@ -26,6 +26,24 @@
     },
     "abgekuendigtSeit" : null
   }, {
+    "pfad" : "/api/kanban/deployments/latest",
+    "methode" : "GET",
+    "parameter" : [ ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/DeploymentLatestResponse"
+            }
+          }
+        }
+      },
+      "204" : { }
+    },
+    "abgekuendigtSeit" : null
+  }, {
     "pfad" : "/api/kanban/epics",
     "methode" : "GET",
     "parameter" : [ ],
@@ -370,6 +388,41 @@
     },
     "erfolg" : {
       "204" : { }
+    },
+    "abgekuendigtSeit" : null
+  }, {
+    "pfad" : "/api/kanban/deployments",
+    "methode" : "POST",
+    "parameter" : [ ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/DeploymentRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/DeploymentResponse"
+            }
+          }
+        }
+      },
+      "201" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/DeploymentResponse"
+            }
+          }
+        }
+      }
     },
     "abgekuendigtSeit" : null
   }, {
@@ -828,6 +881,81 @@
         "number" : {
           "format" : "int32",
           "type" : "integer"
+        }
+      },
+      "type" : "object"
+    },
+    "DeploymentCommitRequest" : {
+      "properties" : {
+        "committedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "sha" : {
+          "maxLength" : 64,
+          "minLength" : 0,
+          "type" : "string"
+        }
+      },
+      "required" : [ "committedAt", "sha" ],
+      "type" : "object"
+    },
+    "DeploymentLatestResponse" : {
+      "properties" : {
+        "finishedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "outcome" : {
+          "enum" : [ "SUCCESS", "FAILURE" ],
+          "type" : "string"
+        },
+        "revision" : {
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "DeploymentRequest" : {
+      "properties" : {
+        "attemptId" : {
+          "maxLength" : 200,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "commits" : {
+          "items" : {
+            "$ref" : "#/components/schemas/DeploymentCommitRequest"
+          },
+          "maxItems" : 20000,
+          "minItems" : 0,
+          "type" : "array"
+        },
+        "finishedAt" : {
+          "format" : "date-time",
+          "type" : "string"
+        },
+        "outcome" : {
+          "enum" : [ "SUCCESS", "FAILURE" ],
+          "type" : "string"
+        },
+        "revision" : {
+          "maxLength" : 64,
+          "minLength" : 0,
+          "type" : "string"
+        }
+      },
+      "required" : [ "attemptId", "commits", "finishedAt", "outcome", "revision" ],
+      "type" : "object"
+    },
+    "DeploymentResponse" : {
+      "properties" : {
+        "attemptId" : {
+          "type" : "string"
+        },
+        "status" : {
+          "enum" : [ "CREATED", "UNCHANGED" ],
+          "type" : "string"
         }
       },
       "type" : "object"

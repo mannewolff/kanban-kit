@@ -93,6 +93,7 @@
   "src/test/java/org/mwolff/manban/nightrun/DisruptionRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/DisruptionRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/nightrun/LaeufeDerNachtRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/DisruptionRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/nightrun/DisruptionEndpointIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/DisruptionController.java", "src/main/java/org/mwolff/manban/nightrun/application/DisruptionService.java", "src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunRepositoryAdapter.java"],
+  "src/test/java/org/mwolff/manban/deployment/DeploymentIngestIT.java": ["src/main/java/org/mwolff/manban/deployment/web/DeploymentIngestController.java"],
   "src/test/java/org/mwolff/manban/nightrun/NachtlaufNichtAngelaufenIngestIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/NightRunIngestController.java", "src/main/java/org/mwolff/manban/nightrun/domain/NightRunOutcome.java"],
   "src/test/java/org/mwolff/manban/nightrun/NachtlaufOhneArbeitIngestIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/NightRunIngestController.java"],
   "src/test/java/org/mwolff/manban/nightrun/NightRunKettenstandIT.java": ["src/main/java/org/mwolff/manban/nightrun/web/NightRunCardController.java", "src/main/java/org/mwolff/manban/nightrun/domain/KettenAbleitung.java"],
