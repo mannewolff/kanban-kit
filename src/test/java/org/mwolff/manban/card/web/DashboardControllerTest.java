@@ -20,21 +20,27 @@ import org.mwolff.manban.card.application.BoardDashboardKpis;
 import org.mwolff.manban.card.application.BoardFlowView;
 import org.mwolff.manban.card.application.BoardFlussService;
 import org.mwolff.manban.card.application.CardCycleTimeService;
+import org.mwolff.manban.card.application.EpicForecastView;
 import org.mwolff.manban.card.application.ImplementationTimeView;
+import org.mwolff.manban.card.application.VorhabenPrognoseService;
+import org.mwolff.manban.card.domain.VorhabenLage.Lage;
 import org.mwolff.manban.common.web.KeineRegionszoneException;
+import org.mwolff.manban.project.application.ProjectNotFoundException;
 
 /** Unit-Test des Dashboard-Controllers (Service gemockt). */
 class DashboardControllerTest {
 
   private CardCycleTimeService service;
   private BoardFlussService fluss;
+  private VorhabenPrognoseService prognose;
   private DashboardController controller;
 
   @BeforeEach
   void setUp() {
     service = mock(CardCycleTimeService.class);
     fluss = mock(BoardFlussService.class);
-    controller = new DashboardController(service, fluss);
+    prognose = mock(VorhabenPrognoseService.class);
+    controller = new DashboardController(service, fluss, prognose);
   }
 
   @Test
@@ -145,5 +151,85 @@ class DashboardControllerTest {
     when(fluss.aging(3L, 7L)).thenReturn(view);
 
     assertThat(controller.aging(3L, 7L)).isSameAs(view);
+  }
+
+  @Test
+  void epicForecast_delegatesWithUserBoardAndZone() {
+    ZoneId berlin = ZoneId.of("Europe/Berlin");
+    EpicForecastView view = new EpicForecastView(0, List.of());
+    when(prognose.epicForecast(3L, 7L, berlin)).thenReturn(view);
+
+    assertThat(controller.epicForecast(3L, 7L, berlin)).isSameAs(view);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"+05:30", "Z", "UTC+02:00"})
+  void epicForecast_rejectsAnOffsetZone(String zone) {
+    assertThatThrownBy(() -> controller.epicForecast(3L, 7L, ZoneId.of(zone)))
+        .isInstanceOf(KeineRegionszoneException.class);
+    verifyNoInteractions(prognose);
+  }
+
+  @Test
+  void epicForecast_passesNotFoundThrough() {
+    ZoneId berlin = ZoneId.of("Europe/Berlin");
+    when(prognose.epicForecast(3L, 7L, berlin)).thenThrow(new ProjectNotFoundException());
+
+    assertThatThrownBy(() -> controller.epicForecast(3L, 7L, berlin))
+        .isInstanceOf(ProjectNotFoundException.class);
+  }
+
+  @Test
+  void epicForecast_namesTheFieldsInTheJsonResponse() throws Exception {
+    ZoneId berlin = ZoneId.of("Europe/Berlin");
+    EpicForecastView view =
+        new EpicForecastView(
+            12,
+            List.of(
+                new EpicForecastView.Epic(
+                    42L,
+                    1782,
+                    "Leitstand-Prognose",
+                    Lage.FORECAST,
+                    14,
+                    2,
+                    12,
+                    LocalDate.of(2026, 10, 21),
+                    LocalDate.of(2026, 10, 24),
+                    true,
+                    List.of(new EpicForecastView.PendingDocument(1819, "[Plan] Prognose")),
+                    2),
+                new EpicForecastView.Epic(
+                    43L,
+                    1790,
+                    "Leer",
+                    Lage.NO_PACKAGES,
+                    0,
+                    0,
+                    0,
+                    null,
+                    null,
+                    false,
+                    List.of(),
+                    1)));
+    when(prognose.epicForecast(3L, 7L, berlin)).thenReturn(view);
+
+    String json =
+        new ObjectMapper()
+            .findAndRegisterModules()
+            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .writeValueAsString(controller.epicForecast(3L, 7L, berlin));
+
+    assertThat(json)
+        .isEqualTo(
+            "{\"throughputDays\":12,\"epics\":["
+                + "{\"id\":42,\"number\":1782,\"title\":\"Leitstand-Prognose\","
+                + "\"state\":\"FORECAST\",\"total\":14,\"finished\":2,\"open\":12,"
+                + "\"p50\":\"2026-10-21\",\"p85\":\"2026-10-24\",\"earliest\":true,"
+                + "\"pendingDocuments\":[{\"number\":1819,\"title\":\"[Plan] Prognose\"}],"
+                + "\"otherEpicsSharing\":2},"
+                + "{\"id\":43,\"number\":1790,\"title\":\"Leer\",\"state\":\"NO_PACKAGES\","
+                + "\"total\":0,\"finished\":0,\"open\":0,\"p50\":null,\"p85\":null,"
+                + "\"earliest\":false,\"pendingDocuments\":[],\"otherEpicsSharing\":1}]}");
   }
 }
