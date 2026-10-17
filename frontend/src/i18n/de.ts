@@ -1009,6 +1009,26 @@ export const de = {
     VORHABEN: 'Vorhaben',
     OFFEN: 'offen',
     KEIN_VORHABEN: 'Kein offenes Vorhaben.',
+    PROGNOSE_ZEILE: (p50: string, p85: string, fruehestens: boolean) => {
+      const vor = fruehestens ? 'frühestens' : 'bis'
+      return `voraussichtlich fertig: 50 % ${vor} ${p50} · 85 % ${vor} ${p85}`
+    },
+    PROGNOSE_ZU_WENIG_DURCHSATZ: 'Zu wenig Durchsatz für eine Prognose',
+    PROGNOSE_ALLE_UMGESETZT: 'alle Pakete umgesetzt',
+    PROGNOSE_ALLE_UMGESETZT_WEITERE: (dokumente: string) => `alle Pakete umgesetzt, weitere folgen aus ${dokumente}`,
+    PROGNOSE_KEINE_PAKETE: 'noch keine Pakete geschnitten',
+    PROGNOSE_OFFENE_PAKETE: (anzahl: number) => (anzahl === 1 ? '1 offenes Paket' : `${anzahl} offene Pakete`),
+    PROGNOSE_ERKLAERUNG: (p50: string, p85: string, offen: number, fruehestens: boolean) => {
+      const vor = fruehestens ? 'frühestens' : 'bis'
+      const pakete = offen === 1 ? 'das offene Paket' : `alle ${offen} offenen Pakete`
+      return (
+        `Mit 50 % Wahrscheinlichkeit sind ${vor} ${p50} ${pakete} umgesetzt, mit 85 % ${vor} ${p85}, ` +
+        'gerechnet aus dem Durchsatz der letzten 30 Tage, jeweils von 12 bis 12 Uhr.'
+      )
+    },
+    PROGNOSE_NUR_DIESES: 'Gilt, wenn das Board nur an diesem Vorhaben arbeitet.',
+    PROGNOSE_WEITERE_VORHABEN: (anzahl: number) => `${anzahl} weitere Vorhaben teilen sich den Durchsatz.`,
+    PROGNOSE_AUSSTEHEND: (dokumente: string) => `Weitere Pakete folgen aus ${dokumente}.`,
   },
 
   /** Seite „Plattform-Leitstand“ (Issue #1657). */

@@ -957,6 +957,27 @@ export const en: Woerterbuch = {
     VORHABEN: 'Epics',
     OFFEN: 'open',
     KEIN_VORHABEN: 'No open epic.',
+    PROGNOSE_ZEILE: (p50: string, p85: string, fruehestens: boolean) => {
+      const vor = fruehestens ? 'not before' : 'by'
+      return `expected done: 50% ${vor} ${p50} · 85% ${vor} ${p85}`
+    },
+    PROGNOSE_ZU_WENIG_DURCHSATZ: 'Not enough throughput for a forecast',
+    PROGNOSE_ALLE_UMGESETZT: 'all packages implemented',
+    PROGNOSE_ALLE_UMGESETZT_WEITERE: (dokumente: string) => `all packages implemented, more to follow from ${dokumente}`,
+    PROGNOSE_KEINE_PAKETE: 'no packages cut yet',
+    PROGNOSE_OFFENE_PAKETE: (anzahl: number) => (anzahl === 1 ? '1 open package' : `${anzahl} open packages`),
+    PROGNOSE_ERKLAERUNG: (p50: string, p85: string, offen: number, fruehestens: boolean) => {
+      const vor = fruehestens ? 'not before' : 'by'
+      const pakete = offen === 1 ? 'the open package is' : `all ${offen} open packages are`
+      return (
+        `With 50% probability ${pakete} implemented ${vor} ${p50}, with 85% ${vor} ${p85}, ` +
+        'calculated from the throughput of the last 30 days, each from noon to noon.'
+      )
+    },
+    PROGNOSE_NUR_DIESES: 'Applies if the board works on this epic only.',
+    PROGNOSE_WEITERE_VORHABEN: (anzahl: number) =>
+      anzahl === 1 ? '1 other epic shares the throughput.' : `${anzahl} other epics share the throughput.`,
+    PROGNOSE_AUSSTEHEND: (dokumente: string) => `More packages follow from ${dokumente}.`,
   },
 
   PLATTFORM_LEITSTAND: {

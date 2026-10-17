@@ -16,7 +16,7 @@ import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
-vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn(), flow: vi.fn(), aging: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
@@ -45,6 +45,7 @@ const m = {
   implementierung: dashboardApi.implementationTime as ReturnType<typeof vi.fn>,
   fluss: dashboardApi.flow as ReturnType<typeof vi.fn>,
   alter: dashboardApi.aging as ReturnType<typeof vi.fn>,
+  prognose: dashboardApi.epicForecast as ReturnType<typeof vi.fn>,
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
@@ -288,6 +289,7 @@ beforeEach(() => {
   m.nacharbeit.mockResolvedValue(nacharbeit())
   m.fluss.mockResolvedValue(fluss())
   m.alter.mockResolvedValue(alter())
+  m.prognose.mockResolvedValue({ throughputDays: 0, epics: [] })
 })
 
 describe('LeitstandPage (#979)', () => {

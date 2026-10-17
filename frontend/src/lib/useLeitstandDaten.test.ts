@@ -2,13 +2,13 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError } from '../api/client'
-import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow } from '../api/dashboard'
+import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type EpicForecast } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { useLeitstandDaten } from './useLeitstandDaten'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
-vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), flow: vi.fn(), aging: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn() } }))
 
@@ -17,6 +17,7 @@ const m = {
   kpis: dashboardApi.get as ReturnType<typeof vi.fn>,
   fluss: dashboardApi.flow as ReturnType<typeof vi.fn>,
   alter: dashboardApi.aging as ReturnType<typeof vi.fn>,
+  prognose: dashboardApi.epicForecast as ReturnType<typeof vi.fn>,
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
@@ -46,6 +47,26 @@ const kpis = (): BoardDashboardKpis => ({
 const fluss = (): BoardFlow => ({
   days: [{ date: '2026-10-15', known: true, backlog: 4, ready: 2, inProgress: 1, inReview: 3, done: 5 }],
   dataSince: null,
+})
+
+const prognose = (): EpicForecast => ({
+  throughputDays: 12,
+  epics: [
+    {
+      id: 42,
+      number: 1782,
+      title: 'Leitstand-Prognose',
+      state: 'FORECAST',
+      total: 14,
+      finished: 2,
+      open: 12,
+      p50: '2026-10-21',
+      p85: '2026-10-24',
+      earliest: false,
+      pendingDocuments: [],
+      otherEpicsSharing: 0,
+    },
+  ],
 })
 
 const alter = (): AgingWip => ({
@@ -119,6 +140,7 @@ beforeEach(() => {
   m.kpis.mockResolvedValue(kpis())
   m.fluss.mockResolvedValue(fluss())
   m.alter.mockResolvedValue(alter())
+  m.prognose.mockResolvedValue(prognose())
   m.epics.mockResolvedValue([epic(1, 'Nachtlauf-Auswertung')])
   m.laeufe.mockResolvedValue([lauf(1, '2026-09-10T21:00:00Z'), lauf(3, '2026-09-14T21:10:00Z')])
   m.klassen.mockResolvedValue({ CHECKS_RED: 11 })
@@ -155,6 +177,7 @@ describe('useLeitstandDaten — Board-ID', () => {
     expect(m.nacharbeit).not.toHaveBeenCalled()
     expect(m.fluss).not.toHaveBeenCalled()
     expect(m.alter).not.toHaveBeenCalled()
+    expect(m.prognose).not.toHaveBeenCalled()
   })
 
   it('lädt zu einer neuen Board-ID neu und beginnt dabei wieder beim Laden', async () => {
@@ -344,5 +367,30 @@ describe('useLeitstandDaten — Fehler', () => {
       spaet.einloesen(kpis())
     })
     expect(result.current.kpis).toEqual({ art: 'laedt' })
+  })
+})
+
+describe('useLeitstandDaten — Prognose der Vorhaben (Issue #1828)', () => {
+  it('lädt die Prognose sofort mit der Board-ID wie den Fluss, ohne auf das Projekt zu warten', async () => {
+    const erstes = offen<Board>()
+    m.board.mockReturnValue(erstes.versprechen)
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    expect(result.current.prognose).toEqual({ art: 'laedt' })
+    expect(m.prognose).toHaveBeenCalledWith(7)
+    await waitFor(() => expect(result.current.prognose).toEqual({ art: 'da', wert: prognose() }))
+  })
+
+  it('lädt zu einer neuen Board-ID die Prognose neu', async () => {
+    const { result, rerender } = renderHook((boardId: string) => useLeitstandDaten(boardId), { initialProps: '7' })
+    await waitFor(() => expect(result.current.prognose.art).toBe('da'))
+    rerender('8')
+    expect(m.prognose).toHaveBeenLastCalledWith(8)
+  })
+
+  it('lässt bei einem Fehler der Prognose die übrigen Abrufe stehen', async () => {
+    m.prognose.mockRejectedValue(new Error('Netz'))
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.prognose).toEqual({ art: 'fehler' }))
+    await waitFor(() => expect(result.current.fluss).toEqual({ art: 'da', wert: fluss() }))
   })
 })
