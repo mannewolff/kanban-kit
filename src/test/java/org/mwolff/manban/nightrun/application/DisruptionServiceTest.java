@@ -269,7 +269,7 @@ class DisruptionServiceTest {
   @Test
   void dreiListenKostenEineRechtepruefung() {
     nachtLaeufe(kandidat(5L, JETZT));
-    when(disruptions.openCandidates()).thenReturn(List.of(kandidat(5L, JETZT)));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(kandidat(5L, JETZT)));
     pakete(paket(5L, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
 
     service.leitstand(ADMIN, UTC);
@@ -280,7 +280,7 @@ class DisruptionServiceTest {
   /** AK 7: Der Plattform-Admin liest die Störungen ohne jede Projekt-Mitgliedschaft. */
   @Test
   void derPlattformAdminLiestOhneProjektMitgliedschaft() {
-    when(disruptions.openCandidates()).thenReturn(List.of(kandidat(5L, JETZT)));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(kandidat(5L, JETZT)));
     pakete(paket(5L, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen()).hasSize(1);
@@ -321,7 +321,7 @@ class DisruptionServiceTest {
     nachtLaeufe(
         kandidat(6L, JETZT.minus(Duration.ofHours(1)), NightRunMode.CHAIN),
         kandidat(5L, JETZT.minus(Duration.ofHours(2)), NightRunMode.REVIEW));
-    when(disruptions.openCandidates())
+    when(disruptions.openCandidates(any(), any()))
         .thenReturn(List.of(kandidat(5L, JETZT.minus(Duration.ofHours(2)), NightRunMode.REVIEW)));
     pakete(paket(5L, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
 
@@ -413,7 +413,7 @@ class DisruptionServiceTest {
     DisruptionService nachZwoelf = mitUhr(Instant.parse("2026-09-20T14:00:00Z"));
     DisruptionCandidate beendet = kandidat(5L, Instant.parse("2026-09-20T10:30:00Z"));
     nachtLaeufe(beendet);
-    when(disruptions.openCandidates()).thenReturn(List.of(beendet));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(beendet));
     pakete(paket(5L, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
 
     LeitstandView leitstand = nachZwoelf.leitstand(ADMIN, UTC);
@@ -467,6 +467,18 @@ class DisruptionServiceTest {
             Instant.parse("2026-09-20T12:00:00Z"),
             JETZT,
             Duration.ofMinutes(90));
+  }
+
+  /**
+   * Issue #1800: Auch die Störungsliste bekommt Uhr und Stillefrist des Dienstes — sonst nähme sie
+   * einen verstummten Lauf nicht auf, den der Befund als gescheitert sieht, oder einen lebenden,
+   * den er noch laufen sieht.
+   */
+  @Test
+  void dieStoerungsabfrageBekommtDenselbenMassstabWieDerBefund() {
+    service.leitstand(ADMIN, UTC);
+
+    verify(disruptions).openCandidates(JETZT, Duration.ofMinutes(90));
   }
 
   // --- Dieser und voriger Zyklus (Issue #1135) -----------------------------------------------
@@ -552,7 +564,7 @@ class DisruptionServiceTest {
   @Test
   void dieStoerungenGehenUeberAlleNaechte_undKennenDenVerstummtenNicht() {
     nachtLaeufe(unfertig(5L, JETZT.minus(Duration.ofHours(5)), JETZT.minus(Duration.ofHours(4))));
-    when(disruptions.openCandidates())
+    when(disruptions.openCandidates(any(), any()))
         .thenReturn(List.of(kandidat(4L, JETZT.minus(Duration.ofDays(3)))));
     pakete(paket(4L, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
 
@@ -577,7 +589,7 @@ class DisruptionServiceTest {
 
     assertThat(ids(leitstand.durchgefuehrte())).containsExactly(5L);
     verify(disruptions).candidatesOfNight(any(), any(), any(), any());
-    verify(disruptions).openCandidates();
+    verify(disruptions).openCandidates(any(), any());
     verifyNoMoreInteractions(disruptions);
   }
 
@@ -585,7 +597,7 @@ class DisruptionServiceTest {
 
   @Test
   void einGelungenerLaufIstKandidat_aberKeineStoerung() {
-    when(disruptions.openCandidates())
+    when(disruptions.openCandidates(any(), any()))
         .thenReturn(List.of(kandidat(5L, JETZT), kandidat(6L, JETZT.minusSeconds(60))));
     pakete(
         paket(5L, NightRunState.GREEN, null),
@@ -596,7 +608,7 @@ class DisruptionServiceTest {
 
   @Test
   void einZurueckgestelltesPaketIstEineStoerung() {
-    when(disruptions.openCandidates()).thenReturn(List.of(kandidat(5L, JETZT)));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(kandidat(5L, JETZT)));
     pakete(paket(5L, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET));
 
     assertThat(service.leitstand(ADMIN, UTC).stoerungen())
@@ -631,7 +643,7 @@ class DisruptionServiceTest {
             null,
             null);
     nachtLaeufe(rueckfall);
-    when(disruptions.openCandidates()).thenReturn(List.of(rueckfall));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(rueckfall));
 
     LeitstandView leitstand = service.leitstand(ADMIN, UTC);
 
@@ -652,7 +664,7 @@ class DisruptionServiceTest {
    */
   @Test
   void einZurueckgestelltesPaketBleibtEineStoerungAuchMitRueckfalltext() {
-    when(disruptions.openCandidates())
+    when(disruptions.openCandidates(any(), any()))
         .thenReturn(
             List.of(
                 new DisruptionCandidate(
@@ -700,7 +712,7 @@ class DisruptionServiceTest {
             null,
             null);
     nachtLaeufe(ruhig);
-    when(disruptions.openCandidates()).thenReturn(List.of(ruhig));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(ruhig));
 
     LeitstandView leitstand = service.leitstand(ADMIN, UTC);
 
@@ -723,7 +735,7 @@ class DisruptionServiceTest {
   void einAbgebrochenerLaufIstEineStoerung() {
     DisruptionCandidate abgebrochen = abgebrochen(5L, JETZT);
     nachtLaeufe(abgebrochen);
-    when(disruptions.openCandidates()).thenReturn(List.of(abgebrochen));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(abgebrochen));
     pakete(paket(5L, NightRunState.GREEN, null));
 
     LeitstandView leitstand = service.leitstand(ADMIN, UTC);
@@ -749,7 +761,7 @@ class DisruptionServiceTest {
   void einNichtAngelaufenerLaufStehtUnterDenDurchgefuehrten_nichtUnterDenStoerungen() {
     DisruptionCandidate nichtAngelaufen = abgebrochen(5L, JETZT, NightRunAbortKind.REPORTED);
     nachtLaeufe(nichtAngelaufen);
-    when(disruptions.openCandidates()).thenReturn(List.of(nichtAngelaufen));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(nichtAngelaufen));
     pakete();
 
     LeitstandView leitstand = service.leitstand(ADMIN, UTC);
@@ -774,7 +786,7 @@ class DisruptionServiceTest {
   void einVomWaechterAbgeschlossenerLaufOhnePaketBleibtEineStoerung() {
     DisruptionCandidate verstummt = abgebrochen(5L, JETZT, NightRunAbortKind.SILENCED);
     nachtLaeufe(verstummt);
-    when(disruptions.openCandidates()).thenReturn(List.of(verstummt));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(verstummt));
     pakete();
 
     LeitstandView leitstand = service.leitstand(ADMIN, UTC);
@@ -794,7 +806,8 @@ class DisruptionServiceTest {
    */
   @Test
   void dieStoerzeileEinerKetteZeigtDasPaketAnDemSieRiss() {
-    when(disruptions.openCandidates()).thenReturn(List.of(kandidat(5L, JETZT, NightRunMode.CHAIN)));
+    when(disruptions.openCandidates(any(), any()))
+        .thenReturn(List.of(kandidat(5L, JETZT, NightRunMode.CHAIN)));
     pakete(
         paket(5L, 993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
         paket(5L, 1112, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
@@ -808,7 +821,7 @@ class DisruptionServiceTest {
   /** Derselbe Fall außerhalb einer Kette bleibt beim ersten Paket in Laufreihenfolge. */
   @Test
   void dieStoerzeileEinesImplementierungslaufsBleibtBeimErstenPaket() {
-    when(disruptions.openCandidates())
+    when(disruptions.openCandidates(any(), any()))
         .thenReturn(List.of(kandidat(5L, JETZT, NightRunMode.IMPLEMENTATION)));
     pakete(
         paket(5L, 993, NightRunState.RED, NightRunErrorClass.HARD_ABORT),
@@ -822,7 +835,7 @@ class DisruptionServiceTest {
 
   @Test
   void dieStoerzeileTraegtProjektUndZeitpunkt() {
-    when(disruptions.openCandidates())
+    when(disruptions.openCandidates(any(), any()))
         .thenReturn(
             List.of(
                 new DisruptionCandidate(
@@ -856,7 +869,8 @@ class DisruptionServiceTest {
   @Test
   void diePaketeWerdenFuerBeideAbfragenInEinemZugGeholt() {
     nachtLaeufe(kandidat(6L, JETZT), kandidat(5L, JETZT.minusSeconds(60)));
-    when(disruptions.openCandidates()).thenReturn(List.of(kandidat(5L, JETZT.minusSeconds(60))));
+    when(disruptions.openCandidates(any(), any()))
+        .thenReturn(List.of(kandidat(5L, JETZT.minusSeconds(60))));
     pakete(paket(5L, NightRunState.RED, NightRunErrorClass.HARD_ABORT));
 
     service.leitstand(ADMIN, UTC);
@@ -894,7 +908,7 @@ class DisruptionServiceTest {
         unfertig(7L, JETZT.minus(Duration.ofMinutes(10)), JETZT.minus(Duration.ofMinutes(5))),
         kandidat(6L, JETZT.minus(Duration.ofHours(1))),
         gestoert);
-    when(disruptions.openCandidates()).thenReturn(List.of(gestoert));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(gestoert));
     pakete(
         paket(7L, 1170, NightRunState.GREEN, null),
         paket(6L, 1169, NightRunState.GREEN, null),
@@ -1157,7 +1171,7 @@ class DisruptionServiceTest {
     DisruptionCandidate gekennzeichnet =
         unfertigGekennzeichnet(5L, JETZT.minus(Duration.ofMinutes(10)));
     nachtLaeufe(gekennzeichnet);
-    when(disruptions.openCandidates()).thenReturn(List.of(gekennzeichnet));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(gekennzeichnet));
 
     LeitstandView sicht = service.leitstand(ADMIN, UTC);
 

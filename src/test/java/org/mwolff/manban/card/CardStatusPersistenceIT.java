@@ -38,8 +38,8 @@ class CardStatusPersistenceIT extends AbstractIntegrationTest {
   void seed() {
     long userId =
         insert(
-            "INSERT INTO app_user (email, password_hash, display_name) "
-                + "VALUES ('s@example.com', 'x', 'S') RETURNING id");
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('s@example.com', 'S') RETURNING id");
     projectId =
         insert(
             "INSERT INTO project (name, owner_user_id) VALUES ('P', " + userId + ") RETURNING id");

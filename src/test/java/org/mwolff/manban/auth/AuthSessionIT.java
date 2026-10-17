@@ -7,108 +7,48 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import jakarta.servlet.http.Cookie;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * Security-Slice: volle Filterkette gegen echtes Postgres. Deckt Login (Cookie), /api/me, falsche
- * Daten (401), unverifiziert (403), Default-Deny ohne Cookie (401) und Logout (Cookie-Löschung) ab.
+ * Security-Slice: volle Filterkette gegen echtes Postgres. Deckt die Anmeldung per Code (Cookie),
+ * /api/me, Default-Deny ohne Cookie (401), den Wegfall der Passwort-Anmeldung und das Abmelden ab:
+ * Es löscht das Cookie dieses Geräts, danach antwortet /api/me mit 401 (Plan #1801, E4; Issue
+ * #1813). Falsche, abgelaufene und erratene Codes prüft {@link AnmeldungPerCodeSzenarienIT}.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class AuthSessionIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
 
-  @Autowired private AppUserRepository users;
-
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
 
   @Autowired private JdbcTemplate jdbc;
 
-  @BeforeEach
-  void seedUsers() {
-    if (users.findByEmail("verified@example.com").isEmpty()) {
-      users.save(
-          new AppUser(
-              null,
-              "verified@example.com",
-              passwordEncoder.encode(PASSWORD),
-              "Verified",
-              true,
-              PlatformRole.USER));
-    }
-    if (users.findByEmail("unverified@example.com").isEmpty()) {
-      users.save(
-          new AppUser(
-              null,
-              "unverified@example.com",
-              passwordEncoder.encode(PASSWORD),
-              "Unverified",
-              false,
-              PlatformRole.USER));
-    }
-  }
-
-  private static String loginBody(String email, String password) {
-    return """
-                {"email":"%s","password":"%s"}
-                """
-        .formatted(email, password);
-  }
-
   @Test
-  void loginSetsCookieAndMeReturnsUser() throws Exception {
-    MvcResult login =
-        mvc.perform(
-                post("/api/auth/login")
-                    .contentType("application/json")
-                    .content(loginBody("verified@example.com", PASSWORD)))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.email").value("verified@example.com"))
-            .andExpect(jsonPath("$.platformRole").value("USER"))
-            .andExpect(jsonPath("$.memberships").isArray())
-            .andReturn();
+  void codeLoginSetsCookieAndMeReturnsUser() throws Exception {
+    anmeldung.konto("verified@example.com", PlatformRole.USER);
 
-    Cookie session = login.getResponse().getCookie("manban_session");
-    assertThat(session).isNotNull();
+    Cookie session = anmeldung.perCode(mvc, "verified@example.com");
+
     assertThat(session.getValue()).isNotBlank();
     assertThat(session.isHttpOnly()).isTrue();
-
     mvc.perform(get("/api/me").cookie(session))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.email").value("verified@example.com"));
-  }
-
-  @Test
-  void wrongPasswordReturns401() throws Exception {
-    mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content(loginBody("verified@example.com", "wrong-password")))
-        .andExpect(status().isUnauthorized());
-  }
-
-  @Test
-  void unverifiedUserReturns403() throws Exception {
-    mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content(loginBody("unverified@example.com", PASSWORD)))
-        .andExpect(status().isForbidden());
+        .andExpect(jsonPath("$.email").value("verified@example.com"))
+        .andExpect(jsonPath("$.platformRole").value("USER"))
+        .andExpect(jsonPath("$.memberships").isArray());
   }
 
   /**
@@ -124,9 +64,9 @@ class AuthSessionIT extends AbstractIntegrationTest {
                 .contentType("application/json")
                 .content(
                     """
-                    {"email":"%s","password":"%s","displayName":"Self Admin"}
+                    {"email":"%s","displayName":"Self Admin"}
                     """
-                        .formatted(email, PASSWORD)))
+                        .formatted(email)))
         .andExpect(status().isCreated());
 
     // Exakt der dokumentierte Befehl: setzt Verifikation und Rolle, aber keine Freigabe.
@@ -134,12 +74,10 @@ class AuthSessionIT extends AbstractIntegrationTest {
         "UPDATE app_user SET email_verified = true, platform_role = 'ADMIN' WHERE email = ?",
         email);
 
-    mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content(loginBody(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.platformRole").value("ADMIN"));
+    MockHttpServletResponse eingabe = anmeldung.codeEinloesen(mvc, email);
+
+    assertThat(eingabe.getStatus()).isEqualTo(HttpStatus.OK.value());
+    assertThat(eingabe.getContentAsString()).contains("\"platformRole\":\"ADMIN\"");
   }
 
   @Test
@@ -147,14 +85,47 @@ class AuthSessionIT extends AbstractIntegrationTest {
     mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
   }
 
+  /** Abmelden beendet die Sitzung auf diesem Gerät: Cookie gelöscht, danach 401 (AK 5, E4). */
   @Test
-  void logoutClearsCookie() throws Exception {
+  void logoutClearsCookieAndEndsTheSessionOnThisDevice() throws Exception {
+    anmeldung.konto("logout@example.com", PlatformRole.USER);
+    Cookie session = anmeldung.perCode(mvc, "logout@example.com");
+    mvc.perform(get("/api/me").cookie(session)).andExpect(status().isOk());
+
     MvcResult logout =
-        mvc.perform(post("/api/auth/logout")).andExpect(status().isNoContent()).andReturn();
+        mvc.perform(post("/api/auth/logout").cookie(session))
+            .andExpect(status().isNoContent())
+            .andReturn();
 
     Cookie cleared = logout.getResponse().getCookie("manban_session");
     assertThat(cleared).isNotNull();
     assertThat(cleared.getMaxAge()).isZero();
+    // Der Browser übernimmt das gelöschte Cookie und schickt danach nur noch dieses mit.
+    mvc.perform(get("/api/me").cookie(cleared)).andExpect(status().isUnauthorized());
+    mvc.perform(get("/api/me")).andExpect(status().isUnauthorized());
+  }
+
+  /**
+   * Die Anmeldung mit Passwort ist entfallen (Plan #1801, A13; Issue #1816): Auch mit gültiger
+   * Sitzung gibt es den Endpunkt nicht mehr. Ohne Sitzung antwortete schon der Default-Deny mit 401
+   * und verdeckte, ob es ihn noch gibt.
+   */
+  @Test
+  void passwordLoginNoLongerExists() throws Exception {
+    anmeldung.konto("ohne-passwort@example.com", PlatformRole.USER);
+    Cookie session = anmeldung.perCode(mvc, "ohne-passwort@example.com");
+
+    int status =
+        mvc.perform(
+                post("/api/auth/{pfad}", "login")
+                    .cookie(session)
+                    .contentType("application/json")
+                    .content("{\"email\":\"ohne-passwort@example.com\",\"password\":\"x\"}"))
+            .andReturn()
+            .getResponse()
+            .getStatus();
+
+    assertThat(status).isIn(HttpStatus.NOT_FOUND.value(), HttpStatus.METHOD_NOT_ALLOWED.value());
   }
 
   @Test

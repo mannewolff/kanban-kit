@@ -44,8 +44,8 @@ class CommentLaufstandIT extends AbstractIntegrationTest {
   void seed() {
     userId =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('laufstand@example.com', 'x', 'L') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('laufstand@example.com', 'L') RETURNING id");
     projectId =
         id("INSERT INTO project (name, owner_user_id) VALUES ('P', ?) RETURNING id", userId);
     jdbc.update(

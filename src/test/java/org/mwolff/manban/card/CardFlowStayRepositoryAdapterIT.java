@@ -78,7 +78,14 @@ class CardFlowStayRepositoryAdapterIT extends AbstractIntegrationTest {
         new DriverManagerDataSource(SAAT.getJdbcUrl(), SAAT.getUsername(), SAAT.getPassword());
     saat = new JdbcTemplate(dataSource);
     migriere(dataSource, "55");
-    long board = boardMitSpalte(saat, "saat@example.com");
+    // Stand V55: Das Konto trägt noch einen Passwort-Hash (entfällt mit V58).
+    long board =
+        boardMitSpalte(
+            saat,
+            id(
+                saat,
+                "INSERT INTO app_user (email, password_hash, display_name)"
+                    + " VALUES ('saat@example.com', 'x', 'F') RETURNING id"));
     long spalte = id(saat, "SELECT id FROM board_column WHERE board_id = ?", board);
     saatKarten =
         Map.of(
@@ -135,13 +142,7 @@ class CardFlowStayRepositoryAdapterIT extends AbstractIntegrationTest {
     return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
   }
 
-  private static long boardMitSpalte(JdbcTemplate jdbc, String email) {
-    long userId =
-        id(
-            jdbc,
-            "INSERT INTO app_user (email, password_hash, display_name) VALUES (?, 'x', 'F')"
-                + " RETURNING id",
-            email);
+  private static long boardMitSpalte(JdbcTemplate jdbc, long userId) {
     long projectId =
         id(jdbc, "INSERT INTO project (name, owner_user_id) VALUES ('P', ?) RETURNING id", userId);
     long board =
@@ -225,7 +226,13 @@ class CardFlowStayRepositoryAdapterIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void seed() {
-    boardId = boardMitSpalte(jdbc, "fluss@example.com");
+    boardId =
+        boardMitSpalte(
+            jdbc,
+            id(
+                jdbc,
+                "INSERT INTO app_user (email, display_name)"
+                    + " VALUES ('fluss@example.com', 'F') RETURNING id"));
     zweitesBoardId =
         id(
             jdbc,

@@ -26,12 +26,12 @@ class BootstrapServiceTest {
   private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
   private static AppUser user(long id, PlatformRole role) {
-    return new AppUser(id, "u" + id + "@x.de", "hash", "U", true, role);
+    return new AppUser(id, "u" + id + "@x.de", "U", true, role);
   }
 
   /** Noch nicht freigegebener Benutzer (kanonischer Konstruktor, {@code approvedAt=null}). */
   private static AppUser pendingUser(long id) {
-    return new AppUser(id, "u" + id + "@x.de", "hash", "U", true, PlatformRole.USER, null, null);
+    return new AppUser(id, "u" + id + "@x.de", "U", true, PlatformRole.USER, null, null);
   }
 
   @Test

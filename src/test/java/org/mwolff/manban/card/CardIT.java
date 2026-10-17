@@ -14,8 +14,8 @@ import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -24,7 +24,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** End-to-End-Test für Karten-CRUD, projektweite Nummern, Abhängigkeiten und Archiv-Flow. */
@@ -35,12 +34,10 @@ import org.springframework.test.web.servlet.MockMvc;
 @SuppressWarnings("PMD.TooManyMethods")
 class CardIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
   @Autowired private ProjectMembershipRepository memberships;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
 
@@ -48,33 +45,8 @@ class CardIT extends AbstractIntegrationTest {
     return users.findByEmail(email).orElseThrow().id();
   }
 
-  private Cookie loginAs(String email) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
-  }
-
   private long createProject(String ownerEmail, String name) throws Exception {
-    if (users.findByEmail(ownerEmail).isEmpty()) {
-      users.save(
-          new AppUser(
-              null,
-              ownerEmail,
-              passwordEncoder.encode(PASSWORD),
-              "Person",
-              true,
-              PlatformRole.USER));
-    }
+    anmeldung.konto(ownerEmail, PlatformRole.USER);
     Cookie admin = platformAdminSession();
     String body =
         mvc.perform(
@@ -89,21 +61,8 @@ class CardIT extends AbstractIntegrationTest {
     return json.readTree(body).get("id").asLong();
   }
 
-  private Cookie platformAdminSession() throws Exception {
-    String email = "project-admin@example.com";
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie platformAdminSession() {
+    return anmeldung.anmelden("project-admin@example.com", PlatformRole.ADMIN);
   }
 
   private JsonNode createBoard(Cookie session, long projectId) throws Exception {
@@ -155,7 +114,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void cardNumbersAreSequentialAndProjectScoped() throws Exception {
-    Cookie alice = loginAs("card-owner@example.com");
+    Cookie alice = anmeldung.anmelden("card-owner@example.com", PlatformRole.USER);
     long projectId = createProject("card-owner@example.com", "P");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -177,7 +136,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void dependencyValidation() throws Exception {
-    Cookie alice = loginAs("dep-owner@example.com");
+    Cookie alice = anmeldung.anmelden("dep-owner@example.com", PlatformRole.USER);
     long projectId = createProject("dep-owner@example.com", "Dep");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -210,7 +169,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void archiveRestoreFlow() throws Exception {
-    Cookie alice = loginAs("arch-owner@example.com");
+    Cookie alice = anmeldung.anmelden("arch-owner@example.com", PlatformRole.USER);
     long projectId = createProject("arch-owner@example.com", "Arch");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -232,7 +191,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkArchiveArchivesEveryCardAndEpic() throws Exception {
-    Cookie alice = loginAs("bulk-arch-owner@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-arch-owner@example.com", PlatformRole.USER);
     long projectId = createProject("bulk-arch-owner@example.com", "BulkArch");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -275,8 +234,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkArchiveRollsBackWhenPermissionMissingOnOneCard() throws Exception {
-    Cookie alice = loginAs("bulk-rb-owner@example.com");
-    Cookie bob = loginAs("bulk-rb-bob@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-rb-owner@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("bulk-rb-bob@example.com", PlatformRole.USER);
     long p1 = createProject("bulk-rb-owner@example.com", "BulkRb1");
     long p2 = createProject("bulk-rb-bob@example.com", "BulkRb2");
     JsonNode boardA = createBoard(alice, p1);
@@ -310,7 +269,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkArchiveRejectsEmptyAndOversizedList() throws Exception {
-    Cookie alice = loginAs("bulk-val-owner@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-val-owner@example.com", PlatformRole.USER);
 
     mvc.perform(
             post("/api/cards/bulk-archive")
@@ -355,7 +314,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkLabelsAddsAndRemovesAcrossTheSelection() throws Exception {
-    Cookie alice = loginAs("bulk-lbl-owner@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-lbl-owner@example.com", PlatformRole.USER);
     long projectId = createProject("bulk-lbl-owner@example.com", "BulkLbl");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -411,7 +370,7 @@ class CardIT extends AbstractIntegrationTest {
    */
   @Test
   void singleLabelAddAndRemoveTouchOnlyThatLabelAndAreIdempotent() throws Exception {
-    Cookie alice = loginAs("single-lbl-owner@example.com");
+    Cookie alice = anmeldung.anmelden("single-lbl-owner@example.com", PlatformRole.USER);
     long projectId = createProject("single-lbl-owner@example.com", "SingleLbl");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -444,9 +403,9 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void singleLabelRejectsViewerAndForeignCard() throws Exception {
-    Cookie alice = loginAs("single-lbl-rb-owner@example.com");
-    Cookie bob = loginAs("single-lbl-rb-bob@example.com");
-    Cookie carol = loginAs("single-lbl-rb-carol@example.com");
+    Cookie alice = anmeldung.anmelden("single-lbl-rb-owner@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("single-lbl-rb-bob@example.com", PlatformRole.USER);
+    Cookie carol = anmeldung.anmelden("single-lbl-rb-carol@example.com", PlatformRole.USER);
     long p2 = createProject("single-lbl-rb-bob@example.com", "SingleLblRb");
     JsonNode boardB = createBoard(bob, p2);
     long boardIdB = boardB.get("id").asLong();
@@ -472,7 +431,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkLabelsRollsBackWhenSelectionContainsEpic() throws Exception {
-    Cookie alice = loginAs("bulk-lbl-epic@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-lbl-epic@example.com", PlatformRole.USER);
     long projectId = createProject("bulk-lbl-epic@example.com", "BulkLblEpic");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -495,8 +454,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkLabelsRollsBackWhenPermissionMissingOnOneCard() throws Exception {
-    Cookie alice = loginAs("bulk-lbl-rb-owner@example.com");
-    Cookie bob = loginAs("bulk-lbl-rb-bob@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-lbl-rb-owner@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("bulk-lbl-rb-bob@example.com", PlatformRole.USER);
     long p1 = createProject("bulk-lbl-rb-owner@example.com", "BulkLblRb1");
     long p2 = createProject("bulk-lbl-rb-bob@example.com", "BulkLblRb2");
     JsonNode boardA = createBoard(alice, p1);
@@ -527,7 +486,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkLabelsRejectsEmptySelectionAndMissingFields() throws Exception {
-    Cookie alice = loginAs("bulk-lbl-val@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-lbl-val@example.com", PlatformRole.USER);
 
     mvc.perform(
             post("/api/cards/bulk-labels")
@@ -553,7 +512,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkTransferMovesEveryCardToTargetForOwner() throws Exception {
-    Cookie alice = loginAs("bulk-xfer-owner@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-xfer-owner@example.com", PlatformRole.USER);
     long p1 = createProject("bulk-xfer-owner@example.com", "BulkXfer1");
     long p2 = createProject("bulk-xfer-owner@example.com", "BulkXfer2");
     JsonNode boardA = createBoard(alice, p1);
@@ -598,7 +557,7 @@ class CardIT extends AbstractIntegrationTest {
    */
   @Test
   void bulkTransferAppendsInInputOrderToPopulatedTargetColumn() throws Exception {
-    Cookie alice = loginAs("bulk-xfer-order@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-xfer-order@example.com", PlatformRole.USER);
     long p1 = createProject("bulk-xfer-order@example.com", "BulkXferOrder1");
     long p2 = createProject("bulk-xfer-order@example.com", "BulkXferOrder2");
     JsonNode boardA = createBoard(alice, p1);
@@ -651,7 +610,7 @@ class CardIT extends AbstractIntegrationTest {
    */
   @Test
   void transferAppendsBehindHighestPositionWhenTargetColumnHasGap() throws Exception {
-    Cookie alice = loginAs("xfer-gap@example.com");
+    Cookie alice = anmeldung.anmelden("xfer-gap@example.com", PlatformRole.USER);
     long p1 = createProject("xfer-gap@example.com", "XferGap1");
     long p2 = createProject("xfer-gap@example.com", "XferGap2");
     JsonNode boardA = createBoard(alice, p1);
@@ -700,8 +659,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkTransferRollsBackWhenNotOwnerInTargetProject() throws Exception {
-    Cookie alice = loginAs("bulk-xfer-rb-owner@example.com");
-    Cookie bob = loginAs("bulk-xfer-rb-bob@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-xfer-rb-owner@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("bulk-xfer-rb-bob@example.com", PlatformRole.USER);
     long p1 = createProject("bulk-xfer-rb-owner@example.com", "BulkXferRb1");
     long p2 = createProject("bulk-xfer-rb-bob@example.com", "BulkXferRb2");
     JsonNode boardA = createBoard(alice, p1);
@@ -736,7 +695,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkTransferRollsBackWhenSelectionContainsEpic() throws Exception {
-    Cookie alice = loginAs("bulk-xfer-epic-owner@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-xfer-epic-owner@example.com", PlatformRole.USER);
     long p1 = createProject("bulk-xfer-epic-owner@example.com", "BulkXferEpic1");
     long p2 = createProject("bulk-xfer-epic-owner@example.com", "BulkXferEpic2");
     JsonNode boardA = createBoard(alice, p1);
@@ -772,7 +731,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkTransferRejectsEmptyAndOversizedList() throws Exception {
-    Cookie alice = loginAs("bulk-xfer-val-owner@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-xfer-val-owner@example.com", PlatformRole.USER);
 
     mvc.perform(
             post("/api/cards/bulk-transfer")
@@ -797,7 +756,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkDeleteMovesEveryCardToTrash() throws Exception {
-    Cookie alice = loginAs("bulk-del-owner@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-del-owner@example.com", PlatformRole.USER);
     long projectId = createProject("bulk-del-owner@example.com", "BulkDel");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -827,8 +786,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkDeleteRollsBackWhenPermissionMissingOnOneCard() throws Exception {
-    Cookie alice = loginAs("bulk-del-rb-owner@example.com");
-    Cookie bob = loginAs("bulk-del-rb-bob@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-del-rb-owner@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("bulk-del-rb-bob@example.com", PlatformRole.USER);
     long p1 = createProject("bulk-del-rb-owner@example.com", "BulkDelRb1");
     long p2 = createProject("bulk-del-rb-bob@example.com", "BulkDelRb2");
     JsonNode boardA = createBoard(alice, p1);
@@ -862,7 +821,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkDeleteRejectsEmptyAndOversizedList() throws Exception {
-    Cookie alice = loginAs("bulk-del-val-owner@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-del-val-owner@example.com", PlatformRole.USER);
 
     mvc.perform(
             post("/api/cards/bulk-delete")
@@ -885,7 +844,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void updateAndDelete() throws Exception {
-    Cookie alice = loginAs("ud-owner@example.com");
+    Cookie alice = anmeldung.anmelden("ud-owner@example.com", PlatformRole.USER);
     long projectId = createProject("ud-owner@example.com", "UD");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -912,8 +871,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void viewerCannotCreateCard() throws Exception {
-    Cookie alice = loginAs("cc-owner@example.com");
-    Cookie viewer = loginAs("cc-viewer@example.com");
+    Cookie alice = anmeldung.anmelden("cc-owner@example.com", PlatformRole.USER);
+    Cookie viewer = anmeldung.anmelden("cc-viewer@example.com", PlatformRole.USER);
     long projectId = createProject("cc-owner@example.com", "V");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -932,7 +891,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void transferMovesCardAcrossProjectsForOwner() throws Exception {
-    Cookie alice = loginAs("xfer-owner@example.com");
+    Cookie alice = anmeldung.anmelden("xfer-owner@example.com", PlatformRole.USER);
     long p1 = createProject("xfer-owner@example.com", "XferP1");
     long p2 = createProject("xfer-owner@example.com", "XferP2");
     JsonNode boardA = createBoard(alice, p1);
@@ -968,8 +927,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void transferForbiddenForNonOwner() throws Exception {
-    Cookie alice = loginAs("xfer-rbac-owner@example.com");
-    Cookie mallory = loginAs("xfer-rbac-member@example.com");
+    Cookie alice = anmeldung.anmelden("xfer-rbac-owner@example.com", PlatformRole.USER);
+    Cookie mallory = anmeldung.anmelden("xfer-rbac-member@example.com", PlatformRole.USER);
     long p1 = createProject("xfer-rbac-owner@example.com", "XferRbac1");
     long p2 = createProject("xfer-rbac-owner@example.com", "XferRbac2");
     JsonNode boardA = createBoard(alice, p1);
@@ -993,7 +952,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void startNumberFloorsCardNumbering() throws Exception {
-    Cookie alice = loginAs("startnum-owner@example.com");
+    Cookie alice = anmeldung.anmelden("startnum-owner@example.com", PlatformRole.USER);
     long projectId = createProject("startnum-owner@example.com", "StartNum");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -1019,8 +978,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void nextCardNumberEndpoint_setsAndGuardsStartNumber() throws Exception {
-    Cookie alice = loginAs("nextnum-owner@example.com");
-    Cookie mallory = loginAs("nextnum-member@example.com");
+    Cookie alice = anmeldung.anmelden("nextnum-owner@example.com", PlatformRole.USER);
+    Cookie mallory = anmeldung.anmelden("nextnum-member@example.com", PlatformRole.USER);
     long projectId = createProject("nextnum-owner@example.com", "NextNum");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -1069,7 +1028,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void dependencyReferencesAnotherBoardInSameProject() throws Exception {
-    Cookie alice = loginAs("xboard-dep-owner@example.com");
+    Cookie alice = anmeldung.anmelden("xboard-dep-owner@example.com", PlatformRole.USER);
     long projectId = createProject("xboard-dep-owner@example.com", "XBoardDep");
     JsonNode boardA = createBoard(alice, projectId);
     JsonNode boardB = createBoard(alice, projectId);
@@ -1087,7 +1046,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void transferWithinProjectKeepsNumberAndDependencies() throws Exception {
-    Cookie alice = loginAs("xfer-same-owner@example.com");
+    Cookie alice = anmeldung.anmelden("xfer-same-owner@example.com", PlatformRole.USER);
     long projectId = createProject("xfer-same-owner@example.com", "XferSame");
     JsonNode boardA = createBoard(alice, projectId);
     JsonNode boardB = createBoard(alice, projectId);
@@ -1121,7 +1080,7 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void transferAcrossProjectsReassignsNumberAndDropsDependencies() throws Exception {
-    Cookie alice = loginAs("xfer-drop-owner@example.com");
+    Cookie alice = anmeldung.anmelden("xfer-drop-owner@example.com", PlatformRole.USER);
     long p1 = createProject("xfer-drop-owner@example.com", "XferDrop1");
     long p2 = createProject("xfer-drop-owner@example.com", "XferDrop2");
     JsonNode boardA = createBoard(alice, p1);
@@ -1169,8 +1128,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void transferWithinProjectAllowedForMemberWithCardMove() throws Exception {
-    Cookie alice = loginAs("xfer-move-owner@example.com");
-    Cookie bob = loginAs("xfer-move-member@example.com");
+    Cookie alice = anmeldung.anmelden("xfer-move-owner@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("xfer-move-member@example.com", PlatformRole.USER);
     long projectId = createProject("xfer-move-owner@example.com", "XferMove");
     JsonNode boardA = createBoard(alice, projectId);
     JsonNode boardB = createBoard(alice, projectId);
@@ -1196,9 +1155,9 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void transferWithinProjectGuardsMissingCardMoveAndNonMembers() throws Exception {
-    Cookie alice = loginAs("xfer-guard-owner@example.com");
-    Cookie viewer = loginAs("xfer-guard-viewer@example.com");
-    Cookie stranger = loginAs("xfer-guard-stranger@example.com");
+    Cookie alice = anmeldung.anmelden("xfer-guard-owner@example.com", PlatformRole.USER);
+    Cookie viewer = anmeldung.anmelden("xfer-guard-viewer@example.com", PlatformRole.USER);
+    Cookie stranger = anmeldung.anmelden("xfer-guard-stranger@example.com", PlatformRole.USER);
     long projectId = createProject("xfer-guard-owner@example.com", "XferGuard");
     JsonNode boardA = createBoard(alice, projectId);
     JsonNode boardB = createBoard(alice, projectId);
@@ -1228,8 +1187,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void transferAcrossProjectsStillRequiresOwnerDespiteCardMove() throws Exception {
-    Cookie alice = loginAs("xfer-cross-owner@example.com");
-    Cookie bob = loginAs("xfer-cross-member@example.com");
+    Cookie alice = anmeldung.anmelden("xfer-cross-owner@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("xfer-cross-member@example.com", PlatformRole.USER);
     long p1 = createProject("xfer-cross-owner@example.com", "XferCross1");
     long p2 = createProject("xfer-cross-owner@example.com", "XferCross2");
     JsonNode boardA = createBoard(alice, p1);
@@ -1253,8 +1212,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkTransferWithinProjectAllowedForMemberWithCardMove() throws Exception {
-    Cookie alice = loginAs("bulk-move-owner@example.com");
-    Cookie bob = loginAs("bulk-move-member@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-move-owner@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("bulk-move-member@example.com", PlatformRole.USER);
     long projectId = createProject("bulk-move-owner@example.com", "BulkMove");
     JsonNode boardA = createBoard(alice, projectId);
     JsonNode boardB = createBoard(alice, projectId);
@@ -1278,9 +1237,9 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkTransferWithinProjectGuardsMissingCardMoveAndNonMembers() throws Exception {
-    Cookie alice = loginAs("bulk-guard-owner@example.com");
-    Cookie viewer = loginAs("bulk-guard-viewer@example.com");
-    Cookie stranger = loginAs("bulk-guard-stranger@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-guard-owner@example.com", PlatformRole.USER);
+    Cookie viewer = anmeldung.anmelden("bulk-guard-viewer@example.com", PlatformRole.USER);
+    Cookie stranger = anmeldung.anmelden("bulk-guard-stranger@example.com", PlatformRole.USER);
     long projectId = createProject("bulk-guard-owner@example.com", "BulkGuard");
     JsonNode boardA = createBoard(alice, projectId);
     JsonNode boardB = createBoard(alice, projectId);
@@ -1339,7 +1298,7 @@ class CardIT extends AbstractIntegrationTest {
    */
   @Test
   void bulkTransferWithinSameBoardMovesToColumnKeepingNumberAndParent() throws Exception {
-    Cookie alice = loginAs("same-board-owner@example.com");
+    Cookie alice = anmeldung.anmelden("same-board-owner@example.com", PlatformRole.USER);
     long projectId = createProject("same-board-owner@example.com", "SameBoard");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -1410,7 +1369,7 @@ class CardIT extends AbstractIntegrationTest {
    */
   @Test
   void bulkTransferWithinSameBoardSetsAndClearsDoneTimestamp() throws Exception {
-    Cookie alice = loginAs("same-board-done@example.com");
+    Cookie alice = anmeldung.anmelden("same-board-done@example.com", PlatformRole.USER);
     long projectId = createProject("same-board-done@example.com", "SameBoardDone");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -1442,7 +1401,7 @@ class CardIT extends AbstractIntegrationTest {
    */
   @Test
   void bulkTransferWithinSameBoardLeavesCardsAlreadyInTargetColumnUntouched() throws Exception {
-    Cookie alice = loginAs("same-board-noop@example.com");
+    Cookie alice = anmeldung.anmelden("same-board-noop@example.com", PlatformRole.USER);
     long projectId = createProject("same-board-noop@example.com", "SameBoardNoop");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -1477,9 +1436,9 @@ class CardIT extends AbstractIntegrationTest {
    */
   @Test
   void bulkTransferWithinSameBoardNeedsOnlyCardMove() throws Exception {
-    Cookie alice = loginAs("same-board-rights-owner@example.com");
-    Cookie bob = loginAs("same-board-rights-member@example.com");
-    Cookie viewer = loginAs("same-board-rights-viewer@example.com");
+    Cookie alice = anmeldung.anmelden("same-board-rights-owner@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("same-board-rights-member@example.com", PlatformRole.USER);
+    Cookie viewer = anmeldung.anmelden("same-board-rights-viewer@example.com", PlatformRole.USER);
     long projectId = createProject("same-board-rights-owner@example.com", "SameBoardRights");
     JsonNode board = createBoard(alice, projectId);
     long boardId = board.get("id").asLong();
@@ -1516,8 +1475,8 @@ class CardIT extends AbstractIntegrationTest {
 
   @Test
   void bulkTransferAcrossProjectsStillRequiresOwnerDespiteCardMove() throws Exception {
-    Cookie alice = loginAs("bulk-cross-owner@example.com");
-    Cookie bob = loginAs("bulk-cross-member@example.com");
+    Cookie alice = anmeldung.anmelden("bulk-cross-owner@example.com", PlatformRole.USER);
+    Cookie bob = anmeldung.anmelden("bulk-cross-member@example.com", PlatformRole.USER);
     long p1 = createProject("bulk-cross-owner@example.com", "BulkCross1");
     long p2 = createProject("bulk-cross-owner@example.com", "BulkCross2");
     JsonNode boardA = createBoard(alice, p1);

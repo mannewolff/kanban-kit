@@ -34,7 +34,7 @@ import org.springframework.web.filter.ForwardedHeaderFilter;
  * Umleitungen aus {@code server.tomcat.use-relative-redirects}. Ohne sie wäre eine bestehende
  * Konfiguration nach dieser Änderung wirkungslos, ohne dass es jemand bemerkte.
  *
- * <p>Die Bremse selbst greift nur an den drei begrenzten Pfaden ({@code urlPatterns}) und nur beim
+ * <p>Die Bremse selbst greift nur an den begrenzten Pfaden ({@code urlPatterns}) und nur beim
  * {@code REQUEST}-Dispatch: Ein Fehler-Dispatch desselben Aufrufs ist kein zweiter Versuch.
  *
  * <p>Diese Klasse fasst weder Domänentyp noch Repository noch {@code RateLimitProperties} an — sie

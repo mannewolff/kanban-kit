@@ -130,7 +130,7 @@ class OverloadRejectionIT extends AbstractIntegrationTest {
   }
 
   private long user(String email) {
-    return users.save(new AppUser(null, email, "hash", "A", true, PlatformRole.USER)).requireId();
+    return users.save(new AppUser(null, email, "A", true, PlatformRole.USER)).requireId();
   }
 
   private static String row(long user, Instant hour, int rejections) {

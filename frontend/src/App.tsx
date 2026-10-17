@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react'
-import { Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { Box, CircularProgress } from '@mui/material'
 import { AppShell } from './components/AppShell'
 import { LegacyDashboardRedirect } from './routes/LegacyDashboardRedirect'
@@ -31,8 +31,8 @@ const BootstrapAdminPage = lazy(() =>
   import('./pages/BootstrapAdminPage').then((m) => ({ default: m.BootstrapAdminPage })),
 )
 const EpicsPage = lazy(() => import('./pages/EpicsPage').then((m) => ({ default: m.EpicsPage })))
-const ForgotPasswordPage = lazy(() =>
-  import('./pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })),
+const LinkLoginPage = lazy(() =>
+  import('./pages/LinkLoginPage').then((m) => ({ default: m.LinkLoginPage })),
 )
 const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })))
 const NightRunPage = lazy(() => import('./pages/NightRunPage').then((m) => ({ default: m.NightRunPage })))
@@ -50,13 +50,7 @@ const ProfilePage = lazy(() =>
   import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 )
 const RolesPage = lazy(() => import('./pages/RolesPage').then((m) => ({ default: m.RolesPage })))
-const ResetPasswordPage = lazy(() =>
-  import('./pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })),
-)
 const SignupPage = lazy(() => import('./pages/SignupPage').then((m) => ({ default: m.SignupPage })))
-const VerifyNoticePage = lazy(() =>
-  import('./pages/VerifyNoticePage').then((m) => ({ default: m.VerifyNoticePage })),
-)
 
 function PageFallback() {
   return (
@@ -71,10 +65,12 @@ export function App() {
     <Suspense fallback={<PageFallback />}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/login/link" element={<LinkLoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        <Route path="/verify" element={<VerifyNoticePage />} />
-        <Route path="/forgot" element={<ForgotPasswordPage />} />
-        <Route path="/reset" element={<ResetPasswordPage />} />
+        {/* Entfallene Zurücksetzungs- und Bestätigungsseiten: alte Links aus Mails landen auf der Anmeldung (Plan #1801). */}
+        <Route path="/verify" element={<Navigate to="/login" replace />} />
+        <Route path="/forgot" element={<Navigate to="/login" replace />} />
+        <Route path="/reset" element={<Navigate to="/login" replace />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
             <Route path="/" element={<StartRedirect />} />

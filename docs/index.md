@@ -21,7 +21,7 @@ Schalter — steht in `CLAUDE-design.md` im Wurzelverzeichnis.
 
 ## Inhalt
 
-- [Betrieb & Installation](betrieb.md) — Start via Docker, Umgebungsvariablen, erster Admin, E-Mail/Verifikation,
+- [Betrieb & Installation](betrieb.md) — Start via Docker, Umgebungsvariablen, erster Admin, Anmeldecode und Mails,
   [Meldeweg der interaktiven Sitzungen](betrieb.md#meldeweg-der-interaktiven-sitzungen) (Token,
   Hook, Erfassungsbeginn, Aufbewahrungsgrenzen, Worktree-Einschränkung).
 - [Upgrade](upgrading.md) — was ein Versionssprung von Hand verlangt, je Version ein Abschnitt;

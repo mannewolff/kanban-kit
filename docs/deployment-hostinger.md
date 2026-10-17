@@ -3,7 +3,7 @@
 Diese Anleitung beschreibt den öffentlichen Betrieb von kanban-kit unter
 **`https://kanban.mwolff.org`** auf dem Hostinger-Server. Für den **lokalen** Betrieb
 (eigener Caddy, self-signed TLS) siehe [Betrieb & Installation](betrieb.md) — dort stehen
-auch die gemeinsamen Konzepte (Umgebungsvariablen, erster Admin, E-Mail-Verifikation).
+auch die gemeinsamen Konzepte (Umgebungsvariablen, erster Admin, Anmeldecode und Mails).
 
 ## Überblick
 
@@ -63,8 +63,8 @@ docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose
      Platzhalter `change-me-benutzer` aus der Vorlage bleiben — beide lehnt die Anwendung beim Start
      als öffentlich bekannten Standard ab, und sie kommt dann nicht hoch (Issue #1243).
    - Mail (Strato): `MANBAN_MAIL_ENABLED=true`, `MANBAN_SMTP_*`, `MANBAN_MAIL_FROM=info@mwolff.org`,
-     echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst verifizieren
-     (Links landen nur im Log).
+     echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst anmelden
+     (Anmeldecodes landen nur im Log).
    - `MANBAN_BOOTSTRAP_ADMIN_TOKEN=<Zufallswert>` — für den ersten Admin.
 
    > **⚠️ Sonderzeichen in Secrets (`$`).** Docker Compose interpoliert `$` in `.env`-Werten.
@@ -83,7 +83,7 @@ docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose
 Diese Anleitung beschreibt den öffentlichen Betrieb von kanban-kit unter
 **`https://kanban.mwolff.org`** auf dem Hostinger-Server. Für den **lokalen** Betrieb
 (eigener Caddy, self-signed TLS) siehe [Betrieb & Installation](betrieb.md) — dort stehen
-auch die gemeinsamen Konzepte (Umgebungsvariablen, erster Admin, E-Mail-Verifikation).
+auch die gemeinsamen Konzepte (Umgebungsvariablen, erster Admin, Anmeldecode und Mails).
 
 ## Überblick
 
@@ -143,8 +143,8 @@ docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose
      Platzhalter `change-me-benutzer` aus der Vorlage bleiben — beide lehnt die Anwendung beim Start
      als öffentlich bekannten Standard ab, und sie kommt dann nicht hoch (Issue #1243).
    - Mail (Strato): `MANBAN_MAIL_ENABLED=true`, `MANBAN_SMTP_*`, `MANBAN_MAIL_FROM=info@mwolff.org`,
-     echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst verifizieren
-     (Links landen nur im Log).
+     echtes SMTP-Passwort. Ohne echten Mailversand können sich Nutzer nicht selbst anmelden
+     (Anmeldecodes landen nur im Log).
    - `MANBAN_BOOTSTRAP_ADMIN_TOKEN=<Zufallswert>` — für den ersten Admin.
 
    > **⚠️ Sonderzeichen in Secrets (`$`).** Docker Compose interpoliert `$` in `.env`-Werten.
@@ -166,8 +166,8 @@ docker compose -f docker-compose.yml -f docker-compose.bau.yml -f docker-compose
    Erwartet: `manban-api`, `postgres`, `objektspeicher` laufen (**kein** `caddy`); Flyway-Migrationen
    grün; „Started ManbanApplication".
 
-6. **Ersten Admin einrichten.** Registrieren → Verifikations-Mail (Strato) bestätigen →
-   eingeloggt `https://kanban.mwolff.org/admin/bootstrap` mit dem Bootstrap-Token aufrufen.
+6. **Ersten Admin einrichten.** Registrieren → mit dem Anmeldecode aus der Mail (Strato) anmelden →
+   angemeldet `https://kanban.mwolff.org/admin/bootstrap` mit dem Bootstrap-Token aufrufen.
    Details und der DB-Fallback stehen in [Betrieb & Installation](betrieb.md#den-ersten-admin-einrichten).
    Danach `MANBAN_BOOTSTRAP_ADMIN_TOKEN` in der `.env` leeren und neu erstellen:
    ```bash
@@ -217,7 +217,7 @@ Hintergrund und die verworfene Alternative (Checkout-Variante) stehen in
 
 - `curl -I https://kanban.mwolff.org` → `200` mit gültigem Let's-Encrypt-Zertifikat
   (kein Selbstsigniert-Warnhinweis).
-- Registrierung löst eine **echte** Verifikations-Mail über Strato aus.
+- Registrierung und Anmeldung lösen eine **echte** Mail mit Anmeldecode über Strato aus.
 - Das Session-Cookie ist `Secure` + `HttpOnly`.
 - Postgres und der Objektspeicher sind von außen **nicht** erreichbar (kein offener Host-Port —
   in `docker compose … config` erscheinen für sie keine `ports:`-Mappings).

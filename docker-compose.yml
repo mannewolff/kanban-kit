@@ -71,7 +71,7 @@ services:
     # Volle Fassung statt eines beweglichen Tags: Ein `latest` ist genau das, was dieses Vorhaben
     # abschafft. Das Abbild dieser Nummer steht erst mit ihrem Release in der Registry — die
     # Pruefart `eigen` in scripts/bausteine.json haelt den CI-Job deshalb gruen (Issue #1264).
-    image: ghcr.io/mannewolff/kanban-kit:3.2.0
+    image: ghcr.io/mannewolff/kanban-kit:3.3.0
     environment:
       MANBAN_BASE_URL: ${MANBAN_BASE_URL:-https://localhost}
       # Dies ist der lokale Entwicklungs-Stack: Der Schalter erlaubt den Start mit den
@@ -100,6 +100,18 @@ services:
       MANBAN_THROUGHPUT_PER_MINUTE: ${MANBAN_THROUGHPUT_PER_MINUTE:-60}
       MANBAN_THROUGHPUT_CONCURRENT: ${MANBAN_THROUGHPUT_CONCURRENT:-10}
       MANBAN_THROUGHPUT_MAX_TRACKED_PERSONS: ${MANBAN_THROUGHPUT_MAX_TRACKED_PERSONS:-100000}
+      # Anmeldung per Einmalcode (Plan #1801): Code und Zaehlbremse je Herkunft. Ungesetzt
+      # greifen fuer die Bremse noch die alten Namen (FORGOT fuer die Anforderung, LOGIN fuer
+      # die Eingabe), damit eine bestehende .env weiter wirkt.
+      MANBAN_AUTH_LOGIN_CODE_TTL: ${MANBAN_AUTH_LOGIN_CODE_TTL:-PT10M}
+      MANBAN_AUTH_LOGIN_CODE_MAX_ATTEMPTS: ${MANBAN_AUTH_LOGIN_CODE_MAX_ATTEMPTS:-5}
+      MANBAN_AUTH_LOGIN_CODE_MAX_REQUESTS_PER_HOUR: ${MANBAN_AUTH_LOGIN_CODE_MAX_REQUESTS_PER_HOUR:-5}
+      MANBAN_RATELIMIT_CODE_REQUEST_MAX_ATTEMPTS: ${MANBAN_RATELIMIT_CODE_REQUEST_MAX_ATTEMPTS:-${MANBAN_RATELIMIT_FORGOT_MAX_ATTEMPTS:-10}}
+      MANBAN_RATELIMIT_CODE_REQUEST_WINDOW: ${MANBAN_RATELIMIT_CODE_REQUEST_WINDOW:-${MANBAN_RATELIMIT_FORGOT_WINDOW:-PT15M}}
+      MANBAN_RATELIMIT_CODE_REQUEST_BLOCK_DURATION: ${MANBAN_RATELIMIT_CODE_REQUEST_BLOCK_DURATION:-${MANBAN_RATELIMIT_FORGOT_BLOCK_DURATION:-PT15M}}
+      MANBAN_RATELIMIT_CODE_VERIFY_MAX_ATTEMPTS: ${MANBAN_RATELIMIT_CODE_VERIFY_MAX_ATTEMPTS:-${MANBAN_RATELIMIT_LOGIN_MAX_ATTEMPTS:-10}}
+      MANBAN_RATELIMIT_CODE_VERIFY_WINDOW: ${MANBAN_RATELIMIT_CODE_VERIFY_WINDOW:-${MANBAN_RATELIMIT_LOGIN_WINDOW:-PT15M}}
+      MANBAN_RATELIMIT_CODE_VERIFY_BLOCK_DURATION: ${MANBAN_RATELIMIT_CODE_VERIFY_BLOCK_DURATION:-${MANBAN_RATELIMIT_LOGIN_BLOCK_DURATION:-PT15M}}
       MANBAN_MAIL_ENABLED: ${MANBAN_MAIL_ENABLED:-false}
       MANBAN_MAIL_FROM: ${MANBAN_MAIL_FROM:-no-reply@manban.local}
       MANBAN_SMTP_HOST: ${MANBAN_SMTP_HOST:-}

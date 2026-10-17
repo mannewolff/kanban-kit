@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.auth.application.AppUserRepository;
@@ -34,10 +35,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * End-to-End-Test des echten SMTP-Sendepfads (Issue #78): Registrierung und Passwort-Reset
- * versenden echte E-Mails an einen Mailpit-Container. Anders als die übrigen Auth-ITs läuft hier
- * KEIN Mailer-Test-Double — geprüft wird der komplette Pfad API → Outbox → Worker → JavaMail → SMTP
- * → Mailpit-Postfach.
+ * End-to-End-Test des echten SMTP-Sendepfads (Issue #78): Registrierung (mit Anmeldecode, Plan
+ * #1801 E3) und Passwort-Reset versenden echte E-Mails an einen Mailpit-Container. Anders als die
+ * übrigen Auth-ITs läuft hier KEIN Mailer-Test-Double — geprüft wird der komplette Pfad API →
+ * Outbox → Worker → JavaMail → SMTP → Mailpit-Postfach.
  *
  * <p>Seit Issue #502 laufen die Mails über die Outbox: Der Worker ist hier bewusst <em>an</em> und
  * eng getaktet (Poll und Retry-Basis je 200 ms), damit die asynchrone Zustellung innerhalb der
@@ -64,8 +65,7 @@ class SmtpMailIT extends AbstractIntegrationTest {
   private static final int SMTP_PORT = 1025;
   private static final int HTTP_API_PORT = 8025;
   private static final String FROM = "no-reply@manban.test";
-  private static final String VERIFY_SUBJECT = "kanban-kit: E-Mail bestätigen";
-  private static final String RESET_SUBJECT = "kanban-kit: Passwort zurücksetzen";
+  private static final String LOGIN_CODE_SUBJECT_PREFIX = "kanban-kit: Dein Anmeldecode ";
   private static final String APPROVAL_NOTIFICATION_SUBJECT =
       "kanban-kit: Neue Registrierung wartet auf Freigabe";
 
@@ -100,7 +100,7 @@ class SmtpMailIT extends AbstractIntegrationTest {
 
   private static String registerBody(String email) {
     return """
-                {"email":"%s","password":"sup3r-secret","displayName":"Alice"}
+                {"email":"%s","displayName":"Alice"}
                 """
         .formatted(email);
   }
@@ -111,12 +111,6 @@ class SmtpMailIT extends AbstractIntegrationTest {
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
-    return http.send(request, HttpResponse.BodyHandlers.ofString());
-  }
-
-  private HttpResponse<String> get(String path) throws Exception {
-    HttpRequest request =
-        HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET().build();
     return http.send(request, HttpResponse.BodyHandlers.ofString());
   }
 
@@ -150,52 +144,68 @@ class SmtpMailIT extends AbstractIntegrationTest {
     return mailpitGet("/api/v1/message/" + ids.get(0));
   }
 
-  private static String tokenFrom(String mailText) {
-    return mailText.substring(mailText.indexOf("token=") + "token=".length()).trim();
+  /**
+   * Liefert das Mailpit-Message-Detail der Mail mit Anmeldecode an {@code email}; ihr Betreff endet
+   * mit dem Code und ist darum nicht vorab bekannt.
+   */
+  private String awaitLoginCodeMessage(String email) throws Exception {
+    String filter = "$.messages[?(@.To[0].Address=='" + email + "')]";
+    List<String> ids = new ArrayList<>();
+    await()
+        .atMost(Duration.ofSeconds(5))
+        .pollInterval(Duration.ofMillis(100))
+        .untilAsserted(
+            () -> {
+              ids.clear();
+              List<Map<String, Object>> messages =
+                  JsonPath.read(mailpitGet("/api/v1/messages"), filter);
+              messages.stream()
+                  .filter(m -> ((String) m.get("Subject")).startsWith(LOGIN_CODE_SUBJECT_PREFIX))
+                  .map(m -> (String) m.get("ID"))
+                  .forEach(ids::add);
+              assertThat(ids).isNotEmpty();
+            });
+    assertThat(ids).hasSize(1);
+    return mailpitGet("/api/v1/message/" + ids.get(0));
+  }
+
+  private static String codeFrom(String message) {
+    String subject = JsonPath.read(message, "$.Subject");
+    return subject.substring(LOGIN_CODE_SUBJECT_PREFIX.length()).trim();
+  }
+
+  private HttpResponse<String> loginWithCode(String email, String code) throws Exception {
+    return post(
+        "/api/auth/code/verify", "{\"email\":\"%s\",\"code\":\"%s\"}".formatted(email, code));
   }
 
   /** Legt einen bereits freigegebenen Admin an (Bequem-Konstruktor, kein Registrierungspfad). */
   private long seedApprovedAdmin(String email) {
-    return users
-        .save(new AppUser(null, email, "hash", "Admin", true, PlatformRole.ADMIN))
-        .requireId();
+    return users.save(new AppUser(null, email, "Admin", true, PlatformRole.ADMIN)).requireId();
   }
 
   @Test
-  void registrationSendsVerificationMailOverSmtp() throws Exception {
+  void registrationSendsLoginCodeMailOverSmtp() throws Exception {
     String email = "smtp-register@example.com";
 
     assertThat(post("/api/auth/register", registerBody(email)).statusCode()).isEqualTo(201);
 
-    String message = awaitMessage(email, VERIFY_SUBJECT);
+    String message = awaitLoginCodeMessage(email);
     assertThat(JsonPath.<String>read(message, "$.From.Address")).isEqualTo(FROM);
     assertThat(JsonPath.<String>read(message, "$.To[0].Address")).isEqualTo(email);
-    String text = JsonPath.read(message, "$.Text");
-    // Mail verlinkt auf die Frontend-Seite /verify (nicht den API-Endpunkt).
-    assertThat(text).contains("/verify?token=").doesNotContain("/api/auth/verify");
+    String code = codeFrom(message);
+    assertThat(code).matches("\\d{6}");
+    // Mail verlinkt auf die Frontend-Seite /login/link (nicht einen API-Endpunkt).
+    assertThat(JsonPath.<String>read(message, "$.Text"))
+        .contains(code)
+        .contains("/login/link?token=")
+        .doesNotContain("/api/auth/");
 
-    // Der Token aus der Mail funktioniert am API-Endpunkt: einlösen, User ist danach verifiziert.
-    assertThat(get("/api/auth/verify?token=" + tokenFrom(text)).statusCode()).isEqualTo(200);
+    // Der Code aus der Mail meldet an und bestätigt die Adresse; eine zweite Mail kommt nicht.
+    assertThat(loginWithCode(email, code).statusCode()).isEqualTo(200);
     assertThat(users.findByEmail(email))
         .get()
         .satisfies(u -> assertThat(u.emailVerified()).isTrue());
-  }
-
-  @Test
-  void passwordResetSendsMailOverSmtp() throws Exception {
-    String email = "smtp-reset@example.com";
-    assertThat(post("/api/auth/register", registerBody(email)).statusCode()).isEqualTo(201);
-
-    assertThat(post("/api/auth/forgot", "{\"email\":\"%s\"}".formatted(email)).statusCode())
-        .isEqualTo(200);
-
-    String message = awaitMessage(email, RESET_SUBJECT);
-    assertThat(JsonPath.<String>read(message, "$.From.Address")).isEqualTo(FROM);
-    assertThat(JsonPath.<String>read(message, "$.To[0].Address")).isEqualTo(email);
-    // Mail verlinkt auf die Frontend-Seite /reset (nicht den API-Endpunkt).
-    assertThat(JsonPath.<String>read(message, "$.Text"))
-        .contains("/reset?token=")
-        .doesNotContain("/api/auth/reset");
   }
 
   @Test
@@ -214,22 +224,22 @@ class SmtpMailIT extends AbstractIntegrationTest {
     }
     // Der Outbox-Worker wiederholt den Versand über echtes SMTP, sobald der Server wieder da ist —
     // ohne die fachliche Operation zu wiederholen (der Benutzer bleibt derselbe eine Datensatz).
-    String message = awaitMessage(email, VERIFY_SUBJECT);
+    String message = awaitLoginCodeMessage(email);
     assertThat(JsonPath.<String>read(message, "$.To[0].Address")).isEqualTo(email);
     assertThat(users.findByEmail(email)).isPresent();
   }
 
   @Test
-  void verifyingPendingUserNotifiesAllAdminsOverSmtp() throws Exception {
+  void firstCodeLoginOfPendingUserNotifiesAllAdminsOverSmtp() throws Exception {
     seedApprovedAdmin("admin1-notify@example.com");
     seedApprovedAdmin("admin2-notify@example.com");
 
     String email = "smtp-pending@example.com";
     assertThat(post("/api/auth/register", registerBody(email)).statusCode()).isEqualTo(201);
-    String verifyMail = awaitMessage(email, VERIFY_SUBJECT);
-    String token = tokenFrom(JsonPath.read(verifyMail, "$.Text"));
+    String code = codeFrom(awaitLoginCodeMessage(email));
 
-    assertThat(get("/api/auth/verify?token=" + token).statusCode()).isEqualTo(200);
+    // Die erste Code-Anmeldung bestätigt die Adresse; das Konto wartet noch auf Freigabe.
+    assertThat(loginWithCode(email, code).statusCode()).isEqualTo(403);
 
     // Je Admin genau eine Freigabe-Benachrichtigung mit den Daten des neuen Nutzers.
     String adminMail1 = awaitMessage("admin1-notify@example.com", APPROVAL_NOTIFICATION_SUBJECT);
@@ -239,13 +249,12 @@ class SmtpMailIT extends AbstractIntegrationTest {
   }
 
   @Test
-  void verifyingAlreadyApprovedUserSendsNoAdminNotification() throws Exception {
+  void firstCodeLoginOfAlreadyApprovedUserSendsNoAdminNotification() throws Exception {
     seedApprovedAdmin("admin3-notify@example.com");
 
     String email = "smtp-approved@example.com";
     assertThat(post("/api/auth/register", registerBody(email)).statusCode()).isEqualTo(201);
-    String verifyMail = awaitMessage(email, VERIFY_SUBJECT);
-    String token = tokenFrom(JsonPath.read(verifyMail, "$.Text"));
+    String code = codeFrom(awaitLoginCodeMessage(email));
 
     // Nutzer ist vor der E-Mail-Bestätigung bereits freigegeben — Stellvertreter für
     // "bereits freigegeben" (z. B. per Einladung, #0099), ohne die Invitation-Maschinerie
@@ -253,7 +262,7 @@ class SmtpMailIT extends AbstractIntegrationTest {
     AppUser user = users.findByEmail(email).orElseThrow();
     users.save(user.withApproved(Instant.now(), null));
 
-    assertThat(get("/api/auth/verify?token=" + token).statusCode()).isEqualTo(200);
+    assertThat(loginWithCode(email, code).statusCode()).isEqualTo(200);
 
     // Negativer Nachweis: kurz warten (Mailpit legt Mails asynchron ab), dann sicherstellen,
     // dass keine Freigabe-Benachrichtigung ankam.

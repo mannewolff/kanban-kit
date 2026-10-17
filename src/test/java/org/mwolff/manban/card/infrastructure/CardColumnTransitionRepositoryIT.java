@@ -30,8 +30,8 @@ class CardColumnTransitionRepositoryIT extends AbstractIntegrationTest {
   void seedCard() {
     long userId =
         insert(
-            "INSERT INTO app_user (email, password_hash, display_name) "
-                + "VALUES ('t@example.com', 'x', 'T') RETURNING id");
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('t@example.com', 'T') RETURNING id");
     long projectId =
         insert(
             "INSERT INTO project (name, owner_user_id) VALUES ('P', " + userId + ") RETURNING id");

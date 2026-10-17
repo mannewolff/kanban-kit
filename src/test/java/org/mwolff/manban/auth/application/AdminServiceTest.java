@@ -31,7 +31,7 @@ class AdminServiceTest {
   private AdminService service;
 
   private static AppUser user(long id, PlatformRole role) {
-    return new AppUser(id, "u" + id + "@x.de", "hash", "U" + id, true, role);
+    return new AppUser(id, "u" + id + "@x.de", "U" + id, true, role);
   }
 
   /** Noch nicht freigegebener Benutzer (kanonischer Konstruktor, {@code approvedAt=null}). */
@@ -41,7 +41,7 @@ class AdminServiceTest {
 
   /** Noch nicht freigegebener Benutzer mit frei wählbarer Plattform-Rolle. */
   private static AppUser pendingUser(long id, PlatformRole role) {
-    return new AppUser(id, "u" + id + "@x.de", "hash", "U" + id, true, role, null, null);
+    return new AppUser(id, "u" + id + "@x.de", "U" + id, true, role, null, null);
   }
 
   @BeforeEach
@@ -350,8 +350,7 @@ class AdminServiceTest {
   void changePlatformRole_keepsOriginalApproval_whenTargetAlreadyApproved() {
     // Given: das Ziel ist bereits freigegeben (durch Admin 7, zu einem früheren Zeitpunkt).
     Instant earlier = NOW.minusSeconds(3600);
-    AppUser approved =
-        new AppUser(2L, "u2@x.de", "hash", "U2", true, PlatformRole.USER, earlier, 7L);
+    AppUser approved = new AppUser(2L, "u2@x.de", "U2", true, PlatformRole.USER, earlier, 7L);
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(approved));
     when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -388,8 +387,7 @@ class AdminServiceTest {
   void changePlatformRole_keepsApproval_whenApprovedAdminIsDemoted() {
     // Given: ein freigegebener Admin wird degradiert; ein weiterer Admin bleibt übrig.
     Instant earlier = NOW.minusSeconds(3600);
-    AppUser approvedAdmin =
-        new AppUser(2L, "u2@x.de", "hash", "U2", true, PlatformRole.ADMIN, earlier, 7L);
+    AppUser approvedAdmin = new AppUser(2L, "u2@x.de", "U2", true, PlatformRole.ADMIN, earlier, 7L);
     when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
     when(users.findById(2L)).thenReturn(Optional.of(approvedAdmin));
     when(users.lockActivePlatformAdminIds()).thenReturn(List.of(1L, 2L));
@@ -426,8 +424,7 @@ class AdminServiceTest {
   // --- disable / enable -------------------------------------------------
 
   private static AppUser disabledUser(long id, PlatformRole role) {
-    return new AppUser(
-        id, "u" + id + "@x.de", "hash", "U" + id, true, role, Instant.EPOCH, null, NOW);
+    return new AppUser(id, "u" + id + "@x.de", "U" + id, true, role, Instant.EPOCH, null, NOW);
   }
 
   @Test

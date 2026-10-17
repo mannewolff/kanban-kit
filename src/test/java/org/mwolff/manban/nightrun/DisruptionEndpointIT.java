@@ -13,15 +13,13 @@ import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -42,7 +40,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class DisruptionEndpointIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
   private static final String TOKEN_HEADER = "X-Kanban-Token";
   private static final String LEITSTAND = "/api/admin/leitstand";
   private static final String QUITTIEREN = "/api/admin/disruptions";
@@ -50,8 +47,7 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
   private static final String ZONE = "Europe/Berlin";
 
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
   @Autowired private NightRunRepository runs;
@@ -59,18 +55,8 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
   private long projectId;
   private long laufId;
 
-  private Cookie session(String email, PlatformRole role) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, role));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie session(String email, PlatformRole role) {
+    return anmeldung.anmelden(email, role);
   }
 
   private long id(String sql, Object... args) {
@@ -83,8 +69,8 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
   void seed() {
     long owner =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('de-owner@example.com', 'x', 'O') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('de-owner@example.com', 'O') RETURNING id");
     projectId =
         id(
             "INSERT INTO project (name, owner_user_id, dashboard_participation)"
@@ -445,6 +431,47 @@ class DisruptionEndpointIT extends AbstractIntegrationTest {
 
     mvc.perform(post(SCHLIESSEN + "/" + haengt + "/close").cookie(nutzer))
         .andExpect(status().isForbidden());
+  }
+
+  /**
+   * Issue #1800: Ein verstummter Lauf steht unter den Störungen — auch wenn sein letztes
+   * Lebenszeichen Wochen zurückliegt. Er hat sich nie abgemeldet ({@code complete = false}), und
+   * ohne ihn in der Liste gäbe es keinen Knopf, der ihn aus „Runner jetzt" nimmt.
+   *
+   * <p>Daneben drei unfertige Läufe, die <b>nicht</b> dorthin gehören: einer, der noch arbeitet,
+   * einer, den ein Admin von Hand beendete, und einer, dessen Störung schon quittiert ist.
+   */
+  @Test
+  void einVerstummterLaufStehtUnterDenStoerungen_dieDreiAnderenUnfertigenNicht() throws Exception {
+    Cookie admin = session("de-verstummt@example.com", PlatformRole.ADMIN);
+    long verstummt = verstummt(28);
+    long arbeitet = laufend();
+    long beendet = verstummt(27);
+    jdbc.update("UPDATE night_run SET closed_at = now() WHERE id = ?", beendet);
+    long quittiert = verstummt(26);
+    mvc.perform(delete(QUITTIEREN + "/" + quittiert).cookie(admin))
+        .andExpect(status().isNoContent());
+
+    mvc.perform(get(LEITSTAND).param("zone", ZONE).cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.stoerungen.length()").value(2))
+        .andExpect(jsonPath("$.stoerungen[0].nightRunId").value(laufId))
+        .andExpect(jsonPath("$.stoerungen[1].nightRunId").value(verstummt))
+        .andExpect(jsonPath("$.stoerungen[1].outcome.verdict").value("FAILED"))
+        .andExpect(jsonPath("$.laufende.length()").value(1))
+        .andExpect(jsonPath("$.laufende[0].nightRunId").value(arbeitet));
+  }
+
+  /** Ein unfertiger Lauf, dessen einziges Lebenszeichen sein Start vor so vielen Tagen ist. */
+  private long verstummt(int tage) {
+    return id(
+        "INSERT INTO night_run (project_id, started_at, mode, kind, duration_ms, processed_count,"
+            + " skipped_count, unparsed_count, created_at, updated_at, origin, complete)"
+            + " VALUES (?, now() - make_interval(days => ?), 'CHAIN', 'NIGHT', 1, 0, 0, 0,"
+            + " now(), now() - make_interval(days => ?), 'TOKEN', false) RETURNING id",
+        projectId,
+        tage,
+        tage);
   }
 
   /** Ein Lauf, der arbeitet: unfertig, mit frischem Lebenszeichen. */

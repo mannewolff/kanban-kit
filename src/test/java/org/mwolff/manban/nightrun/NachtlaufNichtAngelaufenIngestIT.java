@@ -13,13 +13,11 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
@@ -41,7 +39,6 @@ class NachtlaufNichtAngelaufenIngestIT extends AbstractIntegrationTest {
   private static final String TOKEN_HEADER = "X-Kanban-Token";
   private static final String INGEST_PFAD = "/api/kanban/night-runs";
   private static final String LEITSTAND_PFAD = "/api/admin/leitstand";
-  private static final String PASSWORD = "Passwort-123";
   private static final String GRUND =
       "Working Tree ist nicht sauber. Bitte committen oder aufraeumen, dann neu starten.";
   private static final String OHNE_PAKET = "";
@@ -50,8 +47,7 @@ class NachtlaufNichtAngelaufenIngestIT extends AbstractIntegrationTest {
           + "\"errorClass\":\"CHECKS_RED\"}";
 
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
 
   /**
@@ -227,19 +223,7 @@ class NachtlaufNichtAngelaufenIngestIT extends AbstractIntegrationTest {
     return json.readTree(antwort).get("id").asLong();
   }
 
-  private Cookie session(String email) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "P", true, PlatformRole.ADMIN));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie session(String email) {
+    return anmeldung.anmelden(email, PlatformRole.ADMIN);
   }
 }

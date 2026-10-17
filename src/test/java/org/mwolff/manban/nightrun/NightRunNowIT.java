@@ -15,8 +15,8 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.board.application.BoardColumnRepository;
 import org.mwolff.manban.board.application.BoardService;
@@ -34,7 +34,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -46,12 +45,10 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class NightRunNowIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
   @Autowired private AppUserRepository users;
   @Autowired private ProjectMembershipRepository memberships;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
   @Autowired private NightRunRepository runs;
@@ -59,18 +56,8 @@ class NightRunNowIT extends AbstractIntegrationTest {
   @Autowired private BoardColumnRepository columns;
   @Autowired private CardService cards;
 
-  private Cookie session(String email, PlatformRole role) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, role));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie session(String email, PlatformRole role) {
+    return anmeldung.anmelden(email, role);
   }
 
   private long projectOf(String ownerEmail, String adminEmail) throws Exception {
@@ -219,6 +206,45 @@ class NightRunNowIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.runs.length()").value(1))
         .andExpect(jsonPath("$.runs[0].runId").value(bleibt))
         .andExpect(jsonPath("$.lastRun").doesNotExist());
+  }
+
+  /**
+   * Issue #1800: der Weg, den ein Admin wirklich geht — der verstummte Lauf steht im
+   * Plattform-Leitstand unter den Störungen, wird über genau diese Zeile quittiert und fehlt danach
+   * in „Runner jetzt". Der Test zu #1742 quittierte direkt und fand darum nicht, dass die Zeile
+   * fehlte.
+   */
+  @Test
+  void derVerstummteLaufStehtUnterDenStoerungen_undFehltNachDerenQuittung() throws Exception {
+    Cookie owner = session("now-weg-owner@example.com", PlatformRole.USER);
+    long projectId = projectOf("now-weg-owner@example.com", "now-weg-admin@example.com");
+    Cookie admin = session("now-weg-admin@example.com", PlatformRole.ADMIN);
+    teilnahme(projectId, true);
+    Instant start = Instant.now().minus(Duration.ofDays(28)).truncatedTo(ChronoUnit.SECONDS);
+    long verstummt =
+        runs.upsert(lauf(projectId, NightRunMode.CHAIN, start, false, "", List.of()), List.of())
+            .id();
+    jdbc.update("UPDATE night_run SET updated_at = started_at WHERE id = ?", verstummt);
+
+    String leitstand =
+        mvc.perform(get("/api/admin/leitstand").param("zone", "Europe/Berlin").cookie(admin))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.stoerungen.length()").value(1))
+            .andExpect(jsonPath("$.stoerungen[0].nightRunId").value(verstummt))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    long zeile = json.readTree(leitstand).get("stoerungen").get(0).get("nightRunId").asLong();
+
+    mvc.perform(delete("/api/admin/disruptions/" + zeile).cookie(admin))
+        .andExpect(status().isNoContent());
+
+    mvc.perform(get("/api/admin/leitstand").param("zone", "Europe/Berlin").cookie(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.stoerungen.length()").value(0));
+    mvc.perform(get(jetzt(projectId)).cookie(owner))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.runs.length()").value(0));
   }
 
   @Test

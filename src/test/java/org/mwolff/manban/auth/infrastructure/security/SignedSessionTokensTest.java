@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
+import java.util.Optional;
 import java.util.OptionalLong;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -21,6 +22,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.manban.auth.application.AuthProperties;
+import org.mwolff.manban.auth.application.SessionCheck;
 import org.mwolff.manban.auth.application.SessionGenerations;
 
 /**
@@ -46,7 +48,7 @@ class SignedSessionTokensTest {
   }
 
   private static AuthProperties properties() {
-    return new AuthProperties(null, null, SECRET, TTL, null, null);
+    return new AuthProperties(null, SECRET, TTL, null, null);
   }
 
   private SignedSessionTokens at(Instant instant) {
@@ -64,15 +66,32 @@ class SignedSessionTokensTest {
   }
 
   @Test
-  void verify_validToken_returnsUserId() {
+  void verify_validToken_returnsUserIdAndExpiry() {
     // Given
     String token = at(ISSUED_AT).issue(USER_ID);
 
     // When
-    OptionalLong result = at(ISSUED_AT).verify(token);
+    Optional<SessionCheck> result = at(ISSUED_AT).verify(token);
 
     // Then
-    assertThat(result).hasValue(USER_ID);
+    assertThat(result).contains(new SessionCheck(USER_ID, ISSUED_AT.plus(TTL)));
+  }
+
+  /**
+   * Der Ablauf kommt aus dem Token, nicht aus der Prüfzeit: Später geprüft, bleibt er der Zeitpunkt
+   * der Ausstellung plus TTL — sonst sähe jedes Token frisch aus und würde nie erneuert (Plan
+   * #1801, A10).
+   */
+  @Test
+  void verify_laterCheck_returnsExpiryOfIssuance() {
+    // Given
+    String token = at(ISSUED_AT).issue(USER_ID);
+
+    // When
+    Optional<SessionCheck> result = at(ISSUED_AT.plus(Duration.ofMinutes(30))).verify(token);
+
+    // Then
+    assertThat(result).contains(new SessionCheck(USER_ID, ISSUED_AT.plus(TTL)));
   }
 
   @Test
@@ -81,7 +100,7 @@ class SignedSessionTokensTest {
     String token = at(ISSUED_AT).issue(USER_ID);
 
     // When
-    OptionalLong result = at(ISSUED_AT.plus(TTL).plusMillis(1)).verify(token);
+    Optional<SessionCheck> result = at(ISSUED_AT.plus(TTL).plusMillis(1)).verify(token);
 
     // Then
     assertThat(result).isEmpty();
@@ -93,10 +112,10 @@ class SignedSessionTokensTest {
     String token = at(ISSUED_AT).issue(USER_ID);
 
     // When
-    OptionalLong result = at(ISSUED_AT.plus(TTL)).verify(token);
+    Optional<SessionCheck> result = at(ISSUED_AT.plus(TTL)).verify(token);
 
     // Then
-    assertThat(result).hasValue(USER_ID);
+    assertThat(result).contains(new SessionCheck(USER_ID, ISSUED_AT.plus(TTL)));
   }
 
   /**
@@ -108,7 +127,7 @@ class SignedSessionTokensTest {
   @ValueSource(strings = {"no-dot-here", "payload.$$$not-base64$$$", "payload.AAAA"})
   void verify_invalidToken_returnsEmpty(String token) {
     // When
-    OptionalLong result = at(ISSUED_AT).verify(token);
+    Optional<SessionCheck> result = at(ISSUED_AT).verify(token);
 
     // Then
     assertThat(result).isEmpty();
@@ -120,7 +139,7 @@ class SignedSessionTokensTest {
     String token = signedToken("not-a-number:123:" + GENERATION);
 
     // When
-    OptionalLong result = at(ISSUED_AT).verify(token);
+    Optional<SessionCheck> result = at(ISSUED_AT).verify(token);
 
     // Then
     assertThat(result).isEmpty();
@@ -134,7 +153,7 @@ class SignedSessionTokensTest {
     when(generations.current(USER_ID)).thenReturn(OptionalLong.of(GENERATION + 1));
 
     // When
-    OptionalLong result = at(ISSUED_AT).verify(token);
+    Optional<SessionCheck> result = at(ISSUED_AT).verify(token);
 
     // Then
     assertThat(result).isEmpty();
@@ -157,7 +176,7 @@ class SignedSessionTokensTest {
 
     // When / Then: Konto in der Generation der Ausstellung → gültig
     when(generations.current(USER_ID)).thenReturn(OptionalLong.of(9L));
-    assertThat(at(ISSUED_AT).verify(token)).hasValue(USER_ID);
+    assertThat(at(ISSUED_AT).verify(token)).map(SessionCheck::userId).contains(USER_ID);
   }
 
   /**
@@ -172,7 +191,7 @@ class SignedSessionTokensTest {
     String token = signedToken(template.formatted(USER_ID, ISSUED_AT.plus(TTL).toEpochMilli()));
 
     // When
-    OptionalLong result = at(ISSUED_AT).verify(token);
+    Optional<SessionCheck> result = at(ISSUED_AT).verify(token);
 
     // Then
     assertThat(result).isEmpty();
@@ -185,7 +204,7 @@ class SignedSessionTokensTest {
     when(generations.current(USER_ID)).thenReturn(OptionalLong.empty());
 
     // When
-    OptionalLong result = at(ISSUED_AT).verify(token);
+    Optional<SessionCheck> result = at(ISSUED_AT).verify(token);
 
     // Then
     assertThat(result).isEmpty();

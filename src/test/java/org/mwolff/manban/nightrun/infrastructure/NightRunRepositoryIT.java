@@ -97,8 +97,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
   void seed() {
     long userId =
         insert(
-            "INSERT INTO app_user (email, password_hash, display_name) "
-                + "VALUES ('a@example.com', 'x', 'A') RETURNING id");
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('a@example.com', 'A') RETURNING id");
     projectId =
         insert(
             "INSERT INTO project (name, owner_user_id) VALUES ('P', " + userId + ") RETURNING id");
@@ -436,8 +436,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     anlegen(T1, List.of());
     long andererUser =
         insert(
-            "INSERT INTO app_user (email, password_hash, display_name) "
-                + "VALUES ('b@example.com', 'x', 'B') RETURNING id");
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('b@example.com', 'B') RETURNING id");
     long anderesProjekt =
         insert(
             "INSERT INTO project (name, owner_user_id) VALUES ('Q', "
@@ -792,8 +792,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     anlegen(T1, List.of(paket(721, NightRunState.GREEN)));
     long andererUser =
         insert(
-            "INSERT INTO app_user (email, password_hash, display_name) "
-                + "VALUES ('c@example.com', 'x', 'C') RETURNING id");
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('c@example.com', 'C') RETURNING id");
     long anderesProjekt =
         insert(
             "INSERT INTO project (name, owner_user_id) VALUES ('R', "

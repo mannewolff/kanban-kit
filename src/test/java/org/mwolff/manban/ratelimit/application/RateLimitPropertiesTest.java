@@ -24,9 +24,9 @@ class RateLimitPropertiesTest {
             RateLimitProperties::trustedProxyCount,
             RateLimitProperties::maxTrackedOrigins)
         .containsExactly(true, 1, 100_000);
-    assertThat(properties.login()).isEqualTo(new Limits(10, DEFAULT_WINDOW, DEFAULT_WINDOW));
     assertThat(properties.register()).isEqualTo(new Limits(10, DEFAULT_WINDOW, DEFAULT_WINDOW));
-    assertThat(properties.forgot()).isEqualTo(new Limits(10, DEFAULT_WINDOW, DEFAULT_WINDOW));
+    assertThat(properties.codeRequest()).isEqualTo(new Limits(10, DEFAULT_WINDOW, DEFAULT_WINDOW));
+    assertThat(properties.codeVerify()).isEqualTo(new Limits(10, DEFAULT_WINDOW, DEFAULT_WINDOW));
   }
 
   @Test
@@ -38,9 +38,9 @@ class RateLimitPropertiesTest {
             false,
             0,
             250,
-            new Limits(3, Duration.ofMinutes(1), Duration.ofMinutes(2)),
             new Limits(4, Duration.ofMinutes(3), Duration.ofMinutes(4)),
-            new Limits(5, Duration.ofMinutes(5), Duration.ofMinutes(6)));
+            new Limits(6, Duration.ofMinutes(7), Duration.ofMinutes(8)),
+            new Limits(7, Duration.ofMinutes(9), Duration.ofMinutes(10)));
 
     // Then
     assertThat(properties)
@@ -49,9 +49,9 @@ class RateLimitPropertiesTest {
             RateLimitProperties::trustedProxyCount,
             RateLimitProperties::maxTrackedOrigins)
         .containsExactly(false, 0, 250);
-    assertThat(properties.login().maxAttempts()).isEqualTo(3);
     assertThat(properties.register().maxAttempts()).isEqualTo(4);
-    assertThat(properties.forgot().maxAttempts()).isEqualTo(5);
+    assertThat(properties.codeRequest().maxAttempts()).isEqualTo(6);
+    assertThat(properties.codeVerify().maxAttempts()).isEqualTo(7);
   }
 
   @Test
@@ -81,7 +81,7 @@ class RateLimitPropertiesTest {
 
     // Then
     assertThat(properties.maxTrackedOrigins()).isEqualTo(1);
-    assertThat(properties.login())
+    assertThat(properties.register())
         .isEqualTo(new Limits(1, Duration.ofMillis(1), Duration.ofMillis(1)));
   }
 
@@ -136,16 +136,29 @@ class RateLimitPropertiesTest {
             true,
             1,
             10,
-            new Limits(3, Duration.ofMinutes(1), Duration.ofMinutes(2)),
             new Limits(4, Duration.ofMinutes(3), Duration.ofMinutes(4)),
-            new Limits(5, Duration.ofMinutes(5), Duration.ofMinutes(6)));
+            new Limits(6, Duration.ofMinutes(7), Duration.ofMinutes(8)),
+            new Limits(7, Duration.ofMinutes(9), Duration.ofMinutes(10)));
 
     // When / Then
-    assertThat(properties.limitsFor(RateLimitedOperation.LOGIN))
-        .isEqualTo(new OriginAttempts.Limits(3, Duration.ofMinutes(1), Duration.ofMinutes(2)));
     assertThat(properties.limitsFor(RateLimitedOperation.REGISTER))
         .isEqualTo(new OriginAttempts.Limits(4, Duration.ofMinutes(3), Duration.ofMinutes(4)));
-    assertThat(properties.limitsFor(RateLimitedOperation.FORGOT))
-        .isEqualTo(new OriginAttempts.Limits(5, Duration.ofMinutes(5), Duration.ofMinutes(6)));
+    assertThat(properties.limitsFor(RateLimitedOperation.CODE_REQUEST))
+        .isEqualTo(new OriginAttempts.Limits(6, Duration.ofMinutes(7), Duration.ofMinutes(8)));
+    assertThat(properties.limitsFor(RateLimitedOperation.CODE_VERIFY))
+        .isEqualTo(new OriginAttempts.Limits(7, Duration.ofMinutes(9), Duration.ofMinutes(10)));
+  }
+
+  @Test
+  void limitsFor_theLinkSharesTheLimitsOfTheCodeEntry() {
+    // Given — Plan #1801 A7: Der Link ist eine zweite Form der Code-Eingabe und hat keinen eigenen
+    // Block; eine eigene Stellschraube wäre eine, die der Betreiber vergessen kann.
+    RateLimitProperties properties =
+        new RateLimitProperties(
+            true, 1, 10, null, null, new Limits(7, Duration.ofMinutes(9), Duration.ofMinutes(10)));
+
+    // When / Then
+    assertThat(properties.limitsFor(RateLimitedOperation.CODE_LINK))
+        .isEqualTo(properties.limitsFor(RateLimitedOperation.CODE_VERIFY));
   }
 }

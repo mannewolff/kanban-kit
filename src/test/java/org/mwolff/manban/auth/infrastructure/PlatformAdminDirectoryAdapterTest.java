@@ -69,6 +69,6 @@ class PlatformAdminDirectoryAdapterTest {
   }
 
   private static AppUser admin(long id, String email) {
-    return new AppUser(id, email, "argon2-hash", "Admin " + id, true, PlatformRole.ADMIN);
+    return new AppUser(id, email, "Admin " + id, true, PlatformRole.ADMIN);
   }
 }

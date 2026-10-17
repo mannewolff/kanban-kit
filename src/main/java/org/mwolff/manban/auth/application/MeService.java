@@ -21,13 +21,13 @@ public class MeService {
 
   @Transactional(readOnly = true)
   public MeView load(long userId) {
-    return toView(users.findById(userId).orElseThrow(InvalidCredentialsException::new));
+    return toView(users.findById(userId).orElseThrow(UserNotFoundException::new));
   }
 
   /** Ändert den Anzeigenamen des angemeldeten Benutzers (getrimmt) und liefert die neue Sicht. */
   @Transactional
   public MeView updateDisplayName(long userId, String displayName) {
-    AppUser user = users.findById(userId).orElseThrow(InvalidCredentialsException::new);
+    AppUser user = users.findById(userId).orElseThrow(UserNotFoundException::new);
     return toView(users.save(user.withDisplayName(displayName.trim())));
   }
 

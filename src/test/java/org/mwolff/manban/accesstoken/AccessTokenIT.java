@@ -12,13 +12,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** End-to-End-Test der PAT-Funktionalität (Erstellen, Nutzen, Widerrufen, Least Privilege). */
@@ -26,30 +26,16 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class AccessTokenIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
 
   @Autowired private AppUserRepository users;
 
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
 
   @Autowired private ObjectMapper json;
 
-  private Cookie loginAs(String email) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie loginAs(String email) {
+    return anmeldung.anmelden(email, PlatformRole.USER);
   }
 
   @Test
@@ -127,14 +113,7 @@ class AccessTokenIT extends AbstractIntegrationTest {
 
   private long createProject(String ownerEmail, String name) throws Exception {
     if (users.findByEmail(ownerEmail).isEmpty()) {
-      users.save(
-          new AppUser(
-              null,
-              ownerEmail,
-              passwordEncoder.encode(PASSWORD),
-              "Person",
-              true,
-              PlatformRole.USER));
+      users.save(new AppUser(null, ownerEmail, "Person", true, PlatformRole.USER));
     }
     Cookie admin = platformAdminSession();
     String body =
@@ -150,21 +129,8 @@ class AccessTokenIT extends AbstractIntegrationTest {
     return json.readTree(body).get("id").asLong();
   }
 
-  private Cookie platformAdminSession() throws Exception {
-    String email = "project-admin@example.com";
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie platformAdminSession() {
+    return anmeldung.anmelden("project-admin@example.com", PlatformRole.ADMIN);
   }
 
   private long createBoard(Cookie session, long projectId, String name) throws Exception {

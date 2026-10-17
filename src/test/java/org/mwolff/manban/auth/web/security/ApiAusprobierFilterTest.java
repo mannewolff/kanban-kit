@@ -14,14 +14,15 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
-import java.util.OptionalLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
+import org.mwolff.manban.auth.application.SessionCheck;
 import org.mwolff.manban.auth.application.SessionTokens;
 import org.mwolff.manban.common.i18n.SprachFixture;
 import org.mwolff.manban.common.i18n.Sprache;
@@ -33,6 +34,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 class ApiAusprobierFilterTest {
 
   private static final String SESSION = SessionCookieManager.COOKIE_NAME;
+  private static final Instant ABLAUF = Instant.parse("2026-11-15T10:00:00Z");
 
   private SessionCookieManager cookies;
   private SessionTokens tokens;
@@ -59,7 +61,7 @@ class ApiAusprobierFilterTest {
   private void signedInWithFlag(long userId, boolean admin) {
     request.addHeader(ApiAusprobierFilter.HEADER, "1");
     when(cookies.readToken(any(HttpServletRequest.class))).thenReturn(Optional.of("good"));
-    when(tokens.verify("good")).thenReturn(OptionalLong.of(userId));
+    when(tokens.verify("good")).thenReturn(Optional.of(new SessionCheck(userId, ABLAUF)));
     when(admins.isActivePlatformAdmin(userId)).thenReturn(admin);
   }
 
@@ -100,7 +102,7 @@ class ApiAusprobierFilterTest {
     // Given
     request.addHeader(ApiAusprobierFilter.HEADER, "1");
     when(cookies.readToken(request)).thenReturn(Optional.of("bad"));
-    when(tokens.verify("bad")).thenReturn(OptionalLong.empty());
+    when(tokens.verify("bad")).thenReturn(Optional.empty());
 
     // When
     filter.doFilter(request, response, chain);
@@ -261,7 +263,7 @@ class ApiAusprobierFilterTest {
     // Given
     request.addHeader(ApiAusprobierFilter.HEADER, "0");
     when(cookies.readToken(request)).thenReturn(Optional.of("good"));
-    when(tokens.verify("good")).thenReturn(OptionalLong.of(7L));
+    when(tokens.verify("good")).thenReturn(Optional.of(new SessionCheck(7L, ABLAUF)));
     when(admins.isActivePlatformAdmin(anyLong())).thenReturn(false);
 
     // When

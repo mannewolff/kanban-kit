@@ -86,8 +86,7 @@ class RoleInvariantConcurrencyIT extends AbstractIntegrationTest {
     // hält die Instanz aber nicht handlungsfähig — er darf die gesperrte Menge nicht auffüllen.
     long activeAdmin = saveUser("disabled-guard-active@example.com", PlatformRole.ADMIN);
     users.save(
-        new AppUser(
-                null, "disabled-guard-locked@example.com", "hash", "U", true, PlatformRole.ADMIN)
+        new AppUser(null, "disabled-guard-locked@example.com", "U", true, PlatformRole.ADMIN)
             .withDisabledAt(Instant.now()));
 
     // When / Then: bewusst ohne Rennen als gewöhnlicher Aufruf — geprüft wird allein die
@@ -225,7 +224,7 @@ class RoleInvariantConcurrencyIT extends AbstractIntegrationTest {
   }
 
   private long saveUser(String email, PlatformRole role) {
-    return users.save(new AppUser(null, email, "hash", "U", true, role)).requireId();
+    return users.save(new AppUser(null, email, "U", true, role)).requireId();
   }
 
   private long saveProject(long ownerUserId) {

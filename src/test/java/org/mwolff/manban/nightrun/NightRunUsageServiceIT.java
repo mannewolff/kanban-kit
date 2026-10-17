@@ -78,8 +78,8 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
 
   private long nutzer(String email, String rolle) {
     return id(
-        "INSERT INTO app_user (email, password_hash, display_name, platform_role)"
-            + " VALUES (?, 'x', 'U', ?) RETURNING id",
+        "INSERT INTO app_user (email, display_name, platform_role)"
+            + " VALUES (?, 'U', ?) RETURNING id",
         email,
         rolle);
   }

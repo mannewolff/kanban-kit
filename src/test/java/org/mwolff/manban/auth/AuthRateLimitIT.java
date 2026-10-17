@@ -36,7 +36,6 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.filter.ForwardedHeaderFilter;
@@ -49,7 +48,9 @@ import org.springframework.web.filter.ForwardedHeaderFilter;
  * ist dieser Test da: dass die erzwungene Filterreihenfolge gegenüber Springs {@link
  * ForwardedHeaderFilter} in der echten Kette hält (E2) — liefe der Weiterleitungsfilter zuerst,
  * wären die {@code X-Forwarded-*}-Header verschwunden und die Herkunft käme aus dem vom Client frei
- * wählbaren ersten Eintrag —, und dass die Zähler der drei Vorgänge tatsächlich getrennt laufen.
+ * wählbaren ersten Eintrag —, und dass die Zähler der Vorgänge tatsächlich getrennt laufen. Seit
+ * dem Wegfall der Passwort-Anmeldung (Issue #1816) prüft die Code-Eingabe, was zuvor die Anmeldung
+ * zeigte.
  *
  * <p>Die Bremse ist für die gesamte IT-Suite abgeschaltet ({@code AbstractIntegrationTest}, Issue
  * #899): 45 IT-Klassen melden sich von derselben Herkunft an. Hier wird sie per eigenem
@@ -70,14 +71,14 @@ import org.springframework.web.filter.ForwardedHeaderFilter;
 @SuppressWarnings("PMD.AvoidUsingHardCodedIP")
 class AuthRateLimitIT extends AbstractIntegrationTest {
 
-  private static final String LOGIN_PATH = "/api/auth/login";
   private static final String REGISTER_PATH = "/api/auth/register";
-  private static final String FORGOT_PATH = "/api/auth/forgot";
+  private static final String CODE_REQUEST_PATH = "/api/auth/code/request";
+  private static final String CODE_VERIFY_PATH = "/api/auth/code/verify";
+  private static final String CODE_LINK_PATH = "/api/auth/code/link";
+  private static final String WRONG_CODE = "000000";
   private static final String JSON = "application/json";
   private static final String FORWARDED_FOR = "X-Forwarded-For";
 
-  private static final String PASSWORD = "sup3r-secret";
-  private static final String WRONG_PASSWORD = "falsches-kennwort";
   private static final String KNOWN_EMAIL = "bremse@example.com";
   private static final String UNKNOWN_EMAIL = "gibt-es-nicht@example.com";
 
@@ -105,7 +106,7 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
    * Stellt die Uhr, die Fassade und Zählspeicher der Bremse gemeinsam lesen.
    *
    * <p>Sie startet bei {@code Instant.now()} und nicht bei einem festen Zeitpunkt: Dieselbe Uhr
-   * datiert auch Verifikations- und Reset-Token, die in dieser Klasse entstehen.
+   * datiert auch die Anmeldecodes, die in dieser Klasse entstehen.
    */
   @TestConfiguration
   static class StellbareUhrConfig {
@@ -121,8 +122,6 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
 
   @Autowired private AppUserRepository users;
 
-  @Autowired private PasswordEncoder passwordEncoder;
-
   @Autowired private AttemptStore attempts;
 
   @Autowired private MutableClock clock;
@@ -133,14 +132,7 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void seedUserAndResetTheBrake() {
-    users.save(
-        new AppUser(
-            null,
-            KNOWN_EMAIL,
-            passwordEncoder.encode(PASSWORD),
-            "Bremse",
-            true,
-            PlatformRole.USER));
+    users.save(new AppUser(null, KNOWN_EMAIL, "Bremse", true, PlatformRole.USER));
     clearAttempts(attempts);
   }
 
@@ -169,44 +161,26 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
     }
   }
 
-  /**
-   * Ein Anmeldeversuch mit vollständig gesetztem Weiterleitungsheader.
-   *
-   * @param forwardedFor der komplette {@code X-Forwarded-For}-Wert, gespoofter Anteil inklusive
-   */
-  private static MockHttpServletResponse loginVia(
-      MockMvc mockMvc, String forwardedFor, String email, String password) throws Exception {
-    return mockMvc
-        .perform(
-            post(LOGIN_PATH)
-                .header(FORWARDED_FOR, forwardedFor)
-                .contentType(JSON)
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, password)))
-        .andReturn()
-        .getResponse();
-  }
-
-  /** Ein Anmeldeversuch aus {@code origin}, den ein vertrauenswürdiger Proxy angehängt hat. */
-  private MockHttpServletResponse login(String origin, String email, String password)
-      throws Exception {
-    return loginVia(mvc, SPOOFED + ", " + origin, email, password);
-  }
-
   private MockHttpServletResponse register(String origin, String email) throws Exception {
     return mvc.perform(
             post(REGISTER_PATH)
                 .header(FORWARDED_FOR, SPOOFED + ", " + origin)
                 .contentType(JSON)
-                .content(
-                    "{\"email\":\"%s\",\"password\":\"%s\",\"displayName\":\"Neu\"}"
-                        .formatted(email, PASSWORD)))
+                .content("{\"email\":\"%s\",\"displayName\":\"Neu\"}".formatted(email)))
         .andReturn()
         .getResponse();
   }
 
-  private MockHttpServletResponse forgot(String origin, String email) throws Exception {
+  /**
+   * Eine Code-Anforderung aus {@code origin}.
+   *
+   * <p>Wer die Bremse je Herkunft ausschöpft, wechselt die Adresse: Je Adresse greift sonst schon
+   * nach fünf Anforderungen die eigene Grenze des Dienstes, und die Bremse je Herkunft bliebe
+   * ungeprüft.
+   */
+  private MockHttpServletResponse requestCode(String origin, String email) throws Exception {
     return mvc.perform(
-            post(FORGOT_PATH)
+            post(CODE_REQUEST_PATH)
                 .header(FORWARDED_FOR, SPOOFED + ", " + origin)
                 .contentType(JSON)
                 .content("{\"email\":\"%s\"}".formatted(email)))
@@ -214,10 +188,50 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
         .getResponse();
   }
 
-  /** Schöpft die Anmeldegrenze der Herkunft aus; jeder dieser Versuche wird regulär beantwortet. */
-  private void exhaustLogin(String origin) throws Exception {
+  /**
+   * Eine Code-Eingabe mit vollständig gesetztem Weiterleitungsheader.
+   *
+   * @param forwardedFor der komplette {@code X-Forwarded-For}-Wert, gespoofter Anteil inklusive
+   */
+  private static MockHttpServletResponse verifyCodeVia(
+      MockMvc mockMvc, String forwardedFor, String email, String code) throws Exception {
+    return mockMvc
+        .perform(
+            post(CODE_VERIFY_PATH)
+                .header(FORWARDED_FOR, forwardedFor)
+                .contentType(JSON)
+                .content("{\"email\":\"%s\",\"code\":\"%s\"}".formatted(email, code)))
+        .andReturn()
+        .getResponse();
+  }
+
+  /** Eine Code-Eingabe aus {@code origin}, den ein vertrauenswürdiger Proxy angehängt hat. */
+  private MockHttpServletResponse verifyCode(String origin, String email, String code)
+      throws Exception {
+    return verifyCodeVia(mvc, SPOOFED + ", " + origin, email, code);
+  }
+
+  private MockHttpServletResponse verifyCode(String origin, String code) throws Exception {
+    return verifyCode(origin, KNOWN_EMAIL, code);
+  }
+
+  private MockHttpServletResponse redeemLink(String origin, String token) throws Exception {
+    return mvc.perform(
+            post(CODE_LINK_PATH)
+                .header(FORWARDED_FOR, SPOOFED + ", " + origin)
+                .contentType(JSON)
+                .content("{\"token\":\"%s\"}".formatted(token)))
+        .andReturn()
+        .getResponse();
+  }
+
+  /**
+   * Schöpft die Grenze der Code-Eingabe der Herkunft aus; jeder dieser Versuche wird regulär
+   * beantwortet.
+   */
+  private void exhaustCodeEntry(String origin) throws Exception {
     for (int versuch = 1; versuch <= MAX_ATTEMPTS; versuch++) {
-      assertThat(login(origin, KNOWN_EMAIL, WRONG_PASSWORD).getStatus())
+      assertThat(verifyCode(origin, WRONG_CODE).getStatus())
           .isEqualTo(HttpStatus.UNAUTHORIZED.value());
     }
   }
@@ -238,10 +252,10 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
   @Test
   void ak1UndAk2_zehnVersucheBleibenOffen_derElfteWirdMitRetryAfterAbgewiesen() throws Exception {
     // Given — die Grenze ist ausgeschöpft, jeder Versuch wurde regulär mit 401 beantwortet.
-    exhaustLogin(ORIGIN_A);
+    exhaustCodeEntry(ORIGIN_A);
 
     // When
-    MockHttpServletResponse ersteAbweisung = login(ORIGIN_A, KNOWN_EMAIL, WRONG_PASSWORD);
+    MockHttpServletResponse ersteAbweisung = verifyCode(ORIGIN_A, WRONG_CODE);
 
     // Then
     assertThat(ersteAbweisung.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
@@ -249,7 +263,7 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
 
     // When — ein zwölfter Versuch, eine Minute später.
     clock.advance(ONE_MINUTE);
-    MockHttpServletResponse zweiteAbweisung = login(ORIGIN_A, KNOWN_EMAIL, WRONG_PASSWORD);
+    MockHttpServletResponse zweiteAbweisung = verifyCode(ORIGIN_A, WRONG_CODE);
 
     // Then — die Sperre läuft ab, sie beginnt nicht neu (E10): eine Minute weniger, nicht wieder
     // die volle Dauer.
@@ -265,46 +279,27 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
         .anySatisfy(
             registration ->
                 assertThat(registration.getFilter()).isInstanceOf(ForwardedHeaderFilter.class));
-    exhaustLogin(ORIGIN_A);
-    assertThat(login(ORIGIN_A, KNOWN_EMAIL, WRONG_PASSWORD).getStatus())
+    exhaustCodeEntry(ORIGIN_A);
+    assertThat(verifyCode(ORIGIN_A, WRONG_CODE).getStatus())
         .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
 
     // When / Then — dieselbe E-Mail, zweite echte Herkunft, gleicher gespoofter erster Eintrag:
-    // keine kontoweite Sperre, und die Herkünfte fallen nicht zu einer zusammen.
-    assertThat(loginVia(mvc, SPOOFED + ", " + ORIGIN_B, KNOWN_EMAIL, PASSWORD).getStatus())
-        .isEqualTo(HttpStatus.OK.value());
+    // keine kontoweite Sperre, und die Herkünfte fallen nicht zu einer zusammen. Der Versuch wird
+    // regulär beantwortet, nicht von der Bremse.
+    assertThat(verifyCodeVia(mvc, SPOOFED + ", " + ORIGIN_B, KNOWN_EMAIL, WRONG_CODE).getStatus())
+        .isEqualTo(HttpStatus.UNAUTHORIZED.value());
 
     // Then — ein anderer gespoofter erster Eintrag befreit die gesperrte echte Herkunft nicht.
-    assertThat(loginVia(mvc, OTHER_SPOOFED + ", " + ORIGIN_A, KNOWN_EMAIL, PASSWORD).getStatus())
+    assertThat(
+            verifyCodeVia(mvc, OTHER_SPOOFED + ", " + ORIGIN_A, KNOWN_EMAIL, WRONG_CODE)
+                .getStatus())
         .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
   }
 
   @Test
-  void ak4_ausgeschoepfteAnmeldungSperrtDieAnderenVorgaengeNicht() throws Exception {
-    // Given — die Anmeldung dieser Herkunft ist gesperrt.
-    exhaustLogin(ORIGIN_A);
-    assertThat(login(ORIGIN_A, KNOWN_EMAIL, WRONG_PASSWORD).getStatus())
-        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
-
-    // When / Then — Reset-Anforderung und Registrierung führen eigene Zähler.
-    assertThat(forgot(ORIGIN_A, KNOWN_EMAIL).getStatus()).isEqualTo(HttpStatus.OK.value());
-    assertThat(register(ORIGIN_A, "frisch@example.com").getStatus())
-        .isEqualTo(HttpStatus.CREATED.value());
-  }
-
-  @Test
-  void ak4_resetAnforderungUndRegistrierungSperrenAuchBeiLauterErfolgen() throws Exception {
-    // Given / When — zehn gelungene Reset-Anforderungen: dort entsteht der Schaden gerade durch
-    // die erfolgreichen Aufrufe (E5).
-    for (int aufruf = 1; aufruf <= MAX_ATTEMPTS; aufruf++) {
-      assertThat(forgot(ORIGIN_A, KNOWN_EMAIL).getStatus()).isEqualTo(HttpStatus.OK.value());
-    }
-
-    // Then
-    assertThat(forgot(ORIGIN_A, KNOWN_EMAIL).getStatus())
-        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
-
-    // Given / When — dasselbe für die Registrierung, mit eigenem Zähler derselben Herkunft.
+  void ak4_dieRegistrierungSperrtAuchBeiLauterErfolgen() throws Exception {
+    // Given / When — zehn gelungene Registrierungen: dort entsteht der Schaden gerade durch die
+    // erfolgreichen Aufrufe (E5).
     for (int aufruf = 1; aufruf <= MAX_ATTEMPTS; aufruf++) {
       assertThat(register(ORIGIN_A, "neu" + aufruf + "@example.com").getStatus())
           .isEqualTo(HttpStatus.CREATED.value());
@@ -331,11 +326,11 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
     assertThat(mitUnbekannter).isEqualTo(mitBekannter);
   }
 
-  /** Elf Anmeldeversuche einer Herkunft, als Liste aus Status und {@code detail}. */
+  /** Elf Code-Eingaben einer Herkunft, als Liste aus Status und {@code detail}. */
   private List<String> elevenAttempts(String origin, String email) throws Exception {
     List<String> antworten = new ArrayList<>();
     for (int versuch = 1; versuch <= MAX_ATTEMPTS + 1; versuch++) {
-      antworten.add(statusAndDetail(login(origin, email, WRONG_PASSWORD)));
+      antworten.add(statusAndDetail(verifyCode(origin, email, WRONG_CODE)));
     }
     return antworten;
   }
@@ -343,12 +338,12 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
   @Test
   void ak7_derSperreintrittErzeugtGenauEineWarnzeileOhneGeheimnisse() throws Exception {
     // Given
-    exhaustLogin(ORIGIN_A);
+    exhaustCodeEntry(ORIGIN_A);
 
     // When — der Sperreintritt und ein weiterer abgewiesener Versuch im selben Sperrfenster.
-    login(ORIGIN_A, KNOWN_EMAIL, WRONG_PASSWORD);
+    verifyCode(ORIGIN_A, WRONG_CODE);
     clock.advance(ONE_MINUTE);
-    login(ORIGIN_A, KNOWN_EMAIL, WRONG_PASSWORD);
+    verifyCode(ORIGIN_A, WRONG_CODE);
 
     // Then — eine Zeile je Herkunft, Vorgang und Sperrfenster (E11): Eine Zeile je abgewiesenem
     // Aufruf wäre derselbe Flutungsvektor, gegen den die Bremse antritt.
@@ -359,8 +354,85 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
             .toList();
     assertThat(warnungen).hasSize(1);
     assertThat(warnungen.get(0))
-        .contains(ORIGIN_A, RateLimitedOperation.LOGIN.name())
-        .doesNotContain(KNOWN_EMAIL, WRONG_PASSWORD);
+        .contains(ORIGIN_A, RateLimitedOperation.CODE_VERIFY.name())
+        .doesNotContain(KNOWN_EMAIL, WRONG_CODE);
+  }
+
+  @Test
+  void codeAnforderung_zaehltJedenAufruf_undSperrtNachZehnJeHerkunft() throws Exception {
+    // Given / When — zehn angenommene Anforderungen für zehn verschiedene Adressen: Auch hier
+    // entsteht der Schaden durch die gelungenen Aufrufe, die Mails verschicken (Plan #1801 A7).
+    for (int aufruf = 1; aufruf <= MAX_ATTEMPTS; aufruf++) {
+      assertThat(requestCode(ORIGIN_A, "code" + aufruf + "@example.com").getStatus())
+          .isEqualTo(HttpStatus.ACCEPTED.value());
+    }
+
+    // Then — die elfte ist abgewiesen, eine andere Herkunft bleibt offen.
+    MockHttpServletResponse abweisung = requestCode(ORIGIN_A, "code-zu-viel@example.com");
+    assertThat(abweisung.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+    assertThat(retryAfterOf(abweisung)).isEqualTo(BLOCK.toSeconds());
+    assertThat(requestCode(ORIGIN_B, "code-zu-viel@example.com").getStatus())
+        .isEqualTo(HttpStatus.ACCEPTED.value());
+  }
+
+  @Test
+  void codeEingabe_zaehltFehlschlaege_undSperrtNachZehnJeHerkunft() throws Exception {
+    // Given — zehn falsche Codes, jeder regulär mit 401 beantwortet.
+    for (int versuch = 1; versuch <= MAX_ATTEMPTS; versuch++) {
+      assertThat(verifyCode(ORIGIN_A, WRONG_CODE).getStatus())
+          .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    // When / Then — der elfte ist abgewiesen, eine andere Herkunft bleibt offen.
+    MockHttpServletResponse abweisung = verifyCode(ORIGIN_A, WRONG_CODE);
+    assertThat(abweisung.getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+    assertThat(retryAfterOf(abweisung)).isEqualTo(BLOCK.toSeconds());
+    assertThat(verifyCode(ORIGIN_B, WRONG_CODE).getStatus())
+        .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+  }
+
+  @Test
+  void codeEingabeUndCodeAnforderung_fuehrenGetrennteZaehler() throws Exception {
+    // Given — die Code-Eingabe dieser Herkunft ist gesperrt.
+    for (int versuch = 1; versuch <= MAX_ATTEMPTS; versuch++) {
+      verifyCode(ORIGIN_A, WRONG_CODE);
+    }
+    assertThat(verifyCode(ORIGIN_A, WRONG_CODE).getStatus())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+
+    // When / Then — die Anforderung eines neuen Codes bleibt offen (AK 7 aus #1781: getrennt für
+    // Anforderung und Eingabe), ebenso die Registrierung (AK 4 aus #840).
+    assertThat(requestCode(ORIGIN_A, KNOWN_EMAIL).getStatus())
+        .isEqualTo(HttpStatus.ACCEPTED.value());
+    assertThat(register(ORIGIN_A, "frisch@example.com").getStatus())
+        .isEqualTo(HttpStatus.CREATED.value());
+  }
+
+  @Test
+  void codeAnforderungAusgeschoepft_sperrtDieCodeEingabeNicht() throws Exception {
+    // Given — die Anforderung dieser Herkunft ist gesperrt.
+    for (int aufruf = 1; aufruf <= MAX_ATTEMPTS; aufruf++) {
+      requestCode(ORIGIN_A, "voll" + aufruf + "@example.com");
+    }
+    assertThat(requestCode(ORIGIN_A, KNOWN_EMAIL).getStatus())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
+
+    // When / Then — wer schon einen Code hat, kann ihn noch eingeben.
+    assertThat(verifyCode(ORIGIN_A, WRONG_CODE).getStatus())
+        .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+  }
+
+  @Test
+  void linkEinloesung_zaehltFehlschlaege_mitDenGrenzwertenDerCodeEingabe() throws Exception {
+    // Given — zehn unbekannte Links, jeder regulär mit 401 beantwortet.
+    for (int versuch = 1; versuch <= MAX_ATTEMPTS; versuch++) {
+      assertThat(redeemLink(ORIGIN_A, "unbekannt-" + versuch).getStatus())
+          .isEqualTo(HttpStatus.UNAUTHORIZED.value());
+    }
+
+    // When / Then
+    assertThat(redeemLink(ORIGIN_A, "unbekannt-zu-viel").getStatus())
+        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
   }
 
   /**
@@ -374,7 +446,7 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
    * umschließenden Klasse zu benutzen: Die gehören deren Kontext, nicht diesem.
    */
   @Nested
-  @TestPropertySource(properties = "manban.ratelimit.login.max-attempts=2")
+  @TestPropertySource(properties = "manban.ratelimit.code-verify.max-attempts=2")
   class MitEngererGrenze {
 
     @Autowired private MockMvc engerMvc;
@@ -387,18 +459,18 @@ class AuthRateLimitIT extends AbstractIntegrationTest {
     }
 
     @Test
-    void ak6_dieGrenzeDerAnmeldungIstKonfigurierbar() throws Exception {
+    void ak6_dieGrenzeDerCodeEingabeIstKonfigurierbar() throws Exception {
       // Given — zwei statt zehn Versuche sind offen.
       for (int versuch = 1; versuch <= NARROW_MAX_ATTEMPTS; versuch++) {
         assertThat(
-                loginVia(engerMvc, SPOOFED + ", " + ORIGIN_A, KNOWN_EMAIL, WRONG_PASSWORD)
+                verifyCodeVia(engerMvc, SPOOFED + ", " + ORIGIN_A, KNOWN_EMAIL, WRONG_CODE)
                     .getStatus())
             .isEqualTo(HttpStatus.UNAUTHORIZED.value());
       }
 
       // When / Then — der dritte ist abgewiesen, obwohl die Vorgabe zehn wäre.
       assertThat(
-              loginVia(engerMvc, SPOOFED + ", " + ORIGIN_A, KNOWN_EMAIL, WRONG_PASSWORD)
+              verifyCodeVia(engerMvc, SPOOFED + ", " + ORIGIN_A, KNOWN_EMAIL, WRONG_CODE)
                   .getStatus())
           .isEqualTo(HttpStatus.TOO_MANY_REQUESTS.value());
     }

@@ -2,15 +2,27 @@
 
 ## Registrieren & Anmelden
 
-- **Registrieren:** über „Registrieren" auf dem Login-Screen (E-Mail, Passwort, Anzeigename).
-- **E-Mail bestätigen:** Pflicht vor dem ersten Login. Ohne echten Mailserver steht der Link im Log
-  (siehe [Betrieb](betrieb.md#e-mail-bestätigung-ohne-mailserver)).
-- **Anmelden:** E-Mail + Passwort. Hast du **genau ein** Projekt, wirst du direkt zur Boardauswahl
+- **Registrieren:** über „Registrieren" auf dem Anmeldeschirm, nur mit **E-Mail-Adresse und
+  Anzeigename**. Ein Passwort gibt es nicht. Nach der Registrierung kommt gleich ein Anmeldecode.
+- **Anmelden:** E-Mail-Adresse eingeben → eine Mail bringt einen **sechsstelligen Code** und einen
+  **Link**. Den Link öffnest du auf dem Gerät, das angemeldet werden soll; liest du die Mail auf
+  einem anderen Gerät, tippst du dort den Code ab. Ein Klick meldet immer nur das Gerät an, auf
+  dem er geschieht. Die erste Anmeldung per Code bestätigt zugleich deine E-Mail-Adresse — eine
+  eigene Bestätigungsmail gibt es nicht. Ohne Mailserver steht der Code im Protokoll des Servers
+  (siehe [Betrieb](betrieb.md#anmeldecode-und-mails-ohne-mailserver)).
+- **Der Code** gilt 10 Minuten und nur einmal. Ein neu angeforderter Code macht den alten samt Link
+  ungültig, nach 5 falschen Eingaben verfällt er. Auf jede Anforderung kommt dieselbe Antwort
+  („Falls es ein Konto mit dieser Adresse gibt, ist ein Code unterwegs.“) — sie verrät nicht, ob es
+  ein Konto gibt. Je Adresse werden höchstens 5 Anforderungen pro Stunde angenommen.
+- **Nach der Anmeldung:** Hast du **genau ein** Projekt, wirst du direkt zur Boardauswahl
   geleitet; hat dieses **genau ein** Board, direkt aufs Board. Über die Seitenleiste „Projekte" bzw.
   die Zurück-Links kommst du jederzeit zu den Listen zurück (um weitere anzulegen).
-- **Fehlermeldungen** sind konkret: falsche Zugangsdaten ergeben „Ungültige Anmeldedaten." (ohne zu
-  verraten, ob E-Mail oder Passwort falsch war); noch nicht bestätigte, noch nicht freigegebene oder
-  **gesperrte** Konten nennen den jeweiligen Grund (z. B. „Konto gesperrt").
+- **Sitzungsdauer:** Wer das Board nutzt, bleibt angemeldet — jede Nutzung verlängert die Sitzung.
+  Erst nach **30 Tagen ohne Nutzung** braucht es einen neuen Code.
+- **Abmelden** beendet die Sitzung **auf diesem Gerät** sofort; andere Geräte bleiben angemeldet.
+- **Fehlermeldungen** sind konkret: Ein falscher oder abgelaufener Code wird abgewiesen; ein
+  **gesperrtes** Konto sieht „Konto gesperrt", ein noch nicht freigegebenes „Das Konto wartet auf
+  die Freigabe".
 
 ## Projekte
 
@@ -538,7 +550,8 @@ Die **Stillefrist** ist dieselbe, nach der die Auswertung einen Lauf als verstum
 läuft er wieder.
 
 Ein verstummter Lauf bleibt sichtbar, wie alt er auch ist, **bis seine Störung im
-Plattform-Leitstand quittiert ist**. Danach erscheint er hier nicht mehr und ist auch am wartenden
+Plattform-Leitstand quittiert ist**: Er steht dort unter „Störungen“ und wird über **„Störung
+löschen“** in seiner Zeile quittiert. Danach erscheint er hier nicht mehr und ist auch am wartenden
 Paket kein Grund „Runner verstummt“ mehr. Meldet sich ein quittierter Lauf später doch wieder,
 erscheint er wieder als „läuft“. Den letzten Lauf darunter berührt die Quittung nicht.
 
@@ -1022,8 +1035,10 @@ Die Frist ist ein **Einstellwert der Plattform** (`manban.nightrun.stille-frist`
 Minuten): Sie gilt für alle Projekte gleich und hat bewusst **keine Oberfläche** — wer sie ändern
 will, ändert die Konfiguration der Instanz.
 
-Ein durch Stille beendeter Run ist **keine Störung**. Er erscheint hier als „nicht gelungen" und
-taucht im Bereich „Störungen" nicht auf.
+Ein verstummter Run ist **eine Störung**: Er erscheint als „nicht gelungen" und steht im Bereich
+„Störungen" — wie alt er auch ist, denn er hat sich nie abgemeldet. Erst die Quittung dort nimmt ihn
+auch aus [„Runner jetzt“](#runner-jetzt) heraus. Ein Run, der sich noch innerhalb der Frist
+gemeldet hat, steht dort nicht, ebenso wenig ein von Hand beendeter.
 
 ### Störungen
 

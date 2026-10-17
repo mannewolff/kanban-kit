@@ -6,28 +6,57 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import { useState } from 'react'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
-import { ApiError, apiErrorMessage } from '../api/client'
+import { authApi } from '../api/auth'
 import { useAuth } from '../auth/AuthContext'
 import { AuthCard } from '../components/AuthCard'
-import { PasswordField } from '../components/PasswordField'
 import { useT } from '../i18n/SpracheContext'
+import { codeFehlermeldung } from '../lib/codeFehlermeldung'
 
+/**
+ * Anmeldung per Einmalcode in zwei Schritten (Plan #1801): erst die E-Mail-Adresse, danach die
+ * neutrale Antwort und das Feld für den sechsstelligen Code aus der Mail. Kein Passwort.
+ * Nach der Registrierung kommt der Code sofort (E3): `state.codeFuer` trägt die Adresse, und die
+ * Seite beginnt im Code-Schritt, ohne selbst einen Code anzufordern.
+ */
 export function LoginPage() {
   const t = useT()
-  const { login } = useAuth()
+  const { loginWithCode } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const codeFuer = (location.state as { codeFuer?: string } | null)?.codeFuer
+  const [email, setEmail] = useState(codeFuer ?? '')
+  const [code, setCode] = useState('')
+  const [codeAngefordert, setCodeAngefordert] = useState(codeFuer != null && codeFuer !== '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const fehlerAnzeigen = (e: unknown) => setError(codeFehlermeldung(e, t))
+
+  const codeAnfordern = async () => {
+    setError(null)
+    setBusy(true)
+    try {
+      await authApi.requestCode(email)
+      setCode('')
+      setCodeAngefordert(true)
+    } catch (e) {
+      fehlerAnzeigen(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleEmailSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+    void codeAnfordern()
+  }
+
+  const handleCodeSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setError(null)
     setBusy(true)
     try {
-      await login(email, password)
+      await loginWithCode(email, code)
       // Die vor dem Anmelden aufgerufene Adresse gewinnt (Issue #1082, AK 1 Satz 2): Wer auf eine
       // bestimmte Seite wollte, landet dort und nicht auf der Startseite.
       const vorher = (location.state as { from?: string } | null)?.from
@@ -39,20 +68,7 @@ export function LoginPage() {
       // (nach dem Login ist die Navigation ein Push, also nicht location.key === 'default').
       navigate('/', { replace: true, state: { autoRoute: true } })
     } catch (e) {
-      if (e instanceof ApiError && e.status === 429) {
-        // Zählbremse: vor dem 401-Zweig, weil ein abgewiesener Versuch sonst als falsche
-        // Zugangsdaten erschiene und der Nutzer weiterprobierte, statt zu warten.
-        setError(apiErrorMessage(e, t.AUTH.ZU_VIELE_VERSUCHE))
-      } else if (e instanceof ApiError && e.status === 401) {
-        // Falsche Zugangsdaten: generische Meldung (verrät nicht, ob E-Mail oder Passwort falsch).
-        setError(t.AUTH.ANMELDEDATEN_UNGUELTIG)
-      } else {
-        // Backend liefert die konkrete RFC-9457-Meldung (403: E-Mail nicht bestätigt / noch nicht
-        // freigegeben / Konto gesperrt). Gelesen wird `detail` über apiErrorMessage, nie `message`:
-        // das fällt bei unlesbarem Body auf den Roh-Body bzw. statusText zurück und ist damit nicht
-        // anzeigbar — bei einem 429 eines vorgelagerten Proxys stünde sonst dessen HTML im Formular.
-        setError(apiErrorMessage(e, t.AUTH.ANMELDUNG_FEHLGESCHLAGEN))
-      }
+      fehlerAnzeigen(e)
     } finally {
       setBusy(false)
     }
@@ -60,22 +76,35 @@ export function LoginPage() {
 
   return (
     <AuthCard title={t.AUTH.ANMELDEN}>
-      <Box component="form" onSubmit={handleSubmit}>
-        <Stack spacing={2}>
-          {error && <Alert severity="error">{error}</Alert>}
-          <TextField label={t.AUTH.EMAIL} type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            required fullWidth autoComplete="email" />
-          <PasswordField label={t.AUTH.PASSWORT} value={password} onChange={(e) => setPassword(e.target.value)}
-            required fullWidth autoComplete="current-password" />
-          <Button type="submit" variant="contained" disabled={busy} fullWidth>
-            {t.AUTH.ANMELDEN}
-          </Button>
-          <Stack direction="row" justifyContent="space-between">
-            <Link component={RouterLink} to="/signup">{t.AUTH.REGISTRIEREN}</Link>
-            <Link component={RouterLink} to="/forgot">{t.AUTH.PASSWORT_VERGESSEN}</Link>
+      {codeAngefordert ? (
+        <Box component="form" onSubmit={handleCodeSubmit}>
+          <Stack spacing={2}>
+            <Alert severity="info">{t.AUTH.CODE_UNTERWEGS}</Alert>
+            {error && <Alert severity="error">{error}</Alert>}
+            <TextField label={t.AUTH.CODE} value={code} onChange={(e) => setCode(e.target.value.trim())}
+              required fullWidth autoComplete="one-time-code" helperText={t.AUTH.CODE_HINWEIS}
+              slotProps={{ htmlInput: { inputMode: 'numeric', pattern: '[0-9]{6}', maxLength: 6 } }} />
+            <Button type="submit" variant="contained" disabled={busy} fullWidth>
+              {t.AUTH.ANMELDEN}
+            </Button>
+            <Button onClick={() => void codeAnfordern()} disabled={busy} fullWidth>
+              {t.AUTH.NEUEN_CODE_ANFORDERN}
+            </Button>
           </Stack>
-        </Stack>
-      </Box>
+        </Box>
+      ) : (
+        <Box component="form" onSubmit={handleEmailSubmit}>
+          <Stack spacing={2}>
+            {error && <Alert severity="error">{error}</Alert>}
+            <TextField label={t.AUTH.EMAIL} type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              required fullWidth autoComplete="email" />
+            <Button type="submit" variant="contained" disabled={busy} fullWidth>
+              {t.AUTH.CODE_ANFORDERN}
+            </Button>
+            <Link component={RouterLink} to="/signup">{t.AUTH.REGISTRIEREN}</Link>
+          </Stack>
+        </Box>
+      )}
     </AuthCard>
   )
 }

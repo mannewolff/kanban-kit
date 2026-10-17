@@ -126,7 +126,9 @@ Der Sicherungsdienst hat sein eigenes Bau-Overlay `docker-compose.backup-bau.yml
 
 Was ein Versionssprung von Hand verlangt — je Version ein Abschnitt, und die Regel, dass eine
 Version ohne eigenen Abschnitt keine Handarbeit verlangt —, steht an genau einer Stelle:
-[UPGRADING.md](../UPGRADING.md).
+[UPGRADING.md](../UPGRADING.md). Mit der Anmeldung per Einmalcode enden dort beschrieben einmal
+alle Sitzungen, gespeicherte Passwörter werden gelöscht, und Variablen der Zählbremse sind
+umbenannt.
 
 ## Aufruf
 
@@ -163,6 +165,9 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_SESSION_SECRET` | HMAC-Secret der Session-Cookies. Der Dev-Default gilt **nur** im ausdrücklich eingeschalteten Entwicklungsbetrieb (`MANBAN_DEV_MODE=true`) — sonst verweigert die Anwendung den Start | Dev-Default |
 | `MANBAN_DEV_MODE` | Entwicklungs-/Testbetrieb ausdrücklich einschalten; erlaubt den Start mit dem Standard-Sitzungsschlüssel, mit Warnung. Der lokale Compose-Stack setzt ihn auf `true`, das Produktions-Overlay fest auf `false` | `false` |
 | `MANBAN_COOKIE_SECURE` | Session-Cookie nur über HTTPS | `true` |
+| `MANBAN_AUTH_LOGIN_CODE_TTL` | Gültigkeit eines Anmeldecodes samt Link (ISO-8601-Dauer) | `PT10M` |
+| `MANBAN_AUTH_LOGIN_CODE_MAX_ATTEMPTS` | Falsche Eingaben, nach denen ein Code verfällt | `5` |
+| `MANBAN_AUTH_LOGIN_CODE_MAX_REQUESTS_PER_HOUR` | Angenommene Code-Anforderungen je E-Mail-Adresse und Stunde | `5` |
 | `MANBAN_DB_POOL_MAX` | Höchstzahl der Datenbankverbindungen der Anwendung | `20` |
 | `MANBAN_DB_POOL_MIN_IDLE` | Verbindungen, die auch ohne Last offen bleiben | `5` |
 | `MANBAN_DB_CONNECTION_TIMEOUT_MS` | Höchste Wartezeit auf eine freie Verbindung in Millisekunden | `5000` |
@@ -195,7 +200,7 @@ geladen und ist per `.gitignore` ausgeschlossen).
 > ```
 
 > **E-Mail-Zustellung läuft über die Outbox:** Seit Issue #502 bestätigt eine erfolgreiche
-> HTTP-Antwort (Registrierung, Passwort-Reset, Einladung, Projektanlage) die **gespeicherte
+> HTTP-Antwort (Registrierung, Code-Anforderung, Einladung, Projektanlage) die **gespeicherte
 > fachliche Operation, nicht die Mail-Zustellung**. Die Mail wird in derselben Transaktion
 > vorgemerkt und nach dem Commit vom Worker mit Wiederholungen versandt. Ein SMTP-Ausfall rollt
 > also keine Registrierung oder Einladung mehr zurück (früherer 502 beim Einladen entfällt) —
@@ -885,24 +890,47 @@ Instanz**: Alles unter `docs/` wird auf die öffentliche Doku-Site kopiert
 
 ## Zählbremse gegen Massenversuche
 
-Drei Endpunkte sind gegen Massenversuche begrenzt:
+Die Anmelde-Endpunkte sind je **Herkunft** (Absender-Adresse im Netz) gegen Massenversuche begrenzt:
 
-| Endpunkt | Was gezählt wird |
-| --- | --- |
-| `POST /api/auth/login` | nur abgewiesene Anmeldungen (`401`) — ein `400` zählt nicht |
-| `POST /api/auth/register` | jeder Aufruf, auch der erfolgreiche |
-| `POST /api/auth/forgot` | jeder Aufruf, auch der erfolgreiche |
+| Endpunkt | Vorgang | Was gezählt wird |
+| --- | --- | --- |
+| `POST /api/auth/register` | Registrierung | jeder Aufruf, auch der erfolgreiche |
+| `POST /api/auth/code/request` | Code-Anforderung | jeder Aufruf, auch der erfolgreiche |
+| `POST /api/auth/code/verify` | Code-Eingabe | nur abgewiesene Eingaben (`401`/`403`) — ein Formfehler zählt nicht |
+| `POST /api/auth/code/link` | Link | nur abgewiesene Links; eigener Zähler mit den Grenzwerten der Code-Eingabe |
 
-Registrierung und Reset-Anforderung zählen auch bei Erfolg, weil beide von außen erfolgreich
+Registrierung und Code-Anforderung zählen auch bei Erfolg, weil beide von außen erfolgreich
 ausgelöst werden können und sonst unbegrenzt Mails erzeugten.
 
 **Vorgabewerte:** zehn Versuche je fünfzehn Minuten, danach fünfzehn Minuten Sperre. Gezählt wird
-je **Herkunft und Vorgang** getrennt: Ausgeschöpfte Anmeldeversuche sperren die Reset-Anforderung
+je **Herkunft und Vorgang** getrennt: Ausgeschöpfte Code-Eingaben sperren die Code-Anforderung
 nicht, und eine gesperrte Herkunft sperrt kein Konto — dieselbe Anmeldung von einer anderen
 Herkunft gelingt weiterhin. Die Sperre läuft ab dem ersten abgewiesenen Versuch und wird durch
 weitere Versuche **nicht verlängert**. Abgewiesen wird mit `429` und einem `Retry-After`-Header.
 
-Alle Werte lassen sich über `MANBAN_RATELIMIT_*` überschreiben, siehe `.env.example`.
+Alle Werte lassen sich über `MANBAN_RATELIMIT_*` überschreiben, siehe `.env.example`:
+
+| Variable | Bedeutung | Default |
+|----------|-----------|---------|
+| `MANBAN_RATELIMIT_CODE_REQUEST_MAX_ATTEMPTS` | Code-Anforderungen je Herkunft im Zeitfenster | `10` |
+| `MANBAN_RATELIMIT_CODE_REQUEST_WINDOW` | Zeitfenster der Code-Anforderung (ISO-8601) | `PT15M` |
+| `MANBAN_RATELIMIT_CODE_REQUEST_BLOCK_DURATION` | Sperrdauer nach ausgeschöpfter Code-Anforderung | `PT15M` |
+| `MANBAN_RATELIMIT_CODE_VERIFY_MAX_ATTEMPTS` | abgewiesene Code-Eingaben je Herkunft im Zeitfenster (gilt auch für den Link) | `10` |
+| `MANBAN_RATELIMIT_CODE_VERIFY_WINDOW` | Zeitfenster der Code-Eingabe (ISO-8601) | `PT15M` |
+| `MANBAN_RATELIMIT_CODE_VERIFY_BLOCK_DURATION` | Sperrdauer nach ausgeschöpfter Code-Eingabe | `PT15M` |
+
+**Rückfall auf die alten Namen.** Bis zur Anmeldung per Einmalcode hießen die beiden Vorgänge
+anders. Ist ein neuer Name nicht gesetzt, gilt der Wert des alten: für die Code-Anforderung
+`MANBAN_RATELIMIT_FORGOT_MAX_ATTEMPTS`, `_WINDOW` und `_BLOCK_DURATION`, für die Code-Eingabe
+`MANBAN_RATELIMIT_LOGIN_MAX_ATTEMPTS`, `_WINDOW` und `_BLOCK_DURATION`. Eine bestehende `.env`
+wirkt damit weiter; umstellen sollte man sie trotzdem, denn der Rückfall ist nur ein Übergang.
+
+**Grenze je E-Mail-Adresse.** Zusätzlich zur Bremse je Herkunft nimmt die Anwendung je
+eingegebener Adresse höchstens `MANBAN_AUTH_LOGIN_CODE_MAX_REQUESTS_PER_HOUR` (Vorgabe 5)
+Code-Anforderungen pro Stunde an — gleich, ob es ein Konto gibt. Ab der nächsten sieht jeder
+denselben Hinweis; weder Antwort noch Hinweis verraten, ob ein Konto existiert. Gültigkeit und
+Fehlversuche eines Codes stellen `MANBAN_AUTH_LOGIN_CODE_TTL` und
+`MANBAN_AUTH_LOGIN_CODE_MAX_ATTEMPTS` ein (Tabelle unter [Umgebungsvariablen](#umgebungsvariablen)).
 
 **Im Protokoll** steht beim Eintritt einer Sperre genau **eine** `WARN`-Zeile je Herkunft, Vorgang
 und Sperrfenster — weitere abgewiesene Versuche im selben Fenster erzeugen keine weiteren Zeilen.
@@ -930,7 +958,7 @@ sie begrenzen und **wie**:
 
 | | Zählbremse gegen Massenversuche | Durchsatzbremse für Zugriffstoken |
 | --- | --- | --- |
-| Greift auf | Anmeldung, Registrierung, Reset-Anforderung | jeden Aufruf mit Zugriffstoken (CLI, Nachtlauf) |
+| Greift auf | Registrierung, Code-Anforderung, Code-Eingabe | jeden Aufruf mit Zugriffstoken (CLI, Nachtlauf) |
 | Zählt je | Herkunft (IP) und Vorgang | Person, über alle ihre Token hinweg |
 | Regel | N Versuche je Fenster, dann feste Sperre | kontinuierlich nachgefüllt, nur der Überschuss wird abgewiesen |
 | `type` im Problem-Detail | `about:blank` | `urn:manban:overload` |
@@ -954,16 +982,31 @@ Minute. Jede Abweisung wird außerdem je Person und Stunde aufsummiert abgelegt 
 aufgeräumt. Für mehrere Instanzen gilt dieselbe Einschränkung wie bei der Zählbremse: Jede zählt
 für sich.
 
-## E-Mail-Bestätigung (ohne Mailserver)
+## Anmeldecode und Mails (ohne Mailserver)
 
-Im Standard ist der Mailversand **aus** (`MANBAN_MAIL_ENABLED=false`). Verifikations-, Passwort-Reset-
-und Einladungs-Links werden stattdessen **ins Log geschrieben**:
+Angemeldet wird per Einmalcode: Die Mail bringt einen sechsstelligen Code und einen Link
+(`…/login/link?token=…`), der ihn gleich einlöst. Die erste Anmeldung bestätigt zugleich die
+E-Mail-Adresse. **Sitzungsdauer:** 30 Tage, gleitend — jede Nutzung verlängert die Sitzung;
+„Abmelden" beendet sie auf dem Gerät sofort.
+
+Im Standard ist der Mailversand **aus** (`MANBAN_MAIL_ENABLED=false`). Anmeldecode, Link und
+Einladungs-Links werden stattdessen **ins Log geschrieben**:
 
 ```
-docker compose logs manban-api | grep "Verifikations-Link"
+docker compose logs manban-api | grep "Anmeldecode für"
 ```
 
-Den geloggten Link (`https://localhost/verify?token=…`) im Browser öffnen → E-Mail bestätigt.
+Den Code auf dem Anmeldeschirm eingeben oder den geloggten Link im Browser öffnen.
+
+**Mit eingeschaltetem Mailversand steht der Code nie im Protokoll** — dort steht dann nur, dass
+eine Mail versandt wurde. Das ist gewollt: Wer das Protokoll lesen kann, soll sich damit nicht
+anmelden können.
+
+**Fällt der Mailserver aus**, kommen keine Codes an, und niemand kann sich neu anmelden; bestehende
+Sitzungen laufen weiter. Der Betreiber schaltet dann den Mailversand **vorübergehend ab**
+(`MANBAN_MAIL_ENABLED=false` in der `.env`, Container mit `docker compose up -d` neu anlegen), liest
+die Codes aus dem Protokoll und gibt sie den Betroffenen auf einem anderen Weg weiter. Ist der
+Mailserver wieder da, wird der Versand wieder eingeschaltet.
 
 ## Den ersten Admin einrichten
 
@@ -978,7 +1021,7 @@ kein Aussperren).
 
 1. `MANBAN_BOOTSTRAP_ADMIN_TOKEN=DEIN_TOKEN` in der `.env` setzen und die Container **neu anlegen**
    (`docker compose up -d`) — Compose liest die `.env` nur beim Anlegen, ein `restart` genügt nicht.
-2. Normal **registrieren** und **einloggen** (E-Mail vorher bestätigen, s. o.).
+2. Normal **registrieren** und per **Code anmelden** (Code ohne Mailserver aus dem Log, s. o.).
 3. Eingeloggt **`https://localhost/admin/bootstrap`** öffnen, den Token eingeben → „Admin werden".
 
 **Wichtig:** zuerst einloggen, *dann* `/admin/bootstrap` — der Bootstrap stuft den *gerade
@@ -990,7 +1033,7 @@ wenn schon ein Admin existiert → 409. Token danach aus der `.env` entfernen.
 Nur nehmen, wenn Weg A nicht in Frage kommt — etwa weil die Container nicht neu angelegt
 werden können. Der Weg
 umgeht jede Anwendungslogik, jedes Feld muss von Hand stimmen. Registrieren, dann per SQL
-freischalten und zum Admin machen (spart Token + Verifikations-Link):
+freischalten und zum Admin machen (spart den Token):
 
 ```
 docker compose exec -T postgres psql -U manban -d manban \

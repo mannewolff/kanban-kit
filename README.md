@@ -137,8 +137,8 @@ Danach ab- und wieder anmelden — die Rolle wird beim Login geladen.
 
 ## Mailversand aktivieren
 
-Ohne Konfiguration werden Verifikations- und Reset-Links nur ins Log geschrieben (kein SMTP
-nötig). Für echten Versand in der `.env` setzen (Beispiel Strato, 587/STARTTLS):
+Angemeldet wird per Einmalcode aus einer Mail. Ohne Konfiguration werden Anmeldecodes und
+Einladungs-Links nur ins Log geschrieben (kein SMTP nötig), mit eingeschaltetem Versand nie. Für echten Versand in der `.env` setzen (Beispiel Strato, 587/STARTTLS):
 
 ```
 MANBAN_MAIL_ENABLED=true

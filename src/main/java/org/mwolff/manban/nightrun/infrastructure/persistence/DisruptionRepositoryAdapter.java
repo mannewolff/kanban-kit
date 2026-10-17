@@ -39,6 +39,13 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
    * des Projekts und die fehlende Quittung. <b>Was eine Störung ist, steht hier nicht</b> — das
    * entscheidet {@code NightRunOutcome} in der Domäne, und zwar als einziger Ort.
    *
+   * <p><b>Abgeschlossen oder verstummt</b> (Issue #1800): Ein Lauf, der sich nie abmeldete, trägt
+   * {@code complete = false} und hat trotzdem einen Ausgang, sobald sein letztes Lebenszeichen vor
+   * {@code :lebenszeichenBis} liegt. Dieselbe Rückfallregel und derselbe Rand wie in {@link
+   * #LAEUFE_DER_NACHT}, nur verneint: Genau <em>auf</em> der Frist lebt der Lauf noch und bleibt
+   * draußen. Ohne diesen Zweig erschiene ein verstummter Lauf nie unter den Störungen — und ließe
+   * sich nicht quittieren.
+   *
    * <p>Kein {@code LIMIT} (Plan #1072 E13): AK 4 verlangt jede offene Störung, und ein stilles
    * Limit sähe aus wie Vollständigkeit. Die Menge ist durch den Ringpuffer je Projekt nach oben
    * beschränkt.
@@ -52,7 +59,8 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
         JOIN project p ON p.id = r.project_id
         LEFT JOIN night_run_disruption_ack a ON a.night_run_id = r.id
        WHERE r.kind = 'NIGHT'
-         AND r.complete = true
+         AND (r.complete = true
+              OR COALESCE(r.updated_at, r.started_at) < :lebenszeichenBis)
          AND p.dashboard_participation = true
          AND a.night_run_id IS NULL
        ORDER BY r.started_at DESC, r.id DESC
@@ -206,8 +214,12 @@ class DisruptionRepositoryAdapter implements DisruptionRepository {
   }
 
   @Override
-  public List<DisruptionCandidate> openCandidates() {
-    return jdbc.query(KANDIDATEN, new MapSqlParameterSource(), KANDIDAT);
+  public List<DisruptionCandidate> openCandidates(Instant jetzt, Duration stilleFrist) {
+    return jdbc.query(
+        KANDIDATEN,
+        new MapSqlParameterSource(
+            "lebenszeichenBis", OffsetDateTime.ofInstant(jetzt.minus(stilleFrist), ZoneOffset.UTC)),
+        KANDIDAT);
   }
 
   @Override

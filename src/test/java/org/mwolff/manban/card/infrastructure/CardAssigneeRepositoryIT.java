@@ -29,12 +29,12 @@ class CardAssigneeRepositoryIT extends AbstractIntegrationTest {
   void seed() {
     userA =
         insert(
-            "INSERT INTO app_user (email, password_hash, display_name) "
-                + "VALUES ('a@example.com', 'x', 'A') RETURNING id");
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('a@example.com', 'A') RETURNING id");
     userB =
         insert(
-            "INSERT INTO app_user (email, password_hash, display_name) "
-                + "VALUES ('b@example.com', 'x', 'B') RETURNING id");
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('b@example.com', 'B') RETURNING id");
     long projectId =
         insert(
             "INSERT INTO project (name, owner_user_id) VALUES ('P', " + userA + ") RETURNING id");

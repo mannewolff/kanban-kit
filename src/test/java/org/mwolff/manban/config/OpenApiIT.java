@@ -31,14 +31,12 @@ import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -59,13 +57,9 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class OpenApiIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
 
-  @Autowired private AppUserRepository users;
-
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
 
   @Autowired private ObjectMapper json;
 
@@ -124,18 +118,8 @@ class OpenApiIT extends AbstractIntegrationTest {
 
   private static final String ABWEICHEND = "Abweichende verlässliche Aufrufe: ";
 
-  private Cookie loginAs(String email) throws Exception {
-    users.save(
-        new AppUser(
-            null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie loginAs(String email) {
+    return anmeldung.anmelden(email, PlatformRole.USER);
   }
 
   private JsonNode tokenAnlegen(Cookie session) throws Exception {
@@ -223,7 +207,7 @@ class OpenApiIT extends AbstractIntegrationTest {
         .isNotBlank()
         .isNotEqualTo(OpenApiConfig.VERSION_UNBEKANNT);
     // Zugang je Pfad aus derselben Tabelle wie die Security-Regeln.
-    assertThat(spec.at("/paths/~1api~1auth~1login/post/x-zugang").asText())
+    assertThat(spec.at("/paths/~1api~1auth~1code~1request/post/x-zugang").asText())
         .isEqualTo("oeffentlich");
     assertThat(spec.at("/paths/~1api~1kanban~1items/get/x-zugang").asText())
         .isEqualTo("nur-projekt-token");

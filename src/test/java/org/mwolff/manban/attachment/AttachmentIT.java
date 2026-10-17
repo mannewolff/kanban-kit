@@ -14,9 +14,9 @@ import java.nio.charset.StandardCharsets;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.attachment.application.ObjectStorage;
 import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardArchiveService;
@@ -35,8 +35,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class AttachmentIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   /** Kleines Limit, damit der Limit-Test (perCardLimitIsEnforced) günstig bleibt. */
   @DynamicPropertySource
   static void attachmentLimit(DynamicPropertyRegistry registry) {
@@ -52,7 +50,7 @@ class AttachmentIT extends AbstractIntegrationTest {
   @Autowired private CardArchiveService cardArchiveService;
   @Autowired private BoardService boardService;
 
-  @Autowired private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
 
   private Cookie login;
   private long cardId;
@@ -60,19 +58,7 @@ class AttachmentIT extends AbstractIntegrationTest {
   private long columnId;
 
   private void setup(String email) throws Exception {
-    String hash = passwordEncoder.encode(PASSWORD);
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(new AppUser(null, email, hash, "P", true, PlatformRole.USER));
-    }
-    login =
-        mvc.perform(
-                post("/api/auth/login")
-                    .contentType("application/json")
-                    .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-            .andExpect(status().isOk())
-            .andReturn()
-            .getResponse()
-            .getCookie("manban_session");
+    login = anmeldung.anmelden(email, PlatformRole.USER);
 
     Cookie admin = platformAdminSession();
     long projectId =
@@ -129,21 +115,8 @@ class AttachmentIT extends AbstractIntegrationTest {
     return json.readTree(body).get("id").asLong();
   }
 
-  private Cookie platformAdminSession() throws Exception {
-    String email = "project-admin@example.com";
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie platformAdminSession() {
+    return anmeldung.anmelden("project-admin@example.com", PlatformRole.ADMIN);
   }
 
   private String objectKeyOf(long attachmentId) {

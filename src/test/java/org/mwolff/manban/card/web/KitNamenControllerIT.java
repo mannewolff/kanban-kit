@@ -11,14 +11,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.common.KitNamen.Sache;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** Zugang zum Lese-Endpunkt der Kit-Namen: Session, ungebundenes Token, ohne Anmeldung. */
@@ -26,32 +24,13 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class KitNamenControllerIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
-
-  private Cookie loginAs(String email) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
-  }
 
   @Test
   void angemeldetPerSession_liestDieKitNamen() throws Exception {
-    Cookie session = loginAs("kitnamen-session@example.com");
+    Cookie session = anmeldung.anmelden("kitnamen-session@example.com", PlatformRole.USER);
     mvc.perform(get("/api/kit-namen").cookie(session))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.sachen[0].sache").value("DURCHZIEHEN"))
@@ -63,7 +42,7 @@ class KitNamenControllerIT extends AbstractIntegrationTest {
 
   @Test
   void ungebundenesToken_liestDieKitNamen() throws Exception {
-    Cookie session = loginAs("kitnamen-token@example.com");
+    Cookie session = anmeldung.anmelden("kitnamen-token@example.com", PlatformRole.USER);
     String body =
         mvc.perform(
                 post("/api/access-tokens")
@@ -88,7 +67,7 @@ class KitNamenControllerIT extends AbstractIntegrationTest {
 
   @Test
   void schutz_stehtFuerJedeSacheGleichDerRegelDerSache() throws Exception {
-    Cookie session = loginAs("kitnamen-schutz@example.com");
+    Cookie session = anmeldung.anmelden("kitnamen-schutz@example.com", PlatformRole.USER);
     String body =
         mvc.perform(get("/api/kit-namen").cookie(session))
             .andExpect(status().isOk())

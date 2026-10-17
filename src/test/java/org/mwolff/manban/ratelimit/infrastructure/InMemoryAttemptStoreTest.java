@@ -38,7 +38,7 @@ class InMemoryAttemptStoreTest {
   }
 
   private static AttemptStore.Key key(int index) {
-    return new AttemptStore.Key("203.0.113." + index, RateLimitedOperation.LOGIN);
+    return new AttemptStore.Key("203.0.113." + index, RateLimitedOperation.CODE_VERIFY);
   }
 
   @Test

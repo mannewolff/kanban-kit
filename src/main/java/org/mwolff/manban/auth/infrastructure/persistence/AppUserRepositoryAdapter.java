@@ -63,7 +63,6 @@ class AppUserRepositoryAdapter implements AppUserRepository {
     return new AppUser(
         e.getId(),
         e.getEmail(),
-        e.getPasswordHash(),
         e.getDisplayName(),
         e.isEmailVerified(),
         e.getPlatformRole(),

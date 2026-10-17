@@ -4,53 +4,50 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Locale;
 import org.mwolff.manban.auth.domain.AppUser;
-import org.mwolff.manban.auth.domain.EmailVerificationToken;
 import org.mwolff.manban.auth.domain.PlatformRole;
-import org.mwolff.manban.common.SecureTokens;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Registriert einen neuen Benutzer: legt ihn (unverifiziert) mit Argon2id-Passwort-Hash an, erzeugt
- * ein Verifikations-Token und stößt den Versand der Verifikations-E-Mail an.
+ * Registriert einen neuen Benutzer: legt ihn unverifiziert an und fordert im selben Zug einen
+ * Anmeldecode an (Plan #1801, E3). Eine eigene Bestätigungsmail gibt es nicht mehr — die erste
+ * Anmeldung per Code bestätigt die Adresse.
+ *
+ * <p><strong>Grenze je Adresse:</strong> Die Code-Anforderung zählt auf die Grenze der Adresse. Ist
+ * sie schon erreicht, wirft sie {@link LoginCodeLimitExceededException}, und die ganze
+ * Registrierung wird zurückgerollt — ein Konto ohne Code entsteht nicht.
  *
  * <p><strong>Fehlersemantik seit Issue #502:</strong> Ein HTTP-Erfolg bestätigt die persistierte
- * Registrierung, <em>nicht</em> die Zustellung der Verifikations-Mail — die wird in derselben
- * Transaktion in der Outbox vorgemerkt und nach dem Commit mit Wiederholungen versandt. Ein
- * SMTP-Ausfall lässt die Registrierung also bestehen, statt sie (wie früher) mit zurückzurollen;
- * eine endgültig gescheiterte Zustellung bleibt als FAILED-Eintrag in der Outbox sichtbar.
+ * Registrierung, <em>nicht</em> die Zustellung der Mail mit dem Code — die wird in derselben
+ * Transaktion in der Outbox vorgemerkt und nach dem Commit mit Wiederholungen versandt.
  */
 @Service
 public class RegisterUserService {
 
   private final AppUserRepository users;
-  private final EmailVerificationTokenRepository tokens;
-  private final VerificationMailer mailer;
-  private final PasswordEncoder passwordEncoder;
-  private final AuthProperties properties;
+  private final RequestLoginCodeService loginCodes;
   private final Clock clock;
   private final RegistrationApprovalPolicy approvalPolicy;
 
   public RegisterUserService(
       AppUserRepository users,
-      EmailVerificationTokenRepository tokens,
-      VerificationMailer mailer,
-      PasswordEncoder passwordEncoder,
-      AuthProperties properties,
+      RequestLoginCodeService loginCodes,
       Clock clock,
       RegistrationApprovalPolicy approvalPolicy) {
     this.users = users;
-    this.tokens = tokens;
-    this.mailer = mailer;
-    this.passwordEncoder = passwordEncoder;
-    this.properties = properties;
+    this.loginCodes = loginCodes;
     this.clock = clock;
     this.approvalPolicy = approvalPolicy;
   }
 
+  /**
+   * Legt das Konto an und fordert einen Anmeldecode an.
+   *
+   * @throws EmailAlreadyRegisteredException wenn die Adresse schon registriert ist
+   * @throws LoginCodeLimitExceededException wenn die Grenze je Adresse erreicht ist
+   */
   @Transactional
-  public AppUser register(String email, String rawPassword, String displayName) {
+  public AppUser register(String email, String displayName) {
     String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
     if (users.existsByEmail(normalizedEmail)) {
       throw new EmailAlreadyRegisteredException();
@@ -65,25 +62,13 @@ public class RegisterUserService {
             new AppUser(
                 null,
                 normalizedEmail,
-                passwordEncoder.encode(rawPassword),
                 displayName.trim(),
                 false,
                 PlatformRole.USER,
                 approvedAt,
                 null));
 
-    String plaintext = SecureTokens.newToken();
-    tokens.save(
-        new EmailVerificationToken(
-            null,
-            user.requireId(),
-            SecureTokens.sha256Hex(plaintext),
-            clock.instant().plus(properties.verificationTtl()),
-            null));
-
-    String verificationUrl = properties.baseUrl() + "/verify?token=" + plaintext;
-    mailer.sendVerificationEmail(user.email(), verificationUrl);
-
+    loginCodes.requestCode(normalizedEmail);
     return user;
   }
 }

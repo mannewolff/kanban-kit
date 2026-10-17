@@ -9,13 +9,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -26,18 +24,15 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class CardByNumberIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
 
   @Test
   void resolvesBoardCardAndPoolIdeaByNumber_andRejectsNonMemberAndUnknown() throws Exception {
-    Cookie owner = session("bynum-owner@example.com", PlatformRole.USER);
-    Cookie admin = session("bynum-admin@example.com", PlatformRole.ADMIN);
-    Cookie stranger = session("bynum-stranger@example.com", PlatformRole.USER);
+    Cookie owner = anmeldung.anmelden("bynum-owner@example.com", PlatformRole.USER);
+    Cookie admin = anmeldung.anmelden("bynum-admin@example.com", PlatformRole.ADMIN);
+    Cookie stranger = anmeldung.anmelden("bynum-stranger@example.com", PlatformRole.USER);
 
     long projectId =
         json.readTree(
@@ -96,19 +91,5 @@ class CardByNumberIT extends AbstractIntegrationTest {
             get("/api/projects/" + projectId + "/cards/by-number/" + (cardNumber + 999))
                 .cookie(owner))
         .andExpect(status().isNotFound());
-  }
-
-  private Cookie session(String email, PlatformRole role) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, role));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
   }
 }

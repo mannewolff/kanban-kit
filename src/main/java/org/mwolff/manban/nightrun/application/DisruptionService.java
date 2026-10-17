@@ -104,7 +104,8 @@ public class DisruptionService {
     NightRunPeriod vorige = nacht.previous();
     List<DisruptionRepository.DisruptionCandidate> kandidaten =
         repository.candidatesOfNight(vorige.from(), nacht.to(), jetzt, properties.stilleFrist());
-    List<DisruptionRepository.DisruptionCandidate> offene = repository.openCandidates();
+    List<DisruptionRepository.DisruptionCandidate> offene =
+        repository.openCandidates(jetzt, properties.stilleFrist());
     Map<Long, List<NightRunItem>> jeLauf = pakete(kandidaten, offene);
     List<DisruptionView> zeilen = views(kandidaten, jeLauf);
     List<DisruptionView> beendete =
@@ -281,10 +282,9 @@ public class DisruptionService {
    * Ketten-Einheit statt des Pakets, an dem die Kette riss.
    *
    * <p><b>Abschluss und Lebenszeichen kommen vom Kandidaten</b>, nicht als Festwert. Über {@link
-   * DisruptionRepository#openCandidates()} ist {@code complete} stets {@code true}, weil die
-   * Abfrage darauf filtert; über {@link DisruptionRepository#candidatesOfNight} nicht — dort
-   * entscheidet erst die Stillefrist (Issue #1091), ob ein unfertiger Lauf noch läuft oder
-   * verstummt ist.
+   * DisruptionRepository#openCandidates} ist ein unfertiger Lauf stets verstummt (Issue #1800),
+   * über {@link DisruptionRepository#candidatesOfNight} nicht — in beiden Fällen entscheidet erst
+   * die Stillefrist (Issue #1091) im Befund, ob ein unfertiger Lauf noch läuft oder verstummt ist.
    *
    * <p><b>Auch der Abbruchgrund kommt vom Kandidaten</b> (Issue #1143): Er erzwingt {@code FAILED}
    * und bringt den Lauf damit in die Störungsliste — ohne ihn erschiene ein Lauf, der nach drei

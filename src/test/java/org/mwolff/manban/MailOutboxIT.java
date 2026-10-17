@@ -118,7 +118,7 @@ class MailOutboxIT extends AbstractIntegrationTest {
             () ->
                 tx.executeWithoutResult(
                     status -> {
-                      registerService.register("rollback@example.org", "sup3r-secret", "Rolli");
+                      registerService.register("rollback@example.org", "Rolli");
                       throw new IllegalStateException("fachlicher Abbruch nach der Registrierung");
                     }))
         .isInstanceOf(IllegalStateException.class);
@@ -133,17 +133,17 @@ class MailOutboxIT extends AbstractIntegrationTest {
   @Test
   void commit_deliversOnceAndClearsTheSecretLink() {
     // Given
-    registerService.register("alice@example.org", "sup3r-secret", "Alice");
+    registerService.register("alice@example.org", "Alice");
 
     // When
     int dispatched = dispatch.dispatchDue();
 
-    // Then — genau eine Zustellung an die richtige Adresse mit dem Verifikations-Link.
+    // Then — genau eine Zustellung an die richtige Adresse mit Anmeldecode und Link.
     assertThat(dispatched).isEqualTo(1);
     ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
     verify(mailSender).send(sent.capture());
     assertThat(sent.getValue().getTo()).containsExactly("alice@example.org");
-    assertThat(sent.getValue().getText()).contains("/verify?token=");
+    assertThat(sent.getValue().getText()).contains("/login/link?token=");
 
     // Kein Klartext-Token bleibt dauerhaft in der Outbox liegen (Akzeptanzkriterium).
     assertThat(onlyEntry()).containsEntry("status", "DONE").containsEntry("payload", "");
@@ -160,7 +160,7 @@ class MailOutboxIT extends AbstractIntegrationTest {
         .doNothing()
         .when(mailSender)
         .send(any(SimpleMailMessage.class));
-    registerService.register("bob@example.org", "sup3r-secret", "Bob");
+    registerService.register("bob@example.org", "Bob");
 
     // When — Fehlversuch: Eintrag bleibt offen, die Registrierung bleibt unangetastet.
     assertThat(dispatch.dispatchDue()).isZero();
@@ -202,7 +202,7 @@ class MailOutboxIT extends AbstractIntegrationTest {
     // Given — ein Projekt mit OWNER; der Mailversand ist dauerhaft kaputt.
     long ownerId =
         users
-            .save(new AppUser(null, "owner@example.org", "hash", "Owner", true, PlatformRole.USER))
+            .save(new AppUser(null, "owner@example.org", "Owner", true, PlatformRole.USER))
             .requireId();
     long projectId =
         projects.save(new Project(null, "P", ownerId, Instant.now(), null, false)).requireId();

@@ -46,6 +46,6 @@ class PlatformAdminDirectoryIT extends AbstractIntegrationTest {
   }
 
   private void save(String email, PlatformRole role) {
-    users.save(new AppUser(null, email, "argon2-hash", email, true, role));
+    users.save(new AppUser(null, email, email, true, role));
   }
 }

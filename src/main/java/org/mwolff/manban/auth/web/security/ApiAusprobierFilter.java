@@ -13,10 +13,11 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Objects;
-import java.util.OptionalLong;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
+import org.mwolff.manban.auth.application.SessionCheck;
 import org.mwolff.manban.auth.application.SessionTokens;
 import org.mwolff.manban.common.i18n.Texte;
 import org.springframework.http.HttpHeaders;
@@ -89,13 +90,12 @@ public class ApiAusprobierFilter extends OncePerRequestFilter {
       filterChain.doFilter(request, response);
       return;
     }
-    OptionalLong userId =
-        cookies.readToken(request).map(tokens::verify).orElse(OptionalLong.empty());
-    if (userId.isEmpty()) {
+    Optional<SessionCheck> session = cookies.readToken(request).flatMap(tokens::verify);
+    if (session.isEmpty()) {
       response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
       return;
     }
-    if (!admins.isActivePlatformAdmin(userId.getAsLong())) {
+    if (!admins.isActivePlatformAdmin(session.orElseThrow().userId())) {
       rejectAsForbidden(response);
       return;
     }

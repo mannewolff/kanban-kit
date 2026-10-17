@@ -13,14 +13,12 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -38,11 +36,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class CardEpicTreeIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
 
@@ -90,7 +85,7 @@ class CardEpicTreeIT extends AbstractIntegrationTest {
     long epic = id(vorhaben(f, "Vorhaben"));
     ordneZu(f, id(karte(f, "Anforderung", null)), epic);
 
-    Cookie fremd = loginAs("et-fremd@example.com", PlatformRole.USER);
+    Cookie fremd = anmeldung.anmelden("et-fremd@example.com", PlatformRole.USER);
 
     mvc.perform(get(pfad(f, epic)).cookie(fremd)).andExpect(status().isNotFound());
     // Gegenprobe: Fuer das Mitglied liefert derselbe Aufruf den Baum.
@@ -247,29 +242,15 @@ class CardEpicTreeIT extends AbstractIntegrationTest {
 
   private Fixture fixture(String prefix) throws Exception {
     String email = prefix + "-owner@example.com";
-    Cookie session = loginAs(email, PlatformRole.USER);
+    Cookie session = anmeldung.anmelden(email, PlatformRole.USER);
     long projectId = createProject(email, "P-" + prefix);
     JsonNode board = createBoard(session, projectId);
     return new Fixture(
         session, board.get("id").asLong(), board.get("columns").get(0).get("id").asLong());
   }
 
-  private Cookie loginAs(String email, PlatformRole rolle) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "Person", true, rolle));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
-  }
-
   private long createProject(String ownerEmail, String name) throws Exception {
-    Cookie admin = loginAs("et-admin@example.com", PlatformRole.ADMIN);
+    Cookie admin = anmeldung.anmelden("et-admin@example.com", PlatformRole.ADMIN);
     String body =
         mvc.perform(
                 post("/api/projects")

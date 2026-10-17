@@ -47,8 +47,8 @@ class NightRunOverlapRepositoryIT extends AbstractIntegrationTest {
   void seed() {
     userId =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('ueberlapp@example.com', 'x', 'U') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('ueberlapp@example.com', 'U') RETURNING id");
     projectId = projekt("P");
   }
 

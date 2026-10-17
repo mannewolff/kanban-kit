@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
@@ -76,6 +77,9 @@ import org.testcontainers.utility.MountableFile;
       // die Klassen zaehlten also auf dasselbe Kontingent. ThroughputFilterIT schaltet sie an.
       "manban.ratelimit.throughput.enabled=false"
     })
+// Testhilfe fuer die Anmeldung ohne Anmeldeablauf (Plan #1801, A15): hier fuer alle Subklassen,
+// damit jeder Kontext denselben Import traegt und das Context-Caching gleich bleibt.
+@Import(TestAnmeldung.class)
 public abstract class AbstractIntegrationTest {
 
   // max_connections hochgesetzt (Issue #900): Spring cached Testkontexte ueber den ganzen Lauf,

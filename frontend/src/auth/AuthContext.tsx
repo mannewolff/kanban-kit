@@ -5,7 +5,8 @@ import { setUnauthorizedHandler } from '../api/client'
 interface AuthState {
   user: Me | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  loginWithCode: (email: string, code: string) => Promise<void>
+  loginWithLink: (token: string) => Promise<void>
   logout: () => Promise<void>
   refresh: () => Promise<void>
 }
@@ -37,8 +38,12 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     return () => setUnauthorizedHandler(null)
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    setUser(await authApi.login(email, password))
+  const loginWithCode = useCallback(async (email: string, code: string) => {
+    setUser(await authApi.verifyCode(email, code))
+  }, [])
+
+  const loginWithLink = useCallback(async (token: string) => {
+    setUser(await authApi.linkLogin(token))
   }, [])
 
   const logout = useCallback(async () => {
@@ -46,7 +51,10 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     setUser(null)
   }, [])
 
-  const value = useMemo(() => ({ user, loading, login, logout, refresh }), [user, loading, login, logout, refresh])
+  const value = useMemo(
+    () => ({ user, loading, loginWithCode, loginWithLink, logout, refresh }),
+    [user, loading, loginWithCode, loginWithLink, logout, refresh],
+  )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

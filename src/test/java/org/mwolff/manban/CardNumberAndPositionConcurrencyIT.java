@@ -386,7 +386,7 @@ class CardNumberAndPositionConcurrencyIT extends AbstractIntegrationTest {
 
   /** Plattform-Admin: passiert jede Rechteprüfung, spart das Mitgliedschafts-Setup. */
   private long admin(String email) {
-    return users.save(new AppUser(null, email, "hash", "A", true, PlatformRole.ADMIN)).requireId();
+    return users.save(new AppUser(null, email, "A", true, PlatformRole.ADMIN)).requireId();
   }
 
   private long project(long ownerUserId) {

@@ -6,7 +6,7 @@ import { notifyUnauthorized, setUnauthorizedHandler } from '../api/client'
 import { AuthProvider, useAuth } from './AuthContext'
 
 vi.mock('../api/auth', () => ({
-  authApi: { me: vi.fn(), login: vi.fn(), logout: vi.fn() },
+  authApi: { me: vi.fn(), verifyCode: vi.fn(), linkLogin: vi.fn(), logout: vi.fn() },
 }))
 
 // Nur `setUnauthorizedHandler` wird umhüllt, damit das Abmelden beim Unmount beobachtbar ist;
@@ -18,7 +18,8 @@ vi.mock('../api/client', async (importOriginal) => {
 
 const mockedApi = authApi as unknown as {
   me: ReturnType<typeof vi.fn>
-  login: ReturnType<typeof vi.fn>
+  verifyCode: ReturnType<typeof vi.fn>
+  linkLogin: ReturnType<typeof vi.fn>
   logout: ReturnType<typeof vi.fn>
 }
 
@@ -27,12 +28,13 @@ const meFixture = {
 }
 
 function Probe() {
-  const { user, loading, login, logout } = useAuth()
+  const { user, loading, loginWithCode, loginWithLink, logout } = useAuth()
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>
       <span data-testid="user">{user?.email ?? 'none'}</span>
-      <button onClick={() => void login('a@b.de', 'geheim123')}>login</button>
+      <button onClick={() => void loginWithCode('a@b.de', '042817')}>code</button>
+      <button onClick={() => void loginWithLink('tok-123')}>link</button>
       <button onClick={() => void logout()}>logout</button>
     </div>
   )
@@ -65,13 +67,24 @@ describe('AuthContext', () => {
     expect(screen.getByTestId('user')).toHaveTextContent('none')
   })
 
-  it('login setzt den Nutzer aus der API-Antwort', async () => {
+  it('loginWithCode meldet über verifyCode an und setzt den Nutzer aus der Antwort', async () => {
     mockedApi.me.mockRejectedValue(new Error('401'))
-    mockedApi.login.mockResolvedValue(meFixture)
+    mockedApi.verifyCode.mockResolvedValue(meFixture)
     renderProbe()
     await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
-    await userEvent.click(screen.getByRole('button', { name: 'login' }))
+    await userEvent.click(screen.getByRole('button', { name: 'code' }))
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('a@b.de'))
+    expect(mockedApi.verifyCode).toHaveBeenCalledWith('a@b.de', '042817')
+  })
+
+  it('loginWithLink meldet über linkLogin an und setzt den Nutzer aus der Antwort', async () => {
+    mockedApi.me.mockRejectedValue(new Error('401'))
+    mockedApi.linkLogin.mockResolvedValue(meFixture)
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    await userEvent.click(screen.getByRole('button', { name: 'link' }))
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('a@b.de'))
+    expect(mockedApi.linkLogin).toHaveBeenCalledWith('tok-123')
   })
 
   it('logout ruft die API auf und setzt den Nutzer auf null', async () => {

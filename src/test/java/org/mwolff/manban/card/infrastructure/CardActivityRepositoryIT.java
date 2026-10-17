@@ -52,8 +52,8 @@ class CardActivityRepositoryIT extends AbstractIntegrationTest {
   void seed() {
     userId =
         insert(
-            "INSERT INTO app_user (email, password_hash, display_name) "
-                + "VALUES ('a@example.com', 'x', 'A') RETURNING id");
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('a@example.com', 'A') RETURNING id");
     long projectId =
         insert(
             "INSERT INTO project (name, owner_user_id) VALUES ('P', " + userId + ") RETURNING id");

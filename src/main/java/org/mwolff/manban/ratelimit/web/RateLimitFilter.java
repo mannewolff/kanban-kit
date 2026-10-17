@@ -31,16 +31,16 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * er ausschließlich in {@code config.RateLimitFilterConfig}, die die Reihenfolge gegenüber Springs
  * {@code ForwardedHeaderFilter} erzwingt (E2).
  *
- * <p><strong>Was gezählt wird</strong>, entscheidet der Vorgang: Bei der Anmeldung nur der
- * abgewiesene Versuch ({@code 401}/{@code 403}) — ein Formfehler ist kein Passwortversuch (E4). Bei
- * Registrierung und Reset-Anforderung jeder Aufruf, denn dort entsteht der Schaden gerade durch die
+ * <p><strong>Was gezählt wird</strong>, entscheidet der Vorgang: Bei Code-Eingabe und Link nur der
+ * abgewiesene Versuch ({@code 401}/{@code 403}) — ein Formfehler ist kein Rateversuch (E4). Bei
+ * Registrierung und Code-Anforderung jeder Aufruf, denn dort entsteht der Schaden gerade durch die
  * gelungenen (E5). Der wegen einer Sperre abgewiesene Aufruf zählt nie mit; sonst verlängerte jeder
  * Anklopfer seine eigene Sperre.
  *
  * <p>Gelesen werden nur Methode, Pfad und die Herkunft aus {@link ClientOriginResolver} —
- * <strong>nie</strong> der Request-Body. Die Bremse kennt weder E-Mail-Adresse noch Passwort (E11).
+ * <strong>nie</strong> der Request-Body. Die Bremse kennt weder E-Mail-Adresse noch Code (E11).
  *
- * <p>Die Auskunft erscheint in der eingestellten Sprache (Issue #1640, Plan #1638 A5): Die drei
+ * <p>Die Auskunft erscheint in der eingestellten Sprache (Issue #1640, Plan #1638 A5): Die
  * begrenzten Pfade sind öffentlich und tragen nie ein Projekt-Token, ein Sonderfall nach Zugangsart
  * entfällt.
  */
@@ -90,7 +90,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
    *
    * <p>Der Pfad kommt aus {@link RateLimitedOperation} und nicht aus einer zweiten Liste im Filter
    * — getrennt gepflegt wäre eine davon irgendwann falsch. Vom {@code requestURI} wird der
-   * Context-Path abgezogen: Unter {@code /app} lautet die URI {@code /app/api/auth/login}.
+   * Context-Path abgezogen: Unter {@code /app} lautet die URI {@code /app/api/auth/register}.
    *
    * @return {@code null}, wenn Methode oder Pfad nicht begrenzt sind
    */

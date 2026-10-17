@@ -51,8 +51,8 @@ class CardTokenActivityWindowIT extends AbstractIntegrationTest {
   void seed() {
     long userId =
         id(
-            "INSERT INTO app_user (email, password_hash, display_name)"
-                + " VALUES ('spur@example.com', 'x', 'S') RETURNING id");
+            "INSERT INTO app_user (email, display_name)"
+                + " VALUES ('spur@example.com', 'S') RETURNING id");
     projectId =
         id("INSERT INTO project (name, owner_user_id) VALUES ('P', ?) RETURNING id", userId);
     boardId = board(projectId);

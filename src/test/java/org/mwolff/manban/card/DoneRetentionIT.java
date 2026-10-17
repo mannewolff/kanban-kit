@@ -11,8 +11,7 @@ import java.time.Instant;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.application.DoneRetentionService;
@@ -20,7 +19,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** Test der Done-Retention mit fixer Zeitquelle. */
@@ -28,11 +26,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class DoneRetentionIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
   @Autowired private JdbcTemplate jdbc;
   @Autowired private DoneRetentionService retention;
@@ -40,7 +35,7 @@ class DoneRetentionIT extends AbstractIntegrationTest {
 
   @Test
   void archivesOnlyExpiredDoneCards() throws Exception {
-    Cookie alice = login("retention@example.com");
+    Cookie alice = anmeldung.anmelden("retention@example.com", PlatformRole.USER);
     Cookie admin = platformAdminSession();
     long projectId =
         json.readTree(
@@ -88,7 +83,7 @@ class DoneRetentionIT extends AbstractIntegrationTest {
   void raeumtErledigtesArbeitspaketAuf_dasNieInDerDoneSpalteLag() throws Exception {
     // Plan #1294, E7: Bei einem Arbeitspaket speist der Status DONE den Done-Zeitstempel — auch in
     // einer eigenen Spalte. Ohne ihn fiele das Paket dauerhaft aus dem Aufräumjob.
-    Cookie alice = login("retention-status@example.com");
+    Cookie alice = anmeldung.anmelden("retention-status@example.com", PlatformRole.USER);
     long boardId = boardAnlegen(alice, "retention-status@example.com");
     long anstehend = spalteAnlegen(alice, boardId, "Anstehend");
     long wartet = spalteAnlegen(alice, boardId, "Wartet auf Zulieferung");
@@ -153,36 +148,8 @@ class DoneRetentionIT extends AbstractIntegrationTest {
         .asLong();
   }
 
-  private Cookie login(String email) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, PlatformRole.USER));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
-  }
-
-  private Cookie platformAdminSession() throws Exception {
-    String email = "project-admin@example.com";
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie platformAdminSession() {
+    return anmeldung.anmelden("project-admin@example.com", PlatformRole.ADMIN);
   }
 
   private long createCard(Cookie session, long boardId, long columnId, String title)

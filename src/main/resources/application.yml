@@ -94,11 +94,15 @@ manban:
   dev-mode: ${MANBAN_DEV_MODE:false}
   auth:
     base-url: ${MANBAN_BASE_URL:http://localhost:8080}
-    verification-ttl: PT24H
     session-secret: ${MANBAN_SESSION_SECRET:dev-only-insecure-secret-change-me}
-    session-ttl: P7D
+    session-ttl: P30D
     cookie-secure: ${MANBAN_COOKIE_SECURE:true}
-    reset-ttl: PT1H
+    # Code-Anmeldung (Plan #1801, A6): Gültigkeit, Fehlversuche je Code, Anforderungen je Adresse
+    # und gleitender Stunde.
+    login-code:
+      ttl: ${MANBAN_AUTH_LOGIN_CODE_TTL:PT10M}
+      max-attempts: ${MANBAN_AUTH_LOGIN_CODE_MAX_ATTEMPTS:5}
+      max-requests-per-hour: ${MANBAN_AUTH_LOGIN_CODE_MAX_REQUESTS_PER_HOUR:5}
   mail:
     enabled: ${MANBAN_MAIL_ENABLED:false}
     from: ${MANBAN_MAIL_FROM:no-reply@kanban-kit.local}
@@ -158,7 +162,7 @@ manban:
     # Einmal-Token, um auf einer frischen Instanz den ersten Plattform-Admin zu erzeugen.
     # Leer = deaktiviert. Greift nur, solange kein Admin existiert.
     admin-token: ${MANBAN_BOOTSTRAP_ADMIN_TOKEN:}
-  # Zaehlbremse gegen Massenversuche an Anmeldung, Registrierung und Reset-Anforderung
+  # Zaehlbremse gegen Massenversuche an Registrierung und Anmeldung per Einmalcode
   # (Issue #840). Gezaehlt wird je Herkunft und Vorgang; die Sperre laeuft ab dem ersten
   # tatsaechlich abgewiesenen Versuch und wird durch weitere Versuche nicht verlaengert.
   # trusted-proxy-count ist die Zahl der Proxies VOR der Anwendung: 1 passt zum mitgelieferten
@@ -168,18 +172,22 @@ manban:
     enabled: ${MANBAN_RATELIMIT_ENABLED:true}
     trusted-proxy-count: ${MANBAN_RATELIMIT_TRUSTED_PROXY_COUNT:1}
     max-tracked-origins: ${MANBAN_RATELIMIT_MAX_TRACKED_ORIGINS:100000}
-    login:
-      max-attempts: ${MANBAN_RATELIMIT_LOGIN_MAX_ATTEMPTS:10}
-      window: ${MANBAN_RATELIMIT_LOGIN_WINDOW:PT15M}
-      block-duration: ${MANBAN_RATELIMIT_LOGIN_BLOCK_DURATION:PT15M}
     register:
       max-attempts: ${MANBAN_RATELIMIT_REGISTER_MAX_ATTEMPTS:10}
       window: ${MANBAN_RATELIMIT_REGISTER_WINDOW:PT15M}
       block-duration: ${MANBAN_RATELIMIT_REGISTER_BLOCK_DURATION:PT15M}
-    forgot:
-      max-attempts: ${MANBAN_RATELIMIT_FORGOT_MAX_ATTEMPTS:10}
-      window: ${MANBAN_RATELIMIT_FORGOT_WINDOW:PT15M}
-      block-duration: ${MANBAN_RATELIMIT_FORGOT_BLOCK_DURATION:PT15M}
+    # Anmeldung per Einmalcode (Issue #1807, Plan #1801 A7). Ohne eigene Variable gilt der Wert
+    # der alten Variable — die Code-Eingabe (und der Link aus der Mail) erbt von der entfallenen
+    # Passwort-Anmeldung (LOGIN), die Code-Anforderung von der entfallenen Reset-Anforderung
+    # (FORGOT). So bleibt eine schon gesetzte Einstellung des Betreibers wirksam.
+    code-request:
+      max-attempts: ${MANBAN_RATELIMIT_CODE_REQUEST_MAX_ATTEMPTS:${MANBAN_RATELIMIT_FORGOT_MAX_ATTEMPTS:10}}
+      window: ${MANBAN_RATELIMIT_CODE_REQUEST_WINDOW:${MANBAN_RATELIMIT_FORGOT_WINDOW:PT15M}}
+      block-duration: ${MANBAN_RATELIMIT_CODE_REQUEST_BLOCK_DURATION:${MANBAN_RATELIMIT_FORGOT_BLOCK_DURATION:PT15M}}
+    code-verify:
+      max-attempts: ${MANBAN_RATELIMIT_CODE_VERIFY_MAX_ATTEMPTS:${MANBAN_RATELIMIT_LOGIN_MAX_ATTEMPTS:10}}
+      window: ${MANBAN_RATELIMIT_CODE_VERIFY_WINDOW:${MANBAN_RATELIMIT_LOGIN_WINDOW:PT15M}}
+      block-duration: ${MANBAN_RATELIMIT_CODE_VERIFY_BLOCK_DURATION:${MANBAN_RATELIMIT_LOGIN_BLOCK_DURATION:PT15M}}
     # Durchsatzbremse (Issue #999/#1002) — ein ZWEITER, von der Zaehlbremse oben getrennter
     # Mechanismus. Sie greift nur auf Aufrufe mit Zugriffstoken (CLI, Nachtlauf), nie auf die
     # Weboberflaeche, und zaehlt je Person ueber alle ihre Token: hoechstens per-minute Befehle je

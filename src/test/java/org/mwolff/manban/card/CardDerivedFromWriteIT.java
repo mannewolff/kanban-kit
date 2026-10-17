@@ -11,13 +11,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -37,11 +35,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class CardDerivedFromWriteIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
-
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
 
   @Test
@@ -176,27 +171,11 @@ class CardDerivedFromWriteIT extends AbstractIntegrationTest {
 
   private Fixture fixture(String prefix) throws Exception {
     String email = prefix + "-owner@example.com";
-    Cookie session = loginAs(email);
+    Cookie session = anmeldung.anmelden(email, PlatformRole.USER);
     long projectId = createProject(email, "P-" + prefix);
     JsonNode board = createBoard(session, projectId);
     return new Fixture(
         session, board.get("id").asLong(), board.get("columns").get(0).get("id").asLong());
-  }
-
-  private Cookie loginAs(String email) throws Exception {
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.USER));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
   }
 
   private long createProject(String ownerEmail, String name) throws Exception {
@@ -214,21 +193,8 @@ class CardDerivedFromWriteIT extends AbstractIntegrationTest {
     return json.readTree(body).get("id").asLong();
   }
 
-  private Cookie platformAdminSession() throws Exception {
-    String email = "df-write-admin@example.com";
-    if (users.findByEmail(email).isEmpty()) {
-      users.save(
-          new AppUser(
-              null, email, passwordEncoder.encode(PASSWORD), "Person", true, PlatformRole.ADMIN));
-    }
-    return mvc.perform(
-            post("/api/auth/login")
-                .contentType("application/json")
-                .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
-        .andExpect(status().isOk())
-        .andReturn()
-        .getResponse()
-        .getCookie("manban_session");
+  private Cookie platformAdminSession() {
+    return anmeldung.anmelden("df-write-admin@example.com", PlatformRole.ADMIN);
   }
 
   private JsonNode createBoard(Cookie session, long projectId) throws Exception {

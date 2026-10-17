@@ -9,14 +9,12 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { AuthCard } from '../components/AuthCard'
-import { PasswordField } from '../components/PasswordField'
 import { useT } from '../i18n/SpracheContext'
 
 export function SignupPage() {
   const t = useT()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -26,8 +24,10 @@ export function SignupPage() {
     setError(null)
     setBusy(true)
     try {
-      await authApi.register(email, password, displayName)
-      navigate('/verify')
+      await authApi.register(email, displayName)
+      // Der Server schickt mit der Registrierung sofort einen Anmeldecode (E3): weiter in den
+      // Code-Schritt der Anmeldung.
+      navigate('/login', { state: { codeFuer: email } })
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) {
         // Zählbremse vor dem 409-Zweig. Die Abweisung ist herkunftsbezogen und verrät nichts
@@ -52,8 +52,6 @@ export function SignupPage() {
             required fullWidth />
           <TextField label={t.AUTH.EMAIL} type="email" value={email} onChange={(e) => setEmail(e.target.value)}
             required fullWidth autoComplete="email" />
-          <PasswordField label={t.AUTH.PASSWORT} value={password} onChange={(e) => setPassword(e.target.value)}
-            required fullWidth autoComplete="new-password" helperText={t.AUTH.MINDESTENS_8_ZEICHEN} />
           <Button type="submit" variant="contained" disabled={busy} fullWidth>
             {t.AUTH.KONTO_ERSTELLEN}
           </Button>

@@ -28,9 +28,6 @@ class AppUserEntity {
   @Column(name = "email", nullable = false)
   private String email;
 
-  @Column(name = "password_hash", nullable = false)
-  private String passwordHash;
-
   @Column(name = "display_name", nullable = false)
   private String displayName;
 
@@ -58,7 +55,6 @@ class AppUserEntity {
   AppUserEntity(AppUser u) {
     this.id = u.id();
     this.email = u.email();
-    this.passwordHash = u.passwordHash();
     this.displayName = u.displayName();
     this.emailVerified = u.emailVerified();
     this.platformRole = u.platformRole();
@@ -73,10 +69,6 @@ class AppUserEntity {
 
   String getEmail() {
     return email;
-  }
-
-  String getPasswordHash() {
-    return passwordHash;
   }
 
   String getDisplayName() {

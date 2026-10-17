@@ -37,7 +37,7 @@ class OpenApiConfig {
 
       Jeder Aufruf nennt seinen Zugang in `x-zugang` und im Security-Requirement:
 
-      - **oeffentlich** — ohne Anmeldung (Registrierung, Anmeldung, Passwort-Reset).
+      - **oeffentlich** — ohne Anmeldung (Registrierung, Anmeldung per Einmalcode).
       - **nur-session** — nur mit dem Session-Cookie `manban_session` einer Anmeldung im \
       Browser, nicht mit einem Token (Token-Verwaltung, Administration, diese Beschreibung).
       - **nur-projekt-token** — nur mit einem Projekt-Token im Header `X-Kanban-Token` \

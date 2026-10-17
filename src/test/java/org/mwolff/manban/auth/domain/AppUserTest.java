@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class AppUserTest {
 
   private static AppUser user(PlatformRole role, @Nullable Instant approvedAt) {
-    return new AppUser(1L, "a@x.de", "hash", "Ada", true, role, approvedAt, null, null);
+    return new AppUser(1L, "a@x.de", "Ada", true, role, approvedAt, null, null);
   }
 
   @Test
@@ -45,15 +45,13 @@ class AppUserTest {
   @Test
   void withDisplayName_changesOnlyDisplayName() {
     AppUser user =
-        new AppUser(
-            1L, "a@x.de", "hash", "Alt", true, PlatformRole.ADMIN, Instant.EPOCH, 9L, Instant.MAX);
+        new AppUser(1L, "a@x.de", "Alt", true, PlatformRole.ADMIN, Instant.EPOCH, 9L, Instant.MAX);
 
     AppUser updated = user.withDisplayName("Neu");
 
     assertThat(updated.displayName()).isEqualTo("Neu");
     assertThat(updated.id()).isEqualTo(1L);
     assertThat(updated.email()).isEqualTo("a@x.de");
-    assertThat(updated.passwordHash()).isEqualTo("hash");
     assertThat(updated.emailVerified()).isTrue();
     assertThat(updated.platformRole()).isEqualTo(PlatformRole.ADMIN);
     assertThat(updated.approvedAt()).isEqualTo(Instant.EPOCH);

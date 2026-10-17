@@ -27,6 +27,27 @@ Darunter steht je Version mit Handarbeit ein Abschnitt, **absteigend** nach Vers
 Versionen überspringt, arbeitet die betroffenen Abschnitte von unten nach oben ab — also von der
 ältesten zur neuesten.
 
+## 3.3.0 — Anmeldung per Einmalcode statt Passwort
+
+Angemeldet wird nur noch per Einmalcode aus einer Mail; das Passwort entfällt ganz. Handarbeit
+verlangt die Version keine, drei Folgen sollte der Betreiber aber vorher kennen:
+
+1. **Alle Sitzungen enden einmal.** Nach dem Update meldet sich jedes Konto einmal per Code neu an.
+   Konten, Rollen und Projekte bleiben; Zugriffstokens für Runner, Ingest und Kommandozeile sind
+   nicht betroffen.
+2. **Gespeicherte Passwörter werden gelöscht.** Die Migration V58 entfernt die Passwort-Hashes aus
+   der Datenbank; ein Zurück auf eine ältere Version findet keine Passwörter mehr vor.
+3. **Variablen der Zählbremse sind umbenannt.** Aus `MANBAN_RATELIMIT_FORGOT_*` wird
+   `MANBAN_RATELIMIT_CODE_REQUEST_*`, aus `MANBAN_RATELIMIT_LOGIN_*` wird
+   `MANBAN_RATELIMIT_CODE_VERIFY_*` (je `_MAX_ATTEMPTS`, `_WINDOW`, `_BLOCK_DURATION`). Die alten
+   Namen wirken als Rückfall weiter, solange der neue nicht gesetzt ist; die `.env` sollte trotzdem
+   umgestellt werden. Neu sind `MANBAN_AUTH_LOGIN_CODE_TTL`, `MANBAN_AUTH_LOGIN_CODE_MAX_ATTEMPTS`
+   und `MANBAN_AUTH_LOGIN_CODE_MAX_REQUESTS_PER_HOUR` — siehe
+   [Betrieb: Zählbremse](docs/betrieb.md#zählbremse-gegen-massenversuche).
+
+Ohne eingeschalteten Mailversand stehen die Anmeldecodes im Protokoll des Servers
+(`docker compose logs manban-api | grep "Anmeldecode für"`), mit Mailversand nie.
+
 ## 2.15.0 — veröffentlichte Abbilder, Betriebs-Overlay, eigenes Datenbankkennwort
 
 ### Vom Bau auf das veröffentlichte Abbild

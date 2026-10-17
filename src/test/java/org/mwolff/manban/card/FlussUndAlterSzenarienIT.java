@@ -22,8 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.StellbareUhrConfig;
-import org.mwolff.manban.auth.application.AppUserRepository;
-import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardView;
@@ -37,7 +36,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -54,14 +52,12 @@ import org.springframework.test.web.servlet.MockMvc;
 @Import(StellbareUhrConfig.class)
 class FlussUndAlterSzenarienIT extends AbstractIntegrationTest {
 
-  private static final String PASSWORD = "sup3r-secret";
   private static final String OWNER = "szenario-owner@example.com";
   private static final String ZONE = "Europe/Berlin";
   private static final int LETZTER_TAG = 83;
 
   @Autowired private MockMvc mvc;
-  @Autowired private AppUserRepository users;
-  @Autowired private PasswordEncoder passwordEncoder;
+  @Autowired private TestAnmeldung anmeldung;
   @Autowired private ProjectService projects;
   @Autowired private BoardService boards;
   @Autowired private CardService cardService;
@@ -79,7 +75,7 @@ class FlussUndAlterSzenarienIT extends AbstractIntegrationTest {
     owner = nutzer(OWNER, PlatformRole.USER);
     long projectId = projects.create(admin, "Szenarien", OWNER).id();
     board = boardMitBacklogSpalten(boards.createBoard(owner, projectId, "B"));
-    login = session();
+    login = anmeldung.anmelden(OWNER, PlatformRole.USER);
     mittag();
     // Erfasst und nachgetragen seit langem: Jeder Tag der zwölf Wochen ist bekannt.
     marke(uhr.instant().minus(Duration.ofDays(200)));
@@ -261,7 +257,7 @@ class FlussUndAlterSzenarienIT extends AbstractIntegrationTest {
   /** Lässt Zeit verstreichen; die Sitzung läuft nach sieben Tagen ab und wird darum erneuert. */
   private void weiter(Duration dauer) throws Exception {
     uhr.advance(dauer);
-    login = session();
+    login = anmeldung.anmelden(OWNER, PlatformRole.USER);
   }
 
   /** Die Erfassungsmarke; der Reset vor jeder Methode leert auch {@code card_flow_capture}. */
@@ -275,22 +271,6 @@ class FlussUndAlterSzenarienIT extends AbstractIntegrationTest {
   }
 
   private long nutzer(String email, PlatformRole rolle) {
-    return users
-        .save(new AppUser(null, email, passwordEncoder.encode(PASSWORD), "P", true, rolle))
-        .id();
-  }
-
-  private Cookie session() throws Exception {
-    Cookie cookie =
-        mvc.perform(
-                post("/api/auth/login")
-                    .contentType("application/json")
-                    .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(OWNER, PASSWORD)))
-            .andExpect(status().isOk())
-            .andReturn()
-            .getResponse()
-            .getCookie("manban_session");
-    assertThat(cookie).isNotNull();
-    return cookie;
+    return anmeldung.konto(email, rolle).requireId();
   }
 }

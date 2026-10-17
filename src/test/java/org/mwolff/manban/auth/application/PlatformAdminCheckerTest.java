@@ -24,7 +24,7 @@ class PlatformAdminCheckerTest {
   }
 
   private static AppUser user(long id, PlatformRole role) {
-    return new AppUser(id, "u" + id + "@x.de", "hash", "U" + id, true, role);
+    return new AppUser(id, "u" + id + "@x.de", "U" + id, true, role);
   }
 
   @Test

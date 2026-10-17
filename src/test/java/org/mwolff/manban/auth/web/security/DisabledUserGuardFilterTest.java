@@ -32,7 +32,7 @@ class DisabledUserGuardFilterTest {
 
   private static AppUser user(long id, java.time.Instant disabledAt) {
     return new AppUser(
-        id, "a@b.de", "h", "A", true, PlatformRole.USER, java.time.Instant.EPOCH, null, disabledAt);
+        id, "a@b.de", "A", true, PlatformRole.USER, java.time.Instant.EPOCH, null, disabledAt);
   }
 
   @BeforeEach

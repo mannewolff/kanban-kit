@@ -22,7 +22,7 @@ class UserDirectoryServiceTest {
   private UserDirectoryService service;
 
   private static AppUser user() {
-    return new AppUser(7L, "ada@x.de", "hash", "Ada", true, PlatformRole.USER);
+    return new AppUser(7L, "ada@x.de", "Ada", true, PlatformRole.USER);
   }
 
   @BeforeEach
@@ -78,8 +78,7 @@ class UserDirectoryServiceTest {
     // Given: kanonischer Konstruktor mit approvedAt=null — noch nicht freigegeben.
     when(users.findById(7L))
         .thenReturn(
-            Optional.of(
-                new AppUser(7L, "ada@x.de", "hash", "Ada", true, PlatformRole.USER, null, null)));
+            Optional.of(new AppUser(7L, "ada@x.de", "Ada", true, PlatformRole.USER, null, null)));
 
     // When / Then
     assertThat(service.findById(7L)).map(UserSummary::approved).contains(false);
@@ -94,7 +93,6 @@ class UserDirectoryServiceTest {
                 new AppUser(
                     7L,
                     "ada@x.de",
-                    "hash",
                     "Ada",
                     true,
                     PlatformRole.USER,
@@ -112,8 +110,7 @@ class UserDirectoryServiceTest {
     when(users.findById(7L))
         .thenReturn(
             Optional.of(
-                new AppUser(
-                    7L, "root@x.de", "hash", "Root", true, PlatformRole.ADMIN, null, null)));
+                new AppUser(7L, "root@x.de", "Root", true, PlatformRole.ADMIN, null, null)));
 
     // When / Then
     assertThat(service.findById(7L)).map(UserSummary::approved).contains(true);
@@ -125,8 +122,7 @@ class UserDirectoryServiceTest {
     when(users.findByEmail("root@x.de"))
         .thenReturn(
             Optional.of(
-                new AppUser(
-                    7L, "root@x.de", "hash", "Root", true, PlatformRole.ADMIN, null, null)));
+                new AppUser(7L, "root@x.de", "Root", true, PlatformRole.ADMIN, null, null)));
 
     // When / Then
     assertThat(service.findByEmail("root@x.de")).map(UserSummary::approved).contains(true);
