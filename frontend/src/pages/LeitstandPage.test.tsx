@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { ApiError } from '../api/client'
-import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow } from '../api/dashboard'
+import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type EpicForecastEntry } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
@@ -156,6 +156,23 @@ const epic = (id: number, title: string, done: number, total: number, memberNumb
   requirementCardNumber: null,
 })
 
+/** Ein Vorhaben der Prognose (Issue #1829); nach der neuen Zählung, nicht nach `listEpics`. */
+const vorhersage = (id: number, title: string, finished: number, total: number, teil: Partial<EpicForecastEntry> = {}): EpicForecastEntry => ({
+  id,
+  number: id,
+  title,
+  state: finished < total ? 'FORECAST' : 'ALL_DONE',
+  total,
+  finished,
+  open: total - finished,
+  p50: finished < total ? '2026-10-21' : null,
+  p85: finished < total ? '2026-10-24' : null,
+  earliest: false,
+  pendingDocuments: [],
+  otherEpicsSharing: 0,
+  ...teil,
+})
+
 const angaben = (costUsd: number | null, inputTokens: number | null = 4_820_000, outputTokens: number | null = 186_000, cachedInputTokens: number | null = 3_660_000) => ({
   costUsd,
   inputTokens,
@@ -289,7 +306,7 @@ beforeEach(() => {
   m.nacharbeit.mockResolvedValue(nacharbeit())
   m.fluss.mockResolvedValue(fluss())
   m.alter.mockResolvedValue(alter())
-  m.prognose.mockResolvedValue({ throughputDays: 0, epics: [] })
+  m.prognose.mockResolvedValue({ throughputDays: 20, epics: [vorhersage(1, 'Nachtlauf-Auswertung', 7, 9), vorhersage(2, 'Erledigt', 3, 3)] })
 })
 
 describe('LeitstandPage (#979)', () => {
@@ -639,17 +656,39 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     expect(screen.queryByText(/Kartenverlauf als Zeitstrahl/)).not.toBeInTheDocument()
   })
 
-  it('zeigt nur offene Vorhaben mit Fortschritt', async () => {
+  it('zeigt jedes nicht archivierte Vorhaben mit der Zählung und Prognose des neuen Abrufs (Issue #1829)', async () => {
     renderPage()
     const vorhaben = await screen.findByRole('region', { name: 'Vorhaben' })
-    expect(within(vorhaben).getAllByRole('listitem').map((z) => z.textContent)).toEqual(['Nachtlauf-Auswertung7/9'])
+    expect(m.prognose).toHaveBeenCalledWith(1)
+    expect(within(vorhaben).getAllByRole('listitem').map((z) => z.textContent)).toEqual([
+      'Nachtlauf-Auswertung7/9voraussichtlich fertig: 50 % bis 21.10.2026 · 85 % bis 24.10.2026 · 2 offene Pakete',
+      'Erledigt3/3alle Pakete umgesetzt',
+    ])
     expect(within(vorhaben).getByTestId('fuellung-78')).toBeInTheDocument()
+    expect(within(vorhaben).getByTestId('fuellung-100')).toBeInTheDocument()
   })
 
-  it('sagt ohne offenes Vorhaben, dass es keins gibt', async () => {
-    m.epics.mockResolvedValue([epic(2, 'Erledigt', 3, 3)])
+  it('zählt nach dem neuen Abruf, nicht nach der Vorhabenliste (AK 16)', async () => {
+    m.epics.mockResolvedValue([epic(1, 'Nachtlauf-Auswertung', 2, 9, [917])])
+    renderPage()
+    const vorhaben = await screen.findByRole('region', { name: 'Vorhaben' })
+    expect(vorhaben).toHaveTextContent('7/9')
+    expect(vorhaben).not.toHaveTextContent('2/9')
+  })
+
+  it('sagt ohne Vorhaben, dass es keins gibt', async () => {
+    m.prognose.mockResolvedValue({ throughputDays: 20, epics: [] })
     renderPage()
     expect(await screen.findByRole('region', { name: 'Vorhaben' })).toHaveTextContent('Kein offenes Vorhaben.')
+  })
+
+  it('zeigt die Platte ohne Daten des neuen Abrufs nicht, auch wenn die Vorhabenliste da ist (E14)', async () => {
+    m.prognose.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Abbruchgründe' })).toBeInTheDocument()
+    await waitFor(() => expect(m.prognose).toHaveBeenCalled())
+    await waitFor(() => expect(m.epics).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Vorhaben' })).not.toBeInTheDocument()
   })
 })
 
@@ -1288,7 +1327,7 @@ describe('LeitstandPage auf Englisch', () => {
     )
     m.klassen.mockResolvedValue({})
     m.laeufe.mockResolvedValue([lauf()])
-    m.epics.mockResolvedValue([epic(2, 'Erledigt', 3, 3)])
+    m.prognose.mockResolvedValue({ throughputDays: 0, epics: [] })
     renderEnglisch()
     expect(await screen.findByRole('article', { name: 'Lead time' })).toHaveTextContent('—no data')
     expect(screen.getByRole('region', { name: 'Throughput' })).toHaveTextContent('No completed card in the last weeks yet.')

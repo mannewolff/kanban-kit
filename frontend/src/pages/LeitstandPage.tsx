@@ -2,11 +2,11 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import Typography from '@mui/material/Typography'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
-import { type AgingWip, type BoardDashboardKpis, type BoardFlow } from '../api/dashboard'
+import { type AgingWip, type BoardDashboardKpis, type BoardFlow, type EpicForecast } from '../api/dashboard'
 import { type Epic } from '../api/epics'
 import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { CardDetailModal } from '../components/CardDetailModal'
@@ -33,6 +33,7 @@ import {
 } from '../components/leitstand/LeitstandBausteine'
 import { LeitstandVerbrauch } from '../components/leitstand/LeitstandVerbrauch'
 import { NacharbeitPlatte } from '../components/leitstand/NacharbeitPlatte'
+import { VorhabenPlatte } from '../components/leitstand/VorhabenPlatte'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { formatierer } from '../i18n/format'
 import { useSprache, useT } from '../i18n/SpracheContext'
@@ -91,7 +92,8 @@ import {
  *
  * **Gespeist aus** Board, Kennzahlen, Vorhaben, aufbewahrten Läufen, Häufigkeit der
  * Fehlerklassen und Verbrauch; dazu die Implementierungszeit je Zeitraum aus dem Abruf
- * `/dashboard/implementation-time` (Issue #1540, #1541). Die Verweildauer je Spalte gehört nicht
+ * `/dashboard/implementation-time` (Issue #1540, #1541); die Platte „Vorhaben“ allein aus der Prognose
+ * `/dashboard/epic-forecast` (Issue #1829). Die Verweildauer je Spalte gehört nicht
  * in den Leitstand (Manne, 2026-09-16).
  *
  * **Die Läufe sieht nur, wer sie auch auf der Nachtlauf-Seite sieht** (Owner-Recht im Backend).
@@ -114,7 +116,7 @@ export function LeitstandPage() {
     return <Alert severity="error">{t.UNGUELTIGE_ID}</Alert>
   }
 
-  const { board, kpis, fluss, alter, epics, klassen, nacharbeit, projectId, liste, juengster, epicListe } = daten
+  const { board, kpis, fluss, alter, prognose, klassen, nacharbeit, projectId, liste, juengster, epicListe } = daten
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -138,7 +140,7 @@ export function LeitstandPage() {
         kpis={kpis}
         klassen={klassen}
         nacharbeit={nacharbeit}
-        epics={epics}
+        prognose={prognose}
         epicListe={epicListe}
         liste={liste}
         onDetail={setDetail}
@@ -191,7 +193,7 @@ function LeitstandRumpf({
   kpis,
   klassen,
   nacharbeit,
-  epics,
+  prognose,
   epicListe,
   liste,
   onDetail,
@@ -201,7 +203,7 @@ function LeitstandRumpf({
   kpis: Laden<BoardDashboardKpis>
   klassen: Laden<NightRunErrorClassCounts>
   nacharbeit: Laden<NightRunRework>
-  epics: Laden<Epic[]>
+  prognose: Laden<EpicForecast>
   epicListe: readonly Epic[]
   liste: readonly NightRunView[] | null
   onDetail: (auswahl: Auswahl) => void
@@ -233,7 +235,8 @@ function LeitstandRumpf({
         {liste && projectId !== null && nacharbeit.art === 'da' && (
           <NacharbeitPlatte daten={nacharbeit.wert} onOeffnen={(nummer) => void oeffnen(projectId, nummer)} />
         )}
-        {epics.art === 'da' && <VorhabenPlatte epics={epics.wert} />}
+        {/* Erst mit Daten der Prognose (E14): Ein Rückfall auf die Vorhabenliste zeigte die alte Zählung. */}
+        {prognose.art === 'da' && <VorhabenPlatte prognose={prognose.wert} />}
       </Box>
     </Box>
   )
@@ -686,29 +689,3 @@ function Abbruchgruende({ zaehler, laeufe }: Readonly<{ zaehler: NightRunErrorCl
   )
 }
 
-/** Vorhaben mit Fortschritt (Entwurf Z. 1682–1712): nur offene, in der Farbe ihres Schilds. */
-function VorhabenPlatte({ epics }: Readonly<{ epics: readonly Epic[] }>) {
-  const t = useT().LEITSTAND
-  const offen = useMemo(() => epics.filter((e) => e.done < e.total), [epics])
-  return (
-    <Platte titel={t.VORHABEN} notiz={t.OFFEN}>
-      {offen.length === 0 ? (
-        <Typography color="text.secondary" sx={{ px: '16px', py: '14px' }}>
-          {t.KEIN_VORHABEN}
-        </Typography>
-      ) : (
-        <Box component="ul" sx={{ listStyle: 'none', m: 0, display: 'flex', flexDirection: 'column', gap: '9px', px: '16px', pt: '14px', pb: '16px' }}>
-          {offen.map((epic) => (
-            <Box component="li" key={epic.id} sx={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: '10px', alignItems: 'center' }}>
-              <div>
-                <Box sx={{ fontSize: 12.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{epic.title}</Box>
-                <Fuellschiene breite={Math.round((epic.done / epic.total) * 100)} farbe={epicColor(epic.id)} />
-              </div>
-              <Box sx={{ ...ZAHL, fontSize: 12.5, textAlign: 'right' }}>{`${epic.done}/${epic.total}`}</Box>
-            </Box>
-          ))}
-        </Box>
-      )}
-    </Platte>
-  )
-}
