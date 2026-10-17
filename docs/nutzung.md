@@ -326,11 +326,13 @@ Von oben nach unten führt er:
    [Verbrauch (Leitstand)](#verbrauch-leitstand).
 4. **Herkunft** — eine Zeile zum jüngsten Run: ob er eingeliefert oder im Browser hochgeladen
    wurde, dazu der Name des Tokens, die Zahl der Vorgänge und die der ungedeuteten Zeilen.
-5. **Rumpf** — sechs Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
+5. **Rumpf** — sieben Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
    öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche und rechts
    daneben **„Implementierungszeit“** mit dem Mittelwert je Woche, **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs, **„Nacharbeit“**
-   (siehe unten) und **„Vorhaben“** mit
-   den offenen. Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
+   (siehe unten), **„Vorhaben“** mit
+   den offenen und **„Auslieferung“** mit vier Kennzahlen zur Auslieferung an die Nutzer; sie steht
+   in voller Breite ganz unten, unter „Alter in Arbeit“ (siehe
+   [Platte Auslieferung](#platte-auslieferung)). Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
    braune LED und „nicht angelaufen — ‹Grund›“.
 6. **Fluss und Alter in Arbeit** — darunter in voller Breite **„Fluss“** und darunter **„Alter in
    Arbeit“** (siehe unten).
@@ -421,12 +423,57 @@ keiner der beiden Platten.
   frühesten bekannten Zeitpunkt; der Melder erscheint, wenn schon dieser Mindestwert über der
   Schwelle liegt. Ein Aufenthalt mit unbekanntem Beginn zählt nicht als Vergleichswert.
 
+### Platte Auslieferung {#platte-auslieferung}
+
+Die übrigen Platten enden bei „Done“. **„Auslieferung“** zeigt, was danach geschieht: wie oft das
+Projekt an seine Nutzer ausliefert, wie lange eine Änderung bis dorthin braucht, wie oft eine
+Auslieferung scheitert und wie schnell es danach wieder läuft. Die vier Kennzahlen (in der Fachwelt
+als DORA-Kennzahlen bekannt) stehen nebeneinander, jede mit einem kurzen Hinweis, was sie zählt.
+
+**Woher die Zahlen kommen:** allein aus Meldungen. Jeder Auslieferungslauf des Projekts meldet seinen
+Versuch mit einem board-gebundenen Token (siehe [API-Tokens](rollen-und-rechte.md#api-tokens)) —
+Ausgang (erfolgreich oder gescheitert), Zeitpunkt, ausgelieferter Commit und die seither
+hinzugekommenen Commits mit ihrem Commit-Zeitpunkt. Das Board fragt keinen Code-Hoster ab. Eine
+Meldung zählt für das **ganze Projekt**, zu dem das Board des Tokens gehört; die Platte zeigt darum
+auf jedem Board des Projekts dieselben Zahlen. Dieselbe Meldung (gleiche Kennung) zählt nur einmal,
+ein erneut gestarteter Lauf trägt eine neue Kennung und zählt als eigener Versuch. Ein Lauf, der
+nichts meldet, zählt nicht.
+
+**Das Fenster** sind die letzten 12 Wochen (84 Tage bis jetzt); maßgeblich ist der gemeldete
+Zeitpunkt des Ausgangs, nicht der Eingang der Meldung. Liegt die erste Meldung später, steht im Kopf
+„seit ‹Datum›“ statt „letzte 12 Wochen“.
+
+- **Deployment-Frequenz** — die Zahl der **erfolgreichen** Auslieferungen im Fenster, etwa
+  „7 Auslieferungen in 12 Wochen“ bzw. „… seit ‹Datum›“. Hier ist 0 eine echte Null.
+- **Lead Time for Changes** — wie lange eine Änderung braucht: je ausgeliefertem Commit die Zeit vom
+  Commit bis zur erfolgreichen Auslieferung, davon der **Median** (der mittlere Wert; bei gerader
+  Anzahl das Mittel der beiden mittleren). Die Wartezeit eines Commits vor dem Hochladen zählt mit.
+  Scheitert ein Versuch, zählen seine Commits bei der nächsten erfolgreichen Auslieferung; jeder
+  Commit zählt genau einmal. Ohne ausgelieferten Commit im Fenster steht **„keine Grundlage“**.
+- **Change Failure Rate** — der Anteil gescheiterter an allen gemeldeten Versuchen im Fenster, in
+  ganzen Prozent. Gescheitert ist ein Versuch genau dann, wenn sein Lauf das Scheitern meldet, auch
+  wenn die Anwendung nach dem Hochfahren nicht bereit wird. **Bewusste Lücke:** Eine grün
+  ausgelieferte Version mit Fehler zählt nicht — es zählen nur gemeldete Fehlschläge. Ohne Versuch im
+  Fenster steht **„keine Grundlage“**.
+- **Time to Restore** — wie schnell es nach einem Scheitern wieder läuft. Ein **Ausfall** reicht vom
+  ersten gescheiterten Versuch einer Folge von Fehlschlägen bis zur nächsten erfolgreichen
+  Auslieferung; mehrere Fehlschläge hintereinander sind ein Ausfall. Gezeigt wird der Median der im
+  Fenster **beendeten** Ausfälle, jeder mit voller Dauer. Ohne beendeten Ausfall steht **„kein
+  Ausfall“**. Ein noch laufender Ausfall zählt nicht in den Median, sondern steht hervorgehoben
+  daneben: **„Ausfall läuft seit ‹Dauer›“**.
+
+Unter den Zahlen zeigt eine **Wochenleiste** je Woche des Fensters die erfolgreichen und, abgesetzt,
+die gescheiterten Versuche; eine Woche ohne Versuch hat nur eine Grundlinie. Lead Time und Time to
+Restore haben keinen Verlauf. Liegt für das Projekt noch **keine einzige Meldung** vor, zeigt die
+ganze Platte nur **„noch keine Auslieferung“** statt Nullen. Gezählt wird ab der ersten Meldung,
+frühere Releases werden nicht nachgetragen.
+
 **Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“,
 „Abbruchgründe“ und „Nacharbeit“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
 Projekts und **Plattform-Admins**, sofern das Projekt am
 [Plattform-Leitstand](#plattform-leitstand) teilnimmt. Ohne dieses Recht entfallen sie still; die
-Board-Kennzahlen, „Durchsatz“, „Implementierungszeit“, „Fluss“ und „Alter in Arbeit“ bleiben — die
-beiden letzten sieht wie „Durchsatz“ jeder, der das Board sehen darf.
+Board-Kennzahlen, „Durchsatz“, „Implementierungszeit“, „Fluss“, „Alter in Arbeit“ und „Auslieferung“
+bleiben — die drei letzten sieht wie „Durchsatz“ jedes Projektmitglied, das das Board sehen darf.
 
 **Grundlage der Board-Kennzahlen** ist die automatisch erfasste Verweildauer jeder Karte pro
 Spalte — gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API

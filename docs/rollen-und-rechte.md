@@ -56,6 +56,7 @@ hängt, gehört deshalb nicht in die Tabelle, sondern unter [Sonderregeln](#sond
 | Übersicht „Heute Nacht“ und Morgenkachel „Veröffentlichung vorbereitet“ auf der Runner-Seite sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
 | Bereich „Runner jetzt“ auf der Runner-Seite sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
 | Platte „Nacharbeit“ im Board-Leitstand sehen (`GET /api/boards/{boardId}/night-run-rework`, `requireNightRunAccess`) — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
+| Platte „Auslieferung“ im Board-Leitstand lesen (`GET /api/boards/{boardId}/dashboard/delivery`, `requireMembership`) — geprüft wird die Projektmitgliedschaft wie beim übrigen Leitstand, also jede Rolle, die das Board lesen darf; zeigt die Daten des ganzen Projekts | `BOARD_READ` | ✓ | ✓ | ✓ | ✓ |
 | Abschnitt „Wartegrund“ im Kartendialog eines Pakets in Ready sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
 | **Protokoll eines Laufs hineingeben** — der Plattform-Admin immer | `NIGHT_RUN_SUBMIT` | – | – | – | ✓ |
 
@@ -204,6 +205,14 @@ herunterladen (siehe [Dogfooding](dogfooding.md#anhange-einer-karte-lesen)), ohn
 Hochladen oder löschen kann es keinen Anhang. Ein unerreichbarer Anhang — an einer Karte eines
 anderen Boards oder im Papierkorb, oder bereits gelöscht — wird mit **404** beantwortet wie einer, den
 es nicht gibt.
+
+**Auslieferungen melden** (siehe [Platte Auslieferung](nutzung.md#platte-auslieferung)) geht über
+`POST /api/kanban/deployments`; `GET /api/kanban/deployments/latest` liefert den zuletzt gemeldeten
+Stand. Beide nimmt nur ein **board-gebundenes** Token an, dessen Inhaber im Projekt des Boards das
+Recht `TICKET_CREATE` hat — dieselbe Bedingung, unter der das Token angelegt werden durfte, ein
+neues Recht entsteht nicht. Geprüft wird bei jedem Aufruf: Ist der Inhaber nur noch VIEWER, antwortet
+das Board mit **403**; ist er kein Mitglied des Projekts mehr, mit **404**. Ein **ungebundenes** Token
+erhält **409** wie auf der übrigen Kanban-Compat-API; seine Meldung erscheint in keinem Projekt.
 
 ### Freigabe-Labels des Kits
 
