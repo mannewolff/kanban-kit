@@ -79,6 +79,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   /** Name des benannten SQL-Parameters für die Gattung (Sonar java:S1192). */
   private static final String P_KIND = "kind";
 
+  /** Name des benannten SQL-Parameters für die Kartennummer (Sonar java:S1192). */
+  private static final String P_CARD_NUMBER = "cardNumber";
+
   /** Spaltenname der Lauf-ID in den Abfragen der Morgenmeldung (Sonar java:S1192). */
   private static final String C_NIGHT_RUN_ID = "night_run_id";
 
@@ -343,7 +346,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           new MapSqlParameterSource()
               .addValue(P_NIGHT_RUN_ID, runId)
               .addValue("position", position)
-              .addValue("cardNumber", stufe.cardNumber())
+              .addValue(P_CARD_NUMBER, stufe.cardNumber())
               .addValue("stage", stufe.stage())
               .addValue(P_STARTED_AT, zeitpunkt(stufe.startedAt()))
               .addValue(
@@ -395,7 +398,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
               .addValue(P_NIGHT_RUN_ID, runId)
               .addValue(P_KIND, art)
               .addValue("position", position)
-              .addValue("cardNumber", wert instanceof Integer nummer ? nummer : null, Types.INTEGER)
+              .addValue(
+                  P_CARD_NUMBER, wert instanceof Integer nummer ? nummer : null, Types.INTEGER)
               .addValue("text", wert instanceof String text ? text : null, Types.VARCHAR));
     }
   }
@@ -702,7 +706,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue(P_STARTED_AT, zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
             .addValue(P_KIND, run.kind().name())
-            .addValue("cardNumber", item.cardNumber())
+            .addValue(P_CARD_NUMBER, item.cardNumber())
             .addValue("title", item.title())
             .addValue("state", item.state().name())
             .addValue("errorClass", errorClass == null ? null : errorClass.name(), Types.VARCHAR)
