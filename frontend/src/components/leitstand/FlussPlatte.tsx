@@ -41,7 +41,7 @@ function tagDatum(tag: FlowDay, sprache: Sprache): string {
 export function FlussPlatte({ daten }: Readonly<{ daten: BoardFlow }>) {
   const t = useT().LEITSTAND_FLUSS
   const { sprache } = useSprache()
-  const [aktiv, setzeAktiv] = useState<number | null>(null)
+  const [aktiv, setAktiv] = useState<number | null>(null)
   const tage = daten.days
   return (
     <Platte titel={t.TITEL} notiz={t.NOTIZ(flussKopf(daten.dataSince, sprache))}>
@@ -49,7 +49,7 @@ export function FlussPlatte({ daten }: Readonly<{ daten: BoardFlow }>) {
         <LeerSatz testId="fluss-leer">{t.LEER}</LeerSatz>
       ) : (
         <Box sx={{ px: '16px', pt: '16px', pb: '14px' }}>
-          <Bild tage={tage} sprache={sprache} onAktiv={setzeAktiv} />
+          <Bild tage={tage} sprache={sprache} onAktiv={setAktiv} />
           <Anzeige tag={aktiv === null ? null : tage[aktiv]} sprache={sprache} />
           <Legende />
         </Box>

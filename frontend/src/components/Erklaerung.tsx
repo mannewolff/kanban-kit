@@ -15,7 +15,7 @@ import {
 } from 'react'
 import { useTabletQuer } from '../lib/tabletQuer'
 
-type OffenZustand = Readonly<{ offen: string | null; setzeOffen: Dispatch<SetStateAction<string | null>> }>
+type OffenZustand = Readonly<{ offen: string | null; setOffen: Dispatch<SetStateAction<string | null>> }>
 
 const ErklaerungOffenKontext = createContext<OffenZustand | null>(null)
 
@@ -24,21 +24,21 @@ const ErklaerungOffenKontext = createContext<OffenZustand | null>(null)
  * erste. Hängt in `AppShell`; ohne Provider führt jede Erklärung ihren eigenen Zustand.
  */
 export function ErklaerungOffenProvider({ children }: Readonly<{ children: ReactNode }>) {
-  const [offen, setzeOffen] = useState<string | null>(null)
-  const wert = useMemo(() => ({ offen, setzeOffen }), [offen])
+  const [offen, setOffen] = useState<string | null>(null)
+  const wert = useMemo(() => ({ offen, setOffen }), [offen])
   return <ErklaerungOffenKontext.Provider value={wert}>{children}</ErklaerungOffenKontext.Provider>
 }
 
 /** Offen-Zustand der Erklärung `id`, aus dem Provider oder, ohne ihn, aus eigenem Zustand. */
 function useErklaerungOffen(id: string) {
   const geteilt = useContext(ErklaerungOffenKontext)
-  const [eigen, setzeEigen] = useState<string | null>(null)
-  const { offen, setzeOffen } = geteilt ?? { offen: eigen, setzeOffen: setzeEigen }
+  const [eigen, setEigen] = useState<string | null>(null)
+  const { offen, setOffen } = geteilt ?? { offen: eigen, setOffen: setEigen }
   return {
     offen: offen === id,
-    umschalten: () => setzeOffen((aktuell) => (aktuell === id ? null : id)),
+    umschalten: () => setOffen((aktuell) => (aktuell === id ? null : id)),
     // Gerufen nur vom ClickAwayListener, und der lauscht nur, solange diese Erklärung offen ist.
-    schliessen: () => setzeOffen(null),
+    schliessen: () => setOffen(null),
   }
 }
 

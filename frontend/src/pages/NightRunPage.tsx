@@ -3086,6 +3086,7 @@ export function NightRunPage() {
     )
 
     while (offen.length > 0) {
+      // eslint-disable-next-line no-await-in-loop -- Runde n+1 hängt von den Ergebnissen der Runde n ab
       const geladen = await Promise.all( // NOSONAR typescript:S9382 – Runde n+1 hängt von den Ergebnissen der Runde n ab
         // `apiFetch` wirft bei 404; eine nicht auflösbare Nummer ist hier kein Fehler, sondern
         // ein Ergebnis — sie erscheint als „Karte #N nicht gefunden".
