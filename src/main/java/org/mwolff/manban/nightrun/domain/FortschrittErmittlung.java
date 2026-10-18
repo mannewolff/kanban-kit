@@ -128,6 +128,9 @@ public final class FortschrittErmittlung {
   /** Das Register, aus dem die Labels als Sachen gelesen werden (E13). */
   private final KitNamen namen;
 
+  // S107 abgelehnt (Issue #1844): Der private Konstruktor sammelt nur die Eingaben der Berechnung
+  // und trägt keine Last nach außen; ein Parameterobjekt nähme keine Entscheidung ab.
+  @SuppressWarnings("java:S107")
   private FortschrittErmittlung(
       KitNamen namen,
       NightRun lauf,

@@ -390,6 +390,9 @@ public class CardService {
         .toList();
   }
 
+  // S3824 abgelehnt (Issue #1844): computeIfAbsent legt bei null keinen Eintrag an; containsKey/put
+  // merkt sich bewusst auch einen fehlenden Anzeigenamen — je Handelndem genau ein Nachschlagen.
+  @SuppressWarnings("java:S3824")
   private @Nullable String anzeigename(
       @Nullable Long actorUserId, Map<Long, @Nullable String> namen) {
     if (actorUserId == null) {
