@@ -94,6 +94,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   /** Spaltenname der Stufe in der Abfrage der laufenden Stufen (Sonar java:S1192). */
   private static final String C_STAGE = "stage";
 
+  /** Spaltenname der Kartennummer in den Leseabfragen (Sonar java:S1192). */
+  private static final String C_CARD_NUMBER = "card_number";
+
   /**
    * Der Platzhalter für „keine Vorgaben gemeldet" (Issue #1112). Er steht hier und nicht in der
    * Domäne: Fachlich gibt es ihn nicht — ein Lauf ohne Vorgaben trägt {@code null} —, er ist allein
@@ -485,8 +488,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
               Eintraege liste =
                   eintraege.computeIfAbsent(rs.getLong(C_NIGHT_RUN_ID), id -> new Eintraege());
               switch (rs.getString(P_KIND)) {
-                case E_CARD -> liste.karten().add(rs.getInt("card_number"));
-                case E_RED_CARD -> liste.roteKarten().add(rs.getInt("card_number"));
+                case E_CARD -> liste.karten().add(rs.getInt(C_CARD_NUMBER));
+                case E_RED_CARD -> liste.roteKarten().add(rs.getInt(C_CARD_NUMBER));
                 default -> liste.offen().add(rs.getString("text"));
               }
             });
@@ -521,7 +524,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
                   .computeIfAbsent(rs.getLong(C_NIGHT_RUN_ID), id -> new ArrayList<>())
                   .add(
                       new RunnerStufe(
-                          rs.getInt("card_number"),
+                          rs.getInt(C_CARD_NUMBER),
                           rs.getString(C_STAGE),
                           rs.getObject("started_at", OffsetDateTime.class).toInstant(),
                           frist == null ? null : frist.toInstant(),
