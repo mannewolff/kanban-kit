@@ -627,7 +627,7 @@ function Rahmen() {
     ausschnitt?.addEventListener('resize', hoeheSetzen)
     return () => {
       ausschnitt?.removeEventListener('resize', hoeheSetzen)
-      root.removeAttribute('data-geraet')
+      delete root.dataset.geraet
       root.style.removeProperty('--sichtbare-hoehe')
     }
   }, [tabletQuer])
