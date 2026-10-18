@@ -82,11 +82,17 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   /** Name des benannten SQL-Parameters für die Kartennummer (Sonar java:S1192). */
   private static final String P_CARD_NUMBER = "cardNumber";
 
+  /** Name des benannten SQL-Parameters für die Stufe (Sonar java:S1192). */
+  private static final String P_STAGE = "stage";
+
   /** Spaltenname der Lauf-ID in den Abfragen der Morgenmeldung (Sonar java:S1192). */
   private static final String C_NIGHT_RUN_ID = "night_run_id";
 
   /** Spaltenname der Fehlerklasse in der Zählabfrage (Sonar java:S1192). */
   private static final String C_ERROR_CLASS = "error_class";
+
+  /** Spaltenname der Stufe in der Abfrage der laufenden Stufen (Sonar java:S1192). */
+  private static final String C_STAGE = "stage";
 
   /**
    * Der Platzhalter für „keine Vorgaben gemeldet" (Issue #1112). Er steht hier und nicht in der
@@ -347,7 +353,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
               .addValue(P_NIGHT_RUN_ID, runId)
               .addValue("position", position)
               .addValue(P_CARD_NUMBER, stufe.cardNumber())
-              .addValue("stage", stufe.stage())
+              .addValue(P_STAGE, stufe.stage())
               .addValue(P_STARTED_AT, zeitpunkt(stufe.startedAt()))
               .addValue(
                   "deadline",
@@ -516,7 +522,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
                   .add(
                       new RunnerStufe(
                           rs.getInt("card_number"),
-                          rs.getString("stage"),
+                          rs.getString(C_STAGE),
                           rs.getObject("started_at", OffsetDateTime.class).toInstant(),
                           frist == null ? null : frist.toInstant(),
                           rs.getString("step"),
@@ -691,7 +697,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     MapSqlParameterSource parameter =
         new MapSqlParameterSource()
             .addValue("nightRunItemId", itemId)
-            .addValue("stage", stage.stage().name())
+            .addValue(P_STAGE, stage.stage().name())
             .addValue(P_DURATION_MS, stage.durationMs(), Types.BIGINT);
     verbrauchSchreiben(parameter, stage.usage());
     return parameter;
