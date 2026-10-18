@@ -130,12 +130,14 @@ class NightRunController {
           („Protokoll einlesen“ auf der Runner-Seite). Ein Lauf ist eine Sitzung eines \
           Agenten, die Karten abarbeitet; seine Arbeitspakete (items) sind die Karten, die \
           er angefasst hat, mit Ausgang (state) und gegebenenfalls Fehlerklasse. Das \
-          Protokoll selbst verlässt den Browser nicht.\n\n\
+          Protokoll selbst verlässt den Browser nicht.
+
           Schlüssel eines Laufs ist startedAt: Ein Lauf, den das Projekt schon kennt, bleibt \
           unangetastet und wird als schon vorliegend gemeldet — wiederholtes Hochladen \
           desselben Protokolls ist darum folgenlos. Die Antwort nennt je übergebenem Lauf, \
           in Anfragereihenfolge, ob er angelegt wurde (created). Verlangt die Rolle Owner \
-          im Projekt; ein Plattform-Admin darf ebenfalls.\n\n\
+          im Projekt; ein Plattform-Admin darf ebenfalls.
+
           Den strukturierten Weg ohne Browser, mit Projekt-Token, bietet POST \
           /api/kanban/night-runs.""")
   @ApiResponse(

@@ -155,19 +155,24 @@ class NightRunIngestController {
           Meldet den vollständigen Stand eines Laufs mit einem projektgebundenen Projekt-Token \
           (Header X-Kanban-Token). Das Zielprojekt kommt aus der Bindung des Tokens, nicht \
           aus dem Aufruf; das Token darf nur, was die Person darf, die es angelegt hat — \
-          hier verlangt das die Rolle Owner im Projekt.\n\n\
+          hier verlangt das die Rolle Owner im Projekt.
+
           Ein Lauf je Aufruf. Schlüssel ist startedAt: Die erste Meldung legt den Lauf an, \
           jede weitere mit demselben startedAt ersetzt ihn vollständig (Zustand, keine \
-          Ergänzung). Ein Lauf meldet sich so im Verlauf mehrfach.\n\n\
+          Ergänzung). Ein Lauf meldet sich so im Verlauf mehrfach.
+
           kind unterscheidet den Nachtlauf (NIGHT, die Vorgabe) von der interaktiven \
           Sitzung (INTERACTIVE). Bei einer Kette (mode CHAIN) tragen die Vorgänge ihre \
           Stufen (stages) mit Dauer und Verbrauch; budget nennt die Zeit- und \
-          Kostenvorgaben, unter denen der Lauf antrat.\n\n\
+          Kostenvorgaben, unter denen der Lauf antrat.
+
           releasePreparation ist die Morgenmeldung: ob und wie der Lauf eine \
           Veröffentlichung vorbereitet hat. Sie ersetzt wie jedes andere Feld eine früher \
-          gemeldete; fehlt sie, steht am Lauf keine. Den Eingang setzt der Server.\n\n\
+          gemeldete; fehlt sie, steht am Lauf keine. Den Eingang setzt der Server.
+
           current nennt die Stufen, die der Lauf gerade fährt. Auch sie ersetzen die \
-          früher gemeldeten; ein beendeter Lauf trägt keine.\n\n\
+          früher gemeldeten; ein beendeter Lauf trägt keine.
+
           Gegenstück auf der Runner-Seite ist „Protokoll einlesen“: Dort lädt ein Mensch \
           das Textprotokoll eines Laufs im Browser hoch, und der Leitstand deutet es \
           zeilenweise. Dieser Aufruf nimmt denselben Inhalt strukturiert an, ohne \

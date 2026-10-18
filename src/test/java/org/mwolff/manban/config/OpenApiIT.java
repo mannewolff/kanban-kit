@@ -523,4 +523,123 @@ class OpenApiIT extends AbstractIntegrationTest {
     }
     knoten.forEach(kind -> verweise(kind, namen));
   }
+
+  /** Zeile, die {@code ApiBeschreibungsAnreicherung} einem verlässlichen Aufruf voranstellt. */
+  private static final String STABIL_VERLAESSLICH = "Stabilität: verlässlich.\n\n";
+
+  /**
+   * Charakterisierung zu Issue #1842: Die Beschreibungen, deren Textblöcke Absätze per Escape-Folge
+   * setzten, bleiben nach dem Umbau zeichengleich. Die erwarteten Texte sind der Stand vor dem
+   * Umbau.
+   */
+  @Test
+  void beschreibungenMitAbsaetzenBleibenZeichengleich() throws Exception {
+    JsonNode paths = spezifikation("spec-absaetze@example.com").get("paths");
+
+    assertThat(beschreibung(paths, "/api/kanban/night-runs", "post"))
+        .isEqualTo(
+            STABIL_VERLAESSLICH
+                + """
+            Meldet den vollständigen Stand eines Laufs mit einem projektgebundenen Projekt-Token \
+            (Header X-Kanban-Token). Das Zielprojekt kommt aus der Bindung des Tokens, nicht \
+            aus dem Aufruf; das Token darf nur, was die Person darf, die es angelegt hat — \
+            hier verlangt das die Rolle Owner im Projekt.
+
+            Ein Lauf je Aufruf. Schlüssel ist startedAt: Die erste Meldung legt den Lauf an, \
+            jede weitere mit demselben startedAt ersetzt ihn vollständig (Zustand, keine \
+            Ergänzung). Ein Lauf meldet sich so im Verlauf mehrfach.
+
+            kind unterscheidet den Nachtlauf (NIGHT, die Vorgabe) von der interaktiven \
+            Sitzung (INTERACTIVE). Bei einer Kette (mode CHAIN) tragen die Vorgänge ihre \
+            Stufen (stages) mit Dauer und Verbrauch; budget nennt die Zeit- und \
+            Kostenvorgaben, unter denen der Lauf antrat.
+
+            releasePreparation ist die Morgenmeldung: ob und wie der Lauf eine \
+            Veröffentlichung vorbereitet hat. Sie ersetzt wie jedes andere Feld eine früher \
+            gemeldete; fehlt sie, steht am Lauf keine. Den Eingang setzt der Server.
+
+            current nennt die Stufen, die der Lauf gerade fährt. Auch sie ersetzen die \
+            früher gemeldeten; ein beendeter Lauf trägt keine.
+
+            Gegenstück auf der Runner-Seite ist „Protokoll einlesen“: Dort lädt ein Mensch \
+            das Textprotokoll eines Laufs im Browser hoch, und der Leitstand deutet es \
+            zeilenweise. Dieser Aufruf nimmt denselben Inhalt strukturiert an, ohne \
+            Textprotokoll und ohne ungedeutete Zeilen.""");
+    assertThat(beschreibung(paths, "/api/projects/{projectId}/night-runs", "post"))
+        .isEqualTo(
+            """
+            Nimmt Läufe entgegen, die der Browser aus einem Textprotokoll des Runners gedeutet hat \
+            („Protokoll einlesen“ auf der Runner-Seite). Ein Lauf ist eine Sitzung eines \
+            Agenten, die Karten abarbeitet; seine Arbeitspakete (items) sind die Karten, die \
+            er angefasst hat, mit Ausgang (state) und gegebenenfalls Fehlerklasse. Das \
+            Protokoll selbst verlässt den Browser nicht.
+
+            Schlüssel eines Laufs ist startedAt: Ein Lauf, den das Projekt schon kennt, bleibt \
+            unangetastet und wird als schon vorliegend gemeldet — wiederholtes Hochladen \
+            desselben Protokolls ist darum folgenlos. Die Antwort nennt je übergebenem Lauf, \
+            in Anfragereihenfolge, ob er angelegt wurde (created). Verlangt die Rolle Owner \
+            im Projekt; ein Plattform-Admin darf ebenfalls.
+
+            Den strukturierten Weg ohne Browser, mit Projekt-Token, bietet POST \
+            /api/kanban/night-runs.""");
+    assertThat(beschreibung(paths, "/api/boards/{boardId}/cards", "post"))
+        .isEqualTo(
+            """
+            Legt eine Karte in der angegebenen Spalte des Boards an, am Ende der Spalte. Mit \
+            type=EPIC entsteht stattdessen ein Vorhaben in der ersten Spalte; columnId ist \
+            dann ohne Wirkung. Recht: TICKET_CREATE für Karten, EPIC_CREATE für Vorhaben.
+
+            Zuständige, Labels und Fälligkeit werden mit der Anlage in einem Zug übernommen. \
+            dependencies nennt die projektweiten Nummern der Karten, von denen diese \
+            abhängt; parentId ordnet die Karte einem Vorhaben desselben Boards zu.
+
+            derivedFrom hält die Herkunft fest: die projektweite Nummer der Karte, aus der \
+            diese abgeleitet ist, etwa ein Arbeitspaket aus seinem Plan. Ein Vorhaben trägt \
+            keine Herkunft.""");
+    assertThat(beschreibung(paths, "/api/kanban/night-runs/ready-assessment", "post"))
+        .isEqualTo(
+            STABIL_VERLAESSLICH
+                + """
+            Meldet, wie der Runner die Karten in Ready bewertet: je Karte die Gründe, aus denen \
+            er sie zurückstellt oder nicht zieht, und für die startbaren ihren Platz. Das \
+            Zielprojekt kommt aus der Bindung des Projekt-Tokens (Header X-Kanban-Token); \
+            melden darf, wer im Projekt Owner ist.
+
+            Je Projekt gilt nur die jüngste Bewertung: Eine Meldung ersetzt die gespeicherte \
+            vollständig, eine gleich alte gilt als Wiederholung, eine ältere wird mit 409 \
+            abgewiesen. code ist ein Code des Runners; ein unbekannter wird angenommen, und \
+            die Anzeige zeigt dann text.""");
+    assertThat(beschreibung(paths, "/api/boards/{boardId}/events", "get"))
+        .isEqualTo(
+            """
+            Öffnet einen Server-Sent-Events-Stream (text/event-stream), über den der Leitstand \
+            jede Änderung am Board meldet, bis der Aufrufer die Verbindung schließt oder \
+            sie nach 30 Minuten endet; danach neu abonnieren. Verlangt die Mitgliedschaft \
+            im Projekt.
+
+            Ereignisarten: Jede Änderung kommt als Ereignis mit dem Namen board-changed; \
+            seine Daten sind ein JSON-Objekt mit boardId, type und cardId. type ist eine \
+            von CREATED (Karte angelegt), UPDATED (geändert), MOVED (verschoben), ARCHIVED \
+            (archiviert), RESTORED (wiederhergestellt) oder DELETED (gelöscht); cardId nennt \
+            die betroffene Karte oder ist null, wenn die Änderung keine einzelne Karte \
+            betrifft. Etwa alle 25 Sekunden kommt zusätzlich ein Kommentar ping, der die \
+            Verbindung durch Proxys offen hält und keine Daten trägt.""");
+  }
+
+  /** Charakterisierung zu Issue #1842: das Beispiel eines Grundes der Ready-Bewertung. */
+  @Test
+  void beispielDesBewertungsgrundesBleibtZeichengleich() throws Exception {
+    JsonNode beispiel =
+        spezifikation("spec-beispiel@example.com")
+            .at("/components/schemas/AssessmentReasonRequest/example");
+
+    assertThat(json.writeValueAsString(beispiel))
+        .isEqualTo(
+            "{\"code\":\"DEPENDENCY\",\"cardNumbers\":[1698],"
+                + "\"text\":\"Abhaengigkeit #1698 nicht erfuellt\"}");
+  }
+
+  private static String beschreibung(JsonNode paths, String pfad, String methode) {
+    return paths.path(pfad).path(methode).path("description").asText();
+  }
 }
