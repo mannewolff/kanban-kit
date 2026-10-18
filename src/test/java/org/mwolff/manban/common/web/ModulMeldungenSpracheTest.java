@@ -114,7 +114,7 @@ class ModulMeldungenSpracheTest {
 
     assertThat(
             handler
-                .handleException(InvalidDerivedFromException.unbekannteNummer(1234))
+                .handleException(InvalidDerivedFromException.unbekannteHerkunftsnummer(1234))
                 .getProperties())
         .containsEntry("fieldErrors", Map.of("derivedFrom", "Unknown card number as origin: 1234"));
   }

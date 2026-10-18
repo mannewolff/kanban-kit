@@ -39,7 +39,7 @@ public final class InvalidDerivedFromException extends InvalidDependencyExceptio
   }
 
   /** Die Kartennummer der Herkunft gibt es im Projekt nicht. */
-  public static InvalidDerivedFromException unbekannteNummer(Integer nummer) {
+  public static InvalidDerivedFromException unbekannteHerkunftsnummer(Integer nummer) {
     return new InvalidDerivedFromException(
         "card.herkunft.unbekannte-nummer",
         "Unbekannte Kartennummer als Herkunft: " + nummer,
@@ -47,7 +47,7 @@ public final class InvalidDerivedFromException extends InvalidDependencyExceptio
   }
 
   /** Eine Karte stammt von sich selbst ab. */
-  public static InvalidDerivedFromException vonSichSelbst() {
+  public static InvalidDerivedFromException herkunftVonSichSelbst() {
     return new InvalidDerivedFromException(
         "card.herkunft.von-sich-selbst", "Eine Karte kann nicht von sich selbst abstammen");
   }

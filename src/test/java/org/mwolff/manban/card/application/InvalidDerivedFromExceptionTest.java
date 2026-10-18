@@ -18,7 +18,7 @@ class InvalidDerivedFromExceptionTest {
 
   @Test
   void nenntDasFeldDerivedFrom() {
-    FieldScopedException ex = InvalidDerivedFromException.unbekannteNummer(7);
+    FieldScopedException ex = InvalidDerivedFromException.unbekannteHerkunftsnummer(7);
 
     assertThat(ex.field()).isEqualTo("derivedFrom");
   }
