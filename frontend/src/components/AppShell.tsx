@@ -622,7 +622,7 @@ function Rahmen() {
     const hoeheSetzen = () => {
       if (ausschnitt) root.style.setProperty('--sichtbare-hoehe', `${ausschnitt.height}px`)
     }
-    root.setAttribute('data-geraet', 'tablet-quer')
+    root.dataset.geraet = 'tablet-quer'
     hoeheSetzen()
     ausschnitt?.addEventListener('resize', hoeheSetzen)
     return () => {
