@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(HttpStatus.FORBIDDEN)
 public final class FreigabeLabelException extends RuntimeException implements UebersetzbareMeldung {
 
+  /** Anfang jeder Meldung, vor dem Namen des Labels. */
+  private static final String LABEL = "Label ";
+
   /** Begründung eines unbekannten Namens im Namensraum, zwischen Name und Folge (E7). */
   private static final String NAMENSRAUM_UNBEKANNT =
       " liegt im Namensraum des Kits und ist dort unbekannt; ";
@@ -31,7 +34,7 @@ public final class FreigabeLabelException extends RuntimeException implements Ue
   public static FreigabeLabelException nurMenschSetzt(String label) {
     return new FreigabeLabelException(
         "card.freigabe-label.nur-mensch-setzt",
-        "Label " + label + " setzt nur ein Mensch im Board",
+        LABEL + label + " setzt nur ein Mensch im Board",
         label);
   }
 
@@ -39,7 +42,7 @@ public final class FreigabeLabelException extends RuntimeException implements Ue
   public static FreigabeLabelException nurMenschNimmtAb(String label) {
     return new FreigabeLabelException(
         "card.freigabe-label.nur-mensch-nimmt-ab",
-        "Label " + label + " nimmt nur ein Mensch im Board ab",
+        LABEL + label + " nimmt nur ein Mensch im Board ab",
         label);
   }
 
@@ -47,7 +50,7 @@ public final class FreigabeLabelException extends RuntimeException implements Ue
   public static FreigabeLabelException unbekanntSetzen(String label) {
     return new FreigabeLabelException(
         "card.freigabe-label.unbekannt-setzen",
-        "Label " + label + NAMENSRAUM_UNBEKANNT + "es setzt nur ein Mensch im Board",
+        LABEL + label + NAMENSRAUM_UNBEKANNT + "es setzt nur ein Mensch im Board",
         label);
   }
 
@@ -55,7 +58,7 @@ public final class FreigabeLabelException extends RuntimeException implements Ue
   public static FreigabeLabelException unbekanntUmbenennen(String label) {
     return new FreigabeLabelException(
         "card.freigabe-label.unbekannt-umbenennen",
-        "Label "
+        LABEL
             + label
             + NAMENSRAUM_UNBEKANNT
             + "auf diesen Namen benennt nur ein Mensch im Board um",
@@ -66,9 +69,7 @@ public final class FreigabeLabelException extends RuntimeException implements Ue
   public static FreigabeLabelException definitionGesperrt(String label) {
     return new FreigabeLabelException(
         "card.freigabe-label.definition-gesperrt",
-        "Label "
-            + label
-            + " ist ein Freigabe-Label; seine Definition ändert nur ein Mensch im Board",
+        LABEL + label + " ist ein Freigabe-Label; seine Definition ändert nur ein Mensch im Board",
         label);
   }
 
