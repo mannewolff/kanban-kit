@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { globToRegExp, excludeByExclusions } from './sync-sonar-issues-to-board.mjs';
+import {
+  globToRegExp,
+  excludeByExclusions,
+  buildIssuesSearchUrl,
+  mergeIssueLists,
+  SEVERITY_SELECTION,
+  TYPE_SELECTION,
+} from './sync-sonar-issues-to-board.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -50,4 +57,61 @@ test('excludeByExclusions mit den Mustern aus sonar-project.properties', () => {
     excludeByExclusions(issues, exclusions).map((i) => i.key),
     ['src/main/java/org/mwolff/manban/X.java'],
   );
+});
+
+const abfrage = (selection) =>
+  new URL(
+    buildIssuesSearchUrl({ projectKey: 'proj', organization: 'org', pageSize: 500, page: 2, selection }),
+  );
+
+test('Abfrage mit Schweregrad-Auswahl filtert nach Schweregrad, nicht nach Typ', () => {
+  const url = abfrage(SEVERITY_SELECTION);
+  assert.equal(url.pathname, '/api/issues/search');
+  assert.equal(url.searchParams.get('severities'), 'MAJOR,CRITICAL,BLOCKER');
+  assert.equal(url.searchParams.has('types'), false);
+  assert.equal(url.searchParams.get('componentKeys'), 'proj');
+  assert.equal(url.searchParams.get('organization'), 'org');
+  assert.equal(url.searchParams.get('resolved'), 'false');
+  assert.equal(url.searchParams.get('ps'), '500');
+  assert.equal(url.searchParams.get('p'), '2');
+});
+
+test('Abfrage mit Typ-Auswahl holt Bugs und Vulnerabilities ohne Schweregrad-Filter', () => {
+  const url = abfrage(TYPE_SELECTION);
+  assert.equal(url.searchParams.get('types'), 'BUG,VULNERABILITY');
+  assert.equal(url.searchParams.has('severities'), false);
+  assert.equal(url.searchParams.get('resolved'), 'false');
+});
+
+test('mergeIssueLists entdoppelt ueber issue.key und behaelt die Reihenfolge der ersten Liste', () => {
+  const befund = (key, liste) => ({ key, liste });
+  const merged = mergeIssueLists(
+    [befund('a', 1), befund('b', 1), befund('c', 1)],
+    [befund('b', 2), befund('d', 2), befund('a', 2)],
+  );
+  assert.deepEqual(
+    merged.map((i) => `${i.key}${i.liste}`),
+    ['a1', 'b1', 'c1', 'd2'],
+  );
+});
+
+test('Ein MINOR-Bug ueberlebt die Zusammenfuehrung, ein MINOR-Code-Smell nicht', () => {
+  // Bestand auf SonarCloud; die Auswahl wirkt wie die API: Parameter je Abfrage mit UND verknuepft.
+  const bestand = [
+    { key: 'minor-bug', type: 'BUG', severity: 'MINOR' },
+    { key: 'minor-smell', type: 'CODE_SMELL', severity: 'MINOR' },
+    { key: 'major-bug', type: 'BUG', severity: 'MAJOR' },
+    { key: 'info-vuln', type: 'VULNERABILITY', severity: 'INFO' },
+    { key: 'major-smell', type: 'CODE_SMELL', severity: 'MAJOR' },
+  ];
+  const antwort = (selection) => {
+    const params = abfrage(selection).searchParams;
+    const severities = params.get('severities')?.split(',');
+    const types = params.get('types')?.split(',');
+    return bestand.filter(
+      (i) => (!severities || severities.includes(i.severity)) && (!types || types.includes(i.type)),
+    );
+  };
+  const merged = mergeIssueLists(antwort(SEVERITY_SELECTION), antwort(TYPE_SELECTION));
+  assert.deepEqual(merged.map((i) => i.key), ['major-bug', 'major-smell', 'minor-bug', 'info-vuln']);
 });
