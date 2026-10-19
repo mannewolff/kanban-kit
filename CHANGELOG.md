@@ -17,6 +17,49 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.4.0] – 2026-10-19
+
+- chore: v3.3.2
+- GET /api/kanban/labels liefert die Labels des gebundenen Boards ([#1855](https://github.com/mannewolff/kanban-kit/issues/1855))
+- Mutations-Ueberlebende in prognose.ts toeten ([#1854](https://github.com/mannewolff/kanban-kit/issues/1854))
+- Mutations-Ueberlebende in auslieferung.ts toeten ([#1853](https://github.com/mannewolff/kanban-kit/issues/1853))
+- Mutations-Ueberlebende in AuslieferungPlatte toeten ([#1852](https://github.com/mannewolff/kanban-kit/issues/1852))
+- chore: v3.3.1
+- Zeitzonentest in prognose.test.ts ohne Wechsel von process.env.TZ ([#1851](https://github.com/mannewolff/kanban-kit/issues/1851))
+- Mutations-Ueberlebende in Durchsatzermittlung toeten ([#1850](https://github.com/mannewolff/kanban-kit/issues/1850))
+- Mutations-Ueberlebende in AuslieferungsErmittlung beseitigen ([#1849](https://github.com/mannewolff/kanban-kit/issues/1849))
+- Mutations-Ueberlebende in Fertigprognose toeten ([#1848](https://github.com/mannewolff/kanban-kit/issues/1848))
+- Mutations-Ueberlebende in VorhabenLage toeten, Zweigabdeckung schliessen ([#1847](https://github.com/mannewolff/kanban-kit/issues/1847))
+- ESLint-Gate: react/hook-use-state und no-await-in-loop aufnehmen ([#1846](https://github.com/mannewolff/kanban-kit/issues/1846))
+- Sonar S9149: verdeckende Fabrikmethoden der Herkunfts- und Anforderungs-Ausnahmen umbenennen ([#1845](https://github.com/mannewolff/kanban-kit/issues/1845))
+- Sieben gepruefte Sonar-Befunde mit Begruendung ablehnen ([#1844](https://github.com/mannewolff/kanban-kit/issues/1844))
+- Sonar-Sync holt Bugs und Vulnerabilities unabhaengig vom Schweregrad ([#1843](https://github.com/mannewolff/kanban-kit/issues/1843))
+- Sonar S5665/S5663: Escape-Folgen in OpenAPI-Textbloecken aufloesen ([#1842](https://github.com/mannewolff/kanban-kit/issues/1842))
+- Sonar S7761: dataset statt removeAttribute in AppShell ([#1740](https://github.com/mannewolff/kanban-kit/issues/1740))
+- Sonar S7761: dataset statt setAttribute in AppShell ([#1739](https://github.com/mannewolff/kanban-kit/issues/1739))
+- Sonar S1192: Literal "card_number" in NightRunRepositoryAdapter als Konstante ([#1738](https://github.com/mannewolff/kanban-kit/issues/1738))
+- Sonar S1192: Literal "stage" in NightRunRepositoryAdapter als Konstante ([#1737](https://github.com/mannewolff/kanban-kit/issues/1737))
+- Sonar S1192: Literal "cardNumber" in NightRunRepositoryAdapter als Konstante ([#1736](https://github.com/mannewolff/kanban-kit/issues/1736))
+- Sonar S1192: Literal "Label " in FreigabeLabelException als Konstante ([#1689](https://github.com/mannewolff/kanban-kit/issues/1689))
+- Sonar S8786: Regex mit Backtracking in einzeilig ersetzt ([#1634](https://github.com/mannewolff/kanban-kit/issues/1634))
+- Sonar S1845: Feld PRUEFER in NachtFreigabe zu PRUEFERZAHLEN umbenannt ([#1605](https://github.com/mannewolff/kanban-kit/issues/1605))
+- Sonar S3358: verschachtelte Ternary in balkenHoehenMitLuecken aufgelöst ([#1563](https://github.com/mannewolff/kanban-kit/issues/1563))
+- Auslieferung: Doku zu Platte, Rechten und Token ([#1837](https://github.com/mannewolff/kanban-kit/issues/1837))
+- Auslieferung: Platte im Leitstand ([#1836](https://github.com/mannewolff/kanban-kit/issues/1836))
+- Auslieferung: Lese-Schnittstelle für die Platte und Szenarien-IT ([#1835](https://github.com/mannewolff/kanban-kit/issues/1835))
+- Auslieferung: Melde-Schnittstelle /api/kanban/deployments ([#1834](https://github.com/mannewolff/kanban-kit/issues/1834))
+- Auslieferung: Speicherung und Melde-Dienst ([#1833](https://github.com/mannewolff/kanban-kit/issues/1833))
+- Auslieferung: Domäne und Kennzahlen-Ermittlung (DORA) ([#1832](https://github.com/mannewolff/kanban-kit/issues/1832))
+- Leitstand-Prognose: Nutzungsdoku zur Platte Vorhaben ([#1830](https://github.com/mannewolff/kanban-kit/issues/1830))
+- Leitstand-Prognose: Platte Vorhaben als eigene Komponente mit Prognosezeile ([#1829](https://github.com/mannewolff/kanban-kit/issues/1829))
+- Leitstand-Prognose: Abruf, Ladezustand und Textlogik im Frontend ([#1828](https://github.com/mannewolff/kanban-kit/issues/1828))
+- Leitstand-Prognose: Szenariotests gegen die Datenbank ([#1827](https://github.com/mannewolff/kanban-kit/issues/1827))
+- Leitstand-Prognose: Abruf epic-forecast mit Dienst und Controller ([#1826](https://github.com/mannewolff/kanban-kit/issues/1826))
+- Leitstand-Prognose: Lage, Zählung und ausstehende Dokumente je Vorhaben ([#1825](https://github.com/mannewolff/kanban-kit/issues/1825))
+- Leitstand-Prognose: Durchsatz je Tag aus den Aufenthalten ([#1824](https://github.com/mannewolff/kanban-kit/issues/1824))
+- Leitstand-Prognose: Tagesgrenze 12 Uhr und exakte Fertigprognose ([#1823](https://github.com/mannewolff/kanban-kit/issues/1823))
+- Änderungen durch install.mjs 5.3.0
+
 ## [3.3.0] – 2026-10-16
 
 - chore: v3.2.1
