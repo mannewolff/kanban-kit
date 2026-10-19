@@ -128,6 +128,12 @@ describe('wochenHoehen', () => {
     ])
   })
 
+  it('zeigt eine Woche mit gleich vielen Erfolgen und Fehlschlägen als Balken, nicht als Lücke', () => {
+    expect(wochenHoehen([{ weekStart: 'a', successCount: 2, failureCount: 2 }])).toEqual([
+      { erfolg: 50, fehlschlag: 50 },
+    ])
+  })
+
   it('gibt ohne Versuch in jeder Woche nur Lücken', () => {
     expect(wochenHoehen([{ weekStart: 'a', successCount: 0, failureCount: 0 }])).toEqual([null])
   })
