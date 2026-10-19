@@ -413,12 +413,13 @@ class DurchsatzermittlungTest {
   }
 
   @Test
-  @DisplayName("EXIT in den Papierkorb, nach Artwechsel oder ohne bekannten Stand zählt nicht")
+  @DisplayName(
+      "EXIT in den Papierkorb, nach Artwechsel, ohne Archiv oder ohne bekannten Stand zählt nicht")
   void papierkorbArtwechselUndUnbekannterStandZaehlenNicht() {
     Instant review = am(TAG);
     Instant austritt = am(TAG.plusDays(1));
     List<FlussStay> aufenthalte = new ArrayList<>();
-    for (long karte = 1; karte <= 5; karte++) {
+    for (long karte = 1; karte <= 6; karte++) {
       aufenthalte.add(stay(karte, CardStatus.IN_PROGRESS, review.minusSeconds(3600), review));
       aufenthalte.add(stay(karte, BOARD, CardStatus.IN_REVIEW, review, austritt, EndedBy.EXIT));
     }
@@ -427,7 +428,8 @@ class DurchsatzermittlungTest {
             1L, new Kartenstand(CardStatus.IN_REVIEW, false, true),
             2L, new Kartenstand(CardStatus.IN_REVIEW, true, true),
             3L, new Kartenstand(null, false, false),
-            4L, new Kartenstand(null, true, false));
+            4L, new Kartenstand(null, true, false),
+            6L, new Kartenstand(CardStatus.IN_REVIEW, false, false));
 
     assertThat(summe(ermittle(BOARD, aufenthalte, heute))).isZero();
   }
