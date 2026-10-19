@@ -532,6 +532,36 @@ class VorhabenLageTest {
     assertThat(ergebnis.total()).isZero();
   }
 
+  @Test
+  @DisplayName("AK 13/16: ein Dokument mit Status zählt nicht als Paket")
+  void dokumentMitStatusZaehltNicht() {
+    Card epic = vorhaben();
+    long id = neueId();
+    zu(epic, karte(id, "[Plan] mit Status", CardType.CARD, BACKLOG, CardStatus.READY, null, false));
+
+    Ergebnis ergebnis = ermittle(epic, JEDEN_TAG_EINS);
+
+    assertThat(ergebnis.lage()).isEqualTo(Lage.NO_PACKAGES);
+    assertThat(ergebnis.total()).isZero();
+  }
+
+  @Test
+  @DisplayName(
+      "AK 11: Tage nur bei FORECAST, auch wenn die Zählung ohne Archiv offene Pakete findet")
+  void tageNurBeiPrognose() {
+    Card epic = vorhaben();
+    offenePakete(epic, 1);
+    Map<Long, Set<Card>> ohneGeschnittene = Map.of(epic.requireId(), Set.of());
+
+    Ergebnis ergebnis =
+        VorhabenLage.ermittle(karten, ohneArchiv(), ohneGeschnittene, SPALTEN, JEDEN_TAG_EINS)
+            .getFirst();
+
+    assertThat(ergebnis.lage()).isEqualTo(Lage.NO_PACKAGES);
+    assertThat(ergebnis.open()).isEqualTo(1);
+    assertThat(ergebnis.tage()).isNull();
+  }
+
   // --- E12 ---
 
   @Test
