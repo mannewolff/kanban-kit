@@ -2,7 +2,9 @@ package org.mwolff.manban.card.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -106,6 +108,26 @@ class FertigprognoseTest {
     werte.addAll(Collections.nCopies(7, 3));
 
     assertThat(tage(werte, 4)).isEqualTo(new Tage(2, 4));
+  }
+
+  @Test
+  @DisplayName("Eine Wahrscheinlichkeit genau am Rand des Rundungsspielraums erreicht die Marke")
+  void genauAmRandDesSpielraums() {
+    assertThat(Fertigprognose.erreicht(0.5 - 1e-12, 0.5)).isTrue();
+    assertThat(Fertigprognose.erreicht(0.5 - 2e-12, 0.5)).isFalse();
+  }
+
+  @Test
+  @DisplayName("Die Rechnung endet, sobald das größte n seinen 85-%-Tag hat")
+  void endetMitDemLetztenFuenfundachtzigTag() {
+    // Zehn Tageswerte knapp unter n: Tag 2 ist sicher fertig. Liefe die Rechnung bis zur
+    // Schutzgrenze weiter, falteten 36 500 Tage je eine Million Schritte.
+    int anzahl = 100_000;
+    List<Integer> werte = IntStream.range(0, 10).mapToObj(i -> anzahl - 1 - i).toList();
+
+    Tage ergebnis = assertTimeoutPreemptively(Duration.ofSeconds(2), () -> tage(werte, anzahl));
+
+    assertThat(ergebnis).isEqualTo(new Tage(2, 2));
   }
 
   @Test

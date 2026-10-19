@@ -98,7 +98,8 @@ public final class Fertigprognose {
     }
   }
 
-  private static boolean erreicht(double wahrscheinlichkeit, double marke) {
+  /** Paketsichtbar, damit der Rand des {@link #TOLERANZ Rundungsspielraums} prüfbar ist. */
+  static boolean erreicht(double wahrscheinlichkeit, double marke) {
     return wahrscheinlichkeit >= marke - TOLERANZ;
   }
 
@@ -148,8 +149,9 @@ public final class Fertigprognose {
         }
       }
       verteilung = neu;
+      // Zustand 0 bleibt aus: Gefragt wird nur nach mindestens einem Paket.
       double rest = 0.0;
-      for (int summe = hoechste; summe >= 0; summe--) {
+      for (int summe = hoechste; summe >= 1; summe--) {
         rest += verteilung[summe];
         restsummen[summe] = rest;
       }
