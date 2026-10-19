@@ -156,6 +156,10 @@ describe('hinweisText — Deutsch', () => {
     expect(hinweisText('de', vorhaben({ state, p50: null, p85: null }))).toBeNull()
   })
 
+  it('hat außer bei FORECAST keinen Hinweis, auch wenn Daten mitkommen', () => {
+    expect(hinweisText('de', vorhaben({ state: 'INSUFFICIENT_THROUGHPUT' }))).toBeNull()
+  })
+
   it('hat ohne Daten keinen Hinweis, auch bei FORECAST', () => {
     expect(hinweisText('de', vorhaben({ p85: null }))).toBeNull()
     expect(zeilenText('de', vorhaben({ p50: null }))).toBe('Zu wenig Durchsatz für eine Prognose')
