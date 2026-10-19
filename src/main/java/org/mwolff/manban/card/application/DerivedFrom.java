@@ -54,10 +54,10 @@ final class DerivedFrom {
     Card vorfahr =
         cards
             .findByProjectIdAndNumber(projectId, derivedFrom)
-            .orElseThrow(() -> InvalidDerivedFromException.unbekannteNummer(derivedFrom));
+            .orElseThrow(() -> InvalidDerivedFromException.unbekannteHerkunftsnummer(derivedFrom));
     long vorfahrId = vorfahr.requireId();
     if (selfCardId != null && selfCardId == vorfahrId) {
-      throw InvalidDerivedFromException.vonSichSelbst();
+      throw InvalidDerivedFromException.herkunftVonSichSelbst();
     }
     requireNoCycle(cards, vorfahr, selfCardId);
     return vorfahrId;

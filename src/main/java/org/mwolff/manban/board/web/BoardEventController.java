@@ -41,7 +41,8 @@ class BoardEventController {
           Öffnet einen Server-Sent-Events-Stream (text/event-stream), über den der Leitstand \
           jede Änderung am Board meldet, bis der Aufrufer die Verbindung schließt oder \
           sie nach 30 Minuten endet; danach neu abonnieren. Verlangt die Mitgliedschaft \
-          im Projekt.\n\n\
+          im Projekt.
+
           Ereignisarten: Jede Änderung kommt als Ereignis mit dem Namen board-changed; \
           seine Daten sind ein JSON-Objekt mit boardId, type und cardId. type ist eine \
           von CREATED (Karte angelegt), UPDATED (geändert), MOVED (verschoben), ARCHIVED \

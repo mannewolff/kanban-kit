@@ -14,7 +14,9 @@ import org.mwolff.manban.card.application.BoardDashboardKpis;
 import org.mwolff.manban.card.application.BoardFlowView;
 import org.mwolff.manban.card.application.BoardFlussService;
 import org.mwolff.manban.card.application.CardCycleTimeService;
+import org.mwolff.manban.card.application.EpicForecastView;
 import org.mwolff.manban.card.application.ImplementationTimeView;
+import org.mwolff.manban.card.application.VorhabenPrognoseService;
 import org.mwolff.manban.common.web.Regionszone;
 import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -34,10 +36,13 @@ class DashboardController {
 
   private final CardCycleTimeService kennzahlen;
   private final BoardFlussService fluss;
+  private final VorhabenPrognoseService prognose;
 
-  DashboardController(CardCycleTimeService kennzahlen, BoardFlussService fluss) {
+  DashboardController(
+      CardCycleTimeService kennzahlen, BoardFlussService fluss, VorhabenPrognoseService prognose) {
     this.kennzahlen = kennzahlen;
     this.fluss = fluss;
+    this.prognose = prognose;
   }
 
   @Operation(
@@ -168,5 +173,44 @@ class DashboardController {
       @Parameter(description = "Interne ID des Boards.", example = "3") @PathVariable
           long boardId) {
     return fluss.aging(userId, boardId);
+  }
+
+  @Operation(
+      summary = "Prognose der Vorhaben eines Boards lesen",
+      description =
+          "Liefert die Prognose der Platte „Vorhaben“: je nicht archiviertem Vorhaben die Lage,"
+              + " die Zahl der Arbeitspakete (In Review zählt als fertig) und bei der Lage FORECAST"
+              + " die Tage, bis zu denen mit 50 % und 85 % alle offenen Pakete umgesetzt sind."
+              + " Grundlage ist der Durchsatz des Boards der letzten 30 abgeschlossenen Tage; ein"
+              + " Tag reicht von 12 bis 12 Uhr in der übergebenen Zone und trägt das Datum seines"
+              + " Endes, der laufende Tag ist der erste vorhergesagte. Verlangt die Mitgliedschaft"
+              + " im Projekt.")
+  @ApiResponse(responseCode = "200", description = "Die Prognose der Platte „Vorhaben“.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "zone fehlt, ist unbekannt oder ein fester Versatz statt einer Regionszone.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description = NICHT_GEFUNDEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @GetMapping("/api/boards/{boardId}/dashboard/epic-forecast")
+  EpicForecastView epicForecast(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = "Interne ID des Boards.", example = "3") @PathVariable long boardId,
+      @Parameter(
+              description =
+                  "Regionszone des Lesers, in der die Tage um 12 Uhr beginnen und enden; ein fester"
+                      + " Versatz wie +05:30 wird abgewiesen.",
+              example = "Europe/Berlin")
+          @RequestParam
+          ZoneId zone) {
+    return prognose.epicForecast(userId, boardId, Regionszone.of(zone));
   }
 }

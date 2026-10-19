@@ -48,7 +48,10 @@ final class RequirementCard {
     Card anforderung =
         cards
             .findByProjectIdAndNumber(epic.projectId(), requirementNumber)
-            .orElseThrow(() -> InvalidRequirementCardException.unbekannteNummer(requirementNumber));
+            .orElseThrow(
+                () ->
+                    InvalidRequirementCardException.unbekannteAnforderungsnummer(
+                        requirementNumber));
     long anforderungId = anforderung.requireId();
     if (anforderungId == epic.requireId()) {
       throw InvalidRequirementCardException.eigene();

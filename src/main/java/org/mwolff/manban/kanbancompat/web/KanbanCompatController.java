@@ -42,6 +42,7 @@ import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Created;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Epic;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Item;
+import org.mwolff.manban.kanbancompat.application.KanbanCompatService.KanbanLabel;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -69,8 +70,10 @@ import org.springframework.web.bind.annotation.RestController;
  * Vertragsschnappschuss in {@code OpenApiIT} macht jede Änderung an ihnen sichtbar.
  */
 // Die OpenAPI-Annotationen heben die Importzahl über die PMD-Schwelle von 40 (Plan #1400, E14).
-// Die Ausnahme bleibt an dieser Klasse sichtbar, statt die Regel für alle anzuheben.
-@SuppressWarnings("PMD.ExcessiveImports")
+// Die Ausnahme bleibt an dieser Klasse sichtbar, statt die Regel für alle anzuheben. Aus demselben
+// Grund liegt die Kopplung über 20: je Aufruf der Kanban-Strecke ein Antwort-Record, zuletzt
+// KanbanLabel (Issue #1855).
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.CouplingBetweenObjects"})
 @Tag(name = TAG_NAME, description = TAG_BESCHREIBUNG)
 @RestController
 @RequestMapping("/api/kanban")
@@ -807,6 +810,26 @@ class KanbanCompatController {
           int limit) {
     return archiv.search(
         principal(authentication), q, kind, epic, createdFrom, createdTo, cursor, limit);
+  }
+
+  @Operation(
+      summary = "Labels des Boards lesen",
+      description =
+          "Liefert die Labels des gebundenen Boards mit Name und Farbe, nach Name sortiert; ein"
+              + " Board ohne Labels liefert eine leere Liste. Rein lesend. "
+              + TOKEN_BINDUNG)
+  @ApiResponse(responseCode = "200", description = "Die Labels des Boards.")
+  @ApiResponse(
+      responseCode = "409",
+      description = NICHT_GEBUNDEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(stabilitaet = Stabilitaet.VERLAESSLICH)
+  @GetMapping("/labels")
+  List<KanbanLabel> labels(@Nullable Authentication authentication) {
+    return service.labels(principal(authentication));
   }
 
   @Operation(

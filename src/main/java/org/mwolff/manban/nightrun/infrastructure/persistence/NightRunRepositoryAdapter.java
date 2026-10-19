@@ -79,11 +79,23 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   /** Name des benannten SQL-Parameters für die Gattung (Sonar java:S1192). */
   private static final String P_KIND = "kind";
 
+  /** Name des benannten SQL-Parameters für die Kartennummer (Sonar java:S1192). */
+  private static final String P_CARD_NUMBER = "cardNumber";
+
+  /** Name des benannten SQL-Parameters für die Stufe (Sonar java:S1192). */
+  private static final String P_STAGE = "stage";
+
   /** Spaltenname der Lauf-ID in den Abfragen der Morgenmeldung (Sonar java:S1192). */
   private static final String C_NIGHT_RUN_ID = "night_run_id";
 
   /** Spaltenname der Fehlerklasse in der Zählabfrage (Sonar java:S1192). */
   private static final String C_ERROR_CLASS = "error_class";
+
+  /** Spaltenname der Stufe in der Abfrage der laufenden Stufen (Sonar java:S1192). */
+  private static final String C_STAGE = "stage";
+
+  /** Spaltenname der Kartennummer in den Leseabfragen (Sonar java:S1192). */
+  private static final String C_CARD_NUMBER = "card_number";
 
   /**
    * Der Platzhalter für „keine Vorgaben gemeldet" (Issue #1112). Er steht hier und nicht in der
@@ -343,8 +355,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           new MapSqlParameterSource()
               .addValue(P_NIGHT_RUN_ID, runId)
               .addValue("position", position)
-              .addValue("cardNumber", stufe.cardNumber())
-              .addValue("stage", stufe.stage())
+              .addValue(P_CARD_NUMBER, stufe.cardNumber())
+              .addValue(P_STAGE, stufe.stage())
               .addValue(P_STARTED_AT, zeitpunkt(stufe.startedAt()))
               .addValue(
                   "deadline",
@@ -395,7 +407,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
               .addValue(P_NIGHT_RUN_ID, runId)
               .addValue(P_KIND, art)
               .addValue("position", position)
-              .addValue("cardNumber", wert instanceof Integer nummer ? nummer : null, Types.INTEGER)
+              .addValue(
+                  P_CARD_NUMBER, wert instanceof Integer nummer ? nummer : null, Types.INTEGER)
               .addValue("text", wert instanceof String text ? text : null, Types.VARCHAR));
     }
   }
@@ -475,8 +488,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
               Eintraege liste =
                   eintraege.computeIfAbsent(rs.getLong(C_NIGHT_RUN_ID), id -> new Eintraege());
               switch (rs.getString(P_KIND)) {
-                case E_CARD -> liste.karten().add(rs.getInt("card_number"));
-                case E_RED_CARD -> liste.roteKarten().add(rs.getInt("card_number"));
+                case E_CARD -> liste.karten().add(rs.getInt(C_CARD_NUMBER));
+                case E_RED_CARD -> liste.roteKarten().add(rs.getInt(C_CARD_NUMBER));
                 default -> liste.offen().add(rs.getString("text"));
               }
             });
@@ -511,8 +524,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
                   .computeIfAbsent(rs.getLong(C_NIGHT_RUN_ID), id -> new ArrayList<>())
                   .add(
                       new RunnerStufe(
-                          rs.getInt("card_number"),
-                          rs.getString("stage"),
+                          rs.getInt(C_CARD_NUMBER),
+                          rs.getString(C_STAGE),
                           rs.getObject("started_at", OffsetDateTime.class).toInstant(),
                           frist == null ? null : frist.toInstant(),
                           rs.getString("step"),
@@ -687,7 +700,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
     MapSqlParameterSource parameter =
         new MapSqlParameterSource()
             .addValue("nightRunItemId", itemId)
-            .addValue("stage", stage.stage().name())
+            .addValue(P_STAGE, stage.stage().name())
             .addValue(P_DURATION_MS, stage.durationMs(), Types.BIGINT);
     verbrauchSchreiben(parameter, stage.usage());
     return parameter;
@@ -702,7 +715,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
             .addValue(P_STARTED_AT, zeitpunkt(run.startedAt()))
             .addValue("mode", run.mode().name())
             .addValue(P_KIND, run.kind().name())
-            .addValue("cardNumber", item.cardNumber())
+            .addValue(P_CARD_NUMBER, item.cardNumber())
             .addValue("title", item.title())
             .addValue("state", item.state().name())
             .addValue("errorClass", errorClass == null ? null : errorClass.name(), Types.VARCHAR)

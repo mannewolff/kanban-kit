@@ -138,7 +138,8 @@ export function AbnahmeSzenarienDialog({ open, titel, szenarien, onClose, onAbsc
                   </Typography>
                   <Box component="ol" sx={{ mt: 1, mb: 1, pl: 3 }}>
                     {szenario.schritte.map((schritt, schrittIndex) => (
-                      <li key={schrittIndex}>
+                      // Unveränderliche Liste, Schritte dürfen sich wiederholen: Index-Key bewusst (Issue #1844).
+                      <li key={schrittIndex /* NOSONAR */}>
                         <Schritt text={schritt} />
                       </li>
                     ))}

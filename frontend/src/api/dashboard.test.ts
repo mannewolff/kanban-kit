@@ -104,3 +104,64 @@ describe('dashboardApi.flow und aging', () => {
     expect(result).toEqual(alter)
   })
 })
+
+describe('dashboardApi.epicForecast (Issue #1828)', () => {
+  const antwort = (body: unknown) =>
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: () => Promise.resolve(JSON.stringify(body)),
+    } as Response)
+
+  it('ruft ohne Zone die Zone des Lesers ab', async () => {
+    const prognose = { throughputDays: 0, epics: [] }
+    const f = antwort(prognose)
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    const result = await dashboardApi.epicForecast(7)
+
+    const [url, init] = f.mock.calls[f.mock.calls.length - 1]
+    expect(url).toBe(`/api/boards/7/dashboard/epic-forecast?zone=${encodeURIComponent(zone)}`)
+    expect(init?.method).toBeUndefined()
+    expect(result).toEqual(prognose)
+  })
+
+  it('hängt eine übergebene Zone URL-kodiert an', async () => {
+    const f = antwort({ throughputDays: 0, epics: [] })
+
+    await dashboardApi.epicForecast(7, 'America/Argentina/Buenos_Aires')
+
+    expect(f.mock.calls[f.mock.calls.length - 1][0]).toBe(
+      '/api/boards/7/dashboard/epic-forecast?zone=America%2FArgentina%2FBuenos_Aires',
+    )
+  })
+})
+
+describe('dashboardApi.delivery (Issue #1836)', () => {
+  it('ruft GET /api/boards/{id}/dashboard/delivery', async () => {
+    const auslieferung = {
+      hasReports: true,
+      dataSince: null,
+      deploymentCount: 4,
+      leadTimeMedianSeconds: 7200,
+      changeFailurePercent: 20,
+      timeToRestoreMedianSeconds: null,
+      outageSince: null,
+      weeks: [{ weekStart: '2026-10-10T12:00:00Z', successCount: 4, failureCount: 1 }],
+    }
+    const f = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: () => Promise.resolve(JSON.stringify(auslieferung)),
+    } as Response)
+
+    const result = await dashboardApi.delivery(7)
+
+    const [url, init] = f.mock.calls[f.mock.calls.length - 1]
+    expect(url).toBe('/api/boards/7/dashboard/delivery')
+    expect(init?.method).toBeUndefined()
+    expect(result).toEqual(auslieferung)
+  })
+})

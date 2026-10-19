@@ -70,7 +70,8 @@ class NightRunNowController {
           Meldet, wie der Runner die Karten in Ready bewertet: je Karte die Gründe, aus denen \
           er sie zurückstellt oder nicht zieht, und für die startbaren ihren Platz. Das \
           Zielprojekt kommt aus der Bindung des Projekt-Tokens (Header X-Kanban-Token); \
-          melden darf, wer im Projekt Owner ist.\n\n\
+          melden darf, wer im Projekt Owner ist.
+
           Je Projekt gilt nur die jüngste Bewertung: Eine Meldung ersetzt die gespeicherte \
           vollständig, eine gleich alte gilt als Wiederholung, eine ältere wird mit 409 \
           abgewiesen. code ist ein Code des Runners; ein unbekannter wird angenommen, und \
@@ -301,8 +302,8 @@ class NightRunNowController {
   @Schema(
       description = "Ein Grund, aus dem der Runner die Karte zurückstellt oder nicht zieht.",
       example =
-          """
-          {"code":"DEPENDENCY","cardNumbers":[1698],"text":"Abhaengigkeit #1698 nicht erfuellt"}""")
+          "{\"code\":\"DEPENDENCY\",\"cardNumbers\":[1698],"
+              + "\"text\":\"Abhaengigkeit #1698 nicht erfuellt\"}")
   record AssessmentReasonRequest(
       @Schema(
               description =

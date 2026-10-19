@@ -46,7 +46,9 @@ import org.mwolff.manban.comment.application.CommentService;
 // Fehlerpfad sind hier gewollt, kein Refactoring-Signal.
 // PMD.CyclomaticComplexity: die Summe über lauter Methoden der Komplexität 1 — sie zählt hier nur
 // die Tests, nicht verschachtelte Logik.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity"})
+// PMD.CouplingBetweenObjects: die Schicht spricht alle card-Fassaden samt ihren Sichten an; mit der
+// Labelliste (Issue #1855) kommt LabelNameColor dazu.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity", "PMD.CouplingBetweenObjects"})
 class KanbanCompatServiceTest {
 
   private static final long BOARD = 10L;
@@ -1468,6 +1470,40 @@ class KanbanCompatServiceTest {
         .singleElement()
         .extracting(e -> e.progress().total(), e -> e.progress().done())
         .containsExactly(4, 2);
+  }
+
+  @Test
+  void labels_liestDieLabelsDesGebundenenBoardsNachNameSortiert() {
+    // Given: nur das gebundene Board wird abgefragt; Labels anderer Boards kommen nie an.
+    when(labelService.listNamesAndColors(1L, BOARD))
+        .thenReturn(
+            List.of(
+                new LabelService.LabelNameColor("Ux", "#1565c0"),
+                new LabelService.LabelNameColor("Bug", "#c62828")));
+
+    // When
+    List<KanbanCompatService.KanbanLabel> result = service.labels(bound());
+
+    // Then
+    assertThat(result)
+        .containsExactly(
+            new KanbanCompatService.KanbanLabel("Bug", "#c62828"),
+            new KanbanCompatService.KanbanLabel("Ux", "#1565c0"));
+    verify(labelService).listNamesAndColors(1L, BOARD);
+  }
+
+  @Test
+  void labels_boardOhneLabels_liefertLeereListe() {
+    when(labelService.listNamesAndColors(1L, BOARD)).thenReturn(List.of());
+
+    assertThat(service.labels(bound())).isEmpty();
+  }
+
+  @Test
+  void labels_throwsTokenNotBound_whenPrincipalUnbound() {
+    KanbanPrincipal unbound = new KanbanPrincipal(1L, 2L, null, null, "Token");
+
+    assertThatThrownBy(() -> service.labels(unbound)).isInstanceOf(TokenNotBoundException.class);
   }
 
   @Test

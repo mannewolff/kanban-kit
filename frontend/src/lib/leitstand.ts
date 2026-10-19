@@ -604,7 +604,11 @@ export function balkenHoehen(werte: readonly number[]): number[] {
 export function balkenHoehenMitLuecken(werte: readonly (number | null)[]): (number | null)[] {
   // Stryker disable next-line ConditionalExpression,MethodExpression: gleichwertig — Math.max nimmt null als 0, und die 0 steht schon als Untergrenze
   const max = Math.max(0, ...werte.filter((wert) => wert !== null))
-  return werte.map((wert) => (wert === null ? null : Math.max(3, max === 0 ? 0 : Math.round((wert / max) * 100))))
+  return werte.map((wert) => {
+    if (wert === null) return null
+    const anteil = max === 0 ? 0 : Math.round((wert / max) * 100)
+    return Math.max(3, anteil)
+  })
 }
 
 /** Eine Zeile der Abbruchgründe (Entwurf Z. 1606–1653): Klasse, Zahl, Breite relativ zur häufigsten. */

@@ -115,6 +115,75 @@ export interface AgingWip {
   inReview: AgingState
 }
 
+/**
+ * Die Lage eines Vorhabens in der Rangfolge (Plan #1819, AK 11): ohne Pakete, ohne offenes Paket,
+ * zu wenig Durchsatz oder mit Daten der Prognose.
+ */
+export type EpicForecastState = 'NO_PACKAGES' | 'ALL_DONE' | 'INSUFFICIENT_THROUGHPUT' | 'FORECAST'
+
+/** Ein Dokument, aus dem noch Pakete oder ein Plan folgen. */
+export interface EpicForecastPendingDocument {
+  number: number
+  title: string
+}
+
+/** Ein Vorhaben der Platte „Vorhaben“ mit Lage, Zählung und den Daten der Prognose. */
+export interface EpicForecastEntry {
+  id: number
+  number: number
+  title: string
+  state: EpicForecastState
+  /** Arbeitspakete des Vorhabens ohne Archiv. */
+  total: number
+  /** Davon in In Review oder Done. */
+  finished: number
+  open: number
+  /** Tag `YYYY-MM-DD`, benannt nach seinem Ende um 12 Uhr; `null` außer bei `FORECAST`. */
+  p50: string | null
+  /** Wie `p50`, mit 85 % Wahrscheinlichkeit. */
+  p85: string | null
+  /** Die Daten gelten nur „frühestens“, weil aus `pendingDocuments` noch etwas folgt. */
+  earliest: boolean
+  /** Pläne ohne Arbeitspaket und Fachpläne ohne Plan, aufsteigend nach Nummer. */
+  pendingDocuments: EpicForecastPendingDocument[]
+  /** Andere angezeigte Vorhaben mit mindestens einem offenen Paket. */
+  otherEpicsSharing: number
+}
+
+/** Die Prognose der Platte „Vorhaben“ (Issue #1828, Plan #1819). */
+export interface EpicForecast {
+  /** Tage der letzten 30 abgeschlossenen Tage mit mindestens einem fertigen Arbeitspaket. */
+  throughputDays: number
+  epics: EpicForecastEntry[]
+}
+
+/** Versuche eines Wochenfensters der Platte „Auslieferung“ (dieselben Fenster wie beim Durchsatz). */
+export interface DeliveryWeek {
+  weekStart: string
+  successCount: number
+  failureCount: number
+}
+
+/**
+ * Die Platte „Auslieferung“ mit den DORA-Kennzahlen eines Board-Projekts (Plan #1831, E5). Dauern in
+ * Sekunden; `null` heißt „keine Grundlage“, bei der Time to Restore „kein Ausfall“.
+ */
+export interface DeliveryView {
+  /** Ob für das Projekt je ein Versuch gemeldet wurde; ohne Meldung zeigt die Platte keine Zahl. */
+  hasReports: boolean
+  /** Der früheste gemeldete Ausgang, wenn er im Fenster liegt; sonst `null` („letzte 12 Wochen“). */
+  dataSince: string | null
+  /** Erfolgreiche Auslieferungen im Fenster — eine 0 ist eine echte Null. */
+  deploymentCount: number
+  leadTimeMedianSeconds: number | null
+  changeFailurePercent: number | null
+  /** Median der im Fenster abgeschlossenen Ausfälle; ein laufender zählt nicht mit. */
+  timeToRestoreMedianSeconds: number | null
+  /** Beginn eines noch laufenden Ausfalls; `null` ohne laufenden Ausfall. */
+  outageSince: string | null
+  weeks: DeliveryWeek[]
+}
+
 export const dashboardApi = {
   get: (boardId: number) => apiFetch<BoardDashboardKpis>(`/api/boards/${boardId}/dashboard`),
   /**
@@ -128,8 +197,13 @@ export const dashboardApi = {
   /** Die Tage der Platte „Fluss“ in der Zone des Lesers (Plan #1765, E9). */
   flow: (boardId: number, zone: string = leserZone()) =>
     apiFetch<BoardFlow>(`/api/boards/${boardId}/dashboard/flow?${new URLSearchParams({ zone })}`),
+  /** Die Prognose der Vorhaben in der Zone des Lesers (Plan #1819). */
+  epicForecast: (boardId: number, zone: string = leserZone()) =>
+    apiFetch<EpicForecast>(`/api/boards/${boardId}/dashboard/epic-forecast?${new URLSearchParams({ zone })}`),
   /** Die Platte „Alter in Arbeit“. */
   aging: (boardId: number) => apiFetch<AgingWip>(`/api/boards/${boardId}/dashboard/aging`),
+  /** Die Platte „Auslieferung“ mit den Daten des ganzen Projekts (Plan #1831, E1, E5). */
+  delivery: (boardId: number) => apiFetch<DeliveryView>(`/api/boards/${boardId}/dashboard/delivery`),
 }
 
 export type DashboardApi = typeof dashboardApi

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { ApiError } from '../api/client'
-import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow } from '../api/dashboard'
+import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecastEntry } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
@@ -16,7 +16,7 @@ import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
-vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn(), flow: vi.fn(), aging: vi.fn() } }))
+vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn(), delivery: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
@@ -45,6 +45,8 @@ const m = {
   implementierung: dashboardApi.implementationTime as ReturnType<typeof vi.fn>,
   fluss: dashboardApi.flow as ReturnType<typeof vi.fn>,
   alter: dashboardApi.aging as ReturnType<typeof vi.fn>,
+  prognose: dashboardApi.epicForecast as ReturnType<typeof vi.fn>,
+  auslieferung: dashboardApi.delivery as ReturnType<typeof vi.fn>,
   epics: epicsApi.list as ReturnType<typeof vi.fn>,
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
@@ -155,6 +157,23 @@ const epic = (id: number, title: string, done: number, total: number, memberNumb
   requirementCardNumber: null,
 })
 
+/** Ein Vorhaben der Prognose (Issue #1829); nach der neuen Zählung, nicht nach `listEpics`. */
+const vorhersage = (id: number, title: string, finished: number, total: number, teil: Partial<EpicForecastEntry> = {}): EpicForecastEntry => ({
+  id,
+  number: id,
+  title,
+  state: finished < total ? 'FORECAST' : 'ALL_DONE',
+  total,
+  finished,
+  open: total - finished,
+  p50: finished < total ? '2026-10-21' : null,
+  p85: finished < total ? '2026-10-24' : null,
+  earliest: false,
+  pendingDocuments: [],
+  otherEpicsSharing: 0,
+  ...teil,
+})
+
 const angaben = (costUsd: number | null, inputTokens: number | null = 4_820_000, outputTokens: number | null = 186_000, cachedInputTokens: number | null = 3_660_000) => ({
   costUsd,
   inputTokens,
@@ -262,6 +281,18 @@ const alter = (): AgingWip => ({
   },
 })
 
+/** Die Antwort der Platte „Auslieferung“ (Issue #1836). */
+const auslieferung = (): DeliveryView => ({
+  hasReports: true,
+  dataSince: null,
+  deploymentCount: 4,
+  leadTimeMedianSeconds: 7200,
+  changeFailurePercent: 20,
+  timeToRestoreMedianSeconds: null,
+  outageSince: null,
+  weeks: [{ weekStart: '2026-10-10T12:00:00Z', successCount: 4, failureCount: 1 }],
+})
+
 function renderPage(pfad = '/boards/1/leitstand') {
   return render(
     <TabletQuerProvider>
@@ -288,6 +319,8 @@ beforeEach(() => {
   m.nacharbeit.mockResolvedValue(nacharbeit())
   m.fluss.mockResolvedValue(fluss())
   m.alter.mockResolvedValue(alter())
+  m.auslieferung.mockResolvedValue(auslieferung())
+  m.prognose.mockResolvedValue({ throughputDays: 20, epics: [vorhersage(1, 'Nachtlauf-Auswertung', 7, 9), vorhersage(2, 'Erledigt', 3, 3)] })
 })
 
 describe('LeitstandPage (#979)', () => {
@@ -334,7 +367,7 @@ describe('LeitstandPage (#979)', () => {
     // Nachtlauf-Kachel hängt an der längeren Kette Board → Läufe und kommt nach den Kennzahlen;
     // ohne das Warten hinge die Vollständigkeitsprüfung am Zufall der Auflösungsreihenfolge.
     await waitFor(() =>
-      expect(screen.getAllByRole('article').map((k) => k.getAttribute('aria-label'))).toEqual([
+      expect(within(screen.getByRole('region', { name: 'Kennzahlen' })).getAllByRole('article').map((k) => k.getAttribute('aria-label'))).toEqual([
         'Durchsatz · Woche',
         'Durchlaufzeit',
         'Implementierungszeit',
@@ -637,17 +670,39 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     expect(screen.queryByText(/Kartenverlauf als Zeitstrahl/)).not.toBeInTheDocument()
   })
 
-  it('zeigt nur offene Vorhaben mit Fortschritt', async () => {
+  it('zeigt jedes nicht archivierte Vorhaben mit der Zählung und Prognose des neuen Abrufs (Issue #1829)', async () => {
     renderPage()
     const vorhaben = await screen.findByRole('region', { name: 'Vorhaben' })
-    expect(within(vorhaben).getAllByRole('listitem').map((z) => z.textContent)).toEqual(['Nachtlauf-Auswertung7/9'])
+    expect(m.prognose).toHaveBeenCalledWith(1)
+    expect(within(vorhaben).getAllByRole('listitem').map((z) => z.textContent)).toEqual([
+      'Nachtlauf-Auswertung7/9voraussichtlich fertig: 50 % bis 21.10.2026 · 85 % bis 24.10.2026 · 2 offene Pakete',
+      'Erledigt3/3alle Pakete umgesetzt',
+    ])
     expect(within(vorhaben).getByTestId('fuellung-78')).toBeInTheDocument()
+    expect(within(vorhaben).getByTestId('fuellung-100')).toBeInTheDocument()
   })
 
-  it('sagt ohne offenes Vorhaben, dass es keins gibt', async () => {
-    m.epics.mockResolvedValue([epic(2, 'Erledigt', 3, 3)])
+  it('zählt nach dem neuen Abruf, nicht nach der Vorhabenliste (AK 16)', async () => {
+    m.epics.mockResolvedValue([epic(1, 'Nachtlauf-Auswertung', 2, 9, [917])])
+    renderPage()
+    const vorhaben = await screen.findByRole('region', { name: 'Vorhaben' })
+    expect(vorhaben).toHaveTextContent('7/9')
+    expect(vorhaben).not.toHaveTextContent('2/9')
+  })
+
+  it('sagt ohne Vorhaben, dass es keins gibt', async () => {
+    m.prognose.mockResolvedValue({ throughputDays: 20, epics: [] })
     renderPage()
     expect(await screen.findByRole('region', { name: 'Vorhaben' })).toHaveTextContent('Kein offenes Vorhaben.')
+  })
+
+  it('zeigt die Platte ohne Daten des neuen Abrufs nicht, auch wenn die Vorhabenliste da ist (E14)', async () => {
+    m.prognose.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Abbruchgründe' })).toBeInTheDocument()
+    await waitFor(() => expect(m.prognose).toHaveBeenCalled())
+    await waitFor(() => expect(m.epics).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Vorhaben' })).not.toBeInTheDocument()
   })
 })
 
@@ -774,6 +829,39 @@ describe('LeitstandPage — Fluss und Alter in Arbeit (Issue #1778)', () => {
     expect(await screen.findByRole('region', { name: 'Fluss' })).toBeInTheDocument()
     await waitFor(() => expect(m.alter).toHaveBeenCalled())
     expect(screen.queryByRole('region', { name: 'Alter in Arbeit' })).not.toBeInTheDocument()
+  })
+})
+
+describe('LeitstandPage — Auslieferung (Issue #1836)', () => {
+  it('stellt „Auslieferung“ nach „Alter in Arbeit“ in den Abschnitt voller Breite', async () => {
+    renderPage()
+    const platte = await screen.findByRole('region', { name: 'Auslieferung' })
+    const alterPlatte = await screen.findByRole('region', { name: 'Alter in Arbeit' })
+    expect(m.auslieferung).toHaveBeenCalledWith(1)
+    expect(alterPlatte.compareDocumentPosition(platte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByTestId('leitstand-fluss')).toContainElement(platte)
+    expect(within(platte).getAllByRole('article')).toHaveLength(4)
+  })
+
+  it('zeigt die Platte auch ohne Recht auf die Runs (AK 16)', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.nacharbeit.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Auslieferung' })).toBeInTheDocument()
+  })
+
+  it.each([
+    ['einem Fehler', new ApiError(500, 'Kaputt')],
+    ['403', new ApiError(403, 'Forbidden')],
+  ])('lässt die Platte bei %s still weg und die übrigen stehen', async (_name, fehler) => {
+    m.auslieferung.mockRejectedValue(fehler)
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Alter in Arbeit' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Fluss' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
+    await waitFor(() => expect(m.auslieferung).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Auslieferung' })).not.toBeInTheDocument()
   })
 })
 
@@ -1286,7 +1374,7 @@ describe('LeitstandPage auf Englisch', () => {
     )
     m.klassen.mockResolvedValue({})
     m.laeufe.mockResolvedValue([lauf()])
-    m.epics.mockResolvedValue([epic(2, 'Erledigt', 3, 3)])
+    m.prognose.mockResolvedValue({ throughputDays: 0, epics: [] })
     renderEnglisch()
     expect(await screen.findByRole('article', { name: 'Lead time' })).toHaveTextContent('—no data')
     expect(screen.getByRole('region', { name: 'Throughput' })).toHaveTextContent('No completed card in the last weeks yet.')

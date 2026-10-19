@@ -1295,7 +1295,9 @@ function CardDetailModalView({
     setLabelIds([...labelIds.filter((id) => !ab.includes(id)), ...an.filter((id) => !labelIds.includes(id))])
     let antwort: Card | null = null
     try {
+      // eslint-disable-next-line no-await-in-loop -- jeder Aufruf liefert die ganze Karte; gleichzeitige Mutationen derselben Karte verlören eine Änderung
       for (const id of ab) antwort = await cardsApi.removeLabel(card.id, id)
+      // eslint-disable-next-line no-await-in-loop -- jeder Aufruf liefert die ganze Karte; gleichzeitige Mutationen derselben Karte verlören eine Änderung
       for (const id of an) antwort = await cardsApi.addLabel(card.id, id)
       if (antwort !== null && labelsRequestSeq.current === requestId) {
         setLabelIds(antwort.labels)
@@ -1325,6 +1327,7 @@ function CardDetailModalView({
   // Kein Sync-Effect auf die Prop nötig: der Wrapper remountet die View per `key` je Karte.
   // `startStand` ändert sich nie und dient beim Nachladen als Rückfallwert für Felder, die eine
   // Antwort nicht trägt.
+  // eslint-disable-next-line react/hook-use-state -- der Wert entsteht einmal und wird nie gesetzt; ein Setter nur fürs Lint wäre toter Code
   const [startStand] = useState<KartenStand>(() => standAus(card))
   const [stand, setStand] = useState<KartenStand>(startStand)
   const [beschreibungStatus, setBeschreibungStatus] = useState<BeschreibungStatus>('laedt')

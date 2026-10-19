@@ -62,7 +62,7 @@ public record NachtFreigabe(
   private static final Set<Art> STARTARTEN = Set.of(Art.FACHLICH, Art.PLAN);
 
   /** Die Prüferzahl je {@code planreview:*}-Sache in der Reihenfolge der Wahl. */
-  private static final List<Map.Entry<Sache, Integer>> PRUEFER =
+  private static final List<Map.Entry<Sache, Integer>> PRUEFERZAHLEN =
       List.of(Map.entry(Sache.PLANREVIEW_1, 1), Map.entry(Sache.PLANREVIEW_2, 2));
 
   /**
@@ -112,7 +112,7 @@ public record NachtFreigabe(
     Integer pruefer =
         plan
             ? null
-            : PRUEFER.stream()
+            : PRUEFERZAHLEN.stream()
                 .filter(p -> traegt.test(p.getKey()))
                 .findFirst()
                 .map(Map.Entry::getValue)

@@ -105,6 +105,17 @@ public class LabelService {
     return labels.findByBoardId(boardId);
   }
 
+  /**
+   * Name und Farbe der Labels eines Boards, für Aufrufer außerhalb des card-Moduls (Issue #1855):
+   * {@code card.domain} ist modulintern. Rechteprüfung wie {@link #list}.
+   */
+  @Transactional(readOnly = true)
+  public List<LabelNameColor> listNamesAndColors(long userId, long boardId) {
+    return list(userId, boardId).stream()
+        .map(l -> new LabelNameColor(l.name(), l.color()))
+        .toList();
+  }
+
   @Transactional
   public Label create(long userId, long boardId, String name, String color) {
     permissions.require(userId, boardService.requireProjectId(boardId), Permission.BOARD_UPDATE);
@@ -236,4 +247,7 @@ public class LabelService {
     }
     return trimmed;
   }
+
+  /** Name und Farbe eines Labels, ohne interne IDs (Issue #1855). */
+  public record LabelNameColor(String name, String color) {}
 }

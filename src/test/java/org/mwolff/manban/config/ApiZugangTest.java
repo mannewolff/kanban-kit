@@ -32,6 +32,7 @@ class ApiZugangTest {
     "/api/openapi.yaml, NUR_SESSION",
     "/api/kanban/items, NUR_PROJEKT_TOKEN",
     "/api/kanban/night-runs, NUR_PROJEKT_TOKEN",
+    "/api/kanban/labels, NUR_PROJEKT_TOKEN",
     "/api/me, SESSION_ODER_UNGEBUNDENES_TOKEN",
     "/api/cards/{cardId}, SESSION_ODER_UNGEBUNDENES_TOKEN",
     "/api/auth/me, SESSION_ODER_UNGEBUNDENES_TOKEN",

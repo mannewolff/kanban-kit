@@ -30,9 +30,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * Die Endpunkte {@code /dashboard/flow} und {@code /dashboard/aging} über HTTP (Issue #1773, Plan
- * #1765 E13, E14): Recht wie {@code /dashboard} (AK 10), Abweisung einer Offset-Zone mit 400 und
- * die Antwortform.
+ * Die Endpunkte {@code /dashboard/flow}, {@code /dashboard/aging} und {@code
+ * /dashboard/epic-forecast} über HTTP (Issue #1773, #1826, Plan #1765 E13, E14): Recht wie {@code
+ * /dashboard} (AK 10), Abweisung einer Offset-Zone mit 400 und die Antwortform.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
@@ -102,6 +102,30 @@ class DashboardFlowIT extends AbstractIntegrationTest {
         .andExpect(status().isBadRequest());
   }
 
+  @Test
+  void epicForecastLiestNurEinMitglied() throws Exception {
+    Cookie mitglied = anmeldung.anmelden(OWNER, PlatformRole.USER);
+    Cookie fremd = anmeldung.anmelden(FREMD, PlatformRole.USER);
+
+    mvc.perform(get(epicForecast()).param("zone", ZONE).cookie(mitglied))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.throughputDays").value(0))
+        .andExpect(jsonPath("$.epics").isEmpty());
+    mvc.perform(get(epicForecast()).param("zone", ZONE).cookie(fremd))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void epicForecastWeistEineFehlendeUnbekannteOderOffsetZoneAb() throws Exception {
+    Cookie mitglied = anmeldung.anmelden(OWNER, PlatformRole.USER);
+
+    mvc.perform(get(epicForecast()).cookie(mitglied)).andExpect(status().isBadRequest());
+    mvc.perform(get(epicForecast()).param("zone", "Mars/Olymp").cookie(mitglied))
+        .andExpect(status().isBadRequest());
+    mvc.perform(get(epicForecast()).param("zone", "+05:30").cookie(mitglied))
+        .andExpect(status().isBadRequest());
+  }
+
   // --- Antwortform ---------------------------------------------------------------------------
 
   @Test
@@ -157,6 +181,10 @@ class DashboardFlowIT extends AbstractIntegrationTest {
 
   private String flow() {
     return "/api/boards/" + board.id() + "/dashboard/flow";
+  }
+
+  private String epicForecast() {
+    return "/api/boards/" + board.id() + "/dashboard/epic-forecast";
   }
 
   private String aging() {

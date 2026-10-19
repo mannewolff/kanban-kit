@@ -80,6 +80,15 @@ export default tseslint.config(
         'error',
         { ignorePrimitives: { string: true }, ignoreMixedLogicalExpressions: true },
       ],
+
+      // --- TypeScript-Regelklassen ohne neue Abhaengigkeit (Issue #1846) --------------------
+      // Sonar S6754 — `useState`-Paar `[wert, setWert]`. 247 von 250 Destrukturierungen im
+      // Bestand folgen dem Muster schon; die Regel haelt die Abweichler aus dem Gate.
+      'react/hook-use-state': 'error',
+      // Sonar S9382 — `await` in der Schleife serialisiert, was meist gleichzeitig laufen
+      // koennte. Rein vorbeugend: Die drei Produktivtreffer sind berechtigt und tragen eine
+      // begruendete Ausnahme; die Regel faengt den naechsten Fall.
+      'no-await-in-loop': 'error',
     },
   },
   {
@@ -88,6 +97,12 @@ export default tseslint.config(
     // `waitFor(() => expect(getByX()))` (prefer-find-by) direkt im Gate ab.
     files: ['src/**/*.test.{ts,tsx}'],
     extends: [testingLibrary.configs['flat/react']],
+    rules: {
+      // Deaktiviert (begründet): In Tests ist die Folge von `await` in der Schleife das Idiom
+      // von `user-event` — jede Eingabe wartet auf die vorige; Sonar misst die Tests aus
+      // demselben Grund nicht mit (Issue #1846).
+      'no-await-in-loop': 'off',
+    },
   },
   {
     // Stryker-Plugins (Issue #1277): reines JavaScript ausserhalb des `tsconfig`-Projekts, darum

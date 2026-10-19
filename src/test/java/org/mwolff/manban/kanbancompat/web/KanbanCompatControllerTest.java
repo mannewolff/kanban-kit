@@ -29,6 +29,7 @@ import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Comment;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Created;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Epic;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService.Item;
+import org.mwolff.manban.kanbancompat.application.KanbanCompatService.KanbanLabel;
 import org.mwolff.manban.kanbancompat.application.TokenNotBoundException;
 import org.springframework.security.core.Authentication;
 
@@ -438,6 +439,36 @@ class KanbanCompatControllerTest {
   void search_suchbegriffBisZweihundertZeichen_istGueltig_darueberUngueltig() throws Exception {
     assertThat(searchVerletzungen(controller, "x".repeat(200), null, 50)).isEmpty();
     assertThat(searchVerletzungen(controller, "x".repeat(201), null, 50)).hasSize(1);
+  }
+
+  @Test
+  void labels_withBoundPrincipal_delegates() {
+    // Given
+    List<KanbanLabel> labels = List.of(new KanbanLabel("Bug", "#c62828"));
+    when(service.labels(PRINCIPAL)).thenReturn(labels);
+
+    // When
+    List<KanbanLabel> result = controller.labels(boundAuthentication());
+
+    // Then
+    assertThat(result).isSameAs(labels);
+  }
+
+  @Test
+  void labels_boardOhneLabels_liefertLeereListe() {
+    // Given
+    when(service.labels(PRINCIPAL)).thenReturn(List.of());
+
+    // When
+    List<KanbanLabel> result = controller.labels(boundAuthentication());
+
+    // Then
+    assertThat(result).isEmpty();
+  }
+
+  @Test
+  void labels_nullAuthentication_throwsTokenNotBound() {
+    assertThatThrownBy(() -> controller.labels(null)).isInstanceOf(TokenNotBoundException.class);
   }
 
   @Test

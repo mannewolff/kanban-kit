@@ -326,11 +326,13 @@ Von oben nach unten führt er:
    [Verbrauch (Leitstand)](#verbrauch-leitstand).
 4. **Herkunft** — eine Zeile zum jüngsten Run: ob er eingeliefert oder im Browser hochgeladen
    wurde, dazu der Name des Tokens, die Zahl der Vorgänge und die der ungedeuteten Zeilen.
-5. **Rumpf** — sechs Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
+5. **Rumpf** — sieben Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
    öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche und rechts
    daneben **„Implementierungszeit“** mit dem Mittelwert je Woche, **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs, **„Nacharbeit“**
-   (siehe unten) und **„Vorhaben“** mit
-   den offenen. Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
+   (siehe unten), **„Vorhaben“** mit
+   den offenen und **„Auslieferung“** mit vier Kennzahlen zur Auslieferung an die Nutzer; sie steht
+   in voller Breite ganz unten, unter „Alter in Arbeit“ (siehe
+   [Platte Auslieferung](#platte-auslieferung)). Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
    braune LED und „nicht angelaufen — ‹Grund›“.
 6. **Fluss und Alter in Arbeit** — darunter in voller Breite **„Fluss“** und darunter **„Alter in
    Arbeit“** (siehe unten).
@@ -367,6 +369,32 @@ Dokument-Zeile „keine Daten“. Den Laufstand-Kommentar einer Karte schreibt j
 darum nur den letzten Schreiber; frühere Runs zählen über ihre übrigen Spuren. Ein Rückzug zählt nur,
 wenn der Status der Karte vor der Bewegung bekannt ist.
 
+**Die Platte „Vorhaben“** zeigt jedes Vorhaben des Boards, bis es archiviert ist — von Hand oder
+automatisch, sobald alle zugehörigen Karten archiviert sind; auch ein Vorhaben ohne Pakete und eines,
+dessen Pakete alle umgesetzt sind, bleibt bis dahin stehen. Der Fortschritt zählt **nur
+Arbeitspakete**, und ein Paket in In Review zählt schon als fertig; alle minus fertige ergibt die Zahl
+der offenen Pakete, auch im Backlog und nach einem Zurückziehen durch den Runner.
+Die Zahl weicht bewusst vom Fortschritt der Vorhaben-Seite ab: Dort zählen alle zugehörigen Karten
+und nur Done als fertig. Darunter steht die **Prognose** „voraussichtlich fertig: 50 % bis ‹Datum› · 85 % bis
+‹Datum›“ mit „‹n› offene Pakete“: Mit dieser Wahrscheinlichkeit sind bis zu diesem Tag alle offenen
+Pakete umgesetzt, gerechnet aus dem Durchsatz der letzten 30 abgeschlossenen Tage, zu dem alle
+Arbeitspakete des Boards zählen, auch solche ohne Vorhaben. Ein Tag reicht von 12 bis 12 Uhr in
+deiner Zeitzone und trägt das Datum seines **Endes** — anders als der [Verbrauch](#verbrauch-leitstand),
+der einen Zeitraum nach seinem Beginn benennt; der laufende Tag ist der erste vorhergesagte. Der
+Hinweis beim Überfahren erklärt das und sagt „Gilt, wenn das Board nur an diesem Vorhaben
+arbeitet.“; haben weitere Vorhaben offene Pakete, ergänzt er „‹X› weitere Vorhaben teilen sich den
+Durchsatz.“ Sonderfälle, in dieser Rangfolge:
+
+- **„noch keine Pakete geschnitten“** — das Vorhaben hat noch kein Arbeitspaket.
+- **„alle Pakete umgesetzt“** — alle Pakete liegen in In Review oder Done; folgt aus einem Plan oder
+  Fachplan noch etwas, steht „alle Pakete umgesetzt, weitere folgen aus ‹Dokument›“.
+- **„Zu wenig Durchsatz für eine Prognose“** — in den letzten 30 Tagen wurde an weniger als fünf
+  Tagen ein Paket fertig. Der Satz erscheint auch, wenn die offenen Pakete bei diesem Durchsatz nicht
+  in absehbarer Zeit fertig werden (mehr als 1 000 offene Pakete oder mehr als 100 Jahre).
+- **„frühestens“ statt „bis“** — ein Plan außerhalb von Done hat noch kein Paket oder ein Fachplan
+  außerhalb von Done noch keinen Plan; der Hinweis nennt das Dokument, denn daraus kommen weitere
+  Pakete.
+
 **Die Platten „Fluss“ und „Alter in Arbeit“** zeigen, wo sich die Arbeit staut und welche Karte
 schon auffällig lange in Arbeit liegt. **Gezählt wird nach dem Zustand eines Arbeitspakets, nicht
 nach der Spalte, in der es liegt:** Ein Paket in „Anstehend“ mit Zustand Ready zählt unter Ready;
@@ -395,12 +423,57 @@ keiner der beiden Platten.
   frühesten bekannten Zeitpunkt; der Melder erscheint, wenn schon dieser Mindestwert über der
   Schwelle liegt. Ein Aufenthalt mit unbekanntem Beginn zählt nicht als Vergleichswert.
 
+### Platte Auslieferung {#platte-auslieferung}
+
+Die übrigen Platten enden bei „Done“. **„Auslieferung“** zeigt, was danach geschieht: wie oft das
+Projekt an seine Nutzer ausliefert, wie lange eine Änderung bis dorthin braucht, wie oft eine
+Auslieferung scheitert und wie schnell es danach wieder läuft. Die vier Kennzahlen (in der Fachwelt
+als DORA-Kennzahlen bekannt) stehen nebeneinander, jede mit einem kurzen Hinweis, was sie zählt.
+
+**Woher die Zahlen kommen:** allein aus Meldungen. Jeder Auslieferungslauf des Projekts meldet seinen
+Versuch mit einem board-gebundenen Token (siehe [API-Tokens](rollen-und-rechte.md#api-tokens)) —
+Ausgang (erfolgreich oder gescheitert), Zeitpunkt, ausgelieferter Commit und die seither
+hinzugekommenen Commits mit ihrem Commit-Zeitpunkt. Das Board fragt keinen Code-Hoster ab. Eine
+Meldung zählt für das **ganze Projekt**, zu dem das Board des Tokens gehört; die Platte zeigt darum
+auf jedem Board des Projekts dieselben Zahlen. Dieselbe Meldung (gleiche Kennung) zählt nur einmal,
+ein erneut gestarteter Lauf trägt eine neue Kennung und zählt als eigener Versuch. Ein Lauf, der
+nichts meldet, zählt nicht.
+
+**Das Fenster** sind die letzten 12 Wochen (84 Tage bis jetzt); maßgeblich ist der gemeldete
+Zeitpunkt des Ausgangs, nicht der Eingang der Meldung. Liegt die erste Meldung später, steht im Kopf
+„seit ‹Datum›“ statt „letzte 12 Wochen“.
+
+- **Deployment-Frequenz** — die Zahl der **erfolgreichen** Auslieferungen im Fenster, etwa
+  „7 Auslieferungen in 12 Wochen“ bzw. „… seit ‹Datum›“. Hier ist 0 eine echte Null.
+- **Lead Time for Changes** — wie lange eine Änderung braucht: je ausgeliefertem Commit die Zeit vom
+  Commit bis zur erfolgreichen Auslieferung, davon der **Median** (der mittlere Wert; bei gerader
+  Anzahl das Mittel der beiden mittleren). Die Wartezeit eines Commits vor dem Hochladen zählt mit.
+  Scheitert ein Versuch, zählen seine Commits bei der nächsten erfolgreichen Auslieferung; jeder
+  Commit zählt genau einmal. Ohne ausgelieferten Commit im Fenster steht **„keine Grundlage“**.
+- **Change Failure Rate** — der Anteil gescheiterter an allen gemeldeten Versuchen im Fenster, in
+  ganzen Prozent. Gescheitert ist ein Versuch genau dann, wenn sein Lauf das Scheitern meldet, auch
+  wenn die Anwendung nach dem Hochfahren nicht bereit wird. **Bewusste Lücke:** Eine grün
+  ausgelieferte Version mit Fehler zählt nicht — es zählen nur gemeldete Fehlschläge. Ohne Versuch im
+  Fenster steht **„keine Grundlage“**.
+- **Time to Restore** — wie schnell es nach einem Scheitern wieder läuft. Ein **Ausfall** reicht vom
+  ersten gescheiterten Versuch einer Folge von Fehlschlägen bis zur nächsten erfolgreichen
+  Auslieferung; mehrere Fehlschläge hintereinander sind ein Ausfall. Gezeigt wird der Median der im
+  Fenster **beendeten** Ausfälle, jeder mit voller Dauer. Ohne beendeten Ausfall steht **„kein
+  Ausfall“**. Ein noch laufender Ausfall zählt nicht in den Median, sondern steht hervorgehoben
+  daneben: **„Ausfall läuft seit ‹Dauer›“**.
+
+Unter den Zahlen zeigt eine **Wochenleiste** je Woche des Fensters die erfolgreichen und, abgesetzt,
+die gescheiterten Versuche; eine Woche ohne Versuch hat nur eine Grundlinie. Lead Time und Time to
+Restore haben keinen Verlauf. Liegt für das Projekt noch **keine einzige Meldung** vor, zeigt die
+ganze Platte nur **„noch keine Auslieferung“** statt Nullen. Gezählt wird ab der ersten Meldung,
+frühere Releases werden nicht nachgetragen.
+
 **Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“,
 „Abbruchgründe“ und „Nacharbeit“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
 Projekts und **Plattform-Admins**, sofern das Projekt am
 [Plattform-Leitstand](#plattform-leitstand) teilnimmt. Ohne dieses Recht entfallen sie still; die
-Board-Kennzahlen, „Durchsatz“, „Implementierungszeit“, „Fluss“ und „Alter in Arbeit“ bleiben — die
-beiden letzten sieht wie „Durchsatz“ jeder, der das Board sehen darf.
+Board-Kennzahlen, „Durchsatz“, „Implementierungszeit“, „Fluss“, „Alter in Arbeit“ und „Auslieferung“
+bleiben — die drei letzten sieht wie „Durchsatz“ jedes Projektmitglied, das das Board sehen darf.
 
 **Grundlage der Board-Kennzahlen** ist die automatisch erfasste Verweildauer jeder Karte pro
 Spalte — gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-Menü oder über die API

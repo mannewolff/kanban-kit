@@ -108,8 +108,13 @@ export function abnahmeStand(szenarien: Szenario[], vermerke: (Vermerk | undefin
 /** Maskiert die Markdown-Zeichen, damit die Anzeige dem Text entspricht (E10). */
 const maskiert = (text: string) => text.replace(/[\\*_`[\]|]/g, '\\$&')
 
-/** Macht eine Notiz einzeilig (E9). */
-const einzeilig = (text: string) => text.trim().replace(/\s*\n\s*/g, ' ')
+/** Macht eine Notiz einzeilig (E9); ohne Regex, weil `\s*\n\s*` superlinear zuruecksetzt (Issue #1634). */
+const einzeilig = (text: string) =>
+  text
+    .split('\n')
+    .map((zeile) => zeile.trim())
+    .filter((zeile) => zeile !== '')
+    .join(' ')
 
 function ergebnisZeile(anzahl: number, stand: AbnahmeStand, t: Woerterbuch): string {
   if (stand.okay === anzahl) return t.ABNAHME.ERGEBNIS_ALLE(anzahl)

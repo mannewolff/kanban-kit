@@ -488,3 +488,24 @@ Der Leitstand deutet ihn als `RED` mit `STUCK` und nimmt den Auszug aus `grund`;
 entsprechen `check`, `error`, `attempts`, `sessionLimitMs` und `sessionId`. Zulässig ist der Ausgang
 in Umsetzung, Nachtplanung und Kette, **im Prüf-Lauf nicht** — dort gibt es keine
 Umsetzungssitzung, die sich festfahren kann.
+
+## 8. Auslieferungen melden
+
+Die eigene Auslieferung von kanban-kit (`.github/workflows/deploy.yml`) meldet jeden Versuch an das
+kanban-kit-Board; daraus entsteht im Leitstand die
+[Platte „Auslieferung“](nutzung.md#platte-auslieferung). Dafür braucht der Auslieferungslauf ein
+eigenes **board-gebundenes Token** des kanban-kit-Boards:
+
+1. Wie in Abschnitt 1 ein Token für das kanban-kit-Board
+   erzeugen, etwa mit dem Namen `deploy`. Der Ersteller braucht im Projekt das Recht `TICKET_CREATE`
+   und muss es behalten: Das Board prüft es bei jeder Meldung (VIEWER → `403`, nicht mehr Mitglied →
+   `404`, ungebundenes Token → `409`; siehe [API-Tokens](rollen-und-rechte.md#api-tokens)).
+2. Das Token im GitHub-Repo unter *Settings → Secrets and variables → Actions* als Repo-Secret
+   **`KANBAN_DEPLOY_TOKEN`** hinterlegen. Der Meldeschritt des Workflows liest es zusammen mit der
+   Board-Adresse `KANBAN_URL=https://kanban.mwolff.org` aus seinem `env:`.
+3. Den Runner einrichten: Das Melde-Kommando des Kits muss auf dem Server liegen, weil der Workflow
+   ohne Checkout arbeitet. Wie das geht, steht in [`deployment-hostinger.md`](deployment-hostinger.md)
+   unter „Einmalige Einrichtung (Server + GitHub)“.
+
+Fehlt das Secret oder scheitert die Meldung, endet nur der Meldeschritt rot; die Auslieferung selbst
+bleibt davon unberührt, und der Versuch fehlt auf der Platte.

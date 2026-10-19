@@ -819,6 +819,40 @@ export const de = {
     ALTER_KARTE_OEFFNEN: (nummer: number, titel: string) => `Karte #${nummer} öffnen: ${titel}`,
   },
 
+  /** Die Platte „Auslieferung“ mit den DORA-Kennzahlen, `lib/auslieferung.ts` (Plan #1831). */
+  LEITSTAND_AUSLIEFERUNG: {
+    TITEL: 'Auslieferung',
+    LETZTE_WOCHEN: 'letzte 12 Wochen',
+    SEIT: (datum: string) => `seit ${datum}`,
+    LEER: 'noch keine Auslieferung',
+    KEINE_GRUNDLAGE: 'keine Grundlage',
+    KEIN_AUSFALL: 'kein Ausfall',
+    AUSFALL_LAEUFT: (dauer: string) => `Ausfall läuft seit ${dauer}`,
+    UNTER_EINER_STUNDE: 'unter 1 Stunde',
+    STUNDEN_ANZAHL: (anzahl: number) => (anzahl === 1 ? '1 Stunde' : `${anzahl} Stunden`),
+    TAGE_ANZAHL: (anzahl: number) => (anzahl === 1 ? '1 Tag' : `${anzahl} Tage`),
+    STUNDEN: 'Stunden',
+    TAGE: 'Tage',
+    FREQUENZ_FENSTER: (anzahl: number) => (anzahl === 1 ? 'Auslieferung in 12 Wochen' : 'Auslieferungen in 12 Wochen'),
+    FREQUENZ_SEIT: (anzahl: number, datum: string) =>
+      anzahl === 1 ? `Auslieferung seit ${datum}` : `Auslieferungen seit ${datum}`,
+    FREQUENZ: 'Deployment-Frequenz',
+    LEAD_TIME: 'Lead Time for Changes',
+    CHANGE_FAILURE_RATE: 'Change Failure Rate',
+    TIME_TO_RESTORE: 'Time to Restore',
+    FREQUENZ_HINWEIS: 'Zählt die erfolgreichen Auslieferungen im Fenster.',
+    LEAD_TIME_HINWEIS: 'Median je ausgelieferter Änderung, vom Commit bis zur erfolgreichen Auslieferung.',
+    CHANGE_FAILURE_RATE_HINWEIS:
+      'Anteil gescheiterter an allen gemeldeten Auslieferungen. Es zählen nur gemeldete Fehlschläge, nicht Fehler, die erst nach einer erfolgreichen Auslieferung auffallen.',
+    TIME_TO_RESTORE_HINWEIS:
+      'Median der abgeschlossenen Ausfälle, vom ersten gescheiterten Versuch bis zur nächsten erfolgreichen Auslieferung.',
+    ERFOLGREICH: 'erfolgreich',
+    GESCHEITERT: 'gescheitert',
+    WOCHE_ARIA: (kw: number, erfolg: number, fehlschlag: number) =>
+      `KW ${kw}: ${erfolg} erfolgreich, ${fehlschlag} gescheitert`,
+    WOCHEN_ARIA: (wochen: string) => `Auslieferungsversuche je Woche — ${wochen}`,
+  },
+
   /** Textrechnung der Verbrauchs-Auswertung, `lib/verbrauchZeitraum.ts` (Issue #1656). */
   VERBRAUCH_ZEITRAUM: {
     KEIN_LAUF: 'In diesem Zeitraum hat weder ein Run noch eine Sitzung stattgefunden.',
@@ -1009,6 +1043,26 @@ export const de = {
     VORHABEN: 'Vorhaben',
     OFFEN: 'offen',
     KEIN_VORHABEN: 'Kein offenes Vorhaben.',
+    PROGNOSE_ZEILE: (p50: string, p85: string, fruehestens: boolean) => {
+      const vor = fruehestens ? 'frühestens' : 'bis'
+      return `voraussichtlich fertig: 50 % ${vor} ${p50} · 85 % ${vor} ${p85}`
+    },
+    PROGNOSE_ZU_WENIG_DURCHSATZ: 'Zu wenig Durchsatz für eine Prognose',
+    PROGNOSE_ALLE_UMGESETZT: 'alle Pakete umgesetzt',
+    PROGNOSE_ALLE_UMGESETZT_WEITERE: (dokumente: string) => `alle Pakete umgesetzt, weitere folgen aus ${dokumente}`,
+    PROGNOSE_KEINE_PAKETE: 'noch keine Pakete geschnitten',
+    PROGNOSE_OFFENE_PAKETE: (anzahl: number) => (anzahl === 1 ? '1 offenes Paket' : `${anzahl} offene Pakete`),
+    PROGNOSE_ERKLAERUNG: (p50: string, p85: string, offen: number, fruehestens: boolean) => {
+      const vor = fruehestens ? 'frühestens' : 'bis'
+      const pakete = offen === 1 ? 'das offene Paket' : `alle ${offen} offenen Pakete`
+      return (
+        `Mit 50 % Wahrscheinlichkeit sind ${vor} ${p50} ${pakete} umgesetzt, mit 85 % ${vor} ${p85}, ` +
+        'gerechnet aus dem Durchsatz der letzten 30 Tage, jeweils von 12 bis 12 Uhr.'
+      )
+    },
+    PROGNOSE_NUR_DIESES: 'Gilt, wenn das Board nur an diesem Vorhaben arbeitet.',
+    PROGNOSE_WEITERE_VORHABEN: (anzahl: number) => `${anzahl} weitere Vorhaben teilen sich den Durchsatz.`,
+    PROGNOSE_AUSSTEHEND: (dokumente: string) => `Weitere Pakete folgen aus ${dokumente}.`,
   },
 
   /** Seite „Plattform-Leitstand“ (Issue #1657). */

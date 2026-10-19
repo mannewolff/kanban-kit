@@ -74,6 +74,9 @@ public class LoginCodeCrypto {
   // schon der SecretKeySpec-Konstruktor. Zum Kompilieren der geprüften Ausnahmen ist er zwingend;
   // die Fachlogik deckt codeHmac über LoginCodeCryptoTest ab.
   @ExcludeFromJacocoGeneratedReport
+  // S125 abgelehnt (Issue #1844): Der Kommentar oben ist Prosa, kein auskommentierter Code; er ist
+  // die Begründung, die CLAUDE-java.md §5.4 neben der Coverage-Ausnahme verlangt.
+  @SuppressWarnings("java:S125")
   private byte[] hmac(String data) {
     try {
       Mac mac = Mac.getInstance(HMAC_ALGORITHM);

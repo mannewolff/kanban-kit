@@ -779,6 +779,37 @@ export const en: Woerterbuch = {
     ALTER_KARTE_OEFFNEN: (nummer, titel) => `Open card #${nummer}: ${titel}`,
   },
 
+  LEITSTAND_AUSLIEFERUNG: {
+    TITEL: 'Delivery',
+    LETZTE_WOCHEN: 'last 12 weeks',
+    SEIT: (datum) => `since ${datum}`,
+    LEER: 'no delivery yet',
+    KEINE_GRUNDLAGE: 'no basis',
+    KEIN_AUSFALL: 'no outage',
+    AUSFALL_LAEUFT: (dauer) => `Outage ongoing for ${dauer}`,
+    UNTER_EINER_STUNDE: 'under 1 hour',
+    STUNDEN_ANZAHL: (anzahl) => (anzahl === 1 ? '1 hour' : `${anzahl} hours`),
+    TAGE_ANZAHL: (anzahl) => (anzahl === 1 ? '1 day' : `${anzahl} days`),
+    STUNDEN: 'hours',
+    TAGE: 'days',
+    FREQUENZ_FENSTER: (anzahl) => (anzahl === 1 ? 'delivery in 12 weeks' : 'deliveries in 12 weeks'),
+    FREQUENZ_SEIT: (anzahl, datum) => (anzahl === 1 ? `delivery since ${datum}` : `deliveries since ${datum}`),
+    FREQUENZ: 'Deployment frequency',
+    LEAD_TIME: 'Lead time for changes',
+    CHANGE_FAILURE_RATE: 'Change failure rate',
+    TIME_TO_RESTORE: 'Time to restore',
+    FREQUENZ_HINWEIS: 'Counts the successful deliveries in the window.',
+    LEAD_TIME_HINWEIS: 'Median per delivered change, from the commit to the successful delivery.',
+    CHANGE_FAILURE_RATE_HINWEIS:
+      'Share of failed among all reported deliveries. Only reported failures count, not defects that only surface after a successful delivery.',
+    TIME_TO_RESTORE_HINWEIS:
+      'Median of the finished outages, from the first failed attempt to the next successful delivery.',
+    ERFOLGREICH: 'successful',
+    GESCHEITERT: 'failed',
+    WOCHE_ARIA: (kw, erfolg, fehlschlag) => `CW ${kw}: ${erfolg} successful, ${fehlschlag} failed`,
+    WOCHEN_ARIA: (wochen) => `Delivery attempts per week — ${wochen}`,
+  },
+
   VERBRAUCH_ZEITRAUM: {
     KEIN_LAUF: 'Neither a run nor a session took place in this period.',
     NICHT_ERFASST: 'not recorded',
@@ -957,6 +988,27 @@ export const en: Woerterbuch = {
     VORHABEN: 'Epics',
     OFFEN: 'open',
     KEIN_VORHABEN: 'No open epic.',
+    PROGNOSE_ZEILE: (p50: string, p85: string, fruehestens: boolean) => {
+      const vor = fruehestens ? 'not before' : 'by'
+      return `expected done: 50% ${vor} ${p50} · 85% ${vor} ${p85}`
+    },
+    PROGNOSE_ZU_WENIG_DURCHSATZ: 'Not enough throughput for a forecast',
+    PROGNOSE_ALLE_UMGESETZT: 'all packages implemented',
+    PROGNOSE_ALLE_UMGESETZT_WEITERE: (dokumente: string) => `all packages implemented, more to follow from ${dokumente}`,
+    PROGNOSE_KEINE_PAKETE: 'no packages cut yet',
+    PROGNOSE_OFFENE_PAKETE: (anzahl: number) => (anzahl === 1 ? '1 open package' : `${anzahl} open packages`),
+    PROGNOSE_ERKLAERUNG: (p50: string, p85: string, offen: number, fruehestens: boolean) => {
+      const vor = fruehestens ? 'not before' : 'by'
+      const pakete = offen === 1 ? 'the open package is' : `all ${offen} open packages are`
+      return (
+        `With 50% probability ${pakete} implemented ${vor} ${p50}, with 85% ${vor} ${p85}, ` +
+        'calculated from the throughput of the last 30 days, each from noon to noon.'
+      )
+    },
+    PROGNOSE_NUR_DIESES: 'Applies if the board works on this epic only.',
+    PROGNOSE_WEITERE_VORHABEN: (anzahl: number) =>
+      anzahl === 1 ? '1 other epic shares the throughput.' : `${anzahl} other epics share the throughput.`,
+    PROGNOSE_AUSSTEHEND: (dokumente: string) => `More packages follow from ${dokumente}.`,
   },
 
   PLATTFORM_LEITSTAND: {

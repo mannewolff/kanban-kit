@@ -128,23 +128,49 @@ async function waitForCeTask(taskId, token) {
   }
 }
 
-async function fetchAllIssues(projectKey, organization, token) {
+// Schweregrad-Filter direkt an der API: nur MAJOR/CRITICAL/BLOCKER holen, Kleinst-Smells
+// (MINOR/INFO) gar nicht erst laden. Grund: ein einzelnes Test-Idiom (prefer-find-by, MINOR)
+// hatte den Sync zu 60 Rausch-Issues aufgebläht. Bewusst der Legacy-Parameter `severities`
+// statt `impactSeverities`: severityLabel() liest `issue.severity` zuerst, dieses Feld ist auf
+// den Findings verlässlich gesetzt, und `severities` deckt die Top-Grade vollständig ab (kein
+// Risiko, BLOCKER aus einer unvollständigen impactSeverities-Aufzählung zu verlieren).
+export const SEVERITY_SELECTION = { severities: 'MAJOR,CRITICAL,BLOCKER' };
+// Bugs und Vulnerabilities sind vom Schweregrad-Filter ausgenommen: Die Gate-Bedingungen
+// new_reliability_rating und new_security_rating kennen keinen Mindest-Schweregrad, schon ein
+// MINOR-Bug kippt das Quality Gate (Issue #1843). Die API verknüpft `severities` und `types` mit
+// UND, deshalb eine zweite Abfrage statt eines gemeinsamen Filters. Security-Hotspots liefert
+// /api/issues/search nicht, sie liegen hinter /api/hotspots/search.
+export const TYPE_SELECTION = { types: 'BUG,VULNERABILITY' };
+
+/** Baut die URL einer Seite von /api/issues/search; `selection` ist eine der Auswahlen oben. */
+export function buildIssuesSearchUrl({ projectKey, organization, pageSize, page, selection }) {
+  const filter = Object.entries(selection)
+    .map(([name, value]) => `&${name}=${value}`)
+    .join('');
+  return (
+    `${SONAR_HOST}/api/issues/search?componentKeys=${encodeURIComponent(projectKey)}` +
+    `&organization=${encodeURIComponent(organization)}&resolved=false` +
+    `${filter}&ps=${pageSize}&p=${page}`
+  );
+}
+
+/** Führt Issue-Listen zusammen; ein Finding mehrerer Listen erscheint einmal, an erster Stelle. */
+export function mergeIssueLists(...lists) {
+  const byKey = new Map();
+  for (const issue of lists.flat()) {
+    if (!byKey.has(issue.key)) byKey.set(issue.key, issue);
+  }
+  return [...byKey.values()];
+}
+
+async function fetchIssuesBySelection(projectKey, organization, token, selection) {
   const auth = Buffer.from(`${token}:`).toString('base64');
   const issues = [];
   let page = 1;
   const pageSize = 500;
 
   for (;;) {
-    // Schweregrad-Filter direkt an der API: nur MAJOR/CRITICAL/BLOCKER holen, Kleinst-Smells
-    // (MINOR/INFO) gar nicht erst laden. Grund: ein einzelnes Test-Idiom (prefer-find-by, MINOR)
-    // hatte den Sync zu 60 Rausch-Issues aufgebläht. Bewusst der Legacy-Parameter `severities`
-    // statt `impactSeverities`: severityLabel() liest `issue.severity` zuerst, dieses Feld ist auf
-    // den Findings verlässlich gesetzt, und `severities` deckt die Top-Grade vollständig ab (kein
-    // Risiko, BLOCKER aus einer unvollständigen impactSeverities-Aufzählung zu verlieren).
-    const url =
-      `${SONAR_HOST}/api/issues/search?componentKeys=${encodeURIComponent(projectKey)}` +
-      `&organization=${encodeURIComponent(organization)}&resolved=false` +
-      `&severities=MAJOR,CRITICAL,BLOCKER&ps=${pageSize}&p=${page}`;
+    const url = buildIssuesSearchUrl({ projectKey, organization, pageSize, page, selection });
     const res = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
     if (!res.ok) {
       throw new Error(`SonarCloud-API-Fehler (HTTP ${res.status}): ${await res.text()}`);
@@ -156,6 +182,12 @@ async function fetchAllIssues(projectKey, organization, token) {
     page++;
   }
   return issues;
+}
+
+async function fetchAllIssues(projectKey, organization, token) {
+  const bySeverity = await fetchIssuesBySelection(projectKey, organization, token, SEVERITY_SELECTION);
+  const byType = await fetchIssuesBySelection(projectKey, organization, token, TYPE_SELECTION);
+  return mergeIssueLists(bySeverity, byType);
 }
 
 function severityLabel(issue) {

@@ -41,7 +41,7 @@ public final class InvalidRequirementCardException extends InvalidDependencyExce
   }
 
   /** Die Kartennummer der Anforderung gibt es im Projekt nicht. */
-  public static InvalidRequirementCardException unbekannteNummer(Integer nummer) {
+  public static InvalidRequirementCardException unbekannteAnforderungsnummer(Integer nummer) {
     return new InvalidRequirementCardException(
         "card.anforderung.unbekannte-nummer",
         "Unbekannte Kartennummer als Anforderung: " + nummer,

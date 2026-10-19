@@ -91,6 +91,9 @@ public class KanbanArchivService {
    * @param kinds Arten, ODER-verknüpft; fehlend oder leer heißt jede Art
    * @param cursor Nummer des letzten Treffers des vorigen Teils
    */
+  // S107 abgelehnt (Issue #1844): Die Parameter bilden die Filter der Suche eins zu eins ab; ein
+  // Parameterobjekt verschöbe sie nur eine Ebene tiefer (wie bei den Entities, Issue #1520).
+  @SuppressWarnings("java:S107")
   @Transactional(readOnly = true)
   public SearchPage search(
       KanbanPrincipal principal,

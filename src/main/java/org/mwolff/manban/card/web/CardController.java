@@ -108,10 +108,12 @@ class CardController {
           """
           Legt eine Karte in der angegebenen Spalte des Boards an, am Ende der Spalte. Mit \
           type=EPIC entsteht stattdessen ein Vorhaben in der ersten Spalte; columnId ist \
-          dann ohne Wirkung. Recht: TICKET_CREATE für Karten, EPIC_CREATE für Vorhaben.\n\n\
+          dann ohne Wirkung. Recht: TICKET_CREATE für Karten, EPIC_CREATE für Vorhaben.
+
           Zuständige, Labels und Fälligkeit werden mit der Anlage in einem Zug übernommen. \
           dependencies nennt die projektweiten Nummern der Karten, von denen diese \
-          abhängt; parentId ordnet die Karte einem Vorhaben desselben Boards zu.\n\n\
+          abhängt; parentId ordnet die Karte einem Vorhaben desselben Boards zu.
+
           derivedFrom hält die Herkunft fest: die projektweite Nummer der Karte, aus der \
           diese abgeleitet ist, etwa ein Arbeitspaket aus seinem Plan. Ein Vorhaben trägt \
           keine Herkunft.""")
