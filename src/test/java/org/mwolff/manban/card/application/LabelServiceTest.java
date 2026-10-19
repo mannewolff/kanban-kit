@@ -110,6 +110,17 @@ class LabelServiceTest {
   }
 
   @Test
+  void listNamesAndColors_requiresMembershipAndReturnsNameAndColor() {
+    when(labels.findByBoardId(BOARD))
+        .thenReturn(List.of(new Label(1L, BOARD, "Bug", "#f00", true)));
+
+    List<LabelService.LabelNameColor> result = service.listNamesAndColors(5L, BOARD);
+
+    verify(permissions).requireMembership(5L, PROJECT);
+    assertThat(result).containsExactly(new LabelService.LabelNameColor("Bug", "#f00"));
+  }
+
+  @Test
   void list_throwsBoardNotFound_whenBoardUnknown() {
     when(boardService.requireProjectId(BOARD)).thenThrow(new BoardNotFoundException());
 

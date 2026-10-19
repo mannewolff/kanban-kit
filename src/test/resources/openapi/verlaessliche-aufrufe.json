@@ -270,6 +270,26 @@
     },
     "abgekuendigtSeit" : null
   }, {
+    "pfad" : "/api/kanban/labels",
+    "methode" : "GET",
+    "parameter" : [ ],
+    "rumpf" : null,
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "items" : {
+                "$ref" : "#/components/schemas/KanbanLabel"
+              },
+              "type" : "array"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
     "pfad" : "/api/kanban/search",
     "methode" : "GET",
     "parameter" : [ {
@@ -1397,6 +1417,17 @@
         }
       },
       "required" : [ "body" ],
+      "type" : "object"
+    },
+    "KanbanLabel" : {
+      "properties" : {
+        "color" : {
+          "type" : "string"
+        },
+        "name" : {
+          "type" : "string"
+        }
+      },
       "type" : "object"
     },
     "KanbanLabelRequest" : {

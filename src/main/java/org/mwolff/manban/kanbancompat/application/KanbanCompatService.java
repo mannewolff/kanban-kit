@@ -5,6 +5,7 @@ import static org.mwolff.manban.kanbancompat.application.KanbanBindung.requireBo
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -510,6 +511,19 @@ public class KanbanCompatService {
         .toList();
   }
 
+  /**
+   * Labels des gebundenen Boards mit Name und Farbe, nach Name sortiert (Issue #1855). Die
+   * Compat-API spricht Labels über den Namen an; interne IDs braucht ein Projekt-Token nicht.
+   */
+  @Transactional(readOnly = true)
+  public List<KanbanLabel> labels(KanbanPrincipal principal) {
+    long boardId = requireBound(principal);
+    return labelService.listNamesAndColors(principal.userId(), boardId).stream()
+        .map(l -> new KanbanLabel(l.name(), l.color()))
+        .sorted(Comparator.comparing(KanbanLabel::name))
+        .toList();
+  }
+
   // --- interne Helfer -------------------------------------------------------
 
   /**
@@ -752,4 +766,9 @@ public class KanbanCompatService {
   public record Progress(
       @Schema(description = "Zahl der zugeordneten Karten.", example = "10") int total,
       @Schema(description = "Davon erledigt.", example = "3") int done) {}
+
+  @Schema(description = "Ein Label des Boards; Karten sprechen es über den Namen an.")
+  public record KanbanLabel(
+      @Schema(description = "Name, boardweit eindeutig.", example = "Bug") String name,
+      @Schema(description = "Farbe als Hex-Wert.", example = "#c62828") String color) {}
 }
