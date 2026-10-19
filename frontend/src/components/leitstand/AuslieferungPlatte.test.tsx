@@ -2,7 +2,9 @@ import { screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DeliveryView, DeliveryWeek } from '../../api/dashboard'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
+import { cssRegel } from '../../test/cssRegel'
 import { AuslieferungPlatte } from './AuslieferungPlatte'
+import { melderFarbe } from './LeitstandBausteine'
 
 /** Die Platte „Auslieferung“ (Issue #1836, Plan #1831 E9, E10, E11, E15). */
 
@@ -52,6 +54,7 @@ describe('AuslieferungPlatte', () => {
     )
     const ttr = kachel('Time to Restore')
     expect(within(ttr).getByTestId('auslieferung-ausfall')).toHaveTextContent('Ausfall läuft seit 3 Stunden')
+    expect(cssRegel(within(ttr).getByTestId('auslieferung-ausfall'))).toContain(`color: ${melderFarbe('zinnob')}`)
     expect(within(ttr).getByTestId('kachel-wert')).toHaveTextContent('—')
     expect(ttr).toHaveTextContent('kein Ausfall')
   })
@@ -92,6 +95,7 @@ describe('AuslieferungPlatte', () => {
     expect(within(kachel('Change Failure Rate')).getByTestId('kachel-wert')).toHaveTextContent('25')
     expect(kachel('Change Failure Rate')).toHaveTextContent('%')
     expect(within(kachel('Time to Restore')).getByTestId('kachel-wert')).toHaveTextContent('2,0')
+    expect(kachel('Time to Restore')).toHaveTextContent('Stunden')
     expect(screen.queryByTestId('auslieferung-ausfall')).not.toBeInTheDocument()
   })
 
@@ -150,9 +154,30 @@ describe('AuslieferungPlatte', () => {
     expect(within(letzte).getByTestId('auslieferung-erfolg-50')).toBeInTheDocument()
     expect(within(letzte).queryByTestId(/^auslieferung-fehlschlag-/)).not.toBeInTheDocument()
 
-    expect(werk.getAttribute('aria-label')).toContain('3 erfolgreich, 1 gescheitert')
-    expect(screen.getByTestId('auslieferung-legende')).toHaveTextContent('erfolgreich')
-    expect(screen.getByTestId('auslieferung-legende')).toHaveTextContent('gescheitert')
+    expect(werk.getAttribute('aria-label')).toContain('3 erfolgreich, 1 gescheitert; ')
+    expect(screen.getByTestId('auslieferung-legende')).toHaveTextContent(/^erfolgreich\s*gescheitert$/)
+  })
+
+  it('setzt nur bei Erfolg und Fehlschlag derselben Woche den Absatz ab und rechnet die Höhen in Anteilen', () => {
+    const wochen = leereWochen()
+    wochen[9] = { ...wochen[9], successCount: 0, failureCount: 2 }
+    wochen[10] = { ...wochen[10], successCount: 3, failureCount: 1 }
+    wochen[11] = { ...wochen[11], successCount: 2, failureCount: 0 }
+    renderMitSprache(<AuslieferungPlatte daten={auslieferung({ weeks: wochen })} />)
+
+    const beide = screen.getByTestId('auslieferung-woche-10')
+    expect(cssRegel(within(beide).getByTestId('auslieferung-fehlschlag-25'))).toContain('height: calc((100% - 3px) * 0.25)')
+    const erfolgBeide = cssRegel(within(beide).getByTestId('auslieferung-erfolg-75'))
+    expect(erfolgBeide).toContain('height: calc((100% - 3px) * 0.75)')
+    expect(erfolgBeide).toContain('margin-top: 3px')
+
+    const nurErfolg = cssRegel(within(screen.getByTestId('auslieferung-woche-11')).getByTestId('auslieferung-erfolg-50'))
+    expect(nurErfolg).toContain('height: calc((100% - 0px) * 0.5)')
+    expect(nurErfolg).toContain('margin-top: 0')
+
+    const nurFehlschlag = screen.getByTestId('auslieferung-woche-9')
+    expect(cssRegel(within(nurFehlschlag).getByTestId('auslieferung-fehlschlag-50'))).toContain('height: calc((100% - 0px) * 0.5)')
+    expect(within(nurFehlschlag).queryByTestId(/^auslieferung-erfolg-/)).not.toBeInTheDocument()
   })
 
   it('spricht Englisch', () => {

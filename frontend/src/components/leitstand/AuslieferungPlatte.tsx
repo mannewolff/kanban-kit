@@ -61,6 +61,7 @@ export function AuslieferungPlatte({ daten }: Readonly<{ daten: DeliveryView }>)
         <Kennzahl
           titel={t.LEAD_TIME}
           wert={leadTime?.wert ?? null}
+          // Stryker disable next-line StringLiteral: gleichwertig — ohne Lead Time ist der Wert null, und KachelWert zeigt dann den leerText statt der Einheit
           einheit={leadTime?.einheit ?? ''}
           leerText={t.KEINE_GRUNDLAGE}
           hinweis={t.LEAD_TIME_HINWEIS}
@@ -75,6 +76,7 @@ export function AuslieferungPlatte({ daten }: Readonly<{ daten: DeliveryView }>)
         <Kennzahl
           titel={t.TIME_TO_RESTORE}
           wert={restore?.wert ?? null}
+          // Stryker disable next-line StringLiteral: gleichwertig — ohne Time to Restore ist der Wert null, und KachelWert zeigt dann den leerText statt der Einheit
           einheit={restore?.einheit ?? ''}
           leerText={t.KEIN_AUSFALL}
           hinweis={t.TIME_TO_RESTORE_HINWEIS}
