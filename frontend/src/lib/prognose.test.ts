@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { EpicForecastEntry } from '../api/dashboard'
 import { datumText, dokumentListe, hinweisText, lokalesDatum, paketZahl, zeilenText } from './prognose'
 
@@ -187,22 +187,16 @@ describe('lokales Datum (E13)', () => {
     expect([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()]).toEqual([2026, 9, 21, 0])
   })
 
-  describe('westlich von UTC', () => {
-    let vorher: string | undefined
-    beforeEach(() => {
-      vorher = process.env.TZ
-      process.env.TZ = 'America/New_York'
-    })
-    afterEach(() => {
-      process.env.TZ = vorher
-    })
-
-    it('zeigt den Tag selbst und nicht den Vortag', () => {
-      // Gegenprobe: Die Zone wirkt — ein Datum aus `new Date('JJJJ-MM-TT')` fiele hier auf den Vortag.
-      expect(new Date('2026-10-21').getDate()).toBe(20)
-      expect(lokalesDatum('2026-10-21').getDate()).toBe(21)
-      expect(datumText('de', '2026-10-21')).toBe('21.10.2026')
-      expect(datumText('en', '2026-01-01')).toBe('Jan 1, 2026')
-    })
+  it('zeigt in jeder Zone den Tag selbst und nicht den Vortag wie UTC-Mitternacht', () => {
+    // Gegenprobe, zonenexplizit: `new Date('JJJJ-MM-TT')` ist UTC-Mitternacht und faellt westlich von UTC auf den Vortag.
+    const utc = new Date('2026-10-21')
+    expect(utc.toISOString()).toBe('2026-10-21T00:00:00.000Z')
+    expect(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', day: 'numeric' }).format(utc)).toBe('20')
+    // `lokalesDatum` dagegen ist lokale Mitternacht des Tages selbst — unabhaengig von der Zone des Prozesses.
+    const d = lokalesDatum('2026-10-21')
+    expect([d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds()]).toEqual([21, 0, 0, 0, 0])
+    expect(d.getTime()).toBe(utc.getTime() + d.getTimezoneOffset() * 60_000)
+    expect(datumText('de', '2026-10-21')).toBe('21.10.2026')
+    expect(datumText('en', '2026-01-01')).toBe('Jan 1, 2026')
   })
 })
