@@ -80,7 +80,7 @@ public final class AuslieferungsErmittlung {
     Map<Long, Auslieferungsversuch> jeId =
         geordnet.stream().collect(Collectors.toMap(Auslieferungsversuch::id, Function.identity()));
     BinaryOperator<Meldung> fruehere =
-        (a, b) -> FRUEHER.compare(a.versuch(), b.versuch()) <= 0 ? a : b;
+        BinaryOperator.minBy(Comparator.comparing(Meldung::versuch, FRUEHER));
     Map<String, Meldung> ersteMeldung = new HashMap<>();
     for (GemeldeterCommit commit : commits) {
       Auslieferungsversuch versuch = jeId.get(commit.versuchId());
