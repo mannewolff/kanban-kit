@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
@@ -351,6 +352,61 @@ class BetriebsdateienTest {
   }
 
   /**
+   * Jeder Auslieferungsversuch meldet sich ans Board, damit die Platte „Auslieferung“ echte Daten
+   * bekommt (Issue #1839, Plan #1831 E13, fachlich #1784 AK 5, AK 12). Vier Zusicherungen stecken
+   * in diesem einen Schritt, und jede einzelne fiele stumm aus:
+   *
+   * <ul>
+   *   <li>{@code if: success() || failure()} — ein gescheiterter Deploy meldet „gescheitert“. Ohne
+   *       die Bedingung liefe der Schritt nur nach Grün, und die Change Failure Rate bliebe bei
+   *       null, obwohl Läufe scheitern.
+   *   <li>{@code continue-on-error: true} — eine gescheiterte Meldung färbt den Auslieferungslauf
+   *       nicht rot. Die Auslieferung ist gelungen, auch wenn das Board sie nicht erfährt.
+   *   <li>die Kennung aus {@code run_id} und {@code run_attempt} — ein erneut gestarteter Lauf ist
+   *       ein eigener Versuch (AK 12), derselbe Lauf zählt nur einmal.
+   *   <li>{@code job.status} — rot auch bei roter Bereitschaftsprüfung (AK 5), nicht nur bei einem
+   *       gescheiterten Compose-Aufruf.
+   * </ul>
+   *
+   * <p>Geprüft wird der <b>letzte</b> Schritt: Die Meldung muss hinter allem stehen, was den
+   * Ausgang bestimmen kann.
+   */
+  @Test
+  void derLetzteSchrittDesDeployWorkflowsMeldetJedenVersuchAnsBoard() throws IOException {
+    String meldeSchritt = letzterSchritt(DEPLOY_WORKFLOW);
+
+    assertThat(meldeSchritt)
+        .as("letzter Schritt in %s", DEPLOY_WORKFLOW)
+        .contains("if: success() || failure()")
+        .contains("continue-on-error: true")
+        .contains("${{ github.run_id }}-${{ github.run_attempt }}")
+        .contains("job.status")
+        .contains("KANBAN_DEPLOY_TOKEN: ${{ secrets.KANBAN_DEPLOY_TOKEN }}");
+  }
+
+  /**
+   * Der Auslieferungs-Workflow reagiert weiter nur auf {@code push} nach {@code production} (Issue
+   * #1839). Ein self-hosted Runner an einem öffentlichen Repo ist eine scharfe Kante: Käme ein
+   * {@code pull_request} dazu, liefe fremder Fork-Code auf dem VPS. Der Melde-Schritt darf daran
+   * nichts ändern — er ist der erste Anlass seit Issue #1198, die Datei überhaupt anzufassen.
+   */
+  @Test
+  void deployWorkflowReagiertWeiterNurAufPushNachProduction() throws IOException {
+    List<String> wirksam = wirksameZeilen(DEPLOY_WORKFLOW);
+
+    assertThat(wirksam)
+        .as("Auslöser in %s", DEPLOY_WORKFLOW)
+        .contains("push:", "branches: [production]");
+    assertThat(wirksam)
+        .as("kein weiterer Auslöser in %s", DEPLOY_WORKFLOW)
+        .noneMatch(
+            zeile ->
+                zeile.startsWith("pull_request")
+                    || zeile.startsWith("workflow_dispatch")
+                    || zeile.startsWith("schedule"));
+  }
+
+  /**
    * Der ausgelieferte Stack zieht veröffentlichte Abbilder, der Bau liegt allein im Bau-Overlay
    * (Issue #1265, fachliche Quelle #675). Bliebe ein {@code build:} im Basis-Stack oder im
    * Sicherungs-Overlay stehen, bräuchte ein Selbsthoster wieder Node-, Maven- und JDK-Bauzeit,
@@ -572,10 +628,38 @@ class BetriebsdateienTest {
    * Erläuterungen über einem Eintrag frei formuliert bleiben und nur der wirksame Eintrag zählt.
    */
   private static List<String> wirksameZeilenMit(Path datei, String fragment) throws IOException {
+    return wirksameZeilen(datei).stream().filter(zeile -> zeile.contains(fragment)).toList();
+  }
+
+  /**
+   * Der letzte Schritt der Datei als Text, ohne Kommentarzeilen: vom letzten {@code - name:} bis
+   * zum Ende. Die Kommentare fliegen aus demselben Grund heraus wie bei {@link
+   * #wirksameZeilenMit(Path, String)} — eine Erläuterung, die {@code continue-on-error} nur
+   * erwähnt, täuschte sonst die Zusicherung vor.
+   */
+  private static String letzterSchritt(Path datei) throws IOException {
+    List<String> zeilen = Files.readAllLines(datei, StandardCharsets.UTF_8);
+    int start = -1;
+    for (int i = 0; i < zeilen.size(); i++) {
+      if (zeilen.get(i).trim().startsWith("- name:")) {
+        start = i;
+      }
+    }
+    assertThat(start).as("mindestens ein Schritt in %s", datei).isNotNegative();
+    return zeilen.subList(start, zeilen.size()).stream()
+        .map(String::trim)
+        .filter(zeile -> !zeile.startsWith("#"))
+        .collect(Collectors.joining("\n"));
+  }
+
+  /**
+   * Getrimmte Zeilen der Datei ohne Kommentarzeilen, damit die Erläuterungen über einem Eintrag
+   * frei formuliert bleiben und nur der wirksame Eintrag zählt.
+   */
+  private static List<String> wirksameZeilen(Path datei) throws IOException {
     return Files.readAllLines(datei, StandardCharsets.UTF_8).stream()
         .map(String::trim)
         .filter(zeile -> !zeile.startsWith("#"))
-        .filter(zeile -> zeile.contains(fragment))
         .toList();
   }
 }

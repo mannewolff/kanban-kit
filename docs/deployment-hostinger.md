@@ -199,6 +199,21 @@ Sicherung muss auf dem Server daher eingerichtet sein (siehe [`backup.md`](backu
 Deploy nach dieser Änderung startet die Datenbank einmal neu, falls die WAL-Archivierung gerade
 aus ist — der Overlay-`command` ändert die Container-Definition von `postgres`.
 
+
+Seit Issue #1839 trägt der Workflow einen **letzten Schritt „Auslieferung ans Board melden"**. Er
+meldet jeden Auslieferungsversuch an das kanban-kit-Board, damit die Platte „Auslieferung" im
+Leitstand echte Daten bekommt (Deployment-Frequenz, Lead Time, Change Failure Rate, Time to
+Restore). Drei Eigenheiten, alle Absicht:
+
+- Gemeldet wird **auch ein gescheiterter Lauf**, einschließlich einer roten Bereitschaftsprüfung —
+  sonst bliebe die Change Failure Rate bei null, obwohl Läufe scheitern.
+- Scheitert die **Meldung selbst** (Board nicht erreichbar, Token abgelaufen), bleibt der Job
+  grün: Die Auslieferung ist gelungen, auch wenn das Board nichts davon erfährt.
+- Ein **abgebrochener** Lauf meldet nichts und zählt nirgends.
+
+Der Schritt braucht zweierlei auf dem Server: das Repo-Secret `KANBAN_DEPLOY_TOKEN` und das
+Melde-Kommando `deployment.mjs` samt Node — beides unten unter *Einmalige Einrichtung*.
+
 Einmalige Einrichtung (Server + GitHub, nicht Teil des Repos):
 
 1. **Runner installieren** auf dem VPS und als Dienst einrichten (`config.sh` gegen dieses Repo,
@@ -209,6 +224,27 @@ Einmalige Einrichtung (Server + GitHub, nicht Teil des Repos):
 3. **Sicherheit (Pflicht bei öffentlichem Repo):** Der Workflow triggert **ausschließlich** auf
    `push` nach `production`, **nie** auf `pull_request` — so kann kein Fork-Code auf dem VPS laufen.
    Zusätzlich unter *Settings → Actions* Fork-Runs auf **Approval** stellen.
+4. **Repo-Secret `KANBAN_DEPLOY_TOKEN`** unter *Settings → Secrets and variables → Actions*
+   anlegen. Wert ist ein **board-gebundenes** Zugriffstoken des kanban-kit-Boards: in der
+   Anwendung unter *Administration → API-Tokens* erzeugen und dabei **Projekt und Board** setzen —
+   eine Meldung über ein ungebundenes Token weist die Schnittstelle mit `409` ab. Der Klartext
+   erscheint genau einmal. Die Board-Adresse steht fest im Workflow (`KANBAN_URL`) und braucht kein
+   Secret.
+5. **Melde-Kommando ablegen:** `deployment.mjs` des Kits nach `/root/opt/kanban-kit/` holen und
+   **Node ab 18** auf dem Host bereitstellen. Das ist *keine* Installation des Kits — eine einzelne
+   Datei ohne Abhängigkeiten, die nur Node-Bordmittel und `git` benutzt:
+
+   ```bash
+   cd /root/opt/kanban-kit
+   curl -o deployment.mjs https://docs.mwolff.org/deployment.mjs
+   apt update && apt install -y nodejs     # Ubuntu 24.04 liefert Node 18
+   node deployment.mjs --version           # Gegenprobe
+   ```
+
+   Die Datei liegt bewusst **neben** dem Arbeitsverzeichnis und nicht im Repo: Der Workflow
+   arbeitet ohne `actions/checkout`, und `git reset --hard` würde eine versionierte Kopie ohnehin
+   nicht herbeischaffen, weil `.claude/` unversioniert ist. Sie überlebt jeden Deploy, weil
+   `reset --hard` unversionierte Dateien nicht anfasst.
 
 Hintergrund und die verworfene Alternative (Checkout-Variante) stehen in
 `deployment-spec.md` im Repo-Wurzelverzeichnis.
