@@ -8,6 +8,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -159,6 +163,15 @@ class BetriebsdateienTest {
 
   /** Anleitung für die Produktions-Installation auf dem VPS. */
   private static final Path HOSTINGER_ANLEITUNG = Path.of("docs", "deployment-hostinger.md");
+
+  /** Verzeichnis der GitHub-Workflows, deren Secrets die Anleitung auflisten muss. */
+  private static final Path WORKFLOWS = Path.of(".github", "workflows");
+
+  /** Ein Secret-Zugriff in einer Workflow-Datei, etwa {@code secrets.KANBAN_KIT_TOKEN}. */
+  private static final Pattern SECRET_ZUGRIFF = Pattern.compile("secrets\\.([A-Za-z0-9_]+)");
+
+  /** Stellt GitHub je Lauf selbst; wird nie angelegt oder erneuert (Issue #1861). */
+  private static final String GITHUB_EIGENES_SECRET = "GITHUB_TOKEN";
 
   /** Die Kontrolle, die fehlende Pflichtwerte nicht bemerkt (Issue #1236). */
   private static final String WIRKUNGSLOSE_KONTROLLE = "grep -c \"is not set\"";
@@ -570,6 +583,37 @@ class BetriebsdateienTest {
     assertThat(bauAufrufe)
         .as("Bau-Aufrufe in den ausgelieferten Dateien — ein leerer Treffer wäre kein Beweis")
         .isNotEmpty();
+  }
+
+  /**
+   * Jedes Secret, das ein Workflow anspricht, hat eine Zeile in der Secret-Tabelle der Anleitung
+   * (Issue #1861). Die Liste kommt aus den Workflow-Dateien selbst, nicht aus dem Test — sonst wäre
+   * sie dieselbe handgepflegte Liste ein Stockwerk tiefer. Gesucht wird die Tabellenzeile, nicht
+   * jede Erwähnung: {@code KANBAN_DEPLOY_TOKEN} steht auch unter „Einmalige Einrichtung“.
+   */
+  @Test
+  void anleitungFuehrtJedesSecretDerWorkflowsInIhrerTabelle() throws IOException {
+    Set<String> secrets = new TreeSet<>();
+    try (Stream<Path> dateien = Files.list(WORKFLOWS)) {
+      for (Path datei : dateien.filter(d -> d.toString().endsWith(".yml")).toList()) {
+        Matcher treffer = SECRET_ZUGRIFF.matcher(Files.readString(datei, StandardCharsets.UTF_8));
+        while (treffer.find()) {
+          secrets.add(treffer.group(1));
+        }
+      }
+    }
+    secrets.remove(GITHUB_EIGENES_SECRET);
+    assertThat(secrets)
+        .as("Secrets in %s — leer hieße: der Test prüft nichts", WORKFLOWS)
+        .isNotEmpty();
+
+    List<String> zeilen = Files.readAllLines(HOSTINGER_ANLEITUNG, StandardCharsets.UTF_8);
+    for (String secret : secrets) {
+      String tabellenAnfang = "| `" + secret + "` |";
+      assertThat(zeilen.stream().anyMatch(zeile -> zeile.startsWith(tabellenAnfang)))
+          .as("Tabellenzeile für Secret %s in %s", secret, HOSTINGER_ANLEITUNG)
+          .isTrue();
+    }
   }
 
   /**

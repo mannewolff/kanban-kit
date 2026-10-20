@@ -249,6 +249,20 @@ Einmalige Einrichtung (Server + GitHub, nicht Teil des Repos):
 Hintergrund und die verworfene Alternative (Checkout-Variante) stehen in
 `deployment-spec.md` im Repo-Wurzelverzeichnis.
 
+## GitHub-Actions-Secrets
+
+Diese Secrets liegen unter *Settings → Secrets and variables → Actions* des Repositories. Die
+Tabelle muss jedes Secret nennen, das ein Workflow unter `.github/workflows/` anspricht — ein Test
+(`BetriebsdateienTest`) liest die Workflows und schlägt fehl, sobald eine Zeile fehlt. Nicht
+dazu gehört `GITHUB_TOKEN`: Den stellt GitHub je Lauf selbst, er wird nie angelegt oder erneuert.
+
+| Name | Wofür (Workflow, Schritt) | Woher der Wert kommt | Erneuern |
+|---|---|---|---|
+| `KANBAN_DEPLOY_TOKEN` | `deploy.yml`, letzter Schritt „Auslieferung ans Board melden“ | Board-gebundenes Zugriffstoken des kanban-kit-Boards, siehe *Einmalige Einrichtung*, Punkt 4 oben | Neues board-gebundenes Token erzeugen, Secret überschreiben, altes Token widerrufen |
+| `KANBAN_KIT_TOKEN` | `ci.yml`, Job „Backend (PIT Mutation)“, Schritt „Mutationsprüfung (Sperrschwelle 80 %, Liegezeit 7 Tage)“ (als `TBX_TOKEN`; legt Karten für Mutations-Überlebende an) | Zugriffstoken des kanban-kit-Boards, gebunden an das Projekt und das Board dieses Repositories: *Administration → API-Tokens* | Wie oben: neues Token mit derselben Bindung erzeugen, Secret überschreiben, altes widerrufen |
+| `KANBAN_SONAR_TOKEN` | `sonarqube.yml`, Schritt „Neue Findings aufs Sonar-Board synchronisieren“ | Zugriffstoken des kanban-kit-Boards, gebunden an Projekt **und Sonar-Board** (Issue #536): *Administration → API-Tokens* | Wie oben, mit Bindung an das Sonar-Board |
+| `SONAR_TOKEN` | `sonarqube.yml`, Schritte „SonarQube-Scan“ und „Neue Findings aufs Sonar-Board synchronisieren“ (liest die Findings) | Analyse-Token von SonarQube Cloud (`sonarcloud.io`): *My Account → Security → Generate Tokens* | Neues Token in SonarQube Cloud erzeugen, Secret überschreiben, altes Token dort widerrufen |
+
 ## Verifikation
 
 - `curl -I https://kanban.mwolff.org` → `200` mit gültigem Let's-Encrypt-Zertifikat
