@@ -185,7 +185,7 @@ außen vor. Ein **Strich** zeigt an, dass nur einige Karten der Spalte gewählt 
 ergänzt die fehlenden. Sind alle gewählt, hebt der Klick die Auswahl **dieser** Spalte wieder auf —
 Karten anderer Spalten bleiben gewählt, sodass sich mehrere Spalten nacheinander einsammeln lassen.
 
-Sobald mindestens eine Karte gewählt ist, erscheint unten eine Aktionsleiste mit vier Massenaktionen:
+Sobald mindestens eine Karte gewählt ist, erscheint unten eine Aktionsleiste mit fünf Massenaktionen:
 
 - **Labels:** öffnet ein Menü mit allen Labels des Boards. Je Label steht dort, wie weit es in der
   Auswahl vertreten ist — ein **voller Haken** („alle gewählten Karten"), ein **Strich** („einige")
@@ -193,6 +193,16 @@ Sobald mindestens eine Karte gewählt ist, erscheint unten eine Aktionsleiste mi
   gewählten Karten an, ein Klick auf einen vollen Haken **nimmt es allen ab**; die übrigen Labels
   jeder Karte bleiben dabei unberührt. Das Menü bleibt offen, sodass mehrere Labels in einem Zug
   gehen. Hat das Board keine Labels, ist die Taste gesperrt.
+- **Vorhaben zuordnen:** öffnet ein Menü mit allen nicht archivierten Vorhaben des Boards; ein für
+  dich ausgeblendetes Vorhaben ist als „(ausgeblendet)" gekennzeichnet und ebenso wählbar. Nach der
+  Wahl folgt **stets eine Rückfrage** mit der Zahl der Karten, dem Vorhaben und der Zahl der Karten,
+  deren unmittelbare Zuordnung zu einem anderen Vorhaben dabei ersetzt wird. Gesetzt wird nur die
+  **unmittelbare Zuordnung**: Gehört eine Karte über ihre Herkunft zu einem anderen Vorhaben, hat
+  diese geerbte Zugehörigkeit in der Anzeige weiter Vorrang; abgeleitete Karten kommen über ihre
+  Herkunft mit. Ist das Ziel ausgeblendet, verschwinden die Karten vom Board und kommen über
+  „Ausgeblendete zeigen" zurück. Höchstens **200 Karten** in einem Zug. Gesperrt ist die Taste, wenn
+  die Auswahl ein Vorhaben enthält oder das Board kein Vorhaben hat. Nach Erfolg endet die Auswahl;
+  jede geänderte Karte bekommt einen Eintrag in ihrem Verlauf.
 - **Verschieben:** alle gewählten Karten in eine Spalte — wahlweise in eine **andere Spalte desselben
   Boards** (vorausgewählt; etwa fünf Pakete auf einmal nach Ready) oder auf ein **anderes Board**
   bzw. in ein anderes Projekt. Nur mit Verschieberecht. Innerhalb des Boards behalten die Karten
@@ -201,7 +211,9 @@ Sobald mindestens eine Karte gewählt ist, erscheint unten eine Aktionsleiste mi
   eine Karte, die schon dort liegt, bleibt an ihrem Platz.
 - **Archivieren** und **In den Papierkorb:** jeweils nach einer Rückfrage.
 
-Alle vier laufen als **eine Transaktion**: Scheitert eine Karte, bleibt die ganze Auswahl unverändert.
+Alle fünf laufen als **eine Transaktion**: Scheitert eine Karte, bleibt die ganze Auswahl unverändert.
+Beim Zuordnen bleiben Karten, die es auf dem Board nicht mehr gibt (archiviert, im Papierkorb,
+verschoben), außen vor; die Meldung nennt ihre Zahl.
 Sie treffen immer nur, was der aktive Anzeige-Filter gerade zeigt.
 
 ## Labels
