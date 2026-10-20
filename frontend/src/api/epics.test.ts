@@ -76,6 +76,17 @@ describe('epicsApi', () => {
     expect(JSON.parse(String(c.body))).toEqual({ parentId: null })
   })
 
+  it('bulkAssign ruft POST /api/cards/bulk-parent mit IDs und Vorhaben und liefert das Ergebnis', async () => {
+    const ergebnis = { changedCardIds: [1], overwritten: 1, skipped: 0 }
+    const f = spyFetch(JSON.stringify(ergebnis))
+    const result = await epicsApi.bulkAssign([1, 2], 7)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/cards/bulk-parent')
+    expect(c.method).toBe('POST')
+    expect(JSON.parse(String(c.body))).toEqual({ cardIds: [1, 2], parentId: 7 })
+    expect(result).toEqual(ergebnis)
+  })
+
   it('remove ruft DELETE /api/cards/{id}', async () => {
     const f = spyFetch()
     await epicsApi.remove(1)

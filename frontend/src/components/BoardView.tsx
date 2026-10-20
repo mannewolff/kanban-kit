@@ -260,6 +260,13 @@ function einfuegeIndexIn(anzeige: FingerZugAnzeige | null, columnId: number): nu
 }
 
 /**
+ * Platzhalter für die Wahl eines Vorhabens in der Aktionsleiste, bis Issue #1869 Rückfrage und
+ * Ausführung verdrahtet. Ohne Logik und unerreichbar, solange die Leiste keine Vorhaben anbietet.
+ */
+/* v8 ignore next -- @preserve */
+const vorhabenZuordnenFolgt = () => {}
+
+/**
  * Spaltenansicht mit Drag & Drop. Verschieben ist optimistisch (Revert bei Fehler). Karten tragen
  * Epic-Badge + farbigen Rand, ein ⋮-Menü (Bearbeiten/Archivieren/Verschieben) und auf Done einen
  * Archiv-Countdown. Angelegt wird über „Neu anlegen“ oder die Taste „+“ — stets in der ersten Spalte.
@@ -1300,6 +1307,10 @@ export function BoardView({
           labelOptions={labelOptions}
           labelsDisabledReason={labelSperrgrund(t, gewaehlteKarten, boardLabels)}
           onToggleLabel={(labelId, action) => void applyBulkLabel(labelId, action)}
+          // Vorläufig ohne Vorhaben und ohne Aktion; die Verdrahtung bringt Issue #1869.
+          epicOptions={[]}
+          epicDisabledReason={null}
+          onChooseEpic={vorhabenZuordnenFolgt}
           onArchive={() => setBulkArchiveConfirm(true)}
           onMove={() => setBulkTransferOpen(true)}
           onDelete={() => setDeleteConfirm([...effectiveSelectedIds])}

@@ -26,6 +26,13 @@ export interface Epic {
   requirementCardNumber: number | null
 }
 
+/** Antwort der Massenzuordnung: geänderte Karten, davon überschriebene Zuordnungen, ausgelassene Karten. */
+export interface BulkAssignResult {
+  changedCardIds: number[]
+  overwritten: number
+  skipped: number
+}
+
 export const epicsApi = {
   list: (boardId: number) => apiFetch<Epic[]>(`/api/boards/${boardId}/epics`),
   create: (boardId: number, title: string, description: string, shortcode: string | null) =>
@@ -36,6 +43,12 @@ export const epicsApi = {
   /** Ordnet eine Karte einem Epic zu (parentId) oder löst die Zuordnung (null). */
   assign: (cardId: number, parentId: number | null) =>
     apiFetch<Card>(`/api/cards/${cardId}/parent`, { method: 'PATCH', body: JSON.stringify({ parentId }) }),
+  /** Ordnet mehrere Karten in einem Zug einem Vorhaben zu — alle oder keine (Plan #1865). */
+  bulkAssign: (cardIds: number[], parentId: number) =>
+    apiFetch<BulkAssignResult>('/api/cards/bulk-parent', {
+      method: 'POST',
+      body: JSON.stringify({ cardIds, parentId }),
+    }),
   remove: (id: number) => apiFetch<void>(`/api/cards/${id}`, { method: 'DELETE' }),
 }
 
