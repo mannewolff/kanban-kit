@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState, type ComponentProps } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest'
 import type { Board } from '../api/boards'
 import { cardsApi } from '../api/cards'
 import type { Card } from '../api/cards'
+import type { Epic } from '../api/epics'
 import { ApiError } from '../api/client'
 import { columnsApi } from '../api/columns'
 import { boardsApi } from '../api/boards'
@@ -20,6 +21,7 @@ import { setzeMedien } from '../test/setup'
 import type { KitNamenZustand } from '../api/kitNamen'
 import { KIT_NAMEN } from '../test/kitNamen'
 import { de } from '../i18n/de'
+import { en } from '../i18n/en'
 import { HALTEZEIT_MS } from '../lib/fingerZiehen'
 
 vi.mock('../api/columns', () => ({
@@ -295,7 +297,7 @@ describe('BoardView', () => {
 
   it('legt über Typ=Epic ein Epic an statt einer Karte', async () => {
     const api = mkApi()
-    const epicsApi = { create: vi.fn().mockResolvedValue({ id: 5 }) }
+    const epicsApi = { create: vi.fn().mockResolvedValue({ id: 5 }), bulkAssign: vi.fn() }
     const onEpicsChanged = vi.fn()
     render(
       <BoardView board={board} initialCards={[card]} canEdit api={api}
@@ -3214,7 +3216,10 @@ describe('BoardView', () => {
     })
 
     it('createItem: lässt den Anlege-Dialog bei einem Serverfehler offen (Vorhaben)', async () => {
-      const epicsApi = { create: vi.fn().mockRejectedValue(serverfehler('Das Kürzel ist schon vergeben.')) }
+      const epicsApi = {
+        create: vi.fn().mockRejectedValue(serverfehler('Das Kürzel ist schon vergeben.')),
+        bulkAssign: vi.fn(),
+      }
       const onEpicsChanged = vi.fn()
       render(
         <BoardView board={board} initialCards={[card]} canEdit api={mkApi()}
@@ -4008,5 +4013,473 @@ describe('BoardView — Knopf kit:nightrun im Kopf der Ready-Spalte (Issue #1708
     expect(api.bulkLabels).toHaveBeenCalledTimes(1)
     expect(knopf).toBeDisabled()
     await act(async () => antwort([{ ...eins, labels: [9] }]))
+  })
+})
+
+describe('Vorhaben über die Mehrfachauswahl zuordnen (Issue #1869)', () => {
+  beforeEach(() => {
+    editMode.value = true
+  })
+
+  const mkEpic = (id: number, title: string, shortcode: string, memberNumbers: number[] = [], rootNumbers = memberNumbers): Epic => ({
+    id, number: id, title, description: null, shortcode, done: 0, total: memberNumbers.length,
+    memberNumbers, rootNumbers, requirementCardNumber: null,
+  })
+  const karte = (n: number, over: Partial<Card> = {}): Card => ({
+    ...card, id: 1000 + n, number: n, title: `Karte ${n}`, positionInColumn: n, ...over,
+  })
+  const zahlen = (anzahl: number) => Array.from({ length: anzahl }, (_, i) => i + 1)
+  const ergebnis = (changedCardIds: number[], overwritten = 0, skipped = 0) => ({ changedCardIds, overwritten, skipped })
+  const abrechnung = mkEpic(9, 'Abrechnung', 'ABR')
+  const altlasten = (members: number[] = [], roots = members) => mkEpic(8, 'Altlasten', 'ALT', members, roots)
+  const nice = (members: number[] = []) => mkEpic(5, 'Nice to have', 'NTH', members)
+  const vorhabenApi = (bulkAssign = vi.fn().mockResolvedValue(ergebnis([]))) => ({ create: vi.fn(), bulkAssign })
+  const GRUND_VORHABEN = 'ein Vorhaben lässt sich keinem Vorhaben zuordnen'
+  const GRUND_KEINE = 'das Board hat kein wählbares Vorhaben'
+
+  /**
+   * Hält Vorhaben-Liste und Ausblendung so, wie `BoardPage` es tut: `onEpicsChanged` lädt die
+   * Liste neu — hier mit `nachLaden`, der Antwort des Servers nach der Zuordnung.
+   */
+  const KEINE_AUSGEBLENDET: ReadonlySet<number> = new Set()
+
+  function BoardMitVorhaben({
+    start, nachLaden = start, hidden = KEINE_AUSGEBLENDET, onEpicsChanged, ...rest
+  }: { start: Epic[]; nachLaden?: Epic[]; hidden?: ReadonlySet<number> } & Omit<ComponentProps<typeof BoardView>, 'board' | 'canEdit' | 'epics' | 'hiddenEpics'>) {
+    const [epics, setEpics] = useState(start)
+    return (
+      <BoardView
+        board={board} canEdit epics={epics} hiddenEpics={hidden}
+        onEpicsChanged={() => { setEpics(nachLaden); onEpicsChanged?.() }} {...rest}
+      />
+    )
+  }
+
+  const zeige = (props: ComponentProps<typeof BoardMitVorhaben>) =>
+    render(<BoardMitVorhaben {...props} />, { wrapper: SnackbarProvider })
+
+  const waehle = (...nummern: number[]) => {
+    fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+    for (const n of nummern) fireEvent.click(screen.getByTestId(`card-${1000 + n}`))
+  }
+  const oeffneZuordnen = (punkt: string) => {
+    fireEvent.click(screen.getByRole('button', { name: 'Vorhaben zuordnen' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: punkt }))
+  }
+  const rueckfrage = () => screen.getByRole('dialog', { name: 'Vorhaben zuordnen?' })
+  const bestaetige = () => fireEvent.click(within(rueckfrage()).getByRole('button', { name: 'Zuordnen' }))
+
+  test('Szenario: Zwanzig lose Karten in ein ausgeblendetes Sammel-Vorhaben', async () => {
+    const nummern = zahlen(20)
+    const karten = nummern.map((n) => karte(n))
+    const ids = karten.map((c) => c.id)
+    const epicsApi = vorhabenApi(vi.fn().mockResolvedValue(ergebnis(ids)))
+    zeige({
+      initialCards: karten, start: [abrechnung, nice()], nachLaden: [abrechnung, nice(nummern)], hidden: new Set([5]),
+      api: mkApi(), epicsApi,
+    })
+
+    waehle(...nummern)
+    oeffneZuordnen('Nice to have (ausgeblendet)')
+    expect(rueckfrage()).toHaveTextContent('20 Karten werden dem Vorhaben „Nice to have“ zugeordnet.')
+    expect(rueckfrage()).not.toHaveTextContent('anderen Vorhaben')
+    bestaetige()
+
+    await waitFor(() => expect(epicsApi.bulkAssign).toHaveBeenCalledWith(ids, 5))
+    expect(
+      await screen.findByText(
+        '20 Karten dem ausgeblendeten Vorhaben „Nice to have“ zugeordnet. Sie sind auf diesem Board jetzt verdeckt — „Ausgeblendete zeigen“ blendet sie wieder ein.',
+      ),
+    ).toBeInTheDocument()
+    // Die neu geladene Vorhaben-Liste führt sie als Mitglieder — damit sind sie verdeckt.
+    expect(screen.queryAllByTestId(/^card-\d+$/)).toHaveLength(0)
+    expect(
+      within(screen.getByTestId('column-header-10')).getByRole('button', { name: '20 Karten ausgeblendet, einblenden' }),
+    ).toBeInTheDocument()
+  })
+
+  test('Szenario: Eine Auswahl enthält Karten mit bestehender Zuordnung', async () => {
+    const nummern = zahlen(7)
+    const karten = nummern.map((n) => karte(n, n <= 3 ? { parentId: 8 } : {}))
+    const epicsApi = vorhabenApi(vi.fn().mockResolvedValue(ergebnis(karten.map((c) => c.id), 3)))
+    zeige({
+      initialCards: karten,
+      start: [altlasten([1, 2, 3]), abrechnung],
+      nachLaden: [altlasten(), mkEpic(9, 'Abrechnung', 'ABR', nummern)],
+      api: mkApi(), epicsApi,
+    })
+
+    waehle(...nummern)
+    oeffneZuordnen('Abrechnung')
+    expect(rueckfrage()).toHaveTextContent('7 Karten werden dem Vorhaben „Abrechnung“ zugeordnet.')
+    expect(rueckfrage()).toHaveTextContent(
+      'Davon gehören 3 Karten bereits zu einem anderen Vorhaben; diese Zuordnung wird ersetzt.',
+    )
+    bestaetige()
+
+    // Genau so viele überschrieben wie angekündigt — kein Zusatz.
+    expect(await screen.findByText('7 Karten dem Vorhaben „Abrechnung“ zugeordnet.')).toBeInTheDocument()
+    for (const n of nummern) {
+      expect(within(screen.getByTestId(`card-${1000 + n}`)).getByText('ABR')).toBeInTheDocument()
+      expect(within(screen.getByTestId(`card-${1000 + n}`)).queryByText('ALT')).not.toBeInTheDocument()
+    }
+  })
+
+  test('Szenario: Eine Karte mit geerbtem Vorhaben behält ihre Anzeige', async () => {
+    // Karte #1 gehört über ihre Herkunft (Wurzel #50) zu „Altlasten", unmittelbar zu keinem.
+    const geerbt = karte(1)
+    const onEpicsChanged = vi.fn()
+    const epicsApi = vorhabenApi(vi.fn().mockResolvedValue(ergebnis([geerbt.id])))
+    zeige({
+      initialCards: [geerbt],
+      start: [altlasten([1], [50]), abrechnung],
+      nachLaden: [altlasten([1], [50]), mkEpic(9, 'Abrechnung', 'ABR', [1], [1])],
+      api: mkApi(), epicsApi, onEpicsChanged,
+    })
+    expect(within(screen.getByTestId('card-1001')).getByText('ALT')).toBeInTheDocument()
+
+    waehle(1)
+    oeffneZuordnen('Abrechnung')
+    expect(rueckfrage()).toHaveTextContent('Die ausgewählte Karte wird dem Vorhaben „Abrechnung“ zugeordnet.')
+    expect(rueckfrage()).not.toHaveTextContent('anderen Vorhaben')
+    bestaetige()
+
+    expect(await screen.findByText('1 Karte dem Vorhaben „Abrechnung“ zugeordnet.')).toBeInTheDocument()
+    expect(onEpicsChanged).toHaveBeenCalled()
+    // Die geerbte Zugehörigkeit hat Vorrang in der Anzeige.
+    expect(within(screen.getByTestId('card-1001')).getByText('ALT')).toBeInTheDocument()
+    expect(within(screen.getByTestId('card-1001')).queryByText('ABR')).not.toBeInTheDocument()
+    // Keine zusätzliche Rückfrage, keine Warnung: nur die eine Erfolgsmeldung.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  test('Szenario: Die Auswahl enthält ein Vorhaben', async () => {
+    const karten = [...zahlen(4).map((n) => karte(n)), karte(5, { type: 'EPIC', title: 'Ein Vorhaben' })]
+    const epicsApi = vorhabenApi()
+    zeige({ initialCards: karten, start: [abrechnung], api: mkApi(), epicsApi })
+
+    waehle(1, 2, 3, 4, 5)
+
+    const taste = screen.getByRole('button', { name: `Vorhaben zuordnen — ${GRUND_VORHABEN}` })
+    expect(taste).toBeDisabled()
+    fireEvent.click(taste)
+    fireEvent.mouseOver(screen.getByLabelText(GRUND_VORHABEN))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(GRUND_VORHABEN)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(epicsApi.bulkAssign).not.toHaveBeenCalled()
+    for (const n of zahlen(4)) expect(screen.getByTestId(`card-${1000 + n}`)).toBeInTheDocument()
+  })
+
+  test('Szenario: Das Board hat kein wählbares Vorhaben', async () => {
+    const epicsApi = vorhabenApi()
+    zeige({ initialCards: [karte(1), karte(2)], start: [], api: mkApi(), epicsApi })
+
+    waehle(1, 2)
+
+    const taste = screen.getByRole('button', { name: `Vorhaben zuordnen — ${GRUND_KEINE}` })
+    expect(taste).toBeDisabled()
+    fireEvent.click(taste)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    fireEvent.mouseOver(screen.getByLabelText(GRUND_KEINE))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(GRUND_KEINE)
+    expect(epicsApi.bulkAssign).not.toHaveBeenCalled()
+  })
+
+  it('nennt beide Sperrgründe zugleich, mit „; " verbunden', () => {
+    zeige({ initialCards: [karte(1), karte(2, { type: 'EPIC' })], start: [], api: mkApi(), epicsApi: vorhabenApi() })
+
+    waehle(1, 2)
+
+    expect(
+      screen.getByRole('button', { name: `Vorhaben zuordnen — ${GRUND_VORHABEN}; ${GRUND_KEINE}` }),
+    ).toBeDisabled()
+  })
+
+  it('bietet alle Vorhaben der vollen Liste an, ausgeblendete gekennzeichnet, in der Reihenfolge des Servers', () => {
+    zeige({ initialCards: [karte(1)], start: [nice(), abrechnung, altlasten()], hidden: new Set([5]), api: mkApi(), epicsApi: vorhabenApi() })
+
+    waehle(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Vorhaben zuordnen' }))
+
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
+      'Nice to have (ausgeblendet)', 'Abrechnung', 'Altlasten',
+    ])
+  })
+
+  it('zählt als überschrieben nur Karten mit einer anderen unmittelbaren Zuordnung', () => {
+    // #1 schon im Ziel, #2 unmittelbar in „Altlasten", #3 ohne Vorhaben, #4 nur geerbt.
+    const karten = [karte(1, { parentId: 9 }), karte(2, { parentId: 8 }), karte(3), karte(4)]
+    zeige({ initialCards: karten, start: [altlasten([2, 4], [2]), abrechnung], api: mkApi(), epicsApi: vorhabenApi() })
+
+    waehle(1, 2, 3, 4)
+    oeffneZuordnen('Abrechnung')
+
+    expect(rueckfrage()).toHaveTextContent('4 Karten werden dem Vorhaben „Abrechnung“ zugeordnet.')
+    expect(rueckfrage()).toHaveTextContent(
+      'Davon gehört 1 Karte bereits zu einem anderen Vorhaben; diese Zuordnung wird ersetzt.',
+    )
+  })
+
+  it('schließt die Rückfrage beim Abbrechen, ohne zuzuordnen', async () => {
+    const epicsApi = vorhabenApi()
+    zeige({ initialCards: [karte(1)], start: [abrechnung], api: mkApi(), epicsApi })
+
+    waehle(1)
+    oeffneZuordnen('Abrechnung')
+    fireEvent.click(within(rueckfrage()).getByRole('button', { name: 'Abbrechen' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(epicsApi.bulkAssign).not.toHaveBeenCalled()
+    expect(screen.getByText('1 ausgewählt')).toBeInTheDocument()
+  })
+
+  it('schließt die Rückfrage mit Escape, ohne zuzuordnen', async () => {
+    const epicsApi = vorhabenApi()
+    zeige({ initialCards: [karte(1)], start: [abrechnung], api: mkApi(), epicsApi })
+
+    waehle(1)
+    oeffneZuordnen('Abrechnung')
+    fireEvent.keyDown(rueckfrage(), { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(epicsApi.bulkAssign).not.toHaveBeenCalled()
+  })
+
+  describe('Höchstzahl je Zug', () => {
+    const MELDUNG_201 = 'Höchstens 200 Karten in einem Zug — gewählt sind 201'
+
+    it('lehnt beim Wählen des Vorhabens mehr als 200 Karten ab, ohne Rückfrage und ohne Aufruf', async () => {
+      const karten = zahlen(201).map((n) => karte(n))
+      const epicsApi = vorhabenApi()
+      zeige({ initialCards: karten, start: [abrechnung], api: mkApi(), epicsApi })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Alle Karten in Backlog auswählen' }))
+      oeffneZuordnen('Abrechnung')
+
+      await erwarteFehlerToast(MELDUNG_201)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(epicsApi.bulkAssign).not.toHaveBeenCalled()
+      expect(screen.getByText('201 ausgewählt')).toBeInTheDocument()
+    })
+
+    it('prüft beim Bestätigen erneut, gegen die wirksame Auswahl dieses Moments', async () => {
+      // 200 überfällige Karten und eine ohne Frist: Unter „Überfällig" sind 200 wirksam, die
+      // Rückfrage öffnet; zurück auf „Alle Karten" sind es beim Bestätigen 201.
+      const gestern = new Date(Date.now() - 86_400_000).toISOString()
+      const karten = zahlen(201).map((n) => karte(n, n <= 200 ? { dueDate: gestern } : {}))
+      const epicsApi = vorhabenApi()
+      zeige({ initialCards: karten, start: [abrechnung], api: mkApi(), epicsApi })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Auswählen' }))
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Alle Karten in Backlog auswählen' }))
+      fireEvent.click(screen.getByRole('button', { name: /^Überfällig/ }))
+      oeffneZuordnen('Abrechnung')
+      expect(rueckfrage()).toHaveTextContent('200 Karten werden dem Vorhaben „Abrechnung“ zugeordnet.')
+      fireEvent.click(screen.getByRole('button', { name: 'Alle Karten', hidden: true }))
+      bestaetige()
+
+      await erwarteFehlerToast(MELDUNG_201)
+      expect(epicsApi.bulkAssign).not.toHaveBeenCalled()
+    })
+  })
+
+  it('sendet beim Bestätigen nur die Karten, die der Filter in diesem Moment zeigt', async () => {
+    const gestern = new Date(Date.now() - 86_400_000).toISOString()
+    const karten = [karte(1, { dueDate: gestern }), karte(2), karte(3, { dueDate: gestern })]
+    const epicsApi = vorhabenApi(vi.fn().mockResolvedValue(ergebnis([1001, 1003])))
+    zeige({ initialCards: karten, start: [abrechnung], api: mkApi(), epicsApi })
+
+    waehle(1, 2, 3)
+    oeffneZuordnen('Abrechnung')
+    expect(rueckfrage()).toHaveTextContent('3 Karten werden dem Vorhaben „Abrechnung“ zugeordnet.')
+    fireEvent.click(screen.getByRole('button', { name: /^Überfällig/, hidden: true }))
+    bestaetige()
+
+    await waitFor(() => expect(epicsApi.bulkAssign).toHaveBeenCalledWith([1001, 1003], 9))
+  })
+
+  it('lässt bei einem Fehler Karten, Vorhaben und Auswahl unverändert und nennt den Grund', async () => {
+    const onEpicsChanged = vi.fn()
+    const onCardsChanged = vi.fn()
+    const epicsApi = vorhabenApi(vi.fn().mockRejectedValue(serverfehler('Keine Berechtigung.')))
+    zeige({
+      initialCards: [karte(1, { parentId: 8 }), karte(2)], start: [altlasten([1]), abrechnung],
+      api: mkApi(), epicsApi, onEpicsChanged, onCardsChanged,
+    })
+
+    waehle(1, 2)
+    oeffneZuordnen('Abrechnung')
+    bestaetige()
+
+    await erwarteFehlerToast('Keine Berechtigung.')
+    expect(onEpicsChanged).not.toHaveBeenCalled()
+    expect(onCardsChanged).not.toHaveBeenCalled()
+    expect(screen.getByText('2 ausgewählt')).toBeInTheDocument()
+    // Die Zuordnung ist unverändert: dieselbe Rückfrage nennt weiter eine überschriebene Karte.
+    oeffneZuordnen('Abrechnung')
+    expect(rueckfrage()).toHaveTextContent('Davon gehört 1 Karte bereits zu einem anderen Vorhaben')
+  })
+
+  it('meldet einen Fehler ohne Text vom Server mit dem eigenen Wortlaut', async () => {
+    const epicsApi = vorhabenApi(vi.fn().mockRejectedValue(new Error('Netz weg')))
+    zeige({ initialCards: [karte(1)], start: [abrechnung], api: mkApi(), epicsApi })
+
+    waehle(1)
+    oeffneZuordnen('Abrechnung')
+    bestaetige()
+
+    await erwarteFehlerToast('Vorhaben zuordnen fehlgeschlagen.')
+  })
+
+  it('setzt nach dem Erfolg die Zuordnung der geänderten Karten, meldet beide Änderungen und beendet die Auswahl', async () => {
+    const onEpicsChanged = vi.fn()
+    const onCardsChanged = vi.fn()
+    // Karte #3 ist nicht in der Antwort (schon zugeordnet oder verschwunden) und behält ihren Stand.
+    const epicsApi = vorhabenApi(vi.fn().mockResolvedValue(ergebnis([1001, 1002])))
+    zeige({
+      initialCards: [karte(1), karte(2), karte(3)], start: [altlasten(), abrechnung],
+      api: mkApi(), epicsApi, onEpicsChanged, onCardsChanged,
+    })
+
+    waehle(1, 2, 3)
+    oeffneZuordnen('Abrechnung')
+    bestaetige()
+
+    expect(await screen.findByText('2 Karten dem Vorhaben „Abrechnung“ zugeordnet.')).toBeInTheDocument()
+    expect(onEpicsChanged).toHaveBeenCalledTimes(1)
+    expect(onCardsChanged).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Auswählen' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Massenaktionen' })).not.toBeInTheDocument()
+
+    // `parentId` ist gesetzt: Die nächste Rückfrage nach „Altlasten" zählt #1 und #2 als überschrieben.
+    waehle(1, 2, 3)
+    oeffneZuordnen('Altlasten')
+    expect(rueckfrage()).toHaveTextContent('Davon gehören 2 Karten bereits zu einem anderen Vorhaben')
+  })
+
+  it('nennt mehr überschriebene als angekündigt und die übergangenen Karten', async () => {
+    // Angekündigt war eine überschriebene Zuordnung; bei der Ausführung waren es drei.
+    const epicsApi = vorhabenApi(vi.fn().mockResolvedValue(ergebnis([1001, 1002, 1003], 3, 2)))
+    zeige({
+      initialCards: [karte(1, { parentId: 8 }), karte(2), karte(3), karte(4), karte(5)],
+      start: [altlasten([1]), abrechnung], api: mkApi(), epicsApi,
+    })
+
+    waehle(1, 2, 3, 4, 5)
+    oeffneZuordnen('Abrechnung')
+    expect(rueckfrage()).toHaveTextContent('Davon gehört 1 Karte bereits zu einem anderen Vorhaben')
+    bestaetige()
+
+    expect(
+      await screen.findByText(
+        '3 Karten dem Vorhaben „Abrechnung“ zugeordnet. Davon hatten 3 bisher ein anderes Vorhaben. 2 ausgewählte Karten gab es nicht mehr auf diesem Board; sie blieben außen vor.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('nennt im Singular eine mehr überschriebene und eine übergangene Karte', async () => {
+    const epicsApi = vorhabenApi(vi.fn().mockResolvedValue(ergebnis([1001], 1, 1)))
+    zeige({ initialCards: [karte(1), karte(2)], start: [abrechnung], api: mkApi(), epicsApi })
+
+    waehle(1, 2)
+    oeffneZuordnen('Abrechnung')
+    bestaetige()
+
+    expect(
+      await screen.findByText(
+        '1 Karte dem Vorhaben „Abrechnung“ zugeordnet. Davon hatte 1 bisher ein anderes Vorhaben. 1 ausgewählte Karte gab es nicht mehr auf diesem Board; sie blieb außen vor.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('meldet Erfolg auch, wenn bei der Ausführung keine Karte geändert wurde (E10)', async () => {
+    const epicsApi = vorhabenApi(vi.fn().mockResolvedValue(ergebnis([], 0, 2)))
+    zeige({ initialCards: [karte(1), karte(2)], start: [nice()], hidden: new Set([5]), api: mkApi(), epicsApi })
+
+    waehle(1, 2)
+    oeffneZuordnen('Nice to have (ausgeblendet)')
+    bestaetige()
+
+    // Nichts wurde verdeckt — der Weg zurück entfällt.
+    expect(
+      await screen.findByText(
+        '0 Karten dem ausgeblendeten Vorhaben „Nice to have“ zugeordnet. 2 ausgewählte Karten gab es nicht mehr auf diesem Board; sie blieben außen vor.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveClass('MuiAlert-filledSuccess')
+  })
+
+  it('führt Rückfrage und Meldung auf Englisch', async () => {
+    const epicsApi = vorhabenApi(vi.fn().mockResolvedValue(ergebnis([1001, 1002], 2, 1)))
+    renderMitSprache(
+      <SnackbarProvider>
+        <BoardMitVorhaben
+          initialCards={[karte(1, { parentId: 8 }), karte(2)]} start={[altlasten([1]), abrechnung]}
+          api={mkApi()} epicsApi={epicsApi}
+        />
+      </SnackbarProvider>,
+      'en',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select' }))
+    fireEvent.click(screen.getByTestId('card-1001'))
+    fireEvent.click(screen.getByTestId('card-1002'))
+    fireEvent.click(screen.getByRole('button', { name: 'Assign epic' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Abrechnung' }))
+    const dialog = screen.getByRole('dialog', { name: 'Assign epic?' })
+    expect(dialog).toHaveTextContent('2 cards will be assigned to the epic “Abrechnung”.')
+    expect(dialog).toHaveTextContent('1 of them already belongs to another epic; that assignment will be replaced.')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Assign' }))
+
+    expect(
+      await screen.findByText(
+        '2 cards assigned to the epic “Abrechnung”. 2 of them previously had another epic. 1 selected card no longer existed on this board; it was left out.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  describe('Wortlaute in beiden Sprachen', () => {
+    it.each([
+      ['de', de],
+      ['en', en],
+    ])('%s: jede Form ist ausgeschrieben', (_sprache, w) => {
+      for (const anzahl of [0, 1, 2]) {
+        for (const text of [
+          w.BOARD.ZUORDNEN_TEXT(anzahl, 'X'),
+          w.BOARD.ZUORDNEN_UEBERSCHREIBT(anzahl),
+          w.BOARD.ZUORDNEN_ERFOLG(anzahl, 'X'),
+          w.BOARD.ZUORDNEN_ERFOLG_AUSGEBLENDET(anzahl, 'X'),
+          w.BOARD.ZUORDNEN_MEHR_UEBERSCHRIEBEN(anzahl),
+          w.BOARD.ZUORDNEN_UEBERGANGEN(anzahl),
+        ]) {
+          expect(text).not.toMatch(/undefined|NaN/)
+        }
+      }
+      expect(w.BOARD.ZUORDNEN_HOECHSTENS(200, 240)).toMatch(/200.*240/)
+    })
+
+    it('nennt im Englischen Einzahl und Mehrzahl', () => {
+      expect(en.BOARD.ZUORDNEN_TEXT(1, 'X')).toBe('The selected card will be assigned to the epic “X”.')
+      expect(en.BOARD.ZUORDNEN_ERFOLG(1, 'X')).toBe('1 card assigned to the epic “X”.')
+      expect(en.BOARD.ZUORDNEN_ERFOLG_AUSGEBLENDET(1, 'X')).toBe(
+        '1 card assigned to the hidden epic “X”. It is now concealed on this board — “Show hidden” shows it again.',
+      )
+      expect(en.BOARD.ZUORDNEN_ERFOLG_AUSGEBLENDET(2, 'X')).toBe(
+        '2 cards assigned to the hidden epic “X”. They are now concealed on this board — “Show hidden” shows them again.',
+      )
+      expect(en.BOARD.ZUORDNEN_ERFOLG_AUSGEBLENDET(0, 'X')).toBe('0 cards assigned to the hidden epic “X”.')
+      expect(en.BOARD.ZUORDNEN_UEBERSCHREIBT(2)).toBe('2 of them already belong to another epic; that assignment will be replaced.')
+      expect(en.BOARD.ZUORDNEN_MEHR_UEBERSCHRIEBEN(1)).toBe('1 of them previously had another epic.')
+      expect(en.BOARD.ZUORDNEN_UEBERGANGEN(2)).toBe('2 selected cards no longer existed on this board; they were left out.')
+      expect(en.BOARD.ZUORDNEN_HOECHSTENS(200, 240)).toBe('At most 200 cards in one go — 240 selected')
+    })
+
+    it('nennt im Deutschen die Einzahl des ausgeblendeten Ziels', () => {
+      expect(de.BOARD.ZUORDNEN_ERFOLG_AUSGEBLENDET(1, 'X')).toBe(
+        '1 Karte dem ausgeblendeten Vorhaben „X“ zugeordnet. Sie ist auf diesem Board jetzt verdeckt — „Ausgeblendete zeigen“ blendet sie wieder ein.',
+      )
+    })
   })
 })
