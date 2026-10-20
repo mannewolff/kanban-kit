@@ -9,7 +9,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardNumbers;
@@ -17,6 +20,7 @@ import org.mwolff.manban.card.application.CardView;
 import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.EpicService.DerivationNodeView;
 import org.mwolff.manban.card.application.EpicService.EpicView;
+import org.mwolff.manban.card.application.VorhabenMassenzuordnung;
 import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.mwolff.manban.common.web.api.ApiVertrag;
 import org.springframework.http.HttpStatus;
@@ -33,7 +37,8 @@ import org.springframework.web.bind.annotation.RestController;
  * Vorhaben und Herkunft (Issue #1393, Plan #1387 E12): Vorhaben eines Boards mit Fortschritt, der
  * Herkunftsbaum eines Vorhabens, die Zuordnung einer Karte zu einem Vorhaben, ihre Herkunft, die
  * Anforderungskarte und das Eröffnen eines Vorgangs. Pfade, HTTP-Methoden, Rechte und Antworten
- * sind unverändert die aus {@link CardController}; delegiert wird an den {@link EpicService}.
+ * sind unverändert die aus {@link CardController}; dazu seit Issue #1864 die Massenzuordnung {@code
+ * bulk-parent}. Delegiert wird an den {@link EpicService}.
  */
 @Tag(name = "Karten")
 @RestController
@@ -158,6 +163,59 @@ class EpicController {
       @Parameter(description = BESCHREIBUNG_CARD_ID, example = "812") @PathVariable long cardId,
       @RequestBody AssignParentRequest request) {
     return epicService.assignParent(userId, cardId, request.parentId());
+  }
+
+  /**
+   * Ordnet mehrere Karten eines Boards in einem Zug einem Vorhaben zu (Issue #1864), in einer
+   * Transaktion (alles oder nichts). Gesetzt wird allein die unmittelbare Zuordnung.
+   */
+  @Operation(
+      summary = "Mehrere Karten einem Vorhaben zuordnen",
+      description =
+          "Ordnet bis zu "
+              + CardController.MAX_CARDS_PER_BATCH
+              + " Karten dem Vorhaben parentId zu; gesetzt wird allein die unmittelbare"
+              + " Zuordnung. Alles oder nichts: Scheitert die Zuordnung, ändert sich keine Karte."
+              + " Es gilt der Stand bei der Ausführung: Eine Karte, die die Zuordnung schon trägt,"
+              + " bleibt unverändert; eine Karte, die archiviert ist, im Papierkorb liegt, auf"
+              + " einem anderen Board liegt oder nicht existiert, wird übergangen und in skipped"
+              + " gezählt. Jede geänderte Karte bekommt einen Verlaufseintrag, der das Vorhaben"
+              + " nennt. Recht: TICKET_UPDATE.")
+  @ApiResponse(responseCode = "200", description = "Das Ergebnis der Zuordnung.")
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          UNGUELTIGE_EINGABE
+              + " Ebenso: die Auswahl enthält ein Vorhaben, oder parentId ist kein zuordenbares"
+              + " Vorhaben (etwa archiviert).",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "403",
+      description = VERBOTEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description =
+          "Das Vorhaben parentId gibt es nicht, oder der Aufrufer ist kein Mitglied seines"
+              + " Projekts.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiVertrag(recht = "TICKET_UPDATE")
+  @PostMapping("/api/cards/bulk-parent")
+  BulkParentResponse bulkParent(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody BulkParentRequest request) {
+    VorhabenMassenzuordnung.Ergebnis ergebnis =
+        epicService.assignParentBulk(userId, request.cardIds(), request.parentId());
+    return new BulkParentResponse(
+        ergebnis.geaendert(), ergebnis.ueberschrieben(), ergebnis.uebergangen());
   }
 
   /**
@@ -308,6 +366,35 @@ class EpicController {
   record AssignParentRequest(
       @Schema(description = "Interne ID des Vorhabens; null löst die Zuordnung.", example = "640")
           Long parentId) {}
+
+  @Schema(description = "Karten, die in einem Zug einem Vorhaben zugeordnet werden.")
+  record BulkParentRequest(
+      @Schema(
+              description =
+                  "Interne IDs der Karten, 1 bis " + CardController.MAX_CARDS_PER_BATCH + ".",
+              example = "[812, 813]")
+          @NotEmpty
+          @Size(max = CardController.MAX_CARDS_PER_BATCH)
+          List<Long> cardIds,
+      @Schema(description = "Interne ID des Vorhabens.", example = "640") @NotNull Long parentId) {}
+
+  @Schema(description = "Das Ergebnis einer Massenzuordnung.")
+  record BulkParentResponse(
+      @Schema(
+              description = "Interne IDs der Karten, deren Zuordnung sich geändert hat.",
+              example = "[812, 813]")
+          List<Long> changedCardIds,
+      @Schema(
+              description =
+                  "Davon die Karten, die vorher unmittelbar einem anderen Vorhaben angehörten.",
+              example = "1")
+          int overwritten,
+      @Schema(
+              description =
+                  "Gewählte Karten, die bei der Ausführung archiviert, im Papierkorb, auf einem"
+                      + " anderen Board oder nicht vorhanden waren.",
+              example = "0")
+          int skipped) {}
 
   // Dieselben Grenzen wie im kanbancompat-Ingest (`CreateItemRequest`), damit beide Schreibpfade
   // dieselbe Nummer akzeptieren und dieselbe ablehnen.

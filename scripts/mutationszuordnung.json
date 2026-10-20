@@ -145,6 +145,7 @@
   "src/test/java/org/mwolff/manban/card/DoneRetentionSettingIT.java": ["src/main/java/org/mwolff/manban/card/web/AdminRetentionController.java", "src/main/java/org/mwolff/manban/card/application/DoneRetentionSettingService.java"],
   "src/test/java/org/mwolff/manban/card/EpicIT.java": ["src/main/java/org/mwolff/manban/card/web/EpicController.java", "src/main/java/org/mwolff/manban/card/application/EpicService.java"],
   "src/test/java/org/mwolff/manban/card/VorhabenArchivIT.java": ["src/main/java/org/mwolff/manban/card/application/VorhabenArchivierung.java"],
+  "src/test/java/org/mwolff/manban/card/VorhabenMassenzuordnungSzenarienIT.java": ["src/main/java/org/mwolff/manban/card/web/EpicController.java", "src/main/java/org/mwolff/manban/card/application/VorhabenMassenzuordnung.java"],
   "src/test/java/org/mwolff/manban/card/web/BoardCardBatchIT.java": ["src/main/java/org/mwolff/manban/card/web/CardController.java", "src/main/java/org/mwolff/manban/card/application/CardService.java"],
   "src/test/java/org/mwolff/manban/CardLabelAtomicityIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/JdbcCardLabelRepository.java"],
   "src/test/java/org/mwolff/manban/CardNumberAndPositionConcurrencyIT.java": ["src/main/java/org/mwolff/manban/card/application/CardNumbers.java", "src/main/java/org/mwolff/manban/card/application/CardService.java"],

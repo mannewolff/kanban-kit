@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.card.application.CardView;
 import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.EpicService.EpicView;
+import org.mwolff.manban.card.application.VorhabenMassenzuordnung;
 import org.mwolff.manban.card.domain.CardType;
 
 /**
@@ -100,5 +101,18 @@ class EpicControllerTest {
 
     // Then
     assertThat(result).isSameAs(view);
+  }
+
+  /** Die Massenzuordnung reicht Auswahl und Ziel unverändert durch und bildet das Ergebnis ab. */
+  @Test
+  void bulkParent_delegiertUndBildetErgebnisAb() {
+    when(service.assignParentBulk(3L, List.of(8L, 9L, 10L), 640L))
+        .thenReturn(new VorhabenMassenzuordnung.Ergebnis(List.of(8L, 10L), 1, 1));
+
+    EpicController.BulkParentResponse result =
+        controller.bulkParent(3L, new EpicController.BulkParentRequest(List.of(8L, 9L, 10L), 640L));
+
+    assertThat(result).isEqualTo(new EpicController.BulkParentResponse(List.of(8L, 10L), 1, 1));
+    verify(service).assignParentBulk(3L, List.of(8L, 9L, 10L), 640L);
   }
 }
