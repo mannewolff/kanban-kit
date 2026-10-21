@@ -755,6 +755,10 @@ const zurEinlieferung = (run: NightRun & { mode: NightRunServerMode }): NightRun
     ...alsVerbrauch(item.kennzahlen?.kostenUsd),
     // Die Angaben eines festgefahrenen Pakets (Issue #1552); ohne sie kein leerer Schluessel.
     ...(item.stuck === undefined ? {} : { stuck: item.stuck }),
+    // Die Angaben einer gleichzeitigen Nacht (Issue #1878), flach wie in der Meldung des Kits.
+    ...(item.concurrent === undefined ? {} : { concurrent: item.concurrent }),
+    ...(item.checkWaitMs === undefined ? {} : { checkWaitMs: item.checkWaitMs }),
+    ...(item.deferredAtMerge === undefined ? {} : { deferredAtMerge: item.deferredAtMerge }),
   })),
 })
 

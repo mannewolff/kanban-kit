@@ -1598,3 +1598,92 @@ describe('parseNightRunErgebnisstand — Randlagen (Issue #1560)', () => {
     expect(ergebnis.wort).toBe('erfunden')
   })
 })
+
+/**
+ * Die drei Angaben einer gleichzeitigen Nacht (Issue #1878, Plan #1876 E9): Der Handweg fuellt sie
+ * nach der Regel von `nachtlaufGleichzeitig` in `kit/board/melder.mjs` auf — nur bei
+ * `concurrentPackages` > 1, dann an **jedem** Paket. Eine eigene Pruefung gibt es hier nicht.
+ */
+describe('parseNightRunErgebnisstand — Gleichzeitigkeit (Issue #1878)', () => {
+  const ERFOLG = { ausgang: 'erfolg', pruefung: { id: '100', zustand: 'geprueft' } }
+  const gleichzeitig = (felder: Record<string, unknown>, plaetze: unknown = 2): NightRunItem =>
+    einziges(mitEinheit({ ...ERFOLG, ...felder }, { concurrentPackages: plaetze }))
+  const FELDER = ['concurrent', 'checkWaitMs', 'deferredAtMerge'] as const
+  const gefuehrt = (item: NightRunItem): string[] => FELDER.filter((feld) => feld in item)
+
+  it('fuellt bei zwei Plaetzen alle drei Angaben aus der Einheit auf', () => {
+    const item = gleichzeitig({ gleichzeitig: true, pruefWartezeitMs: 776_000, zusammenfuehrung: 'zurueckgestellt' })
+    expect(item).toMatchObject({ concurrent: true, checkWaitMs: 776_000, deferredAtMerge: true })
+  })
+
+  it('fuellt bei einem Platz nichts auf', () => {
+    expect(gefuehrt(gleichzeitig({ gleichzeitig: true, pruefWartezeitMs: 5000, zusammenfuehrung: 'zurueckgestellt' }, 1))).toEqual([])
+  })
+
+  it('fuellt ohne das Feld concurrentPackages nichts auf', () => {
+    const item = einziges(mitEinheit({ ...ERFOLG, gleichzeitig: true, pruefWartezeitMs: 5000 }))
+    expect(gefuehrt(item)).toEqual([])
+  })
+
+  it.each([[2.5], ['2'], [null], [0]])('fuellt bei concurrentPackages %s nichts auf', (plaetze) => {
+    expect(gefuehrt(gleichzeitig({ gleichzeitig: true }, plaetze))).toEqual([])
+  })
+
+  it.each([
+    ['uebernommen', false],
+    ['ausstehend', false],
+    ['zurueckgestellt', true],
+  ])('deutet die Zusammenfuehrung %s als deferredAtMerge %s', (zusammenfuehrung, verschoben) => {
+    expect(gleichzeitig({ gleichzeitig: true, zusammenfuehrung }).deferredAtMerge).toBe(verschoben)
+  })
+
+  it('laesst checkWaitMs bei pruefWartezeitMs null weg', () => {
+    const item = gleichzeitig({ gleichzeitig: true, pruefWartezeitMs: null })
+    expect(gefuehrt(item)).toEqual(['concurrent', 'deferredAtMerge'])
+  })
+
+  it('reicht eine endliche, auch negative Wartezeit unveraendert durch — der Server urteilt (E9)', () => {
+    expect(gleichzeitig({ gleichzeitig: true, pruefWartezeitMs: -5 }).checkWaitMs).toBe(-5)
+    expect(gleichzeitig({ gleichzeitig: true, pruefWartezeitMs: 0 }).checkWaitMs).toBe(0)
+  })
+
+  it('wertet nur ein wahres gleichzeitig als concurrent', () => {
+    expect(gleichzeitig({ gleichzeitig: 'true' }).concurrent).toBe(false)
+  })
+
+  /**
+   * K1: Dieselbe Nacht sieht auf beiden Wegen gleich aus. Die erwarteten Felder sind die, die
+   * `nachtlaufMeldung` des Kits fuer genau diesen Stand erzeugt — die uebergangene Einheit traegt
+   * keines der drei Felder in der Datei und in der Meldung `false` bei beiden Wahrheitswerten.
+   */
+  it('erzeugt bei zwei Plaetzen genau die Felder der Kit-Meldung (K1)', () => {
+    const nacht = lauf(
+      stand({
+        concurrentPackages: 2,
+        einheiten: [
+          einheit({
+            id: '722',
+            ...ERFOLG,
+            gleichzeitig: true,
+            pruefWartezeitMs: 776_000,
+            zusammenfuehrung: 'uebernommen',
+          }),
+          einheit({ id: '723', ...ERFOLG, gleichzeitig: true, zusammenfuehrung: 'zurueckgestellt' }),
+          einheit({ id: '724', ausgang: 'uebersprungen', grund: 'Abhaengigkeit offen' }),
+        ],
+      }),
+    )
+    const angaben = nacht.items.map((item) =>
+      Object.fromEntries(FELDER.filter((feld) => feld in item).map((feld) => [feld, item[feld]])),
+    )
+    expect(angaben).toEqual([
+      { concurrent: true, checkWaitMs: 776_000, deferredAtMerge: false },
+      { concurrent: true, deferredAtMerge: true },
+      { concurrent: false, deferredAtMerge: false },
+    ])
+  })
+
+  it('deutet eine aeltere Datei ohne die Angaben unveraendert', () => {
+    expect(lauf(JSON.stringify(echterLauf)).items.flatMap(gefuehrt)).toEqual([])
+  })
+})

@@ -325,6 +325,18 @@ export function paketDauerBeschriftung(ms: number | null, sprache: Sprache = 'de
   return h > 0 ? t.DAUER_STUNDEN(h, m, s) : t.DAUER_MINUTEN(m, s)
 }
 
+/**
+ * Die Wartezeit eines Pakets auf einen freien Platz für seinen Prüflauf (Issue #1878, Plan #1876
+ * E15): „12 min 56 s", ab einer Stunde „1 h 2 min 10 s", eine gemeldete 0 als „0 min 0 s". Ohne
+ * Präfix wie {@link paketDauerBeschriftung} und sekundengenau statt {@link laufDauer}: Sonst wäre
+ * eine gemeldete 0 von 25 Sekunden nicht zu unterscheiden.
+ */
+export function wartezeit(ms: number, sprache: Sprache = 'de'): string {
+  const t = woerterbuch(sprache).GLEICHZEITIGKEIT
+  const { h, m, s } = paketDauerTeile(ms)
+  return h > 0 ? t.WARTEZEIT_STUNDEN(h, m, s) : t.WARTEZEIT_MINUTEN(m, s)
+}
+
 /** Dauer eines Laufs als „4 h 12 min" bzw. „12 min". */
 export function laufDauer(ms: number, sprache: Sprache = 'de'): string {
   const t = woerterbuch(sprache).LEITSTAND_RECHNUNG

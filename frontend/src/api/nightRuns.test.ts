@@ -103,6 +103,24 @@ describe('nightRunsApi', () => {
     })
   })
 
+  it('submit traegt die drei Angaben einer gleichzeitigen Nacht flach am Paket mit (Issue #1878)', async () => {
+    const gleichzeitig: NightRunSubmission = {
+      ...lauf,
+      items: [
+        { cardNumber: 722, title: 'Gleichzeitig', state: 'GREEN', concurrent: true, checkWaitMs: 776_000, deferredAtMerge: true },
+        { cardNumber: 723, title: 'Uebergangen', state: 'GREY', concurrent: false, deferredAtMerge: false },
+      ],
+    }
+    const f = spyFetch('[]')
+
+    await nightRunsApi.submit(4, [gleichzeitig])
+
+    const gesendet = JSON.parse(String(lastCall(f).body)) as { runs: NightRunSubmission[] }
+    expect(gesendet.runs[0].items[0]).toMatchObject({ concurrent: true, checkWaitMs: 776_000, deferredAtMerge: true })
+    expect(gesendet.runs[0].items[1]).toMatchObject({ concurrent: false, deferredAtMerge: false })
+    expect(gesendet.runs[0].items[1]).not.toHaveProperty('checkWaitMs')
+  })
+
   it('list liefert Angaben und geschaetzte gesparte Zeit eines festgefahrenen Pakets (Issue #1551)', async () => {
     const stuck = { check: 'mvn verify', error: null, attempts: 3, sessionLimitMs: 3_600_000, sessionId: null }
     spyFetch(

@@ -156,6 +156,15 @@ interface RohEinheit {
    * uebernommen werden und eine fremde Datei nichts anderes einschleusen darf.
    */
   festgefahren?: RohFestgefahren
+  /**
+   * Die Angaben der gleichzeitigen Umsetzung (Issue #1878, Plan #1876 E9) — das Kit fuehrt sie nur
+   * an Einheiten, die durch sie liefen. `unknown`: Uebernommen wird allein, was die Regel von
+   * `nachtlaufGleichzeitig` im Kit annimmt.
+   */
+  gleichzeitig?: unknown
+  pruefWartezeitMs?: unknown
+  /** `uebernommen`, `ausstehend` oder `zurueckgestellt`; nur das letzte heisst verschoben. */
+  zusammenfuehrung?: unknown
 }
 
 /** Der Block `einheit.festgefahren`, additiv in Fassung 1 (Issue #1551). */
@@ -216,6 +225,8 @@ interface RohLauf {
    * Datei darf dort nichts anderes als eine Zeichenkette einschleusen.
    */
   kennzahlenHinweis?: unknown
+  /** Die Zahl der Plaetze, mit denen die Nacht lief (Issue #1878); fehlt in aelteren Staenden. */
+  concurrentPackages?: unknown
 }
 
 /** Zustand und Fehlerklasse eines Arbeitspakets — der Kern der Deutung. */
@@ -876,6 +887,25 @@ function stuckDerEinheit(e: RohEinheit): NightRunStuck | undefined {
 }
 
 /**
+ * Die Angaben einer gleichzeitigen Nacht — Wort fuer Wort die Regel von `nachtlaufGleichzeitig` in
+ * `kit/board/melder.mjs` (Plan #1876, E9): ein wahres `gleichzeitig`, `zurueckgestellt` als
+ * verschobene Uebernahme und die Wartezeit nur als endliche Zahl. Eine eigene Pruefung gibt es hier
+ * nicht; eine negative Zahl geht durch, und der Server urteilt wie die Anzeige (E3, E10).
+ */
+function gleichzeitigkeitDerEinheit(e: RohEinheit): Pick<NightRunItem, 'concurrent' | 'checkWaitMs' | 'deferredAtMerge'> {
+  const wartezeit = e.pruefWartezeitMs
+  return {
+    concurrent: e.gleichzeitig === true,
+    ...(typeof wartezeit === 'number' && Number.isFinite(wartezeit) ? { checkWaitMs: wartezeit } : {}),
+    deferredAtMerge: e.zusammenfuehrung === 'zurueckgestellt',
+  }
+}
+
+/** Ob die Nacht mit mehr als einem Platz lief — dieselbe Bedingung wie in `nachtlaufMeldung`. */
+const mitMehrerenPlaetzen = (l: RohLauf): boolean =>
+  Number.isInteger(l.concurrentPackages) && (l.concurrentPackages as number) > 1
+
+/**
  * Erfolg und Fehlschlag: Ihre Farbe haengt am Pruefblock. Jedes fehlende Glied der Kette gibt
  * `null` — ein Ausgang aus einer Runde ohne Pruefblock ist unvollstaendig, die Farbe haengt am
  * Nachweis, und ohne ihn bliebe nur Raten.
@@ -906,7 +936,7 @@ function deuteEinheit(e: RohEinheit, modus: NightRunMode): (Farbe & { excerpt: s
 }
 
 /** Eine Einheit in ein Arbeitspaket der Auswertung uebersetzen. */
-function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRunItem | null {
+function baueItem(e: RohEinheit, position: number, modus: NightRunMode, gleichzeitig: boolean): NightRunItem | null {
   const deutung = deuteEinheit(e, modus)
   if (!deutung) return null
   const dauer = dauerDerEinheit(e)
@@ -933,6 +963,8 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode): NightRu
     // Einheit, noch bevor sie erstmals geschrieben wird (siehe {@link RohEinheit}).
     ausgang: e.ausgang,
     ...(stuck === undefined ? {} : { stuck }),
+    // An jedem Paket einer Nacht mit mehreren Plaetzen, sonst an keinem (Plan #1876, E9).
+    ...(gleichzeitig ? gleichzeitigkeitDerEinheit(e) : {}),
   }
 }
 
@@ -1004,9 +1036,10 @@ export function parseNightRunErgebnisstand(text: string): NightRunErgebnisstandR
   }
 
   const einheiten = lauf.einheiten as RohEinheit[]
+  const gleichzeitig = mitMehrerenPlaetzen(lauf)
   const items: NightRunItem[] = []
   for (const [position, e] of einheiten.entries()) {
-    const item = baueItem(e, position, modus)
+    const item = baueItem(e, position, modus, gleichzeitig)
     if (!item) return abgelehnt(lauf, 'nicht-unterstuetzt', e.ausgang)
     items.push(item)
   }

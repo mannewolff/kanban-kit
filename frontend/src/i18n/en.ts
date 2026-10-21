@@ -902,6 +902,18 @@ export const en: Woerterbuch = {
     GESPART: 'estimated time saved',
   },
 
+  GLEICHZEITIGKEIT: {
+    GLEICHZEITIG: 'Concurrent',
+    WARTEZEIT: 'Wait for a check slot',
+    VERSCHOBEN: 'Merge deferred',
+    JA: 'yes',
+    NEIN: 'no',
+    MARKE_GLEICHZEITIG: 'concurrent',
+    MARKE_VERSCHOBEN: 'merge deferred',
+    WARTEZEIT_STUNDEN: (h, m, s) => `${h} h ${m} min ${s} s`,
+    WARTEZEIT_MINUTEN: (m, s) => `${m} min ${s} s`,
+  },
+
   LEITSTAND_BAUSTEINE: {
     KEINE_DATENBASIS: 'no data',
     NICHT_GEMESSEN: 'not measured',

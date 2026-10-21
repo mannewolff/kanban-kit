@@ -957,6 +957,22 @@ export const de = {
     GESPART: 'geschätzte gesparte Zeit',
   },
 
+  /**
+   * Angaben einer gleichzeitigen Nacht, `lib/gleichzeitigkeit.ts` (Issue #1878, Plan #1876 E16).
+   * „nicht gemeldet" steht in `NACHTLAUF_UEBERGABE.NICHT_GEMELDET`, nicht hier.
+   */
+  GLEICHZEITIGKEIT: {
+    GLEICHZEITIG: 'Gleichzeitig',
+    WARTEZEIT: 'Wartezeit auf die Prüfung',
+    VERSCHOBEN: 'Übernahme verschoben',
+    JA: 'ja',
+    NEIN: 'nein',
+    MARKE_GLEICHZEITIG: 'gleichzeitig',
+    MARKE_VERSCHOBEN: 'Übernahme verschoben',
+    WARTEZEIT_STUNDEN: (h: number, m: number, s: number) => `${h} h ${m} min ${s} s`,
+    WARTEZEIT_MINUTEN: (m: number, s: number) => `${m} min ${s} s`,
+  },
+
   /** Bausteine des Leitstands (Issue #1656). */
   LEITSTAND_BAUSTEINE: {
     KEINE_DATENBASIS: 'keine Datenbasis',

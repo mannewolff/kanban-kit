@@ -208,6 +208,15 @@ export interface NightRunItem {
    * die Einheit keinen oder einen leeren Block traegt.
    */
   stuck?: NightRunStuck
+  /**
+   * Die drei Angaben einer gleichzeitigen Nacht in den Namen des Servers (Issue #1878, Plan #1876
+   * E9) — nur aus einem Ergebnisstand mit `concurrentPackages` > 1, dort an jedem Paket. Gedeutet
+   * wird erst in `lib/gleichzeitigkeit.ts`; eine endliche negative Wartezeit geht wie in der
+   * Meldung des Kits unveraendert durch.
+   */
+  concurrent?: boolean
+  checkWaitMs?: number
+  deferredAtMerge?: boolean
 }
 
 /**
