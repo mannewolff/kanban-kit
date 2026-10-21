@@ -23,24 +23,25 @@
 ARG AGE_VERSION=1.3.2
 ARG RCLONE_VERSION=1.75.2
 
-FROM debian:bookworm-20260918-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS werkzeuge
+# Die Werkzeugstufe baut age und rclone selbst aus den Quellen, statt die Release-Binaerdateien zu
+# laden (Issue #1875): Deren Go-Standardbibliothek traegt Luecken (zuletzt CVE-2026-111943), und die
+# Projekte liefern keine neu gebaute Fassung nach. Gebaut wird genau die festgehaltene Fassung des
+# Moduls — gleicher Quelltext, gleiches Verschluesselungsformat, nur das Go darunter ist neuer. Den
+# Inhalt jedes geladenen Moduls haelt die Pruefsummen-Datenbank von Go (GOSUMDB) fest;
+# GOTOOLCHAIN=local verhindert, dass `go` still eine andere Toolchain nachlaedt. Wer eine Go-Luecke
+# schliesst, hebt das Abbild dieser Stufe; wer ein Werkzeug hebt, die ARG-Zeilen oben.
+FROM golang:1.27.3-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132 AS werkzeuge
 ARG AGE_VERSION
 ARG RCLONE_VERSION
-# TARGETARCH setzt BuildKit selbst (amd64 auf dem Server, arm64 auf einem Apple-Rechner). Fest
-# verdrahtetes `amd64` liesse das Abbild auf dem Entwicklerrechner gar nicht erst entstehen.
-ARG TARGETARCH
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl unzip \
-    && rm -rf /var/lib/apt/lists/*
-WORKDIR /bau
-RUN curl -fsSL -o age.tar.gz \
-        "https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-${TARGETARCH}.tar.gz" \
-    && tar -xzf age.tar.gz \
-    && install -m 0755 age/age age/age-keygen /usr/local/bin/
-RUN curl -fsSL -o rclone.zip \
-        "https://downloads.rclone.org/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}.zip" \
-    && unzip -q rclone.zip \
-    && install -m 0755 "rclone-v${RCLONE_VERSION}-linux-${TARGETARCH}/rclone" /usr/local/bin/rclone
+# Statisch gebaut: Die Laufzeitstufe ist ein anderes Debian, und die Werkzeuge brauchen kein cgo.
+# rclone bekommt seine Fassung wie im eigenen Release-Bau (Makefile) per Linker, sonst meldet es
+# `-DEV`.
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-trimpath
+RUN go install -ldflags="-s -w" \
+        "filippo.io/age/cmd/age@v${AGE_VERSION}" "filippo.io/age/cmd/age-keygen@v${AGE_VERSION}" \
+    && go install -ldflags="-s -w -X github.com/rclone/rclone/fs.Version=v${RCLONE_VERSION}" \
+        "github.com/rclone/rclone@v${RCLONE_VERSION}" \
+    && install -m 0755 /go/bin/age /go/bin/age-keygen /go/bin/rclone /usr/local/bin/
 
 FROM postgres:16.15-bookworm@sha256:efedf3595f1d6f415c08568ba171029bf54052e754cc9f030e3f2412b21f3d67
 
