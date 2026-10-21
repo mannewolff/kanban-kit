@@ -58,7 +58,6 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/components/nachtlauf/NachtlaufFortschritt.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufFuss.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufKartenchips.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  { file: 'src/components/nachtlauf/NachtlaufLaufInstrumente.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufLaufPlatte.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufStufenband.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufVorgangszeile.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },

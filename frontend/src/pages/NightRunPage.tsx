@@ -59,10 +59,7 @@ import { NachtlaufBefund } from '../components/nachtlauf/NachtlaufBefund'
 import { NachtlaufFortschritt } from '../components/nachtlauf/NachtlaufFortschritt'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
 import { RunnerJetzt } from '../components/nachtlauf/RunnerJetzt'
-import {
-  NachtlaufLaufInstrumente,
-  type Kostenaufteilung,
-} from '../components/nachtlauf/NachtlaufLaufInstrumente'
+import { NachtlaufLage, type Kostenaufteilung } from '../components/nachtlauf/NachtlaufLage'
 import { LaufMarke, NachtlaufLaufPlatte } from '../components/nachtlauf/NachtlaufLaufPlatte'
 import { LaufArtSymbol, type LaufArt } from '../components/leitstand/LaufArtSymbol'
 import { NachtlaufVorgangszeile } from '../components/nachtlauf/NachtlaufVorgangszeile'
@@ -121,6 +118,7 @@ import { BUDGETFELDER } from '../lib/kitWortformen'
 import {
   laeufeZusammenfuehren,
   vorwegZaehlung,
+  zustandssatz,
   type FortschrittArt,
 } from '../lib/laufFortschritt'
 import { readTextFile } from '../lib/readTextFile'
@@ -665,7 +663,7 @@ function stufenDauer(stufen: Bandstufen): number | undefined {
  * <p><b>Planung</b> sind die Kosten der Arbeitsschritte der Kettenvorgänge, <b>Umsetzung</b> der
  * Rest der Laufkosten. Der Rest und nicht die Summe der Paketzeilen: Die Laufsumme liegt über der
  * Summe der Vorgänge, wo Sitzungen keinem Vorgang zuzuordnen waren (siehe
- * `NachtlaufLaufInstrumente`) — so ergeben beide Anteile zusammen immer das Gesamt.
+ * `NachtlaufLage`) — so ergeben beide Anteile zusammen immer das Gesamt.
  *
  * <p>`undefined` am Lauf, der keine eingelieferte Kette ist. Ein einzelner Anteil fehlt, wo er sich
  * nicht bilden lässt — kein Schritt meldet Kosten, oder der Lauf meldet kein Gesamt.
@@ -2182,15 +2180,14 @@ function fussangaben(lauf: AnzeigeLauf, stand: NightRun | undefined, sprache: Sp
       label: t.FUSS.TEUERSTER,
       wert: stand === undefined ? t.NICHT_ANGEGEBEN : teuersterVorgang(stand.items, sprache),
     },
-    { label: t.FUSS.HERKUNFT_STAND, wert: stand === undefined ? t.NICHT_ANGEGEBEN : t.ERGEBNISSTAND },
   ]
 }
 
 /**
  * Die Angaben, die allein der Ergebnisstand eines Ketten-Laufs hergibt — bis #988 die
  * Kennzahlenreihe der Übersicht (#866). Die Werte sind dieselben; nur ihr Ort ist neu: Über den
- * Vorgängen stehen seit #988 die sechs Instrumente der Vorlage, und die tragen den Verbrauch, nicht
- * die Auskünfte des Stands.
+ * Vorgängen steht seit Plan #1882 die Lage des Runs (vorher die Instrumente aus #988), und die
+ * trägt den Verbrauch, nicht die Auskünfte des Stands.
  *
  * <p>Leer ohne Stand: Kosten und Zeiten der Arbeitsschritte verlassen den Browser nie (Plan #718,
  * A1), der Server bewahrt sie nicht auf. Eine Reihe aus lauter Fehlanzeigen wäre dieselbe Wand, die
@@ -2326,25 +2323,45 @@ function einlieferungsangaben(lauf: AnzeigeLauf, sprache: Sprache): string[] {
 }
 
 /**
- * Die Marken rechts im Kopf eines Laufs (Vorlage `docs/mockup-nachtlauf-lauf.html` Z. 386–389):
- * Zustand, Kosten und Herkunft.
+ * Die Zeile „Einlieferung“ im Fuß eines Laufs (Plan #1882 E10) — bis dahin die Herkunftsmarken
+ * im Kopf, mit denselben Texten: woher der Stand kam, wann der Lauf eingeliefert und zuletzt
+ * gemeldet wurde und ob ihn diese Sitzung neu angelegt hat.
  *
- * <p><b>Die Kosten stehen nur am zugeklappten Lauf.</b> Aufgeklappt trägt sie das Instrument
- * „Kosten“, und zweimal dieselbe Zahl im Blick ließe den Leser nach einem Unterschied suchen, den
- * es nicht gibt — so führt es die Vorlage (Z. 452 gegen Z. 393).
+ * <p>Die Herkunft wird **hier** aus dem Zwischenspeicher gelesen, nicht in `AnzeigeLauf`
+ * mitgeführt: Der Server kennt die Unterscheidung nicht, ein Feld am Anzeigemodell müsste also in
+ * jedem Ladepfad einzeln gesetzt werden — und der nächste vergessene Pfad zeigte still die falsche
+ * Herkunft (AK 9, Fall 3).
+ */
+function einlieferung(
+  lauf: AnzeigeLauf,
+  ergebnis: boolean | undefined,
+  ausErgebnisstand: ReadonlySet<string>,
+  sprache: Sprache,
+): string[] {
+  const t = seite(sprache)
+  return [
+    ausErgebnisstand.has(lauf.startedAt) ? t.ERGEBNISSTAND : t.HERKUNFT_UNBEKANNT,
+    ...einlieferungsangaben(lauf, sprache),
+    ...(ergebnis === undefined ? [] : [ergebnis ? t.NEU_ANGELEGT : t.LAG_SCHON_VOR]),
+  ]
+}
+
+/**
+ * Die Marken rechts im Kopf eines Laufs (Vorlage `docs/entwurf-lauf-ansicht.html` Z. 487–489):
+ * Zustand und, zugeklappt, Kosten. Die Herkunft steht seit Plan #1882 (E10) im Fuß.
+ *
+ * <p><b>Die Kosten stehen nur am zugeklappten Lauf.</b> Aufgeklappt trägt sie die Lage des Runs,
+ * und zweimal dieselbe Zahl im Blick ließe den Leser nach einem Unterschied suchen, den es nicht
+ * gibt.
  */
 function Kopfmarken({
   lauf,
   melder,
-  ergebnis,
-  ausErgebnisstand,
   offen,
 }: Readonly<{
   lauf: AnzeigeLauf
   /** Der Melder des ganzen Laufs — die Marke „ohne Arbeit" trägt ihn (Issue #1121). */
   melder: Melder
-  ergebnis: boolean | undefined
-  ausErgebnisstand: ReadonlySet<string>
   offen: boolean
 }>) {
   const { sprache } = useSprache()
@@ -2390,17 +2407,6 @@ function Kopfmarken({
         </LaufMarke>
       )}
       {!offen && kosten !== null && <LaufMarke testId="lauf-kosten">{kosten}</LaufMarke>}
-      {/* Die Herkunft wird **hier** aus dem Zwischenspeicher gelesen, nicht in `AnzeigeLauf`
-          mitgeführt: Der Server kennt die Unterscheidung nicht, ein Feld am Anzeigemodell müsste
-          also in jedem Ladepfad einzeln gesetzt werden — und der nächste vergessene Pfad zeigte
-          still die falsche Herkunft (AK 9, Fall 3). */}
-      <LaufMarke testId="lauf-stand">
-        {ausErgebnisstand.has(lauf.startedAt) ? t.ERGEBNISSTAND : t.HERKUNFT_UNBEKANNT}
-      </LaufMarke>
-      {einlieferungsangaben(lauf, sprache).map((angabe) => (
-        <LaufMarke key={angabe}>{angabe}</LaufMarke>
-      ))}
-      {ergebnis !== undefined && <LaufMarke>{ergebnis ? t.NEU_ANGELEGT : t.LAG_SCHON_VOR}</LaufMarke>}
     </>
   )
 }
@@ -2759,7 +2765,7 @@ function Vorgangszeile({
 }
 
 /**
- * Ein Lauf als aufklappbare Platte (#988) — Kopf, sechs Instrumente, die Vorgänge als kompakte
+ * Ein Lauf als aufklappbare Platte (#988) — Kopf, Lage des Runs (Plan #1882), die Vorgänge als kompakte
  * Zeilen und die Fußzeile. Die Kette wird erst beim Aufklappen geladen (Plan #718, A8).
  */
 function LaufPanel({
@@ -2859,6 +2865,12 @@ function LaufPanel({
   // Den Grund bekommt er seit Issue #1186 nicht mehr: Er steht im Befund als `NO_WORK`, und der
   // eben im Browser geparste Lauf trägt ohnehin keinen.
   const melder = laufMelder({ complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund })
+  // Ein laufender Run ohne Fortschrittsart (Prüf- und Erzeugungs-Lauf) hat keinen Satz; am
+  // abgeschlossenen spricht allein der Befund, die Art liest `zustandssatz` dort nicht.
+  const satz =
+    laeuft && art === null
+      ? null
+      : zustandssatz(geladen, art ?? 'KETTE', laeuft, lauf.befund, pakete, woerterbuch(sprache).NACHTLAUF_LAGE)
 
   return (
     <NachtlaufLaufPlatte
@@ -2874,20 +2886,14 @@ function LaufPanel({
       offen={offen}
       onUmschalten={umschalten}
       marken={
-        <Kopfmarken
-          lauf={lauf}
-          melder={melder}
-          ergebnis={ergebnis}
-          ausErgebnisstand={ausErgebnisstand}
-          offen={offen}
-        />
+        <Kopfmarken lauf={lauf} melder={melder} offen={offen} />
       }
     >
-      {/* Die sechs Instrumente ersetzen die Textzeile der Laufsumme (Entscheidung Manne
-          2026-09-17). Der Verbrauch kommt aus dem Lauf selbst, nicht aus seinen Vorgängen. */}
-      <NachtlaufLaufInstrumente
+      {/* Die Lage des Runs an der Stelle der früheren sechs Instrumente (Plan #1882 E3, E5). Der
+          Verbrauch kommt aus dem Lauf selbst, nicht aus seinen Vorgängen. */}
+      <NachtlaufLage
+        satz={satz}
         verbrauch={lauf.verbrauch}
-        dauerMs={lauf.durationMs}
         pakete={pakete}
         aufteilung={kostenaufteilung(lauf)}
         // Dieselbe Bedingung wie `pulsiert`: Nur ein laufender Lauf zeigt, wie lange er schon
@@ -2972,7 +2978,11 @@ function LaufPanel({
       </Box>
 
       <Box sx={{ borderTop: `1px solid ${RAND}` }}>
-        <NachtlaufFuss angaben={fussangaben(lauf, stand, sprache)} testId="uebersicht-fuss" />
+        <NachtlaufFuss
+          angaben={fussangaben(lauf, stand, sprache)}
+          einlieferung={einlieferung(lauf, ergebnis, ausErgebnisstand, sprache)}
+          testId="uebersicht-fuss"
+        />
       </Box>
     </NachtlaufLaufPlatte>
   )

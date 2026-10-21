@@ -1424,16 +1424,18 @@ export const de = {
     FORT: (nummer: string) => `#${nummer} nicht mehr vorhanden`,
   },
 
-  /** Instrumente eines Laufs, `NachtlaufLaufInstrumente` (Issue #1658). */
+  /** Lage eines Runs, `NachtlaufLage` (Issue #1658, Plan #1882 E5). */
   NACHTLAUF_INSTRUMENTE: {
+    LAGE: 'Lage des Runs',
     BETRAG: (wert: string) => `${wert} $`,
     KOSTEN: 'Kosten',
     AUFTEILUNG: (planung: string, umsetzung: string) => `Planung ${planung} · Umsetzung ${umsetzung}`,
     EINGABE: 'Eingabe',
     AUSGABE: 'Ausgabe',
     CACHE_QUOTE: 'Cache-Quote',
+    ANGABE: (titel: string, wert: string) => `${titel} ${wert}`,
+    QUOTE: (prozent: number) => `${prozent} %`,
     NICHT_BERECHENBAR: 'nicht berechenbar',
-    DAUER: 'Dauer',
     LAEUFT_SEIT: (wert: string, einheit: string) => `läuft seit ${wert} ${einheit}`,
     PAKETE: 'Pakete',
     GRUEN: 'grün',
@@ -1562,9 +1564,9 @@ export const de = {
       KOSTENBUDGET: 'Kostenbudget je Kette',
       HOECHSTE_KOSTEN: 'Höchste Kosten eines Vorgangs',
       HERKUNFT_BUDGETS: 'Herkunft der Budgets',
+      EINLIEFERUNG: 'Einlieferung',
       ERGEBNIS: 'Ergebnis der Schicht',
       TEUERSTER: 'Teuerster Vorgang',
-      HERKUNFT_STAND: 'Herkunft des Stands',
       KETTEN_DURCHGELAUFEN: 'Ketten durchgelaufen',
       KARTEN_ENTSTANDEN: 'Karten entstanden',
       LAUFZEIT_STUFEN: 'Laufzeit über alle Stufen',
