@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { KitNamenZustand } from '../api/kitNamen'
+import type { Epic } from '../api/epics'
 import type { Label } from '../api/labels'
 import { de } from '../i18n/de'
 import { TabletQuerProvider } from '../lib/tabletQuer'
@@ -23,6 +24,19 @@ const label = (id: number, name: string): Label => ({
   countOnEpicTile: false,
 })
 
+const epic = (id: number, title: string): Epic => ({
+  id,
+  number: id,
+  title,
+  description: null,
+  shortcode: null,
+  done: 0,
+  total: 0,
+  memberNumbers: [],
+  rootNumbers: [],
+  requirementCardNumber: null,
+})
+
 /** Rendert die Leiste und gibt die Rückrufe zurück, damit Tests sie prüfen können. */
 function zeigeLeiste(over: Partial<Parameters<typeof BulkActionBar>[0]> = {}) {
   const eigenschaften = {
@@ -31,6 +45,9 @@ function zeigeLeiste(over: Partial<Parameters<typeof BulkActionBar>[0]> = {}) {
     labelOptions: [] as LabelOption[],
     labelsDisabledReason: null,
     onToggleLabel: vi.fn(),
+    epicOptions: [] as { epic: Epic; hidden: boolean }[],
+    epicDisabledReason: null,
+    onChooseEpic: vi.fn(),
     onArchive: vi.fn(),
     onMove: vi.fn(),
     onDelete: vi.fn(),
@@ -196,6 +213,77 @@ describe('BulkActionBar', () => {
   })
 })
 
+describe('BulkActionBar: Vorhaben zuordnen (Plan #1865)', () => {
+  const SPERRGRUND = 'das Board hat kein wählbares Vorhaben'
+  const optionen = [
+    { epic: epic(5, 'Nice to have'), hidden: true },
+    { epic: epic(3, 'Suche'), hidden: false },
+  ]
+
+  it('steht direkt nach Labels und vor Verschieben', () => {
+    zeigeLeiste()
+
+    const namen = screen.getAllByRole('button').map((taste) => taste.textContent)
+    const labels = namen.indexOf('Labels')
+    expect(namen[labels + 1]).toBe('Vorhaben zuordnen')
+    expect(namen[labels + 2]).toBe('Verschieben')
+  })
+
+  it('öffnet ein Menü mit allen Vorhaben in der übergebenen Reihenfolge, ausgeblendete gekennzeichnet', () => {
+    zeigeLeiste({ epicOptions: optionen })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vorhaben zuordnen' }))
+
+    const punkte = screen.getAllByRole('menuitem')
+    expect(punkte.map((punkt) => punkt.textContent)).toEqual(['Nice to have (ausgeblendet)', 'Suche'])
+    expect(punkte[0]).toHaveAccessibleName('Nice to have (ausgeblendet)')
+    expect(punkte[1]).toHaveAccessibleName('Suche')
+  })
+
+  it('schließt das Menü bei der Wahl und meldet das Vorhaben', async () => {
+    const rueckrufe = zeigeLeiste({ epicOptions: optionen })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vorhaben zuordnen' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Suche' }))
+
+    expect(rueckrufe.onChooseEpic).toHaveBeenCalledTimes(1)
+    expect(rueckrufe.onChooseEpic).toHaveBeenCalledWith(3)
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+  })
+
+  it('schließt das Vorhaben-Menü auf Escape, ohne ein Vorhaben zu melden', async () => {
+    const rueckrufe = zeigeLeiste({ epicOptions: optionen })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vorhaben zuordnen' }))
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+    expect(rueckrufe.onChooseEpic).not.toHaveBeenCalled()
+  })
+
+  it('sperrt die Taste mit dem Grund im Namen und im Tooltip, ohne Menü', async () => {
+    zeigeLeiste({ epicOptions: optionen, epicDisabledReason: SPERRGRUND })
+
+    const taste = screen.getByRole('button', { name: `Vorhaben zuordnen — ${SPERRGRUND}` })
+    expect(taste).toBeDisabled()
+    fireEvent.click(taste)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+
+    fireEvent.mouseOver(screen.getByLabelText(SPERRGRUND))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(SPERRGRUND)
+  })
+
+  it('öffnet die Erklärung der gesperrten Taste auf dem Tablet per Antippen', () => {
+    setzeMedien({ tabletQuer: true })
+    zeigeLeiste({ epicDisabledReason: SPERRGRUND })
+
+    fireEvent.click(screen.getByLabelText(SPERRGRUND))
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent(SPERRGRUND)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+})
+
 describe('BulkActionBar auf dem Tablet im Querformat (Plan #1707, E7)', () => {
   const KLAEREN = de.LABEL_ERKLAERUNG.SACHEN.KLAEREN
   const optionen: LabelOption[] = [
@@ -252,6 +340,9 @@ describe('BulkActionBar auf Englisch', () => {
         ]}
         labelsDisabledReason={null}
         onToggleLabel={vi.fn()}
+        epicOptions={[{ epic: epic(5, 'Nice to have'), hidden: true }]}
+        epicDisabledReason={null}
+        onChooseEpic={vi.fn()}
         onArchive={vi.fn()}
         onMove={vi.fn()}
         onDelete={vi.fn()}
@@ -266,7 +357,7 @@ describe('BulkActionBar auf Englisch', () => {
 
     expect(screen.getByRole('region', { name: 'Bulk actions' })).toBeInTheDocument()
     expect(screen.getByText('3 selected')).toBeInTheDocument()
-    for (const name of ['Labels', 'Move', 'Archive', 'Move to trash', 'Cancel']) {
+    for (const name of ['Labels', 'Assign epic', 'Move', 'Archive', 'Move to trash', 'Cancel']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
   })
@@ -284,5 +375,17 @@ describe('BulkActionBar auf Englisch', () => {
     zeigeEn({ labelsDisabledReason: 'The board has no labels' })
 
     expect(screen.getByRole('button', { name: 'Labels — The board has no labels' })).toBeDisabled()
+  })
+
+  it('kennzeichnet ausgeblendete Vorhaben und den Sperrgrund auf Englisch', () => {
+    zeigeEn()
+    fireEvent.click(screen.getByRole('button', { name: 'Assign epic' }))
+    expect(screen.getByRole('menuitem', { name: 'Nice to have (hidden)' })).toBeInTheDocument()
+  })
+
+  it('nennt den Sperrgrund im Namen der Vorhaben-Taste auf Englisch', () => {
+    zeigeEn({ epicDisabledReason: 'the board has no selectable epic' })
+
+    expect(screen.getByRole('button', { name: 'Assign epic — the board has no selectable epic' })).toBeDisabled()
   })
 })

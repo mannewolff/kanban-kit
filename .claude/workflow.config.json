@@ -7,7 +7,7 @@
       "areas": [
         "backend"
       ],
-      "concurrent": true
+      "upfront": true
     },
     {
       "cmd": "mvn verify",
@@ -16,7 +16,7 @@
         "doku"
       ],
       "stage": "push",
-      "concurrent": true
+      "upfront": true
     },
     {
       "cmd": "npm --prefix docs-site ci --no-audit --no-fund && npm --prefix docs-site run build",

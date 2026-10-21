@@ -225,7 +225,7 @@ test('Regel 7 im Lauf: laufen leitet den Pruefzeitpunkt aus dem injizierten jetz
 
 test('eine Ausnahme fuer ein anderes Ziel greift nicht', () => {
   const liste = ausnahmen([
-    { kennung: 'CVE-2026-1001', ziel: 'caddy:2.11.4', begruendung: 'anderes Abbild', ablauf: '2026-12-31' },
+    { kennung: 'CVE-2026-1001', ziel: 'caddy:2.11.7', begruendung: 'anderes Abbild', ablauf: '2026-12-31' },
   ]);
   const urteil = urteilen([ergebnis(ABBILD, 'abbild-befunde.json')], liste, { heute: HEUTE });
   assert.ok(texte(urteil.sperrend).some((t) => t.includes('CVE-2026-1001')));
@@ -483,7 +483,7 @@ test('Regel 12: aus der Bausteinliste nur ausgelieferte fremde Abbilder mit Prue
       referenz: 'postgres:16.15',
       gebunden: 'postgres:16.15',
     },
-    { art: 'abbild', name: 'caddy:2.11.4', referenz: 'caddy:2.11.4', verwendung: 'bau' },
+    { art: 'abbild', name: 'caddy:2.11.7', referenz: 'caddy:2.11.7', verwendung: 'bau' },
   ]);
 });
 
@@ -500,7 +500,7 @@ test('Regel 12: dazu die per Argument uebergebenen Ziele', async () => {
     [
       'abbild postgres:16.15',
       'abbild postgres:16.15 (aktuell: 16.15)',
-      'abbild caddy:2.11.4',
+      'abbild caddy:2.11.7',
       'abbild kanban-kit:pruefung',
       'abbild kanban-kit-backup:pruefung',
       'sbom target/bom.json',
@@ -607,8 +607,8 @@ test('Referenz: neuester Tag derselben Hauptlinie und Variante', () => {
 });
 
 test('Referenz: ist der eigene Tag der hoechste, ist die Referenz derselbe Tag — auch wenn die Liste ihn nicht nennt', () => {
-  assert.equal(referenzBezugsstelle('caddy:2.11.4', ['2.11.3', '2.11.4', '2.11.4-alpine', '3.0']), 'caddy:2.11.4');
-  assert.equal(referenzBezugsstelle('caddy:2.11.4', []), 'caddy:2.11.4');
+  assert.equal(referenzBezugsstelle('caddy:2.11.7', ['2.11.3', '2.11.7', '2.11.7-alpine', '3.0']), 'caddy:2.11.7');
+  assert.equal(referenzBezugsstelle('caddy:2.11.7', []), 'caddy:2.11.7');
 });
 
 test('Referenz: numerisch verglichen, nicht als Text', () => {
@@ -669,15 +669,15 @@ test('zieleBilden: fremdes Abbild mit Digest bekommt ein Referenzziel ohne Diges
   });
   assert.deepEqual(abgefragt, ['postgres:16.15']);
   assert.deepEqual(ziele.filter((z) => z.rolle === 'referenz'), [REFERENZ]);
-  assert.ok(!ziele.some((z) => z.rolle === 'referenz' && z.gebunden === 'caddy:2.11.4'));
+  assert.ok(!ziele.some((z) => z.rolle === 'referenz' && z.gebunden === 'caddy:2.11.7'));
 });
 
 test('zieleBilden: ein fremdes Abbild ohne Digest bekommt kein Referenzziel', async () => {
-  const bausteine = [{ name: 'X', art: 'abbild', bezugsstelle: 'caddy:2.11.4', pruefung: 'bezug', ausgeliefert: true }];
+  const bausteine = [{ name: 'X', art: 'abbild', bezugsstelle: 'caddy:2.11.7', pruefung: 'bezug', ausgeliefert: true }];
   const ziele = await zieleBilden(bausteine, { abbilder: [], sbom: null, sperrdateien: [], arbeitsbaum: null }, {
     tagsHolen: async () => assert.fail('keine Abfrage ohne Digest'),
   });
-  assert.deepEqual(ziele.map((z) => z.name), ['caddy:2.11.4']);
+  assert.deepEqual(ziele.map((z) => z.name), ['caddy:2.11.7']);
 });
 
 test('zieleBilden: ein Fehler beim Abfragen der Tag-Liste wird zum Referenzziel mit Fehler', async () => {

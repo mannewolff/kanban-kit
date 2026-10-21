@@ -9,7 +9,7 @@ name: SonarQube Cloud
 # Nachlauf.
 on:
   push:
-    branches: [main]
+    branches: [main, kit-pruefung]
   workflow_dispatch:
 
 jobs:

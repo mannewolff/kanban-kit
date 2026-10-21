@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import Button from '@mui/material/Button'
 import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
@@ -6,6 +6,7 @@ import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
+import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined'
 import ArchiveOutlinedIcon from '@mui/icons-material/ArchiveOutlined'
 import CheckBoxOutlineBlankOutlinedIcon from '@mui/icons-material/CheckBoxOutlineBlankOutlined'
 import CheckBoxOutlinedIcon from '@mui/icons-material/CheckBoxOutlined'
@@ -14,6 +15,7 @@ import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined
 import IndeterminateCheckBoxOutlinedIcon from '@mui/icons-material/IndeterminateCheckBoxOutlined'
 import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined'
 import type { LabelAction } from '../api/cards'
+import type { Epic } from '../api/epics'
 import type { Label } from '../api/labels'
 import { useT } from '../i18n/SpracheContext'
 import { Erklaerung } from './Erklaerung'
@@ -34,6 +36,48 @@ const ZUSTAND_SYMBOL: Record<LabelZustand, typeof CheckBoxOutlinedIcon> = {
   keine: CheckBoxOutlineBlankOutlinedIcon,
 }
 
+export interface EpicOption {
+  epic: Epic
+  /** Ob das Vorhaben für diesen Menschen auf diesem Board ausgeblendet ist. */
+  hidden: boolean
+}
+
+interface SperrbareTasteProps {
+  symbol: ReactNode
+  text: string
+  /** Grund der Sperre; `null` heißt bedienbar. */
+  sperrgrund: string | null
+  /** Zugänglicher Name der gesperrten Taste, der den Grund nennt. */
+  gesperrterName: (grund: string) => string
+  onClick: (anker: HTMLElement) => void
+}
+
+/** Eine Taste der Leiste, die gesperrt sein kann und dann ihren Grund nennt. */
+function SperrbareTaste({ symbol, text, sperrgrund, gesperrterName, onClick }: Readonly<SperrbareTasteProps>) {
+  const taste = (
+    <Button
+      size="small"
+      startIcon={symbol}
+      disabled={sperrgrund !== null}
+      // Der Grund steht im Namen der Taste, nicht nur im Tooltip: Ein gesperrter Button ist für
+      // Tastatur und Screenreader nicht erreichbar, der Tooltip käme dort also nie an.
+      aria-label={sperrgrund === null ? undefined : gesperrterName(sperrgrund)}
+      onClick={(e) => onClick(e.currentTarget)}
+    >
+      {text}
+    </Button>
+  )
+  if (sperrgrund === null) return taste
+  // Ein deaktivierter Button meldet keine Mausereignisse; ohne den span-Wrapper bliebe der Hinweis,
+  // warum er gesperrt ist, auch am Zeigegerät unsichtbar. Auf dem Tablet quer öffnet Antippen den
+  // Hinweis (Plan #1707, E7).
+  return (
+    <Erklaerung title={sperrgrund}>
+      <span>{taste}</span>
+    </Erklaerung>
+  )
+}
+
 interface Props {
   /** Anzahl der aktuell ausgewählten Karten. */
   count: number
@@ -45,6 +89,12 @@ interface Props {
   labelsDisabledReason: string | null
   /** Klick auf einen Label-Eintrag: ohne vollen Haken `ADD`, auf einem vollen Haken `REMOVE`. */
   onToggleLabel: (labelId: number, action: LabelAction) => void
+  /** Alle nicht archivierten Vorhaben des Boards in der Reihenfolge des Servers. */
+  epicOptions: EpicOption[]
+  /** Grund, warum „Vorhaben zuordnen" gesperrt ist; `null` heißt bedienbar. */
+  epicDisabledReason: string | null
+  /** Wahl eines Vorhabens im Menü. */
+  onChooseEpic: (epicId: number) => void
   onArchive: () => void
   onMove: () => void
   onDelete: () => void
@@ -53,7 +103,8 @@ interface Props {
 
 /**
  * Fixierte Aktionsleiste für die Mehrfachauswahl von Karten. Erscheint, sobald mindestens eine
- * Karte ausgewählt ist, und bietet Labels setzen, Archivieren, optional Verschieben sowie Abbrechen.
+ * Karte ausgewählt ist, und bietet Labels setzen, Vorhaben zuordnen, optional Verschieben,
+ * Archivieren, In den Papierkorb sowie Abbrechen.
  */
 export function BulkActionBar({
   count,
@@ -61,6 +112,9 @@ export function BulkActionBar({
   labelOptions,
   labelsDisabledReason,
   onToggleLabel,
+  epicOptions,
+  epicDisabledReason,
+  onChooseEpic,
   onArchive,
   onMove,
   onDelete,
@@ -68,21 +122,7 @@ export function BulkActionBar({
 }: Readonly<Props>) {
   const t = useT()
   const [labelAnchor, setLabelAnchor] = useState<HTMLElement | null>(null)
-  const labelsGesperrt = labelsDisabledReason !== null
-
-  const labelTaste = (
-    <Button
-      size="small"
-      startIcon={<LabelOutlinedIcon />}
-      disabled={labelsGesperrt}
-      // Der Grund steht im Namen der Taste, nicht nur im Tooltip: Ein gesperrter Button ist für
-      // Tastatur und Screenreader nicht erreichbar, der Tooltip käme dort also nie an.
-      aria-label={labelsGesperrt ? t.MASSENAKTION.LABELS_GESPERRT(labelsDisabledReason) : undefined}
-      onClick={(e) => setLabelAnchor(e.currentTarget)}
-    >
-      {t.MASSENAKTION.LABELS}
-    </Button>
-  )
+  const [epicAnchor, setEpicAnchor] = useState<HTMLElement | null>(null)
 
   return (
     <Paper
@@ -109,16 +149,13 @@ export function BulkActionBar({
       <Typography variant="body2" sx={{ fontWeight: 600 }}>
         {t.MASSENAKTION.AUSGEWAEHLT(count)}
       </Typography>
-      {labelsGesperrt ? (
-        // Ein deaktivierter Button meldet keine Mausereignisse; ohne den span-Wrapper bliebe der
-        // Hinweis, warum er gesperrt ist, auch am Zeigegerät unsichtbar. Auf dem Tablet quer öffnet
-        // Antippen den Hinweis (Plan #1707, E7).
-        <Erklaerung title={labelsDisabledReason}>
-          <span>{labelTaste}</span>
-        </Erklaerung>
-      ) : (
-        labelTaste
-      )}
+      <SperrbareTaste
+        symbol={<LabelOutlinedIcon />}
+        text={t.MASSENAKTION.LABELS}
+        sperrgrund={labelsDisabledReason}
+        gesperrterName={t.MASSENAKTION.LABELS_GESPERRT}
+        onClick={setLabelAnchor}
+      />
       <Menu anchorEl={labelAnchor} open={labelAnchor !== null} onClose={() => setLabelAnchor(null)}>
         {labelOptions.map(({ label, zustand }) => {
           const ZustandSymbol = ZUSTAND_SYMBOL[zustand]
@@ -145,6 +182,28 @@ export function BulkActionBar({
             </LabelErklaerung>
           )
         })}
+      </Menu>
+      <SperrbareTaste
+        symbol={<AccountTreeOutlinedIcon />}
+        text={t.MASSENAKTION.VORHABEN_ZUORDNEN}
+        sperrgrund={epicDisabledReason}
+        gesperrterName={t.MASSENAKTION.VORHABEN_GESPERRT}
+        onClick={setEpicAnchor}
+      />
+      <Menu anchorEl={epicAnchor} open={epicAnchor !== null} onClose={() => setEpicAnchor(null)}>
+        {epicOptions.map(({ epic, hidden }) => (
+          <MenuItem
+            key={epic.id}
+            onClick={() => {
+              setEpicAnchor(null)
+              onChooseEpic(epic.id)
+            }}
+          >
+            {/* Der Zusatz steht als Text im Punkt und damit auch im zugänglichen Namen, nicht nur
+                als Symbol (Plan #1865, E5). */}
+            <ListItemText primary={hidden ? `${epic.title} ${t.MASSENAKTION.AUSGEBLENDET}` : epic.title} />
+          </MenuItem>
+        ))}
       </Menu>
       {canMove && (
         <Button size="small" startIcon={<DriveFileMoveOutlinedIcon />} onClick={onMove}>

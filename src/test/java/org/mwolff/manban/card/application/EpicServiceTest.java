@@ -289,6 +289,29 @@ class EpicServiceTest {
   }
 
   @Test
+  void assignParentBulk_delegiertAnDieMassenzuordnung() {
+    // Given
+    VorhabenMassenzuordnung massenzuordnung = mock(VorhabenMassenzuordnung.class);
+    VorhabenMassenzuordnung.Ergebnis ergebnis =
+        new VorhabenMassenzuordnung.Ergebnis(List.of(1L, 2L), 1, 3);
+    when(massenzuordnung.ordneZu(1L, List.of(1L, 2L), 30L)).thenReturn(ergebnis);
+    EpicService fassade =
+        new EpicService(
+            cards,
+            mock(KartenAbhaengigkeiten.class),
+            boardService,
+            permissions,
+            mock(KartenZuordnung.class),
+            mock(KartenGrundlage.class),
+            mock(KartenSicht.class),
+            massenzuordnung,
+            Clock.fixed(FIXED, ZoneOffset.UTC));
+
+    // When / Then
+    assertThat(fassade.assignParentBulk(1L, List.of(1L, 2L), 30L)).isSameAs(ergebnis);
+  }
+
+  @Test
   void assignParent_throwsInvalidDependency_whenCardIsEpic() {
     // Given
     when(cards.findById(5L))

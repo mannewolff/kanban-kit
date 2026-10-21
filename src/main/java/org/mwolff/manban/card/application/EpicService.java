@@ -33,6 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
  * keine Position und gruppieren Karten über {@code parentId}. Transaktionen und Rechteprüfung sind
  * unverändert die aus {@link CardService} (E3).
  */
+// PMD.CouplingBetweenObjects: Mit Issue #1866 kommen VorhabenMassenzuordnung und ihr Ergebnis dazu.
+// Die Regel steht schon in einer eigenen Klasse; ein zweites Ergebnis-Record an der Fassade nur für
+// PMD wäre eine Kopie ohne Leser (Plan #1865, A2).
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class EpicService {
 
@@ -43,6 +47,7 @@ public class EpicService {
   private final KartenZuordnung zuordnung;
   private final KartenGrundlage grundlage;
   private final KartenSicht sicht;
+  private final VorhabenMassenzuordnung massenzuordnung;
   private final Clock clock;
 
   public EpicService(
@@ -53,6 +58,7 @@ public class EpicService {
       KartenZuordnung zuordnung,
       KartenGrundlage grundlage,
       KartenSicht sicht,
+      VorhabenMassenzuordnung massenzuordnung,
       Clock clock) {
     this.cards = cards;
     this.abhaengigkeiten = abhaengigkeiten;
@@ -61,6 +67,7 @@ public class EpicService {
     this.zuordnung = zuordnung;
     this.grundlage = grundlage;
     this.sicht = sicht;
+    this.massenzuordnung = massenzuordnung;
     this.clock = clock;
   }
 
@@ -250,8 +257,8 @@ public class EpicService {
                   // selbst. Das ist kein Zugehörigkeitsfilter mehr — die Zugehörigkeit steht schon
                   // fest —, sondern nur die Kennzeichnung, wer von Hand zugeordnet wurde. Direkt im
                   // Aufruf statt in einer lokalen Variable: Deren Typ zählte PMD als weitere
-                  // Kopplung, und EpicService soll ohne CouplingBetweenObjects-Ausnahme auskommen
-                  // (Issue #1393).
+                  // Kopplung; EpicService kam damit bis Issue #1866 ohne CouplingBetweenObjects-
+                  // Ausnahme aus (Issue #1393).
                   members.stream()
                       .filter(c -> Objects.equals(c.parentId(), epic.requireId()))
                       .map(Card::number)
@@ -281,6 +288,19 @@ public class EpicService {
     Card saved = cards.save(card.withParent(effective));
     grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
     return sicht.view(userId, saved);
+  }
+
+  /**
+   * Ordnet Karten eines Boards in einem Zug dem Vorhaben {@code parentId} zu (Issue #1864); die
+   * Regel steht in {@link VorhabenMassenzuordnung}. Die Transaktion hier hält „alles oder nichts".
+   *
+   * <p>Anders als {@link #assignParent} schreibt dieser Weg je geänderter Karte einen
+   * Verlaufseintrag, der das Vorhaben nennt. Die Einzelzuordnung bleibt, wie sie ist.
+   */
+  @Transactional
+  public VorhabenMassenzuordnung.Ergebnis assignParentBulk(
+      long userId, List<Long> cardIds, long parentId) {
+    return massenzuordnung.ordneZu(userId, cardIds, parentId);
   }
 
   /**

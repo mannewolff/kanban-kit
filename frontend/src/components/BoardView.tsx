@@ -19,7 +19,7 @@ import type { Board, BoardColumn } from '../api/boards'
 import { cardsApi, type Card, type CardsApi, type LabelAction } from '../api/cards'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
-import { epicsApi as defaultEpicsApi, type Epic, type EpicsApi } from '../api/epics'
+import { epicsApi as defaultEpicsApi, type BulkAssignResult, type Epic, type EpicsApi } from '../api/epics'
 import { artAusTitel, boardName, useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import type { Member } from '../api/members'
 import type { Woerterbuch } from '../i18n/de'
@@ -51,7 +51,7 @@ import {
 import { BoardSpalte } from './board/BoardSpalte'
 import type { NachtlaufKnopf } from './board/SpaltenKopf'
 import { spaltenMass, SPALTEN_OHNE_ROLLEN, type Dichte } from './boardSurfaceSx'
-import { BulkActionBar, type LabelOption, type LabelZustand } from './BulkActionBar'
+import { BulkActionBar, type EpicOption, type LabelOption, type LabelZustand } from './BulkActionBar'
 import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './NewCardModal'
 import { useSnackbar } from './SnackbarProvider'
 import { SpecImportDialog, type SpecCard } from './SpecImportDialog'
@@ -72,6 +72,52 @@ const labelSperrgrund = (t: Woerterbuch, gewaehlt: Card[], boardLabels: Label[])
   if (gewaehlt.some((c) => c.type === 'EPIC')) return t.BOARD.LABELS_GESPERRT_VORHABEN
   if (boardLabels.length === 0) return t.BOARD.LABELS_GESPERRT_KEINE
   return null
+}
+
+/**
+ * Höchstzahl Karten je Massenaktion — dieselbe Grenze wie `CardController.MAX_CARDS_PER_BATCH`
+ * im Backend (Plan #1865, A6). Hier geprüft, damit die Ablehnung beide Zahlen nennt, statt als
+ * Validierungsfehler des Servers anzukommen.
+ */
+const MAX_KARTEN_JE_ZUG = 200
+
+/**
+ * Grund, warum „Vorhaben zuordnen" gesperrt ist; `null` heißt bedienbar. Anders als bei den Labels
+ * nennt er beide Gründe, wenn beide zutreffen (Plan #1865, E8). Wählbar sind alle Vorhaben der
+ * Liste, ausgeblendete eingeschlossen.
+ */
+const vorhabenSperrgrund = (t: Woerterbuch, gewaehlt: Card[], epics: Epic[]): string | null => {
+  const gruende = [
+    ...(gewaehlt.some((c) => c.type === 'EPIC') ? [t.BOARD.ZUORDNEN_GESPERRT_VORHABEN] : []),
+    ...(epics.length === 0 ? [t.BOARD.ZUORDNEN_GESPERRT_KEINE] : []),
+  ]
+  return gruende.length === 0 ? null : gruende.join('; ')
+}
+
+/**
+ * Wie viele gewählte Karten unmittelbar zu einem anderen Vorhaben gehören (Plan #1865, E4). Eine
+ * geerbte Mitgliedschaft steht nicht in `parentId` und zählt deshalb nicht mit.
+ */
+const ueberschriebeneZuordnungen = (gewaehlt: Card[], epicId: number) =>
+  gewaehlt.filter((c) => c.parentId !== null && c.parentId !== epicId).length
+
+/**
+ * Erfolgsmeldung des Zuordnens (Plan #1865, E9, E10). Gemeldet wird, was der Server tatsächlich
+ * geändert hat; überschriebene Zuordnungen nur, wenn es mehr waren als in der Rückfrage genannt.
+ */
+const zuordnenMeldung = (
+  t: Woerterbuch,
+  ergebnis: BulkAssignResult,
+  epic: Epic,
+  ausgeblendet: boolean,
+  angekuendigtUeberschrieben: number,
+) => {
+  const anzahl = ergebnis.changedCardIds.length
+  return [
+    ausgeblendet ? t.BOARD.ZUORDNEN_ERFOLG_AUSGEBLENDET(anzahl, epic.title) : t.BOARD.ZUORDNEN_ERFOLG(anzahl, epic.title),
+    ...(ergebnis.overwritten > angekuendigtUeberschrieben ? [t.BOARD.ZUORDNEN_MEHR_UEBERSCHRIEBEN(ergebnis.overwritten)] : []),
+    ...(ergebnis.skipped > 0 ? [t.BOARD.ZUORDNEN_UEBERGANGEN(ergebnis.skipped)] : []),
+  ].join(' ')
 }
 
 /**
@@ -214,7 +260,7 @@ interface Props {
     | 'bulkDelete'
     | 'bulkLabels'
   >
-  epicsApi?: Pick<EpicsApi, 'create'>
+  epicsApi?: Pick<EpicsApi, 'create' | 'bulkAssign'>
 }
 
 /** Was ein laufender Fingerzug auf dem Board zeigt (Plan #1707, E5); ohne ihn gilt der Mauspfad. */
@@ -305,6 +351,9 @@ export function BoardView({
   const [bulkTransferOpen, setBulkTransferOpen] = useState(false)
   // Läuft gerade ein bulk-labels-Aufruf? Sperrt den zweiten Klick, solange die Antwort aussteht.
   const [labelBusy, setLabelBusy] = useState(false)
+  // Offene Rückfrage des Zuordnens. Die genannte Zahl überschriebener Zuordnungen wird beim Öffnen
+  // festgehalten: Mit ihr vergleicht die Erfolgsmeldung, was der Server tatsächlich ersetzt hat (E9).
+  const [epicAssign, setEpicAssign] = useState<{ epic: Epic; angekuendigtUeberschrieben: number } | null>(null)
   const [kartenFilter, setKartenFilter] = useState<KartenFilter>('alle')
   // Im Browser gelesene Spezifikationsdatei (Name nur zur Anzeige). `null` = keine Vorschau offen;
   // hochgeladen wird die Datei nie, sie existiert hier nur als Text (Issue #493, #1201).
@@ -519,6 +568,9 @@ export function BoardView({
     ),
   }))
 
+  // Zur Wahl stehen alle Vorhaben, auch ausgeblendete (Plan #1865, AK 3) — nicht `sichtbareEpics`.
+  const epicOptions: EpicOption[] = epics.map((epic) => ({ epic, hidden: hiddenEpics.has(epic.id) }))
+
   const changeEpicFilter = (value: number | null) => {
     setEpicFilter(value)
     try {
@@ -698,6 +750,43 @@ export function BoardView({
    */
   const applyBulkLabel = (labelId: number, action: LabelAction) =>
     setzeLabels([...effectiveSelectedIds], labelId, action)
+
+  /** Meldet die Ablehnung über der Höchstzahl; `true` heißt, die Auswahl passt in einen Zug. */
+  const passtInEinenZug = (anzahl: number) => {
+    if (anzahl <= MAX_KARTEN_JE_ZUG) return true
+    notify(t.BOARD.ZUORDNEN_HOECHSTENS(MAX_KARTEN_JE_ZUG, anzahl), 'error')
+    return false
+  }
+
+  // Wahl im Menü: Über der Höchstzahl erscheint keine Rückfrage für eine unmögliche Aktion (E6).
+  // Das Vorhaben stammt aus `epicOptions` und damit aus derselben Liste.
+  const vorhabenGewaehlt = (epicId: number) => {
+    const epic = epics.find((e) => e.id === epicId)!
+    if (!passtInEinenZug(effectiveSelectedIds.size)) return
+    setEpicAssign({ epic, angekuendigtUeberschrieben: ueberschriebeneZuordnungen(gewaehlteKarten, epic.id) })
+  }
+
+  /**
+   * Ordnet die wirksame Auswahl dieses Moments zu (E6) — nicht optimistisch: Erst die Antwort sagt,
+   * welche Karten sich geändert haben. Nach einem Fehler bleibt alles, wie es war, auch die Auswahl.
+   * Verdeckt werden die Karten eines ausgeblendeten Ziels über die neu geladene Vorhaben-Liste (E11).
+   */
+  const confirmBulkAssign = async (epic: Epic, angekuendigtUeberschrieben: number) => {
+    setEpicAssign(null)
+    const ids = [...effectiveSelectedIds]
+    if (!passtInEinenZug(ids.length)) return
+    try {
+      const ergebnis = await epicsApi.bulkAssign(ids, epic.id)
+      const geaendert = new Set(ergebnis.changedCardIds)
+      setCards((current) => current.map((c) => (geaendert.has(c.id) ? { ...c, parentId: epic.id } : c)))
+      exitSelection()
+      onEpicsChanged?.()
+      onCardsChanged?.()
+      notify(zuordnenMeldung(t, ergebnis, epic, hiddenEpics.has(epic.id), angekuendigtUeberschrieben), 'success')
+    } catch (e) {
+      notify(apiErrorMessage(e, t.BOARD.ZUORDNEN_FEHLER), 'error')
+    }
+  }
 
   /** Gemeinsamer Weg der Label-Massenaktion und des Knopfes `kit:nightrun` in Ready (Issue #1708). */
   const setzeLabels = async (ids: number[], labelId: number, action: LabelAction) => {
@@ -1293,6 +1382,31 @@ export function BoardView({
         </DialogActions>
       </Dialog>
 
+      {epicAssign && (
+        <Dialog open onClose={() => setEpicAssign(null)}>
+          <DialogTitle>{t.BOARD.ZUORDNEN_TITEL}</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {t.BOARD.ZUORDNEN_TEXT(effectiveSelectedIds.size, epicAssign.epic.title)}
+            </DialogContentText>
+            {epicAssign.angekuendigtUeberschrieben > 0 && (
+              <DialogContentText sx={{ mt: 1 }}>
+                {t.BOARD.ZUORDNEN_UEBERSCHREIBT(epicAssign.angekuendigtUeberschrieben)}
+              </DialogContentText>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEpicAssign(null)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
+            <Button
+              variant="contained"
+              onClick={() => void confirmBulkAssign(epicAssign.epic, epicAssign.angekuendigtUeberschrieben)}
+            >
+              {t.BOARD.ZUORDNEN_BESTAETIGEN}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
       {selectionMode && effectiveSelectedIds.size > 0 && (
         <BulkActionBar
           count={effectiveSelectedIds.size}
@@ -1300,6 +1414,9 @@ export function BoardView({
           labelOptions={labelOptions}
           labelsDisabledReason={labelSperrgrund(t, gewaehlteKarten, boardLabels)}
           onToggleLabel={(labelId, action) => void applyBulkLabel(labelId, action)}
+          epicOptions={epicOptions}
+          epicDisabledReason={vorhabenSperrgrund(t, gewaehlteKarten, epics)}
+          onChooseEpic={vorhabenGewaehlt}
           onArchive={() => setBulkArchiveConfirm(true)}
           onMove={() => setBulkTransferOpen(true)}
           onDelete={() => setDeleteConfirm([...effectiveSelectedIds])}

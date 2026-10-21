@@ -25,8 +25,8 @@
       "name": "Bau: Werkzeug",
       "zweck": "Bauwerkzeug ohne Digest, nur beim Bauen gebraucht",
       "art": "abbild",
-      "bezugsstelle": "caddy:2.11.4",
-      "fassung": "2.11.4",
+      "bezugsstelle": "caddy:2.11.7",
+      "fassung": "2.11.7",
       "pruefung": "bezug",
       "ausgeliefert": true,
       "verwendung": "bau"

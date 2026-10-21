@@ -148,6 +148,7 @@ final class CardServiceAufbau {
         zuordnung,
         b.grundlage(),
         b.sicht(),
+        new VorhabenMassenzuordnung(cards, b.grundlage(), permissions),
         clock);
   }
 

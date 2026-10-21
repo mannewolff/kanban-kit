@@ -358,6 +358,31 @@ export const en: Woerterbuch = {
     KARTE_LADEN_FEHLER: 'The card could not be loaded.',
     PAPIERKORB_FEHLER: 'Moving to the trash failed.',
     LABELS_SETZEN_FEHLER: 'Setting labels failed.',
+    ZUORDNEN_GESPERRT_VORHABEN: 'an epic cannot be assigned to an epic',
+    ZUORDNEN_GESPERRT_KEINE: 'the board has no selectable epic',
+    ZUORDNEN_TITEL: 'Assign epic?',
+    ZUORDNEN_TEXT: (anzahl, titel) =>
+      anzahl === 1
+        ? `The selected card will be assigned to the epic “${titel}”.`
+        : `${anzahl} cards will be assigned to the epic “${titel}”.`,
+    ZUORDNEN_UEBERSCHREIBT: (anzahl) =>
+      `${anzahl} of them already ${anzahl === 1 ? 'belongs' : 'belong'} to another epic; that assignment will be replaced.`,
+    ZUORDNEN_BESTAETIGEN: 'Assign',
+    ZUORDNEN_ERFOLG: (anzahl, titel) => `${anzahl} ${anzahl === 1 ? 'card' : 'cards'} assigned to the epic “${titel}”.`,
+    ZUORDNEN_ERFOLG_AUSGEBLENDET: (anzahl, titel) => {
+      const satz = `${anzahl} ${anzahl === 1 ? 'card' : 'cards'} assigned to the hidden epic “${titel}”.`
+      if (anzahl === 0) return satz
+      return anzahl === 1
+        ? `${satz} It is now concealed on this board — “Show hidden” shows it again.`
+        : `${satz} They are now concealed on this board — “Show hidden” shows them again.`
+    },
+    ZUORDNEN_MEHR_UEBERSCHRIEBEN: (anzahl) => `${anzahl} of them previously had another epic.`,
+    ZUORDNEN_UEBERGANGEN: (anzahl) =>
+      anzahl === 1
+        ? '1 selected card no longer existed on this board; it was left out.'
+        : `${anzahl} selected cards no longer existed on this board; they were left out.`,
+    ZUORDNEN_HOECHSTENS: (max, gewaehlt) => `At most ${max} cards in one go — ${gewaehlt} selected`,
+    ZUORDNEN_FEHLER: 'Assigning the epic failed.',
     KARTEN_FILTERN: 'Filter cards',
     ALLE_KARTEN: 'All cards',
     MEINE: 'Mine',
@@ -429,6 +454,9 @@ export const en: Woerterbuch = {
       einige: 'some selected cards',
       keine: 'no selected card',
     },
+    VORHABEN_ZUORDNEN: 'Assign epic',
+    VORHABEN_GESPERRT: (grund) => `Assign epic — ${grund}`,
+    AUSGEBLENDET: '(hidden)',
     VERSCHIEBEN: 'Move',
     ARCHIVIEREN: 'Archive',
     IN_DEN_PAPIERKORB: 'Move to trash',

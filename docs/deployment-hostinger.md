@@ -199,6 +199,21 @@ Sicherung muss auf dem Server daher eingerichtet sein (siehe [`backup.md`](backu
 Deploy nach dieser Änderung startet die Datenbank einmal neu, falls die WAL-Archivierung gerade
 aus ist — der Overlay-`command` ändert die Container-Definition von `postgres`.
 
+
+Seit Issue #1839 trägt der Workflow einen **letzten Schritt „Auslieferung ans Board melden"**. Er
+meldet jeden Auslieferungsversuch an das kanban-kit-Board, damit die Platte „Auslieferung" im
+Leitstand echte Daten bekommt (Deployment-Frequenz, Lead Time, Change Failure Rate, Time to
+Restore). Drei Eigenheiten, alle Absicht:
+
+- Gemeldet wird **auch ein gescheiterter Lauf**, einschließlich einer roten Bereitschaftsprüfung —
+  sonst bliebe die Change Failure Rate bei null, obwohl Läufe scheitern.
+- Scheitert die **Meldung selbst** (Board nicht erreichbar, Token abgelaufen), bleibt der Job
+  grün: Die Auslieferung ist gelungen, auch wenn das Board nichts davon erfährt.
+- Ein **abgebrochener** Lauf meldet nichts und zählt nirgends.
+
+Der Schritt braucht zweierlei auf dem Server: das Repo-Secret `KANBAN_DEPLOY_TOKEN` und das
+Melde-Kommando `deployment.mjs` samt Node — beides unten unter *Einmalige Einrichtung*.
+
 Einmalige Einrichtung (Server + GitHub, nicht Teil des Repos):
 
 1. **Runner installieren** auf dem VPS und als Dienst einrichten (`config.sh` gegen dieses Repo,
@@ -209,9 +224,44 @@ Einmalige Einrichtung (Server + GitHub, nicht Teil des Repos):
 3. **Sicherheit (Pflicht bei öffentlichem Repo):** Der Workflow triggert **ausschließlich** auf
    `push` nach `production`, **nie** auf `pull_request` — so kann kein Fork-Code auf dem VPS laufen.
    Zusätzlich unter *Settings → Actions* Fork-Runs auf **Approval** stellen.
+4. **Repo-Secret `KANBAN_DEPLOY_TOKEN`** unter *Settings → Secrets and variables → Actions*
+   anlegen. Wert ist ein **board-gebundenes** Zugriffstoken des kanban-kit-Boards: in der
+   Anwendung unter *Administration → API-Tokens* erzeugen und dabei **Projekt und Board** setzen —
+   eine Meldung über ein ungebundenes Token weist die Schnittstelle mit `409` ab. Der Klartext
+   erscheint genau einmal. Die Board-Adresse steht fest im Workflow (`KANBAN_URL`) und braucht kein
+   Secret.
+5. **Melde-Kommando ablegen:** `deployment.mjs` des Kits nach `/root/opt/kanban-kit/` holen und
+   **Node ab 18** auf dem Host bereitstellen. Das ist *keine* Installation des Kits — eine einzelne
+   Datei ohne Abhängigkeiten, die nur Node-Bordmittel und `git` benutzt:
+
+   ```bash
+   cd /root/opt/kanban-kit
+   curl -o deployment.mjs https://docs.mwolff.org/deployment.mjs
+   apt update && apt install -y nodejs     # Ubuntu 24.04 liefert Node 18
+   node deployment.mjs --version           # Gegenprobe
+   ```
+
+   Die Datei liegt bewusst **neben** dem Arbeitsverzeichnis und nicht im Repo: Der Workflow
+   arbeitet ohne `actions/checkout`, und `git reset --hard` würde eine versionierte Kopie ohnehin
+   nicht herbeischaffen, weil `.claude/` unversioniert ist. Sie überlebt jeden Deploy, weil
+   `reset --hard` unversionierte Dateien nicht anfasst.
 
 Hintergrund und die verworfene Alternative (Checkout-Variante) stehen in
 `deployment-spec.md` im Repo-Wurzelverzeichnis.
+
+## GitHub-Actions-Secrets
+
+Diese Secrets liegen unter *Settings → Secrets and variables → Actions* des Repositories. Die
+Tabelle muss jedes Secret nennen, das ein Workflow unter `.github/workflows/` anspricht — ein Test
+(`BetriebsdateienTest`) liest die Workflows und schlägt fehl, sobald eine Zeile fehlt. Nicht
+dazu gehört `GITHUB_TOKEN`: Den stellt GitHub je Lauf selbst, er wird nie angelegt oder erneuert.
+
+| Name | Wofür (Workflow, Schritt) | Woher der Wert kommt | Erneuern |
+|---|---|---|---|
+| `KANBAN_DEPLOY_TOKEN` | `deploy.yml`, letzter Schritt „Auslieferung ans Board melden“ | Board-gebundenes Zugriffstoken des kanban-kit-Boards, siehe *Einmalige Einrichtung*, Punkt 4 oben | Neues board-gebundenes Token erzeugen, Secret überschreiben, altes Token widerrufen |
+| `KANBAN_KIT_TOKEN` | `ci.yml`, Job „Backend (PIT Mutation)“, Schritt „Mutationsprüfung (Sperrschwelle 80 %, Liegezeit 7 Tage)“ (als `TBX_TOKEN`; legt Karten für Mutations-Überlebende an) | Zugriffstoken des kanban-kit-Boards, gebunden an das Projekt und das Board dieses Repositories: *Administration → API-Tokens* | Wie oben: neues Token mit derselben Bindung erzeugen, Secret überschreiben, altes widerrufen |
+| `KANBAN_SONAR_TOKEN` | `sonarqube.yml`, Schritt „Neue Findings aufs Sonar-Board synchronisieren“ | Zugriffstoken des kanban-kit-Boards, gebunden an Projekt **und Sonar-Board** (Issue #536): *Administration → API-Tokens* | Wie oben, mit Bindung an das Sonar-Board |
+| `SONAR_TOKEN` | `sonarqube.yml`, Schritte „SonarQube-Scan“ und „Neue Findings aufs Sonar-Board synchronisieren“ (liest die Findings) | Analyse-Token von SonarQube Cloud (`sonarcloud.io`): *My Account → Security → Generate Tokens* | Neues Token in SonarQube Cloud erzeugen, Secret überschreiben, altes Token dort widerrufen |
 
 ## Verifikation
 

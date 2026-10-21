@@ -374,6 +374,36 @@ export const de = {
     KARTE_LADEN_FEHLER: 'Karte konnte nicht geladen werden.',
     PAPIERKORB_FEHLER: 'In den Papierkorb verschieben fehlgeschlagen.',
     LABELS_SETZEN_FEHLER: 'Labels setzen fehlgeschlagen.',
+    // Vorhaben-Massenzuordnung (Plan #1865, E8–E10). Die Sperrgründe stehen klein, weil sie im
+    // Namen der Taste hinter „Vorhaben zuordnen — " stehen und bei beiden mit „; " verbunden werden.
+    ZUORDNEN_GESPERRT_VORHABEN: 'ein Vorhaben lässt sich keinem Vorhaben zuordnen',
+    ZUORDNEN_GESPERRT_KEINE: 'das Board hat kein wählbares Vorhaben',
+    ZUORDNEN_TITEL: 'Vorhaben zuordnen?',
+    ZUORDNEN_TEXT: (anzahl: number, titel: string) =>
+      anzahl === 1
+        ? `Die ausgewählte Karte wird dem Vorhaben „${titel}“ zugeordnet.`
+        : `${anzahl} Karten werden dem Vorhaben „${titel}“ zugeordnet.`,
+    ZUORDNEN_UEBERSCHREIBT: (anzahl: number) =>
+      anzahl === 1
+        ? 'Davon gehört 1 Karte bereits zu einem anderen Vorhaben; diese Zuordnung wird ersetzt.'
+        : `Davon gehören ${anzahl} Karten bereits zu einem anderen Vorhaben; diese Zuordnung wird ersetzt.`,
+    ZUORDNEN_BESTAETIGEN: 'Zuordnen',
+    ZUORDNEN_ERFOLG: (anzahl: number, titel: string) =>
+      `${anzahl} ${anzahl === 1 ? 'Karte' : 'Karten'} dem Vorhaben „${titel}“ zugeordnet.`,
+    // Ohne geänderte Karte wurde nichts verdeckt; dann entfällt der Weg zurück.
+    ZUORDNEN_ERFOLG_AUSGEBLENDET: (anzahl: number, titel: string) => {
+      const satz = `${anzahl} ${anzahl === 1 ? 'Karte' : 'Karten'} dem ausgeblendeten Vorhaben „${titel}“ zugeordnet.`
+      if (anzahl === 0) return satz
+      return `${satz} ${anzahl === 1 ? 'Sie ist' : 'Sie sind'} auf diesem Board jetzt verdeckt — „Ausgeblendete zeigen“ blendet sie wieder ein.`
+    },
+    ZUORDNEN_MEHR_UEBERSCHRIEBEN: (anzahl: number) =>
+      `Davon ${anzahl === 1 ? 'hatte' : 'hatten'} ${anzahl} bisher ein anderes Vorhaben.`,
+    ZUORDNEN_UEBERGANGEN: (anzahl: number) =>
+      anzahl === 1
+        ? '1 ausgewählte Karte gab es nicht mehr auf diesem Board; sie blieb außen vor.'
+        : `${anzahl} ausgewählte Karten gab es nicht mehr auf diesem Board; sie blieben außen vor.`,
+    ZUORDNEN_HOECHSTENS: (max: number, gewaehlt: number) => `Höchstens ${max} Karten in einem Zug — gewählt sind ${gewaehlt}`,
+    ZUORDNEN_FEHLER: 'Vorhaben zuordnen fehlgeschlagen.',
     KARTEN_FILTERN: 'Karten filtern',
     ALLE_KARTEN: 'Alle Karten',
     MEINE: 'Meine',
@@ -448,6 +478,9 @@ export const de = {
       einige: 'einige gewählte Karten',
       keine: 'keine gewählte Karte',
     },
+    VORHABEN_ZUORDNEN: 'Vorhaben zuordnen',
+    VORHABEN_GESPERRT: (grund: string) => `Vorhaben zuordnen — ${grund}`,
+    AUSGEBLENDET: '(ausgeblendet)',
     VERSCHIEBEN: 'Verschieben',
     ARCHIVIEREN: 'Archivieren',
     IN_DEN_PAPIERKORB: 'In den Papierkorb',
