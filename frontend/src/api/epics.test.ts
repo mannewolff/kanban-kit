@@ -25,8 +25,9 @@ describe('epicsApi', () => {
       id: 1, number: 5, title: 'Epic', description: null, shortcode: 'EPC', done: 1, total: 3,
       memberNumbers: [7, 8, 9], rootNumbers: [7], requirementCardNumber: 7,
     }
-    spyFetch(JSON.stringify([epic]))
+    const f = spyFetch(JSON.stringify([epic]))
     const result = await epicsApi.list(3)
+    expect(lastCall(f).url).toBe('/api/boards/3/epics')
     expect(result).toEqual([epic])
     expect(result[0].memberNumbers).toEqual([7, 8, 9])
     expect(result[0].rootNumbers).toEqual([7])
