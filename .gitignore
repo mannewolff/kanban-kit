@@ -61,3 +61,10 @@ frontend/.stryker-tmp/
 # `--untracked-files=all` als Aenderung im Bereich `frontend` — jeder Aenderungslauf beruehrte dann
 # den Bereich, der ihn ausgeloest hat.
 frontend/reports/
+
+chain.sh
+check.sh
+checkrun.sh
+doctor.sh
+runner.sh
+
