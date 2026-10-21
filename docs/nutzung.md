@@ -537,12 +537,11 @@ allein die Ergebnisdatei sie trägt. Bei einem Run, den der Runner eingeliefert 
 - der Grund, an dem eine Stufe der Kette abbrach,
 - die Dokumente je Stufe.
 
-Bei einem eingelieferten **Kettenlauf** trägt jede erreichte Stufe im Stufenband ihre Kosten, die
-Kostenkachel teilt das Gesamt in **Planung** (die Stufen der Kette) und **Umsetzung** (der Rest),
-und der Kettenvorgang nennt den **angelegten Plan und die Pakete** als Verweise — ermittelt aus der
-Herkunft der Karten am Board, beschränkt auf Karten, die während des Runs entstanden. Jede
-Paketzeile nennt ihren Plan („Paket aus Plan #N"). Die Dauer des Kettenvorgangs ist die Summe seiner
-Stufen.
+Bei einem eingelieferten **Kettenlauf** teilt die [Lage des Runs](#lage-des-runs) die Kosten in
+**Planung** (die Stufen der Kette) und **Umsetzung** (der Rest), und der Kettenvorgang nennt den
+**angelegten Plan und die Pakete** als Verweise — ermittelt aus der Herkunft der Karten am Board,
+beschränkt auf Karten, die während des Runs entstanden. Jede Paketzeile nennt ihren Plan („Paket aus
+Plan #N"). Die Dauer des Kettenvorgangs ist die Summe seiner Stufen.
 
 Der **Titel** eines Runs nennt seine Nummer, das Startdatum und die Startzeit („Run #412 · 14.
 September, 22:05"); ein eben eingelesener Run ohne Nummer heißt „Run · 14. September, 22:05".
@@ -742,22 +741,85 @@ außerhalb des Boards wiederfindest. Unter „Enthaltene Arbeitspakete“ stehen
 mit Nummer und Titel, auch solche aus anderen Ketten. **Veröffentlicht wird von Hand**, außerhalb
 des Boards: Die Kachel bietet keinen Knopf dafür.
 
+### Lage des Runs {#lage-des-runs}
+
+Aufgeklappt beginnt jeder Run mit der **Lage des Runs**. Sie ersetzt die früheren Instrumente und
+Chips und sagt in einem Blick, wo der Run steht:
+
+- **Zustandssatz** — ein Satz statt einer Reihe von Marken: am laufenden Run etwa „Setzt Pakete #12,
+  #14 um — 3 von 7 fertig“, „Prüfung zu Plan #40“ oder „Kette #38 am Ende des Wegs“, bei mehreren
+  Ketten ergänzt um „+ 2 weitere Ketten“; am abgeschlossenen Run der Ausgang samt Zahlen, etwa
+  „Erfolg — 5 grün · 1 gelb · 0 rot“.
+- **„läuft seit“** — nur am laufenden Run; die Angabe zählt alle zehn Sekunden mit, ohne dass du die
+  Seite neu lädst.
+- **Kosten** als eine große Zahl in Dollar.
+- **Pakete** — die Zahl der grünen, gelben und roten Pakete. Solange der Run läuft, greift sie dem
+  Board vor, wie unter [Fortschritt eines laufenden Runs](#fortschritt-eines-laufenden-runs)
+  beschrieben.
+- **Verbrauchszeile** — leise darunter: Eingabe, Ausgabe, Cache-Quote und bei einem Kettenlauf die
+  Aufteilung „Planung … · Umsetzung …“. Was nicht zu berechnen ist, steht als „nicht berechenbar“ da.
+
+Am Fuß der Platte nennt die Zeile **„Einlieferung“**, woher der Stand kommt (vom Runner eingeliefert
+oder eingelesen, samt erzeugender Fassung); sie ersetzt die frühere Angabe „Herkunft des Stands“ im
+Kopf. Daneben stehen Zeitvorgaben, Kostenbudget und deren Herkunft sowie die Kennzahlen der Schicht.
+
+### Kettenzeilen {#kettenzeilen}
+
+Jede Kette eines laufenden Runs steht als eigene Zeile: Nummer, Plan und Titel der Anforderung, dann
+von links nach rechts:
+
+- **Stufenleiste** mit den Stufen **Plan · Prüfung · Arbeitspakete · Abdeckung · Umsetzung**. Der
+  Zustand jeder Stufe ist an der **Form** erkennbar, nicht allein an der Farbe: ein **gefüllter Punkt**
+  für erreicht, ein **hervorgehobener Punkt** für die laufende Stufe, ein **gestrichelter Ring** für
+  offen. Fährst du mit der Maus darauf, nennt ein Hinweis Stufe und Zustand („Plan: erreicht“);
+  Vorlesewerkzeuge lesen dasselbe vor.
+- **Zeitbalken** an der laufenden Stufe: die verstrichene Zeit gegen die **Zeitvorgabe** der Stufe,
+  etwa „12 / 30 min“, bei Überschreitung ergänzt um „· 5 min über der Vorgabe“. Ohne Vorgabe steht nur
+  „seit *Dauer*“.
+- **Ende des Wegs** — die Stufe Umsetzung erscheint nur, wenn die Karte, die die Kette trägt, das
+  Label `kit:durchziehen` trägt. Fehlt es, endet die Kette planmäßig nach der Abdeckung; eine Flagge
+  „Ende des Wegs“ zeigt das, statt einer ausstehenden Umsetzung.
+- **Paketraster** — je Arbeitspaket ein Quadrat (siehe unten).
+- **Kosten der Kette** rechts. Bei einer Kette **ohne Umsetzung** steht ein kupferner Balken gegen das
+  Kostenbudget („… / 4 $“); bei einer Kette mit Umsetzung steht der Betrag als „Planung“ **ohne
+  Balken**, weil das Budget nur die Planung deckt.
+
+**Paketraster.** Jedes Quadrat ist ein Arbeitspaket der Kette und öffnet per Klick die Karte. Sein
+Zustand ist wieder an der Form zu erkennen; der Hinweis nennt Nummer, Zustand und Titel. Die Legende
+kennt fünf Zustände:
+
+- **angelegt** — das Paket ist entstanden, aber noch nicht gezogen,
+- **gezogen** — es steht zur Umsetzung bereit,
+- **in Umsetzung** — es wird gerade umgesetzt,
+- **fertig** — umgesetzt und in „In review“,
+- **zurückgestellt** — mit Fehlschlag zurück ins Backlog gestellt.
+
+Unter dem Raster zählt eine Zeile jeden vorkommenden Zustand, etwa „3 fertig · 1 in Umsetzung“.
+
+### Jetzt im Werk {#jetzt-im-werk}
+
+Solange mindestens ein Run läuft, steht zwischen „Runner jetzt“ und der Liste der Runs die Platte
+**„Jetzt im Werk“** — mit der Zahl der Runs im Titel („Jetzt im Werk · 2 Runs gleichzeitig“). Sie
+zeigt jeden Run als Balken auf einer gemeinsamen **Zeitachse**:
+
+- ein **laufender** Run schraffiert in Stahl,
+- ein im Zeitfenster **beendeter** Run in der Farbe seines Ausgangs,
+- ein kupferner Strich markiert **„jetzt“**.
+
+Jeder Balken trägt die Nummer des Runs und seine jüngste Stufe („#691 · Umsetzung“). Für
+Vorlesewerkzeuge steht darunter eine Liste („Run #691, seit 10:32, läuft, Umsetzung“), deren Einträge
+zur Platte des Runs springen. Läuft kein Run, entfällt die Platte.
+
 ### Fortschritt eines laufenden Runs
 
 Klappst du die Kachel eines **noch laufenden** Runs auf, steht über den Vorgangszeilen ein eigener
 Block mit dem Stand, den das Board zur selben Zeit zeigt:
 
-- **Bei einer Kette** eine Wegleiste mit den Stufen **Plan · Prüfung · Arbeitspakete · Abdeckung ·
-  Umsetzung**. Die Stufe Umsetzung erscheint nur, wenn die Karte, die die Kette trägt (die fachliche
-  Anforderung bzw. der Plan, an dem sie begann), das Label `kit:durchziehen` trägt. Fehlt es, endet
-  die Kette planmäßig nach der Abdeckung; die Wegleiste zeigt das als **„Ende des Wegs erreicht"**,
-  nicht als ausstehende Umsetzung.
+- **Bei einer Kette** je Kette eine [Kettenzeile](#kettenzeilen) mit Stufenleiste und Paketraster.
 - **Bei einer Umsetzungsnacht** nur die Umsetzung: welches Paket gerade umgesetzt wird und welche
   schon fertig sind.
 
-Die aktuelle Stufe ist markiert — als Text, nicht allein über die Farbe. Zu jeder Stufe stehen die
-Karten, die sie hervorgebracht hat (der angelegte Plan, die Arbeitspakete samt Anzahl); jede
-Kartennummer ist ein Link und öffnet die Karte.
+Jede Kartennummer ist ein Link und öffnet die Karte.
 
 **Welche Karten zum Run gehören.** Erstes Kriterium ist die Laufkennung: Ein Runner weist sich bei
 jeder Änderung am Board mit seinem Startzeitpunkt aus (Header `X-Night-Run`). Zum Run zählen dann
