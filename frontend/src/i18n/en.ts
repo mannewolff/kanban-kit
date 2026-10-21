@@ -15,6 +15,26 @@ import type { Woerterbuch } from './de'
  *
  * Kartenarten (A11): FACHLICH „Requirement“, IDEE „Idea“, MENSCH „Human“, PLAN „Plan“, TASK „Task“.
  */
+/** Die Namen der Stufen einer Kette — Wegleiste und Zustandssatz teilen sie (Plan #1882 E4). */
+const STUFENNAMEN: Woerterbuch['NACHTLAUF_LAGE']['STUFE'] = {
+  PLAN: 'Plan',
+  REVIEW: 'Review',
+  PAKETE: 'Work packages',
+  ABDECKUNG: 'Coverage',
+  UMSETZUNG: 'Implementation',
+}
+
+/** Die Ausgangswörter eines Befunds — Übergabe und Zustandssatz teilen sie (Plan #1882 E4). */
+const AUSGANGSWORT: Woerterbuch['NACHTLAUF_LAGE']['AUSGANG'] = {
+  SUCCEEDED: 'succeeded',
+  FAILED: 'did not succeed',
+  WAITING: 'with reservation',
+  RUNNING: 'running',
+  NO_WORK: 'nothing to do',
+  CLOSED: 'closed by hand',
+  NOT_STARTED: 'did not start',
+}
+
 export const en: Woerterbuch = {
   APP_NAME: 'AI Control Room',
 
@@ -862,13 +882,7 @@ export const en: Woerterbuch = {
 
   LAUF_FORTSCHRITT: {
     ENDE_DES_WEGS: 'End of the path reached',
-    STUFE: {
-      PLAN: 'Plan',
-      REVIEW: 'Review',
-      PAKETE: 'Work packages',
-      ABDECKUNG: 'Coverage',
-      UMSETZUNG: 'Implementation',
-    },
+    STUFE: STUFENNAMEN,
     ZUSTAND: {
       ERREICHT: 'reached',
       LAEUFT: 'running',
@@ -1112,15 +1126,7 @@ export const en: Woerterbuch = {
       TIME_BUDGET_EXCEEDED: 'Time budget exhausted',
       STUCK: 'Stuck',
     },
-    AUSGANG: {
-      SUCCEEDED: 'succeeded',
-      FAILED: 'did not succeed',
-      WAITING: 'with reservation',
-      RUNNING: 'running',
-      NO_WORK: 'nothing to do',
-      CLOSED: 'closed by hand',
-      NOT_STARTED: 'did not start',
-    },
+    AUSGANG: AUSGANGSWORT,
     ZEITBUDGET_MIT_ERGEBNIS: 'Ended at the time budget, result available',
     ZEITBUDGET_OHNE_ERGEBNIS: 'Ended at the time budget, without result',
     FESTGEFAHREN: 'stuck',
@@ -1349,6 +1355,21 @@ export const en: Woerterbuch = {
     GRUEN: 'green',
     GELB: 'yellow',
     ROT: 'red',
+  },
+
+  NACHTLAUF_LAGE: {
+    STUFE: STUFENNAMEN,
+    AUSGANG: AUSGANGSWORT,
+    SETZT_UM: (nummern, mehrere, fertig, gesamt) =>
+      `Implementing ${mehrere ? 'packages' : 'package'} ${nummern} — ${fertig} of ${gesamt} done`,
+    SETZT_UM_NACHT: (nummern, mehrere, fertig) =>
+      `Implementing ${mehrere ? 'packages' : 'package'} ${nummern} — ${fertig} done`,
+    UMSETZUNG_NACHT: (fertig) => `Implementation — ${fertig} done`,
+    ZU_PLAN: (stufe, nummer) => `${stufe} for plan #${nummer}`,
+    ZU_ANFORDERUNG: (stufe, nummer) => `${stufe} for requirement #${nummer}`,
+    ENDE_DES_WEGS: (nummer) => `Chain #${nummer} at the end of the path`,
+    WEITERE_KETTEN: (anzahl) => (anzahl === 1 ? ' + 1 more chain' : ` + ${anzahl} more chains`),
+    ABGESCHLOSSEN: (ausgang, gruen, gelb, rot) => `${ausgang} — ${gruen} green · ${gelb} yellow · ${rot} red`,
   },
 
   NACHTLAUF_PLATTE: {

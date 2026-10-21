@@ -33,10 +33,10 @@ const kette = (teil: Partial<ChainProgressView> = {}): ChainProgressView => ({
   plan: karte(101, 'Der Plan'),
   pakete: [],
   stufen: [
-    { stufe: 'PLAN', zustand: 'ERREICHT' },
-    { stufe: 'REVIEW', zustand: 'LAEUFT' },
-    { stufe: 'PAKETE', zustand: 'OFFEN' },
-    { stufe: 'ABDECKUNG', zustand: 'OFFEN' },
+    { stufe: 'PLAN', zustand: 'ERREICHT', seit: null },
+    { stufe: 'REVIEW', zustand: 'LAEUFT', seit: '2026-10-21T01:00:00Z' },
+    { stufe: 'PAKETE', zustand: 'OFFEN', seit: null },
+    { stufe: 'ABDECKUNG', zustand: 'OFFEN', seit: null },
   ],
   aktuelleStufe: 'REVIEW',
   endeErreicht: false,
@@ -99,11 +99,11 @@ describe('NachtlaufFortschritt', () => {
         ketten: [
           kette({
             stufen: [
-              { stufe: 'PLAN', zustand: 'ERREICHT' },
-              { stufe: 'REVIEW', zustand: 'ERREICHT' },
-              { stufe: 'PAKETE', zustand: 'ERREICHT' },
-              { stufe: 'ABDECKUNG', zustand: 'ERREICHT' },
-              { stufe: 'UMSETZUNG', zustand: 'LAEUFT' },
+              { stufe: 'PLAN', zustand: 'ERREICHT', seit: null },
+              { stufe: 'REVIEW', zustand: 'ERREICHT', seit: null },
+              { stufe: 'PAKETE', zustand: 'ERREICHT', seit: null },
+              { stufe: 'ABDECKUNG', zustand: 'ERREICHT', seit: null },
+              { stufe: 'UMSETZUNG', zustand: 'LAEUFT', seit: '2026-10-21T01:00:00Z' },
             ],
             aktuelleStufe: 'UMSETZUNG',
           }),
@@ -123,10 +123,10 @@ describe('NachtlaufFortschritt', () => {
         ketten: [
           kette({
             stufen: [
-              { stufe: 'PLAN', zustand: 'ERREICHT' },
-              { stufe: 'REVIEW', zustand: 'ERREICHT' },
-              { stufe: 'PAKETE', zustand: 'ERREICHT' },
-              { stufe: 'ABDECKUNG', zustand: 'ERREICHT' },
+              { stufe: 'PLAN', zustand: 'ERREICHT', seit: null },
+              { stufe: 'REVIEW', zustand: 'ERREICHT', seit: null },
+              { stufe: 'PAKETE', zustand: 'ERREICHT', seit: null },
+              { stufe: 'ABDECKUNG', zustand: 'ERREICHT', seit: null },
             ],
             aktuelleStufe: null,
             endeErreicht: true,

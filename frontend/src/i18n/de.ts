@@ -8,6 +8,26 @@
  *
  * Neue Texte kommen paketweise dazu, wenn eine Seite umgestellt wird.
  */
+/** Die Namen der Stufen einer Kette — Wegleiste und Zustandssatz teilen sie (Plan #1882 E4). */
+const STUFENNAMEN = {
+  PLAN: 'Plan',
+  REVIEW: 'Prüfung',
+  PAKETE: 'Arbeitspakete',
+  ABDECKUNG: 'Abdeckung',
+  UMSETZUNG: 'Umsetzung',
+} as const
+
+/** Die Ausgangswörter eines Befunds — Übergabe und Zustandssatz teilen sie (Plan #1882 E4). */
+const AUSGANGSWORT = {
+  SUCCEEDED: 'gelungen',
+  FAILED: 'nicht gelungen',
+  WAITING: 'mit Vorbehalt',
+  RUNNING: 'läuft',
+  NO_WORK: 'nichts zu tun',
+  CLOSED: 'von Hand beendet',
+  NOT_STARTED: 'nicht angelaufen',
+} as const
+
 export const de = {
   /** Anzeigename der Anwendung: Kopfzeile, Anmeldekarte, Lizenzhinweis und Fenstertitel. */
   APP_NAME: 'KI-Leitstand',
@@ -915,13 +935,7 @@ export const de = {
   /** Fortschritt und Stufenleiste eines Laufs, `lib/laufFortschritt.ts` (Issue #1656). */
   LAUF_FORTSCHRITT: {
     ENDE_DES_WEGS: 'Ende des Wegs erreicht',
-    STUFE: {
-      PLAN: 'Plan',
-      REVIEW: 'Prüfung',
-      PAKETE: 'Arbeitspakete',
-      ABDECKUNG: 'Abdeckung',
-      UMSETZUNG: 'Umsetzung',
-    },
+    STUFE: STUFENNAMEN,
     ZUSTAND: {
       ERREICHT: 'erreicht',
       LAEUFT: 'läuft',
@@ -1183,15 +1197,7 @@ export const de = {
       TIME_BUDGET_EXCEEDED: 'Zeitbudget erschöpft',
       STUCK: 'Festgefahren',
     },
-    AUSGANG: {
-      SUCCEEDED: 'gelungen',
-      FAILED: 'nicht gelungen',
-      WAITING: 'mit Vorbehalt',
-      RUNNING: 'läuft',
-      NO_WORK: 'nichts zu tun',
-      CLOSED: 'von Hand beendet',
-      NOT_STARTED: 'nicht angelaufen',
-    },
+    AUSGANG: AUSGANGSWORT,
     ZEITBUDGET_MIT_ERGEBNIS: 'Am Zeitbudget beendet, Ergebnis liegt vor',
     ZEITBUDGET_OHNE_ERGEBNIS: 'Am Zeitbudget beendet, ohne Ergebnis',
     FESTGEFAHREN: 'festgefahren',
@@ -1433,6 +1439,23 @@ export const de = {
     GRUEN: 'grün',
     GELB: 'gelb',
     ROT: 'rot',
+  },
+
+  /** Zustandssatz der Lage eines Runs, `zustandssatz` in `lib/laufFortschritt.ts` (Plan #1882 E4). */
+  NACHTLAUF_LAGE: {
+    STUFE: STUFENNAMEN,
+    AUSGANG: AUSGANGSWORT,
+    SETZT_UM: (nummern: string, mehrere: boolean, fertig: number, gesamt: number) =>
+      `Setzt ${mehrere ? 'Pakete' : 'Paket'} ${nummern} um — ${fertig} von ${gesamt} fertig`,
+    SETZT_UM_NACHT: (nummern: string, mehrere: boolean, fertig: number) =>
+      `Setzt ${mehrere ? 'Pakete' : 'Paket'} ${nummern} um — ${fertig} fertig`,
+    UMSETZUNG_NACHT: (fertig: number) => `Umsetzung — ${fertig} fertig`,
+    ZU_PLAN: (stufe: string, nummer: number) => `${stufe} zu Plan #${nummer}`,
+    ZU_ANFORDERUNG: (stufe: string, nummer: number) => `${stufe} zu Anforderung #${nummer}`,
+    ENDE_DES_WEGS: (nummer: number) => `Kette #${nummer} am Ende des Wegs`,
+    WEITERE_KETTEN: (anzahl: number) => (anzahl === 1 ? ' + 1 weitere Kette' : ` + ${anzahl} weitere Ketten`),
+    ABGESCHLOSSEN: (ausgang: string, gruen: number, gelb: number, rot: number) =>
+      `${ausgang} — ${gruen} grün · ${gelb} gelb · ${rot} rot`,
   },
 
   /** Aufklappbare Platte eines Laufs, `NachtlaufLaufPlatte` (Issue #1658). */

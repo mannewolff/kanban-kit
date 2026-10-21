@@ -412,6 +412,8 @@ export interface PackageProgressView {
 export interface StageProgressView {
   stufe: ProgressStage
   zustand: StageState
+  /** Beginn der laufenden Stufe (Issue #1883, Plan #1882 E1); `null` an jeder anderen Stufe. */
+  seit: string | null
 }
 
 /**
