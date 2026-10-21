@@ -1,5 +1,5 @@
 import Box from '@mui/material/Box'
-import { useCallback, useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { ApiError, apiErrorMessage } from '../../api/client'
 import {
   nightRunsApi,
@@ -34,19 +34,24 @@ function schritt(t: RunnerJetztTexte, step: string): string {
  * <p>Aufgefrischt wird im Takt `taktMs`, nur bei sichtbarem Tab und nur, solange ein Lauf läuft
  * oder verstummt ist — ein verstummter kann sich wieder melden. Fehlt das Leserecht (403), erscheint
  * der Bereich gar nicht, wie `HeuteNachtUebersicht`; ein anderer Ladefehler steht in ihm.
+ *
+ * <p>Jede geladene Lage geht zusätzlich an `onGeladen` (Issue #1887, Plan #1882 E2): Die Seite
+ * nimmt daraus die laufende Stufe für „Jetzt im Werk“, ohne `/now` ein zweites Mal abzufragen.
  */
 export function RunnerJetzt({
   projectId,
   taktMs,
   api = nightRunsApi,
+  onGeladen,
 }: Readonly<{
   projectId: number
   taktMs: number
   api?: Pick<NightRunsApi, 'jetzt'>
+  onGeladen?: (lage: RunnerJetztDaten) => void
 }>) {
   const alleT = useT()
   const t = alleT.RUNNER_JETZT
-  const ladung = useRunnerJetzt(api, projectId, taktMs, alleT.FEHLER_UNBEKANNT)
+  const ladung = useRunnerJetzt(api, projectId, taktMs, alleT.FEHLER_UNBEKANNT, onGeladen)
   const ueberschriftId = useId()
 
   if (ladung.art === 'laden' || ladung.art === 'verboten') {
@@ -191,14 +196,23 @@ function useRunnerJetzt(
   projectId: number,
   taktMs: number,
   fallback: string,
+  onGeladen: ((lage: RunnerJetztDaten) => void) | undefined,
 ): Ladung {
   const [ladung, setLadung] = useState<Ladung>({ art: 'laden' })
+  // Der Rückruf steht in einem Ref: Eine neue Funktion je Rendern der Seite soll weder das Laden
+  // neu anstoßen noch den Takt neu aufsetzen.
+  const rueckruf = useRef(onGeladen)
+  useEffect(() => {
+    rueckruf.current = onGeladen
+  }, [onGeladen])
 
   const laden = useCallback(
     (istAktiv: () => boolean) => {
       api.jetzt(projectId).then(
         (lage) => {
-          if (istAktiv()) setLadung({ art: 'geladen', lage })
+          if (!istAktiv()) return
+          setLadung({ art: 'geladen', lage })
+          rueckruf.current?.(lage)
         },
         (error: unknown) => {
           if (!istAktiv()) return

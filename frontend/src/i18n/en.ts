@@ -1234,6 +1234,20 @@ export const en: Woerterbuch = {
     OHNE_PAKET: (grund) => `ended without a package – ${grund}`,
   },
 
+  JETZT_IM_WERK: {
+    TITEL: (laufend) => (laufend === 1 ? 'Right now · 1 run' : `Right now · ${laufend} runs at once`),
+    JETZT: (zeit) => `now ${zeit}`,
+    BALKEN_NUMMER: (nummer) => `#${nummer}`,
+    BALKEN_STUFE: (balken, stufe) => `${balken} · ${stufe}`,
+    RUN: (nummer) => (nummer === undefined ? 'Run' : `Run #${nummer}`),
+    LAEUFT: (run, seit) => `${run}, since ${seit}, running`,
+    MIT_STUFE: (satz, stufe) => `${satz}, ${stufe}`,
+    FERTIG: (run, von, bis) => `${run}, ${von} to ${bis}, finished`,
+    LEGENDE_LAEUFT: 'running',
+    LEGENDE_BEENDET: 'ended, in the color of its outcome',
+    LEGENDE_JETZT: 'now',
+  },
+
   WARTEGRUND: {
     TITEL: 'Why it waits',
     LADEFEHLER: (meldung) => `The waiting reason could not be loaded: ${meldung}`,

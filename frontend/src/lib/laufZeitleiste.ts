@@ -69,3 +69,11 @@ export function zeitleiste(
     }))
   return { vonMs, bisMs: jetzt, balken }
 }
+
+/**
+ * Das Sprungziel der Platte eines Runs (Issue #1887): ihr `id`, gebildet aus dem Start — der ist
+ * der Schlüssel der Lauf-Liste und steht auch an einem Run ohne Nummer.
+ */
+export function laufSprungziel(startedAt: string): string {
+  return `lauf-${startedAt}`
+}

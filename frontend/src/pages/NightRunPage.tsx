@@ -44,6 +44,7 @@ import {
   type NightRunUsageView,
   type NightRunView,
   type ReleasePreparationView,
+  type RunnerJetzt as RunnerJetztDaten,
 } from '../api/nightRuns'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
@@ -58,6 +59,7 @@ import {
 import { NachtlaufBefund } from '../components/nachtlauf/NachtlaufBefund'
 import { NachtlaufFortschritt } from '../components/nachtlauf/NachtlaufFortschritt'
 import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
+import { JetztImWerk } from '../components/nachtlauf/JetztImWerk'
 import { RunnerJetzt } from '../components/nachtlauf/RunnerJetzt'
 import { NachtlaufLage, type Kostenaufteilung } from '../components/nachtlauf/NachtlaufLage'
 import { LaufMarke, NachtlaufLaufPlatte } from '../components/nachtlauf/NachtlaufLaufPlatte'
@@ -78,6 +80,7 @@ import { useSnackbar } from '../components/SnackbarProvider'
 import { epicColor } from '../lib/epicMeta'
 import { formatDuration } from '../lib/formatDuration'
 import { gleichzeitigkeitDerMeldung, gleichzeitigkeitsMarken } from '../lib/gleichzeitigkeit'
+import { laufSprungziel, type Zeitleistenlauf } from '../lib/laufZeitleiste'
 import type { Melder } from '../lib/leitstand'
 import {
   auskunftOhneArbeit,
@@ -410,6 +413,15 @@ const zaehlerLaden = (projektId: number): Promise<Haeufigkeiten> =>
   nightRunsApi.errorClassCounts(projektId).catch(() => null)
 
 const nachStartAbsteigend = (a: AnzeigeLauf, b: AnzeigeLauf) => b.startedAt.localeCompare(a.startedAt)
+
+/** Ein Lauf, wie „Jetzt im Werk“ ihn braucht (Issue #1887): Nummer, Zeitraum, ob er läuft, Melder. */
+const alsZeitleistenlauf = (lauf: AnzeigeLauf): Zeitleistenlauf => ({
+  nummer: lauf.laufId,
+  startedAt: lauf.startedAt,
+  durationMs: lauf.durationMs,
+  laeuft: laeuftNoch({ complete: lauf.vollstaendig, outcome: lauf.befund }),
+  melder: laufMelder({ complete: lauf.vollstaendig, items: lauf.items, outcome: lauf.befund }),
+})
 
 /** Mehr Läufe stehen beim Öffnen nicht gleichzeitig offen (Issue #1511) — Plan #718 (A8). */
 const HOECHSTENS_OFFEN = 3
@@ -2889,6 +2901,7 @@ function LaufPanel({
   return (
     <NachtlaufLaufPlatte
       testId={`lauf-${lauf.startedAt}`}
+      id={laufSprungziel(lauf.startedAt)}
       titel={laufTitel(lauf.startedAt, lauf.laufId, sprache)}
       zyklus={zyklusBeschriftung(zyklusDesStarts(lauf.startedAt), sprache)}
       artSymbol={<LaufArtSymbol art={lauf.mode} />}
@@ -3057,6 +3070,11 @@ export function NightRunPage() {
    * ist der Speicher leer, und der Lauf fällt auf die Zeilendarstellung zurück.
    */
   const [staende, setStaende] = useState<ReadonlyMap<string, NightRun>>(() => new Map())
+  /**
+   * Die zuletzt geladene Lage von „Runner jetzt“ (Issue #1887, Plan #1882 E2) — aus ihr nimmt
+   * „Jetzt im Werk“ die laufende Stufe je Run; `null`, solange sie nicht geladen ist.
+   */
+  const [runnerLage, setRunnerLage] = useState<RunnerJetztDaten | null>(null)
   const [katalog, setKatalog] = useState<Kartenkatalog>(() => new Map())
   /** Die Erzeugnisse der Kettenläufe je Startzeitpunkt (Issue #1106), ermittelt beim Aufklappen. */
   /** Ob die Liste auch die älteren Läufe zeigt (Issue #1134) — nur für diesen Seitenbesuch. */
@@ -3496,7 +3514,8 @@ export function NightRunPage() {
               Leserecht ausbleibt. Was sonst auf dieser Seite steht, bleibt in der Ausnahme. */}
           <KupferwarteBereich>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <RunnerJetzt projectId={id} taktMs={AUFFRISCH_MS} />
+              <RunnerJetzt projectId={id} taktMs={AUFFRISCH_MS} onGeladen={setRunnerLage} />
+              <JetztImWerk laeufe={laeufe.map(alsZeitleistenlauf)} runner={runnerLage} jetzt={new Date().getTime()} />
               <HeuteNachtUebersicht projectId={id} onKarteOeffnen={karteOeffnen} />
 
               {laeufe.length === 0 && <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEINE_AUSWERTUNG}</Typography>}

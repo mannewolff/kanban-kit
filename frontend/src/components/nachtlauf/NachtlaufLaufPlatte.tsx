@@ -85,6 +85,11 @@ export function NachtlaufLaufPlatte({
   offen,
   onUmschalten,
   testId,
+  /**
+   * Das `id` der Platte, das Sprungziel der Balken von „Jetzt im Werk“ (Issue #1887); die Seite
+   * bildet es aus dem Start des Laufs.
+   */
+  id,
   children,
 }: Readonly<{
   titel: string
@@ -99,6 +104,7 @@ export function NachtlaufLaufPlatte({
   offen: boolean
   onUmschalten: () => void
   testId: string
+  id?: string
   children: ReactNode
 }>) {
   const inhaltId = useId()
@@ -118,6 +124,7 @@ export function NachtlaufLaufPlatte({
   return (
     <Box
       component="section"
+      id={id}
       aria-label={titel}
       data-testid={testId}
       sx={{

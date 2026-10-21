@@ -1310,6 +1310,24 @@ export const de = {
     OHNE_PAKET: (grund: string) => `ohne Paket beendet – ${grund}`,
   },
 
+  /** Die Platte „Jetzt im Werk“ auf der Runner-Seite, `JetztImWerk` (Issue #1887, Plan #1882 E2). */
+  JETZT_IM_WERK: {
+    TITEL: (laufend: number) =>
+      laufend === 1 ? 'Jetzt im Werk · 1 Run' : `Jetzt im Werk · ${laufend} Runs gleichzeitig`,
+    JETZT: (zeit: string) => `jetzt ${zeit}`,
+    /** Der Balken: Nummer und Stufe, ohne Nummer die Startzeit. */
+    BALKEN_NUMMER: (nummer: number) => `#${nummer}`,
+    BALKEN_STUFE: (balken: string, stufe: string) => `${balken} · ${stufe}`,
+    /** Die Vorleseliste: „Run #691, seit 10:32, läuft, Umsetzung“. */
+    RUN: (nummer: number | undefined) => (nummer === undefined ? 'Run' : `Run #${nummer}`),
+    LAEUFT: (run: string, seit: string) => `${run}, seit ${seit}, läuft`,
+    MIT_STUFE: (satz: string, stufe: string) => `${satz}, ${stufe}`,
+    FERTIG: (run: string, von: string, bis: string) => `${run}, ${von} bis ${bis}, fertig`,
+    LEGENDE_LAEUFT: 'läuft',
+    LEGENDE_BEENDET: 'beendet, in der Farbe seines Ausgangs',
+    LEGENDE_JETZT: 'jetzt',
+  },
+
   /** Der Abschnitt „Wartegrund“ im Kartendialog, `Wartegrund` (Issue #1730, Plan #1724). Den Satz für „verstummt“ liefert `RUNNER_JETZT.VERSTUMMT`. */
   WARTEGRUND: {
     TITEL: 'Wartegrund',

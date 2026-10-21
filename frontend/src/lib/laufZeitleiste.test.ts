@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { zeitleiste, type Zeitleistenlauf } from './laufZeitleiste'
+import { laufSprungziel, zeitleiste, type Zeitleistenlauf } from './laufZeitleiste'
 
 const MIN = 60_000
 const JETZT = Date.parse('2026-10-21T03:00:00Z')
@@ -95,5 +95,11 @@ describe('zeitleiste (Plan #1882 E2)', () => {
       zeitleiste([lauf({ nummer: 1, startedAt: '2026-10-21T02:30:00Z', laeuft: false, durationMs: MIN })], new Map(), JETZT),
     ).toBeNull()
     expect(zeitleiste([], new Map(), JETZT)).toBeNull()
+  })
+})
+
+describe('laufSprungziel (Issue #1887)', () => {
+  it('bildet das Sprungziel einer Platte aus ihrem Start', () => {
+    expect(laufSprungziel('2026-10-21T01:00:00Z')).toBe('lauf-2026-10-21T01:00:00Z')
   })
 })

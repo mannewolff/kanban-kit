@@ -21,6 +21,7 @@ import type {
   NightRunResult,
   NightRunUsageView,
   NightRunView,
+  RunnerJetzt as RunnerJetztDaten,
 } from '../api/nightRuns'
 import { SnackbarProvider } from '../components/SnackbarProvider'
 import echterLauf from '../lib/__fixtures__/night-run-2026-09-07-085229.json'
@@ -486,6 +487,11 @@ interface Antworten {
    * Angabe ist keine Karte freigegeben.
    */
   heuteNacht?: HeuteNachtKarte[] | 'verboten'
+  /**
+   * Die Antwort von `GET …/night-runs/now` für „Runner jetzt“ (Issue #1887); ohne Angabe scheitert
+   * der Abruf wie jede unerwartete Anfrage.
+   */
+  jetzt?: RunnerJetztDaten
 }
 
 /** Alle Anfragen dieses Tests, in Reihenfolge — Grundlage der Sende- und Ladepfad-Prüfungen. */
@@ -589,6 +595,12 @@ function fortschrittAntwort(url: string, naechster: ReadonlyMap<number, ReturnTy
   return treffer === null ? undefined : naechster.get(Number(treffer[1]))?.()
 }
 
+/** Die Lage von „Runner jetzt“ (Issue #1887), wenn der Test eine vorgibt; sonst `undefined`. */
+function runnerJetztAntwort(url: string, antworten: Antworten) {
+  if (url !== '/api/projects/5/night-runs/now' || antworten.jetzt === undefined) return undefined
+  return Promise.resolve(antwortOk(antworten.jetzt))
+}
+
 /** Die Übersicht „Heute Nacht“ (Issue #1455); ohne Vorgabe ist keine Karte freigegeben. */
 function heuteNachtAntwort(url: string, antworten: Antworten) {
   if (url !== '/api/projects/5/night-runs/tonight') return undefined
@@ -636,7 +648,8 @@ function stubFetch(antworten: Antworten) {
         kartenAntwort(url, antworten) ??
         herkunftsAntwort(url, antworten) ??
         fortschrittAntwort(url, naechsterFortschritt) ??
-        heuteNachtAntwort(url, antworten)
+        heuteNachtAntwort(url, antworten) ??
+        runnerJetztAntwort(url, antworten)
       if (karte) return karte
 
       return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
@@ -7791,5 +7804,67 @@ describe('NightRunPage — Gleichzeitigkeit in der Lauf-Ansicht (#1879)', () => 
     expect(angabenVon(722)).toEqual([])
     expect(angabenVon(700)).toEqual([])
     expect(screen.getByTestId('paket-722')).not.toHaveTextContent('gleichzeitig')
+  })
+})
+
+// Issue #1887 (Plan #1882 E2): Laufen zwei Runs gleichzeitig, zeigt „Jetzt im Werk“ sie auf einer
+// Zeitachse — mit der Stufe aus `/now`, die „Runner jetzt“ über `onGeladen` an die Seite reicht.
+describe('NightRunPage — Jetzt im Werk', () => {
+  const stufe = (stage: string) => ({
+    cardNumber: 1887,
+    stage,
+    startedAt: startedAt(30),
+    deadline: null,
+    step: 'SESSION',
+    holdsImplementation: false,
+  })
+  const runnerLauf = (runId: number, minute: number, stage: string) => ({
+    runId,
+    mode: 'CHAIN' as const,
+    startedAt: startedAt(minute),
+    tokenName: 'runner',
+    lastReportAt: startedAt(40),
+    state: 'LAEUFT' as const,
+    stages: [stufe(stage)],
+    lastStage: null,
+  })
+
+  it('zeigt zwei gleichzeitig laufende Runs als Balken mit Stufe, zwischen „Runner jetzt“ und den Läufen', async () => {
+    renderPage({
+      listen: [
+        [
+          aufbewahrt({ id: 692, startedAt: startedAt(10), complete: false }),
+          aufbewahrt({ id: 691, startedAt: startedAt(5), complete: false }),
+          aufbewahrt({ id: 690, startedAt: startedAt(0) }),
+        ],
+      ],
+      jetzt: {
+        state: 'AKTIV',
+        runs: [runnerLauf(691, 5, 'UMSETZUNG'), runnerLauf(692, 10, 'REVIEW')],
+        lastRun: null,
+      },
+    })
+
+    const werk = await screen.findByRole('region', { name: 'Jetzt im Werk · 2 Runs gleichzeitig' })
+    await waitFor(() => expect(within(werk).getByText(/^#691 · Umsetzung$/)).toBeInTheDocument())
+    expect(within(werk).getByText(/^#692 · Prüfung$/)).toBeInTheDocument()
+    // Der Balken springt zur Platte seines Runs.
+    expect(within(werk).getByText(/^#691 · Umsetzung$/)).toHaveAttribute('href', `#lauf-${startedAt(5)}`)
+    expect(lauf(5)).toHaveAttribute('id', `lauf-${startedAt(5)}`)
+    // Reihenfolge im Dokument: Runner jetzt, Jetzt im Werk, Läufe.
+    const runner = await screen.findByTestId('runner-jetzt')
+    expect(runner.compareDocumentPosition(werk) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(werk.compareDocumentPosition(lauf(10)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('fehlt, solange kein Run läuft', async () => {
+    renderPage({
+      listen: [[aufbewahrt({ id: 690, startedAt: startedAt(0) })]],
+      jetzt: { state: 'KEIN_RUNNER', runs: [], lastRun: null },
+    })
+
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+    await screen.findByTestId('runner-jetzt')
+    expect(screen.queryByRole('region', { name: /^Jetzt im Werk/ })).not.toBeInTheDocument()
   })
 })
