@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lauf-Ansicht</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* ============================================================
+     LAUF-ANSICHT — verbindliche Vorlage der Runner-Seite
+     Skizze aus der Designsession vom 2026-10-21, von Manne als
+     verbindliche Vorlage entschieden (Plan „Lauf-Ansicht auf einen
+     Blick lesbar“). Gilt für die Lauf-Platte und „Jetzt im Werk“;
+     Werte und Tiefen aus docs/entwurf-leitstand.html (Kupferwarte).
+     ============================================================ */
+
+  :root {
+    --grund:        #E7E9ED;
+    --grund-tief:   #D8DBE2;
+    --nute:         #D5D9E0;
+    --platte:       #FDFDFE;
+    --platte-fuss:  #F2F4F7;
+    --platte-hoch:  #FFFFFF;
+    --rand:         #CDD2DA;
+    --rand-stark:   #B7BEC9;
+    --kante:        rgba(255,255,255,.9);
+
+    --text:         #14181E;
+    --text-matt:    #58606C;
+    --text-schwach: #868E9B;
+
+    --kupfer:       #A85F2C;
+    --kupfer-hell:  #C2743C;
+    --kupfer-schat: rgba(168,95,44,.16);
+
+    --gruen:   #2F8F4E;
+    --bernst:  #B07C15;
+    --zinnob:  #C8393E;
+    --stahl:   #2F6FC9;
+    --grau:    #8A929E;
+    --braun:   #7A5A3E;
+
+    --schatten-platte:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(18,24,33,.10),
+      0 10px 24px -14px rgba(18,24,33,.35);
+    --schatten-nute:
+      0 2px 5px rgba(18,24,33,.14) inset,
+      0 -1px 0 var(--kante) inset;
+    --schatten-taste:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(18,24,33,.18);
+
+    --r-gross: 14px;
+    --r-mittel: 10px;
+    --r-klein: 6px;
+
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --grund:        #0D1014;
+      --grund-tief:   #090B0E;
+      --nute:         #080A0D;
+      --platte:       #171B22;
+      --platte-fuss:  #12151B;
+      --platte-hoch:  #1E242D;
+      --rand:         #262C36;
+      --rand-stark:   #333B47;
+      --kante:        rgba(255,255,255,.075);
+      --text:         #E7EAEF;
+      --text-matt:    #98A1AE;
+      --text-schwach: #69717E;
+      --kupfer:       #D08A52;
+      --kupfer-hell:  #E3A26C;
+      --kupfer-schat: rgba(208,138,82,.18);
+      --gruen:   #46C46F;
+      --bernst:  #E0AE49;
+      --zinnob:  #F0575C;
+      --stahl:   #5B96F0;
+      --grau:    #6E7681;
+      --braun:   #B08A68;
+      --schatten-platte:
+        0 1px 0 var(--kante) inset,
+        0 1px 2px rgba(0,0,0,.5),
+        0 12px 28px -16px rgba(0,0,0,.85);
+      --schatten-nute:
+        0 3px 7px rgba(0,0,0,.6) inset,
+        0 -1px 0 rgba(255,255,255,.05) inset;
+      --schatten-taste:
+        0 1px 0 rgba(255,255,255,.08) inset,
+        0 1px 2px rgba(0,0,0,.6);
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --grund:        #0D1014;
+    --grund-tief:   #090B0E;
+    --nute:         #080A0D;
+    --platte:       #171B22;
+    --platte-fuss:  #12151B;
+    --platte-hoch:  #1E242D;
+    --rand:         #262C36;
+    --rand-stark:   #333B47;
+    --kante:        rgba(255,255,255,.075);
+    --text:         #E7EAEF;
+    --text-matt:    #98A1AE;
+    --text-schwach: #69717E;
+    --kupfer:       #D08A52;
+    --kupfer-hell:  #E3A26C;
+    --kupfer-schat: rgba(208,138,82,.18);
+    --gruen:   #46C46F;
+    --bernst:  #E0AE49;
+    --zinnob:  #F0575C;
+    --stahl:   #5B96F0;
+    --grau:    #6E7681;
+    --braun:   #B08A68;
+    --schatten-platte:
+      0 1px 0 var(--kante) inset,
+      0 1px 2px rgba(0,0,0,.5),
+      0 12px 28px -16px rgba(0,0,0,.85);
+    --schatten-nute:
+      0 3px 7px rgba(0,0,0,.6) inset,
+      0 -1px 0 rgba(255,255,255,.05) inset;
+    --schatten-taste:
+      0 1px 0 rgba(255,255,255,.08) inset,
+      0 1px 2px rgba(0,0,0,.6);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 600px at 18% -8%, var(--kupfer-schat), transparent 62%),
+      var(--grund);
+    color: var(--text);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono, .zahl {
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a { color: inherit; }
+
+  :is(button, a, [tabindex]):focus-visible {
+    outline: 2px solid var(--kupfer);
+    outline-offset: 2px;
+    border-radius: var(--r-klein);
+  }
+
+  .etikett {
+    font-family: Archivo, system-ui, sans-serif;
+    font-stretch: 118%;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--text-schwach);
+  }
+
+  .buehne {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 22px 26px 44px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .seitenkopf { display: flex; justify-content: space-between; align-items: baseline; }
+  .seitenkopf h1 {
+    font-family: Archivo, system-ui, sans-serif;
+    font-stretch: 112%;
+    font-size: 20px;
+    margin: 0;
+  }
+  .umschalter {
+    font: inherit; font-size: 12px; color: var(--text-matt);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte-fuss));
+    border: 1px solid var(--rand); border-radius: var(--r-klein);
+    box-shadow: var(--schatten-taste); padding: 4px 10px; cursor: pointer;
+  }
+
+  /* ---------- Platte ---------- */
+  .platte {
+    border-radius: var(--r-gross);
+    border: 1px solid var(--rand);
+    background: var(--platte);
+    box-shadow: var(--schatten-platte);
+    overflow: hidden;
+  }
+
+  /* ---------- LED ---------- */
+  .led {
+    width: 9px; height: 9px; border-radius: 50%; flex: none;
+    background: var(--grau); color: var(--grau);
+    box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 8px -1px currentColor;
+  }
+  .led-gruen { background: var(--gruen); color: var(--gruen); }
+  .led-stahl { background: var(--stahl); color: var(--stahl); }
+  .led-puls { animation: puls 1.9s ease-in-out infinite; }
+  @keyframes puls {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 7px -1px currentColor; }
+    50%      { box-shadow: 0 0 0 1px rgba(0,0,0,.22) inset, 0 0 14px 1px currentColor; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .led-puls { animation: none; }
+  }
+
+  /* ============================================================
+     Jetzt im Werk — Zeitachse der laufenden Runs (Plan E2)
+     ============================================================ */
+  .werk { padding: 14px 18px 12px; }
+  .werk-kopf { display: flex; justify-content: space-between; align-items: baseline; }
+  .werk-jetzt { font-size: 12px; color: var(--text-matt); }
+  .achse {
+    position: relative;
+    margin-top: 12px;
+    padding: 22px 0 6px;
+    border-radius: var(--r-mittel);
+    background: var(--nute);
+    box-shadow: var(--schatten-nute);
+  }
+  .achse-marken {
+    position: absolute; left: 12px; right: 12px; top: 4px;
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--text-matt);
+  }
+  .bahn { position: relative; height: 22px; margin: 4px 12px; }
+  .balken {
+    position: absolute; top: 2px; height: 18px;
+    border-radius: 5px;
+    display: flex; align-items: center; padding: 0 8px;
+    font-size: 11px; font-weight: 600; text-decoration: none;
+    color: #fff;
+  }
+  .balken-laeuft {
+    background: repeating-linear-gradient(45deg, var(--stahl) 0 5px, color-mix(in srgb, var(--stahl) 72%, #fff) 5px 10px);
+  }
+  .balken-fertig { background: var(--gruen); }
+  .jetzt-strich {
+    position: absolute; top: 18px; bottom: 4px; width: 2px;
+    background: var(--kupfer);
+    box-shadow: 0 0 8px -1px var(--kupfer);
+  }
+  .legende {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    margin-top: 10px; font-size: 11.5px; color: var(--text-matt);
+  }
+  .legende span { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* ============================================================
+     Lauf-Platte: Kopf, Lage, Kettenzeilen, Vorgänge, Fuß
+     ============================================================ */
+  .kopf {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--rand);
+    background: linear-gradient(180deg, var(--platte-hoch), var(--platte-fuss));
+  }
+  .kopf-zyklus { font-size: 10px; }
+  .kopf-titel {
+    font-family: Archivo, system-ui, sans-serif; font-stretch: 110%;
+    font-size: 15px; font-weight: 600;
+  }
+  .kopf-meta { font-size: 12px; color: var(--text-matt); }
+  .kopf-marken { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .marke {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 3px 9px; border-radius: var(--r-klein);
+    background: var(--nute); box-shadow: var(--schatten-nute);
+    font-size: 11.5px; color: var(--text-matt);
+  }
+  .klapp {
+    width: 22px; height: 22px; border-radius: var(--r-klein);
+    display: grid; place-items: center; color: var(--text-matt);
+    border: 1px solid var(--rand); background: var(--platte-hoch); box-shadow: var(--schatten-taste);
+    font-size: 11px;
+  }
+
+  /* --- Lage des Runs (Plan E3–E5) --- */
+  .lage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 28px; align-items: center;
+    padding: 16px 18px 12px;
+  }
+  .satz { font-size: 16px; line-height: 1.4; }
+  .satz b { font-weight: 600; }
+  .satz .mono { font-size: 15px; }
+  .satz-unter { font-size: 12px; color: var(--text-matt); margin-top: 2px; }
+  .gross {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 26px; font-weight: 600; line-height: 1;
+  }
+  .gross small { font-size: 12px; font-weight: 400; color: var(--text-matt); margin-left: 3px; }
+  .zahlen { display: flex; gap: 12px; font-size: 13px; color: var(--text-matt); }
+  .zahlen b { font-family: "IBM Plex Mono", monospace; font-weight: 600; color: var(--text); }
+  .leise {
+    padding: 0 18px 14px;
+    font-size: 11.5px; color: var(--text-matt);
+  }
+
+  /* --- Kettenzeile (Plan E6–E8) --- */
+  .ketten { border-top: 1px solid var(--rand); }
+  .kette {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr) 230px 170px;
+    gap: 20px; align-items: center;
+    padding: 12px 18px;
+  }
+  .kette + .kette { border-top: 1px dashed var(--rand); }
+  @media (max-width: 1180px) {
+    .kette { grid-template-columns: 200px minmax(0, 1fr); row-gap: 10px; }
+    .kette > :nth-child(3) { grid-column: 2; }
+    .kette > :nth-child(4) { grid-column: 2; max-width: 240px; }
+    .fuss { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .lage { gap: 18px; }
+  }
+  .anf-nr { font-size: 12px; color: var(--text-matt); display: flex; gap: 8px; align-items: center; }
+  .anf-titel { font-size: 13.5px; font-weight: 500; line-height: 1.3; }
+  .flagge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--gruen); font-weight: 600;
+  }
+
+  .stufen { display: flex; align-items: center; min-width: 0; list-style: none; margin: 0; padding: 0; }
+  .stufe { display: flex; align-items: center; flex: 1; min-width: 0; }
+  .stufe:last-child { flex: none; }
+  .punkt {
+    width: 22px; height: 22px; border-radius: 50%; flex: none;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 600; font-family: "IBM Plex Mono", monospace;
+  }
+  .punkt-erreicht {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--gruen) 26%, var(--platte)), var(--platte));
+    border: 1px solid color-mix(in srgb, var(--gruen) 45%, var(--rand));
+    color: var(--gruen);
+    box-shadow: var(--schatten-taste);
+  }
+  .punkt-laeuft {
+    background: linear-gradient(180deg, var(--kupfer-hell), var(--kupfer));
+    border: 1px solid color-mix(in srgb, var(--kupfer) 60%, #000);
+    color: #fff;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--kupfer) 28%, transparent), 0 0 12px -2px var(--kupfer);
+  }
+  .punkt-offen {
+    background: var(--nute);
+    border: 1.5px dashed var(--text-schwach);
+    color: var(--text-schwach);
+  }
+  .stufe-name { font-size: 11px; color: var(--text-matt); margin-left: 6px; white-space: nowrap; }
+  .stufe[aria-current="step"] .stufe-name { color: var(--text); font-weight: 600; }
+  .strich {
+    flex: 1; height: 2px; border-radius: 2px; margin: 0 8px; min-width: 10px;
+    background: var(--nute); box-shadow: var(--schatten-nute);
+  }
+  .stufe-erreicht .strich { background: color-mix(in srgb, var(--gruen) 55%, var(--nute)); box-shadow: none; }
+
+  .zeit { flex: 1; margin-left: 12px; min-width: 120px; }
+  .schiene {
+    height: 6px; border-radius: 3px;
+    background: var(--nute); box-shadow: var(--schatten-nute); overflow: hidden;
+  }
+  .fuellung { height: 100%; border-radius: 3px; }
+  .fuellung-stahl { background: var(--stahl); }
+  .fuellung-kupfer { background: linear-gradient(90deg, var(--kupfer), var(--kupfer-hell)); }
+  .zeit-text { font-size: 11px; color: var(--text-matt); margin-top: 3px; }
+
+  /* --- Paketraster (Plan E6) --- */
+  .raster { display: flex; flex-wrap: wrap; gap: 4px; list-style: none; margin: 0; padding: 0; }
+  .paket {
+    width: 16px; height: 16px; border-radius: 4px; padding: 0;
+    cursor: pointer; display: block;
+  }
+  .paket-fertig { background: var(--gruen); border: 1px solid color-mix(in srgb, var(--gruen) 70%, #000); }
+  .paket-umsetzung {
+    border: 1px solid var(--stahl);
+    background: repeating-linear-gradient(45deg, var(--stahl) 0 3px, color-mix(in srgb, var(--stahl) 35%, var(--platte)) 3px 6px);
+  }
+  .paket-gezogen { background: transparent; border: 1.5px solid var(--stahl); }
+  .paket-angelegt { background: transparent; border: 1.5px solid var(--text-schwach); }
+  .paket-zurueck {
+    border: 1px solid color-mix(in srgb, var(--zinnob) 70%, #000);
+    background: linear-gradient(135deg, var(--zinnob) 0 44%, var(--platte) 44% 56%, var(--zinnob) 56%);
+  }
+  .raster-text { font-size: 11px; color: var(--text-matt); margin-top: 4px; }
+
+  .kosten-kette .wert { font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 500; }
+  .kosten-kette .wert small { color: var(--text-matt); font-weight: 400; }
+  .kosten-kette .schiene { margin-top: 4px; }
+  .kosten-leer { font-size: 11.5px; color: var(--text-schwach); }
+
+  /* --- Vorgangszeilen (unverändert, hier nur angedeutet) --- */
+  .vorgaenge { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rand); }
+  .vorgang {
+    display: grid; grid-template-columns: 14px 64px minmax(0, 1fr) auto auto auto;
+    gap: 14px; align-items: center; padding: 9px 18px;
+    font-size: 13px;
+  }
+  .vorgang + .vorgang { border-top: 1px solid var(--rand); }
+  .vorgang .zahl { font-size: 12px; color: var(--text-matt); }
+  .hash {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-matt);
+    padding: 1px 6px; border-radius: var(--r-klein); background: var(--nute); box-shadow: var(--schatten-nute);
+  }
+  .marke-klein { font-size: 11px; color: var(--text-matt); padding: 1px 7px; border-radius: var(--r-klein); border: 1px solid var(--rand); }
+
+  /* --- Fuß (Plan E10) --- */
+  .fuss {
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 18px; padding: 12px 18px 14px;
+    border-top: 1px solid var(--rand);
+    background: var(--platte-fuss);
+  }
+  .fuss .wert { font-size: 12px; color: var(--text-matt); margin-top: 3px; }
+  .fuss .einlieferung { grid-column: span 2; }
+
+  .hinweis {
+    font-size: 12px; color: var(--text-matt);
+    border-left: 2px solid var(--kupfer); border-radius: 0;
+    padding: 8px 12px; background: var(--platte);
+  }
+
+  .sr {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<main class="buehne">
+
+  <header class="seitenkopf">
+    <h1>Runner</h1>
+    <button class="umschalter" type="button" id="thema">hell / dunkel</button>
+  </header>
+
+  <p class="hinweis">Verbindliche Vorlage der Lauf-Platte und der Platte „Jetzt im Werk“, entschieden am 2026-10-21. Die Vorgangszeilen sind nur angedeutet; für sie gilt weiter <span class="mono">docs/mockup-nachtlauf-lauf.html</span>. Alle Zahlen sind Beispielwerte.</p>
+
+  <!-- ===================== Jetzt im Werk ===================== -->
+  <section class="platte werk" aria-labelledby="werk-titel">
+    <div class="werk-kopf">
+      <h2 class="etikett" id="werk-titel" style="margin:0">Jetzt im Werk · 2 Runs gleichzeitig</h2>
+      <span class="werk-jetzt mono">jetzt 11:35</span>
+    </div>
+    <div class="achse" aria-hidden="true">
+      <div class="achse-marken mono"><span>10:30</span><span>10:45</span><span>11:00</span><span>11:15</span><span>11:30</span></div>
+      <div class="bahn"><a class="balken balken-laeuft mono" href="#lauf-691" style="left:3%;width:91%">#691 · Umsetzung</a></div>
+      <div class="bahn"><a class="balken balken-laeuft mono" href="#lauf-692" style="left:6%;width:88%">#692 · Prüfung</a></div>
+      <div class="bahn"><a class="balken balken-fertig mono" href="#lauf-690" style="left:0;width:22%">#690</a></div>
+      <span class="jetzt-strich" style="left:calc(12px + (100% - 24px) * .94)"></span>
+    </div>
+    <ul class="sr">
+      <li><a href="#lauf-691">Run #691, seit 10:32, läuft, Umsetzung</a></li>
+      <li><a href="#lauf-692">Run #692, seit 10:34, läuft, Prüfung</a></li>
+      <li><a href="#lauf-690">Run #690, 10:30 bis 10:44, fertig</a></li>
+    </ul>
+    <div class="legende">
+      <span><span class="balken balken-laeuft" style="position:static;width:22px;height:10px;padding:0"></span>läuft</span>
+      <span><span class="balken balken-fertig" style="position:static;width:22px;height:10px;padding:0"></span>beendet, in der Farbe seines Ausgangs</span>
+      <span><span style="display:inline-block;width:2px;height:12px;background:var(--kupfer)"></span>jetzt</span>
+    </div>
+  </section>
+
+  <!-- ===================== Run #691 — Umsetzung ===================== -->
+  <article class="platte" id="lauf-691" aria-labelledby="t691">
+    <header class="kopf">
+      <span class="led led-stahl led-puls" aria-hidden="true"></span>
+      <div>
+        <div class="etikett kopf-zyklus">Schicht vom 20.10.2026 auf den 21.10.2026</div>
+        <div class="kopf-titel" id="t691">Run #691 · 21. Oktober, 10:32</div>
+        <div class="kopf-meta mono">21.10., 10:32 · 1:03 h · 4 bearbeitet · 0 übergangen</div>
+      </div>
+      <div class="kopf-marken">
+        <span class="marke"><span class="led led-stahl led-puls" aria-hidden="true"></span>unvollständig gemeldet</span>
+      </div>
+      <span class="klapp" aria-hidden="true">▾</span>
+    </header>
+
+    <section class="lage" aria-label="Lage des Runs">
+      <div>
+        <div class="satz">Setzt Paket <span class="mono">#1846</span> um — <b>4 von 11</b> fertig</div>
+        <div class="satz-unter">Anforderung <span class="mono">#1800</span> · Plan <span class="mono">#1830</span></div>
+      </div>
+      <div class="zahlen" aria-label="Pakete">
+        <span><b>4</b> grün</span><span><b>0</b> gelb</span><span><b>0</b> rot</span>
+      </div>
+      <div class="gross" aria-label="Kosten des Runs">14,55<small>$</small></div>
+    </section>
+    <div class="leise mono">Eingabe 24,09 Mio · Ausgabe 195 Tsd · Cache-Quote 97 %</div>
+
+    <section class="ketten" aria-label="Ketten">
+      <div class="kette">
+        <div>
+          <div class="anf-nr mono"><a href="#">#1800</a> · Plan <a href="#">#1830</a></div>
+          <div class="anf-titel">Fassung und Update des Kits</div>
+        </div>
+        <ol class="stufen" aria-label="Weg der Kette">
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Plan: erreicht">✓</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Prüfung: erreicht">✓</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Arbeitspakete: erreicht">✓</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Abdeckung: erreicht">✓</span><span class="strich"></span></li>
+          <li class="stufe" aria-current="step"><span class="punkt punkt-laeuft" role="img" aria-label="Umsetzung: läuft">5</span><span class="stufe-name">Umsetzung</span><span class="zeit-text mono" style="margin:0 0 0 8px">seit 44 min</span></li>
+        </ol>
+        <div>
+          <ul class="raster" aria-label="Pakete">
+            <li><button class="paket paket-fertig" title="Paket #1842, fertig: Bezugsstand in kit/board/fassung.mjs" aria-label="Paket #1842, fertig: Bezugsstand in kit/board/fassung.mjs"></button></li>
+            <li><button class="paket paket-fertig" title="Paket #1843, fertig" aria-label="Paket #1843, fertig: Projektliste des Rechners"></button></li>
+            <li><button class="paket paket-fertig" title="Paket #1844, fertig" aria-label="Paket #1844, fertig: Changelog je Fassung"></button></li>
+            <li><button class="paket paket-fertig" title="Paket #1845, fertig" aria-label="Paket #1845, fertig: update check meldet neue Fassung"></button></li>
+            <li><button class="paket paket-umsetzung" title="Paket #1846, in Umsetzung" aria-label="Paket #1846, in Umsetzung"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1847, angelegt" aria-label="Paket #1847, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1848, angelegt" aria-label="Paket #1848, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1849, angelegt" aria-label="Paket #1849, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1850, angelegt" aria-label="Paket #1850, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1851, angelegt" aria-label="Paket #1851, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1852, angelegt" aria-label="Paket #1852, angelegt"></button></li>
+          </ul>
+          <div class="raster-text mono">4 fertig · 1 in Umsetzung · 6 angelegt</div>
+        </div>
+        <!-- Kette mit Umsetzung (Variante B): Betrag der Planung ohne Balken — ihr Deckel
+             im Kit ist kostenUsdB, und das Board bekommt ihn nicht gemeldet (Plan E8). -->
+        <div class="kosten-kette">
+          <div class="wert"><small>Planung</small> 7,28 <small>$</small></div>
+        </div>
+      </div>
+    </section>
+
+    <ul class="vorgaenge" aria-label="Vorgänge">
+      <li class="vorgang"><span class="led led-gruen" aria-hidden="true"></span><span class="zahl">#1842</span><span>Der Bezugsstand der veröffentlichten Fassung liegt in kit/board/fassung.mjs</span><span class="marke-klein">gleichzeitig</span><span class="zahl">10:41 min · 2,59 $</span><span class="hash">0533083</span></li>
+      <li class="vorgang"><span class="led led-gruen" aria-hidden="true"></span><span class="zahl">#1843</span><span>Installation und Update tragen das Projekt in die Projektliste des Rechners ein</span><span></span><span class="zahl">11:16 min · 3,35 $</span><span class="hash">b3534b5</span></li>
+    </ul>
+
+    <footer class="fuss">
+      <div><div class="etikett">Zeitvorgaben je Kette</div><div class="wert mono">Plan 60 · Prüfung 60 · Pakete 30 · Abdeckung 15 min</div></div>
+      <div><div class="etikett">Kostenbudget je Kette</div><div class="wert mono">50,00 $</div></div>
+      <div><div class="etikett">Herkunft der Budgets</div><div class="wert">eingestellt</div></div>
+      <div class="einlieferung"><div class="etikett">Einlieferung</div><div class="wert">Herkunft unbekannt · maschinell eingeliefert am 21.10.2026, 10:32:03 (Token: ki-workflow-kit) · zuletzt gemeldet am 21.10.2026, 11:26:55</div></div>
+    </footer>
+  </article>
+
+  <!-- ===================== Run #692 — Kette in Prüfung ===================== -->
+  <article class="platte" id="lauf-692" aria-labelledby="t692">
+    <header class="kopf">
+      <span class="led led-stahl led-puls" aria-hidden="true"></span>
+      <div>
+        <div class="etikett kopf-zyklus">Schicht vom 20.10.2026 auf den 21.10.2026</div>
+        <div class="kopf-titel" id="t692">Run #692 · 21. Oktober, 10:34</div>
+        <div class="kopf-meta mono">21.10., 10:34 · 1:01 h · 1 bearbeitet · 0 übergangen</div>
+      </div>
+      <div class="kopf-marken">
+        <span class="marke"><span class="led led-stahl led-puls" aria-hidden="true"></span>unvollständig gemeldet</span>
+      </div>
+      <span class="klapp" aria-hidden="true">▾</span>
+    </header>
+
+    <section class="lage" aria-label="Lage des Runs">
+      <div>
+        <div class="satz">Prüft Plan <span class="mono">#1866</span> zu Anforderung <span class="mono">#1816</span> <span style="color:var(--text-matt)">+ 1 weitere Kette</span></div>
+        <div class="satz-unter">Kette <span class="mono">#1814</span> am Ende des Wegs, 11 Pakete angelegt</div>
+      </div>
+      <div class="zahlen" aria-label="Pakete">
+        <span><b>1</b> grün</span><span><b>0</b> gelb</span><span><b>0</b> rot</span>
+      </div>
+      <div class="gross" aria-label="Kosten des Runs">25,21<small>$</small></div>
+    </section>
+    <div class="leise mono">Eingabe 11,84 Mio · Ausgabe 131 Tsd · Cache-Quote 97 % · Planung 17,64 $ · Umsetzung 7,56 $</div>
+
+    <section class="ketten" aria-label="Ketten">
+      <div class="kette">
+        <div>
+          <div class="anf-nr mono"><a href="#">#1816</a> · Plan <a href="#">#1866</a></div>
+          <div class="anf-titel">Titel der Anforderung #1816</div>
+        </div>
+        <ol class="stufen" aria-label="Weg der Kette">
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Plan: erreicht">✓</span><span class="strich"></span></li>
+          <li class="stufe" aria-current="step" style="flex:3">
+            <span class="punkt punkt-laeuft" role="img" aria-label="Prüfung: läuft">2</span>
+            <span class="stufe-name">Prüfung</span>
+            <div class="zeit">
+              <div class="schiene" role="img" aria-label="18 von 60 Minuten verstrichen"><div class="fuellung fuellung-stahl" style="width:30%"></div></div>
+              <div class="zeit-text mono">18 / 60 min</div>
+            </div>
+            <span class="strich"></span>
+          </li>
+          <li class="stufe"><span class="punkt punkt-offen" role="img" aria-label="Arbeitspakete: offen">3</span><span class="strich"></span></li>
+          <li class="stufe"><span class="punkt punkt-offen" role="img" aria-label="Abdeckung: offen">4</span></li>
+        </ol>
+        <div class="raster-text" style="margin:0">noch keine Pakete</div>
+        <div class="kosten-leer">Kosten erst mit der Meldung des Vorgangs</div>
+      </div>
+
+      <div class="kette">
+        <div>
+          <div class="anf-nr mono"><a href="#">#1814</a> · Plan <a href="#">#1853</a> <span class="flagge" role="img" aria-label="Ende des Wegs erreicht">⚑ Ende des Wegs</span></div>
+          <div class="anf-titel">Das Kit läuft ohne die Pro-Teile vollständig interaktiv</div>
+        </div>
+        <ol class="stufen" aria-label="Weg der Kette">
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Plan: erreicht">✓</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Prüfung: erreicht">✓</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Arbeitspakete: erreicht">✓</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Abdeckung: erreicht">✓</span></li>
+        </ol>
+        <div>
+          <ul class="raster" aria-label="Pakete">
+            <li><button class="paket paket-gezogen" title="Paket #1855, gezogen" aria-label="Paket #1855, gezogen"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1856, angelegt" aria-label="Paket #1856, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1857, angelegt" aria-label="Paket #1857, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1858, angelegt" aria-label="Paket #1858, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1859, angelegt" aria-label="Paket #1859, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1860, angelegt" aria-label="Paket #1860, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1861, angelegt" aria-label="Paket #1861, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1862, angelegt" aria-label="Paket #1862, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1863, angelegt" aria-label="Paket #1863, angelegt"></button></li>
+            <li><button class="paket paket-angelegt" title="Paket #1864, angelegt" aria-label="Paket #1864, angelegt"></button></li>
+            <li><button class="paket paket-zurueck" title="Paket #1865, zurückgestellt" aria-label="Paket #1865, zurückgestellt"></button></li>
+          </ul>
+          <div class="raster-text mono">1 gezogen · 9 angelegt · 1 zurückgestellt</div>
+        </div>
+        <div class="kosten-kette">
+          <div class="wert">17,64 <small>/ 50,00 $</small></div>
+          <div class="schiene" aria-hidden="true"><div class="fuellung fuellung-kupfer" style="width:35%"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <ul class="vorgaenge" aria-label="Vorgänge">
+      <li class="vorgang"><span class="led led-gruen" aria-hidden="true"></span><span class="zahl">#1814</span><span>[Requirement] Das Kit läuft ohne die Pro-Teile vollständig interaktiv</span><span></span><span class="zahl">36:37 min · 17,64 $</span><span></span></li>
+    </ul>
+
+    <footer class="fuss">
+      <div><div class="etikett">Zeitvorgaben je Kette</div><div class="wert mono">Plan 60 · Prüfung 60 · Pakete 30 · Abdeckung 15 min</div></div>
+      <div><div class="etikett">Kostenbudget je Kette</div><div class="wert mono">50,00 $</div></div>
+      <div><div class="etikett">Höchste Kosten eines Vorgangs</div><div class="wert mono">17,64 $</div></div>
+      <div class="einlieferung"><div class="etikett">Einlieferung</div><div class="wert">Herkunft unbekannt · maschinell eingeliefert am 21.10.2026, 10:34:38 (Token: ki-workflow-kit) · zuletzt gemeldet am 21.10.2026, 11:22:11</div></div>
+    </footer>
+  </article>
+
+  <!-- ===================== Legende ===================== -->
+  <section class="platte" style="padding:14px 18px" aria-labelledby="legende-titel">
+    <h2 class="etikett" id="legende-titel" style="margin:0 0 10px">Legende</h2>
+    <div class="legende" style="margin:0">
+      <span><span class="punkt punkt-erreicht" aria-hidden="true">✓</span>Stufe erreicht</span>
+      <span><span class="punkt punkt-laeuft" aria-hidden="true">2</span>Stufe läuft</span>
+      <span><span class="punkt punkt-offen" aria-hidden="true">3</span>Stufe offen</span>
+      <span><span class="paket paket-fertig" aria-hidden="true"></span>fertig</span>
+      <span><span class="paket paket-umsetzung" aria-hidden="true"></span>in Umsetzung</span>
+      <span><span class="paket paket-gezogen" aria-hidden="true"></span>gezogen</span>
+      <span><span class="paket paket-angelegt" aria-hidden="true"></span>angelegt</span>
+      <span><span class="paket paket-zurueck" aria-hidden="true"></span>zurückgestellt</span>
+    </div>
+  </section>
+
+</main>
+<script>
+  document.getElementById('thema').addEventListener('click', () => {
+    const root = document.documentElement
+    const dunkel = root.dataset.theme
+      ? root.dataset.theme === 'dark'
+      : matchMedia('(prefers-color-scheme: dark)').matches
+    root.dataset.theme = dunkel ? 'light' : 'dark'
+  })
+</script>
+</body>
+</html>
