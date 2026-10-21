@@ -112,6 +112,7 @@ class NightRunNowServiceTest {
         null,
         null,
         null,
+        null,
         List.of());
   }
 

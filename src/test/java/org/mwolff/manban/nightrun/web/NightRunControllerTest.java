@@ -42,6 +42,7 @@ import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe.Startstation;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
@@ -190,6 +191,7 @@ class NightRunControllerTest {
                         "mvn verify rot",
                         null,
                         null,
+                        null,
                         List.of()))));
     assertThat(uebergeben.get(1))
         .isEqualTo(
@@ -261,6 +263,7 @@ class NightRunControllerTest {
                         "Kette",
                         NightRunState.RED,
                         NightRunErrorClass.TIME_BUDGET_EXCEEDED,
+                        null,
                         null,
                         null,
                         null,
@@ -470,6 +473,7 @@ class NightRunControllerTest {
                             null,
                             null,
                             null,
+                            null,
                             List.of())))));
 
     mvc.perform(get(PATH))
@@ -607,6 +611,45 @@ class NightRunControllerTest {
         .isEqualTo(new NightRunStuck("mvn verify", "OpenApiIT rot", 3, 3_600_000L, "sitzung-1"));
   }
 
+  /**
+   * Der Upload-Weg nimmt die drei Angaben zur gleichzeitigen Umsetzung flach am Paket an und deutet
+   * sie wie der Ingest-Weg (Issue #1877, Plan #1876 E8) — ein kaputter Wert kostet die Meldung
+   * nicht.
+   */
+  @Test
+  // Siehe submit_passesEveryFieldToService_andAnswersInRequestOrder: derselbe Grund.
+  @SuppressWarnings("unchecked")
+  void submit_mapsConcurrency_toService() throws Exception {
+    when(service.submit(eq(USER), eq(PROJECT), anyList()))
+        .thenReturn(List.of(new NightRunResult(ERSTER, true)));
+
+    mvc.perform(
+            post(PATH)
+                .contentType(JSON)
+                .content(
+                    """
+                    {"runs":[{"startedAt":"2026-08-31T22:00:00Z","mode":"IMPLEMENTATION",
+                              "durationMs":1,"processedCount":2,"skippedCount":0,
+                              "unparsedCount":0,
+                              "items":[{"cardNumber":4713,"title":"Gleichzeitig","state":"GREEN",
+                                        "concurrent":true,"checkWaitMs":776000,
+                                        "deferredAtMerge":true},
+                                       {"cardNumber":4714,"title":"Kaputt","state":"GREEN",
+                                        "concurrent":"ja"},
+                                       {"cardNumber":4715,"title":"Ohne","state":"GREEN"}]}]}
+                    """))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<List<NewNightRun>> captor = ArgumentCaptor.forClass(List.class);
+    verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
+    assertThat(captor.getValue().getFirst().items())
+        .extracting(NewNightRunItem::concurrency)
+        .containsExactly(
+            new NightRunConcurrency(true, 776_000L, true),
+            new NightRunConcurrency(null, null, null),
+            null);
+  }
+
   @Test
   void submit_rejectsTooLongStuckCheck_beforeReachingService() throws Exception {
     mvc.perform(
@@ -675,6 +718,7 @@ class NightRunControllerTest {
                             null,
                             new NightRunStuck(
                                 "mvn verify", "OpenApiIT rot", 3, 3_600_000L, "sitzung-1"),
+                            null,
                             2_700_000L,
                             List.of())))));
 
@@ -732,6 +776,7 @@ class NightRunControllerTest {
                             "Kette",
                             NightRunState.RED,
                             NightRunErrorClass.TIME_BUDGET_EXCEEDED,
+                            null,
                             null,
                             null,
                             null,
@@ -1002,6 +1047,7 @@ class NightRunControllerTest {
                             null,
                             null,
                             new NightRunUsage(null, null, null, null, 900_000L, 42),
+                            null,
                             null,
                             null,
                             List.of(

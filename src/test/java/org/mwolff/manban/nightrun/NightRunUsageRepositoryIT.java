@@ -185,6 +185,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         null,
         verbrauch,
         null,
+        null,
         List.of());
   }
 
@@ -206,6 +207,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         new NightRunStuck("mvn verify", "OpenApiIT rot", 3, 3_600_000L, "s-" + cardNumber),
+        null,
         List.of());
   }
 
@@ -227,6 +229,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         NightRunState.GREEN,
         null,
         60_000L,
+        null,
         null,
         null,
         null,

@@ -41,6 +41,9 @@ import org.mwolff.manban.common.Identifiable;
  *     NightRunLimits#EXCERPT_MAX} Zeichen
  * @param stuck Angaben zu einem festgefahrenen Paket (Issue #1546); {@code null}, wenn das Kit
  *     keine gemeldet hat
+ * @param concurrency Angaben zur gleichzeitigen Umsetzung (Issue #1877); {@code null}, wenn die
+ *     Meldung keines der drei Felder führt — ein Record heißt „mindestens eines geführt“, eine
+ *     {@code null}-Komponente darin „nicht gemeldet“
  * @param stages die Stufen der Kette, die dieser Vorgang durchlaufen hat (Issue #1112) — leer statt
  *     {@code null}, denn „dieser Vorgang hatte keine Stufen" ist eine Aussage
  */
@@ -60,6 +63,7 @@ public record NightRunItem(
     @Nullable String excerpt,
     @Nullable NightRunUsage usage,
     @Nullable NightRunStuck stuck,
+    @Nullable NightRunConcurrency concurrency,
     List<NightRunItemStage> stages)
     implements Identifiable {
 
@@ -92,6 +96,7 @@ public record NightRunItem(
         excerpt,
         usage,
         stuck,
+        concurrency,
         stages);
   }
 }

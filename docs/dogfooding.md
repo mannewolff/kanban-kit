@@ -489,6 +489,53 @@ entsprechen `check`, `error`, `attempts`, `sessionLimitMs` und `sessionId`. Zul�
 in Umsetzung, Nachtplanung und Kette, **im Prüf-Lauf nicht** — dort gibt es keine
 Umsetzungssitzung, die sich festfahren kann.
 
+### Gleichzeitige Umsetzung melden
+
+Setzt das Kit mehrere Pakete einer Nacht gleichzeitig um (mehr als ein Platz), meldet es an
+**jedem** Paket drei Angaben, flach neben den übrigen Feldern:
+
+```json
+{
+  "cardNumber": 4713,
+  "title": "Export als CSV",
+  "state": "GREEN",
+  "durationMs": 1980000,
+  "commitHash": "b2ae30f6",
+  "concurrent": true,
+  "checkWaitMs": 420000,
+  "deferredAtMerge": false
+}
+```
+
+- **`concurrent`** — `true`, wenn das Paket gleichzeitig mit mindestens einem anderen lief.
+- **`checkWaitMs`** — wie lange das Paket auf einen freien Platz für seinen vollen Prüflauf
+  wartete, in Millisekunden. Die gemeldete Paketdauer `durationMs` enthält diese Wartezeit. Das
+  Feld fehlt, wenn das Kit die Wartezeit nicht gemessen hat; eine gemeldete `0` ist ein Wert.
+- **`deferredAtMerge`** — `true`, wenn die Übernahme des Pakets in den gemeinsamen Stand
+  zurückgestellt wurde.
+
+Die Regeln dazu:
+
+- **Nur mit mehr als einem Platz.** Eine Nacht, die ihre Pakete nacheinander umsetzt, meldet keines
+  der drei Felder, und der Leitstand zeigt bei ihren Paketen nichts davon. Ein übergangenes Paket
+  einer gleichzeitigen Nacht trägt die Felder trotzdem, mit `false` bei beiden Wahrheitswerten.
+- **Ein kaputter Wert kostet die Meldung nicht.** `concurrent` und `deferredAtMerge` gelten nur als
+  JSON-Wahrheitswert — auch der Text `"true"` nicht —, `checkWaitMs` nur als ganze Zahl ab 0.
+  Alles andere, auch ein ausdrückliches `null`, nimmt der Leitstand an und zeigt „nicht gemeldet“;
+  das Feld zählt trotzdem als geführt. Ein Paket, das wenigstens eines der drei Felder führt, zeigt
+  alle drei.
+- **Ältere Meldungen gelten unverändert.** Eine Meldung ohne die drei Felder wird angenommen wie
+  bisher; Pakete, die vor dieser Erweiterung gespeichert wurden, zeigen nichts davon.
+
+**In der Ergebnisdatei** (Rückfallweg „Protokoll einlesen“) tragen die Angaben die inneren Namen
+des Kits: Die Zahl der Plätze steht am Lauf als `concurrentPackages`, an der Einheit stehen
+`gleichzeitig` (Wahrheitswert, wird `concurrent`), `pruefWartezeitMs` (wird `checkWaitMs`) und
+`zusammenfuehrung` — ein Text, aus dem allein der Wert `zurueckgestellt` ein wahres
+`deferredAtMerge` macht. Die Datei führt die Angaben nur an Einheiten, die durch die gleichzeitige
+Umsetzung liefen. Damit dieselbe Nacht auf beiden Wegen gleich aussieht, füllt der Handweg bei
+`concurrentPackages > 1` jede Einheit ohne eigene Angabe so auf, wie die Meldung sie trüge:
+`concurrent` und `deferredAtMerge` als `false`, `checkWaitMs` fehlt.
+
 ## 8. Auslieferungen melden
 
 Die eigene Auslieferung von kanban-kit (`.github/workflows/deploy.yml`) meldet jeden Versuch an das

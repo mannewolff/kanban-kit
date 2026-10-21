@@ -41,6 +41,7 @@ import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunItemStage;
@@ -470,6 +471,7 @@ class NightRunServiceTest {
         "Auszug " + cardNumber,
         null,
         null,
+        null,
         List.of());
   }
 
@@ -745,6 +747,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        null,
         List.of(stufen));
   }
 
@@ -843,6 +846,7 @@ class NightRunServiceTest {
         null,
         null,
         stuck,
+        null,
         List.of());
   }
 
@@ -899,6 +903,80 @@ class NightRunServiceTest {
     assertThat(((FakeNightRunRepository) runs).allePakete())
         .extracting(NightRunItem::stuck)
         .containsExactlyInAnyOrder(FESTGEFAHREN, null);
+  }
+
+  // --- Gleichzeitige Umsetzung: concurrency am Vorgang (Issue #1877, Plan #1876 E7) -------
+
+  private static NightRunService.NewNightRunItem itemMitGleichzeitigkeit(
+      int cardNumber,
+      NightRunState state,
+      @Nullable NightRunErrorClass errorClass,
+      @Nullable NightRunConcurrency concurrency) {
+    return new NightRunService.NewNightRunItem(
+        cardNumber,
+        "Paket " + cardNumber,
+        state,
+        errorClass,
+        state == NightRunState.GREY ? null : 900_000L,
+        null,
+        null,
+        null,
+        null,
+        concurrency,
+        List.of());
+  }
+
+  /**
+   * E7: Anders als stuck gelten die Angaben bei jedem Paket, gleich welcher Zustand — auch ein
+   * übergangenes (GREY) zeigt seine gemeldeten Werte. Die Sicht trägt sie bis zum Paket.
+   */
+  @Test
+  void ingest_uebernimmtConcurrencyBeiJedemZustand_undDieSichtTraegtSie() {
+    NightRunConcurrency gruen = new NightRunConcurrency(true, 776_000L, false);
+    NightRunConcurrency gelb = new NightRunConcurrency(true, 0L, true);
+    NightRunConcurrency rot = new NightRunConcurrency(true, null, false);
+    NightRunConcurrency grau = new NightRunConcurrency(false, null, false);
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(
+            T1,
+            true,
+            null,
+            itemMitGleichzeitigkeit(1, NightRunState.GREEN, null, gruen),
+            itemMitGleichzeitigkeit(2, NightRunState.YELLOW, NightRunErrorClass.CHECKS_RED, gelb),
+            itemMitGleichzeitigkeit(3, NightRunState.RED, NightRunErrorClass.STUCK, rot),
+            itemMitGleichzeitigkeit(
+                4, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET, grau),
+            itemMitGleichzeitigkeit(5, NightRunState.GREEN, null, null)));
+
+    assertThat(((FakeNightRunRepository) runs).allePakete())
+        .extracting(NightRunItem::concurrency)
+        .containsExactly(gruen, gelb, rot, grau, null);
+    assertThat(service.list(USER, PROJECT).getFirst().items())
+        .extracting(NightRunService.NightRunItemView::concurrency)
+        .containsExactly(gruen, gelb, rot, grau, null);
+  }
+
+  /** Der Upload-Weg folgt derselben Regel — beide Wege teilen die Abbildung der Pakete. */
+  @Test
+  void submit_uebernimmtConcurrencyBeiJedemZustand() {
+    NightRunConcurrency kaputt = new NightRunConcurrency(null, null, null);
+    service.submit(
+        USER,
+        PROJECT,
+        List.of(
+            lauf(
+                T1,
+                itemMitGleichzeitigkeit(
+                    4714, NightRunState.GREY, NightRunErrorClass.DEPENDENCY_UNMET, kaputt))));
+
+    assertThat(((FakeNightRunRepository) runs).allePakete())
+        .singleElement()
+        .extracting(NightRunItem::concurrency)
+        .isEqualTo(kaputt);
   }
 
   // --- Morgenmeldung: releasePreparation am Lauf (Issue #1456) ----------------------------
@@ -1094,6 +1172,7 @@ class NightRunServiceTest {
         null,
         null,
         usage,
+        null,
         null,
         List.of());
   }
@@ -1946,6 +2025,7 @@ class NightRunServiceTest {
           item.excerpt(),
           item.usage(),
           item.stuck(),
+          item.concurrency(),
           item.stages());
     }
 
@@ -2006,6 +2086,7 @@ class NightRunServiceTest {
           item.excerpt(),
           item.usage(),
           item.stuck(),
+          item.concurrency(),
           // Die Stufen haengen am Paket, nicht am Lauf (V37): Ein verwaistes Paket behaelt sie.
           item.stages());
     }

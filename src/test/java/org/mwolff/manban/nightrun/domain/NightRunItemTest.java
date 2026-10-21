@@ -31,6 +31,7 @@ class NightRunItemTest {
           "  Issue #721: gelaufen: mvn verify -> rot",
           null,
           null,
+          null,
           List.of(STUFE));
 
   @Test
@@ -59,6 +60,7 @@ class NightRunItemTest {
             NightRunItem::commitHash,
             NightRunItem::excerpt,
             NightRunItem::stuck,
+            NightRunItem::concurrency,
             NightRunItem::stages)
         .containsExactly(
             null,
@@ -73,6 +75,7 @@ class NightRunItemTest {
             92_000L,
             "4c9f42a",
             "  Issue #721: gelaufen: mvn verify -> rot",
+            null,
             null,
             List.of(STUFE));
   }
@@ -98,9 +101,37 @@ class NightRunItemTest {
             null,
             null,
             angaben,
+            null,
             List.of());
 
     assertThat(festgefahren.withNightRunId(4711L).stuck()).isEqualTo(angaben);
+  }
+
+  /** Die Angaben zur gleichzeitigen Umsetzung reisen durch die Kopie mit (Issue #1877). */
+  @Test
+  void withNightRunIdReichtDieAngabenZurGleichzeitigenUmsetzungDurch() {
+    NightRunConcurrency angaben = new NightRunConcurrency(true, 776_000L, false);
+    NightRunItem gleichzeitig =
+        new NightRunItem(
+            null,
+            null,
+            42L,
+            Instant.parse("2026-09-01T22:00:00Z"),
+            NightRunMode.IMPLEMENTATION,
+            NightRunKind.NIGHT,
+            4714,
+            "Gleichzeitig",
+            NightRunState.GREEN,
+            null,
+            1_200_000L,
+            null,
+            null,
+            null,
+            null,
+            angaben,
+            List.of());
+
+    assertThat(gleichzeitig.withNightRunId(4711L).concurrency()).isEqualTo(angaben);
   }
 
   /**
@@ -134,6 +165,7 @@ class NightRunItemTest {
         92_000L,
         "4c9f42a",
         "  Issue #721: gelaufen: mvn verify -> rot",
+        null,
         null,
         null,
         stages);

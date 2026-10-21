@@ -21,8 +21,11 @@ import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_FI
 import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_PENDING_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_TEXT_MAX;
 import static org.mwolff.manban.nightrun.web.NightRunIngestController.RELEASE_VERSION_MAX;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.NullNode;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
@@ -31,6 +34,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.stream.IntStream;
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
@@ -42,6 +46,7 @@ import org.mwolff.manban.nightrun.application.TokenNotBoundForIngestException;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
@@ -56,8 +61,13 @@ import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestBudgetReque
 import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestItemRequest;
 import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestReleasePreparationRequest;
 import org.mwolff.manban.nightrun.web.NightRunIngestController.IngestStageRequest;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
  * Die Pfade des Ingest-Endpunkts, die der Integrationstest nicht erreicht (Issue #947).
@@ -433,7 +443,19 @@ class NightRunIngestControllerTest {
         null,
         List.of(
             new IngestItemRequest(
-                993, "Paket 993", NightRunState.GREEN, null, 5L, null, null, null, stufen, null)));
+                993,
+                "Paket 993",
+                NightRunState.GREEN,
+                null,
+                5L,
+                null,
+                null,
+                null,
+                stufen,
+                null,
+                null,
+                null,
+                null)));
   }
 
   private static IngestStageRequest stufe(NightRunStage stage) {
@@ -907,7 +929,10 @@ class NightRunIngestControllerTest {
                 null,
                 null,
                 null,
-                stuck)));
+                stuck,
+                null,
+                null,
+                null)));
   }
 
   private NewNightRun gemeldet(NightRunIngestController.IngestRequest anfrage) {
@@ -1137,5 +1162,89 @@ class NightRunIngestControllerTest {
                 .getFirst()
                 .deadline())
         .isNull();
+  }
+
+  // --- Gleichzeitige Umsetzung: concurrent, checkWaitMs, deferredAtMerge (Issue #1877) -----
+
+  /**
+   * Der echte Weg über Jackson und Bean Validation: Nur so zeigt sich, dass ein kaputter Wert die
+   * Meldung nicht als unlesbaren Body oder Verletzung abweist (Plan #1876 E1).
+   */
+  private NewNightRun perJsonGemeldet(String paketFelder) throws Exception {
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+    MockMvc mvc =
+        MockMvcBuilders.standaloneSetup(controller)
+            .setMessageConverters(
+                new MappingJackson2HttpMessageConverter(Jackson2ObjectMapperBuilder.json().build()))
+            .build();
+    mvc.perform(
+            post("/api/kanban/night-runs")
+                .principal(mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"startedAt":"2026-09-16T22:31:00Z","mode":"IMPLEMENTATION","complete":true,
+                     "items":[{"cardNumber":4714,"title":"Paket 4714","state":"GREEN"%s}]}
+                    """
+                        .formatted(paketFelder)))
+        .andExpect(status().is2xxSuccessful());
+    ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
+    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    return meldung.getValue();
+  }
+
+  @Test
+  @DisplayName("Szenario: Ein kaputt gemeldeter Wert bleibt sichtbar")
+  void szenarioEinKaputtGemeldeterWertBleibtSichtbar() throws Exception {
+    NewNightRun meldung = perJsonGemeldet(",\"concurrent\":\"ja\"");
+
+    assertThat(meldung.items().getFirst().concurrency())
+        .isEqualTo(new NightRunConcurrency(null, null, null));
+  }
+
+  /** K8: Eine ältere Kit-Kopie meldet keines der drei Felder — die Meldung kommt unverändert an. */
+  @Test
+  void eineMeldungOhneDieDreiFelderKommtOhneAngabenAn() throws Exception {
+    NewNightRun meldung = perJsonGemeldet("");
+
+    assertThat(meldung.items().getFirst().concurrency()).isNull();
+    assertThat(verletztePfade(anfrageMitPaket(NightRunErrorClass.CHECKS_RED, null))).isEmpty();
+  }
+
+  @Test
+  void eineMeldungMitAllenDreiFeldernKommtMitDenWertenAn() throws Exception {
+    NewNightRun meldung =
+        perJsonGemeldet(",\"concurrent\":true,\"checkWaitMs\":776000,\"deferredAtMerge\":false");
+
+    assertThat(meldung.items().getFirst().concurrency())
+        .isEqualTo(new NightRunConcurrency(true, 776_000L, false));
+  }
+
+  /** K7: Kaputte Werte in allen drei Feldern kosten die Meldung nicht. */
+  @Test
+  void eineMeldungMitKaputtenWertenWirdAngenommen() throws Exception {
+    NewNightRun meldung =
+        perJsonGemeldet(",\"concurrent\":1,\"checkWaitMs\":-5,\"deferredAtMerge\":\"nein\"");
+
+    assertThat(meldung.items().getFirst().concurrency())
+        .isEqualTo(new NightRunConcurrency(null, null, null));
+  }
+
+  /** E2: Jackson liefert für ein ausdrückliches JSON-null einen NullNode, kein Java-null. */
+  @Test
+  void einAusdruecklichesNullWirdAlsNullNodeGelesen() throws Exception {
+    IngestItemRequest paket =
+        new ObjectMapper()
+            .readValue(
+                """
+                {"cardNumber":4714,"title":"Paket 4714","state":"GREEN","checkWaitMs":null}
+                """,
+                IngestItemRequest.class);
+
+    assertThat(paket.checkWaitMs()).isInstanceOf(NullNode.class);
+    assertThat(paket.concurrent()).isNull();
+    assertThat(perJsonGemeldet(",\"checkWaitMs\":null").items().getFirst().concurrency())
+        .isEqualTo(new NightRunConcurrency(null, null, null));
   }
 }

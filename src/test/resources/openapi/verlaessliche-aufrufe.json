@@ -1102,10 +1102,20 @@
           "format" : "int32",
           "type" : "integer"
         },
+        "checkWaitMs" : {
+          "format" : "int64",
+          "type" : "integer"
+        },
         "commitHash" : {
           "maxLength" : 40,
           "minLength" : 0,
           "type" : "string"
+        },
+        "concurrent" : {
+          "type" : "boolean"
+        },
+        "deferredAtMerge" : {
+          "type" : "boolean"
         },
         "durationMs" : {
           "format" : "int64",
