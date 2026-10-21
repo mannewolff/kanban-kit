@@ -29,6 +29,7 @@ import echterNachtplanHarterStopp from '../lib/__fixtures__/night-run-2026-09-09
 import echterPrueflauf from '../lib/__fixtures__/night-run-2026-09-11-103116.json'
 import echteKette from '../lib/__fixtures__/night-run-2026-09-14-131200.json'
 import { formatDuration } from '../lib/formatDuration'
+import { gleichzeitigkeitDerMeldung } from '../lib/gleichzeitigkeit'
 import { parseNightRunErgebnisstand } from '../lib/nightRunErgebnisstand'
 import { NIGHT_RUN_AUSZUG_LIEGENGEBLIEBEN } from '../lib/nightRunErgebnisstand'
 import { buildHandoffText, KURZ_GRUND_MAX, type NightRunHandoffItem, type NightRunStuckAngaben } from '../lib/nightRunHandoff'
@@ -321,7 +322,11 @@ function wieAufbewahrt(ergebnisstand: string): NightRunView[] {
       // fest als „nicht gemeldet" ab.
       budget: null,
       releasePreparation: null,
-      items: run.items.map((item, position) => wieAufbewahrtesItem({ id: position + 1, ...item })),
+      // Die Angaben einer gleichzeitigen Nacht deutet der Server wie `gleichzeitigkeitDerMeldung`
+      // (Plan #1876, E10) und schickt sie gebündelt zurück.
+      items: run.items.map((item, position) =>
+        wieAufbewahrtesItem({ id: position + 1, ...item, concurrency: gleichzeitigkeitDerMeldung(item) }),
+      ),
       outcome: { abortReason: null, verdict: 'SUCCEEDED', decisiveItem: null, noWorkReason: null },
   }
   // Der Befund kommt aus dem Szenario, nicht aus einer Vorgabe (Issue #1081).
@@ -7484,5 +7489,223 @@ describe('NightRunPage — Gleichzeitigkeit in der Einlieferung (#1878)', () => 
     await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
     const [paket] = JSON.parse(anfragen.find((a) => a.method === 'POST')!.body).runs[0].items
     expect(['concurrent', 'checkWaitMs', 'deferredAtMerge'].filter((feld) => feld in paket)).toEqual([])
+  })
+})
+
+/**
+ * Die drei Angaben einer gleichzeitigen Nacht in der Lauf-Ansicht (Issue #1879, Plan #1876 E6, E10,
+ * E12, E14): aufgeklappt als Begriffsliste, zugeklappt als Marke im Aufklapp-Knopf. Die Teile der
+ * Szenarien zur Platte „Letzter Run“ trägt `LeitstandPage.test.tsx` (Paket 4).
+ */
+describe('NightRunPage — Gleichzeitigkeit in der Lauf-Ansicht (#1879)', () => {
+  const BEGRIFFE = ['Gleichzeitig', 'Wartezeit auf die Prüfung', 'Übernahme verschoben']
+
+  /** Ein Paket eines aufbewahrten Laufs mit seinen Angaben (`null` = keines der drei Felder). */
+  const paket = (
+    cardNumber: number,
+    concurrency: NightRunItemView['concurrency'],
+    felder: Partial<ItemVorgabe> = {},
+  ): ItemVorgabe => ({
+    id: cardNumber,
+    cardNumber,
+    title: `Paket ${cardNumber}`,
+    state: 'GREEN',
+    durationMs: SIEBEN_MIN,
+    commitHash: 'a1b2c3d4e5',
+    usage: verbraucht({ costUsd: 1.5 }),
+    concurrency,
+    ...felder,
+  })
+
+  const zeigeLauf = async (items: ItemVorgabe[]) => {
+    renderPage({ listen: [[aufbewahrt({ id: 1, startedAt: startedAt(0), items })]] })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+  }
+
+  /** Die Angaben eines aufgeklappten Pakets als Paare aus Begriff und Wert, in ihrer Reihenfolge. */
+  const angabenVon = (nummer: number): [string | null, string | null][] => {
+    const block = screen.getByTestId(`paket-${nummer}`)
+    const werte = within(block).queryAllByRole('definition')
+    return within(block)
+      .queryAllByRole('term')
+      .map((begriff, index) => [begriff.textContent, werte[index].textContent])
+  }
+
+  const aufgeklappt = (nummer: number) => {
+    fireEvent.click(screen.getByTestId(`vorgang-taste-${nummer}`))
+    return angabenVon(nummer)
+  }
+
+  /** Der Aufklapp-Knopf eines Pakets, gefunden über die Marke in seinem zugänglichen Namen (K4). */
+  const knopfMitMarke = (nummer: number, marke: string) =>
+    within(screen.getByTestId(`paket-${nummer}`)).getByRole('button', { name: new RegExp(marke) })
+
+  it('Szenario: Ein Paket lief neben anderen und hat auf seine Prüfung gewartet', async () => {
+    await zeigeLauf([
+      paket(4711, { concurrent: true, checkWaitMs: 7 * 60_000, deferredAtMerge: false }),
+      paket(4720, { concurrent: true, checkWaitMs: 0, deferredAtMerge: false }),
+      paket(4721, { concurrent: true, checkWaitMs: 30_000, deferredAtMerge: false }),
+    ])
+
+    // Zugeklappt trägt die Zeile die Marke, ohne Wartezeit.
+    expect(knopfMitMarke(4711, 'gleichzeitig')).toBe(screen.getByTestId('vorgang-taste-4711'))
+    expect(screen.getByTestId('paket-4711')).toHaveTextContent('gleichzeitig')
+    expect(screen.getByTestId('paket-4711')).not.toHaveTextContent('7 min 0 s')
+    expect(screen.getByTestId('paket-4711')).not.toHaveTextContent('Übernahme verschoben')
+
+    expect(aufgeklappt(4711)).toEqual([
+      ['Gleichzeitig', 'ja'],
+      ['Wartezeit auf die Prüfung', '7 min 0 s'],
+      ['Übernahme verschoben', 'nein'],
+    ])
+  })
+
+  it('Szenario: Eine Nacht ohne Gleichzeitigkeit zeigt die Angaben nicht', async () => {
+    await zeigeLauf([paket(4715, null), paket(4716, null, { state: 'GREY', excerpt: 'Abhaengigkeit offen' })])
+
+    vorgaengeAufklappen(lauf(0))
+
+    for (const nummer of [4715, 4716]) {
+      const block = screen.getByTestId(`paket-${nummer}`)
+      expect(angabenVon(nummer)).toEqual([])
+      for (const begriff of BEGRIFFE) expect(block).not.toHaveTextContent(begriff)
+      // Als eigene Angabe — „Züge nicht gemeldet“ der Ergebniszeile steht wie bisher da.
+      expect(within(block).queryByText('nicht gemeldet')).not.toBeInTheDocument()
+      expect(block).not.toHaveTextContent('gleichzeitig')
+    }
+    expect(screen.getByTestId('zustand-4715')).toHaveTextContent('Erfolg')
+    expect(screen.getByTestId('dauer-4715')).toHaveTextContent('7:00 min')
+    expect(screen.getByTestId('kosten-4715')).toHaveTextContent('1,50 $')
+    expect(screen.getByTestId('commit-4715')).toHaveTextContent('a1b2c3d')
+  })
+
+  it('Szenario: Ein Paket mit verschobener Übernahme ist als solches erkennbar', async () => {
+    await zeigeLauf([
+      paket(4712, { concurrent: true, checkWaitMs: 12_000, deferredAtMerge: true }, { state: 'GREY', commitHash: undefined }),
+      paket(4722, { concurrent: true, checkWaitMs: 0, deferredAtMerge: false }),
+      paket(4723, { concurrent: true, checkWaitMs: 0, deferredAtMerge: false }),
+      paket(4724, { concurrent: true, checkWaitMs: 0, deferredAtMerge: false }),
+    ])
+
+    expect(knopfMitMarke(4712, 'Übernahme verschoben')).toBe(screen.getByTestId('vorgang-taste-4712'))
+    expect(knopfMitMarke(4712, 'gleichzeitig')).toBe(screen.getByTestId('vorgang-taste-4712'))
+    // Das Paket bleibt grau wie heute — die Marke ersetzt die Lampe nicht.
+    expect(within(screen.getByTestId('paket-4712')).getByTestId('led-grau')).toBeInTheDocument()
+
+    expect(aufgeklappt(4712)).toContainEqual(['Übernahme verschoben', 'ja'])
+  })
+
+  it('Szenario: Eine gemeldete Angabe fehlt', async () => {
+    await zeigeLauf([
+      paket(4713, { concurrent: true, checkWaitMs: null, deferredAtMerge: false }),
+      paket(4725, { concurrent: true, checkWaitMs: 5_000, deferredAtMerge: false }),
+    ])
+
+    expect(aufgeklappt(4713)).toEqual([
+      ['Gleichzeitig', 'ja'],
+      ['Wartezeit auf die Prüfung', 'nicht gemeldet'],
+      ['Übernahme verschoben', 'nein'],
+    ])
+  })
+
+  it('Szenario: Ein übergangenes Paket einer gleichzeitigen Nacht zeigt „nein“', async () => {
+    await zeigeLauf([
+      paket(4726, { concurrent: true, checkWaitMs: 0, deferredAtMerge: false }),
+      paket(4727, { concurrent: true, checkWaitMs: 0, deferredAtMerge: false }),
+      paket(4728, { concurrent: false, checkWaitMs: null, deferredAtMerge: false }, { state: 'GREY', commitHash: undefined }),
+    ])
+
+    // Zugeklappt keine Marke: „nein“ trägt keine.
+    expect(screen.getByTestId('paket-4728')).not.toHaveTextContent('gleichzeitig')
+    expect(screen.getByTestId('paket-4728')).not.toHaveTextContent('Übernahme verschoben')
+
+    expect(aufgeklappt(4728)).toEqual([
+      ['Gleichzeitig', 'nein'],
+      ['Wartezeit auf die Prüfung', 'nicht gemeldet'],
+      ['Übernahme verschoben', 'nein'],
+    ])
+  })
+
+  it('Szenario: Ein kaputt gemeldeter Wert bleibt sichtbar', async () => {
+    // Die Meldung führt das Feld mit „ja“ als Text: gedeutet wie im Backend (E3), geführt bleibt es.
+    const kaputt = gleichzeitigkeitDerMeldung({ concurrent: 'ja' })
+    expect(kaputt).not.toBeNull()
+    await zeigeLauf([paket(4714, kaputt), paket(4729, { concurrent: true, checkWaitMs: 0, deferredAtMerge: false })])
+
+    expect(screen.getByTestId('paket-4714')).not.toHaveTextContent('gleichzeitig')
+    expect(aufgeklappt(4714)).toEqual([
+      ['Gleichzeitig', 'nicht gemeldet'],
+      ['Wartezeit auf die Prüfung', 'nicht gemeldet'],
+      ['Übernahme verschoben', 'nicht gemeldet'],
+    ])
+  })
+
+  /** Eine Ergebnisdatei mit zwei Plätzen: ein wartendes, verschobenes Paket und ein übergangenes. */
+  const GLEICHZEITIG = stand({
+    concurrentPackages: 2,
+    einheiten: [
+      einheit({
+        id: '722',
+        titel: 'Paket G',
+        ausgang: 'erfolg',
+        pruefung: GEPRUEFT,
+        gleichzeitig: true,
+        pruefWartezeitMs: 776_000,
+        zusammenfuehrung: 'zurueckgestellt',
+      }),
+      einheit({ ausgang: 'erfolg', commit: 'a1b2c3d', pruefung: GEPRUEFT }),
+    ],
+  })
+
+  const ERWARTET_722 = [
+    ['Gleichzeitig', 'ja'],
+    ['Wartezeit auf die Prüfung', '12 min 56 s'],
+    ['Übernahme verschoben', 'ja'],
+  ]
+  const ERWARTET_700 = [
+    ['Gleichzeitig', 'nein'],
+    ['Wartezeit auf die Prüfung', 'nicht gemeldet'],
+    ['Übernahme verschoben', 'nein'],
+  ]
+
+  it('zeigt am eingelesenen, nicht eingelieferten Lauf dasselbe wie am aufbewahrten (E10)', async () => {
+    renderPage({ submit: { fehler: 'Einliefern nicht möglich' } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    protokollWaehlen(GLEICHZEITIG)
+
+    expect(await screen.findByText('Einliefern nicht möglich')).toBeInTheDocument()
+    expect(knopfMitMarke(722, 'Übernahme verschoben')).toBe(screen.getByTestId('vorgang-taste-722'))
+    vorgaengeAufklappen(lauf(0))
+    expect(angabenVon(722)).toEqual(ERWARTET_722)
+    expect(angabenVon(700)).toEqual(ERWARTET_700)
+  })
+
+  it('zeigt am aufbewahrten Lauf derselben Datei dieselben Angaben (E10)', async () => {
+    renderPage({ listen: [wieAufbewahrt(GLEICHZEITIG)] })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    expect(knopfMitMarke(722, 'Übernahme verschoben')).toBe(screen.getByTestId('vorgang-taste-722'))
+    vorgaengeAufklappen(lauf(0))
+    expect(angabenVon(722)).toEqual(ERWARTET_722)
+    expect(angabenVon(700)).toEqual(ERWARTET_700)
+  })
+
+  it('ändert die Anzeige eines servergeführten Laufs beim erneuten Einlesen nicht (K9)', async () => {
+    // Aufbewahrt, bevor der Leitstand die Angaben auswertete: Der Server führt keine.
+    const vorher = wieAufbewahrt(GLEICHZEITIG).map((run) => ({
+      ...run,
+      items: run.items.map((item) => ({ ...item, concurrency: null })),
+    }))
+    renderPage({ listen: [vorher], submit: { ergebnis: [{ startedAt: startedAt(0), created: false }] } })
+    await screen.findByTestId(`lauf-${startedAt(0)}`)
+
+    protokollWaehlen(GLEICHZEITIG)
+    await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
+
+    vorgaengeAufklappen(lauf(0))
+    expect(angabenVon(722)).toEqual([])
+    expect(angabenVon(700)).toEqual([])
+    expect(screen.getByTestId('paket-722')).not.toHaveTextContent('gleichzeitig')
   })
 })

@@ -16,6 +16,7 @@ import {
   TEXT_SCHWACH,
   ZAHL,
 } from '../../theme'
+import { GleichzeitigkeitMarken } from '../leitstand/GleichzeitigkeitMarken'
 import { KlassenMarke, Led, PaketDauer, ZEILE_HOVER_SX } from '../leitstand/LeitstandBausteine'
 
 /** Die Fehlerklasse eines Abbruchs als Marke: ihr Schlüsselwort und ihre Farbe. */
@@ -77,6 +78,12 @@ export function NachtlaufVorgangszeile({
   kosten,
   /** Der kurze Commit-Hash; `null`, wo der Vorgang keinen hinterließ. */
   commit,
+  /**
+   * Die Marken einer gleichzeitigen Nacht (Issue #1879, Plan #1876 E12). Sie stehen im
+   * Aufklapp-Knopf, der kein eigenes `aria-label` trägt — so sind sie Teil seines zugänglichen
+   * Namens (K4).
+   */
+  marken = [],
   offen,
   onUmschalten,
   onOeffnen,
@@ -94,6 +101,7 @@ export function NachtlaufVorgangszeile({
   dauer: number | null
   kosten: string | null
   commit: string | null
+  marken?: readonly string[]
   offen: boolean
   onUmschalten: () => void
   onOeffnen: (karte: CardByNumber) => void
@@ -198,6 +206,7 @@ export function NachtlaufVorgangszeile({
               {vorhaben.titel}
             </Box>
           )}
+          <GleichzeitigkeitMarken marken={marken} />
           {haeufigkeit !== null && (
             <Box
               component="span"

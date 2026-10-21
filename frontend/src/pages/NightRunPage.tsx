@@ -32,6 +32,7 @@ import {
   nightRunsApi,
   type NightRunBudgetOrigin,
   type NightRunBudgetView,
+  type NightRunConcurrencyView,
   type NightRunErrorClassCounts,
   type NightRunItemStageView,
   type NightRunOutcomeView,
@@ -48,6 +49,7 @@ import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { HeuteNachtUebersicht } from '../components/nachtlauf/HeuteNachtUebersicht'
 import { FestgefahrenAngaben } from '../components/leitstand/FestgefahrenAngaben'
+import { GleichzeitigkeitAngaben } from '../components/leitstand/GleichzeitigkeitAngaben'
 import { Led, melderFarbe } from '../components/leitstand/LeitstandBausteine'
 import {
   NachtlaufKartenchips,
@@ -78,6 +80,7 @@ import { KUPFER, NUT, RAND, TEXT_SCHWACH, ZAHL } from '../theme'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { epicColor } from '../lib/epicMeta'
 import { formatDuration } from '../lib/formatDuration'
+import { gleichzeitigkeitDerMeldung, gleichzeitigkeitsMarken } from '../lib/gleichzeitigkeit'
 import type { Melder } from '../lib/leitstand'
 import {
   auskunftOhneArbeit,
@@ -173,6 +176,11 @@ interface AnzeigeItem extends NightRunHandoffItem {
    * niemand eingelesen hat.
    */
   stufen: Bandstufen | undefined
+  /**
+   * Die Angaben einer gleichzeitigen Nacht (Issue #1879, Plan #1876 E6, E10); `null`, wo das Paket
+   * keines der drei Felder führt — dann erscheint keine Angabe.
+   */
+  concurrency: NightRunConcurrencyView | null
 }
 
 /**
@@ -493,6 +501,9 @@ const ausParser = (run: NightRun): AnzeigeLauf => ({
     commitHash: item.commit,
     excerpt: item.excerpt,
     stuck: item.stuck,
+    // Dieselbe Deutung wie der Server, damit der eingelesene Lauf vor dem Senden zeigt, was er
+    // aufbewahrt (Plan #1876, E10).
+    concurrency: gleichzeitigkeitDerMeldung(item),
     verbrauch: undefined,
     // Wie der Verbrauch leer: Die Arbeitsschritte eines eben geparsten Laufs stehen in seinem
     // Ergebnisstand, und von dort holt sie {@link bandstufen} (Issue #1116).
@@ -627,6 +638,7 @@ const ausSicht = (view: NightRunView): AnzeigeLauf => ({
       commitHash: item.commitHash ?? undefined,
       excerpt: item.excerpt ?? undefined,
       stuck: item.stuck ?? undefined,
+      concurrency: item.concurrency,
       verbrauch: ausVerbrauch(item.usage),
       stufen,
     }
@@ -2613,6 +2625,7 @@ function Vorgangszeile({
       dauer={item.durationMs ?? null}
       kosten={kostenText(vorgangskosten(item, standItem), sprache)}
       commit={kurzHash(item.commitHash ?? null)}
+      marken={gleichzeitigkeitsMarken(item.concurrency, t)}
       offen={offen}
       onUmschalten={() => setOffen((wert) => !wert)}
       onOeffnen={onOeffnen}
@@ -2630,6 +2643,10 @@ function Vorgangszeile({
       {/* Die Angaben eines festgefahrenen Pakets stehen vor dem Auszug, nicht an seiner Stelle
           (Issue #1552, E14) — am eingelesenen wie am aufbewahrten Lauf dieselbe Anzeige (E17). */}
       {item.errorClass === 'STUCK' && <FestgefahrenAngaben stuck={item.stuck} durationMs={item.durationMs} />}
+
+      {/* Die Angaben einer gleichzeitigen Nacht nach denen eines festgefahrenen Pakets und vor dem
+          Auszug — nur, wo das Paket mindestens eines der drei Felder führt (Plan #1876, E6, E14). */}
+      {item.concurrency != null && <GleichzeitigkeitAngaben concurrency={item.concurrency} />}
 
       {/* Auszüge sind Fremdtext (Claude-Ausgaben, Ergebnisse fremder Werkzeuge) und werden
           deshalb als reiner Text gerendert, nie über den Markdown-Renderer (CLAUDE-security.md).

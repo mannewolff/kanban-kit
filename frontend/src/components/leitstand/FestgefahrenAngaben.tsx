@@ -4,12 +4,16 @@ import { useSprache, useT } from '../../i18n/SpracheContext'
 import type { Sprache } from '../../i18n/woerterbuch'
 import { laufDauer } from '../../lib/leitstand'
 import { geschaetztGespart, NICHT_GEMELDET, type NightRunStuckAngaben } from '../../lib/nightRunHandoff'
-import { ANZEIGE, TEXT_SCHWACH, ZAHL } from '../../theme'
-import { Led } from './LeitstandBausteine'
+import { ANZEIGE } from '../../theme'
+import { AngabenListe, type Angabe, Led } from './LeitstandBausteine'
 
-/** Eine Dauer im Format des Verbrauchs („1 h 0 min", „40 min") oder {@link NICHT_GEMELDET}. */
-const dauer = (ms: number | null | undefined, sprache: Sprache): string =>
-  ms == null ? NICHT_GEMELDET : laufDauer(ms, sprache)
+/** Eine Zeile mit Wert oder, wo er fehlt, {@link NICHT_GEMELDET} als nicht gemeldet gekennzeichnet. */
+const zeile = (begriff: string, wert: string | null | undefined): Angabe =>
+  wert == null ? { begriff, wert: NICHT_GEMELDET, nichtGemeldet: true } : { begriff, wert, nichtGemeldet: false }
+
+/** Eine Dauer im Format des Verbrauchs („1 h 0 min", „40 min"); `null`, wo sie fehlt. */
+const dauer = (ms: number | null | undefined, sprache: Sprache): string | null =>
+  ms == null ? null : laufDauer(ms, sprache)
 
 /**
  * Die Angaben eines festgefahrenen Pakets (Issue #1552, Plan #1547 E14, E17): Prüfung, Fehler,
@@ -42,13 +46,13 @@ export function FestgefahrenAngaben({
   const t = useT().FESTGEFAHREN
   const { sprache } = useSprache()
   const angaben = stuck ?? {}
-  const zeilen: readonly [string, string][] = [
-    [t.PRUEFUNG, angaben.check ?? NICHT_GEMELDET],
-    [t.FEHLER, angaben.error ?? NICHT_GEMELDET],
-    [t.VERSUCHE, angaben.attempts == null ? NICHT_GEMELDET : String(angaben.attempts)],
-    [t.LAUFZEIT, dauer(durationMs, sprache)],
-    [t.ZEITGRENZE, dauer(angaben.sessionLimitMs, sprache)],
-    [t.GESPART, dauer(geschaetztGespart(durationMs, angaben.sessionLimitMs), sprache)],
+  const zeilen: readonly Angabe[] = [
+    zeile(t.PRUEFUNG, angaben.check),
+    zeile(t.FEHLER, angaben.error),
+    zeile(t.VERSUCHE, angaben.attempts == null ? null : String(angaben.attempts)),
+    zeile(t.LAUFZEIT, dauer(durationMs, sprache)),
+    zeile(t.ZEITGRENZE, dauer(angaben.sessionLimitMs, sprache)),
+    zeile(t.GESPART, dauer(geschaetztGespart(durationMs, angaben.sessionLimitMs), sprache)),
   ]
 
   return (
@@ -59,24 +63,7 @@ export function FestgefahrenAngaben({
           {t.TITEL}
         </Box>
       </Box>
-      <Box
-        component="dl"
-        sx={{ m: 0, display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', columnGap: 1.5, rowGap: 0.25, fontSize: 12 }}
-      >
-        {zeilen.map(([begriff, wert]) => (
-          <Box key={begriff} sx={{ display: 'contents' }}>
-            <Box component="dt" sx={{ color: TEXT_SCHWACH }}>
-              {begriff}
-            </Box>
-            <Box
-              component="dd"
-              sx={{ m: 0, ...ZAHL, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: wert === NICHT_GEMELDET ? TEXT_SCHWACH : 'text.primary' }}
-            >
-              {wert}
-            </Box>
-          </Box>
-        ))}
-      </Box>
+      <AngabenListe zeilen={zeilen} />
     </Box>
   )
 }

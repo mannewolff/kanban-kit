@@ -8,6 +8,7 @@ import { cssRegel } from '../../test/cssRegel'
 import { setzeMedien } from '../../test/setup'
 import { KUPFER, KUPFER_SCHIMMER, LED_RING, MELDER, PLATTE_HOCH, RAND, RAND_STARK, TEXT_SCHWACH, theme } from '../../theme'
 import {
+  AngabenListe,
   DeltaMarke,
   FilterTaste,
   Fuellschiene,
@@ -376,6 +377,34 @@ describe('kleine Bausteine', () => {
 
   it('ZEILE_HOVER_SX mischt die helle Platte mit dem Kupferschimmer', () => {
     expect(ZEILE_HOVER_SX).toBe(`color-mix(in srgb, ${PLATTE_HOCH} 75%, ${KUPFER_SCHIMMER})`)
+  })
+})
+
+describe('AngabenListe (Plan #1876, E14)', () => {
+  const ZEILEN = [
+    { begriff: 'Gleichzeitig', wert: 'ja', nichtGemeldet: false },
+    { begriff: 'Wartezeit', wert: 'nicht gemeldet', nichtGemeldet: true },
+  ]
+
+  it('stellt jede Zeile als Begriff und Wert einer Beschreibungsliste dar', () => {
+    zeige(<AngabenListe zeilen={ZEILEN} />)
+
+    expect(screen.getAllByRole('term').map((b) => b.textContent)).toEqual(['Gleichzeitig', 'Wartezeit'])
+    expect(screen.getAllByRole('definition').map((w) => w.textContent)).toEqual(['ja', 'nicht gemeldet'])
+    expect(cssRegel(screen.getByText('Gleichzeitig'))).toContain(`color: ${TEXT_SCHWACH}`)
+  })
+
+  it('zeigt einen Wert in der Normalfarbe und eine nicht gemeldete Zeile in TEXT_SCHWACH', () => {
+    zeige(<AngabenListe zeilen={ZEILEN} />)
+
+    expect(cssRegel(screen.getByText('ja'))).toContain('color: var(--mb-palette-text-primary)')
+    expect(cssRegel(screen.getByText('nicht gemeldet'))).toContain(`color: ${TEXT_SCHWACH}`)
+  })
+
+  it('richtet die Farbe nach dem Kennzeichen, nicht nach dem Text', () => {
+    zeige(<AngabenListe zeilen={[{ begriff: 'Fehler', wert: 'nicht gemeldet', nichtGemeldet: false }]} />)
+
+    expect(cssRegel(screen.getByText('nicht gemeldet'))).toContain('color: var(--mb-palette-text-primary)')
   })
 })
 

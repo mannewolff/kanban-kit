@@ -96,3 +96,48 @@ describe('NachtlaufVorgangszeile auf Englisch (Issue #1658)', () => {
     expect(screen.getByTestId('dauer-92')).toHaveAttribute('aria-label', 'Duration not measured')
   })
 })
+
+/** Die Marken einer gleichzeitigen Nacht in der zugeklappten Zeile (Issue #1879, Plan #1876 E12). */
+describe('NachtlaufVorgangszeile — Marken', () => {
+  const zeigeMit = (marken?: readonly string[]) =>
+    render(
+      <ThemeProvider theme={theme}>
+        <ul>
+          <NachtlaufVorgangszeile
+            nummer={92}
+            titel="Paket 92"
+            wurzel={undefined}
+            melder="gruen"
+            zustandswort="Erfolg"
+            klasse={null}
+            auszug={null}
+            haeufigkeit={null}
+            vorhaben={null}
+            dauer={null}
+            kosten={null}
+            commit={null}
+            offen={false}
+            onUmschalten={() => {}}
+            onOeffnen={() => {}}
+            {...(marken === undefined ? {} : { marken })}
+          />
+        </ul>
+      </ThemeProvider>,
+    )
+
+  it('trägt jede Marke als Wort im Namen des Aufklapp-Knopfs', () => {
+    zeigeMit(['gleichzeitig', 'Übernahme verschoben'])
+
+    const knopf = screen.getByTestId('vorgang-taste-92')
+    expect(screen.getByRole('button', { name: /gleichzeitig/ })).toBe(knopf)
+    expect(screen.getByRole('button', { name: /Übernahme verschoben/ })).toBe(knopf)
+    expect(knopf).not.toHaveAttribute('aria-label')
+    expect(screen.getByTestId('paket-92')).toHaveTextContent('Paket 92gleichzeitigÜbernahme verschoben')
+  })
+
+  it('bleibt ohne Marken unverändert', () => {
+    zeigeMit()
+
+    expect(screen.getByRole('button', { name: 'Paket 92' })).toBe(screen.getByTestId('vorgang-taste-92'))
+  })
+})

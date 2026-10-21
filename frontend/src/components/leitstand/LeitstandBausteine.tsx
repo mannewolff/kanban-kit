@@ -529,6 +529,44 @@ export function Instrument({
   )
 }
 
+/** Eine Zeile der {@link AngabenListe}: Begriff, Wert und ob der Wert fehlte. */
+export interface Angabe {
+  begriff: string
+  wert: string
+  /** Der Wert fehlte und steht als „nicht gemeldet" da — dann in {@link TEXT_SCHWACH}. */
+  nichtGemeldet: boolean
+}
+
+/**
+ * Angaben eines Pakets als Begriffsliste (Plan #1876, E14) — von `FestgefahrenAngaben` und
+ * `GleichzeitigkeitAngaben` geteilt. Die schwache Farbe eines fehlenden Werts hängt am Kennzeichen
+ * der Zeile, nicht am angezeigten Text: Der ist je Sprache ein anderer.
+ *
+ * <p>Werte können Fremdtext des Kits sein und stehen als reiner Text da (CLAUDE-security.md).
+ */
+export function AngabenListe({ zeilen }: Readonly<{ zeilen: readonly Angabe[] }>) {
+  return (
+    <Box
+      component="dl"
+      sx={{ m: 0, display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', columnGap: 1.5, rowGap: 0.25, fontSize: 12 }}
+    >
+      {zeilen.map(({ begriff, wert, nichtGemeldet }) => (
+        <Box key={begriff} sx={{ display: 'contents' }}>
+          <Box component="dt" sx={{ color: TEXT_SCHWACH }}>
+            {begriff}
+          </Box>
+          <Box
+            component="dd"
+            sx={{ m: 0, ...ZAHL, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: nichtGemeldet ? TEXT_SCHWACH : 'text.primary' }}
+          >
+            {wert}
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
 /** Marke einer Fehlerklasse (Entwurf `.marke-klasse`, Z. 623–634). */
 export function KlassenMarke({ melder, children }: Readonly<{ melder: Melder; children: ReactNode }>) {
   return (

@@ -45,7 +45,6 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/components/EpicVisibilityList.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1656 — CSS-Werte (Rahmen, Raster, Farbmischungen, Verläufe, Übergänge, SVG-Pfad) des Leitstands
   { file: 'src/components/leitstand/AktuellerStand.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  { file: 'src/components/leitstand/FestgefahrenAngaben.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/leitstand/LeitstandBausteine.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/leitstand/LeitstandVerbrauch.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/pages/LeitstandPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
