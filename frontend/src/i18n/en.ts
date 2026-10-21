@@ -990,6 +990,8 @@ export const en: Woerterbuch = {
     KEIN_ABBRUCH_RUN: 'No abort in this run.',
     KEIN_PAKET: 'The run has not reported a work package yet.',
     KARTE_OEFFNEN_ARIA: (nummer, titel) => `Open card #${nummer}: ${titel}`,
+    KARTE_OEFFNEN_MIT_MARKEN_ARIA: (nummer, titel, marken) =>
+      marken.length === 0 ? `Open card #${nummer}: ${titel}` : `Open card #${nummer}: ${titel} — ${marken.join(', ')}`,
     DURCHSATZ: 'Throughput',
     DURCHSATZ_NOTIZ: (wochen) => `completed cards per week · ${wochen} weeks`,
     KARTEN: (anzahl) => `${anzahl} cards`,

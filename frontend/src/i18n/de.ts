@@ -1053,6 +1053,9 @@ export const de = {
     KEIN_ABBRUCH_RUN: 'Kein Abbruch in diesem Run.',
     KEIN_PAKET: 'Der Run hat noch kein Arbeitspaket gemeldet.',
     KARTE_OEFFNEN_ARIA: (nummer: number, titel: string) => `Karte #${nummer} öffnen: ${titel}`,
+    /** Beschriftung mit den Marken einer gleichzeitigen Nacht (Issue #1880, Plan #1876 E11); ohne Marke wie `KARTE_OEFFNEN_ARIA`. */
+    KARTE_OEFFNEN_MIT_MARKEN_ARIA: (nummer: number, titel: string, marken: readonly string[]) =>
+      marken.length === 0 ? `Karte #${nummer} öffnen: ${titel}` : `Karte #${nummer} öffnen: ${titel} — ${marken.join(', ')}`,
     DURCHSATZ: 'Durchsatz',
     DURCHSATZ_NOTIZ: (wochen: number) => `abgeschlossene Karten je Woche · ${wochen} Wochen`,
     KARTEN: (anzahl: number) => `${anzahl} Karten`,

@@ -345,7 +345,9 @@ Von oben nach unten führt er:
    den offenen und **„Auslieferung“** mit vier Kennzahlen zur Auslieferung an die Nutzer; sie steht
    in voller Breite ganz unten, unter „Alter in Arbeit“ (siehe
    [Platte Auslieferung](#platte-auslieferung)). Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
-   braune LED und „nicht angelaufen — ‹Grund›“.
+   braune LED und „nicht angelaufen — ‹Grund›“. Aus einer gleichzeitigen Nacht tragen die Vorgänge
+   die Marken „gleichzeitig“ und „Übernahme verschoben“, ohne Wartezeit (siehe
+   [Runner](#nachtlauf)).
 6. **Fluss und Alter in Arbeit** — darunter in voller Breite **„Fluss“** und darunter **„Alter in
    Arbeit“** (siehe unten).
 
@@ -575,6 +577,18 @@ und „Wartet auf Entscheidung". Dazu stehen sechs Angaben: **Prüfung**, **Fehl
 minus Laufzeit, nie unter 0). Was das Kit nicht gemeldet hat, steht als „nicht gemeldet" da; ohne
 Zeitgrenze oder Laufzeit gilt das auch für die gesparte Zeit. Ältere Nächte, die ein festgefahrenes
 Paket noch als „Prüfungen rot" gemeldet haben, bleiben so, wie sie waren.
+
+**Gleichzeitige Nacht:** Setzt das Kit mehrere Pakete gleichzeitig um, steht beim aufgeklappten
+Paket eine Liste mit drei Angaben: **„Gleichzeitig“** (ja/nein — lief neben mindestens einem
+anderen Paket), **„Wartezeit auf die Prüfung“** (wie lange es auf einen freien Platz für seinen
+Prüflauf wartete, in Minuten und Sekunden, etwa „7 min 0 s“) und **„Übernahme verschoben“**
+(ja/nein — die Übernahme in den gemeinsamen Stand wurde verschoben). Was das Kit in einer solchen
+Nacht nicht gemeldet hat, steht als „nicht gemeldet“ da; ein übergangenes Paket zeigt bei beiden
+Wahrheitswerten „nein“. Zugeklappt trägt die Zeile nur die Marken **„gleichzeitig“** und
+**„Übernahme verschoben“**, und zwar nur beim Wert „ja“. Dieselben Marken stehen in der
+Leitstand-Platte **„Letzter Run“** und dort auch in der Beschriftung, die ein Vorlesewerkzeug
+nennt; die Wartezeit steht nur in der Lauf-Ansicht. Eine Nacht, die ihre Pakete nacheinander
+umsetzt, zeigt keine dieser Angaben.
 
 Zu jedem Arbeitspaket stehen darunter der Auszug aus dem Protokoll (bei grau der Grund) und die
 Herkunftskette — die fachliche Anforderung und der Plan, aus denen es entstanden ist. Die

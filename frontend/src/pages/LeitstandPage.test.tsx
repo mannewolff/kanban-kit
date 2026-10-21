@@ -569,6 +569,74 @@ describe('LeitstandPage — Letzter Run', () => {
   })
 })
 
+describe('LeitstandPage — Gleichzeitigkeit in „Letzter Run“ (Issue #1880)', () => {
+  const platte = () => screen.findByRole('region', { name: 'Letzter Run · Kette' })
+
+  it('Szenario: Ein Paket lief neben anderen und hat auf seine Prüfung gewartet', async () => {
+    m.laeufe.mockResolvedValue([
+      lauf({
+        items: [
+          paket(4711, 'GREEN', { concurrency: { concurrent: true, checkWaitMs: 420_000, deferredAtMerge: false } }),
+          paket(4713, 'GREEN', { concurrency: { concurrent: true, checkWaitMs: 0, deferredAtMerge: false } }),
+          paket(4714, 'GREEN', { concurrency: { concurrent: true, checkWaitMs: null, deferredAtMerge: false } }),
+        ],
+      }),
+    ])
+    renderPage()
+    const letzter = await platte()
+
+    const taste = within(letzter).getByRole('button', { name: 'Karte #4711 öffnen: Paket 4711 — gleichzeitig' })
+    expect(taste).toHaveTextContent('gleichzeitig')
+    expect(taste).not.toHaveTextContent('Übernahme verschoben')
+    expect(letzter).not.toHaveTextContent('Wartezeit')
+    expect(letzter).not.toHaveTextContent('7 min 0 s')
+  })
+
+  it('Szenario: Ein Paket mit verschobener Übernahme ist als solches erkennbar', async () => {
+    m.laeufe.mockResolvedValue([
+      lauf({
+        items: [
+          paket(4712, 'GREEN', { concurrency: { concurrent: true, checkWaitMs: 60_000, deferredAtMerge: true } }),
+          paket(4715, 'GREEN', { concurrency: { concurrent: false, checkWaitMs: null, deferredAtMerge: true } }),
+        ],
+      }),
+    ])
+    renderPage()
+    const letzter = await platte()
+
+    const taste = within(letzter).getByRole('button', {
+      name: 'Karte #4712 öffnen: Paket 4712 — gleichzeitig, Übernahme verschoben',
+    })
+    expect(taste).toHaveTextContent('gleichzeitigÜbernahme verschoben')
+    expect(within(letzter).getByRole('button', { name: 'Karte #4715 öffnen: Paket 4715 — Übernahme verschoben' })).toHaveTextContent(
+      'Übernahme verschoben',
+    )
+  })
+
+  it('Szenario: Ein übergangenes Paket einer gleichzeitigen Nacht zeigt „nein“', async () => {
+    m.laeufe.mockResolvedValue([
+      lauf({
+        items: [
+          paket(4716, 'GREEN', { concurrency: { concurrent: true, checkWaitMs: 1_000, deferredAtMerge: false } }),
+          paket(4717, 'GREY', { concurrency: { concurrent: false, checkWaitMs: null, deferredAtMerge: false } }),
+        ],
+      }),
+    ])
+    renderPage()
+    const letzter = await platte()
+
+    const taste = within(letzter).getByRole('button', { name: 'Karte #4717 öffnen: Paket 4717' })
+    expect(taste).not.toHaveTextContent('gleichzeitig')
+    expect(taste).not.toHaveTextContent('Übernahme verschoben')
+  })
+
+  it('lässt die Beschriftung eines Pakets ohne Angaben unverändert', async () => {
+    renderPage()
+    const letzter = await platte()
+    expect(within(letzter).getByRole('button', { name: 'Karte #917 öffnen: Paket 917' })).not.toHaveTextContent('gleichzeitig')
+  })
+})
+
 describe('LeitstandPage — Platten des Rumpfs', () => {
   it('zeigt die Implementierungszeit je Woche neben dem Durchsatz, eine Woche ohne Messung ohne Balken', async () => {
     m.kpis.mockResolvedValue(
@@ -1294,6 +1362,16 @@ describe('LeitstandPage auf Englisch', () => {
     expect(screen.getByRole('region', { name: 'Latest run' }).textContent).toMatch(/since \d{1,2}:\d\d\s[AP]M/)
     const gruen = await screen.findByRole('article', { name: 'Run · green' })
     expect(gruen).toHaveTextContent('last package')
+  })
+
+  it('nennt die Marken einer gleichzeitigen Nacht auf Englisch in Zeile und Beschriftung (Issue #1880)', async () => {
+    m.laeufe.mockResolvedValue([
+      lauf({ items: [paket(4712, 'GREEN', { concurrency: { concurrent: true, checkWaitMs: 60_000, deferredAtMerge: true } })] }),
+    ])
+    renderEnglisch()
+    const letzter = await screen.findByRole('region', { name: 'Last run · Chain' })
+    const taste = within(letzter).getByRole('button', { name: 'Open card #4712: Paket 4712 — concurrent, merge deferred' })
+    expect(taste).toHaveTextContent('concurrentmerge deferred')
   })
 
   it('sagt Leerfälle des letzten Runs auf Englisch', async () => {

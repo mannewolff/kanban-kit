@@ -14,6 +14,7 @@ import { Erklaerung } from '../components/Erklaerung'
 import { AlterInArbeitPlatte } from '../components/leitstand/AlterInArbeitPlatte'
 import { AuslieferungPlatte } from '../components/leitstand/AuslieferungPlatte'
 import { FestgefahrenAngaben } from '../components/leitstand/FestgefahrenAngaben'
+import { GleichzeitigkeitMarken } from '../components/leitstand/GleichzeitigkeitMarken'
 import { FlussPlatte } from '../components/leitstand/FlussPlatte'
 import {
   FilterTaste,
@@ -39,6 +40,7 @@ import { useSnackbar } from '../components/SnackbarProvider'
 import { formatierer } from '../i18n/format'
 import { useSprache, useT } from '../i18n/SpracheContext'
 import { epicColor } from '../lib/epicMeta'
+import { gleichzeitigkeitsMarken } from '../lib/gleichzeitigkeit'
 import {
   abbruchgruende,
   balkenHoehen,
@@ -476,13 +478,17 @@ function LetzterLauf({
 }
 
 function Vorgang({ item, epic, onOeffnen }: Readonly<{ item: NightRunItemView; epic: Epic | null; onOeffnen: () => void }>) {
-  const t = useT().LEITSTAND
+  const woerter = useT()
+  const t = woerter.LEITSTAND
   const auszug = ersteZeile(item.excerpt)
   const hash = kurzHash(item.commitHash)
+  // Nur die Marken, keine Wartezeit (Issue #1880, Plan #1876 E11): Die Zahl steht eine Ebene tiefer
+  // in der Lauf-Ansicht. Die Marken stehen auch in der Beschriftung, weil sie den Inhalt des Knopfs ersetzt (K4).
+  const marken = gleichzeitigkeitsMarken(item.concurrency, woerter)
   return (
     <ButtonBase
       onClick={onOeffnen}
-      aria-label={t.KARTE_OEFFNEN_ARIA(item.cardNumber, item.title)}
+      aria-label={t.KARTE_OEFFNEN_MIT_MARKEN_ARIA(item.cardNumber, item.title, marken)}
       sx={{
         width: '100%',
         display: 'grid',
@@ -509,6 +515,7 @@ function Vorgang({ item, epic, onOeffnen }: Readonly<{ item: NightRunItemView; e
               {epic.title}
             </Box>
           )}
+          <GleichzeitigkeitMarken marken={marken} />
         </Box>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 'none' }}>
