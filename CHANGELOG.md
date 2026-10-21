@@ -17,6 +17,24 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.5.0] – 2026-10-21
+
+- chore: v3.4.2
+- Sicherungs-Abbild: age und rclone mit Go 1.27.3 aus den Quellen bauen ([#1875](https://github.com/mannewolff/kanban-kit/issues/1875))
+- Caddy auf 2.11.7 heben, Sicherheitsausnahmen nachziehen ([#1874](https://github.com/mannewolff/kanban-kit/issues/1874))
+- epicsApi.list: URL im Test pruefen ([#1873](https://github.com/mannewolff/kanban-kit/issues/1873))
+- Convinience Scripte in .gitignore
+- Maven-Pruefungen laufen vorab statt gleichzeitig
+- chore: v3.4.1
+- Vorhaben-Massenzuordnung: Nutzungsdoku Mehrfachauswahl nachziehen ([#1870](https://github.com/mannewolff/kanban-kit/issues/1870))
+- Vorhaben-Massenzuordnung: Rückfrage, Ausführung und Meldungen im BoardView ([#1869](https://github.com/mannewolff/kanban-kit/issues/1869))
+- Vorhaben-Massenzuordnung: Taste und Menü in der BulkActionBar, API bulkAssign ([#1868](https://github.com/mannewolff/kanban-kit/issues/1868))
+- Vorhaben-Massenzuordnung: Endpunkt POST /api/cards/bulk-parent mit Szenario-Integrationstests ([#1867](https://github.com/mannewolff/kanban-kit/issues/1867))
+- Vorhaben-Massenzuordnung: Regel VorhabenMassenzuordnung und Fassade EpicService.assignParentBulk ([#1866](https://github.com/mannewolff/kanban-kit/issues/1866))
+- Übersicht der GitHub-Actions-Secrets dokumentieren ([#1861](https://github.com/mannewolff/kanban-kit/issues/1861))
+- CI und SonarQube laufen auch auf dem Pruefzweig kit-pruefung ([#1859](https://github.com/mannewolff/kanban-kit/issues/1859))
+- Auslieferung: Meldung aus dem eigenen Deploy-Workflow ([#1839](https://github.com/mannewolff/kanban-kit/issues/1839))
+
 ## [3.4.0] – 2026-10-19
 
 - chore: v3.3.2
