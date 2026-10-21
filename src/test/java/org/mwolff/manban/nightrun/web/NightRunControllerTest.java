@@ -1089,7 +1089,12 @@ class NightRunControllerTest {
                         anforderung,
                         plan,
                         List.of(paket),
-                        List.of(new StageProgress(ProgressStage.PLAN, StageState.ERREICHT)),
+                        List.of(
+                            new StageProgress(ProgressStage.PLAN, StageState.ERREICHT, null),
+                            new StageProgress(
+                                ProgressStage.REVIEW,
+                                StageState.LAEUFT,
+                                Instant.parse("2026-10-21T17:03:27Z"))),
                         ProgressStage.ABDECKUNG,
                         false)),
                 List.of(paket),
@@ -1108,6 +1113,9 @@ class NightRunControllerTest {
         .andExpect(jsonPath("$.ketten[0].pakete[0].zustand").value("IN_UMSETZUNG"))
         .andExpect(jsonPath("$.ketten[0].stufen[0].stufe").value("PLAN"))
         .andExpect(jsonPath("$.ketten[0].stufen[0].zustand").value("ERREICHT"))
+        .andExpect(jsonPath("$.ketten[0].stufen[0].seit").value(nullValue()))
+        .andExpect(jsonPath("$.ketten[0].stufen[1].zustand").value("LAEUFT"))
+        .andExpect(jsonPath("$.ketten[0].stufen[1].seit").value("2026-10-21T17:03:27Z"))
         .andExpect(jsonPath("$.ketten[0].aktuelleStufe").value("ABDECKUNG"))
         .andExpect(jsonPath("$.ketten[0].endeErreicht").value(false))
         .andExpect(jsonPath("$.pakete[0].karte.title").value("Paket 3/7"))
@@ -1182,7 +1190,7 @@ class NightRunControllerTest {
     assertThat(felder(NightRunProgressView.PackageProgressView.class))
         .containsExactly("karte", "zustand");
     assertThat(felder(NightRunProgressView.StageProgressView.class))
-        .containsExactly("stufe", "zustand");
+        .containsExactly("stufe", "zustand", "seit");
     assertThat(felder(NightRunProgressView.CardRefView.class))
         .containsExactly("number", "title", "boardId");
   }

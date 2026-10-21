@@ -1,6 +1,7 @@
 package org.mwolff.manban.nightrun.web;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.Instant;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.domain.CardRef;
@@ -113,10 +114,16 @@ record NightRunProgressView(
               description =
                   "OFFEN: noch nicht erreicht; LAEUFT: die aktuelle Stelle; ERREICHT: erledigt.",
               example = "ERREICHT")
-          StageState zustand) {
+          StageState zustand,
+      @Schema(
+              description =
+                  "Beginn der laufenden Stufe; null bei jeder anderen Stufe und wenn kein Beginn"
+                      + " gemeldet ist.",
+              example = "2026-10-21T17:03:27Z")
+          @Nullable Instant seit) {
 
     static StageProgressView of(StageProgress s) {
-      return new StageProgressView(s.stufe(), s.zustand());
+      return new StageProgressView(s.stufe(), s.zustand(), s.seit());
     }
   }
 
