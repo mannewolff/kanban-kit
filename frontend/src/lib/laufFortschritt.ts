@@ -10,6 +10,7 @@ import type {
   PackageState,
   ProgressStage,
   StageProgressView,
+  StageState,
 } from '../api/nightRuns'
 import type { NightRunState } from './nightRunLog'
 import type { Woerterbuch } from '../i18n/de'
@@ -94,6 +95,8 @@ export interface Wegstufe {
   name: string
   /** Der Zustand der Stufe als Text — nie allein über die Farbe (E12). */
   zustand: string
+  /** Der Zustand als Schlüssel — für die Form des Stufenpunkts (Plan #1882 E6). */
+  stand: StageState
   /** Ob der Lauf gerade an dieser Stelle steht. */
   aktuell: boolean
 }
@@ -118,7 +121,7 @@ export function wegleiste(kette: ChainProgressView | null, art: FortschrittArt, 
   const t = woerterbuch(sprache).LAUF_FORTSCHRITT
   if (art === 'UMSETZUNGSNACHT') {
     return {
-      stufen: [{ stufe: 'UMSETZUNG', name: t.STUFE.UMSETZUNG, zustand: t.ZUSTAND.LAEUFT, aktuell: true }],
+      stufen: [{ stufe: 'UMSETZUNG', name: t.STUFE.UMSETZUNG, zustand: t.ZUSTAND.LAEUFT, stand: 'LAEUFT', aktuell: true }],
       ende: null,
     }
   }
@@ -130,6 +133,7 @@ export function wegleiste(kette: ChainProgressView | null, art: FortschrittArt, 
       stufe: s.stufe,
       name: t.STUFE[s.stufe],
       zustand: t.ZUSTAND[s.zustand],
+      stand: s.zustand,
       aktuell: s.stufe === kette.aktuelleStufe,
     })),
     ende: kette.endeErreicht ? t.ENDE_DES_WEGS : null,
@@ -403,6 +407,25 @@ export function rasterzustand(zustand: PackageState): Rasterzustand {
   return RASTER[zustand]
 }
 
+/** Eine Zahl der Zählzeile unter dem Raster. */
+export interface Rasteranzahl {
+  zustand: PackageState
+  anzahl: number
+}
+
+/** Die Reihenfolge der Zählzeile: was fertig ist, zuerst; was zurückgestellt ist, zuletzt. */
+const ZAEHLFOLGE: readonly PackageState[] = ['FERTIG', 'IN_UMSETZUNG', 'GEZOGEN', 'ANGELEGT', 'ZURUECKGESTELLT']
+
+/**
+ * Die Zählzeile unter dem Paketraster (Issue #1886, Vorlage `docs/entwurf-lauf-ansicht.html`):
+ * je vorkommendem Zustand seine Anzahl, in der Reihenfolge von {@link ZAEHLFOLGE}.
+ */
+export function rasterzaehlung(pakete: readonly PackageProgressView[]): Rasteranzahl[] {
+  return ZAEHLFOLGE.map((zustand) => ({ zustand, anzahl: pakete.filter((p) => p.zustand === zustand).length })).filter(
+    (z) => z.anzahl > 0,
+  )
+}
+
 /** Was eine Kettenzeile über die Kosten ihres Kettenvorgangs sagt. */
 export interface Kettenkosten {
   betragUsd: number
@@ -415,7 +438,8 @@ export interface Kettenkosten {
 /** Ein Vorgang, soweit die Kettenkosten ihn brauchen. */
 export interface Kostenvorgang {
   cardNumber: number
-  verbrauch?: { kostenUsd: number | null }
+  /** `undefined` am eben geparsten Lauf; ein fehlender Betrag heißt „nicht gemessen". */
+  verbrauch?: { kostenUsd?: number | null }
 }
 
 /**

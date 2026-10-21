@@ -18,6 +18,7 @@ import {
   kettenAnzeige,
   kettenkosten,
   laeufeZusammenfuehren,
+  rasterzaehlung,
   rasterzustand,
   stufenzeit,
   vorwegZaehlung,
@@ -169,10 +170,10 @@ describe('wegleiste', () => {
     })
     expect(wegleiste(k, 'KETTE')).toEqual({
       stufen: [
-        { stufe: 'PLAN', name: 'Plan', zustand: 'erreicht', aktuell: false },
-        { stufe: 'REVIEW', name: 'Prüfung', zustand: 'erreicht', aktuell: false },
-        { stufe: 'PAKETE', name: 'Arbeitspakete', zustand: 'erreicht', aktuell: false },
-        { stufe: 'ABDECKUNG', name: 'Abdeckung', zustand: 'erreicht', aktuell: false },
+        { stufe: 'PLAN', name: 'Plan', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'REVIEW', name: 'Prüfung', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'PAKETE', name: 'Arbeitspakete', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'ABDECKUNG', name: 'Abdeckung', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
       ],
       ende: 'Ende des Wegs erreicht',
     })
@@ -191,11 +192,11 @@ describe('wegleiste', () => {
     })
     expect(wegleiste(k, 'KETTE')).toEqual({
       stufen: [
-        { stufe: 'PLAN', name: 'Plan', zustand: 'erreicht', aktuell: false },
-        { stufe: 'REVIEW', name: 'Prüfung', zustand: 'erreicht', aktuell: false },
-        { stufe: 'PAKETE', name: 'Arbeitspakete', zustand: 'läuft', aktuell: true },
-        { stufe: 'ABDECKUNG', name: 'Abdeckung', zustand: 'offen', aktuell: false },
-        { stufe: 'UMSETZUNG', name: 'Umsetzung', zustand: 'offen', aktuell: false },
+        { stufe: 'PLAN', name: 'Plan', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'REVIEW', name: 'Prüfung', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'PAKETE', name: 'Arbeitspakete', zustand: 'läuft', stand: 'LAEUFT', aktuell: true },
+        { stufe: 'ABDECKUNG', name: 'Abdeckung', zustand: 'offen', stand: 'OFFEN', aktuell: false },
+        { stufe: 'UMSETZUNG', name: 'Umsetzung', zustand: 'offen', stand: 'OFFEN', aktuell: false },
       ],
       ende: null,
     })
@@ -203,7 +204,7 @@ describe('wegleiste', () => {
 
   it('zeigt bei der Umsetzungsnacht nur die Umsetzung als laufende Stufe', () => {
     expect(wegleiste(null, 'UMSETZUNGSNACHT')).toEqual({
-      stufen: [{ stufe: 'UMSETZUNG', name: 'Umsetzung', zustand: 'läuft', aktuell: true }],
+      stufen: [{ stufe: 'UMSETZUNG', name: 'Umsetzung', zustand: 'läuft', stand: 'LAEUFT', aktuell: true }],
       ende: null,
     })
   })
@@ -395,14 +396,14 @@ describe('laufFortschritt auf Englisch', () => {
     })
     expect(wegleiste(k, 'KETTE', 'en')).toEqual({
       stufen: [
-        { stufe: 'PLAN', name: 'Plan', zustand: 'reached', aktuell: false },
-        { stufe: 'REVIEW', name: 'Review', zustand: 'running', aktuell: true },
-        { stufe: 'PAKETE', name: 'Work packages', zustand: 'open', aktuell: false },
+        { stufe: 'PLAN', name: 'Plan', zustand: 'reached', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'REVIEW', name: 'Review', zustand: 'running', stand: 'LAEUFT', aktuell: true },
+        { stufe: 'PAKETE', name: 'Work packages', zustand: 'open', stand: 'OFFEN', aktuell: false },
       ],
       ende: 'End of the path reached',
     })
     expect(wegleiste(null, 'UMSETZUNGSNACHT', 'en').stufen).toEqual([
-      { stufe: 'UMSETZUNG', name: 'Implementation', zustand: 'running', aktuell: true },
+      { stufe: 'UMSETZUNG', name: 'Implementation', zustand: 'running', stand: 'LAEUFT', aktuell: true },
     ])
   })
 
@@ -651,6 +652,32 @@ describe('rasterzustand (Plan #1882 E6)', () => {
     expect(rasterzustand('GEZOGEN')).toEqual({ form: 'umriss', farbe: 'stahl', querstrich: false })
     expect(rasterzustand('ANGELEGT')).toEqual({ form: 'umriss', farbe: 'text-schwach', querstrich: false })
     expect(rasterzustand('ZURUECKGESTELLT')).toEqual({ form: 'gefuellt', farbe: 'zinnob', querstrich: true })
+  })
+})
+
+describe('rasterzaehlung (Issue #1886)', () => {
+  it('zählt je vorkommendem Zustand in fester Reihenfolge: fertig, in Umsetzung, gezogen, angelegt, zurückgestellt', () => {
+    expect(
+      rasterzaehlung([
+        paket(1, 'ZURUECKGESTELLT'),
+        paket(2, 'ANGELEGT'),
+        paket(3, 'GEZOGEN'),
+        paket(4, 'IN_UMSETZUNG'),
+        paket(5, 'FERTIG'),
+        paket(6, 'ANGELEGT'),
+      ]),
+    ).toEqual([
+      { zustand: 'FERTIG', anzahl: 1 },
+      { zustand: 'IN_UMSETZUNG', anzahl: 1 },
+      { zustand: 'GEZOGEN', anzahl: 1 },
+      { zustand: 'ANGELEGT', anzahl: 2 },
+      { zustand: 'ZURUECKGESTELLT', anzahl: 1 },
+    ])
+  })
+
+  it('lässt Zustände ohne Paket weg', () => {
+    expect(rasterzaehlung([paket(1, 'ANGELEGT'), paket(2, 'ANGELEGT')])).toEqual([{ zustand: 'ANGELEGT', anzahl: 2 }])
+    expect(rasterzaehlung([])).toEqual([])
   })
 })
 

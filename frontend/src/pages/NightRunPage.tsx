@@ -574,6 +574,20 @@ const kettenBudget = (lauf: AnzeigeLauf, stand: NightRun | undefined): Budget =>
     voreingestellteFelder: [],
   }
 
+/**
+ * Die Vorgaben in der Form, die `stufenzeit` und `kettenkosten` lesen (Issue #1886) — der Rückweg
+ * von {@link ausBudget}: Ein fehlender Schlüssel ist dort wieder `null`, „keine Vorgabe".
+ */
+const budgetSicht = (budget: Budget): NightRunBudgetView => ({
+  planMin: budget.vorgabenMin.plan ?? null,
+  reviewMin: budget.vorgabenMin.review ?? null,
+  paketeMin: budget.vorgabenMin.pakete ?? null,
+  abdeckungMin: budget.vorgabenMin.abdeckung ?? null,
+  kostenUsd: budget.kostenUsd ?? null,
+  origin: budget.herkunft ?? null,
+  defaultFields: [...budget.voreingestellteFelder],
+})
+
 /** Die Zeitvorgaben der Antwort unter den Schlüsseln der Arbeitsschritte; ein Schritt ohne Vorgabe fehlt. */
 function vorgabenAusSicht(view: NightRunBudgetView): NightRunStufenvorgaben {
   const minuten: Record<NightRunKettenStufe, number | null> = {
@@ -2942,6 +2956,10 @@ function LaufPanel({
             fortschritt={geladen}
             art={art}
             laeuft={laeuft}
+            // Dieselben Vorgaben wie die Fußzeile (Plan #1882 E7, E8): Zeitbalken und Kostenbalken
+            // stehen gegen das, was dort als Vorgabe je Kette steht.
+            budget={budgetSicht(kettenBudget(lauf, stand))}
+            vorgaenge={lauf.items}
             onKarteOeffnen={onKarteOeffnen}
           />
         </Box>

@@ -1411,6 +1411,21 @@ export const de = {
     PAKETE_KETTE: (nummer: number) => `Pakete der Kette #${nummer}`,
     KEINE_PAKETE: 'noch keine Pakete',
     FRAGE: 'Offene Frage an den Menschen an Karte',
+    /** Zugänglicher Name und Tooltip eines Pakets im Raster (Plan #1882 E6). */
+    PAKET_NAME: (nummer: number, zustand: string, titel: string) => `Paket #${nummer}, ${zustand}: ${titel}`,
+    /** Die Zählzeile unter dem Raster, ein Teil je vorkommendem Zustand. */
+    RASTER_ANZAHL: (anzahl: number, zustand: string) => `${anzahl} ${zustand}`,
+    /** Zugänglicher Name und Tooltip eines Stufenpunkts — „Plan: erreicht". */
+    STUFE_NAME: (stufe: string, zustand: string) => `${stufe}: ${zustand}`,
+    ENDE_DES_WEGS: 'Ende des Wegs',
+    ZEIT_SCHIENE: (verstrichen: number, vorgabe: number) => `${verstrichen} von ${vorgabe} Minuten verstrichen`,
+    ZEIT: (verstrichen: number, vorgabe: number) => `${verstrichen} / ${vorgabe} min`,
+    ZEIT_UEBER: (ueber: number) => ` · ${ueber} min über der Vorgabe`,
+    SEIT: (wert: string, einheit: string) => `seit ${wert} ${einheit}`,
+    KOSTEN: 'Kosten der Kette',
+    KOSTEN_PLANUNG: 'Planung',
+    KOSTEN_GEGEN: (budget: string) => `/ ${budget} $`,
+    DOLLAR: '$',
     ART: {
       ANFORDERUNG: 'Anforderung',
       PLAN: 'Plan',

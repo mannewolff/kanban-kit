@@ -6568,6 +6568,43 @@ describe('NightRunPage — Fortschritt eines laufenden Laufs (#1378)', () => {
     expect(fortschrittAufrufe().map((a) => a.url)).toEqual(['/api/projects/5/night-runs/7/progress'])
   })
 
+  it('reicht Budget und Vorgänge an die Kettenzeile: Zeitbalken der Prüfung und Kosten der Kette (Issue #1886)', async () => {
+    const pruefung = kettenStand([], {})
+    pruefung.ketten[0] = {
+      ...pruefung.ketten[0],
+      stufen: [
+        { stufe: 'PLAN', zustand: 'ERREICHT', seit: null },
+        { stufe: 'REVIEW', zustand: 'LAEUFT', seit: '2026-10-04T14:42:00Z' },
+        { stufe: 'PAKETE', zustand: 'OFFEN', seit: null },
+        { stufe: 'ABDECKUNG', zustand: 'OFFEN', seit: null },
+      ],
+      aktuelleStufe: 'REVIEW',
+    }
+    renderPage({
+      listen: [
+        [
+          laufendeKette({
+            budget: {
+              planMin: 60,
+              reviewMin: 60,
+              paketeMin: 30,
+              abdeckungMin: 15,
+              kostenUsd: 50,
+              origin: 'CONFIGURED',
+              defaultFields: [],
+            },
+            items: [{ id: 1, cardNumber: 800, title: 'Anforderung', state: 'GREEN', usage: verbraucht({ costUsd: 17.5 }) }],
+          }),
+        ],
+      ],
+      fortschritte: { 7: [pruefung] },
+    })
+
+    const zeile = within(await screen.findByTestId('fortschritt-kette-800'))
+    expect(zeile.getByRole('img', { name: '18 von 60 Minuten verstrichen' })).toBeInTheDocument()
+    expect(zeile.getByRole('group', { name: 'Kosten der Kette' })).toHaveTextContent('17,50 / 50,00 $')
+  })
+
   it('steht über den Vorgangszeilen', async () => {
     renderPage({
       listen: [[laufendeKette({ items: [{ id: 1, cardNumber: 800, title: 'Anforderung', state: 'GREEN' }] })]],
@@ -6586,7 +6623,7 @@ describe('NightRunPage — Fortschritt eines laufenden Laufs (#1378)', () => {
       karten: { 801: karte({ id: 91, number: 801, title: 'Paket eins' }) },
     })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Paket #801 Paket eins' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Paket #801, fertig: Paket eins' }))
 
     expect(await screen.findByTestId('karten-detail')).toHaveTextContent('Karte 801')
   })
@@ -6594,7 +6631,7 @@ describe('NightRunPage — Fortschritt eines laufenden Laufs (#1378)', () => {
   it('meldet, wenn sich die Karte des Fortschritts nicht öffnen lässt', async () => {
     renderPage({ listen: [[laufendeKette()]], fortschritte: { 7: [ZWEI_PAKETE] } })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Paket #801 Paket eins' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Paket #801, fertig: Paket eins' }))
 
     expect(await screen.findByText('Karte nicht gefunden')).toBeInTheDocument()
     expect(screen.queryByTestId('karten-detail')).toBeNull()
@@ -6603,11 +6640,11 @@ describe('NightRunPage — Fortschritt eines laufenden Laufs (#1378)', () => {
   it('zeigt nach 30 s einen neuen Board-Stand', async () => {
     renderPage({ listen: [[laufendeKette()]], fortschritte: { 7: [ZWEI_PAKETE, DREI_PAKETE] } })
     await screen.findByTestId('fortschritt-kette-800')
-    expect(screen.queryByRole('button', { name: 'Paket #803 Paket drei' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Paket #803, in Umsetzung: Paket drei' })).toBeNull()
 
     await vi.advanceTimersByTimeAsync(30_000)
 
-    expect(await screen.findByRole('button', { name: 'Paket #803 Paket drei' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Paket #803, in Umsetzung: Paket drei' })).toBeInTheDocument()
     expect(within(panel()).getByTestId('nachtlauf-meta')).toHaveTextContent('2 bearbeitet')
     expect(listenAufrufe()).toHaveLength(2)
   })
@@ -6632,7 +6669,7 @@ describe('NightRunPage — Fortschritt eines laufenden Laufs (#1378)', () => {
 
     fireEvent.focus(window)
 
-    expect(await screen.findByRole('button', { name: 'Paket #803 Paket drei' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Paket #803, in Umsetzung: Paket drei' })).toBeInTheDocument()
   })
 
   it('frischt den Fortschritt einer zugeklappten Kachel nicht auf', async () => {
