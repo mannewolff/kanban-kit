@@ -460,6 +460,6 @@ export function kettenkosten(
   if (weg.some((s) => s.stufe === 'UMSETZUNG')) {
     return { betragUsd, anteil: null, planung: true }
   }
-  const deckel = budget?.kostenUsd ?? null
-  return { betragUsd, anteil: deckel === null || deckel <= 0 ? null : betragUsd / deckel, planung: false }
+  const deckel = budget?.kostenUsd ?? 0
+  return { betragUsd, anteil: deckel <= 0 ? null : betragUsd / deckel, planung: false }
 }

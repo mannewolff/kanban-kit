@@ -548,6 +548,42 @@ describe('zustandssatz (Plan #1882 E4)', () => {
     )
   })
 
+  it('liest die laufende Stufe aus dem Weg, auch wenn die aktuelle Stufe abweicht', () => {
+    const k = kette({
+      stufen: [stufe('PLAN', 'ERREICHT'), stufe('REVIEW', 'LAEUFT'), stufe('PAKETE', 'OFFEN')],
+      aktuelleStufe: 'PAKETE',
+    })
+    expect(zustandssatz(mitKetten([k]), 'KETTE', true, null, keineZahlen, lage)).toBe('Prüfung zu Plan #1372')
+    const ohneAktuelle = kette({ stufen: [stufe('REVIEW', 'LAEUFT')], aktuelleStufe: null })
+    expect(zustandssatz(mitKetten([ohneAktuelle]), 'KETTE', true, null, keineZahlen, lage)).toBe(
+      'Prüfung zu Plan #1372',
+    )
+  })
+
+  it('nennt an einer Planstufe die Stufe, auch wenn ein Paket der Kette in Umsetzung steht', () => {
+    const k = kette({
+      pakete: [paket(1846, 'IN_UMSETZUNG')],
+      stufen: [stufe('PLAN', 'ERREICHT'), stufe('REVIEW', 'LAEUFT')],
+      aktuelleStufe: 'REVIEW',
+    })
+    expect(zustandssatz(mitKetten([k]), 'KETTE', true, null, keineZahlen, lage)).toBe('Prüfung zu Plan #1372')
+  })
+
+  it('behält die Reihenfolge mehrerer laufender Ketten und stellt sie vor die fertigen', () => {
+    const fertig = kette({ anforderung: karte(1814), stufen: [], aktuelleStufe: null, endeErreicht: true })
+    const erste = kette({ plan: karte(1866), stufen: [stufe('REVIEW', 'LAEUFT')], aktuelleStufe: 'REVIEW' })
+    const zweite = kette({ plan: karte(1867), stufen: [stufe('PAKETE', 'LAEUFT')], aktuelleStufe: 'PAKETE' })
+    const satz = (ketten: ChainProgressView[]) => zustandssatz(mitKetten(ketten), 'KETTE', true, null, keineZahlen, lage)
+    expect(satz([erste, zweite, fertig])).toBe('Prüfung zu Plan #1866 + 2 weitere Ketten')
+    expect(satz([erste, fertig, zweite])).toBe('Prüfung zu Plan #1866 + 2 weitere Ketten')
+    expect(satz([fertig, erste, zweite])).toBe('Prüfung zu Plan #1866 + 2 weitere Ketten')
+    expect(satz([fertig, zweite, erste])).toBe('Arbeitspakete zu Plan #1867 + 2 weitere Ketten')
+    expect(satz([zweite, fertig, fertig, erste])).toBe('Arbeitspakete zu Plan #1867 + 3 weitere Ketten')
+    const auchFertig = kette({ anforderung: karte(1815), stufen: [], aktuelleStufe: null, endeErreicht: true })
+    expect(satz([fertig, auchFertig])).toBe('Kette #1814 am Ende des Wegs + 1 weitere Kette')
+    expect(satz([auchFertig, fertig])).toBe('Kette #1815 am Ende des Wegs + 1 weitere Kette')
+  })
+
   it('nennt am abgeschlossenen Run das Ausgangswort des Befunds mit den Paketzahlen', () => {
     expect(
       zustandssatz(null, 'KETTE', false, befund('FAILED'), { gruen: 3, gelb: 1, rot: 2 }, lage),
