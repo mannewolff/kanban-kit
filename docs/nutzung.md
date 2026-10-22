@@ -37,6 +37,10 @@
 - Innerhalb eines Projekts weitere **Boards** anlegen. Ein neues Board bekommt die Default-Spalten
   **Backlog · Ready · In Progress · In Review · Done**.
 - Spalten lassen sich anlegen, umbenennen, umsortieren und (wenn leer) löschen.
+- **Rollen:** Die Fläche mit den Spalten reicht bis zum unteren Fensterrand und rollt in sich,
+  senkrecht wie waagerecht; die Spaltenköpfe bleiben dabei oben stehen, und der waagerechte
+  Rollbalken steht immer am unteren Rand. Zieht man eine Karte an einen Rand der Fläche, rollt sie
+  in diese Richtung mit — mit der Maus wie mit dem Finger.
 - **Status eines Arbeitspakets:** Die fünf Prozessspalten **Backlog**, **Ready**, **In Progress**,
   **In Review** und **Done** geben einer Karte, die dort ankommt, ihren Status. Eine **eigene
   Spalte** (jeder andere Name) übernimmt den Status der nächsten Prozessspalte **links** davon; gibt

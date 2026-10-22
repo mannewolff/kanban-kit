@@ -26,6 +26,7 @@ import type { Woerterbuch } from '../i18n/de'
 import { useT } from '../i18n/SpracheContext'
 import { ablagePosition, activeCardsInColumn, applyMove, applyMoveAt, spaltenAuswahlUmschalten } from '../lib/boardOps'
 import { effektivDone, neighbourColumns } from '../lib/columnMeta'
+import { randGeschwindigkeit } from '../lib/fingerZiehen'
 import { useEditMode } from '../lib/EditModeContext'
 import { useTabletQuer } from '../lib/tabletQuer'
 import { useFingerZiehen, type FingerZiehen, type FingerZiel } from '../lib/useFingerZiehen'
@@ -35,6 +36,7 @@ import { epicShortcode } from '../lib/epicMeta'
 import { selectableEpics } from '../lib/epicTiles'
 import { hiddenCardNumbers } from '../lib/hiddenCards'
 import { readTextFile } from '../lib/readTextFile'
+import { restHoehe } from '../lib/restHoehe'
 import { useKeyboardShortcut } from '../lib/useKeyboardShortcut'
 import {
   MELDER,
@@ -310,6 +312,34 @@ function einfuegeIndexIn(anzeige: FingerZugAnzeige | null, columnId: number): nu
  * Epic-Badge + farbigen Rand, ein ⋮-Menü (Bearbeiten/Archivieren/Verschieben) und auf Done einen
  * Archiv-Countdown. Angelegt wird über „Neu anlegen“ oder die Taste „+“ — stets in der ersten Spalte.
  */
+/** Unter diese Höhe schrumpft die Board-Fläche nicht, auch in einem sehr niedrigen Fenster (Issue #1901). */
+const FLAECHE_MIN_HOEHE_PX = 320
+
+/**
+ * Höhe der Board-Fläche: von ihrer Oberkante im Dokument bis zum unteren Fensterrand (Issue #1901).
+ * Gemessen statt als feste Abzugskonstante, weil Banner, umbrechende Werkzeugleiste und Tablet die
+ * Oberkante verschieben. Neu gemessen bei Größenänderung des Fensters und der Fläche; ohne
+ * `ResizeObserver` bleibt das Fenster-Ereignis.
+ */
+function useFlaechenHoehe(): [(element: HTMLElement | null) => void, number | undefined] {
+  const [element, setElement] = useState<HTMLElement | null>(null)
+  const [hoehe, setHoehe] = useState<number>()
+  useEffect(() => {
+    if (!element) return
+    const messen = () =>
+      setHoehe(restHoehe(element.getBoundingClientRect().top + window.scrollY, window.innerHeight, FLAECHE_MIN_HOEHE_PX))
+    messen()
+    window.addEventListener('resize', messen)
+    const beobachter = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(messen)
+    beobachter?.observe(element)
+    return () => {
+      window.removeEventListener('resize', messen)
+      beobachter?.disconnect()
+    }
+  }, [element])
+  return [setElement, hoehe]
+}
+
 export function BoardView({
   board,
   initialCards,
@@ -422,6 +452,7 @@ export function BoardView({
   // Ohne Argument: Unter `@types/react` 18.3 wählt `useRef<T>()` dieselbe Überladung, der Typ
   // bleibt `MutableRefObject<T | undefined>` (S4623). React 19 verlangt das Argument wieder.
   const zugTakt = useRef<ReturnType<typeof setTimeout>>()
+  const [flaecheRef, flaechenHoehe] = useFlaechenHoehe()
   useEffect(() => () => clearTimeout(zugTakt.current), [])
 
   const reorderColumn = async (fromId: number, toId: number) => {
@@ -1087,97 +1118,116 @@ export function BoardView({
       >
         {t.BOARD.WAAGERECHT_ROLLEN}
       </Typography>
-      <Stack
+      {/* Die Fläche ist ein eigenes Fenster bis zum unteren Rand (Issue #1901): Sie rollt auf beiden
+          Achsen, die Spaltenköpfe bleiben oben in ihr stehen, und der waagerechte Rollbalken steht
+          immer am unteren Rand. Beim Ziehen einer Karte an ihren Rand rollt sie mit — dieselbe
+          Rechnung wie beim Finger, weil Browser einen verschachtelten Behälter nicht alle gleich
+          mitrollen. */}
+      <Box
+        ref={flaecheRef}
         data-testid="board-surface"
-        direction="row"
-        spacing={spaltenMass(tabletQuer).abstand}
-        sx={{
-          overflowX: 'auto',
-          pb: 2,
-          pt: 1,
-          px: 1,
-          width: '100%',
-          alignItems: 'stretch',
-          // Spalten füllen die Höhe bis nahe an den Viewport-Rand (Offset ≈ AppBar + Header).
-          minHeight: 'calc(100vh - 210px)',
+        onDragOver={(e) => {
+          if (dragCardIds.size === 0) return
+          const flaeche = e.currentTarget
+          const rahmen = flaeche.getBoundingClientRect()
+          flaeche.scrollTop += randGeschwindigkeit(e.clientY, rahmen.top, rahmen.bottom)
+          flaeche.scrollLeft += randGeschwindigkeit(e.clientX, rahmen.left, rahmen.right)
         }}
+        style={{ height: flaechenHoehe }}
+        sx={{ overflow: 'auto', width: '100%' }}
       >
-        {columns.map((column) => {
-          // Voller Bestand, nicht der gefilterte: Der Zähler trägt die WIP-Grenze. Zählte er
-          // filteredCards, meldete er bei gesetztem Vorhaben-Filter eine eingehaltene Grenze,
-          // die tatsächlich verletzt ist. Dargestellt wird weiterhin filteredCards.
-          const columnCards = activeCardsInColumn(cards, column.id)
-          const angezeigteKarten = activeCardsInColumn(sichtbareKarten, column.id)
-          return (
-            <BoardSpalte
-              key={column.id}
-              column={column}
-              count={columnCards.length}
-              // Eine Zahl je Spalte: die Vereinigung beider Achsen, keine zwei Zählungen (E4).
-              hiddenCount={columnCards.filter((c) => hiddenNumbers.has(c.number)).length}
-              // Was die Spalte gerade zeigt — Grundlage des Spalten-Kästchens und der Karten.
-              angezeigteKarten={angezeigteKarten}
-              nachtlauf={nachtlaufKnopf(angezeigteKarten)}
-              epics={epics}
-              dichte={dichte}
-              selectionMode={selectionMode}
-              selectedIds={selectedIds}
-              canEdit={canEdit}
-              showStructureEdit={showStructureEdit}
-              members={members}
-              boardLabels={boardLabels}
-              retentionDays={retentionDays}
-              naechsteRichtung={nextSortDirection[column.id] ?? 'ASC'}
-              sortiertGerade={sortingColumnId === column.id}
-              dragCardIds={zugKartenIds}
-              ablageSpalteId={zugSpalteId}
-              herkunftsSpalteId={herkunftsSpalteId}
-              kartenZug={kartenZug}
-              spaltenZug={spaltenZug}
-              einfuegeIndex={einfuegeIndexIn(fingerAnzeige, column.id)}
-              colDrag={colDrag}
-              onKarteUeber={() => setAblageSpalteId(column.id)}
-              onKarteAbgelegt={(cardId) => {
-                zugBeenden()
-                if (cardId) {
-                  karteAbgelegt(cardId, column.id)
-                }
-              }}
-              onKarteZugBeginn={(e, card) => zugBeginnen(e, card.id)}
-              onKarteZugEnde={zugBeenden}
-              onKarteWaehlen={(card) => toggleSelect(card.id)}
-              onKarteOeffnen={(card) => onCardClick?.(card)}
-              onKarteMenu={(card, anchor) => setMenu({ card, anchor })}
-              onEpicOpen={onEpicOpen}
-              onSpaltenAuswahl={toggleSpaltenAuswahl}
-              onAusblendungAufheben={showAllHidden}
-              onSortieren={() => void sortColumnByNumber(column)}
-              onBearbeiten={() => openColumnDialog(column)}
-              onLoeschen={() => {
-                setDeleteError(null)
-                setDeleteColumn(column)
-              }}
-              onZugBeginn={() => setColDrag(column.id)}
-              onAblage={(fromId) => void reorderColumn(fromId, column.id)}
-              onZugEnde={() => setColDrag(null)}
-            />
-          )
-        })}
-        {showStructureEdit && (
-          <Box sx={{ flexShrink: 0, alignSelf: 'flex-start', pt: 0.5 }}>
-            {tabletQuer ? (
-              // Schmal, damit die fünfte Spalte daneben noch Platz hat; der Name sagt, was er tut.
-              <IconButton size="small" aria-label={t.BOARD.NEUE_SPALTE} onClick={() => openColumnDialog('new')}>
-                <AddIcon fontSize="small" />
-              </IconButton>
-            ) : (
-              <Button size="small" startIcon={<AddIcon />} onClick={() => openColumnDialog('new')}>
-                {t.BOARD.SPALTE}
-              </Button>
-            )}
-          </Box>
-        )}
-      </Stack>
+        {/* Eigene Zeile in der Fläche: Sie wächst mit der längsten Spalte, und alle Spalten strecken
+            sich auf ihre Höhe. Rollte die Fläche selbst als Zeile, endeten die Spalten an ihrer Höhe,
+            und mit ihnen die klebenden Köpfe. */}
+        <Stack
+          data-testid="board-zeile"
+          direction="row"
+          spacing={spaltenMass(tabletQuer).abstand}
+          sx={{
+            pb: 2,
+            pt: 1,
+            px: 1,
+            alignItems: 'stretch',
+            minHeight: '100%',
+          }}
+        >
+          {columns.map((column) => {
+            // Voller Bestand, nicht der gefilterte: Der Zähler trägt die WIP-Grenze. Zählte er
+            // filteredCards, meldete er bei gesetztem Vorhaben-Filter eine eingehaltene Grenze,
+            // die tatsächlich verletzt ist. Dargestellt wird weiterhin filteredCards.
+            const columnCards = activeCardsInColumn(cards, column.id)
+            const angezeigteKarten = activeCardsInColumn(sichtbareKarten, column.id)
+            return (
+              <BoardSpalte
+                key={column.id}
+                column={column}
+                count={columnCards.length}
+                // Eine Zahl je Spalte: die Vereinigung beider Achsen, keine zwei Zählungen (E4).
+                hiddenCount={columnCards.filter((c) => hiddenNumbers.has(c.number)).length}
+                // Was die Spalte gerade zeigt — Grundlage des Spalten-Kästchens und der Karten.
+                angezeigteKarten={angezeigteKarten}
+                nachtlauf={nachtlaufKnopf(angezeigteKarten)}
+                epics={epics}
+                dichte={dichte}
+                selectionMode={selectionMode}
+                selectedIds={selectedIds}
+                canEdit={canEdit}
+                showStructureEdit={showStructureEdit}
+                members={members}
+                boardLabels={boardLabels}
+                retentionDays={retentionDays}
+                naechsteRichtung={nextSortDirection[column.id] ?? 'ASC'}
+                sortiertGerade={sortingColumnId === column.id}
+                dragCardIds={zugKartenIds}
+                ablageSpalteId={zugSpalteId}
+                herkunftsSpalteId={herkunftsSpalteId}
+                kartenZug={kartenZug}
+                spaltenZug={spaltenZug}
+                einfuegeIndex={einfuegeIndexIn(fingerAnzeige, column.id)}
+                colDrag={colDrag}
+                onKarteUeber={() => setAblageSpalteId(column.id)}
+                onKarteAbgelegt={(cardId) => {
+                  zugBeenden()
+                  if (cardId) {
+                    karteAbgelegt(cardId, column.id)
+                  }
+                }}
+                onKarteZugBeginn={(e, card) => zugBeginnen(e, card.id)}
+                onKarteZugEnde={zugBeenden}
+                onKarteWaehlen={(card) => toggleSelect(card.id)}
+                onKarteOeffnen={(card) => onCardClick?.(card)}
+                onKarteMenu={(card, anchor) => setMenu({ card, anchor })}
+                onEpicOpen={onEpicOpen}
+                onSpaltenAuswahl={toggleSpaltenAuswahl}
+                onAusblendungAufheben={showAllHidden}
+                onSortieren={() => void sortColumnByNumber(column)}
+                onBearbeiten={() => openColumnDialog(column)}
+                onLoeschen={() => {
+                  setDeleteError(null)
+                  setDeleteColumn(column)
+                }}
+                onZugBeginn={() => setColDrag(column.id)}
+                onAblage={(fromId) => void reorderColumn(fromId, column.id)}
+                onZugEnde={() => setColDrag(null)}
+              />
+            )
+          })}
+          {showStructureEdit && (
+            <Box sx={{ flexShrink: 0, alignSelf: 'flex-start', pt: 0.5 }}>
+              {tabletQuer ? (
+                // Schmal, damit die fünfte Spalte daneben noch Platz hat; der Name sagt, was er tut.
+                <IconButton size="small" aria-label={t.BOARD.NEUE_SPALTE} onClick={() => openColumnDialog('new')}>
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              ) : (
+                <Button size="small" startIcon={<AddIcon />} onClick={() => openColumnDialog('new')}>
+                  {t.BOARD.SPALTE}
+                </Button>
+              )}
+            </Box>
+          )}
+        </Stack>
+      </Box>
 
       <Dialog open={columnDialog !== null} onClose={closeColumnDialog}>
         <DialogTitle>{columnDialog === 'new' ? t.BOARD.NEUE_SPALTE : t.BOARD.SPALTE_BEARBEITEN}</DialogTitle>

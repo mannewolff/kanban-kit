@@ -405,31 +405,33 @@ describe('useFingerZiehen — Wischen, Antippen, Abbruch', () => {
 })
 
 describe('useFingerZiehen — Rand-Scroll', () => {
-  it('scrollt das Dokument senkrecht am unteren und oberen Rand des Ausschnitts', () => {
-    Object.defineProperty(document, 'scrollingElement', { configurable: true, get: () => document.documentElement })
-    try {
-      const { result } = anzeigen()
-      greifen(result.current.griff('1').onPointerDown)
-      warten(HALTEZEIT_MS)
-      document.documentElement.scrollTop = 100
-      bewegen(500, window.innerHeight)
-      warten(16)
-      expect(document.documentElement.scrollTop).toBe(100 + RAND_SCROLL_MAX_PX)
-      bewegen(500, 0)
-      warten(16)
-      expect(document.documentElement.scrollTop).toBe(100)
-    } finally {
-      Reflect.deleteProperty(document, 'scrollingElement')
-    }
-  })
-
-  it('greift auf das Wurzelelement zurück, wenn der Browser kein scrollingElement meldet', () => {
+  it('rollt die Board-Fläche senkrecht am unteren und oberen Rand der Fläche, nicht das Dokument', () => {
+    // Die Fläche beginnt unter der Werkzeugleiste: Gemessen wird gegen ihre Kanten, nicht gegen das Fenster.
+    flaeche.getBoundingClientRect = () => rechteck(0, 200, 1000, 500)
     const { result } = anzeigen()
     greifen(result.current.griff('1').onPointerDown)
     warten(HALTEZEIT_MS)
-    bewegen(500, window.innerHeight)
+    flaeche.scrollTop = 100
+    bewegen(500, 700)
     warten(16)
-    expect(document.documentElement.scrollTop).toBe(RAND_SCROLL_MAX_PX)
+    expect(flaeche.scrollTop).toBe(100 + RAND_SCROLL_MAX_PX)
+    expect(document.documentElement.scrollTop).toBe(0)
+    bewegen(500, 200)
+    warten(16)
+    expect(flaeche.scrollTop).toBe(100)
+    expect(document.documentElement.scrollTop).toBe(0)
+  })
+
+  it('rollt die Fläche nicht senkrecht, solange der Finger zwischen ihren Randbändern steht', () => {
+    flaeche.getBoundingClientRect = () => rechteck(0, 200, 1000, 500)
+    const { result } = anzeigen()
+    greifen(result.current.griff('1').onPointerDown)
+    warten(HALTEZEIT_MS)
+    // Am unteren Fensterrand, aber mitten in der Fläche gemessen an ihrer Höhe nicht im Band.
+    bewegen(500, 450)
+    warten(16)
+    expect(flaeche.scrollTop).toBe(0)
+    expect(document.documentElement.scrollTop).toBe(0)
   })
 
   it('scrollt die Board-Fläche waagerecht am rechten Rand, nicht in der Mitte', () => {
@@ -460,21 +462,23 @@ describe('useFingerZiehen — Rand-Scroll', () => {
     const { result } = anzeigen()
     greifen(result.current.griff('1').onPointerDown)
     warten(HALTEZEIT_MS)
-    bewegen(1000, window.innerHeight)
+    bewegen(1000, 768)
     loslassen()
     warten(100)
     expect(flaeche.scrollLeft).toBe(0)
+    expect(flaeche.scrollTop).toBe(0)
     expect(document.documentElement.scrollTop).toBe(0)
   })
 
-  it('scrollt ohne Board-Fläche nur senkrecht', () => {
+  it('rollt ohne Board-Fläche nichts, auch nicht das Dokument', () => {
     flaeche.removeAttribute('data-testid')
     const { result } = anzeigen()
     greifen(result.current.griff('1').onPointerDown)
     warten(HALTEZEIT_MS)
-    bewegen(1000, window.innerHeight)
+    bewegen(1000, 768)
     warten(16)
     expect(flaeche.scrollLeft).toBe(0)
-    expect(document.documentElement.scrollTop).toBe(RAND_SCROLL_MAX_PX)
+    expect(flaeche.scrollTop).toBe(0)
+    expect(document.documentElement.scrollTop).toBe(0)
   })
 })

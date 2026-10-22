@@ -186,7 +186,22 @@ export function BoardSpalte({
         boxShadow: SCHATTEN_NUTE,
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: '8px', px: '4px', pt: '2px' }}>
+      {/* Bleibt beim Rollen der Fläche oben stehen (Issue #1901). Der Nut-Ton als Grund deckt die
+          Karten, die darunter durchrollen; ohne ihn schimmerten sie durch. */}
+      <Box
+        data-testid={`kopfbereich-${column.id}`}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          px: '4px',
+          pt: '2px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1,
+          background: NUT,
+        }}
+      >
         <SpaltenKopf
           column={column}
           count={count}

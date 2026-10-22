@@ -70,8 +70,9 @@ function zielUnter(x: number, y: number, gezogenId: string): FingerZiel | null {
  * Ziehen per Finger im Tablet-Modus (Plan #1707, E3–E5): Pointer-Ereignisse mit
  * `pointerType === 'touch'`, neben dem unveränderten HTML5-Pfad der Maus. Nach `HALTEZEIT_MS`
  * Ruhe hebt sich eine Kopie und folgt dem Finger; ein nicht-passiver `touchmove`-Listener hält
- * dabei die Seite still, und am Rand scrollen Dokument (senkrecht) und Board-Fläche (waagerecht)
- * mit. Ohne `aktiv` registriert der Hook nichts.
+ * dabei die Seite still. Am Rand der Board-Fläche rollt die Fläche auf beiden Achsen mit, gemessen
+ * an ihren eigenen Kanten; das Dokument rollt nicht, denn seit Issue #1901 rollt allein die Fläche.
+ * Ohne `aktiv` registriert der Hook nichts.
  */
 export function useFingerZiehen({ aktiv, onAblage }: FingerZiehenOptionen): FingerZiehen {
   const [zustand, setZustand] = useState<ZiehZustand>('bereit')
@@ -108,11 +109,10 @@ export function useFingerZiehen({ aktiv, onAblage }: FingerZiehenOptionen): Fing
     }
 
     const randScroll = () => {
-      const seite = document.scrollingElement ?? document.documentElement
-      seite.scrollTop += randGeschwindigkeit(y, 0, window.innerHeight)
       const flaeche = document.querySelector<HTMLElement>(BOARD_FLAECHE)
       if (flaeche) {
         const rahmen = flaeche.getBoundingClientRect()
+        flaeche.scrollTop += randGeschwindigkeit(y, rahmen.top, rahmen.bottom)
         flaeche.scrollLeft += randGeschwindigkeit(x, rahmen.left, rahmen.right)
       }
       zielAktualisieren()

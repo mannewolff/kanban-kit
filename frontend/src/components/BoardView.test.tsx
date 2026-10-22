@@ -15,14 +15,14 @@ import { renderMitSprache } from '../i18n/renderMitSprache'
 import { SnackbarProvider } from './SnackbarProvider'
 import { statusColors } from '../lib/statusColors'
 import { cssRegel, cssRegelMit } from '../test/cssRegel'
-import { PANEL_RADIUS } from '../theme'
+import { NUT, PANEL_RADIUS } from '../theme'
 import { TabletQuerProvider } from '../lib/tabletQuer'
 import { setzeMedien } from '../test/setup'
 import type { KitNamenZustand } from '../api/kitNamen'
 import { KIT_NAMEN } from '../test/kitNamen'
 import { de } from '../i18n/de'
 import { en } from '../i18n/en'
-import { HALTEZEIT_MS } from '../lib/fingerZiehen'
+import { HALTEZEIT_MS, RAND_SCROLL_MAX_PX } from '../lib/fingerZiehen'
 
 vi.mock('../api/columns', () => ({
   columnsApi: {
@@ -3269,7 +3269,7 @@ describe('BoardView auf dem Tablet im Querformat (Plan #1707, E6)', () => {
       expect(cssRegel(screen.getByTestId(`column-${id}`))).toContain('min-width: 160px')
     }
     expect(abstand()).toBe('8px')
-    expect(getComputedStyle(screen.getByTestId('board-surface')).overflowX).toBe('auto')
+    expect(getComputedStyle(screen.getByTestId('board-surface')).overflow).toBe('auto')
   })
 
   it('lässt am Desktop Spaltenbreite und Abstand wie bisher (Gegenprobe)', () => {
@@ -4481,5 +4481,176 @@ describe('Vorhaben über die Mehrfachauswahl zuordnen (Issue #1869)', () => {
         '1 Karte dem ausgeblendeten Vorhaben „X“ zugeordnet. Sie ist auf diesem Board jetzt verdeckt — „Ausgeblendete zeigen“ blendet sie wieder ein.',
       )
     })
+  })
+})
+
+describe('BoardView — Spaltenköpfe bleiben beim Rollen stehen (Issue #1901)', () => {
+  const rahmen = (left: number, top: number, width: number, height: number): DOMRect =>
+    ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect
+  const flaeche = () => screen.getByTestId('board-surface')
+
+  /** Ein `dragover` mit Koordinaten: jsdom kennt kein `DragEvent`, `fireEvent.dragOver` verlöre sie. */
+  const ziehenUeber = (x: number, y: number) =>
+    fireEvent(flaeche(), new MouseEvent('dragover', { bubbles: true, cancelable: true, clientX: x, clientY: y }))
+
+  const karteZiehen = async () => {
+    fireEvent.dragStart(screen.getByTestId('card-100'), { dataTransfer: { setData: vi.fn() } })
+    await waitFor(() => expect(screen.getByTestId('card-100')).toHaveAttribute('data-zieh-zustand', 'bewegt'))
+  }
+
+  /** Die Fläche liegt unter der Werkzeugleiste, 1200 × 588 px groß, wie bei 1440 × 768. */
+  const flaecheAusmessen = () => {
+    flaeche().getBoundingClientRect = () => rahmen(0, 180, 1200, 588)
+  }
+
+  it('rollt senkrecht und waagerecht in der Fläche, ohne die feste Abzugskonstante', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    const regel = cssRegel(flaeche())
+    expect(regel).toContain('overflow: auto')
+    expect(regel).not.toContain('100vh')
+  })
+
+  it('lässt alle Spalten mindestens so hoch wie die Fläche und gleich hoch untereinander', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    const zeile = within(flaeche()).getByTestId('board-zeile')
+    expect(within(zeile).getByTestId('column-10')).toBeInTheDocument()
+    const regel = cssRegel(zeile)
+    expect(regel).toContain('min-height: 100%')
+    expect(regel).toContain('align-items: stretch')
+  })
+
+  it('reicht von ihrer Oberkante bis zum unteren Fensterrand, neu gemessen bei Größenänderung des Fensters', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    flaeche().getBoundingClientRect = () => rahmen(0, 180, 1200, 100)
+    fireEvent(window, new Event('resize'))
+    expect(flaeche()).toHaveStyle({ height: `${window.innerHeight - 180}px` })
+  })
+
+  it('misst die Oberkante im Dokument, auch wenn die Seite schon gerollt ist', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    const vorher = window.scrollY
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 50 })
+    try {
+      flaeche().getBoundingClientRect = () => rahmen(0, 130, 1200, 100)
+      fireEvent(window, new Event('resize'))
+      expect(flaeche()).toHaveStyle({ height: `${window.innerHeight - 180}px` })
+    } finally {
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: vorher })
+    }
+  })
+
+  it('wird nie niedriger als 320 px', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    flaeche().getBoundingClientRect = () => rahmen(0, window.innerHeight - 100, 1200, 100)
+    fireEvent(window, new Event('resize'))
+    expect(flaeche()).toHaveStyle({ height: '320px' })
+  })
+
+  it('misst neu, wenn sich die Größe der Fläche ändert', () => {
+    const beobachtet: Element[] = []
+    let melden: () => void = () => undefined
+    const trennen = vi.fn()
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(rueckruf: () => void) {
+          melden = rueckruf
+        }
+        observe(ziel: Element) {
+          beobachtet.push(ziel)
+        }
+        disconnect = trennen
+      },
+    )
+    try {
+      const { unmount } = render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+      expect(beobachtet).toEqual([flaeche()])
+      flaeche().getBoundingClientRect = () => rahmen(0, 240, 1200, 100)
+      act(() => melden())
+      expect(flaeche()).toHaveStyle({ height: `${window.innerHeight - 240}px` })
+      unmount()
+      expect(trennen).toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('hört nach dem Aushängen nicht mehr auf Größenänderungen des Fensters', () => {
+    const entfernen = vi.spyOn(window, 'removeEventListener')
+    const { unmount } = render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    unmount()
+    expect(entfernen).toHaveBeenCalledWith('resize', expect.any(Function))
+  })
+
+  it('rollt beim Ziehen einer Karte im unteren Randband nach unten, im oberen nach oben', async () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    flaecheAusmessen()
+    await karteZiehen()
+
+    flaeche().scrollTop = 100
+    ziehenUeber(600, 768)
+    expect(flaeche().scrollTop).toBe(100 + RAND_SCROLL_MAX_PX)
+    ziehenUeber(600, 180)
+    expect(flaeche().scrollTop).toBe(100)
+    expect(flaeche().scrollLeft).toBe(0)
+  })
+
+  it('rollt beim Ziehen einer Karte im rechten Randband nach rechts, im linken nach links', async () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    flaecheAusmessen()
+    await karteZiehen()
+
+    flaeche().scrollLeft = 100
+    ziehenUeber(1200, 450)
+    expect(flaeche().scrollLeft).toBe(100 + RAND_SCROLL_MAX_PX)
+    ziehenUeber(0, 450)
+    expect(flaeche().scrollLeft).toBe(100)
+    expect(flaeche().scrollTop).toBe(0)
+  })
+
+  it('rollt in der Mitte der Fläche nicht', async () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    flaecheAusmessen()
+    await karteZiehen()
+
+    ziehenUeber(600, 450)
+    expect(flaeche().scrollTop).toBe(0)
+    expect(flaeche().scrollLeft).toBe(0)
+  })
+
+  it('rollt ohne gezogene Karte auch am Rand nicht', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+    flaecheAusmessen()
+
+    ziehenUeber(1200, 768)
+    expect(flaeche().scrollTop).toBe(0)
+    expect(flaeche().scrollLeft).toBe(0)
+  })
+
+  it('hält den Kopfbereich jeder Spalte oben in der Fläche, im Nut-Ton und über den Karten', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    for (const id of [10, 20]) {
+      const kopf = screen.getByTestId(`kopfbereich-${id}`)
+      expect(within(kopf).getByTestId(`column-header-${id}`)).toBeInTheDocument()
+      const regel = cssRegel(kopf)
+      expect(regel).toContain('position: sticky')
+      expect(regel).toContain('top: 0')
+      expect(regel).toContain('z-index: 1')
+      expect(regel).toContain(`background: ${NUT}`)
+    }
+  })
+
+  it('lässt den Hinweis „waagerecht rollen“ stehen', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    expect(screen.getByText(de.BOARD.WAAGERECHT_ROLLEN)).toBeInTheDocument()
   })
 })
