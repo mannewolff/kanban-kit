@@ -17,6 +17,31 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.6.0] – 2026-10-22
+
+- chore: v3.5.2
+- Tests töten die Mutations-Überlebenden in laufZeitleiste.ts ([#1897](https://github.com/mannewolff/kanban-kit/issues/1897))
+- Tests töten die Mutations-Überlebenden in laufFortschritt.ts ([#1896](https://github.com/mannewolff/kanban-kit/issues/1896))
+- Test tötet den Mutations-Überlebenden in gleichzeitigkeitDerMeldung ([#1895](https://github.com/mannewolff/kanban-kit/issues/1895))
+- Test tötet den Mutations-Überlebenden in gleichzeitigkeitDerEinheit ([#1894](https://github.com/mannewolff/kanban-kit/issues/1894))
+- Test tötet die Mutations-Überlebenden in FestgefahrenAngaben ([#1893](https://github.com/mannewolff/kanban-kit/issues/1893))
+- Test tötet den Mutations-Überlebenden in wartezeit ([#1892](https://github.com/mannewolff/kanban-kit/issues/1892))
+- Tests töten die Mutations-Überlebenden in FortschrittErmittlung ([#1891](https://github.com/mannewolff/kanban-kit/issues/1891))
+- App.test.tsx wartet auf den linkLogin-Aufruf der Link-Seite ([#1898](https://github.com/mannewolff/kanban-kit/issues/1898))
+- chore: v3.5.1
+- NightRunFortschrittIT erlaubt das Feld seit im Fortschritt ([#1890](https://github.com/mannewolff/kanban-kit/issues/1890))
+- Nutzungsdoku und Designquelle für die neue Runner-Seite ([#1888](https://github.com/mannewolff/kanban-kit/issues/1888))
+- Platte „Jetzt im Werk“ zeigt gleichzeitige Runs auf einer Zeitachse ([#1887](https://github.com/mannewolff/kanban-kit/issues/1887))
+- Kettenzeilen mit Stufenleiste und Paketraster ([#1886](https://github.com/mannewolff/kanban-kit/issues/1886))
+- Lage des Runs ersetzt die Instrumente, Herkunft wandert in den Fuß ([#1885](https://github.com/mannewolff/kanban-kit/issues/1885))
+- Rechnung für Zustandssatz, Stufenzeit, Paketraster und Zeitachse der Runner-Seite ([#1884](https://github.com/mannewolff/kanban-kit/issues/1884))
+- Fortschritt meldet den Beginn der laufenden Stufe ([#1883](https://github.com/mannewolff/kanban-kit/issues/1883))
+- Design Plan
+- Leitstand-Gleichzeitigkeit (4/4): Platte „Letzter Run“ zeigt Marken, Nutzungs-Doku ([#1880](https://github.com/mannewolff/kanban-kit/issues/1880))
+- Leitstand-Gleichzeitigkeit (3/4): Lauf-Ansicht zeigt Angaben und Marken je Paket ([#1879](https://github.com/mannewolff/kanban-kit/issues/1879))
+- Leitstand-Gleichzeitigkeit (2/4): Frontend-Daten, Handweg, Wartezeit-Format und Wörterbuch ([#1878](https://github.com/mannewolff/kanban-kit/issues/1878))
+- Leitstand-Gleichzeitigkeit (1/4): concurrent, checkWaitMs, deferredAtMerge annehmen und speichern ([#1877](https://github.com/mannewolff/kanban-kit/issues/1877))
+
 ## [3.5.0] – 2026-10-21
 
 - chore: v3.4.2
