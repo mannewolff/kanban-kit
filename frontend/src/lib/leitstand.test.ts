@@ -200,6 +200,8 @@ describe('leitstand Letzter Run', () => {
     expect(wartezeit(420_000, 'en')).toBe('7 min 0 s')
     expect(wartezeit(776_000, 'en')).toBe('12 min 56 s')
     expect(wartezeit(3_730_000, 'en')).toBe('1 h 2 min 10 s')
+    // Ohne Sprache gilt Deutsch (Issue #1892): Ein leerer Standardwert faende kein Woerterbuch.
+    expect(wartezeit(776_000)).toBe('12 min 56 s')
   })
 
   it('formatiert Laufdauern und die Notiz im Plattenkopf', () => {
