@@ -2,7 +2,8 @@ import { ThemeProvider } from '@mui/material/styles'
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { NightRunStuckAngaben } from '../../lib/nightRunHandoff'
-import { theme } from '../../theme'
+import { cssRegel } from '../../test/cssRegel'
+import { TEXT_SCHWACH, theme } from '../../theme'
 import { FestgefahrenAngaben } from './FestgefahrenAngaben'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 
@@ -93,6 +94,13 @@ describe('FestgefahrenAngaben (Issue #1552, Plan #1547 E14, E17)', () => {
     zeige(VOLL, undefined)
 
     expect(wert('geschätzte gesparte Zeit')).toBe('nicht gemeldet')
+  })
+
+  it('zeigt eine fehlende Angabe in TEXT_SCHWACH und eine gemeldete in der Textfarbe (Issue #1893)', () => {
+    zeige({ ...VOLL, check: null }, ZWANZIG_MIN)
+
+    expect(cssRegel(screen.getByText('nicht gemeldet'))).toContain(`color: ${TEXT_SCHWACH}`)
+    expect(cssRegel(screen.getByText('OpenApiIT: Vertrag weicht ab'))).toContain('color: var(--mb-palette-text-primary)')
   })
 
   it('zeigt ohne jede Angabe sechsmal „nicht gemeldet“', () => {
