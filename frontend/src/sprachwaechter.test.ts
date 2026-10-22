@@ -45,7 +45,6 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/components/EpicVisibilityList.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1656 — CSS-Werte (Rahmen, Raster, Farbmischungen, Verläufe, Übergänge, SVG-Pfad) des Leitstands
   { file: 'src/components/leitstand/AktuellerStand.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  { file: 'src/components/leitstand/FestgefahrenAngaben.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/leitstand/LeitstandBausteine.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/leitstand/LeitstandVerbrauch.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/pages/LeitstandPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
@@ -59,10 +58,13 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/components/nachtlauf/NachtlaufFortschritt.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufFuss.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufKartenchips.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
-  { file: 'src/components/nachtlauf/NachtlaufLaufInstrumente.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufLaufPlatte.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufStufenband.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/components/nachtlauf/NachtlaufVorgangszeile.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  // #1886 — CSS-Werte (Rahmen, Schraffur, Querstrich, Fokusrand) des Paketrasters
+  { file: 'src/components/nachtlauf/Paketraster.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  // #1887 — CSS-Werte (Rahmen, Schraffur, Abstand der Bahnen) der Platte „Jetzt im Werk“
+  { file: 'src/components/nachtlauf/JetztImWerk.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1729 — CSS-Wert (Rahmen) des Bereichs „Runner jetzt“
   { file: 'src/components/nachtlauf/RunnerJetzt.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1658 — die Auszüge des Ergebnisstands gehen mit dem Lauf an den Server und werden dort

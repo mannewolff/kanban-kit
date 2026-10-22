@@ -115,6 +115,7 @@ class NightRunCardControllerTest {
         "Auszug",
         usage,
         null,
+        null,
         List.of());
   }
 

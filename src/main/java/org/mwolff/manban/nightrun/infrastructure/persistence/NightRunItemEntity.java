@@ -16,6 +16,11 @@ import org.jspecify.annotations.Nullable;
  * <p>Geschrieben werden die Zeilen zusammen mit ihrem Lauf über JDBC (siehe {@link
  * NightRunRepositoryAdapter}); die Entity trägt deshalb keinen öffentlichen Konstruktor.
  */
+// Die Feldzahl folgt dem Tabellenschema, nicht einer Entwurfsentscheidung: Diese Klasse bildet
+// night_run_item 1:1 ab, und mit den Angaben zur gleichzeitigen Umsetzung (Issue #1877) traegt sie
+// das 16. Feld. Sie aufzuteilen hiesse, eine Zeile auf zwei Objekte zu verteilen, die es in der
+// Datenbank nicht gibt.
+@SuppressWarnings("PMD.TooManyFields")
 @Entity
 @Table(name = "night_run_item")
 class NightRunItemEntity {
@@ -67,6 +72,9 @@ class NightRunItemEntity {
 
   /** Die fünf Angaben eines festgefahrenen Pakets (Issue #1546); {@code null} ohne jede Angabe. */
   @Embedded private @Nullable StuckEmbeddable stuck;
+
+  /** Die Angaben zur gleichzeitigen Umsetzung samt Marker (Issue #1877); {@code null} ohne Feld. */
+  @Embedded private @Nullable ConcurrencyEmbeddable concurrency;
 
   protected NightRunItemEntity() {
     // für JPA
@@ -126,6 +134,10 @@ class NightRunItemEntity {
 
   @Nullable StuckEmbeddable getStuck() {
     return stuck;
+  }
+
+  @Nullable ConcurrencyEmbeddable getConcurrency() {
+    return concurrency;
   }
 
   VerbrauchEmbeddable getVerbrauch() {

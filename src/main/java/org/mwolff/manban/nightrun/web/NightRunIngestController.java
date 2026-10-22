@@ -7,6 +7,7 @@ import static org.mwolff.manban.nightrun.web.NightRunController.NO_WORK_REASON_M
 import static org.mwolff.manban.nightrun.web.NightRunController.TITLE_MAX;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -289,6 +290,8 @@ class NightRunIngestController {
         request.excerpt(),
         NightRunUsageRequest.toDomain(request.usage()),
         IngestStuckRequest.toDomain(request.stuck()),
+        IngestConcurrency.toDomain(
+            request.concurrent(), request.checkWaitMs(), request.deferredAtMerge()),
         // Fehlende Stufen werden zur leeren Liste und nicht zu null: „dieser Vorgang hatte keine
         // Stufen" ist eine Aussage, und die Domaene fuehrt sie als Liste.
         stufen == null ? List.of() : stufen.stream().map(NightRunIngestController::stage).toList());
@@ -460,6 +463,9 @@ class NightRunIngestController {
    * @param stuck die Angaben eines festgefahrenen Pakets (Issue #1549). Additiv und
    *     {@code @Nullable} wie {@code stages}: Eine ältere Kit-Kopie kennt das Feld nicht und meldet
    *     unverändert weiter. Ob die Angaben am Paket landen, entscheidet der Dienst (Plan #1547 E2).
+   * @param concurrent gleichzeitig gelaufen (Issue #1877); wie {@code checkWaitMs} und {@code
+   *     deferredAtMerge} flach am Paket und als {@link JsonNode} angenommen, gedeutet in {@link
+   *     IngestConcurrency} (Plan #1876 E1, E8)
    */
   @Schema(description = "Ein Vorgang des Laufs: eine bearbeitete oder übergangene Karte.")
   record IngestItemRequest(
@@ -505,7 +511,22 @@ class NightRunIngestController {
       @Schema(description = "Angaben eines festgefahrenen Pakets; gilt nur bei errorClass STUCK.")
           @Nullable
           @Valid
-          IngestStuckRequest stuck) {}
+          IngestStuckRequest stuck,
+      @Schema(
+              implementation = Boolean.class,
+              description = IngestConcurrency.CONCURRENT_BESCHREIBUNG,
+              example = IngestConcurrency.CONCURRENT_BEISPIEL)
+          @Nullable JsonNode concurrent,
+      @Schema(
+              implementation = Long.class,
+              description = IngestConcurrency.CHECK_WAIT_MS_BESCHREIBUNG,
+              example = IngestConcurrency.CHECK_WAIT_MS_BEISPIEL)
+          @Nullable JsonNode checkWaitMs,
+      @Schema(
+              implementation = Boolean.class,
+              description = IngestConcurrency.DEFERRED_AT_MERGE_BESCHREIBUNG,
+              example = IngestConcurrency.DEFERRED_AT_MERGE_BEISPIEL)
+          @Nullable JsonNode deferredAtMerge) {}
 
   /**
    * Die gemeldeten Vorgaben eines Kettenlaufs (Issue #1113, Plan #1110 E2/E3).

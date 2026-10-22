@@ -59,6 +59,7 @@ function zeige(offenAnfangs = false, abbruchGrund?: string, veroeffentlichung?: 
           setOffen((vorher) => !vorher)
         }}
         testId="lauf-1"
+        id="lauf-2026-09-14T22:05:00Z"
       >
         <div>Vorgänge des Laufs</div>
       </NachtlaufLaufPlatte>
@@ -403,5 +404,15 @@ describe('NachtlaufLaufPlatte auf Englisch (Issue #1658)', () => {
     expect(screen.getByRole('button', { name: 'Collapse Run #86' })).toBeInTheDocument()
     expect(screen.getByText('Reason for abort')).toBeInTheDocument()
     expect(grundzeile()).toHaveTextContent('dirty tree')
+  })
+})
+
+describe('NachtlaufLaufPlatte — Sprungziel (Issue #1887)', () => {
+  it('trägt an der äußeren Platte das id aus ihrem Start', () => {
+    zeige()
+
+    const platte = screen.getByTestId('lauf-1')
+    expect(platte).toHaveAttribute('id', 'lauf-2026-09-14T22:05:00Z')
+    expect(platte.tagName).toBe('SECTION')
   })
 })

@@ -1,21 +1,45 @@
 import { ThemeProvider } from '@mui/material/styles'
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   CardRefView,
   ChainProgressView,
+  NightRunBudgetView,
   NightRunProgressView,
   PackageProgressView,
 } from '../../api/nightRuns'
-import type { FortschrittArt } from '../../lib/laufFortschritt'
+import type { FortschrittArt, Kostenvorgang } from '../../lib/laufFortschritt'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { nachtlaufTheme } from '../../nachtlaufDesign'
 import { NachtlaufFortschritt } from './NachtlaufFortschritt'
 
 /**
- * Der Fortschritt eines Laufs in der aufgeklappten Kachel (Issue #1377, Plan #1372 E12): Wegleiste
- * je Kette, Kartennummern als Verweise, „unbekannt" und der Hinweis auf eine offene Frage.
+ * Der Fortschritt eines Laufs in der aufgeklappten Kachel (Issue #1377, Plan #1372 E12; seit
+ * Issue #1886 als Kettenzeilen nach Plan #1882 E6–E8): Stufenleiste und Paketraster je Kette,
+ * Kartennummern als Verweise, „unbekannt" und der Hinweis auf eine offene Frage. Jeder Zustand wird
+ * über seinen zugänglichen Namen gefunden.
  */
+
+/** Achtzehn Minuten nach dem Beginn der laufenden Prüfung der Beispielkette. */
+const JETZT = '2026-10-21T01:18:00Z'
+
+const budget = (teil: Partial<NightRunBudgetView> = {}): NightRunBudgetView => ({
+  planMin: 60,
+  reviewMin: 60,
+  paketeMin: 30,
+  abdeckungMin: 15,
+  kostenUsd: 50,
+  origin: 'CONFIGURED',
+  defaultFields: [],
+  ...teil,
+})
+
+const ERREICHT_BIS_ABDECKUNG: ChainProgressView['stufen'] = [
+  { stufe: 'PLAN', zustand: 'ERREICHT', seit: null },
+  { stufe: 'REVIEW', zustand: 'ERREICHT', seit: null },
+  { stufe: 'PAKETE', zustand: 'ERREICHT', seit: null },
+  { stufe: 'ABDECKUNG', zustand: 'ERREICHT', seit: null },
+]
 
 const karte = (number: number, title = `Karte ${number}`): CardRefView => ({
   number,
@@ -33,10 +57,10 @@ const kette = (teil: Partial<ChainProgressView> = {}): ChainProgressView => ({
   plan: karte(101, 'Der Plan'),
   pakete: [],
   stufen: [
-    { stufe: 'PLAN', zustand: 'ERREICHT' },
-    { stufe: 'REVIEW', zustand: 'LAEUFT' },
-    { stufe: 'PAKETE', zustand: 'OFFEN' },
-    { stufe: 'ABDECKUNG', zustand: 'OFFEN' },
+    { stufe: 'PLAN', zustand: 'ERREICHT', seit: null },
+    { stufe: 'REVIEW', zustand: 'LAEUFT', seit: '2026-10-21T01:00:00Z' },
+    { stufe: 'PAKETE', zustand: 'OFFEN', seit: null },
+    { stufe: 'ABDECKUNG', zustand: 'OFFEN', seit: null },
   ],
   aktuelleStufe: 'REVIEW',
   endeErreicht: false,
@@ -55,7 +79,17 @@ const fortschritt = (teil: Partial<NightRunProgressView> = {}): NightRunProgress
 
 const zeige = (
   f: NightRunProgressView,
-  { art = 'KETTE', laeuft = true }: { art?: FortschrittArt; laeuft?: boolean } = {},
+  {
+    art = 'KETTE',
+    laeuft = true,
+    budget: b = budget(),
+    vorgaenge = [],
+  }: {
+    art?: FortschrittArt
+    laeuft?: boolean
+    budget?: NightRunBudgetView | null
+    vorgaenge?: readonly Kostenvorgang[]
+  } = {},
 ) => {
   const onKarteOeffnen = vi.fn()
   const { container } = render(
@@ -64,6 +98,8 @@ const zeige = (
         fortschritt={f}
         art={art}
         laeuft={laeuft}
+        budget={b}
+        vorgaenge={vorgaenge}
         onKarteOeffnen={onKarteOeffnen}
       />
     </ThemeProvider>,
@@ -73,17 +109,104 @@ const zeige = (
 
 const stufenliste = () => within(screen.getByRole('list', { name: 'Weg der Kette #100' }))
 
+/** Die Stufenpunkte einer Liste — die Bilder mit Zustand, ohne die Zeitschiene. */
+const punktbilder = (liste: HTMLElement): HTMLElement[] =>
+  within(liste)
+    .getAllByRole('img')
+    .filter((p) => p.dataset.zustand !== undefined)
+
+/** Die Stufenpunkte einer Liste über ihre zugänglichen Namen. */
+const punkte = (liste: HTMLElement) => punktbilder(liste).map((p) => p.getAttribute('aria-label'))
+
+const wegDerKette = (name = 'Weg der Kette #100') => screen.getByRole('list', { name })
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(JETZT))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe('NachtlaufFortschritt', () => {
-  it('zeigt die Wegleiste einer Kette mit jedem Zustand als Text', () => {
+  it('zeigt die Stufenleiste einer Kette mit jedem Zustand als zugänglichem Namen', () => {
     zeige(fortschritt({ ketten: [kette()] }))
 
-    const stufen = stufenliste().getAllByRole('listitem')
-    expect(stufen.map((s) => s.textContent)).toEqual([
+    expect(punkte(wegDerKette())).toEqual([
       'Plan: erreicht',
       'Prüfung: läuft',
       'Arbeitspakete: offen',
       'Abdeckung: offen',
     ])
+    expect(punktbilder(wegDerKette()).map((p) => p.dataset.zustand)).toEqual([
+      'ERREICHT',
+      'LAEUFT',
+      'OFFEN',
+      'OFFEN',
+    ])
+  })
+
+  it('zeigt den Zustand eines Stufenpunkts als Tooltip', async () => {
+    zeige(fortschritt({ ketten: [kette()] }))
+
+    fireEvent.mouseOver(stufenliste().getByRole('img', { name: 'Arbeitspakete: offen' }))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Arbeitspakete: offen')
+  })
+
+  it('nennt den Namen der laufenden Stufe sichtbar', () => {
+    zeige(fortschritt({ ketten: [kette()] }))
+
+    const laufend = stufenliste().getAllByRole('listitem')[1]
+    expect(laufend).toHaveTextContent('Prüfung')
+    expect(stufenliste().getAllByRole('listitem')[2]).not.toHaveTextContent('Arbeitspakete')
+  })
+
+  it('zeigt an der laufenden Stufe die Zeit gegen ihre Vorgabe', () => {
+    zeige(fortschritt({ ketten: [kette()] }))
+
+    const laufend = stufenliste().getAllByRole('listitem')[1]
+    expect(laufend).toHaveTextContent('18 / 60 min')
+    expect(within(laufend).getByRole('img', { name: '18 von 60 Minuten verstrichen' })).toBeInTheDocument()
+    expect(screen.getAllByText(/ min$/)).toHaveLength(1)
+  })
+
+  it('lässt die Schiene über der Vorgabe voll und nennt die Überschreitung', () => {
+    vi.setSystemTime(new Date('2026-10-21T02:15:00Z'))
+    zeige(fortschritt({ ketten: [kette()] }))
+
+    const laufend = stufenliste().getAllByRole('listitem')[1]
+    expect(laufend).toHaveTextContent('75 / 60 min · 15 min über der Vorgabe')
+    expect(screen.getByTestId('zeit-fuellung')).toHaveStyle({ width: '100%' })
+  })
+
+  it('zeigt ohne Vorgabe keinen Zeitbalken, nur „seit <Dauer>"', () => {
+    zeige(fortschritt({ ketten: [kette()] }), { budget: budget({ reviewMin: null }) })
+    expect(screen.queryByRole('img', { name: /Minuten verstrichen/ })).not.toBeInTheDocument()
+    expect(stufenliste().getAllByRole('listitem')[1]).toHaveTextContent('seit 18 min')
+  })
+
+  it('zeigt ohne Beginn der Stufe keine Zeit', () => {
+    zeige(
+      fortschritt({
+        ketten: [
+          kette({
+            stufen: [
+              { stufe: 'PLAN', zustand: 'ERREICHT', seit: null },
+              { stufe: 'REVIEW', zustand: 'LAEUFT', seit: null },
+            ],
+          }),
+        ],
+      }),
+    )
+    expect(screen.queryByText(/min/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Titel der Anforderung sichtbar', () => {
+    zeige(fortschritt({ ketten: [kette()] }))
+
+    expect(screen.getByTestId('fortschritt-kette-100')).toHaveTextContent('Die Anforderung')
   })
 
   it('markiert allein die aktuelle Stufe mit aria-current="step"', () => {
@@ -91,6 +214,7 @@ describe('NachtlaufFortschritt', () => {
 
     const stufen = stufenliste().getAllByRole('listitem')
     expect(stufen.map((s) => s.getAttribute('aria-current'))).toEqual([null, 'step', null, null])
+    expect(within(stufen[1]).getByRole('img', { name: 'Prüfung: läuft' })).toBeInTheDocument()
   })
 
   it('zeigt die Umsetzung als Stufe, wenn die Kette sie trägt', () => {
@@ -99,11 +223,11 @@ describe('NachtlaufFortschritt', () => {
         ketten: [
           kette({
             stufen: [
-              { stufe: 'PLAN', zustand: 'ERREICHT' },
-              { stufe: 'REVIEW', zustand: 'ERREICHT' },
-              { stufe: 'PAKETE', zustand: 'ERREICHT' },
-              { stufe: 'ABDECKUNG', zustand: 'ERREICHT' },
-              { stufe: 'UMSETZUNG', zustand: 'LAEUFT' },
+              { stufe: 'PLAN', zustand: 'ERREICHT', seit: null },
+              { stufe: 'REVIEW', zustand: 'ERREICHT', seit: null },
+              { stufe: 'PAKETE', zustand: 'ERREICHT', seit: null },
+              { stufe: 'ABDECKUNG', zustand: 'ERREICHT', seit: null },
+              { stufe: 'UMSETZUNG', zustand: 'LAEUFT', seit: '2026-10-21T01:00:00Z' },
             ],
             aktuelleStufe: 'UMSETZUNG',
           }),
@@ -112,9 +236,12 @@ describe('NachtlaufFortschritt', () => {
     )
 
     const stufen = stufenliste().getAllByRole('listitem')
-    expect(stufen[4]).toHaveTextContent('Umsetzung: läuft')
+    expect(within(stufen[4]).getByRole('img', { name: 'Umsetzung: läuft' })).toBeInTheDocument()
     expect(stufen[4]).toHaveAttribute('aria-current', 'step')
-    expect(screen.queryByText('Ende des Wegs erreicht')).not.toBeInTheDocument()
+    // Die Umsetzung hat keine Vorgabe: nur „seit <Dauer>", keine Schiene (Plan #1882 E7).
+    expect(stufen[4]).toHaveTextContent('seit 18 min')
+    expect(screen.queryByRole('img', { name: /Minuten verstrichen/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Ende des Wegs erreicht' })).not.toBeInTheDocument()
   })
 
   it('zeigt in Variante A nach der Abdeckung „Ende des Wegs erreicht" statt einer offenen Umsetzung', () => {
@@ -122,12 +249,7 @@ describe('NachtlaufFortschritt', () => {
       fortschritt({
         ketten: [
           kette({
-            stufen: [
-              { stufe: 'PLAN', zustand: 'ERREICHT' },
-              { stufe: 'REVIEW', zustand: 'ERREICHT' },
-              { stufe: 'PAKETE', zustand: 'ERREICHT' },
-              { stufe: 'ABDECKUNG', zustand: 'ERREICHT' },
-            ],
+            stufen: ERREICHT_BIS_ABDECKUNG,
             aktuelleStufe: null,
             endeErreicht: true,
           }),
@@ -135,7 +257,14 @@ describe('NachtlaufFortschritt', () => {
       }),
     )
 
-    expect(stufenliste().getByText('Ende des Wegs erreicht')).toBeInTheDocument()
+    const zeile = within(screen.getByTestId('fortschritt-kette-100'))
+    expect(zeile.getByRole('img', { name: 'Ende des Wegs erreicht' })).toHaveTextContent('Ende des Wegs')
+    expect(punkte(wegDerKette())).toEqual([
+      'Plan: erreicht',
+      'Prüfung: erreicht',
+      'Arbeitspakete: erreicht',
+      'Abdeckung: erreicht',
+    ])
     expect(screen.queryByText(/Umsetzung/)).not.toBeInTheDocument()
     expect(
       stufenliste()
@@ -164,12 +293,12 @@ describe('NachtlaufFortschritt', () => {
     expect(screen.getByRole('button', { name: 'Anforderung #100 Die Anforderung' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Plan #101 Der Plan' })).toBeVisible()
     const pakete = within(screen.getByRole('list', { name: 'Pakete der Kette #100' }))
-    expect(pakete.getAllByRole('listitem').map((p) => p.textContent)).toEqual([
-      'Paket#201angelegt',
-      'Paket#202gezogen',
-      'Paket#203in Umsetzung',
-      'Paket#204fertig',
-      'Paket#205zurückgestellt',
+    expect(pakete.getAllByRole('button').map((p) => p.getAttribute('aria-label'))).toEqual([
+      'Paket #201, angelegt: Karte 201',
+      'Paket #202, gezogen: Karte 202',
+      'Paket #203, in Umsetzung: Karte 203',
+      'Paket #204, fertig: Karte 204',
+      'Paket #205, zurückgestellt: Karte 205',
     ])
   })
 
@@ -189,9 +318,61 @@ describe('NachtlaufFortschritt', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Anforderung #100 Die Anforderung' }))
     fireEvent.click(screen.getByRole('button', { name: 'Plan #101 Der Plan' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Paket #203 Karte 203' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Paket #203, in Umsetzung: Karte 203' }))
 
     expect(onKarteOeffnen.mock.calls).toEqual([[100], [101], [203]])
+  })
+
+  it('stellt an einer Kette ohne Umsetzung die Kosten mit Balken gegen das Budget', () => {
+    zeige(
+      fortschritt({ ketten: [kette({ stufen: ERREICHT_BIS_ABDECKUNG, aktuelleStufe: null, endeErreicht: true })] }),
+      { vorgaenge: [{ cardNumber: 100, verbrauch: { kostenUsd: 17.5 } }] },
+    )
+
+    const kosten = screen.getByRole('group', { name: 'Kosten der Kette' })
+    expect(kosten).toHaveTextContent('17,50 / 50,00 $')
+    expect(within(kosten).getByTestId('kosten-fuellung')).toHaveStyle({ width: '35%' })
+  })
+
+  it('lässt den Kostenbalken über dem Budget voll', () => {
+    zeige(fortschritt({ ketten: [kette()] }), { vorgaenge: [{ cardNumber: 100, verbrauch: { kostenUsd: 75 } }] })
+
+    expect(screen.getByTestId('kosten-fuellung')).toHaveStyle({ width: '100%' })
+  })
+
+  it('nennt an einer Kette mit Umsetzung die Planung ohne Balken', () => {
+    zeige(
+      fortschritt({
+        ketten: [
+          kette({
+            stufen: [...ERREICHT_BIS_ABDECKUNG, { stufe: 'UMSETZUNG', zustand: 'LAEUFT', seit: null }],
+            aktuelleStufe: 'UMSETZUNG',
+          }),
+        ],
+      }),
+      { vorgaenge: [{ cardNumber: 100, verbrauch: { kostenUsd: 7.28 } }] },
+    )
+
+    const kosten = screen.getByRole('group', { name: 'Kosten der Kette' })
+    expect(kosten).toHaveTextContent('Planung 7,28 $')
+    expect(within(kosten).queryByTestId('kosten-fuellung')).not.toBeInTheDocument()
+  })
+
+  it('nennt ohne Budget nur den Betrag', () => {
+    zeige(fortschritt({ ketten: [kette()] }), {
+      budget: null,
+      vorgaenge: [{ cardNumber: 100, verbrauch: { kostenUsd: 2.5 } }],
+    })
+
+    expect(screen.getByRole('group', { name: 'Kosten der Kette' })).toHaveTextContent(/^2,50 \$$/)
+    expect(screen.queryByTestId('kosten-fuellung')).not.toBeInTheDocument()
+  })
+
+  it('zeigt keine Kosten, solange der Kettenvorgang nicht gemeldet ist', () => {
+    zeige(fortschritt({ ketten: [kette()] }), { vorgaenge: [{ cardNumber: 999, verbrauch: { kostenUsd: 4 } }] })
+
+    expect(screen.queryByRole('group', { name: 'Kosten der Kette' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('fortschritt-kette-100')).not.toHaveTextContent('$')
   })
 
   it('zeigt mehrere Ketten je mit eigener Wegleiste', () => {
@@ -205,21 +386,22 @@ describe('NachtlaufFortschritt', () => {
     expect(screen.getByRole('list', { name: 'Weg der Kette #300' })).toBeInTheDocument()
   })
 
-  it('zeigt in der Umsetzungsnacht nur die Umsetzung und die Paketliste', () => {
+  it('zeigt in der Umsetzungsnacht nur die Umsetzung und das Raster', () => {
     zeige(
       fortschritt({ pakete: [paket(401, 'IN_UMSETZUNG'), paket(402, 'FERTIG')] }),
-      { art: 'UMSETZUNGSNACHT' },
+      { art: 'UMSETZUNGSNACHT', vorgaenge: [{ cardNumber: 401, verbrauch: { kostenUsd: 3 } }] },
     )
 
     const weg = within(screen.getByRole('list', { name: 'Weg der Umsetzungsnacht' }))
     const stufen = weg.getAllByRole('listitem')
-    expect(stufen.map((s) => s.textContent)).toEqual(['Umsetzung: läuft'])
+    expect(punkte(wegDerKette('Weg der Umsetzungsnacht'))).toEqual(['Umsetzung: läuft'])
     expect(stufen[0]).toHaveAttribute('aria-current', 'step')
     expect(screen.queryByText(/Plan|Prüfung|Abdeckung|Anforderung/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Kosten der Kette' })).not.toBeInTheDocument()
     const pakete = within(screen.getByRole('list', { name: 'Pakete der Umsetzungsnacht' }))
-    expect(pakete.getAllByRole('listitem').map((p) => p.textContent)).toEqual([
-      'Paket#401in Umsetzung',
-      'Paket#402fertig',
+    expect(pakete.getAllByRole('button').map((p) => p.getAttribute('aria-label'))).toEqual([
+      'Paket #401, in Umsetzung: Karte 401',
+      'Paket #402, fertig: Karte 402',
     ])
   })
 
@@ -330,7 +512,14 @@ describe('NachtlaufFortschritt auf Englisch (Issue #1658)', () => {
   const zeigeEnglisch = (f: NightRunProgressView, art: FortschrittArt = 'KETTE') =>
     renderMitSprache(
       <ThemeProvider theme={nachtlaufTheme}>
-        <NachtlaufFortschritt fortschritt={f} art={art} laeuft onKarteOeffnen={vi.fn()} />
+        <NachtlaufFortschritt
+          fortschritt={f}
+          art={art}
+          laeuft
+          budget={budget()}
+          vorgaenge={[{ cardNumber: 100, verbrauch: { kostenUsd: 7.5 } }]}
+          onKarteOeffnen={vi.fn()}
+        />
       </ThemeProvider>,
       'en',
     )
@@ -339,18 +528,36 @@ describe('NachtlaufFortschritt auf Englisch (Issue #1658)', () => {
     zeigeEnglisch(fortschritt({ ketten: [kette({ pakete: [paket(203, 'IN_UMSETZUNG'), paket(204, 'ZURUECKGESTELLT')] })] }))
 
     const weg = within(screen.getByRole('list', { name: 'Path of chain #100' }))
-    expect(weg.getAllByRole('listitem').map((s) => s.textContent)).toEqual([
-      'Plan: reached',
-      'Review: running',
-      'Work packages: open',
-      'Coverage: open',
-    ])
+    expect(punkte(wegDerKette('Path of chain #100'))).toEqual(['Plan: reached', 'Review: running', 'Work packages: open', 'Coverage: open'])
+    expect(weg.getByRole('img', { name: '18 of 60 minutes elapsed' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Cost of the chain' })).toHaveTextContent('7.50 / 50.00 $')
     expect(screen.getByRole('button', { name: 'Requirement #100 Die Anforderung' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Plan #101 Der Plan' })).toBeInTheDocument()
     const pakete = screen.getByRole('list', { name: 'Packages of chain #100' })
-    expect(within(pakete).getByRole('button', { name: 'Package #203 Karte 203' })).toBeInTheDocument()
-    expect(pakete).toHaveTextContent('in implementation')
-    expect(pakete).toHaveTextContent('deferred')
+    expect(within(pakete).getByRole('button', { name: 'Package #203, in implementation: Karte 203' })).toBeInTheDocument()
+    expect(within(pakete).getByRole('button', { name: 'Package #204, deferred: Karte 204' })).toBeInTheDocument()
+  })
+
+  it('nennt Überschreitung, „seit" und die Planung auf Englisch', () => {
+    vi.setSystemTime(new Date('2026-10-21T02:15:00Z'))
+    zeigeEnglisch(
+      fortschritt({
+        ketten: [
+          kette(),
+          kette({
+            anforderung: karte(300, 'Zweite'),
+            stufen: [...ERREICHT_BIS_ABDECKUNG, { stufe: 'UMSETZUNG', zustand: 'LAEUFT', seit: '2026-10-21T01:31:00Z' }],
+            aktuelleStufe: 'UMSETZUNG',
+          }),
+        ],
+      }),
+    )
+
+    expect(screen.getByRole('list', { name: 'Path of chain #100' })).toHaveTextContent('75 / 60 min · 15 min over the limit')
+    expect(screen.getByRole('list', { name: 'Path of chain #300' })).toHaveTextContent('for 44 min')
+    expect(within(screen.getByTestId('fortschritt-kette-100')).getByRole('group', { name: 'Cost of the chain' })).toHaveTextContent(
+      '7.50 / 50.00 $',
+    )
   })
 
   it('nennt fehlenden Plan, fehlende Pakete, Unbekanntes und die offene Frage auf Englisch', () => {
@@ -376,7 +583,7 @@ describe('NachtlaufFortschritt auf Englisch (Issue #1658)', () => {
   it('zeigt die Umsetzungsnacht und eine unbekannte Zuordnung auf Englisch', () => {
     zeigeEnglisch(fortschritt({ pakete: [paket(203, 'FERTIG')] }), 'UMSETZUNGSNACHT')
     expect(screen.getByRole('list', { name: 'Path of the implementation night' })).toBeInTheDocument()
-    expect(screen.getByRole('list', { name: 'Packages of the implementation night' })).toHaveTextContent('done')
+    expect(screen.getByRole('button', { name: 'Package #203, done: Karte 203' })).toBeInTheDocument()
 
     zeigeEnglisch(fortschritt({ zuordnung: 'UNBEKANNT' }))
     expect(screen.getByTestId('fortschritt-zuordnung-unbekannt')).toHaveTextContent(

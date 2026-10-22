@@ -66,8 +66,8 @@ export function NachtlaufLaufPlatte({
   /** `true` an einem Lauf, den die Kette noch nicht abgeschlossen gemeldet hat. */
   pulsiert = false,
   /**
-   * Die Marken rechts im Kopf — Zustand, Kosten (zugeklappt) und Herkunft. Welche es sind,
-   * entscheidet die Seite; die Platte reiht sie nur auf.
+   * Die Marken rechts im Kopf — Zustand und, zugeklappt, Kosten; die Herkunft steht seit Plan
+   * #1882 (E10) im Fuß. Welche es sind, entscheidet die Seite; die Platte reiht sie nur auf.
    */
   marken,
   /**
@@ -85,6 +85,11 @@ export function NachtlaufLaufPlatte({
   offen,
   onUmschalten,
   testId,
+  /**
+   * Das `id` der Platte, das Sprungziel der Balken von „Jetzt im Werk“ (Issue #1887); die Seite
+   * bildet es aus dem Start des Laufs.
+   */
+  id,
   children,
 }: Readonly<{
   titel: string
@@ -99,14 +104,15 @@ export function NachtlaufLaufPlatte({
   offen: boolean
   onUmschalten: () => void
   testId: string
+  id?: string
   children: ReactNode
 }>) {
   const inhaltId = useId()
   const t = useT().NACHTLAUF_PLATTE
 
   /**
-   * Ein Klick in die Kopfzeile schaltet um — außer er beendet gerade eine Textauswahl. Herkunft
-   * und Token-Namen in den Marken werden kopiert; wer sie markiert, will den Lauf nicht zuklappen.
+   * Ein Klick in die Kopfzeile schaltet um — außer er beendet gerade eine Textauswahl. Titel und
+   * Marken werden kopiert; wer sie markiert, will den Lauf nicht zuklappen.
    */
   const kopfKlick = () => {
     if ((window.getSelection()?.toString() ?? '') !== '') {
@@ -118,6 +124,7 @@ export function NachtlaufLaufPlatte({
   return (
     <Box
       component="section"
+      id={id}
       aria-label={titel}
       data-testid={testId}
       sx={{
@@ -277,7 +284,7 @@ export function NachtlaufLaufPlatte({
  * einer LED davor, wo sie einen Zustand meldet.
  *
  * <p>Sie ist die Stelle, an der die Angaben stehen, für die die Vorlage im Kopf kein eigenes
- * Element vorsieht — Herkunft, Einlieferung, Kosten des zugeklappten Laufs. Weggelassen wären sie
+ * Element vorsieht — etwa die Kosten des zugeklappten Laufs. Weggelassen wären sie
  * verloren; als Marke stehen sie in der Gestalt, die die Vorlage dafür kennt.
  */
 export function LaufMarke({

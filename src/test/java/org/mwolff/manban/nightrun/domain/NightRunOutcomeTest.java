@@ -106,6 +106,7 @@ class NightRunOutcomeTest {
         null,
         null,
         null,
+        null,
         List.of());
   }
 

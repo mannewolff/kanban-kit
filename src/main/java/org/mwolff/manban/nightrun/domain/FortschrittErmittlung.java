@@ -397,7 +397,12 @@ public final class FortschrittErmittlung {
     ProgressStage aktuell =
         weg.stream().filter(s -> !erreicht.contains(s)).findFirst().orElse(null);
     List<StageProgress> stufen =
-        weg.stream().map(s -> new StageProgress(s, zustand(s, erreicht, aktuell))).toList();
+        weg.stream()
+            .map(
+                s ->
+                    new StageProgress(
+                        s, zustand(s, erreicht, aktuell), s == aktuell ? lage.beginn(s) : null))
+            .toList();
     return new ChainProgress(
         ref(anforderung),
         plan == null ? null : ref(plan),
@@ -556,6 +561,19 @@ public final class FortschrittErmittlung {
           || eintraege.stream()
               .filter(this::passt)
               .anyMatch(e -> e.stufe().compareTo(stufe) > 0 || (e.stufe() == stufe && e.fertig()));
+    }
+
+    /**
+     * Der Beginn der laufenden Stufe (Issue #1883): der Zeitstempel des jüngsten passenden Eintrags
+     * dieser Stufe im Fenster; {@code null} ohne einen. Ein {@code fertig}-Eintrag kommt hier nicht
+     * vor — er machte die Stufe erreicht, und dann läuft sie nicht.
+     */
+    @Nullable Instant beginn(ProgressStage stufe) {
+      return eintraege.stream()
+          .filter(e -> e.stufe() == stufe && passt(e))
+          .map(StufenEintrag::zeit)
+          .max(Comparator.naturalOrder())
+          .orElse(null);
     }
 
     private boolean signal(ProgressStage stufe) {

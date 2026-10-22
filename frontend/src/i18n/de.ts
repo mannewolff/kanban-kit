@@ -8,6 +8,26 @@
  *
  * Neue Texte kommen paketweise dazu, wenn eine Seite umgestellt wird.
  */
+/** Die Namen der Stufen einer Kette — Wegleiste und Zustandssatz teilen sie (Plan #1882 E4). */
+const STUFENNAMEN = {
+  PLAN: 'Plan',
+  REVIEW: 'Prüfung',
+  PAKETE: 'Arbeitspakete',
+  ABDECKUNG: 'Abdeckung',
+  UMSETZUNG: 'Umsetzung',
+} as const
+
+/** Die Ausgangswörter eines Befunds — Übergabe und Zustandssatz teilen sie (Plan #1882 E4). */
+const AUSGANGSWORT = {
+  SUCCEEDED: 'gelungen',
+  FAILED: 'nicht gelungen',
+  WAITING: 'mit Vorbehalt',
+  RUNNING: 'läuft',
+  NO_WORK: 'nichts zu tun',
+  CLOSED: 'von Hand beendet',
+  NOT_STARTED: 'nicht angelaufen',
+} as const
+
 export const de = {
   /** Anzeigename der Anwendung: Kopfzeile, Anmeldekarte, Lizenzhinweis und Fenstertitel. */
   APP_NAME: 'KI-Leitstand',
@@ -915,13 +935,7 @@ export const de = {
   /** Fortschritt und Stufenleiste eines Laufs, `lib/laufFortschritt.ts` (Issue #1656). */
   LAUF_FORTSCHRITT: {
     ENDE_DES_WEGS: 'Ende des Wegs erreicht',
-    STUFE: {
-      PLAN: 'Plan',
-      REVIEW: 'Prüfung',
-      PAKETE: 'Arbeitspakete',
-      ABDECKUNG: 'Abdeckung',
-      UMSETZUNG: 'Umsetzung',
-    },
+    STUFE: STUFENNAMEN,
     ZUSTAND: {
       ERREICHT: 'erreicht',
       LAEUFT: 'läuft',
@@ -955,6 +969,22 @@ export const de = {
     LAUFZEIT: 'Laufzeit bis Abbruch',
     ZEITGRENZE: 'Zeitgrenze der Sitzung',
     GESPART: 'geschätzte gesparte Zeit',
+  },
+
+  /**
+   * Angaben einer gleichzeitigen Nacht, `lib/gleichzeitigkeit.ts` (Issue #1878, Plan #1876 E16).
+   * „nicht gemeldet" steht in `NACHTLAUF_UEBERGABE.NICHT_GEMELDET`, nicht hier.
+   */
+  GLEICHZEITIGKEIT: {
+    GLEICHZEITIG: 'Gleichzeitig',
+    WARTEZEIT: 'Wartezeit auf die Prüfung',
+    VERSCHOBEN: 'Übernahme verschoben',
+    JA: 'ja',
+    NEIN: 'nein',
+    MARKE_GLEICHZEITIG: 'gleichzeitig',
+    MARKE_VERSCHOBEN: 'Übernahme verschoben',
+    WARTEZEIT_STUNDEN: (h: number, m: number, s: number) => `${h} h ${m} min ${s} s`,
+    WARTEZEIT_MINUTEN: (m: number, s: number) => `${m} min ${s} s`,
   },
 
   /** Bausteine des Leitstands (Issue #1656). */
@@ -1037,6 +1067,9 @@ export const de = {
     KEIN_ABBRUCH_RUN: 'Kein Abbruch in diesem Run.',
     KEIN_PAKET: 'Der Run hat noch kein Arbeitspaket gemeldet.',
     KARTE_OEFFNEN_ARIA: (nummer: number, titel: string) => `Karte #${nummer} öffnen: ${titel}`,
+    /** Beschriftung mit den Marken einer gleichzeitigen Nacht (Issue #1880, Plan #1876 E11); ohne Marke wie `KARTE_OEFFNEN_ARIA`. */
+    KARTE_OEFFNEN_MIT_MARKEN_ARIA: (nummer: number, titel: string, marken: readonly string[]) =>
+      marken.length === 0 ? `Karte #${nummer} öffnen: ${titel}` : `Karte #${nummer} öffnen: ${titel} — ${marken.join(', ')}`,
     DURCHSATZ: 'Durchsatz',
     DURCHSATZ_NOTIZ: (wochen: number) => `abgeschlossene Karten je Woche · ${wochen} Wochen`,
     KARTEN: (anzahl: number) => `${anzahl} Karten`,
@@ -1164,15 +1197,7 @@ export const de = {
       TIME_BUDGET_EXCEEDED: 'Zeitbudget erschöpft',
       STUCK: 'Festgefahren',
     },
-    AUSGANG: {
-      SUCCEEDED: 'gelungen',
-      FAILED: 'nicht gelungen',
-      WAITING: 'mit Vorbehalt',
-      RUNNING: 'läuft',
-      NO_WORK: 'nichts zu tun',
-      CLOSED: 'von Hand beendet',
-      NOT_STARTED: 'nicht angelaufen',
-    },
+    AUSGANG: AUSGANGSWORT,
     ZEITBUDGET_MIT_ERGEBNIS: 'Am Zeitbudget beendet, Ergebnis liegt vor',
     ZEITBUDGET_OHNE_ERGEBNIS: 'Am Zeitbudget beendet, ohne Ergebnis',
     FESTGEFAHREN: 'festgefahren',
@@ -1285,6 +1310,24 @@ export const de = {
     OHNE_PAKET: (grund: string) => `ohne Paket beendet – ${grund}`,
   },
 
+  /** Die Platte „Jetzt im Werk“ auf der Runner-Seite, `JetztImWerk` (Issue #1887, Plan #1882 E2). */
+  JETZT_IM_WERK: {
+    TITEL: (laufend: number) =>
+      laufend === 1 ? 'Jetzt im Werk · 1 Run' : `Jetzt im Werk · ${laufend} Runs gleichzeitig`,
+    JETZT: (zeit: string) => `jetzt ${zeit}`,
+    /** Der Balken: Nummer und Stufe, ohne Nummer die Startzeit. */
+    BALKEN_NUMMER: (nummer: number) => `#${nummer}`,
+    BALKEN_STUFE: (balken: string, stufe: string) => `${balken} · ${stufe}`,
+    /** Die Vorleseliste: „Run #691, seit 10:32, läuft, Umsetzung“. */
+    RUN: (nummer: number | undefined) => (nummer === undefined ? 'Run' : `Run #${nummer}`),
+    LAEUFT: (run: string, seit: string) => `${run}, seit ${seit}, läuft`,
+    MIT_STUFE: (satz: string, stufe: string) => `${satz}, ${stufe}`,
+    FERTIG: (run: string, von: string, bis: string) => `${run}, ${von} bis ${bis}, fertig`,
+    LEGENDE_LAEUFT: 'läuft',
+    LEGENDE_BEENDET: 'beendet, in der Farbe seines Ausgangs',
+    LEGENDE_JETZT: 'jetzt',
+  },
+
   /** Der Abschnitt „Wartegrund“ im Kartendialog, `Wartegrund` (Issue #1730, Plan #1724). Den Satz für „verstummt“ liefert `RUNNER_JETZT.VERSTUMMT`. */
   WARTEGRUND: {
     TITEL: 'Wartegrund',
@@ -1386,6 +1429,21 @@ export const de = {
     PAKETE_KETTE: (nummer: number) => `Pakete der Kette #${nummer}`,
     KEINE_PAKETE: 'noch keine Pakete',
     FRAGE: 'Offene Frage an den Menschen an Karte',
+    /** Zugänglicher Name und Tooltip eines Pakets im Raster (Plan #1882 E6). */
+    PAKET_NAME: (nummer: number, zustand: string, titel: string) => `Paket #${nummer}, ${zustand}: ${titel}`,
+    /** Die Zählzeile unter dem Raster, ein Teil je vorkommendem Zustand. */
+    RASTER_ANZAHL: (anzahl: number, zustand: string) => `${anzahl} ${zustand}`,
+    /** Zugänglicher Name und Tooltip eines Stufenpunkts — „Plan: erreicht". */
+    STUFE_NAME: (stufe: string, zustand: string) => `${stufe}: ${zustand}`,
+    ENDE_DES_WEGS: 'Ende des Wegs',
+    ZEIT_SCHIENE: (verstrichen: number, vorgabe: number) => `${verstrichen} von ${vorgabe} Minuten verstrichen`,
+    ZEIT: (verstrichen: number, vorgabe: number) => `${verstrichen} / ${vorgabe} min`,
+    ZEIT_UEBER: (ueber: number) => ` · ${ueber} min über der Vorgabe`,
+    SEIT: (wert: string, einheit: string) => `seit ${wert} ${einheit}`,
+    KOSTEN: 'Kosten der Kette',
+    KOSTEN_PLANUNG: 'Planung',
+    KOSTEN_GEGEN: (budget: string) => `/ ${budget} $`,
+    DOLLAR: '$',
     ART: {
       ANFORDERUNG: 'Anforderung',
       PLAN: 'Plan',
@@ -1399,21 +1457,40 @@ export const de = {
     FORT: (nummer: string) => `#${nummer} nicht mehr vorhanden`,
   },
 
-  /** Instrumente eines Laufs, `NachtlaufLaufInstrumente` (Issue #1658). */
+  /** Lage eines Runs, `NachtlaufLage` (Issue #1658, Plan #1882 E5). */
   NACHTLAUF_INSTRUMENTE: {
+    LAGE: 'Lage des Runs',
     BETRAG: (wert: string) => `${wert} $`,
     KOSTEN: 'Kosten',
     AUFTEILUNG: (planung: string, umsetzung: string) => `Planung ${planung} · Umsetzung ${umsetzung}`,
     EINGABE: 'Eingabe',
     AUSGABE: 'Ausgabe',
     CACHE_QUOTE: 'Cache-Quote',
+    ANGABE: (titel: string, wert: string) => `${titel} ${wert}`,
+    QUOTE: (prozent: number) => `${prozent} %`,
     NICHT_BERECHENBAR: 'nicht berechenbar',
-    DAUER: 'Dauer',
     LAEUFT_SEIT: (wert: string, einheit: string) => `läuft seit ${wert} ${einheit}`,
     PAKETE: 'Pakete',
     GRUEN: 'grün',
     GELB: 'gelb',
     ROT: 'rot',
+  },
+
+  /** Zustandssatz der Lage eines Runs, `zustandssatz` in `lib/laufFortschritt.ts` (Plan #1882 E4). */
+  NACHTLAUF_LAGE: {
+    STUFE: STUFENNAMEN,
+    AUSGANG: AUSGANGSWORT,
+    SETZT_UM: (nummern: string, mehrere: boolean, fertig: number, gesamt: number) =>
+      `Setzt ${mehrere ? 'Pakete' : 'Paket'} ${nummern} um — ${fertig} von ${gesamt} fertig`,
+    SETZT_UM_NACHT: (nummern: string, mehrere: boolean, fertig: number) =>
+      `Setzt ${mehrere ? 'Pakete' : 'Paket'} ${nummern} um — ${fertig} fertig`,
+    UMSETZUNG_NACHT: (fertig: number) => `Umsetzung — ${fertig} fertig`,
+    ZU_PLAN: (stufe: string, nummer: number) => `${stufe} zu Plan #${nummer}`,
+    ZU_ANFORDERUNG: (stufe: string, nummer: number) => `${stufe} zu Anforderung #${nummer}`,
+    ENDE_DES_WEGS: (nummer: number) => `Kette #${nummer} am Ende des Wegs`,
+    WEITERE_KETTEN: (anzahl: number) => (anzahl === 1 ? ' + 1 weitere Kette' : ` + ${anzahl} weitere Ketten`),
+    ABGESCHLOSSEN: (ausgang: string, gruen: number, gelb: number, rot: number) =>
+      `${ausgang} — ${gruen} grün · ${gelb} gelb · ${rot} rot`,
   },
 
   /** Aufklappbare Platte eines Laufs, `NachtlaufLaufPlatte` (Issue #1658). */
@@ -1520,9 +1597,9 @@ export const de = {
       KOSTENBUDGET: 'Kostenbudget je Kette',
       HOECHSTE_KOSTEN: 'Höchste Kosten eines Vorgangs',
       HERKUNFT_BUDGETS: 'Herkunft der Budgets',
+      EINLIEFERUNG: 'Einlieferung',
       ERGEBNIS: 'Ergebnis der Schicht',
       TEUERSTER: 'Teuerster Vorgang',
-      HERKUNFT_STAND: 'Herkunft des Stands',
       KETTEN_DURCHGELAUFEN: 'Ketten durchgelaufen',
       KARTEN_ENTSTANDEN: 'Karten entstanden',
       LAUFZEIT_STUFEN: 'Laufzeit über alle Stufen',

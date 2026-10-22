@@ -61,6 +61,13 @@ export interface NightRunItemSubmission {
   usage?: NightRunUsage
   /** Die Angaben eines festgefahrenen Pakets (Issue #1551); der Server uebernimmt sie nur bei `STUCK`. */
   stuck?: NightRunStuck
+  /**
+   * Die drei Angaben einer gleichzeitigen Nacht, flach wie in der Meldung des Kits (Issue #1878,
+   * Plan #1876 E8); der Handweg fuehrt sie nur bei `concurrentPackages` > 1, dann an jedem Paket.
+   */
+  concurrent?: boolean
+  checkWaitMs?: number
+  deferredAtMerge?: boolean
 }
 
 /** Ein einzuliefernder Lauf. */
@@ -114,6 +121,21 @@ export interface NightRunItemView {
    * `lib/nightRunHandoff.ts`; `null` ohne `STUCK` und ohne Zeitgrenze oder Laufzeit.
    */
   estimatedSavedMs: number | null
+  /**
+   * Die Angaben einer gleichzeitigen Nacht (Issue #1878, Plan #1876 E8) — verschachtelt wie
+   * `stuck`; `null`, wenn das Paket keines der drei Felder gemeldet hat.
+   */
+  concurrency: NightRunConcurrencyView | null
+}
+
+/**
+ * Die Angaben einer gleichzeitigen Nacht in der Lesesicht. Eine einzelne Angabe ist `null`, wenn sie
+ * fehlte oder ausserhalb ihres Wertebereichs lag — angezeigt als „nicht gemeldet" (Plan #1876, E3).
+ */
+export interface NightRunConcurrencyView {
+  concurrent: boolean | null
+  checkWaitMs: number | null
+  deferredAtMerge: boolean | null
 }
 
 /** Die Angaben eines festgefahrenen Pakets in der Lesesicht — eine fehlende Angabe kommt als `null`. */
@@ -390,6 +412,8 @@ export interface PackageProgressView {
 export interface StageProgressView {
   stufe: ProgressStage
   zustand: StageState
+  /** Beginn der laufenden Stufe (Issue #1883, Plan #1882 E1); `null` an jeder anderen Stufe. */
+  seit: string | null
 }
 
 /**

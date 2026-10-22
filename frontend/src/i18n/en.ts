@@ -15,6 +15,26 @@ import type { Woerterbuch } from './de'
  *
  * Kartenarten (A11): FACHLICH „Requirement“, IDEE „Idea“, MENSCH „Human“, PLAN „Plan“, TASK „Task“.
  */
+/** Die Namen der Stufen einer Kette — Wegleiste und Zustandssatz teilen sie (Plan #1882 E4). */
+const STUFENNAMEN: Woerterbuch['NACHTLAUF_LAGE']['STUFE'] = {
+  PLAN: 'Plan',
+  REVIEW: 'Review',
+  PAKETE: 'Work packages',
+  ABDECKUNG: 'Coverage',
+  UMSETZUNG: 'Implementation',
+}
+
+/** Die Ausgangswörter eines Befunds — Übergabe und Zustandssatz teilen sie (Plan #1882 E4). */
+const AUSGANGSWORT: Woerterbuch['NACHTLAUF_LAGE']['AUSGANG'] = {
+  SUCCEEDED: 'succeeded',
+  FAILED: 'did not succeed',
+  WAITING: 'with reservation',
+  RUNNING: 'running',
+  NO_WORK: 'nothing to do',
+  CLOSED: 'closed by hand',
+  NOT_STARTED: 'did not start',
+}
+
 export const en: Woerterbuch = {
   APP_NAME: 'AI Control Room',
 
@@ -862,13 +882,7 @@ export const en: Woerterbuch = {
 
   LAUF_FORTSCHRITT: {
     ENDE_DES_WEGS: 'End of the path reached',
-    STUFE: {
-      PLAN: 'Plan',
-      REVIEW: 'Review',
-      PAKETE: 'Work packages',
-      ABDECKUNG: 'Coverage',
-      UMSETZUNG: 'Implementation',
-    },
+    STUFE: STUFENNAMEN,
     ZUSTAND: {
       ERREICHT: 'reached',
       LAEUFT: 'running',
@@ -900,6 +914,18 @@ export const en: Woerterbuch = {
     LAUFZEIT: 'Runtime until abort',
     ZEITGRENZE: 'Session time limit',
     GESPART: 'estimated time saved',
+  },
+
+  GLEICHZEITIGKEIT: {
+    GLEICHZEITIG: 'Concurrent',
+    WARTEZEIT: 'Wait for a check slot',
+    VERSCHOBEN: 'Merge deferred',
+    JA: 'yes',
+    NEIN: 'no',
+    MARKE_GLEICHZEITIG: 'concurrent',
+    MARKE_VERSCHOBEN: 'merge deferred',
+    WARTEZEIT_STUNDEN: (h, m, s) => `${h} h ${m} min ${s} s`,
+    WARTEZEIT_MINUTEN: (m, s) => `${m} min ${s} s`,
   },
 
   LEITSTAND_BAUSTEINE: {
@@ -978,6 +1004,8 @@ export const en: Woerterbuch = {
     KEIN_ABBRUCH_RUN: 'No abort in this run.',
     KEIN_PAKET: 'The run has not reported a work package yet.',
     KARTE_OEFFNEN_ARIA: (nummer, titel) => `Open card #${nummer}: ${titel}`,
+    KARTE_OEFFNEN_MIT_MARKEN_ARIA: (nummer, titel, marken) =>
+      marken.length === 0 ? `Open card #${nummer}: ${titel}` : `Open card #${nummer}: ${titel} — ${marken.join(', ')}`,
     DURCHSATZ: 'Throughput',
     DURCHSATZ_NOTIZ: (wochen) => `completed cards per week · ${wochen} weeks`,
     KARTEN: (anzahl) => `${anzahl} cards`,
@@ -1098,15 +1126,7 @@ export const en: Woerterbuch = {
       TIME_BUDGET_EXCEEDED: 'Time budget exhausted',
       STUCK: 'Stuck',
     },
-    AUSGANG: {
-      SUCCEEDED: 'succeeded',
-      FAILED: 'did not succeed',
-      WAITING: 'with reservation',
-      RUNNING: 'running',
-      NO_WORK: 'nothing to do',
-      CLOSED: 'closed by hand',
-      NOT_STARTED: 'did not start',
-    },
+    AUSGANG: AUSGANGSWORT,
     ZEITBUDGET_MIT_ERGEBNIS: 'Ended at the time budget, result available',
     ZEITBUDGET_OHNE_ERGEBNIS: 'Ended at the time budget, without result',
     FESTGEFAHREN: 'stuck',
@@ -1214,6 +1234,20 @@ export const en: Woerterbuch = {
     OHNE_PAKET: (grund) => `ended without a package – ${grund}`,
   },
 
+  JETZT_IM_WERK: {
+    TITEL: (laufend) => (laufend === 1 ? 'Right now · 1 run' : `Right now · ${laufend} runs at once`),
+    JETZT: (zeit) => `now ${zeit}`,
+    BALKEN_NUMMER: (nummer) => `#${nummer}`,
+    BALKEN_STUFE: (balken, stufe) => `${balken} · ${stufe}`,
+    RUN: (nummer) => (nummer === undefined ? 'Run' : `Run #${nummer}`),
+    LAEUFT: (run, seit) => `${run}, since ${seit}, running`,
+    MIT_STUFE: (satz, stufe) => `${satz}, ${stufe}`,
+    FERTIG: (run, von, bis) => `${run}, ${von} to ${bis}, finished`,
+    LEGENDE_LAEUFT: 'running',
+    LEGENDE_BEENDET: 'ended, in the color of its outcome',
+    LEGENDE_JETZT: 'now',
+  },
+
   WARTEGRUND: {
     TITEL: 'Why it waits',
     LADEFEHLER: (meldung) => `The waiting reason could not be loaded: ${meldung}`,
@@ -1309,6 +1343,18 @@ export const en: Woerterbuch = {
     PAKETE_KETTE: (nummer) => `Packages of chain #${nummer}`,
     KEINE_PAKETE: 'no packages yet',
     FRAGE: 'Open question for a person on card',
+    PAKET_NAME: (nummer, zustand, titel) => `Package #${nummer}, ${zustand}: ${titel}`,
+    RASTER_ANZAHL: (anzahl, zustand) => `${anzahl} ${zustand}`,
+    STUFE_NAME: (stufe, zustand) => `${stufe}: ${zustand}`,
+    ENDE_DES_WEGS: 'End of the path',
+    ZEIT_SCHIENE: (verstrichen, vorgabe) => `${verstrichen} of ${vorgabe} minutes elapsed`,
+    ZEIT: (verstrichen, vorgabe) => `${verstrichen} / ${vorgabe} min`,
+    ZEIT_UEBER: (ueber) => ` · ${ueber} min over the limit`,
+    SEIT: (wert, einheit) => `for ${wert} ${einheit}`,
+    KOSTEN: 'Cost of the chain',
+    KOSTEN_PLANUNG: 'Planning',
+    KOSTEN_GEGEN: (budget) => `/ ${budget} $`,
+    DOLLAR: '$',
     ART: {
       ANFORDERUNG: 'Requirement',
       PLAN: 'Plan',
@@ -1322,19 +1368,36 @@ export const en: Woerterbuch = {
   },
 
   NACHTLAUF_INSTRUMENTE: {
+    LAGE: 'State of the run',
     BETRAG: (wert) => `$${wert}`,
     KOSTEN: 'Cost',
     AUFTEILUNG: (planung, umsetzung) => `Planning ${planung} · Implementation ${umsetzung}`,
     EINGABE: 'Input',
     AUSGABE: 'Output',
     CACHE_QUOTE: 'Cache rate',
+    ANGABE: (titel, wert) => `${titel} ${wert}`,
+    QUOTE: (prozent) => `${prozent} %`,
     NICHT_BERECHENBAR: 'not computable',
-    DAUER: 'Duration',
     LAEUFT_SEIT: (wert, einheit) => `running for ${wert} ${einheit}`,
     PAKETE: 'Packages',
     GRUEN: 'green',
     GELB: 'yellow',
     ROT: 'red',
+  },
+
+  NACHTLAUF_LAGE: {
+    STUFE: STUFENNAMEN,
+    AUSGANG: AUSGANGSWORT,
+    SETZT_UM: (nummern, mehrere, fertig, gesamt) =>
+      `Implementing ${mehrere ? 'packages' : 'package'} ${nummern} — ${fertig} of ${gesamt} done`,
+    SETZT_UM_NACHT: (nummern, mehrere, fertig) =>
+      `Implementing ${mehrere ? 'packages' : 'package'} ${nummern} — ${fertig} done`,
+    UMSETZUNG_NACHT: (fertig) => `Implementation — ${fertig} done`,
+    ZU_PLAN: (stufe, nummer) => `${stufe} for plan #${nummer}`,
+    ZU_ANFORDERUNG: (stufe, nummer) => `${stufe} for requirement #${nummer}`,
+    ENDE_DES_WEGS: (nummer) => `Chain #${nummer} at the end of the path`,
+    WEITERE_KETTEN: (anzahl) => (anzahl === 1 ? ' + 1 more chain' : ` + ${anzahl} more chains`),
+    ABGESCHLOSSEN: (ausgang, gruen, gelb, rot) => `${ausgang} — ${gruen} green · ${gelb} yellow · ${rot} red`,
   },
 
   NACHTLAUF_PLATTE: {
@@ -1435,9 +1498,9 @@ export const en: Woerterbuch = {
       KOSTENBUDGET: 'Cost budget per chain',
       HOECHSTE_KOSTEN: 'Highest cost of an item',
       HERKUNFT_BUDGETS: 'Origin of the budgets',
+      EINLIEFERUNG: 'Delivery',
       ERGEBNIS: 'Shift result',
       TEUERSTER: 'Most expensive item',
-      HERKUNFT_STAND: 'Origin of the state',
       KETTEN_DURCHGELAUFEN: 'Chains completed',
       KARTEN_ENTSTANDEN: 'Cards created',
       LAUFZEIT_STUFEN: 'Runtime across all stages',

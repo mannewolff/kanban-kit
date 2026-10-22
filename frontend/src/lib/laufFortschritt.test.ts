@@ -11,12 +11,19 @@ import type {
   StageProgressView,
 } from '../api/nightRuns'
 import type { NightRunState } from './nightRunLog'
+import type { NightRunBudgetView, NightRunOutcomeView } from '../api/nightRuns'
+import { woerterbuch } from '../i18n/woerterbuch'
 import {
   kettenAnsage,
   kettenAnzeige,
+  kettenkosten,
   laeufeZusammenfuehren,
+  rasterzaehlung,
+  rasterzustand,
+  stufenzeit,
   vorwegZaehlung,
   wegleiste,
+  zustandssatz,
 } from './laufFortschritt'
 
 const karte = (number: number): CardRefView => ({ number, title: `Karte ${number}`, boardId: 3 })
@@ -129,9 +136,14 @@ describe('vorwegZaehlung', () => {
   })
 })
 
-const stufe = (s: StageProgressView['stufe'], zustand: StageProgressView['zustand']) => ({
+const stufe = (
+  s: StageProgressView['stufe'],
+  zustand: StageProgressView['zustand'],
+  seit: string | null = null,
+): StageProgressView => ({
   stufe: s,
   zustand,
+  seit,
 })
 
 const kette = (teil: Partial<ChainProgressView>): ChainProgressView => ({
@@ -158,10 +170,10 @@ describe('wegleiste', () => {
     })
     expect(wegleiste(k, 'KETTE')).toEqual({
       stufen: [
-        { stufe: 'PLAN', name: 'Plan', zustand: 'erreicht', aktuell: false },
-        { stufe: 'REVIEW', name: 'Prüfung', zustand: 'erreicht', aktuell: false },
-        { stufe: 'PAKETE', name: 'Arbeitspakete', zustand: 'erreicht', aktuell: false },
-        { stufe: 'ABDECKUNG', name: 'Abdeckung', zustand: 'erreicht', aktuell: false },
+        { stufe: 'PLAN', name: 'Plan', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'REVIEW', name: 'Prüfung', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'PAKETE', name: 'Arbeitspakete', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'ABDECKUNG', name: 'Abdeckung', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
       ],
       ende: 'Ende des Wegs erreicht',
     })
@@ -180,11 +192,11 @@ describe('wegleiste', () => {
     })
     expect(wegleiste(k, 'KETTE')).toEqual({
       stufen: [
-        { stufe: 'PLAN', name: 'Plan', zustand: 'erreicht', aktuell: false },
-        { stufe: 'REVIEW', name: 'Prüfung', zustand: 'erreicht', aktuell: false },
-        { stufe: 'PAKETE', name: 'Arbeitspakete', zustand: 'läuft', aktuell: true },
-        { stufe: 'ABDECKUNG', name: 'Abdeckung', zustand: 'offen', aktuell: false },
-        { stufe: 'UMSETZUNG', name: 'Umsetzung', zustand: 'offen', aktuell: false },
+        { stufe: 'PLAN', name: 'Plan', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'REVIEW', name: 'Prüfung', zustand: 'erreicht', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'PAKETE', name: 'Arbeitspakete', zustand: 'läuft', stand: 'LAEUFT', aktuell: true },
+        { stufe: 'ABDECKUNG', name: 'Abdeckung', zustand: 'offen', stand: 'OFFEN', aktuell: false },
+        { stufe: 'UMSETZUNG', name: 'Umsetzung', zustand: 'offen', stand: 'OFFEN', aktuell: false },
       ],
       ende: null,
     })
@@ -192,7 +204,7 @@ describe('wegleiste', () => {
 
   it('zeigt bei der Umsetzungsnacht nur die Umsetzung als laufende Stufe', () => {
     expect(wegleiste(null, 'UMSETZUNGSNACHT')).toEqual({
-      stufen: [{ stufe: 'UMSETZUNG', name: 'Umsetzung', zustand: 'läuft', aktuell: true }],
+      stufen: [{ stufe: 'UMSETZUNG', name: 'Umsetzung', zustand: 'läuft', stand: 'LAEUFT', aktuell: true }],
       ende: null,
     })
   })
@@ -384,14 +396,14 @@ describe('laufFortschritt auf Englisch', () => {
     })
     expect(wegleiste(k, 'KETTE', 'en')).toEqual({
       stufen: [
-        { stufe: 'PLAN', name: 'Plan', zustand: 'reached', aktuell: false },
-        { stufe: 'REVIEW', name: 'Review', zustand: 'running', aktuell: true },
-        { stufe: 'PAKETE', name: 'Work packages', zustand: 'open', aktuell: false },
+        { stufe: 'PLAN', name: 'Plan', zustand: 'reached', stand: 'ERREICHT', aktuell: false },
+        { stufe: 'REVIEW', name: 'Review', zustand: 'running', stand: 'LAEUFT', aktuell: true },
+        { stufe: 'PAKETE', name: 'Work packages', zustand: 'open', stand: 'OFFEN', aktuell: false },
       ],
       ende: 'End of the path reached',
     })
     expect(wegleiste(null, 'UMSETZUNGSNACHT', 'en').stufen).toEqual([
-      { stufe: 'UMSETZUNG', name: 'Implementation', zustand: 'running', aktuell: true },
+      { stufe: 'UMSETZUNG', name: 'Implementation', zustand: 'running', stand: 'LAEUFT', aktuell: true },
     ])
   })
 
@@ -414,5 +426,324 @@ describe('laufFortschritt auf Englisch', () => {
     )
     expect(anzeige.map((a) => a.name)).toEqual(['Coverage', 'Release prepared'])
     expect(kettenAnsage(anzeige, 'en')).toBe('Night chain: Coverage done; Release prepared waiting (question), target')
+  })
+})
+
+const lage = woerterbuch('de').NACHTLAUF_LAGE
+
+const mitKetten = (ketten: ChainProgressView[], pakete: PackageProgressView[] = []): NightRunProgressView => ({
+  ...fortschritt(pakete),
+  ketten,
+})
+
+const befund = (verdict: NightRunOutcomeView['verdict']): NightRunOutcomeView => ({
+  verdict,
+  decisiveItem: null,
+  noWorkReason: null,
+  abortReason: null,
+})
+
+const keineZahlen = { gruen: 0, gelb: 0, rot: 0 }
+
+const umsetzendeKette = (pakete: PackageProgressView[]) =>
+  kette({
+    pakete,
+    stufen: [
+      stufe('PLAN', 'ERREICHT'),
+      stufe('REVIEW', 'ERREICHT'),
+      stufe('PAKETE', 'ERREICHT'),
+      stufe('ABDECKUNG', 'ERREICHT'),
+      stufe('UMSETZUNG', 'LAEUFT', '2026-10-21T01:00:00Z'),
+    ],
+    aktuelleStufe: 'UMSETZUNG',
+  })
+
+describe('zustandssatz (Plan #1882 E4)', () => {
+  it('nennt an einer Kette in Umsetzung das Paket und k von n fertig', () => {
+    const k = umsetzendeKette([
+      paket(1846, 'IN_UMSETZUNG'),
+      paket(1843, 'FERTIG'),
+      paket(1844, 'FERTIG'),
+      paket(1847, 'GEZOGEN'),
+    ])
+    expect(zustandssatz(mitKetten([k]), 'KETTE', true, null, keineZahlen, lage)).toBe(
+      'Setzt Paket #1846 um — 2 von 4 fertig',
+    )
+  })
+
+  it('nennt mehrere Pakete in Umsetzung zugleich', () => {
+    const k = umsetzendeKette([
+      paket(1846, 'IN_UMSETZUNG'),
+      paket(1847, 'IN_UMSETZUNG'),
+      paket(1843, 'FERTIG'),
+    ])
+    expect(zustandssatz(mitKetten([k]), 'KETTE', true, null, keineZahlen, lage)).toBe(
+      'Setzt Pakete #1846, #1847 um — 1 von 3 fertig',
+    )
+  })
+
+  it('nennt in der Umsetzungsnacht die fertigen Pakete ohne Nenner', () => {
+    const f = fortschritt([paket(20, 'FERTIG'), paket(21, 'IN_UMSETZUNG'), paket(22, 'GEZOGEN')])
+    expect(zustandssatz(f, 'UMSETZUNGSNACHT', true, null, keineZahlen, lage)).toBe('Setzt Paket #21 um — 1 fertig')
+  })
+
+  it('nennt in der Umsetzungsnacht mehrere Pakete in Umsetzung', () => {
+    const f = fortschritt([paket(21, 'IN_UMSETZUNG'), paket(22, 'IN_UMSETZUNG')])
+    expect(zustandssatz(f, 'UMSETZUNGSNACHT', true, null, keineZahlen, lage)).toBe('Setzt Pakete #21, #22 um — 0 fertig')
+  })
+
+  it('nennt in der Umsetzungsnacht ohne Paket in Umsetzung nur die fertigen', () => {
+    const f = fortschritt([paket(20, 'FERTIG'), paket(22, 'GEZOGEN')])
+    expect(zustandssatz(f, 'UMSETZUNGSNACHT', true, null, keineZahlen, lage)).toBe('Umsetzung — 1 fertig')
+  })
+
+  it('nennt an einer Planstufe die Stufe und den Plan', () => {
+    const k = kette({
+      stufen: [stufe('PLAN', 'ERREICHT'), stufe('REVIEW', 'LAEUFT'), stufe('PAKETE', 'OFFEN')],
+      aktuelleStufe: 'REVIEW',
+    })
+    expect(zustandssatz(mitKetten([k]), 'KETTE', true, null, keineZahlen, lage)).toBe('Prüfung zu Plan #1372')
+  })
+
+  it('nennt die Anforderung, solange die Kette noch keinen Plan hat', () => {
+    const k = kette({ plan: null, stufen: [stufe('PLAN', 'LAEUFT')], aktuelleStufe: 'PLAN' })
+    expect(zustandssatz(mitKetten([k]), 'KETTE', true, null, keineZahlen, lage)).toBe('Plan zu Anforderung #1364')
+  })
+
+  it('nennt an einer Kette in Umsetzung ohne Paket in Umsetzung die Stufe', () => {
+    const k = umsetzendeKette([paket(1843, 'FERTIG'), paket(1847, 'GEZOGEN')])
+    expect(zustandssatz(mitKetten([k]), 'KETTE', true, null, keineZahlen, lage)).toBe('Umsetzung zu Plan #1372')
+  })
+
+  it('stellt bei mehreren Ketten die mit laufender Stufe voran und zählt die übrigen', () => {
+    const fertig = kette({
+      anforderung: karte(1814),
+      stufen: [stufe('PLAN', 'ERREICHT'), stufe('ABDECKUNG', 'ERREICHT')],
+      aktuelleStufe: null,
+      endeErreicht: true,
+    })
+    const laufend = kette({
+      anforderung: karte(1816),
+      plan: karte(1866),
+      stufen: [stufe('PLAN', 'ERREICHT'), stufe('REVIEW', 'LAEUFT')],
+      aktuelleStufe: 'REVIEW',
+    })
+    expect(zustandssatz(mitKetten([fertig, laufend]), 'KETTE', true, null, keineZahlen, lage)).toBe(
+      'Prüfung zu Plan #1866 + 1 weitere Kette',
+    )
+    expect(zustandssatz(mitKetten([fertig, laufend, fertig]), 'KETTE', true, null, keineZahlen, lage)).toBe(
+      'Prüfung zu Plan #1866 + 2 weitere Ketten',
+    )
+  })
+
+  it('nennt eine Kette am Ende des Wegs, wenn keine Stufe mehr läuft', () => {
+    const fertig = kette({
+      anforderung: karte(1814),
+      stufen: [stufe('PLAN', 'ERREICHT')],
+      aktuelleStufe: null,
+      endeErreicht: true,
+    })
+    expect(zustandssatz(mitKetten([fertig]), 'KETTE', true, null, keineZahlen, lage)).toBe(
+      'Kette #1814 am Ende des Wegs',
+    )
+  })
+
+  it('liest die laufende Stufe aus dem Weg, auch wenn die aktuelle Stufe abweicht', () => {
+    const k = kette({
+      stufen: [stufe('PLAN', 'ERREICHT'), stufe('REVIEW', 'LAEUFT'), stufe('PAKETE', 'OFFEN')],
+      aktuelleStufe: 'PAKETE',
+    })
+    expect(zustandssatz(mitKetten([k]), 'KETTE', true, null, keineZahlen, lage)).toBe('Prüfung zu Plan #1372')
+    const ohneAktuelle = kette({ stufen: [stufe('REVIEW', 'LAEUFT')], aktuelleStufe: null })
+    expect(zustandssatz(mitKetten([ohneAktuelle]), 'KETTE', true, null, keineZahlen, lage)).toBe(
+      'Prüfung zu Plan #1372',
+    )
+  })
+
+  it('nennt an einer Planstufe die Stufe, auch wenn ein Paket der Kette in Umsetzung steht', () => {
+    const k = kette({
+      pakete: [paket(1846, 'IN_UMSETZUNG')],
+      stufen: [stufe('PLAN', 'ERREICHT'), stufe('REVIEW', 'LAEUFT')],
+      aktuelleStufe: 'REVIEW',
+    })
+    expect(zustandssatz(mitKetten([k]), 'KETTE', true, null, keineZahlen, lage)).toBe('Prüfung zu Plan #1372')
+  })
+
+  it('behält die Reihenfolge mehrerer laufender Ketten und stellt sie vor die fertigen', () => {
+    const fertig = kette({ anforderung: karte(1814), stufen: [], aktuelleStufe: null, endeErreicht: true })
+    const erste = kette({ plan: karte(1866), stufen: [stufe('REVIEW', 'LAEUFT')], aktuelleStufe: 'REVIEW' })
+    const zweite = kette({ plan: karte(1867), stufen: [stufe('PAKETE', 'LAEUFT')], aktuelleStufe: 'PAKETE' })
+    const satz = (ketten: ChainProgressView[]) => zustandssatz(mitKetten(ketten), 'KETTE', true, null, keineZahlen, lage)
+    expect(satz([erste, zweite, fertig])).toBe('Prüfung zu Plan #1866 + 2 weitere Ketten')
+    expect(satz([erste, fertig, zweite])).toBe('Prüfung zu Plan #1866 + 2 weitere Ketten')
+    expect(satz([fertig, erste, zweite])).toBe('Prüfung zu Plan #1866 + 2 weitere Ketten')
+    expect(satz([fertig, zweite, erste])).toBe('Arbeitspakete zu Plan #1867 + 2 weitere Ketten')
+    expect(satz([zweite, fertig, fertig, erste])).toBe('Arbeitspakete zu Plan #1867 + 3 weitere Ketten')
+    const auchFertig = kette({ anforderung: karte(1815), stufen: [], aktuelleStufe: null, endeErreicht: true })
+    expect(satz([fertig, auchFertig])).toBe('Kette #1814 am Ende des Wegs + 1 weitere Kette')
+    expect(satz([auchFertig, fertig])).toBe('Kette #1815 am Ende des Wegs + 1 weitere Kette')
+  })
+
+  it('nennt am abgeschlossenen Run das Ausgangswort des Befunds mit den Paketzahlen', () => {
+    expect(
+      zustandssatz(null, 'KETTE', false, befund('FAILED'), { gruen: 3, gelb: 1, rot: 2 }, lage),
+    ).toBe('nicht gelungen — 3 grün · 1 gelb · 2 rot')
+    expect(zustandssatz(null, 'KETTE', false, null, keineZahlen, lage)).toBeNull()
+  })
+
+  it('bildet ohne Fortschritt, bei unbekannter Zuordnung oder ohne Kette keinen Satz', () => {
+    expect(zustandssatz(null, 'KETTE', true, null, keineZahlen, lage)).toBeNull()
+    expect(
+      zustandssatz({ ...fortschritt([paket(1, 'IN_UMSETZUNG')]), zuordnung: 'UNBEKANNT' }, 'UMSETZUNGSNACHT', true, null, keineZahlen, lage),
+    ).toBeNull()
+    expect(zustandssatz(fortschritt([]), 'KETTE', true, null, keineZahlen, lage)).toBeNull()
+  })
+
+  it('bildet die Sätze auf Englisch', () => {
+    const en = woerterbuch('en').NACHTLAUF_LAGE
+    const k = umsetzendeKette([paket(1846, 'IN_UMSETZUNG'), paket(1843, 'FERTIG')])
+    expect(zustandssatz(mitKetten([k]), 'KETTE', true, null, keineZahlen, en)).toBe(
+      'Implementing package #1846 — 1 of 2 done',
+    )
+    expect(zustandssatz(null, 'KETTE', false, befund('SUCCEEDED'), { gruen: 1, gelb: 0, rot: 0 }, en)).toBe(
+      'succeeded — 1 green · 0 yellow · 0 red',
+    )
+    const zwei = umsetzendeKette([paket(1, 'IN_UMSETZUNG'), paket(2, 'IN_UMSETZUNG')])
+    expect(zustandssatz(mitKetten([zwei]), 'KETTE', true, null, keineZahlen, en)).toBe(
+      'Implementing packages #1, #2 — 0 of 2 done',
+    )
+    expect(zustandssatz(fortschritt([paket(3, 'IN_UMSETZUNG')]), 'UMSETZUNGSNACHT', true, null, keineZahlen, en)).toBe(
+      'Implementing package #3 — 0 done',
+    )
+    expect(
+      zustandssatz(fortschritt([paket(3, 'IN_UMSETZUNG'), paket(4, 'IN_UMSETZUNG')]), 'UMSETZUNGSNACHT', true, null, keineZahlen, en),
+    ).toBe('Implementing packages #3, #4 — 0 done')
+    expect(zustandssatz(fortschritt([]), 'UMSETZUNGSNACHT', true, null, keineZahlen, en)).toBe('Implementation — 0 done')
+    const planstufe = kette({ stufen: [stufe('REVIEW', 'LAEUFT')], aktuelleStufe: 'REVIEW' })
+    const ohnePlan = kette({ plan: null, stufen: [stufe('PLAN', 'LAEUFT')], aktuelleStufe: 'PLAN' })
+    const ende = kette({ anforderung: karte(9), stufen: [], aktuelleStufe: null, endeErreicht: true })
+    expect(zustandssatz(mitKetten([planstufe, ende]), 'KETTE', true, null, keineZahlen, en)).toBe(
+      'Review for plan #1372 + 1 more chain',
+    )
+    expect(zustandssatz(mitKetten([ohnePlan, ende, ende]), 'KETTE', true, null, keineZahlen, en)).toBe(
+      'Plan for requirement #1364 + 2 more chains',
+    )
+    expect(zustandssatz(mitKetten([ende]), 'KETTE', true, null, keineZahlen, en)).toBe('Chain #9 at the end of the path')
+  })
+})
+
+const budget = (teil: Partial<NightRunBudgetView> = {}): NightRunBudgetView => ({
+  planMin: 30,
+  reviewMin: 60,
+  paketeMin: 20,
+  abdeckungMin: 10,
+  kostenUsd: 20,
+  origin: 'CONFIGURED',
+  defaultFields: [],
+  ...teil,
+})
+
+const JETZT = Date.parse('2026-10-21T02:00:00Z')
+
+describe('stufenzeit (Plan #1882 E7)', () => {
+  it('rechnet an der laufenden Stufe die verstrichene Zeit gegen die Vorgabe', () => {
+    expect(stufenzeit(stufe('REVIEW', 'LAEUFT', '2026-10-21T01:42:00Z'), budget(), JETZT)).toEqual({
+      verstrichenMs: 18 * 60_000,
+      vorgabeMs: 60 * 60_000,
+    })
+  })
+
+  it('nimmt für jede Planstufe ihr eigenes Feld der Vorgabe', () => {
+    const seit = '2026-10-21T01:00:00Z'
+    expect(stufenzeit(stufe('PLAN', 'LAEUFT', seit), budget(), JETZT)?.vorgabeMs).toBe(30 * 60_000)
+    expect(stufenzeit(stufe('PAKETE', 'LAEUFT', seit), budget(), JETZT)?.vorgabeMs).toBe(20 * 60_000)
+    expect(stufenzeit(stufe('ABDECKUNG', 'LAEUFT', seit), budget(), JETZT)?.vorgabeMs).toBe(10 * 60_000)
+  })
+
+  it('liefert an der Umsetzung, ohne Budget oder ohne Feld keine Vorgabe', () => {
+    const seit = '2026-10-21T01:00:00Z'
+    expect(stufenzeit(stufe('UMSETZUNG', 'LAEUFT', seit), budget(), JETZT)).toEqual({
+      verstrichenMs: 60 * 60_000,
+      vorgabeMs: null,
+    })
+    expect(stufenzeit(stufe('PLAN', 'LAEUFT', seit), null, JETZT)?.vorgabeMs).toBeNull()
+    expect(stufenzeit(stufe('PLAN', 'LAEUFT', seit), budget({ planMin: null }), JETZT)?.vorgabeMs).toBeNull()
+  })
+
+  it('liefert nichts ohne Beginn oder an einer Stufe, die nicht läuft', () => {
+    expect(stufenzeit(stufe('PLAN', 'LAEUFT'), budget(), JETZT)).toBeNull()
+    expect(stufenzeit(stufe('PLAN', 'ERREICHT', '2026-10-21T01:00:00Z'), budget(), JETZT)).toBeNull()
+    expect(stufenzeit(stufe('PLAN', 'OFFEN', '2026-10-21T01:00:00Z'), budget(), JETZT)).toBeNull()
+  })
+
+  it('zeigt einen Beginn in der Zukunft als null verstrichen statt negativ', () => {
+    expect(stufenzeit(stufe('PLAN', 'LAEUFT', '2026-10-21T02:01:00Z'), budget(), JETZT)?.verstrichenMs).toBe(0)
+  })
+})
+
+describe('rasterzustand (Plan #1882 E6)', () => {
+  it('bildet jeden Paketzustand auf Form und Farbe ab', () => {
+    expect(rasterzustand('FERTIG')).toEqual({ form: 'gefuellt', farbe: 'gruen', querstrich: false })
+    expect(rasterzustand('IN_UMSETZUNG')).toEqual({ form: 'schraffiert', farbe: 'stahl', querstrich: false })
+    expect(rasterzustand('GEZOGEN')).toEqual({ form: 'umriss', farbe: 'stahl', querstrich: false })
+    expect(rasterzustand('ANGELEGT')).toEqual({ form: 'umriss', farbe: 'text-schwach', querstrich: false })
+    expect(rasterzustand('ZURUECKGESTELLT')).toEqual({ form: 'gefuellt', farbe: 'zinnob', querstrich: true })
+  })
+})
+
+describe('rasterzaehlung (Issue #1886)', () => {
+  it('zählt je vorkommendem Zustand in fester Reihenfolge: fertig, in Umsetzung, gezogen, angelegt, zurückgestellt', () => {
+    expect(
+      rasterzaehlung([
+        paket(1, 'ZURUECKGESTELLT'),
+        paket(2, 'ANGELEGT'),
+        paket(3, 'GEZOGEN'),
+        paket(4, 'IN_UMSETZUNG'),
+        paket(5, 'FERTIG'),
+        paket(6, 'ANGELEGT'),
+      ]),
+    ).toEqual([
+      { zustand: 'FERTIG', anzahl: 1 },
+      { zustand: 'IN_UMSETZUNG', anzahl: 1 },
+      { zustand: 'GEZOGEN', anzahl: 1 },
+      { zustand: 'ANGELEGT', anzahl: 2 },
+      { zustand: 'ZURUECKGESTELLT', anzahl: 1 },
+    ])
+  })
+
+  it('lässt Zustände ohne Paket weg', () => {
+    expect(rasterzaehlung([paket(1, 'ANGELEGT'), paket(2, 'ANGELEGT')])).toEqual([{ zustand: 'ANGELEGT', anzahl: 2 }])
+    expect(rasterzaehlung([])).toEqual([])
+  })
+})
+
+describe('kettenkosten (Plan #1882 E8)', () => {
+  const wegA = [stufe('PLAN', 'ERREICHT'), stufe('ABDECKUNG', 'ERREICHT')]
+  const wegB = [...wegA, stufe('UMSETZUNG', 'LAEUFT')]
+  const items = [
+    { cardNumber: 1364, verbrauch: { kostenUsd: 5 } },
+    { cardNumber: 1365 },
+    { cardNumber: 1366, verbrauch: { kostenUsd: null } },
+  ]
+
+  it('stellt an einer A-Kette den Betrag gegen das Budget', () => {
+    expect(kettenkosten(karte(1364), wegA, items, budget())).toEqual({ betragUsd: 5, anteil: 0.25, planung: false })
+  })
+
+  it('lässt den Anteil über 100 % stehen und ohne Budgetbetrag weg', () => {
+    expect(kettenkosten(karte(1364), wegA, items, budget({ kostenUsd: 4 }))?.anteil).toBe(1.25)
+    expect(kettenkosten(karte(1364), wegA, items, budget({ kostenUsd: null }))?.anteil).toBeNull()
+    expect(kettenkosten(karte(1364), wegA, items, budget({ kostenUsd: 0 }))?.anteil).toBeNull()
+    expect(kettenkosten(karte(1364), wegA, items, null)).toEqual({ betragUsd: 5, anteil: null, planung: false })
+  })
+
+  it('nennt an einer B-Kette den Betrag als Planung ohne Anteil', () => {
+    expect(kettenkosten(karte(1364), wegB, items, budget())).toEqual({ betragUsd: 5, anteil: null, planung: true })
+  })
+
+  it('liefert nichts, solange der Kettenvorgang nicht gemeldet ist', () => {
+    expect(kettenkosten(karte(1400), wegA, items, budget())).toBeNull()
+    expect(kettenkosten(karte(1365), wegA, items, budget())).toBeNull()
+    expect(kettenkosten(karte(1366), wegA, items, budget())).toBeNull()
   })
 })

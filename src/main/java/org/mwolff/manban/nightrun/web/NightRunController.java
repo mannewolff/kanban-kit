@@ -1,5 +1,6 @@
 package org.mwolff.manban.nightrun.web;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -394,6 +395,8 @@ class NightRunController {
         request.excerpt(),
         NightRunUsageRequest.toDomain(request.usage()),
         IngestStuckRequest.toDomain(request.stuck()),
+        IngestConcurrency.toDomain(
+            request.concurrent(), request.checkWaitMs(), request.deferredAtMerge()),
         // Wie das Budget am Lauf: Der Upload-Weg fuehrt keine Stufen (Issue #1113, E14).
         List.of());
   }
@@ -458,6 +461,9 @@ class NightRunController {
    *
    * @param stuck die Angaben eines festgefahrenen Pakets (Issue #1549); derselbe Typ wie am
    *     Ingest-Weg, damit beide Wege dieselbe Nacht gleich abbilden
+   * @param concurrent gleichzeitig gelaufen (Issue #1877); wie {@code checkWaitMs} und {@code
+   *     deferredAtMerge} derselbe flache Eingang wie am Ingest-Weg, gedeutet in {@link
+   *     IngestConcurrency} (Plan #1876 E8)
    */
   @Schema(description = "Ein Arbeitspaket des Laufs: eine bearbeitete oder übergangene Karte.")
   record NightRunItemRequest(
@@ -501,7 +507,22 @@ class NightRunController {
                   errorClass STUCK.""")
           @Nullable
           @Valid
-          IngestStuckRequest stuck) {}
+          IngestStuckRequest stuck,
+      @Schema(
+              implementation = Boolean.class,
+              description = IngestConcurrency.CONCURRENT_BESCHREIBUNG,
+              example = IngestConcurrency.CONCURRENT_BEISPIEL)
+          @Nullable JsonNode concurrent,
+      @Schema(
+              implementation = Long.class,
+              description = IngestConcurrency.CHECK_WAIT_MS_BESCHREIBUNG,
+              example = IngestConcurrency.CHECK_WAIT_MS_BEISPIEL)
+          @Nullable JsonNode checkWaitMs,
+      @Schema(
+              implementation = Boolean.class,
+              description = IngestConcurrency.DEFERRED_AT_MERGE_BESCHREIBUNG,
+              example = IngestConcurrency.DEFERRED_AT_MERGE_BEISPIEL)
+          @Nullable JsonNode deferredAtMerge) {}
 
   /** Eine Zeile der Übersicht „Heute Nacht“ (Issue #1454). */
   @Schema(description = "Eine zur Übernahme freigegebene Karte mit ihrem kleinen Stufenstand.")

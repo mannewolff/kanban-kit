@@ -21,6 +21,7 @@ import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
+import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunItemStage;
@@ -496,6 +497,11 @@ public class NightRunService {
                     // E2): An jedem anderen Paket werden sie stillschweigend verworfen, wie die
                     // Abschlussart ohne Abbruchgrund — eine Ablehnung kostete den ganzen Lauf.
                     item.errorClass() == NightRunErrorClass.STUCK ? item.stuck() : null,
+                    // Die Angaben zur gleichzeitigen Umsetzung gelten bei jedem Paket, gleich
+                    // welcher
+                    // Zustand (Plan #1876 E7): Sie aendern keinen Ausgang und darum auch nicht, was
+                    // gespeichert wird — ein uebergangenes Paket zeigt seine gemeldeten Werte.
+                    item.concurrency(),
                     // Die Stufen kommen mit der Meldung (Issue #1113); der Upload-Weg uebergibt
                     // hier fest die leere Liste — „dieser Vorgang hatte keine".
                     item.stages()))
@@ -574,6 +580,7 @@ public class NightRunService {
         item.excerpt(),
         item.usage(),
         item.stuck(),
+        item.concurrency(),
         Bremsbilanz.gespart(item),
         item.stages());
   }
@@ -690,6 +697,9 @@ public class NightRunService {
    * @param stuck die gemeldeten Angaben eines festgefahrenen Pakets (Issue #1549); {@code null}
    *     heißt „keine gemeldet". Übernommen werden sie nur bei {@link NightRunErrorClass#STUCK}
    *     (Plan #1547 E2).
+   * @param concurrency die gemeldeten Angaben zur gleichzeitigen Umsetzung (Issue #1877); {@code
+   *     null} heißt „keines der drei Felder geführt“. Übernommen werden sie bei jedem Paket (Plan
+   *     #1876 E7).
    * @param stages die gemeldeten Stufen der Kette (Issue #1113) — leer statt {@code null}, denn
    *     „dieser Vorgang hatte keine Stufen" ist eine Aussage
    */
@@ -703,6 +713,7 @@ public class NightRunService {
       @Nullable String excerpt,
       @Nullable NightRunUsage usage,
       @Nullable NightRunStuck stuck,
+      @Nullable NightRunConcurrency concurrency,
       List<NightRunItemStage> stages) {}
 
   /**
@@ -802,6 +813,8 @@ public class NightRunService {
    *
    * @param stuck die Angaben eines festgefahrenen Pakets (Issue #1549); {@code null}, wenn keine
    *     gemeldet wurden
+   * @param concurrency die Angaben zur gleichzeitigen Umsetzung (Issue #1877); {@code null}, wenn
+   *     die Meldung keines der drei Felder führt
    * @param estimatedSavedMs die geschätzte gesparte Zeit aus {@link Bremsbilanz#gespart}; {@code
    *     null} ohne STUCK und für eine Bremsung ohne Zeitwert
    * @param stages die Stufen der Kette, die dieser Vorgang durchlaufen hat (Issue #1113) — leer
@@ -824,6 +837,13 @@ public class NightRunService {
                   Versuche, Zeitgrenze der Sitzung und Sitzungskennung; null, wenn keine \
                   gemeldet wurden.""")
           @Nullable NightRunStuck stuck,
+      @Schema(
+              description =
+                  """
+                  Angaben zur gleichzeitigen Umsetzung: concurrent, checkWaitMs und \
+                  deferredAtMerge; null, wenn die Meldung keines der drei Felder führt. Eine \
+                  null-Angabe darin heißt nicht gemeldet.""")
+          @Nullable NightRunConcurrency concurrency,
       @Schema(
               description =
                   """

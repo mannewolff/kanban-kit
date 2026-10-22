@@ -42,6 +42,7 @@ import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe.Startstation;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItemStage;
 import org.mwolff.manban.nightrun.domain.NightRunLimits;
@@ -190,6 +191,7 @@ class NightRunControllerTest {
                         "mvn verify rot",
                         null,
                         null,
+                        null,
                         List.of()))));
     assertThat(uebergeben.get(1))
         .isEqualTo(
@@ -261,6 +263,7 @@ class NightRunControllerTest {
                         "Kette",
                         NightRunState.RED,
                         NightRunErrorClass.TIME_BUDGET_EXCEEDED,
+                        null,
                         null,
                         null,
                         null,
@@ -470,6 +473,7 @@ class NightRunControllerTest {
                             null,
                             null,
                             null,
+                            null,
                             List.of())))));
 
     mvc.perform(get(PATH))
@@ -607,6 +611,45 @@ class NightRunControllerTest {
         .isEqualTo(new NightRunStuck("mvn verify", "OpenApiIT rot", 3, 3_600_000L, "sitzung-1"));
   }
 
+  /**
+   * Der Upload-Weg nimmt die drei Angaben zur gleichzeitigen Umsetzung flach am Paket an und deutet
+   * sie wie der Ingest-Weg (Issue #1877, Plan #1876 E8) — ein kaputter Wert kostet die Meldung
+   * nicht.
+   */
+  @Test
+  // Siehe submit_passesEveryFieldToService_andAnswersInRequestOrder: derselbe Grund.
+  @SuppressWarnings("unchecked")
+  void submit_mapsConcurrency_toService() throws Exception {
+    when(service.submit(eq(USER), eq(PROJECT), anyList()))
+        .thenReturn(List.of(new NightRunResult(ERSTER, true)));
+
+    mvc.perform(
+            post(PATH)
+                .contentType(JSON)
+                .content(
+                    """
+                    {"runs":[{"startedAt":"2026-08-31T22:00:00Z","mode":"IMPLEMENTATION",
+                              "durationMs":1,"processedCount":2,"skippedCount":0,
+                              "unparsedCount":0,
+                              "items":[{"cardNumber":4713,"title":"Gleichzeitig","state":"GREEN",
+                                        "concurrent":true,"checkWaitMs":776000,
+                                        "deferredAtMerge":true},
+                                       {"cardNumber":4714,"title":"Kaputt","state":"GREEN",
+                                        "concurrent":"ja"},
+                                       {"cardNumber":4715,"title":"Ohne","state":"GREEN"}]}]}
+                    """))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<List<NewNightRun>> captor = ArgumentCaptor.forClass(List.class);
+    verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
+    assertThat(captor.getValue().getFirst().items())
+        .extracting(NewNightRunItem::concurrency)
+        .containsExactly(
+            new NightRunConcurrency(true, 776_000L, true),
+            new NightRunConcurrency(null, null, null),
+            null);
+  }
+
   @Test
   void submit_rejectsTooLongStuckCheck_beforeReachingService() throws Exception {
     mvc.perform(
@@ -675,6 +718,7 @@ class NightRunControllerTest {
                             null,
                             new NightRunStuck(
                                 "mvn verify", "OpenApiIT rot", 3, 3_600_000L, "sitzung-1"),
+                            null,
                             2_700_000L,
                             List.of())))));
 
@@ -732,6 +776,7 @@ class NightRunControllerTest {
                             "Kette",
                             NightRunState.RED,
                             NightRunErrorClass.TIME_BUDGET_EXCEEDED,
+                            null,
                             null,
                             null,
                             null,
@@ -1004,6 +1049,7 @@ class NightRunControllerTest {
                             new NightRunUsage(null, null, null, null, 900_000L, 42),
                             null,
                             null,
+                            null,
                             List.of(
                                 new NightRunItemStage(
                                     NightRunStage.PLAN,
@@ -1043,7 +1089,12 @@ class NightRunControllerTest {
                         anforderung,
                         plan,
                         List.of(paket),
-                        List.of(new StageProgress(ProgressStage.PLAN, StageState.ERREICHT)),
+                        List.of(
+                            new StageProgress(ProgressStage.PLAN, StageState.ERREICHT, null),
+                            new StageProgress(
+                                ProgressStage.REVIEW,
+                                StageState.LAEUFT,
+                                Instant.parse("2026-10-21T17:03:27Z"))),
                         ProgressStage.ABDECKUNG,
                         false)),
                 List.of(paket),
@@ -1062,6 +1113,9 @@ class NightRunControllerTest {
         .andExpect(jsonPath("$.ketten[0].pakete[0].zustand").value("IN_UMSETZUNG"))
         .andExpect(jsonPath("$.ketten[0].stufen[0].stufe").value("PLAN"))
         .andExpect(jsonPath("$.ketten[0].stufen[0].zustand").value("ERREICHT"))
+        .andExpect(jsonPath("$.ketten[0].stufen[0].seit").value(nullValue()))
+        .andExpect(jsonPath("$.ketten[0].stufen[1].zustand").value("LAEUFT"))
+        .andExpect(jsonPath("$.ketten[0].stufen[1].seit").value("2026-10-21T17:03:27Z"))
         .andExpect(jsonPath("$.ketten[0].aktuelleStufe").value("ABDECKUNG"))
         .andExpect(jsonPath("$.ketten[0].endeErreicht").value(false))
         .andExpect(jsonPath("$.pakete[0].karte.title").value("Paket 3/7"))
@@ -1136,7 +1190,7 @@ class NightRunControllerTest {
     assertThat(felder(NightRunProgressView.PackageProgressView.class))
         .containsExactly("karte", "zustand");
     assertThat(felder(NightRunProgressView.StageProgressView.class))
-        .containsExactly("stufe", "zustand");
+        .containsExactly("stufe", "zustand", "seit");
     assertThat(felder(NightRunProgressView.CardRefView.class))
         .containsExactly("number", "title", "boardId");
   }

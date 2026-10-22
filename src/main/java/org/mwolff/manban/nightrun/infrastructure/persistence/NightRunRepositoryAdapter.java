@@ -20,6 +20,7 @@ import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunItemStage;
@@ -134,17 +135,28 @@ class NightRunRepositoryAdapter implements NightRunRepository {
       "INSERT INTO night_run_item (night_run_id, project_id, started_at, mode, kind, card_number,"
           + " title, state, error_class, duration_ms, commit_hash, excerpt, cost_usd,"
           + " input_tokens, output_tokens, cached_input_tokens, model_duration_ms, turns,"
-          + " stuck_check, stuck_error, stuck_attempts, stuck_session_limit_ms, stuck_session_id)"
+          + " stuck_check, stuck_error, stuck_attempts, stuck_session_limit_ms, stuck_session_id,"
+          + " concurrency_reported, concurrency_concurrent, concurrency_check_wait_ms,"
+          + " concurrency_deferred_at_merge)"
           + " VALUES (:nightRunId, :projectId, :startedAt, :mode, :kind, :cardNumber, :title,"
           + " :state, :errorClass,"
           + " :durationMs, :commitHash, :excerpt, :costUsd, :inputTokens, :outputTokens,"
           + " :cachedInputTokens, :modelDurationMs, :turns,"
-          + " :stuckCheck, :stuckError, :stuckAttempts, :stuckSessionLimitMs, :stuckSessionId)"
+          + " :stuckCheck, :stuckError, :stuckAttempts, :stuckSessionLimitMs, :stuckSessionId,"
+          + " :concurrencyReported, :concurrencyConcurrent, :concurrencyCheckWaitMs,"
+          + " :concurrencyDeferredAtMerge)"
           + " RETURNING id";
 
   /** Ein Paket ohne Angaben schreibt alle fünf {@code stuck_*}-Spalten als {@code NULL}. */
   private static final NightRunStuck KEINE_STUCK_ANGABEN =
       new NightRunStuck(null, null, null, null, null);
+
+  /**
+   * Ein Paket ohne Angaben zur gleichzeitigen Umsetzung schreibt alle vier {@code
+   * concurrency_*}-Spalten als {@code NULL}.
+   */
+  private static final NightRunConcurrency KEINE_GLEICHZEITIGKEIT =
+      new NightRunConcurrency(null, null, null);
 
   private static final String INSERT_STAGE =
       "INSERT INTO night_run_item_stage (night_run_item_id, stage, duration_ms, cost_usd,"
@@ -730,6 +742,16 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         .addValue("stuckAttempts", stuck.attempts(), Types.INTEGER)
         .addValue("stuckSessionLimitMs", stuck.sessionLimitMs(), Types.BIGINT)
         .addValue("stuckSessionId", stuck.sessionId(), Types.VARCHAR);
+    // Der Marker steht genau bei vorhandenem Record auf true, sonst NULL (V60): Nur so liest sich
+    // ein
+    // Paket mit drei kaputt gemeldeten Werten nicht wie eines ohne Angaben.
+    NightRunConcurrency concurrency = item.concurrency();
+    NightRunConcurrency werte = Objects.requireNonNullElse(concurrency, KEINE_GLEICHZEITIGKEIT);
+    parameter
+        .addValue("concurrencyReported", concurrency == null ? null : Boolean.TRUE, Types.BOOLEAN)
+        .addValue("concurrencyConcurrent", werte.concurrent(), Types.BOOLEAN)
+        .addValue("concurrencyCheckWaitMs", werte.checkWaitMs(), Types.BIGINT)
+        .addValue("concurrencyDeferredAtMerge", werte.deferredAtMerge(), Types.BOOLEAN);
     return parameter;
   }
 
@@ -775,6 +797,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   static NightRunItem toDomain(NightRunItemEntity e, List<NightRunItemStage> stages) {
     String errorClass = e.getErrorClass();
     StuckEmbeddable stuck = e.getStuck();
+    ConcurrencyEmbeddable concurrency = e.getConcurrency();
     return new NightRunItem(
         e.getId(),
         e.getNightRunId(),
@@ -791,6 +814,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         e.getExcerpt(),
         verbrauchLesen(e.getVerbrauch()),
         stuck == null ? null : stuck.toDomain(),
+        concurrency == null ? null : concurrency.toDomain(),
         stages);
   }
 

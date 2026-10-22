@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
@@ -40,7 +40,7 @@ describe('App-Routen der Anmeldung', () => {
     mockedApi.linkLogin.mockReturnValue(new Promise(() => {}))
     renderApp('/login/link?token=tok-9')
     expect(await screen.findByText('Anmeldung läuft …', undefined, { timeout: 5000 })).toBeInTheDocument()
-    expect(mockedApi.linkLogin).toHaveBeenCalledWith('tok-9')
+    await waitFor(() => expect(mockedApi.linkLogin).toHaveBeenCalledWith('tok-9'))
     expect(screen.queryByRole('button', { name: 'Code anfordern' })).not.toBeInTheDocument()
   })
 })

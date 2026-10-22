@@ -25,6 +25,7 @@ import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
+import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunItemStage;
@@ -154,6 +155,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         state == NightRunState.GREY ? null : 60_000L,
         state == NightRunState.GREEN ? "4c9f42a" : null,
         "  #" + cardNumber + " -> " + state,
+        null,
         null,
         null,
         List.of());
@@ -309,6 +311,107 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         stuck,
+        null,
+        List.of());
+  }
+
+  // --- Gleichzeitige Umsetzung (Issue #1877) ----------------------------------------------------
+
+  /**
+   * Die Rundreise über die vier Spalten aus {@code V60}: ohne Angaben, voll gemeldet und alle drei
+   * kaputt gemeldet. Den letzten Fall hält nur der Marker {@code concurrency_reported} — ohne ihn
+   * läse Hibernate das Embeddable aus lauter {@code NULL} als {@code null}.
+   */
+  @Test
+  void dieAngabenZurGleichzeitigenUmsetzungReisenDurchDieDatenbank() {
+    NightRunConcurrency voll = new NightRunConcurrency(true, 776_000L, false);
+    NightRunConcurrency kaputt = new NightRunConcurrency(null, null, null);
+
+    long id =
+        anlegen(
+            T1,
+            List.of(
+                gleichzeitig(4713, null), gleichzeitig(4714, voll), gleichzeitig(4715, kaputt)));
+
+    assertThat(runs.findItemsByRunIds(List.of(id)))
+        .extracting(NightRunItem::cardNumber, NightRunItem::concurrency)
+        .containsExactlyInAnyOrder(tuple(4713, null), tuple(4714, voll), tuple(4715, kaputt));
+    assertThat(
+            jdbc.queryForList(
+                "SELECT concurrency_reported FROM night_run_item WHERE night_run_id = ?"
+                    + " ORDER BY card_number",
+                Boolean.class,
+                id))
+        .containsExactly(null, true, true);
+  }
+
+  /** Eine gemeldete Wartezeit von 0 ist ein Wert und bleibt 0 (K7). */
+  @Test
+  void eineWartezeitVonNullBleibtNull() {
+    NightRunConcurrency null0 = new NightRunConcurrency(false, 0L, false);
+
+    long id = anlegen(T1, List.of(gleichzeitig(4716, null0)));
+
+    assertThat(runs.findItemsByRunIds(List.of(id)))
+        .singleElement()
+        .extracting(NightRunItem::concurrency)
+        .isEqualTo(null0);
+  }
+
+  /**
+   * K9: Eine Zeile, die vor {@code V60} geschrieben wurde, trägt in allen vier Spalten {@code NULL}
+   * und liest sich ohne Angaben. Nachträglich nur Wertspalten zu setzen, lässt die Prüfregel ohne
+   * Marker nicht zu.
+   */
+  @Test
+  void eineAltzeileOhneMarkerLiestKeineAngaben() {
+    long id = anlegen(T1, List.of(gleichzeitig(4717, null)));
+
+    assertThat(runs.findItemsByRunIds(List.of(id)))
+        .singleElement()
+        .extracting(NightRunItem::concurrency)
+        .isNull();
+    assertThatThrownBy(() -> setzeSpalte("concurrency_concurrent = true", id))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  /** Die Prüfregeln aus {@code V60}: Marker nur {@code true}, Wartezeit nie negativ. */
+  @Test
+  void diePruefregelnWeisenMarkerFalschUndNegativeWartezeitAb() {
+    long id = anlegen(T1, List.of(gleichzeitig(4718, new NightRunConcurrency(true, 1L, true))));
+
+    assertThatThrownBy(() -> setzeSpalte("concurrency_reported = false", id))
+        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(() -> setzeSpalte("concurrency_check_wait_ms = -1", id))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  /**
+   * Setzt eine Spalte an den Paketen des Laufs von Hand — am Adapter vorbei, gegen die Prüfregeln.
+   */
+  private void setzeSpalte(String zuweisung, long runId) {
+    jdbc.update("UPDATE night_run_item SET " + zuweisung + " WHERE night_run_id = ?", runId);
+  }
+
+  private static NightRunItem gleichzeitig(
+      int cardNumber, @Nullable NightRunConcurrency concurrency) {
+    return new NightRunItem(
+        null,
+        null,
+        PLATZHALTER_PROJEKT,
+        PLATZHALTER_START,
+        PLATZHALTER_MODUS,
+        PLATZHALTER_GATTUNG,
+        cardNumber,
+        "Paket " + cardNumber,
+        NightRunState.GREEN,
+        null,
+        1_200_000L,
+        null,
+        null,
+        null,
+        null,
+        concurrency,
         List.of());
   }
 
@@ -618,6 +721,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         excerpt,
+        null,
         null,
         null,
         List.of());
@@ -1033,6 +1137,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
+        null,
         List.of());
   }
 
@@ -1124,6 +1229,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             null,
             null,
             paketVerbrauch,
+            null,
             null,
             List.of());
 
@@ -1811,6 +1917,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         "4c9f42a",
         null,
         usage,
+        null,
         null,
         stages);
   }

@@ -1,11 +1,19 @@
 import type {
+  CardRefView,
   ChainProgressView,
   KettenStand,
   KettenStation,
+  NightRunBudgetView,
+  NightRunOutcomeView,
   NightRunProgressView,
+  PackageProgressView,
+  PackageState,
   ProgressStage,
+  StageProgressView,
+  StageState,
 } from '../api/nightRuns'
 import type { NightRunState } from './nightRunLog'
+import type { Woerterbuch } from '../i18n/de'
 import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 
 /**
@@ -87,6 +95,8 @@ export interface Wegstufe {
   name: string
   /** Der Zustand der Stufe als Text — nie allein über die Farbe (E12). */
   zustand: string
+  /** Der Zustand als Schlüssel — für die Form des Stufenpunkts (Plan #1882 E6). */
+  stand: StageState
   /** Ob der Lauf gerade an dieser Stelle steht. */
   aktuell: boolean
 }
@@ -111,7 +121,7 @@ export function wegleiste(kette: ChainProgressView | null, art: FortschrittArt, 
   const t = woerterbuch(sprache).LAUF_FORTSCHRITT
   if (art === 'UMSETZUNGSNACHT') {
     return {
-      stufen: [{ stufe: 'UMSETZUNG', name: t.STUFE.UMSETZUNG, zustand: t.ZUSTAND.LAEUFT, aktuell: true }],
+      stufen: [{ stufe: 'UMSETZUNG', name: t.STUFE.UMSETZUNG, zustand: t.ZUSTAND.LAEUFT, stand: 'LAEUFT', aktuell: true }],
       ende: null,
     }
   }
@@ -123,6 +133,7 @@ export function wegleiste(kette: ChainProgressView | null, art: FortschrittArt, 
       stufe: s.stufe,
       name: t.STUFE[s.stufe],
       zustand: t.ZUSTAND[s.zustand],
+      stand: s.zustand,
       aktuell: s.stufe === kette.aktuelleStufe,
     })),
     ende: kette.endeErreicht ? t.ENDE_DES_WEGS : null,
@@ -244,4 +255,211 @@ export function laeufeZusammenfuehren<T extends Listenlauf>(
   const servergefuehrt = new Set(vomServer.map((l) => l.startedAt))
   const browsereigen = bisher.filter((l) => !l.gespeichert && !servergefuehrt.has(l.startedAt))
   return [...vomServer, ...browsereigen].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+}
+
+/** Die Texte des Zustandssatzes — der Block `NACHTLAUF_LAGE` einer Sprache. */
+export type Lagetexte = Woerterbuch['NACHTLAUF_LAGE']
+
+/** Die Paketzahlen, die der Satz eines abgeschlossenen Runs nennt. */
+export interface Satzzahlen {
+  gruen: number
+  gelb: number
+  rot: number
+}
+
+const nummernliste = (pakete: readonly PackageProgressView[]): string =>
+  pakete.map((p) => `#${p.karte.number}`).join(', ')
+
+const fertige = (pakete: readonly PackageProgressView[]): number =>
+  pakete.filter((p) => p.zustand === 'FERTIG').length
+
+const inUmsetzung = (pakete: readonly PackageProgressView[]): PackageProgressView[] =>
+  pakete.filter((p) => p.zustand === 'IN_UMSETZUNG')
+
+/** Die Stufe, an der eine Kette gerade arbeitet; `null` am Ende des Wegs. */
+const laufendeStufe = (kette: ChainProgressView): ProgressStage | null =>
+  kette.stufen.find((s) => s.zustand === 'LAEUFT')?.stufe ?? kette.aktuelleStufe
+
+/** Der Satz einer einzelnen Kette. */
+function kettensatz(kette: ChainProgressView, t: Lagetexte): string {
+  const stufe = laufendeStufe(kette)
+  if (stufe === null) {
+    return t.ENDE_DES_WEGS(kette.anforderung.number)
+  }
+  const aktiv = inUmsetzung(kette.pakete)
+  if (stufe === 'UMSETZUNG' && aktiv.length > 0) {
+    return t.SETZT_UM(nummernliste(aktiv), aktiv.length > 1, fertige(kette.pakete), kette.pakete.length)
+  }
+  return kette.plan === null
+    ? t.ZU_ANFORDERUNG(t.STUFE[stufe], kette.anforderung.number)
+    : t.ZU_PLAN(t.STUFE[stufe], kette.plan.number)
+}
+
+/**
+ * Der Zustandssatz der Lage eines Runs (Plan #1882 E4) — jeder Satz aus Daten, die schon vorliegen.
+ *
+ * <p>Laufend spricht der Fortschritt: an der Umsetzung die Pakete in Arbeit mit „k von n fertig“
+ * (n = Pakete der Kette), in der Umsetzungsnacht ohne Nenner, weil die Zahl der anstehenden Pakete
+ * dort unbekannt ist; an einer Planstufe die Stufe mit Plan oder, solange es keinen gibt,
+ * Anforderung. Bei mehreren Ketten steht die mit laufender Stufe vorn. Abgeschlossen spricht der
+ * Befund mit seinem Ausgangswort. Was nicht vorliegt, ergibt keinen Satz (`null`).
+ *
+ * @param befund der Befund des Servers; nur am abgeschlossenen Run gelesen
+ * @param zahlen die Paketzahlen des abgeschlossenen Runs
+ */
+export function zustandssatz(
+  fortschritt: NightRunProgressView | null,
+  art: FortschrittArt,
+  laeuft: boolean,
+  befund: NightRunOutcomeView | null | undefined,
+  zahlen: Satzzahlen,
+  t: Lagetexte,
+): string | null {
+  if (!laeuft) {
+    return befund == null ? null : t.ABGESCHLOSSEN(t.AUSGANG[befund.verdict], zahlen.gruen, zahlen.gelb, zahlen.rot)
+  }
+  if (fortschritt?.zuordnung !== 'OK') {
+    return null
+  }
+  if (art === 'UMSETZUNGSNACHT') {
+    const aktiv = inUmsetzung(fortschritt.pakete)
+    const fertig = fertige(fortschritt.pakete)
+    return aktiv.length === 0
+      ? t.UMSETZUNG_NACHT(fertig)
+      : t.SETZT_UM_NACHT(nummernliste(aktiv), aktiv.length > 1, fertig)
+  }
+  const [erste, ...weitere] = [...fortschritt.ketten].sort(
+    (a, b) => Number(laufendeStufe(b) !== null) - Number(laufendeStufe(a) !== null),
+  )
+  if (erste === undefined) {
+    return null
+  }
+  return kettensatz(erste, t) + (weitere.length === 0 ? '' : t.WEITERE_KETTEN(weitere.length))
+}
+
+/** Die verstrichene Zeit der laufenden Stufe und ihre Vorgabe; `vorgabeMs` ist `null` ohne Vorgabe. */
+export interface Stufenzeit {
+  verstrichenMs: number
+  vorgabeMs: number | null
+}
+
+const MINUTE_MS = 60_000
+
+/** Die Zeitvorgabe einer Stufe in Minuten; die Umsetzung hat keine (Plan #1882 E7). */
+const vorgabeMinuten = (stufe: ProgressStage, budget: NightRunBudgetView): number | null => {
+  switch (stufe) {
+    case 'PLAN':
+      return budget.planMin
+    case 'REVIEW':
+      return budget.reviewMin
+    case 'PAKETE':
+      return budget.paketeMin
+    case 'ABDECKUNG':
+      return budget.abdeckungMin
+    case 'UMSETZUNG':
+      return null
+  }
+}
+
+/**
+ * Die Zeit der laufenden Stufe gegen ihre Vorgabe (Plan #1882 E7) — nur an einer Stufe, die läuft
+ * und ihren Beginn kennt; sonst `null`. Ein Beginn nach `jetzt` (Uhrenversatz) zählt als 0.
+ */
+export function stufenzeit(
+  stufe: StageProgressView,
+  budget: NightRunBudgetView | null,
+  jetzt: number,
+): Stufenzeit | null {
+  if (stufe.zustand !== 'LAEUFT' || stufe.seit === null) {
+    return null
+  }
+  const minuten = budget === null ? null : vorgabeMinuten(stufe.stufe, budget)
+  return {
+    verstrichenMs: Math.max(0, jetzt - Date.parse(stufe.seit)),
+    vorgabeMs: minuten === null ? null : minuten * MINUTE_MS,
+  }
+}
+
+/** Die Form eines Quadrats im Paketraster — die erste Auszeichnung, vor der Farbe (E6). */
+export type Rasterform = 'gefuellt' | 'schraffiert' | 'umriss'
+
+/** Die Farbe eines Quadrats: ein Melder oder „Text schwach“ der Palette. */
+export type Rasterfarbe = 'gruen' | 'stahl' | 'zinnob' | 'text-schwach'
+
+/** Wie ein Paket im Raster erscheint. */
+export interface Rasterzustand {
+  form: Rasterform
+  farbe: Rasterfarbe
+  /** Ob ein Querstrich das Quadrat durchzieht — am zurückgestellten Paket. */
+  querstrich: boolean
+}
+
+const RASTER: Readonly<Record<PackageState, Rasterzustand>> = {
+  FERTIG: { form: 'gefuellt', farbe: 'gruen', querstrich: false },
+  IN_UMSETZUNG: { form: 'schraffiert', farbe: 'stahl', querstrich: false },
+  GEZOGEN: { form: 'umriss', farbe: 'stahl', querstrich: false },
+  ANGELEGT: { form: 'umriss', farbe: 'text-schwach', querstrich: false },
+  ZURUECKGESTELLT: { form: 'gefuellt', farbe: 'zinnob', querstrich: true },
+}
+
+/** Form und Farbe eines Pakets im Raster (Plan #1882 E6). */
+export function rasterzustand(zustand: PackageState): Rasterzustand {
+  return RASTER[zustand]
+}
+
+/** Eine Zahl der Zählzeile unter dem Raster. */
+export interface Rasteranzahl {
+  zustand: PackageState
+  anzahl: number
+}
+
+/** Die Reihenfolge der Zählzeile: was fertig ist, zuerst; was zurückgestellt ist, zuletzt. */
+const ZAEHLFOLGE: readonly PackageState[] = ['FERTIG', 'IN_UMSETZUNG', 'GEZOGEN', 'ANGELEGT', 'ZURUECKGESTELLT']
+
+/**
+ * Die Zählzeile unter dem Paketraster (Issue #1886, Vorlage `docs/entwurf-lauf-ansicht.html`):
+ * je vorkommendem Zustand seine Anzahl, in der Reihenfolge von {@link ZAEHLFOLGE}.
+ */
+export function rasterzaehlung(pakete: readonly PackageProgressView[]): Rasteranzahl[] {
+  return ZAEHLFOLGE.map((zustand) => ({ zustand, anzahl: pakete.filter((p) => p.zustand === zustand).length })).filter(
+    (z) => z.anzahl > 0,
+  )
+}
+
+/** Was eine Kettenzeile über die Kosten ihres Kettenvorgangs sagt. */
+export interface Kettenkosten {
+  betragUsd: number
+  /** Betrag geteilt durch `budget.kostenUsd`, auch über 1; `null`, wo kein Balken steht. */
+  anteil: number | null
+  /** `true` an einer Kette mit Umsetzung: Der Betrag steht als „Planung“ ohne Balken. */
+  planung: boolean
+}
+
+/** Ein Vorgang, soweit die Kettenkosten ihn brauchen. */
+export interface Kostenvorgang {
+  cardNumber: number
+  /** `undefined` am eben geparsten Lauf; ein fehlender Betrag heißt „nicht gemessen". */
+  verbrauch?: { kostenUsd?: number | null }
+}
+
+/**
+ * Die Kosten einer Kette (Plan #1882 E8): der Betrag des Vorgangs zur Anforderung. Einen Anteil am
+ * Budget trägt nur eine Kette ohne Umsetzung (Variante A) — der Deckel einer Kette mit Umsetzung
+ * kommt beim Board nicht an. Ohne gemeldeten Betrag `null`.
+ */
+export function kettenkosten(
+  anforderung: CardRefView,
+  weg: readonly StageProgressView[],
+  items: readonly Kostenvorgang[],
+  budget: NightRunBudgetView | null,
+): Kettenkosten | null {
+  const betragUsd = items.find((i) => i.cardNumber === anforderung.number)?.verbrauch?.kostenUsd ?? null
+  if (betragUsd === null) {
+    return null
+  }
+  if (weg.some((s) => s.stufe === 'UMSETZUNG')) {
+    return { betragUsd, anteil: null, planung: true }
+  }
+  const deckel = budget?.kostenUsd ?? 0
+  return { betragUsd, anteil: deckel <= 0 ? null : betragUsd / deckel, planung: false }
 }

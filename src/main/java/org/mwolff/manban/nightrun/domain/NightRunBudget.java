@@ -19,7 +19,7 @@ import org.jspecify.annotations.Nullable;
  * @param reviewMin Zeitvorgabe der Stufe {@link NightRunStage#REVIEW} in Minuten
  * @param paketeMin Zeitvorgabe der Stufe {@link NightRunStage#PAKETE} in Minuten
  * @param abdeckungMin Zeitvorgabe der Stufe {@link NightRunStage#ABDECKUNG} in Minuten
- * @param kostenUsd Kostenbudget des ganzen Laufs
+ * @param kostenUsd Kostenbudget je Kette
  * @param origin Herkunft der Vorgaben; {@code null} heißt „nicht angegeben" (Plan #1110 E3)
  * @param defaultFields die Felder, die aus den Voreinstellungen kamen — nur bei {@link
  *     NightRunBudgetOrigin#DEFAULTED} gefüllt. Leer statt {@code null}, denn „kein Feld kam aus den

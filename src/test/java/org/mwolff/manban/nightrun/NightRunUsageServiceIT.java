@@ -147,6 +147,7 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
         null,
         new NightRunUsage(new BigDecimal(kosten), null, null, null, null, null),
         null,
+        null,
         List.of());
   }
 
@@ -164,6 +165,7 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
         NightRunState.GREEN,
         null,
         1_000L,
+        null,
         null,
         null,
         null,

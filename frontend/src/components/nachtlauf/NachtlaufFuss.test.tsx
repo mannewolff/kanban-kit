@@ -65,6 +65,50 @@ describe('NachtlaufFuss', () => {
   })
 })
 
+describe('NachtlaufFuss — Zeile „Einlieferung“ (Plan #1882 E10)', () => {
+  const EINLIEFERUNG = [
+    'Herkunft unbekannt',
+    'maschinell eingeliefert am 21.10.2026, 10:32:03 (Token: ki-workflow-kit)',
+    'zuletzt gemeldet am 21.10.2026, 11:26:55',
+  ]
+
+  it('führt die Einlieferungsangaben als eine Angabe „Einlieferung“ hinter den übrigen', () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <NachtlaufFuss
+          angaben={[{ label: 'Kostenbudget je Kette', wert: '50,00 $' }]}
+          einlieferung={EINLIEFERUNG}
+          testId="uebersicht-fuss"
+        />
+      </ThemeProvider>,
+    )
+
+    const fuss = screen.getByTestId('uebersicht-fuss')
+    const zeile = within(fuss).getByTestId('fuss-einlieferung')
+    expect(within(zeile).getByText('Einlieferung').tagName).toBe('DT')
+    expect(within(zeile).getByText(EINLIEFERUNG.join(' · ')).tagName).toBe('DD')
+    expect(within(fuss).getAllByRole('term').at(-1)).toHaveTextContent('Einlieferung')
+  })
+
+  it('lässt die Zeile ohne Einlieferungsangaben weg', () => {
+    zeige([{ label: 'Kostenbudget je Kette', wert: '50,00 $' }])
+
+    expect(screen.queryByTestId('fuss-einlieferung')).toBeNull()
+    expect(screen.queryByText('Einlieferung')).toBeNull()
+  })
+
+  it('benennt die Zeile auf Englisch', () => {
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <NachtlaufFuss angaben={[]} einlieferung={['Origin unknown']} testId="uebersicht-fuss" />
+      </ThemeProvider>,
+      'en',
+    )
+
+    expect(within(screen.getByTestId('fuss-einlieferung')).getByText('Delivery').tagName).toBe('DT')
+  })
+})
+
 describe('NachtlaufFuss auf Englisch (Issue #1658)', () => {
   it('zeigt die Angaben der Seite auf Englisch als Paare', () => {
     renderMitSprache(

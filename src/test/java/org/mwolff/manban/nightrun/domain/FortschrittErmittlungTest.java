@@ -1,6 +1,7 @@
 package org.mwolff.manban.nightrun.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -1102,7 +1103,118 @@ class FortschrittErmittlungTest {
     assertThat(stufen(eineKette())).containsEntry(ProgressStage.PAKETE, StageState.ERREICHT);
   }
 
-  // --- Offene Fragen (E9) ------------------------------------------------------------------------
+  // --- Beginn der laufenden Stufe (Issue #1883, Plan #1882 E1) -----------------------------------
+
+  private static Map<ProgressStage, @Nullable Instant> seit(ChainProgress k) {
+    Map<ProgressStage, @Nullable Instant> m = new LinkedHashMap<>();
+    k.stufen().forEach(s -> m.put(s.stufe(), s.seit()));
+    return m;
+  }
+
+  @Test
+  void dieLaufendeStufeTraegtIhrenBeginnUndAlleAnderenNull() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    stand(f, begonnen("review", p, 10));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.REVIEW, StageState.LAEUFT);
+    assertThat(seit(kette))
+        .containsExactly(
+            entry(ProgressStage.PLAN, null),
+            entry(ProgressStage.REVIEW, um(10)),
+            entry(ProgressStage.PAKETE, null),
+            entry(ProgressStage.ABDECKUNG, null));
+  }
+
+  @Test
+  void derBeginnKommtVomJuengstenPassendenEintragDerStufe() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    Karte anderer = plan(401, anforderung(400));
+    angelegt(p, 5);
+    stand(f, begonnen("review", p, 20));
+    stand(f, begonnen("review", p, 10));
+    stand(f, begonnen("review", anderer, 30));
+
+    assertThat(seit(eineKette())).containsEntry(ProgressStage.REVIEW, um(20));
+  }
+
+  @Test
+  void diePlanstufeFindetIhrenBeginnUeberDieAnforderung() {
+    Karte f = anforderung(500);
+    Karte anderer = anforderung(400);
+    stand(f, begonnen("plan", f, 5), begonnen("plan", anderer, 8));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(kette.aktuelleStufe()).isEqualTo(ProgressStage.PLAN);
+    assertThat(seit(kette)).containsEntry(ProgressStage.PLAN, um(5));
+  }
+
+  @Test
+  void eineErreichteStufeTraegtKeinenBeginnTrotzEigenemEintrag() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    stand(f, begonnen("plan", f, 5));
+    stand(f, begonnen("review", p, 10));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.PLAN, StageState.ERREICHT);
+    assertThat(seit(kette))
+        .containsEntry(ProgressStage.PLAN, null)
+        .containsEntry(ProgressStage.REVIEW, um(10));
+  }
+
+  @Test
+  void derBeginnZaehltNurEintraegeDerLaufendenStufe() {
+    Karte f = anforderung(500);
+    angelegt(plan(501, f), 5);
+    stand(f, begonnen("plan", f, 8));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.REVIEW, StageState.LAEUFT);
+    assertThat(seit(kette)).containsEntry(ProgressStage.REVIEW, null);
+  }
+
+  @Test
+  void dieLaufendeStufeOhneGemeldetenBeginnTraegtNull() {
+    Karte f = anforderung(500);
+    angelegt(plan(501, f), 10);
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.REVIEW, StageState.LAEUFT);
+    assertThat(seit(kette)).containsEntry(ProgressStage.REVIEW, null);
+  }
+
+  @Test
+  void einBeginnAusserhalbDesFenstersZaehltNicht() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    angelegt(p, 5);
+    stand(f, begonnen("review", p, -10));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.REVIEW, StageState.LAEUFT);
+    assertThat(seit(kette)).containsEntry(ProgressStage.REVIEW, null);
+  }
+
+  @Test
+  void dieUmsetzungsnachtTraegtKeinenBeginn() {
+    Karte f = anforderung(500);
+    stand(f, begonnen("plan", f, 5));
+
+    NightRunProgress fortschritt = ermittle(NightRunMode.IMPLEMENTATION);
+
+    assertThat(fortschritt.ketten()).flatMap(ChainProgress::stufen).isEmpty();
+  }
+
+  // --- Offene Fragen (E9)------------------------------------------------------------------------
 
   @Test
   void klaerenBleibtNachAbgeschlossenemLaufStehen() {

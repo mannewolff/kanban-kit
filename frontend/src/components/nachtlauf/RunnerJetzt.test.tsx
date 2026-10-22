@@ -344,4 +344,28 @@ describe('RunnerJetzt', () => {
     expect(await screen.findByText('no runner active – no run started yet')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Runner now' })).toBeInTheDocument()
   })
+
+  it('reicht die geladenen Daten an onGeladen weiter und zeigt sie unverändert (Issue #1887)', async () => {
+    const daten: RunnerJetztDaten = { state: 'AKTIV', runs: [lauf()], lastRun: null }
+    const onGeladen = vi.fn()
+    const api = { jetzt: vi.fn(() => Promise.resolve(daten)) }
+    render(
+      <ThemeProvider theme={theme}>
+        <RunnerJetzt projectId={5} taktMs={30_000} api={api} onGeladen={onGeladen} />
+      </ThemeProvider>,
+    )
+
+    expect(await laufZeile(312)).toBeInTheDocument()
+    expect(onGeladen).toHaveBeenCalledWith(daten)
+    expect(screen.getByText(t.LAEUFT)).toBeInTheDocument()
+  })
+
+  it('ruft onGeladen nach einem Ladefehler nicht', async () => {
+    const onGeladen = vi.fn()
+    const api = { jetzt: vi.fn(() => Promise.reject(new ApiError(500, 'x', undefined, 'kaputt'))) }
+    render(<RunnerJetzt projectId={5} taktMs={30_000} api={api} onGeladen={onGeladen} />)
+
+    expect(await screen.findByText(t.LADEFEHLER('kaputt'))).toBeInTheDocument()
+    expect(onGeladen).not.toHaveBeenCalled()
+  })
 })

@@ -41,6 +41,7 @@ import {
   tokenText,
   uhrzeit,
   vorgaenge,
+  wartezeit,
 } from './leitstand'
 
 const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<NightRunItemView> = {}): NightRunItemView => ({
@@ -56,6 +57,7 @@ const paket = (nummer: number, state: NightRunItemView['state'], extra: Partial<
   stages: [],
   stuck: null,
   estimatedSavedMs: null,
+  concurrency: null,
   ...extra,
 })
 
@@ -184,6 +186,22 @@ describe('leitstand Letzter Run', () => {
     expect(paketDauerBeschriftung(3_730_000)).toBe('Dauer 1 h 2 min 10 s')
     expect(paketDauerBeschriftung(45_000)).toBe('Dauer 0 min 45 s')
     expect(paketDauerBeschriftung(null)).toBe('Dauer nicht gemessen')
+  })
+
+  it('schreibt die Wartezeit auf die Pruefung mit Minuten und Sekunden aus (Issue #1878, E15)', () => {
+    expect(wartezeit(0, 'de')).toBe('0 min 0 s')
+    expect(wartezeit(25_000, 'de')).toBe('0 min 25 s')
+    expect(wartezeit(420_000, 'de')).toBe('7 min 0 s')
+    expect(wartezeit(776_000, 'de')).toBe('12 min 56 s')
+    expect(wartezeit(3_730_000, 'de')).toBe('1 h 2 min 10 s')
+    expect(wartezeit(3_600_000, 'de')).toBe('1 h 0 min 0 s')
+    expect(wartezeit(0, 'en')).toBe('0 min 0 s')
+    expect(wartezeit(25_000, 'en')).toBe('0 min 25 s')
+    expect(wartezeit(420_000, 'en')).toBe('7 min 0 s')
+    expect(wartezeit(776_000, 'en')).toBe('12 min 56 s')
+    expect(wartezeit(3_730_000, 'en')).toBe('1 h 2 min 10 s')
+    // Ohne Sprache gilt Deutsch (Issue #1892): Ein leerer Standardwert faende kein Woerterbuch.
+    expect(wartezeit(776_000)).toBe('12 min 56 s')
   })
 
   it('formatiert Laufdauern und die Notiz im Plattenkopf', () => {
