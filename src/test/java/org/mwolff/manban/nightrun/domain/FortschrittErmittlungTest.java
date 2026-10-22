@@ -1154,6 +1154,33 @@ class FortschrittErmittlungTest {
   }
 
   @Test
+  void eineErreichteStufeTraegtKeinenBeginnTrotzEigenemEintrag() {
+    Karte f = anforderung(500);
+    Karte p = plan(501, f);
+    stand(f, begonnen("plan", f, 5));
+    stand(f, begonnen("review", p, 10));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.PLAN, StageState.ERREICHT);
+    assertThat(seit(kette))
+        .containsEntry(ProgressStage.PLAN, null)
+        .containsEntry(ProgressStage.REVIEW, um(10));
+  }
+
+  @Test
+  void derBeginnZaehltNurEintraegeDerLaufendenStufe() {
+    Karte f = anforderung(500);
+    angelegt(plan(501, f), 5);
+    stand(f, begonnen("plan", f, 8));
+
+    ChainProgress kette = eineKette();
+
+    assertThat(stufen(kette)).containsEntry(ProgressStage.REVIEW, StageState.LAEUFT);
+    assertThat(seit(kette)).containsEntry(ProgressStage.REVIEW, null);
+  }
+
+  @Test
   void dieLaufendeStufeOhneGemeldetenBeginnTraegtNull() {
     Karte f = anforderung(500);
     angelegt(plan(501, f), 10);
