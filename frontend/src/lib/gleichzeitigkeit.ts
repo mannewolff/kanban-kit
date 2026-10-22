@@ -14,6 +14,7 @@ export interface GleichzeitigkeitsFelder {
 const wahrheitswert = (wert: unknown): boolean | null => (typeof wert === 'boolean' ? wert : null)
 
 const wartezeitInMs = (wert: unknown): number | null =>
+  // Stryker disable next-line ConditionalExpression: gleichwertig — `Number.isSafeInteger` ist bei jeder Nicht-Zahl falsch; `typeof` verengt nur den Typ
   typeof wert === 'number' && Number.isSafeInteger(wert) && wert >= 0 ? wert : null
 
 /**

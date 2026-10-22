@@ -43,6 +43,14 @@ describe('gleichzeitigkeitDerMeldung', () => {
     })
   })
 
+  it('wertet eine allein gemeldete Wartezeit als gefuehrt', () => {
+    expect(gleichzeitigkeitDerMeldung({ checkWaitMs: 25_000 })).toEqual({
+      concurrent: null,
+      checkWaitMs: 25_000,
+      deferredAtMerge: null,
+    })
+  })
+
   it('laesst eine gemeldete Wartezeit von 0 als 0 stehen', () => {
     expect(gleichzeitigkeitDerMeldung({ concurrent: true, checkWaitMs: 0, deferredAtMerge: false })?.checkWaitMs).toBe(0)
   })
