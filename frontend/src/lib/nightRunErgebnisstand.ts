@@ -896,6 +896,7 @@ function gleichzeitigkeitDerEinheit(e: RohEinheit): Pick<NightRunItem, 'concurre
   const wartezeit = e.pruefWartezeitMs
   return {
     concurrent: e.gleichzeitig === true,
+    // Stryker disable next-line ConditionalExpression: gleichwertig — `Number.isFinite` ist bei jeder Nicht-Zahl falsch; `typeof` verengt nur den Typ
     ...(typeof wartezeit === 'number' && Number.isFinite(wartezeit) ? { checkWaitMs: wartezeit } : {}),
     deferredAtMerge: e.zusammenfuehrung === 'zurueckgestellt',
   }

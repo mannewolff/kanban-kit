@@ -1642,6 +1642,22 @@ describe('parseNightRunErgebnisstand — Gleichzeitigkeit (Issue #1878)', () => 
     expect(gefuehrt(item)).toEqual(['concurrent', 'deferredAtMerge'])
   })
 
+  it.each([['5000'], [undefined]])('laesst checkWaitMs bei pruefWartezeitMs %s weg', (wartezeit) => {
+    const item = gleichzeitig({ gleichzeitig: true, pruefWartezeitMs: wartezeit })
+    expect(gefuehrt(item)).toEqual(['concurrent', 'deferredAtMerge'])
+  })
+
+  /**
+   * Eine unendliche Zahl ist vom Typ `number`, aber keine Wartezeit (Issue #1894). `JSON.stringify`
+   * schreibt `Infinity` als `null`; erst die Ziffernfolge `1e999` im Rohtext liest `JSON.parse` als
+   * `Infinity` ein.
+   */
+  it.each([['1e999'], ['-1e999']])('laesst checkWaitMs bei der unendlichen Wartezeit %s weg', (roh) => {
+    const text = mitEinheit({ ...ERFOLG, gleichzeitig: true, pruefWartezeitMs: 'UNENDLICH' }, { concurrentPackages: 2 })
+    const item = einziges(text.replace('"UNENDLICH"', roh))
+    expect(gefuehrt(item)).toEqual(['concurrent', 'deferredAtMerge'])
+  })
+
   it('reicht eine endliche, auch negative Wartezeit unveraendert durch — der Server urteilt (E9)', () => {
     expect(gleichzeitig({ gleichzeitig: true, pruefWartezeitMs: -5 }).checkWaitMs).toBe(-5)
     expect(gleichzeitig({ gleichzeitig: true, pruefWartezeitMs: 0 }).checkWaitMs).toBe(0)
