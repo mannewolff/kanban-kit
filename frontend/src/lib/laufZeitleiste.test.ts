@@ -90,6 +90,23 @@ describe('zeitleiste (Plan #1882 E2)', () => {
     ])
   })
 
+  it('lässt einen Run fallen, der genau am Fensteranfang endete', () => {
+    const laeufe = [
+      lauf({ nummer: 2, startedAt: '2026-10-21T02:30:00Z' }),
+      lauf({ nummer: 1, startedAt: '2026-10-21T01:30:00Z', laeuft: false, durationMs: 30 * MIN }),
+    ]
+    const z = zeitleiste(laeufe, new Map(), JETZT)
+    expect(z?.vonMs).toBe(JETZT - 60 * MIN)
+    expect(z?.balken.map((b) => b.nummer)).toEqual([2])
+  })
+
+  it('fragt die Stufe eines Runs ohne Nummer nicht ab', () => {
+    // Eine Map mit Schlüssel `undefined` ist nur zur Laufzeit möglich; sie zeigt, dass die Nummer geprüft wird.
+    const stufen = new Map([[undefined, 'PLAN']]) as unknown as ReadonlyMap<number, string>
+    const z = zeitleiste([lauf({ startedAt: '2026-10-21T02:40:00Z' })], stufen, JETZT)
+    expect(z?.balken.map((b) => b.stufe)).toEqual([null])
+  })
+
   it('liefert nichts, solange kein Run läuft', () => {
     expect(
       zeitleiste([lauf({ nummer: 1, startedAt: '2026-10-21T02:30:00Z', laeuft: false, durationMs: MIN })], new Map(), JETZT),
