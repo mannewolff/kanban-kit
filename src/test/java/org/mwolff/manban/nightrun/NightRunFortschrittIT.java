@@ -81,6 +81,7 @@ class NightRunFortschrittIT extends AbstractIntegrationTest {
           "endeErreicht",
           "stufe",
           "zustand",
+          "seit",
           "karte",
           "number",
           "title",
