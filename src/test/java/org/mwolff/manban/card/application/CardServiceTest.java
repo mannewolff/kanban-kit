@@ -73,6 +73,7 @@ class CardServiceTest {
   private CardLabelEventRepository labelEvents;
   private ApplicationEventPublisher events;
   private UserLookup users;
+  private ZuweisungsBenachrichtigung benachrichtigung;
   private CardService service;
 
   private static Card card(
@@ -109,6 +110,7 @@ class CardServiceTest {
     events = mock(ApplicationEventPublisher.class);
     users = mock(UserLookup.class);
     labelEvents = mock(CardLabelEventRepository.class);
+    benachrichtigung = mock(ZuweisungsBenachrichtigung.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         CardServiceAufbau.ausPorts(
@@ -122,7 +124,14 @@ class CardServiceTest {
             // Mock der Zuordnung ließe die Tests zu InvalidAssigneeException/InvalidLabelException
             // ins Leere laufen.
             new KartenZuordnung(
-                assignees, labels, cardLabels, permissions, labelEvents, actor, clock),
+                assignees,
+                labels,
+                cardLabels,
+                permissions,
+                labelEvents,
+                actor,
+                clock,
+                benachrichtigung),
             activity,
             actor,
             events,
@@ -781,6 +790,20 @@ class CardServiceTest {
             ActorContext.ActorStamp.unknown());
     assertThat(result.id()).isEqualTo(1L);
     assertThat(result.assignees()).containsExactly(7L, 8L);
+  }
+
+  @Test
+  void setAssignees_reichtDieHandelndePersonAnDieBenachrichtigungDurch() {
+    // Issue #1916: Wer zuweist, steht als „zugewiesen von“ in der Nachricht.
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(permissions.isRealProjectMember(7L, 1L)).thenReturn(true);
+    List<Long> vorher = List.of();
+    when(assignees.findByCardId(1L)).thenReturn(vorher).thenReturn(List.of(7L));
+
+    service.setAssignees(3L, 1L, List.of(7L));
+
+    verify(benachrichtigung).zugewiesen(1L, List.of(7L), 3L);
   }
 
   @Test

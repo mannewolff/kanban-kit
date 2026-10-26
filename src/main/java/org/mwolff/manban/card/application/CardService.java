@@ -276,7 +276,7 @@ public class CardService {
     // Projekt-basierte Rechte (#405), nicht über das Board.
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
-    zuordnung.ersetzeZustaendige(cardId, card.projectId(), assigneeIds);
+    zuordnung.ersetzeZustaendige(cardId, card.projectId(), assigneeIds, userId);
     grundlage.aktivitaet(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert");
     grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
     return sicht.view(userId, card);

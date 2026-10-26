@@ -200,9 +200,10 @@ geladen und ist per `.gitignore` ausgeschlossen).
 > ```
 
 > **E-Mail-Zustellung läuft über die Outbox:** Seit Issue #502 bestätigt eine erfolgreiche
-> HTTP-Antwort (Registrierung, Code-Anforderung, Einladung, Projektanlage) die **gespeicherte
-> fachliche Operation, nicht die Mail-Zustellung**. Die Mail wird in derselben Transaktion
-> vorgemerkt und nach dem Commit vom Worker mit Wiederholungen versandt. Ein SMTP-Ausfall rollt
+> HTTP-Antwort (Registrierung, Code-Anforderung, Einladung, Projektanlage, Zuweisung einer Karte)
+> die **gespeicherte fachliche Operation, nicht die Mail-Zustellung**. Versandt werden so auch die
+> Zuweisungs-Mails an neu Zuständige einer Karte (Issue #1916). Die Mail wird in derselben
+> Transaktion vorgemerkt und nach dem Commit vom Worker mit Wiederholungen versandt. Ein SMTP-Ausfall rollt
 > also keine Registrierung oder Einladung mehr zurück (früherer 502 beim Einladen entfällt) —
 > hängengebliebene Mails erscheinen als `FAILED`-Einträge in der Abfrage oben.
 

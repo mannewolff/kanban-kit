@@ -160,6 +160,8 @@
   "src/test/java/org/mwolff/manban/backup/infrastructure/BackupWatchdogIT.java": ["src/main/java/org/mwolff/manban/backup/infrastructure/BackupWatchdogJob.java"],
   "src/test/java/org/mwolff/manban/card/CardSoftDeleteIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/card/CardTokenActivityWindowIT.java": ["src/main/java/org/mwolff/manban/card/application/CardRunQueryService.java"],
+  "src/test/java/org/mwolff/manban/card/ZuweisungsMailIT.java": ["src/main/java/org/mwolff/manban/card/application/KartenZuordnung.java", "src/main/java/org/mwolff/manban/card/infrastructure/mail/OutboxZuweisungsMailer.java"],
+  "src/test/java/org/mwolff/manban/card/application/KartenGrundlageAktivitaetTest.java": ["src/main/java/org/mwolff/manban/card/application/KartenGrundlage.java"],
   "src/test/java/org/mwolff/manban/card/infrastructure/CardAssigneeRepositoryIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/JdbcCardAssigneeRepository.java"],
   "src/test/java/org/mwolff/manban/card/infrastructure/CardColumnTransitionRepositoryIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardColumnTransitionRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/card/infrastructure/CardRepositoryExistingNumbersIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardRepositoryAdapter.java"],

@@ -97,6 +97,11 @@ Das Detail zeigt:
   kommagetrennt)" — alles in einem Speichern-Vorgang.
 - **Zuständige:** ein oder mehrere Projektmitglieder über das Feld „Zuständige" zuweisen (Mehrfachauswahl).
   Ohne Bearbeitungsrecht werden die Zuständigen nur als Chips angezeigt.
+  Wer neu zuständig wird, bekommt eine E-Mail mit Kartennummer, Titel, Projekt, Board, dem Namen der
+  zuweisenden Person und einem Link, der die Karte direkt öffnet — gleich ob die Zuweisung in der
+  Oberfläche oder über ein Token geschah. Wer sich selbst zuweist oder entfernt wird, bekommt keine.
+  Ist der Mailversand ausgeschaltet (`MANBAN_MAIL_ENABLED=false`), bleibt die Mail aus; die
+  Zuweisung gilt trotzdem.
 - **Fällig am:** ein Fälligkeitsdatum setzen. Im Ansichtsmodus steht darunter „Fällig am *TT.MM.JJJJ*";
   liegt das Datum in der Vergangenheit und ist die Karte nicht in einer Done-Spalte, wird es rot als
   „— überfällig" markiert.

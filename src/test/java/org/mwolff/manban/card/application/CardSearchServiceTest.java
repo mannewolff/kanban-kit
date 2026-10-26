@@ -97,7 +97,8 @@ class CardSearchServiceTest {
                 permissions,
                 mock(CardLabelEventRepository.class),
                 ActorContext.ActorStamp::unknown,
-                Clock.systemUTC()),
+                Clock.systemUTC(),
+                mock(ZuweisungsBenachrichtigung.class)),
             permissions);
     service =
         new CardSearchService(cards, kartenBestand, boardService, permissions, projects, sicht);
