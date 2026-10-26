@@ -29,6 +29,7 @@ import {
   RAND,
   SCHATTEN_NUTE,
   SCHATTEN_TASTE,
+  TEXT_MATT,
   TEXT_SCHWACH,
   ZAHL,
 } from '../../theme'
@@ -42,8 +43,9 @@ const MINUTE_MS = 60_000
 /**
  * Der Fortschritt eines Laufs in der aufgeklappten Kachel (Issue #1377, Plan #1372 E12) — seit
  * Issue #1886 je Kette eine Zeile nach Plan #1882 E6–E8 (Vorlage `docs/entwurf-lauf-ansicht.html`):
- * Nummer und Titel der Anforderung mit dem Plan als Verweis, die Stufenleiste mit Formzuständen, an
- * der laufenden Stufe die Zeit gegen ihre Vorgabe, „Ende des Wegs" als Flagge, das Paketraster und
+ * Nummer und Titel der Anforderung mit dem Plan als Verweis, die Stufenleiste mit Formzuständen und
+ * dem Namen jeder Stufe (die laufende hervorgehoben, Issue #1902), an der laufenden Stufe die Zeit
+ * gegen ihre Vorgabe, „Ende des Wegs" als Flagge, das Paketraster und
  * rechts die Kosten der Kette. Die Umsetzungsnacht zeigt nur die Umsetzung und das Raster; darunter
  * stehen „unbekannt" und der Hinweis auf eine offene Frage.
  *
@@ -255,7 +257,9 @@ function Kettenzeile({
 /**
  * Die Stufenleiste als Punktleiste (Plan #1882 E6): erreicht ein heller Grünton mit Haken, läuft
  * ein kupferner Punkt mit Ring, offen ein Nut-Punkt mit gestricheltem Umriss. Der Zustand steht
- * als zugänglicher Name und Tooltip am Punkt; an der laufenden Stufe stehen ihr Name und die Zeit.
+ * als zugänglicher Name und Tooltip am Punkt. Jede Stufe trägt ihren Namen sichtbar, die laufende
+ * fett in Textfarbe mit ihrer Zeit, die übrigen matt (Issue #1902). Reicht die Breite nicht, bricht
+ * die Leiste um, statt einen Namen abzuschneiden.
  */
 function Stufenleiste({
   leiste,
@@ -273,7 +277,16 @@ function Stufenleiste({
     <Box
       component="ol"
       aria-label={name}
-      sx={{ display: 'flex', alignItems: 'center', minWidth: 0, listStyle: 'none', margin: 0, padding: 0 }}
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        rowGap: '8px',
+        minWidth: 0,
+        listStyle: 'none',
+        margin: 0,
+        padding: 0,
+      }}
     >
       {leiste.stufen.map((s, position) => {
         const zeit = zeiten[position] ?? null
@@ -287,7 +300,6 @@ function Stufenleiste({
             sx={{
               display: 'flex',
               alignItems: 'center',
-              minWidth: 0,
               flex: stufenbreite(position === letzte, zeit),
             }}
           >
@@ -296,11 +308,9 @@ function Stufenleiste({
                 {zustand === 'ERREICHT' ? '✓' : position + 1}
               </Box>
             </Tooltip>
-            {s.aktuell && (
-              <Box component="span" sx={{ fontSize: 11, fontWeight: 600, color: 'text.primary', ml: '6px', whiteSpace: 'nowrap' }}>
-                {s.name}
-              </Box>
-            )}
+            <Box component="span" sx={s.aktuell ? NAME_LAUFEND_STIL : NAME_STIL}>
+              {s.name}
+            </Box>
             {zeit !== null && <Zeit zeit={zeit} />}
             {position < letzte && (
               <Box
@@ -324,6 +334,12 @@ function Stufenleiste({
     </Box>
   )
 }
+
+/** Der Name einer Stufe; er wird nie gekürzt (Issue #1902). */
+const NAME_STIL = { fontSize: 11, fontWeight: 400, color: TEXT_MATT, ml: '6px', whiteSpace: 'nowrap' } as const
+
+/** Der Name der laufenden Stufe: fett in Textfarbe. */
+const NAME_LAUFEND_STIL = { ...NAME_STIL, fontWeight: 600, color: 'text.primary' } as const
 
 /** Die letzte Stufe nimmt nur ihren Platz; eine mit Zeitschiene dreimal so viel wie die übrigen. */
 function stufenbreite(letzte: boolean, zeit: Stufenzeit | null): number | 'none' {

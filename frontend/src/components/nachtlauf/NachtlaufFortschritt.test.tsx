@@ -11,6 +11,7 @@ import type {
 import type { FortschrittArt, Kostenvorgang } from '../../lib/laufFortschritt'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { nachtlaufTheme } from '../../nachtlaufDesign'
+import { TEXT_MATT } from '../../theme'
 import { NachtlaufFortschritt } from './NachtlaufFortschritt'
 
 /**
@@ -155,12 +156,38 @@ describe('NachtlaufFortschritt', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Arbeitspakete: offen')
   })
 
-  it('nennt den Namen der laufenden Stufe sichtbar', () => {
+  it('nennt jede Stufe sichtbar beim Namen (#1902)', () => {
     zeige(fortschritt({ ketten: [kette()] }))
 
-    const laufend = stufenliste().getAllByRole('listitem')[1]
-    expect(laufend).toHaveTextContent('Prüfung')
-    expect(stufenliste().getAllByRole('listitem')[2]).not.toHaveTextContent('Arbeitspakete')
+    const stufen = stufenliste().getAllByRole('listitem')
+    expect(stufen).toHaveLength(4)
+    ;['Plan', 'Prüfung', 'Arbeitspakete', 'Abdeckung'].forEach((name, i) => {
+      expect(within(stufen[i]).getByText(name)).toBeVisible()
+    })
+  })
+
+  it('hebt den Namen der laufenden Stufe hervor, die übrigen stehen matt (#1902)', () => {
+    zeige(fortschritt({ ketten: [kette()] }))
+
+    const stufen = stufenliste().getAllByRole('listitem')
+    expect(within(stufen[1]).getByText('Prüfung')).toHaveStyle({ fontWeight: 600 })
+    for (const [i, name] of [[0, 'Plan'], [2, 'Arbeitspakete'], [3, 'Abdeckung']] as const) {
+      const text = within(stufen[i]).getByText(name)
+      expect(text).toHaveStyle({ color: TEXT_MATT, fontWeight: 400 })
+      expect(text).not.toHaveStyle({ fontWeight: 600 })
+    }
+  })
+
+  it('lässt die Stufenleiste umbrechen, statt einen Namen abzuschneiden (#1902)', () => {
+    zeige(fortschritt({ ketten: [kette()] }))
+
+    expect(screen.getByRole('list', { name: 'Weg der Kette #100' })).toHaveStyle({ flexWrap: 'wrap' })
+    for (const name of ['Plan', 'Prüfung', 'Arbeitspakete', 'Abdeckung']) {
+      const text = stufenliste().getByText(name)
+      expect(text).toHaveStyle({ whiteSpace: 'nowrap' })
+      expect(text).not.toHaveStyle({ overflow: 'hidden' })
+      expect(text).not.toHaveStyle({ textOverflow: 'ellipsis' })
+    }
   })
 
   it('zeigt an der laufenden Stufe die Zeit gegen ihre Vorgabe', () => {
@@ -395,6 +422,8 @@ describe('NachtlaufFortschritt', () => {
     const weg = within(screen.getByRole('list', { name: 'Weg der Umsetzungsnacht' }))
     const stufen = weg.getAllByRole('listitem')
     expect(punkte(wegDerKette('Weg der Umsetzungsnacht'))).toEqual(['Umsetzung: läuft'])
+    expect(stufen).toHaveLength(1)
+    expect(within(stufen[0]).getByText('Umsetzung')).toBeVisible()
     expect(stufen[0]).toHaveAttribute('aria-current', 'step')
     expect(screen.queryByText(/Plan|Prüfung|Abdeckung|Anforderung/)).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: 'Kosten der Kette' })).not.toBeInTheDocument()

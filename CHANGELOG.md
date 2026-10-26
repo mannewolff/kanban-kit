@@ -17,6 +17,12 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.7.0] – 2026-10-26
+
+- chore: v3.6.1
+- Stufenleiste der Lauf-Kachel nennt jede Stufe sichtbar beim Namen ([#1903](https://github.com/mannewolff/kanban-kit/issues/1903))
+- Spaltenköpfe bleiben beim Rollen des Boards stehen ([#1901](https://github.com/mannewolff/kanban-kit/issues/1901))
+
 ## [3.6.0] – 2026-10-22
 
 - chore: v3.5.2

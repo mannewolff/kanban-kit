@@ -335,8 +335,8 @@
     font-size: 11px; color: var(--gruen); font-weight: 600;
   }
 
-  .stufen { display: flex; align-items: center; min-width: 0; list-style: none; margin: 0; padding: 0; }
-  .stufe { display: flex; align-items: center; flex: 1; min-width: 0; }
+  .stufen { display: flex; flex-wrap: wrap; align-items: center; row-gap: 8px; min-width: 0; list-style: none; margin: 0; padding: 0; }
+  .stufe { display: flex; align-items: center; flex: 1; }
   .stufe:last-child { flex: none; }
   .punkt {
     width: 22px; height: 22px; border-radius: 50%; flex: none;
@@ -508,10 +508,10 @@
           <div class="anf-titel">Fassung und Update des Kits</div>
         </div>
         <ol class="stufen" aria-label="Weg der Kette">
-          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Plan: erreicht">✓</span><span class="strich"></span></li>
-          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Prüfung: erreicht">✓</span><span class="strich"></span></li>
-          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Arbeitspakete: erreicht">✓</span><span class="strich"></span></li>
-          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Abdeckung: erreicht">✓</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Plan: erreicht">✓</span><span class="stufe-name">Plan</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Prüfung: erreicht">✓</span><span class="stufe-name">Prüfung</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Arbeitspakete: erreicht">✓</span><span class="stufe-name">Arbeitspakete</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Abdeckung: erreicht">✓</span><span class="stufe-name">Abdeckung</span><span class="strich"></span></li>
           <li class="stufe" aria-current="step"><span class="punkt punkt-laeuft" role="img" aria-label="Umsetzung: läuft">5</span><span class="stufe-name">Umsetzung</span><span class="zeit-text mono" style="margin:0 0 0 8px">seit 44 min</span></li>
         </ol>
         <div>
@@ -585,7 +585,7 @@
           <div class="anf-titel">Titel der Anforderung #1816</div>
         </div>
         <ol class="stufen" aria-label="Weg der Kette">
-          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Plan: erreicht">✓</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Plan: erreicht">✓</span><span class="stufe-name">Plan</span><span class="strich"></span></li>
           <li class="stufe" aria-current="step" style="flex:3">
             <span class="punkt punkt-laeuft" role="img" aria-label="Prüfung: läuft">2</span>
             <span class="stufe-name">Prüfung</span>
@@ -595,8 +595,8 @@
             </div>
             <span class="strich"></span>
           </li>
-          <li class="stufe"><span class="punkt punkt-offen" role="img" aria-label="Arbeitspakete: offen">3</span><span class="strich"></span></li>
-          <li class="stufe"><span class="punkt punkt-offen" role="img" aria-label="Abdeckung: offen">4</span></li>
+          <li class="stufe"><span class="punkt punkt-offen" role="img" aria-label="Arbeitspakete: offen">3</span><span class="stufe-name">Arbeitspakete</span><span class="strich"></span></li>
+          <li class="stufe"><span class="punkt punkt-offen" role="img" aria-label="Abdeckung: offen">4</span><span class="stufe-name">Abdeckung</span></li>
         </ol>
         <div class="raster-text" style="margin:0">noch keine Pakete</div>
         <div class="kosten-leer">Kosten erst mit der Meldung des Vorgangs</div>
@@ -608,10 +608,10 @@
           <div class="anf-titel">Das Kit läuft ohne die Pro-Teile vollständig interaktiv</div>
         </div>
         <ol class="stufen" aria-label="Weg der Kette">
-          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Plan: erreicht">✓</span><span class="strich"></span></li>
-          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Prüfung: erreicht">✓</span><span class="strich"></span></li>
-          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Arbeitspakete: erreicht">✓</span><span class="strich"></span></li>
-          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Abdeckung: erreicht">✓</span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Plan: erreicht">✓</span><span class="stufe-name">Plan</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Prüfung: erreicht">✓</span><span class="stufe-name">Prüfung</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Arbeitspakete: erreicht">✓</span><span class="stufe-name">Arbeitspakete</span><span class="strich"></span></li>
+          <li class="stufe stufe-erreicht"><span class="punkt punkt-erreicht" role="img" aria-label="Abdeckung: erreicht">✓</span><span class="stufe-name">Abdeckung</span></li>
         </ol>
         <div>
           <ul class="raster" aria-label="Pakete">
