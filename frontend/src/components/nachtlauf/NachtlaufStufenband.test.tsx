@@ -1,9 +1,10 @@
 import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { NACHTLAUF_FARBEN, nachtlaufTheme } from '../../nachtlaufDesign'
+import { NACHTLAUF_FARBEN } from '../../nachtlaufDesign'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { NachtlaufStufenband, type Bandabschnitt } from './NachtlaufStufenband'
+import { theme } from '../../theme'
 
 /**
  * Das Stufenband eines Ketten-Vorgangs (#916, AK 5 und AK 8). Die Rechnung steht in der Seite;
@@ -25,7 +26,7 @@ const abschnitt = (felder: Partial<Bandabschnitt> = {}): Bandabschnitt => ({
 
 const zeige = (abschnitte: readonly Bandabschnitt[], ansage = 'Stufenband: Plan 7,8 / 20 min') =>
   render(
-    <ThemeProvider theme={nachtlaufTheme}>
+    <ThemeProvider theme={theme}>
       <NachtlaufStufenband
         abschnitte={abschnitte}
         ansage={ansage}
@@ -111,7 +112,7 @@ describe('NachtlaufStufenband — Kosten je Schritt (#1106)', () => {
 describe('NachtlaufStufenband auf Englisch (Issue #1658)', () => {
   it('zeigt Beschriftung, Zahlen, Kosten und Vermerk der Seite auf Englisch unverändert', () => {
     renderMitSprache(
-      <ThemeProvider theme={nachtlaufTheme}>
+      <ThemeProvider theme={theme}>
         <NachtlaufStufenband
           abschnitte={[abschnitt({ label: 'Plan', zahlen: '7.8 / 20 min', kosten: '$0.40', vermerk: 'aborted here' })]}
           ansage="Stage band: Plan 7.8 / 20 min"

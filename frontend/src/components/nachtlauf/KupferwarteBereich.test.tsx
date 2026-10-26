@@ -1,7 +1,6 @@
-import { ThemeProvider, useTheme } from '@mui/material/styles'
+import { createTheme, ThemeProvider, useTheme } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { NACHTLAUF_WURZEL_SX, nachtlaufTheme } from '../../nachtlaufDesign'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { theme } from '../../theme'
 import { KupferwarteBereich } from './KupferwarteBereich'
@@ -20,11 +19,15 @@ function Sonde() {
   )
 }
 
-/** Wie auf der Seite: Ausnahme-Theme und heller Wurzelknoten liegen über dem Bereich. */
+/**
+ * Ein fremdes Theme ohne Variablen und ein Knoten mit festem Variablenwert liegen über dem Bereich —
+ * so stand bis #1912 die Nachtlauf-Ausnahme über ihm.
+ */
+const fremdesTheme = createTheme({ palette: { primary: { main: '#123456' } } })
 const zeigeInDerAusnahme = () =>
   render(
-    <ThemeProvider theme={nachtlaufTheme}>
-      <div style={NACHTLAUF_WURZEL_SX as Record<string, string>}>
+    <ThemeProvider theme={fremdesTheme}>
+      <div style={{ '--mb-palette-background-default': '#ABCDEF' } as Record<string, string>}>
         <KupferwarteBereich>
           <Sonde />
         </KupferwarteBereich>
@@ -38,15 +41,15 @@ describe('KupferwarteBereich', () => {
 
     const sonde = screen.getByTestId('sonde')
     expect(sonde.dataset.kupfer).toBe(theme.colorSchemes.light!.palette.primary.main)
-    expect(sonde.dataset.kupfer).not.toBe(nachtlaufTheme.palette.primary.main)
+    expect(sonde.dataset.kupfer).not.toBe(fremdesTheme.palette.primary.main)
     expect(sonde.dataset.variablen).toBe('true')
   })
 
   it('schreibt die Variablen beider Erscheinungsbilder an seinen eigenen Knoten', () => {
     zeigeInDerAusnahme()
 
-    // Der Wurzelknoten der Ausnahme setzt sie auf feste Hellwerte; geerbt würde die Seite auch im
-    // dunklen System hell bleiben. Der Bereich setzt sie deshalb selbst.
+    // Ein Knoten darüber setzt sie auf einen festen Wert; geerbt bliebe er stehen. Der Bereich setzt
+    // sie deshalb selbst.
     const bereich = screen.getByTestId('kupferwarte-bereich')
     expect(getComputedStyle(bereich).getPropertyValue('--mb-palette-background-default')).toBe(
       theme.colorSchemes.light!.palette.background.default,

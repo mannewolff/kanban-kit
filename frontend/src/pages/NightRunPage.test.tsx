@@ -1156,7 +1156,7 @@ describe('NightRunPage — Übersicht „Heute Nacht“ (Issue #1455)', () => {
     expect(screen.getByTestId('heute-nacht-karte-1420')).toBeInTheDocument()
     expect(within(uebersicht).getByText('Board: Betrieb')).toBeInTheDocument()
     const bereich = screen.getByTestId('heute-nacht')
-    expect(screen.getByTestId('kupferwarte-bereich')).toContainElement(bereich)
+    expect(screen.getByTestId('laufbereich')).toContainElement(bereich)
     // Oberhalb der Laufplatten: Die Übersicht steht im Dokument vor dem ersten Lauf.
     expect(bereich.compareDocumentPosition(lauf(0)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(anfragen.filter((a) => a.url === '/api/projects/5/night-runs/tonight')).toHaveLength(1)
@@ -1219,7 +1219,7 @@ describe('NightRunPage — Statistikteil entfernt (Issue #1161)', () => {
     // Text — Testing Library hat dafür keine Abfrage. Der Griff zum Geschwisterelement ist hier
     // die Zusage selbst, nicht ein Umweg um eine vorhandene Abfrage.
     // eslint-disable-next-line testing-library/no-node-access
-    expect(meldung.nextElementSibling).toBe(screen.getByTestId('kupferwarte-bereich'))
+    expect(meldung.nextElementSibling).toBe(screen.getByTestId('laufbereich'))
   })
 
   it('legt keine neue Route an: App.tsx fuehrt fuer die Seite nur /projects/:projectId/nachtlauf', () => {
@@ -1581,18 +1581,21 @@ describe('NightRunPage — Ergebnisstand hineingeben', () => {
   })
 })
 
-describe('NightRunPage — Ausnahme auch im Dunkeln (#954)', () => {
-  it('setzt am Wurzelknoten der Seite die Hellwerte und malt ihren Grund selbst', async () => {
+describe('NightRunPage — folgt vollständig Kupferwarte (#1912)', () => {
+  it('rendert keinen Wurzelknoten der Ausnahme mehr; Kopf liest die Variablen der Anwendung', async () => {
     renderPage()
     await screen.findByText('Noch keine Auswertung vorhanden.')
 
-    // jsdom wertet `prefers-color-scheme` nicht aus; geprüft wird deshalb die erzeugte Regel am
-    // Wurzelknoten. Sie fällt, sobald die Variablen von `:root` durchschlagen könnten.
-    const regel = cssRegel(screen.getByTestId('nachtlauf-wurzel'))
-    expect(regel).toContain(`--mb-palette-background-paper: ${theme.colorSchemes.light!.palette.background.paper}`)
-    expect(regel).toContain(`--mb-palette-divider: ${theme.colorSchemes.light!.palette.divider}`)
-    expect(regel).toContain('color-scheme: light')
-    expect(regel).toContain(`background-color: ${NACHTLAUF_FARBEN.ground}`)
+    expect(screen.queryByTestId('nachtlauf-wurzel')).toBeNull()
+    // Der Knopf ist ein `<label>` ohne eigene Rolle; der Griff zum Elternknoten des Textes ist der
+    // einzige Weg an seine erzeugte Regel.
+    // eslint-disable-next-line testing-library/no-node-access
+    const knopf = cssRegel(screen.getByText('Protokoll einlesen').closest('label')!)
+    expect(knopf).toContain('var(--mb-palette-')
+    expect(knopf).not.toContain(NACHTLAUF_FARBEN.akzent)
+    const pfad = cssRegel(screen.getByRole('link', { name: 'Projekte' }))
+    expect(pfad).toContain('var(--mb-palette-')
+    expect(pfad).not.toContain(NACHTLAUF_FARBEN.ink)
   })
 })
 
@@ -5317,17 +5320,14 @@ describe('NightRunPage — Laufblock im Leitstand-Stil (#988)', () => {
     expect(within(lauf(0)).queryByTestId('befund-917')).not.toBeInTheDocument()
   })
 
-  it('stellt die Laufblöcke in den Kupferwarte-Bereich, die übrige Seite in die Ausnahme', async () => {
-    // `CLAUDE-design.md`: Die Laufblöcke haben die Nachtlauf-Ausnahme verlassen; Brotkrumenpfad,
-    // „Protokoll einlesen" und die Nachtansicht bleiben darin.
+  it('stellt die Laufblöcke ohne eigenen Kupferwarte-Bereich in den Laufbereich (#1912)', async () => {
+    // Seit #1912 folgt die ganze Seite Kupferwarte; eine Gegenausnahme für die Laufblöcke braucht es
+    // nicht mehr.
     renderPage(mitAllem())
     await screen.findByTestId(`lauf-${startedAt(0)}`)
 
-    const bereiche = screen.getAllByTestId('kupferwarte-bereich')
-    // Einer: die Laufblöcke (#988). Die Zeitraum-Sicht des Verbrauchs brachte bis #1161 einen
-    // zweiten mit; der Statistikteil ist entfallen.
-    expect(bereiche).toHaveLength(1)
-    expect(bereiche[0]).toContainElement(lauf(0))
+    expect(screen.queryByTestId('kupferwarte-bereich')).toBeNull()
+    expect(screen.getByTestId('laufbereich')).toContainElement(lauf(0))
   })
 })
 
@@ -6432,6 +6432,10 @@ describe('NightRunPage — nur die letzten zwei Zyklen (#1134)', () => {
     expect(sichtbar(GESTERN_11)).toBe(false)
     expect(sichtbar(VORGESTERN)).toBe(false)
     expect(screen.getByRole('button', { name: 'Ältere Runs anzeigen (2)' })).toBeInTheDocument()
+    // Seit #1912 im Theme der Anwendung: die Schrift liest die Variablen, keine festen Hellwerte.
+    const knopf = cssRegel(screen.getByRole('button', { name: 'Ältere Runs anzeigen (2)' }))
+    expect(knopf).toContain('var(--mb-palette-')
+    expect(knopf).not.toContain(NACHTLAUF_FARBEN.akzent)
   })
 
   it('zeigt auf Klick alle Läufe und auf den nächsten wieder nur die letzten zwei Zyklen', async () => {

@@ -10,8 +10,7 @@ import type {
 } from '../../api/nightRuns'
 import type { FortschrittArt, Kostenvorgang } from '../../lib/laufFortschritt'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
-import { nachtlaufTheme } from '../../nachtlaufDesign'
-import { TEXT_MATT } from '../../theme'
+import { TEXT_MATT, theme } from '../../theme'
 import { NachtlaufFortschritt } from './NachtlaufFortschritt'
 
 /**
@@ -94,7 +93,7 @@ const zeige = (
 ) => {
   const onKarteOeffnen = vi.fn()
   const { container } = render(
-    <ThemeProvider theme={nachtlaufTheme}>
+    <ThemeProvider theme={theme}>
       <NachtlaufFortschritt
         fortschritt={f}
         art={art}
@@ -540,7 +539,7 @@ describe('NachtlaufFortschritt', () => {
 describe('NachtlaufFortschritt auf Englisch (Issue #1658)', () => {
   const zeigeEnglisch = (f: NightRunProgressView, art: FortschrittArt = 'KETTE') =>
     renderMitSprache(
-      <ThemeProvider theme={nachtlaufTheme}>
+      <ThemeProvider theme={theme}>
         <NachtlaufFortschritt
           fortschritt={f}
           art={art}

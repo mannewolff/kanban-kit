@@ -1,7 +1,4 @@
-import { createTheme, type SxProps, type Theme } from '@mui/material/styles'
 import type { NightRunState } from './lib/nightRunLog'
-import { variablenAufloesen } from './lib/variablenAufloesen'
-import { HELLE_VARIABLEN, theme } from './theme'
 
 /**
  * Wertequelle der Nachtlauf-Auswertung (`/projects/:id/nachtlauf`) — die einzige bewusste
@@ -23,6 +20,10 @@ import { HELLE_VARIABLEN, theme } from './theme'
  *
  * Die Datei trägt keine Logik und ist deshalb von der Coverage ausgenommen (`vite.config.ts`,
  * `sonar-project.properties`) — wie `theme.ts`.
+ *
+ * **Seit #1912 ist die Ausnahme aufgehoben:** Die Seite folgt vollständig Kupferwarte, das eigene
+ * Theme und der helle Wurzelknoten sind entfallen. Die Werte hier lesen nur noch einzelne Bausteine
+ * wie `NachtlaufAnteilsbalken`.
  */
 
 /** Grund der Seite außerhalb der Vorgangsblöcke. */
@@ -183,62 +184,4 @@ export const NACHTLAUF_TON: Record<NightRunState, string> = {
   YELLOW: BUDGET,
   RED: LEER,
   GREY: NIE,
-}
-
-/**
- * Theme der Nachtlauf-Auswertung, für einen verschachtelten `ThemeProvider` über dem
- * Inhaltsbereich der Seite (#914).
- *
- * Die Palette steht im **ersten** Argument, damit MUI die abgeleiteten Töne des Akzents selbst
- * berechnet; die Komponenten-Vorgaben des Leitstands und `palette.nightRun` kommen im zweiten
- * hinzu. Ein verschachtelter Provider ersetzt das äußere Theme vollständig — ohne diese Übernahme
- * fielen alle Komponenten auf die MUI-Vorgabe zurück, sichtbar an jedem Dialog der Seite.
- *
- * `palette.nightRun` in `theme.ts` bleibt unverändert (E10): Es trägt weiter die beiden
- * Lauf-Arten, die in der Designsprache „Panel" dargestellt werden.
- *
- * **Die übernommenen Vorgaben tragen feste Hellwerte (#954).** Seit #951 stehen in `theme.ts`
- * Variablen, die an `:root` hängen und im dunklen Erscheinungsbild umschalten — unabhängig von
- * diesem verschachtelten Provider, und auch in Menüs und Popovern, die im Portal außerhalb der
- * Seite landen. Aufgelöst zu den Hellwerten bleibt die Ausnahme hell (Plan #932 E2).
- */
-export const nachtlaufTheme = createTheme(
-  {
-    palette: {
-      mode: 'light',
-      primary: { main: AKZENT },
-      text: { primary: INK, secondary: INK_2 },
-      background: { default: GROUND, paper: SURFACE },
-      divider: LINE,
-    },
-    shape: { borderRadius: 8 },
-    typography: { fontFamily: NACHTLAUF_SCHRIFTEN.body },
-  },
-  { components: variablenAufloesen(theme.components, HELLE_VARIABLEN), palette: { nightRun: theme.palette.nightRun } },
-)
-
-/**
- * Wurzelknoten des Inhaltsbereichs der Nachtlauf-Auswertung (#954, Plan #932 E2).
- *
- * **Die Ausnahme gilt auch im dunklen Erscheinungsbild — und stellt sich nicht von selbst her.**
- * Bausteine auf der Seite lesen weiterhin Variablen des Leitstands (Status- und Vorhaben-Farben,
- * Flächen-Tokens); die hängen an `:root` und schalteten ins Dunkle. Der Wurzelknoten setzt sie für
- * seinen Teilbaum auf die Hellwerte zurück.
- *
- * **Der Grund wird hier gemalt**, nicht aus `body::before` bezogen: Jener trägt den Grund des
- * Leitstands und würde dunkel, während die Flächen der Seite hell blieben. Die negativen Ränder
- * ziehen die Fläche über die Polsterung des Inhaltsbereichs der Shell, damit dort kein dunkler
- * Streifen stehen bleibt; die Mindesthöhe reicht bis unter die Kopfleiste.
- */
-export const NACHTLAUF_WURZEL_SX: SxProps<Theme> = {
-  ...HELLE_VARIABLEN,
-  bgcolor: GROUND,
-  // Deckt die Bühne der Shell bis an Schiene und Kopf ab (Innenabstand 22/26/44 px, #978).
-  mt: '-22px',
-  mb: '-44px',
-  mx: { xs: '-16px', md: '-26px' },
-  pt: '22px',
-  pb: '44px',
-  px: { xs: '16px', md: '26px' },
-  minHeight: 'calc(100vh - 59px)',
 }

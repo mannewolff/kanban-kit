@@ -1,9 +1,10 @@
 import { ThemeProvider } from '@mui/material/styles'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { NACHTLAUF_FARBEN, nachtlaufTheme } from '../../nachtlaufDesign'
+import { NACHTLAUF_FARBEN } from '../../nachtlaufDesign'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { NachtlaufAnteilsbalken } from './NachtlaufAnteilsbalken'
+import { theme } from '../../theme'
 
 /**
  * Der Anteilsbalken eines Umsetzungs-Vorgangs (#917, AK 6). Gerechnet wird in der Seite; hier
@@ -12,7 +13,7 @@ import { NachtlaufAnteilsbalken } from './NachtlaufAnteilsbalken'
 
 const zeige = (felder: Partial<Parameters<typeof NachtlaufAnteilsbalken>[0]> = {}) =>
   render(
-    <ThemeProvider theme={nachtlaufTheme}>
+    <ThemeProvider theme={theme}>
       <NachtlaufAnteilsbalken
         anteil={15}
         beschriftung="12 Min · 15 % der Schicht"
@@ -64,7 +65,7 @@ function alsRgb(hex: string): string {
 describe('NachtlaufAnteilsbalken auf Englisch (Issue #1658)', () => {
   it('zeigt Beschriftung und Ansage der Seite auf Englisch unverändert', () => {
     renderMitSprache(
-      <ThemeProvider theme={nachtlaufTheme}>
+      <ThemeProvider theme={theme}>
         <NachtlaufAnteilsbalken
           anteil={15}
           beschriftung="12 min · 15 % of the shift"

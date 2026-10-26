@@ -4,17 +4,16 @@ import type { ReactNode } from 'react'
 import { ERSCHEINUNGSBILD_SX, theme } from '../../theme'
 
 /**
- * Ein Bereich der Nachtlauf-Seite, der die Ausnahme aus `CLAUDE-design.md` verlässt und wieder
- * Kupferwarte trägt (#987).
+ * Ein Bereich, der Theme und Variablen der Kupferwarte für seinen Teilbaum zurückstellt und seinen
+ * Grund selbst malt (#987).
  *
- * <p><b>Warum es zwei Dinge braucht.</b> Die Seite liegt unter einem verschachtelten
- * `ThemeProvider` mit `nachtlaufTheme` — festen Hellwerten ohne CSS-Variablen — und ihr
- * Wurzelknoten schreibt zusätzlich die hellen Variablen des Leitstands in seinen Teilbaum (#954).
- * Das eine ist React-Kontext, das andere CSS-Vererbung: Der Bereich stellt deshalb beides zurück —
- * das Theme über einen eigenen Provider, die Variablen über {@link ERSCHEINUNGSBILD_SX}.
+ * <p>Entstanden für die Nachtlauf-Seite, deren Laufblöcke so die helle Ausnahme verließen. Seit
+ * #1912 folgt jene Seite vollständig Kupferwarte und braucht ihn nicht mehr; Verwender ist der
+ * Plattform-Leitstand.
  *
- * <p><b>Der Grund wird selbst gemalt</b>, über die volle Breite des Inhaltsbereichs. Sonst stünden
- * im dunklen Erscheinungsbild dunkle Platten auf der hellen Fläche der Ausnahme.
+ * <p><b>Warum es zwei Dinge braucht.</b> Theme ist React-Kontext, Variablen sind CSS-Vererbung: Der
+ * Bereich stellt beides zurück — das Theme über einen eigenen Provider, die Variablen über
+ * {@link ERSCHEINUNGSBILD_SX}.
  */
 export function KupferwarteBereich({ children }: Readonly<{ children: ReactNode }>) {
   return (

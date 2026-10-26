@@ -2,9 +2,9 @@ import { ThemeProvider } from '@mui/material/styles'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { CardByNumber } from '../../api/cards'
-import { nachtlaufTheme } from '../../nachtlaufDesign'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { NachtlaufKartenchips, type Kartenchip } from './NachtlaufKartenchips'
+import { theme } from '../../theme'
 
 /**
  * Die entstandenen Karten eines Vorgangs als Chips (#916). Geprüft werden die drei Zustände, die
@@ -16,7 +16,7 @@ const karte = (number: number, title: string): CardByNumber =>
 
 const zeige = (chips: readonly Kartenchip[], onOeffnen = vi.fn()) => {
   render(
-    <ThemeProvider theme={nachtlaufTheme}>
+    <ThemeProvider theme={theme}>
       <NachtlaufKartenchips
         chips={chips}
         leer="keine Pakete"
@@ -84,7 +84,7 @@ describe('NachtlaufKartenchips', () => {
 describe('NachtlaufKartenchips auf Englisch (Issue #1658)', () => {
   it('nennt eine nicht mehr vorhandene Karte auf Englisch', () => {
     renderMitSprache(
-      <ThemeProvider theme={nachtlaufTheme}>
+      <ThemeProvider theme={theme}>
         <NachtlaufKartenchips
           chips={[{ id: '844', art: 'Plan', zustand: { art: 'fort' } }]}
           leer="no packages"
