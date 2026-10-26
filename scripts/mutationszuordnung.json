@@ -12,6 +12,7 @@
   "src/test/java/org/mwolff/manban/ReadmeDokumentationTest.java": ["README.md"],
   "src/test/java/org/mwolff/manban/UpgradeDokumentationTest.java": ["UPGRADING.md", "CHANGELOG.md"],
   "src/test/java/org/mwolff/manban/auth/AdminUserIT.java": ["src/main/java/org/mwolff/manban/auth/web/AdminUserController.java", "src/main/java/org/mwolff/manban/auth/application/AdminService.java", "src/main/java/org/mwolff/manban/auth/application/LoginService.java"],
+  "src/test/java/org/mwolff/manban/auth/AdminVorschauMigrationIT.java": ["src/main/resources/db/migration/V62__admin_vorschau.sql"],
   "src/test/java/org/mwolff/manban/auth/ApiAusprobierenIT.java": ["src/main/java/org/mwolff/manban/auth/web/security/ApiAusprobierFilter.java"],
   "src/test/java/org/mwolff/manban/auth/AuthSessionIT.java": ["src/main/java/org/mwolff/manban/auth/web/LoginCodeController.java", "src/main/java/org/mwolff/manban/auth/web/AuthController.java", "src/main/java/org/mwolff/manban/auth/web/security/SessionCookieManager.java"],
   "src/test/java/org/mwolff/manban/auth/BootstrapIT.java": ["src/main/java/org/mwolff/manban/auth/web/BootstrapController.java", "src/main/java/org/mwolff/manban/auth/application/BootstrapService.java"],
