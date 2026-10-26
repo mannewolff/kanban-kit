@@ -77,7 +77,15 @@
 
 ### Karten-Detail
 
-Klick auf eine Karte öffnet das Detail:
+Klick auf eine Karte öffnet das Detail.
+
+**Direkter Link:** `…/projects/<Projekt>/karten/<Nummer>` öffnet das Board der Karte mit offenem
+Detail — zum Weitergeben, etwa im Chat. Der Link hält, auch wenn die Karte inzwischen auf einem
+anderen Board liegt, denn die Kartennummer ist im Projekt fest. Abgemeldet führt er über die
+Anmeldung zur Karte. Gibt es die Karte nicht oder fehlt der Zugriff, zeigt die Projektseite
+„Karte #N ist nicht erreichbar.“ Beim Schließen des Details verschwindet die Karte aus der Adresse.
+
+Das Detail zeigt:
 
 - **Beschreibung** als GitHub-Markdown (im Bearbeiten-Modus editierbar). **Task-Listen**
   (`- [ ]` / `- [x]`) werden als anklickbare Checkboxen gerendert; ein Klick schaltet sie um und

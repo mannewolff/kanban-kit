@@ -207,7 +207,8 @@
         "src/pages/ProjectMembersPage.tsx",
         "src/pages/BoardListPage.tsx",
         "src/pages/BoardPage.tsx",
-        "src/pages/EpicsPage.tsx"
+        "src/pages/EpicsPage.tsx",
+        "src/pages/KartenLinkPage.tsx"
       ],
       "testMuster": [
         "src/pages/ProjectsPage.test.tsx",
@@ -215,7 +216,8 @@
         "src/pages/ProjectMembersPage.test.tsx",
         "src/pages/BoardListPage.test.tsx",
         "src/pages/BoardPage.test.tsx",
-        "src/pages/EpicsPage.test.tsx"
+        "src/pages/EpicsPage.test.tsx",
+        "src/pages/KartenLinkPage.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 3,

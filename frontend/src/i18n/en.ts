@@ -548,6 +548,8 @@ export const en: Woerterbuch = {
     BLOCK_ZUORDNUNG: 'Assignment',
     BLOCK_VERLAUF: 'History',
     AUFGABE_ARIA: (nummer) => `Task ${nummer}`,
+    NICHT_ERREICHBAR: (nummer) => `Card #${nummer} is not reachable.`,
+    LINK_UNGUELTIG: 'Invalid card link.',
     BEARBEITET: (zeitpunkt) => `edited ${zeitpunkt}`,
     ZUSTAENDIGE: 'Assignees',
     NIEMAND_ZUGEWIESEN: 'Nobody assigned.',

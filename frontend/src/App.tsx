@@ -34,6 +34,9 @@ const EpicsPage = lazy(() => import('./pages/EpicsPage').then((m) => ({ default:
 const LinkLoginPage = lazy(() =>
   import('./pages/LinkLoginPage').then((m) => ({ default: m.LinkLoginPage })),
 )
+const KartenLinkRedirect = lazy(() =>
+  import('./pages/KartenLinkPage').then((m) => ({ default: m.KartenLinkRedirect })),
+)
 const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })))
 const NightRunPage = lazy(() => import('./pages/NightRunPage').then((m) => ({ default: m.NightRunPage })))
 const ProjectBoardsPage = lazy(() =>
@@ -79,6 +82,7 @@ export function App() {
             <Route path="/projects/:projectId" element={<ProjectBoardsPage />} />
             {/* Alter Pfad der entfallenen Ideen-Seite: leitet auf das Projekt weiter (#1201). */}
             <Route path="/projects/:projectId/ideas" element={<LegacyIdeasRedirect />} />
+            <Route path="/projects/:projectId/karten/:nummer" element={<KartenLinkRedirect />} />
             <Route path="/projects/:projectId/members" element={<ProjectMembersPage />} />
             <Route path="/projects/:projectId/nachtlauf" element={<NightRunPage />} />
             <Route path="/boards/:boardId" element={<BoardPage />} />

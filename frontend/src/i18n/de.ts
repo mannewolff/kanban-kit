@@ -580,6 +580,9 @@ export const de = {
     BLOCK_ZUORDNUNG: 'Zuordnung',
     BLOCK_VERLAUF: 'Verlauf',
     AUFGABE_ARIA: (nummer: number) => `Aufgabe ${nummer}`,
+    /** Direkter Link auf eine Karte (Issue #1915): derselbe Text für „gibt es nicht“ und „kein Zugriff“. */
+    NICHT_ERREICHBAR: (nummer: number) => `Karte #${nummer} ist nicht erreichbar.`,
+    LINK_UNGUELTIG: 'Ungültiger Kartenlink.',
     BEARBEITET: (zeitpunkt: string) => `bearbeitet ${zeitpunkt}`,
     ZUSTAENDIGE: 'Zuständige',
     NIEMAND_ZUGEWIESEN: 'Niemand zugewiesen.',
