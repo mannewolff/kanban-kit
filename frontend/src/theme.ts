@@ -14,10 +14,12 @@ import { STATUS_FARBWERTE, type StatusColorSet } from './lib/statusColors'
  * Lichtkante, abgehobene Platten (Hover, gezogene Karte) einen längeren. Tasten liegen knapp über
  * ihrer Fläche.
  *
- * **Zwei Erscheinungsbilder, kein Schalter (#951).** Das Theme trägt beide als MUI-CSS-Variablen
- * mit `colorSchemeSelector: 'media'`: Die Anwendung folgt der Einstellung des Betriebssystems.
- * Beide Wertesätze stehen in dieser Datei — eine zweite Datei für die Dunkelwerte wäre eine zweite
- * Wertequelle.
+ * **Zwei Erscheinungsbilder, Schalter System / Hell / Dunkel (#1911).** Das Theme trägt beide als
+ * MUI-CSS-Variablen; welches gilt, sagt das Attribut `data-mb-farbschema` an `<html>` (siehe
+ * {@link DUNKEL_SELEKTOR}). MUI setzt es aus dem Modus von `useColorScheme`: „System" bildet die
+ * Media-Query `prefers-color-scheme` nach, „Hell" und „Dunkel" legen es fest. Die Wahl liegt am
+ * Konto (`AuthContext`), vor der Anmeldung gilt „System". Beide Wertesätze stehen in dieser Datei —
+ * eine zweite Datei für die Dunkelwerte wäre eine zweite Wertequelle.
  *
  * **Die exportierten Tokens sind Verweise, keine Werte.** `SURFACE_TINT`, `NUT` & Co. tragen
  * `var(--mb-palette-…)`. Wer einen Wert braucht, liest ihn je Erscheinungsbild aus
@@ -312,9 +314,18 @@ declare module '@mui/material/styles' {
   }
 }
 
+/**
+ * Der Selektor, unter dem MUI das jeweilige Erscheinungsbild schreibt (#1911): `%s` steht für
+ * `light` oder `dark`. MUI setzt das Attribut an `<html>`, sobald der Modus feststeht.
+ */
+const FARBSCHEMA_SELEKTOR = '[data-mb-farbschema="%s"]'
+
+/** Der Selektor des dunklen Erscheinungsbilds — dieselbe Regel, die MUI für `:root` schreibt. */
+export const DUNKEL_SELEKTOR = FARBSCHEMA_SELEKTOR.replace('%s', 'dark')
+
 /** Beide Erscheinungsbilder samt Variablen-Schalter — Grundlage für die Tokens und das Theme. */
 const ERSCHEINUNGSBILDER = {
-  cssVariables: { colorSchemeSelector: 'media', cssVarPrefix: 'mb' },
+  cssVariables: { colorSchemeSelector: FARBSCHEMA_SELEKTOR, cssVarPrefix: 'mb' },
   colorSchemes: {
     light: {
       palette: {
@@ -371,17 +382,13 @@ const VARIABLEN = VARIABLEN_THEME.vars.palette
  */
 const BLAETTER = VARIABLEN_THEME.generateStyleSheets()
 
-/** Der `:root`-Block des dunklen Erscheinungsbilds, so wie MUI ihn in die Media-Query schreibt. */
+/** Der Block des dunklen Erscheinungsbilds, so wie MUI ihn unter {@link DUNKEL_SELEKTOR} schreibt. */
 const WURZEL_DUNKEL: Readonly<Record<string, string>> =
-  (
-    BLAETTER.find((blatt) => '@media (prefers-color-scheme: dark)' in blatt)?.['@media (prefers-color-scheme: dark)'] as
-      | Record<string, Record<string, string>>
-      | undefined
-  )?.[':root'] ?? {}
+  (BLAETTER.find((blatt) => DUNKEL_SELEKTOR in blatt)?.[DUNKEL_SELEKTOR] as Record<string, string> | undefined) ?? {}
 
 export const HELLE_VARIABLEN: Readonly<Record<string, string>> = (() => {
-  const hell = BLAETTER.map((blatt) => blatt[':root'] as Record<string, string> | undefined).find(
-    (wurzel) => wurzel?.colorScheme === 'light',
+  const hell = BLAETTER.flatMap((blatt) => Object.values(blatt) as Array<Record<string, string>>).find(
+    (wurzel) => wurzel.colorScheme === 'light',
   )
   const dunkel = WURZEL_DUNKEL
   // Einige Variablen legt MUI nur dunkel an: die Aufhellung erhöhter Flächen (`overlays`) und
@@ -410,12 +417,12 @@ export const HELLE_VARIABLEN: Readonly<Record<string, string>> = (() => {
  * <p>Die Nachtlauf-Auswertung setzt an ihrem Wurzelknoten die hellen Variablen fest, damit ihre
  * Ausnahme auch im Dunkeln hell bleibt (#954). Ein Bereich **darin**, der wieder Kupferwarte trägt,
  * kann die Variablen von `:root` nicht zurückholen — CSS kennt kein „erbe wieder von oben". Er
- * schreibt deshalb beide Sätze selbst, mit derselben Media-Query, die auch `:root` benutzt: hell als
- * Grundlage, dunkel im dunklen System.
+ * schreibt deshalb beide Sätze selbst, unter demselben Selektor, den auch `:root` benutzt: hell als
+ * Grundlage, dunkel, sobald `<html>` das dunkle Erscheinungsbild trägt (#1911).
  */
 export const ERSCHEINUNGSBILD_SX: Readonly<Record<string, string | Readonly<Record<string, string>>>> = {
   ...HELLE_VARIABLEN,
-  '@media (prefers-color-scheme: dark)': WURZEL_DUNKEL,
+  [`${DUNKEL_SELEKTOR} &`]: WURZEL_DUNKEL,
 }
 
 // ---------------------------------------------------------------------------------------------

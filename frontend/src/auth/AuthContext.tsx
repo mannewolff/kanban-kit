@@ -1,6 +1,8 @@
+import { useColorScheme } from '@mui/material/styles'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { authApi, type Me } from '../api/auth'
 import { setUnauthorizedHandler } from '../api/client'
+import { farbmodusAus } from '../lib/farbmodus'
 
 interface AuthState {
   user: Me | null
@@ -30,6 +32,15 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Das Erscheinungsbild folgt der Wahl am Konto (#1911). Ohne Nutzer — bis zur Selbstauskunft,
+  // nach dem Abmelden oder nach einem 401 — gilt „System": Ein geteilter Rechner zeigt nicht die
+  // Wahl des Vorgängers.
+  const { setMode } = useColorScheme()
+  const colorScheme = user?.colorScheme
+  useEffect(() => {
+    setMode(farbmodusAus(colorScheme))
+  }, [colorScheme, setMode])
 
   // Eine serverseitig beendete Sitzung meldet sich als 401 an einem beliebigen Endpunkt.
   // Der zurückgesetzte Nutzer lässt `ProtectedRoute` auf die Anmeldeseite umleiten.

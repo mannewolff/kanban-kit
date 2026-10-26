@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.ProjectMembershipReader.Membership;
 import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.auth.domain.ColorScheme;
 import org.mwolff.manban.auth.domain.PlatformRole;
 
 /** Verhaltenstests der Selbstauskunft {@code /api/me} (Mockito an den Ports). */
@@ -93,6 +94,52 @@ class MeServiceTest {
 
     // When / Then
     assertThatThrownBy(() -> service.updateDisplayName(2L, "Neu"))
+        .isInstanceOf(UserNotFoundException.class);
+  }
+
+  @Test
+  void load_returnsColorSchemeOfAccount() {
+    // Given
+    when(users.findById(2L))
+        .thenReturn(
+            Optional.of(
+                new AppUser(2L, "a@x.de", "Ada", true, PlatformRole.USER)
+                    .withColorScheme(ColorScheme.LIGHT)));
+    when(memberships.findByUserId(2L)).thenReturn(List.of());
+
+    // When
+    MeService.MeView view = service.load(2L);
+
+    // Then
+    assertThat(view.colorScheme()).isEqualTo(ColorScheme.LIGHT);
+  }
+
+  @Test
+  void updateColorScheme_persistsAndReturnsUpdatedView() {
+    // Given
+    when(users.findById(2L))
+        .thenReturn(Optional.of(new AppUser(2L, "a@x.de", "Ada", true, PlatformRole.USER)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(memberships.findByUserId(2L)).thenReturn(List.of());
+
+    // When
+    MeService.MeView view = service.updateColorScheme(2L, ColorScheme.DARK);
+
+    // Then
+    assertThat(view.colorScheme()).isEqualTo(ColorScheme.DARK);
+    assertThat(view.displayName()).isEqualTo("Ada");
+    ArgumentCaptor<AppUser> saved = ArgumentCaptor.forClass(AppUser.class);
+    verify(users).save(saved.capture());
+    assertThat(saved.getValue().colorScheme()).isEqualTo(ColorScheme.DARK);
+  }
+
+  @Test
+  void updateColorScheme_throwsUserNotFound_whenUserUnknown() {
+    // Given
+    when(users.findById(2L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> service.updateColorScheme(2L, ColorScheme.DARK))
         .isInstanceOf(UserNotFoundException.class);
   }
 }

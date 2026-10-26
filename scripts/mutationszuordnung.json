@@ -1,5 +1,6 @@
 {
   "frontend/src/components/leitstand/Led.test.tsx": ["frontend/src/components/leitstand/LeitstandBausteine.tsx"],
+  "frontend/src/designQuelle.test.ts": ["CLAUDE-design.md"],
   "frontend/src/lib/mutationsstufen.test.ts": ["frontend/mutationTestUmfang.ts", "frontend/mutationsstufen.json"],
   "frontend/src/lib/strykerUmfang.test.ts": ["frontend/mutationTestUmfang.ts"],
   "frontend/src/sprachwaechter.test.ts": ["frontend/src/lib/sprachwaechter.ts"],
@@ -7,6 +8,7 @@
   "src/test/java/org/mwolff/manban/ArchitectureTest.java": ["src/test/java/org/mwolff/manban/ArchitekturKlassen.java"],
   "src/test/java/org/mwolff/manban/BetriebsdateienTest.java": ["README.md", "UPGRADING.md", "deployment-spec.md"],
   "src/test/java/org/mwolff/manban/MessagesVollstaendigkeitTest.java": ["src/main/resources/i18n/messages_de.properties", "src/main/resources/i18n/messages_en.properties", "src/main/resources/ValidationMessages_de.properties", "src/main/resources/ValidationMessages_en.properties", "src/main/java/org/mwolff/manban/common/i18n/UebersetzbareMeldung.java"],
+  "src/test/java/org/mwolff/manban/MeColorSchemeIT.java": ["src/main/java/org/mwolff/manban/auth/web/MeController.java", "src/main/java/org/mwolff/manban/auth/application/MeService.java", "src/main/resources/db/migration/V61__app_user_color_scheme.sql"],
   "src/test/java/org/mwolff/manban/ReadmeDokumentationTest.java": ["README.md"],
   "src/test/java/org/mwolff/manban/UpgradeDokumentationTest.java": ["UPGRADING.md", "CHANGELOG.md"],
   "src/test/java/org/mwolff/manban/auth/AdminUserIT.java": ["src/main/java/org/mwolff/manban/auth/web/AdminUserController.java", "src/main/java/org/mwolff/manban/auth/application/AdminService.java", "src/main/java/org/mwolff/manban/auth/application/LoginService.java"],

@@ -1072,6 +1072,19 @@ Unabhängig vom Editiermodus zeigt die Seite **Administration** jedem Angemeldet
 YAML). Die Übersicht dient dem Nachschlagen; wer Aufrufe darin ausprobieren darf, steht unter
 [API-Übersicht](#api-ubersicht).
 
+### Erscheinungsbild
+
+Gleich unter dem Editiermodus wählt jeder Angemeldete auf der Seite **Administration** das
+**Erscheinungsbild** in drei Stufen: **System**, **Hell** oder **Dunkel**. Die Wahl wirkt sofort und
+wird **am Konto** gespeichert — sie gilt damit auf jedem Gerät, sobald du dich angemeldet hast.
+Vorgabe ist **System**.
+
+- **System** folgt dem Farbschema des **Browsers**. Der Browser kann das Betriebssystem
+  übersteuern: Steht der Rechner auf Dunkel und bleibt der Leitstand trotzdem hell, ist im Browser
+  „Hell“ eingestellt. Mit **Dunkel** stellst du den Leitstand unabhängig davon um.
+- Die Seiten **vor der Anmeldung** folgen immer dem System; nach dem Abmelden gilt wieder System.
+- Der **Ausdruck** bleibt in jeder Stufe hell, ebenso die Nachtlauf-Auswertung.
+
 ### Sprache / Language
 
 Die Seite **Administration** zeigt jedem Angemeldeten den Abschnitt **„Sprache / Language"** mit

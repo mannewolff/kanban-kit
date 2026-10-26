@@ -1551,6 +1551,13 @@ export const en: Woerterbuch = {
     BEARBEITEN_AKTIVIEREN: 'Enable editing',
     EDITIERMODUS_HINWEIS:
       'When edit mode is on, the edit icons appear (for example to rename projects, boards and columns), provided you have the required permissions. The mode is always off at startup and is not remembered across a restart.',
+    ERSCHEINUNGSBILD: 'Appearance',
+    ERSCHEINUNGSBILD_SYSTEM: 'System',
+    ERSCHEINUNGSBILD_HELL: 'Light',
+    ERSCHEINUNGSBILD_DUNKEL: 'Dark',
+    ERSCHEINUNGSBILD_HINWEIS:
+      '“System” follows the color scheme of your browser, which can override the operating system. Your choice is saved to your account and applies on every device after signing in.',
+    ERSCHEINUNGSBILD_FEHLER: 'The appearance could not be saved.',
     DONE_AUFBEWAHRUNG: 'Done retention',
     DONE_UNGUELTIG: 'Please enter a whole number ≥ 0 (0 = no auto-archive).',
     GESPEICHERT: 'Saved.',

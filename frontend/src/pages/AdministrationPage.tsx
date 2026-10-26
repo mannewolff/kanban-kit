@@ -15,13 +15,17 @@ import RadioGroup from '@mui/material/RadioGroup'
 import Stack from '@mui/material/Stack'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import { useColorScheme } from '@mui/material/styles'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { accessTokensApi, type AccessToken, type CreatedAccessToken } from '../api/accessTokens'
+import { authApi, type ColorScheme } from '../api/auth'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { configApi } from '../api/config'
@@ -34,11 +38,12 @@ import { StandardLabelsSection } from '../components/StandardLabelsSection'
 import { useSprache, useT } from '../i18n/SpracheContext'
 import { istSprache, woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { useEditMode } from '../lib/EditModeContext'
+import { farbmodusAus } from '../lib/farbmodus'
 import { canEditCards, isPlatformAdmin } from '../lib/roles'
 
 /**
- * Administrations-/Einstellungsseite (für alle angemeldeten Nutzer): Editiermodus-Schalter und die
- * Verwaltung persönlicher API-Tokens.
+ * Administrations-/Einstellungsseite (für alle angemeldeten Nutzer): Editiermodus-Schalter,
+ * Erscheinungsbild und die Verwaltung persönlicher API-Tokens.
  */
 export function AdministrationPage() {
   const { editMode, setEditMode } = useEditMode()
@@ -72,6 +77,8 @@ export function AdministrationPage() {
             </Typography>
           </Stack>
         </Paper>
+
+        <AppearanceSection />
 
         <LanguageSection />
 
@@ -183,6 +190,67 @@ function LanguageSection() {
             {t.SPRACHE.NUR_ADMIN}
           </Typography>
         )}
+      </Stack>
+    </Paper>
+  )
+}
+
+/**
+ * Erscheinungsbild System / Hell / Dunkel (#1911), gespeichert am Konto. Die Wahl wirkt sofort;
+ * scheitert das Speichern, springen Anzeige und Erscheinungsbild auf den gespeicherten Stand zurück.
+ */
+function AppearanceSection() {
+  const { user, refresh } = useAuth()
+  const { setMode } = useColorScheme()
+  const t = useT().ADMINISTRATION
+  const notify = useSnackbar()
+  const gespeichert: ColorScheme = user?.colorScheme ?? 'SYSTEM'
+  const [wahl, setWahl] = useState<ColorScheme>(gespeichert)
+
+  const waehlen = async (neu: ColorScheme) => {
+    setWahl(neu)
+    setMode(farbmodusAus(neu))
+    try {
+      await authApi.setColorScheme(neu)
+      await refresh()
+    } catch (e) {
+      setWahl(gespeichert)
+      setMode(farbmodusAus(gespeichert))
+      notify(apiErrorMessage(e, t.ERSCHEINUNGSBILD_FEHLER), 'error')
+    }
+  }
+
+  const stufen: ReadonlyArray<{ wert: ColorScheme; name: string }> = [
+    { wert: 'SYSTEM', name: t.ERSCHEINUNGSBILD_SYSTEM },
+    { wert: 'LIGHT', name: t.ERSCHEINUNGSBILD_HELL },
+    { wert: 'DARK', name: t.ERSCHEINUNGSBILD_DUNKEL },
+  ]
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack spacing={1}>
+        <Typography variant="h6" component="h2" id="erscheinungsbild-ueberschrift">
+          {t.ERSCHEINUNGSBILD}
+        </Typography>
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={wahl}
+          aria-labelledby="erscheinungsbild-ueberschrift"
+          onChange={(_, neu: ColorScheme | null) => {
+            // Ein Klick auf die schon gewählte Stufe liefert null — die Wahl bleibt dann stehen.
+            if (neu !== null && neu !== wahl) void waehlen(neu)
+          }}
+        >
+          {stufen.map(({ wert, name }) => (
+            <ToggleButton key={wert} value={wert}>
+              {name}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+        <Typography variant="body2" color="text.secondary">
+          {t.ERSCHEINUNGSBILD_HINWEIS}
+        </Typography>
       </Stack>
     </Paper>
   )

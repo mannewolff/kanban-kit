@@ -57,6 +57,24 @@ describe('authApi.me – Laufzeit-Validierung der Me-Antwort', () => {
 
     await expect(authApi.me()).rejects.toBeInstanceOf(ApiError)
   })
+
+  it('übernimmt die Farbwahl des Kontos (#1911)', async () => {
+    mockJsonResponse({ ...validMe, colorScheme: 'DARK' })
+
+    expect((await authApi.me()).colorScheme).toBe('DARK')
+  })
+
+  it('fällt bei fehlender Farbwahl auf SYSTEM zurück', async () => {
+    mockJsonResponse(validMe)
+
+    expect((await authApi.me()).colorScheme).toBe('SYSTEM')
+  })
+
+  it('fällt bei unbekannter Farbwahl auf SYSTEM zurück', async () => {
+    mockJsonResponse({ ...validMe, colorScheme: 'PURPLE' })
+
+    expect((await authApi.me()).colorScheme).toBe('SYSTEM')
+  })
 })
 
 describe('authApi – restliche Endpunkte', () => {
@@ -68,6 +86,16 @@ describe('authApi – restliche Endpunkte', () => {
     expect(c.method).toBe('PATCH')
     expect(JSON.parse(String(c.body))).toEqual({ displayName: 'Neuer Name' })
     expect(result.userId).toBe(1)
+  })
+
+  it('setColorScheme ruft PUT /api/me/color-scheme mit der Wahl und validiert die Antwort', async () => {
+    const f = mockJsonResponse({ ...validMe, colorScheme: 'LIGHT' })
+    const result = await authApi.setColorScheme('LIGHT')
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/me/color-scheme')
+    expect(c.method).toBe('PUT')
+    expect(JSON.parse(String(c.body))).toEqual({ colorScheme: 'LIGHT' })
+    expect(result.colorScheme).toBe('LIGHT')
   })
 
   it('requestCode ruft POST /api/auth/code/request mit der E-Mail', async () => {

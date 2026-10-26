@@ -37,11 +37,14 @@ describe('CLAUDE-design.md gegen den Quelltext', () => {
     expect([...zeilen].sort()).toEqual([...routen].sort())
   })
 
-  it('beschreibt das dunkle Erscheinungsbild samt Media-Query und ohne Schalter', () => {
+  it('beschreibt das dunkle Erscheinungsbild samt Selektor und den Schalter mit drei Stufen (#1911)', () => {
     const erscheinungsbilder = abschnitt('## 🌗 Erscheinungsbilder')
-    expect(erscheinungsbilder).toContain("colorSchemeSelector: 'media'")
-    expect(erscheinungsbilder).toContain('prefers-color-scheme: dark')
-    expect(erscheinungsbilder).toMatch(/kein Schalter/)
+    expect(erscheinungsbilder).toContain(`colorSchemeSelector: '[data-mb-farbschema="%s"]'`)
+    expect(erscheinungsbilder).toContain('[data-mb-farbschema="dark"]')
+    expect(erscheinungsbilder).toContain('System / Hell / Dunkel')
+    expect(erscheinungsbilder).toMatch(/Vorgabe ist \*\*System\*\*/)
+    expect(erscheinungsbilder).toMatch(/am Konto/)
+    expect(erscheinungsbilder).toMatch(/Seiten vor der Anmeldung folgen dem System/)
   })
 
   it('macht den Leitstand-Entwurf zur verbindlichen Vorlage, abgenommen per Bildschirmfoto', () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { kontrast } from './lib/kontrast'
 import type { NightRunState } from './lib/nightRunLog'
-import { theme } from './theme'
+import { DUNKEL_SELEKTOR, theme } from './theme'
 import {
   NACHTLAUF_FARBEN,
   NACHTLAUF_WURZEL_SX,
@@ -175,20 +175,24 @@ describe('nachtlaufTheme', () => {
 })
 
 /**
- * Die Ausnahme gilt auch im dunklen Erscheinungsbild (Plan #932 E2, #954). Sie stellt sich nicht
- * von selbst her: Die `--mb-*`-Variablen hängen an `:root` und schalten per Media-Query —
+ * Die Ausnahme gilt auch im dunklen Erscheinungsbild (Plan #932 E2, #954) — ob das System dunkel
+ * steht oder das Konto „Dunkel" gewählt hat (#1911). Sie stellt sich nicht von selbst her: Die
+ * `--mb-*`-Variablen hängen am Wurzelelement und schalten über das Attribut `data-mb-farbschema` —
  * unabhängig vom verschachtelten Theme-Provider. Ohne diese Zusicherungen stünde die Seite halb
  * hell, halb dunkel da, und kein Test meldete es.
  */
 describe('nachtlaufDesign Ausnahme auch im Dunkeln (#954)', () => {
   const blaetter = theme.generateStyleSheets()
-  const dunkleRegel = blaetter.find((blatt) => '@media (prefers-color-scheme: dark)' in blatt)![
-    '@media (prefers-color-scheme: dark)'
-  ] as Record<string, Record<string, string>>
+  const dunkleRegel = blaetter.find((blatt) => DUNKEL_SELEKTOR in blatt)![DUNKEL_SELEKTOR] as Record<string, string>
   const helleRegel = blaetter
-    .map((blatt) => blatt[':root'] as Record<string, string> | undefined)
-    .find((wurzel) => wurzel?.colorScheme === 'light')!
-  const dunklePaletteVariablen = Object.keys(dunkleRegel[':root']).filter((name) => name.startsWith('--mb-palette-'))
+    .flatMap((blatt) => Object.values(blatt) as Array<Record<string, string>>)
+    .find((wurzel) => wurzel.colorScheme === 'light')!
+  const dunklePaletteVariablen = Object.keys(dunkleRegel).filter((name) => name.startsWith('--mb-palette-'))
+
+  it('liest den dunklen Block unter dem Selektor, den die Wahl „Dunkel" setzt', () => {
+    expect(DUNKEL_SELEKTOR).toBe('[data-mb-farbschema="dark"]')
+    expect(dunkleRegel.colorScheme).toBe('dark')
+  })
   const wurzel = NACHTLAUF_WURZEL_SX as Record<string, unknown>
   const hell = theme.colorSchemes.light!.palette
 

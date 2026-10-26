@@ -3,6 +3,7 @@ package org.mwolff.manban.auth.application;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.auth.domain.ColorScheme;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,13 +32,21 @@ public class MeService {
     return toView(users.save(user.withDisplayName(displayName.trim())));
   }
 
+  /** Setzt die Farbwahl des angemeldeten Benutzers (Issue #1911) und liefert die neue Sicht. */
+  @Transactional
+  public MeView updateColorScheme(long userId, ColorScheme colorScheme) {
+    AppUser user = users.findById(userId).orElseThrow(UserNotFoundException::new);
+    return toView(users.save(user.withColorScheme(colorScheme)));
+  }
+
   private MeView toView(AppUser user) {
     return new MeView(
         user.requireId(),
         user.email(),
         user.displayName(),
         user.platformRole(),
-        memberships.findByUserId(user.requireId()));
+        memberships.findByUserId(user.requireId()),
+        user.colorScheme());
   }
 
   /** Selbstauskunft eines angemeldeten Benutzers. */
@@ -50,5 +59,11 @@ public class MeService {
       @Schema(description = "Plattform-Rolle: ADMIN oder USER.", example = "USER")
           PlatformRole platformRole,
       @Schema(description = "Projekte, in denen der Benutzer Mitglied ist, mit seiner Rolle.")
-          List<ProjectMembershipReader.Membership> memberships) {}
+          List<ProjectMembershipReader.Membership> memberships,
+      @Schema(
+              description =
+                  "Gewähltes Erscheinungsbild der Oberfläche: SYSTEM folgt Browser bzw."
+                      + " Betriebssystem, LIGHT und DARK legen es fest.",
+              example = "SYSTEM")
+          ColorScheme colorScheme) {}
 }

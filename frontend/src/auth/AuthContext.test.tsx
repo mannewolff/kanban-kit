@@ -5,6 +5,12 @@ import { authApi } from '../api/auth'
 import { notifyUnauthorized, setUnauthorizedHandler } from '../api/client'
 import { AuthProvider, useAuth } from './AuthContext'
 
+const farbe = vi.hoisted(() => ({ setMode: vi.fn() }))
+vi.mock('@mui/material/styles', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@mui/material/styles')>()),
+  useColorScheme: () => ({ setMode: farbe.setMode }),
+}))
+
 vi.mock('../api/auth', () => ({
   authApi: { me: vi.fn(), verifyCode: vi.fn(), linkLogin: vi.fn(), logout: vi.fn() },
 }))
@@ -25,6 +31,7 @@ const mockedApi = authApi as unknown as {
 
 const meFixture = {
   userId: 1, email: 'a@b.de', displayName: 'A', platformRole: 'USER' as const, memberships: [],
+  colorScheme: 'SYSTEM' as const,
 }
 
 function Probe() {
@@ -137,6 +144,48 @@ describe('AuthContext', () => {
       expect(() => render(<BareProbe />)).toThrow(
         'useAuth muss innerhalb von AuthProvider verwendet werden',
       )
+    })
+  })
+
+  describe('Erscheinungsbild am Konto (#1911)', () => {
+    it('gilt bis zum Laden der Selbstauskunft „System"', () => {
+      mockedApi.me.mockReturnValue(new Promise(() => {}))
+      renderProbe()
+      expect(farbe.setMode).toHaveBeenLastCalledWith('system')
+    })
+
+    it('setzt nach dem Laden von /api/me die Kontowahl', async () => {
+      mockedApi.me.mockResolvedValue({ ...meFixture, colorScheme: 'DARK' })
+      renderProbe()
+      await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('a@b.de'))
+      expect(farbe.setMode).toHaveBeenLastCalledWith('dark')
+    })
+
+    it('setzt nach der Anmeldung die Kontowahl', async () => {
+      mockedApi.me.mockRejectedValue(new Error('401'))
+      mockedApi.verifyCode.mockResolvedValue({ ...meFixture, colorScheme: 'LIGHT' })
+      renderProbe()
+      await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+      await userEvent.click(screen.getByRole('button', { name: 'code' }))
+      await waitFor(() => expect(farbe.setMode).toHaveBeenLastCalledWith('light'))
+    })
+
+    it('fällt nach dem Abmelden auf „System" zurück', async () => {
+      mockedApi.me.mockResolvedValue({ ...meFixture, colorScheme: 'DARK' })
+      mockedApi.logout.mockResolvedValue(undefined)
+      renderProbe()
+      await waitFor(() => expect(farbe.setMode).toHaveBeenLastCalledWith('dark'))
+      await userEvent.click(screen.getByRole('button', { name: 'logout' }))
+      await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('none'))
+      expect(farbe.setMode).toHaveBeenLastCalledWith('system')
+    })
+
+    it('fällt nach einem 401 auf „System" zurück', async () => {
+      mockedApi.me.mockResolvedValue({ ...meFixture, colorScheme: 'LIGHT' })
+      renderProbe()
+      await waitFor(() => expect(farbe.setMode).toHaveBeenLastCalledWith('light'))
+      act(() => notifyUnauthorized(401))
+      await waitFor(() => expect(farbe.setMode).toHaveBeenLastCalledWith('system'))
     })
   })
 })

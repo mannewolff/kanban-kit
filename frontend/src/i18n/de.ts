@@ -1650,6 +1650,13 @@ export const de = {
     BEARBEITEN_AKTIVIEREN: 'Bearbeiten aktivieren',
     EDITIERMODUS_HINWEIS:
       'Ist der Editiermodus aktiv, erscheinen die Bearbeiten-Symbole (etwa zum Umbenennen von Projekten, Boards und Spalten), sofern du die nötigen Rechte hast. Der Modus ist beim Start immer aus und wird nicht über einen Neustart hinweg gemerkt.',
+    ERSCHEINUNGSBILD: 'Erscheinungsbild',
+    ERSCHEINUNGSBILD_SYSTEM: 'System',
+    ERSCHEINUNGSBILD_HELL: 'Hell',
+    ERSCHEINUNGSBILD_DUNKEL: 'Dunkel',
+    ERSCHEINUNGSBILD_HINWEIS:
+      '„System“ folgt dem Farbschema deines Browsers, der das Betriebssystem übersteuern kann. Die Wahl wird an deinem Konto gespeichert und gilt auf jedem Gerät nach der Anmeldung.',
+    ERSCHEINUNGSBILD_FEHLER: 'Das Erscheinungsbild konnte nicht gespeichert werden.',
     DONE_AUFBEWAHRUNG: 'Done-Aufbewahrung',
     DONE_UNGUELTIG: 'Bitte eine ganze Zahl ≥ 0 angeben (0 = kein Auto-Archiv).',
     GESPEICHERT: 'Gespeichert.',
