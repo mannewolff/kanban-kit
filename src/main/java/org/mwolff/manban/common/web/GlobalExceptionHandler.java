@@ -1,10 +1,12 @@
 package org.mwolff.manban.common.web;
 
+import java.net.URI;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.FieldScopedException;
+import org.mwolff.manban.common.MitProblemTyp;
 import org.mwolff.manban.common.i18n.Sprache;
 import org.mwolff.manban.common.i18n.Texte;
 import org.mwolff.manban.common.i18n.UebersetzbareMeldung;
@@ -34,6 +36,8 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
  *   <li>{@code @ResponseStatus}-annotierte Domänenexceptions behalten ihren Statuscode (generischer
  *       Annotation-Lookup statt Einzel-Handler je Exception); als {@code detail} dient die
  *       kuratierte Exception-Message bzw. der {@code reason} der Annotation.
+ *   <li>Exceptions mit {@link MitProblemTyp} tragen dessen Problem-Typ als {@code type} (Issue
+ *       #1918); alle anderen behalten {@code about:blank}.
  *   <li>Bean-Validation-Fehler ({@link MethodArgumentNotValidException}) ergeben 400 mit einer
  *       {@code fieldErrors}-Extension (Feld → Meldung).
  *   <li>Unique-Verletzungen der Datenbank ergeben 409 statt 500 (Issue #496) — die Anfrage war
@@ -107,6 +111,11 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // Aufrufs nicht auseinanderhalten (Issue #607).
     if (ex instanceof FieldScopedException scoped) {
       problem.setProperty("fieldErrors", Map.of(scoped.field(), detail));
+    }
+    // Ein eigener Problem-Typ laesst den Client die Ablehnung erkennen, ohne den uebersetzten
+    // `detail` zu lesen (Issue #1918); ohne ihn bleibt `type` wie bisher `about:blank`.
+    if (ex instanceof MitProblemTyp mitTyp) {
+      problem.setType(URI.create(mitTyp.problemTyp()));
     }
     return problem;
   }

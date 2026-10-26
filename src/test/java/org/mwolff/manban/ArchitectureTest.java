@@ -301,6 +301,10 @@ class ArchitectureTest {
   // PlatformAdminDirectory (Issue #827) ist der Empfaenger-Port fuer Betriebsmeldungen an alle
   // Plattform-Admins: Er gibt nur E-Mail-Adressen heraus, damit ein alarmierendes Modul die
   // Admins erreicht, ohne AppUserRepository oder PlatformRole zu sehen.
+  // VorschauKontext, VorschauKontextLeser und VorschauVerborgenException (Issue #1918, Plan #1914
+  // E6) sind wie PlatformAdminChecker ein Port samt Vokabular fuer die Rechtepruefung in project:
+  // PermissionChecker liest den handelnden Admin der Vorschau „Ansicht als XY", ohne auth.web oder
+  // den SecurityContext zu kennen, und wirft die Ablehnung, wenn der Admin selbst nichts saehe.
   static final ArchRule AUTH_DOMAIN_IST_MODULINTERN =
       noClasses()
           .that()
@@ -321,7 +325,10 @@ class ArchitectureTest {
           "PlatformAdminDirectory",
           "RegistrationApprovalPolicy",
           "AuthProperties",
-          "AdminAccessDeniedException");
+          "AdminAccessDeniedException",
+          "VorschauKontext",
+          "VorschauKontextLeser",
+          "VorschauVerborgenException");
 
   // --- Modul-Grenze: project-Fassade (Issue #461, Whitelist seit #470) ------------------------
   // Die Projekt-/Mitgliedschafts-Persistenz-Ports sind modulintern. card darf vom project-Modul

@@ -129,6 +129,7 @@
   "src/test/java/org/mwolff/manban/auth/LoginCodeConcurrencyIT.java": ["src/main/java/org/mwolff/manban/auth/infrastructure/persistence/LoginCodeRepositoryAdapter.java", "src/main/java/org/mwolff/manban/auth/infrastructure/persistence/LoginCodeJpaRepository.java"],
   "src/test/java/org/mwolff/manban/auth/infrastructure/security/SessionSecretStartupCheckContextTest.java": ["src/main/java/org/mwolff/manban/auth/infrastructure/security/SessionSecretStartupCheck.java"],
   "src/test/java/org/mwolff/manban/project/application/MembershipInvitationTest.java": ["src/main/java/org/mwolff/manban/project/application/MembershipService.java"],
+  "src/test/java/org/mwolff/manban/project/application/PermissionCheckerNightRunAccessTest.java": ["src/main/java/org/mwolff/manban/project/application/PermissionChecker.java"],
   "src/test/java/org/mwolff/manban/project/application/ProjectServiceParticipationViewTest.java": ["src/main/java/org/mwolff/manban/project/application/ProjectService.java"],
   "src/test/java/org/mwolff/manban/project/application/ProjectServiceParticipationWriteTest.java": ["src/main/java/org/mwolff/manban/project/application/ProjectService.java"],
   "src/test/java/org/mwolff/manban/TestAnmeldungIT.java": ["src/test/java/org/mwolff/manban/TestAnmeldung.java"],

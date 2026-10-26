@@ -129,6 +129,31 @@ class GlobalExceptionHandlerTest {
     assertThat(problem.getDetail()).isEqualTo("Bad Request");
   }
 
+  // --- Problem-Typ aus MitProblemTyp (Issue #1918, Plan #1914 E6) ----------------------------
+
+  @Test
+  void vorschauVerborgenErgibt403MitProblemTyp() throws Exception {
+    mvc.perform(get("/probe/vorschau-verborgen"))
+        .andExpect(status().isForbidden())
+        .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("vorschau-verborgen"))
+        .andExpect(jsonPath("$.status").value(403))
+        .andExpect(
+            jsonPath("$.detail")
+                .value("Die Person sieht diesen Bereich, die Vorschau zeigt ihn aber nicht."));
+  }
+
+  @Test
+  void exceptionOhneProblemTypBehaeltIhrBisherigesFormat() {
+    // When
+    ProblemDetail problem = handler.handleException(new ProjectAccessDeniedException());
+
+    // Then
+    assertThat(problem.getType()).hasToString("about:blank");
+    assertThat(problem.getStatus()).isEqualTo(403);
+    assertThat(problem.getDetail()).isEqualTo("Keine Berechtigung für diese Projekt-Aktion");
+  }
+
   // --- Unerwartete Fehler: 500 ohne interne Details ------------------------------------------
 
   @Test
@@ -481,6 +506,12 @@ class GlobalExceptionHandlerTest {
     @GetMapping("/probe/uebersetzt")
     String uebersetzt() {
       throw new UebersetzteKollision();
+    }
+
+    @GetMapping("/probe/vorschau-verborgen")
+    String vorschauVerborgen() {
+      // Voll qualifiziert: Ein weiterer Import risse die PMD-Grenze ExcessiveImports (40).
+      throw new org.mwolff.manban.auth.application.VorschauVerborgenException();
     }
 
     @GetMapping("/probe/unexpected")
