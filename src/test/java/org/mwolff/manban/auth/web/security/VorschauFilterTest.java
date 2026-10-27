@@ -401,8 +401,59 @@ class VorschauFilterTest {
   }
 
   @Test
+  void gueltig_selbstauskunftNachDemNeuladenMitKopfzeileKeine_laeuftAlsZiel() throws Exception {
+    // Given: der frisch geladene Tab kennt die Kennung noch nicht (Issue #1940)
+    inGueltigerVorschau();
+    request.setRequestURI("/api/me");
+    request.addHeader(VorschauFilter.HEADER, VorschauFilter.KEINE);
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertWeitergereicht();
+    assertThat(authentication().getPrincipal()).isEqualTo(ZIEL);
+    assertThat(authentication().getDetails())
+        .isEqualTo(new VorschauKontext(KENNUNG, ADMIN, ZIEL, ABLAUF));
+  }
+
+  @Test
+  void gueltig_selbstauskunftOhneKopfzeile_laeuftAlsZiel() throws Exception {
+    // Given
+    inGueltigerVorschau();
+    request.setRequestURI("/api/me");
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertWeitergereicht();
+    assertThat(authentication().getPrincipal()).isEqualTo(ZIEL);
+  }
+
+  @Test
+  void endfall_weistAuchDieSelbstauskunftAbUndLoeschtDasCookie() throws Exception {
+    // Given
+    angemeldet(ADMIN);
+    mitVorschauCookie();
+    pruefungErgibt(new VorschauPruefung.Beendet(VorschauEndgrund.ABLAUF));
+    request.setRequestURI("/api/me");
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertVorschauGewechselt();
+    assertThat(setCookie()).contains(GELOESCHT);
+  }
+
+  @Test
   void ausnahmen_geltenNurFuerGetAufGenauDiesenPfaden() throws Exception {
     String[][] faelle = {
+      {"PATCH", "/api/me"},
+      {"PUT", "/api/me"},
+      {"GET", "/api/me/vorschau-protokoll"},
+      {"GET", "/api/me/"},
       {"DELETE", "/api/attachments/9"},
       {"POST", "/api/boards/3/events"},
       {"GET", "/api/attachments/9/mehr"},

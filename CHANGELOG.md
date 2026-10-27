@@ -17,6 +17,11 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.9.0] – 2026-10-27
+
+- chore: v3.8.1
+- Ansicht als XY: Selbstauskunft vom Abgleich der Vorschau ausnehmen ([#1940](https://github.com/mannewolff/kanban-kit/issues/1940))
+
 ## [3.8.0] – 2026-10-27
 
 - chore: v3.7.2

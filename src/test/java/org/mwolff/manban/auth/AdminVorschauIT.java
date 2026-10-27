@@ -274,6 +274,37 @@ class AdminVorschauIT extends AbstractIntegrationTest {
         .isEqualTo(vorschau.kennung());
   }
 
+  /**
+   * Issue #1940: Nach dem Start lädt die Oberfläche neu, und der frische Tab kennt die Kennung noch
+   * nicht. Seine Selbstauskunft ohne Kopfzeile nennt sie ihm, statt mit 409 ein weiteres Neuladen
+   * auszulösen.
+   */
+  @Test
+  void frischGeladenerTabErfaehrtDieKennungAusDerSelbstauskunft() throws Exception {
+    Cookie admin = session(ADMIN, PlatformRole.ADMIN);
+    long alpha = project(admin, "Alpha");
+    long xy = mitglied(XY, alpha, ProjectRole.VIEWER);
+    Vorschau vorschau = starte(admin, xy);
+
+    JsonNode me = lies(get("/api/me").cookie(vorschau.sitzung(), vorschau.cookie()));
+    assertThat(me.get("userId").asLong()).isEqualTo(xy);
+    String kennung = me.get("vorschau").get("kennung").asText();
+    assertThat(kennung).isEqualTo(vorschau.kennung());
+
+    JsonNode projekte =
+        lies(
+            get("/api/projects")
+                .cookie(vorschau.sitzung(), vorschau.cookie())
+                .header(VorschauFilter.HEADER, kennung));
+    assertThat(projekte).hasSize(1);
+    mvc.perform(
+            get("/api/projects")
+                .cookie(vorschau.sitzung(), vorschau.cookie())
+                .header(VorschauFilter.HEADER, VorschauFilter.KEINE))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.type").value("vorschau-gewechselt"));
+  }
+
   /** AK 7: Ein Änderungsaufruf aus einem alten Vorschau-Tab läuft nach dem Ende nie als Admin. */
   @Test
   void aenderungMitVeralteterKopfzeileNachDemEndeErgibt409() throws Exception {

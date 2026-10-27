@@ -46,7 +46,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *       Weicht sie vom Stand am Server ab, antwortet der Filter 409 mit dem Problem-Typ {@value
  *       #PROBLEM_TYP} und führt nichts aus. Ausgenommen sind nur {@code GET} auf die
  *       Board-Ereignisse und auf den direkten Link eines Anhangs: Sie löst der Browser selbst aus,
- *       ohne Kopfzeile, und sie laufen mit dem Stand am Server.
+ *       ohne Kopfzeile, und sie laufen mit dem Stand am Server. Ebenso ausgenommen ist {@code GET}
+ *       auf die Selbstauskunft {@code /api/me} (Issue #1940): Aus ihrer Antwort erfährt ein frisch
+ *       geladener Tab die Kennung erst; hinge sie am Abgleich, lüde der Tab nach dem Start der
+ *       Vorschau endlos neu. Sie verändert nichts und läuft ebenfalls mit dem Stand am Server.
  * </ul>
  */
 @Component
@@ -66,9 +69,12 @@ public class VorschauFilter extends OncePerRequestFilter {
 
   private static final String API = "/api/";
 
-  /** Board-Ereignisse und direkter Anhang-Link, je mit genau einem Pfadsegment als Id. */
+  /**
+   * Board-Ereignisse und direkter Anhang-Link, je mit genau einem Pfadsegment als Id, und die
+   * Selbstauskunft {@code /api/me} ohne Unterpfade.
+   */
   private static final Pattern OHNE_ABGLEICH =
-      Pattern.compile("/api/boards/[^/]+/events|/api/attachments/[^/]+");
+      Pattern.compile("/api/boards/[^/]+/events|/api/attachments/[^/]+|/api/me");
 
   private final SessionCookieManager cookies;
   private final AdminVorschauService vorschauen;
