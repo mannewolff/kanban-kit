@@ -44,11 +44,14 @@ describe('adminApi', () => {
   })
 
   it('listUsers ruft GET /api/admin/users und liefert die geparste Antwort', async () => {
-    spyFetch(JSON.stringify([{
+    const f = spyFetch(JSON.stringify([{
       id: 1, email: 'a@x.de', displayName: 'Ada', platformRole: 'USER',
       emailVerified: true, approvedAt: null, disabled: false,
     }]))
     const result = await adminApi.listUsers()
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/admin/users')
+    expect(c.method).toBeUndefined()
     expect(result).toHaveLength(1)
     expect(result[0].email).toBe('a@x.de')
   })
