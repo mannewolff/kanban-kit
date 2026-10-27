@@ -14,6 +14,7 @@ import { apiErrorMessage } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
 import { useT } from '../i18n/SpracheContext'
 import { dialogTitleSx } from './dialogChromeSx'
+import { VorschauGesperrt } from './VorschauGesperrt'
 
 interface Props {
   /** Eine oder mehrere zu verschiebende Karten. */
@@ -194,13 +195,15 @@ export function TransferCardDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-        <Button
-          variant="contained"
-          disabled={busy || boardId === '' || columnId === ''}
-          onClick={() => void submit()}
-        >
-          {t.VERSCHIEBEN.VERSCHIEBEN}
-        </Button>
+        <VorschauGesperrt>
+          <Button
+            variant="contained"
+            disabled={busy || boardId === '' || columnId === ''}
+            onClick={() => void submit()}
+          >
+            {t.VERSCHIEBEN.VERSCHIEBEN}
+          </Button>
+        </VorschauGesperrt>
       </DialogActions>
     </Dialog>
   )

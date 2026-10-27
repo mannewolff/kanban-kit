@@ -22,6 +22,7 @@ import { labelsApi, type Label } from '../api/labels'
 import { membersApi, type Member } from '../api/members'
 import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { LabelManagerDialog } from '../components/LabelManagerDialog'
@@ -259,9 +260,11 @@ export function BoardPage() {
           ]}
         />
         {canEditStructure && (
-          <IconButton size="small" aria-label={t.BOARD.UMBENENNEN} onClick={openRename}>
-            <EditOutlinedIcon fontSize="small" />
-          </IconButton>
+          <VorschauGesperrt>
+            <IconButton size="small" aria-label={t.BOARD.UMBENENNEN} onClick={openRename}>
+              <EditOutlinedIcon fontSize="small" />
+            </IconButton>
+          </VorschauGesperrt>
         )}
         {canEditStructure && (
           <Button size="small" onClick={() => setLabelManagerOpen(true)}>
@@ -357,9 +360,11 @@ export function BoardPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRenameOpen(false)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-          <Button variant="contained" disabled={!renameValue.trim()} onClick={() => void handleRename(board)}>
-            {t.ALLGEMEIN.SPEICHERN}
-          </Button>
+          <VorschauGesperrt>
+            <Button variant="contained" disabled={!renameValue.trim()} onClick={() => void handleRename(board)}>
+              {t.ALLGEMEIN.SPEICHERN}
+            </Button>
+          </VorschauGesperrt>
         </DialogActions>
       </Dialog>
     </Box>

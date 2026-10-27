@@ -28,6 +28,7 @@ import {
   useState,
   type ComponentPropsWithoutRef,
   type Dispatch,
+  type ReactElement,
   type ReactNode,
   type SetStateAction,
 } from 'react'
@@ -67,6 +68,7 @@ import { labelChipSx } from './labelChipSx'
 import { useAuth } from '../auth/AuthContext'
 import { AttachmentPreview } from './AttachmentPreview'
 import { useSnackbar } from './SnackbarProvider'
+import { VorschauGesperrt } from './VorschauGesperrt'
 import { dialogTitleSx } from './dialogChromeSx'
 import { useSprache, useT } from '../i18n/SpracheContext'
 import { formatierer } from '../i18n/format'
@@ -146,7 +148,7 @@ function MarkdownInput(props: Readonly<ComponentPropsWithoutRef<'input'>>) {
   const ctx = useContext(TaskCheckboxContext)!
   const t = useT()
   const index = ctx.nextIndex()
-  return (
+  const box = (
     <input
       type="checkbox"
       checked={props.checked === true}
@@ -155,6 +157,8 @@ function MarkdownInput(props: Readonly<ComponentPropsWithoutRef<'input'>>) {
       aria-label={t.KARTE.AUFGABE_ARIA(index + 1)}
     />
   )
+  // Ohne Bearbeitungsrecht ist sie ohnehin gesperrt; mit ihm sperrt sie die Vorschau (Plan #1914, E15).
+  return ctx.canEdit ? <VorschauGesperrt>{box}</VorschauGesperrt> : box
 }
 
 const markdownComponents: Components = { input: MarkdownInput }
@@ -296,17 +300,28 @@ export function commentMetaText(c: Readonly<Pick<Comment, 'createdAt' | 'updated
  */
 export const commentFieldProps = { multiline: true, minRows: 3 } as const
 
+/**
+ * Umschließt das Feld nur, wenn der Aufrufer die Vorschau meldet: Die Zuordnungsfelder stehen auch im
+ * Anlege-Dialog, der keinen Anmeldezustand kennt (Plan #1914, E15).
+ */
+function InVorschauGesperrt({ vorschau, children }: Readonly<{ vorschau: boolean; children: ReactElement }>) {
+  return vorschau ? <VorschauGesperrt>{children}</VorschauGesperrt> : children
+}
+
 /** Zuständige-Sektion: Autocomplete im Edit-Modus, sonst Chips oder Leer-Hinweis. */
 export function AssigneeSection({
   canEdit,
   members,
   assigneeIds,
   onChange,
+  vorschau = false,
 }: Readonly<{
   canEdit: boolean
   members: Member[]
   assigneeIds: number[]
   onChange: (ids: number[]) => void
+  /** In der „Ansicht als XY“ gesperrt mit dem Hinweis „Vorschau“ (Plan #1914, E15). */
+  vorschau?: boolean
 }>) {
   const t = useT()
   const memberName = (userId: number) =>
@@ -327,6 +342,7 @@ export function AssigneeSection({
         {t.KARTE.ZUSTAENDIGE}
       </Typography>
       {canEdit ? (
+        <InVorschauGesperrt vorschau={vorschau}>
         <Autocomplete
           multiple
           size="small"
@@ -339,6 +355,7 @@ export function AssigneeSection({
             <TextField {...params} label={t.KARTE.ZUSTAENDIGE} slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': t.KARTE.ZUSTAENDIGE } }} />
           )}
         />
+        </InVorschauGesperrt>
       ) : (
         readOnly
       )}
@@ -352,11 +369,14 @@ export function LabelSection({
   boardLabels,
   labelIds,
   onChange,
+  vorschau = false,
 }: Readonly<{
   canEdit: boolean
   boardLabels: BoardLabel[]
   labelIds: number[]
   onChange: (ids: number[]) => void
+  /** In der „Ansicht als XY“ gesperrt mit dem Hinweis „Vorschau“ (Plan #1914, E15). */
+  vorschau?: boolean
 }>) {
   const t = useT()
   // Die Optionen haben keinen echten Fokus, die Tastatur markiert über `aria-activedescendant`.
@@ -388,6 +408,7 @@ export function LabelSection({
         {t.KARTE.LABELS}
       </Typography>
       {canEdit ? (
+        <InVorschauGesperrt vorschau={vorschau}>
         <Autocomplete
           multiple
           size="small"
@@ -423,6 +444,7 @@ export function LabelSection({
             <TextField {...params} label={t.KARTE.LABELS} slotProps={{ htmlInput: { ...params.inputProps, 'aria-label': t.KARTE.LABELS } }} />
           )}
         />
+        </InVorschauGesperrt>
       ) : (
         readOnly
       )}
@@ -449,6 +471,7 @@ function AttachmentsSection({
   onUpload: (file: File) => void
 }>) {
   const t = useT()
+  const vorschau = Boolean(useAuth().vorschau)
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
@@ -470,9 +493,11 @@ function AttachmentsSection({
                 {t.KARTE.GROESSE_KB(Math.round(a.size / 1024))}
               </Typography>
               {canEdit && (
-                <IconButton size="small" aria-label={t.KARTE.ANHANG_LOESCHEN_ARIA(a.filename)} onClick={() => onDelete(a.id)}>
-                  ✕
-                </IconButton>
+                <VorschauGesperrt>
+                  <IconButton size="small" aria-label={t.KARTE.ANHANG_LOESCHEN_ARIA(a.filename)} onClick={() => onDelete(a.id)}>
+                    ✕
+                  </IconButton>
+                </VorschauGesperrt>
               )}
             </Stack>
             {previews[a.id] && (
@@ -485,17 +510,20 @@ function AttachmentsSection({
         {attachments.length === 0 && <Typography color="text.secondary">{t.KARTE.KEINE_ANHAENGE}</Typography>}
       </Stack>
       {canEdit && (
-        <Button component="label" size="small" sx={{ mt: 1 }}>
-          {t.KARTE.DATEI_ANHAENGEN}<input
-            hidden
-            type="file"
-            aria-label={t.KARTE.DATEI_ANHAENGEN}
-            onChange={(e) => {
-              const f = e.target.files?.[0]
-              if (f) onUpload(f)
-            }}
-          />
-        </Button>
+        <VorschauGesperrt>
+          <Button component="label" size="small" sx={{ mt: 1 }}>
+            {t.KARTE.DATEI_ANHAENGEN}<input
+              hidden
+              type="file"
+              aria-label={t.KARTE.DATEI_ANHAENGEN}
+              disabled={vorschau}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) onUpload(f)
+              }}
+            />
+          </Button>
+        </VorschauGesperrt>
       )}
     </Box>
   )
@@ -533,6 +561,7 @@ function CommentsSection({
 }>) {
   const { sprache } = useSprache()
   const t = useT()
+  const vorschau = Boolean(useAuth().vorschau)
   return (
     <Box>
       <Typography variant="subtitle2" gutterBottom>
@@ -559,15 +588,19 @@ function CommentsSection({
                 <Stack direction="row" spacing={0.5}>
                   {/* Bearbeiten darf nur der Autor selbst. */}
                   {isAuthor && editingCommentId !== c.id && (
-                    <IconButton size="small" aria-label={t.KARTE.KOMMENTAR_BEARBEITEN} onClick={() => onStartEdit(c)}>
-                      ✎
-                    </IconButton>
+                    <VorschauGesperrt>
+                      <IconButton size="small" aria-label={t.KARTE.KOMMENTAR_BEARBEITEN} onClick={() => onStartEdit(c)}>
+                        ✎
+                      </IconButton>
+                    </VorschauGesperrt>
                   )}
                   {/* Löschen ist Moderation: nur Admin/Owner (bzw. Plattform-Admin). */}
                   {canModerateComments && (
-                    <IconButton size="small" aria-label={t.KARTE.KOMMENTAR_LOESCHEN} onClick={() => onDelete(c.id)}>
-                      ✕
-                    </IconButton>
+                    <VorschauGesperrt>
+                      <IconButton size="small" aria-label={t.KARTE.KOMMENTAR_LOESCHEN} onClick={() => onDelete(c.id)}>
+                        ✕
+                      </IconButton>
+                    </VorschauGesperrt>
                   )}
                 </Stack>
               </Stack>
@@ -579,7 +612,9 @@ function CommentsSection({
                     helperText={isTooLong(editingBody) ? tooLongMessage(editingBody.length, sprache) : undefined}
                     slotProps={{ htmlInput: { 'aria-label': t.KARTE.KOMMENTAR_BEARBEITEN } }} />
                   <Stack direction="row" spacing={1}>
-                    <Button size="small" variant="contained" onClick={onSaveEdit} disabled={isTooLong(editingBody)}>{t.ALLGEMEIN.SPEICHERN}</Button>
+                    <VorschauGesperrt>
+                      <Button size="small" variant="contained" onClick={onSaveEdit} disabled={isTooLong(editingBody)}>{t.ALLGEMEIN.SPEICHERN}</Button>
+                    </VorschauGesperrt>
                     <Button size="small" onClick={onCancelEdit}>{t.ALLGEMEIN.ABBRECHEN}</Button>
                   </Stack>
                 </Stack>
@@ -593,14 +628,19 @@ function CommentsSection({
       </Stack>
       {/* alignItems explizit: sonst zieht der Default `stretch` den Senden-Button auf Feldhöhe. */}
       <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
-        <TextField {...commentFieldProps} size="small" fullWidth placeholder={t.KARTE.KOMMENTAR_SCHREIBEN} value={newComment}
-          onChange={(e) => onNewCommentChange(e.target.value)}
-          error={isTooLong(newComment)}
-          helperText={isTooLong(newComment) ? tooLongMessage(newComment.length, sprache) : undefined}
-          slotProps={{ htmlInput: { 'aria-label': t.KARTE.KOMMENTAR_SCHREIBEN } }} />
-        <Button variant="contained" size="small" onClick={onAdd} disabled={isTooLong(newComment)}>
-          {t.KARTE.SENDEN}
-        </Button>
+        {/* Das Feld trägt seinen Namen am Eingabeelement; dort steht in der Vorschau der Hinweis. */}
+        <VorschauGesperrt>
+          <TextField {...commentFieldProps} size="small" fullWidth placeholder={t.KARTE.KOMMENTAR_SCHREIBEN} value={newComment}
+            onChange={(e) => onNewCommentChange(e.target.value)}
+            error={isTooLong(newComment)}
+            helperText={isTooLong(newComment) ? tooLongMessage(newComment.length, sprache) : undefined}
+            slotProps={{ htmlInput: { 'aria-label': vorschau ? t.VORSCHAU.GESPERRT : t.KARTE.KOMMENTAR_SCHREIBEN } }} />
+        </VorschauGesperrt>
+        <VorschauGesperrt>
+          <Button variant="contained" size="small" onClick={onAdd} disabled={isTooLong(newComment)}>
+            {t.KARTE.SENDEN}
+          </Button>
+        </VorschauGesperrt>
       </Stack>
     </Box>
   )
@@ -731,6 +771,7 @@ function CardStatusChip({
 
   return (
     <>
+      <VorschauGesperrt>
       <Select
         size="small"
         variant="standard"
@@ -759,6 +800,7 @@ function CardStatusChip({
           </MenuItem>
         ))}
       </Select>
+      </VorschauGesperrt>
 
       {/*
         Rückfrage nur vor „Ready": Ready ist das menschliche GO — das Gate hängt an der Bedeutung,
@@ -769,15 +811,17 @@ function CardStatusChip({
           <DialogTitle sx={dialogTitleSx}>{t.KARTE.READY_FRAGE}</DialogTitle>
           <DialogActions>
             <Button onClick={() => setConfirmReady(false)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-            <Button
-              variant="contained"
-              onClick={() => {
-                setConfirmReady(false)
-                void setze('READY')
-              }}
-            >
-              {t.KARTE.READY_SETZEN}
-            </Button>
+            <VorschauGesperrt>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  setConfirmReady(false)
+                  void setze('READY')
+                }}
+              >
+                {t.KARTE.READY_SETZEN}
+              </Button>
+            </VorschauGesperrt>
           </DialogActions>
         </Dialog>
       )}
@@ -1011,15 +1055,17 @@ function VorgangEroeffnenDialog({
 
   return (
     <>
-      <Button
-        onClick={() => {
-          setName(cardTitle)
-          setKuerzel('')
-          setOffen(true)
-        }}
-      >
-        {t.KARTE.VORGANG_EROEFFNEN}
-      </Button>
+      <VorschauGesperrt>
+        <Button
+          onClick={() => {
+            setName(cardTitle)
+            setKuerzel('')
+            setOffen(true)
+          }}
+        >
+          {t.KARTE.VORGANG_EROEFFNEN}
+        </Button>
+      </VorschauGesperrt>
       {/* Eigener Dialog statt Inline-Feldern, damit die Kartenmaske im Lesemodus nicht zwei
           Eingabefelder traegt, die fast nie gebraucht werden. */}
       <Dialog open={offen} onClose={() => setOffen(false)} fullWidth maxWidth="xs">
@@ -1043,13 +1089,15 @@ function VorgangEroeffnenDialog({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOffen(false)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-          <Button
-            variant="contained"
-            onClick={() => void eroeffneVorgang()}
-            disabled={name.trim() === ''}
-          >
-            {t.KARTE.EROEFFNEN}
-          </Button>
+          <VorschauGesperrt>
+            <Button
+              variant="contained"
+              onClick={() => void eroeffneVorgang()}
+              disabled={name.trim() === ''}
+            >
+              {t.KARTE.EROEFFNEN}
+            </Button>
+          </VorschauGesperrt>
         </DialogActions>
       </Dialog>
     </>
@@ -1088,15 +1136,21 @@ function KartenDialogAktionen({
     return (
       <DialogActions>
         <Button onClick={onAbbrechen}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-        <Button variant="contained" onClick={onSpeichern} disabled={speichernGesperrt}>
-          {t.ALLGEMEIN.SPEICHERN}
-        </Button>
+        <VorschauGesperrt>
+          <Button variant="contained" onClick={onSpeichern} disabled={speichernGesperrt}>
+            {t.ALLGEMEIN.SPEICHERN}
+          </Button>
+        </VorschauGesperrt>
       </DialogActions>
     )
   }
   return (
     <DialogActions>
-      {canEdit && archived && <Button onClick={onWiederherstellen}>{t.ALLGEMEIN.WIEDERHERSTELLEN}</Button>}
+      {canEdit && archived && (
+        <VorschauGesperrt>
+          <Button onClick={onWiederherstellen}>{t.ALLGEMEIN.WIEDERHERSTELLEN}</Button>
+        </VorschauGesperrt>
+      )}
       {vorgang}
       <Button onClick={onClose}>{t.ALLGEMEIN.SCHLIESSEN}</Button>
     </DialogActions>
@@ -1223,7 +1277,9 @@ function CardDetailModalView({
   onOpenDependency,
   onBack,
 }: Readonly<ViewProps>) {
-  const { user } = useAuth()
+  const { user, vorschau: laufendeVorschau } = useAuth()
+  // In der „Ansicht als XY“ ist alles Verändernde gesperrt (Plan #1914, E15).
+  const vorschau = Boolean(laufendeVorschau)
   const t = useT()
   const isEpic = card.type === 'EPIC'
   const [assigneeIds, setAssigneeIds] = useState<number[]>(card.assignees)
@@ -1543,7 +1599,7 @@ function CardDetailModalView({
   // allein der bestätigte Stand (#1328): Die Prop wäre nach einem Speichern veraltet, und der
   // Entwurf kann ein per Abbrechen verworfener sein.
   const toggleTask = async (index: number) => {
-    if (!canEdit || saving) return
+    if (!canEdit || vorschau || saving) return
     const vorher = stand
     // `index` stammt immer aus einer real gerenderten Checkbox, und toggleTaskAt zählt über
     // denselben GFM-Parser wie der Renderer (MarkdownInput zählt dieselbe Dokumentreihenfolge),
@@ -1744,21 +1800,25 @@ function CardDetailModalView({
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
           {zeigtAbnahme && (
-            <Button size="small" variant="outlined" onClick={() => setAbnahmeOffen(true)}>
-              {t.KARTE.ABNAHME}
-            </Button>
+            <VorschauGesperrt>
+              <Button size="small" variant="outlined" onClick={() => setAbnahmeOffen(true)}>
+                {t.KARTE.ABNAHME}
+              </Button>
+            </VorschauGesperrt>
           )}
           {canEdit && !editing && (
-            <Button
-              size="small"
-              variant="outlined"
-              // Bis die Beschreibung da ist (oder ihr Abruf gescheitert ist), führte Bearbeiten in
-              // ein leeres Feld, dessen Speichern den Volltext löschte.
-              disabled={beschreibungStatus !== 'geladen'}
-              onClick={startEditing}
-            >
-              {t.KARTE.BEARBEITEN}
-            </Button>
+            <VorschauGesperrt>
+              <Button
+                size="small"
+                variant="outlined"
+                // Bis die Beschreibung da ist (oder ihr Abruf gescheitert ist), führte Bearbeiten in
+                // ein leeres Feld, dessen Speichern den Volltext löschte.
+                disabled={beschreibungStatus !== 'geladen'}
+                onClick={startEditing}
+              >
+                {t.KARTE.BEARBEITEN}
+              </Button>
+            </VorschauGesperrt>
           )}
         </Stack>
         {/*
@@ -1890,12 +1950,14 @@ function CardDetailModalView({
                 members={members}
                 assigneeIds={assigneeIds}
                 onChange={(ids) => void saveAssignees(ids)}
+                vorschau={vorschau}
               />
               <LabelSection
                 canEdit={canEdit && canEditLabels}
                 boardLabels={boardLabels}
                 labelIds={labelIds}
                 onChange={(ids) => void saveLabels(ids)}
+                vorschau={vorschau}
               />
             </KartenBlock>
           )}
@@ -1913,7 +1975,7 @@ function CardDetailModalView({
                   titel={stand.title}
                   labelIds={labelIds}
                   boardLabels={boardLabels}
-                  disabled={!(canEdit && canEditLabels)}
+                  disabled={!(canEdit && canEditLabels) || vorschau}
                   beschreibung={stand.description}
                   kommentare={comments}
                   onChange={(aenderung) => void aendereLabels(aenderung)}

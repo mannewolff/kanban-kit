@@ -1,10 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { Card } from '../api/cards'
 import { SnackbarProvider } from './SnackbarProvider'
 import { TrashDialog } from './TrashDialog'
 import { renderMitSprache } from '../i18n/renderMitSprache'
+
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+beforeEach(() => {
+  auth.vorschau = null
+})
 
 const base = {
   boardId: 1, columnId: 10, positionInColumn: 0, archived: false, movedToDoneAt: null as string | null,
@@ -165,5 +173,24 @@ describe('TrashDialog auf Englisch', () => {
     expect(await screen.findByText('Restoring failed.')).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Delete Gelöscht permanently'))
     expect(await screen.findByText('Permanent deletion failed.')).toBeInTheDocument()
+  })
+})
+
+describe('TrashDialog — Ansicht als XY (Issue #1926)', () => {
+  it('zeigt Wiederherstellen und Endgültig löschen gesperrt mit dem Hinweis „Vorschau“', async () => {
+    auth.vorschau = vorschau
+    const api = mkApi()
+    render(<TrashDialog open boardId={1} canPurge onClose={vi.fn()} onChanged={vi.fn()} api={api} />)
+
+    expect(await screen.findByText(/Gelöscht/)).toBeInTheDocument()
+    const knoepfe = screen.getAllByRole('button', { name: 'Vorschau' })
+    expect(knoepfe.map((k) => k.textContent)).toEqual(['Wiederherstellen', 'Endgültig löschen'])
+    knoepfe.forEach((k) => {
+      expect(k).toBeDisabled()
+      fireEvent.click(k)
+    })
+    expect(api.restoreDeleted).not.toHaveBeenCalled()
+    expect(api.purge).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Schließen' })).toBeEnabled()
   })
 })

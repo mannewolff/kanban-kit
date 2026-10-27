@@ -26,8 +26,13 @@ import { theme } from '../theme'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 import { formatierer } from '../i18n/format'
 
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] } }),
+  useAuth: () => ({
+    user: { userId: 7, email: 'a@b.c', displayName: 'A', platformRole: 'USER', memberships: [] },
+    vorschau: auth.vorschau,
+  }),
 }))
 
 /** Das Namen-Register des Kits (Issue #1595): ohne Angabe geladen, ein Test kann es umstellen. */
@@ -38,6 +43,7 @@ vi.mock('../api/kitNamen', async (original) => ({
 }))
 beforeEach(() => {
   kitNamen.zustand = null
+  auth.vorschau = null
 })
 
 const card: Card = {
@@ -3182,6 +3188,14 @@ describe('CardDetailModal — Statuswechsler', () => {
       expect(within(leiste).queryAllByRole('button')).toHaveLength(0)
     })
 
+    it('ist in der Ansicht als XY nur Anzeige (Issue #1926)', async () => {
+      auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+      oeffne(fachlich)
+
+      const leiste = await screen.findByTestId('ketten-stufenleiste')
+      expect(within(leiste).queryAllByRole('button')).toHaveLength(0)
+    })
+
     it('ist ohne geladenen Label-Vorrat nur Anzeige', async () => {
       oeffne(fachlich, { canEditLabels: false })
 
@@ -3880,5 +3894,137 @@ describe('CardDetailModal auf Englisch', () => {
     zeigeEn({}, apis)
 
     expect(await screen.findByRole('checkbox', { name: 'Task 1' })).toBeInTheDocument()
+  })
+})
+
+describe('CardDetailModal — Ansicht als XY (Issue #1926)', () => {
+  const members = [{ userId: 5, email: 'm@x.de', displayName: 'Max', role: 'MEMBER' as const }]
+  const boardLabels = [{ id: 1, boardId: 1, name: 'Bug', color: '#ff0000', countOnEpicTile: false }]
+  const taskCard: Card = { ...card, description: '[ ] eins' }
+
+  beforeEach(() => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  /** Das gesperrte Bedienelement mit dem Namen „Vorschau“ und dem Text `text`. */
+  const gesperrtMitText = (text: string) =>
+    screen.getAllByRole('button', { name: 'Vorschau' }).find((k) => k.textContent === text) ?? null
+
+  /** Ob eine Hülle mit dem Namen „Vorschau“ das Element umschließt. */
+  const inVorschauHuelle = (element: HTMLElement) =>
+    screen.getAllByLabelText('Vorschau').some((huelle) => huelle !== element && huelle.contains(element))
+
+  /** Ein sichtbares Bedienelement, gesperrt und mit dem zugänglichen Namen „Vorschau“. */
+  function erwarteGesperrt(element: HTMLElement | null) {
+    expect(element).toBeInTheDocument()
+    expect(element).toHaveAccessibleName('Vorschau')
+    expect(element).toBeDisabled()
+  }
+
+  it('Szenario: Veränderungen sind in der Vorschau gesperrt', async () => {
+    // Rolle MEMBER: Bearbeitungsrecht, aber keine Moderation der Kommentare.
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit canModerateComments={false} onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+    const feld = screen.getByPlaceholderText('Kommentar schreiben')
+    expect(feld).toBeVisible()
+    erwarteGesperrt(feld)
+    fireEvent.change(feld, { target: { value: 'Neu' } })
+    const senden = gesperrtMitText('Senden')
+    erwarteGesperrt(senden)
+    fireEvent.click(senden!)
+    expect(apis.commentsApi.create).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Kommentar löschen' })).not.toBeInTheDocument()
+  })
+
+  it('sperrt Bearbeiten, Vorgang eröffnen, Kommentar bearbeiten, Aufgaben und Anhänge', async () => {
+    const apis = makeApis()
+    apis.cardsApi.get.mockResolvedValue({ ...taskCard })
+    apis.attachmentsApi.list = vi.fn().mockResolvedValue([
+      { id: 5, cardId: 100, filename: 'doc.pdf', contentType: 'application/pdf', size: 2048, createdAt: '' },
+    ])
+    render(<CardDetailModal card={taskCard} canEdit canModerateComments onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+    await waitFor(() => expect(screen.getByLabelText('Vorschau', { selector: 'input[type="checkbox"]' })).toBeDisabled())
+    fireEvent.click(screen.getByLabelText('Vorschau', { selector: 'input[type="checkbox"]' }))
+    expect(apis.cardsApi.update).not.toHaveBeenCalled()
+
+    const texte = (await screen.findAllByRole('button', { name: 'Vorschau' })).map((k) => k.textContent)
+    expect(texte).toEqual(expect.arrayContaining(['Bearbeiten', 'Vorgang eröffnen', '✎', '✕', 'Senden']))
+    // Der Datei-Knopf ist ein <label> mit Knopfrolle: Er meldet die Sperre über `aria-disabled`.
+    screen.getAllByRole('button', { name: 'Vorschau' }).forEach((k) =>
+      k.tagName === 'LABEL' ? expect(k).toHaveAttribute('aria-disabled', 'true') : expect(k).toBeDisabled(),
+    )
+    // Die Kommentarzeile trägt neben „Bearbeiten“ auch „Löschen“ (Moderation) — beide gesperrt.
+    expect(texte.filter((t) => t === '✕')).toHaveLength(2)
+
+    const anhaengen = gesperrtMitText('Datei anhängen')
+    expect(anhaengen).toHaveAccessibleName('Vorschau')
+    expect(anhaengen).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByLabelText('Datei anhängen')).toBeDisabled()
+    // Lesen bleibt möglich: die Vorschau eines Anhangs öffnet sich weiter.
+    expect(screen.getByRole('button', { name: 'doc.pdf' })).toBeEnabled()
+  })
+
+  it('sperrt Zuständige und Labels mit dem Hinweis „Vorschau“', async () => {
+    const apis = makeApis()
+    render(
+      <CardDetailModal card={card} canEdit members={members} boardLabels={boardLabels} onClose={vi.fn()} {...apis} />,
+    )
+
+    const zustaendige = await screen.findByLabelText('Zuständige', { selector: 'input' })
+    const labels = screen.getByLabelText('Labels', { selector: 'input' })
+    expect(zustaendige).toBeDisabled()
+    expect(labels).toBeDisabled()
+    expect(inVorschauHuelle(zustaendige)).toBe(true)
+    expect(inVorschauHuelle(labels)).toBe(true)
+    fireEvent.mouseDown(zustaendige)
+    expect(screen.queryByText('Max')).not.toBeInTheDocument()
+  })
+
+  it('sperrt Wiederherstellen einer archivierten Karte', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={{ ...card, archived: true }} canEdit onClose={vi.fn()} {...apis} />)
+
+    await screen.findByText('Wiederherstellen')
+    const knopf = gesperrtMitText('Wiederherstellen')
+    erwarteGesperrt(knopf)
+    fireEvent.click(knopf!)
+    expect(apis.cardsApi.restore).not.toHaveBeenCalled()
+  })
+
+  it('sperrt den Statuswechsler eines Arbeitspakets', async () => {
+    const apis = makeApis()
+    render(
+      <CardDetailModal
+        card={{ ...card, status: 'BACKLOG', canSetStatus: true }}
+        canEdit
+        columnName="Backlog"
+        onClose={vi.fn()}
+        {...apis}
+      />,
+    )
+
+    const status = await screen.findByRole('combobox', { name: 'Status' })
+    expect(status).toHaveAttribute('aria-disabled', 'true')
+    expect(inVorschauHuelle(status)).toBe(true)
+    fireEvent.mouseDown(status)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('lässt außerhalb der Vorschau alles bedienbar', async () => {
+    auth.vorschau = null
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit canModerateComments onClose={vi.fn()} {...apis} />)
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+
+    expect(screen.getByLabelText('Kommentar schreiben')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Senden' })).toBeEnabled()
+    expect(screen.getByLabelText('Datei anhängen')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
   })
 })

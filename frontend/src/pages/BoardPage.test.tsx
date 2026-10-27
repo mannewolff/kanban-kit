@@ -16,8 +16,13 @@ import { renderMitSprache } from '../i18n/renderMitSprache'
 let memberships: { projectId: number; role: string }[] = []
 let platformRole = 'USER'
 let angemeldet = true
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+let vorschau: null | Record<string, string> = null
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ user: angemeldet ? { userId: 1, email: 'a@b.c', displayName: 'A', platformRole, memberships } : null }),
+  useAuth: () => ({
+    user: angemeldet ? { userId: 1, email: 'a@b.c', displayName: 'A', platformRole, memberships } : null,
+    vorschau,
+  }),
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn(), rename: vi.fn(), list: vi.fn() } }))
 vi.mock('../api/cards', () => ({
@@ -66,6 +71,7 @@ vi.mock('../lib/EditModeContext', () => ({
 beforeEach(() => {
   editMode.value = true
   platformRole = 'USER'
+  vorschau = null
 })
 
 const mockedBoards = boardsApi as unknown as {
@@ -1095,3 +1101,26 @@ describe('BoardPage öffnet die Karte aus ?karte= (Issue #1915)', () => {
 })
 
 const mockedCardsByNumber = (cardsApi as unknown as { byNumber: ReturnType<typeof vi.fn> }).byNumber
+
+describe('BoardPage — Ansicht als XY (Issue #1926)', () => {
+  beforeEach(() => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    mockedBoards.rename.mockReset()
+  })
+
+  it('zeigt Board umbenennen gesperrt mit dem Hinweis „Vorschau“; Labels und Papierkorb öffnen zum Lesen', async () => {
+    renderPage()
+    expect(await screen.findByText('B')).toBeInTheDocument()
+
+    expect(screen.queryByLabelText('Board umbenennen')).not.toBeInTheDocument()
+    // Der erste gesperrte Knopf der Seite steht im Kopf neben dem Board-Namen, vor denen der Spalten.
+    const umbenennen = screen.getAllByRole('button', { name: 'Vorschau' })[0]
+    expect(within(umbenennen).getByTestId('EditOutlinedIcon')).toBeInTheDocument()
+    expect(umbenennen).toBeDisabled()
+    fireEvent.click(umbenennen)
+    expect(screen.queryByLabelText('Neuer Board-Name')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Labels' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Papierkorb' })).toBeEnabled()
+  })
+})

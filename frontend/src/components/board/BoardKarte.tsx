@@ -10,6 +10,7 @@ import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import type { Card, CardStatus } from '../../api/cards'
+import { useAuth } from '../../auth/AuthContext'
 import type { Epic } from '../../api/epics'
 import type { Label } from '../../api/labels'
 import type { Member } from '../../api/members'
@@ -270,7 +271,9 @@ export function BoardKarte({
   const alltag = canEdit && !selectionMode
   // Im Auswahlmodus zieht eine ausgewählte Karte die ganze Auswahl mit (#1324); eine nicht
   // ausgewählte bleibt unbeweglich, ihr Klick wählt sie aus.
-  const ziehbar = alltag || (canEdit && selected)
+  // In der „Ansicht als XY“ ist keine Karte ziehbar; anklickbar bleibt sie (Plan #1914, E15).
+  const vorschau = Boolean(useAuth().vorschau)
+  const ziehbar = (alltag || (canEdit && selected)) && !vorschau
   const normal = dichte === 'normal'
   // Auf dem Tablet quer zieht der Finger über Pointer-Ereignisse (Plan #1707, E3). Natives Ziehen
   // bleibt dort aus, sonst startete iPadOS-Safari beim langen Antippen ein zweites, eigenes Ziehen.

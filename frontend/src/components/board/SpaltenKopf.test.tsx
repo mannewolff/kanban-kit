@@ -1,10 +1,17 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardColumn } from '../../api/boards'
 import { TabletQuerProvider } from '../../lib/tabletQuer'
 import { cssRegel } from '../../test/cssRegel'
 import { setzeMedien } from '../../test/setup'
 import { SpaltenKopf } from './SpaltenKopf'
+
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+beforeEach(() => {
+  auth.vorschau = null
+})
 
 const spalte: BoardColumn = { id: 10, name: 'In Prüfung', position: 0, wipLimit: 4 }
 
@@ -148,5 +155,32 @@ describe('SpaltenKopf — Spalten per Finger umordnen (Plan #1707, E3/E4)', () =
     expect(kopf()).toHaveAttribute('draggable', String(bearbeiten))
     expect(cssRegel(kopf())).not.toContain('touch-action')
     expect(handler.onPointerDown).not.toHaveBeenCalled()
+  })
+})
+
+describe('SpaltenKopf — Ansicht als XY (Issue #1926)', () => {
+  beforeEach(() => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+  })
+
+  it('zeigt Sortieren, Bearbeiten und Löschen gesperrt mit dem Hinweis „Vorschau“', () => {
+    setzeMedien({ tabletQuer: false })
+    renderKopf(true)
+
+    const knoepfe = screen.getAllByRole('button', { name: 'Vorschau' })
+    expect(knoepfe).toHaveLength(3)
+    knoepfe.forEach((k) => expect(k).toBeDisabled())
+    expect(screen.queryByRole('button', { name: 'Spalte In Prüfung bearbeiten' })).not.toBeInTheDocument()
+  })
+
+  it('lässt die Spalte am Desktop nicht nativ ziehen und registriert keine Zieh-Handler', () => {
+    setzeMedien({ tabletQuer: false })
+    renderKopf(true)
+
+    expect(kopf()).toHaveAttribute('draggable', 'false')
+    fireEvent.dragStart(kopf())
+    fireEvent.drop(kopf())
+    expect(handler.onZugBeginn).not.toHaveBeenCalled()
+    expect(handler.onAblage).not.toHaveBeenCalled()
   })
 })

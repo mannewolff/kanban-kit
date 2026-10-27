@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { KitNamenZustand } from '../api/kitNamen'
 import type { Epic } from '../api/epics'
 import type { Label } from '../api/labels'
@@ -10,6 +10,14 @@ import { KIT_NAMEN } from '../test/kitNamen'
 import { setzeMedien } from '../test/setup'
 import { BulkActionBar, type LabelOption } from './BulkActionBar'
 import { renderMitSprache } from '../i18n/renderMitSprache'
+
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+beforeEach(() => {
+  auth.vorschau = null
+})
 
 vi.mock('../api/kitNamen', async (original) => ({
   ...(await original<typeof import('../api/kitNamen')>()),
@@ -387,5 +395,34 @@ describe('BulkActionBar auf Englisch', () => {
     zeigeEn({ epicDisabledReason: 'the board has no selectable epic' })
 
     expect(screen.getByRole('button', { name: 'Assign epic — the board has no selectable epic' })).toBeDisabled()
+  })
+})
+
+describe('BulkActionBar — Ansicht als XY (Issue #1926)', () => {
+  it('zeigt jede Sammelaktion gesperrt mit dem Hinweis „Vorschau“, Abbrechen bleibt bedienbar', () => {
+    auth.vorschau = vorschau
+    const rueckrufe = zeigeLeiste({ labelsDisabledReason: 'Kein Label auf dem Board' })
+
+    const gesperrt = screen.getAllByRole('button', { name: 'Vorschau' })
+    expect(gesperrt.map((k) => k.textContent)).toEqual([
+      'Labels', 'Vorhaben zuordnen', 'Verschieben', 'Archivieren', 'In den Papierkorb',
+    ])
+    gesperrt.forEach((k) => {
+      expect(k).toBeDisabled()
+      fireEvent.click(k)
+    })
+    expect(rueckrufe.onMove).not.toHaveBeenCalled()
+    expect(rueckrufe.onArchive).not.toHaveBeenCalled()
+    expect(rueckrufe.onDelete).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Abbrechen' })).toBeEnabled()
+  })
+
+  it('nennt außerhalb der Vorschau weiter den Sperrgrund statt „Vorschau“', () => {
+    zeigeLeiste({ labelsDisabledReason: 'Kein Label auf dem Board' })
+
+    expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Labels/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Archivieren' })).toBeEnabled()
   })
 })

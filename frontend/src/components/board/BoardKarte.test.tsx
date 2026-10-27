@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, test, vi } from 'vitest'
+import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 import type { Card } from '../../api/cards'
 import type { KitNamenZustand } from '../../api/kitNamen'
 import { de } from '../../i18n/de'
@@ -11,6 +11,13 @@ import { setzeMedien } from '../../test/setup'
 import { ErklaerungOffenProvider } from '../Erklaerung'
 import { BoardKarte } from './BoardKarte'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
+
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Fall ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+beforeEach(() => {
+  auth.vorschau = null
+})
 
 vi.mock('../../api/kitNamen', async (original) => ({
   ...(await original<typeof import('../../api/kitNamen')>()),
@@ -45,6 +52,14 @@ describe('BoardKarte — Ziehbarkeit (#1324)', () => {
     zeigen({ selectionMode, selected, canEdit })
 
     expect(screen.getByTestId('card-100')).toHaveAttribute('draggable', String(ziehbar))
+  })
+
+  it('ist in der Ansicht als XY nicht ziehbar, bleibt aber anklickbar (Issue #1926)', () => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    zeigen({ selectionMode: false, selected: false, canEdit: true })
+
+    expect(screen.getByTestId('card-100')).toHaveAttribute('draggable', 'false')
+    expect(screen.getByRole('button', { name: 'Aufgabe' })).toBeEnabled()
   })
 
   it('zeigt im Auswahlmodus kein ⋮-Menü, auch nicht an einer ziehbaren Karte', () => {
