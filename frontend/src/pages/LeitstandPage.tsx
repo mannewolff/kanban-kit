@@ -37,6 +37,7 @@ import { LeitstandVerbrauch } from '../components/leitstand/LeitstandVerbrauch'
 import { NacharbeitPlatte } from '../components/leitstand/NacharbeitPlatte'
 import { VorhabenPlatte } from '../components/leitstand/VorhabenPlatte'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { VorschauVerborgenHinweis } from '../components/VorschauVerborgenHinweis'
 import { formatierer } from '../i18n/format'
 import { useSprache, useT } from '../i18n/SpracheContext'
 import { epicColor } from '../lib/epicMeta'
@@ -103,6 +104,9 @@ import {
  * **Die Läufe sieht nur, wer sie auch auf der Nachtlauf-Seite sieht** (Owner-Recht im Backend).
  * Ohne das Recht entfallen Laufband, Nachtlauf-Kachel, Verbrauch, Letzter Lauf, Abbruchgründe und
  * Nacharbeit still; die Board-Kennzahlen, beide Wochenplatten, „Fluss", „Alter in Arbeit" und „Auslieferung" bleiben.
+ * In der „Ansicht als XY“ steht dort, wo XY die Läufe sähe, der Admin selbst aber nicht
+ * (`403 vorschau-verborgen`), ein Hinweis: einer statt Laufband, Kachel, Verbrauch und Letztem Lauf,
+ * je einer in „Abbruchgründe“ und „Nacharbeit“ (Plan #1914, E16).
  */
 
 /** Die Karte, die der Dialog zeigt, mit dem Projekt, aus dem sie kam. */
@@ -120,13 +124,15 @@ export function LeitstandPage() {
     return <Alert severity="error">{t.UNGUELTIGE_ID}</Alert>
   }
 
-  const { board, kpis, fluss, alter, prognose, auslieferung, klassen, nacharbeit, projectId, liste, juengster, epicListe } = daten
+  const { board, kpis, fluss, alter, prognose, auslieferung, klassen, nacharbeit, projectId, liste, juengster, laeufeVerborgen, epicListe } = daten
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <Box component="h1" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
         {board.art === 'da' ? t.TITEL_BOARD(board.wert.name) : t.TITEL}
       </Box>
+
+      {laeufeVerborgen && <VorschauVerborgenHinweis />}
 
       {juengster && <LaufbandBereich lauf={juengster} />}
 
@@ -235,9 +241,11 @@ function LeitstandRumpf({
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
         {klassen.art === 'da' && liste && <Abbruchgruende zaehler={klassen.wert} laeufe={liste.length} />}
-        {/* Nur mit Run-Recht (AK 7): Die Läufe sind da, wo das Recht besteht. */}
-        {liste && projectId !== null && nacharbeit.art === 'da' && (
-          <NacharbeitPlatte daten={nacharbeit.wert} onOeffnen={(nummer) => void oeffnen(projectId, nummer)} />
+        {klassen.art === 'vorschauVerborgen' && <AbbruchgruendeVerborgen />}
+        {/* Nur mit Run-Recht (AK 7): Die Läufe sind da, wo das Recht besteht; in der Vorschau ohne
+            Recht des Admins steht die Platte mit dem Hinweis (E16). */}
+        {projectId !== null && (liste !== null || nacharbeit.art === 'vorschauVerborgen') && (
+          <NacharbeitPlatte nacharbeit={nacharbeit} onOeffnen={(nummer) => void oeffnen(projectId, nummer)} />
         )}
         {/* Erst mit Daten der Prognose (E14): Ein Rückfall auf die Vorhabenliste zeigte die alte Zählung. */}
         {prognose.art === 'da' && <VorhabenPlatte prognose={prognose.wert} />}
@@ -676,6 +684,18 @@ function Balkenwerk({
       </Box>
       <WochenLeiste wochen={wochen} />
     </>
+  )
+}
+
+/** „Abbruchgründe“ in der „Ansicht als XY“ ohne Lauf-Recht des Admins: der Hinweis statt der Zähler (E16). */
+function AbbruchgruendeVerborgen() {
+  const t = useT().LEITSTAND
+  return (
+    <Platte titel={t.ABBRUCHGRUENDE}>
+      <Box sx={{ px: '16px', py: '14px' }}>
+        <VorschauVerborgenHinweis />
+      </Box>
+    </Platte>
   )
 }
 

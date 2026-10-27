@@ -3,6 +3,7 @@ import {
   apiFetch,
   ApiError,
   apiErrorMessage,
+  istVorschauVerborgen,
   notifyUnauthorized,
   setNeuLaden,
   setNurLesendHandler,
@@ -120,6 +121,21 @@ describe('ApiError.type', () => {
     mockErrorResponse(403, body)
     const error = await failingFetch()
     expect(error.type).toBeUndefined()
+  })
+})
+
+describe('istVorschauVerborgen (Plan #1914, E16)', () => {
+  it('erkennt 403 mit dem Problem-Typ vorschau-verborgen', () => {
+    expect(istVorschauVerborgen(new ApiError(403, 'Forbidden', undefined, undefined, 'vorschau-verborgen'))).toBe(true)
+  })
+
+  it.each([
+    ['einen 403 ohne Problem-Typ', new ApiError(403, 'Forbidden')],
+    ['einen 403 mit anderem Problem-Typ', new ApiError(403, 'Forbidden', undefined, undefined, 'vorschau-nur-lesend')],
+    ['vorschau-verborgen mit anderem Status', new ApiError(404, 'Not Found', undefined, undefined, 'vorschau-verborgen')],
+    ['einen Fehler, der kein ApiError ist', new Error('vorschau-verborgen')],
+  ])('verneint %s', (_fall, fehler) => {
+    expect(istVorschauVerborgen(fehler)).toBe(false)
   })
 })
 

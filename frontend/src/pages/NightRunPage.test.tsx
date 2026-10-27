@@ -496,6 +496,11 @@ interface Antworten {
    * der Abruf wie jede unerwartete Anfrage.
    */
   jetzt?: RunnerJetztDaten
+  /**
+   * Die „Ansicht als XY“ ohne eigenes Lauf-Recht des Admins (Issue #1928, Plan #1914 E16): Liste,
+   * Fehlerklassen, „Heute Nacht“ und „Runner jetzt“ antworten mit `403 vorschau-verborgen`.
+   */
+  vorschauVerborgen?: true
 }
 
 /** Alle Anfragen dieses Tests, in Reihenfolge — Grundlage der Sende- und Ladepfad-Prüfungen. */
@@ -513,6 +518,14 @@ const antwortFehler = (detail: string, status = 400) => ({
   status,
   statusText: 'Bad Request',
   text: () => Promise.resolve(JSON.stringify({ detail })),
+})
+
+/** Die Abweisung `403 vorschau-verborgen` der „Ansicht als XY“ (Plan #1914, E6). */
+const antwortVerborgen = () => ({
+  ok: false,
+  status: 403,
+  statusText: 'Forbidden',
+  text: () => Promise.resolve(JSON.stringify({ type: 'vorschau-verborgen', title: 'Forbidden', status: 403, detail: 'Vorschau verborgen' })),
 })
 
 /** Fehlerantwort ohne RFC-9457-Problem im Body — der Roh-Body gehört nicht vor den Nutzer. */
@@ -615,6 +628,21 @@ function heuteNachtAntwort(url: string, antworten: Antworten) {
   )
 }
 
+/** Die Lauf-Abrufe, die in der „Ansicht als XY“ ohne Lauf-Recht des Admins abgewiesen werden. */
+const VERBORGENE_ABRUFE = /^\/api\/projects\/5\/night-runs(\/(error-class-counts|tonight|now))?$/
+
+/** Legt um den Fetch-Stub die Abweisung `403 vorschau-verborgen` für die Lauf-Abrufe (Issue #1928). */
+function mitVorschauVerborgen(antworten: Antworten) {
+  if (!antworten.vorschauVerborgen) return
+  const grund = globalThis.fetch
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init?: RequestInit) =>
+      (init?.method ?? 'GET') === 'GET' && VERBORGENE_ABRUFE.test(url) ? Promise.resolve(antwortVerborgen()) : grund(url, init),
+    ),
+  )
+}
+
 function stubFetch(antworten: Antworten) {
   const naechsteListe = folge(antworten.listen ?? [[]])
   const naechsterZaehler = folge(antworten.zaehler ?? [{}])
@@ -659,6 +687,7 @@ function stubFetch(antworten: Antworten) {
       return Promise.reject(new Error(`unerwartete Anfrage: ${method} ${url}`))
     }),
   )
+  mitVorschauVerborgen(antworten)
 }
 
 function renderPage(antworten: Antworten = {}, pfad = '/projects/5/nachtlauf') {
@@ -7890,6 +7919,30 @@ describe('NightRunPage — Ansicht als XY (Issue #1927)', () => {
     expect(knopf).toHaveAttribute('aria-disabled', 'true')
     // Auch die Dateiauswahl dahinter nimmt nichts an: Ohne Datei gibt es nichts einzureichen.
     expect(screen.getByLabelText('Protokolldatei auswählen')).toBeDisabled()
+  })
+
+  it('Szenario: Die Einwilligung zum Plattform-Leitstand bleibt gewahrt', async () => {
+    auth.vorschau = vorschau
+    renderPage({ vorschauVerborgen: true })
+
+    const bereich = screen.getByTestId('laufbereich')
+    await waitFor(() => expect(within(bereich).getAllByRole('note')).toHaveLength(3))
+    for (const hinweis of within(bereich).getAllByRole('note')) {
+      expect(hinweis).toHaveTextContent('Grace sieht diesen Bereich, die Vorschau zeigt ihn nicht.')
+    }
+    // Keine Laufdaten, keine Fehlermeldung: weder die Meldung des Servers noch „keine Auswertung“.
+    expect(screen.queryByText('Vorschau verborgen')).not.toBeInTheDocument()
+    expect(screen.queryByText('Noch keine Auswertung vorhanden.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(within(bereich).queryByTestId(/^lauf-/)).not.toBeInTheDocument()
+  })
+
+  it('anderer 403 behält das bisherige Verhalten: die Laufliste meldet den Fehler', async () => {
+    auth.vorschau = vorschau
+    renderPage({ listenFehler: 'Nur der Owner darf die Auswertung sehen.' })
+
+    expect(await screen.findByText('Nur der Owner darf die Auswertung sehen.')).toBeInTheDocument()
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
   })
 
   it('lässt Protokoll einlesen außerhalb der Vorschau bedienbar', async () => {

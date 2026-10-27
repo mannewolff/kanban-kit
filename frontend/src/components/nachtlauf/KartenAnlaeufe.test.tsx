@@ -1,9 +1,16 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
 import type { NightRunAnlauf, NightRunServerMode, NightRunUsageView } from '../../api/nightRuns'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { KartenAnlaeufe, LAUF_ART_TEXT, zaehleWiederaufnahmen } from './KartenAnlaeufe'
+
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E16); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+const VORSCHAU = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+const HINWEIS = 'Grace sieht diesen Bereich, die Vorschau zeigt ihn nicht.'
+const verborgen = () => new ApiError(403, 'Forbidden', undefined, undefined, 'vorschau-verborgen')
 
 /** Die Anläufe einer Karte im Karten-Detail (Issue #968). */
 
@@ -339,5 +346,30 @@ describe('KartenAnlaeufe auf Englisch (Issue #1658)', () => {
     )
 
     expect(await screen.findByText('The attempts could not be loaded.')).toBeInTheDocument()
+  })
+})
+
+describe('KartenAnlaeufe — Ansicht als XY (Issue #1928, Plan #1914 E16)', () => {
+  afterEach(() => {
+    auth.vorschau = null
+  })
+
+  it('zeigt bei vorschau-verborgen den Block mit dem Hinweis statt der Anläufe', async () => {
+    auth.vorschau = VORSCHAU
+    renderMitSprache(<KartenAnlaeufe projectId={9} cardNumber={968} api={apiMit(Promise.reject(verborgen()))} />)
+
+    const block = await screen.findByTestId('karten-anlaeufe')
+    expect(within(block).getByRole('note')).toHaveTextContent(HINWEIS)
+    expect(within(block).queryByTestId('anlaeufe-liste')).not.toBeInTheDocument()
+  })
+
+  it('anderer 403 behält das bisherige Verhalten: kein Block', async () => {
+    auth.vorschau = VORSCHAU
+    const api = apiMit(Promise.reject(new ApiError(403, 'Forbidden')))
+    const { container } = renderMitSprache(<KartenAnlaeufe projectId={9} cardNumber={968} api={api} />)
+
+    await waitFor(() => expect(api.anlaeufeDerKarte).toHaveBeenCalled())
+    await Promise.resolve()
+    expect(container).toBeEmptyDOMElement()
   })
 })

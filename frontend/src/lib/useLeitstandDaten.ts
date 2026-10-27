@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react'
 import { boardsApi, type Board } from '../api/boards'
-import { ApiError } from '../api/client'
+import { ApiError, istVorschauVerborgen } from '../api/client'
 import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunErrorClassCounts, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { juengsterLauf } from './leitstand'
 
-/** Der Ladezustand eines Abrufs des Leitstands; `ohneRecht` ist die stille Form von „403". */
-export type Laden<T> = { art: 'laedt' } | { art: 'ohneRecht' } | { art: 'fehler' } | { art: 'da'; wert: T }
+/**
+ * Der Ladezustand eines Abrufs des Leitstands; `ohneRecht` ist die stille Form von „403“,
+ * `vorschauVerborgen` die Abweisung `403 vorschau-verborgen` der „Ansicht als XY“, an deren Stelle
+ * ein Hinweis steht (Plan #1914, E16).
+ */
+export type Laden<T> =
+  | { art: 'laedt' }
+  | { art: 'ohneRecht' }
+  | { art: 'vorschauVerborgen' }
+  | { art: 'fehler' }
+  | { art: 'da'; wert: T }
 
 const LAEDT = { art: 'laedt' } as const
 
@@ -23,6 +32,11 @@ const LAEDT = { art: 'laedt' } as const
  * 63 (Issue #1053): SonarCloud rechnet jeden Zweig, der eine Funktion trägt, als weitere
  * Verschachtelungsstufe für alles, was danach kommt.
  */
+function fehlerZustand(err: unknown): Laden<never> {
+  if (istVorschauVerborgen(err)) return { art: 'vorschauVerborgen' }
+  return err instanceof ApiError && err.status === 403 ? { art: 'ohneRecht' } : { art: 'fehler' }
+}
+
 function useLadenWenn<S, T>(
   schluessel: S | null,
   abruf: (schluessel: S) => Promise<T>,
@@ -40,7 +54,7 @@ function useLadenWenn<S, T>(
         if (aktiv) setZustand({ art: 'da', wert })
       },
       (err: unknown) => {
-        if (aktiv) setZustand(err instanceof ApiError && err.status === 403 ? { art: 'ohneRecht' } : { art: 'fehler' })
+        if (aktiv) setZustand(fehlerZustand(err))
       },
     )
     return () => {
@@ -75,6 +89,8 @@ export interface LeitstandDaten {
   /** Die aufbewahrten Läufe; `null`, solange sie fehlen — auch mangels Recht. */
   liste: NightRunView[] | null
   juengster: NightRunView | null
+  /** Ob die Läufe in der „Ansicht als XY“ verborgen sind (`403 vorschau-verborgen`, Plan #1914 E16). */
+  laeufeVerborgen: boolean
   /** Die Vorhaben als Liste; ohne geladene Vorhaben leer statt fehlend. */
   epicListe: readonly Epic[]
 }
@@ -85,7 +101,9 @@ export interface LeitstandDaten {
  * Die Läufe, die Fehlerklassen und damit der Verbrauch hängen am Projekt des Boards und beginnen
  * erst, wenn das Board da ist; Nacharbeit, Fluss, Alter, Prognose und Auslieferung hängen am Board selbst und laden sofort. Wer die
  * Läufe nicht sehen darf, bekommt vom Server 403 — das bleibt als `ohneRecht` still, und die Seite
- * lässt die Lauf-Bereiche weg.
+ * lässt die Lauf-Bereiche weg. In der „Ansicht als XY“ antwortet er dort, wo XY sähe, was der Admin
+ * nicht sehen darf, mit `403 vorschau-verborgen`; daraus wird `vorschauVerborgen`, und die Seite
+ * zeigt den Hinweis statt der Lauf-Bereiche (Plan #1914, E16).
  */
 export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
   // Stryker disable next-line StringLiteral: gleichwertig — Number.parseInt ergibt für '' wie für jeden anderen Nicht-Zahl-Text NaN
@@ -108,5 +126,7 @@ export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
   const juengster = liste === null ? null : juengsterLauf(liste)
   const epicListe = epics.art === 'da' ? epics.wert : []
 
-  return { validId: gueltigeId !== null, board, kpis, fluss, alter, prognose, auslieferung, epics, klassen, nacharbeit, projectId, liste, juengster, epicListe }
+  const laeufeVerborgen = laeufe.art === 'vorschauVerborgen'
+
+  return { validId: gueltigeId !== null, board, kpis, fluss, alter, prognose, auslieferung, epics, klassen, nacharbeit, projectId, liste, juengster, laeufeVerborgen, epicListe }
 }

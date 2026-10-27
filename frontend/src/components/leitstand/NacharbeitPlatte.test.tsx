@@ -1,12 +1,17 @@
 import { ThemeProvider } from '@mui/material/styles'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { Laden } from '../../lib/useLeitstandDaten'
 import type { NightRunRework, NightRunReworkLine, NightRunReworkWeek, NightRunReworkWeekValue } from '../../api/nightRuns'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { kalenderwoche } from '../../lib/leitstand'
 import { cssRegel } from '../../test/cssRegel'
 import { KUPFER, MELDER, theme } from '../../theme'
 import { NacharbeitPlatte } from './NacharbeitPlatte'
+
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E16); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
 
 /** Die Platte „Nacharbeit“ (Issue #1759, Plan #1752 E6, E8, E9, E13, E14). */
 
@@ -50,7 +55,7 @@ const daten = (teil: Partial<NightRunRework> = {}): NightRunRework => ({
 const zeige = (d: NightRunRework, onOeffnen: (nummer: number) => void = vi.fn(), sprache: 'de' | 'en' = 'de') =>
   renderMitSprache(
     <ThemeProvider theme={theme}>
-      <NacharbeitPlatte daten={d} onOeffnen={onOeffnen} />
+      <NacharbeitPlatte nacharbeit={{ art: 'da', wert: d }} onOeffnen={onOeffnen} />
     </ThemeProvider>,
     sprache,
   )
@@ -240,5 +245,31 @@ describe('NacharbeitPlatte', () => {
     expect(screen.getByTestId('nacharbeit-woche-0').getAttribute('aria-label')).toMatch(
       new RegExp(`^KW ${kalenderwoche(eigene[0])}:`),
     )
+  })
+})
+
+describe('NacharbeitPlatte — Ansicht als XY (Issue #1928)', () => {
+  const zeigeZustand = (nacharbeit: Laden<NightRunRework>) =>
+    renderMitSprache(
+      <ThemeProvider theme={theme}>
+        <NacharbeitPlatte nacharbeit={nacharbeit} onOeffnen={vi.fn()} />
+      </ThemeProvider>,
+    )
+
+  it('zeigt bei vorschau-verborgen die Platte mit dem Hinweis statt der Zahlen', () => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    zeigeZustand({ art: 'vorschauVerborgen' })
+    expect(within(platte()).getByRole('note')).toHaveTextContent('Grace sieht diesen Bereich, die Vorschau zeigt ihn nicht.')
+    expect(screen.queryByTestId('nacharbeit-zeile-pakete')).not.toBeInTheDocument()
+    auth.vorschau = null
+  })
+
+  it.each([
+    ['anderer 403 behält das bisherige Verhalten (still, ohne Recht)', { art: 'ohneRecht' } as const],
+    ['ein Ladefehler', { art: 'fehler' } as const],
+    ['solange sie lädt', { art: 'laedt' } as const],
+  ])('zeigt nichts: %s', (_fall, nacharbeit) => {
+    const { container } = zeigeZustand(nacharbeit)
+    expect(container).toBeEmptyDOMElement()
   })
 })

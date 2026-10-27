@@ -1,12 +1,19 @@
 import { ThemeProvider } from '@mui/material/styles'
 import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../../api/client'
 import type { HeuteNachtKarte } from '../../api/nightRuns'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { theme } from '../../theme'
 import { HeuteNachtUebersicht, LEER_SATZ } from './HeuteNachtUebersicht'
+
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E16); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+const VORSCHAU = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+const HINWEIS = 'Grace sieht diesen Bereich, die Vorschau zeigt ihn nicht.'
+const verborgen = () => new ApiError(403, 'Forbidden', undefined, undefined, 'vorschau-verborgen')
 
 /**
  * Die Übersicht „Heute Nacht“ auf der Runner-Seite (Issue #1455, Plan #1447): die freigegebenen,
@@ -252,5 +259,29 @@ describe('HeuteNachtUebersicht auf Englisch (Issue #1658)', () => {
 
     zeigeEnglisch(() => Promise.reject(new Error('')))
     expect(await screen.findByText('The overview could not be loaded: unknown error')).toBeInTheDocument()
+  })
+})
+
+describe('HeuteNachtUebersicht — Ansicht als XY (Issue #1928, Plan #1914 E16)', () => {
+  afterEach(() => {
+    auth.vorschau = null
+  })
+
+  it('zeigt bei vorschau-verborgen die Übersicht mit dem Hinweis statt der Karten', async () => {
+    auth.vorschau = VORSCHAU
+    zeige(() => Promise.reject(verborgen()))
+
+    const bereich = await screen.findByTestId('heute-nacht')
+    expect(within(bereich).getByRole('note')).toHaveTextContent(HINWEIS)
+    expect(within(bereich).queryByText(LEER_SATZ)).not.toBeInTheDocument()
+  })
+
+  it('anderer 403 behält das bisherige Verhalten: die Übersicht fehlt', async () => {
+    auth.vorschau = VORSCHAU
+    const { container } = zeige(() => Promise.reject(new ApiError(403, 'Kein Zugriff')))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(container).toBeEmptyDOMElement()
   })
 })

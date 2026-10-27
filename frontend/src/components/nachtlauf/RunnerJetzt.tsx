@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { ApiError, apiErrorMessage } from '../../api/client'
+import { ApiError, apiErrorMessage, istVorschauVerborgen } from '../../api/client'
 import {
   nightRunsApi,
   type NightRunsApi,
@@ -12,12 +12,14 @@ import {
 import { useSprache, useT } from '../../i18n/SpracheContext'
 import { tagZeit } from '../../lib/leitstand'
 import { stufenname, verstummtSatz, type RunnerJetztTexte } from '../../lib/runnerJetzt'
+import { VorschauVerborgenHinweis } from '../VorschauVerborgenHinweis'
 import { ANZEIGE, KLEIN_RADIUS, NUT_SX, PANEL_RADIUS, PLATTE, RAND, SCHATTEN_PLATTE, TEXT_MATT, ZAHL } from '../../theme'
 
 type Ladung =
   | { art: 'laden' }
   | { art: 'geladen'; lage: RunnerJetztDaten }
   | { art: 'verboten' }
+  | { art: 'vorschauVerborgen' }
   | { art: 'fehler'; meldung: string }
 
 /** Der Teilschritt in Worten; ein unbekannter Code erscheint als „Teilschritt: <Code>“ (E5). */
@@ -33,7 +35,8 @@ function schritt(t: RunnerJetztTexte, step: string): string {
  *
  * <p>Aufgefrischt wird im Takt `taktMs`, nur bei sichtbarem Tab und nur, solange ein Lauf läuft
  * oder verstummt ist — ein verstummter kann sich wieder melden. Fehlt das Leserecht (403), erscheint
- * der Bereich gar nicht, wie `HeuteNachtUebersicht`; ein anderer Ladefehler steht in ihm.
+ * der Bereich gar nicht, wie `HeuteNachtUebersicht`; ein anderer Ladefehler steht in ihm. In der
+ * „Ansicht als XY“ steht bei `403 vorschau-verborgen` der Hinweis im Bereich (Plan #1914, E16).
  *
  * <p>Jede geladene Lage geht zusätzlich an `onGeladen` (Issue #1887, Plan #1882 E2): Die Seite
  * nimmt daraus die laufende Stufe für „Jetzt im Werk“, ohne `/now` ein zweites Mal abzufragen.
@@ -82,6 +85,7 @@ export function RunnerJetzt({
           {t.LADEFEHLER(ladung.meldung)}
         </Box>
       )}
+      {ladung.art === 'vorschauVerborgen' && <VorschauVerborgenHinweis />}
       {ladung.art === 'geladen' && <Lage lage={ladung.lage} />}
     </Box>
   )
@@ -187,6 +191,14 @@ function LetzterLauf({ lauf }: Readonly<{ lauf: RunnerLetzterLauf }>) {
   )
 }
 
+/** Der Zustand nach einem gescheiterten Abruf: Hinweis in der Vorschau, still ohne Recht, sonst die Meldung. */
+function fehlerLadung(error: unknown, fallback: string): Ladung {
+  if (istVorschauVerborgen(error)) return { art: 'vorschauVerborgen' }
+  return error instanceof ApiError && error.status === 403
+    ? { art: 'verboten' }
+    : { art: 'fehler', meldung: apiErrorMessage(error, fallback) }
+}
+
 /**
  * Lädt die Lage beim Öffnen und danach im Takt, solange ein Lauf läuft oder verstummt ist — nur bei
  * sichtbarem Tab. Eine Antwort nach dem Schließen verfällt.
@@ -216,11 +228,7 @@ function useRunnerJetzt(
         },
         (error: unknown) => {
           if (!istAktiv()) return
-          setLadung(
-            error instanceof ApiError && error.status === 403
-              ? { art: 'verboten' }
-              : { art: 'fehler', meldung: apiErrorMessage(error, fallback) },
-          )
+          setLadung(fehlerLadung(error, fallback))
         },
       )
     },

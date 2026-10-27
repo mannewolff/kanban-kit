@@ -25,7 +25,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { cardsApi, type Card, type CardByNumber } from '../api/cards'
-import { apiErrorMessage } from '../api/client'
+import { apiErrorMessage, istVorschauVerborgen } from '../api/client'
 import { artAusTitel, useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import {
   nightRunsApi,
@@ -75,6 +75,7 @@ import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { KUPFER, NUT, RAND, TEXT_SCHWACH, ZAHL } from '../theme'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { VorschauGesperrt } from '../components/VorschauGesperrt'
+import { VorschauVerborgenHinweis } from '../components/VorschauVerborgenHinweis'
 import { useAuth } from '../auth/AuthContext'
 import { epicColor } from '../lib/epicMeta'
 import { formatDuration } from '../lib/formatDuration'
@@ -3041,6 +3042,8 @@ export function NightRunPage() {
   const t = useT()
 
   const [laeufe, setLaeufe] = useState<AnzeigeLauf[]>([])
+  /** Ob die Laufliste in der „Ansicht als XY“ verborgen ist (`403 vorschau-verborgen`, Plan #1914 E16). */
+  const [laeufeVerborgen, setLaeufeVerborgen] = useState(false)
   const [ergebnisse, setErgebnisse] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   /**
    * Die Startzeitpunkte der Läufe, die in **dieser Sitzung** aus einem Ergebnisstand gedeutet
@@ -3126,7 +3129,11 @@ export function NightRunPage() {
         }
       })
       .catch((error_: Error) => {
-        if (aktiv) notify(error_.message, 'error')
+        // In der Vorschau steht statt der Fehlermeldung der Hinweis; jeder andere Fehler bleibt eine Meldung.
+        if (aktiv) {
+          if (istVorschauVerborgen(error_)) setLaeufeVerborgen(true)
+          else notify(error_.message, 'error')
+        }
       })
     // Ein Abruf beim Öffnen der Seite, ein weiterer nach erfolgreichem Senden — die Zahl ist
     // projektweit, ein Abruf je Lauf oder je Arbeitspaket wäre die Anfragelawine aus A8.
@@ -3515,7 +3522,10 @@ export function NightRunPage() {
           <JetztImWerk laeufe={laeufe.map(alsZeitleistenlauf)} runner={runnerLage} jetzt={new Date().getTime()} />
           <HeuteNachtUebersicht projectId={id} onKarteOeffnen={karteOeffnen} />
 
-          {laeufe.length === 0 && <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEINE_AUSWERTUNG}</Typography>}
+          {laeufeVerborgen && <VorschauVerborgenHinweis />}
+          {!laeufeVerborgen && laeufe.length === 0 && (
+            <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEINE_AUSWERTUNG}</Typography>
+          )}
           {laeufe.length > 0 && sichtbareLaeufe.length === 0 && (
             <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEIN_RUN}</Typography>
           )}

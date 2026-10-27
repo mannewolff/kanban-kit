@@ -1,7 +1,7 @@
 import { GRUND_UNBEKANNT, serverBefund } from '../test/befund'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { boardsApi } from '../api/boards'
 import { cardsApi, type Card } from '../api/cards'
 import { ApiError } from '../api/client'
@@ -25,6 +25,9 @@ vi.mock('../api/nightRunUsage', async (original) => ({
 }))
 
 const mNotify = vi.fn()
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E16); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
 vi.mock('../components/SnackbarProvider', () => ({ useSnackbar: () => mNotify }))
 
 // Der Kartendialog ist eigenständig getestet; hier zählt, mit welcher Karte er geöffnet wird.
@@ -834,6 +837,49 @@ describe('LeitstandPage — Nacharbeit (Issue #1760)', () => {
     fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Pakete zurückgezogen: 1 von 14 — Karten zeigen' }))
     fireEvent.click(within(nacharbeitPlatte).getByRole('button', { name: 'Karte #1712 öffnen: Endpunkt bereitstellen' }))
     await waitFor(() => expect(mNotify).toHaveBeenCalledWith('Karte #1712 nicht gefunden — gelöscht oder kein Zugriff.', 'warning'))
+  })
+})
+
+describe('LeitstandPage — Ansicht als XY (Issue #1928, Plan #1914 E16)', () => {
+  const verborgen = () => new ApiError(403, 'Forbidden', undefined, undefined, 'vorschau-verborgen')
+  const HINWEIS = 'Grace sieht diesen Bereich, die Vorschau zeigt ihn nicht.'
+
+  afterEach(() => {
+    auth.vorschau = null
+  })
+
+  it('zeigt bei vorschau-verborgen den Hinweis statt der Lauf-Bereiche und an „Abbruchgründe“ und „Nacharbeit“', async () => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    m.laeufe.mockRejectedValue(verborgen())
+    m.klassen.mockRejectedValue(verborgen())
+    m.nacharbeit.mockRejectedValue(verborgen())
+    renderPage()
+    const nacharbeitPlatte = await screen.findByRole('region', { name: 'Nacharbeit' })
+    expect(within(nacharbeitPlatte).getByRole('note')).toHaveTextContent(HINWEIS)
+    expect(within(screen.getByRole('region', { name: 'Abbruchgründe' })).getByRole('note')).toHaveTextContent(HINWEIS)
+    // Laufband, Nachtlauf-Kachel, Verbrauch und Letzter Run stehen nicht da, an ihrer Stelle ein Hinweis.
+    expect(screen.getAllByRole('note')).toHaveLength(3)
+    expect(screen.queryByRole('region', { name: 'Jüngster Run' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /Letzter Run/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('article', { name: 'Run · grün' })).not.toBeInTheDocument()
+    expect(m.verbrauch).not.toHaveBeenCalled()
+    expect(nacharbeitPlatte).not.toHaveTextContent('von 14')
+    // Was der Admin selbst sehen darf, bleibt.
+    expect(screen.getByRole('article', { name: 'Durchlaufzeit' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('anderer 403 behält das bisherige Verhalten: die Lauf-Bereiche fehlen still, ohne Hinweis', async () => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.nacharbeit.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
+    await waitFor(() => expect(m.nacharbeit).toHaveBeenCalled())
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Nacharbeit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Abbruchgründe' })).not.toBeInTheDocument()
   })
 })
 

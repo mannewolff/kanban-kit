@@ -5,9 +5,11 @@ import type { NightRunRework, NightRunReworkCard, NightRunReworkWeek, NightRunRe
 import { formatierer } from '../../i18n/format'
 import { useSprache, useT } from '../../i18n/SpracheContext'
 import { kalenderwoche } from '../../lib/leitstand'
+import type { Laden } from '../../lib/useLeitstandDaten'
 import { balkenZustand, dokumentSeit, kopfText, wochenHinweis, zeilenZustand, type ZeilenZustand } from '../../lib/nacharbeit'
 import { KUPFER, MELDER, RAND, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { Erklaerung } from '../Erklaerung'
+import { VorschauVerborgenHinweis } from '../VorschauVerborgenHinweis'
 import { Grundlinie, LeerSatz, Platte, Taste, WochenLeiste, wochenSpalten } from './LeitstandBausteine'
 
 /**
@@ -19,8 +21,32 @@ import { Grundlinie, LeerSatz, Platte, Taste, WochenLeiste, wochenSpalten } from
  * „Durchsatz“, Dokumente in Stahl — mit drei sichtbar verschiedenen Zuständen (E13): ein Balken
  * (0 % als 2 px hoher Stummel), die gestrichelte Grundlinie, oder ein leerer Platz ohne Daten.
  * Die Kalenderwochen kommen aus den eigenen `weeks[].weekStart` (E6).
+ *
+ * <p>Die Platte bekommt den Ladezustand: Mit Daten zeigt sie die Zeilen, in der „Ansicht als XY“ bei
+ * `vorschauVerborgen` den Hinweis statt der Zahlen (Plan #1914, E16); sonst — lädt, ohne Recht,
+ * Fehler — erscheint sie nicht.
  */
 export function NacharbeitPlatte({
+  nacharbeit,
+  onOeffnen,
+}: Readonly<{ nacharbeit: Laden<NightRunRework>; onOeffnen: (nummer: number) => void }>) {
+  const t = useT().LEITSTAND
+  if (nacharbeit.art === 'vorschauVerborgen') {
+    return (
+      <Platte titel={t.NACHARBEIT}>
+        <Box sx={{ px: '16px', py: '14px' }}>
+          <VorschauVerborgenHinweis />
+        </Box>
+      </Platte>
+    )
+  }
+  if (nacharbeit.art !== 'da') {
+    return null
+  }
+  return <NacharbeitInhalt daten={nacharbeit.wert} onOeffnen={onOeffnen} />
+}
+
+function NacharbeitInhalt({
   daten,
   onOeffnen,
 }: Readonly<{ daten: NightRunRework; onOeffnen: (nummer: number) => void }>) {

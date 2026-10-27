@@ -107,6 +107,20 @@ const VORSCHAU_GEWECHSELT = 'vorschau-gewechselt'
 /** Problem-Typ, mit dem der Server einen Änderungsaufruf in der Vorschau abweist (Plan #1914, E15). */
 const VORSCHAU_NUR_LESEND = 'vorschau-nur-lesend'
 
+/**
+ * Problem-Typ, mit dem der Server in der Vorschau einen Bereich verbirgt, den XY sähe, der Admin
+ * selbst aber nicht sehen darf (Plan #1914, E6).
+ */
+const VORSCHAU_VERBORGEN = 'vorschau-verborgen'
+
+/**
+ * Ob ein Fehler die Abweisung `403 vorschau-verborgen` ist: An der Stelle steht dann der Hinweis
+ * `VorschauVerborgenHinweis` statt des Inhalts, jeder andere 403 bleibt beim bisherigen Verhalten (E16).
+ */
+export function istVorschauVerborgen(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 403 && error.type === VORSCHAU_VERBORGEN
+}
+
 let vorschauKennung: string | null = null
 
 /**
