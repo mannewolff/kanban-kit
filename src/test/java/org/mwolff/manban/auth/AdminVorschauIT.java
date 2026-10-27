@@ -305,6 +305,24 @@ class AdminVorschauIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$.type").value("vorschau-gewechselt"));
   }
 
+  /**
+   * Issue #1940: Noch vor der Selbstauskunft fragt der frisch geladene Tab die Sprache der
+   * Installation ab. Ohne Kennung bekommt er sie, statt mit 409 ein weiteres Neuladen auszulösen.
+   */
+  @Test
+  void frischGeladenerTabBekommtDieSpracheOhneKennung() throws Exception {
+    Cookie admin = session(ADMIN, PlatformRole.ADMIN);
+    long alpha = project(admin, "Alpha");
+    long xy = mitglied(XY, alpha, ProjectRole.VIEWER);
+    Vorschau vorschau = starte(admin, xy);
+
+    mvc.perform(
+            get("/api/language")
+                .cookie(vorschau.sitzung(), vorschau.cookie())
+                .header(VorschauFilter.HEADER, VorschauFilter.KEINE))
+        .andExpect(status().isOk());
+  }
+
   /** AK 7: Ein Änderungsaufruf aus einem alten Vorschau-Tab läuft nach dem Ende nie als Admin. */
   @Test
   void aenderungMitVeralteterKopfzeileNachDemEndeErgibt409() throws Exception {
