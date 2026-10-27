@@ -555,7 +555,7 @@ class EpicServiceTest {
     when(cards.findById(50L)).thenReturn(Optional.of(angelegtesEpic));
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    CardView ergebnis = service.openEpicFromCard(1L, 1L, "EP-1", "Vorhaben");
+    CardView ergebnis = service.openEpicFromCard(1L, 1L, "EP-1", "Vorhaben", null);
 
     verify(cards, times(3)).save(captor.capture());
     // 1. Das Vorhaben entsteht — auf dem Board der Quellkarte, ohne Beschreibung.
@@ -604,12 +604,54 @@ class EpicServiceTest {
     when(cards.findById(50L)).thenReturn(Optional.of(angelegtesEpic));
 
     ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-    service.openEpicFromCard(1L, 1L, null, "Vorhaben");
+    service.openEpicFromCard(1L, 1L, null, "Vorhaben", null);
 
     verify(cards, times(3)).save(captor.capture());
     assertThat(captor.getAllValues())
         .filteredOn(c -> c.type() == CardType.EPIC)
         .allSatisfy(c -> assertThat(c.shortcode()).isNull());
+  }
+
+  /**
+   * Die Beschreibung, die der Mensch im Dialog eingibt, geht mit ins Vorhaben (Issue #1932). Vom
+   * Requirement wird weiterhin nichts kopiert (Plan #637 E2).
+   */
+  @Test
+  void openEpicFromCard_mitBeschreibung_landetImVorhaben() {
+    assertThat(eroeffneMitBeschreibung("Ziel des Vorhabens").description())
+        .isEqualTo("Ziel des Vorhabens");
+  }
+
+  /** Leer oder nur Leerraum wird {@code null} — wie ohne Feld (Issue #1932). */
+  @Test
+  void openEpicFromCard_leereBeschreibung_wirdNull() {
+    assertThat(eroeffneMitBeschreibung("  \n ").description()).isNull();
+  }
+
+  private Card eroeffneMitBeschreibung(String beschreibung) {
+    Card quelle = card(1L, 20L, 7, false, null, CardType.CARD, null, null);
+    when(cards.findById(1L)).thenReturn(Optional.of(quelle));
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(boardService.firstColumn(BOARD)).thenReturn(column(20L, "Backlog", 0));
+    when(cards.allocateCardNumber(PROJECT)).thenReturn(8);
+    when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
+    Card angelegtesEpic = card(50L, 20L, 8, false, null, CardType.EPIC, null, null);
+    when(cards.save(any()))
+        .thenAnswer(
+            inv -> {
+              Card c = inv.getArgument(0);
+              return c.id() == null ? angelegtesEpic : c;
+            });
+    when(cards.findById(50L)).thenReturn(Optional.of(angelegtesEpic));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.openEpicFromCard(1L, 1L, null, "Vorhaben", beschreibung);
+
+    verify(cards, times(3)).save(captor.capture());
+    return captor.getAllValues().stream()
+        .filter(c -> c.type() == CardType.EPIC && c.id() == null)
+        .findFirst()
+        .orElseThrow();
   }
 
   /**
@@ -624,7 +666,7 @@ class EpicServiceTest {
     when(cards.findById(1L)).thenReturn(Optional.of(quelle));
     when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
 
-    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V", null))
         .isExactlyInstanceOf(InvalidDependencyException.class)
         .hasMessageContaining("aus sich selbst");
 
@@ -637,7 +679,7 @@ class EpicServiceTest {
     when(cards.findById(1L)).thenReturn(Optional.of(quelle));
     when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
 
-    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V", null))
         .isExactlyInstanceOf(InvalidDependencyException.class)
         .hasMessageContaining("ruhende Karte");
 
@@ -657,7 +699,7 @@ class EpicServiceTest {
     // `isExactlyInstanceOf`: Faellt die Papierkorb-Pruefung weg, laeuft der Ablauf weiter und
     // scheitert spaeter an derselben leeren Nummernsuche — dann aber mit der erbenden
     // InvalidRequirementCardException. Ein Test auf die Oberklasse bliebe dabei gruen.
-    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V", null))
         .isExactlyInstanceOf(InvalidDependencyException.class)
         .hasMessageContaining("ruhende Karte");
 
@@ -670,7 +712,7 @@ class EpicServiceTest {
     when(cards.findById(1L)).thenReturn(Optional.of(quelle));
     when(cards.findByProjectIdAndNumber(PROJECT, 7)).thenReturn(Optional.of(quelle));
 
-    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V", null))
         .isExactlyInstanceOf(InvalidDependencyException.class)
         .hasMessageContaining("bereits einem Vorhaben zugeordnet");
 
@@ -681,7 +723,7 @@ class EpicServiceTest {
   void openEpicFromCard_unbekannteKarte_wirdAbgelehnt() {
     when(cards.findById(1L)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V"))
+    assertThatThrownBy(() -> service.openEpicFromCard(1L, 1L, null, "V", null))
         .isInstanceOf(CardNotFoundException.class);
   }
 

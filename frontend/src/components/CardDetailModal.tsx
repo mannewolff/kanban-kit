@@ -41,7 +41,7 @@ import { ApiError, apiErrorMessage } from '../api/client'
 import { DerivationTree } from './DerivationTree'
 import { cardsApi as defaultCardsApi, type Card, type CardActivity, type CardByNumber, type CardDetail, type CardStatus, type DerivationNode } from '../api/cards'
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
-import { artAusTitel, useKitNamen } from '../api/kitNamen'
+import { artAusTitel, useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import type { NightRunsApi } from '../api/nightRuns'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
@@ -55,6 +55,7 @@ import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { szenarienAus } from '../lib/abnahmeSzenarien'
 import { CardFields } from './CardFields'
 import { vorhabenFeld } from '../lib/cardEpic'
+import { vorhabenNameVorschlag } from '../lib/vorhabenName'
 import { cardLocationCrumbs, type CardLocation } from '../lib/cardLocation'
 import { effektivDone, STATUS_NAMEN, statusAnzeigename } from '../lib/columnMeta'
 import { dueInputToIso, formatDueDate, isOverdue } from '../lib/dueDate'
@@ -989,7 +990,8 @@ function CardBodyView({
 }
 
 /**
- * „Vorgang eröffnen" (Issue #647): der Knopf in der Fußzeile und der Dialog für Name und Kürzel.
+ * „Vorgang eröffnen" (Issue #647): der Knopf in der Fußzeile und der Dialog für Name, Kürzel und
+ * Beschreibung (Issue #1932).
  * Eigene Komponente mit eigenem Zustand (Plan #1042, E11) — Name, Kürzel und Offen-Zustand
  * interessieren ausschließlich diesen einen Weg und belasteten die Kartenmaske sonst mit drei
  * weiteren Zustandsfeldern.
@@ -1005,6 +1007,7 @@ function VorgangEroeffnenDialog({
   archived,
   parentId,
   cardsApi,
+  kitNamen,
   onChanged,
   onOpenDependency,
 }: Readonly<{
@@ -1015,16 +1018,20 @@ function VorgangEroeffnenDialog({
   archived: boolean
   parentId: number | null
   cardsApi: Pick<typeof defaultCardsApi, 'openEpic'>
+  /** Das Namen-Register aus der Kartenmaske: Präfixe für den Namensvorschlag (Issue #1932). */
+  kitNamen: KitNamenZustand
   onChanged?: () => void
   onOpenDependency?: (number: number) => void
 }>) {
   const notify = useSnackbar()
   const t = useT()
-  // Der Name ist mit dem Kartentitel vorbelegt und ueberschreibbar; das Kuerzel ist optional wie
-  // beim Anlegen eines Vorhabens.
+  // Der Name ist mit dem Kartentitel vorbelegt, ein Requirement-Praefix durch `[Epic]` ersetzt, und
+  // ueberschreibbar; Kuerzel und Beschreibung sind optional. Die Beschreibung startet leer: Vom
+  // Requirement wird nichts kopiert (Plan #637 E2, Issue #1932).
   const [offen, setOffen] = useState(false)
   const [name, setName] = useState('')
   const [kuerzel, setKuerzel] = useState('')
+  const [beschreibung, setBeschreibung] = useState('')
 
   /**
    * Ob an dieser Karte ein Vorgang eroeffnet werden kann — dieselben Bedingungen, die das Backend
@@ -1035,7 +1042,12 @@ function VorgangEroeffnenDialog({
 
   const eroeffneVorgang = async () => {
     try {
-      const vorhaben = await cardsApi.openEpic(cardId, name.trim(), (kuerzel.trim() === '' ? null : kuerzel.trim()))
+      const vorhaben = await cardsApi.openEpic(
+        cardId,
+        name.trim(),
+        kuerzel.trim() === '' ? null : kuerzel.trim(),
+        beschreibung.trim() === '' ? null : beschreibung,
+      )
       setOffen(false)
       onChanged?.()
       notify(t.KARTE.VORGANG_EROEFFNET(vorhaben.title), 'success')
@@ -1058,8 +1070,14 @@ function VorgangEroeffnenDialog({
       <VorschauGesperrt>
         <Button
           onClick={() => {
-            setName(cardTitle)
+            setName(
+              vorhabenNameVorschlag(
+                kitNamen.status === 'fertig' ? kitNamen.daten.titelPraefixe : undefined,
+                cardTitle,
+              ),
+            )
             setKuerzel('')
+            setBeschreibung('')
             setOffen(true)
           }}
         >
@@ -1084,6 +1102,14 @@ function VorgangEroeffnenDialog({
               value={kuerzel}
               onChange={(e) => setKuerzel(e.target.value)}
               fullWidth
+            />
+            <TextField
+              label={t.KARTE.VORHABEN_BESCHREIBUNG}
+              value={beschreibung}
+              onChange={(e) => setBeschreibung(e.target.value)}
+              fullWidth
+              multiline
+              minRows={3}
             />
           </Stack>
         </DialogContent>
@@ -2044,6 +2070,7 @@ function CardDetailModalView({
             archived={card.archived}
             parentId={stand.parentId}
             cardsApi={cardsApi}
+            kitNamen={kitNamen}
             onChanged={onChanged}
             onOpenDependency={onOpenDependency}
           />

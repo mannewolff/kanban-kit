@@ -448,12 +448,46 @@ class VorschauFilterTest {
   }
 
   @Test
+  void gueltig_spracheNachDemNeuladenMitKopfzeileKeine_wirdWeitergereicht() throws Exception {
+    // Given: GET /api/language ist die erste Anfrage des frisch geladenen Tabs, noch vor der
+    // Selbstauskunft (Issue #1940)
+    inGueltigerVorschau();
+    request.setRequestURI("/api/language");
+    request.addHeader(VorschauFilter.HEADER, VorschauFilter.KEINE);
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertWeitergereicht();
+  }
+
+  @Test
+  void endfall_weistAuchDieSpracheAbUndLoeschtDasCookie() throws Exception {
+    // Given
+    angemeldet(ADMIN);
+    mitVorschauCookie();
+    pruefungErgibt(new VorschauPruefung.Beendet(VorschauEndgrund.ABLAUF));
+    request.setRequestURI("/api/language");
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertVorschauGewechselt();
+    assertThat(setCookie()).contains(GELOESCHT);
+  }
+
+  @Test
   void ausnahmen_geltenNurFuerGetAufGenauDiesenPfaden() throws Exception {
     String[][] faelle = {
       {"PATCH", "/api/me"},
       {"PUT", "/api/me"},
       {"GET", "/api/me/vorschau-protokoll"},
       {"GET", "/api/me/"},
+      {"PUT", "/api/language"},
+      {"GET", "/api/language/"},
+      {"PUT", "/api/admin/language"},
       {"DELETE", "/api/attachments/9"},
       {"POST", "/api/boards/3/events"},
       {"GET", "/api/attachments/9/mehr"},

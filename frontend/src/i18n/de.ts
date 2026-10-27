@@ -671,6 +671,7 @@ export const de = {
     VORGANG_FEHLER: 'Vorgang eröffnen fehlgeschlagen.',
     VORHABEN_NAME: 'Name des Vorhabens',
     KUERZEL_OPTIONAL: 'Kürzel (optional)',
+    VORHABEN_BESCHREIBUNG: 'Beschreibung (optional)',
     EROEFFNEN: 'Eröffnen',
     ZUSTAENDIGE_FEHLER: 'Zuständige speichern fehlgeschlagen.',
     STATUS_FEHLER: 'Status setzen fehlgeschlagen.',

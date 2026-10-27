@@ -94,6 +94,26 @@ class CardOpenEpicIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[0].memberNumbers.length()").value(3));
   }
 
+  /** Die im Dialog eingegebene Beschreibung steht im Vorhaben (Issue #1932). */
+  @Test
+  void mitBeschreibung_stehtSieImVorhaben() throws Exception {
+    Fixture f = fixture("oe-desc");
+    JsonNode quelle = createCard(f, "Anforderung");
+
+    String body =
+        openEpic(
+                f.session,
+                quelle.get("id").asLong(),
+                "{\"name\":\"Vorgang\",\"beschreibung\":\"Ziel des Vorhabens\"}")
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    mvc.perform(get("/api/cards/" + json.readTree(body).get("id").asLong()).cookie(f.session))
+        .andExpect(jsonPath("$.description").value("Ziel des Vorhabens"));
+  }
+
   @Test
   void ohneKuerzel_wirdAngelegt() throws Exception {
     Fixture f = fixture("oe-nokey");

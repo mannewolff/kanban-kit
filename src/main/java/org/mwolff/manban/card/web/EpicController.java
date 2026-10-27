@@ -278,8 +278,9 @@ class EpicController {
       summary = "Vorgang an einer Karte eröffnen",
       description =
           "Legt in einem Zug ein Vorhaben auf dem Board der Karte an, setzt die Karte als seine"
-              + " Anforderung und ordnet sie ihm zu. Das Vorhaben bleibt ohne Beschreibung; den"
-              + " Inhalt trägt die Anforderungskarte. Recht: EPIC_CREATE.")
+              + " Anforderung und ordnet sie ihm zu. Das Vorhaben trägt nur die übergebene"
+              + " Beschreibung; vom Inhalt der Anforderungskarte wird nichts kopiert. Recht:"
+              + " EPIC_CREATE.")
   @ApiResponse(responseCode = "201", description = "Das neue Vorhaben.")
   @ApiResponse(
       responseCode = "400",
@@ -312,7 +313,8 @@ class EpicController {
       @AuthenticationPrincipal Long userId,
       @Parameter(description = BESCHREIBUNG_CARD_ID, example = "812") @PathVariable long cardId,
       @Valid @RequestBody OpenEpicRequest request) {
-    return epicService.openEpicFromCard(userId, cardId, request.kuerzel(), request.name());
+    return epicService.openEpicFromCard(
+        userId, cardId, request.kuerzel(), request.name(), request.beschreibung());
   }
 
   /**
@@ -422,6 +424,11 @@ class EpicController {
   record OpenEpicRequest(
       @Schema(description = "Optionales Kürzel des Vorhabens.", example = "API")
           @Nullable String kuerzel,
-      @Schema(description = "Name des Vorhabens.", example = "API-Übersicht") @NotBlank
-          String name) {}
+      @Schema(description = "Name des Vorhabens.", example = "API-Übersicht") @NotBlank String name,
+      @Schema(
+              description =
+                  "Optionale Beschreibung des Vorhabens (Markdown); leer oder fehlend heißt"
+                      + " keine.",
+              example = "Alle Endpunkte auf einer Seite.")
+          @Nullable String beschreibung) {}
 }

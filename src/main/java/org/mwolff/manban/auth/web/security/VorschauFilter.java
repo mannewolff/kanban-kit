@@ -49,7 +49,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *       ohne Kopfzeile, und sie laufen mit dem Stand am Server. Ebenso ausgenommen ist {@code GET}
  *       auf die Selbstauskunft {@code /api/me} (Issue #1940): Aus ihrer Antwort erfährt ein frisch
  *       geladener Tab die Kennung erst; hinge sie am Abgleich, lüde der Tab nach dem Start der
- *       Vorschau endlos neu. Sie verändert nichts und läuft ebenfalls mit dem Stand am Server.
+ *       Vorschau endlos neu. Sie verändert nichts und läuft ebenfalls mit dem Stand am Server. Aus
+ *       demselben Grund ist {@code GET /api/language} ausgenommen: Die Sprache der Installation
+ *       lädt der Tab noch vor der Selbstauskunft; sie ist öffentlich und hängt an keinem Konto.
  * </ul>
  */
 @Component
@@ -71,10 +73,10 @@ public class VorschauFilter extends OncePerRequestFilter {
 
   /**
    * Board-Ereignisse und direkter Anhang-Link, je mit genau einem Pfadsegment als Id, und die
-   * Selbstauskunft {@code /api/me} ohne Unterpfade.
+   * Selbstauskunft {@code /api/me} und die Sprache {@code /api/language}, je ohne Unterpfade.
    */
   private static final Pattern OHNE_ABGLEICH =
-      Pattern.compile("/api/boards/[^/]+/events|/api/attachments/[^/]+|/api/me");
+      Pattern.compile("/api/boards/[^/]+/events|/api/attachments/[^/]+|/api/me|/api/language");
 
   private final SessionCookieManager cookies;
   private final AdminVorschauService vorschauen;
