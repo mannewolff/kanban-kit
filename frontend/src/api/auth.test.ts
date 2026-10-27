@@ -32,8 +32,8 @@ afterEach(() => {
 })
 
 describe('authApi.me – Laufzeit-Validierung der Me-Antwort', () => {
-  it('gibt Me bei valider Antwort zurück', async () => {
-    mockJsonResponse({
+  it('gibt Me bei valider Antwort zurück und fragt GET /api/me', async () => {
+    const f = mockJsonResponse({
       userId: 1,
       email: 'a@x.de',
       displayName: 'Ada',
@@ -44,16 +44,38 @@ describe('authApi.me – Laufzeit-Validierung der Me-Antwort', () => {
     const me = await authApi.me()
 
     expect(me.userId).toBe(1)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/me')
+    expect(c.method).toBeUndefined()
   })
 
   it('wirft ApiError bei typverletzter Server-Antwort', async () => {
     mockJsonResponse({ userId: 'nope', email: 'a@x.de' })
+
+    await expect(authApi.me()).rejects.toThrow(new ApiError(500, 'Unerwartete Antwort vom Server (Me).'))
+  })
+
+  // Je Feld ein Fall, in dem nur dieses Feld verletzt ist: Jede Teilprüfung muss für sich abweisen.
+  it.each([
+    ['userId', { ...validMe, userId: '1' }],
+    ['email', { ...validMe, email: 7 }],
+    ['displayName', { ...validMe, displayName: null }],
+    ['platformRole', { ...validMe, platformRole: undefined }],
+    ['memberships', { ...validMe, memberships: {} }],
+  ])('wirft ApiError, wenn allein %s verletzt ist', async (_feld, antwort) => {
+    mockJsonResponse(antwort)
 
     await expect(authApi.me()).rejects.toBeInstanceOf(ApiError)
   })
 
   it('wirft ApiError bei null als Antwort', async () => {
     mockJsonResponse(null)
+
+    await expect(authApi.me()).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('wirft ApiError bei leerer Antwort', async () => {
+    mockEmptyResponse()
 
     await expect(authApi.me()).rejects.toBeInstanceOf(ApiError)
   })
@@ -110,7 +132,7 @@ describe('authApi.me – Vorschau „Ansicht als XY“ (Plan #1914, E14)', () =>
   ])('wirft ApiError bei einer Vorschau %s', async (_fall, wert) => {
     mockJsonResponse({ ...validMe, vorschau: wert })
 
-    await expect(authApi.me()).rejects.toBeInstanceOf(ApiError)
+    await expect(authApi.me()).rejects.toThrow(new ApiError(500, 'Unerwartete Antwort vom Server (Me.vorschau).'))
   })
 })
 
