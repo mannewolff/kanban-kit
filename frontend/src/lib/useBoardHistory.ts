@@ -43,6 +43,7 @@ function isId(value: unknown): value is number {
  * migriert — der Verlauf fuellt sich beim naechsten Besuch von selbst neu.
  */
 function isEntry(value: unknown): value is BoardHistoryEntry {
+  // Stryker disable next-line ConditionalExpression: gleichwertig — `JSON.parse` liefert kein `undefined`, und bei Text, Zahl oder Wahrheitswert ergibt `candidate.id` `undefined`, an dem `isId` scheitert
   if (typeof value !== 'object' || value === null) {
     return false
   }
@@ -61,6 +62,7 @@ function isEntry(value: unknown): value is BoardHistoryEntry {
  * Felder projizieren. Ein Nicht-Array ergibt einen leeren Verlauf.
  */
 function normalize(value: unknown): BoardHistoryEntry[] {
+  // Stryker disable next-line ConditionalExpression,BlockStatement: gleichwertig — ohne die Prüfung wirft `for…of` bei einem Nicht-Array, oder ein Text liefert nur Zeichen, und `read` endet beides beim leeren Verlauf
   if (!Array.isArray(value)) {
     return []
   }
@@ -100,6 +102,7 @@ function read(userId: number | null): BoardHistoryEntry[] {
   }
   try {
     const raw = localStorage.getItem(storageKey(userId))
+    // Stryker disable next-line ConditionalExpression: gleichwertig — `JSON.parse(null)` ergibt `null`, und `normalize` macht daraus den leeren Verlauf
     return raw === null ? [] : normalize(JSON.parse(raw))
   } catch {
     // Gesperrter Storage oder kaputtes JSON — der Verlauf startet leer.
@@ -156,6 +159,7 @@ export function useBoardHistory(): BoardHistory {
       write(activeUserId, entries)
       setState(latest.current)
     },
+    // Stryker disable next-line ArrayDeclaration: gleichwertig — eine Liste mit festem Wert haelt `update` ebenso stabil wie die leere
     [],
   )
 
@@ -167,11 +171,13 @@ export function useBoardHistory(): BoardHistory {
           ...entries.filter((e) => e.id !== entry.id),
         ].slice(0, MAX_ENTRIES),
       ),
+    // Stryker disable next-line ArrayDeclaration: gleichwertig — `update` ist stabil, mit oder ohne Abhaengigkeit entsteht `recordVisit` nur einmal
     [update],
   )
 
   const remove = useCallback(
     (boardId: number) => update((entries) => entries.filter((e) => e.id !== boardId)),
+    // Stryker disable next-line ArrayDeclaration: gleichwertig — `update` ist stabil, mit oder ohne Abhaengigkeit entsteht `remove` nur einmal
     [update],
   )
 
