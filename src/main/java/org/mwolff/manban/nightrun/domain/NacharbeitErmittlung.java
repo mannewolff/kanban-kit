@@ -5,7 +5,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -17,7 +16,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.KitNamen;
-import org.mwolff.manban.common.KitNamen.Sache;
 import org.mwolff.manban.common.Wochenfenster;
 import org.mwolff.manban.nightrun.domain.Nacharbeit.Karteneintrag;
 import org.mwolff.manban.nightrun.domain.Nacharbeit.Wochenwert;
@@ -33,10 +31,10 @@ import org.mwolff.manban.nightrun.domain.Nacharbeit.Zustand;
  * übergebenen Board-Karten gehört (E10, AK 12). Sie fällt in das Wochenfenster ihres Laufstarts,
  * nicht ihres eigenen Zeitpunkts (AK 11).
  *
- * <p><b>Signale:</b> Ein Paket ist zurückgezogen, wenn eine Bewegung des Runs es nach Ready oder
- * Backlog brachte und der bekannte Status davor In Progress war (E1). Ein Dokument ist angehalten,
- * wenn der Run ein Label der Sachen {@code KLAEREN} oder {@code LAUF_WARTET} setzte, gleich in
- * welcher Sprache (E3); je Run zählt das einmal (E9).
+ * <p><b>Signale</b> ({@link NacharbeitSignale}): Ein Paket ist zurückgezogen, wenn eine Bewegung
+ * des Runs es nach Ready oder Backlog brachte und der bekannte Status davor In Progress war (E1).
+ * Ein Dokument ist angehalten, wenn der Run ein Label der Sachen {@code KLAEREN} oder {@code
+ * LAUF_WARTET} setzte, gleich in welcher Sprache (E3); je Run zählt das einmal (E9).
  *
  * <p><b>Bearbeitet (E5, AK 10):</b> ein Paket mit einer Bewegung des Runs nach In Progress; ein
  * Dokument mit einem Kommentar, einem Label oder einer Aktivität außer {@code CREATED} des Runs.
@@ -49,10 +47,7 @@ import org.mwolff.manban.nightrun.domain.Nacharbeit.Zustand;
  */
 public final class NacharbeitErmittlung {
 
-  private static final String IN_PROGRESS = "IN_PROGRESS";
-  private static final Set<String> RUECKZUG_ZIELE = Set.of("READY", "BACKLOG");
   private static final String ANGELEGT = "CREATED";
-  private static final Set<Sache> HALT = EnumSet.of(Sache.KLAEREN, Sache.LAUF_WARTET);
 
   private NacharbeitErmittlung() {}
 
@@ -149,7 +144,7 @@ public final class NacharbeitErmittlung {
           .filter(spur -> spur.gruppe() == Kartengruppe.DOKUMENT)
           .ifPresent(
               spur -> {
-                if (istHalt(ereignis.labelName())) {
+                if (NacharbeitSignale.istHalt(ereignis.labelName())) {
                   dokumente.signal(spur);
                 } else {
                   dokumente.bearbeitet(spur);
@@ -171,23 +166,14 @@ public final class NacharbeitErmittlung {
   private static void aktivitaetZaehlen(
       Aktivitaet aktivitaet, Spur spur, Zaehlung pakete, Zaehlung dokumente) {
     if (spur.gruppe() == Kartengruppe.PAKET) {
-      if (istRueckzug(aktivitaet)) {
+      if (NacharbeitSignale.istRueckzug(aktivitaet.statusVorher(), aktivitaet.statusNachher())) {
         pakete.signal(spur);
-      } else if (IN_PROGRESS.equals(aktivitaet.statusNachher())) {
+      } else if (NacharbeitSignale.IN_PROGRESS.equals(aktivitaet.statusNachher())) {
         pakete.bearbeitet(spur);
       }
     } else if (spur.gruppe() == Kartengruppe.DOKUMENT && !ANGELEGT.equals(aktivitaet.art())) {
       dokumente.bearbeitet(spur);
     }
-  }
-
-  private static boolean istRueckzug(Aktivitaet aktivitaet) {
-    return IN_PROGRESS.equals(aktivitaet.statusVorher())
-        && RUECKZUG_ZIELE.contains(aktivitaet.statusNachher());
-  }
-
-  private static boolean istHalt(String labelName) {
-    return KitNamen.STANDARD.sache(labelName).filter(HALT::contains).isPresent();
   }
 
   private static Instant spaeter(Instant a, Instant b) {
