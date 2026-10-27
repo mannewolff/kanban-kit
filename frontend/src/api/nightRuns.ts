@@ -47,6 +47,28 @@ export interface NightRunUsage {
   inputTokens?: number
   outputTokens?: number
   cachedInputTokens?: number
+  /** Rechenzeit des Modells ohne Wartezeiten; am Handweg allein an einem Vorgang (Issue #1948). */
+  modelDurationMs?: number
+  /** Zahl der Zuege der Sitzung; am Handweg allein an einem Vorgang (Issue #1948). */
+  turns?: number
+}
+
+/**
+ * Ein einzelner Vorgang eines Pakets, wie er an den Server geht (Vertrag V1 aus Plan #1905, Issue
+ * #1948): ein Versuch an einer Karte in einer Stufe, in der Pruefung je Pruefer ein Eintrag.
+ *
+ * `stage` bleibt eine Zeichenkette in Grossschreibung, wie die Ergebnisdatei sie nennt: Eine
+ * unbekannte Stufe ist ein Vertragsbruch, und den stellt der Server mit 400 fest (E6), nicht der
+ * Browser. Jede optionale Angabe fehlt als Schluessel, wo nichts gemeldet wurde.
+ */
+export interface NightRunAttempt {
+  stage: string
+  cardNumber: number
+  model?: string
+  effort?: string
+  succeeded: boolean
+  usage?: NightRunUsage
+  writtenCards?: number[]
 }
 
 /** Ein Arbeitspaket, wie es an den Server geht — der Ausschnitt des Parser-Ergebnisses, den der Server kennt. */
@@ -61,6 +83,8 @@ export interface NightRunItemSubmission {
   usage?: NightRunUsage
   /** Die Angaben eines festgefahrenen Pakets (Issue #1551); der Server uebernimmt sie nur bei `STUCK`. */
   stuck?: NightRunStuck
+  /** Die Vorgaenge des Pakets in der Reihenfolge ihrer Ausfuehrung (Issue #1948). */
+  attempts?: NightRunAttempt[]
   /**
    * Die drei Angaben einer gleichzeitigen Nacht, flach wie in der Meldung des Kits (Issue #1878,
    * Plan #1876 E8); der Handweg fuehrt sie nur bei `concurrentPackages` > 1, dann an jedem Paket.

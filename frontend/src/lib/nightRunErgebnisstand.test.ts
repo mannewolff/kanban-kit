@@ -1703,3 +1703,91 @@ describe('parseNightRunErgebnisstand — Gleichzeitigkeit (Issue #1878)', () => 
     expect(lauf(JSON.stringify(echterLauf)).items.flatMap(gefuehrt)).toEqual([])
   })
 })
+
+/**
+ * Die Vorgänge je Einheit (Issue #1948, Plan #1905 V2): Die Ergebnisdatei traegt sie als
+ * `vorgaenge` mit den deutschen Namen, das Einlesen bildet sie feldgleich auf `attempts` (V1) ab.
+ */
+describe('parseNightRunErgebnisstand — Vorgaenge je Einheit (Issue #1948)', () => {
+  const VOLL = {
+    stufe: 'plan',
+    karte: 1904,
+    modell: 'claude-opus-5-5',
+    denktiefe: 'high',
+    gelungen: true,
+    verbrauch: { costUsd: 1.25, inputTokens: 120_000, outputTokens: 8_000, cachedInputTokens: 90_000, turns: 57 },
+    kennzahlen: { apiDauerMs: 420_000 },
+    dokumente: [1905],
+  }
+
+  it('bildet einen vollstaendigen Vorgang feldgleich auf `attempts` ab', () => {
+    const item = einziges(mitEinheit({ ausgang: 'erfolg', pruefung: { id: '100', zustand: 'geprueft' }, vorgaenge: [VOLL] }))
+    expect(item.attempts).toEqual([
+      {
+        stage: 'PLAN',
+        cardNumber: 1904,
+        model: 'claude-opus-5-5',
+        effort: 'high',
+        succeeded: true,
+        usage: {
+          costUsd: 1.25,
+          inputTokens: 120_000,
+          outputTokens: 8_000,
+          cachedInputTokens: 90_000,
+          turns: 57,
+          modelDurationMs: 420_000,
+        },
+        writtenCards: [1905],
+      },
+    ])
+  })
+
+  it('haelt die Reihenfolge der Ausfuehrung und laesst fehlende optionale Felder weg', () => {
+    const item = einziges(
+      mitEinheit({
+        ausgang: 'erfolg',
+        pruefung: { id: '100', zustand: 'geprueft' },
+        vorgaenge: [
+          { stufe: 'review', karte: 1905, gelungen: false },
+          { stufe: 'umsetzung', karte: 1948, modell: 'gpt-astra', gelungen: true, kennzahlen: { apiDauerMs: 1_000 } },
+          { stufe: 'pakete', karte: 1905, gelungen: true, verbrauch: { costUsd: 0.5 }, kennzahlen: null },
+        ],
+      }),
+    )
+    expect(item.attempts).toEqual([
+      { stage: 'REVIEW', cardNumber: 1905, succeeded: false },
+      { stage: 'UMSETZUNG', cardNumber: 1948, model: 'gpt-astra', succeeded: true, usage: { modelDurationMs: 1_000 } },
+      { stage: 'PAKETE', cardNumber: 1905, succeeded: true, usage: { costUsd: 0.5 } },
+    ])
+    expect('model' in item.attempts![0]).toBe(false)
+    expect('usage' in item.attempts![0]).toBe(false)
+    expect('writtenCards' in item.attempts![0]).toBe(false)
+  })
+
+  it('uebernimmt nur Zahlen und Zeichenketten und verwirft Vorgaenge ohne Pflichtangabe', () => {
+    const item = einziges(
+      mitEinheit({
+        ausgang: 'erfolg',
+        pruefung: { id: '100', zustand: 'geprueft' },
+        vorgaenge: [
+          { stufe: 'plan', karte: 1904, gelungen: true, modell: 7, denktiefe: null, verbrauch: { costUsd: '1' }, dokumente: [1, 'x'] },
+          { karte: 1904, gelungen: true },
+          { stufe: 'plan', karte: '1904', gelungen: true },
+          { stufe: 'plan', karte: 1904, gelungen: 'ja' },
+          null,
+        ],
+      }),
+    )
+    expect(item.attempts).toEqual([{ stage: 'PLAN', cardNumber: 1904, succeeded: true, writtenCards: [1] }])
+  })
+
+  it('fuehrt ohne `vorgaenge` keinen Schluessel `attempts`', () => {
+    const item = einziges(mitEinheit({ ausgang: 'erfolg', pruefung: { id: '100', zustand: 'geprueft' } }))
+    expect('attempts' in item).toBe(false)
+  })
+
+  it('fuehrt bei `vorgaenge`, das keine Liste ist, keinen Schluessel `attempts`', () => {
+    const item = einziges(mitEinheit({ ausgang: 'erfolg', pruefung: { id: '100', zustand: 'geprueft' }, vorgaenge: 'x' }))
+    expect('attempts' in item).toBe(false)
+  })
+})

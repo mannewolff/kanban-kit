@@ -23,6 +23,7 @@
  * (Issue #1592): Ein englisches Protokoll deutet sich wie sein deutsches Gegenstueck.
  */
 
+import type { NightRunAttempt } from '../api/nightRuns'
 import { PROTOKOLL, passe, type Wortform } from './kitWortformen'
 
 /**
@@ -208,6 +209,11 @@ export interface NightRunItem {
    * die Einheit keinen oder einen leeren Block traegt.
    */
   stuck?: NightRunStuck
+  /**
+   * Die Vorgaenge des Pakets in den Namen des Servers (Issue #1948, Plan #1905 V2) — nur aus einem
+   * Ergebnisstand, der `vorgaenge` an der Einheit traegt. Fehlt sonst als Schluessel.
+   */
+  attempts?: NightRunAttempt[]
   /**
    * Die drei Angaben einer gleichzeitigen Nacht in den Namen des Servers (Issue #1878, Plan #1876
    * E9) — nur aus einem Ergebnisstand mit `concurrentPackages` > 1, dort an jedem Paket. Gedeutet

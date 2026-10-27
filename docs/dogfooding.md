@@ -600,6 +600,24 @@ Die Regeln dazu:
 Der Einlieferungsweg der von Hand eingelesenen Ergebnisdatei
 (`POST /api/projects/{projectId}/night-runs`) nimmt `attempts` am Paket in derselben Form an.
 
+In der Ergebnisdatei selbst stehen die Vorgänge je Einheit als Liste `vorgaenge` mit deutschen
+Namen; das Einlesen im Leitstand bildet sie feldgleich auf `attempts` ab:
+
+| Ergebnisdatei (`vorgaenge[]`) | Einlieferung (`attempts[]`) |
+|---|---|
+| `stufe` | `stage` (in Großschreibung) |
+| `karte` | `cardNumber` |
+| `modell` | `model` |
+| `denktiefe` | `effort` |
+| `gelungen` | `succeeded` |
+| `verbrauch` (`costUsd`, `inputTokens`, `outputTokens`, `cachedInputTokens`, `turns`) | `usage` mit denselben Feldern |
+| `kennzahlen.apiDauerMs` | `usage.modelDurationMs` |
+| `dokumente` | `writtenCards` |
+
+Ein Eintrag ohne `stufe`, `karte` oder `gelungen` wird beim Einlesen übergangen; eine fehlende
+optionale Angabe entfällt als Schlüssel. Trägt eine Einheit keine `vorgaenge`, geht das Paket ohne
+`attempts` hinaus, mit demselben Rumpf wie zuvor.
+
 ## 8. Auslieferungen melden
 
 Die eigene Auslieferung von kanban-kit (`.github/workflows/deploy.yml`) meldet jeden Versuch an das

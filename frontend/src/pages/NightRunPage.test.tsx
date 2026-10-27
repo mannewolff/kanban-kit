@@ -7955,3 +7955,89 @@ describe('NightRunPage — Ansicht als XY (Issue #1927)', () => {
     expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
   })
 })
+
+/**
+ * Die Vorgänge je Paket (Issue #1948, Plan #1905 V2): Aus `vorgaenge` der Ergebnisdatei werden
+ * `attempts` der Einlieferung; ohne `vorgaenge` bleibt der Rumpf, wie er vorher war.
+ */
+describe('NightRunPage — Vorgänge in der Einlieferung (#1948)', () => {
+  const mitVorgaengen = (vorgaenge?: unknown[]) =>
+    stand({
+      einheiten: [
+        einheit({
+          ausgang: 'erfolg',
+          commit: 'a1b2c3d',
+          pruefung: GEPRUEFT,
+          ...(vorgaenge === undefined ? {} : { vorgaenge }),
+        }),
+      ],
+    })
+
+  const gesendeterRumpf = async (inhalt: string): Promise<string> => {
+    renderPage({ submit: { ergebnis: alleNeu(inhalt) } })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+    protokollWaehlen(inhalt)
+    await waitFor(() => expect(anfragen.some((a) => a.method === 'POST')).toBe(true))
+    return anfragen.find((a) => a.method === 'POST')!.body as string
+  }
+
+  it('reicht die Vorgänge als `attempts` in die Einlieferung durch', async () => {
+    const rumpf = await gesendeterRumpf(
+      mitVorgaengen([
+        {
+          stufe: 'umsetzung',
+          karte: 700,
+          modell: 'claude-opus-5-5',
+          denktiefe: 'medium',
+          gelungen: true,
+          verbrauch: { costUsd: 2.1 },
+          kennzahlen: { apiDauerMs: 980_000 },
+        },
+      ]),
+    )
+    expect(JSON.parse(rumpf).runs[0].items[0].attempts).toEqual([
+      {
+        stage: 'UMSETZUNG',
+        cardNumber: 700,
+        model: 'claude-opus-5-5',
+        effort: 'medium',
+        succeeded: true,
+        usage: { costUsd: 2.1, modelDurationMs: 980_000 },
+      },
+    ])
+  })
+
+  it('sendet ohne `vorgaenge` denselben Rumpf wie bisher', async () => {
+    const rumpf = await gesendeterRumpf(mitVorgaengen())
+    const gesendet = JSON.parse(rumpf)
+    const item = gesendet.runs[0].items[0]
+    expect('attempts' in item).toBe(false)
+    // Der bisherige Rumpf, Feld für Feld so gepickt, wie `zurEinlieferung` es vor #1948 tat.
+    const bisher = {
+      runs: gesendet.runs.map((run: Record<string, unknown> & { items: Record<string, unknown>[] }) => ({
+        ...run,
+        items: run.items.map((i) => {
+          const kopie: Record<string, unknown> = {}
+          for (const schluessel of [
+            'cardNumber',
+            'title',
+            'state',
+            'errorClass',
+            'durationMs',
+            'commitHash',
+            'excerpt',
+            'usage',
+            'stuck',
+            'concurrent',
+            'checkWaitMs',
+            'deferredAtMerge',
+          ]) {
+            if (schluessel in i) kopie[schluessel] = i[schluessel]
+          }
+          return kopie
+        }),
+      })),
+    }
+    expect(rumpf).toBe(JSON.stringify(bisher))
+  })
+})
