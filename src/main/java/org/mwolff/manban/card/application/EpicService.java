@@ -339,21 +339,27 @@ public class EpicService {
    * Vorhaben ohne Anforderung — also genau den Zustand, den diese Methode abschaffen soll (Plan
    * #637, E2).
    *
-   * <p>Das Vorhaben entsteht auf dem Board der Quellkarte und <b>ohne Beschreibung</b>: Den Inhalt
-   * trägt die Anforderungskarte, eine Kopie liefe sofort auseinander.
+   * <p>Das Vorhaben entsteht auf dem Board der Quellkarte, <b>nur mit der eingegebenen
+   * Beschreibung</b>: Vom Requirement wird nichts kopiert, eine Kopie liefe sofort auseinander
+   * (Plan #637, E2). Was der Mensch im Dialog bewusst eingibt, geht mit (Issue #1932).
    *
    * @param shortcode optional, wie bei {@link #createEpic}
+   * @param description optional; leer oder nur Leerraum wird {@code null}
    */
   @Transactional
   public CardView openEpicFromCard(
-      long userId, long cardId, @Nullable String shortcode, String title) {
+      long userId,
+      long cardId,
+      @Nullable String shortcode,
+      String title,
+      @Nullable String description) {
     Card quelle = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.require(userId, quelle.projectId(), Permission.EPIC_CREATE);
     requireVorgangEroeffenbar(quelle);
 
     // Bestehenden Weg wiederverwenden statt nachbauen: Nummernvergabe, erste Spalte, Rechte und
     // das Board-Ereignis haengen alle daran.
-    CardView vorhaben = doCreateEpic(userId, quelle.boardId(), title, null, shortcode);
+    CardView vorhaben = doCreateEpic(userId, quelle.boardId(), title, description, shortcode);
 
     Card epic = cards.findById(vorhaben.id()).orElseThrow(CardNotFoundException::new);
     Long anforderung = RequirementCard.resolve(cards, epic, quelle.number());

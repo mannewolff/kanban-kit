@@ -42,21 +42,21 @@ describe('cardsApi', () => {
   })
 
 
-  it('openEpic ruft POST /api/cards/{id}/open-epic mit Name und Kürzel', async () => {
+  it('openEpic ruft POST /api/cards/{id}/open-epic mit Name, Kürzel und Beschreibung', async () => {
     const f = spyFetch(JSON.stringify({ ...card, id: 400, number: 9, title: 'Vorhaben', type: 'EPIC' }))
-    const result = await cardsApi.openEpic(7, 'Vorhaben', 'VOR')
+    const result = await cardsApi.openEpic(7, 'Vorhaben', 'VOR', 'Ziel')
     const c = lastCall(f)
     expect(c.url).toBe('/api/cards/7/open-epic')
     expect(c.method).toBe('POST')
-    expect(JSON.parse(String(c.body))).toEqual({ name: 'Vorhaben', kuerzel: 'VOR' })
+    expect(JSON.parse(String(c.body))).toEqual({ name: 'Vorhaben', kuerzel: 'VOR', beschreibung: 'Ziel' })
     expect(result.type).toBe('EPIC')
   })
 
-  it('openEpic reicht ein fehlendes Kürzel als null durch', async () => {
+  it('openEpic reicht fehlendes Kürzel und fehlende Beschreibung als null durch', async () => {
     // Gegenprobe: Das Kuerzel ist optional (#640) — es darf weder zu '' noch zu undefined werden.
     const f = spyFetch(JSON.stringify(card))
-    await cardsApi.openEpic(7, 'Vorhaben', null)
-    expect(JSON.parse(String(lastCall(f).body))).toEqual({ name: 'Vorhaben', kuerzel: null })
+    await cardsApi.openEpic(7, 'Vorhaben', null, null)
+    expect(JSON.parse(String(lastCall(f).body))).toEqual({ name: 'Vorhaben', kuerzel: null, beschreibung: null })
   })
 
   it('epicTree ruft GET /api/boards/{id}/epics/{epicId}/tree und liefert die geparste Antwort', async () => {

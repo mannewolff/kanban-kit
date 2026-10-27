@@ -1245,7 +1245,7 @@ describe('CardDetailModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
 
-    await waitFor(() => expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(100, 'Aufgabe', null))
+    await waitFor(() => expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(100, 'Aufgabe', null, null))
   })
 
   it('macht den Erfolg sichtbar und führt zum neuen Vorhaben', async () => {
@@ -1291,7 +1291,7 @@ describe('CardDetailModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
 
     await waitFor(() =>
-      expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(100, 'Eigener Name', null),
+      expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(100, 'Eigener Name', null, null),
     )
   })
 
@@ -1323,7 +1323,80 @@ describe('CardDetailModal', () => {
     fireEvent.change(screen.getByLabelText('Kürzel (optional)'), { target: { value: 'VOR' } })
     fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
 
-    await waitFor(() => expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(100, 'Aufgabe', 'VOR'))
+    await waitFor(() => expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(100, 'Aufgabe', 'VOR', null))
+  })
+
+  // --- Namensvorschlag und Beschreibung (Issue #1932) ----------------------
+
+  it.each(['[Requirement] Export', '[Fachlich] Export'])(
+    'schlägt für „%s" den Namen „[Epic] Export" vor',
+    async (titel) => {
+      const apis = makeApis()
+      const karte = { ...card, title: titel }
+      apis.cardsApi.get.mockResolvedValue(karte)
+      await oeffneVorgangsDialog(apis, karte)
+
+      expect(screen.getByLabelText('Name des Vorhabens')).toHaveValue('[Epic] Export')
+    },
+  )
+
+  it('lässt den Vorschlag unverändert, solange die Kit-Namen laden', async () => {
+    kitNamen.zustand = { status: 'laden' }
+    const apis = makeApis()
+    const karte = { ...card, title: '[Requirement] Export' }
+    apis.cardsApi.get.mockResolvedValue(karte)
+    await oeffneVorgangsDialog(apis, karte)
+
+    expect(screen.getByLabelText('Name des Vorhabens')).toHaveValue('[Requirement] Export')
+  })
+
+  it('zeigt ein leeres Beschreibungsfeld und gibt die Eingabe mit', async () => {
+    const apis = makeApis()
+    await oeffneVorgangsDialog(apis)
+
+    const feld = screen.getByLabelText('Beschreibung (optional)')
+    expect(feld).toHaveValue('')
+    fireEvent.change(feld, { target: { value: 'Ziel des Vorhabens' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
+
+    await waitFor(() =>
+      expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(
+        100,
+        'Aufgabe',
+        null,
+        'Ziel des Vorhabens',
+      ),
+    )
+  })
+
+  it('schickt eine Beschreibung aus Leerraum als null', async () => {
+    const apis = makeApis()
+    await oeffneVorgangsDialog(apis)
+
+    fireEvent.change(screen.getByLabelText('Beschreibung (optional)'), {
+      target: { value: '   ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Eröffnen' }))
+
+    await waitFor(() =>
+      expect(apis.cardsApi.openEpic).toHaveBeenCalledWith(100, 'Aufgabe', null, null),
+    )
+  })
+
+  it('leert die Beschreibung beim erneuten Öffnen', async () => {
+    const apis = makeApis()
+    await oeffneVorgangsDialog(apis)
+    fireEvent.change(screen.getByLabelText('Beschreibung (optional)'), {
+      target: { value: 'Entwurf' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Vorgang eröffnen' })).toBeNull(),
+    )
+
+    fireEvent.click(vorgangKnopf())
+
+    expect(screen.getByLabelText('Beschreibung (optional)')).toHaveValue('')
   })
 
   /**

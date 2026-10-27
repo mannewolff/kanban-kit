@@ -187,11 +187,12 @@ export const cardsApi = {
   /**
    * Eröffnet an dieser Karte einen Vorgang (Issue #640): Das Vorhaben entsteht, die Karte wird
    * seine Anforderung und ist ihm zugeordnet — in einem Aufruf. Zurück kommt das neue Vorhaben.
+   * Die Beschreibung ist die im Dialog eingegebene (Issue #1932), `null` heißt keine.
    */
-  openEpic: (cardId: number, name: string, kuerzel: string | null) =>
+  openEpic: (cardId: number, name: string, kuerzel: string | null, beschreibung: string | null) =>
     apiFetch<Card>(`/api/cards/${cardId}/open-epic`, {
       method: 'POST',
-      body: JSON.stringify({ name, kuerzel }),
+      body: JSON.stringify({ name, kuerzel, beschreibung }),
     }),
   /** Herkunftsbaum eines Vorhabens (Issue #643). */
   epicTree: (boardId: number, epicId: number) =>

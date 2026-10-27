@@ -628,6 +628,7 @@ export const en: Woerterbuch = {
     VORGANG_FEHLER: 'Opening the epic failed.',
     VORHABEN_NAME: 'Epic name',
     KUERZEL_OPTIONAL: 'Short code (optional)',
+    VORHABEN_BESCHREIBUNG: 'Description (optional)',
     EROEFFNEN: 'Open',
     ZUSTAENDIGE_FEHLER: 'Saving the assignees failed.',
     STATUS_FEHLER: 'Setting the status failed.',
