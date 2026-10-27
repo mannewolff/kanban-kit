@@ -273,6 +273,7 @@ function vorhaben(partial: Partial<Card> & { id: number; number: number; title: 
     derivedFrom: null,
     status: null,
     canSetStatus: false,
+    herkunft: null,
     ...partial,
   }
 }

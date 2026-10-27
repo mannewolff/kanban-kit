@@ -48,7 +48,7 @@
     {
       "name": "bausteine-board",
       "muster": ["src/components/board/**/*.tsx"],
-      "testMuster": ["src/components/BoardView.test.tsx"],
+      "testMuster": ["src/components/BoardView.test.tsx", "src/components/board/KartenHerkunft.test.tsx"],
       "aufgenommen": false,
       "phase": 1,
       "reihenfolge": 5,

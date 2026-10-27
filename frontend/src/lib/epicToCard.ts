@@ -11,5 +11,7 @@ export function epicToCard(epic: Epic, boardId: number): Card {
     // Vorhaben tragen keinen eigenen Status; fuer sie zaehlt die Spalte (Plan #1294, E2).
     status: null,
     canSetStatus: false,
+    // Die Herkunftskette rechnet nur die Board-Liste der Karten (Issue #1930).
+    herkunft: null,
   }
 }

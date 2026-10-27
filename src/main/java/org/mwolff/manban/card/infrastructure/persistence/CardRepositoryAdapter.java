@@ -127,6 +127,30 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
   }
 
   @Override
+  public List<KarteImBestand> findImBestand(Collection<Long> ids) {
+    if (ids.isEmpty()) {
+      return List.of();
+    }
+    List<CardEntity> treffer = jpa.findAllById(ids);
+    // Die verlorene Nummer zählt nur ohne gesetzte Herkunft (V51) — nur dann eine zweite Abfrage.
+    List<Long> ohneHerkunft =
+        treffer.stream()
+            .filter(e -> e.getDerivedFromCardId() == null)
+            .map(CardEntity::getId)
+            .toList();
+    Map<Long, Integer> verloren = new HashMap<>();
+    if (!ohneHerkunft.isEmpty()) {
+      for (Object[] zeile : jpa.findVerloreneHerkunftsnummernZu(ohneHerkunft)) {
+        verloren.put(((Number) zeile[0]).longValue(), ((Number) zeile[1]).intValue());
+      }
+    }
+    return treffer.stream()
+        .map(
+            e -> new KarteImBestand(toDomain(e), e.getDeletedAt() != null, verloren.get(e.getId())))
+        .toList();
+  }
+
+  @Override
   public Optional<Card> findById(long id) {
     return jpa.findById(id).map(CardRepositoryAdapter::toDomain);
   }

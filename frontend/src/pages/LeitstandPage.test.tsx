@@ -80,6 +80,7 @@ const karte = (title: string): Card => ({
   labels: [],
   status: null,
   canSetStatus: false,
+  herkunft: null,
 })
 
 const kpis = (extra: Partial<BoardDashboardKpis> = {}): BoardDashboardKpis => ({

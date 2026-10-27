@@ -19,7 +19,9 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.card.application.CardBestandRepository.KarteImBestand;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -46,6 +48,7 @@ class CardServiceListByBoardTest {
   private CardDependencyRepository dependencies;
   private CardAssigneeRepository assignees;
   private CardLabelRepository cardLabels;
+  private CardBestandRepository bestand;
   private CardService service;
 
   @BeforeEach
@@ -54,6 +57,7 @@ class CardServiceListByBoardTest {
     dependencies = mock(CardDependencyRepository.class);
     assignees = mock(CardAssigneeRepository.class);
     cardLabels = mock(CardLabelRepository.class);
+    bestand = mock(CardBestandRepository.class);
     BoardService boardService = mock(BoardService.class);
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
@@ -79,7 +83,9 @@ class CardServiceListByBoardTest {
             mock(CardActivityRepository.class),
             actor,
             mock(ApplicationEventPublisher.class),
-            Clock.fixed(FIXED, ZoneOffset.UTC));
+            Clock.fixed(FIXED, ZoneOffset.UTC),
+            mock(UserLookup.class),
+            bestand);
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
   }
 
@@ -149,6 +155,29 @@ class CardServiceListByBoardTest {
   }
 
   @Test
+  void herkunft_gefuellt_undOhneVorfahrLeer() {
+    // Given: Karte 1 stammt vom Plan 99 auf einem anderen Board ab, der von der Idee 98 abstammt.
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(List.of(karte(1L, 1, CardType.CARD, 99L), karte(2L, 2, CardType.CARD, null)));
+    when(bestand.verloreneHerkunftsnummern(BOARD)).thenReturn(Map.of());
+    when(bestand.findImBestand(Set.of(99L)))
+        .thenReturn(List.of(new KarteImBestand(karte(99L, 88, CardType.CARD, 98L), false, null)));
+    when(bestand.findImBestand(Set.of(98L)))
+        .thenReturn(List.of(new KarteImBestand(karte(98L, 87, CardType.CARD, null), false, null)));
+
+    // When
+    List<CardView> result = service.listByBoard(1L, BOARD);
+
+    // Then: nächster Vorfahr zuerst; ohne Vorfahr eine leere Liste, nicht null.
+    assertThat(result.get(0).herkunft())
+        .containsExactly(
+            new HerkunftsGlied(88, "Titel", false, null),
+            new HerkunftsGlied(87, "Titel", false, null));
+    assertThat(result.get(1).herkunft()).isEmpty();
+    verify(bestand, times(1)).verloreneHerkunftsnummern(BOARD);
+  }
+
+  @Test
   void ohneKarten_fragtKeineHerkunftAb() {
     // Given: nur ein Vorhaben — seine Herkunft gehoert nicht in den Sammelzugriff.
     when(cards.findByBoardId(BOARD)).thenReturn(List.of(karte(3L, 3, CardType.EPIC, 99L)));
@@ -156,6 +185,8 @@ class CardServiceListByBoardTest {
     // When / Then
     assertThat(service.listByBoard(1L, BOARD)).isEmpty();
     verify(cards, never()).findByIds(any());
+    verify(bestand, never()).verloreneHerkunftsnummern(anyLong());
+    verify(bestand, never()).findImBestand(any());
   }
 
   // --- Auszug statt voller Beschreibung (Issue #771) --------------------

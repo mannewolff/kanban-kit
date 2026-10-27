@@ -22,6 +22,7 @@ const base = {
   derivedFrom: null as number | null,
   status: null,
   canSetStatus: false,
+  herkunft: null,
   excerpt: null as string | null,
 }
 const card: Card = { ...base, id: 100, number: 5, title: 'Gelöscht', description: null }

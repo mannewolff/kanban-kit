@@ -30,6 +30,7 @@ const card: Card = {
   derivedFrom: null,
   status: null,
   canSetStatus: false,
+  herkunft: null,
 }
 
 function renderDialog(platformAdmin = false, sourceColumnPosition: number | null = null) {

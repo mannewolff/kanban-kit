@@ -66,6 +66,35 @@ final class CardServiceAufbau {
       ApplicationEventPublisher events,
       Clock clock,
       UserLookup users) {
+    return ausPorts(
+        cards,
+        dependencies,
+        boardService,
+        permissions,
+        transitions,
+        zuordnung,
+        activity,
+        actor,
+        events,
+        clock,
+        users,
+        mock(CardBestandRepository.class));
+  }
+
+  /** Wie die Signatur davor, mit einem eigenen {@link CardBestandRepository} (Issue #1930). */
+  static CardService ausPorts(
+      CardRepository cards,
+      CardDependencyRepository dependencies,
+      BoardService boardService,
+      PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
+      KartenZuordnung zuordnung,
+      CardActivityRepository activity,
+      ActorContext actor,
+      ApplicationEventPublisher events,
+      Clock clock,
+      UserLookup users,
+      CardBestandRepository bestand) {
     Bausteine b =
         bausteine(
             cards,
@@ -77,7 +106,8 @@ final class CardServiceAufbau {
             activity,
             actor,
             events,
-            clock);
+            clock,
+            bestand);
     return new CardService(
         cards,
         b.abhaengigkeiten(),
@@ -112,7 +142,8 @@ final class CardServiceAufbau {
             activity,
             actor,
             events,
-            clock);
+            clock,
+            mock(CardBestandRepository.class));
     return new CardIngestService(
         cards, b.abhaengigkeiten(), boardService, permissions, b.grundlage(), b.sicht(), clock);
   }
@@ -139,7 +170,8 @@ final class CardServiceAufbau {
             activity,
             actor,
             events,
-            clock);
+            clock,
+            mock(CardBestandRepository.class));
     return new EpicService(
         cards,
         b.abhaengigkeiten(),
@@ -175,7 +207,8 @@ final class CardServiceAufbau {
             activity,
             actor,
             events,
-            clock);
+            clock,
+            bestand);
     return new CardArchiveService(
         cards,
         bestand,
@@ -211,7 +244,8 @@ final class CardServiceAufbau {
             activity,
             actor,
             events,
-            clock);
+            clock,
+            mock(CardBestandRepository.class));
     return new CardMoveService(
         cards,
         b.abhaengigkeiten(),
@@ -234,7 +268,8 @@ final class CardServiceAufbau {
       CardActivityRepository activity,
       ActorContext actor,
       ApplicationEventPublisher events,
-      Clock clock) {
+      Clock clock,
+      CardBestandRepository bestand) {
     KartenAbhaengigkeiten abhaengigkeiten = new KartenAbhaengigkeiten(dependencies, cards);
     KartenGrundlage grundlage =
         new KartenGrundlage(
@@ -248,7 +283,7 @@ final class CardServiceAufbau {
             actor,
             events,
             clock);
-    KartenSicht sicht = new KartenSicht(cards, abhaengigkeiten, zuordnung, permissions);
+    KartenSicht sicht = new KartenSicht(cards, bestand, abhaengigkeiten, zuordnung, permissions);
     return new Bausteine(abhaengigkeiten, grundlage, sicht);
   }
 

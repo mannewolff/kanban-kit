@@ -72,6 +72,15 @@
   ist das Menü leer.
 - **Auf der Karte sichtbar:** farbige **Label**-Chips, eine gesetzte **Fälligkeit** („📅 *Datum*",
   überfällige rot und fett) sowie rechts unten die **Avatare der Zuständigen** (Initialen, bis zu vier).
+- **Herkunft an der Nummer:** Die Kartennummer `#N` oben auf der Karte zeigt, woraus die Karte
+  entstanden ist — beim Überfahren mit der Maus, wenn sie per **Tab** den Fokus bekommt, und auf dem
+  [Tablet quer](#tablet) beim Antippen. Der Hinweis nennt die ganze Kette bis zum Ursprung, nächster
+  Vorfahr zuerst, je Glied Nummer und Titel, etwa „#1914 · [Plan] …“ und darunter „#1910 · [Fachlich]
+  …“; die Art steht im Präfix des Titels. Vorfahren auf anderen Boards desselben Projekts erscheinen
+  mit, archivierte mit „(archiviert)“. Ein Vorfahr im Papierkorb erscheint als „#N (im Papierkorb)“,
+  und die Kette geht über ihn weiter; ein endgültig gelöschter als „#N (gelöscht)“, dort endet sie,
+  ebenso an einem Vorfahren in einem anderen Projekt. Ohne Vorfahren steht dort „Ohne Herkunft“. Ein
+  Klick auf die Nummer öffnet weiter die Karte.
 - **Done-Countdown:** Karten in einer Done-Spalte zeigen „wird in X Tagen archiviert"
   (steuerbar über `MANBAN_DONE_RETENTION_DAYS`).
 

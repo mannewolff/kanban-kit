@@ -42,7 +42,8 @@ class CardArchiveControllerTest {
         List.of(),
         null,
         "BACKLOG",
-        true);
+        true,
+        null);
   }
 
   @BeforeEach

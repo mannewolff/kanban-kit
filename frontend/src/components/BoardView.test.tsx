@@ -85,6 +85,7 @@ const card: Card = {
   derivedFrom: null,
   status: null,
   canSetStatus: false,
+  herkunft: null,
 }
 
 function mkApi(over: Record<string, unknown> = {}) {

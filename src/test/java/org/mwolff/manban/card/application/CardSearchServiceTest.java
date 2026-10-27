@@ -89,6 +89,7 @@ class CardSearchServiceTest {
     KartenSicht sicht =
         new KartenSicht(
             cards,
+            kartenBestand,
             new KartenAbhaengigkeiten(mock(CardDependencyRepository.class), cards),
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),

@@ -51,7 +51,8 @@ class CardMoveControllerTest {
         List.of(),
         null,
         "BACKLOG",
-        true);
+        true,
+        null);
   }
 
   @BeforeEach

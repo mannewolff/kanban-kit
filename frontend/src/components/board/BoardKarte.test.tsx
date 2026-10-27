@@ -28,7 +28,7 @@ const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null, excerpt: null,
   positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
-  derivedFrom: null, status: null, canSetStatus: false,
+  derivedFrom: null, status: null, canSetStatus: false, herkunft: null,
 }
 
 const zeigen = (over: { selectionMode: boolean; selected: boolean; canEdit: boolean }) =>
@@ -302,5 +302,39 @@ describe('BoardKarte — Erklärung der Systemlabels (#1672)', () => {
 
     expect(label('kit:clarify')).toHaveFocus()
     expect(onOpen).not.toHaveBeenCalled()
+  })
+})
+
+describe('BoardKarte — Herkunft an der Nummer (Issue #1930)', () => {
+  const zeigenMitHerkunft = (herkunft: Card['herkunft']) => {
+    const onOpen = vi.fn()
+    renderMitSprache(
+      <BoardKarte
+        card={{ ...card, herkunft }} epic={undefined} done={false} spaltenname="Backlog" dichte="normal" bewegt={false}
+        members={[]} boardLabels={[]} retentionDays={30} selectionMode={false} selected={false} canEdit
+        onDragStart={vi.fn()} onDragEnd={vi.fn()} onSelect={vi.fn()} onOpen={onOpen} onMenu={vi.fn()}
+      />,
+      'de',
+    )
+    return onOpen
+  }
+
+  it('trägt an der Nummer die Herkunft als Hinweis, und ein Klick darauf öffnet die Karte', async () => {
+    const onOpen = zeigenMitHerkunft([{ number: 7, title: '[Plan] P', archived: false, luecke: null }])
+
+    await userEvent.hover(screen.getByText('#1'))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('#7 · [Plan] P')
+    expect(screen.getByText('#1')).toHaveAttribute('tabindex', '0')
+    await userEvent.click(screen.getByText('#1'))
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('zeigt „Ohne Herkunft“ an einer Karte ohne Vorfahren', async () => {
+    zeigenMitHerkunft([])
+
+    await userEvent.hover(screen.getByText('#1'))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(de.BOARD.HERKUNFT_KEINE)
   })
 })

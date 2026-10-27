@@ -23,6 +23,7 @@ import type { FingerZiehen } from '../../lib/useFingerZiehen'
 import { useTabletQuer } from '../../lib/tabletQuer'
 import { type Dichte, FINGER_GRIFF_SX, karteDichteSx, karteSx } from '../boardSurfaceSx'
 import { EpicBadge } from '../EpicBadge'
+import { KartenHerkunft } from './KartenHerkunft'
 import { LabelErklaerung } from '../LabelErklaerung'
 import { labelChipSx } from '../labelChipSx'
 import { useSprache, useT } from '../../i18n/SpracheContext'
@@ -332,7 +333,8 @@ export function BoardKarte({
             sx={{ p: 0 }}
           />
         )}
-        <Box component="span" sx={{ ...ZAHL, fontSize: 11, color: TEXT_SCHWACH }}>{`#${card.number}`}</Box>
+        {/* Die Nummer trägt die Herkunft als Hinweis; ein Klick darauf öffnet weiter die Karte (Issue #1930). */}
+        <KartenHerkunft number={card.number} herkunft={card.herkunft} />
         {normal && <CardAssignees assigneeIds={card.assignees} members={members} cardTitle={card.title} />}
         {alltag && (
           <IconButton

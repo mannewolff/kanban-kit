@@ -50,7 +50,7 @@ const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 5, title: 'Aufgabe', description: '# Titel\n\n- a\n- b',
   excerpt: null, positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [3, 4],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [], derivedFrom: null,
-  status: null, canSetStatus: false,
+  status: null, canSetStatus: false, herkunft: null,
 }
 
 /** Karte, auf die der Abhängigkeits-Verweis „#3“ zeigt — bewusst auf einem anderen Board. */

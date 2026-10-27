@@ -4,13 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.card.application.CardBestandRepository.KarteImBestand;
 import org.mwolff.manban.card.application.CardSearchService.Kette;
 import org.mwolff.manban.card.application.CardSearchService.KettenGlied;
 import org.mwolff.manban.card.domain.Card;
@@ -28,9 +32,16 @@ class HerkunftsKetteTest {
   private static final long BOARD = 10L;
   private static final long FREMDES_BOARD = 11L;
   private static final long SPALTE = 20L;
+  private static final long PROJEKT = 1L;
+  private static final long FREMDES_PROJEKT = 2L;
 
   private final Map<Long, Card> ausserhalb = new HashMap<>();
   private final Map<Long, Integer> verloren = new HashMap<>();
+
+  /** Karten außerhalb der Board-Liste, wie {@code findImBestand} sie liefert (Issue #1930). */
+  private final Map<Long, KarteImBestand> bestand = new HashMap<>();
+
+  private final List<Set<Long>> ladeaufrufe = new ArrayList<>();
 
   private static Card karte(
       long id, long board, int number, String title, @Nullable Long derivedFrom, boolean archived) {
@@ -297,5 +308,158 @@ class HerkunftsKetteTest {
     Kette k = kette(fachlich, List.of(fachlich, kindDesGeloeschten, sichtbar));
 
     assertThat(k.nachfahren()).extracting(KettenGlied::number).containsExactly(40);
+  }
+
+  // --- vorfahrenJeKarte: die Herkunft der Board-Liste (Issue #1930) ---
+
+  private void imBestand(Card c, boolean imPapierkorb, @Nullable Integer verloreneNummer) {
+    bestand.put(c.requireId(), new KarteImBestand(c, imPapierkorb, verloreneNummer));
+  }
+
+  private static Card imProjekt(long id, long projekt, int number, @Nullable Long derivedFrom) {
+    Card c = karte(id, FREMDES_BOARD, number, "Karte " + number, derivedFrom, false);
+    return new Card(
+        c.id(),
+        c.boardId(),
+        c.columnId(),
+        c.number(),
+        c.title(),
+        c.description(),
+        c.positionInColumn(),
+        c.archived(),
+        c.movedToDoneAt(),
+        c.createdBy(),
+        c.createdAt(),
+        c.updatedAt(),
+        c.type(),
+        c.parentId(),
+        c.shortcode(),
+        c.dueDate(),
+        projekt,
+        c.externalKey(),
+        c.derivedFromCardId(),
+        c.requirementCardId(),
+        c.status());
+  }
+
+  private Map<Long, List<HerkunftsGlied>> vorfahren(List<Card> boardKarten) {
+    return HerkunftsKette.vorfahrenJeKarte(
+        boardKarten,
+        ids -> {
+          ladeaufrufe.add(Set.copyOf(ids));
+          return ids.stream().map(bestand::get).filter(Objects::nonNull).toList();
+        },
+        verloren,
+        PROJEKT);
+  }
+
+  private static HerkunftsGlied sichtbar(int number, String title) {
+    return new HerkunftsGlied(number, title, false, null);
+  }
+
+  @Test
+  void vorfahrenJeKarte_ketteUeberDreiStufen_naechsterVorfahrZuerst() {
+    Card idee = aufBoard(1L, 1, "[Idee] I", null);
+    Card fachlich = aufBoard(2L, 2, "[Fachlich] F", 1L);
+    Card plan = karte(3L, BOARD, 3, "[Plan] P", 2L, true);
+    Card paket = aufBoard(4L, 4, "Paket", 3L);
+
+    Map<Long, List<HerkunftsGlied>> v = vorfahren(List.of(idee, fachlich, plan, paket));
+
+    assertThat(v.get(4L))
+        .containsExactly(
+            new HerkunftsGlied(3, "[Plan] P", true, null),
+            sichtbar(2, "[Fachlich] F"),
+            sichtbar(1, "[Idee] I"));
+    assertThat(v.get(1L)).isEmpty();
+    // Alles liegt auf dem Board: kein Nachladen.
+    assertThat(ladeaufrufe).isEmpty();
+  }
+
+  @Test
+  void vorfahrenJeKarte_vorfahrAufAnderemBoardDesselbenProjekts_mitTitel() {
+    Card idee = karte(1L, FREMDES_BOARD, 1, "[Idee] I", null, false);
+    imBestand(idee, false, null);
+    Card fachlich = aufBoard(2L, 2, "[Fachlich] F", 1L);
+
+    assertThat(vorfahren(List.of(fachlich)).get(2L)).containsExactly(sichtbar(1, "[Idee] I"));
+  }
+
+  @Test
+  void vorfahrenJeKarte_papierkorbIstLuecke_undDieKetteGehtWeiter() {
+    Card idee = karte(1L, FREMDES_BOARD, 1, "[Idee] I", null, false);
+    imBestand(idee, false, null);
+    Card fachlich = aufBoard(2L, 2, "[Fachlich] F", 1L);
+    imBestand(fachlich, true, null);
+    Card paket = aufBoard(3L, 3, "Paket", 2L);
+
+    assertThat(vorfahren(List.of(paket)).get(3L))
+        .containsExactly(
+            new HerkunftsGlied(2, null, false, HerkunftsGlied.Luecke.PAPIERKORB),
+            sichtbar(1, "[Idee] I"));
+  }
+
+  @Test
+  void vorfahrenJeKarte_geloeschterVorfahrIstLueckeAmEnde() {
+    // Auf dem Board aus der Map, außerhalb aus dem Bestand.
+    Card plan = karte(2L, FREMDES_BOARD, 2, "[Plan] P", null, false);
+    imBestand(plan, false, 77);
+    Card paket = aufBoard(3L, 3, "Paket", 2L);
+    Card waise = aufBoard(4L, 4, "Waise", null);
+    verloren.put(4L, 66);
+
+    Map<Long, List<HerkunftsGlied>> v = vorfahren(List.of(paket, waise));
+
+    assertThat(v.get(3L))
+        .containsExactly(
+            sichtbar(2, "[Plan] P"),
+            new HerkunftsGlied(77, null, false, HerkunftsGlied.Luecke.GELOESCHT));
+    assertThat(v.get(4L))
+        .containsExactly(new HerkunftsGlied(66, null, false, HerkunftsGlied.Luecke.GELOESCHT));
+  }
+
+  @Test
+  void vorfahrenJeKarte_fremdesProjektEndetOhneGlied() {
+    Card fremd = imProjekt(1L, FREMDES_PROJEKT, 1, null);
+    imBestand(fremd, false, null);
+    Card plan = imProjekt(2L, PROJEKT, 2, 1L);
+    imBestand(plan, false, null);
+    Card paket = aufBoard(3L, 3, "Paket", 2L);
+
+    assertThat(vorfahren(List.of(paket)).get(3L)).containsExactly(sichtbar(2, "Karte 2"));
+  }
+
+  @Test
+  void vorfahrenJeKarte_ringEndet_undUnbekannteIdEndetAuch() {
+    Card a = aufBoard(1L, 1, "A", 2L);
+    Card b = aufBoard(2L, 2, "B", 1L);
+    Card c = aufBoard(3L, 3, "C", 99L);
+
+    Map<Long, List<HerkunftsGlied>> v = vorfahren(List.of(a, b, c));
+
+    assertThat(v.get(1L)).containsExactly(sichtbar(2, "B"));
+    assertThat(v.get(2L)).containsExactly(sichtbar(1, "A"));
+    assertThat(v.get(3L)).isEmpty();
+  }
+
+  @Test
+  void vorfahrenJeKarte_eineLadeabfrageJeStufe_ueberAlleKarten() {
+    // Zwei Pakete mit je eigener Kette über drei Stufen außerhalb des Boards; Stufe 3 teilen sie.
+    Card wurzel = karte(1L, FREMDES_BOARD, 1, "W", null, false);
+    Card mitteA = karte(2L, FREMDES_BOARD, 2, "MA", 1L, false);
+    Card mitteB = karte(3L, FREMDES_BOARD, 3, "MB", 1L, false);
+    Card obenA = karte(4L, FREMDES_BOARD, 4, "OA", 2L, false);
+    Card obenB = karte(5L, FREMDES_BOARD, 5, "OB", 3L, false);
+    for (Card c : List.of(wurzel, mitteA, mitteB, obenA, obenB)) {
+      imBestand(c, false, null);
+    }
+    Card paketA = aufBoard(6L, 6, "PA", 4L);
+    Card paketB = aufBoard(7L, 7, "PB", 5L);
+
+    Map<Long, List<HerkunftsGlied>> v = vorfahren(List.of(paketA, paketB));
+
+    assertThat(ladeaufrufe).containsExactly(Set.of(4L, 5L), Set.of(2L, 3L), Set.of(1L));
+    assertThat(v.get(6L)).extracting(HerkunftsGlied::number).containsExactly(4, 2, 1);
+    assertThat(v.get(7L)).extracting(HerkunftsGlied::number).containsExactly(5, 3, 1);
   }
 }

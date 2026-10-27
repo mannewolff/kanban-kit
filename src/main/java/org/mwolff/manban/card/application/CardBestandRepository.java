@@ -1,7 +1,10 @@
 package org.mwolff.manban.card.application;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.domain.Card;
 
 /**
  * Schmaler Port neben {@link CardRepository} für Auskünfte über den Kartenbestand, die der Record
@@ -38,4 +41,23 @@ public interface CardBestandRepository {
    * @param q Suchbegriff, getrimmt und nicht leer
    */
   Map<Long, String> textFundstellenAufBoard(long boardId, String q);
+
+  /**
+   * Karten zu IDs samt den Auskünften, die der Record nicht trägt (Issue #1930): ob sie im
+   * Papierkorb liegen und die verlorene Herkunftsnummer. Liefert <strong>alle</strong> Treffer,
+   * archivierte und Papierkorb-Karten eingeschlossen, über Board- und Projektgrenzen hinweg; eine
+   * unbekannte ID fehlt. Eine leere Sammlung ist ein No-op.
+   */
+  List<KarteImBestand> findImBestand(Collection<Long> ids);
+
+  /**
+   * Eine Karte mit ihren Bestandsauskünften.
+   *
+   * @param karte die Karte
+   * @param imPapierkorb ob {@code deleted_at} gesetzt ist
+   * @param verloreneHerkunftsnummer Nummer des endgültig gelöschten Vorfahren; nur gesetzt, wenn
+   *     {@code derivedFromCardId} {@code null} ist
+   */
+  record KarteImBestand(
+      Card karte, boolean imPapierkorb, @Nullable Integer verloreneHerkunftsnummer) {}
 }

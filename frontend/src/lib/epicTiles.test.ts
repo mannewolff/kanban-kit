@@ -30,6 +30,7 @@ function karte(number: number, title: string, labels: number[] = []): Card {
     derivedFrom: null,
     status: null,
     canSetStatus: false,
+    herkunft: null,
   }
 }
 

@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.application.CardBestandRepository.KarteImBestand;
 import org.mwolff.manban.card.application.CardSearchService.Kette;
 import org.mwolff.manban.card.application.CardSearchService.KettenGlied;
 import org.mwolff.manban.card.domain.Card;
@@ -76,6 +77,109 @@ final class HerkunftsKette {
     besucht.add(karte.requireId());
     kette.absteigen(karte, 1, besucht, nachfahren);
     return new Kette(kette.glied(karte, 0), kette.vorfahren(karte), List.copyOf(nachfahren));
+  }
+
+  /**
+   * Die Vorfahren aller Karten einer Board-Liste (Issue #1930), nächster Vorfahr zuerst. Anders als
+   * {@link #berechne} reicht die Kette über alle Boards desselben Projekts: Die Board-Liste
+   * verlangt die Projekt-Mitgliedschaft, und ein Mitglied sieht jedes Board des Projekts.
+   *
+   * <ul>
+   *   <li>Ein Vorfahr im Papierkorb ist eine Lücke {@link HerkunftsGlied.Luecke#PAPIERKORB} ohne
+   *       Titel; die Kette geht über ihn weiter.
+   *   <li>Ein endgültig gelöschter Vorfahr ist eine Lücke {@link HerkunftsGlied.Luecke#GELOESCHT}
+   *       und beendet sie.
+   *   <li>Ein Vorfahr in einem anderen Projekt beendet sie ohne Glied.
+   *   <li>Ein Ring endet an der ersten schon besuchten Karte.
+   * </ul>
+   *
+   * <p>Nachgeladen wird stufenweise gesammelt: je Stufe <strong>ein</strong> Aufruf des
+   * Stapelladers für alle Vorfahren, die weder auf dem Board liegen noch schon geladen sind. Ein
+   * Nachlader je Karte ergäbe bei 200 Karten bis zu 200 Abfragen je Stufe.
+   *
+   * @param boardKarten die Karten der Board-Liste
+   * @param stapelLader Karten zu IDs samt Papierkorb und verlorener Nummer ({@code findImBestand});
+   *     eine unbekannte ID fehlt
+   * @param verloreneNummern Nummer des endgültig gelöschten Vorfahren je Karten-ID des Boards
+   * @param projectId Projekt des Boards
+   * @return je Karten-ID der Board-Liste die Vorfahren; leer bei einer Karte ohne Herkunft
+   */
+  static Map<Long, List<HerkunftsGlied>> vorfahrenJeKarte(
+      List<Card> boardKarten,
+      Function<Set<Long>, List<KarteImBestand>> stapelLader,
+      Map<Long, Integer> verloreneNummern,
+      long projectId) {
+    Map<Long, KarteImBestand> bekannt = new HashMap<>();
+    Map<Long, List<HerkunftsGlied>> ergebnis = new HashMap<>();
+    List<Aufstieg> offen = new ArrayList<>();
+    for (Card c : boardKarten) {
+      // Karten des Boards liegen nie im Papierkorb: Die Board-Liste lässt ihn aus.
+      KarteImBestand start = new KarteImBestand(c, false, verloreneNummern.get(c.requireId()));
+      bekannt.put(c.requireId(), start);
+      Aufstieg aufstieg = new Aufstieg(start);
+      ergebnis.put(c.requireId(), aufstieg.glieder);
+      offen.add(aufstieg);
+    }
+    while (!offen.isEmpty()) {
+      Set<Long> fehlend = new HashSet<>();
+      for (Aufstieg a : offen) {
+        Long vorfahrId = a.cursor.karte().derivedFromCardId();
+        if (vorfahrId != null && !bekannt.containsKey(vorfahrId)) {
+          fehlend.add(vorfahrId);
+        }
+      }
+      if (!fehlend.isEmpty()) {
+        for (KarteImBestand geladen : stapelLader.apply(fehlend)) {
+          bekannt.put(geladen.karte().requireId(), geladen);
+        }
+      }
+      offen.removeIf(a -> !a.schritt(bekannt, projectId));
+    }
+    return ergebnis;
+  }
+
+  /** Der Aufstieg einer Karte der Board-Liste: Stand und schon gefundene Glieder. */
+  private static final class Aufstieg {
+    private final List<HerkunftsGlied> glieder = new ArrayList<>();
+    // Besuchte IDs: Ein Ring aus #607 führte sonst endlos im Kreis.
+    private final Set<Long> besucht = new HashSet<>();
+    private KarteImBestand cursor;
+
+    Aufstieg(KarteImBestand start) {
+      cursor = start;
+      besucht.add(start.karte().requireId());
+    }
+
+    /**
+     * Ein Schritt aufwärts: hängt das nächste Glied an.
+     *
+     * @return ob der Aufstieg weitergeht
+     */
+    boolean schritt(Map<Long, KarteImBestand> bekannt, long projectId) {
+      Long vorfahrId = cursor.karte().derivedFromCardId();
+      if (vorfahrId == null) {
+        // Vor der Migration gelöschte Vorfahren haben keine bewahrte Nummer und erscheinen nicht.
+        Integer verloren = cursor.verloreneHerkunftsnummer();
+        if (verloren != null) {
+          glieder.add(new HerkunftsGlied(verloren, null, false, HerkunftsGlied.Luecke.GELOESCHT));
+        }
+        return false;
+      }
+      KarteImBestand vorfahr = bekannt.get(vorfahrId);
+      // Wertvergleich der Projekt-IDs (Long): Ein fremdes Projekt beendet die Kette ohne Glied.
+      if (!besucht.add(vorfahrId)
+          || vorfahr == null
+          || !Objects.equals(vorfahr.karte().projectId(), projectId)) {
+        return false;
+      }
+      Card karte = vorfahr.karte();
+      glieder.add(
+          vorfahr.imPapierkorb()
+              ? new HerkunftsGlied(karte.number(), null, false, HerkunftsGlied.Luecke.PAPIERKORB)
+              : new HerkunftsGlied(karte.number(), karte.title(), karte.archived(), null));
+      cursor = vorfahr;
+      return true;
+    }
   }
 
   /**

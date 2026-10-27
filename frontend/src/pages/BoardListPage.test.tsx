@@ -93,6 +93,7 @@ const base = {
   derivedFrom: null as number | null,
   status: null,
   canSetStatus: false,
+  herkunft: null,
   // Die Listen-Antwort liefert die Beschreibung nur noch als Auszug (Issue #771); `description`
   // ist dort immer `null`. Die Fixturen tragen den Vorschautext deshalb in `excerpt`.
   excerpt: null as string | null,

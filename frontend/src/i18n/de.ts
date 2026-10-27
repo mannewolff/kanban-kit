@@ -507,6 +507,12 @@ export const de = {
     AUSLASTUNG_WERT: (belegt: number, grenze: number) => `${belegt} von ${grenze}`,
     KARTE_LABELS: (titel: string) => `Labels ${titel}`,
     ZUSTAENDIGE: (titel: string) => `Zuständige ${titel}`,
+    // Herkunft an der Kartennummer (Issue #1930).
+    HERKUNFT_TITEL: 'Herkunft',
+    HERKUNFT_KEINE: 'Ohne Herkunft',
+    HERKUNFT_PAPIERKORB: (n: number) => `#${n} (im Papierkorb)`,
+    HERKUNFT_GELOESCHT: (n: number) => `#${n} (gelöscht)`,
+    HERKUNFT_ARCHIVIERT: '(archiviert)',
     STATUS: (name: string) => `Status ${name}`,
     KARTE_AUSWAEHLEN: (titel: string) => `Karte ${titel} auswählen`,
     MENUE: (titel: string) => `Menü ${titel}`,
