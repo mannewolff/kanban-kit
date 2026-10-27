@@ -40,6 +40,21 @@ Verbindliche Sicherheits-Regeln für Spring-Boot-Backend und React-Frontend. Die
 
 **Access-Tokens (Ingest):** Der Kanban-kompatible Ingest ohne Login nutzt projektgebundene Access-Tokens (`accesstoken` + `kanbancompat`), getrennt vom Session-Login. Die Token-Verwaltung selbst ist nur per Cookie-Login erreichbar (Least Privilege), nicht per Access-Token.
 
+### Vorschau als anderes Konto — Sicherheitsmodell
+
+Die „Ansicht als …" (Issue #1910, Plan #1914) lässt einen Plattform-Admin die App nur lesend als ein anderes Konto (XY) sehen. Die Regeln dahinter:
+
+- **Principal-Tausch (E1):** In der Vorschau setzt [`VorschauFilter`](src/main/java/org/mwolff/manban/auth/web/security/VorschauFilter.java) XY als Principal und legt den handelnden Admin als `VorschauKontext` daneben. Alle Dienste und Rechteprüfungen sehen damit genau die Sicht von XY; der Plattform-Admin-Bypass entfällt von selbst. Kein Dienst bekommt einen Parameter „sehen als".
+- **Cookie mit Hash (E2):** Der Zustand liegt in der Tabelle `admin_vorschau`. Im Browser steht nur das Cookie `manban_vorschau` (`HttpOnly`, `SameSite=Strict`, `Secure` wie das Sitzungs-Cookie) mit einem Geheimnis aus `SecureTokens`; gespeichert wird nur dessen Hash. „Beenden" wirkt dadurch sofort in allen Tabs.
+- **Bindung an die Sitzung (E3):** Das Cookie gilt nur zusammen mit einem gültigen Sitzungs-Cookie desselben Admins; die Zeile hält die Sitzungs-Generation beim Start fest, eine höhere beendet die Vorschau. Projekt-Tokens (`PatAuthenticationFilter`) werden nie zur Vorschau.
+- **Zentrale Schreibsperre (E4):** [`VorschauSchreibsperreFilter`](src/main/java/org/mwolff/manban/auth/web/security/VorschauSchreibsperreFilter.java) weist in der Vorschau jede Methode außer GET, HEAD und OPTIONS mit 403 und Problem-Typ `vorschau-nur-lesend` ab. Ausgenommen sind nur `POST /api/auth/logout` und `DELETE /api/vorschau`. Ein neuer Endpunkt kann die Sperre nicht vergessen — schreibende Wege dürfen darum nie über GET laufen.
+- **Persönliche Pfade (E5):** Derselbe Filter weist auch lesende Aufrufe auf `/api/access-tokens/**` und `/api/me/vorschau-protokoll` ab (403, `vorschau-persoenlich`). Die Farbwahl von XY wird weder gezeigt noch angewendet.
+- **Schnittmenge beim Lauf-Zugriff (E6):** `PermissionChecker.requireNightRunAccess` prüft in der Vorschau zusätzlich den handelnden Admin (Teilnahme oder eigene Projektrolle); scheitert er, folgt `VorschauVerborgenException` → 403 mit `vorschau-verborgen`. Die Vorschau zeigt nie mehr, als der Admin selbst sehen darf.
+- **Sperre des Ausprobierens (E7):** [`ApiAusprobierFilter`](src/main/java/org/mwolff/manban/auth/web/security/ApiAusprobierFilter.java) weist eine Anfrage mit `X-Api-Ausprobieren` und Cookie `manban_vorschau` mit 403 `vorschau-nur-lesend` ab — mit Session und mit Projekt-Token, auch lesend.
+- **`X-Vorschau` (E8):** Jede Anfrage aus `api/client.ts` und `api/attachments.ts` trägt die öffentliche Kennung der Vorschau, die der Tab zu sehen glaubt, oder `keine` (fehlend gilt als `keine`). Weicht sie vom Stand am Server ab, antwortet er mit 409 `vorschau-gewechselt` und führt nichts aus. So läuft ein Änderungsaufruf aus einem alten Vorschau-Tab nie mit Admin-Rechten. Ausgenommen sind nur lesende Browser-Abrufe ohne Kopfzeile (Board-Ereignisse per SSE, Bild- und Download-Links).
+- **Endfälle (E9):** Der `VorschauFilter` beendet die Vorschau beim nächsten Zugriff, wenn sie abgelaufen ist (30 Minuten), der Admin nicht mehr Plattform-Admin, gesperrt oder mit höherer Sitzungs-Generation ist oder das Ziel Plattform-Admin wurde bzw. fehlt; er schreibt `beendet_am` und `endgrund`, löscht das Cookie und antwortet mit 409. Dazu kommen `DELETE /api/vorschau` und das Abmelden (`ABMELDUNG`, beide Cookies gelöscht). Kein Aufräum-Job.
+- **Gesperrte Ziele (E10):** `DisabledUserGuardFilter` prüft in der Vorschau den handelnden Admin statt XY; ein gesperrtes oder wartendes Zielkonto erscheint, wie es nach Entsperren bzw. Freigabe aussähe.
+
 ### Input & XSS
 
 - React escapt Textknoten automatisch — das schützt vor XSS, **solange** kein `dangerouslySetInnerHTML` verwendet wird.

@@ -117,7 +117,7 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
 
 ### Nur mit der Plattform-Rolle ADMIN
 
-Fünf Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
+Sechs Dinge gewährt **keine** Projekt-Rolle — auch OWNER nicht. Sie stehen deshalb hier und nicht als
 Zeile der [Rechte-Matrix](#projekt-rollen-rechte-matrix) oben; eine Zeile, die in jeder Rollenspalte
 leer bliebe, sähe aus wie ein vergessenes Häkchen und lüde dazu ein, es einer Rolle zu geben.
 
@@ -132,6 +132,15 @@ leer bliebe, sähe aus wie ein vergessenes Häkchen und lüde dazu ein, es einer
   überspringt vorhandene. Siehe [Standard-Labels](nutzung.md#standard-labels).
 - **Sprache der Installation ändern** — nur der Plattform-Admin; die Einstellung gilt für alle
   Nutzer und auch für die Seiten vor der Anmeldung. Lesen darf sie jeder, auch ohne Anmeldung.
+- **Ansicht als …** — nur der Plattform-Admin sieht die App nur lesend so, wie ein anderes Konto sie
+  sähe; nicht als das eigene Konto und nicht als ein anderer Plattform-Admin, wohl aber als gesperrtes
+  oder noch nicht freigegebenes Konto. Der Server sperrt jede Änderung, auch außerhalb der Oberfläche,
+  und das Ausprobieren in der API-Übersicht ganz. Gezeigt wird nie mehr, als der Admin selbst sehen
+  darf: Laufdaten eines nicht teilnehmenden Projekts bleiben verborgen, solange er dort keine eigene
+  Projektrolle hat. Profil, persönliche API-Tokens und persönliche Einstellungen des Kontos bleiben
+  außen vor. Die Ansicht gilt nur für die Anmeldung, aus der sie gestartet wurde; andere Anmeldungen
+  und die API-Tokens des Admins bleiben unberührt. Kein neues Recht der Matrix — siehe
+  [Ansicht als …](nutzung.md#ansicht-als).
 
 **Projekte legt ausschließlich der Plattform-Admin an und löscht sie auch nur er.** Beim Anlegen
 bestimmt er den **Owner** per E-Mail; dadurch wird er selbst nicht Mitglied, hat als Plattform-Admin
@@ -153,6 +162,11 @@ Nur für Plattform-Admins sichtbar (Eintrag „Admin" in der Seitenleiste):
   solange sie gesperrt sind — ein gesperrter Admin hält die Plattform also nicht offen. Daneben gilt
   unverändert: man kann sich **nicht selbst** sperren. Analog kann der letzte OWNER eines Projekts
   weder degradiert noch entfernt werden.
+- **Ansicht als …:** Der Knopf in einer Zeile der Nutzerliste startet die nur lesende Ansicht als
+  dieses Konto und öffnet dessen Startseite. Ein fester Balken „Du siehst die App als XY. Nur lesend."
+  steht auf jeder Seite; „Beenden" darin oder spätestens 30 Minuten beenden sie. Jeder Start und jedes
+  Ende steht als Eintrag bei der Zeile des Zielkontos (Admin, Zeit, Grund des Endes); das Zielkonto
+  sieht die Einträge im eigenen Profil.
 
 Den ersten Admin richtet man über den Bootstrap-Token oder direkt in der DB ein — siehe
 [Betrieb → Den ersten Admin einrichten](betrieb.md#den-ersten-admin-einrichten).

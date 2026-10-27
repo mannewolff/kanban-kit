@@ -1150,6 +1150,37 @@ Zuordnungen unverändert und wird übersprungen. Danach meldet der Abschnitt, au
 viele Labels neu angelegt wurden und wie viele schon vorhanden waren. Der Knopf lässt sich beliebig
 oft drücken: Ab dem zweiten Mal legt er nichts mehr an — auf einem neuen Board aber die fehlenden.
 
+## Ansicht als … {#ansicht-als}
+
+Ein **Plattform-Admin** prüft mit der **Ansicht als …**, ob ein Konto wirklich sieht, was er ihm
+eingerichtet hat. Er startet sie in der Nutzerliste des Admin-Bereichs über den Knopf **„Ansicht als
+…"** in der Zeile des Kontos; danach öffnet sich die Startseite, die das Konto nach der Anmeldung sähe.
+Nicht möglich ist sie als das eigene Konto oder als ein anderer Plattform-Admin. Ein gesperrtes oder
+noch nicht freigegebenes Konto zeigt sie so, wie es nach dem Entsperren bzw. der Freigabe aussähe.
+
+- **Balken:** Auf jeder Seite steht fest der Balken **„Du siehst die App als XY. Nur lesend."** mit dem
+  Knopf **„Beenden"**. Danach bist du wieder du selbst, ohne dich neu anzumelden.
+- **Nur lesend:** Projekte, Boards, Karten und Bedienelemente erscheinen so, wie das Konto sie hätte.
+  Alles, was etwas ändern würde — anlegen, verschieben, löschen, hochladen, kommentieren, Einstellungen
+  —, ist gesperrt und trägt den Hinweis **„Vorschau"**. Auch Aufrufe außerhalb der Oberfläche weist
+  der Server ab. Das Ausprobieren in der [API-Übersicht](#api-ubersicht) ist ganz gesperrt.
+- **Verborgene Stellen:** Sähe das Konto etwas, das du selbst nicht sehen darfst — etwa die Laufdaten
+  eines Projekts, das nicht am Plattform-Leitstand teilnimmt und in dem du keine eigene Rolle hast —,
+  steht dort der Hinweis „XY sieht diesen Bereich, die Vorschau zeigt ihn nicht."
+- **Persönliches:** Profil, persönliche API-Tokens und die Farbwahl des Kontos werden nicht gezeigt;
+  an ihrer Stelle steht „Dieser Bereich wird in der Vorschau nicht gezeigt." Du behältst dein eigenes
+  Erscheinungsbild.
+- **Ende:** Die Ansicht endet mit „Beenden", spätestens nach **30 Minuten**, beim Abmelden (dann
+  erscheint die Anmeldeseite) oder beim nächsten Zugriff, wenn du nicht mehr Plattform-Admin bist,
+  das Konto Plattform-Admin wurde oder gelöscht ist. Ein Fenster, das noch die Vorschau zeigt, lädt
+  dann neu, bevor es etwas ändern kann. Die Ansicht gilt nur für die Anmeldung, aus der du sie
+  gestartet hast — in allen ihren Tabs; andere Anmeldungen und deine API-Tokens bleiben unberührt.
+  Das Konto selbst merkt nichts davon.
+- **Einträge:** Jeder Start und jedes Ende wird festgehalten. Plattform-Admins sehen die Einträge in
+  der Nutzerliste bei der Zeile des Kontos, das Konto selbst sieht im eigenen **Profil**, wann welcher
+  Admin die Ansicht geöffnet hat. Bei Ablauf trägt der Eintrag den Ablaufzeitpunkt. Ist das Konto des
+  Admins gelöscht, nennt der Eintrag ihn weiter mit Namen und dem Vermerk „Konto gelöscht".
+
 ## Plattform-Leitstand
 
 Der **Plattform-Leitstand** ist die Startseite eines **Plattform-Admins** nach dem Anmelden (Sidebar
