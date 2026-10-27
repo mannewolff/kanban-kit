@@ -7,6 +7,7 @@ import org.mwolff.manban.auth.web.security.ApiAusprobierFilter;
 import org.mwolff.manban.auth.web.security.DisabledUserGuardFilter;
 import org.mwolff.manban.auth.web.security.SessionAuthenticationFilter;
 import org.mwolff.manban.auth.web.security.VorschauFilter;
+import org.mwolff.manban.auth.web.security.VorschauSchreibsperreFilter;
 import org.mwolff.manban.ratelimit.web.ThroughputFilter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -47,6 +48,9 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *   <li>Vorschau „Ansicht als XY“ (Issue #1919): Der {@link VorschauFilter} läuft nach den
  *       Auth-Filtern und vor der Sperrprüfung; in einer gültigen Vorschau macht er XY zum
  *       Principal.
+ *   <li>Schreibsperre der Vorschau (Issue #1920): Der {@link VorschauSchreibsperreFilter} läuft
+ *       nach der Sperrprüfung und der Durchsatzbremse und weist in der Vorschau verändernde Aufrufe
+ *       und die persönlichen Pfade ab.
  * </ul>
  *
  * <p>2FA-Vorbereitung: Der zweite Faktor hängt im Login-Flow (LoginCodeController / LoginService),
@@ -69,7 +73,8 @@ class SecurityConfig {
       DisabledUserGuardFilter disabledGuard,
       ThroughputFilter throughputFilter,
       ApiAusprobierFilter ausprobierFilter,
-      VorschauFilter vorschauFilter)
+      VorschauFilter vorschauFilter,
+      VorschauSchreibsperreFilter schreibsperre)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -112,7 +117,11 @@ class SecurityConfig {
         // anders als die Auth-Bremse, die vor der Kette an der Herkunft zählt
         // (RateLimitFilterConfig).
         // Ein gesperrtes Konto kommt hier ohne Authentifizierung an und wird nicht gezählt.
-        .addFilterAfter(throughputFilter, DisabledUserGuardFilter.class);
+        .addFilterAfter(throughputFilter, DisabledUserGuardFilter.class)
+        // Schreibsperre der Vorschau (Issue #1920): nach der Sperrprüfung, denn sie liest den
+        // Kontext der Vorschau, den der VorschauFilter ablegt; hinter der Durchsatzbremse, damit
+        // auch abgewiesene Aufrufe zählen.
+        .addFilterAfter(schreibsperre, ThroughputFilter.class);
     return http.build();
   }
 
@@ -175,6 +184,20 @@ class SecurityConfig {
       VorschauFilter vorschauFilter) {
     FilterRegistrationBean<VorschauFilter> registration =
         new FilterRegistrationBean<>(vorschauFilter);
+    registration.setEnabled(false);
+    return registration;
+  }
+
+  /**
+   * Hält den {@link VorschauSchreibsperreFilter} aus der Servlet-Filterkette heraus (Issue #1920),
+   * aus demselben Grund wie beim {@link ThroughputFilter}: Er braucht den Kontext der Vorschau aus
+   * der Kette oben und gehört ausschließlich hinter deren Sperrprüfung.
+   */
+  @Bean
+  FilterRegistrationBean<VorschauSchreibsperreFilter> schreibsperreOutsideTheServletChain(
+      VorschauSchreibsperreFilter schreibsperre) {
+    FilterRegistrationBean<VorschauSchreibsperreFilter> registration =
+        new FilterRegistrationBean<>(schreibsperre);
     registration.setEnabled(false);
     return registration;
   }
