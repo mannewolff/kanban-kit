@@ -42,6 +42,12 @@ export const en: Woerterbuch = {
 
   VORSCHAU: {
     NUR_LESEND: 'Preview – read only',
+    BALKEN: (ziel) => `You are viewing the app as ${ziel}. Read only.`,
+    BALKEN_BEREICH: (ziel) => `View as ${ziel}`,
+    BEENDEN: 'End',
+    BEENDEN_FEHLGESCHLAGEN: 'The view could not be ended.',
+    GESPERRT: 'Preview',
+    VERBORGEN: (ziel) => `${ziel} sees this area, the preview does not show it.`,
   },
 
   KARTENART: {

@@ -8,6 +8,7 @@ import {
   setNurLesendHandler,
   setUnauthorizedHandler,
   setVorschauKennung,
+  startseiteNeuLaden,
   vorschauKopf,
 } from './client'
 import { en } from '../i18n/en'
@@ -163,6 +164,29 @@ describe('409 vorschau-gewechselt', () => {
       mockErrorResponse(409, JSON.stringify({ type: 'vorschau-gewechselt', status: 409 }))
 
       await failingFetch()
+
+      expect(assign).toHaveBeenCalledWith('/')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('startseiteNeuLaden', () => {
+  it('lädt über die ersetzte Funktion neu', () => {
+    const neuLaden = vi.fn()
+    setNeuLaden(neuLaden)
+
+    startseiteNeuLaden()
+
+    expect(neuLaden).toHaveBeenCalledTimes(1)
+  })
+
+  it('führt ohne ersetzte Funktion auf die Startseite', () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+    try {
+      startseiteNeuLaden()
 
       expect(assign).toHaveBeenCalledWith('/')
     } finally {

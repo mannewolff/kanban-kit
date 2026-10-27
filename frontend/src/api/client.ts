@@ -143,6 +143,14 @@ export function setNeuLaden(handler: (() => void) | null): void {
   neuLaden = handler ?? aufStartseite
 }
 
+/**
+ * Lädt auf `/` neu wie nach `409 vorschau-gewechselt` — für den Wechsel, den die Oberfläche selbst
+ * auslöst, etwa „Beenden“ im Balken der Vorschau (Plan #1914, E13).
+ */
+export function startseiteNeuLaden(): void {
+  neuLaden()
+}
+
 let nurLesendHandler: (() => void) | null = null
 
 /**

@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import pkg from '../../package.json'
 import { APP_NAME } from '../appMeta'
 import { boardsApi } from '../api/boards'
-import { ApiError } from '../api/client'
+import { ApiError, apiFetch, setNeuLaden, setVorschauKennung } from '../api/client'
+import { AuthProvider } from '../auth/AuthContext'
 import { projectsApi } from '../api/projects'
 import { AppShell } from './AppShell'
 import { SnackbarProvider } from './SnackbarProvider'
@@ -19,9 +20,14 @@ import { setzeMedien } from '../test/setup'
 
 const logoutMock = vi.fn().mockResolvedValue(undefined)
 const useAuthMock = vi.fn()
-vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => useAuthMock(),
-}))
+// Vorgabe ist der nachgebildete Zustand; die Szenarien der Vorschau schalten auf den echten
+// `AuthProvider` um, der die Selbstauskunft über `fetch` lädt (Plan #1914, Issue #1924).
+const authWahl = vi.hoisted(() => ({ echt: false }))
+vi.mock('../auth/AuthContext', async (importOriginal) => {
+  const echt = await importOriginal<typeof import('../auth/AuthContext')>()
+  const nachgebildet = { useAuth: () => useAuthMock() }
+  return { ...echt, useAuth: () => (authWahl.echt ? echt : nachgebildet).useAuth() }
+})
 
 const loggedInUser = { userId: 1, email: 'a@b.c', displayName: 'Manne', platformRole: 'USER' as const, memberships: [] }
 
@@ -1591,5 +1597,142 @@ describe('AppShell Kennzeichen und sichtbare Höhe für Dialoge (Plan #1707, E10
 
     expect(wurzel()).toHaveAttribute('data-geraet', 'tablet-quer')
     expect(hoehe()).toBe('')
+  })
+})
+
+const vorschauGrace = { kennung: 'vk-7', zielName: 'Grace', adminName: 'Manne', laeuftAbAm: '2026-10-27T10:30:00Z' }
+
+describe('AppShell: Balken der Ansicht als XY', () => {
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    vi.clearAllMocks()
+    editModeState.editMode = false
+    mockedBoards.list.mockResolvedValue([])
+    mockedProjects.list.mockResolvedValue([])
+  })
+
+  it('zeigt ohne Vorschau keinen Balken', () => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, vorschau: null, logout: logoutMock })
+    renderShell()
+    expect(screen.queryByRole('status', { name: /^Ansicht als/ })).not.toBeInTheDocument()
+    expect(document.documentElement.style.getPropertyValue('--app-content-top')).toBe('59px')
+  })
+
+  it('zeigt in der Vorschau den Balken und rückt Kopf und Kontextbereich um seine Höhe nach unten', () => {
+    useAuthMock.mockReturnValue({ user: loggedInUser, vorschau: vorschauGrace, logout: logoutMock })
+    renderShell()
+    const balken = screen.getByRole('status', { name: 'Ansicht als Grace' })
+    expect(balken).toHaveTextContent('Du siehst die App als Grace. Nur lesend.')
+    expect(balken).toHaveStyle({ top: '0px' })
+    expect(screen.getByRole('banner')).toHaveStyle({ top: '40px' })
+    expect(document.documentElement.style.getPropertyValue('--app-content-top')).toBe('99px')
+  })
+
+  it('stellt den Balken unter das Band des Editiermodus, wenn beide stehen', () => {
+    editModeState.editMode = true
+    useAuthMock.mockReturnValue({ user: loggedInUser, vorschau: vorschauGrace, logout: logoutMock })
+    renderShell()
+    expect(screen.getByRole('status', { name: 'Ansicht als Grace' })).toHaveStyle({ top: '40px' })
+    expect(screen.getByRole('banner')).toHaveStyle({ top: '80px' })
+    expect(document.documentElement.style.getPropertyValue('--app-content-top')).toBe('139px')
+  })
+})
+
+/** Die Selbstauskunft, wie der Server sie liefert: in der Vorschau XY mit `vorschau`, sonst der Admin. */
+const meGrace = {
+  userId: 2, email: 'grace@b.c', displayName: 'Grace', platformRole: 'USER', memberships: [],
+  colorScheme: 'SYSTEM', vorschau: vorschauGrace,
+}
+const meManne = {
+  userId: 1, email: 'a@b.c', displayName: 'Manne', platformRole: 'ADMIN', memberships: [],
+  colorScheme: 'SYSTEM', vorschau: null,
+}
+
+const antwort = (status: number, body: unknown) =>
+  ({
+    ok: status < 300,
+    status,
+    statusText: '',
+    text: () => Promise.resolve(body === undefined ? '' : JSON.stringify(body)),
+  }) as Response
+
+describe('AppShell in der Ansicht als XY (mit echter Selbstauskunft)', () => {
+  /** Die Antworten auf `GET /api/me` in ihrer Folge. */
+  let selbstauskuenfte: unknown[]
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.stubGlobal('localStorage', fakeStorage())
+    vi.clearAllMocks()
+    editModeState.editMode = false
+    authWahl.echt = true
+    mockedBoards.list.mockResolvedValue([])
+    mockedProjects.list.mockResolvedValue([])
+    selbstauskuenfte = []
+    fetchMock = vi.fn((pfad: string, init?: RequestInit) => {
+      if (pfad === '/api/me') return Promise.resolve(antwort(200, selbstauskuenfte.shift()))
+      if (pfad === '/api/auth/logout' && init?.method === 'POST') return Promise.resolve(antwort(204, undefined))
+      // Jede weitere Seite trifft auf eine inzwischen abgelaufene Vorschau (Plan #1914, E8).
+      return Promise.resolve(antwort(409, { type: 'vorschau-gewechselt', status: 409, detail: 'gewechselt' }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    authWahl.echt = false
+    setNeuLaden(null)
+    setVorschauKennung(null)
+    vi.unstubAllGlobals()
+  })
+
+  function renderAnwendung() {
+    return render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={['/']}>
+          <AuthProvider>
+            <Routes>
+              <Route path="/login" element={<div>Anmeldeseite</div>} />
+              <Route path="*" element={<AppShell />} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+  }
+
+  it('Szenario: Die Ansicht endet von selbst', async () => {
+    selbstauskuenfte.push(meGrace, meManne)
+    const neuLaden = vi.fn()
+    setNeuLaden(neuLaden)
+    const { unmount } = renderAnwendung()
+    expect(await screen.findByRole('status', { name: 'Ansicht als Grace' })).toBeInTheDocument()
+
+    // Die nächste Seite fragt mit der alten Kennung an; der Server weist sie mit 409 ab.
+    await act(async () => {
+      await apiFetch('/api/boards/1').catch(() => undefined)
+    })
+    expect(neuLaden).toHaveBeenCalledTimes(1)
+    const kopf = new Headers(fetchMock.mock.calls.at(-1)?.[1]?.headers as HeadersInit)
+    expect(kopf.get('X-Vorschau')).toBe('vk-7')
+
+    // Das Neuladen baut die Anwendung neu auf; die Selbstauskunft nennt wieder den Admin.
+    unmount()
+    renderAnwendung()
+    expect(await screen.findByRole('button', { name: 'Konto von Manne' })).toBeInTheDocument()
+    expect(screen.queryByRole('status', { name: /^Ansicht als/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('Anmeldeseite')).not.toBeInTheDocument()
+  })
+
+  it('Szenario: Abmelden beendet beides', async () => {
+    selbstauskuenfte.push(meGrace)
+    renderAnwendung()
+    expect(await screen.findByRole('status', { name: 'Ansicht als Grace' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Konto von Grace' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Abmelden' }))
+
+    expect(await screen.findByText('Anmeldeseite')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({ method: 'POST' }))
+    expect(screen.queryByRole('status', { name: /^Ansicht als/ })).not.toBeInTheDocument()
   })
 })

@@ -39,6 +39,16 @@ export const de = {
   VORSCHAU: {
     /** Meldung, wenn der Server einen Änderungsaufruf in der Vorschau abweist (E15). */
     NUR_LESEND: 'Vorschau – nur lesend',
+    /** Der feste Balken auf jeder Seite der Vorschau (AK 7, E14). */
+    BALKEN: (ziel: string) => `Du siehst die App als ${ziel}. Nur lesend.`,
+    /** Zugänglicher Name des Balkens. */
+    BALKEN_BEREICH: (ziel: string) => `Ansicht als ${ziel}`,
+    BEENDEN: 'Beenden',
+    BEENDEN_FEHLGESCHLAGEN: 'Die Ansicht ließ sich nicht beenden.',
+    /** Hinweis und zugänglicher Name eines in der Vorschau gesperrten Bedienelements (E15). */
+    GESPERRT: 'Vorschau',
+    /** Hinweis an Stellen, die XY sähe, die Vorschau aber nicht zeigt (E16). */
+    VERBORGEN: (ziel: string) => `${ziel} sieht diesen Bereich, die Vorschau zeigt ihn nicht.`,
   },
 
   /** Die angezeigten Kartenarten des Kits (A11); Schlüssel wie im Namen-Register des Servers. */
