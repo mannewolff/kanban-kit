@@ -31,7 +31,9 @@ import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
@@ -44,6 +46,8 @@ import org.mwolff.manban.nightrun.application.NightRunService.NewReleasePreparat
 import org.mwolff.manban.nightrun.application.NightRunService.NightRunResult;
 import org.mwolff.manban.nightrun.application.TokenNotBoundForIngestException;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
+import org.mwolff.manban.nightrun.domain.NightRunAttempt;
+import org.mwolff.manban.nightrun.domain.NightRunAttemptStage;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
@@ -89,11 +93,15 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 // PMD.GodClass: Issue #1549 bringt die Faelle des Blocks stuck dazu; die Summe der Faelle reisst
 // die Schwelle. Dieselbe Begruendung wie bei TooManyMethods: Die Faelle gehoeren zum
 // Einlieferungsvertrag und werden nicht zusammengelegt, um eine Zahl zu druecken.
+// PMD.CyclomaticComplexity: die Summe ueber lauter Methoden der Komplexitaet 1 — Issue #1945 bringt
+// die Faelle der Vorgaenge (attempts) dazu und reisst damit die Schwelle. Dieselbe Begruendung wie
+// bei TooManyMethods.
 @SuppressWarnings({
   "PMD.ExcessiveImports",
   "PMD.TooManyMethods",
   "PMD.CouplingBetweenObjects",
-  "PMD.GodClass"
+  "PMD.GodClass",
+  "PMD.CyclomaticComplexity"
 })
 class NightRunIngestControllerTest {
 
@@ -452,6 +460,7 @@ class NightRunIngestControllerTest {
                 null,
                 null,
                 stufen,
+                null,
                 null,
                 null,
                 null,
@@ -932,6 +941,7 @@ class NightRunIngestControllerTest {
                 stuck,
                 null,
                 null,
+                null,
                 null)));
   }
 
@@ -1246,5 +1256,127 @@ class NightRunIngestControllerTest {
     assertThat(paket.concurrent()).isNull();
     assertThat(perJsonGemeldet(",\"checkWaitMs\":null").items().getFirst().concurrency())
         .isEqualTo(new NightRunConcurrency(null, null, null));
+  }
+
+  // --- Vorgaenge je Item: attempts (Issue #1945, Plan #1905 E1, E3, E6) ---------------------
+
+  /**
+   * Ein vollstaendiger Vorgang nach Vertrag V1 und einer mit englischem Stufennamen ohne Optionen.
+   */
+  private static final String ZWEI_VORGAENGE =
+      """
+      ,"attempts":[
+        {"stage":"UMSETZUNG","cardNumber":1945,"model":"claude-opus-5-5","effort":"high",
+         "succeeded":true,"usage":{"costUsd":1.25,"modelDurationMs":420000},
+         "writtenCards":[1905]},
+        {"stage":"packages","cardNumber":1946,"succeeded":false}]""";
+
+  /** Postet ein Paket mit den genannten Zusatzfeldern und liefert den Statuscode der Antwort. */
+  private int perJsonStatus(String paketFelder) throws Exception {
+    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+    MockMvc mvc =
+        MockMvcBuilders.standaloneSetup(controller)
+            .setMessageConverters(
+                new MappingJackson2HttpMessageConverter(Jackson2ObjectMapperBuilder.json().build()))
+            .build();
+    return mvc.perform(
+            post("/api/kanban/night-runs")
+                .principal(mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"startedAt":"2026-09-16T22:31:00Z","mode":"CHAIN","complete":true,
+                     "items":[{"cardNumber":4714,"title":"Paket 4714","state":"GREEN"%s}]}
+                    """
+                        .formatted(paketFelder)))
+        .andReturn()
+        .getResponse()
+        .getStatus();
+  }
+
+  private static String vorgang(String felder) {
+    return ",\"attempts\":[{\"stage\":\"PLAN\",\"cardNumber\":1905,\"succeeded\":true%s}]"
+        .formatted(felder);
+  }
+
+  @Test
+  void gemeldeteVorgaengeKommenInIhrerReihenfolgeAmDienstAn() throws Exception {
+    NewNightRun meldung = perJsonGemeldet(ZWEI_VORGAENGE);
+
+    assertThat(meldung.items().getFirst().attempts())
+        .containsExactly(
+            new NightRunAttempt(
+                NightRunAttemptStage.UMSETZUNG,
+                1945,
+                "claude-opus-5-5",
+                "high",
+                true,
+                new NightRunUsage(new BigDecimal("1.25"), null, null, null, 420_000L, null),
+                List.of(1905)),
+            new NightRunAttempt(
+                NightRunAttemptStage.PAKETE, 1946, null, null, false, null, List.of()));
+  }
+
+  /**
+   * E6: Eine Kit-Kopie ohne das Feld meldet unveraendert weiter; das Paket traegt keine Vorgaenge.
+   */
+  @Test
+  void eineMeldungOhneVorgaengeKommtMitLeererListeAn() throws Exception {
+    assertThat(perJsonGemeldet("").items().getFirst().attempts()).isEmpty();
+  }
+
+  /** E6: Ein Stufenname ausserhalb des Wertebereichs ist ein Vertragsbruch wie bei stages. */
+  @Test
+  void eineUnbekannteStufeImVorgangWirdAbgewiesen() throws Exception {
+    assertThat(
+            perJsonStatus(
+                ",\"attempts\":[{\"stage\":\"NACHTISCH\",\"cardNumber\":1,\"succeeded\":true}]"))
+        .isEqualTo(400);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void fuenfzigVorgaengeBestehenUndEinundfuenfzigWerdenAbgewiesen() throws Exception {
+    String einer = "{\"stage\":\"REVIEW\",\"cardNumber\":1,\"succeeded\":true}";
+    String fuenfzig = String.join(",", Collections.nCopies(50, einer));
+
+    assertThat(perJsonStatus(",\"attempts\":[" + fuenfzig + "]")).isEqualTo(200);
+    assertThat(perJsonStatus(",\"attempts\":[" + fuenfzig + "," + einer + "]")).isEqualTo(400);
+  }
+
+  @Test
+  void fuenfzigGeschriebeneKartenBestehenUndEinundfuenfzigWerdenAbgewiesen() throws Exception {
+    assertThat(perJsonStatus(vorgang(",\"writtenCards\":" + karten(50)))).isEqualTo(200);
+    assertThat(perJsonStatus(vorgang(",\"writtenCards\":" + karten(51)))).isEqualTo(400);
+  }
+
+  @Test
+  void modellUndDenktiefeBisZurGrenzeBestehenUndDarueberWerdenAbgewiesen() throws Exception {
+    String modell = ",\"model\":\"%s\"";
+    String denktiefe = ",\"effort\":\"%s\"";
+
+    assertThat(perJsonStatus(vorgang(modell.formatted("m".repeat(100))))).isEqualTo(200);
+    assertThat(perJsonStatus(vorgang(modell.formatted("m".repeat(101))))).isEqualTo(400);
+    assertThat(perJsonStatus(vorgang(denktiefe.formatted("e".repeat(20))))).isEqualTo(200);
+    assertThat(perJsonStatus(vorgang(denktiefe.formatted("e".repeat(21))))).isEqualTo(400);
+  }
+
+  @Test
+  void einVorgangOhnePflichtfeldWirdAbgewiesen() throws Exception {
+    assertThat(perJsonStatus(",\"attempts\":[{\"cardNumber\":1,\"succeeded\":true}]"))
+        .isEqualTo(400);
+    assertThat(perJsonStatus(",\"attempts\":[{\"stage\":\"PLAN\",\"succeeded\":true}]"))
+        .isEqualTo(400);
+    assertThat(perJsonStatus(",\"attempts\":[{\"stage\":\"PLAN\",\"cardNumber\":1}]"))
+        .isEqualTo(400);
+    assertThat(perJsonStatus(",\"attempts\":[null]")).isEqualTo(400);
+    verifyNoInteractions(service);
+  }
+
+  private static String karten(int anzahl) {
+    return IntStream.rangeClosed(1, anzahl)
+        .mapToObj(Integer::toString)
+        .collect(Collectors.joining(",", "[", "]"));
   }
 }

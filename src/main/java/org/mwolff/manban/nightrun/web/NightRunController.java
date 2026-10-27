@@ -399,8 +399,7 @@ class NightRunController {
             request.concurrent(), request.checkWaitMs(), request.deferredAtMerge()),
         // Wie das Budget am Lauf: Der Upload-Weg fuehrt keine Stufen (Issue #1113, E14).
         List.of(),
-        // Die Vorgaenge nimmt dieser Weg erst mit einem eigenen Paket an (Plan #1905, #1948).
-        List.of());
+        NightRunAttemptRequest.toDomain(request.attempts()));
   }
 
   /**
@@ -466,6 +465,8 @@ class NightRunController {
    * @param concurrent gleichzeitig gelaufen (Issue #1877); wie {@code checkWaitMs} und {@code
    *     deferredAtMerge} derselbe flache Eingang wie am Ingest-Weg, gedeutet in {@link
    *     IngestConcurrency} (Plan #1876 E8)
+   * @param attempts die einzelnen Vorgänge des Pakets (Issue #1945); derselbe Typ wie am
+   *     Ingest-Weg, damit Meldung und Ergebnisdatei die Angaben gleich tragen (Plan #1905 E16)
    */
   @Schema(description = "Ein Arbeitspaket des Laufs: eine bearbeitete oder übergangene Karte.")
   record NightRunItemRequest(
@@ -524,7 +525,11 @@ class NightRunController {
               implementation = Boolean.class,
               description = IngestConcurrency.DEFERRED_AT_MERGE_BESCHREIBUNG,
               example = IngestConcurrency.DEFERRED_AT_MERGE_BEISPIEL)
-          @Nullable JsonNode deferredAtMerge) {}
+          @Nullable JsonNode deferredAtMerge,
+      @Schema(description = NightRunAttemptRequest.LISTE_BESCHREIBUNG)
+          @Nullable
+          @Size(max = NightRunAttemptRequest.MAX_ATTEMPTS_PER_ITEM)
+          List<@Valid @NotNull NightRunAttemptRequest> attempts) {}
 
   /** Eine Zeile der Übersicht „Heute Nacht“ (Issue #1454). */
   @Schema(description = "Eine zur Übernahme freigegebene Karte mit ihrem kleinen Stufenstand.")

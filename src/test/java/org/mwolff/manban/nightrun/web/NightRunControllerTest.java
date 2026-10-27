@@ -19,8 +19,10 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,6 +42,8 @@ import org.mwolff.manban.nightrun.domain.CardRef;
 import org.mwolff.manban.nightrun.domain.ChainProgress;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe.Startstation;
+import org.mwolff.manban.nightrun.domain.NightRunAttempt;
+import org.mwolff.manban.nightrun.domain.NightRunAttemptStage;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
@@ -69,6 +73,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
@@ -1199,6 +1204,154 @@ class NightRunControllerTest {
 
   private static List<String> felder(Class<? extends Record> typ) {
     return Arrays.stream(typ.getRecordComponents()).map(RecordComponent::getName).toList();
+  }
+
+  // --- Vorgaenge je Item: attempts (Issue #1945, Plan #1905 E1, E3, E6) ---------------------
+
+  /** Postet einen Lauf mit einem Paket, das die genannten Zusatzfelder traegt. */
+  private ResultActions submitMitPaketfeldern(String paketFelder) throws Exception {
+    when(service.submit(eq(USER), eq(PROJECT), anyList()))
+        .thenReturn(List.of(new NightRunResult(ERSTER, true)));
+    return mvc.perform(
+        post(PATH)
+            .contentType(JSON)
+            .content(
+                "{\"runs\":[%s]}"
+                    .formatted(
+                        run(
+                            "2026-08-31T22:00:00Z",
+                            "{\"cardNumber\":1,\"title\":\"Paket\",\"state\":\"GREEN\"%s}"
+                                .formatted(paketFelder)))));
+  }
+
+  // Siehe submit_passesEveryFieldToService_andAnswersInRequestOrder: derselbe Grund.
+  @SuppressWarnings("unchecked")
+  private NewNightRunItem uebergebenesPaket() {
+    ArgumentCaptor<List<NewNightRun>> captor = ArgumentCaptor.forClass(List.class);
+    verify(service).submit(eq(USER), eq(PROJECT), captor.capture());
+    return captor.getValue().getFirst().items().getFirst();
+  }
+
+  private static String vorgang(String felder) {
+    return ",\"attempts\":[{\"stage\":\"PLAN\",\"cardNumber\":1905,\"succeeded\":true%s}]"
+        .formatted(felder);
+  }
+
+  @Test
+  void submit_passesAttemptsInOrderToService() throws Exception {
+    submitMitPaketfeldern(
+            """
+            ,"attempts":[
+              {"stage":"REVIEW","cardNumber":1905,"model":"gpt-astra","effort":"medium",
+               "succeeded":true,"usage":{"costUsd":0.40,"modelDurationMs":90000}},
+              {"stage":"implementation","cardNumber":1945,"succeeded":false,
+               "writtenCards":[1946,1947]}]""")
+        .andExpect(status().isOk());
+
+    assertThat(uebergebenesPaket().attempts())
+        .containsExactly(
+            new NightRunAttempt(
+                NightRunAttemptStage.REVIEW,
+                1905,
+                "gpt-astra",
+                "medium",
+                true,
+                new NightRunUsage(new BigDecimal("0.40"), null, null, null, 90_000L, null),
+                List.of()),
+            new NightRunAttempt(
+                NightRunAttemptStage.UMSETZUNG,
+                1945,
+                null,
+                null,
+                false,
+                null,
+                List.of(1946, 1947)));
+  }
+
+  @Test
+  void submit_withoutAttempts_passesEmptyList() throws Exception {
+    submitMitPaketfeldern("").andExpect(status().isOk());
+
+    assertThat(uebergebenesPaket().attempts()).isEmpty();
+  }
+
+  @Test
+  void submit_rejectsUnknownAttemptStage_beforeReachingService() throws Exception {
+    submitMitPaketfeldern(
+            ",\"attempts\":[{\"stage\":\"NACHTISCH\",\"cardNumber\":1,\"succeeded\":true}]")
+        .andExpect(status().isBadRequest());
+
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void submit_rejectsMoreAttemptsThanAllowed_beforeReachingService() throws Exception {
+    String einer = "{\"stage\":\"REVIEW\",\"cardNumber\":1,\"succeeded\":true}";
+
+    submitMitPaketfeldern(
+            ",\"attempts\":[%s]".formatted(String.join(",", Collections.nCopies(51, einer))))
+        .andExpect(status().isBadRequest());
+
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void submit_acceptsFiftyAttempts() throws Exception {
+    String einer = "{\"stage\":\"REVIEW\",\"cardNumber\":1,\"succeeded\":true}";
+
+    submitMitPaketfeldern(
+            ",\"attempts\":[%s]".formatted(String.join(",", Collections.nCopies(50, einer))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void submit_rejectsTooManyWrittenCards_beforeReachingService() throws Exception {
+    submitMitPaketfeldern(vorgang(",\"writtenCards\":" + karten(51)))
+        .andExpect(status().isBadRequest());
+
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void submit_acceptsFiftyWrittenCards() throws Exception {
+    submitMitPaketfeldern(vorgang(",\"writtenCards\":" + karten(50))).andExpect(status().isOk());
+  }
+
+  @Test
+  void submit_rejectsTooLongModelOrEffort_beforeReachingService() throws Exception {
+    submitMitPaketfeldern(vorgang(",\"model\":\"%s\"".formatted("m".repeat(101))))
+        .andExpect(status().isBadRequest());
+    submitMitPaketfeldern(vorgang(",\"effort\":\"%s\"".formatted("e".repeat(21))))
+        .andExpect(status().isBadRequest());
+
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void submit_acceptsModelAndEffortAtTheirLimits() throws Exception {
+    submitMitPaketfeldern(
+            vorgang(
+                ",\"model\":\"%s\",\"effort\":\"%s\"".formatted("m".repeat(100), "e".repeat(20))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void submit_rejectsAttemptWithoutRequiredField_beforeReachingService() throws Exception {
+    submitMitPaketfeldern(",\"attempts\":[{\"cardNumber\":1,\"succeeded\":true}]")
+        .andExpect(status().isBadRequest());
+    submitMitPaketfeldern(",\"attempts\":[{\"stage\":\"PLAN\",\"succeeded\":true}]")
+        .andExpect(status().isBadRequest());
+    submitMitPaketfeldern(",\"attempts\":[{\"stage\":\"PLAN\",\"cardNumber\":1}]")
+        .andExpect(status().isBadRequest());
+    submitMitPaketfeldern(",\"attempts\":[null]").andExpect(status().isBadRequest());
+
+    verifyNoInteractions(service);
+  }
+
+  private static String karten(int anzahl) {
+    return IntStream.rangeClosed(1, anzahl)
+        .mapToObj(Integer::toString)
+        .collect(Collectors.joining(",", "[", "]"));
   }
 
   private static String run(String startedAt, String items) {
