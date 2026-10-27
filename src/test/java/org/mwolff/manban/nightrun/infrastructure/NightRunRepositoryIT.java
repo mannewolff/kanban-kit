@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
+import org.mwolff.manban.nightrun.domain.ModellvergleichErmittlung.Vorgang;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunAttempt;
@@ -59,7 +60,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 // zusammengelegt, um eine Zahl zu druecken. Issue #944 bringt drei Faelle fuer Herkunft,
 // Vollstaendigkeit und Verbrauch dazu, Issue #964 drei fuer das verwaiste Arbeitspaket, Issue
 // #965 zwei fuer dessen Wiedererkennung, Issue #1112 sieben fuer Budgets und Stufen, Issue #1944
-// sechs fuer die Vorgaenge.
+// sechs fuer die Vorgaenge, Issue #1947 fuenf fuer ihren Lesepfad.
 // PMD.CyclomaticComplexity: dieselbe Ursache, ueber die Klasse summiert — die hoechste
 // Einzelmethode liegt bei 4, weit unter jedem Schwellwert. Ein Zerschneiden nach der Summe
 // verteilte die Faelle eines Adapters auf zwei Dateien, die sich dieselben Vorrichtungen teilen
@@ -2135,5 +2136,88 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
         .isEmpty();
     assertThat(vorgaengeDesLaufs(runId)).hasSize(1);
+  }
+
+  // --- Vorgaenge seit einem Zeitpunkt (Issue #1947) --------------------------------------------
+
+  /**
+   * Die Zeitgrenze schliesst ihren Zeitpunkt ein; jeder Vorgang traegt Start und Gattung seines
+   * Pakets und den Abschluss aus seiner Meldung (Plan #1905 E7).
+   */
+  @Test
+  void findAttemptsSinceLiefertDieVorgaengeAbDemZeitpunkt_mitStartGattungUndAbschluss() {
+    anlegen(T1, List.of(mitVorgaengen(1905, PLANVORGANG)));
+    anlegen(T2, NightRunKind.INTERACTIVE, List.of(mitVorgaengen(1944, UMSETZUNGSVORGANG)));
+    runs.upsert(meldung(T3, false), List.of(mitVorgaengen(1905, PRUEFVORGANG)));
+
+    assertThat(runs.findAttemptsSince(projectId, T2))
+        .extracting(Vorgang::laufStart, Vorgang::kind, Vorgang::laufAbgeschlossen, Vorgang::attempt)
+        .containsExactly(
+            tuple(T2, NightRunKind.INTERACTIVE, true, UMSETZUNGSVORGANG),
+            tuple(T3, NightRunKind.NIGHT, false, PRUEFVORGANG));
+  }
+
+  @Test
+  void findAttemptsSinceKenntNurDasEigeneProjekt() {
+    long andererUser =
+        insert(
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('b@example.com', 'B') RETURNING id");
+    long anderesProjekt =
+        insert(
+            "INSERT INTO project (name, owner_user_id) VALUES ('Q', "
+                + andererUser
+                + ") RETURNING id");
+    anlegen(T1, List.of(mitVorgaengen(1905, PRUEFVORGANG)));
+
+    assertThat(runs.findAttemptsSince(anderesProjekt, T1)).isEmpty();
+    assertThat(runs.findAttemptsSince(projectId, T1)).hasSize(1);
+  }
+
+  /** Modell, Denktiefe, Verbrauch und die geschriebenen Karten in gemeldeter Reihenfolge. */
+  @Test
+  void findAttemptsSinceLiefertJedeAngabeDesVorgangs_dieKartenInIhrerReihenfolge() {
+    anlegen(T1, List.of(mitVorgaengen(1905, PLANVORGANG)));
+
+    assertThat(runs.findAttemptsSince(projectId, T1))
+        .singleElement()
+        .satisfies(
+            vorgang -> {
+              assertThat(vorgang.attempt()).isEqualTo(PLANVORGANG);
+              assertThat(vorgang.attempt().writtenCards()).containsExactly(1946, 1944, 1945);
+            });
+  }
+
+  /**
+   * Die Position zaehlt ueber die Pakete eines Laufs hinweg in Meldungsreihenfolge: Die Ermittlung
+   * vergleicht sie innerhalb eines Runs, und zwei Pakete tragen je eigene Positionen ab 0.
+   */
+  @Test
+  void findAttemptsSinceNummeriertDieVorgaengeEinesLaufsDurchgehend() {
+    anlegen(
+        T1,
+        List.of(
+            mitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG),
+            mitVorgaengen(1944, UMSETZUNGSVORGANG)));
+
+    List<Vorgang> vorgaenge = runs.findAttemptsSince(projectId, T1);
+
+    assertThat(vorgaenge)
+        .extracting(v -> v.attempt().stage())
+        .containsExactly(
+            NightRunAttemptStage.PLAN, NightRunAttemptStage.REVIEW, NightRunAttemptStage.UMSETZUNG);
+    assertThat(vorgaenge).extracting(Vorgang::position).isSorted().doesNotHaveDuplicates();
+  }
+
+  /** Pakete ueberdauern die Verdraengung ihres Laufs fuer Kennzahlen (#964), ihre Vorgaenge mit. */
+  @Test
+  void findAttemptsSinceLiefertAuchDieVorgaengeVerwaisterPakete() {
+    long runId = anlegen(T1, List.of(mitVorgaengen(1905, PLANVORGANG)));
+    jdbc.update("DELETE FROM night_run WHERE id = ?", runId);
+
+    assertThat(runs.findAttemptsSince(projectId, T1))
+        .singleElement()
+        .extracting(Vorgang::laufStart, Vorgang::kind, Vorgang::laufAbgeschlossen)
+        .containsExactly(T1, NightRunKind.NIGHT, true);
   }
 }

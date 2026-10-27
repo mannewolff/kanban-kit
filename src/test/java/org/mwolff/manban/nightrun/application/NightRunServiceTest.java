@@ -35,6 +35,7 @@ import org.mwolff.manban.card.application.CardRunQueryService.FreigabeKarteView;
 import org.mwolff.manban.common.KitNamen;
 import org.mwolff.manban.common.KitNamen.Sache;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
+import org.mwolff.manban.nightrun.domain.ModellvergleichErmittlung;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe.Startstation;
 import org.mwolff.manban.nightrun.domain.NightRun;
@@ -2239,6 +2240,12 @@ class NightRunServiceTest {
                   .thenComparing(NightRunItem::requireId)
                   .reversed())
           .toList();
+    }
+
+    /** Der Lesepfad der Platte „Modelle“ (Issue #1947); {@link NightRunService} ruft ihn nicht. */
+    @Override
+    public List<ModellvergleichErmittlung.Vorgang> findAttemptsSince(long projectId, Instant von) {
+      return List.of();
     }
 
     /** Alle Pakete, auch verwaiste — die Verdraengung ist sonst ueber keinen Port sichtbar. */
