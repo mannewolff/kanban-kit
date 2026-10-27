@@ -567,7 +567,9 @@ Bei einem eingelieferten **Kettenlauf** teilt die [Lage des Runs](#lage-des-runs
 **Planung** (die Stufen der Kette) und **Umsetzung** (der Rest), und der Kettenvorgang nennt den
 **angelegten Plan und die Pakete** als Verweise — ermittelt aus der Herkunft der Karten am Board,
 beschränkt auf Karten, die während des Runs entstanden. Jede Paketzeile nennt ihren Plan („Paket aus
-Plan #N"). Die Dauer des Kettenvorgangs ist die Summe seiner Stufen.
+Plan #N"). Als Anforderung eines Plans zählt dabei nur eine fachliche Anforderung: Ein Plan aus
+einer Idee erscheint wie ein Plan ohne Anforderung. Die Dauer des Kettenvorgangs ist die Summe seiner
+Stufen.
 
 Der **Titel** eines Runs nennt seine Nummer, das Startdatum und die Startzeit („Run #412 · 14.
 September, 22:05"); ein eben eingelesener Run ohne Nummer heißt „Run · 14. September, 22:05".
