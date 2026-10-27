@@ -64,7 +64,9 @@
         "src/components/EditModeBanner.tsx",
         "src/components/VorschauBalken.tsx",
         "src/components/VorschauGesperrt.tsx",
-        "src/components/VorschauVerborgenHinweis.tsx"
+        "src/components/VorschauVerborgenHinweis.tsx",
+        "src/components/VorschauPersoenlichHinweis.tsx",
+        "src/components/VorschauEintraege.tsx"
       ],
       "testMuster": [
         "src/components/AppShell.test.tsx",
@@ -74,12 +76,14 @@
         "src/components/EditModeBanner.test.tsx",
         "src/components/VorschauBalken.test.tsx",
         "src/components/VorschauGesperrt.test.tsx",
-        "src/components/VorschauVerborgenHinweis.test.tsx"
+        "src/components/VorschauVerborgenHinweis.test.tsx",
+        "src/components/VorschauPersoenlichHinweis.test.tsx",
+        "src/components/VorschauEintraege.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,
       "reihenfolge": 6,
-      "begruendung": "Der Rahmen um jede Seite: Navigation, Pfadzeile, Board-Auswahl, Meldungen, das Band des Bearbeitungsmodus und die Bausteine der Ansicht als XY (Balken, Sperre, Hinweis)."
+      "begruendung": "Der Rahmen um jede Seite: Navigation, Pfadzeile, Board-Auswahl, Meldungen, das Band des Bearbeitungsmodus und die Bausteine der Ansicht als XY (Balken, Sperre, Hinweise, Einträge)."
     },
     {
       "name": "bausteine-karte",

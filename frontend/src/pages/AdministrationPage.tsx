@@ -22,7 +22,7 @@ import Typography from '@mui/material/Typography'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { useColorScheme } from '@mui/material/styles'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { accessTokensApi, type AccessToken, type CreatedAccessToken } from '../api/accessTokens'
 import { authApi, type ColorScheme } from '../api/auth'
@@ -35,6 +35,8 @@ import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { StandardLabelsSection } from '../components/StandardLabelsSection'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
+import { VorschauPersoenlichHinweis } from '../components/VorschauPersoenlichHinweis'
 import { useSprache, useT } from '../i18n/SpracheContext'
 import { istSprache, woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { useEditMode } from '../lib/EditModeContext'
@@ -78,7 +80,9 @@ export function AdministrationPage() {
           </Stack>
         </Paper>
 
-        <AppearanceSection />
+        <Persoenlich titel={t.ERSCHEINUNGSBILD}>
+          <AppearanceSection />
+        </Persoenlich>
 
         <LanguageSection />
 
@@ -86,7 +90,9 @@ export function AdministrationPage() {
 
         <StandardLabelsSection />
 
-        <ApiTokensSection />
+        <Persoenlich titel={t.API_TOKENS}>
+          <ApiTokensSection />
+        </Persoenlich>
 
         <ApiUebersichtSection />
       </Stack>
@@ -181,15 +187,39 @@ function LanguageSection() {
         </RadioGroup>
         {admin ? (
           <Box>
-            <Button variant="contained" aria-label={t.SPRACHE.SPEICHERN_ARIA} onClick={() => void save()}>
-              {t.SPRACHE.SPEICHERN}
-            </Button>
+            <VorschauGesperrt>
+              <Button variant="contained" aria-label={t.SPRACHE.SPEICHERN_ARIA} onClick={() => void save()}>
+                {t.SPRACHE.SPEICHERN}
+              </Button>
+            </VorschauGesperrt>
           </Box>
         ) : (
           <Typography variant="body2" color="text.secondary">
             {t.SPRACHE.NUR_ADMIN}
           </Typography>
         )}
+      </Stack>
+    </Paper>
+  )
+}
+
+/**
+ * Rahmen eines persönlichen Abschnitts: In der „Ansicht als XY“ steht unter der Überschrift statt
+ * des Inhalts nur der Hinweis, dass der Bereich in der Vorschau nicht gezeigt wird (AK 5, E5). Der
+ * Inhalt wird dann gar nicht erst eingehängt und ruft darum auch nichts ab.
+ */
+function Persoenlich({ titel, children }: Readonly<{ titel: string; children: ReactNode }>) {
+  const { vorschau } = useAuth()
+  if (!vorschau) {
+    return children
+  }
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack spacing={1}>
+        <Typography variant="h6" component="h2">
+          {titel}
+        </Typography>
+        <VorschauPersoenlichHinweis />
       </Stack>
     </Paper>
   )
@@ -324,9 +354,11 @@ function DoneRetentionSection() {
             slotProps={{ htmlInput: { min: 0, 'aria-label': t.DONE_TAGE_ARIA } }}
             sx={{ width: 140 }}
           />
-          <Button variant="contained" onClick={() => void save()} sx={{ mt: 0.5 }}>
-            {tg.ALLGEMEIN.SPEICHERN}
-          </Button>
+          <VorschauGesperrt>
+            <Button variant="contained" onClick={() => void save()} sx={{ mt: 0.5 }}>
+              {tg.ALLGEMEIN.SPEICHERN}
+            </Button>
+          </VorschauGesperrt>
         </Stack>
       </Stack>
     </Paper>

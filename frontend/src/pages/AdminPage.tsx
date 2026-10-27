@@ -8,11 +8,12 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useCallback, useEffect, useState } from 'react'
 import { adminApi as defaultAdminApi, type AdminApi, type AdminUser } from '../api/admin'
-import { ApiError, apiErrorMessage } from '../api/client'
+import { ApiError, apiErrorMessage, startseiteNeuLaden } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { BackupStatusSection } from '../components/BackupStatusSection'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { OverloadRejectionsSection } from '../components/OverloadRejectionsSection'
+import { VorschauEintraege } from '../components/VorschauEintraege'
 import { useT } from '../i18n/SpracheContext'
 import { useEditMode } from '../lib/EditModeContext'
 
@@ -86,6 +87,22 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
     }
   }
 
+  // Nach dem Start lädt die Oberfläche auf `/` neu; `StartRedirect` wählt dort mit der
+  // Selbstauskunft von XY dessen Startseite (Plan #1914, E13).
+  const ansichtStarten = async (u: AdminUser) => {
+    setError(null)
+    try {
+      await api.vorschauStarten(u.id)
+      startseiteNeuLaden()
+    } catch (e) {
+      setError(apiErrorMessage(e, ta.ANSICHT_FEHLGESCHLAGEN))
+    }
+  }
+
+  // In Frage kommt jedes Konto außer dem eigenen und den Plattform-Admins, auch gesperrte und
+  // wartende: Die Ansicht zeigt, was XY nach dem Entsperren bzw. der Freigabe sähe (AK 1, E11).
+  const ansichtMoeglich = (u: AdminUser) => u.id !== currentUser?.userId && u.platformRole !== 'ADMIN'
+
   const nameCell = (u: AdminUser) =>
     editing?.id === u.id ? (
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -119,6 +136,16 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
 
   const actionsCell = (u: AdminUser) => (
     <>
+      {ansichtMoeglich(u) && (
+        <Button
+          size="small"
+          aria-label={ta.ANSICHT_ALS_ARIA(u.displayName)}
+          onClick={() => void ansichtStarten(u)}
+          sx={{ mr: 1 }}
+        >
+          {ta.ANSICHT_ALS}
+        </Button>
+      )}
       {!u.approvedAt && (
         <Button
           size="small"
@@ -184,7 +211,15 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
       hideable: true,
       resizable: true,
     },
-    { key: 'actions', header: ta.AKTION, render: actionsCell, align: 'right', defaultWidth: 260 },
+    {
+      key: 'ansichten',
+      header: ta.ANSICHTEN,
+      render: (u) => <AnsichtenZelle user={u} api={api} />,
+      defaultWidth: 220,
+      hideable: true,
+      resizable: true,
+    },
+    { key: 'actions', header: ta.AKTION, render: actionsCell, align: 'right', defaultWidth: 360 },
   ]
 
   return (
@@ -206,6 +241,26 @@ export function AdminPage({ api = defaultAdminApi }: Readonly<Props>) {
       />
 
       <OverloadRejectionsSection api={api} />
+    </Box>
+  )
+}
+
+/** Aufklappbare Einträge der Ansichten als dieses Konto (AK 8); sie laden erst beim Aufklappen. */
+function AnsichtenZelle({ user, api }: Readonly<{ user: AdminUser; api: AdminApi }>) {
+  const ta = useT().ADMIN_SEITE
+  const [offen, setOffen] = useState(false)
+  const laden = useCallback(() => api.vorschauProtokoll(user.id), [api, user.id])
+  return (
+    <Box>
+      <Button
+        size="small"
+        aria-expanded={offen}
+        aria-label={ta.EINTRAEGE_ARIA(user.displayName)}
+        onClick={() => setOffen(!offen)}
+      >
+        {ta.EINTRAEGE}
+      </Button>
+      {offen && <VorschauEintraege laden={laden} />}
     </Box>
   )
 }

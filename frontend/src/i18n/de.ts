@@ -49,6 +49,28 @@ export const de = {
     GESPERRT: 'Vorschau',
     /** Hinweis an Stellen, die XY sähe, die Vorschau aber nicht zeigt (E16). */
     VERBORGEN: (ziel: string) => `${ziel} sieht diesen Bereich, die Vorschau zeigt ihn nicht.`,
+    /** Hinweis statt Profil, API-Tokens und Farbwahl von XY (AK 5, E5). */
+    PERSOENLICH: 'Dieser Bereich wird in der Vorschau nicht gezeigt.',
+    /** Hinweis statt des Ausprobierens in der API-Übersicht (AK 3, E7). */
+    AUSPROBIEREN_GESPERRT: 'Das Ausprobieren von Aufrufen ist in der Vorschau gesperrt.',
+    /** Die Einträge, wann welcher Admin die App als ein Konto angesehen hat (AK 8, E12). */
+    PROTOKOLL_TITEL: 'Ansichten durch Admins',
+    PROTOKOLL_LEER: 'Bisher hat kein Admin die App als dieses Konto angesehen.',
+    PROTOKOLL_LADEN_FEHLGESCHLAGEN: 'Die Einträge ließen sich nicht laden.',
+    KONTO_GELOESCHT: 'Konto gelöscht',
+    START: (zeit: string) => `Start ${zeit}`,
+    ENDE: (zeit: string) => `Ende ${zeit}`,
+    LAEUFT: 'läuft noch',
+    ENDGRUND: {
+      BEENDET: 'beendet',
+      ABLAUF: 'nach 30 Minuten abgelaufen',
+      ABMELDUNG: 'Abmeldung',
+      ROLLE_ENTZOGEN: 'Admin-Rolle entzogen',
+      ADMIN_GESPERRT: 'Admin gesperrt',
+      SITZUNG_UNGUELTIG: 'Anmeldung ungültig',
+      ZIEL_IST_ADMIN: 'Konto wurde Plattform-Admin',
+      ZIEL_FEHLT: 'Konto entfallen',
+    },
   },
 
   /** Die angezeigten Kartenarten des Kits (A11); Schlüssel wie im Namen-Register des Servers. */
@@ -1766,6 +1788,14 @@ export const de = {
     GESPERRT: 'Gesperrt',
     AKTIV: 'Aktiv',
     AKTION: 'Aktion',
+    /** Start der nur lesenden „Ansicht als …“ je in Frage kommender Zeile (AK 2, Plan #1914). */
+    ANSICHT_ALS: 'Ansicht als …',
+    ANSICHT_ALS_ARIA: (name: string) => `Ansicht als ${name}`,
+    ANSICHT_FEHLGESCHLAGEN: 'Die Ansicht ließ sich nicht starten.',
+    /** Spalte mit den aufklappbaren Einträgen der Ansichten (AK 8). */
+    ANSICHTEN: 'Ansichten',
+    EINTRAEGE: 'Einträge',
+    EINTRAEGE_ARIA: (name: string) => `Ansichten als ${name}`,
   },
 
   /** Statuskachel der Sicherung im Admin-Bereich (Issue #1660); das Ziel ist ein Datenwert. */

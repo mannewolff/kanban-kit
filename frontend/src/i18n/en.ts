@@ -48,6 +48,25 @@ export const en: Woerterbuch = {
     BEENDEN_FEHLGESCHLAGEN: 'The view could not be ended.',
     GESPERRT: 'Preview',
     VERBORGEN: (ziel) => `${ziel} sees this area, the preview does not show it.`,
+    PERSOENLICH: 'This area is not shown in the preview.',
+    AUSPROBIEREN_GESPERRT: 'Trying out requests is blocked in the preview.',
+    PROTOKOLL_TITEL: 'Views by admins',
+    PROTOKOLL_LEER: 'No admin has viewed the app as this account yet.',
+    PROTOKOLL_LADEN_FEHLGESCHLAGEN: 'The entries could not be loaded.',
+    KONTO_GELOESCHT: 'account deleted',
+    START: (zeit) => `Start ${zeit}`,
+    ENDE: (zeit) => `End ${zeit}`,
+    LAEUFT: 'still running',
+    ENDGRUND: {
+      BEENDET: 'ended',
+      ABLAUF: 'expired after 30 minutes',
+      ABMELDUNG: 'sign-out',
+      ROLLE_ENTZOGEN: 'admin role revoked',
+      ADMIN_GESPERRT: 'admin blocked',
+      SITZUNG_UNGUELTIG: 'sign-in invalid',
+      ZIEL_IST_ADMIN: 'account became platform admin',
+      ZIEL_FEHLT: 'account gone',
+    },
   },
 
   KARTENART: {
@@ -1658,6 +1677,12 @@ export const en: Woerterbuch = {
     GESPERRT: 'Blocked',
     AKTIV: 'Active',
     AKTION: 'Action',
+    ANSICHT_ALS: 'View as …',
+    ANSICHT_ALS_ARIA: (name) => `View as ${name}`,
+    ANSICHT_FEHLGESCHLAGEN: 'The view could not be started.',
+    ANSICHTEN: 'Views',
+    EINTRAEGE: 'Entries',
+    EINTRAEGE_ARIA: (name) => `Views as ${name}`,
   },
 
   SICHERUNG: {

@@ -14,6 +14,7 @@ import { renderMitSprache } from '../i18n/renderMitSprache'
 
 const authState = vi.hoisted(() => ({
   user: { platformRole: 'ADMIN', memberships: [] } as { platformRole: string; memberships: [] },
+  vorschau: null as null | Record<string, string>,
 }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => authState }))
 const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
@@ -49,6 +50,7 @@ describe('StandardLabelsSection', () => {
     vi.clearAllMocks()
     kitNamen.zustand = null
     authState.user = { platformRole: 'ADMIN', memberships: [] }
+    authState.vorschau = null
     mApi.satz.mockResolvedValue(SATZ)
     mApi.anlegen.mockResolvedValue({ boards: 3, angelegt: 10, uebersprungen: 2 })
   })
@@ -58,6 +60,18 @@ describe('StandardLabelsSection', () => {
     const { container } = render(<StandardLabelsSection />)
 
     expect(container).toBeEmptyDOMElement()
+    expect(mApi.satz).not.toHaveBeenCalled()
+  })
+
+  it('sperrt den Knopf in der Vorschau mit dem Hinweis „Vorschau“', async () => {
+    authState.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    renderMitSprache(<StandardLabelsSection />)
+
+    const knopf = screen.getByRole('button', { name: 'Vorschau' })
+    expect(knopf).toBeDisabled()
+    expect(knopf).toHaveTextContent('Standard-Labels für alle Boards')
+    fireEvent.click(knopf)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(mApi.satz).not.toHaveBeenCalled()
   })
 

@@ -96,8 +96,9 @@ export function ApiUebersichtPage() {
   const [spec, setSpec] = useState<object | null>(null)
   const [fehler, setFehler] = useState<string | null>(null)
   const [rueckfrage, setRueckfrage] = useState<Rueckfrage | null>(null)
-  const { user } = useAuth()
-  const admin = isPlatformAdmin(user)
+  const { user, vorschau } = useAuth()
+  // In der Vorschau ist das Ausprobieren ganz gesperrt, auch lesend und mit Projekt-Token (AK 3, E7).
+  const admin = isPlatformAdmin(user) && !vorschau
   const t = useT()
   const { sprache } = useSprache()
   const ausprobierPlugin = useMemo(() => ausprobieren(hinweisAendernd(sprache)), [sprache])
@@ -152,6 +153,11 @@ export function ApiUebersichtPage() {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress aria-label={t.API_UEBERSICHT.LAEDT} />
         </Box>
+      )}
+      {spec !== null && vorschau && (
+        <Alert severity="info" variant="outlined" role="note" sx={{ mb: 1 }}>
+          {t.VORSCHAU.AUSPROBIEREN_GESPERRT}
+        </Alert>
       )}
       {spec !== null && admin && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>

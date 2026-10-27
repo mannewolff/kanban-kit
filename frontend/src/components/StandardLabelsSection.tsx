@@ -21,6 +21,7 @@ import { useT } from '../i18n/SpracheContext'
 import { labelErklaerung } from '../lib/labelErklaerung'
 import { isPlatformAdmin } from '../lib/roles'
 import { ErklaerungsText, LabelErklaerung } from './LabelErklaerung'
+import { VorschauGesperrt } from './VorschauGesperrt'
 import { labelChipSx } from './labelChipSx'
 
 /**
@@ -75,9 +76,11 @@ export function StandardLabelsSection() {
           {t.STANDARD_LABELS.HINWEIS}
         </Typography>
         <Stack direction="row">
-          <Button variant="outlined" size="small" onClick={oeffnen}>
-            {t.STANDARD_LABELS.KNOPF}
-          </Button>
+          <VorschauGesperrt>
+            <Button variant="outlined" size="small" onClick={oeffnen}>
+              {t.STANDARD_LABELS.KNOPF}
+            </Button>
+          </VorschauGesperrt>
         </Stack>
         {ergebnis && (
           <Alert severity="success">

@@ -1,12 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AdminApi } from '../api/admin'
-import { ApiError } from '../api/client'
+import { ApiError, startseiteNeuLaden } from '../api/client'
+import { formatierer } from '../i18n/format'
 import { AdminPage } from './AdminPage'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ user: { userId: 99, memberships: [] } }),
+  useAuth: () => ({ user: { userId: 99, memberships: [] }, vorschau: null }),
+}))
+// Das Neuladen auf `/` nach dem Start der Vorschau (E13) wird beobachtet, nicht ausgeführt.
+vi.mock('../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/client')>()),
+  startseiteNeuLaden: vi.fn(),
 }))
 // Editiermodus gemockt: Bestandstests laufen mit editMode=true (Namen-Bleistift sichtbar); der
 // Editiermodus-aus-Test schaltet editMode.value=false.
@@ -52,8 +58,8 @@ function makeApi(): AdminApi {
     disable: vi.fn().mockResolvedValue({}),
     enable: vi.fn().mockResolvedValue({}),
     listOverloadRejections: vi.fn().mockResolvedValue([]),
-    vorschauStarten: vi.fn(),
-    vorschauProtokoll: vi.fn(),
+    vorschauStarten: vi.fn().mockResolvedValue(undefined),
+    vorschauProtokoll: vi.fn().mockResolvedValue([]),
     bootstrap: vi.fn(),
   }
 }
@@ -353,5 +359,136 @@ describe('AdminPage auf Englisch', () => {
     renderMitSprache(<AdminPage api={api} />, 'en')
 
     expect(await screen.findByText('Loading failed.')).toBeInTheDocument()
+  })
+})
+
+describe('AdminPage: Ansicht als …', () => {
+  beforeEach(() => {
+    editMode.value = true
+    vi.mocked(startseiteNeuLaden).mockClear()
+  })
+
+  const ich = {
+    id: 99,
+    email: 'ich@x.de',
+    displayName: 'Ich',
+    platformRole: 'ADMIN',
+    emailVerified: true,
+    approvedAt: '2026-07-13T10:00:00Z',
+    disabled: false,
+  }
+
+  it('bietet den Knopf nur für Konten, die weder das eigene noch ein Plattform-Admin sind', async () => {
+    const api = makeApi()
+    const liste = await api.listUsers()
+    api.listUsers = vi.fn().mockResolvedValue([...liste, ich])
+    render(<AdminPage api={api} />)
+    await screen.findByText('Ich')
+
+    expect(screen.getByRole('button', { name: 'Ansicht als Alice' })).toHaveTextContent('Ansicht als …')
+    // Gesperrt und wartend kommt in Frage: Die Ansicht zeigt, was XY nach der Freigabe sähe (AK 1).
+    expect(screen.getByRole('button', { name: 'Ansicht als Carol' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ansicht als Bob' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Ansicht als Ich' })).not.toBeInTheDocument()
+  })
+
+  it('Szenario: Admin prüft die Sicht eines neuen Mitglieds', async () => {
+    const api = makeApi()
+    render(<AdminPage api={api} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ansicht als Alice' }))
+
+    await waitFor(() => expect(startseiteNeuLaden).toHaveBeenCalledTimes(1))
+    expect(api.vorschauStarten).toHaveBeenCalledWith(1)
+    // Erst nach dem Start wird neu geladen: `StartRedirect` wählt dann die Startseite von XY.
+    expect(vi.mocked(api.vorschauStarten).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(startseiteNeuLaden).mock.invocationCallOrder[0],
+    )
+  })
+
+  it('lädt nicht neu und meldet den Grund, wenn der Start abgewiesen wird', async () => {
+    const api = makeApi()
+    api.vorschauStarten = vi
+      .fn()
+      .mockRejectedValue(new ApiError(409, 'Conflict', undefined, 'Es läuft schon eine Ansicht.'))
+    render(<AdminPage api={api} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ansicht als Alice' }))
+
+    expect(await screen.findByText('Es läuft schon eine Ansicht.')).toBeInTheDocument()
+    expect(startseiteNeuLaden).not.toHaveBeenCalled()
+  })
+
+  it('meldet einen Start ohne Server-Meldung mit eigenem Text', async () => {
+    const api = makeApi()
+    api.vorschauStarten = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    render(<AdminPage api={api} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ansicht als Alice' }))
+
+    expect(await screen.findByText('Die Ansicht ließ sich nicht starten.')).toBeInTheDocument()
+  })
+
+  it('Szenario: XY erfährt von der Ansicht — Start und Ende stehen in der Nutzerliste', async () => {
+    const api = makeApi()
+    api.vorschauProtokoll = vi.fn().mockResolvedValue([
+      {
+        adminName: 'Ada',
+        adminKontoGeloescht: false,
+        gestartetAm: '2026-10-26T09:00:00Z',
+        laeuftAbAm: '2026-10-26T09:30:00Z',
+        beendetAm: '2026-10-26T09:12:00Z',
+        endgrund: 'BEENDET',
+      },
+    ])
+    render(<AdminPage api={api} />)
+    await screen.findByText('Alice')
+    // Die Einträge laden erst beim Aufklappen.
+    expect(api.vorschauProtokoll).not.toHaveBeenCalled()
+
+    const knopf = screen.getByRole('button', { name: 'Ansichten als Alice' })
+    expect(knopf).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(knopf)
+
+    const de = formatierer('de').datumUhrzeit
+    const eintrag = await screen.findByRole('listitem')
+    expect(api.vorschauProtokoll).toHaveBeenCalledWith(1)
+    expect(knopf).toHaveAttribute('aria-expanded', 'true')
+    expect(eintrag).toHaveTextContent('Ada')
+    expect(eintrag).toHaveTextContent(`Start ${de('2026-10-26T09:00:00Z')}`)
+    expect(eintrag).toHaveTextContent(`Ende ${de('2026-10-26T09:12:00Z')}`)
+    expect(eintrag).toHaveTextContent('beendet')
+
+    fireEvent.click(knopf)
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
+  })
+
+  it('nennt einen gelöschten Admin mit Namen und dem Vermerk „Konto gelöscht“', async () => {
+    const api = makeApi()
+    api.vorschauProtokoll = vi.fn().mockResolvedValue([
+      {
+        adminName: 'Ada',
+        adminKontoGeloescht: true,
+        gestartetAm: '2026-10-26T09:00:00Z',
+        laeuftAbAm: '2026-10-26T09:30:00Z',
+        beendetAm: '2026-10-26T09:30:00Z',
+        endgrund: 'ABLAUF',
+      },
+    ])
+    render(<AdminPage api={api} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Ansichten als Carol' }))
+
+    expect(await screen.findByRole('listitem')).toHaveTextContent('Ada (Konto gelöscht)')
+    expect(api.vorschauProtokoll).toHaveBeenCalledWith(3)
+  })
+
+  it('beschriftet Knopf und Spalte auf Englisch', async () => {
+    renderMitSprache(<AdminPage api={makeApi()} />, 'en')
+    await screen.findByText('Alice')
+
+    expect(screen.getByRole('button', { name: 'View as Alice' })).toHaveTextContent('View as …')
+    expect(screen.getByRole('columnheader', { name: /Views/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Views as Alice' })).toHaveTextContent('Entries')
   })
 })

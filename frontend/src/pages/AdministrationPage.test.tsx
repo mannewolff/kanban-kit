@@ -20,6 +20,7 @@ const authState = vi.hoisted(() => ({
     memberships: []
     colorScheme?: 'SYSTEM' | 'LIGHT' | 'DARK'
   },
+  vorschau: null as null | Record<string, string>,
   refresh: vi.fn(),
 }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => authState }))
@@ -91,6 +92,7 @@ describe('AdministrationPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     authState.user = { platformRole: 'USER', memberships: [] }
+    authState.vorschau = null
     authState.refresh.mockResolvedValue(undefined)
     mAuth.setColorScheme.mockResolvedValue({})
     mTokens.list.mockResolvedValue([])
@@ -679,6 +681,7 @@ describe('AdministrationPage — Erscheinungsbild (#1911)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     authState.user = { platformRole: 'USER', memberships: [], colorScheme: 'LIGHT' }
+    authState.vorschau = null
     authState.refresh.mockResolvedValue(undefined)
     mAuth.setColorScheme.mockResolvedValue({})
     mTokens.list.mockResolvedValue([])
@@ -754,5 +757,64 @@ describe('AdministrationPage — Erscheinungsbild (#1911)', () => {
     expect(stufe('Hell')).toHaveAttribute('aria-pressed', 'true')
     expect(stufe('Dunkel')).toHaveAttribute('aria-pressed', 'false')
     expect(authState.refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe('AdministrationPage in der Ansicht als XY', () => {
+  const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authState.user = { platformRole: 'USER', memberships: [], colorScheme: 'DARK' }
+    authState.vorschau = vorschau
+    mTokens.list.mockResolvedValue([boundToken])
+    mProjects.list.mockResolvedValue([memberProject])
+    mBoards.list.mockResolvedValue([])
+    mConfig.getDoneRetention.mockResolvedValue({ effective: 30, override: null })
+  })
+
+  it('Szenario: Persönliches von XY bleibt verborgen', () => {
+    renderPage()
+
+    // Beide Abschnitte behalten ihre Überschrift und tragen statt des Inhalts den Hinweis.
+    expect(screen.getByRole('heading', { name: 'API-Tokens', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Erscheinungsbild', level: 2 })).toBeInTheDocument()
+    const hinweise = screen.getAllByRole('note')
+    expect(hinweise).toHaveLength(2)
+    for (const hinweis of hinweise) {
+      expect(hinweis).toHaveTextContent('Dieser Bereich wird in der Vorschau nicht gezeigt.')
+    }
+    // Keine Tokens, keine Farbwahl — und die Tokens von XY werden gar nicht erst abgerufen (E5).
+    expect(mTokens.list).not.toHaveBeenCalled()
+    expect(mProjects.list).not.toHaveBeenCalled()
+    expect(screen.queryByText('board-cli')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Token erzeugen' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Erscheinungsbild' })).not.toBeInTheDocument()
+  })
+
+  it('sperrt Aufbewahrung, Sprache und Standard-Labels mit dem Hinweis „Vorschau“', async () => {
+    // XY ist nie Plattform-Admin; die Sperre gilt trotzdem, falls die Abschnitte erscheinen.
+    authState.user = { platformRole: 'ADMIN', memberships: [] }
+    renderPage()
+    await screen.findByText(/Aktuell wirksam/)
+
+    const gesperrt = screen.getAllByRole('button', { name: 'Vorschau' })
+    expect(gesperrt).toHaveLength(3)
+    for (const knopf of gesperrt) expect(knopf).toBeDisabled()
+    // Sprache, Aufbewahrung und Standard-Labels in der Reihenfolge der Seite.
+    expect(gesperrt.map((knopf) => knopf.textContent)).toEqual([
+      'Speichern',
+      'Speichern',
+      'Standard-Labels für alle Boards',
+    ])
+  })
+
+  it('lässt außerhalb der Vorschau Tokens und Farbwahl stehen', async () => {
+    authState.vorschau = null
+    renderPage()
+
+    expect(await screen.findByText('board-cli')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Erscheinungsbild' })).toBeInTheDocument()
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
   })
 })
