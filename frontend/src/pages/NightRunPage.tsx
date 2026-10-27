@@ -74,6 +74,8 @@ import { useSprache, useT } from '../i18n/SpracheContext'
 import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { KUPFER, NUT, RAND, TEXT_SCHWACH, ZAHL } from '../theme'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
+import { useAuth } from '../auth/AuthContext'
 import { epicColor } from '../lib/epicMeta'
 import { formatDuration } from '../lib/formatDuration'
 import { gleichzeitigkeitDerMeldung, gleichzeitigkeitsMarken } from '../lib/gleichzeitigkeit'
@@ -3019,6 +3021,7 @@ function LaufPanel({
 
 export function NightRunPage() {
   const { projectId } = useParams()
+  const { vorschau } = useAuth()
   const [suchparameter] = useSearchParams()
   /**
    * Der angesteuerte Lauf aus `?lauf=<id>` (Issue #1085, AK 7).
@@ -3476,21 +3479,25 @@ export function NightRunPage() {
               { label: t.RAHMEN.NAV_NACHTLAUF },
             ]}
           />
-          {/* Dateiauswahl wie beim Spezifikations-Import: Button als <label> mit verstecktem Input. */}
-          <Button variant="contained" component="label">
-            {t.NACHTLAUF_SEITE.PROTOKOLL_EINLESEN}<input
-              hidden
-              type="file"
-              accept=".json,application/json"
-              aria-label={t.NACHTLAUF_SEITE.PROTOKOLLDATEI_WAEHLEN}
-              onChange={(e) => {
-                const datei = e.target.files?.[0]
-                // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann.
-                e.target.value = ''
-                if (datei) void protokollLesen(datei)
-              }}
-            />
-          </Button>
+          {/* Dateiauswahl wie beim Spezifikations-Import: Button als <label> mit verstecktem Input.
+              Einlesen reicht den Lauf ein; in der „Ansicht als XY“ ist beides gesperrt (Plan #1914, E15). */}
+          <VorschauGesperrt>
+            <Button variant="contained" component="label">
+              {t.NACHTLAUF_SEITE.PROTOKOLL_EINLESEN}<input
+                hidden
+                type="file"
+                accept=".json,application/json"
+                disabled={vorschau !== null}
+                aria-label={t.NACHTLAUF_SEITE.PROTOKOLLDATEI_WAEHLEN}
+                onChange={(e) => {
+                  const datei = e.target.files?.[0]
+                  // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann.
+                  e.target.value = ''
+                  if (datei) void protokollLesen(datei)
+                }}
+              />
+            </Button>
+          </VorschauGesperrt>
         </Stack>
 
         {meldung !== null && (

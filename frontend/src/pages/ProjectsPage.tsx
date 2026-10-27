@@ -24,6 +24,7 @@ import { projectsApi, type Project } from '../api/projects'
 import { canManageProject, isPlatformAdmin } from '../lib/roles'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { useEditMode } from '../lib/EditModeContext'
 import { formatierer } from '../i18n/format'
 import { useSprache, useT } from '../i18n/SpracheContext'
@@ -187,9 +188,11 @@ export function ProjectsPage() {
             <TextField size="small" label={t.PROJEKTE.NEUES_PROJEKT} value={name} onChange={(e) => setName(e.target.value)} />
             <TextField size="small" type="email" label={t.PROJEKTE.OWNER_EMAIL} value={ownerEmail}
               onChange={(e) => setOwnerEmail(e.target.value)} />
-            <Button type="submit" variant="contained">
-              {t.ALLGEMEIN.ANLEGEN}
-            </Button>
+            <VorschauGesperrt>
+              <Button type="submit" variant="contained">
+                {t.ALLGEMEIN.ANLEGEN}
+              </Button>
+            </VorschauGesperrt>
           </Stack>
           {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
         </Box>
@@ -244,28 +247,32 @@ export function ProjectsPage() {
                   canManageProject aber nie an den Dialog — das Stift-Symbol oeffnet ihn. */}
               {(canManageProject(project.role, admin) || project.participationEditable === true) &&
                 editMode && (
-                <IconButton
-                  size="small"
-                  aria-label={t.PROJEKTE.UMBENENNEN_ARIA(project.name)}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openRename(project)
-                  }}
-                >
-                  <EditOutlinedIcon fontSize="small" />
-                </IconButton>
+                <VorschauGesperrt>
+                  <IconButton
+                    size="small"
+                    aria-label={t.PROJEKTE.UMBENENNEN_ARIA(project.name)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openRename(project)
+                    }}
+                  >
+                    <EditOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </VorschauGesperrt>
               )}
               {admin && editMode && (
-                <IconButton
-                  size="small"
-                  aria-label={t.PROJEKTE.LOESCHEN_ARIA(project.name)}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setConfirmDelete(project)
-                  }}
-                >
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
+                <VorschauGesperrt>
+                  <IconButton
+                    size="small"
+                    aria-label={t.PROJEKTE.LOESCHEN_ARIA(project.name)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setConfirmDelete(project)
+                    }}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </VorschauGesperrt>
               )}
             </Paper>
           ))}

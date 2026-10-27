@@ -90,6 +90,10 @@ vi.mock('../components/CardDetailModal', async () => {
  * Hook gemockt und nicht über den `fetch`-Stub bedient — das Register lädt einmal je Sitzung, und
  * ein geteilter Ladezustand machte die Tests voneinander abhängig.
  */
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
 const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
 vi.mock('../api/kitNamen', async (original) => ({
   ...(await original<typeof import('../api/kitNamen')>()),
@@ -797,6 +801,7 @@ const UHR_VOR_DEN_FIXTURES = new Date('2026-09-01T00:00:00Z')
 beforeEach(() => {
   anfragen = []
   kitNamen.zustand = null
+  auth.vorschau = null
   vi.clearAllMocks()
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(UHR_VOR_DEN_FIXTURES)
@@ -7870,5 +7875,29 @@ describe('NightRunPage — Jetzt im Werk', () => {
     await screen.findByTestId(`lauf-${startedAt(0)}`)
     await screen.findByTestId('runner-jetzt')
     expect(screen.queryByRole('region', { name: /^Jetzt im Werk/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('NightRunPage — Ansicht als XY (Issue #1927)', () => {
+  it('zeigt Protokoll einlesen in der Vorschau gesperrt mit dem Hinweis „Vorschau“', async () => {
+    auth.vorschau = vorschau
+    renderPage({ listen: [[]] })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    expect(screen.queryByRole('button', { name: 'Protokoll einlesen' })).not.toBeInTheDocument()
+    const knopf = screen.getByRole('button', { name: 'Vorschau' })
+    expect(knopf).toHaveTextContent('Protokoll einlesen')
+    expect(knopf).toHaveAttribute('aria-disabled', 'true')
+    // Auch die Dateiauswahl dahinter nimmt nichts an: Ohne Datei gibt es nichts einzureichen.
+    expect(screen.getByLabelText('Protokolldatei auswählen')).toBeDisabled()
+  })
+
+  it('lässt Protokoll einlesen außerhalb der Vorschau bedienbar', async () => {
+    renderPage({ listen: [[]] })
+    await screen.findByText('Noch keine Auswertung vorhanden.')
+
+    expect(screen.getByRole('button', { name: 'Protokoll einlesen' })).not.toHaveAttribute('aria-disabled')
+    expect(screen.getByLabelText('Protokolldatei auswählen')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
   })
 })

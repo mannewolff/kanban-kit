@@ -37,6 +37,13 @@ function makeBoards(names: string[], projectId: number): Board[] {
 }
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+beforeEach(() => {
+  auth.vorschau = null
+})
 vi.mock('../api/boards', () => ({
   boardsApi: {
     list: vi.fn(),
@@ -647,5 +654,40 @@ describe('ProjectBoardsPage auf Englisch', () => {
       'en',
     )
     expect(screen.getByText('Invalid project ID.')).toBeInTheDocument()
+  })
+})
+
+describe('ProjectBoardsPage — Ansicht als XY (Issue #1927)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('zeigt Anlegen, Archivieren, Wiederherstellen und Endgültig löschen in der Vorschau gesperrt mit dem Hinweis „Vorschau“', async () => {
+    auth.vorschau = vorschau
+    renderMitArchiv()
+
+    expect(await screen.findByText('Altes Board')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Board Aktiv archivieren')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Board Altes Board endgültig löschen')).not.toBeInTheDocument()
+    const knoepfe = screen.getAllByRole('button', { name: 'Vorschau' })
+    expect(knoepfe.map((k) => k.textContent)).toEqual(['Anlegen', '', '', 'Wiederherstellen', ''])
+    knoepfe.forEach((k) => {
+      expect(k).toBeDisabled()
+      fireEvent.click(k)
+    })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(mockedBoards.create).not.toHaveBeenCalled()
+    expect(mockedBoards.remove).not.toHaveBeenCalled()
+    expect(mockedBoards.restore).not.toHaveBeenCalled()
+    expect(mockedBoards.purge).not.toHaveBeenCalled()
+  })
+
+  it('lässt dieselben Knöpfe außerhalb der Vorschau bedienbar', async () => {
+    renderMitArchiv()
+
+    expect(await screen.findByText('Altes Board')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Anlegen' })).toBeEnabled()
+    expect(screen.getByLabelText('Board Aktiv archivieren')).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Wiederherstellen' })).toBeEnabled()
+    expect(screen.getByLabelText('Board Altes Board endgültig löschen')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
   })
 })

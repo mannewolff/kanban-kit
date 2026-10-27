@@ -20,6 +20,7 @@ import { boardsApi, type Board } from '../api/boards'
 import { apiErrorMessage } from '../api/client'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { cardsApi, type Card } from '../api/cards'
 import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
@@ -264,9 +265,11 @@ export function EpicsPage() {
           ]}
         />
         {canEdit && (
-          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setCreating(true)}>
-            {t.NEU}
-          </Button>
+          <VorschauGesperrt>
+            <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setCreating(true)}>
+              {t.NEU}
+            </Button>
+          </VorschauGesperrt>
         )}
       </Stack>
 
@@ -324,15 +327,17 @@ export function EpicsPage() {
             Rechte-Check (`onMenu` nur bei `canEdit`). Der Server prüft ohnehin; das Gate erspart
             einem Nur-Leser nur die 403-Antwort auf eine Möglichkeit, die ihm gar nicht offensteht. */}
         {menu && (
-          <MenuItem
-            onClick={() => {
-              const gewaehlt = menu.epic
-              setMenu(null)
-              setDeleteConfirm(gewaehlt)
-            }}
-          >
-            {t.LOESCHEN}
-          </MenuItem>
+          <VorschauGesperrt>
+            <MenuItem
+              onClick={() => {
+                const gewaehlt = menu.epic
+                setMenu(null)
+                setDeleteConfirm(gewaehlt)
+              }}
+            >
+              {t.LOESCHEN}
+            </MenuItem>
+          </VorschauGesperrt>
         )}
       </Menu>
 
