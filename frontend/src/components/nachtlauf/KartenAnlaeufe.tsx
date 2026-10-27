@@ -3,7 +3,7 @@ import Divider from '@mui/material/Divider'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
-import { ApiError } from '../../api/client'
+import { ApiError, istVorschauVerborgen } from '../../api/client'
 import {
   nightRunsApi,
   type NightRunAnlauf,
@@ -19,6 +19,7 @@ import { de } from '../../i18n/de'
 import { formatierer } from '../../i18n/format'
 import { useSprache, useT } from '../../i18n/SpracheContext'
 import { woerterbuch, type Sprache } from '../../i18n/woerterbuch'
+import { VorschauVerborgenHinweis } from '../VorschauVerborgenHinweis'
 
 /**
  * Die Lauf-Arten, die eingeliefert werden, in fester Reihenfolge. Als `Record` über
@@ -86,6 +87,7 @@ const zeitpunkt = (iso: string, sprache: Sprache): string =>
 type Zustand =
   | { art: 'laden' }
   | { art: 'verborgen' }
+  | { art: 'vorschauVerborgen' }
   | { art: 'fehler' }
   | { art: 'geladen'; anlaeufe: NightRunAnlauf[] }
 
@@ -142,6 +144,12 @@ function summeMitGrundlage(
   return woerterbuch(sprache).KARTEN_ANLAEUFE.GRUNDLAGE(format(summe, sprache), werte.length, anlaeufe.length)
 }
 
+/** Der Zustand nach einem gescheiterten Abruf: Hinweis in der Vorschau, still bei 403 und 404, sonst Fehler. */
+function fehlerZustand(error: unknown): Zustand {
+  if (istVorschauVerborgen(error)) return { art: 'vorschauVerborgen' }
+  return { art: error instanceof ApiError && (error.status === 403 || error.status === 404) ? 'verborgen' : 'fehler' }
+}
+
 /**
  * Die Anläufe einer Karte im Karten-Detail (Issue #968): Dauer je Lauf-Art, Verbrauch über alle
  * Anläufe, die Anläufe selbst und die Zahl der Wiederaufnahmen.
@@ -150,7 +158,8 @@ function summeMitGrundlage(
  * 404 still — kein Block, keine Meldung. Die Projekt-Rolle liegt am Karten-Detail nicht vor, und
  * sie eigens zu laden hieße, eine zweite Rechtelogik im Browser zu führen, die mit der des Servers
  * auseinanderlaufen kann. Solange die Karte in keinem Lauf vorkam, bleibt der Block ebenfalls weg:
- * Drei Zeilen „nicht gelaufen" an jeder Karte sagten nichts.
+ * Drei Zeilen „nicht gelaufen" an jeder Karte sagten nichts. In der „Ansicht als XY“ steht bei
+ * `403 vorschau-verborgen` der Block mit dem Hinweis statt der Anläufe (Plan #1914, E16).
  */
 export function KartenAnlaeufe({
   projectId,
@@ -173,9 +182,7 @@ export function KartenAnlaeufe({
       },
       (error: unknown) => {
         if (!aktiv) return
-        const verborgen =
-          error instanceof ApiError && (error.status === 403 || error.status === 404)
-        setZustand({ art: verborgen ? 'verborgen' : 'fehler' })
+        setZustand(fehlerZustand(error))
       },
     )
     return () => {
@@ -198,11 +205,9 @@ export function KartenAnlaeufe({
         <Typography variant="subtitle2" gutterBottom>
           {t.TITEL}
         </Typography>
-        {zustand.art === 'fehler' ? (
-          <Typography color="text.secondary">{t.LADEFEHLER}</Typography>
-        ) : (
-          <AnlaufInhalt anlaeufe={zustand.anlaeufe} />
-        )}
+        {zustand.art === 'fehler' && <Typography color="text.secondary">{t.LADEFEHLER}</Typography>}
+        {zustand.art === 'vorschauVerborgen' && <VorschauVerborgenHinweis />}
+        {zustand.art === 'geladen' && <AnlaufInhalt anlaeufe={zustand.anlaeufe} />}
       </Box>
     </>
   )

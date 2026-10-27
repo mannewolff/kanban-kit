@@ -1,8 +1,9 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { accessTokensApi } from '../api/accessTokens'
+import { authApi } from '../api/auth'
 import { boardsApi } from '../api/boards'
 import { ApiError } from '../api/client'
 import { configApi } from '../api/config'
@@ -14,9 +15,21 @@ import { AdministrationPage } from './AdministrationPage'
 
 // Rolle je Test umschaltbar: Default USER (Nicht-Admin, blendet Admin-Abschnitte aus).
 const authState = vi.hoisted(() => ({
-  user: { platformRole: 'USER', memberships: [] } as { platformRole: string; memberships: [] },
+  user: { platformRole: 'USER', memberships: [] } as {
+    platformRole: string
+    memberships: []
+    colorScheme?: 'SYSTEM' | 'LIGHT' | 'DARK'
+  },
+  vorschau: null as null | Record<string, string>,
+  refresh: vi.fn(),
 }))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => authState }))
+vi.mock('../api/auth', () => ({ authApi: { setColorScheme: vi.fn() } }))
+const farbe = vi.hoisted(() => ({ setMode: vi.fn() }))
+vi.mock('@mui/material/styles', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@mui/material/styles')>()),
+  useColorScheme: () => ({ setMode: farbe.setMode }),
+}))
 vi.mock('../api/accessTokens', () => ({
   accessTokensApi: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
 }))
@@ -36,6 +49,7 @@ const mTokens = accessTokensApi as unknown as {
   create: ReturnType<typeof vi.fn>
   revoke: ReturnType<typeof vi.fn>
 }
+const mAuth = authApi as unknown as { setColorScheme: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
 const mBoards = boardsApi as unknown as { list: ReturnType<typeof vi.fn> }
 
@@ -78,6 +92,9 @@ describe('AdministrationPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     authState.user = { platformRole: 'USER', memberships: [] }
+    authState.vorschau = null
+    authState.refresh.mockResolvedValue(undefined)
+    mAuth.setColorScheme.mockResolvedValue({})
     mTokens.list.mockResolvedValue([])
     mTokens.create.mockResolvedValue({ id: 1, name: 'board-cli', plaintext: 'tk_geheim' })
     mTokens.revoke.mockResolvedValue(undefined)
@@ -657,5 +674,147 @@ describe('AdministrationPage auf Englisch', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Saving failed.')).toBeInTheDocument()
+  })
+})
+
+describe('AdministrationPage — Erscheinungsbild (#1911)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authState.user = { platformRole: 'USER', memberships: [], colorScheme: 'LIGHT' }
+    authState.vorschau = null
+    authState.refresh.mockResolvedValue(undefined)
+    mAuth.setColorScheme.mockResolvedValue({})
+    mTokens.list.mockResolvedValue([])
+    mProjects.list.mockResolvedValue([])
+    mBoards.list.mockResolvedValue([])
+    mConfig.getDoneRetention.mockResolvedValue({ effective: 30, override: null })
+  })
+
+  const gruppe = () => screen.getByRole('group', { name: 'Erscheinungsbild' })
+  const stufe = (name: string) => within(gruppe()).getByRole('button', { name })
+
+  it('zeigt drei Stufen in einer benannten Gruppe, die Kontowahl vorausgewählt', () => {
+    renderPage()
+
+    expect(within(gruppe()).getAllByRole('button').map((knopf) => knopf.textContent)).toEqual([
+      'System',
+      'Hell',
+      'Dunkel',
+    ])
+    expect(stufe('Hell')).toHaveAttribute('aria-pressed', 'true')
+    expect(stufe('System')).toHaveAttribute('aria-pressed', 'false')
+    expect(stufe('Dunkel')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('wählt „System“ vor, wenn das Konto keine Wahl trägt', () => {
+    authState.user = { platformRole: 'USER', memberships: [] }
+    renderPage()
+
+    expect(stufe('System')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('setzt beim Klick sofort den Modus, speichert die Wahl und lädt die Selbstauskunft neu', async () => {
+    renderPage()
+
+    await userEvent.click(stufe('Dunkel'))
+
+    expect(farbe.setMode).toHaveBeenCalledWith('dark')
+    expect(mAuth.setColorScheme).toHaveBeenCalledWith('DARK')
+    await waitFor(() => expect(authState.refresh).toHaveBeenCalled())
+    expect(stufe('Dunkel')).toHaveAttribute('aria-pressed', 'true')
+    expect(stufe('Hell')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('lässt sich per Tastatur bedienen', async () => {
+    renderPage()
+
+    stufe('System').focus()
+    await userEvent.keyboard('{Enter}')
+
+    expect(mAuth.setColorScheme).toHaveBeenCalledWith('SYSTEM')
+    expect(farbe.setMode).toHaveBeenCalledWith('system')
+  })
+
+  it('speichert nichts, wenn die schon gewählte Stufe erneut geklickt wird', async () => {
+    renderPage()
+
+    await userEvent.click(stufe('Hell'))
+
+    expect(mAuth.setColorScheme).not.toHaveBeenCalled()
+    expect(farbe.setMode).not.toHaveBeenCalled()
+    expect(stufe('Hell')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('stellt bei einem Fehler den gespeicherten Stand wieder her und meldet ihn', async () => {
+    mAuth.setColorScheme.mockRejectedValue(new Error('netz weg'))
+    renderPage()
+
+    await userEvent.click(stufe('Dunkel'))
+
+    await erwarteFehlerToast('Das Erscheinungsbild konnte nicht gespeichert werden.')
+    expect(farbe.setMode).toHaveBeenNthCalledWith(1, 'dark')
+    expect(farbe.setMode).toHaveBeenLastCalledWith('light')
+    expect(stufe('Hell')).toHaveAttribute('aria-pressed', 'true')
+    expect(stufe('Dunkel')).toHaveAttribute('aria-pressed', 'false')
+    expect(authState.refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe('AdministrationPage in der Ansicht als XY', () => {
+  const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authState.user = { platformRole: 'USER', memberships: [], colorScheme: 'DARK' }
+    authState.vorschau = vorschau
+    mTokens.list.mockResolvedValue([boundToken])
+    mProjects.list.mockResolvedValue([memberProject])
+    mBoards.list.mockResolvedValue([])
+    mConfig.getDoneRetention.mockResolvedValue({ effective: 30, override: null })
+  })
+
+  it('Szenario: Persönliches von XY bleibt verborgen', () => {
+    renderPage()
+
+    // Beide Abschnitte behalten ihre Überschrift und tragen statt des Inhalts den Hinweis.
+    expect(screen.getByRole('heading', { name: 'API-Tokens', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Erscheinungsbild', level: 2 })).toBeInTheDocument()
+    const hinweise = screen.getAllByRole('note')
+    expect(hinweise).toHaveLength(2)
+    for (const hinweis of hinweise) {
+      expect(hinweis).toHaveTextContent('Dieser Bereich wird in der Vorschau nicht gezeigt.')
+    }
+    // Keine Tokens, keine Farbwahl — und die Tokens von XY werden gar nicht erst abgerufen (E5).
+    expect(mTokens.list).not.toHaveBeenCalled()
+    expect(mProjects.list).not.toHaveBeenCalled()
+    expect(screen.queryByText('board-cli')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Token erzeugen' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Erscheinungsbild' })).not.toBeInTheDocument()
+  })
+
+  it('sperrt Aufbewahrung, Sprache und Standard-Labels mit dem Hinweis „Vorschau“', async () => {
+    // XY ist nie Plattform-Admin; die Sperre gilt trotzdem, falls die Abschnitte erscheinen.
+    authState.user = { platformRole: 'ADMIN', memberships: [] }
+    renderPage()
+    await screen.findByText(/Aktuell wirksam/)
+
+    const gesperrt = screen.getAllByRole('button', { name: 'Vorschau' })
+    expect(gesperrt).toHaveLength(3)
+    for (const knopf of gesperrt) expect(knopf).toBeDisabled()
+    // Sprache, Aufbewahrung und Standard-Labels in der Reihenfolge der Seite.
+    expect(gesperrt.map((knopf) => knopf.textContent)).toEqual([
+      'Speichern',
+      'Speichern',
+      'Standard-Labels für alle Boards',
+    ])
+  })
+
+  it('lässt außerhalb der Vorschau Tokens und Farbwahl stehen', async () => {
+    authState.vorschau = null
+    renderPage()
+
+    expect(await screen.findByText('board-cli')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Erscheinungsbild' })).toBeInTheDocument()
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
   })
 })

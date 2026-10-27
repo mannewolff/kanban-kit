@@ -184,7 +184,7 @@ public final class KartenGrundlage {
     aktivitaet(saved.requireId(), userId, CardActivityType.CREATED, "Karte angelegt", now);
     abhaengigkeiten.ersetze(saved, dependsOn);
     if (assigneeIds != null && !assigneeIds.isEmpty()) {
-      zuordnung.ersetzeZustaendige(saved.requireId(), projectId, assigneeIds);
+      zuordnung.ersetzeZustaendige(saved.requireId(), projectId, assigneeIds, userId);
     }
     if (labelIds != null && !labelIds.isEmpty()) {
       zuordnung.ersetzeLabels(saved.requireId(), boardId, labelIds, herkunft());

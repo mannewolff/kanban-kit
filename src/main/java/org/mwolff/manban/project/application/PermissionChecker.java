@@ -3,10 +3,14 @@ package org.mwolff.manban.project.application;
 import java.time.Clock;
 import java.util.Optional;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
+import org.mwolff.manban.auth.application.VorschauKontext;
+import org.mwolff.manban.auth.application.VorschauKontextLeser;
+import org.mwolff.manban.auth.application.VorschauVerborgenException;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,18 +31,32 @@ public class PermissionChecker {
   private final PlatformAdminChecker platformAdminChecker;
   private final ProjectRepository projects;
   private final Clock clock;
+  private final VorschauKontextLeser vorschauKontext;
 
+  /** Ohne Vorschau „Ansicht als XY“: Jede Anfrage gilt als eigene Sicht des Principals. */
   public PermissionChecker(
       ProjectMembershipRepository memberships,
       RolePermissionRepository rolePermissions,
       PlatformAdminChecker platformAdminChecker,
       ProjectRepository projects,
       Clock clock) {
+    this(memberships, rolePermissions, platformAdminChecker, projects, clock, Optional::empty);
+  }
+
+  @Autowired
+  public PermissionChecker(
+      ProjectMembershipRepository memberships,
+      RolePermissionRepository rolePermissions,
+      PlatformAdminChecker platformAdminChecker,
+      ProjectRepository projects,
+      Clock clock,
+      VorschauKontextLeser vorschauKontext) {
     this.memberships = memberships;
     this.rolePermissions = rolePermissions;
     this.platformAdminChecker = platformAdminChecker;
     this.projects = projects;
     this.clock = clock;
+    this.vorschauKontext = vorschauKontext;
   }
 
   /** Ob der Benutzer plattformweit Admin (Super-User) ist. */
@@ -151,12 +169,22 @@ public class PermissionChecker {
    *     (404)
    * @throws ProjectAccessDeniedException wenn die Rolle nicht OWNER ist und die Teilnahme fehlt
    *     (403)
+   * @throws VorschauVerborgenException wenn in der Vorschau der handelnde Admin selbst die
+   *     Auswertung nicht sähe (403, Issue #1918)
    */
   @Transactional(readOnly = true)
   public void requireNightRunAccess(long userId, long projectId) {
+    requireEigenerNachtlaufZugriff(userId, projectId);
+    vorschauKontext
+        .aktuell()
+        .ifPresent(vorschau -> requireAdminSiehtNachtlauf(vorschau, projectId));
+  }
+
+  /** Die Regel aus {@link #requireNightRunAccess} für den Principal selbst. */
+  private void requireEigenerNachtlaufZugriff(long userId, long projectId) {
     Optional<ProjectMembership> membership =
         memberships.findByProjectIdAndUserId(projectId, userId);
-    if (membership.map(m -> m.role() == ProjectRole.OWNER).orElse(false)) {
+    if (istOwner(membership)) {
       return;
     }
     if (!platformAdminChecker.isPlatformAdmin(userId)) {
@@ -167,11 +195,32 @@ public class PermissionChecker {
       }
       throw new ProjectAccessDeniedException();
     }
-    boolean teilnehmend =
-        projects.findById(projectId).map(Project::dashboardParticipation).orElse(false);
-    if (!teilnehmend) {
+    if (!nimmtTeil(projectId)) {
       throw new ProjectAccessDeniedException();
     }
+  }
+
+  /**
+   * In der Vorschau „Ansicht als XY“ zeigt die Nachtlauf-Auswertung nie mehr, als der handelnde
+   * Admin selbst sähe (Issue #1918, Plan #1914 E6): eigene OWNER-Rolle oder Teilnahme des Projekts.
+   * Sonst gilt sie als verborgen — 403 mit dem Problem-Typ {@code vorschau-verborgen}.
+   */
+  private void requireAdminSiehtNachtlauf(VorschauKontext vorschau, long projectId) {
+    if (istOwner(memberships.findByProjectIdAndUserId(projectId, vorschau.adminId()))) {
+      return;
+    }
+    if (!nimmtTeil(projectId)) {
+      throw new VorschauVerborgenException();
+    }
+  }
+
+  private static boolean istOwner(Optional<ProjectMembership> membership) {
+    return membership.map(m -> m.role() == ProjectRole.OWNER).orElse(false);
+  }
+
+  /** Ob das Projekt am Plattform-Leitstand teilnimmt; ein unbekanntes Projekt nimmt nicht teil. */
+  private boolean nimmtTeil(long projectId) {
+    return projects.findById(projectId).map(Project::dashboardParticipation).orElse(false);
   }
 
   /**

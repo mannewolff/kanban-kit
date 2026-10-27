@@ -56,6 +56,7 @@ import { CardNumberSearch } from './CardNumberSearch'
 import { EditModeBanner, EDIT_MODE_BANNER_HEIGHT } from './EditModeBanner'
 import { Erklaerung, ErklaerungOffenProvider } from './Erklaerung'
 import { useSnackbar } from './SnackbarProvider'
+import { VorschauBalken, VORSCHAU_BALKEN_HEIGHT } from './VorschauBalken'
 
 /** Breite der Schiene (Entwurf `.warte`, Z. 199). */
 const DRAWER_WIDTH = 224
@@ -330,7 +331,7 @@ export function AppShell() {
 
 function Rahmen() {
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user, vorschau, logout } = useAuth()
   const t = useT()
   const tabletQuer = useTabletQuer()
 
@@ -594,9 +595,10 @@ function Rahmen() {
   const inhaltLinks = schmal ? 0 : drawerWidth
 
   const { editMode } = useEditMode()
-  // Im Editiermodus liegt der Hinweisstreifen über dem Header; Header und Inhalt weichen um die
-  // Bannerhöhe nach unten, damit nichts verdeckt wird.
-  const bannerOffset = editMode ? EDIT_MODE_BANNER_HEIGHT : 0
+  // Im Editiermodus liegt der Hinweisstreifen über dem Header, in der Vorschau der Balken darunter
+  // (Plan #1914, E14); Header und Inhalt weichen um beide Höhen nach unten, damit nichts verdeckt wird.
+  const editBannerHoehe = editMode ? EDIT_MODE_BANNER_HEIGHT : 0
+  const bannerOffset = editBannerHoehe + (vorschau ? VORSCHAU_BALKEN_HEIGHT : 0)
 
   // Maße des Kontextbereichs (unter der Kopfleiste, rechts der Sidebar) als CSS-Variablen an :root,
   // damit portalbasierte Overlays (z. B. der Kartendetail-Dialog) sich darin positionieren können.
@@ -668,6 +670,8 @@ function Rahmen() {
         {t.RAHMEN.ZUM_INHALT}
       </Box>
       <EditModeBanner />
+      {/* „Abmelden“ im Menü am Nutzer-Mal bleibt in der Vorschau bedienbar (AK 7). */}
+      <VorschauBalken oben={editBannerHoehe} />
 
       {/* Schiene (Entwurf `.schiene`, Z. 204–212): eingelassene Nut mit Verlauf und Innenschatten. */}
       <Drawer

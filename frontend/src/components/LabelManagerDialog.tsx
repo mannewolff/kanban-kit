@@ -18,6 +18,7 @@ import { useT } from '../i18n/SpracheContext'
 import { dialogTitleSx } from './dialogChromeSx'
 import { LabelErklaerung, useLabelErklaerung } from './LabelErklaerung'
 import { useSnackbar } from './SnackbarProvider'
+import { VorschauGesperrt } from './VorschauGesperrt'
 
 interface Props {
   open: boolean
@@ -123,9 +124,11 @@ export function LabelManagerDialog({
               onChange={(e) => setNewColor((e.target as HTMLInputElement).value)}
               sx={{ width: 40, height: 36, border: 'none', background: 'none' }}
             />
-            <Button variant="contained" size="small" onClick={() => void create()}>
-              {t.ALLGEMEIN.ANLEGEN}
-            </Button>
+            <VorschauGesperrt>
+              <Button variant="contained" size="small" onClick={() => void create()}>
+                {t.ALLGEMEIN.ANLEGEN}
+              </Button>
+            </VorschauGesperrt>
           </Stack>
           {error && (
             <Typography color="error" variant="caption">
@@ -187,16 +190,20 @@ function LabelRow({
           onChange={(e) => setColor((e.target as HTMLInputElement).value)}
           sx={{ width: 40, height: 36, border: 'none', background: 'none' }}
         />
-        <Button
-          size="small"
-          disabled={!dirty || !name.trim()}
-          onClick={() => void onSave(label, name, color, zaehltGeaendert ? zaehlt : undefined)}
-        >
-          {t.ALLGEMEIN.SPEICHERN}
-        </Button>
-        <IconButton size="small" aria-label={t.LABELVERWALTUNG.LOESCHEN_ARIA(label.name)} onClick={() => void onDelete(label)}>
-          ✕
-        </IconButton>
+        <VorschauGesperrt>
+          <Button
+            size="small"
+            disabled={!dirty || !name.trim()}
+            onClick={() => void onSave(label, name, color, zaehltGeaendert ? zaehlt : undefined)}
+          >
+            {t.ALLGEMEIN.SPEICHERN}
+          </Button>
+        </VorschauGesperrt>
+        <VorschauGesperrt>
+          <IconButton size="small" aria-label={t.LABELVERWALTUNG.LOESCHEN_ARIA(label.name)} onClick={() => void onDelete(label)}>
+            ✕
+          </IconButton>
+        </VorschauGesperrt>
       </Stack>
       {/* `FormControlLabel` verknuepft die Beschriftung ueber ein echtes <label> mit der Box: der
           Text steht sichtbar im DOM. Ein blosses `aria-label` waere unsichtbar, und `jsx-a11y`

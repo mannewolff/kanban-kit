@@ -22,11 +22,10 @@ import Link from '@mui/material/Link'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import { ThemeProvider } from '@mui/material/styles'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { cardsApi, type Card, type CardByNumber } from '../api/cards'
-import { apiErrorMessage } from '../api/client'
+import { apiErrorMessage, istVorschauVerborgen } from '../api/client'
 import { artAusTitel, useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import {
   nightRunsApi,
@@ -58,7 +57,6 @@ import {
 } from '../components/nachtlauf/NachtlaufKartenchips'
 import { NachtlaufBefund } from '../components/nachtlauf/NachtlaufBefund'
 import { NachtlaufFortschritt } from '../components/nachtlauf/NachtlaufFortschritt'
-import { KupferwarteBereich } from '../components/nachtlauf/KupferwarteBereich'
 import { JetztImWerk } from '../components/nachtlauf/JetztImWerk'
 import { RunnerJetzt } from '../components/nachtlauf/RunnerJetzt'
 import { NachtlaufLage, type Kostenaufteilung } from '../components/nachtlauf/NachtlaufLage'
@@ -74,9 +72,11 @@ import { NachtlaufFuss, type Fussangabe as FussangabeForm } from '../components/
 import { formatierer } from '../i18n/format'
 import { useSprache, useT } from '../i18n/SpracheContext'
 import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
-import { NACHTLAUF_WURZEL_SX, nachtlaufTheme } from '../nachtlaufDesign'
 import { KUPFER, NUT, RAND, TEXT_SCHWACH, ZAHL } from '../theme'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
+import { VorschauVerborgenHinweis } from '../components/VorschauVerborgenHinweis'
+import { useAuth } from '../auth/AuthContext'
 import { epicColor } from '../lib/epicMeta'
 import { formatDuration } from '../lib/formatDuration'
 import { gleichzeitigkeitDerMeldung, gleichzeitigkeitsMarken } from '../lib/gleichzeitigkeit'
@@ -3022,6 +3022,7 @@ function LaufPanel({
 
 export function NightRunPage() {
   const { projectId } = useParams()
+  const { vorschau } = useAuth()
   const [suchparameter] = useSearchParams()
   /**
    * Der angesteuerte Lauf aus `?lauf=<id>` (Issue #1085, AK 7).
@@ -3041,6 +3042,8 @@ export function NightRunPage() {
   const t = useT()
 
   const [laeufe, setLaeufe] = useState<AnzeigeLauf[]>([])
+  /** Ob die Laufliste in der „Ansicht als XY“ verborgen ist (`403 vorschau-verborgen`, Plan #1914 E16). */
+  const [laeufeVerborgen, setLaeufeVerborgen] = useState(false)
   const [ergebnisse, setErgebnisse] = useState<ReadonlyMap<string, boolean>>(() => new Map())
   /**
    * Die Startzeitpunkte der Läufe, die in **dieser Sitzung** aus einem Ergebnisstand gedeutet
@@ -3126,7 +3129,11 @@ export function NightRunPage() {
         }
       })
       .catch((error_: Error) => {
-        if (aktiv) notify(error_.message, 'error')
+        // In der Vorschau steht statt der Fehlermeldung der Hinweis; jeder andere Fehler bleibt eine Meldung.
+        if (aktiv) {
+          if (istVorschauVerborgen(error_)) setLaeufeVerborgen(true)
+          else notify(error_.message, 'error')
+        }
       })
     // Ein Abruf beim Öffnen der Seite, ein weiterer nach erfolgreichem Senden — die Zahl ist
     // projektweit, ein Abruf je Lauf oder je Arbeitspaket wäre die Anfragelawine aus A8.
@@ -3463,31 +3470,31 @@ export function NightRunPage() {
   }
 
   return (
-    // Das Theme des Entwurfs liegt über dem Inhaltsbereich und nur über ihm (#914, E2): keine
-    // globalen CSS-Regeln, die die übrige Anwendung mitfärbten. Die `AppShell` mit AppBar und
-    // Drawer bleibt außen vor (E8) — der Entwurf beschreibt allein den Inhaltsbereich.
+    // Die Seite folgt seit #1912 vollständig Kupferwarte wie jede andere Seite: Die helle Ausnahme
+    // (#914, #954) und ihre Gegenausnahme für die Laufblöcke (#988) sind entfallen, alles steht im
+    // Theme der Anwendung. Hell bleibt nur der Ausdruck (#953), den das Theme selbst regelt.
     <>
-      <ThemeProvider theme={nachtlaufTheme}>
-        {/* Die Ausnahme bleibt auch bei dunklem System hell (#954): Der Wurzelknoten setzt die
-            Variablen des Leitstands für seinen Teilbaum auf die Hellwerte und malt den Grund selbst. */}
-        <Box data-testid="nachtlauf-wurzel" sx={NACHTLAUF_WURZEL_SX}>
-          {/* Brotkrumenpfad und „Protokoll einlesen" kennt der Entwurf nicht. AK 10: Wo er kein
-              Element vorsieht, bleibt es in seiner Funktion erhalten und wird eingepasst — als
-              schmale Zeile über dem Entwurfskopf, in dessen Schriftbild und Farben (E9). */}
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-            <Breadcrumbs
-              items={[
-                { label: t.RAHMEN.NAV_PROJEKTE, to: '/projects' },
-                { label: projectName ?? t.RAHMEN.NAV_PROJEKT, to: `/projects/${id}` },
-                { label: t.RAHMEN.NAV_NACHTLAUF },
-              ]}
-            />
-            {/* Dateiauswahl wie beim Spezifikations-Import: Button als <label> mit verstecktem Input. */}
+      <Box>
+        {/* Brotkrumenpfad und „Protokoll einlesen" kennt der Entwurf nicht. AK 10: Wo er kein
+            Element vorsieht, bleibt es in seiner Funktion erhalten und wird eingepasst — als
+            schmale Zeile über dem Entwurfskopf (E9). */}
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+          <Breadcrumbs
+            items={[
+              { label: t.RAHMEN.NAV_PROJEKTE, to: '/projects' },
+              { label: projectName ?? t.RAHMEN.NAV_PROJEKT, to: `/projects/${id}` },
+              { label: t.RAHMEN.NAV_NACHTLAUF },
+            ]}
+          />
+          {/* Dateiauswahl wie beim Spezifikations-Import: Button als <label> mit verstecktem Input.
+              Einlesen reicht den Lauf ein; in der „Ansicht als XY“ ist beides gesperrt (Plan #1914, E15). */}
+          <VorschauGesperrt>
             <Button variant="contained" component="label">
               {t.NACHTLAUF_SEITE.PROTOKOLL_EINLESEN}<input
                 hidden
                 type="file"
                 accept=".json,application/json"
+                disabled={vorschau !== null}
                 aria-label={t.NACHTLAUF_SEITE.PROTOKOLLDATEI_WAEHLEN}
                 onChange={(e) => {
                   const datei = e.target.files?.[0]
@@ -3497,86 +3504,80 @@ export function NightRunPage() {
                 }}
               />
             </Button>
-          </Stack>
+          </VorschauGesperrt>
+        </Stack>
 
-          {meldung !== null && (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              {meldung}
-            </Alert>
+        {meldung !== null && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {meldung}
+          </Alert>
+        )}
+
+        {/* Über den Laufplatten stehen die Übersicht „Heute Nacht“ (Issue #1455, Plan #1447) und
+            darüber „Runner jetzt“ (Issue #1729, Plan #1724 E14), dazu die Hinweise, dass es keine
+            Läufe gibt — so steht der Bereich nie leer, auch wenn die Übersicht ohne Leserecht
+            ausbleibt. Die Polsterung oben und unten ist die des früheren Bereichs (#988). */}
+        <Box data-testid="laufbereich" sx={{ display: 'flex', flexDirection: 'column', gap: '14px', py: '20px' }}>
+          <RunnerJetzt projectId={id} taktMs={AUFFRISCH_MS} onGeladen={setRunnerLage} />
+          <JetztImWerk laeufe={laeufe.map(alsZeitleistenlauf)} runner={runnerLage} jetzt={new Date().getTime()} />
+          <HeuteNachtUebersicht projectId={id} onKarteOeffnen={karteOeffnen} />
+
+          {laeufeVerborgen && <VorschauVerborgenHinweis />}
+          {!laeufeVerborgen && laeufe.length === 0 && (
+            <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEINE_AUSWERTUNG}</Typography>
+          )}
+          {laeufe.length > 0 && sichtbareLaeufe.length === 0 && (
+            <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEIN_RUN}</Typography>
           )}
 
-          {/* Die Laufblöcke haben mit #988 die Nachtlauf-Ausnahme verlassen und folgen Kupferwarte
-              (`CLAUDE-design.md`) — deshalb stehen sie im `KupferwarteBereich`, der Theme und
-              Variablen für seinen Teilbaum zurückstellt. Mit ihnen stehen dort die Übersicht
-              „Heute Nacht“ oberhalb der Laufplatten (Issue #1455, Plan #1447), darüber „Runner jetzt“
-              (Issue #1729, Plan #1724 E14), und die Hinweise, dass
-              es keine Läufe gibt — so steht der Bereich nie leer, auch wenn die Übersicht ohne
-              Leserecht ausbleibt. Was sonst auf dieser Seite steht, bleibt in der Ausnahme. */}
-          <KupferwarteBereich>
+          {sichtbareLaeufe.length > 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <RunnerJetzt projectId={id} taktMs={AUFFRISCH_MS} onGeladen={setRunnerLage} />
-              <JetztImWerk laeufe={laeufe.map(alsZeitleistenlauf)} runner={runnerLage} jetzt={new Date().getTime()} />
-              <HeuteNachtUebersicht projectId={id} onKarteOeffnen={karteOeffnen} />
-
-              {laeufe.length === 0 && <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEINE_AUSWERTUNG}</Typography>}
-              {laeufe.length > 0 && sichtbareLaeufe.length === 0 && (
-                <Typography color="text.secondary">{t.NACHTLAUF_SEITE.KEIN_RUN}</Typography>
-              )}
-
-              {sichtbareLaeufe.length > 0 && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {sichtbareLaeufe.map((lauf) => (
-                    <LaufPanel
-                      key={lauf.startedAt}
-                      lauf={lauf}
-                      // Mit `?lauf=<id>` steht genau dieser Lauf offen statt der zusammen gelaufenen
-                      // (Issue #1085, #1511).
-                      zuerst={
-                        gesuchteLaufId === null
-                          ? offenBeimStart.includes(lauf)
-                          : lauf.laufId === gesuchteLaufId
-                      }
-                      ergebnis={ergebnisse.get(lauf.startedAt)}
-                      ausErgebnisstand={ausErgebnisstand}
-                      // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser
-                      // Sitzung vorliegt; welche Darstellung daraus entsteht, entscheidet der Modus
-                      // am Anzeigelauf — er steht auch am neu geladenen.
-                      stand={staende.get(lauf.startedAt)}
-                      katalog={katalog}
-                      vorhabenKarten={vorhabenKarten}
-                      zaehler={zaehler}
-                      erzeugnisse={erzeugnisse.get(lauf.startedAt) ?? KEINE_ERZEUGNISSE}
-                      aufbewahrteLaeufe={aufbewahrteLaeufe}
-                      fortschritt={fortschritte.get(lauf.startedAt)}
-                      onAufklappen={() => {
-                        offeneLaeufe.current.add(lauf.startedAt)
-                        aufklappen(lauf)
-                      }}
-                      onZuklappen={() => offeneLaeufe.current.delete(lauf.startedAt)}
-                      onOeffnen={setDetail}
-                      onKarteOeffnen={karteOeffnen}
-                    />
-                  ))}
-                </Box>
-              )}
-            </Box>
-          </KupferwarteBereich>
-
-          {(alleLaeufe || ausgeblendet > 0) && (
-            <Box>
-              <Button variant="text" onClick={() => setAlleLaeufe((wert) => !wert)}>
-                {alleLaeufe ? t.NACHTLAUF_SEITE.NUR_ZWEI_SCHICHTEN : t.NACHTLAUF_SEITE.AELTERE_RUNS(ausgeblendet)}
-              </Button>
+              {sichtbareLaeufe.map((lauf) => (
+                <LaufPanel
+                  key={lauf.startedAt}
+                  lauf={lauf}
+                  // Mit `?lauf=<id>` steht genau dieser Lauf offen statt der zusammen gelaufenen
+                  // (Issue #1085, #1511).
+                  zuerst={
+                    gesuchteLaufId === null
+                      ? offenBeimStart.includes(lauf)
+                      : lauf.laufId === gesuchteLaufId
+                  }
+                  ergebnis={ergebnisse.get(lauf.startedAt)}
+                  ausErgebnisstand={ausErgebnisstand}
+                  // Der Speicher entscheidet, ob zu genau diesem Lauf ein Ergebnisstand dieser
+                  // Sitzung vorliegt; welche Darstellung daraus entsteht, entscheidet der Modus
+                  // am Anzeigelauf — er steht auch am neu geladenen.
+                  stand={staende.get(lauf.startedAt)}
+                  katalog={katalog}
+                  vorhabenKarten={vorhabenKarten}
+                  zaehler={zaehler}
+                  erzeugnisse={erzeugnisse.get(lauf.startedAt) ?? KEINE_ERZEUGNISSE}
+                  aufbewahrteLaeufe={aufbewahrteLaeufe}
+                  fortschritt={fortschritte.get(lauf.startedAt)}
+                  onAufklappen={() => {
+                    offeneLaeufe.current.add(lauf.startedAt)
+                    aufklappen(lauf)
+                  }}
+                  onZuklappen={() => offeneLaeufe.current.delete(lauf.startedAt)}
+                  onOeffnen={setDetail}
+                  onKarteOeffnen={karteOeffnen}
+                />
+              ))}
             </Box>
           )}
-
         </Box>
-      </ThemeProvider>
 
-      {/* Außerhalb des Theme-Teilbaums: Nicht-Ziel 2 des Fachplans verbietet, die Gestaltung auf
-          die übrige Anwendung zu übertragen, und der Kartendialog gehört zu ihr — auch wenn er
-          von dieser Seite aus geöffnet wird. Maßgeblich ist die Stellung im React-Baum, nicht das
-          Portal, in dem der Dialog im DOM landet. */}
+        {(alleLaeufe || ausgeblendet > 0) && (
+          <Box>
+            <Button variant="text" onClick={() => setAlleLaeufe((wert) => !wert)}>
+              {alleLaeufe ? t.NACHTLAUF_SEITE.NUR_ZWEI_SCHICHTEN : t.NACHTLAUF_SEITE.AELTERE_RUNS(ausgeblendet)}
+            </Button>
+          </Box>
+        )}
+
+      </Box>
+
       {detail !== null && (
         <CardDetailModal
           card={detail}

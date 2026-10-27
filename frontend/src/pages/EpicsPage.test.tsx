@@ -21,9 +21,12 @@ vi.mock('../api/kitNamen', async (original) => ({
   ...(await original<typeof import('../api/kitNamen')>()),
   useKitNamen: (): KitNamenZustand => ({ status: 'fertig', daten: KIT_NAMEN }),
 }))
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ user: { userId: 1, memberships: [{ projectId: 9, role: 'OWNER' }] } }),
+  useAuth: () => ({ user: { userId: 1, memberships: [{ projectId: 9, role: 'OWNER' }] }, vorschau: auth.vorschau }),
 }))
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({
   cardsApi: {
@@ -78,6 +81,7 @@ function renderPage() {
 describe('EpicsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    auth.vorschau = null
     mBoards.get.mockResolvedValue({ id: 1, projectId: 9, name: 'B', createdAt: '', columns: [] })
     mCards.list.mockResolvedValue([])
     mEpics.create.mockResolvedValue({})
@@ -1350,6 +1354,42 @@ describe('EpicsPage', () => {
       // Der Dialog schließt vor dem Aufruf — sonst schickte ein zweiter Klick ein zweites DELETE.
       expect(screen.queryByRole('button', { name: 'Abbrechen' })).toBeNull()
       expect(zeilenIds()).toEqual(['vorhaben-zeile-9', 'vorhaben-zeile-10'])
+    })
+  })
+
+  describe('Ansicht als XY (Issue #1927)', () => {
+    const vorhaben = {
+      id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 0,
+      memberNumbers: [], rootNumbers: [], requirementCardNumber: null,
+    }
+
+    it('zeigt Neues Vorhaben und Löschen in der Vorschau gesperrt mit dem Hinweis „Vorschau“', async () => {
+      auth.vorschau = vorschau
+      mEpics.list.mockResolvedValue([vorhaben])
+      renderPage()
+
+      const neu = await screen.findByRole('button', { name: 'Vorschau' })
+      expect(neu).toHaveTextContent('Neues Vorhaben')
+      expect(neu).toBeDisabled()
+      fireEvent.click(neu)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      await oeffneMenue(vorhaben)
+      const loeschen = screen.getByRole('menuitem', { name: 'Vorschau' })
+      expect(loeschen).toHaveTextContent('Löschen')
+      expect(loeschen).toHaveAttribute('aria-disabled', 'true')
+      expect(mEpics.create).not.toHaveBeenCalled()
+      expect(mEpics.remove).not.toHaveBeenCalled()
+    })
+
+    it('lässt Neues Vorhaben und Löschen außerhalb der Vorschau bedienbar', async () => {
+      mEpics.list.mockResolvedValue([vorhaben])
+      renderPage()
+
+      expect(await screen.findByRole('button', { name: 'Neues Vorhaben' })).toBeEnabled()
+      await oeffneMenue(vorhaben)
+      expect(screen.getByRole('menuitem', { name: 'Löschen' })).not.toHaveAttribute('aria-disabled')
+      expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
     })
   })
 })

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { KitNamenZustand } from '../api/kitNamen'
 import type { Label } from '../api/labels'
@@ -12,6 +12,14 @@ import { setzeMedien } from '../test/setup'
 import { LabelManagerDialog } from './LabelManagerDialog'
 import { SnackbarProvider } from './SnackbarProvider'
 import { renderMitSprache } from '../i18n/renderMitSprache'
+
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+beforeEach(() => {
+  auth.vorschau = null
+})
 
 vi.mock('../api/kitNamen', async (original) => ({
   ...(await original<typeof import('../api/kitNamen')>()),
@@ -438,5 +446,27 @@ describe('LabelManagerDialog auf Englisch', () => {
 
     fireEvent.click(screen.getByLabelText('Delete label Bug'))
     expect(await screen.findByText('The label could not be deleted.')).toBeInTheDocument()
+  })
+})
+
+describe('LabelManagerDialog — Ansicht als XY (Issue #1926)', () => {
+  it('zeigt Anlegen, Speichern und Löschen gesperrt mit dem Hinweis „Vorschau“', () => {
+    auth.vorschau = vorschau
+    const api = mkApi()
+    render(<LabelManagerDialog open boardId={9} labels={labels} onClose={vi.fn()} onChanged={vi.fn()} api={api} />)
+
+    fireEvent.change(screen.getByLabelText('Label Bug'), { target: { value: 'Defekt' } })
+    fireEvent.change(screen.getByLabelText('Neues Label'), { target: { value: 'Ux' } })
+
+    const knoepfe = screen.getAllByRole('button', { name: 'Vorschau' })
+    expect(knoepfe.map((k) => k.textContent)).toEqual(['Speichern', '✕', 'Anlegen'])
+    knoepfe.forEach((k) => {
+      expect(k).toBeDisabled()
+      fireEvent.click(k)
+    })
+    expect(api.create).not.toHaveBeenCalled()
+    expect(api.update).not.toHaveBeenCalled()
+    expect(api.remove).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Schließen' })).toBeEnabled()
   })
 })

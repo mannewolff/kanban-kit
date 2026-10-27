@@ -51,7 +51,20 @@ export interface Card {
    * das Recht der aufrufenden Ansicht (Plan #1294, E10). Ohne eigenen Status immer `false`.
    */
   canSetStatus: boolean
+  /**
+   * Herkunft bis zum Ursprung, nächster Vorfahr zuerst (Issue #1930). Nur die Board-Liste rechnet
+   * sie; `null` heißt „nicht berechnet", `[]` „ohne Herkunft".
+   */
+  herkunft: HerkunftsGlied[] | null
 }
+
+/**
+ * Ein Vorfahr in der Herkunft einer Karte. Bei einer Lücke fehlt der Titel: `PAPIERKORB` — die
+ * Kette geht über ihn weiter —, `GELOESCHT` — sie endet.
+ */
+export type HerkunftsGlied =
+  | { number: number; title: string; archived: boolean; luecke: null }
+  | { number: number; title: null; archived: false; luecke: 'PAPIERKORB' | 'GELOESCHT' }
 
 /**
  * Strukturelle Karten-Form, die das CardDetailModal tatsächlich liest — die Teilmenge der `Card`,

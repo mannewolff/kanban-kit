@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.mwolff.manban.auth.application.AppUserRepository;
+import org.mwolff.manban.auth.application.VorschauKontext;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,6 +19,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * aufgelöste Benutzer gesperrt, wird der Sicherheitskontext geleert (die Anfrage gilt als
  * unauthentifiziert → 401/403). So werden bestehende Sessions und Tokens gesperrter Nutzer sofort
  * ungültig, ohne dass das accesstoken-Modul auf das auth-Modul zugreifen müsste.
+ *
+ * <p><strong>Vorschau „Ansicht als XY“ (Issue #1919, Plan #1914 E10):</strong> Dort ist der
+ * Principal das Zielkonto, und geprüft wird der handelnde Admin aus dem {@link VorschauKontext}.
+ * Ein gesperrtes Zielkonto erscheint so, als wäre es entsperrt; ein gesperrter Admin kommt nicht
+ * durch. Der Filter läuft deshalb nach dem {@link VorschauFilter}.
  */
 @Component
 public class DisabledUserGuardFilter extends OncePerRequestFilter {
@@ -33,7 +39,11 @@ public class DisabledUserGuardFilter extends OncePerRequestFilter {
       HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
       throws ServletException, IOException {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-    if (authentication != null && authentication.getPrincipal() instanceof Long userId) {
+    if (authentication != null && authentication.getPrincipal() instanceof Long principal) {
+      long userId =
+          authentication.getDetails() instanceof VorschauKontext vorschau
+              ? vorschau.adminId()
+              : principal;
       boolean disabled = users.findById(userId).map(AppUser::disabled).orElse(false);
       if (disabled) {
         SecurityContextHolder.clearContext();

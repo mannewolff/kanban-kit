@@ -7,6 +7,14 @@ import { projectsApi } from '../api/projects'
 import { TransferCardDialog } from './TransferCardDialog'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+beforeEach(() => {
+  auth.vorschau = null
+})
+
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { bulkTransfer: vi.fn() } }))
@@ -22,6 +30,7 @@ const card: Card = {
   derivedFrom: null,
   status: null,
   canSetStatus: false,
+  herkunft: null,
 }
 
 function renderDialog(platformAdmin = false, sourceColumnPosition: number | null = null) {
@@ -343,5 +352,29 @@ describe('TransferCardDialog auf Englisch', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Move' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Moving failed.')
+  })
+})
+
+describe('TransferCardDialog — Ansicht als XY (Issue #1926)', () => {
+  beforeEach(() => {
+    mockedCards.bulkTransfer.mockReset()
+    mockedProjects.list.mockResolvedValue([{ id: 1, name: 'Eigenes', role: 'OWNER', createdAt: '' }])
+    mockedBoards.list.mockResolvedValue([
+      { id: 10, name: 'Ziel', projectId: 1, createdAt: '', columns: [{ id: 100, name: 'Backlog', position: 0, wipLimit: null }] },
+    ])
+  })
+
+  it('sperrt „Verschieben“ in der Vorschau auch bei vollständiger Auswahl', async () => {
+    auth.vorschau = vorschau
+    renderDialog(false, 0)
+    await screen.findByRole('option', { name: 'Eigenes' })
+    fireEvent.change(screen.getByLabelText('Zielprojekt'), { target: { value: '1' } })
+    fireEvent.change(await screen.findByLabelText('Zielboard'), { target: { value: '10' } })
+
+    const knopf = screen.getByRole('button', { name: 'Vorschau' })
+    expect(knopf).toHaveTextContent('Verschieben')
+    expect(knopf).toBeDisabled()
+    fireEvent.click(knopf)
+    expect(mockedCards.bulkTransfer).not.toHaveBeenCalled()
   })
 })

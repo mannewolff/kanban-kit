@@ -17,6 +17,35 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.8.0] – 2026-10-27
+
+- chore: v3.7.2
+- Runner-Ermittlung: Herkunft eines Plans zählt nur als Anforderung, wenn sie fachlich ist ([#1931](https://github.com/mannewolff/kanban-kit/issues/1931))
+- Herkunft einer Karte als Hinweis an ihrer Nummer im Board ([#1930](https://github.com/mannewolff/kanban-kit/issues/1930))
+- Ansicht als XY: Doku zu Rechten, Nutzung und Sicherheitsmodell ([#1929](https://github.com/mannewolff/kanban-kit/issues/1929))
+- Ansicht als XY: Hinweis statt Laufdaten in Leitstand und Nachtlauf ([#1928](https://github.com/mannewolff/kanban-kit/issues/1928))
+- Ansicht als XY: Projekt-, Board-Listen-, Mitglieder- und Vorhaben-Seiten gesperrt ([#1927](https://github.com/mannewolff/kanban-kit/issues/1927))
+- Ansicht als XY: Board und Kartendialog in der Vorschau gesperrt ([#1926](https://github.com/mannewolff/kanban-kit/issues/1926))
+- Ansicht als XY: Start in der Nutzerliste, Einträge, Persönliches und API-Übersicht ([#1925](https://github.com/mannewolff/kanban-kit/issues/1925))
+- Ansicht als XY: Balken, Sperr-Baustein und Hinweis-Baustein ([#1924](https://github.com/mannewolff/kanban-kit/issues/1924))
+- Ansicht als XY: Frontend-Anbindung mit X-Vorschau und Vorschau-Zustand ([#1923](https://github.com/mannewolff/kanban-kit/issues/1923))
+- Ansicht als XY: Integrationstest der sieben Szenarien ([#1922](https://github.com/mannewolff/kanban-kit/issues/1922))
+- Ansicht als XY: Endpunkte zum Starten, Beenden, Protokoll und Selbstauskunft ([#1921](https://github.com/mannewolff/kanban-kit/issues/1921))
+- Ansicht als XY: Schreibsperre, persönliche Pfade und Sperre des Ausprobierens ([#1920](https://github.com/mannewolff/kanban-kit/issues/1920))
+- Ansicht als XY: VorschauFilter mit Sitzungsbindung und X-Vorschau-Abgleich ([#1919](https://github.com/mannewolff/kanban-kit/issues/1919))
+- Ansicht als XY: Lauf-Zugriff in der Vorschau nie über den Admin hinaus ([#1918](https://github.com/mannewolff/kanban-kit/issues/1918))
+- Ansicht als XY: Tabelle, Speicher und Dienst der Vorschau ([#1917](https://github.com/mannewolff/kanban-kit/issues/1917))
+- Mail mit Karten-Link, wenn jemand neu zuständig wird ([#1916](https://github.com/mannewolff/kanban-kit/issues/1916))
+- Direkter Link öffnet eine Karte: /projects/<Projekt>/karten/<Nummer> ([#1915](https://github.com/mannewolff/kanban-kit/issues/1915))
+- Runner-Seite folgt vollständig Kupferwarte ([#1912](https://github.com/mannewolff/kanban-kit/issues/1912))
+- Farbschalter System / Hell / Dunkel, gespeichert am Konto ([#1911](https://github.com/mannewolff/kanban-kit/issues/1911))
+- chore: v3.7.1
+- dompurify im Frontend-Lockfile auf 3.4.17 heben ([#1908](https://github.com/mannewolff/kanban-kit/issues/1908))
+- chore: v3.7.0
+- chore: v3.6.1
+- Stufenleiste der Lauf-Kachel nennt jede Stufe sichtbar beim Namen ([#1903](https://github.com/mannewolff/kanban-kit/issues/1903))
+- Spaltenköpfe bleiben beim Rollen des Boards stehen ([#1901](https://github.com/mannewolff/kanban-kit/issues/1901))
+
 ## [3.7.0] – 2026-10-26
 
 - chore: v3.6.1

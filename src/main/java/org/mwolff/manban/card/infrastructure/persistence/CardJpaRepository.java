@@ -94,6 +94,17 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   List<Object[]> findVerloreneHerkunftsnummern(long boardId);
 
   /**
+   * Karten-ID und verlorene Herkunftsnummer zu den genannten Karten (Issue #1930) — wie {@link
+   * #findVerloreneHerkunftsnummern(long)}, nur über IDs statt über ein Board.
+   */
+  @Query(
+      value =
+          "select id, derived_from_lost_number from card where id in (?1) "
+              + "and derived_from_lost_number is not null and derived_from_card_id is null",
+      nativeQuery = true)
+  List<Object[]> findVerloreneHerkunftsnummernZu(Collection<Long> ids);
+
+  /**
    * Karten-ID und Fundstelle ({@code TITLE} vor {@code BODY}) des Suchbegriffs in den Karten des
    * Boards ohne Papierkorb (Plan #1574, E3, E4). {@code strpos} statt {@code LIKE}, damit {@code %}
    * und {@code _} wörtlich gelten; der Suchbegriff geht nur als gebundener Parameter.

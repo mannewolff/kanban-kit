@@ -44,7 +44,8 @@ class EpicControllerTest {
         List.of(),
         null,
         "BACKLOG",
-        true);
+        true,
+        null);
   }
 
   @BeforeEach

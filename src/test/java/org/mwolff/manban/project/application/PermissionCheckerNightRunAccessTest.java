@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
+import org.mwolff.manban.auth.application.VorschauKontext;
+import org.mwolff.manban.auth.application.VorschauVerborgenException;
 import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
@@ -43,6 +45,7 @@ class PermissionCheckerNightRunAccessTest {
   private PlatformAdminChecker platformAdminChecker;
   private ProjectRepository projects;
   private PermissionChecker checker;
+  private Optional<VorschauKontext> vorschau;
 
   private static ProjectMembership membership(long userId, ProjectRole role) {
     return new ProjectMembership(1L, PROJECT, userId, role, FIXED);
@@ -70,7 +73,14 @@ class PermissionCheckerNightRunAccessTest {
             mock(RolePermissionRepository.class),
             platformAdminChecker,
             projects,
-            clock);
+            clock,
+            () -> vorschau);
+    vorschau = Optional.empty();
+  }
+
+  /** Der Admin sieht die App als {@link #USER} (Plan #1914 E1). */
+  private void inDerVorschau() {
+    vorschau = Optional.of(new VorschauKontext("kennung", ADMIN, USER, FIXED.plusSeconds(1800)));
   }
 
   @Test
@@ -163,5 +173,57 @@ class PermissionCheckerNightRunAccessTest {
 
     assertThatCode(() -> checker.requireNightRunAccess(ADMIN, PROJECT)).doesNotThrowAnyException();
     verify(projects, never()).findById(PROJECT);
+  }
+
+  // --- Vorschau „Ansicht als XY": nie mehr als der Admin selbst (Issue #1918, Plan #1914 E6) ---
+
+  /**
+   * Der Kern des Pakets: XY ist Owner, der Admin sähe die Auswertung aber selbst nicht — ohne
+   * Teilnahme und ohne eigene OWNER-Rolle. Die Vorschau zeigt sie nicht.
+   */
+  @Test
+  void inDerVorschauOhneTeilnahmeUndOhneAdminrolleIstDieAuswertungVerborgen() {
+    inDerVorschau();
+    mitgliedschaft(USER, ProjectRole.OWNER);
+    mitgliedschaft(ADMIN, null);
+    teilnahme(false);
+
+    assertThatThrownBy(() -> checker.requireNightRunAccess(USER, PROJECT))
+        .isInstanceOf(VorschauVerborgenException.class);
+  }
+
+  /** Eigene Projektrollen des Admins zählen mit (AK 4 der fachlichen Quelle). */
+  @Test
+  void inDerVorschauZeigtDieEigeneOwnerRolleDesAdminsDieAuswertung() {
+    inDerVorschau();
+    mitgliedschaft(USER, ProjectRole.OWNER);
+    mitgliedschaft(ADMIN, ProjectRole.OWNER);
+
+    assertThatCode(() -> checker.requireNightRunAccess(USER, PROJECT)).doesNotThrowAnyException();
+    verify(projects, never()).findById(PROJECT);
+  }
+
+  @Test
+  void inDerVorschauZeigtDieTeilnahmeDesProjektsDieAuswertung() {
+    inDerVorschau();
+    mitgliedschaft(USER, ProjectRole.OWNER);
+    mitgliedschaft(ADMIN, ProjectRole.MEMBER);
+    teilnahme(true);
+
+    assertThatCode(() -> checker.requireNightRunAccess(USER, PROJECT)).doesNotThrowAnyException();
+  }
+
+  /**
+   * Hat XY selbst kein Recht, bleibt es bei der bisherigen Ablehnung — die Vorschau zeigt genau,
+   * was XY bekäme, und der Admin wird gar nicht erst gefragt.
+   */
+  @Test
+  void inDerVorschauBehaeltXyOhneRechtDieBisherigeAblehnung() {
+    inDerVorschau();
+    mitgliedschaft(USER, ProjectRole.MEMBER);
+
+    assertThatThrownBy(() -> checker.requireNightRunAccess(USER, PROJECT))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(memberships, never()).findByProjectIdAndUserId(PROJECT, ADMIN);
   }
 }

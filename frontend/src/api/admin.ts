@@ -1,3 +1,4 @@
+import type { VorschauEintrag } from './auth'
 import { apiFetch } from './client'
 
 export type PlatformRole = 'ADMIN' | 'USER'
@@ -33,6 +34,11 @@ export const adminApi = {
   approve: (id: number) => apiFetch<AdminUser>(`/api/admin/users/${id}/approve`, { method: 'POST' }),
   disable: (id: number) => apiFetch<AdminUser>(`/api/admin/users/${id}/disable`, { method: 'POST' }),
   enable: (id: number) => apiFetch<AdminUser>(`/api/admin/users/${id}/enable`, { method: 'POST' }),
+  /** Startet die nur lesende „Ansicht als …“ dieses Kontos; die Oberfläche lädt danach neu (Plan #1914). */
+  vorschauStarten: (userId: number) => apiFetch<void>(`/api/admin/users/${userId}/vorschau`, { method: 'POST' }),
+  /** Wann welcher Admin die App als dieses Konto angesehen hat (E12). */
+  vorschauProtokoll: (userId: number) =>
+    apiFetch<VorschauEintrag[]>(`/api/admin/users/${userId}/vorschau-protokoll`),
   listOverloadRejections: () => apiFetch<OverloadRejection[]>('/api/admin/overload-rejections'),
   bootstrap: (token: string) =>
     apiFetch<AdminUser>('/api/admin/bootstrap', { method: 'POST', body: JSON.stringify({ token }) }),

@@ -47,7 +47,9 @@ class CardGetIT extends AbstractIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(cardId))
         .andExpect(jsonPath("$.title").value("Karte"))
-        .andExpect(jsonPath("$.columnId").value(columnId));
+        .andExpect(jsonPath("$.columnId").value(columnId))
+        // Die Herkunftskette rechnet nur die Board-Liste (Issue #1930): null, nicht berechnet.
+        .andExpect(jsonPath("$.herkunft").doesNotExist());
 
     // Nichtmitglied und unbekannte Karte sind nicht unterscheidbar: beide 404.
     mvc.perform(get("/api/cards/" + cardId).cookie(stranger)).andExpect(status().isNotFound());

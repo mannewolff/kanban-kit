@@ -7,8 +7,10 @@ import Checkbox from '@mui/material/Checkbox'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
+import type { ReactElement } from 'react'
 import type { BoardColumn } from '../../api/boards'
 import type { SortDirection } from '../../api/columns'
+import { useAuth } from '../../auth/AuthContext'
 import { useT } from '../../i18n/SpracheContext'
 import type { Woerterbuch } from '../../i18n/de'
 import { spaltenAuswahl, type SpaltenAuswahlZustand } from '../../lib/boardOps'
@@ -16,6 +18,7 @@ import { statusColors } from '../../lib/statusColors'
 import { useTabletQuer } from '../../lib/tabletQuer'
 import type { FingerZiehen } from '../../lib/useFingerZiehen'
 import { FINGER_GRIFF_SX } from '../boardSurfaceSx'
+import { VorschauGesperrt } from '../VorschauGesperrt'
 import {
   LED_RING,
   MELDER,
@@ -78,6 +81,17 @@ function spaltenZiehHandler(
       p.onZugEnde()
     },
   }
+}
+
+/**
+ * Symbolknopf des Kopfes mit seinem Tooltip; in der „Ansicht als XY“ gesperrt mit dem Hinweis
+ * „Vorschau“ (Plan #1914, E15). Der Tooltip fällt dann weg: Er legte seinen Namen über den Hinweis.
+ */
+function KopfTaste({ titel, vorschau, children }: Readonly<{ titel: string; vorschau: boolean; children: ReactElement }>) {
+  if (vorschau) {
+    return <VorschauGesperrt>{children}</VorschauGesperrt>
+  }
+  return <Tooltip title={titel}>{children}</Tooltip>
 }
 
 /**
@@ -204,6 +218,9 @@ export function SpaltenKopf({
 }: Readonly<Props>) {
   const t = useT()
   const tabletQuer = useTabletQuer()
+  // In der Vorschau ist das Umordnen der Spalten aus (Plan #1914, E15).
+  const vorschau = Boolean(useAuth().vorschau)
+  const umordnen = showStructureEdit && !vorschau
   const colors = statusColors(column.name)
   const spaltenZustand = spaltenAuswahl(angezeigteIds, selectedIds)
   const sortierLabel = sortByNumberLabel(t, column.name, naechsteRichtung)
@@ -214,8 +231,8 @@ export function SpaltenKopf({
   // Ziehen bleibt dort aus, damit iPadOS-Safari kein zweites Ziehen daneben startet.
   const kopf = {
     'data-testid': `column-header-${column.id}`,
-    draggable: showStructureEdit && !tabletQuer,
-    ...spaltenZiehHandler(showStructureEdit, { columnId: column.id, colDrag, onZugBeginn, onAblage, onZugEnde }),
+    draggable: umordnen && !tabletQuer,
+    ...spaltenZiehHandler(umordnen, { columnId: column.id, colDrag, onZugBeginn, onAblage, onZugEnde }),
     onDragEnd: onZugEnde,
     'data-zieh-zustand': fingerZustand,
     ...(zweizeilig ? fingerGriff : {}),
@@ -288,33 +305,33 @@ export function SpaltenKopf({
     <>
       {nachtlauf && <NachtlaufTaste knopf={nachtlauf} />}
       {canEdit && (
-        <Tooltip title={sortierLabel}>
-          {/* Kein span-Wrapper um den Button: MUI legt den Tooltip-Titel als aria-label auf
-              sein direktes Kind, ein Wrapper trüge den Namen also doppelt (span + Button).
-              Preis dafür: während des laufenden Aufrufs (disabled) zeigt der Tooltip nicht. */}
+        // Kein span-Wrapper um den Button: MUI legt den Tooltip-Titel als aria-label auf sein
+        // direktes Kind, ein Wrapper trüge den Namen also doppelt (span + Button). Preis dafür:
+        // während des laufenden Aufrufs (disabled) zeigt der Tooltip nicht.
+        <KopfTaste titel={sortierLabel} vorschau={vorschau}>
           <IconButton size="small"
             aria-label={sortierLabel}
             disabled={sortiertGerade}
             onClick={onSortieren} sx={{ color: 'text.secondary' }}>
             <SortIcon fontSize="small" />
           </IconButton>
-        </Tooltip>
+        </KopfTaste>
       )}
       {showStructureEdit && (
-        <Tooltip title={t.BOARD.SPALTE_BEARBEITEN}>
+        <KopfTaste titel={t.BOARD.SPALTE_BEARBEITEN} vorschau={vorschau}>
           <IconButton size="small" aria-label={t.BOARD.SPALTE_BEARBEITEN_ARIA(column.name)}
             onClick={onBearbeiten} sx={{ color: 'text.secondary' }}>
             <EditOutlinedIcon fontSize="small" />
           </IconButton>
-        </Tooltip>
+        </KopfTaste>
       )}
       {showStructureEdit && (
-        <Tooltip title={t.BOARD.SPALTE_LOESCHEN}>
+        <KopfTaste titel={t.BOARD.SPALTE_LOESCHEN} vorschau={vorschau}>
           <IconButton size="small" aria-label={t.BOARD.SPALTE_LOESCHEN_ARIA(column.name)}
             onClick={onLoeschen} sx={{ color: 'text.secondary' }}>
             <DeleteOutlineIcon fontSize="small" />
           </IconButton>
-        </Tooltip>
+        </KopfTaste>
       )}
     </>
   )

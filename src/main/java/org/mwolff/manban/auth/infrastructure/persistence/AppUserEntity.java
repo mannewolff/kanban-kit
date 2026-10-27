@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.domain.AppUser;
+import org.mwolff.manban.auth.domain.ColorScheme;
 import org.mwolff.manban.auth.domain.PlatformRole;
 
 /**
@@ -47,6 +48,10 @@ class AppUserEntity {
   @Column(name = "disabled_at")
   private @Nullable Instant disabledAt;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "color_scheme", nullable = false)
+  private ColorScheme colorScheme;
+
   protected AppUserEntity() {
     // für JPA
   }
@@ -61,6 +66,7 @@ class AppUserEntity {
     this.approvedAt = u.approvedAt();
     this.approvedBy = u.approvedBy();
     this.disabledAt = u.disabledAt();
+    this.colorScheme = u.colorScheme();
   }
 
   @Nullable Long getId() {
@@ -93,5 +99,9 @@ class AppUserEntity {
 
   @Nullable Instant getDisabledAt() {
     return disabledAt;
+  }
+
+  ColorScheme getColorScheme() {
+    return colorScheme;
   }
 }

@@ -25,6 +25,7 @@ function card(number: number, parentId: number | null = null): Card {
     derivedFrom: null,
     status: null,
     canSetStatus: false,
+    herkunft: null,
   }
 }
 

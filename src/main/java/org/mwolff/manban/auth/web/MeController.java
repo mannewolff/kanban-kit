@@ -7,13 +7,16 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.mwolff.manban.auth.application.MeService;
 import org.mwolff.manban.auth.application.MeService.MeView;
+import org.mwolff.manban.auth.domain.ColorScheme;
 import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -64,10 +67,35 @@ class MeController {
     return meService.updateDisplayName(userId, request.displayName());
   }
 
+  @Operation(
+      summary = "Eigenes Erscheinungsbild wählen",
+      description =
+          "Speichert die Farbwahl des Aufrufers am Konto: SYSTEM folgt Browser bzw."
+              + " Betriebssystem, LIGHT und DARK legen das Erscheinungsbild fest. Die Antwort ist"
+              + " die aktualisierte Selbstauskunft.")
+  @ApiResponse(responseCode = "200", description = "Die aktualisierte Selbstauskunft.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "Ungültige Eingabe: colorScheme fehlt oder ist nicht SYSTEM, LIGHT oder DARK.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @PutMapping("/api/me/color-scheme")
+  MeView updateColorScheme(
+      @AuthenticationPrincipal Long userId, @Valid @RequestBody UpdateColorSchemeRequest request) {
+    return meService.updateColorScheme(userId, request.colorScheme());
+  }
+
   @Schema(description = "Neuer Anzeigename des Aufrufers.")
   record UpdateProfileRequest(
       @Schema(description = "Anzeigename, höchstens 120 Zeichen.", example = "Ada Lovelace")
           @NotBlank
           @Size(max = 120)
           String displayName) {}
+
+  @Schema(description = "Farbwahl des Aufrufers.")
+  record UpdateColorSchemeRequest(
+      @Schema(description = "SYSTEM, LIGHT oder DARK.", example = "DARK") @NotNull
+          ColorScheme colorScheme) {}
 }

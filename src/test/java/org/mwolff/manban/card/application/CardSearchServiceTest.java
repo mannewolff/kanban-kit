@@ -89,6 +89,7 @@ class CardSearchServiceTest {
     KartenSicht sicht =
         new KartenSicht(
             cards,
+            kartenBestand,
             new KartenAbhaengigkeiten(mock(CardDependencyRepository.class), cards),
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),
@@ -97,7 +98,8 @@ class CardSearchServiceTest {
                 permissions,
                 mock(CardLabelEventRepository.class),
                 ActorContext.ActorStamp::unknown,
-                Clock.systemUTC()),
+                Clock.systemUTC(),
+                mock(ZuweisungsBenachrichtigung.class)),
             permissions);
     service =
         new CardSearchService(cards, kartenBestand, boardService, permissions, projects, sicht);

@@ -35,6 +35,44 @@ export const de = {
   /** Allgemeiner Fallback, wenn ein Fehler keine anzeigbare Server-Meldung trägt (E6). */
   FEHLER_UNBEKANNT: 'unbekannter Fehler',
 
+  /** Die nur lesende „Ansicht als XY“ (Plan #1914). */
+  VORSCHAU: {
+    /** Meldung, wenn der Server einen Änderungsaufruf in der Vorschau abweist (E15). */
+    NUR_LESEND: 'Vorschau – nur lesend',
+    /** Der feste Balken auf jeder Seite der Vorschau (AK 7, E14). */
+    BALKEN: (ziel: string) => `Du siehst die App als ${ziel}. Nur lesend.`,
+    /** Zugänglicher Name des Balkens. */
+    BALKEN_BEREICH: (ziel: string) => `Ansicht als ${ziel}`,
+    BEENDEN: 'Beenden',
+    BEENDEN_FEHLGESCHLAGEN: 'Die Ansicht ließ sich nicht beenden.',
+    /** Hinweis und zugänglicher Name eines in der Vorschau gesperrten Bedienelements (E15). */
+    GESPERRT: 'Vorschau',
+    /** Hinweis an Stellen, die XY sähe, die Vorschau aber nicht zeigt (E16). */
+    VERBORGEN: (ziel: string) => `${ziel} sieht diesen Bereich, die Vorschau zeigt ihn nicht.`,
+    /** Hinweis statt Profil, API-Tokens und Farbwahl von XY (AK 5, E5). */
+    PERSOENLICH: 'Dieser Bereich wird in der Vorschau nicht gezeigt.',
+    /** Hinweis statt des Ausprobierens in der API-Übersicht (AK 3, E7). */
+    AUSPROBIEREN_GESPERRT: 'Das Ausprobieren von Aufrufen ist in der Vorschau gesperrt.',
+    /** Die Einträge, wann welcher Admin die App als ein Konto angesehen hat (AK 8, E12). */
+    PROTOKOLL_TITEL: 'Ansichten durch Admins',
+    PROTOKOLL_LEER: 'Bisher hat kein Admin die App als dieses Konto angesehen.',
+    PROTOKOLL_LADEN_FEHLGESCHLAGEN: 'Die Einträge ließen sich nicht laden.',
+    KONTO_GELOESCHT: 'Konto gelöscht',
+    START: (zeit: string) => `Start ${zeit}`,
+    ENDE: (zeit: string) => `Ende ${zeit}`,
+    LAEUFT: 'läuft noch',
+    ENDGRUND: {
+      BEENDET: 'beendet',
+      ABLAUF: 'nach 30 Minuten abgelaufen',
+      ABMELDUNG: 'Abmeldung',
+      ROLLE_ENTZOGEN: 'Admin-Rolle entzogen',
+      ADMIN_GESPERRT: 'Admin gesperrt',
+      SITZUNG_UNGUELTIG: 'Anmeldung ungültig',
+      ZIEL_IST_ADMIN: 'Konto wurde Plattform-Admin',
+      ZIEL_FEHLT: 'Konto entfallen',
+    },
+  },
+
   /** Die angezeigten Kartenarten des Kits (A11); Schlüssel wie im Namen-Register des Servers. */
   KARTENART: {
     FACHLICH: 'Fachliche Anforderung',
@@ -469,6 +507,12 @@ export const de = {
     AUSLASTUNG_WERT: (belegt: number, grenze: number) => `${belegt} von ${grenze}`,
     KARTE_LABELS: (titel: string) => `Labels ${titel}`,
     ZUSTAENDIGE: (titel: string) => `Zuständige ${titel}`,
+    // Herkunft an der Kartennummer (Issue #1930).
+    HERKUNFT_TITEL: 'Herkunft',
+    HERKUNFT_KEINE: 'Ohne Herkunft',
+    HERKUNFT_PAPIERKORB: (n: number) => `#${n} (im Papierkorb)`,
+    HERKUNFT_GELOESCHT: (n: number) => `#${n} (gelöscht)`,
+    HERKUNFT_ARCHIVIERT: '(archiviert)',
     STATUS: (name: string) => `Status ${name}`,
     KARTE_AUSWAEHLEN: (titel: string) => `Karte ${titel} auswählen`,
     MENUE: (titel: string) => `Menü ${titel}`,
@@ -580,6 +624,9 @@ export const de = {
     BLOCK_ZUORDNUNG: 'Zuordnung',
     BLOCK_VERLAUF: 'Verlauf',
     AUFGABE_ARIA: (nummer: number) => `Aufgabe ${nummer}`,
+    /** Direkter Link auf eine Karte (Issue #1915): derselbe Text für „gibt es nicht“ und „kein Zugriff“. */
+    NICHT_ERREICHBAR: (nummer: number) => `Karte #${nummer} ist nicht erreichbar.`,
+    LINK_UNGUELTIG: 'Ungültiger Kartenlink.',
     BEARBEITET: (zeitpunkt: string) => `bearbeitet ${zeitpunkt}`,
     ZUSTAENDIGE: 'Zuständige',
     NIEMAND_ZUGEWIESEN: 'Niemand zugewiesen.',
@@ -1650,6 +1697,13 @@ export const de = {
     BEARBEITEN_AKTIVIEREN: 'Bearbeiten aktivieren',
     EDITIERMODUS_HINWEIS:
       'Ist der Editiermodus aktiv, erscheinen die Bearbeiten-Symbole (etwa zum Umbenennen von Projekten, Boards und Spalten), sofern du die nötigen Rechte hast. Der Modus ist beim Start immer aus und wird nicht über einen Neustart hinweg gemerkt.',
+    ERSCHEINUNGSBILD: 'Erscheinungsbild',
+    ERSCHEINUNGSBILD_SYSTEM: 'System',
+    ERSCHEINUNGSBILD_HELL: 'Hell',
+    ERSCHEINUNGSBILD_DUNKEL: 'Dunkel',
+    ERSCHEINUNGSBILD_HINWEIS:
+      '„System“ folgt dem Farbschema deines Browsers, der das Betriebssystem übersteuern kann. Die Wahl wird an deinem Konto gespeichert und gilt auf jedem Gerät nach der Anmeldung.',
+    ERSCHEINUNGSBILD_FEHLER: 'Das Erscheinungsbild konnte nicht gespeichert werden.',
     DONE_AUFBEWAHRUNG: 'Done-Aufbewahrung',
     DONE_UNGUELTIG: 'Bitte eine ganze Zahl ≥ 0 angeben (0 = kein Auto-Archiv).',
     GESPEICHERT: 'Gespeichert.',
@@ -1740,6 +1794,14 @@ export const de = {
     GESPERRT: 'Gesperrt',
     AKTIV: 'Aktiv',
     AKTION: 'Aktion',
+    /** Start der nur lesenden „Ansicht als …“ je in Frage kommender Zeile (AK 2, Plan #1914). */
+    ANSICHT_ALS: 'Ansicht als …',
+    ANSICHT_ALS_ARIA: (name: string) => `Ansicht als ${name}`,
+    ANSICHT_FEHLGESCHLAGEN: 'Die Ansicht ließ sich nicht starten.',
+    /** Spalte mit den aufklappbaren Einträgen der Ansichten (AK 8). */
+    ANSICHTEN: 'Ansichten',
+    EINTRAEGE: 'Einträge',
+    EINTRAEGE_ARIA: (name: string) => `Ansichten als ${name}`,
   },
 
   /** Statuskachel der Sicherung im Admin-Bereich (Issue #1660); das Ziel ist ein Datenwert. */

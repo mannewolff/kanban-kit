@@ -9,7 +9,10 @@ import { ProjectMembersPage } from './ProjectMembersPage'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn(), transferOwner: vi.fn() } }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: { userId: 1 } }) }))
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: { userId: 1 }, vorschau: auth.vorschau }) }))
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
 // Editiermodus gemockt: Bestandstests mit editMode=true (Bleistift sichtbar); der Editiermodus-
 // aus-Test schaltet editMode.value=false.
 const editMode = vi.hoisted(() => ({ value: true }))
@@ -64,6 +67,7 @@ function renderNoRole(api: MembersApi) {
 describe('ProjectMembersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    auth.vorschau = null
     editMode.value = true
   })
 
@@ -606,5 +610,58 @@ describe('ProjectMembersPage auf Englisch', () => {
       'en',
     )
     expect(screen.getByText('Invalid project ID.')).toBeInTheDocument()
+  })
+})
+
+describe('ProjectMembersPage — Ansicht als XY (Issue #1927)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    auth.vorschau = null
+    editMode.value = true
+  })
+
+  it('zeigt Einladen, Namen, Rolle, Eigentümer und Entfernen in der Vorschau gesperrt mit dem Hinweis „Vorschau“', async () => {
+    auth.vorschau = vorschau
+    const api = makeApi()
+    renderPage(api, 'OWNER')
+
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('E-Mail einladen'), { target: { value: 'neu@x.de' } })
+    expect(screen.queryByRole('button', { name: 'Einladen' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Namen von Mika Member bearbeiten')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Rolle von Mika Member')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Mika Member zum Eigentümer machen')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Mika Member entfernen')).not.toBeInTheDocument()
+
+    const knoepfe = screen.getAllByRole('button', { name: 'Vorschau' })
+    // Einladen, dann Zeile für Zeile: Namen bearbeiten, (bei Mika) zum Eigentümer machen, Entfernen.
+    expect(knoepfe.map((k) => k.textContent)).toEqual(['Einladen', '', 'Entfernen', '', 'Zum Eigentümer machen', 'Entfernen'])
+    knoepfe.forEach((k) => {
+      expect(k).toBeDisabled()
+      fireEvent.click(k)
+    })
+    const rollen = screen.getAllByRole('combobox', { name: 'Vorschau' })
+    expect(rollen).toHaveLength(2)
+    rollen.forEach((r) => expect(r).toHaveAttribute('aria-disabled', 'true'))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Anzeigename von member@x.de')).not.toBeInTheDocument()
+    expect(api.invite).not.toHaveBeenCalled()
+    expect(api.remove).not.toHaveBeenCalled()
+    expect(api.changeRole).not.toHaveBeenCalled()
+    expect(mProjects.transferOwner).not.toHaveBeenCalled()
+  })
+
+  it('lässt dieselben Bedienelemente außerhalb der Vorschau bedienbar', async () => {
+    renderPage(makeApi(), 'OWNER')
+
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('E-Mail einladen'), { target: { value: 'neu@x.de' } })
+    expect(screen.getByRole('button', { name: 'Einladen' })).toBeEnabled()
+    expect(screen.getByLabelText('Namen von Mika Member bearbeiten')).toBeEnabled()
+    expect(screen.getByLabelText('Rolle von Mika Member')).toBeEnabled()
+    expect(screen.getByLabelText('Mika Member zum Eigentümer machen')).toBeEnabled()
+    expect(screen.getByLabelText('Mika Member entfernen')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
   })
 })

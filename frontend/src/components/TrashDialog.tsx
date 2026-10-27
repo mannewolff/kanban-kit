@@ -11,6 +11,7 @@ import { apiErrorMessage } from '../api/client'
 import { useT } from '../i18n/SpracheContext'
 import { dialogTitleSx } from './dialogChromeSx'
 import { useSnackbar } from './SnackbarProvider'
+import { VorschauGesperrt } from './VorschauGesperrt'
 
 interface Props {
   open: boolean
@@ -78,18 +79,22 @@ export function TrashDialog({
               <Typography variant="body2" sx={{ flexGrow: 1 }}>
                 #{card.number} · {card.title}
               </Typography>
-              <Button size="small" aria-label={t.PAPIERKORB.WIEDERHERSTELLEN_ARIA(card.title)} onClick={() => void restore(card)}>
-                {t.ALLGEMEIN.WIEDERHERSTELLEN}
-              </Button>
-              {canPurge && (
-                <Button
-                  size="small"
-                  color="error"
-                  aria-label={t.PAPIERKORB.ENDGUELTIG_ARIA(card.title)}
-                  onClick={() => void purge(card)}
-                >
-                  {t.PAPIERKORB.ENDGUELTIG}
+              <VorschauGesperrt>
+                <Button size="small" aria-label={t.PAPIERKORB.WIEDERHERSTELLEN_ARIA(card.title)} onClick={() => void restore(card)}>
+                  {t.ALLGEMEIN.WIEDERHERSTELLEN}
                 </Button>
+              </VorschauGesperrt>
+              {canPurge && (
+                <VorschauGesperrt>
+                  <Button
+                    size="small"
+                    color="error"
+                    aria-label={t.PAPIERKORB.ENDGUELTIG_ARIA(card.title)}
+                    onClick={() => void purge(card)}
+                  >
+                    {t.PAPIERKORB.ENDGUELTIG}
+                  </Button>
+                </VorschauGesperrt>
               )}
             </Stack>
           ))}

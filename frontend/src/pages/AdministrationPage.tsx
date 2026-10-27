@@ -15,13 +15,17 @@ import RadioGroup from '@mui/material/RadioGroup'
 import Stack from '@mui/material/Stack'
 import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
-import { useEffect, useState } from 'react'
+import { useColorScheme } from '@mui/material/styles'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { accessTokensApi, type AccessToken, type CreatedAccessToken } from '../api/accessTokens'
+import { authApi, type ColorScheme } from '../api/auth'
 import { boardsApi, type Board } from '../api/boards'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { configApi } from '../api/config'
@@ -31,14 +35,17 @@ import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { StandardLabelsSection } from '../components/StandardLabelsSection'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
+import { VorschauPersoenlichHinweis } from '../components/VorschauPersoenlichHinweis'
 import { useSprache, useT } from '../i18n/SpracheContext'
 import { istSprache, woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { useEditMode } from '../lib/EditModeContext'
+import { farbmodusAus } from '../lib/farbmodus'
 import { canEditCards, isPlatformAdmin } from '../lib/roles'
 
 /**
- * Administrations-/Einstellungsseite (für alle angemeldeten Nutzer): Editiermodus-Schalter und die
- * Verwaltung persönlicher API-Tokens.
+ * Administrations-/Einstellungsseite (für alle angemeldeten Nutzer): Editiermodus-Schalter,
+ * Erscheinungsbild und die Verwaltung persönlicher API-Tokens.
  */
 export function AdministrationPage() {
   const { editMode, setEditMode } = useEditMode()
@@ -73,13 +80,19 @@ export function AdministrationPage() {
           </Stack>
         </Paper>
 
+        <Persoenlich titel={t.ERSCHEINUNGSBILD}>
+          <AppearanceSection />
+        </Persoenlich>
+
         <LanguageSection />
 
         <DoneRetentionSection />
 
         <StandardLabelsSection />
 
-        <ApiTokensSection />
+        <Persoenlich titel={t.API_TOKENS}>
+          <ApiTokensSection />
+        </Persoenlich>
 
         <ApiUebersichtSection />
       </Stack>
@@ -174,15 +187,100 @@ function LanguageSection() {
         </RadioGroup>
         {admin ? (
           <Box>
-            <Button variant="contained" aria-label={t.SPRACHE.SPEICHERN_ARIA} onClick={() => void save()}>
-              {t.SPRACHE.SPEICHERN}
-            </Button>
+            <VorschauGesperrt>
+              <Button variant="contained" aria-label={t.SPRACHE.SPEICHERN_ARIA} onClick={() => void save()}>
+                {t.SPRACHE.SPEICHERN}
+              </Button>
+            </VorschauGesperrt>
           </Box>
         ) : (
           <Typography variant="body2" color="text.secondary">
             {t.SPRACHE.NUR_ADMIN}
           </Typography>
         )}
+      </Stack>
+    </Paper>
+  )
+}
+
+/**
+ * Rahmen eines persönlichen Abschnitts: In der „Ansicht als XY“ steht unter der Überschrift statt
+ * des Inhalts nur der Hinweis, dass der Bereich in der Vorschau nicht gezeigt wird (AK 5, E5). Der
+ * Inhalt wird dann gar nicht erst eingehängt und ruft darum auch nichts ab.
+ */
+function Persoenlich({ titel, children }: Readonly<{ titel: string; children: ReactNode }>) {
+  const { vorschau } = useAuth()
+  if (!vorschau) {
+    return children
+  }
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack spacing={1}>
+        <Typography variant="h6" component="h2">
+          {titel}
+        </Typography>
+        <VorschauPersoenlichHinweis />
+      </Stack>
+    </Paper>
+  )
+}
+
+/**
+ * Erscheinungsbild System / Hell / Dunkel (#1911), gespeichert am Konto. Die Wahl wirkt sofort;
+ * scheitert das Speichern, springen Anzeige und Erscheinungsbild auf den gespeicherten Stand zurück.
+ */
+function AppearanceSection() {
+  const { user, refresh } = useAuth()
+  const { setMode } = useColorScheme()
+  const t = useT().ADMINISTRATION
+  const notify = useSnackbar()
+  const gespeichert: ColorScheme = user?.colorScheme ?? 'SYSTEM'
+  const [wahl, setWahl] = useState<ColorScheme>(gespeichert)
+
+  const waehlen = async (neu: ColorScheme) => {
+    setWahl(neu)
+    setMode(farbmodusAus(neu))
+    try {
+      await authApi.setColorScheme(neu)
+      await refresh()
+    } catch (e) {
+      setWahl(gespeichert)
+      setMode(farbmodusAus(gespeichert))
+      notify(apiErrorMessage(e, t.ERSCHEINUNGSBILD_FEHLER), 'error')
+    }
+  }
+
+  const stufen: ReadonlyArray<{ wert: ColorScheme; name: string }> = [
+    { wert: 'SYSTEM', name: t.ERSCHEINUNGSBILD_SYSTEM },
+    { wert: 'LIGHT', name: t.ERSCHEINUNGSBILD_HELL },
+    { wert: 'DARK', name: t.ERSCHEINUNGSBILD_DUNKEL },
+  ]
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack spacing={1}>
+        <Typography variant="h6" component="h2" id="erscheinungsbild-ueberschrift">
+          {t.ERSCHEINUNGSBILD}
+        </Typography>
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={wahl}
+          aria-labelledby="erscheinungsbild-ueberschrift"
+          onChange={(_, neu: ColorScheme | null) => {
+            // Ein Klick auf die schon gewählte Stufe liefert null — die Wahl bleibt dann stehen.
+            if (neu !== null && neu !== wahl) void waehlen(neu)
+          }}
+        >
+          {stufen.map(({ wert, name }) => (
+            <ToggleButton key={wert} value={wert}>
+              {name}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+        <Typography variant="body2" color="text.secondary">
+          {t.ERSCHEINUNGSBILD_HINWEIS}
+        </Typography>
       </Stack>
     </Paper>
   )
@@ -256,9 +354,11 @@ function DoneRetentionSection() {
             slotProps={{ htmlInput: { min: 0, 'aria-label': t.DONE_TAGE_ARIA } }}
             sx={{ width: 140 }}
           />
-          <Button variant="contained" onClick={() => void save()} sx={{ mt: 0.5 }}>
-            {tg.ALLGEMEIN.SPEICHERN}
-          </Button>
+          <VorschauGesperrt>
+            <Button variant="contained" onClick={() => void save()} sx={{ mt: 0.5 }}>
+              {tg.ALLGEMEIN.SPEICHERN}
+            </Button>
+          </VorschauGesperrt>
         </Stack>
       </Stack>
     </Paper>

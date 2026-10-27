@@ -9,6 +9,13 @@ import { tagZeit } from '../../lib/leitstand'
 import { theme } from '../../theme'
 import { RunnerJetzt } from './RunnerJetzt'
 
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E16); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+const VORSCHAU = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+const HINWEIS = 'Grace sieht diesen Bereich, die Vorschau zeigt ihn nicht.'
+const verborgen = () => new ApiError(403, 'Forbidden', undefined, undefined, 'vorschau-verborgen')
+
 /**
  * Der Bereich „Runner jetzt“ auf der Runner-Seite (Issue #1729, Plan #1724 E5, E6, E14, E15): je
  * Lauf Art und Zustand, je Stufe Karte, Stufe, Beginn, Frist, Teilschritt und ob sie die Umsetzung
@@ -367,5 +374,30 @@ describe('RunnerJetzt', () => {
 
     expect(await screen.findByText(t.LADEFEHLER('kaputt'))).toBeInTheDocument()
     expect(onGeladen).not.toHaveBeenCalled()
+  })
+})
+
+describe('RunnerJetzt — Ansicht als XY (Issue #1928, Plan #1914 E16)', () => {
+  afterEach(() => {
+    auth.vorschau = null
+  })
+
+  it('zeigt bei vorschau-verborgen den Bereich mit dem Hinweis statt der Lage', async () => {
+    auth.vorschau = VORSCHAU
+    zeige(() => Promise.reject(verborgen()))
+
+    const bereich = await screen.findByTestId('runner-jetzt')
+    expect(within(bereich).getByRole('heading', { name: 'Runner jetzt' })).toBeInTheDocument()
+    expect(within(bereich).getByRole('note')).toHaveTextContent(HINWEIS)
+  })
+
+  it('anderer 403 behält das bisherige Verhalten: der Bereich fehlt', async () => {
+    auth.vorschau = VORSCHAU
+    const { container } = zeige(() => Promise.reject(new ApiError(403, 'verboten', undefined, undefined, 'vorschau-nur-lesend')))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(container).toBeEmptyDOMElement()
   })
 })

@@ -8,10 +8,32 @@ import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { VorschauEintraege } from '../components/VorschauEintraege'
+import { VorschauPersoenlichHinweis } from '../components/VorschauPersoenlichHinweis'
 import { useT } from '../i18n/SpracheContext'
 
-/** Selbstpflege des Profils: Anzeigenamen des angemeldeten Benutzers ändern. */
+/**
+ * Profil des angemeldeten Benutzers: Anzeigenamen ändern und sehen, wann welcher Admin die App als
+ * dieses Konto angesehen hat (AK 8). In der „Ansicht als XY“ steht statt beidem nur der Hinweis,
+ * dass das Profil von XY in der Vorschau nicht gezeigt wird (AK 5, Plan #1914, E5).
+ */
 export function ProfilePage() {
+  const { vorschau } = useAuth()
+  const t = useT()
+  if (vorschau) {
+    return (
+      <Box>
+        <Typography variant="h4" gutterBottom>
+          {t.PROFIL.TITEL}
+        </Typography>
+        <VorschauPersoenlichHinweis />
+      </Box>
+    )
+  }
+  return <EigenesProfil />
+}
+
+function EigenesProfil() {
   const { user, refresh } = useAuth()
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [busy, setBusy] = useState(false)
@@ -52,6 +74,12 @@ export function ProfilePage() {
             {t.ALLGEMEIN.SPEICHERN}
           </Button>
         </Stack>
+      </Box>
+      <Box sx={{ maxWidth: 480, mt: 4 }}>
+        <Typography variant="h6" component="h2" gutterBottom>
+          {t.VORSCHAU.PROTOKOLL_TITEL}
+        </Typography>
+        <VorschauEintraege laden={authApi.eigenesVorschauProtokoll} />
       </Box>
     </Box>
   )

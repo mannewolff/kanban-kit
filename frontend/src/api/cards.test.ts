@@ -31,6 +31,16 @@ describe('cardsApi', () => {
     expect(result).toEqual([card])
   })
 
+  it('list reicht die Herkunft der Board-Liste unverändert durch (Issue #1930)', async () => {
+    const herkunft = [
+      { number: 4, title: '[Plan] P', archived: true, luecke: null },
+      { number: 3, title: null, archived: false, luecke: 'PAPIERKORB' },
+    ]
+    spyFetch(JSON.stringify([{ ...card, herkunft }, { ...card, id: 2, herkunft: [] }]))
+    const result = await cardsApi.list(3)
+    expect(result.map((c) => c.herkunft)).toEqual([herkunft, []])
+  })
+
 
   it('openEpic ruft POST /api/cards/{id}/open-epic mit Name und Kürzel', async () => {
     const f = spyFetch(JSON.stringify({ ...card, id: 400, number: 9, title: 'Vorhaben', type: 'EPIC' }))

@@ -40,7 +40,8 @@ class CardRunQueryServiceExistingCardNumbersTest {
                 mock(PermissionChecker.class),
                 mock(CardLabelEventRepository.class),
                 ActorContext.ActorStamp::unknown,
-                Clock.systemUTC()),
+                Clock.systemUTC(),
+                mock(ZuweisungsBenachrichtigung.class)),
             mock(BoardService.class),
             mock(CardLabelEventRepository.class));
   }

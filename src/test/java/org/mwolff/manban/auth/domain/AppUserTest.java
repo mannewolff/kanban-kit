@@ -58,4 +58,43 @@ class AppUserTest {
     assertThat(updated.approvedBy()).isEqualTo(9L);
     assertThat(updated.disabledAt()).isEqualTo(Instant.MAX);
   }
+
+  @Test
+  void convenienceConstructor_defaultsColorSchemeToSystem() {
+    assertThat(user(PlatformRole.USER, null).colorScheme()).isEqualTo(ColorScheme.SYSTEM);
+  }
+
+  @Test
+  void withColorScheme_changesOnlyColorScheme() {
+    AppUser user =
+        new AppUser(1L, "a@x.de", "Ada", true, PlatformRole.ADMIN, Instant.EPOCH, 9L, Instant.MAX);
+
+    AppUser updated = user.withColorScheme(ColorScheme.DARK);
+
+    assertThat(updated.colorScheme()).isEqualTo(ColorScheme.DARK);
+    assertThat(updated).usingRecursiveComparison().ignoringFields("colorScheme").isEqualTo(user);
+  }
+
+  /** Jede Kopiermethode trägt die Farbwahl weiter (Issue #1911) — sonst ginge sie verloren. */
+  @Test
+  void withMethods_keepColorScheme() {
+    AppUser user =
+        new AppUser(
+            1L,
+            "a@x.de",
+            "Ada",
+            true,
+            PlatformRole.USER,
+            Instant.EPOCH,
+            9L,
+            null,
+            ColorScheme.LIGHT);
+
+    assertThat(user.withEmailVerified(false).colorScheme()).isEqualTo(ColorScheme.LIGHT);
+    assertThat(user.withDisplayName("Neu").colorScheme()).isEqualTo(ColorScheme.LIGHT);
+    assertThat(user.withPlatformRole(PlatformRole.ADMIN).colorScheme())
+        .isEqualTo(ColorScheme.LIGHT);
+    assertThat(user.withApproved(Instant.MAX, 2L).colorScheme()).isEqualTo(ColorScheme.LIGHT);
+    assertThat(user.withDisabledAt(Instant.MAX).colorScheme()).isEqualTo(ColorScheme.LIGHT);
+  }
 }

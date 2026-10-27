@@ -12,16 +12,17 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { boardsApi, type Board } from '../api/boards'
-import { cardsApi, type Card } from '../api/cards'
+import { cardsApi, type Card, type CardByNumber } from '../api/cards'
 import { configApi } from '../api/config'
 import { epicsApi, type Epic } from '../api/epics'
 import { labelsApi, type Label } from '../api/labels'
 import { membersApi, type Member } from '../api/members'
 import { useAuth } from '../auth/AuthContext'
 import { BoardView } from '../components/BoardView'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { LabelManagerDialog } from '../components/LabelManagerDialog'
@@ -50,7 +51,7 @@ export function BoardPage() {
   const [cards, setCards] = useState<Card[]>([])
   const [epics, setEpics] = useState<Epic[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedCard, setSelectedCard] = useState<Card | null>(null)
+  const [selectedCard, setSelectedCard] = useState<Card | CardByNumber | null>(null)
   const [openEditing, setOpenEditing] = useState(false)
   const [retentionDays, setRetentionDays] = useState(30)
   const [renameOpen, setRenameOpen] = useState(false)
@@ -158,6 +159,45 @@ export function BoardPage() {
     void labelsApi.list(id).then(setLabels).catch(() => setLabels([]))
   }, [id, validId])
 
+  // Direkter Link (Issue #1915): `?karte=N` öffnet den Dialog der Karte N, sobald das Board steht.
+  // Liegt sie nicht auf diesem Board, wird sie wie bei der Nummernsuche über die Nummer geladen.
+  // Der Ref hält fest, welche Nummer schon geöffnet wurde — sonst öffnete jedes Nachladen der
+  // Karten (Fokus, Board-Events) den Dialog erneut.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const karteParam = searchParams.get('karte')
+  const karteNummer = karteParam != null && /^\d+$/.test(karteParam) ? Number(karteParam) : null
+  const geoeffneteNummerRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (karteNummer == null || board == null || geoeffneteNummerRef.current === karteNummer) {
+      return
+    }
+    geoeffneteNummerRef.current = karteNummer
+    const aufDiesemBoard = cards.find((c) => c.number === karteNummer)
+    if (aufDiesemBoard) {
+      setOpenEditing(false)
+      setSelectedCard(aufDiesemBoard)
+      return
+    }
+    void cardsApi
+      .byNumber(board.projectId, karteNummer)
+      .then((karte) => {
+        setOpenEditing(false)
+        setSelectedCard(karte)
+      })
+      .catch(() => {})
+  }, [karteNummer, board, cards])
+
+  // Beim Schließen verschwindet `karte` aus der Adresse — sonst öffnete jedes Neuladen den Dialog.
+  const closeCard = () => {
+    setSelectedCard(null)
+    if (searchParams.has('karte')) {
+      geoeffneteNummerRef.current = null
+      const next = new URLSearchParams(searchParams)
+      next.delete('karte')
+      setSearchParams(next, { replace: true })
+    }
+  }
+
   const projectName = useProjectName(board?.projectId ?? null)
   // Plattform-Admin ist synchron aus dem Auth-Context ableitbar (kein Race) und bleibt deshalb hier;
   // die Projektrolle kommt zentral aus useProjectRole.
@@ -220,9 +260,11 @@ export function BoardPage() {
           ]}
         />
         {canEditStructure && (
-          <IconButton size="small" aria-label={t.BOARD.UMBENENNEN} onClick={openRename}>
-            <EditOutlinedIcon fontSize="small" />
-          </IconButton>
+          <VorschauGesperrt>
+            <IconButton size="small" aria-label={t.BOARD.UMBENENNEN} onClick={openRename}>
+              <EditOutlinedIcon fontSize="small" />
+            </IconButton>
+          </VorschauGesperrt>
         )}
         {canEditStructure && (
           <Button size="small" onClick={() => setLabelManagerOpen(true)}>
@@ -276,7 +318,7 @@ export function BoardPage() {
             projectName,
             board: { id: board.id, name: board.name, columnName: selectedColumnName },
           }}
-          onClose={() => setSelectedCard(null)}
+          onClose={closeCard}
           onChanged={() => {
             void reloadCards()
             reloadEpics()
@@ -318,9 +360,11 @@ export function BoardPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRenameOpen(false)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-          <Button variant="contained" disabled={!renameValue.trim()} onClick={() => void handleRename(board)}>
-            {t.ALLGEMEIN.SPEICHERN}
-          </Button>
+          <VorschauGesperrt>
+            <Button variant="contained" disabled={!renameValue.trim()} onClick={() => void handleRename(board)}>
+              {t.ALLGEMEIN.SPEICHERN}
+            </Button>
+          </VorschauGesperrt>
         </DialogActions>
       </Dialog>
     </Box>

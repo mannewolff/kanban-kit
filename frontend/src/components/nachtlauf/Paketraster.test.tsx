@@ -6,7 +6,6 @@ import type { PackageProgressView, PackageState } from '../../api/nightRuns'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { kontrast } from '../../lib/kontrast'
 import { rasterzustand, type Rasterfarbe } from '../../lib/laufFortschritt'
-import { nachtlaufTheme } from '../../nachtlaufDesign'
 import { theme } from '../../theme'
 import { Paketraster } from './Paketraster'
 
@@ -31,7 +30,7 @@ const ALLE: readonly PackageProgressView[] = [
 const zeige = (pakete: readonly PackageProgressView[]) => {
   const onKarteOeffnen = vi.fn()
   render(
-    <ThemeProvider theme={nachtlaufTheme}>
+    <ThemeProvider theme={theme}>
       <Paketraster pakete={pakete} name="Pakete der Kette #100" onKarteOeffnen={onKarteOeffnen} />
     </ThemeProvider>,
   )
@@ -114,7 +113,7 @@ describe('Paketraster', () => {
 
   it('spricht Englisch', () => {
     renderMitSprache(
-      <ThemeProvider theme={nachtlaufTheme}>
+      <ThemeProvider theme={theme}>
         <Paketraster pakete={[paket(203, 'IN_UMSETZUNG')]} name="Packages" onKarteOeffnen={vi.fn()} />
       </ThemeProvider>,
       'en',

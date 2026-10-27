@@ -384,6 +384,42 @@ describe('useLeitstandDaten — Fehler', () => {
   })
 })
 
+describe('useLeitstandDaten — Ansicht als XY (Issue #1928, Plan #1914 E16)', () => {
+  const verborgen = () => new ApiError(403, 'Forbidden', undefined, undefined, 'vorschau-verborgen')
+
+  it('deutet 403 vorschau-verborgen bei Läufen, Fehlerklassen und Nacharbeit als „vorschauVerborgen“', async () => {
+    m.laeufe.mockRejectedValue(verborgen())
+    m.klassen.mockRejectedValue(verborgen())
+    m.nacharbeit.mockRejectedValue(verborgen())
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.laeufeVerborgen).toBe(true))
+    await waitFor(() => expect(result.current.klassen).toEqual({ art: 'vorschauVerborgen' }))
+    await waitFor(() => expect(result.current.nacharbeit).toEqual({ art: 'vorschauVerborgen' }))
+    expect(result.current.liste).toBeNull()
+    expect(result.current.juengster).toBeNull()
+    // Was der Admin selbst sehen darf, bleibt.
+    expect(result.current.kpis).toEqual({ art: 'da', wert: kpis() })
+  })
+
+  it('anderer 403 behält das bisherige Verhalten: still „ohne Recht“, kein Hinweis', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden', undefined, undefined, 'vorschau-nur-lesend'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.nacharbeit.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.klassen).toEqual({ art: 'ohneRecht' }))
+    await waitFor(() => expect(result.current.nacharbeit).toEqual({ art: 'ohneRecht' }))
+    await waitFor(() => expect(m.laeufe).toHaveBeenCalled())
+    expect(result.current.laeufeVerborgen).toBe(false)
+    expect(result.current.liste).toBeNull()
+  })
+
+  it('meldet geladene Läufe nicht als verborgen', async () => {
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.liste).not.toBeNull())
+    expect(result.current.laeufeVerborgen).toBe(false)
+  })
+})
+
 describe('useLeitstandDaten — Prognose der Vorhaben (Issue #1828)', () => {
   it('lädt die Prognose sofort mit der Board-ID wie den Fluss, ohne auf das Projekt zu warten', async () => {
     const erstes = offen<Board>()

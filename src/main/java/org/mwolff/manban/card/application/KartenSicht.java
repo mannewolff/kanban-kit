@@ -35,16 +35,19 @@ public final class KartenSicht {
   private static final int AUSZUG_CODEPOINTS = 200;
 
   private final CardRepository cards;
+  private final CardBestandRepository bestand;
   private final KartenAbhaengigkeiten abhaengigkeiten;
   private final KartenZuordnung zuordnung;
   private final PermissionChecker permissions;
 
   public KartenSicht(
       CardRepository cards,
+      CardBestandRepository bestand,
       KartenAbhaengigkeiten abhaengigkeiten,
       KartenZuordnung zuordnung,
       PermissionChecker permissions) {
     this.cards = cards;
+    this.bestand = bestand;
     this.abhaengigkeiten = abhaengigkeiten;
     this.zuordnung = zuordnung;
     this.permissions = permissions;
@@ -73,7 +76,8 @@ public final class KartenSicht {
 
   /**
    * Die Sicht der Kartenliste eines Boards — vier Sammelzugriffe statt vier Abfragen <em>je
-   * Karte</em> (Issue #768); aus {@code CardService.listByBoard} hierher gezogen (Issue #1397).
+   * Karte</em> (Issue #768); aus {@code CardService.listByBoard} hierher gezogen (Issue #1397). Die
+   * Herkunftskette kommt mit einem Sammelzugriff je Stufe dazu (Issue #1930).
    *
    * <p>Bewusst nicht über {@link #view(Card, boolean)}: Der baut eine einzelne Karte und lädt
    * Abhängigkeiten, Zuständige, Labels und Herkunft je Aufruf einzeln nach. Auf einer ganzen
@@ -94,6 +98,14 @@ public final class KartenSicht {
     Map<Long, Integer> nummern = herkunftsnummern(karten);
     // Alle Karten liegen auf diesem Board: eine CARD_MOVE-Prüfung für die ganze Liste (E10).
     boolean darfStatusSetzen = darfStatusSetzen(userId, projectId);
+    // Je Stufe der Kette ein Sammelzugriff über alle Karten (Issue #1930); die verlorenen Nummern
+    // der Board-Karten in einem. Alle Karten der Liste liegen auf einem Board.
+    Map<Long, Integer> verloren =
+        karten.isEmpty()
+            ? Map.of()
+            : bestand.verloreneHerkunftsnummern(karten.getFirst().boardId());
+    Map<Long, List<HerkunftsGlied>> herkunft =
+        HerkunftsKette.vorfahrenJeKarte(karten, bestand::findImBestand, verloren, projectId);
     return karten.stream()
         .map(
             c ->
@@ -120,7 +132,8 @@ public final class KartenSicht {
                     labelIds.getOrDefault(c.requireId(), List.of()),
                     c.derivedFromCardId() == null ? null : nummern.get(c.derivedFromCardId()),
                     statusName(c),
-                    c.status() != null && darfStatusSetzen))
+                    c.status() != null && darfStatusSetzen,
+                    herkunft.get(c.requireId())))
         .toList();
   }
 
@@ -191,7 +204,9 @@ public final class KartenSicht {
         zuordnung.labelsVon(c.requireId()),
         herkunftsnummer(c),
         statusName(c),
-        c.status() != null && canSetStatus);
+        c.status() != null && canSetStatus,
+        // Die Kette rechnet nur die Board-Liste (Issue #1930).
+        null);
   }
 
   /**

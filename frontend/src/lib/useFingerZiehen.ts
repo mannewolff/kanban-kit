@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useAuth } from '../auth/AuthContext'
 import { SCHATTEN_HOCH, theme } from '../theme'
 import {
   ablageIndex,
@@ -72,9 +73,12 @@ function zielUnter(x: number, y: number, gezogenId: string): FingerZiel | null {
  * Ruhe hebt sich eine Kopie und folgt dem Finger; ein nicht-passiver `touchmove`-Listener hält
  * dabei die Seite still. Am Rand der Board-Fläche rollt die Fläche auf beiden Achsen mit, gemessen
  * an ihren eigenen Kanten; das Dokument rollt nicht, denn seit Issue #1901 rollt allein die Fläche.
- * Ohne `aktiv` registriert der Hook nichts.
+ * Ohne `aktiv` registriert der Hook nichts, ebenso in der „Ansicht als XY“: Dort ist Ziehen und
+ * Ablegen aus (Plan #1914, E15).
  */
 export function useFingerZiehen({ aktiv, onAblage }: FingerZiehenOptionen): FingerZiehen {
+  const { vorschau } = useAuth()
+  const greifbar = aktiv && !vorschau
   const [zustand, setZustand] = useState<ZiehZustand>('bereit')
   const [gezogenId, setGezogenId] = useState<string | null>(null)
   const [ziel, setZiel] = useState<FingerZiel | null>(null)
@@ -86,7 +90,7 @@ export function useFingerZiehen({ aktiv, onAblage }: FingerZiehenOptionen): Fing
   const abbrechenRef = useRef<(() => void) | null>(null)
 
   // Endet der Tablet-Modus oder hängt die Komponente aus, endet auch ein laufender Zug.
-  useEffect(() => () => abbrechenRef.current?.(), [aktiv])
+  useEffect(() => () => abbrechenRef.current?.(), [greifbar])
 
   // Stryker disable ArrayDeclaration: gleichwertig — eine feste Abhängigkeit hält die Funktion ebenso stabil wie keine; ein next-line-Kommentar im Funktionskörper erreicht die Liste nicht
   const starteZug = useCallback((id: string, element: HTMLElement, pointerId: number, startX: number, startY: number) => {
@@ -189,7 +193,7 @@ export function useFingerZiehen({ aktiv, onAblage }: FingerZiehenOptionen): Fing
 
   const griff = useCallback(
     (id: string) =>
-      aktiv
+      greifbar
         ? {
             onPointerDown: (e: ReactPointerEvent<HTMLElement>) => {
               if (e.pointerType === 'touch' && !abbrechenRef.current) {
@@ -198,7 +202,7 @@ export function useFingerZiehen({ aktiv, onAblage }: FingerZiehenOptionen): Fing
             },
           }
         : {},
-    [aktiv, starteZug],
+    [greifbar, starteZug],
   )
 
   return { griff, zustand, gezogenId, ziel }

@@ -3,8 +3,14 @@ import {
   apiFetch,
   ApiError,
   apiErrorMessage,
+  istVorschauVerborgen,
   notifyUnauthorized,
+  setNeuLaden,
+  setNurLesendHandler,
   setUnauthorizedHandler,
+  setVorschauKennung,
+  startseiteNeuLaden,
+  vorschauKopf,
 } from './client'
 import { en } from '../i18n/en'
 
@@ -39,6 +45,9 @@ async function failingFetch(): Promise<ApiError> {
 afterEach(() => {
   vi.restoreAllMocks()
   setUnauthorizedHandler(null)
+  setVorschauKennung(null)
+  setNeuLaden(null)
+  setNurLesendHandler(null)
 })
 
 describe('apiFetch – Anfrage', () => {
@@ -47,7 +56,197 @@ describe('apiFetch – Anfrage', () => {
     await apiFetch('/api/test')
     const init = vi.mocked(globalThis.fetch).mock.calls[0][1]
     expect(init?.credentials).toBe('include')
-    expect(init?.headers).toEqual({ 'Content-Type': 'application/json' })
+    expect(init?.headers).toEqual({ 'Content-Type': 'application/json', 'X-Vorschau': 'keine' })
+  })
+
+  it('behält eigene Kopfzeilen des Aufrufers neben Content-Type und X-Vorschau', async () => {
+    mockOkResponse('')
+    await apiFetch('/api/test', { method: 'PUT', headers: { Authorization: 'Bearer x' } })
+    const init = vi.mocked(globalThis.fetch).mock.calls[0][1]
+    expect(init?.method).toBe('PUT')
+    expect(init?.headers).toEqual({
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer x',
+      'X-Vorschau': 'keine',
+    })
+  })
+})
+
+describe('X-Vorschau (Plan #1914, E8)', () => {
+  it('trägt die Kennung der Vorschau, die der Tab zu sehen glaubt', async () => {
+    setVorschauKennung('vk-42')
+    mockOkResponse('')
+    await apiFetch('/api/test')
+    const init = vi.mocked(globalThis.fetch).mock.calls[0][1]
+    expect((init?.headers as Record<string, string>)['X-Vorschau']).toBe('vk-42')
+  })
+
+  it('trägt nach dem Zurücksetzen wieder „keine“', async () => {
+    setVorschauKennung('vk-42')
+    setVorschauKennung(null)
+    mockOkResponse('')
+    await apiFetch('/api/test')
+    const init = vi.mocked(globalThis.fetch).mock.calls[0][1]
+    expect((init?.headers as Record<string, string>)['X-Vorschau']).toBe('keine')
+  })
+
+  it('lässt sich vom Aufrufer nicht überschreiben', async () => {
+    setVorschauKennung('vk-42')
+    mockOkResponse('')
+    await apiFetch('/api/test', { headers: { 'X-Vorschau': 'keine' } })
+    const init = vi.mocked(globalThis.fetch).mock.calls[0][1]
+    expect((init?.headers as Record<string, string>)['X-Vorschau']).toBe('vk-42')
+  })
+
+  it('liefert die Kopfzeile für Direktaufrufe', () => {
+    expect(vorschauKopf()).toEqual({ 'X-Vorschau': 'keine' })
+    setVorschauKennung('vk-7')
+    expect(vorschauKopf()).toEqual({ 'X-Vorschau': 'vk-7' })
+  })
+})
+
+describe('ApiError.type', () => {
+  it('übernimmt type aus dem Problem-Körper', async () => {
+    mockErrorResponse(403, JSON.stringify({ type: 'vorschau-verborgen', title: 'Forbidden', status: 403 }))
+    const error = await failingFetch()
+    expect(error.type).toBe('vorschau-verborgen')
+  })
+
+  it.each([
+    ['ohne type', JSON.stringify({ title: 'Forbidden' })],
+    ['mit leerem type', JSON.stringify({ type: '', title: 'Forbidden' })],
+    ['mit nicht-textlichem type', JSON.stringify({ type: 7, title: 'Forbidden' })],
+    ['bei Nicht-JSON-Body', 'Forbidden'],
+  ])('bleibt %s undefiniert', async (_fall, body) => {
+    mockErrorResponse(403, body)
+    const error = await failingFetch()
+    expect(error.type).toBeUndefined()
+  })
+})
+
+describe('istVorschauVerborgen (Plan #1914, E16)', () => {
+  it('erkennt 403 mit dem Problem-Typ vorschau-verborgen', () => {
+    expect(istVorschauVerborgen(new ApiError(403, 'Forbidden', undefined, undefined, 'vorschau-verborgen'))).toBe(true)
+  })
+
+  it.each([
+    ['einen 403 ohne Problem-Typ', new ApiError(403, 'Forbidden')],
+    ['einen 403 mit anderem Problem-Typ', new ApiError(403, 'Forbidden', undefined, undefined, 'vorschau-nur-lesend')],
+    ['vorschau-verborgen mit anderem Status', new ApiError(404, 'Not Found', undefined, undefined, 'vorschau-verborgen')],
+    ['einen Fehler, der kein ApiError ist', new Error('vorschau-verborgen')],
+  ])('verneint %s', (_fall, fehler) => {
+    expect(istVorschauVerborgen(fehler)).toBe(false)
+  })
+})
+
+describe('409 vorschau-gewechselt', () => {
+  it('lädt neu und wirft danach einen ApiError', async () => {
+    const neuLaden = vi.fn()
+    setNeuLaden(neuLaden)
+    mockErrorResponse(409, JSON.stringify({ type: 'vorschau-gewechselt', status: 409, detail: 'gewechselt' }))
+
+    const error = await failingFetch()
+
+    expect(neuLaden).toHaveBeenCalledTimes(1)
+    expect(error.status).toBe(409)
+    expect(error.type).toBe('vorschau-gewechselt')
+  })
+
+  it('lädt bei einem anderen 409 nicht neu', async () => {
+    const neuLaden = vi.fn()
+    setNeuLaden(neuLaden)
+    mockErrorResponse(409, JSON.stringify({ type: 'about:blank', status: 409, detail: 'Spalte nicht leer' }))
+
+    await failingFetch()
+
+    expect(neuLaden).not.toHaveBeenCalled()
+  })
+
+  it('lädt bei vorschau-gewechselt mit anderem Status nicht neu', async () => {
+    const neuLaden = vi.fn()
+    setNeuLaden(neuLaden)
+    mockErrorResponse(400, JSON.stringify({ type: 'vorschau-gewechselt', status: 400 }))
+
+    await failingFetch()
+
+    expect(neuLaden).not.toHaveBeenCalled()
+  })
+
+  it('führt ohne ersetzte Funktion auf die Startseite', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+    try {
+      setNeuLaden(null)
+      mockErrorResponse(409, JSON.stringify({ type: 'vorschau-gewechselt', status: 409 }))
+
+      await failingFetch()
+
+      expect(assign).toHaveBeenCalledWith('/')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('startseiteNeuLaden', () => {
+  it('lädt über die ersetzte Funktion neu', () => {
+    const neuLaden = vi.fn()
+    setNeuLaden(neuLaden)
+
+    startseiteNeuLaden()
+
+    expect(neuLaden).toHaveBeenCalledTimes(1)
+  })
+
+  it('führt ohne ersetzte Funktion auf die Startseite', () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+    try {
+      startseiteNeuLaden()
+
+      expect(assign).toHaveBeenCalledWith('/')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('403 vorschau-nur-lesend', () => {
+  it('meldet „Vorschau – nur lesend“ über den registrierten Meldeweg', async () => {
+    const melde = vi.fn()
+    setNurLesendHandler(melde)
+    mockErrorResponse(403, JSON.stringify({ type: 'vorschau-nur-lesend', status: 403, detail: 'nur lesend' }))
+
+    const error = await failingFetch()
+
+    expect(melde).toHaveBeenCalledTimes(1)
+    expect(error.status).toBe(403)
+    expect(error.type).toBe('vorschau-nur-lesend')
+  })
+
+  it.each([
+    ['einem anderen 403', 403, 'vorschau-verborgen'],
+    ['vorschau-nur-lesend mit anderem Status', 409, 'vorschau-nur-lesend'],
+  ])('meldet bei %s nichts', async (_fall, status, type) => {
+    const melde = vi.fn()
+    setNurLesendHandler(melde)
+    mockErrorResponse(status, JSON.stringify({ type, status }))
+
+    await failingFetch()
+
+    expect(melde).not.toHaveBeenCalled()
+  })
+
+  it('meldet nach setNurLesendHandler(null) nichts mehr und wirft trotzdem', async () => {
+    const melde = vi.fn()
+    setNurLesendHandler(melde)
+    setNurLesendHandler(null)
+    mockErrorResponse(403, JSON.stringify({ type: 'vorschau-nur-lesend', status: 403 }))
+
+    const error = await failingFetch()
+
+    expect(melde).not.toHaveBeenCalled()
+    expect(error.type).toBe('vorschau-nur-lesend')
   })
 })
 

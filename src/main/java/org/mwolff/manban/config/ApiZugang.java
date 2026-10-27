@@ -63,6 +63,11 @@ final class ApiZugang {
           // Admin-Bereich (inkl. Bootstrap) nur per Session-Login, nicht per PAT.
           // Die Admin-Autorisierung selbst erledigt der AdminService pro Endpunkt.
           new Pfadgruppe(Zugangsart.NUR_SESSION, List.of("/api/admin/**")),
+          // Vorschau „Ansicht als XY“ (Issue #1921, Plan #1914 E11, E12): Beenden und die eigenen
+          // Einträge nur per Session — ein Token hat nie eine Vorschau. Start und Einträge für
+          // Admins liegen unter /api/admin/**.
+          new Pfadgruppe(
+              Zugangsart.NUR_SESSION, List.of("/api/vorschau", "/api/me/vorschau-protokoll")),
           // Die API-Beschreibung (Plan #1400, E1): für jeden Angemeldeten, aber nur per Session —
           // der Fachplan unterscheidet die Anmeldung ausdrücklich vom Projekt-Token.
           new Pfadgruppe(Zugangsart.NUR_SESSION, List.of("/api/openapi", "/api/openapi.yaml")),

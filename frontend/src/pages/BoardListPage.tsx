@@ -17,7 +17,7 @@ import CheckBoxOutlineBlankOutlinedIcon from '@mui/icons-material/CheckBoxOutlin
 import CheckBoxOutlinedIcon from '@mui/icons-material/CheckBoxOutlined'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import RestoreOutlinedIcon from '@mui/icons-material/RestoreOutlined'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { useParams } from 'react-router-dom'
 import { boardsApi, type Board } from '../api/boards'
 import { Breadcrumbs } from '../components/Breadcrumbs'
@@ -38,6 +38,8 @@ import { clampExcerptWidth, EXCERPT_DEFAULT_PCT, stripMarkdown } from '../lib/li
 import { nextSortState, sortCards, type ColumnKey, type SortState } from '../lib/listSort'
 import { useBoardEvents } from '../lib/useBoardEvents'
 import { useBoardRole } from '../lib/useBoardRole'
+import { useAuth } from '../auth/AuthContext'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { useProjectName } from '../lib/useProjectName'
 import { useTabletQuer } from '../lib/tabletQuer'
 import { useFingerZiehen, type FingerZiehen, type FingerZiel } from '../lib/useFingerZiehen'
@@ -285,6 +287,17 @@ function GruppenKopf({ epic, zahl }: Readonly<{ epic: Epic | null; zahl: number 
   )
 }
 
+/**
+ * Wiederherstellen einer archivierten Zeile: außerhalb der Vorschau mit seinem Tooltip, in der
+ * „Ansicht als XY“ gesperrt mit dem Hinweis „Vorschau“ an dessen Stelle (Plan #1914, E15).
+ */
+function WiederherstellenTaste({ titel, vorschau, children }: Readonly<{ titel: string; vorschau: boolean; children: ReactElement }>) {
+  if (vorschau) {
+    return <VorschauGesperrt>{children}</VorschauGesperrt>
+  }
+  return <Tooltip title={titel}>{children}</Tooltip>
+}
+
 export function BoardListPage() {
   const { sprache } = useSprache()
   const t = useT()
@@ -461,6 +474,7 @@ export function BoardListPage() {
     key === 'excerpt' ? { ...COLUMN_META.excerpt.sx, flex: `0 0 ${excerptWidth}%` } : COLUMN_META[key].sx
 
   const { canEdit, canModerate } = useBoardRole(board)
+  const { vorschau } = useAuth()
   const projectName = useProjectName(board?.projectId ?? null)
 
   const columns = useMemo(() => [...(board?.columns ?? [])].sort((a, b) => a.position - b.position), [board])
@@ -534,6 +548,8 @@ export function BoardListPage() {
   // landete die Karte woanders als dort, wohin gezogen wurde.
   const activeColumns = columns.filter((c) => activeFilters.has(c.id))
   const sortable = canEdit && !archiveActive && activeColumns.length === 1 && sort === null && gruppierung === 'keine'
+  // In der „Ansicht als XY“ verschiebt Ziehen nichts (Plan #1914, E15): kein Griff, keine Ablage.
+  const ziehbar = sortable && vorschau === null
 
   const gruppierungWaehlen = (wert: Gruppierung) => {
     setGruppierung(wert)
@@ -558,7 +574,7 @@ export function BoardListPage() {
   // alle sichtbaren Karten in derselben, nicht-archivierten Spalte — die frühere Spalten-/Archiv-
   // Prüfung ist damit redundant; es bleibt: ein laufender Drag, nicht auf sich selbst.
   const validRowDrop = (target: Card): boolean =>
-    sortable && rowDrag !== null && rowDrag !== target.id
+    ziehbar && rowDrag !== null && rowDrag !== target.id
 
   const tabletQuer = useTabletQuer()
 
@@ -578,7 +594,7 @@ export function BoardListPage() {
   // Zeilen per Finger, unter derselben Bedingung wie per Maus (`sortable`): genau eine Spalte, alle
   // angezeigten Zeilen liegen darin. Der Hook zählt die Stelle unter den angezeigten Zeilen; ein
   // Filter kann Karten verdecken, die der Server mitzählt.
-  const zeilenGriff = tabletQuer && sortable
+  const zeilenGriff = tabletQuer && ziehbar
   const zeilenZug = useFingerZiehen({
     aktiv: zeilenGriff,
     onAblage: (zeilenId: string, ziel: FingerZiel) => {
@@ -890,7 +906,7 @@ export function BoardListPage() {
               role="button"
               tabIndex={0}
               aria-label={t.LISTE.DETAIL_OEFFNEN(card.title)}
-              draggable={sortable && !tabletQuer}
+              draggable={ziehbar && !tabletQuer}
               {...zeilenZug.griff(String(card.id))}
               data-karte-id={nurImTablet(zeilenGriff, card.id)}
               onDragStart={(e) => {
@@ -933,7 +949,7 @@ export function BoardListPage() {
                 ...(zeilenGriff ? FINGER_GRIFF_SX : {}),
               }}
             >
-              {sortable && (
+              {ziehbar && (
                 <DragIndicatorIcon
                   fontSize="small"
                   aria-label={t.LISTE.REIHENFOLGE_AENDERN}
@@ -946,7 +962,7 @@ export function BoardListPage() {
                 </Box>
               ))}
               {canEdit && card.archived && (
-                <Tooltip title={t.ALLGEMEIN.WIEDERHERSTELLEN}>
+                <WiederherstellenTaste titel={t.ALLGEMEIN.WIEDERHERSTELLEN} vorschau={vorschau !== null}>
                   <IconButton
                     size="small"
                     aria-label={t.LISTE.KARTE_WIEDERHERSTELLEN(card.title)}
@@ -958,7 +974,7 @@ export function BoardListPage() {
                   >
                     <RestoreOutlinedIcon fontSize="small" />
                   </IconButton>
-                </Tooltip>
+                </WiederherstellenTaste>
               )}
             </Box>
             )),

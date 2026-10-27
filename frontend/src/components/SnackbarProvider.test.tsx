@@ -5,6 +5,7 @@ import { cssRegel } from '../test/cssRegel'
 import { theme } from '../theme'
 import { SnackbarProvider, useSnackbar } from './SnackbarProvider'
 import { renderMitSprache } from '../i18n/renderMitSprache'
+import { apiFetch } from '../api/client'
 
 function Harness() {
   const notify = useSnackbar()
@@ -147,5 +148,54 @@ describe('SnackbarProvider auf Englisch', () => {
 
     act(() => vi.advanceTimersByTime(3000))
     expect(screen.getByText('Fehler')).toBeInTheDocument()
+  })
+})
+
+describe('SnackbarProvider – Netz der Vorschau (Plan #1914, E15)', () => {
+  function mockNurLesend() {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      text: () => Promise.resolve(JSON.stringify({ type: 'vorschau-nur-lesend', status: 403 })),
+    } as Response)
+  }
+
+  beforeEach(() => vi.useRealTimers())
+  afterEach(() => vi.restoreAllMocks())
+
+  it('meldet „Vorschau – nur lesend“, wenn der Server einen Änderungsaufruf abweist', async () => {
+    mockNurLesend()
+    renderProvider()
+
+    await act(() => apiFetch('/api/cards/1', { method: 'PATCH' }).catch(() => undefined))
+
+    const meldung = await screen.findByRole('alert')
+    expect(meldung).toHaveTextContent('Vorschau – nur lesend')
+    expect(meldung).toHaveClass('MuiAlert-filledWarning')
+  })
+
+  it('meldet auf Englisch „Preview – read only“', async () => {
+    mockNurLesend()
+    renderMitSprache(
+      <SnackbarProvider>
+        <Harness />
+      </SnackbarProvider>,
+      'en',
+    )
+
+    await act(() => apiFetch('/api/cards/1', { method: 'PATCH' }).catch(() => undefined))
+
+    expect(await screen.findByText('Preview – read only')).toBeInTheDocument()
+  })
+
+  it('meldet nach dem Unmount nichts mehr', async () => {
+    mockNurLesend()
+    const { unmount } = renderProvider()
+    unmount()
+
+    await apiFetch('/api/cards/1', { method: 'PATCH' }).catch(() => undefined)
+
+    expect(screen.queryByText('Vorschau – nur lesend')).not.toBeInTheDocument()
   })
 })

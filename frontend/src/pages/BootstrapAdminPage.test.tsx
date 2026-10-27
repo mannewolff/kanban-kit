@@ -18,6 +18,8 @@ function makeApi(bootstrap: AdminApi['bootstrap']): AdminApi {
     disable: vi.fn(),
     enable: vi.fn(),
     listOverloadRejections: vi.fn(),
+    vorschauStarten: vi.fn(),
+    vorschauProtokoll: vi.fn(),
     bootstrap,
   }
 }

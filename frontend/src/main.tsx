@@ -25,9 +25,12 @@ if (!container) {
   throw new Error('Root-Element #root nicht gefunden')
 }
 
+// Farbmodus (#1911): Vorgabe „System"; MUI setzt `data-mb-farbschema` an `<html>` vor dem ersten
+// Malen (Layout-Effekt). Nichts wird im Browser gespeichert — die Wahl liegt am Konto und kommt
+// über den AuthContext, vor der Anmeldung gilt das System.
 createRoot(container).render(
   <StrictMode>
-    <ThemeProvider theme={theme}>
+    <ThemeProvider theme={theme} defaultMode="system" storageManager={null} noSsr>
       <CssBaseline />
       <BrowserRouter>
         <SpracheProvider>

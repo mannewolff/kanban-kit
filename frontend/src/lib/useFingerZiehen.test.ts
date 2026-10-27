@@ -5,6 +5,10 @@ import { SCHATTEN_HOCH } from '../theme'
 import { HALTEZEIT_MS, RAND_SCROLL_MAX_PX } from './fingerZiehen'
 import { useFingerZiehen, type FingerZiel } from './useFingerZiehen'
 
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+
 // jsdom kennt weder `PointerEvent` noch `elementFromPoint` (Plan #1707, E13): Die Attrappe trägt
 // `pointerId` und `pointerType`, `fireEvent` greift über `window.PointerEvent` auf sie zu.
 class PointerEventAttrappe extends MouseEvent {
@@ -97,6 +101,7 @@ function anzeigen(onAblage = vi.fn<(id: string, ziel: FingerZiel) => void>(), ak
 }
 
 beforeEach(() => {
+  auth.vorschau = null
   vi.useFakeTimers({
     toFake: ['setTimeout', 'clearTimeout', 'Date', 'requestAnimationFrame', 'cancelAnimationFrame'],
   })
@@ -480,5 +485,36 @@ describe('useFingerZiehen — Rand-Scroll', () => {
     expect(flaeche.scrollLeft).toBe(0)
     expect(flaeche.scrollTop).toBe(0)
     expect(document.documentElement.scrollTop).toBe(0)
+  })
+})
+
+describe('useFingerZiehen — Ansicht als XY (Issue #1926)', () => {
+  it('startet in der Vorschau kein Ziehen und legt nichts ab', () => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    const { result, onAblage } = anzeigen()
+
+    expect(result.current.griff('1')).toEqual({})
+    greifen(result.current.griff('1').onPointerDown)
+    warten(HALTEZEIT_MS)
+    unterFinger = doing
+    bewegen(60, 300)
+    loslassen()
+
+    expect(result.current.zustand).toBe('bereit')
+    expect(kopie()).toBeNull()
+    expect(onAblage).not.toHaveBeenCalled()
+  })
+
+  it('bricht einen laufenden Zug ab, sobald die Vorschau beginnt', () => {
+    const { result, rerender, onAblage } = anzeigen()
+    greifen(result.current.griff('1').onPointerDown)
+    warten(HALTEZEIT_MS)
+    expect(result.current.zustand).toBe('zieht')
+
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    rerender({ aktiv: true, onAblage })
+
+    expect(result.current.zustand).toBe('abgebrochen')
+    expect(kopie()).toBeNull()
   })
 })

@@ -110,7 +110,8 @@ class KanbanCompatServiceTest {
         List.of(),
         null,
         status,
-        true);
+        true,
+        null);
   }
 
   /** Die angelegte Karte, wie sie seit Issue #1203 zurückkommt: mit Board, Spalte und Nummer. */
@@ -135,7 +136,8 @@ class KanbanCompatServiceTest {
         List.of(),
         null,
         null,
-        false);
+        false,
+        null);
   }
 
   @BeforeEach

@@ -68,6 +68,7 @@ class AppUserRepositoryAdapter implements AppUserRepository {
         e.getPlatformRole(),
         e.getApprovedAt(),
         e.getApprovedBy(),
-        e.getDisabledAt());
+        e.getDisabledAt(),
+        e.getColorScheme());
   }
 }

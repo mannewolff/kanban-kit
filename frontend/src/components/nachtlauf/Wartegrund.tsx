@@ -2,7 +2,7 @@ import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import Typography from '@mui/material/Typography'
 import { useEffect, useState } from 'react'
-import { ApiError, apiErrorMessage } from '../../api/client'
+import { ApiError, apiErrorMessage, istVorschauVerborgen } from '../../api/client'
 import {
   nightRunsApi,
   type NightRunsApi,
@@ -16,11 +16,13 @@ import { useSprache, useT } from '../../i18n/SpracheContext'
 import type { Sprache } from '../../i18n/woerterbuch'
 import { tagZeit } from '../../lib/leitstand'
 import { stufenname, verstummtSatz } from '../../lib/runnerJetzt'
+import { VorschauVerborgenHinweis } from '../VorschauVerborgenHinweis'
 
 type Ladung =
   | { art: 'laden' }
   | { art: 'geladen'; gruende: Wartegruende }
   | { art: 'verborgen' }
+  | { art: 'vorschauVerborgen' }
   | { art: 'fehler'; meldung: string }
 
 /** Der Satz eines Grundes aus den Läufen (Plan #1724 E8); „verstummt“ über `RUNNER_JETZT.VERSTUMMT`. */
@@ -81,7 +83,8 @@ function vermerkSatz(t: Woerterbuch['WARTEGRUND'], sprache: Sprache, v: Wartegru
  *
  * <p>Geladen wird für jede Karte; ob sie in Ready steht, entscheidet der Server (E12). Bei 403
  * (kein Leserecht) und 404 (nicht in Ready) erscheint nichts, auch kein leerer Rahmen; ein anderer
- * Ladefehler steht im Abschnitt.
+ * Ladefehler steht im Abschnitt. In der „Ansicht als XY“ steht bei `403 vorschau-verborgen` der
+ * Hinweis im Abschnitt (Plan #1914, E16).
  */
 export function Wartegrund({
   cardId,
@@ -115,6 +118,7 @@ export function Wartegrund({
           {t.TITEL}
         </Typography>
         {ladung.art === 'fehler' && <Typography color="text.secondary">{t.LADEFEHLER(ladung.meldung)}</Typography>}
+        {ladung.art === 'vorschauVerborgen' && <VorschauVerborgenHinweis />}
         {ladung.art === 'geladen' && (
           <>
             {ladung.gruende.startable && <Typography variant="body2">{t.STARTBEREIT}</Typography>}
@@ -143,6 +147,14 @@ export function Wartegrund({
   )
 }
 
+/** Der Zustand nach einem gescheiterten Abruf: Hinweis in der Vorschau, still bei 403 und 404, sonst die Meldung. */
+function fehlerLadung(error: unknown, fallback: string): Ladung {
+  if (istVorschauVerborgen(error)) return { art: 'vorschauVerborgen' }
+  return error instanceof ApiError && (error.status === 403 || error.status === 404)
+    ? { art: 'verborgen' }
+    : { art: 'fehler', meldung: apiErrorMessage(error, fallback) }
+}
+
 /** Lädt den Wartegrund einmal je Karte; eine Antwort nach dem Schließen verfällt. */
 function useWartegrund(api: Pick<NightRunsApi, 'wartegrund'>, cardId: number, fallback: string): Ladung {
   const [ladung, setLadung] = useState<Ladung>({ art: 'laden' })
@@ -154,11 +166,7 @@ function useWartegrund(api: Pick<NightRunsApi, 'wartegrund'>, cardId: number, fa
       },
       (error: unknown) => {
         if (!aktiv) return
-        setLadung(
-          error instanceof ApiError && (error.status === 403 || error.status === 404)
-            ? { art: 'verborgen' }
-            : { art: 'fehler', meldung: apiErrorMessage(error, fallback) },
-        )
+        setLadung(fehlerLadung(error, fallback))
       },
     )
     return () => {

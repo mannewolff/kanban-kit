@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, test, vi } from 'vitest'
+import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 import type { Card } from '../../api/cards'
 import type { KitNamenZustand } from '../../api/kitNamen'
 import { de } from '../../i18n/de'
@@ -12,6 +12,13 @@ import { ErklaerungOffenProvider } from '../Erklaerung'
 import { BoardKarte } from './BoardKarte'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Fall ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+beforeEach(() => {
+  auth.vorschau = null
+})
+
 vi.mock('../../api/kitNamen', async (original) => ({
   ...(await original<typeof import('../../api/kitNamen')>()),
   useKitNamen: (): KitNamenZustand => ({ status: 'fertig', daten: KIT_NAMEN }),
@@ -21,7 +28,7 @@ const card: Card = {
   id: 100, boardId: 1, columnId: 10, number: 1, title: 'Aufgabe', description: null, excerpt: null,
   positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
   type: 'CARD', parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [],
-  derivedFrom: null, status: null, canSetStatus: false,
+  derivedFrom: null, status: null, canSetStatus: false, herkunft: null,
 }
 
 const zeigen = (over: { selectionMode: boolean; selected: boolean; canEdit: boolean }) =>
@@ -45,6 +52,14 @@ describe('BoardKarte — Ziehbarkeit (#1324)', () => {
     zeigen({ selectionMode, selected, canEdit })
 
     expect(screen.getByTestId('card-100')).toHaveAttribute('draggable', String(ziehbar))
+  })
+
+  it('ist in der Ansicht als XY nicht ziehbar, bleibt aber anklickbar (Issue #1926)', () => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    zeigen({ selectionMode: false, selected: false, canEdit: true })
+
+    expect(screen.getByTestId('card-100')).toHaveAttribute('draggable', 'false')
+    expect(screen.getByRole('button', { name: 'Aufgabe' })).toBeEnabled()
   })
 
   it('zeigt im Auswahlmodus kein ⋮-Menü, auch nicht an einer ziehbaren Karte', () => {
@@ -287,5 +302,39 @@ describe('BoardKarte — Erklärung der Systemlabels (#1672)', () => {
 
     expect(label('kit:clarify')).toHaveFocus()
     expect(onOpen).not.toHaveBeenCalled()
+  })
+})
+
+describe('BoardKarte — Herkunft an der Nummer (Issue #1930)', () => {
+  const zeigenMitHerkunft = (herkunft: Card['herkunft']) => {
+    const onOpen = vi.fn()
+    renderMitSprache(
+      <BoardKarte
+        card={{ ...card, herkunft }} epic={undefined} done={false} spaltenname="Backlog" dichte="normal" bewegt={false}
+        members={[]} boardLabels={[]} retentionDays={30} selectionMode={false} selected={false} canEdit
+        onDragStart={vi.fn()} onDragEnd={vi.fn()} onSelect={vi.fn()} onOpen={onOpen} onMenu={vi.fn()}
+      />,
+      'de',
+    )
+    return onOpen
+  }
+
+  it('trägt an der Nummer die Herkunft als Hinweis, und ein Klick darauf öffnet die Karte', async () => {
+    const onOpen = zeigenMitHerkunft([{ number: 7, title: '[Plan] P', archived: false, luecke: null }])
+
+    await userEvent.hover(screen.getByText('#1'))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('#7 · [Plan] P')
+    expect(screen.getByText('#1')).toHaveAttribute('tabindex', '0')
+    await userEvent.click(screen.getByText('#1'))
+    expect(onOpen).toHaveBeenCalledTimes(1)
+  })
+
+  it('zeigt „Ohne Herkunft“ an einer Karte ohne Vorfahren', async () => {
+    zeigenMitHerkunft([])
+
+    await userEvent.hover(screen.getByText('#1'))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(de.BOARD.HERKUNFT_KEINE)
   })
 })

@@ -13,7 +13,7 @@ import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { membersApi as defaultMembersApi, type Member, type MembersApi } from '../api/members'
 import { Breadcrumbs } from '../components/Breadcrumbs'
@@ -24,9 +24,21 @@ import { useAuth } from '../auth/AuthContext'
 import { useEditMode } from '../lib/EditModeContext'
 import { canManageMembers, type ProjectRole } from '../lib/roles'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { useT } from '../i18n/SpracheContext'
 
 const ROLES: ProjectRole[] = ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']
+
+/**
+ * Stift zum Namen: außerhalb der Vorschau mit seinem Tooltip, in der „Ansicht als XY“ gesperrt mit dem
+ * Hinweis „Vorschau“ an dessen Stelle (Plan #1914, E15) — zwei Tooltips übereinander verdeckten sich.
+ */
+function NamenTaste({ titel, vorschau, children }: Readonly<{ titel: string; vorschau: boolean; children: ReactElement }>) {
+  if (vorschau) {
+    return <VorschauGesperrt>{children}</VorschauGesperrt>
+  }
+  return <Tooltip title={titel}>{children}</Tooltip>
+}
 
 interface Props {
   api?: MembersApi
@@ -37,7 +49,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
   const { projectId } = useParams()
   const id = Number.parseInt(projectId ?? '', 10)
   const validId = Number.isInteger(id) && id > 0
-  const { user } = useAuth()
+  const { user, vorschau } = useAuth()
   const notify = useSnackbar()
   const t = useT()
   const [members, setMembers] = useState<Member[]>([])
@@ -208,7 +220,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
       <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
         {member.displayName}
         {manage && editMode && (
-          <Tooltip title={t.MITGLIEDER.NAME_AENDERN_HINWEIS}>
+          <NamenTaste titel={t.MITGLIEDER.NAME_AENDERN_HINWEIS} vorschau={vorschau !== null}>
             <IconButton
               size="small"
               aria-label={t.MITGLIEDER.NAMEN_BEARBEITEN(member.displayName)}
@@ -216,29 +228,34 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
             >
               <EditIcon fontSize="inherit" />
             </IconButton>
-          </Tooltip>
+          </NamenTaste>
         )}
       </Box>
     )
 
   const roleCell = (member: Member) =>
     manage ? (
-      <TextField
-        select
-        size="small"
-        value={member.role}
-        variant="standard"
-        disabled={isLastOwner(member)}
-        sx={{ minWidth: 110 }}
-        onChange={(e) => handleChangeRole(member, e.target.value as ProjectRole)}
-        slotProps={{ htmlInput: { 'aria-label': t.MITGLIEDER.ROLLE_VON(member.displayName) } }}
-      >
-        {ROLES.map((r) => (
-          <MenuItem key={r} value={r}>
-            {r}
-          </MenuItem>
-        ))}
-      </TextField>
+      // Das Feld trägt seinen Namen am Eingabeelement; dort steht in der Vorschau der Hinweis.
+      <VorschauGesperrt>
+        <TextField
+          select
+          size="small"
+          value={member.role}
+          variant="standard"
+          disabled={isLastOwner(member)}
+          sx={{ minWidth: 110 }}
+          onChange={(e) => handleChangeRole(member, e.target.value as ProjectRole)}
+          slotProps={{
+            htmlInput: { 'aria-label': vorschau ? t.VORSCHAU.GESPERRT : t.MITGLIEDER.ROLLE_VON(member.displayName) },
+          }}
+        >
+          {ROLES.map((r) => (
+            <MenuItem key={r} value={r}>
+              {r}
+            </MenuItem>
+          ))}
+        </TextField>
+      </VorschauGesperrt>
     ) : (
       member.role
     )
@@ -246,24 +263,28 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
   const actionsCell = (member: Member) => (
     <>
       {isOwner && member.userId !== user?.userId && (
+        <VorschauGesperrt>
+          <Button
+            size="small"
+            sx={{ mr: 1 }}
+            aria-label={t.MITGLIEDER.ZUM_EIGENTUEMER_ARIA(member.displayName)}
+            onClick={() => setTransferTarget(member)}
+          >
+            {t.MITGLIEDER.ZUM_EIGENTUEMER}
+          </Button>
+        </VorschauGesperrt>
+      )}
+      <VorschauGesperrt>
         <Button
           size="small"
-          sx={{ mr: 1 }}
-          aria-label={t.MITGLIEDER.ZUM_EIGENTUEMER_ARIA(member.displayName)}
-          onClick={() => setTransferTarget(member)}
+          color="error"
+          disabled={isLastOwner(member)}
+          aria-label={t.MITGLIEDER.ENTFERNEN_ARIA(member.displayName)}
+          onClick={() => handleRemove(member)}
         >
-          {t.MITGLIEDER.ZUM_EIGENTUEMER}
+          {t.ALLGEMEIN.ENTFERNEN}
         </Button>
-      )}
-      <Button
-        size="small"
-        color="error"
-        disabled={isLastOwner(member)}
-        aria-label={t.MITGLIEDER.ENTFERNEN_ARIA(member.displayName)}
-        onClick={() => handleRemove(member)}
-      >
-        {t.ALLGEMEIN.ENTFERNEN}
-      </Button>
+      </VorschauGesperrt>
     </>
   )
 
@@ -301,9 +322,11 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
               slotProps={{ htmlInput: { 'aria-label': t.MITGLIEDER.EINLADUNGSROLLE } }}>
               {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
             </TextField>
-            <Button type="submit" variant="contained" disabled={inviting || !inviteEmail.trim()}>
-              {t.MITGLIEDER.EINLADEN}
-            </Button>
+            <VorschauGesperrt>
+              <Button type="submit" variant="contained" disabled={inviting || !inviteEmail.trim()}>
+                {t.MITGLIEDER.EINLADEN}
+              </Button>
+            </VorschauGesperrt>
           </Stack>
         </Box>
       )}

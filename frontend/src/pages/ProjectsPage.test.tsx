@@ -41,7 +41,10 @@ vi.mock('../api/projects', () => ({
 }))
 
 let mockUser: { platformRole: string } | null = { platformRole: 'USER' }
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: mockUser }) }))
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+let mockVorschau: null | Record<string, string> = null
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: mockUser, vorschau: mockVorschau }) }))
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
 // Editiermodus gemockt: Bestandstests mit editMode=true (Bleistifte sichtbar); der Editiermodus-
 // aus-Test schaltet editMode.value=false.
 const editMode = vi.hoisted(() => ({ value: true }))
@@ -63,6 +66,7 @@ describe('ProjectsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockUser = { platformRole: 'USER' }
+    mockVorschau = null
     editMode.value = true
     mocked.nextCardNumber.mockResolvedValue({ nextCardNumber: 5 })
     mocked.setNextCardNumber.mockResolvedValue({ nextCardNumber: 13457 })
@@ -735,5 +739,45 @@ describe('ProjectsPage auf Englisch', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Project saved.')).toBeInTheDocument()
+  })
+})
+
+describe('ProjectsPage — Ansicht als XY (Issue #1927)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockUser = { platformRole: 'ADMIN' }
+    mockVorschau = null
+    editMode.value = true
+    mocked.list.mockResolvedValue([{ id: 1, name: 'Meins', role: 'OWNER', createdAt: '' }])
+  })
+
+  it('zeigt Anlegen, Umbenennen und Löschen in der Vorschau gesperrt mit dem Hinweis „Vorschau“', async () => {
+    mockVorschau = vorschau
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    expect(await screen.findByText('Meins')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Anlegen' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Projekt Meins umbenennen')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Projekt Meins löschen')).not.toBeInTheDocument()
+    const knoepfe = screen.getAllByRole('button', { name: 'Vorschau' })
+    expect(knoepfe.map((k) => k.textContent)).toEqual(['Anlegen', '', ''])
+    knoepfe.forEach((k) => {
+      expect(k).toBeDisabled()
+      fireEvent.click(k)
+    })
+    expect(screen.queryByText('Projekt löschen?')).not.toBeInTheDocument()
+    expect(screen.queryByText('Projekt umbenennen')).not.toBeInTheDocument()
+    expect(mocked.create).not.toHaveBeenCalled()
+    expect(mocked.rename).not.toHaveBeenCalled()
+    expect(mocked.remove).not.toHaveBeenCalled()
+  })
+
+  it('lässt Anlegen, Umbenennen und Löschen außerhalb der Vorschau bedienbar', async () => {
+    render(<MemoryRouter><ProjectsPage /></MemoryRouter>)
+
+    expect(await screen.findByRole('button', { name: 'Anlegen' })).toBeEnabled()
+    expect(screen.getByLabelText('Projekt Meins umbenennen')).toBeEnabled()
+    expect(screen.getByLabelText('Projekt Meins löschen')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
   })
 })

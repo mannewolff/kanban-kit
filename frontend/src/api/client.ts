@@ -18,6 +18,8 @@ export class ApiError extends Error {
     message: string,
     public readonly fieldErrors?: FieldErrors,
     public readonly detail?: string,
+    /** Problem-Typ aus dem Antwortkörper (`type`), etwa `vorschau-verborgen` (Plan #1914, E16). */
+    public readonly type?: string,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -45,7 +47,7 @@ export function apiErrorMessage(error: unknown, fallback: string = de.FEHLER_UNB
  * Nur ein hier gefundenes `message` wird zu {@link ApiError.detail} — der Fallback auf
  * den Roh-Body bleibt allein in `message` und wird nie als Server-Meldung ausgegeben.
  */
-function parseProblem(body: string): { message?: string; fieldErrors?: FieldErrors } {
+function parseProblem(body: string): { message?: string; fieldErrors?: FieldErrors; type?: string } {
   let data: unknown
   try {
     data = JSON.parse(body)
@@ -60,6 +62,7 @@ function parseProblem(body: string): { message?: string; fieldErrors?: FieldErro
   return {
     message: firstNonEmptyString(problem.detail, problem.title),
     fieldErrors: toFieldErrors(problem.fieldErrors),
+    type: firstNonEmptyString(problem.type),
   }
 }
 
@@ -98,8 +101,88 @@ export function notifyUnauthorized(status: number): void {
   if (status === 401) unauthorizedHandler?.()
 }
 
+/** Problem-Typ, mit dem der Server eine Anfrage aus einem veralteten Tab abweist (Plan #1914, E8). */
+const VORSCHAU_GEWECHSELT = 'vorschau-gewechselt'
+
+/** Problem-Typ, mit dem der Server einen Änderungsaufruf in der Vorschau abweist (Plan #1914, E15). */
+const VORSCHAU_NUR_LESEND = 'vorschau-nur-lesend'
+
 /**
- * Dünner Fetch-Wrapper. Sendet Cookies mit (Session-Auth), setzt JSON-Header und
+ * Problem-Typ, mit dem der Server in der Vorschau einen Bereich verbirgt, den XY sähe, der Admin
+ * selbst aber nicht sehen darf (Plan #1914, E6).
+ */
+const VORSCHAU_VERBORGEN = 'vorschau-verborgen'
+
+/**
+ * Ob ein Fehler die Abweisung `403 vorschau-verborgen` ist: An der Stelle steht dann der Hinweis
+ * `VorschauVerborgenHinweis` statt des Inhalts, jeder andere 403 bleibt beim bisherigen Verhalten (E16).
+ */
+export function istVorschauVerborgen(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 403 && error.type === VORSCHAU_VERBORGEN
+}
+
+let vorschauKennung: string | null = null
+
+/**
+ * Setzt die Kennung der Vorschau, die dieser Tab zu sehen glaubt; `null` außerhalb einer Vorschau.
+ *
+ * Das Register belegt `AuthContext` aus der Selbstauskunft, und zwar im selben Zug wie den Nutzer:
+ * Die erste Anfrage nach einem Wechsel trägt so schon die neue Kennung.
+ */
+export function setVorschauKennung(kennung: string | null): void {
+  vorschauKennung = kennung
+}
+
+/**
+ * Die Kopfzeile `X-Vorschau` mit der Kennung aus {@link setVorschauKennung} oder `keine` (E8).
+ *
+ * Für die Direktaufrufe an {@link apiFetch} vorbei; weicht sie vom Stand am Server ab, führt der
+ * Server nichts aus und antwortet mit `409 vorschau-gewechselt`.
+ */
+export function vorschauKopf(): Record<string, string> {
+  return { 'X-Vorschau': vorschauKennung ?? 'keine' }
+}
+
+const aufStartseite = () => window.location.assign('/')
+
+let neuLaden: () => void = aufStartseite
+
+/**
+ * Ersetzt das Neuladen bei `409 vorschau-gewechselt`; `null` stellt die Vorgabe wieder her.
+ *
+ * Vorgabe ist `/`, nicht die alte Seite: `StartRedirect` leitet von dort auf die Startseite des
+ * gültigen Stands weiter, die alte Seite gibt es für ihn vielleicht nicht (Plan #1914, E13).
+ */
+export function setNeuLaden(handler: (() => void) | null): void {
+  neuLaden = handler ?? aufStartseite
+}
+
+/**
+ * Lädt auf `/` neu wie nach `409 vorschau-gewechselt` — für den Wechsel, den die Oberfläche selbst
+ * auslöst, etwa „Beenden“ im Balken der Vorschau (Plan #1914, E13).
+ */
+export function startseiteNeuLaden(): void {
+  neuLaden()
+}
+
+let nurLesendHandler: (() => void) | null = null
+
+/**
+ * Registriert die Meldung „Vorschau – nur lesend“ bei `403 vorschau-nur-lesend`; `null` meldet
+ * sie ab. Ein Netz für ein Bedienelement, das in der Vorschau nicht gesperrt wurde (E15).
+ */
+export function setNurLesendHandler(handler: (() => void) | null): void {
+  nurLesendHandler = handler
+}
+
+/** Löst die Folgen der Vorschau-Abweisungen aus: Neuladen bei 409, Meldung bei 403. */
+function folgeDerVorschau(status: number, type: string | undefined): void {
+  if (status === 409 && type === VORSCHAU_GEWECHSELT) neuLaden()
+  if (status === 403 && type === VORSCHAU_NUR_LESEND) nurLesendHandler?.()
+}
+
+/**
+ * Dünner Fetch-Wrapper. Sendet Cookies mit (Session-Auth), setzt JSON-Header und `X-Vorschau` und
  * wirft {@link ApiError} bei nicht-2xx-Antworten. Leere Antworten -> undefined.
  */
 export async function apiFetch<T>(
@@ -107,10 +190,12 @@ export async function apiFetch<T>(
   options: RequestInit = {},
   parse?: (data: unknown) => T,
 ): Promise<T> {
+  // Die Kopfzeilen stehen nach `options`, damit eigene Kopfzeilen des Aufrufers sie ergänzen und nicht
+  // ersetzen; `X-Vorschau` steht zuletzt und lässt sich nicht überschreiben (E8).
   const response = await fetch(path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...options.headers, ...vorschauKopf() },
   })
 
   if (!response.ok) {
@@ -118,11 +203,14 @@ export async function apiFetch<T>(
     const body = await response.text().catch(() => '')
     const problem = parseProblem(body)
     notifyUnauthorized(response.status)
+    folgeDerVorschau(response.status, problem.type)
+    // Auch nach dem Neuladen wirft der Aufruf, damit kein Aufrufer mit leeren Daten weitermacht.
     throw new ApiError(
       response.status,
       problem.message ?? (body || response.statusText),
       problem.fieldErrors,
       problem.message,
+      problem.type,
     )
   }
 

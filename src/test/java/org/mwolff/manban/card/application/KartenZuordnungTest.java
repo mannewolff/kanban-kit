@@ -42,6 +42,10 @@ class KartenZuordnungTest {
   private static final long KARTE = 7L;
   private static final Instant JETZT = Instant.parse("2026-10-15T08:00:00Z");
   private static final Instant LAUF = Instant.parse("2026-10-15T02:00:00Z");
+  private static final long A = 31L;
+  private static final long B = 32L;
+  private static final long C = 33L;
+  private static final long HANDELND = 99L;
   private static final ActorStamp STEMPEL =
       new ActorStamp(TOKEN, "Nachtlauf", "claude-opus-5-5", LAUF);
 
@@ -50,6 +54,7 @@ class KartenZuordnungTest {
   private CardLabelRepository cardLabels;
   private PermissionChecker permissions;
   private CardLabelEventRepository labelEvents;
+  private ZuweisungsBenachrichtigung benachrichtigung;
   private KartenZuordnung zuordnung;
 
   private static Label label(long id, String name, String color, boolean countOnEpicTile) {
@@ -63,6 +68,7 @@ class KartenZuordnungTest {
     cardLabels = mock(CardLabelRepository.class);
     permissions = mock(PermissionChecker.class);
     labelEvents = mock(CardLabelEventRepository.class);
+    benachrichtigung = mock(ZuweisungsBenachrichtigung.class);
     zuordnung =
         new KartenZuordnung(
             assignees,
@@ -71,7 +77,8 @@ class KartenZuordnungTest {
             permissions,
             labelEvents,
             () -> STEMPEL,
-            Clock.fixed(JETZT, ZoneOffset.UTC));
+            Clock.fixed(JETZT, ZoneOffset.UTC),
+            benachrichtigung);
   }
 
   @Test
@@ -110,19 +117,74 @@ class KartenZuordnungTest {
   void ersetzeZustaendigeEntferntDuplikateUndSchreibt() {
     when(permissions.isRealProjectMember(3L, PROJECT)).thenReturn(true);
 
-    zuordnung.ersetzeZustaendige(KARTE, PROJECT, List.of(3L, 3L));
+    zuordnung.ersetzeZustaendige(KARTE, PROJECT, List.of(3L, 3L), HANDELND);
 
     verify(assignees).replaceAssignees(KARTE, List.of(3L));
+  }
+
+  @Test
+  void ersetzeZustaendigeMeldetNurHinzugekommeneOhneDenHandelnden() {
+    // {A} → {A, B, C}, und C handelt: Nur B erfährt davon (Issue #1916).
+    when(permissions.isRealProjectMember(anyLong(), eq(PROJECT))).thenReturn(true);
+    when(assignees.findByCardId(KARTE)).thenReturn(List.of(A));
+
+    zuordnung.ersetzeZustaendige(KARTE, PROJECT, List.of(A, B, C), C);
+
+    verify(assignees).replaceAssignees(KARTE, List.of(A, B, C));
+    verify(benachrichtigung).zugewiesen(KARTE, List.of(B), C);
+  }
+
+  @Test
+  void ersetzeZustaendigeMeldetMehrereHinzugekommeneInEinemAufruf() {
+    when(permissions.isRealProjectMember(anyLong(), eq(PROJECT))).thenReturn(true);
+    when(assignees.findByCardId(KARTE)).thenReturn(List.of());
+
+    zuordnung.ersetzeZustaendige(KARTE, PROJECT, List.of(B, C, B), A);
+
+    verify(benachrichtigung).zugewiesen(KARTE, List.of(B, C), A);
+  }
+
+  @Test
+  void ersetzeZustaendigeRuftDenPortBeimBlossenEntfernenNicht() {
+    // {A, B} → {A}: Wer entfernt wird, bekommt keine Nachricht.
+    when(permissions.isRealProjectMember(anyLong(), eq(PROJECT))).thenReturn(true);
+    when(assignees.findByCardId(KARTE)).thenReturn(List.of(A, B));
+
+    zuordnung.ersetzeZustaendige(KARTE, PROJECT, List.of(A), C);
+
+    verify(assignees).replaceAssignees(KARTE, List.of(A));
+    verifyNoInteractions(benachrichtigung);
+  }
+
+  @Test
+  void ersetzeZustaendigeRuftDenPortBeiUnveraenderterListeNicht() {
+    when(permissions.isRealProjectMember(anyLong(), eq(PROJECT))).thenReturn(true);
+    when(assignees.findByCardId(KARTE)).thenReturn(List.of(A, B));
+
+    zuordnung.ersetzeZustaendige(KARTE, PROJECT, List.of(B, A), C);
+
+    verifyNoInteractions(benachrichtigung);
+  }
+
+  @Test
+  void ersetzeZustaendigeRuftDenPortBeiSelbstzuweisungNicht() {
+    when(permissions.isRealProjectMember(anyLong(), eq(PROJECT))).thenReturn(true);
+    when(assignees.findByCardId(KARTE)).thenReturn(List.of(A));
+
+    zuordnung.ersetzeZustaendige(KARTE, PROJECT, List.of(A, C), C);
+
+    verifyNoInteractions(benachrichtigung);
   }
 
   @Test
   void ersetzeZustaendigeLehntNichtMitgliedAb() {
     when(permissions.isRealProjectMember(3L, PROJECT)).thenReturn(false);
 
-    assertThatThrownBy(() -> zuordnung.ersetzeZustaendige(KARTE, PROJECT, List.of(3L)))
+    assertThatThrownBy(() -> zuordnung.ersetzeZustaendige(KARTE, PROJECT, List.of(3L), HANDELND))
         .isInstanceOf(InvalidAssigneeException.class)
         .hasMessageContaining("3");
     verify(assignees, never()).replaceAssignees(anyLong(), anyList());
+    verifyNoInteractions(benachrichtigung);
   }
 
   @Test

@@ -17,6 +17,7 @@ function card(id: number, columnId: number, position: number, archived = false):
     derivedFrom: null,
     status: null,
     canSetStatus: false,
+    herkunft: null,
   }
 }
 

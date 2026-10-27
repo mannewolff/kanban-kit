@@ -16,6 +16,7 @@ import org.mwolff.manban.common.Identifiable;
  * @param approvedBy ID des freigebenden Plattform-Admins; {@code null} wenn nicht (durch einen
  *     Admin) freigegeben
  * @param disabledAt Zeitpunkt der Sperre; {@code null} = aktiv (nicht gesperrt)
+ * @param colorScheme gewähltes Erscheinungsbild der Oberfläche (Issue #1911)
  */
 public record AppUser(
     @Nullable Long id,
@@ -25,7 +26,8 @@ public record AppUser(
     PlatformRole platformRole,
     @Nullable Instant approvedAt,
     @Nullable Long approvedBy,
-    @Nullable Instant disabledAt)
+    @Nullable Instant disabledAt,
+    ColorScheme colorScheme)
     implements Identifiable {
 
   /**
@@ -47,6 +49,31 @@ public record AppUser(
       boolean emailVerified,
       PlatformRole platformRole) {
     this(id, email, displayName, emailVerified, platformRole, PRE_APPROVED, null, null);
+  }
+
+  /**
+   * Bequem-Konstruktor ohne Farbwahl: erzeugt einen Benutzer mit der Vorgabe {@link
+   * ColorScheme#SYSTEM}.
+   */
+  public AppUser(
+      @Nullable Long id,
+      String email,
+      String displayName,
+      boolean emailVerified,
+      PlatformRole platformRole,
+      @Nullable Instant approvedAt,
+      @Nullable Long approvedBy,
+      @Nullable Instant disabledAt) {
+    this(
+        id,
+        email,
+        displayName,
+        emailVerified,
+        platformRole,
+        approvedAt,
+        approvedBy,
+        disabledAt,
+        ColorScheme.SYSTEM);
   }
 
   /**
@@ -93,29 +120,76 @@ public record AppUser(
   /** Kopie mit gesetztem E-Mail-Verifikations-Status. */
   public AppUser withEmailVerified(boolean verified) {
     return new AppUser(
-        id, email, displayName, verified, platformRole, approvedAt, approvedBy, disabledAt);
+        id,
+        email,
+        displayName,
+        verified,
+        platformRole,
+        approvedAt,
+        approvedBy,
+        disabledAt,
+        colorScheme);
   }
 
   /** Kopie mit neuem Anzeigenamen. */
   public AppUser withDisplayName(String newDisplayName) {
     return new AppUser(
-        id, email, newDisplayName, emailVerified, platformRole, approvedAt, approvedBy, disabledAt);
+        id,
+        email,
+        newDisplayName,
+        emailVerified,
+        platformRole,
+        approvedAt,
+        approvedBy,
+        disabledAt,
+        colorScheme);
   }
 
   /** Kopie mit neuer Plattform-Rolle. */
   public AppUser withPlatformRole(PlatformRole newPlatformRole) {
     return new AppUser(
-        id, email, displayName, emailVerified, newPlatformRole, approvedAt, approvedBy, disabledAt);
+        id,
+        email,
+        displayName,
+        emailVerified,
+        newPlatformRole,
+        approvedAt,
+        approvedBy,
+        disabledAt,
+        colorScheme);
   }
 
   /** Kopie mit gesetzter Freigabe (Zeitpunkt + ID des freigebenden Admins). */
   public AppUser withApproved(Instant when, @Nullable Long by) {
-    return new AppUser(id, email, displayName, emailVerified, platformRole, when, by, disabledAt);
+    return new AppUser(
+        id, email, displayName, emailVerified, platformRole, when, by, disabledAt, colorScheme);
   }
 
   /** Kopie mit gesetzter/aufgehobener Sperre ({@code null} = entsperrt). */
   public AppUser withDisabledAt(@Nullable Instant when) {
     return new AppUser(
-        id, email, displayName, emailVerified, platformRole, approvedAt, approvedBy, when);
+        id,
+        email,
+        displayName,
+        emailVerified,
+        platformRole,
+        approvedAt,
+        approvedBy,
+        when,
+        colorScheme);
+  }
+
+  /** Kopie mit neuer Farbwahl. */
+  public AppUser withColorScheme(ColorScheme newColorScheme) {
+    return new AppUser(
+        id,
+        email,
+        displayName,
+        emailVerified,
+        platformRole,
+        approvedAt,
+        approvedBy,
+        disabledAt,
+        newColorScheme);
   }
 }

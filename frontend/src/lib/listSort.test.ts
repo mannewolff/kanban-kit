@@ -26,6 +26,7 @@ function card(number: number, over: Partial<Card> = {}): Card {
     derivedFrom: null,
     status: null,
     canSetStatus: false,
+    herkunft: null,
     ...over,
   }
 }

@@ -39,7 +39,8 @@ class ProjectCardControllerTest {
         List.of(),
         null,
         null,
-        false);
+        false,
+        null);
   }
 
   @BeforeEach

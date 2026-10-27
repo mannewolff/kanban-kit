@@ -50,6 +50,12 @@ vi.mock('../api/kitNamen', async (original) => {
       kitNamen.geladen ? { status: 'fertig', daten: KIT_NAMEN } : echt.useKitNamen(),
   }
 })
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15): außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
+vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ vorschau: auth.vorschau }) }))
+beforeEach(() => {
+  auth.vorschau = null
+})
 const mColumns = columnsApi as unknown as {
   create: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
@@ -79,6 +85,7 @@ const card: Card = {
   derivedFrom: null,
   status: null,
   canSetStatus: false,
+  herkunft: null,
 }
 
 function mkApi(over: Record<string, unknown> = {}) {
@@ -4652,5 +4659,129 @@ describe('BoardView — Spaltenköpfe bleiben beim Rollen stehen (Issue #1901)',
     render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
 
     expect(screen.getByText(de.BOARD.WAAGERECHT_ROLLEN)).toBeInTheDocument()
+  })
+})
+
+describe('BoardView — Ansicht als XY: Veränderungen sind gesperrt (Issue #1926)', () => {
+  const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+  const nightrun = { id: 9, boardId: 1, name: 'kit:nightrun', color: '#00ff00', countOnEpicTile: false }
+
+  beforeEach(() => {
+    editMode.value = true
+    auth.vorschau = vorschau
+    mCards.bulkTransfer.mockReset()
+    mColumns.remove.mockReset()
+    mColumns.reorder.mockReset()
+    mColumns.sortByNumber.mockReset()
+  })
+
+  afterEach(() => {
+    kitNamen.geladen = false
+  })
+
+  /** Das sichtbare, gesperrte Bedienelement mit dem Namen „Vorschau“ und dem Text `text`. */
+  const gesperrtMitText = (text: string) =>
+    screen.getAllByRole('button', { name: 'Vorschau' }).find((k) => k.textContent === text) ?? null
+
+  function erwarteGesperrt(element: HTMLElement | null) {
+    expect(element).toBeInTheDocument()
+    expect(element).toHaveAccessibleName('Vorschau')
+    if (element?.tagName === 'LABEL') {
+      expect(element).toHaveAttribute('aria-disabled', 'true')
+    } else {
+      expect(element).toBeDisabled()
+    }
+  }
+
+  it('Szenario: Veränderungen sind in der Vorschau gesperrt — Ziehen löst keinen Verschiebe-Aufruf aus', () => {
+    const api = mkApi({ move: vi.fn().mockResolvedValue(undefined) })
+    render(<BoardView board={board} initialCards={[card]} canEdit api={api} />)
+
+    const karte = screen.getByTestId('card-100')
+    expect(karte).toHaveAttribute('draggable', 'false')
+    fireEvent.dragStart(karte, { dataTransfer: { setData: vi.fn() } })
+    dropOnColumn(20, 100)
+
+    expect(api.move).not.toHaveBeenCalled()
+    expect(mCards.bulkTransfer).not.toHaveBeenCalled()
+    expect(within(screen.getByTestId('column-10')).getByTestId('card-100')).toBeInTheDocument()
+  })
+
+  it('sperrt Anlegen, Spezifikation einlesen und neue Spalte mit dem Hinweis „Vorschau“', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    erwarteGesperrt(gesperrtMitText('Neu anlegen'))
+    erwarteGesperrt(gesperrtMitText('Spezifikation einlesen'))
+    expect(screen.getByLabelText('Markdown-Datei auswählen')).toBeDisabled()
+    erwarteGesperrt(gesperrtMitText('Spalte'))
+    // Auswählen ändert nichts und bleibt bedienbar.
+    expect(screen.getByRole('button', { name: 'Auswählen' })).toBeEnabled()
+  })
+
+  it('öffnet mit „+“ keinen Anlage-Dialog', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    fireEvent.keyDown(document.body, { key: '+' })
+
+    expect(screen.queryByRole('heading', { name: 'Neue Karte in „Backlog“' })).not.toBeInTheDocument()
+  })
+
+  it('sperrt Sortieren, Bearbeiten und Löschen im Spaltenkopf und das Ziehen der Spalte', () => {
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    const kopf = screen.getByTestId('column-header-20')
+    expect(kopf).toHaveAttribute('draggable', 'false')
+    const knoepfe = within(kopf).getAllByRole('button', { name: 'Vorschau' })
+    expect(knoepfe).toHaveLength(3)
+    knoepfe.forEach((knopf) => expect(knopf).toBeDisabled())
+    expect(within(kopf).queryByRole('button', { name: 'Spalte Done löschen' })).not.toBeInTheDocument()
+
+    fireEvent.dragStart(kopf)
+    fireEvent.drop(screen.getByTestId('column-header-10'), { dataTransfer: { getData: () => '' } })
+    expect(mColumns.reorder).not.toHaveBeenCalled()
+  })
+
+  it('zeigt im ⋮-Menü jeden verändernden Eintrag gesperrt', () => {
+    const wideBoard: Board = {
+      ...board,
+      columns: [
+        { id: 10, name: 'Backlog', position: 0, wipLimit: null },
+        { id: 20, name: 'Doing', position: 1, wipLimit: null },
+        { id: 30, name: 'Done', position: 2, wipLimit: null },
+      ],
+    }
+    render(<BoardView board={wideBoard} initialCards={[{ ...card, columnId: 20 }]} canEdit canTransfer api={mkApi()} />)
+
+    fireEvent.click(screen.getByLabelText('Menü Aufgabe'))
+
+    const eintraege = screen.getAllByRole('menuitem')
+    expect(eintraege.map((e) => e.textContent)).toEqual([
+      'Bearbeiten', 'Duplizieren', 'Archivieren', 'Verschieben…', 'Nach links verschieben', 'Nach rechts verschieben', 'Löschen',
+    ])
+    eintraege.forEach((eintrag) => {
+      expect(eintrag).toHaveAccessibleName('Vorschau')
+      expect(eintrag).toHaveAttribute('aria-disabled', 'true')
+    })
+  })
+
+  it('sperrt den Knopf kit:nightrun mit dem Hinweis „Vorschau“', () => {
+    kitNamen.geladen = true
+    const readyBoard: Board = { ...board, columns: [{ id: 30, name: 'Ready', position: 0, wipLimit: null }] }
+    render(
+      <BoardView board={readyBoard} initialCards={[{ ...card, columnId: 30 }]} canEdit boardLabels={[nightrun]} api={mkApi()} />,
+    )
+
+    erwarteGesperrt(gesperrtMitText('kit:nightrun'))
+  })
+
+  it('lässt außerhalb der Vorschau alles bedienbar', () => {
+    auth.vorschau = null
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    expect(screen.getByRole('button', { name: 'Neu anlegen' })).toBeEnabled()
+    expect(screen.getByLabelText('Markdown-Datei auswählen')).toBeEnabled()
+    expect(screen.getByTestId('card-100')).toHaveAttribute('draggable', 'true')
+    expect(screen.getByTestId('column-header-20')).toHaveAttribute('draggable', 'true')
+    expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
   })
 })

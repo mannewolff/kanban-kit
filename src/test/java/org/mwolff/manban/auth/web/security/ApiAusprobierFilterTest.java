@@ -34,6 +34,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 class ApiAusprobierFilterTest {
 
   private static final String SESSION = SessionCookieManager.COOKIE_NAME;
+  private static final String VORSCHAU = SessionCookieManager.VORSCHAU_COOKIE_NAME;
   private static final Instant ABLAUF = Instant.parse("2026-11-15T10:00:00Z");
 
   private SessionCookieManager cookies;
@@ -256,6 +257,115 @@ class ApiAusprobierFilterTest {
     assertThat(forwarded.getCookies()).isNull();
     assertThat(forwarded.getHeader("Cookie")).isNull();
     assertThat(Collections.list(forwarded.getHeaders("Cookie"))).isEmpty();
+  }
+
+  private void assertVorschauNurLesend() throws Exception {
+    assertThat(response.getStatus()).isEqualTo(403);
+    assertThat(response.getContentType()).startsWith(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+    assertThat(response.getCharacterEncoding()).isEqualTo("UTF-8");
+    assertThat(response.getContentAsString())
+        .isEqualTo(
+            "{\"type\":\"vorschau-nur-lesend\",\"title\":\"Forbidden\",\"status\":403,"
+                + "\"detail\":\"Die Vorschau ist nur lesend. Ändern ist hier nicht möglich.\"}");
+    verify(chain, never()).doFilter(any(), any());
+  }
+
+  @Test
+  void doFilter_flagInDerVorschauMitSession_rejectsNurLesend() throws Exception {
+    // Given
+    signedInWithFlag(1L, true);
+    request.setCookies(new Cookie(SESSION, "good"), new Cookie(VORSCHAU, "k.g"));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertVorschauNurLesend();
+  }
+
+  @Test
+  void doFilter_flagInDerVorschauMitProjektToken_rejectsVorDemEntfernenDesCookies()
+      throws Exception {
+    // Given
+    signedInWithFlag(1L, true);
+    request.addHeader(ApiAusprobierFilter.PROJEKT_TOKEN_HEADER, "pat-123");
+    request.setCookies(new Cookie(SESSION, "good"), new Cookie(VORSCHAU, "k.g"));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertVorschauNurLesend();
+  }
+
+  @Test
+  void doFilter_flagInDerVorschauLesend_rejectsNurLesend() throws Exception {
+    // Given
+    request = new MockHttpServletRequest("GET", "/api/projects");
+    signedInWithFlag(1L, true);
+    request.setCookies(new Cookie(SESSION, "good"), new Cookie(VORSCHAU, "k.g"));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertVorschauNurLesend();
+  }
+
+  @Test
+  void doFilter_flagInDerVorschauLesendMitProjektToken_rejectsNurLesend() throws Exception {
+    // Given
+    request = new MockHttpServletRequest("GET", "/api/kanban/items");
+    signedInWithFlag(1L, true);
+    request.addHeader(ApiAusprobierFilter.PROJEKT_TOKEN_HEADER, "pat-123");
+    request.setCookies(new Cookie(VORSCHAU, "k.g"), new Cookie(SESSION, "good"));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertVorschauNurLesend();
+  }
+
+  @Test
+  void doFilter_flagMitVorschauCookieOhneSession_rejectsOhneSessionPruefung() throws Exception {
+    // Given
+    request.addHeader(ApiAusprobierFilter.HEADER, "1");
+    request.setCookies(new Cookie(VORSCHAU, "k.g"));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertVorschauNurLesend();
+    verifyNoInteractions(cookies, tokens, admins);
+  }
+
+  @Test
+  void doFilter_vorschauCookieOhneFlag_passesSameRequestUnchanged() throws Exception {
+    // Given
+    request.setCookies(new Cookie(SESSION, "good"), new Cookie(VORSCHAU, "k.g"));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    verify(chain).doFilter(request, response);
+    assertThat(response.getStatus()).isEqualTo(200);
+  }
+
+  @Test
+  void doFilter_flagMitAnderemCookie_bleibtBeimBisherigenVerhalten() throws Exception {
+    // Given
+    signedInWithFlag(1L, true);
+    request.setCookies(new Cookie(SESSION, "good"), new Cookie("theme", "dark"));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    verify(chain).doFilter(request, response);
+    assertThat(response.getStatus()).isEqualTo(200);
   }
 
   @Test

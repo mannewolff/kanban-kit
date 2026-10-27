@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { boardsApi } from '../api/boards'
@@ -16,8 +16,13 @@ import { renderMitSprache } from '../i18n/renderMitSprache'
 let memberships: { projectId: number; role: string }[] = []
 let platformRole = 'USER'
 let angemeldet = true
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+let vorschau: null | Record<string, string> = null
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ user: angemeldet ? { userId: 1, email: 'a@b.c', displayName: 'A', platformRole, memberships } : null }),
+  useAuth: () => ({
+    user: angemeldet ? { userId: 1, email: 'a@b.c', displayName: 'A', platformRole, memberships } : null,
+    vorschau,
+  }),
 }))
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn(), rename: vi.fn(), list: vi.fn() } }))
 vi.mock('../api/cards', () => ({
@@ -43,6 +48,7 @@ vi.mock('../api/cards', () => ({
     listTrash: vi.fn().mockResolvedValue([]),
     restoreDeleted: vi.fn(),
     purge: vi.fn(),
+    byNumber: vi.fn(),
   },
 }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn(), assign: vi.fn(), create: vi.fn() } }))
@@ -65,6 +71,7 @@ vi.mock('../lib/EditModeContext', () => ({
 beforeEach(() => {
   editMode.value = true
   platformRole = 'USER'
+  vorschau = null
 })
 
 const mockedBoards = boardsApi as unknown as {
@@ -998,5 +1005,122 @@ describe('BoardPage auf Englisch', () => {
     zeigeEn()
 
     expect(await screen.findByText('Board not found.')).toBeInTheDocument()
+  })
+})
+
+describe('BoardPage öffnet die Karte aus ?karte= (Issue #1915)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const karte = (id: number, number: number, title: string, boardId = 1) => ({
+    id, boardId, columnId: 10, number, title, description: null,
+    positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [],
+    type: 'CARD' as const, parentId: null, shortcode: null, assignees: [], dueDate: null, labels: [], status: null, canSetStatus: false,
+  })
+
+  function Adresse() {
+    const { search } = useLocation()
+    return <div data-testid="adresse">{search}</div>
+  }
+
+  function renderMit(entry: string, cards: unknown[]) {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    mockedBoards.get.mockResolvedValue({
+      id: 1, projectId: 9, name: 'B', createdAt: '',
+      columns: [{ id: 10, name: 'Backlog', position: 0, wipLimit: null }],
+    })
+    mockedCards.list.mockResolvedValue(cards)
+    mockedEpics.list.mockResolvedValue([])
+    mockedLabels.list.mockResolvedValue([])
+    mockedMembers.list.mockResolvedValue([])
+    mockedConfig.get.mockResolvedValue({ doneRetentionDays: 30 })
+    mockedProjects.list.mockResolvedValue([{ id: 9, name: 'P', role: 'OWNER', createdAt: '' }])
+    return render(
+      <SnackbarProvider>
+        <MemoryRouter initialEntries={[entry]}>
+          <Routes>
+            <Route path="/boards/:boardId" element={<><BoardPage /><Adresse /></>} />
+          </Routes>
+        </MemoryRouter>
+      </SnackbarProvider>,
+    )
+  }
+
+  it('öffnet den Dialog der Karte vom selben Board, ohne nachzuladen', async () => {
+    renderMit('/boards/1?karte=7', [karte(100, 7, 'Sieben')])
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByText('Sieben').length).toBeGreaterThan(0)
+    expect(mockedCardsByNumber).not.toHaveBeenCalled()
+  })
+
+  it('lädt eine Karte von einem anderen Board über die Nummer und öffnet ihren Dialog', async () => {
+    mockedCardsByNumber.mockResolvedValue(karte(200, 12, 'Woanders', 2))
+    renderMit('/boards/1?karte=12', [karte(100, 7, 'Sieben')])
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByText('Woanders').length).toBeGreaterThan(0)
+    expect(mockedCardsByNumber).toHaveBeenCalledWith(9, 12)
+  })
+
+  it('entfernt karte beim Schließen aus der Adresse und behält andere Parameter', async () => {
+    renderMit('/boards/1?x=1&karte=7', [karte(100, 7, 'Sieben')])
+
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Schließen' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByTestId('adresse')).toHaveTextContent(/^\?x=1$/)
+  })
+
+  it('lässt die Adresse beim Schließen einer per Klick geöffneten Karte unverändert', async () => {
+    renderMit('/boards/1?x=1', [karte(100, 7, 'Sieben')])
+
+    fireEvent.click(await screen.findByTestId('card-100'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Schließen' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByTestId('adresse')).toHaveTextContent(/^\?x=1$/)
+  })
+
+  it('öffnet nichts bei einem nicht numerischen Parameter', async () => {
+    renderMit('/boards/1?karte=abc', [karte(100, 7, 'Sieben')])
+
+    expect(await screen.findByTestId('card-100')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(mockedCardsByNumber).not.toHaveBeenCalled()
+  })
+
+  it('öffnet nichts, wenn die Nummer nicht auflösbar ist', async () => {
+    mockedCardsByNumber.mockRejectedValue(new ApiError(404, 'weg'))
+    renderMit('/boards/1?karte=99', [karte(100, 7, 'Sieben')])
+
+    await waitFor(() => expect(mockedCardsByNumber).toHaveBeenCalledWith(9, 99))
+    await act(async () => { await Promise.resolve() })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+const mockedCardsByNumber = (cardsApi as unknown as { byNumber: ReturnType<typeof vi.fn> }).byNumber
+
+describe('BoardPage — Ansicht als XY (Issue #1926)', () => {
+  beforeEach(() => {
+    memberships = [{ projectId: 9, role: 'OWNER' }]
+    vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    mockedBoards.rename.mockReset()
+  })
+
+  it('zeigt Board umbenennen gesperrt mit dem Hinweis „Vorschau“; Labels und Papierkorb öffnen zum Lesen', async () => {
+    renderPage()
+    expect(await screen.findByText('B')).toBeInTheDocument()
+
+    expect(screen.queryByLabelText('Board umbenennen')).not.toBeInTheDocument()
+    // Der erste gesperrte Knopf der Seite steht im Kopf neben dem Board-Namen, vor denen der Spalten.
+    const umbenennen = screen.getAllByRole('button', { name: 'Vorschau' })[0]
+    expect(within(umbenennen).getByTestId('EditOutlinedIcon')).toBeInTheDocument()
+    expect(umbenennen).toBeDisabled()
+    fireEvent.click(umbenennen)
+    expect(screen.queryByLabelText('Neuer Board-Name')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Labels' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Papierkorb' })).toBeEnabled()
   })
 })

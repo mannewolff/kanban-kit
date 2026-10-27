@@ -14,8 +14,9 @@ import MenuItem from '@mui/material/MenuItem'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
+import { useAuth } from '../auth/AuthContext'
 import { cardsApi, type Card, type CardsApi, type LabelAction } from '../api/cards'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
@@ -58,6 +59,7 @@ import { NewCardModal, type NewCardInitialValues, type NewItemInput } from './Ne
 import { useSnackbar } from './SnackbarProvider'
 import { SpecImportDialog, type SpecCard } from './SpecImportDialog'
 import { TransferCardDialog } from './TransferCardDialog'
+import { VorschauGesperrt } from './VorschauGesperrt'
 
 /** Wie weit ein Label in der Auswahl vertreten ist — `alle` nur, wenn jede gewählte Karte es trägt. */
 const labelZustand = (treffer: number, gesamt: number): LabelZustand => {
@@ -365,6 +367,13 @@ export function BoardView({
   // Struktur-Affordances (Spalten anlegen/bearbeiten/löschen/umsortieren, Karte bearbeiten) sind
   // nur im Editiermodus sichtbar. Karten-Alltag (anlegen, verschieben, archivieren) bleibt an canEdit.
   const showStructureEdit = canEdit && editMode
+  // In der „Ansicht als XY“ bleibt sichtbar, was die Rolle zeigt, gesperrt ist alles Verändernde,
+  // und Ziehen und Ablegen sind aus (Plan #1914, E15).
+  const inVorschau = Boolean(useAuth().vorschau)
+  // Im ⋮-Menü nur in der Vorschau umschlossen: Das Menü gibt seinem Kind Fokus und Tab-Stopp mit,
+  // die ein Umschlag außerhalb der Vorschau schluckte.
+  const gesperrt = (eintrag: ReactElement) =>
+    inVorschau ? <VorschauGesperrt key={eintrag.key}>{eintrag}</VorschauGesperrt> : eintrag
   const tabletQuer = useTabletQuer()
   const [cards, setCards] = useState<Card[]>(initialCards)
   const [modalColumn, setModalColumn] = useState<{ id: number; name: string } | null>(null)
@@ -426,7 +435,7 @@ export function BoardView({
 
   // Die Taste „+“ tut dasselbe wie der Button „Neu anlegen“: anlegen in der ersten Spalte. Ohne
   // Bearbeitungsrecht oder ohne Spalte gibt es nichts anzulegen, dann bleibt das Kürzel stumm.
-  useKeyboardShortcut('+', canEdit && columns.length > 0, () =>
+  useKeyboardShortcut('+', canEdit && !inVorschau && columns.length > 0, () =>
     setModalColumn({ id: columns[0].id, name: columns[0].name }),
   )
 
@@ -857,7 +866,7 @@ export function BoardView({
     const ziel = moeglich.filter((c) => !c.labels.includes(label.id)).map((c) => c.id)
     return {
       label: label.name,
-      sperrgrund: nachtlaufSperrgrund(t, label.name, moeglich.length, ziel.length),
+      sperrgrund: inVorschau ? t.VORSCHAU.GESPERRT : nachtlaufSperrgrund(t, label.name, moeglich.length, ziel.length),
       beschaeftigt: labelBusy,
       onNachtlaufMarkieren: () => void setzeLabels(ziel, label.id, 'ADD'),
     }
@@ -1075,12 +1084,14 @@ export function BoardView({
             {canEdit && (
               /* Dateiauswahl wie beim Anhang-Upload (CardDetailModal): Button als <label> mit
                  verstecktem Input — hier zusätzlich auf Markdown eingeschränkt. */
+              <VorschauGesperrt>
               <Button size="small" variant="outlined" component="label">
                 {t.BOARD.SPEZIFIKATION_EINLESEN}<input
                   hidden
                   type="file"
                   accept=".md,.markdown,text/markdown"
                   aria-label={t.BOARD.MARKDOWN_WAEHLEN}
+                  disabled={inVorschau}
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     // Zurücksetzen, damit dieselbe Datei erneut gewählt werden kann — sonst bleibt
@@ -1090,16 +1101,19 @@ export function BoardView({
                   }}
                 />
               </Button>
+              </VorschauGesperrt>
             )}
             {canEdit && (
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<AddIcon />}
-                onClick={() => setModalColumn({ id: columns[0].id, name: columns[0].name })}
-              >
-                {t.BOARD.NEU_ANLEGEN}
-              </Button>
+              <VorschauGesperrt>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<AddIcon />}
+                  onClick={() => setModalColumn({ id: columns[0].id, name: columns[0].name })}
+                >
+                  {t.BOARD.NEU_ANLEGEN}
+                </Button>
+              </VorschauGesperrt>
             )}
           </Box>
         </Box>
@@ -1188,7 +1202,7 @@ export function BoardView({
                 onKarteUeber={() => setAblageSpalteId(column.id)}
                 onKarteAbgelegt={(cardId) => {
                   zugBeenden()
-                  if (cardId) {
+                  if (cardId && !inVorschau) {
                     karteAbgelegt(cardId, column.id)
                   }
                 }}
@@ -1216,13 +1230,17 @@ export function BoardView({
             <Box sx={{ flexShrink: 0, alignSelf: 'flex-start', pt: 0.5 }}>
               {tabletQuer ? (
                 // Schmal, damit die fünfte Spalte daneben noch Platz hat; der Name sagt, was er tut.
-                <IconButton size="small" aria-label={t.BOARD.NEUE_SPALTE} onClick={() => openColumnDialog('new')}>
-                  <AddIcon fontSize="small" />
-                </IconButton>
+                <VorschauGesperrt>
+                  <IconButton size="small" aria-label={t.BOARD.NEUE_SPALTE} onClick={() => openColumnDialog('new')}>
+                    <AddIcon fontSize="small" />
+                  </IconButton>
+                </VorschauGesperrt>
               ) : (
-                <Button size="small" startIcon={<AddIcon />} onClick={() => openColumnDialog('new')}>
-                  {t.BOARD.SPALTE}
-                </Button>
+                <VorschauGesperrt>
+                  <Button size="small" startIcon={<AddIcon />} onClick={() => openColumnDialog('new')}>
+                    {t.BOARD.SPALTE}
+                  </Button>
+                </VorschauGesperrt>
               )}
             </Box>
           )}
@@ -1251,13 +1269,15 @@ export function BoardView({
         </DialogContent>
         <DialogActions>
           <Button onClick={closeColumnDialog}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-          <Button
-            variant="contained"
-            disabled={!columnName.trim() || parsedWip() === undefined}
-            onClick={() => void saveColumn()}
-          >
-            {t.ALLGEMEIN.SPEICHERN}
-          </Button>
+          <VorschauGesperrt>
+            <Button
+              variant="contained"
+              disabled={!columnName.trim() || parsedWip() === undefined}
+              onClick={() => void saveColumn()}
+            >
+              {t.ALLGEMEIN.SPEICHERN}
+            </Button>
+          </VorschauGesperrt>
         </DialogActions>
       </Dialog>
 
@@ -1272,9 +1292,11 @@ export function BoardView({
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setDeleteColumn(null)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-            <Button color="error" onClick={() => void handleDeleteColumn(deleteColumn)}>
-              {t.ALLGEMEIN.LOESCHEN}
-            </Button>
+            <VorschauGesperrt>
+              <Button color="error" onClick={() => void handleDeleteColumn(deleteColumn)}>
+                {t.ALLGEMEIN.LOESCHEN}
+              </Button>
+            </VorschauGesperrt>
           </DialogActions>
         </Dialog>
       )}
@@ -1283,33 +1305,33 @@ export function BoardView({
         {menu && !menu.card.archived && [
           // Bearbeiten (Bleistift) nur im Editiermodus; Duplizieren/Archivieren/Verschieben bleiben
           // als Alltags-Aktionen erhalten.
-          showStructureEdit ? (
+          showStructureEdit ? gesperrt(
             <MenuItem key="edit" onClick={() => { const c = menu.card; closeMenu(); onEditCard?.(c) }}>
               {t.BOARD.BEARBEITEN}
             </MenuItem>
           ) : null,
-          <MenuItem
+          gesperrt(<MenuItem
             key="duplicate"
             onClick={() => { const c = menu.card; closeMenu(); void duplicateCard(c) }}
           >
             {t.BOARD.DUPLIZIEREN}
-          </MenuItem>,
-          <MenuItem key="archive" onClick={() => { const c = menu.card; closeMenu(); void archiveCard(c) }}>
+          </MenuItem>),
+          gesperrt(<MenuItem key="archive" onClick={() => { const c = menu.card; closeMenu(); void archiveCard(c) }}>
             {t.BOARD.ARCHIVIEREN}
-          </MenuItem>,
+          </MenuItem>),
           ...(canTransfer
             ? [
-                <MenuItem
+                gesperrt(<MenuItem
                   key="transfer"
                   onClick={() => { const c = menu.card; closeMenu(); setTransferCard(c) }}
                 >
                   {t.BOARD.VERSCHIEBEN_DIALOG}
-                </MenuItem>,
+                </MenuItem>),
               ]
             : []),
           // Genau eine Spalte weit nach links bzw. rechts — nicht ein Eintrag je Zielspalte, sonst
           // wächst das Menü mit der Spaltenzahl. Am Rand fehlt die jeweilige Richtung.
-          moveLeft ? (
+          moveLeft ? gesperrt(
             <MenuItem
               key="move-left"
               onClick={() => { const c = menu.card; closeMenu(); void moveCard(c.id, moveLeft.id) }}
@@ -1317,7 +1339,7 @@ export function BoardView({
               {t.BOARD.NACH_LINKS}
             </MenuItem>
           ) : null,
-          moveRight ? (
+          moveRight ? gesperrt(
             <MenuItem
               key="move-right"
               onClick={() => { const c = menu.card; closeMenu(); void moveCard(c.id, moveRight.id) }}
@@ -1327,13 +1349,13 @@ export function BoardView({
           ) : null,
           // Ganz unten und rot abgesetzt: der einzige Eintrag, der Inhalt aus dem Board nimmt —
           // er soll nicht neben „Nach rechts verschieben" versehentlich getroffen werden.
-          <MenuItem
+          gesperrt(<MenuItem
             key="delete"
             sx={{ color: 'error.main' }}
             onClick={() => { const c = menu.card; closeMenu(); setDeleteConfirm([c.id]) }}
           >
             {t.ALLGEMEIN.LOESCHEN}
-          </MenuItem>,
+          </MenuItem>),
         ]}
       </Menu>
 
@@ -1411,9 +1433,11 @@ export function BoardView({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setBulkArchiveConfirm(false)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-          <Button color="error" onClick={() => void confirmBulkArchive()}>
-            {t.BOARD.ARCHIVIEREN}
-          </Button>
+          <VorschauGesperrt>
+            <Button color="error" onClick={() => void confirmBulkArchive()}>
+              {t.BOARD.ARCHIVIEREN}
+            </Button>
+          </VorschauGesperrt>
         </DialogActions>
       </Dialog>
 
@@ -1426,9 +1450,11 @@ export function BoardView({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteConfirm([])}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-          <Button color="error" onClick={() => void confirmDelete()}>
-            {t.BOARD.IN_DEN_PAPIERKORB}
-          </Button>
+          <VorschauGesperrt>
+            <Button color="error" onClick={() => void confirmDelete()}>
+              {t.BOARD.IN_DEN_PAPIERKORB}
+            </Button>
+          </VorschauGesperrt>
         </DialogActions>
       </Dialog>
 
@@ -1447,12 +1473,14 @@ export function BoardView({
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setEpicAssign(null)}>{t.ALLGEMEIN.ABBRECHEN}</Button>
-            <Button
-              variant="contained"
-              onClick={() => void confirmBulkAssign(epicAssign.epic, epicAssign.angekuendigtUeberschrieben)}
-            >
-              {t.BOARD.ZUORDNEN_BESTAETIGEN}
-            </Button>
+            <VorschauGesperrt>
+              <Button
+                variant="contained"
+                onClick={() => void confirmBulkAssign(epicAssign.epic, epicAssign.angekuendigtUeberschrieben)}
+              >
+                {t.BOARD.ZUORDNEN_BESTAETIGEN}
+              </Button>
+            </VorschauGesperrt>
           </DialogActions>
         </Dialog>
       )}

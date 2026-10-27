@@ -72,12 +72,29 @@
   ist das Menü leer.
 - **Auf der Karte sichtbar:** farbige **Label**-Chips, eine gesetzte **Fälligkeit** („📅 *Datum*",
   überfällige rot und fett) sowie rechts unten die **Avatare der Zuständigen** (Initialen, bis zu vier).
+- **Herkunft an der Nummer:** Die Kartennummer `#N` oben auf der Karte zeigt, woraus die Karte
+  entstanden ist — beim Überfahren mit der Maus, wenn sie per **Tab** den Fokus bekommt, und auf dem
+  [Tablet quer](#tablet) beim Antippen. Der Hinweis nennt die ganze Kette bis zum Ursprung, nächster
+  Vorfahr zuerst, je Glied Nummer und Titel, etwa „#1914 · [Plan] …“ und darunter „#1910 · [Fachlich]
+  …“; die Art steht im Präfix des Titels. Vorfahren auf anderen Boards desselben Projekts erscheinen
+  mit, archivierte mit „(archiviert)“. Ein Vorfahr im Papierkorb erscheint als „#N (im Papierkorb)“,
+  und die Kette geht über ihn weiter; ein endgültig gelöschter als „#N (gelöscht)“, dort endet sie,
+  ebenso an einem Vorfahren in einem anderen Projekt. Ohne Vorfahren steht dort „Ohne Herkunft“. Ein
+  Klick auf die Nummer öffnet weiter die Karte.
 - **Done-Countdown:** Karten in einer Done-Spalte zeigen „wird in X Tagen archiviert"
   (steuerbar über `MANBAN_DONE_RETENTION_DAYS`).
 
 ### Karten-Detail
 
-Klick auf eine Karte öffnet das Detail:
+Klick auf eine Karte öffnet das Detail.
+
+**Direkter Link:** `…/projects/<Projekt>/karten/<Nummer>` öffnet das Board der Karte mit offenem
+Detail — zum Weitergeben, etwa im Chat. Der Link hält, auch wenn die Karte inzwischen auf einem
+anderen Board liegt, denn die Kartennummer ist im Projekt fest. Abgemeldet führt er über die
+Anmeldung zur Karte. Gibt es die Karte nicht oder fehlt der Zugriff, zeigt die Projektseite
+„Karte #N ist nicht erreichbar.“ Beim Schließen des Details verschwindet die Karte aus der Adresse.
+
+Das Detail zeigt:
 
 - **Beschreibung** als GitHub-Markdown (im Bearbeiten-Modus editierbar). **Task-Listen**
   (`- [ ]` / `- [x]`) werden als anklickbare Checkboxen gerendert; ein Klick schaltet sie um und
@@ -89,6 +106,11 @@ Klick auf eine Karte öffnet das Detail:
   kommagetrennt)" — alles in einem Speichern-Vorgang.
 - **Zuständige:** ein oder mehrere Projektmitglieder über das Feld „Zuständige" zuweisen (Mehrfachauswahl).
   Ohne Bearbeitungsrecht werden die Zuständigen nur als Chips angezeigt.
+  Wer neu zuständig wird, bekommt eine E-Mail mit Kartennummer, Titel, Projekt, Board, dem Namen der
+  zuweisenden Person und einem Link, der die Karte direkt öffnet — gleich ob die Zuweisung in der
+  Oberfläche oder über ein Token geschah. Wer sich selbst zuweist oder entfernt wird, bekommt keine.
+  Ist der Mailversand ausgeschaltet (`MANBAN_MAIL_ENABLED=false`), bleibt die Mail aus; die
+  Zuweisung gilt trotzdem.
 - **Fällig am:** ein Fälligkeitsdatum setzen. Im Ansichtsmodus steht darunter „Fällig am *TT.MM.JJJJ*";
   liegt das Datum in der Vergangenheit und ist die Karte nicht in einer Done-Spalte, wird es rot als
   „— überfällig" markiert.
@@ -545,7 +567,9 @@ Bei einem eingelieferten **Kettenlauf** teilt die [Lage des Runs](#lage-des-runs
 **Planung** (die Stufen der Kette) und **Umsetzung** (der Rest), und der Kettenvorgang nennt den
 **angelegten Plan und die Pakete** als Verweise — ermittelt aus der Herkunft der Karten am Board,
 beschränkt auf Karten, die während des Runs entstanden. Jede Paketzeile nennt ihren Plan („Paket aus
-Plan #N"). Die Dauer des Kettenvorgangs ist die Summe seiner Stufen.
+Plan #N"). Als Anforderung eines Plans zählt dabei nur eine fachliche Anforderung: Ein Plan aus
+einer Idee erscheint wie ein Plan ohne Anforderung. Die Dauer des Kettenvorgangs ist die Summe seiner
+Stufen.
 
 Der **Titel** eines Runs nennt seine Nummer, das Startdatum und die Startzeit („Run #412 · 14.
 September, 22:05"); ein eben eingelesener Run ohne Nummer heißt „Run · 14. September, 22:05".
@@ -1072,6 +1096,19 @@ Unabhängig vom Editiermodus zeigt die Seite **Administration** jedem Angemeldet
 YAML). Die Übersicht dient dem Nachschlagen; wer Aufrufe darin ausprobieren darf, steht unter
 [API-Übersicht](#api-ubersicht).
 
+### Erscheinungsbild
+
+Gleich unter dem Editiermodus wählt jeder Angemeldete auf der Seite **Administration** das
+**Erscheinungsbild** in drei Stufen: **System**, **Hell** oder **Dunkel**. Die Wahl wirkt sofort und
+wird **am Konto** gespeichert — sie gilt damit auf jedem Gerät, sobald du dich angemeldet hast.
+Vorgabe ist **System**.
+
+- **System** folgt dem Farbschema des **Browsers**. Der Browser kann das Betriebssystem
+  übersteuern: Steht der Rechner auf Dunkel und bleibt der Leitstand trotzdem hell, ist im Browser
+  „Hell“ eingestellt. Mit **Dunkel** stellst du den Leitstand unabhängig davon um.
+- Die Seiten **vor der Anmeldung** folgen immer dem System; nach dem Abmelden gilt wieder System.
+- Der **Ausdruck** bleibt in jeder Stufe hell, ebenso die Nachtlauf-Auswertung.
+
 ### Sprache / Language
 
 Die Seite **Administration** zeigt jedem Angemeldeten den Abschnitt **„Sprache / Language"** mit
@@ -1123,6 +1160,37 @@ Projekte** an; „Abbrechen" ändert nichts. Ein Label, das ein Board schon trä
 Zuordnungen unverändert und wird übersprungen. Danach meldet der Abschnitt, auf wie vielen Boards wie
 viele Labels neu angelegt wurden und wie viele schon vorhanden waren. Der Knopf lässt sich beliebig
 oft drücken: Ab dem zweiten Mal legt er nichts mehr an — auf einem neuen Board aber die fehlenden.
+
+## Ansicht als … {#ansicht-als}
+
+Ein **Plattform-Admin** prüft mit der **Ansicht als …**, ob ein Konto wirklich sieht, was er ihm
+eingerichtet hat. Er startet sie in der Nutzerliste des Admin-Bereichs über den Knopf **„Ansicht als
+…"** in der Zeile des Kontos; danach öffnet sich die Startseite, die das Konto nach der Anmeldung sähe.
+Nicht möglich ist sie als das eigene Konto oder als ein anderer Plattform-Admin. Ein gesperrtes oder
+noch nicht freigegebenes Konto zeigt sie so, wie es nach dem Entsperren bzw. der Freigabe aussähe.
+
+- **Balken:** Auf jeder Seite steht fest der Balken **„Du siehst die App als XY. Nur lesend."** mit dem
+  Knopf **„Beenden"**. Danach bist du wieder du selbst, ohne dich neu anzumelden.
+- **Nur lesend:** Projekte, Boards, Karten und Bedienelemente erscheinen so, wie das Konto sie hätte.
+  Alles, was etwas ändern würde — anlegen, verschieben, löschen, hochladen, kommentieren, Einstellungen
+  —, ist gesperrt und trägt den Hinweis **„Vorschau"**. Auch Aufrufe außerhalb der Oberfläche weist
+  der Server ab. Das Ausprobieren in der [API-Übersicht](#api-ubersicht) ist ganz gesperrt.
+- **Verborgene Stellen:** Sähe das Konto etwas, das du selbst nicht sehen darfst — etwa die Laufdaten
+  eines Projekts, das nicht am Plattform-Leitstand teilnimmt und in dem du keine eigene Rolle hast —,
+  steht dort der Hinweis „XY sieht diesen Bereich, die Vorschau zeigt ihn nicht."
+- **Persönliches:** Profil, persönliche API-Tokens und die Farbwahl des Kontos werden nicht gezeigt;
+  an ihrer Stelle steht „Dieser Bereich wird in der Vorschau nicht gezeigt." Du behältst dein eigenes
+  Erscheinungsbild.
+- **Ende:** Die Ansicht endet mit „Beenden", spätestens nach **30 Minuten**, beim Abmelden (dann
+  erscheint die Anmeldeseite) oder beim nächsten Zugriff, wenn du nicht mehr Plattform-Admin bist,
+  das Konto Plattform-Admin wurde oder gelöscht ist. Ein Fenster, das noch die Vorschau zeigt, lädt
+  dann neu, bevor es etwas ändern kann. Die Ansicht gilt nur für die Anmeldung, aus der du sie
+  gestartet hast — in allen ihren Tabs; andere Anmeldungen und deine API-Tokens bleiben unberührt.
+  Das Konto selbst merkt nichts davon.
+- **Einträge:** Jeder Start und jedes Ende wird festgehalten. Plattform-Admins sehen die Einträge in
+  der Nutzerliste bei der Zeile des Kontos, das Konto selbst sieht im eigenen **Profil**, wann welcher
+  Admin die Ansicht geöffnet hat. Bei Ablauf trägt der Eintrag den Ablaufzeitpunkt. Ist das Konto des
+  Admins gelöscht, nennt der Eintrag ihn weiter mit Namen und dem Vermerk „Konto gelöscht".
 
 ## Plattform-Leitstand
 

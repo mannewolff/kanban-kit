@@ -25,6 +25,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.WebUtils;
 
 /**
  * Lässt Aufrufe, die aus der API-Übersicht heraus ausprobiert werden, nur für aktive
@@ -42,6 +43,12 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   <li>Trägt die Anfrage zusätzlich ein Projekt-Token ({@value #PROJEKT_TOKEN_HEADER}), gilt das
  *       Token und nicht die Session: Das Session-Cookie wird aus der weitergereichten Anfrage
  *       entfernt, damit der Aufruf mit genau den Rechten des Tokens läuft.
+ *   <li>Trägt die Anfrage das Cookie {@value SessionCookieManager#VORSCHAU_COOKIE_NAME} der
+ *       Vorschau „Ansicht als XY“, antwortet er 403 mit dem Problem-Typ {@value
+ *       VorschauSchreibsperreFilter#NUR_LESEND} — mit Session wie mit Projekt-Token, auch lesend
+ *       (Issue #1920, Plan #1914 E7). Die Prüfung steht hier und vor dem Entfernen des
+ *       Session-Cookies: Ein späterer Filter sähe die Vorschau nicht mehr, denn ohne Session-Cookie
+ *       gilt ihr Cookie nicht.
  * </ul>
  *
  * <p><strong>Grenze:</strong> Das Kennzeichen grenzt allein die Funktion „Ausprobieren“ ab. Die
@@ -90,13 +97,20 @@ public class ApiAusprobierFilter extends OncePerRequestFilter {
       filterChain.doFilter(request, response);
       return;
     }
+    if (WebUtils.getCookie(request, SessionCookieManager.VORSCHAU_COOKIE_NAME) != null) {
+      rejectAsForbidden(
+          response,
+          VorschauSchreibsperreFilter.NUR_LESEND,
+          VorschauSchreibsperreFilter.NUR_LESEND_TEXT);
+      return;
+    }
     Optional<SessionCheck> session = cookies.readToken(request).flatMap(tokens::verify);
     if (session.isEmpty()) {
       response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
       return;
     }
     if (!admins.isActivePlatformAdmin(session.orElseThrow().userId())) {
-      rejectAsForbidden(response);
+      rejectAsForbidden(response, "about:blank", NUR_PLATTFORM_ADMINS);
       return;
     }
     String projektToken = request.getHeader(PROJEKT_TOKEN_HEADER);
@@ -107,19 +121,21 @@ public class ApiAusprobierFilter extends OncePerRequestFilter {
     filterChain.doFilter(request, response);
   }
 
-  private void rejectAsForbidden(HttpServletResponse response) throws IOException {
+  private void rejectAsForbidden(HttpServletResponse response, String typ, String schluessel)
+      throws IOException {
     response.setStatus(HttpStatus.FORBIDDEN.value());
     response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
     response.setCharacterEncoding(StandardCharsets.UTF_8.name());
     // Literal nach dem Vorbild RateLimitFilter.rejectAsTooManyRequests, ohne Serialisierung: Der
-    // Text stammt aus den Meldungsdateien und enthält weder Anführungszeichen noch Backslash.
+    // Text stammt aus den Meldungsdateien und enthält wie der Typ weder Anführungszeichen noch
+    // Backslash.
     // Gewöhnliches Literal statt Konstante: Error Prone (InlineFormatString) duldet eine einmal
     // benutzte Formatvorlage nicht als Konstante.
     response
         .getWriter()
         .write(
-            "{\"type\":\"about:blank\",\"title\":\"Forbidden\",\"status\":403,\"detail\":\"%s\"}"
-                .formatted(texte.text(texte.spracheDerAnfrage(), NUR_PLATTFORM_ADMINS)));
+            "{\"type\":\"%s\",\"title\":\"Forbidden\",\"status\":403,\"detail\":\"%s\"}"
+                .formatted(typ, texte.text(texte.spracheDerAnfrage(), schluessel)));
   }
 
   /** Die Anfrage ohne das Session-Cookie — in {@code getCookies()} wie im Cookie-Header. */

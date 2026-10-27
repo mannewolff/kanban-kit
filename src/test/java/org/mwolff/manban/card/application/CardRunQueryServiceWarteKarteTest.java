@@ -50,7 +50,8 @@ class CardRunQueryServiceWarteKarteTest {
                 mock(PermissionChecker.class),
                 mock(CardLabelEventRepository.class),
                 ActorContext.ActorStamp::unknown,
-                Clock.systemUTC()),
+                Clock.systemUTC(),
+                mock(ZuweisungsBenachrichtigung.class)),
             boards,
             mock(CardLabelEventRepository.class));
     when(boards.requireColumn(SPALTE_READY, BOARD))

@@ -316,15 +316,20 @@ public final class FortschrittErmittlung {
   /**
    * Die tragenden Karten, nach Nummer: die Herkunft jedes vom Lauf angelegten Plans — ist sie nicht
    * geliefert, der Plan selbst — und jede Karte mit einer Stufenzeile im Fenster. Nie ein
-   * Arbeitspaket: Der Runner führt Laufstand und {@code lauf:*}-Labels auch an Paketen.
+   * Arbeitspaket: Der Runner führt Laufstand und {@code lauf:*}-Labels auch an Paketen. Eine andere
+   * Herkunft als eine fachliche Anforderung (etwa eine Idee) zählt nicht als Anforderung: Der Plan
+   * gilt dann wie einer ohne Herkunft (Issue #1931).
    */
   private List<Karte> tragendeKarten() {
     Map<Integer, Karte> tragende = new TreeMap<>();
     for (Karte plan : angelegtePlaene()) {
       Long herkunft = plan.derivedFromCardId();
-      if (herkunft != null) {
-        Karte k = jeId.getOrDefault(herkunft, plan);
-        tragende.put(k.number(), k);
+      if (herkunft != null && !jeId.containsKey(herkunft)) {
+        tragende.put(plan.number(), plan);
+      }
+      Karte anforderung = anforderungVon(plan);
+      if (anforderung != null) {
+        tragende.put(anforderung.number(), anforderung);
       }
     }
     eintraegeJeKarte.forEach(
@@ -340,27 +345,40 @@ public final class FortschrittErmittlung {
   /**
    * Die Kette an der tragenden Karte {@code t}; leer, wenn sie sich keiner Anforderung zuordnen
    * lässt (E3). Ist {@code t} selbst ein Plan, setzt die Kette an einem vorhandenen Plan an, und
-   * die Anforderung ist seine Herkunft.
+   * die Anforderung ist seine Herkunft. Eine andere Herkunft als eine fachliche Anforderung (etwa
+   * eine Idee) zählt nicht als Anforderung (Issue #1931).
    */
   private Optional<ChainProgress> kette(Karte t) {
     List<StufenEintrag> eintraege = eintraegeJeKarte.getOrDefault(t.id(), List.of());
     if (istPlan(t)) {
-      return Optional.ofNullable(t.derivedFromCardId())
-          .map(jeId::get)
-          .map(f -> ketteAus(f, t, eintraege, t));
+      return Optional.ofNullable(anforderungVon(t)).map(f -> ketteAus(f, t, eintraege, t));
     }
     return Optional.of(ketteAus(t, planZu(t, eintraege), eintraege, t));
   }
 
   /**
+   * Die fachliche Anforderung eines Plans: seine gelieferte Herkunft, sofern sie {@code [Fachlich]}
+   * trägt (Issue #1931). Eine andere Herkunft, etwa eine Idee, zählt nicht als Anforderung.
+   */
+  private @Nullable Karte anforderungVon(Karte plan) {
+    Long herkunft = plan.derivedFromCardId();
+    Karte k = herkunft == null ? null : jeId.get(herkunft);
+    return k != null && KitNamen.artAusTitel(k.title()).filter(Art.FACHLICH::equals).isPresent()
+        ? k
+        : null;
+  }
+
+  /**
    * Der Plan einer Kette, die an der Anforderung ansetzt: der jüngste vom Lauf angelegte Plan mit
    * dieser Herkunft, sonst der Plan, den der jüngste Stufeneintrag nennt — die Einträge ab der
-   * Prüfung nennen den Plan, die der Planstufe die Anforderung selbst.
+   * Prüfung nennen den Plan, die der Planstufe die Anforderung selbst. Ein Plan zählt nur, wenn die
+   * Anforderung seine Herkunft ist und fachlich; eine andere Herkunft (etwa eine Idee) zählt nicht
+   * als Anforderung (Issue #1931).
    */
   private @Nullable Karte planZu(Karte anforderung, List<StufenEintrag> eintraege) {
     Optional<Karte> angelegt =
         angelegtePlaene().stream()
-            .filter(p -> Objects.equals(p.derivedFromCardId(), anforderung.id()))
+            .filter(p -> anforderung.equals(anforderungVon(p)))
             .max(NACH_NUMMER);
     if (angelegt.isPresent()) {
       return angelegt.get();

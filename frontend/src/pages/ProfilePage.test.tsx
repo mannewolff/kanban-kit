@@ -6,17 +6,21 @@ import { authApi } from '../api/auth'
 import { ApiError } from '../api/client'
 import { AuthProvider, useAuth } from '../auth/AuthContext'
 import { SnackbarProvider } from '../components/SnackbarProvider'
+import { formatierer } from '../i18n/format'
 import { ProfilePage } from './ProfilePage'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/auth', () => ({
-  authApi: { me: vi.fn(), updateProfile: vi.fn(), login: vi.fn(), logout: vi.fn() },
+  authApi: { me: vi.fn(), updateProfile: vi.fn(), login: vi.fn(), logout: vi.fn(), eigenesVorschauProtokoll: vi.fn() },
 }))
 
 const mockedApi = authApi as unknown as {
   me: ReturnType<typeof vi.fn>
   updateProfile: ReturnType<typeof vi.fn>
+  eigenesVorschauProtokoll: ReturnType<typeof vi.fn>
 }
+
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
 
 const alt = { userId: 1, email: 'a@b.de', displayName: 'Alt', platformRole: 'USER', memberships: [] }
 
@@ -43,6 +47,7 @@ describe('ProfilePage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedApi.me.mockResolvedValue({ ...alt })
+    mockedApi.eigenesVorschauProtokoll.mockResolvedValue([])
   })
 
   it('zeigt leere Felder, solange kein Nutzer geladen ist', () => {
@@ -103,6 +108,7 @@ describe('ProfilePage auf Englisch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedApi.me.mockResolvedValue({ ...alt })
+    mockedApi.eigenesVorschauProtokoll.mockResolvedValue([])
   })
 
   const renderEn = () =>
@@ -134,5 +140,47 @@ describe('ProfilePage auf Englisch', () => {
     renderEn()
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Saving failed.')).toBeInTheDocument()
+  })
+})
+
+describe('ProfilePage: Ansicht als XY', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockedApi.me.mockResolvedValue({ ...alt })
+    mockedApi.eigenesVorschauProtokoll.mockResolvedValue([])
+  })
+
+  it('Szenario: XY erfährt von der Ansicht', async () => {
+    mockedApi.eigenesVorschauProtokoll.mockResolvedValue([
+      {
+        adminName: 'Ada',
+        adminKontoGeloescht: false,
+        gestartetAm: '2026-10-26T09:00:00Z',
+        laeuftAbAm: '2026-10-26T09:30:00Z',
+        beendetAm: '2026-10-26T09:12:00Z',
+        endgrund: 'BEENDET',
+      },
+    ])
+    renderProfile()
+
+    expect(await screen.findByRole('heading', { name: 'Ansichten durch Admins' })).toBeInTheDocument()
+    const eintrag = await screen.findByRole('listitem')
+    expect(eintrag).toHaveTextContent('Ada')
+    expect(eintrag).toHaveTextContent(`Start ${formatierer('de').datumUhrzeit('2026-10-26T09:00:00Z')}`)
+    expect(mockedApi.eigenesVorschauProtokoll).toHaveBeenCalledTimes(1)
+  })
+
+  it('Szenario: Persönliches von XY bleibt verborgen', async () => {
+    mockedApi.me.mockResolvedValue({ ...alt, displayName: 'Grace', email: 'grace@x.de', vorschau })
+    renderProfile()
+
+    expect(await screen.findByRole('note')).toHaveTextContent('Dieser Bereich wird in der Vorschau nicht gezeigt.')
+    expect(screen.getByRole('heading', { name: 'Profil' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Anzeigename')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('E-Mail')).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue('grace@x.de')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Ansichten durch Admins' })).not.toBeInTheDocument()
+    // Der Server wiese den Abruf in der Vorschau ab (E5); die Seite stellt ihn gar nicht erst.
+    expect(mockedApi.eigenesVorschauProtokoll).not.toHaveBeenCalled()
   })
 })

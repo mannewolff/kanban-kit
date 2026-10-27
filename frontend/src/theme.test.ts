@@ -5,6 +5,7 @@ import { ARCHIVED_STATUS_COLOR, STATUS_FARBWERTE, statusColors } from './lib/sta
 import {
   APP_BACKGROUND,
   CARD_LIFT,
+  DUNKEL_SELEKTOR,
   ERSCHEINUNGSBILD_SX,
   CARD_RADIUS,
   CARD_SHADOW,
@@ -50,11 +51,24 @@ const schemata = [
 const appBarStil = (): Record<string, unknown> =>
   theme.components?.MuiAppBar?.styleOverrides?.root as Record<string, unknown>
 
+/** Der Block des dunklen Erscheinungsbilds, wie MUI ihn schreibt. */
+const dunkleRegel = (): Record<string, string> =>
+  theme.generateStyleSheets().find((blatt) => DUNKEL_SELEKTOR in blatt)![DUNKEL_SELEKTOR] as Record<string, string>
+
 describe('theme Erscheinungsbilder', () => {
-  it('folgt der Einstellung des Betriebssystems und bietet keinen Schalter an', () => {
-    expect(theme.colorSchemeSelector).toBe('media')
+  it('schaltet über das Attribut data-mb-farbschema statt über die Media-Query (#1911)', () => {
+    expect(theme.colorSchemeSelector).toBe('[data-mb-farbschema="%s"]')
     const schluessel = theme.generateStyleSheets().flatMap((blatt) => Object.keys(blatt))
-    expect(schluessel).toContain('@media (prefers-color-scheme: dark)')
+    expect(schluessel).toContain(DUNKEL_SELEKTOR)
+    expect(schluessel).toContain(':root, [data-mb-farbschema="light"]')
+    expect(schluessel).not.toContain('@media (prefers-color-scheme: dark)')
+  })
+
+  it('legt den dunklen Block unter den Selektor des dunklen Erscheinungsbilds', () => {
+    const block = dunkleRegel()
+    expect(block.colorScheme).toBe('dark')
+    expect(block['--mb-palette-background-default']).toBe(dunkel.background.default)
+    expect(block['--mb-palette-text-primary']).toBe(dunkel.text.primary)
   })
 
   it('führt genau zwei Erscheinungsbilder, hell als Vorgabe', () => {
@@ -632,7 +646,7 @@ describe('theme Ausdruck (Fachplan-Frage 6, E6, #953)', () => {
   })
 
   it('druckt immer im hellen Erscheinungsbild, auch bei dunklem System', () => {
-    // Die dunklen Werte hängen an `@media (prefers-color-scheme: dark)` und gälten auch im Druck.
+    // Die dunklen Werte hängen an `[data-mb-farbschema="dark"]` und gälten auch im Druck.
     // Der Druckblock setzt deshalb alle Palette-Variablen auf ihre hellen Werte zurück, mit
     // höherer Spezifität als die Dunkel-Regel.
     const wurzel = druck()![':root:root'] as Record<string, string>
@@ -645,13 +659,7 @@ describe('theme Ausdruck (Fachplan-Frage 6, E6, #953)', () => {
   })
 
   it('setzt im Druck jede Variable zurück, die das dunkle Erscheinungsbild ändert', () => {
-    const dunkleRegel = theme
-      .generateStyleSheets()
-      .find((blatt) => '@media (prefers-color-scheme: dark)' in blatt)!['@media (prefers-color-scheme: dark)'] as Record<
-      string,
-      Record<string, string>
-    >
-    const dunkleVariablen = Object.keys(dunkleRegel[':root']).filter((name) => name.startsWith('--'))
+    const dunkleVariablen = Object.keys(dunkleRegel()).filter((name) => name.startsWith('--'))
     const wurzel = druck()![':root:root'] as Record<string, string>
     expect(dunkleVariablen.length).toBeGreaterThan(50)
     expect(dunkleVariablen.filter((name) => !(name in wurzel))).toEqual([])
@@ -659,13 +667,12 @@ describe('theme Ausdruck (Fachplan-Frage 6, E6, #953)', () => {
 })
 
 describe('theme Teilbaum mit beiden Erscheinungsbildern (#987)', () => {
-  const dunkelBlock = () =>
-    ERSCHEINUNGSBILD_SX['@media (prefers-color-scheme: dark)'] as Record<string, string>
+  const dunkelBlock = () => ERSCHEINUNGSBILD_SX[`${DUNKEL_SELEKTOR} &`] as Record<string, string>
 
-  it('setzt die hellen Variablen und schaltet im dunklen System auf die dunklen um', () => {
+  it('setzt die hellen Variablen und schaltet im dunklen Erscheinungsbild auf die dunklen um', () => {
     // Die Nachtlauf-Seite setzt an ihrem Wurzelknoten die hellen Variablen fest (#954). Ein Bereich
     // darin, der Kupferwarte trägt, kann sie nicht „erben lassen" — er schreibt beide Sätze selbst,
-    // mit derselben Media-Query, die auch `:root` benutzt.
+    // unter demselben Selektor, den auch `:root` benutzt (#1911).
     expect(ERSCHEINUNGSBILD_SX['--mb-palette-background-default']).toBe(hell.background.default)
     expect(dunkelBlock()['--mb-palette-background-default']).toBe(dunkel.background.default)
     expect(ERSCHEINUNGSBILD_SX.colorScheme).toBe('light')
@@ -674,13 +681,7 @@ describe('theme Teilbaum mit beiden Erscheinungsbildern (#987)', () => {
 
   it('schaltet jede Variable zurueck, die das dunkle Erscheinungsbild aendert', () => {
     // Bliebe eine hängen, stünde im Dunkeln ein heller Wert mitten in der dunklen Fläche.
-    const dunkleRegel = theme
-      .generateStyleSheets()
-      .find((blatt) => '@media (prefers-color-scheme: dark)' in blatt)!['@media (prefers-color-scheme: dark)'] as Record<
-      string,
-      Record<string, string>
-    >
-    const dunkleVariablen = Object.keys(dunkleRegel[':root']).filter((name) => name.startsWith('--'))
+    const dunkleVariablen = Object.keys(dunkleRegel()).filter((name) => name.startsWith('--'))
 
     expect(dunkleVariablen.length).toBeGreaterThan(50)
     expect(dunkleVariablen.filter((name) => !(name in dunkelBlock()))).toEqual([])

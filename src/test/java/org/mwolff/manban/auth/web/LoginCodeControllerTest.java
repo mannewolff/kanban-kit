@@ -259,7 +259,15 @@ class LoginCodeControllerTest {
     when(tokens.issue(user.requireId())).thenReturn("session-token");
     when(cookies.create("session-token")).thenReturn(cookie());
     when(meService.load(user.requireId()))
-        .thenReturn(new MeView(7L, EMAIL, "Ada", PlatformRole.USER, List.of()));
+        .thenReturn(
+            new MeView(
+                7L,
+                EMAIL,
+                "Ada",
+                PlatformRole.USER,
+                List.of(),
+                org.mwolff.manban.auth.domain.ColorScheme.SYSTEM,
+                null));
   }
 
   private static AppUser user() {

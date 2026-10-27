@@ -5,7 +5,7 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline'
 import Box from '@mui/material/Box'
 import ButtonBase from '@mui/material/ButtonBase'
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { ApiError, apiErrorMessage } from '../../api/client'
+import { ApiError, apiErrorMessage, istVorschauVerborgen } from '../../api/client'
 import {
   nightRunsApi,
   type HeuteNachtKarte,
@@ -28,6 +28,7 @@ import {
   TEXT_SCHWACH,
   ZAHL,
 } from '../../theme'
+import { VorschauVerborgenHinweis } from '../VorschauVerborgenHinweis'
 
 /** Der Satz für den leeren Fall (Fachplan #1420: „sagt das ausdrücklich, statt leer zu bleiben“). */
 export const LEER_SATZ = de.HEUTE_NACHT.LEER
@@ -69,6 +70,7 @@ type Ladung =
   | { art: 'laden' }
   | { art: 'geladen'; karten: HeuteNachtKarte[] }
   | { art: 'verboten' }
+  | { art: 'vorschauVerborgen' }
   | { art: 'fehler'; meldung: string }
 
 /**
@@ -77,7 +79,8 @@ type Ladung =
  * Nummer, Titel, Board, Ziel, kleinem Stufenstand und — falls gewählt — der Prüferzahl.
  *
  * <p>Geladen wird einmal beim Öffnen der Seite. Fehlt das Leserecht (403), erscheint die Übersicht
- * gar nicht, wie die übrigen Lauf-Bereiche; ein anderer Ladefehler steht in ihr. Ein Klick auf
+ * gar nicht, wie die übrigen Lauf-Bereiche; ein anderer Ladefehler steht in ihr. In der „Ansicht
+ * als XY“ steht bei `403 vorschau-verborgen` der Hinweis in ihr (Plan #1914, E16). Ein Klick auf
  * Nummer und Titel öffnet die Karte über `onKarteOeffnen`, wie die übrigen Kartenverweise.
  */
 export function HeuteNachtUebersicht({
@@ -119,6 +122,7 @@ export function HeuteNachtUebersicht({
           {t.LADEFEHLER(ladung.meldung)}
         </Box>
       )}
+      {ladung.art === 'vorschauVerborgen' && <VorschauVerborgenHinweis />}
       {ladung.art === 'geladen' && ladung.karten.length === 0 && (
         <Box component="p" sx={{ m: 0, color: TEXT_MATT }}>
           {t.LEER}
@@ -210,6 +214,14 @@ function KartenZeile({ karte, onOeffnen }: Readonly<{ karte: HeuteNachtKarte; on
   )
 }
 
+/** Der Zustand nach einem gescheiterten Abruf: Hinweis in der Vorschau, still ohne Recht, sonst die Meldung. */
+function fehlerLadung(error: unknown, fallback: string): Ladung {
+  if (istVorschauVerborgen(error)) return { art: 'vorschauVerborgen' }
+  return error instanceof ApiError && error.status === 403
+    ? { art: 'verboten' }
+    : { art: 'fehler', meldung: apiErrorMessage(error, fallback) }
+}
+
 /** Lädt die Übersicht einmal; eine Antwort nach dem Schließen verfällt. */
 function useHeuteNacht(api: Pick<NightRunsApi, 'heuteNacht'>, projectId: number, fallback: string): Ladung {
   const [ladung, setLadung] = useState<Ladung>({ art: 'laden' })
@@ -221,11 +233,7 @@ function useHeuteNacht(api: Pick<NightRunsApi, 'heuteNacht'>, projectId: number,
       },
       (error: unknown) => {
         if (!aktiv) return
-        setLadung(
-          error instanceof ApiError && error.status === 403
-            ? { art: 'verboten' }
-            : { art: 'fehler', meldung: apiErrorMessage(error, fallback) },
-        )
+        setLadung(fehlerLadung(error, fallback))
       },
     )
     return () => {

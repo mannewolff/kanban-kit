@@ -48,7 +48,7 @@
     {
       "name": "bausteine-board",
       "muster": ["src/components/board/**/*.tsx"],
-      "testMuster": ["src/components/BoardView.test.tsx"],
+      "testMuster": ["src/components/BoardView.test.tsx", "src/components/board/KartenHerkunft.test.tsx"],
       "aufgenommen": false,
       "phase": 1,
       "reihenfolge": 5,
@@ -61,19 +61,29 @@
         "src/components/Breadcrumbs.tsx",
         "src/components/BoardSwitcher.tsx",
         "src/components/SnackbarProvider.tsx",
-        "src/components/EditModeBanner.tsx"
+        "src/components/EditModeBanner.tsx",
+        "src/components/VorschauBalken.tsx",
+        "src/components/VorschauGesperrt.tsx",
+        "src/components/VorschauVerborgenHinweis.tsx",
+        "src/components/VorschauPersoenlichHinweis.tsx",
+        "src/components/VorschauEintraege.tsx"
       ],
       "testMuster": [
         "src/components/AppShell.test.tsx",
         "src/components/Breadcrumbs.test.tsx",
         "src/components/BoardSwitcher.test.tsx",
         "src/components/SnackbarProvider.test.tsx",
-        "src/components/EditModeBanner.test.tsx"
+        "src/components/EditModeBanner.test.tsx",
+        "src/components/VorschauBalken.test.tsx",
+        "src/components/VorschauGesperrt.test.tsx",
+        "src/components/VorschauVerborgenHinweis.test.tsx",
+        "src/components/VorschauPersoenlichHinweis.test.tsx",
+        "src/components/VorschauEintraege.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,
       "reihenfolge": 6,
-      "begruendung": "Der Rahmen um jede Seite: Navigation, Pfadzeile, Board-Auswahl, Meldungen und das Band des Bearbeitungsmodus."
+      "begruendung": "Der Rahmen um jede Seite: Navigation, Pfadzeile, Board-Auswahl, Meldungen, das Band des Bearbeitungsmodus und die Bausteine der Ansicht als XY (Balken, Sperre, Hinweise, Einträge)."
     },
     {
       "name": "bausteine-karte",
@@ -207,7 +217,8 @@
         "src/pages/ProjectMembersPage.tsx",
         "src/pages/BoardListPage.tsx",
         "src/pages/BoardPage.tsx",
-        "src/pages/EpicsPage.tsx"
+        "src/pages/EpicsPage.tsx",
+        "src/pages/KartenLinkPage.tsx"
       ],
       "testMuster": [
         "src/pages/ProjectsPage.test.tsx",
@@ -215,7 +226,8 @@
         "src/pages/ProjectMembersPage.test.tsx",
         "src/pages/BoardListPage.test.tsx",
         "src/pages/BoardPage.test.tsx",
-        "src/pages/EpicsPage.test.tsx"
+        "src/pages/EpicsPage.test.tsx",
+        "src/pages/KartenLinkPage.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 3,

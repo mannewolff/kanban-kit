@@ -23,6 +23,9 @@ import org.mwolff.manban.card.domain.CardType;
  * @param canSetStatus ob der Betrachter den Status dieser Karte setzen darf: {@link
  *     org.mwolff.manban.project.domain.Permission#CARD_MOVE} im Projekt <em>dieser</em> Karte (E10)
  *     — und nur, wenn sie einen eigenen Status trägt
+ * @param herkunft Vorfahren bis zum Ursprung, nächster zuerst (Issue #1930); nur in der Board-Liste
+ *     gesetzt, sonst {@code null} (nicht berechnet) — kein Einzelabruf rechnet eine Kette; {@code
+ *     []} heißt ohne Herkunft
  */
 @Schema(description = "Eine Karte oder ein Vorhaben.")
 public record CardView(
@@ -79,4 +82,9 @@ public record CardView(
                 "Ob der Aufrufer den Status dieser Karte setzen darf (Recht CARD_MOVE im Projekt"
                     + " der Karte, und nur bei Karten mit eigenem Status).",
             example = "true")
-        boolean canSetStatus) {}
+        boolean canSetStatus,
+    @Schema(
+            description =
+                "Herkunft bis zum Ursprung, nächster Vorfahr zuerst; nur in der Board-Liste"
+                    + " berechnet. Leer (null): nicht berechnet; eine leere Liste: ohne Herkunft.")
+        @Nullable List<HerkunftsGlied> herkunft) {}

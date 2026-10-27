@@ -21,6 +21,7 @@ import { apiErrorMessage } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { useSnackbar } from '../components/SnackbarProvider'
+import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { useT } from '../i18n/SpracheContext'
 import { canManageBoards, canManageMembers } from '../lib/roles'
 import { useRefetchOnFocus } from '../lib/useRefetchOnFocus'
@@ -177,9 +178,11 @@ export function ProjectBoardsPage() {
         <Box component="form" onSubmit={handleCreate} sx={{ mb: 3 }}>
           <Stack direction="row" spacing={1}>
             <TextField size="small" label={t.BOARDS.NEUES_BOARD} value={name} onChange={(e) => setName(e.target.value)} />
-            <Button type="submit" variant="contained">
-              {t.ALLGEMEIN.ANLEGEN}
-            </Button>
+            <VorschauGesperrt>
+              <Button type="submit" variant="contained">
+                {t.ALLGEMEIN.ANLEGEN}
+              </Button>
+            </VorschauGesperrt>
           </Stack>
         </Box>
       )}
@@ -223,16 +226,18 @@ export function ProjectBoardsPage() {
                 {t.BOARDS.SPALTEN(board.columns.length)}
               </Typography>
               {canManage && (
-                <IconButton
-                  size="small"
-                  aria-label={t.BOARDS.ARCHIVIEREN_ARIA(board.name)}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setConfirmBoard(board)
-                  }}
-                >
-                  <ArchiveOutlinedIcon fontSize="small" />
-                </IconButton>
+                <VorschauGesperrt>
+                  <IconButton
+                    size="small"
+                    aria-label={t.BOARDS.ARCHIVIEREN_ARIA(board.name)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setConfirmBoard(board)
+                    }}
+                  >
+                    <ArchiveOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </VorschauGesperrt>
               )}
             </Paper>
           ))}
@@ -254,17 +259,21 @@ export function ProjectBoardsPage() {
                 <Typography variant="subtitle1" sx={{ fontWeight: 600, flexGrow: 1, minWidth: 0 }}>
                   {board.name}
                 </Typography>
-                <Button size="small" onClick={() => void handleRestoreBoard(board.id)}>
-                  {t.ALLGEMEIN.WIEDERHERSTELLEN}
-                </Button>
-                <IconButton
-                  size="small"
-                  color="error"
-                  aria-label={t.BOARDS.ENDGUELTIG_ARIA(board.name)}
-                  onClick={() => setPurgeBoard(board)}
-                >
-                  <DeleteOutlineIcon fontSize="small" />
-                </IconButton>
+                <VorschauGesperrt>
+                  <Button size="small" onClick={() => void handleRestoreBoard(board.id)}>
+                    {t.ALLGEMEIN.WIEDERHERSTELLEN}
+                  </Button>
+                </VorschauGesperrt>
+                <VorschauGesperrt>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    aria-label={t.BOARDS.ENDGUELTIG_ARIA(board.name)}
+                    onClick={() => setPurgeBoard(board)}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </VorschauGesperrt>
               </Paper>
             ))}
           </Stack>

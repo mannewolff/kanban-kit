@@ -9,7 +9,10 @@ import { ApiUebersichtPage } from './ApiUebersichtPage'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 
 // Rolle je Test umschaltbar: Default USER (Nicht-Admin, Seite rein lesend wie in #1410).
-const authState = vi.hoisted(() => ({ user: { platformRole: 'USER' } as { platformRole: string } }))
+const authState = vi.hoisted(() => ({
+  user: { platformRole: 'USER' } as { platformRole: string },
+  vorschau: null as null | Record<string, string>,
+}))
 vi.mock('../auth/AuthContext', () => ({ useAuth: () => authState }))
 
 vi.mock('../api/openapi', async (importOriginal) => ({
@@ -47,7 +50,27 @@ describe('ApiUebersichtPage', () => {
     vi.clearAllMocks()
     swaggerProps.zuletzt = null
     authState.user = { platformRole: 'USER' }
+    authState.vorschau = null
     mOpenapi.lade.mockResolvedValue(spec)
+  })
+
+  it('blendet in der Vorschau das Ausprobieren aus und zeigt an seiner Stelle den Hinweis', async () => {
+    // Auch mit Admin-Rolle: In der Vorschau läuft nichts mit fremden Rechten (AK 3, E7).
+    authState.user = { platformRole: 'ADMIN' }
+    authState.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    renderPage()
+    await screen.findByTestId('swagger-ui')
+
+    expect(screen.getByRole('note')).toHaveTextContent('Das Ausprobieren von Aufrufen ist in der Vorschau gesperrt.')
+    expect(swaggerProps.zuletzt?.supportedSubmitMethods).toEqual([])
+    expect(swaggerProps.zuletzt?.requestInterceptor).toBeUndefined()
+    expect(screen.queryByText(/Aufrufe mit Anmeldung laufen mit Ihrer Sitzung/)).not.toBeInTheDocument()
+  })
+
+  it('zeigt außerhalb der Vorschau keinen Vorschau-Hinweis', async () => {
+    renderPage()
+    await screen.findByTestId('swagger-ui')
+    expect(screen.queryByRole('note')).not.toBeInTheDocument()
   })
 
   it('zeigt Überschrift und führt mit dem Zurück-Knopf in die Administration', async () => {

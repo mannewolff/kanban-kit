@@ -20,8 +20,11 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.StellbareUhrConfig;
 import org.mwolff.manban.TestAnmeldung;
+import org.mwolff.manban.auth.application.AdminVorschauService;
+import org.mwolff.manban.auth.application.VorschauStart;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.mwolff.manban.auth.web.security.ApiAusprobierFilter;
+import org.mwolff.manban.auth.web.security.SessionCookieManager;
 import org.mwolff.manban.ratelimit.MutableClock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -58,6 +61,7 @@ class ApiAusprobierenIT extends AbstractIntegrationTest {
   @Autowired private ObjectMapper json;
   @Autowired private DataSource dataSource;
   @Autowired private MutableClock clock;
+  @Autowired private AdminVorschauService vorschauen;
 
   /**
    * Die Stempel-Drosselung merkt sich je Token-ID die letzte Minute im Arbeitsspeicher des
@@ -211,6 +215,56 @@ class ApiAusprobierenIT extends AbstractIntegrationTest {
                     Boolean.class,
                     projectId))
         .isFalse();
+  }
+
+  /**
+   * In der Vorschau „Ansicht als XY“ ist das Ausprobieren ganz gesperrt (Issue #1920, Plan #1914
+   * E7): Auch mit Projekt-Token und lesend antwortet der Filter 403, bevor er das Sitzungs-Cookie
+   * entfernt und das Token gälte. Ohne Vorschau läuft derselbe Aufruf mit den Rechten des Tokens.
+   */
+  @Test
+  void inDerVorschauMitProjektTokenIstAusprobierenGesperrt() throws Exception {
+    Cookie admin = session(ADMIN, PlatformRole.ADMIN);
+    Cookie owner = session(OWNER, PlatformRole.USER);
+    long projectId = createProject(admin, "Vorschau-Projekt", OWNER);
+    long boardId = createBoard(owner, projectId, "Board P").get("id").asLong();
+    String token =
+        boundToken(owner, projectId, boardId, "Vorschau-Token").get("plaintext").asText();
+    VorschauStart start =
+        vorschauen.starte(
+            anmeldung.konto(ADMIN, PlatformRole.ADMIN).requireId(),
+            anmeldung.konto(OWNER, PlatformRole.USER).requireId(),
+            false);
+    Cookie vorschau =
+        new Cookie(
+            SessionCookieManager.VORSCHAU_COOKIE_NAME,
+            start.vorschau().kennung() + "." + start.geheimnis());
+
+    mvc.perform(
+            get("/api/kanban/items")
+                .cookie(admin)
+                .header(KENNZEICHEN, "1")
+                .header(TOKEN_HEADER, token))
+        .andExpect(status().isOk());
+    mvc.perform(
+            get("/api/kanban/items")
+                .cookie(admin, vorschau)
+                .header(KENNZEICHEN, "1")
+                .header(TOKEN_HEADER, token))
+        .andExpect(status().isForbidden())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("vorschau-nur-lesend"));
+    mvc.perform(
+            post("/api/kanban/items")
+                .cookie(admin, vorschau)
+                .header(KENNZEICHEN, "1")
+                .header(TOKEN_HEADER, token)
+                .contentType("application/json")
+                .content("{\"title\":\"In der Vorschau\",\"direct\":true}"))
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.type").value("vorschau-nur-lesend"));
+
+    assertThat(count("SELECT count(*) FROM card")).isZero();
   }
 
   /**

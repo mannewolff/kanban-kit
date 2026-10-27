@@ -45,6 +45,7 @@ public final class KartenZuordnung {
   private final CardLabelEventRepository labelEvents;
   private final ActorContext actor;
   private final Clock clock;
+  private final ZuweisungsBenachrichtigung benachrichtigung;
 
   public KartenZuordnung(
       CardAssigneeRepository assignees,
@@ -53,7 +54,8 @@ public final class KartenZuordnung {
       PermissionChecker permissions,
       CardLabelEventRepository labelEvents,
       ActorContext actor,
-      Clock clock) {
+      Clock clock,
+      ZuweisungsBenachrichtigung benachrichtigung) {
     this.assignees = assignees;
     this.labels = labels;
     this.cardLabels = cardLabels;
@@ -61,6 +63,7 @@ public final class KartenZuordnung {
     this.labelEvents = labelEvents;
     this.actor = actor;
     this.clock = clock;
+    this.benachrichtigung = benachrichtigung;
   }
 
   /** Benutzer-IDs der Zuständigen einer Karte, aufsteigend. */
@@ -123,15 +126,31 @@ public final class KartenZuordnung {
   /**
    * Prüft und setzt die Zuständigen einer Karte (Duplikate raus; jede ID muss Mitglied des Projekts
    * sein) ohne Aktivitätseintrag — den schreibt der aufrufende Use-Case.
+   *
+   * <p>Wer gegenüber der bisherigen Zuordnung hinzukommt, geht an {@link
+   * ZuweisungsBenachrichtigung} (Issue #1916) — ohne die handelnde Person, die sich selbst keine
+   * Nachricht schickt. Hier und nicht in den Aufrufern, weil jeder Schreibweg durch diese Methode
+   * läuft, wie die Prüfung der Freigabe-Labels (#1421). Wer nur entfernt wird, erfährt nichts.
+   *
+   * @param handelnderUserId wer zuweist — bei einem Token sein Inhaber
    */
-  public void ersetzeZustaendige(long cardId, long projectId, List<Long> assigneeIds) {
+  public void ersetzeZustaendige(
+      long cardId, long projectId, List<Long> assigneeIds, long handelnderUserId) {
     List<Long> distinct = assigneeIds.stream().distinct().toList();
     for (Long assignee : distinct) {
       if (!permissions.isRealProjectMember(assignee, projectId)) {
         throw InvalidAssigneeException.keinMitglied(assignee);
       }
     }
+    List<Long> vorher = assignees.findByCardId(cardId);
     assignees.replaceAssignees(cardId, distinct);
+    List<Long> neu =
+        distinct.stream()
+            .filter(id -> !vorher.contains(id) && id.longValue() != handelnderUserId)
+            .toList();
+    if (!neu.isEmpty()) {
+      benachrichtigung.zugewiesen(cardId, neu, handelnderUserId);
+    }
   }
 
   /**

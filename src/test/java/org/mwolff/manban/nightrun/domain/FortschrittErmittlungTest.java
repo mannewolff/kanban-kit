@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Aktivitaet;
 import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Karte;
 import org.mwolff.manban.nightrun.domain.FortschrittErmittlung.Laufstand;
@@ -1010,6 +1012,70 @@ class FortschrittErmittlungTest {
 
     assertThat(fortschritt.ketten()).isEmpty();
     assertThat(fortschritt.unbekannt()).containsExactly(ref(p));
+  }
+
+  // --- Herkunft eines Plans, die keine fachliche Anforderung ist (Issue #1931) ---------------
+
+  /** Legt die Spuren eines vom Lauf angelegten Plans an, mit {@code herkunft} oder ohne. */
+  private NightRunProgress angelegterPlanMit(@Nullable String herkunftTitel) {
+    Karte herkunft =
+        herkunftTitel == null ? null : karte(500, herkunftTitel, "BACKLOG", null, false, null);
+    angelegt(plan(501, herkunft), 10);
+    return ermittle(NightRunMode.CHAIN);
+  }
+
+  /** Legt einen vorhandenen Plan mit Stufeneintrag an, mit {@code herkunft} oder ohne. */
+  private NightRunProgress planMitStufeneintragUnd(@Nullable String herkunftTitel) {
+    Karte herkunft =
+        herkunftTitel == null ? null : karte(500, herkunftTitel, "BACKLOG", null, false, null);
+    Karte p = plan(501, herkunft);
+    stand(p, begonnen("pakete", p, 10));
+    return ermittle(NightRunMode.CHAIN);
+  }
+
+  private void allesVergessen() {
+    karten.clear();
+    aktivitaeten.clear();
+    laufstaende.clear();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"[Idee] Einfall", "[Idea] Einfall"})
+  void einAngelegterPlanAusEinerIdeeGiltAlsPlanOhneHerkunft(String idee) {
+    NightRunProgress mitIdee = angelegterPlanMit(idee);
+    allesVergessen();
+    NightRunProgress ohne = angelegterPlanMit(null);
+
+    assertThat(mitIdee).isEqualTo(ohne);
+    assertThat(mitIdee.ketten()).isEmpty();
+    assertThat(mitIdee.unbekannt()).isEmpty();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"[Idee] Einfall", "[Idea] Einfall"})
+  void ketteAnEinemPlanAusEinerIdeeGiltAlsPlanOhneHerkunft(String idee) {
+    NightRunProgress mitIdee = planMitStufeneintragUnd(idee);
+    allesVergessen();
+    NightRunProgress ohne = planMitStufeneintragUnd(null);
+
+    assertThat(mitIdee).isEqualTo(ohne);
+    assertThat(mitIdee.ketten()).isEmpty();
+    assertThat(refNummern(mitIdee.unbekannt())).containsExactly(501);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"[Fachlich] Anforderung", "[Requirement] Anforderung"})
+  void einPlanAusEinerFachlichenAnforderungSetztDieKetteAnIhrAn(String fachlich) {
+    NightRunProgress angelegt = angelegterPlanMit(fachlich);
+    assertThat(angelegt.ketten()).hasSize(1);
+    assertThat(angelegt.ketten().get(0).anforderung().number()).isEqualTo(500);
+    assertThat(angelegt.ketten().get(0).plan()).extracting(CardRef::number).isEqualTo(501);
+
+    allesVergessen();
+    NightRunProgress vorhanden = planMitStufeneintragUnd(fachlich);
+    assertThat(vorhanden.ketten()).hasSize(1);
+    assertThat(vorhanden.ketten().get(0).anforderung().number()).isEqualTo(500);
+    assertThat(vorhanden.unbekannt()).isEmpty();
   }
 
   @Test

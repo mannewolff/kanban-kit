@@ -1,6 +1,7 @@
 package org.mwolff.manban.card;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.time.Instant;
 import java.util.List;
@@ -11,6 +12,7 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardArchiveService;
 import org.mwolff.manban.card.application.CardBestandRepository;
+import org.mwolff.manban.card.application.CardBestandRepository.KarteImBestand;
 import org.mwolff.manban.card.application.CardRepository;
 import org.mwolff.manban.card.application.TrashRetentionService;
 import org.mwolff.manban.card.domain.Card;
@@ -150,6 +152,30 @@ class CardPurgeHerkunftIT extends AbstractIntegrationTest {
     archiv.purge(userId, vorfahr.requireId());
 
     assertThat(bestand.verloreneHerkunftsnummern(boardA)).isEmpty();
+  }
+
+  @Test
+  void findImBestand_liefertPapierkorbUndVerloreneNummer_ueberBoardsHinweg() {
+    Card vorfahr = karte(boardA, spalteA, null);
+    Card waise = karte(boardB, spalteB, vorfahr.requireId());
+    Card mitHerkunft = karte(boardB, spalteB, waise.requireId());
+    Card geloescht = karte(boardA, spalteA, null);
+    archiv.purge(userId, vorfahr.requireId());
+    cards.softDelete(geloescht.requireId(), JETZT);
+
+    assertThat(
+            bestand.findImBestand(
+                List.of(
+                    waise.requireId(), mitHerkunft.requireId(), geloescht.requireId(), 999_999L)))
+        .extracting(
+            k -> k.karte().requireId(),
+            KarteImBestand::imPapierkorb,
+            KarteImBestand::verloreneHerkunftsnummer)
+        .containsExactlyInAnyOrder(
+            tuple(waise.requireId(), false, vorfahr.number()),
+            tuple(mitHerkunft.requireId(), false, null),
+            tuple(geloescht.requireId(), true, null));
+    assertThat(bestand.findImBestand(List.of())).isEmpty();
   }
 
   private Card karte(long board, long spalte, Long herkunft) {

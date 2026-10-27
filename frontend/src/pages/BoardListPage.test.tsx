@@ -31,9 +31,15 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+// Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
+const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
 vi.mock('../auth/AuthContext', () => ({
-  useAuth: () => ({ user: { userId: 1, memberships: [{ projectId: 9, role: 'OWNER' }] } }),
+  useAuth: () => ({ user: { userId: 1, memberships: [{ projectId: 9, role: 'OWNER' }] }, vorschau: auth.vorschau }),
 }))
+const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+beforeEach(() => {
+  auth.vorschau = null
+})
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({
   cardsApi: {
@@ -87,6 +93,7 @@ const base = {
   derivedFrom: null as number | null,
   status: null,
   canSetStatus: false,
+  herkunft: null,
   // Die Listen-Antwort liefert die Beschreibung nur noch als Auszug (Issue #771); `description`
   // ist dort immer `null`. Die Fixturen tragen den Vorschautext deshalb in `excerpt`.
   excerpt: null as string | null,
@@ -2038,5 +2045,59 @@ describe('BoardListPage — Ziehen und Spaltenbreite per Finger auf dem Tablet (
     warten(HALTEZEIT_MS)
     expect(zeile('Anton')).not.toHaveAttribute('data-zieh-zustand')
     loslassen()
+  })
+})
+
+describe('BoardListPage — Ansicht als XY (Issue #1927)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('localStorage', fakeStorage())
+    localStorage.setItem('manban.listGruppierung', 'keine')
+    mProjects.list.mockResolvedValue([{ id: 9, name: 'Projekt', role: 'OWNER', createdAt: '' }])
+  })
+
+  it('zeigt Wiederherstellen in der Vorschau gesperrt mit dem Hinweis „Vorschau“', async () => {
+    auth.vorschau = vorschau
+    renderPage()
+    fireEvent.click(await screen.findByLabelText('Filter Archiv'))
+    await screen.findByText('AlteKarte')
+
+    expect(screen.queryByLabelText('Karte AlteKarte wiederherstellen')).not.toBeInTheDocument()
+    const knopf = screen.getByRole('button', { name: 'Vorschau' })
+    expect(knopf).toBeDisabled()
+    fireEvent.click(knopf)
+    expect(mCards.restore).not.toHaveBeenCalled()
+    // Die Zeile selbst bleibt zum Lesen anklickbar.
+    fireEvent.click(screen.getByLabelText('Detail öffnen: AlteKarte'))
+    expect(await screen.findByRole('button', { name: 'Schließen' })).toBeInTheDocument()
+  })
+
+  it('verschiebt in der Vorschau keine Zeile: kein Ziehgriff, nicht ziehbar, eine Ablage verschiebt nichts', async () => {
+    auth.vorschau = vorschau
+    renderSortPage()
+    await screen.findByText('Beta')
+
+    expect(screen.queryByLabelText('Reihenfolge ändern')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Detail öffnen: Beta')).not.toHaveAttribute('draggable', 'true')
+    const dataTransfer = { setData: vi.fn() }
+    fireEvent.dragStart(screen.getByText('Beta'), { dataTransfer })
+    fireEvent.dragOver(screen.getByText('Anton'), { dataTransfer })
+    fireEvent.drop(screen.getByText('Anton'), { dataTransfer })
+    fireEvent.dragEnd(screen.getByText('Beta'))
+    expect(mCards.move).not.toHaveBeenCalled()
+  })
+
+  it('lässt Ziehen außerhalb der Vorschau bedienbar', async () => {
+    renderSortPage()
+    await screen.findByText('Beta')
+    expect(screen.getAllByLabelText('Reihenfolge ändern')).toHaveLength(3)
+    expect(screen.getByLabelText('Detail öffnen: Beta')).toHaveAttribute('draggable', 'true')
+  })
+
+  it('lässt Wiederherstellen außerhalb der Vorschau bedienbar', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByLabelText('Filter Archiv'))
+    expect(await screen.findByLabelText('Karte AlteKarte wiederherstellen')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
   })
 })

@@ -10,6 +10,7 @@ import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import type { Card, CardStatus } from '../../api/cards'
+import { useAuth } from '../../auth/AuthContext'
 import type { Epic } from '../../api/epics'
 import type { Label } from '../../api/labels'
 import type { Member } from '../../api/members'
@@ -22,6 +23,7 @@ import type { FingerZiehen } from '../../lib/useFingerZiehen'
 import { useTabletQuer } from '../../lib/tabletQuer'
 import { type Dichte, FINGER_GRIFF_SX, karteDichteSx, karteSx } from '../boardSurfaceSx'
 import { EpicBadge } from '../EpicBadge'
+import { KartenHerkunft } from './KartenHerkunft'
 import { LabelErklaerung } from '../LabelErklaerung'
 import { labelChipSx } from '../labelChipSx'
 import { useSprache, useT } from '../../i18n/SpracheContext'
@@ -270,7 +272,9 @@ export function BoardKarte({
   const alltag = canEdit && !selectionMode
   // Im Auswahlmodus zieht eine ausgewählte Karte die ganze Auswahl mit (#1324); eine nicht
   // ausgewählte bleibt unbeweglich, ihr Klick wählt sie aus.
-  const ziehbar = alltag || (canEdit && selected)
+  // In der „Ansicht als XY“ ist keine Karte ziehbar; anklickbar bleibt sie (Plan #1914, E15).
+  const vorschau = Boolean(useAuth().vorschau)
+  const ziehbar = (alltag || (canEdit && selected)) && !vorschau
   const normal = dichte === 'normal'
   // Auf dem Tablet quer zieht der Finger über Pointer-Ereignisse (Plan #1707, E3). Natives Ziehen
   // bleibt dort aus, sonst startete iPadOS-Safari beim langen Antippen ein zweites, eigenes Ziehen.
@@ -329,7 +333,8 @@ export function BoardKarte({
             sx={{ p: 0 }}
           />
         )}
-        <Box component="span" sx={{ ...ZAHL, fontSize: 11, color: TEXT_SCHWACH }}>{`#${card.number}`}</Box>
+        {/* Die Nummer trägt die Herkunft als Hinweis; ein Klick darauf öffnet weiter die Karte (Issue #1930). */}
+        <KartenHerkunft number={card.number} herkunft={card.herkunft} />
         {normal && <CardAssignees assigneeIds={card.assignees} members={members} cardTitle={card.title} />}
         {alltag && (
           <IconButton

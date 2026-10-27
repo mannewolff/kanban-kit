@@ -12,6 +12,8 @@ const me = (userId: number): Me => ({
   displayName: `U${userId}`,
   platformRole: 'USER',
   memberships: [],
+  colorScheme: 'SYSTEM',
+  vorschau: null,
 })
 
 const key = (userId: number): string => `manban.boardHistory.v1.${userId}`

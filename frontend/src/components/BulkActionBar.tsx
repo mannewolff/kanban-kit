@@ -15,12 +15,14 @@ import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined
 import IndeterminateCheckBoxOutlinedIcon from '@mui/icons-material/IndeterminateCheckBoxOutlined'
 import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined'
 import type { LabelAction } from '../api/cards'
+import { useAuth } from '../auth/AuthContext'
 import type { Epic } from '../api/epics'
 import type { Label } from '../api/labels'
 import { useT } from '../i18n/SpracheContext'
 import { Erklaerung } from './Erklaerung'
 import { LabelErklaerung, LabelErklaerungInfo } from './LabelErklaerung'
 import { SURFACE_HOVER_SHADOW } from '../theme'
+import { VorschauGesperrt } from './VorschauGesperrt'
 
 /** Wie weit ein Label in der Auswahl vertreten ist. */
 export type LabelZustand = 'alle' | 'einige' | 'keine'
@@ -52,8 +54,12 @@ interface SperrbareTasteProps {
   onClick: (anker: HTMLElement) => void
 }
 
-/** Eine Taste der Leiste, die gesperrt sein kann und dann ihren Grund nennt. */
+/**
+ * Eine Taste der Leiste, die gesperrt sein kann und dann ihren Grund nennt. In der „Ansicht als XY“
+ * nennt sie statt des Grundes den Hinweis „Vorschau“ (Plan #1914, E15).
+ */
 function SperrbareTaste({ symbol, text, sperrgrund, gesperrterName, onClick }: Readonly<SperrbareTasteProps>) {
+  const { vorschau } = useAuth()
   const taste = (
     <Button
       size="small"
@@ -67,6 +73,7 @@ function SperrbareTaste({ symbol, text, sperrgrund, gesperrterName, onClick }: R
       {text}
     </Button>
   )
+  if (vorschau) return <VorschauGesperrt>{taste}</VorschauGesperrt>
   if (sperrgrund === null) return taste
   // Ein deaktivierter Button meldet keine Mausereignisse; ohne den span-Wrapper bliebe der Hinweis,
   // warum er gesperrt ist, auch am Zeigegerät unsichtbar. Auf dem Tablet quer öffnet Antippen den
@@ -206,16 +213,22 @@ export function BulkActionBar({
         ))}
       </Menu>
       {canMove && (
-        <Button size="small" startIcon={<DriveFileMoveOutlinedIcon />} onClick={onMove}>
-          {t.MASSENAKTION.VERSCHIEBEN}
-        </Button>
+        <VorschauGesperrt>
+          <Button size="small" startIcon={<DriveFileMoveOutlinedIcon />} onClick={onMove}>
+            {t.MASSENAKTION.VERSCHIEBEN}
+          </Button>
+        </VorschauGesperrt>
       )}
-      <Button size="small" startIcon={<ArchiveOutlinedIcon />} onClick={onArchive}>
-        {t.MASSENAKTION.ARCHIVIEREN}
-      </Button>
-      <Button size="small" color="error" startIcon={<DeleteOutlineIcon />} onClick={onDelete}>
-        {t.MASSENAKTION.IN_DEN_PAPIERKORB}
-      </Button>
+      <VorschauGesperrt>
+        <Button size="small" startIcon={<ArchiveOutlinedIcon />} onClick={onArchive}>
+          {t.MASSENAKTION.ARCHIVIEREN}
+        </Button>
+      </VorschauGesperrt>
+      <VorschauGesperrt>
+        <Button size="small" color="error" startIcon={<DeleteOutlineIcon />} onClick={onDelete}>
+          {t.MASSENAKTION.IN_DEN_PAPIERKORB}
+        </Button>
+      </VorschauGesperrt>
       <Button size="small" onClick={onCancel}>
         {t.ALLGEMEIN.ABBRECHEN}
       </Button>

@@ -41,7 +41,8 @@ class CardSearchControllerTest {
             List.of(),
             null,
             null,
-            false);
+            false,
+            null);
     return new CardSearchHit(card, 3L, "Projekt A", 10L, "Board A", false, 20L, "Ready");
   }
 

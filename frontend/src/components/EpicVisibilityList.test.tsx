@@ -50,7 +50,7 @@ function karte(number: number, title: string, labels: number[] = []): Card {
     id: number * 10, boardId: 1, columnId: 10, number, title, description: null, excerpt: null,
     positionInColumn: 0, archived: false, movedToDoneAt: null, dependencies: [], type: 'CARD',
     parentId: null, shortcode: null, assignees: [], dueDate: null, labels, derivedFrom: null,
-    status: null, canSetStatus: false,
+    status: null, canSetStatus: false, herkunft: null,
   }
 }
 
