@@ -192,6 +192,7 @@ class NightRunControllerTest {
                         null,
                         null,
                         null,
+                        List.of(),
                         List.of()))));
     assertThat(uebergeben.get(1))
         .isEqualTo(
@@ -269,6 +270,7 @@ class NightRunControllerTest {
                         null,
                         null,
                         null,
+                        List.of(),
                         List.of()))));
   }
 

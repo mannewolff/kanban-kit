@@ -398,6 +398,8 @@ class NightRunController {
         IngestConcurrency.toDomain(
             request.concurrent(), request.checkWaitMs(), request.deferredAtMerge()),
         // Wie das Budget am Lauf: Der Upload-Weg fuehrt keine Stufen (Issue #1113, E14).
+        List.of(),
+        // Die Vorgaenge nimmt dieser Weg erst mit einem eigenen Paket an (Plan #1905, #1948).
         List.of());
   }
 

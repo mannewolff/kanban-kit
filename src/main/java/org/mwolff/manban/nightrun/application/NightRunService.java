@@ -20,6 +20,7 @@ import org.mwolff.manban.nightrun.domain.Bremsbilanz;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
+import org.mwolff.manban.nightrun.domain.NightRunAttempt;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
@@ -66,7 +67,11 @@ import org.springframework.transaction.annotation.Transactional;
 // derselben Runner-Seite mit derselben Rechtepruefung wie list. Issue #1456 bringt mit der
 // Morgenmeldung ReleasePreparation und ReleasePreparationResult dazu — zwei Felder mehr desselben
 // Laufs, die derselbe Use-Case schreibt.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
+// PMD.ExcessiveImports: dieselbe Ursache, an den Importen gezaehlt. Issue #1944 bringt mit den
+// Vorgaengen je Paket NightRunAttempt dazu und hebt die Zahl auf die Schwelle von 40 — ein Feld
+// mehr
+// am einzuliefernden Paket, das derselbe Use-Case durchreicht.
+@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.ExcessiveImports"})
 public class NightRunService {
 
   private final NightRunRepository runs;
@@ -504,7 +509,11 @@ public class NightRunService {
                     item.concurrency(),
                     // Die Stufen kommen mit der Meldung (Issue #1113); der Upload-Weg uebergibt
                     // hier fest die leere Liste — „dieser Vorgang hatte keine".
-                    item.stages()))
+                    item.stages(),
+                    // Die Vorgaenge reichen beide Wege unveraendert durch (Issue #1944): Ob sie
+                    // ersetzen oder nur bei einem unbekannten Lauf ankommen, entscheidet der
+                    // Schreibweg — upsert bzw. insertIfAbsent (Plan #1905 E5).
+                    item.attempts()))
         .toList();
   }
 
@@ -702,6 +711,8 @@ public class NightRunService {
    *     #1876 E7).
    * @param stages die gemeldeten Stufen der Kette (Issue #1113) — leer statt {@code null}, denn
    *     „dieser Vorgang hatte keine Stufen" ist eine Aussage
+   * @param attempts die gemeldeten Vorgänge des Pakets in der Reihenfolge ihrer Ausführung (Issue
+   *     #1944, Plan #1905 E1) — leer, wenn keine gemeldet wurden
    */
   public record NewNightRunItem(
       int cardNumber,
@@ -714,7 +725,8 @@ public class NightRunService {
       @Nullable NightRunUsage usage,
       @Nullable NightRunStuck stuck,
       @Nullable NightRunConcurrency concurrency,
-      List<NightRunItemStage> stages) {}
+      List<NightRunItemStage> stages,
+      List<NightRunAttempt> attempts) {}
 
   /**
    * Ergebnis der Einlieferung eines Laufs.

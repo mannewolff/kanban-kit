@@ -276,16 +276,19 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   private final NightRunJpaRepository runs;
   private final NightRunItemJpaRepository items;
   private final NightRunItemStageJpaRepository stages;
+  private final NightRunAttemptWriter attempts;
 
   NightRunRepositoryAdapter(
       NamedParameterJdbcTemplate jdbc,
       NightRunJpaRepository runs,
       NightRunItemJpaRepository items,
-      NightRunItemStageJpaRepository stages) {
+      NightRunItemStageJpaRepository stages,
+      NightRunAttemptWriter attempts) {
     this.jdbc = jdbc;
     this.runs = runs;
     this.items = items;
     this.stages = stages;
+    this.attempts = attempts;
   }
 
   @Override
@@ -441,6 +444,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           jdbc.queryForObject(
               INSERT_ITEM, itemParameters(item.withNightRunId(runId), run), Long.class);
       insertStages(itemId, item.stages());
+      attempts.insert(itemId, item.attempts(), run.complete());
     }
   }
 
@@ -666,12 +670,11 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   /**
-   * Die sechs Verbrauchswerte an denselben Namen fuer Lauf, Arbeitspaket und Stufe — sie tragen
-   * dieselbe Form, und ein fehlendes {@code usage} setzt alle sechs auf {@code NULL} („nicht
-   * gemessen").
+   * Die sechs Verbrauchswerte an denselben Namen fuer Lauf, Arbeitspaket, Stufe und Vorgang — sie
+   * tragen dieselbe Form, und ein fehlendes {@code usage} setzt alle sechs auf {@code NULL} („nicht
+   * gemessen"). Paketsichtbar fuer den {@link NightRunAttemptWriter} (Issue #1944).
    */
-  private static void verbrauchSchreiben(
-      MapSqlParameterSource parameter, @Nullable NightRunUsage usage) {
+  static void verbrauchSchreiben(MapSqlParameterSource parameter, @Nullable NightRunUsage usage) {
     parameter
         .addValue("costUsd", usage == null ? null : usage.costUsd(), Types.NUMERIC)
         .addValue("inputTokens", usage == null ? null : usage.inputTokens(), Types.BIGINT)
@@ -815,7 +818,10 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         verbrauchLesen(e.getVerbrauch()),
         stuck == null ? null : stuck.toDomain(),
         concurrency == null ? null : concurrency.toDomain(),
-        stages);
+        stages,
+        // Die Lesepfade laden die Vorgaenge nicht (Issue #1944): Leer heisst hier „nicht
+        // geladen"; gelesen werden sie allein ueber findAttemptsSince.
+        List.of());
   }
 
   private static NightRunItemStage toDomain(NightRunItemStageEntity e) {

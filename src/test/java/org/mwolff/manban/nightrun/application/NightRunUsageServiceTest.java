@@ -507,6 +507,7 @@ class NightRunUsageServiceTest {
         null,
         new NightRunStuck("mvn verify", "rot", 3, 3_600_000L, "s-" + nightRunId),
         null,
+        List.of(),
         List.of());
   }
 

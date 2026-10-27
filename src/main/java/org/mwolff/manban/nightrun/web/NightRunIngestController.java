@@ -294,7 +294,9 @@ class NightRunIngestController {
             request.concurrent(), request.checkWaitMs(), request.deferredAtMerge()),
         // Fehlende Stufen werden zur leeren Liste und nicht zu null: „dieser Vorgang hatte keine
         // Stufen" ist eine Aussage, und die Domaene fuehrt sie als Liste.
-        stufen == null ? List.of() : stufen.stream().map(NightRunIngestController::stage).toList());
+        stufen == null ? List.of() : stufen.stream().map(NightRunIngestController::stage).toList(),
+        // Die Vorgaenge nimmt die Meldung erst mit einem eigenen Paket an (Plan #1905, #1945).
+        List.of());
   }
 
   /**
