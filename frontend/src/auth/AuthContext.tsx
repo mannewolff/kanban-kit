@@ -1,11 +1,13 @@
 import { useColorScheme } from '@mui/material/styles'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { authApi, type Me } from '../api/auth'
-import { setUnauthorizedHandler } from '../api/client'
+import { authApi, type Me, type Vorschau } from '../api/auth'
+import { setUnauthorizedHandler, setVorschauKennung } from '../api/client'
 import { farbmodusAus } from '../lib/farbmodus'
 
 interface AuthState {
   user: Me | null
+  /** Die laufende „Ansicht als XY“ dieser Anmeldung; `null` außerhalb (Plan #1914, E14). */
+  vorschau: Vorschau | null
   loading: boolean
   loginWithCode: (email: string, code: string) => Promise<void>
   loginWithLink: (token: string) => Promise<void>
@@ -19,15 +21,23 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [user, setUser] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Die Kopfzeile `X-Vorschau` (E8) folgt dem Nutzer im selben Zug und nicht erst in einem Effekt:
+  // Die Effekte der Kinder laufen vor denen des Providers, und ihre erste Anfrage nach einem Wechsel
+  // trüge sonst noch die alte Kennung — der Server wiese sie mit `vorschau-gewechselt` ab.
+  const uebernimm = useCallback((me: Me | null) => {
+    setVorschauKennung(me?.vorschau?.kennung ?? null)
+    setUser(me)
+  }, [])
+
   const refresh = useCallback(async () => {
     try {
-      setUser(await authApi.me())
+      uebernimm(await authApi.me())
     } catch {
-      setUser(null)
+      uebernimm(null)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [uebernimm])
 
   useEffect(() => {
     void refresh()
@@ -35,7 +45,8 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
 
   // Das Erscheinungsbild folgt der Wahl am Konto (#1911). Ohne Nutzer — bis zur Selbstauskunft,
   // nach dem Abmelden oder nach einem 401 — gilt „System": Ein geteilter Rechner zeigt nicht die
-  // Wahl des Vorgängers.
+  // Wahl des Vorgängers. In der Vorschau liefert /api/me statt der Wahl von XY die des Admins
+  // (Issue #1921), der Admin behält so seine eigene (Plan #1914, E5).
   const { setMode } = useColorScheme()
   const colorScheme = user?.colorScheme
   useEffect(() => {
@@ -45,26 +56,33 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   // Eine serverseitig beendete Sitzung meldet sich als 401 an einem beliebigen Endpunkt.
   // Der zurückgesetzte Nutzer lässt `ProtectedRoute` auf die Anmeldeseite umleiten.
   useEffect(() => {
-    setUnauthorizedHandler(() => setUser(null))
+    setUnauthorizedHandler(() => uebernimm(null))
     return () => setUnauthorizedHandler(null)
-  }, [])
+  }, [uebernimm])
 
-  const loginWithCode = useCallback(async (email: string, code: string) => {
-    setUser(await authApi.verifyCode(email, code))
-  }, [])
+  const loginWithCode = useCallback(
+    async (email: string, code: string) => {
+      uebernimm(await authApi.verifyCode(email, code))
+    },
+    [uebernimm],
+  )
 
-  const loginWithLink = useCallback(async (token: string) => {
-    setUser(await authApi.linkLogin(token))
-  }, [])
+  const loginWithLink = useCallback(
+    async (token: string) => {
+      uebernimm(await authApi.linkLogin(token))
+    },
+    [uebernimm],
+  )
 
   const logout = useCallback(async () => {
     await authApi.logout()
-    setUser(null)
-  }, [])
+    uebernimm(null)
+  }, [uebernimm])
 
+  const vorschau = user?.vorschau ?? null
   const value = useMemo(
-    () => ({ user, loading, loginWithCode, loginWithLink, logout, refresh }),
-    [user, loading, loginWithCode, loginWithLink, logout, refresh],
+    () => ({ user, vorschau, loading, loginWithCode, loginWithLink, logout, refresh }),
+    [user, vorschau, loading, loginWithCode, loginWithLink, logout, refresh],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

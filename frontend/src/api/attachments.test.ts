@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { attachmentsApi } from './attachments'
-import { ApiError, setUnauthorizedHandler } from './client'
+import { ApiError, setUnauthorizedHandler, setVorschauKennung } from './client'
 
 function spyFetch(overrides: Partial<Response> = {}) {
   return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -16,6 +16,7 @@ function spyFetch(overrides: Partial<Response> = {}) {
 afterEach(() => {
   vi.restoreAllMocks()
   setUnauthorizedHandler(null)
+  setVorschauKennung(null)
 })
 
 const attachment = {
@@ -115,5 +116,23 @@ describe.each(aufrufe)('attachmentsApi.%s – 401-Haken', (_name, call) => {
 
     await expect(call()).rejects.toBeInstanceOf(ApiError)
     expect(handler).not.toHaveBeenCalled()
+  })
+})
+
+describe.each(aufrufe)('attachmentsApi.%s – X-Vorschau (Plan #1914, E8)', (_name, call) => {
+  const kopf = (f: ReturnType<typeof spyFetch>) =>
+    (f.mock.calls[0][1]?.headers as Record<string, string> | undefined)?.['X-Vorschau']
+
+  it('trägt außerhalb der Vorschau „keine“', async () => {
+    const f = spyFetch({ json: () => Promise.resolve([]) })
+    await call()
+    expect(kopf(f)).toBe('keine')
+  })
+
+  it('trägt in der Vorschau deren Kennung', async () => {
+    setVorschauKennung('vk-42')
+    const f = spyFetch({ json: () => Promise.resolve([]) })
+    await call()
+    expect(kopf(f)).toBe('vk-42')
   })
 })

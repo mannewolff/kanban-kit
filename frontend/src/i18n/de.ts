@@ -35,6 +35,12 @@ export const de = {
   /** Allgemeiner Fallback, wenn ein Fehler keine anzeigbare Server-Meldung trägt (E6). */
   FEHLER_UNBEKANNT: 'unbekannter Fehler',
 
+  /** Die nur lesende „Ansicht als XY“ (Plan #1914). */
+  VORSCHAU: {
+    /** Meldung, wenn der Server einen Änderungsaufruf in der Vorschau abweist (E15). */
+    NUR_LESEND: 'Vorschau – nur lesend',
+  },
+
   /** Die angezeigten Kartenarten des Kits (A11); Schlüssel wie im Namen-Register des Servers. */
   KARTENART: {
     FACHLICH: 'Fachliche Anforderung',

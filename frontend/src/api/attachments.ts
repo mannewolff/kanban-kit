@@ -1,6 +1,7 @@
 // Diese vier Aufrufe laufen bewusst an `apiFetch` vorbei (Multipart-Upload, Blob-Abruf) und
-// melden eine `401` deshalb selbst, damit auch hier die Sitzungsregel greift.
-import { ApiError, notifyUnauthorized } from './client'
+// melden eine `401` deshalb selbst, damit auch hier die Sitzungsregel greift. Die Kopfzeile
+// `X-Vorschau` tragen sie wie jeder andere Aufruf (Plan #1914, E8).
+import { ApiError, notifyUnauthorized, vorschauKopf } from './client'
 
 export interface Attachment {
   id: number
@@ -12,7 +13,7 @@ export interface Attachment {
 }
 
 async function listAttachments(cardId: number): Promise<Attachment[]> {
-  const res = await fetch(`/api/cards/${cardId}/attachments`, { credentials: 'include' })
+  const res = await fetch(`/api/cards/${cardId}/attachments`, { credentials: 'include', headers: vorschauKopf() })
   if (!res.ok) {
     notifyUnauthorized(res.status)
     throw new ApiError(res.status, res.statusText)
@@ -26,7 +27,8 @@ async function upload(cardId: number, file: File): Promise<Attachment> {
   const res = await fetch(`/api/cards/${cardId}/attachments`, {
     method: 'POST',
     credentials: 'include',
-    body: form, // KEIN Content-Type setzen -> Browser setzt multipart-Boundary
+    headers: vorschauKopf(), // KEIN Content-Type: Den setzt der Browser samt multipart-Boundary
+    body: form,
   })
   if (!res.ok) {
     notifyUnauthorized(res.status)
@@ -36,7 +38,11 @@ async function upload(cardId: number, file: File): Promise<Attachment> {
 }
 
 async function remove(id: number): Promise<void> {
-  const res = await fetch(`/api/attachments/${id}`, { method: 'DELETE', credentials: 'include' })
+  const res = await fetch(`/api/attachments/${id}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: vorschauKopf(),
+  })
   if (!res.ok) {
     notifyUnauthorized(res.status)
     throw new ApiError(res.status, res.statusText)
@@ -45,7 +51,7 @@ async function remove(id: number): Promise<void> {
 
 /** Lädt den Blob (für die Inline-Vorschau; der Download-Endpunkt liefert Content-Disposition: attachment). */
 async function fetchBlob(id: number): Promise<Blob> {
-  const res = await fetch(`/api/attachments/${id}`, { credentials: 'include' })
+  const res = await fetch(`/api/attachments/${id}`, { credentials: 'include', headers: vorschauKopf() })
   if (!res.ok) {
     notifyUnauthorized(res.status)
     throw new ApiError(res.status, res.statusText)

@@ -18,6 +18,31 @@ function lastCall(fetchSpy: ReturnType<typeof spyFetch>) {
 afterEach(() => vi.restoreAllMocks())
 
 describe('adminApi', () => {
+  it('vorschauStarten ruft POST /api/admin/users/{id}/vorschau (Plan #1914)', async () => {
+    const f = spyFetch('')
+    await adminApi.vorschauStarten(7)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/admin/users/7/vorschau')
+    expect(c.method).toBe('POST')
+  })
+
+  it('vorschauProtokoll ruft GET /api/admin/users/{id}/vorschau-protokoll und liefert die Einträge', async () => {
+    const eintrag = {
+      adminName: 'Ada',
+      adminKontoGeloescht: true,
+      gestartetAm: '2026-10-27T10:00:00Z',
+      laeuftAbAm: '2026-10-27T10:30:00Z',
+      beendetAm: '2026-10-27T10:30:00Z',
+      endgrund: 'ABLAUF',
+    }
+    const f = spyFetch(JSON.stringify([eintrag]))
+    const result = await adminApi.vorschauProtokoll(7)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/admin/users/7/vorschau-protokoll')
+    expect(c.method).toBeUndefined()
+    expect(result).toEqual([eintrag])
+  })
+
   it('listUsers ruft GET /api/admin/users und liefert die geparste Antwort', async () => {
     spyFetch(JSON.stringify([{
       id: 1, email: 'a@x.de', displayName: 'Ada', platformRole: 'USER',

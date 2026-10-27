@@ -40,6 +40,10 @@ export const en: Woerterbuch = {
 
   FEHLER_UNBEKANNT: 'unknown error',
 
+  VORSCHAU: {
+    NUR_LESEND: 'Preview – read only',
+  },
+
   KARTENART: {
     FACHLICH: 'Requirement',
     IDEE: 'Idea',

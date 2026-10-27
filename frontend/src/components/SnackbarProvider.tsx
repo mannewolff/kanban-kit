@@ -11,6 +11,8 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { setNurLesendHandler } from '../api/client'
+import { useT } from '../i18n/SpracheContext'
 import { SURFACE_HOVER_SHADOW } from '../theme'
 
 /** Auslöser für eine Toast-Meldung. */
@@ -64,6 +66,14 @@ export function SnackbarProvider({ children }: Readonly<{ children: ReactNode }>
     },
     [remove],
   )
+
+  // Netz der Vorschau (Plan #1914, E15): Weist der Server einen Änderungsaufruf als nur lesend ab,
+  // meldet `client.ts` das hierüber — auch an einer Stelle, deren Aufrufer den Fehler nicht zeigt.
+  const t = useT()
+  useEffect(() => {
+    setNurLesendHandler(() => notify(t.VORSCHAU.NUR_LESEND, 'warning'))
+    return () => setNurLesendHandler(null)
+  }, [notify, t])
 
   // Beim Unmount alle noch laufenden Auto-Hide-Timer abräumen.
   useEffect(() => {

@@ -52,6 +52,8 @@ function makeApi(): AdminApi {
     disable: vi.fn().mockResolvedValue({}),
     enable: vi.fn().mockResolvedValue({}),
     listOverloadRejections: vi.fn().mockResolvedValue([]),
+    vorschauStarten: vi.fn(),
+    vorschauProtokoll: vi.fn(),
     bootstrap: vi.fn(),
   }
 }
