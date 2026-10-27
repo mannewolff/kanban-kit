@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   nightRunsApi,
+  type NightRunModels,
   type NightRunRework,
   type NightRunSubmission,
   type ReleasePreparationView,
@@ -351,6 +352,40 @@ describe('nightRunsApi', () => {
     const ergebnis = await nightRunsApi.rework(9)
     const c = lastCall(f)
     expect(c.url).toBe('/api/boards/9/night-run-rework')
+    expect(c.method).toBeUndefined()
+    expect(ergebnis).toEqual(antwort)
+  })
+
+  it('models ruft GET /api/boards/{boardId}/night-run-models und liefert den typisierten Aufbau', async () => {
+    const antwort: NightRunModels = {
+      dataSince: '2026-08-01T22:00:00Z',
+      lastTwelveWeeks: false,
+      withoutModel: 3,
+      attemptsInPeriod: 12,
+      stages: [
+        {
+          stage: 'REVIEW',
+          rows: [
+            {
+              model: 'claude-opus-5-5',
+              effort: 'medium',
+              attempts: 12,
+              succeeded: 9,
+              enoughData: true,
+              costMedianUsd: 1.25,
+              costFrom: 9,
+              modelTimeMedianMs: 95000,
+              modelTimeFrom: 12,
+            },
+          ],
+        },
+        { stage: 'UMSETZUNG', rows: [] },
+      ],
+    }
+    const f = spyFetch(JSON.stringify(antwort))
+    const ergebnis = await nightRunsApi.models(9)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/boards/9/night-run-models')
     expect(c.method).toBeUndefined()
     expect(ergebnis).toEqual(antwort)
   })

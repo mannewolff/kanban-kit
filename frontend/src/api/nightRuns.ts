@@ -693,6 +693,46 @@ export interface NightRunRework {
   weeks: NightRunReworkWeek[]
 }
 
+/** Eine Zeile der Platte „Modelle“: ein Modell mit einer Denktiefe in einer Stufe (Issue #1949, Plan #1905 E12). */
+export interface NightRunModelRow {
+  /** Das Modell, wie gemeldet. */
+  model: string
+  /** Die Denktiefe, wie gemeldet; `null` ohne Denktiefe. */
+  effort: string | null
+  attempts: number
+  succeeded: number
+  /** Erst ab fünf Vorgängen steht eine Erfolgsquote; die Schwelle steht im Backend (E10). */
+  enoughData: boolean
+  /** Median der Kosten je Vorgang in USD; `null`, wenn kein Vorgang sie trägt. */
+  costMedianUsd: number | null
+  /** Zahl der Vorgänge, die Kosten tragen. */
+  costFrom: number
+  /** Median der Modellzeit je Vorgang in Millisekunden; `null`, wenn kein Vorgang sie trägt. */
+  modelTimeMedianMs: number | null
+  /** Zahl der Vorgänge, die eine Modellzeit tragen. */
+  modelTimeFrom: number
+}
+
+/** Eine Stufe der Kette mit ihren Zeilen, nach Namen geordnet; leer ohne Vorgang. */
+export interface NightRunModelStage {
+  stage: ProgressStage
+  rows: NightRunModelRow[]
+}
+
+/** Antwort von `GET /api/boards/{boardId}/night-run-models` (Issue #1947, `NightRunModelsView`). */
+export interface NightRunModels {
+  /** Frühester Laufstart eines gezählten Vorgangs mit Modell; `null` ohne einen. */
+  dataSince: string | null
+  /** Ob der Datenbeginn im ältesten der zwölf Wochenfenster liegt (E11). */
+  lastTwelveWeeks: boolean
+  /** Gezählte Vorgänge ohne Modell ab dem Datenbeginn. */
+  withoutModel: number
+  /** Gezählte Vorgänge mit Modell. */
+  attemptsInPeriod: number
+  /** Die fünf Stufen in der Reihenfolge der Kette, auch ohne Vorgang. */
+  stages: NightRunModelStage[]
+}
+
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
 export type NightRunErrorClassCounts = Partial<Record<NightRunErrorClass, number>>
 
@@ -724,6 +764,8 @@ export const nightRunsApi = {
   wartegrund: (cardId: number) => apiFetch<Wartegruende>(`/api/cards/${cardId}/night-wait`),
   /** Die Nacharbeit der Runs an einem Board (Issue #1759, Plan #1752). */
   rework: (boardId: number) => apiFetch<NightRunRework>(`/api/boards/${boardId}/night-run-rework`),
+  /** Der Modellvergleich der Runs an einem Board (Issue #1949, Plan #1905). */
+  models: (boardId: number) => apiFetch<NightRunModels>(`/api/boards/${boardId}/night-run-models`),
 }
 
 export type NightRunsApi = typeof nightRunsApi

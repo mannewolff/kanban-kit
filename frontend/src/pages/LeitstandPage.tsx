@@ -8,7 +8,7 @@ import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
 import { type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { type Epic } from '../api/epics'
-import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
+import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { Erklaerung } from '../components/Erklaerung'
 import { AlterInArbeitPlatte } from '../components/leitstand/AlterInArbeitPlatte'
@@ -34,6 +34,7 @@ import {
   ZEILE_HOVER_SX,
 } from '../components/leitstand/LeitstandBausteine'
 import { LeitstandVerbrauch } from '../components/leitstand/LeitstandVerbrauch'
+import { ModellePlatte } from '../components/leitstand/ModellePlatte'
 import { NacharbeitPlatte } from '../components/leitstand/NacharbeitPlatte'
 import { VorhabenPlatte } from '../components/leitstand/VorhabenPlatte'
 import { useSnackbar } from '../components/SnackbarProvider'
@@ -89,7 +90,7 @@ import {
  * `docs/entwurf-leitstand.html` (CSS Z. 390–722, 977–1017; HTML Z. 1200–1678). Er ersetzt die
  * Kennzahlen-Ansicht: Laufband des jüngsten Laufs, vier Kennzahl-Kacheln, Verbrauch mit
  * Zeitraum-Wahl und der Rumpf aus „Letzter Lauf", „Durchsatz", „Implementierungszeit",
- * „Abbruchgründe", „Nacharbeit" und „Vorhaben"; darunter in voller Breite „Fluss", „Alter in
+ * „Abbruchgründe", „Nacharbeit", „Modelle" und „Vorhaben"; darunter in voller Breite „Fluss", „Alter in
  * Arbeit" (Issue #1778) und „Auslieferung" (Issue #1836).
  * Die Platte „Liegengeblieben" des Entwurfs entfällt (Manne, 2026-09-17, #983) — die Kennzahl
  * `outliers` bleibt im Backend, wird hier aber nicht mehr dargestellt.
@@ -102,8 +103,8 @@ import {
  * in den Leitstand (Manne, 2026-09-16).
  *
  * **Die Läufe sieht nur, wer sie auch auf der Nachtlauf-Seite sieht** (Owner-Recht im Backend).
- * Ohne das Recht entfallen Laufband, Nachtlauf-Kachel, Verbrauch, Letzter Lauf, Abbruchgründe und
- * Nacharbeit still; die Board-Kennzahlen, beide Wochenplatten, „Fluss", „Alter in Arbeit" und „Auslieferung" bleiben.
+ * Ohne das Recht entfallen Laufband, Nachtlauf-Kachel, Verbrauch, Letzter Lauf, Abbruchgründe,
+ * Nacharbeit und Modelle still; die Board-Kennzahlen, beide Wochenplatten, „Fluss", „Alter in Arbeit" und „Auslieferung" bleiben.
  * In der „Ansicht als XY“ steht dort, wo XY die Läufe sähe, der Admin selbst aber nicht
  * (`403 vorschau-verborgen`), ein Hinweis: einer statt Laufband, Kachel, Verbrauch und Letztem Lauf,
  * je einer in „Abbruchgründe“ und „Nacharbeit“ (Plan #1914, E16).
@@ -124,7 +125,7 @@ export function LeitstandPage() {
     return <Alert severity="error">{t.UNGUELTIGE_ID}</Alert>
   }
 
-  const { board, kpis, fluss, alter, prognose, auslieferung, klassen, nacharbeit, projectId, liste, juengster, laeufeVerborgen, epicListe } = daten
+  const { board, kpis, fluss, alter, prognose, auslieferung, klassen, nacharbeit, modelle, projectId, liste, juengster, laeufeVerborgen, epicListe } = daten
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -150,6 +151,7 @@ export function LeitstandPage() {
         kpis={kpis}
         klassen={klassen}
         nacharbeit={nacharbeit}
+        modelle={modelle}
         prognose={prognose}
         epicListe={epicListe}
         liste={liste}
@@ -193,7 +195,7 @@ function KennzahlenBereich({ kpis, liste }: Readonly<{ kpis: Laden<BoardDashboar
 
 /**
  * Der Rumpf (Entwurf Z. 1410–1712): „Letzter Run", „Durchsatz" mit „Implementierungszeit" daneben
- * (Issue #1542), „Abbruchgründe", „Nacharbeit" (Issue #1760) und „Vorhaben".
+ * (Issue #1542), „Abbruchgründe", „Nacharbeit" (Issue #1760), „Modelle" (Issue #1949) und „Vorhaben".
  *
  * Beide Platten mit Kartennummern öffnen die Karte über denselben Weg ({@link useKarteOeffnen}).
  */
@@ -203,6 +205,7 @@ function LeitstandRumpf({
   kpis,
   klassen,
   nacharbeit,
+  modelle,
   prognose,
   epicListe,
   liste,
@@ -213,6 +216,7 @@ function LeitstandRumpf({
   kpis: Laden<BoardDashboardKpis>
   klassen: Laden<NightRunErrorClassCounts>
   nacharbeit: Laden<NightRunRework>
+  modelle: Laden<NightRunModels>
   prognose: Laden<EpicForecast>
   epicListe: readonly Epic[]
   liste: readonly NightRunView[] | null
@@ -247,6 +251,8 @@ function LeitstandRumpf({
         {projectId !== null && (liste !== null || nacharbeit.art === 'vorschauVerborgen') && (
           <NacharbeitPlatte nacharbeit={nacharbeit} onOeffnen={(nummer) => void oeffnen(projectId, nummer)} />
         )}
+        {/* Nur mit Run-Recht und gelungenem Abruf (Plan #1905, E13): Ein Fehler blendet nur diese Platte aus. */}
+        {liste && modelle.art === 'da' && <ModellePlatte daten={modelle.wert} />}
         {/* Erst mit Daten der Prognose (E14): Ein Rückfall auf die Vorhabenliste zeigte die alte Zählung. */}
         {prognose.art === 'da' && <VorhabenPlatte prognose={prognose.wert} />}
       </Box>
