@@ -154,6 +154,23 @@ public class AdminVorschauService {
    */
   @Transactional
   public List<AdminVorschau> protokoll(long zielId) {
+    return eintraege(zielId);
+  }
+
+  /**
+   * Die Einträge zu einem Zielkonto für einen Plattform-Admin (E12), wie {@link #protokoll}.
+   *
+   * @throws AdminAccessDeniedException wenn der Aufrufer kein aktiver Plattform-Admin ist
+   */
+  @Transactional
+  public List<AdminVorschau> protokollFuerAdmin(long adminId, long zielId) {
+    if (users.findById(adminId).filter(AdminVorschauService::aktiverAdmin).isEmpty()) {
+      throw new AdminAccessDeniedException();
+    }
+    return eintraege(zielId);
+  }
+
+  private List<AdminVorschau> eintraege(long zielId) {
     vorschauen.beendeAbgelaufene(zielId, clock.instant());
     return vorschauen.findByZiel(zielId);
   }

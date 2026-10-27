@@ -266,7 +266,8 @@ class LoginCodeControllerTest {
                 "Ada",
                 PlatformRole.USER,
                 List.of(),
-                org.mwolff.manban.auth.domain.ColorScheme.SYSTEM));
+                org.mwolff.manban.auth.domain.ColorScheme.SYSTEM,
+                null));
   }
 
   private static AppUser user() {

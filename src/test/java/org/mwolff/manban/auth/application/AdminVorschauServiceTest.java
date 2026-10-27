@@ -505,4 +505,36 @@ class AdminVorschauServiceTest {
     reihenfolge.verify(vorschauen).beendeAbgelaufene(ZIEL, ABLAUF.plusSeconds(5));
     reihenfolge.verify(vorschauen).findByZiel(ZIEL);
   }
+
+  @Test
+  void protokollFuerAdminLiestWieDasProtokoll() {
+    List<AdminVorschau> zeilen = List.of(offen());
+    when(vorschauen.findByZiel(ZIEL)).thenReturn(zeilen);
+
+    assertThat(service.protokollFuerAdmin(ADMIN, ZIEL)).isEqualTo(zeilen);
+
+    InOrder reihenfolge = inOrder(vorschauen);
+    reihenfolge.verify(vorschauen).beendeAbgelaufene(ZIEL, NOW);
+    reihenfolge.verify(vorschauen).findByZiel(ZIEL);
+  }
+
+  @Test
+  void protokollFuerNichtAdminWirdAbgewiesen() {
+    assertThatThrownBy(() -> service.protokollFuerAdmin(ZIEL, ZIEL))
+        .isInstanceOf(AdminAccessDeniedException.class);
+
+    verify(vorschauen, never()).findByZiel(anyLong());
+    verify(vorschauen, never()).beendeAbgelaufene(anyLong(), any());
+  }
+
+  @Test
+  void protokollFuerGesperrtenAdminWirdAbgewiesen() {
+    when(users.findById(ADMIN))
+        .thenReturn(Optional.of(adminKonto().withDisabledAt(NOW.minusSeconds(1))));
+
+    assertThatThrownBy(() -> service.protokollFuerAdmin(ADMIN, ZIEL))
+        .isInstanceOf(AdminAccessDeniedException.class);
+
+    verify(vorschauen, never()).findByZiel(anyLong());
+  }
 }

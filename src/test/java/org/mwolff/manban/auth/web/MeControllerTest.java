@@ -5,19 +5,25 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.SerializationFeature;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.MeService;
 import org.mwolff.manban.auth.application.MeService.MeView;
+import org.mwolff.manban.auth.application.MeService.VorschauView;
 import org.mwolff.manban.auth.domain.ColorScheme;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
@@ -46,6 +52,11 @@ class MeControllerTest {
     mvc =
         MockMvcBuilders.standaloneSetup(controller)
             .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+            .setMessageConverters(
+                new MappingJackson2HttpMessageConverter(
+                    Jackson2ObjectMapperBuilder.json()
+                        .featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                        .build()))
             .build();
     SecurityContextHolder.getContext()
         .setAuthentication(new UsernamePasswordAuthenticationToken(USER, null, List.of()));
@@ -118,6 +129,39 @@ class MeControllerTest {
   }
 
   private static MeView view(String displayName, ColorScheme colorScheme) {
-    return new MeView(USER, "a@b.de", displayName, PlatformRole.USER, List.of(), colorScheme);
+    return new MeView(USER, "a@b.de", displayName, PlatformRole.USER, List.of(), colorScheme, null);
+  }
+
+  @Test
+  void me_outsideVorschau_deliversVorschauAsNull() throws Exception {
+    when(service.load(USER)).thenReturn(view("Alice", ColorScheme.SYSTEM));
+
+    mvc.perform(get("/api/me"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.userId").value(USER))
+        .andExpect(jsonPath("$.vorschau").isEmpty());
+  }
+
+  /** Issue #1921, Plan #1914 E14: Kennung, Name von XY, Name des Admins und Ablauf. */
+  @Test
+  void me_inVorschau_deliversVorschauField() throws Exception {
+    Instant ablauf = Instant.parse("2026-10-27T10:30:00Z");
+    when(service.load(USER))
+        .thenReturn(
+            new MeView(
+                USER,
+                "xy@b.de",
+                "Xaver",
+                PlatformRole.USER,
+                List.of(),
+                ColorScheme.DARK,
+                new VorschauView("kennung-a", "Xaver", "Ada Admin", ablauf)));
+
+    mvc.perform(get("/api/me"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.vorschau.kennung").value("kennung-a"))
+        .andExpect(jsonPath("$.vorschau.zielName").value("Xaver"))
+        .andExpect(jsonPath("$.vorschau.adminName").value("Ada Admin"))
+        .andExpect(jsonPath("$.vorschau.laeuftAbAm").value(ablauf.toString()));
   }
 }
