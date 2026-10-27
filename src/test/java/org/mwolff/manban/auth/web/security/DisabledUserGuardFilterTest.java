@@ -16,6 +16,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.AppUserRepository;
+import org.mwolff.manban.auth.application.VorschauKontext;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -105,6 +106,39 @@ class DisabledUserGuardFilterTest {
 
     assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
     verify(users, never()).findById(anyLong());
+    verify(chain).doFilter(request, response);
+  }
+
+  /** Anfrage in der Vorschau: Principal ist das Ziel, die Details nennen den Admin. */
+  private void authenticateInVorschau(long adminId, long zielId) {
+    var authentication = new UsernamePasswordAuthenticationToken(zielId, null, List.of());
+    authentication.setDetails(
+        new VorschauKontext("kennung", adminId, zielId, java.time.Instant.EPOCH));
+    SecurityContextHolder.getContext().setAuthentication(authentication);
+  }
+
+  @Test
+  void vorschau_disabledZiel_passesThrough() throws Exception {
+    authenticateInVorschau(1L, 42L);
+    when(users.findById(1L)).thenReturn(Optional.of(user(1L, null)));
+    when(users.findById(42L)).thenReturn(Optional.of(user(42L, java.time.Instant.EPOCH)));
+
+    filter.doFilter(request, response, chain);
+
+    assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+    verify(users, never()).findById(42L);
+    verify(chain).doFilter(request, response);
+  }
+
+  @Test
+  void vorschau_disabledAdmin_clearsContext() throws Exception {
+    authenticateInVorschau(1L, 42L);
+    when(users.findById(1L)).thenReturn(Optional.of(user(1L, java.time.Instant.EPOCH)));
+    when(users.findById(42L)).thenReturn(Optional.of(user(42L, null)));
+
+    filter.doFilter(request, response, chain);
+
+    assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     verify(chain).doFilter(request, response);
   }
 }
