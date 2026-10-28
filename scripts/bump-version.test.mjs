@@ -10,6 +10,8 @@ import {
   GHCR_SICHERUNG,
   betriebsdateienFaellig,
   betriebsdateienNachziehen,
+  hotfixVersionPruefen,
+  versionSetzen,
 } from './bump-version.mjs';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
@@ -252,3 +254,56 @@ for (const [was, verstuemmeln] of [
     });
   }
 }
+
+// --- Hotfix-Version (Issue #1975) ------------------------------------------
+
+/** Wegwerf-Kopie der Dateien, die eine gesetzte Version beruehrt — wieder die echten Dateien. */
+function wegwerfkopieMitVersion() {
+  const verzeichnis = wegwerfkopie();
+  mkdirSync(join(verzeichnis, 'frontend'));
+  for (const datei of ['VERSION', 'pom.xml']) {
+    cpSync(join(WURZEL, datei), join(verzeichnis, datei));
+  }
+  for (const datei of ['package.json', 'package-lock.json']) {
+    cpSync(join(WURZEL, 'frontend', datei), join(verzeichnis, 'frontend', datei));
+  }
+  return verzeichnis;
+}
+
+test('hotfixVersionPruefen nimmt X.Y.Z-hotfix.N an', () => {
+  assert.equal(hotfixVersionPruefen('3.8.0-hotfix.1'), '3.8.0-hotfix.1');
+  assert.equal(hotfixVersionPruefen(' 3.8.0-hotfix.12\n'), '3.8.0-hotfix.12');
+});
+
+for (const falsch of ['3.8.0', '3.8.0-rc.1', '3.8.0-hotfix', '3.8.0-hotfix.0', '3.8.0-hotfix.1a', 'v3.8.0-hotfix.1', '3.8-hotfix.1', '']) {
+  test(`hotfixVersionPruefen lehnt '${falsch}' ab`, () => {
+    assert.throws(() => hotfixVersionPruefen(falsch), /X\.Y\.Z-hotfix\.N/);
+  });
+}
+
+test('versionSetzen schreibt die Hotfix-Version in VERSION, pom.xml, Frontend und Betriebsdateien', () => {
+  const verzeichnis = wegwerfkopieMitVersion();
+  try {
+    versionSetzen(verzeichnis, '3.8.0-hotfix.1');
+
+    assert.equal(lies(verzeichnis, 'VERSION'), '3.8.0-hotfix.1\n');
+    assert.match(lies(verzeichnis, 'pom.xml'), /<artifactId>manban<\/artifactId>\s*\n\s*<version>3\.8\.0-hotfix\.1<\/version>/);
+    assert.equal(JSON.parse(lies(verzeichnis, 'frontend', 'package.json')).version, '3.8.0-hotfix.1');
+    assert.equal(JSON.parse(lies(verzeichnis, 'frontend', 'package-lock.json')).version, '3.8.0-hotfix.1');
+    assert.ok(lies(verzeichnis, 'docker-compose.yml').includes(`image: ${GHCR_ANWENDUNG}:3.8.0-hotfix.1\n`));
+    assert.ok(lies(verzeichnis, 'docker-compose.backup.yml').includes(`image: ${GHCR_SICHERUNG}:3.8.0-hotfix.1\n`));
+  } finally {
+    rmSync(verzeichnis, { recursive: true, force: true });
+  }
+});
+
+test('versionSetzen lehnt einen anderen Zusatz ab und laesst die Dateien unberuehrt', () => {
+  const verzeichnis = wegwerfkopieMitVersion();
+  try {
+    const vorher = lies(verzeichnis, 'VERSION');
+    assert.throws(() => versionSetzen(verzeichnis, '3.8.0-rc.1'), /X\.Y\.Z-hotfix\.N/);
+    assert.equal(lies(verzeichnis, 'VERSION'), vorher);
+  } finally {
+    rmSync(verzeichnis, { recursive: true, force: true });
+  }
+});

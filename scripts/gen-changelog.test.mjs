@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { KEEP_A_CHANGELOG_HEADER, collectEntries, versionBlock } from './gen-changelog.mjs';
+import { KEEP_A_CHANGELOG_HEADER, collectEntries, previousVersionTag, versionBlock } from './gen-changelog.mjs';
 
 const HIER = dirname(fileURLToPath(import.meta.url));
 const SKRIPT = join(HIER, 'gen-changelog.mjs');
@@ -89,4 +89,36 @@ test('der Kopf nennt die Kennzeichnung der API-Änderungen vor den Upgrade-Hinwe
     KEEP_A_CHANGELOG_HEADER.indexOf('API-Änderung') <
       KEEP_A_CHANGELOG_HEADER.indexOf('## Hinweise zum Upgrade'),
   );
+});
+
+// --- Hotfix (Issue #1975) --------------------------------------------------
+
+test('ein Hotfix-Block trägt den Vermerk „verkürzt geprüft“ vor den Einträgen', () => {
+  const block = versionBlock('3.8.0-hotfix.1', '2026-10-28', ['Ansicht als: Schleife beendet']);
+
+  assert.equal(
+    block,
+    '## [3.8.0-hotfix.1] – 2026-10-28\n\n' +
+      '**verkürzt geprüft** — Hotfix auf 3.8.0; vor dem Merge lief die verkürzte Prüfung, nicht die volle.\n\n' +
+      '- Ansicht als: Schleife beendet\n',
+  );
+});
+
+test('ein regulärer Block trägt keinen Vermerk', () => {
+  assert.ok(!versionBlock('3.12.0', '2026-10-28', ['x']).includes('verkürzt geprüft'));
+});
+
+test('der Hotfix grenzt gegen das Release ab, auf dem er sitzt', () => {
+  assert.equal(previousVersionTag('3.8.0-hotfix.1', ['v3.7.0', 'v3.8.0', 'v3.9.0']), 'v3.8.0');
+});
+
+test('der zweite Hotfix grenzt gegen den ersten ab', () => {
+  assert.equal(
+    previousVersionTag('3.8.0-hotfix.2', ['v3.8.0', 'v3.8.0-hotfix.1', 'v3.8.0-hotfix.3']),
+    'v3.8.0-hotfix.1',
+  );
+});
+
+test('ein reguläres Release übergeht die Hotfix-Tags', () => {
+  assert.equal(previousVersionTag('3.12.0', ['v3.10.0', 'v3.11.0', 'v3.11.0-hotfix.1']), 'v3.11.0');
 });

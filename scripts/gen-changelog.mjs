@@ -20,6 +20,10 @@
  * definierte Startpunkt INITIAL_SINCE für den retroaktiven 0.6.0-Block. Reines Node-Skript, nur
  * git + Dateizugriff, keine externen Abhängigkeiten. Idempotent: ein bereits vorhandener
  * Versionsblock wird nicht dupliziert.
+ *
+ * Hotfix (Issue #1975): Eine Version X.Y.Z-hotfix.N grenzt gegen den vorigen Hotfix desselben
+ * Releases bzw. gegen vX.Y.Z ab, und ihr Block traegt den Vermerk „verkürzt geprüft“. Ein
+ * regulaeres Release uebergeht die Hotfix-Tags: Sie liegen auf `production`, nicht auf `main`.
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -74,8 +78,8 @@ function git(args) {
 
 function readVersion() {
   const version = readFileSync(VERSION_PATH, 'utf-8').trim();
-  if (!/^\d+\.\d+\.\d+$/.test(version)) {
-    fail(`VERSION enthält keine gültige X.Y.Z-Version: '${version}'`);
+  if (!parseSemver(version)) {
+    fail(`VERSION enthält keine gültige X.Y.Z- oder X.Y.Z-hotfix.N-Version: '${version}'`);
   }
   return version;
 }
@@ -86,25 +90,33 @@ function repoUrl() {
   return match ? `https://github.com/${match[1]}` : raw.replace(/\.git$/, '');
 }
 
+/** [X, Y, Z, N] — N ist die Hotfix-Nummer, 0 ohne Zusatz; ein Hotfix folgt seinem Release. */
 function parseSemver(text) {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(text.trim());
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-hotfix\.([1-9]\d*))?$/.exec(text.trim());
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4] ?? 0)] : null;
 }
 
 function compareSemver(a, b) {
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     if (a[i] !== b[i]) return a[i] - b[i];
   }
   return 0;
 }
 
-/** Der höchste vorhandene Tag vX.Y.Z, dessen Version strikt kleiner als die aktuelle ist. */
-function previousVersionTag(currentVersion) {
+function istHotfix(semver) {
+  return semver[3] > 0;
+}
+
+/**
+ * Der höchste Tag aus `tags`, dessen Version strikt kleiner als die aktuelle ist. Ein reguläres
+ * Release berücksichtigt nur reguläre Tags, ein Hotfix auch die Hotfix-Tags.
+ */
+export function previousVersionTag(currentVersion, tags = git(['tag', '--list', 'v*']).split('\n')) {
   const current = parseSemver(currentVersion);
-  return git(['tag', '--list', 'v*'])
-    .split('\n')
+  return tags
     .map((tag) => ({ tag: tag.trim(), semver: parseSemver(tag) }))
-    .filter((entry) => entry.semver && compareSemver(entry.semver, current) < 0)
+    .filter((entry) => entry.semver && (istHotfix(current) || !istHotfix(entry.semver)))
+    .filter((entry) => compareSemver(entry.semver, current) < 0)
     .sort((a, b) => compareSemver(b.semver, a.semver))
     .map((entry) => entry.tag)[0];
 }
@@ -130,7 +142,12 @@ export function collectEntries(sinceRef, endRef, url, runGit = git) {
 
 export function versionBlock(version, date, entries) {
   const body = entries.length ? entries.map((entry) => `- ${entry}`).join('\n') : '- (keine Änderungen)';
-  return `## [${version}] – ${date}\n\n${body}\n`;
+  const semver = parseSemver(version);
+  const vermerk =
+    semver && istHotfix(semver)
+      ? `**verkürzt geprüft** — Hotfix auf ${semver.slice(0, 3).join('.')}; vor dem Merge lief die verkürzte Prüfung, nicht die volle.\n\n`
+      : '';
+  return `## [${version}] – ${date}\n\n${vermerk}${body}\n`;
 }
 
 function releaseDate(endRef, argDate) {
