@@ -433,6 +433,21 @@ class ModellvergleichErmittlungTest {
   }
 
   @Test
+  void einRueckzugTrifftNurDieUmsetzungNichtDenVorgangEinerAnderenStufeImRun() {
+    // Der Prüfungs-Vorgang liegt nach Position vorn: Ohne den Stufenfilter träfe ihn der Rückzug.
+    Modellvergleich vergleich =
+        new Lage()
+            .paket(1)
+            .vorgang(NACHT, pruefung(1, OPUS))
+            .vorgang(NACHT, umsetzung(1, OPUS))
+            .rueckzug(1, NACHT)
+            .ermittle();
+
+    assertThat(zeile(vergleich, REVIEW, OPUS).erfolgreich()).isEqualTo(1);
+    assertThat(zeile(vergleich, UMSETZUNG, OPUS).erfolgreich()).isZero();
+  }
+
+  @Test
   void nurEineBewegungAusInProgressIstEinRueckzug() {
     Modellvergleich vergleich =
         new Lage()
