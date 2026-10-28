@@ -65,7 +65,11 @@
              statt 1.78.1: Sicherheitsprüfung (Issue #1347, CI-Lauf #281) — CVE-2025-14813,
              CVE-2026-8763, CVE-2026-13506.
            - checker-qual: 3.48.3 (über org.postgresql:postgresql) vs. 3.37.0 (über
-             io.minio:minio → com.google.guava:guava) → auf 3.48.3 gepinnt. -->
+             io.minio:minio → com.google.guava:guava) → auf 3.48.3 gepinnt.
+           - guava: transitiv über io.minio:minio → auf 33.7.2-jre gepinnt statt 33.4.8-jre.
+             Grund: Sicherheitsprüfung (Issue #1960) — CVE-2026-102554.
+           - snappy-java: transitiv über io.minio:minio → auf 1.1.10.9 gepinnt statt 1.1.10.7.
+             Grund: Sicherheitsprüfung (Issue #1960) — CVE-2026-108106, CVE-2026-93451. -->
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -77,6 +81,16 @@
                 <groupId>org.checkerframework</groupId>
                 <artifactId>checker-qual</artifactId>
                 <version>3.48.3</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>33.7.2-jre</version>
+            </dependency>
+            <dependency>
+                <groupId>org.xerial.snappy</groupId>
+                <artifactId>snappy-java</artifactId>
+                <version>1.1.10.9</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
