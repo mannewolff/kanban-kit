@@ -935,10 +935,14 @@ beide Angaben stehen nebeneinander, keine ersetzt die andere.
 
 ### Was der Bereich zeigt
 
-Über den Kacheln steht der gewählte Zeitraum — **Schicht · Woche · Monat · Gesamt** — und daneben,
-aus wie vielen Einträgen die Zahlen stammen („*Schicht vom 17.09.2026 auf den 18.09.2026* · 2 Runs ·
-5 Sitzungen", unter „Gesamt" etwa „Gesamt · 30 Runs · 12 Sitzungen"). Alle Kacheln unter dem
-Umschalter hängen an dieser Wahl und wechseln mit ihr gemeinsam. Die Kacheln selbst:
+Der Bereich ist von oben nach unten so aufgebaut: die **Titelzeile** „Verbrauch", darunter die
+**Budgetzeile** für den laufenden Monat (siehe [Monatsbudget](#monatsbudget)), darunter eine eigene
+Zeile mit dem **Umfangstext** und dem **Umschalter** **Schicht · Woche · Monat · Gesamt**, und erst
+dann die Kacheln. Der Umfangstext nennt den gewählten Zeitraum und, aus wie vielen Einträgen die
+Zahlen stammen („*Schicht vom 17.09.2026 auf den 18.09.2026* · 2 Runs · 5 Sitzungen", unter
+„Gesamt" etwa „Gesamt · 30 Runs · 12 Sitzungen"). Alle Kacheln unter dem Umschalter hängen an
+dieser Wahl und wechseln mit ihr gemeinsam; die Budgetzeile darüber hängt nicht daran. Die Kacheln
+selbst:
 
 - **Eingabe-Token** mit einem Balken, der die Eingabe in **„Cache gelesen"** und **„frisch"**
   aufteilt. Der Balken beantwortet eine andere Frage als die Gattungen und wird nicht auf sie
@@ -976,6 +980,45 @@ der Verbrauch daneben projektweit zählt. Schicht, Woche und Monat grenzen genau
 Verbrauch; unter „Gesamt" gilt der Mittelwert über alle gemessenen Karten des Boards. Der Fuß nennt,
 auf wie vielen Karten der Wert beruht. Gibt es im Zeitraum keine gemessene Karte, steht „—" mit
 „keine Datenbasis", nie 0 Minuten.
+
+### Monatsbudget
+
+Der **Owner** eines Projekts kann ein **Monatsbudget** in USD festlegen, ändern und wieder
+entfernen — in der Budgetzeile selbst. Ein Budget ist größer als 0 $ und hat höchstens zwei
+Nachkommastellen; eine andere Eingabe wird abgewiesen, das bisherige Budget bleibt. Es gilt für das
+ganze Projekt (Runs und interaktive Sitzungen zusammen, an jedem Board dasselbe) und in jedem
+folgenden Monat weiter, bis der Owner es ändert oder entfernt. Wer sonst den Verbrauch sieht, sieht
+den Betrag, aber kein Bedienelement; ohne Budget sieht nur der Owner den Hinweis „Hier lässt sich
+ein Monatsbudget festlegen.".
+
+**Die Budgetzeile** steht über dem Umschalter und gilt immer für den **laufenden Monat**, gleich
+welcher Zeitraum darunter gewählt ist — „laufender Monat: 42,10 $ von 100,00 $ (42 %)". Sie ist
+nicht dieselbe Zahl wie die Wahl „Monat", die den zuletzt abgeschlossenen Monat zeigt. Der laufende
+Monat beginnt wie alle Zeiträume des Bereichs am 1. um **12:00 in der Zeitzone des Lesers**, ein Tag
+läuft von 12:00 bis 12:00.
+
+- **Warnungen:** Ab **80 %** steht „Warnung: 80 % des Monatsbudgets sind erreicht.", ab **100 %**
+  stattdessen „Warnung: Das Monatsbudget ist erreicht.". Beide sind am Text erkennbar, nicht nur an
+  der Farbe. **Angehalten oder gesperrt wird nichts** — kein Run, keine Sitzung.
+- **Hochrechnung:** Ab dem **dritten Tag** des Monats steht „voraussichtlich … bis Monatsende
+  (Schätzung)": der Verbrauch des Monats geteilt durch die Zahl der angebrochenen Tage (der
+  laufende eingeschlossen, auch Tage ohne Verbrauch), mal die Tage des Monats. Am ersten und
+  zweiten Tag steht stattdessen „Für eine Hochrechnung ist es noch zu früh.". Ohne Budget steht nur
+  die Hochrechnung da, ohne Anteil und Warnung.
+- **„voraussichtlich überschritten am …"** steht, wenn die Hochrechnung über dem Budget liegt, der
+  Stand aber noch darunter — auch vor 80 %. Das Datum ist der erste Tag, an dessen Ende die
+  fortgeschriebene Summe das Budget erreicht. Der Hinweis ist eine Schätzung, keine Warnung, und
+  **entfällt**, sobald der Stand das Budget erreicht hat; dann steht die Warnung bei 100 %.
+- **Keine Kosten gemeldet:** Liegen im Monat Läufe, aber keiner hat Kosten gemeldet, sagt die Zeile
+  „laufender Monat: keine Kosten gemeldet" — ohne Anteil, Warnung und Hochrechnung, denn ein
+  fehlender Wert zählt nie als 0. Ohne jeden Lauf ist der Stand dagegen 0 $ und wird normal
+  gerechnet.
+- **Verdrängte Läufe:** Hat der Ringpuffer schon Läufe des laufenden Monats verdrängt, zählt die
+  Zeile nur die aufbewahrten und trägt denselben Hinweis wie die Zeiträume, dass ältere Läufe nicht
+  mehr gezählt sind.
+
+Im [Plattform-Leitstand](#plattform-leitstand) erscheinen **keine** Budgets, Warnungen oder
+Hochrechnungen.
 
 ### Eine Sitzung zählt zum Zeitraum ihres Beginns
 
