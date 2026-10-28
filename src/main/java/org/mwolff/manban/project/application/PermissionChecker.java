@@ -225,7 +225,8 @@ public class PermissionChecker {
 
   /**
    * Stellt sicher, dass der Benutzer im Projekt eine der erlaubten Rollen hat — <b>als einzige
-   * Prüfung dieser Klasse ohne Plattform-Admin-Bypass</b>.
+   * werfende Prüfung dieser Klasse ohne Plattform-Admin-Bypass</b> (ohne Wurf: {@link
+   * #hatEchteRolle}).
    *
    * <p><strong>Das ist kein Versehen, sondern der Zweck (Issue #1077, AK 16).</strong> Überall
    * sonst ist der Plattform-Admin Super-User und passiert jede Prüfung. Beim Schalten der Teilnahme
@@ -257,6 +258,30 @@ public class PermissionChecker {
       }
     }
     throw new ProjectAccessDeniedException();
+  }
+
+  /**
+   * Ob der Benutzer im Projekt <em>echt</em> die Rolle hat — dieselbe Semantik wie {@link
+   * #requireRealRole}, aber ohne zu werfen (Issue #1967). Ein Plattform-Admin ohne eigene
+   * Mitgliedschaft ist auch hier ein Nichtmitglied; {@link PlatformAdminChecker} wird nicht
+   * befragt. Gedacht für Antworten, die sagen, ob jemand etwas ändern darf, ohne ihm das Lesen zu
+   * verwehren.
+   */
+  @Transactional(readOnly = true)
+  public boolean hatEchteRolle(long userId, long projectId, ProjectRole rolle) {
+    return memberships
+        .findByProjectIdAndUserId(projectId, userId)
+        .map(m -> m.role() == rolle)
+        .orElse(false);
+  }
+
+  /**
+   * {@link #hatEchteRolle} mit der Rolle OWNER — für Module außerhalb von {@code project}, die
+   * {@link ProjectRole} nicht sehen dürfen ({@code ArchitectureTest.projectDomainIstModulintern}).
+   */
+  @Transactional(readOnly = true)
+  public boolean istEchterOwner(long userId, long projectId) {
+    return hatEchteRolle(userId, projectId, ProjectRole.OWNER);
   }
 
   /**
