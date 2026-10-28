@@ -1010,6 +1010,28 @@ export const en: Woerterbuch = {
     AUS_SITZUNGEN: 'from interactive sessions',
   },
 
+  LEITSTAND_BUDGET: {
+    ARIA: 'Monthly budget for the current month',
+    LAEDT: 'Loading monthly budget …',
+    FEHLER: 'The monthly budget could not be loaded.',
+    BETRAG: (betrag) => `$${betrag}`,
+    STAND: (verbraucht, budget, prozent) => `current month: ${verbraucht} of ${budget} (${prozent}%)`,
+    OHNE_KOSTEN: 'current month: no costs reported',
+    OHNE_KOSTEN_MIT_BUDGET: (budget) => `current month: no costs reported (budget ${budget})`,
+    WARNUNG_ACHTZIG: 'Warning: 80% of the monthly budget reached.',
+    WARNUNG_ERREICHT: 'Warning: the monthly budget has been reached.',
+    HOCHRECHNUNG: (betrag) => `projected ${betrag} by month end (estimate)`,
+    ZU_FRUEH: 'It is too early for a projection.',
+    UEBERSCHRITTEN: (datum) => `projected to be exceeded on ${datum} (estimate)`,
+    FESTLEGEN_HINWEIS: 'A monthly budget can be set here.',
+    EINGABE: 'Monthly budget in $',
+    SPEICHERN: 'Save budget',
+    ENTFERNEN: 'Remove budget',
+    UNGUELTIG: 'A budget is greater than $0 and has at most two decimal places.',
+    SPEICHERN_FEHLER: 'The monthly budget could not be saved.',
+    ENTFERNEN_FEHLER: 'The monthly budget could not be removed.',
+  },
+
   LEITSTAND: {
     UNGUELTIGE_ID: 'Invalid board ID.',
     TITEL: 'Control Room',

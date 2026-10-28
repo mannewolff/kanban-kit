@@ -21,7 +21,7 @@ vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn(), models: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
   ...(await original<typeof import('../api/nightRunUsage')>()),
-  nightRunUsageApi: { period: vi.fn(), total: vi.fn() },
+  nightRunUsageApi: { period: vi.fn(), total: vi.fn(), budget: vi.fn() },
 }))
 
 const mNotify = vi.fn()
@@ -58,6 +58,7 @@ const m = {
   karteNachNummer: cardsApi.byNumber as ReturnType<typeof vi.fn>,
   verbrauch: nightRunUsageApi.period as ReturnType<typeof vi.fn>,
   lebenszeit: nightRunUsageApi.total as ReturnType<typeof vi.fn>,
+  budget: nightRunUsageApi.budget as ReturnType<typeof vi.fn>,
 }
 
 const karte = (title: string): Card => ({
@@ -337,6 +338,18 @@ beforeEach(() => {
   m.klassen.mockResolvedValue({ CHECKS_RED: 11, AWAITING_DECISION: 7 })
   m.verbrauch.mockResolvedValue(zeitraum())
   m.lebenszeit.mockResolvedValue(lebenszeit())
+  m.budget.mockResolvedValue({
+    budgetUsd: 100,
+    editable: true,
+    monthFirstDay: '2026-10-01',
+    spentUsd: 40,
+    percent: 40,
+    warning: 'NONE',
+    forecastUsd: 124,
+    tooEarly: false,
+    exceedDate: '2026-10-25',
+    coverage: 'COMPLETE',
+  })
   m.nacharbeit.mockResolvedValue(nacharbeit())
   m.modelle.mockResolvedValue(modelle())
   m.fluss.mockResolvedValue(fluss())
@@ -1111,6 +1124,14 @@ describe('LeitstandPage — Verbrauch', () => {
       'Schicht vom 14.09.2026 auf den 15.09.2026 · 1 Run · 0 Sitzungen',
     )
     expect(m.verbrauch).toHaveBeenCalledWith(5, 'DAY', 0)
+  })
+
+  it('zeigt die Budgetzeile des Projekts über dem Umschalter (Issue #1969)', async () => {
+    renderPage()
+
+    const budget = await screen.findByTestId('budgetzeile-stand')
+    expect(budget.textContent?.replaceAll('\u00a0', ' ')).toContain('laufender Monat: 40 $ von 100 $ (40 %)')
+    expect(m.budget).toHaveBeenCalledWith(5)
   })
 
   it('zeigt die Implementierungszeit des Zeitraums für dieses Board', async () => {

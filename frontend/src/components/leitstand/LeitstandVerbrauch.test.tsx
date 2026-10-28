@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, test, vi } from 'vitest'
 import type { ImplementationTime } from '../../api/dashboard'
 import type {
   VerbrauchAngaben,
   VerbrauchAufteilung,
+  VerbrauchBudget,
   VerbrauchGesamt,
   VerbrauchKennzahlen,
   VerbrauchZeitraum,
@@ -124,12 +125,31 @@ const implementierung = (extra: Partial<ImplementationTime> = {}): Implementatio
 const antwort = <T,>(wert: T | Error) =>
   wert instanceof Error ? vi.fn().mockRejectedValue(wert) : vi.fn().mockResolvedValue(wert)
 
+/** Stand des Monatsbudgets (Issue #1969): 40 $ von 100 $, gesehen von einem Mitglied ohne Owner-Rolle. */
+const budgetStand = (extra: Partial<VerbrauchBudget> = {}): VerbrauchBudget => ({
+  budgetUsd: 100,
+  editable: false,
+  monthFirstDay: '2026-10-01',
+  spentUsd: 40,
+  percent: 40,
+  warning: 'NONE',
+  forecastUsd: 124,
+  tooEarly: false,
+  exceedDate: '2026-10-25',
+  coverage: 'COMPLETE',
+  ...extra,
+})
+
+const budgetAbruf = (wert: VerbrauchBudget | Error = budgetStand()) => antwort(wert)
+
 function zeige(
   zeitraumWert: VerbrauchZeitraum | Error = zeitraum(),
   gesamtWert: VerbrauchGesamt | Error = gesamt(),
   implementierungWert: ImplementationTime | Error = implementierung(),
+  budgetWert: VerbrauchBudget | Error = budgetStand(),
 ) {
   const api = {
+    budget: budgetAbruf(budgetWert),
     period: antwort(zeitraumWert),
     total: antwort(gesamtWert),
     implementationTime: antwort(implementierungWert),
@@ -445,6 +465,7 @@ describe('LeitstandVerbrauch — Implementierungszeit (Issue #1541)', () => {
         projectId={5}
         boardId={3}
         api={{
+          budget: budgetAbruf(),
           period: vi.fn().mockResolvedValue(zeitraum()),
           total: vi.fn(),
           implementationTime: vi.fn().mockReturnValue(new Promise(() => undefined)),
@@ -476,6 +497,7 @@ describe('LeitstandVerbrauch — Implementierungszeit (Issue #1541)', () => {
     const altWert = aufgeschoben<ImplementationTime>()
     const altFehler = aufgeschoben<ImplementationTime>()
     const api = {
+      budget: budgetAbruf(),
       period: vi.fn().mockResolvedValue(zeitraum()),
       total: vi.fn(),
       implementationTime: vi
@@ -557,6 +579,69 @@ const nachtMit = (night: string, outputTokens: number | null) => ({
   aborted: false,
 })
 
+describe('LeitstandVerbrauch — Budgetzeile (Issue #1969, Plan #1962)', () => {
+  test('Szenario: Warnung bei 80 %', async () => {
+    zeige(
+      zeitraum(),
+      gesamt(),
+      implementierung(),
+      budgetStand({ spentUsd: 85, percent: 85, warning: 'EIGHTY', forecastUsd: 263.5, exceedDate: '2026-10-12' }),
+    )
+    await kachel('Kosten')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Woche' })).toHaveAttribute('aria-pressed', 'true'))
+    const budget = lesbar(screen.getByTestId('budgetzeile-stand').textContent)
+    expect(budget).toContain('laufender Monat: 85 $ von 100 $ (85 %)')
+    expect(budget).toContain('Warnung: 80 % des Monatsbudgets sind erreicht.')
+  })
+
+  it('ordnet Titelzeile, Budgetzeile, Umschalter und Kacheln untereinander', async () => {
+    zeige()
+    await screen.findByTestId('budgetzeile-stand')
+    await kachel('Kosten')
+
+    const folge = [
+      screen.getByRole('heading', { level: 2, name: 'Verbrauch' }),
+      screen.getByTestId('budgetzeile'),
+      screen.getByRole('group', { name: 'Zeitraum' }),
+      screen.getByRole('group', { name: 'Verbrauch des Zeitraums' }),
+    ]
+    folge.slice(1).forEach((element, i) =>
+      expect(folge[i].compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(),
+    )
+    // Der Umschalter folgt der Budgetzeile, steht also nicht mehr in der Titelzeile darüber.
+    expect(screen.getByTestId('budgetzeile')).not.toContainElement(screen.getByRole('group', { name: 'Zeitraum' }))
+  })
+
+  it('lädt den Stand einmal je Projekt, unabhängig vom gewählten Zeitraum', async () => {
+    const api = zeige()
+    await kachel('Kosten')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Woche' }))
+    await waitFor(() => expect(api.period).toHaveBeenLastCalledWith(5, 'WEEK', 0))
+
+    expect(api.budget).toHaveBeenCalledTimes(1)
+    expect(api.budget).toHaveBeenCalledWith(5)
+  })
+
+  it('lässt bei einem Ladefehler des Budgets den übrigen Bereich stehen', async () => {
+    zeige(zeitraum(), gesamt(), implementierung(), new Error('Netz'))
+
+    expect(await screen.findByText('Das Monatsbudget konnte nicht geladen werden.')).toBeInTheDocument()
+    expect(await kachel('Kosten')).toHaveTextContent('12,40$')
+    expect(screen.getByRole('group', { name: 'Zeitraum' })).toBeInTheDocument()
+  })
+
+  it('zeigt die Budgetzeile auch, wenn der Verbrauch nicht geladen werden kann', async () => {
+    zeige(new Error('Netz'))
+
+    expect(await screen.findByText('Der Verbrauch konnte nicht geladen werden.')).toBeInTheDocument()
+    expect(await screen.findByTestId('budgetzeile-stand')).toHaveTextContent('laufender Monat')
+  })
+})
+
 const zeitraumTasten = () => within(screen.getByRole('group', { name: 'Zeitraum' })).getAllByRole('button')
 
 describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () => {
@@ -588,6 +673,7 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
 
   it('holt die Angaben neu, wenn Projekt oder Board wechseln', async () => {
     const api = {
+      budget: budgetAbruf(),
       period: vi.fn().mockResolvedValue(zeitraum()),
       total: vi.fn().mockResolvedValue(gesamt()),
       implementationTime: vi.fn().mockResolvedValue(implementierung()),
@@ -609,8 +695,10 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
     try {
       render(<LeitstandVerbrauch projectId={5} boardId={3} />)
 
-      await waitFor(() => expect(abruf).toHaveBeenCalledTimes(1))
-      expect(String(abruf.mock.calls[0][0])).toMatch(/^\/api\/projects\/5\/night-run-usage\?type=DAY&stepsBack=0&/)
+      await waitFor(() => expect(abruf).toHaveBeenCalledTimes(2))
+      const adressen = abruf.mock.calls.map(([adresse]) => String(adresse))
+      expect(adressen).toContainEqual(expect.stringMatching(/^\/api\/projects\/5\/night-run-usage\?type=DAY&stepsBack=0&/))
+      expect(adressen).toContainEqual(expect.stringMatching(/^\/api\/projects\/5\/night-run-usage\/budget\?zone=/))
       expect(screen.getByText('Der Verbrauch wird geladen …')).toBeInTheDocument()
     } finally {
       abruf.mockRestore()
@@ -618,7 +706,7 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
   })
 
   it('zeigt schon im ersten Bild den Ladesatz, bevor ein Effekt läuft', () => {
-    const api = { period: vi.fn(), total: vi.fn(), implementationTime: vi.fn() }
+    const api = { budget: budgetAbruf(), period: vi.fn(), total: vi.fn(), implementationTime: vi.fn() }
     expect(renderToStaticMarkup(<LeitstandVerbrauch projectId={5} boardId={3} api={api} />)).toContain('Der Verbrauch wird geladen …')
   })
 
@@ -627,7 +715,12 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
       <LeitstandVerbrauch
         projectId={5}
         boardId={3}
-        api={{ period: vi.fn().mockReturnValue(new Promise(() => undefined)), total: vi.fn(), implementationTime: vi.fn() }}
+        api={{
+          budget: budgetAbruf(),
+          period: vi.fn().mockReturnValue(new Promise(() => undefined)),
+          total: vi.fn(),
+          implementationTime: vi.fn(),
+        }}
       />,
     )
     expect(screen.getByText('Der Verbrauch wird geladen …')).toBeInTheDocument()
@@ -637,6 +730,7 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
 
   it('zeigt beim Wechsel wieder den Ladesatz statt der alten Zahlen', async () => {
     const api = {
+      budget: budgetAbruf(),
       period: vi.fn().mockResolvedValueOnce(zeitraum()).mockReturnValue(new Promise(() => undefined)),
       total: vi.fn(),
       implementationTime: vi.fn().mockResolvedValue(implementierung()),
@@ -655,7 +749,12 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
       <LeitstandVerbrauch
         projectId={5}
         boardId={3}
-        api={{ period: vi.fn().mockRejectedValue(new Error('Netz')), total: vi.fn(), implementationTime: vi.fn() }}
+        api={{
+          budget: budgetAbruf(),
+          period: vi.fn().mockRejectedValue(new Error('Netz')),
+          total: vi.fn(),
+          implementationTime: vi.fn(),
+        }}
       />,
     )
     expect(await screen.findByText('Der Verbrauch konnte nicht geladen werden.')).toBeInTheDocument()
@@ -665,6 +764,7 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
   it('verwirft eine verspätete Antwort des vorigen Zeitraums', async () => {
     const alt = aufgeschoben<VerbrauchZeitraum>()
     const api = {
+      budget: budgetAbruf(),
       period: vi
         .fn()
         .mockReturnValueOnce(alt.versprechen)
@@ -684,6 +784,7 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
   it('verwirft auch einen verspäteten Fehler des vorigen Zeitraums', async () => {
     const alt = aufgeschoben<VerbrauchZeitraum>()
     const api = {
+      budget: budgetAbruf(),
       period: vi.fn().mockReturnValueOnce(alt.versprechen).mockResolvedValue(zeitraum()),
       total: vi.fn(),
       implementationTime: vi.fn().mockResolvedValue(implementierung()),
@@ -702,6 +803,7 @@ describe('LeitstandVerbrauch — Zeitraum, Laden und Fehler (Issue #1281)', () =
     const altWert = aufgeschoben<VerbrauchGesamt>()
     const altFehler = aufgeschoben<VerbrauchGesamt>()
     const api = {
+      budget: budgetAbruf(),
       period: vi.fn().mockResolvedValue(zeitraum()),
       total: vi
         .fn()
@@ -862,6 +964,7 @@ describe('LeitstandVerbrauch — Kachel Bremse (Issue #1553, Plan #1547 E12, E14
 
   function zeigeJeZeitraum(gesamtWert: VerbrauchGesamt = gesamt()) {
     const api = {
+      budget: budgetAbruf(),
       period: vi.fn((_: number, art: keyof typeof BREMSEN) =>
         Promise.resolve(zeitraum({ current: kennzahlen({ type: art, brakes: BREMSEN[art] }) })),
       ),
@@ -929,7 +1032,12 @@ describe('LeitstandVerbrauch — Kachel Bremse (Issue #1553, Plan #1547 E12, E14
 
 describe('LeitstandVerbrauch auf dem Tablet im Querformat (Plan #1707, E7)', () => {
   function zeigeMitModus() {
-    const api = { period: antwort(zeitraum()), total: antwort(gesamt()), implementationTime: antwort(implementierung()) }
+    const api = {
+      budget: budgetAbruf(),
+      period: antwort(zeitraum()),
+      total: antwort(gesamt()),
+      implementationTime: antwort(implementierung()),
+    }
     render(
       <TabletQuerProvider>
         <LeitstandVerbrauch projectId={5} boardId={3} api={api} />
@@ -966,6 +1074,7 @@ describe('LeitstandVerbrauch auf Englisch', () => {
     implementierungWert: ImplementationTime | Error | Promise<never> = implementierung(),
   ) {
     const api = {
+      budget: budgetAbruf(),
       period: antwort(zeitraumWert),
       total: antwort(gesamtWert),
       implementationTime:

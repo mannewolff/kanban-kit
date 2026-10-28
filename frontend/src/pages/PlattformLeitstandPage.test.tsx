@@ -149,6 +149,16 @@ describe('PlattformLeitstandPage (#1083)', () => {
     ])
   })
 
+  it('zeigt kein Monatsbudget, keine Warnung und keine Hochrechnung (Issue #1969, #1957 AK 13)', async () => {
+    api.leitstand.mockResolvedValue(sicht({ stoerungen: [stoerung()] }))
+
+    zeigeSeite()
+
+    await screen.findByTestId('stoerung-5')
+    expect(screen.queryByTestId('budgetzeile')).not.toBeInTheDocument()
+    expect(screen.queryByText(/laufender Monat|Monatsbudget|bis Monatsende/)).not.toBeInTheDocument()
+  })
+
   /** Der Bereich „Beendete Runs" (Kriterien 9–14). */
   describe('Beendete Runs (#1098, benannt in #1102)', () => {
     const durchgefuehrt = (extra: Partial<DisruptionView> = {}): DisruptionView => ({

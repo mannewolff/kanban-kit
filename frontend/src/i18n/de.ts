@@ -1082,6 +1082,30 @@ export const de = {
     AUS_SITZUNGEN: 'aus interaktiven Sitzungen',
   },
 
+  /** Budgetzeile im Bereich „Verbrauch" (Issue #1969, Plan #1962). */
+  LEITSTAND_BUDGET: {
+    ARIA: 'Monatsbudget im laufenden Monat',
+    LAEDT: 'Das Monatsbudget wird geladen …',
+    FEHLER: 'Das Monatsbudget konnte nicht geladen werden.',
+    BETRAG: (betrag: string) => `${betrag} $`,
+    STAND: (verbraucht: string, budget: string, prozent: number) =>
+      `laufender Monat: ${verbraucht} von ${budget} (${prozent} %)`,
+    OHNE_KOSTEN: 'laufender Monat: keine Kosten gemeldet',
+    OHNE_KOSTEN_MIT_BUDGET: (budget: string) => `laufender Monat: keine Kosten gemeldet (Budget ${budget})`,
+    WARNUNG_ACHTZIG: 'Warnung: 80 % des Monatsbudgets sind erreicht.',
+    WARNUNG_ERREICHT: 'Warnung: Das Monatsbudget ist erreicht.',
+    HOCHRECHNUNG: (betrag: string) => `voraussichtlich ${betrag} bis Monatsende (Schätzung)`,
+    ZU_FRUEH: 'Für eine Hochrechnung ist es noch zu früh.',
+    UEBERSCHRITTEN: (datum: string) => `voraussichtlich überschritten am ${datum} (Schätzung)`,
+    FESTLEGEN_HINWEIS: 'Hier lässt sich ein Monatsbudget festlegen.',
+    EINGABE: 'Monatsbudget in $',
+    SPEICHERN: 'Budget speichern',
+    ENTFERNEN: 'Budget entfernen',
+    UNGUELTIG: 'Ein Budget ist größer als 0 $ und hat höchstens zwei Nachkommastellen.',
+    SPEICHERN_FEHLER: 'Das Monatsbudget konnte nicht gespeichert werden.',
+    ENTFERNEN_FEHLER: 'Das Monatsbudget konnte nicht entfernt werden.',
+  },
+
   /** Seite „Leitstand“ eines Boards (Issue #1656). */
   LEITSTAND: {
     UNGUELTIGE_ID: 'Ungültige Board-ID.',
