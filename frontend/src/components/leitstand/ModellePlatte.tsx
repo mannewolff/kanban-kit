@@ -72,7 +72,7 @@ function Stufe({ stufe }: Readonly<{ stufe: NightRunModelStage }>) {
             </thead>
             <tbody>
               {stufe.rows.map((zeile) => (
-                <Zeile key={`${zeile.model}\u0000${zeile.effort ?? ''}`} zeile={zeile} />
+                <Zeile key={JSON.stringify([zeile.model, zeile.effort])} zeile={zeile} />
               ))}
             </tbody>
           </Box>
