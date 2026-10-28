@@ -10,8 +10,13 @@ import { renderMitSprache } from '../i18n/renderMitSprache'
 
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn(), transferOwner: vi.fn() } }))
 // Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
-const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string> }))
-vi.mock('../auth/AuthContext', () => ({ useAuth: () => ({ user: { userId: 1 }, vorschau: auth.vorschau }) }))
+const auth = vi.hoisted(() => ({
+  vorschau: null as null | Record<string, string>,
+  platformRole: undefined as undefined | string,
+}))
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({ user: { userId: 1, platformRole: auth.platformRole }, vorschau: auth.vorschau }),
+}))
 const vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
 // Editiermodus gemockt: Bestandstests mit editMode=true (Bleistift sichtbar); der Editiermodus-
 // aus-Test schaltet editMode.value=false.
@@ -68,7 +73,46 @@ describe('ProjectMembersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     auth.vorschau = null
+    auth.platformRole = undefined
     editMode.value = true
+  })
+
+  /** Die angebotenen Rollen einer Auswahl, geöffnet über ihr Label. */
+  async function angeboteneRollen(label: string): Promise<string[]> {
+    fireEvent.mouseDown(screen.getByLabelText(label))
+    const optionen = await screen.findAllByRole('option')
+    const rollen = optionen.map((o) => o.textContent ?? '')
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape', code: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+    return rollen
+  }
+
+  it('bietet einem Projekt-ADMIN OWNER weder in der Rollenauswahl noch beim Einladen an (Issue #1972)', async () => {
+    renderPage(makeApi(), 'ADMIN')
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+
+    expect(await angeboteneRollen('Rolle von Mika Member')).toEqual(['ADMIN', 'MEMBER', 'VIEWER'])
+    expect(await angeboteneRollen('Einladungsrolle')).toEqual(['ADMIN', 'MEMBER', 'VIEWER'])
+    // Die Rolle eines OWNERs kann der ADMIN nicht ändern — sie steht als Text da, ohne Auswahl.
+    expect(screen.queryByLabelText('Rolle von Olga Owner')).not.toBeInTheDocument()
+    expect(screen.getByText('OWNER')).toBeInTheDocument()
+  })
+
+  it('bietet dem OWNER die Rolle OWNER an', async () => {
+    renderPage(makeApi(), 'OWNER')
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+
+    expect(await angeboteneRollen('Rolle von Mika Member')).toEqual(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'])
+    expect(await angeboteneRollen('Einladungsrolle')).toEqual(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'])
+  })
+
+  it('bietet dem Plattform-Admin die Rolle OWNER auch mit Projekt-Rolle ADMIN an', async () => {
+    auth.platformRole = 'ADMIN'
+    renderPage(makeApi(), 'ADMIN')
+    expect(await screen.findByText('Mika Member')).toBeInTheDocument()
+
+    expect(await angeboteneRollen('Rolle von Mika Member')).toEqual(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER'])
+    expect(screen.getByLabelText('Rolle von Olga Owner')).toBeInTheDocument()
   })
 
   it('behandelt einen fehlenden Projekt-Parameter als ungültig', () => {
@@ -520,6 +564,7 @@ describe('ProjectMembersPage', () => {
 describe('ProjectMembersPage auf Englisch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    auth.platformRole = undefined
     editMode.value = true
   })
 
@@ -617,6 +662,7 @@ describe('ProjectMembersPage — Ansicht als XY (Issue #1927)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     auth.vorschau = null
+    auth.platformRole = undefined
     editMode.value = true
   })
 

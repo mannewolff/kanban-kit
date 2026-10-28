@@ -23,6 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
  * Mitgliederverwaltung geteilter Projekte: Einladen (Token per E-Mail), Annehmen, Rolle ändern und
  * Entfernen. Rechteprüfung über den {@link PermissionChecker} (MEMBER_INVITE bzw. MEMBER_REMOVE).
  * Der letzte OWNER ist geschützt.
+ *
+ * <p>Wer die Rolle OWNER vergibt oder einem OWNER die Rolle nimmt, braucht zusätzlich {@link
+ * Permission#PROJECT_OWNER_TRANSFER} (Issue #1972) — sonst machte sich ein Projekt-ADMIN über Rolle
+ * ändern, Einladen oder Entfernen selbst zum Owner und setzte den echten ab, obwohl die Übergabe
+ * bewusst nicht ADMIN zusteht.
  */
 @Service
 public class MembershipService {
@@ -83,6 +88,10 @@ public class MembershipService {
   @Transactional
   public InviteOutcome invite(long inviterUserId, long projectId, String email, ProjectRole role) {
     permissions.require(inviterUserId, projectId, Permission.MEMBER_INVITE);
+    if (role == ProjectRole.OWNER) {
+      // Gilt für die direkte Zuordnung wie für die Token-Einladung: Beide ergeben einen OWNER.
+      requireOwnerTransfer(inviterUserId, projectId);
+    }
     Project project = projects.findById(projectId).orElseThrow(ProjectNotFoundException::new);
     String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
 
@@ -91,7 +100,7 @@ public class MembershipService {
       if (!existing.approved()) {
         throw new MemberNotApprovedException(normalizedEmail);
       }
-      addOrUpdateMembership(projectId, existing.id(), role);
+      addOrUpdateMembership(inviterUserId, projectId, existing.id(), role);
       // Die Info-Mail wird in der Outbox vorgemerkt und erst nach dem Commit versandt — ein
       // Versandfehler kann die gespeicherte Mitgliedschaft strukturell nicht mehr berühren.
       mailer.sendProjectAssignedEmail(normalizedEmail, project.name(), role, projectUrl(projectId));
@@ -126,8 +135,12 @@ public class MembershipService {
    * einzigen OWNER als VIEWER das Projekt still in die Ownerlosigkeit (Issue #498). Das Anlegen
    * einer <em>neuen</em> Mitgliedschaft braucht keinen Schutz — es kann die Owner-Menge nur
    * vergrößern.
+   *
+   * <p>Die Herabstufung eines bestehenden OWNER verlangt die Eigentümer-Übergabe wie {@link
+   * #changeRole} (Issue #1972); die Vergabe von OWNER prüft schon {@link #invite}.
    */
-  private void addOrUpdateMembership(long projectId, long userId, ProjectRole role) {
+  private void addOrUpdateMembership(
+      long inviterUserId, long projectId, long userId, ProjectRole role) {
     @Nullable ProjectMembership current =
         memberships.findByProjectIdAndUserId(projectId, userId).orElse(null);
     if (current == null) {
@@ -135,7 +148,11 @@ public class MembershipService {
       return;
     }
     if (role != ProjectRole.OWNER) {
-      requireOwnerRemains(memberships.lockOwnerUserIds(projectId), userId);
+      List<Long> owners = memberships.lockOwnerUserIds(projectId);
+      requireOwnerRemains(owners, userId);
+      if (owners.contains(userId)) {
+        requireOwnerTransfer(inviterUserId, projectId);
+      }
     }
     memberships.save(current.withRole(role));
   }
@@ -204,6 +221,12 @@ public class MembershipService {
    * Setzt die Projekt-Rolle eines Mitglieds. Der letzte OWNER kann nicht degradiert werden — auch
    * dann nicht, wenn zwei Owner das gleichzeitig füreinander versuchen (Issue #498, siehe {@link
    * #requireOwnerRemains}).
+   *
+   * <p>Ist die neue Rolle OWNER oder das Ziel derzeit OWNER, braucht der Aufrufer zusätzlich {@link
+   * Permission#PROJECT_OWNER_TRANSFER} (Issue #1972). Die Prüfung steht <em>nach</em> dem
+   * Aussperr-Schutz: Sie liest die Rolle des Aufrufers nach der Sperre neu, und wer im Wettlauf
+   * zweier Owner soeben herabgestuft wurde, soll weiterhin {@link LastOwnerException} sehen statt
+   * eines 403, das den Grund verdeckt ({@code RoleInvariantConcurrencyIT}).
    */
   @Transactional
   public MemberView changeRole(
@@ -217,6 +240,9 @@ public class MembershipService {
 
     if (newRole != ProjectRole.OWNER) {
       requireOwnerRemains(owners, targetUserId);
+    }
+    if (newRole == ProjectRole.OWNER || owners.contains(targetUserId)) {
+      requireOwnerTransfer(actorUserId, projectId);
     }
     return toView(memberships.save(target.withRole(newRole)));
   }
@@ -285,7 +311,8 @@ public class MembershipService {
 
   /**
    * Entfernt ein Mitglied. Der letzte OWNER kann nicht entfernt werden — auch nicht bei
-   * gleichzeitigen Aufrufen (Issue #498, siehe {@link #requireOwnerRemains}).
+   * gleichzeitigen Aufrufen (Issue #498, siehe {@link #requireOwnerRemains}). Einen OWNER entfernt
+   * nur, wer die Eigentümer-Übergabe darf (Issue #1972).
    */
   @Transactional
   public void removeMember(long actorUserId, long projectId, long targetUserId) {
@@ -297,7 +324,18 @@ public class MembershipService {
             .orElseThrow(MemberNotFoundException::new);
 
     requireOwnerRemains(owners, targetUserId);
+    if (owners.contains(targetUserId)) {
+      requireOwnerTransfer(actorUserId, projectId);
+    }
     memberships.deleteById(target.requireId());
+  }
+
+  /**
+   * Verlangt {@link Permission#PROJECT_OWNER_TRANSFER} — das Recht, das über die Rolle OWNER
+   * entscheidet. Der Plattform-Admin passiert wie bei jeder Prüfung des {@link PermissionChecker}.
+   */
+  private void requireOwnerTransfer(long actorUserId, long projectId) {
+    permissions.require(actorUserId, projectId, Permission.PROJECT_OWNER_TRANSFER);
   }
 
   /**

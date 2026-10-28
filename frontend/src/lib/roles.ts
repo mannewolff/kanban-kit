@@ -17,6 +17,13 @@ export const canManageProject = (role: string, platformAdmin = false): boolean =
 export const canManageMembers = (role: string, platformAdmin = false): boolean =>
   platformAdmin || role === 'OWNER' || role === 'ADMIN'
 
+/**
+ * Wer die Rolle OWNER vergeben oder einem OWNER nehmen darf (PROJECT_OWNER_TRANSFER) — nur OWNER
+ * oder Plattform-Admin, bewusst nicht der Projekt-ADMIN (Issue #1972).
+ */
+export const canTransferOwnership = (role: string, platformAdmin = false): boolean =>
+  platformAdmin || role === 'OWNER'
+
 /** Wer Karten anlegen/verschieben darf (CARD_*). */
 export const canEditCards = (role: string, platformAdmin = false): boolean =>
   platformAdmin || role !== 'VIEWER'

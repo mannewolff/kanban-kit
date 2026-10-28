@@ -21,8 +21,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.AuthProperties;
+import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.auth.application.UserDisplayNameWriter;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
@@ -51,6 +53,20 @@ class MembershipServiceTest {
   private UserLookup users;
   private UserDisplayNameWriter displayNames;
   private MembershipService service;
+
+  /**
+   * Derselbe Service mit einem <em>echten</em> {@link PermissionChecker} (Issue #1972): Nur so
+   * zeigt ein Test, dass ein Projekt-ADMIN an {@link Permission#PROJECT_OWNER_TRANSFER} scheitert,
+   * während OWNER und Plattform-Admin durchkommen. Akteure: 1 = OWNER, 3 = ADMIN, 7 =
+   * Plattform-Admin ohne Mitgliedschaft; 5 ist ein weiterer OWNER, 2 ein MEMBER.
+   */
+  private MembershipService checkedService;
+
+  private static final long OWNER_ID = 1L;
+  private static final long ADMIN_ID = 3L;
+  private static final long PLATFORM_ADMIN_ID = 7L;
+  private static final long OTHER_OWNER_ID = 5L;
+  private static final long MEMBER_ID = 2L;
 
   private static UserSummary user(long id, String email) {
     return new UserSummary(id, email, "U" + id, true);
@@ -94,6 +110,228 @@ class MembershipServiceTest {
             authProperties,
             projectProperties,
             clock);
+    RolePermissionRepository rolePermissions = mock(RolePermissionRepository.class);
+    // Ausschnitt der Matrix aus V8: OWNER hat alles, ADMIN alles außer der Eigentümer-Übergabe.
+    when(rolePermissions.isGranted(any(ProjectRole.class), any(Permission.class)))
+        .thenAnswer(
+            inv ->
+                inv.getArgument(0) == ProjectRole.OWNER
+                    || (inv.getArgument(0) == ProjectRole.ADMIN
+                        && inv.getArgument(1) != Permission.PROJECT_OWNER_TRANSFER));
+    PlatformAdminChecker platformAdmins = mock(PlatformAdminChecker.class);
+    when(platformAdmins.isPlatformAdmin(PLATFORM_ADMIN_ID)).thenReturn(true);
+    checkedService =
+        new MembershipService(
+            projects,
+            memberships,
+            invitations,
+            new PermissionChecker(memberships, rolePermissions, platformAdmins, projects, clock),
+            mailer,
+            users,
+            displayNames,
+            authProperties,
+            projectProperties,
+            clock);
+  }
+
+  /** Projekt 9 mit zwei OWNERn (1, 5), einem ADMIN (3) und einem MEMBER (2). */
+  private void givenProjectWithOwnersAdminAndMember() {
+    when(memberships.findByProjectIdAndUserId(9L, OWNER_ID))
+        .thenReturn(Optional.of(membership(OWNER_ID, ProjectRole.OWNER)));
+    when(memberships.findByProjectIdAndUserId(9L, OTHER_OWNER_ID))
+        .thenReturn(Optional.of(membership(OTHER_OWNER_ID, ProjectRole.OWNER)));
+    when(memberships.findByProjectIdAndUserId(9L, ADMIN_ID))
+        .thenReturn(Optional.of(membership(ADMIN_ID, ProjectRole.ADMIN)));
+    when(memberships.findByProjectIdAndUserId(9L, MEMBER_ID))
+        .thenReturn(Optional.of(membership(MEMBER_ID, ProjectRole.MEMBER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(OWNER_ID, OTHER_OWNER_ID));
+    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+    when(projects.findById(9L)).thenReturn(Optional.of(project()));
+    when(invitations.save(any(ProjectInvitation.class))).thenAnswer(inv -> inv.getArgument(0));
+  }
+
+  private void givenRegisteredUser(long userId, String email) {
+    when(users.findByEmail(email)).thenReturn(Optional.of(user(userId, email)));
+  }
+
+  @Test
+  void changeRole_deniesProjectAdmin_promotingHimselfToOwner() {
+    // Given
+    givenProjectWithOwnersAdminAndMember();
+
+    // When / Then
+    assertThatThrownBy(() -> checkedService.changeRole(ADMIN_ID, 9L, ADMIN_ID, ProjectRole.OWNER))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(memberships, never()).save(any(ProjectMembership.class));
+  }
+
+  @Test
+  void changeRole_deniesProjectAdmin_demotingOwner() {
+    // Given
+    givenProjectWithOwnersAdminAndMember();
+
+    // When / Then
+    assertThatThrownBy(
+            () -> checkedService.changeRole(ADMIN_ID, 9L, OTHER_OWNER_ID, ProjectRole.MEMBER))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(memberships, never()).save(any(ProjectMembership.class));
+  }
+
+  @Test
+  void changeRole_keepsLastOwnerAnswer_beforeOwnerTransferCheck() {
+    // Given: der ADMIN versucht den einzigen OWNER herabzustufen. Der Aussperr-Schutz antwortet
+    // zuerst — wie im Wettlauf zweier Owner, in dem der Aufrufer nach der Sperre schon herabgestuft
+    // ist und trotzdem den eigentlichen Grund sehen soll (RoleInvariantConcurrencyIT).
+    givenProjectWithOwnersAdminAndMember();
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(OTHER_OWNER_ID));
+
+    // When / Then
+    assertThatThrownBy(
+            () -> checkedService.changeRole(ADMIN_ID, 9L, OTHER_OWNER_ID, ProjectRole.MEMBER))
+        .isInstanceOf(LastOwnerException.class);
+    verify(memberships, never()).save(any(ProjectMembership.class));
+  }
+
+  @Test
+  void removeMember_deniesProjectAdmin_removingOwner() {
+    // Given
+    givenProjectWithOwnersAdminAndMember();
+
+    // When / Then
+    assertThatThrownBy(() -> checkedService.removeMember(ADMIN_ID, 9L, OTHER_OWNER_ID))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(memberships, never()).deleteById(anyLong());
+  }
+
+  @Test
+  void invite_deniesProjectAdmin_addingRegisteredUserAsOwner() {
+    // Given
+    givenProjectWithOwnersAdminAndMember();
+    givenRegisteredUser(MEMBER_ID, "member@x.de");
+
+    // When / Then
+    assertThatThrownBy(() -> checkedService.invite(ADMIN_ID, 9L, "member@x.de", ProjectRole.OWNER))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(memberships, never()).save(any(ProjectMembership.class));
+    verify(mailer, never()).sendProjectAssignedEmail(anyString(), anyString(), any(), anyString());
+  }
+
+  @Test
+  void invite_deniesProjectAdmin_creatingOwnerInvitation() {
+    // Given: unbekannte E-Mail -> Token-Einladung, die beim Annehmen OWNER ergäbe.
+    givenProjectWithOwnersAdminAndMember();
+
+    // When / Then
+    assertThatThrownBy(() -> checkedService.invite(ADMIN_ID, 9L, "guest@x.de", ProjectRole.OWNER))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(invitations, never()).save(any(ProjectInvitation.class));
+    verify(mailer, never()).sendInvitationEmail(anyString(), anyString(), anyString());
+  }
+
+  @Test
+  void invite_deniesProjectAdmin_downgradingExistingOwner() {
+    // Given: die erneute Einladung eines OWNERs mit kleinerer Rolle ist eine Herabstufung.
+    givenProjectWithOwnersAdminAndMember();
+    givenRegisteredUser(OTHER_OWNER_ID, "owner@x.de");
+
+    // When / Then
+    assertThatThrownBy(() -> checkedService.invite(ADMIN_ID, 9L, "owner@x.de", ProjectRole.MEMBER))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(memberships, never()).save(any(ProjectMembership.class));
+  }
+
+  @Test
+  void projectAdmin_keepsManagingNonOwnerMembers() {
+    // Given: unterhalb von OWNER bleibt die Mitgliederverwaltung des ADMINs unverändert.
+    givenProjectWithOwnersAdminAndMember();
+    givenRegisteredUser(MEMBER_ID, "member@x.de");
+
+    // When
+    checkedService.changeRole(ADMIN_ID, 9L, MEMBER_ID, ProjectRole.ADMIN);
+    checkedService.invite(ADMIN_ID, 9L, "member@x.de", ProjectRole.VIEWER);
+    checkedService.invite(ADMIN_ID, 9L, "guest@x.de", ProjectRole.ADMIN);
+    checkedService.removeMember(ADMIN_ID, 9L, MEMBER_ID);
+
+    // Then
+    verify(memberships, times(2)).save(any(ProjectMembership.class));
+    verify(invitations).save(any(ProjectInvitation.class));
+    verify(memberships).deleteById(3L);
+  }
+
+  @ParameterizedTest
+  @ValueSource(longs = {OWNER_ID, PLATFORM_ADMIN_ID})
+  void changeRole_allowsOwnerAndPlatformAdmin_toGrantOwner(long actor) {
+    // Given
+    givenProjectWithOwnersAdminAndMember();
+
+    // When
+    MembershipService.MemberView view =
+        checkedService.changeRole(actor, 9L, MEMBER_ID, ProjectRole.OWNER);
+
+    // Then
+    assertThat(view.role()).isEqualTo(ProjectRole.OWNER);
+  }
+
+  @ParameterizedTest
+  @ValueSource(longs = {OWNER_ID, PLATFORM_ADMIN_ID})
+  void changeRole_allowsOwnerAndPlatformAdmin_toDemoteOwner(long actor) {
+    // Given
+    givenProjectWithOwnersAdminAndMember();
+
+    // When
+    MembershipService.MemberView view =
+        checkedService.changeRole(actor, 9L, OTHER_OWNER_ID, ProjectRole.MEMBER);
+
+    // Then
+    assertThat(view.role()).isEqualTo(ProjectRole.MEMBER);
+  }
+
+  @ParameterizedTest
+  @ValueSource(longs = {OWNER_ID, PLATFORM_ADMIN_ID})
+  void removeMember_allowsOwnerAndPlatformAdmin_toRemoveOwner(long actor) {
+    // Given
+    givenProjectWithOwnersAdminAndMember();
+
+    // When
+    checkedService.removeMember(actor, 9L, OTHER_OWNER_ID);
+
+    // Then
+    verify(memberships).deleteById(3L);
+  }
+
+  @ParameterizedTest
+  @ValueSource(longs = {OWNER_ID, PLATFORM_ADMIN_ID})
+  void invite_allowsOwnerAndPlatformAdmin_toGrantOwner(long actor) {
+    // Given
+    givenProjectWithOwnersAdminAndMember();
+    givenRegisteredUser(MEMBER_ID, "member@x.de");
+
+    // When
+    InviteOutcome added = checkedService.invite(actor, 9L, "member@x.de", ProjectRole.OWNER);
+    InviteOutcome invited = checkedService.invite(actor, 9L, "guest@x.de", ProjectRole.OWNER);
+
+    // Then
+    assertThat(added).isEqualTo(InviteOutcome.ADDED);
+    assertThat(invited).isEqualTo(InviteOutcome.INVITED);
+    ArgumentCaptor<ProjectInvitation> captor = ArgumentCaptor.forClass(ProjectInvitation.class);
+    verify(invitations).save(captor.capture());
+    assertThat(captor.getValue().role()).isEqualTo(ProjectRole.OWNER);
+  }
+
+  @ParameterizedTest
+  @ValueSource(longs = {OWNER_ID, PLATFORM_ADMIN_ID})
+  void invite_allowsOwnerAndPlatformAdmin_toDowngradeExistingOwner(long actor) {
+    // Given
+    givenProjectWithOwnersAdminAndMember();
+    givenRegisteredUser(OTHER_OWNER_ID, "owner@x.de");
+
+    // When
+    checkedService.invite(actor, 9L, "owner@x.de", ProjectRole.MEMBER);
+
+    // Then
+    ArgumentCaptor<ProjectMembership> captor = ArgumentCaptor.forClass(ProjectMembership.class);
+    verify(memberships).save(captor.capture());
+    assertThat(captor.getValue().role()).isEqualTo(ProjectRole.MEMBER);
   }
 
   @Test

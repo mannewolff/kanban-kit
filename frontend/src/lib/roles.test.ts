@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canEditCards, canManageBoards, canManageProject, isPlatformAdmin } from './roles'
+import { canEditCards, canManageBoards, canManageProject, canTransferOwnership, isPlatformAdmin } from './roles'
 
 describe('roles', () => {
   it('gibt einem Plattform-Admin Vollzugriff', () => {
@@ -13,6 +13,13 @@ describe('roles', () => {
     expect(canEditCards('MEMBER')).toBe(true)
     expect(canManageProject('OWNER')).toBe(true)
     expect(canManageProject('ADMIN')).toBe(false)
+  })
+
+  it('lässt nur OWNER und Plattform-Admin über die Rolle OWNER entscheiden (Issue #1972)', () => {
+    expect(canTransferOwnership('OWNER')).toBe(true)
+    expect(canTransferOwnership('ADMIN')).toBe(false)
+    expect(canTransferOwnership('MEMBER')).toBe(false)
+    expect(canTransferOwnership('ADMIN', true)).toBe(true)
   })
 
   it('isPlatformAdmin liest platformRole', () => {
