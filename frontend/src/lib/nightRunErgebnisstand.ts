@@ -895,7 +895,12 @@ function stuckDerEinheit(e: RohEinheit): NightRunStuck | undefined {
 
 /** Ein Wert als Objekt mit unbekannten Feldern, oder `undefined`, wenn er keines ist. */
 const alsObjekt = (wert: unknown): Record<string, unknown> | undefined =>
-  typeof wert === 'object' && wert !== null && !Array.isArray(wert) ? (wert as Record<string, unknown>) : undefined
+  wert !== null &&
+  // Stryker disable next-line ConditionalExpression: gleichwertig — ein durchgelassener primitiver Wert traegt keines der gelesenen Felder, sie bleiben undefined; null faengt die Zeile davor
+  typeof wert === 'object' &&
+  !Array.isArray(wert)
+    ? (wert as Record<string, unknown>)
+    : undefined
 
 /**
  * Der Verbrauch eines Vorgangs in den Namen des Servers: `verbrauch` traegt sie schon (V2 ist
