@@ -536,6 +536,88 @@ Umsetzung liefen. Damit dieselbe Nacht auf beiden Wegen gleich aussieht, füllt 
 `concurrentPackages > 1` jede Einheit ohne eigene Angabe so auf, wie die Meldung sie trüge:
 `concurrent` und `deferredAtMerge` als `false`, `checkWaitMs` fehlt.
 
+### Vorgänge je Paket melden
+
+Damit der Leitstand die Modelle je Stufe vergleichen kann, meldet das Kit an jedem Paket die Liste
+`attempts`: ein Eintrag je Vorgang, in der Reihenfolge der Ausführung. Ein Vorgang ist ein einzelner
+Versuch an einer Karte in einer Stufe; in der Prüfung ist jeder Prüfer ein eigener Eintrag, und eine
+Wiederholung steht als weiterer Eintrag da.
+
+```json
+{
+  "cardNumber": 1945,
+  "title": "Laufmeldung nimmt Vorgänge je Item an",
+  "state": "GREEN",
+  "attempts": [
+    {
+      "stage": "PLAN",
+      "cardNumber": 1904,
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "succeeded": true,
+      "usage": { "costUsd": 1.25, "modelDurationMs": 420000 },
+      "writtenCards": [1905]
+    },
+    {
+      "stage": "REVIEW",
+      "cardNumber": 1905,
+      "model": "gpt-astra",
+      "succeeded": true
+    },
+    {
+      "stage": "UMSETZUNG",
+      "cardNumber": 1945,
+      "model": "claude-opus-5-5",
+      "effort": "medium",
+      "succeeded": true,
+      "usage": { "costUsd": 2.10, "modelDurationMs": 980000 }
+    }
+  ]
+}
+```
+
+- **`stage`** (Pflicht) — `PLAN`, `REVIEW`, `PAKETE`, `ABDECKUNG` oder `UMSETZUNG`; angenommen werden
+  auch `PACKAGES`, `COVERAGE` und `IMPLEMENTATION`, in beliebiger Schreibweise.
+- **`cardNumber`** (Pflicht) — die Karte, an der der Vorgang arbeitete; sie darf von der Karte des
+  Pakets abweichen.
+- **`model`** — das Modell, wie der Runner es führt, höchstens 100 Zeichen.
+- **`effort`** — die Denktiefe, wie gemeldet, höchstens 20 Zeichen.
+- **`succeeded`** (Pflicht) — `true`, wenn der Vorgang gelungen ist.
+- **`usage`** — Verbrauch des Vorgangs, dieselben Felder wie `usage` am Paket.
+- **`writtenCards`** — die Karten der Dokumente, die der Vorgang angelegt oder neu geschrieben hat,
+  etwa der Plan aus der Stufe `PLAN`; höchstens 50.
+
+Die Regeln dazu:
+
+- **Alles außer den drei Pflichtfeldern darf fehlen.** Ein Vorgang ohne `model` wird angenommen,
+  zählt im Modellvergleich aber nicht mit.
+- **Eine unbekannte Stufe ist ein Vertragsbruch.** Sie lehnt den Lauf mit `400` ab, wie ein
+  unbekannter Name in `stages`; ebenso ein fehlendes Pflichtfeld, mehr als 50 Einträge je Paket oder
+  eine überschrittene Länge.
+- **Ältere Meldungen gelten unverändert.** Ein Paket ohne `attempts` wird angenommen wie bisher und
+  trägt keinen gemeldeten Vorgang.
+
+Der Einlieferungsweg der von Hand eingelesenen Ergebnisdatei
+(`POST /api/projects/{projectId}/night-runs`) nimmt `attempts` am Paket in derselben Form an.
+
+In der Ergebnisdatei selbst stehen die Vorgänge je Einheit als Liste `vorgaenge` mit deutschen
+Namen; das Einlesen im Leitstand bildet sie feldgleich auf `attempts` ab:
+
+| Ergebnisdatei (`vorgaenge[]`) | Einlieferung (`attempts[]`) |
+|---|---|
+| `stufe` | `stage` (in Großschreibung) |
+| `karte` | `cardNumber` |
+| `modell` | `model` |
+| `denktiefe` | `effort` |
+| `gelungen` | `succeeded` |
+| `verbrauch` (`costUsd`, `inputTokens`, `outputTokens`, `cachedInputTokens`, `turns`) | `usage` mit denselben Feldern |
+| `kennzahlen.apiDauerMs` | `usage.modelDurationMs` |
+| `dokumente` | `writtenCards` |
+
+Ein Eintrag ohne `stufe`, `karte` oder `gelungen` wird beim Einlesen übergangen; eine fehlende
+optionale Angabe entfällt als Schlüssel. Trägt eine Einheit keine `vorgaenge`, geht das Paket ohne
+`attempts` hinaus, mit demselben Rumpf wie zuvor.
+
 ## 8. Auslieferungen melden
 
 Die eigene Auslieferung von kanban-kit (`.github/workflows/deploy.yml`) meldet jeden Versuch an das

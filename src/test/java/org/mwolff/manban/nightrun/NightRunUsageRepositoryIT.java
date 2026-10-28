@@ -186,6 +186,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         verbrauch,
         null,
         null,
+        List.of(),
         List.of());
   }
 
@@ -208,6 +209,7 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         null,
         new NightRunStuck("mvn verify", "OpenApiIT rot", 3, 3_600_000L, "s-" + cardNumber),
         null,
+        List.of(),
         List.of());
   }
 
@@ -234,7 +236,8 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
-        List.of(stufen));
+        List.of(stufen),
+        List.of());
   }
 
   /** Eine Stufe mit allen sechs Verbrauchsangaben — Modellzeit und Züge eingeschlossen. */

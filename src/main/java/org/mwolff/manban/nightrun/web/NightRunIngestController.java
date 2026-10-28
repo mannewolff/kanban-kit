@@ -294,7 +294,8 @@ class NightRunIngestController {
             request.concurrent(), request.checkWaitMs(), request.deferredAtMerge()),
         // Fehlende Stufen werden zur leeren Liste und nicht zu null: „dieser Vorgang hatte keine
         // Stufen" ist eine Aussage, und die Domaene fuehrt sie als Liste.
-        stufen == null ? List.of() : stufen.stream().map(NightRunIngestController::stage).toList());
+        stufen == null ? List.of() : stufen.stream().map(NightRunIngestController::stage).toList(),
+        NightRunAttemptRequest.toDomain(request.attempts()));
   }
 
   /**
@@ -466,6 +467,9 @@ class NightRunIngestController {
    * @param concurrent gleichzeitig gelaufen (Issue #1877); wie {@code checkWaitMs} und {@code
    *     deferredAtMerge} flach am Paket und als {@link JsonNode} angenommen, gedeutet in {@link
    *     IngestConcurrency} (Plan #1876 E1, E8)
+   * @param attempts die einzelnen Vorgänge des Pakets nach Vertrag V1 (Issue #1945, Plan #1905 E1).
+   *     Additiv und {@code @Nullable} wie {@code stages}: Eine ältere Kit-Kopie kennt das Feld
+   *     nicht und meldet unverändert weiter; das Paket trägt dann keinen Vorgang (E6).
    */
   @Schema(description = "Ein Vorgang des Laufs: eine bearbeitete oder übergangene Karte.")
   record IngestItemRequest(
@@ -526,7 +530,11 @@ class NightRunIngestController {
               implementation = Boolean.class,
               description = IngestConcurrency.DEFERRED_AT_MERGE_BESCHREIBUNG,
               example = IngestConcurrency.DEFERRED_AT_MERGE_BEISPIEL)
-          @Nullable JsonNode deferredAtMerge) {}
+          @Nullable JsonNode deferredAtMerge,
+      @Schema(description = NightRunAttemptRequest.LISTE_BESCHREIBUNG)
+          @Nullable
+          @Size(max = NightRunAttemptRequest.MAX_ATTEMPTS_PER_ITEM)
+          List<@Valid @NotNull NightRunAttemptRequest> attempts) {}
 
   /**
    * Die gemeldeten Vorgaben eines Kettenlaufs (Issue #1113, Plan #1110 E2/E3).

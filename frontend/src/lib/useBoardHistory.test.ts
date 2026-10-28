@@ -126,6 +126,37 @@ describe('useBoardHistory', () => {
     expect(renders.filter((r) => r.userId !== 2 && r.history.some((e) => e.id === 22))).toEqual([])
   })
 
+  it('schreibt nach einem Kontowechsel ohne Unmount in den Verlauf des neuen Kontos', () => {
+    localStorage.setItem(key(1), JSON.stringify([entry(11)]))
+    auth.value = { user: me(1), loading: false }
+    const { result, rerender } = renderHook(() => useBoardHistory())
+
+    auth.value = { user: me(2), loading: false }
+    rerender()
+    act(() => result.current.recordVisit(entry(22)))
+
+    expect(result.current.history).toEqual([entry(22)])
+    expect(stored(2)).toEqual([entry(22)])
+    expect(stored(1)).toEqual([entry(11)])
+  })
+
+  it('rendert beim ersten Mount nur einmal, mit und ohne Nutzer', () => {
+    let renders = 0
+    renderHook(() => {
+      renders++
+      return useBoardHistory()
+    })
+    expect(renders).toBe(1)
+
+    renders = 0
+    auth.value = { user: null, loading: true }
+    renderHook(() => {
+      renders++
+      return useBoardHistory()
+    })
+    expect(renders).toBe(1)
+  })
+
   it('greift bei loading oder ohne Nutzer weder lesend noch schreibend auf den Storage zu', () => {
     const getItem = vi.spyOn(localStorage, 'getItem')
     const setItem = vi.spyOn(localStorage, 'setItem')
@@ -173,6 +204,7 @@ describe('useBoardHistory', () => {
         { id: 4.5, name: 'B4', projectId: 4, projectName: 'P4' },
         { id: 5 },
         { id: 6, name: 'B6', projectId: 6 },
+        { id: 9, name: 9, projectId: 9, projectName: 'P9' },
         { id: 7, name: 'B7', projectId: 7, projectName: 'P7' },
         { id: 7, name: 'B7 veraltet', projectId: 7, projectName: 'P7 veraltet' },
         { id: 8, name: 'B8', projectId: 8, projectName: 'P8' },

@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.mwolff.manban.nightrun.domain.ModellvergleichErmittlung.Vorgang;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
@@ -148,6 +149,21 @@ public interface NightRunRepository {
    * seit {@code V34} die Spalte auch auf {@code night_run_item} führt.
    */
   List<NightRunItem> findByCard(long projectId, int cardNumber);
+
+  /**
+   * Die gemeldeten Vorgänge des Projekts aus Paketen mit Startzeitpunkt ab {@code von}
+   * (eingeschlossen), je mit Start und Gattung ihres Pakets und dem Abschluss {@code run_complete}
+   * aus ihrer Meldung (Issue #1947, Plan #1905 E7).
+   *
+   * <p>Wie {@link #findByCard} über die Pakete und nicht über die aufbewahrten Läufe: Auch die
+   * Vorgänge verwaister Pakete kommen mit, und <b>beide Gattungen</b> — die Gattung ist eine
+   * Eigenschaft des Vorgangs, gefiltert wird in der Ermittlung.
+   *
+   * <p>Sortiert nach Start, Paket und Stelle im Paket. {@link Vorgang#position} zählt über diese
+   * Reihenfolge durch: Innerhalb eines Laufs ist sie damit die Reihenfolge der Meldung, auch über
+   * die Pakete hinweg, deren eigene Stellen je bei 0 beginnen.
+   */
+  List<Vorgang> findAttemptsSince(long projectId, Instant von);
 
   /**
    * Zählt je Fehlerklasse die aufbewahrten Läufe <b>dieser Gattung</b> im Projekt, in denen sie

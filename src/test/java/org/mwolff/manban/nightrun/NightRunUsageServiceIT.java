@@ -148,6 +148,7 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
         new NightRunUsage(new BigDecimal(kosten), null, null, null, null, null),
         null,
         null,
+        List.of(),
         List.of());
   }
 
@@ -170,7 +171,8 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
         null,
         null,
         null,
-        List.of(stufen));
+        List.of(stufen),
+        List.of());
   }
 
   private static NightRunItemStage stufe(NightRunStage stage, long durationMs, String kosten) {

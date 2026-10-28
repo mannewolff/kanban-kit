@@ -7,7 +7,7 @@ import { cardsApi, type Card } from '../api/cards'
 import { ApiError } from '../api/client'
 import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecastEntry } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
-import { nightRunsApi, type NightRunItemView, type NightRunRework, type NightRunView } from '../api/nightRuns'
+import { nightRunsApi, type NightRunItemView, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
 import { TabletQuerProvider } from '../lib/tabletQuer'
 import { setzeMedien } from '../test/setup'
@@ -18,7 +18,7 @@ vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
 vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn(), delivery: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
-vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn() } }))
+vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn(), models: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
   ...(await original<typeof import('../api/nightRunUsage')>()),
   nightRunUsageApi: { period: vi.fn(), total: vi.fn() },
@@ -54,6 +54,7 @@ const m = {
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
   nacharbeit: nightRunsApi.rework as ReturnType<typeof vi.fn>,
+  modelle: nightRunsApi.models as ReturnType<typeof vi.fn>,
   karteNachNummer: cardsApi.byNumber as ReturnType<typeof vi.fn>,
   verbrauch: nightRunUsageApi.period as ReturnType<typeof vi.fn>,
   lebenszeit: nightRunUsageApi.total as ReturnType<typeof vi.fn>,
@@ -262,6 +263,21 @@ const nacharbeit = (): NightRunRework => ({
   weeks: [],
 })
 
+/** Die Antwort der Platte „Modelle“ (Issue #1949); die Tabellen sind in `ModellePlatte.test.tsx` geprüft. */
+const modelle = (): NightRunModels => ({
+  dataSince: '2026-07-01T22:00:00Z',
+  lastTwelveWeeks: true,
+  withoutModel: 0,
+  attemptsInPeriod: 3,
+  stages: (['PLAN', 'REVIEW', 'PAKETE', 'ABDECKUNG', 'UMSETZUNG'] as const).map((stage) => ({
+    stage,
+    rows:
+      stage === 'REVIEW'
+        ? [{ model: 'claude-opus-5-5', effort: null, attempts: 3, succeeded: 3, enoughData: false, costMedianUsd: 1.25, costFrom: 3, modelTimeMedianMs: 30_000, modelTimeFrom: 3 }]
+        : [],
+  })),
+})
+
 /** Die Antwort der Platte „Fluss“ (Issue #1778); Bänder und Anzeige sind in `FlussPlatte.test.tsx` geprüft. */
 const fluss = (): BoardFlow => ({
   days: [
@@ -322,6 +338,7 @@ beforeEach(() => {
   m.verbrauch.mockResolvedValue(zeitraum())
   m.lebenszeit.mockResolvedValue(lebenszeit())
   m.nacharbeit.mockResolvedValue(nacharbeit())
+  m.modelle.mockResolvedValue(modelle())
   m.fluss.mockResolvedValue(fluss())
   m.alter.mockResolvedValue(alter())
   m.auslieferung.mockResolvedValue(auslieferung())
@@ -776,6 +793,57 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     await waitFor(() => expect(m.prognose).toHaveBeenCalled())
     await waitFor(() => expect(m.epics).toHaveBeenCalled())
     expect(screen.queryByRole('region', { name: 'Vorhaben' })).not.toBeInTheDocument()
+  })
+})
+
+describe('LeitstandPage — Modelle (Issue #1949)', () => {
+  it('zeigt die Platte in der rechten Spalte zwischen „Nacharbeit“ und „Vorhaben“', async () => {
+    renderPage()
+    const platte = await screen.findByRole('region', { name: 'Modelle' })
+    const nacharbeitPlatte = screen.getByRole('region', { name: 'Nacharbeit' })
+    expect(nacharbeitPlatte.compareDocumentPosition(platte) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(platte.compareDocumentPosition(screen.getByRole('region', { name: 'Vorhaben' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(platte).getByRole('table', { name: 'Prüfung' })).toHaveTextContent('zu wenig Daten')
+    expect(m.modelle).toHaveBeenCalledWith(1)
+  })
+
+  it('Szenario: Ohne Recht auf die Läufe', async () => {
+    // Angenommen ein Mitglied des Projekts darf die Läufe nicht sehen
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.klassen.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.nacharbeit.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    m.modelle.mockRejectedValue(new ApiError(403, 'Forbidden'))
+
+    // Wenn es den Leitstand öffnet
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Durchsatz' })).toBeInTheDocument()
+    await waitFor(() => expect(m.modelle).toHaveBeenCalled())
+
+    // Dann sieht es die Platte „Modelle“ nicht — die übrigen Platten bleiben
+    expect(screen.queryByRole('region', { name: 'Modelle' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Vorhaben' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /^Implementierungszeit/ })).toBeInTheDocument()
+    expect(screen.getByRole('article', { name: 'Durchlaufzeit' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Platte ohne die Laufliste nicht, auch wenn der Modellvergleich da ist', async () => {
+    m.laeufe.mockRejectedValue(new ApiError(403, 'Forbidden'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Vorhaben' })).toBeInTheDocument()
+    await waitFor(() => expect(m.laeufe).toHaveBeenCalled())
+    await waitFor(() => expect(m.modelle).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Modelle' })).not.toBeInTheDocument()
+  })
+
+  it('blendet bei einem Fehler des Abrufs nur die eigene Platte aus', async () => {
+    m.modelle.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    renderPage()
+    expect(await screen.findByRole('region', { name: 'Nacharbeit' })).toBeInTheDocument()
+    await waitFor(() => expect(m.modelle).toHaveBeenCalled())
+    expect(screen.queryByRole('region', { name: 'Modelle' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Abbruchgründe' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Vorhaben' })).toBeInTheDocument()
   })
 })
 

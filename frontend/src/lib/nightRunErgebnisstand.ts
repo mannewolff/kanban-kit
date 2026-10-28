@@ -32,6 +32,7 @@
  * wie das des Pruef-Laufs ({@link NUR_KETTE}, {@link NIE_IN_KETTE}).
  */
 
+import type { NightRunAttempt, NightRunUsage } from '../api/nightRuns'
 import { ERGEBNISGRUND, type Wortpaar } from './kitWortformen'
 import {
   NIGHT_RUN_EXCERPT_MAX,
@@ -165,6 +166,12 @@ interface RohEinheit {
   pruefWartezeitMs?: unknown
   /** `uebernommen`, `ausstehend` oder `zurueckgestellt`; nur das letzte heisst verschoben. */
   zusammenfuehrung?: unknown
+  /**
+   * Die einzelnen Vorgaenge der Einheit (Vertrag V2 aus Plan #1905, Issue #1948). `unknown`, weil
+   * eine fremde Datei nichts einschleusen darf: Uebernommen wird nur, was {@link vorgangAlsAttempt}
+   * annimmt.
+   */
+  vorgaenge?: unknown
 }
 
 /** Der Block `einheit.festgefahren`, additiv in Fassung 1 (Issue #1551). */
@@ -886,6 +893,55 @@ function stuckDerEinheit(e: RohEinheit): NightRunStuck | undefined {
   })
 }
 
+/** Ein Wert als Objekt mit unbekannten Feldern, oder `undefined`, wenn er keines ist. */
+const alsObjekt = (wert: unknown): Record<string, unknown> | undefined =>
+  typeof wert === 'object' && wert !== null && !Array.isArray(wert) ? (wert as Record<string, unknown>) : undefined
+
+/**
+ * Der Verbrauch eines Vorgangs in den Namen des Servers: `verbrauch` traegt sie schon (V2 ist
+ * feldgleich mit V1), die Modellzeit kommt aus `kennzahlen.apiDauerMs`. Nur Zahlen gehen durch;
+ * ohne eine einzige Angabe kein Verbrauch.
+ */
+function verbrauchDesVorgangs(v: Record<string, unknown>): NightRunUsage | undefined {
+  const verbrauch = alsObjekt(v.verbrauch) ?? {}
+  return leerOderWert<NightRunUsage>({
+    ...zahlenfeld('costUsd', verbrauch.costUsd),
+    ...zahlenfeld('inputTokens', verbrauch.inputTokens),
+    ...zahlenfeld('outputTokens', verbrauch.outputTokens),
+    ...zahlenfeld('cachedInputTokens', verbrauch.cachedInputTokens),
+    ...zahlenfeld('turns', verbrauch.turns),
+    ...zahlenfeld('modelDurationMs', alsObjekt(v.kennzahlen)?.apiDauerMs),
+  })
+}
+
+/**
+ * Ein Eintrag aus `vorgaenge` als Vorgang des Servers (Plan #1905 V2 → V1); `undefined`, wenn
+ * eine der drei Pflichtangaben `stufe`, `karte`, `gelungen` fehlt oder nicht passt.
+ */
+function vorgangAlsAttempt(roh: unknown): NightRunAttempt | undefined {
+  const v = alsObjekt(roh)
+  if (v === undefined || typeof v.stufe !== 'string' || typeof v.karte !== 'number' || typeof v.gelungen !== 'boolean') {
+    return undefined
+  }
+  const usage = verbrauchDesVorgangs(v)
+  const dokumente = Array.isArray(v.dokumente) ? v.dokumente.filter((d): d is number => typeof d === 'number') : undefined
+  return {
+    stage: v.stufe.toUpperCase(),
+    cardNumber: v.karte,
+    ...textfeld('model', v.modell),
+    ...textfeld('effort', v.denktiefe),
+    succeeded: v.gelungen,
+    ...(usage === undefined ? {} : { usage }),
+    ...(dokumente === undefined ? {} : { writtenCards: dokumente }),
+  }
+}
+
+/** Die Vorgaenge einer Einheit; `undefined` ohne Liste `vorgaenge` — dann entfaellt der Schluessel. */
+function vorgaengeDerEinheit(e: RohEinheit): NightRunAttempt[] | undefined {
+  if (!Array.isArray(e.vorgaenge)) return undefined
+  return e.vorgaenge.map(vorgangAlsAttempt).filter((a): a is NightRunAttempt => a !== undefined)
+}
+
 /**
  * Die Angaben einer gleichzeitigen Nacht — Wort fuer Wort die Regel von `nachtlaufGleichzeitig` in
  * `kit/board/melder.mjs` (Plan #1876, E9): ein wahres `gleichzeitig`, `zurueckgestellt` als
@@ -944,6 +1000,7 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode, gleichze
   const kennzahlen = kennzahlenDerEinheit(e)
   const kettenStufen = kettenStufenDerEinheit(e.stufen)
   const stuck = stuckDerEinheit(e)
+  const attempts = vorgaengeDerEinheit(e)
   return {
     cardNumber: Number(e.id),
     title: e.titel,
@@ -964,6 +1021,7 @@ function baueItem(e: RohEinheit, position: number, modus: NightRunMode, gleichze
     // Einheit, noch bevor sie erstmals geschrieben wird (siehe {@link RohEinheit}).
     ausgang: e.ausgang,
     ...(stuck === undefined ? {} : { stuck }),
+    ...(attempts === undefined ? {} : { attempts }),
     // An jedem Paket einer Nacht mit mehreren Plaetzen, sonst an keinem (Plan #1876, E9).
     ...(gleichzeitig ? gleichzeitigkeitDerEinheit(e) : {}),
   }

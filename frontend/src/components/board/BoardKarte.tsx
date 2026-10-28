@@ -305,7 +305,8 @@ export function BoardKarte({
     >
       {/* Der Titel steht im DOM vor dem Kopf: Das Öffnen ist die erste Tab-Station der Karte, vor
           dem ⋮ (Plan #1292, E7). Sichtbar bleibt der Kopf oben, über `order`. */}
-      <Typography component="h4" sx={{ m: 0, fontSize: 12.5, fontWeight: 500, lineHeight: 1.35 }}>
+      {/* Ein Pfad ohne Leerzeichen ist für den Browser ein Wort; ohne Umbruchregel liefe er über den Rand (Issue #1942). */}
+      <Typography component="h4" sx={{ m: 0, fontSize: 12.5, fontWeight: 500, lineHeight: 1.35, overflowWrap: 'anywhere' }}>
         {/* Ein eigener Knopf statt der ganzen Fläche, weil die Karte selbst Knöpfe trägt (E1); sein Name
             ist der sichtbare Titel, damit die Überschrift ihren Titel behält (E5). Die Klickwelle änderte das
             Erscheinungsbild, der Fokusring kommt aus dem Theme (E6). */}

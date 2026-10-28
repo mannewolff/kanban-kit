@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -194,6 +195,13 @@ class AdminVorschauServiceTest {
     assertThatThrownBy(() -> service.starte(ADMIN, ADMIN, false))
         .isInstanceOf(VorschauZielUnzulaessigException.class);
     verify(vorschauen, never()).save(any());
+  }
+
+  @Test
+  void startAlsSichSelbstWirdVorDemLadenDesZielsAbgewiesen() {
+    assertThatThrownBy(() -> service.starte(ADMIN, ADMIN, false))
+        .isInstanceOf(VorschauZielUnzulaessigException.class);
+    verify(users, times(1)).findById(ADMIN);
   }
 
   @Test
@@ -429,6 +437,18 @@ class AdminVorschauServiceTest {
 
     assertThat(service.pruefe(KENNUNG, GEHEIMNIS, ADMIN))
         .isEqualTo(new VorschauPruefung.Beendet(VorschauEndgrund.BEENDET));
+  }
+
+  @Test
+  void gewonnenesRennenUmsEndeMeldetDenEigenenEndgrund() {
+    when(vorschauen.findByKennung(KENNUNG))
+        .thenReturn(Optional.of(offen()))
+        .thenReturn(Optional.of(offen().beendet(NOW, VorschauEndgrund.BEENDET)));
+    when(vorschauen.beende(anyLong(), any(), any())).thenReturn(true);
+    when(users.findById(ZIEL)).thenReturn(Optional.empty());
+
+    assertThat(service.pruefe(KENNUNG, GEHEIMNIS, ADMIN))
+        .isEqualTo(new VorschauPruefung.Beendet(VorschauEndgrund.ZIEL_FEHLT));
   }
 
   @Test

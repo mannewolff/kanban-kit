@@ -361,8 +361,9 @@ public final class FortschrittErmittlung {
    * trägt (Issue #1931). Eine andere Herkunft, etwa eine Idee, zählt nicht als Anforderung.
    */
   private @Nullable Karte anforderungVon(Karte plan) {
-    Long herkunft = plan.derivedFromCardId();
-    Karte k = herkunft == null ? null : jeId.get(herkunft);
+    // Ohne Herkunft liefert die HashMap null; eine eigene Null-Prüfung davor wäre gleichwertig
+    // und hinterließe einen nicht tötbaren Mutanten (Issue #1933).
+    Karte k = jeId.get(plan.derivedFromCardId());
     return k != null && KitNamen.artAusTitel(k.title()).filter(Art.FACHLICH::equals).isPresent()
         ? k
         : null;

@@ -1098,6 +1098,14 @@
     },
     "IngestItemRequest" : {
       "properties" : {
+        "attempts" : {
+          "items" : {
+            "$ref" : "#/components/schemas/NightRunAttemptRequest"
+          },
+          "maxItems" : 50,
+          "minItems" : 0,
+          "type" : "array"
+        },
         "cardNumber" : {
           "format" : "int32",
           "type" : "integer"
@@ -1511,6 +1519,45 @@
         }
       },
       "required" : [ "column" ],
+      "type" : "object"
+    },
+    "NightRunAttemptRequest" : {
+      "properties" : {
+        "cardNumber" : {
+          "format" : "int32",
+          "type" : "integer"
+        },
+        "effort" : {
+          "maxLength" : 20,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "model" : {
+          "maxLength" : 100,
+          "minLength" : 0,
+          "type" : "string"
+        },
+        "stage" : {
+          "enum" : [ "PLAN", "REVIEW", "PAKETE", "ABDECKUNG", "UMSETZUNG" ],
+          "type" : "string"
+        },
+        "succeeded" : {
+          "type" : "boolean"
+        },
+        "usage" : {
+          "$ref" : "#/components/schemas/NightRunUsageRequest"
+        },
+        "writtenCards" : {
+          "items" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "maxItems" : 50,
+          "minItems" : 0,
+          "type" : "array"
+        }
+      },
+      "required" : [ "cardNumber", "stage", "succeeded" ],
       "type" : "object"
     },
     "NightRunUsageRequest" : {

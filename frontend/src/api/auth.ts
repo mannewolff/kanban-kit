@@ -8,6 +8,7 @@ export interface Membership {
 /** Gewähltes Erscheinungsbild am Konto (#1911): SYSTEM folgt Browser bzw. Betriebssystem. */
 export type ColorScheme = 'SYSTEM' | 'LIGHT' | 'DARK'
 
+// Stryker disable next-line StringLiteral: gleichwertig — fehlt 'SYSTEM' in der Liste, fällt die Wahl in `parseMe` auf 'SYSTEM' zurück
 const COLOR_SCHEMES: ReadonlyArray<string> = ['SYSTEM', 'LIGHT', 'DARK'] satisfies ColorScheme[]
 
 /** Die laufende, nur lesende „Ansicht als XY“ dieser Anmeldung (Plan #1914, E14). */
@@ -77,6 +78,7 @@ function isMe(
 const nichtLeer = (wert: unknown): wert is string => typeof wert === 'string' && wert !== ''
 
 function isVorschau(data: unknown): data is Vorschau {
+  // Stryker disable next-line ConditionalExpression,LogicalOperator: gleichwertig — `parseMe` reicht nie `null` oder `undefined` herein, und an einem Text oder einer Zahl scheitert schon `nichtLeer`
   if (typeof data !== 'object' || data === null) return false
   const d = data as Record<string, unknown>
   return nichtLeer(d.kennung) && nichtLeer(d.zielName) && nichtLeer(d.adminName) && nichtLeer(d.laeuftAbAm)

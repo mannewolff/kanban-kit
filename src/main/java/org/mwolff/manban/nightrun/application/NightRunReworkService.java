@@ -118,7 +118,8 @@ public class NightRunReworkService {
     return NacharbeitErmittlung.ermittle(eingaben, jetzt);
   }
 
-  private static Kartengruppe gruppe(KartenGruppe gruppe) {
+  /** Paketsichtbar für {@link NightRunModelsService} (Issue #1947) — eine Abbildung, nicht zwei. */
+  static Kartengruppe gruppe(KartenGruppe gruppe) {
     return switch (gruppe) {
       case PAKET -> Kartengruppe.PAKET;
       case DOKUMENT -> Kartengruppe.DOKUMENT;

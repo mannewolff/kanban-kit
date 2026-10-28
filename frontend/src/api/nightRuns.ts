@@ -47,6 +47,28 @@ export interface NightRunUsage {
   inputTokens?: number
   outputTokens?: number
   cachedInputTokens?: number
+  /** Rechenzeit des Modells ohne Wartezeiten; am Handweg allein an einem Vorgang (Issue #1948). */
+  modelDurationMs?: number
+  /** Zahl der Zuege der Sitzung; am Handweg allein an einem Vorgang (Issue #1948). */
+  turns?: number
+}
+
+/**
+ * Ein einzelner Vorgang eines Pakets, wie er an den Server geht (Vertrag V1 aus Plan #1905, Issue
+ * #1948): ein Versuch an einer Karte in einer Stufe, in der Pruefung je Pruefer ein Eintrag.
+ *
+ * `stage` bleibt eine Zeichenkette in Grossschreibung, wie die Ergebnisdatei sie nennt: Eine
+ * unbekannte Stufe ist ein Vertragsbruch, und den stellt der Server mit 400 fest (E6), nicht der
+ * Browser. Jede optionale Angabe fehlt als Schluessel, wo nichts gemeldet wurde.
+ */
+export interface NightRunAttempt {
+  stage: string
+  cardNumber: number
+  model?: string
+  effort?: string
+  succeeded: boolean
+  usage?: NightRunUsage
+  writtenCards?: number[]
 }
 
 /** Ein Arbeitspaket, wie es an den Server geht — der Ausschnitt des Parser-Ergebnisses, den der Server kennt. */
@@ -61,6 +83,8 @@ export interface NightRunItemSubmission {
   usage?: NightRunUsage
   /** Die Angaben eines festgefahrenen Pakets (Issue #1551); der Server uebernimmt sie nur bei `STUCK`. */
   stuck?: NightRunStuck
+  /** Die Vorgaenge des Pakets in der Reihenfolge ihrer Ausfuehrung (Issue #1948). */
+  attempts?: NightRunAttempt[]
   /**
    * Die drei Angaben einer gleichzeitigen Nacht, flach wie in der Meldung des Kits (Issue #1878,
    * Plan #1876 E8); der Handweg fuehrt sie nur bei `concurrentPackages` > 1, dann an jedem Paket.
@@ -669,6 +693,46 @@ export interface NightRunRework {
   weeks: NightRunReworkWeek[]
 }
 
+/** Eine Zeile der Platte „Modelle“: ein Modell mit einer Denktiefe in einer Stufe (Issue #1949, Plan #1905 E12). */
+export interface NightRunModelRow {
+  /** Das Modell, wie gemeldet. */
+  model: string
+  /** Die Denktiefe, wie gemeldet; `null` ohne Denktiefe. */
+  effort: string | null
+  attempts: number
+  succeeded: number
+  /** Erst ab fünf Vorgängen steht eine Erfolgsquote; die Schwelle steht im Backend (E10). */
+  enoughData: boolean
+  /** Median der Kosten je Vorgang in USD; `null`, wenn kein Vorgang sie trägt. */
+  costMedianUsd: number | null
+  /** Zahl der Vorgänge, die Kosten tragen. */
+  costFrom: number
+  /** Median der Modellzeit je Vorgang in Millisekunden; `null`, wenn kein Vorgang sie trägt. */
+  modelTimeMedianMs: number | null
+  /** Zahl der Vorgänge, die eine Modellzeit tragen. */
+  modelTimeFrom: number
+}
+
+/** Eine Stufe der Kette mit ihren Zeilen, nach Namen geordnet; leer ohne Vorgang. */
+export interface NightRunModelStage {
+  stage: ProgressStage
+  rows: NightRunModelRow[]
+}
+
+/** Antwort von `GET /api/boards/{boardId}/night-run-models` (Issue #1947, `NightRunModelsView`). */
+export interface NightRunModels {
+  /** Frühester Laufstart eines gezählten Vorgangs mit Modell; `null` ohne einen. */
+  dataSince: string | null
+  /** Ob der Datenbeginn im ältesten der zwölf Wochenfenster liegt (E11). */
+  lastTwelveWeeks: boolean
+  /** Gezählte Vorgänge ohne Modell ab dem Datenbeginn. */
+  withoutModel: number
+  /** Gezählte Vorgänge mit Modell. */
+  attemptsInPeriod: number
+  /** Die fünf Stufen in der Reihenfolge der Kette, auch ohne Vorgang. */
+  stages: NightRunModelStage[]
+}
+
 /** Je Fehlerklasse die Zahl der aufbewahrten Laeufe, in denen sie vorkam; fehlende Klassen kamen nie vor. */
 export type NightRunErrorClassCounts = Partial<Record<NightRunErrorClass, number>>
 
@@ -700,6 +764,8 @@ export const nightRunsApi = {
   wartegrund: (cardId: number) => apiFetch<Wartegruende>(`/api/cards/${cardId}/night-wait`),
   /** Die Nacharbeit der Runs an einem Board (Issue #1759, Plan #1752). */
   rework: (boardId: number) => apiFetch<NightRunRework>(`/api/boards/${boardId}/night-run-rework`),
+  /** Der Modellvergleich der Runs an einem Board (Issue #1949, Plan #1905). */
+  models: (boardId: number) => apiFetch<NightRunModels>(`/api/boards/${boardId}/night-run-models`),
 }
 
 export type NightRunsApi = typeof nightRunsApi

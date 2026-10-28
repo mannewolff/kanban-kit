@@ -35,10 +35,13 @@ import org.mwolff.manban.card.application.CardRunQueryService.FreigabeKarteView;
 import org.mwolff.manban.common.KitNamen;
 import org.mwolff.manban.common.KitNamen.Sache;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
+import org.mwolff.manban.nightrun.domain.ModellvergleichErmittlung;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe;
 import org.mwolff.manban.nightrun.domain.NachtFreigabe.Startstation;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
+import org.mwolff.manban.nightrun.domain.NightRunAttempt;
+import org.mwolff.manban.nightrun.domain.NightRunAttemptStage;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
@@ -472,6 +475,7 @@ class NightRunServiceTest {
         null,
         null,
         null,
+        List.of(),
         List.of());
   }
 
@@ -723,6 +727,110 @@ class NightRunServiceTest {
         .isEqualTo(new BigDecimal("4.000000"));
   }
 
+  // --- Vorgaenge je Paket durch den Dienst (Issue #1944) -------------------------------------
+
+  private static final NightRunAttempt PLANVORGANG =
+      new NightRunAttempt(
+          NightRunAttemptStage.PLAN,
+          1905,
+          "claude-opus-5-5",
+          "high",
+          true,
+          new NightRunUsage(new BigDecimal("1.50"), 100L, 20L, 50L, 60_000L, 4),
+          List.of(1905));
+
+  private static final NightRunAttempt PRUEFVORGANG =
+      new NightRunAttempt(
+          NightRunAttemptStage.REVIEW, 1905, "gpt-astra", null, false, null, List.of());
+
+  private static NightRunService.NewNightRunItem itemMitVorgaengen(
+      int cardNumber, NightRunAttempt... vorgaenge) {
+    return new NightRunService.NewNightRunItem(
+        cardNumber,
+        "Paket " + cardNumber,
+        NightRunState.GREEN,
+        null,
+        5L,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        List.of(vorgaenge));
+  }
+
+  private List<NightRunAttempt> vorgaengeDes(Instant startedAt) {
+    NightRun lauf =
+        runs.findByProjectAndKindOrderByStartedAtDesc(PROJECT, NightRunKind.NIGHT).stream()
+            .filter(r -> r.startedAt().equals(startedAt))
+            .findFirst()
+            .orElseThrow();
+    return runs.findItemsByRunIds(List.of(lauf.requireId())).stream()
+        .flatMap(item -> item.attempts().stream())
+        .toList();
+  }
+
+  /** Der Handweg reicht die Vorgaenge eines noch unbekannten Laufs in ihrer Reihenfolge durch. */
+  @Test
+  void submit_speichertDieVorgaengeEinesUnbekanntenLaufs() {
+    service.submit(
+        USER, PROJECT, List.of(lauf(T1, itemMitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG))));
+
+    assertThat(vorgaengeDes(T1)).containsExactly(PLANVORGANG, PRUEFVORGANG);
+  }
+
+  /**
+   * Am Handweg gewinnt der erste Stand (Plan #1905 E5): Ein zweites Einlesen desselben Laufs mit
+   * anderen Vorgaengen aendert die gespeicherten nicht und zaehlt sie nicht doppelt.
+   */
+  @Test
+  void submit_einZweitesEinlesenAendertDieVorgaengeNicht() {
+    service.submit(USER, PROJECT, List.of(lauf(T1, itemMitVorgaengen(1905, PLANVORGANG))));
+
+    service.submit(
+        USER, PROJECT, List.of(lauf(T1, itemMitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG))));
+
+    assertThat(vorgaengeDes(T1)).containsExactly(PLANVORGANG);
+  }
+
+  /** Beide Einlieferungswege erzeugen aus demselben Inhalt dieselben Vorgaenge (Plan #1905 E5). */
+  @Test
+  void submitUndIngestErzeugenBeiGleichemInhaltDieselbenVorgaenge() {
+    service.submit(
+        USER, PROJECT, List.of(lauf(T1, itemMitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG))));
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(T2, true, null, itemMitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG)));
+
+    assertThat(vorgaengeDes(T2))
+        .containsExactly(PLANVORGANG, PRUEFVORGANG)
+        .isEqualTo(vorgaengeDes(T1));
+  }
+
+  /** Am meldenden Weg ersetzt eine spaetere Meldung die Vorgaenge mit dem Stand des Laufs. */
+  @Test
+  void ingest_eineSpaetereMeldungErsetztDieVorgaenge() {
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(T1, false, null, itemMitVorgaengen(1905, PLANVORGANG)));
+
+    service.ingest(
+        USER,
+        PROJECT,
+        TOKEN,
+        NightRunKind.NIGHT,
+        meldung(T1, true, null, itemMitVorgaengen(1905, PRUEFVORGANG)));
+
+    assertThat(vorgaengeDes(T1)).containsExactly(PRUEFVORGANG);
+  }
+
   // --- Budgets und Stufen durch den Dienst (Issue #1113) ------------------------------------
 
   private static final NightRunBudget VORGABEN =
@@ -748,7 +856,8 @@ class NightRunServiceTest {
         null,
         null,
         null,
-        List.of(stufen));
+        List.of(stufen),
+        List.of());
   }
 
   private static NightRunItemStage stufe(NightRunStage stage) {
@@ -847,6 +956,7 @@ class NightRunServiceTest {
         null,
         stuck,
         null,
+        List.of(),
         List.of());
   }
 
@@ -923,6 +1033,7 @@ class NightRunServiceTest {
         null,
         null,
         concurrency,
+        List.of(),
         List.of());
   }
 
@@ -1174,6 +1285,7 @@ class NightRunServiceTest {
         usage,
         null,
         null,
+        List.of(),
         List.of());
   }
 
@@ -2026,7 +2138,8 @@ class NightRunServiceTest {
           item.usage(),
           item.stuck(),
           item.concurrency(),
-          item.stages());
+          item.stages(),
+          item.attempts());
     }
 
     @Override
@@ -2088,7 +2201,8 @@ class NightRunServiceTest {
           item.stuck(),
           item.concurrency(),
           // Die Stufen haengen am Paket, nicht am Lauf (V37): Ein verwaistes Paket behaelt sie.
-          item.stages());
+          item.stages(),
+          item.attempts());
     }
 
     @Override
@@ -2126,6 +2240,12 @@ class NightRunServiceTest {
                   .thenComparing(NightRunItem::requireId)
                   .reversed())
           .toList();
+    }
+
+    /** Der Lesepfad der Platte „Modelle“ (Issue #1947); {@link NightRunService} ruft ihn nicht. */
+    @Override
+    public List<ModellvergleichErmittlung.Vorgang> findAttemptsSince(long projectId, Instant von) {
+      return List.of();
     }
 
     /** Alle Pakete, auch verwaiste — die Verdraengung ist sonst ueber keinen Port sichtbar. */

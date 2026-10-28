@@ -17,6 +17,24 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.11.0] – 2026-10-28
+
+- chore: v3.10.1
+- Test schließt den Stufenzweig des Rückzugs in ModellvergleichErmittlung ([#1952](https://github.com/mannewolff/kanban-kit/issues/1952))
+- Test tötet Mutanten in vorhabenName.ts ([#1943](https://github.com/mannewolff/kanban-kit/issues/1943))
+- Leitstand: Platte „Modelle“ zeigt den Vergleich je Stufe ([#1949](https://github.com/mannewolff/kanban-kit/issues/1949))
+- Leitstand: Vorgänge der Ergebnisdatei von Hand einliefern ([#1948](https://github.com/mannewolff/kanban-kit/issues/1948))
+- Nachtlauf: Endpunkt für den Modellvergleich eines Boards ([#1947](https://github.com/mannewolff/kanban-kit/issues/1947))
+- Nachtlauf: Modellvergleich je Stufe ermitteln ([#1946](https://github.com/mannewolff/kanban-kit/issues/1946))
+- Nachtlauf: Laufmeldung nimmt Vorgänge je Item an ([#1945](https://github.com/mannewolff/kanban-kit/issues/1945))
+- Nachtlauf: Vorgänge je Item speichern ([#1944](https://github.com/mannewolff/kanban-kit/issues/1944))
+- Board-Karte: lange Wörter im Titel umbrechen ([#1942](https://github.com/mannewolff/kanban-kit/issues/1942))
+- useBoardHistory: Mutations-Überlebende töten oder als gleichwertig ausnehmen ([#1937](https://github.com/mannewolff/kanban-kit/issues/1937))
+- authApi: Mutations-Überlebende in auth.ts töten ([#1936](https://github.com/mannewolff/kanban-kit/issues/1936))
+- adminApi.listUsers: Mutations-Überlebenden in Zeile 26 töten ([#1935](https://github.com/mannewolff/kanban-kit/issues/1935))
+- AdminVorschauService: Mutations-Überlebende in Zeile 83 und 226 töten ([#1934](https://github.com/mannewolff/kanban-kit/issues/1934))
+- FortschrittErmittlung: gleichwertige Null-Prüfung der Herkunft streichen ([#1933](https://github.com/mannewolff/kanban-kit/issues/1933))
+
 ## [3.10.0] – 2026-10-27
 
 - chore: v3.9.1

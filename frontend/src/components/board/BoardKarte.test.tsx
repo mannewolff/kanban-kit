@@ -69,6 +69,14 @@ describe('BoardKarte — Ziehbarkeit (#1324)', () => {
   })
 })
 
+describe('BoardKarte — Umbruch langer Wörter im Titel (Issue #1942)', () => {
+  it('bricht einen Titel ohne Leerzeichen innerhalb der Karte um', () => {
+    zeigen({ selectionMode: false, selected: false, canEdit: true })
+
+    expect(getComputedStyle(screen.getByRole('heading', { level: 4 })).overflowWrap).toBe('anywhere')
+  })
+})
+
 describe('BoardKarte auf dem Tablet im Querformat (Plan #1707, E3/E4)', () => {
   const zeigenTablet = (
     over: Partial<{ selectionMode: boolean; selected: boolean; canEdit: boolean; fingerZustand: 'wartet' | 'zieht' }> = {},

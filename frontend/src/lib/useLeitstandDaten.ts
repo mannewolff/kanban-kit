@@ -3,7 +3,7 @@ import { boardsApi, type Board } from '../api/boards'
 import { ApiError, istVorschauVerborgen } from '../api/client'
 import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
-import { nightRunsApi, type NightRunErrorClassCounts, type NightRunRework, type NightRunView } from '../api/nightRuns'
+import { nightRunsApi, type NightRunErrorClassCounts, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { juengsterLauf } from './leitstand'
 
 /**
@@ -84,6 +84,8 @@ export interface LeitstandDaten {
   klassen: Laden<NightRunErrorClassCounts>
   /** Die Nacharbeit der Runs auf diesem Board (Issue #1760); ohne Run-Recht `ohneRecht`. */
   nacharbeit: Laden<NightRunRework>
+  /** Der Modellvergleich der Runs auf diesem Board (Issue #1949); ohne Run-Recht `ohneRecht`. */
+  modelle: Laden<NightRunModels>
   /** Das Projekt des Boards; `null`, solange das Board nicht geladen ist. */
   projectId: number | null
   /** Die aufbewahrten Läufe; `null`, solange sie fehlen — auch mangels Recht. */
@@ -99,7 +101,7 @@ export interface LeitstandDaten {
  * Lädt die Daten des Leitstands zu einem Board und leitet die Sichtwerte ab (Issue #1053).
  *
  * Die Läufe, die Fehlerklassen und damit der Verbrauch hängen am Projekt des Boards und beginnen
- * erst, wenn das Board da ist; Nacharbeit, Fluss, Alter, Prognose und Auslieferung hängen am Board selbst und laden sofort. Wer die
+ * erst, wenn das Board da ist; Nacharbeit, Modelle, Fluss, Alter, Prognose und Auslieferung hängen am Board selbst und laden sofort. Wer die
  * Läufe nicht sehen darf, bekommt vom Server 403 — das bleibt als `ohneRecht` still, und die Seite
  * lässt die Lauf-Bereiche weg. In der „Ansicht als XY“ antwortet er dort, wo XY sähe, was der Admin
  * nicht sehen darf, mit `403 vorschau-verborgen`; daraus wird `vorschauVerborgen`, und die Seite
@@ -118,6 +120,7 @@ export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
   const auslieferung = useLadenWenn(gueltigeId, (bid) => dashboardApi.delivery(bid), [gueltigeId])
   const epics = useLadenWenn(gueltigeId, (bid) => epicsApi.list(bid), [gueltigeId])
   const nacharbeit = useLadenWenn(gueltigeId, (bid) => nightRunsApi.rework(bid), [gueltigeId])
+  const modelle = useLadenWenn(gueltigeId, (bid) => nightRunsApi.models(bid), [gueltigeId])
   const projectId = board.art === 'da' ? board.wert.projectId : null
   const laeufe = useLadenWenn(projectId, (pid) => nightRunsApi.list(pid), [projectId])
   const klassen = useLadenWenn(projectId, (pid) => nightRunsApi.errorClassCounts(pid), [projectId])
@@ -128,5 +131,5 @@ export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
 
   const laeufeVerborgen = laeufe.art === 'vorschauVerborgen'
 
-  return { validId: gueltigeId !== null, board, kpis, fluss, alter, prognose, auslieferung, epics, klassen, nacharbeit, projectId, liste, juengster, laeufeVerborgen, epicListe }
+  return { validId: gueltigeId !== null, board, kpis, fluss, alter, prognose, auslieferung, epics, klassen, nacharbeit, modelle, projectId, liste, juengster, laeufeVerborgen, epicListe }
 }

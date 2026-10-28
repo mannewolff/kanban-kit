@@ -16,6 +16,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
+import org.mwolff.manban.nightrun.domain.ModellvergleichErmittlung.Vorgang;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
@@ -62,7 +63,16 @@ import org.springframework.stereotype.Component;
 // trivialen addValue-/getX-Zeilen des Mappings, die TCC ist niedrig, weil Schreib- und Lesepfad
 // derselben Tabelle sich keine Felder teilen. Das ist die Form eines Persistenz-Adapters und kein
 // Smell. Wenn hier weiter waechst, ist die Tabelle zu zerlegen — nicht diese Klasse.
-@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.GodClass"})
+// PMD.TooManyMethods: Jede Methode des Ports ist hier eine, und mit findAttemptsSince (Issue #1947)
+// sind es 31. Die Abbildung der Vorgaenge steht darum nicht hier, sondern im
+// NightRunAttemptReader; was bleibt, ist die eine Zeile, die der Port verlangt.
+// PMD.ExcessiveImports: dieselbe Zeile bringt den Rueckgabetyp Vorgang mit, den 40. Import.
+@SuppressWarnings({
+  "PMD.CouplingBetweenObjects",
+  "PMD.GodClass",
+  "PMD.TooManyMethods",
+  "PMD.ExcessiveImports"
+})
 class NightRunRepositoryAdapter implements NightRunRepository {
 
   /** Name des benannten SQL-Parameters für die Dauer (Sonar java:S1192). */
@@ -276,16 +286,22 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   private final NightRunJpaRepository runs;
   private final NightRunItemJpaRepository items;
   private final NightRunItemStageJpaRepository stages;
+  private final NightRunAttemptWriter attempts;
+  private final NightRunAttemptReader attemptReader;
 
   NightRunRepositoryAdapter(
       NamedParameterJdbcTemplate jdbc,
       NightRunJpaRepository runs,
       NightRunItemJpaRepository items,
-      NightRunItemStageJpaRepository stages) {
+      NightRunItemStageJpaRepository stages,
+      NightRunAttemptWriter attempts,
+      NightRunAttemptReader attemptReader) {
     this.jdbc = jdbc;
     this.runs = runs;
     this.items = items;
     this.stages = stages;
+    this.attempts = attempts;
+    this.attemptReader = attemptReader;
   }
 
   @Override
@@ -441,6 +457,7 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           jdbc.queryForObject(
               INSERT_ITEM, itemParameters(item.withNightRunId(runId), run), Long.class);
       insertStages(itemId, item.stages());
+      attempts.insert(itemId, item.attempts(), run.complete());
     }
   }
 
@@ -572,6 +589,12 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         items.findByProjectIdAndCardNumberOrderByStartedAtDescIdDesc(projectId, cardNumber));
   }
 
+  /** Liest über den {@link NightRunAttemptReader} (Issue #1947), wie der Writer schreibt. */
+  @Override
+  public List<Vorgang> findAttemptsSince(long projectId, Instant von) {
+    return attemptReader.seit(projectId, von);
+  }
+
   /**
    * Die Stufen werden zu allen Paketen in einer zweiten Abfrage nachgeladen (Issue #1112) und nicht
    * je Paket. Ohne das Nachladen behauptete die leere Liste „hatte keine Stufen" auch dort, wo es
@@ -666,12 +689,11 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   /**
-   * Die sechs Verbrauchswerte an denselben Namen fuer Lauf, Arbeitspaket und Stufe — sie tragen
-   * dieselbe Form, und ein fehlendes {@code usage} setzt alle sechs auf {@code NULL} („nicht
-   * gemessen").
+   * Die sechs Verbrauchswerte an denselben Namen fuer Lauf, Arbeitspaket, Stufe und Vorgang — sie
+   * tragen dieselbe Form, und ein fehlendes {@code usage} setzt alle sechs auf {@code NULL} („nicht
+   * gemessen"). Paketsichtbar fuer den {@link NightRunAttemptWriter} (Issue #1944).
    */
-  private static void verbrauchSchreiben(
-      MapSqlParameterSource parameter, @Nullable NightRunUsage usage) {
+  static void verbrauchSchreiben(MapSqlParameterSource parameter, @Nullable NightRunUsage usage) {
     parameter
         .addValue("costUsd", usage == null ? null : usage.costUsd(), Types.NUMERIC)
         .addValue("inputTokens", usage == null ? null : usage.inputTokens(), Types.BIGINT)
@@ -815,7 +837,10 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         verbrauchLesen(e.getVerbrauch()),
         stuck == null ? null : stuck.toDomain(),
         concurrency == null ? null : concurrency.toDomain(),
-        stages);
+        stages,
+        // Die Lesepfade laden die Vorgaenge nicht (Issue #1944): Leer heisst hier „nicht
+        // geladen"; gelesen werden sie allein ueber findAttemptsSince.
+        List.of());
   }
 
   private static NightRunItemStage toDomain(NightRunItemStageEntity e) {
@@ -826,9 +851,10 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   /**
    * Aus sechs Spalten wird ein {@link NightRunUsage} — oder {@code null}, wenn keine davon gesetzt
    * ist. Ein Record aus lauter {@code null} waere von „nicht gemessen" nicht zu unterscheiden und
-   * zwaenge jede Anzeigestelle zu einer zweiten Fallunterscheidung.
+   * zwaenge jede Anzeigestelle zu einer zweiten Fallunterscheidung. Paketsichtbar fuer den {@link
+   * NightRunAttemptReader} (Issue #1947).
    */
-  private static @Nullable NightRunUsage verbrauchLesen(VerbrauchEmbeddable verbrauch) {
+  static @Nullable NightRunUsage verbrauchLesen(VerbrauchEmbeddable verbrauch) {
     BigDecimal costUsd = verbrauch.getCostUsd();
     Long inputTokens = verbrauch.getInputTokens();
     Long outputTokens = verbrauch.getOutputTokens();

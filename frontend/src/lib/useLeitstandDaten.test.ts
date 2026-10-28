@@ -4,13 +4,13 @@ import { boardsApi, type Board } from '../api/boards'
 import { ApiError } from '../api/client'
 import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
-import { nightRunsApi, type NightRunRework, type NightRunView } from '../api/nightRuns'
+import { nightRunsApi, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { useLeitstandDaten } from './useLeitstandDaten'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn(), delivery: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
-vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn() } }))
+vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn(), models: vi.fn() } }))
 
 const m = {
   board: boardsApi.get as ReturnType<typeof vi.fn>,
@@ -23,6 +23,7 @@ const m = {
   laeufe: nightRunsApi.list as ReturnType<typeof vi.fn>,
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
   nacharbeit: nightRunsApi.rework as ReturnType<typeof vi.fn>,
+  modelle: nightRunsApi.models as ReturnType<typeof vi.fn>,
 }
 
 const board = (extra: Partial<Board> = {}): Board => ({
@@ -135,6 +136,14 @@ const nacharbeit = (): NightRunRework => ({
   weeks: [],
 })
 
+const modelle = (): NightRunModels => ({
+  dataSince: '2026-08-01T22:00:00Z',
+  lastTwelveWeeks: true,
+  withoutModel: 0,
+  attemptsInPeriod: 0,
+  stages: [],
+})
+
 /** Ein Versprechen, das der Test von Hand einlöst — für die Zustände vor der Antwort. */
 function offen<T>() {
   let einloesen: (wert: T) => void = () => undefined
@@ -158,6 +167,7 @@ beforeEach(() => {
   m.laeufe.mockResolvedValue([lauf(1, '2026-09-10T21:00:00Z'), lauf(3, '2026-09-14T21:10:00Z')])
   m.klassen.mockResolvedValue({ CHECKS_RED: 11 })
   m.nacharbeit.mockResolvedValue(nacharbeit())
+  m.modelle.mockResolvedValue(modelle())
 })
 
 describe('useLeitstandDaten — Board-ID', () => {
@@ -188,6 +198,7 @@ describe('useLeitstandDaten — Board-ID', () => {
     expect(m.epics).not.toHaveBeenCalled()
     expect(m.laeufe).not.toHaveBeenCalled()
     expect(m.nacharbeit).not.toHaveBeenCalled()
+    expect(m.modelle).not.toHaveBeenCalled()
     expect(m.fluss).not.toHaveBeenCalled()
     expect(m.alter).not.toHaveBeenCalled()
     expect(m.prognose).not.toHaveBeenCalled()
@@ -305,6 +316,34 @@ describe('useLeitstandDaten — Nacharbeit (Issue #1760)', () => {
     m.nacharbeit.mockRejectedValue(fehler)
     const { result } = renderHook(() => useLeitstandDaten('7'))
     await waitFor(() => expect(result.current.nacharbeit).toEqual(erwartet))
+  })
+})
+
+describe('useLeitstandDaten — Modelle (Issue #1949)', () => {
+  it('lädt den Modellvergleich zum Board, ohne auf das Projekt zu warten', async () => {
+    const erstes = offen<Board>()
+    m.board.mockReturnValue(erstes.versprechen)
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    expect(result.current.modelle).toEqual({ art: 'laedt' })
+    expect(m.modelle).toHaveBeenCalledWith(7)
+    await waitFor(() => expect(result.current.modelle).toEqual({ art: 'da', wert: modelle() }))
+  })
+
+  it('lädt zu einer neuen Board-ID den Modellvergleich neu', async () => {
+    const { result, rerender } = renderHook((boardId: string) => useLeitstandDaten(boardId), { initialProps: '7' })
+    await waitFor(() => expect(result.current.modelle.art).toBe('da'))
+    rerender('8')
+    expect(m.modelle).toHaveBeenLastCalledWith(8)
+  })
+
+  it.each([
+    ['403 als „ohne Recht"', new ApiError(403, 'Forbidden'), { art: 'ohneRecht' }],
+    ['einen anderen Fehler als Fehler', new Error('Netz'), { art: 'fehler' }],
+  ])('deutet %s, ohne die Nacharbeit zu berühren', async (_name, fehler, erwartet) => {
+    m.modelle.mockRejectedValue(fehler)
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.modelle).toEqual(erwartet))
+    expect(result.current.nacharbeit).toEqual({ art: 'da', wert: nacharbeit() })
   })
 })
 

@@ -364,10 +364,10 @@ Von oben nach unten führt er:
    [Verbrauch (Leitstand)](#verbrauch-leitstand).
 4. **Herkunft** — eine Zeile zum jüngsten Run: ob er eingeliefert oder im Browser hochgeladen
    wurde, dazu der Name des Tokens, die Zahl der Vorgänge und die der ungedeuteten Zeilen.
-5. **Rumpf** — sieben Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
+5. **Rumpf** — acht Platten: **„Letzter Run · ‹Art›“** mit seinen Vorgängen (die Kartennummer
    öffnet die Karte zum Lesen), **„Durchsatz“** mit den abgeschlossenen Karten je Woche und rechts
    daneben **„Implementierungszeit“** mit dem Mittelwert je Woche, **„Abbruchgründe“** mit den Fehlerklassen über die aufbewahrten Runs, **„Nacharbeit“**
-   (siehe unten), **„Vorhaben“** mit
+   und darunter **„Modelle“** (beide siehe unten), **„Vorhaben“** mit
    den offenen und **„Auslieferung“** mit vier Kennzahlen zur Auslieferung an die Nutzer; sie steht
    in voller Breite ganz unten, unter „Alter in Arbeit“ (siehe
    [Platte Auslieferung](#platte-auslieferung)). Bei einem nicht angelaufenen Run trägt die Platte „Letzter Run“ ebenfalls die
@@ -408,6 +408,25 @@ werden erst seit dem Einspielen der Version erfasst, die die Platte mitbringt �
 Dokument-Zeile „keine Daten“. Den Laufstand-Kommentar einer Karte schreibt jeder Run neu, er bezeugt
 darum nur den letzten Schreiber; frühere Runs zählen über ihre übrigen Spuren. Ein Rückzug zählt nur,
 wenn der Status der Karte vor der Bewegung bekannt ist.
+
+**Die Platte „Modelle“** vergleicht, was die Modelle des Runners je Stufe der Kette kosten, wie
+lange sie rechnen und wie oft ihre Arbeit ohne Nacharbeit durchgeht. Für jede Stufe — Plan,
+Prüfung, Arbeitspakete, Abdeckung, Umsetzung — steht eine Tabelle mit einer Zeile je Modell und, wo
+gemeldet, je Denktiefe („claude-opus-5-5 · mittel“); der Modellname bleibt, wie der Runner ihn
+meldet. Jede Zeile nennt die Zahl der Vorgänge, den **Median** der Kosten und der Modellzeit je
+Vorgang und die Erfolgsquote („4 von 5 erfolgreich“); beim Überfahren, mit der Tastatur oder per
+Antippen von „erfolgreich“ erklärt die Platte, was das in der Stufe heißt. **Zählregeln:** Es zählen
+nur unbeaufsichtigte Vorgänge aus Runs des Runners, die ihr Ende gemeldet haben, und nur an Karten
+dieses Boards; ein Vorgang ist ein einzelner Versuch an einer Karte in einer Stufe, in der Prüfung
+je Prüfer einer. Erfolgreich ist ein gelungener Vorgang, gegen den bis zum Ende seines Runs keine
+Nacharbeit im Sinne der Platte „Nacharbeit“ entstand. Bezugszeitraum sind dieselben **zwölf
+Wochen**; der Kopf nennt sie oder „seit ‹Datum›“, wenn die Daten mit gemeldetem Modell später
+beginnen, und die Zahl der Vorgänge ohne Modellangabe, die nicht gezählt sind. Unter der
+**Mindestzahl von fünf** Vorgängen steht „zu wenig Daten“ statt der Quote. Fehlt einem Teil der
+Vorgänge die Kosten- oder Zeitangabe, steht die Teilmenge daneben („aus 9 von 12“), fehlt sie allen,
+„nicht gemessen“. Eine Stufe ohne Vorgang trägt den Satz „Kein Vorgang mit gemeldetem Modell“, ganz
+ohne Vorgang steht ein Satz statt der Tabellen. Die Platte ordnet die Modelle nach Namen, hebt keines
+hervor und empfiehlt keines.
 
 **Die Platte „Vorhaben“** zeigt jedes Vorhaben des Boards, bis es archiviert ist — von Hand oder
 automatisch, sobald alle zugehörigen Karten archiviert sind; auch ein Vorhaben ohne Pakete und eines,
@@ -509,7 +528,7 @@ ganze Platte nur **„noch keine Auslieferung“** statt Nullen. Gezählt wird a
 frühere Releases werden nicht nachgetragen.
 
 **Was das Recht entscheidet:** das Band des jüngsten Runs, die Run-Kachel, Verbrauch, „Letzter Run“,
-„Abbruchgründe“ und „Nacharbeit“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
+„Abbruchgründe“, „Nacharbeit“ und „Modelle“ sieht nur, wer auch die [Runs](#nachtlauf) sehen darf — der **Owner** des
 Projekts und **Plattform-Admins**, sofern das Projekt am
 [Plattform-Leitstand](#plattform-leitstand) teilnimmt. Ohne dieses Recht entfallen sie still; die
 Board-Kennzahlen, „Durchsatz“, „Implementierungszeit“, „Fluss“, „Alter in Arbeit“ und „Auslieferung“

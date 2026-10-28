@@ -183,6 +183,7 @@ class DisruptionServiceTest {
         null,
         null,
         null,
+        List.of(),
         List.of());
   }
 

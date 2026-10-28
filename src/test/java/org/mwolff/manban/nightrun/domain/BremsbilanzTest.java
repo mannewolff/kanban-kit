@@ -36,6 +36,7 @@ class BremsbilanzTest {
         null,
         stuck,
         null,
+        List.of(),
         List.of());
   }
 
@@ -75,7 +76,8 @@ class BremsbilanzTest {
         item.usage(),
         item.stuck(),
         null,
-        item.stages());
+        item.stages(),
+        List.of());
   }
 
   @Test

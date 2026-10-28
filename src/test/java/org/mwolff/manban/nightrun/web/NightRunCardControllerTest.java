@@ -116,6 +116,7 @@ class NightRunCardControllerTest {
         usage,
         null,
         null,
+        List.of(),
         List.of());
   }
 

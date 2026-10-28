@@ -21,8 +21,11 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.application.NightRunRepository.UpsertResult;
+import org.mwolff.manban.nightrun.domain.ModellvergleichErmittlung.Vorgang;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunAbortKind;
+import org.mwolff.manban.nightrun.domain.NightRunAttempt;
+import org.mwolff.manban.nightrun.domain.NightRunAttemptStage;
 import org.mwolff.manban.nightrun.domain.NightRunBudget;
 import org.mwolff.manban.nightrun.domain.NightRunBudgetOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunConcurrency;
@@ -56,7 +59,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 // PMD.TooManyMethods: Testklasse: Jede Methode ist ein Fall, und Faelle werden nicht
 // zusammengelegt, um eine Zahl zu druecken. Issue #944 bringt drei Faelle fuer Herkunft,
 // Vollstaendigkeit und Verbrauch dazu, Issue #964 drei fuer das verwaiste Arbeitspaket, Issue
-// #965 zwei fuer dessen Wiedererkennung, Issue #1112 sieben fuer Budgets und Stufen.
+// #965 zwei fuer dessen Wiedererkennung, Issue #1112 sieben fuer Budgets und Stufen, Issue #1944
+// sechs fuer die Vorgaenge, Issue #1947 fuenf fuer ihren Lesepfad.
 // PMD.CyclomaticComplexity: dieselbe Ursache, ueber die Klasse summiert — die hoechste
 // Einzelmethode liegt bei 4, weit unter jedem Schwellwert. Ein Zerschneiden nach der Summe
 // verteilte die Faelle eines Adapters auf zwei Dateien, die sich dieselben Vorrichtungen teilen
@@ -158,6 +162,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
+        List.of(),
         List.of());
   }
 
@@ -312,6 +317,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         stuck,
         null,
+        List.of(),
         List.of());
   }
 
@@ -412,6 +418,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         concurrency,
+        List.of(),
         List.of());
   }
 
@@ -724,6 +731,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
+        List.of(),
         List.of());
   }
 
@@ -1138,6 +1146,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         null,
         null,
         null,
+        List.of(),
         List.of());
   }
 
@@ -1231,6 +1240,7 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
             paketVerbrauch,
             null,
             null,
+            List.of(),
             List.of());
 
     long runId = runs.insertIfAbsent(mitVerbrauch, List.of(paket)).orElseThrow();
@@ -1919,7 +1929,8 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
         usage,
         null,
         null,
-        stages);
+        stages,
+        List.of());
   }
 
   /** Der Upload-Weg plaettet keinen reicheren Stand: insertIfAbsent laesst ihn unangetastet. */
@@ -1939,5 +1950,274 @@ class NightRunRepositoryIT extends AbstractIntegrationTest {
     assertThat(runs.findItemsByRunIds(List.of(gemeldet.id())))
         .extracting(NightRunItem::cardNumber)
         .containsExactly(101);
+  }
+
+  // --- Vorgaenge je Paket (Issue #1944) -------------------------------------------------------
+
+  /** Ein Vorgang mit allen Angaben, die Kartenliste in nicht sortierter Reihenfolge. */
+  private static final NightRunAttempt PLANVORGANG =
+      new NightRunAttempt(
+          NightRunAttemptStage.PLAN,
+          1905,
+          "claude-opus-5-5",
+          "high",
+          true,
+          new NightRunUsage(new BigDecimal("1.500000"), 100L, 20L, 50L, 60_000L, 4),
+          List.of(1946, 1944, 1945));
+
+  /** Ein Vorgang ohne Modell, Denktiefe, Verbrauch und Karten (Plan #1905 E6). */
+  private static final NightRunAttempt PRUEFVORGANG =
+      new NightRunAttempt(NightRunAttemptStage.REVIEW, 1905, null, null, false, null, List.of());
+
+  private static final NightRunAttempt UMSETZUNGSVORGANG =
+      new NightRunAttempt(
+          NightRunAttemptStage.UMSETZUNG, 1944, "fable", "medium", true, null, List.of());
+
+  private static NightRunItem mitVorgaengen(int cardNumber, NightRunAttempt... vorgaenge) {
+    return new NightRunItem(
+        null,
+        null,
+        PLATZHALTER_PROJEKT,
+        PLATZHALTER_START,
+        PLATZHALTER_MODUS,
+        PLATZHALTER_GATTUNG,
+        cardNumber,
+        "Vorgang " + cardNumber,
+        NightRunState.GREEN,
+        null,
+        60_000L,
+        "4c9f42a",
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        List.of(vorgaenge));
+  }
+
+  /** Eine gelesene Zeile aus {@code night_run_attempt}. */
+  private record Vorgangszeile(
+      int position,
+      String stage,
+      int cardNumber,
+      @Nullable String model,
+      @Nullable String effort,
+      boolean succeeded,
+      @Nullable BigDecimal costUsd,
+      @Nullable Long modelDurationMs,
+      List<Integer> writtenCards,
+      boolean runComplete) {}
+
+  /**
+   * Die Vorgaenge eines Laufs per SQL: Die Lesepfade des Ports laden sie nicht (Issue #1944), und
+   * die Array-Spalte soll hier so ankommen, wie Postgres sie haelt.
+   */
+  private List<Vorgangszeile> vorgaengeDesLaufs(long runId) {
+    return jdbc.query(
+        "SELECT a.position, a.stage, a.card_number, a.model, a.effort, a.succeeded, a.cost_usd,"
+            + " a.model_duration_ms, a.written_card_numbers, a.run_complete"
+            + " FROM night_run_attempt a JOIN night_run_item i ON i.id = a.night_run_item_id"
+            + " WHERE i.night_run_id = ? ORDER BY a.night_run_item_id, a.position",
+        (rs, zeile) ->
+            new Vorgangszeile(
+                rs.getInt("position"),
+                rs.getString("stage"),
+                rs.getInt("card_number"),
+                rs.getString("model"),
+                rs.getString("effort"),
+                rs.getBoolean("succeeded"),
+                rs.getBigDecimal("cost_usd"),
+                rs.getObject("model_duration_ms", Long.class),
+                List.of((Integer[]) rs.getArray("written_card_numbers").getArray()),
+                rs.getBoolean("run_complete")),
+        runId);
+  }
+
+  @Test
+  void dieVorgaengeWerdenMitIhremPaketInMeldungsreihenfolgeGespeichert() {
+    long runId =
+        anlegen(
+            T1,
+            List.of(
+                mitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG),
+                mitVorgaengen(1944, UMSETZUNGSVORGANG)));
+
+    assertThat(vorgaengeDesLaufs(runId))
+        .containsExactly(
+            new Vorgangszeile(
+                0,
+                "PLAN",
+                1905,
+                "claude-opus-5-5",
+                "high",
+                true,
+                new BigDecimal("1.500000"),
+                60_000L,
+                List.of(1946, 1944, 1945),
+                true),
+            new Vorgangszeile(1, "REVIEW", 1905, null, null, false, null, null, List.of(), true),
+            new Vorgangszeile(
+                0, "UMSETZUNG", 1944, "fable", "medium", true, null, null, List.of(), true));
+  }
+
+  /**
+   * Eine leere Kartenliste ist ein leeres Array und nie {@code NULL} (Plan #1905 E4); eine
+   * gefuellte kommt in ihrer Reihenfolge zurueck.
+   */
+  @Test
+  void dieGeschriebenenKartenReisenLeerUndInIhrerReihenfolgeDurchDieDatenbank() {
+    long runId = anlegen(T1, List.of(mitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG)));
+
+    assertThat(vorgaengeDesLaufs(runId))
+        .extracting(Vorgangszeile::writtenCards)
+        .containsExactly(List.of(1946, 1944, 1945), List.of());
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM night_run_attempt WHERE written_card_numbers IS NULL",
+                Long.class))
+        .isZero();
+  }
+
+  /**
+   * Eine Meldung des Kits ersetzt die Vorgaenge mit dem Stand des Laufs (Plan #1905 E5), und {@code
+   * run_complete} traegt den Wert der letzten Meldung.
+   */
+  @Test
+  void beimErsetzenEinesLaufsWerdenDieVorgaengeErsetzt_undRunCompleteFolgtDerLetztenMeldung() {
+    Instant start = Instant.parse("2026-10-27T22:00:00Z");
+    long runId =
+        runs.upsert(meldung(start, false), List.of(mitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG)))
+            .id();
+    assertThat(vorgaengeDesLaufs(runId))
+        .extracting(Vorgangszeile::stage, Vorgangszeile::runComplete)
+        .containsExactly(tuple("PLAN", false), tuple("REVIEW", false));
+
+    runs.upsert(meldung(start, true), List.of(mitVorgaengen(1944, UMSETZUNGSVORGANG)));
+
+    assertThat(vorgaengeDesLaufs(runId))
+        .extracting(Vorgangszeile::stage, Vorgangszeile::cardNumber, Vorgangszeile::runComplete)
+        .containsExactly(tuple("UMSETZUNG", 1944, true));
+  }
+
+  /** Am Handweg gewinnt der erste Stand: Ein bekannter Lauf bekommt keine weiteren Vorgaenge. */
+  @Test
+  void insertIfAbsentSchreibtBeiEinemBekanntenLaufKeineVorgaenge() {
+    long runId = anlegen(T1, List.of(mitVorgaengen(1905, PLANVORGANG)));
+
+    Optional<Long> nochmal =
+        runs.insertIfAbsent(lauf(T1), List.of(mitVorgaengen(1905, PRUEFVORGANG)));
+
+    assertThat(nochmal).isEmpty();
+    assertThat(vorgaengeDesLaufs(runId)).extracting(Vorgangszeile::stage).containsExactly("PLAN");
+  }
+
+  @Test
+  void mitDemPaketFallenSeineVorgaenge() {
+    long runId = anlegen(T1, List.of(mitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG)));
+
+    jdbc.update("DELETE FROM night_run_item WHERE night_run_id = ?", runId);
+
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM night_run_attempt", Long.class)).isZero();
+  }
+
+  /** Leer heisst auf diesen Lesepfaden „nicht geladen" (Issue #1944), nicht „keine gemeldet". */
+  @Test
+  void findItemsByRunIdsUndFindByCardLadenDieVorgaengeNicht() {
+    long runId = anlegen(T1, List.of(mitVorgaengen(1905, PLANVORGANG)));
+
+    assertThat(runs.findItemsByRunIds(List.of(runId)))
+        .singleElement()
+        .extracting(NightRunItem::attempts)
+        .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
+        .isEmpty();
+    assertThat(runs.findByCard(projectId, 1905))
+        .singleElement()
+        .extracting(NightRunItem::attempts)
+        .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
+        .isEmpty();
+    assertThat(vorgaengeDesLaufs(runId)).hasSize(1);
+  }
+
+  // --- Vorgaenge seit einem Zeitpunkt (Issue #1947) --------------------------------------------
+
+  /**
+   * Die Zeitgrenze schliesst ihren Zeitpunkt ein; jeder Vorgang traegt Start und Gattung seines
+   * Pakets und den Abschluss aus seiner Meldung (Plan #1905 E7).
+   */
+  @Test
+  void findAttemptsSinceLiefertDieVorgaengeAbDemZeitpunkt_mitStartGattungUndAbschluss() {
+    anlegen(T1, List.of(mitVorgaengen(1905, PLANVORGANG)));
+    anlegen(T2, NightRunKind.INTERACTIVE, List.of(mitVorgaengen(1944, UMSETZUNGSVORGANG)));
+    runs.upsert(meldung(T3, false), List.of(mitVorgaengen(1905, PRUEFVORGANG)));
+
+    assertThat(runs.findAttemptsSince(projectId, T2))
+        .extracting(Vorgang::laufStart, Vorgang::kind, Vorgang::laufAbgeschlossen, Vorgang::attempt)
+        .containsExactly(
+            tuple(T2, NightRunKind.INTERACTIVE, true, UMSETZUNGSVORGANG),
+            tuple(T3, NightRunKind.NIGHT, false, PRUEFVORGANG));
+  }
+
+  @Test
+  void findAttemptsSinceKenntNurDasEigeneProjekt() {
+    long andererUser =
+        insert(
+            "INSERT INTO app_user (email, display_name) "
+                + "VALUES ('b@example.com', 'B') RETURNING id");
+    long anderesProjekt =
+        insert(
+            "INSERT INTO project (name, owner_user_id) VALUES ('Q', "
+                + andererUser
+                + ") RETURNING id");
+    anlegen(T1, List.of(mitVorgaengen(1905, PRUEFVORGANG)));
+
+    assertThat(runs.findAttemptsSince(anderesProjekt, T1)).isEmpty();
+    assertThat(runs.findAttemptsSince(projectId, T1)).hasSize(1);
+  }
+
+  /** Modell, Denktiefe, Verbrauch und die geschriebenen Karten in gemeldeter Reihenfolge. */
+  @Test
+  void findAttemptsSinceLiefertJedeAngabeDesVorgangs_dieKartenInIhrerReihenfolge() {
+    anlegen(T1, List.of(mitVorgaengen(1905, PLANVORGANG)));
+
+    assertThat(runs.findAttemptsSince(projectId, T1))
+        .singleElement()
+        .satisfies(
+            vorgang -> {
+              assertThat(vorgang.attempt()).isEqualTo(PLANVORGANG);
+              assertThat(vorgang.attempt().writtenCards()).containsExactly(1946, 1944, 1945);
+            });
+  }
+
+  /**
+   * Die Position zaehlt ueber die Pakete eines Laufs hinweg in Meldungsreihenfolge: Die Ermittlung
+   * vergleicht sie innerhalb eines Runs, und zwei Pakete tragen je eigene Positionen ab 0.
+   */
+  @Test
+  void findAttemptsSinceNummeriertDieVorgaengeEinesLaufsDurchgehend() {
+    anlegen(
+        T1,
+        List.of(
+            mitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG),
+            mitVorgaengen(1944, UMSETZUNGSVORGANG)));
+
+    List<Vorgang> vorgaenge = runs.findAttemptsSince(projectId, T1);
+
+    assertThat(vorgaenge)
+        .extracting(v -> v.attempt().stage())
+        .containsExactly(
+            NightRunAttemptStage.PLAN, NightRunAttemptStage.REVIEW, NightRunAttemptStage.UMSETZUNG);
+    assertThat(vorgaenge).extracting(Vorgang::position).isSorted().doesNotHaveDuplicates();
+  }
+
+  /** Pakete ueberdauern die Verdraengung ihres Laufs fuer Kennzahlen (#964), ihre Vorgaenge mit. */
+  @Test
+  void findAttemptsSinceLiefertAuchDieVorgaengeVerwaisterPakete() {
+    long runId = anlegen(T1, List.of(mitVorgaengen(1905, PLANVORGANG)));
+    jdbc.update("DELETE FROM night_run WHERE id = ?", runId);
+
+    assertThat(runs.findAttemptsSince(projectId, T1))
+        .singleElement()
+        .extracting(Vorgang::laufStart, Vorgang::kind, Vorgang::laufAbgeschlossen)
+        .containsExactly(T1, NightRunKind.NIGHT, true);
   }
 }

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 /** Kopiermethode des Arbeitspakets: Der Fremdschlüssel kommt erst beim Schreiben dazu (#721). */
@@ -13,6 +14,11 @@ class NightRunItemTest {
   /** Eine Stufe am Paket, damit die Kopiermethode sie nachweislich mitnimmt (Issue #1112). */
   private static final NightRunItemStage STUFE =
       new NightRunItemStage(NightRunStage.PLAN, 5_000L, null);
+
+  /** Ein Vorgang am Paket, damit die Kopiermethode ihn nachweislich mitnimmt (Issue #1944). */
+  private static final NightRunAttempt VORGANG =
+      new NightRunAttempt(
+          NightRunAttemptStage.UMSETZUNG, 721, "claude-opus-5-5", "high", true, null, List.of());
 
   private static final NightRunItem OHNE_LAUF =
       new NightRunItem(
@@ -32,7 +38,8 @@ class NightRunItemTest {
           null,
           null,
           null,
-          List.of(STUFE));
+          List.of(STUFE),
+          List.of(VORGANG));
 
   @Test
   void withNightRunIdSetztDenFremdschluessel() {
@@ -61,7 +68,8 @@ class NightRunItemTest {
             NightRunItem::excerpt,
             NightRunItem::stuck,
             NightRunItem::concurrency,
-            NightRunItem::stages)
+            NightRunItem::stages,
+            NightRunItem::attempts)
         .containsExactly(
             null,
             42L,
@@ -77,7 +85,8 @@ class NightRunItemTest {
             "  Issue #721: gelaufen: mvn verify -> rot",
             null,
             null,
-            List.of(STUFE));
+            List.of(STUFE),
+            List.of(VORGANG));
   }
 
   /** Die Angaben eines festgefahrenen Pakets reisen durch die Kopie mit (Issue #1546). */
@@ -102,6 +111,7 @@ class NightRunItemTest {
             null,
             angaben,
             null,
+            List.of(),
             List.of());
 
     assertThat(festgefahren.withNightRunId(4711L).stuck()).isEqualTo(angaben);
@@ -129,6 +139,7 @@ class NightRunItemTest {
             null,
             null,
             angaben,
+            List.of(),
             List.of());
 
     assertThat(gleichzeitig.withNightRunId(4711L).concurrency()).isEqualTo(angaben);
@@ -150,7 +161,30 @@ class NightRunItemTest {
     assertThat(paket.stages()).isUnmodifiable();
   }
 
+  /** Dieselbe Regel für die Vorgänge (Issue #1944). */
+  @Test
+  void dieVorgangslisteIstUnveraenderlich() {
+    List<NightRunAttempt> veraenderlich = new ArrayList<>(List.of(VORGANG));
+    NightRunItem paket = paketMit(List.of(), veraenderlich);
+
+    veraenderlich.clear();
+
+    assertThat(paket.attempts()).containsExactly(VORGANG);
+    assertThat(paket.attempts()).isUnmodifiable();
+  }
+
+  /** Fehlende Vorgänge werden zur leeren Liste und nicht zu {@code null} (Issue #1944). */
+  @Test
+  void fehlendeVorgaengeWerdenZurLeerenListe() {
+    assertThat(paketMit(List.of(), null).attempts()).isEmpty();
+  }
+
   private static NightRunItem paketMit(List<NightRunItemStage> stages) {
+    return paketMit(stages, List.of());
+  }
+
+  private static NightRunItem paketMit(
+      List<NightRunItemStage> stages, @Nullable List<NightRunAttempt> attempts) {
     return new NightRunItem(
         null,
         null,
@@ -168,7 +202,8 @@ class NightRunItemTest {
         null,
         null,
         null,
-        stages);
+        stages,
+        attempts);
   }
 
   @Test

@@ -46,6 +46,9 @@ import org.mwolff.manban.common.Identifiable;
  *     {@code null}-Komponente darin „nicht gemeldet“
  * @param stages die Stufen der Kette, die dieser Vorgang durchlaufen hat (Issue #1112) — leer statt
  *     {@code null}, denn „dieser Vorgang hatte keine Stufen" ist eine Aussage
+ * @param attempts die einzelnen Vorgänge des Pakets in der Reihenfolge ihrer Ausführung (Issue
+ *     #1944, Plan #1905 E1) — leer statt {@code null}. Leer heißt auf den Lesepfaden außer {@code
+ *     findAttemptsSince}: nicht geladen.
  */
 public record NightRunItem(
     @Nullable Long id,
@@ -64,12 +67,17 @@ public record NightRunItem(
     @Nullable NightRunUsage usage,
     @Nullable NightRunStuck stuck,
     @Nullable NightRunConcurrency concurrency,
-    List<NightRunItemStage> stages)
+    List<NightRunItemStage> stages,
+    List<NightRunAttempt> attempts)
     implements Identifiable {
 
-  /** Die Stufenliste wird beim Anlegen kopiert und unveränderlich gemacht. */
+  /**
+   * Stufen- und Vorgangsliste werden beim Anlegen kopiert und unveränderlich gemacht; fehlende
+   * Vorgänge werden zur leeren Liste.
+   */
   public NightRunItem {
     stages = List.copyOf(stages);
+    attempts = attempts == null ? List.of() : List.copyOf(attempts);
   }
 
   /**
@@ -97,6 +105,7 @@ public record NightRunItem(
         usage,
         stuck,
         concurrency,
-        stages);
+        stages,
+        attempts);
   }
 }
