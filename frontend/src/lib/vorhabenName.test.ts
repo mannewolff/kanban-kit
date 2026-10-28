@@ -25,6 +25,12 @@ describe('vorhabenNameVorschlag (Issue #1932)', () => {
     expect(vorhabenNameVorschlag(PRAEFIXE, '[Plan] Export')).toBe('[Plan] Export')
   })
 
+  it('wählt die Art FACHLICH unabhängig von ihrer Stelle im Register', () => {
+    const umgekehrt = [...PRAEFIXE].reverse()
+    expect(vorhabenNameVorschlag(umgekehrt, '[Task] Export')).toBe('[Task] Export')
+    expect(vorhabenNameVorschlag(umgekehrt, '[Requirement] Export')).toBe('[Epic] Export')
+  })
+
   it('ersetzt nur ein führendes Präfix', () => {
     expect(vorhabenNameVorschlag(PRAEFIXE, 'Export [Requirement]')).toBe('Export [Requirement]')
   })
