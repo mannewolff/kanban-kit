@@ -873,6 +873,21 @@ function DependencyList({
 type BeschreibungStatus = 'laedt' | 'geladen' | 'fehler'
 
 /**
+ * Das Vorhaben, dessen neue Zuordnung die Karte auf dem Board verdeckt (Issue #1981): nur wenn sich
+ * die Zuordnung geändert hat und das Ziel ausgeblendet ist. Sonst `undefined` — dann meldet das
+ * Speichern nur sich selbst.
+ */
+function verdeckendesVorhaben(
+  vorher: number | null,
+  nachher: number | null,
+  hiddenEpics: ReadonlySet<number> | undefined,
+  epics: readonly Epic[],
+): Epic | undefined {
+  if (nachher === null || nachher === vorher || !hiddenEpics?.has(nachher)) return undefined
+  return epics.find((e) => e.id === nachher)
+}
+
+/**
  * Der zuletzt vom Server bestätigte Stand der Felder, die Bearbeiten-Dialog und Checkbox-Klick
  * schreiben (Issue #1328, Plan #1325, A1). Lesemodus und Checkbox-Klick lesen nur ihn — nie die
  * `card`-Prop, die nach dem Speichern veraltet, und nie den Entwurf, den Abbrechen verwirft.
@@ -1210,17 +1225,16 @@ interface Props {
    */
   location?: CardLocation | null
   /**
-   * Board-Epics: Datenquelle für Titelanzeige und Fortschritt eines Vorhabens — und, ohne
-   * {@link selectableEpics}, zugleich der Optionsvorrat des Auswahlfelds.
+   * Board-Epics: Datenquelle für Titelanzeige und Fortschritt eines Vorhabens und zugleich der
+   * Optionsvorrat des Auswahlfelds — auch ausgeblendete stehen zur Wahl (Issue #1981).
    */
   epics?: Epic[]
   /**
-   * Die im Auswahlfeld anzubietenden Vorhaben (Default: {@link epics}). Trägt ausschließlich den
-   * Optionsvorrat; die Anzeige bleibt an `epics` gebunden. Getrennt, weil ein auf dem Board
-   * ausgeblendetes Vorhaben zwar nicht mehr zur Auswahl steht, seinen Titel aber weiterhin hat
-   * (Plan #717, A2) — es aus `epics` zu streichen kostete Titel und Fortschritt gleich mit.
+   * IDs der auf dem Board ausgeblendeten Vorhaben (Default: keines). Sie stehen im Auswahlfeld
+   * markiert nach den übrigen; wird die Karte beim Speichern neu einem davon zugeordnet, sagt die
+   * Meldung, dass sie auf dem Board jetzt verdeckt ist.
    */
-  selectableEpics?: Epic[]
+  hiddenEpics?: ReadonlySet<number>
   /**
    * Ob die Epic-Zuordnung geändert werden darf (Default `true`). `false` heißt: Der Aufrufer konnte
    * den Optionsvorrat nicht laden (archiviertes Board, board-lose Idee). Ein leeres Dropdown böte
@@ -1290,7 +1304,7 @@ function CardDetailModalView({
   columnName,
   location,
   epics = [],
-  selectableEpics,
+  hiddenEpics,
   canEditEpic = true,
   canEditLabels = true,
   members = [],
@@ -1604,7 +1618,11 @@ function CardDetailModalView({
       setStand(standAus(gespeichert))
       setEditing(false)
       onChanged?.()
-      notify(t.KARTE.GESPEICHERT, 'success')
+      const verdeckend = verdeckendesVorhaben(stand.parentId, gespeichert.parentId, hiddenEpics, epics)
+      notify(
+        verdeckend ? t.BOARD.ZUORDNEN_ERFOLG_AUSGEBLENDET(1, verdeckend.title) : t.KARTE.GESPEICHERT,
+        'success',
+      )
     } catch (err) {
       // Die drei Herkunfts-Ablehnungen kommen feldbezogen (#607). Sie gehoeren ans Feld, nicht in
       // einen Toast: Im selben Aufruf entstehen fast wortgleiche Abhaengigkeits-Fehler, und die
@@ -1755,7 +1773,7 @@ function CardDetailModalView({
   const { epicOptionen, epicLesend, epicLesendText } = vorhabenFeld({
     canEditEpic,
     parentId,
-    selectableEpics,
+    hiddenEpics,
     epics,
   })
 

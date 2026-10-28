@@ -220,7 +220,8 @@ Sobald mindestens eine Karte gewählt ist, erscheint unten eine Aktionsleiste mi
   jeder Karte bleiben dabei unberührt. Das Menü bleibt offen, sodass mehrere Labels in einem Zug
   gehen. Hat das Board keine Labels, ist die Taste gesperrt.
 - **Vorhaben zuordnen:** öffnet ein Menü mit allen nicht archivierten Vorhaben des Boards; ein für
-  dich ausgeblendetes Vorhaben ist als „(ausgeblendet)" gekennzeichnet und ebenso wählbar. Nach der
+  dich ausgeblendetes Vorhaben ist als „(ausgeblendet)" gekennzeichnet, steht nach den eingeblendeten
+  und ist ebenso wählbar. Nach der
   Wahl folgt **stets eine Rückfrage** mit der Zahl der Karten, dem Vorhaben und der Zahl der Karten,
   deren unmittelbare Zuordnung zu einem anderen Vorhaben dabei ersetzt wird. Gesetzt wird nur die
   **unmittelbare Zuordnung**: Gehört eine Karte über ihre Herkunft zu einem anderen Vorhaben, hat
@@ -1102,7 +1103,11 @@ Die Tatsachengrundlage dazu steht in
   ausgeblendetes Vorhaben bleibt bis zum nächsten Laden der Seite **ausgegraut** in der Liste
   stehen, damit sich ein Versehen am selben Schalter zurücknehmen lässt. Oben schaltet
   **„Ausgeblendete zeigen (n)“** die ausgeblendeten Vorhaben dazu — abgeschwächt und mit dem
-  Vermerk „Ausgeblendet“, an ihrer gewohnten Stelle; n ist ihre Zahl.
+  Vermerk „Ausgeblendet“, an ihrer gewohnten Stelle; n ist ihre Zahl. Zuordnen lässt sich ein
+  ausgeblendetes Vorhaben weiter: Im Karten-Detail und im Anlege-Dialog steht es mit dem Zusatz
+  „(ausgeblendet)“ nach den eingeblendeten. Wird eine Karte ihm neu zugeordnet, ist sie auf dem
+  Board danach verdeckt, und eine Meldung sagt das. Nur der Board-Vorhaben-Filter bietet
+  ausgeblendete Vorhaben nicht an.
 - **Menü an der Zeile:** Das ⋮ bietet **„Löschen“** und erscheint nur bei Bearbeitungsrecht auf
   dem Board.
 - **Baum im Detail:** Ein Klick auf die Zeile öffnet das Vorhaben-Detail, und darin steht der

@@ -16,7 +16,7 @@ import IndeterminateCheckBoxOutlinedIcon from '@mui/icons-material/Indeterminate
 import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined'
 import type { LabelAction } from '../api/cards'
 import { useAuth } from '../auth/AuthContext'
-import type { Epic } from '../api/epics'
+import type { EpicOption } from '../lib/epicTiles'
 import type { Label } from '../api/labels'
 import { useT } from '../i18n/SpracheContext'
 import { Erklaerung } from './Erklaerung'
@@ -38,11 +38,7 @@ const ZUSTAND_SYMBOL: Record<LabelZustand, typeof CheckBoxOutlinedIcon> = {
   keine: CheckBoxOutlineBlankOutlinedIcon,
 }
 
-export interface EpicOption {
-  epic: Epic
-  /** Ob das Vorhaben für diesen Menschen auf diesem Board ausgeblendet ist. */
-  hidden: boolean
-}
+export type { EpicOption }
 
 interface SperrbareTasteProps {
   symbol: ReactNode

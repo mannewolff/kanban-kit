@@ -1,6 +1,7 @@
 import type { Card } from '../api/cards'
 import type { Epic } from '../api/epics'
 import { epicShortcode } from './epicMeta'
+import { epicAuswahl, type EpicOption } from './epicTiles'
 
 /**
  * Das Vorhaben, dessen Kürzel eine Karte trägt (Plan #682, E2) — als reine Funktion, damit die
@@ -31,22 +32,25 @@ export function epicOfCard(card: Card, epics: readonly Epic[]): Epic | undefined
   return kandidaten[0]
 }
 
+/** Ohne Angabe ist kein Vorhaben ausgeblendet. */
+const KEINE_AUSBLENDUNG: ReadonlySet<number> = new Set()
+
 /** Was der Kartendialog über das Vorhaben-Feld wissen muss (Plan #1042, E11). */
 export interface VorhabenFeldEingabe {
   /** Ob die Zuordnung überhaupt geändert werden darf — `false` heißt: Optionsvorrat nicht ladbar. */
   canEditEpic: boolean
   /** Aktuell zugeordnetes Vorhaben (dessen `id`) oder `null`. */
   parentId: number | null
-  /** Die im Auswahlfeld anzubietenden Vorhaben; ohne Angabe die volle Liste. */
-  selectableEpics?: Epic[]
-  /** Alle Vorhaben des Boards — Quelle des angezeigten Titels, auch für ausgeblendete. */
+  /** IDs der auf dem Board ausgeblendeten Vorhaben; ohne Angabe keines. */
+  hiddenEpics?: ReadonlySet<number>
+  /** Alle Vorhaben des Boards — Optionsvorrat und Quelle des angezeigten Titels. */
   epics: Epic[]
 }
 
 /** Optionsvorrat und Lesezustand des Vorhaben-Felds im Kartendialog. */
 export interface VorhabenFeldAnsicht {
-  /** Optionen des Auswahlfelds. */
-  epicOptionen: Epic[]
+  /** Optionen des Auswahlfelds, ausgeblendete markiert und nach den eingeblendeten. */
+  epicOptionen: EpicOption[]
   /** Ob das Feld nur gelesen werden kann. */
   epicLesend: boolean
   /** Beschriftung im Lesezustand („Kürzel – Titel"), oder `undefined` ohne bekanntes Vorhaben. */
@@ -57,27 +61,23 @@ export interface VorhabenFeldAnsicht {
  * Optionsvorrat, Lesezustand und Lesetext des Vorhaben-Felds — als reine Funktion, damit die drei
  * Regeln nicht als Ternär-Kette in der Kartenmaske stehen (Plan #1042, E11).
  *
- * Der Optionsvorrat ist ohne eigene Angabe die volle `epics`-Liste; Aufrufer ohne ausgeblendete
- * Vorhaben ändern sich dadurch nicht.
+ * Zur Wahl stehen alle Vorhaben, auch ausgeblendete (Issue #1981) — über `epicAuswahl`, dieselbe
+ * Liste wie in der Massenaktion „Zuordnen".
  *
- * Zeigt die Karte auf ein Vorhaben, das nicht zur Auswahl steht (ausgeblendet, fehlende Liste,
- * fremdes oder gelöschtes Vorhaben), bleibt das Feld lesend: Ein Dropdown ohne diesen Eintrag böte
- * nur an, die Zuordnung zu löschen, ohne sie je gezeigt zu haben (#586, Plan #717 A2).
- *
- * Der Lesetext kommt aus der vollen `epics`-Liste, nicht aus dem Optionsvorrat: Nur sie kennt das
- * ausgeblendete Vorhaben. Fehlt es auch dort, gibt es keinen Text — der Aufrufer zeigt dann die
- * nackte Nummer.
+ * Zeigt die Karte auf ein Vorhaben, das in `epics` fehlt (fehlende Liste, fremdes oder gelöschtes
+ * Vorhaben), bleibt das Feld lesend: Ein Dropdown ohne diesen Eintrag böte nur an, die Zuordnung
+ * zu löschen, ohne sie je gezeigt zu haben (#586). Fehlt das Vorhaben, gibt es auch keinen
+ * Lesetext — der Aufrufer zeigt dann die nackte Nummer.
  */
 export function vorhabenFeld({
   canEditEpic,
   parentId,
-  selectableEpics,
+  hiddenEpics = KEINE_AUSBLENDUNG,
   epics,
 }: VorhabenFeldEingabe): VorhabenFeldAnsicht {
-  const epicOptionen = selectableEpics ?? epics
-  const epicLesend =
-    !canEditEpic || (parentId !== null && !epicOptionen.some((e) => e.id === parentId))
+  const epicOptionen = epicAuswahl(epics, hiddenEpics)
   const zugeordnetesVorhaben = epics.find((e) => e.id === parentId)
+  const epicLesend = !canEditEpic || (parentId !== null && zugeordnetesVorhaben === undefined)
   const epicLesendText = zugeordnetesVorhaben
     ? `${epicShortcode(zugeordnetesVorhaben.title, zugeordnetesVorhaben.shortcode)} – ${zugeordnetesVorhaben.title}`
     : undefined

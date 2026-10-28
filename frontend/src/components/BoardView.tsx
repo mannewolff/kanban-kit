@@ -34,7 +34,7 @@ import { useFingerZiehen, type FingerZiehen, type FingerZiel } from '../lib/useF
 import type { Label } from '../api/labels'
 import { isOverdue } from '../lib/dueDate'
 import { epicShortcode } from '../lib/epicMeta'
-import { selectableEpics } from '../lib/epicTiles'
+import { epicAuswahl, visibleEpics } from '../lib/epicTiles'
 import { hiddenCardNumbers } from '../lib/hiddenCards'
 import { readTextFile } from '../lib/readTextFile'
 import { restHoehe } from '../lib/restHoehe'
@@ -581,10 +581,10 @@ export function BoardView({
     if (kartenFilter === 'ueberfaellig') return istUeberfaellig(c)
     return true
   })
-  // Einblendbare Vorhaben (weder ausgeblendet). Sowohl Vorhaben-Filter als auch Anlege-Dialog
-  // bieten seit Issue #785 nur noch daraus an — ein ausgeblendetes Vorhaben zeigte über den
-  // Filter ohnehin nie etwas an, weil seine Karten auf dem Board grundsätzlich verdeckt bleiben.
-  const sichtbareEpics = selectableEpics(epics, hiddenEpics)
+  // Eingeblendete Vorhaben. Der Vorhaben-Filter bietet seit Issue #785 nur daraus an — ein
+  // ausgeblendetes Vorhaben zeigte über den Filter nie etwas an, weil seine Karten auf dem Board
+  // grundsätzlich verdeckt bleiben. Der Anlege-Dialog bietet seit Issue #1981 wieder alle an.
+  const sichtbareEpics = visibleEpics(epics, hiddenEpics)
 
   // Wirksame Auswahl für Massenaktionen: die Schnittmenge aus der Auswahl und dem, was der
   // Anzeige-Filter gerade zeigt. Jede Bulk-Stelle (Zählung, Dialogtexte, Verschieben, Archivieren,
@@ -608,8 +608,9 @@ export function BoardView({
     ),
   }))
 
-  // Zur Wahl stehen alle Vorhaben, auch ausgeblendete (Plan #1865, AK 3) — nicht `sichtbareEpics`.
-  const epicOptions: EpicOption[] = epics.map((epic) => ({ epic, hidden: hiddenEpics.has(epic.id) }))
+  // Zur Wahl stehen alle Vorhaben, auch ausgeblendete (Plan #1865, AK 3) — nicht `sichtbareEpics`;
+  // ausgeblendete nach den eingeblendeten, wie im Karten-Detail und im Anlege-Dialog (Issue #1981).
+  const epicOptions: EpicOption[] = epicAuswahl(epics, hiddenEpics)
 
   const changeEpicFilter = (value: number | null) => {
     setEpicFilter(value)
@@ -675,6 +676,13 @@ export function BoardView({
       },
     )
     setCards((current) => [...current, created])
+    // Eine neue Karte an einem ausgeblendeten Vorhaben ist sofort verdeckt (Issue #1981): dieselbe
+    // Meldung wie bei der Massenaktion, und die neu geladene Vorhaben-Liste verdeckt sie.
+    const vorhaben = epics.find((e) => e.id === input.parentId)
+    if (vorhaben && hiddenEpics.has(vorhaben.id)) {
+      onEpicsChanged?.()
+      notify(t.BOARD.ZUORDNEN_ERFOLG_AUSGEBLENDET(1, vorhaben.title), 'success')
+    }
   }
 
   // Die Spezifikationsdatei wird ausschließlich im Browser gelesen — kein Upload, kein
@@ -1361,16 +1369,14 @@ export function BoardView({
 
       {/* modalColumn ist beim Submit immer gesetzt: NewCardModal ist nur offen, solange
           open={modalColumn !== null} — der Anlegen-Button existiert also nur in diesem Zustand. */}
-      {/* Anlege-Dialog und Vorhaben-Filter bieten seit Issue #785 beide nur einblendbare Vorhaben an
-          (Plan #717, A4 galt bisher nur hier): Eine neue Karte kann keine bestehende Zuordnung
-          verlieren, und was auf dem Board unsichtbar ist, soll man ihr nicht geben — dasselbe gilt
-          jetzt für den Filter, dessen Auswahl sonst ein dauerhaft leeres Board zeigte. Das
-          Karten-Kürzel (EpicBadge) bleibt bewusst an der vollen Liste `epics`: Eine Karte behält
-          ihre Zuordnung sichtbar, auch wenn das Vorhaben inzwischen ausgeblendet wurde. */}
+      {/* Der Anlege-Dialog bietet seit Issue #1981 alle Vorhaben an, ausgeblendete markiert nach den
+          übrigen — die Regel aus #785 ist für ihn bewusst umgekehrt. Der Vorhaben-Filter bleibt bei
+          `sichtbareEpics`, dessen Auswahl sonst ein dauerhaft leeres Board zeigte. */}
       <NewCardModal
         open={modalColumn !== null}
         columnName={modalColumn?.name ?? ''}
-        epics={sichtbareEpics}
+        epics={epics}
+        hiddenEpics={hiddenEpics}
         members={members}
         boardLabels={boardLabels}
         initialValues={duplicateValues ?? undefined}

@@ -13,6 +13,7 @@ import type { Epic } from '../api/epics'
 import type { Label as BoardLabel } from '../api/labels'
 import type { Member } from '../api/members'
 import { epicShortcode } from '../lib/epicMeta'
+import { epicAuswahl } from '../lib/epicTiles'
 import { dueInputToIso } from '../lib/dueDate'
 import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
@@ -50,7 +51,10 @@ export interface NewCardInitialValues {
 interface Props {
   open: boolean
   columnName: string
+  /** Alle Vorhaben des Boards; zur Wahl stehen auch ausgeblendete (Issue #1981). */
   epics: Epic[]
+  /** IDs der auf dem Board ausgeblendeten Vorhaben — sie stehen markiert nach den übrigen. */
+  hiddenEpics?: ReadonlySet<number>
   onClose: () => void
   onSubmit: (input: NewItemInput) => Promise<void> | void
   /** Nur Epic anlegen: Typ vorbelegt EPIC, ohne Typ-/Zuordnungs-Auswahl (für die Epics-Ansicht). */
@@ -63,6 +67,9 @@ interface Props {
   boardLabels?: BoardLabel[]
 }
 
+/** Default der `hiddenEpics`-Prop: stabil, damit kein Rendering eine neue Menge anlegt. */
+const KEINE_AUSBLENDUNG: ReadonlySet<number> = new Set()
+
 /**
  * Zentrierter Anlage-Dialog für neue Karten und Epics (Port von KanbanNewItemModal):
  * Typ (Karte/Epic); bei Karte optionale Epic-Zuordnung, bei Epic optionales Kürzel;
@@ -72,6 +79,7 @@ export function NewCardModal({
   open,
   columnName,
   epics,
+  hiddenEpics = KEINE_AUSBLENDUNG,
   onClose,
   onSubmit,
   epicOnly = false,
@@ -244,7 +252,7 @@ export function NewCardModal({
                 body={body}
                 shortcode={shortcode}
                 parentId={parentId}
-                epics={epics}
+                epics={epicAuswahl(epics, hiddenEpics)}
                 titleError={titleError}
                 depsInput={depsInput}
                 depsError={depsError}

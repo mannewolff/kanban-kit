@@ -95,99 +95,66 @@ describe('vorhabenFeld', () => {
   const v70 = epic(70, [], [])
   const v80 = epic(80, [], [])
 
-  it('nimmt ohne eigenen Optionsvorrat die volle Vorhaben-Liste', () => {
-    const feld = vorhabenFeld({
-      canEditEpic: true,
-      parentId: null,
-      selectableEpics: undefined,
-      epics: [v70, v80],
-    })
-    expect(feld.epicOptionen).toEqual([v70, v80])
+  it('bietet ohne Ausblendung alle Vorhaben unmarkiert an', () => {
+    const feld = vorhabenFeld({ canEditEpic: true, parentId: null, epics: [v70, v80] })
+    expect(feld.epicOptionen).toEqual([
+      { epic: v70, hidden: false },
+      { epic: v80, hidden: false },
+    ])
   })
 
-  it('nimmt als Optionsvorrat die angegebene Liste, nicht die volle', () => {
+  it('bietet ein ausgeblendetes Vorhaben markiert nach den eingeblendeten an', () => {
     const feld = vorhabenFeld({
       canEditEpic: true,
       parentId: null,
-      selectableEpics: [v70],
+      hiddenEpics: new Set([v70.id]),
       epics: [v70, v80],
     })
-    expect(feld.epicOptionen).toEqual([v70])
+    expect(feld.epicOptionen).toEqual([
+      { epic: v80, hidden: false },
+      { epic: v70, hidden: true },
+    ])
   })
 
   it('bleibt bearbeitbar und ohne Lesetext, solange keine Zuordnung besteht', () => {
-    const feld = vorhabenFeld({
-      canEditEpic: true,
-      parentId: null,
-      selectableEpics: [v70],
-      epics: [v70],
-    })
+    const feld = vorhabenFeld({ canEditEpic: true, parentId: null, epics: [v70] })
     expect(feld.epicLesend).toBe(false)
     expect(feld.epicLesendText).toBeUndefined()
   })
 
   it('ist lesend, wenn der Aufrufer die Zuordnung nicht ändern darf', () => {
-    const feld = vorhabenFeld({
-      canEditEpic: false,
-      parentId: null,
-      selectableEpics: [v70],
-      epics: [v70],
-    })
+    const feld = vorhabenFeld({ canEditEpic: false, parentId: null, epics: [v70] })
     expect(feld.epicLesend).toBe(true)
   })
 
-  it('bleibt bearbeitbar, wenn das zugeordnete Vorhaben zur Auswahl steht', () => {
-    const feld = vorhabenFeld({
-      canEditEpic: true,
-      parentId: v70.id,
-      selectableEpics: [v70],
-      epics: [v70],
-    })
+  it('bleibt bearbeitbar, wenn das zugeordnete Vorhaben eines unter mehreren ist', () => {
+    // Es genügt, dass **ein** Vorhaben der Liste passt — nicht, dass alle passen.
+    const feld = vorhabenFeld({ canEditEpic: true, parentId: v70.id, epics: [v70, v80] })
     expect(feld.epicLesend).toBe(false)
     expect(feld.epicLesendText).toBe('V70 – Vorhaben 70')
   })
 
-  it('bleibt bearbeitbar, wenn das zugeordnete Vorhaben eines unter mehreren zur Auswahl ist', () => {
-    // Es genügt, dass **ein** Eintrag des Optionsvorrats passt — nicht, dass alle passen.
-    const feld = vorhabenFeld({
-      canEditEpic: true,
-      parentId: v70.id,
-      selectableEpics: [v70, v80],
-      epics: [v70, v80],
-    })
-    expect(feld.epicLesend).toBe(false)
-  })
-
-  it('ist lesend, wenn das zugeordnete Vorhaben nicht zur Auswahl steht, und nennt es trotzdem', () => {
+  // Issue #1981: Das lesende Feld bei Zuordnung zu einem ausgeblendeten Vorhaben (Plan #717) entfällt.
+  it('bleibt bearbeitbar, wenn das zugeordnete Vorhaben ausgeblendet ist', () => {
     const feld = vorhabenFeld({
       canEditEpic: true,
       parentId: v80.id,
-      selectableEpics: [v70],
+      hiddenEpics: new Set([v80.id]),
       epics: [v70, v80],
     })
-    expect(feld.epicLesend).toBe(true)
-    expect(feld.epicLesendText).toBe('V80 – Vorhaben 80')
+    expect(feld.epicLesend).toBe(false)
+    expect(feld.epicOptionen).toContainEqual({ epic: v80, hidden: true })
   })
 
-  it('ist lesend und ohne Text, wenn das zugeordnete Vorhaben auch in der vollen Liste fehlt', () => {
-    const feld = vorhabenFeld({
-      canEditEpic: true,
-      parentId: 999,
-      selectableEpics: [v70],
-      epics: [v70],
-    })
+  it('ist lesend und ohne Text, wenn das zugeordnete Vorhaben in der Liste fehlt', () => {
+    const feld = vorhabenFeld({ canEditEpic: true, parentId: 999, epics: [v70] })
     expect(feld.epicLesend).toBe(true)
     expect(feld.epicLesendText).toBeUndefined()
   })
 
   it('bildet das Kürzel aus dem Titel, wenn das Vorhaben keines gesetzt hat', () => {
     const ohneKuerzel: Epic = { ...v70, shortcode: null, title: 'Neue Warte bauen' }
-    const feld = vorhabenFeld({
-      canEditEpic: true,
-      parentId: ohneKuerzel.id,
-      selectableEpics: [ohneKuerzel],
-      epics: [ohneKuerzel],
-    })
+    const feld = vorhabenFeld({ canEditEpic: true, parentId: ohneKuerzel.id, epics: [ohneKuerzel] })
     expect(feld.epicLesendText).toBe('NWB – Neue Warte bauen')
   })
 })

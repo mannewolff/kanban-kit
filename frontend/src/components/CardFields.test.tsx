@@ -2,13 +2,13 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Epic } from '../api/epics'
+import type { EpicOption } from '../lib/epicTiles'
 import { renderMitSprache } from '../i18n/renderMitSprache'
 import { MAX_TEXT_LENGTH } from '../lib/textLimits'
 import { CardFields } from './CardFields'
 
-const epics: Epic[] = [
-  { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null },
-]
+const auth: Epic = { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }
+const epics: EpicOption[] = [{ epic: auth, hidden: false }]
 
 function handlers() {
   return {
@@ -329,6 +329,34 @@ describe('CardFields', () => {
     expect(h.onParentIdChange).not.toHaveBeenCalled()
   })
 
+  // Issue #1981: Ein ausgeblendetes Vorhaben ist wählbar und trägt den Zusatz der Massenaktion.
+  it('bietet ein ausgeblendetes Vorhaben mit dem Zusatz „(ausgeblendet)“ an', () => {
+    const h = handlers()
+    const nice: Epic = { ...auth, id: 11, number: 3, title: 'Nice to Have', shortcode: 'NTH' }
+    render(
+      <CardFields
+        isEpic={false}
+        title="T"
+        body=""
+        shortcode=""
+        parentId={null}
+        epics={[{ epic: auth, hidden: false }, { epic: nice, hidden: true }]}
+        depsInput=""
+        depsError={null}
+        dueInput=""
+        {...h}
+      />,
+    )
+
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      '(kein Vorhaben)',
+      'AUT – Auth',
+      'NTH – Nice to Have (ausgeblendet)',
+    ])
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '11' } })
+    expect(h.onParentIdChange).toHaveBeenCalledWith(11)
+  })
+
   it('benennt die fehlende Epic-Zuordnung auch im Nur-Lese-Fall', () => {
     const h = handlers()
     render(
@@ -405,7 +433,7 @@ describe('CardFields', () => {
 
       expect(screen.getByLabelText('Epic')).toHaveValue('(no epic)')
       expect(
-        screen.getByText('Epic not selectable here (hidden or list unavailable) — the assignment stays unchanged.'),
+        screen.getByText('Epic not selectable here (list unavailable) — the assignment stays unchanged.'),
       ).toBeInTheDocument()
     })
 

@@ -714,7 +714,7 @@ export const de = {
   KARTENFELDER: {
     VORHABEN: 'Vorhaben',
     KEIN_VORHABEN: '(kein Vorhaben)',
-    VORHABEN_NUR_LESEN: 'Vorhaben hier nicht auswählbar (ausgeblendet oder Liste nicht verfügbar) — die Zuordnung bleibt unverändert.',
+    VORHABEN_NUR_LESEN: 'Vorhaben hier nicht auswählbar (Liste nicht verfügbar) — die Zuordnung bleibt unverändert.',
     ABHAENGIG: 'Abhängig von (Nummern, kommagetrennt)',
     ABHAENGIG_KURZ: 'Abhängig von',
     ABHAENGIG_BEISPIEL: 'z. B. 12, 34',

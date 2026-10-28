@@ -1,14 +1,15 @@
 import TextField from '@mui/material/TextField'
 import type { KeyboardEvent, Ref } from 'react'
-import type { Epic } from '../api/epics'
 import { epicShortcode } from '../lib/epicMeta'
+import type { EpicOption } from '../lib/epicTiles'
 import { useCheckboxShortcut } from '../lib/useCheckboxShortcut'
 import { isTooLong, tooLongMessage } from '../lib/textLimits'
 import { useSprache, useT } from '../i18n/SpracheContext'
 import { DatumFeld } from './DatumFeld'
 
 /**
- * Native Vorhaben-Auswahl: „(kein Vorhaben)" plus alle übergebenen Vorhaben mit Kürzel. Eigene
+ * Native Vorhaben-Auswahl: „(kein Vorhaben)" plus alle übergebenen Vorhaben mit Kürzel; ein
+ * ausgeblendetes trägt den Zusatz der Massenaktion „(ausgeblendet)" (Issue #1981). Eigene
  * Komponente, weil neben dieser Feldbasis auch der schlanke Anlege-Zweig des `NewCardModal`
  * (Idee/Karte ohne Zusatzfelder) dieselbe Auswahl braucht — vorher zwei wortgleiche Kopien (#781).
  */
@@ -18,10 +19,11 @@ export function EpicSelectField({
   onParentIdChange,
 }: Readonly<{
   parentId: number | null
-  epics: Epic[]
+  epics: EpicOption[]
   onParentIdChange: (value: number | null) => void
 }>) {
-  const t = useT().KARTENFELDER
+  const woerterbuch = useT()
+  const t = woerterbuch.KARTENFELDER
   return (
     <TextField
       select
@@ -36,9 +38,10 @@ export function EpicSelectField({
       fullWidth
     >
       <option value="">{t.KEIN_VORHABEN}</option>
-      {epics.map((epic) => (
+      {epics.map(({ epic, hidden }) => (
         <option key={epic.id} value={epic.id}>
           {epicShortcode(epic.title, epic.shortcode)} – {epic.title}
+          {hidden ? ` ${woerterbuch.MASSENAKTION.AUSGEBLENDET}` : ''}
         </option>
       ))}
     </TextField>
@@ -81,11 +84,12 @@ export function CardFields({
   body: string
   shortcode: string
   parentId: number | null
-  epics: Epic[]
+  /** Optionsvorrat der Vorhaben-Auswahl, ausgeblendete markiert (`epicAuswahl`). */
+  epics: EpicOption[]
   /**
    * Zeigt die Epic-Zuordnung nur an, statt sie zur Auswahl zu stellen. Für Aufrufer, die den
    * Optionsvorrat nicht laden können (archiviertes Board, board-lose Idee) oder deren Zuordnung
-   * nicht darin vorkommt (ausgeblendetes Vorhaben, Plan #717): Das Dropdown böte dann
+   * nicht darin vorkommt (fremdes oder gelöschtes Vorhaben): Das Dropdown böte dann
    * ausschließlich „(kein Epic)" an, und ein Klick darauf löschte eine bestehende Zuordnung, ohne
    * sie je gezeigt zu haben (#586).
    */

@@ -669,7 +669,7 @@ export const en: Woerterbuch = {
   KARTENFELDER: {
     VORHABEN: 'Epic',
     KEIN_VORHABEN: '(no epic)',
-    VORHABEN_NUR_LESEN: 'Epic not selectable here (hidden or list unavailable) — the assignment stays unchanged.',
+    VORHABEN_NUR_LESEN: 'Epic not selectable here (list unavailable) — the assignment stays unchanged.',
     ABHAENGIG: 'Depends on (numbers, comma-separated)',
     ABHAENGIG_KURZ: 'Depends on',
     ABHAENGIG_BEISPIEL: 'e.g. 12, 34',

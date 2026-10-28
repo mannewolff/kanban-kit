@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { NewCardModal } from './NewCardModal'
@@ -41,6 +41,36 @@ describe('NewCardModal', () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Karte', parentId: 9, description: 'Text' }),
     )
+    await Promise.resolve()
+  })
+
+  // Issue #1981: Die Regel aus #785 ist umgekehrt — auch ein ausgeblendetes Vorhaben ist wählbar.
+  it('bietet ein ausgeblendetes Vorhaben markiert nach den eingeblendeten an und reicht es durch', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const nice = { id: 11, number: 3, title: 'Nice to Have', description: null, shortcode: 'NTH', done: 0, total: 0, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }
+    const auth = { ...nice, id: 9, number: 2, title: 'Auth', shortcode: 'AUT' }
+    render(
+      <NewCardModal
+        open
+        columnName="Backlog"
+        epics={[nice, auth]}
+        hiddenEpics={new Set([11])}
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    )
+
+    const vorhaben = within(screen.getByLabelText('Vorhaben')).getAllByRole('option')
+    expect(vorhaben.map((o) => o.textContent)).toEqual([
+      '(kein Vorhaben)',
+      'AUT – Auth',
+      'NTH – Nice to Have (ausgeblendet)',
+    ])
+    fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Karte' } })
+    fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '11' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ title: 'Karte', parentId: 11 }))
     await Promise.resolve()
   })
 

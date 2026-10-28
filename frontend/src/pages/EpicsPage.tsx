@@ -30,7 +30,7 @@ import { EpicVisibilityList } from '../components/EpicVisibilityList'
 import { NewCardModal } from '../components/NewCardModal'
 import { leseAusgeblendet, schreibeAusgeblendet } from '../lib/boardHiddenEpics'
 import { epicToCard } from '../lib/epicToCard'
-import { selectableEpics, sortEpics, visibleEpics } from '../lib/epicTiles'
+import { sortEpics, visibleEpics } from '../lib/epicTiles'
 import { useBoardRole } from '../lib/useBoardRole'
 import { useProjectName } from '../lib/useProjectName'
 import { useT } from '../i18n/SpracheContext'
@@ -383,11 +383,10 @@ export function EpicsPage() {
           projectId={projectId}
           members={members}
           boardLabels={labels}
-          // Volle Liste für Titel und Fortschritt, gefilterter Vorrat für die Auswahl (Plan #717,
-          // A2) — derselbe Vertrag wie am Board. Der Umschalter „Ausgeblendete zeigen" dieser Seite
-          // zieht ausdrücklich nicht mit (A1): Er steuert die Liste, nicht die Zuordnung.
+          // Alle Vorhaben stehen zur Wahl, ausgeblendete markiert nach den übrigen (Issue #1981) —
+          // derselbe Vertrag wie am Board.
           epics={epics}
-          selectableEpics={selectableEpics(epics, hiddenEpics)}
+          hiddenEpics={hiddenEpics}
           onClose={() => setSelected(null)}
           onChanged={reload}
         />

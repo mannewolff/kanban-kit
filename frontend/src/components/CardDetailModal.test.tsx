@@ -1513,38 +1513,65 @@ describe('CardDetailModal', () => {
     )
   })
 
-  it('schaltet die Vorhaben-Auswahl bei ausgeblendetem Vorhaben lesend', async () => {
+  // Issue #1981: Das lesende Feld bei Zuordnung zu einem ausgeblendeten Vorhaben (Plan #717) entfällt.
+  it('zeigt die Zuordnung zu einem ausgeblendeten Vorhaben bearbeitbar und meldet ohne Änderung nur das Speichern', async () => {
     const apis = makeApis()
     apis.cardsApi.get.mockResolvedValue({ ...card, parentId: 9 })
-    // `epics` kennt das Vorhaben (Titelanzeige, Fortschritt), `selectableEpics` nicht: genau der
-    // Zustand eines auf dem Board ausgeblendeten Vorhabens (Plan #717, A2).
     const epics = [{ id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }]
     render(
       <CardDetailModal
         card={{ ...card, parentId: 9 }}
         canEdit
         epics={epics}
-        selectableEpics={[]}
+        hiddenEpics={new Set([9])}
         onClose={vi.fn()}
         {...apis}
       />,
+      { wrapper: SnackbarProvider },
     )
 
     await klickeBearbeiten()
 
     const field = screen.getByLabelText('Vorhaben')
-    expect(field).toHaveAttribute('readonly')
-    expect(field).toHaveValue('AUT – Auth')
-    expect(
-      screen.getByText(
-        'Vorhaben hier nicht auswählbar (ausgeblendet oder Liste nicht verfügbar) — die Zuordnung bleibt unverändert.',
-      ),
-    ).toBeInTheDocument()
+    expect(field).not.toHaveAttribute('readonly')
+    expect(field).toHaveValue('9')
+    expect(within(field).getByRole('option', { name: 'AUT – Auth (ausgeblendet)' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(() =>
       expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', expect.any(String), [3, 4], undefined, 9, null),
     )
+    expect(await screen.findByText('Karte gespeichert.')).toBeInTheDocument()
+  })
+
+  it('bietet ein ausgeblendetes Vorhaben nach den eingeblendeten an und meldet nach dem Zuordnen die Verdeckung', async () => {
+    const apis = makeApis()
+    const auth = { id: 9, number: 2, title: 'Auth', description: null, shortcode: 'AUT', done: 0, total: 1, memberNumbers: [], rootNumbers: [], requirementCardNumber: null }
+    const nice = { ...auth, id: 11, number: 3, title: 'Nice to Have', shortcode: 'NTH' }
+    render(
+      <CardDetailModal card={card} canEdit epics={[nice, auth]} hiddenEpics={new Set([11])} onClose={vi.fn()} {...apis} />,
+      { wrapper: SnackbarProvider },
+    )
+
+    await klickeBearbeiten()
+
+    const field = screen.getByLabelText('Vorhaben')
+    expect(within(field).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      '(kein Vorhaben)',
+      'AUT – Auth',
+      'NTH – Nice to Have (ausgeblendet)',
+    ])
+    fireEvent.change(field, { target: { value: '11' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() =>
+      expect(apis.cardsApi.update).toHaveBeenCalledWith(100, 'Aufgabe', expect.any(String), [3, 4], undefined, 11, null),
+    )
+    expect(
+      await screen.findByText(
+        '1 Karte dem ausgeblendeten Vorhaben „Nice to Have“ zugeordnet. Sie ist auf diesem Board jetzt verdeckt — „Ausgeblendete zeigen“ blendet sie wieder ein.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('zeigt die nackte Nummer, wenn auch die Vorhaben-Liste das Vorhaben nicht kennt', async () => {
