@@ -217,6 +217,55 @@ class VorschauSchreibsperreFilterTest {
         "Dieser persönliche Bereich wird in der Vorschau nicht gezeigt.");
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "/api/%61ccess-tokens",
+        "/api/access-tokens/%35",
+        "/api/me/%76orschau-protokoll",
+        "/api/me/vorschau-protokoll;x=1",
+        "/api//access-tokens"
+      })
+  void inDerVorschau_persoenlicherPfadKodiert_wirdAbgewiesen(String path) throws Exception {
+    // Given: Das Routing sieht den dekodierten Pfad (Issue #1974)
+
+    // When
+    run("GET", path);
+
+    // Then
+    assertRejected(
+        VorschauSchreibsperreFilter.PERSOENLICH,
+        "Dieser persönliche Bereich wird in der Vorschau nicht gezeigt.");
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "POST, /api/%61ccess-tokens",
+    "DELETE, /api/access-tokens/%35",
+    "POST, /api/auth/logout/%78",
+    "DELETE, /api/vorschau/%78"
+  })
+  void inDerVorschau_veraenderndKodiert_bleibtNurLesend(String method, String path)
+      throws Exception {
+    // When
+    run(method, path);
+
+    // Then
+    assertRejected(
+        VorschauSchreibsperreFilter.NUR_LESEND,
+        "Die Vorschau ist nur lesend. Ändern ist hier nicht möglich.");
+  }
+
+  @ParameterizedTest
+  @CsvSource({"POST, /api/auth/%6Cogout", "DELETE, /api/%76orschau"})
+  void inDerVorschau_ausnahmeKodiert_gehtDurch(String method, String path) throws Exception {
+    // When
+    MockHttpServletRequest request = run(method, path);
+
+    // Then
+    assertPassed(request);
+  }
+
   @Test
   void inDerVorschau_abweisungInDerEingestelltenSprache() throws Exception {
     // Given

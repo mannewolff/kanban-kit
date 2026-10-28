@@ -527,6 +527,63 @@ class VorschauFilterTest {
   }
 
   @Test
+  void ausnahme_kodiertGeschrieben_bleibtAusgenommen() throws Exception {
+    // Issue #1974: Das Routing sieht den dekodierten Pfad.
+    String[] pfade = {"/api/%6De", "/api/%61ttachments/9", "/api/boards/3/%65vents", "/api//me"};
+    for (String pfad : pfade) {
+      // Given
+      SecurityContextHolder.clearContext();
+      setUp();
+      inGueltigerVorschau();
+      request.setRequestURI(pfad);
+
+      // When
+      filter.doFilter(request, response, chain);
+
+      // Then
+      assertWeitergereicht();
+      assertThat(authentication().getPrincipal()).as(pfad).isEqualTo(ZIEL);
+    }
+  }
+
+  @Test
+  void keineAusnahme_kodiertGeschrieben_bleibtImAbgleich() throws Exception {
+    // Issue #1974: Ein kodierter Pfad darf den Abgleich nicht überspringen.
+    String[] pfade = {
+      "/api/me/%76orschau-protokoll",
+      "/api/%61ttachments/9/mehr",
+      "/api/me%2F",
+      "/api/me;x=1/vorschau-protokoll"
+    };
+    for (String pfad : pfade) {
+      // Given
+      SecurityContextHolder.clearContext();
+      setUp();
+      inGueltigerVorschau();
+      request.setRequestURI(pfad);
+
+      // When
+      filter.doFilter(request, response, chain);
+
+      // Then
+      assertThat(response.getStatus()).as(pfad).isEqualTo(409);
+    }
+  }
+
+  @Test
+  void apiPfadKodiertGeschrieben_laeuftDurchDenFilter() throws Exception {
+    // Given: /%61pi/ erreicht dieselben Handler wie /api/ (Issue #1974)
+    inGueltigerVorschau();
+    request.setRequestURI("/%61pi/projects");
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertVorschauGewechselt();
+  }
+
+  @Test
   void alterAdminTab_aufAusgenommenemPfadOhneKopfzeile_gehtOhneVorschauWeiter() throws Exception {
     // Given
     angemeldet(ADMIN);
