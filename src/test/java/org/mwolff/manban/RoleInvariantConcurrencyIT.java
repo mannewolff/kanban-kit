@@ -229,7 +229,7 @@ class RoleInvariantConcurrencyIT extends AbstractIntegrationTest {
 
   private long saveProject(long ownerUserId) {
     return projects
-        .save(new Project(null, "Rennen", ownerUserId, Instant.now(), null, false))
+        .save(new Project(null, "Rennen", ownerUserId, Instant.now(), null, false, null))
         .requireId();
   }
 

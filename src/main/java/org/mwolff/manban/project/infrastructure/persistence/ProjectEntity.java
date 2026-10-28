@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 
@@ -47,6 +48,14 @@ class ProjectEntity {
   @Column(name = "dashboard_participation", insertable = false, updatable = false)
   private boolean dashboardParticipation;
 
+  /**
+   * Das Monatsbudget in USD (Issue #1964, Plan #1962) — <b>nur lesbar</b>, dieselbe Begründung wie
+   * bei {@link #dashboardParticipation}. Geschrieben wird es allein über {@code
+   * ProjectRepository#setMonthlyBudget}; {@code null} heißt „kein Budget“.
+   */
+  @Column(name = "monthly_budget_usd", insertable = false, updatable = false)
+  private @Nullable BigDecimal monthlyBudgetUsd;
+
   protected ProjectEntity() {
     // für JPA
   }
@@ -80,5 +89,9 @@ class ProjectEntity {
 
   boolean isDashboardParticipation() {
     return dashboardParticipation;
+  }
+
+  @Nullable BigDecimal getMonthlyBudgetUsd() {
+    return monthlyBudgetUsd;
   }
 }

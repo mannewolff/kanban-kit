@@ -1,8 +1,10 @@
 package org.mwolff.manban.project.application;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.project.domain.Project;
 
 /** Ausgehender Port für die Persistenz von Projekten. */
@@ -48,4 +50,16 @@ public interface ProjectRepository {
    * Aggregat beim Laden gesehen hat. Ein unbekanntes Projekt ist ein No-Op.
    */
   void setDashboardParticipation(long projectId, boolean participating);
+
+  /**
+   * Setzt das Monatsbudget ({@code project.monthly_budget_usd}, Issue #1964, Plan #1962); {@code
+   * null} entfernt es.
+   *
+   * <p>Gezieltes Update statt {@code save}, aus demselben Grund wie bei {@link
+   * #setDashboardParticipation}: Die Spalte steht an der Entity auf {@code insertable = false,
+   * updatable = false}, damit ein Umbenennen das Budget nicht mit einem veralteten Wert
+   * überschreibt. Ein unbekanntes Projekt ist ein No-Op; die Prüfbedingung {@code > 0} der Spalte
+   * weist einen Betrag von 0 oder darunter ab.
+   */
+  void setMonthlyBudget(long projectId, @Nullable BigDecimal amount);
 }

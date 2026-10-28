@@ -175,5 +175,6 @@
   "src/test/java/org/mwolff/manban/nightrun/NightRunOverlapRepositoryIT.java": ["src/main/java/org/mwolff/manban/nightrun/infrastructure/persistence/NightRunRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/project/infrastructure/ProjectDashboardParticipationIT.java": ["src/main/java/org/mwolff/manban/project/infrastructure/persistence/ProjectRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/project/infrastructure/ProjectInteractiveUsageIT.java": ["src/main/java/org/mwolff/manban/project/infrastructure/persistence/ProjectRepositoryAdapter.java"],
+  "src/test/java/org/mwolff/manban/project/infrastructure/ProjectMonthlyBudgetIT.java": ["src/main/java/org/mwolff/manban/project/infrastructure/persistence/ProjectRepositoryAdapter.java", "src/main/resources/db/migration/V64__project_monthly_budget.sql"],
   "src/test/java/org/mwolff/manban/ratelimit/OverloadRejectionIT.java": ["src/main/java/org/mwolff/manban/ratelimit/infrastructure/persistence/OverloadRejectionTable.java"]
 }

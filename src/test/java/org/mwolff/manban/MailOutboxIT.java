@@ -205,7 +205,9 @@ class MailOutboxIT extends AbstractIntegrationTest {
             .save(new AppUser(null, "owner@example.org", "Owner", true, PlatformRole.USER))
             .requireId();
     long projectId =
-        projects.save(new Project(null, "P", ownerId, Instant.now(), null, false)).requireId();
+        projects
+            .save(new Project(null, "P", ownerId, Instant.now(), null, false, null))
+            .requireId();
     memberships.save(
         new ProjectMembership(null, projectId, ownerId, ProjectRole.OWNER, Instant.now()));
     Mockito.doThrow(new MailSendException("smtp down"))

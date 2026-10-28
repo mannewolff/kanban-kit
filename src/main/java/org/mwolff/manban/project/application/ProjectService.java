@@ -87,7 +87,8 @@ public class ProjectService {
     // Der Erfassungsbeginn der interaktiven Sitzungen bleibt leer: Ein frisches Projekt hat noch
     // keine gemeldet (Issue #1012). Gesetzt wird er allein ueber InteractiveUsageSinceWriter.
     // Die Teilnahme am Plattform-Leitstand startet aus (Issue #1076, AK 17).
-    Project project = projects.save(new Project(null, name.trim(), owner.id(), now, null, false));
+    Project project =
+        projects.save(new Project(null, name.trim(), owner.id(), now, null, false, null));
     memberships.save(
         new ProjectMembership(null, project.requireId(), owner.id(), ProjectRole.OWNER, now));
     // Synchron im selben Transaktions-Scope: der Board-seitige Listener legt das Default-Board an;

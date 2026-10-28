@@ -51,7 +51,7 @@ class InvitationAutoApprovalIT extends AbstractIntegrationTest {
             .requireId();
     long projectId =
         projects
-            .save(new Project(null, "Projekt", ownerId, clock.instant(), null, false))
+            .save(new Project(null, "Projekt", ownerId, clock.instant(), null, false, null))
             .requireId();
     String token = SecureTokens.newToken();
     invitations.save(

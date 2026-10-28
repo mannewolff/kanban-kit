@@ -58,7 +58,7 @@ class PermissionCheckerNightRunAccessTest {
 
   private void teilnahme(boolean teilnehmend) {
     when(projects.findById(PROJECT))
-        .thenReturn(Optional.of(new Project(PROJECT, "P", 9L, FIXED, null, teilnehmend)));
+        .thenReturn(Optional.of(new Project(PROJECT, "P", 9L, FIXED, null, teilnehmend, null)));
   }
 
   @BeforeEach

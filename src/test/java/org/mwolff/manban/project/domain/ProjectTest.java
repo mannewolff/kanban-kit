@@ -2,6 +2,7 @@ package org.mwolff.manban.project.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +14,7 @@ class ProjectTest {
 
   @Test
   void withNameTauschtNurDenNamen() {
-    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, null, false);
+    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, null, false, null);
 
     Project nachher = vorher.withName("Neu");
 
@@ -30,7 +31,7 @@ class ProjectTest {
    */
   @Test
   void withNameBehaeltDenErfassungsbeginn() {
-    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, ERFASST_SEIT, false);
+    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, ERFASST_SEIT, false, null);
 
     assertThat(vorher.withName("Neu").interactiveUsageSince()).isEqualTo(ERFASST_SEIT);
   }
@@ -41,8 +42,30 @@ class ProjectTest {
    */
   @Test
   void withNameBehaeltDieTeilnahmeAmPlattformLeitstand() {
-    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, null, true);
+    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, null, true, null);
 
     assertThat(vorher.withName("Neu").dashboardParticipation()).isTrue();
+  }
+
+  /**
+   * Das Monatsbudget (Issue #1964, Plan #1962) steht am Projekt; {@code null} heißt „kein Budget“.
+   * Ein {@code withMonthlyBudget} gibt es bewusst nicht — geschrieben wird es nur über den
+   * gezielten Weg {@code ProjectRepository#setMonthlyBudget}.
+   */
+  @Test
+  void dasMonatsbudgetKommtAusDemKonstruktor() {
+    Project mitBudget = new Project(7L, "P", 3L, ANGELEGT, null, false, new BigDecimal("100.00"));
+    Project ohneBudget = new Project(7L, "P", 3L, ANGELEGT, null, false, null);
+
+    assertThat(mitBudget.monthlyBudgetUsd()).isEqualByComparingTo("100.00");
+    assertThat(ohneBudget.monthlyBudgetUsd()).isNull();
+  }
+
+  /** Umbenennen ist keine Budgetänderung — derselbe Grund wie bei der Teilnahme. */
+  @Test
+  void withNameBehaeltDasMonatsbudget() {
+    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, null, false, new BigDecimal("100.00"));
+
+    assertThat(vorher.withName("Neu").monthlyBudgetUsd()).isEqualByComparingTo("100.00");
   }
 }

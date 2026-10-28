@@ -66,7 +66,7 @@ class MembershipServiceTest {
   }
 
   private static Project project() {
-    return new Project(9L, "P", 1L, FIXED, null, false);
+    return new Project(9L, "P", 1L, FIXED, null, false, null);
   }
 
   @BeforeEach

@@ -49,7 +49,7 @@ class ProjectServiceParticipationWriteTest {
   /** Das Projekt, wie es nach dem Schalten aus der Persistenz zurückkommt. */
   private void projektMitTeilnahme(boolean teilnahme) {
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, teilnahme)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, teilnahme, null)));
   }
 
   @BeforeEach

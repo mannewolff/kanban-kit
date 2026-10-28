@@ -62,6 +62,6 @@ class ProjectDashboardParticipationServiceTest {
   }
 
   private static Project projekt(long id, String name, boolean teilnahme) {
-    return new Project(id, name, 1L, ANGELEGT, null, teilnahme);
+    return new Project(id, name, 1L, ANGELEGT, null, teilnahme, null);
   }
 }

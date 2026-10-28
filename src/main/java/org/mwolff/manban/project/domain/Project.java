@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.domain;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.Identifiable;
@@ -20,6 +21,9 @@ import org.mwolff.manban.common.Identifiable;
  * @param dashboardParticipation ob der Plattform-Leitstand Störungen dieses Projekts zeigt (Issue
  *     #1076, Plan #1072 E5). Vorgabe {@code false} für Bestand und neue Projekte; das Schalten
  *     selbst folgt in einem späteren Paket.
+ * @param monthlyBudgetUsd Monatsbudget des Projekts in USD (Issue #1964, Plan #1962); {@code null}
+ *     heißt „kein Budget“. Wie die Teilnahme gibt es dafür kein {@code with…}: Gesetzt wird es
+ *     ausschließlich über {@code ProjectRepository#setMonthlyBudget}, nie über {@code save}.
  */
 public record Project(
     @Nullable Long id,
@@ -27,11 +31,18 @@ public record Project(
     Long ownerUserId,
     Instant createdAt,
     @Nullable Instant interactiveUsageSince,
-    boolean dashboardParticipation)
+    boolean dashboardParticipation,
+    @Nullable BigDecimal monthlyBudgetUsd)
     implements Identifiable {
 
   public Project withName(String newName) {
     return new Project(
-        id, newName, ownerUserId, createdAt, interactiveUsageSince, dashboardParticipation);
+        id,
+        newName,
+        ownerUserId,
+        createdAt,
+        interactiveUsageSince,
+        dashboardParticipation,
+        monthlyBudgetUsd);
   }
 }

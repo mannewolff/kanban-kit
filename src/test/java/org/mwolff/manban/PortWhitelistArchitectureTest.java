@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Aufrufer-Whitelists der rechtepruefungsfreien Ports (Issue #463, #1012, #1013, #1076, #1803,
- * #1804).
+ * #1804, #1964).
  *
  * <p>Diese Ports pruefen bewusst keine Rechte; die Autorisierung liegt beim Aufrufer. Deshalb ist
  * ihr Aufruferkreis maschinell begrenzt: Ein neues Modul, das einen solchen Port injiziert, umginge
@@ -90,6 +90,22 @@ class PortWhitelistArchitectureTest {
               "DashboardParticipationReader prueft keine Rechte: Aufrufer nur project.application "
                   + "und nightrun.application");
 
+  // Weiterer Port derselben Bauart (Issue #1964, Plan #1962): Das Monatsbudget eines Projekts
+  // liest das Nachtlauf-Modul ohne Rechtepruefung; die Autorisierung (Verbrauch des Projekts
+  // sehen) liegt beim Aufrufer in nightrun.application.
+  static final ArchRule MONTHLY_BUDGET_READER_HAT_AUFRUFER_WHITELIST =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages(
+              "org.mwolff.manban.project.application..", "org.mwolff.manban.nightrun.application..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching(
+              "org\\.mwolff\\.manban\\.project\\.application\\.MonthlyBudgetReader(\\$.*)?")
+          .as(
+              "MonthlyBudgetReader prueft keine Rechte: Aufrufer nur project.application "
+                  + "und nightrun.application");
+
   // Fuenfter Port derselben Bauart (Issue #1803, Plan #1801 A2): Wer eine Code-Anforderung
   // einloest, bekommt ein Konto zurueck, ohne dass der Port irgendetwas prueft. Ausser dem Modul
   // auth selbst (Dienste in application, Adapter in infrastructure) darf ihn niemand benutzen —
@@ -139,6 +155,11 @@ class PortWhitelistArchitectureTest {
   @Test
   void dashboardParticipationReaderHatAufruferWhitelist() {
     DASHBOARD_PARTICIPATION_READER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void monthlyBudgetReaderHatAufruferWhitelist() {
+    MONTHLY_BUDGET_READER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
