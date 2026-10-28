@@ -166,6 +166,32 @@ export interface VerbrauchGesamt {
   brakes: VerbrauchBremsen
 }
 
+/** Warnstufe des Monatsbudgets: unter 80 %, ab 80 %, ab dem vollen Budget (Plan #1962). */
+export type VerbrauchWarnstufe = 'NONE' | 'EIGHTY' | 'REACHED'
+
+/**
+ * Der Stand des Monatsbudgets im laufenden Monat (Issue #1968, Endpunkt aus #1967). Die Beträge
+ * tragen denselben Zahlentyp wie `costUsd`; ohne Budget oder ohne gemeldete Kosten sind sie `null`.
+ */
+export interface VerbrauchBudget {
+  budgetUsd: number | null
+  /** `true` nur für die echte Rolle OWNER. */
+  editable: boolean
+  /** Erster Tag des laufenden Monats (`JJJJ-MM-TT`). */
+  monthFirstDay: string
+  spentUsd: number | null
+  /** Anteil am Budget in Prozent, abgerundet; `null` ohne Budget oder Kosten. */
+  percent: number | null
+  warning: VerbrauchWarnstufe
+  /** Hochrechnung bis Monatsende; `null` am 1. und 2. Tag und ohne Kosten. */
+  forecastUsd: number | null
+  /** `true` am 1. und 2. Tag des Monats. */
+  tooEarly: boolean
+  /** Tag, an dem die Hochrechnung das Budget voraussichtlich erreicht (`JJJJ-MM-TT`). */
+  exceedDate: string | null
+  coverage: VerbrauchAbdeckung
+}
+
 /** Die Zone des Lesers: „die letzte Nacht" ist seine Nacht, nicht die des Servers (Plan E4). */
 export function leserZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -191,6 +217,11 @@ export const nightRunUsageApi = {
    */
   total: (projectId: number) =>
     apiFetch<VerbrauchGesamt>(`/api/projects/${projectId}/night-run-usage/total`),
+  /** Der Stand des Monatsbudgets im laufenden Monat in der Zone des Lesers (Issue #1968). */
+  budget: (projectId: number, zone: string = leserZone()) =>
+    apiFetch<VerbrauchBudget>(
+      `/api/projects/${projectId}/night-run-usage/budget?${new URLSearchParams({ zone })}`,
+    ),
 }
 
 export type NightRunUsageApi = typeof nightRunUsageApi

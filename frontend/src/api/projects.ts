@@ -42,6 +42,16 @@ export const projectsApi = {
       `/api/projects/${id}/dashboard-participation`,
       json({ participating }, 'PUT'),
     ),
+  /**
+   * Legt das Monatsbudget des Projekts fest (Issue #1968, Server in #1965). Der Betrag geht als
+   * Zeichenkette mit Punkt als Dezimaltrenner (Plan #1962 E4) — kein Gleitkomma fuer Geld; das
+   * Komma wandelt das Eingabefeld, nicht diese Funktion.
+   */
+  setMonthlyBudget: (id: number, amount: string) =>
+    apiFetch<void>(`/api/projects/${id}/monthly-budget`, json({ amountUsd: amount }, 'PUT')),
+  /** Entfernt das Monatsbudget des Projekts (Issue #1968). */
+  removeMonthlyBudget: (id: number) =>
+    apiFetch<void>(`/api/projects/${id}/monthly-budget`, { method: 'DELETE' }),
   remove: (id: number) => apiFetch<void>(`/api/projects/${id}`, { method: 'DELETE' }),
   transferOwner: (id: number, newOwnerUserId: number) =>
     apiFetch<void>(`/api/projects/${id}/owner`, json({ newOwnerUserId }, 'POST')),
