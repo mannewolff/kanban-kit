@@ -23,6 +23,7 @@ import org.mwolff.manban.common.i18n.Sprache;
 import org.mwolff.manban.kanbancompat.application.IdempotencyKeyReusedException;
 import org.mwolff.manban.kanbancompat.application.InvalidKanbanColumnException;
 import org.mwolff.manban.kanbancompat.application.TokenNotBoundException;
+import org.mwolff.manban.project.application.InvalidMonthlyBudgetException;
 import org.mwolff.manban.project.application.MemberNotApprovedException;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 
@@ -65,6 +66,15 @@ class ModulMeldungenSpracheTest {
         .isEqualTo("You do not have permission for this project action");
     assertThat(englischesDetail(new MemberNotApprovedException("a@example.org")))
         .isEqualTo("User has not been approved yet: a@example.org");
+  }
+
+  /** Ein ungültiges Monatsbudget (Issue #1965): Die Meldung nennt alle drei Bedingungen. */
+  @Test
+  void monatsbudgetMeldungAufEnglisch() {
+    assertThat(englischesDetail(new InvalidMonthlyBudgetException()))
+        .isEqualTo(
+            "The monthly budget must be greater than 0 USD, have at most two decimal places and"
+                + " be at most 9,999,999,999.99 USD.");
   }
 
   @Test
