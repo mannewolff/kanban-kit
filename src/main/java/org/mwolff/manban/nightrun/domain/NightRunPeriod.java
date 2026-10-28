@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 
 /**
@@ -77,6 +78,25 @@ public record NightRunPeriod(
    */
   public static NightRunPeriod laufendeNacht(Instant jetzt, ZoneId zone) {
     return night(nachtDatum(LocalDateTime.ofInstant(jetzt, zone)), zone);
+  }
+
+  /**
+   * Der Monat, in dem {@code jetzt} liegt — der <b>laufende</b> und volle Monat (Issue #1966, Plan
+   * #1962), wie {@link #laufendeNacht} die volle Nacht liefert. Die Grenzen bleiben 12:00-Grenzen:
+   * Am 1. vor 12:00 läuft noch der Vormonat.
+   */
+  public static NightRunPeriod laufenderMonat(Instant jetzt, ZoneId zone) {
+    LocalDate nacht = nachtDatum(LocalDateTime.ofInstant(jetzt, zone));
+    return beginnendAm(NightRunPeriodType.MONTH, zone, nacht.withDayOfMonth(1));
+  }
+
+  /**
+   * Zahl der seit {@link #firstDay} angebrochenen Tage einschließlich des laufenden (Issue #1966):
+   * das Nachtdatum von {@code jetzt} minus erster Tag plus 1. Am 3. um 11:59 sind es noch zwei.
+   */
+  public int angebrocheneTage(Instant jetzt) {
+    LocalDate nacht = nachtDatum(LocalDateTime.ofInstant(jetzt, zone));
+    return Math.toIntExact(ChronoUnit.DAYS.between(firstDay, nacht) + 1);
   }
 
   /** Der unmittelbar vorangegangene gleichartige Zeitraum. */

@@ -188,6 +188,91 @@ class NightRunPeriodTest {
         .isEqualTo(Duration.ofHours(25));
   }
 
+  // --- Laufender Monat (Issue #1966, Plan #1962) ----------------------------------------------
+
+  /**
+   * Am 01.11. (CET, UTC+1) läuft bis 11:59 noch der Oktober mit allen 31 Tagen, ab 12:00 der
+   * November mit seinem ersten angebrochenen Tag. Die Grenzen bleiben 12:00-Grenzen, auch über
+   * einen Sommerzeitwechsel.
+   */
+  @Test
+  void laufenderMonat_wechseltAmErstenUmZwoelfUhrAuchUeberDieZeitumstellung() {
+    Instant elfUhrNeunundfuenfzig = Instant.parse("2026-11-01T10:59:00Z");
+    NightRunPeriod oktober = NightRunPeriod.laufenderMonat(elfUhrNeunundfuenfzig, BERLIN);
+
+    assertThat(oktober.type()).isEqualTo(NightRunPeriodType.MONTH);
+    assertThat(oktober.zone()).isEqualTo(BERLIN);
+    assertThat(oktober.firstDay()).isEqualTo(LocalDate.of(2026, 10, 1));
+    assertThat(oktober.lastDay()).isEqualTo(LocalDate.of(2026, 10, 31));
+    assertThat(oktober.angebrocheneTage(elfUhrNeunundfuenfzig)).isEqualTo(31);
+
+    Instant zwoelfUhr = Instant.parse("2026-11-01T11:00:00Z");
+    NightRunPeriod november = NightRunPeriod.laufenderMonat(zwoelfUhr, BERLIN);
+
+    assertThat(november.firstDay()).isEqualTo(LocalDate.of(2026, 11, 1));
+    assertThat(november.from()).as("Beginn: 12:00 am 1., einschließlich").isEqualTo(zwoelfUhr);
+    assertThat(november.to())
+        .as("Ende: 12:00 am 1. des Folgemonats, ausschließlich")
+        .isEqualTo(Instant.parse("2026-12-01T11:00:00Z"));
+    assertThat(november.angebrocheneTage(zwoelfUhr)).isEqualTo(1);
+
+    // Die Grenzen bleiben 12:00-Grenzen, auch wenn im Monat die Uhr umgestellt wird.
+    NightRunPeriod maerz =
+        NightRunPeriod.laufenderMonat(Instant.parse("2026-03-29T12:00:00Z"), BERLIN);
+    assertThat(maerz.from())
+        .as("1. März 12:00 CET")
+        .isEqualTo(Instant.parse("2026-03-01T11:00:00Z"));
+    assertThat(maerz.to())
+        .as("1. April 12:00 CEST")
+        .isEqualTo(Instant.parse("2026-04-01T10:00:00Z"));
+    assertThat(Duration.between(maerz.from(), maerz.to()))
+        .as("der März hat eine Stunde weniger")
+        .isEqualTo(Duration.ofDays(31).minusHours(1));
+    assertThat(maerz.angebrocheneTage(Instant.parse("2026-03-29T12:00:00Z"))).isEqualTo(29);
+
+    NightRunPeriod oktoberUmgestellt =
+        NightRunPeriod.laufenderMonat(Instant.parse("2026-10-26T10:30:00Z"), BERLIN);
+    assertThat(Duration.between(oktoberUmgestellt.from(), oktoberUmgestellt.to()))
+        .as("der Oktober hat eine Stunde mehr")
+        .isEqualTo(Duration.ofDays(31).plusHours(1));
+    assertThat(oktoberUmgestellt.angebrocheneTage(Instant.parse("2026-10-26T10:30:00Z")))
+        .as("26.10. 11:30 CET gehört noch zur Nacht des 25.")
+        .isEqualTo(25);
+  }
+
+  /**
+   * Am 3. um 11:59 sind erst zwei Tage angebrochen, um 12:00 drei; am Monatsende zählen 28, 30 und
+   * 31 Tage.
+   */
+  @Test
+  void angebrocheneTage_zaehlenNachtdatenSeitDemErsten() {
+    NightRunPeriod monat =
+        NightRunPeriod.laufenderMonat(Instant.parse("2026-11-03T10:59:00Z"), BERLIN);
+
+    assertThat(monat.firstDay()).isEqualTo(LocalDate.of(2026, 11, 1));
+    assertThat(monat.angebrocheneTage(Instant.parse("2026-11-03T10:59:00Z"))).isEqualTo(2);
+    assertThat(monat.angebrocheneTage(Instant.parse("2026-11-03T11:00:00Z"))).isEqualTo(3);
+    assertThat(monat.angebrocheneTage(Instant.parse("2026-11-02T11:00:00Z"))).isEqualTo(2);
+
+    // Februar, April und Oktober: der letzte Tag vor 12:00 am 1. zählt die ganze Monatslänge.
+    Instant ersterMaerzElfUhr = Instant.parse("2026-03-01T10:00:00Z");
+    NightRunPeriod februar = NightRunPeriod.laufenderMonat(ersterMaerzElfUhr, BERLIN);
+    assertThat(februar.firstDay()).isEqualTo(LocalDate.of(2026, 2, 1));
+    assertThat(februar.lastDay()).isEqualTo(LocalDate.of(2026, 2, 28));
+    assertThat(februar.angebrocheneTage(ersterMaerzElfUhr)).isEqualTo(28);
+
+    Instant ersterMaiElfUhr = Instant.parse("2026-05-01T09:00:00Z");
+    NightRunPeriod april = NightRunPeriod.laufenderMonat(ersterMaiElfUhr, BERLIN);
+    assertThat(april.firstDay()).isEqualTo(LocalDate.of(2026, 4, 1));
+    assertThat(april.lastDay()).isEqualTo(LocalDate.of(2026, 4, 30));
+    assertThat(april.angebrocheneTage(ersterMaiElfUhr)).isEqualTo(30);
+
+    Instant zehnterOktober = Instant.parse("2026-10-10T10:00:00Z");
+    NightRunPeriod oktober = NightRunPeriod.laufenderMonat(zehnterOktober, BERLIN);
+    assertThat(oktober.lastDay()).isEqualTo(LocalDate.of(2026, 10, 31));
+    assertThat(oktober.angebrocheneTage(zehnterOktober)).isEqualTo(10);
+  }
+
   // --- Woche -----------------------------------------------------------------------------------
 
   /**
