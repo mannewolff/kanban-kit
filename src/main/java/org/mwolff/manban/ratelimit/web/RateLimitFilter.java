@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.i18n.Texte;
+import org.mwolff.manban.common.web.Anwendungspfad;
 import org.mwolff.manban.ratelimit.application.RateLimitedOperation;
 import org.mwolff.manban.ratelimit.application.RateLimiter;
 import org.springframework.http.HttpHeaders;
@@ -89,8 +90,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
    * Der begrenzte Vorgang dieses Aufrufs.
    *
    * <p>Der Pfad kommt aus {@link RateLimitedOperation} und nicht aus einer zweiten Liste im Filter
-   * — getrennt gepflegt wäre eine davon irgendwann falsch. Vom {@code requestURI} wird der
-   * Context-Path abgezogen: Unter {@code /app} lautet die URI {@code /app/api/auth/register}.
+   * — getrennt gepflegt wäre eine davon irgendwann falsch. Verglichen wird der Pfad, wie das
+   * Routing ihn sieht ({@link Anwendungspfad}): ohne Context-Path und dekodiert. Auf der rohen URI
+   * erreichte {@code /api/auth/code/%76erify} den Handler, ohne gezählt zu werden (Issue #1973).
    *
    * @return {@code null}, wenn Methode oder Pfad nicht begrenzt sind
    */
@@ -98,7 +100,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     if (!HttpMethod.POST.matches(request.getMethod())) {
       return null;
     }
-    String path = request.getRequestURI().substring(request.getContextPath().length());
+    String path = Anwendungspfad.von(request);
     for (RateLimitedOperation operation : RateLimitedOperation.values()) {
       if (operation.path().equals(path)) {
         return operation;

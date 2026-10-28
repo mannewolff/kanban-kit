@@ -12,15 +12,26 @@ import static org.mockito.Mockito.when;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mwolff.manban.common.i18n.SprachFixture;
 import org.mwolff.manban.common.i18n.Sprache;
+import org.mwolff.manban.ratelimit.application.AttemptStore;
 import org.mwolff.manban.ratelimit.application.RateLimitProperties;
+import org.mwolff.manban.ratelimit.application.RateLimitProperties.Limits;
 import org.mwolff.manban.ratelimit.application.RateLimitedOperation;
 import org.mwolff.manban.ratelimit.application.RateLimiter;
+import org.mwolff.manban.ratelimit.domain.OriginAttempts;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -45,6 +56,7 @@ class RateLimitFilterTest {
   private static final String ORIGIN = "203.0.113.9";
   private static final String PROBLEM_JSON = "application/problem+json";
   private static final String UTF_8 = "UTF-8";
+  private static final int MAX_ATTEMPTS = 2;
 
   private RateLimiter rateLimiter;
   private RateLimitFilter filter;
@@ -375,5 +387,70 @@ class RateLimitFilterTest {
 
     // Then — der Vorgang wird trotzdem erkannt.
     verify(rateLimiter).recordAttempt(ORIGIN, RateLimitedOperation.CODE_VERIFY);
+  }
+
+  /** Ein Zählerspeicher im Speicher des Tests — die echte Fassade braucht nur diese drei Griffe. */
+  private static final class MapAttemptStore implements AttemptStore {
+
+    private final Map<Key, OriginAttempts> entries = new HashMap<>();
+
+    @Override
+    public @Nullable OriginAttempts get(Key key) {
+      return entries.get(key);
+    }
+
+    @Override
+    public void put(Key key, OriginAttempts attempts) {
+      entries.put(key, attempts);
+    }
+
+    @Override
+    public void remove(Key key) {
+      entries.remove(key);
+    }
+  }
+
+  /** Ein Filter mit echter Fassade: gezählt und gesperrt wird hier wirklich, nicht gemockt. */
+  private RateLimitFilter filterWithRealLimiter() {
+    Limits limits = new Limits(MAX_ATTEMPTS, Duration.ofMinutes(10), Duration.ofMinutes(5));
+    RateLimitProperties properties = new RateLimitProperties(true, 0, null, limits, limits, limits);
+    Clock clock = Clock.fixed(Instant.parse("2026-10-28T10:00:00Z"), ZoneOffset.UTC);
+    return new RateLimitFilter(
+        new RateLimiter(new MapAttemptStore(), properties, clock),
+        new ClientOriginResolver(properties),
+        SprachFixture.mit(() -> eingestellt));
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @CsvSource({
+    // Die kodierten Varianten (Issue #1973): Spring Security und MVC dekodieren den Pfad, bevor sie
+    // routen — `%76erify` erreicht denselben Handler wie `verify` und muss ebenso zählen.
+    "/api/auth/%72egister",
+    "/api/auth/code/%72equest",
+    "/api/auth/code/%76erify",
+    "/api/auth/code/%6Cink",
+    // Die Literalpfade verhalten sich unverändert.
+    "/api/auth/register",
+    "/api/auth/code/request",
+    "/api/auth/code/verify",
+    "/api/auth/code/link"
+  })
+  void begrenzterPfadWirdGezaehltUndNachDerGrenzeAbgewiesen(String path) throws Exception {
+    // Given — eine echte Fassade mit zwei Versuchen; 401 zählt bei jedem der vier Vorgänge.
+    RateLimitFilter realFilter = filterWithRealLimiter();
+    for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      MockFilterChain chain = chainAnswering(401);
+      realFilter.doFilter(request("POST", path), new MockHttpServletResponse(), chain);
+      assertThat(chain.getRequest()).isNotNull();
+    }
+    MockFilterChain chain = chainAnswering(401);
+    MockHttpServletResponse response = new MockHttpServletResponse();
+
+    // When — der Versuch nach Erreichen der Grenze
+    realFilter.doFilter(request("POST", path), response, chain);
+
+    // Then — abgewiesen, bevor der Endpunkt ihn sieht.
+    assertThat(response.getStatus()).isEqualTo(429);
+    assertThat(chain.getRequest()).isNull();
   }
 }
