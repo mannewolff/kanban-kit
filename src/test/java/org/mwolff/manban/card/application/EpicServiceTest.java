@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.board.application.ColumnNotFoundException;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
+import org.mwolff.manban.card.application.EpicService.DerivationNodeView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -836,6 +838,52 @@ class EpicServiceTest {
 
     assertThat(onlyPublishedEvent())
         .isEqualTo(new CardBoardActivityEvent(BOARD, ActivityType.UPDATED, 1L));
+  }
+
+  /**
+   * Eine Herkunft in einem anderen Projekt bleibt extern, aber ohne Nummer: Der Betrachter muss
+   * dort nicht Mitglied sein (Issue #1982, Plan #1980 E4).
+   */
+  @Test
+  void epicDerivationTree_vorfahrInAnderemProjekt_externOhneNummer() {
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(5L, 20L, 1, false, null, CardType.EPIC, null, "E"),
+                kette(6L, 20L, 2, CardType.CARD, 5L, 77L)));
+    when(dependencies.findByCardIds(any())).thenReturn(Map.of());
+    Card projektfremd =
+        new Card(
+            77L,
+            99L,
+            30L,
+            42,
+            "Fremd",
+            null,
+            0,
+            false,
+            null,
+            1L,
+            FIXED,
+            FIXED,
+            CardType.CARD,
+            null,
+            null,
+            null,
+            2L,
+            null,
+            null,
+            null,
+            null);
+    when(cards.findByIds(any())).thenReturn(List.of(projektfremd));
+
+    List<DerivationNodeView> baum = service.epicDerivationTree(1L, BOARD, 5L);
+
+    assertThat(baum).hasSize(1);
+    DerivationNodeView zeile = baum.get(0);
+    assertThat(zeile.number()).isEqualTo(2);
+    assertThat(zeile.externalOrigin()).isTrue();
+    assertThat(zeile.derivedFrom()).isNull();
   }
 
   /** Karte mit Herkunft — für die Zugehörigkeit über die Kette (Issue #633). */

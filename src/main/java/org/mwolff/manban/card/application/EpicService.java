@@ -5,7 +5,6 @@ import static org.mwolff.manban.card.application.KartenGrundlage.trimToNull;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -156,7 +155,8 @@ public class EpicService {
    */
   @Transactional(readOnly = true)
   public List<DerivationNodeView> epicDerivationTree(long userId, long boardId, long epicId) {
-    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
 
     // Ungefiltert in die Zugehörigkeitsrechnung — genau wie in listEpics: EpicMembership filtert
     // Archiviertes selbst heraus, kappt die Kette aber nicht daran. Ein Vorfilter hier ergäbe eine
@@ -176,33 +176,8 @@ public class EpicService {
     return DerivationTree.build(
         baumKarten,
         abhaengigkeiten.abhaengigkeitenJeKarte(ids),
-        fremdeVorfahrenNummern(alle),
+        FremdeVorfahren.nummern(cards, projectId, alle),
         zuordnung.gezaehlteMarken(boardId, ids));
-  }
-
-  /**
-   * Nummern der Vorfahren, die nicht auf diesem Board liegen — ein Sammelzugriff statt einer
-   * Abfrage je Kante.
-   *
-   * <p>Bezugsmenge ist bewusst das <b>Board</b> und nicht die jeweils übergebene Teilmenge: Nur so
-   * behält eine board-fremde Herkunft im Vorhaben-Baum ihre Nummer, während board-interne
-   * Nicht-Mitglieder ohne Nummer extern bleiben.
-   */
-  private Map<Long, Integer> fremdeVorfahrenNummern(List<Card> boardCards) {
-    Set<Long> imBoard = boardCards.stream().map(Card::requireId).collect(Collectors.toSet());
-    Set<Long> fremde =
-        boardCards.stream()
-            .map(Card::derivedFromCardId)
-            .filter(Objects::nonNull)
-            .filter(id -> !imBoard.contains(id))
-            .collect(Collectors.toSet());
-    Map<Long, Integer> nummern = new HashMap<>();
-    if (!fremde.isEmpty()) {
-      for (Card vorfahr : cards.findByIds(fremde)) {
-        nummern.put(vorfahr.requireId(), vorfahr.number());
-      }
-    }
-    return nummern;
   }
 
   /**
