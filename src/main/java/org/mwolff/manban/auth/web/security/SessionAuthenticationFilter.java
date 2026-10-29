@@ -7,10 +7,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.application.SessionCheck;
 import org.mwolff.manban.auth.application.SessionTokens;
+import org.mwolff.manban.auth.application.SitzungsEnde;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -30,6 +32,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * Nutzung, auch eine Hintergrundabfrage; die Schwelle von einem Tag hält die Set-Cookie-Kopfzeilen
  * selten. Ein abgelaufenes, fremdes oder durch eine neue Sitzungs-Generation entwertetes Token
  * prüft der Port als ungültig — es wird nie erneuert.
+ *
+ * <p><strong>Sitzungsende (Issue #1997, Plan #1989 E14):</strong> Jede gültige Anmeldung trägt
+ * {@link SitzungsEnde} als Details — nach einer Erneuerung jetzt plus die volle Sitzungsdauer,
+ * sonst den Ablauf aus dem Token. Daran misst das Push-Abo, wie lange es auf diesem Gerät gilt.
  */
 @Component
 public class SessionAuthenticationFilter extends OncePerRequestFilter {
@@ -40,6 +46,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
   private final SessionCookieManager cookies;
   private final SessionTokens tokens;
+  private final Duration sessionTtl;
   private final Duration renewalThreshold;
   private final Clock clock;
 
@@ -47,7 +54,8 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
       SessionCookieManager cookies, SessionTokens tokens, AuthProperties properties, Clock clock) {
     this.cookies = cookies;
     this.tokens = tokens;
-    this.renewalThreshold = properties.sessionTtl().minus(RENEWAL_SLACK);
+    this.sessionTtl = properties.sessionTtl();
+    this.renewalThreshold = sessionTtl.minus(RENEWAL_SLACK);
     this.clock = clock;
   }
 
@@ -64,17 +72,21 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
                 var authentication =
                     new UsernamePasswordAuthenticationToken(
                         check.userId(), null, List.of(new SimpleGrantedAuthority(AUTHORITY)));
+                authentication.setDetails(new SitzungsEnde(renewIfAged(check, response)));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-                renewIfAged(check, response);
               });
     }
     filterChain.doFilter(request, response);
   }
 
-  private void renewIfAged(SessionCheck check, HttpServletResponse response) {
-    if (check.expiresAt().isBefore(clock.instant().plus(renewalThreshold))) {
+  /** Erneuert ein gealtertes Token und liefert das Ende der Sitzung, die danach gilt. */
+  private Instant renewIfAged(SessionCheck check, HttpServletResponse response) {
+    Instant now = clock.instant();
+    if (check.expiresAt().isBefore(now.plus(renewalThreshold))) {
       String renewed = tokens.issue(check.userId());
       response.addHeader(HttpHeaders.SET_COOKIE, cookies.create(renewed).toString());
+      return now.plus(sessionTtl);
     }
+    return check.expiresAt();
   }
 }

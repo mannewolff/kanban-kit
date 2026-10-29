@@ -74,6 +74,9 @@ final class ApiZugang {
           // Die mobile Oberfläche (Issue #1994, Plan #1989 E19): nur per Session — sie ist eine
           // Oberfläche für Angemeldete, kein Zugang für Werkzeuge mit Token.
           new Pfadgruppe(Zugangsart.NUR_SESSION, List.of("/api/mobil/**")),
+          // Push-Abos (Issue #1997, Plan #1989 E14): nur per Session — ein Abo lebt so lange wie
+          // die Sitzung auf dem Gerät, und ein Token hat keine.
+          new Pfadgruppe(Zugangsart.NUR_SESSION, List.of("/api/push/**")),
           // Kanban-Compat-API (tbx.mjs/board.mjs) ausschließlich per PAT. Seit Issue #947 liegt
           // hier auch POST /api/kanban/night-runs: Der Nachtlauf meldet sich mit demselben
           // projektgebundenen Token, ohne Sitzung. Keine Regel ändert sich dadurch — das Muster
