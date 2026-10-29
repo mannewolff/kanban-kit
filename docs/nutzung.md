@@ -1370,6 +1370,55 @@ echter Mitgliedschaft, über das Teilnahme-Ankreuzfeld im [Editiermodus](#editie
 Projektliste. Der Plattform-Admin sieht nur Runs und Störungen teilnehmender Projekte und kann die
 Teilnahme selbst nicht erzwingen.
 
+## Unterwegs: Handy und Siri {#unterwegs}
+
+### Siri-Kurzbefehl
+
+Eine Idee lässt sich unterwegs per Sprache festhalten: „Hey Siri, Idee festhalten“, einen Satz
+diktieren — danach liegt im Backlog des Boards eine Karte `[Idea]` mit diesem Text. Dafür braucht es
+keine eigene Oberfläche; der Kurzbefehl ruft den bestehenden Karten-Zugang mit einem Zugangsschlüssel
+auf.
+
+**1. Zugangsschlüssel anlegen.** Unter **Administration → API-Tokens** ein neues Token anlegen und
+dabei **Projekt und Board** setzen — das Board, in dessen Backlog die Ideen landen sollen. Das Token
+handelt mit deinen Rechten im Projekt; das Recht `TICKET_CREATE` (Karten anlegen) genügt. Den
+angezeigten Schlüssel gleich kopieren, er wird nur einmal gezeigt.
+
+**2. Kurzbefehl einrichten.** In der App **Kurzbefehle** einen neuen Kurzbefehl anlegen:
+
+1. Aktion **„Text diktieren“** hinzufügen.
+2. Aktion **„Aktuelles Datum“** hinzufügen und mit **„Datum formatieren“** etwa im Format
+   `yyyy-MM-dd-HH-mm-ss` als Text ausgeben — das ist der `Idempotency-Key`, je Aufruf neu.
+3. Aktion **„Inhalte von URL abrufen“** hinzufügen:
+   - Adresse: `https://<dein-host>/api/kanban/items`
+   - Methode: `POST`
+   - Kopfzeilen: `X-Kanban-Token` = dein Schlüssel, `Idempotency-Key` = das formatierte Datum
+   - Anfragetext: JSON mit `title` = `[Idea] ` gefolgt vom diktierten Text und `column` =
+     `BACKLOG`, also `{"title":"[Idea] <Diktat>","column":"BACKLOG"}`
+4. Den Kurzbefehl **„Idee festhalten“** nennen — unter diesem Namen startet ihn Siri.
+
+**Schlüssel auf dem Handy.** Der Schlüssel bleibt im Kurzbefehl auf dem Handy gespeichert. Geht das
+Handy verloren, das Token unter **Administration → API-Tokens** zurückziehen; danach legt der
+Kurzbefehl nichts mehr an.
+
+**Anderes Board.** Der Kurzbefehl legt Ideen immer auf dem Board seines Schlüssels an. Für ein anderes
+Board ein Token mit Bindung an dieses Board anlegen und im Kurzbefehl den Schlüssel austauschen. Die
+Board-Wahl der mobilen Oberfläche `/mobil` wirkt nicht auf den Kurzbefehl.
+
+**Grenze.** Der Titel darf höchstens 300 Zeichen haben, das Präfix `[Idea] ` eingerechnet.
+
+**Zum Ausprobieren** ohne Handy:
+
+```bash
+curl -X POST "https://<dein-host>/api/kanban/items" \
+  -H "X-Kanban-Token: <dein-schluessel>" \
+  -H "Idempotency-Key: $(date +%Y-%m-%d-%H-%M-%S)" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"[Idea] Karten nach Fälligkeit sortieren","column":"BACKLOG"}'
+```
+
+Ein zweiter Aufruf mit demselben `Idempotency-Key` legt keine zweite Karte an.
+
 ## API-Übersicht {#api-ubersicht}
 
 Für alle Angemeldeten ohne Plattform-Rolle ADMIN ist die API-Übersicht (`/administration/api`) rein
