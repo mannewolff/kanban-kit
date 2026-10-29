@@ -34,6 +34,8 @@ class ApiZugangTest {
     "/api/me/vorschau-protokoll, NUR_SESSION",
     "/api/openapi, NUR_SESSION",
     "/api/openapi.yaml, NUR_SESSION",
+    "/api/mobil/laeufe, NUR_SESSION",
+    "/api/mobil/laeufe/{laufId}, NUR_SESSION",
     "/api/kanban/items, NUR_PROJEKT_TOKEN",
     "/api/kanban/night-runs, NUR_PROJEKT_TOKEN",
     "/api/kanban/labels, NUR_PROJEKT_TOKEN",

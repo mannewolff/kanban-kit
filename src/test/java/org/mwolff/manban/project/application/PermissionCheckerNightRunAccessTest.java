@@ -1,5 +1,6 @@
 package org.mwolff.manban.project.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -224,6 +225,61 @@ class PermissionCheckerNightRunAccessTest {
 
     assertThatThrownBy(() -> checker.requireNightRunAccess(USER, PROJECT))
         .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(memberships, never()).findByProjectIdAndUserId(PROJECT, ADMIN);
+  }
+
+  // --- hatNachtlaufZugriff: dieselbe Regel als Ja/Nein (Issue #1994, Plan #1989 E9) ----------
+
+  @Test
+  void hatNachtlaufZugriff_derEchteOwnerJa_ohneDassDieTeilnahmeGefragtWird() {
+    mitgliedschaft(USER, ProjectRole.OWNER);
+
+    assertThat(checker.hatNachtlaufZugriff(USER, PROJECT)).isTrue();
+    verify(projects, never()).findById(PROJECT);
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = ProjectRole.class,
+      names = {"VIEWER", "MEMBER", "ADMIN"})
+  void hatNachtlaufZugriff_einMitgliedUnterhalbVonOwnerNein(ProjectRole rolle) {
+    mitgliedschaft(USER, rolle);
+
+    assertThat(checker.hatNachtlaufZugriff(USER, PROJECT)).isFalse();
+  }
+
+  @Test
+  void hatNachtlaufZugriff_einNichtmitgliedNein_ohneZuWerfen() {
+    mitgliedschaft(USER, null);
+
+    assertThat(checker.hatNachtlaufZugriff(USER, PROJECT)).isFalse();
+    verify(projects, never()).findById(PROJECT);
+  }
+
+  @Test
+  void hatNachtlaufZugriff_derPlattformAdminNurAmTeilnehmendenProjekt() {
+    when(platformAdminChecker.isPlatformAdmin(ADMIN)).thenReturn(true);
+    mitgliedschaft(ADMIN, ProjectRole.MEMBER);
+
+    teilnahme(true);
+    assertThat(checker.hatNachtlaufZugriff(ADMIN, PROJECT)).isTrue();
+
+    teilnahme(false);
+    assertThat(checker.hatNachtlaufZugriff(ADMIN, PROJECT)).isFalse();
+
+    when(projects.findById(PROJECT)).thenReturn(Optional.empty());
+    assertThat(checker.hatNachtlaufZugriff(ADMIN, PROJECT)).isFalse();
+  }
+
+  /** Kein Vorschau-Zweig: Die Antwort gilt dem genannten Konto, nicht der Sicht einer Anfrage. */
+  @Test
+  void hatNachtlaufZugriff_kenntKeineVorschau() {
+    inDerVorschau();
+    mitgliedschaft(USER, ProjectRole.OWNER);
+    mitgliedschaft(ADMIN, null);
+    teilnahme(false);
+
+    assertThat(checker.hatNachtlaufZugriff(USER, PROJECT)).isTrue();
     verify(memberships, never()).findByProjectIdAndUserId(PROJECT, ADMIN);
   }
 }

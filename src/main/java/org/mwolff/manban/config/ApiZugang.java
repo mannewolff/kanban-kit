@@ -71,6 +71,9 @@ final class ApiZugang {
           // Die API-Beschreibung (Plan #1400, E1): für jeden Angemeldeten, aber nur per Session —
           // der Fachplan unterscheidet die Anmeldung ausdrücklich vom Projekt-Token.
           new Pfadgruppe(Zugangsart.NUR_SESSION, List.of("/api/openapi", "/api/openapi.yaml")),
+          // Die mobile Oberfläche (Issue #1994, Plan #1989 E19): nur per Session — sie ist eine
+          // Oberfläche für Angemeldete, kein Zugang für Werkzeuge mit Token.
+          new Pfadgruppe(Zugangsart.NUR_SESSION, List.of("/api/mobil/**")),
           // Kanban-Compat-API (tbx.mjs/board.mjs) ausschließlich per PAT. Seit Issue #947 liegt
           // hier auch POST /api/kanban/night-runs: Der Nachtlauf meldet sich mit demselben
           // projektgebundenen Token, ohne Sitzung. Keine Regel ändert sich dadurch — das Muster
