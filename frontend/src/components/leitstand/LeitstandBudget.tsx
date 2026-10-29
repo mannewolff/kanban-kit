@@ -75,8 +75,10 @@ export function LeitstandBudget({
   schreiben?: BudgetSchreiben
 }>) {
   const t = useT().LEITSTAND_BUDGET
+  // Stryker disable next-line ObjectLiteral,StringLiteral: gleichwertig — der Effekt setzt vor jeder Anzeige der Zeile selbst 'laden'
   const [zustand, setZustand] = useState<Zustand>({ art: 'laden' })
   const [stand, setStand] = useState(0)
+  // Stryker disable next-line ArithmeticOperator,ArrayDeclaration: gleichwertig — jeder neue Wert stößt das Laden an, und neuLaden liest keinen Wert aus dem Rendern
   const neuLaden = useCallback(() => setStand((n) => n + 1), [])
 
   useEffect(() => {
