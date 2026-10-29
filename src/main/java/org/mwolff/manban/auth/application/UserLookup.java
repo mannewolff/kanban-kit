@@ -17,4 +17,11 @@ public interface UserLookup {
 
   /** Benutzer zu einer technischen ID; leer, wenn unbekannt. */
   Optional<UserSummary> findById(long userId);
+
+  /**
+   * Ob das Konto mitwirken darf: freigegeben und nicht gesperrt (Issue #1998, Plan #1989 E12). Ein
+   * Plattform-Admin gilt wie in {@link UserSummary#approved()} als freigegeben; ein unbekanntes
+   * Konto ist nicht aktiv.
+   */
+  boolean istAktiv(long userId);
 }

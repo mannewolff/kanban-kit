@@ -1,8 +1,10 @@
 package org.mwolff.manban.push.infrastructure.persistence;
 
+import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.push.application.PushAboRepository;
 import org.mwolff.manban.push.domain.PushAbo;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 /** Adapter des {@link PushAboRepository}-Ports auf Spring Data JPA. */
@@ -18,6 +20,16 @@ class PushAboRepositoryAdapter implements PushAboRepository {
   @Override
   public Optional<PushAbo> findByEndpoint(String endpoint) {
     return jpa.findByEndpoint(endpoint).map(PushAboRepositoryAdapter::toDomain);
+  }
+
+  @Override
+  public Optional<PushAbo> findById(long id) {
+    return jpa.findById(id).map(PushAboRepositoryAdapter::toDomain);
+  }
+
+  @Override
+  public List<PushAbo> findAll() {
+    return jpa.findAll(Sort.by("id")).stream().map(PushAboRepositoryAdapter::toDomain).toList();
   }
 
   @Override

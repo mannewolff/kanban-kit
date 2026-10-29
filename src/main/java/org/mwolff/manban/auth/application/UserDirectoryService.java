@@ -39,6 +39,15 @@ class UserDirectoryService implements UserLookup, UserDisplayNameWriter {
   }
 
   @Override
+  @Transactional(readOnly = true)
+  public boolean istAktiv(long userId) {
+    return users
+        .findById(userId)
+        .filter(user -> user.effectivelyApproved() && !user.disabled())
+        .isPresent();
+  }
+
+  @Override
   @Transactional
   public Optional<UserSummary> updateDisplayName(long userId, String displayName) {
     return users

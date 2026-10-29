@@ -2224,6 +2224,13 @@ class NightRunServiceTest {
       return alleLaeufe(projectId).stream().filter(r -> r.kind() == kind).toList();
     }
 
+    @Override
+    public List<NightRun> findByKindStartedSince(NightRunKind kind, Instant von) {
+      return gespeicherteLaeufe.stream()
+          .filter(r -> r.kind() == kind && !r.startedAt().isBefore(von))
+          .toList();
+    }
+
     /**
      * Alle Laeufe des Projekts ueber beide Gattungen hinweg — der Port bietet das nicht mehr an
      * (Issue #1012), der Fake braucht es fuer die Verdraengung und die Faelle, die belegen, dass

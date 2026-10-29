@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.application.UserLookup;
@@ -152,6 +153,16 @@ public class ProjectService {
     return readableProjects(userId).stream()
         .map(p -> new AccessibleProject(p.requireId(), p.name()))
         .toList();
+  }
+
+  /**
+   * Der Name eines Projekts; leer, wenn es das Projekt nicht gibt (Issue #1998). <b>Ohne
+   * Rechteprüfung</b>: Der Meldejob benennt damit das Projekt eines Laufs in der Nachricht, ohne
+   * Anfrage und ohne Aufrufer; wem die Nachricht gilt, prüft er selbst je Konto.
+   */
+  @Transactional(readOnly = true)
+  public Optional<String> findName(long projectId) {
+    return projects.findById(projectId).map(Project::name);
   }
 
   /**

@@ -89,6 +89,16 @@ class PushAboServiceTest {
     }
 
     @Override
+    public Optional<PushAbo> findById(long id) {
+      return gespeichert.values().stream().filter(abo -> abo.requireId() == id).findFirst();
+    }
+
+    @Override
+    public List<PushAbo> findAll() {
+      return List.copyOf(gespeichert.values());
+    }
+
+    @Override
     public PushAbo save(PushAbo abo) {
       PushAbo mitId = abo;
       if (abo.id() == null) {

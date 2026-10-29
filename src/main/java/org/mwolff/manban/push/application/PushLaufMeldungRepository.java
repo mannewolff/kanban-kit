@@ -4,7 +4,7 @@ import java.time.Instant;
 
 /**
  * Persistenz-Port der gemeldeten Läufe (Issue #1997, Plan #1989 E12): Je Lauf hält eine Zeile fest,
- * dass er gemeldet wurde. Den Meldejob, der ihn nutzt, baut ein eigenes Paket (Issue #1998).
+ * dass er gemeldet wurde. Genutzt vom {@link LaufMeldeService} (Issue #1998).
  */
 // PMD.ImplicitFunctionalInterface: bewusst KEIN @FunctionalInterface — ein Persistenz-Port, kein
 // Lambda-Ziel.
