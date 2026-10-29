@@ -273,6 +273,15 @@
       "begruendung": "Die auswertenden Seiten von Leitstand und Nachtlauf, die aus Rohdaten Kennzahlen machen."
     },
     {
+      "name": "seiten-mobil",
+      "muster": ["src/pages/mobil/**/*.tsx"],
+      "testMuster": ["src/pages/mobil/**/*.test.tsx"],
+      "aufgenommen": false,
+      "phase": 3,
+      "reihenfolge": 16,
+      "begruendung": "Die schmale Oberflaeche fuer das Handy unter /mobil (Plan #1989): Ideen festhalten und das Standard-Board je Geraet."
+    },
+    {
       "name": "einstieg-und-routing",
       "muster": [
         "src/App.tsx",
@@ -290,7 +299,7 @@
       ],
       "aufgenommen": false,
       "phase": 4,
-      "reihenfolge": 16,
+      "reihenfolge": 17,
       "begruendung": "Einstieg, Sitzungskontext, Weiterleitungen und Navigation — die Muster erfassen die Wurzel src bewusst nicht, damit designQuelle.test.ts ausserhalb des Sandkastens bleibt."
     },
     {
@@ -298,7 +307,7 @@
       "muster": ["src/i18n/**/*.{ts,tsx}"],
       "aufgenommen": false,
       "phase": 4,
-      "reihenfolge": 17,
+      "reihenfolge": 18,
       "begruendung": "Woerterbuecher, Sprachkontext und Formatierer der Oberflaeche (Plan #1638) — die Grundlage, ueber die jede Seite ihre Texte, Daten und Zahlen in der eingestellten Sprache zeigt; zuletzt aufgenommen, weil sie mit den Seitenpaketen noch waechst."
     }
   ]

@@ -1699,6 +1699,32 @@ export const en: Woerterbuch = {
       'The token could not be created. For a board-bound token you need the permission to create cards on this board.',
   },
 
+  MOBIL: {
+    NAVIGATION: 'Mobile navigation',
+    NAV_IDEE: 'Idea',
+    NAV_EINSTELLUNGEN: 'Settings',
+    ABMELDEN: 'Sign out',
+    ABMELDEN_FEHLGESCHLAGEN: 'Sign-out failed.',
+    IDEE_UEBERSCHRIFT: 'Capture an idea',
+    IDEE_FELD: 'Your idea',
+    IDEE_HINWEIS: 'Type it or speak it with the dictation key.',
+    FESTHALTEN: 'Capture',
+    ZIEL: (board) => `Goes to the backlog of “${board}”.`,
+    ZU_LANG: (laenge, grenze) =>
+      `Too long: ${laenge} characters, at most ${grenze} fit on a card.`,
+    ANGELEGT: 'Idea captured.',
+    NICHT_ANGELEGT: 'The idea was not created. The text stays, try again in a moment.',
+    EINSTELLUNGEN_UEBERSCHRIFT: 'Settings',
+    STANDARD_BOARD: 'Default board',
+    STANDARD_BOARD_HINWEIS: 'New ideas land in the backlog of this board. The choice applies to this device only.',
+    BOARD_EINTRAG: (projekt, board) => `${projekt} · ${board}`,
+    KEIN_BOARD: 'You are not in any project where you may create cards.',
+    BOARD_VERSCHWUNDEN: 'The chosen board no longer exists. Please choose a new one.',
+    LADEN_FEHLGESCHLAGEN: 'The boards could not be loaded.',
+    GESPEICHERT: 'Saved.',
+    ZUR_IDEE: 'To the idea',
+  },
+
   OPENAPI: {
     JSON: 'OpenAPI (JSON)',
     YAML: 'OpenAPI (YAML)',

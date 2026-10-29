@@ -1811,6 +1811,33 @@ export const de = {
       'Token konnte nicht erzeugt werden. Für ein board-gebundenes Token brauchst du das Recht, auf diesem Board Karten anzulegen.',
   },
 
+  /** Die schmale Oberfläche für das Handy unter `/mobil` (Plan #1989, Issue #1992). */
+  MOBIL: {
+    NAVIGATION: 'Mobile Navigation',
+    NAV_IDEE: 'Idee',
+    NAV_EINSTELLUNGEN: 'Einstellungen',
+    ABMELDEN: 'Abmelden',
+    ABMELDEN_FEHLGESCHLAGEN: 'Abmelden fehlgeschlagen.',
+    IDEE_UEBERSCHRIFT: 'Idee festhalten',
+    IDEE_FELD: 'Deine Idee',
+    IDEE_HINWEIS: 'Eintippen oder mit der Diktiertaste einsprechen.',
+    FESTHALTEN: 'Festhalten',
+    ZIEL: (board: string) => `Geht ins Backlog von „${board}“.`,
+    ZU_LANG: (laenge: number, grenze: number) =>
+      `Zu lang: ${laenge} Zeichen, höchstens ${grenze} gehen auf eine Karte.`,
+    ANGELEGT: 'Idee festgehalten.',
+    NICHT_ANGELEGT: 'Die Idee wurde nicht angelegt. Der Text bleibt stehen, versuch es gleich noch einmal.',
+    EINSTELLUNGEN_UEBERSCHRIFT: 'Einstellungen',
+    STANDARD_BOARD: 'Standard-Board',
+    STANDARD_BOARD_HINWEIS: 'Neue Ideen landen im Backlog dieses Boards. Die Wahl gilt nur auf diesem Gerät.',
+    BOARD_EINTRAG: (projekt: string, board: string) => `${projekt} · ${board}`,
+    KEIN_BOARD: 'Du bist in keinem Projekt, in dem du Karten anlegen darfst.',
+    BOARD_VERSCHWUNDEN: 'Das gewählte Board gibt es nicht mehr. Bitte wähle ein neues.',
+    LADEN_FEHLGESCHLAGEN: 'Die Boards konnten nicht geladen werden.',
+    GESPEICHERT: 'Gespeichert.',
+    ZUR_IDEE: 'Zur Idee',
+  },
+
   /** Downloads der OpenAPI-Beschreibung, in Administration und API-Übersicht (Issue #1660). */
   OPENAPI: {
     JSON: 'OpenAPI (JSON)',

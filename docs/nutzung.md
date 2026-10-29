@@ -1419,6 +1419,40 @@ curl -X POST "https://<dein-host>/api/kanban/items" \
 
 Ein zweiter Aufruf mit demselben `Idempotency-Key` legt keine zweite Karte an.
 
+### Ideen in der mobilen Oberfläche {#mobil}
+
+Unter der Adresse `https://<dein-host>/mobil` gibt es eine schmale Oberfläche für das Handy: ein
+Textfeld und einen Knopf **„Festhalten“**. Ein eingetippter oder mit der Diktiertaste der Tastatur
+eingesprochener Text landet als Karte `[Idea] <Text>` im Backlog deines Standard-Boards — in der
+Spalte, die „Backlog“ heißt, sonst in der ersten Spalte des Boards. Danach bestätigt die Oberfläche
+das, und das Feld ist wieder leer. Am großen Bildschirm ändert sich dadurch nichts.
+
+- **Standard-Board:** Beim ersten Öffnen führt die Oberfläche zu den **Einstellungen**. Dort stehen
+  die Boards der Projekte, in denen du Karten anlegen darfst. Die Wahl gilt nur **auf diesem
+  Gerät** und für dein Konto; ein anderes Handy hat seine eigene. Gibt es das gewählte Board nicht
+  mehr, verlangt die Oberfläche eine neue Wahl.
+- **Grenze:** Höchstens 293 Zeichen Text, damit der Titel samt Präfix `[Idea] ` bei 300 bleibt.
+  Darüber sperrt die Oberfläche den Knopf und sagt es; sie kürzt nicht. Ein leeres Feld legt nichts
+  an.
+- **Ohne Netz:** Scheitert das Anlegen, sagt die Oberfläche das, und der Text bleibt im Feld stehen.
+  Zwischengespeichert wird nichts — einfach noch einmal tippen, wenn das Netz wieder da ist.
+- **Nur Ideen:** Karten verschieben, bearbeiten, archivieren oder löschen geht in der mobilen
+  Oberfläche nicht.
+
+**Auf den Startbildschirm legen.**
+
+- **iPhone (Safari):** `/mobil` öffnen, das **Teilen**-Symbol tippen, dann **„Zum Home-Bildschirm“**.
+- **Android (Chrome):** `/mobil` öffnen, im Menü **⋮** auf **„Zum Startbildschirm hinzufügen“**
+  bzw. **„App installieren“** tippen.
+
+Vom Startbildschirm aus öffnet sich die Oberfläche wie eine App, ohne Adressleiste.
+
+**Anmelden per Code.** Die Anmeldung ist dieselbe wie am großen Bildschirm, mit derselben
+Sitzungsdauer von 30 Tagen. Auf dem iPhone hat die App vom Startbildschirm aber **eigene Cookies**,
+getrennt von Safari: Ein Anmeldelink aus der Mail öffnet sich in Safari und meldet nur Safari an.
+Melde dich deshalb in der App vom Startbildschirm mit dem **sechsstelligen Code** aus der Mail an —
+E-Mail-Adresse eingeben, Code abtippen. Danach führt die Anmeldung zurück nach `/mobil`.
+
 ## API-Übersicht {#api-ubersicht}
 
 Für alle Angemeldeten ohne Plattform-Rolle ADMIN ist die API-Übersicht (`/administration/api`) rein

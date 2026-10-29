@@ -37,6 +37,14 @@ const LinkLoginPage = lazy(() =>
 const KartenLinkRedirect = lazy(() =>
   import('./pages/KartenLinkPage').then((m) => ({ default: m.KartenLinkRedirect })),
 )
+// Die mobile Oberfläche lädt ihren Rahmen und ihre Seiten eigenständig (Plan #1989, E3).
+const MobilRahmen = lazy(() => import('./pages/mobil/MobilRahmen').then((m) => ({ default: m.MobilRahmen })))
+const MobilIdeePage = lazy(() =>
+  import('./pages/mobil/MobilIdeePage').then((m) => ({ default: m.MobilIdeePage })),
+)
+const MobilEinstellungenPage = lazy(() =>
+  import('./pages/mobil/MobilEinstellungenPage').then((m) => ({ default: m.MobilEinstellungenPage })),
+)
 const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })))
 const NightRunPage = lazy(() => import('./pages/NightRunPage').then((m) => ({ default: m.NightRunPage })))
 const ProjectBoardsPage = lazy(() =>
@@ -75,6 +83,11 @@ export function App() {
         <Route path="/forgot" element={<Navigate to="/login" replace />} />
         <Route path="/reset" element={<Navigate to="/login" replace />} />
         <Route element={<ProtectedRoute />}>
+          {/* Schmale Oberfläche für das Handy, ohne AppShell und ohne Seitenleiste (Plan #1989, E3). */}
+          <Route path="/mobil" element={<MobilRahmen />}>
+            <Route index element={<MobilIdeePage />} />
+            <Route path="/mobil/einstellungen" element={<MobilEinstellungenPage />} />
+          </Route>
           <Route element={<AppShell />}>
             <Route path="/" element={<StartRedirect />} />
             <Route path="/projects" element={<ProjectsPage />} />
