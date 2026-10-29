@@ -17,8 +17,11 @@ import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.card.application.DerivationTree.Zweig;
 import org.mwolff.manban.card.application.EpicService.DerivationNodeView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
@@ -58,6 +61,32 @@ class DerivationTreeTest {
         0,
         false,
         done,
+        1L,
+        FIXED,
+        FIXED,
+        CardType.CARD,
+        null,
+        null,
+        null,
+        PROJECT,
+        null,
+        derivedFrom,
+        null,
+        null);
+  }
+
+  /** Karte dieses Boards mit eigenem Titel — die Art des Kits steckt im Titel-Präfix. */
+  private static Card karte(long id, int number, String titel, @Nullable Long derivedFrom) {
+    return new Card(
+        id,
+        BOARD,
+        100L,
+        number,
+        titel,
+        null,
+        0,
+        false,
+        null,
         1L,
         FIXED,
         FIXED,
@@ -421,5 +450,201 @@ class DerivationTreeTest {
     // Liegen alle Vorfahren auf diesem Board, gibt es nichts nachzuschlagen — der Zugriff auf
     // board-fremde Nummern darf dann gar nicht erst stattfinden.
     verify(cards, never()).findByIds(any());
+  }
+
+  /**
+   * Zweig einer Karte (Issue #1983, Plan #1980 E2, E3, E5, E7). Eigene Gruppe, weil die Klasse
+   * sonst die Methodengrenze von PMD reisst.
+   */
+  @Nested
+  class ZweigEinerKarte {
+
+    private static List<Integer> nummern(Zweig zweig) {
+      return zweig.karten().stream().map(Card::number).sorted().toList();
+    }
+
+    @Test
+    void zweig_beginnt_an_der_obersten_anforderung_vorfahren_darueber_fehlen() {
+      List<Card> menge =
+          List.of(
+              karte(1L, 1, "[Idea] Idee", null),
+              karte(2L, 2, "[Fachlich] Oben", 1L),
+              karte(3L, 3, "[Requirement] Unten", 2L),
+              karte(4L, 4, "[Plan] Plan", 3L),
+              karte(5L, 5, "[Task] Paket", 4L));
+
+      Zweig zweig = DerivationTree.zweig(menge, 5L);
+
+      assertThat(zweig.anfangId()).isEqualTo(2L);
+      assertThat(nummern(zweig)).containsExactly(2, 3, 4, 5);
+    }
+
+    @Test
+    void requirement_zaehlt_wie_fachlich() {
+      List<Card> menge =
+          List.of(
+              karte(1L, 1, "[Plan] Oben", null),
+              karte(2L, 2, "  [requirement] Anforderung", 1L),
+              karte(3L, 3, "[Task] Paket", 2L));
+
+      Zweig zweig = DerivationTree.zweig(menge, 3L);
+
+      assertThat(zweig.anfangId()).isEqualTo(2L);
+      assertThat(nummern(zweig)).containsExactly(2, 3);
+      assertThat(zweig.anfangAbgeschnitten()).isTrue();
+    }
+
+    @Test
+    void linie_ohne_anforderung_beginnt_bei_der_obersten_erreichten_karte() {
+      List<Card> menge =
+          List.of(
+              karte(1L, 1, "[Plan] Plan", null),
+              karte(2L, 2, "[Task] Paket", 1L),
+              karte(3L, 3, "[Task] Anderes", 1L));
+
+      Zweig zweig = DerivationTree.zweig(menge, 2L);
+
+      assertThat(zweig.anfangId()).isEqualTo(1L);
+      assertThat(nummern(zweig)).containsExactly(1, 2, 3);
+      assertThat(zweig.anfangAbgeschnitten()).isFalse();
+    }
+
+    @Test
+    void geschwister_anforderung_desselben_vorfahren_steht_nicht_im_zweig() {
+      List<Card> menge =
+          List.of(
+              karte(1L, 1, "[Idea] Idee", null),
+              karte(2L, 2, "[Fachlich] Eigene", 1L),
+              karte(3L, 3, "[Fachlich] Geschwister", 1L),
+              karte(4L, 4, "[Plan] Plan der Geschwister", 3L),
+              karte(5L, 5, "[Plan] Eigener Plan", 2L));
+
+      Zweig zweig = DerivationTree.zweig(menge, 5L);
+
+      assertThat(zweig.anfangId()).isEqualTo(2L);
+      assertThat(nummern(zweig)).containsExactly(2, 5);
+    }
+
+    @Test
+    void ring_bricht_den_aufstieg_ab_und_die_menge_enthaelt_den_ring() {
+      // 1 -> 2 -> 3 -> 1 als Ring, 4 haengt an 3; 5 ist unverbunden. Ein Ring hat keinen Anfang
+      // (E7).
+      List<Card> menge =
+          List.of(
+              karte(1L, 1, "[Fachlich] Ring A", 3L),
+              karte(2L, 2, "[Plan] Ring B", 1L),
+              karte(3L, 3, "[Task] Ring C", 2L),
+              karte(4L, 4, "[Task] Daran", 3L),
+              karte(5L, 5, "[Task] Fremd", null));
+
+      Zweig zweig = DerivationTree.zweig(menge, 4L);
+
+      assertThat(zweig.anfangId()).isNull();
+      assertThat(zweig.anfangAbgeschnitten()).isFalse();
+      assertThat(nummern(zweig)).containsExactly(1, 2, 3, 4);
+    }
+
+    @Test
+    @DisplayName("Szenario: Karte ohne Kette — weder Herkunft noch Nachfolger, der Zweig ist leer")
+    void szenario_karte_ohne_kette() {
+      List<Card> menge =
+          List.of(karte(1L, 1, "[Task] Allein", null), karte(2L, 2, "[Task] Andere", null));
+
+      Zweig zweig = DerivationTree.zweig(menge, 1L);
+
+      assertThat(zweig.karten()).isEmpty();
+      assertThat(zweig.anfangId()).isNull();
+      assertThat(zweig.anfangAbgeschnitten()).isFalse();
+    }
+
+    @Test
+    void karte_ausserhalb_der_bezugsmenge_hat_keinen_zweig() {
+      // Archiviert, im Papierkorb oder Vorhaben: Der Aufrufer hat sie herausgefiltert (E1, E5).
+      Zweig zweig = DerivationTree.zweig(List.of(karte(1L, 1, "[Plan] Plan", null)), 2L);
+
+      assertThat(zweig.karten()).isEmpty();
+      assertThat(zweig.anfangId()).isNull();
+    }
+
+    @Test
+    void karte_nur_mit_nachfolger_hat_einen_zweig() {
+      List<Card> menge = List.of(karte(1L, 1, "[Plan] Plan", null), karte(2L, 2, "[Task] P", 1L));
+
+      Zweig zweig = DerivationTree.zweig(menge, 1L);
+
+      assertThat(zweig.anfangId()).isEqualTo(1L);
+      assertThat(nummern(zweig)).containsExactly(1, 2);
+    }
+
+    @Test
+    void karte_mit_nicht_erreichbarer_herkunft_beginnt_bei_sich_selbst() {
+      // Herkunft auf einem anderen Board oder archiviert: Die Karte gehoert zu einer Kette (AK 1),
+      // der Zweig beginnt bei ihr (AK 3), und build zeigt die Marke „Herkunft extern“.
+      List<Card> menge = List.of(karte(1L, 1, "[Task] Paket", 77L));
+
+      Zweig zweig = DerivationTree.zweig(menge, 1L);
+
+      assertThat(zweig.anfangId()).isEqualTo(1L);
+      assertThat(nummern(zweig)).containsExactly(1);
+      assertThat(zweig.anfangAbgeschnitten()).isFalse();
+    }
+
+    @Test
+    void anfang_ist_abgeschnitten_bei_lebendem_vorfahren_ueber_der_anforderung() {
+      List<Card> menge =
+          List.of(karte(1L, 1, "[Idea] Idee", null), karte(2L, 2, "[Fachlich] Anforderung", 1L));
+
+      Zweig zweig = DerivationTree.zweig(menge, 2L);
+
+      assertThat(zweig.anfangId()).isEqualTo(2L);
+      assertThat(zweig.anfangAbgeschnitten()).isTrue();
+    }
+
+    @Test
+    void anfang_ist_nicht_abgeschnitten_bei_archiviertem_vorfahren() {
+      // Die Idee 1 ist archiviert und fehlt deshalb in der Bezugsmenge.
+      List<Card> menge =
+          List.of(karte(2L, 2, "[Fachlich] Anforderung", 1L), karte(3L, 3, "[Plan] Plan", 2L));
+
+      Zweig zweig = DerivationTree.zweig(menge, 3L);
+
+      assertThat(zweig.anfangId()).isEqualTo(2L);
+      assertThat(zweig.anfangAbgeschnitten()).isFalse();
+    }
+
+    @Test
+    void archiviertes_zwischenglied_trennt_den_zweig() {
+      // Plan 2 ist archiviert und fehlt in der Bezugsmenge (E2).
+      List<Card> menge =
+          List.of(
+              karte(1L, 1, "[Fachlich] Anforderung", null),
+              karte(3L, 3, "[Task] Paket", 2L),
+              karte(4L, 4, "[Plan] Anderer Plan", 1L));
+
+      Zweig paket = DerivationTree.zweig(menge, 3L);
+      Zweig anforderung = DerivationTree.zweig(menge, 1L);
+
+      assertThat(paket.anfangId()).isEqualTo(3L);
+      assertThat(nummern(paket)).containsExactly(3);
+      assertThat(anforderung.anfangId()).isEqualTo(1L);
+      assertThat(nummern(anforderung)).containsExactly(1, 4);
+    }
+
+    @Test
+    void build_rechnet_auf_dem_zweig() {
+      List<Card> menge =
+          List.of(
+              karte(1L, 1, "[Idea] Idee", null),
+              karte(2L, 2, "[Fachlich] Anforderung", 1L),
+              karte(3L, 3, "[Plan] Plan", 2L),
+              karte(4L, 4, "[Fachlich] Geschwister", 1L));
+
+      Zweig zweig = DerivationTree.zweig(menge, 3L);
+      List<DerivationNodeView> baum =
+          DerivationTree.build(zweig.karten(), Map.of(), Map.of(), Map.of());
+
+      assertThat(baum).extracting(DerivationNodeView::number).containsExactly(2, 3);
+      assertThat(baum).extracting(DerivationNodeView::depth).containsExactly(0, 1);
+    }
   }
 }
