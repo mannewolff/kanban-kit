@@ -17,6 +17,32 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.12.0] – 2026-10-29
+
+- chore: v3.11.1
+- Doku: Herkunftsbaum im Karten-Detail und Öffnen über der Karte ([#1988](https://github.com/mannewolff/kanban-kit/issues/1988))
+- Karten-Detail: Verweise öffnen Karten als Dialog darüber ([#1987](https://github.com/mannewolff/kanban-kit/issues/1987))
+- Herkunftsbaum: Bereich „Herkunft“ im Karten-Detail ([#1986](https://github.com/mannewolff/kanban-kit/issues/1986))
+- Herkunftsbaum: Endpunkt GET /api/cards/{cardId}/tree ([#1985](https://github.com/mannewolff/kanban-kit/issues/1985))
+- Nummern fremder Vorfahren gemeinsam nutzen, nur aus dem eigenen Projekt ([#1982](https://github.com/mannewolff/kanban-kit/issues/1982))
+- Herkunftsbaum: Zweigauswahl je Karte in DerivationTree ([#1983](https://github.com/mannewolff/kanban-kit/issues/1983))
+- Herkunftsbaum: Titel nach 60 Zeichen kürzen, aktuelle Zeile hervorheben ([#1984](https://github.com/mannewolff/kanban-kit/issues/1984))
+- Ausgeblendete Vorhaben bei der Zuordnung einer Karte anbieten ([#1981](https://github.com/mannewolff/kanban-kit/issues/1981))
+- RELEASING.md, bump-version und CI für Hotfix und Zurückkehren des Kits ([#1975](https://github.com/mannewolff/kanban-kit/issues/1975))
+- Vorschau-Filter prüfen den dekodierten Pfad ([#1974](https://github.com/mannewolff/kanban-kit/issues/1974))
+- Rate-Limit-Filter prüft den dekodierten Pfad ([#1973](https://github.com/mannewolff/kanban-kit/issues/1973))
+- Projekt-ADMIN darf OWNER weder vergeben noch entziehen ([#1972](https://github.com/mannewolff/kanban-kit/issues/1972))
+- Monatsbudget: Doku in nutzung.md und rollen-und-rechte.md ([#1970](https://github.com/mannewolff/kanban-kit/issues/1970))
+- Monatsbudget: Budgetzeile LeitstandBudget im Bereich Verbrauch ([#1969](https://github.com/mannewolff/kanban-kit/issues/1969))
+- Monatsbudget: Frontend-Aufrufe in projects.ts und nightRunUsage.ts ([#1968](https://github.com/mannewolff/kanban-kit/issues/1968))
+- Monatsbudget: Abruf des Stands im Nachtlauf-Modul mit MonatsbudgetIT ([#1967](https://github.com/mannewolff/kanban-kit/issues/1967))
+- Monatsbudget: Rechnung MonatsbudgetStand und laufender Monat an NightRunPeriod ([#1966](https://github.com/mannewolff/kanban-kit/issues/1966))
+- Monatsbudget festlegen und entfernen: Service und Endpunkte ([#1965](https://github.com/mannewolff/kanban-kit/issues/1965))
+- Monatsbudget: Spalte am Projekt und Lese-Port MonthlyBudgetReader ([#1964](https://github.com/mannewolff/kanban-kit/issues/1964))
+- guava und snappy-java auf korrigierte Versionen festlegen ([#1960](https://github.com/mannewolff/kanban-kit/issues/1960))
+- Gleichwertigen Mutanten in nightRunErgebnisstand.ts vermerken ([#1959](https://github.com/mannewolff/kanban-kit/issues/1959))
+- Test tötet Mutanten am Zeilenschlüssel in ModellePlatte.tsx ([#1958](https://github.com/mannewolff/kanban-kit/issues/1958))
+
 ## [3.11.0] – 2026-10-28
 
 - chore: v3.10.1
