@@ -121,6 +121,24 @@ class KartenZweigServiceTest {
     assertThat(zeile(baum, 3).depth()).isEqualTo(1);
   }
 
+  /**
+   * Der Anfang wird über seine ID gefunden, nicht als erste Zweigkarte: Steht ein Nachfahr in der
+   * Board-Reihenfolge vor ihm, verliert trotzdem nur der Anfang seine Herkunft (Issue #2009).
+   */
+  @Test
+  void nachfahrVorDemAnfangInDerBoardReihenfolge_nurDerAnfangWirdKorrigiert() {
+    aufDemBoard(
+        karte(3L, 3, "[Plan] Plan", 2L, false),
+        karte(1L, 1, "[Idea] Idee", null, false),
+        karte(2L, 2, "[Requirement] Anforderung", 1L, false));
+
+    List<DerivationNodeView> baum = service.kartenZweig(USER, 3L);
+
+    assertThat(zeile(baum, 2).externalOrigin()).isFalse();
+    assertThat(zeile(baum, 2).derivedFrom()).isNull();
+    assertThat(zeile(baum, 3).derivedFrom()).isEqualTo(2);
+  }
+
   /** Ein archivierter Vorfahr ist nicht mehr erreichbar: Die Marke bleibt wie im Vorhaben-Baum. */
   @Test
   void archivierterVorfahr_markeBleibt() {
