@@ -120,6 +120,11 @@ services:
       MANBAN_SMTP_PASSWORD: ${MANBAN_SMTP_PASSWORD:-}
       MANBAN_SMTP_AUTH: ${MANBAN_SMTP_AUTH:-true}
       MANBAN_SMTP_STARTTLS: ${MANBAN_SMTP_STARTTLS:-true}
+      # Web Push (Issue #1996): optional. Leer bleiben Benachrichtigungen aus; halb gesetzt bricht
+      # der Start ab. Ein Paar erzeugt node scripts/vapid-schluessel.mjs.
+      MANBAN_PUSH_VAPID_PUBLIC_KEY: ${MANBAN_PUSH_VAPID_PUBLIC_KEY:-}
+      MANBAN_PUSH_VAPID_PRIVATE_KEY: ${MANBAN_PUSH_VAPID_PRIVATE_KEY:-}
+      MANBAN_PUSH_SUBJECT: ${MANBAN_PUSH_SUBJECT:-}
       MANBAN_STORAGE_ENDPOINT: http://objektspeicher:8333
       MANBAN_STORAGE_ACCESS_KEY: ${OBJEKTSPEICHER_ROOT_USER:-manban}
       MANBAN_STORAGE_SECRET_KEY: ${OBJEKTSPEICHER_ROOT_PASSWORD:-manban-objektspeicher}

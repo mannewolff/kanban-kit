@@ -172,6 +172,9 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_DB_POOL_MIN_IDLE` | Verbindungen, die auch ohne Last offen bleiben | `5` |
 | `MANBAN_DB_CONNECTION_TIMEOUT_MS` | Höchste Wartezeit auf eine freie Verbindung in Millisekunden | `5000` |
 | `MANBAN_SERVER_THREADS_MAX` | Höchstzahl gleichzeitig bearbeiteter HTTP-Aufrufe | `600` |
+| `MANBAN_PUSH_VAPID_PUBLIC_KEY` | öffentlicher VAPID-Schlüssel für Benachrichtigungen aufs Handy (Web Push), siehe [Benachrichtigungen aufs Handy](#benachrichtigungen-aufs-handy-web-push) | leer (aus) |
+| `MANBAN_PUSH_VAPID_PRIVATE_KEY` | privater VAPID-Schlüssel dazu — ein Geheimnis wie `MANBAN_SESSION_SECRET` | leer (aus) |
+| `MANBAN_PUSH_SUBJECT` | Kontakt für die Push-Dienste, `mailto:<adresse>` oder `https://<seite>` | leer (aus) |
 | `MANBAN_STORAGE_BUCKET` | Name des Buckets, in dem die Anhänge liegen. Derselbe Wert speist die S3-Identität des Speichers und den Anlegeschritt beim Start — eine Änderung wirkt auf alle drei Stellen zugleich, holt aber keine Anhänge aus dem alten Bucket nach | `manban` |
 | `POSTGRES_*`, `OBJEKTSPEICHER_ROOT_*` | DB- und Objektspeicher-Zugangsdaten. Bewusst ohne `MANBAN_`-Präfix: Sie gehören den Bausteinen, nicht der Anwendung. Aus den `OBJEKTSPEICHER_ROOT_*` speist der Stack zugleich die S3-Identität des Speichers und den Zugang von `manban-api` | siehe `docker-compose.yml` |
 
@@ -227,6 +230,36 @@ geladen und ist per `.gitignore` ausgeschlossen).
 > Schalter; `MANBAN_BACKUP_ENABLED` setzt das Overlay selbst und wird nie von Hand gesetzt. Das
 > Zuschalten startet die Datenbank **einmalig** neu (WAL-Archivierung). Vollständige Anleitung:
 > [Sicherung & Wiederherstellung](backup.md).
+
+## Benachrichtigungen aufs Handy (Web Push)
+
+Die mobile Oberfläche unter `/mobil` kann Nachrichten aufs Handy schicken, wenn ein Lauf scheitert
+oder hängt. Dafür braucht die Installation ein eigenes VAPID-Schlüsselpaar (RFC 8292), mit dem sie
+sich bei den Push-Diensten von Apple, Google und Mozilla ausweist. **Ohne Schlüssel startet die
+Anwendung wie bisher, nur Benachrichtigungen bleiben aus** — beim Start steht dann eine INFO-Zeile
+„Web Push ist aus“ im Log.
+
+1. Ein Paar erzeugen — das Skript braucht nur Node, kein Paket:
+
+   ```bash
+   node scripts/vapid-schluessel.mjs
+   ```
+
+   Es gibt zwei Zeilen aus, `MANBAN_PUSH_VAPID_PUBLIC_KEY=…` und `MANBAN_PUSH_VAPID_PRIVATE_KEY=…`.
+2. Beide Zeilen in die `.env` übernehmen und `MANBAN_PUSH_SUBJECT` setzen, etwa
+   `MANBAN_PUSH_SUBJECT=mailto:betrieb@example.org`. Die Push-Dienste nutzen die Adresse, um den
+   Betreiber bei Problemen zu erreichen.
+3. Den Container neu erstellen: `docker compose up -d` (ein `restart` liest die `.env` nicht neu).
+
+Entweder alle drei Werte setzen oder keinen. Fehlt einer, ist ein Schlüssel nicht lesbar, gehören
+die beiden Schlüssel nicht zusammen oder beginnt der Kontakt weder mit `mailto:` noch mit
+`https://`, verweigert die Anwendung den Start und nennt die betroffene Variable — nie einen
+Schlüsselwert.
+
+Den privaten Schlüssel wie `MANBAN_SESSION_SECRET` behandeln: nicht ins Repository, nicht in ein
+Ticket. Ein neues Paar macht alle bestehenden Abos ungültig, weil die Browser sich mit dem alten
+öffentlichen Schlüssel angemeldet haben; jedes Handy muss Benachrichtigungen danach neu
+einschalten.
 
 ## Herkunft und Aktualisierung des Objektspeichers
 
