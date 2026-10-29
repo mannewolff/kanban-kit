@@ -793,6 +793,142 @@ describe('DerivationTree', () => {
   })
 })
 
+describe('DerivationTree: lange Titel (Plan #1980, E9)', () => {
+  /** 90 Zeichen, nur Buchstaben und Ziffern — taugt auch als regulärer Ausdruck. */
+  const langerTitel = 'Herkunftsbaum0'.repeat(6) + 'abcdef'
+  const kurzerTitel = langerTitel.slice(0, 60) + '…'
+
+  it('Szenario: Langer Titel', async () => {
+    expect(langerTitel).toHaveLength(90)
+    await zeigeBaum([node({ number: 1, title: langerTitel })])
+
+    // Dann stehen dort die ersten 60 Zeichen, gefolgt von „…"
+    expect(screen.getByText(kurzerTitel)).toBeInTheDocument()
+    // Und beim Darüberfahren erscheint der volle Titel
+    expect(screen.getByTitle(langerTitel)).toBeInTheDocument()
+    expect(zeilen()[0]).toContainElement(screen.getByTitle(langerTitel))
+  })
+
+  it('verbirgt den gekürzten Text vor Screenreadern und liest den vollen Titel vor', async () => {
+    await zeigeBaum([node({ number: 1, title: langerTitel })])
+
+    expect(screen.getByText(kurzerTitel)).toHaveAttribute('aria-hidden', 'true')
+    const voll = screen.getByText(langerTitel)
+    expect(voll).not.toHaveAttribute('aria-hidden')
+    expect(voll).toHaveStyle({ position: 'absolute', overflow: 'hidden' })
+    expect(zeilen()[0]).toHaveAccessibleName(new RegExp(`${langerTitel}$`))
+  })
+
+  it('lässt einen Titel mit 60 Zeichen ungekürzt und ohne Doppel', async () => {
+    const titel = langerTitel.slice(0, 60)
+    await zeigeBaum([node({ number: 1, title: titel })])
+
+    expect(screen.getByText(titel)).not.toHaveAttribute('aria-hidden')
+    expect(screen.queryByText(/…/)).toBeNull()
+    expect(screen.queryByTitle(titel)).toBeNull()
+  })
+
+  it('öffnet auch mit einem Klick auf den gekürzten Titel die Karte', async () => {
+    const user = userEvent.setup()
+    const onOpenCard = await zeigeBaum([node({ number: 7, title: langerTitel })])
+
+    await user.click(screen.getByText(kurzerTitel))
+
+    expect(onOpenCard).toHaveBeenCalledWith(7)
+  })
+})
+
+describe('DerivationTree: aktuelle Karte (Plan #1980, E8)', () => {
+  function zeigeMitAktueller(aktuelleNummer: number | undefined, onOpenCard = vi.fn()) {
+    render(<DerivationTree rows={kette} onOpenCard={onOpenCard} aktuelleNummer={aktuelleNummer} />)
+    return onOpenCard
+  }
+
+  it('kennzeichnet die Zeile der geöffneten Karte mit aria-current', () => {
+    zeigeMitAktueller(2)
+
+    const [erste, zweite, dritte] = zeilen()
+    expect(zweite).toHaveAttribute('aria-current', 'true')
+    expect(erste).not.toHaveAttribute('aria-current')
+    expect(dritte).not.toHaveAttribute('aria-current')
+  })
+
+  it('hebt die Zeile der geöffneten Karte sichtbar hervor', () => {
+    zeigeMitAktueller(2)
+
+    const [erste, zweite] = zeilen()
+    expect(getComputedStyle(zweite).backgroundColor).not.toBe(getComputedStyle(erste).backgroundColor)
+    // Nicht nur Farbe (CLAUDE-design.md): Der Titel der aktuellen Zeile steht zusätzlich fett.
+    expect(screen.getByText('Karte 2')).toHaveStyle({ fontWeight: 600 })
+    expect(screen.getByText('Karte 1')).not.toHaveStyle({ fontWeight: 600 })
+  })
+
+  it('öffnet mit einem Klick auf die aktuelle Zeile nichts', async () => {
+    const user = userEvent.setup()
+    const onOpenCard = zeigeMitAktueller(2)
+
+    await user.click(screen.getByText('Karte 2'))
+
+    expect(onOpenCard).not.toHaveBeenCalled()
+  })
+
+  it('öffnet mit Enter auf der aktuellen Zeile nichts', async () => {
+    const user = userEvent.setup()
+    const onOpenCard = zeigeMitAktueller(2)
+
+    await fokusAuf(zeilen()[1])
+    await user.keyboard('{Enter}')
+
+    expect(onOpenCard).not.toHaveBeenCalled()
+  })
+
+  it('öffnet die anderen Zeilen weiterhin per Klick und Enter', async () => {
+    const user = userEvent.setup()
+    const onOpenCard = zeigeMitAktueller(2)
+
+    await user.click(screen.getByText('Karte 1'))
+    await fokusAuf(zeilen()[2])
+    await user.keyboard('{Enter}')
+
+    expect(onOpenCard).toHaveBeenNthCalledWith(1, 1)
+    expect(onOpenCard).toHaveBeenNthCalledWith(2, 3)
+  })
+
+  it('lässt auf der aktuellen Zeile die Pfeiltasten wirken', async () => {
+    const user = userEvent.setup()
+    zeigeMitAktueller(2)
+
+    await fokusAuf(zeilen()[1])
+    await user.keyboard('{ArrowDown}')
+
+    expect(zeilen()[2]).toHaveFocus()
+  })
+
+  it('zeigt die aktuelle Zeile nicht als klickbar', () => {
+    zeigeMitAktueller(2)
+
+    expect(zeilen()[1]).toHaveStyle({ cursor: 'default' })
+    expect(zeilen()[0]).toHaveStyle({ cursor: 'pointer' })
+  })
+
+  it('trägt ohne aktuelleNummer an keiner Zeile aria-current', () => {
+    zeigeMitAktueller(undefined)
+
+    for (const zeile of zeilen()) {
+      expect(zeile).not.toHaveAttribute('aria-current')
+    }
+    expect(screen.getByText('Karte 2')).not.toHaveStyle({ fontWeight: 600 })
+  })
+
+  it('trägt bei einer Nummer außerhalb des Baums an keiner Zeile aria-current', () => {
+    zeigeMitAktueller(99)
+
+    for (const zeile of zeilen()) {
+      expect(zeile).not.toHaveAttribute('aria-current')
+    }
+  })
+})
+
 describe('DerivationTree auf Englisch', () => {
   beforeEach(() => {
     kitNamen.zustand = null
