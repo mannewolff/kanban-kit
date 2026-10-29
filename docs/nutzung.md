@@ -116,6 +116,20 @@ Das Detail zeigt:
   „— überfällig" markiert.
 - **Labels:** dem Board angelegte Labels über das Feld „Labels" (Mehrfachauswahl) an die Karte hängen;
   sie erscheinen als farbige Chips.
+- **Herkunft:** Gehört die Karte zu einer Herkunftskette — sie ist aus einer anderen Karte
+  entstanden, oder eine andere Karte aus ihr —, steht im Block „Zuordnung“ unter Zuständigen und
+  Labels der Bereich „Herkunft“; sonst fehlt er. Er zeigt den Zweig der Karte: Er beginnt bei der
+  obersten Anforderung ihrer Herkunftslinie (ohne Anforderung bei der obersten erreichbaren Karte),
+  darunter eingerückt Pläne und Arbeitspakete, wie im [Baum des Vorhabens](#vorhaben). Die geöffnete
+  Karte ist hervorgehoben. Liegt die Herkunft in einem anderen Projekt oder ist sie nicht mehr
+  erreichbar, beginnt der Baum dort und trägt wie im Vorhaben die Marke „Herkunft extern“ bzw.
+  „Kette unterbrochen“. Titel über 60 Zeichen werden gekürzt. Der Bereich steht nur im Lesemodus,
+  nicht im Bearbeiten-Formular, und auch bei einer Kette ohne Vorhaben.
+- **Verweise öffnen über der Karte:** Ein Klick (oder Eingabe) auf eine Zeile des Baums, eine
+  Abhängigkeit oder einen anderen Kartenverweis öffnet diese Karte über der aktuellen; die aktuelle
+  bleibt darunter offen. Schließen führt genau eine Ebene zurück, zur vorigen Karte mit allem, was
+  dort eingegeben war — einen Knopf „Zurück“ gibt es nicht mehr. Lässt sich die Karte nicht öffnen,
+  erscheint der Hinweis, dass sie nicht gefunden wurde, und die aktuelle bleibt offen.
 - **Abhängigkeiten:** Verweise auf andere Kartennummern.
 - **Anhänge:** hochladen, herunterladen, löschen. **Klick auf einen Bild- oder PDF-Anhang** (auf die
   Miniatur oder den Dateinamen) öffnet eine **Vorschau (Lightbox)**; andere Dateitypen werden geladen.
@@ -1113,7 +1127,8 @@ Die Tatsachengrundlage dazu steht in
 - **Baum im Detail:** Ein Klick auf die Zeile öffnet das Vorhaben-Detail, und darin steht der
   **Baum** dieses Vorhabens: die Anforderung an der Wurzel, darunter die Pläne, darunter die
   Arbeitspakete. Der Baum ist mit den Pfeiltasten bedienbar; Eingabe auf einer Zeile öffnet die
-  jeweilige Karte im selben Dialog. Ist dem Vorhaben noch nichts zugeordnet, sagt das Detail
+  jeweilige Karte über dem Vorhaben; Schließen führt zum Vorhaben zurück. Titel über 60 Zeichen
+  werden gekürzt — der volle Titel steht beim Darüberfahren und im Kopf der geöffneten Karte. Ist dem Vorhaben noch nichts zugeordnet, sagt das Detail
   genau das.
 - **Board-Vorhaben-Filter:** auf dem Board über das Dropdown „Vorhaben-Filter" nur die Karten
   eines Vorhabens anzeigen. Dieser Filter arbeitet **nur auf den direkt zugeordneten** Karten.
