@@ -124,14 +124,14 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " cached_input_tokens, model_duration_ms, turns, no_work_reason,"
           + " budget_plan_min, budget_review_min, budget_pakete_min, budget_abdeckung_min,"
           + " budget_kosten_usd, budget_origin, budget_default_fields, abort_reason,"
-          + " abort_kind)"
+          + " abort_kind, board_id)"
           + " VALUES (:projectId, :startedAt, :mode, :kind, :durationMs, :processedCount,"
           + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt, :origin,"
           + " :tokenName, :complete, :updatedAt, :costUsd, :inputTokens, :outputTokens,"
           + " :cachedInputTokens, :modelDurationMs, :turns, :noWorkReason,"
           + " :budgetPlanMin, :budgetReviewMin, :budgetPaketeMin, :budgetAbdeckungMin,"
           + " :budgetKostenUsd, :budgetOrigin, :budgetDefaultFields, :abortReason,"
-          + " :abortKind)"
+          + " :abortKind, :boardId)"
           + " ON CONFLICT (project_id, started_at) DO NOTHING"
           + " RETURNING id";
 
@@ -682,7 +682,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
                 Types.TIMESTAMP_WITH_TIMEZONE)
             .addValue("noWorkReason", run.noWorkReason(), Types.VARCHAR)
             .addValue("abortReason", run.abortReason(), Types.VARCHAR)
-            .addValue("abortKind", abortKind == null ? null : abortKind.name(), Types.VARCHAR);
+            .addValue("abortKind", abortKind == null ? null : abortKind.name(), Types.VARCHAR)
+            // Nur INSERT_RUN liest den Wert; UPDATE_RUN laesst das Board stehen (Issue #1993).
+            .addValue("boardId", run.boardId(), Types.BIGINT);
     verbrauchSchreiben(parameter, run.usage());
     budgetSchreiben(parameter, run.budget());
     return parameter;
@@ -812,7 +814,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         abortKind == null ? null : NightRunAbortKind.valueOf(abortKind),
         vorbereitung,
         stufen,
-        e.getClosedAt());
+        e.getClosedAt(),
+        e.getBoardId());
   }
 
   /** Paketsichtbar für den Lesepfad der Bremsbilanz (Issue #1550) — eine Abbildung, nicht zwei. */

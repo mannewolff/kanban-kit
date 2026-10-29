@@ -195,7 +195,9 @@ class NightRunNebenlaufIT extends AbstractIntegrationTest {
   private Thread melder(String name, long projectId, Instant startedAt) {
     Thread faden =
         new Thread(
-            () -> service.ingest(userId, projectId, name, NightRunKind.NIGHT, meldung(startedAt)),
+            () ->
+                service.ingest(
+                    userId, projectId, null, name, NightRunKind.NIGHT, meldung(startedAt)),
             name);
     faden.setUncaughtExceptionHandler((wer, ursache) -> fehler.add(ursache));
     return faden;

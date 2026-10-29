@@ -164,7 +164,12 @@ public class NightRunService {
    */
   @Transactional
   public NightRunResult ingest(
-      long userId, long projectId, String tokenName, NightRunKind kind, NewNightRun meldung) {
+      long userId,
+      long projectId,
+      @Nullable Long boardId,
+      String tokenName,
+      NightRunKind kind,
+      NewNightRun meldung) {
     permissions.requireOwner(userId, projectId);
     // Erste Datenbankaktion dieses Wegs (Issue #1090), aus demselben Grund wie in submit und vor
     // der Laufzeile aus upsert — die Sperrreihenfolge ist damit in beiden Wegen dieselbe.
@@ -218,7 +223,10 @@ public class NightRunService {
             // Die Beendigung von Hand setzt allein der Plattform-Leitstand (Issue #1197); eine
             // Meldung des Runners setzt sie nie, der Adapter laesst die Spalte beim Ersetzen
             // stehen.
-            null);
+            null,
+            // Das Board des Zugangsschluessels (Issue #1993). Der Adapter setzt es nur beim
+            // Anlegen; eine Folgemeldung desselben Laufs laesst es stehen.
+            boardId);
 
     // Wie beim Upload-Weg: verwaiste Pakete eines verdrängten Laufs zuerst weg (#965).
     runs.deleteOrphanItemsOfRun(projectId, meldung.startedAt());
@@ -390,6 +398,9 @@ public class NightRunService {
         // Durchgereicht wie jedes andere Feld (Issue #1725); ein hochgeladenes Protokoll ist
         // beendet und traegt darum keine laufenden Stufen.
         submission.complete() ? List.of() : submission.current(),
+        null,
+        // Fest null (Issue #1993): Ein hochgeladenes Protokoll kennt keinen Zugangsschluessel und
+        // damit kein Board.
         null);
   }
 

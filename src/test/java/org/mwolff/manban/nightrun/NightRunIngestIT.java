@@ -139,6 +139,53 @@ class NightRunIngestIT extends AbstractIntegrationTest {
     assertThat(gespeichert.usage().cachedInputTokens()).isEqualTo(8_883_160L);
   }
 
+  /** Der Lauf traegt das Board seines Zugangsschluessels (Issue #1993, Fachplan #1961 AK 12). */
+  @Test
+  void einLaufUeberEinenBoardSchluesselTraegtDessenBoard() throws Exception {
+    Aufbau aufbau = aufbau("ingest-board");
+
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldung(false, paket(917))))
+        .andExpect(status().isOk());
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldung(true, paket(917))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.outcome").value("REPLACED"));
+
+    assertThat(einzigerLauf(aufbau.projectId()).boardId()).isEqualTo(aufbau.boardId());
+  }
+
+  /** Ein geloeschtes Board nimmt den Lauf nicht mit, es loest nur die Zuordnung (Issue #1993). */
+  @Test
+  void dasLoeschenDesBoardsSetztDieZuordnungDesLaufsZurueck() throws Exception {
+    Aufbau aufbau = aufbau("ingest-board-weg");
+    mvc.perform(
+            post(PFAD)
+                .header(TOKEN_HEADER, aufbau.token())
+                .contentType("application/json")
+                .content(meldung(true, paket(917))))
+        .andExpect(status().isOk());
+
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                    "/api/boards/" + aufbau.boardId())
+                .cookie(aufbau.session()))
+        .andExpect(status().isNoContent());
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                    "/api/boards/" + aufbau.boardId() + "/purge")
+                .cookie(aufbau.session()))
+        .andExpect(status().isNoContent());
+
+    assertThat(einzigerLauf(aufbau.projectId()).boardId()).isNull();
+  }
+
   @Test
   void einWiderrufenesTokenWirdAbgewiesenUndSchreibtNichts() throws Exception {
     Aufbau aufbau = aufbau("ingest-widerruf");
@@ -1080,7 +1127,7 @@ class NightRunIngestIT extends AbstractIntegrationTest {
   }
 
   private record Aufbau(
-      Cookie session, long projectId, String token, long tokenId, String tokenName) {}
+      Cookie session, long projectId, long boardId, String token, long tokenId, String tokenName) {}
 
   private Aufbau aufbau(String kennung) throws Exception {
     Cookie session = session(kennung + "@example.com", PlatformRole.ADMIN);
@@ -1101,7 +1148,12 @@ class NightRunIngestIT extends AbstractIntegrationTest {
                 .getResponse()
                 .getContentAsString());
     return new Aufbau(
-        session, projectId, angelegt.get("plaintext").asText(), angelegt.get("id").asLong(), name);
+        session,
+        projectId,
+        boardId,
+        angelegt.get("plaintext").asText(),
+        angelegt.get("id").asLong(),
+        name);
   }
 
   private NightRun einzigerLauf(long projectId) {
