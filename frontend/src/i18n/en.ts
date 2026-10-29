@@ -646,7 +646,6 @@ export const en: Woerterbuch = {
     VORSCHAU_NACH_UPLOAD_FEHLER: 'Attachment uploaded, but the preview could not be loaded.',
     ANHANG_LOESCHEN_FEHLER: 'Deleting the attachment failed.',
     VORSCHAU_FEHLER: 'The preview could not be loaded.',
-    ZURUECK: 'Back to the previous card',
     ABNAHME: 'Click through acceptance',
     BEARBEITEN: 'Edit',
     FORTSCHRITT: 'Progress',

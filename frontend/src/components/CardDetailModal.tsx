@@ -1,4 +1,3 @@
-import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import Alert from '@mui/material/Alert'
 import Autocomplete from '@mui/material/Autocomplete'
 import Box from '@mui/material/Box'
@@ -1276,13 +1275,16 @@ interface Props {
 
 /**
  * Interne Props der Detail-Ansicht: Die Navigation über `#N`-Verweise steuert der `CardDetailModal`-
- * Wrapper, die Ansicht selbst kennt nur die beiden Callbacks.
+ * Wrapper, die Ansicht selbst kennt nur den Callback und den Nachlade-Zähler.
  */
 type ViewProps = Props & {
   /** Öffnet den Verweis auf die Kartennummer; fehlt, wenn keine Auflösung möglich ist. */
   onOpenDependency?: (number: number) => void
-  /** Eine Ebene im Verweis-Stack zurück; fehlt auf der Ausgangskarte. */
-  onBack?: () => void
+  /**
+   * Zählt hoch, wenn eine darüberliegende Ebene etwas geändert hat und abgenommen wurde (Plan #1980,
+   * E12): Dann lädt die Ansicht Baum und Kartenstand neu, ohne ihre Eingaben zu verlieren.
+   */
+  neuLaden?: number
 }
 
 /**
@@ -1316,7 +1318,7 @@ function CardDetailModalView({
   projectId,
   nightRunsApi,
   onOpenDependency,
-  onBack,
+  neuLaden = 0,
 }: Readonly<ViewProps>) {
   const { user, vorschau: laufendeVorschau } = useAuth()
   // In der „Ansicht als XY“ ist alles Verändernde gesperrt (Plan #1914, E15).
@@ -1509,15 +1511,22 @@ function CardDetailModalView({
   // Vorhaben-Karten (`epicToCard`) sind sie in der Prop nur Ersatzwerte, und ein Checkbox-Klick
   // schickte sie sonst als gespeicherten Stand zurück. Alle übrigen Felder (Spalte, Status,
   // Zuständige, Labels …) kommen weiter aus der Prop.
+  // Ein Nachladen nach einer Änderung darüber (E12) setzt nicht auf „lädt" zurück und öffnet den
+  // Entwurf nicht erneut: Die Ebene bleibt, wie man sie verlassen hat, nur mit dem neuen Stand.
   useEffect(() => {
     let aktiv = true
-    setBeschreibungStatus('laedt')
+    const nachladen = neuLaden > 0
+    if (!nachladen) setBeschreibungStatus('laedt')
     void cardsApi.get(card.id).then(
       (voll) => {
         if (!aktiv) return
         const geladen = standAus({ ...startStand, ...voll })
         setStand(geladen)
         setBeschreibungStatus('geladen')
+        if (nachladen) {
+          setStatus(voll.status)
+          return
+        }
         // Der Entwurf ohne Editier-Guard: Bis hierhin ist der Bearbeiten-Button gesperrt und
         // `editing` startet mit `false` — es gibt keine Eingabe, die hier überschrieben würde.
         if (initialEditing) {
@@ -1526,14 +1535,14 @@ function CardDetailModalView({
         }
       },
       () => {
-        if (!aktiv) return
+        if (!aktiv || nachladen) return
         setBeschreibungStatus('fehler')
       },
     )
     return () => {
       aktiv = false
     }
-  }, [card.id, cardsApi, initialEditing, fuelleEntwurf, startStand])
+  }, [card.id, cardsApi, initialEditing, fuelleEntwurf, startStand, neuLaden])
 
   // Der Baum eines Vorhabens (Issue #644). Das Laden liegt hier und nicht mehr in
   // `DerivationTree`: Der Dialog kennt die Karte ohnehin, und Lade-, Fehler- und Leerzustand
@@ -1555,8 +1564,11 @@ function CardDetailModalView({
       return undefined
     }
     let aktiv = true
-    setBaum(null)
-    setBaumFehler(null)
+    // Beim Nachladen (E12) bleibt der alte Baum stehen, bis der neue da ist — kein Sprung im Dialog.
+    if (neuLaden === 0) {
+      setBaum(null)
+      setBaumFehler(null)
+    }
     void cardsApi
       .epicTree(baumBoardId, card.id)
       .then(
@@ -1576,7 +1588,7 @@ function CardDetailModalView({
     return () => {
       aktiv = false
     }
-  }, [isEpic, baumBoardId, card.id, cardsApi, t])
+  }, [isEpic, baumBoardId, card.id, cardsApi, t, neuLaden])
 
   // Der Zweig einer Karte im Block „Zuordnung“ (Issue #1986, Plan #1980) — nach dem `aktiv`-Muster
   // des Vorhaben-Baums. Ein Vorhaben hat seinen eigenen Baum; der Endpunkt lieferte dort ohnehin leer.
@@ -1585,8 +1597,10 @@ function CardDetailModalView({
       return undefined
     }
     let aktiv = true
-    setZweig(null)
-    setZweigFehler(null)
+    if (neuLaden === 0) {
+      setZweig(null)
+      setZweigFehler(null)
+    }
     void cardsApi
       .cardTree(card.id)
       .then(
@@ -1606,7 +1620,7 @@ function CardDetailModalView({
     return () => {
       aktiv = false
     }
-  }, [isEpic, card.id, cardsApi, t])
+  }, [isEpic, card.id, cardsApi, t, neuLaden])
 
   const startEditing = () => {
     // Aus dem bestätigten Stand, nicht aus der Prop — sonst verwürfe erneutes Bearbeiten nach
@@ -1854,11 +1868,6 @@ function CardDetailModalView({
     >
       <DialogTitle sx={dialogTitleSx}>
         <Stack direction="row" alignItems="center" spacing={1} sx={{ flexWrap: 'wrap' }}>
-          {onBack && (
-            <IconButton size="small" aria-label={t.KARTE.ZURUECK} onClick={onBack}>
-              <ArrowBackIcon fontSize="small" />
-            </IconButton>
-          )}
           <CardStatusChip
             isEpic={isEpic}
             columnName={columnName}
@@ -2009,8 +2018,8 @@ function CardDetailModalView({
                 {baum !== null && (
                   <DerivationTree
                     rows={baum}
-                    // Enter auf einer Zeile laedt die Karte in denselben Dialog — ueber denselben
-                    // Verweis-Stack wie die `#N`-Spruenge. Ohne `projectId` gibt es keine
+                    // Enter auf einer Zeile oeffnet die Karte als Dialog darueber — ueber denselben
+                    // Verweis-Stapel wie die `#N`-Spruenge. Ohne `projectId` gibt es keine
                     // Aufloesung; dann bleibt die Zeile ohne Ziel, wie eine Abhaengigkeitsmarke.
                     onOpenCard={(nummer) => onOpenDependency?.(nummer)}
                   />
@@ -2173,10 +2182,19 @@ function CardDetailModalView({
   )
 }
 
-/** Eine über einen `#N`-Verweis geöffnete Karte samt aufgelöstem Spaltennamen für den Status-Chip. */
+/**
+ * Eine über einen `#N`-Verweis geöffnete Karte samt aufgelöstem Spaltennamen für den Status-Chip,
+ * als Ebene des Verweis-Stapels (Plan #1980, E11, E12).
+ */
 interface LinkedCard {
   card: CardByNumber
   columnName?: string
+  /** Schlüssel der Ebene: Dieselbe Karte kann über einen Ring mehrfach im Stapel liegen. */
+  ebene: number
+  /** Ob in dieser Ebene etwas geändert wurde — beim Abnehmen lädt die Ebene darunter dann neu. */
+  geaendert: boolean
+  /** Nachlade-Zähler dieser Ebene, siehe `ViewProps.neuLaden`. */
+  neuLaden: number
 }
 
 /**
@@ -2197,10 +2215,16 @@ async function resolveColumnName(
 }
 
 /**
- * Detail-Modal einer Karte mit Navigation über die `#N`-Abhängigkeitsverweise. Der Wrapper hält den
- * Verweis-Stack und rendert immer genau eine Karte: die Ausgangskarte oder die zuletzt geöffnete
- * verknüpfte Karte. Ein Stack (statt eines einstufigen Zurück) ist nötig, damit „Zurück“ nach
- * mehreren Sprüngen dorthin führt, wo man tatsächlich herkam.
+ * Detail-Modal einer Karte mit Navigation über die `#N`-Abhängigkeitsverweise, den Baum der Karte
+ * und den Baum des Vorhabens. Der Wrapper hält den Verweis-Stapel und zeigt jede Ebene als eigenen
+ * `Dialog`: die Ausgangskarte zuunterst, jede später geöffnete darüber (Plan #1980, E11). Die
+ * unteren bleiben eingehängt, damit Eingaben und Scrollstellung erhalten bleiben. Schließen, Escape
+ * und ein Klick auf den Hintergrund nehmen nur den obersten ab — MUI reicht beides nur an den
+ * obersten Dialog weiter —, und erst die Ausgangskarte ruft `onClose` des Aufrufers.
+ *
+ * Meldet eine obere Ebene eine Änderung, ruft der Stapel sofort `onChanged` des Aufrufers, damit
+ * das Board nachzieht, und merkt sie sich: Beim Abnehmen lädt die Ebene darunter Baum und
+ * Kartenstand neu und gilt selbst als geändert, damit auch tiefere Ebenen nachziehen (E12).
  *
  * Eine über einen Verweis geöffnete Karte wird bewusst **nur gelesen**: Ihr board-spezifischer
  * Bearbeitungskontext (Epics, Labels, Spalten) gehört zum Board des Aufrufers und wäre für ein
@@ -2210,14 +2234,15 @@ async function resolveColumnName(
  *
  * Ausgenommen ist der Statuswechsler eines Arbeitspakets: Sein Recht (`canSetStatus`) liefert der
  * Server mit der Karte selbst, für ihr eigenes Board — es hängt nicht am Kontext des Aufrufers
- * (Plan #1294, E10, E23).
+ * (Plan #1294, E10, E23; Plan #1980, E13).
  */
 export function CardDetailModal(props: Readonly<Props>) {
-  const { projectId, cardsApi = defaultCardsApi, boardsApi = defaultBoardsApi } = props
+  const { projectId, onChanged, cardsApi = defaultCardsApi, boardsApi = defaultBoardsApi } = props
   const [stack, setStack] = useState<LinkedCard[]>([])
+  const [basisNeuLaden, setBasisNeuLaden] = useState(0)
+  const naechsteEbene = useRef(0)
   const notify = useSnackbar()
   const t = useT()
-  const top = stack.at(-1)
 
   // Nicht auflösbar (gelöscht, kein Zugriff): Hinweis statt totem Sprung — die aktuelle Karte
   // bleibt offen. Eine Vorab-Prüfung aller Verweise würde je geöffneter Karte N Requests kosten.
@@ -2225,7 +2250,8 @@ export function CardDetailModal(props: Readonly<Props>) {
     try {
       const linked = await cardsApi.byNumber(project, number)
       const columnName = await resolveColumnName(linked, boardsApi)
-      setStack((s) => [...s, { card: linked, columnName }])
+      const ebene = ++naechsteEbene.current
+      setStack((s) => [...s, { card: linked, columnName, ebene, geaendert: false, neuLaden: 0 }])
     } catch {
       notify(t.KARTE.NICHT_GEFUNDEN(number), 'error')
     }
@@ -2233,22 +2259,43 @@ export function CardDetailModal(props: Readonly<Props>) {
   const onOpenDependency =
     projectId == null ? undefined : (n: number) => void openDependency(projectId, n)
 
-  if (!top) return <CardDetailModalView {...props} onOpenDependency={onOpenDependency} />
+  const markiereGeaendert = (ebene: number) => {
+    setStack((s) => s.map((e) => (e.ebene === ebene ? { ...e, geaendert: true } : e)))
+    onChanged?.()
+  }
+
+  // Schließen erreicht nur den obersten Dialog; `oben` ist deshalb immer der letzte Eintrag.
+  const nimmAb = (oben: LinkedCard) => {
+    const rest = stack.slice(0, -1)
+    const unten = rest.at(-1)
+    if (oben.geaendert && unten) {
+      rest[rest.length - 1] = { ...unten, geaendert: true, neuLaden: unten.neuLaden + 1 }
+    } else if (oben.geaendert) {
+      setBasisNeuLaden((n) => n + 1)
+    }
+    setStack(rest)
+  }
+
   return (
-    <CardDetailModalView
-      // Kartenwechsel remountet die Ansicht, damit ihr aus `card` abgeleiteter Zustand frisch ist.
-      key={top.card.id}
-      card={top.card}
-      canEdit={false}
-      canModerateComments={props.canModerateComments}
-      columnName={top.columnName}
-      members={props.members}
-      commentsApi={props.commentsApi}
-      attachmentsApi={props.attachmentsApi}
-      cardsApi={cardsApi}
-      onClose={props.onClose}
-      onOpenDependency={onOpenDependency}
-      onBack={() => setStack((s) => s.slice(0, -1))}
-    />
+    <>
+      <CardDetailModalView {...props} onOpenDependency={onOpenDependency} neuLaden={basisNeuLaden} />
+      {stack.map((eintrag) => (
+        <CardDetailModalView
+          key={eintrag.ebene}
+          card={eintrag.card}
+          canEdit={false}
+          canModerateComments={props.canModerateComments}
+          columnName={eintrag.columnName}
+          members={props.members}
+          commentsApi={props.commentsApi}
+          attachmentsApi={props.attachmentsApi}
+          cardsApi={cardsApi}
+          onClose={() => nimmAb(eintrag)}
+          onChanged={() => markiereGeaendert(eintrag.ebene)}
+          onOpenDependency={onOpenDependency}
+          neuLaden={eintrag.neuLaden}
+        />
+      ))}
+    </>
   )
 }

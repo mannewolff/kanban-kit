@@ -689,7 +689,6 @@ export const de = {
     VORSCHAU_NACH_UPLOAD_FEHLER: 'Anhang hochgeladen, Vorschau konnte nicht geladen werden.',
     ANHANG_LOESCHEN_FEHLER: 'Anhang löschen fehlgeschlagen.',
     VORSCHAU_FEHLER: 'Vorschau konnte nicht geladen werden.',
-    ZURUECK: 'Zurück zur vorherigen Karte',
     ABNAHME: 'Abnahme durchklicken',
     BEARBEITEN: 'Bearbeiten',
     FORTSCHRITT: 'Fortschritt',

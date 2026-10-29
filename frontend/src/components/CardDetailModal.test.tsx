@@ -1050,11 +1050,10 @@ describe('CardDetailModal', () => {
   })
 
   /**
-   * Enter auf einer Baumzeile laedt die Karte in denselben Dialog — ueber denselben Verweis-Stack
-   * wie die `#N`-Spruenge (Entscheidung 2026-08-30). Damit behaelt die Enter-Bedienung aus #611
-   * ein Ziel.
+   * Enter auf einer Baumzeile oeffnet die Karte ueber dem Vorhaben — ueber denselben Verweis-Stapel
+   * wie die `#N`-Spruenge (Issue #1987, E11). Damit behaelt die Enter-Bedienung aus #611 ein Ziel.
    */
-  it('lädt per Enter auf einer Baumzeile die Karte in denselben Dialog', async () => {
+  it('öffnet per Enter auf einer Baumzeile die Karte über dem Vorhaben', async () => {
     const apis = makeApis()
     apis.cardsApi.epicTree.mockResolvedValue([baumZeile(3)])
     render(
@@ -1064,7 +1063,7 @@ describe('CardDetailModal', () => {
 
     fireEvent.keyDown(zeile, { key: 'Enter' })
 
-    // `byNumber` liefert die Vorbedingung — sie ersetzt die Vorhaben-Ansicht im selben Dialog.
+    // `byNumber` liefert die Vorbedingung — sie liegt als zweiter Dialog über dem Vorhaben.
     expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
     expect(apis.cardsApi.byNumber).toHaveBeenCalledWith(9, 3)
   })
@@ -2299,20 +2298,6 @@ describe('CardDetailModal', () => {
     expect(screen.queryByRole('button', { name: 'Bearbeiten' })).not.toBeInTheDocument()
   })
 
-  it('führt von der verknüpften Karte per Zurück zur Ausgangskarte', async () => {
-    const apis = makeApis()
-    const onClose = vi.fn()
-    render(<CardDetailModal card={card} canEdit projectId={9} onClose={onClose} {...apis} />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Karte #3 öffnen' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Zurück zur vorherigen Karte' }))
-
-    expect(await screen.findByText('Aufgabe')).toBeInTheDocument()
-    expect(screen.queryByText('Vorbedingung')).not.toBeInTheDocument()
-    // Zurück navigiert nur im Modal, es schließt es nicht.
-    expect(onClose).not.toHaveBeenCalled()
-  })
-
   it('meldet einen nicht auflösbaren Verweis und bleibt bei der Ausgangskarte', async () => {
     const apis = makeApis()
     apis.cardsApi.byNumber = vi.fn().mockRejectedValue(new Error('404'))
@@ -2738,6 +2723,279 @@ describe('CardDetailModal', () => {
 })
 
 /** Kommentar-Darstellung (Issue #575): Markdown statt einzeiliger Textwand. */
+/**
+ * Verweise öffnen Karten als eigenen Dialog über der vorigen (Issue #1987, Plan #1980, E11–E13):
+ * Schließen nimmt genau eine Ebene ab, die untere zeigt danach den neuen Stand.
+ */
+describe('CardDetailModal — Verweise als Dialog darüber (Issue #1987)', () => {
+  /** Eine Karte des Projekts 9 mit fortlaufender ID aus ihrer Nummer. */
+  function karteNr(nummer: number, extra: Partial<CardByNumber> = {}): CardByNumber {
+    return { ...linkedCard, id: nummer * 10, number: nummer, title: `Karte ${nummer}`, ...extra }
+  }
+
+  function zeile(nummer: number, depth: number, extra: Partial<DerivationNode> = {}): DerivationNode {
+    return {
+      number: nummer, title: `Karte ${nummer}`, type: 'CARD', derivedFrom: null, depth,
+      done: false, inReview: false, blocked: false, dependencies: [], externalDependencies: [],
+      externalOrigin: false, broken: false, labels: [], ...extra,
+    }
+  }
+
+  /**
+   * APIs, die jede Nummer auf `karten` auflösen; `get` liefert dieselbe Karte nach ihrer ID und
+   * für die Ausgangskarte deren eigenen Stand.
+   */
+  function stapelApis(karten: CardByNumber[], ausgang: Card = card) {
+    const apis = makeApis()
+    apis.cardsApi.byNumber = vi.fn((_projekt: number, nummer: number) => {
+      const treffer = karten.find((k) => k.number === nummer)
+      return treffer ? Promise.resolve({ ...treffer }) : Promise.reject(new Error('404'))
+    })
+    apis.cardsApi.get = vi.fn((id: number): Promise<Card> => {
+      const treffer = karten.find((k) => k.id === id)
+      return Promise.resolve(treffer ? { ...card, ...treffer } : { ...ausgang })
+    })
+    return apis
+  }
+
+  /** Der oberste Dialog: Die unteren sind für Hilfstechnik verborgen, solange einer darüber liegt. */
+  const oben = () => screen.getByRole('dialog')
+  const offeneDialoge = () => screen.getAllByRole('dialog', { hidden: true })
+
+  /** Wartet, bis der oberste Dialog den Text zeigt — er wird bei jedem Versuch neu bestimmt. */
+  async function obenSteht(text: string) {
+    await waitFor(() => expect(within(oben()).getByText(text)).toBeInTheDocument())
+  }
+
+  async function schliesseOben() {
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Schließen' }))
+  }
+
+  it('Szenario: Karte aus dem Baum öffnen und wieder schließen', async () => {
+    const vorhaben: Card = { ...card, id: 19570, number: 1957, title: 'Vorhaben zu 1957', type: 'EPIC' }
+    const apis = stapelApis([karteNr(1966, { title: 'Paket 1966' })], vorhaben)
+    apis.cardsApi.epicTree.mockResolvedValue([zeile(1957, 0), zeile(1962, 1), zeile(1966, 2)])
+    const onClose = vi.fn()
+    render(<CardDetailModal card={vorhaben} canEdit projectId={9} onClose={onClose} {...apis} />)
+
+    const zeilen = await within(oben()).findAllByRole('treeitem')
+    fireEvent.click(zeilen[2])
+
+    // #1966 liegt über dem Vorhaben; das Vorhaben bleibt darunter eingehängt.
+    await obenSteht('Paket 1966')
+    expect(offeneDialoge()).toHaveLength(2)
+    expect(within(offeneDialoge()[0]).getByText('Vorhaben zu 1957')).toBeInTheDocument()
+
+    await schliesseOben()
+
+    await waitFor(() => expect(offeneDialoge()).toHaveLength(1))
+    expect(within(oben()).getByText('Vorhaben zu 1957')).toBeInTheDocument()
+    expect(screen.queryByText('Paket 1966')).toBeNull()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('Szenario: Status oben wechseln', async () => {
+    const plan: Card = { ...card, id: 19620, number: 1962, title: 'Plan 1962', dependencies: [] }
+    const apis = stapelApis([karteNr(1970, { title: 'Paket 1970', status: 'IN_PROGRESS', canSetStatus: true })], plan)
+    const vorher = [zeile(1957, 0), zeile(1962, 1, { derivedFrom: 1957 }), zeile(1970, 2, { derivedFrom: 1962 })]
+    const nachher = [vorher[0], vorher[1], zeile(1970, 2, { derivedFrom: 1962, inReview: true })]
+    apis.cardsApi.cardTree.mockResolvedValue(vorher)
+    const onChanged = vi.fn()
+    render(
+      <CardDetailModal card={plan} canEdit projectId={9} onClose={vi.fn()} onChanged={onChanged} {...apis} />,
+    )
+    const baum = await within(oben()).findByRole('tree')
+    expect(within(baum).queryByRole('img', { name: 'in review' })).toBeNull()
+    fireEvent.click(within(baum).getAllByRole('treeitem')[2])
+    await obenSteht('Paket 1970')
+
+    // Ab jetzt liefert der Server den neuen Stand.
+    apis.cardsApi.cardTree.mockResolvedValue(nachher)
+    fireEvent.mouseDown(await within(oben()).findByRole('combobox', { name: 'Status' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In review' }))
+    await waitFor(() => expect(apis.cardsApi.setStatus).toHaveBeenCalledWith(19700, 'IN_REVIEW'))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    const ladungenVorher = apis.cardsApi.get.mock.calls.filter(([id]) => id === 19620).length
+
+    await schliesseOben()
+
+    await waitFor(() => expect(offeneDialoge()).toHaveLength(1))
+    expect(within(oben()).getByText('Plan 1962')).toBeInTheDocument()
+    const zeile1970 = (await within(oben()).findAllByRole('treeitem'))[2]
+    expect(await within(zeile1970).findByRole('img', { name: 'in review' })).toBeInTheDocument()
+    // Auch der volle Kartenstand der unteren Ebene wird neu geladen (E12).
+    expect(apis.cardsApi.get.mock.calls.filter(([id]) => id === 19620).length).toBeGreaterThan(ladungenVorher)
+  })
+
+  it('Szenario: Mehrere Sprünge', async () => {
+    const plan: Card = { ...card, id: 19620, number: 1962, title: 'Plan 1962', dependencies: [] }
+    const apis = stapelApis(
+      [karteNr(1957, { title: 'Anforderung 1957', dependencies: [1930] }), karteNr(1930, { title: 'Vorbedingung 1930' })],
+      plan,
+    )
+    apis.cardsApi.cardTree.mockResolvedValue([zeile(1957, 0), zeile(1962, 1, { derivedFrom: 1957 })])
+    const onClose = vi.fn()
+    render(<CardDetailModal card={plan} canEdit projectId={9} onClose={onClose} {...apis} />)
+
+    fireEvent.click((await within(oben()).findAllByRole('treeitem'))[0])
+    await obenSteht('Anforderung 1957')
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Karte #1930 öffnen' }))
+    await obenSteht('Vorbedingung 1930')
+    expect(offeneDialoge()).toHaveLength(3)
+
+    await schliesseOben()
+    await waitFor(() => expect(within(oben()).getByText('Anforderung 1957')).toBeInTheDocument())
+    expect(onClose).not.toHaveBeenCalled()
+
+    await schliesseOben()
+    await waitFor(() => expect(within(oben()).getByText('Plan 1962')).toBeInTheDocument())
+    expect(onClose).not.toHaveBeenCalled()
+
+    await schliesseOben()
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('öffnet eine Abhängigkeit als zweiten Dialog und behält die Eingaben der unteren Karte', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+    fireEvent.change(within(oben()).getByLabelText('Kommentar schreiben'), { target: { value: 'Halb fertig' } })
+
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Karte #3 öffnen' }))
+
+    await obenSteht('Vorbedingung')
+    expect(offeneDialoge()).toHaveLength(2)
+    await schliesseOben()
+    await waitFor(() => expect(offeneDialoge()).toHaveLength(1))
+    expect(within(oben()).getByLabelText('Kommentar schreiben')).toHaveValue('Halb fertig')
+  })
+
+  it('nimmt per Escape nur den obersten Dialog ab', async () => {
+    const apis = makeApis()
+    const onClose = vi.fn()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={onClose} {...apis} />)
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Karte #3 öffnen' }))
+    await obenSteht('Vorbedingung')
+
+    fireEvent.keyDown(oben(), { key: 'Escape', code: 'Escape' })
+
+    await waitFor(() => expect(offeneDialoge()).toHaveLength(1))
+    expect(within(oben()).getByText('Aufgabe')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(oben(), { key: 'Escape', code: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('nimmt per Klick auf den Hintergrund nur den obersten Dialog ab', async () => {
+    const apis = makeApis()
+    const onClose = vi.fn()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={onClose} {...apis} />)
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Karte #3 öffnen' }))
+    await obenSteht('Vorbedingung')
+
+    // Der Klick auf den Hintergrund trifft den Container um das Blatt des obersten Dialogs; eine
+    // Rolle oder einen Namen hat er nicht, deshalb der Weg über das DOM.
+    // eslint-disable-next-line testing-library/no-node-access -- der Hintergrund ist nur über das DOM erreichbar
+    const hintergrund = oben().parentElement as HTMLElement
+    fireEvent.mouseDown(hintergrund)
+    fireEvent.click(hintergrund)
+
+    await waitFor(() => expect(offeneDialoge()).toHaveLength(1))
+    expect(within(oben()).getByText('Aufgabe')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('lädt die untere Ebene ohne Änderung oben nicht neu', async () => {
+    const apis = makeApis()
+    const onChanged = vi.fn()
+    render(
+      <CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} onChanged={onChanged} {...apis} />,
+    )
+    await waitFor(() => expect(apis.cardsApi.cardTree).toHaveBeenCalledWith(100))
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Karte #3 öffnen' }))
+    await obenSteht('Vorbedingung')
+    const baumLadungen = apis.cardsApi.cardTree.mock.calls.filter(([id]) => id === 100).length
+
+    await schliesseOben()
+
+    await waitFor(() => expect(offeneDialoge()).toHaveLength(1))
+    expect(apis.cardsApi.cardTree.mock.calls.filter(([id]) => id === 100)).toHaveLength(baumLadungen)
+    expect(onChanged).not.toHaveBeenCalled()
+  })
+
+  it('reicht eine Änderung über zwei Ebenen bis zur Ausgangskarte durch', async () => {
+    const plan: Card = { ...card, id: 19620, number: 1962, title: 'Plan 1962', dependencies: [] }
+    const apis = stapelApis(
+      [
+        karteNr(1957, { title: 'Anforderung 1957', dependencies: [1970] }),
+        karteNr(1970, { title: 'Paket 1970', status: 'IN_PROGRESS', canSetStatus: true }),
+      ],
+      plan,
+    )
+    apis.cardsApi.cardTree.mockResolvedValue([zeile(1957, 0), zeile(1962, 1, { derivedFrom: 1957 })])
+    render(<CardDetailModal card={plan} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+    fireEvent.click((await within(oben()).findAllByRole('treeitem'))[0])
+    await obenSteht('Anforderung 1957')
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Karte #1970 öffnen' }))
+    await obenSteht('Paket 1970')
+    fireEvent.mouseDown(await within(oben()).findByRole('combobox', { name: 'Status' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'In review' }))
+    await waitFor(() => expect(apis.cardsApi.setStatus).toHaveBeenCalledWith(19700, 'IN_REVIEW'))
+    const planBaum = () => apis.cardsApi.cardTree.mock.calls.filter(([id]) => id === 19620).length
+    const planBaumVorher = planBaum()
+
+    await schliesseOben()
+    await waitFor(() => expect(within(oben()).getByText('Anforderung 1957')).toBeInTheDocument())
+    await schliesseOben()
+
+    await waitFor(() => expect(planBaum()).toBeGreaterThan(planBaumVorher))
+  })
+
+  it('meldet eine nicht auffindbare Karte und lässt die aktuelle offen', async () => {
+    const plan: Card = { ...card, id: 19620, number: 1962, title: 'Plan 1962', dependencies: [1957] }
+    const apis = stapelApis([karteNr(1957, { title: 'Anforderung 1957', dependencies: [1930] })], plan)
+    render(<CardDetailModal card={plan} canEdit projectId={9} onClose={vi.fn()} {...apis} />, {
+      wrapper: SnackbarProvider,
+    })
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Karte #1957 öffnen' }))
+    await obenSteht('Anforderung 1957')
+
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Karte #1930 öffnen' }))
+
+    expect(await screen.findByText('Karte #1930 nicht gefunden — gelöscht oder kein Zugriff.')).toBeInTheDocument()
+    expect(offeneDialoge()).toHaveLength(2)
+    expect(within(oben()).getByText('Anforderung 1957')).toBeInTheDocument()
+  })
+
+  /**
+   * E13 schreibt den heutigen Stand fest: `canEdit={false}`, Status nach `canSetStatus` der Karte,
+   * Kommentare und die Anhänge der Karte — hochladen lässt sich dort wie bisher nichts.
+   */
+  it('lässt die Rechte in einer geöffneten Karte unverändert (E13)', async () => {
+    const apis = makeApis()
+    apis.cardsApi.byNumber = vi.fn().mockResolvedValue({ ...linkedCard, status: 'IN_PROGRESS', canSetStatus: true })
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Karte #3 öffnen' }))
+    await obenSteht('Vorbedingung')
+
+    const dialog = within(oben())
+    expect(dialog.queryByRole('button', { name: 'Bearbeiten' })).toBeNull()
+    expect(await dialog.findByRole('combobox', { name: 'Status' })).toBeInTheDocument()
+    expect(dialog.getByLabelText('Kommentar schreiben')).toBeInTheDocument()
+    expect(dialog.getByText('Anhänge')).toBeInTheDocument()
+    expect(dialog.queryByLabelText('Datei anhängen')).toBeNull()
+  })
+
+  it('zeigt keinen Knopf „Zurück“ mehr', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+    fireEvent.click(within(oben()).getByRole('button', { name: 'Karte #3 öffnen' }))
+    await obenSteht('Vorbedingung')
+
+    expect(screen.queryByRole('button', { name: /zurück/i, hidden: true })).toBeNull()
+  })
+})
+
 describe('CardDetailModal — Kommentar-Body als Markdown', () => {
   beforeEach(() => {
     URL.createObjectURL = vi.fn(() => 'blob:preview')
@@ -4111,12 +4369,10 @@ describe('CardDetailModal auf Englisch', () => {
     expect(dialog.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
   })
 
-  it('beschriftet Zurück und Wiederherstellen auf Englisch', async () => {
+  it('beschriftet Wiederherstellen auf Englisch', () => {
     zeigeEn({ card: { ...card, archived: true } })
 
     expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument()
-    fireEvent.click(await screen.findByRole('button', { name: 'Open card #3' }))
-    expect(await screen.findByRole('button', { name: 'Back to the previous card' })).toBeInTheDocument()
   })
 
   it('beschriftet die Checkboxen der Beschreibung auf Englisch', async () => {
