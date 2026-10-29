@@ -1,3 +1,4 @@
+import type { MobilerZustand } from '../api/mobil'
 import type { Verdict } from '../api/nightRuns'
 import { de } from '../i18n/de'
 import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
@@ -105,6 +106,16 @@ export const NIGHT_RUN_ERROR_CLASS_TEXT: Record<NightRunErrorClass, string> = de
  * von #1493).
  */
 export const NIGHT_RUN_VERDICT_TEXT: Record<Verdict, string> = de.NACHTLAUF_UEBERGABE.AUSGANG
+
+/**
+ * Das Wort je Zustand eines Laufs auf dem Handy (Issue #1995, Plan #1989 E19) — die Seiten unter
+ * `/mobil/laeufe` nehmen es von hier, damit Liste und Lauf dieselben Wörter tragen wie der Leitstand
+ * (`LAEUFT` ist das Ausgangswort `RUNNING`). `Record` und nicht `Partial`: Ein neuer Zustand bricht
+ * den Build, statt stumm ohne Wort zu erscheinen.
+ */
+export function mobilerZustandsText(zustand: MobilerZustand, sprache: Sprache = 'de'): string {
+  return woerterbuch(sprache).NACHTLAUF_UEBERGABE.MOBILER_ZUSTAND[zustand]
+}
 
 /**
  * Wo die Fehlerklasse den Zustand genauer sagt als die Ampel allein (Issue #856).

@@ -14,6 +14,8 @@ function seite(pfad = '/mobil') {
       <Routes>
         <Route path="/mobil" element={<MobilRahmen />}>
           <Route index element={<p>Ideenseite</p>} />
+          <Route path="laeufe" element={<p>Läufeseite</p>} />
+          <Route path="laeufe/:laufId" element={<p>Laufseite</p>} />
           <Route path="einstellungen" element={<p>Einstellungsseite</p>} />
         </Route>
         <Route path="/login" element={<p>Anmeldung</p>} />
@@ -55,10 +57,19 @@ describe('MobilRahmen', () => {
     expect(screen.getByText('Ideenseite')).toBeInTheDocument()
     const leiste = screen.getByRole('navigation', { name: 'Mobile Navigation' })
     expect(leiste).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('link', { name: 'Läufe' }))
+    expect(screen.getByText('Läufeseite')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Einstellungen' }))
     expect(screen.getByText('Einstellungsseite')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Idee' }))
     expect(screen.getByText('Ideenseite')).toBeInTheDocument()
+  })
+
+  it('markiert „Läufe“ auch beim geöffneten Lauf', () => {
+    seite('/mobil/laeufe/12')
+    expect(screen.getByText('Laufseite')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Läufe' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Idee' })).not.toHaveAttribute('aria-current')
   })
 
   it('markiert den aktiven Eintrag der Leiste', () => {
@@ -88,10 +99,10 @@ describe('MobilRahmen', () => {
     const beschriftungen = [...screen.getAllByRole('button'), ...screen.getAllByRole('link')].map(
       (e) => e.textContent ?? '',
     )
-    expect(beschriftungen).toEqual(expect.arrayContaining(['Abmelden', 'Idee', 'Einstellungen']))
+    expect(beschriftungen).toEqual(expect.arrayContaining(['Abmelden', 'Idee', 'Läufe', 'Einstellungen']))
     for (const text of beschriftungen) {
       expect(text).not.toMatch(/verschieb|bearbeit|archiv|lösch/i)
     }
-    expect(beschriftungen).toHaveLength(3)
+    expect(beschriftungen).toHaveLength(4)
   })
 })

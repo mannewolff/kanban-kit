@@ -42,6 +42,10 @@ const MobilRahmen = lazy(() => import('./pages/mobil/MobilRahmen').then((m) => (
 const MobilIdeePage = lazy(() =>
   import('./pages/mobil/MobilIdeePage').then((m) => ({ default: m.MobilIdeePage })),
 )
+const MobilLaeufePage = lazy(() =>
+  import('./pages/mobil/MobilLaeufePage').then((m) => ({ default: m.MobilLaeufePage })),
+)
+const MobilLaufPage = lazy(() => import('./pages/mobil/MobilLaufPage').then((m) => ({ default: m.MobilLaufPage })))
 const MobilEinstellungenPage = lazy(() =>
   import('./pages/mobil/MobilEinstellungenPage').then((m) => ({ default: m.MobilEinstellungenPage })),
 )
@@ -86,6 +90,8 @@ export function App() {
           {/* Schmale Oberfläche für das Handy, ohne AppShell und ohne Seitenleiste (Plan #1989, E3). */}
           <Route path="/mobil" element={<MobilRahmen />}>
             <Route index element={<MobilIdeePage />} />
+            <Route path="/mobil/laeufe" element={<MobilLaeufePage />} />
+            <Route path="/mobil/laeufe/:laufId" element={<MobilLaufPage />} />
             <Route path="/mobil/einstellungen" element={<MobilEinstellungenPage />} />
           </Route>
           <Route element={<AppShell />}>

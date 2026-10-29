@@ -1,4 +1,5 @@
 import LightbulbOutlined from '@mui/icons-material/LightbulbOutlined'
+import ListAltOutlined from '@mui/icons-material/ListAltOutlined'
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
@@ -32,7 +33,7 @@ const LEISTEN_EINTRAG_SX = {
 
 /**
  * Der schmale Rahmen der mobilen Oberfläche unter `/mobil` (Plan #1989, E3): oben Name und
- * Abmelden, darunter die Seite, unten die Leiste „Idee“ und „Einstellungen“. Keine Seitenleiste,
+ * Abmelden, darunter die Seite, unten die Leiste „Idee“, „Läufe“ und „Einstellungen“. Keine Seitenleiste,
  * kein Board — und nichts, womit sich Karten verschieben, bearbeiten, archivieren oder löschen
  * ließen (AK 8 der Quelle #1961).
  *
@@ -115,6 +116,10 @@ export function MobilRahmen() {
         <Button component={NavLink} to="/mobil" end sx={LEISTEN_EINTRAG_SX}>
           <LightbulbOutlined aria-hidden />
           {t.MOBIL.NAV_IDEE}
+        </Button>
+        <Button component={NavLink} to="/mobil/laeufe" sx={LEISTEN_EINTRAG_SX}>
+          <ListAltOutlined aria-hidden />
+          {t.MOBIL.NAV_LAEUFE}
         </Button>
         <Button component={NavLink} to="/mobil/einstellungen" sx={LEISTEN_EINTRAG_SX}>
           <SettingsOutlined aria-hidden />

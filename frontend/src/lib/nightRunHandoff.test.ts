@@ -6,6 +6,7 @@ import {
   geschaetztGespart,
   kurzGrund,
   KURZ_GRUND_MAX,
+  mobilerZustandsText,
   nightRunStateTextByErrorClass,
   nightRunZustandsText,
   NIGHT_RUN_ERROR_CLASS_TEXT,
@@ -508,5 +509,19 @@ describe('Übernahmetext und Zustandswörter auf Englisch (Issue #1658)', () => 
 
     expect(jeKlasse.TIME_BUDGET_EXCEEDED?.YELLOW).toBe('Am Zeitbudget beendet, Ergebnis liegt vor')
     expect(jeKlasse.STUCK?.RED).toBe('festgefahren')
+  })
+})
+
+describe('mobilerZustandsText (Issue #1995)', () => {
+  it('nennt jeden Zustand des Handys mit Wort, laufend wie im Leitstand', () => {
+    expect(mobilerZustandsText('LAEUFT')).toBe(NIGHT_RUN_VERDICT_TEXT.RUNNING)
+    expect(mobilerZustandsText('HAENGT')).toBe('hängt')
+    expect(mobilerZustandsText('GESCHEITERT')).toBe('gescheitert')
+    expect(mobilerZustandsText('BEENDET')).toBe('beendet')
+  })
+
+  it('schreibt in der übergebenen Sprache', () => {
+    expect(mobilerZustandsText('HAENGT', 'en')).toBe('stalled')
+    expect(mobilerZustandsText('LAEUFT', 'en')).toBe('running')
   })
 })
