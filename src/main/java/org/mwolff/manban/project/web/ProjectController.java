@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.util.List;
 import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.mwolff.manban.common.web.api.ApiVertrag;
@@ -51,6 +52,10 @@ class ProjectController {
 
   private static final String PROJEKT_FEHLT =
       "Das Projekt gibt es nicht, oder der Aufrufer ist kein Mitglied.";
+
+  private static final String BUDGET_PROJEKT_FEHLT =
+      "Das Projekt gibt es nicht, oder der Aufrufer ist kein echtes Mitglied (auch als"
+          + " Plattform-Admin).";
 
   ProjectController(ProjectService projects, MembershipService memberships) {
     this.projects = projects;
@@ -249,6 +254,97 @@ class ProjectController {
       @Valid @RequestBody ParticipationRequest request) {
     return projects.setDashboardParticipation(userId, id, request.participating());
   }
+
+  /**
+   * Legt das Monatsbudget des Projekts fest oder ändert es (Issue #1965, Plan #1962 E4).
+   *
+   * <p>Der Betrag kommt als Zeichenkette mit Punkt als Dezimaltrenner und wird als {@link
+   * BigDecimal} gelesen — kein Gleitkomma für Geld. Wie bei der Teilnahme lässt die Rechteprüfung
+   * einen Plattform-Admin ohne eigene Owner-Rolle nicht passieren.
+   */
+  @Operation(
+      summary = "Monatsbudget festlegen",
+      description =
+          "Legt das Monatsbudget des Projekts in USD fest oder ändert es. Es gilt für den ganzen"
+              + " Verbrauch des Projekts, Nachtläufe und Sitzungen zusammen, ab sofort und in"
+              + " jedem folgenden Monat, bis es geändert oder entfernt wird. Festlegen darf allein"
+              + " ein echtes Mitglied mit der Rolle OWNER — ein Plattform-Admin ohne eigene"
+              + " Owner-Rolle nicht.")
+  @ApiResponse(responseCode = "204", description = "Das Monatsbudget ist festgelegt.")
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          "Ungültiger Betrag: fehlt, ist keine Dezimalzahl mit Punkt, ist nicht größer als 0, hat"
+              + " mehr als zwei Nachkommastellen oder liegt über 9999999999.99. Das bisherige"
+              + " Budget bleibt bestehen.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "Die Rolle des Aufrufers im Projekt ist nicht OWNER.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description = BUDGET_PROJEKT_FEHLT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @PutMapping("/{id}/monthly-budget")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void setMonthlyBudget(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = BESCHREIBUNG_PROJECT_ID, example = "1") @PathVariable long id,
+      @Valid @RequestBody MonthlyBudgetRequest request) {
+    projects.setMonthlyBudget(userId, id, request.amountUsd());
+  }
+
+  /** Entfernt das Monatsbudget des Projekts (Issue #1965). */
+  @Operation(
+      summary = "Monatsbudget entfernen",
+      description =
+          "Entfernt das Monatsbudget des Projekts; danach hat es kein Budget mehr. Entfernen darf"
+              + " allein ein echtes Mitglied mit der Rolle OWNER — ein Plattform-Admin ohne eigene"
+              + " Owner-Rolle nicht.")
+  @ApiResponse(responseCode = "204", description = "Das Monatsbudget ist entfernt.")
+  @ApiResponse(
+      responseCode = "403",
+      description = "Die Rolle des Aufrufers im Projekt ist nicht OWNER.",
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description = BUDGET_PROJEKT_FEHLT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @DeleteMapping("/{id}/monthly-budget")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  void removeMonthlyBudget(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = BESCHREIBUNG_PROJECT_ID, example = "1") @PathVariable long id) {
+    projects.removeMonthlyBudget(userId, id);
+  }
+
+  /** Request-Body für das Festlegen des Monatsbudgets (Plan #1962 E4). */
+  @Schema(description = "Monatsbudget eines Projekts.")
+  record MonthlyBudgetRequest(
+      @Schema(
+              description =
+                  "Betrag in USD als Zeichenkette mit Punkt als Dezimaltrenner, größer als 0,"
+                      + " höchstens zwei Nachkommastellen, höchstens 9999999999.99.",
+              type = "string",
+              example = "100.00")
+          @NotNull
+          BigDecimal amountUsd) {}
 
   /** Request-Body für das Umbenennen. */
   @Schema(description = "Neuer Name eines Projekts.")

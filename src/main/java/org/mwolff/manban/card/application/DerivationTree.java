@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.EpicService.DerivationNodeView;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
+import org.mwolff.manban.common.KitNamen;
 
 /**
  * Berechnet den Herkunftsbaum eines Boards (Issue #609): aus der flachen Kartenmenge und ihren
@@ -32,9 +33,101 @@ final class DerivationTree {
   private DerivationTree() {}
 
   /**
+   * Der Zweig einer Karte (Issue #1983, Plan #1980): die Karten, auf denen {@link #build} den
+   * Herkunftsbaum im Karten-Detail rechnet.
+   *
+   * @param karten Karten des Zweigs, in der Reihenfolge der Bezugsmenge; leer, wenn die Karte zu
+   *     keiner Kette gehört (E5)
+   * @param anfangId Karte, bei der der Zweig beginnt; {@code null} bei leerem Zweig und bei einem
+   *     Ring, der keinen Anfang hat (E7)
+   * @param anfangAbgeschnitten wahr, wenn der Vorfahr des Anfangs in der Bezugsmenge liegt und nur
+   *     bewusst weggelassen wurde (E3)
+   */
+  record Zweig(List<Card> karten, @Nullable Long anfangId, boolean anfangAbgeschnitten) {
+
+    private static final Zweig LEER = new Zweig(List.of(), null, false);
+  }
+
+  /**
+   * Wählt aus der Bezugsmenge den Zweig der Karte {@code cardId}: ab der obersten Anforderung ihrer
+   * Herkunftslinie abwärts (E2). Die Bezugsmenge filtert der Aufrufer (E1) — was darin fehlt,
+   * archiviert oder auf einem anderen Board, trennt die Linie.
+   *
+   * <p>Der Aufstieg folgt {@code derivedFromCardId}, bis ein Vorfahr fehlt oder eine Karte zum
+   * zweiten Mal kommt. Im zweiten Fall hängt die Linie an einem Ring ohne Anfang: Die Menge ist
+   * dann alles, was vom Ring abstammt, und {@code build} zeigt es mit seiner Ringregel (E7).
+   */
+  static Zweig zweig(List<Card> bezugsmenge, long cardId) {
+    Map<Long, Card> byId = new HashMap<>();
+    Map<Long, List<Card>> kinder = new HashMap<>();
+    for (Card c : bezugsmenge) {
+      byId.put(c.requireId(), c);
+    }
+    for (Card c : bezugsmenge) {
+      Long vorfahr = c.derivedFromCardId();
+      if (byId.containsKey(vorfahr)) {
+        kinder.computeIfAbsent(vorfahr, k -> new ArrayList<>()).add(c);
+      }
+    }
+
+    Card karte = byId.get(cardId);
+    // Eine Herkunft zählt auch, wenn sie außerhalb der Bezugsmenge liegt: Die Karte gehört dann zu
+    // einer Kette und ist selbst der Anfang (AK 3).
+    if (karte == null || (karte.derivedFromCardId() == null && !kinder.containsKey(cardId))) {
+      return Zweig.LEER;
+    }
+
+    Set<Long> pfad = new HashSet<>();
+    List<Card> aufstieg = new ArrayList<>();
+    Card cursor = karte;
+    while (cursor != null && pfad.add(cursor.requireId())) {
+      aufstieg.add(cursor);
+      cursor = byId.get(cursor.derivedFromCardId());
+    }
+
+    if (cursor != null) {
+      return new Zweig(abstieg(bezugsmenge, aufstieg, kinder), null, false);
+    }
+    Card anfang = obersteAnforderung(aufstieg);
+    return new Zweig(
+        abstieg(bezugsmenge, List.of(anfang), kinder),
+        anfang.requireId(),
+        byId.containsKey(anfang.derivedFromCardId()));
+  }
+
+  /** Die oberste Karte der Art {@code FACHLICH} im Aufstieg, ohne eine die oberste erreichte. */
+  private static Card obersteAnforderung(List<Card> aufstieg) {
+    for (int i = aufstieg.size() - 1; i >= 0; i--) {
+      Card c = aufstieg.get(i);
+      if (KitNamen.artAusTitel(c.title()).filter(KitNamen.Art.FACHLICH::equals).isPresent()) {
+        return c;
+      }
+    }
+    return aufstieg.getLast();
+  }
+
+  /**
+   * Die Startkarten samt allem, was von ihnen abstammt, in der Reihenfolge der Bezugsmenge. Ein
+   * zweites Mal kommt eine Karte nur beim Ring an; dort hält die Menge {@code erreicht} den Abstieg
+   * an.
+   */
+  private static List<Card> abstieg(
+      List<Card> bezugsmenge, List<Card> start, Map<Long, List<Card>> kinder) {
+    Set<Long> erreicht = new HashSet<>();
+    List<Card> offen = new ArrayList<>(start);
+    while (!offen.isEmpty()) {
+      Card c = offen.removeLast();
+      if (erreicht.add(c.requireId())) {
+        offen.addAll(kinder.getOrDefault(c.requireId(), List.of()));
+      }
+    }
+    return bezugsmenge.stream().filter(c -> erreicht.contains(c.requireId())).toList();
+  }
+
+  /**
    * Baut den Baum aus einer bereits geladenen Kartenmenge — ohne weitere Abfragen.
    *
-   * @param boardCards Karten dieses Boards ohne Papierkorb und ohne Ideen-Speicher
+   * @param boardCards Karten dieses Boards ohne Papierkorb
    * @param depsByCardId Abhängigkeits-Nummern je Karten-ID (ein Sammelzugriff)
    * @param externalAncestorNumbers Nummern der Vorfahren, die <em>nicht</em> auf diesem Board
    *     liegen

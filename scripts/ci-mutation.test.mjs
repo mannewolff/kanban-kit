@@ -46,6 +46,17 @@ function befunde(yaml) {
 
 const yaml = readFileSync(CI_YML, 'utf8');
 
+/**
+ * Ersetzt das Token erst ab dem Job `mutation`: Der Job `backend` traegt fuer die verkuerzte
+ * Pruefung eines Hotfix-Zweigs ein eigenes (Issue #1975), und ein `replace` ueber die ganze Datei
+ * traefe zuerst dieses.
+ */
+function imJobMutation(text, ersatz) {
+  const start = text.indexOf('\n  mutation:\n');
+  assert.ok(start >= 0, 'Job mutation nicht gefunden');
+  return text.slice(0, start) + text.slice(start).replace(TOKEN, ersatz);
+}
+
 test('Job mutation urteilt über den Treiber mit Board-Token, ohne PIT direkt', () => {
   assert.deepEqual(befunde(yaml), []);
 });
@@ -64,12 +75,12 @@ test('rot, wenn neben dem Treiber ein zusätzlicher Schritt PIT direkt fährt', 
 });
 
 test('rot, wenn der Treiber-Schritt kein TBX_TOKEN bekommt', () => {
-  const ohne = yaml.replace(TOKEN, '');
+  const ohne = imJobMutation(yaml, '');
   assert.deepEqual(befunde(ohne), ['Treiber-Schritt bekommt kein TBX_TOKEN aus secrets.KANBAN_KIT_TOKEN']);
 });
 
 test('rot, wenn das Token aus einem anderen Secret kommt', () => {
-  const fremd = yaml.replace(TOKEN, '          TBX_TOKEN: ${{ secrets.KANBAN_SONAR_TOKEN }}');
+  const fremd = imJobMutation(yaml, '          TBX_TOKEN: ${{ secrets.KANBAN_SONAR_TOKEN }}');
   assert.deepEqual(befunde(fremd), ['Treiber-Schritt bekommt kein TBX_TOKEN aus secrets.KANBAN_KIT_TOKEN']);
 });
 

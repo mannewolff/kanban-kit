@@ -18,6 +18,13 @@
  *   node scripts/bump-version.mjs tag     annotated Tag vX.Y.Z auf HEAD -> merge production,
  *                                          NACH dem Release-Commit (sonst zeigt der Tag auf den
  *                                          Commit davor statt auf den Release-Stand)
+ *   node scripts/bump-version.mjs hotfix <X.Y.Z-hotfix.N>
+ *                                          setzt die Hotfix-Version -> hotfix production
+ *
+ * Seit Issue #1975 kennt die Version einen einzigen Zusatz: `-hotfix.N` (N ab 1). Ein Hotfix
+ * sitzt auf dem Stand, der in Produktion laeuft, und veroeffentlicht wie ein Release ein Abbild
+ * (der Tag vX.Y.Z-hotfix.N startet release-images.yml) — darum zieht `hotfix` die Betriebsdateien
+ * mit. `patch`, `minor` und `major` auf einer Hotfix-Version legen den Zusatz ab.
  *
  * Siehe RELEASING.md fuer den Kontext, wann welcher Teil/Befehl faellig ist.
  */
@@ -34,6 +41,9 @@ const FRONTEND_DIR = join(REPO_ROOT, 'frontend');
 
 const PARTS = ['major', 'minor', 'patch'];
 
+/** Die einzige Form mit Zusatz: X.Y.Z-hotfix.N, N ab 1. */
+const HOTFIX_VERSION = /^\d+\.\d+\.\d+-hotfix\.[1-9]\d*$/;
+
 function fail(message) {
   process.stderr.write(`Fehler: ${message}\n`);
   process.exit(1);
@@ -41,16 +51,29 @@ function fail(message) {
 
 function parseVersion(text) {
   const trimmed = text.trim();
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(trimmed);
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-hotfix\.([1-9]\d*))?$/.exec(trimmed);
   if (!match) {
-    fail(`VERSION enthält keine gültige X.Y.Z-Version: '${trimmed}'`);
+    fail(`VERSION enthält keine gültige X.Y.Z- oder X.Y.Z-hotfix.N-Version: '${trimmed}'`);
   }
-  const [, major, minor, patch] = match;
-  return { major: Number(major), minor: Number(minor), patch: Number(patch) };
+  const [, major, minor, patch, hotfix] = match;
+  return { major: Number(major), minor: Number(minor), patch: Number(patch), hotfix: hotfix && Number(hotfix) };
 }
 
-function formatVersion({ major, minor, patch }) {
-  return `${major}.${minor}.${patch}`;
+function formatVersion({ major, minor, patch, hotfix }) {
+  return hotfix ? `${major}.${minor}.${patch}-hotfix.${hotfix}` : `${major}.${minor}.${patch}`;
+}
+
+/**
+ * Gibt die Hotfix-Version ohne umgebenden Leerraum zurueck oder wirft. Jeder andere Zusatz
+ * (`-rc.1`, `-hotfix`, `-hotfix.0`) und eine Version ohne Zusatz werden abgelehnt: Diese Form
+ * setzt allein `hotfix production`, eine reguläre Version entsteht nur ueber patch/minor/major.
+ */
+export function hotfixVersionPruefen(text) {
+  const version = String(text ?? '').trim();
+  if (!HOTFIX_VERSION.test(version)) {
+    throw new Error(`Erwartet eine Hotfix-Version der Form X.Y.Z-hotfix.N (N ab 1): '${version}'`);
+  }
+  return version;
 }
 
 /** Reset-Semantik: eine Erhöhung setzt alle niedrigeren Teile auf 0 zurück. */
@@ -60,13 +83,13 @@ function bump({ major, minor, patch }, part) {
   return { major, minor, patch: patch + 1 };
 }
 
-function updatePom(newVersion) {
-  const pom = readFileSync(POM_PATH, 'utf-8');
+function updatePom(newVersion, pomPath = POM_PATH) {
+  const pom = readFileSync(pomPath, 'utf-8');
   const pattern = /(<artifactId>manban<\/artifactId>\s*\n\s*<version>)[^<]+(<\/version>)/;
   if (!pattern.test(pom)) {
     fail('Projekt-Version in pom.xml (Artefakt "manban") nicht gefunden');
   }
-  writeFileSync(POM_PATH, pom.replace(pattern, `$1${newVersion}$2`));
+  writeFileSync(pomPath, pom.replace(pattern, `$1${newVersion}$2`));
 }
 
 /** Die beiden eigenen Abbilder, die dieses Projekt selbst nach ghcr.io veroeffentlicht. */
@@ -130,12 +153,25 @@ export function betriebsdateienNachziehen(wurzel, neueVersion) {
   writeFileSync(bausteinePfad, `${JSON.stringify(daten, null, 2)}\n`);
 }
 
-function updateFrontend(newVersion) {
+function updateFrontend(newVersion, frontendDir = FRONTEND_DIR) {
   execFileSync(
     'npm',
-    ['--prefix', FRONTEND_DIR, 'version', newVersion, '--no-git-tag-version', '--allow-same-version'],
+    ['--prefix', frontendDir, 'version', newVersion, '--no-git-tag-version', '--allow-same-version'],
     { stdio: 'inherit' },
   );
+}
+
+/**
+ * Setzt die Hotfix-Version `version` unterhalb von `wurzel`: VERSION, pom.xml, frontend/package.json
+ * samt Lock-Datei und die Betriebsdateien. Geprueft wird vor dem ersten Schreiben — eine
+ * abgelehnte Version laesst alle Dateien unberuehrt.
+ */
+export function versionSetzen(wurzel, version) {
+  const neu = hotfixVersionPruefen(version);
+  writeFileSync(join(wurzel, 'VERSION'), `${neu}\n`);
+  updatePom(neu, join(wurzel, 'pom.xml'));
+  updateFrontend(neu, join(wurzel, 'frontend'));
+  betriebsdateienNachziehen(wurzel, neu);
 }
 
 /**
@@ -167,8 +203,19 @@ function main(argv) {
     return;
   }
 
+  if (cmd === 'hotfix') {
+    const currentText = formatVersion(parseVersion(readFileSync(VERSION_PATH, 'utf-8')));
+    try {
+      versionSetzen(REPO_ROOT, argv[1]);
+    } catch (fehler) {
+      fail(fehler.message);
+    }
+    process.stdout.write(`Version: ${currentText} -> ${argv[1].trim()} (Betriebsdateien nachgezogen)\n`);
+    return;
+  }
+
   if (!PARTS.includes(cmd)) {
-    fail(`Erwartet einen von: ${PARTS.join(', ')}, tag`);
+    fail(`Erwartet einen von: ${PARTS.join(', ')}, tag, hotfix <X.Y.Z-hotfix.N>`);
   }
 
   const current = parseVersion(readFileSync(VERSION_PATH, 'utf-8'));

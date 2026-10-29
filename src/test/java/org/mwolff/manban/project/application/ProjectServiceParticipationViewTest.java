@@ -85,7 +85,8 @@ class ProjectServiceParticipationViewTest {
                   p.ownerUserId(),
                   p.createdAt(),
                   p.interactiveUsageSince(),
-                  p.dashboardParticipation());
+                  p.dashboardParticipation(),
+                  p.monthlyBudgetUsd());
             });
 
     // When
@@ -102,7 +103,7 @@ class ProjectServiceParticipationViewTest {
     when(permissions.isPlatformAdmin(2L)).thenReturn(false);
     when(memberships.findByUserId(2L)).thenReturn(List.of(membership(9L, 2L, ProjectRole.MEMBER)));
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, true)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, true, null)));
 
     // When
     List<ProjectService.ProjectView> result = service.list(2L);
@@ -120,7 +121,7 @@ class ProjectServiceParticipationViewTest {
     when(permissions.isPlatformAdmin(2L)).thenReturn(false);
     when(memberships.findByUserId(2L)).thenReturn(List.of(membership(9L, 2L, ProjectRole.OWNER)));
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 2L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 2L, FIXED, null, false, null)));
 
     // When
     List<ProjectService.ProjectView> result = service.list(2L);
@@ -138,7 +139,7 @@ class ProjectServiceParticipationViewTest {
     when(permissions.isPlatformAdmin(2L)).thenReturn(false);
     when(memberships.findByUserId(2L)).thenReturn(List.of(membership(9L, 2L, ProjectRole.ADMIN)));
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
 
     // When
     List<ProjectService.ProjectView> result = service.list(2L);
@@ -156,7 +157,7 @@ class ProjectServiceParticipationViewTest {
     when(permissions.isPlatformAdmin(2L)).thenReturn(false);
     when(memberships.findByUserId(2L)).thenReturn(List.of(membership(9L, 2L, ProjectRole.MEMBER)));
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
 
     // When
     List<ProjectService.ProjectView> result = service.list(2L);
@@ -174,7 +175,7 @@ class ProjectServiceParticipationViewTest {
     when(permissions.isPlatformAdmin(2L)).thenReturn(false);
     when(memberships.findByUserId(2L)).thenReturn(List.of(membership(9L, 2L, ProjectRole.VIEWER)));
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
 
     // When
     List<ProjectService.ProjectView> result = service.list(2L);
@@ -197,7 +198,8 @@ class ProjectServiceParticipationViewTest {
     // Given
     when(permissions.isPlatformAdmin(1L)).thenReturn(true);
     when(memberships.findByUserId(1L)).thenReturn(List.of());
-    when(projects.findAll()).thenReturn(List.of(new Project(9L, "P", 2L, FIXED, null, false)));
+    when(projects.findAll())
+        .thenReturn(List.of(new Project(9L, "P", 2L, FIXED, null, false, null)));
 
     // When
     List<ProjectService.ProjectView> result = service.list(1L);
@@ -216,7 +218,7 @@ class ProjectServiceParticipationViewTest {
         .thenReturn(membership(9L, 2L, ProjectRole.OWNER));
     when(permissions.isRealProjectMember(2L, 9L)).thenReturn(true);
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED, null, false, null)));
     when(projects.save(any(Project.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -237,7 +239,7 @@ class ProjectServiceParticipationViewTest {
         .thenReturn(membership(9L, 1L, ProjectRole.OWNER));
     when(permissions.isRealProjectMember(1L, 9L)).thenReturn(false);
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "Alt", 2L, FIXED, null, false, null)));
     when(projects.save(any(Project.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When

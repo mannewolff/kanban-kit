@@ -45,6 +45,8 @@ vi.mock('../api/cards', () => ({
     bulkDelete: vi.fn(),
     // Der Detail-Dialog eines Vorhabens lädt seinen Herkunftsbaum nach (Issue #686).
     epicTree: vi.fn().mockResolvedValue([]),
+    // Der Detail-Dialog einer Karte lädt ihren Zweig im Herkunftsbaum nach (Issue #1986).
+    cardTree: vi.fn().mockResolvedValue([]),
     listTrash: vi.fn().mockResolvedValue([]),
     restoreDeleted: vi.fn(),
     purge: vi.fn(),

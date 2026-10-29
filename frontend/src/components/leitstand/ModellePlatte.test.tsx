@@ -1,7 +1,7 @@
 import { ThemeProvider } from '@mui/material/styles'
 import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, test } from 'vitest'
+import { describe, expect, it, test, vi } from 'vitest'
 import type { NightRunModelRow, NightRunModels, ProgressStage } from '../../api/nightRuns'
 import { de } from '../../i18n/de'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
@@ -122,6 +122,28 @@ describe('ModellePlatte', () => {
     expect(reihen[0]).toHaveTextContent('1,25 $ (aus 9 von 12)')
     expect(reihen[0]).toHaveTextContent('9 von 12 erfolgreich')
     expect(within(reihen[1]).getAllByText('nicht gemessen')).toHaveLength(2)
+  })
+
+  it('gibt jeder Zeile einen eigenen Schlüssel aus Modell und Aufwand (Issue #1958)', () => {
+    const fehler = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      zeige(
+        daten({
+          UMSETZUNG: [
+            zeile({ effort: null }),
+            zeile({ effort: '' }),
+            zeile({ effort: 'high' }),
+            zeile({ effort: 'low' }),
+          ],
+        }),
+      )
+
+      expect(within(stufe('Umsetzung')).getAllByRole('rowheader')).toHaveLength(4)
+      const meldungen = fehler.mock.calls.map((aufruf) => aufruf.map(String).join(' '))
+      expect(meldungen.filter((m) => m.includes('same key'))).toEqual([])
+    } finally {
+      fehler.mockRestore()
+    }
   })
 
   it('hebt keine Zeile hervor (AK 5)', () => {

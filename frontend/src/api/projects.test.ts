@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from './client'
 import { projectsApi } from './projects'
 
 function spyFetch(body = '{}') {
@@ -92,5 +93,39 @@ describe('projectsApi', () => {
     await projectsApi.setDashboardParticipation(3, false)
 
     expect(JSON.parse(String(lastCall(f).body))).toEqual({ participating: false })
+  })
+  it('setMonthlyBudget ruft PUT /api/projects/{id}/monthly-budget mit dem Betrag als Zeichenkette (#1968)', async () => {
+    const f = spyFetch('')
+
+    await projectsApi.setMonthlyBudget(3, '100.00')
+
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/projects/3/monthly-budget')
+    expect(c.method).toBe('PUT')
+    expect(JSON.parse(String(c.body))).toEqual({ amountUsd: '100.00' })
+  })
+
+  it('removeMonthlyBudget ruft DELETE /api/projects/{id}/monthly-budget (#1968)', async () => {
+    const f = spyFetch('')
+
+    await projectsApi.removeMonthlyBudget(3)
+
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/projects/3/monthly-budget')
+    expect(c.method).toBe('DELETE')
+  })
+
+  it('setMonthlyBudget reicht detail einer 400-Antwort als Fehler durch (#1968)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      text: () => Promise.resolve('{"detail":"Höchstens zwei Nachkommastellen."}'),
+    } as Response)
+
+    const fehler = projectsApi.setMonthlyBudget(3, '1.005')
+
+    await expect(fehler).rejects.toBeInstanceOf(ApiError)
+    await expect(fehler).rejects.toMatchObject({ status: 400, detail: 'Höchstens zwei Nachkommastellen.' })
   })
 })

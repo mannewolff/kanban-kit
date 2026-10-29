@@ -79,6 +79,10 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
   Betreiber, und wer sie einholt, erteilt sie sich nicht selbst. Genau deshalb hat sie keinen
   Schlüssel: Ein Häkchen in einer Rollenspalte müsste für den Plattform-Admin anders gelten als für
   alle anderen.
+- **Monatsbudget festlegen, ändern oder entfernen:** nur die **echte Projekt-Rolle** `OWNER` —
+  kein Durchgriff des Plattform-Admins. Das Budget ist eine Ausgabeentscheidung des Projekts.
+  **Sehen** (Betrag, Stand, Warnungen, Hochrechnung) darf, wer den Verbrauch des Projekts sieht,
+  siehe [Monatsbudget](nutzung.md#monatsbudget).
 - **Karte endgültig löschen** (aus dem Papierkorb) hängt bewusst an `BOARD_DELETE`, ist also erst ab
   ADMIN erlaubt — anders als das Legen in den Papierkorb (`TICKET_DELETE`, ab MEMBER). Wiederherstellen
   darf, wer löschen darf: so kann ein MEMBER einen eigenen Fehlgriff selbst korrigieren.

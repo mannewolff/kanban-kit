@@ -22,7 +22,7 @@ import { projectsApi } from '../api/projects'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useEditMode } from '../lib/EditModeContext'
-import { canManageMembers, type ProjectRole } from '../lib/roles'
+import { canManageMembers, canTransferOwnership, isPlatformAdmin, type ProjectRole } from '../lib/roles'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { VorschauGesperrt } from '../components/VorschauGesperrt'
 import { useT } from '../i18n/SpracheContext'
@@ -92,6 +92,10 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
   }, [id, validId, api, loadRole])
 
   const manage = canManageMembers(role)
+  // Über die Rolle OWNER entscheidet nur, wer die Eigentümerschaft übergeben darf (Issue #1972):
+  // Ein Projekt-ADMIN bekommt OWNER nicht angeboten und ändert die Rolle eines OWNERs nicht.
+  const canGrantOwner = canTransferOwnership(role, isPlatformAdmin(user))
+  const roles = canGrantOwner ? ROLES : ROLES.filter((r) => r !== 'OWNER')
   const { editMode } = useEditMode()
   const isOwner = role === 'OWNER'
   const ownerCount = members.filter((m) => m.role === 'OWNER').length
@@ -234,7 +238,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
     )
 
   const roleCell = (member: Member) =>
-    manage ? (
+    manage && (canGrantOwner || member.role !== 'OWNER') ? (
       // Das Feld trägt seinen Namen am Eingabeelement; dort steht in der Vorschau der Hinweis.
       <VorschauGesperrt>
         <TextField
@@ -249,7 +253,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
             htmlInput: { 'aria-label': vorschau ? t.VORSCHAU.GESPERRT : t.MITGLIEDER.ROLLE_VON(member.displayName) },
           }}
         >
-          {ROLES.map((r) => (
+          {roles.map((r) => (
             <MenuItem key={r} value={r}>
               {r}
             </MenuItem>
@@ -320,7 +324,7 @@ export function ProjectMembersPage({ api = defaultMembersApi, loadRole }: Readon
             <TextField size="small" select label={t.ALLGEMEIN.ROLLE} value={inviteRole} sx={{ minWidth: 120 }}
               onChange={(e) => setInviteRole(e.target.value as ProjectRole)}
               slotProps={{ htmlInput: { 'aria-label': t.MITGLIEDER.EINLADUNGSROLLE } }}>
-              {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+              {roles.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
             </TextField>
             <VorschauGesperrt>
               <Button type="submit" variant="contained" disabled={inviting || !inviteEmail.trim()}>

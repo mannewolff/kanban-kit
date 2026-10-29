@@ -72,7 +72,7 @@ class MembershipInvitationTest {
   void invite_setsExpiryFromInjectedClockPlusTtl() {
     // Given
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
     when(invitations.save(any(ProjectInvitation.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -88,7 +88,7 @@ class MembershipInvitationTest {
   void invite_normalizesEmail() {
     // Given
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
     when(invitations.save(any(ProjectInvitation.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -104,7 +104,7 @@ class MembershipInvitationTest {
   void invite_sendsInvitationEmail() {
     // Given
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
     when(invitations.save(any(ProjectInvitation.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -128,7 +128,7 @@ class MembershipInvitationTest {
   void invite_returnsInvited_forUnknownEmail() {
     // Given: keine Registrierung (users.findByEmail Default: empty).
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
     when(invitations.save(any(ProjectInvitation.class))).thenAnswer(inv -> inv.getArgument(0));
 
     // When
@@ -142,7 +142,7 @@ class MembershipInvitationTest {
   void invite_addsRegisteredApprovedUserDirectly_andReturnsAdded() {
     // Given: E-Mail gehört zu einem registrierten, freigegebenen Nutzer.
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
     when(users.findByEmail("bob@x.de"))
         .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", true)));
     when(memberships.findByProjectIdAndUserId(9L, 7L)).thenReturn(Optional.empty());
@@ -166,7 +166,7 @@ class MembershipInvitationTest {
   void invite_updatesRole_forExistingMember() {
     // Given: Nutzer ist bereits Mitglied (VIEWER) — invite mit ADMIN aktualisiert die Rolle.
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
     when(users.findByEmail("bob@x.de"))
         .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", true)));
     when(memberships.findByProjectIdAndUserId(9L, 7L))
@@ -190,7 +190,7 @@ class MembershipInvitationTest {
     // mit geringerer Rolle aktualisiert die Rolle — und ist damit ein rollenändernder Pfad wie
     // changeRole. Ohne Aussperr-Schutz bliebe das Projekt hier ownerlos zurück (Issue #498).
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
     when(users.findByEmail("bob@x.de"))
         .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", true)));
     when(memberships.findByProjectIdAndUserId(9L, 7L))
@@ -208,7 +208,7 @@ class MembershipInvitationTest {
     // Given: derselbe einzige OWNER, aber die Einladung bestätigt die Rolle OWNER — die
     // Owner-Menge schrumpft nicht, der Aussperr-Schutz darf nicht greifen.
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
     when(users.findByEmail("bob@x.de"))
         .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", true)));
     when(memberships.findByProjectIdAndUserId(9L, 7L))
@@ -228,7 +228,7 @@ class MembershipInvitationTest {
   void invite_throwsMemberNotApproved_forRegisteredPendingUser() {
     // Given: registrierter, aber nicht freigegebener Nutzer.
     when(projects.findById(9L))
-        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false)));
+        .thenReturn(Optional.of(new Project(9L, "P", 1L, FIXED, null, false, null)));
     when(users.findByEmail("bob@x.de"))
         .thenReturn(Optional.of(new UserSummary(7L, "bob@x.de", "Bob", false)));
 

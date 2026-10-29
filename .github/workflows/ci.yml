@@ -5,6 +5,14 @@ on:
     branches: [main, kit-pruefung]
   pull_request:
 
+# Hotfix (Issue #1975): Ein Pull Request aus einem Zweig `hotfix/…` prueft in `backend` und
+# `mutation` verkuerzt mit `node .claude/kit/checks.mjs run --stage push --hotfix` statt voll. Die
+# Job-Namen bleiben, weil das Ruleset von `production` genau diese Namen verlangt
+# (docs/betrieb.md). Die uebrigen Jobs laufen fuer einen Hotfix unveraendert. Siehe RELEASING.md,
+# Abschnitt `hotfix production`.
+env:
+  HOTFIX: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'hotfix/') }}
+
 jobs:
   backend:
     name: Backend (mvn verify)
@@ -18,7 +26,18 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Build & test (inkl. gebündeltem Frontend)
+        if: env.HOTFIX != 'true'
         run: mvn -B verify
+      - name: Set up Node 22 (Hotfix)
+        if: env.HOTFIX == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verkürzte Prüfung (Hotfix)
+        if: env.HOTFIX == 'true'
+        env:
+          TBX_TOKEN: ${{ secrets.KANBAN_KIT_TOKEN }}
+        run: node .claude/kit/checks.mjs run --stage push --hotfix
 
   # Mutationsprüfung (CLAUDE-java.md §5, Issue #1567): Der Treiber fährt den Backend-Vollauf mit PIT
   # gegen die Surefire-Unit-Tests (kein Docker/Testcontainers nötig) und urteilt wie `push main` —
@@ -41,9 +60,15 @@ jobs:
         with:
           node-version: '22'
       - name: Mutationsprüfung (Sperrschwelle 80 %, Liegezeit 7 Tage)
+        if: env.HOTFIX != 'true'
         env:
           TBX_TOKEN: ${{ secrets.KANBAN_KIT_TOKEN }}
         run: node scripts/mutationspruefung.mjs vollauf backend
+      # Fuer einen Hotfix entscheidet die verkuerzte Pruefung im Job `backend`, ob und was mutiert
+      # wird; derselbe Aufruf hier liefe ein zweites Mal ueber denselben Stand.
+      - name: Verkürzte Prüfung (Hotfix, im Job Backend)
+        if: env.HOTFIX == 'true'
+        run: echo "Hotfix-Zweig — die verkürzte Prüfung läuft im Job 'Backend (mvn verify)'."
 
   frontend:
     name: Frontend (npm build)

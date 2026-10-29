@@ -1,10 +1,12 @@
 package org.mwolff.manban.project.infrastructure.persistence;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.project.application.ProjectRepository;
 import org.mwolff.manban.project.domain.Project;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -78,10 +80,20 @@ class ProjectRepositoryAdapter implements ProjectRepository {
   }
 
   /**
-   * {@code interactive_usage_since} und {@code dashboard_participation} fehlen hier absichtlich:
-   * Beide Spalten sind an der Entity {@code insertable = false, updatable = false} und gehören
-   * jeweils einem engen Schreibweg. Über {@code save} können sie deshalb weder gesetzt noch
-   * verloren werden.
+   * Gezielter Direkt-Update wie bei {@code dashboard_participation} (Issue #1964): {@code
+   * monthly_budget_usd} ist an der Entity {@code insertable = false, updatable = false}; {@code
+   * null} entfernt das Budget.
+   */
+  @Override
+  public void setMonthlyBudget(long projectId, @Nullable BigDecimal amount) {
+    jdbc.update("UPDATE project SET monthly_budget_usd = ? WHERE id = ?", amount, projectId);
+  }
+
+  /**
+   * {@code interactive_usage_since}, {@code dashboard_participation} und {@code monthly_budget_usd}
+   * fehlen hier absichtlich: Alle drei Spalten sind an der Entity {@code insertable = false,
+   * updatable = false} und gehören jeweils einem engen Schreibweg. Über {@code save} können sie
+   * deshalb weder gesetzt noch verloren werden.
    */
   private static ProjectEntity toEntity(Project p) {
     return new ProjectEntity(p.id(), p.name(), p.ownerUserId(), p.createdAt());
@@ -94,6 +106,7 @@ class ProjectRepositoryAdapter implements ProjectRepository {
         e.getOwnerUserId(),
         e.getCreatedAt(),
         e.getInteractiveUsageSince(),
-        e.isDashboardParticipation());
+        e.isDashboardParticipation(),
+        e.getMonthlyBudgetUsd());
   }
 }

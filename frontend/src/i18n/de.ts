@@ -689,7 +689,6 @@ export const de = {
     VORSCHAU_NACH_UPLOAD_FEHLER: 'Anhang hochgeladen, Vorschau konnte nicht geladen werden.',
     ANHANG_LOESCHEN_FEHLER: 'Anhang löschen fehlgeschlagen.',
     VORSCHAU_FEHLER: 'Vorschau konnte nicht geladen werden.',
-    ZURUECK: 'Zurück zur vorherigen Karte',
     ABNAHME: 'Abnahme durchklicken',
     BEARBEITEN: 'Bearbeiten',
     FORTSCHRITT: 'Fortschritt',
@@ -714,7 +713,7 @@ export const de = {
   KARTENFELDER: {
     VORHABEN: 'Vorhaben',
     KEIN_VORHABEN: '(kein Vorhaben)',
-    VORHABEN_NUR_LESEN: 'Vorhaben hier nicht auswählbar (ausgeblendet oder Liste nicht verfügbar) — die Zuordnung bleibt unverändert.',
+    VORHABEN_NUR_LESEN: 'Vorhaben hier nicht auswählbar (Liste nicht verfügbar) — die Zuordnung bleibt unverändert.',
     ABHAENGIG: 'Abhängig von (Nummern, kommagetrennt)',
     ABHAENGIG_KURZ: 'Abhängig von',
     ABHAENGIG_BEISPIEL: 'z. B. 12, 34',
@@ -1080,6 +1079,30 @@ export const de = {
     OHNE_ZEITWERT: (anzahl: number) => `davon ${anzahl} ohne Zeitwert`,
     AUS_RUNS: 'aus Runs',
     AUS_SITZUNGEN: 'aus interaktiven Sitzungen',
+  },
+
+  /** Budgetzeile im Bereich „Verbrauch" (Issue #1969, Plan #1962). */
+  LEITSTAND_BUDGET: {
+    ARIA: 'Monatsbudget im laufenden Monat',
+    LAEDT: 'Das Monatsbudget wird geladen …',
+    FEHLER: 'Das Monatsbudget konnte nicht geladen werden.',
+    BETRAG: (betrag: string) => `${betrag} $`,
+    STAND: (verbraucht: string, budget: string, prozent: number) =>
+      `laufender Monat: ${verbraucht} von ${budget} (${prozent} %)`,
+    OHNE_KOSTEN: 'laufender Monat: keine Kosten gemeldet',
+    OHNE_KOSTEN_MIT_BUDGET: (budget: string) => `laufender Monat: keine Kosten gemeldet (Budget ${budget})`,
+    WARNUNG_ACHTZIG: 'Warnung: 80 % des Monatsbudgets sind erreicht.',
+    WARNUNG_ERREICHT: 'Warnung: Das Monatsbudget ist erreicht.',
+    HOCHRECHNUNG: (betrag: string) => `voraussichtlich ${betrag} bis Monatsende (Schätzung)`,
+    ZU_FRUEH: 'Für eine Hochrechnung ist es noch zu früh.',
+    UEBERSCHRITTEN: (datum: string) => `voraussichtlich überschritten am ${datum} (Schätzung)`,
+    FESTLEGEN_HINWEIS: 'Hier lässt sich ein Monatsbudget festlegen.',
+    EINGABE: 'Monatsbudget in $',
+    SPEICHERN: 'Budget speichern',
+    ENTFERNEN: 'Budget entfernen',
+    UNGUELTIG: 'Ein Budget ist größer als 0 $ und hat höchstens zwei Nachkommastellen.',
+    SPEICHERN_FEHLER: 'Das Monatsbudget konnte nicht gespeichert werden.',
+    ENTFERNEN_FEHLER: 'Das Monatsbudget konnte nicht entfernt werden.',
   },
 
   /** Seite „Leitstand“ eines Boards (Issue #1656). */

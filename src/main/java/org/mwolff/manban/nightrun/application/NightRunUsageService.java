@@ -25,12 +25,14 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedBy
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.StageTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
 import org.mwolff.manban.nightrun.domain.Bremsbilanz;
+import org.mwolff.manban.nightrun.domain.MonatsbudgetStand;
 import org.mwolff.manban.nightrun.domain.NightRunErrorClass;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
 import org.mwolff.manban.project.application.InteractiveUsageSinceReader;
+import org.mwolff.manban.project.application.MonthlyBudgetReader;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -72,6 +74,7 @@ public class NightRunUsageService {
   private final CardRunQueryService cards;
   private final PermissionChecker permissions;
   private final InteractiveUsageSinceReader erfassungsbeginn;
+  private final MonthlyBudgetReader budgets;
   private final Clock clock;
   private final NightRunProperties properties;
 
@@ -80,12 +83,14 @@ public class NightRunUsageService {
       CardRunQueryService cards,
       PermissionChecker permissions,
       InteractiveUsageSinceReader erfassungsbeginn,
+      MonthlyBudgetReader budgets,
       Clock clock,
       NightRunProperties properties) {
     this.usage = usage;
     this.cards = cards;
     this.permissions = permissions;
     this.erfassungsbeginn = erfassungsbeginn;
+    this.budgets = budgets;
     this.clock = clock;
     this.properties = properties;
   }
@@ -172,6 +177,40 @@ public class NightRunUsageService {
         usage.oldestRetainedRunStart(projectId).orElse(null),
         erfassungsbeginn.interactiveUsageSince(projectId).orElse(null),
         Bremsbilanz.of(usage.lifetimeStuckItems(projectId)));
+  }
+
+  /**
+   * Der Stand des Monatsbudgets im <b>laufenden</b> Monat (Issue #1967, Plan #1962, fachliche
+   * Quelle #1957 AK 5, 6 und 12) — Nachtläufe und Sitzungen zusammen, unabhängig vom gewählten
+   * Zeitraum. Lesen darf, wer den Verbrauch liest; ändern darf allein der echte OWNER, und das sagt
+   * {@code editable}.
+   *
+   * <p>Der Verbrauch ist 0, wenn im Monat kein Lauf liegt, und sonst die gemeldete Summe — {@code
+   * null}, wenn keiner Kosten gemeldet hat (Plan E2). Reicht der Monat über die
+   * Aufbewahrungsgrenze, zählen die aufbewahrten Läufe, und die Abdeckung sagt {@code PARTIAL}
+   * (Plan E1).
+   */
+  @Transactional(readOnly = true)
+  public BudgetView budget(long userId, long projectId, ZoneId zone) {
+    permissions.requireNightRunAccess(userId, projectId);
+    Instant jetzt = clock.instant();
+    NightRunPeriod monat = NightRunPeriod.laufenderMonat(jetzt, zone);
+    PeriodTotals summe = usage.totals(projectId, monat.from(), monat.to());
+    @Nullable BigDecimal verbraucht =
+        summe.byKind().night().runCount() + summe.byKind().interactive().runCount() == 0
+            ? BigDecimal.ZERO
+            : summe.runUsage().costUsd();
+    MonatsbudgetStand stand =
+        new MonatsbudgetStand(
+            budgets.monthlyBudget(projectId).orElse(null),
+            verbraucht,
+            monat.firstDay(),
+            monat.angebrocheneTage(jetzt),
+            monat.firstDay().lengthOfMonth());
+    return new BudgetView(
+        stand,
+        permissions.istEchterOwner(userId, projectId),
+        abdeckung(monat, aufbewahrungsgrenze(projectId)));
   }
 
   private PeriodFigures kennzahlen(
@@ -425,6 +464,16 @@ public class NightRunUsageService {
       return nightRunCount + interactiveRunCount;
     }
   }
+
+  /**
+   * Der Stand des Monatsbudgets im laufenden Monat (Issue #1967).
+   *
+   * @param stand Budget, Verbrauch und die Rechnung daraus
+   * @param editable {@code true} nur für die echte Rolle OWNER — ein Plattform-Admin liest mit,
+   *     ändert aber nicht
+   * @param coverage Abdeckung des laufenden Monats durch die aufbewahrten Läufe (Plan E1)
+   */
+  public record BudgetView(MonatsbudgetStand stand, boolean editable, Coverage coverage) {}
 
   /** Eine Nacht innerhalb eines Zeitraums, von der aus die Nachtansicht erreichbar ist (AK 8). */
   public record NightSummary(

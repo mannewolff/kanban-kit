@@ -1,6 +1,7 @@
 package org.mwolff.manban.project.application;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -29,6 +30,12 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class ProjectService {
+
+  /** Obergrenze des Monatsbudgets: die Breite der Spalte {@code NUMERIC(12,2)} (Plan #1962 E3). */
+  private static final BigDecimal MONATSBUDGET_HOECHSTENS = new BigDecimal("9999999999.99");
+
+  /** Höchstzahl der Nachkommastellen des Monatsbudgets (Fachplan #1957, AK 2). */
+  private static final int MONATSBUDGET_NACHKOMMASTELLEN = 2;
 
   private final ProjectRepository projects;
   private final ProjectMembershipRepository memberships;
@@ -87,7 +94,8 @@ public class ProjectService {
     // Der Erfassungsbeginn der interaktiven Sitzungen bleibt leer: Ein frisches Projekt hat noch
     // keine gemeldet (Issue #1012). Gesetzt wird er allein ueber InteractiveUsageSinceWriter.
     // Die Teilnahme am Plattform-Leitstand startet aus (Issue #1076, AK 17).
-    Project project = projects.save(new Project(null, name.trim(), owner.id(), now, null, false));
+    Project project =
+        projects.save(new Project(null, name.trim(), owner.id(), now, null, false, null));
     memberships.save(
         new ProjectMembership(null, project.requireId(), owner.id(), ProjectRole.OWNER, now));
     // Synchron im selben Transaktions-Scope: der Board-seitige Listener legt das Default-Board an;
@@ -228,6 +236,46 @@ public class ProjectService {
         project.createdAt(),
         project.dashboardParticipation(),
         participationEditable(realRole));
+  }
+
+  /**
+   * Legt das Monatsbudget des Projekts in USD fest oder ändert es (Issue #1965, Fachplan #1957 AK 1
+   * bis 3).
+   *
+   * <p>Die Rechteprüfung ist {@link PermissionChecker#requireRealRole} mit der Rolle OWNER und
+   * bewusst nicht {@code requireOwner}: Das Budget legt der Owner fest, ein Plattform-Admin ohne
+   * eigene Owner-Rolle nicht. Sie läuft vor der Betragsprüfung, damit wer nicht schreiben darf,
+   * auch nichts über seinen Betrag erfährt.
+   *
+   * <p>Gültig ist ein Betrag größer als 0 mit höchstens zwei Nachkommastellen und höchstens 9 999
+   * 999 999,99 (Plan #1962 E3). Ein ungültiger Betrag schreibt nicht; das bisherige Budget bleibt.
+   *
+   * @throws ProjectNotFoundException wenn der Benutzer kein echtes Mitglied ist (404)
+   * @throws ProjectAccessDeniedException wenn die echte Rolle nicht OWNER ist (403)
+   * @throws InvalidMonthlyBudgetException wenn der Betrag ungültig ist (400)
+   */
+  @Transactional
+  public void setMonthlyBudget(long userId, long projectId, BigDecimal amountUsd) {
+    permissions.requireRealRole(userId, projectId, ProjectRole.OWNER);
+    if (amountUsd.signum() <= 0
+        || amountUsd.scale() > MONATSBUDGET_NACHKOMMASTELLEN
+        || amountUsd.compareTo(MONATSBUDGET_HOECHSTENS) > 0) {
+      throw new InvalidMonthlyBudgetException();
+    }
+    projects.setMonthlyBudget(projectId, amountUsd);
+  }
+
+  /**
+   * Entfernt das Monatsbudget des Projekts (Issue #1965, Fachplan #1957 AK 1/2): „Kein Budget“
+   * entsteht nur hier. Dieselbe Rechteprüfung wie {@link #setMonthlyBudget}.
+   *
+   * @throws ProjectNotFoundException wenn der Benutzer kein echtes Mitglied ist (404)
+   * @throws ProjectAccessDeniedException wenn die echte Rolle nicht OWNER ist (403)
+   */
+  @Transactional
+  public void removeMonthlyBudget(long userId, long projectId) {
+    permissions.requireRealRole(userId, projectId, ProjectRole.OWNER);
+    projects.setMonthlyBudget(projectId, null);
   }
 
   /**

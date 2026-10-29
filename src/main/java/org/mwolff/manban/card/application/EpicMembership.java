@@ -112,9 +112,10 @@ final class EpicMembership {
 
   /**
    * Ob eine erreichte Karte in die Menge gehört. Wer hier ausscheidet, wird trotzdem durchlaufen —
-   * siehe die Grundregel im Klassen-Javadoc.
+   * siehe die Grundregel im Klassen-Javadoc. Zugleich die Bezugsmenge des Zweigs im Karten-Detail
+   * (Plan #1980, E1): gleicher Filter, gleiche Darstellung archivierter Glieder.
    */
-  private static boolean zaehlt(Card c) {
+  static boolean zaehlt(Card c) {
     return c.type() != CardType.EPIC && !c.archived();
   }
 }

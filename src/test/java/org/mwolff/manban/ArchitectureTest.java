@@ -349,6 +349,7 @@ class ArchitectureTest {
           "InteractiveUsageSinceWriter",
           "InteractiveUsageSinceReader",
           "DashboardParticipationReader",
+          "MonthlyBudgetReader",
           "ProjectCreatedEvent",
           "ProjectAccessDeniedException",
           // Exception-Vokabular als Vertrag, Plan #1694 (A4)

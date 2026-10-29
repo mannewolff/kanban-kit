@@ -19,6 +19,7 @@ import org.mwolff.manban.common.web.Regionszone;
 import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageService;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.BudgetView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.Coverage;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.EpicUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.KindSplit;
@@ -30,9 +31,11 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.StageUsageVie
 import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.UsageSplit;
 import org.mwolff.manban.nightrun.domain.Bremsbilanz;
+import org.mwolff.manban.nightrun.domain.MonatsbudgetStand;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.nightrun.domain.Warnstufe;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,12 +49,16 @@ import org.springframework.web.server.ResponseStatusException;
  * <p><b>Die Zone kommt vom Leser</b> (Plan E4) und ist eine Regionszone — eingegrenzt von {@link
  * Regionszone}, das seit Issue #1095 auch der Plattform-Leitstand nutzt.
  *
- * <p>Keine eigenen Exceptions: 403 und 404 liefert {@code requireOwner} im Service, 400 die
- * Bindung, die Parameter-Validierung und die Abweisung der Zone über {@link
+ * <p>Keine eigenen Exceptions: 403 und 404 liefert {@code requireNightRunAccess} im Service, 400
+ * die Bindung, die Parameter-Validierung und die Abweisung der Zone über {@link
  * ResponseStatusException}.
  */
 @Tag(name = "Läufe (Runner)")
 @RestController
+// Die Kopplung folgt den Antworten: Jede Sicht hat ihren Antwort-Record samt Quelltyp aus dem
+// Service, seit Issue #1967 auch der Stand des Monatsbudgets mit Warnstufe. Die Records in eigene
+// Dateien zu ziehen senkte die Zahl nicht — sie blieben referenziert.
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.CouplingBetweenObjects"})
 class NightRunUsageController {
 
   /** Was eine Nacht ist — gemeinsam für Nacht- und Zeitraumansicht. */
@@ -236,6 +243,55 @@ class NightRunUsageController {
           @PathVariable
           long projectId) {
     return TotalResponse.of(usage.total(userId, projectId));
+  }
+
+  /**
+   * Der Stand des Monatsbudgets im laufenden Monat (Issue #1967, Plan #1962). Ein eigener Abruf und
+   * kein Teil der Zeiträume: Er gilt immer für den laufenden Monat, gleich welcher Zeitraum gewählt
+   * ist (#1957 AK 5).
+   */
+  @Operation(
+      summary = "Stand des Monatsbudgets lesen",
+      description =
+          "Liefert für den laufenden Monat Budget, Verbrauch, Anteil, Warnstufe, Hochrechnung"
+              + " und den voraussichtlichen Überschreitungstag. Der laufende Monat beginnt am 1. um"
+              + " 12:00 in der übergebenen Zone; gezählt werden Nachtläufe und Sitzungen zusammen."
+              + " spentUsd ist 0 ohne Lauf und null, wenn Läufe vorliegen, aber keiner Kosten"
+              + " gemeldet hat — dann fehlen Anteil, Warnung und Hochrechnung. editable sagt, ob"
+              + " der Aufrufer das Budget ändern darf: nur die echte Rolle OWNER."
+              + " coverage sagt, ob die Aufbewahrung Läufe des Monats schon verdrängt hat. "
+              + NightRunController.LESERECHT)
+  @ApiResponse(responseCode = "200", description = "Der Stand des laufenden Monats.")
+  @ApiResponse(
+      responseCode = "400",
+      description = ZONE_FALSCH,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "403",
+      description = NightRunController.LESEN_VERBOTEN,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @ApiResponse(
+      responseCode = "404",
+      description = NightRunController.PROJEKT_UNBEKANNT,
+      content =
+          @Content(
+              mediaType = ApiSchemas.PROBLEM_JSON,
+              schema = @Schema(ref = ApiSchemas.PROBLEM_DETAIL_REF)))
+  @GetMapping("/api/projects/{projectId}/night-run-usage/budget")
+  BudgetResponse budget(
+      @AuthenticationPrincipal Long userId,
+      @Parameter(description = NightRunController.BESCHREIBUNG_PROJEKT_ID, example = "7")
+          @PathVariable
+          long projectId,
+      @Parameter(description = BESCHREIBUNG_ZONE, example = "Europe/Berlin") @RequestParam
+          ZoneId zone) {
+    return BudgetResponse.of(usage.budget(userId, projectId, Regionszone.of(zone)));
   }
 
   /** Die vier Verbrauchsangaben und der Anteil aus dem Zwischenspeicher; fehlend bleibt null. */
@@ -598,6 +654,69 @@ class NightRunUsageController {
           EpicResponse.of(p.withoutEpic()),
           p.epicsOverlap(),
           p.stages().stream().map(StageResponse::of).toList());
+    }
+  }
+
+  /** Der Stand des Monatsbudgets im laufenden Monat (Issue #1967). */
+  @Schema(description = "Stand des Monatsbudgets im laufenden Monat.")
+  record BudgetResponse(
+      @Schema(description = "Monatsbudget in US-Dollar; null ohne Budget.", example = "100.00")
+          @Nullable BigDecimal budgetUsd,
+      @Schema(description = "true nur für die echte Rolle OWNER.", example = "true")
+          boolean editable,
+      @Schema(description = "Erster Tag des laufenden Monats.", example = "2026-10-01")
+          LocalDate monthFirstDay,
+      @Schema(
+              description =
+                  "Verbrauch des laufenden Monats in US-Dollar; 0 ohne Lauf, null, wenn kein"
+                      + " Lauf Kosten gemeldet hat.",
+              example = "82.00")
+          @Nullable BigDecimal spentUsd,
+      @Schema(
+              description =
+                  "Anteil am Budget in Prozent, abgerundet; null ohne Budget oder Kosten.",
+              example = "82")
+          @Nullable Integer percent,
+      @Schema(
+              description =
+                  "NONE unter 80 %, EIGHTY ab 80 %, REACHED ab dem vollen Budget — am genauen"
+                      + " Betrag.",
+              example = "EIGHTY")
+          Warnstufe warning,
+      @Schema(
+              description =
+                  "Hochrechnung bis Monatsende in US-Dollar; null am 1. und 2. Tag und ohne"
+                      + " Kosten.",
+              example = "153.75")
+          @Nullable BigDecimal forecastUsd,
+      @Schema(description = "true am 1. und 2. Tag des Monats.", example = "false")
+          boolean tooEarly,
+      @Schema(
+              description =
+                  "Tag, an dem die Hochrechnung das Budget voraussichtlich erreicht; null, wenn"
+                      + " das nicht zutrifft.",
+              example = "2026-10-20")
+          @Nullable LocalDate exceedDate,
+      @Schema(
+              description =
+                  "COMPLETE: kein Lauf des Monats verdrängt; PARTIAL: der Monat reicht über die"
+                      + " Aufbewahrungsgrenze.",
+              example = "COMPLETE")
+          Coverage coverage) {
+
+    static BudgetResponse of(BudgetView b) {
+      MonatsbudgetStand s = b.stand();
+      return new BudgetResponse(
+          s.budgetUsd(),
+          b.editable(),
+          s.monthFirstDay(),
+          s.spentUsd(),
+          s.percent(),
+          s.warning(),
+          s.forecastUsd(),
+          s.tooEarly(),
+          s.exceedDate(),
+          b.coverage());
     }
   }
 }

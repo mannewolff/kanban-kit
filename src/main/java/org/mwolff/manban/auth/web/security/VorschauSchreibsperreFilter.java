@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import org.mwolff.manban.auth.application.VorschauKontextLeser;
 import org.mwolff.manban.common.i18n.Texte;
+import org.mwolff.manban.common.web.Anwendungspfad;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -29,6 +30,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *       samt Unterpfaden und auf {@code /api/me/vorschau-protokoll} werden abgewiesen, mit dem
  *       Problem-Typ {@value #PERSOENLICH}.
  * </ul>
+ *
+ * <p>Verglichen wird der Pfad, wie das Routing ihn sieht ({@link Anwendungspfad}): ohne
+ * Context-Path, dekodiert und normalisiert (Issue #1974).
  *
  * <p>Die Antwort schreibt der Filter selbst, nach dem Muster von {@code
  * ApiAusprobierFilter.rejectAsForbidden}: Vor dem MVC-Stack greift kein {@code @ControllerAdvice}.
@@ -71,7 +75,9 @@ public class VorschauSchreibsperreFilter extends OncePerRequestFilter {
       return;
     }
     String methode = request.getMethod();
-    String pfad = request.getRequestURI().substring(request.getContextPath().length());
+    // Der Pfad, wie das Routing ihn sieht: Auf der rohen URI zeigte GET /api/%61ccess-tokens die
+    // Token-Liste von XY (Issue #1974).
+    String pfad = Anwendungspfad.von(request);
     if (!LESEND.contains(methode) && !ausgenommen(methode, pfad)) {
       rejectAsForbidden(response, NUR_LESEND, NUR_LESEND_TEXT);
       return;

@@ -14,6 +14,7 @@ import org.mwolff.manban.auth.application.VorschauKontext;
 import org.mwolff.manban.auth.application.VorschauPruefung;
 import org.mwolff.manban.auth.domain.AdminVorschau;
 import org.mwolff.manban.common.i18n.Texte;
+import org.mwolff.manban.common.web.Anwendungspfad;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -157,8 +158,12 @@ public class VorschauFilter extends OncePerRequestFilter {
         && OHNE_ABGLEICH.matcher(pfad(request)).matches();
   }
 
+  /**
+   * Der Pfad, wie das Routing ihn sieht ({@link Anwendungspfad}). Auf der rohen URI liefe {@code
+   * /%61pi/…} am Filter vorbei, und Ausnahme und Abgleich hingen an der Schreibweise (Issue #1974).
+   */
   private static String pfad(HttpServletRequest request) {
-    return request.getRequestURI().substring(request.getContextPath().length());
+    return Anwendungspfad.von(request);
   }
 
   private void loescheCookie(HttpServletResponse response) {

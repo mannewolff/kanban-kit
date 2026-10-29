@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from
 import { type DerivationNode } from '../api/cards'
 import { artAusTitel, useKitNamen, type KitNamen, type KitNamenZustand } from '../api/kitNamen'
 import { useT } from '../i18n/SpracheContext'
-import { MELDER } from '../theme'
+import { kuerzeTitel } from '../lib/kuerzeTitel'
+import { MELDER, NUR_LESER_SX } from '../theme'
 import { labelChipSx } from './labelChipSx'
 
 interface Props {
@@ -17,7 +18,16 @@ interface Props {
   rows: readonly DerivationNode[]
   /** Enter auf einer Zeile. Es gibt keine Karten-Route — der Aufrufer öffnet die Karte. */
   onOpenCard: (number: number) => void
+  /**
+   * Nummer der Karte, deren Detail den Baum zeigt (Plan #1980, E8). Ihre Zeile trägt
+   * `aria-current` und ist hervorgehoben; Klick und Enter öffnen sie nicht noch einmal. Ohne Angabe
+   * — im Baum des Vorhabens — ist keine Zeile die aktuelle.
+   */
+  aktuelleNummer?: number
 }
+
+/** Ab dieser Länge wird ein Titel im Baum gekürzt (Plan #1980, E9). */
+const TITEL_MAX = 60
 
 /**
  * Index des Elternteils in der Präorder-Liste, oder `-1` für eine Wurzel. In Präorder steht der
@@ -133,7 +143,7 @@ function isVisible(
  * mit den Pfeiltasten. Accessibility steht in CLAUDE.md über Optik und Wartbarkeit, deshalb hat
  * jede farbliche Unterscheidung eine textliche Entsprechung.
  */
-export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
+export function DerivationTree({ rows, onOpenCard, aktuelleNummer }: Readonly<Props>) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set())
   const [focused, setFocused] = useState<number | undefined>(undefined)
   // Getrennt vom Fokus: Das Ziel eines Sprungs kann beim Ausloesen noch eingeklappt und damit gar
@@ -211,6 +221,12 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
     setSprungZiel(nummer)
   }
 
+  const oeffne = (nummer: number) => {
+    if (nummer !== aktuelleNummer) {
+      onOpenCard(nummer)
+    }
+  }
+
   const umschalten = (nummer: number, zuklappen: boolean) =>
     setCollapsed((vorher) => {
       const naechste = new Set(vorher)
@@ -258,7 +274,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
         }
         break
       case 'Enter':
-        onOpenCard(zeile.number)
+        oeffne(zeile.number)
         break
       default:
         return
@@ -271,6 +287,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
       {sichtbareIndizes.map((index) => {
         const zeile = rows[index]
         const kinderDa = hasChildren(rows, index)
+        const aktuell = zeile.number === aktuelleNummer
         return (
           <Box
             key={zeile.number}
@@ -284,6 +301,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
             role="treeitem"
             aria-level={zeile.depth + 1}
             aria-expanded={kinderDa ? !collapsed.has(zeile.number) : undefined}
+            aria-current={aktuell ? 'true' : undefined}
             tabIndex={zeile.number === effektivFokus ? 0 : -1}
             data-jump-target={zeile.number === hervorgehoben ? 'true' : undefined}
             // Der Roving-Tabindex folgt dem tatsaechlichen Fokus. Ohne diese Kopplung liefen die
@@ -291,7 +309,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
             // den Tab-Stopp, und die Sprungmarke einer anderen Zeile waere unerreichbar.
             onFocus={() => setFocused(zeile.number)}
             onKeyDown={(event) => beiTaste(event, index)}
-            onClick={() => onOpenCard(zeile.number)}
+            onClick={() => oeffne(zeile.number)}
             sx={{
               display: 'flex',
               alignItems: 'baseline',
@@ -302,9 +320,9 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
               // erst dahinter (Issue #985).
               pl: 1,
               borderRadius: 1,
-              cursor: 'pointer',
+              cursor: aktuell ? 'default' : 'pointer',
               opacity: zeile.blocked ? 0.6 : 1,
-              bgcolor: zeile.number === hervorgehoben ? 'action.selected' : undefined,
+              bgcolor: aktuell || zeile.number === hervorgehoben ? 'action.selected' : undefined,
               '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
             }}
           >
@@ -319,9 +337,7 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
             {zeile.labels.map((label) => (
               <LabelMarke key={`l${label.name}`} name={label.name} farbe={label.color} />
             ))}
-            <Typography variant="body2" component="span" sx={{ flexGrow: 1 }}>
-              {zeile.title}
-            </Typography>
+            <Titel titel={zeile.title} aktuell={aktuell} />
             {zeile.type === 'EPIC' && <Marke text={t.BAUM.VORHABEN} />}
             {zeile.blocked && <Marke text={t.BAUM.BLOCKIERT} />}
             {zeile.broken && <Marke text={t.BAUM.KETTE_UNTERBROCHEN} />}
@@ -341,6 +357,39 @@ export function DerivationTree({ rows, onOpenCard }: Readonly<Props>) {
         )
       })}
     </Box>
+  )
+}
+
+/**
+ * Titel einer Zeile, nach {@link TITEL_MAX} Zeichen gekürzt (Plan #1980, E9). Gekürzt steht der
+ * volle Titel zweimal daneben: als `title` fürs Darüberfahren am Desktop und als nur vorgelesener
+ * Text, während der sichtbare Stummel vor Screenreadern verborgen ist. Ein ungekürzter Titel braucht
+ * beides nicht.
+ *
+ * <p>Die aktuelle Zeile steht zusätzlich fett — die Hervorhebung hängt nicht an der Fläche allein
+ * (CLAUDE-design.md: Farbe ist nie alleiniger Informationsträger).
+ */
+function Titel({ titel, aktuell }: Readonly<{ titel: string; aktuell: boolean }>) {
+  const kurz = kuerzeTitel(titel, TITEL_MAX)
+  const gekuerzt = kurz !== titel
+  return (
+    <Typography
+      variant="body2"
+      component="span"
+      title={gekuerzt ? titel : undefined}
+      sx={{ flexGrow: 1, fontWeight: aktuell ? 600 : undefined }}
+    >
+      {gekuerzt ? (
+        <>
+          <span aria-hidden="true">{kurz}</span>
+          <Box component="span" sx={NUR_LESER_SX}>
+            {titel}
+          </Box>
+        </>
+      ) : (
+        titel
+      )}
+    </Typography>
   )
 }
 

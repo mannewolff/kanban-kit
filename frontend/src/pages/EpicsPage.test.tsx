@@ -34,6 +34,8 @@ vi.mock('../api/cards', () => ({
     // Das CardDetailModal lädt die volle Beschreibung beim Öffnen nach (Issue #769).
     get: vi.fn().mockResolvedValue({ description: null }),
     epicTree: vi.fn(),
+    // Der Detail-Dialog einer Karte lädt ihren Zweig im Herkunftsbaum nach (Issue #1986).
+    cardTree: vi.fn().mockResolvedValue([]),
     byNumber: vi.fn(),
     getActivity: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
@@ -1055,8 +1057,8 @@ describe('EpicsPage', () => {
   // --- Vorhaben-Auswahl im Detail-Dialog (Issue #756, Plan #717 A1/A2) -------
 
   /**
-   * Der Optionsvorrat des Kartenformulars folgt der Ausblendung des Boards, die Anzeige nicht:
-   * `epics` bleibt die volle Liste (Titel, Fortschritt), `selectableEpics` trägt die Auswahl.
+   * Das Kartenformular bietet alle Vorhaben an und kennzeichnet die auf dem Board ausgeblendeten
+   * (Issue #1981): `epics` ist die volle Liste, `hiddenEpics` die Ausblendung des Boards.
    */
   describe('Vorhaben-Auswahl im Detail-Dialog', () => {
     const auth = {
@@ -1091,11 +1093,12 @@ describe('EpicsPage', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
 
+      // Die Kennzeichnung folgt der Ausblendung des Boards, nicht dem Umschalter dieser Seite.
       expect(await screen.findByRole('option', { name: 'ZAH – Zahlung' })).toBeInTheDocument()
-      expect(screen.queryByRole('option', { name: 'AUT – Auth' })).toBeNull()
+      expect(screen.getByRole('option', { name: 'AUT – Auth (ausgeblendet)' })).toBeInTheDocument()
     })
 
-    it('bietet ein ausgeblendetes Vorhaben nicht zur Auswahl an, zeigt seinen Titel aber weiter', async () => {
+    it('bietet ein zugeordnetes ausgeblendetes Vorhaben bearbeitbar und gekennzeichnet an', async () => {
       stubStore([[hiddenEpicsStorageKey(1), JSON.stringify([9])]])
       mEpics.list.mockResolvedValue([auth, zahlung])
       mCards.list.mockResolvedValue([anforderung(9)])
@@ -1104,10 +1107,11 @@ describe('EpicsPage', () => {
       fireEvent.click(await screen.findByRole('button', { name: '#4 · Anforderung' }))
       fireEvent.click(await screen.findByRole('button', { name: 'Bearbeiten' }))
 
-      // Der Titel stammt aus der vollen `epics`-Liste; im Optionsvorrat steht das Vorhaben nicht
-      // mehr, das Feld bleibt deshalb lesend statt nur „(kein Vorhaben)" anzubieten.
-      expect(await screen.findByLabelText('Vorhaben')).toHaveValue('AUT – Auth')
-      expect(screen.queryByRole('option', { name: 'AUT – Auth' })).toBeNull()
+      // Seit Issue #1981 kein lesendes Feld mehr: Das Vorhaben steht gewählt im Auswahlfeld.
+      const feld = await screen.findByLabelText('Vorhaben')
+      expect(feld).not.toHaveAttribute('readonly')
+      expect(feld).toHaveValue('9')
+      expect(within(feld).getByRole('option', { name: 'AUT – Auth (ausgeblendet)' })).toBeInTheDocument()
     })
 
     it('zeigt am ausgeblendeten Vorhaben aus der Liste weiterhin seinen Fortschritt', async () => {
@@ -1119,7 +1123,7 @@ describe('EpicsPage', () => {
       const zeile = await screen.findByTestId('vorhaben-zeile-9')
       fireEvent.click(within(zeile).getByText('Auth'))
 
-      // Fortschritt und Titel kommen aus `epics` — die Filterung trifft nur den Optionsvorrat.
+      // Fortschritt und Titel kommen aus der vollen `epics`-Liste.
       const dialog = await screen.findByRole('dialog')
       expect(within(dialog).getByLabelText('Fortschritt')).toHaveTextContent('0 von 1 fertig')
     })

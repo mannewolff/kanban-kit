@@ -193,6 +193,66 @@ describe('nightRunUsageApi', () => {
     expect(gesamt.brakes).toEqual({ count: 7, withoutTimeCount: 2, savedMs: 9_000_000 })
   })
 
+  /** Der Stand des Monatsbudgets (Issue #1968, Endpunkt aus #1967, Plan #1962). */
+  it('budget ruft GET /api/projects/{id}/night-run-usage/budget mit der Zone', async () => {
+    const f = spyFetch(
+      JSON.stringify({
+        budgetUsd: 100,
+        editable: true,
+        monthFirstDay: '2026-10-01',
+        spentUsd: 82,
+        percent: 82,
+        warning: 'EIGHTY',
+        forecastUsd: 153.75,
+        tooEarly: false,
+        exceedDate: '2026-10-20',
+        coverage: 'COMPLETE',
+      }),
+    )
+
+    const stand = await nightRunUsageApi.budget(4, 'Europe/Berlin')
+
+    const url = lastUrl(f)
+    expect(url.pathname).toBe('/api/projects/4/night-run-usage/budget')
+    expect(url.searchParams.get('zone')).toBe('Europe/Berlin')
+    expect(stand).toEqual({
+      budgetUsd: 100,
+      editable: true,
+      monthFirstDay: '2026-10-01',
+      spentUsd: 82,
+      percent: 82,
+      warning: 'EIGHTY',
+      forecastUsd: 153.75,
+      tooEarly: false,
+      exceedDate: '2026-10-20',
+      coverage: 'COMPLETE',
+    })
+  })
+
+  it('budget schickt ohne ausdrueckliche Zone die Zone des Lesers und laesst null-Felder null', async () => {
+    const f = spyFetch(
+      JSON.stringify({
+        budgetUsd: null,
+        editable: false,
+        monthFirstDay: '2026-10-01',
+        spentUsd: null,
+        percent: null,
+        warning: 'NONE',
+        forecastUsd: null,
+        tooEarly: true,
+        exceedDate: null,
+        coverage: 'PARTIAL',
+      }),
+    )
+
+    const stand = await nightRunUsageApi.budget(4)
+
+    expect(lastUrl(f).searchParams.get('zone')).toBe(leserZone())
+    expect(stand.budgetUsd).toBeNull()
+    expect(stand.spentUsd).toBeNull()
+    expect(stand.forecastUsd).toBeNull()
+  })
+
   it('reicht einen Fehlerstatus als ApiError weiter', async () => {
     spyFetch('{"detail":"verboten"}', 403)
 

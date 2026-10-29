@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.card.application.EpicRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageService;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.BudgetView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.Coverage;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.EpicUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.KindSplit;
@@ -40,6 +41,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageService.StageUsageVie
 import org.mwolff.manban.nightrun.application.NightRunUsageService.TotalUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.UsageSplit;
 import org.mwolff.manban.nightrun.domain.Bremsbilanz;
+import org.mwolff.manban.nightrun.domain.MonatsbudgetStand;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.mwolff.manban.nightrun.domain.NightRunPeriodType;
 import org.mwolff.manban.nightrun.domain.NightRunStage;
@@ -60,8 +62,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * {@code @AuthenticationPrincipal} tatsächlich auslösen. 403 und 404 liefert der Service über
  * {@code requireOwner}; dass der volle Kontext dieselben Codes liefert, belegt {@code NightRunIT}.
  */
-// Testklasse: Die Importe folgen den abgebildeten Typen.
-@SuppressWarnings("PMD.ExcessiveImports")
+// Testklasse: Die Importe folgen den abgebildeten Typen, und jede Methode ist ein Fall eines
+// Endpunkts — seit Issue #1967 kommt der Stand des Monatsbudgets als vierter Abruf dazu.
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.TooManyMethods"})
 class NightRunUsageControllerTest {
 
   private static final long USER = 7L;
@@ -69,6 +72,7 @@ class NightRunUsageControllerTest {
   private static final String PFAD_NACHT = "/api/projects/" + PROJECT + "/night-run-usage/night";
   private static final String PFAD_ZEITRAUM = "/api/projects/" + PROJECT + "/night-run-usage";
   private static final String PFAD_GESAMT = PFAD_ZEITRAUM + "/total";
+  private static final String PFAD_BUDGET = PFAD_ZEITRAUM + "/budget";
   private static final ZoneId BERLIN = ZoneId.of("Europe/Berlin");
   private static final NightRunUsage NICHTS = new NightRunUsage(null, null, null, null, null, null);
 
@@ -550,5 +554,82 @@ class NightRunUsageControllerTest {
         .andExpect(status().isBadRequest());
 
     verifyNoInteractions(service);
+  }
+
+  // --- Monatsbudget (Issue #1967) ----------------------------------------------------------------
+
+  /** Alle Felder der Antwort: 82 von 100 $ am 16. von 30 Tagen, Hochrechnung 153,75 $. */
+  @Test
+  void budget_bildetAlleFelderAb_undReichtDieZoneDurch() throws Exception {
+    when(service.budget(anyLong(), anyLong(), any()))
+        .thenReturn(
+            new BudgetView(
+                new MonatsbudgetStand(
+                    new BigDecimal("100.00"),
+                    new BigDecimal("82.00"),
+                    LocalDate.of(2026, 9, 1),
+                    16,
+                    30),
+                true,
+                Coverage.PARTIAL));
+
+    mvc.perform(get(PFAD_BUDGET).param("zone", "Europe/Berlin"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.budgetUsd").value(100.00))
+        .andExpect(jsonPath("$.editable").value(true))
+        .andExpect(jsonPath("$.monthFirstDay").value("2026-09-01"))
+        .andExpect(jsonPath("$.spentUsd").value(82.00))
+        .andExpect(jsonPath("$.percent").value(82))
+        .andExpect(jsonPath("$.warning").value("EIGHTY"))
+        .andExpect(jsonPath("$.forecastUsd").value(153.75))
+        .andExpect(jsonPath("$.tooEarly").value(false))
+        .andExpect(jsonPath("$.exceedDate").value("2026-09-20"))
+        .andExpect(jsonPath("$.coverage").value("PARTIAL"));
+
+    verify(service).budget(USER, PROJECT, BERLIN);
+  }
+
+  /** Ohne Budget und ohne gemeldete Kosten am 2. Tag: die Lücken stehen als null da. */
+  @Test
+  void budget_fehlendeWerteStehenAlsNull() throws Exception {
+    when(service.budget(anyLong(), anyLong(), any()))
+        .thenReturn(
+            new BudgetView(
+                new MonatsbudgetStand(null, null, LocalDate.of(2026, 9, 1), 2, 30),
+                false,
+                Coverage.COMPLETE));
+
+    mvc.perform(get(PFAD_BUDGET).param("zone", "Europe/Berlin"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.budgetUsd").value(nullValue()))
+        .andExpect(jsonPath("$.editable").value(false))
+        .andExpect(jsonPath("$.spentUsd").value(nullValue()))
+        .andExpect(jsonPath("$.percent").value(nullValue()))
+        .andExpect(jsonPath("$.warning").value("NONE"))
+        .andExpect(jsonPath("$.forecastUsd").value(nullValue()))
+        .andExpect(jsonPath("$.tooEarly").value(true))
+        .andExpect(jsonPath("$.exceedDate").value(nullValue()))
+        .andExpect(jsonPath("$.coverage").value("COMPLETE"));
+  }
+
+  @Test
+  void budget_ohneZoneUngueltig() throws Exception {
+    mvc.perform(get(PFAD_BUDGET)).andExpect(status().isBadRequest());
+
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void budget_ungueltigBeiOffsetZone() throws Exception {
+    mvc.perform(get(PFAD_BUDGET).param("zone", "+02:00")).andExpect(status().isBadRequest());
+
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void budget_verbotenOhneLeserecht() throws Exception {
+    when(service.budget(anyLong(), anyLong(), any())).thenThrow(new ProjectAccessDeniedException());
+
+    mvc.perform(get(PFAD_BUDGET).param("zone", "Europe/Berlin")).andExpect(status().isForbidden());
   }
 }

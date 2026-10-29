@@ -12,6 +12,14 @@ public class CardNotFoundException extends RuntimeException implements Uebersetz
     super("Karte nicht gefunden");
   }
 
+  /**
+   * Dieselbe Meldung, aus einer anderen Nicht-gefunden-Ursache — etwa einer fehlenden
+   * Mitgliedschaft, die nach außen nicht von einer unbekannten Karte zu unterscheiden sein soll.
+   */
+  public CardNotFoundException(Throwable cause) {
+    super("Karte nicht gefunden", cause);
+  }
+
   @Override
   public String schluessel() {
     return "card.nicht-gefunden";

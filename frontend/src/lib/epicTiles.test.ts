@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Card } from '../api/cards'
 import type { Epic } from '../api/epics'
 import type { Label } from '../api/labels'
-import { aggregateMarks, countKinds, selectableEpics, sortEpics, visibleEpics } from './epicTiles'
+import { aggregateMarks, countKinds, epicAuswahl, sortEpics, visibleEpics } from './epicTiles'
 import { KIT_NAMEN } from '../test/kitNamen'
 
 /** Die Titel-Präfixe, wie der Server sie liefert (Plan #1582, E10). */
@@ -322,15 +322,21 @@ describe('visibleEpics', () => {
   })
 })
 
-describe('selectableEpics', () => {
+describe('epicAuswahl', () => {
   const drei = [vorhaben({ id: 1 }), vorhaben({ id: 2 }), vorhaben({ id: 3 })]
+  const auswahl = (hidden: ReadonlySet<number>) =>
+    epicAuswahl(drei, hidden).map((o) => [o.epic.id, o.hidden])
 
-  it('liefert bei leerem Ausblende-Zustand alle Vorhaben in unveränderter Reihenfolge', () => {
-    expect(selectableEpics(drei, new Set()).map((e) => e.id)).toEqual([1, 2, 3])
+  it('liefert bei leerem Ausblende-Zustand alle Vorhaben unmarkiert in unveränderter Reihenfolge', () => {
+    expect(auswahl(new Set())).toEqual([[1, false], [2, false], [3, false]])
   })
 
-  it('lässt ein ausgeblendetes Vorhaben weg und behält die Reihenfolge der übrigen', () => {
-    expect(selectableEpics(drei, new Set([2])).map((e) => e.id)).toEqual([1, 3])
+  it('bietet ein ausgeblendetes Vorhaben markiert nach allen eingeblendeten an', () => {
+    expect(auswahl(new Set([1]))).toEqual([[2, false], [3, false], [1, true]])
+  })
+
+  it('behält innerhalb beider Gruppen die Reihenfolge der Eingabe', () => {
+    expect(auswahl(new Set([3, 1]))).toEqual([[2, false], [1, true], [3, true]])
   })
 
   /**
@@ -338,19 +344,14 @@ describe('selectableEpics', () => {
    * daher der Regelfall, kein Fehler.
    */
   it('ignoriert eine ausgeblendete ID, zu der es kein Vorhaben gibt', () => {
-    expect(selectableEpics(drei, new Set([42])).map((e) => e.id)).toEqual([1, 2, 3])
-  })
-
-  it('liefert eine leere Liste, wenn alle Vorhaben ausgeblendet sind', () => {
-    expect(selectableEpics(drei, new Set([1, 2, 3]))).toEqual([])
+    expect(auswahl(new Set([42]))).toEqual([[1, false], [2, false], [3, false]])
   })
 
   it('lässt das Eingabe-Array unverändert', () => {
     const eingabe = [vorhaben({ id: 1 }), vorhaben({ id: 2 })]
 
-    const ergebnis = selectableEpics(eingabe, new Set([1]))
+    epicAuswahl(eingabe, new Set([1]))
 
-    expect(ergebnis).not.toBe(eingabe)
     expect(eingabe.map((e) => e.id)).toEqual([1, 2])
   })
 })

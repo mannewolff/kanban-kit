@@ -30,6 +30,7 @@ import {
 import { ETIKETT, KUPFER, KUPFER_HELL, MELDER, NUT, PLATTE, PLATTE_HOCH, RAND, SCHATTEN_NUTE, SCHATTEN_TASTE, SCHRIFT_ANZEIGE, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { Erklaerung } from '../Erklaerung'
 import { DeltaMarke, Funke, Kachel, KACHEL_SX, KachelFuss, KachelWert } from './LeitstandBausteine'
+import { LeitstandBudget } from './LeitstandBudget'
 
 /**
  * Verbrauch mit Zeitraum-Wahl (#979, Entwurf Z. 977–1017, 1340–1398): Eingabe-Token mit
@@ -49,8 +50,9 @@ import { DeltaMarke, Funke, Kachel, KACHEL_SX, KachelFuss, KachelWert } from './
  * dessen Grenzen; unter „Gesamt" ohne Grenzen. Scheitert sie, bleiben die Verbrauchs-Kacheln
  * stehen; scheitert der Verbrauch, entfällt sie mit.
  *
- * **Ohne Datenquelle erscheint nichts:** kein Budget („von 18,00"), kein „Cache geschrieben" und
- * keine Ersparnis durch den Zwischenspeicher — der Server kennt nur gelesene Cache-Token.
+ * **Ohne Datenquelle erscheint nichts:** kein Budget je Zeitraum in den Kacheln („von 18,00" — das
+ * Monatsbudget steht in der eigenen Budgetzeile), kein „Cache geschrieben" und keine Ersparnis durch
+ * den Zwischenspeicher — der Server kennt nur gelesene Cache-Token.
  *
  * **Beide Gattungen** (Issue #1017, #984 AK 1, 3, 4, 6): Unter der Summe jeder Kachel stehen der
  * Anteil aus Nachtläufen und der aus interaktiven Sitzungen, in der Kopfzeile die Zahl beider. Der
@@ -60,6 +62,10 @@ import { DeltaMarke, Funke, Kachel, KACHEL_SX, KachelFuss, KachelWert } from './
  * **Bremse** (Issue #1553, Plan #1547 E12, E14, E19): wie oft die Bremse des Kits im Zeitraum
  * gegriffen hat und wie viel Zeit sie geschätzt gespart hat — aus `current.brakes`, unter „Gesamt"
  * aus `total.brakes`, ohne Vorzeitraum-Vergleich.
+ *
+ * **Aufbau** (Issue #1969, Plan #1962): Titelzeile → Budgetzeile → Zeile mit Umfangstext und
+ * Umschalter → Kacheln. Die Budgetzeile gilt immer für den laufenden Monat und hängt nicht vom
+ * Umschalter ab; sie steht deshalb darüber und lädt für sich (`api.budget`).
  */
 type Wahl = VerbrauchZeitraumArt | 'TOTAL'
 
@@ -72,10 +78,11 @@ type Ansicht = { art: 'zeitraum'; zeitraum: VerbrauchZeitraum } | { art: 'gesamt
 type Zustand = { art: 'laden' } | { art: 'fehler' } | { art: 'da'; ansicht: Ansicht }
 type ImplementierungZustand = { art: 'laden' } | { art: 'fehler' } | { art: 'da'; wert: ImplementationTime }
 
-type VerbrauchApi = Pick<NightRunUsageApi, 'period' | 'total'> & Pick<DashboardApi, 'implementationTime'>
+type VerbrauchApi = Pick<NightRunUsageApi, 'period' | 'total' | 'budget'> & Pick<DashboardApi, 'implementationTime'>
 
 /** Ein Objekt für alle Aufrufe — ein neues je Rendern stieße den Ladeeffekt endlos neu an. */
 const STANDARD_API: VerbrauchApi = {
+  budget: nightRunUsageApi.budget,
   period: nightRunUsageApi.period,
   total: nightRunUsageApi.total,
   implementationTime: dashboardApi.implementationTime,
@@ -139,6 +146,11 @@ export function LeitstandVerbrauch({
         >
           {t.TITEL}
         </Box>
+      </Box>
+
+      <LeitstandBudget projectId={projectId} laden={api.budget} />
+
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
         {zustand.art === 'da' && (
           <Box component="span" data-testid="verbrauch-umfang" sx={{ fontSize: 11.5, color: TEXT_SCHWACH }}>
             {umfangText(zustand.ansicht, sprache)}

@@ -2892,19 +2892,64 @@ describe('BoardView', () => {
       expect(screen.queryByRole('button', { name: /ausgeblendet/ })).not.toBeInTheDocument()
     })
 
-    it('bietet ausgeblendete Vorhaben weder im Anlege-Dialog noch im Vorhaben-Filter an', () => {
-      // Beide Bedienstellen zeigen seit Issue #785 nur einblendbare Vorhaben — vorher galt das nur
-      // für den Anlege-Dialog (Plan #717, A4/A7): Ein ausgeblendetes Vorhaben zeigte über den
-      // Filter ohnehin nie eine Karte, weil dessen Karten auf dem Board grundsätzlich verdeckt
-      // bleiben; der Filter täuschte damit eine Erreichbarkeit vor, die es nie gab.
+    it('bietet ausgeblendete Vorhaben im Anlege-Dialog markiert an, im Vorhaben-Filter weiter nicht', () => {
+      // Der Filter zeigt seit Issue #785 nur einblendbare Vorhaben: Ein ausgeblendetes zeigte dort
+      // nie eine Karte, weil dessen Karten auf dem Board grundsätzlich verdeckt bleiben. Für den
+      // Anlege-Dialog ist die Regel seit Issue #1981 umgekehrt — er bietet alle an.
       render(<BoardMitAusblendung initial={[8]} cards={[aBacklog, bBacklog, frei]} />)
 
       expect(within(screen.getByLabelText('Vorhaben-Filter')).queryByRole('option', { name: /Suche/ })).not.toBeInTheDocument()
 
       fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
       const auswahl = within(screen.getByLabelText('Vorhaben'))
-      expect(auswahl.getByRole('option', { name: /Auth/ })).toBeInTheDocument()
-      expect(auswahl.queryByRole('option', { name: /Suche/ })).not.toBeInTheDocument()
+      expect(auswahl.getAllByRole('option').map((o) => o.textContent)).toEqual([
+        '(kein Vorhaben)',
+        'AUT – Auth',
+        'SUC – Suche (ausgeblendet)',
+      ])
+    })
+
+    it('meldet nach dem Anlegen an einem ausgeblendeten Vorhaben die Verdeckung und lädt die Vorhaben neu', async () => {
+      const created: Card = { ...card, id: 500, number: 5, title: 'Neu', parentId: 8, columnId: 10, positionInColumn: 3 }
+      const onEpicsChanged = vi.fn()
+      render(
+        <BoardMitAusblendung
+          initial={[8]} cards={[aBacklog, frei]} onEpicsChanged={onEpicsChanged}
+          api={mkApi({ create: vi.fn().mockResolvedValue(created) })}
+        />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
+      fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neu' } })
+      fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '8' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+      expect(
+        await screen.findByText(
+          '1 Karte dem ausgeblendeten Vorhaben „Suche“ zugeordnet. Sie ist auf diesem Board jetzt verdeckt — „Ausgeblendete zeigen“ blendet sie wieder ein.',
+        ),
+      ).toBeInTheDocument()
+      expect(onEpicsChanged).toHaveBeenCalledTimes(1)
+    })
+
+    it('meldet nach dem Anlegen an einem eingeblendeten Vorhaben keine Verdeckung', async () => {
+      const created: Card = { ...card, id: 500, number: 5, title: 'Neu', parentId: 9, columnId: 10, positionInColumn: 3 }
+      const onEpicsChanged = vi.fn()
+      const api = mkApi({ create: vi.fn().mockResolvedValue(created) })
+      render(
+        <BoardMitAusblendung initial={[8]} cards={[aBacklog, frei]} onEpicsChanged={onEpicsChanged} api={api} />,
+        { wrapper: SnackbarProvider },
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Neu anlegen' }))
+      fireEvent.change(screen.getByLabelText('Titel'), { target: { value: 'Neu' } })
+      fireEvent.change(screen.getByLabelText('Vorhaben'), { target: { value: '9' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Anlegen' }))
+
+      expect(await screen.findByTestId('card-500')).toBeInTheDocument()
+      expect(screen.queryByText(/dem ausgeblendeten Vorhaben/)).not.toBeInTheDocument()
+      expect(onEpicsChanged).not.toHaveBeenCalled()
     })
 
     it('setzt einen per localStorage gemerkten Filter zurück, wenn das Vorhaben inzwischen ausgeblendet ist', () => {
@@ -4203,14 +4248,14 @@ describe('Vorhaben über die Mehrfachauswahl zuordnen (Issue #1869)', () => {
     ).toBeDisabled()
   })
 
-  it('bietet alle Vorhaben der vollen Liste an, ausgeblendete gekennzeichnet, in der Reihenfolge des Servers', () => {
+  it('bietet alle Vorhaben der vollen Liste an, ausgeblendete gekennzeichnet nach den eingeblendeten', () => {
     zeige({ initialCards: [karte(1)], start: [nice(), abrechnung, altlasten()], hidden: new Set([5]), api: mkApi(), epicsApi: vorhabenApi() })
 
     waehle(1)
     fireEvent.click(screen.getByRole('button', { name: 'Vorhaben zuordnen' }))
 
     expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
-      'Nice to have (ausgeblendet)', 'Abrechnung', 'Altlasten',
+      'Abrechnung', 'Altlasten', 'Nice to have (ausgeblendet)',
     ])
   })
 

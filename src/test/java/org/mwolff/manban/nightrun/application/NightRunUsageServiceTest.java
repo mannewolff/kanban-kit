@@ -34,6 +34,7 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTota
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.StageTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
+import org.mwolff.manban.nightrun.application.NightRunUsageService.BudgetView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.Coverage;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.EpicUsageView;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.NightSummary;
@@ -51,7 +52,9 @@ import org.mwolff.manban.nightrun.domain.NightRunStage;
 import org.mwolff.manban.nightrun.domain.NightRunState;
 import org.mwolff.manban.nightrun.domain.NightRunStuck;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.nightrun.domain.Warnstufe;
 import org.mwolff.manban.project.application.InteractiveUsageSinceReader;
+import org.mwolff.manban.project.application.MonthlyBudgetReader;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 
@@ -88,6 +91,7 @@ class NightRunUsageServiceTest {
   private CardRunQueryService cards;
   private PermissionChecker permissions;
   private InteractiveUsageSinceReader erfassungsbeginn;
+  private MonthlyBudgetReader budgets;
   private NightRunUsageService service;
 
   @BeforeEach
@@ -97,8 +101,11 @@ class NightRunUsageServiceTest {
     permissions = mock(PermissionChecker.class);
     erfassungsbeginn = mock(InteractiveUsageSinceReader.class);
     when(erfassungsbeginn.interactiveUsageSince(anyLong())).thenReturn(Optional.empty());
+    budgets = mock(MonthlyBudgetReader.class);
+    when(budgets.monthlyBudget(anyLong())).thenReturn(Optional.empty());
     service =
-        new NightRunUsageService(usage, cards, permissions, erfassungsbeginn, JETZT, PROPERTIES);
+        new NightRunUsageService(
+            usage, cards, permissions, erfassungsbeginn, budgets, JETZT, PROPERTIES);
   }
 
   private static RetainedByKind voll(NightRunKind kind, String aeltester) {
@@ -156,6 +163,121 @@ class NightRunUsageServiceTest {
     service.period(USER, PROJECT, NightRunPeriodType.DAY, 0, BERLIN);
 
     verify(permissions, org.mockito.Mockito.times(2)).requireNightRunAccess(USER, PROJECT);
+  }
+
+  // --- Monatsbudget (Issue #1967) --------------------------------------------------------------
+
+  /** Mi 16.09.2026 13:00 Berlin: laufender Monat ab 01.09. 12:00, 16 angebrochene Tage. */
+  private static final String SEPTEMBER = "totals 2026-09-01T10:00:00Z 2026-10-01T10:00:00Z";
+
+  @Test
+  void dasBudgetVerlangtDenNachtlaufZugriff_undLiestOhneIhnNichts() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
+
+    assertThatThrownBy(() -> service.budget(USER, PROJECT, BERLIN))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    assertThat(usage.aufrufe).isEmpty();
+    verifyNoInteractions(budgets);
+  }
+
+  /**
+   * Die Spanne ist der laufende Monat aus {@code NightRunPeriod.laufenderMonat}, nicht Rückschritt
+   * 0.
+   */
+  @Test
+  void dasBudgetLiestDenLaufendenMonat() {
+    BudgetView stand = service.budget(USER, PROJECT, BERLIN);
+
+    assertThat(usage.aufrufe).contains(SEPTEMBER);
+    assertThat(stand.stand().monthFirstDay()).isEqualTo(LocalDate.of(2026, 9, 1));
+    assertThat(stand.stand().angebrocheneTage()).isEqualTo(16);
+    assertThat(stand.stand().tageImMonat()).isEqualTo(30);
+  }
+
+  /** Plan #1962 E2: Ohne jeden Lauf ist der Verbrauch 0 und wird normal gerechnet. */
+  @Test
+  void monatOhneLauf_spentUsdIstNull() {
+    when(budgets.monthlyBudget(PROJECT)).thenReturn(Optional.of(new BigDecimal("100.00")));
+
+    BudgetView stand = service.budget(USER, PROJECT, BERLIN);
+
+    assertThat(stand.stand().spentUsd()).isEqualByComparingTo("0");
+    assertThat(stand.stand().percent()).isZero();
+    assertThat(stand.stand().warning()).isEqualTo(Warnstufe.NONE);
+  }
+
+  /** Plan #1962 E2: Läufe ohne gemeldete Kosten ergeben null, nicht 0. */
+  @Test
+  void laeufeOhneGemeldeteKosten_spentUsdIstNull() {
+    when(budgets.monthlyBudget(PROJECT)).thenReturn(Optional.of(new BigDecimal("100.00")));
+    usage.summe =
+        new PeriodTotals(
+            1_000L,
+            1L,
+            new TotalsByKind(
+                new KindTotals(1L, NICHTS, NICHTS), new KindTotals(2L, NICHTS, NICHTS)));
+
+    BudgetView stand = service.budget(USER, PROJECT, BERLIN);
+
+    assertThat(stand.stand().spentUsd()).isNull();
+    assertThat(stand.stand().percent()).isNull();
+    assertThat(stand.stand().forecastUsd()).isNull();
+  }
+
+  /** Nacht und Sitzungen zählen zusammen; das Budget kommt aus dem Port. */
+  @Test
+  void derStandRechnetNachtUndSitzungenGegenDasBudget() {
+    when(budgets.monthlyBudget(PROJECT)).thenReturn(Optional.of(new BigDecimal("100.00")));
+    usage.summe =
+        new PeriodTotals(
+            1_000L,
+            1L,
+            new TotalsByKind(
+                new KindTotals(1L, kosten("50.00"), NICHTS),
+                new KindTotals(1L, kosten("32.00"), NICHTS)));
+
+    BudgetView stand = service.budget(USER, PROJECT, BERLIN);
+
+    assertThat(stand.stand().budgetUsd()).isEqualByComparingTo("100.00");
+    assertThat(stand.stand().spentUsd()).isEqualByComparingTo("82.00");
+    assertThat(stand.stand().percent()).isEqualTo(82);
+    assertThat(stand.stand().warning()).isEqualTo(Warnstufe.EIGHTY);
+  }
+
+  @Test
+  void ohneBudgetIstDerBetragNull() {
+    assertThat(service.budget(USER, PROJECT, BERLIN).stand().budgetUsd()).isNull();
+  }
+
+  @Test
+  void editableNurFuerDenEchtenOwner() {
+    when(permissions.istEchterOwner(USER, PROJECT)).thenReturn(true);
+
+    assertThat(service.budget(USER, PROJECT, BERLIN).editable()).isTrue();
+  }
+
+  /** Der Plattform-Admin liest bei teilnehmendem Projekt mit, ändern darf er nicht. */
+  @Test
+  void derPlattformAdminLiestOhneZuAendern() {
+    when(permissions.isPlatformAdmin(USER)).thenReturn(true);
+    when(permissions.istEchterOwner(USER, PROJECT)).thenReturn(false);
+
+    assertThat(service.budget(USER, PROJECT, BERLIN).editable()).isFalse();
+  }
+
+  /** Plan #1962 E1: Reicht der Monat über die Aufbewahrungsgrenze, ist er PARTIAL. */
+  @Test
+  void einMonatUeberDerAufbewahrungsgrenzeIstTeilweiseAbgedeckt() {
+    usage.retention = List.of(voll(NightRunKind.NIGHT, "2026-09-10T21:00:00Z"));
+
+    assertThat(service.budget(USER, PROJECT, BERLIN).coverage()).isEqualTo(Coverage.PARTIAL);
+  }
+
+  @Test
+  void ohneVerdraengungIstDerMonatVollstaendig() {
+    assertThat(service.budget(USER, PROJECT, BERLIN).coverage()).isEqualTo(Coverage.COMPLETE);
   }
 
   // --- Eine Nacht ------------------------------------------------------------------------------
