@@ -1453,6 +1453,43 @@ getrennt von Safari: Ein Anmeldelink aus der Mail öffnet sich in Safari und mel
 Melde dich deshalb in der App vom Startbildschirm mit dem **sechsstelligen Code** aus der Mail an —
 E-Mail-Adresse eingeben, Code abtippen. Danach führt die Anmeldung zurück nach `/mobil`.
 
+### Läufe und Benachrichtigungen {#mobil-laeufe}
+
+Unter **„Läufe“** zeigt die mobile Oberfläche die unbeaufsichtigten Läufe der laufenden und der
+vorigen Nacht, nur lesend — wie der Bereich „Durchgeführte Nachtläufe“ im Leitstand. Ein Tipp auf
+einen Lauf zeigt seinen Zustand, die letzte Meldung und die Dauer.
+
+- **Wer sie sieht:** Wer die Läufe eines Projekts am großen Bildschirm sehen darf — als Owner des
+  Projekts oder als Plattform-Admin eines teilnehmenden Projekts. Interaktive Sitzungen und
+  Auslieferungen erscheinen nicht.
+- **Zustände:** **läuft**; **hängt**, wenn ein Paket auf jemanden wartet oder an einer Prüfung
+  festgefahren ist; **gescheitert**, wenn ein Paket gescheitert ist oder sein Zeitbudget erschöpft
+  hat, und wenn der Lauf länger als 90 Minuten nichts meldet. Ein Lauf, der regulär an seiner
+  eigenen Grenze endet (Kosten- oder Zeitbudget einer Stufe, Obergrenze an Paketen), ist weder
+  hängend noch gescheitert.
+
+**Benachrichtigungen einschalten.** Unter **„Einstellungen“** → **„Benachrichtigungen auf diesem
+Gerät“** einschalten und die Frage des Browsers erlauben. Danach kommt eine Nachricht, sobald ein
+Lauf hängt oder scheitert — beim ersten Paket, das wartet, festgefahren ist oder scheitert, auch wenn
+der Lauf weiterarbeitet, und beim Verstummen nach 90 Minuten. Je Lauf kommt höchstens eine
+Nachricht; was beim Einschalten schon bestand, wird nicht nachgemeldet. Die Nachricht nennt Projekt,
+Board und was passiert ist; ein Tipp darauf öffnet den Lauf in der mobilen Oberfläche mit seinem
+aktuellen Zustand.
+
+- **Je Board abschalten:** Unter dem Schalter stehen die Boards, zu deren Läufen Nachrichten kommen
+  können, jedes mit eigenem Schalter, gültig für dieses Gerät. Ein Lauf gehört zu dem Board, über
+  dessen Zugangsschlüssel er gemeldet wird; ist keines erkennbar, meldet er sich, solange
+  mindestens ein Board seines Projekts eingeschaltet ist.
+- **iPhone nur vom Startbildschirm:** Auf dem iPhone gibt es Benachrichtigungen nur, wenn die
+  Oberfläche vom Startbildschirm geöffnet wurde (siehe oben, **„Zum Home-Bildschirm“**). In Safari
+  sagt die Seite das statt des Schalters. Kann ein Gerät gar keine Benachrichtigungen, sagt sie
+  „Dieses Gerät kann keine Benachrichtigungen“; hat der Server sie nicht eingerichtet,
+  „Benachrichtigungen sind nicht eingerichtet“.
+- **Ende:** Der Empfang endet mit dem **Abmelden** auf diesem Gerät und mit dem **Ablauf der
+  Sitzung** dort. Jedes Öffnen von `/mobil` verlängert ihn auf die laufende Sitzung. Nach einem
+  Ablauf kommt nichts mehr, bis du dich wieder anmeldest und `/mobil` öffnest; nach dem Abmelden
+  schaltest du die Benachrichtigungen neu ein.
+
 ## API-Übersicht {#api-ubersicht}
 
 Für alle Angemeldeten ohne Plattform-Rolle ADMIN ist die API-Übersicht (`/administration/api`) rein

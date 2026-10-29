@@ -3,10 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
+import { auffrischen } from '../../lib/pushAbo'
 import { MobilRahmen } from './MobilRahmen'
 
-const auth = vi.hoisted(() => ({ logout: vi.fn() }))
+const auth = vi.hoisted(() => ({ logout: vi.fn(), vorschau: null as { kennung: string } | null }))
 vi.mock('../../auth/AuthContext', () => ({ useAuth: () => auth }))
+vi.mock('../../lib/pushAbo', () => ({ auffrischen: vi.fn() }))
+
+const frische = vi.mocked(auffrischen)
 
 function seite(pfad = '/mobil') {
   return renderMitSprache(
@@ -39,6 +43,26 @@ const kopf = () => {
 describe('MobilRahmen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    auth.vorschau = null
+    frische.mockResolvedValue(undefined)
+  })
+
+  it('frischt beim Öffnen das Abo für Benachrichtigungen auf', () => {
+    seite()
+    expect(frische).toHaveBeenCalledWith(null)
+  })
+
+  it('reicht die laufende Vorschau an das Auffrischen weiter', () => {
+    auth.vorschau = { kennung: 'vk-1' }
+    seite()
+    expect(frische).toHaveBeenCalledWith({ kennung: 'vk-1' })
+  })
+
+  it('bleibt stehen, wenn das Auffrischen scheitert', async () => {
+    frische.mockRejectedValue(new TypeError('Failed to fetch'))
+    seite()
+    await waitFor(() => expect(frische).toHaveBeenCalled())
+    expect(screen.getByText('Ideenseite')).toBeInTheDocument()
   })
 
   it('setzt beim Einhängen die Kopfangaben für den Startbildschirm und entfernt sie beim Aushängen', () => {

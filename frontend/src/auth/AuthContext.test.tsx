@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { authApi } from '../api/auth'
 import { notifyUnauthorized, setUnauthorizedHandler, setVorschauKennung, vorschauKopf } from '../api/client'
+import { abmelden as aboAbmelden } from '../lib/pushAbo'
 import { AuthProvider, useAuth } from './AuthContext'
 
 const farbe = vi.hoisted(() => ({ setMode: vi.fn() }))
@@ -11,6 +12,8 @@ vi.mock('@mui/material/styles', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@mui/material/styles')>()),
   useColorScheme: () => ({ setMode: farbe.setMode }),
 }))
+
+vi.mock('../lib/pushAbo', () => ({ abmelden: vi.fn() }))
 
 vi.mock('../api/auth', () => ({
   authApi: { me: vi.fn(), verifyCode: vi.fn(), linkLogin: vi.fn(), logout: vi.fn() },
@@ -60,9 +63,12 @@ function renderProbe() {
   )
 }
 
+const pushAbmelden = vi.mocked(aboAbmelden)
+
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    pushAbmelden.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -111,6 +117,35 @@ describe('AuthContext', () => {
     await userEvent.click(screen.getByRole('button', { name: 'logout' }))
     expect(mockedApi.logout).toHaveBeenCalled()
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('none'))
+  })
+
+  it('logout beendet vorher das Abo für Benachrichtigungen auf diesem Gerät', async () => {
+    mockedApi.me.mockResolvedValue(meFixture)
+    const reihenfolge: string[] = []
+    pushAbmelden.mockImplementation(() => {
+      reihenfolge.push('abo')
+      return Promise.resolve()
+    })
+    mockedApi.logout.mockImplementation(() => {
+      reihenfolge.push('logout')
+      return Promise.resolve()
+    })
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('a@b.de'))
+    await userEvent.click(screen.getByRole('button', { name: 'logout' }))
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('none'))
+    expect(reihenfolge).toEqual(['abo', 'logout'])
+  })
+
+  it('logout meldet ab, auch wenn das Beenden des Abos scheitert', async () => {
+    mockedApi.me.mockResolvedValue(meFixture)
+    mockedApi.logout.mockResolvedValue(undefined)
+    pushAbmelden.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('a@b.de'))
+    await userEvent.click(screen.getByRole('button', { name: 'logout' }))
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('none'))
+    expect(mockedApi.logout).toHaveBeenCalled()
   })
 
   it('setzt den Nutzer auf null, wenn ein API-Aufruf mit 401 antwortet', async () => {

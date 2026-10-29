@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { authApi, type Me, type Vorschau } from '../api/auth'
 import { setUnauthorizedHandler, setVorschauKennung } from '../api/client'
 import { farbmodusAus } from '../lib/farbmodus'
+import { abmelden as aboAbmelden } from '../lib/pushAbo'
 
 interface AuthState {
   user: Me | null
@@ -74,7 +75,14 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
     [uebernimm],
   )
 
+  // Das Abo für Benachrichtigungen endet vor der Sitzung (Plan #1989, E14): Danach nähme der Server
+  // das Löschen nicht mehr an. Ein Fehler dabei hält das Abmelden nicht auf.
   const logout = useCallback(async () => {
+    try {
+      await aboAbmelden()
+    } catch {
+      // Das Abo endet am Server spätestens mit der Sitzung.
+    }
     await authApi.logout()
     uebernimm(null)
   }, [uebernimm])

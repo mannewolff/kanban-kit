@@ -3,6 +3,7 @@
   "frontend/src/designQuelle.test.ts": ["CLAUDE-design.md"],
   "frontend/src/lib/mutationsstufen.test.ts": ["frontend/mutationTestUmfang.ts", "frontend/mutationsstufen.json"],
   "frontend/src/lib/strykerUmfang.test.ts": ["frontend/mutationTestUmfang.ts"],
+  "frontend/src/mobil/mobilSw.test.ts": ["frontend/public/mobil-sw.js"],
   "frontend/src/sprachwaechter.test.ts": ["frontend/src/lib/sprachwaechter.ts"],
   "src/test/java/org/mwolff/manban/AbstractIntegrationTest.java": ["docker-compose.yml"],
   "src/test/java/org/mwolff/manban/ArchitectureTest.java": ["src/test/java/org/mwolff/manban/ArchitekturKlassen.java"],

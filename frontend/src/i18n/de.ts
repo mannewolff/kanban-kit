@@ -1864,6 +1864,20 @@ export const de = {
       `Stufe „${stufe}“ an Karte #${karte} begann ${seit}.`,
     LAEUFE_NICHT_GEFUNDEN: 'Lauf nicht gefunden.',
     LAEUFE_LAUF_FEHLGESCHLAGEN: 'Der Lauf konnte nicht geladen werden.',
+    PUSH_UEBERSCHRIFT: 'Benachrichtigungen',
+    PUSH_SCHALTER: 'Benachrichtigungen auf diesem Gerät',
+    PUSH_HINWEIS: 'Eine Nachricht kommt, wenn ein Lauf scheitert oder hängt — je Lauf höchstens eine.',
+    PUSH_HOME_BILDSCHIRM:
+      'Auf dem iPhone kommen Benachrichtigungen nur, wenn du diese Seite vom Startbildschirm öffnest: Im Teilen-Menü „Zum Home-Bildschirm“ wählen und von dort öffnen.',
+    PUSH_KEIN_GERAET: 'Dieses Gerät kann keine Benachrichtigungen.',
+    PUSH_NICHT_EINGERICHTET: 'Benachrichtigungen sind nicht eingerichtet.',
+    PUSH_LADEN_FEHLGESCHLAGEN: 'Die Benachrichtigungen konnten nicht geladen werden.',
+    PUSH_VERWEIGERT: 'Benachrichtigungen sind für diese Seite nicht erlaubt. Erlaube sie in den Einstellungen des Geräts.',
+    PUSH_FEHLGESCHLAGEN: 'Das hat nicht geklappt. Versuch es gleich noch einmal.',
+    PUSH_VORSCHAU: 'In der Vorschau lassen sich Benachrichtigungen nicht schalten.',
+    PUSH_BOARDS: 'Nachrichten je Board',
+    PUSH_KEINE_BOARDS: 'Es gibt kein Board, zu dessen Läufen Nachrichten kommen können.',
+    PUSH_ENDE: 'Die Benachrichtigungen enden mit dem Abmelden und mit dem Ablauf der Sitzung auf diesem Gerät.',
   },
 
   /** Downloads der OpenAPI-Beschreibung, in Administration und API-Übersicht (Issue #1660). */

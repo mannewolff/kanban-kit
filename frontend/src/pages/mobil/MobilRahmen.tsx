@@ -9,6 +9,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthContext'
 import { useT } from '../../i18n/SpracheContext'
+import { auffrischen } from '../../lib/pushAbo'
 import { ANZEIGE, GRUND, KOPFFARBE, PLATTE, RAND } from '../../theme'
 
 /** Legt ein Element für den Kopf mit den genannten Attributen an. */
@@ -43,9 +44,15 @@ const LEISTEN_EINTRAG_SX = {
  */
 export function MobilRahmen() {
   const t = useT()
-  const { logout } = useAuth()
+  const { logout, vorschau } = useAuth()
   const navigate = useNavigate()
   const [abmeldenFehler, setAbmeldenFehler] = useState(false)
+
+  // Das Abo für Benachrichtigungen gilt bis zum Ende der Sitzung; jedes Öffnen verlängert es auf die
+  // laufende (Plan #1989, E14). Scheitert das, bleibt das alte Abo bis zu seinem Ende bestehen.
+  useEffect(() => {
+    auffrischen(vorschau).catch(() => undefined)
+  }, [vorschau])
 
   useEffect(() => {
     const elemente = [

@@ -1749,6 +1749,20 @@ export const en: Woerterbuch = {
     LAEUFE_MELDUNG_STUFE_KARTE: (stufe, karte, seit) => `Stage “${stufe}” on card #${karte} began ${seit}.`,
     LAEUFE_NICHT_GEFUNDEN: 'Run not found.',
     LAEUFE_LAUF_FEHLGESCHLAGEN: 'The run could not be loaded.',
+    PUSH_UEBERSCHRIFT: 'Notifications',
+    PUSH_SCHALTER: 'Notifications on this device',
+    PUSH_HINWEIS: 'A message arrives when a run fails or gets stuck — at most one per run.',
+    PUSH_HOME_BILDSCHIRM:
+      'On the iPhone, notifications only arrive if you open this page from the home screen: choose “Add to Home Screen” in the share menu and open it from there.',
+    PUSH_KEIN_GERAET: 'This device cannot show notifications.',
+    PUSH_NICHT_EINGERICHTET: 'Notifications are not set up.',
+    PUSH_LADEN_FEHLGESCHLAGEN: 'The notifications could not be loaded.',
+    PUSH_VERWEIGERT: 'Notifications are not allowed for this page. Allow them in the device settings.',
+    PUSH_FEHLGESCHLAGEN: 'That did not work. Please try again in a moment.',
+    PUSH_VORSCHAU: 'Notifications cannot be switched in the preview.',
+    PUSH_BOARDS: 'Messages per board',
+    PUSH_KEINE_BOARDS: 'There is no board whose runs can send messages.',
+    PUSH_ENDE: 'Notifications end when you sign out and when the session on this device expires.',
   },
 
   OPENAPI: {
