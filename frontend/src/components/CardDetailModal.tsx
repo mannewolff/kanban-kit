@@ -1263,6 +1263,7 @@ interface Props {
     | 'byNumber'
     | 'assignDerivedFrom'
     | 'epicTree'
+    | 'cardTree'
     | 'openEpic'
   >
   boardsApi?: Pick<typeof defaultBoardsApi, 'get'>
@@ -1482,6 +1483,9 @@ function CardDetailModalView({
   const [preview, setPreview] = useState<{ attachment: Attachment; url: string } | null>(null)
   const [baum, setBaum] = useState<DerivationNode[] | null>(null)
   const [baumFehler, setBaumFehler] = useState<string | null>(null)
+  // Der Zweig einer gewöhnlichen Karte (Issue #1986): `null` lädt, leer heißt „keine Kette“.
+  const [zweig, setZweig] = useState<DerivationNode[] | null>(null)
+  const [zweigFehler, setZweigFehler] = useState<string | null>(null)
 
   useEffect(() => {
     // Neuester zuerst (#843): Der Server liefert stabil nach `createdAt, id` aufsteigend; das
@@ -1573,6 +1577,36 @@ function CardDetailModalView({
       aktiv = false
     }
   }, [isEpic, baumBoardId, card.id, cardsApi, t])
+
+  // Der Zweig einer Karte im Block „Zuordnung“ (Issue #1986, Plan #1980) — nach dem `aktiv`-Muster
+  // des Vorhaben-Baums. Ein Vorhaben hat seinen eigenen Baum; der Endpunkt lieferte dort ohnehin leer.
+  useEffect(() => {
+    if (isEpic) {
+      return undefined
+    }
+    let aktiv = true
+    setZweig(null)
+    setZweigFehler(null)
+    void cardsApi
+      .cardTree(card.id)
+      .then(
+        (zeilen) => ({ zeilen, fehler: null as string | null }),
+        (error_: unknown) => ({
+          zeilen: null,
+          fehler: apiErrorMessage(error_, t.KARTE.BAUM_FEHLER),
+        }),
+      )
+      .then((ergebnis) => {
+        if (!aktiv) {
+          return
+        }
+        setZweig(ergebnis.zeilen)
+        setZweigFehler(ergebnis.fehler)
+      })
+    return () => {
+      aktiv = false
+    }
+  }, [isEpic, card.id, cardsApi, t])
 
   const startEditing = () => {
     // Aus dem bestätigten Stand, nicht aus der Prop — sonst verwürfe erneutes Bearbeiten nach
@@ -2003,6 +2037,28 @@ function CardDetailModalView({
                 onChange={(ids) => void saveLabels(ids)}
                 vorschau={vorschau}
               />
+              {/* Nur im Lesemodus (E10); eine leere Liste heißt „keine Kette“ — dann kein Bereich. */}
+              {!editing && (zweig === null || zweig.length > 0) && (
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    {t.KARTE.HERKUNFT}
+                  </Typography>
+                  {zweigFehler !== null && <Alert severity="error">{zweigFehler}</Alert>}
+                  {zweigFehler === null && zweig === null && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                      <CircularProgress size={24} />
+                    </Box>
+                  )}
+                  {zweig !== null && (
+                    <DerivationTree
+                      rows={zweig}
+                      aktuelleNummer={card.number}
+                      // Derselbe Verweis-Weg wie die `#N`-Sprünge und der Baum des Vorhabens.
+                      onOpenCard={(nummer) => onOpenDependency?.(nummer)}
+                    />
+                  )}
+                </Box>
+              )}
             </KartenBlock>
           )}
 

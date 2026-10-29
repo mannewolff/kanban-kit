@@ -53,6 +53,8 @@ vi.mock('../api/cards', () => ({
     getActivity: vi.fn().mockResolvedValue([]),
     // Der Detail-Dialog eines Vorhabens lädt seinen Herkunftsbaum nach (Issue #644).
     epicTree: vi.fn().mockResolvedValue([]),
+    // Der Detail-Dialog einer Karte lädt ihren Zweig im Herkunftsbaum nach (Issue #1986).
+    cardTree: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
     setAssignees: vi.fn(),
     setLabels: vi.fn(),

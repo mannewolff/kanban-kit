@@ -34,6 +34,8 @@ vi.mock('../api/cards', () => ({
     // Das CardDetailModal lädt die volle Beschreibung beim Öffnen nach (Issue #769).
     get: vi.fn().mockResolvedValue({ description: null }),
     epicTree: vi.fn(),
+    // Der Detail-Dialog einer Karte lädt ihren Zweig im Herkunftsbaum nach (Issue #1986).
+    cardTree: vi.fn().mockResolvedValue([]),
     byNumber: vi.fn(),
     getActivity: vi.fn().mockResolvedValue([]),
     update: vi.fn(),

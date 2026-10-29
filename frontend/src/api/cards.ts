@@ -197,6 +197,11 @@ export const cardsApi = {
   /** Herkunftsbaum eines Vorhabens (Issue #643). */
   epicTree: (boardId: number, epicId: number) =>
     apiFetch<DerivationNode[]>(`/api/boards/${boardId}/epics/${epicId}/tree`),
+  /**
+   * Der Zweig einer Karte im Herkunftsbaum (Issue #1985, #1986): ab der obersten Anforderung ihrer
+   * Herkunftslinie abwärts. Eine leere Liste heißt „keine Kette“ — der Client braucht keine eigene Regel.
+   */
+  cardTree: (cardId: number) => apiFetch<DerivationNode[]>(`/api/cards/${cardId}/tree`),
   list: (boardId: number) => apiFetch<Card[]>(`/api/boards/${boardId}/cards`),
   get: (cardId: number) => apiFetch<Card>(`/api/cards/${cardId}`),
   getActivity: (cardId: number) => apiFetch<CardActivity[]>(`/api/cards/${cardId}/activity`),

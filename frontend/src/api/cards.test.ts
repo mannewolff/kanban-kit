@@ -73,6 +73,20 @@ describe('cardsApi', () => {
     expect(result).toEqual([zeile])
   })
 
+  it('cardTree ruft GET /api/cards/{cardId}/tree und liefert die Zeilen des Zweigs', async () => {
+    const zeile = {
+      number: 1962, title: 'Plan', type: 'CARD' as const, derivedFrom: 1957, depth: 1,
+      done: false, inReview: false, blocked: false, dependencies: [], externalDependencies: [],
+      externalOrigin: false, broken: false, labels: [],
+    }
+    const f = spyFetch(JSON.stringify([zeile]))
+    const result = await cardsApi.cardTree(42)
+    expect(lastCall(f).url).toBe('/api/cards/42/tree')
+    // Reiner Lesepfad wie beim Baum des Vorhabens.
+    expect(lastCall(f).method).toBeUndefined()
+    expect(result).toEqual([zeile])
+  })
+
   it('get ruft GET /api/cards/{id} und liefert die geparste Antwort', async () => {
     const f = spyFetch(JSON.stringify(card))
     const result = await cardsApi.get(7)

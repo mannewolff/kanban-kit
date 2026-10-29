@@ -7,7 +7,7 @@ import type { AttachmentsApi } from '../api/attachments'
 import type { Board } from '../api/boards'
 import { ApiError } from '../api/client'
 import type { Wartegruende } from '../api/nightRuns'
-import type { Card, CardByNumber, CardDetail } from '../api/cards'
+import type { Card, CardByNumber, CardDetail, DerivationNode } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
 import type { KitNamenZustand } from '../api/kitNamen'
 import type { CardLocation } from '../lib/cardLocation'
@@ -139,6 +139,8 @@ function makeApis() {
       (id: number, derivedFrom: number | null): Promise<Card> => Promise.resolve({ ...card, id, derivedFrom }),
     ),
     epicTree: vi.fn().mockResolvedValue([]),
+    // Der Zweig einer Karte (Issue #1986): leer heißt „keine Kette“ — der Bereich bleibt weg.
+    cardTree: vi.fn().mockResolvedValue([]),
     openEpic: vi.fn().mockResolvedValue({ ...card, id: 400, number: 9, title: 'Neues Vorhaben', type: 'EPIC' }),
   }
   const boardsApi = { get: vi.fn().mockResolvedValue(linkedBoard) }
@@ -1085,6 +1087,135 @@ describe('CardDetailModal', () => {
     unmount()
 
     aufloesen([baumZeile(7)])
+    await Promise.resolve()
+
+    expect(screen.queryByRole('tree')).toBeNull()
+  })
+
+  // --- Herkunftsbaum im Karten-Detail (Issue #1986, Plan #1980) -------------
+
+  /** Eine Zeile, wie sie GET /api/cards/{cardId}/tree liefert. */
+  function zweigZeile(nummer: number, depth: number, extra: Partial<DerivationNode> = {}): DerivationNode {
+    return { ...baumZeile(nummer, depth), ...extra }
+  }
+
+  /** Die Kette aus dem Anlass: Anforderung #1957, Plan #1962, Pakete #1964 bis #1970. */
+  const plankette = [
+    zweigZeile(1957, 0, { title: 'Anforderung' }),
+    zweigZeile(1962, 1, { title: 'Plan', derivedFrom: 1957 }),
+    ...[1964, 1965, 1966, 1967, 1968, 1969, 1970].map((n) => zweigZeile(n, 2, { derivedFrom: 1962, done: true })),
+  ]
+  const plankarte: Card = { ...card, id: 500, number: 1962, title: 'Plan' }
+
+  it('Szenario: Plan zeigt seine Kette', async () => {
+    const apis = makeApis()
+    apis.cardsApi.cardTree.mockResolvedValue(plankette)
+    render(<CardDetailModal card={plankarte} canEdit onClose={vi.fn()} {...apis} />)
+
+    const zuordnung = screen.getByRole('region', { name: 'Zuordnung' })
+    const baum = await within(zuordnung).findByRole('tree')
+    expect(apis.cardsApi.cardTree).toHaveBeenCalledWith(500)
+    const zeilen = within(baum).getAllByRole('treeitem')
+    expect(zeilen).toHaveLength(9)
+    expect(zeilen[0]).toHaveTextContent('#1957')
+    // Die geöffnete Karte ist die aktuelle Zeile, die übrigen nicht.
+    expect(zeilen[1]).toHaveTextContent('#1962')
+    expect(zeilen[1]).toHaveAttribute('aria-current', 'true')
+    expect(zeilen.filter((z) => z.getAttribute('aria-current') === 'true')).toHaveLength(1)
+    expect(zeilen[8]).toHaveTextContent('#1970')
+    // Unter Zuständigen und Labels: Die Überschrift folgt beiden im Dokument.
+    const ueberschrift = within(zuordnung).getByText('Herkunft')
+    const labels = within(zuordnung).getAllByText('Labels')[0]
+    expect(labels.compareDocumentPosition(ueberschrift) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('Szenario: Karte ohne Kette', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    await waitFor(() => expect(apis.cardsApi.cardTree).toHaveBeenCalledWith(100))
+    await screen.findByText('Aufgabe')
+    const zuordnung = screen.getByRole('region', { name: 'Zuordnung' })
+    await waitFor(() => expect(within(zuordnung).queryByRole('progressbar')).toBeNull())
+    expect(within(zuordnung).queryByText('Herkunft')).toBeNull()
+    expect(screen.queryByRole('tree')).toBeNull()
+  })
+
+  it('zeigt den Bereich „Herkunft“ nicht im Bearbeiten-Modus (E10)', async () => {
+    const apis = makeApis()
+    apis.cardsApi.cardTree.mockResolvedValue(plankette)
+    render(<CardDetailModal card={plankarte} canEdit onClose={vi.fn()} {...apis} />)
+    await screen.findByRole('tree')
+
+    await klickeBearbeiten()
+
+    expect(screen.queryByRole('tree')).toBeNull()
+    expect(within(screen.getByRole('region', { name: 'Zuordnung' })).queryByText('Herkunft')).toBeNull()
+  })
+
+  it('zeigt beim Laden des Zweigs einen Platzhalter unter „Herkunft“', () => {
+    const apis = makeApis()
+    apis.cardsApi.cardTree.mockReturnValue(new Promise(() => {}))
+    render(<CardDetailModal card={plankarte} canEdit onClose={vi.fn()} {...apis} />)
+
+    const zuordnung = screen.getByRole('region', { name: 'Zuordnung' })
+    expect(within(zuordnung).getByText('Herkunft')).toBeInTheDocument()
+    expect(within(zuordnung).getByRole('progressbar')).toBeInTheDocument()
+  })
+
+  it('meldet einen gescheiterten Zweig und lässt den Dialog bedienbar', async () => {
+    const apis = makeApis()
+    apis.cardsApi.cardTree.mockRejectedValue(serverfehler('Karte nicht gefunden.'))
+    render(<CardDetailModal card={plankarte} canEdit onClose={vi.fn()} {...apis} />)
+
+    const zuordnung = screen.getByRole('region', { name: 'Zuordnung' })
+    expect(await within(zuordnung).findByText(/karte nicht gefunden/i)).toBeInTheDocument()
+    expect(within(zuordnung).getByText('Herkunft')).toBeInTheDocument()
+    expect(within(zuordnung).queryByRole('progressbar')).toBeNull()
+    expect(screen.queryByRole('tree')).toBeNull()
+    expect(screen.getByText('Kommentare')).toBeInTheDocument()
+  })
+
+  it('meldet einen Zweig-Fehler ohne API-Kontext mit dem Wortlaut des Baums', async () => {
+    const apis = makeApis()
+    apis.cardsApi.cardTree.mockRejectedValue(new Error('Netzwerk weg'))
+    render(<CardDetailModal card={plankarte} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText(/herkunftsbaum konnte nicht geladen werden/i)).toBeInTheDocument()
+  })
+
+  it('ruft für ein Vorhaben den Zweig nicht ab', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    await screen.findByText(/diesem vorhaben sind noch keine karten zugeordnet/i)
+    expect(apis.cardsApi.cardTree).not.toHaveBeenCalled()
+  })
+
+  it('öffnet eine Zeile des Zweigs über den Verweis-Weg des Dialogs', async () => {
+    const apis = makeApis()
+    apis.cardsApi.cardTree.mockResolvedValue([zweigZeile(3, 0), zweigZeile(1962, 1, { derivedFrom: 3 })])
+    render(<CardDetailModal card={plankarte} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+    const zeile = (await screen.findAllByRole('treeitem'))[0]
+
+    fireEvent.keyDown(zeile, { key: 'Enter' })
+
+    expect(await screen.findByText('Vorbedingung')).toBeInTheDocument()
+    expect(apis.cardsApi.byNumber).toHaveBeenCalledWith(9, 3)
+  })
+
+  it('verwirft eine Zweig-Antwort, die erst nach dem Schliessen eintrifft', async () => {
+    const apis = makeApis()
+    let aufloesen: (zeilen: unknown[]) => void = () => {}
+    apis.cardsApi.cardTree.mockReturnValue(
+      new Promise<unknown[]>((r) => {
+        aufloesen = r
+      }),
+    )
+    const { unmount } = render(<CardDetailModal card={plankarte} canEdit onClose={vi.fn()} {...apis} />)
+    unmount()
+
+    aufloesen(plankette)
     await Promise.resolve()
 
     expect(screen.queryByRole('tree')).toBeNull()
