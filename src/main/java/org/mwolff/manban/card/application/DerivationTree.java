@@ -63,10 +63,13 @@ final class DerivationTree {
     for (Card c : bezugsmenge) {
       byId.put(c.requireId(), c);
     }
+    // Kanten über den Vorfahren selbst, wie in build (Issue #2008): Der Guard über die ID wäre bloß
+    // Kosmetik — kinder wird nur mit IDs der Bezugsmenge befragt, ein überzähliger Schlüssel bliebe
+    // unsichtbar und der Guard damit untestbar.
     for (Card c : bezugsmenge) {
-      Long vorfahr = c.derivedFromCardId();
-      if (byId.containsKey(vorfahr)) {
-        kinder.computeIfAbsent(vorfahr, k -> new ArrayList<>()).add(c);
+      Card vorfahr = byId.get(c.derivedFromCardId());
+      if (vorfahr != null) {
+        kinder.computeIfAbsent(vorfahr.requireId(), k -> new ArrayList<>()).add(c);
       }
     }
 
