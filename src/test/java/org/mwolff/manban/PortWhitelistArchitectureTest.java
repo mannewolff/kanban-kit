@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Aufrufer-Whitelists der rechtepruefungsfreien Ports (Issue #463, #1012, #1013, #1076, #1803,
- * #1804, #1964).
+ * #1804, #1964, #2014).
  *
  * <p>Diese Ports pruefen bewusst keine Rechte; die Autorisierung liegt beim Aufrufer. Deshalb ist
  * ihr Aufruferkreis maschinell begrenzt: Ein neues Modul, das einen solchen Port injiziert, umginge
@@ -106,6 +106,42 @@ class PortWhitelistArchitectureTest {
               "MonthlyBudgetReader prueft keine Rechte: Aufrufer nur project.application "
                   + "und nightrun.application");
 
+  // Weitere Ports derselben Bauart (Issue #2014): Die Strenge-Stufe, die das Kit im Header
+  // X-Kit-Strictness meldet, legt ein Filter im accesstoken-Modul am Projekt ab, an das das Token
+  // gebunden ist — die Bindung ist die ganze Autorisierung. Gelesen wird sie vom
+  // Plattform-Leitstand
+  // in nightrun.application, der auf Plattform-Admins beschraenkt ist.
+  static final ArchRule KIT_STRICTNESS_PORTS_HABEN_AUFRUFER_WHITELIST =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages(
+              "org.mwolff.manban.project.application..",
+              "org.mwolff.manban.project.infrastructure..",
+              "org.mwolff.manban.accesstoken.web.security..",
+              "org.mwolff.manban.nightrun.application..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching(
+              "org\\.mwolff\\.manban\\.project\\.application\\.KitStrictness(Writer|Reader)")
+          .as(
+              "KitStrictness-Ports pruefen keine Rechte: Aufrufer nur accesstoken.web.security"
+                  + " (gebundenes Token) und nightrun.application (Plattform-Leitstand)");
+
+  // Schreibend darf nur der Filter; der Leitstand liest nur.
+  static final ArchRule KIT_STRICTNESS_WRITER_NUR_IM_FILTER =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages(
+              "org.mwolff.manban.project.application..",
+              "org.mwolff.manban.project.infrastructure..",
+              "org.mwolff.manban.accesstoken.web.security..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching("org\\.mwolff\\.manban\\.project\\.application\\.KitStrictnessWriter")
+          .as(
+              "KitStrictnessWriter: Aufrufer nur der KitStrictnessFilter in"
+                  + " accesstoken.web.security");
+
   // Fuenfter Port derselben Bauart (Issue #1803, Plan #1801 A2): Wer eine Code-Anforderung
   // einloest, bekommt ein Konto zurueck, ohne dass der Port irgendetwas prueft. Ausser dem Modul
   // auth selbst (Dienste in application, Adapter in infrastructure) darf ihn niemand benutzen —
@@ -160,6 +196,12 @@ class PortWhitelistArchitectureTest {
   @Test
   void monthlyBudgetReaderHatAufruferWhitelist() {
     MONTHLY_BUDGET_READER_HAT_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void kitStrictnessPortsHabenAufruferWhitelist() {
+    KIT_STRICTNESS_PORTS_HABEN_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
+    KIT_STRICTNESS_WRITER_NUR_IM_FILTER.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

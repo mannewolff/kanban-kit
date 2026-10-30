@@ -114,7 +114,8 @@ public class ProjectService {
         ProjectRole.OWNER,
         project.createdAt(),
         project.dashboardParticipation(),
-        participationEditable(ProjectRole.OWNER));
+        participationEditable(ProjectRole.OWNER),
+        project.kitStrictness());
   }
 
   @Transactional(readOnly = true)
@@ -135,7 +136,8 @@ public class ProjectService {
                     ownRoles.getOrDefault(p.id(), ProjectRole.OWNER),
                     p.createdAt(),
                     p.dashboardParticipation(),
-                    participationEditable(ownRoles.get(p.id()))))
+                    participationEditable(ownRoles.get(p.id())),
+                    p.kitStrictness()))
         .toList();
   }
 
@@ -193,7 +195,8 @@ public class ProjectService {
         membership.role(),
         renamed.createdAt(),
         renamed.dashboardParticipation(),
-        participationEditable(realRole));
+        participationEditable(realRole),
+        renamed.kitStrictness());
   }
 
   /**
@@ -246,7 +249,8 @@ public class ProjectService {
         realRole,
         project.createdAt(),
         project.dashboardParticipation(),
-        participationEditable(realRole));
+        participationEditable(realRole),
+        project.kitStrictness());
   }
 
   /**
@@ -314,7 +318,13 @@ public class ProjectService {
                   "Ob der Aufrufer die Teilnahme schalten darf: echtes Mitglied mit der Rolle"
                       + " OWNER oder ADMIN.",
               example = "true")
-          boolean participationEditable) {}
+          boolean participationEditable,
+      @Schema(
+              description =
+                  "Zuletzt vom Kit gemeldete Strenge-Stufe des Projekts (light, normal oder"
+                      + " strict); null, solange das Projekt nie eine gemeldet hat.",
+              example = "normal")
+          @Nullable String strictness) {}
 
   /** Projekt-Kurzinfo für modulfremde Aufrufer: Id und Name (siehe {@link #listAccessible}). */
   public record AccessibleProject(Long id, String name) {}

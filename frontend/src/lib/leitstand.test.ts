@@ -872,6 +872,16 @@ describe('nachProjekt', () => {
     expect(gruppen[1].eintraege.map((e) => e.marke)).toEqual(['b'])
   })
 
+  it('nimmt die Strenge-Stufe der Gruppe aus ihrem ersten Eintrag (#2014)', () => {
+    const gruppen = nachProjekt([
+      { projectId: 7, projectName: 'Kit', strictness: 'normal' as const },
+      { projectId: 3, projectName: 'Leitstand', strictness: null },
+      { projectId: 7, projectName: 'Kit', strictness: 'normal' as const },
+    ])
+
+    expect(gruppen.map((g) => g.strictness)).toEqual(['normal', null])
+  })
+
   it('liefert fuer die leere Liste keine Gruppe', () => {
     expect(nachProjekt([])).toEqual([])
   })

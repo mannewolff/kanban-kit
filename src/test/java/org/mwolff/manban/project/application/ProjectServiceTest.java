@@ -324,6 +324,22 @@ class ProjectServiceTest {
         .isEqualTo(ProjectRole.OWNER);
   }
 
+  /** Die Projektliste trägt die zuletzt vom Kit gemeldete Strenge-Stufe (Issue #2014). */
+  @Test
+  void list_traegtDieGemeldeteStrengeStufe() {
+    when(permissions.isPlatformAdmin(1L)).thenReturn(true);
+    when(memberships.findByUserId(1L)).thenReturn(List.of());
+    when(projects.findAll())
+        .thenReturn(
+            List.of(
+                new Project(9L, "P", 2L, FIXED, null, false, null, "strict"),
+                new Project(10L, "Q", 2L, FIXED, null, false, null)));
+
+    assertThat(service.list(1L))
+        .extracting(ProjectService.ProjectView::strictness)
+        .containsExactly("strict", null);
+  }
+
   @Test
   void list_returnsOnlyMemberProjects_forRegularUser() {
     // Given

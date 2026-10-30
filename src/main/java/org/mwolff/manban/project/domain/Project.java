@@ -24,6 +24,10 @@ import org.mwolff.manban.common.Identifiable;
  * @param monthlyBudgetUsd Monatsbudget des Projekts in USD (Issue #1964, Plan #1962); {@code null}
  *     heißt „kein Budget“. Wie die Teilnahme gibt es dafür kein {@code with…}: Gesetzt wird es
  *     ausschließlich über {@code ProjectRepository#setMonthlyBudget}, nie über {@code save}.
+ * @param kitStrictness zuletzt vom Kit gemeldete Strenge-Stufe ({@code light}, {@code normal} oder
+ *     {@code strict}, Issue #2014); {@code null}, solange das Projekt nie eine gemeldet hat.
+ *     Gesetzt wird sie ausschließlich über {@code ProjectRepository#setKitStrictness}, nie über
+ *     {@code save}.
  */
 public record Project(
     @Nullable Long id,
@@ -32,8 +36,29 @@ public record Project(
     Instant createdAt,
     @Nullable Instant interactiveUsageSince,
     boolean dashboardParticipation,
-    @Nullable BigDecimal monthlyBudgetUsd)
+    @Nullable BigDecimal monthlyBudgetUsd,
+    @Nullable String kitStrictness)
     implements Identifiable {
+
+  /** Ein Projekt, das nie eine Strenge-Stufe gemeldet hat (Issue #2014). */
+  public Project(
+      @Nullable Long id,
+      String name,
+      Long ownerUserId,
+      Instant createdAt,
+      @Nullable Instant interactiveUsageSince,
+      boolean dashboardParticipation,
+      @Nullable BigDecimal monthlyBudgetUsd) {
+    this(
+        id,
+        name,
+        ownerUserId,
+        createdAt,
+        interactiveUsageSince,
+        dashboardParticipation,
+        monthlyBudgetUsd,
+        null);
+  }
 
   public Project withName(String newName) {
     return new Project(
@@ -43,6 +68,7 @@ public record Project(
         createdAt,
         interactiveUsageSince,
         dashboardParticipation,
-        monthlyBudgetUsd);
+        monthlyBudgetUsd,
+        kitStrictness);
   }
 }

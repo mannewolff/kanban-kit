@@ -970,6 +970,13 @@ export const en: Woerterbuch = {
     NACHTPLAN: 'Night plan',
   },
 
+  STRENGE: {
+    light: 'Light',
+    normal: 'Normal',
+    strict: 'Strict',
+    HINWEIS: 'Strictness chosen for the project in the kit',
+  },
+
   LEITSTAND_VERBRAUCH: {
     ZEITRAUM: {
       DAY: 'Shift',

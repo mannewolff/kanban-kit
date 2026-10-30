@@ -353,6 +353,8 @@ class ArchitectureTest {
           "InteractiveUsageSinceReader",
           "DashboardParticipationReader",
           "MonthlyBudgetReader",
+          "KitStrictnessWriter",
+          "KitStrictnessReader",
           "ProjectCreatedEvent",
           "ProjectAccessDeniedException",
           // Exception-Vokabular als Vertrag, Plan #1694 (A4)

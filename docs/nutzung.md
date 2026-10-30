@@ -366,6 +366,11 @@ Der **Leitstand** (Sidebar-Eintrag **„Leitstand“** im Board-Kontext, Route
 `/boards/:boardId/leitstand`) ist die **Hauptansicht eines Boards**. Er ersetzt die frühere
 Kennzahlen-Seite „Dashboard“; die alte Adresse `/boards/:boardId/dashboard` leitet auf ihn weiter.
 
+Ganz oben rechts steht die **Strenge**, die das Projekt im Kit gewählt hat — **Leicht**, **Normal**
+oder **Streng**, mit dem Hinweisfähnchen „Strenge, die das Projekt im Kit gewählt hat“. Die Marke
+erscheint erst, wenn das Kit sie zum ersten Mal gemeldet hat; danach zeigt sie den zuletzt
+gemeldeten Wert.
+
 Von oben nach unten führt er:
 
 1. **Jüngster Run** — der jüngste Run als schmales Band: Melder (als Wechselblinker, solange er läuft),
@@ -1287,6 +1292,11 @@ neu laden.
 In allen drei Bereichen steht **direkt hinter dem Lämpchen** das Symbol der **Art des Runs** —
 dieselben fünf Symbole wie auf der Läufe-Seite, mit dem Wort als Hinweisfähnchen. Weil das Symbol
 bei jeder Art gleich breit ist, beginnt alles dahinter in jeder Zeile an derselben Stelle.
+
+Am Kopf jeder **Projektgruppe** — in „Aktive Runs“ und unter „Störungen“ — steht neben dem
+Projektnamen die **Strenge**, die das Projekt im Kit gewählt hat (Leicht, Normal oder Streng). Sie
+erscheint erst nach der ersten Meldung des Kits; ein Projekt, das nie eine gemeldet hat, zeigt keine
+Marke.
 
 ### Aktive Runs
 

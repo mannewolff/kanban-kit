@@ -1,5 +1,6 @@
 import type { NightRunErrorClass, NightRunState } from '../lib/nightRunLog'
 import type { NightRunOutcomeView, NightRunServerMode } from './nightRuns'
+import type { Strenge } from './projects'
 import { apiFetch } from './client'
 import { leserZone } from './nightRunUsage'
 
@@ -24,6 +25,8 @@ export interface DisruptionView {
   nightRunId: number
   projectId: number
   projectName: string
+  /** Die zuletzt vom Kit gemeldete Strenge-Stufe des Projekts (Issue #2014); `null` = nie gemeldet. */
+  strictness?: Strenge | null
   /** Die Art des Laufs (Issue #1128) — an jeder Zeile als Marke. */
   mode: NightRunServerMode
   startedAt: string

@@ -1,3 +1,4 @@
+import type { Strenge } from '../api/projects'
 import { NIGHT_RUN_STATE_TEXT } from './nightRunHandoff'
 import { nachProjekt, type Projektgruppe } from './leitstand'
 import type { NightRunState } from './nightRunLog'
@@ -24,6 +25,8 @@ export interface StandLauf {
   nightRunId: number
   projectId: number
   projectName: string
+  /** Die Strenge-Stufe des Projekts (Issue #2014) — für den Kopf der Projektgruppe. */
+  strictness?: Strenge | null
 }
 
 /** Die gemeldeten Pakete **eines** Laufs, wie die Antwort sie neben `laufende` führt (E1). */
@@ -97,6 +100,7 @@ export function laufgruppen<P extends StandPaket>(
       return {
         projectId: lauf.projectId,
         projectName: lauf.projectName,
+        strictness: lauf.strictness,
         nightRunId: lauf.nightRunId,
         pakete,
         stand: standText(pakete, sprache),
@@ -105,6 +109,7 @@ export function laufgruppen<P extends StandPaket>(
   ).map((gruppe) => ({
     projectId: gruppe.projectId,
     projectName: gruppe.projectName,
+    strictness: gruppe.strictness,
     eintraege: gruppe.eintraege.map(({ nightRunId, pakete, stand }) => ({
       nightRunId,
       pakete,

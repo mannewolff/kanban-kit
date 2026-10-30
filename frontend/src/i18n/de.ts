@@ -1041,6 +1041,14 @@ export const de = {
     NACHTPLAN: 'Nachtplan',
   },
 
+  /** Die Strenge-Stufe, die das Projekt im Kit gewählt hat (Issue #2014). */
+  STRENGE: {
+    light: 'Leicht',
+    normal: 'Normal',
+    strict: 'Streng',
+    HINWEIS: 'Strenge, die das Projekt im Kit gewählt hat',
+  },
+
   /** Verbrauch mit Zeitraum-Wahl (Issue #1656). */
   LEITSTAND_VERBRAUCH: {
     ZEITRAUM: {

@@ -96,6 +96,14 @@ describe('laufgruppen (#1172, AK 6 und E8 aus Plan #1167)', () => {
     expect(gruppen[0].eintraege[0].pakete.map((p) => p.state)).toEqual(['GREY', 'GREEN', 'RED'])
   })
 
+  it('reicht die Strenge-Stufe des Projekts an die Gruppe durch (#2014)', () => {
+    const [gruppe] = laufgruppen(
+      [{ ...lauf(1, 42, 'Leitstand'), strictness: 'strict' as const }],
+      [{ nightRunId: 1, pakete: [] }],
+    )
+    expect(gruppe.strictness).toBe('strict')
+  })
+
   it('nimmt den Projektnamen aus laufende', () => {
     const [gruppe] = laufgruppen([lauf(1, 42, 'Leitstand')], [{ nightRunId: 1, pakete: [] }])
     expect(gruppe.projectName).toBe('Leitstand')

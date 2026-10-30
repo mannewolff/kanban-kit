@@ -23,6 +23,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -46,6 +47,7 @@ import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.project.application.KitStrictnessReader;
 
 /**
  * Die Use-Cases des Plattform-Leitstands (Issue #1080, um den Leitstand erweitert in #1095).
@@ -67,7 +69,9 @@ import org.mwolff.manban.nightrun.domain.NightRunState;
 // PMD.ExcessiveImports: Die Kopplung ist die des geprueften Dienstes, nicht eine eigene — Issue
 // #1170 bringt den Kartendienst und die beiden neuen Sichten dazu und reisst damit die Schwelle
 // von 40. Weniger Importe gaebe es nur durch weniger geprueftes Verhalten.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.ExcessiveImports"})
+// PMD.CouplingBetweenObjects: dieselbe Begruendung — Issue #2014 bringt den Port der Strenge-Stufe
+// dazu, den der Dienst neu kennt.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.ExcessiveImports", "PMD.CouplingBetweenObjects"})
 class DisruptionServiceTest {
 
   /** 08:00 UTC — vor der Tagesgrenze, die laufende Nacht ist damit die vom 19. auf den 20. */
@@ -82,6 +86,7 @@ class DisruptionServiceTest {
   private NightRunRepository runs;
   private CardRunQueryService cards;
   private PlatformAdminChecker platformAdminChecker;
+  private KitStrictnessReader strenge;
   private DisruptionService service;
 
   private static DisruptionCandidate kandidat(long laufId, Instant startedAt) {
@@ -247,6 +252,7 @@ class DisruptionServiceTest {
     runs = mock(NightRunRepository.class);
     cards = mock(CardRunQueryService.class);
     platformAdminChecker = mock(PlatformAdminChecker.class);
+    strenge = mock(KitStrictnessReader.class);
     when(platformAdminChecker.isPlatformAdmin(ADMIN)).thenReturn(true);
     service = mitUhr(JETZT);
   }
@@ -289,6 +295,30 @@ class DisruptionServiceTest {
   }
 
   // --- Die Aufteilung der Nacht (Kriterien 1, 2, 6) ------------------------------------------
+
+  /**
+   * Issue #2014: Jede Zeile trägt die zuletzt gemeldete Strenge-Stufe ihres Projekts — in allen
+   * Listen, aus einem einzigen Abruf; ein Projekt ohne Meldung trägt {@code null}.
+   */
+  @Test
+  void jedeZeileTraegtDieStrengeStufeIhresProjekts() {
+    nachtLaeufe(
+        unfertig(7L, 9L, JETZT.minus(Duration.ofMinutes(10)), JETZT.minus(Duration.ofMinutes(5))),
+        unfertig(8L, 11L, JETZT.minus(Duration.ofMinutes(20)), JETZT.minus(Duration.ofMinutes(5))));
+    when(disruptions.openCandidates(any(), any())).thenReturn(List.of(kandidat(5L, JETZT)));
+    pakete(paket(5L, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
+    when(strenge.reportedStrictness()).thenReturn(Map.of(9L, "strict"));
+
+    LeitstandView leitstand = service.leitstand(ADMIN, UTC);
+
+    assertThat(leitstand.laufende())
+        .extracting(DisruptionView::nightRunId, DisruptionView::strictness)
+        .containsExactly(tuple(7L, "strict"), tuple(8L, null));
+    assertThat(leitstand.stoerungen())
+        .extracting(DisruptionView::strictness)
+        .containsExactly("strict");
+    verify(strenge, times(1)).reportedStrictness();
+  }
 
   /**
    * Der verstummte Lauf ist der Kern: Er trägt {@code complete = false} und steht trotzdem unter
@@ -1214,6 +1244,7 @@ class DisruptionServiceTest {
         cards,
         platformAdminChecker,
         new NightRunProperties(null, null, null, null, null),
+        strenge,
         Clock.fixed(jetzt, ZoneOffset.UTC));
   }
 }

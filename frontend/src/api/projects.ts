@@ -16,7 +16,15 @@ export interface Project {
    * echte Mitgliedschaft also nicht ablesbar.
    */
   participationEditable?: boolean
+  /**
+   * Die zuletzt vom Kit gemeldete Strenge-Stufe des Projekts (Issue #2014); `null`, solange das
+   * Projekt nie eine gemeldet hat.
+   */
+  strictness?: Strenge | null
 }
+
+/** Die drei Strenge-Stufen des Kits (Vertrag V1 aus Plan #2102 des Kits). */
+export type Strenge = 'light' | 'normal' | 'strict'
 
 const json = (data: unknown, method: string): RequestInit => ({ method, body: JSON.stringify(data) })
 

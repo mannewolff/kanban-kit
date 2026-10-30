@@ -2,6 +2,7 @@ package org.mwolff.manban.config;
 
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
+import org.mwolff.manban.accesstoken.web.security.KitStrictnessFilter;
 import org.mwolff.manban.accesstoken.web.security.PatAuthenticationFilter;
 import org.mwolff.manban.auth.web.security.ApiAusprobierFilter;
 import org.mwolff.manban.auth.web.security.DisabledUserGuardFilter;
@@ -51,6 +52,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *   <li>Schreibsperre der Vorschau (Issue #1920): Der {@link VorschauSchreibsperreFilter} läuft
  *       nach der Sperrprüfung und der Durchsatzbremse und weist in der Vorschau verändernde Aufrufe
  *       und die persönlichen Pfade ab.
+ *   <li>Strenge-Stufe des Kits (Issue #2014): Der {@link KitStrictnessFilter} läuft zuletzt und
+ *       legt den Header {@code X-Kit-Strictness} eines gebundenen Tokens am Projekt ab.
  * </ul>
  *
  * <p>2FA-Vorbereitung: Der zweite Faktor hängt im Login-Flow (LoginCodeController / LoginService),
@@ -74,7 +77,8 @@ class SecurityConfig {
       ThroughputFilter throughputFilter,
       ApiAusprobierFilter ausprobierFilter,
       VorschauFilter vorschauFilter,
-      VorschauSchreibsperreFilter schreibsperre)
+      VorschauSchreibsperreFilter schreibsperre,
+      KitStrictnessFilter kitStrictness)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -121,7 +125,10 @@ class SecurityConfig {
         // Schreibsperre der Vorschau (Issue #1920): nach der Sperrprüfung, denn sie liest den
         // Kontext der Vorschau, den der VorschauFilter ablegt; hinter der Durchsatzbremse, damit
         // auch abgewiesene Aufrufe zählen.
-        .addFilterAfter(schreibsperre, ThroughputFilter.class);
+        .addFilterAfter(schreibsperre, ThroughputFilter.class)
+        // Strenge-Stufe des Kits (Issue #2014): ganz hinten, denn sie braucht das gebundene Token
+        // aus dem PAT-Filter und soll nur zählen, was Sperrprüfung und Bremse durchgelassen haben.
+        .addFilterAfter(kitStrictness, VorschauSchreibsperreFilter.class);
     return http.build();
   }
 
@@ -198,6 +205,21 @@ class SecurityConfig {
       VorschauSchreibsperreFilter schreibsperre) {
     FilterRegistrationBean<VorschauSchreibsperreFilter> registration =
         new FilterRegistrationBean<>(schreibsperre);
+    registration.setEnabled(false);
+    return registration;
+  }
+
+  /**
+   * Hält den {@link KitStrictnessFilter} aus der Servlet-Filterkette heraus (Issue #2014), aus
+   * demselben Grund wie beim {@link ThroughputFilter}: Er braucht die Authentifizierung der Kette
+   * oben. Liefe er zusätzlich vor ihr im Container, fände er dort keine und markierte die Anfrage
+   * als gefiltert — in der Kette würde er dann übersprungen.
+   */
+  @Bean
+  FilterRegistrationBean<KitStrictnessFilter> kitStrictnessFilterOutsideTheServletChain(
+      KitStrictnessFilter kitStrictness) {
+    FilterRegistrationBean<KitStrictnessFilter> registration =
+        new FilterRegistrationBean<>(kitStrictness);
     registration.setEnabled(false);
     return registration;
   }

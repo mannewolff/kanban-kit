@@ -8,6 +8,7 @@ import { ApiError } from '../api/client'
 import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecastEntry } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunItemView, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
+import { projectsApi } from '../api/projects'
 import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
 import { TabletQuerProvider } from '../lib/tabletQuer'
 import { setzeMedien } from '../test/setup'
@@ -18,6 +19,7 @@ vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/cards', () => ({ cardsApi: { byNumber: vi.fn() } }))
 vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementationTime: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn(), delivery: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
+vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn(), models: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
   ...(await original<typeof import('../api/nightRunUsage')>()),
@@ -59,6 +61,7 @@ const m = {
   verbrauch: nightRunUsageApi.period as ReturnType<typeof vi.fn>,
   lebenszeit: nightRunUsageApi.total as ReturnType<typeof vi.fn>,
   budget: nightRunUsageApi.budget as ReturnType<typeof vi.fn>,
+  projekte: projectsApi.list as ReturnType<typeof vi.fn>,
 }
 
 const karte = (title: string): Card => ({
@@ -331,6 +334,7 @@ function renderPage(pfad = '/boards/1/leitstand') {
 beforeEach(() => {
   vi.clearAllMocks()
   m.board.mockResolvedValue({ id: 1, name: 'Entwicklung', projectId: 5, columns: [] })
+  m.projekte.mockResolvedValue([])
   m.kpis.mockResolvedValue(kpis())
   m.implementierung.mockResolvedValue({ avgImplementationSeconds: 5400, implementationSampleCount: 4 })
   m.epics.mockResolvedValue([epic(1, 'Nachtlauf-Auswertung', 7, 9, [917]), epic(2, 'Erledigt', 3, 3)])
@@ -502,6 +506,42 @@ describe('LeitstandPage (#979)', () => {
     renderPage()
     expect(screen.getByRole('heading', { level: 1, name: 'Leitstand' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { level: 1, name: 'Leitstand Entwicklung' })).toBeInTheDocument()
+  })
+})
+
+describe('LeitstandPage — Strenge-Stufe des Kits (Issue #2014)', () => {
+  const projekt = (id: number, strictness: 'light' | 'normal' | 'strict' | null) => ({
+    id,
+    name: `P${id}`,
+    role: 'OWNER',
+    createdAt: '2026-10-01T00:00:00Z',
+    strictness,
+  })
+
+  it('zeigt im Seitenkopf die Stufe des Projekts aus der Projektliste', async () => {
+    m.projekte.mockResolvedValue([projekt(4, 'light'), projekt(5, 'strict')])
+    renderPage()
+
+    const kopf = await screen.findByTestId('leitstand-kopf')
+    expect(within(kopf).getByTestId('strenge-marke')).toHaveTextContent('Streng')
+  })
+
+  it('zeigt keinen Kopf, solange das Projekt nie eine Stufe gemeldet hat', async () => {
+    m.projekte.mockResolvedValue([projekt(5, null)])
+    renderPage()
+
+    await screen.findByRole('region', { name: 'Jüngster Run' })
+    await waitFor(() => expect(m.projekte).toHaveBeenCalled())
+    expect(screen.queryByTestId('leitstand-kopf')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('strenge-marke')).not.toBeInTheDocument()
+  })
+
+  it('lässt die Marke weg, wenn die Projektliste nicht lädt', async () => {
+    m.projekte.mockRejectedValue(new Error('weg'))
+    renderPage()
+
+    await screen.findByRole('region', { name: 'Jüngster Run' })
+    expect(screen.queryByTestId('strenge-marke')).not.toBeInTheDocument()
   })
 })
 

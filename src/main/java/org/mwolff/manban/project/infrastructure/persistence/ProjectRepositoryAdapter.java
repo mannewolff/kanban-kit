@@ -90,10 +90,25 @@ class ProjectRepositoryAdapter implements ProjectRepository {
   }
 
   /**
-   * {@code interactive_usage_since}, {@code dashboard_participation} und {@code monthly_budget_usd}
-   * fehlen hier absichtlich: Alle drei Spalten sind an der Entity {@code insertable = false,
-   * updatable = false} und gehören jeweils einem engen Schreibweg. Über {@code save} können sie
-   * deshalb weder gesetzt noch verloren werden.
+   * Gezielter Direkt-Update wie bei {@code monthly_budget_usd} (Issue #2014). Das {@code IS
+   * DISTINCT FROM} in der Bedingung spart den Schreibzugriff, solange die Stufe gleich bleibt: Das
+   * Kit meldet sie an jeder Anfrage, ändern tut sie sich selten. Ein unbekanntes Projekt trifft
+   * keine Zeile.
+   */
+  @Override
+  public void setKitStrictness(long projectId, String value) {
+    jdbc.update(
+        "UPDATE project SET kit_strictness = ? WHERE id = ? AND kit_strictness IS DISTINCT FROM ?",
+        value,
+        projectId,
+        value);
+  }
+
+  /**
+   * {@code interactive_usage_since}, {@code dashboard_participation}, {@code monthly_budget_usd}
+   * und {@code kit_strictness} fehlen hier absichtlich: Alle vier Spalten sind an der Entity {@code
+   * insertable = false, updatable = false} und gehören jeweils einem engen Schreibweg. Über {@code
+   * save} können sie deshalb weder gesetzt noch verloren werden.
    */
   private static ProjectEntity toEntity(Project p) {
     return new ProjectEntity(p.id(), p.name(), p.ownerUserId(), p.createdAt());
@@ -107,6 +122,7 @@ class ProjectRepositoryAdapter implements ProjectRepository {
         e.getCreatedAt(),
         e.getInteractiveUsageSince(),
         e.isDashboardParticipation(),
-        e.getMonthlyBudgetUsd());
+        e.getMonthlyBudgetUsd(),
+        e.getKitStrictness());
   }
 }

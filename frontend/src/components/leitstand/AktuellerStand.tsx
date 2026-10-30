@@ -17,6 +17,7 @@ import { NIGHT_RUN_VERDICT_TEXT, nightRunZustandsText } from '../../lib/nightRun
 import { useJetzt } from '../../lib/useJetzt'
 import { ANZEIGE, RAND, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { LaufArtSymbol } from './LaufArtSymbol'
+import { StrengeMarke } from './StrengeMarke'
 import { Led, LeerSatz, PaketDauer, Taste, ZEILE_HOVER_SX } from './LeitstandBausteine'
 
 /**
@@ -130,16 +131,19 @@ function Standgruppe({
         component="h3"
         data-testid={`stand-gruppe-kopf-${gruppe.projectId}`}
         sx={{
-          ...ANZEIGE,
-          fontSize: 12.5,
-          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: '8px',
           m: 0,
           px: '16px',
           pb: '4px',
           borderBottom: `1px solid ${RAND}`,
         }}
       >
-        {gruppe.projectName}
+        <Box component="span" sx={{ ...ANZEIGE, fontSize: 12.5, fontWeight: 600 }}>
+          {gruppe.projectName}
+        </Box>
+        <StrengeMarke stufe={gruppe.strictness} />
       </Box>
       {gruppe.eintraege.map((eintrag) => (
         <Standlauf
