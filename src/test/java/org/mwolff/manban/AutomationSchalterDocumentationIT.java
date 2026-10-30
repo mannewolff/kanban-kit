@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,9 @@ import org.springframework.boot.test.context.SpringBootTest;
  * Compose) sichert {@code BetriebsvariablenDocumentationTest} aus Issue #905. Gesammelt wird wie
  * dort nur aus Tabellenzeilen: Eine Erwähnung im Fließtext ist keine Zusicherung.
  *
+ * <p>Ein Schaltertext darf mehrere Namen tragen — Push nennt alle drei VAPID-Angaben in einem Text
+ * (Issue #1998); geprüft wird jeder Name einzeln (Issue #2015).
+ *
  * <p>Die Mindestzahl der gemeldeten Zustände ist Absicht: Fiele ein Contributor versehentlich weg,
  * wäre die Menge der Schalternamen leer — und ein Test über eine leere Menge ist immer grün.
  */
@@ -44,10 +48,20 @@ class AutomationSchalterDocumentationIT extends AbstractIntegrationTest {
 
   @Test
   void jederGemeldeteSchalterStehtInDerAnleitung() throws IOException {
-    List<String> schalter =
+    List<String> texte =
         contributors.stream()
             .flatMap(contributor -> contributor.statuses().stream())
             .map(status -> status.schalterVariable())
+            .distinct()
+            .toList();
+
+    assertThat(texte)
+        .as("Jeder Schaltertext im Startprotokoll nennt mindestens einen Variablennamen")
+        .allSatisfy(text -> assertThat(VARIABLE.matcher(text).find()).as(text).isTrue());
+
+    List<String> schalter =
+        texte.stream()
+            .flatMap(text -> VARIABLE.matcher(text).results().map(MatchResult::group))
             .distinct()
             .toList();
 

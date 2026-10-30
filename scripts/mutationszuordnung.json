@@ -7,6 +7,7 @@
   "frontend/src/sprachwaechter.test.ts": ["frontend/src/lib/sprachwaechter.ts"],
   "src/test/java/org/mwolff/manban/AbstractIntegrationTest.java": ["docker-compose.yml"],
   "src/test/java/org/mwolff/manban/ArchitectureTest.java": ["src/test/java/org/mwolff/manban/ArchitekturKlassen.java"],
+  "src/test/java/org/mwolff/manban/AutomationSchalterDocumentationIT.java": ["docs/betrieb.md"],
   "src/test/java/org/mwolff/manban/BetriebsdateienTest.java": ["README.md", "UPGRADING.md", "deployment-spec.md"],
   "src/test/java/org/mwolff/manban/MessagesVollstaendigkeitTest.java": ["src/main/resources/i18n/messages_de.properties", "src/main/resources/i18n/messages_en.properties", "src/main/resources/ValidationMessages_de.properties", "src/main/resources/ValidationMessages_en.properties", "src/main/java/org/mwolff/manban/common/i18n/UebersetzbareMeldung.java"],
   "src/test/java/org/mwolff/manban/MeColorSchemeIT.java": ["src/main/java/org/mwolff/manban/auth/web/MeController.java", "src/main/java/org/mwolff/manban/auth/application/MeService.java", "src/main/resources/db/migration/V61__app_user_color_scheme.sql"],
