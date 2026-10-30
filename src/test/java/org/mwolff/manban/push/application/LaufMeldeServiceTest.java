@@ -301,6 +301,17 @@ class LaufMeldeServiceTest {
   }
 
   @Test
+  void eineSchonGeplanteNachrichtZaehltNichtNochEinmal() {
+    // Given: Die Outbox kennt den Schlüssel schon, etwa aus einem abgebrochenen Takt.
+    abo(11L, KONTO);
+    outbox.add(new OutboxMessage(LaufNachricht.TYP, "push-lauf:300:11", "{}"));
+
+    // When / Then
+    assertThat(service.melde(gescheitertAufProdukt())).isZero();
+    assertThat(outbox).hasSize(1);
+  }
+
+  @Test
   void einAboMitAbgeschaltetemBoardBekommtNichtsUndDerLaufGiltTrotzdemAlsGemeldet() {
     abo(11L, KONTO, PRODUKT);
 

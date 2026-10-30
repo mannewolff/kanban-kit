@@ -169,6 +169,13 @@ class PushSchluesselStartupCheckTest {
   }
 
   @Test
+  void aktiv_nurWennAlleDreiAngabenGesetztSind() {
+    assertThat(new PushProperties(null, PRIVAT, SUBJECT, null).aktiv()).isFalse();
+    assertThat(new PushProperties(OEFFENTLICH, null, SUBJECT, null).aktiv()).isFalse();
+    assertThat(new PushProperties(OEFFENTLICH, PRIVAT, null, null).aktiv()).isFalse();
+  }
+
+  @Test
   void meldeTakt_hatDieVorgabeEineMinute() {
     assertThat(new PushProperties(null, null, null, null).meldeTakt())
         .isEqualTo(Duration.ofMinutes(1));

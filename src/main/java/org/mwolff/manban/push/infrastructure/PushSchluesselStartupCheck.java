@@ -55,17 +55,13 @@ final class PushSchluesselStartupCheck {
       return;
     }
     if (!fehlend.isEmpty()) {
-      abbrechen(
+      throw abbrechen(
           "Web Push ist nur halb eingerichtet, es fehlt "
               + String.join(", ", fehlend)
               + ". Entweder alle drei setzen oder keinen (docs/betrieb.md).");
     }
-    try {
-      VapidSchluessel.aus(
-          Objects.requireNonNull(properties.vapidPublicKey()),
-          Objects.requireNonNull(properties.vapidPrivateKey()));
-    } catch (IllegalArgumentException e) {
-      abbrechen(
+    if (!sindLesbar(properties)) {
+      throw abbrechen(
           "Die VAPID-Schlüssel in "
               + PUBLIC_KEY
               + " und "
@@ -74,7 +70,7 @@ final class PushSchluesselStartupCheck {
               + " node scripts/vapid-schluessel.mjs (docs/betrieb.md).");
     }
     if (!istKontakt(Objects.requireNonNull(properties.subject()))) {
-      abbrechen(SUBJECT + " muss mit mailto: oder https:// beginnen (RFC 8292).");
+      throw abbrechen(SUBJECT + " muss mit mailto: oder https:// beginnen (RFC 8292).");
     }
   }
 
@@ -92,14 +88,26 @@ final class PushSchluesselStartupCheck {
     return fehlend;
   }
 
+  /** Wahr, wenn beide Schlüssel lesbar sind und zusammengehören. */
+  private static boolean sindLesbar(PushProperties properties) {
+    try {
+      VapidSchluessel.aus(
+          Objects.requireNonNull(properties.vapidPublicKey()),
+          Objects.requireNonNull(properties.vapidPrivateKey()));
+      return true;
+    } catch (IllegalArgumentException e) {
+      return false;
+    }
+  }
+
   private static boolean istKontakt(String subject) {
     String klein = subject.toLowerCase(Locale.ROOT);
     return klein.startsWith("mailto:") || klein.startsWith("https://");
   }
 
-  private static void abbrechen(String grund) {
+  private static IllegalStateException abbrechen(String grund) {
     String meldung = "Start abgebrochen: " + grund;
     log.error(meldung);
-    throw new IllegalStateException(meldung);
+    return new IllegalStateException(meldung);
   }
 }

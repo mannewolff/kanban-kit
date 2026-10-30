@@ -26,6 +26,7 @@ import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
+import org.mwolff.manban.push.application.PushAboRepository;
 import org.mwolff.manban.push.application.PushLaufMeldungRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -53,6 +54,7 @@ class PushAboIT extends AbstractIntegrationTest {
   @Autowired private BoardService boards;
   @Autowired private NightRunRepository runs;
   @Autowired private PushLaufMeldungRepository meldungen;
+  @Autowired private PushAboRepository abos;
 
   private Cookie session(String email, PlatformRole role) {
     return anmeldung.anmelden(email, role);
@@ -182,6 +184,23 @@ class PushAboIT extends AbstractIntegrationTest {
         .isEqualTo(userId(owner));
     assertThat(anzahl("SELECT count(*) FROM push_abo_board_aus WHERE abo_id = ?", aboId(endpoint)))
         .isZero();
+  }
+
+  @Test
+  void findById_liefertDasAboUndLeerFuerEinFehlendes() throws Exception {
+    String email = "push-findbyid@example.com";
+    Cookie session = session(email, PlatformRole.USER);
+    String endpoint = "https://push.example/findbyid";
+    abonniere(session, endpoint).andExpect(status().isNoContent());
+    long aboId = aboId(endpoint);
+
+    assertThat(abos.findById(aboId))
+        .hasValueSatisfying(
+            abo -> {
+              assertThat(abo.endpoint()).isEqualTo(endpoint);
+              assertThat(abo.userId()).isEqualTo(userId(email));
+            });
+    assertThat(abos.findById(aboId + 1_000_000)).isEmpty();
   }
 
   /**

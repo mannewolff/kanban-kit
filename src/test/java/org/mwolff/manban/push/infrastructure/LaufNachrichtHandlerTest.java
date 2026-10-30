@@ -239,13 +239,17 @@ class LaufNachrichtHandlerTest {
   }
 
   @Test
-  void einUmleitungsstatusGiltAlsFehler() {
+  void einStatusAusserhalbVon2xxGiltAlsFehler() {
     abo();
-    antwort.set(301);
     LaufNachrichtHandler handler = handler();
 
+    antwort.set(301);
     assertThatThrownBy(() -> handler.handle(gescheitert()))
         .isInstanceOf(IllegalStateException.class);
+    antwort.set(199);
+    assertThatThrownBy(() -> handler.handle(gescheitert()))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("199");
   }
 
   @Test
