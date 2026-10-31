@@ -17,6 +17,27 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.13.0] – 2026-10-30
+
+- chore: v3.12.1
+- Push-Modul erreicht wieder 100 % Testabdeckung ([#2016](https://github.com/mannewolff/kanban-kit/issues/2016))
+- Startprotokoll-Test prüft jeden Schalternamen einzeln ([#2015](https://github.com/mannewolff/kanban-kit/issues/2015))
+- Leitstand zeigt die Strenge-Stufe jedes Projekts ([#2014](https://github.com/mannewolff/kanban-kit/issues/2014))
+- Mobil: Benachrichtigungen auf dem Handy einschalten, anzeigen, beenden ([#1999](https://github.com/mannewolff/kanban-kit/issues/1999))
+- Mobil: Meldejob schickt je Lauf höchstens eine Nachricht ([#1998](https://github.com/mannewolff/kanban-kit/issues/1998))
+- Mobil: Push-Abos je Gerät mit Board-Schaltern und Sitzungsende ([#1997](https://github.com/mannewolff/kanban-kit/issues/1997))
+- Mobil: Web-Push-Grundlage mit JDK-Kryptografie, abschaltbar ([#1996](https://github.com/mannewolff/kanban-kit/issues/1996))
+- Mobil: Läufe-Liste und Lauf-Ansicht unter /mobil ([#1995](https://github.com/mannewolff/kanban-kit/issues/1995))
+- Mobil: Meldegrund und mobile Läufe-Liste im Backend ([#1994](https://github.com/mannewolff/kanban-kit/issues/1994))
+- Nachtlauf: Lauf merkt sich das Board seines Zugangsschlüssels ([#1993](https://github.com/mannewolff/kanban-kit/issues/1993))
+- Mobil: Ideen festhalten unter /mobil mit Standard-Board je Gerät ([#1992](https://github.com/mannewolff/kanban-kit/issues/1992))
+- Siri-Kurzbefehl: Anleitung und abgesicherter Ingest-Aufruf ([#1991](https://github.com/mannewolff/kanban-kit/issues/1991))
+- Projekt-API: Tests töten Mutanten in projects.ts ([#2012](https://github.com/mannewolff/kanban-kit/issues/2012))
+- Budgetzeile: Tests töten Mutanten in LeitstandBudget.tsx ([#2011](https://github.com/mannewolff/kanban-kit/issues/2011))
+- Rollen-Helfer: Tests töten Mutanten in roles.ts ([#2010](https://github.com/mannewolff/kanban-kit/issues/2010))
+- Karten-Zweig: Test tötet Mutanten beim Finden des Anfangs ([#2009](https://github.com/mannewolff/kanban-kit/issues/2009))
+- Herkunftsbaum: Kante im Zweig über den Vorfahren statt über dessen ID ([#2008](https://github.com/mannewolff/kanban-kit/issues/2008))
+
 ## [3.12.0] – 2026-10-29
 
 - chore: v3.11.1
