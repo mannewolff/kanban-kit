@@ -180,24 +180,40 @@ public class PermissionChecker {
         .ifPresent(vorschau -> requireAdminSiehtNachtlauf(vorschau, projectId));
   }
 
+  /**
+   * Ob der Benutzer die Läufe des Projekts sehen darf — die Regel aus {@link
+   * #requireNightRunAccess} als Ja oder Nein (Issue #1994, Plan #1989 E9): der echte Owner immer,
+   * ein Plattform-Admin nur bei teilnehmendem Projekt.
+   *
+   * <p>Für Aufrufer, die über mehrere Projekte hinweg auswählen — die mobile Läufe-Liste und der
+   * Meldejob. Sie wirft nicht und kennt <b>keinen Vorschau-Zweig</b>: Die Antwort gilt dem
+   * genannten Konto, auch wenn sie ein Hintergrundjob ohne Anfrage stellt.
+   */
+  @Transactional(readOnly = true)
+  public boolean hatNachtlaufZugriff(long userId, long projectId) {
+    return nachtlaufZugriff(userId, projectId);
+  }
+
+  /** Ohne Proxy-Aufruf aus {@link #requireEigenerNachtlaufZugriff} (java:S6809). */
+  private boolean nachtlaufZugriff(long userId, long projectId) {
+    return istOwner(memberships.findByProjectIdAndUserId(projectId, userId))
+        || (platformAdminChecker.isPlatformAdmin(userId) && nimmtTeil(projectId));
+  }
+
   /** Die Regel aus {@link #requireNightRunAccess} für den Principal selbst. */
   private void requireEigenerNachtlaufZugriff(long userId, long projectId) {
-    Optional<ProjectMembership> membership =
-        memberships.findByProjectIdAndUserId(projectId, userId);
-    if (istOwner(membership)) {
+    if (nachtlaufZugriff(userId, projectId)) {
       return;
     }
-    if (!platformAdminChecker.isPlatformAdmin(userId)) {
-      // Ohne Admin-Status entscheidet allein die Mitgliedschaft — wie in requireOwner:
-      // Nichtmitglied 404 (kein Existenz-Leak), Mitglied ohne OWNER-Rolle 403.
-      if (membership.isEmpty()) {
-        throw new ProjectNotFoundException();
-      }
+    if (platformAdminChecker.isPlatformAdmin(userId)) {
       throw new ProjectAccessDeniedException();
     }
-    if (!nimmtTeil(projectId)) {
-      throw new ProjectAccessDeniedException();
+    // Ohne Admin-Status entscheidet allein die Mitgliedschaft — wie in requireOwner:
+    // Nichtmitglied 404 (kein Existenz-Leak), Mitglied ohne OWNER-Rolle 403.
+    if (memberships.findByProjectIdAndUserId(projectId, userId).isEmpty()) {
+      throw new ProjectNotFoundException();
     }
+    throw new ProjectAccessDeniedException();
   }
 
   /**

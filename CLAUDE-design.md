@@ -184,6 +184,10 @@ Zu jeder darstellenden Route aus [`frontend/src/App.tsx`](frontend/src/App.tsx) 
 | `/administration` | Administration | Rahmen; Platten | #978 |
 | `/administration/api` | API-Schnittstelle | Rahmen; Swagger UI mit ihrem Standard-CSS auf einer hellen Platte, auch im dunklen Modus | #1410 |
 | `/invitations/accept` | Einladung annehmen | Rahmen; Meldungen in Melderfarben | #978 |
+| `/mobil` | Mobil: Idee festhalten | Eigener schmaler Rahmen ohne Schiene (`MobilRahmen`): Kopf und Leiste unten als Platte auf dem Grund, Kupfertaste; Meldungen in Melderfarben | #1992 |
+| `/mobil/laeufe` | Mobil: Läufe | wie Mobil: Idee festhalten; Läufe als Liste mit Trennlinien, Zustand als Wort neben jedem Eintrag; leere Liste als ruhiger Text in Sekundärfarbe | #1995 |
+| `/mobil/laeufe/:laufId` | Mobil: Lauf | wie Mobil: Idee festhalten; Zustand, letzte Meldung und Dauer als Beschreibungsliste, „nicht gefunden“ als Info-Melder | #1995 |
+| `/mobil/einstellungen` | Mobil: Einstellungen | wie Mobil: Idee festhalten; Board-Wahl als Optionsliste | #1992 |
 
 ---
 

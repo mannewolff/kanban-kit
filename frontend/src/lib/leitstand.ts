@@ -1,4 +1,5 @@
 import type { WeeklyThroughput } from '../api/dashboard'
+import type { Strenge } from '../api/projects'
 import type { NightRunErrorClassCounts, NightRunItemView, NightRunOutcomeView, NightRunServerMode, NightRunView } from '../api/nightRuns'
 import type { NightRunErrorClass, NightRunState } from './nightRunLog'
 import { NIGHT_RUN_VERDICT_TEXT } from './nightRunHandoff'
@@ -663,6 +664,8 @@ export function tokenMenge(anzahl: number | null, sprache: Sprache = 'de'): { we
 export interface Projektgruppe<T> {
   projectId: number
   projectName: string
+  /** Die zuletzt vom Kit gemeldete Strenge-Stufe des Projekts (Issue #2014), aus dem ersten Eintrag. */
+  strictness?: Strenge | null
   eintraege: T[]
 }
 
@@ -675,7 +678,9 @@ export interface Projektgruppe<T> {
  * Sortieren im Browser waere eine zweite Fassung von „juengste zuoberst"; sie liefe auseinander,
  * sobald der Server seine Sortierung aendert.
  */
-export function nachProjekt<T extends { projectId: number; projectName: string }>(
+export function nachProjekt<
+  T extends { projectId: number; projectName: string; strictness?: Strenge | null },
+>(
   liste: readonly T[],
 ): Projektgruppe<T>[] {
   const gruppen = new Map<number, Projektgruppe<T>>()
@@ -685,6 +690,7 @@ export function nachProjekt<T extends { projectId: number; projectName: string }
       gruppen.set(eintrag.projectId, {
         projectId: eintrag.projectId,
         projectName: eintrag.projectName,
+        strictness: eintrag.strictness,
         eintraege: [eintrag],
       })
     } else {

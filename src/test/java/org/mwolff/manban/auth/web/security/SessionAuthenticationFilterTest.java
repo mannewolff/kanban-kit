@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.application.SessionCheck;
 import org.mwolff.manban.auth.application.SessionTokens;
+import org.mwolff.manban.auth.application.SitzungsEnde;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -203,5 +204,61 @@ class SessionAuthenticationFilterTest {
 
     // Then
     verify(response).addHeader(HttpHeaders.SET_COOKIE, renewed.toString());
+  }
+
+  /**
+   * Sitzungsende als Details (Issue #1997, Plan #1989 E14): Ein nicht erneuertes Token endet, wann
+   * es im Token steht.
+   */
+  @Test
+  void doFilter_notRenewed_setsSitzungsEndeOfToken() throws Exception {
+    // Given
+    Instant ablauf = NOW.plus(TTL).minus(Duration.ofDays(1));
+    when(cookies.readToken(request)).thenReturn(Optional.of("good-token"));
+    when(tokens.verify("good-token")).thenReturn(Optional.of(new SessionCheck(42L, ablauf)));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertThat(SecurityContextHolder.getContext().getAuthentication().getDetails())
+        .isEqualTo(new SitzungsEnde(ablauf));
+  }
+
+  /** Ein frisch ausgestelltes Token trägt sein eigenes Ende als Details. */
+  @Test
+  void doFilter_freshToken_setsSitzungsEndeOfToken() throws Exception {
+    // Given
+    when(cookies.readToken(request)).thenReturn(Optional.of("good-token"));
+    when(tokens.verify("good-token")).thenReturn(Optional.of(new SessionCheck(42L, NOW.plus(TTL))));
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertThat(SecurityContextHolder.getContext().getAuthentication().getDetails())
+        .isEqualTo(new SitzungsEnde(NOW.plus(TTL)));
+  }
+
+  /**
+   * Nach einer Erneuerung gilt das Ende des neuen Tokens — jetzt plus die volle Sitzungsdauer,
+   * nicht das alte Ende aus dem Cookie der Anfrage.
+   */
+  @Test
+  void doFilter_renewed_setsSitzungsEndeOfRenewedToken() throws Exception {
+    // Given
+    when(cookies.readToken(request)).thenReturn(Optional.of("good-token"));
+    when(tokens.verify("good-token"))
+        .thenReturn(Optional.of(new SessionCheck(42L, NOW.plus(Duration.ofMinutes(5)))));
+    when(tokens.issue(42L)).thenReturn("renewed-token");
+    when(cookies.create("renewed-token"))
+        .thenReturn(ResponseCookie.from("manban_session", "renewed-token").build());
+
+    // When
+    filter.doFilter(request, response, chain);
+
+    // Then
+    assertThat(SecurityContextHolder.getContext().getAuthentication().getDetails())
+        .isEqualTo(new SitzungsEnde(NOW.plus(TTL)));
   }
 }

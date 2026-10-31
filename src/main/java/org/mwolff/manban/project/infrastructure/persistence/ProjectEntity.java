@@ -56,6 +56,14 @@ class ProjectEntity {
   @Column(name = "monthly_budget_usd", insertable = false, updatable = false)
   private @Nullable BigDecimal monthlyBudgetUsd;
 
+  /**
+   * Die zuletzt vom Kit gemeldete Strenge-Stufe (Issue #2014) — <b>nur lesbar</b>, dieselbe
+   * Begründung wie bei {@link #dashboardParticipation}. Geschrieben wird sie allein über {@code
+   * ProjectRepository#setKitStrictness}; {@code null} heißt „nie gemeldet“.
+   */
+  @Column(name = "kit_strictness", insertable = false, updatable = false)
+  private @Nullable String kitStrictness;
+
   protected ProjectEntity() {
     // für JPA
   }
@@ -93,5 +101,9 @@ class ProjectEntity {
 
   @Nullable BigDecimal getMonthlyBudgetUsd() {
     return monthlyBudgetUsd;
+  }
+
+  @Nullable String getKitStrictness() {
+    return kitStrictness;
   }
 }

@@ -45,6 +45,10 @@ import org.mwolff.manban.common.Identifiable;
  *     Lauf und bei jedem, dessen Kit keine Stufen meldet
  * @param closedAt wann ein Plattform-Admin den Lauf von Hand beendet hat (Issue #1197, gelesen seit
  *     #1725); {@code null} heißt „nicht von Hand beendet“
+ * @param boardId Board des Zugangsschlüssels, über den der Lauf gemeldet wurde (Issue #1993);
+ *     gesetzt von der ersten Meldung, Folgemeldungen lassen es stehen. {@code null} heißt „kein
+ *     Board erkennbar“ — jeder hochgeladene Lauf, jeder vor {@code V65} gemeldete und jeder, dessen
+ *     Board gelöscht wurde
  */
 public record NightRun(
     @Nullable Long id,
@@ -69,11 +73,67 @@ public record NightRun(
     @Nullable NightRunAbortKind abortKind,
     @Nullable ReleasePreparation releasePreparation,
     List<RunnerStufe> current,
-    @Nullable Instant closedAt)
+    @Nullable Instant closedAt,
+    @Nullable Long boardId)
     implements Identifiable {
 
   public NightRun {
     current = List.copyOf(current);
+  }
+
+  /**
+   * Ein Lauf ohne Board — der Stand jedes Erzeugungspfads, der keinen Zugangsschlüssel kennt (Issue
+   * #1993).
+   */
+  public NightRun(
+      @Nullable Long id,
+      Long projectId,
+      Instant startedAt,
+      NightRunMode mode,
+      NightRunKind kind,
+      long durationMs,
+      int processedCount,
+      int skippedCount,
+      int unparsedCount,
+      @Nullable String unparsedSample,
+      Instant createdAt,
+      NightRunOrigin origin,
+      @Nullable String tokenName,
+      boolean complete,
+      @Nullable Instant updatedAt,
+      @Nullable NightRunUsage usage,
+      @Nullable String noWorkReason,
+      @Nullable NightRunBudget budget,
+      @Nullable String abortReason,
+      @Nullable NightRunAbortKind abortKind,
+      @Nullable ReleasePreparation releasePreparation,
+      List<RunnerStufe> current,
+      @Nullable Instant closedAt) {
+    this(
+        id,
+        projectId,
+        startedAt,
+        mode,
+        kind,
+        durationMs,
+        processedCount,
+        skippedCount,
+        unparsedCount,
+        unparsedSample,
+        createdAt,
+        origin,
+        tokenName,
+        complete,
+        updatedAt,
+        usage,
+        noWorkReason,
+        budget,
+        abortReason,
+        abortKind,
+        releasePreparation,
+        current,
+        closedAt,
+        null);
   }
 
   /**
@@ -125,6 +185,7 @@ public record NightRun(
         abortKind,
         releasePreparation,
         List.of(),
+        null,
         null);
   }
 }

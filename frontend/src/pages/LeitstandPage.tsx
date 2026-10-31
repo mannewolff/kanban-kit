@@ -36,6 +36,7 @@ import {
 import { LeitstandVerbrauch } from '../components/leitstand/LeitstandVerbrauch'
 import { ModellePlatte } from '../components/leitstand/ModellePlatte'
 import { NacharbeitPlatte } from '../components/leitstand/NacharbeitPlatte'
+import { StrengeMarke } from '../components/leitstand/StrengeMarke'
 import { VorhabenPlatte } from '../components/leitstand/VorhabenPlatte'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { VorschauVerborgenHinweis } from '../components/VorschauVerborgenHinweis'
@@ -66,6 +67,7 @@ import {
   vorgaenge,
 } from '../lib/leitstand'
 import { useLeitstandDaten, type Laden } from '../lib/useLeitstandDaten'
+import { useProjectStrictness } from '../lib/useProjectStrictness'
 import {
   BLINKER_HELL,
   ETIKETT,
@@ -117,6 +119,7 @@ export function LeitstandPage() {
   const { boardId } = useParams()
   const t = useT().LEITSTAND
   const daten = useLeitstandDaten(boardId)
+  const strenge = useProjectStrictness(daten.board.art === 'da' ? daten.board.wert.projectId : null)
   // Die Karte kommt aus „Letzter Lauf", „Nacharbeit" oder „Alter in Arbeit" und damit immer aus einem
   // bekannten Projekt; das Projekt reist im Zustand mit, statt beim Rendern des Dialogs noch einmal gegen `null` geprüft zu werden.
   const [detail, setDetail] = useState<Auswahl | null>(null)
@@ -132,6 +135,14 @@ export function LeitstandPage() {
       <Box component="h1" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
         {board.art === 'da' ? t.TITEL_BOARD(board.wert.name) : t.TITEL}
       </Box>
+
+      {strenge !== null && (
+        // Der Kopf der Seite trägt die Strenge-Stufe des Projekts (Issue #2014); ohne Meldung steht
+        // hier nichts, damit die Seite für Projekte ohne Kit unverändert bleibt.
+        <Box data-testid="leitstand-kopf" sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <StrengeMarke stufe={strenge} />
+        </Box>
+      )}
 
       {laeufeVerborgen && <VorschauVerborgenHinweis />}
 

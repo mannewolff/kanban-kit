@@ -399,6 +399,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(
@@ -489,6 +490,8 @@ class NightRunServiceTest {
 
   private static final String TOKEN = "nacht-token";
 
+  private static final long BOARD = 7L;
+
   private static NightRunService.NewNightRun meldung(
       Instant startedAt,
       boolean complete,
@@ -531,7 +534,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_verlangtDenBesitzer() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     verify(permissions).requireOwner(USER, PROJECT);
   }
@@ -541,7 +544,9 @@ class NightRunServiceTest {
     doThrow(new ProjectAccessDeniedException()).when(permissions).requireOwner(USER, PROJECT);
 
     assertThatThrownBy(
-            () -> service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null)))
+            () ->
+                service.ingest(
+                    USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null)))
         .isInstanceOf(ProjectAccessDeniedException.class);
 
     verifyNoInteractions(runs);
@@ -549,7 +554,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_schreibtMaschinelleHerkunftMitTokennamenUndZeitpunkt() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, false, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, false, null));
 
     NightRun geschrieben = gemeldeterLauf();
     assertThat(geschrieben.origin()).isEqualTo(NightRunOrigin.TOKEN);
@@ -564,6 +569,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(T1, true, null, item(721, NightRunState.GREEN, null)));
@@ -587,6 +593,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.INTERACTIVE,
         meldung(T1, true, null, item(1012, NightRunState.GREEN, null)));
@@ -605,7 +612,7 @@ class NightRunServiceTest {
    */
   @Test
   void ingest_meldetDenErfassungsbeginnMitDemStartzeitpunktDerSitzung() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.INTERACTIVE, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.INTERACTIVE, meldung(T1, true, null));
 
     verify(erfassungsbeginn).setInteractiveUsageSinceIfAbsent(PROJECT, T1);
   }
@@ -613,7 +620,7 @@ class NightRunServiceTest {
   /** Ein Nachtlauf sagt ueber die interaktive Nutzung nichts aus und ruehrt den Wert nicht an. */
   @Test
   void ingest_ruehrtDenErfassungsbeginnNichtAn_beiEinemNachtlauf() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     verifyNoInteractions(erfassungsbeginn);
   }
@@ -629,7 +636,7 @@ class NightRunServiceTest {
   /** Die Gattung bestimmt auch, welcher Ringpuffer gezogen wird (Issue #1011). */
   @Test
   void ingest_zieehtDieGrenzenDerSitzung_wennEineSitzungGemeldetWird() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.INTERACTIVE, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.INTERACTIVE, meldung(T1, true, null));
 
     verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.INTERACTIVE, 400);
     verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, NightRunKind.INTERACTIVE, 4000);
@@ -638,14 +645,43 @@ class NightRunServiceTest {
   // --- Die Nachtlauf-Seite sieht nur Nachtlaeufe (Issue #1012, Nicht-Ziel) ------------------
 
   /**
+   * Der Lauf merkt sich das Board seines Zugangsschluessels (Issue #1993, Fachplan #1961 AK 12).
+   */
+  @Test
+  void ingest_speichertDasBoardDesZugangsschluessels() {
+    service.ingest(USER, PROJECT, BOARD, TOKEN, NightRunKind.NIGHT, meldung(T1, false, null));
+
+    assertThat(gemeldeterLauf().boardId()).isEqualTo(BOARD);
+  }
+
+  /** Das Board setzt die erste Meldung; eine Folgemeldung desselben Laufs laesst es stehen. */
+  @Test
+  void ingest_laesstDasBoardBeiFolgemeldungStehen() {
+    service.ingest(USER, PROJECT, BOARD, TOKEN, NightRunKind.NIGHT, meldung(T1, false, null));
+    service.ingest(USER, PROJECT, 8L, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+
+    NightRun gespeichert = gemeldeterLauf();
+    assertThat(gespeichert.complete()).isTrue();
+    assertThat(gespeichert.boardId()).isEqualTo(BOARD);
+  }
+
+  /** Ein hochgeladenes Protokoll kennt keinen Zugangsschluessel und damit kein Board. */
+  @Test
+  void submit_speichertKeinBoard() {
+    service.submit(USER, PROJECT, List.of(lauf(T1)));
+
+    assertThat(gemeldeterLauf().boardId()).isNull();
+  }
+
+  /**
    * Die Laufliste speist die Nachtlauf-Seite und die Platte „Letzter Lauf". Sie muss dieselben
    * Ergebnisse liefern wie vor der Einlieferung von Sitzungen — sonst stuende nach der ersten
    * Sitzung eine Sitzung als „letzter Lauf" da.
    */
   @Test
   void list_zeigtNurNachtlaeufe_auchWennSitzungenDanebenLiegen() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.INTERACTIVE, meldung(T2, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.INTERACTIVE, meldung(T2, true, null));
 
     assertThat(service.list(USER, PROJECT))
         .extracting(NightRunService.NightRunView::startedAt)
@@ -658,12 +694,14 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(T1, true, null, item(1, NightRunState.RED, NightRunErrorClass.CHECKS_RED)));
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.INTERACTIVE,
         meldung(T2, true, null, item(2, NightRunState.RED, NightRunErrorClass.CHECKS_RED)));
@@ -674,7 +712,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_zieehtDenRingpufferNach() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
   }
@@ -684,7 +722,7 @@ class NightRunServiceTest {
     NightRunUsage gemeldet =
         new NightRunUsage(new BigDecimal("8.032575"), 148L, 62_411L, 8_883_160L, null, null);
 
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, gemeldet));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, gemeldet));
 
     NightRunUsage angekommen = gemeldeterLauf().usage();
     assertThat(angekommen).isNotNull();
@@ -710,6 +748,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(T1, true, laufSumme, itemMitVerbrauch(721, paketAnteil)));
@@ -802,6 +841,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(T2, true, null, itemMitVorgaengen(1905, PLANVORGANG, PRUEFVORGANG)));
@@ -817,6 +857,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(T1, false, null, itemMitVorgaengen(1905, PLANVORGANG)));
@@ -824,6 +865,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(T1, true, null, itemMitVorgaengen(1905, PRUEFVORGANG)));
@@ -874,6 +916,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(
@@ -899,6 +942,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(T1, true, null, VORGABEN, itemMitStufen(993, stufe(NightRunStage.PAKETE))));
@@ -915,6 +959,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(T1, true, null, item(993, NightRunState.GREEN, null)));
@@ -966,6 +1011,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(T1, true, null, itemMitStuck(NightRunErrorClass.STUCK, FESTGEFAHREN)));
@@ -986,6 +1032,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(T1, true, null, itemMitStuck(NightRunErrorClass.CHECKS_RED, FESTGEFAHREN)));
@@ -1050,6 +1097,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         meldung(
@@ -1135,7 +1183,8 @@ class NightRunServiceTest {
   /** Die Meldung landet vollständig am Lauf; den Eingang setzt die Uhr des Servers (E12). */
   @Test
   void ingest_speichertDieMorgenmeldungMitDemEingangNachDerServeruhr() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
 
     assertThat(gemeldeterLauf().releasePreparation())
         .isEqualTo(
@@ -1153,8 +1202,9 @@ class NightRunServiceTest {
   /** Eine neue Meldung desselben Laufs ersetzt die Morgenmeldung wie die übrigen Felder. */
   @Test
   void ingest_ersetztDieMorgenmeldungBeiErneuterMeldungDesselbenLaufs() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, ROT));
+    service.ingest(
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, ROT));
 
     ReleasePreparation gespeichert = gemeldeterLauf().releasePreparation();
     assertThat(gespeichert).isNotNull();
@@ -1172,8 +1222,10 @@ class NightRunServiceTest {
    */
   @Test
   void ingest_raeumtDieMorgenmeldungAb_wennDieNeueMeldungSieNichtTraegt() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, null));
+    service.ingest(
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, null));
 
     assertThat(gemeldeterLauf().releasePreparation()).isNull();
   }
@@ -1191,7 +1243,8 @@ class NightRunServiceTest {
   /** Ohne Morgenmeldung steht am Lauf null, nicht eine Meldung aus lauter fehlenden Feldern. */
   @Test
   void list_zeigtOhneMorgenmeldungNull() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, null));
+    service.ingest(
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, null));
 
     assertThat(service.list(USER, PROJECT).getFirst().releasePreparation()).isNull();
   }
@@ -1204,7 +1257,8 @@ class NightRunServiceTest {
   void list_zeigtDieMorgenmeldungMitAufgeloestenTiteln() {
     when(cards.titlesByCardNumber(PROJECT, Set.of(1449, 1450)))
         .thenReturn(Map.of(1449, "Paket A", 1450, "Paket aus fremder Kette"));
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
 
     NightRunService.ReleasePreparationView sicht =
         service.list(USER, PROJECT).getFirst().releasePreparation();
@@ -1232,7 +1286,7 @@ class NightRunServiceTest {
   void list_laesstEineUnbekannteNummerOhneTitelStehen() {
     when(cards.titlesByCardNumber(PROJECT, Set.of(1449, 1450)))
         .thenReturn(Map.of(1450, "Rotes Paket"));
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, ROT));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, ROT));
 
     NightRunService.ReleasePreparationView sicht =
         Objects.requireNonNull(service.list(USER, PROJECT).getFirst().releasePreparation());
@@ -1249,8 +1303,9 @@ class NightRunServiceTest {
    */
   @Test
   void list_fragtDieTitelEinmalUndNurImEigenenProjekt() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T2, ROT));
+    service.ingest(
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T1, GRUEN));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldungMitVorbereitung(T2, ROT));
 
     service.list(USER, PROJECT);
 
@@ -1262,12 +1317,12 @@ class NightRunServiceTest {
   void ingest_reichtDasErgebnisDesSchreibwegsDurch() {
     assertThat(
             service
-                .ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null))
+                .ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null))
                 .created())
         .isTrue();
     assertThat(
             service
-                .ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null))
+                .ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null))
                 .created())
         .isFalse();
   }
@@ -1308,7 +1363,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_loeschtVerwaistePaketeDesLaufs_bevorEsIhnAnlegt() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     var reihenfolge = inOrder(runs);
     reihenfolge.verify(runs).deleteOrphanItemsOfRun(PROJECT, T1);
@@ -1354,7 +1409,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_kapptVerwaistePaketeUnmittelbarNachDerVerdraengung() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     var reihenfolge = inOrder(runs);
     reihenfolge.verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
@@ -1388,7 +1443,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_sperrtDasProjekt_vorJederAnderenDatenbankaktion() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     var reihenfolge = inOrder(runs);
     reihenfolge.verify(runs).lockProject(PROJECT);
@@ -1417,7 +1472,7 @@ class NightRunServiceTest {
 
   @Test
   void ingest_zieehtDieGrenzenDerGattungDesGemeldetenLaufs() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     verify(runs).deleteOlderThanNewest(PROJECT, NightRunKind.NIGHT, 30);
     verify(runs).deleteOrphanItemsOlderThanNewest(PROJECT, NightRunKind.NIGHT, 2000);
@@ -1580,7 +1635,7 @@ class NightRunServiceTest {
    */
   @Test
   void ingest_setztDenRueckfalltext_wennEinNachtlaufOhneArbeitKeinenGrundMeldet() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null));
 
     assertThat(gemeldeterLauf().noWorkReason())
         .isEqualTo(RUECKFALL)
@@ -1590,7 +1645,7 @@ class NightRunServiceTest {
   @Test
   void ingest_uebernimmtDenGemeldetenGrundWoertlich() {
     service.ingest(
-        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, GEMELDETER_GRUND));
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, GEMELDETER_GRUND));
 
     assertThat(gemeldeterLauf().noWorkReason()).isEqualTo(GEMELDETER_GRUND);
   }
@@ -1601,21 +1656,21 @@ class NightRunServiceTest {
    */
   @Test
   void ingest_faelltAufDenRueckfalltextZurueck_wennDerGemeldeteGrundLeerIst() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, "   "));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, "   "));
 
     assertThat(gemeldeterLauf().noWorkReason()).isEqualTo(RUECKFALL);
   }
 
   @Test
   void ingest_laesstDenGrundLeer_wennDerLaufGearbeitetHat() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, meldung(T1, true, null));
 
     assertThat(gemeldeterLauf().noWorkReason()).isNull();
   }
 
   @Test
   void ingest_laesstDenGrundLeer_wennDerLaufNichtAbgeschlossenIst() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, false, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, false, null));
 
     assertThat(gemeldeterLauf().noWorkReason()).isNull();
   }
@@ -1628,7 +1683,12 @@ class NightRunServiceTest {
   @Test
   void ingest_laesstDenGrundLeer_beiEinerInteraktivenSitzung() {
     service.ingest(
-        USER, PROJECT, TOKEN, NightRunKind.INTERACTIVE, ohneArbeit(T1, true, GEMELDETER_GRUND));
+        USER,
+        PROJECT,
+        null,
+        TOKEN,
+        NightRunKind.INTERACTIVE,
+        ohneArbeit(T1, true, GEMELDETER_GRUND));
 
     assertThat(gemeldeterLauf(NightRunKind.INTERACTIVE).noWorkReason()).isNull();
   }
@@ -1642,7 +1702,7 @@ class NightRunServiceTest {
 
   @Test
   void list_reichtDenGrundInDieSichtDurch() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null));
 
     assertThat(service.list(USER, PROJECT))
         .extracting(NightRunService.NightRunView::noWorkReason)
@@ -1659,7 +1719,7 @@ class NightRunServiceTest {
    */
   @Test
   void list_liestEinenLaufOhneArbeitOhneGemeldetenGrundAlsNichtsZuTun() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null));
 
     NightRunOutcome befund = service.list(USER, PROJECT).getFirst().outcome();
     assertThat(befund.verdict()).isEqualTo(NightRunOutcome.Verdict.NO_WORK);
@@ -1676,7 +1736,7 @@ class NightRunServiceTest {
   @Test
   void ingest_uebernimmtDenGemeldetenAbbruchgrundWoertlich() {
     service.ingest(
-        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
 
     assertThat(gemeldeterLauf().abortReason()).isEqualTo(ABBRUCH_GRUND);
   }
@@ -1689,7 +1749,7 @@ class NightRunServiceTest {
   @Test
   void ingest_laesstDenGrundOhneArbeitLeer_wennEinAbbruchgrundGemeldetWurde() {
     service.ingest(
-        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
 
     NightRun gespeichert = gemeldeterLauf();
     assertThat(gespeichert.noWorkReason()).as("no_work_reason bleibt leer").isNull();
@@ -1702,6 +1762,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         ohneArbeit(T1, true, GEMELDETER_GRUND, ABBRUCH_GRUND));
@@ -1712,7 +1773,8 @@ class NightRunServiceTest {
   /** Leer ist wie nicht gemeldet — anders als beim Grund ohne Arbeit gibt es keinen Rueckfall. */
   @Test
   void ingest_verwirftEinenLeerenAbbruchgrund() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, "   "));
+    service.ingest(
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, "   "));
 
     NightRun gespeichert = gemeldeterLauf();
     assertThat(gespeichert.abortReason()).as("kein leerer Text am Lauf").isNull();
@@ -1725,7 +1787,7 @@ class NightRunServiceTest {
   @Test
   void ingest_verwirftDenAbbruchgrund_wennDerLaufNichtAbgeschlossenIst() {
     service.ingest(
-        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, false, null, ABBRUCH_GRUND));
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, false, null, ABBRUCH_GRUND));
 
     assertThat(gemeldeterLauf().abortReason()).isNull();
   }
@@ -1734,7 +1796,12 @@ class NightRunServiceTest {
   @Test
   void ingest_verwirftDenAbbruchgrund_beiEinerInteraktivenSitzung() {
     service.ingest(
-        USER, PROJECT, TOKEN, NightRunKind.INTERACTIVE, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
+        USER,
+        PROJECT,
+        null,
+        TOKEN,
+        NightRunKind.INTERACTIVE,
+        ohneArbeit(T1, true, null, ABBRUCH_GRUND));
 
     assertThat(gemeldeterLauf(NightRunKind.INTERACTIVE).abortReason()).isNull();
   }
@@ -1776,7 +1843,7 @@ class NightRunServiceTest {
   @Test
   void list_reichtDenAbbruchgrundInDieSichtDurch() {
     service.ingest(
-        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
 
     assertThat(service.list(USER, PROJECT))
         .extracting(NightRunService.NightRunView::abortReason)
@@ -1790,6 +1857,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         ohneArbeit(T1, true, null, ABBRUCH_GRUND, NightRunAbortKind.REPORTED));
@@ -1805,6 +1873,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         ohneArbeit(T1, true, null, null, NightRunAbortKind.REPORTED));
@@ -1818,6 +1887,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         ohneArbeit(T1, true, null, "   ", NightRunAbortKind.REPORTED));
@@ -1830,6 +1900,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         ohneArbeit(T1, false, null, ABBRUCH_GRUND, NightRunAbortKind.REPORTED));
@@ -1842,6 +1913,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.INTERACTIVE,
         ohneArbeit(T1, true, null, ABBRUCH_GRUND, NightRunAbortKind.REPORTED));
@@ -1869,6 +1941,7 @@ class NightRunServiceTest {
     service.ingest(
         USER,
         PROJECT,
+        null,
         TOKEN,
         NightRunKind.NIGHT,
         ohneArbeit(T1, true, null, ABBRUCH_GRUND, NightRunAbortKind.REPORTED));
@@ -1886,7 +1959,7 @@ class NightRunServiceTest {
   @Test
   void list_liestEinenAbbruchOhneArtWeiterAlsGescheitert() {
     service.ingest(
-        USER, PROJECT, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
+        USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, ohneArbeit(T1, true, null, ABBRUCH_GRUND));
 
     assertThat(service.list(USER, PROJECT))
         .singleElement()
@@ -1923,21 +1996,21 @@ class NightRunServiceTest {
 
   @Test
   void ingest_uebergibtDieLaufendenStufenAnDenLauf() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, mitStufen(false));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, mitStufen(false));
 
     assertThat(gemeldeterLauf().current()).containsExactly(VORBEREITUNG);
   }
 
   @Test
   void ingest_verwirftDieStufenEinesBeendetenLaufs() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, mitStufen(true));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, mitStufen(true));
 
     assertThat(gemeldeterLauf().current()).isEmpty();
   }
 
   @Test
   void ingest_setztDieBeendigungVonHandNie() {
-    service.ingest(USER, PROJECT, TOKEN, NightRunKind.NIGHT, mitStufen(false));
+    service.ingest(USER, PROJECT, null, TOKEN, NightRunKind.NIGHT, mitStufen(false));
 
     assertThat(gemeldeterLauf().closedAt()).isNull();
   }
@@ -2061,7 +2134,9 @@ class NightRunServiceTest {
               run.abortKind(),
               run.releasePreparation(),
               run.current(),
-              run.closedAt()));
+              run.closedAt(),
+              // Wie im Adapter: Das Board setzt die erste Meldung, Folgemeldungen lassen es stehen.
+              vorhanden.get().boardId()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -2107,7 +2182,8 @@ class NightRunServiceTest {
               run.abortKind(),
               run.releasePreparation(),
               run.current(),
-              run.closedAt()));
+              run.closedAt(),
+              run.boardId()));
       for (NightRunItem item : items) {
         gespeichertePakete.add(paket(item, run, id));
       }
@@ -2146,6 +2222,13 @@ class NightRunServiceTest {
     public List<NightRun> findByProjectAndKindOrderByStartedAtDesc(
         long projectId, NightRunKind kind) {
       return alleLaeufe(projectId).stream().filter(r -> r.kind() == kind).toList();
+    }
+
+    @Override
+    public List<NightRun> findByKindStartedSince(NightRunKind kind, Instant von) {
+      return gespeicherteLaeufe.stream()
+          .filter(r -> r.kind() == kind && !r.startedAt().isBefore(von))
+          .toList();
     }
 
     /**

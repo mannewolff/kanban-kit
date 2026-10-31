@@ -1,0 +1,14 @@
+{
+  "name": "KI-Leitstand mobil",
+  "short_name": "Leitstand",
+  "description": "Ideen unterwegs festhalten",
+  "start_url": "/mobil",
+  "scope": "/mobil",
+  "display": "standalone",
+  "background_color": "#E7E9ED",
+  "theme_color": "#E7E9ED",
+  "icons": [
+    { "src": "/mobil-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/mobil-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

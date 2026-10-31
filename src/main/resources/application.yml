@@ -128,6 +128,16 @@ manban:
     retry-base-delay: PT10S
     retry-max-delay: PT1H
     completed-retention-days: ${MANBAN_OUTBOX_RETENTION_DAYS:7}
+  # Web Push aufs Handy (Issue #1996, Plan #1989 E16). Abschaltbar: Ohne die drei Werte startet die
+  # Anwendung wie bisher und verschickt keine Benachrichtigungen. Halbe oder ungueltige Angaben
+  # brechen den Start ab (PushSchluesselStartupCheck). Ein Paar erzeugt
+  # node scripts/vapid-schluessel.mjs; subject ist der Kontakt fuer Push-Dienste (mailto: oder
+  # https:, RFC 8292). melde-takt ist der Abstand zwischen zwei Laeufen des Meldejobs.
+  push:
+    vapid-public-key: ${MANBAN_PUSH_VAPID_PUBLIC_KEY:}
+    vapid-private-key: ${MANBAN_PUSH_VAPID_PRIVATE_KEY:}
+    subject: ${MANBAN_PUSH_SUBJECT:}
+    melde-takt: PT1M
   # Nachtlauf-Auswertung (Issue #722): Ringpuffer je Projekt. Der aelteste Lauf nach started_at
   # wird verdraengt, sobald die Grenze ueberschritten ist.
   # Verwaiste Arbeitspakete (Lauf verdraengt, Issue #964) haben eine eigene Grenze (Issue #966);

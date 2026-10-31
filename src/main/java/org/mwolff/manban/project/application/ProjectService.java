@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.AuthProperties;
 import org.mwolff.manban.auth.application.UserLookup;
@@ -113,7 +114,8 @@ public class ProjectService {
         ProjectRole.OWNER,
         project.createdAt(),
         project.dashboardParticipation(),
-        participationEditable(ProjectRole.OWNER));
+        participationEditable(ProjectRole.OWNER),
+        project.kitStrictness());
   }
 
   @Transactional(readOnly = true)
@@ -134,7 +136,8 @@ public class ProjectService {
                     ownRoles.getOrDefault(p.id(), ProjectRole.OWNER),
                     p.createdAt(),
                     p.dashboardParticipation(),
-                    participationEditable(ownRoles.get(p.id()))))
+                    participationEditable(ownRoles.get(p.id())),
+                    p.kitStrictness()))
         .toList();
   }
 
@@ -152,6 +155,16 @@ public class ProjectService {
     return readableProjects(userId).stream()
         .map(p -> new AccessibleProject(p.requireId(), p.name()))
         .toList();
+  }
+
+  /**
+   * Der Name eines Projekts; leer, wenn es das Projekt nicht gibt (Issue #1998). <b>Ohne
+   * Rechteprüfung</b>: Der Meldejob benennt damit das Projekt eines Laufs in der Nachricht, ohne
+   * Anfrage und ohne Aufrufer; wem die Nachricht gilt, prüft er selbst je Konto.
+   */
+  @Transactional(readOnly = true)
+  public Optional<String> findName(long projectId) {
+    return projects.findById(projectId).map(Project::name);
   }
 
   /**
@@ -182,7 +195,8 @@ public class ProjectService {
         membership.role(),
         renamed.createdAt(),
         renamed.dashboardParticipation(),
-        participationEditable(realRole));
+        participationEditable(realRole),
+        renamed.kitStrictness());
   }
 
   /**
@@ -235,7 +249,8 @@ public class ProjectService {
         realRole,
         project.createdAt(),
         project.dashboardParticipation(),
-        participationEditable(realRole));
+        participationEditable(realRole),
+        project.kitStrictness());
   }
 
   /**
@@ -303,7 +318,13 @@ public class ProjectService {
                   "Ob der Aufrufer die Teilnahme schalten darf: echtes Mitglied mit der Rolle"
                       + " OWNER oder ADMIN.",
               example = "true")
-          boolean participationEditable) {}
+          boolean participationEditable,
+      @Schema(
+              description =
+                  "Zuletzt vom Kit gemeldete Strenge-Stufe des Projekts (light, normal oder"
+                      + " strict); null, solange das Projekt nie eine gemeldet hat.",
+              example = "normal")
+          @Nullable String strictness) {}
 
   /** Projekt-Kurzinfo für modulfremde Aufrufer: Id und Name (siehe {@link #listAccessible}). */
   public record AccessibleProject(Long id, String name) {}

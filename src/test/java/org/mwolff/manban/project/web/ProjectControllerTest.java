@@ -43,7 +43,7 @@ class ProjectControllerTest {
   private static final String BUDGET_PATH = "/api/projects/5/monthly-budget";
 
   private static ProjectView project() {
-    return new ProjectView(1L, "Project", ProjectRole.OWNER, Instant.EPOCH, false, true);
+    return new ProjectView(1L, "Project", ProjectRole.OWNER, Instant.EPOCH, false, true, null);
   }
 
   @BeforeEach

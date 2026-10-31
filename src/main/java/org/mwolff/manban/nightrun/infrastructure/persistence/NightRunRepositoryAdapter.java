@@ -67,11 +67,15 @@ import org.springframework.stereotype.Component;
 // sind es 31. Die Abbildung der Vorgaenge steht darum nicht hier, sondern im
 // NightRunAttemptReader; was bleibt, ist die eine Zeile, die der Port verlangt.
 // PMD.ExcessiveImports: dieselbe Zeile bringt den Rueckgabetyp Vorgang mit, den 40. Import.
+// PMD.CyclomaticComplexity: die Summe ueber die Klasse, keine Methode liegt ueber 10. Mit
+// findByKindStartedSince (Issue #1998) kam die einzeilige Methode dazu, die die Grenze von 80
+// ueberschritt — dieselbe Zaehlung wie bei TooManyMethods, keine verzweigte Logik.
 @SuppressWarnings({
   "PMD.CouplingBetweenObjects",
   "PMD.GodClass",
   "PMD.TooManyMethods",
-  "PMD.ExcessiveImports"
+  "PMD.ExcessiveImports",
+  "PMD.CyclomaticComplexity"
 })
 class NightRunRepositoryAdapter implements NightRunRepository {
 
@@ -124,14 +128,14 @@ class NightRunRepositoryAdapter implements NightRunRepository {
           + " cached_input_tokens, model_duration_ms, turns, no_work_reason,"
           + " budget_plan_min, budget_review_min, budget_pakete_min, budget_abdeckung_min,"
           + " budget_kosten_usd, budget_origin, budget_default_fields, abort_reason,"
-          + " abort_kind)"
+          + " abort_kind, board_id)"
           + " VALUES (:projectId, :startedAt, :mode, :kind, :durationMs, :processedCount,"
           + " :skippedCount, :unparsedCount, :unparsedSample, :createdAt, :origin,"
           + " :tokenName, :complete, :updatedAt, :costUsd, :inputTokens, :outputTokens,"
           + " :cachedInputTokens, :modelDurationMs, :turns, :noWorkReason,"
           + " :budgetPlanMin, :budgetReviewMin, :budgetPaketeMin, :budgetAbdeckungMin,"
           + " :budgetKostenUsd, :budgetOrigin, :budgetDefaultFields, :abortReason,"
-          + " :abortKind)"
+          + " :abortKind, :boardId)"
           + " ON CONFLICT (project_id, started_at) DO NOTHING"
           + " RETURNING id";
 
@@ -484,6 +488,12 @@ class NightRunRepositoryAdapter implements NightRunRepository {
   }
 
   @Override
+  public List<NightRun> findByKindStartedSince(NightRunKind kind, Instant von) {
+    return mitVorbereitung(
+        runs.findByKindAndStartedAtGreaterThanEqualOrderByStartedAtAscIdAsc(kind.name(), von));
+  }
+
+  @Override
   public Optional<NightRun> findByIdAndProjectId(long runId, long projectId) {
     return runs.findByIdAndProjectId(runId, projectId)
         .map(gefunden -> mitVorbereitung(List.of(gefunden)).getFirst());
@@ -682,7 +692,9 @@ class NightRunRepositoryAdapter implements NightRunRepository {
                 Types.TIMESTAMP_WITH_TIMEZONE)
             .addValue("noWorkReason", run.noWorkReason(), Types.VARCHAR)
             .addValue("abortReason", run.abortReason(), Types.VARCHAR)
-            .addValue("abortKind", abortKind == null ? null : abortKind.name(), Types.VARCHAR);
+            .addValue("abortKind", abortKind == null ? null : abortKind.name(), Types.VARCHAR)
+            // Nur INSERT_RUN liest den Wert; UPDATE_RUN laesst das Board stehen (Issue #1993).
+            .addValue("boardId", run.boardId(), Types.BIGINT);
     verbrauchSchreiben(parameter, run.usage());
     budgetSchreiben(parameter, run.budget());
     return parameter;
@@ -812,7 +824,8 @@ class NightRunRepositoryAdapter implements NightRunRepository {
         abortKind == null ? null : NightRunAbortKind.valueOf(abortKind),
         vorbereitung,
         stufen,
-        e.getClosedAt());
+        e.getClosedAt(),
+        e.getBoardId());
   }
 
   /** Paketsichtbar für den Lesepfad der Bremsbilanz (Issue #1550) — eine Abbildung, nicht zwei. */

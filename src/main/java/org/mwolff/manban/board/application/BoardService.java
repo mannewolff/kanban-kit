@@ -239,6 +239,16 @@ public class BoardService {
   }
 
   /**
+   * Die Kennungen der aktiven Boards eines Projekts (Issue #1998, Plan #1989 E13), nach Anlage
+   * geordnet. <b>Ohne Rechteprüfung</b>: Der Meldejob fragt ohne Anfrage, ob für einen Lauf ohne
+   * Board noch ein Board des Projekts eingeschaltet ist; die Rechte prüft er selbst je Konto.
+   */
+  @Transactional(readOnly = true)
+  public List<Long> listActiveBoardIds(long projectId) {
+    return boards.findByProjectId(projectId).stream().map(Board::requireId).toList();
+  }
+
+  /**
    * Alle aktiven Boards aller Projekte (Issue #1485), nach Anlage geordnet. <b>Ohne
    * Rechteprüfung</b>: Der Aufrufer prüft selbst, etwa auf Plattform-Admin; die Liste überschreitet
    * Projektgrenzen und darf nie an Projektmitglieder gehen.

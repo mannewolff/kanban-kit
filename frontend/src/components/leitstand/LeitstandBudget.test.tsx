@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 import { ApiError } from '../../api/client'
 import type { VerbrauchBudget } from '../../api/nightRunUsage'
@@ -15,6 +15,12 @@ const auth = vi.hoisted(() => ({ vorschau: null as null | Record<string, string>
 vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({ vorschau: auth.vorschau }),
 }))
+
+const api = vi.hoisted(() => ({
+  setMonthlyBudget: vi.fn(),
+  removeMonthlyBudget: vi.fn(),
+}))
+vi.mock('../../api/projects', () => ({ projectsApi: api }))
 
 /** `Intl` setzt vor Einheiten ein geschütztes Leerzeichen; verglichen wird der Wortlaut. */
 const lesbar = (text: string | null | undefined) => text?.replaceAll(' ', ' ') ?? ''
@@ -52,6 +58,8 @@ async function zeile(): Promise<string> {
 
 beforeEach(() => {
   auth.vorschau = null
+  api.setMonthlyBudget.mockReset().mockResolvedValue(undefined)
+  api.removeMonthlyBudget.mockReset().mockResolvedValue(undefined)
 })
 
 describe('LeitstandBudget — Szenarien der Fachlichen Quelle #1957', () => {
@@ -112,6 +120,29 @@ describe('LeitstandBudget — Anzeige', () => {
     expect(text).toContain('Warnung: 80 % des Monatsbudgets sind erreicht.')
   })
 
+  it('zeigt dem Owner mit Budget keinen Hinweis zum Festlegen', async () => {
+    zeige()
+
+    await zeile()
+    expect(screen.queryByText('Hier lässt sich ein Monatsbudget festlegen.')).toBeNull()
+  })
+
+  it('nennt den Stand nur mit Budget und Anteil', async () => {
+    zeige(stand({ percent: null }))
+
+    const text = await zeile()
+    expect(text).not.toContain('laufender Monat')
+    expect(text).not.toContain('%')
+  })
+
+  it('nennt ohne Budget keinen Stand, auch wenn ein Anteil käme', async () => {
+    zeige(stand({ budgetUsd: null, exceedDate: null }))
+
+    const text = await zeile()
+    expect(text).not.toContain('laufender Monat')
+    expect(text).not.toContain('von')
+  })
+
   it('zeigt den Hinweis für den Owner ohne Budget nur bei editable', async () => {
     zeige(stand({ budgetUsd: null, percent: null, exceedDate: null, editable: false }))
 
@@ -165,6 +196,43 @@ describe('LeitstandBudget — Anzeige', () => {
     expect(screen.queryByTestId('budgetzeile-stand')).toBeNull()
   })
 
+  it('verwirft einen verspäteten Stand des vorigen Projekts', async () => {
+    let altLiefern: (wert: VerbrauchBudget) => void = () => undefined
+    const laden = vi.fn((projectId: number) =>
+      projectId === 5
+        ? new Promise<VerbrauchBudget>((liefern) => {
+            altLiefern = liefern
+          })
+        : Promise.resolve(stand({ budgetUsd: 200, spentUsd: 20, percent: 10 })),
+    )
+    const { rerender } = renderMitSprache(<LeitstandBudget projectId={5} laden={laden} />)
+    rerender(<LeitstandBudget projectId={6} laden={laden} />)
+    expect(await zeile()).toContain('20 $ von 200 $')
+
+    await act(async () => altLiefern(stand()))
+
+    expect(lesbar(screen.getByTestId('budgetzeile-stand').textContent)).toContain('20 $ von 200 $')
+  })
+
+  it('verwirft einen verspäteten Fehler des vorigen Projekts', async () => {
+    let altScheitern: (grund: Error) => void = () => undefined
+    const laden = vi.fn((projectId: number) =>
+      projectId === 5
+        ? new Promise<VerbrauchBudget>((_, scheitern) => {
+            altScheitern = scheitern
+          })
+        : Promise.resolve(stand()),
+    )
+    const { rerender } = renderMitSprache(<LeitstandBudget projectId={5} laden={laden} />)
+    rerender(<LeitstandBudget projectId={6} laden={laden} />)
+    await zeile()
+
+    await act(async () => altScheitern(new Error('zu spät')))
+
+    expect(screen.queryByText('Das Monatsbudget konnte nicht geladen werden.')).toBeNull()
+    expect(screen.getByTestId('budgetzeile-stand')).toBeInTheDocument()
+  })
+
   it('lädt den Stand des übergebenen Projekts', async () => {
     const { laden } = zeige()
 
@@ -188,6 +256,51 @@ describe('LeitstandBudget — festlegen, ändern, entfernen (AK 1, 2, E4)', () =
     await waitFor(() => expect(laden).toHaveBeenCalledTimes(2))
     expect(schreiben.setMonthlyBudget).toHaveBeenCalledWith(5, '150.5')
     expect(eingabe()).toHaveValue('')
+  })
+
+  it('lädt nach jedem Speichern erneut', async () => {
+    const { laden } = zeige()
+    await zeile()
+
+    fireEvent.change(eingabe(), { target: { value: '10' } })
+    fireEvent.click(speichern())
+    await waitFor(() => expect(laden).toHaveBeenCalledTimes(2))
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Monatsbudget in $' }), { target: { value: '20' } })
+    fireEvent.click(speichern())
+
+    await waitFor(() => expect(laden).toHaveBeenCalledTimes(3))
+  })
+
+  it('beginnt mit leerem Feld für Dezimaleingabe, ohne Fehler', async () => {
+    zeige()
+    await zeile()
+
+    expect(eingabe()).toHaveValue('')
+    expect(eingabe()).toHaveAttribute('inputmode', 'decimal')
+    expect(eingabe()).toHaveAttribute('aria-invalid', 'false')
+  })
+
+  it('markiert das Feld als fehlerhaft, solange eine Meldung steht', async () => {
+    zeige()
+    await zeile()
+
+    fireEvent.change(eingabe(), { target: { value: '0' } })
+    fireEvent.click(speichern())
+
+    await waitFor(() => expect(eingabe()).toHaveAttribute('aria-invalid', 'true'))
+  })
+
+  it('schreibt ohne übergebene Schnittstelle über die Projekt-API', async () => {
+    const laden = vi.fn().mockResolvedValue(stand())
+    renderMitSprache(<LeitstandBudget projectId={5} laden={laden} />)
+    await zeile()
+
+    fireEvent.change(eingabe(), { target: { value: '10' } })
+    fireEvent.click(speichern())
+    await waitFor(() => expect(api.setMonthlyBudget).toHaveBeenCalledWith(5, '10'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Budget entfernen' }))
+
+    await waitFor(() => expect(api.removeMonthlyBudget).toHaveBeenCalledWith(5))
   })
 
   it('nimmt Punkt an', async () => {
@@ -223,6 +336,17 @@ describe('LeitstandBudget — festlegen, ändern, entfernen (AK 1, 2, E4)', () =
 
     expect(await screen.findByText('Betrag zu groß.')).toBeInTheDocument()
     expect(laden).toHaveBeenCalledTimes(1)
+  })
+
+  it('zeigt bei einer Problem-Antwort ohne detail die eigene Meldung', async () => {
+    const { schreiben } = zeige()
+    schreiben.setMonthlyBudget.mockRejectedValue(new ApiError(500, 'Server Error'))
+    await zeile()
+
+    fireEvent.change(eingabe(), { target: { value: '10' } })
+    fireEvent.click(speichern())
+
+    expect(await screen.findByText('Das Monatsbudget konnte nicht gespeichert werden.')).toBeInTheDocument()
   })
 
   it('zeigt ohne detail eine eigene Meldung', async () => {

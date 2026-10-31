@@ -17,11 +17,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.common.KitNamen;
 import org.mwolff.manban.common.TextLimits;
 import org.mwolff.manban.project.application.ProjectMembershipRepository;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -526,6 +528,50 @@ class KanbanCompatIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[0].title").value("Als Idee"))
         .andExpect(jsonPath("$[0].boardId").value(boardId))
         .andExpect(jsonPath("$[0].columnId").value(firstColumn));
+  }
+
+  @Test
+  @DisplayName("Szenario: Idee per Siri festhalten")
+  void siriKurzbefehl_legtIdeeImBacklogDesGebundenenBoardsAn() throws Exception {
+    // Issue #1991: genau der Aufruf aus docs/nutzung.md, Abschnitt „Unterwegs: Handy und Siri“.
+    Cookie session = loginAs("kanban-siri@example.com");
+    long projectId = createProject("kanban-siri@example.com", "Siri-Projekt");
+    long boardId = createBoard(session, projectId, "Produkt");
+    String token = boundToken(session, projectId, boardId);
+    String koerper =
+        "{\"title\":\"[Idea] Karten nach Fälligkeit sortieren\",\"column\":\"BACKLOG\"}";
+
+    String created = siriAufruf(token, "2026-10-29-12-00-00", koerper);
+    long cardId = json.readTree(created).get("id").asLong();
+    String wiederholt = siriAufruf(token, "2026-10-29-12-00-00", koerper);
+
+    assertThat(json.readTree(wiederholt).get("id").asLong()).isEqualTo(cardId);
+    String cards =
+        mvc.perform(get("/api/boards/" + boardId + "/cards").cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    JsonNode liste = json.readTree(cards);
+    assertThat(liste).hasSize(1);
+    String titel = liste.get(0).get("title").asText();
+    assertThat(titel).isEqualTo("[Idea] Karten nach Fälligkeit sortieren");
+    assertThat(liste.get(0).get("columnId").asLong())
+        .isEqualTo(columnIdByName(session, boardId, "Backlog"));
+    assertThat(KitNamen.artAusTitel(titel)).contains(KitNamen.Art.IDEE);
+  }
+
+  private String siriAufruf(String token, String schluessel, String koerper) throws Exception {
+    return mvc.perform(
+            post("/api/kanban/items")
+                .header("X-Kanban-Token", token)
+                .header("Idempotency-Key", schluessel)
+                .contentType("application/json")
+                .content(koerper))
+        .andExpect(status().is2xxSuccessful())
+        .andReturn()
+        .getResponse()
+        .getContentAsString();
   }
 
   @Test

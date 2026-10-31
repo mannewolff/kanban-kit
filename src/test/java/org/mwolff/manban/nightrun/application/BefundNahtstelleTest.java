@@ -23,6 +23,7 @@ import org.mwolff.manban.nightrun.domain.NightRunMode;
 import org.mwolff.manban.nightrun.domain.NightRunOrigin;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.project.application.InteractiveUsageSinceWriter;
+import org.mwolff.manban.project.application.KitStrictnessReader;
 import org.mwolff.manban.project.application.PermissionChecker;
 
 /**
@@ -129,7 +130,13 @@ class BefundNahtstelleTest {
     when(admins.isPlatformAdmin(ADMIN)).thenReturn(true);
     DisruptionService service =
         new DisruptionService(
-            disruptions, runs, mock(CardRunQueryService.class), admins, properties, uhr);
+            disruptions,
+            runs,
+            mock(CardRunQueryService.class),
+            admins,
+            properties,
+            mock(KitStrictnessReader.class),
+            uhr);
     return service.leitstand(ADMIN, ZoneId.of("UTC")).durchgefuehrte().getFirst().outcome();
   }
 

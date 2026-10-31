@@ -202,7 +202,7 @@ class NightRunIngestControllerTest {
   @Test
   void einAngelegterLaufMeldetCreated_einErsetzterReplaced() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true), new NightRunResult(START, false));
 
     assertThat(controller.ingest(gebunden, anfrage(null)).outcome())
@@ -218,24 +218,40 @@ class NightRunIngestControllerTest {
   @Test
   void ohneGattungMeldetDerControllerEinenNachtlauf() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(gebunden, anfrage(null, null, NightRunMode.CHAIN));
 
-    verify(service).ingest(eq(1L), eq(42L), eq("nacht"), eq(NightRunKind.NIGHT), any());
+    verify(service).ingest(eq(1L), eq(42L), eq(7L), eq("nacht"), eq(NightRunKind.NIGHT), any());
   }
 
   /** Mit gesetztem Feld reicht der Controller die gemeldete Gattung unveraendert durch. */
   @Test
   void mitGattungReichtDerControllerSieDurch() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "sitzung"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(gebunden, anfrage(null, NightRunKind.INTERACTIVE, NightRunMode.INTERACTIVE));
 
-    verify(service).ingest(eq(1L), eq(42L), eq("sitzung"), eq(NightRunKind.INTERACTIVE), any());
+    verify(service)
+        .ingest(eq(1L), eq(42L), eq(7L), eq("sitzung"), eq(NightRunKind.INTERACTIVE), any());
+  }
+
+  /**
+   * Der Lauf gehoert zum Board seines Zugangsschluessels (Issue #1993, Fachplan #1961 AK 12): Der
+   * Controller reicht das gebundene Board durch, der Koerper der Meldung nennt es nicht.
+   */
+  @Test
+  void reichtDasBoardDesZugangsschluesselsDurch() {
+    Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 9L, "nacht"));
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
+        .thenReturn(new NightRunResult(START, true));
+
+    controller.ingest(gebunden, anfrage(null));
+
+    verify(service).ingest(eq(1L), eq(42L), eq(9L), eq("nacht"), any(), any());
   }
 
   /** Eine Meldung mit gemeldetem Grund ohne abgearbeitete Pakete. */
@@ -286,13 +302,13 @@ class NightRunIngestControllerTest {
   @Test
   void derGemeldeteGrundWirdAnDenDienstDurchgereicht() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(gebunden, anfrageMitGrund("Kein Eintrag trug das Label kit:nightrun"));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().noWorkReason())
         .isEqualTo("Kein Eintrag trug das Label kit:nightrun");
   }
@@ -370,13 +386,13 @@ class NightRunIngestControllerTest {
   @Test
   void derGemeldeteAbbruchgrundWirdAnDenDienstDurchgereicht() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(gebunden, anfrageMitAbbruch("Dirty-Guard: uncommittete Reste"));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().abortReason()).isEqualTo("Dirty-Guard: uncommittete Reste");
   }
 
@@ -384,27 +400,27 @@ class NightRunIngestControllerTest {
   @Test
   void ohneAbbruchgrundKommtNullAmDienstAn() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(gebunden, anfrageMitAbbruch(null));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().abortReason()).isNull();
   }
 
   @Test
   void dieGemeldeteAbschlussartWirdAnDenDienstDurchgereicht() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(
         gebunden, anfrageMitAbbruch("Working Tree ist nicht sauber.", NightRunAbortKind.REPORTED));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().abortKind()).isEqualTo(NightRunAbortKind.REPORTED);
   }
 
@@ -412,13 +428,13 @@ class NightRunIngestControllerTest {
   @Test
   void ohneAbschlussartKommtNullAmDienstAn() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(gebunden, anfrageMitAbbruch("Working Tree ist nicht sauber."));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().abortKind()).isNull();
   }
 
@@ -475,7 +491,7 @@ class NightRunIngestControllerTest {
   @Test
   void budgetUndStufenKommenAmDienstAn() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(
@@ -492,7 +508,7 @@ class NightRunIngestControllerTest {
             List.of(stufe(NightRunStage.PLAN), stufe(NightRunStage.REVIEW))));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     NightRunBudget budget = meldung.getValue().budget();
     assertThat(budget).isNotNull();
     assertThat(budget.planMin()).isEqualTo(30);
@@ -519,13 +535,13 @@ class NightRunIngestControllerTest {
   @Test
   void ohneBudgetUndStufenKommtNichtsAn_undNichtsWirdErfunden() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(gebunden, anfrageMitVorgaben(null, null));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().budget()).isNull();
     assertThat(meldung.getValue().items().getFirst().stages()).isEmpty();
   }
@@ -537,7 +553,7 @@ class NightRunIngestControllerTest {
   @Test
   void englischeBudgetfelderWerdenUnterDenBisherigenNamenGespeichert() throws Exception {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
     IngestBudgetRequest budget =
         new ObjectMapper()
@@ -546,7 +562,7 @@ class NightRunIngestControllerTest {
     controller.ingest(gebunden, anfrageMitVorgaben(budget, null));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     NightRunBudget gespeichert = meldung.getValue().budget();
     assertThat(gespeichert).isNotNull();
     assertThat(gespeichert.paketeMin()).isEqualTo(25);
@@ -557,7 +573,7 @@ class NightRunIngestControllerTest {
   @Test
   void eineEnglischeStufeWirdAngenommen() throws Exception {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
     IngestStageRequest stufe =
         new ObjectMapper().readValue("{\"stage\":\"PACKAGES\"}", IngestStageRequest.class);
@@ -565,7 +581,7 @@ class NightRunIngestControllerTest {
     controller.ingest(gebunden, anfrageMitVorgaben(null, List.of(stufe)));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().items().getFirst().stages())
         .extracting(NightRunItemStage::stage)
         .containsExactly(NightRunStage.PAKETE);
@@ -578,7 +594,7 @@ class NightRunIngestControllerTest {
   @Test
   void einBudgetOhneFeldlisteTraegtDieLeereListe() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(
@@ -588,7 +604,7 @@ class NightRunIngestControllerTest {
             List.of()));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().budget().defaultFields()).isEmpty();
   }
 
@@ -722,13 +738,13 @@ class NightRunIngestControllerTest {
   @Test
   void dieMorgenmeldungKommtOhneReleaseFilesAmDienstAn() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(gebunden, anfrageMitVorbereitung(vorbereitung("b2ae30f6")));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().releasePreparation())
         .isEqualTo(
             new NewReleasePreparation(
@@ -745,7 +761,7 @@ class NightRunIngestControllerTest {
   @Test
   void eineMorgenmeldungNurMitErgebnisTraegtLeereListen() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(
@@ -755,7 +771,7 @@ class NightRunIngestControllerTest {
                 ReleasePreparationResult.NOT_PREPARED, null, null, null, null, null, null, null)));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().releasePreparation())
         .isEqualTo(
             new NewReleasePreparation(
@@ -772,13 +788,13 @@ class NightRunIngestControllerTest {
   @Test
   void ohneMorgenmeldungKommtNullAmDienstAn() {
     Authentication gebunden = mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht"));
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
 
     controller.ingest(gebunden, anfrageMitVorbereitung(null));
 
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     assertThat(meldung.getValue().releasePreparation()).isNull();
   }
 
@@ -946,11 +962,11 @@ class NightRunIngestControllerTest {
   }
 
   private NewNightRun gemeldet(NightRunIngestController.IngestRequest anfrage) {
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
     controller.ingest(mitPrincipal(new KanbanPrincipal(1L, 2L, 42L, 7L, "nacht")), anfrage);
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     return meldung.getValue();
   }
 
@@ -1181,7 +1197,7 @@ class NightRunIngestControllerTest {
    * Meldung nicht als unlesbaren Body oder Verletzung abweist (Plan #1876 E1).
    */
   private NewNightRun perJsonGemeldet(String paketFelder) throws Exception {
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
     MockMvc mvc =
         MockMvcBuilders.standaloneSetup(controller)
@@ -1200,7 +1216,7 @@ class NightRunIngestControllerTest {
                         .formatted(paketFelder)))
         .andExpect(status().is2xxSuccessful());
     ArgumentCaptor<NewNightRun> meldung = ArgumentCaptor.forClass(NewNightRun.class);
-    verify(service).ingest(anyLong(), anyLong(), anyString(), any(), meldung.capture());
+    verify(service).ingest(anyLong(), anyLong(), any(), anyString(), any(), meldung.capture());
     return meldung.getValue();
   }
 
@@ -1273,7 +1289,7 @@ class NightRunIngestControllerTest {
 
   /** Postet ein Paket mit den genannten Zusatzfeldern und liefert den Statuscode der Antwort. */
   private int perJsonStatus(String paketFelder) throws Exception {
-    when(service.ingest(anyLong(), anyLong(), anyString(), any(), any()))
+    when(service.ingest(anyLong(), anyLong(), any(), anyString(), any(), any()))
         .thenReturn(new NightRunResult(START, true));
     MockMvc mvc =
         MockMvcBuilders.standaloneSetup(controller)

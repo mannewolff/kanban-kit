@@ -62,4 +62,14 @@ public interface ProjectRepository {
    * weist einen Betrag von 0 oder darunter ab.
    */
   void setMonthlyBudget(long projectId, @Nullable BigDecimal amount);
+
+  /**
+   * Legt die zuletzt vom Kit gemeldete Strenge-Stufe ab ({@code project.kit_strictness}, Issue
+   * #2014) — <b>nur, wenn sie sich ändert</b>.
+   *
+   * <p>Gezieltes Update statt {@code save}, aus demselben Grund wie bei {@link #setMonthlyBudget}.
+   * Ein unbekanntes Projekt ist ein No-Op; die Prüfbedingung der Spalte lässt nur {@code light},
+   * {@code normal} und {@code strict} zu.
+   */
+  void setKitStrictness(long projectId, String value);
 }

@@ -58,6 +58,7 @@ hängt, gehört deshalb nicht in die Tabelle, sondern unter [Sonderregeln](#sond
 | Platte „Nacharbeit“ im Board-Leitstand sehen (`GET /api/boards/{boardId}/night-run-rework`, `requireNightRunAccess`) — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
 | Platte „Auslieferung“ im Board-Leitstand lesen (`GET /api/boards/{boardId}/dashboard/delivery`, `requireMembership`) — geprüft wird die Projektmitgliedschaft wie beim übrigen Leitstand, also jede Rolle, die das Board lesen darf; zeigt die Daten des ganzen Projekts | `BOARD_READ` | ✓ | ✓ | ✓ | ✓ |
 | Abschnitt „Wartegrund“ im Kartendialog eines Pakets in Ready sehen — dieselbe Regel wie die Auswertung der Läufe | `NIGHT_RUN_READ` | – | – | – | ✓ |
+| Läufe in der [mobilen Oberfläche](nutzung.md#unterwegs) unter `/mobil/laeufe` sehen (`GET /api/mobil/laeufe`, `GET /api/mobil/laeufe/{laufId}`) — die mobile Sicht folgt genau dem Recht, Läufe im Leitstand zu sehen: Wer sie dort nicht sieht, sieht sie auch mobil nicht, und ein solcher Lauf antwortet mit 404 wie ein unbekannter | `NIGHT_RUN_READ` | – | – | – | ✓ |
 | **Protokoll eines Laufs hineingeben** — der Plattform-Admin immer | `NIGHT_RUN_SUBMIT` | – | – | – | ✓ |
 
 Dieselbe Übersicht ist in der App unter **`/roles`** erreichbar (Link „Rollen & Rechte" auf der

@@ -92,6 +92,14 @@ public interface NightRunRepository {
    */
   List<NightRun> findByProjectAndKindOrderByStartedAtDesc(long projectId, NightRunKind kind);
 
+  /**
+   * Läufe dieser Gattung <b>über alle Projekte</b>, die ab {@code von} begonnen haben, ältester
+   * zuerst; bei Gleichstand entscheidet die ID (Issue #1998). Für den Meldejob, der ohne Anfrage
+   * die Läufe der laufenden und der vorigen Nacht prüft — ohne Rechteprüfung, die liegt beim
+   * Aufrufer.
+   */
+  List<NightRun> findByKindStartedSince(NightRunKind kind, Instant von);
+
   /** Arbeitspakete der genannten Läufe, nach Lauf und Einfügereihenfolge sortiert. */
   List<NightRunItem> findItemsByRunIds(Collection<Long> runIds);
 

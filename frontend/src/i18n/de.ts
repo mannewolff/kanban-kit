@@ -1041,6 +1041,14 @@ export const de = {
     NACHTPLAN: 'Nachtplan',
   },
 
+  /** Die Strenge-Stufe, die das Projekt im Kit gewählt hat (Issue #2014). */
+  STRENGE: {
+    light: 'Leicht',
+    normal: 'Normal',
+    strict: 'Streng',
+    HINWEIS: 'Strenge, die das Projekt im Kit gewählt hat',
+  },
+
   /** Verbrauch mit Zeitraum-Wahl (Issue #1656). */
   LEITSTAND_VERBRAUCH: {
     ZEITRAUM: {
@@ -1304,6 +1312,13 @@ export const de = {
       STUCK: 'Festgefahren',
     },
     AUSGANG: AUSGANGSWORT,
+    /** Wie ein Lauf auf dem Handy erscheint (Issue #1995, Plan #1989 E19). */
+    MOBILER_ZUSTAND: {
+      LAEUFT: AUSGANGSWORT.RUNNING,
+      HAENGT: 'hängt',
+      GESCHEITERT: 'gescheitert',
+      BEENDET: 'beendet',
+    },
     ZEITBUDGET_MIT_ERGEBNIS: 'Am Zeitbudget beendet, Ergebnis liegt vor',
     ZEITBUDGET_OHNE_ERGEBNIS: 'Am Zeitbudget beendet, ohne Ergebnis',
     FESTGEFAHREN: 'festgefahren',
@@ -1809,6 +1824,68 @@ export const de = {
     ERZEUGEN: 'Erzeugen',
     ERZEUGEN_FEHLGESCHLAGEN:
       'Token konnte nicht erzeugt werden. Für ein board-gebundenes Token brauchst du das Recht, auf diesem Board Karten anzulegen.',
+  },
+
+  /** Die schmale Oberfläche für das Handy unter `/mobil` (Plan #1989, Issue #1992). */
+  MOBIL: {
+    NAVIGATION: 'Mobile Navigation',
+    NAV_IDEE: 'Idee',
+    NAV_EINSTELLUNGEN: 'Einstellungen',
+    ABMELDEN: 'Abmelden',
+    ABMELDEN_FEHLGESCHLAGEN: 'Abmelden fehlgeschlagen.',
+    IDEE_UEBERSCHRIFT: 'Idee festhalten',
+    IDEE_FELD: 'Deine Idee',
+    IDEE_HINWEIS: 'Eintippen oder mit der Diktiertaste einsprechen.',
+    FESTHALTEN: 'Festhalten',
+    ZIEL: (board: string) => `Geht ins Backlog von „${board}“.`,
+    ZU_LANG: (laenge: number, grenze: number) =>
+      `Zu lang: ${laenge} Zeichen, höchstens ${grenze} gehen auf eine Karte.`,
+    ANGELEGT: 'Idee festgehalten.',
+    NICHT_ANGELEGT: 'Die Idee wurde nicht angelegt. Der Text bleibt stehen, versuch es gleich noch einmal.',
+    EINSTELLUNGEN_UEBERSCHRIFT: 'Einstellungen',
+    STANDARD_BOARD: 'Standard-Board',
+    STANDARD_BOARD_HINWEIS: 'Neue Ideen landen im Backlog dieses Boards. Die Wahl gilt nur auf diesem Gerät.',
+    BOARD_EINTRAG: (projekt: string, board: string) => `${projekt} · ${board}`,
+    KEIN_BOARD: 'Du bist in keinem Projekt, in dem du Karten anlegen darfst.',
+    BOARD_VERSCHWUNDEN: 'Das gewählte Board gibt es nicht mehr. Bitte wähle ein neues.',
+    LADEN_FEHLGESCHLAGEN: 'Die Boards konnten nicht geladen werden.',
+    GESPEICHERT: 'Gespeichert.',
+    ZUR_IDEE: 'Zur Idee',
+    NAV_LAEUFE: 'Läufe',
+    LAEUFE_UEBERSCHRIFT: 'Läufe',
+    LAEUFE_HINWEIS: 'Laufende, hängende und gescheiterte Läufe der laufenden und der vorigen Nacht.',
+    LAEUFE_LEER: 'Gerade läuft nichts, und nichts hängt oder ist gescheitert.',
+    LAEUFE_FEHLGESCHLAGEN: 'Die Läufe konnten nicht geladen werden.',
+    LAEUFE_ALLE_BOARDS: 'alle Boards',
+    LAEUFE_ORT: (projekt: string, board: string) => `${projekt} · ${board}`,
+    LAEUFE_BEGINN: (beginn: string) => `Beginn ${beginn}`,
+    LAEUFE_DAUER: (dauer: string) => `Dauer ${dauer}`,
+    LAEUFE_ZURUECK: 'Alle Läufe',
+    LAEUFE_ZUSTAND: 'Zustand',
+    LAEUFE_MELDUNG: 'Letzte Meldung',
+    LAEUFE_DAUER_TITEL: 'Dauer',
+    LAEUFE_KEINE_MELDUNG: 'Keine Meldung.',
+    LAEUFE_MELDUNG_PAKET: (karte: number, text: string) => `Paket #${karte}: ${text}`,
+    LAEUFE_MELDUNG_STILLE: (seit: string) => `Meldet sich nicht mehr seit ${seit}.`,
+    LAEUFE_MELDUNG_STUFE: (stufe: string, seit: string) => `Stufe „${stufe}“ begann ${seit}.`,
+    LAEUFE_MELDUNG_STUFE_KARTE: (stufe: string, karte: number, seit: string) =>
+      `Stufe „${stufe}“ an Karte #${karte} begann ${seit}.`,
+    LAEUFE_NICHT_GEFUNDEN: 'Lauf nicht gefunden.',
+    LAEUFE_LAUF_FEHLGESCHLAGEN: 'Der Lauf konnte nicht geladen werden.',
+    PUSH_UEBERSCHRIFT: 'Benachrichtigungen',
+    PUSH_SCHALTER: 'Benachrichtigungen auf diesem Gerät',
+    PUSH_HINWEIS: 'Eine Nachricht kommt, wenn ein Lauf scheitert oder hängt — je Lauf höchstens eine.',
+    PUSH_HOME_BILDSCHIRM:
+      'Auf dem iPhone kommen Benachrichtigungen nur, wenn du diese Seite vom Startbildschirm öffnest: Im Teilen-Menü „Zum Home-Bildschirm“ wählen und von dort öffnen.',
+    PUSH_KEIN_GERAET: 'Dieses Gerät kann keine Benachrichtigungen.',
+    PUSH_NICHT_EINGERICHTET: 'Benachrichtigungen sind nicht eingerichtet.',
+    PUSH_LADEN_FEHLGESCHLAGEN: 'Die Benachrichtigungen konnten nicht geladen werden.',
+    PUSH_VERWEIGERT: 'Benachrichtigungen sind für diese Seite nicht erlaubt. Erlaube sie in den Einstellungen des Geräts.',
+    PUSH_FEHLGESCHLAGEN: 'Das hat nicht geklappt. Versuch es gleich noch einmal.',
+    PUSH_VORSCHAU: 'In der Vorschau lassen sich Benachrichtigungen nicht schalten.',
+    PUSH_BOARDS: 'Nachrichten je Board',
+    PUSH_KEINE_BOARDS: 'Es gibt kein Board, zu dessen Läufen Nachrichten kommen können.',
+    PUSH_ENDE: 'Die Benachrichtigungen enden mit dem Abmelden und mit dem Ablauf der Sitzung auf diesem Gerät.',
   },
 
   /** Downloads der OpenAPI-Beschreibung, in Administration und API-Übersicht (Issue #1660). */

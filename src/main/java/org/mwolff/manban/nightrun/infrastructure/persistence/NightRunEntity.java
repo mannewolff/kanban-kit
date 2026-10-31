@@ -122,6 +122,14 @@ class NightRunEntity {
   @Column(name = "closed_at", insertable = false, updatable = false)
   private @Nullable Instant closedAt;
 
+  /**
+   * Board des Zugangsschlüssels, über den der Lauf gemeldet wurde (Issue #1993); {@code null}
+   * heisst „kein Board erkennbar“. Geschrieben wird die Spalte allein beim Anlegen über den
+   * JDBC-Weg des Adapters.
+   */
+  @Column(name = "board_id")
+  private @Nullable Long boardId;
+
   protected NightRunEntity() {
     // für JPA
   }
@@ -232,5 +240,9 @@ class NightRunEntity {
 
   @Nullable Instant getClosedAt() {
     return closedAt;
+  }
+
+  @Nullable Long getBoardId() {
+    return boardId;
   }
 }

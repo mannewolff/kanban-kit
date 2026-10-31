@@ -305,6 +305,8 @@ class ArchitectureTest {
   // E6) sind wie PlatformAdminChecker ein Port samt Vokabular fuer die Rechtepruefung in project:
   // PermissionChecker liest den handelnden Admin der Vorschau „Ansicht als XY", ohne auth.web oder
   // den SecurityContext zu kennen, und wirft die Ablehnung, wenn der Admin selbst nichts saehe.
+  // SitzungsEnde (Issue #1997, Plan #1989 E14, E20) ist das Vokabular der Anmeldung: Der Filter
+  // legt es als Details an, und push liest daran ab, wie lange ein Abo auf diesem Geraet gilt.
   static final ArchRule AUTH_DOMAIN_IST_MODULINTERN =
       noClasses()
           .that()
@@ -328,7 +330,8 @@ class ArchitectureTest {
           "AdminAccessDeniedException",
           "VorschauKontext",
           "VorschauKontextLeser",
-          "VorschauVerborgenException");
+          "VorschauVerborgenException",
+          "SitzungsEnde");
 
   // --- Modul-Grenze: project-Fassade (Issue #461, Whitelist seit #470) ------------------------
   // Die Projekt-/Mitgliedschafts-Persistenz-Ports sind modulintern. card darf vom project-Modul
@@ -350,6 +353,8 @@ class ArchitectureTest {
           "InteractiveUsageSinceReader",
           "DashboardParticipationReader",
           "MonthlyBudgetReader",
+          "KitStrictnessWriter",
+          "KitStrictnessReader",
           "ProjectCreatedEvent",
           "ProjectAccessDeniedException",
           // Exception-Vokabular als Vertrag, Plan #1694 (A4)

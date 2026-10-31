@@ -68,4 +68,16 @@ class ProjectTest {
 
     assertThat(vorher.withName("Neu").monthlyBudgetUsd()).isEqualByComparingTo("100.00");
   }
+
+  /**
+   * Die Strenge-Stufe des Kits (Issue #2014) überlebt die Umbenennung; der Konstruktor ohne Stufe
+   * steht für ein Projekt, das nie eine gemeldet hat.
+   */
+  @Test
+  void withNameBehaeltDieStrengeStufe() {
+    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, null, false, null, "strict");
+
+    assertThat(vorher.withName("Neu").kitStrictness()).isEqualTo("strict");
+    assertThat(new Project(7L, "P", 3L, ANGELEGT, null, false, null).kitStrictness()).isNull();
+  }
 }

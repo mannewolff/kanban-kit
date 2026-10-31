@@ -366,6 +366,11 @@ Der **Leitstand** (Sidebar-Eintrag **„Leitstand“** im Board-Kontext, Route
 `/boards/:boardId/leitstand`) ist die **Hauptansicht eines Boards**. Er ersetzt die frühere
 Kennzahlen-Seite „Dashboard“; die alte Adresse `/boards/:boardId/dashboard` leitet auf ihn weiter.
 
+Ganz oben rechts steht die **Strenge**, die das Projekt im Kit gewählt hat — **Leicht**, **Normal**
+oder **Streng**, mit dem Hinweisfähnchen „Strenge, die das Projekt im Kit gewählt hat“. Die Marke
+erscheint erst, wenn das Kit sie zum ersten Mal gemeldet hat; danach zeigt sie den zuletzt
+gemeldeten Wert.
+
 Von oben nach unten führt er:
 
 1. **Jüngster Run** — der jüngste Run als schmales Band: Melder (als Wechselblinker, solange er läuft),
@@ -1288,6 +1293,11 @@ In allen drei Bereichen steht **direkt hinter dem Lämpchen** das Symbol der **A
 dieselben fünf Symbole wie auf der Läufe-Seite, mit dem Wort als Hinweisfähnchen. Weil das Symbol
 bei jeder Art gleich breit ist, beginnt alles dahinter in jeder Zeile an derselben Stelle.
 
+Am Kopf jeder **Projektgruppe** — in „Aktive Runs“ und unter „Störungen“ — steht neben dem
+Projektnamen die **Strenge**, die das Projekt im Kit gewählt hat (Leicht, Normal oder Streng). Sie
+erscheint erst nach der ersten Meldung des Kits; ein Projekt, das nie eine gemeldet hat, zeigt keine
+Marke.
+
 ### Aktive Runs
 
 Jeder Run, der **gerade arbeitet** — mit Projekt, dem Wort „läuft seit" samt bisheriger Dauer,
@@ -1369,6 +1379,126 @@ Ob ein Projekt teilnimmt, entscheidet ausschließlich das Projekt selbst — OWN
 echter Mitgliedschaft, über das Teilnahme-Ankreuzfeld im [Editiermodus](#editiermodus) der
 Projektliste. Der Plattform-Admin sieht nur Runs und Störungen teilnehmender Projekte und kann die
 Teilnahme selbst nicht erzwingen.
+
+## Unterwegs: Handy und Siri {#unterwegs}
+
+### Siri-Kurzbefehl
+
+Eine Idee lässt sich unterwegs per Sprache festhalten: „Hey Siri, Idee festhalten“, einen Satz
+diktieren — danach liegt im Backlog des Boards eine Karte `[Idea]` mit diesem Text. Dafür braucht es
+keine eigene Oberfläche; der Kurzbefehl ruft den bestehenden Karten-Zugang mit einem Zugangsschlüssel
+auf.
+
+**1. Zugangsschlüssel anlegen.** Unter **Administration → API-Tokens** ein neues Token anlegen und
+dabei **Projekt und Board** setzen — das Board, in dessen Backlog die Ideen landen sollen. Das Token
+handelt mit deinen Rechten im Projekt; das Recht `TICKET_CREATE` (Karten anlegen) genügt. Den
+angezeigten Schlüssel gleich kopieren, er wird nur einmal gezeigt.
+
+**2. Kurzbefehl einrichten.** In der App **Kurzbefehle** einen neuen Kurzbefehl anlegen:
+
+1. Aktion **„Text diktieren“** hinzufügen.
+2. Aktion **„Aktuelles Datum“** hinzufügen und mit **„Datum formatieren“** etwa im Format
+   `yyyy-MM-dd-HH-mm-ss` als Text ausgeben — das ist der `Idempotency-Key`, je Aufruf neu.
+3. Aktion **„Inhalte von URL abrufen“** hinzufügen:
+   - Adresse: `https://<dein-host>/api/kanban/items`
+   - Methode: `POST`
+   - Kopfzeilen: `X-Kanban-Token` = dein Schlüssel, `Idempotency-Key` = das formatierte Datum
+   - Anfragetext: JSON mit `title` = `[Idea] ` gefolgt vom diktierten Text und `column` =
+     `BACKLOG`, also `{"title":"[Idea] <Diktat>","column":"BACKLOG"}`
+4. Den Kurzbefehl **„Idee festhalten“** nennen — unter diesem Namen startet ihn Siri.
+
+**Schlüssel auf dem Handy.** Der Schlüssel bleibt im Kurzbefehl auf dem Handy gespeichert. Geht das
+Handy verloren, das Token unter **Administration → API-Tokens** zurückziehen; danach legt der
+Kurzbefehl nichts mehr an.
+
+**Anderes Board.** Der Kurzbefehl legt Ideen immer auf dem Board seines Schlüssels an. Für ein anderes
+Board ein Token mit Bindung an dieses Board anlegen und im Kurzbefehl den Schlüssel austauschen. Die
+Board-Wahl der mobilen Oberfläche `/mobil` wirkt nicht auf den Kurzbefehl.
+
+**Grenze.** Der Titel darf höchstens 300 Zeichen haben, das Präfix `[Idea] ` eingerechnet.
+
+**Zum Ausprobieren** ohne Handy:
+
+```bash
+curl -X POST "https://<dein-host>/api/kanban/items" \
+  -H "X-Kanban-Token: <dein-schluessel>" \
+  -H "Idempotency-Key: $(date +%Y-%m-%d-%H-%M-%S)" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"[Idea] Karten nach Fälligkeit sortieren","column":"BACKLOG"}'
+```
+
+Ein zweiter Aufruf mit demselben `Idempotency-Key` legt keine zweite Karte an.
+
+### Ideen in der mobilen Oberfläche {#mobil}
+
+Unter der Adresse `https://<dein-host>/mobil` gibt es eine schmale Oberfläche für das Handy: ein
+Textfeld und einen Knopf **„Festhalten“**. Ein eingetippter oder mit der Diktiertaste der Tastatur
+eingesprochener Text landet als Karte `[Idea] <Text>` im Backlog deines Standard-Boards — in der
+Spalte, die „Backlog“ heißt, sonst in der ersten Spalte des Boards. Danach bestätigt die Oberfläche
+das, und das Feld ist wieder leer. Am großen Bildschirm ändert sich dadurch nichts.
+
+- **Standard-Board:** Beim ersten Öffnen führt die Oberfläche zu den **Einstellungen**. Dort stehen
+  die Boards der Projekte, in denen du Karten anlegen darfst. Die Wahl gilt nur **auf diesem
+  Gerät** und für dein Konto; ein anderes Handy hat seine eigene. Gibt es das gewählte Board nicht
+  mehr, verlangt die Oberfläche eine neue Wahl.
+- **Grenze:** Höchstens 293 Zeichen Text, damit der Titel samt Präfix `[Idea] ` bei 300 bleibt.
+  Darüber sperrt die Oberfläche den Knopf und sagt es; sie kürzt nicht. Ein leeres Feld legt nichts
+  an.
+- **Ohne Netz:** Scheitert das Anlegen, sagt die Oberfläche das, und der Text bleibt im Feld stehen.
+  Zwischengespeichert wird nichts — einfach noch einmal tippen, wenn das Netz wieder da ist.
+- **Nur Ideen:** Karten verschieben, bearbeiten, archivieren oder löschen geht in der mobilen
+  Oberfläche nicht.
+
+**Auf den Startbildschirm legen.**
+
+- **iPhone (Safari):** `/mobil` öffnen, das **Teilen**-Symbol tippen, dann **„Zum Home-Bildschirm“**.
+- **Android (Chrome):** `/mobil` öffnen, im Menü **⋮** auf **„Zum Startbildschirm hinzufügen“**
+  bzw. **„App installieren“** tippen.
+
+Vom Startbildschirm aus öffnet sich die Oberfläche wie eine App, ohne Adressleiste.
+
+**Anmelden per Code.** Die Anmeldung ist dieselbe wie am großen Bildschirm, mit derselben
+Sitzungsdauer von 30 Tagen. Auf dem iPhone hat die App vom Startbildschirm aber **eigene Cookies**,
+getrennt von Safari: Ein Anmeldelink aus der Mail öffnet sich in Safari und meldet nur Safari an.
+Melde dich deshalb in der App vom Startbildschirm mit dem **sechsstelligen Code** aus der Mail an —
+E-Mail-Adresse eingeben, Code abtippen. Danach führt die Anmeldung zurück nach `/mobil`.
+
+### Läufe und Benachrichtigungen {#mobil-laeufe}
+
+Unter **„Läufe“** zeigt die mobile Oberfläche die unbeaufsichtigten Läufe der laufenden und der
+vorigen Nacht, nur lesend — wie der Bereich „Durchgeführte Nachtläufe“ im Leitstand. Ein Tipp auf
+einen Lauf zeigt seinen Zustand, die letzte Meldung und die Dauer.
+
+- **Wer sie sieht:** Wer die Läufe eines Projekts am großen Bildschirm sehen darf — als Owner des
+  Projekts oder als Plattform-Admin eines teilnehmenden Projekts. Interaktive Sitzungen und
+  Auslieferungen erscheinen nicht.
+- **Zustände:** **läuft**; **hängt**, wenn ein Paket auf jemanden wartet oder an einer Prüfung
+  festgefahren ist; **gescheitert**, wenn ein Paket gescheitert ist oder sein Zeitbudget erschöpft
+  hat, und wenn der Lauf länger als 90 Minuten nichts meldet. Ein Lauf, der regulär an seiner
+  eigenen Grenze endet (Kosten- oder Zeitbudget einer Stufe, Obergrenze an Paketen), ist weder
+  hängend noch gescheitert.
+
+**Benachrichtigungen einschalten.** Unter **„Einstellungen“** → **„Benachrichtigungen auf diesem
+Gerät“** einschalten und die Frage des Browsers erlauben. Danach kommt eine Nachricht, sobald ein
+Lauf hängt oder scheitert — beim ersten Paket, das wartet, festgefahren ist oder scheitert, auch wenn
+der Lauf weiterarbeitet, und beim Verstummen nach 90 Minuten. Je Lauf kommt höchstens eine
+Nachricht; was beim Einschalten schon bestand, wird nicht nachgemeldet. Die Nachricht nennt Projekt,
+Board und was passiert ist; ein Tipp darauf öffnet den Lauf in der mobilen Oberfläche mit seinem
+aktuellen Zustand.
+
+- **Je Board abschalten:** Unter dem Schalter stehen die Boards, zu deren Läufen Nachrichten kommen
+  können, jedes mit eigenem Schalter, gültig für dieses Gerät. Ein Lauf gehört zu dem Board, über
+  dessen Zugangsschlüssel er gemeldet wird; ist keines erkennbar, meldet er sich, solange
+  mindestens ein Board seines Projekts eingeschaltet ist.
+- **iPhone nur vom Startbildschirm:** Auf dem iPhone gibt es Benachrichtigungen nur, wenn die
+  Oberfläche vom Startbildschirm geöffnet wurde (siehe oben, **„Zum Home-Bildschirm“**). In Safari
+  sagt die Seite das statt des Schalters. Kann ein Gerät gar keine Benachrichtigungen, sagt sie
+  „Dieses Gerät kann keine Benachrichtigungen“; hat der Server sie nicht eingerichtet,
+  „Benachrichtigungen sind nicht eingerichtet“.
+- **Ende:** Der Empfang endet mit dem **Abmelden** auf diesem Gerät und mit dem **Ablauf der
+  Sitzung** dort. Jedes Öffnen von `/mobil` verlängert ihn auf die laufende Sitzung. Nach einem
+  Ablauf kommt nichts mehr, bis du dich wieder anmeldest und `/mobil` öffnest; nach dem Abmelden
+  schaltest du die Benachrichtigungen neu ein.
 
 ## API-Übersicht {#api-ubersicht}
 

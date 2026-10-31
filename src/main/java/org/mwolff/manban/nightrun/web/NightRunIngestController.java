@@ -216,7 +216,12 @@ class NightRunIngestController {
     }
     NightRunResult ergebnis =
         service.ingest(
-            principal.userId(), projectId, principal.tokenName(), kind(request), run(request));
+            principal.userId(),
+            projectId,
+            principal.boardId(),
+            principal.tokenName(),
+            kind(request),
+            run(request));
     return new IngestResponse(
         ergebnis.startedAt(), ergebnis.created() ? Outcome.CREATED : Outcome.REPLACED);
   }

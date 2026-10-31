@@ -180,4 +180,57 @@ class UserDirectoryServiceTest {
         .map(UserSummary::displayName)
         .contains("Neuer Name");
   }
+
+  // --- istAktiv (Issue #1998, Plan #1989 E12) ----------------------------------------------
+
+  @Test
+  void istAktiv_wahrBeiFreigegebenemUndNichtGesperrtemKonto() {
+    when(users.findById(7L)).thenReturn(Optional.of(user()));
+
+    assertThat(service.istAktiv(7L)).isTrue();
+  }
+
+  @Test
+  void istAktiv_falschBeiGesperrtemKonto() {
+    when(users.findById(7L))
+        .thenReturn(
+            Optional.of(
+                new AppUser(
+                    7L,
+                    "ada@x.de",
+                    "Ada",
+                    true,
+                    PlatformRole.USER,
+                    Instant.parse("2026-01-01T00:00:00Z"),
+                    1L,
+                    Instant.parse("2026-02-01T00:00:00Z"))));
+
+    assertThat(service.istAktiv(7L)).isFalse();
+  }
+
+  @Test
+  void istAktiv_falschBeiNichtFreigegebenemKonto() {
+    when(users.findById(7L))
+        .thenReturn(
+            Optional.of(new AppUser(7L, "ada@x.de", "Ada", true, PlatformRole.USER, null, null)));
+
+    assertThat(service.istAktiv(7L)).isFalse();
+  }
+
+  @Test
+  void istAktiv_wahrFuerPlattformAdminOhneFreigabeZeitstempel() {
+    // Wie UserSummary.approved: Ein Plattform-Admin gilt als freigegeben (Issue #556).
+    when(users.findById(7L))
+        .thenReturn(
+            Optional.of(new AppUser(7L, "ada@x.de", "Ada", true, PlatformRole.ADMIN, null, null)));
+
+    assertThat(service.istAktiv(7L)).isTrue();
+  }
+
+  @Test
+  void istAktiv_falschBeiUnbekanntemKonto() {
+    when(users.findById(7L)).thenReturn(Optional.empty());
+
+    assertThat(service.istAktiv(7L)).isFalse();
+  }
 }

@@ -546,6 +546,21 @@ describe('PlattformLeitstandPage (#1083)', () => {
       expect(within(zeile).getByText('Am Zeitbudget beendet, Ergebnis liegt vor')).toBeInTheDocument()
     })
 
+    /** Issue #2014: Auch der Kopf einer Projektgruppe im aktuellen Status trägt die Stufe. */
+    it('zeigt die Strenge-Stufe am Kopf der Projektgruppe der laufenden Runs', async () => {
+      api.leitstand.mockResolvedValue(
+        sicht({
+          laufende: [laufend({ nightRunId: 8, projectId: 9, projectName: 'Alpha', strictness: 'strict' })],
+          gemeldetePakete: [pakete(8, [])],
+        }),
+      )
+
+      zeigeSeite()
+
+      const kopf = await screen.findByTestId('stand-gruppe-kopf-9')
+      expect(within(kopf).getByTestId('strenge-marke')).toHaveTextContent('Streng')
+    })
+
     /** AK 6: nach Projekt gruppiert, je Lauf ein Kopf mit Kennung und Stand. */
     it('gruppiert nach Projekt und gibt jedem Lauf einen Kopf mit seinem Stand', async () => {
       api.leitstand.mockResolvedValue(
@@ -953,6 +968,27 @@ describe('PlattformLeitstandPage (#1083)', () => {
     expect(within(zeile).getByRole('link', { name: 'Run #5' })).toBeInTheDocument()
     expect(within(zeile).getByText(/^Karte #721:/)).toBeInTheDocument()
     expect(within(screen.getByTestId('stoergruppe-kopf-9')).getByText('Mein Projekt')).toBeInTheDocument()
+  })
+
+  /**
+   * Issue #2014: Die Strenge-Stufe, die das Projekt im Kit gewählt hat, steht am Kopf der
+   * Projektgruppe neben dem Namen; eine Gruppe ohne gemeldete Stufe zeigt keine Marke.
+   */
+  it('zeigt die Strenge-Stufe am Kopf der Projektgruppe, ohne Meldung keine Marke', async () => {
+    api.leitstand.mockResolvedValue(
+      sicht({
+        stoerungen: [
+          stoerung({ strictness: 'normal' }),
+          stoerung({ nightRunId: 6, projectId: 10, projectName: 'Anderes', strictness: null }),
+        ],
+      }),
+    )
+
+    zeigeSeite()
+
+    const kopf = await screen.findByTestId('stoergruppe-kopf-9')
+    expect(within(kopf).getByTestId('strenge-marke')).toHaveTextContent('Normal')
+    expect(within(screen.getByTestId('stoergruppe-kopf-10')).queryByTestId('strenge-marke')).toBeNull()
   })
 
   /**

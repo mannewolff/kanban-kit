@@ -25,6 +25,10 @@ interface NightRunJpaRepository extends JpaRepository<NightRunEntity, Long> {
 
   Optional<NightRunEntity> findByIdAndProjectId(long id, long projectId);
 
+  /** Läufe einer Gattung über alle Projekte ab einem Beginn, ältester zuerst (Issue #1998). */
+  List<NightRunEntity> findByKindAndStartedAtGreaterThanEqualOrderByStartedAtAscIdAsc(
+      String kind, Instant von);
+
   /**
    * Die Nachtläufe eines Tokens, die das Fenster {@code [von, bis]} berühren (Issue #1373). Natives
    * SQL, weil das Ende eines gemeldeten Laufs aus Start und Dauer in Millisekunden entsteht.

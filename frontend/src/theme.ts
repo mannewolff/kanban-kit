@@ -503,6 +503,11 @@ export const KUPFER_HELL = VARIABLEN.primary.light
 export const KUPFER_SCHIMMER = VARIABLEN.warte.kupferSchimmer
 /** Gewählte Zeile. */
 export const AUSWAHL = VARIABLEN.warte.auswahl
+/**
+ * Grund des hellen Erscheinungsbildes als fester Wert, für `theme-color` der mobilen Oberfläche
+ * (Issue #1992): Ein Meta-Tag im Kopf liest keine CSS-Variablen.
+ */
+export const KOPFFARBE = HELL.grund
 /** Helle Phase des Wechselblinkers eines laufenden Laufs (Issue #1136). */
 export const BLINKER_HELL = VARIABLEN.warte.blinkerHell
 /** Innenschatten einer Nut. */

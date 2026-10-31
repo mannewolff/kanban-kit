@@ -142,6 +142,17 @@ class BoardServiceTest {
   }
 
   @Test
+  void listActiveBoardIds_nenntDieAktivenBoardsDesProjektsOhneRechtepruefung() {
+    // Given
+    when(boards.findByProjectId(1L))
+        .thenReturn(List.of(board(), new Board(11L, 1L, "Zweites", FIXED)));
+
+    // When / Then
+    assertThat(service.listActiveBoardIds(1L)).containsExactly(10L, 11L);
+    verifyNoInteractions(permissions);
+  }
+
+  @Test
   void getBoard_returnsBoardView() {
     // Given
     when(boards.findById(10L)).thenReturn(Optional.of(board()));

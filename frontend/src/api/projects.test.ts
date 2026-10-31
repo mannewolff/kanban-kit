@@ -20,8 +20,9 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('projectsApi', () => {
   it('list ruft GET /api/projects und liefert die geparste Antwort', async () => {
-    spyFetch(JSON.stringify([{ id: 1, name: 'Kanban Kit', role: 'OWNER', createdAt: '2026-01-01' }]))
+    const f = spyFetch(JSON.stringify([{ id: 1, name: 'Kanban Kit', role: 'OWNER', createdAt: '2026-01-01' }]))
     const result = await projectsApi.list()
+    expect(lastCall(f).url).toBe('/api/projects')
     expect(result).toEqual([{ id: 1, name: 'Kanban Kit', role: 'OWNER', createdAt: '2026-01-01' }])
   })
 
@@ -61,8 +62,9 @@ describe('projectsApi', () => {
   })
 
   it('nextCardNumber ruft GET /api/projects/{id}/next-card-number', async () => {
-    spyFetch(JSON.stringify({ nextCardNumber: 13457 }))
+    const f = spyFetch(JSON.stringify({ nextCardNumber: 13457 }))
     const result = await projectsApi.nextCardNumber(3)
+    expect(lastCall(f).url).toBe('/api/projects/3/next-card-number')
     expect(result).toEqual({ nextCardNumber: 13457 })
   })
 

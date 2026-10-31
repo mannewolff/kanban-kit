@@ -3,11 +3,18 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { authApi } from './api/auth'
+import { ApiError } from './api/client'
+import { mobilApi } from './api/mobil'
+import { projectsApi } from './api/projects'
 import { AuthProvider } from './auth/AuthContext'
 
 vi.mock('./api/auth', () => ({
   authApi: { me: vi.fn(), requestCode: vi.fn(), verifyCode: vi.fn(), linkLogin: vi.fn(), logout: vi.fn() },
 }))
+
+vi.mock('./api/projects', () => ({ projectsApi: { list: vi.fn() } }))
+
+vi.mock('./api/mobil', () => ({ mobilApi: { laeufe: vi.fn(), lauf: vi.fn() } }))
 
 const mockedApi = authApi as unknown as {
   me: ReturnType<typeof vi.fn>
@@ -42,5 +49,71 @@ describe('App-Routen der Anmeldung', () => {
     expect(await screen.findByText('Anmeldung läuft …', undefined, { timeout: 5000 })).toBeInTheDocument()
     await waitFor(() => expect(mockedApi.linkLogin).toHaveBeenCalledWith('tok-9'))
     expect(screen.queryByRole('button', { name: 'Code anfordern' })).not.toBeInTheDocument()
+  })
+})
+
+const ANGEMELDET = {
+  userId: 1,
+  email: 'a@b.de',
+  displayName: 'A',
+  platformRole: 'USER',
+  memberships: [],
+  colorScheme: 'SYSTEM',
+  vorschau: null,
+}
+
+describe('App-Routen der mobilen Oberfläche', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(projectsApi.list).mockResolvedValue([])
+  })
+
+  it('öffnet /mobil im schmalen Rahmen ohne AppShell und führt ohne Board zu den Einstellungen', async () => {
+    mockedApi.me.mockResolvedValue({
+      userId: 1,
+      email: 'a@b.de',
+      displayName: 'A',
+      platformRole: 'USER',
+      memberships: [],
+      colorScheme: 'SYSTEM',
+      vorschau: null,
+    })
+    renderApp('/mobil')
+    expect(await screen.findByRole('navigation', { name: 'Mobile Navigation' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Einstellungen' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Hauptnavigation' })).not.toBeInTheDocument()
+  })
+
+  it('öffnet /mobil/laeufe im schmalen Rahmen ohne AppShell', async () => {
+    mockedApi.me.mockResolvedValue(ANGEMELDET)
+    vi.mocked(mobilApi.laeufe).mockResolvedValue([])
+    renderApp('/mobil/laeufe')
+    expect(await screen.findByRole('heading', { name: 'Läufe' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Mobile Navigation' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Hauptnavigation' })).not.toBeInTheDocument()
+  })
+
+  it('öffnet /mobil/laeufe/:laufId im schmalen Rahmen ohne AppShell', async () => {
+    mockedApi.me.mockResolvedValue(ANGEMELDET)
+    vi.mocked(mobilApi.lauf).mockRejectedValue(new ApiError(404, 'Not Found'))
+    renderApp('/mobil/laeufe/4711')
+    expect(await screen.findByText('Lauf nicht gefunden.', undefined, { timeout: 5000 })).toBeInTheDocument()
+    expect(mobilApi.lauf).toHaveBeenCalledWith(4711)
+    expect(screen.getByRole('navigation', { name: 'Mobile Navigation' })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Hauptnavigation' })).not.toBeInTheDocument()
+  })
+
+  it('führt /mobil/laeufe ohne Anmeldung zur Anmeldung', async () => {
+    mockedApi.me.mockRejectedValue(new Error('401'))
+    renderApp('/mobil/laeufe')
+    expect(await screen.findByRole('button', { name: 'Code anfordern' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(mobilApi.laeufe).not.toHaveBeenCalled()
+  })
+
+  it('führt /mobil ohne Anmeldung zur Anmeldung', async () => {
+    mockedApi.me.mockRejectedValue(new Error('401'))
+    renderApp('/mobil')
+    expect(await screen.findByRole('button', { name: 'Code anfordern' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: 'Mobile Navigation' })).not.toBeInTheDocument()
   })
 })

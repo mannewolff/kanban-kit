@@ -20,6 +20,7 @@ import org.mwolff.manban.nightrun.domain.NightRunOutcome;
 import org.mwolff.manban.nightrun.domain.NightRunOutcome.Verdict;
 import org.mwolff.manban.nightrun.domain.NightRunPeriod;
 import org.mwolff.manban.nightrun.domain.NightRunState;
+import org.mwolff.manban.project.application.KitStrictnessReader;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +36,10 @@ import org.springframework.transaction.annotation.Transactional;
  * die Ausnahme, die man beim Lesen übersieht. {@link NightRunUsageService} ist der Präzedenzfall
  * für einen zweiten Dienst im selben Modul.
  */
+// PMD.CouplingBetweenObjects: Mit Issue #2014 kommt der project-Port KitStrictnessReader dazu,
+// damit jede Zeile die Strenge-Stufe ihres Projekts trägt (Plan #1088 E5: eine Antwort). Eine
+// Aufteilung hätte zwei Dienste für dieselbe eine Abfrage der Seite zur Folge.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class DisruptionService {
 
@@ -43,6 +48,7 @@ public class DisruptionService {
   private final CardRunQueryService cards;
   private final PlatformAdminChecker platformAdminChecker;
   private final NightRunProperties properties;
+  private final KitStrictnessReader strenge;
   private final Clock clock;
 
   public DisruptionService(
@@ -51,12 +57,14 @@ public class DisruptionService {
       CardRunQueryService cards,
       PlatformAdminChecker platformAdminChecker,
       NightRunProperties properties,
+      KitStrictnessReader strenge,
       Clock clock) {
     this.repository = repository;
     this.runs = runs;
     this.cards = cards;
     this.platformAdminChecker = platformAdminChecker;
     this.properties = properties;
+    this.strenge = strenge;
     this.clock = clock;
   }
 
@@ -107,7 +115,9 @@ public class DisruptionService {
     List<DisruptionRepository.DisruptionCandidate> offene =
         repository.openCandidates(jetzt, properties.stilleFrist());
     Map<Long, List<NightRunItem>> jeLauf = pakete(kandidaten, offene);
-    List<DisruptionView> zeilen = views(kandidaten, jeLauf);
+    // Ein Abruf für alle Zeilen (Issue #2014): Die Stufe hängt am Projekt, nicht am Lauf.
+    Map<Long, String> stufen = strenge.reportedStrictness();
+    List<DisruptionView> zeilen = views(kandidaten, jeLauf, stufen);
     List<DisruptionView> beendete =
         zeilen.stream().filter(v -> v.outcome().verdict() != Verdict.RUNNING).toList();
     List<DisruptionView> laufende =
@@ -116,7 +126,7 @@ public class DisruptionService {
         laufende,
         beendete.stream().filter(v -> nacht.contains(v.startedAt())).toList(),
         beendete.stream().filter(v -> vorige.contains(v.startedAt())).toList(),
-        views(offene, jeLauf).stream().filter(v -> v.outcome().isDisruption()).toList(),
+        views(offene, jeLauf, stufen).stream().filter(v -> v.outcome().isDisruption()).toList(),
         gemeldetePakete(laufende, jeLauf));
   }
 
@@ -197,9 +207,11 @@ public class DisruptionService {
 
   private List<DisruptionView> views(
       List<DisruptionRepository.DisruptionCandidate> kandidaten,
-      Map<Long, List<NightRunItem>> jeLauf) {
+      Map<Long, List<NightRunItem>> jeLauf,
+      Map<Long, String> stufen) {
     return kandidaten.stream()
-        .map(k -> view(k, jeLauf.getOrDefault(k.nightRunId(), List.of())))
+        .map(
+            k -> view(k, jeLauf.getOrDefault(k.nightRunId(), List.of()), stufen.get(k.projectId())))
         .toList();
   }
 
@@ -258,7 +270,8 @@ public class DisruptionService {
     DisruptionRepository.DisruptionCandidate kandidat =
         repository.candidate(nightRunId).orElseThrow(DisruptionNotFoundException::new);
     Verdict ausgang =
-        view(kandidat, runs.findItemsByRunIds(List.of(nightRunId))).outcome().verdict();
+        // Die Strenge-Stufe spielt für den Ausgang keine Rolle (Issue #2014).
+        view(kandidat, runs.findItemsByRunIds(List.of(nightRunId)), null).outcome().verdict();
     if (ausgang == Verdict.CLOSED) {
       return;
     }
@@ -291,11 +304,14 @@ public class DisruptionService {
    * grünen Paketen abbrach, als gelungen.
    */
   private DisruptionView view(
-      DisruptionRepository.DisruptionCandidate k, List<NightRunItem> items) {
+      DisruptionRepository.DisruptionCandidate k,
+      List<NightRunItem> items,
+      @Nullable String strictness) {
     return new DisruptionView(
         k.nightRunId(),
         k.projectId(),
         k.projectName(),
+        strictness,
         k.mode(),
         k.startedAt(),
         NightRunOutcome.of(
@@ -328,11 +344,17 @@ public class DisruptionService {
    *
    * <p>Die <b>Art</b> des Laufs ({@code mode}) steht seit Issue #1128 dabei: Der
    * Plattform-Leitstand zeigt sie als Marke an jeder Zeile.
+   *
+   * <p>Die <b>Strenge-Stufe</b> ({@code strictness}, Issue #2014) ist die zuletzt vom Kit gemeldete
+   * des Projekts, {@code null}, solange es nie eine gemeldet hat. Sie steht wie {@code projectName}
+   * an jeder Zeile, weil die Seite ihre Daten in einer Antwort holt (Plan #1088 E5); gezeigt wird
+   * sie am Kopf der Projektgruppe.
    */
   public record DisruptionView(
       long nightRunId,
       long projectId,
       String projectName,
+      @Nullable String strictness,
       NightRunMode mode,
       Instant startedAt,
       NightRunOutcome outcome) {}

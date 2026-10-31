@@ -23,6 +23,7 @@ import { useSprache, useT } from '../i18n/SpracheContext'
 import { woerterbuch, type Sprache } from '../i18n/woerterbuch'
 import { AktuellerStand, karteSchluessel } from '../components/leitstand/AktuellerStand'
 import { LaufArtSymbol } from '../components/leitstand/LaufArtSymbol'
+import { StrengeMarke } from '../components/leitstand/StrengeMarke'
 import {
   FilterTaste,
   Led,
@@ -863,6 +864,7 @@ function Projektblock({
         <Box component="span" id={nameId} sx={{ ...ANZEIGE, fontSize: 12.5, fontWeight: 600 }}>
           {gruppe.projectName}
         </Box>
+        <StrengeMarke stufe={gruppe.strictness} />
         <Box component="span" sx={{ fontSize: 11.5, color: TEXT_SCHWACH }}>
           {t.STOERUNGEN_ANZAHL(zahl)}
         </Box>
