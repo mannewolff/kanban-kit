@@ -159,6 +159,17 @@ describe('pushAbo', () => {
       api.aboSetzen.mockRejectedValue(new ApiError(500, 'kaputt'))
       await expect(einschalten('AQID')).rejects.toThrow('kaputt')
     })
+
+    it('legt bei einem anderen Fehler kein neues Abo an', async () => {
+      const sub = abo()
+      const g = geraet(null, false)
+      g.subscribe.mockResolvedValue(sub)
+      api.aboSetzen.mockRejectedValueOnce(new ApiError(500, 'kaputt'))
+      await expect(einschalten('AQID')).rejects.toThrow('kaputt')
+      expect(sub.unsubscribe).not.toHaveBeenCalled()
+      expect(g.subscribe).toHaveBeenCalledTimes(1)
+      expect(api.aboSetzen).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('auffrischen', () => {
