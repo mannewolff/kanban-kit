@@ -7,6 +7,7 @@ import type { AttachmentsApi } from '../api/attachments'
 import type { Board } from '../api/boards'
 import { ApiError } from '../api/client'
 import type { Wartegruende } from '../api/nightRuns'
+import type { VorhabenKostenView } from '../api/vorhabenKosten'
 import type { Card, CardByNumber, CardDetail, DerivationNode } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
 import type { KitNamenZustand } from '../api/kitNamen'
@@ -152,7 +153,11 @@ function makeApis() {
     kettenstand: vi.fn(() => new Promise<never>(() => {})),
     wartegrund: vi.fn<(cardId: number) => Promise<Wartegruende>>(() => Promise.reject(new ApiError(404, 'Not Found'))),
   }
-  return { commentsApi, attachmentsApi, cardsApi, boardsApi, nightRunsApi }
+  // Die Kostenzeile eines Vorhabens (Issue #2006): null wie ohne Verbrauchsrecht, der Block bleibt weg.
+  const vorhabenKostenApi = {
+    jeVorhaben: vi.fn<(cardId: number) => Promise<VorhabenKostenView | null>>().mockResolvedValue(null),
+  }
+  return { commentsApi, attachmentsApi, cardsApi, boardsApi, nightRunsApi, vorhabenKostenApi }
 }
 
 /**
@@ -975,6 +980,91 @@ describe('CardDetailModal', () => {
     expect(await screen.findByRole('tree')).toBeInTheDocument()
     expect(screen.queryByText(/^Karten \(/)).toBeNull()
     expect(screen.queryByText('Keine zugeordneten Karten.')).toBeNull()
+  })
+
+  // --- Kostenzeile im Vorhaben-Dialog (Issue #2006) -------------------------
+
+  const kostenLaufend = (archiviert = false): VorhabenKostenView => ({
+    epicId: 200,
+    number: 1,
+    archiviert,
+    laufend: {
+      hatDokumentOderPaket: true,
+      bisher: 4,
+      unvollstaendig: false,
+      voraussage: { art: 'PAKETE', typisch: 16, unten: 12, oben: 24, paketzahl: 8, ohneStufe: 0 },
+      zuWenigDaten: null,
+    },
+    abschluss: null,
+  })
+
+  it('zeigt im Vorhaben die Kostenzeile aus dem Abruf je Vorhaben', async () => {
+    const apis = makeApis()
+    apis.vorhabenKostenApi.jeVorhaben.mockResolvedValue(kostenLaufend())
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    const zeile = await screen.findByTestId('kosten-1')
+    expect(zeile).toHaveTextContent('Voraussichtliche Kosten: typisch 16,00 $ (12,00 $–24,00 $) · aus 8 Paketen · bisher 4,00 $')
+    expect(apis.vorhabenKostenApi.jeVorhaben).toHaveBeenCalledWith(200)
+  })
+
+  it('zeigt die Kostenzeile auch an einem archivierten Vorhaben, mit dem Vergleich nach dem Abschluss', async () => {
+    const apis = makeApis()
+    apis.vorhabenKostenApi.jeVorhaben.mockResolvedValue({
+      ...kostenLaufend(true),
+      laufend: null,
+      abschluss: {
+        abgeschlossenAt: '2026-11-01T06:00:00Z',
+        tatsaechlich: 18,
+        unvollstaendig: false,
+        anforderung: { beziffert: true, art: 'ANFORDERUNG', typisch: 16, unten: 12, oben: 21, abweichungProzent: 13 },
+        pakete: { beziffert: false, art: null, typisch: null, unten: null, oben: null, abweichungProzent: null },
+      },
+    })
+    render(<CardDetailModal card={{ ...epicCard, archived: true }} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByTestId('kosten-1')).toHaveTextContent(
+      'tatsächlich 18,00 $ · aus der Anforderung 16,00 $ (+13 %) · aus den Paketen keine Voraussage',
+    )
+  })
+
+  it('zeigt im Vorhaben ohne Anforderung, Plan und Paket die bisherigen Kosten', async () => {
+    const apis = makeApis()
+    apis.vorhabenKostenApi.jeVorhaben.mockResolvedValue({
+      ...kostenLaufend(),
+      laufend: { hatDokumentOderPaket: false, bisher: 0, unvollstaendig: false, voraussage: null, zuWenigDaten: null },
+    })
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByTestId('kosten-1')).toHaveTextContent('bisher 0,00 $')
+  })
+
+  it('zeigt ohne Verbrauchsrecht keine Kostenzeile', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    await waitFor(() => expect(apis.vorhabenKostenApi.jeVorhaben).toHaveBeenCalledWith(200))
+    expect(await screen.findByText('Anhänge')).toBeInTheDocument()
+    expect(screen.queryByTestId('kosten-1')).not.toBeInTheDocument()
+    expect(screen.queryByText('Kosten')).not.toBeInTheDocument()
+  })
+
+  it('zeigt bei einem Fehler des Abrufs keine Kostenzeile', async () => {
+    const apis = makeApis()
+    apis.vorhabenKostenApi.jeVorhaben.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    render(<CardDetailModal card={epicCard} canEdit onClose={vi.fn()} {...apis} />)
+
+    await waitFor(() => expect(apis.vorhabenKostenApi.jeVorhaben).toHaveBeenCalled())
+    expect(await screen.findByText('Anhänge')).toBeInTheDocument()
+    expect(screen.queryByTestId('kosten-1')).not.toBeInTheDocument()
+  })
+
+  it('fragt für eine Karte, die kein Vorhaben ist, keine Kosten ab', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByText('Anhänge')).toBeInTheDocument()
+    expect(apis.vorhabenKostenApi.jeVorhaben).not.toHaveBeenCalled()
   })
 
   // --- Herkunftsbaum im Vorhaben-Dialog (Issue #644) ------------------------

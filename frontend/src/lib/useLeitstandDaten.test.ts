@@ -5,12 +5,14 @@ import { ApiError } from '../api/client'
 import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
+import { vorhabenKostenApi, type VorhabenKostenView } from '../api/vorhabenKosten'
 import { useLeitstandDaten } from './useLeitstandDaten'
 
 vi.mock('../api/boards', () => ({ boardsApi: { get: vi.fn() } }))
 vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), flow: vi.fn(), aging: vi.fn(), epicForecast: vi.fn(), delivery: vi.fn() } }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn(), models: vi.fn() } }))
+vi.mock('../api/vorhabenKosten', () => ({ vorhabenKostenApi: { jeBoard: vi.fn() } }))
 
 const m = {
   board: boardsApi.get as ReturnType<typeof vi.fn>,
@@ -24,6 +26,7 @@ const m = {
   klassen: nightRunsApi.errorClassCounts as ReturnType<typeof vi.fn>,
   nacharbeit: nightRunsApi.rework as ReturnType<typeof vi.fn>,
   modelle: nightRunsApi.models as ReturnType<typeof vi.fn>,
+  kosten: vorhabenKostenApi.jeBoard as ReturnType<typeof vi.fn>,
 }
 
 const board = (extra: Partial<Board> = {}): Board => ({
@@ -144,6 +147,22 @@ const modelle = (): NightRunModels => ({
   stages: [],
 })
 
+const kosten = (): VorhabenKostenView[] => [
+  {
+    epicId: 42,
+    number: 1782,
+    archiviert: false,
+    laufend: {
+      hatDokumentOderPaket: true,
+      bisher: 4,
+      unvollstaendig: false,
+      voraussage: { art: 'PAKETE', typisch: 16, unten: 12, oben: 24, paketzahl: 8, ohneStufe: 0 },
+      zuWenigDaten: null,
+    },
+    abschluss: null,
+  },
+]
+
 /** Ein Versprechen, das der Test von Hand einlöst — für die Zustände vor der Antwort. */
 function offen<T>() {
   let einloesen: (wert: T) => void = () => undefined
@@ -168,6 +187,7 @@ beforeEach(() => {
   m.klassen.mockResolvedValue({ CHECKS_RED: 11 })
   m.nacharbeit.mockResolvedValue(nacharbeit())
   m.modelle.mockResolvedValue(modelle())
+  m.kosten.mockResolvedValue(kosten())
 })
 
 describe('useLeitstandDaten — Board-ID', () => {
@@ -382,6 +402,27 @@ describe('useLeitstandDaten — Fluss und Alter in Arbeit (Issue #1778)', () => 
     await waitFor(() => expect(result.current.alter).toEqual({ art: 'ohneRecht' }))
     await waitFor(() => expect(result.current.fluss).toEqual({ art: 'da', wert: fluss() }))
     expect(result.current.kpis).toEqual({ art: 'da', wert: kpis() })
+  })
+})
+
+describe('useLeitstandDaten — Kosten je Vorhaben (Issue #2006)', () => {
+  it('lädt die Kosten neben der Prognose sofort zum Board', async () => {
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.kosten).toEqual({ art: 'da', wert: kosten() }))
+    expect(m.kosten).toHaveBeenCalledWith(7)
+    expect(result.current.prognose).toEqual({ art: 'da', wert: prognose() })
+  })
+
+  it('übernimmt bei 403 das null des Abrufs, ohne die Prognose zu berühren', async () => {
+    m.kosten.mockResolvedValue(null)
+    const { result } = renderHook(() => useLeitstandDaten('7'))
+    await waitFor(() => expect(result.current.kosten).toEqual({ art: 'da', wert: null }))
+    expect(result.current.prognose).toEqual({ art: 'da', wert: prognose() })
+  })
+
+  it('ruft die Kosten ohne gültige ID nicht ab', () => {
+    renderHook(() => useLeitstandDaten('abc'))
+    expect(m.kosten).not.toHaveBeenCalled()
   })
 })
 

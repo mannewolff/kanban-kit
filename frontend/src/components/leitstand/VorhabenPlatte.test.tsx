@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, test } from 'vitest'
 import type { EpicForecast, EpicForecastEntry } from '../../api/dashboard'
+import type { VorhabenKostenView } from '../../api/vorhabenKosten'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
 import { TabletQuerProvider } from '../../lib/tabletQuer'
 import { setzeMedien } from '../../test/setup'
@@ -141,6 +142,85 @@ describe('VorhabenPlatte', () => {
   it('spricht Englisch', () => {
     renderMitSprache(<VorhabenPlatte prognose={prognose([vorhaben({ open: 1 })])} />, 'en')
     expect(screen.getByTestId('prognose-1782')).toHaveTextContent('1 open package')
+  })
+})
+
+const kostenLaufend = (teil: Partial<VorhabenKostenView> = {}, hatDokumentOderPaket = true): VorhabenKostenView => ({
+  epicId: 42,
+  number: 1782,
+  archiviert: false,
+  laufend: {
+    hatDokumentOderPaket,
+    bisher: 4,
+    unvollstaendig: false,
+    voraussage: hatDokumentOderPaket ? { art: 'PAKETE', typisch: 16, unten: 12, oben: 24, paketzahl: 8, ohneStufe: 0 } : null,
+    zuWenigDaten: null,
+  },
+  abschluss: null,
+  ...teil,
+})
+
+describe('VorhabenPlatte mit Kostenzeile (Issue #2006)', () => {
+  const zeigeMitKosten = (kosten: VorhabenKostenView[] | null) =>
+    renderMitSprache(<VorhabenPlatte prognose={prognose([vorhaben()])} kosten={kosten} />)
+
+  it('setzt die Zeile „Voraussichtliche Kosten“ unter die Prognose des Vorhabens', () => {
+    zeigeMitKosten([kostenLaufend()])
+    const [eintrag] = within(platte()).getAllByRole('listitem')
+    expect(within(eintrag).getByTestId('kosten-1782')).toHaveTextContent(
+      'Voraussichtliche Kosten: typisch 16,00 $ (12,00 $–24,00 $) · aus 8 Paketen · bisher 4,00 $',
+    )
+  })
+
+  it('blendet die Zeile aus, solange das Vorhaben weder Anforderung noch Plan noch Paket hat', () => {
+    zeigeMitKosten([kostenLaufend({}, false)])
+    expect(within(platte()).queryByTestId('kosten-1782')).not.toBeInTheDocument()
+  })
+
+  it('zeigt ohne Daten (kein Verbrauchsrecht) keine Zeile', () => {
+    zeigeMitKosten(null)
+    expect(within(platte()).queryByTestId('kosten-1782')).not.toBeInTheDocument()
+    expect(within(platte()).getByTestId('prognose-1782')).toBeInTheDocument()
+  })
+
+  it('zeigt keine Zeile für ein Vorhaben ohne Eintrag in den Kosten', () => {
+    zeigeMitKosten([kostenLaufend({ epicId: 99, number: 99 })])
+    expect(within(platte()).queryByTestId('kosten-1782')).not.toBeInTheDocument()
+  })
+
+  it('zeigt nach dem Abschluss den Vergleich', () => {
+    zeigeMitKosten([
+      kostenLaufend({
+        laufend: null,
+        abschluss: {
+          abgeschlossenAt: '2026-11-01T06:00:00Z',
+          tatsaechlich: 18,
+          unvollstaendig: false,
+          anforderung: { beziffert: true, art: 'ANFORDERUNG', typisch: 16, unten: 12, oben: 21, abweichungProzent: 13 },
+          pakete: { beziffert: true, art: 'PAKETE', typisch: 20, unten: 15, oben: 26, abweichungProzent: -10 },
+        },
+      }),
+    ])
+    expect(within(platte()).getByTestId('kosten-1782')).toHaveTextContent(
+      'tatsächlich 18,00 $ · aus der Anforderung 16,00 $ (+13 %) · aus den Paketen 20,00 $ (−10 %)',
+    )
+  })
+
+  it('zeigt an einem archivierten Vorhaben keinen Vergleich', () => {
+    zeigeMitKosten([
+      kostenLaufend({
+        archiviert: true,
+        laufend: null,
+        abschluss: {
+          abgeschlossenAt: '2026-11-01T06:00:00Z',
+          tatsaechlich: 18,
+          unvollstaendig: false,
+          anforderung: { beziffert: false, art: null, typisch: null, unten: null, oben: null, abweichungProzent: null },
+          pakete: { beziffert: false, art: null, typisch: null, unten: null, oben: null, abweichungProzent: null },
+        },
+      }),
+    ])
+    expect(within(platte()).queryByTestId('kosten-1782')).not.toBeInTheDocument()
   })
 })
 

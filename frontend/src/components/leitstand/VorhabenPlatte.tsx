@@ -1,11 +1,13 @@
 import Box from '@mui/material/Box'
 import type { EpicForecast, EpicForecastEntry } from '../../api/dashboard'
+import type { VorhabenKostenView } from '../../api/vorhabenKosten'
 import { useSprache, useT } from '../../i18n/SpracheContext'
 import { epicColor } from '../../lib/epicMeta'
 import { hinweisText, paketZahl, zeilenText } from '../../lib/prognose'
 import { KUPFER, TEXT_SCHWACH, ZAHL } from '../../theme'
 import { Erklaerung } from '../Erklaerung'
 import { Fuellschiene, LeerSatz, Platte } from './LeitstandBausteine'
+import { VorhabenKostenZeile } from './VorhabenKostenZeile'
 
 /** Füllung der Schiene in Prozent; ein Vorhaben ohne Pakete bleibt leer statt `NaN` (E11). */
 function fuellung(v: EpicForecastEntry): number {
@@ -17,9 +19,17 @@ function fuellung(v: EpicForecastEntry): number {
  * mit Titel, Füllschiene und ‹fertig›/‹gesamt› nach der Zählung der Prognose, darunter die
  * Prognosezeile. Nur mit Daten folgt „‹n› offene Pakete“, und die Zeile trägt den Hinweis, der beim
  * Überfahren, beim Fokus oder auf dem Tablet per Antippen erscheint.
+ *
+ * Darunter steht die Kostenzeile (Issue #2006, Plan #1990): nur mit `kosten`, also für jeden, der
+ * den Verbrauch sieht, und nur für ein Vorhaben, das nicht archiviert ist. `null` heißt ohne Recht oder
+ * ohne Daten — dann fehlt die Zeile bei jedem Vorhaben.
  */
-export function VorhabenPlatte({ prognose }: Readonly<{ prognose: EpicForecast }>) {
+export function VorhabenPlatte({
+  prognose,
+  kosten = null,
+}: Readonly<{ prognose: EpicForecast; kosten?: readonly VorhabenKostenView[] | null }>) {
   const t = useT().LEITSTAND
+  const kostenJeVorhaben = new Map((kosten ?? []).filter((k) => !k.archiviert).map((k) => [k.epicId, k]))
   return (
     <Platte titel={t.VORHABEN} notiz={t.OFFEN}>
       {prognose.epics.length === 0 ? (
@@ -36,12 +46,18 @@ export function VorhabenPlatte({ prognose }: Readonly<{ prognose: EpicForecast }
                 <Box sx={{ ...ZAHL, fontSize: 12.5, textAlign: 'right' }}>{`${v.finished}/${v.total}`}</Box>
               </Box>
               <Prognosezeile vorhaben={v} />
+              <KostenFuer kosten={kostenJeVorhaben.get(v.id)} />
             </Box>
           ))}
         </Box>
       )}
     </Platte>
   )
+}
+
+/** Die Kostenzeile eines Vorhabens; ohne Eintrag in den Kosten keine. */
+function KostenFuer({ kosten }: Readonly<{ kosten: VorhabenKostenView | undefined }>) {
+  return kosten === undefined ? null : <VorhabenKostenZeile kosten={kosten} />
 }
 
 /** Die zweite Zeile eines Vorhabens (E10): Prognose, mit Daten dahinter die Zahl der offenen Pakete. */

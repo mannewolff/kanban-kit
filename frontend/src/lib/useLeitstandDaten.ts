@@ -4,6 +4,7 @@ import { ApiError, istVorschauVerborgen } from '../api/client'
 import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunErrorClassCounts, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
+import { vorhabenKostenApi, type VorhabenKostenView } from '../api/vorhabenKosten'
 import { juengsterLauf } from './leitstand'
 
 /**
@@ -78,6 +79,11 @@ export interface LeitstandDaten {
   alter: Laden<AgingWip>
   /** Die Prognose der Platte „Vorhaben“ (Issue #1828); lädt wie der Fluss sofort zum Board. */
   prognose: Laden<EpicForecast>
+  /**
+   * Die Kostenzeilen der Platte „Vorhaben“ (Issue #2006); lädt wie die Prognose sofort zum Board.
+   * `null` als Wert heißt ohne Verbrauchsrecht — dann steht keine Kostenzeile.
+   */
+  kosten: Laden<VorhabenKostenView[] | null>
   /** Die Platte „Auslieferung“ (Issue #1836) mit den Daten des ganzen Projekts; lädt sofort zum Board. */
   auslieferung: Laden<DeliveryView>
   epics: Laden<Epic[]>
@@ -117,6 +123,7 @@ export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
   const fluss = useLadenWenn(gueltigeId, (bid) => dashboardApi.flow(bid), [gueltigeId])
   const alter = useLadenWenn(gueltigeId, (bid) => dashboardApi.aging(bid), [gueltigeId])
   const prognose = useLadenWenn(gueltigeId, (bid) => dashboardApi.epicForecast(bid), [gueltigeId])
+  const kosten = useLadenWenn(gueltigeId, (bid) => vorhabenKostenApi.jeBoard(bid), [gueltigeId])
   const auslieferung = useLadenWenn(gueltigeId, (bid) => dashboardApi.delivery(bid), [gueltigeId])
   const epics = useLadenWenn(gueltigeId, (bid) => epicsApi.list(bid), [gueltigeId])
   const nacharbeit = useLadenWenn(gueltigeId, (bid) => nightRunsApi.rework(bid), [gueltigeId])
@@ -131,5 +138,5 @@ export function useLeitstandDaten(boardId: string | undefined): LeitstandDaten {
 
   const laeufeVerborgen = laeufe.art === 'vorschauVerborgen'
 
-  return { validId: gueltigeId !== null, board, kpis, fluss, alter, prognose, auslieferung, epics, klassen, nacharbeit, modelle, projectId, liste, juengster, laeufeVerborgen, epicListe }
+  return { validId: gueltigeId !== null, board, kpis, fluss, alter, prognose, kosten, auslieferung, epics, klassen, nacharbeit, modelle, projectId, liste, juengster, laeufeVerborgen, epicListe }
 }

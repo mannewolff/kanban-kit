@@ -1246,6 +1246,46 @@ export const de = {
     PROGNOSE_NUR_DIESES: 'Gilt, wenn das Board nur an diesem Vorhaben arbeitet.',
     PROGNOSE_WEITERE_VORHABEN: (anzahl: number) => `${anzahl} weitere Vorhaben teilen sich den Durchsatz.`,
     PROGNOSE_AUSSTEHEND: (dokumente: string) => `Weitere Pakete folgen aus ${dokumente}.`,
+    /** Die Zeile „Voraussichtliche Kosten“ je Vorhaben (Issue #2006, fachlich #1954). */
+    VORHABEN_KOSTEN: {
+      TITEL: 'Kosten',
+      VORAUSSAGE: (typisch: string, unten: string, oben: string) =>
+        `Voraussichtliche Kosten: typisch ${typisch} (${unten}–${oben})`,
+      AUS_ANFORDERUNG_GESCHAETZT: 'aus der Anforderung geschätzt',
+      VOR_DEM_SCHNITT_GESCHAETZT: 'vor dem Schnitt geschätzt',
+      AUS_PAKETEN: (anzahl: number) => (anzahl === 1 ? 'aus 1 Paket' : `aus ${anzahl} Paketen`),
+      BISHER: (betrag: string) => `bisher ${betrag}`,
+      UNVOLLSTAENDIG: 'unvollständig',
+      ZU_WENIG_DATEN: 'Noch zu wenig Daten für eine Voraussage',
+      TATSAECHLICH: (betrag: string) => `tatsächlich ${betrag}`,
+      VERGLEICH_ANFORDERUNG: 'aus der Anforderung',
+      VERGLEICH_PAKETE: 'aus den Paketen',
+      KEINE_VORAUSSAGE: 'keine Voraussage',
+      ABWEICHUNG: (prozent: number) => {
+        if (prozent > 0) return `+${prozent} %`
+        return prozent < 0 ? `−${-prozent} %` : '0 %'
+      },
+      HINWEIS_ANFORDERUNG:
+        'Schätzung aus den Vorhaben des Projekts, die in den letzten zwölf Wochen abgeschlossen wurden: ' +
+        'Plan, Prüfung, Schnitt und Abdeckung aus der typischen Zahl der Vorgänge und dem typischen Preis je Vorgang, ' +
+        'die Umsetzung aus der typischen Paketzahl und dem typischen Preis eines Pakets bis Done. ' +
+        'Typisch ist der 50-%-Wert, die Spanne reicht vom 15-%- zum 85-%-Wert; die bisherigen Kosten sind enthalten.',
+      HINWEIS_PAKETE:
+        'Schätzung aus den Vorhaben des Projekts, die in den letzten zwölf Wochen abgeschlossen wurden: ' +
+        'je Paket der typische Preis eines Pakets seiner Aufgabenstufe bis Done mit allen Versuchen, ' +
+        'dazu die noch ausstehenden Stufen. Typisch ist der 50-%-Wert, die Spanne reicht vom 15-%- zum 85-%-Wert; ' +
+        'die bisherigen Kosten sind enthalten.',
+      HINWEIS_OHNE_STUFE: (anzahl: number) =>
+        anzahl === 1
+          ? '1 Paket ohne Aufgabenstufe rechnet mit dem Paketpreis über alle Aufgabenstufen.'
+          : `${anzahl} Pakete ohne Aufgabenstufe rechnen mit dem Paketpreis über alle Aufgabenstufen.`,
+      HINWEIS_UNVOLLSTAENDIG: 'Am Vorhaben fehlen Messungen oder Kostenangaben.',
+      GRUND: {
+        ZU_WENIG_VORHABEN: 'In den letzten zwölf Wochen wurden weniger als drei Vorhaben vollständig gemessen abgeschlossen.',
+        STUFE_OHNE_PREIS: 'Für eine noch zu schätzende Stufe fehlt der Preis beim zuletzt eingesetzten Modell.',
+        KEINE_PAKETPREISE: 'Es gibt noch keinen Preis für ein Paket.',
+      },
+    },
   },
 
   /** Seite „Plattform-Leitstand“ (Issue #1657). */

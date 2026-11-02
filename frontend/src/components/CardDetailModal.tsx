@@ -42,6 +42,8 @@ import { cardsApi as defaultCardsApi, type Card, type CardActivity, type CardByN
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import { artAusTitel, useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import type { NightRunsApi } from '../api/nightRuns'
+import { vorhabenKostenApi as defaultVorhabenKostenApi, type VorhabenKostenApi, type VorhabenKostenView } from '../api/vorhabenKosten'
+import { VorhabenKostenZeile } from './leitstand/VorhabenKostenZeile'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
 import { Wartegrund } from './nachtlauf/Wartegrund'
@@ -1271,6 +1273,8 @@ interface Props {
    * ohne Angabe die echten Endpunkte.
    */
   nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte' | 'kettenstand' | 'wartegrund'>
+  /** Abruf der Kostenzeile eines Vorhabens (Issue #2006); ohne Angabe der echte Endpunkt. */
+  vorhabenKostenApi?: Pick<VorhabenKostenApi, 'jeVorhaben'>
 }
 
 /**
@@ -1317,6 +1321,7 @@ function CardDetailModalView({
   cardsApi = defaultCardsApi,
   projectId,
   nightRunsApi,
+  vorhabenKostenApi = defaultVorhabenKostenApi,
   onOpenDependency,
   neuLaden = 0,
 }: Readonly<ViewProps>) {
@@ -1485,6 +1490,7 @@ function CardDetailModalView({
   const [preview, setPreview] = useState<{ attachment: Attachment; url: string } | null>(null)
   const [baum, setBaum] = useState<DerivationNode[] | null>(null)
   const [baumFehler, setBaumFehler] = useState<string | null>(null)
+  const [kosten, setKosten] = useState<VorhabenKostenView | null>(null)
   // Der Zweig einer gewöhnlichen Karte (Issue #1986): `null` lädt, leer heißt „keine Kette“.
   const [zweig, setZweig] = useState<DerivationNode[] | null>(null)
   const [zweigFehler, setZweigFehler] = useState<string | null>(null)
@@ -1589,6 +1595,28 @@ function CardDetailModalView({
       aktiv = false
     }
   }, [isEpic, baumBoardId, card.id, cardsApi, t, neuLaden])
+
+  // Die Kostenzeile eines Vorhabens (Issue #2006, Plan #1990): über die Karten-ID, weil ein über
+  // `#N` nachgeladenes Vorhaben kein Board kennt — darum auch archiviert. Ohne Verbrauchsrecht liefert
+  // der Abruf `null`, ein Fehler wird still zu `null`: Die Zeile ist eine Zugabe, kein Grund für eine
+  // Meldung im Dialog.
+  useEffect(() => {
+    if (!isEpic) {
+      return undefined
+    }
+    let aktiv = true
+    void vorhabenKostenApi.jeVorhaben(card.id).then(
+      (zeile) => {
+        if (aktiv) setKosten(zeile)
+      },
+      () => {
+        if (aktiv) setKosten(null)
+      },
+    )
+    return () => {
+      aktiv = false
+    }
+  }, [isEpic, card.id, vorhabenKostenApi, neuLaden])
 
   // Der Zweig einer Karte im Block „Zuordnung“ (Issue #1986, Plan #1980) — nach dem `aktiv`-Muster
   // des Vorhaben-Baums. Ein Vorhaben hat seinen eigenen Baum; der Endpunkt lieferte dort ohnehin leer.
@@ -2002,6 +2030,18 @@ function CardDetailModalView({
             </>
           )}
 
+          {!editing && kosten !== null && (
+            <>
+              <Divider />
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  {t.LEITSTAND.VORHABEN_KOSTEN.TITEL}
+                </Typography>
+                <VorhabenKostenZeile kosten={kosten} immer />
+              </Box>
+            </>
+          )}
+
           {!editing && isEpic && baumBoardId !== null && (
             <>
               <Divider />
@@ -2290,6 +2330,7 @@ export function CardDetailModal(props: Readonly<Props>) {
           commentsApi={props.commentsApi}
           attachmentsApi={props.attachmentsApi}
           cardsApi={cardsApi}
+          vorhabenKostenApi={props.vorhabenKostenApi}
           onClose={() => nimmAb(eintrag)}
           onChanged={() => markiereGeaendert(eintrag.ebene)}
           onOpenDependency={onOpenDependency}
