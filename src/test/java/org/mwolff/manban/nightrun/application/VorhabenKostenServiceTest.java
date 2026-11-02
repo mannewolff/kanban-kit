@@ -1,12 +1,15 @@
 package org.mwolff.manban.nightrun.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -25,6 +28,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.Aufgabenstufe;
 import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.card.application.CardRunQueryService.DokumentStandView;
@@ -36,6 +40,10 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedBy
 import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.FestgehalteneVoraussage;
 import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.Stand;
 import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.VorhabenKosten;
+import org.mwolff.manban.nightrun.application.VorhabenKostenService.AbschlussView;
+import org.mwolff.manban.nightrun.application.VorhabenKostenService.LaufendView;
+import org.mwolff.manban.nightrun.application.VorhabenKostenService.VergleichView;
+import org.mwolff.manban.nightrun.application.VorhabenKostenService.VorhabenKostenView;
 import org.mwolff.manban.nightrun.domain.KostenVergleich;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Art;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Ergebnis;
@@ -47,6 +55,9 @@ import org.mwolff.manban.nightrun.domain.NightRunAttempt;
 import org.mwolff.manban.nightrun.domain.NightRunAttemptStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.project.application.PermissionChecker;
+import org.mwolff.manban.project.application.ProjectAccessDeniedException;
+import org.mwolff.manban.project.application.ProjectNotFoundException;
 
 /**
  * Der Dienst der Kostenvoraussage (Issue #2003, Plan #1990 E3, E6, E7): Er trägt Kartenlage,
@@ -57,7 +68,14 @@ import org.mwolff.manban.nightrun.domain.NightRunUsage;
  * einem Vorgang Plan 2 $, Prüfung, Schnitt und Abdeckung zu je 1 $) und einem mittleren Paket zu
  * 1,50 $. Ein Vorhaben mit nur seiner Anforderung kostet damit typisch 5 $ + 1 × 1,50 $ = 6,50 $.
  */
-@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.ExcessiveImports", "PMD.TooManyMethods"})
+// PMD.CyclomaticComplexity: die Summe vieler kleiner Fälle (keiner über 2), mit Issue #2005 kommen
+// die Aufrufe der Kostenzeile dazu — dieselbe Ursache wie PMD.TooManyMethods.
+@SuppressWarnings({
+  "PMD.CouplingBetweenObjects",
+  "PMD.CyclomaticComplexity",
+  "PMD.ExcessiveImports",
+  "PMD.TooManyMethods"
+})
 class VorhabenKostenServiceTest {
 
   private static final long PROJECT = 42L;
@@ -71,14 +89,24 @@ class VorhabenKostenServiceTest {
   private static final String SONNET = "claude-sonnet-5-5";
 
   private static final long ZIEL = 400L;
+  private static final long USER = 7L;
+  private static final long BOARD = 1L;
 
   private final CardRunQueryService cards = mock(CardRunQueryService.class);
   private final NightRunRepository runs = mock(NightRunRepository.class);
   private final NightRunUsageRepository usage = mock(NightRunUsageRepository.class);
+  private final BoardService boards = mock(BoardService.class);
+  private final PermissionChecker permissions = mock(PermissionChecker.class);
   private final FesteKosten festgehalten = new FesteKosten();
   private final VorhabenKostenService service =
       new VorhabenKostenService(
-          cards, runs, usage, festgehalten, new NightRunProperties(3, null, 2, null, null));
+          cards,
+          runs,
+          usage,
+          festgehalten,
+          new NightRunProperties(3, null, 2, null, null),
+          boards,
+          permissions);
 
   private final List<VorhabenStandView> staende = new ArrayList<>();
   private final List<Vorgang> vorgaenge = new ArrayList<>();
@@ -89,6 +117,8 @@ class VorhabenKostenServiceTest {
   @BeforeEach
   void verdrahten() {
     when(cards.vorhabenStaende(PROJECT)).thenReturn(staende);
+    when(boards.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(cards.requireProjectId(anyLong())).thenReturn(PROJECT);
     when(runs.findAttemptsSince(eq(PROJECT), any())).thenReturn(vorgaenge);
     when(usage.retentionBoundary(PROJECT)).thenReturn(aufbewahrt);
     when(usage.itemKostenJeKarte(anyLong(), anyCollection(), isNull()))
@@ -1218,6 +1248,255 @@ class VorhabenKostenServiceTest {
     when(cards.projekteMitVorhaben()).thenReturn(List.of(3L, 7L));
 
     assertThat(service.projekteMitVorhaben()).containsExactly(3L, 7L);
+  }
+
+  // --- Aufrufe der Kostenzeile (Issue #2005) ---------------------------------------------------
+
+  @Test
+  @DisplayName("Je Board: alle Vorhaben dieses Boards, archivierte eingeschlossen, fremde nicht")
+  void jeBoardAlleVorhabenDesBoards() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    staende.add(
+        new VorhabenStandView(
+            new VorhabenRef(500L, 500, "ARCH", "Archiviert", true),
+            BOARD,
+            List.of(),
+            List.of(),
+            false,
+            false,
+            false,
+            List.of(),
+            null));
+    staende.add(
+        new VorhabenStandView(
+            ref(600L, 600), 2L, List.of(), List.of(), false, false, false, List.of(), null));
+
+    List<VorhabenKostenView> views = service.jeBoard(USER, BOARD, JETZT);
+
+    assertThat(views)
+        .extracting(VorhabenKostenView::epicId)
+        .containsExactly(100L, 200L, 300L, ZIEL, 500L);
+    VorhabenKostenView archiviert = views.getLast();
+    assertThat(archiviert.archiviert()).isTrue();
+    assertThat(archiviert.number()).isEqualTo(500);
+    verify(permissions).requireNightRunAccess(USER, PROJECT);
+  }
+
+  @Test
+  @DisplayName("Je Board: Ein Mitglied ohne Recht auf den Verbrauch bekommt 403, ohne Abfrage")
+  void jeBoardMitgliedOhneVerbrauchsrecht() {
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
+
+    assertThatThrownBy(() -> service.jeBoard(USER, BOARD, JETZT))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(cards, never()).vorhabenStaende(anyLong());
+  }
+
+  @Test
+  @DisplayName("Je Board: Ein Nichtmitglied bekommt 404")
+  void jeBoardNichtmitglied() {
+    doThrow(new ProjectNotFoundException()).when(permissions).requireNightRunAccess(USER, PROJECT);
+
+    assertThatThrownBy(() -> service.jeBoard(USER, BOARD, JETZT))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(cards, never()).vorhabenStaende(anyLong());
+  }
+
+  @Test
+  @DisplayName(
+      "Je Vorhaben: Owner sieht die laufende Voraussage samt bisherigen Kosten und Hinweis")
+  void jeVorhabenLaufend() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    // 0,50 $ aus Items, deren Lauf schon verdrängt ist: bisher 0,50 $, keine Stufe begonnen.
+    misst(401, "0.50");
+
+    VorhabenKostenView view = service.jeVorhaben(USER, ZIEL, JETZT);
+
+    assertThat(view.epicId()).isEqualTo(ZIEL);
+    assertThat(view.number()).isEqualTo(400);
+    assertThat(view.archiviert()).isFalse();
+    assertThat(view.abschluss()).isNull();
+    LaufendView laufend = view.laufend();
+    assertThat(laufend).isNotNull();
+    assertThat(laufend.hatDokumentOderPaket()).isTrue();
+    assertThat(laufend.bisher()).isEqualByComparingTo("0.50");
+    assertThat(laufend.unvollstaendig()).isFalse();
+    assertThat(laufend.zuWenigDaten()).isNull();
+    assertThat(laufend.voraussage()).isNotNull();
+    assertThat(laufend.voraussage().art()).isEqualTo(Art.ANFORDERUNG);
+    assertThat(laufend.voraussage().typisch()).isEqualByComparingTo("7");
+    assertThat(laufend.voraussage().unten()).isEqualByComparingTo("7");
+    assertThat(laufend.voraussage().oben()).isEqualByComparingTo("7");
+    assertThat(laufend.voraussage().paketzahl()).isEqualTo(1);
+    assertThat(laufend.voraussage().ohneStufe()).isZero();
+    verify(cards).requireProjectId(ZIEL);
+    verify(permissions).requireNightRunAccess(USER, PROJECT);
+  }
+
+  @Test
+  @DisplayName("Je Vorhaben: Zu wenig Daten nennt den Grund, die bisherigen Kosten bleiben")
+  void jeVorhabenZuWenigDaten() {
+    grundlage(10);
+    zielNurAnforderung();
+    kosten.put(401, new ItemKostenJeKarte(401, new BigDecimal("0.75"), 1L, VOR_EINER_WOCHE));
+
+    LaufendView laufend = service.jeVorhaben(USER, ZIEL, JETZT).laufend();
+
+    assertThat(laufend).isNotNull();
+    assertThat(laufend.voraussage()).isNull();
+    assertThat(laufend.zuWenigDaten()).isEqualTo(Grund.ZU_WENIG_VORHABEN);
+    assertThat(laufend.bisher()).isEqualByComparingTo("0.75");
+    assertThat(laufend.unvollstaendig()).isTrue();
+  }
+
+  @Test
+  @DisplayName("Je Vorhaben: Ohne Dokument und Paket gibt es weder Voraussage noch Grund")
+  void jeVorhabenOhneDokumentUndPaket() {
+    staende.add(
+        new VorhabenStandView(
+            ref(ZIEL, 400), BOARD, List.of(), List.of(), false, false, false, List.of(), null));
+
+    LaufendView laufend = service.jeVorhaben(USER, ZIEL, JETZT).laufend();
+
+    assertThat(laufend).isNotNull();
+    assertThat(laufend.hatDokumentOderPaket()).isFalse();
+    assertThat(laufend.voraussage()).isNull();
+    assertThat(laufend.zuWenigDaten()).isNull();
+    assertThat(laufend.bisher()).isEqualByComparingTo("0");
+  }
+
+  @Test
+  @DisplayName("Je Vorhaben: Abgeschlossen trägt es die tatsächlichen Kosten und beide Vergleiche")
+  void jeVorhabenAbgeschlossen() {
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402));
+    festgehalten.speichere(
+        VorhabenKosten.leer(ZIEL, PROJECT)
+            .mitAnforderung(beziffert(Art.ANFORDERUNG, "16"))
+            .mitPaketen(FestgehalteneVoraussage.keine(VOR_EINER_WOCHE))
+            .mitAbschluss(ABSCHLUSS, new BigDecimal("18"), false, List.of(401, 402)));
+
+    VorhabenKostenView view = service.jeVorhaben(USER, ZIEL, JETZT);
+
+    assertThat(view.laufend()).isNull();
+    AbschlussView abschluss = view.abschluss();
+    assertThat(abschluss).isNotNull();
+    assertThat(abschluss.abgeschlossenAt()).isEqualTo(ABSCHLUSS);
+    assertThat(abschluss.tatsaechlich()).isEqualByComparingTo("18");
+    assertThat(abschluss.unvollstaendig()).isFalse();
+    VergleichView anforderung = abschluss.anforderung();
+    assertThat(anforderung.beziffert()).isTrue();
+    assertThat(anforderung.art()).isEqualTo(Art.ANFORDERUNG);
+    assertThat(anforderung.typisch()).isEqualByComparingTo("16");
+    assertThat(anforderung.unten()).isEqualByComparingTo("16");
+    assertThat(anforderung.oben()).isEqualByComparingTo("16");
+    assertThat(anforderung.abweichungProzent()).isEqualTo(13);
+    VergleichView pakete = abschluss.pakete();
+    assertThat(pakete.beziffert()).isFalse();
+    assertThat(pakete.art()).isNull();
+    assertThat(pakete.typisch()).isNull();
+    assertThat(pakete.abweichungProzent()).isNull();
+  }
+
+  @Test
+  @DisplayName("Je Vorhaben: Unvollständige tatsächliche Kosten tragen keine Abweichung")
+  void jeVorhabenAbgeschlossenUnvollstaendig() {
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402));
+    festgehalten.speichere(
+        VorhabenKosten.leer(ZIEL, PROJECT)
+            .mitAbschluss(ABSCHLUSS, new BigDecimal("18"), true, List.of(401, 402)));
+
+    AbschlussView abschluss = service.jeVorhaben(USER, ZIEL, JETZT).abschluss();
+
+    assertThat(abschluss).isNotNull();
+    assertThat(abschluss.unvollstaendig()).isTrue();
+    // Nie festgehaltene Voraussagen stehen als „keine Voraussage“ da.
+    assertThat(abschluss.anforderung().beziffert()).isFalse();
+    assertThat(abschluss.pakete().beziffert()).isFalse();
+    assertThat(abschluss.anforderung().abweichungProzent()).isNull();
+  }
+
+  @Test
+  @DisplayName("Je Vorhaben: Ein archiviertes abgeschlossenes Vorhaben zeigt seinen Vergleich")
+  void jeVorhabenArchiviert() {
+    staende.add(
+        new VorhabenStandView(
+            new VorhabenRef(ZIEL, 400, null, "Export", true),
+            BOARD,
+            List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+            List.of(anforderung(false, true)),
+            true,
+            true,
+            true,
+            List.of(401, 402),
+            VOR_EINER_WOCHE));
+    festgehalten.speichere(
+        VorhabenKosten.leer(ZIEL, PROJECT)
+            .mitPaketen(beziffert(Art.PAKETE, "20"))
+            .mitAbschluss(ABSCHLUSS, new BigDecimal("18"), false, List.of(401, 402)));
+
+    VorhabenKostenView view = service.jeVorhaben(USER, ZIEL, JETZT);
+
+    assertThat(view.archiviert()).isTrue();
+    assertThat(view.abschluss()).isNotNull();
+    assertThat(view.abschluss().pakete().abweichungProzent()).isEqualTo(-10);
+  }
+
+  @Test
+  @DisplayName("Je Vorhaben: Eine festgehaltene Zeile ohne Abschluss zeigt die laufende Voraussage")
+  void jeVorhabenFestgehaltenOhneAbschluss() {
+    zielNurAnforderung();
+    festgehalten.speichere(
+        VorhabenKosten.leer(ZIEL, PROJECT).mitAnforderung(beziffert(Art.ANFORDERUNG, "16")));
+
+    VorhabenKostenView view = service.jeVorhaben(USER, ZIEL, JETZT);
+
+    assertThat(view.abschluss()).isNull();
+    assertThat(view.laufend()).isNotNull();
+    // Ein Abschluss ohne tatsächliche Kosten gilt ebenso wenig als Vergleich.
+    festgehalten.speichere(
+        new VorhabenKosten(ZIEL, PROJECT, null, null, ABSCHLUSS, null, false, List.of()));
+
+    assertThat(service.jeVorhaben(USER, ZIEL, JETZT).abschluss()).isNull();
+  }
+
+  @Test
+  @DisplayName("Je Vorhaben: Eine Karte, die kein Vorhaben ist, ergibt 404")
+  void jeVorhabenKeinVorhaben() {
+    zielNurAnforderung();
+
+    assertThatThrownBy(() -> service.jeVorhaben(USER, 401L, JETZT))
+        .isInstanceOf(VorhabenNotFoundException.class);
+  }
+
+  @Test
+  @DisplayName("Je Vorhaben: Mitglied ohne Verbrauchsrecht 403, Nichtmitglied 404, ohne Abfrage")
+  void jeVorhabenRechte() {
+    doThrow(new ProjectAccessDeniedException())
+        .doThrow(new ProjectNotFoundException())
+        .when(permissions)
+        .requireNightRunAccess(USER, PROJECT);
+
+    assertThatThrownBy(() -> service.jeVorhaben(USER, ZIEL, JETZT))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    assertThatThrownBy(() -> service.jeVorhaben(USER, ZIEL, JETZT))
+        .isInstanceOf(ProjectNotFoundException.class);
+    verify(cards, never()).vorhabenStaende(anyLong());
   }
 
   /** Ein Speicher im Arbeitsspeicher für ein einziges Projekt. */

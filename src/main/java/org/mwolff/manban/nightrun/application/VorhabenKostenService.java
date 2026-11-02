@@ -18,6 +18,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.Aufgabenstufe;
 import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.card.application.CardRunQueryService.PaketStandView;
@@ -25,10 +26,14 @@ import org.mwolff.manban.card.application.CardRunQueryService.VorhabenStandView;
 import org.mwolff.manban.common.Wochenfenster;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.ItemKostenJeKarte;
 import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.FestgehalteneVoraussage;
+import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.Stand;
 import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.VorhabenKosten;
+import org.mwolff.manban.nightrun.domain.KostenVergleich;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage;
+import org.mwolff.manban.nightrun.domain.KostenVoraussage.Art;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Eingaben;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Ergebnis;
+import org.mwolff.manban.nightrun.domain.KostenVoraussage.Grund;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.GrundlageVorhaben;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Paket;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Paketstufe;
@@ -36,10 +41,12 @@ import org.mwolff.manban.nightrun.domain.KostenVoraussage.Preise;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Rechnung;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Voraussage;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Vorhaben;
+import org.mwolff.manban.nightrun.domain.KostenVoraussage.ZuWenigDaten;
 import org.mwolff.manban.nightrun.domain.ModellvergleichErmittlung.Vorgang;
 import org.mwolff.manban.nightrun.domain.NightRunAttemptStage;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
 import org.mwolff.manban.nightrun.domain.NightRunUsage;
+import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -68,13 +75,27 @@ import org.springframework.transaction.annotation.Transactional;
  * gemeldetem Modell, je Stufe beim Modell des jüngsten Vorgangs. Ein Paketpreis ist die Summe aller
  * Items eines Pakets in Done, das in den zwölf Wochenfenstern nach Done kam, vollständig aufbewahrt
  * ist und dessen letzter Umsetzungsvorgang mit dem zuletzt umsetzenden Modell lief.
+ *
+ * <p><b>Kostenzeile (Issue #2005):</b> {@link #jeBoard} und {@link #jeVorhaben} liefern je Vorhaben
+ * die laufende Voraussage oder, nach dem festgehaltenen Abschluss, den Vergleich. Lesen darf nur,
+ * wer den Verbrauch des Projekts sieht ({@code requireNightRunAccess}, fachlich #1954 AK 10) —
+ * geprüft vor jeder weiteren Abfrage.
  */
 // PMD.CouplingBetweenObjects: Der Dienst trägt Kartenlage, Vorgänge, Kosten je Karte und Grenze für
 // die reine Rechnung zusammen; die Typen dieser Quellen und der Eingaben sind sein Zweck.
 // PMD.ExcessiveImports, PMD.GodClass: dieselbe Ursache, anders gezählt — mit Issue #2004 kommen
 // die festgehaltenen Zeilen dazu. Festhalten und Voraussage teilen sich Kontext und Grundlage; eine
 // Aufteilung verteilte das Zusammentragen auf zwei Klassen, die dieselben Quellen kennen müssten.
-@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.ExcessiveImports", "PMD.GodClass"})
+// Mit Issue #2005 kommen die Aufrufe der Kostenzeile dazu, aus demselben Grund; sie lesen denselben
+// Kontext und rechnen dieselbe Voraussage. PMD.TooManyMethods und PMD.CyclomaticComplexity zählen
+// dieselbe Größe noch einmal — keine Methode liegt über der Methodenschwelle.
+@SuppressWarnings({
+  "PMD.CouplingBetweenObjects",
+  "PMD.CyclomaticComplexity",
+  "PMD.ExcessiveImports",
+  "PMD.GodClass",
+  "PMD.TooManyMethods"
+})
 @Service
 public class VorhabenKostenService {
 
@@ -83,18 +104,98 @@ public class VorhabenKostenService {
   private final NightRunUsageRepository usage;
   private final VorhabenKostenRepository festgehalten;
   private final Aufbewahrungsgrenze grenze;
+  private final BoardService boards;
+  private final PermissionChecker permissions;
 
   public VorhabenKostenService(
       CardRunQueryService cards,
       NightRunRepository runs,
       NightRunUsageRepository usage,
       VorhabenKostenRepository festgehalten,
-      NightRunProperties properties) {
+      NightRunProperties properties,
+      BoardService boards,
+      PermissionChecker permissions) {
     this.cards = cards;
     this.runs = runs;
     this.usage = usage;
     this.festgehalten = festgehalten;
     this.grenze = new Aufbewahrungsgrenze(properties);
+    this.boards = boards;
+    this.permissions = permissions;
+  }
+
+  /**
+   * Die Kostenzeile jedes Vorhabens des Boards, archivierte eingeschlossen (Issue #2005, Platte
+   * „Vorhaben“).
+   *
+   * @param userId der Aufrufer
+   * @param boardId das Board
+   * @param jetzt der Zeitpunkt, bis zu dem die zwölf Wochenfenster reichen
+   * @return je Vorhaben des Boards seine Kostenzeile, aufsteigend nach Kartennummer
+   * @throws org.mwolff.manban.board.application.BoardNotFoundException wenn das Board nicht
+   *     existiert oder archiviert ist (404)
+   * @throws org.mwolff.manban.project.application.ProjectNotFoundException für Nichtmitglieder
+   *     (404)
+   * @throws org.mwolff.manban.project.application.ProjectAccessDeniedException ohne Recht auf den
+   *     Verbrauch (403)
+   */
+  @Transactional(readOnly = true)
+  public List<VorhabenKostenView> jeBoard(long userId, long boardId, Instant jetzt) {
+    long projectId = boards.requireProjectId(boardId);
+    permissions.requireNightRunAccess(userId, projectId);
+    Kontext kontext = kontext(projectId, jetzt);
+    return kontext.staende().stream()
+        .filter(s -> s.boardId() == boardId)
+        .map(s -> view(kontext, s))
+        .toList();
+  }
+
+  /**
+   * Die Kostenzeile eines Vorhabens für sein Detail (Issue #2005) — auch archiviert.
+   *
+   * @param userId der Aufrufer
+   * @param cardId die ID der Vorhaben-Karte
+   * @param jetzt der Zeitpunkt, bis zu dem die zwölf Wochenfenster reichen
+   * @return die Kostenzeile
+   * @throws org.mwolff.manban.card.application.CardNotFoundException wenn die Karte nicht existiert
+   *     (404)
+   * @throws VorhabenNotFoundException wenn die Karte kein Vorhaben ist (404)
+   * @throws org.mwolff.manban.project.application.ProjectNotFoundException für Nichtmitglieder
+   *     (404)
+   * @throws org.mwolff.manban.project.application.ProjectAccessDeniedException ohne Recht auf den
+   *     Verbrauch (403)
+   */
+  @Transactional(readOnly = true)
+  public VorhabenKostenView jeVorhaben(long userId, long cardId, Instant jetzt) {
+    long projectId = cards.requireProjectId(cardId);
+    permissions.requireNightRunAccess(userId, projectId);
+    Kontext kontext = kontext(projectId, jetzt);
+    return kontext.staende().stream()
+        .filter(s -> s.vorhaben().id() == cardId)
+        .findFirst()
+        .map(s -> view(kontext, s))
+        .orElseThrow(VorhabenNotFoundException::new);
+  }
+
+  /** Nach dem festgehaltenen Abschluss der Vergleich, sonst die laufende Voraussage. */
+  private VorhabenKostenView view(Kontext kontext, VorhabenStandView stand) {
+    VorhabenKosten zeile = kontext.zeilen().get(stand.vorhaben().id());
+    AbschlussView abschluss = zeile == null ? null : AbschlussView.aus(zeile);
+    LaufendView laufend = null;
+    if (abschluss == null) {
+      boolean hatDokumentOderPaket = !stand.dokumente().isEmpty() || !stand.pakete().isEmpty();
+      laufend =
+          LaufendView.aus(
+              bisher(stand, kontext.kosten()),
+              unvollstaendig(stand, kontext.kosten(), kontext.grenze()),
+              hatDokumentOderPaket ? rechne(kontext, stand, rechnung(stand)) : null);
+    }
+    return new VorhabenKostenView(
+        stand.vorhaben().id(),
+        stand.vorhaben().number(),
+        stand.vorhaben().archiviert(),
+        laufend,
+        abschluss);
   }
 
   /**
@@ -369,20 +470,28 @@ public class VorhabenKostenService {
                         paketstufe(p.aufgabenstufe()),
                         betrag(kosten.get(p.number()))))
             .toList();
-    BigDecimal bisher =
-        stand.kostenkarten().stream()
-            .map(n -> betrag(kosten.get(n)))
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    boolean unvollstaendig =
-        !vollstaendig(stand.fruehesteKostenkarteAngelegt(), grenze)
-            || !stand.kostenkarten().stream().allMatch(n -> ohneLuecke(kosten.get(n)));
     return new Vorhaben(
         stand.hatAnforderung(),
         ungeschnittenOffen(stand),
         angefallen,
         pakete,
-        bisher,
-        unvollstaendig);
+        bisher(stand, kosten),
+        unvollstaendig(stand, kosten, grenze));
+  }
+
+  /** Die bisher an den Kostenkarten des Vorhabens angefallenen Kosten. */
+  private static BigDecimal bisher(
+      VorhabenStandView stand, Map<Integer, ItemKostenJeKarte> kosten) {
+    return stand.kostenkarten().stream()
+        .map(n -> betrag(kosten.get(n)))
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
+  }
+
+  /** Ob am Vorhaben Messungen fehlen (Grenze) oder Kostenangaben (AK 6). */
+  private static boolean unvollstaendig(
+      VorhabenStandView stand, Map<Integer, ItemKostenJeKarte> kosten, Optional<Instant> grenze) {
+    return !vollstaendig(stand.fruehesteKostenkarteAngelegt(), grenze)
+        || !stand.kostenkarten().stream().allMatch(n -> ohneLuecke(kosten.get(n)));
   }
 
   /**
@@ -507,6 +616,148 @@ public class VorhabenKostenService {
 
   private static @Nullable Paketstufe paketstufe(@Nullable Aufgabenstufe stufe) {
     return stufe == null ? null : Paketstufe.valueOf(stufe.name());
+  }
+
+  /**
+   * Die Kostenzeile eines Vorhabens (Issue #2005). Genau eines von {@code laufend} und {@code
+   * abschluss} ist gesetzt.
+   *
+   * @param epicId ID der Vorhaben-Karte
+   * @param number projektweite Nummer der Vorhaben-Karte
+   * @param archiviert ob das Vorhaben archiviert ist
+   * @param laufend die aktuelle Voraussage; {@code null}, sobald der Abschluss festgehalten ist
+   * @param abschluss der Vergleich nach dem festgehaltenen Abschluss; sonst {@code null}
+   */
+  public record VorhabenKostenView(
+      long epicId,
+      int number,
+      boolean archiviert,
+      @Nullable LaufendView laufend,
+      @Nullable AbschlussView abschluss) {}
+
+  /**
+   * Ein nicht abgeschlossenes Vorhaben (fachlich #1954 AK 3 bis 7, 9). Genau eines von {@code
+   * voraussage} und {@code zuWenigDaten} ist gesetzt, wenn {@code hatDokumentOderPaket} gilt; sonst
+   * keines.
+   *
+   * @param hatDokumentOderPaket ob es eine fachliche Anforderung, einen Plan oder ein Paket hat (AK
+   *     3) — nur dann trägt die Platte die Zeile
+   * @param bisher die bisher angefallenen Kosten in USD
+   * @param unvollstaendig ob am Vorhaben Messungen oder Kostenangaben fehlen
+   * @param voraussage die bezifferte Voraussage
+   * @param zuWenigDaten warum keine Voraussage beziffert wird
+   */
+  public record LaufendView(
+      boolean hatDokumentOderPaket,
+      BigDecimal bisher,
+      boolean unvollstaendig,
+      @Nullable VoraussageView voraussage,
+      @Nullable Grund zuWenigDaten) {
+
+    /** Aus dem Ergebnis der Rechnung; ohne Ergebnis, wenn weder Dokument noch Paket da ist. */
+    static LaufendView aus(BigDecimal bisher, boolean unvollstaendig, @Nullable Ergebnis ergebnis) {
+      return switch (ergebnis) {
+        case null -> new LaufendView(false, bisher, unvollstaendig, null, null);
+        case Voraussage v ->
+            new LaufendView(
+                true,
+                bisher,
+                unvollstaendig,
+                new VoraussageView(
+                    v.art(), v.typisch(), v.unten(), v.oben(), v.paketzahl(), v.ohneStufe()),
+                null);
+        case ZuWenigDaten z -> new LaufendView(true, bisher, unvollstaendig, null, z.grund());
+      };
+    }
+  }
+
+  /**
+   * Eine bezifferte Voraussage mit ihrem Hinweis, in USD (AK 4, 5, 9).
+   *
+   * @param art die Grundlage: aus der Anforderung, vor dem Schnitt oder aus den Paketen
+   * @param typisch die Kosten des ganzen Vorhabens mit den 50-%-Werten
+   * @param unten dasselbe mit den 15-%-Werten
+   * @param oben dasselbe mit den 85-%-Werten
+   * @param paketzahl aus wie vielen Paketen sie rechnet
+   * @param ohneStufe Zahl der Pakete, die mit dem Paketpreis über alle Aufgabenstufen rechnen
+   */
+  public record VoraussageView(
+      Art art,
+      BigDecimal typisch,
+      BigDecimal unten,
+      BigDecimal oben,
+      int paketzahl,
+      int ohneStufe) {}
+
+  /**
+   * Ein abgeschlossenes Vorhaben mit beiden festgehaltenen Voraussagen (AK 8).
+   *
+   * @param abgeschlossenAt Zeitpunkt des letzten Abschlusses
+   * @param tatsaechlich die festgehaltenen tatsächlichen Kosten in USD
+   * @param unvollstaendig ob beim Festhalten Messungen fehlten — dann ohne Abweichung
+   * @param anforderung die Voraussage aus der Anforderung
+   * @param pakete die Voraussage aus den Paketen
+   */
+  public record AbschlussView(
+      Instant abgeschlossenAt,
+      BigDecimal tatsaechlich,
+      boolean unvollstaendig,
+      VergleichView anforderung,
+      VergleichView pakete) {
+
+    /** Der Vergleich nach dem festgehaltenen Abschluss; {@code null}, solange es keinen gibt. */
+    static @Nullable AbschlussView aus(VorhabenKosten zeile) {
+      Instant abgeschlossen = zeile.abgeschlossenAt();
+      BigDecimal tatsaechlich = zeile.tatsaechlichUsd();
+      if (abgeschlossen == null || tatsaechlich == null) {
+        return null;
+      }
+      boolean unvollstaendig = zeile.tatsaechlichUnvollstaendig();
+      return new AbschlussView(
+          abgeschlossen,
+          tatsaechlich,
+          unvollstaendig,
+          VergleichView.von(zeile.anforderung(), tatsaechlich, unvollstaendig),
+          VergleichView.von(zeile.pakete(), tatsaechlich, unvollstaendig));
+    }
+  }
+
+  /**
+   * Eine festgehaltene Voraussage neben den tatsächlichen Kosten. Ohne bezifferte Voraussage steht
+   * „keine Voraussage“: {@code beziffert} ist {@code false}, alle übrigen Felder {@code null}.
+   *
+   * @param beziffert ob die Voraussage beziffert festgehalten wurde
+   * @param art wie sie entstand
+   * @param typisch ihr typischer Betrag in USD
+   * @param unten unteres Ende der Spanne
+   * @param oben oberes Ende der Spanne
+   * @param abweichungProzent die Abweichung nach {@link KostenVergleich}; {@code null}, wenn keine
+   *     zu nennen ist
+   */
+  public record VergleichView(
+      boolean beziffert,
+      @Nullable Art art,
+      @Nullable BigDecimal typisch,
+      @Nullable BigDecimal unten,
+      @Nullable BigDecimal oben,
+      @Nullable Integer abweichungProzent) {
+
+    static VergleichView von(
+        @Nullable FestgehalteneVoraussage voraussage,
+        BigDecimal tatsaechlich,
+        boolean unvollstaendig) {
+      if (voraussage == null || voraussage.stand() != Stand.BEZIFFERT) {
+        return new VergleichView(false, null, null, null, null, null);
+      }
+      return new VergleichView(
+          true,
+          voraussage.art(),
+          voraussage.typischUsd(),
+          voraussage.untenUsd(),
+          voraussage.obenUsd(),
+          KostenVergleich.abweichung(tatsaechlich, unvollstaendig, voraussage.typischUsd())
+              .orElse(null));
+    }
   }
 
   /**
