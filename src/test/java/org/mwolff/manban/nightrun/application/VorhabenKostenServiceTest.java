@@ -1,0 +1,644 @@
+package org.mwolff.manban.nightrun.application;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.mwolff.manban.card.application.Aufgabenstufe;
+import org.mwolff.manban.card.application.CardRunQueryService;
+import org.mwolff.manban.card.application.CardRunQueryService.DokumentStandView;
+import org.mwolff.manban.card.application.CardRunQueryService.PaketStandView;
+import org.mwolff.manban.card.application.CardRunQueryService.VorhabenStandView;
+import org.mwolff.manban.card.application.VorhabenRef;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.ItemKostenJeKarte;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
+import org.mwolff.manban.nightrun.domain.KostenVoraussage.Art;
+import org.mwolff.manban.nightrun.domain.KostenVoraussage.Ergebnis;
+import org.mwolff.manban.nightrun.domain.KostenVoraussage.Grund;
+import org.mwolff.manban.nightrun.domain.KostenVoraussage.Voraussage;
+import org.mwolff.manban.nightrun.domain.KostenVoraussage.ZuWenigDaten;
+import org.mwolff.manban.nightrun.domain.ModellvergleichErmittlung.Vorgang;
+import org.mwolff.manban.nightrun.domain.NightRunAttempt;
+import org.mwolff.manban.nightrun.domain.NightRunAttemptStage;
+import org.mwolff.manban.nightrun.domain.NightRunKind;
+import org.mwolff.manban.nightrun.domain.NightRunUsage;
+
+/**
+ * Der Dienst der Kostenvoraussage (Issue #2003, Plan #1990 E3, E6, E7): Er trägt Kartenlage,
+ * Vorgänge, Kosten je Karte samt verwaister Items und die Aufbewahrungsgrenze richtig zusammen und
+ * schließt unvollständige Vorhaben aus der Grundlage aus.
+ *
+ * <p>Die Grundlage im Normalfall: drei abgeschlossene Vorhaben mit je einer Anforderung (5 $ an je
+ * einem Vorgang Plan 2 $, Prüfung, Schnitt und Abdeckung zu je 1 $) und einem mittleren Paket zu
+ * 1,50 $. Ein Vorhaben mit nur seiner Anforderung kostet damit typisch 5 $ + 1 × 1,50 $ = 6,50 $.
+ */
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.TooManyMethods"})
+class VorhabenKostenServiceTest {
+
+  private static final long PROJECT = 42L;
+  private static final Instant JETZT = Instant.parse("2026-11-02T06:00:00Z");
+  private static final Instant FENSTER = JETZT.minus(Duration.ofDays(84));
+  private static final Instant VOR_EINER_WOCHE = JETZT.minus(Duration.ofDays(7));
+  private static final Instant LAUF = JETZT.minus(Duration.ofDays(6));
+  private static final String OPUS = "claude-opus-5-5";
+  private static final String SONNET = "claude-sonnet-5-5";
+
+  private static final long ZIEL = 400L;
+
+  private final CardRunQueryService cards = mock(CardRunQueryService.class);
+  private final NightRunRepository runs = mock(NightRunRepository.class);
+  private final NightRunUsageRepository usage = mock(NightRunUsageRepository.class);
+  private final VorhabenKostenService service =
+      new VorhabenKostenService(cards, runs, usage, new NightRunProperties(3, null, 2, null, null));
+
+  private final List<VorhabenStandView> staende = new ArrayList<>();
+  private final List<Vorgang> vorgaenge = new ArrayList<>();
+  private final Map<Integer, ItemKostenJeKarte> kosten = new HashMap<>();
+  private final List<RetainedByKind> aufbewahrt = new ArrayList<>();
+
+  @BeforeEach
+  void verdrahten() {
+    when(cards.vorhabenStaende(PROJECT)).thenReturn(staende);
+    when(runs.findAttemptsSince(eq(PROJECT), any())).thenReturn(vorgaenge);
+    when(usage.retentionBoundary(PROJECT)).thenReturn(aufbewahrt);
+    when(usage.itemKostenJeKarte(anyLong(), anyCollection(), isNull()))
+        .thenAnswer(
+            a -> {
+              List<ItemKostenJeKarte> zeilen = new ArrayList<>();
+              a.<Collection<Integer>>getArgument(1).stream()
+                  .map(kosten::get)
+                  .filter(k -> k != null)
+                  .forEach(zeilen::add);
+              return zeilen;
+            });
+  }
+
+  // --- Bausteine -------------------------------------------------------------------------------
+
+  private static VorhabenRef ref(long id, int nummer) {
+    return new VorhabenRef(id, nummer, null, "Vorhaben " + nummer, false);
+  }
+
+  private static PaketStandView paket(
+      int nummer, @Nullable Aufgabenstufe stufe, @Nullable Instant done) {
+    return new PaketStandView(nummer, done != null, stufe, VOR_EINER_WOCHE, done);
+  }
+
+  private static NightRunUsage kostet(@Nullable String betrag) {
+    return new NightRunUsage(
+        betrag == null ? null : new BigDecimal(betrag), null, null, null, null, null);
+  }
+
+  private void vorgang(
+      NightRunAttemptStage stufe, int karte, @Nullable String modell, @Nullable String betrag) {
+    vorgang(stufe, karte, modell, betrag == null ? null : kostet(betrag), NightRunKind.NIGHT, true);
+  }
+
+  private void vorgang(
+      NightRunAttemptStage stufe,
+      int karte,
+      @Nullable String modell,
+      @Nullable NightRunUsage verbrauch,
+      NightRunKind gattung,
+      boolean abgeschlossen) {
+    vorgaenge.add(
+        new Vorgang(
+            LAUF,
+            gattung,
+            abgeschlossen,
+            vorgaenge.size(),
+            new NightRunAttempt(stufe, karte, modell, null, true, verbrauch, List.of())));
+  }
+
+  private void misst(int karte, String betrag) {
+    kosten.put(karte, new ItemKostenJeKarte(karte, new BigDecimal(betrag), 0L, VOR_EINER_WOCHE));
+  }
+
+  /**
+   * Ein abgeschlossenes Grundlage-Vorhaben: Anforderung {@code nummer + 1} mit je einem Vorgang je
+   * Dokumentstufe, ein mittleres Paket {@code nummer + 2}, das vor fünf Tagen nach Done kam.
+   */
+  private void grundlage(int nummer) {
+    grundlage(nummer, JETZT.minus(Duration.ofDays(5)), VOR_EINER_WOCHE);
+  }
+
+  private void grundlage(int nummer, @Nullable Instant done, Instant fruehester) {
+    int anforderung = nummer + 1;
+    int paket = nummer + 2;
+    staende.add(
+        new VorhabenStandView(
+            ref(nummer * 10L, nummer),
+            1L,
+            List.of(paket(paket, Aufgabenstufe.MITTEL, done)),
+            List.of(new DokumentStandView(anforderung, "FACHLICH", false, true)),
+            true,
+            true,
+            true,
+            List.of(anforderung, paket),
+            fruehester));
+    vorgang(NightRunAttemptStage.PLAN, anforderung, OPUS, "2");
+    vorgang(NightRunAttemptStage.REVIEW, anforderung, OPUS, "1");
+    vorgang(NightRunAttemptStage.PAKETE, anforderung, OPUS, "1");
+    vorgang(NightRunAttemptStage.ABDECKUNG, anforderung, OPUS, "1");
+    vorgang(NightRunAttemptStage.UMSETZUNG, paket, OPUS, "1.50");
+    misst(anforderung, "5");
+    misst(paket, "1.50");
+  }
+
+  /** Das Ziel „Export“ mit nur seiner ungeschnittenen Anforderung 401. */
+  private void zielNurAnforderung() {
+    zielNurAnforderung(JETZT.minus(Duration.ofDays(1)));
+  }
+
+  private void zielNurAnforderung(Instant fruehester) {
+    staende.add(
+        new VorhabenStandView(
+            ref(ZIEL, 400),
+            1L,
+            List.of(),
+            List.of(new DokumentStandView(401, "FACHLICH", true, false)),
+            true,
+            true,
+            false,
+            List.of(401),
+            fruehester));
+  }
+
+  private Ergebnis rechne() {
+    return service.aktuelleVoraussage(PROJECT, ZIEL, JETZT).orElseThrow();
+  }
+
+  private Voraussage voraussage() {
+    Ergebnis ergebnis = rechne();
+    assertThat(ergebnis).isInstanceOf(Voraussage.class);
+    return (Voraussage) ergebnis;
+  }
+
+  // --- Zusammentragen --------------------------------------------------------------------------
+
+  @Test
+  @DisplayName("Die Eingaben werden aus Kartenlage, Vorgängen und Kosten je Karte zusammengetragen")
+  void eingabenZusammengetragen() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+
+    Voraussage v = voraussage();
+
+    assertThat(v.art()).isEqualTo(Art.ANFORDERUNG);
+    assertThat(v.typisch()).isEqualByComparingTo("6.50");
+    assertThat(v.paketzahl()).isEqualTo(1);
+    assertThat(v.bisher()).isEqualByComparingTo("0");
+    assertThat(v.unvollstaendig()).isFalse();
+    verify(runs).findAttemptsSince(PROJECT, FENSTER);
+    verify(usage).itemKostenJeKarte(PROJECT, Set.of(11, 12, 21, 22, 31, 32, 401), null);
+  }
+
+  @Test
+  @DisplayName("Fehlt das Vorhaben oder hat es weder Dokument noch Paket, gibt es keine Zeile")
+  void ohneVorhabenKeineZeile() {
+    grundlage(10);
+    staende.add(
+        new VorhabenStandView(
+            ref(ZIEL, 400), 1L, List.of(), List.of(), false, false, false, List.of(), null));
+
+    assertThat(service.aktuelleVoraussage(PROJECT, ZIEL, JETZT)).isEmpty();
+    assertThat(service.aktuelleVoraussage(PROJECT, 999L, JETZT)).isEmpty();
+  }
+
+  @Test
+  @DisplayName("Verwaiste Items zählen in den bisherigen Kosten mit, je Stufe ihr Angefallenes")
+  void verwaisteItemsUndAngefallenes() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    // 0,50 $ aus Items, deren Lauf schon verdrängt ist — nur itemKostenJeKarte kennt sie.
+    misst(401, "0.50");
+    vorgang(NightRunAttemptStage.PLAN, 401, OPUS, "0.50");
+
+    Voraussage v = voraussage();
+
+    // Plan 2 $ − 0,50 $, die übrigen Stufen 3 $, ein Paket 1,50 $, bisher 0,50 $.
+    assertThat(v.bisher()).isEqualByComparingTo("0.50");
+    assertThat(v.typisch()).isEqualByComparingTo("6.50");
+  }
+
+  @Test
+  @DisplayName("Ein Item ohne Kostenangabe am Vorhaben macht bisher und Voraussage unvollständig")
+  void zielMitLuecke() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    kosten.put(401, new ItemKostenJeKarte(401, null, 1L, VOR_EINER_WOCHE));
+    vorgang(NightRunAttemptStage.PLAN, 401, OPUS, kostet(null), NightRunKind.NIGHT, false);
+
+    Voraussage v = voraussage();
+
+    assertThat(v.unvollstaendig()).isTrue();
+    assertThat(v.bisher()).isEqualByComparingTo("0");
+    assertThat(v.typisch()).isEqualByComparingTo("6.50");
+  }
+
+  @Test
+  @DisplayName("Liegt der Beginn des Vorhabens vor der Aufbewahrungsgrenze, ist es unvollständig")
+  void zielVorDerGrenze() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung(VOR_EINER_WOCHE.minusSeconds(2));
+    aufbewahrt.add(new RetainedByKind(NightRunKind.INTERACTIVE, 9L, JETZT));
+    aufbewahrt.add(new RetainedByKind(NightRunKind.NIGHT, 3L, VOR_EINER_WOCHE.minusSeconds(1)));
+
+    assertThat(voraussage().unvollstaendig()).isTrue();
+  }
+
+  @Test
+  @DisplayName("Mit Paketen und ohne ungeschnittenes Dokument rechnet die zweite Stufe")
+  void zweiteStufe() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    staende.add(
+        new VorhabenStandView(
+            ref(ZIEL, 400),
+            1L,
+            List.of(
+                paket(402, Aufgabenstufe.MITTEL, null),
+                paket(403, null, null),
+                paket(404, Aufgabenstufe.LEICHT, JETZT)),
+            List.of(new DokumentStandView(401, "FACHLICH", true, true)),
+            true,
+            true,
+            false,
+            List.of(401, 402, 403, 404),
+            JETZT.minus(Duration.ofDays(1))));
+    misst(401, "4");
+    misst(402, "0.50");
+    misst(404, "1");
+    vorgang(NightRunAttemptStage.PLAN, 401, OPUS, "2");
+    vorgang(NightRunAttemptStage.REVIEW, 401, OPUS, "1");
+    vorgang(NightRunAttemptStage.PAKETE, 401, OPUS, "1");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 402, OPUS, "0.50");
+    // Eine interaktive Sitzung zählt nicht: sonst wäre die Abdeckung begonnen.
+    vorgang(NightRunAttemptStage.ABDECKUNG, 401, OPUS, kostet("9"), NightRunKind.INTERACTIVE, true);
+
+    Voraussage v = voraussage();
+
+    // Alle Dokumentstufen durchlaufen (Umsetzung begonnen); 402 mittel 1,50 $ − 0,50 $, 403 ohne
+    // Stufe 1,50 $, 404 in Done; bisher 4 + 0,50 + 1 = 5,50 $.
+    assertThat(v.art()).isEqualTo(Art.PAKETE);
+    assertThat(v.paketzahl()).isEqualTo(3);
+    assertThat(v.ohneStufe()).isEqualTo(1);
+    assertThat(v.bisher()).isEqualByComparingTo("5.50");
+    assertThat(v.typisch()).isEqualByComparingTo("8");
+  }
+
+  @Test
+  @DisplayName("Ein Vorhaben ohne Paket rechnet die erste Stufe, auch ohne offenes Dokument")
+  void ohnePaketErsteStufe() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    staende.add(
+        new VorhabenStandView(
+            ref(ZIEL, 400),
+            1L,
+            List.of(),
+            List.of(new DokumentStandView(401, "PLAN", false, false)),
+            false,
+            true,
+            false,
+            List.of(401),
+            null));
+
+    assertThat(voraussage().art()).isEqualTo(Art.VOR_DEM_SCHNITT);
+  }
+
+  // --- Preise ----------------------------------------------------------------------------------
+
+  @Test
+  @DisplayName("Der Preis einer Stufe gilt beim Modell ihres jüngsten Vorgangs")
+  void preisBeimJuengstenModell() {
+    vorgang(NightRunAttemptStage.PLAN, 11, SONNET, "100");
+    vorgang(NightRunAttemptStage.PLAN, 11, null, "100");
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    // Ein abgeschlossener Vorgang ohne Modell und Kosten nach dem jüngsten zählt im Preis nicht.
+    vorgang(NightRunAttemptStage.REVIEW, 999, null, null);
+    // Ein Vorgang eines nicht abgeschlossenen Laufs zählt im Preis nicht.
+    vorgang(NightRunAttemptStage.ABDECKUNG, 999, SONNET, kostet("100"), NightRunKind.NIGHT, false);
+
+    // Vorhaben 10 hat drei Plan-Vorgänge, typisch bleibt einer.
+    assertThat(voraussage().typisch()).isEqualByComparingTo("6.50");
+  }
+
+  @Test
+  @DisplayName("Ein Vorgang vor den zwölf Wochenfenstern zählt nur in der Vorgangszahl")
+  void vorgangVorDemFenster() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    vorgaenge.add(
+        new Vorgang(
+            FENSTER.minusSeconds(1),
+            NightRunKind.NIGHT,
+            true,
+            vorgaenge.size(),
+            new NightRunAttempt(
+                NightRunAttemptStage.PLAN, 999, SONNET, null, true, kostet("100"), List.of())));
+
+    assertThat(voraussage().typisch()).isEqualByComparingTo("6.50");
+  }
+
+  @Test
+  @DisplayName("Fehlt einer Stufe jeder Vorgang mit Modell, fehlt ihr Preis")
+  void stufeOhneVorgangMitModell() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    vorgaenge.removeIf(v -> v.attempt().stage() == NightRunAttemptStage.ABDECKUNG);
+    vorgang(NightRunAttemptStage.ABDECKUNG, 11, null, "1");
+    vorgang(NightRunAttemptStage.ABDECKUNG, 21, null, "1");
+    vorgang(NightRunAttemptStage.ABDECKUNG, 31, null, "1");
+
+    assertThat(rechne()).isEqualTo(new ZuWenigDaten(Grund.STUFE_OHNE_PREIS));
+  }
+
+  @Test
+  @DisplayName("Paketpreise: nur Pakete in Done, vollständig, zuletzt mit dem umsetzenden Modell")
+  void paketpreise() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    // Ein viertes Vorhaben, noch offen, liefert Pakete, die nicht zählen dürfen.
+    Instant vorDemFenster = FENSTER.minusSeconds(1);
+    staende.add(
+        new VorhabenStandView(
+            ref(500L, 50),
+            1L,
+            List.of(
+                paket(51, Aufgabenstufe.MITTEL, null),
+                paket(52, Aufgabenstufe.MITTEL, JETZT),
+                paket(53, Aufgabenstufe.MITTEL, vorDemFenster),
+                paket(54, Aufgabenstufe.MITTEL, JETZT),
+                paket(55, Aufgabenstufe.MITTEL, JETZT),
+                paket(56, Aufgabenstufe.MITTEL, JETZT),
+                paket(57, null, JETZT)),
+            List.of(),
+            false,
+            false,
+            false,
+            List.of(),
+            null));
+    misst(51, "100");
+    misst(52, "100"); // letzter Umsetzungsvorgang mit einem anderen Modell
+    misst(53, "100"); // vor den zwölf Wochenfenstern nach Done
+    kosten.put(54, new ItemKostenJeKarte(54, new BigDecimal("100"), 1L, VOR_EINER_WOCHE));
+    kosten.put(55, new ItemKostenJeKarte(55, null, 0L, VOR_EINER_WOCHE));
+    // 56 ohne Messung
+    misst(57, "3"); // ohne Aufgabenstufe: nur im Preis über alle Stufen
+    vorgang(NightRunAttemptStage.UMSETZUNG, 51, OPUS, "100");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 52, SONNET, "100");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 53, OPUS, "100");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 54, OPUS, "100");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 55, OPUS, "100");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 56, OPUS, "100");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 57, OPUS, "3");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 57, null, "3");
+    staende.add(
+        new VorhabenStandView(
+            ref(ZIEL, 400),
+            1L,
+            List.of(paket(401, Aufgabenstufe.MITTEL, null), paket(402, null, null)),
+            List.of(),
+            false,
+            false,
+            false,
+            List.of(401, 402),
+            null));
+
+    Voraussage v = voraussage();
+
+    // Stufen 5 $; 401 mittel aus den drei Grundlage-Paketen (1,50 $); 402 ohne Stufe aus diesen
+    // und 57 — typisch 1,50 $, oben 1,50 $ + 0,55 × 1,50 $. Ein 100-$-Paket höbe den oberen Wert.
+    assertThat(v.typisch()).isEqualByComparingTo("8");
+    assertThat(v.oben()).isEqualByComparingTo("8.83");
+  }
+
+  @Test
+  @DisplayName("Ein Paket vor der Aufbewahrungsgrenze liefert keinen Preis")
+  void paketVorDerGrenze() {
+    aufbewahrt.add(new RetainedByKind(NightRunKind.NIGHT, 3L, VOR_EINER_WOCHE.minusSeconds(1)));
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    staende.add(
+        new VorhabenStandView(
+            ref(500L, 50),
+            1L,
+            List.of(
+                new PaketStandView(
+                    51, true, Aufgabenstufe.LEICHT, VOR_EINER_WOCHE.minusSeconds(2), JETZT)),
+            List.of(),
+            false,
+            false,
+            false,
+            List.of(51),
+            null));
+    misst(51, "100");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 51, OPUS, "100");
+    staende.add(
+        new VorhabenStandView(
+            ref(ZIEL, 400),
+            1L,
+            List.of(paket(401, Aufgabenstufe.LEICHT, null)),
+            List.of(),
+            false,
+            false,
+            false,
+            List.of(401),
+            null));
+
+    Voraussage v = voraussage();
+
+    // Ohne leichten Preis gilt der über alle Stufen: 5 $ + 1,50 $.
+    assertThat(v.typisch()).isEqualByComparingTo("6.50");
+    assertThat(v.ohneStufe()).isEqualTo(1);
+  }
+
+  // --- Grundlage -------------------------------------------------------------------------------
+
+  @Test
+  @DisplayName("Ein Vorhaben mit einem Item ohne Kostenangabe zählt nicht zur Grundlage")
+  void grundlageMitItemOhneKosten() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    kosten.put(31, new ItemKostenJeKarte(31, new BigDecimal("5"), 1L, VOR_EINER_WOCHE));
+
+    assertThat(rechne()).isEqualTo(new ZuWenigDaten(Grund.ZU_WENIG_VORHABEN));
+  }
+
+  @Test
+  @DisplayName("Ein Vorhaben mit einem Vorgang ohne Kostenangabe zählt nicht zur Grundlage")
+  void grundlageMitVorgangOhneKosten() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    vorgang(NightRunAttemptStage.REVIEW, 31, OPUS, kostet(null), NightRunKind.NIGHT, true);
+
+    assertThat(rechne()).isEqualTo(new ZuWenigDaten(Grund.ZU_WENIG_VORHABEN));
+  }
+
+  @Test
+  @DisplayName("Ein Vorhaben mit einem Vorgang ohne Verbrauch zählt nicht zur Grundlage")
+  void grundlageMitVorgangOhneVerbrauch() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    vorgang(NightRunAttemptStage.REVIEW, 31, OPUS, null, NightRunKind.NIGHT, true);
+
+    assertThat(rechne()).isEqualTo(new ZuWenigDaten(Grund.ZU_WENIG_VORHABEN));
+  }
+
+  @Test
+  @DisplayName("Ein Vorhaben, das vor der Aufbewahrungsgrenze begann, zählt nicht zur Grundlage")
+  void grundlageVorDerGrenze() {
+    aufbewahrt.add(new RetainedByKind(NightRunKind.NIGHT, 3L, VOR_EINER_WOCHE));
+    grundlage(10);
+    grundlage(20);
+    grundlage(30, JETZT.minus(Duration.ofDays(5)), VOR_EINER_WOCHE.minusSeconds(1));
+    zielNurAnforderung();
+
+    assertThat(rechne()).isEqualTo(new ZuWenigDaten(Grund.ZU_WENIG_VORHABEN));
+  }
+
+  @Test
+  @DisplayName("Ohne vollen Ringpuffer gibt es keine Grenze, auch ein altes Vorhaben zählt")
+  void ohneVollenPufferKeineGrenze() {
+    Instant alt = FENSTER.minus(Duration.ofDays(30));
+    aufbewahrt.add(new RetainedByKind(NightRunKind.NIGHT, 2L, alt));
+    grundlage(10);
+    grundlage(20);
+    grundlage(30, JETZT.minus(Duration.ofDays(5)), alt);
+    zielNurAnforderung();
+
+    assertThat(voraussage().typisch()).isEqualByComparingTo("6.50");
+    // Die Vorgänge werden ab dem frühesten Beginn der Grundlage gelesen.
+    verify(runs).findAttemptsSince(PROJECT, alt);
+  }
+
+  @Test
+  @DisplayName("Ein Vorhaben, das vor den zwölf Wochenfenstern abgeschlossen wurde, zählt nicht")
+  void grundlageVorDemFenster() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30, FENSTER.minusSeconds(1), FENSTER.minus(Duration.ofDays(3)));
+    zielNurAnforderung();
+
+    assertThat(rechne()).isEqualTo(new ZuWenigDaten(Grund.ZU_WENIG_VORHABEN));
+  }
+
+  @Test
+  @DisplayName("Ein Vorhaben, dessen Abschluss genau am Beginn des Fensters liegt, zählt")
+  void grundlageAmFensterbeginn() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30, FENSTER, VOR_EINER_WOCHE);
+    zielNurAnforderung();
+
+    assertThat(rechne()).isInstanceOf(Voraussage.class);
+  }
+
+  @Test
+  @DisplayName("Ein Vorhaben mit unbekanntem Done eines Pakets zählt nicht zur Grundlage")
+  void grundlageMitUnbekanntemDone() {
+    grundlage(10);
+    grundlage(20);
+    staende.add(
+        new VorhabenStandView(
+            ref(300L, 30),
+            1L,
+            List.of(
+                new PaketStandView(32, true, Aufgabenstufe.MITTEL, VOR_EINER_WOCHE, null),
+                paket(33, Aufgabenstufe.MITTEL, JETZT)),
+            List.of(new DokumentStandView(31, "FACHLICH", false, true)),
+            true,
+            true,
+            true,
+            List.of(31, 32, 33),
+            VOR_EINER_WOCHE));
+    for (NightRunAttemptStage stufe : NightRunAttemptStage.values()) {
+      vorgang(stufe, 31, OPUS, "1");
+    }
+    zielNurAnforderung();
+
+    assertThat(rechne()).isEqualTo(new ZuWenigDaten(Grund.ZU_WENIG_VORHABEN));
+  }
+
+  @Test
+  @DisplayName("Offene Vorhaben und das Vorhaben selbst zählen nicht zur Grundlage")
+  void offeneUndZielNichtInGrundlage() {
+    grundlage(10);
+    grundlage(20);
+    staende.add(
+        new VorhabenStandView(
+            ref(300L, 30),
+            1L,
+            List.of(paket(32, Aufgabenstufe.MITTEL, JETZT)),
+            List.of(new DokumentStandView(31, "PLAN", true, false)),
+            false,
+            true,
+            false,
+            List.of(31, 32),
+            VOR_EINER_WOCHE));
+    staende.add(
+        new VorhabenStandView(
+            ref(ZIEL, 400),
+            1L,
+            List.of(paket(402, Aufgabenstufe.MITTEL, JETZT)),
+            List.of(new DokumentStandView(401, "FACHLICH", false, true)),
+            true,
+            true,
+            true,
+            List.of(401, 402),
+            VOR_EINER_WOCHE));
+    for (NightRunAttemptStage stufe : NightRunAttemptStage.values()) {
+      vorgang(stufe, 31, OPUS, "1");
+      vorgang(stufe, 401, OPUS, "1");
+    }
+
+    assertThat(service.aktuelleVoraussage(PROJECT, ZIEL, JETZT))
+        .isEqualTo(Optional.of(new ZuWenigDaten(Grund.ZU_WENIG_VORHABEN)));
+  }
+}
