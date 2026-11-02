@@ -1087,6 +1087,9 @@ export const de = {
     OHNE_ZEITWERT: (anzahl: number) => `davon ${anzahl} ohne Zeitwert`,
     AUS_RUNS: 'aus Runs',
     AUS_SITZUNGEN: 'aus interaktiven Sitzungen',
+    VORHABEN_TITEL: 'Kosten je Vorhaben',
+    VORHABEN_OHNE: 'ohne Vorhaben',
+    VORHABEN_ARCHIVIERT: 'archiviert',
   },
 
   /** Budgetzeile im Bereich „Verbrauch" (Issue #1969, Plan #1962). */

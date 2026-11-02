@@ -14,7 +14,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
-import org.mwolff.manban.card.application.EpicRef;
+import org.mwolff.manban.card.application.VorhabenRef;
 import org.mwolff.manban.common.web.Regionszone;
 import org.mwolff.manban.common.web.api.ApiSchemas;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
@@ -501,26 +501,33 @@ class NightRunUsageController {
   }
 
   /**
-   * Ein Vorhaben der Aufstellung; beim Posten „ohne Vorhaben" sind Kennung, Kürzel und Titel null.
+   * Ein Vorhaben der Aufstellung; beim Posten „ohne Vorhaben" sind Kennung, Nummer, Kürzel und
+   * Titel null.
    */
   @Schema(
       description =
-          "Ein Vorhaben mit dem Verbrauch seiner Karten; beim Posten ohne Vorhaben sind Kennung,"
-              + " Kürzel und Titel null.")
+          "Ein Vorhaben mit den Kosten seiner Karten aus Nachtläufen; beim Posten ohne Vorhaben"
+              + " sind Kennung, Nummer, Kürzel und Titel null.")
   record EpicResponse(
       @Schema(description = "Kennung des Vorhabens.", example = "12") @Nullable Long epicId,
+      @Schema(description = "Kartennummer des Vorhabens.", example = "1954")
+          @Nullable Integer number,
       @Schema(description = "Kürzel des Vorhabens.", example = "API") @Nullable String shortcode,
       @Schema(description = "Titel des Vorhabens.", example = "API-Übersicht")
           @Nullable String title,
+      @Schema(description = "true, wenn das Vorhaben archiviert ist.", example = "false")
+          boolean archived,
       @Schema(description = "Zahl der Karten, die beitragen.", example = "6") long cardCount,
-      @Schema(description = "Summe ihrer Verbräuche.") UsageResponse usage) {
+      @Schema(description = "Summe ihrer Verbräuche aus Nachtläufen.") UsageResponse usage) {
 
     static EpicResponse of(EpicUsageView e) {
-      EpicRef ref = e.epic();
+      VorhabenRef ref = e.epic();
       return new EpicResponse(
           ref == null ? null : ref.id(),
+          ref == null ? null : ref.number(),
           ref == null ? null : ref.shortcode(),
           ref == null ? null : ref.title(),
+          ref != null && ref.archiviert(),
           e.cardCount(),
           UsageResponse.of(e.usage()));
     }
@@ -634,25 +641,27 @@ class NightRunUsageController {
       @Schema(description = "Der unmittelbar vorangegangene gleichartige Zeitraum.")
           PeriodFiguresResponse previous,
       @Schema(description = "Die Nächte des Zeitraums.") List<NightSummaryResponse> nights,
-      @Schema(description = "Die Vorhaben, absteigend nach Kosten.") List<EpicResponse> epics,
-      @Schema(description = "Die Karten ohne Vorhaben.") EpicResponse withoutEpic,
       @Schema(
               description =
-                  "true, wenn eine Karte zu mehreren Vorhaben gehört — dann ergeben die"
-                      + " Vorhaben-Summen zusammen mehr als den Anteil der Karten.",
-              example = "false")
-          boolean epicsOverlap,
+                  "Die Kosten je Vorhaben, absteigend nach Kosten; jede Karte zählt bei genau"
+                      + " einem Vorhaben, ein Vorhaben ohne Messung fehlt.")
+          List<EpicResponse> epics,
+      @Schema(
+              description =
+                  "Die Karten ohne Vorhaben; null, wenn für sie im Zeitraum nichts gemessen"
+                      + " wurde.")
+          @Nullable EpicResponse withoutEpic,
       @Schema(description = "Kosten je Stufe einer Kette; leer, wenn keine Kette lief.")
           List<StageResponse> stages) {
 
     static PeriodResponse of(PeriodUsageView p) {
+      @Nullable EpicUsageView withoutEpic = p.withoutEpic();
       return new PeriodResponse(
           PeriodFiguresResponse.of(p.current()),
           PeriodFiguresResponse.of(p.previous()),
           p.nights().stream().map(NightSummaryResponse::of).toList(),
           p.epics().stream().map(EpicResponse::of).toList(),
-          EpicResponse.of(p.withoutEpic()),
-          p.epicsOverlap(),
+          withoutEpic == null ? null : EpicResponse.of(withoutEpic),
           p.stages().stream().map(StageResponse::of).toList());
     }
   }

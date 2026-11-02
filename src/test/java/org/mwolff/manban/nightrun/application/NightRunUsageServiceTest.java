@@ -23,9 +23,10 @@ import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.card.application.CardRunQueryService;
-import org.mwolff.manban.card.application.EpicRef;
+import org.mwolff.manban.card.application.VorhabenRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.KindTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
@@ -511,12 +512,11 @@ class NightRunUsageServiceTest {
     assertThat(monat.nights().getFirst().usage().remainder().costUsd()).isEqualByComparingTo("6");
   }
 
-  /** Eine Karte, die in beiden Gattungen vorkommt, zählt im Vorhaben mit ihrer Summe. */
+  /** Interaktive Sitzungen stehen nicht in der Aufstellung (#1954 AK 1, AK 9): nur NIGHT zählt. */
   @Test
-  void eineKarteAusBeidenGattungenZaehltMitIhrerSumme() {
+  void eineKarteAusBeidenGattungenZaehltNurMitIhremNachtlaufAnteil() {
     usage.jeKarte = List.of(new CardTotals(964, 2L, 60_000L, kosten("3"), kosten("1")));
-    when(cards.epicsByCardNumber(anyLong(), anyCollection()))
-        .thenReturn(Map.of(964, Set.of(PLANEN)));
+    when(cards.kostenVorhabenJeKarte(anyLong(), anyCollection())).thenReturn(Map.of(964, PLANEN));
 
     PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
 
@@ -525,7 +525,7 @@ class NightRunUsageServiceTest {
         .satisfies(
             e -> {
               assertThat(e.epic()).isEqualTo(PLANEN);
-              assertThat(e.usage().costUsd()).isEqualByComparingTo("4");
+              assertThat(e.usage().costUsd()).isEqualByComparingTo("3");
             });
   }
 
@@ -896,59 +896,101 @@ class NightRunUsageServiceTest {
 
   // --- Vorhaben-Aufstellung --------------------------------------------------------------------
 
-  private static final EpicRef PLANEN = new EpicRef(1L, "PLANEN", "Planen");
-  private static final EpicRef BACKUP = new EpicRef(2L, "BACKUP", "Backup");
+  private static final VorhabenRef PLANEN = new VorhabenRef(1L, 900, "PLANEN", "Planen", false);
+  private static final VorhabenRef BACKUP = new VorhabenRef(2L, 901, "BACKUP", "Backup", false);
 
   @Test
-  void eineKarteInZweiVorhabenZaehltInBeiden_undDieAntwortSagtEs() {
-    usage.jeKarte = List.of(karte(964, kosten("3")));
-    when(cards.epicsByCardNumber(anyLong(), anyCollection()))
-        .thenReturn(Map.of(964, Set.of(PLANEN, BACKUP)));
+  @DisplayName("Szenario: Kosten je Vorhaben im Verbrauch")
+  void szenarioKostenJeVorhabenImVerbrauch() {
+    VorhabenRef export = new VorhabenRef(11L, 910, null, "Export", false);
+    VorhabenRef suche = new VorhabenRef(12L, 920, null, "Suche", false);
+    usage.jeKarte =
+        List.of(
+            karte(1, kosten("4")),
+            karte(2, kosten("5")),
+            karte(3, kosten("4")),
+            karte(4, kosten("2")));
+    when(cards.kostenVorhabenJeKarte(anyLong(), anyCollection()))
+        .thenReturn(Map.of(1, export, 2, export, 3, suche));
+
+    PeriodUsageView woche = service.period(USER, PROJECT, NightRunPeriodType.WEEK, 0, BERLIN);
+
+    assertThat(woche.epics()).extracting(EpicUsageView::epic).containsExactly(export, suche);
+    assertThat(woche.epics().get(0).usage().costUsd()).isEqualByComparingTo("9");
+    assertThat(woche.epics().get(1).usage().costUsd()).isEqualByComparingTo("4");
+    assertThat(woche.withoutEpic()).isNotNull();
+    assertThat(woche.withoutEpic().usage().costUsd()).isEqualByComparingTo("2");
+  }
+
+  /**
+   * Die Fassade liefert je Karte genau ein Vorhaben (Antwort 7); die Summen der Vorhaben ergeben
+   * zusammen mit „ohne Vorhaben" genau den Anteil der Karten.
+   */
+  @Test
+  void jedeKarteZaehltGenauEinmal() {
+    usage.jeKarte =
+        List.of(karte(964, kosten("3")), karte(824, kosten("1")), karte(5, kosten("2")));
+    when(cards.kostenVorhabenJeKarte(anyLong(), anyCollection()))
+        .thenReturn(Map.of(964, PLANEN, 824, BACKUP));
 
     PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
 
-    assertThat(monat.epics())
-        .extracting(EpicUsageView::epic)
-        .containsExactlyInAnyOrder(PLANEN, BACKUP);
-    assertThat(monat.epics())
-        .allSatisfy(e -> assertThat(e.usage().costUsd()).isEqualByComparingTo("3"));
-    assertThat(monat.epicsOverlap()).isTrue();
+    assertThat(monat.epics()).extracting(EpicUsageView::epic).containsExactly(PLANEN, BACKUP);
+    assertThat(monat.epics().get(0).usage().costUsd()).isEqualByComparingTo("3");
+    assertThat(monat.epics().get(1).usage().costUsd()).isEqualByComparingTo("1");
+    assertThat(monat.epics()).extracting(EpicUsageView::cardCount).containsExactly(1L, 1L);
+    assertThat(monat.withoutEpic().cardCount()).isEqualTo(1L);
   }
 
+  /** Ein Vorhaben, für das im Zeitraum kein Nachtlauf gemessen wurde, fehlt — nie mit 0. */
   @Test
-  void ohneMehrfachzugehoerigkeitUeberschneidenSichDieVorhabenNicht() {
-    usage.jeKarte = List.of(karte(964, kosten("3")), karte(824, kosten("1")));
-    when(cards.epicsByCardNumber(anyLong(), anyCollection()))
-        .thenReturn(Map.of(964, Set.of(PLANEN), 824, Set.of(BACKUP)));
+  void einVorhabenNurMitSitzungenFehlt() {
+    usage.jeKarte =
+        List.of(new CardTotals(964, 1L, 60_000L, NICHTS, kosten("5")), karte(824, kosten("1")));
+    when(cards.kostenVorhabenJeKarte(anyLong(), anyCollection()))
+        .thenReturn(Map.of(964, PLANEN, 824, BACKUP));
 
-    assertThat(service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN).epicsOverlap())
-        .isFalse();
+    PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
+
+    assertThat(monat.epics()).extracting(EpicUsageView::epic).containsExactly(BACKUP);
+    assertThat(monat.withoutEpic()).isNull();
   }
 
   /** Eine geloeschte Kartennummer liefert die Fassade nicht — sie zaehlt als „ohne Vorhaben". */
   @Test
   void eineGeloeschteKartennummerZaehltAlsOhneVorhaben_undFaelltNichtAusDerSumme() {
     usage.jeKarte =
-        List.of(karte(964, kosten("3")), karte(4711, kosten("2")), karte(1, kosten("1")));
-    when(cards.epicsByCardNumber(anyLong(), anyCollection()))
-        .thenReturn(Map.of(964, Set.of(PLANEN)));
+        List.of(
+            karte(964, kosten("3")),
+            karte(4711, kosten("2")),
+            karte(1, kosten("1")),
+            new CardTotals(2, 1L, 60_000L, NICHTS, kosten("7")));
+    when(cards.kostenVorhabenJeKarte(anyLong(), anyCollection())).thenReturn(Map.of(964, PLANEN));
 
     PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
 
+    assertThat(monat.withoutEpic()).isNotNull();
     assertThat(monat.withoutEpic().epic()).isNull();
     assertThat(monat.withoutEpic().cardCount()).isEqualTo(2L);
     assertThat(monat.withoutEpic().usage().costUsd()).isEqualByComparingTo("3");
   }
 
+  /**
+   * Eine gemessene Karte ohne Kostenangabe gehört in die Aufstellung — ihr Vorhaben steht mit
+   * fehlendem Betrag zuletzt, nie mit 0.
+   */
   @Test
   void dieVorhabenStehenAbsteigendNachKosten_ohneKostenZuletzt() {
-    EpicRef ohneKosten = new EpicRef(3L, null, "Ohne Kosten");
+    VorhabenRef ohneKosten = new VorhabenRef(3L, 903, null, "Ohne Kosten", true);
+    NightRunUsage nurTokens = new NightRunUsage(null, 100L, null, null, null, null);
     usage.jeKarte =
         List.of(
-            karte(1, kosten("1")), karte(2, kosten("5")), karte(3, null), karte(4, kosten("2")));
-    when(cards.epicsByCardNumber(anyLong(), anyCollection()))
-        .thenReturn(
-            Map.of(1, Set.of(PLANEN), 2, Set.of(BACKUP), 3, Set.of(ohneKosten), 4, Set.of(PLANEN)));
+            karte(1, kosten("1")),
+            karte(2, kosten("5")),
+            karte(3, nurTokens),
+            karte(4, kosten("2")));
+    when(cards.kostenVorhabenJeKarte(anyLong(), anyCollection()))
+        .thenReturn(Map.of(1, PLANEN, 2, BACKUP, 3, ohneKosten, 4, PLANEN));
 
     PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
 
@@ -964,8 +1006,8 @@ class NightRunUsageServiceTest {
   @Test
   void beiGleichenKostenEntscheidetDieVorhabenId() {
     usage.jeKarte = List.of(karte(1, kosten("2")), karte(2, kosten("2")));
-    when(cards.epicsByCardNumber(anyLong(), anyCollection()))
-        .thenReturn(Map.of(1, Set.of(BACKUP), 2, Set.of(PLANEN)));
+    when(cards.kostenVorhabenJeKarte(anyLong(), anyCollection()))
+        .thenReturn(Map.of(1, BACKUP, 2, PLANEN));
 
     assertThat(service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN).epics())
         .extracting(EpicUsageView::epic)
@@ -973,15 +1015,13 @@ class NightRunUsageServiceTest {
   }
 
   @Test
-  void ohneKartenBleibtDieAufstellungLeer_undOhneVorhabenTraegtNichts() {
-    when(cards.epicsByCardNumber(anyLong(), anyCollection())).thenReturn(Map.of());
+  void ohneKartenBleibtDieAufstellungLeer_undOhneVorhabenFehlt() {
+    when(cards.kostenVorhabenJeKarte(anyLong(), anyCollection())).thenReturn(Map.of());
 
     PeriodUsageView monat = service.period(USER, PROJECT, NightRunPeriodType.MONTH, 0, BERLIN);
 
     assertThat(monat.epics()).isEmpty();
-    assertThat(monat.withoutEpic().cardCount()).isZero();
-    assertThat(monat.withoutEpic().usage()).isEqualTo(NICHTS);
-    assertThat(monat.epicsOverlap()).isFalse();
+    assertThat(monat.withoutEpic()).isNull();
   }
 
   // --- Doppelgaenger des Ports -----------------------------------------------------------------

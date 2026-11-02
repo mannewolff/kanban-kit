@@ -1014,6 +1014,9 @@ export const en: Woerterbuch = {
     OHNE_ZEITWERT: (anzahl) => `of which ${anzahl} without time value`,
     AUS_RUNS: 'from runs',
     AUS_SITZUNGEN: 'from interactive sessions',
+    VORHABEN_TITEL: 'Cost per epic',
+    VORHABEN_OHNE: 'without epic',
+    VORHABEN_ARCHIVIERT: 'archived',
   },
 
   LEITSTAND_BUDGET: {

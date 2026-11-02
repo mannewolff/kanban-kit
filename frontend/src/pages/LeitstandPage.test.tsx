@@ -239,8 +239,7 @@ const zeitraum = (extra: Partial<VerbrauchZeitraum> = {}): VerbrauchZeitraum => 
   }),
   nights: [nacht('2026-09-14', 186_000)],
   epics: [],
-  withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: angaben(null) },
-  epicsOverlap: false,
+  withoutEpic: null,
   stages: [],
   ...extra,
 })

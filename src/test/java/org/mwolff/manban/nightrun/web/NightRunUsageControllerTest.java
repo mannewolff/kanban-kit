@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mwolff.manban.card.application.EpicRef;
+import org.mwolff.manban.card.application.VorhabenRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageService;
 import org.mwolff.manban.nightrun.application.NightRunUsageService.BudgetView;
@@ -168,11 +168,10 @@ class NightRunUsageControllerTest {
         List.of(new NightSummary(LocalDate.of(2026, 8, 3), 2L, 1L, teilung, jeGattung, false)),
         List.of(
             new EpicUsageView(
-                new EpicRef(11L, "PLANEN", "Planen"),
+                new VorhabenRef(11L, 910, "PLANEN", "Planen", true),
                 2L,
                 new NightRunUsage(new BigDecimal("4.00"), null, null, null, null, null))),
         new EpicUsageView(null, 1L, NICHTS),
-        true,
         STUFEN);
   }
 
@@ -346,14 +345,18 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.epics[0].epicId").value(11))
         .andExpect(jsonPath("$.epics[0].shortcode").value("PLANEN"))
         .andExpect(jsonPath("$.epics[0].title").value("Planen"))
+        .andExpect(jsonPath("$.epics[0].number").value(910))
+        .andExpect(jsonPath("$.epics[0].archived").value(true))
         .andExpect(jsonPath("$.epics[0].cardCount").value(2))
         .andExpect(jsonPath("$.epics[0].usage.costUsd").value(4))
         .andExpect(jsonPath("$.withoutEpic.epicId").value(nullValue()))
         .andExpect(jsonPath("$.withoutEpic.shortcode").value(nullValue()))
         .andExpect(jsonPath("$.withoutEpic.title").value(nullValue()))
+        .andExpect(jsonPath("$.withoutEpic.number").value(nullValue()))
+        .andExpect(jsonPath("$.withoutEpic.archived").value(false))
         .andExpect(jsonPath("$.withoutEpic.cardCount").value(1))
         .andExpect(jsonPath("$.withoutEpic.usage.costUsd").value(nullValue()))
-        .andExpect(jsonPath("$.epicsOverlap").value(true))
+        .andExpect(jsonPath("$.epicsOverlap").doesNotExist())
         .andExpect(jsonPath("$.stages[0].stage").value("PLAN"))
         .andExpect(jsonPath("$.stages[0].itemCount").value(2))
         .andExpect(jsonPath("$.stages[0].durationMs").value(70000))
@@ -362,6 +365,21 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.stages[1].stage").value("ABDECKUNG"))
         .andExpect(jsonPath("$.stages[1].itemCount").value(1))
         .andExpect(jsonPath("$.stages[1].usage.costUsd").value(nullValue()));
+  }
+
+  /** Ohne Messung für Karten ohne Vorhaben fehlt der Posten (Issue #2000, #1954 AK 1). */
+  @Test
+  void zeitraum_ohneMessungOhneVorhabenIstDerPostenNull() throws Exception {
+    PeriodUsageView z = zeitraum();
+    when(service.period(anyLong(), anyLong(), any(), anyInt(), any()))
+        .thenReturn(
+            new PeriodUsageView(
+                z.current(), z.previous(), z.nights(), z.epics(), null, z.stages()));
+
+    mvc.perform(
+            get(PFAD_ZEITRAUM).param("type", "DAY").param("stepsBack", "0").param("zone", "UTC"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.withoutEpic").value(nullValue()));
   }
 
   /**

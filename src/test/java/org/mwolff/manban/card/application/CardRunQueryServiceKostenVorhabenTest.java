@@ -19,12 +19,15 @@ import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.project.application.PermissionChecker;
 
 /**
- * Unit-Tests der Vorhaben-Zuordnung zu Kartennummern über die card-Fassade (Issue #936).
+ * Unit-Tests des Kostenvorhabens je Kartennummer über die card-Fassade (Issue #2000, Plan #1990 E1;
+ * ersetzt die Tests von {@code epicsByCardNumber} aus Issue #936).
  *
  * <p>Eigene Klasse wie {@code CardServiceEpicTreeTest}: {@code CardServiceTest} steht an seinen
- * PMD-Grenzen. Als Unit-Test, weil PIT allein Unit-Tests misst.
+ * PMD-Grenzen. Als Unit-Test, weil PIT allein Unit-Tests misst. Die Regel selbst prüft {@code
+ * KostenzuordnungTest}; hier geht es um die Fassade: über alle Boards, Zugehörigkeit samt Archiv,
+ * nur die gefragten Nummern, die Felder des {@link VorhabenRef}.
  */
-class CardRunQueryServiceEpicsByCardNumberTest {
+class CardRunQueryServiceKostenVorhabenTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
   private static final long PROJECT = 1L;
@@ -62,7 +65,8 @@ class CardRunQueryServiceEpicsByCardNumberTest {
       CardType type,
       @Nullable String shortcode,
       @Nullable Long parentId,
-      @Nullable Long derivedFrom) {
+      @Nullable Long derivedFrom,
+      boolean archived) {
     return new Card(
         id,
         board,
@@ -71,7 +75,7 @@ class CardRunQueryServiceEpicsByCardNumberTest {
         "Karte " + number,
         null,
         0,
-        false,
+        archived,
         null,
         1L,
         FIXED,
@@ -88,26 +92,22 @@ class CardRunQueryServiceEpicsByCardNumberTest {
   }
 
   private static Card vorhaben(long id, long board, int number, String kuerzel) {
-    return karte(id, board, number, CardType.EPIC, kuerzel, null, null);
+    return karte(id, board, number, CardType.EPIC, kuerzel, null, null, false);
   }
 
   private static Card zugeordnet(long id, long board, int number, long epicId) {
-    return karte(id, board, number, CardType.CARD, null, epicId, null);
+    return karte(id, board, number, CardType.CARD, null, epicId, null, false);
   }
 
   private static Card abgeleitet(long id, long board, int number, long vorfahrId) {
-    return karte(id, board, number, CardType.CARD, null, null, vorfahrId);
+    return karte(id, board, number, CardType.CARD, null, null, vorfahrId, false);
   }
 
-  private static Card frei(long id, long board, int number) {
-    return karte(id, board, number, CardType.CARD, null, null, null);
-  }
+  private static final VorhabenRef PLANEN = new VorhabenRef(1L, 900, "PLANEN", "Karte 900", false);
+  private static final VorhabenRef BACKUP = new VorhabenRef(2L, 901, "BACKUP", "Karte 901", false);
 
-  private static final EpicRef PLANEN = new EpicRef(1L, "PLANEN", "Karte 900");
-  private static final EpicRef BACKUP = new EpicRef(2L, "BACKUP", "Karte 901");
-
-  private Map<Integer, Set<EpicRef>> zuordnung(Integer... nummern) {
-    return service.epicsByCardNumber(PROJECT, Set.of(nummern));
+  private Map<Integer, VorhabenRef> zuordnung(Integer... nummern) {
+    return service.kostenVorhabenJeKarte(PROJECT, Set.of(nummern));
   }
 
   @Test
@@ -116,7 +116,7 @@ class CardRunQueryServiceEpicsByCardNumberTest {
         .thenReturn(
             List.of(vorhaben(1L, BOARD_A, 900, "PLANEN"), zugeordnet(10L, BOARD_A, 964, 1L)));
 
-    assertThat(zuordnung(964)).containsExactly(Map.entry(964, Set.of(PLANEN)));
+    assertThat(zuordnung(964)).containsExactly(Map.entry(964, PLANEN));
   }
 
   @Test
@@ -128,43 +128,50 @@ class CardRunQueryServiceEpicsByCardNumberTest {
                 zugeordnet(10L, BOARD_A, 963, 1L),
                 abgeleitet(11L, BOARD_A, 964, 10L)));
 
-    assertThat(zuordnung(964)).containsExactly(Map.entry(964, Set.of(PLANEN)));
+    assertThat(zuordnung(964)).containsExactly(Map.entry(964, PLANEN));
   }
 
+  /** Antwort 7: Eine Karte in zwei Vorhaben zählt genau einmal, beim unmittelbaren. */
   @Test
-  void eineKarteInZweiVorhabenLiefertBeide() {
+  void eineKarteInZweiVorhabenLiefertNurDasUnmittelbare() {
     when(cards.findByProjectId(PROJECT))
         .thenReturn(
             List.of(
                 vorhaben(1L, BOARD_A, 900, "PLANEN"),
                 vorhaben(2L, BOARD_A, 901, "BACKUP"),
-                zugeordnet(10L, BOARD_A, 963, 1L),
                 zugeordnet(12L, BOARD_A, 970, 2L),
                 // ueber parentId in PLANEN, ueber die Herkunft zusaetzlich in BACKUP
-                karte(11L, BOARD_A, 964, CardType.CARD, null, 1L, 12L)));
+                karte(11L, BOARD_A, 964, CardType.CARD, null, 1L, 12L, false)));
 
-    assertThat(zuordnung(964)).containsExactly(Map.entry(964, Set.of(PLANEN, BACKUP)));
+    assertThat(zuordnung(964, 970)).containsOnly(Map.entry(964, PLANEN), Map.entry(970, BACKUP));
   }
 
+  /** Archivierte Pakete gehen nicht verloren, archivierte Vorhaben tragen den Zusatz. */
   @Test
-  void eineNummerOhneKarteLiefertKeinVorhabenUndWirftNicht() {
+  void archivierteKartenUndVorhabenZaehlenMit() {
+    Card archiviertesVorhaben = karte(1L, BOARD_A, 900, CardType.EPIC, null, null, null, true);
     when(cards.findByProjectId(PROJECT))
         .thenReturn(
-            List.of(vorhaben(1L, BOARD_A, 900, "PLANEN"), zugeordnet(10L, BOARD_A, 964, 1L)));
+            List.of(
+                archiviertesVorhaben,
+                karte(10L, BOARD_A, 963, CardType.CARD, null, 1L, null, true),
+                karte(11L, BOARD_A, 964, CardType.CARD, null, null, 10L, true)));
 
-    assertThat(zuordnung(4711)).isEmpty();
+    VorhabenRef erwartet = new VorhabenRef(1L, 900, null, "Karte 900", true);
+    assertThat(zuordnung(963, 964))
+        .containsOnly(Map.entry(963, erwartet), Map.entry(964, erwartet));
   }
 
   @Test
-  void eineKarteOhneVorhabenLiefertKeinVorhabenUndWirftNicht() {
+  void eineNummerOhneKarteOderOhneVorhabenFehltUndWirftNicht() {
     when(cards.findByProjectId(PROJECT))
         .thenReturn(
             List.of(
                 vorhaben(1L, BOARD_A, 900, "PLANEN"),
                 zugeordnet(10L, BOARD_A, 964, 1L),
-                frei(11L, BOARD_A, 965)));
+                karte(11L, BOARD_A, 965, CardType.CARD, null, null, null, false)));
 
-    assertThat(zuordnung(965)).isEmpty();
+    assertThat(zuordnung(4711, 965, 900)).isEmpty();
   }
 
   @Test
@@ -177,8 +184,7 @@ class CardRunQueryServiceEpicsByCardNumberTest {
                 vorhaben(2L, BOARD_B, 901, "BACKUP"),
                 zugeordnet(20L, BOARD_B, 824, 2L)));
 
-    assertThat(zuordnung(964, 824))
-        .containsOnly(Map.entry(964, Set.of(PLANEN)), Map.entry(824, Set.of(BACKUP)));
+    assertThat(zuordnung(964, 824)).containsOnly(Map.entry(964, PLANEN), Map.entry(824, BACKUP));
   }
 
   /** Nur die gefragten Nummern kommen zurueck — nicht die ganze Zuordnung des Projekts. */
@@ -196,7 +202,7 @@ class CardRunQueryServiceEpicsByCardNumberTest {
 
   @Test
   void eineLeereNummernmengeFragtDieDatenbankNicht() {
-    assertThat(service.epicsByCardNumber(PROJECT, Set.of())).isEmpty();
+    assertThat(service.kostenVorhabenJeKarte(PROJECT, Set.of())).isEmpty();
 
     verifyNoInteractions(cards);
   }

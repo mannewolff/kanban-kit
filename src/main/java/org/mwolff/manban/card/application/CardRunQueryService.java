@@ -3,7 +3,6 @@ package org.mwolff.manban.card.application;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +18,7 @@ import org.mwolff.manban.card.domain.Arbeitspaket;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.Kartenart;
+import org.mwolff.manban.card.domain.Kostenzuordnung;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,18 +61,15 @@ public class CardRunQueryService {
   }
 
   /**
-   * Zu jeder genannten Kartennummer des Projekts die Vorhaben, zu denen ihre Karte gehört (Issue
-   * #936, Plan #933 E10).
+   * Zu jeder genannten Kartennummer des Projekts ihr Kostenvorhaben (Issue #2000, Plan #1990 E1,
+   * fachlich #1954 AK 1 und 12): das eine Vorhaben, bei dem ihre Kosten zählen.
    *
-   * <p>Die Zugehörigkeit ist die aus {@link EpicMembership} — {@code parentId} plus Herkunftskette
-   * — und kein eigener Begriff. Gerechnet wird je Board, wie überall, wo {@code EpicMembership}
-   * gilt, und über alle Boards des Projekts vereinigt: Kartennummern sind projektweit eindeutig,
-   * und der Aufrufer kennt nur Nummern.
-   *
-   * <p><b>Eine Karte kann zu mehreren Vorhaben gehören</b> (Plan #631, E10) und steht dann mit
-   * mehreren {@link EpicRef} im Ergebnis. Wer über Vorhaben summiert, zählt ihre Werte deshalb
-   * mehrfach — die Summen der Vorhaben dürfen sich überschneiden und ergeben zusammen nicht die
-   * Gesamtsumme.
+   * <p>Die Zugehörigkeit ist die aus {@link EpicMembership#computeMitArchiv} — {@code parentId}
+   * plus Herkunftskette, archivierte Karten eingeschlossen —, und unter ihr wählt {@link
+   * Kostenzuordnung} genau ein Vorhaben: unmittelbar vor geerbt. Gerechnet wird je Board, wie
+   * überall, wo {@code EpicMembership} gilt, und über alle Boards des Projekts vereinigt:
+   * Kartennummern sind projektweit eindeutig, und der Aufrufer kennt nur Nummern. Die Summen je
+   * Vorhaben überschneiden sich damit nie.
    *
    * <p>Eine Nummer ohne Karte oder ohne Vorhaben fehlt im Ergebnis; die Methode wirft dafür nicht.
    * Eine leere Nummernmenge fragt die Datenbank nicht.
@@ -81,36 +78,36 @@ public class CardRunQueryService {
    * fremde Module, die ihre eigene Prüfung bereits vorgenommen haben — sie liefert keine
    * Karteninhalte, nur die Zuordnung zu den Nummern, die der Aufrufer schon kennt.
    *
-   * @return je Kartennummer die Menge ihrer Vorhaben; Nummern ohne Vorhaben fehlen
+   * @return je Kartennummer ihr Kostenvorhaben; Nummern ohne Vorhaben fehlen
    */
   @Transactional(readOnly = true)
-  public Map<Integer, Set<EpicRef>> epicsByCardNumber(
-      long projectId, Collection<Integer> cardNumbers) {
-    if (cardNumbers.isEmpty()) {
+  public Map<Integer, VorhabenRef> kostenVorhabenJeKarte(
+      long projectId, Collection<Integer> nummern) {
+    if (nummern.isEmpty()) {
       return Map.of();
     }
-    Set<Integer> gesucht = Set.copyOf(cardNumbers);
+    Set<Integer> gesucht = Set.copyOf(nummern);
     Map<Long, List<Card>> jeBoard =
         cards.findByProjectId(projectId).stream().collect(Collectors.groupingBy(Card::boardId));
 
-    Map<Integer, Set<EpicRef>> ergebnis = new HashMap<>();
+    Map<Integer, VorhabenRef> ergebnis = new HashMap<>();
     for (List<Card> boardKarten : jeBoard.values()) {
-      Map<Long, Card> nachId =
-          boardKarten.stream().collect(Collectors.toMap(Card::requireId, Function.identity()));
-      EpicMembership.compute(boardKarten)
+      Kostenzuordnung.ermittle(boardKarten, EpicMembership.computeMitArchiv(boardKarten))
           .forEach(
-              (epicId, mitglieder) -> {
-                // Die Schluessel von compute sind die Vorhaben genau dieser Kartenmenge.
-                Card epic = Objects.requireNonNull(nachId.get(epicId));
-                EpicRef ref = new EpicRef(epicId, epic.shortcode(), epic.title());
-                mitglieder.stream()
-                    .map(Card::number)
-                    .filter(gesucht::contains)
-                    .forEach(n -> ergebnis.computeIfAbsent(n, k -> new HashSet<>()).add(ref));
+              (nummer, vorhaben) -> {
+                if (gesucht.contains(nummer)) {
+                  ergebnis.put(
+                      nummer,
+                      new VorhabenRef(
+                          vorhaben.requireId(),
+                          vorhaben.number(),
+                          vorhaben.shortcode(),
+                          vorhaben.title(),
+                          vorhaben.archived()));
+                }
               });
     }
-    return ergebnis.entrySet().stream()
-        .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, e -> Set.copyOf(e.getValue())));
+    return Map.copyOf(ergebnis);
   }
 
   /**
@@ -126,7 +123,7 @@ public class CardRunQueryService {
    * Papierkorb-Karten nicht. Unbekannte Nummern fehlen im Ergebnis; die Methode wirft dafür nicht.
    * Eine leere Nummernmenge fragt die Datenbank nicht.
    *
-   * <p>Ohne Rechteprüfung wie {@link #epicsByCardNumber}: Die Methode ist Vertrag für fremde
+   * <p>Ohne Rechteprüfung wie {@link #kostenVorhabenJeKarte}: Die Methode ist Vertrag für fremde
    * Module, die ihre eigene Prüfung bereits vorgenommen haben — sie liefert keine Karteninhalte,
    * nur die Existenz zu den Nummern, die der Aufrufer schon kennt.
    *

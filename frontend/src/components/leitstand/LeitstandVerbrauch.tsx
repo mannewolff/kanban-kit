@@ -31,6 +31,7 @@ import { ETIKETT, KUPFER, KUPFER_HELL, MELDER, NUT, PLATTE, PLATTE_HOCH, RAND, S
 import { Erklaerung } from '../Erklaerung'
 import { DeltaMarke, Funke, Kachel, KACHEL_SX, KachelFuss, KachelWert } from './LeitstandBausteine'
 import { LeitstandBudget } from './LeitstandBudget'
+import { VerbrauchVorhaben } from './VerbrauchVorhaben'
 
 /**
  * Verbrauch mit Zeitraum-Wahl (#979, Entwurf Z. 977–1017, 1340–1398): Eingabe-Token mit
@@ -64,8 +65,12 @@ import { LeitstandBudget } from './LeitstandBudget'
  * aus `total.brakes`, ohne Vorzeitraum-Vergleich.
  *
  * **Aufbau** (Issue #1969, Plan #1962): Titelzeile → Budgetzeile → Zeile mit Umfangstext und
- * Umschalter → Kacheln. Die Budgetzeile gilt immer für den laufenden Monat und hängt nicht vom
- * Umschalter ab; sie steht deshalb darüber und lädt für sich (`api.budget`).
+ * Umschalter → Kacheln → Kosten je Vorhaben. Die Budgetzeile gilt immer für den laufenden Monat
+ * und hängt nicht vom Umschalter ab; sie steht deshalb darüber und lädt für sich (`api.budget`).
+ *
+ * **Kosten je Vorhaben** (Issue #2000, Plan #1990): unter den Kacheln die Aufstellung aus
+ * `period` für den gewählten Zeitraum. Unter „Gesamt" entfällt sie — die Lebenszeit-Summe trägt
+ * keine.
  */
 type Wahl = VerbrauchZeitraumArt | 'TOTAL'
 
@@ -190,6 +195,9 @@ export function LeitstandVerbrauch({
       {zustand.art === 'laden' && <Typography color="text.secondary">{t.LAEDT}</Typography>}
       {zustand.art === 'fehler' && <Typography color="text.secondary">{t.FEHLER}</Typography>}
       {zustand.art === 'da' && <VerbrauchKacheln {...kachelWerte(zustand.ansicht, sprache)} implementierung={implementierung} />}
+      {zustand.art === 'da' && zustand.ansicht.art === 'zeitraum' && (
+        <VerbrauchVorhaben epics={zustand.ansicht.zeitraum.epics} withoutEpic={zustand.ansicht.zeitraum.withoutEpic} />
+      )}
     </Box>
   )
 }

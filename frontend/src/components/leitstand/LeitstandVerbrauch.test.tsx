@@ -96,8 +96,7 @@ const zeitraum = (extra: Partial<VerbrauchZeitraum> = {}): VerbrauchZeitraum => 
     },
   ],
   epics: [],
-  withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: nichts },
-  epicsOverlap: false,
+  withoutEpic: null,
   stages: [],
   ...extra,
 })
@@ -1187,5 +1186,39 @@ describe('LeitstandVerbrauch auf Englisch', () => {
     expect(
       screen.getByText('Interactive sessions are only recorded since Sep 14, 2026 — this period begins before.'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('LeitstandVerbrauch — Kosten je Vorhaben (Issue #2000)', () => {
+  const posten = (title: string | null, costUsd: number, archived = false) => ({
+    epicId: title === null ? null : costUsd,
+    number: title === null ? null : 900 + costUsd,
+    shortcode: null,
+    title,
+    archived,
+    cardCount: 1,
+    usage: angaben(costUsd),
+  })
+
+  it('zeigt unter den Kacheln die Kosten je Vorhaben des gewaehlten Zeitraums, darunter „ohne Vorhaben"', async () => {
+    zeige(zeitraum({ epics: [posten('Export', 9), posten('Suche', 4, true)], withoutEpic: posten(null, 2) }))
+
+    const aufstellung = await screen.findByRole('region', { name: 'Kosten je Vorhaben' })
+    expect(within(aufstellung).getAllByRole('listitem').map((z) => lesbar(z.textContent))).toEqual([
+      'Export9,00 $',
+      'Suche · archiviert4,00 $',
+      'ohne Vorhaben2,00 $',
+    ])
+  })
+
+  it('laesst die Aufstellung unter „Gesamt" weg', async () => {
+    const api = zeige(zeitraum({ epics: [posten('Export', 9)], withoutEpic: null }))
+    await screen.findByRole('region', { name: 'Kosten je Vorhaben' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gesamt' }))
+    await waitFor(() => expect(api.total).toHaveBeenCalled())
+    await screen.findByText(/^Gesamt ·/)
+
+    expect(screen.queryByRole('region', { name: 'Kosten je Vorhaben' })).not.toBeInTheDocument()
   })
 })
