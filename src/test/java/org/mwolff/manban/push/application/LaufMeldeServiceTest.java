@@ -68,6 +68,7 @@ class LaufMeldeServiceTest {
   private final List<PushAbo> abos = new ArrayList<>();
   private final List<Long> geloescht = new ArrayList<>();
   private final List<OutboxMessage> outbox = new ArrayList<>();
+  private UserLookup users;
   private PermissionChecker permissions;
   private BoardService boards;
   private LaufMeldeService service;
@@ -93,7 +94,7 @@ class LaufMeldeServiceTest {
             })
         .when(aboRepository)
         .deleteById(anyLong());
-    UserLookup users = mock(UserLookup.class);
+    users = mock(UserLookup.class);
     when(users.istAktiv(anyLong())).thenReturn(true);
     permissions = mock(PermissionChecker.class);
     when(permissions.hatNachtlaufZugriff(anyLong(), anyLong())).thenReturn(true);
@@ -281,6 +282,20 @@ class LaufMeldeServiceTest {
   }
 
   @Test
+  void einZweiterTaktPlantAuchFuerEinNeuesAboNichts() {
+    // Given: Nach der ersten Meldung kommt ein Abo dazu, das die Outbox noch nicht kennt.
+    abo(11L, KONTO);
+    service.melde(gescheitertAufProdukt());
+    abo(12L, ANDERES_KONTO);
+
+    // When / Then: Der Lauf ist gemeldet — der zweite Takt plant nichts.
+    assertThat(service.melde(gescheitertAufProdukt())).isZero();
+    assertThat(outbox)
+        .extracting(OutboxMessage::idempotencyKey)
+        .containsExactly("push-lauf:300:11");
+  }
+
+  @Test
   void einZweitesPaketDesselbenLaufsPlantKeineNeueNachricht() {
     abo(11L, KONTO);
     service.melde(
@@ -330,6 +345,15 @@ class LaufMeldeServiceTest {
   }
 
   @Test
+  void einAboEinesInaktivenKontosBekommtNichts() {
+    abo(11L, KONTO);
+    when(users.istAktiv(KONTO)).thenReturn(false);
+
+    assertThat(service.melde(gescheitertAufProdukt())).isZero();
+    assertThat(outbox).isEmpty();
+  }
+
+  @Test
   void abgelaufeneAbosWerdenUebersprungenUndGeloescht() {
     abo(11L, KONTO);
     abos.add(
@@ -359,6 +383,19 @@ class LaufMeldeServiceTest {
     assertThat(nachrichten())
         .singleElement()
         .satisfies(n -> assertThat(n.titel()).isEqualTo("Alpha"));
+  }
+
+  @Test
+  void einLaufOhneBoardMeldetNichtsWennAlleAktivenBoardsAbgeschaltetSind() {
+    abo(11L, KONTO, PRODUKT, 41L);
+    when(boards.listActiveBoardIds(PROJEKT)).thenReturn(List.of(PRODUKT, 41L));
+
+    int geplant =
+        service.melde(
+            meldbar(null, null, paket(1, NightRunState.RED, NightRunErrorClass.HARD_ABORT)));
+
+    assertThat(geplant).isZero();
+    assertThat(outbox).isEmpty();
   }
 
   @Test
