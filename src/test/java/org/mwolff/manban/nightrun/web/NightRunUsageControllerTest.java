@@ -170,7 +170,11 @@ class NightRunUsageControllerTest {
             new EpicUsageView(
                 new VorhabenRef(11L, 910, "PLANEN", "Planen", true),
                 2L,
-                new NightRunUsage(new BigDecimal("4.00"), null, null, null, null, null))),
+                new NightRunUsage(new BigDecimal("4.00"), null, null, null, null, null)),
+            new EpicUsageView(
+                new VorhabenRef(12L, 920, "BAUEN", "Bauen", false),
+                1L,
+                new NightRunUsage(new BigDecimal("1.00"), null, null, null, null, null))),
         new EpicUsageView(null, 1L, NICHTS),
         STUFEN);
   }
@@ -349,6 +353,8 @@ class NightRunUsageControllerTest {
         .andExpect(jsonPath("$.epics[0].archived").value(true))
         .andExpect(jsonPath("$.epics[0].cardCount").value(2))
         .andExpect(jsonPath("$.epics[0].usage.costUsd").value(4))
+        .andExpect(jsonPath("$.epics[1].epicId").value(12))
+        .andExpect(jsonPath("$.epics[1].archived").value(false))
         .andExpect(jsonPath("$.withoutEpic.epicId").value(nullValue()))
         .andExpect(jsonPath("$.withoutEpic.shortcode").value(nullValue()))
         .andExpect(jsonPath("$.withoutEpic.title").value(nullValue()))

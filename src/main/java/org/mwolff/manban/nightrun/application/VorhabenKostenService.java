@@ -591,10 +591,9 @@ public class VorhabenKostenService {
         : Optional.empty();
   }
 
-  /** Das Modell des jüngsten Vorgangs mit Modell. */
+  /** Das Modell des jüngsten Vorgangs; die Aufrufer reichen nur Vorgänge mit Modell herein. */
   private static Optional<String> juengsterModell(Collection<Vorgang> vorgaenge) {
     return vorgaenge.stream()
-        .filter(v -> v.attempt().model() != null)
         .max(Comparator.comparingInt(Vorgang::position))
         .map(v -> v.attempt().model());
   }

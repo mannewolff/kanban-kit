@@ -979,6 +979,42 @@ class VorhabenKostenServiceTest {
   }
 
   @Test
+  @DisplayName("Hat ein festgehaltenes Vorhaben kein Paket mehr, bleibt seine Zeile unverändert")
+  void festgehaltenOhnePaketBleibt() {
+    eingefuehrt();
+    festgehalten.speichere(
+        VorhabenKosten.leer(ZIEL, PROJECT).mitAnforderung(beziffert(Art.ANFORDERUNG, "16")));
+    VorhabenKosten vorher = zeile();
+    int geschrieben = festgehalten.gespeichert;
+    zielStand(List.of(), List.of(anforderung(true, false)), false, List.of(401));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile()).isEqualTo(vorher);
+    assertThat(festgehalten.gespeichert).isEqualTo(geschrieben);
+  }
+
+  @Test
+  @DisplayName("Ein festgehaltener Abschluss ohne tatsächliche Kosten wird nachgerechnet")
+  void abschlussOhneTatsaechlicheKosten() {
+    eingefuehrt();
+    festgehalten.speichere(
+        new VorhabenKosten(ZIEL, PROJECT, null, null, ABSCHLUSS, null, false, List.of(401, 402)));
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402));
+    kostetBisAbschluss(401, "10");
+    kostetBisAbschluss(402, "8");
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().abgeschlossenAt()).isEqualTo(ABSCHLUSS);
+    assertThat(zeile().tatsaechlichUsd()).isEqualByComparingTo("18");
+  }
+
+  @Test
   @DisplayName("Der Abschluss hält Zeitpunkt, tatsächliche Kosten bis dahin und Kostenkarten fest")
   void abschlussHaeltFest() {
     eingefuehrt();
@@ -1229,6 +1265,22 @@ class VorhabenKostenServiceTest {
   }
 
   @Test
+  @DisplayName("Einführung: Das späteste Done zählt auch, wenn es das letzte Paket trägt")
+  void einfuehrungSpaetestesZuletzt() {
+    Instant frueh = JETZT.minus(Duration.ofDays(20));
+    Instant spaet = JETZT.minus(Duration.ofDays(10));
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, frueh), paket(403, Aufgabenstufe.MITTEL, spaet)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402, 403));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().abgeschlossenAt()).isEqualTo(spaet);
+  }
+
+  @Test
   @DisplayName("Einführung: Fehlt ein Done-Zeitpunkt, gilt der Zeitpunkt des Laufs")
   void einfuehrungOhneDoneZeitpunkt() {
     zielStand(
@@ -1355,6 +1407,21 @@ class VorhabenKostenServiceTest {
     assertThat(laufend.zuWenigDaten()).isEqualTo(Grund.ZU_WENIG_VORHABEN);
     assertThat(laufend.bisher()).isEqualByComparingTo("0.75");
     assertThat(laufend.unvollstaendig()).isTrue();
+  }
+
+  @Test
+  @DisplayName("Je Vorhaben: Ein Paket ohne Dokument genügt für die Voraussage")
+  void jeVorhabenNurPaket() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielStand(List.of(paket(402, Aufgabenstufe.MITTEL, null)), List.of(), false, List.of(402));
+
+    LaufendView laufend = service.jeVorhaben(USER, ZIEL, JETZT).laufend();
+
+    assertThat(laufend).isNotNull();
+    assertThat(laufend.hatDokumentOderPaket()).isTrue();
+    assertThat(laufend.voraussage()).isNotNull();
   }
 
   @Test
