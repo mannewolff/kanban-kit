@@ -372,6 +372,37 @@ class KostenVoraussageTest {
   }
 
   @Test
+  @DisplayName("E7: Ungeschnitten offen bleibt eine Stufe offen, auch wenn eine spätere begann")
+  void ungeschnittenOffenSpaetereStufeBegonnen() {
+    Vorhaben vorhaben =
+        new Vorhaben(true, true, Map.of(REVIEW, usd("1")), List.of(), usd("1"), false);
+
+    Voraussage v =
+        voraussage(
+            KostenVoraussage.rechne(
+                new Eingaben(
+                    Rechnung.ANFORDERUNG, vorhaben, dreiMitSechs(), preiseFuenfUndAnderthalb())));
+
+    // Der Plan zählt trotz begonnener Prüfung mit 2 $: 2 + 0 + 1 + 1 + 6 × 1,50 $, bisher 1 $.
+    assertThat(v.typisch()).isEqualByComparingTo("14");
+  }
+
+  @Test
+  @DisplayName("E7: Eine begonnene Stufe ohne spätere ist nicht durchlaufen")
+  void begonneneStufeOhneSpaetereNichtDurchlaufen() {
+    Vorhaben vorhaben = geschnitten(Map.of(PLAN, usd("0.50")), List.of(), "0.50");
+
+    Voraussage v =
+        voraussage(
+            KostenVoraussage.rechne(
+                new Eingaben(
+                    Rechnung.ANFORDERUNG, vorhaben, dreiMitSechs(), preiseFuenfUndAnderthalb())));
+
+    // Plan 2 $ − 0,50 $ = 1,50 $, dazu 1 + 1 + 1 + 6 × 1,50 $, bisher 0,50 $.
+    assertThat(v.typisch()).isEqualByComparingTo("14");
+  }
+
+  @Test
   @DisplayName("AK 5: Pakete in Done stehen nur in den bisherigen Kosten")
   void zweiteStufeDoneNurBisher() {
     Preise preise = new Preise(Map.of(), Map.of(Paketstufe.LEICHT, preise("1")), preise("5"));
