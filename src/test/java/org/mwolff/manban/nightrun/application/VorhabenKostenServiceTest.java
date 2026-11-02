@@ -399,6 +399,10 @@ class VorhabenKostenServiceTest {
   void preisBeimJuengstenModell() {
     vorgang(NightRunAttemptStage.PLAN, 11, SONNET, "100");
     vorgang(NightRunAttemptStage.PLAN, 11, null, "100");
+    // Ältere Vorgänge eines anderen Modells: zählten sie mit, läge der typische Preis bei 100 $.
+    for (int i = 0; i < 3; i++) {
+      vorgang(NightRunAttemptStage.PLAN, 999, SONNET, "100");
+    }
     grundlage(10);
     grundlage(20);
     grundlage(30);
@@ -410,6 +414,72 @@ class VorhabenKostenServiceTest {
 
     // Vorhaben 10 hat drei Plan-Vorgänge, typisch bleibt einer.
     assertThat(voraussage().typisch()).isEqualByComparingTo("6.50");
+  }
+
+  @Test
+  @DisplayName("Interaktive Vorgänge zählen auch im Preis einer Stufe nicht")
+  void interaktiveVorgaengeOhnePreis() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    for (int i = 0; i < 4; i++) {
+      vorgang(NightRunAttemptStage.PLAN, 999, OPUS, kostet("100"), NightRunKind.INTERACTIVE, true);
+    }
+
+    assertThat(voraussage().typisch()).isEqualByComparingTo("6.50");
+  }
+
+  @Test
+  @DisplayName("Das umsetzende Modell ist das des jüngsten Umsetzungsvorgangs, nicht des jüngsten")
+  void umsetzendesModellAusDerUmsetzung() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    // Der jüngste Vorgang überhaupt läuft mit einem anderen Modell in einer anderen Stufe.
+    vorgang(NightRunAttemptStage.PLAN, 999, SONNET, "2");
+
+    assertThat(voraussage().typisch()).isEqualByComparingTo("6.50");
+  }
+
+  @Test
+  @DisplayName("Ohne Umsetzungsvorgang mit Modell gibt es keinen Paketpreis")
+  void ohneUmsetzendesModellKeinPaketpreis() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielNurAnforderung();
+    vorgaenge.removeIf(v -> v.attempt().stage() == NightRunAttemptStage.UMSETZUNG);
+    vorgang(NightRunAttemptStage.UMSETZUNG, 12, null, "1.50");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 22, null, "1.50");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 32, null, "1.50");
+
+    assertThat(rechne()).isEqualTo(new ZuWenigDaten(Grund.KEINE_PAKETPREISE));
+  }
+
+  @Test
+  @DisplayName("Die erste Stufe gilt, solange ein Dokument offen und ungeschnitten ist")
+  void ersteStufeNurBeiOffenemUngeschnittenemDokument() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+        List.of(anforderung(true, false)),
+        false,
+        List.of(401, 402));
+
+    assertThat(voraussage().art()).isEqualTo(Art.ANFORDERUNG);
+
+    // Ein geschlossenes Dokument hält den Schnitt nicht auf, auch ungeschnitten.
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+        List.of(anforderung(false, false)),
+        false,
+        List.of(401, 402));
+
+    assertThat(voraussage().art()).isEqualTo(Art.PAKETE);
   }
 
   @Test
@@ -465,7 +535,11 @@ class VorhabenKostenServiceTest {
                 paket(54, Aufgabenstufe.MITTEL, JETZT),
                 paket(55, Aufgabenstufe.MITTEL, JETZT),
                 paket(56, Aufgabenstufe.MITTEL, JETZT),
-                paket(57, null, JETZT)),
+                paket(57, null, JETZT),
+                // aus Done zurückgezogen: der Zeitpunkt bleibt, das Paket zählt nicht
+                new PaketStandView(58, false, Aufgabenstufe.MITTEL, VOR_EINER_WOCHE, JETZT),
+                // in Done ohne bekannten Zeitpunkt
+                new PaketStandView(59, true, Aufgabenstufe.MITTEL, VOR_EINER_WOCHE, null)),
             List.of(),
             false,
             false,
@@ -479,14 +553,20 @@ class VorhabenKostenServiceTest {
     kosten.put(55, new ItemKostenJeKarte(55, null, 0L, VOR_EINER_WOCHE));
     // 56 ohne Messung
     misst(57, "3"); // ohne Aufgabenstufe: nur im Preis über alle Stufen
+    misst(58, "100");
+    misst(59, "100");
     vorgang(NightRunAttemptStage.UMSETZUNG, 51, OPUS, "100");
     vorgang(NightRunAttemptStage.UMSETZUNG, 52, SONNET, "100");
+    // Ein späterer Vorgang einer anderen Stufe mit dem umsetzenden Modell ändert nichts daran.
+    vorgang(NightRunAttemptStage.REVIEW, 52, OPUS, "1");
     vorgang(NightRunAttemptStage.UMSETZUNG, 53, OPUS, "100");
     vorgang(NightRunAttemptStage.UMSETZUNG, 54, OPUS, "100");
     vorgang(NightRunAttemptStage.UMSETZUNG, 55, OPUS, "100");
     vorgang(NightRunAttemptStage.UMSETZUNG, 56, OPUS, "100");
     vorgang(NightRunAttemptStage.UMSETZUNG, 57, OPUS, "3");
     vorgang(NightRunAttemptStage.UMSETZUNG, 57, null, "3");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 58, OPUS, "100");
+    vorgang(NightRunAttemptStage.UMSETZUNG, 59, OPUS, "100");
     staende.add(
         new VorhabenStandView(
             ref(ZIEL, 400),
@@ -692,6 +772,10 @@ class VorhabenKostenServiceTest {
       vorgang(stufe, 31, OPUS, "1");
       vorgang(stufe, 401, OPUS, "1");
     }
+    // Auch mit festgehaltenem Abschluss rechnet das Vorhaben nicht in seiner eigenen Grundlage.
+    festgehalten.speichere(
+        VorhabenKosten.leer(ZIEL, PROJECT)
+            .mitAbschluss(ABSCHLUSS, new BigDecimal("6"), false, List.of(401, 402)));
 
     assertThat(service.aktuelleVoraussage(PROJECT, ZIEL, JETZT))
         .isEqualTo(Optional.of(new ZuWenigDaten(Grund.ZU_WENIG_VORHABEN)));
@@ -995,6 +1079,36 @@ class VorhabenKostenServiceTest {
   }
 
   @Test
+  @DisplayName("Ohne Paket und ohne Abschluss hält ein Lauf an einer Zeile nichts nach")
+  void ohnePaketUndAbschlussNichtsNachgehalten() {
+    eingefuehrt();
+    festgehalten.speichere(
+        new VorhabenKosten(
+            ZIEL, PROJECT, null, null, null, new BigDecimal("5"), true, List.of(401)));
+    VorhabenKosten vorher = zeile();
+    int geschrieben = festgehalten.gespeichert;
+    zielStand(List.of(), List.of(), false, List.of());
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile()).isEqualTo(vorher);
+    assertThat(festgehalten.gespeichert).isEqualTo(geschrieben);
+  }
+
+  @Test
+  @DisplayName("Verliert ein abgeschlossenes Vorhaben sein letztes Paket, öffnet es sich wieder")
+  void ohnePaketWiederOffen() {
+    eingefuehrt();
+    festgehaltenAbgeschlossen();
+    zielStand(List.of(), List.of(anforderung(true, false)), false, List.of(401));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().abgeschlossenAt()).isNull();
+    assertThat(zeile().anforderung()).isEqualTo(beziffert(Art.ANFORDERUNG, "16"));
+  }
+
+  @Test
   @DisplayName("Ein festgehaltener Abschluss ohne tatsächliche Kosten wird nachgerechnet")
   void abschlussOhneTatsaechlicheKosten() {
     eingefuehrt();
@@ -1147,6 +1261,27 @@ class VorhabenKostenServiceTest {
   }
 
   @Test
+  @DisplayName("Ergibt die Nachrechnung denselben Betrag, schreibt ein Lauf nichts")
+  void gleicheNachrechnungOhneSchreiben() {
+    eingefuehrt();
+    festgehaltenAbgeschlossen();
+    int geschrieben = festgehalten.gespeichert;
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402));
+    // 18,00 $ ist derselbe Betrag wie die festgehaltenen 18 $, nur in anderer Schreibweise.
+    kostetBisAbschluss(401, "10.00");
+    kostetBisAbschluss(402, "8.00");
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(festgehalten.gespeichert).isEqualTo(geschrieben);
+    assertThat(zeile().tatsaechlichUsd()).isEqualTo(new BigDecimal("18"));
+  }
+
+  @Test
   @DisplayName("Umzuordnung und verdrängte Messungen nach dem Abschluss senken den Betrag nie")
   void umzuordnungNachAbschluss() {
     eingefuehrt();
@@ -1238,6 +1373,7 @@ class VorhabenKostenServiceTest {
     assertThat(zeile().pakete().stand()).isEqualTo(Stand.BEZIFFERT);
     assertThat(zeile().pakete().festgehaltenAt()).isEqualTo(SPAETER);
     assertThat(festgehalten.eingefuehrtAm(PROJECT)).hasValue(JETZT);
+    assertThat(festgehalten.einfuehrungen).as("nur der erste Lauf vermerkt die Einführung").isOne();
   }
 
   @Test
@@ -1283,11 +1419,14 @@ class VorhabenKostenServiceTest {
   @Test
   @DisplayName("Einführung: Fehlt ein Done-Zeitpunkt, gilt der Zeitpunkt des Laufs")
   void einfuehrungOhneDoneZeitpunkt() {
+    // Das Paket danach trägt einen Zeitpunkt; maßgeblich bleibt der fehlende.
     zielStand(
-        List.of(new PaketStandView(402, true, Aufgabenstufe.MITTEL, VOR_EINER_WOCHE, null)),
+        List.of(
+            new PaketStandView(402, true, Aufgabenstufe.MITTEL, VOR_EINER_WOCHE, null),
+            paket(403, Aufgabenstufe.MITTEL, JETZT.minus(Duration.ofDays(10)))),
         List.of(anforderung(false, true)),
         true,
-        List.of(401, 402));
+        List.of(401, 402, 403));
 
     service.festhalten(PROJECT, JETZT);
 
@@ -1540,6 +1679,11 @@ class VorhabenKostenServiceTest {
         new VorhabenKosten(ZIEL, PROJECT, null, null, ABSCHLUSS, null, false, List.of()));
 
     assertThat(service.jeVorhaben(USER, ZIEL, JETZT).abschluss()).isNull();
+    // Tatsächliche Kosten ohne Abschlusszeitpunkt ebenso.
+    festgehalten.speichere(
+        new VorhabenKosten(ZIEL, PROJECT, null, null, null, new BigDecimal("5"), false, List.of()));
+
+    assertThat(service.jeVorhaben(USER, ZIEL, JETZT).abschluss()).isNull();
   }
 
   @Test
@@ -1572,6 +1716,7 @@ class VorhabenKostenServiceTest {
     private final Map<Long, VorhabenKosten> zeilen = new TreeMap<>();
     private @Nullable Instant eingefuehrt;
     private int gespeichert;
+    private int einfuehrungen;
 
     @Override
     public List<VorhabenKosten> findByProjectId(long projectId) {
@@ -1591,6 +1736,7 @@ class VorhabenKostenServiceTest {
 
     @Override
     public void einfuehren(long projectId, Instant am) {
+      einfuehrungen++;
       if (eingefuehrt == null) {
         eingefuehrt = am;
       }
