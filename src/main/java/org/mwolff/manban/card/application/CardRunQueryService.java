@@ -2,6 +2,7 @@ package org.mwolff.manban.card.application;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.Kartenart;
 import org.mwolff.manban.card.domain.Kostenzuordnung;
+import org.mwolff.manban.card.domain.VorhabenStand;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -108,6 +110,67 @@ public class CardRunQueryService {
               });
     }
     return Map.copyOf(ergebnis);
+  }
+
+  /**
+   * Der Stand jedes Vorhabens des Projekts für die Kostenvoraussage (Issue #2001, Plan #1990 E1,
+   * E5, E10; fachlich #1954 AK 3, 5 und 7): Pakete mit Aufgabenstufe, Dokumente mit offen und
+   * geschnitten, der Abschluss und die Kostenkarten. Archivierte Vorhaben stehen mit da.
+   *
+   * <p>Gerechnet wird je Board wie bei {@link #kostenVorhabenJeKarte}: Die Zugehörigkeit samt
+   * Archiv aus {@link EpicMembership#computeMitArchiv} und die Spaltennamen des Boards gehen an
+   * {@link VorhabenStand}. Die Aufgabenstufe liest erst diese Fassade ({@link
+   * Aufgabenstufe#ausBeschreibung}), weil {@code card.domain} sie nicht kennt. Ein Projekt ohne
+   * Karten fragt keine Spalten. Ohne Rechteprüfung wie {@link #kostenVorhabenJeKarte}.
+   *
+   * @return je Vorhaben sein Stand, aufsteigend nach Kartennummer
+   */
+  @Transactional(readOnly = true)
+  public List<VorhabenStandView> vorhabenStaende(long projectId) {
+    Map<Long, List<Card>> jeBoard =
+        cards.findByProjectId(projectId).stream().collect(Collectors.groupingBy(Card::boardId));
+    return jeBoard.entrySet().stream()
+        .flatMap(
+            board -> {
+              Map<Long, String> spaltennamen = new HashMap<>();
+              boards.listColumns(board.getKey()).forEach(s -> spaltennamen.put(s.id(), s.name()));
+              return VorhabenStand.ermittle(
+                  board.getValue(), EpicMembership.computeMitArchiv(board.getValue()), spaltennamen)
+                  .stream();
+            })
+        .sorted(Comparator.comparing((VorhabenStand.Ergebnis e) -> e.vorhaben().number()))
+        .map(CardRunQueryService::standView)
+        .toList();
+  }
+
+  private static VorhabenStandView standView(VorhabenStand.Ergebnis stand) {
+    Card vorhaben = stand.vorhaben();
+    return new VorhabenStandView(
+        new VorhabenRef(
+            vorhaben.requireId(),
+            vorhaben.number(),
+            vorhaben.shortcode(),
+            vorhaben.title(),
+            vorhaben.archived()),
+        vorhaben.boardId(),
+        stand.pakete().stream()
+            .map(
+                p ->
+                    new PaketStandView(
+                        p.nummer(),
+                        p.done(),
+                        Aufgabenstufe.ausBeschreibung(p.beschreibung()).orElse(null),
+                        p.angelegt(),
+                        p.movedToDoneAt()))
+            .toList(),
+        stand.dokumente().stream()
+            .map(d -> new DokumentStandView(d.nummer(), d.art().name(), d.offen(), d.geschnitten()))
+            .toList(),
+        stand.hatAnforderung(),
+        stand.hatteUngeschnittenesDokument(),
+        stand.abgeschlossen(),
+        stand.kostenkarten(),
+        stand.fruehesteKostenkarteAngelegt());
   }
 
   /**
@@ -494,4 +557,55 @@ public class CardRunQueryService {
    */
   public record LabelEreignisView(
       long cardId, String labelName, Instant createdAt, Instant laufStart) {}
+
+  /**
+   * Der Stand eines Vorhabens für die Kostenvoraussage (Issue #2001).
+   *
+   * @param vorhaben das Vorhaben, auch archiviert
+   * @param boardId Board des Vorhabens
+   * @param pakete Arbeitspakete samt Archiv, aufsteigend nach Nummer
+   * @param dokumente Fachpläne und Pläne samt Archiv, aufsteigend nach Nummer
+   * @param hatAnforderung ob ein Fachplan dazugehört
+   * @param hatteUngeschnittenesDokument ob überhaupt ein Dokument dazugehört — jedes war vor seinem
+   *     Schnitt ungeschnitten
+   * @param abgeschlossen mindestens ein Paket, alle in Done, kein Dokument offen (Plan #1990 E10)
+   * @param kostenkarten Nummern der Karten, deren Kosten bei diesem Vorhaben zählen (E1)
+   * @param fruehesteKostenkarteAngelegt früheste Anlagezeit einer Kostenkarte; {@code null} ohne
+   */
+  public record VorhabenStandView(
+      VorhabenRef vorhaben,
+      long boardId,
+      List<PaketStandView> pakete,
+      List<DokumentStandView> dokumente,
+      boolean hatAnforderung,
+      boolean hatteUngeschnittenesDokument,
+      boolean abgeschlossen,
+      List<Integer> kostenkarten,
+      @Nullable Instant fruehesteKostenkarteAngelegt) {}
+
+  /**
+   * Ein Arbeitspaket eines Vorhabens (Issue #2001).
+   *
+   * @param number projektweite Nummer der Karte
+   * @param done ob es in Done liegt ({@code Arbeitspaket.effektivDone})
+   * @param aufgabenstufe Stufe aus der Beschreibung; {@code null} ohne gültige Zeile (E5)
+   * @param createdAt Anlagezeit
+   * @param movedToDoneAt wann es zuletzt nach Done kam; {@code null}, wenn unbekannt
+   */
+  public record PaketStandView(
+      int number,
+      boolean done,
+      @Nullable Aufgabenstufe aufgabenstufe,
+      Instant createdAt,
+      @Nullable Instant movedToDoneAt) {}
+
+  /**
+   * Ein Fachplan oder Plan eines Vorhabens (Issue #2001).
+   *
+   * @param number projektweite Nummer der Karte
+   * @param art Konstantenname der Kartenart, {@code FACHLICH} oder {@code PLAN}
+   * @param offen weder in Done noch archiviert
+   * @param geschnitten ob aus ihm schon ein Paket (Plan) oder ein Plan (Fachplan) entstanden ist
+   */
+  public record DokumentStandView(int number, String art, boolean offen, boolean geschnitten) {}
 }
