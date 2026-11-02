@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: MIT
 // Das Commit-Gate (Issue #470, Plan #467).
 //
 // Ein Commit entsteht nur, wenn jede Datei, die in ihn geht, beim gruenen
