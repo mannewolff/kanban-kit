@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -110,6 +111,24 @@ public class CardRunQueryService {
               });
     }
     return Map.copyOf(ergebnis);
+  }
+
+  /**
+   * Die Projekte mit mindestens einem Vorhaben (Issue #2004, Plan #1990) — für den Job, der die
+   * Kosten je Vorhaben festhält. Archivierte Vorhaben zählen mit, Vorhaben im Papierkorb nicht
+   * ({@link CardRepository#findBoardIdsWithEpics}). Ohne Rechteprüfung wie {@link
+   * #kostenVorhabenJeKarte}: Die Methode nennt nur IDs.
+   *
+   * @return die Projekt-IDs, jede einmal, aufsteigend
+   */
+  @Transactional(readOnly = true)
+  public List<Long> projekteMitVorhaben() {
+    return cards.findBoardIdsWithEpics().stream()
+        .map(boards::findProjectId)
+        .flatMap(Optional::stream)
+        .distinct()
+        .sorted()
+        .toList();
   }
 
   /**

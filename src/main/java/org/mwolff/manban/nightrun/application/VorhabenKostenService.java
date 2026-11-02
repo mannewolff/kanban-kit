@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,8 @@ import org.mwolff.manban.card.application.CardRunQueryService.PaketStandView;
 import org.mwolff.manban.card.application.CardRunQueryService.VorhabenStandView;
 import org.mwolff.manban.common.Wochenfenster;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.ItemKostenJeKarte;
+import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.FestgehalteneVoraussage;
+import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.VorhabenKosten;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Eingaben;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Ergebnis;
@@ -31,6 +34,7 @@ import org.mwolff.manban.nightrun.domain.KostenVoraussage.Paket;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Paketstufe;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Preise;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Rechnung;
+import org.mwolff.manban.nightrun.domain.KostenVoraussage.Voraussage;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Vorhaben;
 import org.mwolff.manban.nightrun.domain.ModellvergleichErmittlung.Vorgang;
 import org.mwolff.manban.nightrun.domain.NightRunAttemptStage;
@@ -50,12 +54,15 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link Aufbewahrungsgrenze}. Gezählt wird nur die Gattung NIGHT; interaktive Sitzungen zählen
  * nicht.
  *
- * <p><b>Grundlage (E3):</b> die übrigen Vorhaben des Projekts, die abgeschlossen sind, deren
- * letztes Paket in den zwölf {@link Wochenfenster}n nach Done kam und die vollständig aufbewahrt
- * sind — die früheste Kostenkarte nicht vor der Grenze, kein Item und kein abgeschlossener Vorgang
- * ohne Kostenangabe. Das Festhalten des Abschlusses folgt in einem eigenen Paket; bis dahin erkennt
- * der Dienst ihn aus dem Stand. Die Vorgänge werden darum ab dem frühesten Beginn der Grundlage
- * gelesen, mindestens ab dem ältesten Wochenfenster.
+ * <p><b>Grundlage (E3):</b> die übrigen Vorhaben des Projekts, deren Abschluss in den zwölf {@link
+ * Wochenfenster}n festgehalten wurde und die vollständig aufbewahrt sind — die früheste Kostenkarte
+ * nicht vor der Grenze, kein Item und kein abgeschlossener Vorgang ohne Kostenangabe. Maßgeblich
+ * ist der festgehaltene Abschluss aus {@link VorhabenKostenRepository} (Issue #2004), nicht das
+ * späteste Done der Pakete. Die Vorgänge werden ab dem frühesten Beginn der Grundlage gelesen,
+ * mindestens ab dem ältesten Wochenfenster.
+ *
+ * <p><b>Festhalten:</b> {@link #festhalten} schreibt die Übergänge je Vorhaben, aufgerufen vom
+ * geplanten Job je Projekt in einer eigenen Transaktion.
  *
  * <p><b>Preise (E6):</b> aus allen abgeschlossenen Nachtlauf-Vorgängen der zwölf Wochenfenster mit
  * gemeldetem Modell, je Stufe beim Modell des jüngsten Vorgangs. Ein Paketpreis ist die Summe aller
@@ -64,23 +71,29 @@ import org.springframework.transaction.annotation.Transactional;
  */
 // PMD.CouplingBetweenObjects: Der Dienst trägt Kartenlage, Vorgänge, Kosten je Karte und Grenze für
 // die reine Rechnung zusammen; die Typen dieser Quellen und der Eingaben sind sein Zweck.
-@SuppressWarnings("PMD.CouplingBetweenObjects")
+// PMD.ExcessiveImports, PMD.GodClass: dieselbe Ursache, anders gezählt — mit Issue #2004 kommen
+// die festgehaltenen Zeilen dazu. Festhalten und Voraussage teilen sich Kontext und Grundlage; eine
+// Aufteilung verteilte das Zusammentragen auf zwei Klassen, die dieselben Quellen kennen müssten.
+@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.ExcessiveImports", "PMD.GodClass"})
 @Service
 public class VorhabenKostenService {
 
   private final CardRunQueryService cards;
   private final NightRunRepository runs;
   private final NightRunUsageRepository usage;
+  private final VorhabenKostenRepository festgehalten;
   private final Aufbewahrungsgrenze grenze;
 
   public VorhabenKostenService(
       CardRunQueryService cards,
       NightRunRepository runs,
       NightRunUsageRepository usage,
+      VorhabenKostenRepository festgehalten,
       NightRunProperties properties) {
     this.cards = cards;
     this.runs = runs;
     this.usage = usage;
+    this.festgehalten = festgehalten;
     this.grenze = new Aufbewahrungsgrenze(properties);
   }
 
@@ -95,47 +108,214 @@ public class VorhabenKostenService {
    */
   @Transactional(readOnly = true)
   public Optional<Ergebnis> aktuelleVoraussage(long projectId, long epicId, Instant jetzt) {
-    List<VorhabenStandView> staende = cards.vorhabenStaende(projectId);
+    Kontext kontext = kontext(projectId, jetzt);
     Optional<VorhabenStandView> gefunden =
-        staende.stream().filter(s -> s.vorhaben().id() == epicId).findFirst();
+        kontext.staende().stream().filter(s -> s.vorhaben().id() == epicId).findFirst();
     if (gefunden.isEmpty()
         || (gefunden.get().dokumente().isEmpty() && gefunden.get().pakete().isEmpty())) {
       return Optional.empty();
     }
     VorhabenStandView ziel = gefunden.get();
-    Instant fenster = Wochenfenster.beginn(0, jetzt);
+    return Optional.of(rechne(kontext, ziel, rechnung(ziel)));
+  }
+
+  /** Die Projekte mit mindestens einem Vorhaben, deren Kosten der Job festhält (Issue #2004). */
+  public List<Long> projekteMitVorhaben() {
+    return cards.projekteMitVorhaben();
+  }
+
+  /**
+   * Hält die Übergänge aller Vorhaben des Projekts fest (Issue #2004, Plan #1990 E8 bis E10, E12;
+   * fachlich #1954 AK 8). Geschrieben wird nur eine Zeile, die sich ändert.
+   *
+   * <ul>
+   *   <li>Erstes Paket ohne Voraussage aus der Anforderung: sie wird festgehalten — „keine
+   *       Voraussage“, wenn nie ein ungeschnittenes Dokument da war oder die Rechnung zu wenig
+   *       Daten hat.
+   *   <li>Paket da und nichts mehr ungeschnitten offen, ohne Voraussage aus den Paketen: sie wird
+   *       festgehalten. Beide Übergänge im selben Lauf folgen in dieser Reihenfolge (E12).
+   *   <li>Abgeschlossen (E10): Zeitpunkt, tatsächliche Kosten bis dahin, „unvollständig“ nach E3
+   *       und die Kostenkarten. Ist der Abschluss schon festgehalten, werden die Kosten über die
+   *       festgehaltenen Kostenkarten nachgerechnet, und der größere Wert bleibt (E9).
+   *   <li>Wieder offen: Der Abschluss entfällt, die Voraussagen bleiben.
+   * </ul>
+   *
+   * <p><b>Einführung (E8):</b> Beim ersten Lauf für das Projekt ergeben Zeitpunkte, die schon
+   * vorbei sind, „keine Voraussage“, und ein schon abgeschlossenes Vorhaben gilt beim spätesten
+   * Done seiner Pakete als abgeschlossen. Danach wird die Einführung vermerkt.
+   *
+   * @param projectId das Projekt
+   * @param jetzt der Zeitpunkt des Laufs
+   */
+  @Transactional
+  public void festhalten(long projectId, Instant jetzt) {
+    Kontext kontext = kontext(projectId, jetzt);
+    boolean einfuehrung = festgehalten.eingefuehrtAm(projectId).isEmpty();
+    for (VorhabenStandView stand : kontext.staende()) {
+      VorhabenKosten alt = kontext.zeilen().get(stand.vorhaben().id());
+      VorhabenKosten neu = naechsteZeile(kontext, stand, alt, jetzt, einfuehrung);
+      if (neu != null && !neu.equals(alt)) {
+        festgehalten.speichere(neu);
+      }
+    }
+    if (einfuehrung) {
+      festgehalten.einfuehren(projectId, jetzt);
+    }
+  }
+
+  private @Nullable VorhabenKosten naechsteZeile(
+      Kontext kontext,
+      VorhabenStandView stand,
+      @Nullable VorhabenKosten alt,
+      Instant jetzt,
+      boolean einfuehrung) {
+    if (stand.pakete().isEmpty() && alt == null) {
+      return null;
+    }
+    VorhabenKosten zeile =
+        voraussagen(
+            kontext,
+            stand,
+            alt == null ? VorhabenKosten.leer(stand.vorhaben().id(), kontext.projectId()) : alt,
+            jetzt,
+            einfuehrung);
+    return abschluss(
+        kontext, stand, zeile, einfuehrung ? spaetestesDone(stand).orElse(jetzt) : jetzt);
+  }
+
+  /** Erst die Voraussage aus der Anforderung, dann die aus den Paketen (E12). */
+  private VorhabenKosten voraussagen(
+      Kontext kontext,
+      VorhabenStandView stand,
+      VorhabenKosten zeile,
+      Instant jetzt,
+      boolean einfuehrung) {
+    if (stand.pakete().isEmpty()) {
+      return zeile;
+    }
+    VorhabenKosten ergebnis = zeile;
+    if (ergebnis.anforderung() == null) {
+      ergebnis =
+          ergebnis.mitAnforderung(
+              einfuehrung || !stand.hatteUngeschnittenesDokument()
+                  ? FestgehalteneVoraussage.keine(jetzt)
+                  : voraussageFesthalten(kontext, stand, Rechnung.ANFORDERUNG, jetzt));
+    }
+    if (!ungeschnittenOffen(stand) && ergebnis.pakete() == null) {
+      ergebnis =
+          ergebnis.mitPaketen(
+              einfuehrung
+                  ? FestgehalteneVoraussage.keine(jetzt)
+                  : voraussageFesthalten(kontext, stand, Rechnung.PAKETE, jetzt));
+    }
+    return ergebnis;
+  }
+
+  private FestgehalteneVoraussage voraussageFesthalten(
+      Kontext kontext, VorhabenStandView stand, Rechnung rechnung, Instant jetzt) {
+    return rechne(kontext, stand, rechnung) instanceof Voraussage voraussage
+        ? FestgehalteneVoraussage.beziffert(voraussage, jetzt)
+        : FestgehalteneVoraussage.keine(jetzt);
+  }
+
+  private VorhabenKosten abschluss(
+      Kontext kontext, VorhabenStandView stand, VorhabenKosten zeile, Instant zeitpunkt) {
+    Instant abgeschlossen = zeile.abgeschlossenAt();
+    if (!stand.abgeschlossen()) {
+      return abgeschlossen == null ? zeile : zeile.wiederOffen();
+    }
+    if (abgeschlossen == null) {
+      List<ItemKostenJeKarte> bisDahin =
+          usage.itemKostenJeKarte(kontext.projectId(), stand.kostenkarten(), zeitpunkt);
+      boolean unvollstaendig =
+          !vollstaendig(stand.fruehesteKostenkarteAngelegt(), kontext.grenze())
+              || bisDahin.stream().anyMatch(k -> !ohneLuecke(k));
+      return zeile.mitAbschluss(zeitpunkt, summe(bisDahin), unvollstaendig, stand.kostenkarten());
+    }
+    BigDecimal nachgerechnet =
+        summe(usage.itemKostenJeKarte(kontext.projectId(), zeile.kostenKarten(), abgeschlossen));
+    BigDecimal bisher = zeile.tatsaechlichUsd();
+    return bisher == null || nachgerechnet.compareTo(bisher) > 0
+        ? zeile.mitAbschluss(
+            abgeschlossen, nachgerechnet, zeile.tatsaechlichUnvollstaendig(), zeile.kostenKarten())
+        : zeile;
+  }
+
+  /** Das späteste Done der Pakete; leer, wenn eines keinen Zeitpunkt trägt. */
+  private static Optional<Instant> spaetestesDone(VorhabenStandView stand) {
+    Instant spaetestes = null;
+    for (PaketStandView paket : stand.pakete()) {
+      Instant done = paket.movedToDoneAt();
+      if (done == null) {
+        return Optional.empty();
+      }
+      spaetestes = spaetestes == null || done.isAfter(spaetestes) ? done : spaetestes;
+    }
+    return Optional.ofNullable(spaetestes);
+  }
+
+  private static BigDecimal summe(List<ItemKostenJeKarte> zeilen) {
+    return zeilen.stream()
+        .map(VorhabenKostenService::betrag)
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
+  }
+
+  /** Was ein Lauf des Projekts einmal liest. */
+  private Kontext kontext(long projectId, Instant jetzt) {
+    List<VorhabenStandView> staende = cards.vorhabenStaende(projectId);
+    Map<Long, VorhabenKosten> zeilen = new HashMap<>();
+    festgehalten.findByProjectId(projectId).forEach(z -> zeilen.put(z.epicId(), z));
     Optional<Instant> grenzeNacht =
         usage.retentionBoundary(projectId).stream()
             .filter(r -> r.kind() == NightRunKind.NIGHT)
             .findFirst()
             .flatMap(grenze::jeGattung);
-    Map<Integer, ItemKostenJeKarte> kosten = kostenJeKarte(projectId, staende);
+    return new Kontext(
+        projectId,
+        staende,
+        zeilen,
+        Wochenfenster.beginn(0, jetzt),
+        grenzeNacht,
+        kostenJeKarte(projectId, staende));
+  }
 
+  /**
+   * Die Rechnung für ein Vorhaben. Grundlage sind die übrigen Vorhaben mit festgehaltenem Abschluss
+   * in den zwölf Wochenfenstern, die vollständig aufbewahrt sind (E3).
+   */
+  private Ergebnis rechne(Kontext kontext, VorhabenStandView ziel, Rechnung rechnung) {
+    Map<Integer, ItemKostenJeKarte> kosten = kontext.kosten();
     List<VorhabenStandView> kandidaten =
-        staende.stream()
-            .filter(s -> s.vorhaben().id() != epicId)
-            .filter(s -> s.abgeschlossen() && abgeschlossenSeit(s, fenster))
-            .filter(s -> vollstaendig(s.fruehesteKostenkarteAngelegt(), grenzeNacht))
+        kontext.staende().stream()
+            .filter(s -> s.vorhaben().id() != ziel.vorhaben().id())
+            .filter(s -> abgeschlossenSeit(kontext.zeilen().get(s.vorhaben().id()), kontext))
+            .filter(s -> vollstaendig(s.fruehesteKostenkarteAngelegt(), kontext.grenze()))
             .filter(s -> s.kostenkarten().stream().allMatch(n -> ohneLuecke(kosten.get(n))))
             .toList();
     Instant von =
         Stream.concat(Stream.of(ziel), kandidaten.stream())
             .map(VorhabenStandView::fruehesteKostenkarteAngelegt)
             .filter(Objects::nonNull)
-            .reduce(fenster, (a, b) -> a.isBefore(b) ? a : b);
+            .reduce(kontext.fenster(), (a, b) -> a.isBefore(b) ? a : b);
     List<Vorgang> nacht =
-        runs.findAttemptsSince(projectId, von).stream()
+        runs.findAttemptsSince(kontext.projectId(), von).stream()
             .filter(v -> v.kind() == NightRunKind.NIGHT)
             .toList();
     List<Vorgang> gezaehlt = nacht.stream().filter(Vorgang::laufAbgeschlossen).toList();
 
     Eingaben eingaben =
         new Eingaben(
-            rechnung(ziel),
-            vorhaben(ziel, nacht, kosten, grenzeNacht),
+            rechnung,
+            vorhaben(ziel, nacht, kosten, kontext.grenze()),
             kandidaten.stream().map(s -> grundlage(s, gezaehlt)).flatMap(Optional::stream).toList(),
-            preise(staende, gezaehlt, kosten, fenster, grenzeNacht));
-    return Optional.of(KostenVoraussage.rechne(eingaben));
+            preise(kontext.staende(), gezaehlt, kosten, kontext.fenster(), kontext.grenze()));
+    return KostenVoraussage.rechne(eingaben);
+  }
+
+  /** Ob der festgehaltene Abschluss in den zwölf Wochenfenstern liegt. */
+  private static boolean abgeschlossenSeit(@Nullable VorhabenKosten zeile, Kontext kontext) {
+    Instant abgeschlossen = zeile == null ? null : zeile.abgeschlossenAt();
+    return abgeschlossen != null && !abgeschlossen.isBefore(kontext.fenster());
   }
 
   private Map<Integer, ItemKostenJeKarte> kostenJeKarte(
@@ -158,19 +338,6 @@ public class VorhabenKostenService {
 
   private static boolean ungeschnittenOffen(VorhabenStandView stand) {
     return stand.dokumente().stream().anyMatch(d -> d.offen() && !d.geschnitten());
-  }
-
-  /** Der Abschluss gilt beim spätesten Done eines Pakets; fehlt eines, ist er unbekannt. */
-  private static boolean abgeschlossenSeit(VorhabenStandView stand, Instant fenster) {
-    boolean imFenster = false;
-    for (PaketStandView paket : stand.pakete()) {
-      Instant done = paket.movedToDoneAt();
-      if (done == null) {
-        return false;
-      }
-      imFenster |= !done.isBefore(fenster);
-    }
-    return imFenster;
   }
 
   private static boolean vollstaendig(@Nullable Instant fruehester, Optional<Instant> grenze) {
@@ -341,4 +508,22 @@ public class VorhabenKostenService {
   private static @Nullable Paketstufe paketstufe(@Nullable Aufgabenstufe stufe) {
     return stufe == null ? null : Paketstufe.valueOf(stufe.name());
   }
+
+  /**
+   * Was ein Lauf des Projekts einmal liest.
+   *
+   * @param projectId das Projekt
+   * @param staende der Stand jedes Vorhabens
+   * @param zeilen die festgehaltenen Zeilen je Vorhaben-ID
+   * @param fenster Beginn des ältesten der zwölf Wochenfenster
+   * @param grenze die Aufbewahrungsgrenze der Gattung NIGHT
+   * @param kosten die Kosten je Karte über alle aufbewahrten Items
+   */
+  private record Kontext(
+      long projectId,
+      List<VorhabenStandView> staende,
+      Map<Long, VorhabenKosten> zeilen,
+      Instant fenster,
+      Optional<Instant> grenze,
+      Map<Integer, ItemKostenJeKarte> kosten) {}
 }

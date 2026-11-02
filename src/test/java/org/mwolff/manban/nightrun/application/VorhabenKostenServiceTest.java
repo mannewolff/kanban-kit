@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +33,10 @@ import org.mwolff.manban.card.application.CardRunQueryService.VorhabenStandView;
 import org.mwolff.manban.card.application.VorhabenRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.ItemKostenJeKarte;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
+import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.FestgehalteneVoraussage;
+import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.Stand;
+import org.mwolff.manban.nightrun.application.VorhabenKostenRepository.VorhabenKosten;
+import org.mwolff.manban.nightrun.domain.KostenVergleich;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Art;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Ergebnis;
 import org.mwolff.manban.nightrun.domain.KostenVoraussage.Grund;
@@ -52,7 +57,7 @@ import org.mwolff.manban.nightrun.domain.NightRunUsage;
  * einem Vorgang Plan 2 $, Prüfung, Schnitt und Abdeckung zu je 1 $) und einem mittleren Paket zu
  * 1,50 $. Ein Vorhaben mit nur seiner Anforderung kostet damit typisch 5 $ + 1 × 1,50 $ = 6,50 $.
  */
-@SuppressWarnings({"PMD.ExcessiveImports", "PMD.TooManyMethods"})
+@SuppressWarnings({"PMD.CouplingBetweenObjects", "PMD.ExcessiveImports", "PMD.TooManyMethods"})
 class VorhabenKostenServiceTest {
 
   private static final long PROJECT = 42L;
@@ -60,6 +65,8 @@ class VorhabenKostenServiceTest {
   private static final Instant FENSTER = JETZT.minus(Duration.ofDays(84));
   private static final Instant VOR_EINER_WOCHE = JETZT.minus(Duration.ofDays(7));
   private static final Instant LAUF = JETZT.minus(Duration.ofDays(6));
+  private static final Instant SPAETER = JETZT.plus(Duration.ofHours(1));
+  private static final Instant ABSCHLUSS = JETZT.minus(Duration.ofDays(1));
   private static final String OPUS = "claude-opus-5-5";
   private static final String SONNET = "claude-sonnet-5-5";
 
@@ -68,12 +75,15 @@ class VorhabenKostenServiceTest {
   private final CardRunQueryService cards = mock(CardRunQueryService.class);
   private final NightRunRepository runs = mock(NightRunRepository.class);
   private final NightRunUsageRepository usage = mock(NightRunUsageRepository.class);
+  private final FesteKosten festgehalten = new FesteKosten();
   private final VorhabenKostenService service =
-      new VorhabenKostenService(cards, runs, usage, new NightRunProperties(3, null, 2, null, null));
+      new VorhabenKostenService(
+          cards, runs, usage, festgehalten, new NightRunProperties(3, null, 2, null, null));
 
   private final List<VorhabenStandView> staende = new ArrayList<>();
   private final List<Vorgang> vorgaenge = new ArrayList<>();
   private final Map<Integer, ItemKostenJeKarte> kosten = new HashMap<>();
+  private final Map<Integer, ItemKostenJeKarte> kostenBisAbschluss = new HashMap<>();
   private final List<RetainedByKind> aufbewahrt = new ArrayList<>();
 
   @BeforeEach
@@ -87,6 +97,16 @@ class VorhabenKostenServiceTest {
               List<ItemKostenJeKarte> zeilen = new ArrayList<>();
               a.<Collection<Integer>>getArgument(1).stream()
                   .map(kosten::get)
+                  .filter(k -> k != null)
+                  .forEach(zeilen::add);
+              return zeilen;
+            });
+    when(usage.itemKostenJeKarte(anyLong(), anyCollection(), any(Instant.class)))
+        .thenAnswer(
+            a -> {
+              List<ItemKostenJeKarte> zeilen = new ArrayList<>();
+              a.<Collection<Integer>>getArgument(1).stream()
+                  .map(kostenBisAbschluss::get)
                   .filter(k -> k != null)
                   .forEach(zeilen::add);
               return zeilen;
@@ -163,6 +183,11 @@ class VorhabenKostenServiceTest {
     vorgang(NightRunAttemptStage.UMSETZUNG, paket, OPUS, "1.50");
     misst(anforderung, "5");
     misst(paket, "1.50");
+    if (done != null) {
+      festgehalten.speichere(
+          VorhabenKosten.leer(nummer * 10L, PROJECT)
+              .mitAbschluss(done, new BigDecimal("6.50"), false, List.of(anforderung, paket)));
+    }
   }
 
   /** Das Ziel „Export“ mit nur seiner ungeschnittenen Anforderung 401. */
@@ -640,5 +665,589 @@ class VorhabenKostenServiceTest {
 
     assertThat(service.aktuelleVoraussage(PROJECT, ZIEL, JETZT))
         .isEqualTo(Optional.of(new ZuWenigDaten(Grund.ZU_WENIG_VORHABEN)));
+  }
+
+  // --- Grundlage aus den festgehaltenen Abschlüssen (Issue #2004) ------------------------------
+
+  @Test
+  @DisplayName("Ohne festgehaltenen Abschluss zählt ein Vorhaben nicht zur Grundlage")
+  void grundlageNurMitFestgehaltenemAbschluss() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    festgehalten.zeilen.remove(300L);
+    zielNurAnforderung();
+
+    assertThat(rechne()).isEqualTo(new ZuWenigDaten(Grund.ZU_WENIG_VORHABEN));
+  }
+
+  @Test
+  @DisplayName("Maßgeblich ist der festgehaltene Abschluss, nicht das späteste Done der Pakete")
+  void grundlageMitFestgehaltenemZeitpunkt() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30, FENSTER.minusSeconds(1), VOR_EINER_WOCHE);
+    festgehalten.speichere(
+        festgehalten
+            .zeilen
+            .get(300L)
+            .mitAbschluss(FENSTER, BigDecimal.ONE, false, List.of(31, 32)));
+    zielNurAnforderung();
+
+    assertThat(rechne()).isInstanceOf(Voraussage.class);
+  }
+
+  // --- Festhalten (Issue #2004, Plan #1990 E8 bis E10, E12) ------------------------------------
+
+  private static DokumentStandView anforderung(boolean offen, boolean geschnitten) {
+    return new DokumentStandView(401, "FACHLICH", offen, geschnitten);
+  }
+
+  private void zielStand(
+      List<PaketStandView> pakete,
+      List<DokumentStandView> dokumente,
+      boolean abgeschlossen,
+      List<Integer> kostenkarten) {
+    staende.removeIf(s -> s.vorhaben().id() == ZIEL);
+    staende.add(
+        new VorhabenStandView(
+            ref(ZIEL, 400),
+            1L,
+            pakete,
+            dokumente,
+            dokumente.stream().anyMatch(d -> "FACHLICH".equals(d.art())),
+            !dokumente.isEmpty(),
+            abgeschlossen,
+            kostenkarten,
+            VOR_EINER_WOCHE));
+  }
+
+  private void eingefuehrt() {
+    festgehalten.einfuehren(PROJECT, VOR_EINER_WOCHE);
+  }
+
+  private void kostetBisAbschluss(int karte, String betrag) {
+    kostenBisAbschluss.put(
+        karte, new ItemKostenJeKarte(karte, new BigDecimal(betrag), 0L, VOR_EINER_WOCHE));
+  }
+
+  private @Nullable VorhabenKosten zeile() {
+    return festgehalten.zeilen.get(ZIEL);
+  }
+
+  private static FestgehalteneVoraussage beziffert(Art art, String typisch) {
+    BigDecimal betrag = new BigDecimal(typisch);
+    return new FestgehalteneVoraussage(
+        Stand.BEZIFFERT, art, betrag, betrag, betrag, VOR_EINER_WOCHE);
+  }
+
+  /** Ein schon festgehaltenes, abgeschlossenes Vorhaben mit 16 $ und 20 $ Voraussage und 18 $. */
+  private void festgehaltenAbgeschlossen() {
+    festgehalten.speichere(
+        VorhabenKosten.leer(ZIEL, PROJECT)
+            .mitAnforderung(beziffert(Art.ANFORDERUNG, "16"))
+            .mitPaketen(beziffert(Art.PAKETE, "20"))
+            .mitAbschluss(ABSCHLUSS, new BigDecimal("18"), false, List.of(401, 402)));
+  }
+
+  @Test
+  @DisplayName("Szenario: Voraussage und tatsächliche Kosten")
+  void szenarioVoraussageUndTatsaechlicheKosten() {
+    // Angenommen: für „Export“ wurden aus der Anforderung typisch 16 $ und aus den Paketen typisch
+    // 20 $ festgehalten, und das Vorhaben ist eben abgeschlossen und hat 18 $ gekostet.
+    eingefuehrt();
+    festgehalten.speichere(
+        VorhabenKosten.leer(ZIEL, PROJECT)
+            .mitAnforderung(beziffert(Art.ANFORDERUNG, "16"))
+            .mitPaketen(beziffert(Art.PAKETE, "20")));
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402));
+    kostetBisAbschluss(401, "10");
+    kostetBisAbschluss(402, "8");
+
+    service.festhalten(PROJECT, JETZT);
+
+    VorhabenKosten zeile = zeile();
+    assertThat(zeile).isNotNull();
+    assertThat(zeile.tatsaechlichUsd()).isEqualByComparingTo("18");
+    assertThat(zeile.anforderung().typischUsd()).isEqualByComparingTo("16");
+    assertThat(zeile.pakete().typischUsd()).isEqualByComparingTo("20");
+    assertThat(
+            KostenVergleich.abweichung(
+                zeile.tatsaechlichUsd(),
+                zeile.tatsaechlichUnvollstaendig(),
+                zeile.anforderung().typischUsd()))
+        .hasValue(13);
+    assertThat(
+            KostenVergleich.abweichung(
+                zeile.tatsaechlichUsd(),
+                zeile.tatsaechlichUnvollstaendig(),
+                zeile.pakete().typischUsd()))
+        .hasValue(-10);
+  }
+
+  @Test
+  @DisplayName("Das erste Paket hält die Voraussage aus der Anforderung fest")
+  void erstesPaketHaeltAnforderungFest() {
+    eingefuehrt();
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+        List.of(anforderung(true, false)),
+        false,
+        List.of(401, 402));
+
+    service.festhalten(PROJECT, JETZT);
+
+    FestgehalteneVoraussage anforderung = zeile().anforderung();
+    assertThat(anforderung.stand()).isEqualTo(Stand.BEZIFFERT);
+    assertThat(anforderung.art()).isEqualTo(Art.ANFORDERUNG);
+    assertThat(anforderung.typischUsd()).isEqualByComparingTo("6.50");
+    assertThat(anforderung.festgehaltenAt()).isEqualTo(JETZT);
+    assertThat(zeile().pakete()).as("ein Dokument ist noch ungeschnitten offen").isNull();
+    assertThat(zeile().abgeschlossenAt()).isNull();
+  }
+
+  @Test
+  @DisplayName("Ohne Anforderung heißt die erste Voraussage „vor dem Schnitt“")
+  void ohneAnforderungVorDemSchnitt() {
+    eingefuehrt();
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    staende.add(
+        new VorhabenStandView(
+            ref(ZIEL, 400),
+            1L,
+            List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+            List.of(new DokumentStandView(403, "PLAN", true, false)),
+            false,
+            true,
+            false,
+            List.of(402, 403),
+            VOR_EINER_WOCHE));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().anforderung().art()).isEqualTo(Art.VOR_DEM_SCHNITT);
+  }
+
+  @Test
+  @DisplayName("Schnitt in einem Zug: zuerst die Voraussage aus der Anforderung, dann die Pakete")
+  void beideUebergaengeImSelbenLauf() {
+    eingefuehrt();
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+        List.of(anforderung(true, true)),
+        false,
+        List.of(401, 402));
+    Voraussage ausPaketen = (Voraussage) service.aktuelleVoraussage(PROJECT, ZIEL, JETZT).get();
+
+    service.festhalten(PROJECT, JETZT);
+
+    VorhabenKosten zeile = zeile();
+    assertThat(zeile.anforderung().art()).isEqualTo(Art.ANFORDERUNG);
+    assertThat(zeile.anforderung().typischUsd()).isEqualByComparingTo("6.50");
+    assertThat(zeile.pakete().stand()).isEqualTo(Stand.BEZIFFERT);
+    assertThat(zeile.pakete().art()).isEqualTo(Art.PAKETE);
+    assertThat(zeile.pakete().typischUsd()).isEqualByComparingTo(ausPaketen.typisch());
+    assertThat(zeile.pakete().untenUsd()).isEqualByComparingTo(ausPaketen.unten());
+    assertThat(zeile.pakete().obenUsd()).isEqualByComparingTo(ausPaketen.oben());
+  }
+
+  @Test
+  @DisplayName(
+      "Gab es nie ein ungeschnittenes Dokument, steht „keine Voraussage“ aus der Anforderung")
+  void nieUngeschnittenKeineAnforderung() {
+    eingefuehrt();
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielStand(List.of(paket(402, Aufgabenstufe.MITTEL, null)), List.of(), false, List.of(402));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().anforderung()).isEqualTo(FestgehalteneVoraussage.keine(JETZT));
+    assertThat(zeile().pakete().stand()).isEqualTo(Stand.BEZIFFERT);
+  }
+
+  @Test
+  @DisplayName("Liefert die Rechnung beim Festhalten zu wenig Daten, steht „keine Voraussage“")
+  void zuWenigDatenBeimFesthalten() {
+    eingefuehrt();
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+        List.of(anforderung(true, true)),
+        false,
+        List.of(401, 402));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().anforderung()).isEqualTo(FestgehalteneVoraussage.keine(JETZT));
+    assertThat(zeile().pakete()).isEqualTo(FestgehalteneVoraussage.keine(JETZT));
+  }
+
+  @Test
+  @DisplayName("Festgehaltene Voraussagen ändern sich danach nicht mehr")
+  void voraussagenBleiben() {
+    eingefuehrt();
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+        List.of(anforderung(true, true)),
+        false,
+        List.of(401, 402));
+    service.festhalten(PROJECT, JETZT);
+    VorhabenKosten vorher = zeile();
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null), paket(403, Aufgabenstufe.SCHWER, null)),
+        List.of(anforderung(true, true)),
+        false,
+        List.of(401, 402, 403));
+
+    service.festhalten(PROJECT, SPAETER);
+
+    assertThat(zeile()).isEqualTo(vorher);
+  }
+
+  @Test
+  @DisplayName("Ohne Übergang schreibt ein Lauf nichts")
+  void ohneUebergangKeinSchreiben() {
+    eingefuehrt();
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+        List.of(anforderung(true, true)),
+        false,
+        List.of(401, 402));
+    service.festhalten(PROJECT, JETZT);
+    int geschrieben = festgehalten.gespeichert;
+
+    service.festhalten(PROJECT, SPAETER);
+
+    assertThat(festgehalten.gespeichert).isEqualTo(geschrieben);
+  }
+
+  @Test
+  @DisplayName("Ein Vorhaben mit Dokument, aber ohne Paket bekommt noch keine Zeile")
+  void ohnePaketKeineZeile() {
+    eingefuehrt();
+    zielStand(List.of(), List.of(anforderung(true, false)), false, List.of(401));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile()).isNull();
+  }
+
+  @Test
+  @DisplayName("Der Abschluss hält Zeitpunkt, tatsächliche Kosten bis dahin und Kostenkarten fest")
+  void abschlussHaeltFest() {
+    eingefuehrt();
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402));
+    kostetBisAbschluss(401, "10");
+    kostetBisAbschluss(402, "8");
+
+    service.festhalten(PROJECT, JETZT);
+
+    VorhabenKosten zeile = zeile();
+    assertThat(zeile.abgeschlossenAt()).isEqualTo(JETZT);
+    assertThat(zeile.tatsaechlichUsd()).isEqualByComparingTo("18");
+    assertThat(zeile.tatsaechlichUnvollstaendig()).isFalse();
+    assertThat(zeile.kostenKarten()).containsExactly(401, 402);
+    verify(usage).itemKostenJeKarte(PROJECT, List.of(401, 402), JETZT);
+  }
+
+  @Test
+  @DisplayName(
+      "Fehlt beim Abschluss eine Kostenangabe, sind die tatsächlichen Kosten unvollständig")
+  void abschlussMitFehlenderKostenangabe() {
+    eingefuehrt();
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402));
+    kostetBisAbschluss(401, "10");
+    kostenBisAbschluss.put(
+        402, new ItemKostenJeKarte(402, new BigDecimal("8"), 1L, VOR_EINER_WOCHE));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().tatsaechlichUnvollstaendig()).isTrue();
+  }
+
+  @Test
+  @DisplayName("Begann das Vorhaben vor der Aufbewahrungsgrenze, sind die Kosten unvollständig")
+  void abschlussVorDerGrenze() {
+    eingefuehrt();
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402));
+    kostetBisAbschluss(401, "10");
+    aufbewahrt.add(new RetainedByKind(NightRunKind.NIGHT, 3L, VOR_EINER_WOCHE.plusSeconds(1)));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().tatsaechlichUnvollstaendig()).isTrue();
+    assertThat(zeile().tatsaechlichUsd()).isEqualByComparingTo("10");
+  }
+
+  @Test
+  @DisplayName("Öffnet sich das Vorhaben wieder, entfällt der Abschluss, die Voraussagen bleiben")
+  void wiederOffen() {
+    eingefuehrt();
+    festgehaltenAbgeschlossen();
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS), paket(403, null, null)),
+        List.of(anforderung(false, true)),
+        false,
+        List.of(401, 402, 403));
+
+    service.festhalten(PROJECT, JETZT);
+
+    VorhabenKosten zeile = zeile();
+    assertThat(zeile.abgeschlossenAt()).isNull();
+    assertThat(zeile.tatsaechlichUsd()).isNull();
+    assertThat(zeile.kostenKarten()).isEmpty();
+    assertThat(zeile.anforderung()).isEqualTo(beziffert(Art.ANFORDERUNG, "16"));
+    assertThat(zeile.pakete()).isEqualTo(beziffert(Art.PAKETE, "20"));
+  }
+
+  @Test
+  @DisplayName("Der nächste Abschluss nach dem Wiederöffnen hält die Kosten neu fest")
+  void wiederAbgeschlossen() {
+    eingefuehrt();
+    festgehaltenAbgeschlossen();
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS), paket(403, null, null)),
+        List.of(anforderung(false, true)),
+        false,
+        List.of(401, 402, 403));
+    service.festhalten(PROJECT, JETZT);
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS), paket(403, null, JETZT)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402, 403));
+    kostetBisAbschluss(401, "10");
+    kostetBisAbschluss(402, "8");
+    kostetBisAbschluss(403, "4");
+
+    service.festhalten(PROJECT, SPAETER);
+
+    VorhabenKosten zeile = zeile();
+    assertThat(zeile.abgeschlossenAt()).isEqualTo(SPAETER);
+    assertThat(zeile.tatsaechlichUsd()).isEqualByComparingTo("22");
+    assertThat(zeile.kostenKarten()).containsExactly(401, 402, 403);
+    assertThat(zeile.anforderung()).isEqualTo(beziffert(Art.ANFORDERUNG, "16"));
+  }
+
+  @Test
+  @DisplayName(
+      "Eine späte Meldung ergänzt die tatsächlichen Kosten, Abschluss und Voraussagen bleiben")
+  void spaeteMeldung() {
+    eingefuehrt();
+    festgehaltenAbgeschlossen();
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402));
+    kostetBisAbschluss(401, "12");
+    kostetBisAbschluss(402, "8");
+
+    service.festhalten(PROJECT, JETZT);
+
+    VorhabenKosten zeile = zeile();
+    assertThat(zeile.tatsaechlichUsd()).isEqualByComparingTo("20");
+    assertThat(zeile.abgeschlossenAt()).isEqualTo(ABSCHLUSS);
+    assertThat(zeile.anforderung()).isEqualTo(beziffert(Art.ANFORDERUNG, "16"));
+    verify(usage).itemKostenJeKarte(PROJECT, List.of(401, 402), ABSCHLUSS);
+  }
+
+  @Test
+  @DisplayName("Umzuordnung und verdrängte Messungen nach dem Abschluss senken den Betrag nie")
+  void umzuordnungNachAbschluss() {
+    eingefuehrt();
+    festgehaltenAbgeschlossen();
+    // 402 gehört inzwischen zu einem anderen Vorhaben, 405 ist neu zugeordnet.
+    zielStand(
+        List.of(paket(405, Aufgabenstufe.MITTEL, ABSCHLUSS)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 405));
+    kostetBisAbschluss(401, "10");
+    kostetBisAbschluss(405, "50");
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().tatsaechlichUsd()).isEqualByComparingTo("18");
+    assertThat(zeile().kostenKarten()).containsExactly(401, 402);
+    verify(usage).itemKostenJeKarte(PROJECT, List.of(401, 402), ABSCHLUSS);
+  }
+
+  @Test
+  @DisplayName(
+      "Einführung: Bei laufenden Vorhaben ergeben vergangene Zeitpunkte „keine Voraussage“")
+  void einfuehrungLaufend() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+        List.of(anforderung(true, false)),
+        false,
+        List.of(401, 402));
+    staende.add(
+        new VorhabenStandView(
+            ref(500L, 50),
+            1L,
+            List.of(paket(502, Aufgabenstufe.MITTEL, null)),
+            List.of(new DokumentStandView(501, "FACHLICH", true, true)),
+            true,
+            true,
+            false,
+            List.of(501, 502),
+            VOR_EINER_WOCHE));
+    staende.add(
+        new VorhabenStandView(
+            ref(600L, 60),
+            1L,
+            List.of(),
+            List.of(new DokumentStandView(601, "FACHLICH", true, false)),
+            true,
+            true,
+            false,
+            List.of(601),
+            VOR_EINER_WOCHE));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().anforderung()).isEqualTo(FestgehalteneVoraussage.keine(JETZT));
+    assertThat(zeile().pakete()).as("der Schnitt steht noch aus").isNull();
+    assertThat(festgehalten.zeilen.get(500L).anforderung())
+        .isEqualTo(FestgehalteneVoraussage.keine(JETZT));
+    assertThat(festgehalten.zeilen.get(500L).pakete())
+        .isEqualTo(FestgehalteneVoraussage.keine(JETZT));
+    assertThat(festgehalten.zeilen).doesNotContainKey(600L);
+    assertThat(festgehalten.eingefuehrtAm(PROJECT)).hasValue(JETZT);
+  }
+
+  @Test
+  @DisplayName("Nach der Einführung wird ein laufendes Vorhaben ganz normal behandelt")
+  void nachDerEinfuehrungNormal() {
+    grundlage(10);
+    grundlage(20);
+    grundlage(30);
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+        List.of(anforderung(true, false)),
+        false,
+        List.of(401, 402));
+    service.festhalten(PROJECT, JETZT);
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, null)),
+        List.of(anforderung(true, true)),
+        false,
+        List.of(401, 402));
+
+    service.festhalten(PROJECT, SPAETER);
+
+    assertThat(zeile().anforderung()).isEqualTo(FestgehalteneVoraussage.keine(JETZT));
+    assertThat(zeile().pakete().stand()).isEqualTo(Stand.BEZIFFERT);
+    assertThat(zeile().pakete().festgehaltenAt()).isEqualTo(SPAETER);
+    assertThat(festgehalten.eingefuehrtAm(PROJECT)).hasValue(JETZT);
+  }
+
+  @Test
+  @DisplayName("Einführung: Ein abgeschlossenes Vorhaben gilt beim spätesten Done seiner Pakete")
+  void einfuehrungAbgeschlossen() {
+    Instant frueh = JETZT.minus(Duration.ofDays(20));
+    Instant spaet = JETZT.minus(Duration.ofDays(10));
+    zielStand(
+        List.of(paket(402, Aufgabenstufe.MITTEL, spaet), paket(403, Aufgabenstufe.MITTEL, frueh)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402, 403));
+    kostetBisAbschluss(401, "5");
+    kostetBisAbschluss(402, "4");
+    kostetBisAbschluss(403, "3");
+
+    service.festhalten(PROJECT, JETZT);
+
+    VorhabenKosten zeile = zeile();
+    assertThat(zeile.abgeschlossenAt()).isEqualTo(spaet);
+    assertThat(zeile.tatsaechlichUsd()).isEqualByComparingTo("12");
+    assertThat(zeile.anforderung()).isEqualTo(FestgehalteneVoraussage.keine(JETZT));
+    assertThat(zeile.pakete()).isEqualTo(FestgehalteneVoraussage.keine(JETZT));
+    verify(usage).itemKostenJeKarte(PROJECT, List.of(401, 402, 403), spaet);
+  }
+
+  @Test
+  @DisplayName("Einführung: Fehlt ein Done-Zeitpunkt, gilt der Zeitpunkt des Laufs")
+  void einfuehrungOhneDoneZeitpunkt() {
+    zielStand(
+        List.of(new PaketStandView(402, true, Aufgabenstufe.MITTEL, VOR_EINER_WOCHE, null)),
+        List.of(anforderung(false, true)),
+        true,
+        List.of(401, 402));
+
+    service.festhalten(PROJECT, JETZT);
+
+    assertThat(zeile().abgeschlossenAt()).isEqualTo(JETZT);
+  }
+
+  @Test
+  @DisplayName("Die Projekte mit Vorhaben kommen aus der Kartenfassade")
+  void projekteMitVorhaben() {
+    when(cards.projekteMitVorhaben()).thenReturn(List.of(3L, 7L));
+
+    assertThat(service.projekteMitVorhaben()).containsExactly(3L, 7L);
+  }
+
+  /** Ein Speicher im Arbeitsspeicher für ein einziges Projekt. */
+  private static final class FesteKosten implements VorhabenKostenRepository {
+
+    private final Map<Long, VorhabenKosten> zeilen = new TreeMap<>();
+    private @Nullable Instant eingefuehrt;
+    private int gespeichert;
+
+    @Override
+    public List<VorhabenKosten> findByProjectId(long projectId) {
+      return zeilen.values().stream().filter(z -> z.projectId() == projectId).toList();
+    }
+
+    @Override
+    public void speichere(VorhabenKosten kosten) {
+      gespeichert++;
+      zeilen.put(kosten.epicId(), kosten);
+    }
+
+    @Override
+    public Optional<Instant> eingefuehrtAm(long projectId) {
+      return Optional.ofNullable(eingefuehrt);
+    }
+
+    @Override
+    public void einfuehren(long projectId, Instant am) {
+      if (eingefuehrt == null) {
+        eingefuehrt = am;
+      }
+    }
   }
 }
