@@ -36,6 +36,13 @@ describe('pushApi', () => {
     expect(JSON.parse(optionen?.body as string)).toEqual({ endpoint: ENDPUNKT, p256dh: 'schluessel', auth: 'geheim' })
   })
 
+  it('setzt ein Abo ohne Schlüssel, ohne zu werfen', async () => {
+    const fetchSpy = spyFetch()
+    const ohneSchluessel = { toJSON: () => ({ endpoint: ENDPUNKT }) } as unknown as PushSubscription
+    await pushApi.aboSetzen(ohneSchluessel)
+    expect(JSON.parse(fetchSpy.mock.calls[0][1]?.body as string)).toEqual({ endpoint: ENDPUNKT })
+  })
+
   it('löscht das Abo über seinen Endpunkt', async () => {
     const fetchSpy = spyFetch()
     await pushApi.aboLoeschen(ENDPUNKT)
