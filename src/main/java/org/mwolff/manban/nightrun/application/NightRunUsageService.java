@@ -21,7 +21,6 @@ import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
-import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.StageTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
 import org.mwolff.manban.nightrun.domain.Bremsbilanz;
@@ -80,7 +79,7 @@ public class NightRunUsageService {
   private final InteractiveUsageSinceReader erfassungsbeginn;
   private final MonthlyBudgetReader budgets;
   private final Clock clock;
-  private final NightRunProperties properties;
+  private final Aufbewahrungsgrenze grenze;
 
   public NightRunUsageService(
       NightRunUsageRepository usage,
@@ -96,7 +95,7 @@ public class NightRunUsageService {
     this.erfassungsbeginn = erfassungsbeginn;
     this.budgets = budgets;
     this.clock = clock;
-    this.properties = properties;
+    this.grenze = new Aufbewahrungsgrenze(properties);
   }
 
   /**
@@ -234,20 +233,11 @@ public class NightRunUsageService {
   }
 
   /**
-   * Die Aufbewahrungsgrenze (Plan E8, Issue #1071): der späteste älteste Eintrag unter den
-   * Gattungen, deren Ringpuffer <b>gefüllt</b> ist ({@code count >= properties.maxRunsFor(kind)}).
-   * Hat keine Gattung ihren Ringpuffer gefüllt, ist nichts verdrängt worden — dann gibt es keine
-   * Grenze, unabhängig davon, wie alt das Projekt ist.
-   *
-   * <p>Hält eine nicht volle Gattung ältere Einträge als die volle, bleibt die Grenze am ältesten
-   * Eintrag der vollen Gattung — die nicht volle hat davon nichts verloren (E9, Plan-Review H5).
+   * Die Aufbewahrungsgrenze über alle Gattungen (Plan E8, Issue #1071); Regel in {@link
+   * Aufbewahrungsgrenze}.
    */
   private Optional<Instant> aufbewahrungsgrenze(long projectId) {
-    return usage.retentionBoundary(projectId).stream()
-        .filter(r -> r.count() >= properties.maxRunsFor(r.kind()))
-        .map(RetainedByKind::oldestStart)
-        .filter(Objects::nonNull)
-        .max(Instant::compareTo);
+    return grenze.gesamt(usage.retentionBoundary(projectId));
   }
 
   /**

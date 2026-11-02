@@ -1,8 +1,10 @@
 package org.mwolff.manban.nightrun.application;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -116,6 +118,39 @@ public interface NightRunUsageRepository {
    * <p>Eine Gattung ohne aufbewahrten Eintrag liefert Zahl 0 und keinen Zeitpunkt.
    */
   List<RetainedByKind> retentionBoundary(long projectId);
+
+  /**
+   * Die Kosten je Karte über <b>alle</b> aufbewahrten Items der Gattung NIGHT — anders als {@link
+   * #totalsPerCard} auch die verwaisten, deren Lauf verdrängt ist (Issue #2002, Plan #1990 E6, E9).
+   * Die Kostenvoraussage braucht die ganze Geschichte einer Karte, nicht nur die Nächte, die die
+   * Auswertung als Lauf zeigt; dass Verdrängtes fehlt, sagt ihr die Aufbewahrungsgrenze.
+   *
+   * <p>Gefiltert wird über den eigenen {@code started_at} des Items, das ihn auch nach der
+   * Verdrängung seines Laufs trägt. Interaktive Sitzungen zählen nicht.
+   *
+   * @param projectId das Projekt
+   * @param nummern die gefragten Kartennummern; ohne Nummer ist das Ergebnis leer
+   * @param bis nur Items, die vor diesem Zeitpunkt begonnen haben (ausschließlich); {@code null}
+   *     für alle
+   * @return je Karte mit mindestens einem Item eine Zeile, aufsteigend nach Nummer
+   */
+  List<ItemKostenJeKarte> itemKostenJeKarte(
+      long projectId, Collection<Integer> nummern, @Nullable Instant bis);
+
+  /**
+   * Die Kosten einer Karte über ihre Items (Issue #2002).
+   *
+   * @param cardNumber projektweite Kartennummer
+   * @param costUsd Summe der gemeldeten Kosten; {@code null}, wenn kein Item eine Kostenangabe
+   *     trägt — eine fehlende Angabe wird nie 0 (Plan E5)
+   * @param itemsOhneKosten Zahl der Items ohne Kostenangabe; über 0 ist die Summe unvollständig
+   * @param fruehesterBeginn Beginn des frühesten gezählten Items
+   */
+  record ItemKostenJeKarte(
+      int cardNumber,
+      @Nullable BigDecimal costUsd,
+      long itemsOhneKosten,
+      Instant fruehesterBeginn) {}
 
   /**
    * Zahl und ältester Startzeitpunkt der aufbewahrten Einträge einer Gattung (Plan E8, Issue

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
@@ -23,6 +24,10 @@ import org.springframework.stereotype.Component;
 
 /** Adapter des {@link NightRunUsageRepository}-Ports (Issue #937). */
 @Component
+// Die Kopplung folgt dem Port: Jeder Leseweg bringt seine Projektionszeile und seinen Record mit,
+// und der Adapter übersetzt die eine in den anderen. Den Adapter je Leseweg zu teilen trennte, was
+// derselbe Port zusammen anbietet (Issue #2002).
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
 
   private final NightRunUsageJpaRepository abfragen;
@@ -145,6 +150,27 @@ class NightRunUsageRepositoryAdapter implements NightRunUsageRepository {
                   ? new RetainedByKind(kind, 0L, null)
                   : new RetainedByKind(kind, row.getCount(), row.getOldestStart());
             })
+        .toList();
+  }
+
+  @Override
+  public List<ItemKostenJeKarte> itemKostenJeKarte(
+      long projectId, Collection<Integer> nummern, @Nullable Instant bis) {
+    if (nummern.isEmpty()) {
+      return List.of();
+    }
+    List<NightRunUsageJpaRepository.ItemKostenRow> zeilen =
+        bis == null
+            ? abfragen.itemKostenJeKarte(projectId, nummern)
+            : abfragen.itemKostenJeKarteBis(projectId, nummern, bis);
+    return zeilen.stream()
+        .map(
+            z ->
+                new ItemKostenJeKarte(
+                    z.getCardNumber(),
+                    z.getCostUsd(),
+                    z.getItemsOhneKosten(),
+                    z.getFruehesterBeginn()))
         .toList();
   }
 

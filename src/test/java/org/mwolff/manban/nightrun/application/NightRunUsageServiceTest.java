@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.card.application.VorhabenRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.ItemKostenJeKarte;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.KindTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
@@ -1093,6 +1095,14 @@ class NightRunUsageServiceTest {
     public List<RetainedByKind> retentionBoundary(long projectId) {
       aufrufe.add("retentionBoundary");
       return retention;
+    }
+
+    /** Der Service liest diesen Weg nicht (Issue #2002); er ist für die Kostenvoraussage da. */
+    @Override
+    public List<ItemKostenJeKarte> itemKostenJeKarte(
+        long projectId, Collection<Integer> nummern, @Nullable Instant bis) {
+      aufrufe.add("itemKosten");
+      return List.of();
     }
   }
 }

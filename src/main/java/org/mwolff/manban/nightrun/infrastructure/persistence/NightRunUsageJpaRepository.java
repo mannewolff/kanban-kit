@@ -2,6 +2,7 @@ package org.mwolff.manban.nightrun.infrastructure.persistence;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -252,6 +253,37 @@ interface NightRunUsageJpaRepository extends Repository<NightRunEntity, Long> {
       " SELECT i.* FROM night_run_item i JOIN laeufe l ON l.id = i.night_run_id"
           + " WHERE i.error_class = 'STUCK' ORDER BY i.id";
 
+  /**
+   * Kosten je Karte über alle aufbewahrten Items der Gattung NIGHT, verwaiste eingeschlossen (Issue
+   * #2002, Plan #1990 E6, E9): Gelesen wird {@code night_run_item} allein, ohne {@code JOIN} auf
+   * den Lauf — Projekt, Gattung und Beginn trägt das Item selbst (V33, V34). Die Zeitschranke hängt
+   * der jeweilige Zugriff an.
+   */
+  String ITEM_KOSTEN =
+      "SELECT i.card_number AS \"cardNumber\", sum(i.cost_usd) AS \"costUsd\","
+          + " count(*) FILTER (WHERE i.cost_usd IS NULL) AS \"itemsOhneKosten\","
+          + " min(i.started_at) AS \"fruehesterBeginn\""
+          + " FROM night_run_item i"
+          + " WHERE i.project_id = :projectId AND i.kind = 'NIGHT'"
+          + " AND i.card_number IN (:nummern)";
+
+  /** Gruppierung und Reihenfolge von {@link #ITEM_KOSTEN}. */
+  String ITEM_KOSTEN_JE_KARTE = " GROUP BY i.card_number ORDER BY i.card_number";
+
+  /** {@link #ITEM_KOSTEN} ohne Zeitschranke. */
+  @Query(value = ITEM_KOSTEN + ITEM_KOSTEN_JE_KARTE, nativeQuery = true)
+  List<ItemKostenRow> itemKostenJeKarte(
+      @Param("projectId") long projectId, @Param("nummern") Collection<Integer> nummern);
+
+  /** {@link #ITEM_KOSTEN} für Items, die vor {@code bis} begonnen haben. */
+  @Query(
+      value = ITEM_KOSTEN + " AND i.started_at < :bis" + ITEM_KOSTEN_JE_KARTE,
+      nativeQuery = true)
+  List<ItemKostenRow> itemKostenJeKarteBis(
+      @Param("projectId") long projectId,
+      @Param("nummern") Collection<Integer> nummern,
+      @Param("bis") Instant bis);
+
   /** JPQL statt nativ: Der Typ des Startzeitpunkts kommt so als {@link Instant} aus der Entity. */
   @Query("select min(r.startedAt) from NightRunEntity r where r.projectId = :projectId")
   Optional<Instant> oldestStartedAt(@Param("projectId") long projectId);
@@ -372,6 +404,17 @@ interface NightRunUsageJpaRepository extends Repository<NightRunEntity, Long> {
     long getDurationMs();
 
     long getCardCount();
+  }
+
+  /** Eine Zeile von {@link #itemKostenJeKarte}. */
+  interface ItemKostenRow {
+    int getCardNumber();
+
+    @Nullable BigDecimal getCostUsd();
+
+    long getItemsOhneKosten();
+
+    Instant getFruehesterBeginn();
   }
 
   /** Eine Zeile von {@link #retentionByKind}; {@code kind} kommt als Enum-Name der Entity. */
