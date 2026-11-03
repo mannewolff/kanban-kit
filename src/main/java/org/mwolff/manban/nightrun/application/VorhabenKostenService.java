@@ -395,8 +395,7 @@ public class VorhabenKostenService {
             .toList();
     Instant von =
         Stream.concat(Stream.of(ziel), kandidaten.stream())
-            .map(VorhabenStandView::fruehesteKostenkarteAngelegt)
-            .filter(Objects::nonNull)
+            .flatMap(v -> Stream.ofNullable(v.fruehesteKostenkarteAngelegt()))
             .reduce(kontext.fenster(), (a, b) -> a.isBefore(b) ? a : b);
     List<Vorgang> nacht =
         runs.findAttemptsSince(kontext.projectId(), von).stream()
