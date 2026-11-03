@@ -59,7 +59,7 @@ class PushController {
   static final String P256DH_MUSTER = "^[A-Za-z0-9_-]{87}=?$";
 
   /** Authentifizierungsgeheimnis des Browsers: 16 Bytes als base64url. */
-  static final String AUTH_MUSTER = "^[A-Za-z0-9_-]{22}(==)?$";
+  static final String GEHEIMNIS_MUSTER = "^[A-Za-z0-9_-]{22}(==)?$";
 
   private static final String BESCHREIBUNG_ENDPUNKT =
       "Endpunkt des Push-Dienstes, wie ihn der Browser beim Abonnieren liefert.";
@@ -251,7 +251,7 @@ class PushController {
               description = "Authentifizierungsgeheimnis des Browsers (keys.auth), base64url.",
               example = "BTBZMqHH6r4Tts7J_aSIgg")
           @NotNull
-          @Pattern(regexp = AUTH_MUSTER)
+          @Pattern(regexp = GEHEIMNIS_MUSTER)
           String auth) {}
 
   /** Nur der Endpunkt, zum Beenden. */
