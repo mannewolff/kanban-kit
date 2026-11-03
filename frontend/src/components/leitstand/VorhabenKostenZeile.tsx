@@ -59,7 +59,7 @@ type Geld = (betrag: number) => string
 
 /** „‹Betrag› (unvollständig)“ oder der Betrag allein. */
 function betragMitVermerk(t: Texte, geld: Geld, betrag: number, unvollstaendig: boolean): string {
-  return unvollstaendig ? `${geld(betrag)} (${t.UNVOLLSTAENDIG})` : geld(betrag)
+  return unvollstaendig ? `${geld(betrag)} (${t.UNVOLLSTAENDIG})` : geld(betrag) // NOSONAR typescript:S2301 – ein Vermerk am Betrag, keine Wahl zwischen Aktionen; zwei Funktionen verlegten die Verzweigung in beide Aufrufer
 }
 
 function herkunft(t: Texte, v: VoraussageView): string {
