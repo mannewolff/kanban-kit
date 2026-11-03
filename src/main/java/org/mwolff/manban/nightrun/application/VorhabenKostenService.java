@@ -666,7 +666,8 @@ public class VorhabenKostenService {
                 new VoraussageView(
                     v.art(), v.typisch(), v.unten(), v.oben(), v.paketzahl(), v.ohneStufe()),
                 null);
-        case ZuWenigDaten z -> new LaufendView(true, bisher, unvollstaendig, null, z.grund());
+        case ZuWenigDaten(Grund grund) ->
+            new LaufendView(true, bisher, unvollstaendig, null, grund);
       };
     }
   }
