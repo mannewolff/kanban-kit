@@ -285,10 +285,7 @@ public class PermissionChecker {
    */
   @Transactional(readOnly = true)
   public boolean hatEchteRolle(long userId, long projectId, ProjectRole rolle) {
-    return memberships
-        .findByProjectIdAndUserId(projectId, userId)
-        .map(m -> m.role() == rolle)
-        .orElse(false);
+    return echteRolleVorhanden(userId, projectId, rolle);
   }
 
   /**
@@ -297,7 +294,15 @@ public class PermissionChecker {
    */
   @Transactional(readOnly = true)
   public boolean istEchterOwner(long userId, long projectId) {
-    return hatEchteRolle(userId, projectId, ProjectRole.OWNER);
+    return echteRolleVorhanden(userId, projectId, ProjectRole.OWNER);
+  }
+
+  /** {@link #hatEchteRolle} ohne eigene Transaktion, für den Aufruf innerhalb dieser Klasse. */
+  private boolean echteRolleVorhanden(long userId, long projectId, ProjectRole rolle) {
+    return memberships
+        .findByProjectIdAndUserId(projectId, userId)
+        .map(m -> m.role() == rolle)
+        .orElse(false);
   }
 
   /**
