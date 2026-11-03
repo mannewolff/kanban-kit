@@ -610,7 +610,8 @@ public class VorhabenKostenService {
   }
 
   private static BigDecimal betrag(@Nullable ItemKostenJeKarte kosten) {
-    return kosten == null || kosten.costUsd() == null ? BigDecimal.ZERO : kosten.costUsd();
+    BigDecimal betrag = kosten == null ? null : kosten.costUsd();
+    return betrag == null ? BigDecimal.ZERO : betrag;
   }
 
   private static @Nullable Paketstufe paketstufe(@Nullable Aufgabenstufe stufe) {
