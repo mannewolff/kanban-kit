@@ -20,7 +20,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -47,7 +47,9 @@ export const TEXTE = Object.freeze({
     loeschungNichtGeprueft: "Loeschung nicht geprueft",
     nichtGeprueft: "nicht geprueft",
     geaendert: "nach der Pruefung geaendert",
-    einzigesKommando: "gate.mjs: einziges Kommando ist 'pre-commit'.\n",
+    einzigesKommando: "gate.mjs: Kommandos sind 'pre-commit', 'post-commit' und 'post-merge'.\n",
+    nichtGestartet: "{hook}: Kartenpruefung nicht gestartet — {grund}\n",
+    exitCode: "Exit {status}",
   }),
   en: Object.freeze({
     abgewiesen: "Commit rejected — {grund}.\n  {hilfe}\n",
@@ -62,11 +64,27 @@ export const TEXTE = Object.freeze({
     loeschungNichtGeprueft: "deletion not checked",
     nichtGeprueft: "not checked",
     geaendert: "changed after the check",
-    einzigesKommando: "gate.mjs: the only command is 'pre-commit'.\n",
+    einzigesKommando: "gate.mjs: the commands are 'pre-commit', 'post-commit' and 'post-merge'.\n",
+    nichtGestartet: "{hook}: card check not started — {grund}\n",
+    exitCode: "exit {status}",
   }),
 });
 
 let sprache = null;
+let config = null;
+
+/** Die Team-Config aus `.claude/workflow.config.json` im cwd, einmal gelesen; kaputt oder fehlend: `{}`. */
+function projektConfig() {
+  if (config === null) {
+    try {
+      config = JSON.parse(readFileSync(join(process.cwd(), ".claude", "workflow.config.json"), "utf-8")) ?? {};
+    } catch {
+      // keine oder kaputte Config: Vorgabe
+      config = {};
+    }
+  }
+  return config;
+}
 
 /**
  * Die Sprache des Projekts, einmal aus `.claude/workflow.config.json` im cwd gelesen:
@@ -75,13 +93,7 @@ let sprache = null;
  */
 function projektSprache() {
   if (sprache === null) {
-    let config = {};
-    try {
-      config = JSON.parse(readFileSync(join(process.cwd(), ".claude", "workflow.config.json"), "utf-8"));
-    } catch {
-      // keine oder kaputte Config: Vorgabe
-    }
-    const wert = config?.language ?? config?.sprache;
+    const wert = projektConfig().language ?? projektConfig().sprache;
     sprache = wert === "en" || wert === "de" ? wert : "de";
   }
   return sprache;
@@ -210,6 +222,91 @@ function preCommit(zusammenfassungPfad) {
   return 0;
 }
 
+// --- Die Pruefung je Karte nach Commit und Merge (Issue #2156, Plan #2145 E1) ---------------
+//
+// `post-commit` und `post-merge` starten `night.mjs --card-check --detach`. Beide halten nie
+// etwas auf: Der Commit steht schon, jeder Ausgang endet mit 0, ein Fehler beim Start ist eine
+// Zeile. Gestartet wird nur, wenn alles zutrifft; sonst still nichts.
+
+/** Ein Pfad aus `git rev-parse <option>`, absolut zum cwd; `null`, wenn git ihn nicht nennt. */
+function gitPfad(...args) {
+  const res = git("rev-parse", ...args);
+  return res.status === 0 ? resolve(process.cwd(), res.stdout.trim()) : null;
+}
+
+/**
+ * Das Kit-Verzeichnis mit dem Runner: im Projekt `.claude/kit/`, sonst — im CI-Checkout des
+ * Kit-Repos — `kit/`; dieselbe Reihenfolge wie `ladeZusammenfassungPfad`. Gesucht wird unter
+ * dem cwd, das git fuer einen Hook auf die Wurzel des Arbeitsbaums setzt, nicht neben dieser
+ * Datei: Ein Fixture, das auf ein fremdes `.githooks` zeigt, startet so nie dessen Runner.
+ */
+function kitVerzeichnis() {
+  return [join(process.cwd(), ".claude", "kit"), join(process.cwd(), "kit")]
+    .find((ort) => existsSync(join(ort, "night.mjs"))) ?? null;
+}
+
+/**
+ * Pro mit dem Teil `card-check`? Die Ausgabe steht in `board/fassung.mjs` als `KIT_AUSGABE`;
+ * fehlt sie, gilt Pro. Der Teil muss zudem liegen — ohne ihn bliebe der Start wirkungslos.
+ * SYNC: dieselbe Regel wie `ausgabe` in kit/board/ausgabe.mjs, die Datei des Teils wie
+ * `PRO_TEILE["card-check"]` dort.
+ */
+function kartenpruefungInPro(kitDir) {
+  let fassung = "";
+  try {
+    fassung = readFileSync(join(kitDir, "board", "fassung.mjs"), "utf-8");
+  } catch {
+    // keine Fassung: Vorgabe Pro
+  }
+  if (/^export const KIT_AUSGABE = "community";$/m.test(fassung)) return false;
+  return existsSync(join(kitDir, "night", "kartenpruefung.mjs"));
+}
+
+/**
+ * Steht der Arbeitsbaum auf `mainBranch` der Hauptkopie, ohne laufenden Rebase, mit
+ * `origin/<mainBranch>`? Ohne den Ursprungszweig fehlt der Pruefung je Karte die Basis
+ * (Plan #2145, E4) — wie im Abschluss eines Laufs (`abschlussDesLaufs` in kit/night/kitstand.mjs).
+ * Ein Worktree hat ein eigenes Git-Verzeichnis neben dem gemeinsamen; nur die Hauptkopie nicht.
+ */
+function aufHauptzweigDerHauptkopie() {
+  const mainBranch = typeof projektConfig().mainBranch === "string" ? projektConfig().mainBranch : "main";
+  const zweig = git("symbolic-ref", "-q", "--short", "HEAD");
+  if (zweig.status !== 0 || zweig.stdout.trim() !== mainBranch) return false;
+  const eigenes = gitPfad("--git-dir");
+  if (!eigenes || eigenes !== gitPfad("--git-common-dir")) return false;
+  if (["rebase-merge", "rebase-apply"].some((name) => existsSync(gitPfad("--git-path", name)))) return false;
+  return git("rev-parse", "--verify", "-q", `refs/remotes/origin/${mainBranch}^{commit}`).status === 0;
+}
+
+/**
+ * Die Variablen, mit denen git im Hook jeden Git-Aufruf an dieses Repo bindet, aus
+ * `git rev-parse --local-env-vars` ohne die drei zur Konfiguration (`GIT_CONFIG`,
+ * `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`), die der Aufrufer mitbringt. Erbt der Runner etwa
+ * `GIT_INDEX_FILE=.git/index`, scheitert sein `git worktree add`, weil `.git` im neuen Worktree
+ * eine Datei ist (Issue #2165).
+ */
+const REPO_BINDUNG = Object.freeze([
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE",
+  "GIT_GRAFT_FILE", "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX", "GIT_SHALLOW_FILE",
+  "GIT_COMMON_DIR",
+]);
+
+const ohneRepoBindung = (env) => Object.fromEntries(Object.entries(env).filter(([name]) => !REPO_BINDUNG.includes(name)));
+
+function kartenpruefungAnstossen(hook) {
+  const kitDir = kitVerzeichnis();
+  if (!kitDir || !kartenpruefungInPro(kitDir) || !aufHauptzweigDerHauptkopie()) return;
+  const res = spawnSync(process.execPath, [join(kitDir, "night.mjs"), "--card-check", "--detach"], {
+    cwd: process.cwd(), env: ohneRepoBindung(process.env), stdio: ["ignore", "inherit", "pipe"], encoding: "utf-8", timeout: 60_000,
+  });
+  if (!res.error && res.status === 0) {
+    process.stderr.write(res.stderr || "");
+  } else {
+    const grund = res.error?.message ?? [(res.stderr || "").trim(), text("exitCode", { status: res.status })].filter(Boolean).join(" — ");
+    process.stderr.write(text("nichtGestartet", { hook, grund }));
+  }
+}
+
 /**
  * Laedt ein anderes Programm diese Datei als Modul (der Test der Texttabelle), laeuft das
  * Gate nicht. Im Zweifel laeuft es: Ein Gate, das still nichts tut, liesse jeden Commit durch.
@@ -225,6 +322,10 @@ function alsModulGeladen() {
 
 if (!alsModulGeladen()) {
   const [befehl] = process.argv.slice(2);
+  if (befehl === "post-commit" || befehl === "post-merge") {
+    kartenpruefungAnstossen(befehl);
+    process.exit(0);
+  }
   if (befehl !== "pre-commit") {
     process.stderr.write(text("einzigesKommando"));
     process.exit(2);
