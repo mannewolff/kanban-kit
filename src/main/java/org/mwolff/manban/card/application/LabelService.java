@@ -101,8 +101,7 @@ public class LabelService {
 
   @Transactional(readOnly = true)
   public List<Label> list(long userId, long boardId) {
-    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
-    return labels.findByBoardId(boardId);
+    return labelsFuerMitglied(userId, boardId);
   }
 
   /**
@@ -111,9 +110,15 @@ public class LabelService {
    */
   @Transactional(readOnly = true)
   public List<LabelNameColor> listNamesAndColors(long userId, long boardId) {
-    return list(userId, boardId).stream()
+    return labelsFuerMitglied(userId, boardId).stream()
         .map(l -> new LabelNameColor(l.name(), l.color()))
         .toList();
+  }
+
+  /** Labels eines Boards nach der Mitgliedschaftsprüfung, in der Transaktion des Aufrufers. */
+  private List<Label> labelsFuerMitglied(long userId, long boardId) {
+    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+    return labels.findByBoardId(boardId);
   }
 
   @Transactional
