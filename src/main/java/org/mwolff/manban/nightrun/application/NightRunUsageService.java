@@ -130,7 +130,7 @@ public class NightRunUsageService {
       long userId, long projectId, NightRunPeriodType type, int stepsBack, ZoneId zone) {
     permissions.requireNightRunAccess(userId, projectId);
     NightRunPeriod zeitraum = NightRunPeriod.of(type, zone, clock, stepsBack);
-    Optional<Instant> grenze = aufbewahrungsgrenze(projectId);
+    Optional<Instant> aufbewahrtAb = aufbewahrungsgrenze(projectId);
     Instant seit = erfassungsbeginn.interactiveUsageSince(projectId).orElse(null);
 
     List<NightSummary> naechte =
@@ -152,8 +152,8 @@ public class NightRunUsageService {
             projectId, karten.stream().map(CardTotals::cardNumber).toList());
 
     return new PeriodUsageView(
-        kennzahlen(projectId, zeitraum, grenze, seit),
-        kennzahlen(projectId, zeitraum.previous(), grenze, seit),
+        kennzahlen(projectId, zeitraum, aufbewahrtAb, seit),
+        kennzahlen(projectId, zeitraum.previous(), aufbewahrtAb, seit),
         naechte,
         vorhaben(karten, zuordnung),
         ohneVorhaben(karten, zuordnung),
