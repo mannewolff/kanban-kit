@@ -17,6 +17,7 @@ import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.nightrun.application.NightRunRepository;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
+import org.mwolff.manban.nightrun.application.NightRunUsageRepository.ItemKostenJeKarte;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
@@ -929,5 +930,109 @@ class NightRunUsageRepositoryIT extends AbstractIntegrationTest {
         .isEqualTo(1L);
     assertThat(usage.stuckItems(projectId, NACHT_15_VON, NACHT_15_BIS)).isEmpty();
     assertThat(usage.lifetimeStuckItems(projectId)).isEmpty();
+  }
+
+  // --- Kosten je Karte über alle aufbewahrten Items (Issue #2002, Plan #1990 E6, E9) -----------
+
+  /**
+   * Ohne Zeitschranke zählen alle Items der Gattung NIGHT, auch verwaiste, je Karte mit Summe, Zahl
+   * der Items ohne Kostenangabe und frühestem Beginn; Sitzungen, fremde Projekte und nicht erfragte
+   * Karten fehlen.
+   */
+  @Test
+  void itemKostenJeKarte_ohneSchrankeZaehltAlleNachtItemsAuchVerwaiste() {
+    lauf(projectId, "2026-09-10T21:00:00Z", NightRunMode.CHAIN, 1L, null, gruen(721, kosten("2")));
+    jdbc.update("DELETE FROM night_run WHERE project_id = ?", projectId);
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        gruen(721, kosten("1.5")),
+        gruen(722, null),
+        gruen(723, kosten("9")));
+    lauf(
+        projectId,
+        "2026-09-16T21:10:00Z",
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        gruen(722, kosten("4")));
+    sitzung(projectId, "2026-09-15T08:00:00Z", 1L, null, gruen(721, kosten("100")));
+    lauf(
+        fremdesProjekt,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        gruen(721, kosten("50")));
+
+    assertThat(usage.itemKostenJeKarte(projectId, List.of(721, 722, 724), null))
+        .containsExactly(
+            new ItemKostenJeKarte(
+                721, new BigDecimal("3.500000"), 0L, Instant.parse("2026-09-10T21:00:00Z")),
+            new ItemKostenJeKarte(
+                722, new BigDecimal("4.000000"), 1L, Instant.parse("2026-09-15T21:10:00Z")));
+  }
+
+  /**
+   * Mit Schranke zählen nur Items, die vor ihr begonnen haben; die Schranke selbst gehört nicht
+   * dazu.
+   */
+  @Test
+  void itemKostenJeKarte_mitSchrankeNurItemsDavor() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        gruen(721, kosten("1")));
+    lauf(
+        projectId,
+        "2026-09-16T21:10:00Z",
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        gruen(721, kosten("2")),
+        gruen(722, kosten("3")));
+
+    assertThat(
+            usage.itemKostenJeKarte(
+                projectId, List.of(721, 722), Instant.parse("2026-09-16T21:10:00Z")))
+        .containsExactly(
+            new ItemKostenJeKarte(
+                721, new BigDecimal("1.000000"), 0L, Instant.parse("2026-09-15T21:10:00Z")));
+  }
+
+  /** Eine Karte, deren Items alle ohne Kosten sind, trägt keine Summe — nie 0 (Plan E5). */
+  @Test
+  void itemKostenJeKarte_ohneKostenangabeBleibtDieSummeFehlend() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        gruen(721, null),
+        gruen(721, null));
+
+    assertThat(usage.itemKostenJeKarte(projectId, List.of(721), null))
+        .containsExactly(
+            new ItemKostenJeKarte(721, null, 2L, Instant.parse("2026-09-15T21:10:00Z")));
+  }
+
+  @Test
+  void itemKostenJeKarte_ohneNummernIstLeer() {
+    lauf(
+        projectId,
+        "2026-09-15T21:10:00Z",
+        NightRunMode.IMPLEMENTATION,
+        1L,
+        null,
+        gruen(721, kosten("1")));
+
+    assertThat(usage.itemKostenJeKarte(projectId, List.of(), null)).isEmpty();
   }
 }

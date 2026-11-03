@@ -21,6 +21,7 @@ export function useProjectStrictness(projectId: number | null): Strenge | null {
       .list()
       .then((ps) => {
         if (active) {
+          // Stryker disable next-line OptionalChaining: gleichwertig — ohne Treffer wirft der Zugriff, das catch schluckt es, und die Stufe bleibt das zuvor gesetzte null
           setStufe(ps.find((p) => p.id === projectId)?.strictness ?? null)
         }
       })

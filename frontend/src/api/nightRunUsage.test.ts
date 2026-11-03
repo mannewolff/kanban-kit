@@ -151,6 +151,34 @@ describe('nightRunUsageApi', () => {
     expect(gesamt.oldestRetainedRunStart).toBeNull()
   })
 
+  /** Die Kosten je Vorhaben (Issue #2000): mit Nummer und Archiv-Kennzeichen, „ohne Vorhaben" darf fehlen. */
+  it('liefert die Vorhaben mit Nummer und archived und laesst „ohne Vorhaben" null', async () => {
+    spyFetch(
+      JSON.stringify({
+        epics: [
+          {
+            epicId: 12,
+            number: 1954,
+            shortcode: null,
+            title: 'Export',
+            archived: true,
+            cardCount: 2,
+            usage: { ...nichts, costUsd: 9 },
+          },
+        ],
+        withoutEpic: null,
+      }),
+    )
+
+    const zeitraum = await nightRunUsageApi.period(4, 'WEEK', 0, 'UTC')
+
+    expect(zeitraum.epics[0].number).toBe(1954)
+    expect(zeitraum.epics[0].archived).toBe(true)
+    expect(zeitraum.epics[0].usage.costUsd).toBe(9)
+    expect(zeitraum.withoutEpic).toBeNull()
+    expect(zeitraum).not.toHaveProperty('epicsOverlap')
+  })
+
   /** Die Bremsbilanz steht an Zeitraum und Gesamt (Issue #1551, Plan #1547). */
   it('liefert die Bremsbilanz an Zeitraum, Vorzeitraum und Gesamt', async () => {
     const kennzahlen = (brakes: unknown) => ({

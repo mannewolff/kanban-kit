@@ -193,8 +193,11 @@ public final class VorhabenLage {
         .toList();
   }
 
-  /** Ob das Dokument ein Plan ohne Paket oder ein Fachplan ohne Plan ist. */
-  private static boolean fehltNachfahr(Card dokument, Collection<Card> mitArchiv) {
+  /**
+   * Ob das Dokument ein Plan ohne Paket oder ein Fachplan ohne Plan ist. Package-sichtbar, weil
+   * {@link VorhabenStand} dieselbe Regel für „geschnitten“ nutzt (Issue #2001).
+   */
+  static boolean fehltNachfahr(Card dokument, Collection<Card> mitArchiv) {
     Kartenart art = Kartenart.von(dokument.type(), dokument.title());
     boolean plan = art == Kartenart.PLAN;
     if (!plan && art != Kartenart.FACHLICH) {

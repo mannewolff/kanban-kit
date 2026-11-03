@@ -1014,6 +1014,9 @@ export const en: Woerterbuch = {
     OHNE_ZEITWERT: (anzahl) => `of which ${anzahl} without time value`,
     AUS_RUNS: 'from runs',
     AUS_SITZUNGEN: 'from interactive sessions',
+    VORHABEN_TITEL: 'Cost per epic',
+    VORHABEN_OHNE: 'without epic',
+    VORHABEN_ARCHIVIERT: 'archived',
   },
 
   LEITSTAND_BUDGET: {
@@ -1165,6 +1168,44 @@ export const en: Woerterbuch = {
     PROGNOSE_WEITERE_VORHABEN: (anzahl: number) =>
       anzahl === 1 ? '1 other epic shares the throughput.' : `${anzahl} other epics share the throughput.`,
     PROGNOSE_AUSSTEHEND: (dokumente: string) => `More packages follow from ${dokumente}.`,
+    VORHABEN_KOSTEN: {
+      TITEL: 'Cost',
+      VORAUSSAGE: (typisch: string, unten: string, oben: string) => `Expected cost: typically ${typisch} (${unten}–${oben})`,
+      AUS_ANFORDERUNG_GESCHAETZT: 'estimated from the requirement',
+      VOR_DEM_SCHNITT_GESCHAETZT: 'estimated before the cut',
+      AUS_PAKETEN: (anzahl: number) => (anzahl === 1 ? 'from 1 package' : `from ${anzahl} packages`),
+      BISHER: (betrag: string) => `so far ${betrag}`,
+      UNVOLLSTAENDIG: 'incomplete',
+      ZU_WENIG_DATEN: 'Not enough data for a forecast yet',
+      TATSAECHLICH: (betrag: string) => `actual ${betrag}`,
+      VERGLEICH_ANFORDERUNG: 'from the requirement',
+      VERGLEICH_PAKETE: 'from the packages',
+      KEINE_VORAUSSAGE: 'no forecast',
+      ABWEICHUNG: (prozent: number) => {
+        if (prozent > 0) return `+${prozent}%`
+        return prozent < 0 ? `−${-prozent}%` : '0%'
+      },
+      HINWEIS_ANFORDERUNG:
+        'Estimate from the epics of the project completed in the last twelve weeks: ' +
+        'plan, review, cut and coverage from the typical number of attempts and the typical price per attempt, ' +
+        'implementation from the typical number of packages and the typical price of a package up to Done. ' +
+        'Typical is the 50% value, the range runs from the 15% to the 85% value; the cost so far is included.',
+      HINWEIS_PAKETE:
+        'Estimate from the epics of the project completed in the last twelve weeks: ' +
+        'per package the typical price of a package of its task level up to Done with all attempts, ' +
+        'plus the stages still outstanding. Typical is the 50% value, the range runs from the 15% to the 85% value; ' +
+        'the cost so far is included.',
+      HINWEIS_OHNE_STUFE: (anzahl: number) =>
+        anzahl === 1
+          ? '1 package without a task level is priced at the package price across all task levels.'
+          : `${anzahl} packages without a task level are priced at the package price across all task levels.`,
+      HINWEIS_UNVOLLSTAENDIG: 'Measurements or cost reports of the epic are missing.',
+      GRUND: {
+        ZU_WENIG_VORHABEN: 'Fewer than three fully measured epics were completed in the last twelve weeks.',
+        STUFE_OHNE_PREIS: 'A stage still to be estimated has no price for the model used last.',
+        KEINE_PAKETPREISE: 'There is no package price yet.',
+      },
+    },
   },
 
   PLATTFORM_LEITSTAND: {

@@ -17,6 +17,29 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.14.0] – 2026-11-03
+
+- chore: v3.13.2
+- follow-redirects auf 1.16.2 gehoben (CVE-2026-116689)
+- chore: v3.13.1
+- Mutanten im VorhabenKostenService getoetet ([#2026](https://github.com/mannewolff/kanban-kit/issues/2026))
+- Mutanten in KostenVoraussage Zeilen 323 und 325 getötet ([#2027](https://github.com/mannewolff/kanban-kit/issues/2027))
+- Abdeckung der Kostenvoraussage wieder vollstaendig ([#2029](https://github.com/mannewolff/kanban-kit/issues/2029))
+- Kostenzeile auf der Platte Vorhaben und im Detail eines Vorhabens ([#2006](https://github.com/mannewolff/kanban-kit/issues/2006))
+- Aufrufe fuer die Kostenzeile je Board und je Vorhaben ([#2005](https://github.com/mannewolff/kanban-kit/issues/2005))
+- Voraussagen und tatsaechliche Kosten je Vorhaben festhalten ([#2004](https://github.com/mannewolff/kanban-kit/issues/2004))
+- Mutanten in pushAbo.ts Zeilen 28, 40, 57 und 58 getötet ([#2023](https://github.com/mannewolff/kanban-kit/issues/2023))
+- Mutanten in push.ts Zeile 20 getötet ([#2022](https://github.com/mannewolff/kanban-kit/issues/2022))
+- Mutanten in useProjectStrictness getötet ([#2021](https://github.com/mannewolff/kanban-kit/issues/2021))
+- Mutanten in MeldbareLaeufe Zeilen 98 und 99 getötet ([#2020](https://github.com/mannewolff/kanban-kit/issues/2020))
+- Mutanten in LaufMeldeService Zeilen 69, 77 und 111 getötet ([#2019](https://github.com/mannewolff/kanban-kit/issues/2019))
+- Mutanten in PushAboService Zeile 117 getötet ([#2018](https://github.com/mannewolff/kanban-kit/issues/2018))
+- Rechnung der Kostenvoraussage aus Anforderung und Paketen ([#2003](https://github.com/mannewolff/kanban-kit/issues/2003))
+- Bausteine der Kostenvoraussage: Quantil, Aufbewahrungsgrenze, Kosten je Karte ([#2002](https://github.com/mannewolff/kanban-kit/issues/2002))
+- Stand je Vorhaben mit Aufgabenstufe über die Kartenfassade ([#2001](https://github.com/mannewolff/kanban-kit/issues/2001))
+- Kosten je Vorhaben im Verbrauch, jede Karte genau einmal ([#2000](https://github.com/mannewolff/kanban-kit/issues/2000))
+- Nach Installer 5.4.11
+
 ## [3.13.0] – 2026-10-30
 
 - chore: v3.12.1

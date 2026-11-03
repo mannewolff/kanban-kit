@@ -239,9 +239,13 @@ class ArchitectureTest {
           "LabelMarkView",
           "CardBoardActivityEvent",
           "CardsPurgedEvent",
-          // EpicRef ist Vertrag (Issue #936): die Nachtlauf-Auswertung fragt je Kartennummer die
-          // Vorhaben ab, ohne card.domain zu beruehren — analog CardsPurgedEvent (Issue #503).
-          "EpicRef",
+          // VorhabenRef ist Vertrag (Issue #2000, Nachfolger von EpicRef aus #936): die
+          // Nachtlauf-Auswertung fragt je Kartennummer das Kostenvorhaben ab, ohne card.domain zu
+          // beruehren — analog CardsPurgedEvent (Issue #503).
+          "VorhabenRef",
+          // Aufgabenstufe ist Vertrag (Issue #2001, Plan #1990 E5): nightrun rechnet den Paketpreis
+          // je Stufe, und card.domain ist modulintern.
+          "Aufgabenstufe",
           // ActorContext ist Vertrag (Issue #1620, Plan #1617): comment stempelt die Herkunft eines
           // Kommentars aus derselben Quelle wie den Verlauf, samt Record ActorStamp. Gelesen wird
           // sie ueber ActorStamp#originName, damit card.domain modulintern bleibt.

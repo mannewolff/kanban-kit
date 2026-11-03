@@ -95,9 +95,10 @@ public class MeldbareLaeufe {
                   jetzt,
                   properties.stilleFrist())
               .orElse(null);
-      String projektName = grund == null ? null : projects.findName(run.projectId()).orElse(null);
-      if (grund != null && projektName != null) {
-        meldbar.add(lauf(run, projektName, grund));
+      if (grund != null) {
+        projects
+            .findName(run.projectId())
+            .ifPresent(projektName -> meldbar.add(lauf(run, projektName, grund)));
       }
     }
     return meldbar;

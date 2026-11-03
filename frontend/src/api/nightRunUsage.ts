@@ -89,11 +89,18 @@ export interface VerbrauchNachtKurz {
   aborted: boolean
 }
 
-/** Ein Vorhaben der Aufstellung; beim Posten „ohne Vorhaben" sind Kennung, Kürzel und Titel `null`. */
+/**
+ * Ein Vorhaben der Aufstellung (Issue #2000): die Kosten seiner Karten aus Nachtläufen, jede Karte
+ * bei genau einem Vorhaben. Beim Posten „ohne Vorhaben" sind Kennung, Nummer, Kürzel und Titel
+ * `null` und `archived` ist `false`.
+ */
 export interface VerbrauchVorhaben {
   epicId: number | null
+  number: number | null
   shortcode: string | null
   title: string | null
+  /** Das Vorhaben ist archiviert; es steht mit dem Zusatz „archiviert" da (#1954 AK 1). */
+  archived: boolean
   cardCount: number
   usage: VerbrauchAngaben
 }
@@ -134,10 +141,10 @@ export interface VerbrauchZeitraum {
   current: VerbrauchKennzahlen
   previous: VerbrauchKennzahlen
   nights: VerbrauchNachtKurz[]
+  /** Die Kosten je Vorhaben, das teuerste zuerst; ein Vorhaben ohne Messung fehlt. */
   epics: VerbrauchVorhaben[]
-  withoutEpic: VerbrauchVorhaben
-  /** Eine Karte gehört zu mehreren Vorhaben — die Vorhaben-Summen überschneiden sich (Plan E11). */
-  epicsOverlap: boolean
+  /** Der Posten „ohne Vorhaben"; `null`, wenn für Karten ohne Vorhaben nichts gemessen wurde. */
+  withoutEpic: VerbrauchVorhaben | null
   /** Die Kosten je Stufe der Kette; leer, wenn im Zeitraum keine Kette lief (Issue #1114). */
   stages: VerbrauchStufe[]
 }

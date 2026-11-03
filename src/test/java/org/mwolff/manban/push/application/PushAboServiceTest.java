@@ -257,6 +257,9 @@ class PushAboServiceTest {
                 new AccessibleProject(FREMDES_PROJEKT, "Fremd")));
     when(boards.listBoards(ICH, PROJEKT))
         .thenReturn(List.of(boardView(BOARD, "Produkt"), boardView(ZWEITES_BOARD, "Betrieb")));
+    // Das fremde Projekt hat Boards — sie fehlen nur, weil seine Läufe nicht sichtbar sind.
+    when(boards.listBoards(ICH, FREMDES_PROJEKT))
+        .thenReturn(List.of(boardView(FREMDES_BOARD, "Fremdboard")));
 
     // When
     List<BoardSchalter> schalter = service.schaltbareBoards(ICH, ENDPUNKT);

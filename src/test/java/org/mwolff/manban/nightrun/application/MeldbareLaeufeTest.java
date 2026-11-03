@@ -157,6 +157,16 @@ class MeldbareLaeufeTest {
   }
 
   @Test
+  void einLaufOhneGrundFragtKeinenProjektnamenAb() {
+    lauf(1L, PROJEKT, BOARD, JETZT);
+    paket(1L, 1, NightRunState.GREEN, null);
+
+    meldbare.laeufe();
+
+    verify(projects, never()).findName(anyLong());
+  }
+
+  @Test
   void einVerstummterLaufOhneBoardErscheintOhneBoardnamen() {
     lauf(2L, PROJEKT, null, JETZT.minus(Duration.ofMinutes(91)));
 

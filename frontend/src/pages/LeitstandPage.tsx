@@ -8,6 +8,7 @@ import { cardsApi, type CardByNumber } from '../api/cards'
 import { ApiError } from '../api/client'
 import { type AgingWip, type BoardDashboardKpis, type BoardFlow, type DeliveryView, type EpicForecast } from '../api/dashboard'
 import { type Epic } from '../api/epics'
+import type { VorhabenKostenView } from '../api/vorhabenKosten'
 import { type NightRunErrorClassCounts, type NightRunItemView, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { CardDetailModal } from '../components/CardDetailModal'
 import { Erklaerung } from '../components/Erklaerung'
@@ -128,7 +129,7 @@ export function LeitstandPage() {
     return <Alert severity="error">{t.UNGUELTIGE_ID}</Alert>
   }
 
-  const { board, kpis, fluss, alter, prognose, auslieferung, klassen, nacharbeit, modelle, projectId, liste, juengster, laeufeVerborgen, epicListe } = daten
+  const { board, kpis, fluss, alter, prognose, kosten, auslieferung, klassen, nacharbeit, modelle, projectId, liste, juengster, laeufeVerborgen, epicListe } = daten
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -164,6 +165,7 @@ export function LeitstandPage() {
         nacharbeit={nacharbeit}
         modelle={modelle}
         prognose={prognose}
+        kosten={kosten}
         epicListe={epicListe}
         liste={liste}
         onDetail={setDetail}
@@ -218,6 +220,7 @@ function LeitstandRumpf({
   nacharbeit,
   modelle,
   prognose,
+  kosten,
   epicListe,
   liste,
   onDetail,
@@ -229,6 +232,7 @@ function LeitstandRumpf({
   nacharbeit: Laden<NightRunRework>
   modelle: Laden<NightRunModels>
   prognose: Laden<EpicForecast>
+  kosten: Laden<VorhabenKostenView[] | null>
   epicListe: readonly Epic[]
   liste: readonly NightRunView[] | null
   onDetail: (auswahl: Auswahl) => void
@@ -265,7 +269,8 @@ function LeitstandRumpf({
         {/* Nur mit Run-Recht und gelungenem Abruf (Plan #1905, E13): Ein Fehler blendet nur diese Platte aus. */}
         {liste && modelle.art === 'da' && <ModellePlatte daten={modelle.wert} />}
         {/* Erst mit Daten der Prognose (E14): Ein Rückfall auf die Vorhabenliste zeigte die alte Zählung. */}
-        {prognose.art === 'da' && <VorhabenPlatte prognose={prognose.wert} />}
+        {/* Die Kostenzeile nur mit Verbrauchsrecht und gelungenem Abruf (Issue #2006); sonst fehlt sie still. */}
+        {prognose.art === 'da' && <VorhabenPlatte prognose={prognose.wert} kosten={kosten.art === 'da' ? kosten.wert : null} />}
       </Box>
     </Box>
   )

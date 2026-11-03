@@ -16,12 +16,11 @@ import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardRunQueryService;
-import org.mwolff.manban.card.application.EpicRef;
+import org.mwolff.manban.card.application.VorhabenRef;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.CardTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.LifetimeTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.NightTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.PeriodTotals;
-import org.mwolff.manban.nightrun.application.NightRunUsageRepository.RetainedByKind;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.StageTotals;
 import org.mwolff.manban.nightrun.application.NightRunUsageRepository.TotalsByKind;
 import org.mwolff.manban.nightrun.domain.Bremsbilanz;
@@ -70,13 +69,17 @@ public class NightRunUsageService {
   private static final Set<NightRunErrorClass> ABBRUCH =
       EnumSet.of(NightRunErrorClass.HARD_ABORT, NightRunErrorClass.TIME_BUDGET_EXCEEDED);
 
+  /** Ein Verbrauch, in dem kein Feld gemessen ist. */
+  private static final NightRunUsage NICHT_GEMESSEN =
+      new NightRunUsage(null, null, null, null, null, null);
+
   private final NightRunUsageRepository usage;
   private final CardRunQueryService cards;
   private final PermissionChecker permissions;
   private final InteractiveUsageSinceReader erfassungsbeginn;
   private final MonthlyBudgetReader budgets;
   private final Clock clock;
-  private final NightRunProperties properties;
+  private final Aufbewahrungsgrenze grenze;
 
   public NightRunUsageService(
       NightRunUsageRepository usage,
@@ -92,7 +95,7 @@ public class NightRunUsageService {
     this.erfassungsbeginn = erfassungsbeginn;
     this.budgets = budgets;
     this.clock = clock;
-    this.properties = properties;
+    this.grenze = new Aufbewahrungsgrenze(properties);
   }
 
   /**
@@ -144,8 +147,9 @@ public class NightRunUsageService {
             .toList();
 
     List<CardTotals> karten = usage.totalsPerCard(projectId, zeitraum.from(), zeitraum.to());
-    Map<Integer, Set<EpicRef>> zuordnung =
-        cards.epicsByCardNumber(projectId, karten.stream().map(CardTotals::cardNumber).toList());
+    Map<Integer, VorhabenRef> zuordnung =
+        cards.kostenVorhabenJeKarte(
+            projectId, karten.stream().map(CardTotals::cardNumber).toList());
 
     return new PeriodUsageView(
         kennzahlen(projectId, zeitraum, grenze, seit),
@@ -153,7 +157,6 @@ public class NightRunUsageService {
         naechte,
         vorhaben(karten, zuordnung),
         ohneVorhaben(karten, zuordnung),
-        zuordnung.values().stream().anyMatch(vorhaben -> vorhaben.size() > 1),
         stufen(usage.totalsPerStage(projectId, zeitraum.from(), zeitraum.to())));
   }
 
@@ -230,20 +233,11 @@ public class NightRunUsageService {
   }
 
   /**
-   * Die Aufbewahrungsgrenze (Plan E8, Issue #1071): der späteste älteste Eintrag unter den
-   * Gattungen, deren Ringpuffer <b>gefüllt</b> ist ({@code count >= properties.maxRunsFor(kind)}).
-   * Hat keine Gattung ihren Ringpuffer gefüllt, ist nichts verdrängt worden — dann gibt es keine
-   * Grenze, unabhängig davon, wie alt das Projekt ist.
-   *
-   * <p>Hält eine nicht volle Gattung ältere Einträge als die volle, bleibt die Grenze am ältesten
-   * Eintrag der vollen Gattung — die nicht volle hat davon nichts verloren (E9, Plan-Review H5).
+   * Die Aufbewahrungsgrenze über alle Gattungen (Plan E8, Issue #1071); Regel in {@link
+   * Aufbewahrungsgrenze}.
    */
   private Optional<Instant> aufbewahrungsgrenze(long projectId) {
-    return usage.retentionBoundary(projectId).stream()
-        .filter(r -> r.count() >= properties.maxRunsFor(r.kind()))
-        .map(RetainedByKind::oldestStart)
-        .filter(Objects::nonNull)
-        .max(Instant::compareTo);
+    return grenze.gesamt(usage.retentionBoundary(projectId));
   }
 
   /**
@@ -295,16 +289,19 @@ public class NightRunUsageService {
   }
 
   /**
-   * Die Kartensummen je Vorhaben, absteigend nach Kosten; ohne Kosten zuletzt, bei Gleichstand nach
-   * Vorhaben-ID. Eine Karte in mehreren Vorhaben zählt in jedem (Plan E11).
+   * Die Kosten je Vorhaben (Issue #2000, #1954 AK 1), absteigend nach Kosten; ohne Kosten zuletzt,
+   * bei Gleichstand nach Vorhaben-ID. Jede Karte zählt bei genau einem Vorhaben — dem, das die
+   * Fassade ihr zuordnet (Plan #1990 E1) —, und nur mit ihrem Anteil aus Nachtläufen: Sitzungen
+   * bleiben im Verbrauch ein eigener Anteil. Ein Vorhaben ohne Messung im Zeitraum fehlt.
    */
   private static List<EpicUsageView> vorhaben(
-      List<CardTotals> karten, Map<Integer, Set<EpicRef>> zuordnung) {
-    Map<EpicRef, EpicUsageView> jeVorhaben = new LinkedHashMap<>();
-    for (CardTotals karte : karten) {
-      for (EpicRef ref : zuordnung.getOrDefault(karte.cardNumber(), Set.of())) {
+      List<CardTotals> karten, Map<Integer, VorhabenRef> zuordnung) {
+    Map<VorhabenRef, EpicUsageView> jeVorhaben = new LinkedHashMap<>();
+    for (CardTotals karte : gemessen(karten)) {
+      @Nullable VorhabenRef ref = zuordnung.get(karte.cardNumber());
+      if (ref != null) {
         jeVorhaben.merge(
-            ref, new EpicUsageView(ref, 1L, karte.usage()), NightRunUsageService::zusammen);
+            ref, new EpicUsageView(ref, 1L, karte.nightUsage()), NightRunUsageService::zusammen);
       }
     }
     return jeVorhaben.values().stream()
@@ -320,18 +317,27 @@ public class NightRunUsageService {
 
   /**
    * Der eigene Posten „ohne Vorhaben": Karten ohne Zuordnung und Kartennummern, zu denen es keine
-   * Karte mehr gibt (#926 AK 11, Plan E12) — nicht weggelassen und nicht verteilt.
+   * Karte mehr gibt (#926 AK 11, Plan E12) — nicht weggelassen und nicht verteilt. Wurde für sie im
+   * Zeitraum nichts gemessen, fehlt der Posten ({@code null}, #1954 AK 1).
    */
-  private static EpicUsageView ohneVorhaben(
-      Collection<CardTotals> karten, Map<Integer, Set<EpicRef>> zuordnung) {
-    EpicUsageView ohne =
-        new EpicUsageView(null, 0L, new NightRunUsage(null, null, null, null, null, null));
-    for (CardTotals karte : karten) {
-      if (zuordnung.getOrDefault(karte.cardNumber(), Set.of()).isEmpty()) {
-        ohne = zusammen(ohne, new EpicUsageView(null, 1L, karte.usage()));
+  private static @Nullable EpicUsageView ohneVorhaben(
+      Collection<CardTotals> karten, Map<Integer, VorhabenRef> zuordnung) {
+    @Nullable EpicUsageView ohne = null;
+    for (CardTotals karte : gemessen(karten)) {
+      if (!zuordnung.containsKey(karte.cardNumber())) {
+        EpicUsageView posten = new EpicUsageView(null, 1L, karte.nightUsage());
+        ohne = ohne == null ? posten : zusammen(ohne, posten);
       }
     }
     return ohne;
+  }
+
+  /**
+   * Die Karten mit einer Messung aus Nachtläufen. Eine Karte, deren Nachtlauf-Anteil ganz fehlt,
+   * hatte im Zeitraum nur Sitzungen — sie trüge in der Aufstellung eine erfundene 0 bei.
+   */
+  private static List<CardTotals> gemessen(Collection<CardTotals> karten) {
+    return karten.stream().filter(k -> !NICHT_GEMESSEN.equals(k.nightUsage())).toList();
   }
 
   private static EpicUsageView zusammen(EpicUsageView a, EpicUsageView b) {
@@ -485,19 +491,21 @@ public class NightRunUsageService {
       boolean aborted) {}
 
   /**
-   * Ein Vorhaben mit seinen Kartensummen.
+   * Ein Vorhaben mit den Kosten seiner Karten aus Nachtläufen.
    *
    * @param epic das Vorhaben; {@code null} beim Posten „ohne Vorhaben"
    * @param cardCount Zahl der Kartennummern, die beitragen
-   * @param usage Summe ihrer Verbräuche
+   * @param usage Summe ihrer Verbräuche aus Nachtläufen
    */
-  public record EpicUsageView(@Nullable EpicRef epic, long cardCount, NightRunUsage usage) {}
+  public record EpicUsageView(@Nullable VorhabenRef epic, long cardCount, NightRunUsage usage) {}
 
   /**
    * Ein Zeitraum samt Vorzeitraum, Nächten und Vorhaben-Aufstellung.
    *
-   * @param epicsOverlap {@code true}, wenn eine Karte zu mehreren Vorhaben gehört — dann ergeben
-   *     die Vorhaben-Summen zusammen mehr als den kartenbezogenen Anteil (Plan E11)
+   * @param epics die Kosten je Vorhaben, jede Karte genau einmal (#1954 AK 1); ein Vorhaben ohne
+   *     Messung im Zeitraum fehlt
+   * @param withoutEpic der Posten „ohne Vorhaben"; {@code null}, wenn für Karten ohne Vorhaben im
+   *     Zeitraum nichts gemessen wurde
    * @param stages die Kosten je Stufe der Kette (#993 AK 8); leer, wenn im Zeitraum keine Kette
    *     lief. Sie beziehen sich auf {@code current} — der Vorzeitraum trägt seine eigenen Summen,
    *     aber keine eigene Stufen-Aufstellung.
@@ -507,7 +515,6 @@ public class NightRunUsageService {
       PeriodFigures previous,
       List<NightSummary> nights,
       List<EpicUsageView> epics,
-      EpicUsageView withoutEpic,
-      boolean epicsOverlap,
+      @Nullable EpicUsageView withoutEpic,
       List<StageUsageView> stages) {}
 }

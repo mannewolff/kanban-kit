@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 # claude-workflow-kit pre-commit (Issue #470)
 #
 # Delegiert sofort an Node: Die Logik gehoert nach gate.mjs, weil sie testbar sein

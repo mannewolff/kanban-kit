@@ -77,6 +77,11 @@ final class ApiZugang {
           // Push-Abos (Issue #1997, Plan #1989 E14): nur per Session — ein Abo lebt so lange wie
           // die Sitzung auf dem Gerät, und ein Token hat keine.
           new Pfadgruppe(Zugangsart.NUR_SESSION, List.of("/api/push/**")),
+          // Kostenzeile je Vorhaben (Issue #2005, Plan #1990 Paket 5): nur per Session — sie ist
+          // eine Anzeige des Leitstands für Angemeldete, kein Zugang für Werkzeuge mit Token.
+          new Pfadgruppe(
+              Zugangsart.NUR_SESSION,
+              List.of("/api/boards/*/night-run-epic-costs", "/api/cards/*/night-run-epic-costs")),
           // Kanban-Compat-API (tbx.mjs/board.mjs) ausschließlich per PAT. Seit Issue #947 liegt
           // hier auch POST /api/kanban/night-runs: Der Nachtlauf meldet sich mit demselben
           // projektgebundenen Token, ohne Sitzung. Keine Regel ändert sich dadurch — das Muster

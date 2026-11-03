@@ -9,6 +9,7 @@ import { dashboardApi, type AgingWip, type BoardDashboardKpis, type BoardFlow, t
 import { epicsApi, type Epic } from '../api/epics'
 import { nightRunsApi, type NightRunItemView, type NightRunModels, type NightRunRework, type NightRunView } from '../api/nightRuns'
 import { projectsApi } from '../api/projects'
+import { vorhabenKostenApi } from '../api/vorhabenKosten'
 import { nightRunUsageApi, type VerbrauchGesamt, type VerbrauchKennzahlen, type VerbrauchZeitraum } from '../api/nightRunUsage'
 import { TabletQuerProvider } from '../lib/tabletQuer'
 import { setzeMedien } from '../test/setup'
@@ -21,6 +22,7 @@ vi.mock('../api/dashboard', () => ({ dashboardApi: { get: vi.fn(), implementatio
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/nightRuns', () => ({ nightRunsApi: { list: vi.fn(), errorClassCounts: vi.fn(), rework: vi.fn(), models: vi.fn() } }))
+vi.mock('../api/vorhabenKosten', () => ({ vorhabenKostenApi: { jeBoard: vi.fn() } }))
 vi.mock('../api/nightRunUsage', async (original) => ({
   ...(await original<typeof import('../api/nightRunUsage')>()),
   nightRunUsageApi: { period: vi.fn(), total: vi.fn(), budget: vi.fn() },
@@ -58,6 +60,7 @@ const m = {
   nacharbeit: nightRunsApi.rework as ReturnType<typeof vi.fn>,
   modelle: nightRunsApi.models as ReturnType<typeof vi.fn>,
   karteNachNummer: cardsApi.byNumber as ReturnType<typeof vi.fn>,
+  kosten: vorhabenKostenApi.jeBoard as ReturnType<typeof vi.fn>,
   verbrauch: nightRunUsageApi.period as ReturnType<typeof vi.fn>,
   lebenszeit: nightRunUsageApi.total as ReturnType<typeof vi.fn>,
   budget: nightRunUsageApi.budget as ReturnType<typeof vi.fn>,
@@ -239,8 +242,7 @@ const zeitraum = (extra: Partial<VerbrauchZeitraum> = {}): VerbrauchZeitraum => 
   }),
   nights: [nacht('2026-09-14', 186_000)],
   epics: [],
-  withoutEpic: { epicId: null, shortcode: null, title: null, cardCount: 0, usage: angaben(null) },
-  epicsOverlap: false,
+  withoutEpic: null,
   stages: [],
   ...extra,
 })
@@ -335,6 +337,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   m.board.mockResolvedValue({ id: 1, name: 'Entwicklung', projectId: 5, columns: [] })
   m.projekte.mockResolvedValue([])
+  // Ohne Verbrauchsrecht liefert der Abruf null (Issue #2006): Die Platte „Vorhaben“ bleibt ohne Kostenzeile.
+  m.kosten.mockResolvedValue(null)
   m.kpis.mockResolvedValue(kpis())
   m.implementierung.mockResolvedValue({ avgImplementationSeconds: 5400, implementationSampleCount: 4 })
   m.epics.mockResolvedValue([epic(1, 'Nachtlauf-Auswertung', 7, 9, [917]), epic(2, 'Erledigt', 3, 3)])
@@ -823,6 +827,37 @@ describe('LeitstandPage — Platten des Rumpfs', () => {
     ])
     expect(within(vorhaben).getByTestId('fuellung-78')).toBeInTheDocument()
     expect(within(vorhaben).getByTestId('fuellung-100')).toBeInTheDocument()
+  })
+
+  it('setzt die Kostenzeile unter das Vorhaben, wenn der Abruf Daten liefert (Issue #2006)', async () => {
+    m.kosten.mockResolvedValue([
+      {
+        epicId: 1,
+        number: 1,
+        archiviert: false,
+        laufend: {
+          hatDokumentOderPaket: true,
+          bisher: 4,
+          unvollstaendig: false,
+          voraussage: null,
+          zuWenigDaten: 'ZU_WENIG_VORHABEN',
+        },
+        abschluss: null,
+      },
+    ])
+    renderPage()
+    const vorhaben = await screen.findByRole('region', { name: 'Vorhaben' })
+    expect(m.kosten).toHaveBeenCalledWith(1)
+    expect(await within(vorhaben).findByTestId('kosten-1')).toHaveTextContent('Noch zu wenig Daten für eine Voraussage')
+  })
+
+  it('zeigt die Platte ohne Kostenzeile, wenn der Abruf der Kosten scheitert (Issue #2006)', async () => {
+    m.kosten.mockRejectedValue(new ApiError(500, 'Kaputt'))
+    renderPage()
+    const vorhaben = await screen.findByRole('region', { name: 'Vorhaben' })
+    await waitFor(() => expect(m.kosten).toHaveBeenCalled())
+    expect(within(vorhaben).getByTestId('prognose-1')).toBeInTheDocument()
+    expect(within(vorhaben).queryByTestId('kosten-1')).not.toBeInTheDocument()
   })
 
   it('zählt nach dem neuen Abruf, nicht nach der Vorhabenliste (AK 16)', async () => {

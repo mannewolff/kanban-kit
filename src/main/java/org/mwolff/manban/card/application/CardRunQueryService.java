@@ -2,12 +2,13 @@ package org.mwolff.manban.card.application;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -19,6 +20,8 @@ import org.mwolff.manban.card.domain.Arbeitspaket;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.Kartenart;
+import org.mwolff.manban.card.domain.Kostenzuordnung;
+import org.mwolff.manban.card.domain.VorhabenStand;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,18 +64,15 @@ public class CardRunQueryService {
   }
 
   /**
-   * Zu jeder genannten Kartennummer des Projekts die Vorhaben, zu denen ihre Karte gehört (Issue
-   * #936, Plan #933 E10).
+   * Zu jeder genannten Kartennummer des Projekts ihr Kostenvorhaben (Issue #2000, Plan #1990 E1,
+   * fachlich #1954 AK 1 und 12): das eine Vorhaben, bei dem ihre Kosten zählen.
    *
-   * <p>Die Zugehörigkeit ist die aus {@link EpicMembership} — {@code parentId} plus Herkunftskette
-   * — und kein eigener Begriff. Gerechnet wird je Board, wie überall, wo {@code EpicMembership}
-   * gilt, und über alle Boards des Projekts vereinigt: Kartennummern sind projektweit eindeutig,
-   * und der Aufrufer kennt nur Nummern.
-   *
-   * <p><b>Eine Karte kann zu mehreren Vorhaben gehören</b> (Plan #631, E10) und steht dann mit
-   * mehreren {@link EpicRef} im Ergebnis. Wer über Vorhaben summiert, zählt ihre Werte deshalb
-   * mehrfach — die Summen der Vorhaben dürfen sich überschneiden und ergeben zusammen nicht die
-   * Gesamtsumme.
+   * <p>Die Zugehörigkeit ist die aus {@link EpicMembership#computeMitArchiv} — {@code parentId}
+   * plus Herkunftskette, archivierte Karten eingeschlossen —, und unter ihr wählt {@link
+   * Kostenzuordnung} genau ein Vorhaben: unmittelbar vor geerbt. Gerechnet wird je Board, wie
+   * überall, wo {@code EpicMembership} gilt, und über alle Boards des Projekts vereinigt:
+   * Kartennummern sind projektweit eindeutig, und der Aufrufer kennt nur Nummern. Die Summen je
+   * Vorhaben überschneiden sich damit nie.
    *
    * <p>Eine Nummer ohne Karte oder ohne Vorhaben fehlt im Ergebnis; die Methode wirft dafür nicht.
    * Eine leere Nummernmenge fragt die Datenbank nicht.
@@ -81,36 +81,115 @@ public class CardRunQueryService {
    * fremde Module, die ihre eigene Prüfung bereits vorgenommen haben — sie liefert keine
    * Karteninhalte, nur die Zuordnung zu den Nummern, die der Aufrufer schon kennt.
    *
-   * @return je Kartennummer die Menge ihrer Vorhaben; Nummern ohne Vorhaben fehlen
+   * @return je Kartennummer ihr Kostenvorhaben; Nummern ohne Vorhaben fehlen
    */
   @Transactional(readOnly = true)
-  public Map<Integer, Set<EpicRef>> epicsByCardNumber(
-      long projectId, Collection<Integer> cardNumbers) {
-    if (cardNumbers.isEmpty()) {
+  public Map<Integer, VorhabenRef> kostenVorhabenJeKarte(
+      long projectId, Collection<Integer> nummern) {
+    if (nummern.isEmpty()) {
       return Map.of();
     }
-    Set<Integer> gesucht = Set.copyOf(cardNumbers);
+    Set<Integer> gesucht = Set.copyOf(nummern);
     Map<Long, List<Card>> jeBoard =
         cards.findByProjectId(projectId).stream().collect(Collectors.groupingBy(Card::boardId));
 
-    Map<Integer, Set<EpicRef>> ergebnis = new HashMap<>();
+    Map<Integer, VorhabenRef> ergebnis = new HashMap<>();
     for (List<Card> boardKarten : jeBoard.values()) {
-      Map<Long, Card> nachId =
-          boardKarten.stream().collect(Collectors.toMap(Card::requireId, Function.identity()));
-      EpicMembership.compute(boardKarten)
+      Kostenzuordnung.ermittle(boardKarten, EpicMembership.computeMitArchiv(boardKarten))
           .forEach(
-              (epicId, mitglieder) -> {
-                // Die Schluessel von compute sind die Vorhaben genau dieser Kartenmenge.
-                Card epic = Objects.requireNonNull(nachId.get(epicId));
-                EpicRef ref = new EpicRef(epicId, epic.shortcode(), epic.title());
-                mitglieder.stream()
-                    .map(Card::number)
-                    .filter(gesucht::contains)
-                    .forEach(n -> ergebnis.computeIfAbsent(n, k -> new HashSet<>()).add(ref));
+              (nummer, vorhaben) -> {
+                if (gesucht.contains(nummer)) {
+                  ergebnis.put(
+                      nummer,
+                      new VorhabenRef(
+                          vorhaben.requireId(),
+                          vorhaben.number(),
+                          vorhaben.shortcode(),
+                          vorhaben.title(),
+                          vorhaben.archived()));
+                }
               });
     }
-    return ergebnis.entrySet().stream()
-        .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, e -> Set.copyOf(e.getValue())));
+    return Map.copyOf(ergebnis);
+  }
+
+  /**
+   * Die Projekte mit mindestens einem Vorhaben (Issue #2004, Plan #1990) — für den Job, der die
+   * Kosten je Vorhaben festhält. Archivierte Vorhaben zählen mit, Vorhaben im Papierkorb nicht
+   * ({@link CardRepository#findBoardIdsWithEpics}). Ohne Rechteprüfung wie {@link
+   * #kostenVorhabenJeKarte}: Die Methode nennt nur IDs.
+   *
+   * @return die Projekt-IDs, jede einmal, aufsteigend
+   */
+  @Transactional(readOnly = true)
+  public List<Long> projekteMitVorhaben() {
+    return cards.findBoardIdsWithEpics().stream()
+        .map(boards::findProjectId)
+        .flatMap(Optional::stream)
+        .distinct()
+        .sorted()
+        .toList();
+  }
+
+  /**
+   * Der Stand jedes Vorhabens des Projekts für die Kostenvoraussage (Issue #2001, Plan #1990 E1,
+   * E5, E10; fachlich #1954 AK 3, 5 und 7): Pakete mit Aufgabenstufe, Dokumente mit offen und
+   * geschnitten, der Abschluss und die Kostenkarten. Archivierte Vorhaben stehen mit da.
+   *
+   * <p>Gerechnet wird je Board wie bei {@link #kostenVorhabenJeKarte}: Die Zugehörigkeit samt
+   * Archiv aus {@link EpicMembership#computeMitArchiv} und die Spaltennamen des Boards gehen an
+   * {@link VorhabenStand}. Die Aufgabenstufe liest erst diese Fassade ({@link
+   * Aufgabenstufe#ausBeschreibung}), weil {@code card.domain} sie nicht kennt. Ein Projekt ohne
+   * Karten fragt keine Spalten. Ohne Rechteprüfung wie {@link #kostenVorhabenJeKarte}.
+   *
+   * @return je Vorhaben sein Stand, aufsteigend nach Kartennummer
+   */
+  @Transactional(readOnly = true)
+  public List<VorhabenStandView> vorhabenStaende(long projectId) {
+    Map<Long, List<Card>> jeBoard =
+        cards.findByProjectId(projectId).stream().collect(Collectors.groupingBy(Card::boardId));
+    return jeBoard.entrySet().stream()
+        .flatMap(
+            board -> {
+              Map<Long, String> spaltennamen = new HashMap<>();
+              boards.listColumns(board.getKey()).forEach(s -> spaltennamen.put(s.id(), s.name()));
+              return VorhabenStand.ermittle(
+                  board.getValue(), EpicMembership.computeMitArchiv(board.getValue()), spaltennamen)
+                  .stream();
+            })
+        .sorted(Comparator.comparing((VorhabenStand.Ergebnis e) -> e.vorhaben().number()))
+        .map(CardRunQueryService::standView)
+        .toList();
+  }
+
+  private static VorhabenStandView standView(VorhabenStand.Ergebnis stand) {
+    Card vorhaben = stand.vorhaben();
+    return new VorhabenStandView(
+        new VorhabenRef(
+            vorhaben.requireId(),
+            vorhaben.number(),
+            vorhaben.shortcode(),
+            vorhaben.title(),
+            vorhaben.archived()),
+        vorhaben.boardId(),
+        stand.pakete().stream()
+            .map(
+                p ->
+                    new PaketStandView(
+                        p.nummer(),
+                        p.done(),
+                        Aufgabenstufe.ausBeschreibung(p.beschreibung()).orElse(null),
+                        p.angelegt(),
+                        p.movedToDoneAt()))
+            .toList(),
+        stand.dokumente().stream()
+            .map(d -> new DokumentStandView(d.nummer(), d.art().name(), d.offen(), d.geschnitten()))
+            .toList(),
+        stand.hatAnforderung(),
+        stand.hatteUngeschnittenesDokument(),
+        stand.abgeschlossen(),
+        stand.kostenkarten(),
+        stand.fruehesteKostenkarteAngelegt());
   }
 
   /**
@@ -126,7 +205,7 @@ public class CardRunQueryService {
    * Papierkorb-Karten nicht. Unbekannte Nummern fehlen im Ergebnis; die Methode wirft dafür nicht.
    * Eine leere Nummernmenge fragt die Datenbank nicht.
    *
-   * <p>Ohne Rechteprüfung wie {@link #epicsByCardNumber}: Die Methode ist Vertrag für fremde
+   * <p>Ohne Rechteprüfung wie {@link #kostenVorhabenJeKarte}: Die Methode ist Vertrag für fremde
    * Module, die ihre eigene Prüfung bereits vorgenommen haben — sie liefert keine Karteninhalte,
    * nur die Existenz zu den Nummern, die der Aufrufer schon kennt.
    *
@@ -497,4 +576,55 @@ public class CardRunQueryService {
    */
   public record LabelEreignisView(
       long cardId, String labelName, Instant createdAt, Instant laufStart) {}
+
+  /**
+   * Der Stand eines Vorhabens für die Kostenvoraussage (Issue #2001).
+   *
+   * @param vorhaben das Vorhaben, auch archiviert
+   * @param boardId Board des Vorhabens
+   * @param pakete Arbeitspakete samt Archiv, aufsteigend nach Nummer
+   * @param dokumente Fachpläne und Pläne samt Archiv, aufsteigend nach Nummer
+   * @param hatAnforderung ob ein Fachplan dazugehört
+   * @param hatteUngeschnittenesDokument ob überhaupt ein Dokument dazugehört — jedes war vor seinem
+   *     Schnitt ungeschnitten
+   * @param abgeschlossen mindestens ein Paket, alle in Done, kein Dokument offen (Plan #1990 E10)
+   * @param kostenkarten Nummern der Karten, deren Kosten bei diesem Vorhaben zählen (E1)
+   * @param fruehesteKostenkarteAngelegt früheste Anlagezeit einer Kostenkarte; {@code null} ohne
+   */
+  public record VorhabenStandView(
+      VorhabenRef vorhaben,
+      long boardId,
+      List<PaketStandView> pakete,
+      List<DokumentStandView> dokumente,
+      boolean hatAnforderung,
+      boolean hatteUngeschnittenesDokument,
+      boolean abgeschlossen,
+      List<Integer> kostenkarten,
+      @Nullable Instant fruehesteKostenkarteAngelegt) {}
+
+  /**
+   * Ein Arbeitspaket eines Vorhabens (Issue #2001).
+   *
+   * @param number projektweite Nummer der Karte
+   * @param done ob es in Done liegt ({@code Arbeitspaket.effektivDone})
+   * @param aufgabenstufe Stufe aus der Beschreibung; {@code null} ohne gültige Zeile (E5)
+   * @param createdAt Anlagezeit
+   * @param movedToDoneAt wann es zuletzt nach Done kam; {@code null}, wenn unbekannt
+   */
+  public record PaketStandView(
+      int number,
+      boolean done,
+      @Nullable Aufgabenstufe aufgabenstufe,
+      Instant createdAt,
+      @Nullable Instant movedToDoneAt) {}
+
+  /**
+   * Ein Fachplan oder Plan eines Vorhabens (Issue #2001).
+   *
+   * @param number projektweite Nummer der Karte
+   * @param art Konstantenname der Kartenart, {@code FACHLICH} oder {@code PLAN}
+   * @param offen weder in Done noch archiviert
+   * @param geschnitten ob aus ihm schon ein Paket (Plan) oder ein Plan (Fachplan) entstanden ist
+   */
+  public record DokumentStandView(int number, String art, boolean offen, boolean geschnitten) {}
 }

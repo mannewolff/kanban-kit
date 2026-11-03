@@ -273,6 +273,76 @@ class NightRunUsageServiceIT extends AbstractIntegrationTest {
   }
 
   /**
+   * Über die echte card-Fassade (Issue #2000, Plan #1990 E1): jede Karte genau einmal, unmittelbar
+   * vor geerbt, archivierte Pakete und Vorhaben zählen mit, Sitzungen stehen nicht darin.
+   */
+  @Test
+  void dieKostenJeVorhabenZaehlenJedeKarteGenauEinmal() {
+    long board = id("INSERT INTO board (project_id, name) VALUES (?, 'B') RETURNING id", projectId);
+    long spalte =
+        id(
+            "INSERT INTO board_column (board_id, name, position) VALUES (?, 'Ready', 0)"
+                + " RETURNING id",
+            board);
+    long export = karte(board, spalte, 901, "Export", "EPIC", null, null, true);
+    long suche = karte(board, spalte, 902, "Suche", "EPIC", null, null, false);
+    long paket = karte(board, spalte, 101, "Paket", "CARD", export, null, false);
+    long nacharbeit = karte(board, spalte, 102, "Nacharbeit", "CARD", suche, paket, false);
+    karte(board, spalte, 103, "Folge", "CARD", null, nacharbeit, false);
+    karte(board, spalte, 104, "Alt", "CARD", export, null, true);
+
+    NightRunPeriod monat = NightRunPeriod.of(NightRunPeriodType.MONTH, BERLIN, clock, 0);
+    lauf(
+        monat.from().plusSeconds(3_600),
+        NightRunMode.CHAIN,
+        "12",
+        paket(101, "3"),
+        paket(102, "2"),
+        paket(104, "1"),
+        paket(4711, "5"));
+    sitzung(monat.from().plusSeconds(7_200), "9", paket(103, "9"));
+
+    PeriodUsageView auswertung =
+        service.period(owner, projectId, NightRunPeriodType.MONTH, 0, BERLIN);
+
+    assertThat(auswertung.epics())
+        .extracting(e -> e.epic().title(), e -> e.epic().archiviert(), e -> e.cardCount())
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple("Export", true, 2L),
+            org.assertj.core.groups.Tuple.tuple("Suche", false, 1L));
+    assertThat(auswertung.epics().get(0).usage().costUsd()).isEqualByComparingTo("4");
+    assertThat(auswertung.epics().get(1).usage().costUsd()).isEqualByComparingTo("2");
+    assertThat(auswertung.withoutEpic().cardCount()).isEqualTo(1L);
+    assertThat(auswertung.withoutEpic().usage().costUsd()).isEqualByComparingTo("5");
+  }
+
+  private long karte(
+      long board,
+      long spalte,
+      int nummer,
+      String titel,
+      String typ,
+      Long parentId,
+      Long herkunft,
+      boolean archiviert) {
+    return id(
+        "INSERT INTO card (project_id, board_id, column_id, number, title, position_in_column,"
+            + " type, parent_id, derived_from_card_id, archived)"
+            + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        projectId,
+        board,
+        spalte,
+        nummer,
+        titel,
+        // Die Position muss je Spalte eindeutig sein; die Nummer ist es.
+        nummer,
+        typ,
+        parentId,
+        herkunft,
+        archiviert);
+  }
+
+  /**
    * Über die ganze Kette — SQL, Service, Gattungen: Die Gesamtsumme ist genau die Addition beider
    * Anteile, und kein Eintrag steht in beiden (Issue #1013, #984 AK 5).
    */
