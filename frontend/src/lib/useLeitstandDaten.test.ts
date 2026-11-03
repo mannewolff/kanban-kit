@@ -236,6 +236,7 @@ describe('useLeitstandDaten — Board-ID', () => {
     expect(m.board).toHaveBeenLastCalledWith(8)
     expect(m.kpis).toHaveBeenLastCalledWith(8)
     expect(m.epics).toHaveBeenLastCalledWith(8)
+    expect(m.kosten).toHaveBeenLastCalledWith(8)
 
     await act(async () => {
       zweites.einloesen(board({ id: 8, name: 'Zweites' }))
