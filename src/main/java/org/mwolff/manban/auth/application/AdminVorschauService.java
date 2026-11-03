@@ -227,7 +227,10 @@ public class AdminVorschauService {
       return new VorschauPruefung.Beendet(endgrund);
     }
     VorschauEndgrund gespeichert =
-        vorschauen.findByKennung(vorschau.kennung()).map(AdminVorschau::endgrund).orElse(endgrund);
+        vorschauen
+            .findByKennung(vorschau.kennung())
+            .flatMap(v -> Optional.ofNullable(v.endgrund()))
+            .orElse(endgrund);
     return new VorschauPruefung.Beendet(gespeichert);
   }
 
