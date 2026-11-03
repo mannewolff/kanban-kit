@@ -283,6 +283,7 @@ export const en: Woerterbuch = {
     STATUS_FILTER: 'Status filter',
     FILTER: (name) => `Filter ${name}`,
     UEBERFAELLIG: 'Overdue',
+    FACHPLAENE: 'Requirements',
     ZUSTAENDIG: 'Assignee',
     ZUSTAENDIG_ALLE: 'Assignee: all',
     ZUSTAENDIG_NAME: (name) => `Assignee: ${name}`,

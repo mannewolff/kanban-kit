@@ -301,6 +301,7 @@ export const de = {
     STATUS_FILTER: 'Status-Filter',
     FILTER: (name: string) => `Filter ${name}`,
     UEBERFAELLIG: 'Überfällig',
+    FACHPLAENE: 'Fachpläne',
     ZUSTAENDIG: 'Zuständig',
     ZUSTAENDIG_ALLE: 'Zuständig: alle',
     ZUSTAENDIG_NAME: (name: string) => `Zuständig: ${name}`,
