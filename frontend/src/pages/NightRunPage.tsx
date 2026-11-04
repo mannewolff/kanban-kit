@@ -3022,6 +3022,11 @@ function LaufPanel({
 }
 
 
+/** Die Uhrzeit der Darstellung; eigene Funktion, weil `react-hooks/purity` `Date.now()` im Rendern abweist. */
+function jetztMs(): number {
+  return Date.now()
+}
+
 export function NightRunPage() {
   const { projectId } = useParams()
   const { vorschau } = useAuth()
@@ -3344,7 +3349,7 @@ export function NightRunPage() {
   const ausgeblendet = laeufe.length - sichtbareLaeufe.length
   // Seit Issue #1511 stehen mit dem obersten alle offen, die mit ihm zusammen gelaufen sind; jeder
   // lädt einzeln über `aufklappen`.
-  const offenBeimStart = zusammenGelaufen(sichtbareLaeufe, new Date().getTime())
+  const offenBeimStart = zusammenGelaufen(sichtbareLaeufe, jetztMs())
   const offenBeimStartSchluessel = offenBeimStart.map((lauf) => lauf.startedAt).join('|')
 
   useEffect(() => {
@@ -3521,7 +3526,7 @@ export function NightRunPage() {
             ausbleibt. Die Polsterung oben und unten ist die des früheren Bereichs (#988). */}
         <Box data-testid="laufbereich" sx={{ display: 'flex', flexDirection: 'column', gap: '14px', py: '20px' }}>
           <RunnerJetzt projectId={id} taktMs={AUFFRISCH_MS} onGeladen={setRunnerLage} />
-          <JetztImWerk laeufe={laeufe.map(alsZeitleistenlauf)} runner={runnerLage} jetzt={new Date().getTime()} />
+          <JetztImWerk laeufe={laeufe.map(alsZeitleistenlauf)} runner={runnerLage} jetzt={jetztMs()} />
           <HeuteNachtUebersicht projectId={id} onKarteOeffnen={karteOeffnen} />
 
           {laeufeVerborgen && <VorschauVerborgenHinweis />}

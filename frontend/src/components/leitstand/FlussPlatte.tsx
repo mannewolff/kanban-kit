@@ -67,7 +67,7 @@ function Bild({
   const t = useT().LEITSTAND_FLUSS
   const pfade = flussPfade(tage, (tage.length - 1) * TAG_BREITE, HOEHE)
   const vorgelesen = (tag: FlowDay) => t.TAG_ARIA(tagDatum(tag, sprache), flussTagZeilen(tag, sprache).join(', '))
-  const letzter = tage[tage.length - 1]
+  const letzter = tage.at(-1)!
   return (
     <Box sx={{ position: 'relative', height: 132 }}>
       <Box

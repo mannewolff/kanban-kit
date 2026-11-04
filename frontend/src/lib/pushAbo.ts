@@ -27,7 +27,7 @@ export function schluesselBytes(base64url: string): Uint8Array<ArrayBuffer> {
   const base64 = base64url.replaceAll('-', '+').replaceAll('_', '/')
   // Stryker disable next-line ArithmeticOperator,StringLiteral: gleichwertig — atob dekodiert nach dem forgiving-base64 der HTML-Spezifikation auch ohne Auffüllung, eine fehlende '=' ändert die Bytes nicht
   const roh = atob(base64 + '='.repeat((4 - (base64.length % 4)) % 4))
-  return Uint8Array.from(roh, (zeichen) => zeichen.charCodeAt(0))
+  return Uint8Array.from(roh, (zeichen) => zeichen.codePointAt(0)!)
 }
 
 /** Das Abo dieses Geräts, wenn ein Worker im Bereich `/mobil` eines hält; sonst `null`. */
