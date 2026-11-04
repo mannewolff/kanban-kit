@@ -95,7 +95,7 @@ final class PushSchluesselStartupCheck {
           Objects.requireNonNull(properties.vapidPublicKey()),
           Objects.requireNonNull(properties.vapidPrivateKey()));
       return true;
-    } catch (IllegalArgumentException e) {
+    } catch (IllegalArgumentException _) {
       return false;
     }
   }

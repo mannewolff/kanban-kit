@@ -83,11 +83,13 @@ class DeploymentIngestController {
           """
           Meldet einen Auslieferungsversuch mit einem board-gebundenen Projekt-Token (Header \
           X-Kanban-Token). Das Zielprojekt ist das Projekt des Boards, an das das Token \
-          gebunden ist; die Person hinter dem Token braucht dort das Recht, Karten anzulegen.\n\n\
+          gebunden ist; die Person hinter dem Token braucht dort das Recht, Karten anzulegen.
+
           Eine Meldung je Versuch. Schlüssel ist attemptId: Die erste Meldung legt den Versuch \
           an (201 CREATED); dieselbe Meldung noch einmal ändert nichts (200 UNCHANGED), auch \
           wenn die Commits in anderer Reihenfolge stehen. Ein erneuter Versuch trägt eine neue \
-          Kennung.\n\n\
+          Kennung.
+
           finishedAt ist der Zeitpunkt des Ausgangs, er zählt, nicht der Eingang. commits \
           nennt die Commits seit dem vorigen gemeldeten Stand (siehe „Letzten gemeldeten \
           Stand abrufen“), je mit Commit-Zeitpunkt; derselbe Commit darf in mehreren Versuchen \

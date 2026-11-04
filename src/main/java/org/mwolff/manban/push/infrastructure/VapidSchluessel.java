@@ -83,7 +83,7 @@ final class VapidSchluessel {
       pruefen.initVerify(paar.getPublic());
       pruefen.update(PROBE);
       return pruefen.verify(probe);
-    } catch (InvalidKeyException | SignatureException e) {
+    } catch (InvalidKeyException | SignatureException _) {
       return false;
     }
   }

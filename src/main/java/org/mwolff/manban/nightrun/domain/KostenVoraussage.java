@@ -5,7 +5,7 @@ import java.math.RoundingMode;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.Quantil;
 
@@ -368,7 +368,7 @@ public final class KostenVoraussage {
       return je(w -> w.max(untergrenze));
     }
 
-    private Spanne je(Function<BigDecimal, BigDecimal> f) {
+    private Spanne je(UnaryOperator<BigDecimal> f) {
       return new Spanne(f.apply(unten), f.apply(typisch), f.apply(oben));
     }
   }
