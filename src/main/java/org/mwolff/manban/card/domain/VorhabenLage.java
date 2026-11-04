@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.domain.Durchsatzermittlung.Durchsatz;
 
@@ -159,12 +160,11 @@ public final class VorhabenLage {
     if (durchsatz.tageMitPaketen() < Durchsatzermittlung.MINDESTTAGE) {
       return Map.of();
     }
-    Set<Integer> anzahlen = new TreeSet<>();
-    for (Zaehlung z : zaehlungen) {
-      if (z.open() > 0 && z.open() <= HOECHSTE_PAKETZAHL) {
-        anzahlen.add(z.open());
-      }
-    }
+    Set<Integer> anzahlen =
+        zaehlungen.stream()
+            .map(Zaehlung::open)
+            .filter(n -> n > 0 && n <= HOECHSTE_PAKETZAHL)
+            .collect(Collectors.toCollection(TreeSet::new));
     return Fertigprognose.rechne(durchsatz.tageswerte(), anzahlen);
   }
 
