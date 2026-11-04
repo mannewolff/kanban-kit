@@ -344,6 +344,63 @@ test('zugangLesen: leere oder fehlende toolbox.tokenFile ist ein Fehler, kein Ru
   }
 });
 
+/** Hauptkopie mit eingecheckter Config und ein verknuepfter Worktree; Token-Dateien wahlweise an beiden Orten. */
+function worktreePaar({ hauptToken, worktreeToken } = {}) {
+  const wurzel = mkdtempSync(join(tmpdir(), 'mutationskarten-worktree-'));
+  const haupt = join(wurzel, 'haupt');
+  const worktree = join(wurzel, 'worktree');
+  const git = (cwd, ...args) => {
+    const lauf = spawnSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.org', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf-8' });
+    assert.equal(lauf.status, 0, lauf.stderr);
+  };
+  mkdirSync(join(haupt, '.claude'), { recursive: true });
+  writeFileSync(join(haupt, '.claude', 'workflow.config.json'), JSON.stringify({ toolbox: MIT_TOKENDATEI }));
+  git(haupt, 'init', '-q');
+  git(haupt, 'add', '.claude/workflow.config.json');
+  git(haupt, 'commit', '-q', '-m', 'Config');
+  git(haupt, 'worktree', 'add', '-q', '--detach', worktree);
+  for (const [dir, token] of [[haupt, hauptToken], [worktree, worktreeToken]]) {
+    if (token === undefined) continue;
+    mkdirSync(join(dir, '.claude', 'toolbox.cli'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'toolbox.cli', 'tbx.token'), token);
+  }
+  return { wurzel, haupt, worktree };
+}
+
+test('zugangLesen: im verknuepften Worktree ohne Token-Datei kommt das Token aus der Hauptkopie', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt\n' });
+  try {
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), { host: 'https://projekt.test', token: 'tk_haupt' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: die eigene Token-Datei des Worktrees gewinnt vor der Hauptkopie', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeToken: 'tk_worktree' });
+  try {
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), { host: 'https://projekt.test', token: 'tk_worktree' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: fehlt die Token-Datei auch in der Hauptkopie, bleibt es ein Fehler, kein Rueckfall', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar();
+  try {
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), /toolbox\.tokenFile.*nicht lesbar/s);
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.haupt }), /toolbox\.tokenFile.*nicht lesbar/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
 test('zugangLesen: ohne Token ein Fehler, der beide Wege nennt', () => {
   const dir = loginVerzeichnis();
   const projekt = projektVerzeichnis();

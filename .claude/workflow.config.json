@@ -250,5 +250,6 @@
     },
     "statusLabels": true
   },
-  "scenariosFrom": 1638
+  "scenariosFrom": 1638,
+  "strictness": "normal"
 }

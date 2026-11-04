@@ -61,9 +61,14 @@ vi.mock('../api/cards', () => ({
   },
 }))
 vi.mock('../api/epics', () => ({ epicsApi: { list: vi.fn() } }))
+// Das Namen-Register ist geladen; die Fachplan-Taste prüft auch Laden und Ladefehler (Issue #2045).
+const kitNamen = vi.hoisted(() => ({ zustand: null as KitNamenZustand | null }))
+beforeEach(() => {
+  kitNamen.zustand = null
+})
 vi.mock('../api/kitNamen', async (original) => ({
   ...(await original<typeof import('../api/kitNamen')>()),
-  useKitNamen: (): KitNamenZustand => ({ status: 'fertig', daten: KIT_NAMEN }),
+  useKitNamen: (): KitNamenZustand => kitNamen.zustand ?? { status: 'fertig', daten: KIT_NAMEN },
 }))
 vi.mock('../api/labels', () => ({ labelsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/members', () => ({ membersApi: { list: vi.fn().mockResolvedValue([]) } }))
@@ -1467,6 +1472,107 @@ describe('BoardListPage Gruppierung und Filter (#980)', () => {
 
     fireEvent.change(auswahl, { target: { value: '' } })
     expect(screen.getByText('Aufgabe')).toBeInTheDocument()
+  })
+
+  describe('Filtertaste „Fachpläne“ (Issue #2045)', () => {
+    const karte = (id: number, title: string, extra: Partial<Card> = {}): Card =>
+      ({ ...base, id, columnId: 10, number: id, positionInColumn: id, title, description: '', archived: false, ...extra })
+    const requirement = karte(201, '[Requirement] Neuer Fachplan', { assignees: [3], labels: [5] })
+    const fachlich = karte(202, '  [fachlich] Alter Fachplan', { columnId: 20, assignees: [4] })
+    const plan = karte(203, '[Plan] Ein Plan', { labels: [5] })
+    const task = karte(204, '[Task] Eine Aufgabe')
+    const idee = karte(205, '[Idea] Eine Idee')
+    const ohnePraefix = karte(206, 'Karte ohne Präfix')
+    const archiviert = karte(207, '[Requirement] Archivierter Fachplan', { archived: true })
+    const alle = [requirement, fachlich, plan, task, idee, ohnePraefix, archiviert]
+    const titel = () => screen.queryAllByRole('button', { name: /^Detail öffnen: / })
+      .map((z) => z.getAttribute('aria-label')?.replace('Detail öffnen: ', ''))
+
+    const zeige = async () => {
+      renderPage(alle)
+      await screen.findByText('[Task] Eine Aufgabe')
+    }
+
+    beforeEach(() => {
+      localStorage.setItem('manban.listGruppierung', 'keine')
+      mLabels.list.mockResolvedValue([{ id: 5, boardId: 1, name: 'Bug', color: '#f00', countOnEpicTile: false }])
+    })
+
+    it('zeigt mit gesetzter Taste nur Karten mit [Requirement] oder [Fachlich] im Titel', async () => {
+      await zeige()
+      const taste = screen.getByRole('button', { name: 'Filter Fachpläne' })
+      expect(taste).toHaveTextContent('Fachpläne')
+      expect(taste).toHaveAttribute('aria-pressed', 'false')
+
+      fireEvent.click(taste)
+
+      expect(taste).toHaveAttribute('aria-pressed', 'true')
+      expect(titel()).toEqual(['[Requirement] Neuer Fachplan', '  [fachlich] Alter Fachplan'])
+      fireEvent.click(taste)
+      expect(taste).toHaveAttribute('aria-pressed', 'false')
+      expect(titel()).toHaveLength(6)
+    })
+
+    it('lässt die Liste ohne gesetzte Taste unverändert', async () => {
+      await zeige()
+      expect(titel()).toEqual([
+        '[Requirement] Neuer Fachplan', '[Plan] Ein Plan', '[Task] Eine Aufgabe', '[Idea] Eine Idee',
+        'Karte ohne Präfix', '  [fachlich] Alter Fachplan',
+      ])
+    })
+
+    it('zeigt zusammen mit dem Archiv-Filter auch archivierte Fachpläne', async () => {
+      await zeige()
+      fireEvent.click(screen.getByRole('button', { name: 'Filter Fachpläne' }))
+      fireEvent.click(screen.getByLabelText('Filter Archiv'))
+      expect(titel()).toEqual(expect.arrayContaining(['[Requirement] Archivierter Fachplan']))
+      expect(titel()).toHaveLength(3)
+    })
+
+    it('gilt zusammen mit Status-, Label- und Zuständig-Filter zugleich', async () => {
+      await zeige()
+      fireEvent.click(screen.getByRole('button', { name: 'Filter Fachpläne' }))
+
+      fireEvent.click(screen.getByLabelText('Filter Done'))
+      expect(titel()).toEqual(['[Requirement] Neuer Fachplan'])
+      fireEvent.click(screen.getByLabelText('Filter Done'))
+
+      fireEvent.change(await screen.findByRole('combobox', { name: 'Zuständig' }), { target: { value: '4' } })
+      expect(titel()).toEqual(['  [fachlich] Alter Fachplan'])
+      fireEvent.change(screen.getByRole('combobox', { name: 'Zuständig' }), { target: { value: '' } })
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Label-Filter' }))
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Label-Filter Bug' }))
+      fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+      expect(titel()).toEqual(['[Requirement] Neuer Fachplan'])
+    })
+
+    it('ist nach dem Neuladen der Seite wieder aus und speichert nichts', async () => {
+      const { unmount } = renderPage(alle)
+      fireEvent.click(await screen.findByRole('button', { name: 'Filter Fachpläne' }))
+      const schluessel = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))
+      expect(schluessel).toEqual(['manban.listGruppierung'])
+      unmount()
+
+      renderPage(alle)
+      expect(await screen.findByRole('button', { name: 'Filter Fachpläne' })).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.getByText('[Task] Eine Aufgabe')).toBeInTheDocument()
+    })
+
+    it('fehlt, solange das Register lädt', async () => {
+      kitNamen.zustand = { status: 'laden' }
+      await zeige()
+      expect(screen.getByLabelText('Filter Überfällig')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Filter Fachpläne' })).not.toBeInTheDocument()
+    })
+
+    it('fehlt, wenn das Register nicht geladen werden konnte', async () => {
+      kitNamen.zustand = { status: 'fehler', fehler: new Error('503') }
+      await zeige()
+      expect(screen.getByLabelText('Filter Überfällig')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Filter Fachpläne' })).not.toBeInTheDocument()
+    })
   })
 
   // Wie in der Werkzeugleiste des Boards steht die Benennung im Wert, nicht über dem Feld

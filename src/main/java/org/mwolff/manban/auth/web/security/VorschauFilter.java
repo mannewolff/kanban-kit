@@ -102,8 +102,8 @@ public class VorschauFilter extends OncePerRequestFilter {
     String stand = KEINE;
     Optional<VorschauPruefung> pruefung = cookies.readVorschau(request).map(this::pruefe);
     if (pruefung.isPresent()) {
-      if (pruefung.get() instanceof VorschauPruefung.Gueltig gueltig) {
-        stand = alsZiel(gueltig.vorschau());
+      if (pruefung.get() instanceof VorschauPruefung.Gueltig(AdminVorschau vorschau)) {
+        stand = alsZiel(vorschau);
       } else {
         loescheCookie(response);
       }

@@ -36,6 +36,8 @@ class KitNamenTest {
           new Zeile(Sache.NIGHTREVIEW, "kit:nightreview", null, Schutz.KEINER),
           new Zeile(Sache.NIGHTISSUES, "kit:nightissues", null, Schutz.KEINER),
           new Zeile(Sache.WARTET_EREIGNIS, "kit:wartet", "kit:on-hold", Schutz.NUR_MENSCH_NIMMT_AB),
+          new Zeile(Sache.REPARATUR, "kit:repair", null, Schutz.KEINER),
+          new Zeile(Sache.HOTFIX, "kit:hotfix", null, Schutz.KEINER),
           new Zeile(Sache.LAUF_ABGEBROCHEN, "lauf:abgebrochen", "run:aborted", Schutz.KEINER),
           new Zeile(Sache.LAUF_LAEUFT, "lauf:laeuft", "run:running", Schutz.KEINER),
           new Zeile(Sache.LAUF_WARTET, "lauf:wartet", "run:waiting", Schutz.KEINER),
@@ -80,7 +82,7 @@ class KitNamenTest {
 
   @Test
   void standard_hatZweiundzwanzigSachen() {
-    assertThat(Sache.values()).hasSize(22);
+    assertThat(Sache.values()).hasSize(24);
   }
 
   @Test
@@ -127,6 +129,8 @@ class KitNamenTest {
             Sache.NIGHTPLAN,
             Sache.NIGHTREVIEW,
             Sache.NIGHTISSUES,
+            Sache.REPARATUR,
+            Sache.HOTFIX,
             Sache.REVIEW_OFFEN,
             Sache.PLANREVIEW_1,
             Sache.PLANREVIEW_2);
@@ -135,6 +139,14 @@ class KitNamenTest {
     }
     assertThat(Arrays.stream(Sache.values()).filter(s -> !ohneGegenstueck.contains(s)))
         .allSatisfy(s -> assertThat(KitNamen.STANDARD.namen(s)).hasSize(2));
+  }
+
+  @Test
+  void reparaturUndHotfix_loesenAufIhreSacheAufUndTragenKeinenSchutz() {
+    assertThat(KitNamen.STANDARD.sache("kit:repair")).contains(Sache.REPARATUR);
+    assertThat(KitNamen.STANDARD.sache("kit:hotfix")).contains(Sache.HOTFIX);
+    assertThat(Sache.REPARATUR.schutz()).isEqualTo(Schutz.KEINER);
+    assertThat(Sache.HOTFIX.schutz()).isEqualTo(Schutz.KEINER);
   }
 
   @Test
@@ -151,7 +163,7 @@ class KitNamenTest {
     assertThat(KitNamen.STANDARD.alleNamen())
         .containsExactlyElementsOf(
             KitNamen.STANDARD.eintraege().stream().map(Eintrag::name).toList())
-        .hasSize(36)
+        .hasSize(38)
         .startsWith("kit:durchziehen", "kit:carry-through", "kit:geschuetzt")
         .endsWith("planreview:1", "planreview:2");
   }

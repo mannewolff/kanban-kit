@@ -395,8 +395,7 @@ public class VorhabenKostenService {
             .toList();
     Instant von =
         Stream.concat(Stream.of(ziel), kandidaten.stream())
-            .map(VorhabenStandView::fruehesteKostenkarteAngelegt)
-            .filter(Objects::nonNull)
+            .flatMap(v -> Stream.ofNullable(v.fruehesteKostenkarteAngelegt()))
             .reduce(kontext.fenster(), (a, b) -> a.isBefore(b) ? a : b);
     List<Vorgang> nacht =
         runs.findAttemptsSince(kontext.projectId(), von).stream()
@@ -610,7 +609,8 @@ public class VorhabenKostenService {
   }
 
   private static BigDecimal betrag(@Nullable ItemKostenJeKarte kosten) {
-    return kosten == null || kosten.costUsd() == null ? BigDecimal.ZERO : kosten.costUsd();
+    BigDecimal betrag = kosten == null ? null : kosten.costUsd();
+    return betrag == null ? BigDecimal.ZERO : betrag;
   }
 
   private static @Nullable Paketstufe paketstufe(@Nullable Aufgabenstufe stufe) {
@@ -665,7 +665,8 @@ public class VorhabenKostenService {
                 new VoraussageView(
                     v.art(), v.typisch(), v.unten(), v.oben(), v.paketzahl(), v.ohneStufe()),
                 null);
-        case ZuWenigDaten z -> new LaufendView(true, bisher, unvollstaendig, null, z.grund());
+        case ZuWenigDaten(Grund grund) ->
+            new LaufendView(true, bisher, unvollstaendig, null, grund);
       };
     }
   }

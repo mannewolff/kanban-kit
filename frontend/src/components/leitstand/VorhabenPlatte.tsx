@@ -29,7 +29,8 @@ export function VorhabenPlatte({
   kosten = null,
 }: Readonly<{ prognose: EpicForecast; kosten?: readonly VorhabenKostenView[] | null }>) {
   const t = useT().LEITSTAND
-  const kostenJeVorhaben = new Map((kosten ?? []).filter((k) => !k.archiviert).map((k) => [k.epicId, k]))
+  // `new Map(undefined)` ist leer: Ohne Kosten braucht es kein Ersatz-Array.
+  const kostenJeVorhaben = new Map(kosten?.filter((k) => !k.archiviert).map((k) => [k.epicId, k] as const))
   return (
     <Platte titel={t.VORHABEN} notiz={t.OFFEN}>
       {prognose.epics.length === 0 ? (

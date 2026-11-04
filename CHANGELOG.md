@@ -17,6 +17,32 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.15.0] – 2026-11-04
+
+- chore: v3.14.1
+- Mutationstreiber im Worktree: Token-Datei aus der Hauptkopie lesen ([#2053](https://github.com/mannewolff/kanban-kit/issues/2053))
+- Kit-Labels kit:repair und kit:hotfix ins Register und in den Standardsatz ([#2049](https://github.com/mannewolff/kanban-kit/issues/2049))
+- Stream statt Schleife in Durchsatzermittlung.ermittle ([#1857](https://github.com/mannewolff/kanban-kit/issues/1857))
+- Stream statt Schleife in VorhabenLage.prognose ([#1856](https://github.com/mannewolff/kanban-kit/issues/1856))
+- claude-workflow-kit 5.4.13
+- Änderungen durch install.mjs 5.4.12
+- Listenansicht: Filtertaste „Fachpläne“ ([#2045](https://github.com/mannewolff/kanban-kit/issues/2045))
+- Mutant der Kosten-Abhaengigkeit in useLeitstandDaten getoetet ([#2038](https://github.com/mannewolff/kanban-kit/issues/2038))
+- Ersatz-Array in VorhabenPlatte entfernt ([#2037](https://github.com/mannewolff/kanban-kit/issues/2037))
+- Mutanten in VorhabenKostenZeile durch Tests getoetet ([#2036](https://github.com/mannewolff/kanban-kit/issues/2036))
+- Mutanten in VerbrauchVorhaben durch Tests getoetet ([#2035](https://github.com/mannewolff/kanban-kit/issues/2035))
+- S2301 an betragMitVermerk begruendet unterdrueckt ([#2039](https://github.com/mannewolff/kanban-kit/issues/2039))
+- Lokale Aufbewahrungsgrenze umbenannt ([#2042](https://github.com/mannewolff/kanban-kit/issues/2042))
+- Verschachtelten Ternary in MobilerLauf aufgeloest ([#2025](https://github.com/mannewolff/kanban-kit/issues/2025))
+- Fensterbeginn ohne nullbare Stream-Elemente ([#2041](https://github.com/mannewolff/kanban-kit/issues/2041))
+- Gespeicherten Endgrund null-sicher lesen ([#1939](https://github.com/mannewolff/kanban-kit/issues/1939))
+- Record-Pattern fuer ZuWenigDaten ([#2040](https://github.com/mannewolff/kanban-kit/issues/2040))
+- Record-Pattern im VorschauFilter ([#1938](https://github.com/mannewolff/kanban-kit/issues/1938))
+- PermissionChecker ohne transaktionalen Selbstaufruf ([#2013](https://github.com/mannewolff/kanban-kit/issues/2013))
+- LabelService ohne transaktionalen Selbstaufruf ([#1858](https://github.com/mannewolff/kanban-kit/issues/1858))
+- Kostenbetrag ohne doppelten Nullable-Zugriff ([#2043](https://github.com/mannewolff/kanban-kit/issues/2043))
+- AUTH_MUSTER in GEHEIMNIS_MUSTER umbenannt ([#2024](https://github.com/mannewolff/kanban-kit/issues/2024))
+
 ## [3.14.0] – 2026-11-03
 
 - chore: v3.13.2

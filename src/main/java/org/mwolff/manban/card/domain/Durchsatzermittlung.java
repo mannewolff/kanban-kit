@@ -4,8 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -94,12 +93,9 @@ public final class Durchsatzermittlung {
             }
           }
         });
-    List<Integer> tageswerte = new ArrayList<>(TAGE);
-    for (int wert : werte) {
-      tageswerte.add(wert);
-    }
+    List<Integer> tageswerte = Arrays.stream(werte).boxed().toList();
     int tageMitPaketen = (int) tageswerte.stream().filter(wert -> wert > 0).count();
-    return new Durchsatz(Collections.unmodifiableList(tageswerte), tageMitPaketen);
+    return new Durchsatz(tageswerte, tageMitPaketen);
   }
 
   /**

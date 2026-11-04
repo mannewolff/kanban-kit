@@ -68,10 +68,9 @@ public record MobilerLauf(Zustand zustand, Duration dauer, @Nullable LetzteMeldu
         offen && NightRunOutcome.verstummt(run.startedAt(), run.updatedAt(), jetzt, stilleFrist);
     Zustand zustand =
         grund.map(Meldegrund::zustand).orElse(offen ? Zustand.LAEUFT : Zustand.BEENDET);
+    Instant ende = verstummt ? lebenszeichen(run) : jetzt;
     Duration dauer =
-        offen
-            ? Duration.between(run.startedAt(), verstummt ? lebenszeichen(run) : jetzt)
-            : Duration.ofMillis(run.durationMs());
+        offen ? Duration.between(run.startedAt(), ende) : Duration.ofMillis(run.durationMs());
     return new MobilerLauf(zustand, dauer, meldung(run, grund, verstummt));
   }
 

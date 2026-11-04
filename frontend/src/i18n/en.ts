@@ -283,6 +283,7 @@ export const en: Woerterbuch = {
     STATUS_FILTER: 'Status filter',
     FILTER: (name) => `Filter ${name}`,
     UEBERFAELLIG: 'Overdue',
+    FACHPLAENE: 'Requirements',
     ZUSTAENDIG: 'Assignee',
     ZUSTAENDIG_ALLE: 'Assignee: all',
     ZUSTAENDIG_NAME: (name) => `Assignee: ${name}`,
@@ -1982,6 +1983,16 @@ export const en: Woerterbuch = {
         setzt: 'The kit.',
         verschwindet: 'Only when a human removes it; doing so ends the wait.',
         handlung: 'Remove the label as soon as the event has occurred.',
+      },
+      REPARATUR: {
+        bedeutung: 'The card is a repair card: it fixes a finding of the card check.',
+        setzt: 'The night runner, when it creates the repair card.',
+        verschwindet: 'With the card; the runner looks up open repair cards by this label.',
+      },
+      HOTFIX: {
+        bedeutung: 'The card belongs to a hotfix that has not been caught up yet.',
+        setzt: 'The session start or “push main”.',
+        verschwindet: 'The kit removes it once the hotfix has been caught up.',
       },
       LAUF_ABGEBROCHEN: {
         bedeutung:

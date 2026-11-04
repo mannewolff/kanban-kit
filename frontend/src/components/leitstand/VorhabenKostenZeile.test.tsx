@@ -174,4 +174,61 @@ describe('VorhabenKostenZeile', () => {
     zeige(abgeschlossen(), false, 'en')
     expect(zeile()).toHaveTextContent('actual $18.00 · from the requirement $16.00 (+13%) · from the packages $20.00 (−10%)')
   })
+
+  it('zeigt weder laufend noch abgeschlossen keine Zeile, auch im Detail nicht', () => {
+    const { container } = zeige({ ...laufend(), laufend: null }, true)
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('trägt ohne Hinweis keinen Hinweis-Anker', () => {
+    const { unmount } = zeige(abgeschlossen())
+    expect(screen.queryByTestId('kosten-hinweis-1782')).not.toBeInTheDocument()
+    unmount()
+    zeige(laufend({ hatDokumentOderPaket: false, voraussage: null }), true)
+    expect(screen.queryByTestId('kosten-hinweis-1782')).not.toBeInTheDocument()
+  })
+
+  it('zeigt im Detail ohne Voraussage und ohne Grund nur die bisherigen Kosten', () => {
+    zeige(laufend({ voraussage: null, zuWenigDaten: null, bisher: 1.25 }), true)
+    expect(zeile()).toHaveTextContent(/^bisher 1,25 \$$/)
+  })
+
+  it('trennt „zu wenig Daten“ und die bisherigen Kosten mit einem Punkt', () => {
+    zeige(laufend({ voraussage: null, zuWenigDaten: 'ZU_WENIG_VORHABEN' }))
+    expect(zeile()).toHaveTextContent(/^Noch zu wenig Daten für eine Voraussage · bisher 0,00 \$$/)
+  })
+
+  it('nennt im Hinweis zur Anforderung deren Grundlage und nichts weiter', async () => {
+    zeige(laufend())
+    await userEvent.hover(screen.getByTestId('kosten-hinweis-1782'))
+    const hinweis = await screen.findByRole('tooltip')
+    expect(hinweis).toHaveTextContent('Plan, Prüfung, Schnitt und Abdeckung')
+    expect(hinweis).not.toHaveTextContent('je Paket der typische Preis')
+    expect(hinweis).not.toHaveTextContent('ohne Aufgabenstufe')
+    expect(hinweis).not.toHaveTextContent('fehlen Messungen')
+  })
+
+  it('nennt im Hinweis zu den Paketen deren Grundlage, getrennt von den weiteren Sätzen', async () => {
+    zeige(laufend({ unvollstaendig: true, voraussage: { art: 'PAKETE', typisch: 16, unten: 12, oben: 24, paketzahl: 8, ohneStufe: 2 } }))
+    await userEvent.hover(screen.getByTestId('kosten-hinweis-1782'))
+    const hinweis = await screen.findByRole('tooltip')
+    expect(hinweis).toHaveTextContent('je Paket der typische Preis')
+    expect(hinweis).not.toHaveTextContent('Plan, Prüfung, Schnitt')
+    expect(hinweis).toHaveTextContent(
+      'die bisherigen Kosten sind enthalten. 2 Pakete ohne Aufgabenstufe rechnen mit dem Paketpreis über alle Aufgabenstufen. Am Vorhaben fehlen Messungen oder Kostenangaben.',
+    )
+  })
+
+  it.each([
+    ['nicht beziffert, aber mit Betrag', { ...vergleich(16, 5), beziffert: false }],
+    ['beziffert, aber ohne Betrag', { ...vergleich(16, 5), typisch: null }],
+  ])('zeigt „keine Voraussage“, wenn die Voraussage %s festgehalten wurde', (_fall, anforderung: VergleichView) => {
+    zeige(abgeschlossen({ anforderung }))
+    expect(zeile()).toHaveTextContent('aus der Anforderung keine Voraussage ·')
+  })
+
+  it('hängt ohne Abweichung nichts an den Betrag', () => {
+    zeige(abgeschlossen({ anforderung: KEINE, pakete: { ...vergleich(20, null), art: 'PAKETE' } }))
+    expect(zeile()).toHaveTextContent(/^tatsächlich 18,00 \$ · aus der Anforderung keine Voraussage · aus den Paketen 20,00 \$$/)
+  })
 })

@@ -2,6 +2,8 @@ import { screen, within } from '@testing-library/react'
 import { describe, expect, it, test } from 'vitest'
 import type { VerbrauchAngaben, VerbrauchVorhaben as Posten } from '../../api/nightRunUsage'
 import { renderMitSprache } from '../../i18n/renderMitSprache'
+import { cssRegel } from '../../test/cssRegel'
+import { TEXT_SCHWACH } from '../../theme'
 import { VerbrauchVorhaben } from './VerbrauchVorhaben'
 
 /** Die Kosten je Vorhaben im Bereich „Verbrauch" (Issue #2000, #1954 AK 1, 11). */
@@ -58,6 +60,19 @@ describe('VerbrauchVorhaben', () => {
 
     expect(zeilen()).toEqual(['Export9,00 $'])
     expect(screen.queryByText('ohne Vorhaben')).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Posten „ohne Vorhaben" auch ohne ein einziges Vorhaben', () => {
+    renderMitSprache(<VerbrauchVorhaben epics={[]} withoutEpic={ohne(2)} />)
+
+    expect(zeilen()).toEqual(['ohne Vorhaben2,00 $'])
+  })
+
+  it('setzt nur den Posten „ohne Vorhaben" schwach, ein Vorhaben in der Grundfarbe', () => {
+    renderMitSprache(<VerbrauchVorhaben epics={[vorhaben(1, 'Export', 9)]} withoutEpic={ohne(2)} />)
+
+    expect(cssRegel(screen.getByText('Export'))).not.toContain(TEXT_SCHWACH)
+    expect(cssRegel(screen.getByText('ohne Vorhaben'))).toContain(`color: ${TEXT_SCHWACH}`)
   })
 
   it('zeigt fehlende Kosten als Strich, nie als 0', () => {

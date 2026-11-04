@@ -24,6 +24,7 @@ import { Breadcrumbs } from '../components/Breadcrumbs'
 import { cardsApi, type Card } from '../api/cards'
 import { apiErrorMessage } from '../api/client'
 import { epicsApi, type Epic } from '../api/epics'
+import { artAusTitel, useKitNamen } from '../api/kitNamen'
 import { labelsApi, type Label } from '../api/labels'
 import { membersApi, type Member } from '../api/members'
 import { CardDetailModal } from '../components/CardDetailModal'
@@ -313,6 +314,9 @@ export function BoardListPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [gruppierung, setGruppierung] = useState<Gruppierung>(() => readGruppierung())
   const [nurUeberfaellig, setNurUeberfaellig] = useState(false)
+  // Wie „Überfällig“ nicht gespeichert (Issue #2045).
+  const [nurFachplaene, setNurFachplaene] = useState(false)
+  const kitNamen = useKitNamen()
   const [zustaendig, setZustaendig] = useState<number | null>(null)
   const [filters, setFilters] = useState<Set<FilterKey> | null>(null)
   const [order, setOrder] = useState<ColumnKey[]>(() => readColumnOrder())
@@ -526,10 +530,13 @@ export function BoardListPage() {
   const istUeberfaellig = (c: Card) =>
     !c.archived && isOverdue(c.dueDate, effektivDone(c, columnById.get(c.columnId)?.name ?? ''))
   const ueberfaelligZahl = cards.filter((c) => istUeberfaellig(c)).length
+  // Die Taste gibt es erst mit dem Register; ohne es ist der Schalter nie gesetzt.
+  const istFachplan = (c: Card) => kitNamen.status === 'fertig' && artAusTitel(kitNamen.daten, c.title) === 'FACHLICH'
   const inBoardOrder = cards
     .filter((c) => (c.archived ? archiveActive : activeFilters.has(c.columnId)))
     .filter((c) => labelFilter.size === 0 || c.labels.some((l) => labelFilter.has(l)))
     .filter((c) => !nurUeberfaellig || istUeberfaellig(c))
+    .filter((c) => !nurFachplaene || istFachplan(c))
     .filter((c) => zustaendig === null || c.assignees.includes(zustaendig))
     .sort((a, b) => {
       const pa = columnById.get(a.columnId)?.position ?? 0
@@ -765,6 +772,11 @@ export function BoardListPage() {
             size="small"
             sx={chipSx(nurUeberfaellig)}
           />
+          {/* Erst mit dem Namen-Register: Es ist die eine Quelle der Titel-Präfixe (Issue #2045). */}
+          {kitNamen.status === 'fertig' && (
+            <Chip label={t.LISTE.FACHPLAENE} aria-label={t.LISTE.FILTER(t.LISTE.FACHPLAENE)} aria-pressed={nurFachplaene}
+              onClick={() => setNurFachplaene((v) => !v)} size="small" sx={chipSx(nurFachplaene)} />
+          )}
         </Box>
         {members.length > 0 && (
           /* Wähler ohne sichtbare Beschriftung (Entwurf `.waehler`, Z. 833–842): Die Benennung trägt
