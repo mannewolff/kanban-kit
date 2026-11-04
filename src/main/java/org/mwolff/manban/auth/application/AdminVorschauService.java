@@ -226,12 +226,11 @@ public class AdminVorschauService {
     if (vorschauen.beende(vorschau.requireId(), am, endgrund)) {
       return new VorschauPruefung.Beendet(endgrund);
     }
-    VorschauEndgrund gespeichert =
-        vorschauen
-            .findByKennung(vorschau.kennung())
-            .flatMap(v -> Optional.ofNullable(v.endgrund()))
-            .orElse(endgrund);
-    return new VorschauPruefung.Beendet(gespeichert);
+    return vorschauen
+        .findByKennung(vorschau.kennung())
+        .flatMap(v -> Optional.ofNullable(v.endgrund()))
+        .map(VorschauPruefung.Beendet::new)
+        .orElseGet(() -> new VorschauPruefung.Beendet(endgrund));
   }
 
   private static boolean aktiverAdmin(AppUser user) {
