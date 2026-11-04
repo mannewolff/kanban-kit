@@ -29,7 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class StandardLabelsIT extends AbstractIntegrationTest {
 
-  private static final int SATZ = 22;
+  private static final int SATZ = 24;
   private static final String ADMIN = "standardlabels-admin@example.com";
   private static final String OWNER = "standardlabels-owner@example.com";
 
@@ -51,7 +51,10 @@ class StandardLabelsIT extends AbstractIntegrationTest {
         .andExpect(jsonPath("$[3].name").value("kit:clarified"))
         .andExpect(jsonPath("$[10].name").value("kit:on-hold"))
         .andExpect(jsonPath("$[10].gruppe").value("Kit"))
-        .andExpect(jsonPath("$[21].name").value("planreview:2"));
+        .andExpect(jsonPath("$[11].name").value("kit:repair"))
+        .andExpect(jsonPath("$[12].name").value("kit:hotfix"))
+        .andExpect(jsonPath("$[12].gruppe").value("Kit"))
+        .andExpect(jsonPath("$[23].name").value("planreview:2"));
   }
 
   @Test
@@ -112,6 +115,10 @@ class StandardLabelsIT extends AbstractIntegrationTest {
     assertThat(namenszahl(aktivB, "kit:clarify")).isEqualTo(1);
     assertThat(namenszahl(aktivB, "kit:nightplan")).isEqualTo(1);
     assertThat(namenszahl(aktivB, "kit:on-hold")).isEqualTo(1);
+    assertThat(namenszahl(aktivA, "kit:repair")).isEqualTo(1);
+    assertThat(namenszahl(aktivA, "kit:hotfix")).isEqualTo(1);
+    assertThat(namenszahl(aktivB, "kit:repair")).isEqualTo(1);
+    assertThat(namenszahl(aktivB, "kit:hotfix")).isEqualTo(1);
 
     for (int aufruf = 2; aufruf <= 10; aufruf++) {
       JsonNode weiteres = anlegen(admin);

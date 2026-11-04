@@ -254,8 +254,13 @@ und `kit:nightrun` heißen in beiden Sprachen gleich und haben kein Gegenstück.
 Die Labels, mit denen die [Stufenleiste](nutzung.md#karten-detail) Ziel und Prüferzahl einer Kette
 festhält — `ziel:plan`, `ziel:pakete`, `ziel:umsetzung`, `ziel:push-vorbereitet` sowie `planreview:1`
 und `planreview:2` —, tragen **keine** Freigabe-Richtung. Freigegeben wird allein mit `kit:night`.
+
 Ein Token darf `ziel:*` und `planreview:*` deshalb setzen und abnehmen; der Runner nimmt sie bei der
 Übernahme zusammen mit `kit:night` ab.
+
+Auch `kit:repair` (Reparaturkarte der Kartenprüfung) und `kit:hotfix` (Karte eines noch nicht
+nachgeholten Hotfix) tragen keine Freigabe-Richtung: Sie stehen im Namensraum des Kits, ein Token
+darf sie setzen und abnehmen (Issue #2049).
 
 Entscheidend ist die serververifizierte Herkunft — gebundene wie ungebundene Token —, nicht die
 Selbstauskunft im Header `X-Agent-Model`. Eine zweite Selbstauskunft ist der Header `X-Night-Run`, die

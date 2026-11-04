@@ -83,6 +83,24 @@ class FreigabeLabelsTest {
         .doesNotThrowAnyException();
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:repair", "kit:hotfix"})
+  void token_darfReparaturUndHotfixSetzenUndAbnehmen(String name) {
+    assertThatCode(() -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.SETZEN))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.ABNEHMEN))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void token_unbekannterNameImNamensraum_weiterAbgewiesen() {
+    assertThatThrownBy(
+            () ->
+                FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, "kit:gibtsnicht", Richtung.SETZEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:gibtsnicht" + NAMENSRAUM_SETZEN);
+  }
+
   @Test
   void namensvergleich_getrimmt() {
     assertThatThrownBy(

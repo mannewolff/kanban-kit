@@ -2116,6 +2116,16 @@ export const de = {
         verschwindet: 'Nur, wenn ein Mensch es abnimmt; damit hebt er das Warten auf.',
         handlung: 'Nimm das Label ab, sobald das Ereignis eingetreten ist.',
       },
+      REPARATUR: {
+        bedeutung: 'Die Karte ist eine Reparaturkarte: Sie behebt einen Fund der Kartenprüfung.',
+        setzt: 'Der Nacht-Runner, wenn er die Reparaturkarte anlegt.',
+        verschwindet: 'Mit der Karte; der Runner sucht offene Reparaturkarten an diesem Label.',
+      },
+      HOTFIX: {
+        bedeutung: 'Die Karte gehört zu einem Hotfix, der noch nicht nachgeholt ist.',
+        setzt: 'Der Session-Start beziehungsweise „push main“.',
+        verschwindet: 'Das Kit nimmt es ab, sobald der Hotfix nachgeholt ist.',
+      },
       LAUF_ABGEBROCHEN: {
         bedeutung:
           'Ein Lauf des Nacht-Runners ist an dieser Karte abgebrochen; der Kommentar „Laufstand“ nennt den Stand. Wiederholen genügt.',
