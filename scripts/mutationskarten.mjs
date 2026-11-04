@@ -17,9 +17,10 @@
  * Karte entstuende nie neu. Hier traegt die Titelsuche ueber die offenen Karten die Abwehr (E6, E7),
  * und der Zugang ist der lokale tbx-Login statt eines CI-Tokens (E10).
  */
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { configPath, readJsonFile, resolveHost, tokenFetch, tokensPath } from '../cli/tbx.mjs';
@@ -220,13 +221,36 @@ export async function schreiben({ herkunft, stellen, ...zugang }) {
 
 // --- Zugang und Auftraege -------------------------------------------------------------
 
-/** Token aus der Datei `toolbox.tokenFile` (relativ zum Projekt); leer oder unlesbar ist ein Fehler. */
+/** Absoluter Pfad aus `git rev-parse --path-format=absolute <option>`; ohne Git oder bei Fehler `null`. */
+function gitPfad(projektDir, option) {
+  const lauf = spawnSync('git', ['rev-parse', '--path-format=absolute', option], { cwd: projektDir, encoding: 'utf-8' });
+  return lauf.status === 0 ? lauf.stdout.trim() || null : null;
+}
+
+/** Hauptkopie, wenn `projektDir` ein verknuepfter Git-Worktree ist (Issue #2053), sonst `null`. */
+function hauptkopie(projektDir) {
+  const gitDir = gitPfad(projektDir, '--git-dir');
+  const commonDir = gitPfad(projektDir, '--git-common-dir');
+  return gitDir && commonDir && gitDir !== commonDir ? dirname(commonDir) : null;
+}
+
+/**
+ * Token aus der Datei `toolbox.tokenFile` (relativ zum Projekt); leer oder unlesbar ist ein Fehler.
+ * Fehlt sie in einem verknuepften Git-Worktree (`.claude/*` ist gitignored), gilt die Datei der
+ * Hauptkopie (Issue #2053); fehlt sie auch dort, bleibt es beim Fehler des Projektpfads.
+ */
 function projektToken(projektDir, tokenFile) {
   let inhalt;
   try {
     inhalt = readFileSync(join(projektDir, tokenFile), 'utf-8').trim();
   } catch (e) {
-    throw new Error(`toolbox.tokenFile ${tokenFile} ist nicht lesbar: ${e.message}`);
+    const haupt = hauptkopie(projektDir);
+    try {
+      if (!haupt) throw e;
+      inhalt = readFileSync(join(haupt, tokenFile), 'utf-8').trim();
+    } catch {
+      throw new Error(`toolbox.tokenFile ${tokenFile} ist nicht lesbar: ${e.message}`);
+    }
   }
   if (!inhalt) throw new Error(`toolbox.tokenFile ${tokenFile} ist leer.`);
   return inhalt;
@@ -234,7 +258,8 @@ function projektToken(projektDir, tokenFile) {
 
 /**
  * Reihenfolge wie im Kit-Adapter (Issue #1535): `TBX_TOKEN`, dann `toolbox.tokenFile` aus
- * `.claude/workflow.config.json`, erst dann der globale tbx-Login. Host aus `toolbox.host`,
+ * `.claude/workflow.config.json`, erst dann der globale tbx-Login. Im verknuepften Git-Worktree
+ * ohne eigene Token-Datei gilt die der Hauptkopie (Issue #2053). Host aus `toolbox.host`,
  * sonst aus der `config.json` des tbx-Logins.
  */
 export function zugangLesen({ env = process.env, baseDir, projektDir = process.cwd() } = {}) {
