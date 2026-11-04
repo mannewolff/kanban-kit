@@ -238,9 +238,11 @@ function hauptkopie(projektDir) {
  * Token aus der Datei `toolbox.tokenFile` (relativ zum Projekt); leer oder unlesbar ist ein Fehler.
  * Fehlt sie in einem verknuepften Git-Worktree (`.claude/*` ist gitignored), gilt die Datei der
  * Hauptkopie (Issue #2053); fehlt sie auch dort, bleibt es beim Fehler des Projektpfads.
+ * Liefert das Token und, wenn es aus der Hauptkopie kam, deren Pfad als `haupt` (sonst `null`).
  */
 function projektToken(projektDir, tokenFile) {
   let inhalt;
+  let herkunft = null;
   try {
     inhalt = readFileSync(join(projektDir, tokenFile), 'utf-8').trim();
   } catch (e) {
@@ -248,12 +250,18 @@ function projektToken(projektDir, tokenFile) {
     try {
       if (!haupt) throw e;
       inhalt = readFileSync(join(haupt, tokenFile), 'utf-8').trim();
+      herkunft = haupt;
     } catch {
       throw new Error(`toolbox.tokenFile ${tokenFile} ist nicht lesbar: ${e.message}`);
     }
   }
   if (!inhalt) throw new Error(`toolbox.tokenFile ${tokenFile} ist leer.`);
-  return inhalt;
+  return { token: inhalt, haupt: herkunft };
+}
+
+/** `toolbox` aus `.claude/workflow.config.json` unter `dir`; fehlt sie, ein leeres Objekt. */
+function toolboxLesen(dir) {
+  return readJsonFile(join(dir, '.claude', 'workflow.config.json'))?.toolbox ?? {};
 }
 
 /**
@@ -261,17 +269,34 @@ function projektToken(projektDir, tokenFile) {
  * `.claude/workflow.config.json`, erst dann der globale tbx-Login. Im verknuepften Git-Worktree
  * ohne eigene Token-Datei gilt die der Hauptkopie (Issue #2053). Host aus `toolbox.host`,
  * sonst aus der `config.json` des tbx-Logins.
+ *
+ * Bindung von Token und Host (Issue #2054): Kommt das Token aus der Hauptkopie, gilt auch deren
+ * Host. Der Worktree ist der gepruefte, womoeglich fremde Stand; weicht sein Host von dem der
+ * Hauptkopie ab, bricht der Zugang mit beiden Hosts im Text ab, und es geht nichts ans Netz.
+ * `TBX_TOKEN` und eine eigene Token-Datei des Worktrees stellt der Aufrufer bewusst bereit, sie
+ * bleiben ungebunden.
  */
 export function zugangLesen({ env = process.env, baseDir, projektDir = process.cwd() } = {}) {
-  const toolbox = readJsonFile(join(projektDir, '.claude', 'workflow.config.json'))?.toolbox ?? {};
+  const toolbox = toolboxLesen(projektDir);
   const config = readJsonFile(configPath(baseDir));
-  const token = (env.TBX_TOKEN || '').trim()
-    || (toolbox.tokenFile ? projektToken(projektDir, toolbox.tokenFile) : '')
+  const envToken = (env.TBX_TOKEN || '').trim();
+  const ausDatei = !envToken && toolbox.tokenFile ? projektToken(projektDir, toolbox.tokenFile) : null;
+  const token = envToken
+    || ausDatei?.token
     || (readJsonFile(tokensPath(baseDir))?.token || '').trim();
   if (!token) {
     throw new Error('Kein Board-Token: TBX_TOKEN setzen oder per `tbx auth login` anmelden.');
   }
-  return { host: toolbox.host || resolveHost({}, config), token };
+  const host = toolbox.host || resolveHost({}, config);
+  if (ausDatei?.haupt) {
+    const hauptHost = toolboxLesen(ausDatei.haupt).host || resolveHost({}, config);
+    if (host !== hauptHost) {
+      throw new Error(`toolbox.host des Worktrees (${host}) weicht vom Host der Hauptkopie (${hauptHost}) ab; `
+        + 'das Token der Hauptkopie geht nur an deren Host.');
+    }
+    return { host: hauptHost, token };
+  }
+  return { host, token };
 }
 
 /** Fuehrt einen Auftrag aus; wirft nie, ein Fehler wird zu `{ fehler }` mit Code 1. */

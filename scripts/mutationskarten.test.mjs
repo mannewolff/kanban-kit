@@ -344,8 +344,11 @@ test('zugangLesen: leere oder fehlende toolbox.tokenFile ist ein Fehler, kein Ru
   }
 });
 
-/** Hauptkopie mit eingecheckter Config und ein verknuepfter Worktree; Token-Dateien wahlweise an beiden Orten. */
-function worktreePaar({ hauptToken, worktreeToken } = {}) {
+/**
+ * Hauptkopie mit eingecheckter Config und ein verknuepfter Worktree; Token-Dateien wahlweise an beiden Orten.
+ * `worktreeHost` aendert `toolbox.host` in der Config des Worktrees (uncommittet, wie ein gepruefter Stand).
+ */
+function worktreePaar({ hauptToken, worktreeToken, worktreeHost } = {}) {
   const wurzel = mkdtempSync(join(tmpdir(), 'mutationskarten-worktree-'));
   const haupt = join(wurzel, 'haupt');
   const worktree = join(wurzel, 'worktree');
@@ -363,6 +366,9 @@ function worktreePaar({ hauptToken, worktreeToken } = {}) {
     if (token === undefined) continue;
     mkdirSync(join(dir, '.claude', 'toolbox.cli'), { recursive: true });
     writeFileSync(join(dir, '.claude', 'toolbox.cli', 'tbx.token'), token);
+  }
+  if (worktreeHost !== undefined) {
+    writeFileSync(join(worktree, '.claude', 'workflow.config.json'), JSON.stringify({ toolbox: { ...MIT_TOKENDATEI, host: worktreeHost } }));
   }
   return { wurzel, haupt, worktree };
 }
@@ -395,6 +401,73 @@ test('zugangLesen: fehlt die Token-Datei auch in der Hauptkopie, bleibt es ein F
   try {
     assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), /toolbox\.tokenFile.*nicht lesbar/s);
     assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.haupt }), /toolbox\.tokenFile.*nicht lesbar/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: Token der Hauptkopie bei gleichem Host, Host der Hauptkopie (Issue #2054)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://projekt.test' });
+  try {
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), { host: 'https://projekt.test', token: 'tk_haupt' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: Token der Hauptkopie und fremder toolbox.host im Worktree sind ein Fehler mit beiden Hosts (Issue #2054)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://fremd.test' });
+  try {
+    assert.throws(
+      () => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }),
+      (e) => e instanceof Error && e.message.includes('https://fremd.test') && e.message.includes('https://projekt.test'),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: Token der Hauptkopie und fehlender toolbox.host im Worktree sind ebenfalls ein Fehler (Issue #2054)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: '' });
+  try {
+    assert.throws(
+      () => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }),
+      (e) => e.message.includes('https://login.test') && e.message.includes('https://projekt.test'),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: eigene Token-Datei des Worktrees bindet nicht an den Host der Hauptkopie (Issue #2054)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeToken: 'tk_worktree', worktreeHost: 'https://fremd.test' });
+  try {
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), { host: 'https://fremd.test', token: 'tk_worktree' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('ausfuehren: fremder toolbox.host im Worktree ohne eigene Token-Datei endet mit fehler, ohne Aufruf (Issue #2054)', async () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://fremd.test' });
+  let aufrufe = 0;
+  const fetchImpl = async () => { aufrufe += 1; return new Response('[]', { status: 200 }); };
+  try {
+    const lauf = await ausfuehren('{"auftrag":"liegezeit"}', { env: {}, baseDir: dir, projektDir: paar.worktree, fetchImpl });
+    assert.equal(lauf.code, 1);
+    assert.match(lauf.ausgabe.fehler, /https:\/\/fremd\.test/);
+    assert.match(lauf.ausgabe.fehler, /https:\/\/projekt\.test/);
+    assert.equal(aufrufe, 0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(paar.wurzel, { recursive: true, force: true });
