@@ -147,7 +147,7 @@ async function ladeZusammenfassungPfad() {
     join(__dirname, "..", "kit", "checks.mjs"),
   ];
   for (const ort of orte) {
-    if (existsSync(ort)) return (await import(pathToFileURL(ort).href)).zusammenfassungPfad;
+    if (existsSync(ort)) return (await import(pathToFileURL(ort).href)).zusammenfassungPfad;  // eslint-disable-line no-await-in-loop -- NOSONAR S9382: der erste vorhandene Ort gewinnt
   }
   ab(text("checksFehlt"));
   return null;
@@ -267,7 +267,7 @@ async function ladeStrenge() {
     const strenge = join(ort, "strenge.mjs");
     const namen = join(ort, "config-namen.mjs");
     if (!existsSync(strenge) || !existsSync(namen)) continue;
-    const [{ strengeVergleich, abschwaechungText }, { normalisiereConfig }] = await Promise.all([
+    const [{ strengeVergleich, abschwaechungText }, { normalisiereConfig }] = await Promise.all([  // eslint-disable-line no-await-in-loop -- NOSONAR S9382: der erste vorhandene Ort gewinnt
       import(pathToFileURL(strenge).href),
       import(pathToFileURL(namen).href),
     ]);
