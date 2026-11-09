@@ -20,7 +20,7 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { configPath, readJsonFile, resolveHost, tokenFetch, tokensPath } from '../cli/tbx.mjs';
@@ -234,22 +234,37 @@ function hauptkopie(projektDir) {
   return gitDir && commonDir && gitDir !== commonDir ? dirname(commonDir) : null;
 }
 
+/** Ein `toolbox.tokenFile`, das aus seinem Verzeichnis herausfuehrt (Issue #2058); kein Rueckfall. */
+class TokenDateiAusbruch extends Error {}
+
+/** Inhalt von `tokenFile` unter `wurzel`; massgeblich ist der tatsaechliche Pfad samt Symlinks. */
+function tokenDateiLesen(wurzel, tokenFile) {
+  const echterPfad = realpathSync(join(wurzel, tokenFile));
+  if (!echterPfad.startsWith(realpathSync(wurzel) + sep)) {
+    throw new TokenDateiAusbruch(`toolbox.tokenFile ${tokenFile} liegt ausserhalb von ${wurzel}.`);
+  }
+  return readFileSync(echterPfad, 'utf-8').trim();
+}
+
 /**
- * Token aus der Datei `toolbox.tokenFile` (relativ zum Projekt); leer oder unlesbar ist ein Fehler.
- * Fehlt sie in einem verknuepften Git-Worktree (`.claude/*` ist gitignored), gilt die Datei der
- * Hauptkopie (Issue #2053); fehlt sie auch dort, bleibt es beim Fehler des Projektpfads.
- * Liefert das Token und, wenn es aus der Hauptkopie kam, deren Pfad als `haupt` (sonst `null`).
+ * Token aus der Datei `toolbox.tokenFile` (relativ zum Projekt); leer oder unlesbar ist ein Fehler,
+ * ein Pfad aus dem Projekt heraus ebenso (Issue #2058).
+ * Fehlt sie in einem verknuepften Git-Worktree (`.claude/*` ist gitignored), gilt die Datei, die
+ * die Config der Hauptkopie nennt (Issue #2053, #2058); fehlt sie auch dort, bleibt es beim Fehler
+ * des Projektpfads. Liefert das Token und, wenn es aus der Hauptkopie kam, deren Pfad als `haupt`
+ * (sonst `null`).
  */
 function projektToken(projektDir, tokenFile) {
   let inhalt;
   let herkunft = null;
   try {
-    inhalt = readFileSync(join(projektDir, tokenFile), 'utf-8').trim();
+    inhalt = tokenDateiLesen(projektDir, tokenFile);
   } catch (e) {
+    if (e instanceof TokenDateiAusbruch) throw e;
     const haupt = hauptkopie(projektDir);
     try {
       if (!haupt) throw e;
-      inhalt = readFileSync(join(haupt, tokenFile), 'utf-8').trim();
+      inhalt = tokenDateiLesen(haupt, toolboxLesen(haupt).tokenFile);
       herkunft = haupt;
     } catch {
       throw new Error(`toolbox.tokenFile ${tokenFile} ist nicht lesbar: ${e.message}`);

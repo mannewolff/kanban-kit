@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -346,9 +346,10 @@ test('zugangLesen: leere oder fehlende toolbox.tokenFile ist ein Fehler, kein Ru
 
 /**
  * Hauptkopie mit eingecheckter Config und ein verknuepfter Worktree; Token-Dateien wahlweise an beiden Orten.
- * `worktreeHost` aendert `toolbox.host` in der Config des Worktrees (uncommittet, wie ein gepruefter Stand).
+ * `worktreeHost` aendert `toolbox.host` in der Config des Worktrees (uncommittet, wie ein gepruefter Stand),
+ * `worktreeTokenFile` ebenso `toolbox.tokenFile`.
  */
-function worktreePaar({ hauptToken, worktreeToken, worktreeHost } = {}) {
+function worktreePaar({ hauptToken, worktreeToken, worktreeHost, worktreeTokenFile } = {}) {
   const wurzel = mkdtempSync(join(tmpdir(), 'mutationskarten-worktree-'));
   const haupt = join(wurzel, 'haupt');
   const worktree = join(wurzel, 'worktree');
@@ -367,8 +368,9 @@ function worktreePaar({ hauptToken, worktreeToken, worktreeHost } = {}) {
     mkdirSync(join(dir, '.claude', 'toolbox.cli'), { recursive: true });
     writeFileSync(join(dir, '.claude', 'toolbox.cli', 'tbx.token'), token);
   }
-  if (worktreeHost !== undefined) {
-    writeFileSync(join(worktree, '.claude', 'workflow.config.json'), JSON.stringify({ toolbox: { ...MIT_TOKENDATEI, host: worktreeHost } }));
+  if (worktreeHost !== undefined || worktreeTokenFile !== undefined) {
+    const toolbox = { ...MIT_TOKENDATEI, ...(worktreeHost !== undefined && { host: worktreeHost }), ...(worktreeTokenFile !== undefined && { tokenFile: worktreeTokenFile }) };
+    writeFileSync(join(worktree, '.claude', 'workflow.config.json'), JSON.stringify({ toolbox }));
   }
   return { wurzel, haupt, worktree };
 }
@@ -468,6 +470,100 @@ test('ausfuehren: fremder toolbox.host im Worktree ohne eigene Token-Datei endet
     assert.match(lauf.ausgabe.fehler, /https:\/\/fremd\.test/);
     assert.match(lauf.ausgabe.fehler, /https:\/\/projekt\.test/);
     assert.equal(aufrufe, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+const HAUPT_TOKEN_RELATIV = '../haupt/.claude/toolbox.cli/tbx.token';
+
+test('ausfuehren: toolbox.tokenFile mit ../ auf die Hauptkopie schickt deren Token nicht an einen fremden Host (Issue #2058)', async () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://fremd.test', worktreeTokenFile: HAUPT_TOKEN_RELATIV });
+  let aufrufe = 0;
+  const fetchImpl = async () => { aufrufe += 1; return new Response('[]', { status: 200 }); };
+  try {
+    const lauf = await ausfuehren('{"auftrag":"liegezeit"}', { env: {}, baseDir: dir, projektDir: paar.worktree, fetchImpl });
+    assert.equal(lauf.code, 1);
+    assert.match(lauf.ausgabe.fehler, /toolbox\.tokenFile.*ausserhalb/s);
+    assert.equal(aufrufe, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: ein Symlink im Worktree auf die Token-Datei der Hauptkopie gilt als Ausbruch (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://fremd.test' });
+  try {
+    mkdirSync(join(paar.worktree, '.claude', 'toolbox.cli'), { recursive: true });
+    symlinkSync(join(paar.haupt, '.claude', 'toolbox.cli', 'tbx.token'), join(paar.worktree, '.claude', 'toolbox.cli', 'tbx.token'));
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), /toolbox\.tokenFile.*ausserhalb/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: ein symlinktes Verzeichnis im Pfad der Token-Datei gilt als Ausbruch (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://fremd.test' });
+  try {
+    symlinkSync(join(paar.haupt, '.claude', 'toolbox.cli'), join(paar.worktree, '.claude', 'toolbox.cli'));
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), /toolbox\.tokenFile.*ausserhalb/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: ein Nachbarverzeichnis mit gleichem Namensanfang liegt ausserhalb (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ worktreeTokenFile: '../worktree-nachbar/tbx.token' });
+  try {
+    mkdirSync(join(paar.wurzel, 'worktree-nachbar'));
+    writeFileSync(join(paar.wurzel, 'worktree-nachbar', 'tbx.token'), 'tk_nachbar');
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), /toolbox\.tokenFile.*ausserhalb/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: auch die Hauptkopie selbst liest keine Token-Datei ausserhalb ihres Verzeichnisses (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { ...MIT_TOKENDATEI, tokenFile: '../aussen.token' } });
+  const aussen = join(dirname(projekt), 'aussen.token');
+  try {
+    writeFileSync(aussen, 'tk_aussen');
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: projekt }), /toolbox\.tokenFile.*ausserhalb/s);
+  } finally {
+    rmSync(aussen, { force: true });
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: den Rueckfallpfad in die Hauptkopie bestimmt deren Config, nicht der Worktree (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeTokenFile: '.claude/anderes-geheimnis' });
+  try {
+    writeFileSync(join(paar.haupt, '.claude', 'anderes-geheimnis'), 'tk_geheimnis');
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), { host: 'https://projekt.test', token: 'tk_haupt' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: nennt die Config der Hauptkopie keine Token-Datei, gibt es keinen Rueckfall (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt' });
+  try {
+    writeFileSync(join(paar.haupt, '.claude', 'workflow.config.json'), JSON.stringify({ toolbox: { host: 'https://projekt.test' } }));
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), /toolbox\.tokenFile.*nicht lesbar/s);
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(paar.wurzel, { recursive: true, force: true });
