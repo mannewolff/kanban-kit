@@ -438,6 +438,17 @@ class ArchitectureTest {
               "ratelimit.domain ist modulintern (Zugriff nur ueber die "
                   + "ratelimit.application-Fassade)");
 
+  // --- Modul-Grenze: benachrichtigung (Issue #2073, Plan #2070 E1) ----------------------------
+  // Anlassart und Ruhezeit gehoeren dem Modul; fremde Module kennen sie nicht.
+  static final ArchRule BENACHRICHTIGUNG_DOMAIN_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.benachrichtigung..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.benachrichtigung.domain..")
+          .as("benachrichtigung.domain ist modulintern");
+
   // --- Modul-Grenze: language ist nur ueber den Port in common erreichbar (Issue #1639) -------
   // Plan #1638 A3: Die Fachmodule (Server-Meldungen, Mails) brauchen die Sprache der Installation,
   // und language braucht auth (PlatformAdminChecker). Kennte ein Fachmodul language direkt,
@@ -658,6 +669,11 @@ class ArchitectureTest {
   @Test
   void outboxDomainIstModulintern() {
     OUTBOX_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void benachrichtigungDomainIstModulintern() {
+    BENACHRICHTIGUNG_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
   }
 
   @Test
