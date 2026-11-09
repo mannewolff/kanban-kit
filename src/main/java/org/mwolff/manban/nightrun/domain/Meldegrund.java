@@ -66,6 +66,14 @@ public record Meldegrund(Grund grund, @Nullable NightRunItem paket) {
     }
   }
 
+  /**
+   * Die Anlässe eines Laufs für die Mail, jeder für sich.
+   *
+   * @param wartet das erste wartende Paket in Paketreihenfolge; {@code null}, wenn keines wartet
+   * @param stoerung der schwerste Grund einer Störung; {@code null} ohne Störung
+   */
+  public record Anlaesse(@Nullable Meldegrund wartet, @Nullable Meldegrund stoerung) {}
+
   /** Der Zustand, unter dem der Lauf erscheint. */
   public Zustand zustand() {
     return grund.zustand();
@@ -84,10 +92,10 @@ public record Meldegrund(Grund grund, @Nullable NightRunItem paket) {
    */
   public static Optional<Meldegrund> von(
       NightRun run, List<NightRunItem> items, Instant jetzt, Duration stilleFrist) {
-    boolean offen = !run.complete();
-    if (run.kind() != NightRunKind.NIGHT || (offen && run.closedAt() != null)) {
+    if (!zaehlt(run)) {
       return Optional.empty();
     }
+    boolean offen = !run.complete();
     Stream<Meldegrund> stille =
         offen && NightRunOutcome.verstummt(run.startedAt(), run.updatedAt(), jetzt, stilleFrist)
             ? Stream.of(new Meldegrund(Grund.VERSTUMMT, null))
@@ -95,6 +103,49 @@ public record Meldegrund(Grund grund, @Nullable NightRunItem paket) {
     // min nimmt bei Gleichstand das erste — die Laufreihenfolge, in der Kette ihre Umkehrung.
     return Stream.concat(ausPaketen(run.mode(), items), stille)
         .min(Comparator.comparing(Meldegrund::grund));
+  }
+
+  /**
+   * Wartet und Störung des Laufs getrennt, für die Mail (Issue #2074, Plan #2070 E2): Anders als
+   * bei {@link #von} verdeckt der schwerste Grund den anderen Anlass nicht.
+   *
+   * <p>Ein Paket mit {@code AWAITING_DECISION} wartet unabhängig von seiner Farbe auf den Menschen
+   * und ist keine Störung, denn das Kit meldet einen Klärungshalt als {@code RED}. Die übrigen
+   * grauen Pakete warten nicht auf den Menschen und lösen nichts aus, außer sie sind festgefahren.
+   * Alles andere rechnet {@link #von}.
+   *
+   * @param run der Lauf
+   * @param items seine Pakete, in Laufreihenfolge
+   * @param jetzt der Zeitpunkt, gegen den das Lebenszeichen gemessen wird
+   * @param stilleFrist die Stille, die ein unfertiger Lauf sich erlauben darf
+   */
+  public static Anlaesse anlaesse(
+      NightRun run, List<NightRunItem> items, Instant jetzt, Duration stilleFrist) {
+    if (!zaehlt(run)) {
+      return new Anlaesse(null, null);
+    }
+    Meldegrund wartet =
+        items.stream()
+            .filter(Meldegrund::wartetAufMenschen)
+            .findFirst()
+            .map(item -> new Meldegrund(Grund.WARTET, item))
+            .orElse(null);
+    List<NightRunItem> stoerend = items.stream().filter(Meldegrund::kannStoeren).toList();
+    return new Anlaesse(wartet, von(run, stoerend, jetzt, stilleFrist).orElse(null));
+  }
+
+  /** Nur ein Nachtlauf zählt, und keiner, den ein Plattform-Admin von Hand beendet hat. */
+  private static boolean zaehlt(NightRun run) {
+    return run.kind() == NightRunKind.NIGHT && (run.complete() || run.closedAt() == null);
+  }
+
+  private static boolean wartetAufMenschen(NightRunItem item) {
+    return item.errorClass() == NightRunErrorClass.AWAITING_DECISION;
+  }
+
+  private static boolean kannStoeren(NightRunItem item) {
+    return !wartetAufMenschen(item)
+        && (item.state() != NightRunState.GREY || item.errorClass() == NightRunErrorClass.STUCK);
   }
 
   /**
