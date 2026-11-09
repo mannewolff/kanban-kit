@@ -105,7 +105,8 @@ Diese Datei ist der Einstiegspunkt für alle Engineering-Regeln in diesem Projek
 ```bash
 # Backend
 mvn -Dskip.frontend=true -Djacoco.skip=true -Dit.test=OpenApiIT verify   # je Paket: Kompilieren, Unit-Tests, statische Analyse, Vertragsvergleich
-mvn verify                              # beim Push: dazu Integrationstests, 100-%-Abdeckung, Doku-Seite
+mvn verify                              # beim Push: dazu Integrationstests, Abdeckungsbericht, Doku-Seite
+node scripts/abdeckungspruefung.mjs     # beim Push, nach mvn verify: Urteil über die Testabdeckung, Sperrschwellen 99 % und 90 %
 
 # Frontend
 cd frontend && npm run build            # tsc + vite build
@@ -143,11 +144,12 @@ auch nachts. `frontend` (`frontend/**`, `CLAUDE-design.md`) → die drei npm-Che
 `node --test cli/tbx.test.mjs`; `scripts` (`scripts/**`) → `node --test scripts/*.test.mjs`; `doku`
 (`docs/**`, `docs-site/**`, `README.md`) → der Bau der Doku-Seite (Issue #1361), damit ein Doku-Fehler schon
 beim Abschluss eines Pakets auffällt und nicht erst beim Push. Das volle `mvn verify` (Bereiche `backend` und `doku`, inklusive
-Integrationstests, 100-%-Abdeckung und Doku-Seite) trägt `stufe: "push"` und läuft erst bei `push main`
+Integrationstests, Abdeckungsbericht und Doku-Seite) trägt `stufe: "push"` und läuft erst bei `push main`
 und `merge production` — die Abdeckungsgrenze ist ohne Integrationstests nicht zu halten, deshalb
-wandert sie mit. Beim Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine Datei
+wandert sie mit. `node scripts/abdeckungspruefung.mjs` läuft `concurrent`, weil `mvn verify` als `upfront`
+vorher fertig ist, und darf nie vor `mvn verify` laufen. Beim Abschluss eines Pakets läuft nur, was die geänderten Dateien berühren; eine Datei
 ohne Bereich (etwa `Dockerfile`, `.github/`) fährt alle der Paketstufe. **Vor `push main` laufen alle
-Prüfungen der Paket- und Push-Stufe (dreizehn); `merge production` wiederholt keine davon.** Jeder Eintrag
+Prüfungen der Paket- und Push-Stufe (vierzehn); `merge production` wiederholt keine davon.** Jeder Eintrag
 läuft zu Ende, auch nach einem Rot: Alle Einträge tragen `gleichzeitig`, und `KIT_CHECKS_GLEICHZEITIG=1`
 hält sie nacheinander. Die Config ändert nur Manne.
 
@@ -190,6 +192,27 @@ Kit-Kopie ist; nach „Verhältnis der Guides“ hat sie Vorrang vor W3. Im Einz
   80 % und derselben Liegezeit von 7 Tagen; das Board-Token kommt aus dem Secret `KANBAN_KIT_TOKEN`.
   `merge production` ist darum nicht strenger als `push main` — ein dort durchgelassener Überlebender
   sperrt das nächste Release nicht.
+
+**Ausnahme von W3: Sperrschwelle statt Ziel für die Testabdeckung (Plan #2062).** Auch für die
+Testabdeckung des Backends gilt abweichend von Regel W3: **100 % ist das Ziel, gesperrt wird erst unter den
+Sperrschwellen.** Es urteilt allein der Treiber `scripts/abdeckungspruefung.mjs` über den JaCoCo-Bericht; die
+Mängel gehen nicht verloren, sie werden zu Karten. Das Frontend bleibt bei 100 %. Der Vorrang vor W3 ist
+derselbe wie bei der Mutationsprüfung. Im Einzelnen:
+
+- **Sperrschwellen:** Gesperrt wird unter 99 % gesamt (Zeilen oder Zweige) oder unter 90 % auf den
+  geänderten Zeilen.
+- **Karten:** Lässt ein Lauf Lücken durch, entsteht je Datei eine Karte `Abdeckungslücken in <Pfad>` im
+  Backlog. Ein gesperrter Lauf legt keine Karten an, und ein Board-Fehler beim Schreiben färbt den Lauf rot.
+  Bewusst nicht Testbares bleibt beim begründeten Ausschluss nach CLAUDE-java.md §5.2 und §5.4 und bekommt
+  keine Karte.
+- **Liegezeit 7 Tage:** Liegt eine solche Karte länger als 7 Tage offen, sperrt sie die nächste
+  Veröffentlichung. Eine nicht prüfbare Liegezeit gilt nicht als erfüllt.
+- **Bericht fehlt oder ist veraltet:** Fehlt `target/site/jacoco/jacoco.xml`, ist sie nicht lesbar oder
+  älter als der geprüfte Stand, ist der Lauf rot.
+- **Build-Dienst:** Er urteilt mit denselben Schwellen über Gesamtstand und Liegezeit; das Board-Token kommt
+  aus dem Secret `KANBAN_KIT_TOKEN`. Die Bedingung über die geänderten Zeilen greift nur lokal bei `push main`.
+- **Abschlussbericht von `push main`:** Er nennt die Einträge aus `.claude/abdeckungsdurchlass.json` zum
+  gepushten Commit — beide Quoten und die Karten.
 
 **Stufenschaltung (Issue #1280).** Der Treiber kann per `--stufe` und Dauerprotokoll
 (`.claude/mutationsdauer-<seite>.json`) zwischen `paket` und `push` schalten; die Config nutzt das nicht,
@@ -237,7 +260,7 @@ Keine kurzfristige Bequemlichkeit rechtfertigt unsicheren, untypisierten oder sc
 
 ---
 
-**TL;DR:** Java 25 + Spring Boot 3 (TDD-pflichtig, 100 % Coverage) auf PostgreSQL 16 + SeaweedFS. React 18 + TypeScript strict + MUI. Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
+**TL;DR:** Java 25 + Spring Boot 3 (TDD-pflichtig, Ziel 100 % Coverage, Sperrschwelle 99 %) auf PostgreSQL 16 + SeaweedFS. React 18 + TypeScript strict + MUI. Eigenes Session-Auth, rollenbasierte Rechte. Sicherheit > Korrektheit > Komfort. Vor jedem Push: `mvn verify` und `npm run build`/`lint`/`test` grün. Plan-Mode und Board-Issues sind verbindlich (siehe Workflow).
 
 ## Gedächtnis (Obsidian-Vault)
 
