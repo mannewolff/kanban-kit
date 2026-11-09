@@ -3,13 +3,17 @@
  * Kartenmodul der Mutationspruefung (Plan #1528, Issue #1531): Laesst eine Mutationspruefung
  * Ueberlebende durch, steht je Datei eine Karte `Mutations-Überlebende in <Pfad>` im Backlog;
  * liegt eine solche Karte laenger als 7 Tage offen, sperrt sie die naechste Veroeffentlichung
- * (#1516, AK 4 und 5).
+ * (#1516, AK 4 und 5). Dasselbe gilt fuer die Testabdeckung des Backends mit Karten
+ * `Abdeckungslücken in <Pfad>` (Plan #2062, E3); das Feld `pruefung` waehlt die Art.
  *
  * Zwei Auftraege, als JSON ueber stdin, Antwort als JSON auf stdout:
- *   {"auftrag":"liegezeit"[, "tage":7]}
+ *   {"auftrag":"liegezeit"[, "pruefung":"mutation"|"abdeckung"][, "tage":7]}
  *     → {"ueberfaellig":[{"nummer","titel","angelegt"}]}
- *   {"auftrag":"schreiben","herkunft":"…","stellen":[{"datei","zeile","mutator","ersetzung"}]}
+ *   {"auftrag":"schreiben"[, "pruefung":"mutation"|"abdeckung"],"herkunft":"…","stellen":[{"datei","zeile","mutator","ersetzung"}]}
  *     → {"karten":[{"pfad","art":"neu"|"ergaenzt","nummer","neueStellen"}]}
+ * Ohne `pruefung` gilt `mutation`. Eine Stelle der Abdeckung traegt als `mutator` `Zeile` oder
+ * `Zweig` und als `ersetzung` `nicht gedeckt` bzw. `nicht vollständig gedeckt`, ohne Zahlen, weil
+ * der Dublettenschluessel den Text enthaelt.
  * Ein Fehler endet mit {"fehler":"…"} und Rueckgabewert 1.
  *
  * Bewusst nicht wie `sync-sonar-issues-to-board.mjs`: Dort traegt `externalKey` die
@@ -26,15 +30,44 @@ import { fileURLToPath } from 'node:url';
 import { configPath, readJsonFile, resolveHost, tokenFetch, tokensPath } from '../cli/tbx.mjs';
 
 export const LIEGEZEIT_TAGE = 7;
-const TITEL_PRAEFIX = 'Mutations-Überlebende in ';
+const PRUEFUNGEN = {
+  mutation: {
+    name: 'Mutationsprüfung',
+    titelPraefix: 'Mutations-Überlebende in ',
+    kontext: (pfad, herkunft) => `Die Mutationsprüfung (${herkunft}) ließ in \`${pfad}\` überlebende Mutanten durch: Die Quote lag unter `
+      + 'dem Ziel von 100 %, aber nicht unter der Sperrschwelle von 80 %. Liegt diese Karte länger als '
+      + `${LIEGEZEIT_TAGE} Tage offen, sperrt sie die nächste Veröffentlichung (#1516).`,
+    aufgabe: 'Je Stelle einen Test ergänzen, der den Mutanten tötet, oder die Stelle als bewusst hingenommene '
+      + 'Altlast vermerken (CLAUDE-java.md §5.5 bzw. CLAUDE-react.md):',
+    akzeptanz: (pfad) => `- Ein Lauf der Mutationsprüfung über \`${pfad}\` meldet keine der oben genannten Stellen mehr als `
+      + 'überlebend ohne Altlast-Vermerk.',
+  },
+  abdeckung: {
+    name: 'Abdeckungsprüfung',
+    titelPraefix: 'Abdeckungslücken in ',
+    kontext: (pfad, herkunft) => `Die Abdeckungsprüfung (${herkunft}) fand in \`${pfad}\` ungedeckte Stellen: Das Ziel von 100 % `
+      + `ist nicht erreicht. Liegt diese Karte länger als ${LIEGEZEIT_TAGE} Tage offen, sperrt sie die nächste `
+      + 'Veröffentlichung (#2062).',
+    aufgabe: 'Je Stelle einen Test ergänzen oder die Stelle nach CLAUDE-java.md §5.2 und §5.4 begründet ausschließen:',
+    akzeptanz: (pfad) => `- Ein Lauf der Abdeckungsprüfung über \`${pfad}\` meldet keine der oben genannten Stellen mehr als ungedeckt.`,
+  },
+};
 const TAG_MS = 24 * 60 * 60 * 1000;
 const STELLE_MUSTER = /^- `([^`]+)` Zeile (\d+), ([^:]+): (.*)$/;
 
 // --- reine Funktionen -------------------------------------------------------------------
 
+/** Die Art zu `pruefung`; ein unbekannter Wert ist ein Fehler, bevor etwas ans Board geht. */
+function pruefungsArt(pruefung = 'mutation') {
+  if (!Object.hasOwn(PRUEFUNGEN, pruefung)) {
+    throw new Error(`Unbekannte pruefung: ${JSON.stringify(pruefung)} (erwartet mutation oder abdeckung)`);
+  }
+  return PRUEFUNGEN[pruefung];
+}
+
 /** Der feste Titel, an dem die Karte einer Datei erkannt wird (E7). */
-export function kartenTitel(pfad) {
-  return `${TITEL_PRAEFIX}${pfad}`;
+export function kartenTitel(pfad, pruefung) {
+  return `${pruefungsArt(pruefung).titelPraefix}${pfad}`;
 }
 
 /** Eine Ersetzung auf eine Zeile gefaltet — die Stellenliste ist zeilenweise. */
@@ -55,22 +88,19 @@ function sortiert(stellen) {
 }
 
 /** Body im Vier-Abschnitt-Format, damit die Karte ohne Umschreiben nach Ready kann (E7). */
-export function kartenBody({ pfad, stellen, herkunft }) {
+export function kartenBody({ pfad, stellen, herkunft, pruefung }) {
+  const art = pruefungsArt(pruefung);
   return [
     '## Kontext',
-    `Die Mutationsprüfung (${herkunft}) ließ in \`${pfad}\` überlebende Mutanten durch: Die Quote lag unter `
-      + 'dem Ziel von 100 %, aber nicht unter der Sperrschwelle von 80 %. Liegt diese Karte länger als '
-      + `${LIEGEZEIT_TAGE} Tage offen, sperrt sie die nächste Veröffentlichung (#1516).`,
+    art.kontext(pfad, herkunft),
     '',
     '## Aufgabe',
-    'Je Stelle einen Test ergänzen, der den Mutanten tötet, oder die Stelle als bewusst hingenommene '
-      + 'Altlast vermerken (CLAUDE-java.md §5.5 bzw. CLAUDE-react.md):',
+    art.aufgabe,
     '',
     ...sortiert(stellen).map(stellenZeile),
     '',
     '## Akzeptanzkriterium',
-    `- Ein Lauf der Mutationsprüfung über \`${pfad}\` meldet keine der oben genannten Stellen mehr als `
-      + 'überlebend ohne Altlast-Vermerk.',
+    art.akzeptanz(pfad),
     '',
     '## Abhängigkeiten',
     'Keine.',
@@ -147,12 +177,13 @@ async function aufruf({ host, token, fetchImpl }, pfad, options = {}) {
  * ausser DONE, nur Arbeitspakete (`type` card), Titel mit dem festen Praefix. Archivierte Karten
  * fehlen in der Antwort und gelten damit als nicht offen (E7).
  */
-export async function offeneKarten(zugang) {
+export async function offeneKarten(zugang, pruefung) {
+  const { titelPraefix } = pruefungsArt(pruefung);
   const spalten = await aufruf(zugang, '/api/kanban/items');
   return Object.entries(spalten ?? {})
     .filter(([spalte]) => spalte !== 'DONE')
     .flatMap(([, karten]) => karten ?? [])
-    .filter((k) => k?.type === 'card' && typeof k.title === 'string' && k.title.startsWith(TITEL_PRAEFIX));
+    .filter((k) => k?.type === 'card' && typeof k.title === 'string' && k.title.startsWith(titelPraefix));
 }
 
 /** Anlagedatum aus dem Verlauf der Karte, Eintrag CREATED (E8). */
@@ -164,9 +195,9 @@ export async function anlagedatum(zugang, id) {
 }
 
 /** Die offenen Karten dieser Art, die laenger als `tage` liegen. */
-export async function liegezeit({ jetzt = new Date(), tage = LIEGEZEIT_TAGE, ...zugang }) {
+export async function liegezeit({ jetzt = new Date(), tage = LIEGEZEIT_TAGE, pruefung, ...zugang }) {
   const ergebnis = [];
-  for (const karte of await offeneKarten(zugang)) {
+  for (const karte of await offeneKarten(zugang, pruefung)) {
     const angelegt = await anlagedatum(zugang, karte.id);
     if (ueberfaellig({ angelegt, jetzt, tage })) {
       ergebnis.push({ nummer: karte.number, titel: karte.title, angelegt });
@@ -189,11 +220,11 @@ function jeDatei(stellen) {
  * (Titel unveraendert, ohne neue Stellen kein Aufruf); sonst entsteht eine neue in BACKLOG. Der
  * `Idempotency-Key` ist je Anlage zufaellig — die Dublettenabwehr traegt allein die Titelsuche (E6).
  */
-export async function schreiben({ herkunft, stellen, ...zugang }) {
-  const offen = new Map((await offeneKarten(zugang)).map((k) => [k.title, k]));
+export async function schreiben({ herkunft, stellen, pruefung, ...zugang }) {
+  const offen = new Map((await offeneKarten(zugang, pruefung)).map((k) => [k.title, k]));
   const karten = [];
   for (const [pfad, dateiStellen] of jeDatei(stellen)) {
-    const titel = kartenTitel(pfad);
+    const titel = kartenTitel(pfad, pruefung);
     const vorhanden = offen.get(titel);
     if (vorhanden) {
       const { body, neue } = ergaenzen(vorhanden.body, dateiStellen);
@@ -211,7 +242,7 @@ export async function schreiben({ herkunft, stellen, ...zugang }) {
     const angelegt = await aufruf(zugang, '/api/kanban/items', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: titel, body: kartenBody({ pfad, stellen: neue, herkunft }), column: 'BACKLOG' }),
+      body: JSON.stringify({ title: titel, body: kartenBody({ pfad, stellen: neue, herkunft, pruefung }), column: 'BACKLOG' }),
       idempotencyKey: randomUUID(),
     });
     karten.push({ pfad, art: 'neu', nummer: angelegt.number, neueStellen: neue.length });
@@ -327,10 +358,10 @@ export async function ausfuehren(eingabe, { env = process.env, baseDir, projektD
     const auftrag = JSON.parse(eingabe);
     const zugang = { ...zugangLesen({ env, baseDir, projektDir }), fetchImpl };
     if (auftrag?.auftrag === 'liegezeit') {
-      return { code: 0, ausgabe: await liegezeit({ ...zugang, jetzt, tage: auftrag.tage ?? LIEGEZEIT_TAGE }) };
+      return { code: 0, ausgabe: await liegezeit({ ...zugang, jetzt, tage: auftrag.tage ?? LIEGEZEIT_TAGE, pruefung: auftrag.pruefung }) };
     }
     if (auftrag?.auftrag === 'schreiben') {
-      return { code: 0, ausgabe: await schreiben({ ...zugang, herkunft: auftrag.herkunft ?? 'Mutationsprüfung', stellen: auftrag.stellen }) };
+      return { code: 0, ausgabe: await schreiben({ ...zugang, herkunft: auftrag.herkunft ?? pruefungsArt(auftrag.pruefung).name, stellen: auftrag.stellen, pruefung: auftrag.pruefung }) };
     }
     throw new Error(`Unbekannter Auftrag: ${JSON.stringify(auftrag?.auftrag)} (erwartet liegezeit oder schreiben)`);
   } catch (e) {

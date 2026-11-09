@@ -106,6 +106,44 @@ test('ueberfaellig: genau 7 Tage ist nicht ueberfaellig, 7 Tage plus eine Sekund
   assert.equal(ueberfaellig({ angelegt, jetzt: new Date(t0 + TAG_MS), tage: 7 }), false);
 });
 
+const ungedeckt = (zeile, datei = 'src/main/java/A.java') => ({ datei, zeile, mutator: 'Zeile', ersetzung: 'nicht gedeckt' });
+const zweig = (zeile, datei = 'src/main/java/A.java') => ({ datei, zeile, mutator: 'Zweig', ersetzung: 'nicht vollständig gedeckt' });
+
+test('kartenTitel: pruefung abdeckung ergibt "Abdeckungslücken in <Pfad>", mutation bleibt die Vorgabe', () => {
+  assert.equal(kartenTitel('src/main/java/A.java', 'abdeckung'), 'Abdeckungslücken in src/main/java/A.java');
+  assert.equal(kartenTitel('src/a.ts', 'mutation'), kartenTitel('src/a.ts'));
+});
+
+test('kartenBody: pruefung abdeckung nennt Ziel, Liegezeit und Aufgabe im Vier-Abschnitt-Format', () => {
+  const body = kartenBody({ pfad: 'src/main/java/A.java', stellen: [zweig(12), ungedeckt(3)], herkunft: 'Abdeckungsprüfung backend', pruefung: 'abdeckung' });
+  const abschnitte = [...body.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+  assert.deepEqual(abschnitte, ['Kontext', 'Aufgabe', 'Akzeptanzkriterium', 'Abhängigkeiten']);
+  const kontext = body.slice(body.indexOf('## Kontext'), body.indexOf('## Aufgabe'));
+  assert.match(kontext, /Abdeckungsprüfung backend/);
+  assert.match(kontext, /100 %/);
+  assert.match(kontext, /7 Tage/);
+  const aufgabe = body.slice(body.indexOf('## Aufgabe'), body.indexOf('## Akzeptanzkriterium'));
+  assert.match(aufgabe, /Je Stelle einen Test ergänzen/);
+  assert.match(aufgabe, /CLAUDE-java\.md §5\.2 und §5\.4/);
+  assert.match(aufgabe, /begründet ausschließen/);
+  assert.ok(aufgabe.includes('- `src/main/java/A.java` Zeile 3, Zeile: nicht gedeckt'));
+  assert.ok(aufgabe.includes('- `src/main/java/A.java` Zeile 12, Zweig: nicht vollständig gedeckt'));
+  assert.doesNotMatch(body, /Mutant/);
+});
+
+test('kartenBody: ohne pruefung und mit mutation derselbe Text', () => {
+  const eingabe = { pfad: 'src/a.ts', stellen: [stelle(12)], herkunft: 'h' };
+  assert.equal(kartenBody({ ...eingabe, pruefung: 'mutation' }), kartenBody(eingabe));
+});
+
+test('stellenAusBody und ergaenzen lesen die Stellen der Abdeckungskarte', () => {
+  const body = kartenBody({ pfad: 'src/main/java/A.java', stellen: [ungedeckt(3)], herkunft: 'h', pruefung: 'abdeckung' });
+  assert.deepEqual(stellenAusBody(body), [ungedeckt(3)]);
+  const { body: neu, neue } = ergaenzen(body, [ungedeckt(3), zweig(3)]);
+  assert.deepEqual(neue, [zweig(3)]);
+  assert.deepEqual(stellenAusBody(neu), [ungedeckt(3), zweig(3)]);
+});
+
 // --- Board-Teil gegen ein Fake-fetch --------------------------------------------------
 
 const HOST = 'https://board.test';
@@ -252,6 +290,76 @@ test('schreiben: ein Vorhaben mit gleichem Titel zaehlt nicht — es entsteht ei
   const ergebnis = await schreiben({ ...zugang(fetchImpl), herkunft: 'h', stellen: [stelle(3)] });
   assert.equal(aufrufe.filter((a) => a.method === 'PUT').length, 0);
   assert.equal(ergebnis.karten[0].art, 'neu');
+});
+
+const PFAD_JAVA = 'src/main/java/A.java';
+
+/** Je eine alte offene Karte beider Pruefungen zu derselben Datei. */
+function boardMitBeidenArten() {
+  return fakeBoard({
+    spalten: { BACKLOG: [karte(1, 11, kartenTitel(PFAD_JAVA)), karte(2, 12, kartenTitel(PFAD_JAVA, 'abdeckung'))] },
+    aktivitaet: {
+      1: [{ type: 'CREATED', createdAt: '2026-09-01T00:00:00Z' }],
+      2: [{ type: 'CREATED', createdAt: '2026-09-02T00:00:00Z' }],
+    },
+  });
+}
+
+test('offeneKarten: jede Pruefung sieht nur die Karten ihres Titelpraefixes', async () => {
+  const { fetchImpl } = boardMitBeidenArten();
+  assert.deepEqual((await offeneKarten(zugang(fetchImpl))).map((k) => k.number), [11]);
+  assert.deepEqual((await offeneKarten(zugang(fetchImpl), 'mutation')).map((k) => k.number), [11]);
+  assert.deepEqual((await offeneKarten(zugang(fetchImpl), 'abdeckung')).map((k) => k.number), [12]);
+});
+
+test('liegezeit: eine Abdeckungskarte zaehlt nicht bei mutation und umgekehrt', async () => {
+  const jetzt = new Date('2026-10-07T00:00:00Z');
+  const { fetchImpl } = boardMitBeidenArten();
+  const ohne = await liegezeit({ ...zugang(fetchImpl), jetzt });
+  assert.deepEqual(ohne.ueberfaellig.map((k) => k.nummer), [11]);
+  const abdeckung = await liegezeit({ ...zugang(fetchImpl), jetzt, pruefung: 'abdeckung' });
+  assert.deepEqual(abdeckung, {
+    ueberfaellig: [{ nummer: 12, titel: `Abdeckungslücken in ${PFAD_JAVA}`, angelegt: '2026-09-02T00:00:00Z' }],
+  });
+
+  const nurAbdeckung = fakeBoard({
+    spalten: { BACKLOG: [karte(2, 12, kartenTitel(PFAD_JAVA, 'abdeckung'))] },
+    aktivitaet: { 2: [{ type: 'CREATED', createdAt: '2026-09-02T00:00:00Z' }] },
+  });
+  assert.deepEqual(await liegezeit({ ...zugang(nurAbdeckung.fetchImpl), jetzt, pruefung: 'mutation' }), { ueberfaellig: [] });
+  const nurMutation = fakeBoard({
+    spalten: { BACKLOG: [karte(1, 11, kartenTitel(PFAD_JAVA))] },
+    aktivitaet: { 1: [{ type: 'CREATED', createdAt: '2026-09-01T00:00:00Z' }] },
+  });
+  assert.deepEqual(await liegezeit({ ...zugang(nurMutation.fetchImpl), jetzt, pruefung: 'abdeckung' }), { ueberfaellig: [] });
+});
+
+test('schreiben: pruefung abdeckung legt ohne offene Abdeckungskarte eine neue an, auch neben einer Mutationskarte', async () => {
+  const { fetchImpl, aufrufe } = fakeBoard({ spalten: { BACKLOG: [karte(1, 11, kartenTitel(PFAD_JAVA))] } });
+  const ergebnis = await schreiben({ ...zugang(fetchImpl), herkunft: 'h', stellen: [ungedeckt(3)], pruefung: 'abdeckung' });
+  assert.equal(aufrufe.filter((a) => a.method === 'PUT').length, 0);
+  const posts = aufrufe.filter((a) => a.method === 'POST');
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].body.title, `Abdeckungslücken in ${PFAD_JAVA}`);
+  assert.equal(posts[0].body.column, 'BACKLOG');
+  assert.match(posts[0].body.body, /§5\.2 und §5\.4/);
+  assert.deepEqual(ergebnis, { karten: [{ pfad: PFAD_JAVA, art: 'neu', nummer: 901, neueStellen: 1 }] });
+});
+
+test('schreiben: pruefung abdeckung ergaenzt die offene Karte derselben Datei und traegt dieselbe Stelle nicht doppelt ein', async () => {
+  const titel = kartenTitel(PFAD_JAVA, 'abdeckung');
+  const alterBody = kartenBody({ pfad: PFAD_JAVA, stellen: [ungedeckt(3)], herkunft: 'frueher', pruefung: 'abdeckung' });
+  const { fetchImpl, aufrufe } = fakeBoard({
+    spalten: { BACKLOG: [karte(40, 77, titel, 'BACKLOG', { body: alterBody }), karte(41, 78, kartenTitel(PFAD_JAVA))] },
+  });
+  const ergebnis = await schreiben({ ...zugang(fetchImpl), herkunft: 'jetzt', stellen: [ungedeckt(3), zweig(9)], pruefung: 'abdeckung' });
+  const puts = aufrufe.filter((a) => a.method === 'PUT');
+  assert.equal(puts.length, 1);
+  assert.equal(puts[0].pfad, '/api/kanban/items/40');
+  assert.equal(puts[0].body.title, titel);
+  assert.deepEqual(stellenAusBody(puts[0].body.body), [ungedeckt(3), zweig(9)]);
+  assert.equal(aufrufe.filter((a) => a.method === 'POST').length, 0);
+  assert.deepEqual(ergebnis, { karten: [{ pfad: PFAD_JAVA, art: 'ergaenzt', nummer: 77, neueStellen: 1 }] });
 });
 
 test('Board-Fehler werden geworfen und nennen den Status', async () => {
@@ -682,6 +790,41 @@ test('ausfuehren: liegezeit und schreiben laufen ueber den Zugang', async () => 
     const sw = await ausfuehren(JSON.stringify({ auftrag: 'schreiben', herkunft: 'h', stellen: [stelle(1)] }), { env: {}, baseDir: dir, projektDir: dir, fetchImpl });
     assert.equal(sw.code, 0);
     assert.equal(sw.ausgabe.karten[0].art, 'neu');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ausfuehren: pruefung abdeckung erreicht liegezeit und schreiben', async () => {
+  const dir = loginVerzeichnis({ host: HOST, token: 'tk_test' });
+  try {
+    const lzBoard = boardMitBeidenArten();
+    const jetzt = new Date('2026-10-07T00:00:00Z');
+    const lz = await ausfuehren('{"auftrag":"liegezeit","pruefung":"abdeckung","tage":7}', { env: {}, baseDir: dir, projektDir: dir, fetchImpl: lzBoard.fetchImpl, jetzt });
+    assert.deepEqual(lz.ausgabe.ueberfaellig.map((k) => k.nummer), [12]);
+    const swBoard = fakeBoard({ spalten: { BACKLOG: [] } });
+    const sw = await ausfuehren(JSON.stringify({ auftrag: 'schreiben', pruefung: 'abdeckung', stellen: [ungedeckt(1)] }), { env: {}, baseDir: dir, projektDir: dir, fetchImpl: swBoard.fetchImpl });
+    assert.equal(sw.code, 0);
+    const post = swBoard.aufrufe.find((a) => a.method === 'POST');
+    assert.equal(post.body.title, `Abdeckungslücken in ${PFAD_JAVA}`);
+    assert.match(post.body.body, /Abdeckungsprüfung/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ausfuehren: eine unbekannte pruefung endet mit fehler und 1, ohne Aufruf ans Board', async () => {
+  const dir = loginVerzeichnis({ host: HOST, token: 'tk_test' });
+  try {
+    for (const name of ['sonar', 'constructor']) {
+      for (const auftrag of [{ auftrag: 'liegezeit', pruefung: name }, { auftrag: 'schreiben', pruefung: name, stellen: [stelle(1)] }]) {
+        const { fetchImpl, aufrufe } = fakeBoard({ spalten: { BACKLOG: [] } });
+        const lauf = await ausfuehren(JSON.stringify(auftrag), { env: {}, baseDir: dir, projektDir: dir, fetchImpl });
+        assert.equal(lauf.code, 1);
+        assert.ok(lauf.ausgabe.fehler.includes(name));
+        assert.deepEqual(aufrufe, []);
+      }
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
