@@ -1344,7 +1344,7 @@ export function kartenAntwort(res) {
  * stdin. Ein eigener Prozess, weil das Modul asynchron ans Board geht und dieser Treiber synchron
  * laeuft; das Netz hat er, wenn `checks.mjs` den Treiber startet (Plan #1528, E10).
  */
-function kartenProzess(wurzel) {
+export function kartenProzess(wurzel) {
   return (auftrag) => kartenAntwort(spawnSync(process.execPath, [join(wurzel, 'scripts', 'mutationskarten.mjs')], {
     cwd: wurzel,
     input: JSON.stringify(auftrag),
@@ -1353,7 +1353,7 @@ function kartenProzess(wurzel) {
 }
 
 /** Ruft den Injektionspunkt; ein Wurf und eine fehlende Antwort werden zu `{ fehler }`. */
-function kartenAuftrag(karten, auftrag) {
+export function kartenAuftrag(karten, auftrag) {
   try {
     return karten(auftrag) ?? { fehler: 'Kartenmodul ohne Antwort' };
   } catch (err) {
@@ -1604,7 +1604,7 @@ function ausstiegsSatz(seite, stufeArgument, { mitte, anzahl, stufe }) {
  * Commit —, steht `null` in der Datei: lieber kein Stand als ein erfundener, denn an ihm haengt
  * spaeter die Frage, ob ein Ueberlebender derselbe ist.
  */
-function standLesen(git) {
+export function standLesen(git) {
   const res = git('rev-parse', 'HEAD');
   const roh = res.status === 0 ? res.stdout.trim() : '';
   return roh.length > 0 ? roh : null;
