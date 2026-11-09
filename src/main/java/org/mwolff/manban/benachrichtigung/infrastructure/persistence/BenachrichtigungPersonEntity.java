@@ -35,6 +35,10 @@ class BenachrichtigungPersonEntity {
     // für JPA
   }
 
+  Long getUserId() {
+    return userId;
+  }
+
   Instant getEingeschaltetSeit() {
     return eingeschaltetSeit;
   }

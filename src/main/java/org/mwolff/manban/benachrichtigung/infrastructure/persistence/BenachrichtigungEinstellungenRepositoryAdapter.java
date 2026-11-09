@@ -3,6 +3,7 @@ package org.mwolff.manban.benachrichtigung.infrastructure.persistence;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -70,6 +71,13 @@ class BenachrichtigungEinstellungenRepositoryAdapter
   @Override
   public Set<Long> eingeschalteteProjekteDerPerson(long userId) {
     return personen.findProjectIdsByUserId(userId);
+  }
+
+  @Override
+  public List<EingeschaltetePerson> eingeschaltetePersonen(long projectId) {
+    return personen.findByProjectId(projectId).stream()
+        .map(p -> new EingeschaltetePerson(p.getUserId(), p.getEingeschaltetSeit()))
+        .toList();
   }
 
   @Override

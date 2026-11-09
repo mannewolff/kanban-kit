@@ -1,0 +1,200 @@
+package org.mwolff.manban.benachrichtigung.infrastructure.persistence;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Optional;
+import javax.sql.DataSource;
+import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.TransactionRace;
+import org.mwolff.manban.benachrichtigung.application.AnlassRepository;
+import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LaufAnlass;
+import org.mwolff.manban.benachrichtigung.application.AnlassRepository.NeueZustellung;
+import org.mwolff.manban.benachrichtigung.application.BenachrichtigungEinstellungenRepository;
+import org.mwolff.manban.benachrichtigung.application.BenachrichtigungEinstellungenRepository.EingeschaltetePerson;
+import org.mwolff.manban.benachrichtigung.domain.AnlassArt;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/**
+ * Das Anlegen von Anlass und Zustellung gegen echtes PostgreSQL (Issue #2077, Plan #2070 E4):
+ * {@code ON CONFLICT DO NOTHING} lässt parallele Takte nebeneinander bestehen.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+class AnlassRepositoryIT extends AbstractIntegrationTest {
+
+  private static final Instant EINTRITT = Instant.parse("2026-11-09T08:00:00Z");
+  private static final Instant TAKT = Instant.parse("2026-11-09T08:01:00Z");
+
+  @Autowired private AnlassRepository anlaesse;
+  @Autowired private BenachrichtigungEinstellungenRepository einstellungen;
+  @Autowired private PlatformTransactionManager transactionManager;
+  @Autowired private DataSource dataSource;
+
+  private JdbcTemplate jdbc;
+  private long person;
+  private long projekt;
+  private long karte;
+  private long lauf;
+
+  @BeforeEach
+  void legeBestandAn() {
+    jdbc = new JdbcTemplate(dataSource);
+    person = konto("person@example.com");
+    projekt = id("INSERT INTO project (name, owner_user_id) VALUES ('P', ?) RETURNING id", person);
+    long board = id("INSERT INTO board (project_id, name) VALUES (?, 'B') RETURNING id", projekt);
+    long spalte =
+        id(
+            "INSERT INTO board_column (board_id, name, position) VALUES (?, 'Ready', 0)"
+                + " RETURNING id",
+            board);
+    karte =
+        id(
+            "INSERT INTO card (board_id, column_id, number, title, position_in_column)"
+                + " VALUES (?, ?, 1, 'K', 0) RETURNING id",
+            board,
+            spalte);
+    lauf =
+        id(
+            "INSERT INTO night_run (project_id, started_at, mode, duration_ms, processed_count,"
+                + " skipped_count, unparsed_count, created_at)"
+                + " VALUES (?, now(), 'IMPLEMENTATION', 1000, 1, 0, 0, now()) RETURNING id",
+            projekt);
+  }
+
+  @Test
+  void zweiGleichzeitigeAnlageVersucheErgebenEineZeileUndKeinenFehler() throws Exception {
+    LaufAnlass anlass = laufAnlass(AnlassArt.STOERUNG, null);
+
+    TransactionRace.Result rennen =
+        new TransactionRace(transactionManager, dataSource)
+            .run(
+                () -> anlaesse.legeAnlassZumLaufAn(anlass),
+                () -> anlaesse.legeAnlassZumLaufAn(anlass));
+
+    assertThat(rennen.firstFailure()).isNull();
+    assertThat(rennen.secondFailure()).isNull();
+    assertThat(anzahl("benachrichtigung_anlass")).isEqualTo(1);
+  }
+
+  @Test
+  void dieAnlageLiefertDieKennungUndSpeichertAlleWerte() {
+    Optional<Long> kennung = imTakt(laufAnlass(AnlassArt.LAUF_WARTET, karte));
+
+    assertThat(kennung).isPresent();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM benachrichtigung_anlass WHERE id = ? AND art = 'LAUF_WARTET'"
+                    + " AND project_id = ? AND lauf_id = ? AND card_id = ?"
+                    + " AND eingetreten_at = ? AND angelegt_at = ? AND label_event_id IS NULL",
+                Integer.class,
+                kennung.orElseThrow(),
+                projekt,
+                lauf,
+                karte,
+                java.sql.Timestamp.from(EINTRITT),
+                java.sql.Timestamp.from(TAKT)))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void einAnlassOhneKarteBleibtOhneKarte() {
+    imTakt(laufAnlass(AnlassArt.UEBERSICHT, null));
+
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM benachrichtigung_anlass WHERE card_id IS NULL",
+                Integer.class))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void einZweiterAnlassDerselbenArtLiefertNichtsEineAndereArtIstEigen() {
+    Optional<Long> erster = imTakt(laufAnlass(AnlassArt.STOERUNG, null));
+
+    assertThat(imTakt(laufAnlass(AnlassArt.STOERUNG, null))).isEmpty();
+    assertThat(imTakt(laufAnlass(AnlassArt.UEBERSICHT, null))).isPresent().isNotEqualTo(erster);
+    assertThat(anzahl("benachrichtigung_anlass")).isEqualTo(2);
+  }
+
+  @Test
+  void eineZustellungStartetOffenMitIhrenWerten() {
+    long anlass = imTakt(laufAnlass(AnlassArt.UEBERSICHT, null)).orElseThrow();
+
+    zustellung(new NeueZustellung(anlass, person, EINTRITT, true));
+
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM benachrichtigung_zustellung WHERE anlass_id = ?"
+                    + " AND user_id = ? AND faellig_ab = ? AND verschoben AND zustand = 'OFFEN'",
+                Integer.class,
+                anlass,
+                person,
+                java.sql.Timestamp.from(EINTRITT)))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void eineZweiteZustellungAnDieselbePersonWirdStillUebergangen() {
+    long anlass = imTakt(laufAnlass(AnlassArt.UEBERSICHT, null)).orElseThrow();
+
+    zustellung(new NeueZustellung(anlass, person, EINTRITT, false));
+    zustellung(new NeueZustellung(anlass, person, TAKT, true));
+
+    assertThat(anzahl("benachrichtigung_zustellung")).isEqualTo(1);
+  }
+
+  @Test
+  void dieEingeschaltetenPersonenEinesProjektsMitIhremZeitpunkt() {
+    long andere = konto("andere@example.com");
+    long fremdesProjekt =
+        id("INSERT INTO project (name, owner_user_id) VALUES ('F', ?) RETURNING id", andere);
+    Instant seit = EINTRITT.truncatedTo(ChronoUnit.MICROS);
+    new TransactionTemplate(transactionManager)
+        .executeWithoutResult(
+            status -> {
+              einstellungen.schaltePersonEin(person, projekt, seit);
+              einstellungen.schaltePersonEin(andere, fremdesProjekt, seit);
+            });
+
+    List<EingeschaltetePerson> personen = einstellungen.eingeschaltetePersonen(projekt);
+
+    assertThat(personen).containsExactly(new EingeschaltetePerson(person, seit));
+  }
+
+  private LaufAnlass laufAnlass(AnlassArt art, @Nullable Long cardId) {
+    return new LaufAnlass(art, projekt, lauf, cardId, EINTRITT, TAKT);
+  }
+
+  private Optional<Long> imTakt(LaufAnlass anlass) {
+    return new TransactionTemplate(transactionManager)
+        .execute(status -> anlaesse.legeAnlassZumLaufAn(anlass));
+  }
+
+  private void zustellung(NeueZustellung zustellung) {
+    new TransactionTemplate(transactionManager)
+        .executeWithoutResult(status -> anlaesse.legeZustellungAn(zustellung));
+  }
+
+  private long konto(String email) {
+    return id("INSERT INTO app_user (email, display_name) VALUES (?, 'N') RETURNING id", email);
+  }
+
+  private int anzahl(String tabelle) {
+    Integer anzahl = jdbc.queryForObject("SELECT count(*) FROM " + tabelle, Integer.class);
+    return anzahl == null ? 0 : anzahl;
+  }
+
+  private long id(String sql, Object... argumente) {
+    Long generated = jdbc.queryForObject(sql, Long.class, argumente);
+    return generated == null ? 0L : generated;
+  }
+}

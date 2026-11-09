@@ -1,6 +1,7 @@
 package org.mwolff.manban.benachrichtigung.infrastructure.persistence;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -34,4 +35,6 @@ interface BenachrichtigungPersonJpaRepository
 
   @Query("select e.projectId from BenachrichtigungPersonEntity e where e.userId = :userId")
   Set<Long> findProjectIdsByUserId(@Param("userId") long userId);
+
+  List<BenachrichtigungPersonEntity> findByProjectId(long projectId);
 }

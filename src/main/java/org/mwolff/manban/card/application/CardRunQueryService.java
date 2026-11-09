@@ -249,6 +249,18 @@ public class CardRunQueryService {
   }
 
   /**
+   * Die Kennung der Karte zu ihrer projektweiten Nummer (Issue #2077): Ein Paket eines Laufs kennt
+   * nur die Nummer, ein Anlass der Benachrichtigung verweist auf die Karte. Papierkorb-Karten
+   * fehlen. Ohne Rechteprüfung wie {@link #existingCardNumbers}: Die Methode nennt nur die ID.
+   *
+   * @return die Kennung; leer, wenn es im Projekt keine solche Karte gibt
+   */
+  @Transactional(readOnly = true)
+  public Optional<Long> kartenId(long projectId, int number) {
+    return cards.findByProjectIdAndNumber(projectId, number).map(Card::requireId);
+  }
+
+  /**
    * Die Kartenaktivitäten eines Nachtlaufs im Zeitfenster (Issue #1373, Plan #1372 E2): Herkunft
    * {@code TOKEN} mit diesem Token-Namen, gesetztes {@code agent}, Zeitpunkt in {@code [von, bis]}.
    * Chronologisch; je Eintrag nur Karte, Art und Zeitpunkt.
