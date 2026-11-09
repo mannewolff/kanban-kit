@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
@@ -55,6 +56,26 @@ public class BenachrichtigbareLaeufe {
    */
   public record BenachrichtigbarerLauf(
       NightRun lauf, List<NightRunItem> pakete, String projectName, @Nullable String boardName) {}
+
+  /**
+   * Ein Lauf mit seinen Paketen, ohne Namen.
+   *
+   * @param lauf der Lauf
+   * @param pakete seine Pakete, in Laufreihenfolge
+   */
+  public record LaufMitPaketen(NightRun lauf, List<NightRunItem> pakete) {}
+
+  /**
+   * Der Lauf zu einem Anlass (Issue #2079). Bewusst über die Kennung und nicht über das Fenster:
+   * Nach einer Ruhezeit kann der Lauf älter als das Fenster sein.
+   *
+   * @return der Lauf mit seinen Paketen, leer, wenn es ihn im Projekt nicht gibt
+   */
+  @Transactional(readOnly = true)
+  public Optional<LaufMitPaketen> laufMitPaketen(long projectId, long laufId) {
+    return runs.findByIdAndProjectId(laufId, projectId)
+        .map(run -> new LaufMitPaketen(run, runs.findItemsByRunIds(List.of(laufId))));
+  }
 
   /** Die Läufe im Fenster, ältester zuerst; Läufe verschwundener Projekte fallen heraus. */
   @Transactional(readOnly = true)

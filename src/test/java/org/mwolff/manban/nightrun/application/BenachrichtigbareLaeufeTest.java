@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.nightrun.application.BenachrichtigbareLaeufe.BenachrichtigbarerLauf;
+import org.mwolff.manban.nightrun.application.BenachrichtigbareLaeufe.LaufMitPaketen;
 import org.mwolff.manban.nightrun.domain.NightRun;
 import org.mwolff.manban.nightrun.domain.NightRunItem;
 import org.mwolff.manban.nightrun.domain.NightRunKind;
@@ -219,5 +220,24 @@ class BenachrichtigbareLaeufeTest {
     when(runs.findByCard(PROJEKT, 42)).thenReturn(List.of(paket));
 
     assertThat(benachrichtigbare.paketeDerKarte(PROJEKT, 42)).containsExactly(paket);
+  }
+
+  @Test
+  void einLaufKommtPerKennungMitSeinenPaketenAuchAusserhalbDesFensters() {
+    NightRun run = nachtlauf(1L, FENSTER_BEGINN.minus(Duration.ofDays(30)));
+    NightRunItem eigenes = paket(1L, 1, NightRunState.RED);
+    paket(2L, 2, NightRunState.RED);
+    when(runs.findByIdAndProjectId(1L, PROJEKT)).thenReturn(Optional.of(run));
+
+    assertThat(benachrichtigbare.laufMitPaketen(PROJEKT, 1L))
+        .contains(new LaufMitPaketen(run, List.of(eigenes)));
+  }
+
+  @Test
+  void einUnbekannterLaufLiefertNichtsUndFragtKeinePaketeAb() {
+    when(runs.findByIdAndProjectId(anyLong(), anyLong())).thenReturn(Optional.empty());
+
+    assertThat(benachrichtigbare.laufMitPaketen(PROJEKT, 1L)).isEmpty();
+    verify(runs, never()).findItemsByRunIds(any());
   }
 }

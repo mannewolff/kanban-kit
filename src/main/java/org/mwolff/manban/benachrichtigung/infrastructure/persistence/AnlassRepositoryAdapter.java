@@ -1,5 +1,8 @@
 package org.mwolff.manban.benachrichtigung.infrastructure.persistence;
 
+import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository;
 import org.mwolff.manban.benachrichtigung.domain.AnlassArt;
@@ -63,5 +66,37 @@ class AnlassRepositoryAdapter implements AnlassRepository {
         zustellung.userId(),
         zustellung.faelligAb(),
         zustellung.verschoben());
+  }
+
+  @Override
+  public List<FaelligeZustellung> faelligeZustellungen(Instant jetzt) {
+    return zustellungen.findeFaellige(jetzt).stream()
+        .map(
+            zeile ->
+                new FaelligeZustellung(
+                    zeile.getId(),
+                    zeile.getUserId(),
+                    zeile.getVerschoben(),
+                    AnlassArt.valueOf(zeile.getArt()),
+                    zeile.getProjectId(),
+                    zeile.getLaufId(),
+                    zeile.getCardId()))
+        .toList();
+  }
+
+  @Override
+  public void setzeEingeplant(Collection<Long> ids) {
+    setzeZustand(ids, "EINGEPLANT");
+  }
+
+  @Override
+  public void setzeEntfallen(Collection<Long> ids) {
+    setzeZustand(ids, "ENTFALLEN");
+  }
+
+  private void setzeZustand(Collection<Long> ids, String zustand) {
+    if (!ids.isEmpty()) {
+      zustellungen.setzeZustand(ids, zustand);
+    }
   }
 }

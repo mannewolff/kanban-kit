@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.TransactionRace;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository;
+import org.mwolff.manban.benachrichtigung.application.AnlassRepository.FaelligeZustellung;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LabelAnlass;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LaufAnlass;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.NeueZustellung;
@@ -23,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -218,6 +220,93 @@ class AnlassRepositoryIT extends AbstractIntegrationTest {
     assertThat(anlaesse.gibtAnlassZurKarte(karte, AnlassArt.LAUF_WARTET)).isTrue();
     assertThat(anlaesse.gibtAnlassZurKarte(karte, AnlassArt.KARTE_FRAGE)).isFalse();
     assertThat(anlaesse.gibtAnlassZurKarte(karte + 1, AnlassArt.LAUF_WARTET)).isFalse();
+  }
+
+  @Test
+  void faelligSindOffeneZustellungenBisJetztMitIhrenAnlassWerten() {
+    long ausLauf = imTakt(laufAnlass(AnlassArt.LAUF_WARTET, karte)).orElseThrow();
+    long ausLabel = imLabelTakt(labelAnlass(labelEreignis())).orElseThrow();
+    long spaeter = imTakt(laufAnlass(AnlassArt.UEBERSICHT, null)).orElseThrow();
+    zustellung(new NeueZustellung(ausLauf, person, EINTRITT, true));
+    zustellung(new NeueZustellung(ausLabel, person, TAKT, false));
+    zustellung(new NeueZustellung(spaeter, person, TAKT.plusSeconds(1), false));
+
+    List<FaelligeZustellung> faellig =
+        new TransactionTemplate(transactionManager)
+            .execute(status -> anlaesse.faelligeZustellungen(TAKT));
+
+    assertThat(faellig)
+        .containsExactly(
+            new FaelligeZustellung(
+                zustellungsId(ausLauf), person, true, AnlassArt.LAUF_WARTET, projekt, lauf, karte),
+            new FaelligeZustellung(
+                zustellungsId(ausLabel),
+                person,
+                false,
+                AnlassArt.KARTE_FRAGE,
+                projekt,
+                null,
+                karte));
+  }
+
+  @Test
+  void eineAndereTransaktionUeberspringtGesperrteZustellungen() {
+    long anlass = imTakt(laufAnlass(AnlassArt.UEBERSICHT, null)).orElseThrow();
+    zustellung(new NeueZustellung(anlass, person, EINTRITT, false));
+    TransactionTemplate neue = new TransactionTemplate(transactionManager);
+    neue.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+    List<FaelligeZustellung> daneben =
+        new TransactionTemplate(transactionManager)
+            .execute(
+                status -> {
+                  assertThat(anlaesse.faelligeZustellungen(TAKT)).hasSize(1);
+                  return neue.execute(innen -> anlaesse.faelligeZustellungen(TAKT));
+                });
+
+    assertThat(daneben).isEmpty();
+  }
+
+  @Test
+  void eingeplantUndEntfallenGeltenNurFuerOffeneZeilen() {
+    long eins = imTakt(laufAnlass(AnlassArt.UEBERSICHT, null)).orElseThrow();
+    long zwei = imTakt(laufAnlass(AnlassArt.STOERUNG, null)).orElseThrow();
+    zustellung(new NeueZustellung(eins, person, EINTRITT, false));
+    zustellung(new NeueZustellung(zwei, person, EINTRITT, false));
+    long ersteZeile = zustellungsId(eins);
+    long zweiteZeile = zustellungsId(zwei);
+
+    TransactionTemplate takt = new TransactionTemplate(transactionManager);
+    takt.executeWithoutResult(status -> anlaesse.setzeEingeplant(List.of(ersteZeile)));
+    takt.executeWithoutResult(status -> anlaesse.setzeEntfallen(List.of(zweiteZeile)));
+    takt.executeWithoutResult(status -> anlaesse.setzeEntfallen(List.of(ersteZeile)));
+    takt.executeWithoutResult(status -> anlaesse.setzeEingeplant(List.of(zweiteZeile)));
+
+    assertThat(zustand(ersteZeile)).isEqualTo("EINGEPLANT");
+    assertThat(zustand(zweiteZeile)).isEqualTo("ENTFALLEN");
+    List<FaelligeZustellung> faellig = takt.execute(status -> anlaesse.faelligeZustellungen(TAKT));
+    assertThat(faellig).isEmpty();
+  }
+
+  @Test
+  void eineLeereSammlungAendertNichts() {
+    long anlass = imTakt(laufAnlass(AnlassArt.UEBERSICHT, null)).orElseThrow();
+    zustellung(new NeueZustellung(anlass, person, EINTRITT, false));
+
+    TransactionTemplate takt = new TransactionTemplate(transactionManager);
+    takt.executeWithoutResult(status -> anlaesse.setzeEingeplant(List.of()));
+    takt.executeWithoutResult(status -> anlaesse.setzeEntfallen(List.of()));
+
+    assertThat(zustand(zustellungsId(anlass))).isEqualTo("OFFEN");
+  }
+
+  private long zustellungsId(long anlass) {
+    return id("SELECT id FROM benachrichtigung_zustellung WHERE anlass_id = ?", anlass);
+  }
+
+  private String zustand(long zustellung) {
+    return jdbc.queryForObject(
+        "SELECT zustand FROM benachrichtigung_zustellung WHERE id = ?", String.class, zustellung);
   }
 
   private LabelAnlass labelAnlass(long ereignis) {

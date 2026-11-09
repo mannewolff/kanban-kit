@@ -13,6 +13,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mwolff.manban.benachrichtigung.application.AnlassRepository.FaelligeZustellung;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LabelAnlass;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LaufAnlass;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.NeueZustellung;
@@ -48,6 +50,8 @@ import org.mwolff.manban.project.application.PermissionChecker;
  * art)} und {@code (anlass_id, user_id)}. Dass die Datenbank sie wirklich hält, belegt {@code
  * AnlassRepositoryIT}.
  */
+// PMD.ExcessiveImports: Der Test verdrahtet alle Ports der Erkennung und baut ihre Datentypen.
+@SuppressWarnings("PMD.ExcessiveImports")
 class BenachrichtigungErkennungTest {
 
   private static final Instant JETZT = Instant.parse("2026-11-09T12:00:00Z");
@@ -456,6 +460,21 @@ class BenachrichtigungErkennungTest {
     @Override
     public void legeZustellungAn(NeueZustellung zustellung) {
       zustellungen.add(zustellung);
+    }
+
+    @Override
+    public List<FaelligeZustellung> faelligeZustellungen(Instant jetzt) {
+      throw new UnsupportedOperationException("Die Erkennung liest keine Zustellungen");
+    }
+
+    @Override
+    public void setzeEingeplant(Collection<Long> ids) {
+      throw new UnsupportedOperationException("Die Erkennung plant nichts ein");
+    }
+
+    @Override
+    public void setzeEntfallen(Collection<Long> ids) {
+      throw new UnsupportedOperationException("Die Erkennung lässt nichts entfallen");
     }
   }
 }

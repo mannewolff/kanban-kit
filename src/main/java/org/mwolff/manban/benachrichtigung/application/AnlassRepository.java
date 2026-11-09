@@ -1,6 +1,8 @@
 package org.mwolff.manban.benachrichtigung.application;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.benachrichtigung.domain.AnlassArt;
@@ -60,6 +62,26 @@ public interface AnlassRepository {
   record NeueZustellung(long anlassId, long userId, Instant faelligAb, boolean verschoben) {}
 
   /**
+   * Eine offene, fällige Zustellung mit den Angaben ihres Anlasses (Issue #2079).
+   *
+   * @param id die Zustellung
+   * @param userId die Person
+   * @param verschoben wahr, wenn sie in die Sammelmail gehört
+   * @param art worüber die Mail informiert
+   * @param projectId das Projekt des Anlasses
+   * @param laufId der Lauf; {@code null} bei einem Anlass aus einem Label-Ereignis
+   * @param cardId die zugeordnete Karte; {@code null} ohne Karte
+   */
+  record FaelligeZustellung(
+      long id,
+      long userId,
+      boolean verschoben,
+      AnlassArt art,
+      long projectId,
+      @Nullable Long laufId,
+      @Nullable Long cardId) {}
+
+  /**
    * Legt den Anlass an, wenn es zu Lauf und Art noch keinen gibt.
    *
    * @return die Kennung des neuen Anlasses, leer, wenn es ihn schon gab
@@ -78,4 +100,16 @@ public interface AnlassRepository {
 
   /** Legt die Zustellung an; gibt es zu Anlass und Person schon eine, geschieht nichts. */
   void legeZustellungAn(NeueZustellung zustellung);
+
+  /**
+   * Die offenen Zustellungen, die spätestens {@code jetzt} fällig sind, nach Kennung aufsteigend.
+   * Die Zeilen bleiben bis zum Ende der Transaktion gesperrt; ein paralleler Takt überspringt sie.
+   */
+  List<FaelligeZustellung> faelligeZustellungen(Instant jetzt);
+
+  /** Setzt offene Zustellungen auf {@code EINGEPLANT}; eine leere Sammlung ist ein No-op. */
+  void setzeEingeplant(Collection<Long> ids);
+
+  /** Setzt offene Zustellungen auf {@code ENTFALLEN}; eine leere Sammlung ist ein No-op. */
+  void setzeEntfallen(Collection<Long> ids);
 }

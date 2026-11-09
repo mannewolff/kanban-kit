@@ -27,6 +27,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.mwolff.manban.benachrichtigung.application.AnlassRepository.FaelligeZustellung;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LabelAnlass;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LaufAnlass;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.NeueZustellung;
@@ -443,6 +444,21 @@ class BenachrichtigungErkennungKartenTest {
     @Override
     public void legeZustellungAn(NeueZustellung zustellung) {
       zustellungen.add(zustellung);
+    }
+
+    @Override
+    public List<FaelligeZustellung> faelligeZustellungen(Instant jetzt) {
+      throw new UnsupportedOperationException("Die Erkennung liest keine Zustellungen");
+    }
+
+    @Override
+    public void setzeEingeplant(Collection<Long> ids) {
+      throw new UnsupportedOperationException("Die Erkennung plant nichts ein");
+    }
+
+    @Override
+    public void setzeEntfallen(Collection<Long> ids) {
+      throw new UnsupportedOperationException("Die Erkennung lässt nichts entfallen");
     }
   }
 }
