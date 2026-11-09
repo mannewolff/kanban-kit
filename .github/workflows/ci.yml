@@ -28,11 +28,20 @@ jobs:
       - name: Build & test (inkl. gebündeltem Frontend)
         if: env.HOTFIX != 'true'
         run: mvn -B verify
-      - name: Set up Node 22 (Hotfix)
-        if: env.HOTFIX == 'true'
+      - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # Abdeckungspruefung (Issue #2066, Plan #2062, E8): Derselbe Treiber wie bei `push main` urteilt
+      # ueber den Bericht aus `mvn -B verify` — darum im selben Job — mit denselben Schwellen fuer
+      # Gesamtstand und Liegezeit. Die Bedingung ueber geaenderte Zeilen greift hier nicht: Auf `main`
+      # ist der Anker `HEAD`, und im Pull Request ist `origin/main` im flachen Checkout nicht
+      # aufloesbar. Ein Hotfix faehrt den Treiber ueber `buildChecks` mit.
+      - name: Abdeckungsprüfung (Gesamtstand, Liegezeit 7 Tage)
+        if: env.HOTFIX != 'true'
+        env:
+          TBX_TOKEN: ${{ secrets.KANBAN_KIT_TOKEN }}
+        run: node scripts/abdeckungspruefung.mjs
       - name: Verkürzte Prüfung (Hotfix)
         if: env.HOTFIX == 'true'
         env:
