@@ -474,6 +474,71 @@ test('ausfuehren: fremder toolbox.host im Worktree ohne eigene Token-Datei endet
   }
 });
 
+test('ausfuehren: entfernte toolbox.tokenFile und fremder toolbox.host schicken das Login-Token nicht ab (Issue #2059)', async () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { host: 'https://fremd.test' } });
+  const aufrufe = [];
+  const fetchImpl = async (url, init) => { aufrufe.push({ url, init }); return new Response('[]', { status: 200 }); };
+  try {
+    const lauf = await ausfuehren('{"auftrag":"liegezeit"}', { env: {}, baseDir: dir, projektDir: projekt, fetchImpl });
+    assert.equal(lauf.code, 1);
+    assert.match(lauf.ausgabe.fehler, /https:\/\/fremd\.test/);
+    assert.match(lauf.ausgabe.fehler, /https:\/\/login\.test/);
+    assert.doesNotMatch(lauf.ausgabe.fehler, /tk_login/);
+    assert.deepEqual(aufrufe, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: leere toolbox.tokenFile hebt die Bindung des Login-Tokens nicht auf (Issue #2059)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { host: 'https://fremd.test', tokenFile: '' } });
+  try {
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: projekt }), /https:\/\/fremd\.test.*https:\/\/login\.test/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: Login ohne gespeicherten Host gilt nur fuer den Standard-Host (Issue #2059)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const fremd = projektVerzeichnis({ toolbox: { host: 'https://fremd.test' } });
+  const standard = projektVerzeichnis({ toolbox: { host: 'https://kanban.mwolff.org' } });
+  try {
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: fremd }), /https:\/\/fremd\.test.*https:\/\/kanban\.mwolff\.org/s);
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: standard }), { host: 'https://kanban.mwolff.org', token: 'tk_login' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(fremd, { recursive: true, force: true });
+    rmSync(standard, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: Login-Token geht an den eigenen Host, auch wenn toolbox.host ihn nennt (Issue #2059)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { host: 'https://login.test' } });
+  try {
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: projekt }), { host: 'https://login.test', token: 'tk_login' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: TBX_TOKEN bleibt ungebunden, auch ohne toolbox.tokenFile (Issue #2059)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { host: 'https://projekt.test' } });
+  try {
+    assert.deepEqual(zugangLesen({ env: { TBX_TOKEN: 'tk_env' }, baseDir: dir, projektDir: projekt }), { host: 'https://projekt.test', token: 'tk_env' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
 test('zugangLesen: ohne Token ein Fehler, der beide Wege nennt', () => {
   const dir = loginVerzeichnis();
   const projekt = projektVerzeichnis();

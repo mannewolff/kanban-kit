@@ -273,6 +273,8 @@ function toolboxLesen(dir) {
  * Bindung von Token und Host (Issue #2054): Kommt das Token aus der Hauptkopie, gilt auch deren
  * Host. Der Worktree ist der gepruefte, womoeglich fremde Stand; weicht sein Host von dem der
  * Hauptkopie ab, bricht der Zugang mit beiden Hosts im Text ab, und es geht nichts ans Netz.
+ * Ebenso gilt das Token des globalen tbx-Logins nur fuer den Host dieses Logins (Issue #2059),
+ * denn `toolbox.host` kann aus einem fremden Stand kommen.
  * `TBX_TOKEN` und eine eigene Token-Datei des Worktrees stellt der Aufrufer bewusst bereit, sie
  * bleiben ungebunden.
  */
@@ -287,9 +289,14 @@ export function zugangLesen({ env = process.env, baseDir, projektDir = process.c
   if (!token) {
     throw new Error('Kein Board-Token: TBX_TOKEN setzen oder per `tbx auth login` anmelden.');
   }
-  const host = toolbox.host || resolveHost({}, config);
+  const loginHost = resolveHost({}, config);
+  const host = toolbox.host || loginHost;
+  if (!envToken && !ausDatei && host !== loginHost) {
+    throw new Error(`toolbox.host (${host}) weicht vom Host des tbx-Logins (${loginHost}) ab; `
+      + 'das Login-Token geht nur an dessen Host.');
+  }
   if (ausDatei?.haupt) {
-    const hauptHost = toolboxLesen(ausDatei.haupt).host || resolveHost({}, config);
+    const hauptHost = toolboxLesen(ausDatei.haupt).host || loginHost;
     if (host !== hauptHost) {
       throw new Error(`toolbox.host des Worktrees (${host}) weicht vom Host der Hauptkopie (${hauptHost}) ab; `
         + 'das Token der Hauptkopie geht nur an deren Host.');
