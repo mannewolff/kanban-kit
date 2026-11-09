@@ -212,4 +212,12 @@ class BenachrichtigbareLaeufeTest {
     assertThat(benachrichtigbare.laeufe()).isEmpty();
     verify(runs, never()).findItemsByRunIds(any());
   }
+
+  @Test
+  void diePaketeEinerKarteKommenAusDemRepository() {
+    NightRunItem paket = mock(NightRunItem.class);
+    when(runs.findByCard(PROJEKT, 42)).thenReturn(List.of(paket));
+
+    assertThat(benachrichtigbare.paketeDerKarte(PROJEKT, 42)).containsExactly(paket);
+  }
 }

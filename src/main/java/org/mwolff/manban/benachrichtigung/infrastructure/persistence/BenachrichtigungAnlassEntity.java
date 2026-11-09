@@ -13,7 +13,8 @@ import org.mwolff.manban.benachrichtigung.domain.AnlassArt;
 
 /**
  * JPA-Abbildung der Tabelle {@code benachrichtigung_anlass}. Angelegt wird die Zeile über {@link
- * BenachrichtigungAnlassJpaRepository#legeZumLaufAn}.
+ * BenachrichtigungAnlassJpaRepository#legeZumLaufAn} oder {@link
+ * BenachrichtigungAnlassJpaRepository#legeZumLabelAn}.
  */
 @Entity
 @Table(name = "benachrichtigung_anlass")

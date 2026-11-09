@@ -134,6 +134,16 @@ public record Meldegrund(Grund grund, @Nullable NightRunItem paket) {
     return new Anlaesse(wartet, von(run, stoerend, jetzt, stilleFrist).orElse(null));
   }
 
+  /**
+   * Ob das Paket im Nachtlauf eine Mail des Laufs auslöst: dieselbe Abgrenzung wie {@link
+   * #anlaesse}, je Paket (Issue #2078, Plan #2070 E3). Trägt es keine, meldet sich ein Kartenlabel
+   * selbst.
+   */
+  public static boolean loestAnlassAus(NightRunItem item) {
+    return item.kind() == NightRunKind.NIGHT
+        && (wartetAufMenschen(item) || (kannStoeren(item) && grundVon(item) != null));
+  }
+
   /** Nur ein Nachtlauf zählt, und keiner, den ein Plattform-Admin von Hand beendet hat. */
   private static boolean zaehlt(NightRun run) {
     return run.kind() == NightRunKind.NIGHT && (run.complete() || run.closedAt() == null);

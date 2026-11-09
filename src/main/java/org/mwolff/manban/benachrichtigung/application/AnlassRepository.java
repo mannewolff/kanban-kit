@@ -32,6 +32,24 @@ public interface AnlassRepository {
       Instant angelegtAt) {}
 
   /**
+   * Ein Anlass aus einem Label-Ereignis.
+   *
+   * @param art worüber die Mail informiert
+   * @param projectId das Projekt der Karte
+   * @param labelEventId die Zeile aus {@code card_label_event}
+   * @param cardId die Karte
+   * @param eingetretenAt der Zeitpunkt des Ereignisses
+   * @param angelegtAt der Zeitpunkt des Takts
+   */
+  record LabelAnlass(
+      AnlassArt art,
+      long projectId,
+      long labelEventId,
+      long cardId,
+      Instant eingetretenAt,
+      Instant angelegtAt) {}
+
+  /**
    * Eine Zustellung an eine Person; sie beginnt im Zustand {@code OFFEN}.
    *
    * @param anlassId der Anlass
@@ -47,6 +65,16 @@ public interface AnlassRepository {
    * @return die Kennung des neuen Anlasses, leer, wenn es ihn schon gab
    */
   Optional<Long> legeAnlassZumLaufAn(LaufAnlass anlass);
+
+  /**
+   * Legt den Anlass an, wenn es zum Label-Ereignis noch keinen gibt.
+   *
+   * @return die Kennung des neuen Anlasses, leer, wenn es ihn schon gab
+   */
+  Optional<Long> legeAnlassZumLabelAn(LabelAnlass anlass);
+
+  /** Ob es zur Karte schon einen Anlass dieser Art gibt, aus einem Lauf oder einem Label. */
+  boolean gibtAnlassZurKarte(long cardId, AnlassArt art);
 
   /** Legt die Zustellung an; gibt es zu Anlass und Person schon eine, geschieht nichts. */
   void legeZustellungAn(NeueZustellung zustellung);

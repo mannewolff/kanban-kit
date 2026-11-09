@@ -83,6 +83,12 @@ public class BenachrichtigbareLaeufe {
     return benachrichtigbar;
   }
 
+  /** Die Pakete der Karte über alle Läufe, auch verdrängte; jüngster Lauf zuerst (Issue #2078). */
+  @Transactional(readOnly = true)
+  public List<NightRunItem> paketeDerKarte(long projectId, int cardNumber) {
+    return runs.findByCard(projectId, cardNumber);
+  }
+
   private @Nullable String boardName(NightRun run) {
     Long boardId = run.boardId();
     return boardId == null ? null : boards.requireBoardSummary(boardId).name();

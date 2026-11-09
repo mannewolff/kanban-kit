@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.TransactionRace;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository;
+import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LabelAnlass;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LaufAnlass;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.NeueZustellung;
 import org.mwolff.manban.benachrichtigung.application.BenachrichtigungEinstellungenRepository;
@@ -168,6 +169,71 @@ class AnlassRepositoryIT extends AbstractIntegrationTest {
     List<EingeschaltetePerson> personen = einstellungen.eingeschaltetePersonen(projekt);
 
     assertThat(personen).containsExactly(new EingeschaltetePerson(person, seit));
+  }
+
+  @Test
+  void einLabelAnlassLiefertDieKennungUndSpeichertAlleWerte() {
+    long ereignis = labelEreignis();
+
+    Optional<Long> kennung = imLabelTakt(labelAnlass(ereignis));
+
+    assertThat(kennung).isPresent();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM benachrichtigung_anlass WHERE id = ? AND art = 'KARTE_FRAGE'"
+                    + " AND project_id = ? AND label_event_id = ? AND card_id = ?"
+                    + " AND eingetreten_at = ? AND angelegt_at = ? AND lauf_id IS NULL",
+                Integer.class,
+                kennung.orElseThrow(),
+                projekt,
+                ereignis,
+                karte,
+                java.sql.Timestamp.from(EINTRITT),
+                java.sql.Timestamp.from(TAKT)))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void einZweiterAnlassZumSelbenLabelEreignisLiefertNichts() {
+    LabelAnlass anlass = labelAnlass(labelEreignis());
+
+    assertThat(imLabelTakt(anlass)).isPresent();
+    assertThat(imLabelTakt(anlass)).isEmpty();
+    assertThat(anzahl("benachrichtigung_anlass")).isEqualTo(1);
+  }
+
+  @Test
+  void zweiLabelEreignisseSindZweiAnlaesse() {
+    assertThat(imLabelTakt(labelAnlass(labelEreignis()))).isPresent();
+    assertThat(imLabelTakt(labelAnlass(labelEreignis()))).isPresent();
+    assertThat(anzahl("benachrichtigung_anlass")).isEqualTo(2);
+  }
+
+  @Test
+  void einAnlassZaehltNurFuerSeineKarteUndArtAuchAusEinemLauf() {
+    assertThat(anlaesse.gibtAnlassZurKarte(karte, AnlassArt.LAUF_WARTET)).isFalse();
+
+    imTakt(laufAnlass(AnlassArt.LAUF_WARTET, karte));
+
+    assertThat(anlaesse.gibtAnlassZurKarte(karte, AnlassArt.LAUF_WARTET)).isTrue();
+    assertThat(anlaesse.gibtAnlassZurKarte(karte, AnlassArt.KARTE_FRAGE)).isFalse();
+    assertThat(anlaesse.gibtAnlassZurKarte(karte + 1, AnlassArt.LAUF_WARTET)).isFalse();
+  }
+
+  private LabelAnlass labelAnlass(long ereignis) {
+    return new LabelAnlass(AnlassArt.KARTE_FRAGE, projekt, ereignis, karte, EINTRITT, TAKT);
+  }
+
+  private long labelEreignis() {
+    return id(
+        "INSERT INTO card_label_event (card_id, label_name, created_at) VALUES (?, 'kit:klaeren',"
+            + " now()) RETURNING id",
+        karte);
+  }
+
+  private Optional<Long> imLabelTakt(LabelAnlass anlass) {
+    return new TransactionTemplate(transactionManager)
+        .execute(status -> anlaesse.legeAnlassZumLabelAn(anlass));
   }
 
   private LaufAnlass laufAnlass(AnlassArt art, @Nullable Long cardId) {

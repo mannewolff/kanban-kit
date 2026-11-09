@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LabelAnlass;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.LaufAnlass;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository.NeueZustellung;
 import org.mwolff.manban.benachrichtigung.application.BenachrichtigungEinstellungenRepository.EingeschaltetePerson;
@@ -98,6 +99,7 @@ class BenachrichtigungErkennungTest {
             permissions,
             karten,
             new NightRunProperties(null, null, null, null, STILLE),
+            new BenachrichtigungProperties(null),
             Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
@@ -439,6 +441,16 @@ class BenachrichtigungErkennungTest {
       }
       angelegt.add(anlass);
       return Optional.of(idVon(angelegt.size() - 1));
+    }
+
+    @Override
+    public Optional<Long> legeAnlassZumLabelAn(LabelAnlass anlass) {
+      throw new UnsupportedOperationException("Läufe legen keinen Label-Anlass an");
+    }
+
+    @Override
+    public boolean gibtAnlassZurKarte(long cardId, AnlassArt art) {
+      throw new UnsupportedOperationException("Läufe prüfen keine Karte");
     }
 
     @Override

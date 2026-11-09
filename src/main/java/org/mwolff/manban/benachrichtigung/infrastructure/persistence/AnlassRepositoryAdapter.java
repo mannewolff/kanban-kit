@@ -2,6 +2,7 @@ package org.mwolff.manban.benachrichtigung.infrastructure.persistence;
 
 import java.util.Optional;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository;
+import org.mwolff.manban.benachrichtigung.domain.AnlassArt;
 import org.springframework.stereotype.Component;
 
 /** Adapter des {@link AnlassRepository}-Ports auf die Tabellen für Anlass und Zustellung. */
@@ -32,6 +33,27 @@ class AnlassRepositoryAdapter implements AnlassRepository {
       return Optional.empty();
     }
     return Optional.of(anlaesse.findIdByLaufIdAndArt(anlass.laufId(), anlass.art()));
+  }
+
+  @Override
+  public Optional<Long> legeAnlassZumLabelAn(LabelAnlass anlass) {
+    int neu =
+        anlaesse.legeZumLabelAn(
+            anlass.art().name(),
+            anlass.projectId(),
+            anlass.labelEventId(),
+            anlass.cardId(),
+            anlass.eingetretenAt(),
+            anlass.angelegtAt());
+    if (neu == 0) {
+      return Optional.empty();
+    }
+    return Optional.of(anlaesse.findIdByLabelEventId(anlass.labelEventId()));
+  }
+
+  @Override
+  public boolean gibtAnlassZurKarte(long cardId, AnlassArt art) {
+    return anlaesse.existsByCardIdAndArt(cardId, art);
   }
 
   @Override

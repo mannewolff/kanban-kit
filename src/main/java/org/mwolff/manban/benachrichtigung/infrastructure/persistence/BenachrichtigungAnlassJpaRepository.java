@@ -38,4 +38,30 @@ interface BenachrichtigungAnlassJpaRepository
   @Query(
       "select e.id from BenachrichtigungAnlassEntity e where e.laufId = :laufId and e.art = :art")
   Long findIdByLaufIdAndArt(@Param("laufId") long laufId, @Param("art") AnlassArt art);
+
+  /**
+   * Wie {@link #legeZumLaufAn}, eindeutig je Label-Ereignis.
+   *
+   * @return 1, wenn die Zeile neu ist, sonst 0
+   */
+  @Modifying
+  @Query(
+      value =
+          "insert into benachrichtigung_anlass"
+              + " (art, project_id, label_event_id, card_id, eingetreten_at, angelegt_at)"
+              + " values (:art, :projectId, :labelEventId, :cardId, :eingetretenAt, :angelegtAt)"
+              + " on conflict (label_event_id) do nothing",
+      nativeQuery = true)
+  int legeZumLabelAn(
+      @Param("art") String art,
+      @Param("projectId") long projectId,
+      @Param("labelEventId") long labelEventId,
+      @Param("cardId") long cardId,
+      @Param("eingetretenAt") Instant eingetretenAt,
+      @Param("angelegtAt") Instant angelegtAt);
+
+  @Query("select e.id from BenachrichtigungAnlassEntity e where e.labelEventId = :labelEventId")
+  Long findIdByLabelEventId(@Param("labelEventId") long labelEventId);
+
+  boolean existsByCardIdAndArt(Long cardId, AnlassArt art);
 }

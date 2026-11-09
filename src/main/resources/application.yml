@@ -138,6 +138,10 @@ manban:
     vapid-private-key: ${MANBAN_PUSH_VAPID_PRIVATE_KEY:}
     subject: ${MANBAN_PUSH_SUBJECT:}
     melde-takt: PT1M
+  # Benachrichtigung per Mail (Issue #2078, Plan #2070 E3): So lange wartet ein Kartenlabel mit
+  # Laufkennung, ob der Lauf die Karte selbst meldet.
+  benachrichtigung:
+    lauf-label-frist: PT10M
   # Nachtlauf-Auswertung (Issue #722): Ringpuffer je Projekt. Der aelteste Lauf nach started_at
   # wird verdraengt, sobald die Grenze ueberschritten ist.
   # Verwaiste Arbeitspakete (Lauf verdraengt, Issue #964) haben eine eigene Grenze (Issue #966);
