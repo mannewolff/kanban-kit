@@ -56,6 +56,7 @@
   "src/test/java/org/mwolff/manban/card/application/CardRunQueryServiceExistingCardNumbersTest.java": ["src/main/java/org/mwolff/manban/card/application/CardRunQueryService.java"],
   "src/test/java/org/mwolff/manban/card/application/CardRunQueryServiceLaufspurenTest.java": ["src/main/java/org/mwolff/manban/card/application/CardRunQueryService.java"],
   "src/test/java/org/mwolff/manban/card/application/CardRunQueryServiceNacharbeitTest.java": ["src/main/java/org/mwolff/manban/card/application/CardRunQueryService.java"],
+  "src/test/java/org/mwolff/manban/card/application/CardRunQueryServiceLabelAnlaesseTest.java": ["src/main/java/org/mwolff/manban/card/application/CardRunQueryService.java"],
   "src/test/java/org/mwolff/manban/card/infrastructure/CardActivityRepositoryIT.java": ["src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardActivityRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/card/application/CardRunQueryServiceTitelTest.java": ["src/main/java/org/mwolff/manban/card/application/CardRunQueryService.java"],
   "src/test/java/org/mwolff/manban/card/application/CardServiceStatusTest.java": ["src/main/java/org/mwolff/manban/card/application/CardService.java"],

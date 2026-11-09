@@ -55,7 +55,8 @@ class CardRunQueryServiceKostenVorhabenTest {
                 Clock.systemUTC(),
                 mock(ZuweisungsBenachrichtigung.class)),
             mock(BoardService.class),
-            mock(CardLabelEventRepository.class));
+            mock(CardLabelEventRepository.class),
+            mock(CardBestandRepository.class));
   }
 
   private static Card karte(

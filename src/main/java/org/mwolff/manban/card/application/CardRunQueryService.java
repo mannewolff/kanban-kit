@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardSummary;
+import org.mwolff.manban.card.application.CardBestandRepository.KarteImBestand;
 import org.mwolff.manban.card.domain.Arbeitspaket;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
@@ -39,7 +40,9 @@ import org.springframework.transaction.annotation.Transactional;
 // #1452); sie kennt darum die Ports, die Zuordnung und je Abfrage ihre Sicht. Mit Issue #1454 kommt
 // die board-Fassade dazu, weil „Heute Nacht" Boardnamen und den Archiv-Zustand braucht. Eine
 // Aufteilung gaebe nightrun einen zweiten Zugang, ohne eine Abfrage einfacher zu machen. Mit Issue
-// #1755 kommen die Label-Ereignisse fuer die Nacharbeit dazu.
+// #1755 kommen die Label-Ereignisse fuer die Nacharbeit dazu, mit Issue #2075 der Bestands-Port
+// fuer
+// den Kartenstand der Benachrichtigung.
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class CardRunQueryService {
@@ -49,18 +52,21 @@ public class CardRunQueryService {
   private final KartenZuordnung zuordnung;
   private final BoardService boards;
   private final CardLabelEventRepository labelEvents;
+  private final CardBestandRepository bestand;
 
   public CardRunQueryService(
       CardRepository cards,
       CardActivityRepository activity,
       KartenZuordnung zuordnung,
       BoardService boards,
-      CardLabelEventRepository labelEvents) {
+      CardLabelEventRepository labelEvents,
+      CardBestandRepository bestand) {
     this.cards = cards;
     this.activity = activity;
     this.zuordnung = zuordnung;
     this.boards = boards;
     this.labelEvents = labelEvents;
+    this.bestand = bestand;
   }
 
   /**
@@ -467,6 +473,57 @@ public class CardRunQueryService {
     return labelEvents.erfassungSeit();
   }
 
+  /**
+   * Die Ereignisse mit einem der Label-Namen ab {@code seit} für die Karten-Anlässe der
+   * Benachrichtigung (Issue #2075, Plan #2070 E3, E4) — Regeln wie {@link
+   * CardLabelEventRepository#findNachLabelNamenSeit}. Ohne Rechteprüfung wie {@link #cardsByIds}.
+   */
+  @Transactional(readOnly = true)
+  public List<LabelAnlassView> labelAnlaesse(Collection<String> labelNamen, Instant seit) {
+    return labelEvents.findNachLabelNamenSeit(labelNamen, seit).stream()
+        .map(
+            e ->
+                new LabelAnlassView(
+                    e.id(), e.cardId(), e.labelName(), e.createdAt(), e.laufStart()))
+        .toList();
+  }
+
+  /**
+   * Der aktuelle Stand der genannten Karten für die Benachrichtigung (Issue #2075, Plan #2070 E8):
+   * Labels und ob sie archiviert sind oder im Papierkorb liegen.
+   *
+   * <p>Unbekannte IDs fehlen im Ergebnis; die Reihenfolge folgt der Eingabe. Gelesen wird wie bei
+   * {@link CardBestandRepository#findImBestand}, also auch archivierte Karten und Karten im
+   * Papierkorb. Ohne Rechteprüfung wie {@link #cardsByIds}; eine leere Eingabe fragt keinen Port.
+   */
+  @Transactional(readOnly = true)
+  public List<KartenStandView> kartenStand(Collection<Long> ids) {
+    if (ids.isEmpty()) {
+      return List.of();
+    }
+    Map<Long, KarteImBestand> jeId =
+        bestand.findImBestand(Set.copyOf(ids)).stream()
+            .collect(Collectors.toMap(k -> k.karte().requireId(), Function.identity()));
+    List<KarteImBestand> gefunden = ids.stream().map(jeId::get).filter(Objects::nonNull).toList();
+    Map<Long, Long> boardJeKarte = new LinkedHashMap<>();
+    gefunden.forEach(k -> boardJeKarte.put(k.karte().requireId(), k.karte().boardId()));
+    Map<Long, List<String>> labelNamen = zuordnung.labelNamenJeKarte(boardJeKarte);
+    return gefunden.stream()
+        .map(
+            k -> {
+              Card c = k.karte();
+              return new KartenStandView(
+                  c.requireId(),
+                  c.projectId(),
+                  c.number(),
+                  c.title(),
+                  labelNamen.getOrDefault(c.requireId(), List.of()),
+                  c.archived(),
+                  k.imPapierkorb());
+            })
+        .toList();
+  }
+
   private static boolean inBacklog(Card card, @Nullable String spaltenname) {
     return CardStatus.BACKLOG
         .name()
@@ -576,6 +633,34 @@ public class CardRunQueryService {
    */
   public record LabelEreignisView(
       long cardId, String labelName, Instant createdAt, Instant laufStart) {}
+
+  /**
+   * Ein Label-Ereignis für die Karten-Anlässe der Benachrichtigung (Issue #2075).
+   *
+   * @param id Zeilen-ID des Ereignisses
+   * @param labelName Name des Labels beim Setzen
+   * @param laufStart Laufkennung ({@code run_started_at}); {@code null}, wenn sich kein Lauf
+   *     ausgewiesen hat
+   */
+  public record LabelAnlassView(
+      long id, long cardId, String labelName, Instant createdAt, @Nullable Instant laufStart) {}
+
+  /**
+   * Der aktuelle Stand einer Karte für die Benachrichtigung (Issue #2075).
+   *
+   * @param number projektweite Nummer der Karte
+   * @param labels Labelnamen der Karte, alphabetisch
+   * @param archiviert ob die Karte archiviert ist
+   * @param imPapierkorb ob die Karte im Papierkorb liegt
+   */
+  public record KartenStandView(
+      long id,
+      long projectId,
+      int number,
+      String title,
+      List<String> labels,
+      boolean archiviert,
+      boolean imPapierkorb) {}
 
   /**
    * Der Stand eines Vorhabens für die Kostenvoraussage (Issue #2001).

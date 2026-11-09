@@ -43,7 +43,8 @@ class CardRunQueryServiceExistingCardNumbersTest {
                 Clock.systemUTC(),
                 mock(ZuweisungsBenachrichtigung.class)),
             mock(BoardService.class),
-            mock(CardLabelEventRepository.class));
+            mock(CardLabelEventRepository.class),
+            mock(CardBestandRepository.class));
   }
 
   @Test

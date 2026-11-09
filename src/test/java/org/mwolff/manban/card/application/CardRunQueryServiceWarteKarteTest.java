@@ -53,7 +53,8 @@ class CardRunQueryServiceWarteKarteTest {
                 Clock.systemUTC(),
                 mock(ZuweisungsBenachrichtigung.class)),
             boards,
-            mock(CardLabelEventRepository.class));
+            mock(CardLabelEventRepository.class),
+            mock(CardBestandRepository.class));
     when(boards.requireColumn(SPALTE_READY, BOARD))
         .thenReturn(new ColumnView(SPALTE_READY, "Ready", 1, null));
     when(boards.requireColumn(SPALTE_BACKLOG, BOARD))

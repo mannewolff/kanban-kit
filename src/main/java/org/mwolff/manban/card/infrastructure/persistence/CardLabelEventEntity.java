@@ -56,6 +56,10 @@ class CardLabelEventEntity {
     this.runStartedAt = stamp.laufStart();
   }
 
+  @Nullable Long getId() {
+    return id;
+  }
+
   Long getCardId() {
     return cardId;
   }

@@ -10,6 +10,7 @@ import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardLabelEventRepository;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardLabelEvent;
+import org.mwolff.manban.card.domain.LabelEreignisZeile;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -44,6 +45,17 @@ class CardLabelEventRepositoryAdapter implements CardLabelEventRepository {
         .toList();
   }
 
+  @Override
+  public List<LabelEreignisZeile> findNachLabelNamenSeit(
+      Collection<String> labelNamen, Instant seit) {
+    if (labelNamen.isEmpty()) {
+      return List.of();
+    }
+    return jpa.findNachLabelNamenSeit(labelNamen, seit).stream()
+        .map(CardLabelEventRepositoryAdapter::toZeile)
+        .toList();
+  }
+
   /**
    * Die eine Zeile, die V55 anlegt. Fehlt sie, ist das Schema beschädigt — {@code queryForObject}
    * scheitert dann laut, statt einen Beginn zu erfinden.
@@ -66,5 +78,14 @@ class CardLabelEventRepositoryAdapter implements CardLabelEventRepository {
         e.getTokenName(),
         e.getAgent(),
         Objects.requireNonNull(e.getRunStartedAt()));
+  }
+
+  private static LabelEreignisZeile toZeile(CardLabelEventEntity e) {
+    return new LabelEreignisZeile(
+        Objects.requireNonNull(e.getId()),
+        e.getCardId(),
+        e.getLabelName(),
+        e.getCreatedAt(),
+        e.getRunStartedAt());
   }
 }

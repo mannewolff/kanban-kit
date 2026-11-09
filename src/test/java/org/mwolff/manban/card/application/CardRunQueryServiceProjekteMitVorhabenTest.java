@@ -23,7 +23,8 @@ class CardRunQueryServiceProjekteMitVorhabenTest {
           mock(CardActivityRepository.class),
           mock(KartenZuordnung.class),
           boards,
-          mock(CardLabelEventRepository.class));
+          mock(CardLabelEventRepository.class),
+          mock(CardBestandRepository.class));
 
   @Test
   void jedesProjektEinmalUndAufsteigend() {

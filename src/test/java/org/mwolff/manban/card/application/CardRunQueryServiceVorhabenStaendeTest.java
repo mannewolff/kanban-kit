@@ -61,7 +61,8 @@ class CardRunQueryServiceVorhabenStaendeTest {
                 Clock.systemUTC(),
                 mock(ZuweisungsBenachrichtigung.class)),
             boards,
-            mock(CardLabelEventRepository.class));
+            mock(CardLabelEventRepository.class),
+            mock(CardBestandRepository.class));
     when(boards.listColumns(BOARD_A))
         .thenReturn(
             List.of(
