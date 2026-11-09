@@ -27,7 +27,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *       allein {@code POST /api/auth/logout} und {@code DELETE /api/vorschau}, jeweils genau dieser
  *       Pfad.
  *   <li><strong>Persönliches (E5):</strong> Auch lesende Aufrufe auf {@code /api/access-tokens}
- *       samt Unterpfaden und auf {@code /api/me/vorschau-protokoll} werden abgewiesen, mit dem
+ *       samt Unterpfaden, auf {@code /api/me/vorschau-protokoll} und auf {@code
+ *       /api/me/benachrichtigungen} samt Unterpfaden (Issue #2076) werden abgewiesen, mit dem
  *       Problem-Typ {@value #PERSOENLICH}.
  * </ul>
  *
@@ -57,6 +58,7 @@ public class VorschauSchreibsperreFilter extends OncePerRequestFilter {
 
   private static final String ACCESS_TOKENS = "/api/access-tokens";
   private static final String VORSCHAU_PROTOKOLL = "/api/me/vorschau-protokoll";
+  private static final String BENACHRICHTIGUNGEN = "/api/me/benachrichtigungen";
 
   private final VorschauKontextLeser kontext;
   private final Texte texte;
@@ -96,7 +98,9 @@ public class VorschauSchreibsperreFilter extends OncePerRequestFilter {
   }
 
   private static boolean persoenlicherPfad(String pfad) {
-    return unter(pfad, ACCESS_TOKENS) || unter(pfad, VORSCHAU_PROTOKOLL);
+    return unter(pfad, ACCESS_TOKENS)
+        || unter(pfad, VORSCHAU_PROTOKOLL)
+        || unter(pfad, BENACHRICHTIGUNGEN);
   }
 
   /** Der Pfad selbst oder einer darunter — nicht ein Pfad, der nur mit demselben Text beginnt. */

@@ -156,7 +156,10 @@ class VorschauSchreibsperreFilterTest {
         "/api/access-tokens/5",
         "/api/access-tokens/5/revoke",
         "/api/me/vorschau-protokoll",
-        "/api/me/vorschau-protokoll/"
+        "/api/me/vorschau-protokoll/",
+        "/api/me/benachrichtigungen",
+        "/api/me/benachrichtigungen/ruhezeit",
+        "/api/me/benachrichtigungen/projekte/5"
       })
   void inDerVorschau_persoenlicherPfad_wirdAuchLesendAbgewiesen(String path) throws Exception {
     // When
@@ -193,7 +196,13 @@ class VorschauSchreibsperreFilterTest {
 
   @ParameterizedTest
   @ValueSource(
-      strings = {"/api/access-tokensx", "/api/me/vorschau-protokollx", "/api/me", "/api/me/x"})
+      strings = {
+        "/api/access-tokensx",
+        "/api/me/vorschau-protokollx",
+        "/api/me/benachrichtigungenx",
+        "/api/me",
+        "/api/me/x"
+      })
   void inDerVorschau_aehnlicherPfad_istNichtPersoenlich(String path) throws Exception {
     // When
     MockHttpServletRequest request = run("GET", path);

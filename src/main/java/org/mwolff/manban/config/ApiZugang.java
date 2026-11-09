@@ -82,6 +82,11 @@ final class ApiZugang {
           new Pfadgruppe(
               Zugangsart.NUR_SESSION,
               List.of("/api/boards/*/night-run-epic-costs", "/api/cards/*/night-run-epic-costs")),
+          // Mail-Benachrichtigung (Issue #2076, Plan #2070 E12): nur per Session — es sind
+          // Einstellungen von Personen, kein Zugang für Werkzeuge mit Token.
+          new Pfadgruppe(
+              Zugangsart.NUR_SESSION,
+              List.of("/api/me/benachrichtigungen/**", "/api/projects/*/benachrichtigung")),
           // Kanban-Compat-API (tbx.mjs/board.mjs) ausschließlich per PAT. Seit Issue #947 liegt
           // hier auch POST /api/kanban/night-runs: Der Nachtlauf meldet sich mit demselben
           // projektgebundenen Token, ohne Sitzung. Keine Regel ändert sich dadurch — das Muster
