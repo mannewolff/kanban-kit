@@ -637,9 +637,12 @@ export function pitArgumente(dateien) {
  * Der Vollauf des Backends faehrt das Profil `pit` mit seinem Default-Umfang und schaltet wie die
  * Aenderungspruefung die Marke ab (Plan #1528, E12): Die Werkzeugschwelle kennt keinen
  * Altlast-Vermerk, geurteilt wird allein ueber den Bericht gegen die Sperrschwelle.
+ * `-DreportsDirectory` trennt seinen Bericht von dem der Aenderungspruefung (siehe
+ * `PIT_VOLLAUF_BERICHT_TEILE`).
  */
 export function pitVollaufArgumente() {
-  return ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test'];
+  const verzeichnis = PIT_VOLLAUF_BERICHT_TEILE.slice(0, -1).join('/');
+  return ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', `-DreportsDirectory=${verzeichnis}`, 'test'];
 }
 
 /**
@@ -1538,11 +1541,19 @@ function strykerLaufen({ wurzel, starte, args }) {
 const PIT_BERICHT_TEILE = ['target', 'pit-reports', 'mutations.xml'];
 
 /**
+ * Der Bericht des Vollaufs liegt getrennt (Issue #2087): Beide Unterkommandos laufen an der Stufe
+ * `push` gleichzeitig im selben `target/`, und PIT oeffnet die Datei schon zu Beginn seiner Analyse.
+ * Bei einem gemeinsamen Pfad loeschte der Start des einen dem anderen die offene Datei — dessen Lauf
+ * endete gruen und ohne Bericht.
+ */
+const PIT_VOLLAUF_BERICHT_TEILE = ['target', 'pit-reports-vollauf', 'mutations.xml'];
+
+/**
  * Ein PIT-Lauf ueber die beruehrten Klassen. Wie im Frontend faellt der alte Bericht VOR dem Lauf
  * weg, sonst laese ein abgebrochener Lauf den Stand des vorigen und meldete ihn als seinen eigenen.
  */
-function pitLaufen({ wurzel, starte, args }) {
-  const berichtsPfad = join(wurzel, ...PIT_BERICHT_TEILE);
+function pitLaufen({ wurzel, starte, args, teile = PIT_BERICHT_TEILE }) {
+  const berichtsPfad = join(wurzel, ...teile);
   rmSync(berichtsPfad, { force: true });
   const ergebnis = starte('mvn', args, { cwd: wurzel, encoding: 'utf-8' });
   return { ergebnis, xml: existsSync(berichtsPfad) ? readFileSync(berichtsPfad, 'utf-8') : null };
@@ -1663,11 +1674,11 @@ function vollaufLaufen({
     }
     mutanten = strykerMutanten(bericht);
   } else {
-    const { ergebnis, xml } = pitLaufen({ wurzel, starte, args: pitVollaufArgumente() });
+    const { ergebnis, xml } = pitLaufen({ wurzel, starte, args: pitVollaufArgumente(), teile: PIT_VOLLAUF_BERICHT_TEILE });
     // Die Liegezeit gilt unabhaengig vom PIT-Lauf (E9): Auch ein Lauf ohne Bericht nennt sie.
     liegezeit = liegezeitPruefen(karten);
     if (xml === null) {
-      ausgabe(`${fehlenderBericht(PIT_BERICHT_TEILE, ergebnis)}\n${liegezeit.zeilen.join('\n')}\n`);
+      ausgabe(`${fehlenderBericht(PIT_VOLLAUF_BERICHT_TEILE, ergebnis)}\n${liegezeit.zeilen.join('\n')}\n`);
       return 1;
     }
     mutanten = pitMutanten(xml);

@@ -1407,9 +1407,10 @@ test('pitArgumente: ohne Dateiliste bleibt der Default-Umfang des Profils stehen
 
 /** Ein `starte`-Doppel, das den PIT-Bericht an seinen vereinbarten Ort schreibt. */
 function pitDoppel(wurzel, xml, status = 0) {
-  return () => {
-    mkdirSync(join(wurzel, 'target', 'pit-reports'), { recursive: true });
-    if (xml) writeFileSync(join(wurzel, 'target', 'pit-reports', 'mutations.xml'), xml);
+  return (_befehl, args = []) => {
+    const verzeichnis = args.find((a) => a.startsWith('-DreportsDirectory='))?.split('=')[1] ?? 'target/pit-reports';
+    mkdirSync(join(wurzel, verzeichnis), { recursive: true });
+    if (xml) writeFileSync(join(wurzel, verzeichnis, 'mutations.xml'), xml);
     return { status, stdout: '', stderr: '' };
   };
 }
@@ -1640,8 +1641,39 @@ test('vollaufAuswerten: ohne Quellen kennt der Vollauf keinen Vermerk — das Fr
 
 test('pitVollaufArgumente: Default-Umfang des Profils, Marke abgeschaltet, kein inkrementeller Zustand (E12)', () => {
   const args = pitVollaufArgumente();
-  assert.deepEqual(args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
+  assert.deepEqual(args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', '-DreportsDirectory=target/pit-reports-vollauf', 'test']);
   assert.equal(args.some((a) => a.startsWith('-Dpit.targetClasses')), false);
+});
+
+test('laufen: ein Vollauf laesst den Bericht einer gleichzeitigen Aenderungspruefung liegen (Issue #2087)', () => {
+  mitProjekt((wurzel) => {
+    const fremd = join(wurzel, 'target', 'pit-reports', 'mutations.xml');
+    mkdirSync(dirname(fremd), { recursive: true });
+    writeFileSync(fremd, 'bericht der aenderungspruefung');
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML));
+    assert.equal(readFileSync(fremd, 'utf-8'), 'bericht der aenderungspruefung');
+  });
+});
+
+test('laufen: eine Aenderungspruefung laesst den Bericht eines gleichzeitigen Vollaufs liegen (Issue #2087)', () => {
+  mitProjekt((wurzel) => {
+    const fremd = join(wurzel, 'target', 'pit-reports-vollauf', 'mutations.xml');
+    mkdirSync(dirname(fremd), { recursive: true });
+    writeFileSync(fremd, 'bericht des vollaufs');
+    sammelLauf(['aenderung', 'backend'], wurzel, GEAENDERT_SERVICE, pitDoppel(wurzel, BEISPIEL_XML));
+    assert.equal(readFileSync(fremd, 'utf-8'), 'bericht des vollaufs');
+  });
+});
+
+test('laufen: ein alter Vollauf-Bericht wird vor dem Lauf verworfen und nicht als neuer gelesen', () => {
+  const { code, text } = mitProjekt((wurzel) => {
+    const alt = join(wurzel, 'target', 'pit-reports-vollauf', 'mutations.xml');
+    mkdirSync(dirname(alt), { recursive: true });
+    writeFileSync(alt, BEISPIEL_XML);
+    return sammelLauf(['vollauf', 'backend'], wurzel, {}, () => ({ status: 1, stdout: '', stderr: 'boom' }));
+  });
+  assert.notEqual(code, 0);
+  assert.match(text, /keinen Bericht unter target\/pit-reports-vollauf\/mutations\.xml/);
 });
 
 /** 6 Mutanten, 5 getoetet -> 83,33 %: ueber der Frontend-Schwelle. */
@@ -1767,7 +1799,7 @@ test('laufen: vollauf backend faehrt das Profil mit seinem Default-Umfang und ab
     sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML)),
   );
   assert.equal(aufrufe[0].befehl, 'mvn');
-  assert.deepEqual(aufrufe[0].args, ['-B', '-Ppit', '-Dskip.frontend=true', '-Dpit.marke=0', 'test']);
+  assert.deepEqual(aufrufe[0].args, pitVollaufArgumente());
 });
 
 test('laufen: vollauf backend unter der Sperrschwelle endet ungleich 0 und legt die Gedaechtnisdatei an', () => {
