@@ -437,6 +437,21 @@ class BenachrichtigungErkennungTest {
     }
 
     @Override
+    public List<FaelligeZustellung> eingeplanteZustellungen(Collection<Long> ids) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setzeZugestellt(Collection<Long> ids) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setzeEingeplanteEntfallen(Collection<Long> ids) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Optional<Long> legeAnlassZumLaufAn(LaufAnlass anlass) {
       boolean vorhanden =
           angelegt.stream().anyMatch(a -> a.laufId() == anlass.laufId() && a.art() == anlass.art());

@@ -53,7 +53,29 @@ interface BenachrichtigungZustellungJpaRepository
       nativeQuery = true)
   void setzeZustand(@Param("ids") Collection<Long> ids, @Param("zustand") String zustand);
 
-  /** Eine Zeile von {@link #findeFaellige}. */
+  /** Die eingeplanten Zeilen unter den Kennungen samt Anlass (Issue #2080). */
+  @Query(
+      value =
+          "select z.id as id, z.user_id as userId, z.verschoben as verschoben, a.art as art,"
+              + " a.project_id as projectId, a.lauf_id as laufId, a.card_id as cardId"
+              + " from benachrichtigung_zustellung z"
+              + " join benachrichtigung_anlass a on a.id = z.anlass_id"
+              + " where z.id in (:ids) and z.zustand = 'EINGEPLANT'"
+              + " order by z.id",
+      nativeQuery = true)
+  List<FaelligeZeile> findeEingeplante(@Param("ids") Collection<Long> ids);
+
+  /** Ändert nur eingeplante Zeilen: Was schon erledigt ist, bleibt, wie es ist. */
+  @Modifying
+  @Query(
+      value =
+          "update benachrichtigung_zustellung set zustand = :zustand"
+              + " where id in (:ids) and zustand = 'EINGEPLANT'",
+      nativeQuery = true)
+  void setzeZustandEingeplanter(
+      @Param("ids") Collection<Long> ids, @Param("zustand") String zustand);
+
+  /** Eine Zeile von {@link #findeFaellige} und {@link #findeEingeplante}. */
   interface FaelligeZeile {
     long getId();
 

@@ -576,6 +576,21 @@ class BenachrichtigungVersandTest {
     }
 
     @Override
+    public List<FaelligeZustellung> eingeplanteZustellungen(Collection<Long> ids) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setzeZugestellt(Collection<Long> ids) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setzeEingeplanteEntfallen(Collection<Long> ids) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public List<FaelligeZustellung> faelligeZustellungen(Instant jetzt) {
       return zeilen.entrySet().stream()
           .filter(zeile -> !zeile.getValue().isAfter(jetzt))

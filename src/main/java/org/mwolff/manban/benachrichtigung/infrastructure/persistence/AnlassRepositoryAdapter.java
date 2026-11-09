@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.benachrichtigung.application.AnlassRepository;
 import org.mwolff.manban.benachrichtigung.domain.AnlassArt;
+import org.mwolff.manban.benachrichtigung.infrastructure.persistence.BenachrichtigungZustellungJpaRepository.FaelligeZeile;
 import org.springframework.stereotype.Component;
 
 /** Adapter des {@link AnlassRepository}-Ports auf die Tabellen für Anlass und Zustellung. */
@@ -70,18 +71,23 @@ class AnlassRepositoryAdapter implements AnlassRepository {
 
   @Override
   public List<FaelligeZustellung> faelligeZustellungen(Instant jetzt) {
-    return zustellungen.findeFaellige(jetzt).stream()
-        .map(
-            zeile ->
-                new FaelligeZustellung(
-                    zeile.getId(),
-                    zeile.getUserId(),
-                    zeile.getVerschoben(),
-                    AnlassArt.valueOf(zeile.getArt()),
-                    zeile.getProjectId(),
-                    zeile.getLaufId(),
-                    zeile.getCardId()))
-        .toList();
+    return zustellungen.findeFaellige(jetzt).stream().map(this::zustellung).toList();
+  }
+
+  @Override
+  public List<FaelligeZustellung> eingeplanteZustellungen(Collection<Long> ids) {
+    return zustellungen.findeEingeplante(ids).stream().map(this::zustellung).toList();
+  }
+
+  private FaelligeZustellung zustellung(FaelligeZeile zeile) {
+    return new FaelligeZustellung(
+        zeile.getId(),
+        zeile.getUserId(),
+        zeile.getVerschoben(),
+        AnlassArt.valueOf(zeile.getArt()),
+        zeile.getProjectId(),
+        zeile.getLaufId(),
+        zeile.getCardId());
   }
 
   @Override
@@ -92,6 +98,22 @@ class AnlassRepositoryAdapter implements AnlassRepository {
   @Override
   public void setzeEntfallen(Collection<Long> ids) {
     setzeZustand(ids, "ENTFALLEN");
+  }
+
+  @Override
+  public void setzeZugestellt(Collection<Long> ids) {
+    setzeZustandEingeplanter(ids, "ZUGESTELLT");
+  }
+
+  @Override
+  public void setzeEingeplanteEntfallen(Collection<Long> ids) {
+    setzeZustandEingeplanter(ids, "ENTFALLEN");
+  }
+
+  private void setzeZustandEingeplanter(Collection<Long> ids, String zustand) {
+    if (!ids.isEmpty()) {
+      zustellungen.setzeZustandEingeplanter(ids, zustand);
+    }
   }
 
   private void setzeZustand(Collection<Long> ids, String zustand) {

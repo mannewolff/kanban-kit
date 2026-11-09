@@ -300,6 +300,66 @@ class AnlassRepositoryIT extends AbstractIntegrationTest {
     assertThat(zustand(zustellungsId(anlass))).isEqualTo("OFFEN");
   }
 
+  @Test
+  void eingeplantLiestNurEingeplanteZeilenUnterDenKennungenMitIhrenAnlassWerten() {
+    long eins = imTakt(laufAnlass(AnlassArt.LAUF_WARTET, karte)).orElseThrow();
+    long zwei = imTakt(laufAnlass(AnlassArt.UEBERSICHT, null)).orElseThrow();
+    long drei = imTakt(laufAnlass(AnlassArt.STOERUNG, null)).orElseThrow();
+    zustellung(new NeueZustellung(eins, person, EINTRITT, true));
+    zustellung(new NeueZustellung(zwei, person, EINTRITT, false));
+    zustellung(new NeueZustellung(drei, person, EINTRITT, false));
+    long ersteZeile = zustellungsId(eins);
+    long offen = zustellungsId(zwei);
+    long andere = zustellungsId(drei);
+    TransactionTemplate takt = new TransactionTemplate(transactionManager);
+    takt.executeWithoutResult(status -> anlaesse.setzeEingeplant(List.of(ersteZeile, andere)));
+
+    List<FaelligeZustellung> eingeplant =
+        takt.execute(status -> anlaesse.eingeplanteZustellungen(List.of(ersteZeile, offen)));
+
+    assertThat(eingeplant)
+        .containsExactly(
+            new FaelligeZustellung(
+                ersteZeile, person, true, AnlassArt.LAUF_WARTET, projekt, lauf, karte));
+  }
+
+  @Test
+  void zugestelltUndEntfallenGeltenNurFuerEingeplanteZeilen() {
+    long eins = imTakt(laufAnlass(AnlassArt.UEBERSICHT, null)).orElseThrow();
+    long zwei = imTakt(laufAnlass(AnlassArt.STOERUNG, null)).orElseThrow();
+    long drei = imTakt(laufAnlass(AnlassArt.LAUF_WARTET, null)).orElseThrow();
+    zustellung(new NeueZustellung(eins, person, EINTRITT, false));
+    zustellung(new NeueZustellung(zwei, person, EINTRITT, false));
+    zustellung(new NeueZustellung(drei, person, EINTRITT, false));
+    long zuzustellen = zustellungsId(eins);
+    long entfaellt = zustellungsId(zwei);
+    long offen = zustellungsId(drei);
+    TransactionTemplate takt = new TransactionTemplate(transactionManager);
+    takt.executeWithoutResult(status -> anlaesse.setzeEingeplant(List.of(zuzustellen, entfaellt)));
+
+    takt.executeWithoutResult(status -> anlaesse.setzeZugestellt(List.of(zuzustellen, offen)));
+    takt.executeWithoutResult(
+        status -> anlaesse.setzeEingeplanteEntfallen(List.of(entfaellt, zuzustellen, offen)));
+
+    assertThat(zustand(zuzustellen)).isEqualTo("ZUGESTELLT");
+    assertThat(zustand(entfaellt)).isEqualTo("ENTFALLEN");
+    assertThat(zustand(offen)).isEqualTo("OFFEN");
+  }
+
+  @Test
+  void eineLeereSammlungAendertBeimVersandNichts() {
+    long anlass = imTakt(laufAnlass(AnlassArt.UEBERSICHT, null)).orElseThrow();
+    zustellung(new NeueZustellung(anlass, person, EINTRITT, false));
+    long zeile = zustellungsId(anlass);
+    TransactionTemplate takt = new TransactionTemplate(transactionManager);
+    takt.executeWithoutResult(status -> anlaesse.setzeEingeplant(List.of(zeile)));
+
+    takt.executeWithoutResult(status -> anlaesse.setzeZugestellt(List.of()));
+    takt.executeWithoutResult(status -> anlaesse.setzeEingeplanteEntfallen(List.of()));
+
+    assertThat(zustand(zeile)).isEqualTo("EINGEPLANT");
+  }
+
   private long zustellungsId(long anlass) {
     return id("SELECT id FROM benachrichtigung_zustellung WHERE anlass_id = ?", anlass);
   }

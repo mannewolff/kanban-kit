@@ -422,6 +422,21 @@ class BenachrichtigungErkennungKartenTest {
     }
 
     @Override
+    public List<FaelligeZustellung> eingeplanteZustellungen(Collection<Long> ids) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setzeZugestellt(Collection<Long> ids) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void setzeEingeplanteEntfallen(Collection<Long> ids) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Optional<Long> legeAnlassZumLaufAn(LaufAnlass anlass) {
       throw new UnsupportedOperationException("Karten legen keinen Lauf-Anlass an");
     }

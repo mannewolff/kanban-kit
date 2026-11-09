@@ -112,4 +112,16 @@ public interface AnlassRepository {
 
   /** Setzt offene Zustellungen auf {@code ENTFALLEN}; eine leere Sammlung ist ein No-op. */
   void setzeEntfallen(Collection<Long> ids);
+
+  /**
+   * Die eingeplanten Zustellungen unter den Kennungen, nach Kennung aufsteigend (Issue #2080). Was
+   * schon zugestellt oder entfallen ist, fehlt.
+   */
+  List<FaelligeZustellung> eingeplanteZustellungen(Collection<Long> ids);
+
+  /** Setzt eingeplante Zustellungen auf {@code ZUGESTELLT}; eine leere Sammlung ist ein No-op. */
+  void setzeZugestellt(Collection<Long> ids);
+
+  /** Setzt eingeplante Zustellungen auf {@code ENTFALLEN}; eine leere Sammlung ist ein No-op. */
+  void setzeEingeplanteEntfallen(Collection<Long> ids);
 }
