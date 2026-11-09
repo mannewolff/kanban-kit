@@ -94,6 +94,12 @@
       "cmd": "node scripts/mutationspruefung.mjs vollauf backend",
       "stage": "push",
       "concurrent": true
+    },
+    {
+      "cmd": "node scripts/abdeckungspruefung.mjs", 
+      "areas": ["backend", "doku"], 
+      "stage": "push", 
+      "concurrent": true
     }
   ],
   "mutationCommand": "",
