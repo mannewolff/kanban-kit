@@ -1,0 +1,116 @@
+{
+  "autoUpdatesChannel": "latest",
+  "sandbox": {
+    "enabled": true,
+    "excludedCommands": [
+      "mvn *",
+      "node .claude/kit/board.mjs*",
+      "node .claude/kit/night.mjs*",
+      "node .claude/kit/spec.mjs*",
+      "node tools/sync-blobs.mjs*",
+      "node .claude/kit/checks.mjs*",
+      "codex *",
+      "gh run *",
+      "gh pr *",
+      "gh repo *",
+      "gh auth *",
+      "gh issue *",
+      "npm install*",
+      "npm ci*"
+    ],
+    "network": {
+      "allowLocalBinding": true,
+      "excludedCommands": [
+        "mvn *",
+        "node .claude/kit/board.mjs*",
+        "node .claude/kit/night.mjs*",
+        "node .claude/kit/spec.mjs*",
+        "node .claude/kit/checks.mjs*",
+        "node tools/sync-blobs.mjs*",
+        "codex *",
+        "gh run *",
+        "gh pr *",
+        "gh repo *",
+        "gh auth *",
+        "gh issue *",
+        "npm install*",
+        "npm ci*"
+      ]
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(node .claude/kit/board.mjs:*)",
+      "Bash(node .claude/kit/checks.mjs:*)",
+      "Bash(node .claude/kit/spec.mjs:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm test:*)",
+      "Bash(npm run build:*)",
+      "Bash(mvn:*)",
+      "Bash(codex:*)",
+      "Bash(npm --prefix frontend run build:*)",
+      "Bash(npm --prefix frontend run lint:*)",
+      "Bash(npm --prefix frontend run test:coverage:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(node --test:*)",
+      "Bash(node tools/sync-blobs.mjs:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh run:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npm ci)",
+      "Bash(npm ci:*)",
+      "Bash(npm --prefix frontend install)",
+      "Bash(npm --prefix frontend install:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm --prefix frontend test:*)",
+      "Bash(npm --prefix frontend run test:*)"
+    ]
+  },
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/kit/board.mjs session report --complete"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/kit/board.mjs session report"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/kit/board.mjs hook bash-check"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/kit/board.mjs hook write-check"
+          }
+        ]
+      }
+    ]
+  }
+}

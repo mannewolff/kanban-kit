@@ -52,6 +52,8 @@ export const TEXTE = Object.freeze({
     geaendert: "nach der Pruefung geaendert",
     einzigesKommando: "gate.mjs: Kommandos sind 'pre-commit', 'commit-msg', 'post-commit' und 'post-merge'.\n",
     nichtGestartet: "{hook}: Kartenpruefung nicht gestartet — {grund}\n",
+    inSandbox: "{hook}: Kartenpruefung aus einer Sandbox gestartet, sie endet mit 'nicht geprueft'. Naechster Schritt, als eigener Aufruf allein in der Zeile: {kommando}\n",
+    inSandboxRunner: "{hook}: Kartenpruefung aus einer Sandbox gestartet, sie endet mit 'nicht geprueft'. Die echte Pruefung startet der Runner am Ende des Laufs.\n",
     exitCode: "Exit {status}",
     strengeModulFehlt: "board/strenge.mjs liegt weder unter .claude/kit/ noch unter kit/ — bitte den Installer laufen lassen",
     configUnlesbar: "Commit abgewiesen — {pfad} im Commit ist kein gueltiges JSON; ob er die Strenge abschwaecht, laesst sich so nicht pruefen.\n",
@@ -76,6 +78,8 @@ export const TEXTE = Object.freeze({
     geaendert: "changed after the check",
     einzigesKommando: "gate.mjs: the commands are 'pre-commit', 'commit-msg', 'post-commit' and 'post-merge'.\n",
     nichtGestartet: "{hook}: card check not started — {grund}\n",
+    inSandbox: "{hook}: card check started from a sandbox, it ends with 'not checked'. Next step, as a call of its own, alone on the line: {kommando}\n",
+    inSandboxRunner: "{hook}: card check started from a sandbox, it ends with 'not checked'. The runner starts the real check at the end of the run.\n",
     exitCode: "exit {status}",
     strengeModulFehlt: "board/strenge.mjs is in neither .claude/kit/ nor kit/ — please run the installer",
     configUnlesbar: "Commit rejected — {pfad} in the commit is not valid JSON; whether it weakens the strictness cannot be checked that way.\n",
@@ -403,6 +407,9 @@ function kartenpruefungAnstossen(hook) {
   });
   if (!res.error && res.status === 0) {
     process.stderr.write(res.stderr || "");
+    if (process.env.SANDBOX_RUNTIME === "1") {
+      process.stderr.write(process.env.KIT_AGENT_MODEL ? text("inSandboxRunner", { hook }) : text("inSandbox", { hook, kommando: "node .claude/kit/night.mjs --card-check --again" }));
+    }
   } else {
     const grund = res.error?.message ?? [(res.stderr || "").trim(), text("exitCode", { status: res.status })].filter(Boolean).join(" — ");
     process.stderr.write(text("nichtGestartet", { hook, grund }));
