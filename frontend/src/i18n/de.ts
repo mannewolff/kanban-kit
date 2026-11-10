@@ -1887,6 +1887,38 @@ export const de = {
     ERZEUGEN: 'Erzeugen',
     ERZEUGEN_FEHLGESCHLAGEN:
       'Token konnte nicht erzeugt werden. Für ein board-gebundenes Token brauchst du das Recht, auf diesem Board Karten anzulegen.',
+    /** Der Zugang der Desktop-App je Board (Plan #2100). */
+    APP_ZUGANG: {
+      TITEL: 'Zugang der App',
+      HINWEIS:
+        'Mit diesem Zugang handelt die Desktop-App an einem Board in deinem Namen. Je Board gibt es einen. Er gilt, bis er widerrufen oder erneuert wird oder sein Inhaber die Rechte verliert. Der Klartext wird beim Anlegen und Erneuern nur einmal angezeigt.',
+      KEINE_ZEILEN: 'Du bist in keinem Projekt Admin oder Owner, daher gibt es hier nichts zu verwalten.',
+      LADEN_FEHLGESCHLAGEN: 'Die Zugänge ließen sich nicht laden.',
+      FEHLGESCHLAGEN: 'Das hat nicht geklappt.',
+      ORT: (projekt: string, board: string) => `${projekt} · ${board}`,
+      KEIN_ZUGANG: 'Kein Zugang',
+      INHABER: (name: string) => `Inhaber: ${name}`,
+      ANGELEGT_AM: (datum: string) => `angelegt am ${datum}`,
+      ZULETZT_BENUTZT: (datum: string) => `zuletzt benutzt am ${datum}`,
+      NIE_BENUTZT: 'noch nie benutzt',
+      TRENNER: ' · ',
+      ANLEGEN: 'Anlegen',
+      ERNEUERN: 'Erneuern',
+      WIDERRUFEN: 'Widerrufen',
+      ANLEGEN_ARIA: (ort: string) => `Zugang für ${ort} anlegen`,
+      ERNEUERN_ARIA: (ort: string) => `Zugang für ${ort} erneuern`,
+      WIDERRUFEN_ARIA: (ort: string) => `Zugang für ${ort} widerrufen`,
+      ANLEGEN_TITEL: 'Zugang der App anlegen',
+      ERNEUERN_TITEL: 'Zugang der App erneuern',
+      WIDERRUFEN_TITEL: 'Zugang der App widerrufen',
+      ANLEGEN_FRAGE: (ort: string) => `Zugang der App für ${ort} anlegen? Du wirst sein Inhaber.`,
+      ERNEUERN_FRAGE: (ort: string) =>
+        `Zugang der App für ${ort} erneuern? Der bisherige Zugang funktioniert sofort nicht mehr.`,
+      WIDERRUFEN_FRAGE: (ort: string) =>
+        `Zugang der App für ${ort} widerrufen? Das ist endgültig. Danach kann ein neuer Zugang angelegt werden.`,
+      KLARTEXT_SCHLIESSEN: 'Klartext schließen',
+      SCHLIESSEN: 'Schließen',
+    },
   },
 
   /** Die schmale Oberfläche für das Handy unter `/mobil` (Plan #1989, Issue #1992). */

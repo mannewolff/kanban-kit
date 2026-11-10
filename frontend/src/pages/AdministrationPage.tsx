@@ -33,6 +33,7 @@ import { OPENAPI_JSON_PFAD, OPENAPI_YAML_PFAD } from '../api/openapi'
 import { languageApi } from '../api/language'
 import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
+import { AppZugangSection } from '../components/AppZugangSection'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { StandardLabelsSection } from '../components/StandardLabelsSection'
 import { VorschauGesperrt } from '../components/VorschauGesperrt'
@@ -92,6 +93,10 @@ export function AdministrationPage() {
 
         <Persoenlich titel={t.API_TOKENS}>
           <ApiTokensSection />
+        </Persoenlich>
+
+        <Persoenlich titel={t.APP_ZUGANG.TITEL}>
+          <AppZugangSection />
         </Persoenlich>
 
         <ApiUebersichtSection />

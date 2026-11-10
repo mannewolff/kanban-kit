@@ -1769,6 +1769,36 @@ export const en: Woerterbuch = {
     ERZEUGEN: 'Create',
     ERZEUGEN_FEHLGESCHLAGEN:
       'The token could not be created. For a board-bound token you need the permission to create cards on this board.',
+    APP_ZUGANG: {
+      TITEL: 'App access',
+      HINWEIS:
+        'With this access the desktop app acts on a board on your behalf. There is one per board. It stays valid until it is revoked or renewed or its owner loses the rights. The plaintext is shown only once, when it is created or renewed.',
+      KEINE_ZEILEN: 'You are not an admin or owner of any project, so there is nothing to manage here.',
+      LADEN_FEHLGESCHLAGEN: 'The accesses could not be loaded.',
+      FEHLGESCHLAGEN: 'That did not work.',
+      ORT: (projekt, board) => `${projekt} · ${board}`,
+      KEIN_ZUGANG: 'No access',
+      INHABER: (name) => `Owner: ${name}`,
+      ANGELEGT_AM: (datum) => `created on ${datum}`,
+      ZULETZT_BENUTZT: (datum) => `last used on ${datum}`,
+      NIE_BENUTZT: 'never used',
+      TRENNER: ' · ',
+      ANLEGEN: 'Create',
+      ERNEUERN: 'Renew',
+      WIDERRUFEN: 'Revoke',
+      ANLEGEN_ARIA: (ort) => `Create access for ${ort}`,
+      ERNEUERN_ARIA: (ort) => `Renew access for ${ort}`,
+      WIDERRUFEN_ARIA: (ort) => `Revoke access for ${ort}`,
+      ANLEGEN_TITEL: 'Create app access',
+      ERNEUERN_TITEL: 'Renew app access',
+      WIDERRUFEN_TITEL: 'Revoke app access',
+      ANLEGEN_FRAGE: (ort) => `Create app access for ${ort}? You will be its owner.`,
+      ERNEUERN_FRAGE: (ort) => `Renew app access for ${ort}? The current access stops working immediately.`,
+      WIDERRUFEN_FRAGE: (ort) =>
+        `Revoke app access for ${ort}? This is final. A new access can be created afterwards.`,
+      KLARTEXT_SCHLIESSEN: 'Close plaintext',
+      SCHLIESSEN: 'Close',
+    },
   },
 
   MOBIL: {

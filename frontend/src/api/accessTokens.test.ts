@@ -52,4 +52,42 @@ describe('accessTokensApi', () => {
     expect(c.url).toBe('/api/access-tokens/5')
     expect(c.method).toBe('DELETE')
   })
+
+  it('listApp ruft GET /api/access-tokens/app und liefert die Zeilen', async () => {
+    const zeile = {
+      tokenId: null, projectId: 3, projectName: 'Dogfood', boardId: 7, boardName: 'Entwicklung',
+      inhaberName: null, eigener: false, createdAt: null, lastUsedAt: null,
+    }
+    const f = spyFetch(JSON.stringify([zeile]))
+    const result = await accessTokensApi.listApp()
+    expect(lastCall(f).url).toBe('/api/access-tokens/app')
+    expect(result).toEqual([zeile])
+  })
+
+  it('createApp ruft POST /api/access-tokens/app mit Projekt und Board, ohne Namen', async () => {
+    const f = spyFetch(JSON.stringify({ id: 12, name: 'Desktop-App', plaintext: 'tk_geheim' }))
+    const created = await accessTokensApi.createApp(3, 7)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/access-tokens/app')
+    expect(c.method).toBe('POST')
+    expect(JSON.parse(String(c.body))).toEqual({ projectId: 3, boardId: 7 })
+    expect(created.plaintext).toBe('tk_geheim')
+  })
+
+  it('renewApp ruft POST /api/access-tokens/app/{id}/erneuern', async () => {
+    const f = spyFetch(JSON.stringify({ id: 14, name: 'Desktop-App', plaintext: 'tk_neu' }))
+    const created = await accessTokensApi.renewApp(12)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/access-tokens/app/12/erneuern')
+    expect(c.method).toBe('POST')
+    expect(created.plaintext).toBe('tk_neu')
+  })
+
+  it('revokeApp ruft DELETE /api/access-tokens/app/{id}', async () => {
+    const f = spyFetch()
+    await accessTokensApi.revokeApp(12)
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/access-tokens/app/12')
+    expect(c.method).toBe('DELETE')
+  })
 })
