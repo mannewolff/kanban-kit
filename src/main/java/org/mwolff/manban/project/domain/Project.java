@@ -28,6 +28,11 @@ import org.mwolff.manban.common.Identifiable;
  *     {@code strict}, Issue #2014); {@code null}, solange das Projekt nie eine gemeldet hat.
  *     Gesetzt wird sie ausschließlich über {@code ProjectRepository#setKitStrictness}, nie über
  *     {@code save}.
+ * @param kitReviewBeforeReady zuletzt vom Kit gemeldete Einstellung zur Prüfung vor Ready (Issue
+ *     #2112); {@code null}, solange das Projekt nie eine gemeldet hat. Gesetzt wird sie
+ *     ausschließlich über {@code ProjectRepository#setKitReviewBeforeReady}, nie über {@code save}.
+ * @param kitReviewBeforeReadyChangedAt wann ein schon gemeldeter Wert zuletzt wechselte; {@code
+ *     null}, solange er seit der ersten Meldung gleich blieb
  */
 public record Project(
     @Nullable Long id,
@@ -37,8 +42,33 @@ public record Project(
     @Nullable Instant interactiveUsageSince,
     boolean dashboardParticipation,
     @Nullable BigDecimal monthlyBudgetUsd,
-    @Nullable String kitStrictness)
+    @Nullable String kitStrictness,
+    @Nullable Boolean kitReviewBeforeReady,
+    @Nullable Instant kitReviewBeforeReadyChangedAt)
     implements Identifiable {
+
+  /** Ein Projekt, das nie eine Einstellung zur Prüfung vor Ready gemeldet hat (Issue #2112). */
+  public Project(
+      @Nullable Long id,
+      String name,
+      Long ownerUserId,
+      Instant createdAt,
+      @Nullable Instant interactiveUsageSince,
+      boolean dashboardParticipation,
+      @Nullable BigDecimal monthlyBudgetUsd,
+      @Nullable String kitStrictness) {
+    this(
+        id,
+        name,
+        ownerUserId,
+        createdAt,
+        interactiveUsageSince,
+        dashboardParticipation,
+        monthlyBudgetUsd,
+        kitStrictness,
+        null,
+        null);
+  }
 
   /** Ein Projekt, das nie eine Strenge-Stufe gemeldet hat (Issue #2014). */
   public Project(
@@ -69,6 +99,8 @@ public record Project(
         interactiveUsageSince,
         dashboardParticipation,
         monthlyBudgetUsd,
-        kitStrictness);
+        kitStrictness,
+        kitReviewBeforeReady,
+        kitReviewBeforeReadyChangedAt);
   }
 }

@@ -64,6 +64,18 @@ class ProjectEntity {
   @Column(name = "kit_strictness", insertable = false, updatable = false)
   private @Nullable String kitStrictness;
 
+  /**
+   * Die zuletzt vom Kit gemeldete Einstellung zur Prüfung vor Ready (Issue #2112) — <b>nur
+   * lesbar</b>, dieselbe Begründung wie bei {@link #kitStrictness}. Geschrieben wird sie allein
+   * über {@code ProjectRepository#setKitReviewBeforeReady}; {@code null} heißt „nie gemeldet“.
+   */
+  @Column(name = "kit_review_before_ready", insertable = false, updatable = false)
+  private @Nullable Boolean kitReviewBeforeReady;
+
+  /** Wann ein schon gemeldeter Wert zuletzt wechselte (Issue #2112) — <b>nur lesbar</b>. */
+  @Column(name = "kit_review_before_ready_changed_at", insertable = false, updatable = false)
+  private @Nullable Instant kitReviewBeforeReadyChangedAt;
+
   protected ProjectEntity() {
     // für JPA
   }
@@ -105,5 +117,13 @@ class ProjectEntity {
 
   @Nullable String getKitStrictness() {
     return kitStrictness;
+  }
+
+  @Nullable Boolean getKitReviewBeforeReady() {
+    return kitReviewBeforeReady;
+  }
+
+  @Nullable Instant getKitReviewBeforeReadyChangedAt() {
+    return kitReviewBeforeReadyChangedAt;
   }
 }

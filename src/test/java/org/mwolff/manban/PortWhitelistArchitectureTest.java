@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Aufrufer-Whitelists der rechtepruefungsfreien Ports (Issue #463, #1012, #1013, #1076, #1803,
- * #1804, #1964, #2014).
+ * #1804, #1964, #2014, #2112).
  *
  * <p>Diese Ports pruefen bewusst keine Rechte; die Autorisierung liegt beim Aufrufer. Deshalb ist
  * ihr Aufruferkreis maschinell begrenzt: Ein neues Modul, das einen solchen Port injiziert, umginge
@@ -142,6 +142,38 @@ class PortWhitelistArchitectureTest {
               "KitStrictnessWriter: Aufrufer nur der KitStrictnessFilter in"
                   + " accesstoken.web.security");
 
+  // Dieselbe Bauart fuer die Einstellung zur Pruefung vor Ready (Issue #2112, Plan #2108 E18):
+  // Schreiben darf nur der Filter (gebundenes Token), lesen nur die Entscheidungskette.
+  static final ArchRule KIT_REVIEW_VOR_READY_WRITER_NUR_IM_FILTER =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages(
+              "org.mwolff.manban.project.application..",
+              "org.mwolff.manban.project.infrastructure..",
+              "org.mwolff.manban.accesstoken.web.security..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching(
+              "org\\.mwolff\\.manban\\.project\\.application\\.KitReviewVorReadyWriter(\\$.*)?")
+          .as(
+              "KitReviewVorReadyWriter prueft keine Rechte: Aufrufer nur der KitStrictnessFilter"
+                  + " in accesstoken.web.security");
+
+  static final ArchRule KIT_REVIEW_VOR_READY_READER_NUR_ENTSCHEIDUNGSKETTE =
+      noClasses()
+          .that()
+          .resideOutsideOfPackages(
+              "org.mwolff.manban.project.application..",
+              "org.mwolff.manban.project.infrastructure..",
+              "org.mwolff.manban.entscheidungskette.application..")
+          .should()
+          .dependOnClassesThat()
+          .haveNameMatching(
+              "org\\.mwolff\\.manban\\.project\\.application\\.KitReviewVorReadyReader(\\$.*)?")
+          .as(
+              "KitReviewVorReadyReader prueft keine Rechte: Aufrufer nur"
+                  + " entscheidungskette.application");
+
   // Fuenfter Port derselben Bauart (Issue #1803, Plan #1801 A2): Wer eine Code-Anforderung
   // einloest, bekommt ein Konto zurueck, ohne dass der Port irgendetwas prueft. Ausser dem Modul
   // auth selbst (Dienste in application, Adapter in infrastructure) darf ihn niemand benutzen —
@@ -202,6 +234,12 @@ class PortWhitelistArchitectureTest {
   void kitStrictnessPortsHabenAufruferWhitelist() {
     KIT_STRICTNESS_PORTS_HABEN_AUFRUFER_WHITELIST.check(PRODUKTIONSKLASSEN);
     KIT_STRICTNESS_WRITER_NUR_IM_FILTER.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void kitReviewVorReadyPortsHabenAufruferWhitelist() {
+    KIT_REVIEW_VOR_READY_WRITER_NUR_IM_FILTER.check(PRODUKTIONSKLASSEN);
+    KIT_REVIEW_VOR_READY_READER_NUR_ENTSCHEIDUNGSKETTE.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

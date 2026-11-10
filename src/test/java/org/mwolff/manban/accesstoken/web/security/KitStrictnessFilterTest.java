@@ -1,5 +1,6 @@
 package org.mwolff.manban.accesstoken.web.security;
 
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
@@ -17,9 +18,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
+import org.mwolff.manban.project.application.KitReviewVorReadyWriter;
 import org.mwolff.manban.project.application.KitStrictnessWriter;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,6 +37,7 @@ class KitStrictnessFilterTest {
   private static final long PROJECT_ID = 7L;
 
   private KitStrictnessWriter writer;
+  private KitReviewVorReadyWriter reviewWriter;
   private HttpServletRequest request;
   private HttpServletResponse response;
   private FilterChain chain;
@@ -42,10 +46,11 @@ class KitStrictnessFilterTest {
   @BeforeEach
   void setUp() {
     writer = mock(KitStrictnessWriter.class);
+    reviewWriter = mock(KitReviewVorReadyWriter.class);
     request = mock(HttpServletRequest.class);
     response = mock(HttpServletResponse.class);
     chain = mock(FilterChain.class);
-    filter = new KitStrictnessFilter(writer);
+    filter = new KitStrictnessFilter(writer, reviewWriter);
     SecurityContextHolder.clearContext();
   }
 
@@ -144,6 +149,98 @@ class KitStrictnessFilterTest {
     filter.doFilter(request, response, chain);
 
     verify(chain).doFilter(request, response);
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      ignoreLeadingAndTrailingWhitespace = false,
+      value = {
+        "true|true",
+        "false|false",
+        "TRUE|true",
+        "False|false",
+        " true |true",
+        "\tFALSE |false"
+      })
+  void reviewVorReady_gueltigerWert_wirdAbgelegt(String wert, boolean erwartet) throws Exception {
+    authentifiziereMitToken(PROJECT_ID);
+    reviewHeader(wert);
+
+    filter.doFilter(request, response, chain);
+
+    verify(reviewWriter).reportReviewBeforeReady(PROJECT_ID, erwartet);
+    verify(chain).doFilter(request, response);
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = {"", "   ", "ja", "1", "truee", "strict"})
+  void reviewVorReady_andererOderFehlenderWert_schreibtNicht(@Nullable String wert)
+      throws Exception {
+    authentifiziereMitToken(PROJECT_ID);
+    reviewHeader(wert);
+
+    filter.doFilter(request, response, chain);
+
+    verify(reviewWriter, never()).reportReviewBeforeReady(anyLong(), anyBoolean());
+    verify(chain).doFilter(request, response);
+  }
+
+  @Test
+  void reviewVorReady_ungebundenesToken_schreibtNicht() throws Exception {
+    authentifiziereMitToken(null);
+    reviewHeader("true");
+
+    filter.doFilter(request, response, chain);
+
+    verify(reviewWriter, never()).reportReviewBeforeReady(anyLong(), anyBoolean());
+    verify(chain).doFilter(request, response);
+  }
+
+  @Test
+  void reviewVorReady_sessionAnfrage_schreibtNicht() throws Exception {
+    SecurityContextHolder.getContext()
+        .setAuthentication(new UsernamePasswordAuthenticationToken(1L, null, List.of()));
+    reviewHeader("true");
+
+    filter.doFilter(request, response, chain);
+
+    verify(reviewWriter, never()).reportReviewBeforeReady(anyLong(), anyBoolean());
+    verify(chain).doFilter(request, response);
+  }
+
+  @Test
+  void reviewVorReady_fehlerBeimAblegen_laesstDieAnfrageDurch() throws Exception {
+    authentifiziereMitToken(PROJECT_ID);
+    reviewHeader("true");
+    doThrow(new IllegalStateException("Datenbank weg"))
+        .when(reviewWriter)
+        .reportReviewBeforeReady(PROJECT_ID, true);
+
+    filter.doFilter(request, response, chain);
+
+    verify(chain).doFilter(request, response);
+  }
+
+  /** Die beiden Meldungen sind unabhängig: Ein Fehler an der einen verhindert die andere nicht. */
+  @Test
+  void fehlerBeiDerStufe_legtDieReviewMeldungTrotzdemAb() throws Exception {
+    authentifiziereMitToken(PROJECT_ID);
+    header("strict");
+    reviewHeader("false");
+    doThrow(new IllegalStateException("Datenbank weg"))
+        .when(writer)
+        .reportStrictness(PROJECT_ID, "strict");
+
+    filter.doFilter(request, response, chain);
+
+    verify(reviewWriter).reportReviewBeforeReady(PROJECT_ID, false);
+    verify(chain).doFilter(request, response);
+  }
+
+  private void reviewHeader(@Nullable String wert) {
+    when(request.getHeader(KitStrictnessFilter.REVIEW_HEADER)).thenReturn(wert);
   }
 
   private void header(@Nullable String wert) {

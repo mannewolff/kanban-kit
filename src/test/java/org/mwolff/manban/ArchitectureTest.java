@@ -363,6 +363,8 @@ class ArchitectureTest {
           "MonthlyBudgetReader",
           "KitStrictnessWriter",
           "KitStrictnessReader",
+          "KitReviewVorReadyWriter",
+          "KitReviewVorReadyReader",
           "ProjectCreatedEvent",
           // MitgliedRolleVerlorenEvent ist Vertrag (Issue #2104, Plan #2100 E4): accesstoken
           // widerruft darauf die Zugaenge der App, ohne dass project das Modul kennt — analog

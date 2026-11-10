@@ -105,10 +105,29 @@ class ProjectRepositoryAdapter implements ProjectRepository {
   }
 
   /**
-   * {@code interactive_usage_since}, {@code dashboard_participation}, {@code monthly_budget_usd}
-   * und {@code kit_strictness} fehlen hier absichtlich: Alle vier Spalten sind an der Entity {@code
-   * insertable = false, updatable = false} und gehören jeweils einem engen Schreibweg. Über {@code
-   * save} können sie deshalb weder gesetzt noch verloren werden.
+   * Beide Spalten in einem {@code UPDATE}: Das {@code CASE} liest den Wert vor der Änderung, die
+   * Unterscheidung „erste Meldung oder Wechsel“ trägt deshalb auch bei gleichzeitigen Meldungen.
+   */
+  @Override
+  public void setKitReviewBeforeReady(long projectId, boolean value, Instant now) {
+    jdbc.update(
+        "UPDATE project SET kit_review_before_ready = ?,"
+            + " kit_review_before_ready_changed_at = CASE"
+            + " WHEN kit_review_before_ready IS NULL THEN kit_review_before_ready_changed_at"
+            + " ELSE ? END"
+            + " WHERE id = ? AND kit_review_before_ready IS DISTINCT FROM ?",
+        value,
+        OffsetDateTime.ofInstant(now, ZoneOffset.UTC),
+        projectId,
+        value);
+  }
+
+  /**
+   * {@code interactive_usage_since}, {@code dashboard_participation}, {@code monthly_budget_usd},
+   * {@code kit_strictness} und die beiden {@code kit_review_before_ready}-Spalten fehlen hier
+   * absichtlich: Sie sind an der Entity {@code insertable = false, updatable = false} und gehören
+   * jeweils einem engen Schreibweg. Über {@code save} können sie deshalb weder gesetzt noch
+   * verloren werden.
    */
   private static ProjectEntity toEntity(Project p) {
     return new ProjectEntity(p.id(), p.name(), p.ownerUserId(), p.createdAt());
@@ -123,6 +142,8 @@ class ProjectRepositoryAdapter implements ProjectRepository {
         e.getInteractiveUsageSince(),
         e.isDashboardParticipation(),
         e.getMonthlyBudgetUsd(),
-        e.getKitStrictness());
+        e.getKitStrictness(),
+        e.getKitReviewBeforeReady(),
+        e.getKitReviewBeforeReadyChangedAt());
   }
 }
