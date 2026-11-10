@@ -354,6 +354,18 @@ class BenachrichtigungVersandTest {
   }
 
   @Test
+  void einLabelAnlassOhneKarteEntfaellt() {
+    anlaesse.lege(
+        new FaelligeZustellung(1L, PERSON, false, AnlassArt.KARTE_FRAGE, PROJEKT, null, null),
+        JETZT);
+
+    assertThat(versand.planeEin()).isZero();
+
+    assertThat(anlaesse.zustand(1L)).isEqualTo("ENTFALLEN");
+    assertThat(nachrichten()).isEmpty();
+  }
+
+  @Test
   void einHaltBleibtNachDemLaufendeOffenUndWirdEingeplant() {
     karte(false, false);
     lauf(true, null, wartend());
