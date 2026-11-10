@@ -7,6 +7,7 @@ import type { AttachmentsApi } from '../api/attachments'
 import type { Board } from '../api/boards'
 import { ApiError } from '../api/client'
 import type { Wartegruende } from '../api/nightRuns'
+import type { EntscheidungsketteView } from '../api/entscheidungskette'
 import type { VorhabenKostenView } from '../api/vorhabenKosten'
 import type { Card, CardByNumber, CardDetail, DerivationNode } from '../api/cards'
 import type { CommentsApi } from '../api/comments'
@@ -157,8 +158,15 @@ function makeApis() {
   const vorhabenKostenApi = {
     jeVorhaben: vi.fn<(cardId: number) => Promise<VorhabenKostenView | null>>().mockResolvedValue(null),
   }
-  return { commentsApi, attachmentsApi, cardsApi, boardsApi, nightRunsApi, vorhabenKostenApi }
+  // Die Entscheidungskette (Issue #2118): ohne Kit — der Abschnitt bleibt weg.
+  const entscheidungsketteApi = {
+    kette: vi.fn<(cardId: number) => Promise<EntscheidungsketteView>>().mockResolvedValue(OHNE_KIT),
+  }
+  return { commentsApi, attachmentsApi, cardsApi, boardsApi, nightRunsApi, vorhabenKostenApi, entscheidungsketteApi }
 }
+
+/** Die Antwort in einem Projekt, in dem das Kit nicht arbeitet (Issue #2117). */
+const OHNE_KIT: EntscheidungsketteView = { sichtbar: false, art: null, abschnitte: [], nachfahren: [] }
 
 /**
  * Klickt „Bearbeiten", sobald die beim Öffnen nachgeladene Beschreibung da ist (Issue #769). Bis
@@ -980,6 +988,97 @@ describe('CardDetailModal', () => {
     expect(await screen.findByRole('tree')).toBeInTheDocument()
     expect(screen.queryByText(/^Karten \(/)).toBeNull()
     expect(screen.queryByText('Keine zugeordneten Karten.')).toBeNull()
+  })
+
+  // --- Entscheidungskette im Block „Verlauf“ (Issue #2118, Plan #2108 E7, E8) ---
+
+  const mitKette = (): EntscheidungsketteView => ({
+    sichtbar: true,
+    art: 'PAKET',
+    abschnitte: [
+      {
+        art: 'PAKET',
+        glieder: [
+          {
+            art: 'HERKUNFT',
+            zustand: 'ERFASST',
+            freigegebenVon: null,
+            ausgefuehrtVon: { typ: 'MODELL', name: 'claude-opus-5-5', modell: null },
+            zeitpunkt: '2026-11-10T10:00:00Z',
+            ergebnis: 'Paket geschnitten',
+            quelle: { karte: 300, nummer: 3, titel: 'Der Plan', oeffenbar: true, kommentar: null },
+            hinweise: [],
+            pruefung: null,
+            freigabe: null,
+            umsetzung: null,
+            codeReview: null,
+            uebertragung: null,
+            veroeffentlichung: null,
+          },
+        ],
+      },
+    ],
+    nachfahren: [],
+  })
+
+  it('Szenario: Projekt ohne Kit — die Karte trägt keinen Abschnitt „Entscheidungskette“', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    await waitFor(() => expect(apis.entscheidungsketteApi.kette).toHaveBeenCalledWith(100))
+    expect(await screen.findByText('Aktivität')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Entscheidungskette' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Kette eingeklappt im Block „Verlauf“ direkt vor der Aktivität und lädt sie einmal', async () => {
+    const apis = makeApis()
+    apis.entscheidungsketteApi.kette.mockResolvedValue(mitKette())
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    const knopf = await screen.findByRole('button', { name: 'Entscheidungskette' })
+    const verlauf = screen.getByRole('region', { name: 'Verlauf' })
+    expect(verlauf).toContainElement(knopf)
+    expect(knopf).toHaveAttribute('aria-expanded', 'false')
+    const aktivitaet = within(verlauf).getByText('Aktivität')
+    expect(knopf.compareDocumentPosition(aktivitaet) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const anhaenge = within(verlauf).getByText('Anhänge')
+    expect(anhaenge.compareDocumentPosition(knopf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    fireEvent.click(knopf)
+    expect(screen.getByText('Paket geschnitten')).toBeInTheDocument()
+    expect(apis.entscheidungsketteApi.kette).toHaveBeenCalledTimes(1)
+  })
+
+  it('öffnet eine sichtbare Karte der Kette über den Verweis-Stapel', async () => {
+    const apis = makeApis()
+    apis.entscheidungsketteApi.kette.mockResolvedValue(mitKette())
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Entscheidungskette' }))
+    fireEvent.click(screen.getByRole('button', { name: '#3 Der Plan' }))
+
+    await waitFor(() => expect(apis.cardsApi.byNumber).toHaveBeenCalledWith(9, 3))
+  })
+
+  it('lässt den Abschnitt bei einem Fehler des Abrufs entfallen', async () => {
+    const apis = makeApis()
+    apis.entscheidungsketteApi.kette.mockRejectedValue(new ApiError(500, 'Fehler'))
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    await waitFor(() => expect(apis.entscheidungsketteApi.kette).toHaveBeenCalled())
+    expect(await screen.findByText('Aktivität')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Entscheidungskette' })).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Kette im Bearbeiten-Modus nicht', async () => {
+    const apis = makeApis()
+    apis.entscheidungsketteApi.kette.mockResolvedValue(mitKette())
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+    await screen.findByRole('button', { name: 'Entscheidungskette' })
+
+    await klickeBearbeiten()
+
+    expect(screen.queryByRole('button', { name: 'Entscheidungskette' })).not.toBeInTheDocument()
   })
 
   // --- Kostenzeile im Vorhaben-Dialog (Issue #2006) -------------------------
