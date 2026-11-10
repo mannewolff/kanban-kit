@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.accesstoken.application.AccessTokenService;
 import org.mwolff.manban.accesstoken.application.AccessTokenService.AccessTokenView;
+import org.mwolff.manban.accesstoken.application.AccessTokenService.AppZugangZeile;
 import org.mwolff.manban.accesstoken.application.AccessTokenService.CreatedAccessToken;
 
 /** Unit-Tests des dünnen HTTP-Adapters für die Token-Verwaltung (Service gemockt). */
@@ -60,5 +61,55 @@ class AccessTokenControllerTest {
 
     // Then
     verify(service).revoke(3L, 5L);
+  }
+
+  @Test
+  void listApp_delegatesToService() {
+    // Given
+    List<AppZugangZeile> zeilen =
+        List.of(new AppZugangZeile(null, 7L, "Projekt", 9L, "Board", null, false, null, null));
+    when(service.appZugaengeAuflisten(3L)).thenReturn(zeilen);
+
+    // When
+    List<AppZugangZeile> result = controller.listApp(3L);
+
+    // Then
+    assertThat(result).isSameAs(zeilen);
+  }
+
+  @Test
+  void createApp_delegatesToServiceAndReturnsResult() {
+    // Given
+    CreatedAccessToken created = new CreatedAccessToken(1L, "Desktop-App", "tk_plain");
+    var request = new AccessTokenController.CreateAppZugangRequest(7L, 9L);
+    when(service.appZugangAnlegen(3L, 7L, 9L)).thenReturn(created);
+
+    // When
+    CreatedAccessToken result = controller.createApp(3L, request);
+
+    // Then
+    assertThat(result).isSameAs(created);
+  }
+
+  @Test
+  void renewApp_delegatesToServiceAndReturnsResult() {
+    // Given
+    CreatedAccessToken created = new CreatedAccessToken(2L, "Desktop-App", "tk_neu");
+    when(service.appZugangErneuern(3L, 5L)).thenReturn(created);
+
+    // When
+    CreatedAccessToken result = controller.renewApp(3L, 5L);
+
+    // Then
+    assertThat(result).isSameAs(created);
+  }
+
+  @Test
+  void revokeApp_delegatesToService() {
+    // When
+    controller.revokeApp(3L, 5L);
+
+    // Then
+    verify(service).appZugangWiderrufen(3L, 5L);
   }
 }

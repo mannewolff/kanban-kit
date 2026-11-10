@@ -1,6 +1,7 @@
 package org.mwolff.manban.project.application;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.auth.application.VorschauKontext;
@@ -315,11 +316,21 @@ public class PermissionChecker {
     return echteRolleVorhanden(userId, projectId, ProjectRole.OWNER);
   }
 
+  /**
+   * {@link #requireEchterOwnerOderAdmin} ohne Wurf (Plan #2100, E5) — für Aufrufer, die über
+   * mehrere Projekte hinweg auswählen. Ein Plattform-Admin ohne eigene Mitgliedschaft ist auch hier
+   * ein Nichtmitglied.
+   */
+  @Transactional(readOnly = true)
+  public boolean istEchterOwnerOderAdmin(long userId, long projectId) {
+    return echteRolleVorhanden(userId, projectId, ProjectRole.OWNER, ProjectRole.ADMIN);
+  }
+
   /** {@link #hatEchteRolle} ohne eigene Transaktion, für den Aufruf innerhalb dieser Klasse. */
-  private boolean echteRolleVorhanden(long userId, long projectId, ProjectRole rolle) {
+  private boolean echteRolleVorhanden(long userId, long projectId, ProjectRole... erlaubt) {
     return memberships
         .findByProjectIdAndUserId(projectId, userId)
-        .map(m -> m.role() == rolle)
+        .map(m -> List.of(erlaubt).contains(m.role()))
         .orElse(false);
   }
 

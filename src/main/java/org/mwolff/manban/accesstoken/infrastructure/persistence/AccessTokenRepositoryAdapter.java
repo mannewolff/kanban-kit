@@ -1,10 +1,12 @@
 package org.mwolff.manban.accesstoken.infrastructure.persistence;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.accesstoken.application.AccessTokenRepository;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
+import org.mwolff.manban.accesstoken.domain.AccessTokenArt;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +43,19 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
     return jpa.findByTokenHash(tokenHash).map(AccessTokenRepositoryAdapter::toDomain);
   }
 
+  @Override
+  public Optional<AccessToken> findWirksamenAppZugang(long boardId) {
+    return jpa.findByBoardIdAndArtAndRevokedFalse(boardId, AccessTokenArt.APP)
+        .map(AccessTokenRepositoryAdapter::toDomain);
+  }
+
+  @Override
+  public List<AccessToken> findWirksameAppZugaenge(Collection<Long> boardIds) {
+    return jpa.findByBoardIdInAndArtAndRevokedFalse(boardIds, AccessTokenArt.APP).stream()
+        .map(AccessTokenRepositoryAdapter::toDomain)
+        .toList();
+  }
+
   /**
    * {@inheritDoc}
    *
@@ -59,6 +74,11 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
   @Override
   public void markRevoked(long id) {
     jpa.markRevoked(id);
+  }
+
+  @Override
+  public boolean markRevokedIfActive(long id) {
+    return jpa.markRevokedIfActive(id) > 0;
   }
 
   private static KanbanAccessTokenEntity toEntity(AccessToken t) {
