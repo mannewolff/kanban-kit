@@ -82,7 +82,7 @@ export function szenarienAus(body: string): Szenario[] {
     if (kopf) {
       szenarien.push({ name: kopf[1], schritte: [] })
     } else if (szenarien.length > 0) {
-      nimmAuf(szenarien[szenarien.length - 1].schritte, zeile)
+      nimmAuf(szenarien.at(-1)!.schritte, zeile)
     }
   }
   return szenarien.filter((szenario) => szenario.schritte.length > 0)
@@ -106,7 +106,7 @@ export function abnahmeStand(szenarien: Szenario[], vermerke: (Vermerk | undefin
 }
 
 /** Maskiert die Markdown-Zeichen, damit die Anzeige dem Text entspricht (E10). */
-const maskiert = (text: string) => text.replace(/[\\*_`[\]|]/g, '\\$&')
+const maskiert = (text: string) => text.replace(/[\\*_`[\]|]/g, String.raw`\$&`)
 
 /** Macht eine Notiz einzeilig (E9); ohne Regex, weil `\s*\n\s*` superlinear zuruecksetzt (Issue #1634). */
 const einzeilig = (text: string) =>

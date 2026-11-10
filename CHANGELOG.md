@@ -17,6 +17,45 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.16.0] – 2026-11-10
+
+- Änderungen durch install 6.1.3
+- Benachrichtigung: Altlast-Vermerk für äquivalente Mutanten in der Ruhezeit ([#2095](https://github.com/mannewolff/kanban-kit/issues/2095))
+- Benachrichtigung: Test für die Zahl der Anlässe bei Störung ([#2094](https://github.com/mannewolff/kanban-kit/issues/2094))
+- Benachrichtigung: Altlast-Vermerk für äquivalenten Mutanten im Versand ([#2093](https://github.com/mannewolff/kanban-kit/issues/2093))
+- Benachrichtigung: Test für Störung bei nur wartendem Ausgang ([#2092](https://github.com/mannewolff/kanban-kit/issues/2092))
+- Benachrichtigung: Integrationstest für eingeschaltete Projekte ([#2091](https://github.com/mannewolff/kanban-kit/issues/2091))
+- Benachrichtigung: Test für Label-Anlass ohne Karte ([#2090](https://github.com/mannewolff/kanban-kit/issues/2090))
+- Benachrichtigung: Doku für Nutzung und Rechte ([#2084](https://github.com/mannewolff/kanban-kit/issues/2084))
+- Benachrichtigung: Projektschalter auf der Projektseite ([#2083](https://github.com/mannewolff/kanban-kit/issues/2083))
+- Benachrichtigung: Personenschalter und Ruhezeit auf der Profilseite ([#2082](https://github.com/mannewolff/kanban-kit/issues/2082))
+- Vollauf und Änderungsprüfung getrennte PIT-Berichte ([#2087](https://github.com/mannewolff/kanban-kit/issues/2087))
+- Benachrichtigung: Job, Aufbewahrung und Szenarientest ([#2081](https://github.com/mannewolff/kanban-kit/issues/2081))
+- Benachrichtigung: Mail-Handler und Inhalte der Mails ([#2080](https://github.com/mannewolff/kanban-kit/issues/2080))
+- Benachrichtigung: Zustellungen prüfen und in die Outbox einplanen ([#2079](https://github.com/mannewolff/kanban-kit/issues/2079))
+- Benachrichtigung: Anlässe aus Kartenlabels erkennen ([#2078](https://github.com/mannewolff/kanban-kit/issues/2078))
+- Benachrichtigung: Anlässe aus Läufen erkennen ([#2077](https://github.com/mannewolff/kanban-kit/issues/2077))
+- Benachrichtigung: Schalter und Ruhezeit im Backend ([#2076](https://github.com/mannewolff/kanban-kit/issues/2076))
+- Benachrichtigung: Label-Ereignisse mit Zeilen-ID lesen ([#2075](https://github.com/mannewolff/kanban-kit/issues/2075))
+- Benachrichtigung: Läufe und Anlässe aus nightrun lesen ([#2074](https://github.com/mannewolff/kanban-kit/issues/2074))
+- Benachrichtigung: Schema und Domänenregeln ([#2073](https://github.com/mannewolff/kanban-kit/issues/2073))
+- Regeltexte: Sperrschwelle statt harter Grenze für die Testabdeckung ([#2067](https://github.com/mannewolff/kanban-kit/issues/2067))
+- jacoco-check entfällt, der Build-Dienst fährt den Treiber ([#2066](https://github.com/mannewolff/kanban-kit/issues/2066))
+- Konfiguration geändert
+- Abdeckungsprüfung in buildChecks eintragen ([#2065](https://github.com/mannewolff/kanban-kit/issues/2065))
+- Treiber urteilt über die Testabdeckung des Backends ([#2064](https://github.com/mannewolff/kanban-kit/issues/2064))
+- Kartenmodul schreibt auch Abdeckungslücken ([#2063](https://github.com/mannewolff/kanban-kit/issues/2063))
+- Token-Datei nur innerhalb ihres Verzeichnisses lesen ([#2058](https://github.com/mannewolff/kanban-kit/issues/2058))
+- Token des tbx-Logins nur an den Host seines Logins senden ([#2059](https://github.com/mannewolff/kanban-kit/issues/2059))
+- claude-workflow-kit 6.1.1
+- claude-workflow-kit 6.1.0
+- chore: v3.15.1
+- OpenApiConfig in sonar.coverage.exclusions nachziehen
+- Sonar-Smells mit Umbau: S4449, S135, S3398, S9381 ([#2057](https://github.com/mannewolff/kanban-kit/issues/2057))
+- Sonar-Smells Backend: mechanische Ersetzungen ([#2056](https://github.com/mannewolff/kanban-kit/issues/2056))
+- Sonar-Smells Frontend: mechanische Ersetzungen ([#2055](https://github.com/mannewolff/kanban-kit/issues/2055))
+- Token der Hauptkopie nur an den Host der Hauptkopie senden ([#2054](https://github.com/mannewolff/kanban-kit/issues/2054))
+
 ## [3.15.0] – 2026-11-04
 
 - chore: v3.14.1

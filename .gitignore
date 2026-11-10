@@ -2,6 +2,9 @@
 # alles andere unter .claude/ ist lokaler Zustand.
 .claude/*
 !.claude/workflow.config.json
+!.claude/settings.json
+!.claude/settings.local.vorlage.json
+.claude/settings.local.json
 .claude/workflow.config.local.json
 .claude/board-meta-cache.json
 .idea/

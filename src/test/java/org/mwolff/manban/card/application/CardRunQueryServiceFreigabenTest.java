@@ -68,7 +68,8 @@ class CardRunQueryServiceFreigabenTest {
                 Clock.systemUTC(),
                 mock(ZuweisungsBenachrichtigung.class)),
             boards,
-            mock(CardLabelEventRepository.class));
+            mock(CardLabelEventRepository.class),
+            mock(CardBestandRepository.class));
     when(boards.requireBoardSummary(BOARD))
         .thenReturn(new BoardSummary(BOARD, "Entwicklung", false));
     when(boards.requireBoardSummary(ARCHIV)).thenReturn(new BoardSummary(ARCHIV, "Alt", true));

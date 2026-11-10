@@ -220,6 +220,7 @@ export const en: Woerterbuch = {
     NAECHSTE_NUMMER_HILFE: 'Number the next new card gets.',
     TEILNAHME: 'Take part in the Platform Control Room',
     TEILNAHME_FEHLER: 'Participation could not be changed.',
+    MAIL_SCHALTER: 'Email notifications',
     UMBENENNEN_FEHLER: 'Renaming failed.',
     NUMMER_ZU_KLEIN: 'The next number must be greater than the highest number in use.',
     GESPEICHERT: 'Project saved.',
@@ -569,6 +570,22 @@ export const en: Woerterbuch = {
   PROFIL: {
     TITEL: 'Profile',
     GESPEICHERT: 'Display name saved.',
+    MAIL_TITEL: 'Email notifications',
+    MAIL_LADEN_FEHLGESCHLAGEN: 'The settings could not be loaded.',
+    MAIL_PROJEKTE: 'Emails per project',
+    MAIL_KEINE_PROJEKTE: 'There is no project you can turn on emails for.',
+    MAIL_PROJEKT_AUS:
+      'Emails are turned off for this project. You will only get emails once an owner or project admin turns them on.',
+    RUHEZEIT_TITEL: 'Quiet hours',
+    RUHEZEIT_HINWEIS:
+      'No email is sent during quiet hours. Anything that comes up is sent as one digest afterwards. Quiet hours apply to all projects.',
+    RUHEZEIT_BEGINN: 'Start',
+    RUHEZEIT_ENDE: 'End',
+    RUHEZEIT_ZONE: 'Time zone',
+    RUHEZEIT_SPEICHERN: 'Save quiet hours',
+    RUHEZEIT_LOESCHEN: 'Delete quiet hours',
+    RUHEZEIT_GESPEICHERT: 'Quiet hours saved.',
+    RUHEZEIT_GELOESCHT: 'Quiet hours deleted.',
   },
 
   DATEI_NICHT_LESBAR: 'The file could not be read.',

@@ -13,6 +13,7 @@ import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardLabelEventRepository;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardLabelEvent;
+import org.mwolff.manban.card.domain.LabelEreignisZeile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -145,6 +146,72 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
   @Test
   void ohneKartenEineLeereListe() {
     assertThat(events.findLaufEreignisse(List.of(), VON)).isEmpty();
+  }
+
+  private long zeilenId(long karte, String labelName) {
+    return id(
+        "SELECT id FROM card_label_event WHERE card_id = ? AND label_name = ?", karte, labelName);
+  }
+
+  @Test
+  void nachLabelNamenLiefertZeilenIdUndLaufkennungAuchOhneLauf() {
+    long karte = karte();
+    events.add(karte, "kit:clarify", GESETZT, LAUF_STEMPEL);
+    events.add(karte, "kit:klaeren", GESETZT.plusSeconds(1), ActorStamp.unknown());
+
+    assertThat(events.findNachLabelNamenSeit(List.of("kit:clarify", "kit:klaeren"), VON))
+        .containsExactly(
+            new LabelEreignisZeile(
+                zeilenId(karte, "kit:clarify"), karte, "kit:clarify", GESETZT, LAUF),
+            new LabelEreignisZeile(
+                zeilenId(karte, "kit:klaeren"),
+                karte,
+                "kit:klaeren",
+                GESETZT.plusSeconds(1),
+                null));
+  }
+
+  @Test
+  void nachLabelNamenLaesstAndereNamenWeg() {
+    long karte = karte();
+    events.add(karte, "kit:clarify", GESETZT, LAUF_STEMPEL);
+    events.add(karte, "bug", GESETZT, LAUF_STEMPEL);
+
+    assertThat(events.findNachLabelNamenSeit(List.of("kit:clarify"), VON))
+        .extracting(LabelEreignisZeile::labelName)
+        .containsExactly("kit:clarify");
+  }
+
+  @Test
+  void nachLabelNamenZaehltDenAnlagezeitpunktAbSeitEinschliesslich() {
+    long karte = karte();
+    // Die Laufkennung liegt bewusst vor der Grenze: Es zaehlt created_at, nicht run_started_at.
+    ActorStamp frueherLauf =
+        new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", "m", GESETZT.minusSeconds(3600));
+    events.add(karte, "davor", GESETZT.minusMillis(1), LAUF_STEMPEL);
+    events.add(karte, "aufSeit", GESETZT, frueherLauf);
+
+    assertThat(events.findNachLabelNamenSeit(List.of("davor", "aufSeit"), GESETZT))
+        .extracting(LabelEreignisZeile::labelName)
+        .containsExactly("aufSeit");
+  }
+
+  @Test
+  void nachLabelNamenBeiGleichstandNachZeilenId() {
+    long karte = karte();
+    events.add(karte, "zuerst", GESETZT, LAUF_STEMPEL);
+    events.add(karte, "danach", GESETZT, LAUF_STEMPEL);
+
+    assertThat(events.findNachLabelNamenSeit(List.of("danach", "zuerst"), VON))
+        .extracting(LabelEreignisZeile::labelName)
+        .containsExactly("zuerst", "danach");
+  }
+
+  @Test
+  void nachLabelNamenOhneNamenEineLeereListe() {
+    events.add(karte(), "kit:clarify", GESETZT, LAUF_STEMPEL);
+
+    assertThat(events.findNachLabelNamenSeit(List.of(), VON)).isEmpty();
   }
 
   @Test

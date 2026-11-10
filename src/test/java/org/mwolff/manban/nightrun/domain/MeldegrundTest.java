@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.mwolff.manban.nightrun.domain.Meldegrund.Anlaesse;
 import org.mwolff.manban.nightrun.domain.Meldegrund.Grund;
 import org.mwolff.manban.nightrun.domain.Meldegrund.Zustand;
 
@@ -450,5 +451,161 @@ class MeldegrundTest {
     assertThat(Grund.VERSTUMMT.zustand()).isEqualTo(Zustand.GESCHEITERT);
     assertThat(Grund.FESTGEFAHREN.zustand()).isEqualTo(Zustand.HAENGT);
     assertThat(Grund.WARTET.zustand()).isEqualTo(Zustand.HAENGT);
+  }
+
+  private static Anlaesse anlaesse(NightRun run, NightRunItem... items) {
+    return Meldegrund.anlaesse(run, List.of(items), FRISCH, FRIST);
+  }
+
+  /** Das Kit meldet einen Klärungshalt als {@code RED} (Plan #2070 E2): Es zählt nur die Klasse. */
+  @ParameterizedTest
+  @EnumSource(NightRunState.class)
+  void einWartendesPaketIstUnabhaengigVonDerFarbeWartetUndKeineStoerung(NightRunState state) {
+    NightRunItem wartet = paket(1, state, NightRunErrorClass.AWAITING_DECISION);
+
+    Anlaesse anlaesse = anlaesse(lauf(false), wartet);
+
+    assertThat(anlaesse.wartet()).isEqualTo(new Meldegrund(Grund.WARTET, wartet));
+    assertThat(anlaesse.stoerung()).isNull();
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = NightRunErrorClass.class,
+      names = {"AWAITING_DECISION", "STUCK"},
+      mode = EnumSource.Mode.EXCLUDE)
+  void einUebrigesGrauesPaketLoestKeinenAnlassAus(NightRunErrorClass errorClass) {
+    assertThat(anlaesse(lauf(true), paket(1, NightRunState.GREY, errorClass)))
+        .isEqualTo(new Anlaesse(null, null));
+  }
+
+  @Test
+  void einLaufOhneAuffaelligesPaketHatKeinenAnlass() {
+    assertThat(
+            anlaesse(
+                lauf(false),
+                paket(1, NightRunState.GREEN, null),
+                paket(2, NightRunState.GREY, null)))
+        .isEqualTo(new Anlaesse(null, null));
+  }
+
+  @Test
+  void einGescheitertesPaketIstEineStoerung() {
+    NightRunItem rot = paket(1, NightRunState.RED, NightRunErrorClass.CHECKS_RED);
+
+    Anlaesse anlaesse = anlaesse(lauf(false), rot);
+
+    assertThat(anlaesse.stoerung()).isEqualTo(new Meldegrund(Grund.GESCHEITERT, rot));
+    assertThat(anlaesse.wartet()).isNull();
+  }
+
+  @Test
+  void einErschoepftesZeitbudgetIstEineStoerung() {
+    NightRunItem gelb = paket(1, NightRunState.YELLOW, NightRunErrorClass.TIME_BUDGET_EXCEEDED);
+
+    assertThat(anlaesse(lauf(true), gelb).stoerung())
+        .isEqualTo(new Meldegrund(Grund.ZEITBUDGET, gelb));
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = NightRunState.class,
+      names = {"GREY", "YELLOW", "RED"})
+  void einFestgefahrenesPaketIstEineStoerung(NightRunState state) {
+    NightRunItem stuck = paket(1, state, NightRunErrorClass.STUCK);
+
+    assertThat(anlaesse(lauf(false), stuck).stoerung())
+        .isEqualTo(new Meldegrund(Grund.FESTGEFAHREN, stuck));
+  }
+
+  @Test
+  void einVerstummterLaufIstEineStoerungOhnePaket() {
+    Anlaesse anlaesse =
+        Meldegrund.anlaesse(
+            lauf(false), List.of(), LEBENSZEICHEN.plus(FRIST).plusSeconds(1), FRIST);
+
+    assertThat(anlaesse.stoerung()).isEqualTo(new Meldegrund(Grund.VERSTUMMT, null));
+    assertThat(anlaesse.wartet()).isNull();
+  }
+
+  @Test
+  void einLaufMitWartendemUndGescheitertemPaketLiefertBeideAnlaesse() {
+    NightRunItem wartet = paket(1, NightRunState.RED, NightRunErrorClass.AWAITING_DECISION);
+    NightRunItem rot = paket(2, NightRunState.RED, NightRunErrorClass.CHECKS_RED);
+
+    Anlaesse anlaesse = anlaesse(lauf(false), wartet, rot);
+
+    assertThat(anlaesse.wartet()).isEqualTo(new Meldegrund(Grund.WARTET, wartet));
+    assertThat(anlaesse.stoerung()).isEqualTo(new Meldegrund(Grund.GESCHEITERT, rot));
+  }
+
+  @Test
+  void einWartendesPaketVerdecktDieSchwersteStoerungNicht() {
+    NightRunItem zeit = paket(2, NightRunState.RED, NightRunErrorClass.TIME_BUDGET_EXCEEDED);
+    NightRunItem rot = paket(3, NightRunState.RED, NightRunErrorClass.HARD_ABORT);
+
+    assertThat(
+            anlaesse(
+                    lauf(false),
+                    paket(1, NightRunState.GREY, NightRunErrorClass.AWAITING_DECISION),
+                    zeit,
+                    rot)
+                .stoerung())
+        .isEqualTo(new Meldegrund(Grund.GESCHEITERT, rot));
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = NightRunMode.class,
+      names = {"IMPLEMENTATION", "CHAIN"})
+  void vonMehrerenWartendenGiltDasErsteInPaketreihenfolge(NightRunMode mode) {
+    NightRun run = lauf(NightRunKind.NIGHT, mode, false, null, null, null, null);
+    NightRunItem erstes = paket(1, NightRunState.RED, NightRunErrorClass.AWAITING_DECISION);
+    NightRunItem zweites = paket(2, NightRunState.GREY, NightRunErrorClass.AWAITING_DECISION);
+
+    assertThat(anlaesse(run, erstes, zweites).wartet())
+        .isEqualTo(new Meldegrund(Grund.WARTET, erstes));
+  }
+
+  @Test
+  void eineInteraktiveSitzungHatKeineAnlaesse() {
+    NightRun sitzung =
+        lauf(NightRunKind.INTERACTIVE, NightRunMode.IMPLEMENTATION, false, null, null, null, null);
+
+    assertThat(
+            anlaesse(
+                sitzung,
+                paket(1, NightRunState.GREY, NightRunErrorClass.AWAITING_DECISION),
+                paket(2, NightRunState.RED, NightRunErrorClass.CHECKS_RED)))
+        .isEqualTo(new Anlaesse(null, null));
+  }
+
+  @Test
+  void einVonHandBeendeterLaufHatKeineAnlaesse() {
+    NightRun geschlossen =
+        lauf(
+            NightRunKind.NIGHT,
+            NightRunMode.IMPLEMENTATION,
+            false,
+            null,
+            null,
+            null,
+            LEBENSZEICHEN);
+
+    assertThat(
+            anlaesse(
+                geschlossen,
+                paket(1, NightRunState.GREY, NightRunErrorClass.AWAITING_DECISION),
+                paket(2, NightRunState.RED, NightRunErrorClass.CHECKS_RED)))
+        .isEqualTo(new Anlaesse(null, null));
+  }
+
+  @Test
+  void einAbgeschlossenerLaufMitKennzeichnungBehaeltSeineAnlaesse() {
+    NightRun gemeldet =
+        lauf(NightRunKind.NIGHT, NightRunMode.IMPLEMENTATION, true, null, null, null, START);
+    NightRunItem wartet = paket(1, NightRunState.GREY, NightRunErrorClass.AWAITING_DECISION);
+
+    assertThat(anlaesse(gemeldet, wartet).wartet()).isEqualTo(new Meldegrund(Grund.WARTET, wartet));
   }
 }

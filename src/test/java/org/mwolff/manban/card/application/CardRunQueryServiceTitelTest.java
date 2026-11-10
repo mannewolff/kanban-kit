@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,7 +50,8 @@ class CardRunQueryServiceTitelTest {
                 Clock.systemUTC(),
                 mock(ZuweisungsBenachrichtigung.class)),
             mock(BoardService.class),
-            mock(CardLabelEventRepository.class));
+            mock(CardLabelEventRepository.class),
+            mock(CardBestandRepository.class));
   }
 
   private static Card karte(long id, int number, String titel) {
@@ -101,5 +103,20 @@ class CardRunQueryServiceTitelTest {
     assertThat(service.titlesByCardNumber(PROJECT, Set.of())).isEmpty();
 
     verifyNoInteractions(cards);
+  }
+
+  @Test
+  void zurNummerDesProjektsKommtDieKennungDerKarte() {
+    when(cards.findByProjectIdAndNumber(PROJECT, 1449))
+        .thenReturn(Optional.of(karte(5L, 1449, "Paket A")));
+
+    assertThat(service.kartenId(PROJECT, 1449)).contains(5L);
+  }
+
+  @Test
+  void zuEinerUnbekanntenNummerKommtKeineKennung() {
+    when(cards.findByProjectIdAndNumber(PROJECT, 4711)).thenReturn(Optional.empty());
+
+    assertThat(service.kartenId(PROJECT, 4711)).isEmpty();
   }
 }

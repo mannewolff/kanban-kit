@@ -31,15 +31,12 @@ public record Bremsbilanz(long brakeCount, long withoutTimeCount, long savedMs) 
    * zusammenfallen.
    */
   public static Bremsbilanz of(List<NightRunItem> items) {
-    long bremsungen = 0;
+    List<NightRunItem> gebremst =
+        items.stream().filter(item -> item.errorClass() == NightRunErrorClass.STUCK).toList();
     long ohneZeitwert = 0;
     Map<Sitzung, Long> jeSitzung = new HashMap<>();
     List<Long> einzeln = new ArrayList<>();
-    for (NightRunItem item : items) {
-      if (item.errorClass() != NightRunErrorClass.STUCK) {
-        continue;
-      }
-      bremsungen++;
+    for (NightRunItem item : gebremst) {
       Long gespart = gespart(item);
       if (gespart == null) {
         ohneZeitwert++;
@@ -55,7 +52,7 @@ public record Bremsbilanz(long brakeCount, long withoutTimeCount, long savedMs) 
     long summe =
         jeSitzung.values().stream().mapToLong(Long::longValue).sum()
             + einzeln.stream().mapToLong(Long::longValue).sum();
-    return new Bremsbilanz(bremsungen, ohneZeitwert, summe);
+    return new Bremsbilanz(gebremst.size(), ohneZeitwert, summe);
   }
 
   /**

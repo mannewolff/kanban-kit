@@ -116,23 +116,6 @@ class FlussErfassung {
   /** Was die Erfassung von einer Kartenzeile braucht. */
   private record Zeile(Optional<Flusslage> lage, Instant createdAt) {}
 
-  /**
-   * Schreibt den Wechsel einer Karte. Eine endgültig gelöschte Karte hat keine Zeile mehr — ihre
-   * Aufenthalte nimmt die Cascade, hier bleibt nichts zu tun.
-   */
-  private void schreibe(long cardId, Optional<Flusslage> vorher, boolean neu, Instant jetzt) {
-    Optional<Zeile> zeile = zeile(cardId);
-    Optional<Flusslage> nachher = zeile.flatMap(Zeile::lage);
-    if (vorher.equals(nachher)) {
-      return;
-    }
-    vorher.ifPresent(v -> aufenthalte.close(cardId, jetzt, grund(v, nachher)));
-    if (nachher.isPresent()) {
-      Instant eintritt = neu ? zeile.get().createdAt() : jetzt;
-      aufenthalte.open(cardId, nachher.get(), eintritt);
-    }
-  }
-
   /** Warum der Aufenthalt {@code vorher} endet (E4). */
   private static EndedBy grund(Flusslage vorher, Optional<Flusslage> nachher) {
     if (nachher.isEmpty()) {
@@ -159,6 +142,24 @@ class FlussErfassung {
     @Override
     public void afterCompletion(int status) {
       TransactionSynchronizationManager.unbindResourceIfPossible(FlussErfassung.this);
+    }
+
+    /**
+     * Schreibt den Wechsel einer Karte. Eine endgültig gelöschte Karte hat keine Zeile mehr — ihre
+     * Aufenthalte nimmt die Cascade, hier bleibt nichts zu tun.
+     */
+    private void schreibe(
+        long cardId, Optional<Flusslage> lageVorher, boolean angelegt, Instant jetzt) {
+      Optional<Zeile> zeile = zeile(cardId);
+      Optional<Flusslage> nachher = zeile.flatMap(Zeile::lage);
+      if (lageVorher.equals(nachher)) {
+        return;
+      }
+      lageVorher.ifPresent(v -> aufenthalte.close(cardId, jetzt, grund(v, nachher)));
+      if (nachher.isPresent()) {
+        Instant eintritt = angelegt ? zeile.get().createdAt() : jetzt;
+        aufenthalte.open(cardId, nachher.get(), eintritt);
+      }
     }
   }
 }

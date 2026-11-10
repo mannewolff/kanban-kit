@@ -39,7 +39,8 @@ jobs:
       # Der Coverage-Report, den der Scanner unten importiert, als Artefakt sichern. Ohne ihn
       # lässt sich eine Abweichung zwischen SonarCloud und der lokalen Messung nicht entscheiden
       # — genau daran hing Issue #495 (die CI-Zahl war korrekt, die lokale verunreinigt).
-      # if: always(), damit der Report auch bei rotem Coverage-Gate greifbar ist.
+      # if: always(), damit der Report auch bei einem roten Lauf greifbar ist; über die Abdeckung
+      # urteilt nicht dieser Lauf, sondern scripts/abdeckungspruefung.mjs im CI-Job `backend`.
       - name: JaCoCo-Report als Artefakt sichern
         if: always()
         uses: actions/upload-artifact@v4

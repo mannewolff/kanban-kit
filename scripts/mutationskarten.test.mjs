@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -104,6 +104,44 @@ test('ueberfaellig: genau 7 Tage ist nicht ueberfaellig, 7 Tage plus eine Sekund
   assert.equal(ueberfaellig({ angelegt, jetzt: new Date(t0 + 7 * TAG_MS), tage: 7 }), false);
   assert.equal(ueberfaellig({ angelegt, jetzt: new Date(t0 + 7 * TAG_MS + 1000), tage: 7 }), true);
   assert.equal(ueberfaellig({ angelegt, jetzt: new Date(t0 + TAG_MS), tage: 7 }), false);
+});
+
+const ungedeckt = (zeile, datei = 'src/main/java/A.java') => ({ datei, zeile, mutator: 'Zeile', ersetzung: 'nicht gedeckt' });
+const zweig = (zeile, datei = 'src/main/java/A.java') => ({ datei, zeile, mutator: 'Zweig', ersetzung: 'nicht vollständig gedeckt' });
+
+test('kartenTitel: pruefung abdeckung ergibt "Abdeckungslücken in <Pfad>", mutation bleibt die Vorgabe', () => {
+  assert.equal(kartenTitel('src/main/java/A.java', 'abdeckung'), 'Abdeckungslücken in src/main/java/A.java');
+  assert.equal(kartenTitel('src/a.ts', 'mutation'), kartenTitel('src/a.ts'));
+});
+
+test('kartenBody: pruefung abdeckung nennt Ziel, Liegezeit und Aufgabe im Vier-Abschnitt-Format', () => {
+  const body = kartenBody({ pfad: 'src/main/java/A.java', stellen: [zweig(12), ungedeckt(3)], herkunft: 'Abdeckungsprüfung backend', pruefung: 'abdeckung' });
+  const abschnitte = [...body.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+  assert.deepEqual(abschnitte, ['Kontext', 'Aufgabe', 'Akzeptanzkriterium', 'Abhängigkeiten']);
+  const kontext = body.slice(body.indexOf('## Kontext'), body.indexOf('## Aufgabe'));
+  assert.match(kontext, /Abdeckungsprüfung backend/);
+  assert.match(kontext, /100 %/);
+  assert.match(kontext, /7 Tage/);
+  const aufgabe = body.slice(body.indexOf('## Aufgabe'), body.indexOf('## Akzeptanzkriterium'));
+  assert.match(aufgabe, /Je Stelle einen Test ergänzen/);
+  assert.match(aufgabe, /CLAUDE-java\.md §5\.2 und §5\.4/);
+  assert.match(aufgabe, /begründet ausschließen/);
+  assert.ok(aufgabe.includes('- `src/main/java/A.java` Zeile 3, Zeile: nicht gedeckt'));
+  assert.ok(aufgabe.includes('- `src/main/java/A.java` Zeile 12, Zweig: nicht vollständig gedeckt'));
+  assert.doesNotMatch(body, /Mutant/);
+});
+
+test('kartenBody: ohne pruefung und mit mutation derselbe Text', () => {
+  const eingabe = { pfad: 'src/a.ts', stellen: [stelle(12)], herkunft: 'h' };
+  assert.equal(kartenBody({ ...eingabe, pruefung: 'mutation' }), kartenBody(eingabe));
+});
+
+test('stellenAusBody und ergaenzen lesen die Stellen der Abdeckungskarte', () => {
+  const body = kartenBody({ pfad: 'src/main/java/A.java', stellen: [ungedeckt(3)], herkunft: 'h', pruefung: 'abdeckung' });
+  assert.deepEqual(stellenAusBody(body), [ungedeckt(3)]);
+  const { body: neu, neue } = ergaenzen(body, [ungedeckt(3), zweig(3)]);
+  assert.deepEqual(neue, [zweig(3)]);
+  assert.deepEqual(stellenAusBody(neu), [ungedeckt(3), zweig(3)]);
 });
 
 // --- Board-Teil gegen ein Fake-fetch --------------------------------------------------
@@ -254,6 +292,76 @@ test('schreiben: ein Vorhaben mit gleichem Titel zaehlt nicht — es entsteht ei
   assert.equal(ergebnis.karten[0].art, 'neu');
 });
 
+const PFAD_JAVA = 'src/main/java/A.java';
+
+/** Je eine alte offene Karte beider Pruefungen zu derselben Datei. */
+function boardMitBeidenArten() {
+  return fakeBoard({
+    spalten: { BACKLOG: [karte(1, 11, kartenTitel(PFAD_JAVA)), karte(2, 12, kartenTitel(PFAD_JAVA, 'abdeckung'))] },
+    aktivitaet: {
+      1: [{ type: 'CREATED', createdAt: '2026-09-01T00:00:00Z' }],
+      2: [{ type: 'CREATED', createdAt: '2026-09-02T00:00:00Z' }],
+    },
+  });
+}
+
+test('offeneKarten: jede Pruefung sieht nur die Karten ihres Titelpraefixes', async () => {
+  const { fetchImpl } = boardMitBeidenArten();
+  assert.deepEqual((await offeneKarten(zugang(fetchImpl))).map((k) => k.number), [11]);
+  assert.deepEqual((await offeneKarten(zugang(fetchImpl), 'mutation')).map((k) => k.number), [11]);
+  assert.deepEqual((await offeneKarten(zugang(fetchImpl), 'abdeckung')).map((k) => k.number), [12]);
+});
+
+test('liegezeit: eine Abdeckungskarte zaehlt nicht bei mutation und umgekehrt', async () => {
+  const jetzt = new Date('2026-10-07T00:00:00Z');
+  const { fetchImpl } = boardMitBeidenArten();
+  const ohne = await liegezeit({ ...zugang(fetchImpl), jetzt });
+  assert.deepEqual(ohne.ueberfaellig.map((k) => k.nummer), [11]);
+  const abdeckung = await liegezeit({ ...zugang(fetchImpl), jetzt, pruefung: 'abdeckung' });
+  assert.deepEqual(abdeckung, {
+    ueberfaellig: [{ nummer: 12, titel: `Abdeckungslücken in ${PFAD_JAVA}`, angelegt: '2026-09-02T00:00:00Z' }],
+  });
+
+  const nurAbdeckung = fakeBoard({
+    spalten: { BACKLOG: [karte(2, 12, kartenTitel(PFAD_JAVA, 'abdeckung'))] },
+    aktivitaet: { 2: [{ type: 'CREATED', createdAt: '2026-09-02T00:00:00Z' }] },
+  });
+  assert.deepEqual(await liegezeit({ ...zugang(nurAbdeckung.fetchImpl), jetzt, pruefung: 'mutation' }), { ueberfaellig: [] });
+  const nurMutation = fakeBoard({
+    spalten: { BACKLOG: [karte(1, 11, kartenTitel(PFAD_JAVA))] },
+    aktivitaet: { 1: [{ type: 'CREATED', createdAt: '2026-09-01T00:00:00Z' }] },
+  });
+  assert.deepEqual(await liegezeit({ ...zugang(nurMutation.fetchImpl), jetzt, pruefung: 'abdeckung' }), { ueberfaellig: [] });
+});
+
+test('schreiben: pruefung abdeckung legt ohne offene Abdeckungskarte eine neue an, auch neben einer Mutationskarte', async () => {
+  const { fetchImpl, aufrufe } = fakeBoard({ spalten: { BACKLOG: [karte(1, 11, kartenTitel(PFAD_JAVA))] } });
+  const ergebnis = await schreiben({ ...zugang(fetchImpl), herkunft: 'h', stellen: [ungedeckt(3)], pruefung: 'abdeckung' });
+  assert.equal(aufrufe.filter((a) => a.method === 'PUT').length, 0);
+  const posts = aufrufe.filter((a) => a.method === 'POST');
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].body.title, `Abdeckungslücken in ${PFAD_JAVA}`);
+  assert.equal(posts[0].body.column, 'BACKLOG');
+  assert.match(posts[0].body.body, /§5\.2 und §5\.4/);
+  assert.deepEqual(ergebnis, { karten: [{ pfad: PFAD_JAVA, art: 'neu', nummer: 901, neueStellen: 1 }] });
+});
+
+test('schreiben: pruefung abdeckung ergaenzt die offene Karte derselben Datei und traegt dieselbe Stelle nicht doppelt ein', async () => {
+  const titel = kartenTitel(PFAD_JAVA, 'abdeckung');
+  const alterBody = kartenBody({ pfad: PFAD_JAVA, stellen: [ungedeckt(3)], herkunft: 'frueher', pruefung: 'abdeckung' });
+  const { fetchImpl, aufrufe } = fakeBoard({
+    spalten: { BACKLOG: [karte(40, 77, titel, 'BACKLOG', { body: alterBody }), karte(41, 78, kartenTitel(PFAD_JAVA))] },
+  });
+  const ergebnis = await schreiben({ ...zugang(fetchImpl), herkunft: 'jetzt', stellen: [ungedeckt(3), zweig(9)], pruefung: 'abdeckung' });
+  const puts = aufrufe.filter((a) => a.method === 'PUT');
+  assert.equal(puts.length, 1);
+  assert.equal(puts[0].pfad, '/api/kanban/items/40');
+  assert.equal(puts[0].body.title, titel);
+  assert.deepEqual(stellenAusBody(puts[0].body.body), [ungedeckt(3), zweig(9)]);
+  assert.equal(aufrufe.filter((a) => a.method === 'POST').length, 0);
+  assert.deepEqual(ergebnis, { karten: [{ pfad: PFAD_JAVA, art: 'ergaenzt', nummer: 77, neueStellen: 1 }] });
+});
+
 test('Board-Fehler werden geworfen und nennen den Status', async () => {
   const { fetchImpl } = fakeBoard({ status: { 'GET /api/kanban/items': 401 } });
   await assert.rejects(offeneKarten(zugang(fetchImpl)), /401/);
@@ -344,8 +452,12 @@ test('zugangLesen: leere oder fehlende toolbox.tokenFile ist ein Fehler, kein Ru
   }
 });
 
-/** Hauptkopie mit eingecheckter Config und ein verknuepfter Worktree; Token-Dateien wahlweise an beiden Orten. */
-function worktreePaar({ hauptToken, worktreeToken } = {}) {
+/**
+ * Hauptkopie mit eingecheckter Config und ein verknuepfter Worktree; Token-Dateien wahlweise an beiden Orten.
+ * `worktreeHost` aendert `toolbox.host` in der Config des Worktrees (uncommittet, wie ein gepruefter Stand),
+ * `worktreeTokenFile` ebenso `toolbox.tokenFile`.
+ */
+function worktreePaar({ hauptToken, worktreeToken, worktreeHost, worktreeTokenFile } = {}) {
   const wurzel = mkdtempSync(join(tmpdir(), 'mutationskarten-worktree-'));
   const haupt = join(wurzel, 'haupt');
   const worktree = join(wurzel, 'worktree');
@@ -363,6 +475,10 @@ function worktreePaar({ hauptToken, worktreeToken } = {}) {
     if (token === undefined) continue;
     mkdirSync(join(dir, '.claude', 'toolbox.cli'), { recursive: true });
     writeFileSync(join(dir, '.claude', 'toolbox.cli', 'tbx.token'), token);
+  }
+  if (worktreeHost !== undefined || worktreeTokenFile !== undefined) {
+    const toolbox = { ...MIT_TOKENDATEI, ...(worktreeHost !== undefined && { host: worktreeHost }), ...(worktreeTokenFile !== undefined && { tokenFile: worktreeTokenFile }) };
+    writeFileSync(join(worktree, '.claude', 'workflow.config.json'), JSON.stringify({ toolbox }));
   }
   return { wurzel, haupt, worktree };
 }
@@ -398,6 +514,232 @@ test('zugangLesen: fehlt die Token-Datei auch in der Hauptkopie, bleibt es ein F
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: Token der Hauptkopie bei gleichem Host, Host der Hauptkopie (Issue #2054)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://projekt.test' });
+  try {
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), { host: 'https://projekt.test', token: 'tk_haupt' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: Token der Hauptkopie und fremder toolbox.host im Worktree sind ein Fehler mit beiden Hosts (Issue #2054)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://fremd.test' });
+  try {
+    assert.throws(
+      () => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }),
+      (e) => e instanceof Error && e.message.includes('https://fremd.test') && e.message.includes('https://projekt.test'),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: Token der Hauptkopie und fehlender toolbox.host im Worktree sind ebenfalls ein Fehler (Issue #2054)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: '' });
+  try {
+    assert.throws(
+      () => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }),
+      (e) => e.message.includes('https://login.test') && e.message.includes('https://projekt.test'),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: eigene Token-Datei des Worktrees bindet nicht an den Host der Hauptkopie (Issue #2054)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeToken: 'tk_worktree', worktreeHost: 'https://fremd.test' });
+  try {
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), { host: 'https://fremd.test', token: 'tk_worktree' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('ausfuehren: fremder toolbox.host im Worktree ohne eigene Token-Datei endet mit fehler, ohne Aufruf (Issue #2054)', async () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://fremd.test' });
+  let aufrufe = 0;
+  const fetchImpl = async () => { aufrufe += 1; return new Response('[]', { status: 200 }); };
+  try {
+    const lauf = await ausfuehren('{"auftrag":"liegezeit"}', { env: {}, baseDir: dir, projektDir: paar.worktree, fetchImpl });
+    assert.equal(lauf.code, 1);
+    assert.match(lauf.ausgabe.fehler, /https:\/\/fremd\.test/);
+    assert.match(lauf.ausgabe.fehler, /https:\/\/projekt\.test/);
+    assert.equal(aufrufe, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+const HAUPT_TOKEN_RELATIV = '../haupt/.claude/toolbox.cli/tbx.token';
+
+test('ausfuehren: toolbox.tokenFile mit ../ auf die Hauptkopie schickt deren Token nicht an einen fremden Host (Issue #2058)', async () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://fremd.test', worktreeTokenFile: HAUPT_TOKEN_RELATIV });
+  let aufrufe = 0;
+  const fetchImpl = async () => { aufrufe += 1; return new Response('[]', { status: 200 }); };
+  try {
+    const lauf = await ausfuehren('{"auftrag":"liegezeit"}', { env: {}, baseDir: dir, projektDir: paar.worktree, fetchImpl });
+    assert.equal(lauf.code, 1);
+    assert.match(lauf.ausgabe.fehler, /toolbox\.tokenFile.*ausserhalb/s);
+    assert.equal(aufrufe, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: ein Symlink im Worktree auf die Token-Datei der Hauptkopie gilt als Ausbruch (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://fremd.test' });
+  try {
+    mkdirSync(join(paar.worktree, '.claude', 'toolbox.cli'), { recursive: true });
+    symlinkSync(join(paar.haupt, '.claude', 'toolbox.cli', 'tbx.token'), join(paar.worktree, '.claude', 'toolbox.cli', 'tbx.token'));
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), /toolbox\.tokenFile.*ausserhalb/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: ein symlinktes Verzeichnis im Pfad der Token-Datei gilt als Ausbruch (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeHost: 'https://fremd.test' });
+  try {
+    symlinkSync(join(paar.haupt, '.claude', 'toolbox.cli'), join(paar.worktree, '.claude', 'toolbox.cli'));
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), /toolbox\.tokenFile.*ausserhalb/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: ein Nachbarverzeichnis mit gleichem Namensanfang liegt ausserhalb (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ worktreeTokenFile: '../worktree-nachbar/tbx.token' });
+  try {
+    mkdirSync(join(paar.wurzel, 'worktree-nachbar'));
+    writeFileSync(join(paar.wurzel, 'worktree-nachbar', 'tbx.token'), 'tk_nachbar');
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), /toolbox\.tokenFile.*ausserhalb/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: auch die Hauptkopie selbst liest keine Token-Datei ausserhalb ihres Verzeichnisses (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { ...MIT_TOKENDATEI, tokenFile: '../aussen.token' } });
+  const aussen = join(dirname(projekt), 'aussen.token');
+  try {
+    writeFileSync(aussen, 'tk_aussen');
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: projekt }), /toolbox\.tokenFile.*ausserhalb/s);
+  } finally {
+    rmSync(aussen, { force: true });
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: den Rueckfallpfad in die Hauptkopie bestimmt deren Config, nicht der Worktree (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt', worktreeTokenFile: '.claude/anderes-geheimnis' });
+  try {
+    writeFileSync(join(paar.haupt, '.claude', 'anderes-geheimnis'), 'tk_geheimnis');
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), { host: 'https://projekt.test', token: 'tk_haupt' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: nennt die Config der Hauptkopie keine Token-Datei, gibt es keinen Rueckfall (Issue #2058)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const paar = worktreePaar({ hauptToken: 'tk_haupt' });
+  try {
+    writeFileSync(join(paar.haupt, '.claude', 'workflow.config.json'), JSON.stringify({ toolbox: { host: 'https://projekt.test' } }));
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: paar.worktree }), /toolbox\.tokenFile.*nicht lesbar/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(paar.wurzel, { recursive: true, force: true });
+  }
+});
+
+test('ausfuehren: entfernte toolbox.tokenFile und fremder toolbox.host schicken das Login-Token nicht ab (Issue #2059)', async () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { host: 'https://fremd.test' } });
+  const aufrufe = [];
+  const fetchImpl = async (url, init) => { aufrufe.push({ url, init }); return new Response('[]', { status: 200 }); };
+  try {
+    const lauf = await ausfuehren('{"auftrag":"liegezeit"}', { env: {}, baseDir: dir, projektDir: projekt, fetchImpl });
+    assert.equal(lauf.code, 1);
+    assert.match(lauf.ausgabe.fehler, /https:\/\/fremd\.test/);
+    assert.match(lauf.ausgabe.fehler, /https:\/\/login\.test/);
+    assert.doesNotMatch(lauf.ausgabe.fehler, /tk_login/);
+    assert.deepEqual(aufrufe, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: leere toolbox.tokenFile hebt die Bindung des Login-Tokens nicht auf (Issue #2059)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { host: 'https://fremd.test', tokenFile: '' } });
+  try {
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: projekt }), /https:\/\/fremd\.test.*https:\/\/login\.test/s);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: Login ohne gespeicherten Host gilt nur fuer den Standard-Host (Issue #2059)', () => {
+  const dir = loginVerzeichnis({ token: 'tk_login' });
+  const fremd = projektVerzeichnis({ toolbox: { host: 'https://fremd.test' } });
+  const standard = projektVerzeichnis({ toolbox: { host: 'https://kanban.mwolff.org' } });
+  try {
+    assert.throws(() => zugangLesen({ env: {}, baseDir: dir, projektDir: fremd }), /https:\/\/fremd\.test.*https:\/\/kanban\.mwolff\.org/s);
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: standard }), { host: 'https://kanban.mwolff.org', token: 'tk_login' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(fremd, { recursive: true, force: true });
+    rmSync(standard, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: Login-Token geht an den eigenen Host, auch wenn toolbox.host ihn nennt (Issue #2059)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { host: 'https://login.test' } });
+  try {
+    assert.deepEqual(zugangLesen({ env: {}, baseDir: dir, projektDir: projekt }), { host: 'https://login.test', token: 'tk_login' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
+  }
+});
+
+test('zugangLesen: TBX_TOKEN bleibt ungebunden, auch ohne toolbox.tokenFile (Issue #2059)', () => {
+  const dir = loginVerzeichnis({ host: 'https://login.test', token: 'tk_login' });
+  const projekt = projektVerzeichnis({ toolbox: { host: 'https://projekt.test' } });
+  try {
+    assert.deepEqual(zugangLesen({ env: { TBX_TOKEN: 'tk_env' }, baseDir: dir, projektDir: projekt }), { host: 'https://projekt.test', token: 'tk_env' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(projekt, { recursive: true, force: true });
   }
 });
 
@@ -448,6 +790,41 @@ test('ausfuehren: liegezeit und schreiben laufen ueber den Zugang', async () => 
     const sw = await ausfuehren(JSON.stringify({ auftrag: 'schreiben', herkunft: 'h', stellen: [stelle(1)] }), { env: {}, baseDir: dir, projektDir: dir, fetchImpl });
     assert.equal(sw.code, 0);
     assert.equal(sw.ausgabe.karten[0].art, 'neu');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ausfuehren: pruefung abdeckung erreicht liegezeit und schreiben', async () => {
+  const dir = loginVerzeichnis({ host: HOST, token: 'tk_test' });
+  try {
+    const lzBoard = boardMitBeidenArten();
+    const jetzt = new Date('2026-10-07T00:00:00Z');
+    const lz = await ausfuehren('{"auftrag":"liegezeit","pruefung":"abdeckung","tage":7}', { env: {}, baseDir: dir, projektDir: dir, fetchImpl: lzBoard.fetchImpl, jetzt });
+    assert.deepEqual(lz.ausgabe.ueberfaellig.map((k) => k.nummer), [12]);
+    const swBoard = fakeBoard({ spalten: { BACKLOG: [] } });
+    const sw = await ausfuehren(JSON.stringify({ auftrag: 'schreiben', pruefung: 'abdeckung', stellen: [ungedeckt(1)] }), { env: {}, baseDir: dir, projektDir: dir, fetchImpl: swBoard.fetchImpl });
+    assert.equal(sw.code, 0);
+    const post = swBoard.aufrufe.find((a) => a.method === 'POST');
+    assert.equal(post.body.title, `Abdeckungslücken in ${PFAD_JAVA}`);
+    assert.match(post.body.body, /Abdeckungsprüfung/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ausfuehren: eine unbekannte pruefung endet mit fehler und 1, ohne Aufruf ans Board', async () => {
+  const dir = loginVerzeichnis({ host: HOST, token: 'tk_test' });
+  try {
+    for (const name of ['sonar', 'constructor']) {
+      for (const auftrag of [{ auftrag: 'liegezeit', pruefung: name }, { auftrag: 'schreiben', pruefung: name, stellen: [stelle(1)] }]) {
+        const { fetchImpl, aufrufe } = fakeBoard({ spalten: { BACKLOG: [] } });
+        const lauf = await ausfuehren(JSON.stringify(auftrag), { env: {}, baseDir: dir, projektDir: dir, fetchImpl });
+        assert.equal(lauf.code, 1);
+        assert.ok(lauf.ausgabe.fehler.includes(name));
+        assert.deepEqual(aufrufe, []);
+      }
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

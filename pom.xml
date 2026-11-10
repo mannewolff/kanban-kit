@@ -13,7 +13,7 @@
 
     <groupId>org.mwolff</groupId>
     <artifactId>manban</artifactId>
-    <version>3.15.0</version>
+    <version>3.16.0</version>
     <name>manban</name>
     <description>mannewolff Kanban Board — eigenständige, self-hostbare Trello-Alternative</description>
 
@@ -489,10 +489,11 @@
                 </executions>
             </plugin>
 
-            <!-- Coverage-Gate (CLAUDE-java.md §5.1): 100 % Line + 100 % Branch auf Bundle-Ebene.
+            <!-- Coverage-Messung (CLAUDE-java.md §5.1): JaCoCo misst nur, das Urteil fällt
+                 scripts/abdeckungspruefung.mjs über target/site/jacoco/jacoco.xml (Plan #2062, E1).
                  prepare-agent setzt die argLine, die Surefire UND Failsafe erben — beide Läufe
-                 schreiben (append=true) in dieselbe jacoco.exec. Das Gate (check, verify-Phase)
-                 liest sie deshalb nach den ITs und sieht auch deren Coverage.
+                 schreiben (append=true) in dieselbe jacoco.exec. report liest sie deshalb nach den
+                 ITs, und das XML enthält auch deren Coverage.
 
                  report läuft aus genau diesem Grund an post-integration-test, NICHT mehr an test
                  (Issue #495): An test-Phase gebunden entstand das XML vor den ITs, und jede nur
@@ -654,39 +655,13 @@
                     </execution>
                     <execution>
                         <id>jacoco-report</id>
-                        <!-- Nach den Failsafe-ITs (Phase integration-test), vor dem Gate in
-                             verify — siehe Plugin-Kommentar oben (Issue #495). -->
+                        <!-- Nach den Failsafe-ITs (Phase integration-test), damit der Treiber
+                             das XML samt deren Coverage liest — siehe Plugin-Kommentar oben
+                             (Issue #495). -->
                         <phase>post-integration-test</phase>
                         <goals>
                             <goal>report</goal>
                         </goals>
-                    </execution>
-                    <!-- Gate: bricht die verify-Phase bei < 100 % Line/Branch auf Bundle-Ebene (§5.1). -->
-                    <execution>
-                        <id>jacoco-check</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <rule>
-                                    <element>BUNDLE</element>
-                                    <limits>
-                                        <limit>
-                                            <counter>LINE</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>1.00</minimum>
-                                        </limit>
-                                        <limit>
-                                            <counter>BRANCH</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>1.00</minimum>
-                                        </limit>
-                                    </limits>
-                                </rule>
-                            </rules>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -846,8 +821,8 @@
                 <!-- JaCoCo im PIT-Profil abschalten: der von prepare-agent gesetzte
                      -javaagent-argLine würde sonst in die PIT-Minion-JVM durchschlagen und
                      deren Coverage-Lauf abbrechen (UNKNOWN_ERROR). Mutationsabdeckung ist
-                     hier ohnehin die maßgebliche Metrik; die JaCoCo-Line/Branch-Gates laufen
-                     im Default-`verify`. -->
+                     hier ohnehin die maßgebliche Metrik; die JaCoCo-Messung läuft im
+                     Default-`verify`, das Urteil darüber fällt scripts/abdeckungspruefung.mjs. -->
                 <jacoco.skip>true</jacoco.skip>
 
                 <!-- Die Schwelle als Property, damit der Treiber

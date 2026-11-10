@@ -47,7 +47,12 @@ class CardRunQueryServiceNacharbeitTest {
     labelEvents = mock(CardLabelEventRepository.class);
     service =
         new CardRunQueryService(
-            cards, activity, mock(KartenZuordnung.class), mock(BoardService.class), labelEvents);
+            cards,
+            activity,
+            mock(KartenZuordnung.class),
+            mock(BoardService.class),
+            labelEvents,
+            mock(CardBestandRepository.class));
   }
 
   private static Card karte(long id, String titel, CardType type) {

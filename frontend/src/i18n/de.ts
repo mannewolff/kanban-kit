@@ -236,6 +236,8 @@ export const de = {
     NAECHSTE_NUMMER_HILFE: 'Nummer, die die nächste neue Karte bekommt.',
     TEILNAHME: 'Teilnahme am Plattform-Leitstand',
     TEILNAHME_FEHLER: 'Teilnahme konnte nicht geschaltet werden.',
+    /** Mail-Schalter je Projekt (Issue #2083). */
+    MAIL_SCHALTER: 'Benachrichtigungen per Mail',
     UMBENENNEN_FEHLER: 'Umbenennen fehlgeschlagen.',
     NUMMER_ZU_KLEIN: 'Nächste Nummer muss größer als die höchste vergebene Nummer sein.',
     GESPEICHERT: 'Projekt gespeichert.',
@@ -608,6 +610,23 @@ export const de = {
   PROFIL: {
     TITEL: 'Profil',
     GESPEICHERT: 'Anzeigename gespeichert.',
+    /** Mail-Benachrichtigung: Schalter je Projekt und Ruhezeit (Issue #2082). */
+    MAIL_TITEL: 'Mail-Benachrichtigungen',
+    MAIL_LADEN_FEHLGESCHLAGEN: 'Die Einstellungen ließen sich nicht laden.',
+    MAIL_PROJEKTE: 'Mails je Projekt',
+    MAIL_KEINE_PROJEKTE: 'Es gibt kein Projekt, für das du Mails einschalten kannst.',
+    MAIL_PROJEKT_AUS:
+      'Für dieses Projekt sind Mails ausgeschaltet. Erst wenn Owner oder Projekt-Admin sie einschalten, kommen Mails an.',
+    RUHEZEIT_TITEL: 'Ruhezeit',
+    RUHEZEIT_HINWEIS:
+      'In der Ruhezeit kommt keine Mail. Was in dieser Zeit anfällt, kommt danach als eine Sammelmail. Die Ruhezeit gilt für alle Projekte.',
+    RUHEZEIT_BEGINN: 'Beginn',
+    RUHEZEIT_ENDE: 'Ende',
+    RUHEZEIT_ZONE: 'Zeitzone',
+    RUHEZEIT_SPEICHERN: 'Ruhezeit speichern',
+    RUHEZEIT_LOESCHEN: 'Ruhezeit löschen',
+    RUHEZEIT_GESPEICHERT: 'Ruhezeit gespeichert.',
+    RUHEZEIT_GELOESCHT: 'Ruhezeit gelöscht.',
   },
 
   /** Ablehnung von `readTextFile` (Issue #1653). */

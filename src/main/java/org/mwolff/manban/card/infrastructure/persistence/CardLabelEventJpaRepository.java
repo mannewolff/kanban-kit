@@ -17,4 +17,12 @@ interface CardLabelEventJpaRepository extends JpaRepository<CardLabelEventEntity
           + " order by e.createdAt, e.id")
   List<CardLabelEventEntity> findLaufEreignisse(
       @Param("cardIds") Collection<Long> cardIds, @Param("von") Instant von);
+
+  /** Ereignisse mit einem der Label-Namen ab {@code seit}, mit und ohne Lauf (Issue #2075). */
+  @Query(
+      "select e from CardLabelEventEntity e"
+          + " where e.labelName in :labelNamen and e.createdAt >= :seit"
+          + " order by e.createdAt, e.id")
+  List<CardLabelEventEntity> findNachLabelNamenSeit(
+      @Param("labelNamen") Collection<String> labelNamen, @Param("seit") Instant seit);
 }

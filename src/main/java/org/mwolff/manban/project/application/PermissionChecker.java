@@ -264,6 +264,11 @@ public class PermissionChecker {
    */
   @Transactional(readOnly = true)
   public void requireRealRole(long userId, long projectId, ProjectRole... erlaubt) {
+    pruefeEchteRolle(userId, projectId, erlaubt);
+  }
+
+  /** {@link #requireRealRole} ohne Proxy-Aufruf innerhalb dieser Klasse (java:S6809). */
+  private void pruefeEchteRolle(long userId, long projectId, ProjectRole... erlaubt) {
     ProjectMembership m =
         memberships
             .findByProjectIdAndUserId(projectId, userId)
@@ -274,6 +279,19 @@ public class PermissionChecker {
       }
     }
     throw new ProjectAccessDeniedException();
+  }
+
+  /**
+   * {@link #requireRealRole} mit den Rollen OWNER und ADMIN — für Module außerhalb von {@code
+   * project}, die {@link ProjectRole} nicht sehen dürfen ({@code
+   * ArchitectureTest.projectDomainIstModulintern}).
+   *
+   * @throws ProjectNotFoundException wenn der Benutzer keine echte Mitgliedschaft hat (404)
+   * @throws ProjectAccessDeniedException wenn die echte Rolle weder OWNER noch ADMIN ist (403)
+   */
+  @Transactional(readOnly = true)
+  public void requireEchterOwnerOderAdmin(long userId, long projectId) {
+    pruefeEchteRolle(userId, projectId, ProjectRole.OWNER, ProjectRole.ADMIN);
   }
 
   /**

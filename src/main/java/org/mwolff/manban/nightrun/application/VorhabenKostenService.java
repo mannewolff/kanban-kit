@@ -394,9 +394,12 @@ public class VorhabenKostenService {
             .filter(s -> s.kostenkarten().stream().allMatch(n -> ohneLuecke(kosten.get(n))))
             .toList();
     Instant von =
-        Stream.concat(Stream.of(ziel), kandidaten.stream())
-            .flatMap(v -> Stream.ofNullable(v.fruehesteKostenkarteAngelegt()))
-            .reduce(kontext.fenster(), (a, b) -> a.isBefore(b) ? a : b);
+        Stream.concat(
+                Stream.of(kontext.fenster()),
+                Stream.concat(Stream.of(ziel), kandidaten.stream())
+                    .flatMap(v -> Stream.ofNullable(v.fruehesteKostenkarteAngelegt())))
+            .min(Comparator.naturalOrder())
+            .orElseThrow();
     List<Vorgang> nacht =
         runs.findAttemptsSince(kontext.projectId(), von).stream()
             .filter(v -> v.kind() == NightRunKind.NIGHT)

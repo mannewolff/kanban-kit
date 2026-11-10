@@ -14,7 +14,7 @@ Ergänzend zu [CLAUDE.md](CLAUDE.md), [CLAUDE-security.md](CLAUDE-security.md) u
 - **Datenbank:** PostgreSQL 16 (Testcontainers in Integrationstests). Objektspeicher für Anhänge: SeaweedFS (S3-kompatibel).
 - **Schema-Migration:** Flyway (`src/main/resources/db/migration/`, `V<n>__<beschreibung>.sql`).
 - **Paradigma:** Strenges Test-Driven Development (TDD) nach Kent Beck — **Red → Green → Refactor**.
-- **Qualitätsziel:** 100 % Zeilenabdeckung, 100 % Branch-Abdeckung, 100 % Mutationsabdeckung. Keine Ausnahmen ohne dokumentierte Begründung im Code.
+- **Qualitätsziel:** 100 % Zeilenabdeckung, 100 % Branch-Abdeckung, 100 % Mutationsabdeckung. Gesperrt wird nach den Ausnahmen in `CLAUDE.md` (Sperrschwelle statt Ziel). Keine Ausschlüsse ohne dokumentierte Begründung im Code.
 - **Lokale Build-Umgebung (macOS/Colima):** Die Integrationstests brauchen Docker über Colima. Zwingend: `DOCKER_HOST=unix://$HOME/.colima/default/docker.sock` und `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock` (sonst scheitert der Ryuk-Container am Socket-Mount) sowie `~/.docker-java.properties` mit `api.version=1.44` (docker-java handelt sonst API 1.32 aus, moderne Daemons verlangen ≥ 1.40).
 
 ### 1.1 Versionsstrategie
@@ -106,22 +106,28 @@ Vor dem Markieren einer Aufgabe als „fertig" ist nachzuweisen:
 
 ## 5. Coverage und Mutationstests
 
-### 5.1 Schwellwerte (Build bricht ab bei Unterschreitung)
+### 5.1 Ziele und Sperrschwellen
 
-| Metrik                            | Schwellwert |
+| Metrik                            | Ziel        |
 |-----------------------------------|-------------|
 | JaCoCo Line Coverage              | **100 %**   |
 | JaCoCo Branch Coverage            | **100 %**   |
 | PIT Mutation Score                | **100 %**   |
 | PIT Test Strength                 | **100 %**   |
 
-JaCoCo (`check`) läuft im vollen `mvn verify` (Stufe `push`). **PIT liegt im Maven-Profil `-Ppit`**
+100 % ist das Ziel; gesperrt wird nach der Ausnahme „Sperrschwelle statt Ziel für die Testabdeckung“ in
+`CLAUDE.md`: unter 99 % gesamt (Zeilen oder Zweige) oder unter 90 % auf den geänderten Zeilen. Der
+JaCoCo-Bericht entsteht im vollen `mvn verify` (Stufe `push`), danach urteilt der Treiber
+`scripts/abdeckungspruefung.mjs`. Für die Mutationsprüfung gilt die Sperrschwelle aus §5.5. **PIT liegt im Maven-Profil `-Ppit`**
 (`mvn -Ppit test`), damit der Standard-Build schnell bleibt. Aufgerufen wird es nicht mehr direkt,
 sondern über den Treiber `scripts/mutationspruefung.mjs` (§5.5): beim Push die Änderungsprüfung über
 den Batch und der Vollauf, beide an der Push-Stufe. Eine separate Test-Strength-Schwelle bietet pitest-maven nicht; sie
 wird über `mutationThreshold` (Property `pit.marke`, Default 100) miterzwungen und im Report geprüft.
 
 ### 5.2 Ausschlussregeln (eng gefasst)
+
+Der begründete Ausschluss ist der Weg für bewusst nicht Testbares; solcher Code bekommt keine Karte
+`Abdeckungslücken in <Pfad>`. Die Sperrschwelle ist kein Spielraum für neue Lücken.
 
 Ausgeschlossen werden **ausschließlich**:
 
@@ -156,7 +162,7 @@ mit Fachlogik existiert ein separater `*Test` oder `*IT`, der diese Logik abdeck
 
 ### 5.4 Umgang mit nicht erreichbarer Coverage
 
-Wenn 100 % unmöglich erscheinen, lautet die Antwort **nicht** „Schwellwert senken", sondern:
+Wenn das Ziel von 100 % unmöglich erscheint, lautet die Antwort **nicht** „Schwellwert senken" und auch nicht „die Sperrschwelle reicht", sondern:
 
 1. Refactoring, bis der ungetestete Pfad testbar wird, oder
 2. Code entfernen (er war nicht nötig), oder
@@ -306,11 +312,11 @@ Wenn eine Implementierungsaufgabe gestellt wird, gehe **exakt** in dieser Reihen
 7. **Wiederholen** für den nächsten Test der Liste.
 8. **Abschluss-Check:**
    - `mvn verify` läuft komplett grün.
-   - JaCoCo-Report: 100 %.
+   - JaCoCo-Report: Ziel 100 %, gesperrt nach der Ausnahme in `CLAUDE.md` (`node scripts/abdeckungspruefung.mjs`).
    - PIT-Report: 100 % Mutation Score (`mvn -Ppit test`).
    - ArchUnit: grün.
    - Spotless, Checkstyle, SpotBugs, PMD: keine Findings.
-   - **CI erzwingt dieselben Gates** (`.github/workflows/ci.yml`): verify-Job + eigener PIT-Job (`-Ppit`) + Frontend-Job. Was lokal grün sein muss, ist auch in CI ein Pflicht-Gate.
+   - **CI erzwingt dieselben Gates** (`.github/workflows/ci.yml`): verify-Job mit dem Abdeckungs-Treiber (dort Gesamtstand und Liegezeit, die geänderten Zeilen nur lokal) + eigener PIT-Job (`-Ppit`) + Frontend-Job. Was lokal grün sein muss, ist auch in CI ein Pflicht-Gate.
 9. **Zusammenfassung** an den Nutzer im Format aus [CLAUDE-workflow.md](.claude/CLAUDE-workflow.md): was getestet wurde, welche Coverage erreicht wurde, was bewusst nicht abgedeckt ist (mit Begründung).
 
 ### 8.1 Wenn du versucht bist, abzukürzen

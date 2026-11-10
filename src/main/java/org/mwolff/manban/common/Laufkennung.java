@@ -38,7 +38,7 @@ public final class Laufkennung {
     }
     try {
       return Instant.parse(trimmed).truncatedTo(ChronoUnit.MILLIS);
-    } catch (DateTimeException e) {
+    } catch (DateTimeException _) {
       return null;
     }
   }

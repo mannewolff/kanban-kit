@@ -15,5 +15,5 @@ export function woerterbuch(sprache: Sprache): Woerterbuch {
 
 /** Ob ein Wert einer der Sprachcodes ist. */
 export function istSprache(wert: unknown): wert is Sprache {
-  return SPRACHEN.some((sprache) => sprache === wert)
+  return (SPRACHEN as readonly unknown[]).includes(wert)
 }

@@ -103,7 +103,7 @@ export function boardName(
 }
 
 function maskiert(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return text.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 }
 
 /**
@@ -112,6 +112,6 @@ function maskiert(text: string): string {
  */
 export function artAusTitel(daten: KitNamen, titel: string): string | undefined {
   return daten.titelPraefixe.find((a) =>
-    new RegExp(`^\\s*(?:${a.namen.map(maskiert).join('|')})`, 'i').test(titel),
+    new RegExp(String.raw`^\s*(?:${a.namen.map(maskiert).join('|')})`, 'i').test(titel),
   )?.art
 }

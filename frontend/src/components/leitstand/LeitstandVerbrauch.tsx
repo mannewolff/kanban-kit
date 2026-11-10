@@ -115,27 +115,28 @@ export function LeitstandVerbrauch({
         ? // Stryker disable next-line StringLiteral: gleichwertig — kachelWerte und umfangText nehmen jedes art außer 'zeitraum' als „Gesamt"
           api.total(projectId).then((gesamt) => ({ art: 'gesamt', gesamt }))
         : api.period(projectId, wahl, 0).then((zeitraum) => ({ art: 'zeitraum', zeitraum }))
-    verbrauch.then(
-      (ansicht) => {
-        if (!aktiv) return
-        setZustand({ art: 'da', ansicht })
-        const grenzen =
-          ansicht.art === 'zeitraum'
-            ? { from: ansicht.zeitraum.current.from, to: ansicht.zeitraum.current.to }
-            : undefined
-        api.implementationTime(boardId, grenzen).then(
-          (wert) => {
-            if (aktiv) setImplementierung({ art: 'da', wert })
-          },
-          () => {
-            if (aktiv) setImplementierung({ art: 'fehler' })
-          },
-        )
-      },
-      () => {
+    const lade = async () => {
+      let ansicht: Ansicht
+      try {
+        ansicht = await verbrauch
+      } catch {
         if (aktiv) setZustand({ art: 'fehler' })
-      },
-    )
+        return
+      }
+      if (!aktiv) return
+      setZustand({ art: 'da', ansicht })
+      const grenzen =
+        ansicht.art === 'zeitraum'
+          ? { from: ansicht.zeitraum.current.from, to: ansicht.zeitraum.current.to }
+          : undefined
+      try {
+        const wert = await api.implementationTime(boardId, grenzen)
+        if (aktiv) setImplementierung({ art: 'da', wert })
+      } catch {
+        if (aktiv) setImplementierung({ art: 'fehler' })
+      }
+    }
+    void lade()
     return () => {
       aktiv = false
     }
