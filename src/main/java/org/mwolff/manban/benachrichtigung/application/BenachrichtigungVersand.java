@@ -129,6 +129,7 @@ public class BenachrichtigungVersand {
     if (zustellung.art() == AnlassArt.STOERUNG || zustellung.art() == AnlassArt.UEBERSICHT) {
       return false;
     }
+    // Mutations-Altlast: äquivalent, HashMap.get(null) liefert ebenfalls null (#2093, 2026-11-10)
     KartenStandView karte = zustellung.cardId() == null ? null : staende.get(zustellung.cardId());
     if (ausLauf(zustellung)) {
       return karteIstWeg(zustellung, karte) || haltIstVorbei(zustellung, laufStaende);
