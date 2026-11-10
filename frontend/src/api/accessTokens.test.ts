@@ -23,8 +23,11 @@ describe('accessTokensApi', () => {
       id: 1, name: 'board-cli', projectId: 3, boardId: 7,
       createdAt: '2026-01-01', lastUsedAt: null, revoked: false,
     }
-    spyFetch(JSON.stringify([token]))
+    const f = spyFetch(JSON.stringify([token]))
     const result = await accessTokensApi.list()
+    const c = lastCall(f)
+    expect(c.url).toBe('/api/access-tokens')
+    expect(c.method ?? 'GET').toBe('GET')
     expect(result).toEqual([token])
   })
 
