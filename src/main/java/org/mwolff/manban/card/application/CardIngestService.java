@@ -173,9 +173,11 @@ public class CardIngestService {
         cards.save(
             grundlage.folgeArtwechsel(
                 card,
-                card.withContent(
-                    title.trim(),
-                    description == null ? card.description() : normalize(description))));
+                grundlage.folgeWegBeleg(
+                    card,
+                    card.withContent(
+                        title.trim(),
+                        description == null ? card.description() : normalize(description)))));
     grundlage.aktivitaet(
         cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet", clock.instant());
     grundlage.publishChanged(saved.boardId(), ActivityType.UPDATED, cardId);

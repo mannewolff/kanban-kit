@@ -214,6 +214,42 @@ class CardIngestServiceTest {
     assertThat(onlyPublishedEvent().type()).isEqualTo(ActivityType.UPDATED);
   }
 
+  /**
+   * Der Kit schreibt über diesen Weg: Die Marke darf nicht an der Herkunft hängen (Plan #2108 E14).
+   */
+  @Test
+  void updateContent_wechselDerKartenart_setztDieWegBelegMarke() {
+    when(cards.findById(1L))
+        .thenReturn(
+            Optional.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null)
+                    .withContent("[Task] Weg", "Text")));
+    ColumnView spalte = new ColumnView(20L, "Anstehend", 0, null);
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(spalte);
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(spalte));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.updateContent(1L, 1L, "[Plan] Weg", null);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().wegBelegGeaendertAm()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void updateContent_ohneBelegaenderung_setztDieWegBelegMarkeNicht() {
+    when(cards.findById(1L))
+        .thenReturn(
+            Optional.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null)
+                    .withContent("[Task] Weg", "Fachliche Quelle: Issue #1")));
+
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.updateContent(1L, 1L, "[Task] Neu", null);
+
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().wegBelegGeaendertAm()).isNull();
+  }
+
   @Test
   void updateContent_clearsDescription_whenBlank() {
     // Given: ein blanker Body löscht die Beschreibung (normalize) — die Gegenprobe zum null-Fall.

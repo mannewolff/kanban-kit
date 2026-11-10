@@ -268,6 +268,14 @@ public final class KartenGrundlage {
         clock.instant());
   }
 
+  /**
+   * Hält eine Änderung am Wegbeleg der Karte fest (Plan #2108 E14). Jeder Weg, der Titel oder
+   * Beschreibung ändert, läuft hierüber, damit die Herkunft der Änderung keine Rolle spielt.
+   */
+  public Card folgeWegBeleg(Card vorher, Card nachher) {
+    return nachher.withWegBelegVergleich(vorher, clock.instant());
+  }
+
   /** Eine blanke Beschreibung gilt als keine. */
   public static @Nullable String normalize(@Nullable String description) {
     return description == null || description.isBlank() ? null : description;

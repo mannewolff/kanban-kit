@@ -72,6 +72,26 @@ class CardStatusPersistenceIT extends AbstractIntegrationTest {
     assertThat(cards.findById(gespeichert.requireId()).orElseThrow().status()).isNull();
   }
 
+  /** V73, Issue #2111: dieselbe Lücke wie beim Status, sonst ginge die Marke still verloren. */
+  @Test
+  void wegBelegMarke_ueberlebtSpeichernUndLaden() {
+    Card vorher = cards.save(karte(3));
+    Instant marke = NOW.plusSeconds(60);
+
+    cards.save(vorher.withContent("[Plan] Paket 3", null).withWegBelegVergleich(vorher, marke));
+
+    assertThat(cards.findById(vorher.requireId()).orElseThrow().wegBelegGeaendertAm())
+        .isEqualTo(marke);
+  }
+
+  @Test
+  void ohneWegBelegAenderung_bleibtDieMarkeNull() {
+    Card gespeichert = cards.save(karte(4));
+
+    assertThat(cards.findById(gespeichert.requireId()).orElseThrow().wegBelegGeaendertAm())
+        .isNull();
+  }
+
   private Card karte(int nummer) {
     return new Card(
         null,

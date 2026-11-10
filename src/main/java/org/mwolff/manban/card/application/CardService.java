@@ -253,7 +253,8 @@ public class CardService {
                   .requireId();
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
-    Card saved = cards.save(grundlage.folgeArtwechsel(card, updated));
+    Card saved =
+        cards.save(grundlage.folgeArtwechsel(card, grundlage.folgeWegBeleg(card, updated)));
     grundlage.aktivitaet(cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet");
     if (dependsOn != null) {
       abhaengigkeiten.ersetze(saved, dependsOn);

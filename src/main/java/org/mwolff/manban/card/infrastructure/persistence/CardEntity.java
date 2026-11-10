@@ -101,6 +101,10 @@ class CardEntity {
   @Column(name = "deleted_at")
   private @Nullable Instant deletedAt;
 
+  // Letzte Änderung an einer Angabe, die den Weg der Karte belegt (V73, Plan #2108 E14).
+  @Column(name = "weg_beleg_geaendert_am")
+  private @Nullable Instant wegBelegGeaendertAm;
+
   protected CardEntity() {
     // für JPA
   }
@@ -129,6 +133,7 @@ class CardEntity {
     this.parentId = c.parentId();
     this.shortcode = c.shortcode();
     this.dueDate = c.dueDate();
+    this.wegBelegGeaendertAm = c.wegBelegGeaendertAm();
   }
 
   @Nullable Long getId() {
@@ -217,5 +222,9 @@ class CardEntity {
 
   @Nullable Instant getDeletedAt() {
     return deletedAt;
+  }
+
+  @Nullable Instant getWegBelegGeaendertAm() {
+    return wegBelegGeaendertAm;
   }
 }
