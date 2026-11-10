@@ -103,7 +103,7 @@ class BenachrichtigungErkennungTest {
             permissions,
             karten,
             new NightRunProperties(null, null, null, null, STILLE),
-            new BenachrichtigungProperties(null),
+            new BenachrichtigungProperties(null, null, 0),
             Clock.fixed(JETZT, ZoneOffset.UTC));
   }
 
@@ -448,6 +448,11 @@ class BenachrichtigungErkennungTest {
 
     @Override
     public void setzeEingeplanteEntfallen(Collection<Long> ids) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int loescheAelterAls(Instant grenze) {
       throw new UnsupportedOperationException();
     }
 

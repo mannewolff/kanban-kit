@@ -64,4 +64,13 @@ interface BenachrichtigungAnlassJpaRepository
   Long findIdByLabelEventId(@Param("labelEventId") long labelEventId);
 
   boolean existsByCardIdAndArt(Long cardId, AnlassArt art);
+
+  /**
+   * Die Zustellungen nimmt {@code ON DELETE CASCADE} mit.
+   *
+   * @return die Zahl der gelöschten Anlässe
+   */
+  @Modifying
+  @Query("delete from BenachrichtigungAnlassEntity e where e.angelegtAt < :grenze")
+  int loescheAelterAls(@Param("grenze") Instant grenze);
 }

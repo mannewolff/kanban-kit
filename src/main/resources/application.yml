@@ -139,9 +139,13 @@ manban:
     subject: ${MANBAN_PUSH_SUBJECT:}
     melde-takt: PT1M
   # Benachrichtigung per Mail (Issue #2078, Plan #2070 E3): So lange wartet ein Kartenlabel mit
-  # Laufkennung, ob der Lauf die Karte selbst meldet.
+  # Laufkennung, ob der Lauf die Karte selbst meldet. takt ist der Abstand zwischen zwei Laeufen des
+  # Jobs (Issue #2081, E2), retention-days die Aufbewahrung von Anlaessen und Zustellungen (E14);
+  # gelaufen wird nur mit manban.mail.enabled=true (E10).
   benachrichtigung:
     lauf-label-frist: PT10M
+    takt: PT1M
+    retention-days: 90
   # Nachtlauf-Auswertung (Issue #722): Ringpuffer je Projekt. Der aelteste Lauf nach started_at
   # wird verdraengt, sobald die Grenze ueberschritten ist.
   # Verwaiste Arbeitspakete (Lauf verdraengt, Issue #964) haben eine eigene Grenze (Issue #966);

@@ -8,6 +8,7 @@ import org.mwolff.manban.benachrichtigung.application.AnlassRepository;
 import org.mwolff.manban.benachrichtigung.domain.AnlassArt;
 import org.mwolff.manban.benachrichtigung.infrastructure.persistence.BenachrichtigungZustellungJpaRepository.FaelligeZeile;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Adapter des {@link AnlassRepository}-Ports auf die Tabellen für Anlass und Zustellung. */
 @Component
@@ -108,6 +109,13 @@ class AnlassRepositoryAdapter implements AnlassRepository {
   @Override
   public void setzeEingeplanteEntfallen(Collection<Long> ids) {
     setzeZustandEingeplanter(ids, "ENTFALLEN");
+  }
+
+  /** Eigene Transaktion: Der Aufräum-Job ruft ohne eine; die Datenbank löscht die Zustellungen. */
+  @Override
+  @Transactional
+  public int loescheAelterAls(Instant grenze) {
+    return anlaesse.loescheAelterAls(grenze);
   }
 
   private void setzeZustandEingeplanter(Collection<Long> ids, String zustand) {

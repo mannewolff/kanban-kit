@@ -124,4 +124,12 @@ public interface AnlassRepository {
 
   /** Setzt eingeplante Zustellungen auf {@code ENTFALLEN}; eine leere Sammlung ist ein No-op. */
   void setzeEingeplanteEntfallen(Collection<Long> ids);
+
+  /**
+   * Löscht Anlässe, die vor {@code grenze} angelegt wurden, und damit ihre Zustellungen (Issue
+   * #2081, Plan #2070 E14).
+   *
+   * @return die Zahl der gelöschten Anlässe
+   */
+  int loescheAelterAls(Instant grenze);
 }

@@ -591,6 +591,11 @@ class BenachrichtigungVersandTest {
     }
 
     @Override
+    public int loescheAelterAls(Instant grenze) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public List<FaelligeZustellung> faelligeZustellungen(Instant jetzt) {
       return zeilen.entrySet().stream()
           .filter(zeile -> !zeile.getValue().isAfter(jetzt))
