@@ -241,6 +241,26 @@ neues Recht entsteht nicht. Geprüft wird bei jedem Aufruf: Ist der Inhaber nur 
 das Board mit **403**; ist er kein Mitglied des Projekts mehr, mit **404**. Ein **ungebundenes** Token
 erhält **409** wie auf der übrigen Kanban-Compat-API; seine Meldung erscheint in keinem Projekt.
 
+### Zugang der Desktop-App
+
+Der Zugang der Desktop-App ist ein board-gebundenes Token mit zwei zusätzlichen Rechten, den beiden
+Ausnahmen in der Tabelle der [Freigabe-Labels](#freigabe-labels-des-kits). Darüber hinaus kann er
+genau das, was ein board-gebundenes Token desselben Boards kann.
+
+- **Je Board genau einer.** Besteht schon ein wirksamer Zugang, wird ein zweiter abgewiesen, und die
+  Meldung nennt den Inhaber. Mehrere Rechner teilen sich denselben Zugang.
+- **Inhaber ist, wer anlegt.** Wer den Zugang mitbenutzt, handelt unter dem Namen des Inhabers.
+- **Anlegen** kann nur, wer im Projekt des Boards Admin oder Owner ist, und nur nach Anmeldung im
+  Browser. Ein Plattform-Admin ohne Projektrolle kann es nicht.
+- **Erneuern** kann nur der Inhaber; der alte Zugang gilt danach sofort nicht mehr.
+- **Widerrufen** können der Inhaber und jeder Admin oder Owner des Projekts. Ein Widerruf ist
+  endgültig, für das Board kann sofort ein neuer Zugang angelegt werden.
+
+Der Zugang läuft nicht von selbst ab. Er wird endgültig unwirksam, wenn der Inhaber die Rolle Admin
+oder Owner im Projekt verliert oder sein Konto gesperrt oder gelöscht wird. Danach wird jeder Aufruf
+abgewiesen, auch ein lesender, und das bleibt so, auch wenn Rolle oder Konto zurückkommen. Für das
+Board kann dann ein neuer Zugang angelegt werden.
+
 ### Freigabe-Labels des Kits
 
 Fünf Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Server erzwingt sie
@@ -248,12 +268,14 @@ Fünf Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Ser
 Mensch, der Runner nimmt sie ab, sobald sie verbraucht sind. `kit:klaeren`, `kit:geschuetzt` und
 `kit:wartet` setzt die Maschine; ihr Abnehmen ist die Freigabe und steht nur dem Menschen zu.
 
-| | Session (Mensch) | Token (Kit, Runner, Agent) |
-|---|---|---|
-| `kit:night`, `kit:nightrun` setzen | erlaubt | abgewiesen (403) |
-| `kit:night`, `kit:nightrun` abnehmen | erlaubt | erlaubt |
-| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected`, `kit:wartet`/`kit:on-hold` setzen | erlaubt | erlaubt |
-| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected`, `kit:wartet`/`kit:on-hold` abnehmen | erlaubt | abgewiesen (403) |
+| | Session (Mensch) | Token (Kit, Runner, Agent) | Zugang der Desktop-App |
+|---|---|---|---|
+| `kit:night` setzen | erlaubt | abgewiesen (403) | **erlaubt**, nur einzeln an einer Karte |
+| `kit:nightrun` setzen | erlaubt | abgewiesen (403) | abgewiesen (403) |
+| `kit:night`, `kit:nightrun` abnehmen | erlaubt | erlaubt | erlaubt |
+| `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected`, `kit:wartet`/`kit:on-hold` setzen | erlaubt | erlaubt | erlaubt |
+| `kit:klaeren`/`kit:clarify` abnehmen | erlaubt | abgewiesen (403) | **erlaubt**, nur einzeln an einer Karte |
+| `kit:geschuetzt`/`kit:protected`, `kit:wartet`/`kit:on-hold` abnehmen | erlaubt | abgewiesen (403) | abgewiesen (403) |
 
 Das claude-workflow-kit lässt sich auf Englisch einstellen. Darum gilt jede Regel unter beiden Namen
 derselben Sache: `kit:clarify` wie `kit:klaeren`, `kit:protected` wie `kit:geschuetzt`, `kit:on-hold` wie `kit:wartet`. `kit:night`
@@ -273,11 +295,18 @@ darf sie setzen und abnehmen (Issue #2049).
 Entscheidend ist die serververifizierte Herkunft — gebundene wie ungebundene Token —, nicht die
 Selbstauskunft im Header `X-Agent-Model`. Eine zweite Selbstauskunft ist der Header `X-Night-Run`, die
 Laufkennung eines Nachtlaufs: Das Board speichert sie nur bei Token-Herkunft, sie wirkt allein auf
-die Zuordnung der Karten auf der Runner-Seite und begründet kein Recht. Der Server kann Mensch und Agent am Token nicht
-unterscheiden: Auch wer per CLI (`board.mjs`, `tbx`) arbeitet, setzt `kit:night` und
-`kit:nightrun` nur im Board. Die Regel gilt an jedem Schreibweg: einzelnes Label setzen oder
+die Zuordnung der Karten auf der Runner-Seite und begründet kein Recht. Der Server kann Mensch und Agent an einem
+gewöhnlichen Token nicht unterscheiden: Auch wer per CLI (`board.mjs`, `tbx`) arbeitet, setzt `kit:night` und
+`kit:nightrun` nur im Board. Einzige Ausnahme ist der [Zugang der Desktop-App](#zugang-der-desktop-app):
+Das Board erkennt die Freigabe an diesem Zugang, nicht am Menschen. Das Restrisiko ist hingenommen: Wer
+den Zugang der App besitzt, gibt frei. Dass keine KI-Sitzung an ihn kommt, muss das
+claude-workflow-kit bei der Verwahrung sicherstellen; das Board kann es nicht prüfen.
+
+Die Regel gilt an jedem Schreibweg: einzelnes Label setzen oder
 abnehmen, alle Labels einer Karte ersetzen (geprüft wird nur, was hinzukommt oder wegfällt), die
-Massenaktion und das Anlegen einer Karte mit Labels. Per Token darf zudem keine Definition dieser
+Massenaktion und das Anlegen einer Karte mit Labels. Die beiden Ausnahmen des Zugangs der App gelten
+nur beim einzelnen Setzen oder Abnehmen an einer Karte seines Boards; auf allen anderen Schreibwegen
+wird er abgewiesen wie jedes Token. Per Token, auch mit dem Zugang der App, darf zudem keine Definition dieser
 vier Labels gelöscht oder umbenannt und kein anderes Label auf einen ihrer Namen umbenannt werden;
 anlegen darf ein Token sie, weil das Kit seine Labels selbst anlegt. Die Namen werden getrimmt und
 mit Groß-/Kleinschreibung verglichen, genau wie bei der Label-Auflösung.
