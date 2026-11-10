@@ -7,6 +7,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.RecordComponent;
@@ -17,6 +18,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
@@ -561,6 +564,222 @@ class CommentServiceTest {
         .containsExactly("cardId", "laufStart");
   }
 
+  @Test
+  void update_ueberSession_anKitMeldung_setztZeitpunktUndKopfzeile() {
+    // Given (Issue #2109, Plan #2108 E4): mit Herkunft TOKEN angelegt, von Hand geändert.
+    when(comments.findById(3L))
+        .thenReturn(Optional.of(kitMeldung("## Übertragung auf den Hauptzweig\n\nWeg: lokal")));
+    when(actor.current()).thenReturn(new ActorStamp(CardActivityOrigin.SESSION, null, null, null));
+
+    // When
+    Comment gespeichert = aendereUndFange("Von Hand umgeschrieben");
+
+    // Then
+    assertThat(gespeichert.vonHandGeaendertAm()).isEqualTo(FIXED);
+    assertThat(gespeichert.vonHandKopfzeile()).isEqualTo("## Übertragung auf den Hauptzweig");
+    assertThat(gespeichert.body()).isEqualTo("Von Hand umgeschrieben");
+  }
+
+  @Test
+  void update_ohneStempel_anKitMeldung_zaehltAlsAenderungVonHand() {
+    // Given: Nur ein Token gilt als Kit; eine unbekannte Herkunft wird nicht dazu geraten.
+    when(comments.findById(3L)).thenReturn(Optional.of(kitMeldung("## Veröffentlichung")));
+
+    // When
+    Comment gespeichert = aendereUndFange("Neu");
+
+    // Then
+    assertThat(gespeichert.vonHandGeaendertAm()).isEqualTo(FIXED);
+    assertThat(gespeichert.vonHandKopfzeile()).isEqualTo("## Veröffentlichung");
+  }
+
+  @Test
+  void update_ueberToken_anKitMeldung_setztNichts() {
+    // Given
+    when(comments.findById(3L)).thenReturn(Optional.of(kitMeldung("## Veröffentlichung")));
+    when(actor.current())
+        .thenReturn(new ActorStamp(CardActivityOrigin.TOKEN, "kit-nacht", "claude-opus-5-5", LAUF));
+
+    // When
+    Comment gespeichert = aendereUndFange("## Veröffentlichung, neu");
+
+    // Then
+    assertThat(gespeichert.vonHandGeaendertAm()).isNull();
+    assertThat(gespeichert.vonHandKopfzeile()).isNull();
+  }
+
+  @Test
+  void update_ueberDenZugangDerApp_zaehltWieJedesToken() {
+    // Given (Plan #2108 E5): Der Zugang der Desktop-App trägt die Herkunft TOKEN.
+    when(comments.findById(3L)).thenReturn(Optional.of(kitMeldung("## Veröffentlichung")));
+    when(actor.current())
+        .thenReturn(new ActorStamp(CardActivityOrigin.TOKEN, "desktop", null, null, true));
+
+    // When
+    Comment gespeichert = aendereUndFange("Neu");
+
+    // Then
+    assertThat(gespeichert.vonHandGeaendertAm()).isNull();
+    assertThat(gespeichert.vonHandKopfzeile()).isNull();
+  }
+
+  @Test
+  void update_ueberToken_nachAenderungVonHand_loeschtBeideFelder() {
+    // Given: Der Text stammt danach wieder ganz vom Kit (Kriterium 13).
+    when(comments.findById(3L)).thenReturn(Optional.of(vonHandGeaendert("## Veröffentlichung")));
+    when(actor.current())
+        .thenReturn(new ActorStamp(CardActivityOrigin.TOKEN, "kit-nacht", null, null));
+
+    // When
+    Comment gespeichert = aendereUndFange("## Veröffentlichung, neu");
+
+    // Then
+    assertThat(gespeichert.vonHandGeaendertAm()).isNull();
+    assertThat(gespeichert.vonHandKopfzeile()).isNull();
+  }
+
+  @Test
+  void update_zweiteAenderungVonHand_behaeltDieKopfzeileDesKits() {
+    // Given: Die erste Änderung hat den Kopf entfernt, das Glied bleibt trotzdem zugeordnet.
+    when(comments.findById(3L)).thenReturn(Optional.of(vonHandGeaendert("Kopf entfernt")));
+    when(actor.current()).thenReturn(new ActorStamp(CardActivityOrigin.SESSION, null, null, null));
+
+    // When
+    Comment gespeichert = aendereUndFange("Noch einmal anders");
+
+    // Then
+    assertThat(gespeichert.vonHandGeaendertAm()).isEqualTo(FIXED);
+    assertThat(gespeichert.vonHandKopfzeile()).isEqualTo("## Kit-Kopf");
+  }
+
+  @Test
+  void update_setztAlsKopfzeileDieErsteNichtleereZeile() {
+    // Given (E3): Auch die Kette liest die erste nichtleere Zeile.
+    when(comments.findById(3L)).thenReturn(Optional.of(kitMeldung("\n  \n## Kopf\nText")));
+
+    // When / Then
+    assertThat(aendereUndFange("Neu").vonHandKopfzeile()).isEqualTo("## Kopf");
+  }
+
+  @Test
+  void update_ohneNichtleereZeile_setztDenZeitpunktOhneKopfzeile() {
+    // Given
+    when(comments.findById(3L)).thenReturn(Optional.of(kitMeldung(" \n ")));
+
+    // When
+    Comment gespeichert = aendereUndFange("Neu");
+
+    // Then
+    assertThat(gespeichert.vonHandGeaendertAm()).isEqualTo(FIXED);
+    assertThat(gespeichert.vonHandKopfzeile()).isNull();
+  }
+
+  @Test
+  void update_anSessionKommentar_wirdNieMarkiert() {
+    // Given
+    Comment vorhanden =
+        new Comment(3L, 5L, 1L, "Ada", "## Kopf", FIXED, FIXED, null, "SESSION", null, null);
+    when(comments.findById(3L)).thenReturn(Optional.of(vorhanden));
+    when(actor.current()).thenReturn(new ActorStamp(CardActivityOrigin.SESSION, null, null, null));
+
+    // When
+    Comment gespeichert = aendereUndFange("Neu");
+
+    // Then
+    assertThat(gespeichert.vonHandGeaendertAm()).isNull();
+    assertThat(gespeichert.vonHandKopfzeile()).isNull();
+  }
+
+  @Test
+  void update_anKommentarOhneHerkunft_wirdNieMarkiert() {
+    // Given: Alt-Kommentare ohne Herkunft gelten nie als Meldung des Kits (E3).
+    when(comments.findById(3L)).thenReturn(Optional.of(comment(1L)));
+
+    // When
+    Comment gespeichert = aendereUndFange("Neu");
+
+    // Then
+    assertThat(gespeichert.vonHandGeaendertAm()).isNull();
+    assertThat(gespeichert.vonHandKopfzeile()).isNull();
+  }
+
+  @Test
+  void create_setztKeineMarke() {
+    // Given
+    when(users.findById(1L)).thenReturn(Optional.of(new UserSummary(1L, "u@x.de", "Ada", true)));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    service.create(1L, 5L, "Hallo");
+
+    // Then
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().vonHandGeaendertAm()).isNull();
+    assertThat(captor.getValue().vonHandKopfzeile()).isNull();
+  }
+
+  @Test
+  void kettenKommentare_liefertHerkunftUndMarkeOhneRechtepruefung() {
+    // Given (Issue #2109): Vertrag für die Kette, die das Leserecht vorher selbst prüft.
+    when(comments.findKettenKommentare(List.of(5L, 6L)))
+        .thenReturn(
+            List.of(
+                vonHandGeaendert("## Kopf"),
+                new Comment(4L, 6L, null, "Kit", "Text", FIXED, FIXED, LAUF, "TOKEN", "k", "o")));
+
+    // When / Then
+    assertThat(service.kettenKommentare(List.of(5L, 6L)))
+        .containsExactly(
+            new CommentService.KettenKommentarView(
+                3L, 5L, "Kit", "## Kopf", FIXED, "TOKEN", "kit-nacht", "opus", LAUF, "## Kit-Kopf"),
+            new CommentService.KettenKommentarView(
+                4L, 6L, "Kit", "Text", FIXED, "TOKEN", "k", "o", null, null));
+    verifyNoInteractions(permissions);
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  void projektTraegtKitKommentar_reichtDasErgebnisDerAbfrageDurch(boolean vorhanden) {
+    // Given
+    when(comments.existsKitKommentarImProjekt(1L, List.of("## Kartenprüfung")))
+        .thenReturn(vorhanden);
+
+    // When / Then
+    assertThat(service.projektTraegtKitKommentar(1L, List.of("## Kartenprüfung")))
+        .isEqualTo(vorhanden);
+    verifyNoInteractions(permissions);
+  }
+
+  private static Comment kitMeldung(String body) {
+    return new Comment(3L, 5L, 1L, "Kit", body, FIXED, FIXED, null, "TOKEN", "kit-nacht", "opus");
+  }
+
+  private static Comment vonHandGeaendert(String body) {
+    return new Comment(
+        3L,
+        5L,
+        1L,
+        "Kit",
+        body,
+        FIXED,
+        FIXED,
+        null,
+        "TOKEN",
+        "kit-nacht",
+        "opus",
+        LAUF,
+        "## Kit-Kopf");
+  }
+
+  private Comment aendereUndFange(String body) {
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    service.update(1L, 3L, body);
+    verify(comments).save(captor.capture());
+    return captor.getValue();
+  }
+
   /** Simuliert die DB: vergibt beim ersten Speichern eine ID (Issue #0080). */
   private static Comment saved(Comment c) {
     if (c.id() != null) {
@@ -577,6 +796,8 @@ class CommentServiceTest {
         c.laufStart(),
         c.origin(),
         c.tokenName(),
-        c.agent());
+        c.agent(),
+        c.vonHandGeaendertAm(),
+        c.vonHandKopfzeile());
   }
 }

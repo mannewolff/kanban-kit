@@ -120,7 +120,9 @@ public class CommentService {
     if (author == null || author != userId) {
       throw new ProjectAccessDeniedException();
     }
-    return view(comments.save(comment.withBody(body, laufStart)));
+    return view(
+        comments.save(
+            comment.withBody(body, laufStart, actor.current().originName(), clock.instant())));
   }
 
   @Transactional
@@ -160,6 +162,45 @@ public class CommentService {
     return comments.findLaufKommentare(cardIds, von).stream()
         .map(k -> new LaufKommentarView(k.cardId(), k.laufStart()))
         .toList();
+  }
+
+  /**
+   * Die Kommentare der Karten mit Herkunft und Hand-Marke für die Entscheidungskette (Issue #2109,
+   * Plan #2108 E3, E4), chronologisch.
+   *
+   * <p>Ohne Rechteprüfung: Vertrag für die Kette, die das Leserecht vor dem Aufruf selbst prüft und
+   * die Karten auf das Projekt der geöffneten Karte begrenzt.
+   */
+  @Transactional(readOnly = true)
+  public List<KettenKommentarView> kettenKommentare(Collection<Long> cardIds) {
+    return comments.findKettenKommentare(cardIds).stream()
+        .map(
+            c ->
+                new KettenKommentarView(
+                    c.requireId(),
+                    c.cardId(),
+                    c.authorName(),
+                    c.body(),
+                    c.createdAt(),
+                    c.origin(),
+                    c.tokenName(),
+                    c.agent(),
+                    c.vonHandGeaendertAm(),
+                    c.vonHandKopfzeile()))
+        .toList();
+  }
+
+  /**
+   * Ob das Projekt einen Kommentar mit Herkunft {@code TOKEN} und einem der festen Anfänge des Kits
+   * trägt (Issue #2109, Plan #2108 E6).
+   *
+   * <p>Ohne Rechteprüfung wie {@link #kettenKommentare}.
+   *
+   * @param anfaenge die festen Anfänge, wörtlich
+   */
+  @Transactional(readOnly = true)
+  public boolean projektTraegtKitKommentar(long projectId, Collection<String> anfaenge) {
+    return comments.existsKitKommentarImProjekt(projectId, anfaenge);
   }
 
   /**
@@ -241,6 +282,32 @@ public class CommentService {
    * @param laufStart Laufkennung des letzten Schreibers
    */
   public record LaufKommentarView(long cardId, Instant laufStart) {}
+
+  /**
+   * Ein Kommentar, wie ihn die Entscheidungskette liest (Issue #2109).
+   *
+   * @param id der Kommentar
+   * @param cardId Karte, an der er steht
+   * @param authorName Anzeigename des Autors beim Anlegen
+   * @param body sein Text
+   * @param createdAt Zeitpunkt der Anlage
+   * @param origin Herkunft beim Anlegen; {@code null} = unbekannt
+   * @param tokenName Name des Projekt-Zugangs bei Herkunft {@code TOKEN}
+   * @param agent Modell-Selbstauskunft des Werkzeugs
+   * @param vonHandGeaendertAm letzte Änderung von Hand; {@code null} ohne Änderung von Hand
+   * @param vonHandKopfzeile erste nichtleere Zeile der Fassung des Kits vor der Änderung von Hand
+   */
+  public record KettenKommentarView(
+      long id,
+      long cardId,
+      String authorName,
+      String body,
+      Instant createdAt,
+      @Nullable String origin,
+      @Nullable String tokenName,
+      @Nullable String agent,
+      @Nullable Instant vonHandGeaendertAm,
+      @Nullable String vonHandKopfzeile) {}
 
   /**
    * Der erste passende Kommentar einer Karte in der Textsuche (Plan #1574, E16).
