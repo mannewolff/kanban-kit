@@ -60,6 +60,11 @@ class CardActivityRepositoryTest {
     }
 
     @Override
+    public List<CardActivity> findByCardIds(Collection<Long> cardIds) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public List<CardActivity> findTokenActivitiesInWindow(
         long projectId, String tokenName, Instant von, Instant bis) {
       throw new UnsupportedOperationException();

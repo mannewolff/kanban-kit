@@ -44,6 +44,12 @@ public interface CardActivityRepository {
   List<CardActivity> findByCardId(long cardId);
 
   /**
+   * Aktivitäten der genannten Karten in einem Zugriff (Issue #2114), chronologisch und bei
+   * Gleichstand nach ID. Ohne Karten-IDs eine leere Liste.
+   */
+  List<CardActivity> findByCardIds(Collection<Long> cardIds);
+
+  /**
    * Die Aktivitäten eines Nachtlaufs im Projekt (Issue #1373, Plan #1372 E2): Herkunft {@code
    * TOKEN} mit genau diesem Token-Namen, gesetztes {@code agent} und Zeitpunkt in {@code [von,
    * bis]}, beide Grenzen eingeschlossen; chronologisch, bei Gleichstand nach ID.

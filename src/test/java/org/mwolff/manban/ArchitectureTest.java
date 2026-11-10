@@ -250,6 +250,9 @@ class ArchitectureTest {
           // Kommentars aus derselben Quelle wie den Verlauf, samt Record ActorStamp. Gelesen wird
           // sie ueber ActorStamp#originName, damit card.domain modulintern bleibt.
           "ActorContext",
+          // KartenKetteLeser ist Vertrag (Issue #2114, Plan #2108 E1): Die Entscheidungskette liest
+          // Karten, Spaltenwechsel und Label-Ereignisse ueber eigene Records, ohne card.domain.
+          "KartenKetteLeser",
           // Exception-Vokabular als Vertrag, Plan #1694 (A4)
           "CardNotFoundException");
 

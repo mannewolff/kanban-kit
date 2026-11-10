@@ -410,9 +410,9 @@ public class CardService {
    * Spaltenschlüssel eines Zugs (Plan #1617, A2): bei {@code MOVED} der gespeicherte Status nach
    * dem Zug, sonst der Schlüssel der Prozessspalte aus dem Text „Verschoben nach &lt;Spalte&gt;“.
    * Anders als die Board-Übersicht ohne Rückfall auf {@code BACKLOG} — was sich nicht sicher
-   * bestimmen lässt, fehlt.
+   * bestimmen lässt, fehlt. Geteilt mit {@link KartenKetteLeser} (Issue #2114, Plan #2108 E10).
    */
-  private static @Nullable String spaltenSchluessel(CardActivity a) {
+  static @Nullable String spaltenSchluessel(CardActivity a) {
     if (a.type() != CardActivityType.MOVED) {
       return null;
     }

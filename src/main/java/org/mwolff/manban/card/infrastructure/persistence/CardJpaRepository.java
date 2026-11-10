@@ -39,6 +39,36 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   // Projektwechsels muessen auch archivierte und geloeschte Kinder ihren Verweis verlieren.
   List<CardEntity> findByDerivedFromCardId(Long cardId);
 
+  /** IDs der Karten des Projekts zu Nummern, ohne jeden Filter (Issue #2114). */
+  @Query("select c.id from CardEntity c where c.projectId = ?1 and c.number in ?2")
+  List<Long> findIdsByProjectIdAndNumberIn(long projectId, Collection<Integer> nummern);
+
+  /** IDs der Herkunfts-Kinder der genannten Karten, ohne jeden Filter (Issue #2114). */
+  @Query("select c.id from CardEntity c where c.derivedFromCardId in ?1")
+  List<Long> findIdsByDerivedFromCardIdIn(Collection<Long> vorfahrIds);
+
+  /**
+   * Karten des Projekts ohne Papierkorb, deren Beschreibung den regulären Ausdruck (Postgres {@code
+   * ~}) trifft (Issue #2114). Nativ, weil JPQL keinen regulären Ausdruck kennt.
+   */
+  @Query(
+      value =
+          "select * from card where project_id = ?1 and deleted_at is null and description ~ ?2",
+      nativeQuery = true)
+  List<CardEntity> findByProjectIdUndBeschreibungsMuster(long projectId, String muster);
+
+  /**
+   * Ob das Projekt eine Karte ohne Papierkorb hat, die über ein Token angelegt wurde und deren
+   * Beschreibung den regulären Ausdruck trifft (Issue #2114, Plan #2108 E6).
+   */
+  @Query(
+      value =
+          "select exists (select 1 from card c join card_activity a on a.card_id = c.id"
+              + " where c.project_id = ?1 and c.deleted_at is null and a.type = 'CREATED'"
+              + " and a.origin = 'TOKEN' and c.description ~ ?2)",
+      nativeQuery = true)
+  boolean existsUeberTokenAngelegtMitMuster(long projectId, String muster);
+
   List<CardEntity> findByRequirementCardId(Long cardId);
 
   /** Nicht-gelöschte Karte eines Projekts nach projektweiter Nummer (projektweit eindeutig). */

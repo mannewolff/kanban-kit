@@ -51,6 +51,35 @@ public interface CardBestandRepository {
   List<KarteImBestand> findImBestand(Collection<Long> ids);
 
   /**
+   * Karten eines Projekts zu Nummern wie {@link #findImBestand} (Issue #2114, Plan #2108 E12):
+   * archivierte und Papierkorb-Karten eingeschlossen; eine Nummer ohne Karte fehlt. Eine leere
+   * Sammlung fragt die Datenbank nicht.
+   */
+  List<KarteImBestand> findImBestandNachNummern(long projectId, Collection<Integer> nummern);
+
+  /**
+   * Die Karten, deren Herkunft auf eine der genannten Karten zeigt, wie {@link #findImBestand}
+   * (Issue #2114): archivierte und Papierkorb-Karten eingeschlossen, über Projektgrenzen hinweg.
+   * Eine leere Sammlung fragt die Datenbank nicht.
+   */
+  List<KarteImBestand> findKinderImBestand(Collection<Long> vorfahrIds);
+
+  /**
+   * Karten des Projekts ohne Papierkorb, archivierte eingeschlossen, deren Beschreibung in einer
+   * Zeile {@code Ergebnis:} oder {@code Result:} eine der Nummern nennt ({@code Ergebnis: Issue
+   * #N}, Issue #2114). Die Art der Karte prüft der Aufrufer. Eine leere Sammlung fragt die
+   * Datenbank nicht.
+   */
+  List<Card> findMitErgebnisNummer(long projectId, Collection<Integer> nummern);
+
+  /**
+   * Ob das Projekt eine Karte ohne Papierkorb hat, die über ein Token angelegt wurde und eine Zeile
+   * {@code Autor-Modell:}/{@code Author-Model:} oder {@code Plan-Modell:}/{@code Plan-Model:} trägt
+   * (Issue #2114, Plan #2108 E6). Eine {@code EXISTS}-Abfrage.
+   */
+  boolean hatUeberTokenAngelegteKitKarte(long projectId);
+
+  /**
    * Eine Karte mit ihren Bestandsauskünften.
    *
    * @param karte die Karte

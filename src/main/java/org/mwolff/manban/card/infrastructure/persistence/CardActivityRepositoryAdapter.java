@@ -72,6 +72,16 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
   }
 
   @Override
+  public List<CardActivity> findByCardIds(Collection<Long> cardIds) {
+    if (cardIds.isEmpty()) {
+      return List.of();
+    }
+    return jpa.findByCardIdInOrderByCreatedAtAscIdAsc(cardIds).stream()
+        .map(CardActivityRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
   public List<CardActivity> findTokenActivitiesInWindow(
       long projectId, String tokenName, Instant von, Instant bis) {
     return jpa.findTokenActivitiesInWindow(projectId, tokenName, von, bis).stream()

@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.infrastructure.persistence;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +11,9 @@ import org.springframework.data.repository.query.Param;
 interface CardActivityJpaRepository extends JpaRepository<CardActivityEntity, Long> {
 
   List<CardActivityEntity> findByCardIdOrderByCreatedAt(Long cardId);
+
+  /** Die Aktivitäten der Karten, chronologisch und bei Gleichstand nach ID (Issue #2114). */
+  List<CardActivityEntity> findByCardIdInOrderByCreatedAtAscIdAsc(Collection<Long> cardIds);
 
   /**
    * Die Aktivitäten eines Nachtlaufs im Projekt (Issue #1373). Das Projekt kommt über die Karte —
