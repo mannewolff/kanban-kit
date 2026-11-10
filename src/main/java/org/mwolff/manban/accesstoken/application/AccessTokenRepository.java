@@ -48,4 +48,19 @@ public interface AccessTokenRepository {
    * {@code true}.
    */
   boolean markRevokedIfActive(long id);
+
+  /**
+   * Widerruft das Token in einer <strong>eigenen, kurzen</strong> Transaktion, nach dem Muster von
+   * {@link #touchLastUsedAtInOwnTransaction}: für die Auflösung, die ohne umschließende Transaktion
+   * läuft (Issue #997, #2104).
+   */
+  void markRevokedInOwnTransaction(long id);
+
+  /**
+   * Widerruft die wirksamen Zugänge der App dieses Inhabers in allen Projekten (Plan #2100, E4).
+   */
+  void markAppZugaengeRevoked(long userId);
+
+  /** Widerruft die wirksamen Zugänge der App dieses Inhabers in dem Projekt (Plan #2100, E4). */
+  void markAppZugaengeRevoked(long userId, long projectId);
 }

@@ -81,6 +81,28 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
     return jpa.markRevokedIfActive(id) > 0;
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>{@code REQUIRES_NEW} aus demselben Grund wie beim Stempel (Issue #997): Die Auflösung läuft
+   * ohne Transaktion, und der Widerruf committet sofort.
+   */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void markRevokedInOwnTransaction(long id) {
+    jpa.markRevoked(id);
+  }
+
+  @Override
+  public void markAppZugaengeRevoked(long userId) {
+    jpa.markRevokedByUser(userId, AccessTokenArt.APP);
+  }
+
+  @Override
+  public void markAppZugaengeRevoked(long userId, long projectId) {
+    jpa.markRevokedByUserAndProject(userId, projectId, AccessTokenArt.APP);
+  }
+
   private static KanbanAccessTokenEntity toEntity(AccessToken t) {
     return new KanbanAccessTokenEntity(t);
   }

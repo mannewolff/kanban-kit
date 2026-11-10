@@ -319,12 +319,59 @@ class AccessTokenServiceTest {
     // Given
     when(crypto.hash("plain")).thenReturn("hash");
     when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(appZugang(4L)));
+    when(permissions.istEchterOwnerOderAdmin(1L, 5L)).thenReturn(true);
 
     // When
     Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
 
     // Then
     assertThat(principal).map(KanbanPrincipal::appZugang).contains(true);
+    verify(tokens, never()).markRevokedInOwnTransaction(anyLong());
+  }
+
+  @Test
+  void resolveBinding_widerruftUndLiefertLeer_wennDieRolleVerlorenIst() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(appZugang(4L)));
+    when(permissions.istEchterOwnerOderAdmin(1L, 5L)).thenReturn(false);
+
+    // When / Then
+    assertThat(service.resolveBinding("plain")).isEmpty();
+    verify(tokens).markRevokedInOwnTransaction(4L);
+    verify(tokens, never()).touchLastUsedAtInOwnTransaction(anyLong(), any(Instant.class));
+  }
+
+  @Test
+  void resolveBinding_prueftBeimGewoehnlichenTokenKeineRolle() {
+    // Given: auch an ein Board gebunden löst ein gewöhnliches Token keine Rollenprüfung aus.
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash"))
+        .thenReturn(
+            Optional.of(new AccessToken(3L, 1L, 5L, 20L, "CI", "hash", "CI", FIXED, null, false)));
+
+    // When
+    Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
+
+    // Then
+    assertThat(principal).isPresent();
+    verify(permissions, never()).istEchterOwnerOderAdmin(anyLong(), anyLong());
+    verify(tokens, never()).markRevokedInOwnTransaction(anyLong());
+  }
+
+  @Test
+  void resolveBinding_prueftBeimWiderrufenenZugangKeineRolle() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash"))
+        .thenReturn(
+            Optional.of(
+                new AccessToken(
+                    4L, 1L, 5L, 20L, "App", "hash", "App", FIXED, null, true, AccessTokenArt.APP)));
+
+    // When / Then
+    assertThat(service.resolveBinding("plain")).isEmpty();
+    verify(permissions, never()).istEchterOwnerOderAdmin(anyLong(), anyLong());
   }
 
   @Test

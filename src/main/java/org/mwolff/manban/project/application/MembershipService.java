@@ -16,6 +16,7 @@ import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
  * ändern, Einladen oder Entfernen selbst zum Owner und setzte den echten ab, obwohl die Übergabe
  * bewusst nicht ADMIN zusteht.
  */
+// PMD.CouplingBetweenObjects: Das Ereignis für den Rollenverlust (Issue #2104) kommt dazu. Es hängt
+// an den Wegen, die eine Rolle ändern, und die liegen alle in diesem Dienst.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class MembershipService {
 
@@ -42,6 +46,7 @@ public class MembershipService {
   private final AuthProperties authProperties;
   private final ProjectProperties projectProperties;
   private final Clock clock;
+  private final ApplicationEventPublisher events;
 
   public MembershipService(
       ProjectRepository projects,
@@ -53,7 +58,8 @@ public class MembershipService {
       UserDisplayNameWriter displayNames,
       AuthProperties authProperties,
       ProjectProperties projectProperties,
-      Clock clock) {
+      Clock clock,
+      ApplicationEventPublisher events) {
     this.projects = projects;
     this.memberships = memberships;
     this.invitations = invitations;
@@ -64,6 +70,7 @@ public class MembershipService {
     this.authProperties = authProperties;
     this.projectProperties = projectProperties;
     this.clock = clock;
+    this.events = events;
   }
 
   /**
@@ -155,6 +162,7 @@ public class MembershipService {
       }
     }
     memberships.save(current.withRole(role));
+    meldeRollenverlust(current, role);
   }
 
   private String projectUrl(long projectId) {
@@ -244,7 +252,9 @@ public class MembershipService {
     if (newRole == ProjectRole.OWNER || owners.contains(targetUserId)) {
       requireOwnerTransfer(actorUserId, projectId);
     }
-    return toView(memberships.save(target.withRole(newRole)));
+    ProjectMembership saved = memberships.save(target.withRole(newRole));
+    meldeRollenverlust(target, newRole);
+    return toView(saved);
   }
 
   /**
@@ -328,6 +338,22 @@ public class MembershipService {
       requireOwnerTransfer(actorUserId, projectId);
     }
     memberships.deleteById(target.requireId());
+    events.publishEvent(new MitgliedRolleVerlorenEvent(projectId, targetUserId));
+  }
+
+  /**
+   * Meldet in der laufenden Transaktion, wenn eine Rollenänderung unter ADMIN führt (Issue #2104,
+   * Plan #2100 E4). {@link #transferOwnership} ruft das bewusst nicht auf: Der bisherige Owner
+   * bleibt Admin.
+   */
+  private void meldeRollenverlust(ProjectMembership vorher, ProjectRole neueRolle) {
+    if (istAdminOderOwner(vorher.role()) && !istAdminOderOwner(neueRolle)) {
+      events.publishEvent(new MitgliedRolleVerlorenEvent(vorher.projectId(), vorher.userId()));
+    }
+  }
+
+  private static boolean istAdminOderOwner(ProjectRole rolle) {
+    return rolle == ProjectRole.OWNER || rolle == ProjectRole.ADMIN;
   }
 
   /**

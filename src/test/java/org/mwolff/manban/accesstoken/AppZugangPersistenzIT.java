@@ -67,6 +67,11 @@ class AppZugangPersistenzIT extends AbstractIntegrationTest {
             "INSERT INTO project (name, owner_user_id) VALUES ('P', ?) RETURNING id",
             Long.class,
             besitzer);
+    // Die Auflösung eines Zugangs der App prüft die Rolle des Inhabers (Issue #2104).
+    jdbc.update(
+        "INSERT INTO project_membership (project_id, user_id, role) VALUES (?, ?, 'OWNER')",
+        projekt,
+        besitzer);
     Long board =
         jdbc.queryForObject(
             "INSERT INTO board (project_id, name) VALUES (?, 'B') RETURNING id",

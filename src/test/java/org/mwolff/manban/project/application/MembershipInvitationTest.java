@@ -27,6 +27,7 @@ import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests des Einladens (invite) — Mockito an den Ports. */
 class MembershipInvitationTest {
@@ -65,7 +66,8 @@ class MembershipInvitationTest {
             displayNames,
             authProperties,
             projectProperties,
-            clock);
+            clock,
+            mock(ApplicationEventPublisher.class));
   }
 
   @Test

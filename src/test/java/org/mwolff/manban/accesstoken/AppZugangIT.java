@@ -6,15 +6,25 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zaxxer.hikari.HikariConfigMXBean;
+import com.zaxxer.hikari.HikariDataSource;
 import jakarta.servlet.http.Cookie;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Supplier;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,6 +33,7 @@ import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.TransactionRace;
 import org.mwolff.manban.accesstoken.application.AccessTokenService;
 import org.mwolff.manban.accesstoken.application.AppZugangBestehtException;
+import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
 import org.mwolff.manban.auth.application.AppUserRepository;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
@@ -45,6 +56,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Verwaltung des Zugangs der App über die echten Filter (Issue #2103, Plan #2100 E5 bis E8, E12):
  * Anlegen, Erneuern, Widerrufen und Liste unter {@code /api/access-tokens/app}.
  */
+// PMD.ExcessiveImports, PMD.CouplingBetweenObjects, PMD.TooManyMethods: Issue #2104 verlangt die
+// Verlustfälle hier, neben den Szenarien der Verwaltung. Sie laufen über dieselben echten Filter
+// und Fixtures; ein zweites IT trennte die Szenarien eines Zugangs voneinander.
+@SuppressWarnings({"PMD.ExcessiveImports", "PMD.CouplingBetweenObjects", "PMD.TooManyMethods"})
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class AppZugangIT extends AbstractIntegrationTest {
@@ -55,6 +70,8 @@ class AppZugangIT extends AbstractIntegrationTest {
   private static final String KARTEN_PFAD = "/api/kanban/items";
   private static final String INHABER_NAME = "Erika Inhaber";
   private static final String PLAINTEXT = "plaintext";
+  private static final String ADMIN_EMAIL = "admin@example.com";
+  private static final Duration KURZER_POOL_TIMEOUT = Duration.ofSeconds(2);
 
   /** Ein neues Projekt bringt schon Boards mit; die Zeile wird darum über die Board-ID gesucht. */
   private static final String ZEILE_DES_BOARDS = "$[?(@.boardId == %d)]";
@@ -163,6 +180,75 @@ class AppZugangIT extends AbstractIntegrationTest {
                 boardId));
   }
 
+  private long userId(String email) {
+    return users.findByEmail(email).orElseThrow().requireId();
+  }
+
+  private String mitgliedPfad(Projekt projekt, String email) {
+    return "/api/projects/" + projekt.id() + "/members/" + userId(email);
+  }
+
+  private void rolleSetzen(Projekt projekt, String email, ProjectRole rolle) throws Exception {
+    mvc.perform(
+            patch(mitgliedPfad(projekt, email))
+                .cookie(projekt.inhaber())
+                .contentType(JSON)
+                .content("{\"role\":\"%s\"}".formatted(rolle)))
+        .andExpect(status().isOk());
+  }
+
+  /** Ein weiteres Projekt derselben Owner-Person, mit eigenem Board. */
+  private Projekt zweitesProjektDesInhabers(Projekt projekt) throws Exception {
+    long id =
+        idAus(
+            mvc.perform(
+                    post("/api/projects")
+                        .cookie(plattformAdmin())
+                        .contentType(JSON)
+                        .content("{\"name\":\"Beta\",\"ownerEmail\":\"inhaber@example.com\"}"))
+                .andExpect(status().isCreated()));
+    return new Projekt(
+        id,
+        board(projekt.inhaber(), id, "Zweites"),
+        projekt.inhaber(),
+        projekt.admin(),
+        projekt.mitglied());
+  }
+
+  /**
+   * Belegt alle Verbindungen des Pools bis auf eine und ruft dann auf. Wie in {@code
+   * AccessTokenLastUsedThrottleIT}: Hielte die Auflösung ihre Verbindung über die Rollenprüfung
+   * hinweg, liefe die zweite Anforderung in den kurzen Timeout (Issue #997).
+   */
+  private <T> T mitEinerFreienVerbindung(Supplier<T> aufruf) throws SQLException {
+    HikariConfigMXBean pool = dataSource.unwrap(HikariDataSource.class).getHikariConfigMXBean();
+    long bisherigerTimeout = pool.getConnectionTimeout();
+    pool.setConnectionTimeout(KURZER_POOL_TIMEOUT.toMillis());
+    try (BelegteVerbindungen belegt = new BelegteVerbindungen()) {
+      for (int i = 0; i < pool.getMaximumPoolSize() - 1; i++) {
+        belegt.verbindungen.add(dataSource.getConnection());
+      }
+      return aufruf.get();
+    } finally {
+      pool.setConnectionTimeout(bisherigerTimeout);
+    }
+  }
+
+  /** Die belegten Verbindungen als eine Ressource, damit try-with-resources sie freigibt. */
+  private static final class BelegteVerbindungen implements AutoCloseable {
+
+    private final List<Connection> verbindungen = new ArrayList<>();
+
+    @Override
+    // PMD.CloseResource: Fehlalarm — die Schleifenvariable ist die Verbindung, die hier schließt.
+    @SuppressWarnings("PMD.CloseResource")
+    public void close() throws SQLException {
+      for (Connection verbindung : verbindungen) {
+        verbindung.close();
+      }
+    }
+  }
+
   // --- Szenarien ------------------------------------------------------------
 
   @Test
@@ -220,6 +306,160 @@ class AppZugangIT extends AbstractIntegrationTest {
     kartenAbrufen(zugang.get(PLAINTEXT).asText()).andExpect(status().isUnauthorized());
     JsonNode neu = angelegt(projekt.admin(), projekt);
     kartenAbrufen(neu.get(PLAINTEXT).asText()).andExpect(status().isOk());
+  }
+
+  @Test
+  @DisplayName("Szenario: Der Inhaber verlässt das Projekt")
+  void derInhaberVerlaesstDasProjekt() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String klartext = angelegt(projekt.admin(), projekt).get(PLAINTEXT).asText();
+
+    // When
+    mvc.perform(delete(mitgliedPfad(projekt, ADMIN_EMAIL)).cookie(projekt.inhaber()))
+        .andExpect(status().isNoContent());
+
+    // Then: schon ohne einen Aufruf widerrufen, und jeder Aufruf wird abgewiesen.
+    assertThat(wirksameZugaenge(projekt.board())).isZero();
+    kartenAbrufen(klartext).andExpect(status().isUnauthorized());
+    JsonNode neu = angelegt(projekt.inhaber(), projekt);
+    kartenAbrufen(neu.get(PLAINTEXT).asText()).andExpect(status().isOk());
+  }
+
+  @Test
+  @DisplayName("Szenario: Der Inhaber wird herabgestuft und bekommt seine Rolle zurück")
+  void derInhaberWirdHerabgestuftUndBekommtSeineRolleZurueck() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String klartext = angelegt(projekt.admin(), projekt).get(PLAINTEXT).asText();
+
+    // When: zwischen Verlust und Rückgabe der Rolle kommt kein Aufruf.
+    rolleSetzen(projekt, ADMIN_EMAIL, ProjectRole.MEMBER);
+    rolleSetzen(projekt, ADMIN_EMAIL, ProjectRole.ADMIN);
+
+    // Then
+    assertThat(wirksameZugaenge(projekt.board())).isZero();
+    kartenAbrufen(klartext).andExpect(status().isUnauthorized());
+    JsonNode neu = angelegt(projekt.admin(), projekt);
+    kartenAbrufen(neu.get(PLAINTEXT).asText()).andExpect(status().isOk());
+  }
+
+  // --- Verlust von Rolle oder Konto -----------------------------------------
+
+  @Test
+  void einGesperrtesUndWiederEntsperrtesKontoBleibtOhneZugang() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String klartext = angelegt(projekt.admin(), projekt).get(PLAINTEXT).asText();
+    long admin = userId(ADMIN_EMAIL);
+    Cookie plattform = plattformAdmin();
+
+    // When
+    mvc.perform(post("/api/admin/users/" + admin + "/disable").cookie(plattform))
+        .andExpect(status().isOk());
+    mvc.perform(post("/api/admin/users/" + admin + "/enable").cookie(plattform))
+        .andExpect(status().isOk());
+
+    // Then
+    assertThat(wirksameZugaenge(projekt.board())).isZero();
+    kartenAbrufen(klartext).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void beimUebergebenDerEigentuemerschaftBleibtDerZugangWirksam() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String klartext = angelegt(projekt.inhaber(), projekt).get(PLAINTEXT).asText();
+
+    // When: Die bisherige Owner-Person bleibt danach Admin.
+    mvc.perform(
+            post("/api/projects/" + projekt.id() + "/owner")
+                .cookie(projekt.inhaber())
+                .contentType(JSON)
+                .content("{\"newOwnerUserId\":%d}".formatted(userId(ADMIN_EMAIL))))
+        .andExpect(status().is2xxSuccessful());
+
+    // Then
+    assertThat(wirksameZugaenge(projekt.board())).isEqualTo(1);
+    kartenAbrufen(klartext).andExpect(status().isOk());
+  }
+
+  @Test
+  void dasHerabstufenInEinemProjektLaesstDenZugangEinesAnderenProjektsStehen() throws Exception {
+    // Given: Dieselbe Person ist Admin in zwei Projekten, ein Zugang je Projekt.
+    Projekt projekt = projekt();
+    Projekt anderes = zweitesProjektDesInhabers(projekt);
+    String klartext = angelegt(projekt.admin(), projekt).get(PLAINTEXT).asText();
+    mitglied(anderes.id(), ADMIN_EMAIL, ProjectRole.ADMIN);
+    String andererKlartext = angelegt(projekt.admin(), anderes).get(PLAINTEXT).asText();
+
+    // When
+    rolleSetzen(projekt, ADMIN_EMAIL, ProjectRole.VIEWER);
+
+    // Then
+    kartenAbrufen(klartext).andExpect(status().isUnauthorized());
+    kartenAbrufen(andererKlartext).andExpect(status().isOk());
+  }
+
+  @Test
+  void einRollenverlustAmDienstVorbeiWirdBeimAufrufEndgueltig() throws Exception {
+    // Given: Die Rolle ändert sich ohne Ereignis, wie bei einem künftig vergessenen Schreibweg.
+    Projekt projekt = projekt();
+    String klartext = angelegt(projekt.admin(), projekt).get(PLAINTEXT).asText();
+    ProjectMembership vorher =
+        memberships.findByProjectIdAndUserId(projekt.id(), userId(ADMIN_EMAIL)).orElseThrow();
+    memberships.save(vorher.withRole(ProjectRole.MEMBER));
+
+    // When
+    kartenAbrufen(klartext).andExpect(status().isUnauthorized());
+    memberships.save(vorher);
+
+    // Then
+    assertThat(wirksameZugaenge(projekt.board())).isZero();
+    kartenAbrufen(klartext).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void dieAufloesungEinesZugangsKommtMitEinerFreienVerbindungAus() throws Exception {
+    // Given: Die Kennung ist neu, damit die Drossel im Speicher den Stempel nicht unterdrückt.
+    Projekt projekt = projekt();
+    new JdbcTemplate(dataSource)
+        .queryForObject(
+            "SELECT setval(pg_get_serial_sequence('kanban_access_token', 'id'), 1000000)",
+            Long.class);
+    JsonNode zugang = angelegt(projekt.inhaber(), projekt);
+
+    // When
+    Optional<KanbanPrincipal> aufgeloest =
+        mitEinerFreienVerbindung(() -> accessTokens.resolveBinding(zugang.get(PLAINTEXT).asText()));
+
+    // Then: Rolle gelesen und Nutzung gestempelt, nacheinander auf derselben Verbindung.
+    assertThat(aufgeloest).isPresent();
+    assertThat(
+            new JdbcTemplate(dataSource)
+                .queryForObject(
+                    "SELECT last_used_at IS NOT NULL FROM kanban_access_token WHERE id = ?",
+                    Boolean.class,
+                    zugang.get("id").asLong()))
+        .isTrue();
+  }
+
+  @Test
+  void derWiderrufBeimAufrufKommtMitEinerFreienVerbindungAus() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String klartext = angelegt(projekt.admin(), projekt).get(PLAINTEXT).asText();
+    long admin = userId(ADMIN_EMAIL);
+    memberships.deleteById(
+        memberships.findByProjectIdAndUserId(projekt.id(), admin).orElseThrow().requireId());
+
+    // When
+    Optional<KanbanPrincipal> aufgeloest =
+        mitEinerFreienVerbindung(() -> accessTokens.resolveBinding(klartext));
+
+    // Then
+    assertThat(aufgeloest).isEmpty();
+    assertThat(wirksameZugaenge(projekt.board())).isZero();
   }
 
   // --- Rechtegrenzen --------------------------------------------------------

@@ -53,4 +53,21 @@ interface KanbanAccessTokenJpaRepository extends JpaRepository<KanbanAccessToken
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query("update #{#entityName} t set t.revoked = true where t.id = :id and t.revoked = false")
   int markRevokedIfActive(@Param("id") long id);
+
+  /** Widerruft alle wirksamen Token dieser Art und dieses Inhabers. */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update #{#entityName} t set t.revoked = true"
+          + " where t.userId = :userId and t.art = :art and t.revoked = false")
+  void markRevokedByUser(@Param("userId") long userId, @Param("art") AccessTokenArt art);
+
+  /** Widerruft die wirksamen Token dieser Art, dieses Inhabers und dieses Projekts. */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update #{#entityName} t set t.revoked = true where t.userId = :userId"
+          + " and t.projectId = :projectId and t.art = :art and t.revoked = false")
+  void markRevokedByUserAndProject(
+      @Param("userId") long userId,
+      @Param("projectId") long projectId,
+      @Param("art") AccessTokenArt art);
 }

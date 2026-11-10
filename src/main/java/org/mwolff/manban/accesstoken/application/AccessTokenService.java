@@ -366,11 +366,15 @@ public class AccessTokenService {
    * widerrufen ist. Ein volles Zurückschreiben des gelesenen Datensatzes nähme einen
    * zwischenzeitlich committeten Widerruf wieder zurück — ein Widerruf ist aber ein Endzustand
    * (Issue #878).
+   *
+   * <p>Ein Zugang der App wirkt nur, solange sein Inhaber Admin oder Owner des Projekts ist; sonst
+   * ist die Auflösung leer und der Zugang widerrufen (Issue #2104).
    */
   public Optional<KanbanPrincipal> resolveBinding(String plaintext) {
     return tokens
         .findByTokenHash(crypto.hash(plaintext))
         .filter(t -> !t.revoked())
+        .filter(this::inhaberTraegtDenZugang)
         .map(
             t -> {
               stampLastUsedIfDue(t.requireId());
@@ -382,6 +386,23 @@ public class AccessTokenService {
                   t.displayName(),
                   t.art() == AccessTokenArt.APP);
             });
+  }
+
+  /**
+   * Ob der Inhaber eines Zugangs der App noch Admin oder Owner ist (Plan #2100, E4); bei Verlust
+   * wird der Zugang endgültig widerrufen. Fängt einen Schreibweg auf, der das Ereignis vergisst.
+   * Gewöhnliche Token kommen ohne jede Abfrage durch.
+   *
+   * <p>Prüfung und Widerruf holen ihre Verbindung nacheinander, weil die Auflösung ohne Transaktion
+   * läuft (siehe {@link #resolveBinding}).
+   */
+  private boolean inhaberTraegtDenZugang(AccessToken token) {
+    if (token.art() != AccessTokenArt.APP
+        || permissions.istEchterOwnerOderAdmin(token.userId(), gebunden(token.projectId()))) {
+      return true;
+    }
+    tokens.markRevokedInOwnTransaction(token.requireId());
+    return false;
   }
 
   /**

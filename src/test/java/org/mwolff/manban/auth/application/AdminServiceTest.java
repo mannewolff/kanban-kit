@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Plattform-Administration (Mockito am AppUserRepository-Port). */
 @SuppressWarnings("PMD.TooManyMethods")
@@ -28,6 +29,7 @@ class AdminServiceTest {
 
   private AppUserRepository users;
   private PlatformAdminChecker platformAdminChecker;
+  private ApplicationEventPublisher events;
   private AdminService service;
 
   private static AppUser user(long id, PlatformRole role) {
@@ -48,7 +50,8 @@ class AdminServiceTest {
   void setUp() {
     users = mock(AppUserRepository.class);
     platformAdminChecker = new PlatformAdminChecker(users);
-    service = new AdminService(users, CLOCK, platformAdminChecker);
+    events = mock(ApplicationEventPublisher.class);
+    service = new AdminService(users, CLOCK, platformAdminChecker, events);
   }
 
   @Test
@@ -439,6 +442,27 @@ class AdminServiceTest {
     verify(users).save(captor.capture());
     assertThat(captor.getValue().disabledAt()).isEqualTo(NOW);
     assertThat(view.disabled()).isTrue();
+  }
+
+  @Test
+  void disable_meldetDieKontosperre() {
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(user(2, PlatformRole.USER)));
+    when(users.save(any(AppUser.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    service.disable(1L, 2L);
+
+    verify(events).publishEvent(new KontoGesperrtEvent(2L));
+  }
+
+  @Test
+  void disable_meldetNichts_wennDasKontoSchonGesperrtIst() {
+    when(users.findById(1L)).thenReturn(Optional.of(user(1, PlatformRole.ADMIN)));
+    when(users.findById(2L)).thenReturn(Optional.of(disabledUser(2, PlatformRole.USER)));
+
+    service.disable(1L, 2L);
+
+    verify(events, never()).publishEvent(any(Object.class));
   }
 
   @Test
