@@ -102,8 +102,8 @@
       "name": "Sicherung: rclone",
       "zweck": "Spiegel der Anhaenge und Weg ausser Haus (backup/Dockerfile, docker-compose.backup.yml)",
       "art": "archiv",
-      "bezugsstelle": "https://proxy.golang.org/github.com/rclone/rclone/@v/v1.75.2.zip",
-      "fassung": "1.75.2",
+      "bezugsstelle": "https://proxy.golang.org/github.com/rclone/rclone/@v/v1.76.0.zip",
+      "fassung": "1.76.0",
       "pruefung": "bezug"
     },
     {

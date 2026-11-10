@@ -21,7 +21,7 @@
 # Bezugsquelle und ein Werkzeug weg.
 
 ARG AGE_VERSION=1.3.2
-ARG RCLONE_VERSION=1.75.2
+ARG RCLONE_VERSION=1.76.0
 
 # Die Werkzeugstufe baut age und rclone selbst aus den Quellen, statt die Release-Binaerdateien zu
 # laden (Issue #1875): Deren Go-Standardbibliothek traegt Luecken (zuletzt CVE-2026-111943), und die
