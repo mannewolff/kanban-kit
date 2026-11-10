@@ -23,6 +23,8 @@
   "src/test/java/org/mwolff/manban/auth/SessionGenerationsAdapterIT.java": ["src/main/java/org/mwolff/manban/auth/infrastructure/persistence/SessionGenerationsAdapter.java"],
   "src/test/java/org/mwolff/manban/card/KartenKetteLeserIT.java": ["src/main/java/org/mwolff/manban/card/application/KartenKetteLeser.java", "src/main/java/org/mwolff/manban/card/infrastructure/persistence/CardRepositoryAdapter.java"],
   "src/test/java/org/mwolff/manban/card/application/KartenKetteLeserVerwandteTest.java": ["src/main/java/org/mwolff/manban/card/application/KartenKetteLeser.java"],
+  "src/test/java/org/mwolff/manban/entscheidungskette/domain/KartengliederTest.java": ["src/main/java/org/mwolff/manban/entscheidungskette/domain/Kartenglieder.java", "src/main/java/org/mwolff/manban/entscheidungskette/domain/Dokumentmeldungen.java"],
+  "src/test/java/org/mwolff/manban/entscheidungskette/domain/KettenRechnerTest.java": ["src/main/java/org/mwolff/manban/entscheidungskette/domain/KettenRechner.java", "src/main/java/org/mwolff/manban/entscheidungskette/domain/Ideensuche.java"],
   "src/test/java/org/mwolff/manban/entscheidungskette/domain/KitMeldungLeserAuslieferungTest.java": ["src/main/java/org/mwolff/manban/entscheidungskette/domain/KitMeldungLeser.java"],
   "src/test/java/org/mwolff/manban/project/PendingPlatformAdminIT.java": ["src/main/java/org/mwolff/manban/project/application/ProjectService.java", "src/main/java/org/mwolff/manban/project/application/MembershipService.java", "src/main/java/org/mwolff/manban/auth/application/LoginService.java"],
   "src/test/java/org/mwolff/manban/ratelimit/RateLimitAltvariablenIT.java": ["src/main/resources/application.yml", "src/main/java/org/mwolff/manban/ratelimit/application/RateLimitProperties.java"],
