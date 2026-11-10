@@ -124,4 +124,35 @@ class PermissionCheckerEchteRolleTest {
     assertThat(checker.istEchterOwner(2L, 7L)).isTrue();
     assertThat(checker.istEchterOwner(3L, 7L)).isFalse();
   }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = ProjectRole.class,
+      names = {"OWNER", "ADMIN"})
+  void istEchterOwnerOderAdmin_true_fuerOwnerUndAdmin(ProjectRole rolle) {
+    when(memberships.findByProjectIdAndUserId(7L, 2L))
+        .thenReturn(Optional.of(membership(7L, 2L, rolle)));
+
+    assertThat(checker.istEchterOwnerOderAdmin(2L, 7L)).isTrue();
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = ProjectRole.class,
+      names = {"OWNER", "ADMIN"},
+      mode = EnumSource.Mode.EXCLUDE)
+  void istEchterOwnerOderAdmin_false_fuerUebrigeRollen(ProjectRole rolle) {
+    when(memberships.findByProjectIdAndUserId(7L, 2L))
+        .thenReturn(Optional.of(membership(7L, 2L, rolle)));
+
+    assertThat(checker.istEchterOwnerOderAdmin(2L, 7L)).isFalse();
+  }
+
+  @Test
+  void istEchterOwnerOderAdmin_kenntKeinenPlattformAdminBypass() {
+    when(platformAdminChecker.isPlatformAdmin(1L)).thenReturn(true);
+    when(memberships.findByProjectIdAndUserId(7L, 1L)).thenReturn(Optional.empty());
+
+    assertThat(checker.istEchterOwnerOderAdmin(1L, 7L)).isFalse();
+  }
 }

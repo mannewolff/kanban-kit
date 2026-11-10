@@ -31,7 +31,7 @@ vi.mock('@mui/material/styles', async (importOriginal) => ({
   useColorScheme: () => ({ setMode: farbe.setMode }),
 }))
 vi.mock('../api/accessTokens', () => ({
-  accessTokensApi: { list: vi.fn(), create: vi.fn(), revoke: vi.fn() },
+  accessTokensApi: { list: vi.fn(), create: vi.fn(), revoke: vi.fn(), listApp: vi.fn() },
 }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
@@ -48,6 +48,7 @@ const mTokens = accessTokensApi as unknown as {
   list: ReturnType<typeof vi.fn>
   create: ReturnType<typeof vi.fn>
   revoke: ReturnType<typeof vi.fn>
+  listApp: ReturnType<typeof vi.fn>
 }
 const mAuth = authApi as unknown as { setColorScheme: ReturnType<typeof vi.fn> }
 const mProjects = projectsApi as unknown as { list: ReturnType<typeof vi.fn> }
@@ -96,6 +97,7 @@ describe('AdministrationPage', () => {
     authState.refresh.mockResolvedValue(undefined)
     mAuth.setColorScheme.mockResolvedValue({})
     mTokens.list.mockResolvedValue([])
+    mTokens.listApp.mockResolvedValue([])
     mTokens.create.mockResolvedValue({ id: 1, name: 'board-cli', plaintext: 'tk_geheim' })
     mTokens.revoke.mockResolvedValue(undefined)
     mProjects.list.mockResolvedValue([])
@@ -525,6 +527,7 @@ describe('AdministrationPage auf Englisch', () => {
     vi.clearAllMocks()
     authState.user = { platformRole: 'USER', memberships: [] }
     mTokens.list.mockResolvedValue([])
+    mTokens.listApp.mockResolvedValue([])
     mTokens.create.mockResolvedValue({ id: 1, name: 'board-cli', plaintext: 'tk_geheim' })
     mTokens.revoke.mockResolvedValue(undefined)
     mProjects.list.mockResolvedValue([])
@@ -685,6 +688,7 @@ describe('AdministrationPage — Erscheinungsbild (#1911)', () => {
     authState.refresh.mockResolvedValue(undefined)
     mAuth.setColorScheme.mockResolvedValue({})
     mTokens.list.mockResolvedValue([])
+    mTokens.listApp.mockResolvedValue([])
     mProjects.list.mockResolvedValue([])
     mBoards.list.mockResolvedValue([])
     mConfig.getDoneRetention.mockResolvedValue({ effective: 30, override: null })
@@ -768,6 +772,7 @@ describe('AdministrationPage in der Ansicht als XY', () => {
     authState.user = { platformRole: 'USER', memberships: [], colorScheme: 'DARK' }
     authState.vorschau = vorschau
     mTokens.list.mockResolvedValue([boundToken])
+    mTokens.listApp.mockResolvedValue([])
     mProjects.list.mockResolvedValue([memberProject])
     mBoards.list.mockResolvedValue([])
     mConfig.getDoneRetention.mockResolvedValue({ effective: 30, override: null })
@@ -776,11 +781,11 @@ describe('AdministrationPage in der Ansicht als XY', () => {
   it('Szenario: Persönliches von XY bleibt verborgen', () => {
     renderPage()
 
-    // Beide Abschnitte behalten ihre Überschrift und tragen statt des Inhalts den Hinweis.
+    // Die Abschnitte behalten ihre Überschrift und tragen statt des Inhalts den Hinweis.
     expect(screen.getByRole('heading', { name: 'API-Tokens', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Erscheinungsbild', level: 2 })).toBeInTheDocument()
     const hinweise = screen.getAllByRole('note')
-    expect(hinweise).toHaveLength(2)
+    expect(hinweise).toHaveLength(3)
     for (const hinweis of hinweise) {
       expect(hinweis).toHaveTextContent('Dieser Bereich wird in der Vorschau nicht gezeigt.')
     }
@@ -790,6 +795,14 @@ describe('AdministrationPage in der Ansicht als XY', () => {
     expect(screen.queryByText('board-cli')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Token erzeugen' })).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: 'Erscheinungsbild' })).not.toBeInTheDocument()
+  })
+
+  it('hängt den Zugang der App in der Vorschau nicht ein und ruft seine Liste nicht ab', () => {
+    renderPage()
+
+    expect(screen.getByRole('heading', { name: 'Zugang der App', level: 2 })).toBeInTheDocument()
+    expect(mTokens.listApp).not.toHaveBeenCalled()
+    expect(screen.queryByText(/in keinem Projekt Admin oder Owner/)).not.toBeInTheDocument()
   })
 
   it('sperrt Aufbewahrung, Sprache und Standard-Labels mit dem Hinweis „Vorschau“', async () => {
@@ -816,5 +829,8 @@ describe('AdministrationPage in der Ansicht als XY', () => {
     expect(await screen.findByText('board-cli')).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Erscheinungsbild' })).toBeInTheDocument()
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
+    expect(mTokens.listApp).toHaveBeenCalledTimes(1)
+    const ueberschriften = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    expect(ueberschriften.indexOf('Zugang der App')).toBe(ueberschriften.indexOf('API-Tokens') + 1)
   })
 })

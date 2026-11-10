@@ -20,6 +20,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +34,7 @@ import org.mwolff.manban.project.domain.Project;
 import org.mwolff.manban.project.domain.ProjectInvitation;
 import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
+import org.springframework.context.ApplicationEventPublisher;
 
 /** Verhaltenstests der Mitgliederverwaltung (Mockito an den Ports). */
 // PMD.TooManyMethods: umfassende Unit-Suite (Einladen/Annehmen/Rolle/Entfernen/Eigentümer-Transfer,
@@ -52,6 +54,7 @@ class MembershipServiceTest {
   private InvitationMailer mailer;
   private UserLookup users;
   private UserDisplayNameWriter displayNames;
+  private ApplicationEventPublisher events;
   private MembershipService service;
 
   /**
@@ -94,6 +97,7 @@ class MembershipServiceTest {
     mailer = mock(InvitationMailer.class);
     users = mock(UserLookup.class);
     displayNames = mock(UserDisplayNameWriter.class);
+    events = mock(ApplicationEventPublisher.class);
     AuthProperties authProperties =
         new AuthProperties("https://app.example", null, null, null, null);
     ProjectProperties projectProperties = new ProjectProperties(Duration.ofDays(7));
@@ -109,7 +113,8 @@ class MembershipServiceTest {
             displayNames,
             authProperties,
             projectProperties,
-            clock);
+            clock,
+            events);
     RolePermissionRepository rolePermissions = mock(RolePermissionRepository.class);
     // Ausschnitt der Matrix aus V8: OWNER hat alles, ADMIN alles außer der Eigentümer-Übergabe.
     when(rolePermissions.isGranted(any(ProjectRole.class), any(Permission.class)))
@@ -131,7 +136,8 @@ class MembershipServiceTest {
             displayNames,
             authProperties,
             projectProperties,
-            clock);
+            clock,
+            events);
   }
 
   /** Projekt 9 mit zwei OWNERn (1, 5), einem ADMIN (3) und einem MEMBER (2). */
@@ -628,6 +634,134 @@ class MembershipServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.changeRole(1L, 9L, 2L, ProjectRole.MEMBER))
         .isInstanceOf(LastOwnerException.class);
+  }
+
+  // --- Rollenverlust (Issue #2104, Plan #2100 E4) ----------------------------
+
+  private void givenMitglied(ProjectRole rolle) {
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, rolle)));
+    when(memberships.save(any(ProjectMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+  }
+
+  private void givenEingeladenWird(ProjectRole bisherigeRolle) {
+    givenMitglied(bisherigeRolle);
+    when(projects.findById(9L)).thenReturn(Optional.of(project()));
+    givenRegisteredUser(2L, "guest@x.de");
+  }
+
+  @ParameterizedTest
+  @CsvSource({"OWNER,MEMBER", "OWNER,VIEWER", "ADMIN,MEMBER", "ADMIN,VIEWER"})
+  void changeRole_meldetDenRollenverlust_beiHerabstufungUnterAdmin(
+      ProjectRole vorher, ProjectRole neu) {
+    // Given
+    givenMitglied(vorher);
+
+    // When
+    service.changeRole(1L, 9L, 2L, neu);
+
+    // Then
+    verify(events).publishEvent(new MitgliedRolleVerlorenEvent(9L, 2L));
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "OWNER,ADMIN",
+    "ADMIN,OWNER",
+    "ADMIN,ADMIN",
+    "MEMBER,ADMIN",
+    "MEMBER,VIEWER",
+    "VIEWER,MEMBER"
+  })
+  void changeRole_meldetNichts_wennKeinAdminrechtVerlorenGeht(ProjectRole vorher, ProjectRole neu) {
+    // Given
+    givenMitglied(vorher);
+
+    // When
+    service.changeRole(1L, 9L, 2L, neu);
+
+    // Then
+    verify(events, never()).publishEvent(any(Object.class));
+  }
+
+  @ParameterizedTest
+  @CsvSource({"OWNER,MEMBER", "ADMIN,VIEWER"})
+  void invite_meldetDenRollenverlust_beiHerabstufungUnterAdmin(
+      ProjectRole vorher, ProjectRole neu) {
+    // Given
+    givenEingeladenWird(vorher);
+
+    // When
+    service.invite(1L, 9L, "guest@x.de", neu);
+
+    // Then
+    verify(events).publishEvent(new MitgliedRolleVerlorenEvent(9L, 2L));
+  }
+
+  @Test
+  void invite_meldetNichts_wennDieRolleAdminBleibt() {
+    // Given
+    givenEingeladenWird(ProjectRole.OWNER);
+
+    // When
+    service.invite(1L, 9L, "guest@x.de", ProjectRole.ADMIN);
+
+    // Then
+    verify(events, never()).publishEvent(any(Object.class));
+  }
+
+  @Test
+  void invite_meldetNichts_beiNeuerMitgliedschaft() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(9L, 2L)).thenReturn(Optional.empty());
+    when(projects.findById(9L)).thenReturn(Optional.of(project()));
+    givenRegisteredUser(2L, "guest@x.de");
+
+    // When
+    service.invite(1L, 9L, "guest@x.de", ProjectRole.MEMBER);
+
+    // Then
+    verify(events, never()).publishEvent(any(Object.class));
+  }
+
+  @Test
+  void removeMember_meldetDenRollenverlust() {
+    // Given
+    givenMitglied(ProjectRole.ADMIN);
+
+    // When
+    service.removeMember(1L, 9L, 2L);
+
+    // Then
+    verify(events).publishEvent(new MitgliedRolleVerlorenEvent(9L, 2L));
+  }
+
+  @Test
+  void removeMember_meldetNichts_wennDerLetzteOwnerBleibt() {
+    // Given
+    givenMitglied(ProjectRole.OWNER);
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(2L));
+
+    // When / Then
+    assertThatThrownBy(() -> service.removeMember(1L, 9L, 2L))
+        .isInstanceOf(LastOwnerException.class);
+    verify(events, never()).publishEvent(any(Object.class));
+  }
+
+  @Test
+  void transferOwnership_meldetKeinenRollenverlust() {
+    // Given: Der bisherige Owner bleibt Admin und behält damit seinen Zugang.
+    when(memberships.findByProjectIdAndUserId(9L, 2L))
+        .thenReturn(Optional.of(membership(2L, ProjectRole.MEMBER)));
+    when(memberships.findByProjectIdAndUserId(9L, 1L))
+        .thenReturn(Optional.of(membership(1L, ProjectRole.OWNER)));
+    when(memberships.lockOwnerUserIds(9L)).thenReturn(List.of(1L));
+
+    // When
+    service.transferOwnership(1L, 9L, 2L);
+
+    // Then
+    verify(events, never()).publishEvent(any(Object.class));
   }
 
   @Test

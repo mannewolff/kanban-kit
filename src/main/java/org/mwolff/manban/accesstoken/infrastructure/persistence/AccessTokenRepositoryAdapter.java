@@ -1,10 +1,12 @@
 package org.mwolff.manban.accesstoken.infrastructure.persistence;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.accesstoken.application.AccessTokenRepository;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
+import org.mwolff.manban.accesstoken.domain.AccessTokenArt;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +43,19 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
     return jpa.findByTokenHash(tokenHash).map(AccessTokenRepositoryAdapter::toDomain);
   }
 
+  @Override
+  public Optional<AccessToken> findWirksamenAppZugang(long boardId) {
+    return jpa.findByBoardIdAndArtAndRevokedFalse(boardId, AccessTokenArt.APP)
+        .map(AccessTokenRepositoryAdapter::toDomain);
+  }
+
+  @Override
+  public List<AccessToken> findWirksameAppZugaenge(Collection<Long> boardIds) {
+    return jpa.findByBoardIdInAndArtAndRevokedFalse(boardIds, AccessTokenArt.APP).stream()
+        .map(AccessTokenRepositoryAdapter::toDomain)
+        .toList();
+  }
+
   /**
    * {@inheritDoc}
    *
@@ -61,6 +76,33 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
     jpa.markRevoked(id);
   }
 
+  @Override
+  public boolean markRevokedIfActive(long id) {
+    return jpa.markRevokedIfActive(id) > 0;
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>{@code REQUIRES_NEW} aus demselben Grund wie beim Stempel (Issue #997): Die Auflösung läuft
+   * ohne Transaktion, und der Widerruf committet sofort.
+   */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void markRevokedInOwnTransaction(long id) {
+    jpa.markRevoked(id);
+  }
+
+  @Override
+  public void markAppZugaengeRevoked(long userId) {
+    jpa.markRevokedByUser(userId, AccessTokenArt.APP);
+  }
+
+  @Override
+  public void markAppZugaengeRevoked(long userId, long projectId) {
+    jpa.markRevokedByUserAndProject(userId, projectId, AccessTokenArt.APP);
+  }
+
   private static KanbanAccessTokenEntity toEntity(AccessToken t) {
     return new KanbanAccessTokenEntity(t);
   }
@@ -76,6 +118,7 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
         e.getDisplayName(),
         e.getCreatedAt(),
         e.getLastUsedAt(),
-        e.isRevoked());
+        e.isRevoked(),
+        e.getArt());
   }
 }

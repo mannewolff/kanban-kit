@@ -2,6 +2,8 @@ package org.mwolff.manban.accesstoken.infrastructure.persistence;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -9,6 +11,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
+import org.mwolff.manban.accesstoken.domain.AccessTokenArt;
 
 /** JPA-Abbildung der Tabelle {@code kanban_access_token}. */
 @Entity
@@ -52,6 +55,10 @@ class KanbanAccessTokenEntity {
   @Column(name = "revoked", nullable = false)
   private boolean revoked;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "art", nullable = false)
+  private AccessTokenArt art;
+
   protected KanbanAccessTokenEntity() {
     // für JPA
   }
@@ -68,6 +75,7 @@ class KanbanAccessTokenEntity {
     this.createdAt = t.createdAt();
     this.lastUsedAt = t.lastUsedAt();
     this.revoked = t.revoked();
+    this.art = t.art();
   }
 
   @Nullable Long getId() {
@@ -108,5 +116,9 @@ class KanbanAccessTokenEntity {
 
   boolean isRevoked() {
     return revoked;
+  }
+
+  AccessTokenArt getArt() {
+    return art;
   }
 }

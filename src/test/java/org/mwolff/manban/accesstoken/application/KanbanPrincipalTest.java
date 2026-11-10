@@ -24,4 +24,16 @@ class KanbanPrincipalTest {
     // Given / When / Then
     assertThat(new KanbanPrincipal(1L, 2L, null, 10L, "Token").isBound()).isFalse();
   }
+
+  @Test
+  void appZugang_isFalse_whenConstructedWithThePreviousParameters() {
+    // Given / When / Then: bestehende Aufrufer bleiben unverändert (Plan #2100, E3).
+    assertThat(new KanbanPrincipal(1L, 2L, 5L, 10L, "Token").appZugang()).isFalse();
+  }
+
+  @Test
+  void appZugang_isKept_whenGivenExplicitly() {
+    // Given / When / Then
+    assertThat(new KanbanPrincipal(1L, 2L, 5L, 10L, "App", true).appZugang()).isTrue();
+  }
 }

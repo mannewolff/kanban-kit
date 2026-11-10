@@ -1,6 +1,7 @@
 package org.mwolff.manban.accesstoken.application;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
@@ -21,6 +22,12 @@ public interface AccessTokenRepository {
 
   Optional<AccessToken> findByTokenHash(String tokenHash);
 
+  /** Der wirksame Zugang der App am Board; leer, wenn keiner besteht (Plan #2100, E6). */
+  Optional<AccessToken> findWirksamenAppZugang(long boardId);
+
+  /** Die wirksamen Zugänge der App dieser Boards; je Board höchstens einer (Plan #2100, E6). */
+  List<AccessToken> findWirksameAppZugaenge(Collection<Long> boardIds);
+
   /**
    * Stempelt die Nutzung, sofern das Token nicht widerrufen ist — schreibt nur {@code lastUsedAt},
    * und zwar in einer <strong>eigenen, kurzen</strong> Transaktion (Issue #997).
@@ -34,4 +41,26 @@ public interface AccessTokenRepository {
 
   /** Widerruft das Token — schreibt nur {@code revoked}; idempotent. */
   void markRevoked(long id);
+
+  /**
+   * Widerruft das Token, sofern es noch nicht widerrufen ist. Anders als {@link #markRevoked} sagt
+   * die Antwort, ob dieser Aufruf es war: Von zwei gleichzeitigen Aufrufen bekommt genau einer
+   * {@code true}.
+   */
+  boolean markRevokedIfActive(long id);
+
+  /**
+   * Widerruft das Token in einer <strong>eigenen, kurzen</strong> Transaktion, nach dem Muster von
+   * {@link #touchLastUsedAtInOwnTransaction}: für die Auflösung, die ohne umschließende Transaktion
+   * läuft (Issue #997, #2104).
+   */
+  void markRevokedInOwnTransaction(long id);
+
+  /**
+   * Widerruft die wirksamen Zugänge der App dieses Inhabers in allen Projekten (Plan #2100, E4).
+   */
+  void markAppZugaengeRevoked(long userId);
+
+  /** Widerruft die wirksamen Zugänge der App dieses Inhabers in dem Projekt (Plan #2100, E4). */
+  void markAppZugaengeRevoked(long userId, long projectId);
 }

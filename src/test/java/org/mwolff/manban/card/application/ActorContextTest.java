@@ -13,7 +13,7 @@ import org.mwolff.manban.card.domain.CardActivityOrigin;
  * Test-Setups als Mock-Antwort —, aber nirgends geprüft. Ein Mutant, der {@code unknown()} auf
  * {@code null} umbiegt, überlebte deshalb: Setup und Erwartung stammen aus derselben Quelle und
  * werden gemeinsam mutiert. Der Vertrag lautet „nie null" (siehe {@link ActorContext#current()});
- * genau das hält dieser Test fest.
+ * genau das hält dieser Test fest. Dazu das Merkmal des Zugangs der App (Issue #2106).
  */
 class ActorContextTest {
 
@@ -45,5 +45,25 @@ class ActorContextTest {
   @Test
   void originName_ohneHerkunft_istNull() {
     assertThat(ActorStamp.unknown().originName()).isNull();
+  }
+
+  @Test
+  void bisherigeParameterliste_istKeinZugangDerApp() {
+    // Plan #2100, E3: bestehende Aufrufer bleiben unverändert und bekommen keine Ausnahme.
+    assertThat(new ActorStamp(CardActivityOrigin.TOKEN, "kit", null, null).appZugang()).isFalse();
+    assertThat(new ActorStamp(CardActivityOrigin.TOKEN, "kit", null, null))
+        .isEqualTo(new ActorStamp(CardActivityOrigin.TOKEN, "kit", null, null, false));
+  }
+
+  @Test
+  void unknown_istKeinZugangDerApp() {
+    assertThat(ActorStamp.unknown().appZugang()).isFalse();
+  }
+
+  @Test
+  void appZugang_wirdGetragen() {
+    assertThat(
+            new ActorStamp(CardActivityOrigin.TOKEN, "Desktop-App", null, null, true).appZugang())
+        .isTrue();
   }
 }

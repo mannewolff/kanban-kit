@@ -72,6 +72,34 @@ class SecurityActorContextTest {
   }
 
   @Test
+  void current_setztAppZugang_ausDemPrincipal() {
+    // Given
+    authenticate("AUTH_PAT", new KanbanPrincipal(7L, 3L, 1L, 2L, "Desktop-App", true));
+
+    // When / Then: die Herkunft bleibt TOKEN, nur das Merkmal kommt dazu (Plan #2100, E3).
+    assertThat(context.current())
+        .isEqualTo(new ActorStamp(CardActivityOrigin.TOKEN, "Desktop-App", null, null, true));
+  }
+
+  @Test
+  void current_laesstAppZugangAus_beiGewoehnlichemToken() {
+    // Given
+    authenticate("AUTH_PAT", new KanbanPrincipal(7L, 3L, 1L, 2L, "Nachtlauf", false));
+
+    // When / Then
+    assertThat(context.current().appZugang()).isFalse();
+  }
+
+  @Test
+  void current_laesstAppZugangAus_beiSession_auchMitPrincipalInDenDetails() {
+    // Given: Das Merkmal gilt nur unter der Token-Authority.
+    authenticate("AUTH_SESSION", new KanbanPrincipal(7L, 3L, 1L, 2L, "Desktop-App", true));
+
+    // When / Then
+    assertThat(context.current().appZugang()).isFalse();
+  }
+
+  @Test
   void current_returnsTokenWithoutName_whenDetailsAreNoPrincipal() {
     // Given: defensiv — AUTH_PAT, aber die Details sind kein KanbanPrincipal.
     authenticate("AUTH_PAT", "etwas anderes");

@@ -167,17 +167,19 @@
       "muster": [
         "src/components/BackupStatusSection.tsx",
         "src/components/OverloadRejectionsSection.tsx",
-        "src/components/StandardLabelsSection.tsx"
+        "src/components/StandardLabelsSection.tsx",
+        "src/components/AppZugangSection.tsx"
       ],
       "testMuster": [
         "src/components/BackupStatusSection.test.tsx",
         "src/components/OverloadRejectionsSection.test.tsx",
-        "src/components/StandardLabelsSection.test.tsx"
+        "src/components/StandardLabelsSection.test.tsx",
+        "src/components/AppZugangSection.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,
       "reihenfolge": 10,
-      "begruendung": "Die Betriebsabschnitte der Verwaltung: Sicherungsstand, abgewiesene Anfragen unter Last und Standard-Labels für alle Boards."
+      "begruendung": "Die Betriebsabschnitte der Verwaltung: Sicherungsstand, abgewiesene Anfragen unter Last, Standard-Labels für alle Boards und der Zugang der App."
     },
     {
       "name": "baustein-boardview",

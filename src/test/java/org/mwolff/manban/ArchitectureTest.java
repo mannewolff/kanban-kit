@@ -335,7 +335,11 @@ class ArchitectureTest {
           "VorschauKontext",
           "VorschauKontextLeser",
           "VorschauVerborgenException",
-          "SitzungsEnde");
+          "SitzungsEnde",
+          // KontoGesperrtEvent ist Vertrag (Issue #2104, Plan #2100 E4): accesstoken widerruft
+          // darauf die Zugaenge der App, ohne dass auth das Modul kennt — analog
+          // ProjectCreatedEvent.
+          "KontoGesperrtEvent");
 
   // --- Modul-Grenze: project-Fassade (Issue #461, Whitelist seit #470) ------------------------
   // Die Projekt-/Mitgliedschafts-Persistenz-Ports sind modulintern. card darf vom project-Modul
@@ -360,6 +364,10 @@ class ArchitectureTest {
           "KitStrictnessWriter",
           "KitStrictnessReader",
           "ProjectCreatedEvent",
+          // MitgliedRolleVerlorenEvent ist Vertrag (Issue #2104, Plan #2100 E4): accesstoken
+          // widerruft darauf die Zugaenge der App, ohne dass project das Modul kennt — analog
+          // ProjectCreatedEvent.
+          "MitgliedRolleVerlorenEvent",
           "ProjectAccessDeniedException",
           // Exception-Vokabular als Vertrag, Plan #1694 (A4)
           "ProjectNotFoundException");

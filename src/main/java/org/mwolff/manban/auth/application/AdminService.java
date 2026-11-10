@@ -7,6 +7,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.domain.AppUser;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,12 +26,17 @@ public class AdminService {
   private final AppUserRepository users;
   private final Clock clock;
   private final PlatformAdminChecker platformAdminChecker;
+  private final ApplicationEventPublisher events;
 
   public AdminService(
-      AppUserRepository users, Clock clock, PlatformAdminChecker platformAdminChecker) {
+      AppUserRepository users,
+      Clock clock,
+      PlatformAdminChecker platformAdminChecker,
+      ApplicationEventPublisher events) {
     this.users = users;
     this.clock = clock;
     this.platformAdminChecker = platformAdminChecker;
+    this.events = events;
   }
 
   @Transactional(readOnly = true)
@@ -124,7 +130,9 @@ public class AdminService {
       return toView(target);
     }
     requireAnotherActiveAdminRemains(adminIds, targetUserId);
-    return toView(users.save(target.withDisabledAt(clock.instant())));
+    AppUser saved = users.save(target.withDisabledAt(clock.instant()));
+    events.publishEvent(new KontoGesperrtEvent(targetUserId));
+    return toView(saved);
   }
 
   /**

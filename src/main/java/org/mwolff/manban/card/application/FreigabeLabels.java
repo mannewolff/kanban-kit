@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.common.KitNamen;
 import org.mwolff.manban.common.KitNamen.Sache;
@@ -30,6 +31,12 @@ import org.mwolff.manban.common.KitNamen.Schutz;
  * Selbstauskunft ist. Der Server kann Mensch und Agent am Token nicht unterscheiden, darum setzt
  * auch ein Mensch per CLI {@code kit:night} nicht mehr. Session und unbekannte Herkunft (interne
  * Aufrufe ohne Sicherheitskontext) dürfen alles.
+ *
+ * <p>Die einzige Ausnahme von dieser Sperre ist {@link #pruefeEinzeln}: Der Zugang der Desktop-App
+ * darf an einer einzelnen Karte {@code NIGHT} setzen und {@code KLAEREN} abnehmen (Plan #2100, E2).
+ * Seine Herkunft bleibt {@code TOKEN}; darum bleiben {@link #pruefeWechsel} und {@link
+ * #pruefeDefinition} für ihn ohne Änderung gesperrt, also Ersetzen, Massenaktion, Anlegen, Löschen
+ * und Umbenennen.
  *
  * <p>Der Namensvergleich folgt der Label-Auflösung in {@link LabelService}: getrimmt und
  * case-sensitiv. Wiche er ab, entstünde eine Lücke. Nur der Namensraum vergleicht ohne Rücksicht
@@ -81,6 +88,37 @@ public final class FreigabeLabels {
     if (richtung == Richtung.SETZEN && unbekanntImNamensraum(sache, trimmed)) {
       throw FreigabeLabelException.unbekanntSetzen(trimmed);
     }
+  }
+
+  /**
+   * Prüft das Setzen oder Abnehmen genau eines Labels an genau einer Karte gegen {@link
+   * KitNamen#STANDARD}.
+   *
+   * @see #pruefeEinzeln(KitNamen, ActorStamp, String, Richtung)
+   */
+  public static void pruefeEinzeln(ActorStamp akteur, String name, Richtung richtung) {
+    pruefeEinzeln(KitNamen.STANDARD, akteur, name, richtung);
+  }
+
+  /**
+   * Prüft das Setzen oder Abnehmen genau eines Labels an genau einer Karte. Für den Zugang der App
+   * lässt sie allein {@code NIGHT} beim Setzen und {@code KLAEREN} beim Abnehmen durch, alles
+   * andere entscheidet {@link #pruefe(KitNamen, CardActivityOrigin, String, Richtung)}.
+   *
+   * @throws FreigabeLabelException wie {@link #pruefe(KitNamen, CardActivityOrigin, String,
+   *     Richtung)}, außer in den beiden Fällen des Zugangs der App
+   */
+  public static void pruefeEinzeln(
+      KitNamen register, ActorStamp akteur, String name, Richtung richtung) {
+    if (akteur.appZugang() && freigabeDerApp(register.sache(name.trim()), richtung)) {
+      return;
+    }
+    pruefe(register, akteur.origin(), name, richtung);
+  }
+
+  private static boolean freigabeDerApp(Optional<Sache> sache, Richtung richtung) {
+    Sache erlaubt = richtung == Richtung.SETZEN ? Sache.NIGHT : Sache.KLAEREN;
+    return sache.filter(erlaubt::equals).isPresent();
   }
 
   /**
