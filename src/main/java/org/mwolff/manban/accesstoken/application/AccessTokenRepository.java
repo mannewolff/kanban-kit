@@ -57,6 +57,15 @@ public interface AccessTokenRepository {
   void markRevokedInOwnTransaction(long id);
 
   /**
+   * Serialisiert Ausgabe und Entzug der Zugänge der App dieses Inhabers bis zum Ende der laufenden
+   * Transaktion (Issue #2122). Anlegen und Erneuern nehmen sie vor ihrer Rechteprüfung, der
+   * Widerruf bei Rollenverlust oder Kontosperre vor seinem Sammelwiderruf. So sieht entweder die
+   * Ausgabe den committeten Verlust, oder der Sammelwiderruf sieht das committete neue Token — eine
+   * Zeile, die zwischen beiden entsteht, gibt es nicht mehr. Verlangt eine laufende Transaktion.
+   */
+  void sperreAppZugangAusgabe(long userId);
+
+  /**
    * Widerruft die wirksamen Zugänge der App dieses Inhabers in allen Projekten (Plan #2100, E4).
    */
   void markAppZugaengeRevoked(long userId);
