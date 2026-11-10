@@ -214,6 +214,59 @@ Das Detail zeigt:
   Protokolliert werden Anlegen, Bearbeiten, Zuständige geändert, Verschieben, Archivieren und
   Wiederherstellen (Label-Änderungen werden nicht protokolliert).
 
+#### Entscheidungskette
+
+In einem Projekt, in dem das Kit arbeitet, trägt jedes Paket, jeder Plan und jeder Fachplan im
+Block „Verlauf“ vor der Aktivität den aufklappbaren Abschnitt **„Entscheidungskette“**. Er zeigt,
+wie es zur Karte kam, und ist so gebaut, dass auch ein Prüfer ihn lesen kann. An Ideen, an
+Vorhaben und in Projekten ohne Kit fehlt er. Sehen darf ihn, wer die Karte sehen darf; eine eigene
+Rolle gibt es nicht. Die Kette entsteht ohne KI, allein aus Angaben, die Kit und Leitstand
+maschinenlesbar führen, und zeigt für denselben Stand immer dasselbe.
+
+**Glieder.** Die Kette reicht von der Idee über Fachplan und Plan bis zum Paket:
+
+- **Herkunft** jedes Dokuments mit dem Modell, das es geschrieben hat; das Glied Idee stammt aus
+  der Zeile `Ergebnis:` der Idee, die auf die Kette verweist.
+- **Prüfrunden** je Dokument mit Prüfer, Modell, Urteil und Einarbeitung.
+- **Issue-Review** — die Prüfung des Pakets vor Ready, sofern das Projekt sie verlangt.
+- **Freigabe zur Umsetzung** — der Zug nach Ready durch einen Menschen oder, in einer Nacht-Kette,
+  das Ziel ab „Umsetzung“ bzw. `kit:durchziehen` mit der Person, die es gesetzt hat; die Kette nennt,
+  welcher Fall galt.
+- **Umsetzung** mit Commit und dem Prüflauf, der ihn gedeckt hat, dann **Code-Review**.
+- **Übertragung** auf den Hauptzweig mit Weg und dem Ergebnis des Build-Diensts.
+- **Veröffentlichung** mit Version; ihr Ausgang steht wörtlich da.
+
+Freigabe, Umsetzung, Code-Review, Übertragung und Veröffentlichung stehen nur am Paket. Am Fachplan
+und am Plan steht je Nachfahre ein Verweis mit Spalte und zuletzt erreichtem Glied. Jedes Glied
+nennt, wer es getan hat, wann, mit welchem Ergebnis, und verweist auf seine Quelle (Karte,
+Kommentar oder Lauf). Wiederholte Versuche stehen je für sich da; ein späterer Erfolg verdeckt
+keinen früheren Fehlschlag.
+
+**Zustände.** Kein Glied wird stillschweigend ausgelassen:
+
+- **„nicht erfasst“** — das Glied oder eine seiner Angaben fehlt: etwa bei einer von Hand
+  angelegten Karte, einer Freigabe von vor der Einführung, einem Glied aus einem anderen Projekt
+  (Vermerk „anderes Projekt“) oder einer gelöschten Karte bzw. einer im Papierkorb. Eine archivierte
+  Karte erscheint dagegen mit ihren Gliedern.
+- **„nicht vorgesehen“** — der Weg der Karte sieht das Glied nicht vor, belegt durch eine feste
+  Angabe: das Präfix `[Task]` für den Plan, ein Plan mit `Plan-Modell:` ohne `Fachliche Quelle:` für
+  den Fachplan, die Einstellung des Projekts zur Prüfung vor Ready für das Issue-Review. Ohne
+  solchen Beleg, oder wenn er nach dem Schritt geändert wurde, steht „nicht erfasst“.
+- **„ausstehend“** — die Übertragung ist erfolgt, das Ergebnis des Build-Diensts aber noch nicht
+  nachgetragen. Der Zustand bleibt ohne Frist stehen, bis das Kit es meldet.
+- **„von Hand geändert“** — eine Meldung des Kits wurde nachträglich von Hand bearbeitet. Ihre
+  Angaben stehen dann als „nicht erfasst“, und das Glied trägt diesen Hinweis. Ersetzt das Kit eine
+  eigene Meldung, gilt das nicht als Änderung von Hand.
+
+**Welche Meldungen zählen.** Ein Glied begründen nur Meldungen, die das Kit selbst geschrieben
+hat: Kommentare, die über einen Projekt-Zugang (Access-Token) geschrieben wurden und den festen
+Wortlaut des Kits tragen, deutsch oder englisch. Ein in der Oberfläche geschriebener Kommentar
+zählt nie, auch nicht bei gleichem Wortlaut.
+
+**Veröffentlichung.** Der Ausgang `Pull Request angelegt` erscheint nicht als veröffentlicht —
+ebenso wenig wie `nicht veröffentlicht`. Für das zuletzt erreichte Glied eines Nachfahren zählt
+dann das letzte erfasste Glied davor.
+
 ### Mehrfachauswahl
 
 Der Button **„Auswählen"** über dem Board schaltet in den Auswahlmodus: Jede Karte bekommt ein
