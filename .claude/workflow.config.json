@@ -1,6 +1,6 @@
 {
-  "app": { 
-    "controlCenterUrl": "https://kanban.mwolff.org/boards/7/leitstand" 
+  "app": {
+    "controlCenterUrl": "https://kanban.mwolff.org/boards/7/leitstand"
   },
   "codeHost": "github",
   "issueTracker": "toolbox",
@@ -99,9 +99,12 @@
       "concurrent": true
     },
     {
-      "cmd": "node scripts/abdeckungspruefung.mjs", 
-      "areas": ["backend", "doku"], 
-      "stage": "push", 
+      "cmd": "node scripts/abdeckungspruefung.mjs",
+      "areas": [
+        "backend",
+        "doku"
+      ],
+      "stage": "push",
       "concurrent": true
     }
   ],

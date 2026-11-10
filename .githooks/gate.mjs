@@ -341,14 +341,14 @@ function gitPfad(...args) {
 }
 
 /**
- * Das Kit-Verzeichnis mit dem Runner: im Projekt `.claude/kit/`, sonst — im CI-Checkout des
- * Kit-Repos — `kit/`; dieselbe Reihenfolge wie `ladeZusammenfassungPfad`. Gesucht wird unter
+ * Das Kit-Verzeichnis mit dem Runner: nur die installierte Kopie `.claude/kit/`. Ein Rueckfall
+ * auf `kit/` liesse einen Merge mitgebrachten Code starten (Issue #2320). Gesucht wird unter
  * dem cwd, das git fuer einen Hook auf die Wurzel des Arbeitsbaums setzt, nicht neben dieser
  * Datei: Ein Fixture, das auf ein fremdes `.githooks` zeigt, startet so nie dessen Runner.
  */
 function kitVerzeichnis() {
-  return [join(process.cwd(), ".claude", "kit"), join(process.cwd(), "kit")]
-    .find((ort) => existsSync(join(ort, "night.mjs"))) ?? null;
+  const ort = join(process.cwd(), ".claude", "kit");
+  return existsSync(join(ort, "night.mjs")) ? ort : null;
 }
 
 /**
