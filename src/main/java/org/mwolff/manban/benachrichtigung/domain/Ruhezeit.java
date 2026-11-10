@@ -32,6 +32,7 @@ public record Ruhezeit(LocalTime beginn, LocalTime ende, ZoneId zone) {
     boolean vorEnde = uhrzeit.isBefore(ende);
     boolean ueberMitternacht = beginn.isAfter(ende);
 
+    // Mutations-Altlast: äquivalent, vergangenes Ende ergibt den Zeitpunkt (#2095, 2026-11-10)
     if (!(ueberMitternacht ? nachBeginn || vorEnde : nachBeginn && vorEnde)) {
       return zeitpunkt;
     }
