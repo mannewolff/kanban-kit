@@ -26,6 +26,7 @@ import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
+import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -36,7 +37,8 @@ import org.springframework.context.ApplicationEventPublisher;
 /** Verhaltenstests der Label-Verwaltung (Ports gemockt). */
 // PMD.TooManyMethods: methodenreiche Testsuite — viele kleine @Test-Methoden je Erfolgs- und
 // Fehlerpfad sind hier gewollt, kein Refactoring-Signal.
-@SuppressWarnings("PMD.TooManyMethods")
+// PMD.CyclomaticComplexity: Die Summe über diese Methoden; jede einzelne hat Komplexität 1.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity"})
 class LabelServiceTest {
 
   private static final long BOARD = 10L;
@@ -54,6 +56,7 @@ class LabelServiceTest {
   private ApplicationEventPublisher events;
   private ActorContext actor;
   private CardLabelEventRepository labelEvents;
+  private KartenGrundlage grundlage;
   private LabelService service;
 
   @BeforeEach
@@ -67,6 +70,7 @@ class LabelServiceTest {
     actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorStamp.unknown());
     labelEvents = mock(CardLabelEventRepository.class);
+    grundlage = mock(KartenGrundlage.class);
     service =
         new LabelService(
             labels,
@@ -77,7 +81,8 @@ class LabelServiceTest {
             events,
             actor,
             labelEvents,
-            Clock.fixed(FIXED, ZoneOffset.UTC));
+            Clock.fixed(FIXED, ZoneOffset.UTC),
+            grundlage);
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(labels.save(any(Label.class))).thenAnswer(inv -> inv.getArgument(0));
   }
@@ -861,5 +866,142 @@ class LabelServiceTest {
     Label created = service.create(5L, BOARD, "kit:freigabe", "#f00");
 
     assertThat(created.name()).isEqualTo("kit:freigabe");
+  }
+
+  // --- Zugang der App: Ausnahme und Verlauf (Issue #2106, Plan #2100 E2, E9) -------------------
+
+  private void givenAppZugang() {
+    when(actor.current())
+        .thenReturn(new ActorStamp(CardActivityOrigin.TOKEN, "Desktop-App", null, null, true));
+  }
+
+  private void verifyKeinVerlauf() {
+    verify(grundlage, never())
+        .aktivitaet(anyLong(), anyLong(), any(CardActivityType.class), anyString());
+  }
+
+  @Test
+  void addToCard_appZugang_setztFortsetzen_undSchreibtVerlauf() {
+    givenAppZugang();
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:night");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.addToCard(USER, CARD_ID, "  kit:night ");
+
+    verify(cardLabels).addLabel(CARD_ID, 7L);
+    verify(grundlage)
+        .aktivitaet(CARD_ID, USER, CardActivityType.UPDATED, "Label kit:night gesetzt");
+  }
+
+  @Test
+  void addToCard_appZugang_wirkungslos_schreibtKeinenVerlauf() {
+    givenAppZugang();
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:night");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(false);
+
+    service.addToCard(USER, CARD_ID, "kit:night");
+
+    verifyKeinVerlauf();
+  }
+
+  @Test
+  void addToCard_gewoehnlichesToken_schreibtKeinenVerlauf() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Bug");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.addToCard(USER, CARD_ID, "Bug");
+
+    verifyKeinVerlauf();
+  }
+
+  @Test
+  void addToCard_session_schreibtKeinenVerlauf() {
+    givenHerkunft(CardActivityOrigin.SESSION);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Bug");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.addToCard(USER, CARD_ID, "Bug");
+
+    verifyKeinVerlauf();
+  }
+
+  @Test
+  void addToCard_appZugang_andereFreigabe_abgewiesen_undSchreibtNichts() {
+    givenAppZugang();
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:nightrun");
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "kit:nightrun"))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+    verifyKeinVerlauf();
+  }
+
+  @Test
+  void removeFromCard_appZugang_nimmtKlaerenAb_undSchreibtVerlauf() {
+    givenAppZugang();
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:clarify");
+    when(cardLabels.removeLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.removeFromCard(USER, CARD_ID, "  kit:clarify ");
+
+    verify(cardLabels).removeLabel(CARD_ID, 7L);
+    verify(grundlage)
+        .aktivitaet(CARD_ID, USER, CardActivityType.UPDATED, "Label kit:clarify abgenommen");
+  }
+
+  @Test
+  void removeFromCard_appZugang_wirkungslos_schreibtKeinenVerlauf() {
+    givenAppZugang();
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:klaeren");
+    when(cardLabels.removeLabel(CARD_ID, 7L)).thenReturn(false);
+
+    service.removeFromCard(USER, CARD_ID, "kit:klaeren");
+
+    verifyKeinVerlauf();
+  }
+
+  @Test
+  void removeFromCard_gewoehnlichesToken_schreibtKeinenVerlauf() {
+    givenHerkunft(CardActivityOrigin.TOKEN);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:night");
+    when(cardLabels.removeLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.removeFromCard(USER, CARD_ID, "kit:night");
+
+    verifyKeinVerlauf();
+  }
+
+  @Test
+  void removeFromCard_appZugang_andereFreigabe_abgewiesen_undSchreibtNichts() {
+    givenAppZugang();
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:geschuetzt");
+
+    assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "kit:geschuetzt"))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
+    verifyKeinVerlauf();
+  }
+
+  @Test
+  void definition_appZugang_bleibtGesperrt() {
+    givenAppZugang();
+    when(labels.findById(1L))
+        .thenReturn(Optional.of(new Label(1L, BOARD, "kit:night", "#f00", false)));
+
+    assertThatThrownBy(() -> service.delete(5L, 1L)).isInstanceOf(FreigabeLabelException.class);
+    assertThatThrownBy(() -> service.update(5L, 1L, "x", "#f00", null))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(labels, never()).deleteById(anyLong());
+    verify(labels, never()).save(any(Label.class));
   }
 }

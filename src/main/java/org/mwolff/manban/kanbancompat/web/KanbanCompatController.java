@@ -340,7 +340,8 @@ class KanbanCompatController {
           "Ordnet einer Karte genau ein Label zu, das auf dem Board definiert ist; alle übrigen"
               + " Labels bleiben stehen. Ein schon gesetztes Label erneut zu setzen ist Erfolg."
               + " Ein unbekannter Name wird abgelehnt, nicht angelegt. Die Freigabe-Labels"
-              + " kit:night und kit:nightrun setzt nur ein Mensch im Board, nie ein Token. "
+              + " kit:night und kit:nightrun setzt nur ein Mensch im Board, nie ein Token."
+              + " Einzige Ausnahme: Der Zugang der Desktop-App darf kit:night setzen. "
               + TOKEN_BINDUNG)
   @ApiResponse(responseCode = "204", description = "Das Label ist gesetzt.")
   @ApiResponse(
@@ -397,7 +398,9 @@ class KanbanCompatController {
           "Entfernt genau ein Label von einer Karte; alle übrigen bleiben stehen. Ein nicht"
               + " gesetztes Label zu entfernen ist Erfolg. Der Name steht im Query-Parameter,"
               + " weil Labelnamen jedes Zeichen enthalten dürfen, auch '/'. Die Freigabe-Labels"
-              + " kit:night und kit:nightrun nimmt nur ein Mensch im Board ab. "
+              + " kit:night und kit:nightrun nimmt nur ein Mensch im Board ab. Das Label"
+              + " Klärung nötig (kit:klaeren oder kit:clarify) nimmt außer dem Menschen im Board"
+              + " nur der Zugang der Desktop-App ab. "
               + TOKEN_BINDUNG)
   @ApiResponse(responseCode = "204", description = "Das Label ist entfernt.")
   @ApiResponse(

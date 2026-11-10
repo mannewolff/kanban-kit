@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -54,12 +56,21 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Verwaltung des Zugangs der App über die echten Filter (Issue #2103, Plan #2100 E5 bis E8, E12):
- * Anlegen, Erneuern, Widerrufen und Liste unter {@code /api/access-tokens/app}.
+ * Anlegen, Erneuern, Widerrufen und Liste unter {@code /api/access-tokens/app}. Dazu die beiden
+ * Freigaben des Zugangs und ihr Eintrag im Verlauf (Issue #2106, E2, E3, E9).
  */
 // PMD.ExcessiveImports, PMD.CouplingBetweenObjects, PMD.TooManyMethods: Issue #2104 verlangt die
 // Verlustfälle hier, neben den Szenarien der Verwaltung. Sie laufen über dieselben echten Filter
 // und Fixtures; ein zweites IT trennte die Szenarien eines Zugangs voneinander.
-@SuppressWarnings({"PMD.ExcessiveImports", "PMD.CouplingBetweenObjects", "PMD.TooManyMethods"})
+// PMD.GodClass: Issue #2106 verlangt auch die Szenarien der beiden Freigaben hier; die Klasse ist
+// eine Reihe unabhängiger Szenarien mit Request-Helfern, kein Baustein mit vermischter
+// Zuständigkeit.
+@SuppressWarnings({
+  "PMD.ExcessiveImports",
+  "PMD.CouplingBetweenObjects",
+  "PMD.TooManyMethods",
+  "PMD.GodClass"
+})
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 class AppZugangIT extends AbstractIntegrationTest {
@@ -72,6 +83,16 @@ class AppZugangIT extends AbstractIntegrationTest {
   private static final String PLAINTEXT = "plaintext";
   private static final String ADMIN_EMAIL = "admin@example.com";
   private static final Duration KURZER_POOL_TIMEOUT = Duration.ofSeconds(2);
+  private static final String MITGLIED_NAME = "Mia Mitglied";
+  private static final String APP_NAME = "Desktop-App";
+  private static final String LABELS = "/labels";
+  private static final String DETAIL = "$.detail";
+  private static final String NUR_EIN_MENSCH = "nur ein Mensch";
+  private static final String NIGHT = "kit:night";
+  private static final String NIGHTRUN = "kit:nightrun";
+  private static final String KLAEREN = "kit:klaeren";
+  private static final String CLARIFY = "kit:clarify";
+  private static final String GESCHUETZT = "kit:geschuetzt";
 
   /** Ein neues Projekt bringt schon Boards mit; die Zeile wird darum über die Board-ID gesucht. */
   private static final String ZEILE_DES_BOARDS = "$[?(@.boardId == %d)]";
@@ -135,7 +156,7 @@ class AppZugangIT extends AbstractIntegrationTest {
                 .andExpect(status().isCreated()));
     Cookie admin = person("admin@example.com", "Adam Admin");
     mitglied(id, "admin@example.com", ProjectRole.ADMIN);
-    Cookie mitglied = person("mitglied@example.com", "Mia Mitglied");
+    Cookie mitglied = person("mitglied@example.com", MITGLIED_NAME);
     mitglied(id, "mitglied@example.com", ProjectRole.MEMBER);
     return new Projekt(id, board(inhaber, id, "Entwicklung"), inhaber, admin, mitglied);
   }
@@ -486,7 +507,7 @@ class AppZugangIT extends AbstractIntegrationTest {
 
     anlegen(projekt.admin(), projekt)
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.name").value("Desktop-App"));
+        .andExpect(jsonPath("$.name").value(APP_NAME));
 
     mvc.perform(get(PFAD).cookie(projekt.admin()))
         .andExpect(jsonPath(ZEILE_DES_BOARDS + ".inhaberName", projekt.board()).value("Adam Admin"))
@@ -634,6 +655,392 @@ class AppZugangIT extends AbstractIntegrationTest {
     mvc.perform(get("/api/access-tokens").cookie(projekt.inhaber()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(0));
+  }
+
+  // --- Die beiden Freigaben (Issue #2106, Plan #2100 E2, E3, E9) ------------
+
+  private String zugang(Projekt projekt) throws Exception {
+    return angelegt(projekt.inhaber(), projekt).get(PLAINTEXT).asText();
+  }
+
+  private String gewoehnlicherZugang(Cookie session, long projektId, long boardId)
+      throws Exception {
+    String body =
+        mvc.perform(
+                post("/api/access-tokens")
+                    .cookie(session)
+                    .contentType(JSON)
+                    .content(
+                        "{\"name\":\"Nachtlauf\",\"projectId\":%d,\"boardId\":%d}"
+                            .formatted(projektId, boardId)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get(PLAINTEXT).asText();
+  }
+
+  private long label(Cookie session, long boardId, String name) throws Exception {
+    return idAus(
+        mvc.perform(
+                post("/api/boards/" + boardId + "/labels")
+                    .cookie(session)
+                    .contentType(JSON)
+                    .content("{\"name\":\"%s\",\"color\":\"#ff0000\"}".formatted(name)))
+            .andExpect(status().isCreated()));
+  }
+
+  private long karte(String klartext, String titel) throws Exception {
+    return idAus(
+        mvc.perform(
+                post(KARTEN_PFAD)
+                    .header(TOKEN_HEADER, klartext)
+                    .contentType(JSON)
+                    .content("{\"title\":\"%s\",\"direct\":true}".formatted(titel)))
+            .andExpect(status().isCreated()));
+  }
+
+  private void labelsZuordnen(Cookie session, long karte, long... labelIds) throws Exception {
+    mvc.perform(
+            put("/api/cards/" + karte + "/labels")
+                .cookie(session)
+                .contentType(JSON)
+                .content(json.writeValueAsString(Map.of("labels", labelIds))))
+        .andExpect(status().isOk());
+  }
+
+  private ResultActions labelSetzen(String klartext, long karte, String name) throws Exception {
+    return mvc.perform(
+        post(KARTEN_PFAD + "/" + karte + LABELS)
+            .header(TOKEN_HEADER, klartext)
+            .contentType(JSON)
+            .content("{\"name\":\"%s\"}".formatted(name)));
+  }
+
+  private ResultActions labelAbnehmen(String klartext, long karte, String name) throws Exception {
+    return mvc.perform(
+        delete(KARTEN_PFAD + "/" + karte + LABELS)
+            .header(TOKEN_HEADER, klartext)
+            .param("name", name));
+  }
+
+  private void kommentieren(String klartext, long karte, String text) throws Exception {
+    mvc.perform(
+            post(KARTEN_PFAD + "/" + karte + "/comments")
+                .header(TOKEN_HEADER, klartext)
+                .contentType(JSON)
+                .content(json.writeValueAsString(Map.of("body", text))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  private JsonNode lesen(String klartext, long karte, String anhang) throws Exception {
+    String body =
+        mvc.perform(get(KARTEN_PFAD + "/" + karte + anhang).header(TOKEN_HEADER, klartext))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body);
+  }
+
+  private JsonNode verlauf(String klartext, long karte) throws Exception {
+    return lesen(klartext, karte, "/activity");
+  }
+
+  private JsonNode kommentare(String klartext, long karte) throws Exception {
+    return lesen(klartext, karte, "/comments");
+  }
+
+  private static JsonNode eintragMitDetail(JsonNode eintraege, String detail) {
+    for (JsonNode eintrag : eintraege) {
+      if (detail.equals(eintrag.get("detail").asText())) {
+        return eintrag;
+      }
+    }
+    throw new AssertionError("Kein Verlaufseintrag: " + detail + " in " + eintraege);
+  }
+
+  private List<String> labelsDerKarte(long karte) {
+    return new JdbcTemplate(dataSource)
+        .queryForList(
+            "SELECT l.name FROM card_label cl JOIN label l ON l.id = cl.label_id"
+                + " WHERE cl.card_id = ? ORDER BY l.name",
+            String.class,
+            karte);
+  }
+
+  private int labelEintraegeImVerlauf(long karte) {
+    return Objects.requireNonNull(
+        new JdbcTemplate(dataSource)
+            .queryForObject(
+                "SELECT count(*) FROM card_activity WHERE card_id = ? AND detail LIKE 'Label %'",
+                Integer.class, karte));
+  }
+
+  private long ersteSpalte(Cookie session, long boardId) throws Exception {
+    String body =
+        mvc.perform(get("/api/boards/" + boardId).cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return json.readTree(body).get("columns").get(0).get("id").asLong();
+  }
+
+  private static void pruefeHerkunftDerApp(JsonNode eintrag) {
+    assertThat(eintrag.get("origin").asText()).isEqualTo("TOKEN");
+    assertThat(eintrag.get("tokenName").asText()).isEqualTo(APP_NAME);
+    assertThat(eintrag.get("actorName").asText()).isEqualTo(INHABER_NAME);
+  }
+
+  @Test
+  @DisplayName("Szenario: Eine Frage mit dem Zugang der App beantworten")
+  void eineFrageMitDemZugangDerAppBeantworten() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String app = zugang(projekt);
+    long klaeren = label(projekt.inhaber(), projekt.board(), KLAEREN);
+    long karte = karte(app, "Frage");
+    labelsZuordnen(projekt.inhaber(), karte, klaeren);
+
+    // When
+    kommentieren(app, karte, "Die Antwort");
+    labelAbnehmen(app, karte, KLAEREN).andExpect(status().isNoContent());
+
+    // Then
+    assertThat(labelsDerKarte(karte)).isEmpty();
+    assertThat(kommentare(app, karte).get(0).get("author").asText()).isEqualTo(INHABER_NAME);
+    pruefeHerkunftDerApp(eintragMitDetail(verlauf(app, karte), "Label kit:klaeren abgenommen"));
+  }
+
+  @Test
+  @DisplayName("Szenario: Einen Durchlauf mit dem Zugang der App fortsetzen")
+  void einenDurchlaufMitDemZugangDerAppFortsetzen() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String app = zugang(projekt);
+    label(projekt.inhaber(), projekt.board(), NIGHT);
+    long karte = karte(app, "Beantwortet");
+
+    // When
+    labelSetzen(app, karte, NIGHT).andExpect(status().isNoContent());
+
+    // Then
+    assertThat(labelsDerKarte(karte)).containsExactly(NIGHT);
+    pruefeHerkunftDerApp(eintragMitDetail(verlauf(app, karte), "Label kit:night gesetzt"));
+  }
+
+  @Test
+  @DisplayName("Szenario: Eine andere Person benutzt den Zugang mit")
+  void eineAnderePersonBenutztDenZugangMit() throws Exception {
+    // Given: Der Zugang gehört der Inhaberin; Mia Mitglied kennt seinen Klartext.
+    Projekt projekt = projekt();
+    String app = zugang(projekt);
+    long karte = karte(app, "Geteilt");
+
+    // When
+    kommentieren(app, karte, "Von jemand anderem");
+
+    // Then
+    JsonNode kommentare = kommentare(app, karte);
+    assertThat(kommentare.get(0).get("author").asText()).isEqualTo(INHABER_NAME);
+    assertThat(kommentare.toString()).doesNotContain(MITGLIED_NAME);
+    assertThat(verlauf(app, karte).toString()).doesNotContain(MITGLIED_NAME);
+  }
+
+  @Test
+  @DisplayName("Szenario: Eine KI-Sitzung versucht sich selbst freizugeben")
+  void eineKiSitzungVersuchtSichSelbstFreizugeben() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String gewoehnlich = gewoehnlicherZugang(projekt.inhaber(), projekt.id(), projekt.board());
+    long klaeren = label(projekt.inhaber(), projekt.board(), KLAEREN);
+    label(projekt.inhaber(), projekt.board(), NIGHT);
+    long karte = karte(gewoehnlich, "Selbstfreigabe");
+    labelsZuordnen(projekt.inhaber(), karte, klaeren);
+
+    // When / Then
+    labelAbnehmen(gewoehnlich, karte, KLAEREN)
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath(DETAIL, containsString(NUR_EIN_MENSCH)));
+    labelSetzen(gewoehnlich, karte, NIGHT)
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath(DETAIL, containsString(NUR_EIN_MENSCH)));
+    assertThat(labelsDerKarte(karte)).containsExactly(KLAEREN);
+    assertThat(labelEintraegeImVerlauf(karte)).isZero();
+  }
+
+  @Test
+  @DisplayName("Szenario: Eine andere Freigabe mit dem Zugang der App")
+  void eineAndereFreigabeMitDemZugangDerApp() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String app = zugang(projekt);
+    label(projekt.inhaber(), projekt.board(), NIGHTRUN);
+    long geschuetzt = label(projekt.inhaber(), projekt.board(), GESCHUETZT);
+    long karte = karte(app, "Andere Freigabe");
+    labelsZuordnen(projekt.inhaber(), karte, geschuetzt);
+
+    // When / Then
+    labelSetzen(app, karte, NIGHTRUN).andExpect(status().isForbidden());
+    labelAbnehmen(app, karte, GESCHUETZT).andExpect(status().isForbidden());
+    assertThat(labelsDerKarte(karte)).containsExactly(GESCHUETZT);
+    assertThat(labelEintraegeImVerlauf(karte)).isZero();
+  }
+
+  @Test
+  @DisplayName("Szenario: Ein anderer Schreibweg mit dem Zugang der App")
+  void einAndererSchreibwegMitDemZugangDerApp() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String app = zugang(projekt);
+    long night = label(projekt.inhaber(), projekt.board(), NIGHT);
+    long karte = karte(app, "Anderer Weg");
+
+    // When / Then: Massenaktion, Ersetzen und Anlegen.
+    mvc.perform(
+            post("/api/cards/bulk-labels")
+                .header(TOKEN_HEADER, app)
+                .contentType(JSON)
+                .content(
+                    "{\"cardIds\":[%d],\"labelId\":%d,\"action\":\"ADD\"}".formatted(karte, night)))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            put("/api/cards/" + karte + "/labels")
+                .header(TOKEN_HEADER, app)
+                .contentType(JSON)
+                .content(json.writeValueAsString(Map.of("labels", List.of(night)))))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            post("/api/boards/" + projekt.board() + "/cards")
+                .header(TOKEN_HEADER, app)
+                .contentType(JSON)
+                .content(
+                    "{\"title\":\"Gleich mit Label\",\"columnId\":%d,\"labelIds\":[%d]}"
+                        .formatted(ersteSpalte(projekt.inhaber(), projekt.board()), night)))
+        .andExpect(status().isForbidden());
+    assertThat(labelsDerKarte(karte)).isEmpty();
+    assertThat(
+            new JdbcTemplate(dataSource)
+                .queryForObject(
+                    "SELECT count(*) FROM card WHERE board_id = ? AND title = 'Gleich mit Label'",
+                    Integer.class,
+                    projekt.board()))
+        .isZero();
+  }
+
+  @Test
+  void dieEnglischeSchreibweiseVonKlaerungNoetigLaesstSichEbensoAbnehmen() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String app = zugang(projekt);
+    long clarify = label(projekt.inhaber(), projekt.board(), CLARIFY);
+    long karte = karte(app, "Englisch");
+    labelsZuordnen(projekt.inhaber(), karte, clarify);
+
+    // When
+    labelAbnehmen(app, karte, CLARIFY).andExpect(status().isNoContent());
+
+    // Then
+    assertThat(labelsDerKarte(karte)).isEmpty();
+    pruefeHerkunftDerApp(eintragMitDetail(verlauf(app, karte), "Label kit:clarify abgenommen"));
+  }
+
+  @Test
+  void kartenFremderBoardsWerdenAbgewiesen() throws Exception {
+    // Given: Ein zweites Board desselben Projekts, dessen Karte beide Labels kennt.
+    Projekt projekt = projekt();
+    String app = zugang(projekt);
+    long fremdesBoard = board(projekt.inhaber(), projekt.id(), "Fremdes Board");
+    long klaeren = label(projekt.inhaber(), fremdesBoard, KLAEREN);
+    label(projekt.inhaber(), fremdesBoard, NIGHT);
+    long fremdeKarte =
+        karte(gewoehnlicherZugang(projekt.inhaber(), projekt.id(), fremdesBoard), "Fremd");
+    labelsZuordnen(projekt.inhaber(), fremdeKarte, klaeren);
+
+    // When / Then
+    labelAbnehmen(app, fremdeKarte, KLAEREN).andExpect(status().isNotFound());
+    labelSetzen(app, fremdeKarte, NIGHT).andExpect(status().isNotFound());
+    assertThat(labelsDerKarte(fremdeKarte)).containsExactly(KLAEREN);
+    assertThat(labelEintraegeImVerlauf(fremdeKarte)).isZero();
+  }
+
+  @Test
+  void loeschenUndUmbenennenDerBeidenLabelBleibenGesperrt() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String app = zugang(projekt);
+    long night = label(projekt.inhaber(), projekt.board(), NIGHT);
+    long klaeren = label(projekt.inhaber(), projekt.board(), KLAEREN);
+
+    // When / Then
+    for (long labelId : List.of(night, klaeren)) {
+      mvc.perform(delete("/api/labels/" + labelId).header(TOKEN_HEADER, app))
+          .andExpect(status().isForbidden());
+      mvc.perform(
+              patch("/api/labels/" + labelId)
+                  .header(TOKEN_HEADER, app)
+                  .contentType(JSON)
+                  .content("{\"name\":\"anders\",\"color\":\"#ff0000\"}"))
+          .andExpect(status().isForbidden());
+    }
+    assertThat(
+            new JdbcTemplate(dataSource)
+                .queryForList(
+                    "SELECT name FROM label WHERE board_id = ? ORDER BY name",
+                    String.class,
+                    projekt.board()))
+        .containsExactly(KLAEREN, NIGHT);
+  }
+
+  @Test
+  void eineWirkungsloseAenderungSchreibtKeinenVerlaufseintrag() throws Exception {
+    // Given: kit:klaeren ist nicht gesetzt, kit:night schon.
+    Projekt projekt = projekt();
+    String app = zugang(projekt);
+    label(projekt.inhaber(), projekt.board(), KLAEREN);
+    long night = label(projekt.inhaber(), projekt.board(), NIGHT);
+    long karte = karte(app, "Wirkungslos");
+    labelsZuordnen(projekt.inhaber(), karte, night);
+
+    // When
+    labelAbnehmen(app, karte, KLAEREN).andExpect(status().isNoContent());
+    labelSetzen(app, karte, NIGHT).andExpect(status().isNoContent());
+
+    // Then
+    assertThat(labelEintraegeImVerlauf(karte)).isZero();
+    assertThat(labelsDerKarte(karte)).containsExactly(NIGHT);
+  }
+
+  @Test
+  void gewoehnlichesLabelMitDemZugangDerAppErscheintImVerlauf() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String app = zugang(projekt);
+    label(projekt.inhaber(), projekt.board(), "Bug");
+    long karte = karte(app, "Gewöhnlich");
+
+    // When
+    labelSetzen(app, karte, "Bug").andExpect(status().isNoContent());
+
+    // Then
+    pruefeHerkunftDerApp(eintragMitDetail(verlauf(app, karte), "Label Bug gesetzt"));
+  }
+
+  @Test
+  void einGewoehnlicherZugangSchreibtKeinenLabelEintragInDenVerlauf() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String gewoehnlich = gewoehnlicherZugang(projekt.inhaber(), projekt.id(), projekt.board());
+    label(projekt.inhaber(), projekt.board(), "Bug");
+    long karte = karte(gewoehnlich, "Ohne Eintrag");
+
+    // When
+    labelSetzen(gewoehnlich, karte, "Bug").andExpect(status().isNoContent());
+    labelAbnehmen(gewoehnlich, karte, "Bug").andExpect(status().isNoContent());
+
+    // Then
+    assertThat(labelEintraegeImVerlauf(karte)).isZero();
   }
 
   // --- Nebenläufigkeit ------------------------------------------------------

@@ -26,14 +26,28 @@ public interface ActorContext {
    * <p>{@code laufStart} ist wie {@code agent} eine Client-Selbstauskunft: der {@code startedAt}
    * des Nachtlaufs aus dem Header {@code Laufkennung.HEADER} (Issue #1426, Plan #1423 A4), gesetzt
    * nur bei Token-Herkunft. Er ordnet eine Aktivität einem Lauf zu, beweist aber nichts.
+   *
+   * <p>{@code appZugang} ist wieder server-verifiziert: Der Wert stammt aus der Token-Auflösung,
+   * die Herkunft bleibt {@code TOKEN} (Plan #2100, E3). Allein {@link FreigabeLabels#pruefeEinzeln}
+   * und der Verlaufseintrag in {@link LabelService} werten ihn aus.
    */
   record ActorStamp(
       @Nullable CardActivityOrigin origin,
       @Nullable String tokenName,
       @Nullable String agent,
-      @Nullable Instant laufStart) {
+      @Nullable Instant laufStart,
+      boolean appZugang) {
 
     private static final ActorStamp UNKNOWN = new ActorStamp(null, null, null, null);
+
+    /** Die bisherige Parameterliste, damit Aufrufer unverändert bleiben (Plan #2100, E3). */
+    public ActorStamp(
+        @Nullable CardActivityOrigin origin,
+        @Nullable String tokenName,
+        @Nullable String agent,
+        @Nullable Instant laufStart) {
+      this(origin, tokenName, agent, laufStart, false);
+    }
 
     /** Kein authentifizierter Kontext — alle Felder leer, Speicherung wie ein Alt-Eintrag. */
     public static ActorStamp unknown() {

@@ -16,7 +16,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 /**
  * Web-Adapter des {@link ActorContext}-Ports (Issue #517): liest Herkunft und Token-Name aus dem
  * Spring-Sicherheitskontext und die Modell-Selbstauskunft aus dem Request-Header; bei
- * Token-Herkunft dazu die Laufkennung aus {@link Laufkennung#HEADER} (Issue #1426).
+ * Token-Herkunft dazu die Laufkennung aus {@link Laufkennung#HEADER} (Issue #1426) und das Merkmal
+ * des Zugangs der App aus dem {@link KanbanPrincipal} (Plan #2100, E3).
  *
  * <p>Die Authority-Strings entsprechen {@code SessionAuthenticationFilter.AUTHORITY} bzw. {@code
  * PatAuthenticationFilter.AUTHORITY}; als Literale gehalten, um keine Kanten auf fremde
@@ -46,9 +47,15 @@ class SecurityActorContext implements ActorContext {
       return ActorStamp.unknown();
     }
     if (hasAuthority(auth, PAT_AUTHORITY)) {
-      String tokenName =
-          auth.getDetails() instanceof KanbanPrincipal principal ? principal.tokenName() : null;
-      return new ActorStamp(CardActivityOrigin.TOKEN, tokenName, agentHeader(), laufHeader());
+      if (auth.getDetails() instanceof KanbanPrincipal principal) {
+        return new ActorStamp(
+            CardActivityOrigin.TOKEN,
+            principal.tokenName(),
+            agentHeader(),
+            laufHeader(),
+            principal.appZugang());
+      }
+      return new ActorStamp(CardActivityOrigin.TOKEN, null, agentHeader(), laufHeader());
     }
     if (hasAuthority(auth, SESSION_AUTHORITY)) {
       // Keine Laufkennung bei Session-Herkunft (Plan #1423, A3): Menschen gehören zu keinem Lauf.

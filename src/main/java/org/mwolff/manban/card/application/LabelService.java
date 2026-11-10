@@ -13,6 +13,7 @@ import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.application.FreigabeLabels.Richtung;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
+import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -30,7 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
  * dasselbe Recht wie {@code CardService.setLabels}.
  *
  * <p>Die Freigabe-Labels des Kits ändert ein Token nur in ihrer Richtung, und ihre Definition gar
- * nicht ({@link FreigabeLabels}, Issue #1421).
+ * nicht ({@link FreigabeLabels}, Issue #1421). Einzige Ausnahme sind die beiden Freigaben des
+ * Zugangs der App beim einzelnen Setzen und Abnehmen an einer Karte; nur dieser Zugang schreibt
+ * Label-Änderungen auch in den Verlauf der Karte (Plan #2100, E2, E9).
  */
 @Service
 public class LabelService {
@@ -44,6 +47,7 @@ public class LabelService {
   private final ActorContext actor;
   private final CardLabelEventRepository labelEvents;
   private final Clock clock;
+  private final KartenGrundlage grundlage;
 
   public LabelService(
       LabelRepository labels,
@@ -54,7 +58,8 @@ public class LabelService {
       ApplicationEventPublisher events,
       ActorContext actor,
       CardLabelEventRepository labelEvents,
-      Clock clock) {
+      Clock clock,
+      KartenGrundlage grundlage) {
     this.labels = labels;
     this.cardLabels = cardLabels;
     this.cards = cards;
@@ -64,6 +69,7 @@ public class LabelService {
     this.actor = actor;
     this.labelEvents = labelEvents;
     this.clock = clock;
+    this.grundlage = grundlage;
   }
 
   /**
@@ -175,13 +181,14 @@ public class LabelService {
    * <p>Nach außen idempotent — ein bereits zugeordnetes Label erneut hinzuzufügen ist Erfolg, damit
    * ein Nachtlauf nach einem Teilfehler wiederholbar bleibt. Das Board-Ereignis entsteht nur bei
    * einer tatsächlichen Änderung; sonst meldete ein wiederholter Lauf Änderungen, die es nicht gab.
-   * Dasselbe gilt für das Label-Ereignis mit dem Stempel des Aufrufs (Issue #1754, Plan #1752 E11).
+   * Dasselbe gilt für das Label-Ereignis mit dem Stempel des Aufrufs (Issue #1754, Plan #1752 E11)
+   * und für den Verlaufseintrag, den nur der Zugang der App erzeugt (Plan #2100, E9).
    *
    * @throws CardNotFoundException wenn die Karte fehlt
    * @throws InvalidDependencyException wenn das Item ein Vorhaben ist (400)
    * @throws FreigabeLabelException wenn ein Token ein Freigabe-Label setzen will, das nur ein
    *     Mensch setzt (403, Issue #1421) — geprüft nach Absicht, auch wenn das Label schon
-   *     zugeordnet ist
+   *     zugeordnet ist; {@code kit:night} darf allein der Zugang der App (Plan #2100, E2)
    * @throws LabelNotFoundException wenn das Board kein Label dieses Namens definiert (404) — ein
    *     unbekannter Name wird abgelehnt und <em>nicht</em> angelegt, sonst erzeugte ein Tippfehler
    *     im Nachtlauf dauerhaft Label-Müll
@@ -189,11 +196,12 @@ public class LabelService {
   @Transactional
   public void addToCard(long userId, long cardId, String name) {
     Card card = requireLabelableCard(userId, cardId);
-    FreigabeLabels.pruefe(herkunft(), name, Richtung.SETZEN);
+    FreigabeLabels.pruefeEinzeln(actor.current(), name, Richtung.SETZEN);
     long boardId = card.boardId();
     Label label = requireLabel(boardId, name);
     if (cardLabels.addLabel(cardId, label.requireId())) {
       labelEvents.add(cardId, label.name(), clock.instant(), actor.current());
+      verlaufDerApp(cardId, userId, "Label " + label.name() + " gesetzt");
       events.publishEvent(new CardBoardActivityEvent(boardId, ActivityType.UPDATED, cardId));
     }
   }
@@ -201,15 +209,25 @@ public class LabelService {
   /**
    * Gegenstück zu {@link #addToCard}: entfernt genau die eine Zuordnung und lässt alle übrigen
    * unangetastet. Ein nicht zugeordnetes Label zu entfernen ist ebenfalls Erfolg — außer ein Token
-   * nimmt ein Freigabe-Label ab, das nur ein Mensch abnimmt (403, {@link FreigabeLabels}).
+   * nimmt ein Freigabe-Label ab, das nur ein Mensch abnimmt (403, {@link FreigabeLabels}); {@code
+   * kit:klaeren} darf allein der Zugang der App abnehmen (Plan #2100, E2).
    */
   @Transactional
   public void removeFromCard(long userId, long cardId, String name) {
     Card card = requireLabelableCard(userId, cardId);
-    FreigabeLabels.pruefe(herkunft(), name, Richtung.ABNEHMEN);
+    FreigabeLabels.pruefeEinzeln(actor.current(), name, Richtung.ABNEHMEN);
     long boardId = card.boardId();
-    if (cardLabels.removeLabel(cardId, requireLabel(boardId, name).requireId())) {
+    Label label = requireLabel(boardId, name);
+    if (cardLabels.removeLabel(cardId, label.requireId())) {
+      verlaufDerApp(cardId, userId, "Label " + label.name() + " abgenommen");
       events.publishEvent(new CardBoardActivityEvent(boardId, ActivityType.UPDATED, cardId));
+    }
+  }
+
+  /** Verlaufseintrag einer tatsächlichen Änderung, nur mit dem Zugang der App (E9). */
+  private void verlaufDerApp(long cardId, long userId, String detail) {
+    if (actor.current().appZugang()) {
+      grundlage.aktivitaet(cardId, userId, CardActivityType.UPDATED, detail);
     }
   }
 

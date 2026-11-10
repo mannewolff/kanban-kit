@@ -9,8 +9,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.FreigabeLabels.Richtung;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
+import org.mwolff.manban.common.KitNamen;
+import org.mwolff.manban.common.KitNamen.Eintrag;
+import org.mwolff.manban.common.KitNamen.Sache;
 
 /** Unit-Tests der Richtungsregel für die Freigabe-Labels des Kits (Issue #1421). */
 @SuppressWarnings("PMD.TooManyMethods")
@@ -28,6 +32,12 @@ class FreigabeLabelsTest {
 
   private static final Map<Long, String> NAMEN =
       Map.of(1L, "kit:night", 2L, "kit:klaeren", 3L, "bug");
+
+  private static final ActorStamp APP =
+      new ActorStamp(CardActivityOrigin.TOKEN, "Desktop-App", null, null, true);
+
+  private static final ActorStamp TOKEN =
+      new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", null, null);
 
   @ParameterizedTest
   @ValueSource(strings = {"kit:night", "kit:nightrun"})
@@ -389,5 +399,100 @@ class FreigabeLabelsTest {
               })
           .doesNotThrowAnyException();
     }
+  }
+
+  // --- Zugang der App: die beiden Ausnahmen beim einzelnen Ändern (Issue #2106, Plan #2100 E2) --
+
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:night", "  kit:night "})
+  void einzeln_appZugang_setztDurchlaufFortsetzen(String name) {
+    assertThatCode(() -> FreigabeLabels.pruefeEinzeln(APP, name, Richtung.SETZEN))
+        .doesNotThrowAnyException();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:klaeren", "kit:clarify", "  kit:clarify "})
+  void einzeln_appZugang_nimmtKlaerungNoetigAb(String name) {
+    assertThatCode(() -> FreigabeLabels.pruefeEinzeln(APP, name, Richtung.ABNEHMEN))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void einzeln_appZugang_setztKeineAndereFreigabe() {
+    assertThatThrownBy(() -> FreigabeLabels.pruefeEinzeln(APP, "kit:nightrun", Richtung.SETZEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:nightrun setzt nur ein Mensch im Board");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:geschuetzt", "kit:protected", "kit:wartet", "kit:on-hold"})
+  void einzeln_appZugang_nimmtKeineAndereFreigabeAb(String name) {
+    assertThatThrownBy(() -> FreigabeLabels.pruefeEinzeln(APP, name, Richtung.ABNEHMEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label " + name + " nimmt nur ein Mensch im Board ab");
+  }
+
+  @Test
+  void einzeln_appZugang_unbekannterNameImNamensraumBleibtGesperrt() {
+    assertThatThrownBy(() -> FreigabeLabels.pruefeEinzeln(APP, "kit:freigabe", Richtung.SETZEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:freigabe" + NAMENSRAUM_SETZEN);
+  }
+
+  @Test
+  void einzeln_appZugang_behaeltWasJedesTokenDarf() {
+    assertThatCode(
+            () -> {
+              FreigabeLabels.pruefeEinzeln(APP, "kit:night", Richtung.ABNEHMEN);
+              FreigabeLabels.pruefeEinzeln(APP, "kit:klaeren", Richtung.SETZEN);
+              FreigabeLabels.pruefeEinzeln(APP, "bug", Richtung.SETZEN);
+              FreigabeLabels.pruefeEinzeln(APP, "bug", Richtung.ABNEHMEN);
+            })
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void einzeln_gewoehnlichesToken_bekommtKeineAusnahme() {
+    assertThatThrownBy(() -> FreigabeLabels.pruefeEinzeln(TOKEN, "kit:night", Richtung.SETZEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:night setzt nur ein Mensch im Board");
+    assertThatThrownBy(() -> FreigabeLabels.pruefeEinzeln(TOKEN, "kit:clarify", Richtung.ABNEHMEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:clarify nimmt nur ein Mensch im Board ab");
+  }
+
+  @Test
+  void einzeln_sessionUndUnbekannt_duerfenWeiterAlles() {
+    for (ActorStamp akteur :
+        List.of(
+            ActorStamp.unknown(), new ActorStamp(CardActivityOrigin.SESSION, null, null, null))) {
+      for (Richtung richtung : Richtung.values()) {
+        assertThatCode(() -> FreigabeLabels.pruefeEinzeln(akteur, "kit:geschuetzt", richtung))
+            .doesNotThrowAnyException();
+      }
+    }
+  }
+
+  @Test
+  void einzeln_prueftGegenDasUebergebeneRegister() {
+    // Die Ausnahme hängt an der Sache, nicht am Namen (E13).
+    KitNamen register =
+        KitNamen.aus(
+            List.of(
+                new Eintrag(Sache.NIGHT, "kit:fortsetzen"),
+                new Eintrag(Sache.KLAEREN, "kit:rueckfrage")));
+
+    assertThatCode(
+            () -> {
+              FreigabeLabels.pruefeEinzeln(register, APP, "kit:fortsetzen", Richtung.SETZEN);
+              FreigabeLabels.pruefeEinzeln(register, APP, "kit:rueckfrage", Richtung.ABNEHMEN);
+            })
+        .doesNotThrowAnyException();
+    assertThatThrownBy(
+            () -> FreigabeLabels.pruefeEinzeln(register, TOKEN, "kit:fortsetzen", Richtung.SETZEN))
+        .isInstanceOf(FreigabeLabelException.class);
+    assertThatThrownBy(
+            () -> FreigabeLabels.pruefeEinzeln(register, APP, "kit:night", Richtung.SETZEN))
+        .isInstanceOf(FreigabeLabelException.class);
   }
 }
