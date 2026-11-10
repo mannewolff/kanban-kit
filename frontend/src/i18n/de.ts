@@ -236,6 +236,8 @@ export const de = {
     NAECHSTE_NUMMER_HILFE: 'Nummer, die die nächste neue Karte bekommt.',
     TEILNAHME: 'Teilnahme am Plattform-Leitstand',
     TEILNAHME_FEHLER: 'Teilnahme konnte nicht geschaltet werden.',
+    /** Mail-Schalter je Projekt (Issue #2083). */
+    MAIL_SCHALTER: 'Benachrichtigungen per Mail',
     UMBENENNEN_FEHLER: 'Umbenennen fehlgeschlagen.',
     NUMMER_ZU_KLEIN: 'Nächste Nummer muss größer als die höchste vergebene Nummer sein.',
     GESPEICHERT: 'Projekt gespeichert.',

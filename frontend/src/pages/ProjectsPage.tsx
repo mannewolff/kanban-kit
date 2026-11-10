@@ -13,12 +13,14 @@ import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
+import Switch from '@mui/material/Switch'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
+import { benachrichtigungenApi } from '../api/benachrichtigungen'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { projectsApi, type Project } from '../api/projects'
 import { canManageProject, isPlatformAdmin } from '../lib/roles'
@@ -39,6 +41,53 @@ const ROLE_CHIP: Record<string, 'primary' | 'info' | 'default'> = {
 function formatDate(iso: string, sprache: Sprache): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? '' : formatierer(sprache).datum(d)
+}
+
+/**
+ * Der Mail-Schalter eines Projekts (Issue #2083, Plan #2070 E15). Hängt nur im Dialog, sein Stand
+ * wird darum erst beim Öffnen gelesen; scheitert das Schalten, springt er zurück.
+ */
+function ProjektMailSchalter({ projectId }: Readonly<{ projectId: number }>) {
+  const t = useT()
+  const notify = useSnackbar()
+  const [an, setAn] = useState<boolean | null>(null)
+  const [ladenFehlgeschlagen, setLadenFehlgeschlagen] = useState(false)
+
+  useEffect(() => {
+    benachrichtigungenApi.projektschalter(projectId).then(
+      (schalter) => setAn(schalter.an),
+      () => setLadenFehlgeschlagen(true),
+    )
+  }, [projectId])
+
+  const schalte = async (neu: boolean) => {
+    setAn(neu)
+    try {
+      await benachrichtigungenApi.schalteProjekt(projectId, neu)
+    } catch (e) {
+      setAn(!neu)
+      notify(apiErrorMessage(e, t.ALLGEMEIN.SPEICHERN_FEHLGESCHLAGEN), 'error')
+    }
+  }
+
+  if (ladenFehlgeschlagen) {
+    return <Alert severity="error" sx={{ mt: 2 }}>{t.PROFIL.MAIL_LADEN_FEHLGESCHLAGEN}</Alert>
+  }
+
+  return (
+    <FormControlLabel
+      sx={{ mt: 1, display: 'block' }}
+      control={
+        <Switch
+          slotProps={{ input: { role: 'switch' } }}
+          disabled={an === null}
+          checked={an === true}
+          onChange={(e) => void schalte(e.target.checked)}
+        />
+      }
+      label={t.PROJEKTE.MAIL_SCHALTER}
+    />
+  )
 }
 
 export function ProjectsPage() {
@@ -336,6 +385,7 @@ export function ProjectsPage() {
                 label={t.PROJEKTE.TEILNAHME}
               />
             )}
+            {renameProject.participationEditable === true && <ProjektMailSchalter projectId={renameProject.id} />}
           </DialogContent>
           <DialogActions>
             <Button onClick={closeRename}>{t.ALLGEMEIN.ABBRECHEN}</Button>

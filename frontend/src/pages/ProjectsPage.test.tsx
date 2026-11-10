@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { benachrichtigungenApi } from '../api/benachrichtigungen'
 import { ApiError } from '../api/client'
 import { projectsApi } from '../api/projects'
 import { SnackbarProvider } from '../components/SnackbarProvider'
@@ -39,6 +40,15 @@ vi.mock('../api/projects', () => ({
     setDashboardParticipation: vi.fn(),
   },
 }))
+
+// Die Vorgabe steht in der Fabrik, damit auch die übrigen Dialog-Tests einen Stand bekommen.
+vi.mock('../api/benachrichtigungen', () => ({
+  benachrichtigungenApi: {
+    projektschalter: vi.fn(() => Promise.resolve({ an: false })),
+    schalteProjekt: vi.fn(() => Promise.resolve({ an: true })),
+  },
+}))
+const mockedMail = vi.mocked(benachrichtigungenApi)
 
 let mockUser: { platformRole: string } | null = { platformRole: 'USER' }
 // Vorschau-Zustand der „Ansicht als XY“ (Plan #1914, E15); außer im eigenen Block ohne Vorschau.
@@ -516,6 +526,89 @@ describe('ProjectsPage', () => {
       await waitFor(() => expect(mocked.setDashboardParticipation).toHaveBeenCalledWith(1, true))
       fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
       expect(screen.getByText('Anderes')).toBeInTheDocument()
+    })
+  })
+
+  /** Der Mail-Schalter je Projekt (Issue #2083, Plan #2070 E12, E15); sichtbar laut Server. */
+  describe('Mail-Schalter im Projektdialog (#2083)', () => {
+    const SCHALTER = 'Benachrichtigungen per Mail'
+    const projekt = (extra: Record<string, unknown> = {}) => ({
+      id: 7,
+      name: 'Meins',
+      role: 'OWNER',
+      createdAt: '',
+      participationEditable: true,
+      ...extra,
+    })
+
+    const dialogOeffnen = async () => {
+      renderMitToasts()
+      fireEvent.click(await screen.findByLabelText('Projekt Meins umbenennen'))
+    }
+
+    it('zeigt den Schalter und liest seinen Stand beim Öffnen', async () => {
+      mocked.list.mockResolvedValue([projekt()])
+      mockedMail.projektschalter.mockResolvedValueOnce({ an: true })
+
+      await dialogOeffnen()
+
+      await waitFor(() => expect(screen.getByRole('switch', { name: SCHALTER })).toBeChecked())
+      expect(mockedMail.projektschalter).toHaveBeenCalledWith(7)
+    })
+
+    it('sperrt den Schalter, bis sein Stand geladen ist', async () => {
+      mocked.list.mockResolvedValue([projekt()])
+
+      await dialogOeffnen()
+
+      expect(screen.getByRole('switch', { name: SCHALTER })).toBeDisabled()
+      await waitFor(() => expect(screen.getByRole('switch', { name: SCHALTER })).toBeEnabled())
+    })
+
+    it('schreibt beim Klick den neuen Wert', async () => {
+      mocked.list.mockResolvedValue([projekt()])
+
+      await dialogOeffnen()
+      await waitFor(() => expect(screen.getByRole('switch', { name: SCHALTER })).toBeEnabled())
+      fireEvent.click(screen.getByRole('switch', { name: SCHALTER }))
+
+      await waitFor(() => expect(mockedMail.schalteProjekt).toHaveBeenCalledWith(7, true))
+      expect(screen.getByRole('switch', { name: SCHALTER })).toBeChecked()
+    })
+
+    it.each([[false], [undefined]])(
+      'zeigt bei participationEditable %s keinen Schalter und liest nichts',
+      async (participationEditable) => {
+        mocked.list.mockResolvedValue([projekt({ participationEditable })])
+
+        await dialogOeffnen()
+
+        expect(screen.getByLabelText('Neuer Projektname')).toBeInTheDocument()
+        expect(screen.queryByRole('switch', { name: SCHALTER })).not.toBeInTheDocument()
+        expect(mockedMail.projektschalter).not.toHaveBeenCalled()
+      },
+    )
+
+    it('setzt den Schalter nach einer gescheiterten Änderung zurück und meldet den Fehler', async () => {
+      mocked.list.mockResolvedValue([projekt()])
+      mockedMail.schalteProjekt.mockRejectedValueOnce(serverfehler('Das ging nicht.'))
+
+      await dialogOeffnen()
+      await waitFor(() => expect(screen.getByRole('switch', { name: SCHALTER })).toBeEnabled())
+      fireEvent.click(screen.getByRole('switch', { name: SCHALTER }))
+
+      await erwarteFehlerToast('Das ging nicht.')
+      expect(screen.getByRole('switch', { name: SCHALTER })).not.toBeChecked()
+    })
+
+    it('zeigt statt des Schalters eine Meldung, wenn der Stand nicht zu laden ist', async () => {
+      mocked.list.mockResolvedValue([projekt()])
+      mockedMail.projektschalter.mockRejectedValueOnce(new Error('boom'))
+
+      await dialogOeffnen()
+
+      expect(await screen.findByText('Die Einstellungen ließen sich nicht laden.')).toBeInTheDocument()
+      expect(screen.queryByRole('switch', { name: SCHALTER })).not.toBeInTheDocument()
     })
   })
 

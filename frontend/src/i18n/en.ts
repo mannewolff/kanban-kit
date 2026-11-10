@@ -220,6 +220,7 @@ export const en: Woerterbuch = {
     NAECHSTE_NUMMER_HILFE: 'Number the next new card gets.',
     TEILNAHME: 'Take part in the Platform Control Room',
     TEILNAHME_FEHLER: 'Participation could not be changed.',
+    MAIL_SCHALTER: 'Email notifications',
     UMBENENNEN_FEHLER: 'Renaming failed.',
     NUMMER_ZU_KLEIN: 'The next number must be greater than the highest number in use.',
     GESPEICHERT: 'Project saved.',
