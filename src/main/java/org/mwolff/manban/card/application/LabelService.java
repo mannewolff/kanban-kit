@@ -200,7 +200,7 @@ public class LabelService {
     long boardId = card.boardId();
     Label label = requireLabel(boardId, name);
     if (cardLabels.addLabel(cardId, label.requireId())) {
-      labelEvents.add(cardId, label.name(), clock.instant(), actor.current());
+      labelEvents.add(cardId, label.name(), clock.instant(), actor.current(), userId);
       verlaufDerApp(cardId, userId, "Label " + label.name() + " gesetzt");
       events.publishEvent(new CardBoardActivityEvent(boardId, ActivityType.UPDATED, cardId));
     }

@@ -25,4 +25,11 @@ interface CardLabelEventJpaRepository extends JpaRepository<CardLabelEventEntity
           + " order by e.createdAt, e.id")
   List<CardLabelEventEntity> findNachLabelNamenSeit(
       @Param("labelNamen") Collection<String> labelNamen, @Param("seit") Instant seit);
+
+  /** Ereignisse der Karten, mit und ohne Lauf (Issue #2110). */
+  @Query(
+      "select e from CardLabelEventEntity e"
+          + " where e.cardId in :cardIds"
+          + " order by e.createdAt, e.id")
+  List<CardLabelEventEntity> findMitPerson(@Param("cardIds") Collection<Long> cardIds);
 }

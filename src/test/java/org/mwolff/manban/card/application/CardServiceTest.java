@@ -1243,8 +1243,8 @@ class CardServiceTest {
 
     service.setLabels(3L, 1L, List.of(7L, 9L));
 
-    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
-    verify(labelEvents, never()).add(1L, "Bug", FIXED, stempel);
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel, 3L);
+    verify(labelEvents, never()).add(1L, "Bug", FIXED, stempel, 3L);
   }
 
   @Test
@@ -1257,7 +1257,7 @@ class CardServiceTest {
 
     service.changeLabel(3L, 1L, 9L, LabelAction.ADD);
 
-    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel, 3L);
   }
 
   @Test
@@ -1270,8 +1270,8 @@ class CardServiceTest {
 
     service.bulkLabels(3L, List.of(1L, 2L), 9L, LabelAction.ADD);
 
-    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
-    verify(labelEvents, never()).add(2L, "Nacht", FIXED, stempel);
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel, 3L);
+    verify(labelEvents, never()).add(2L, "Nacht", FIXED, stempel, 3L);
   }
 
   @Test
@@ -1284,8 +1284,8 @@ class CardServiceTest {
 
     service.create(1L, BOARD, 20L, "Titel", null, null, null, null, null, List.of(7L, 9L), null);
 
-    verify(labelEvents).add(1L, "Bug", FIXED, stempel);
-    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
+    verify(labelEvents).add(1L, "Bug", FIXED, stempel, 1L);
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel, 1L);
   }
 
   // --- Aktivitätsverlauf (card_activity) --------------------------------

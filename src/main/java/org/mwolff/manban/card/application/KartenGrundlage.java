@@ -187,7 +187,7 @@ public final class KartenGrundlage {
       zuordnung.ersetzeZustaendige(saved.requireId(), projectId, assigneeIds, userId);
     }
     if (labelIds != null && !labelIds.isEmpty()) {
-      zuordnung.ersetzeLabels(saved.requireId(), boardId, labelIds, herkunft());
+      zuordnung.ersetzeLabels(saved.requireId(), boardId, labelIds, herkunft(), userId);
     }
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
     return saved;

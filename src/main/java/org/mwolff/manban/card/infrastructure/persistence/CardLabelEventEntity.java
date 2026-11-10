@@ -42,11 +42,16 @@ class CardLabelEventEntity {
   @Column(name = "run_started_at")
   private @Nullable Instant runStartedAt;
 
+  // Wie card_activity: nullable, ON DELETE SET NULL (V72, Issue #2110).
+  @Column(name = "actor_user_id")
+  private @Nullable Long actorUserId;
+
   protected CardLabelEventEntity() {
     // für JPA
   }
 
-  CardLabelEventEntity(long cardId, String labelName, Instant createdAt, ActorStamp stamp) {
+  CardLabelEventEntity(
+      long cardId, String labelName, Instant createdAt, ActorStamp stamp, long actorUserId) {
     this.cardId = cardId;
     this.labelName = labelName;
     this.createdAt = createdAt;
@@ -54,6 +59,7 @@ class CardLabelEventEntity {
     this.tokenName = stamp.tokenName();
     this.agent = stamp.agent();
     this.runStartedAt = stamp.laufStart();
+    this.actorUserId = actorUserId;
   }
 
   @Nullable Long getId() {
@@ -86,5 +92,9 @@ class CardLabelEventEntity {
 
   @Nullable Instant getRunStartedAt() {
     return runStartedAt;
+  }
+
+  @Nullable Long getActorUserId() {
+    return actorUserId;
   }
 }

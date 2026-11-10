@@ -6,10 +6,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardLabelEventRepository;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardLabelEvent;
+import org.mwolff.manban.card.domain.LabelEreignisMitPerson;
 import org.mwolff.manban.card.domain.LabelEreignisZeile;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -31,8 +33,8 @@ class CardLabelEventRepositoryAdapter implements CardLabelEventRepository {
   }
 
   @Override
-  public void add(long cardId, String labelName, Instant zeitpunkt, ActorStamp stamp) {
-    jpa.save(new CardLabelEventEntity(cardId, labelName, zeitpunkt, stamp));
+  public void add(long cardId, String labelName, Instant zeitpunkt, ActorStamp stamp, long userId) {
+    jpa.save(new CardLabelEventEntity(cardId, labelName, zeitpunkt, stamp, userId));
   }
 
   @Override
@@ -56,6 +58,16 @@ class CardLabelEventRepositoryAdapter implements CardLabelEventRepository {
         .toList();
   }
 
+  @Override
+  public List<LabelEreignisMitPerson> findMitPerson(Collection<Long> cardIds) {
+    if (cardIds.isEmpty()) {
+      return List.of();
+    }
+    return jpa.findMitPerson(cardIds).stream()
+        .map(CardLabelEventRepositoryAdapter::toMitPerson)
+        .toList();
+  }
+
   /**
    * Die eine Zeile, die V55 anlegt. Fehlt sie, ist das Schema beschädigt — {@code queryForObject}
    * scheitert dann laut, statt einen Beginn zu erfinden.
@@ -69,15 +81,30 @@ class CardLabelEventRepositoryAdapter implements CardLabelEventRepository {
   }
 
   private static CardLabelEvent toDomain(CardLabelEventEntity e) {
-    String origin = e.getOrigin();
     return new CardLabelEvent(
         e.getCardId(),
         e.getLabelName(),
         e.getCreatedAt(),
-        origin == null ? null : CardActivityOrigin.valueOf(origin),
+        herkunft(e),
         e.getTokenName(),
         e.getAgent(),
         Objects.requireNonNull(e.getRunStartedAt()));
+  }
+
+  private static LabelEreignisMitPerson toMitPerson(CardLabelEventEntity e) {
+    return new LabelEreignisMitPerson(
+        Objects.requireNonNull(e.getId()),
+        e.getCardId(),
+        e.getLabelName(),
+        e.getCreatedAt(),
+        e.getActorUserId(),
+        herkunft(e),
+        e.getTokenName());
+  }
+
+  private static @Nullable CardActivityOrigin herkunft(CardLabelEventEntity e) {
+    String origin = e.getOrigin();
+    return origin == null ? null : CardActivityOrigin.valueOf(origin);
   }
 
   private static LabelEreignisZeile toZeile(CardLabelEventEntity e) {

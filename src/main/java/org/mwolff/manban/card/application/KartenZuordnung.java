@@ -162,10 +162,21 @@ public final class KartenZuordnung {
    * gegenüber der bisherigen Zuordnung hinzukommt oder wegfällt.
    *
    * @param herkunft serververifizierte Herkunft des Aufrufs, siehe {@link FreigabeLabels}
+   * @param handelnderUserId wer setzt — bei einem Token sein Inhaber
    */
   public void ersetzeLabels(
-      long cardId, long boardId, List<Long> labelIds, @Nullable CardActivityOrigin herkunft) {
-    ersetze(cardId, boardLabelNamen(boardId), cardLabels.findByCardId(cardId), labelIds, herkunft);
+      long cardId,
+      long boardId,
+      List<Long> labelIds,
+      @Nullable CardActivityOrigin herkunft,
+      long handelnderUserId) {
+    ersetze(
+        cardId,
+        boardLabelNamen(boardId),
+        cardLabels.findByCardId(cardId),
+        labelIds,
+        herkunft,
+        handelnderUserId);
   }
 
   /**
@@ -184,7 +195,8 @@ public final class KartenZuordnung {
       long boardId,
       long labelId,
       LabelAction action,
-      @Nullable CardActivityOrigin herkunft) {
+      @Nullable CardActivityOrigin herkunft,
+      long handelnderUserId) {
     Map<Long, String> namen = boardLabelNamen(boardId);
     if (!namen.containsKey(labelId)) {
       throw InvalidLabelException.keinLabelDesBoards(labelId);
@@ -194,7 +206,7 @@ public final class KartenZuordnung {
         action == LabelAction.ADD
             ? Stream.concat(current.stream(), Stream.of(labelId)).distinct().toList()
             : current.stream().filter(id -> id.longValue() != labelId).toList();
-    ersetze(cardId, namen, current, next, herkunft);
+    ersetze(cardId, namen, current, next, herkunft, handelnderUserId);
   }
 
   private void ersetze(
@@ -202,7 +214,8 @@ public final class KartenZuordnung {
       Map<Long, String> namen,
       List<Long> vorher,
       List<Long> labelIds,
-      @Nullable CardActivityOrigin herkunft) {
+      @Nullable CardActivityOrigin herkunft,
+      long handelnderUserId) {
     List<Long> distinct = labelIds.stream().distinct().toList();
     for (Long labelId : distinct) {
       if (!namen.containsKey(labelId)) {
@@ -211,7 +224,7 @@ public final class KartenZuordnung {
     }
     FreigabeLabels.pruefeWechsel(herkunft, namen, vorher, distinct);
     cardLabels.replaceLabels(cardId, distinct);
-    erfasseHinzugekommene(cardId, namen, vorher, distinct);
+    erfasseHinzugekommene(cardId, namen, vorher, distinct, handelnderUserId);
   }
 
   /**
@@ -219,10 +232,19 @@ public final class KartenZuordnung {
    * nicht erfasst: Die Platte „Nacharbeit“ zählt einen Halt auch nach dem Abnehmen (Plan E11).
    */
   private void erfasseHinzugekommene(
-      long cardId, Map<Long, String> namen, List<Long> vorher, List<Long> nachher) {
+      long cardId,
+      Map<Long, String> namen,
+      List<Long> vorher,
+      List<Long> nachher,
+      long handelnderUserId) {
     ActorStamp stempel = actor.current();
     for (Long labelId : nachher.stream().filter(id -> !vorher.contains(id)).toList()) {
-      labelEvents.add(cardId, Objects.requireNonNull(namen.get(labelId)), clock.instant(), stempel);
+      labelEvents.add(
+          cardId,
+          Objects.requireNonNull(namen.get(labelId)),
+          clock.instant(),
+          stempel,
+          handelnderUserId);
     }
   }
 

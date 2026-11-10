@@ -296,7 +296,7 @@ public class CardService {
     // Projekt-basierte Rechte (#405); die Labels selbst bleiben board-scoped.
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
-    zuordnung.ersetzeLabels(cardId, card.boardId(), labelIds, grundlage.herkunft());
+    zuordnung.ersetzeLabels(cardId, card.boardId(), labelIds, grundlage.herkunft(), userId);
     grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
     return sicht.view(userId, card);
   }
@@ -342,7 +342,7 @@ public class CardService {
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     long boardId = card.boardId();
-    zuordnung.aendereLabel(cardId, boardId, labelId, action, grundlage.herkunft());
+    zuordnung.aendereLabel(cardId, boardId, labelId, action, grundlage.herkunft(), userId);
     grundlage.publishChanged(boardId, ActivityType.UPDATED, cardId);
     return sicht.view(userId, card);
   }

@@ -406,7 +406,20 @@ class LabelServiceTest {
 
     service.addToCard(USER, CARD_ID, "  run:waiting ");
 
-    verify(labelEvents).add(CARD_ID, "run:waiting", FIXED, stempel);
+    verify(labelEvents).add(CARD_ID, "run:waiting", FIXED, stempel, USER);
+  }
+
+  /** Issue #2110 (Plan #2108 E5): Wer das Label gesetzt hat, steht am Ereignis. */
+  @Test
+  void addToCard_haeltDieHandelndePersonAmEreignisFest() {
+    long anderePerson = 77L;
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:nightrun");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.addToCard(anderePerson, CARD_ID, "kit:nightrun");
+
+    verify(labelEvents).add(CARD_ID, "kit:nightrun", FIXED, ActorStamp.unknown(), anderePerson);
   }
 
   @Test
@@ -417,7 +430,7 @@ class LabelServiceTest {
 
     service.addToCard(USER, CARD_ID, "run:waiting");
 
-    verify(labelEvents, never()).add(anyLong(), anyString(), any(), any());
+    verify(labelEvents, never()).add(anyLong(), anyString(), any(), any(), anyLong());
   }
 
   @Test
@@ -428,7 +441,7 @@ class LabelServiceTest {
 
     service.removeFromCard(USER, CARD_ID, "run:waiting");
 
-    verify(labelEvents, never()).add(anyLong(), anyString(), any(), any());
+    verify(labelEvents, never()).add(anyLong(), anyString(), any(), any(), anyLong());
   }
 
   @Test
