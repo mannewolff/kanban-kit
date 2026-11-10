@@ -223,7 +223,7 @@ class BenachrichtigungErkennungTest {
     when(karten.kartenId(PROJEKT, 1)).thenReturn(Optional.of(KARTEN_ID));
     gegeben(LAUFEND, paket(1, NightRunState.RED, NightRunErrorClass.CHECKS_RED));
 
-    erkennung.erkenneLaeufe();
+    assertThat(erkennung.erkenneLaeufe()).isEqualTo(1);
 
     assertThat(arten()).containsExactly(AnlassArt.STOERUNG);
     assertThat(anlass(AnlassArt.STOERUNG).cardId()).isEqualTo(KARTEN_ID);
