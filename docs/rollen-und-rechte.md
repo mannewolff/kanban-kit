@@ -84,6 +84,14 @@ Einige Aktionen folgen nicht allein dem Recht aus der Tabelle:
   kein Durchgriff des Plattform-Admins. Das Budget ist eine Ausgabeentscheidung des Projekts.
   **Sehen** (Betrag, Stand, Warnungen, Hochrechnung) darf, wer den Verbrauch des Projekts sieht,
   siehe [Monatsbudget](nutzung.md#monatsbudget).
+- **Projektschalter der [Mail-Benachrichtigungen](nutzung.md#mail-benachrichtigungen) bedienen:** kein
+  Recht der Matrix, sondern die **echte Projekt-Rolle** `OWNER` oder `ADMIN` — kein Durchgriff des
+  Plattform-Admins. Den Personenschalter und die Ruhezeit stellt jede Person nur für sich selbst ein.
+- **Wer welche Mail bekommt:** Die Empfängerauswahl erweitert keine Leserechte. Mails zu Läufen und
+  die Übersicht nach einem Lauf gehen nur an Personen, die Läufe sehen dürfen (`NIGHT_RUN_READ`, heute
+  Owner und bei Teilnahme am Plattform-Leitstand der Plattform-Admin). Mails zu einer Karte gehen an
+  Personen, die die Karte sehen dürfen (`TICKET_READ`). Geprüft wird **zum Versandzeitpunkt**, auch
+  nach einer Ruhezeit; wer das Recht bis dahin verloren hat, bekommt die Mail nicht.
 - **Karte endgültig löschen** (aus dem Papierkorb) hängt bewusst an `BOARD_DELETE`, ist also erst ab
   ADMIN erlaubt — anders als das Legen in den Papierkorb (`TICKET_DELETE`, ab MEMBER). Wiederherstellen
   darf, wer löschen darf: so kann ein MEMBER einen eigenen Fehlgriff selbst korrigieren.

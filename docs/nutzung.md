@@ -563,6 +563,53 @@ Spalte — gemessen bei **jedem** Spaltenwechsel, egal ob per Drag & Drop, ⋮-M
 der KI-Arbeit nicht gebraucht und sind bewusst aus dem Leitstand genommen worden; das API-Feld
 `outliers` bleibt im Backend bestehen.
 
+## Mail-Benachrichtigungen {#mail-benachrichtigungen}
+
+Der Leitstand kann dir eine Mail schicken, wenn du gefragt bist oder etwas schiefgeht, ohne dass du
+ihn öffnen musst. Mails gibt es erst, wenn du sie einschaltest: **Projektschalter** und
+**Personenschalter** sind zunächst aus, und eine Mail geht nur, wenn beide eingeschaltet sind. Der
+Web-Push auf dem [Handy](#mobil-laeufe) und seine Schalter am Board bleiben davon unberührt.
+
+**Wann eine Mail kommt:**
+
+- Eine Karte trägt eine Frage an einen Menschen.
+- Ein Lauf wartet auf einen Menschen.
+- Eine Karte betrifft eine geschützte Datei, die nur ein Mensch ändern darf.
+- Eine Störung tritt auf: Ein Paket ist gescheitert, hat sein Zeitbudget erschöpft oder ist
+  festgefahren, oder der Lauf ist verstummt. Die Mail kommt beim ersten Auftreten, auch wenn der Lauf
+  weiterarbeitet. Ein Ende an der eigenen Grenze und ein von Hand beendeter Lauf sind keine Störung.
+
+Als Lauf zählen nur unbeaufsichtigte [Runner](#nachtlauf)-Läufe, zu jeder Tageszeit. Die Mail nennt
+Projekt, Anlass und deinen nächsten Schritt, bei einem Anlass an einer Karte auch deren Nummer und
+Titel, und sie führt per Link in den Leitstand. Sie kommt in der eingestellten
+[Sprache](#sprache-language).
+
+Je Lauf und Anlass kommt höchstens eine Mail, und eine Karte, die weiter wartet, löst keine weitere
+aus. Was beim Einschalten schon besteht, wird nicht nachgemeldet.
+
+**Die Übersicht nach jedem Lauf** nennt den Ausgang des Laufs, die wartenden Menschenschritte und die
+gemeldeten Kosten in USD; fehlen Kostenangaben, ist der Betrag als unvollständig gekennzeichnet.
+Besteht kein Handlungsbedarf, sagt die Übersicht das. Ein Lauf ohne Arbeit bekommt keine. Bei einem
+verstummten Lauf kommt genau eine Mail: die Übersicht mit dem Ausgang „verstummt“. Schon Gemeldetes
+steht in der Übersicht noch einmal, ohne eine weitere Mail auszulösen. Für die Übersicht gelten
+dieselben Schalter und dieselbe Ruhezeit wie für alle anderen Mails.
+
+**Wo man das einstellt:**
+
+- **Projektschalter:** Bei aktivem [Editiermodus](#editiermodus) in der Projektliste das Stift-Symbol
+  des Projekts öffnen, dort **„Benachrichtigungen per Mail“**. Ihn bedienen Owner und Projekt-Admin,
+  er gilt für das ganze Projekt.
+- **Personenschalter und Ruhezeit:** Im **Profil** unter **„Mail-Benachrichtigungen“**. Dort steht je
+  Projekt ein eigener Schalter; er gilt nur für dich.
+
+**Ruhezeit.** Du stellst Beginn, Ende und Zeitzone ein; die Zeitzone ist aus dem Browser vorbelegt. Die
+Ruhezeit gilt für alle Anlässe und über alle Projekte, auch wenn sie über Mitternacht reicht und über
+eine Zeitumstellung hinweg. In ihr bekommst du keine Mail. Was in dieser Zeit anfällt, auch die
+Übersichten, kommt nach ihrem Ende als eine **Sammelmail**. Inzwischen Erledigtes fällt heraus, und
+bleibt nichts übrig, kommt keine Mail.
+
+Wer welche Mail bekommt, steht unter [Rollen & Rechte](rollen-und-rechte.md#sonderregeln).
+
 ## Runner {#nachtlauf}
 
 Der **Bereich „Runner"** wertet die Protokolle des Nacht-Runners aus: Er zeigt je Run, welche
