@@ -17,6 +17,17 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.17.0] – 2026-11-10
+
+- chore: v3.16.1
+- Zugang der App: Doku der Rechte ([#2107](https://github.com/mannewolff/kanban-kit/issues/2107))
+- Zugang der App: die beiden Freigaben und ihr Eintrag im Verlauf ([#2106](https://github.com/mannewolff/kanban-kit/issues/2106))
+- Zugang der App: Verwaltung in der Administration ([#2105](https://github.com/mannewolff/kanban-kit/issues/2105))
+- Zugang der App: endgültig unwirksam bei Verlust von Rolle oder Konto ([#2104](https://github.com/mannewolff/kanban-kit/issues/2104))
+- Zugang der App: Anlegen, Erneuern, Widerrufen und Liste ([#2103](https://github.com/mannewolff/kanban-kit/issues/2103))
+- Zugang der App: Schema, Art und Merkmal in der Auflösung ([#2102](https://github.com/mannewolff/kanban-kit/issues/2102))
+- rclone 1.76.0 im Backup-Abbild: CVE-2026-78661
+
 ## [3.16.0] – 2026-11-10
 
 - Änderungen durch install 6.1.3
