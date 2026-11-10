@@ -10,11 +10,15 @@ import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Bezug;
 import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Bezugsart;
 import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Karte;
 import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Kommentar;
+import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.LabelEreignis;
+import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.ReviewVorReady;
 
-/** Baut Eingaben der Rechnung für die Tests (Issue #2115). */
+/** Baut Eingaben der Rechnung für die Tests (Issues #2115, #2116). */
 final class KettenAufbau {
 
   static final String TOKEN = "TOKEN";
+  static final String SESSION = "SESSION";
+  static final Instant LAUF = Instant.parse("2026-11-10T07:00:00Z");
   static final String ZUGANG = "kit-nacht";
   static final String AGENT = "claude-opus-5-5";
   static final Instant T0 = Instant.parse("2026-11-10T08:00:00Z");
@@ -48,6 +52,8 @@ final class KettenAufbau {
   private final List<Karte> ideen = new ArrayList<>();
   private final List<Aktivitaet> aktivitaeten = new ArrayList<>();
   private final List<Kommentar> kommentare = new ArrayList<>();
+  private final List<LabelEreignis> labels = new ArrayList<>();
+  private @Nullable ReviewVorReady review;
 
   private KettenAufbau(Karte karte) {
     this.geoeffnet = karte;
@@ -146,7 +152,31 @@ final class KettenAufbau {
             herkunft,
             TOKEN.equals(herkunft) ? ZUGANG : null,
             TOKEN.equals(herkunft) ? AGENT : null,
+            null,
             null));
+    return this;
+  }
+
+  /** Ein Zug eines Menschen in der Oberfläche. */
+  KettenAufbau zugVonMensch(long kartenId, @Nullable String schluessel, long person, Instant zeit) {
+    return aktivitaet(
+        new Aktivitaet(kartenId, person, "MOVED", zeit, SESSION, null, null, schluessel, null));
+  }
+
+  /** Ein Zug über ein Token; mit {@code laufStart} durch einen Lauf. */
+  KettenAufbau zugUeberToken(
+      long kartenId, @Nullable String schluessel, Instant zeit, @Nullable Instant laufStart) {
+    return aktivitaet(
+        new Aktivitaet(kartenId, null, "MOVED", zeit, TOKEN, ZUGANG, AGENT, schluessel, laufStart));
+  }
+
+  KettenAufbau label(LabelEreignis e) {
+    labels.add(e);
+    return this;
+  }
+
+  KettenAufbau reviewVorReady(boolean verlangt, @Nullable Instant geaendertAm) {
+    this.review = new ReviewVorReady(verlangt, geaendertAm);
     return this;
   }
 
@@ -172,7 +202,9 @@ final class KettenAufbau {
         List.copyOf(nachfahren),
         List.copyOf(ideen),
         List.copyOf(aktivitaeten),
-        List.copyOf(kommentare));
+        List.copyOf(kommentare),
+        List.copyOf(labels),
+        review);
   }
 
   Entscheidungskette rechne() {

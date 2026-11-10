@@ -5,4 +5,4 @@ package org.mwolff.manban.entscheidungskette.domain;
  *
  * @param funde seine Funde je Schwere
  */
-public record CodeReview(Fundzahlen funde) implements KitMeldung {}
+public record CodeReview(Fundzahlen funde) implements KitMeldung, Einzelheiten {}

@@ -222,7 +222,8 @@ class KartenKetteLeserTest {
                 "TOKEN",
                 "Nachtlauf",
                 "claude-opus-5-5",
-                "READY"));
+                "READY",
+                JETZT.minusSeconds(5)));
   }
 
   @ParameterizedTest

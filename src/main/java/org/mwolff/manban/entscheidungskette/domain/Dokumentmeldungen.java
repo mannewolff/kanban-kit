@@ -8,14 +8,18 @@ import org.mwolff.manban.common.KitMeldungen.Meldungsart;
 import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Kommentar;
 
 /**
- * Liest aus den Kommentaren die Meldungen des Kits, die Dokument-Glieder begründen: Plan- und
- * Fachplan-Review und ihre Einarbeitung (Plan #2108 E3, E4, E9).
+ * Liest aus den Kommentaren die Meldungen des Kits, die Prüfrunden begründen: Plan-, Fachplan- und
+ * Issue-Review und ihre Einarbeitung (Plan #2108 E3, E4, E9).
  */
 final class Dokumentmeldungen {
 
   /** Die Prüfrunden eines Dokuments; das Issue-Review gehört zum Paket. */
   static final Set<Meldungsart> RUNDENARTEN =
       Set.of(Meldungsart.PLAN_REVIEW, Meldungsart.FACHPLAN_REVIEW);
+
+  /** Alle Prüfrunden, die gelesen werden: die der Dokumente und das Issue-Review (Issue #2116). */
+  static final Set<Meldungsart> PRUEFARTEN =
+      Set.of(Meldungsart.PLAN_REVIEW, Meldungsart.FACHPLAN_REVIEW, Meldungsart.ISSUE_REVIEW);
 
   private static final String HERKUNFT_KIT = "TOKEN";
 
@@ -32,7 +36,7 @@ final class Dokumentmeldungen {
     if (k.vonHandGeaendertAm() != null) {
       String kopf = k.vonHandKopfzeile();
       return KitMeldungen.artDerKopfzeile(kopf)
-          .filter(art -> RUNDENARTEN.contains(art) || art == Meldungsart.EINARBEITUNG)
+          .filter(art -> PRUEFARTEN.contains(art) || art == Meldungsart.EINARBEITUNG)
           .map(art -> new Gelesen(k, art, rundeAusKopf(kopf), null, true));
     }
     return KitMeldungLeser.lies(k.herkunft(), k.text()).flatMap(m -> gelesen(k, m));
@@ -40,7 +44,7 @@ final class Dokumentmeldungen {
 
   private static Optional<Gelesen> gelesen(Kommentar k, KitMeldung meldung) {
     return switch (meldung) {
-      case Pruefrunde p when RUNDENARTEN.contains(p.art()) ->
+      case Pruefrunde p when PRUEFARTEN.contains(p.art()) ->
           Optional.of(new Gelesen(k, p.art(), p.runde(), p, false));
       case Einarbeitung e ->
           Optional.of(new Gelesen(k, Meldungsart.EINARBEITUNG, e.runde(), null, false));

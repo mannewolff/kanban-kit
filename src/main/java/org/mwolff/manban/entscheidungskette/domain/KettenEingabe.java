@@ -14,6 +14,9 @@ import org.jspecify.annotations.Nullable;
  * @param ideen Ideen des Projekts, deren Zeile {@code Ergebnis:} eine Nummer der Kette nennen kann
  * @param aktivitaeten der Karten der Kette
  * @param kommentare der Karten der Kette
+ * @param labelEreignisse der Karten der Kette, chronologisch (Plan #2108 E5, E11)
+ * @param reviewVorReady die zuletzt vom Kit gemeldete Einstellung zur Prüfung vor Ready; {@code
+ *     null}, solange nie gemeldet wurde (Plan #2108 E18)
  */
 public record KettenEingabe(
     Karte karte,
@@ -21,7 +24,9 @@ public record KettenEingabe(
     List<Bezug> nachfahren,
     List<Karte> ideen,
     List<Aktivitaet> aktivitaeten,
-    List<Kommentar> kommentare) {
+    List<Kommentar> kommentare,
+    List<LabelEreignis> labelEreignisse,
+    @Nullable ReviewVorReady reviewVorReady) {
 
   /** Die Art einer Karte, wie sie die Lese-Fassade nennt. */
   public enum Art {
@@ -70,7 +75,13 @@ public record KettenEingabe(
    */
   public record Bezug(Bezugsart art, @Nullable Integer nummer, @Nullable Karte karte) {}
 
-  /** Ein Eintrag des Aktivitätsverlaufs. */
+  /**
+   * Ein Eintrag des Aktivitätsverlaufs.
+   *
+   * @param spaltenSchluessel bei einem Zug der Schlüssel der Zielspalte ({@code READY}, …); {@code
+   *     null}, wenn er sich nicht sicher bestimmen lässt (Plan #2108 E10)
+   * @param laufStart die Laufkennung des Laufs, der den Eintrag auslöste; {@code null} ohne Lauf
+   */
   public record Aktivitaet(
       long kartenId,
       @Nullable Long person,
@@ -79,7 +90,31 @@ public record KettenEingabe(
       @Nullable String herkunft,
       @Nullable String tokenName,
       @Nullable String agent,
-      @Nullable String spaltenSchluessel) {}
+      @Nullable String spaltenSchluessel,
+      @Nullable Instant laufStart) {}
+
+  /**
+   * Ein Label, das einer Karte der Kette hinzugefügt wurde (Plan #2108 E5).
+   *
+   * @param person wer es setzte; {@code null}, wenn nicht erfasst
+   * @param herkunft {@code SESSION} oder {@code TOKEN}; {@code null} ohne bekannte Herkunft
+   */
+  public record LabelEreignis(
+      long kartenId,
+      String labelName,
+      Instant zeitpunkt,
+      @Nullable Long person,
+      @Nullable String herkunft,
+      @Nullable String tokenName) {}
+
+  /**
+   * Die vom Kit gemeldete Einstellung zur Prüfung vor Ready (Plan #2108 E18).
+   *
+   * @param verlangt ob das Projekt die Prüfung vor Ready verlangt
+   * @param geaendertAm wann ein schon gemeldeter Wert zuletzt wechselte; {@code null}, solange er
+   *     seit der ersten Meldung gleich blieb
+   */
+  public record ReviewVorReady(boolean verlangt, @Nullable Instant geaendertAm) {}
 
   /**
    * Ein Kommentar mit Herkunft und Hand-Marke (Plan #2108 E3, E4).

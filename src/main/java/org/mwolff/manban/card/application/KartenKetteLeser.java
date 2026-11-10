@@ -317,7 +317,8 @@ public class KartenKetteLeser {
         a.origin() == null ? null : a.origin().name(),
         a.tokenName(),
         a.agent(),
-        CardService.spaltenSchluessel(a));
+        CardService.spaltenSchluessel(a),
+        a.laufStart());
   }
 
   private static KettenLabelEreignis labelEreignis(LabelEreignisMitPerson e) {
@@ -403,6 +404,8 @@ public class KartenKetteLeser {
    *
    * @param spaltenSchluessel bei einem Zug der Schlüssel der Zielspalte; {@code null}, wenn er sich
    *     nicht sicher bestimmen lässt (Plan #2108 E10)
+   * @param laufStart Laufkennung des Laufs, der den Eintrag auslöste; {@code null} ohne Lauf (Plan
+   *     #2108 E11)
    */
   public record KettenAktivitaet(
       long kartenId,
@@ -413,7 +416,8 @@ public class KartenKetteLeser {
       @Nullable String origin,
       @Nullable String tokenName,
       @Nullable String agent,
-      @Nullable String spaltenSchluessel) {}
+      @Nullable String spaltenSchluessel,
+      @Nullable Instant laufStart) {}
 
   /** Ein Label, das einer Karte der Kette hinzugefügt wurde, mit der Person (Plan #2108 E5). */
   public record KettenLabelEreignis(

@@ -85,7 +85,8 @@ class KartengliederTest {
     Entscheidungskette kette =
         KettenAufbau.an(PLAN_TECHNISCH)
             .aktivitaet(
-                new KettenEingabe.Aktivitaet(2, 1L, "MOVED", um(4), TOKEN, ZUGANG, AGENT, "ready"))
+                new KettenEingabe.Aktivitaet(
+                    2, 1L, "MOVED", um(4), TOKEN, ZUGANG, AGENT, "ready", null))
             .rechne();
 
     Glied herkunft = erstes(kette, Dokumentart.PLAN);

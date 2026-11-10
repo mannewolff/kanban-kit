@@ -1,6 +1,7 @@
 package org.mwolff.manban.entscheidungskette.domain;
 
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.common.KitMeldungen.Wert;
 
 /**
  * Die Meldung einer Veröffentlichung. Leer ist, was fehlt oder als {@code nicht erfasst} gemeldet
@@ -24,4 +25,22 @@ public record Veroeffentlichung(
     @Nullable String quelle,
     Angabe freigegebenVon,
     Angabe ausgefuehrtVon)
-    implements KitMeldung {}
+    implements KitMeldung, Einzelheiten {
+
+  /**
+   * Ob der Ausgang eine Veröffentlichung ist (Plan #2108 E15): {@code Pull Request angelegt} und
+   * {@code nicht veröffentlicht} sind es nicht, ein fehlender Ausgang auch nicht, jeder andere
+   * schon.
+   */
+  public boolean veroeffentlicht() {
+    return ausgang != null
+        && !Wert.PULL_REQUEST_ANGELEGT.bezeichnet(ausgang)
+        && !Wert.NICHT_VEROEFFENTLICHT.bezeichnet(ausgang);
+  }
+
+  /** Nur eine Veröffentlichung zählt als erreicht. */
+  @Override
+  public boolean erreicht() {
+    return veroeffentlicht();
+  }
+}

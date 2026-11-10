@@ -46,7 +46,7 @@ final class Kartenglieder {
                                 .add(g)));
   }
 
-  /** Herkunft und Prüfrunden des Dokuments. */
+  /** Herkunft und Prüfrunden des Dokuments; am Paket ohne das Issue-Review. */
   Abschnitt abschnitt(Dokumentart art, Karte karte) {
     List<Glied> glieder = new ArrayList<>();
     glieder.add(anlage(Gliedart.HERKUNFT, karte, null));
@@ -66,6 +66,7 @@ final class Kartenglieder {
         ergebnis,
         verweis(karte),
         Set.of(),
+        null,
         null);
   }
 
@@ -88,19 +89,29 @@ final class Kartenglieder {
     return new Verweis(karte.id(), karte.nummer(), karte.titel(), !karte.archiviert(), null);
   }
 
+  /** Die Runden des Issue-Reviews am Paket, je mit ihrer Einarbeitung (Issue #2116). */
+  List<Glied> issueReviews(Karte karte) {
+    return runden(karte, Gliedart.ISSUE_REVIEW, Set.of(Meldungsart.ISSUE_REVIEW));
+  }
+
   private List<Glied> runden(Karte karte) {
+    return runden(karte, Gliedart.PRUEFRUNDE, Dokumentmeldungen.RUNDENARTEN);
+  }
+
+  private List<Glied> runden(Karte karte, Gliedart gliedart, Set<Meldungsart> arten) {
     List<Dokumentmeldungen.Gelesen> alle = meldungen.getOrDefault(karte.id(), List.of());
     return alle.stream()
-        .filter(g -> Dokumentmeldungen.RUNDENARTEN.contains(g.art()))
-        .map(g -> runde(g, einarbeitung(alle, g.runde(), karte), karte))
+        .filter(g -> arten.contains(g.art()))
+        .map(g -> runde(gliedart, g, einarbeitung(alle, g.runde(), karte), karte))
         .toList();
   }
 
-  private static Glied runde(Dokumentmeldungen.Gelesen g, Glied einarbeitung, Karte karte) {
+  private static Glied runde(
+      Gliedart gliedart, Dokumentmeldungen.Gelesen g, Glied einarbeitung, Karte karte) {
     Pruefrunde gelesen = g.pruefrunde();
     if (gelesen == null) {
       return new Glied(
-          Gliedart.PRUEFRUNDE,
+          gliedart,
           Zustand.NICHT_ERFASST,
           null,
           null,
@@ -108,10 +119,11 @@ final class Kartenglieder {
           null,
           quelle(g.kommentar(), karte),
           Set.of(Hinweis.VON_HAND_GEAENDERT),
-          new Pruefung(g.art(), g.runde(), List.of(), null, einarbeitung));
+          new Pruefung(g.art(), g.runde(), List.of(), null, einarbeitung),
+          null);
     }
     return meldung(
-        Gliedart.PRUEFRUNDE,
+        gliedart,
         g.kommentar(),
         karte,
         new Pruefung(g.art(), g.runde(), gelesen.reviewer(), gelesen.funde(), einarbeitung));
@@ -147,10 +159,11 @@ final class Kartenglieder {
         null,
         quelle(k, karte),
         Set.of(),
-        pruefung);
+        pruefung,
+        null);
   }
 
-  private static Verweis quelle(Kommentar k, Karte karte) {
+  static Verweis quelle(Kommentar k, Karte karte) {
     return new Verweis(karte.id(), karte.nummer(), null, !karte.archiviert(), k.id());
   }
 

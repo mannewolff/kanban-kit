@@ -5,5 +5,14 @@ public enum Dokumentart {
   IDEE,
   FACHPLAN,
   PLAN,
-  PAKET
+  PAKET;
+
+  /** Das Dokument einer Karte: alles außer Fachplan und Plan ist ein Paket. */
+  static Dokumentart von(KettenEingabe.Art art) {
+    return switch (art) {
+      case FACHLICH -> FACHPLAN;
+      case PLAN -> Dokumentart.PLAN;
+      default -> Dokumentart.PAKET;
+    };
+  }
 }

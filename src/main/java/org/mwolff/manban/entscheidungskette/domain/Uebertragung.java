@@ -30,4 +30,11 @@ public record Uebertragung(
     @Nullable String ausgang,
     Angabe freigegebenVon,
     Angabe ausgefuehrtVon)
-    implements KitMeldung {}
+    implements KitMeldung, Einzelheiten {
+
+  /** Nur eine Übertragung mit Ausgang, der nicht {@code nicht übertragen} lautet, zählt. */
+  @Override
+  public boolean erreicht() {
+    return ausgang != null && !Wert.NICHT_UEBERTRAGEN.bezeichnet(ausgang);
+  }
+}

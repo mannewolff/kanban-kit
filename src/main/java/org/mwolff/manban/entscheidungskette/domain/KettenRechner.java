@@ -9,14 +9,14 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Art;
 import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Bezug;
-import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Bezugsart;
 import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Karte;
 
 /**
- * Rechnet die Dokument-Glieder der Entscheidungskette (Issue #2115, Plan #2108 E12, E13, E14, E15,
- * E17): Idee, Fachplan, Plan und die Herkunft der geöffneten Karte, je Dokument mit Prüfrunden,
- * dazu die Nachfahren am Fachplan und am Plan. Reine Rechnung ohne Uhr und ohne Ports; zweimal
- * gerechnet ergibt dieselbe Ausgabe.
+ * Rechnet die Entscheidungskette (Issues #2115, #2116, Plan #2108 E10 bis E15, E17, E18): Idee,
+ * Fachplan, Plan und die Herkunft der geöffneten Karte, je Dokument mit Prüfrunden, am Paket dazu
+ * Issue-Review, Freigabe, Umsetzung, Code-Review, Übertragung und Veröffentlichung ({@link
+ * Paketglieder}), am Fachplan und am Plan die Nachfahren mit ihrem zuletzt erreichten Glied. Reine
+ * Rechnung ohne Uhr und ohne Ports; zweimal gerechnet ergibt dieselbe Ausgabe.
  *
  * <p>„Nicht vorgesehen“ gilt wörtlich nach Kriterium 6: {@code [Task]} belegt nur den Plan, das
  * Fehlen von {@code Fachliche Quelle:} an einem Plan mit {@code Plan-Modell:} den Fachplan. Eine
@@ -30,8 +30,9 @@ public final class KettenRechner {
   /** Die Kette der Karte aus der Eingabe. */
   public static Entscheidungskette rechne(KettenEingabe eingabe) {
     Karte karte = eingabe.karte();
-    Dokumentart art = dokumentart(karte.art());
+    Dokumentart art = Dokumentart.von(karte.art());
     Kartenglieder glieder = new Kartenglieder(eingabe.aktivitaeten(), eingabe.kommentare());
+    Paketglieder paketglieder = new Paketglieder(eingabe, glieder);
     List<Dokumentart> stufen = stufen(karte, art);
     Map<Dokumentart, Bezug> vorfahren = ordne(karte, stufen, eingabe.vorfahren());
 
@@ -51,21 +52,26 @@ public final class KettenRechner {
               ? new Abschnitt(Dokumentart.PLAN, List.of(fehlenderPlan(karte)))
               : abschnitt(Dokumentart.PLAN, plan, glieder));
     }
-    abschnitte.add(glieder.abschnitt(art, karte));
+    abschnitte.add(paketglieder.abschnitt(art, karte, freigebende(vorfahren)));
 
     List<Nachfahre> nachfahren =
         art == Dokumentart.PAKET
             ? List.of()
-            : eingabe.nachfahren().stream().map(b -> nachfahre(b, glieder)).toList();
+            : eingabe.nachfahren().stream().map(paketglieder::nachfahre).toList();
     return new Entscheidungskette(art, List.copyOf(abschnitte), nachfahren);
   }
 
-  private static Dokumentart dokumentart(Art art) {
-    return switch (art) {
-      case FACHLICH -> Dokumentart.FACHPLAN;
-      case PLAN -> Dokumentart.PLAN;
-      default -> Dokumentart.PAKET;
-    };
+  /** Fachplan und Plan der Kette, an denen ein Kennzeichen die Freigabe sein kann (E11). */
+  private static List<Karte> freigebende(Map<Dokumentart, Bezug> vorfahren) {
+    List<Karte> freigebende = new ArrayList<>();
+    for (Dokumentart stufe : List.of(Dokumentart.FACHPLAN, Dokumentart.PLAN)) {
+      Bezug b = vorfahren.get(stufe);
+      Karte k = b == null ? null : b.karte();
+      if (k != null) {
+        freigebende.add(k);
+      }
+    }
+    return freigebende;
   }
 
   /** Die Vorfahren-Glieder der Karte, nächstes zuerst; ein {@code [Task]} hat keinen Plan. */
@@ -137,15 +143,7 @@ public final class KettenRechner {
     if (k != null) {
       return glieder.abschnitt(art, k);
     }
-    return new Abschnitt(art, List.of(ohneKarte(Gliedart.HERKUNFT, b)));
-  }
-
-  /** Ein Glied, dessen Karte nicht im Bestand oder in einem anderen Projekt liegt (E12). */
-  private static Glied ohneKarte(Gliedart art, Bezug b) {
-    return b.art() == Bezugsart.ANDERES_PROJEKT
-        ? Glied.ohneAngaben(
-            art, Zustand.NICHT_ERFASST, Verweis.KEINER, Set.of(Hinweis.ANDERES_PROJEKT))
-        : Glied.ohneAngaben(art, Zustand.NICHT_ERFASST, Verweis.nurNummer(b.nummer()), Set.of());
+    return new Abschnitt(art, List.of(Glied.ohneKarte(Gliedart.HERKUNFT, b)));
   }
 
   /** {@code [Task]} belegt, dass es keinen Plan gibt (Kriterium 6, E13). */
@@ -202,20 +200,5 @@ public final class KettenRechner {
     ziele.add(eingabe.karte().nummer());
     return new Abschnitt(
         Dokumentart.IDEE, List.of(Ideensuche.glied(eingabe.ideen(), ziele, glieder)));
-  }
-
-  private static Nachfahre nachfahre(Bezug b, Kartenglieder glieder) {
-    Karte k = b.karte();
-    if (k != null) {
-      return new Nachfahre(
-          Zustand.ERFASST,
-          Kartenglieder.verweis(k),
-          k.spalte(),
-          k.spaltenSchluessel(),
-          glieder.zuletztErreicht(k),
-          Set.of());
-    }
-    Glied ohne = ohneKarte(Gliedart.HERKUNFT, b);
-    return new Nachfahre(ohne.zustand(), ohne.quelle(), null, null, null, ohne.hinweise());
   }
 }

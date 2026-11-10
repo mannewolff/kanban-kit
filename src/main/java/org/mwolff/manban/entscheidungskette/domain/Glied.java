@@ -16,7 +16,9 @@ import org.jspecify.annotations.Nullable;
  * @param ergebnis das Ergebnis, wörtlich
  * @param quelle die Karte oder der Kommentar, aus dem es stammt
  * @param hinweise Vermerke wie „von Hand geändert“ oder „anderes Projekt“
- * @param pruefung die Angaben einer Prüfrunde; nur bei {@link Gliedart#PRUEFRUNDE}
+ * @param pruefung die Angaben einer Prüfrunde; nur bei {@link Gliedart#PRUEFRUNDE} und {@link
+ *     Gliedart#ISSUE_REVIEW}
+ * @param einzelheiten die Angaben eines Glieds am Paket; {@code null}, wenn nicht erfasst
  */
 public record Glied(
     Gliedart art,
@@ -27,10 +29,23 @@ public record Glied(
     @Nullable String ergebnis,
     Verweis quelle,
     Set<Hinweis> hinweise,
-    @Nullable Pruefung pruefung) {
+    @Nullable Pruefung pruefung,
+    @Nullable Einzelheiten einzelheiten) {
+
+  /** Ob das Glied erfasst ist und als erreicht zählt (Plan #2108 E15). */
+  boolean erreicht() {
+    return zustand == Zustand.ERFASST && (einzelheiten == null || einzelheiten.erreicht());
+  }
+
+  /** Ein Glied, dessen Karte nicht im Bestand oder in einem anderen Projekt liegt (E12). */
+  static Glied ohneKarte(Gliedart art, KettenEingabe.Bezug b) {
+    return b.art() == KettenEingabe.Bezugsart.ANDERES_PROJEKT
+        ? ohneAngaben(art, Zustand.NICHT_ERFASST, Verweis.KEINER, Set.of(Hinweis.ANDERES_PROJEKT))
+        : ohneAngaben(art, Zustand.NICHT_ERFASST, Verweis.nurNummer(b.nummer()), Set.of());
+  }
 
   /** Ein Glied ohne Angaben im Zustand {@code zustand}. */
   static Glied ohneAngaben(Gliedart art, Zustand zustand, Verweis quelle, Set<Hinweis> hinweise) {
-    return new Glied(art, zustand, null, null, null, null, quelle, hinweise, null);
+    return new Glied(art, zustand, null, null, null, null, quelle, hinweise, null, null);
   }
 }
