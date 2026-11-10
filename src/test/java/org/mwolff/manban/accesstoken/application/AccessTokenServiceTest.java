@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
+import org.mwolff.manban.accesstoken.domain.AccessTokenArt;
 import org.mwolff.manban.accesstoken.infrastructure.InMemoryLastUsedStampThrottle;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.common.token.TokenCryptoPort;
@@ -37,6 +38,9 @@ import org.springframework.beans.factory.ObjectProvider;
  * nicht prüfbar. Der Zwischenspeicher ist bewusst der echte und kein Mock — er trägt die
  * Entscheidung „schreiben oder nicht", und ein Mock würde genau sie wegstubben.
  */
+// PMD.TooManyMethods: Mit der Art des Tokens (Issue #2102) kommen Fälle für Auflösung und Liste
+// dazu; je Fall eine kleine Testmethode bleibt lesbarer als ein Zerschneiden nach Methodenzahl.
+@SuppressWarnings("PMD.TooManyMethods")
 class AccessTokenServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -50,6 +54,11 @@ class AccessTokenServiceTest {
 
   private static AccessToken token(long id, long userId, boolean revoked) {
     return new AccessToken(id, userId, null, null, "CI", "hash", "CI", FIXED, null, revoked);
+  }
+
+  private static AccessToken appZugang(long id) {
+    return new AccessToken(
+        id, 1L, 5L, 20L, "App", "hash", "App", FIXED, null, false, AccessTokenArt.APP);
   }
 
   @BeforeEach
@@ -189,6 +198,36 @@ class AccessTokenServiceTest {
   }
 
   @Test
+  void list_omitsTokensOfKindApp() {
+    // Given
+    when(tokens.findByUserId(1L)).thenReturn(List.of(appZugang(4L), token(3L, 1L, false)));
+
+    // When
+    List<AccessTokenService.AccessTokenView> views = service.list(1L);
+
+    // Then
+    assertThat(views)
+        .singleElement()
+        .extracting(AccessTokenService.AccessTokenView::id)
+        .isEqualTo(3L);
+  }
+
+  @Test
+  void create_savesTokenOfKindStandard() {
+    // Given
+    when(crypto.generate()).thenReturn(new GeneratedToken("tk_plain", "hash"));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    service.create(1L, "CI", null, null);
+
+    // Then
+    ArgumentCaptor<AccessToken> captor = ArgumentCaptor.forClass(AccessToken.class);
+    verify(tokens).save(captor.capture());
+    assertThat(captor.getValue().art()).isEqualTo(AccessTokenArt.STANDARD);
+  }
+
+  @Test
   void revoke_marksRevoked_withoutWritingTheWholeToken() {
     // Given
     when(tokens.findById(3L)).thenReturn(Optional.of(token(3L, 1L, false)));
@@ -259,6 +298,32 @@ class AccessTokenServiceTest {
 
     // Then
     assertThat(principal).map(KanbanPrincipal::userId).contains(1L);
+  }
+
+  @Test
+  void resolveBinding_setsAppZugang_forTokenOfKindApp() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(appZugang(4L)));
+
+    // When
+    Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
+
+    // Then
+    assertThat(principal).map(KanbanPrincipal::appZugang).contains(true);
+  }
+
+  @Test
+  void resolveBinding_leavesAppZugangUnset_forTokenOfKindStandard() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(token(3L, 1L, false)));
+
+    // When
+    Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
+
+    // Then
+    assertThat(principal).map(KanbanPrincipal::appZugang).contains(false);
   }
 
   @Test

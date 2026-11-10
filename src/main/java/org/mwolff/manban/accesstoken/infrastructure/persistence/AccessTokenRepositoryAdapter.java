@@ -76,6 +76,7 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
         e.getDisplayName(),
         e.getCreatedAt(),
         e.getLastUsedAt(),
-        e.isRevoked());
+        e.isRevoked(),
+        e.getArt());
   }
 }

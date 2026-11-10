@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
+import org.mwolff.manban.accesstoken.domain.AccessTokenArt;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.common.token.TokenCryptoPort;
 import org.mwolff.manban.common.token.TokenCryptoPort.GeneratedToken;
@@ -108,6 +109,7 @@ public class AccessTokenService {
   @Transactional(readOnly = true)
   public List<AccessTokenView> list(long userId) {
     return tokens.findByUserId(userId).stream()
+        .filter(t -> t.art() != AccessTokenArt.APP)
         .map(
             t ->
                 new AccessTokenView(
@@ -173,7 +175,12 @@ public class AccessTokenService {
             t -> {
               stampLastUsedIfDue(t.requireId());
               return new KanbanPrincipal(
-                  t.userId(), t.requireId(), t.projectId(), t.boardId(), t.displayName());
+                  t.userId(),
+                  t.requireId(),
+                  t.projectId(),
+                  t.boardId(),
+                  t.displayName(),
+                  t.art() == AccessTokenArt.APP);
             });
   }
 

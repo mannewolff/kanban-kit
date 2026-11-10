@@ -37,4 +37,21 @@ class AccessTokenTest {
     // Given / When / Then
     assertThat(token(null, null).isBound()).isFalse();
   }
+
+  @Test
+  void art_isStandard_whenConstructedWithThePreviousParameters() {
+    // Given / When / Then: bestehende Aufrufer bleiben unverändert (Plan #2100, E3).
+    assertThat(token(5L, 10L).art()).isEqualTo(AccessTokenArt.STANDARD);
+  }
+
+  @Test
+  void art_isKept_whenGivenExplicitly() {
+    // Given
+    AccessToken zugang =
+        new AccessToken(
+            1L, 7L, 5L, 10L, "App", "hash", "App", FIXED, null, false, AccessTokenArt.APP);
+
+    // When / Then
+    assertThat(zugang.art()).isEqualTo(AccessTokenArt.APP);
+  }
 }

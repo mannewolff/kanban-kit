@@ -31,6 +31,7 @@ import org.mwolff.manban.common.Identifiable;
  *     Zeile nähme, die sich die gleichzeitigen Befehle einer Person teilen. Ein Wert, der hinter
  *     dem letzten Aufruf zurückliegt, ist daher kein Fehler.
  * @param revoked ob das Token widerrufen wurde
+ * @param art Art des Tokens (Plan #2100, E1)
  */
 public record AccessToken(
     @Nullable Long id,
@@ -42,8 +43,35 @@ public record AccessToken(
     String displayName,
     Instant createdAt,
     @Nullable Instant lastUsedAt,
-    boolean revoked)
+    boolean revoked,
+    AccessTokenArt art)
     implements Identifiable {
+
+  /** Gewöhnliches Token: die bisherige Parameterliste, damit Aufrufer unverändert bleiben (E3). */
+  public AccessToken(
+      @Nullable Long id,
+      Long userId,
+      @Nullable Long projectId,
+      @Nullable Long boardId,
+      String name,
+      String tokenHash,
+      String displayName,
+      Instant createdAt,
+      @Nullable Instant lastUsedAt,
+      boolean revoked) {
+    this(
+        id,
+        userId,
+        projectId,
+        boardId,
+        name,
+        tokenHash,
+        displayName,
+        createdAt,
+        lastUsedAt,
+        revoked,
+        AccessTokenArt.STANDARD);
+  }
 
   /** Ob das Token an ein Projekt + Board gebunden ist. */
   public boolean isBound() {
