@@ -569,6 +569,15 @@ class BenachrichtigungMailHandlerTest {
   }
 
   @Test
+  void einFestgefahrenesPaketIstEineStoerungAuchWennDerAusgangNurWartet() {
+    gelungenerLauf(paket(42, "Fest", NightRunState.GREY, NightRunErrorClass.STUCK));
+
+    assertThat(textDerUebersicht())
+        .doesNotContain(KEIN_BEDARF)
+        .contains("Ausgang: Wartet auf etwas");
+  }
+
+  @Test
   void einAbgebrochenerLaufOhnePaketVerlangtHandeln() {
     lauf(
         run(true, kosten(BigDecimal.ONE), "Abbruch", NightRunAbortKind.REPORTED, null),
