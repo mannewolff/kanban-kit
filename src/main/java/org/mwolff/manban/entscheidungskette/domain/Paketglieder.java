@@ -61,19 +61,19 @@ final class Paketglieder {
 
   /**
    * Das am weitesten erreichte Glied (Plan #2108 E15). Am Paket zählen ein zurückgezogener Versuch,
-   * eine nicht übertragene Übertragung und eine nicht veröffentlichte Veröffentlichung nicht.
+   * eine nicht übertragene Übertragung und eine nicht veröffentlichte Veröffentlichung nicht. Jedes
+   * Glied nach der Planung liegt auf dem Weg hinter Herkunft und Prüfrunden.
    */
   private Gliedart zuletztErreicht(Dokumentart art, Karte karte) {
     Gliedart erreicht = kartenglieder.zuletztErreicht(karte);
     if (art != Dokumentart.PAKET) {
       return erreicht;
     }
-    for (Glied g : glieder(karte, List.of())) {
-      if (g.erreicht() && g.art().compareTo(erreicht) > 0) {
-        erreicht = g.art();
-      }
-    }
-    return erreicht;
+    return glieder(karte, List.of()).stream()
+        .filter(Glied::erreicht)
+        .map(Glied::art)
+        .max(Comparator.naturalOrder())
+        .orElse(erreicht);
   }
 
   /**

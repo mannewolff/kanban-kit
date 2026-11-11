@@ -109,6 +109,17 @@ class PaketgliederTest {
   }
 
   @Test
+  void nachfahre_zugOhneSpalte_trenntRueckzugUndReadyNicht() {
+    KettenAufbau aufbau =
+        amPlan()
+            .zugVonMensch(P, "IN_PROGRESS", 77, um(1))
+            .zugVonMensch(P, null, 77, um(2))
+            .zugVonMensch(P, "READY", 77, um(3));
+
+    assertThat(nachfahre(aufbau).zuletztErreicht()).isEqualTo(Gliedart.HERKUNFT);
+  }
+
+  @Test
   void nachfahre_offenerVersuch_umsetzung() {
     KettenAufbau aufbau = amPlan().zugUeberToken(P, "IN_PROGRESS", um(2), LAUF);
 
