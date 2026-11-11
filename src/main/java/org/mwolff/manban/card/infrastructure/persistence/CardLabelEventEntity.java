@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.infrastructure.persistence;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -28,32 +29,24 @@ class CardLabelEventEntity {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
-  // Herkunft wie card_activity: origin/tokenName verifiziert, agent und runStartedAt
-  // Selbstauskunft; alle nullable — ein Aufruf ohne authentifizierten Kontext trägt keine.
-  @Column(name = "origin")
-  private @Nullable String origin;
+  // Herkunft wie card_activity; nullable — ein Aufruf ohne authentifizierten Kontext trägt keine.
+  @Embedded private @Nullable HerkunftEmbeddable herkunft;
 
-  @Column(name = "token_name")
-  private @Nullable String tokenName;
-
-  @Column(name = "agent")
-  private @Nullable String agent;
-
-  @Column(name = "run_started_at")
-  private @Nullable Instant runStartedAt;
+  // Wie card_activity: nullable, ON DELETE SET NULL (V72, Issue #2110).
+  @Column(name = "actor_user_id")
+  private @Nullable Long actorUserId;
 
   protected CardLabelEventEntity() {
     // für JPA
   }
 
-  CardLabelEventEntity(long cardId, String labelName, Instant createdAt, ActorStamp stamp) {
+  CardLabelEventEntity(
+      long cardId, String labelName, Instant createdAt, ActorStamp stamp, long actorUserId) {
     this.cardId = cardId;
     this.labelName = labelName;
     this.createdAt = createdAt;
-    this.origin = stamp.originName();
-    this.tokenName = stamp.tokenName();
-    this.agent = stamp.agent();
-    this.runStartedAt = stamp.laufStart();
+    this.herkunft = new HerkunftEmbeddable(stamp);
+    this.actorUserId = actorUserId;
   }
 
   @Nullable Long getId() {
@@ -72,19 +65,11 @@ class CardLabelEventEntity {
     return createdAt;
   }
 
-  @Nullable String getOrigin() {
-    return origin;
+  HerkunftEmbeddable getHerkunft() {
+    return herkunft == null ? new HerkunftEmbeddable() : herkunft;
   }
 
-  @Nullable String getTokenName() {
-    return tokenName;
-  }
-
-  @Nullable String getAgent() {
-    return agent;
-  }
-
-  @Nullable Instant getRunStartedAt() {
-    return runStartedAt;
+  @Nullable Long getActorUserId() {
+    return actorUserId;
   }
 }

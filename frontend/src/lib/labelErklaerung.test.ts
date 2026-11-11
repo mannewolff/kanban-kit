@@ -32,6 +32,30 @@ describe('labelErklaerung — Teile je Label', () => {
     expect(schutz?.text).toBe(de.LABEL_ERKLAERUNG.SCHUTZ.NUR_MENSCH_SETZT)
   })
 
+  for (const [sprache, t] of [
+    ['de', de],
+    ['en', en],
+  ] as const) {
+    it(`erklärt kit:manuell und kit:manual in ${sprache} mit dem Schutz in beide Richtungen (Issue #2142)`, () => {
+      const manuell = t.LABEL_ERKLAERUNG.SACHEN.MANUELL
+      const erwartet = [
+        { art: 'bedeutung', text: manuell.bedeutung },
+        { art: 'setzt', text: manuell.setzt },
+        { art: 'verschwindet', text: manuell.verschwindet },
+        { art: 'schutz', text: t.LABEL_ERKLAERUNG.SCHUTZ.NUR_MENSCH },
+      ]
+      expect(labelErklaerung(KIT_NAMEN, 'kit:manuell', t)).toEqual(erwartet)
+      expect(labelErklaerung(KIT_NAMEN, 'kit:manual', t)).toEqual(erwartet)
+    })
+  }
+
+  it('nennt in kit:manuell den Taktgeber und den Menschen als einzigen Setzer', () => {
+    expect(de.LABEL_ERKLAERUNG.SACHEN.MANUELL.bedeutung).toContain('Taktgeber')
+    expect(en.LABEL_ERKLAERUNG.SACHEN.MANUELL.bedeutung).toContain('scheduler')
+    expect(de.LABEL_ERKLAERUNG.SCHUTZ.NUR_MENSCH).toContain('Setzen und Abnehmen')
+    expect(en.LABEL_ERKLAERUNG.SCHUTZ.NUR_MENSCH).toContain('Setting and removing')
+  })
+
   it('liefert für run:running weder Schutzsatz noch Handlung', () => {
     expect(arten('run:running')).toEqual(['bedeutung', 'setzt', 'verschwindet'])
   })

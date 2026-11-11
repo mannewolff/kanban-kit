@@ -1,0 +1,22 @@
+-- ---------------------------------------------------------------------------
+-- Aenderung am Wegbeleg der Karte (Issue #2111, Plan #2108 E14; Fachliche Quelle #2101)
+--
+-- weg_beleg_geaendert_am haelt fest, wann zuletzt eine Angabe geaendert wurde, die den Weg der
+-- Karte belegt: die Kartenart aus dem Titel oder das Vorhandensein der Zeilen
+-- "Fachliche Quelle:"/"Requirement:" und "Plan-Modell:"/"Plan-Model:". Solange die Marke fehlt,
+-- gilt der Beleg als unveraendert; die Entscheidungskette steht sonst auf "nicht erfasst"
+-- (Kriterium 6).
+--
+-- Eine Spalte statt eines neuen Aktivitaetstyps: card_activity.type wird mit valueOf ohne
+-- Rueckfall gelesen, ein Rueckbau liesse den Verlauf betroffener Karten mit 500 antworten.
+--
+-- Kein Backfill: Fuer die Zeit vor der Einfuehrung gibt es keinen Nachweis einer Aenderung.
+--
+-- Rein additiv: Eine aeltere App-Version laeuft gegen dieses Schema unveraendert.
+--
+-- Rueckweg (Flyway Community kennt kein Undo; von Hand, danach die Zeile von V73 aus
+-- flyway_schema_history loeschen):
+--   ALTER TABLE card DROP COLUMN weg_beleg_geaendert_am;
+-- ---------------------------------------------------------------------------
+ALTER TABLE card
+    ADD COLUMN weg_beleg_geaendert_am timestamptz;

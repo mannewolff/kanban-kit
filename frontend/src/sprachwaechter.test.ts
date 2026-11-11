@@ -74,6 +74,8 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/pages/NightRunPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1660 — CSS-Wert (Rahmen der Token-Zeile) und `rel` des Doku-Links der Sicherung
   { file: 'src/components/BackupStatusSection.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  // #2118 — `rel` des Links aus einem `Quelle:`-Wert der Entscheidungskette
+  { file: 'src/components/Entscheidungskette.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/pages/AdministrationPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1661 — Entwicklerfehler, die keine Oberflaeche anzeigt: ungueltiger Hexwert im Theme, fehlendes `#root`
   { file: 'src/lib/kontrast.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },

@@ -63,6 +63,22 @@ class CommentRepositoryAdapter implements CommentRepository {
     return jpa.findLaufKommentare(cardIds, von);
   }
 
+  @Override
+  public List<Comment> findKettenKommentare(Collection<Long> cardIds) {
+    if (cardIds.isEmpty()) {
+      return List.of();
+    }
+    return jpa.findByCardIdInOrderByCreatedAtAscIdAsc(cardIds).stream()
+        .map(CommentRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
+  public boolean existsKitKommentarImProjekt(long projectId, Collection<String> anfaenge) {
+    return !anfaenge.isEmpty()
+        && jpa.existsKitKommentarImProjekt(projectId, anfaenge.toArray(String[]::new));
+  }
+
   private static CommentEntity toEntity(Comment c) {
     return new CommentEntity(
         c.id(),
@@ -75,7 +91,9 @@ class CommentRepositoryAdapter implements CommentRepository {
         c.laufStart(),
         c.origin(),
         c.tokenName(),
-        c.agent());
+        c.agent(),
+        c.vonHandGeaendertAm(),
+        c.vonHandKopfzeile());
   }
 
   private static Comment toDomain(CommentEntity e) {
@@ -90,6 +108,8 @@ class CommentRepositoryAdapter implements CommentRepository {
         e.getLaufStart(),
         e.getOrigin(),
         e.getTokenName(),
-        e.getAgent());
+        e.getAgent(),
+        e.getVonHandGeaendertAm(),
+        e.getVonHandKopfzeile());
   }
 }

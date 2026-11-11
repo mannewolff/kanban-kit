@@ -3068,3 +3068,45 @@ test('kartenAntwort: ohne gueltige Antwort oder bei Startfehler entsteht ein Feh
   assert.match(kartenAntwort({ error: new Error('spawn node ENOENT'), status: null, stdout: '', stderr: '' }).fehler,
     /Kartenmodul nicht startbar: spawn node ENOENT/);
 });
+
+// --- Ausgabe-Limit der Werkzeugstarts (Issue #2123) --------------------------
+
+const AUSGABE_LIMIT_ERWARTET = 256 * 1024 * 1024;
+
+test('Ausgabe-Limit: der PIT-Start erhaelt maxBuffer von 256 MiB', () => {
+  const { aufrufe } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, pitDoppel(wurzel, BEISPIEL_XML)),
+  );
+  const pit = aufrufe.find((a) => a.befehl === 'mvn');
+  assert.equal(pit.optionen.maxBuffer, AUSGABE_LIMIT_ERWARTET);
+});
+
+test('Ausgabe-Limit: der Stryker-Start erhaelt maxBuffer von 256 MiB', () => {
+  const { aufrufe } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'frontend'], wurzel, {}, strykerDoppel(wurzel, null, 1)),
+  );
+  const stryker = aufrufe.find((a) => a.befehl.endsWith('stryker'));
+  assert.equal(stryker.optionen.maxBuffer, AUSGABE_LIMIT_ERWARTET);
+});
+
+test('Ausgabe-Limit: ENOBUFS ohne Bericht nennt den Abbruch wegen zu grosser Ausgabe und endet mit 1', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, () => ({
+      status: null, signal: 'SIGTERM', stdout: '', stderr: '', error: { code: 'ENOBUFS' },
+    })),
+  );
+  assert.equal(code, 1);
+  assert.match(text, /wegen zu großer Ausgabe beendet/);
+  assert.doesNotMatch(text, /Rückgabewert/);
+});
+
+test('Ausgabe-Limit: ohne ENOBUFS bleibt die Meldung ueber den fehlenden Bericht wie bisher', () => {
+  const { code, text } = mitProjekt((wurzel) =>
+    sammelLauf(['vollauf', 'backend'], wurzel, {}, () => ({
+      status: 143, stdout: '', stderr: '', error: { code: 'EOTHER' },
+    })),
+  );
+  assert.equal(code, 1);
+  assert.match(text, /keinen Bericht unter target\/pit-reports-vollauf\/mutations\.xml hinterlassen \(Rückgabewert 143\)/);
+  assert.doesNotMatch(text, /zu großer Ausgabe/);
+});

@@ -13,6 +13,7 @@ import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardLabelEventRepository;
 import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardLabelEvent;
+import org.mwolff.manban.card.domain.LabelEreignisMitPerson;
 import org.mwolff.manban.card.domain.LabelEreignisZeile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,6 +36,7 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
   @Autowired private CardLabelEventRepository events;
   @Autowired private JdbcTemplate jdbc;
 
+  private long userId;
   private long boardId;
   private long columnId;
   private int naechsteNummer = 1;
@@ -46,7 +48,7 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
 
   @BeforeEach
   void seed() {
-    long userId =
+    userId =
         id(
             "INSERT INTO app_user (email, display_name)"
                 + " VALUES ('label@example.com', 'L') RETURNING id");
@@ -76,7 +78,7 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
   void addHaeltDasEreignisMitStempelFestUndDieLaufabfrageLiefertEs() {
     long karte = karte();
 
-    events.add(karte, "kit:clarify", GESETZT, LAUF_STEMPEL);
+    events.add(karte, "kit:clarify", GESETZT, LAUF_STEMPEL, userId);
 
     assertThat(events.findLaufEreignisse(List.of(karte), VON))
         .containsExactly(
@@ -94,7 +96,7 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
   void einEreignisOhneHerkunftKommtMitHerkunftNullZurueck() {
     long karte = karte();
 
-    events.add(karte, "kit:clarify", GESETZT, new ActorStamp(null, null, null, LAUF));
+    events.add(karte, "kit:clarify", GESETZT, new ActorStamp(null, null, null, LAUF), userId);
 
     assertThat(events.findLaufEreignisse(List.of(karte), VON))
         .containsExactly(new CardLabelEvent(karte, "kit:clarify", GESETZT, null, null, null, LAUF));
@@ -108,8 +110,9 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
         karte,
         "kit:clarify",
         GESETZT,
-        new ActorStamp(CardActivityOrigin.SESSION, null, null, null));
-    events.add(karte, "run:waiting", GESETZT, ActorStamp.unknown());
+        new ActorStamp(CardActivityOrigin.SESSION, null, null, null),
+        userId);
+    events.add(karte, "run:waiting", GESETZT, ActorStamp.unknown(), userId);
 
     assertThat(events.findLaufEreignisse(List.of(karte), VON)).isEmpty();
   }
@@ -121,8 +124,8 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
         new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", "m", VON.minusMillis(1));
     ActorStamp aufVon = new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", "m", VON);
 
-    events.add(karte, "davor", GESETZT, davor);
-    events.add(karte, "aufVon", GESETZT, aufVon);
+    events.add(karte, "davor", GESETZT, davor, userId);
+    events.add(karte, "aufVon", GESETZT, aufVon, userId);
 
     assertThat(events.findLaufEreignisse(List.of(karte), VON))
         .extracting(CardLabelEvent::labelName)
@@ -134,9 +137,9 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
     long erste = karte();
     long zweite = karte();
     long fremde = karte();
-    events.add(zweite, "spaet", GESETZT.plusSeconds(60), LAUF_STEMPEL);
-    events.add(erste, "frueh", GESETZT, LAUF_STEMPEL);
-    events.add(fremde, "fremd", GESETZT, LAUF_STEMPEL);
+    events.add(zweite, "spaet", GESETZT.plusSeconds(60), LAUF_STEMPEL, userId);
+    events.add(erste, "frueh", GESETZT, LAUF_STEMPEL, userId);
+    events.add(fremde, "fremd", GESETZT, LAUF_STEMPEL, userId);
 
     assertThat(events.findLaufEreignisse(List.of(erste, zweite), VON))
         .extracting(CardLabelEvent::labelName)
@@ -156,8 +159,8 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
   @Test
   void nachLabelNamenLiefertZeilenIdUndLaufkennungAuchOhneLauf() {
     long karte = karte();
-    events.add(karte, "kit:clarify", GESETZT, LAUF_STEMPEL);
-    events.add(karte, "kit:klaeren", GESETZT.plusSeconds(1), ActorStamp.unknown());
+    events.add(karte, "kit:clarify", GESETZT, LAUF_STEMPEL, userId);
+    events.add(karte, "kit:klaeren", GESETZT.plusSeconds(1), ActorStamp.unknown(), userId);
 
     assertThat(events.findNachLabelNamenSeit(List.of("kit:clarify", "kit:klaeren"), VON))
         .containsExactly(
@@ -174,8 +177,8 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
   @Test
   void nachLabelNamenLaesstAndereNamenWeg() {
     long karte = karte();
-    events.add(karte, "kit:clarify", GESETZT, LAUF_STEMPEL);
-    events.add(karte, "bug", GESETZT, LAUF_STEMPEL);
+    events.add(karte, "kit:clarify", GESETZT, LAUF_STEMPEL, userId);
+    events.add(karte, "bug", GESETZT, LAUF_STEMPEL, userId);
 
     assertThat(events.findNachLabelNamenSeit(List.of("kit:clarify"), VON))
         .extracting(LabelEreignisZeile::labelName)
@@ -188,8 +191,8 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
     // Die Laufkennung liegt bewusst vor der Grenze: Es zaehlt created_at, nicht run_started_at.
     ActorStamp frueherLauf =
         new ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", "m", GESETZT.minusSeconds(3600));
-    events.add(karte, "davor", GESETZT.minusMillis(1), LAUF_STEMPEL);
-    events.add(karte, "aufSeit", GESETZT, frueherLauf);
+    events.add(karte, "davor", GESETZT.minusMillis(1), LAUF_STEMPEL, userId);
+    events.add(karte, "aufSeit", GESETZT, frueherLauf, userId);
 
     assertThat(events.findNachLabelNamenSeit(List.of("davor", "aufSeit"), GESETZT))
         .extracting(LabelEreignisZeile::labelName)
@@ -199,8 +202,8 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
   @Test
   void nachLabelNamenBeiGleichstandNachZeilenId() {
     long karte = karte();
-    events.add(karte, "zuerst", GESETZT, LAUF_STEMPEL);
-    events.add(karte, "danach", GESETZT, LAUF_STEMPEL);
+    events.add(karte, "zuerst", GESETZT, LAUF_STEMPEL, userId);
+    events.add(karte, "danach", GESETZT, LAUF_STEMPEL, userId);
 
     assertThat(events.findNachLabelNamenSeit(List.of("danach", "zuerst"), VON))
         .extracting(LabelEreignisZeile::labelName)
@@ -209,7 +212,7 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
 
   @Test
   void nachLabelNamenOhneNamenEineLeereListe() {
-    events.add(karte(), "kit:clarify", GESETZT, LAUF_STEMPEL);
+    events.add(karte(), "kit:clarify", GESETZT, LAUF_STEMPEL, userId);
 
     assertThat(events.findNachLabelNamenSeit(List.of(), VON)).isEmpty();
   }
@@ -227,11 +230,98 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
   @Test
   void loeschenDerKarteEntferntIhreEreignisse() {
     long karte = karte();
-    events.add(karte, "kit:clarify", GESETZT, LAUF_STEMPEL);
+    events.add(karte, "kit:clarify", GESETZT, LAUF_STEMPEL, userId);
 
     jdbc.update("DELETE FROM card WHERE id = ?", karte);
 
     assertThat(jdbc.queryForObject("SELECT count(*) FROM card_label_event", Integer.class))
         .isZero();
+  }
+
+  private long weitererNutzer() {
+    return id(
+        "INSERT INTO app_user (email, display_name)"
+            + " VALUES ('weg@example.com', 'W') RETURNING id");
+  }
+
+  @Test
+  void mitPersonLiefertPersonHerkunftTokenNameUndZeitpunkt() {
+    long karte = karte();
+
+    events.add(karte, "kit:nightrun", GESETZT, LAUF_STEMPEL, userId);
+
+    assertThat(events.findMitPerson(List.of(karte)))
+        .containsExactly(
+            new LabelEreignisMitPerson(
+                zeilenId(karte, "kit:nightrun"),
+                karte,
+                "kit:nightrun",
+                GESETZT,
+                userId,
+                CardActivityOrigin.TOKEN,
+                "Nachtlauf"));
+  }
+
+  @Test
+  void mitPersonLiefertNurDieGefragtenKartenChronologischUndBeiGleichstandNachId() {
+    long erste = karte();
+    long zweite = karte();
+    long fremde = karte();
+    events.add(zweite, "spaet", GESETZT.plusSeconds(60), LAUF_STEMPEL, userId);
+    events.add(erste, "zuerst", GESETZT, LAUF_STEMPEL, userId);
+    events.add(zweite, "danach", GESETZT, LAUF_STEMPEL, userId);
+    events.add(fremde, "fremd", GESETZT, LAUF_STEMPEL, userId);
+
+    assertThat(events.findMitPerson(List.of(erste, zweite)))
+        .extracting(LabelEreignisMitPerson::labelName)
+        .containsExactly("zuerst", "danach", "spaet");
+  }
+
+  @Test
+  void mitPersonOhneKartenEineLeereListe() {
+    events.add(karte(), "kit:nightrun", GESETZT, LAUF_STEMPEL, userId);
+
+    assertThat(events.findMitPerson(List.of())).isEmpty();
+  }
+
+  /** Plan #2108 E5: {@code ON DELETE SET NULL} wie {@code card_activity.actor_user_id}. */
+  @Test
+  void loeschenDesNutzersLeertDiePersonUndLaesstDasEreignisStehen() {
+    long karte = karte();
+    long nutzer = weitererNutzer();
+    events.add(
+        karte,
+        "kit:nightrun",
+        GESETZT,
+        new ActorStamp(CardActivityOrigin.SESSION, null, null, null),
+        nutzer);
+
+    jdbc.update("DELETE FROM app_user WHERE id = ?", nutzer);
+
+    assertThat(events.findMitPerson(List.of(karte)))
+        .containsExactly(
+            new LabelEreignisMitPerson(
+                zeilenId(karte, "kit:nightrun"),
+                karte,
+                "kit:nightrun",
+                GESETZT,
+                null,
+                CardActivityOrigin.SESSION,
+                null));
+  }
+
+  /** Ein Ereignis von vor der Einführung trägt keine Person und bleibt lesbar (Kriterium 9). */
+  @Test
+  void einEreignisOhnePersonBleibtLesbar() {
+    long karte = karte();
+    jdbc.update(
+        "INSERT INTO card_label_event (card_id, label_name, created_at) VALUES (?, 'alt', ?)",
+        karte,
+        OffsetDateTime.ofInstant(GESETZT, ZoneOffset.UTC));
+
+    assertThat(events.findMitPerson(List.of(karte)))
+        .containsExactly(
+            new LabelEreignisMitPerson(
+                zeilenId(karte, "alt"), karte, "alt", GESETZT, null, null, null));
   }
 }

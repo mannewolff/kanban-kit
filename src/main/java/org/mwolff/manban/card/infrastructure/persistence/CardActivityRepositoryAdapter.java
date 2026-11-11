@@ -72,6 +72,16 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
   }
 
   @Override
+  public List<CardActivity> findByCardIds(Collection<Long> cardIds) {
+    if (cardIds.isEmpty()) {
+      return List.of();
+    }
+    return jpa.findByCardIdInOrderByCreatedAtAscIdAsc(cardIds).stream()
+        .map(CardActivityRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
   public List<CardActivity> findTokenActivitiesInWindow(
       long projectId, String tokenName, Instant von, Instant bis) {
     return jpa.findTokenActivitiesInWindow(projectId, tokenName, von, bis).stream()
@@ -102,7 +112,8 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
   }
 
   private static CardActivity toDomain(CardActivityEntity e) {
-    String origin = e.getOrigin();
+    HerkunftEmbeddable herkunft = e.getHerkunft();
+    String origin = herkunft.getOrigin();
     String statusAfter = e.getStatusAfter();
     return new CardActivity(
         e.getId(),
@@ -112,9 +123,9 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
         e.getDetail(),
         e.getCreatedAt(),
         origin == null ? null : CardActivityOrigin.valueOf(origin),
-        e.getTokenName(),
-        e.getAgent(),
-        e.getRunStartedAt(),
+        herkunft.getTokenName(),
+        herkunft.getAgent(),
+        herkunft.getRunStartedAt(),
         statusAfter == null ? null : CardStatus.valueOf(statusAfter));
   }
 }

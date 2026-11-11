@@ -1523,6 +1523,14 @@ function bereichLesen(seite, wurzel) {
 const BERICHT_TEILE = ['.claude', 'stryker', 'mutation.json'];
 
 /**
+ * Ausgabe-Limit je Kanal fuer die Werkzeugstarts (Issue #2123). Der Vorgabewert von `spawnSync`
+ * ist 1 MiB; darueber beendet Node das Werkzeug per SIGTERM (`ENOBUFS`, Maven endet mit 143). Bei
+ * leerem Maven-Cache schreibt `mvn` so viele Download-Zeilen, dass diese Grenze reisst. Eine feste
+ * Grenze statt `Infinity` haelt den Speicher begrenzt und einen Ueberlauf als Meldung sichtbar.
+ */
+const AUSGABE_LIMIT = 256 * 1024 * 1024;
+
+/**
  * Ein Stryker-Lauf ueber die beruehrten Dateien. Der alte Bericht faellt VOR dem Lauf weg: Sonst
  * laese ein abgebrochener Lauf den Stand des vorigen und meldete ihn als seinen eigenen.
  */
@@ -1533,6 +1541,7 @@ function strykerLaufen({ wurzel, starte, args }) {
   const ergebnis = starte(binaer, args, {
     cwd: join(wurzel, 'frontend'),
     encoding: 'utf-8',
+    maxBuffer: AUSGABE_LIMIT,
   });
   return { ergebnis, bericht: jsonLesen(berichtsPfad) };
 }
@@ -1555,7 +1564,7 @@ const PIT_VOLLAUF_BERICHT_TEILE = ['target', 'pit-reports-vollauf', 'mutations.x
 function pitLaufen({ wurzel, starte, args, teile = PIT_BERICHT_TEILE }) {
   const berichtsPfad = join(wurzel, ...teile);
   rmSync(berichtsPfad, { force: true });
-  const ergebnis = starte('mvn', args, { cwd: wurzel, encoding: 'utf-8' });
+  const ergebnis = starte('mvn', args, { cwd: wurzel, encoding: 'utf-8', maxBuffer: AUSGABE_LIMIT });
   return { ergebnis, xml: existsSync(berichtsPfad) ? readFileSync(berichtsPfad, 'utf-8') : null };
 }
 
@@ -1648,6 +1657,11 @@ function letzteZeilen(roh, anzahl) {
  */
 function fehlenderBericht(teile, ergebnis) {
   const tail = [...letzteZeilen(ergebnis?.stdout, 15), ...letzteZeilen(ergebnis?.stderr, 5)];
+  if (ergebnis?.error?.code === 'ENOBUFS') {
+    return `Der Mutationslauf hat keinen Bericht unter ${teile.join('/')} hinterlassen: Das Werkzeug `
+      + `wurde wegen zu großer Ausgabe beendet (über ${AUSGABE_LIMIT / 1024 / 1024} MiB je Kanal). `
+      + `Geprüft wurde deshalb nichts.\n${tail.join('\n')}\n`;
+  }
   return `Der Mutationslauf hat keinen Bericht unter ${teile.join('/')} hinterlassen `
     + `(Rückgabewert ${ergebnis?.status ?? 'unbekannt'}). Geprüft wurde deshalb nichts.\n`
     + `${tail.join('\n')}\n`;

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.TestAnmeldung;
 import org.mwolff.manban.auth.domain.PlatformRole;
+import org.mwolff.manban.project.application.KitReviewVorReadyReader;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,10 +31,12 @@ class KitStrictnessIT extends AbstractIntegrationTest {
 
   private static final String TOKEN_HEADER = "X-Kanban-Token";
   private static final String STRENGE = "X-Kit-Strictness";
+  private static final String REVIEW = "X-Kit-Review-Before-Ready";
 
   @Autowired private MockMvc mvc;
   @Autowired private TestAnmeldung anmeldung;
   @Autowired private ObjectMapper json;
+  @Autowired private KitReviewVorReadyReader reviewVorReady;
 
   @Test
   void dasGebundeneTokenMeldetDieStufe_undDerLetzteGueltigeWertBleibt() throws Exception {
@@ -67,6 +70,42 @@ class KitStrictnessIT extends AbstractIntegrationTest {
         .andExpect(status().isOk());
 
     assertThat(strictness(owner, projectId)).isNull();
+  }
+
+  /** Issue #2112: Die erste Meldung ist keine Änderung, erst ein Wechsel setzt den Zeitpunkt. */
+  @Test
+  void dieErsteMeldungIstKeineAenderung_einWechselSetztDenZeitpunkt_gleicheMeldungNichtMehr()
+      throws Exception {
+    Cookie admin = anmeldung.anmelden("review-admin@example.com", PlatformRole.ADMIN);
+    Cookie owner = anmeldung.anmelden("review-owner@example.com", PlatformRole.USER);
+    long projectId = createProject(admin, "Review-Projekt", "review-owner@example.com");
+    long boardId = createBoard(owner, projectId, "Board R");
+    String token = boundToken(owner, projectId, boardId);
+    assertThat(reviewVorReady.meldung(projectId)).isEmpty();
+
+    meldeReview(token, "true");
+    KitReviewVorReadyReader.Meldung erste = reviewVorReady.meldung(projectId).orElseThrow();
+    assertThat(erste.wert()).isTrue();
+    assertThat(erste.geaendertAm()).isNull();
+
+    meldeReview(token, "TRUE");
+    assertThat(reviewVorReady.meldung(projectId)).contains(erste);
+
+    meldeReview(token, "false");
+    KitReviewVorReadyReader.Meldung gewechselt = reviewVorReady.meldung(projectId).orElseThrow();
+    assertThat(gewechselt.wert()).isFalse();
+    assertThat(gewechselt.geaendertAm()).isNotNull();
+
+    meldeReview(token, "false");
+    assertThat(reviewVorReady.meldung(projectId)).contains(gewechselt);
+
+    meldeReview(token, "vielleicht");
+    assertThat(reviewVorReady.meldung(projectId)).contains(gewechselt);
+  }
+
+  private void meldeReview(String token, String wert) throws Exception {
+    mvc.perform(get("/api/kanban/items").header(TOKEN_HEADER, token).header(REVIEW, wert))
+        .andExpect(status().isOk());
   }
 
   private void items(String token, @Nullable String stufe) throws Exception {

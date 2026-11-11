@@ -22,6 +22,8 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
@@ -748,6 +750,118 @@ class CardServiceTest {
     assertThat(view.title()).isEqualTo("Neu");
   }
 
+  // --- Wegbeleg der Karte (Issue #2111, Plan #2108 E14) ----------------------
+
+  private Card nachUpdate(Card vorher, String titel, String beschreibung) {
+    when(cards.findById(1L)).thenReturn(Optional.of(vorher));
+    when(boardService.requireColumn(20L, BOARD)).thenReturn(column(20L, "Anstehend", 0));
+    when(boardService.listColumns(BOARD)).thenReturn(List.of(column(20L, "Anstehend", 0)));
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    service.update(1L, 1L, titel, beschreibung, null, null, null, null);
+    verify(cards).save(captor.capture());
+    return captor.getValue();
+  }
+
+  private static Card karteMit(String titel, @Nullable String beschreibung) {
+    return card(1L, 20L, 1, false, null, CardType.CARD, null, null)
+        .withContent(titel, beschreibung);
+  }
+
+  @Test
+  void update_wechselDerKartenartUeberDenTitel_setztDieMarke() {
+    Card gespeichert = nachUpdate(karteMit("[Task] Weg", null), "[Plan] Weg", null);
+
+    assertThat(gespeichert.wegBelegGeaendertAm()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void update_praefixEntfernt_setztDieMarke() {
+    Card gespeichert = nachUpdate(karteMit("[Task] Weg", null), "Weg", null);
+
+    assertThat(gespeichert.wegBelegGeaendertAm()).isEqualTo(FIXED);
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "Fachliche Quelle: Issue #1",
+        "Requirement: Issue #1",
+        "Plan-Modell: opus",
+        "Plan-Model: opus"
+      })
+  void update_belegendeZeileHinzugefuegt_setztDieMarke(String zeile) {
+    Card gespeichert =
+        nachUpdate(karteMit("Weg", "## Kontext\nText"), "Weg", "## Kontext\n" + zeile + "\nText");
+
+    assertThat(gespeichert.wegBelegGeaendertAm()).isEqualTo(FIXED);
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "Fachliche Quelle: Issue #1",
+        "Requirement: Issue #1",
+        "Plan-Modell: opus",
+        "Plan-Model: opus"
+      })
+  void update_belegendeZeileEntfernt_setztDieMarke(String zeile) {
+    Card gespeichert =
+        nachUpdate(karteMit("Weg", "## Kontext\n" + zeile + "\nText"), "Weg", "## Kontext\nText");
+
+    assertThat(gespeichert.wegBelegGeaendertAm()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void update_aenderungAmUebrigenText_setztDieMarkeNicht() {
+    Card gespeichert =
+        nachUpdate(
+            karteMit("[Task] Weg", "Fachliche Quelle: Issue #1\nPlan-Modell: opus\nalt"),
+            "[Task] Neuer Weg",
+            "Fachliche Quelle: Issue #2\nPlan-Modell: sonnet\nneu");
+
+    assertThat(gespeichert.wegBelegGeaendertAm()).isNull();
+  }
+
+  @Test
+  void update_zeileNurInAndererSprache_setztDieMarkeNicht() {
+    Card gespeichert =
+        nachUpdate(
+            karteMit("Weg", "Fachliche Quelle: Issue #1\nPlan-Modell: opus"),
+            "Weg",
+            "Requirement: Issue #1\nPlan-Model: opus");
+
+    assertThat(gespeichert.wegBelegGeaendertAm()).isNull();
+  }
+
+  @Test
+  void update_angabeMittenImSatz_istKeineBelegendeZeile() {
+    Card gespeichert =
+        nachUpdate(karteMit("Weg", "Text"), "Weg", "Siehe Fachliche Quelle: Issue #1");
+
+    assertThat(gespeichert.wegBelegGeaendertAm()).isNull();
+  }
+
+  @Test
+  void update_ohneBelegaenderung_laesstEineFruehereMarkeStehen() {
+    Instant frueher = FIXED.minusSeconds(3_600);
+    Card vorher =
+        karteMit("Weg", "Text").withWegBelegVergleich(karteMit("[Task] Weg", "Text"), frueher);
+
+    Card gespeichert = nachUpdate(vorher, "Weg", "Anderer Text");
+
+    assertThat(gespeichert.wegBelegGeaendertAm()).isEqualTo(frueher);
+  }
+
+  @Test
+  void update_ueberEinToken_setztDieMarkeWieDieOberflaeche() {
+    when(actor.current())
+        .thenReturn(new ActorContext.ActorStamp(CardActivityOrigin.TOKEN, "Nachtlauf", null, null));
+
+    Card gespeichert = nachUpdate(karteMit("[Task] Weg", null), "[Plan] Weg", null);
+
+    assertThat(gespeichert.wegBelegGeaendertAm()).isEqualTo(FIXED);
+  }
+
   // --- openEpicFromCard (Issue #640) ---------------------------------------
 
   // --- assignRequirement und Anforderung im EpicView (Issue #639) -----------
@@ -1243,8 +1357,8 @@ class CardServiceTest {
 
     service.setLabels(3L, 1L, List.of(7L, 9L));
 
-    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
-    verify(labelEvents, never()).add(1L, "Bug", FIXED, stempel);
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel, 3L);
+    verify(labelEvents, never()).add(1L, "Bug", FIXED, stempel, 3L);
   }
 
   @Test
@@ -1257,7 +1371,7 @@ class CardServiceTest {
 
     service.changeLabel(3L, 1L, 9L, LabelAction.ADD);
 
-    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel, 3L);
   }
 
   @Test
@@ -1270,8 +1384,8 @@ class CardServiceTest {
 
     service.bulkLabels(3L, List.of(1L, 2L), 9L, LabelAction.ADD);
 
-    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
-    verify(labelEvents, never()).add(2L, "Nacht", FIXED, stempel);
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel, 3L);
+    verify(labelEvents, never()).add(2L, "Nacht", FIXED, stempel, 3L);
   }
 
   @Test
@@ -1284,8 +1398,8 @@ class CardServiceTest {
 
     service.create(1L, BOARD, 20L, "Titel", null, null, null, null, null, List.of(7L, 9L), null);
 
-    verify(labelEvents).add(1L, "Bug", FIXED, stempel);
-    verify(labelEvents).add(1L, "Nacht", FIXED, stempel);
+    verify(labelEvents).add(1L, "Bug", FIXED, stempel, 1L);
+    verify(labelEvents).add(1L, "Nacht", FIXED, stempel, 1L);
   }
 
   // --- Aktivitätsverlauf (card_activity) --------------------------------

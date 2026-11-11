@@ -13,6 +13,9 @@ import org.springframework.stereotype.Component;
  * Widerruf committet also mit ihr oder gar nicht. Erst damit ist der Verlust endgültig. Die Prüfung
  * beim Aufruf allein ließe den Zugang wieder wirksam werden, wenn zwischen Verlust und Rückgabe der
  * Rolle kein Aufruf kam.
+ *
+ * <p>Vor dem Sammelwiderruf nimmt er die Ausgabesperre des Inhabers (Issue #2122): Eine Anlage oder
+ * Erneuerung, die gerade läuft, committet zuerst, und der Widerruf erfasst ihr neues Token.
  */
 @Component
 class AppZugangWiderrufListener {
@@ -25,11 +28,13 @@ class AppZugangWiderrufListener {
 
   @EventListener
   void onRolleVerloren(MitgliedRolleVerlorenEvent event) {
+    tokens.sperreAppZugangAusgabe(event.userId());
     tokens.markAppZugaengeRevoked(event.userId(), event.projectId());
   }
 
   @EventListener
   void onKontoGesperrt(KontoGesperrtEvent event) {
+    tokens.sperreAppZugangAusgabe(event.userId());
     tokens.markAppZugaengeRevoked(event.userId());
   }
 }

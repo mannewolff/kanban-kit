@@ -151,6 +151,48 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
   }
 
   @Override
+  public List<KarteImBestand> findImBestandNachNummern(
+      long projectId, Collection<Integer> nummern) {
+    if (nummern.isEmpty()) {
+      return List.of();
+    }
+    return findImBestand(jpa.findIdsByProjectIdAndNumberIn(projectId, nummern));
+  }
+
+  @Override
+  public List<KarteImBestand> findKinderImBestand(Collection<Long> vorfahrIds) {
+    if (vorfahrIds.isEmpty()) {
+      return List.of();
+    }
+    return findImBestand(jpa.findIdsByDerivedFromCardIdIn(vorfahrIds));
+  }
+
+  /**
+   * Der Ausdruck nennt die Nummern als Alternative; {@code ([^0-9]|$)} hält {@code #12} von {@code
+   * #123} fern. Die Nummern sind ganze Zahlen, ein Einschleusen in den Ausdruck ist ausgeschlossen.
+   */
+  @Override
+  public List<Card> findMitErgebnisNummer(long projectId, Collection<Integer> nummern) {
+    if (nummern.isEmpty()) {
+      return List.of();
+    }
+    String alternativen = String.join("|", nummern.stream().sorted().map(String::valueOf).toList());
+    String muster =
+        "(?n)^[[:blank:]]*(Ergebnis|Result):[[:blank:]]*(Issue[[:blank:]]+)?#("
+            + alternativen
+            + ")([^0-9]|$)";
+    return jpa.findByProjectIdUndBeschreibungsMuster(projectId, muster).stream()
+        .map(CardRepositoryAdapter::toDomain)
+        .toList();
+  }
+
+  @Override
+  public boolean hatUeberTokenAngelegteKitKarte(long projectId) {
+    return jpa.existsUeberTokenAngelegtMitMuster(
+        projectId, "(?n)^[[:blank:]]*(Autor-Modell|Author-Model|Plan-Modell|Plan-Model):");
+  }
+
+  @Override
   public Optional<Card> findById(long id) {
     return jpa.findById(id).map(CardRepositoryAdapter::toDomain);
   }
@@ -573,7 +615,8 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
         e.getExternalKey(),
         e.getDerivedFromCardId(),
         e.getRequirementCardId(),
-        status == null ? null : CardStatus.valueOf(status));
+        status == null ? null : CardStatus.valueOf(status),
+        e.getWegBelegGeaendertAm());
   }
 
   /**

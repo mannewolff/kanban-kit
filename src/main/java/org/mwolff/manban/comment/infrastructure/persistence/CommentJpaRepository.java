@@ -18,6 +18,26 @@ interface CommentJpaRepository extends JpaRepository<CommentEntity, Long> {
    */
   List<CommentEntity> findByCardIdOrderByCreatedAtAscIdAsc(Long cardId);
 
+  /** Die Kommentare mehrerer Karten, chronologisch wie je Karte (Issue #2109). */
+  List<CommentEntity> findByCardIdInOrderByCreatedAtAscIdAsc(Collection<Long> cardIds);
+
+  /**
+   * Ob das Projekt einen Kommentar mit Herkunft {@code TOKEN} trägt, dessen erste nichtleere Zeile
+   * mit einem der festen Anfänge beginnt (Issue #2109, Plan #2108 E3, E6). {@code starts_with}
+   * statt {@code LIKE}, damit {@code %} und {@code _} wörtlich gelten; das Projekt kommt über die
+   * Karte. Die Anfänge binden als Array, denn Hibernate machte aus einer Liste in {@code ARRAY[…]}
+   * einen einzigen Row-Wert.
+   */
+  @Query(
+      value =
+          "SELECT EXISTS (SELECT 1 FROM comment c JOIN card k ON k.id = c.card_id"
+              + " WHERE k.project_id = :projectId AND c.origin = 'TOKEN'"
+              + " AND EXISTS (SELECT 1 FROM unnest(CAST(:anfaenge AS text[])) AS a(anfang)"
+              + " WHERE starts_with(regexp_replace(c.body, '^\\s*\\n', ''), a.anfang)))",
+      nativeQuery = true)
+  boolean existsKitKommentarImProjekt(
+      @Param("projectId") long projectId, @Param("anfaenge") String... anfaenge);
+
   /**
    * Je Karte des Projekts der jüngste Kommentar mit dem Anker {@code ## Laufstand} oder {@code ##
    * Run status} am Textanfang (Issue #1373, Issue #1590, Plan #1582 E12). Natives SQL, weil {@code

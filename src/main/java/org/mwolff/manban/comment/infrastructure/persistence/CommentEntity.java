@@ -50,6 +50,13 @@ class CommentEntity {
   @Column(name = "agent")
   private @Nullable String agent;
 
+  // Änderung von Hand an einer Meldung des Kits (Issue #2109); nullable, V71 ohne Backfill.
+  @Column(name = "von_hand_geaendert_am")
+  private @Nullable Instant vonHandGeaendertAm;
+
+  @Column(name = "von_hand_kopfzeile")
+  private @Nullable String vonHandKopfzeile;
+
   protected CommentEntity() {
     // für JPA
   }
@@ -65,7 +72,9 @@ class CommentEntity {
       @Nullable Instant laufStart,
       @Nullable String origin,
       @Nullable String tokenName,
-      @Nullable String agent) {
+      @Nullable String agent,
+      @Nullable Instant vonHandGeaendertAm,
+      @Nullable String vonHandKopfzeile) {
     this.id = id;
     this.cardId = cardId;
     this.authorUserId = authorUserId;
@@ -77,6 +86,8 @@ class CommentEntity {
     this.origin = origin;
     this.tokenName = tokenName;
     this.agent = agent;
+    this.vonHandGeaendertAm = vonHandGeaendertAm;
+    this.vonHandKopfzeile = vonHandKopfzeile;
   }
 
   @Nullable Long getId() {
@@ -121,5 +132,13 @@ class CommentEntity {
 
   @Nullable String getAgent() {
     return agent;
+  }
+
+  @Nullable Instant getVonHandGeaendertAm() {
+    return vonHandGeaendertAm;
+  }
+
+  @Nullable String getVonHandKopfzeile() {
+    return vonHandKopfzeile;
   }
 }

@@ -187,7 +187,7 @@ public final class KartenGrundlage {
       zuordnung.ersetzeZustaendige(saved.requireId(), projectId, assigneeIds, userId);
     }
     if (labelIds != null && !labelIds.isEmpty()) {
-      zuordnung.ersetzeLabels(saved.requireId(), boardId, labelIds, herkunft());
+      zuordnung.ersetzeLabels(saved.requireId(), boardId, labelIds, herkunft(), userId);
     }
     publishChanged(boardId, ActivityType.CREATED, saved.requireId());
     return saved;
@@ -266,6 +266,14 @@ public final class KartenGrundlage {
         nachher.withStatus(null),
         KartenStatus.bis(boardService.listColumns(nachher.boardId()), spalte),
         clock.instant());
+  }
+
+  /**
+   * Hält eine Änderung am Wegbeleg der Karte fest (Plan #2108 E14). Jeder Weg, der Titel oder
+   * Beschreibung ändert, läuft hierüber, damit die Herkunft der Änderung keine Rolle spielt.
+   */
+  public Card folgeWegBeleg(Card vorher, Card nachher) {
+    return nachher.withWegBelegVergleich(vorher, clock.instant());
   }
 
   /** Eine blanke Beschreibung gilt als keine. */

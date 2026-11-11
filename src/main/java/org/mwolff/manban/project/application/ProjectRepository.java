@@ -72,4 +72,14 @@ public interface ProjectRepository {
    * {@code normal} und {@code strict} zu.
    */
   void setKitStrictness(long projectId, String value);
+
+  /**
+   * Legt die zuletzt vom Kit gemeldete Einstellung zur Prüfung vor Ready ab ({@code
+   * project.kit_review_before_ready}, Issue #2112) — <b>nur, wenn sie sich ändert</b>.
+   *
+   * <p>Gezieltes Update statt {@code save}, aus demselben Grund wie bei {@link #setKitStrictness}.
+   * Der Änderungszeitpunkt wird nur gesetzt, wenn ein schon gemeldeter Wert wechselt; die erste
+   * Meldung ist keine Änderung. Ein unbekanntes Projekt ist ein No-Op.
+   */
+  void setKitReviewBeforeReady(long projectId, boolean value, Instant now);
 }

@@ -42,8 +42,14 @@ import { cardsApi as defaultCardsApi, type Card, type CardActivity, type CardByN
 import { commentsApi as defaultCommentsApi, type Comment, type CommentsApi } from '../api/comments'
 import { artAusTitel, useKitNamen, type KitNamenZustand } from '../api/kitNamen'
 import type { NightRunsApi } from '../api/nightRuns'
+import {
+  entscheidungsketteApi as defaultEntscheidungsketteApi,
+  type EntscheidungsketteApi,
+  type EntscheidungsketteView,
+} from '../api/entscheidungskette'
 import { vorhabenKostenApi as defaultVorhabenKostenApi, type VorhabenKostenApi, type VorhabenKostenView } from '../api/vorhabenKosten'
 import { VorhabenKostenZeile } from './leitstand/VorhabenKostenZeile'
+import { Entscheidungskette } from './Entscheidungskette'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
 import { Wartegrund } from './nachtlauf/Wartegrund'
@@ -1275,6 +1281,8 @@ interface Props {
   nightRunsApi?: Pick<NightRunsApi, 'anlaeufeDerKarte' | 'kettenstand' | 'wartegrund'>
   /** Abruf der Kostenzeile eines Vorhabens (Issue #2006); ohne Angabe der echte Endpunkt. */
   vorhabenKostenApi?: Pick<VorhabenKostenApi, 'jeVorhaben'>
+  /** Abruf der Entscheidungskette (Issue #2118); ohne Angabe der echte Endpunkt. */
+  entscheidungsketteApi?: Pick<EntscheidungsketteApi, 'kette'>
 }
 
 /**
@@ -1322,6 +1330,7 @@ function CardDetailModalView({
   projectId,
   nightRunsApi,
   vorhabenKostenApi = defaultVorhabenKostenApi,
+  entscheidungsketteApi = defaultEntscheidungsketteApi,
   onOpenDependency,
   neuLaden = 0,
 }: Readonly<ViewProps>) {
@@ -1491,6 +1500,8 @@ function CardDetailModalView({
   const [baum, setBaum] = useState<DerivationNode[] | null>(null)
   const [baumFehler, setBaumFehler] = useState<string | null>(null)
   const [kosten, setKosten] = useState<VorhabenKostenView | null>(null)
+  // Die Entscheidungskette (Issue #2118): `null`, solange sie lädt, bei einem Fehler oder ohne Abschnitt.
+  const [kette, setKette] = useState<EntscheidungsketteView | null>(null)
   // Der Zweig einer gewöhnlichen Karte (Issue #1986): `null` lädt, leer heißt „keine Kette“.
   const [zweig, setZweig] = useState<DerivationNode[] | null>(null)
   const [zweigFehler, setZweigFehler] = useState<string | null>(null)
@@ -1617,6 +1628,26 @@ function CardDetailModalView({
       aktiv = false
     }
   }, [isEpic, card.id, vorhabenKostenApi, neuLaden])
+
+  // Die Entscheidungskette (Issue #2118, Plan #2108 E7): einmal beim Öffnen — der Dialog öffnet immer
+  // im Lesemodus —, nicht erst beim Aufklappen, denn ob der Abschnitt existiert, sagt erst die
+  // Antwort. Ein Fehler lässt den Abschnitt wie `sichtbar: false` entfallen: Er ist eine Zugabe, kein
+  // Grund für eine Meldung im Dialog. Das Nachladen (E12) lädt sie nicht neu.
+  useEffect(() => {
+    let aktiv = true
+    setKette(null)
+    void entscheidungsketteApi.kette(card.id).then(
+      (antwort) => {
+        if (aktiv) setKette(antwort.sichtbar ? antwort : null)
+      },
+      () => {
+        if (aktiv) setKette(null)
+      },
+    )
+    return () => {
+      aktiv = false
+    }
+  }, [card.id, entscheidungsketteApi])
 
   // Der Zweig einer Karte im Block „Zuordnung“ (Issue #1986, Plan #1980) — nach dem `aktiv`-Muster
   // des Vorhaben-Baums. Ein Vorhaben hat seinen eigenen Baum; der Endpunkt lieferte dort ohnehin leer.
@@ -2168,6 +2199,14 @@ function CardDetailModalView({
                 onAdd={() => void addComment()}
               />
 
+              {/* Direkt vor der Aktivität, eingeklappt (Plan #2108 E8); ohne Kit kein Abschnitt. */}
+              {kette !== null && (
+                <>
+                  <Divider />
+                  <Entscheidungskette kette={kette} onOpenCard={onOpenDependency} />
+                </>
+              )}
+
               <Divider />
               <ActivitySection activities={activities} actorName={actorName} />
             </KartenBlock>
@@ -2331,6 +2370,7 @@ export function CardDetailModal(props: Readonly<Props>) {
           attachmentsApi={props.attachmentsApi}
           cardsApi={cardsApi}
           vorhabenKostenApi={props.vorhabenKostenApi}
+          entscheidungsketteApi={props.entscheidungsketteApi}
           onClose={() => nimmAb(eintrag)}
           onChanged={() => markiereGeaendert(eintrag.ebene)}
           onOpenDependency={onOpenDependency}

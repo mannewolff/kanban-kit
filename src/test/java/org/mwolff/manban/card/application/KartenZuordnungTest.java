@@ -191,7 +191,7 @@ class KartenZuordnungTest {
   void ersetzeLabelsEntferntDuplikateUndSchreibt() {
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(20L, "Bug", "#f00", false)));
 
-    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L, 20L), SESSION);
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L, 20L), SESSION, HANDELND);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(20L));
   }
@@ -200,7 +200,7 @@ class KartenZuordnungTest {
   void ersetzeLabelsLehntFremdesLabelAb() {
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(20L, "Bug", "#f00", false)));
 
-    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(99L), SESSION))
+    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(99L), SESSION, HANDELND))
         .isInstanceOf(InvalidLabelException.class)
         .hasMessageContaining("99");
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
@@ -211,7 +211,7 @@ class KartenZuordnungTest {
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(20L, "Bug", "#f00", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L));
 
-    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.ADD, SESSION);
+    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.ADD, SESSION, HANDELND);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(20L));
   }
@@ -222,7 +222,7 @@ class KartenZuordnungTest {
         .thenReturn(List.of(label(20L, "Bug", "#f00", false), label(21L, "Doku", "#0f0", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L));
 
-    zuordnung.aendereLabel(KARTE, BOARD, 21L, LabelAction.ADD, SESSION);
+    zuordnung.aendereLabel(KARTE, BOARD, 21L, LabelAction.ADD, SESSION, HANDELND);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(20L, 21L));
   }
@@ -233,7 +233,7 @@ class KartenZuordnungTest {
         .thenReturn(List.of(label(20L, "Bug", "#f00", false), label(21L, "Doku", "#0f0", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L, 21L));
 
-    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.REMOVE, SESSION);
+    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.REMOVE, SESSION, HANDELND);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(21L));
   }
@@ -252,11 +252,11 @@ class KartenZuordnungTest {
                 label(22L, "run:waiting", "#00f", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L));
 
-    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L, 21L, 22L, 21L), SESSION);
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L, 21L, 22L, 21L), SESSION, HANDELND);
 
-    verify(labelEvents).add(KARTE, "kit:clarify", JETZT, STEMPEL);
-    verify(labelEvents).add(KARTE, "run:waiting", JETZT, STEMPEL);
-    verify(labelEvents, never()).add(anyLong(), eq("Bug"), any(), any());
+    verify(labelEvents).add(KARTE, "kit:clarify", JETZT, STEMPEL, HANDELND);
+    verify(labelEvents).add(KARTE, "run:waiting", JETZT, STEMPEL, HANDELND);
+    verify(labelEvents, never()).add(anyLong(), eq("Bug"), any(), any(), anyLong());
   }
 
   /** Ein schon gesetztes Label ist kein Ereignis, das Abnehmen auch nicht (Plan #1752 E11). */
@@ -266,7 +266,7 @@ class KartenZuordnungTest {
         .thenReturn(List.of(label(20L, "Bug", "#f00", false), label(21L, "Doku", "#0f0", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L, 21L));
 
-    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L), SESSION);
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L), SESSION, HANDELND);
 
     verifyNoInteractions(labelEvents);
   }
@@ -277,9 +277,30 @@ class KartenZuordnungTest {
         .thenReturn(List.of(label(20L, "Bug", "#f00", false), label(21L, "Doku", "#0f0", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L));
 
-    zuordnung.aendereLabel(KARTE, BOARD, 21L, LabelAction.ADD, SESSION);
+    zuordnung.aendereLabel(KARTE, BOARD, 21L, LabelAction.ADD, SESSION, HANDELND);
 
-    verify(labelEvents).add(KARTE, "Doku", JETZT, STEMPEL);
+    verify(labelEvents).add(KARTE, "Doku", JETZT, STEMPEL, HANDELND);
+  }
+
+  /** Issue #2110 (Plan #2108 E5): Die handelnde Person steht am Ereignis, je Schreibweg. */
+  @Test
+  void ersetzeLabelsHaeltDieHandelndePersonAmEreignisFest() {
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(21L, "kit:clarify", "#0f0", false)));
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of());
+
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(21L), SESSION, A);
+
+    verify(labelEvents).add(KARTE, "kit:clarify", JETZT, STEMPEL, A);
+  }
+
+  @Test
+  void aendereLabelHaeltDieHandelndePersonAmEreignisFest() {
+    when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(21L, "Doku", "#0f0", false)));
+    when(cardLabels.findByCardId(KARTE)).thenReturn(List.of());
+
+    zuordnung.aendereLabel(KARTE, BOARD, 21L, LabelAction.ADD, SESSION, B);
+
+    verify(labelEvents).add(KARTE, "Doku", JETZT, STEMPEL, B);
   }
 
   @Test
@@ -287,7 +308,7 @@ class KartenZuordnungTest {
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(20L, "Bug", "#f00", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L));
 
-    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.ADD, SESSION);
+    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.ADD, SESSION, HANDELND);
 
     verifyNoInteractions(labelEvents);
   }
@@ -298,9 +319,9 @@ class KartenZuordnungTest {
         .thenReturn(List.of(label(20L, "Bug", "#f00", false), label(21L, "Doku", "#0f0", false)));
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(20L, 21L));
 
-    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.REMOVE, SESSION);
+    zuordnung.aendereLabel(KARTE, BOARD, 20L, LabelAction.REMOVE, SESSION, HANDELND);
 
-    verify(labelEvents, never()).add(anyLong(), anyString(), any(), any());
+    verify(labelEvents, never()).add(anyLong(), anyString(), any(), any(), anyLong());
   }
 
   /** Eine abgewiesene Ersetzung hinterlässt kein Ereignis (Freigabe-Prüfung vor dem Schreiben). */
@@ -309,7 +330,8 @@ class KartenZuordnungTest {
     givenFreigabeLabels();
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(31L));
 
-    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(31L, 30L), TOKEN))
+    assertThatThrownBy(
+            () -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(31L, 30L), TOKEN, HANDELND))
         .isInstanceOf(FreigabeLabelException.class);
     verifyNoInteractions(labelEvents);
   }
@@ -318,7 +340,8 @@ class KartenZuordnungTest {
   void aendereLabelLehntFremdesLabelAb() {
     when(labels.findByBoardId(BOARD)).thenReturn(List.of(label(20L, "Bug", "#f00", false)));
 
-    assertThatThrownBy(() -> zuordnung.aendereLabel(KARTE, BOARD, 99L, LabelAction.ADD, SESSION))
+    assertThatThrownBy(
+            () -> zuordnung.aendereLabel(KARTE, BOARD, 99L, LabelAction.ADD, SESSION, HANDELND))
         .isInstanceOf(InvalidLabelException.class)
         .hasMessageContaining("99");
     verify(cardLabels, never()).findByCardId(KARTE);
@@ -330,7 +353,8 @@ class KartenZuordnungTest {
     givenFreigabeLabels();
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(31L));
 
-    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(31L, 30L), TOKEN))
+    assertThatThrownBy(
+            () -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(31L, 30L), TOKEN, HANDELND))
         .isInstanceOf(FreigabeLabelException.class)
         .hasMessage("Label kit:night setzt nur ein Mensch im Board");
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
@@ -341,7 +365,7 @@ class KartenZuordnungTest {
     givenFreigabeLabels();
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(31L, 20L));
 
-    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L), TOKEN))
+    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L), TOKEN, HANDELND))
         .isInstanceOf(FreigabeLabelException.class)
         .hasMessage("Label kit:klaeren nimmt nur ein Mensch im Board ab");
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
@@ -352,7 +376,7 @@ class KartenZuordnungTest {
     givenFreigabeLabels();
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(30L, 31L));
 
-    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(30L, 31L, 20L), TOKEN);
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(30L, 31L, 20L), TOKEN, HANDELND);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(30L, 31L, 20L));
   }
@@ -362,7 +386,7 @@ class KartenZuordnungTest {
     givenFreigabeLabels();
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(31L));
 
-    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(30L), SESSION);
+    zuordnung.ersetzeLabels(KARTE, BOARD, List.of(30L), SESSION, HANDELND);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(30L));
   }
@@ -371,7 +395,8 @@ class KartenZuordnungTest {
   void aendereLabelPerTokenLehntSetzenEinesNurMenschenLabelsAb() {
     givenFreigabeLabels();
 
-    assertThatThrownBy(() -> zuordnung.aendereLabel(KARTE, BOARD, 30L, LabelAction.ADD, TOKEN))
+    assertThatThrownBy(
+            () -> zuordnung.aendereLabel(KARTE, BOARD, 30L, LabelAction.ADD, TOKEN, HANDELND))
         .isInstanceOf(FreigabeLabelException.class);
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
@@ -381,7 +406,8 @@ class KartenZuordnungTest {
     givenFreigabeLabels();
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(31L));
 
-    assertThatThrownBy(() -> zuordnung.aendereLabel(KARTE, BOARD, 31L, LabelAction.REMOVE, TOKEN))
+    assertThatThrownBy(
+            () -> zuordnung.aendereLabel(KARTE, BOARD, 31L, LabelAction.REMOVE, TOKEN, HANDELND))
         .isInstanceOf(FreigabeLabelException.class);
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
   }
@@ -391,7 +417,7 @@ class KartenZuordnungTest {
     givenFreigabeLabels();
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(30L));
 
-    zuordnung.aendereLabel(KARTE, BOARD, 30L, LabelAction.REMOVE, TOKEN);
+    zuordnung.aendereLabel(KARTE, BOARD, 30L, LabelAction.REMOVE, TOKEN, HANDELND);
 
     verify(cardLabels).replaceLabels(KARTE, List.of());
   }
@@ -400,7 +426,7 @@ class KartenZuordnungTest {
   void aendereLabelPerSessionDarfNurMenschenLabelSetzen() {
     givenFreigabeLabels();
 
-    zuordnung.aendereLabel(KARTE, BOARD, 30L, LabelAction.ADD, SESSION);
+    zuordnung.aendereLabel(KARTE, BOARD, 30L, LabelAction.ADD, SESSION, HANDELND);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(30L));
   }
@@ -410,7 +436,7 @@ class KartenZuordnungTest {
     givenEnglischeUndNamensraumLabels();
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(41L, 20L));
 
-    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L), TOKEN))
+    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L), TOKEN, HANDELND))
         .isInstanceOf(FreigabeLabelException.class)
         .hasMessage("Label kit:protected nimmt nur ein Mensch im Board ab");
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
@@ -421,7 +447,8 @@ class KartenZuordnungTest {
     // Anlegen einer Karte mit Labels läuft über ersetzeLabels mit leerer Vorher-Menge.
     givenEnglischeUndNamensraumLabels();
 
-    assertThatThrownBy(() -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L, 42L), TOKEN))
+    assertThatThrownBy(
+            () -> zuordnung.ersetzeLabels(KARTE, BOARD, List.of(20L, 42L), TOKEN, HANDELND))
         .isInstanceOf(FreigabeLabelException.class)
         .hasMessageContaining("Namensraum des Kits");
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
@@ -432,7 +459,8 @@ class KartenZuordnungTest {
     givenEnglischeUndNamensraumLabels();
     when(cardLabels.findByCardId(KARTE)).thenReturn(List.of(40L));
 
-    assertThatThrownBy(() -> zuordnung.aendereLabel(KARTE, BOARD, 40L, LabelAction.REMOVE, TOKEN))
+    assertThatThrownBy(
+            () -> zuordnung.aendereLabel(KARTE, BOARD, 40L, LabelAction.REMOVE, TOKEN, HANDELND))
         .isInstanceOf(FreigabeLabelException.class)
         .hasMessage("Label kit:clarify nimmt nur ein Mensch im Board ab");
     verify(cardLabels, never()).replaceLabels(anyLong(), anyList());
@@ -442,7 +470,7 @@ class KartenZuordnungTest {
   void aendereLabelPerSessionDarfUnbekanntenNamenImNamensraumSetzen() {
     givenEnglischeUndNamensraumLabels();
 
-    zuordnung.aendereLabel(KARTE, BOARD, 42L, LabelAction.ADD, SESSION);
+    zuordnung.aendereLabel(KARTE, BOARD, 42L, LabelAction.ADD, SESSION, HANDELND);
 
     verify(cardLabels).replaceLabels(KARTE, List.of(42L));
   }

@@ -84,6 +84,67 @@ class CardTest {
     assertThat(mitStatus.withDerivedFrom(9L).status()).isEqualTo(CardStatus.READY);
   }
 
+  /** Wie die Herkunft muss auch die Marke des Wegbelegs durch jede Konstruktionsstelle wandern. */
+  @Test
+  void wegBelegMarke_ueberlebt_jedeKonstruktionsstelleDesRecords() {
+    Instant marke = FIXED.plusSeconds(60);
+    Card mitMarke = CARD.withContent("[Plan] T", "desc").withWegBelegVergleich(CARD, marke);
+
+    assertThat(mitMarke.wegBelegGeaendertAm()).isEqualTo(marke);
+    assertThat(mitMarke.withContent("neu", "d").wegBelegGeaendertAm()).isEqualTo(marke);
+    assertThat(mitMarke.asArchived().wegBelegGeaendertAm()).isEqualTo(marke);
+    assertThat(mitMarke.asArchived().asRestored(0).wegBelegGeaendertAm()).isEqualTo(marke);
+    assertThat(mitMarke.withMovedToDoneAt(FIXED).wegBelegGeaendertAm()).isEqualTo(marke);
+    assertThat(mitMarke.withStatus(CardStatus.READY).wegBelegGeaendertAm()).isEqualTo(marke);
+    assertThat(mitMarke.withParent(7L).wegBelegGeaendertAm()).isEqualTo(marke);
+    assertThat(mitMarke.withShortcode("K").wegBelegGeaendertAm()).isEqualTo(marke);
+    assertThat(mitMarke.withDueDate(FIXED).wegBelegGeaendertAm()).isEqualTo(marke);
+    assertThat(mitMarke.withRequirement(3L).wegBelegGeaendertAm()).isEqualTo(marke);
+    assertThat(mitMarke.withDerivedFrom(9L).wegBelegGeaendertAm()).isEqualTo(marke);
+  }
+
+  @Test
+  void withWegBelegVergleich_kartenartGeaendert_stempelt() {
+    Card nachher = CARD.withContent("[Task] T", "desc");
+
+    assertThat(nachher.withWegBelegVergleich(CARD, FIXED).wegBelegGeaendertAm()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void withWegBelegVergleich_beideOhneBeschreibung_stempeltNicht() {
+    Card vorher = CARD.withContent("T", null);
+    Card nachher = vorher.withContent("T2", null);
+
+    assertThat(nachher.withWegBelegVergleich(vorher, FIXED).wegBelegGeaendertAm()).isNull();
+  }
+
+  @Test
+  void withWegBelegVergleich_zeileMitEinzug_zaehlt() {
+    Card nachher = CARD.withContent("T", "desc\n  Plan-Modell: opus");
+
+    assertThat(
+            nachher
+                .withWegBelegVergleich(CARD.withContent("T", "desc"), FIXED)
+                .wegBelegGeaendertAm())
+        .isEqualTo(FIXED);
+  }
+
+  @Test
+  void withWegBelegVergleich_zeileNeuGegenueberLeererBeschreibung_stempelt() {
+    Card vorher = CARD.withContent("T", null);
+    Card nachher = vorher.withContent("T", "Fachliche Quelle: Issue #1");
+
+    assertThat(nachher.withWegBelegVergleich(vorher, FIXED).wegBelegGeaendertAm()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void withWegBelegVergleich_textOhneZeileGegenueberLeererBeschreibung_stempeltNicht() {
+    Card vorher = CARD.withContent("T", null);
+    Card nachher = vorher.withContent("T", "desc");
+
+    assertThat(nachher.withWegBelegVergleich(vorher, FIXED).wegBelegGeaendertAm()).isNull();
+  }
+
   @Test
   void withStatus_setztUndLoescht() {
     assertThat(CARD.status()).isNull();

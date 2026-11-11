@@ -80,8 +80,10 @@ class KitNamenController {
                       + " KEINER — jeder mit Schreibrecht setzt und nimmt ab, per Session oder"
                       + " Token; NUR_MENSCH_SETZT — Setzen über ein Token wird abgewiesen, nur"
                       + " angemeldet per Session; NUR_MENSCH_NIMMT_AB — Abnehmen über ein Token"
-                      + " wird abgewiesen, nur angemeldet per Session.",
-              allowableValues = {"KEINER", "NUR_MENSCH_SETZT", "NUR_MENSCH_NIMMT_AB"},
+                      + " wird abgewiesen, nur angemeldet per Session; NUR_MENSCH — Setzen und"
+                      + " Abnehmen über ein Token werden abgewiesen, beides nur angemeldet per"
+                      + " Session (Issue #2142).",
+              allowableValues = {"KEINER", "NUR_MENSCH_SETZT", "NUR_MENSCH_NIMMT_AB", "NUR_MENSCH"},
               example = "NUR_MENSCH_NIMMT_AB")
           String schutz) {}
 

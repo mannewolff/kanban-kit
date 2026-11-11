@@ -176,7 +176,8 @@ public class AccessTokenService {
    * Index, ist seine Transaktion in PostgreSQL unbrauchbar. Der Inhaber für die Meldung lässt sich
    * erst nach ihrem Rollback nachschlagen.
    *
-   * @throws ProjectAccessDeniedException Aufrufer ist Mitglied, aber weder Admin noch Owner (403)
+   * @throws ProjectAccessDeniedException Aufrufer ist Mitglied, aber weder Admin noch Owner, oder
+   *     sein Konto ist gesperrt (403)
    * @throws org.mwolff.manban.project.application.ProjectNotFoundException Aufrufer hat keine echte
    *     Mitgliedschaft, auch als Plattform-Admin (404)
    * @throws InvalidTokenBindingException Board unbekannt oder in einem anderen Projekt (400)
@@ -193,11 +194,14 @@ public class AccessTokenService {
     }
   }
 
-  /** Die Transaktion von {@link #appZugangAnlegen}; öffentlich nur für den Spring-Proxy. */
+  /**
+   * Die Transaktion von {@link #appZugangAnlegen}; öffentlich nur für den Spring-Proxy. Die
+   * Rechteprüfung läuft unter der Ausgabesperre des Aufrufers (Issue #2122).
+   */
   @Transactional
   public CreatedAccessToken appZugangAnlegenInTransaktion(
       long userId, long projectId, long boardId) {
-    permissions.requireEchterOwnerOderAdmin(userId, projectId);
+    requireAusgabeBerechtigt(userId, projectId);
     requireBoardImProjekt(boardId, projectId);
     tokens
         .findWirksamenAppZugang(boardId)
@@ -213,22 +217,26 @@ public class AccessTokenService {
    * Widerruf der alten und Anlage der neuen Zeile bilden eine Transaktion (Plan #2100, E7).
    *
    * <p>Der bedingte Widerruf serialisiert gleichzeitiges Erneuern und Widerrufen: Wer zweite an der
-   * Zeilensperre ankommt, findet den Zugang widerrufen und legt nichts an.
+   * Zeilensperre ankommt, findet den Zugang widerrufen und legt nichts an. Gegen Rollenverlust und
+   * Kontosperre serialisiert die Ausgabesperre des Aufrufers; unter ihr wird auch die Rolle des
+   * Inhabers erneut geprüft (Issue #2122).
    *
    * @throws AccessTokenNotFoundException Zugang unbekannt oder schon widerrufen (404)
-   * @throws ProjectAccessDeniedException Aufrufer ist Mitglied des Projekts, aber nicht Inhaber
-   *     (403)
+   * @throws ProjectAccessDeniedException Aufrufer ist Mitglied des Projekts, aber nicht Inhaber,
+   *     nicht mehr Admin oder Owner, oder sein Konto ist gesperrt (403)
    * @throws org.mwolff.manban.project.application.ProjectNotFoundException Aufrufer hat keine echte
    *     Mitgliedschaft (404, kein Existenz-Leak)
    */
   @Transactional
   public CreatedAccessToken appZugangErneuern(long userId, long tokenId) {
+    tokens.sperreAppZugangAusgabe(userId);
     AccessToken alt = requireAppZugang(tokenId);
     long projectId = gebunden(alt.projectId());
+    permissions.requireEchterOwnerOderAdmin(userId, projectId);
     if (alt.userId() != userId) {
-      permissions.requireEchterOwnerOderAdmin(userId, projectId);
       throw new ProjectAccessDeniedException();
     }
+    requireAktivesKonto(userId);
     if (!tokens.markRevokedIfActive(tokenId)) {
       throw new AccessTokenNotFoundException();
     }
@@ -297,6 +305,27 @@ public class AccessTokenService {
         zugang.userId() == userId,
         zugang.createdAt(),
         zugang.lastUsedAt());
+  }
+
+  /**
+   * Nimmt die Ausgabesperre des Aufrufers und prüft erst danach Rolle und Konto (Issue #2122). Jede
+   * Abfrage danach sieht damit einen Rollenverlust oder eine Kontosperre, die vor der Sperre
+   * committet hat; eine spätere wartet auf das Ende dieser Transaktion.
+   */
+  private void requireAusgabeBerechtigt(long userId, long projectId) {
+    tokens.sperreAppZugangAusgabe(userId);
+    permissions.requireEchterOwnerOderAdmin(userId, projectId);
+    requireAktivesKonto(userId);
+  }
+
+  /**
+   * Ein gesperrtes Konto bekommt keinen Zugang (403). Der Filter der Sitzung weist es sonst schon
+   * ab; hier geht es um die Anfrage, die vor der Sperre durch den Filter kam (Issue #2122).
+   */
+  private void requireAktivesKonto(long userId) {
+    if (!users.istAktiv(userId)) {
+      throw new ProjectAccessDeniedException();
+    }
   }
 
   /** Ein Zugang der App; ein gewöhnliches Token gibt es unter diesem Weg nicht (404). */

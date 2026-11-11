@@ -54,6 +54,19 @@ interface KanbanAccessTokenJpaRepository extends JpaRepository<KanbanAccessToken
   @Query("update #{#entityName} t set t.revoked = true where t.id = :id and t.revoked = false")
   int markRevokedIfActive(@Param("id") long id);
 
+  /**
+   * Nimmt die Ausgabesperre der Zugänge der App dieses Inhabers bis zum Ende der Transaktion (Issue
+   * #2122). Eine transaktionsgebundene Advisory-Sperre statt einer Zeilensperre: Die neue Zeile, um
+   * die es geht, gibt es beim Sperren noch nicht. Der Schlüssel ist ein Hash über eine feste
+   * Vorsilbe und die Nutzer-ID; eine Kollision kostet nur Wartezeit, nie Korrektheit.
+   */
+  @Query(
+      value =
+          "select 1 from (select pg_advisory_xact_lock("
+              + "hashtextextended('app-zugang-ausgabe:' || :userId, 0))) gesperrt",
+      nativeQuery = true)
+  int sperreAppZugangAusgabe(@Param("userId") long userId);
+
   /** Widerruft alle wirksamen Token dieser Art und dieses Inhabers. */
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(

@@ -99,7 +99,8 @@
         "src/components/DatumFeld.tsx",
         "src/components/LabelErklaerung.tsx",
         "src/components/Erklaerung.tsx",
-        "src/components/ErklaerungInfo.tsx"
+        "src/components/ErklaerungInfo.tsx",
+        "src/components/Entscheidungskette.tsx"
       ],
       "testMuster": [
         "src/components/CardDetailModal.test.tsx",
@@ -113,7 +114,8 @@
         "src/components/DatumFeld.test.tsx",
         "src/components/LabelErklaerung.test.tsx",
         "src/components/Erklaerung.test.tsx",
-        "src/components/ErklaerungInfo.test.tsx"
+        "src/components/ErklaerungInfo.test.tsx",
+        "src/components/Entscheidungskette.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 2,

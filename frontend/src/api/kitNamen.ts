@@ -11,9 +11,10 @@ import { apiFetch } from './client'
 
 /**
  * Wer ein Label der Sache setzen oder abnehmen darf — dieselbe Regel, nach der der Server eine
- * Änderung über ein Token abweist (Issue #1670, Plan #1668 E3).
+ * Änderung über ein Token abweist (Issue #1670, Plan #1668 E3). `NUR_MENSCH` schützt beide Richtungen
+ * (Issue #2142).
  */
-export type KitSchutz = 'KEINER' | 'NUR_MENSCH_SETZT' | 'NUR_MENSCH_NIMMT_AB'
+export type KitSchutz = 'KEINER' | 'NUR_MENSCH_SETZT' | 'NUR_MENSCH_NIMMT_AB' | 'NUR_MENSCH'
 
 /** Eine Sache des Kits mit allen ihren Label-Namen, der deutsche zuerst, und ihrer Schutzregel. */
 export interface KitSache {

@@ -50,4 +50,17 @@ public interface CommentRepository {
    * Erstellzeitpunkt. Nach Laufkennung, bei Gleichstand nach ID. Ohne Karten-IDs eine leere Liste.
    */
   List<LaufKommentar> findLaufKommentare(Collection<Long> cardIds, Instant von);
+
+  /**
+   * Die Kommentare der Karten in chronologischer Reihenfolge, bei Gleichstand nach ID (Issue
+   * #2109). Ohne Karten-IDs eine leere Liste.
+   */
+  List<Comment> findKettenKommentare(Collection<Long> cardIds);
+
+  /**
+   * Ob das Projekt einen Kommentar mit Herkunft {@code TOKEN} trägt, dessen erste nichtleere Zeile
+   * mit einem der festen Anfänge beginnt (Issue #2109, Plan #2108 E3, E6). Die Anfänge gelten
+   * wörtlich; ohne Anfänge ist die Antwort {@code false}.
+   */
+  boolean existsKitKommentarImProjekt(long projectId, Collection<String> anfaenge);
 }

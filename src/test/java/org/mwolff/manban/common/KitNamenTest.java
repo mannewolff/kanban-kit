@@ -38,6 +38,7 @@ class KitNamenTest {
           new Zeile(Sache.WARTET_EREIGNIS, "kit:wartet", "kit:on-hold", Schutz.NUR_MENSCH_NIMMT_AB),
           new Zeile(Sache.REPARATUR, "kit:repair", null, Schutz.KEINER),
           new Zeile(Sache.HOTFIX, "kit:hotfix", null, Schutz.KEINER),
+          new Zeile(Sache.MANUELL, "kit:manuell", "kit:manual", Schutz.NUR_MENSCH),
           new Zeile(Sache.LAUF_ABGEBROCHEN, "lauf:abgebrochen", "run:aborted", Schutz.KEINER),
           new Zeile(Sache.LAUF_LAEUFT, "lauf:laeuft", "run:running", Schutz.KEINER),
           new Zeile(Sache.LAUF_WARTET, "lauf:wartet", "run:waiting", Schutz.KEINER),
@@ -81,8 +82,17 @@ class KitNamenTest {
   }
 
   @Test
-  void standard_hatZweiundzwanzigSachen() {
-    assertThat(Sache.values()).hasSize(24);
+  void standard_hatFuenfundzwanzigSachen() {
+    assertThat(Sache.values()).hasSize(25);
+  }
+
+  @Test
+  void manuell_traegtBeideNamen_undNurDerMenschSetztUndNimmtAb() {
+    // Issue #2142: der Mensch nimmt eine Karte vom Taktgeber des Kits aus (Kit-Plan 2427, V1).
+    assertThat(KitNamen.STANDARD.sache("kit:manuell")).contains(Sache.MANUELL);
+    assertThat(KitNamen.STANDARD.sache("kit:manual")).contains(Sache.MANUELL);
+    assertThat(KitNamen.STANDARD.namen(Sache.MANUELL)).containsExactly("kit:manuell", "kit:manual");
+    assertThat(Sache.MANUELL.schutz()).isEqualTo(Schutz.NUR_MENSCH);
   }
 
   @Test
@@ -163,7 +173,7 @@ class KitNamenTest {
     assertThat(KitNamen.STANDARD.alleNamen())
         .containsExactlyElementsOf(
             KitNamen.STANDARD.eintraege().stream().map(Eintrag::name).toList())
-        .hasSize(38)
+        .hasSize(40)
         .startsWith("kit:durchziehen", "kit:carry-through", "kit:geschuetzt")
         .endsWith("planreview:1", "planreview:2");
   }

@@ -1539,6 +1539,82 @@ export const de = {
     SEIT_BEWERTUNG_GEAENDERT: 'seit der Bewertung geändert',
   },
 
+  /** Der Abschnitt „Entscheidungskette“ im Kartendialog, `Entscheidungskette` (Issue #2118, Plan #2108). */
+  ENTSCHEIDUNGSKETTE: {
+    TITEL: 'Entscheidungskette',
+    NICHT_ERFASST: 'nicht erfasst',
+    NICHT_VORGESEHEN: 'nicht vorgesehen',
+    AUSSTEHEND: 'ausstehend',
+    HINWEIS: {
+      VON_HAND_GEAENDERT: 'von Hand geändert',
+      ANDERES_PROJEKT: 'anderes Projekt',
+    },
+    DOKUMENT: {
+      IDEE: 'Idee',
+      FACHPLAN: 'Fachplan',
+      PLAN: 'Plan',
+      PAKET: 'Paket',
+    },
+    GLIED: {
+      IDEE: 'Idee',
+      HERKUNFT: 'Herkunft',
+      PRUEFRUNDE: 'Prüfrunde',
+      EINARBEITUNG: 'Einarbeitung',
+      ISSUE_REVIEW: 'Prüfung vor Ready (Issue-Review)',
+      FREIGABE: 'Freigabe zur Umsetzung',
+      UMSETZUNG: 'Umsetzung',
+      CODE_REVIEW: 'Code-Review',
+      UEBERTRAGUNG: 'Übertragung auf den Hauptzweig',
+      VEROEFFENTLICHUNG: 'Veröffentlichung',
+    },
+    AKTEURTYP: {
+      MENSCH: 'Mensch',
+      MODELL: 'Modell',
+      WERKZEUG: 'Werkzeug',
+    },
+    VON: 'Von',
+    FREIGEGEBEN_VON: 'Freigegeben von',
+    AUSGEFUEHRT_VON: 'Ausgeführt von',
+    FREIGEGEBEN_UND_AUSGEFUEHRT_VON: 'Freigegeben und ausgeführt von',
+    AKTEUR_MODELL: (modell: string) => `Modell ${modell}`,
+    ZEITPUNKT: 'Zeitpunkt',
+    ERGEBNIS: 'Ergebnis',
+    QUELLE: 'Quelle',
+    KOMMENTAR_AN: 'Kommentar an',
+    KOMMENTAR_VOM: (zeitpunkt: string) => `vom ${zeitpunkt}`,
+    RUNDE: 'Runde',
+    PRUEFER: 'Prüfer',
+    PRUEFER_EINTRAG: (nummer: number) => `Prüfer ${nummer}`,
+    FUNDE: 'Funde',
+    FUNDZAHLEN: (kritisch: number, blocker: number, wichtig: number, hinweis: number) =>
+      `${kritisch} kritisch, ${blocker} Blocker, ${wichtig} wichtig, ${hinweis} Hinweise`,
+    FALL: 'Fall',
+    FREIGABEFALL: {
+      ZUG_NACH_READY: 'Zug nach Ready durch einen Menschen',
+      KENNZEICHEN: 'Ziel oder Durchziehen-Kennzeichen am Fachplan oder Plan',
+    },
+    AUSGANG: 'Ausgang',
+    UMSETZUNGSAUSGANG: {
+      ABGESCHLOSSEN: 'abgeschlossen',
+      ZURUECKGEZOGEN: 'zurückgezogen',
+      OFFEN: 'offen',
+    },
+    COMMIT: 'Commit',
+    PRUEFLAUF: 'Prüflauf',
+    BUILD_DIENST: 'Build-Dienst',
+    WEG: 'Weg',
+    WEGE: {
+      LOKAL: 'Prüflauf lokal',
+      BUILD_DIENST: 'Build-Dienst',
+      NOTFALL: 'Notfall',
+      VORBEREITET: 'vorbereiteter Stand',
+    },
+    VERSION: 'Version',
+    NACHFAHREN: 'Nachfahren',
+    SPALTE: 'Spalte',
+    ZULETZT_ERREICHT: 'Zuletzt erreicht',
+  },
+
   /** Anläufe einer Karte im Karten-Detail, `KartenAnlaeufe` (Issue #1658). */
   KARTEN_ANLAEUFE: {
     LAUF_ART: {
@@ -2177,6 +2253,11 @@ export const de = {
         setzt: 'Der Session-Start beziehungsweise „push main“.',
         verschwindet: 'Das Kit nimmt es ab, sobald der Hotfix nachgeholt ist.',
       },
+      MANUELL: {
+        bedeutung: 'Die Karte ist vom Taktgeber des Kits ausgenommen: Er schickt sie weder von selbst zur Prüfung noch in die Planung.',
+        setzt: 'Nur ein Mensch; das Kit setzt es nie.',
+        verschwindet: 'Nur, wenn ein Mensch es abnimmt; danach nimmt der Taktgeber die Karte wieder auf.',
+      },
       LAUF_ABGEBROCHEN: {
         bedeutung:
           'Ein Lauf des Nacht-Runners ist an dieser Karte abgebrochen; der Kommentar „Laufstand“ nennt den Stand. Wiederholen genügt.',
@@ -2251,6 +2332,7 @@ export const de = {
     SCHUTZ: {
       NUR_MENSCH_SETZT: 'Setzen geht nur angemeldet im Leitstand, nicht über ein Token.',
       NUR_MENSCH_NIMMT_AB: 'Abnehmen geht nur angemeldet im Leitstand, nicht über ein Token.',
+      NUR_MENSCH: 'Setzen und Abnehmen gehen nur angemeldet im Leitstand, nicht über ein Token.',
     },
   },
 

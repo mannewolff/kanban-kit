@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -19,6 +20,7 @@ import java.util.OptionalLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
 import org.mwolff.manban.accesstoken.domain.AccessTokenArt;
 import org.mwolff.manban.accesstoken.infrastructure.InMemoryLastUsedStampThrottle;
@@ -79,6 +81,7 @@ class AccessTokenServiceTest {
     permissions = mock(PermissionChecker.class);
     projects = mock(ProjectService.class);
     users = mock(UserLookup.class);
+    when(users.istAktiv(anyLong())).thenReturn(true);
     clock = new MutableClock(FIXED);
     ObjectProvider<AccessTokenService> self =
         new ObjectProvider<>() {
@@ -595,6 +598,34 @@ class AccessTokenServiceTest {
   }
 
   @Test
+  void appZugangAnlegen_prueftRolleUndKontoErstUnterDerAusgabesperre() {
+    // Given
+    angelegtWird();
+
+    // When
+    service.appZugangAnlegen(1L, 5L, 20L);
+
+    // Then: Issue #2122 — die Sperre vor jeder Prüfung, die Prüfungen vor dem Speichern.
+    InOrder reihenfolge = inOrder(tokens, permissions, users);
+    reihenfolge.verify(tokens).sperreAppZugangAusgabe(1L);
+    reihenfolge.verify(permissions).requireEchterOwnerOderAdmin(1L, 5L);
+    reihenfolge.verify(users).istAktiv(1L);
+    reihenfolge.verify(tokens).save(any(AccessToken.class));
+  }
+
+  @Test
+  void appZugangAnlegen_weistEinGesperrtesKontoAb() {
+    // Given
+    angelegtWird();
+    when(users.istAktiv(1L)).thenReturn(false);
+
+    // When / Then
+    assertThatThrownBy(() -> service.appZugangAnlegen(1L, 5L, 20L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(tokens, never()).save(any(AccessToken.class));
+  }
+
+  @Test
   void appZugangAnlegen_weistBoardEinesAnderenProjektsAb() {
     // Given
     when(boardService.findProjectId(20L)).thenReturn(Optional.of(6L));
@@ -700,6 +731,55 @@ class AccessTokenServiceTest {
             AccessToken::tokenHash,
             AccessToken::art)
         .containsExactly(1L, 5L, 20L, "hash-neu", AccessTokenArt.APP);
+  }
+
+  @Test
+  void appZugangErneuern_prueftDenInhaberUnterDerAusgabesperre() {
+    // Given
+    when(tokens.findById(3L)).thenReturn(Optional.of(appZugang(3L)));
+    when(tokens.markRevokedIfActive(3L)).thenReturn(true);
+    when(crypto.generate()).thenReturn(new GeneratedToken("tk_neu", "hash-neu"));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    service.appZugangErneuern(1L, 3L);
+
+    // Then: Issue #2122 — die Sperre vor dem Lesen, die Prüfungen vor dem Widerruf.
+    InOrder reihenfolge = inOrder(tokens, permissions, users);
+    reihenfolge.verify(tokens).sperreAppZugangAusgabe(1L);
+    reihenfolge.verify(tokens).findById(3L);
+    reihenfolge.verify(permissions).requireEchterOwnerOderAdmin(1L, 5L);
+    reihenfolge.verify(users).istAktiv(1L);
+    reihenfolge.verify(tokens).markRevokedIfActive(3L);
+    reihenfolge.verify(tokens).save(any(AccessToken.class));
+  }
+
+  @Test
+  void appZugangErneuern_weistDenHerabgestuftenInhaberAb() {
+    // Given
+    when(tokens.findById(3L)).thenReturn(Optional.of(appZugang(3L)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireEchterOwnerOderAdmin(1L, 5L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.appZugangErneuern(1L, 3L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(tokens, never()).markRevokedIfActive(anyLong());
+    verify(tokens, never()).save(any(AccessToken.class));
+  }
+
+  @Test
+  void appZugangErneuern_weistEinGesperrtesKontoAb() {
+    // Given
+    when(tokens.findById(3L)).thenReturn(Optional.of(appZugang(3L)));
+    when(users.istAktiv(1L)).thenReturn(false);
+
+    // When / Then
+    assertThatThrownBy(() -> service.appZugangErneuern(1L, 3L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(tokens, never()).markRevokedIfActive(anyLong());
+    verify(tokens, never()).save(any(AccessToken.class));
   }
 
   @Test

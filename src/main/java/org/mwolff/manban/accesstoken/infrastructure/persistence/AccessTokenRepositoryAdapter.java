@@ -93,6 +93,18 @@ class AccessTokenRepositoryAdapter implements AccessTokenRepository {
     jpa.markRevoked(id);
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>{@code MANDATORY}: Die Sperre gilt bis zum Ende der Transaktion; ohne eine liefe sie im
+   * Autocommit und wäre sofort wieder frei.
+   */
+  @Override
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void sperreAppZugangAusgabe(long userId) {
+    jpa.sperreAppZugangAusgabe(userId);
+  }
+
   @Override
   public void markAppZugaengeRevoked(long userId) {
     jpa.markRevokedByUser(userId, AccessTokenArt.APP);

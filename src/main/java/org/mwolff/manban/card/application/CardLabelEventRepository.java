@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.List;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.domain.CardLabelEvent;
+import org.mwolff.manban.card.domain.LabelEreignisMitPerson;
 import org.mwolff.manban.card.domain.LabelEreignisZeile;
 
 /**
@@ -13,8 +14,12 @@ import org.mwolff.manban.card.domain.LabelEreignisZeile;
  */
 public interface CardLabelEventRepository {
 
-  /** Hält fest, dass der Karte das Label {@code labelName} zum {@code zeitpunkt} hinzukam. */
-  void add(long cardId, String labelName, Instant zeitpunkt, ActorStamp stamp);
+  /**
+   * Hält fest, dass der Karte das Label {@code labelName} zum {@code zeitpunkt} hinzukam.
+   *
+   * @param userId wer gesetzt hat — bei einem Token sein Inhaber (Issue #2110, Plan #2108 E5)
+   */
+  void add(long cardId, String labelName, Instant zeitpunkt, ActorStamp stamp, long userId);
 
   /**
    * Die Ereignisse der Karten, die ein Lauf gesetzt hat: Laufkennung gesetzt und nicht vor {@code
@@ -28,6 +33,12 @@ public interface CardLabelEventRepository {
    * eine leere Liste.
    */
   List<LabelEreignisZeile> findNachLabelNamenSeit(Collection<String> labelNamen, Instant seit);
+
+  /**
+   * Die Ereignisse der Karten samt Person, Herkunft und Token-Name (Issue #2110), mit und ohne
+   * Laufkennung; chronologisch, bei Gleichstand nach ID. Ohne Karten-IDs eine leere Liste.
+   */
+  List<LabelEreignisMitPerson> findMitPerson(Collection<Long> cardIds);
 
   /** Seit wann Label-Ereignisse erfasst werden — der Zeitpunkt der Migration V55 (Plan E7). */
   Instant erfassungSeit();

@@ -80,4 +80,16 @@ class ProjectTest {
     assertThat(vorher.withName("Neu").kitStrictness()).isEqualTo("strict");
     assertThat(new Project(7L, "P", 3L, ANGELEGT, null, false, null).kitStrictness()).isNull();
   }
+
+  @Test
+  void withName_behaeltDieMeldungZurPruefungVorReady() {
+    Project vorher = new Project(7L, "Alt", 3L, ANGELEGT, null, false, null, null, true, ANGELEGT);
+
+    Project nachher = vorher.withName("Neu");
+
+    assertThat(nachher.kitReviewBeforeReady()).isTrue();
+    assertThat(nachher.kitReviewBeforeReadyChangedAt()).isEqualTo(ANGELEGT);
+    assertThat(new Project(7L, "P", 3L, ANGELEGT, null, false, null).kitReviewBeforeReady())
+        .isNull();
+  }
 }

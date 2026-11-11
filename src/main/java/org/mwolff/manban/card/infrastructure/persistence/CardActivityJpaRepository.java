@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.infrastructure.persistence;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -11,6 +12,9 @@ interface CardActivityJpaRepository extends JpaRepository<CardActivityEntity, Lo
 
   List<CardActivityEntity> findByCardIdOrderByCreatedAt(Long cardId);
 
+  /** Die Aktivitäten der Karten, chronologisch und bei Gleichstand nach ID (Issue #2114). */
+  List<CardActivityEntity> findByCardIdInOrderByCreatedAtAscIdAsc(Collection<Long> cardIds);
+
   /**
    * Die Aktivitäten eines Nachtlaufs im Projekt (Issue #1373). Das Projekt kommt über die Karte —
    * {@code card_activity} trägt es nicht selbst.
@@ -18,7 +22,8 @@ interface CardActivityJpaRepository extends JpaRepository<CardActivityEntity, Lo
   @Query(
       "select a from CardActivityEntity a, CardEntity c"
           + " where c.id = a.cardId and c.projectId = :projectId"
-          + " and a.origin = 'TOKEN' and a.tokenName = :tokenName and a.agent is not null"
+          + " and a.herkunft.origin = 'TOKEN' and a.herkunft.tokenName = :tokenName"
+          + " and a.herkunft.agent is not null"
           + " and a.createdAt >= :von and a.createdAt <= :bis"
           + " order by a.createdAt, a.id")
   List<CardActivityEntity> findTokenActivitiesInWindow(

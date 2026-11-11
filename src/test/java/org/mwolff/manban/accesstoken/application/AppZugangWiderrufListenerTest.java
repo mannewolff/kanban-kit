@@ -1,10 +1,11 @@
 package org.mwolff.manban.accesstoken.application;
 
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.mwolff.manban.auth.application.KontoGesperrtEvent;
 import org.mwolff.manban.project.application.MitgliedRolleVerlorenEvent;
 
@@ -19,8 +20,10 @@ class AppZugangWiderrufListenerTest {
     // When
     listener.onRolleVerloren(new MitgliedRolleVerlorenEvent(9L, 2L));
 
-    // Then
-    verify(tokens).markAppZugaengeRevoked(2L, 9L);
+    // Then: erst die Ausgabesperre des Inhabers, dann der Sammelwiderruf (Issue #2122).
+    InOrder reihenfolge = inOrder(tokens);
+    reihenfolge.verify(tokens).sperreAppZugangAusgabe(2L);
+    reihenfolge.verify(tokens).markAppZugaengeRevoked(2L, 9L);
     verifyNoMoreInteractions(tokens);
   }
 
@@ -30,7 +33,9 @@ class AppZugangWiderrufListenerTest {
     listener.onKontoGesperrt(new KontoGesperrtEvent(2L));
 
     // Then
-    verify(tokens).markAppZugaengeRevoked(2L);
+    InOrder reihenfolge = inOrder(tokens);
+    reihenfolge.verify(tokens).sperreAppZugangAusgabe(2L);
+    reihenfolge.verify(tokens).markAppZugaengeRevoked(2L);
     verifyNoMoreInteractions(tokens);
   }
 }

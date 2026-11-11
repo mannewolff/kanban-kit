@@ -17,6 +17,39 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.18.0] – 2026-11-11
+
+- chore: v3.17.1
+- kit:manuell als Kennzeichen des Kits mit Schutz in beide Richtungen ([#2142](https://github.com/mannewolff/kanban-kit/issues/2142))
+- Herkunftsfelder der Karten-Entities als Embeddable ausgelagert ([#2141](https://github.com/mannewolff/kanban-kit/issues/2141))
+- Sonar-Fehlgriffe S4449, S6539 und i18n-Duplikate versioniert abgelehnt ([#2099](https://github.com/mannewolff/kanban-kit/issues/2099))
+- Mutations-Überlebenden in Dokumentmeldungen beseitigt ([#2135](https://github.com/mannewolff/kanban-kit/issues/2135))
+- Mutations-Überlebende in Paketmeldungen getötet ([#2134](https://github.com/mannewolff/kanban-kit/issues/2134))
+- Mutations-Überlebende in Angabe getötet ([#2133](https://github.com/mannewolff/kanban-kit/issues/2133))
+- Mutations-Überlebende in Card getötet ([#2132](https://github.com/mannewolff/kanban-kit/issues/2132))
+- Mutations-Überlebende in Fundzahlen getötet ([#2131](https://github.com/mannewolff/kanban-kit/issues/2131))
+- Mutations-Überlebende in Paketglieder getötet ([#2130](https://github.com/mannewolff/kanban-kit/issues/2130))
+- Mutations-Überlebende in EntscheidungsketteService getötet ([#2129](https://github.com/mannewolff/kanban-kit/issues/2129))
+- Mutations-Überlebende in KartenKetteLeser getötet ([#2128](https://github.com/mannewolff/kanban-kit/issues/2128))
+- Mutations-Überlebende in Freigaben getötet ([#2127](https://github.com/mannewolff/kanban-kit/issues/2127))
+- Mutations-Überlebende in Umsetzungsversuche getötet ([#2126](https://github.com/mannewolff/kanban-kit/issues/2126))
+- Mutations-Überlebende in KitMeldungLeser getötet ([#2125](https://github.com/mannewolff/kanban-kit/issues/2125))
+- Mutations-Überlebende in KettenRechner getötet ([#2124](https://github.com/mannewolff/kanban-kit/issues/2124))
+- Mutationstreiber: Ausgabe-Limit 256 MiB für PIT und Stryker ([#2123](https://github.com/mannewolff/kanban-kit/issues/2123))
+- Sicherheit: Token-Ausgabe gegen Rollenverlust und Kontosperre serialisiert ([#2122](https://github.com/mannewolff/kanban-kit/issues/2122))
+- Mutations-Überlebende in accessTokens.ts getötet ([#2121](https://github.com/mannewolff/kanban-kit/issues/2121))
+- Entscheidungskette: Nutzungsdoku ([#2119](https://github.com/mannewolff/kanban-kit/issues/2119))
+- Entscheidungskette: Abschnitt in der Kartenansicht ([#2118](https://github.com/mannewolff/kanban-kit/issues/2118))
+- Entscheidungskette: Schnittstelle und Szenarientests ([#2117](https://github.com/mannewolff/kanban-kit/issues/2117))
+- Entscheidungskette: Rechnung der Glieder am Paket ([#2116](https://github.com/mannewolff/kanban-kit/issues/2116))
+- Entscheidungskette: Rechnung der Dokument-Glieder ([#2115](https://github.com/mannewolff/kanban-kit/issues/2115))
+- Entscheidungskette: Lese-Fassade für Karten der Kette ([#2114](https://github.com/mannewolff/kanban-kit/issues/2114))
+- Entscheidungskette: Register und Leser der Kit-Meldungen ([#2113](https://github.com/mannewolff/kanban-kit/issues/2113))
+- Entscheidungskette: Kit-Meldung zur Prüfung vor Ready ablegen ([#2112](https://github.com/mannewolff/kanban-kit/issues/2112))
+- Entscheidungskette: Änderung am Wegbeleg der Karte festhalten ([#2111](https://github.com/mannewolff/kanban-kit/issues/2111))
+- Entscheidungskette: Person am Label-Ereignis festhalten ([#2110](https://github.com/mannewolff/kanban-kit/issues/2110))
+- Entscheidungskette: Änderung von Hand an Kit-Meldungen erfassen ([#2109](https://github.com/mannewolff/kanban-kit/issues/2109))
+
 ## [3.17.0] – 2026-11-10
 
 - chore: v3.16.1

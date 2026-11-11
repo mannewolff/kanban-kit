@@ -253,7 +253,8 @@ public class CardService {
                   .requireId();
       updated = updated.withParent(effectiveParent).withDueDate(dueDate);
     }
-    Card saved = cards.save(grundlage.folgeArtwechsel(card, updated));
+    Card saved =
+        cards.save(grundlage.folgeArtwechsel(card, grundlage.folgeWegBeleg(card, updated)));
     grundlage.aktivitaet(cardId, userId, CardActivityType.UPDATED, "Karte bearbeitet");
     if (dependsOn != null) {
       abhaengigkeiten.ersetze(saved, dependsOn);
@@ -296,7 +297,7 @@ public class CardService {
     // Projekt-basierte Rechte (#405); die Labels selbst bleiben board-scoped.
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
-    zuordnung.ersetzeLabels(cardId, card.boardId(), labelIds, grundlage.herkunft());
+    zuordnung.ersetzeLabels(cardId, card.boardId(), labelIds, grundlage.herkunft(), userId);
     grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
     return sicht.view(userId, card);
   }
@@ -342,7 +343,7 @@ public class CardService {
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
 
     long boardId = card.boardId();
-    zuordnung.aendereLabel(cardId, boardId, labelId, action, grundlage.herkunft());
+    zuordnung.aendereLabel(cardId, boardId, labelId, action, grundlage.herkunft(), userId);
     grundlage.publishChanged(boardId, ActivityType.UPDATED, cardId);
     return sicht.view(userId, card);
   }
@@ -409,9 +410,9 @@ public class CardService {
    * Spaltenschlüssel eines Zugs (Plan #1617, A2): bei {@code MOVED} der gespeicherte Status nach
    * dem Zug, sonst der Schlüssel der Prozessspalte aus dem Text „Verschoben nach &lt;Spalte&gt;“.
    * Anders als die Board-Übersicht ohne Rückfall auf {@code BACKLOG} — was sich nicht sicher
-   * bestimmen lässt, fehlt.
+   * bestimmen lässt, fehlt. Geteilt mit {@link KartenKetteLeser} (Issue #2114, Plan #2108 E10).
    */
-  private static @Nullable String spaltenSchluessel(CardActivity a) {
+  static @Nullable String spaltenSchluessel(CardActivity a) {
     if (a.type() != CardActivityType.MOVED) {
       return null;
     }

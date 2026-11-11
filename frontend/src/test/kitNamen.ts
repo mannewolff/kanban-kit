@@ -23,6 +23,7 @@ export const KIT_NAMEN: KitNamen = {
     { sache: 'WARTET_EREIGNIS', namen: ['kit:wartet', 'kit:on-hold'], schutz: 'NUR_MENSCH_NIMMT_AB' },
     { sache: 'REPARATUR', namen: ['kit:repair'], schutz: 'KEINER' },
     { sache: 'HOTFIX', namen: ['kit:hotfix'], schutz: 'KEINER' },
+    { sache: 'MANUELL', namen: ['kit:manuell', 'kit:manual'], schutz: 'NUR_MENSCH' },
     { sache: 'LAUF_ABGEBROCHEN', namen: ['lauf:abgebrochen', 'run:aborted'], schutz: 'KEINER' },
     { sache: 'LAUF_LAEUFT', namen: ['lauf:laeuft', 'run:running'], schutz: 'KEINER' },
     { sache: 'LAUF_WARTET', namen: ['lauf:wartet', 'run:waiting'], schutz: 'KEINER' },
