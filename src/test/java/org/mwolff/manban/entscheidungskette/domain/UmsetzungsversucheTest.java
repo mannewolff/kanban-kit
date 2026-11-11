@@ -135,6 +135,22 @@ class UmsetzungsversucheTest {
   }
 
   @Test
+  void umsetzung_berichtVorDemNaechstenZug_schliesstDenErstenVersuch() {
+    Entscheidungskette kette =
+        paket()
+            .zugUeberToken(P, "IN_PROGRESS", um(1), LAUF)
+            .kommentar(60, P, BERICHT, um(2))
+            .zugUeberToken(P, "IN_PROGRESS", um(3), LAUF)
+            .rechne();
+
+    List<Glied> versuche = glieder(kette, Gliedart.UMSETZUNG);
+    assertThat(versuche).extracting(Glied::zeitpunkt).containsExactly(um(1), um(3));
+    assertThat(versuche)
+        .extracting(g -> ((Umsetzungsangaben) g.einzelheiten()).ausgang())
+        .containsExactly(Umsetzungsausgang.ABGESCHLOSSEN, Umsetzungsausgang.OFFEN);
+  }
+
+  @Test
   void umsetzung_berichtOhneZugNachInProgress_eigenerVersuch() {
     String ohneModell = BERICHT.replace("Umgesetzt von: claude-opus-5-5\n", "");
     Entscheidungskette kette =
