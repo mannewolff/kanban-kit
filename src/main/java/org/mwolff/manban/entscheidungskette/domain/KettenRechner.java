@@ -165,7 +165,12 @@ public final class KettenRechner {
    */
   private static Glied fehlenderFachplan(Karte karte, Map<Dokumentart, Bezug> vorfahren) {
     Bezug planBezug = vorfahren.get(Dokumentart.PLAN);
-    Karte plan = karte.art() == Art.PLAN ? karte : planBezug == null ? null : planBezug.karte();
+    Karte plan = null;
+    if (karte.art() == Art.PLAN) {
+      plan = karte;
+    } else if (planBezug != null) {
+      plan = planBezug.karte();
+    }
     if (plan != null
         && Dokumentzeilen.traegtPlanModell(plan.beschreibung())
         && !Dokumentzeilen.traegtFachlicheQuelle(plan.beschreibung())) {

@@ -45,33 +45,6 @@ public record Fundzahlen(int kritisch, int blocker, int wichtig, int hinweis) {
     return gesamt() == 0;
   }
 
-  private static String ohneListenmarke(String zeile) {
-    return LISTE_VORN.matcher(zeile).replaceFirst("");
-  }
-
-  /** Die Zeile ohne Markdown an beiden Enden; Listenmarke und Dekoration umschließen einander. */
-  private static String kern(String zeile) {
-    String vorn = zeile;
-    String kuerzer = kuerzen(vorn);
-    while (!kuerzer.equals(vorn)) {
-      vorn = kuerzer;
-      kuerzer = kuerzen(vorn);
-    }
-    int ende = vorn.length();
-    while (ende > 0 && istDekoHinten(vorn.charAt(ende - 1))) {
-      ende--;
-    }
-    return vorn.substring(0, ende);
-  }
-
-  private static String kuerzen(String zeile) {
-    return DEKO_VORN.matcher(ohneListenmarke(zeile)).replaceFirst("");
-  }
-
-  private static boolean istDekoHinten(char zeichen) {
-    return Character.isWhitespace(zeichen) || DEKO_HINTEN.indexOf(zeichen) >= 0;
-  }
-
   /** Der Zustand beim Durchgehen der Zeilen. */
   private static final class Zaehlung {
     private int anzahlKritisch;
@@ -111,6 +84,33 @@ public record Fundzahlen(int kritisch, int blocker, int wichtig, int hinweis) {
 
     Fundzahlen ergebnis() {
       return new Fundzahlen(anzahlKritisch, anzahlBlocker, anzahlWichtig, anzahlHinweis);
+    }
+
+    private static String ohneListenmarke(String zeile) {
+      return LISTE_VORN.matcher(zeile).replaceFirst("");
+    }
+
+    /** Die Zeile ohne Markdown an beiden Enden; Listenmarke und Dekoration umschließen einander. */
+    private static String kern(String zeile) {
+      String vorn = zeile;
+      String kuerzer = kuerzen(vorn);
+      while (!kuerzer.equals(vorn)) {
+        vorn = kuerzer;
+        kuerzer = kuerzen(vorn);
+      }
+      int ende = vorn.length();
+      while (ende > 0 && istDekoHinten(vorn.charAt(ende - 1))) {
+        ende--;
+      }
+      return vorn.substring(0, ende);
+    }
+
+    private static String kuerzen(String zeile) {
+      return DEKO_VORN.matcher(ohneListenmarke(zeile)).replaceFirst("");
+    }
+
+    private static boolean istDekoHinten(char zeichen) {
+      return Character.isWhitespace(zeichen) || DEKO_HINTEN.indexOf(zeichen) >= 0;
     }
   }
 }

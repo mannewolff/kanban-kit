@@ -144,15 +144,13 @@ public class KartenKetteLeser {
       kinder.sort(Comparator.comparingInt(k -> k.karte().number()));
       List<KarteImBestand> naechste = new ArrayList<>();
       for (KarteImBestand kind : kinder) {
-        if (!besucht.add(kind.karte().requireId())) {
-          continue;
-        }
-        if (kind.karte().projectId() != projekt) {
+        boolean neu = besucht.add(kind.karte().requireId());
+        if (neu && kind.karte().projectId() != projekt) {
           glieder.add(KettenGlied.anderesProjekt());
-          continue;
+        } else if (neu) {
+          glieder.add(glied(kind, spalten));
+          naechste.add(kind);
         }
-        glieder.add(glied(kind, spalten));
-        naechste.add(kind);
       }
       stufe = naechste;
     }

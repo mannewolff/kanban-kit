@@ -43,7 +43,7 @@ public record Angabe(@Nullable String wert, @Nullable Instant zeitpunkt) {
   private static @Nullable Instant zeitpunkt(String text) {
     try {
       return Instant.parse(text);
-    } catch (DateTimeException keinZeitpunkt) {
+    } catch (DateTimeException _) {
       return null;
     }
   }

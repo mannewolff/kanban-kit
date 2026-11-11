@@ -92,8 +92,8 @@ export function Entscheidungskette({
                   {t.NACHFAHREN}
                 </Typography>
                 <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-                  {kette.nachfahren.map((nachfahre, index) => (
-                    <NachfahreZeile key={index} nachfahre={nachfahre} onOpenCard={onOpenCard} />
+                  {nachfahrenMitSchluessel(kette.nachfahren).map(({ schluessel, nachfahre }) => (
+                    <NachfahreZeile key={schluessel} nachfahre={nachfahre} onOpenCard={onOpenCard} />
                   ))}
                 </Box>
               </Box>
@@ -340,6 +340,22 @@ function VerweisText({
       {t.KOMMENTAR_AN} {karte} {t.KOMMENTAR_VOM(wann)}
     </>
   )
+}
+
+/**
+ * Ein stabiler Schlüssel je Nachfahre: die Karten-ID, für einen Fremdprojekt-Nachfahren ohne ID die
+ * laufende Nummer unter ihresgleichen — sie tragen keine ID und sind inhaltsgleich.
+ */
+function nachfahrenMitSchluessel(nachfahren: Nachfahre[]): { schluessel: string; nachfahre: Nachfahre }[] {
+  let fremde = 0
+  return nachfahren.map((nachfahre) => {
+    const karte = nachfahre.verweis.karte
+    if (karte !== null) {
+      return { schluessel: `karte-${karte}`, nachfahre }
+    }
+    fremde += 1
+    return { schluessel: `anderes-projekt-${fremde}`, nachfahre }
+  })
 }
 
 function NachfahreZeile({ nachfahre, onOpenCard }: Readonly<{ nachfahre: Nachfahre; onOpenCard: Oeffnen }>) {

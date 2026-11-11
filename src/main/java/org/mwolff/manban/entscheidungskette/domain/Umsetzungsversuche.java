@@ -49,67 +49,6 @@ final class Umsetzungsversuche {
         : List.copyOf(folge.versuche);
   }
 
-  /** Ein Versuch ohne Bericht: Zug und Herkunft tragen Akteur und Zeitpunkt. */
-  private static Glied ohneBericht(Karte paket, Aktivitaet beginn, @Nullable Aktivitaet rueckzug) {
-    Umsetzungsangaben angaben =
-        rueckzug == null
-            ? new Umsetzungsangaben(Umsetzungsausgang.OFFEN, null, null, Angabe.LEER)
-            : new Umsetzungsangaben(
-                Umsetzungsausgang.ZURUECKGEZOGEN, rueckzug.zeitpunkt(), null, Angabe.LEER);
-    return new Glied(
-        Gliedart.UMSETZUNG,
-        Zustand.ERFASST,
-        null,
-        zugAkteur(beginn),
-        beginn.zeitpunkt(),
-        null,
-        Kartenglieder.verweis(paket),
-        Set.of(),
-        null,
-        angaben);
-  }
-
-  /**
-   * Ein abgeschlossener Versuch. Ist der Bericht von Hand geändert, gelten seine Angaben nicht;
-   * ohne Zug nach In Progress ist der Versuch dann nicht erfasst (Kriterium 13).
-   */
-  private static Glied mitBericht(Karte paket, @Nullable Aktivitaet beginn, Gelesen bericht) {
-    Kommentar k = bericht.kommentar();
-    Verweis quelle = Kartenglieder.quelle(k, paket);
-    if (bericht.meldung() instanceof Abschlussbericht gelesen) {
-      return new Glied(
-          Gliedart.UMSETZUNG,
-          Zustand.ERFASST,
-          null,
-          umsetzer(beginn, k, gelesen),
-          beginn == null ? k.zeitpunkt() : beginn.zeitpunkt(),
-          null,
-          quelle,
-          Set.of(),
-          null,
-          new Umsetzungsangaben(
-              Umsetzungsausgang.ABGESCHLOSSEN,
-              k.zeitpunkt(),
-              gelesen.commit(),
-              gelesen.prueflauf()));
-    }
-    Set<Hinweis> vonHand = Set.of(Hinweis.VON_HAND_GEAENDERT);
-    if (beginn == null) {
-      return Glied.ohneAngaben(Gliedart.UMSETZUNG, Zustand.NICHT_ERFASST, quelle, vonHand);
-    }
-    return new Glied(
-        Gliedart.UMSETZUNG,
-        Zustand.ERFASST,
-        null,
-        zugAkteur(beginn),
-        beginn.zeitpunkt(),
-        null,
-        quelle,
-        vonHand,
-        null,
-        new Umsetzungsangaben(Umsetzungsausgang.ABGESCHLOSSEN, k.zeitpunkt(), null, Angabe.LEER));
-  }
-
   /** {@code Umgesetzt von:}, sonst der Zug nach In Progress, sonst der Zugang des Berichts. */
   private static @Nullable Akteur umsetzer(
       @Nullable Aktivitaet beginn, Kommentar k, Abschlussbericht gelesen) {
@@ -157,6 +96,68 @@ final class Umsetzungsversuche {
         versuche.add(ohneBericht(paket, beginn, rueckzug));
         offen = null;
       }
+    }
+
+    /** Ein Versuch ohne Bericht: Zug und Herkunft tragen Akteur und Zeitpunkt. */
+    private static Glied ohneBericht(
+        Karte paket, Aktivitaet beginn, @Nullable Aktivitaet rueckzug) {
+      Umsetzungsangaben angaben =
+          rueckzug == null
+              ? new Umsetzungsangaben(Umsetzungsausgang.OFFEN, null, null, Angabe.LEER)
+              : new Umsetzungsangaben(
+                  Umsetzungsausgang.ZURUECKGEZOGEN, rueckzug.zeitpunkt(), null, Angabe.LEER);
+      return new Glied(
+          Gliedart.UMSETZUNG,
+          Zustand.ERFASST,
+          null,
+          zugAkteur(beginn),
+          beginn.zeitpunkt(),
+          null,
+          Kartenglieder.verweis(paket),
+          Set.of(),
+          null,
+          angaben);
+    }
+
+    /**
+     * Ein abgeschlossener Versuch. Ist der Bericht von Hand geändert, gelten seine Angaben nicht;
+     * ohne Zug nach In Progress ist der Versuch dann nicht erfasst (Kriterium 13).
+     */
+    private static Glied mitBericht(Karte paket, @Nullable Aktivitaet beginn, Gelesen bericht) {
+      Kommentar k = bericht.kommentar();
+      Verweis quelle = Kartenglieder.quelle(k, paket);
+      if (bericht.meldung() instanceof Abschlussbericht gelesen) {
+        return new Glied(
+            Gliedart.UMSETZUNG,
+            Zustand.ERFASST,
+            null,
+            umsetzer(beginn, k, gelesen),
+            beginn == null ? k.zeitpunkt() : beginn.zeitpunkt(),
+            null,
+            quelle,
+            Set.of(),
+            null,
+            new Umsetzungsangaben(
+                Umsetzungsausgang.ABGESCHLOSSEN,
+                k.zeitpunkt(),
+                gelesen.commit(),
+                gelesen.prueflauf()));
+      }
+      Set<Hinweis> vonHand = Set.of(Hinweis.VON_HAND_GEAENDERT);
+      if (beginn == null) {
+        return Glied.ohneAngaben(Gliedart.UMSETZUNG, Zustand.NICHT_ERFASST, quelle, vonHand);
+      }
+      return new Glied(
+          Gliedart.UMSETZUNG,
+          Zustand.ERFASST,
+          null,
+          zugAkteur(beginn),
+          beginn.zeitpunkt(),
+          null,
+          quelle,
+          vonHand,
+          null,
+          new Umsetzungsangaben(Umsetzungsausgang.ABGESCHLOSSEN, k.zeitpunkt(), null, Angabe.LEER));
     }
   }
 }

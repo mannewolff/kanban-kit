@@ -377,6 +377,42 @@ describe('Entscheidungskette', () => {
     expect(onOpenCard).toHaveBeenCalledWith(20)
   })
 
+  it('zeigt eigene und mehrere Fremdprojekt-Nachfahren ohne doppelten Schlüssel', () => {
+    const fehler = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fremd: Nachfahre = {
+      zustand: 'NICHT_ERFASST',
+      verweis: KEINER,
+      spalte: null,
+      spaltenSchluessel: null,
+      zuletztErreicht: null,
+      hinweise: [],
+    }
+    offen({
+      sichtbar: true,
+      art: 'PLAN',
+      abschnitte: [],
+      nachfahren: [
+        {
+          zustand: 'ERFASST',
+          verweis: { karte: 90, nummer: 20, titel: 'Paket A', oeffenbar: true, kommentar: null },
+          spalte: 'Ready',
+          spaltenSchluessel: 'ready',
+          zuletztErreicht: null,
+          hinweise: [],
+        },
+        fremd,
+        { ...fremd },
+      ],
+    })
+    const nachfahren = screen.getAllByTestId('kettennachfahre')
+    expect(nachfahren).toHaveLength(3)
+    expect(nachfahren[0]).toHaveTextContent('#20 Paket A')
+    expect(nachfahren[1]).toHaveTextContent('nicht erfasst')
+    expect(nachfahren[2]).toHaveTextContent('nicht erfasst')
+    expect(fehler).not.toHaveBeenCalledWith(expect.stringContaining('same key'), expect.anything(), expect.anything())
+    fehler.mockRestore()
+  })
+
   it('zeigt einen nicht erfassten Nachfahren', () => {
     offen({
       sichtbar: true,

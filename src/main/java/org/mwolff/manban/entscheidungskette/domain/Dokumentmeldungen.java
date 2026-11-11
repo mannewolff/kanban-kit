@@ -45,9 +45,11 @@ final class Dokumentmeldungen {
   /** Jede gelesene Prüfrunde trägt eine Art aus {@link #PRUEFARTEN}; das sichert der Leser. */
   private static Optional<Gelesen> gelesen(Kommentar k, KitMeldung meldung) {
     return switch (meldung) {
-      case Pruefrunde p -> Optional.of(new Gelesen(k, p.art(), p.runde(), p, false));
-      case Einarbeitung e ->
-          Optional.of(new Gelesen(k, Meldungsart.EINARBEITUNG, e.runde(), null, false));
+      case Pruefrunde(Meldungsart art, int runde, var reviewer, var funde) ->
+          Optional.of(
+              new Gelesen(k, art, runde, new Pruefrunde(art, runde, reviewer, funde), false));
+      case Einarbeitung(int runde) ->
+          Optional.of(new Gelesen(k, Meldungsart.EINARBEITUNG, runde, null, false));
       default -> Optional.empty();
     };
   }
