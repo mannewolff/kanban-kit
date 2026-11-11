@@ -176,6 +176,16 @@ class KartenKetteLeserVerwandteTest {
   }
 
   @Test
+  void eineBewahrteNummerDieSchonInDerKetteStehtZaehltNurEinmal() {
+    bau.lege(neu(2, "Plan", null, null), false, 1);
+    long paket = bau.lege(neu(3, "Paket", "Plan: Issue #2\nFachliche Quelle: Issue #1", null));
+
+    assertThat(bau.leser.lade(paket).vorfahren())
+        .extracting(KettenGlied::zustand, KettenGlied::nummer)
+        .containsExactly(tuple(GliedZustand.VORHANDEN, 2), tuple(GliedZustand.GELOESCHT, 1));
+  }
+
+  @Test
   void eineKarteAusAnderemProjektWirdUeberDieZeilenNichtGefunden() {
     bau.lege(imProjekt(neu(2, "Geheim", null, null), FREMD));
     long paket = bau.lege(neu(3, "Paket", "Plan: Issue #2", null));
