@@ -7,6 +7,7 @@ const DATEN: KitNamen = {
   sachen: [
     { sache: 'KLAEREN', namen: ['kit:klaeren', 'kit:clarify'], schutz: 'NUR_MENSCH_NIMMT_AB' },
     { sache: 'NIGHT', namen: ['kit:night'], schutz: 'NUR_MENSCH_SETZT' },
+    { sache: 'MANUELL', namen: ['kit:manuell', 'kit:manual'], schutz: 'NUR_MENSCH' },
     { sache: 'ZIEL_PAKETE', namen: ['ziel:pakete', 'goal:packages'], schutz: 'KEINER' },
   ],
   titelPraefixe: [
@@ -56,6 +57,7 @@ describe('ladeKitNamen', () => {
     expect(daten.sachen.map((s) => [s.sache, s.schutz])).toEqual([
       ['KLAEREN', 'NUR_MENSCH_NIMMT_AB'],
       ['NIGHT', 'NUR_MENSCH_SETZT'],
+      ['MANUELL', 'NUR_MENSCH'],
       ['ZIEL_PAKETE', 'KEINER'],
     ])
   })

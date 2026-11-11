@@ -53,6 +53,13 @@ class KitNamenControllerTest {
   }
 
   @Test
+  void manuell_traegtBeideNamen_undNurDerMenschSetztUndNimmtAb() {
+    // Then
+    assertThat(namenDerSache("MANUELL")).containsExactly("kit:manuell", "kit:manual");
+    assertThat(schutzDerSache("MANUELL")).isEqualTo("NUR_MENSCH");
+  }
+
+  @Test
   void geklaert_traegtBeideNamen() {
     // Then
     assertThat(namenDerSache("GEKLAERT")).containsExactly("kit:geklaert", "kit:clarified");

@@ -143,7 +143,8 @@ public class StandardLabelService {
         Sache.NIGHTISSUES,
         Sache.WARTET_EREIGNIS,
         Sache.REPARATUR,
-        Sache.HOTFIX);
+        Sache.HOTFIX,
+        Sache.MANUELL);
     zuordnen(
         tabelle,
         new Darstellung(LAUF, FARBE_LAUF),

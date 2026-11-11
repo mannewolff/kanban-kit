@@ -39,7 +39,9 @@ public final class KitNamen {
     /** Setzen darf nur ein Mensch. */
     NUR_MENSCH_SETZT,
     /** Abnehmen darf nur ein Mensch. */
-    NUR_MENSCH_NIMMT_AB
+    NUR_MENSCH_NIMMT_AB,
+    /** Setzen und Abnehmen darf nur ein Mensch (Issue #2142). */
+    NUR_MENSCH
   }
 
   /** Bedeutung eines Kit-Labels, unabhängig von der Sprache seines Namens. */
@@ -57,6 +59,7 @@ public final class KitNamen {
     WARTET_EREIGNIS(Schutz.NUR_MENSCH_NIMMT_AB),
     REPARATUR(Schutz.KEINER),
     HOTFIX(Schutz.KEINER),
+    MANUELL(Schutz.NUR_MENSCH),
     LAUF_ABGEBROCHEN(Schutz.KEINER),
     LAUF_LAEUFT(Schutz.KEINER),
     LAUF_WARTET(Schutz.KEINER),
@@ -116,6 +119,8 @@ public final class KitNamen {
               new Eintrag(Sache.WARTET_EREIGNIS, "kit:on-hold"),
               new Eintrag(Sache.REPARATUR, "kit:repair"),
               new Eintrag(Sache.HOTFIX, "kit:hotfix"),
+              new Eintrag(Sache.MANUELL, "kit:manuell"),
+              new Eintrag(Sache.MANUELL, "kit:manual"),
               new Eintrag(Sache.LAUF_ABGEBROCHEN, "lauf:abgebrochen"),
               new Eintrag(Sache.LAUF_ABGEBROCHEN, "run:aborted"),
               new Eintrag(Sache.LAUF_LAEUFT, "lauf:laeuft"),

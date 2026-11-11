@@ -83,6 +83,67 @@ class FreigabeLabelsTest {
     }
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"kit:manuell", "kit:manual"})
+  void token_darfManuellWederSetzenNochAbnehmen(String name) {
+    assertThatThrownBy(() -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.SETZEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label " + name + " setzt nur ein Mensch im Board");
+    assertThatThrownBy(
+            () -> FreigabeLabels.pruefe(CardActivityOrigin.TOKEN, name, Richtung.ABNEHMEN))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label " + name + " nimmt nur ein Mensch im Board ab");
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = "SESSION")
+  void mensch_darfManuellSetzenUndAbnehmen(CardActivityOrigin herkunft) {
+    for (String name : List.of("kit:manuell", "kit:manual")) {
+      for (Richtung richtung : Richtung.values()) {
+        assertThatCode(() -> FreigabeLabels.pruefe(herkunft, name, richtung))
+            .doesNotThrowAnyException();
+      }
+    }
+  }
+
+  @Test
+  void appZugang_darfManuellWederSetzenNochAbnehmen() {
+    assertThatThrownBy(() -> FreigabeLabels.pruefeEinzeln(APP, "kit:manuell", Richtung.SETZEN))
+        .isInstanceOf(FreigabeLabelException.class);
+    assertThatThrownBy(() -> FreigabeLabels.pruefeEinzeln(APP, "kit:manuell", Richtung.ABNEHMEN))
+        .isInstanceOf(FreigabeLabelException.class);
+  }
+
+  @Test
+  void token_darfManuellWederPerWechselSetzenNochAbnehmen() {
+    Map<Long, String> namen = Map.of(7L, "kit:manuell", 3L, "bug");
+    assertThatThrownBy(
+            () ->
+                FreigabeLabels.pruefeWechsel(
+                    CardActivityOrigin.TOKEN, namen, List.of(3L), List.of(3L, 7L)))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:manuell setzt nur ein Mensch im Board");
+    assertThatThrownBy(
+            () ->
+                FreigabeLabels.pruefeWechsel(
+                    CardActivityOrigin.TOKEN, namen, List.of(3L, 7L), List.of(3L)))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:manuell nimmt nur ein Mensch im Board ab");
+  }
+
+  @Test
+  void token_darfManuellNichtLoeschenOderUmbenennen() {
+    assertThatThrownBy(
+            () -> FreigabeLabels.pruefeDefinition(CardActivityOrigin.TOKEN, "kit:manuell", null))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:manuell" + DEFINITION_GESPERRT);
+    assertThatThrownBy(
+            () -> FreigabeLabels.pruefeDefinition(CardActivityOrigin.TOKEN, "bug", "kit:manual"))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:manual" + DEFINITION_GESPERRT);
+  }
+
   @Test
   void token_gewoehnlichesLabel_inBeideRichtungen() {
     assertThatCode(

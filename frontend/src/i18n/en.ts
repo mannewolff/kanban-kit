@@ -2116,6 +2116,11 @@ export const en: Woerterbuch = {
         setzt: 'The session start or “push main”.',
         verschwindet: 'The kit removes it once the hotfix has been caught up.',
       },
+      MANUELL: {
+        bedeutung: "The card is exempt from the kit's scheduler: it sends the card neither to review nor to planning on its own.",
+        setzt: 'Only a human; the kit never sets it.',
+        verschwindet: 'Only when a human removes it; afterwards the scheduler picks the card up again.',
+      },
       LAUF_ABGEBROCHEN: {
         bedeutung:
           'A night runner’s run was aborted on this card; the comment “Run status” shows the state. Repeating is enough.',
@@ -2190,6 +2195,7 @@ export const en: Woerterbuch = {
     SCHUTZ: {
       NUR_MENSCH_SETZT: 'Setting it is only possible when signed in to the Control Room, not via a token.',
       NUR_MENSCH_NIMMT_AB: 'Removing it is only possible when signed in to the Control Room, not via a token.',
+      NUR_MENSCH: 'Setting and removing it are only possible when signed in to the Control Room, not via a token.',
     },
   },
 

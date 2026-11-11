@@ -1319,7 +1319,8 @@ mit dem festen Satz der Labels, die das claude-workflow-kit, die Laufsteuerung u
   `kit:nightrun`, `kit:check`, `kit:nightplan`, `kit:nightreview`, `kit:nightissues`,
   `kit:on-hold` (ein Fachplan wartet auf ein äußeres Ereignis; nur ein Mensch hebt das Warten auf),
   `kit:repair` (Reparaturkarte der Kartenprüfung, gesetzt vom Runner), `kit:hotfix` (Karte eines
-  Hotfix, der noch nicht nachgeholt ist)
+  Hotfix, der noch nicht nachgeholt ist), `kit:manual` (Karte vom Taktgeber des Kits ausgenommen;
+  setzt und nimmt nur ein Mensch ab)
 - **Lauf:** `run:aborted`, `run:running`, `run:waiting`
 - **Review:** `review:offen`, `review:done`
 - **Stufenleiste:** `goal:plan`, `goal:packages`, `goal:implementation`, `goal:push-prepared`,

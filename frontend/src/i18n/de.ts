@@ -2253,6 +2253,11 @@ export const de = {
         setzt: 'Der Session-Start beziehungsweise „push main“.',
         verschwindet: 'Das Kit nimmt es ab, sobald der Hotfix nachgeholt ist.',
       },
+      MANUELL: {
+        bedeutung: 'Die Karte ist vom Taktgeber des Kits ausgenommen: Er schickt sie weder von selbst zur Prüfung noch in die Planung.',
+        setzt: 'Nur ein Mensch; das Kit setzt es nie.',
+        verschwindet: 'Nur, wenn ein Mensch es abnimmt; danach nimmt der Taktgeber die Karte wieder auf.',
+      },
       LAUF_ABGEBROCHEN: {
         bedeutung:
           'Ein Lauf des Nacht-Runners ist an dieser Karte abgebrochen; der Kommentar „Laufstand“ nennt den Stand. Wiederholen genügt.',
@@ -2327,6 +2332,7 @@ export const de = {
     SCHUTZ: {
       NUR_MENSCH_SETZT: 'Setzen geht nur angemeldet im Leitstand, nicht über ein Token.',
       NUR_MENSCH_NIMMT_AB: 'Abnehmen geht nur angemeldet im Leitstand, nicht über ein Token.',
+      NUR_MENSCH: 'Setzen und Abnehmen gehen nur angemeldet im Leitstand, nicht über ein Token.',
     },
   },
 

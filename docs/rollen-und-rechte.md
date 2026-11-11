@@ -263,10 +263,11 @@ Board kann dann ein neuer Zugang angelegt werden.
 
 ### Freigabe-Labels des Kits
 
-Fünf Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Server erzwingt sie
-(Issue #1421, #1667). `kit:night` und `kit:nightrun` geben Arbeit für den Nachtlauf frei: Sie setzt nur ein
+Sechs Labels des claude-workflow-kits tragen eine Freigabe-Richtung, und der Server erzwingt sie
+(Issue #1421, #1667, #2142). `kit:night` und `kit:nightrun` geben Arbeit für den Nachtlauf frei: Sie setzt nur ein
 Mensch, der Runner nimmt sie ab, sobald sie verbraucht sind. `kit:klaeren`, `kit:geschuetzt` und
 `kit:wartet` setzt die Maschine; ihr Abnehmen ist die Freigabe und steht nur dem Menschen zu.
+`kit:manuell` nimmt eine Karte vom Taktgeber des Kits aus; es setzt und nimmt allein der Mensch ab.
 
 | | Session (Mensch) | Token (Kit, Runner, Agent) | Zugang der Desktop-App |
 |---|---|---|---|
@@ -276,9 +277,10 @@ Mensch, der Runner nimmt sie ab, sobald sie verbraucht sind. `kit:klaeren`, `kit
 | `kit:klaeren`/`kit:clarify`, `kit:geschuetzt`/`kit:protected`, `kit:wartet`/`kit:on-hold` setzen | erlaubt | erlaubt | erlaubt |
 | `kit:klaeren`/`kit:clarify` abnehmen | erlaubt | abgewiesen (403) | **erlaubt**, nur einzeln an einer Karte |
 | `kit:geschuetzt`/`kit:protected`, `kit:wartet`/`kit:on-hold` abnehmen | erlaubt | abgewiesen (403) | abgewiesen (403) |
+| `kit:manuell`/`kit:manual` setzen oder abnehmen | erlaubt | abgewiesen (403) | abgewiesen (403) |
 
 Das claude-workflow-kit lässt sich auf Englisch einstellen. Darum gilt jede Regel unter beiden Namen
-derselben Sache: `kit:clarify` wie `kit:klaeren`, `kit:protected` wie `kit:geschuetzt`, `kit:on-hold` wie `kit:wartet`. `kit:night`
+derselben Sache: `kit:clarify` wie `kit:klaeren`, `kit:protected` wie `kit:geschuetzt`, `kit:on-hold` wie `kit:wartet`, `kit:manual` wie `kit:manuell`. `kit:night`
 und `kit:nightrun` heißen in beiden Sprachen gleich und haben kein Gegenstück.
 
 Die Labels, mit denen die [Stufenleiste](nutzung.md#karten-detail) Ziel und Prüferzahl einer Kette

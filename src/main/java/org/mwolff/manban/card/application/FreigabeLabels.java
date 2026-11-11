@@ -18,9 +18,11 @@ import org.mwolff.manban.common.KitNamen.Schutz;
  * <p>Die Labels der Sachen {@code NIGHT} und {@code NIGHTRUN} geben Arbeit frei und setzt nur ein
  * Mensch; der Runner darf sie abnehmen, sobald sie verbraucht sind. Die Labels von {@code KLAEREN},
  * {@code GESCHUETZT} und {@code WARTET_EREIGNIS} setzt die Maschine; das Abnehmen ist die Freigabe
- * und steht nur dem Menschen zu. Ohne diese Regel könnte sich eine Session am Kit vorbei selbst
- * freigeben. Welche Sache ein Name trägt und welchen {@link Schutz} sie hat, sagt allein {@link
- * KitNamen}: Deutscher und englischer Name einer Sache sind gleich geschützt.
+ * und steht nur dem Menschen zu. Die Labels von {@code MANUELL} setzt und nimmt allein der Mensch
+ * ab (Issue #2142): Mit ihnen nimmt er eine Karte vom Taktgeber des Kits aus. Ohne diese Regel
+ * könnte sich eine Session am Kit vorbei selbst freigeben. Welche Sache ein Name trägt und welchen
+ * {@link Schutz} sie hat, sagt allein {@link KitNamen}: Deutscher und englischer Name einer Sache
+ * sind gleich geschützt.
  *
  * <p>Ein Name im Namensraum des Kits, den das Register nicht kennt, ist für ein Token weder setzbar
  * noch per Umbenennen erzeugbar (Plan #1582, E7). Sonst legte ein Token fest, welche Namen
@@ -79,15 +81,25 @@ public final class FreigabeLabels {
     String trimmed = name.trim();
     Optional<Sache> sache = register.sache(trimmed);
     Schutz schutz = sache.map(Sache::schutz).orElse(Schutz.KEINER);
-    if (richtung == Richtung.SETZEN && schutz == Schutz.NUR_MENSCH_SETZT) {
+    if (richtung == Richtung.SETZEN && nurMenschSetzt(schutz)) {
       throw FreigabeLabelException.nurMenschSetzt(trimmed);
     }
-    if (richtung == Richtung.ABNEHMEN && schutz == Schutz.NUR_MENSCH_NIMMT_AB) {
+    if (richtung == Richtung.ABNEHMEN && nurMenschNimmtAb(schutz)) {
       throw FreigabeLabelException.nurMenschNimmtAb(trimmed);
     }
     if (richtung == Richtung.SETZEN && unbekanntImNamensraum(sache, trimmed)) {
       throw FreigabeLabelException.unbekanntSetzen(trimmed);
     }
+  }
+
+  /** Setzen ist dem Menschen vorbehalten: allein oder mit dem Abnehmen zusammen (Issue #2142). */
+  private static boolean nurMenschSetzt(Schutz schutz) {
+    return schutz == Schutz.NUR_MENSCH_SETZT || schutz == Schutz.NUR_MENSCH;
+  }
+
+  /** Abnehmen ist dem Menschen vorbehalten: allein oder mit dem Setzen zusammen (Issue #2142). */
+  private static boolean nurMenschNimmtAb(Schutz schutz) {
+    return schutz == Schutz.NUR_MENSCH_NIMMT_AB || schutz == Schutz.NUR_MENSCH;
   }
 
   /**
