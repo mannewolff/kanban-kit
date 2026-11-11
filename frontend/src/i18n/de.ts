@@ -1591,7 +1591,7 @@ export const de = {
       `${kritisch} kritisch, ${blocker} Blocker, ${wichtig} wichtig, ${hinweis} Hinweise`,
     FALL: 'Fall',
     FREIGABEFALL: {
-      ZUG_NACH_READY: 'Zug nach Ready durch einen Menschen',
+      ZUG_NACH_READY: 'Der Zug nach Ready ist die Freigabe',
       KENNZEICHEN: 'Ziel oder Durchziehen-Kennzeichen am Fachplan oder Plan',
     },
     AUSGANG: 'Ausgang',

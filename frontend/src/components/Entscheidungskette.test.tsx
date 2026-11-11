@@ -171,6 +171,40 @@ describe('Entscheidungskette', () => {
     expect(eintrag).toHaveTextContent('Fall:Ziel oder Durchziehen-Kennzeichen am Fachplan oder Plan')
   })
 
+  it('nennt beim Zug nach Ready über einen Zugang keinen Menschen, sondern den Zugang als Freigeber (Issue #2147)', () => {
+    const zugang: AkteurView = { typ: 'WERKZEUG', name: 'runner-token', modell: null, gemeldet: false }
+    offen(
+      kette([
+        glied({
+          art: 'FREIGABE',
+          freigegebenVon: zugang,
+          ausgefuehrtVon: { ...zugang },
+          freigabe: { fall: 'ZUG_NACH_READY', zugNachReady: '2026-11-10T11:00:00Z' },
+        }),
+      ]),
+    )
+    const eintrag = screen.getByTestId('kettenglied-FREIGABE')
+    expect(eintrag).toHaveTextContent('Fall:Der Zug nach Ready ist die Freigabe')
+    expect(eintrag).toHaveTextContent('Freigegeben und ausgeführt von:runner-token (Werkzeug)')
+    expect(eintrag).not.toHaveTextContent('Mensch')
+  })
+
+  it('nennt beim Zug nach Ready durch einen Menschen den Menschen als Freigeber (Issue #2147)', () => {
+    offen(
+      kette([
+        glied({
+          art: 'FREIGABE',
+          freigegebenVon: MANFRED,
+          ausgefuehrtVon: { ...MANFRED },
+          freigabe: { fall: 'ZUG_NACH_READY', zugNachReady: '2026-11-10T11:00:00Z' },
+        }),
+      ]),
+    )
+    const eintrag = screen.getByTestId('kettenglied-FREIGABE')
+    expect(eintrag).toHaveTextContent('Fall:Der Zug nach Ready ist die Freigabe')
+    expect(eintrag).toHaveTextContent('Freigegeben und ausgeführt von:Manfred (Mensch)')
+  })
+
   it('nennt den Akteur einmal, wenn Freigabe und Ausführung dieselbe Person sind', () => {
     offen(kette([glied({ art: 'VEROEFFENTLICHUNG', freigegebenVon: MANFRED, ausgefuehrtVon: { ...MANFRED } })]))
     const eintrag = screen.getByTestId('kettenglied-VEROEFFENTLICHUNG')

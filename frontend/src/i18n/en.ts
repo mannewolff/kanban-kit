@@ -1490,7 +1490,7 @@ export const en: Woerterbuch = {
       `${kritisch} critical, ${blocker} blocker, ${wichtig} major, ${hinweis} notes`,
     FALL: 'Case',
     FREIGABEFALL: {
-      ZUG_NACH_READY: 'Moved to Ready by a human',
+      ZUG_NACH_READY: 'The move to Ready is the approval',
       KENNZEICHEN: 'Target or pull-through flag on the requirement or plan',
     },
     AUSGANG: 'Outcome',

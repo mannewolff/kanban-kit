@@ -231,7 +231,8 @@ maschinenlesbar führen, und zeigt für denselben Stand immer dasselbe.
 - **Issue-Review** — die Prüfung des Pakets vor Ready, sofern das Projekt sie verlangt.
 - **Freigabe zur Umsetzung** — der Zug nach Ready durch einen Menschen oder, in einer Nacht-Kette,
   das Ziel ab „Umsetzung“ bzw. `kit:durchziehen` mit der Person, die es gesetzt hat; die Kette nennt,
-  welcher Fall galt.
+  welcher Fall galt. Auch ein Zugang kann die Karte nach Ready ziehen; dann nennt das Glied den
+  Zugang als Freigeber, etwa „runner-token (Werkzeug)“.
 - **Umsetzung** mit Commit und dem Prüflauf, der ihn gedeckt hat, dann **Code-Review**.
 - **Übertragung** auf den Hauptzweig mit Weg und dem Ergebnis des Build-Diensts.
 - **Veröffentlichung** mit Version; ihr Ausgang steht wörtlich da.
