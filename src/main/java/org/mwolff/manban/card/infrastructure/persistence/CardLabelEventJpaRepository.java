@@ -13,7 +13,8 @@ interface CardLabelEventJpaRepository extends JpaRepository<CardLabelEventEntity
   /** Ereignisse der Karten mit Laufkennung ab {@code von} (Issue #1754). */
   @Query(
       "select e from CardLabelEventEntity e"
-          + " where e.cardId in :cardIds and e.runStartedAt is not null and e.runStartedAt >= :von"
+          + " where e.cardId in :cardIds and e.herkunft.runStartedAt is not null"
+          + " and e.herkunft.runStartedAt >= :von"
           + " order by e.createdAt, e.id")
   List<CardLabelEventEntity> findLaufEreignisse(
       @Param("cardIds") Collection<Long> cardIds, @Param("von") Instant von);

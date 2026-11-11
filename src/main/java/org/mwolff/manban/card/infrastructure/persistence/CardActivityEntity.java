@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.infrastructure.persistence;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -9,7 +10,6 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
-import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardStatus;
 
 /** JPA-Abbildung der Tabelle {@code card_activity}. */
@@ -36,21 +36,10 @@ class CardActivityEntity {
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
-  // Herkunft (Issue #517): origin/tokenName verifiziert, agent Selbstauskunft; alle drei
-  // nullable — Alt-Einträge tragen keine Herkunft (V23 ohne Backfill).
-  @Column(name = "origin")
-  private @Nullable String origin;
+  // Herkunft (Issue #517) und Laufkennung (Issue #1426); nullable, V23/V47 ohne Backfill.
+  @Embedded private @Nullable HerkunftEmbeddable herkunft;
 
-  @Column(name = "token_name")
-  private @Nullable String tokenName;
-
-  @Column(name = "agent")
-  private @Nullable String agent;
-
-  // Laufkennung und Status nach der Bewegung (Issue #1426); nullable, V47 ohne Backfill.
-  @Column(name = "run_started_at")
-  private @Nullable Instant runStartedAt;
-
+  // Status nach der Bewegung (Issue #1426); nullable, V47 ohne Backfill.
   @Column(name = "status_after")
   private @Nullable String statusAfter;
 
@@ -71,11 +60,7 @@ class CardActivityEntity {
     this.type = type;
     this.detail = detail;
     this.createdAt = createdAt;
-    CardActivityOrigin stampOrigin = stamp.origin();
-    this.origin = stampOrigin == null ? null : stampOrigin.name();
-    this.tokenName = stamp.tokenName();
-    this.agent = stamp.agent();
-    this.runStartedAt = stamp.laufStart();
+    this.herkunft = new HerkunftEmbeddable(stamp);
     this.statusAfter = statusAfter == null ? null : statusAfter.name();
   }
 
@@ -103,20 +88,8 @@ class CardActivityEntity {
     return createdAt;
   }
 
-  @Nullable String getOrigin() {
-    return origin;
-  }
-
-  @Nullable String getTokenName() {
-    return tokenName;
-  }
-
-  @Nullable String getAgent() {
-    return agent;
-  }
-
-  @Nullable Instant getRunStartedAt() {
-    return runStartedAt;
+  HerkunftEmbeddable getHerkunft() {
+    return herkunft == null ? new HerkunftEmbeddable() : herkunft;
   }
 
   @Nullable String getStatusAfter() {

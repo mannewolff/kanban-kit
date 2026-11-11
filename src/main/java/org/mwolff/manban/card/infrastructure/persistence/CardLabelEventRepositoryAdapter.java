@@ -81,29 +81,31 @@ class CardLabelEventRepositoryAdapter implements CardLabelEventRepository {
   }
 
   private static CardLabelEvent toDomain(CardLabelEventEntity e) {
+    HerkunftEmbeddable herkunft = e.getHerkunft();
     return new CardLabelEvent(
         e.getCardId(),
         e.getLabelName(),
         e.getCreatedAt(),
-        herkunft(e),
-        e.getTokenName(),
-        e.getAgent(),
-        Objects.requireNonNull(e.getRunStartedAt()));
+        origin(herkunft),
+        herkunft.getTokenName(),
+        herkunft.getAgent(),
+        Objects.requireNonNull(herkunft.getRunStartedAt()));
   }
 
   private static LabelEreignisMitPerson toMitPerson(CardLabelEventEntity e) {
+    HerkunftEmbeddable herkunft = e.getHerkunft();
     return new LabelEreignisMitPerson(
         Objects.requireNonNull(e.getId()),
         e.getCardId(),
         e.getLabelName(),
         e.getCreatedAt(),
         e.getActorUserId(),
-        herkunft(e),
-        e.getTokenName());
+        origin(herkunft),
+        herkunft.getTokenName());
   }
 
-  private static @Nullable CardActivityOrigin herkunft(CardLabelEventEntity e) {
-    String origin = e.getOrigin();
+  private static @Nullable CardActivityOrigin origin(HerkunftEmbeddable herkunft) {
+    String origin = herkunft.getOrigin();
     return origin == null ? null : CardActivityOrigin.valueOf(origin);
   }
 
@@ -113,6 +115,6 @@ class CardLabelEventRepositoryAdapter implements CardLabelEventRepository {
         e.getCardId(),
         e.getLabelName(),
         e.getCreatedAt(),
-        e.getRunStartedAt());
+        e.getHerkunft().getRunStartedAt());
   }
 }

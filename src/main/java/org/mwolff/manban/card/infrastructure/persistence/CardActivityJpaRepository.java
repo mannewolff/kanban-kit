@@ -22,7 +22,8 @@ interface CardActivityJpaRepository extends JpaRepository<CardActivityEntity, Lo
   @Query(
       "select a from CardActivityEntity a, CardEntity c"
           + " where c.id = a.cardId and c.projectId = :projectId"
-          + " and a.origin = 'TOKEN' and a.tokenName = :tokenName and a.agent is not null"
+          + " and a.herkunft.origin = 'TOKEN' and a.herkunft.tokenName = :tokenName"
+          + " and a.herkunft.agent is not null"
           + " and a.createdAt >= :von and a.createdAt <= :bis"
           + " order by a.createdAt, a.id")
   List<CardActivityEntity> findTokenActivitiesInWindow(
