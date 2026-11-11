@@ -314,6 +314,49 @@ class EntscheidungsketteServiceTest {
         .containsExactly(Hinweis.ANDERES_PROJEKT);
   }
 
+  /**
+   * Ein Lauf zieht das Paket nach Ready, am Plan davor liegt das Ziel „Umsetzung“: Das
+   * Label-Ereignis kommt übersetzt in der Rechnung an und ist die Freigabe (Issue #2129).
+   */
+  @Test
+  void einKennzeichenAmPlanIstDieFreigabe() {
+    KettenKarte paket = karte(PAKET, 30, "Paket", "ARBEITSPAKET");
+    KettenKarte plan = karte(PLAN, 20, "[Plan] Weg", "PLAN");
+    when(leser.lade(PAKET))
+        .thenReturn(
+            new KartenKette(
+                paket,
+                List.of(new KettenGlied(GliedZustand.VORHANDEN, 20, plan)),
+                List.of(),
+                List.of(),
+                List.of(
+                    new KettenAktivitaet(
+                        PAKET,
+                        null,
+                        "MOVED",
+                        "",
+                        T0.plusSeconds(60),
+                        "TOKEN",
+                        "Kit",
+                        MODELL,
+                        "READY",
+                        T0.plusSeconds(30))),
+                List.of(
+                    new KettenLabelEreignis(PLAN, "ziel:umsetzung", T0, ERIKA, "SESSION", null))));
+
+    EntscheidungsketteView sicht = service.kette(NUTZER, PAKET);
+
+    GliedView freigabe = glieder(sicht, Dokumentart.PAKET, Gliedart.FREIGABE).getFirst();
+    assertThat(freigabe.freigabe()).isNotNull();
+    assertThat(freigabe.freigabe().fall()).isEqualTo(Freigabefall.KENNZEICHEN);
+    assertThat(freigabe.freigegebenVon())
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null));
+    assertThat(freigabe.ausgefuehrtVon())
+        .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "Kit", MODELL));
+    assertThat(freigabe.zeitpunkt()).isEqualTo(T0);
+    assertThat(freigabe.quelle().nummer()).isEqualTo(20);
+  }
+
   @Test
   void zweimalGerechnetErgibtDieselbeAntwort() {
     when(leser.lade(PAKET)).thenReturn(kette(karte(PAKET, 30, "Paket", "ARBEITSPAKET")));

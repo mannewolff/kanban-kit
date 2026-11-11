@@ -26,7 +26,6 @@ import org.mwolff.manban.entscheidungskette.application.EntscheidungsketteView.G
 import org.mwolff.manban.entscheidungskette.application.EntscheidungsketteView.PruefungView;
 import org.mwolff.manban.entscheidungskette.domain.Abschnitt;
 import org.mwolff.manban.entscheidungskette.domain.Akteur;
-import org.mwolff.manban.entscheidungskette.domain.Akteurtyp;
 import org.mwolff.manban.entscheidungskette.domain.CodeReview;
 import org.mwolff.manban.entscheidungskette.domain.Einzelheiten;
 import org.mwolff.manban.entscheidungskette.domain.Entscheidungskette;
@@ -242,13 +241,16 @@ public class EntscheidungsketteService {
           e instanceof Veroeffentlichung v ? v : null);
     }
 
-    /** Ein Mensch mit Personen-ID erscheint mit Anzeigenamen; ein gelöschter Nutzer ohne Namen. */
+    /**
+     * Ein Mensch mit Personen-ID erscheint mit Anzeigenamen; ein gelöschter Nutzer ohne Namen. Eine
+     * Personen-ID trägt nur ein Mensch ({@link Akteur}), darum entscheidet sie allein.
+     */
     private @Nullable AkteurView akteur(@Nullable Akteur a) {
       if (a == null) {
         return null;
       }
       Long person = a.person();
-      String name = a.typ() == Akteurtyp.MENSCH && person != null ? anzeigename(person) : a.name();
+      String name = person != null ? anzeigename(person) : a.name();
       return new AkteurView(a.typ(), name, a.modell());
     }
 
