@@ -186,4 +186,13 @@ class FundzahlenTest {
   void aus_dekorationAmZeilenende_faelltWeg() {
     assertThat(zaehle("## HINWEIS ##   ")).isEqualTo(new Fundzahlen(0, 0, 0, 1));
   }
+
+  @Test
+  void aus_gruppenueberschriftMitLeerzeichenAmEnde_bleibtGruppenueberschrift() {
+    // Given — das Leerzeichen hinter der Marke gehört zur Dekoration, nicht zum Inhalt
+    String text = "#### WICHTIG \n**Erster Fund**\n";
+
+    // When / Then
+    assertThat(zaehle(text)).isEqualTo(new Fundzahlen(0, 0, 1, 0));
+  }
 }
