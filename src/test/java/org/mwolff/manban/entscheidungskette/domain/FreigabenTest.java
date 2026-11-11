@@ -134,6 +134,20 @@ class FreigabenTest {
   }
 
   @Test
+  void freigabe_nichtFreigebendesLabelAmFachplan_zaehltNicht() {
+    Entscheidungskette kette =
+        paket()
+            .label(label(1, "kit:night", um(2), 5L, SESSION))
+            .zugUeberToken(P, "READY", um(5), LAUF)
+            .rechne();
+
+    Glied glied = einziges(kette, Gliedart.FREIGABE);
+    assertThat(glied.freigegebenVon()).isEqualTo(Akteur.werkzeug(ZUGANG, AGENT));
+    assertThat(((Freigabeangaben) glied.einzelheiten()).fall())
+        .isEqualTo(Freigabefall.ZUG_NACH_READY);
+  }
+
+  @Test
   void freigabe_kennzeichenAnGeloeschtemPlan_zaehltNicht() {
     Entscheidungskette kette =
         KettenAufbau.an(PAKET)
