@@ -128,11 +128,12 @@ public final class KettenRechner {
         default -> null;
       };
     }
+    // Ohne Nummer (anderes Projekt) trifft keine Zeile: beide Mengen sind HashSets ohne null.
     Integer nummer = b.nummer();
-    if (nummer != null && planNummern.contains(nummer)) {
+    if (planNummern.contains(nummer)) {
       return Dokumentart.PLAN;
     }
-    if (nummer != null && quellNummern.contains(nummer)) {
+    if (quellNummern.contains(nummer)) {
       return Dokumentart.FACHPLAN;
     }
     return naechste < stufen.size() ? stufen.get(naechste) : null;

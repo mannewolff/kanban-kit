@@ -23,6 +23,9 @@ import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Art;
 import org.mwolff.manban.entscheidungskette.domain.KettenEingabe.Karte;
 
 /** Die Rechnung der Dokument-Glieder (Issue #2115, Plan #2108 E12, E13, E14, E17). */
+// PMD.TooManyMethods: methodenreiche Testsuite — je Zuordnungsregel ein kleiner Fall, der einen
+// Mutanten tötet (Issue #2124); ein Zerschneiden verstreute die Regeln von ordne() über Dateien.
+@SuppressWarnings("PMD.TooManyMethods")
 class KettenRechnerTest {
 
   // --- Abschnitte je Kartenart -----------------------------------------------------------------
@@ -334,6 +337,73 @@ class KettenRechnerTest {
 
     assertThat(erstes(kette, Dokumentart.FACHPLAN).quelle()).isEqualTo(Verweis.nurNummer(10));
     assertThat(erstes(kette, Dokumentart.PLAN).zustand()).isEqualTo(Zustand.ERFASST);
+  }
+
+  // --- Zuordnung über die Zeilen der Kette (Issue #2124) ---------------------------------------
+
+  @Test
+  void vorfahr_planZeileEinesVorfahren_fuelltDenPlanTrotzBelegterStufe() {
+    Karte paket = karte(3, 30, Art.ARBEITSPAKET, "Paket", null);
+    Karte fachplan = karte(1, 10, Art.FACHLICH, "[Requirement] Kette", "Plan: Issue #20\n");
+
+    Entscheidungskette kette =
+        KettenAufbau.an(paket).vorfahr(vorhanden(fachplan)).vorfahr(geloescht(20)).rechne();
+
+    Glied plan = erstes(kette, Dokumentart.PLAN);
+    assertThat(plan.zustand()).isEqualTo(Zustand.NICHT_ERFASST);
+    assertThat(plan.quelle()).isEqualTo(Verweis.nurNummer(20));
+  }
+
+  @Test
+  void vorfahr_quellZeileEinesVorfahren_fuelltDenFachplanVorDemPlan() {
+    Karte paket = karte(3, 30, Art.ARBEITSPAKET, "Paket", null);
+
+    Entscheidungskette kette =
+        KettenAufbau.an(paket).vorfahr(geloescht(10)).vorfahr(vorhanden(PLAN)).rechne();
+
+    assertThat(erstes(kette, Dokumentart.PLAN).zustand()).isEqualTo(Zustand.ERFASST);
+    assertThat(erstes(kette, Dokumentart.FACHPLAN).quelle()).isEqualTo(Verweis.nurNummer(10));
+  }
+
+  @Test
+  void vorfahr_quellZeileDerKarte_fuelltDenFachplanMitIhrerNummer() {
+    Karte paket = karte(3, 30, Art.ARBEITSPAKET, "Paket", "Fachliche Quelle: Issue #11\n");
+
+    Entscheidungskette kette =
+        KettenAufbau.an(paket).vorfahr(geloescht(11)).vorfahr(vorhanden(PLAN)).rechne();
+
+    assertThat(erstes(kette, Dokumentart.FACHPLAN).quelle()).isEqualTo(Verweis.nurNummer(11));
+  }
+
+  @Test
+  void paket_ohneFachplan_nimmtDieQuellNummerDesPlans() {
+    Karte paket = karte(3, 30, Art.ARBEITSPAKET, "Paket", null);
+
+    Entscheidungskette kette = KettenAufbau.an(paket).vorfahr(vorhanden(PLAN)).rechne();
+
+    Glied fachplan = erstes(kette, Dokumentart.FACHPLAN);
+    assertThat(fachplan.zustand()).isEqualTo(Zustand.NICHT_ERFASST);
+    assertThat(fachplan.quelle()).isEqualTo(Verweis.nurNummer(10));
+  }
+
+  @Test
+  void vorfahr_ohneZeile_nimmtDieStufeNachDemBelegtenPlan() {
+    Karte paket = karte(3, 30, Art.ARBEITSPAKET, "Paket", null);
+
+    Entscheidungskette kette =
+        KettenAufbau.an(paket).vorfahr(vorhanden(PLAN_TECHNISCH)).vorfahr(geloescht(10)).rechne();
+
+    assertThat(erstes(kette, Dokumentart.FACHPLAN).quelle()).isEqualTo(Verweis.nurNummer(10));
+  }
+
+  @Test
+  void idee_planAusAnderemProjekt_sucheGehtZurKarteWeiter() {
+    Karte paket = karte(3, 30, Art.ARBEITSPAKET, "Paket", null);
+    Karte idee = karte(4, 5, Art.IDEE, "[Idea] x", "## Geklärter Stand\nErgebnis: Issue #30\n");
+
+    Entscheidungskette kette = KettenAufbau.an(paket).vorfahr(anderesProjekt()).idee(idee).rechne();
+
+    assertThat(erstes(kette, Dokumentart.IDEE).quelle().nummer()).isEqualTo(5);
   }
 
   // --- Stabilität (E17) ------------------------------------------------------------------------
