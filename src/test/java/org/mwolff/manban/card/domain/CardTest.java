@@ -130,6 +130,22 @@ class CardTest {
   }
 
   @Test
+  void withWegBelegVergleich_zeileNeuGegenueberLeererBeschreibung_stempelt() {
+    Card vorher = CARD.withContent("T", null);
+    Card nachher = vorher.withContent("T", "Fachliche Quelle: Issue #1");
+
+    assertThat(nachher.withWegBelegVergleich(vorher, FIXED).wegBelegGeaendertAm()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void withWegBelegVergleich_textOhneZeileGegenueberLeererBeschreibung_stempeltNicht() {
+    Card vorher = CARD.withContent("T", null);
+    Card nachher = vorher.withContent("T", "desc");
+
+    assertThat(nachher.withWegBelegVergleich(vorher, FIXED).wegBelegGeaendertAm()).isNull();
+  }
+
+  @Test
   void withStatus_setztUndLoescht() {
     assertThat(CARD.status()).isNull();
     assertThat(CARD.withStatus(CardStatus.DONE).status()).isEqualTo(CardStatus.DONE);
