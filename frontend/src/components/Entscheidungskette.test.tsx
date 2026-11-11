@@ -14,8 +14,8 @@ import { Entscheidungskette } from './Entscheidungskette'
 /** Der Abschnitt „Entscheidungskette“ im Kartendialog (Issue #2118, Plan #2108 E7, E8, E15, E16). */
 
 const KEINER: Verweis = { karte: null, nummer: null, titel: null, oeffenbar: false, kommentar: null }
-const MANFRED: AkteurView = { typ: 'MENSCH', name: 'Manfred', modell: null }
-const RUNNER: AkteurView = { typ: 'WERKZEUG', name: 'runner-token', modell: 'claude-opus-5-5' }
+const MANFRED: AkteurView = { typ: 'MENSCH', name: 'Manfred', modell: null, gemeldet: false }
+const RUNNER: AkteurView = { typ: 'WERKZEUG', name: 'runner-token', modell: 'claude-opus-5-5', gemeldet: false }
 const ANGABE_LEER = { wert: null, zeitpunkt: null }
 
 const glied = (werte: Partial<GliedView>): GliedView => ({
@@ -90,7 +90,7 @@ describe('Entscheidungskette', () => {
       kette([
         glied({
           art: 'HERKUNFT',
-          ausgefuehrtVon: { typ: 'MODELL', name: 'claude-opus-5-5', modell: null },
+          ausgefuehrtVon: { typ: 'MODELL', name: 'claude-opus-5-5', modell: null, gemeldet: false },
           zeitpunkt: '2026-11-10T10:00:00Z',
           ergebnis: 'Plan geschrieben',
           quelle: { karte: 81, nummer: 12, titel: 'Der Plan', oeffenbar: true, kommentar: null },
@@ -176,6 +176,29 @@ describe('Entscheidungskette', () => {
     const eintrag = screen.getByTestId('kettenglied-VEROEFFENTLICHUNG')
     expect(eintrag).toHaveTextContent('Freigegeben und ausgeführt von:Manfred (Mensch)')
     expect(eintrag).not.toHaveTextContent('Ausgeführt von:')
+  })
+
+  it('kennzeichnet einen Freigeber, den nur eine Meldung des Kits nennt', () => {
+    offen(
+      kette([
+        glied({
+          art: 'UEBERTRAGUNG',
+          freigegebenVon: { ...MANFRED, gemeldet: true },
+          ausgefuehrtVon: { typ: 'MODELL', name: 'claude-opus-5-5', modell: null, gemeldet: false },
+        }),
+      ]),
+    )
+    const eintrag = screen.getByTestId('kettenglied-UEBERTRAGUNG')
+    expect(eintrag).toHaveTextContent('Freigegeben von:Manfred (Mensch, laut Meldung des Kits)')
+    expect(eintrag).toHaveTextContent('Ausgeführt von:claude-opus-5-5 (Modell)')
+  })
+
+  it('hält einen gemeldeten und einen belegten Menschen gleichen Namens auseinander', () => {
+    offen(kette([glied({ art: 'VEROEFFENTLICHUNG', freigegebenVon: { ...MANFRED, gemeldet: true }, ausgefuehrtVon: MANFRED })]))
+    const eintrag = screen.getByTestId('kettenglied-VEROEFFENTLICHUNG')
+    expect(eintrag).toHaveTextContent('Freigegeben von:Manfred (Mensch, laut Meldung des Kits)')
+    expect(eintrag).toHaveTextContent('Ausgeführt von:Manfred (Mensch)')
+    expect(eintrag).not.toHaveTextContent('Freigegeben und ausgeführt von:')
   })
 
   it('nennt eine fehlende Seite einer Freigabe „nicht erfasst“', () => {
@@ -335,7 +358,7 @@ describe('Entscheidungskette', () => {
       kette([
         glied({
           art: 'UEBERTRAGUNG',
-          ausgefuehrtVon: { typ: 'MENSCH', name: null, modell: null },
+          ausgefuehrtVon: { typ: 'MENSCH', name: null, modell: null, gemeldet: false },
           uebertragung: {
             versuch: null,
             commit: null,

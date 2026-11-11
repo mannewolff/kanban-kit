@@ -1475,6 +1475,7 @@ export const en: Woerterbuch = {
     FREIGEGEBEN_VON: 'Approved by',
     AUSGEFUEHRT_VON: 'Carried out by',
     FREIGEGEBEN_UND_AUSGEFUEHRT_VON: 'Approved and carried out by',
+    AKTEUR_GEMELDET: 'as reported by the kit',
     AKTEUR_MODELL: (modell) => `model ${modell}`,
     ZEITPUNKT: 'Time',
     ERGEBNIS: 'Result',

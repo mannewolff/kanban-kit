@@ -38,7 +38,8 @@ function sichereAdresse(wert: string): string | null {
   }
 }
 
-const gleicherAkteur = (a: AkteurView, b: AkteurView) => a.typ === b.typ && a.name === b.name && a.modell === b.modell
+const gleicherAkteur = (a: AkteurView, b: AkteurView) =>
+  a.typ === b.typ && a.name === b.name && a.modell === b.modell && a.gemeldet === b.gemeldet
 
 /**
  * Der Abschnitt „Entscheidungskette“ im Block „Verlauf“ (Issue #2118, Plan #2108 E7, E8): zugeklappt,
@@ -190,7 +191,11 @@ function akteurText(akteur: AkteurView | null, t: Texte): string {
   if (akteur === null) {
     return t.NICHT_ERFASST
   }
-  const art = [t.AKTEURTYP[akteur.typ], ...(akteur.modell === null ? [] : [t.AKTEUR_MODELL(akteur.modell)])]
+  const art = [
+    t.AKTEURTYP[akteur.typ],
+    ...(akteur.modell === null ? [] : [t.AKTEUR_MODELL(akteur.modell)]),
+    ...(akteur.gemeldet ? [t.AKTEUR_GEMELDET] : []),
+  ]
   return `${akteur.name ?? t.NICHT_ERFASST} (${art.join(', ')})`
 }
 

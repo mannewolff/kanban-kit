@@ -85,7 +85,9 @@ class AuslieferungenTest {
     assertThat(glied.zustand()).isEqualTo(Zustand.ERFASST);
     assertThat(glied.freigegebenVon()).isEqualTo(Akteur.menschGenannt("Erika Muster"));
     assertThat(glied.freigegebenVon())
-        .isEqualTo(new Akteur(Akteurtyp.MENSCH, null, "Erika Muster", null));
+        .isEqualTo(new Akteur(Akteurtyp.MENSCH, null, "Erika Muster", null, true));
+    assertThat(glied.freigegebenVon().gemeldet()).isTrue();
+    assertThat(glied.ausgefuehrtVon().gemeldet()).isFalse();
     assertThat(glied.ausgefuehrtVon()).isEqualTo(Akteur.modell("claude-opus-5-5"));
     assertThat(glied.zeitpunkt()).isEqualTo(Instant.parse("2026-11-10T11:00:00Z"));
     assertThat(glied.ergebnis()).isEqualTo("übertragen");
@@ -270,6 +272,7 @@ class AuslieferungenTest {
     assertThat(erstes.zustand()).isEqualTo(Zustand.ERFASST);
     assertThat(erstes.ergebnis()).isEqualTo("Pull Request angelegt");
     assertThat(erstes.freigegebenVon()).isEqualTo(Akteur.menschGenannt("Erika Muster"));
+    assertThat(erstes.freigegebenVon().gemeldet()).isTrue();
     assertThat(erstes.ausgefuehrtVon()).isEqualTo(Akteur.modell("claude-opus-5-5"));
     assertThat(erstes.zeitpunkt()).isEqualTo(Instant.parse("2026-11-10T12:30:00Z"));
     assertThat(erstes.quelle()).isEqualTo(new Verweis(3L, 30, null, true, 90L));

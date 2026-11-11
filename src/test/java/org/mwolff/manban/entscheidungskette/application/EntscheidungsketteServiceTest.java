@@ -214,18 +214,18 @@ class EntscheidungsketteServiceTest {
     EntscheidungsketteView sicht = service.kette(NUTZER, PAKET);
 
     assertThat(glieder(sicht, Dokumentart.PLAN, Gliedart.HERKUNFT).getFirst().ausgefuehrtVon())
-        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null));
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null, false));
     assertThat(glieder(sicht, Dokumentart.PAKET, Gliedart.HERKUNFT).getFirst().ausgefuehrtVon())
-        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, null, null));
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, null, null, false));
     GliedView freigabe = glieder(sicht, Dokumentart.PAKET, Gliedart.FREIGABE).getFirst();
     assertThat(freigabe.freigegebenVon())
-        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null));
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null, false));
     assertThat(freigabe.freigabe()).isNotNull();
     assertThat(freigabe.freigabe().fall()).isEqualTo(Freigabefall.ZUG_NACH_READY);
     assertThat(freigabe.umsetzung()).isNull();
     GliedView umsetzung = glieder(sicht, Dokumentart.PAKET, Gliedart.UMSETZUNG).getFirst();
     assertThat(umsetzung.ausgefuehrtVon())
-        .isEqualTo(new AkteurView(Akteurtyp.MODELL, "claude-opus-5-5", null));
+        .isEqualTo(new AkteurView(Akteurtyp.MODELL, "claude-opus-5-5", null, false));
     assertThat(umsetzung.umsetzung()).isNotNull();
     assertThat(umsetzung.umsetzung().ausgang()).isEqualTo(Umsetzungsausgang.ABGESCHLOSSEN);
     assertThat(umsetzung.umsetzung().commit()).isEqualTo("abc");
@@ -278,7 +278,7 @@ class EntscheidungsketteServiceTest {
     assertThat(runde.pruefung().pruefer()).extracting(r -> r.modell()).containsExactly("fable");
     assertThat(runde.pruefung().einarbeitung().zustand()).isEqualTo(Zustand.ERFASST);
     assertThat(runde.pruefung().einarbeitung().ausgefuehrtVon())
-        .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "Kit", "claude-opus-5-5"));
+        .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "Kit", "claude-opus-5-5", false));
     assertThat(runde.hinweise()).isEmpty();
     assertThat(glieder(sicht, Dokumentart.PAKET, Gliedart.CODE_REVIEW).getFirst().codeReview())
         .isNotNull();
@@ -288,6 +288,34 @@ class EntscheidungsketteServiceTest {
         glieder(sicht, Dokumentart.PAKET, Gliedart.VEROEFFENTLICHUNG).getFirst();
     assertThat(veroeffentlichung.veroeffentlichung()).isNotNull();
     assertThat(veroeffentlichung.veroeffentlichung().version()).isEqualTo("1.2.3");
+  }
+
+  /** Ein Freigeber aus einer Kit-Meldung geht als gemeldet durch, mit seinem Namen. */
+  @Test
+  void einGemeldeterFreigeberBleibtGemeldet() {
+    KettenKarte paket = karte(PAKET, 30, "Paket", "ARBEITSPAKET");
+    when(leser.lade(PAKET))
+        .thenReturn(new KartenKette(paket, List.of(), List.of(), List.of(), List.of(), List.of()));
+    when(comments.kettenKommentare(anyCollection()))
+        .thenReturn(
+            List.of(
+                kommentar(
+                    1,
+                    PAKET,
+                    "## Übertragung auf den Hauptzweig\n\nVersuch: 1\nAusgang: übertragen\n"
+                        + "Freigegeben von: Erika Muster, 2026-11-10T10:00:00Z\n"
+                        + "Ausgeführt von: "
+                        + MODELL
+                        + ", 2026-11-10T11:00:00Z\n",
+                    T0)));
+
+    EntscheidungsketteView sicht = service.kette(NUTZER, PAKET);
+
+    GliedView uebertragung = glieder(sicht, Dokumentart.PAKET, Gliedart.UEBERTRAGUNG).getFirst();
+    assertThat(uebertragung.freigegebenVon())
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null, true));
+    assertThat(uebertragung.ausgefuehrtVon())
+        .isEqualTo(new AkteurView(Akteurtyp.MODELL, MODELL, null, false));
   }
 
   /** Nachfahren am Plan kommen mit; ein Hinweis bleibt am Glied stehen. */
@@ -350,9 +378,9 @@ class EntscheidungsketteServiceTest {
     assertThat(freigabe.freigabe()).isNotNull();
     assertThat(freigabe.freigabe().fall()).isEqualTo(Freigabefall.KENNZEICHEN);
     assertThat(freigabe.freigegebenVon())
-        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null));
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null, false));
     assertThat(freigabe.ausgefuehrtVon())
-        .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "Kit", MODELL));
+        .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "Kit", MODELL, false));
     assertThat(freigabe.zeitpunkt()).isEqualTo(T0);
     assertThat(freigabe.quelle().nummer()).isEqualTo(20);
   }

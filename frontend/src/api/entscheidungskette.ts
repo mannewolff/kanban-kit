@@ -84,6 +84,8 @@ export interface AkteurView {
   name: string | null
   /** Das gemeldete Modell eines Werkzeugs. */
   modell: string | null
+  /** Wahr, wenn der Akteur nur aus einer Meldung des Kits stammt und nicht vom Server belegt ist (Issue #2146). */
+  gemeldet: boolean
 }
 
 export interface Fundzahlen {

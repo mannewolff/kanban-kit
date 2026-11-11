@@ -1576,6 +1576,7 @@ export const de = {
     FREIGEGEBEN_VON: 'Freigegeben von',
     AUSGEFUEHRT_VON: 'Ausgeführt von',
     FREIGEGEBEN_UND_AUSGEFUEHRT_VON: 'Freigegeben und ausgeführt von',
+    AKTEUR_GEMELDET: 'laut Meldung des Kits',
     AKTEUR_MODELL: (modell: string) => `Modell ${modell}`,
     ZEITPUNKT: 'Zeitpunkt',
     ERGEBNIS: 'Ergebnis',

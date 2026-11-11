@@ -251,7 +251,7 @@ public class EntscheidungsketteService {
       }
       Long person = a.person();
       String name = person != null ? anzeigename(person) : a.name();
-      return new AkteurView(a.typ(), name, a.modell());
+      return new AkteurView(a.typ(), name, a.modell(), a.gemeldet());
     }
 
     private @Nullable String anzeigename(long person) {

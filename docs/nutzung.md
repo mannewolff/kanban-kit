@@ -261,7 +261,10 @@ keinen früheren Fehlschlag.
 **Welche Meldungen zählen.** Ein Glied begründen nur Meldungen, die das Kit selbst geschrieben
 hat: Kommentare, die über einen Projekt-Zugang (Access-Token) geschrieben wurden und den festen
 Wortlaut des Kits tragen, deutsch oder englisch. Ein in der Oberfläche geschriebener Kommentar
-zählt nie, auch nicht bei gleichem Wortlaut.
+zählt nie, auch nicht bei gleichem Wortlaut. Der Freigeber von Übertragung und Veröffentlichung
+ist dabei nur eine Angabe des Kits — der Server belegt ihn nicht über eine Anmeldung —, darum
+steht hinter seinem Namen „(Mensch, laut Meldung des Kits)“. Ein Mensch, den der Server selbst
+belegt, etwa beim Zug nach Ready oder beim Setzen eines Labels, erscheint ohne diesen Zusatz.
 
 **Veröffentlichung.** Der Ausgang `Pull Request angelegt` erscheint nicht als veröffentlicht —
 ebenso wenig wie `nicht veröffentlicht`. Für das zuletzt erreichte Glied eines Nachfahren zählt

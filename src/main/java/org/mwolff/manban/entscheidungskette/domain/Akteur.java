@@ -12,16 +12,22 @@ import org.jspecify.annotations.Nullable;
  * @param name der Name des Modells, des Zugangs oder eines nur genannten Menschen; {@code null},
  *     wenn nicht erfasst
  * @param modell das gemeldete Modell eines Werkzeugs; {@code null}, wenn nicht gemeldet
+ * @param gemeldet {@code true}, wenn der Akteur nur die Angabe einer Meldung des Kits ist und der
+ *     Server ihn nicht selbst belegt hat (Issue #2146)
  */
 public record Akteur(
-    Akteurtyp typ, @Nullable Long person, @Nullable String name, @Nullable String modell) {
+    Akteurtyp typ,
+    @Nullable Long person,
+    @Nullable String name,
+    @Nullable String modell,
+    boolean gemeldet) {
 
   private static final String HERKUNFT_SESSION = "SESSION";
   private static final String HERKUNFT_TOKEN = "TOKEN";
 
   /** Ein Mensch. */
   public static Akteur mensch(@Nullable Long person) {
-    return new Akteur(Akteurtyp.MENSCH, person, null, null);
+    return new Akteur(Akteurtyp.MENSCH, person, null, null, false);
   }
 
   /**
@@ -39,18 +45,21 @@ public record Akteur(
     return HERKUNFT_TOKEN.equals(herkunft) ? werkzeug(tokenName, agent) : null;
   }
 
-  /** Ein Mensch, den eine Meldung des Kits nur mit Namen nennt. */
+  /**
+   * Ein Mensch, den eine Meldung des Kits nur mit Namen nennt. Die Meldung ist eine Selbstauskunft
+   * des Zugangs, darum ist er {@linkplain #gemeldet() gemeldet}.
+   */
   public static Akteur menschGenannt(String name) {
-    return new Akteur(Akteurtyp.MENSCH, null, name, null);
+    return new Akteur(Akteurtyp.MENSCH, null, name, null, true);
   }
 
   /** Ein Modell mit seinem Namen. */
   public static Akteur modell(String name) {
-    return new Akteur(Akteurtyp.MODELL, null, name, null);
+    return new Akteur(Akteurtyp.MODELL, null, name, null, false);
   }
 
   /** Ein Werkzeug mit dem Namen seines Zugangs und dem gemeldeten Modell. */
   public static Akteur werkzeug(@Nullable String zugang, @Nullable String modell) {
-    return new Akteur(Akteurtyp.WERKZEUG, null, zugang, modell);
+    return new Akteur(Akteurtyp.WERKZEUG, null, zugang, modell, false);
   }
 }
