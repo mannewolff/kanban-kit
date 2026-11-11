@@ -137,6 +137,7 @@ class KitMeldungLeserTest {
         "### Reviewer 1: form|form|-",
         "### Reviewer 1:  , fable|-|fable",
         "### Reviewer 1: form,  |form|-",
+        "### Reviewer 1:, fable|-|fable",
         "### Reviewer 1:|-|-",
         "### Reviewer 1: rolle, modell, mit komma|rolle|modell, mit komma"
       })
@@ -148,6 +149,27 @@ class KitMeldungLeserTest {
     // Then
     assertThat(runde.reviewer())
         .containsExactly(new Reviewer(1, rolle, modell, new Fundzahlen(0, 0, 0, 0)));
+  }
+
+  @Test
+  void pruefrunde_fundDirektVorDemNaechstenKopf_gehoertDemVorigenReviewer() {
+    // Given
+    String text =
+        """
+        ## Plan-Review, Runde 1
+        ### Reviewer 1: form, fable
+        **WICHTIG — Titel**
+        ### Reviewer 2: fachlich, gpt-astra
+        """;
+
+    // When
+    Pruefrunde runde = (Pruefrunde) lies(text);
+
+    // Then
+    assertThat(runde.reviewer())
+        .containsExactly(
+            new Reviewer(1, "form", "fable", new Fundzahlen(0, 0, 1, 0)),
+            new Reviewer(2, "fachlich", "gpt-astra", new Fundzahlen(0, 0, 0, 0)));
   }
 
   @ParameterizedTest
@@ -317,10 +339,28 @@ class KitMeldungLeserTest {
         "## Geklärter Stand\n## Weiter\nErgebnis: Issue #7",
         "## Geklärter Stand\n```\nErgebnis: Issue #7\n```",
         "## Geklärter Stand\n~~~\nErgebnis: Issue #7\n~~~",
+        "## Geklärter Stand\n```\nText im Zaun\nErgebnis: Issue #7\n```",
+        "## Geklärter Stand\n```\n~~~\nErgebnis: Issue #7\n```",
         "```\n## Geklärter Stand\nErgebnis: Issue #7\n```"
       })
   void ideeErgebnis_ohneGueltigeZeile_leer(String text) {
     assertThat(KitMeldungLeser.ideeErgebnis(text)).isEmpty();
+  }
+
+  @Test
+  void ideeErgebnis_nachGeschlossenemZaun_zaehltWieder() {
+    // Given
+    String text =
+        """
+        ## Geklärter Stand
+        ```
+        Text im Zaun
+        ```
+        Ergebnis: Issue #7
+        """;
+
+    // When / Then
+    assertThat(KitMeldungLeser.ideeErgebnis(text)).contains("Issue #7");
   }
 
   @Test

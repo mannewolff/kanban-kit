@@ -147,17 +147,14 @@ public final class KitMeldungLeser {
    * Die Zeilen des festen Schlusses: von hinten, solange eine Zeile leer oder eine von ihnen ist.
    */
   private static List<String> schluss(List<String> zeilen) {
-    int beginn = zeilen.size();
-    for (int i = zeilen.size() - 1; i >= 0; i--) {
-      String zeile = zeilen.get(i);
-      if (!zeile.isBlank()) {
-        if (SCHLUSSZEILEN.stream().noneMatch(s -> s.rest(zeile).isPresent())) {
-          break;
-        }
-        beginn = i;
-      }
-    }
-    return zeilen.subList(beginn, zeilen.size());
+    return zeilen.reversed().stream()
+        .takeWhile(zeile -> zeile.isBlank() || istSchlusszeile(zeile))
+        .toList()
+        .reversed();
+  }
+
+  private static boolean istSchlusszeile(String zeile) {
+    return SCHLUSSZEILEN.stream().anyMatch(s -> s.rest(zeile).isPresent());
   }
 
   private static Abschlussbericht abschlussbericht(List<String> schluss) {
