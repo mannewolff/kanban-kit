@@ -353,6 +353,55 @@ class FremdKartenSchreiberIT extends AbstractIntegrationTest {
     assertThat(kartenBestand.fehlendeStatus(boardId)).containsExactly("In review", "Done");
   }
 
+  @Test
+  void herkunftSetzenVerweistAufDenVorfahrenUndNimmtSieWiederWeg() {
+    // Given: Plan 3 und Paket 7 sind gespiegelt
+    long plan =
+        schreiber.anlegen(
+            boardId,
+            new FremdeKarte(3, "[Plan] Export", null, "BACKLOG", ADRESSE),
+            ANGEBUNDEN,
+            ERIKA);
+    long paket = anlegen();
+
+    // When / Then: gesetzt, ein zweites Mal unverändert, dann weggenommen
+    assertThat(schreiber.herkunftSetzen(boardId, 7, 3)).isTrue();
+    assertThat(cards.findById(paket).orElseThrow().derivedFromCardId()).isEqualTo(plan);
+    assertThat(schreiber.herkunftSetzen(boardId, 7, 3)).isFalse();
+    assertThat(schreiber.herkunftSetzen(boardId, 7, null)).isTrue();
+    assertThat(cards.findById(paket).orElseThrow().derivedFromCardId()).isNull();
+  }
+
+  @Test
+  void herkunftOhneVorfahrenOderImKreisBleibtLeer() {
+    // Given: Karte 7 stammt aus Karte 3, Karte 3 gibt es
+    schreiber.anlegen(
+        boardId, new FremdeKarte(3, "[Plan] Export", null, "BACKLOG", ADRESSE), ANGEBUNDEN, ERIKA);
+    long paket = anlegen();
+    schreiber.herkunftSetzen(boardId, 7, 3);
+
+    // When: Karte 3 soll aus Karte 7 stammen (Kreis), Karte 7 aus der unbekannten 99
+    boolean kreis = schreiber.herkunftSetzen(boardId, 3, 7);
+    boolean unbekannt = schreiber.herkunftSetzen(boardId, 7, 99);
+
+    // Then
+    assertThat(kreis).isFalse();
+    assertThat(unbekannt).isTrue();
+    assertThat(cards.findById(paket).orElseThrow().derivedFromCardId()).isNull();
+  }
+
+  @Test
+  void kartenIdFindetNurGespiegelteKartenAusserhalbDesPapierkorbs() {
+    // Given
+    long cardId = anlegen();
+
+    // Then
+    assertThat(kartenBestand.kartenId(projectId, 7)).contains(cardId);
+    assertThat(kartenBestand.kartenId(projectId, 8)).isEmpty();
+    schreiber.alsGeloeschtMarkieren(boardId, 7, GELOESCHT);
+    assertThat(kartenBestand.kartenId(projectId, 7)).isEmpty();
+  }
+
   private void karte(int nummer, String titel, String typ, boolean archiviert, boolean geloescht) {
     jdbc.update(
         "INSERT INTO card (project_id, board_id, column_id, number, title, position_in_column,"

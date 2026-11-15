@@ -1179,4 +1179,58 @@ class CommentServiceTest {
         c.vonHandKopfzeile(),
         c.externKennung());
   }
+
+  @Test
+  void spiegelFehlendeKennzeichnen_kennzeichnetNurFehlendeGespiegelteMeldungen() {
+    // Given: ein eigener Kommentar ohne Kennung, eine fehlende und eine vorhandene Meldung
+    when(boardQuelle.istFremd(1L)).thenReturn(true);
+    Comment fehlt = gespiegelteMeldung("Weg", NOTIZ_ANGELEGT, null, null);
+    Comment bleibt =
+        new Comment(
+            10L,
+            5L,
+            null,
+            "kit-bot",
+            "Da",
+            NOTIZ_ANGELEGT,
+            NOTIZ_ANGELEGT,
+            null,
+            "TOKEN",
+            null,
+            null,
+            null,
+            null,
+            "502");
+    when(comments.findByCardId(5L)).thenReturn(List.of(comment(1L), fehlt, bleibt));
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    service.spiegelFehlendeKennzeichnen(5L, List.of("502"), FIXED);
+
+    // Then
+    ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
+    verify(comments).save(captor.capture());
+    assertThat(captor.getValue().externKennung()).isEqualTo("501");
+    assertThat(captor.getValue().vonHandGeaendertAm()).isEqualTo(FIXED);
+  }
+
+  @Test
+  void spiegelFehlendeKennzeichnen_schonGekennzeichnetBleibtUnberuehrt() {
+    when(boardQuelle.istFremd(1L)).thenReturn(true);
+    Comment schon = gespiegelteMeldung("Weg", NOTIZ_ANGELEGT, NOTIZ_ANGELEGT, "## Kopf");
+    when(comments.findByCardId(5L)).thenReturn(List.of(schon));
+
+    service.spiegelFehlendeKennzeichnen(5L, List.of(), FIXED);
+
+    verify(comments, never()).save(any());
+  }
+
+  @Test
+  void spiegelFehlendeKennzeichnen_ohneFremdesBoardScheitert() {
+    when(boardQuelle.istFremd(1L)).thenReturn(false);
+
+    assertThatThrownBy(() -> service.spiegelFehlendeKennzeichnen(5L, List.of(), FIXED))
+        .isInstanceOf(IllegalStateException.class);
+    verify(comments, never()).findByCardId(5L);
+  }
 }

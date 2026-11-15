@@ -1,9 +1,11 @@
 package org.mwolff.manban.card.application;
 
 import java.util.List;
+import java.util.Optional;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
 import org.mwolff.manban.card.domain.Arbeitspaket;
+import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +38,15 @@ public class FremdKartenBestand {
   public KartenBestand bestand(long projectId) {
     cards.lockCardNumbers(projectId);
     return bestandsAuskunft.bestand(projectId);
+  }
+
+  /**
+   * Die interne ID der Karte mit dieser Nummer im Projekt (Issue #2167); leer, wenn der Spiegel sie
+   * noch nicht angelegt hat oder sie im Papierkorb liegt.
+   */
+  @Transactional(readOnly = true)
+  public Optional<Long> kartenId(long projectId, int nummer) {
+    return cards.findByProjectIdAndNumber(projectId, nummer).map(Card::requireId);
   }
 
   /**

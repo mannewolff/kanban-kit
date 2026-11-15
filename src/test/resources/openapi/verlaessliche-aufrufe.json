@@ -446,6 +446,41 @@
     },
     "abgekuendigtSeit" : null
   }, {
+    "pfad" : "/api/kanban/fremdboard/anstoss",
+    "methode" : "POST",
+    "parameter" : [ ],
+    "rumpf" : {
+      "content" : {
+        "application/json" : {
+          "schema" : {
+            "$ref" : "#/components/schemas/FremdBoardAnstossRequest"
+          }
+        }
+      },
+      "required" : true
+    },
+    "erfolg" : {
+      "200" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/FremdBoardAnstossResponse"
+            }
+          }
+        }
+      },
+      "202" : {
+        "content" : {
+          "application/json" : {
+            "schema" : {
+              "$ref" : "#/components/schemas/FremdBoardAnstossResponse"
+            }
+          }
+        }
+      }
+    },
+    "abgekuendigtSeit" : null
+  }, {
     "pfad" : "/api/kanban/items",
     "methode" : "POST",
     "parameter" : [ {
@@ -1011,6 +1046,25 @@
           "type" : "string"
         }
       },
+      "type" : "object"
+    },
+    "FremdBoardAnstossRequest" : {
+      "properties" : {
+        "nummer" : {
+          "format" : "int32",
+          "type" : "integer"
+        }
+      },
+      "required" : [ "nummer" ],
+      "type" : "object"
+    },
+    "FremdBoardAnstossResponse" : {
+      "properties" : {
+        "abgeglichen" : {
+          "type" : "boolean"
+        }
+      },
+      "required" : [ "abgeglichen" ],
       "type" : "object"
     },
     "IngestBudgetRequest" : {

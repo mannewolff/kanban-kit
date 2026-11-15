@@ -277,6 +277,37 @@ public class FremdKartenSchreiber {
   }
 
   /**
+   * Setzt die Herkunft der Karte auf die Karte mit der Nummer {@code vorfahrNummer} (Issue #2167,
+   * Plan #2152 A12). Das fremde System kennt keine Herkunft; der Spiegel liest sie aus dem Text.
+   * Gibt es den Vorfahren im Projekt nicht (noch nicht gespiegelt, im Papierkorb) oder entstünde
+   * ein Kreis, bleibt die Karte ohne Herkunft — der nächste Abgleich versucht es wieder. {@code
+   * null} nimmt die Herkunft weg: Es gilt der Text im fremden System.
+   *
+   * @return {@code false}, wenn die Herkunft schon so stand
+   * @throws CardNotFoundException wenn es die Karte nicht gibt oder sie im Papierkorb liegt
+   */
+  @Transactional
+  public boolean herkunftSetzen(long boardId, int nummer, @Nullable Integer vorfahrNummer) {
+    long projectId = fremdesProjekt(boardId);
+    Card karte = karte(projectId, nummer);
+    Long vorfahr = vorfahrId(projectId, karte.requireId(), vorfahrNummer);
+    if (Objects.equals(vorfahr, karte.derivedFromCardId())) {
+      return false;
+    }
+    cards.save(karte.withDerivedFrom(vorfahr));
+    grundlage.publishChanged(boardId, ActivityType.UPDATED, karte.requireId());
+    return true;
+  }
+
+  private @Nullable Long vorfahrId(long projectId, long cardId, @Nullable Integer vorfahrNummer) {
+    try {
+      return DerivedFrom.resolve(cards, projectId, vorfahrNummer, cardId);
+    } catch (InvalidDerivedFromException e) {
+      return null;
+    }
+  }
+
+  /**
    * Das Projekt des Boards, sofern es ein fremdes Board hat — sonst schreibt der Spiegel nicht.
    *
    * @throws IllegalStateException wenn das Projekt sein Board in kanban-kit führt

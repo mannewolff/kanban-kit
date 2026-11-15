@@ -162,6 +162,30 @@ public class CommentService {
             });
   }
 
+  /**
+   * Kennzeichnet jede gespiegelte Notiz der Karte, deren Kennung im fremden System fehlt, wie
+   * {@link #spiegelGeloescht} (Issue #2167, Plan #2152 A19): Eine Meldung des Kits bleibt stehen
+   * und gilt als von Hand geändert, jeder andere Kommentar bleibt unberührt. Ohne Rechteprüfung wie
+   * {@link #spiegeln}.
+   *
+   * @param vorhanden die Kennungen der Notizen, die das fremde System an der Karte noch hat
+   * @param zeitpunkt wann der Spiegel das Fehlen festgestellt hat
+   * @throws IllegalStateException wenn das Projekt der Karte kein fremdes Board hat
+   */
+  @Transactional
+  public void spiegelFehlendeKennzeichnen(
+      long cardId, Collection<String> vorhanden, Instant zeitpunkt) {
+    pruefeFremd(cardId);
+    for (Comment bisher : comments.findByCardId(cardId)) {
+      if (bisher.externKennung() != null && !vorhanden.contains(bisher.externKennung())) {
+        Comment gekennzeichnet = bisher.alsImFremdenSystemGeloescht(zeitpunkt);
+        if (!gekennzeichnet.equals(bisher)) {
+          comments.save(gekennzeichnet);
+        }
+      }
+    }
+  }
+
   private void pruefeFremd(long cardId) {
     long projectId = cardService.requireProjectId(cardId);
     if (!boardQuelle.istFremd(projectId)) {

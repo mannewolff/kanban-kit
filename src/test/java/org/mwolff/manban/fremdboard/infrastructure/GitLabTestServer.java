@@ -33,14 +33,16 @@ import org.mwolff.manban.fremdboard.domain.Verbindung;
  * https} durchlässt. Zertifikat für {@code localhost} und aufgezeichnete Antworten liegen unter
  * {@code src/test/resources/fremdboard/gitlab/}. Unbekannte Pfade beantwortet er mit 404.
  */
-final class GitLabTestServer implements AutoCloseable {
+public final class GitLabTestServer implements AutoCloseable {
 
-  static final String ZUGANG = "glpat-geheim-0123456789";
-  static final String PROJEKT = "/api/v4/projects/gruppe%2Fprojekt";
+  public static final String ZUGANG = "glpat-geheim-0123456789";
+  public static final String PROJEKT = "/api/v4/projects/gruppe%2Fprojekt";
   static final String ISSUES = PROJEKT + "/issues?state=all&per_page=100&page=";
 
-  private static final String SCHLUESSEL =
+  /** Schlüssel des Tresors; wer einen Zugang dieses Servers entschlüsseln will, setzt ihn. */
+  public static final String SCHLUESSEL =
       "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+
   private static final char[] KEYSTORE_KENNWORT = "nurfuertests".toCharArray();
 
   private record Antwort(int status, String rumpf, @Nullable String naechsteSeite) {}
@@ -51,11 +53,12 @@ final class GitLabTestServer implements AutoCloseable {
   private final HttpsServer server;
   private final HttpClient client;
   private final ZugangsTresor tresor = new ZugangsTresor(SCHLUESSEL, new SecureRandom());
+  private final HostErlaubnis hostErlaubnis;
   private final GitLabQuelle gitLabQuelle;
   private volatile Duration verzoegerung = Duration.ZERO;
   private volatile boolean ohneEnde;
 
-  GitLabTestServer() throws IOException, GeneralSecurityException {
+  public GitLabTestServer() throws IOException, GeneralSecurityException {
     SSLContext tls = tlsKontext();
     server = HttpsServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
     server.setHttpsConfigurator(new HttpsConfigurator(tls));
@@ -67,18 +70,38 @@ final class GitLabTestServer implements AutoCloseable {
             .followRedirects(HttpClient.Redirect.NEVER)
             .connectTimeout(Duration.ofSeconds(2))
             .build();
-    gitLabQuelle =
-        new GitLabQuelle(
-            new HostErlaubnis(List.of("localhost"), client, Duration.ofMillis(500)), tresor);
+    hostErlaubnis = new HostErlaubnis(List.of("localhost"), client, Duration.ofMillis(500));
+    gitLabQuelle = new GitLabQuelle(hostErlaubnis, tresor);
   }
 
   GitLabQuelle quelle() {
     return gitLabQuelle;
   }
 
+  /**
+   * Die Erlaubnis für {@code localhost} mit dem Client, der dem Zertifikat dieses Servers traut —
+   * für Tests, die die {@link GitLabQuelle} des Anwendungskontexts gegen ihn richten (Issue #2167).
+   */
+  public HostErlaubnis erlaubnis() {
+    return hostErlaubnis;
+  }
+
+  /** {@link #ZUGANG}, verschlüsselt mit {@link #SCHLUESSEL}. */
+  public String zugangVerschluesselt() {
+    return tresor.verschluesseln(ZUGANG);
+  }
+
   /** Beantwortet {@code pfadUndAnfrage} (roh, wie sie ankommt) mit Status, Rumpf und Folgeseite. */
-  void antworte(String pfadUndAnfrage, int status, String rumpf, @Nullable String naechsteSeite) {
+  public void antworte(
+      String pfadUndAnfrage, int status, String rumpf, @Nullable String naechsteSeite) {
     antworten.put(pfadUndAnfrage, new Antwort(status, rumpf, naechsteSeite));
+  }
+
+  /** Vergisst alle Antworten und Abrufe — für einen Server, den mehrere Tests teilen. */
+  public void zuruecksetzen() {
+    antworten.clear();
+    abgerufen.clear();
+    gesendeteZugaenge.clear();
   }
 
   /** Lässt jede Antwort um {@code dauer} warten. */
@@ -92,7 +115,7 @@ final class GitLabTestServer implements AutoCloseable {
   }
 
   /** Die abgerufenen Pfade samt Anfrage, roh und in Reihenfolge. */
-  List<String> abrufe() {
+  public List<String> abrufe() {
     return abgerufen;
   }
 
@@ -101,7 +124,7 @@ final class GitLabTestServer implements AutoCloseable {
     return gesendeteZugaenge;
   }
 
-  String basis() {
+  public String basis() {
     return "https://localhost:" + server.getAddress().getPort();
   }
 
@@ -126,7 +149,7 @@ final class GitLabTestServer implements AutoCloseable {
   }
 
   /** Hält den Server an; danach ist GitLab nicht erreichbar. */
-  void stoppe() {
+  public void stoppe() {
     server.stop(0);
   }
 
@@ -137,7 +160,7 @@ final class GitLabTestServer implements AutoCloseable {
   }
 
   /** Eine aufgezeichnete Antwort aus {@code src/test/resources/fremdboard/gitlab/}. */
-  static String datei(String name) {
+  public static String datei(String name) {
     try (InputStream ein = GitLabTestServer.class.getResourceAsStream(pfad(name))) {
       if (ein == null) {
         throw new IllegalStateException("Aufzeichnung fehlt: " + name);
