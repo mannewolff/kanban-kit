@@ -1996,6 +1996,49 @@ export const de = {
       KLARTEXT_SCHLIESSEN: 'Klartext schließen',
       SCHLIESSEN: 'Schließen',
     },
+    /** Board eines Projekts in einem fremden System, nur für den Owner (Issue #2169, Plan #2152). */
+    FREMDBOARD: {
+      TITEL: 'Board-Quelle',
+      HINWEIS:
+        'Liegt das Board eines Projekts in GitLab, zeigt kanban-kit dessen Karten nur zum Lesen; bearbeitet wird in GitLab. Das geht nur für ein Projekt, das in kanban-kit noch keine Karten hat, und lässt sich danach nicht mehr lösen.',
+      PROJEKT: 'Projekt',
+      PROJEKT_WAEHLEN: '(Projekt wählen)',
+      PROJEKTE_FEHLGESCHLAGEN: 'Die Projekte ließen sich nicht laden.',
+      LADEN_FEHLGESCHLAGEN: 'Die Board-Quelle ließ sich nicht laden.',
+      SPEICHERN_FEHLGESCHLAGEN: 'Die Board-Quelle ließ sich nicht speichern.',
+      GESPEICHERT: 'Gespeichert.',
+      SYSTEM: 'System: GitLab (selbst betrieben oder gitlab.com)',
+      ANGEBUNDEN: (am: string) =>
+        `Das Board dieses Projekts liegt in GitLab, angebunden am ${am}. Adresse und Projektpfad lassen sich nicht mehr ändern.`,
+      LETZTER_ABGLEICH: (am: string) => `Letzter Abgleich: ${am}`,
+      NOCH_KEIN_ABGLEICH: 'Letzter Abgleich: noch keiner',
+      ABGLEICH_FEHLER: (fehler: string) => `Der letzte Abgleich ist gescheitert: ${fehler}`,
+      KEIN_SCHLUESSEL:
+        'Auf dem Server ist kein Schlüssel für Zugänge gesetzt. Ohne ihn lässt sich kein fremdes Board anbinden; wer den Server betreibt, muss ihn setzen.',
+      ZUGANG_NICHT_LESBAR:
+        'Der hinterlegte Zugang lässt sich nicht lesen, etwa weil der Schlüssel auf dem Server gewechselt hat. Bis du ihn neu hinterlegst, bleibt das Board auf dem letzten Stand.',
+      ZUGANG_NEU: 'Zugang neu hinterlegen',
+      ADRESSE: 'Adresse',
+      ADRESSE_HILFE: 'Nur https, etwa https://gitlab.com',
+      PROJEKTPFAD: 'Projektpfad',
+      PROJEKTPFAD_HILFE: 'Gruppe und Projekt in GitLab, etwa gruppe/projekt',
+      ZUGANG: 'Zugang',
+      ZUGANG_HILFE_NEU:
+        'Ein Zugang, der in GitLab nur lesen darf (read_api). Er wird verschlüsselt abgelegt und nie wieder angezeigt.',
+      ZUGANG_HILFE_BESTEHEND:
+        'Leer lassen, um den hinterlegten Zugang zu behalten. Ein neuer ersetzt ihn; angezeigt wird er nie.',
+      KIT_KONTO: 'Kit-Konto',
+      KIT_KONTO_HILFE: 'Benutzername, unter dem das Kit in GitLab schreibt. Darf leer bleiben.',
+      STATUSLABELS: 'Statuslabels in GitLab',
+      STATUSLABELS_HINWEIS:
+        'Mit diesen Labels trägt GitLab den Status einer Karte. Done hat keins: Eine geschlossene Karte gilt als Done.',
+      LABEL_BACKLOG: 'Label für Backlog',
+      LABEL_READY: 'Label für Ready',
+      LABEL_IN_PROGRESS: 'Label für In progress',
+      LABEL_IN_REVIEW: 'Label für In review',
+      ANBINDEN: 'Anbinden',
+      SPEICHERN: 'Speichern',
+    },
   },
 
   /** Die schmale Oberfläche für das Handy unter `/mobil` (Plan #1989, Issue #1992). */

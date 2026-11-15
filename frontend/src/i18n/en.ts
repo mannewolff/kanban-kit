@@ -1875,6 +1875,48 @@ export const en: Woerterbuch = {
       KLARTEXT_SCHLIESSEN: 'Close plaintext',
       SCHLIESSEN: 'Close',
     },
+    FREMDBOARD: {
+      TITEL: 'Board source',
+      HINWEIS:
+        'If a project’s board lives in GitLab, kanban-kit shows its cards read-only; editing happens in GitLab. This only works for a project that has no cards in kanban-kit yet, and it cannot be undone afterwards.',
+      PROJEKT: 'Project',
+      PROJEKT_WAEHLEN: '(Choose a project)',
+      PROJEKTE_FEHLGESCHLAGEN: 'The projects could not be loaded.',
+      LADEN_FEHLGESCHLAGEN: 'The board source could not be loaded.',
+      SPEICHERN_FEHLGESCHLAGEN: 'The board source could not be saved.',
+      GESPEICHERT: 'Saved.',
+      SYSTEM: 'System: GitLab (self-hosted or gitlab.com)',
+      ANGEBUNDEN: (am) =>
+        `This project’s board lives in GitLab, connected on ${am}. Address and project path can no longer be changed.`,
+      LETZTER_ABGLEICH: (am) => `Last sync: ${am}`,
+      NOCH_KEIN_ABGLEICH: 'Last sync: none yet',
+      ABGLEICH_FEHLER: (fehler) => `The last sync failed: ${fehler}`,
+      KEIN_SCHLUESSEL:
+        'No key for credentials is set on the server. Without it no external board can be connected; whoever runs the server has to set it.',
+      ZUGANG_NICHT_LESBAR:
+        'The stored credential cannot be read, for example because the key on the server has changed. Until you store it again, the board stays at its last state.',
+      ZUGANG_NEU: 'Store credential again',
+      ADRESSE: 'Address',
+      ADRESSE_HILFE: 'https only, e.g. https://gitlab.com',
+      PROJEKTPFAD: 'Project path',
+      PROJEKTPFAD_HILFE: 'Group and project in GitLab, e.g. group/project',
+      ZUGANG: 'Credential',
+      ZUGANG_HILFE_NEU:
+        'A credential that may only read in GitLab (read_api). It is stored encrypted and never shown again.',
+      ZUGANG_HILFE_BESTEHEND:
+        'Leave empty to keep the stored credential. A new one replaces it; it is never shown.',
+      KIT_KONTO: 'Kit account',
+      KIT_KONTO_HILFE: 'User name the kit writes as in GitLab. May stay empty.',
+      STATUSLABELS: 'Status labels in GitLab',
+      STATUSLABELS_HINWEIS:
+        'GitLab carries a card’s status with these labels. Done has none: a closed card counts as Done.',
+      LABEL_BACKLOG: 'Label for Backlog',
+      LABEL_READY: 'Label for Ready',
+      LABEL_IN_PROGRESS: 'Label for In progress',
+      LABEL_IN_REVIEW: 'Label for In review',
+      ANBINDEN: 'Connect',
+      SPEICHERN: 'Save',
+    },
   },
 
   MOBIL: {
