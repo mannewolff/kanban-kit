@@ -17,4 +17,17 @@ public interface BoardQuelle {
 
   /** {@code true} genau dann, wenn das Projekt eine Verbindung zu einem fremden Board hat. */
   boolean istFremd(long projectId);
+
+  /**
+   * Lehnt ab, wenn das Projekt ein fremdes Board hat (Issue #2161, Plan #2152 A10): Die Schreibwege
+   * rufen das nach ihrer Rechteprüfung, damit ein Nicht-Mitglied weiter 403/404 sieht und nicht
+   * erfährt, dass das Board anderswo liegt.
+   *
+   * @throws FremdesBoardException wenn {@link #istFremd(long)} für das Projekt zutrifft
+   */
+  default void pruefeSchreibbar(long projectId) {
+    if (istFremd(projectId)) {
+      throw new FremdesBoardException();
+    }
+  }
 }

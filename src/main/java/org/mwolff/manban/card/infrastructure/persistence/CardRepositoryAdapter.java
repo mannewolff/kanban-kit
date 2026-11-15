@@ -289,9 +289,7 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
 
   @Override
   public List<Card> findPurgeableTrash(java.time.Instant threshold) {
-    return jpa.findByDeletedAtNotNullAndDeletedAtBefore(threshold).stream()
-        .map(CardRepositoryAdapter::toDomain)
-        .toList();
+    return jpa.findPurgeableTrash(threshold).stream().map(CardRepositoryAdapter::toDomain).toList();
   }
 
   @Override

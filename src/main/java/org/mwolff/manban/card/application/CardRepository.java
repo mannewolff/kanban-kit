@@ -289,7 +289,10 @@ public interface CardRepository {
   /** Karten im Papierkorb eines Boards (deleted_at gesetzt), aufsteigend nach Nummer. */
   List<Card> findTrashByBoardId(long boardId);
 
-  /** Karten, die vor {@code threshold} gelöscht wurden (für die Papierkorb-Retention). */
+  /**
+   * Karten, die vor {@code threshold} gelöscht wurden (für die Papierkorb-Retention) — ohne die
+   * Karten von Projekten mit fremdem Board (Issue #2161, Plan #2152 A8).
+   */
   List<Card> findPurgeableTrash(Instant threshold);
 
   /** Entfernt eine Karte endgültig (Hard-Delete). */

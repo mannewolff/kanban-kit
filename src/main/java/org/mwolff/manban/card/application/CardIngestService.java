@@ -213,6 +213,7 @@ public class CardIngestService {
     long projectId = boardService.requireProjectId(boardId);
     // Rechte VOR dem Duplikat-Check: der Rückgabepfad darf Unberechtigten keine Existenz leaken.
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    grundlage.pruefeSchreibbar(projectId);
     // Die beiden Identitaetsfelder einmal in lokale Variablen: die Null-Pruefungen unten gelten
     // sonst nur fuer den jeweiligen Aufruf, nicht fuer den danach (SpotBugs
     // NP_NULL_ON_SOME_PATH_FROM_RETURN_VALUE).

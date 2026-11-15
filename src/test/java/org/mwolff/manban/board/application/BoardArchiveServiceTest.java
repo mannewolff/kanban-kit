@@ -49,7 +49,8 @@ class BoardArchiveServiceTest {
     permissions = mock(PermissionChecker.class);
     events = mock(ApplicationEventPublisher.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new BoardService(boards, columns, cardCounter, permissions, events, clock);
+    service =
+        new BoardService(boards, columns, cardCounter, permissions, events, clock, p -> false);
     when(boards.save(any(Board.class))).thenAnswer(inv -> inv.getArgument(0));
     when(columns.findByBoardId(10L)).thenReturn(List.of());
   }

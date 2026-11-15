@@ -57,6 +57,7 @@ public final class VorhabenMassenzuordnung {
     Card epic = cards.findById(epicId).orElseThrow(CardNotFoundException::new);
     // Dasselbe Recht wie die Einzelzuordnung einer Karte (AK 6).
     permissions.require(userId, epic.projectId(), Permission.TICKET_UPDATE);
+    grundlage.pruefeSchreibbar(epic.projectId());
     long boardId = epic.boardId();
     // Lädt das Vorhaben ein zweites Mal — bewusst: So gelten dieselben Ablehnungen wie bei der
     // Einzelzuordnung (kein Vorhaben, archiviert), statt sie hier nachzubauen.

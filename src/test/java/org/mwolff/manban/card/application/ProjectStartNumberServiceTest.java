@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +31,21 @@ class ProjectStartNumberServiceTest {
     cards = mock(CardRepository.class);
     projects = mock(NextCardNumberWriter.class);
     permissions = mock(PermissionChecker.class);
-    service = new ProjectStartNumberService(cards, projects, permissions);
+    service =
+        new ProjectStartNumberService(
+            cards, projects, permissions, projectId -> projectId == FREMDES_PROJEKT);
+  }
+
+  /** Projekt mit fremdem Board (Issue #2161). */
+  private static final long FREMDES_PROJEKT = 99L;
+
+  @Test
+  void setNextCardNumber_lehntAb_wennDasProjektEinFremdesBoardHat() {
+    assertThatThrownBy(() -> service.setNextCardNumber(USER, FREMDES_PROJEKT, 13457))
+        .isInstanceOf(org.mwolff.manban.project.application.FremdesBoardException.class);
+
+    verify(permissions).require(USER, FREMDES_PROJEKT, Permission.PROJECT_EDIT);
+    verifyNoInteractions(projects);
   }
 
   @Test

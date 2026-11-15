@@ -95,6 +95,7 @@ public class EpicService {
       @Nullable String shortcode) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.EPIC_CREATE);
+    grundlage.pruefeSchreibbar(projectId);
 
     long columnId = boardService.firstColumn(boardId).id();
 
@@ -330,6 +331,7 @@ public class EpicService {
       @Nullable String description) {
     Card quelle = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.require(userId, quelle.projectId(), Permission.EPIC_CREATE);
+    grundlage.pruefeSchreibbar(quelle.projectId());
     requireVorgangEroeffenbar(quelle);
 
     // Bestehenden Weg wiederverwenden statt nachbauen: Nummernvergabe, erste Spalte, Rechte und

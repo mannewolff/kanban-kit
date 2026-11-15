@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -25,7 +26,14 @@ class DoneRetentionServiceTest {
   private CardRepository cards;
   private DoneRetentionService service;
 
+  /** Projekt 2 hat ein fremdes Board (Issue #2161). */
+  private static final long FREMDES_PROJEKT = 2L;
+
   private static Card doneCard(long id) {
+    return doneCard(id, 1L);
+  }
+
+  private static Card doneCard(long id, long projectId) {
     return new Card(
         id,
         10L,
@@ -43,7 +51,7 @@ class DoneRetentionServiceTest {
         null,
         null,
         null,
-        1L,
+        projectId,
         null,
         null,
         null,
@@ -53,7 +61,24 @@ class DoneRetentionServiceTest {
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
-    service = new DoneRetentionService(cards);
+    service = new DoneRetentionService(cards, Set.of(FREMDES_PROJEKT)::contains);
+  }
+
+  @Test
+  void archiveExpiredDoneCards_laesstGespiegelteProjekteUnberuehrt() {
+    // Given: Karte 1 im eigenen, Karte 2 im Projekt mit fremdem Board (Issue #2161)
+    when(cards.findArchivableDoneCards(any()))
+        .thenReturn(List.of(doneCard(1), doneCard(2, FREMDES_PROJEKT)));
+    when(cards.save(any(Card.class))).thenAnswer(inv -> inv.getArgument(0));
+
+    // When
+    int count = service.archiveExpiredDoneCards(NOW, 14);
+
+    // Then: nur die eigene Karte archiviert
+    assertThat(count).isEqualTo(1);
+    ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
+    verify(cards).save(captor.capture());
+    assertThat(captor.getValue().id()).isEqualTo(1L);
   }
 
   @Test

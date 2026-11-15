@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Set;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,15 +23,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class VorhabenArchivierung {
 
   private final CardRepository cards;
+  private final BoardQuelle boardQuelle;
 
-  public VorhabenArchivierung(CardRepository cards) {
+  public VorhabenArchivierung(CardRepository cards, BoardQuelle boardQuelle) {
     this.cards = cards;
+    this.boardQuelle = boardQuelle;
   }
 
   /**
    * Gleicht alle Boards mit Vorhaben in beide Richtungen ab (E1): Ein sichtbares Vorhaben ohne
    * mitzählende Karte wird archiviert, ein archiviertes mit mitzählender Karte kehrt zurück. Auch
-   * archivierte Boards werden geprüft (E5).
+   * archivierte Boards werden geprüft (E5). Boards von Projekten mit fremdem Board bleiben
+   * unberührt (Issue #2161, Plan #2152 A10): Ihren Stand bestimmt allein das fremde System.
    *
    * @return Anzahl der in diesem Lauf archivierten Vorhaben; Rückholungen zählen nicht mit
    */
@@ -64,6 +68,10 @@ public class VorhabenArchivierung {
    */
   private int gleicheBoardAb(long boardId, boolean archivieren) {
     List<Card> karten = cards.findByBoardId(boardId);
+    // Alle Karten eines Boards gehören zu dessen Projekt; eine genügt für die Frage.
+    if (!karten.isEmpty() && boardQuelle.istFremd(karten.getFirst().projectId())) {
+      return 0;
+    }
     Map<Long, Set<Card>> mitglieder = EpicMembership.compute(karten);
     int archiviert = 0;
     for (Card epic : karten) {

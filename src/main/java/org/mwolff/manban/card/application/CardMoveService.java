@@ -86,8 +86,9 @@ public class CardMoveService {
     if (card.type() == CardType.EPIC) {
       throw InvalidDependencyException.epicsNichtPositioniert();
     }
-    permissions.require(
-        userId, boardService.requireProjectId(card.boardId()), Permission.CARD_MOVE);
+    long projectId = boardService.requireProjectId(card.boardId());
+    permissions.require(userId, projectId, Permission.CARD_MOVE);
+    grundlage.pruefeSchreibbar(projectId);
 
     ColumnView target = boardService.requireColumn(targetColumnId, card.boardId());
 
@@ -165,6 +166,7 @@ public class CardMoveService {
   public void setStatus(long userId, long cardId, String status) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.require(userId, card.projectId(), Permission.CARD_MOVE);
+    grundlage.pruefeSchreibbar(card.projectId());
     CardStatus neu = statusAus(status);
     if (!Arbeitspaket.istArbeitspaket(card.type(), card.title())) {
       throw InvalidStatusException.keinEigener();
@@ -229,7 +231,9 @@ public class CardMoveService {
   @Transactional
   public void sortColumnByNumber(long userId, long columnId, SortDirection direction) {
     long boardId = boardService.boardIdOfColumn(columnId);
-    permissions.require(userId, boardService.requireProjectId(boardId), Permission.CARD_MOVE);
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.require(userId, projectId, Permission.CARD_MOVE);
+    grundlage.pruefeSchreibbar(projectId);
 
     cards.sortActiveByNumber(columnId, direction);
 
@@ -293,6 +297,10 @@ public class CardMoveService {
       permissions.requireOwner(userId, sourceProjectId);
       permissions.requireOwner(userId, targetProjectId);
     }
+    // Quelle und Ziel (Issue #2161, Plan #2152 A10): Ein Umzug in ein Projekt mit fremdem Board
+    // vergäbe dort eine Nummer und bräche die Gleichheit mit der Nummer im fremden System (A2).
+    grundlage.pruefeSchreibbar(sourceProjectId);
+    grundlage.pruefeSchreibbar(targetProjectId);
 
     // Innerhalb desselben Projekts bleibt die Nummer erhalten (projektweit ohnehin eindeutig) und
     // Abhängigkeiten/Zuständige wandern mit — nur so bleiben Querverweise beim Board-Wechsel

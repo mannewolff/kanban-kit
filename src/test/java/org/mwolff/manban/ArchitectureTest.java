@@ -372,6 +372,9 @@ class ArchitectureTest {
           // kanbancompat und board fragen, ob das Board des Projekts in einem fremden System liegt;
           // umgesetzt in fremdboard.infrastructure, damit kein Modulzyklus entsteht.
           "BoardQuelle",
+          // Die Ablehnung dazu (Issue #2161): dieselben Module werfen sie, der Fehlerhandler
+          // beantwortet sie mit 409.
+          "FremdesBoardException",
           "ProjectCreatedEvent",
           // MitgliedRolleVerlorenEvent ist Vertrag (Issue #2104, Plan #2100 E4): accesstoken
           // widerruft darauf die Zugaenge der App, ohne dass project das Modul kennt — analog

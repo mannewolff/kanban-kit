@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.card.application.CardRepository;
+import org.mwolff.manban.card.application.TrashRetentionService;
 import org.mwolff.manban.card.domain.Card;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,7 +22,9 @@ class CardSoftDeleteIT extends AbstractIntegrationTest {
 
   @Autowired private CardRepository cards;
   @Autowired private JdbcTemplate jdbc;
+  @Autowired private TrashRetentionService trashRetention;
 
+  private long projectId;
   private long boardId;
   private long columnId;
   private long cardId;
@@ -31,7 +35,7 @@ class CardSoftDeleteIT extends AbstractIntegrationTest {
         insert(
             "INSERT INTO app_user (email, display_name) "
                 + "VALUES ('a@example.com', 'A') RETURNING id");
-    long projectId =
+    projectId =
         insert(
             "INSERT INTO project (name, owner_user_id) VALUES ('P', " + userId + ") RETURNING id");
     boardId =
@@ -75,6 +79,29 @@ class CardSoftDeleteIT extends AbstractIntegrationTest {
 
     assertThat(cards.findTrashByBoardId(boardId)).isEmpty();
     assertThat(cards.findByBoardId(boardId)).extracting(Card::requireId).containsExactly(cardId);
+  }
+
+  @Test
+  @DisplayName("gelöschte gespiegelte Karte übersteht die Papierkorb-Aufräumung")
+  void geloeschteGespiegelteKarteUeberstehtDiePapierkorbAufraeumung() {
+    // Given: Das Projekt führt sein Board in einem fremden System (Issue #2161, Plan #2152 A8);
+    // die Karte verschwand dort und liegt hier lange im Papierkorb.
+    jdbc.update(
+        "INSERT INTO fremdboard_verbindung (project_id, art, basis_url, projekt_pfad,"
+            + " zugang_verschluesselt, statuslabels, board_id, angebunden_am)"
+            + " VALUES (?, 'GITLAB', 'https://gitlab.com', 'gruppe/projekt', 'geheim',"
+            + " '{\"ready\":\"Ready\"}'::jsonb, ?, now())",
+        projectId,
+        boardId);
+    cards.softDelete(cardId, DELETED_AT);
+
+    // When
+    int geloescht = trashRetention.purgeExpiredTrash(DELETED_AT.plusSeconds(86_400L * 365), 30);
+
+    // Then: Die Karte bleibt samt ihrer Messungen, die Abfrage liefert sie gar nicht erst.
+    assertThat(geloescht).isZero();
+    assertThat(cards.findTrashByBoardId(boardId)).extracting(Card::requireId).contains(cardId);
+    assertThat(cards.findPurgeableTrash(DELETED_AT.plusSeconds(1))).isEmpty();
   }
 
   @Test

@@ -129,7 +129,9 @@ public class LabelService {
 
   @Transactional
   public Label create(long userId, long boardId, String name, String color) {
-    permissions.require(userId, boardService.requireProjectId(boardId), Permission.BOARD_UPDATE);
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.require(userId, projectId, Permission.BOARD_UPDATE);
+    grundlage.pruefeSchreibbar(projectId);
     String trimmed = requireName(name);
     if (labels.existsByBoardIdAndName(boardId, trimmed)) {
       throw InvalidLabelException.existiertBereits(trimmed);
@@ -149,8 +151,9 @@ public class LabelService {
   public Label update(
       long userId, long labelId, String name, String color, @Nullable Boolean countOnEpicTile) {
     Label label = labels.findById(labelId).orElseThrow(LabelNotFoundException::new);
-    permissions.require(
-        userId, boardService.requireProjectId(label.boardId()), Permission.BOARD_UPDATE);
+    long projectId = boardService.requireProjectId(label.boardId());
+    permissions.require(userId, projectId, Permission.BOARD_UPDATE);
+    grundlage.pruefeSchreibbar(projectId);
     String trimmed = requireName(name);
     FreigabeLabels.pruefeDefinition(herkunft(), label.name(), trimmed);
     if (!trimmed.equals(label.name()) && labels.existsByBoardIdAndName(label.boardId(), trimmed)) {
@@ -163,8 +166,9 @@ public class LabelService {
   @Transactional
   public void delete(long userId, long labelId) {
     Label label = labels.findById(labelId).orElseThrow(LabelNotFoundException::new);
-    permissions.require(
-        userId, boardService.requireProjectId(label.boardId()), Permission.BOARD_UPDATE);
+    long projectId = boardService.requireProjectId(label.boardId());
+    permissions.require(userId, projectId, Permission.BOARD_UPDATE);
+    grundlage.pruefeSchreibbar(projectId);
     FreigabeLabels.pruefeDefinition(herkunft(), label.name(), null);
     labels.deleteById(labelId);
   }
@@ -243,6 +247,7 @@ public class LabelService {
       throw InvalidDependencyException.nurKartenMitLabels();
     }
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
+    grundlage.pruefeSchreibbar(card.projectId());
     return card;
   }
 

@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
@@ -24,6 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Board- und Spalten-Use-Cases. Rechte laufen über den {@link PermissionChecker}: BOARD_CREATE
  * (anlegen), BOARD_UPDATE (umbenennen/Spalten), BOARD_DELETE (löschen). Lesezugriffe verlangen nur
  * Projekt-Mitgliedschaft.
+ *
+ * <p>Liegt das Board eines Projekts in einem fremden System, lehnt jede Strukturänderung — Board
+ * anlegen, umbenennen, archivieren, wiederherstellen, löschen; Spalten anlegen, ändern, löschen,
+ * ordnen — nach der Rechteprüfung mit 409 ab ({@link BoardQuelle}, Issue #2161, Plan #2152 A18):
+ * Der Status gespiegelter Karten folgt dem Spaltennamen, und das Spiegel-Board ist an die
+ * Verbindung gebunden.
  */
 @Service
 public class BoardService {
@@ -37,6 +44,7 @@ public class BoardService {
   private final PermissionChecker permissions;
   private final ApplicationEventPublisher events;
   private final Clock clock;
+  private final BoardQuelle boardQuelle;
 
   public BoardService(
       BoardRepository boards,
@@ -44,18 +52,21 @@ public class BoardService {
       ColumnCardCounter cardCounter,
       PermissionChecker permissions,
       ApplicationEventPublisher events,
-      Clock clock) {
+      Clock clock,
+      BoardQuelle boardQuelle) {
     this.boards = boards;
     this.columns = columns;
     this.cardCounter = cardCounter;
     this.permissions = permissions;
     this.events = events;
     this.clock = clock;
+    this.boardQuelle = boardQuelle;
   }
 
   @Transactional
   public BoardView createBoard(long userId, long projectId, String name) {
     permissions.require(userId, projectId, Permission.BOARD_CREATE);
+    boardQuelle.pruefeSchreibbar(projectId);
     Board board = boards.save(new Board(null, projectId, name.trim(), clock.instant()));
     for (int i = 0; i < DEFAULT_COLUMNS.size(); i++) {
       columns.save(new BoardColumn(null, board.requireId(), DEFAULT_COLUMNS.get(i), i, null));
@@ -80,6 +91,7 @@ public class BoardService {
   public BoardView renameBoard(long userId, long boardId, String name) {
     Board board = requireBoard(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    boardQuelle.pruefeSchreibbar(board.projectId());
     return view(boards.save(board.withName(name.trim())));
   }
 
@@ -92,6 +104,7 @@ public class BoardService {
   public void deleteBoard(long userId, long boardId) {
     Board board = requireBoard(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_DELETE);
+    boardQuelle.pruefeSchreibbar(board.projectId());
     boards.save(board.archivedAt(clock.instant()));
   }
 
@@ -106,6 +119,7 @@ public class BoardService {
   public BoardView restoreBoard(long userId, long boardId) {
     Board board = requireBoardIncludingArchived(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_DELETE);
+    boardQuelle.pruefeSchreibbar(board.projectId());
     return view(boards.save(board.restored()));
   }
 
@@ -117,6 +131,7 @@ public class BoardService {
   public void purgeBoard(long userId, long boardId) {
     Board board = requireBoardIncludingArchived(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_DELETE);
+    boardQuelle.pruefeSchreibbar(board.projectId());
     if (!board.isArchived()) {
       throw new BoardNotArchivedException();
     }
@@ -131,6 +146,7 @@ public class BoardService {
   public ColumnView addColumn(long userId, long boardId, String name, @Nullable Integer wipLimit) {
     Board board = requireBoard(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    boardQuelle.pruefeSchreibbar(board.projectId());
     // Vor dem Lesen sperren: die neue Position entsteht aus dem gelesenen Bestand (#499).
     columns.lockColumnOrder(boardId);
     int nextPosition =
@@ -146,6 +162,7 @@ public class BoardService {
     BoardColumn column = loadColumn(columnId);
     Board board = requireBoard(column.boardId());
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    boardQuelle.pruefeSchreibbar(board.projectId());
     return toColumnView(columns.save(column.with(name.trim(), wipLimit)));
   }
 
@@ -154,6 +171,7 @@ public class BoardService {
     BoardColumn column = loadColumn(columnId);
     Board board = requireBoard(column.boardId());
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    boardQuelle.pruefeSchreibbar(board.projectId());
     if (cardCounter.countByColumnId(columnId) > 0) {
       throw new ColumnNotEmptyException();
     }
@@ -164,6 +182,7 @@ public class BoardService {
   public List<ColumnView> reorderColumns(long userId, long boardId, List<Long> orderedColumnIds) {
     Board board = requireBoard(boardId);
     permissions.require(userId, board.projectId(), Permission.BOARD_UPDATE);
+    boardQuelle.pruefeSchreibbar(board.projectId());
 
     // Vor dem Lesen sperren: gegen die gelesene Ordnung wird die Anfrage validiert, und aus ihr
     // entstehen die neuen Positionen. Eine parallel angehängte Spalte bliebe sonst außerhalb der
