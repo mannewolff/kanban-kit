@@ -51,6 +51,19 @@ public class GitLabNachgestellt {
     return karte(nummer) + "/notes?sort=asc&order_by=created_at&per_page=100&page=1";
   }
 
+  /** Erste und einzige Seite aller Karten des Projekts, offen wie geschlossen. */
+  public static String alleKarten() {
+    return GitLabTestServer.PROJEKT + "/issues?state=all&per_page=100&page=1";
+  }
+
+  /** Erste und einzige Seite der Karten, die sich nach {@code seit} geändert haben. */
+  public static String geaenderteKarten(Instant seit) {
+    return GitLabTestServer.PROJEKT
+        + "/issues?state=all&updated_after="
+        + seit.toString().replace(":", "%3A")
+        + "&order_by=updated_at&sort=asc&per_page=100&page=1";
+  }
+
   /** Antwortet auf eine Liste ohne Folgeseite. */
   public static void liste(String pfad, String json) {
     GITLAB.antworte(pfad, 200, json, "");

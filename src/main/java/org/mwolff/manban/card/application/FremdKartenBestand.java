@@ -1,6 +1,7 @@
 package org.mwolff.manban.card.application;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.ColumnView;
@@ -47,6 +48,18 @@ public class FremdKartenBestand {
   @Transactional(readOnly = true)
   public Optional<Long> kartenId(long projectId, int nummer) {
     return cards.findByProjectIdAndNumber(projectId, nummer).map(Card::requireId);
+  }
+
+  /**
+   * Die Nummern der gespiegelten Karten des Projekts außerhalb des Papierkorbs (Issue #2168, Plan
+   * #2152 A8) — der Vollabgleich vergleicht sie mit den Nummern im fremden System.
+   */
+  @Transactional(readOnly = true)
+  public List<Integer> nummern(long projectId) {
+    return cards.findByProjectId(projectId).stream()
+        .map(Card::number)
+        .filter(Objects::nonNull)
+        .toList();
   }
 
   /**

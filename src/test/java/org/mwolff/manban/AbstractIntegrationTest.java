@@ -75,7 +75,11 @@ import org.testcontainers.utility.MountableFile;
       // Dasselbe fuer die Durchsatzbremse (Issue #1002): Ihr Zaehlstand liegt ebenfalls im
       // Arbeitsspeicher, und nach RESTART IDENTITY beginnen die userIds jeder Klasse wieder bei 1 —
       // die Klassen zaehlten also auf dasselbe Kontingent. ThroughputFilterIT schaltet sie an.
-      "manban.ratelimit.throughput.enabled=false"
+      "manban.ratelimit.throughput.enabled=false",
+      // Der Abgleich mit fremden Boards (Issue #2168) liefe sonst nach einer Minute in jedem
+      // gecachten Kontext los und gliche die Verbindungen der Tests nebenher ab. Wer ihn prüft,
+      // ruft AbgleichJob.run() selbst.
+      "manban.fremdboard.takt=PT24H"
     })
 // Testhilfe fuer die Anmeldung ohne Anmeldeablauf (Plan #1801, A15): hier fuer alle Subklassen,
 // damit jeder Kontext denselben Import traegt und das Context-Caching gleich bleibt.

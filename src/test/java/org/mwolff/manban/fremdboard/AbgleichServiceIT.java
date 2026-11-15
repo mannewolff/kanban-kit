@@ -2,21 +2,29 @@ package org.mwolff.manban.fremdboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mwolff.manban.fremdboard.GitLabNachgestellt.GITLAB;
+import static org.mwolff.manban.fremdboard.GitLabNachgestellt.alleKarten;
+import static org.mwolff.manban.fremdboard.GitLabNachgestellt.geaenderteKarten;
 import static org.mwolff.manban.fremdboard.GitLabNachgestellt.issue;
 import static org.mwolff.manban.fremdboard.GitLabNachgestellt.labelEreignis;
+import static org.mwolff.manban.fremdboard.GitLabNachgestellt.liste;
 import static org.mwolff.manban.fremdboard.GitLabNachgestellt.notiz;
 import static org.mwolff.manban.fremdboard.GitLabNachgestellt.statusEreignis;
 import static org.mwolff.manban.fremdboard.GitLabNachgestellt.stelleNach;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import org.assertj.core.groups.Tuple;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
+import org.mwolff.manban.fremdboard.application.AbgleichJob;
 import org.mwolff.manban.fremdboard.application.AbgleichService;
 import org.mwolff.manban.fremdboard.application.VerbindungRepository;
 import org.mwolff.manban.fremdboard.domain.Verbindung;
@@ -29,10 +37,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 /**
- * Abgleich einer Karte mit GitLab (Issue #2167, Plan #2152 A4, A6, A11, A12, A19) gegen eine echte
- * Datenbank und ein nachgestelltes GitLab: Zeitpunkte aus GitLab, jeder Wechsel genau einmal, es
- * gilt der Stand dort. Dieselbe Konfiguration wie {@code FremdBoardAnstossIT}, damit beide einen
- * Kontext teilen.
+ * Abgleich einer Karte mit GitLab (Issue #2167, Plan #2152 A4, A6, A11, A12, A19) und regelmäßiger
+ * Abgleich samt gelöschter Karten und Ausfall (Issue #2168, A7, A8, A9) gegen eine echte Datenbank
+ * und ein nachgestelltes GitLab: Zeitpunkte aus GitLab, jeder Wechsel genau einmal, es gilt der
+ * Stand dort. Dieselbe Konfiguration wie {@code FremdBoardAnstossIT}, damit beide einen Kontext
+ * teilen.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
@@ -48,6 +57,7 @@ class AbgleichServiceIT extends AbstractIntegrationTest {
   private static final String PAKET = "Export als CSV";
 
   @Autowired private AbgleichService abgleich;
+  @Autowired private AbgleichJob job;
   @Autowired private VerbindungRepository verbindungen;
   @Autowired private JdbcTemplate jdbc;
 
@@ -244,6 +254,144 @@ class AbgleichServiceIT extends AbstractIntegrationTest {
             jdbc.queryForObject(
                 "SELECT count(*) FROM card WHERE project_id = ?", Integer.class, projectId))
         .isZero();
+  }
+
+  @Test
+  @DisplayName("Szenario: Jemand ändert eine Karte von Hand in GitLab")
+  void szenarioJemandAendertEineKarteVonHandInGitLab() {
+    // Given: ein Projekt mit Board in GitLab, Karte 7 steht dort und hier in „In progress“.
+    List<String> wechsel =
+        List.of(
+            labelEreignis(401, "Ready", "add", T1, "anna"),
+            labelEreignis(402, "Ready", "remove", T2, "kit-bot"),
+            labelEreignis(403, "In progress", "add", T2, "kit-bot"));
+    stelleNach(
+        7,
+        issue(7, PAKET, "", List.of("In progress"), false, VORHER, T2),
+        wechsel,
+        List.of(),
+        List.of());
+    abgleich.karteAbgleichen(verbindung, 7);
+    long cardId = karte(7);
+    assertThat(status(cardId)).isEqualTo("IN_PROGRESS");
+
+    // When: Ein Teammitglied setzt die Karte in GitLab auf Done (schließt sie), und der
+    // regelmäßige Abgleich liest die seit dem letzten Mal geänderten Karten.
+    String geschlossen = issue(7, PAKET, "", List.of("In progress"), true, VORHER, T3);
+    stelleNach(
+        7, geschlossen, wechsel, List.of(statusEreignis(510, "closed", T3, "anna")), List.of());
+    liste(geaenderteKarten(T2), "[" + geschlossen + "]");
+    abgleich.inkrementellAbgleichen(verbindung, T2);
+
+    // Then: Die Karte steht in „Done“, der Fluss zählt sie einmal fertig, zum Zeitpunkt aus GitLab.
+    assertThat(status(cardId)).isEqualTo("DONE");
+    assertThat(spalte(cardId)).isEqualTo("Done");
+    assertThat(fertig(cardId)).containsExactly(aufenthalt("DONE", T3, null));
+    assertThat(
+            jdbc.queryForObject(
+                    "SELECT moved_to_done_at FROM card WHERE id = ?", OffsetDateTime.class, cardId)
+                .toInstant())
+        .isEqualTo(T3);
+
+    // When: Der nächste Abgleich sieht dieselbe Änderung noch einmal (Überlappung).
+    abgleich.inkrementellAbgleichen(verbindung, T2);
+
+    // Then: Sie zählt nicht doppelt.
+    assertThat(fertig(cardId)).containsExactly(aufenthalt("DONE", T3, null));
+  }
+
+  @Test
+  void gitLabAntwortetNicht_fehlerSteht_kartenBleiben_keineGeloescht() {
+    // Given: Karte 7 ist gespiegelt, der letzte Abgleich gelang vor zehn Minuten.
+    stelleNach(
+        7,
+        issue(7, PAKET, "", List.of("Ready"), false, VORHER, T1),
+        List.of(labelEreignis(401, "Ready", "add", T1, "anna")),
+        List.of(),
+        List.of());
+    abgleich.karteAbgleichen(verbindung, 7);
+    long cardId = karte(7);
+    Instant zuletzt = Instant.now().minus(Duration.ofMinutes(10)).truncatedTo(ChronoUnit.MICROS);
+    jdbc.update(
+        "UPDATE fremdboard_verbindung SET letzter_abgleich_am = ? WHERE project_id = ?",
+        zuletzt.atOffset(ZoneOffset.UTC),
+        projectId);
+    GITLAB.antworte(alleKarten(), 503, "{\"message\":\"503 Service Unavailable\"}", null);
+    List<Map<String, Object>> vorher = aufenthalte(cardId);
+
+    // When
+    job.run();
+
+    // Then
+    Verbindung danach = verbindungen.finde(projectId).orElseThrow();
+    assertThat(danach.letzterFehler()).contains("503");
+    assertThat(danach.letzterAbgleichAm()).isEqualTo(zuletzt);
+    assertThat(danach.letzterVollabgleichAm()).isNull();
+    assertThat(status(cardId)).isEqualTo("READY");
+    assertThat(aufenthalte(cardId)).isEqualTo(vorher);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM card WHERE project_id = ? AND deleted_at IS NOT NULL",
+                Integer.class,
+                projectId))
+        .isZero();
+  }
+
+  @Test
+  void eineKarteFehltInDerListe_istGeloescht_flussUndVerlaufBleiben() {
+    // Given: Karten 7 und 8 sind gespiegelt; in GitLab gibt es nur noch 7.
+    String sieben = issue(7, PAKET, "", List.of("Ready"), false, VORHER, T1);
+    stelleNach(
+        7, sieben, List.of(labelEreignis(401, "Ready", "add", T1, "anna")), List.of(), List.of());
+    stelleNach(
+        8,
+        issue(8, "Import", "", List.of("In progress"), false, VORHER, T2),
+        List.of(labelEreignis(411, "In progress", "add", T2, "anna")),
+        List.of(),
+        List.of());
+    abgleich.karteAbgleichen(verbindung, 7);
+    abgleich.karteAbgleichen(verbindung, 8);
+    long acht = karte(8);
+    List<Map<String, Object>> fluss = aufenthalte(acht);
+    int verlauf = verlauf(acht);
+    liste(alleKarten(), "[" + sieben + "]");
+    liste(geaenderteKarten(ANGEBUNDEN), "[]");
+
+    // When: der erste regelmäßige Abgleich, ein Vollabgleich
+    job.run();
+
+    // Then
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT deleted_at FROM card WHERE id = ?", OffsetDateTime.class, acht))
+        .isNotNull();
+    // Die Aufenthalte bleiben; der offene endet wie bei jeder gelöschten Karte.
+    assertThat(aufenthalte(acht))
+        .extracting(a -> a.get("status"), a -> a.get("betreten"))
+        .containsExactlyElementsOf(
+            fluss.stream().map(a -> Tuple.tuple(a.get("status"), a.get("betreten"))).toList());
+    assertThat(aufenthalte(acht).getFirst()).isEqualTo(fluss.getFirst());
+    assertThat(aufenthalte(acht).getLast()).containsKey("verlassen");
+    assertThat(verlauf(acht)).isEqualTo(verlauf);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT deleted_at FROM card WHERE id = ?", OffsetDateTime.class, karte(7)))
+        .isNull();
+    Verbindung danach = verbindungen.finde(projectId).orElseThrow();
+    assertThat(danach.letzterFehler()).isNull();
+    assertThat(danach.letzterAbgleichAm()).isNotNull();
+    assertThat(danach.letzterVollabgleichAm()).isEqualTo(danach.letzterAbgleichAm());
+  }
+
+  private List<Map<String, Object>> fertig(long cardId) {
+    return aufenthalte(cardId).stream().filter(a -> "DONE".equals(a.get("status"))).toList();
+  }
+
+  private int verlauf(long cardId) {
+    Integer anzahl =
+        jdbc.queryForObject(
+            "SELECT count(*) FROM card_column_transition WHERE card_id = ?", Integer.class, cardId);
+    return anzahl == null ? 0 : anzahl;
   }
 
   private long karte(int nummer) {

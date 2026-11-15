@@ -2,8 +2,11 @@ package org.mwolff.manban.fremdboard.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.fremdboard.application.VerbindungRepository;
 import org.mwolff.manban.fremdboard.domain.Verbindung;
@@ -27,7 +30,9 @@ class VerbindungBoardQuelleTest {
     assertThat(quelle.istFremd(OHNE_VERBINDUNG)).isFalse();
   }
 
-  /** Kennt nur die Projekte mit Verbindung; Speichern und Lesen braucht dieser Test nicht. */
+  /**
+   * Kennt nur die Projekte mit Verbindung; Speichern, Lesen und Abgleich braucht dieser Test nicht.
+   */
   private record Verbindungen(Set<Long> projekte) implements VerbindungRepository {
 
     @Override
@@ -43,6 +48,27 @@ class VerbindungBoardQuelleTest {
     @Override
     public boolean existiert(long projectId) {
       return projekte.contains(projectId);
+    }
+
+    @Override
+    public List<Long> faellige(Instant grenze) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean beanspruchen(long projectId, @Nullable Instant bisher, Instant jetzt) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void abgleichGelungen(long projectId, @Nullable Instant vollabgleichAm) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void abgleichGescheitert(
+        long projectId, Instant beansprucht, @Nullable Instant bisher, String fehler) {
+      throw new UnsupportedOperationException();
     }
   }
 }

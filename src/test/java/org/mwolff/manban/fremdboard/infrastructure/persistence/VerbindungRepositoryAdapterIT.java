@@ -3,7 +3,14 @@ package org.mwolff.manban.fremdboard.infrastructure.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import javax.sql.DataSource;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.fremdboard.application.VerbindungRepository;
@@ -109,6 +116,134 @@ class VerbindungRepositoryAdapterIT extends AbstractIntegrationTest {
     assertThat(boardQuelle.istFremd(gespiegelt.id())).isTrue();
     assertThat(boardQuelle.istFremd(eigen.id())).isFalse();
     assertThat(boardQuelle.istFremd(Long.MAX_VALUE)).isFalse();
+  }
+
+  @Test
+  void faellig_sindVerbindungenOhneAbgleichUndMitAbgleichBisZurGrenze_aeltesteZuerst() {
+    Projekt nie = projektMitBoard("Nie");
+    Projekt alt = projektMitBoard("Alt");
+    Projekt grenze = projektMitBoard("Grenze");
+    Projekt frisch = projektMitBoard("Frisch");
+    verbindungen.speichere(mitAbgleich(nie, null));
+    verbindungen.speichere(mitAbgleich(alt, ABGLEICH));
+    verbindungen.speichere(mitAbgleich(grenze, VOLLABGLEICH));
+    verbindungen.speichere(mitAbgleich(frisch, VOLLABGLEICH.plusSeconds(1)));
+
+    assertThat(verbindungen.faellige(VOLLABGLEICH))
+        .containsExactly(nie.id(), alt.id(), grenze.id());
+  }
+
+  @Test
+  void anspruch_gelingtNurMitDemGelesenenStand() {
+    Projekt projekt = projektMitBoard("Anspruch");
+    verbindungen.speichere(mitAbgleich(projekt, ABGLEICH));
+
+    assertThat(verbindungen.beanspruchen(projekt.id(), null, VOLLABGLEICH)).isFalse();
+    assertThat(verbindungen.beanspruchen(projekt.id(), ABGLEICH, VOLLABGLEICH)).isTrue();
+    assertThat(verbindungen.beanspruchen(projekt.id(), ABGLEICH, VOLLABGLEICH)).isFalse();
+    assertThat(verbindungen.finde(projekt.id()).orElseThrow().letzterAbgleichAm())
+        .isEqualTo(VOLLABGLEICH);
+  }
+
+  @Test
+  void anspruch_vorDemErstenAbgleich() {
+    Projekt projekt = projektMitBoard("Erster");
+    verbindungen.speichere(mitAbgleich(projekt, null));
+
+    assertThat(verbindungen.beanspruchen(projekt.id(), null, ABGLEICH)).isTrue();
+    assertThat(verbindungen.beanspruchen(projekt.id(), null, ABGLEICH)).isFalse();
+  }
+
+  @Test
+  void zweiKnoten_beanspruchenGleichzeitig_nurEinerGewinnt() throws Exception {
+    Projekt projekt = projektMitBoard("Zwei");
+    verbindungen.speichere(mitAbgleich(projekt, ABGLEICH));
+    CountDownLatch start = new CountDownLatch(1);
+    Callable<Boolean> anspruch =
+        () -> {
+          start.await();
+          return verbindungen.beanspruchen(projekt.id(), ABGLEICH, VOLLABGLEICH);
+        };
+    try (ExecutorService knoten = Executors.newFixedThreadPool(2)) {
+      Future<Boolean> erster = knoten.submit(anspruch);
+      Future<Boolean> zweiter = knoten.submit(anspruch);
+      start.countDown();
+
+      assertThat(List.of(erster.get(), zweiter.get())).containsExactlyInAnyOrder(true, false);
+    }
+  }
+
+  @Test
+  void gelungen_loeschtDenFehler_undVermerktDenVollabgleichNurWennErLief() {
+    Projekt projekt = projektMitBoard("Gelungen");
+    Verbindung mitFehler =
+        new Verbindung(
+            projekt.id(),
+            FremdBoardArt.GITLAB,
+            "https://gitlab.com",
+            "gruppe/projekt",
+            "v1:verschluesselt",
+            null,
+            LABELS,
+            projekt.board(),
+            ANGEBUNDEN,
+            ABGLEICH,
+            ANGEBUNDEN,
+            "nicht erreichbar");
+    verbindungen.speichere(mitFehler);
+
+    verbindungen.abgleichGelungen(projekt.id(), null);
+
+    Verbindung inkrementell = verbindungen.finde(projekt.id()).orElseThrow();
+    assertThat(inkrementell.letzterFehler()).isNull();
+    assertThat(inkrementell.letzterVollabgleichAm()).isEqualTo(ANGEBUNDEN);
+    assertThat(inkrementell.letzterAbgleichAm()).isEqualTo(ABGLEICH);
+
+    verbindungen.abgleichGelungen(projekt.id(), VOLLABGLEICH);
+
+    assertThat(verbindungen.finde(projekt.id()).orElseThrow().letzterVollabgleichAm())
+        .isEqualTo(VOLLABGLEICH);
+  }
+
+  @Test
+  void gescheitert_setztDenFehler_undGibtDenAnspruchZurueck() {
+    Projekt projekt = projektMitBoard("Gescheitert");
+    verbindungen.speichere(mitAbgleich(projekt, ABGLEICH));
+    verbindungen.beanspruchen(projekt.id(), ABGLEICH, VOLLABGLEICH);
+
+    verbindungen.abgleichGescheitert(projekt.id(), VOLLABGLEICH, ABGLEICH, "nicht erreichbar");
+
+    Verbindung danach = verbindungen.finde(projekt.id()).orElseThrow();
+    assertThat(danach.letzterAbgleichAm()).isEqualTo(ABGLEICH);
+    assertThat(danach.letzterFehler()).isEqualTo("nicht erreichbar");
+  }
+
+  @Test
+  void gescheitert_laesstEinenSpaeterenAnspruchStehen() {
+    Projekt projekt = projektMitBoard("Spaeter");
+    verbindungen.speichere(mitAbgleich(projekt, VOLLABGLEICH));
+
+    verbindungen.abgleichGescheitert(projekt.id(), ABGLEICH, null, "nicht erreichbar");
+
+    Verbindung danach = verbindungen.finde(projekt.id()).orElseThrow();
+    assertThat(danach.letzterAbgleichAm()).isEqualTo(VOLLABGLEICH);
+    assertThat(danach.letzterFehler()).isEqualTo("nicht erreichbar");
+  }
+
+  private static Verbindung mitAbgleich(Projekt projekt, @Nullable Instant letzterAbgleich) {
+    return new Verbindung(
+        projekt.id(),
+        FremdBoardArt.GITLAB,
+        "https://gitlab.com",
+        "gruppe/projekt",
+        "v1:verschluesselt",
+        null,
+        LABELS,
+        projekt.board(),
+        ANGEBUNDEN,
+        letzterAbgleich,
+        null,
+        null);
   }
 
   private static Verbindung neueVerbindung(Projekt projekt) {

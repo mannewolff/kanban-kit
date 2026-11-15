@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -15,12 +16,19 @@ import org.mwolff.manban.fremdboard.domain.Verbindung;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Adapter des {@link VerbindungRepository}-Ports über {@code fremdboard_verbindung} (Issue #2156).
  *
  * <p>Die Statuslabels baut und liest Postgres selbst ({@code jsonb_build_object}, {@code ->>}): Die
  * Spalte hat vier feste Schlüssel, eine JSON-Bibliothek brächte nur einen Fehlerpfad dazu.
+ *
+ * <p>Der Anspruch des Abgleichs (Issue #2168, Plan #2152 A7) ist ein bedingtes UPDATE unter einer
+ * transaktionsgebundenen Advisory-Sperre je Projekt, wie in {@code KanbanAccessTokenJpaRepository}.
+ * Die Bedingung allein trüge schon; die Sperre hält zwei Knoten auch dann hintereinander, wenn die
+ * Zeile gerade neu geschrieben wird. Der Schlüssel ist ein Hash über eine feste Vorsilbe und die
+ * Projekt-ID; eine Kollision kostet nur Wartezeit.
  */
 @Component
 class VerbindungRepositoryAdapter implements VerbindungRepository {
@@ -97,6 +105,62 @@ class VerbindungRepositoryAdapter implements VerbindungRepository {
             "SELECT EXISTS (SELECT 1 FROM fremdboard_verbindung WHERE project_id = :projectId)",
             Map.of("projectId", projectId),
             Boolean.class));
+  }
+
+  @Override
+  public List<Long> faellige(Instant grenze) {
+    return jdbc.queryForList(
+        "SELECT project_id FROM fremdboard_verbindung"
+            + " WHERE letzter_abgleich_am IS NULL OR letzter_abgleich_am <= :grenze"
+            + " ORDER BY letzter_abgleich_am NULLS FIRST, project_id",
+        new MapSqlParameterSource("grenze", zeit(grenze)),
+        Long.class);
+  }
+
+  @Override
+  @Transactional
+  public boolean beanspruchen(long projectId, @Nullable Instant bisher, Instant jetzt) {
+    jdbc.queryForObject(
+        "SELECT 1 FROM (SELECT pg_advisory_xact_lock("
+            + "hashtextextended('fremdboard-abgleich:' || :projectId, 0))) gesperrt",
+        Map.of("projectId", projectId),
+        Integer.class);
+    return jdbc.update(
+            "UPDATE fremdboard_verbindung SET letzter_abgleich_am = :jetzt"
+                + " WHERE project_id = :projectId"
+                + " AND letzter_abgleich_am IS NOT DISTINCT FROM CAST(:bisher AS timestamptz)",
+            new MapSqlParameterSource()
+                .addValue("projectId", projectId)
+                .addValue("bisher", zeit(bisher))
+                .addValue("jetzt", zeit(jetzt)))
+        == 1;
+  }
+
+  @Override
+  public void abgleichGelungen(long projectId, @Nullable Instant vollabgleichAm) {
+    jdbc.update(
+        "UPDATE fremdboard_verbindung SET letzter_fehler = NULL,"
+            + " letzter_vollabgleich_am ="
+            + " COALESCE(CAST(:voll AS timestamptz), letzter_vollabgleich_am)"
+            + " WHERE project_id = :projectId",
+        new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("voll", zeit(vollabgleichAm)));
+  }
+
+  @Override
+  public void abgleichGescheitert(
+      long projectId, Instant beansprucht, @Nullable Instant bisher, String fehler) {
+    jdbc.update(
+        "UPDATE fremdboard_verbindung SET letzter_fehler = :fehler,"
+            + " letzter_abgleich_am = CASE WHEN letzter_abgleich_am = :beansprucht"
+            + " THEN CAST(:bisher AS timestamptz) ELSE letzter_abgleich_am END"
+            + " WHERE project_id = :projectId",
+        new MapSqlParameterSource()
+            .addValue("projectId", projectId)
+            .addValue("fehler", fehler)
+            .addValue("beansprucht", zeit(beansprucht))
+            .addValue("bisher", zeit(bisher)));
   }
 
   private static Verbindung zuVerbindung(ResultSet rs) throws SQLException {

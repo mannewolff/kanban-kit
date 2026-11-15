@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -54,6 +55,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * werden alle gespiegelt, auch ältere als die Anbindung: Sie sind Inhalt der Karte, keine Messung.
  * Fehlt die Karte im fremden System, bleibt sie hier unberührt; gelöschte Karten erkennt der
  * Vollabgleich.
+ *
+ * <p>Den regelmäßigen Abgleich ganzer Projekte (Issue #2168) treibt {@link AbgleichJob}: {@link
+ * #inkrementellAbgleichen} für die geänderten Karten, {@link #vollAbgleichen} nach eingestelltem
+ * Abstand auch für fehlende und gelöschte.
  */
 // PMD.CouplingBetweenObjects: Übersetzungsschicht vom Port des fremden Systems auf die Fassaden
 // von card und comment (Plan #2152 A1) — wie KanbanCompatService für die Kanban-Strecke. Die reine
@@ -96,22 +101,76 @@ public class AbgleichService {
    */
   public void karteAbgleichen(Verbindung verbindung, int nummer) {
     FremdBoardQuelle quelle = quelle(verbindung.art());
-    Optional<FremdKarte> gelesen = quelle.karte(verbindung, nummer);
-    if (gelesen.isEmpty()) {
-      return;
+    quelle.karte(verbindung, nummer).ifPresent(karte -> abgleichen(verbindung, quelle, karte));
+  }
+
+  /**
+   * Der regelmäßige Abgleich (Issue #2168, Plan #2152 A7): gleicht jede Karte ab, die sich im
+   * fremden System nach {@code seit} geändert hat. Die Karte selbst kommt aus der Liste und wird
+   * nicht ein zweites Mal gelesen.
+   *
+   * @throws org.mwolff.manban.fremdboard.domain.FremdAbrufException wenn das fremde System nicht
+   *     antwortet — was bis dahin übernommen war, bleibt übernommen
+   */
+  public void inkrementellAbgleichen(Verbindung verbindung, Instant seit) {
+    FremdBoardQuelle quelle = quelle(verbindung.art());
+    for (FremdKarte karte : quelle.geaenderteKarten(verbindung, seit)) {
+      abgleichen(verbindung, quelle, karte);
     }
-    FremdKarte karte = gelesen.get();
+  }
+
+  /**
+   * Der Vollabgleich (Issue #2168, Plan #2152 A7, A8, A9): gleicht wie {@link
+   * #inkrementellAbgleichen} die seit {@code seit} geänderten Karten ab, liest jede Karte einzeln,
+   * die es im fremden System gibt und hier noch nicht, und markiert jede gespiegelte Karte als
+   * gelöscht, die es dort nicht mehr gibt. Ihre Messungen bleiben.
+   *
+   * <p>Die Nummern hier werden <em>vor</em> denen dort gelesen: Eine Karte, die dazwischen dort
+   * angelegt und hier von einem Anstoß gespiegelt wird, fehlt so in beiden Listen und nicht nur in
+   * der fremden. Gelöscht wird erst, wenn alles gelesen ist; scheitert ein Abruf, ist nichts
+   * gelöscht.
+   *
+   * @param seit ab hier gelten Karten als geändert; der Vollabgleich holt damit auch nach, was ein
+   *     abgebrochener Abgleich seit dem letzten Vollabgleich versäumt hat
+   * @throws org.mwolff.manban.fremdboard.domain.FremdAbrufException wenn das fremde System nicht
+   *     antwortet
+   */
+  public void vollAbgleichen(Verbindung verbindung, Instant seit) {
+    FremdBoardQuelle quelle = quelle(verbindung.art());
+    Set<Integer> hier = new HashSet<>(bestand.nummern(verbindung.projectId()));
+    Set<Long> dort = new HashSet<>(quelle.nummern(verbindung));
+    Set<Long> gelesen = new HashSet<>();
+    for (FremdKarte karte : quelle.geaenderteKarten(verbindung, seit)) {
+      abgleichen(verbindung, quelle, karte);
+      gelesen.add(karte.nummer());
+    }
+    for (long nummer : dort) {
+      if (!gelesen.contains(nummer) && !hier.contains(Math.toIntExact(nummer))) {
+        quelle.karte(verbindung, nummer).ifPresent(karte -> abgleichen(verbindung, quelle, karte));
+      }
+    }
+    Instant festgestellt = clock.instant();
+    for (int nummer : hier) {
+      if (!dort.contains((long) nummer)) {
+        schreiber.alsGeloeschtMarkieren(verbindung.boardId(), nummer, festgestellt);
+      }
+    }
+  }
+
+  /** Übernimmt, was sich an der gelesenen Karte geändert hat. */
+  private void abgleichen(Verbindung verbindung, FremdBoardQuelle quelle, FremdKarte karte) {
+    long nummer = karte.nummer();
     List<FremdEreignis> neue = neueEreignisse(verbindung, quelle.ereignisse(verbindung, nummer));
     List<FremdNotiz> notizen = quelle.notizen(verbindung, nummer);
     String adresse = quelle.adresse(verbindung, nummer);
     StatusZuordnung zuordnung = new StatusZuordnung(verbindung.statuslabels());
 
     KartenZustand zustand = KartenZustand.von(karte).vor(neue);
-    Optional<Long> vorhanden = bestand.kartenId(verbindung.projectId(), nummer);
+    Optional<Long> vorhanden = bestand.kartenId(verbindung.projectId(), nummer(karte));
     if (vorhanden.isPresent()) {
       schreiber.aktualisieren(
           verbindung.boardId(),
-          nummer,
+          nummer(karte),
           karte.titel(),
           karte.beschreibung(),
           adresse,

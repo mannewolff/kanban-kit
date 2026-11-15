@@ -29,6 +29,7 @@ import org.mwolff.manban.card.application.FremdKartenSchreiber.FremdeKarte;
 import org.mwolff.manban.card.application.FremdKartenSchreiber.FremderAkteur;
 import org.mwolff.manban.comment.application.CommentService;
 import org.mwolff.manban.comment.application.CommentService.SpiegelNotiz;
+import org.mwolff.manban.fremdboard.domain.FremdAbrufException;
 import org.mwolff.manban.fremdboard.domain.FremdBoardArt;
 import org.mwolff.manban.fremdboard.domain.FremdBoardQuelle;
 import org.mwolff.manban.fremdboard.domain.FremdEreignis;
@@ -357,5 +358,85 @@ class AbgleichServiceTest {
     reihenfolge.verify(schreiber).wechseln(BOARD, 7, "READY", T1, ANNA);
     reihenfolge.verify(schreiber).wechseln(BOARD, 7, "IN_REVIEW", T2, KIT);
     verify(schreiber, never()).wechseln(eq(BOARD), eq(7), eq("BACKLOG"), any(), any());
+  }
+
+  @Test
+  void inkrementell_gleichtJedeGeaenderteKarteAb_ohneSieErneutZuLesen() {
+    // Given: Karte 7 hat sich geändert, ihre Wechsel und Notizen liest der Abgleich je Karte.
+    FremdKarte geaendert = karte("Export", "", List.of("Ready"), false, VORHER);
+    when(quelle.geaenderteKarten(VERBINDUNG, T1)).thenReturn(List.of(geaendert));
+    when(quelle.ereignisse(VERBINDUNG, 7))
+        .thenReturn(List.of(ereignis("label-1", Art.LABEL_GESETZT, "Ready", T2, "anna")));
+    when(quelle.notizen(VERBINDUNG, 7)).thenReturn(List.of());
+    when(bestand.kartenId(PROJEKT, 7)).thenReturn(Optional.of(70L));
+
+    // When
+    service.inkrementellAbgleichen(VERBINDUNG, T1);
+
+    // Then
+    verify(quelle, never()).karte(any(), anyLong());
+    verify(quelle, never()).nummern(any());
+    verify(schreiber).wechseln(BOARD, 7, "READY", T2, ANNA);
+    verify(schreiber, never()).alsGeloeschtMarkieren(anyLong(), anyInt(), any());
+  }
+
+  @Test
+  void voll_liestFehlendeKarten_einzeln_undMarkiertVerschwundeneAlsGeloescht() {
+    // Given: hier gespiegelt sind 7 und 9; in GitLab gibt es 7 (geändert) und 8 (noch nicht
+    // gespiegelt), 9 ist gelöscht.
+    when(bestand.nummern(PROJEKT)).thenReturn(List.of(7, 9));
+    when(quelle.nummern(VERBINDUNG)).thenReturn(List.of(7L, 8L));
+    when(quelle.geaenderteKarten(VERBINDUNG, T1))
+        .thenReturn(List.of(karte("Export", "", List.of(), false, VORHER)));
+    FremdKarte acht = new FremdKarte(8, "Import", "", List.of(), false, VORHER, VORHER);
+    when(quelle.karte(VERBINDUNG, 8)).thenReturn(Optional.of(acht));
+    when(quelle.ereignisse(eq(VERBINDUNG), anyLong())).thenReturn(List.of());
+    when(quelle.notizen(eq(VERBINDUNG), anyLong())).thenReturn(List.of());
+    when(bestand.kartenId(PROJEKT, 7)).thenReturn(Optional.of(70L));
+    when(bestand.kartenId(PROJEKT, 8)).thenReturn(Optional.empty());
+
+    // When
+    service.vollAbgleichen(VERBINDUNG, T1);
+
+    // Then
+    verify(quelle, never()).karte(VERBINDUNG, 7);
+    verify(schreiber).aktualisieren(BOARD, 7, "Export", "", ADRESSE, T2);
+    verify(schreiber)
+        .anlegen(
+            eq(BOARD),
+            eq(new FremdeKarte(8, "Import", "", "BACKLOG", null)),
+            eq(ANGEBUNDEN),
+            any());
+    verify(schreiber).alsGeloeschtMarkieren(BOARD, 9, JETZT);
+    verify(schreiber, never()).alsGeloeschtMarkieren(BOARD, 7, JETZT);
+    verify(schreiber, never()).alsGeloeschtMarkieren(BOARD, 8, JETZT);
+  }
+
+  @Test
+  void voll_liestDenBestandVorDerListe_undLoeschtNichtsWennDieListeScheitert() {
+    // Given
+    when(bestand.nummern(PROJEKT)).thenReturn(List.of(7));
+    when(quelle.nummern(VERBINDUNG))
+        .thenThrow(new FremdAbrufException("GitLab ist nicht erreichbar"));
+
+    // When / Then
+    assertThatThrownBy(() -> service.vollAbgleichen(VERBINDUNG, T1))
+        .isInstanceOf(FremdAbrufException.class);
+    InOrder reihenfolge = inOrder(bestand, quelle);
+    reihenfolge.verify(bestand).nummern(PROJEKT);
+    reihenfolge.verify(quelle).nummern(VERBINDUNG);
+    verifyNoInteractions(schreiber);
+  }
+
+  @Test
+  void voll_eineEinzelnGeleseneKarteDieInzwischenFehlt_bleibtUnberuehrt() {
+    when(bestand.nummern(PROJEKT)).thenReturn(List.of());
+    when(quelle.nummern(VERBINDUNG)).thenReturn(List.of(8L));
+    when(quelle.geaenderteKarten(VERBINDUNG, T1)).thenReturn(List.of());
+    when(quelle.karte(VERBINDUNG, 8)).thenReturn(Optional.empty());
+
+    service.vollAbgleichen(VERBINDUNG, T1);
+
+    verifyNoInteractions(schreiber);
   }
 }
