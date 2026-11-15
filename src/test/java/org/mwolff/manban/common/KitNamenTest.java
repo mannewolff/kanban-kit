@@ -320,6 +320,12 @@ class KitNamenTest {
     assertThat(KitNamen.artAusTitel(null)).isEmpty();
   }
 
+  @ParameterizedTest
+  @CsvSource({"FACHLICH, true", "IDEE, true", "PLAN, true", "MENSCH, false", "TASK, false"})
+  void istDokument_nurDieDreiDokumentarten(Art art, boolean dokument) {
+    assertThat(art.istDokument()).isEqualTo(dokument);
+  }
+
   @Test
   void titelPraefixe_nenntDiePraefixeJeArtDeutschZuerst() {
     assertThat(KitNamen.titelPraefixe())

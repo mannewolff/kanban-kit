@@ -93,7 +93,16 @@ public final class KitNamen {
     IDEE,
     MENSCH,
     PLAN,
-    TASK
+    TASK;
+
+    /**
+     * Ob die Art eines der drei Dokumente ist (Plan #1294 E3): Idee, fachliche Anforderung, Plan.
+     * Menschenkarte und Task sind Arbeitspakete (E4). Einzige Liste dieser Arten, damit {@code
+     * card} und {@code fremdboard} dieselbe Statusregel lesen (Issue #2158).
+     */
+    public boolean istDokument() {
+      return this == FACHLICH || this == IDEE || this == PLAN;
+    }
   }
 
   /** Das Register der Produktion; Reihenfolge je Sache: deutsch, dann englisch. */
