@@ -39,6 +39,7 @@ export default defineConfig({
           { text: "Umgebungsvariablen", link: "/betrieb#umgebungsvariablen" },
           { text: "Anmeldecode und Mails", link: "/betrieb#anmeldecode-und-mails-ohne-mailserver" },
           { text: "Ersten Admin einrichten", link: "/betrieb#den-ersten-admin-einrichten" },
+          { text: "Fremdes Board anbinden", link: "/fremdes-board" },
           { text: "Testsuite lokal starten", link: "/betrieb#testsuite-lokal-starten" },
           { text: "Upgrade", link: "/upgrading" },
         ],
