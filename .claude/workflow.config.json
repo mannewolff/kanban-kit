@@ -274,6 +274,7 @@
   },
   "pacer": {
     "enabled": true,
-    "machine": "manne"
+    "machine": "manne",
+    "stage2": "true"
   }
 }
