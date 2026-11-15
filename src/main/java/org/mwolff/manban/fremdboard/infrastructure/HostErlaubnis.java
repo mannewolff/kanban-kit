@@ -7,6 +7,9 @@ import java.net.http.HttpRequest;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
+import org.mwolff.manban.fremdboard.application.AdressPruefung;
 import org.mwolff.manban.fremdboard.application.FremdboardProperties;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -22,7 +25,7 @@ import org.springframework.stereotype.Component;
  * Rücksicht auf Groß- und Kleinschreibung und einen Schlusspunkt; der Port ist frei.
  */
 @Component
-public final class HostErlaubnis {
+public final class HostErlaubnis implements AdressPruefung {
 
   /** Höchste Wartezeit auf Verbindung und Antwort des fremden Systems. */
   public static final Duration ZEITGRENZE = Duration.ofSeconds(10);
@@ -101,6 +104,19 @@ public final class HostErlaubnis {
           "Host " + vergleich + " steht nicht in der Erlaubnisliste MANBAN_FREMDBOARD_HOSTS");
     }
     return ziel;
+  }
+
+  /**
+   * {@link #pruefe(String)} ohne Wurf: der Grund der Ablehnung, leer bei einer erlaubten Adresse.
+   */
+  @Override
+  public Optional<String> ablehnung(String adresse) {
+    try {
+      pruefe(adresse);
+      return Optional.empty();
+    } catch (HostNichtErlaubtException e) {
+      return Optional.of(Objects.requireNonNullElse(e.getMessage(), "Adresse nicht erlaubt"));
+    }
   }
 
   /**

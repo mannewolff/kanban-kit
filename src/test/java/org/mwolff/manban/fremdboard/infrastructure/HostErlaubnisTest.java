@@ -147,4 +147,13 @@ class HostErlaubnisTest {
     assertThat(antwort.statusCode()).isEqualTo(302);
     assertThat(aufrufeZiel).hasValue(0);
   }
+
+  @Test
+  void ablehnungNenntDenGrundOhneZuWerfen() {
+    assertThat(erlaubnis.ablehnung("https://gitlab.com")).isEmpty();
+    assertThat(erlaubnis.ablehnung("https://boese.example.net"))
+        .hasValueSatisfying(grund -> assertThat(grund).contains("boese.example.net"));
+    assertThat(erlaubnis.ablehnung("http://gitlab.com"))
+        .hasValueSatisfying(grund -> assertThat(grund).contains("https"));
+  }
 }

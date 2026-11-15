@@ -257,6 +257,10 @@ class ArchitectureTest {
           // Schreibweg des Spiegels eines fremden Boards, samt Records FremdeKarte und
           // FremderAkteur.
           "FremdKartenSchreiber",
+          // FremdKartenBestand ist Vertrag (Issue #2166, Plan #2152 A2, A18): Das Anbinden eines
+          // fremden Boards fragt, ob das Projekt Karten hat und ob ein Board je Status eine Spalte
+          // hat, samt Record KartenBestand.
+          "FremdKartenBestand",
           // Exception-Vokabular als Vertrag, Plan #1694 (A4)
           "CardNotFoundException");
 

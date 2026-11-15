@@ -11,6 +11,7 @@ import java.util.Optional;
  *
  * <p>Die Quelle liest nur; kanban-kit schreibt nie in das fremde System (A5). Jede Methode bekommt
  * die {@link Verbindung} des Projekts, aus der die Umsetzung Adresse, Projektpfad und Zugang nimmt.
+ * Scheitert ein Abruf, wirft sie {@link FremdAbrufException} oder eine Unterklasse.
  */
 public interface FremdBoardQuelle {
 

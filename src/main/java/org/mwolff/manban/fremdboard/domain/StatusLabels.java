@@ -9,4 +9,9 @@ package org.mwolff.manban.fremdboard.domain;
  * @param inProgress Label für In Progress
  * @param inReview Label für In Review
  */
-public record StatusLabels(String backlog, String ready, String inProgress, String inReview) {}
+public record StatusLabels(String backlog, String ready, String inProgress, String inReview) {
+
+  /** Die Vorgabe: dieselben Namen wie die Spalten des Kits ({@code columns}). */
+  public static final StatusLabels STANDARD =
+      new StatusLabels("Backlog", "Ready", "In progress", "In review");
+}

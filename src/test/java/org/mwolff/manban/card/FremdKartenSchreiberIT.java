@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.AbstractIntegrationTest;
 import org.mwolff.manban.card.application.CardRepository;
+import org.mwolff.manban.card.application.FremdKartenBestand;
 import org.mwolff.manban.card.application.FremdKartenSchreiber;
 import org.mwolff.manban.card.application.FremdKartenSchreiber.FremdeKarte;
 import org.mwolff.manban.card.application.FremdKartenSchreiber.FremderAkteur;
@@ -39,6 +40,7 @@ class FremdKartenSchreiberIT extends AbstractIntegrationTest {
   private static final FremderAkteur ERIKA = FremderAkteur.von("erika", "kit-bot");
 
   @Autowired private FremdKartenSchreiber schreiber;
+  @Autowired private FremdKartenBestand kartenBestand;
   @Autowired private CardRepository cards;
   @Autowired private KartenSicht sicht;
   @Autowired private JdbcTemplate jdbc;
@@ -313,6 +315,57 @@ class FremdKartenSchreiberIT extends AbstractIntegrationTest {
     // When / Then
     assertThatThrownBy(this::anlegen)
         .isInstanceOf(org.mwolff.manban.card.application.CardNumberConflictException.class);
+  }
+
+  @Test
+  void bestandZaehltJedeZeileDesProjektsNachIhremOrt() {
+    // Given: ein Projekt ohne fremdes Board — dort fragt das Anbinden (Issue #2166, A2).
+    jdbc.update("DELETE FROM fremdboard_verbindung WHERE project_id = ?", projectId);
+    assertThat(kartenBestand.bestand(projectId).leer()).isTrue();
+    karte(1, "Aktiv", "CARD", false, false);
+    karte(2, "[Idea] Pool-Idee", "CARD", false, false);
+    karte(3, "Archiviert", "CARD", true, false);
+    karte(4, "Weggeworfen", "CARD", false, true);
+    karte(5, "Vorhaben", "EPIC", false, false);
+    karte(6, "Weggeworfenes Vorhaben", "EPIC", false, true);
+
+    // When
+    FremdKartenBestand.KartenBestand bestand = kartenBestand.bestand(projectId);
+
+    // Then
+    assertThat(bestand).isEqualTo(new FremdKartenBestand.KartenBestand(2, 1, 2, 1));
+    assertThat(bestand.leer()).isFalse();
+  }
+
+  @Test
+  void fehlendeStatusNenntDieStatusOhneSpalte() {
+    // Given: die fünf Standardspalten aus seed()
+    assertThat(kartenBestand.fehlendeStatus(boardId)).isEmpty();
+
+    // When: zwei Spalten tragen keinen Statusnamen mehr
+    jdbc.update(
+        "UPDATE board_column SET name = 'Erledigt' WHERE board_id = ? AND name = 'Done'", boardId);
+    jdbc.update(
+        "UPDATE board_column SET name = 'Prüfen' WHERE board_id = ? AND name = 'In review'",
+        boardId);
+
+    // Then
+    assertThat(kartenBestand.fehlendeStatus(boardId)).containsExactly("In review", "Done");
+  }
+
+  private void karte(int nummer, String titel, String typ, boolean archiviert, boolean geloescht) {
+    jdbc.update(
+        "INSERT INTO card (project_id, board_id, column_id, number, title, position_in_column,"
+            + " type, archived, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        projectId,
+        boardId,
+        readyId,
+        nummer,
+        titel,
+        nummer,
+        typ,
+        archiviert,
+        geloescht ? java.sql.Timestamp.from(GELOESCHT) : null);
   }
 
   private List<String> labelsDerKarte(long cardId) {

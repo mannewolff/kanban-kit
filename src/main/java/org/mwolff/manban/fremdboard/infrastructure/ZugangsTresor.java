@@ -12,6 +12,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.common.ExcludeFromJacocoGeneratedReport;
 import org.mwolff.manban.fremdboard.application.FremdboardProperties;
+import org.mwolff.manban.fremdboard.application.ZugangsSchutz;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -27,7 +28,7 @@ import org.springframework.stereotype.Component;
  * Meldung nennt Zugang oder Schlüssel.
  */
 @Component
-public final class ZugangsTresor {
+public final class ZugangsTresor implements ZugangsSchutz {
 
   private static final String VERFAHREN = "AES/GCM/NoPadding";
   private static final int SCHLUESSEL_LAENGE = 32;
@@ -52,6 +53,7 @@ public final class ZugangsTresor {
   }
 
   /** Wahr, wenn ein Schlüssel gesetzt ist; sonst ist das Anbinden gesperrt. */
+  @Override
   public boolean verfuegbar() {
     return schluessel != null;
   }
@@ -61,6 +63,7 @@ public final class ZugangsTresor {
    *
    * @throws IllegalStateException wenn kein Schlüssel gesetzt ist
    */
+  @Override
   public String verschluesseln(String klartext) {
     if (schluessel == null) {
       throw new IllegalStateException(
@@ -111,6 +114,20 @@ public final class ZugangsTresor {
           "Gespeicherter Zugang lässt sich mit dem Schlüssel aus MANBAN_SECRET_KEY nicht"
               + " entschlüsseln",
           e);
+    }
+  }
+
+  /**
+   * Ob sich der gespeicherte Wert entschlüsseln lässt (Plan #2152 A13): Die Einstellung zeigt
+   * sonst, dass der Zugang neu hinterlegt werden muss.
+   */
+  @Override
+  public boolean lesbar(String gespeichert) {
+    try {
+      entschluesseln(gespeichert);
+      return true;
+    } catch (ZugangNichtLesbarException e) {
+      return false;
     }
   }
 

@@ -89,4 +89,11 @@ public interface CardBestandRepository {
    */
   record KarteImBestand(
       Card karte, boolean imPapierkorb, @Nullable Integer verloreneHerkunftsnummer) {}
+
+  /**
+   * Alle Zeilen in {@code card} des Projekts, nach ihrem Ort gezählt — einschließlich Archiv,
+   * Papierkorb und Vorhaben (Issue #2166, Plan #2152 A2). Eine Karte im Papierkorb zählt dort, auch
+   * wenn sie ein Vorhaben oder archiviert ist; ein Vorhaben zählt als Vorhaben, auch archiviert.
+   */
+  FremdKartenBestand.KartenBestand bestand(long projectId);
 }

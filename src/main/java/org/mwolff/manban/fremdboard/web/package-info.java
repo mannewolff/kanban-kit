@@ -1,6 +1,6 @@
 /**
- * Web-Adapter des Moduls {@code fremdboard} (Plan #2152); die Endpunkte folgen mit den weiteren
- * Paketen des Plans.
+ * Web-Adapter des Moduls {@code fremdboard} (Plan #2152): Einrichten und Prüfen der Verbindung
+ * (Issue #2166).
  *
  * <p>{@code @NullMarked} (Issue #0080): Alle Referenzen in diesem Package sind per Default
  * non-null; Ausnahmen tragen explizit {@code @Nullable} (CLAUDE-java.md §6.2).

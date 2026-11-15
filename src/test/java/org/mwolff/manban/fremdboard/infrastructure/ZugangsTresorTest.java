@@ -136,4 +136,14 @@ class ZugangsTresorTest {
         .hasMessageContaining("MANBAN_SECRET_KEY")
         .hasMessageNotContaining(keinHex);
   }
+
+  @Test
+  void lesbarSagtObSichDerGespeicherteZugangEntschluesselnLaesst() {
+    String gespeichert = tresor.verschluesseln("glpat-geheim");
+    ZugangsTresor anderer = new ZugangsTresor(ANDERER_SCHLUESSEL, new SecureRandom());
+
+    assertThat(tresor.lesbar(gespeichert)).isTrue();
+    assertThat(anderer.lesbar(gespeichert)).isFalse();
+    assertThat(new ZugangsTresor(null, new SecureRandom()).lesbar(gespeichert)).isFalse();
+  }
 }
