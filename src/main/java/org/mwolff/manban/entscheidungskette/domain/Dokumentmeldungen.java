@@ -42,14 +42,17 @@ final class Dokumentmeldungen {
     return KitMeldungLeser.lies(k.herkunft(), k.text()).flatMap(m -> gelesen(k, m));
   }
 
-  /** Jede gelesene Prüfrunde trägt eine Art aus {@link #PRUEFARTEN}; das sichert der Leser. */
+  /**
+   * Jede gelesene Prüfrunde trägt eine Art aus {@link #PRUEFARTEN}; das sichert der Leser.
+   * Typmuster statt Record-Muster: Ein primitives Teilmuster wie {@code int runde} lässt javac eine
+   * stets erfüllte Prüfung erzeugen, deren Mutante kein Test töten kann (Issue #2154).
+   */
   private static Optional<Gelesen> gelesen(Kommentar k, KitMeldung meldung) {
     return switch (meldung) {
-      case Pruefrunde(Meldungsart art, int runde, var reviewer, var funde) ->
-          Optional.of(
-              new Gelesen(k, art, runde, new Pruefrunde(art, runde, reviewer, funde), false));
-      case Einarbeitung(int runde) ->
-          Optional.of(new Gelesen(k, Meldungsart.EINARBEITUNG, runde, null, false));
+      case Pruefrunde pruefrunde ->
+          Optional.of(new Gelesen(k, pruefrunde.art(), pruefrunde.runde(), pruefrunde, false));
+      case Einarbeitung einarbeitung ->
+          Optional.of(new Gelesen(k, Meldungsart.EINARBEITUNG, einarbeitung.runde(), null, false));
       default -> Optional.empty();
     };
   }
