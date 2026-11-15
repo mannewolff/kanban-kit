@@ -220,6 +220,11 @@ class OpenApiIT extends AbstractIntegrationTest {
     JsonNode archivieren = spec.at("/paths/~1api~1cards~1{cardId}~1archive/post");
     assertThat(archivieren.isMissingNode()).isFalse();
     assertThat(archivieren.at("/parameters").findValuesAsText("name")).containsExactly("cardId");
+    // Die Karten-Antwort nennt die Adresse im fremden System (Issue #2162, Plan #2152 A1).
+    JsonNode adresse = spec.at("/components/schemas/CardView/properties/externUrl");
+    assertThat(adresse.isMissingNode()).isFalse();
+    assertThat(adresse.at("/type").asText()).isEqualTo("string");
+    assertThat(adresse.at("/description").asText()).contains("fremden System");
   }
 
   @Test

@@ -3,6 +3,7 @@ package org.mwolff.manban.comment.infrastructure.persistence;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.mwolff.manban.comment.domain.LaufKommentar;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +18,9 @@ interface CommentJpaRepository extends JpaRepository<CommentEntity, Long> {
    * Zeilenlage, die sich durch UPDATE/VACUUM oder einen anderen Ausführungsplan ändert.
    */
   List<CommentEntity> findByCardIdOrderByCreatedAtAscIdAsc(Long cardId);
+
+  /** Der gespiegelte Kommentar der Karte mit dieser Kennung im fremden System (Issue #2162). */
+  Optional<CommentEntity> findByCardIdAndExternKennung(Long cardId, String externKennung);
 
   /** Die Kommentare mehrerer Karten, chronologisch wie je Karte (Issue #2109). */
   List<CommentEntity> findByCardIdInOrderByCreatedAtAscIdAsc(Collection<Long> cardIds);

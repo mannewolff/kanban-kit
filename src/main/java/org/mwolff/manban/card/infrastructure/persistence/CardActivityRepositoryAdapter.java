@@ -2,6 +2,7 @@ package org.mwolff.manban.card.infrastructure.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -16,6 +17,7 @@ import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.LaufBewegung;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -62,6 +64,31 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
     jpa.save(
         new CardActivityEntity(
             cardId, actorUserId, type.name(), detail, createdAt, stamp, statusAfter));
+  }
+
+  @Override
+  public void addFremd(
+      long cardId,
+      CardActivityType type,
+      String detail,
+      Instant createdAt,
+      CardActivityOrigin origin,
+      @Nullable String externAkteur,
+      @Nullable CardStatus statusAfter) {
+    MapSqlParameterSource werte =
+        new MapSqlParameterSource()
+            .addValue("cardId", cardId)
+            .addValue("type", type.name())
+            .addValue("detail", detail)
+            .addValue("createdAt", Timestamp.from(createdAt))
+            .addValue("origin", origin.name())
+            .addValue("externAkteur", externAkteur)
+            .addValue("statusAfter", statusAfter == null ? null : statusAfter.name());
+    jdbc.update(
+        "INSERT INTO card_activity (card_id, type, detail, created_at, origin, extern_akteur,"
+            + " status_after) VALUES (:cardId, :type, :detail, :createdAt, :origin,"
+            + " :externAkteur, :statusAfter)",
+        werte);
   }
 
   @Override

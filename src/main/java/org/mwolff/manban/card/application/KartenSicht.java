@@ -133,7 +133,8 @@ public final class KartenSicht {
                     c.derivedFromCardId() == null ? null : nummern.get(c.derivedFromCardId()),
                     statusName(c),
                     c.status() != null && darfStatusSetzen,
-                    herkunft.get(c.requireId())))
+                    herkunft.get(c.requireId()),
+                    c.externUrl()))
         .toList();
   }
 
@@ -206,7 +207,8 @@ public final class KartenSicht {
         statusName(c),
         c.status() != null && canSetStatus,
         // Die Kette rechnet nur die Board-Liste (Issue #1930).
-        null);
+        null,
+        c.externUrl());
   }
 
   /**

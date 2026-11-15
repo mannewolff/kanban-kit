@@ -37,6 +37,12 @@ class CommentRepositoryAdapter implements CommentRepository {
   }
 
   @Override
+  public Optional<Comment> findByCardIdAndExternKennung(long cardId, String externKennung) {
+    return jpa.findByCardIdAndExternKennung(cardId, externKennung)
+        .map(CommentRepositoryAdapter::toDomain);
+  }
+
+  @Override
   public void deleteById(long id) {
     jpa.deleteById(id);
   }
@@ -93,7 +99,8 @@ class CommentRepositoryAdapter implements CommentRepository {
         c.tokenName(),
         c.agent(),
         c.vonHandGeaendertAm(),
-        c.vonHandKopfzeile());
+        c.vonHandKopfzeile(),
+        c.externKennung());
   }
 
   private static Comment toDomain(CommentEntity e) {
@@ -110,6 +117,7 @@ class CommentRepositoryAdapter implements CommentRepository {
         e.getTokenName(),
         e.getAgent(),
         e.getVonHandGeaendertAm(),
-        e.getVonHandKopfzeile());
+        e.getVonHandKopfzeile(),
+        e.getExternKennung());
   }
 }

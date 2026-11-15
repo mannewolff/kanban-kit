@@ -105,6 +105,10 @@ class CardEntity {
   @Column(name = "weg_beleg_geaendert_am")
   private @Nullable Instant wegBelegGeaendertAm;
 
+  // Adresse der gespiegelten Karte im fremden System (V75, Issue #2162, Plan #2152 A1).
+  @Column(name = "extern_url")
+  private @Nullable String externUrl;
+
   protected CardEntity() {
     // für JPA
   }
@@ -134,6 +138,7 @@ class CardEntity {
     this.shortcode = c.shortcode();
     this.dueDate = c.dueDate();
     this.wegBelegGeaendertAm = c.wegBelegGeaendertAm();
+    this.externUrl = c.externUrl();
   }
 
   @Nullable Long getId() {
@@ -226,5 +231,9 @@ class CardEntity {
 
   @Nullable Instant getWegBelegGeaendertAm() {
     return wegBelegGeaendertAm;
+  }
+
+  @Nullable String getExternUrl() {
+    return externUrl;
   }
 }

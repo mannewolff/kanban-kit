@@ -26,6 +26,8 @@ import org.mwolff.manban.card.domain.CardType;
  * @param herkunft Vorfahren bis zum Ursprung, nächster zuerst (Issue #1930); nur in der Board-Liste
  *     gesetzt, sonst {@code null} (nicht berechnet) — kein Einzelabruf rechnet eine Kette; {@code
  *     []} heißt ohne Herkunft
+ * @param externUrl Adresse der Karte im fremden System (Issue #2162, Plan #2152 A1), Ziel von „In
+ *     GitLab öffnen“; {@code null} bei jeder eigenen Karte
  */
 @Schema(description = "Eine Karte oder ein Vorhaben.")
 public record CardView(
@@ -87,4 +89,59 @@ public record CardView(
             description =
                 "Herkunft bis zum Ursprung, nächster Vorfahr zuerst; nur in der Board-Liste"
                     + " berechnet. Leer (null): nicht berechnet; eine leere Liste: ohne Herkunft.")
-        @Nullable List<HerkunftsGlied> herkunft) {}
+        @Nullable List<HerkunftsGlied> herkunft,
+    @Schema(
+            description =
+                "Adresse der Karte im fremden System, aus dem kanban-kit sie spiegelt (etwa"
+                    + " GitLab); null bei jeder eigenen Karte.",
+            example = "https://gitlab.com/gruppe/projekt/-/issues/7")
+        @Nullable String externUrl) {
+
+  /** Eine Sicht ohne Adresse im fremden System — die bisherige Parameterliste (Issue #2162). */
+  public CardView(
+      Long id,
+      Long boardId,
+      Long columnId,
+      Integer number,
+      String title,
+      @Nullable String description,
+      @Nullable String excerpt,
+      int positionInColumn,
+      boolean archived,
+      @Nullable Instant movedToDoneAt,
+      List<Integer> dependencies,
+      CardType type,
+      @Nullable Long parentId,
+      @Nullable String shortcode,
+      List<Long> assignees,
+      @Nullable Instant dueDate,
+      List<Long> labels,
+      @Nullable Integer derivedFrom,
+      @Nullable String status,
+      boolean canSetStatus,
+      @Nullable List<HerkunftsGlied> herkunft) {
+    this(
+        id,
+        boardId,
+        columnId,
+        number,
+        title,
+        description,
+        excerpt,
+        positionInColumn,
+        archived,
+        movedToDoneAt,
+        dependencies,
+        type,
+        parentId,
+        shortcode,
+        assignees,
+        dueDate,
+        labels,
+        derivedFrom,
+        status,
+        canSetStatus,
+        herkunft,
+        null);
+  }
+}

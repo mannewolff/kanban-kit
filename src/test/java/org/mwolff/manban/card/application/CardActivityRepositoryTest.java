@@ -55,6 +55,18 @@ class CardActivityRepositoryTest {
     }
 
     @Override
+    public void addFremd(
+        long cardId,
+        CardActivityType type,
+        String detail,
+        Instant createdAt,
+        CardActivityOrigin origin,
+        @Nullable String externAkteur,
+        @Nullable CardStatus statusAfter) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public List<CardActivity> findByCardId(long cardId) {
       throw new UnsupportedOperationException();
     }

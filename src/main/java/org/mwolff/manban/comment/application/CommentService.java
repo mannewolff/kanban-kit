@@ -5,13 +5,16 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.card.application.ActorContext;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.card.application.FremdKartenSchreiber.FremderAkteur;
 import org.mwolff.manban.comment.domain.Comment;
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
@@ -26,12 +29,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CommentService {
 
+  private static final String UNBEKANNT = "Unbekannt";
+
   private final CommentRepository comments;
   private final CardService cardService;
   private final PermissionChecker permissions;
   private final UserLookup users;
   private final ActorContext actor;
   private final Clock clock;
+  private final BoardQuelle boardQuelle;
 
   public CommentService(
       CommentRepository comments,
@@ -39,13 +45,15 @@ public class CommentService {
       PermissionChecker permissions,
       UserLookup users,
       ActorContext actor,
-      Clock clock) {
+      Clock clock,
+      BoardQuelle boardQuelle) {
     this.comments = comments;
     this.cardService = cardService;
     this.permissions = permissions;
     this.users = users;
     this.actor = actor;
     this.clock = clock;
+    this.boardQuelle = boardQuelle;
   }
 
   /** Legt einen Kommentar ohne Laufkennung an — der Session-Weg (Plan #1423, A3). */
@@ -67,7 +75,7 @@ public class CommentService {
   private CommentView anlegen(long userId, long cardId, String body, @Nullable Instant laufStart) {
     long projectId = cardService.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);
-    String authorName = users.findById(userId).map(UserSummary::displayName).orElse("Unbekannt");
+    String authorName = users.findById(userId).map(UserSummary::displayName).orElse(UNBEKANNT);
     Instant now = clock.instant();
     // Herkunft aus derselben Quelle wie der Verlauf (Issue #1620, A4); ohne Stempel bleibt sie
     // leer — unbekannt, nicht geraten (A6).
@@ -87,6 +95,72 @@ public class CommentService {
                 stamp.tokenName(),
                 stamp.agent()));
     return view(saved);
+  }
+
+  /**
+   * Der Spiegel-Schreibweg für Kommentare eines fremden Boards (Issue #2162, Plan #2152 A1, A11,
+   * A19): Eine noch nicht übernommene Notiz wird angelegt, Herkunft {@code TOKEN}, wenn das
+   * Kit-Konto sie schrieb, sonst {@code SESSION}; eine schon übernommene bekommt den Text und die
+   * Änderungszeit aus dem fremden System. Liegt die Änderungszeit einer Meldung des Kits nach ihrer
+   * Anlage, ist sie als von Hand geändert gekennzeichnet. Eine unveränderte Notiz bleibt unberührt.
+   *
+   * <p>Ohne Rechteprüfung: Es schreibt kein Mensch, sondern der Abgleich mit dem fremden System —
+   * und nur in eine Karte eines Projekts, dessen Board dort liegt.
+   *
+   * @throws IllegalStateException wenn das Projekt der Karte kein fremdes Board hat
+   */
+  @Transactional
+  public void spiegeln(long cardId, SpiegelNotiz notiz) {
+    pruefeFremd(cardId);
+    Optional<Comment> vorhanden = comments.findByCardIdAndExternKennung(cardId, notiz.kennung());
+    if (vorhanden.isEmpty()) {
+      String autor = notiz.autor().name();
+      comments.save(
+          Comment.gespiegelt(
+              cardId,
+              notiz.kennung(),
+              autor == null ? UNBEKANNT : autor,
+              notiz.text(),
+              notiz.angelegtAm(),
+              notiz.geaendertAm(),
+              notiz.autor().kitKonto()));
+      return;
+    }
+    Comment bisher = vorhanden.get();
+    if (bisher.body().equals(notiz.text()) && bisher.updatedAt().equals(notiz.geaendertAm())) {
+      return;
+    }
+    comments.save(bisher.withSpiegelText(notiz.text(), notiz.geaendertAm()));
+  }
+
+  /**
+   * Eine Notiz fehlt im fremden System (Issue #2162, Plan #2152 A19): Eine Meldung des Kits bleibt
+   * stehen und wird als von Hand geändert gekennzeichnet; jeder andere Kommentar und eine noch
+   * nicht übernommene Kennung bleiben unberührt. Ohne Rechteprüfung wie {@link #spiegeln}.
+   *
+   * @param zeitpunkt wann der Spiegel das Fehlen festgestellt hat
+   * @throws IllegalStateException wenn das Projekt der Karte kein fremdes Board hat
+   */
+  @Transactional
+  public void spiegelGeloescht(long cardId, String kennung, Instant zeitpunkt) {
+    pruefeFremd(cardId);
+    comments
+        .findByCardIdAndExternKennung(cardId, kennung)
+        .ifPresent(
+            bisher -> {
+              Comment gekennzeichnet = bisher.alsImFremdenSystemGeloescht(zeitpunkt);
+              if (!gekennzeichnet.equals(bisher)) {
+                comments.save(gekennzeichnet);
+              }
+            });
+  }
+
+  private void pruefeFremd(long cardId) {
+    long projectId = cardService.requireProjectId(cardId);
+    if (!boardQuelle.istFremd(projectId)) {
+      throw new IllegalStateException(
+          "Der Spiegel schreibt nur in ein Projekt mit fremdem Board (Projekt " + projectId + ")");
+    }
   }
 
   @Transactional(readOnly = true)
@@ -265,6 +339,18 @@ public class CommentService {
                   "Modell-Selbstauskunft des Werkzeugs (Header X-Agent-Model); null ohne Angabe.",
               example = "claude-opus-5-5")
           @Nullable String agent) {}
+
+  /**
+   * Eine Notiz an einer Karte im fremden System, wie der Spiegel sie übergibt (Issue #2162).
+   *
+   * @param kennung Kennung der Notiz im fremden System; mit ihr wird sie wiedergefunden
+   * @param autor wer sie geschrieben hat; Kit-Konto ergibt Herkunft {@code TOKEN}
+   * @param text Text der Notiz
+   * @param angelegtAm Anlagezeitpunkt im fremden System
+   * @param geaendertAm letzter Änderungszeitpunkt im fremden System
+   */
+  public record SpiegelNotiz(
+      String kennung, FremderAkteur autor, String text, Instant angelegtAm, Instant geaendertAm) {}
 
   /**
    * Der Laufstand-Kommentar einer Karte (Issue #1373).

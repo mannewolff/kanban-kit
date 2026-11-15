@@ -64,6 +64,9 @@ import org.mwolff.manban.common.KitNamen;
  * @param wegBelegGeaendertAm letzte Änderung an einer Angabe, die den Weg der Karte belegt (Plan
  *     #2108 E14, siehe {@link #withWegBelegVergleich}); {@code null}, solange keine nachgewiesen
  *     ist
+ * @param externUrl Adresse der Karte in einem fremden System, aus dem kanban-kit sie spiegelt
+ *     (Issue #2162, Plan #2152 A1) — Ziel von „In GitLab öffnen“; {@code null} bei jeder eigenen
+ *     Karte
  */
 public record Card(
     @Nullable Long id,
@@ -87,7 +90,8 @@ public record Card(
     @Nullable Long derivedFromCardId,
     @Nullable Long requirementCardId,
     @Nullable CardStatus status,
-    @Nullable Instant wegBelegGeaendertAm)
+    @Nullable Instant wegBelegGeaendertAm,
+    @Nullable String externUrl)
     implements Identifiable {
 
   /**
@@ -99,6 +103,59 @@ public record Card(
   /** Zeile mit dem Modell des Plans, deutsch oder englisch; beide gelten als eine Angabe. */
   private static final Pattern ZEILE_PLAN_MODELL =
       Pattern.compile("^[ \\t]*Plan-Model(?:l)?:", Pattern.MULTILINE);
+
+  /**
+   * Eine Karte ohne Adresse in einem fremden System — die bisherige Parameterliste (Issue #2162,
+   * Plan #2152 A1).
+   */
+  public Card(
+      @Nullable Long id,
+      Long boardId,
+      Long columnId,
+      Integer number,
+      String title,
+      @Nullable String description,
+      int positionInColumn,
+      boolean archived,
+      @Nullable Instant movedToDoneAt,
+      @Nullable Long createdBy,
+      Instant createdAt,
+      Instant updatedAt,
+      CardType type,
+      @Nullable Long parentId,
+      @Nullable String shortcode,
+      @Nullable Instant dueDate,
+      Long projectId,
+      @Nullable String externalKey,
+      @Nullable Long derivedFromCardId,
+      @Nullable Long requirementCardId,
+      @Nullable CardStatus status,
+      @Nullable Instant wegBelegGeaendertAm) {
+    this(
+        id,
+        boardId,
+        columnId,
+        number,
+        title,
+        description,
+        positionInColumn,
+        archived,
+        movedToDoneAt,
+        createdBy,
+        createdAt,
+        updatedAt,
+        type,
+        parentId,
+        shortcode,
+        dueDate,
+        projectId,
+        externalKey,
+        derivedFromCardId,
+        requirementCardId,
+        status,
+        wegBelegGeaendertAm,
+        null);
+  }
 
   /** Eine Karte ohne geänderten Wegbeleg — die bisherige Parameterliste (Plan #2108 E14). */
   public Card(
@@ -183,11 +240,40 @@ public record Card(
         derivedFromCardId,
         requirementCardId,
         status,
-        jetzt);
+        jetzt,
+        externUrl);
   }
 
   private boolean traegtZeile(Pattern zeile) {
     return description != null && zeile.matcher(description).find();
+  }
+
+  /** Die Karte mit der Adresse im fremden System (Issue #2162); {@code null} entfernt sie. */
+  public Card withExternUrl(@Nullable String newExternUrl) {
+    return new Card(
+        id,
+        boardId,
+        columnId,
+        number,
+        title,
+        description,
+        positionInColumn,
+        archived,
+        movedToDoneAt,
+        createdBy,
+        createdAt,
+        updatedAt,
+        type,
+        parentId,
+        shortcode,
+        dueDate,
+        projectId,
+        externalKey,
+        derivedFromCardId,
+        requirementCardId,
+        status,
+        wegBelegGeaendertAm,
+        newExternUrl);
   }
 
   public Card withContent(String newTitle, @Nullable String newDescription) {
@@ -213,7 +299,8 @@ public record Card(
         derivedFromCardId,
         requirementCardId,
         status,
-        wegBelegGeaendertAm);
+        wegBelegGeaendertAm,
+        externUrl);
   }
 
   public Card asArchived() {
@@ -239,7 +326,8 @@ public record Card(
         derivedFromCardId,
         requirementCardId,
         status,
-        wegBelegGeaendertAm);
+        wegBelegGeaendertAm,
+        externUrl);
   }
 
   /** Wiederherstellen an einer freien Position (append), um Positionskollisionen zu vermeiden. */
@@ -266,7 +354,8 @@ public record Card(
         derivedFromCardId,
         requirementCardId,
         status,
-        wegBelegGeaendertAm);
+        wegBelegGeaendertAm,
+        externUrl);
   }
 
   public Card withMovedToDoneAt(@Nullable Instant when) {
@@ -292,7 +381,8 @@ public record Card(
         derivedFromCardId,
         requirementCardId,
         status,
-        wegBelegGeaendertAm);
+        wegBelegGeaendertAm,
+        externUrl);
   }
 
   /** Setzt oder löscht ({@code null}) den eigenen Status eines Arbeitspakets. */
@@ -319,7 +409,8 @@ public record Card(
         derivedFromCardId,
         requirementCardId,
         newStatus,
-        wegBelegGeaendertAm);
+        wegBelegGeaendertAm,
+        externUrl);
   }
 
   /** Setzt oder löscht ({@code null}) die Vorhaben-Zuordnung. */
@@ -346,7 +437,8 @@ public record Card(
         derivedFromCardId,
         requirementCardId,
         status,
-        wegBelegGeaendertAm);
+        wegBelegGeaendertAm,
+        externUrl);
   }
 
   /** Setzt das Kürzel (nur für Vorhaben sinnvoll). */
@@ -373,7 +465,8 @@ public record Card(
         derivedFromCardId,
         requirementCardId,
         status,
-        wegBelegGeaendertAm);
+        wegBelegGeaendertAm,
+        externUrl);
   }
 
   /** Setzt oder löscht ({@code null}) das Fälligkeitsdatum. */
@@ -400,7 +493,8 @@ public record Card(
         derivedFromCardId,
         requirementCardId,
         status,
-        wegBelegGeaendertAm);
+        wegBelegGeaendertAm,
+        externUrl);
   }
 
   /**
@@ -434,7 +528,8 @@ public record Card(
         derivedFromCardId,
         newRequirementCardId,
         status,
-        wegBelegGeaendertAm);
+        wegBelegGeaendertAm,
+        externUrl);
   }
 
   /**
@@ -467,6 +562,7 @@ public record Card(
         newDerivedFromCardId,
         requirementCardId,
         status,
-        wegBelegGeaendertAm);
+        wegBelegGeaendertAm,
+        externUrl);
   }
 }

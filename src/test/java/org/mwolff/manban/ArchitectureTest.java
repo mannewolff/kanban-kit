@@ -253,6 +253,10 @@ class ArchitectureTest {
           // KartenKetteLeser ist Vertrag (Issue #2114, Plan #2108 E1): Die Entscheidungskette liest
           // Karten, Spaltenwechsel und Label-Ereignisse ueber eigene Records, ohne card.domain.
           "KartenKetteLeser",
+          // FremdKartenSchreiber ist Vertrag (Issue #2162, Plan #2152 A1, A10): der einzige
+          // Schreibweg des Spiegels eines fremden Boards, samt Records FremdeKarte und
+          // FremderAkteur.
+          "FremdKartenSchreiber",
           // Exception-Vokabular als Vertrag, Plan #1694 (A4)
           "CardNotFoundException");
 

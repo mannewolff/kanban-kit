@@ -614,7 +614,8 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
         e.getDerivedFromCardId(),
         e.getRequirementCardId(),
         status == null ? null : CardStatus.valueOf(status),
-        e.getWegBelegGeaendertAm());
+        e.getWegBelegGeaendertAm(),
+        e.getExternUrl());
   }
 
   /**

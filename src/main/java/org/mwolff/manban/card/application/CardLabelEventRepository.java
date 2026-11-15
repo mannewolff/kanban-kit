@@ -3,7 +3,9 @@ package org.mwolff.manban.card.application;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardLabelEvent;
 import org.mwolff.manban.card.domain.LabelEreignisMitPerson;
 import org.mwolff.manban.card.domain.LabelEreignisZeile;
@@ -20,6 +22,20 @@ public interface CardLabelEventRepository {
    * @param userId wer gesetzt hat — bei einem Token sein Inhaber (Issue #2110, Plan #2108 E5)
    */
   void add(long cardId, String labelName, Instant zeitpunkt, ActorStamp stamp, long userId);
+
+  /**
+   * Hält ein Label-Ereignis des Spiegels eines fremden Boards fest (Issue #2162, Plan #2152 A11):
+   * ohne Benutzer in kanban-kit, ohne Laufkennung, mit der Herkunft und dem Benutzer im fremden
+   * System.
+   *
+   * @param externAkteur Benutzername im fremden System; {@code null}, wenn es ihn nicht festhält
+   */
+  void addFremd(
+      long cardId,
+      String labelName,
+      Instant zeitpunkt,
+      CardActivityOrigin origin,
+      @Nullable String externAkteur);
 
   /**
    * Die Ereignisse der Karten, die ein Lauf gesetzt hat: Laufkennung gesetzt und nicht vor {@code

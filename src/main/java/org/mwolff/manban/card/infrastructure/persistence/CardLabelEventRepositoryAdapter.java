@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.infrastructure.persistence;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Collection;
@@ -13,6 +14,7 @@ import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardLabelEvent;
 import org.mwolff.manban.card.domain.LabelEreignisMitPerson;
 import org.mwolff.manban.card.domain.LabelEreignisZeile;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -35,6 +37,26 @@ class CardLabelEventRepositoryAdapter implements CardLabelEventRepository {
   @Override
   public void add(long cardId, String labelName, Instant zeitpunkt, ActorStamp stamp, long userId) {
     jpa.save(new CardLabelEventEntity(cardId, labelName, zeitpunkt, stamp, userId));
+  }
+
+  @Override
+  public void addFremd(
+      long cardId,
+      String labelName,
+      Instant zeitpunkt,
+      CardActivityOrigin origin,
+      @Nullable String externAkteur) {
+    MapSqlParameterSource werte =
+        new MapSqlParameterSource()
+            .addValue("cardId", cardId)
+            .addValue("labelName", labelName)
+            .addValue("zeitpunkt", Timestamp.from(zeitpunkt))
+            .addValue("origin", origin.name())
+            .addValue("externAkteur", externAkteur);
+    jdbc.update(
+        "INSERT INTO card_label_event (card_id, label_name, created_at, origin, extern_akteur)"
+            + " VALUES (:cardId, :labelName, :zeitpunkt, :origin, :externAkteur)",
+        werte);
   }
 
   @Override
