@@ -1,0 +1,20 @@
+[
+  {
+    "id": 701,
+    "body": "## Kette angehalten\nFrage: Passkey oder Passwort?",
+    "author": { "id": 9, "username": "kit-bot", "name": "Kit" },
+    "created_at": "2026-11-02T10:12:00.000Z",
+    "updated_at": "2026-11-02T11:00:00.000Z",
+    "system": false,
+    "noteable_iid": 7
+  },
+  {
+    "id": 702,
+    "body": "added ~11 label",
+    "author": { "id": 3, "username": "anna", "name": "Anna" },
+    "created_at": "2026-11-02T10:00:00.000Z",
+    "updated_at": "2026-11-02T10:00:00.000Z",
+    "system": true,
+    "noteable_iid": 7
+  }
+]

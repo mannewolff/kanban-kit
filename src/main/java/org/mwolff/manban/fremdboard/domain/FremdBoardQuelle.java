@@ -1,5 +1,6 @@
 package org.mwolff.manban.fremdboard.domain;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +19,12 @@ public interface FremdBoardQuelle {
 
   /** Die Nummern aller Karten des angebundenen Projekts, offene wie geschlossene. */
   List<Long> nummern(Verbindung verbindung);
+
+  /**
+   * Die Karten, die sich im fremden System nach {@code seit} geändert haben, offene wie
+   * geschlossene, die am längsten unveränderte zuerst — Grundlage des regelmäßigen Abgleichs (A7).
+   */
+  List<FremdKarte> geaenderteKarten(Verbindung verbindung, Instant seit);
 
   /**
    * Die Karte mit Titel, Text, Labels und Zustand, aus denen {@link StatusZuordnung} ihren Status

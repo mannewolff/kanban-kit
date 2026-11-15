@@ -29,6 +29,7 @@ public final class HostErlaubnis {
 
   private final List<String> erlaubteHosts;
   private final HttpClient client;
+  private final Duration zeitgrenze;
 
   @Autowired
   HostErlaubnis(FremdboardProperties properties) {
@@ -36,12 +37,23 @@ public final class HostErlaubnis {
   }
 
   HostErlaubnis(List<String> hosts) {
-    this.erlaubteHosts = FremdboardProperties.normalisierteHosts(hosts);
-    this.client =
+    this(
+        hosts,
         HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NEVER)
             .connectTimeout(ZEITGRENZE)
-            .build();
+            .build(),
+        ZEITGRENZE);
+  }
+
+  /**
+   * Für Tests gegen einen lokalen {@code https}-Server: dessen Zertifikat kennt nur ein eigener
+   * Client, und eine Zeitüberschreitung soll nicht zehn Sekunden dauern.
+   */
+  HostErlaubnis(List<String> hosts, HttpClient client, Duration zeitgrenze) {
+    this.erlaubteHosts = FremdboardProperties.normalisierteHosts(hosts);
+    this.client = client;
+    this.zeitgrenze = zeitgrenze;
   }
 
   /** Die erlaubten Hosts, klein geschrieben. */
@@ -97,7 +109,7 @@ public final class HostErlaubnis {
    * @throws HostNichtErlaubtException wenn {@link #pruefe(URI)} das Ziel ablehnt
    */
   public HttpRequest.Builder anfrage(URI ziel) {
-    return HttpRequest.newBuilder(pruefe(ziel)).timeout(ZEITGRENZE);
+    return HttpRequest.newBuilder(pruefe(ziel)).timeout(zeitgrenze);
   }
 
   /** Der HTTP-Client für das fremde Board: folgt keiner Weiterleitung, Verbindungslimit 10 s. */
