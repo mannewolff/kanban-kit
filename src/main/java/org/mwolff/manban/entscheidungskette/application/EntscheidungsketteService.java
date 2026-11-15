@@ -45,6 +45,7 @@ import org.mwolff.manban.entscheidungskette.domain.Pruefung;
 import org.mwolff.manban.entscheidungskette.domain.Uebertragung;
 import org.mwolff.manban.entscheidungskette.domain.Umsetzungsangaben;
 import org.mwolff.manban.entscheidungskette.domain.Veroeffentlichung;
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.KitReviewVorReadyReader;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectNotFoundException;
@@ -53,8 +54,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Die Entscheidungskette einer Karte (Issue #2117, Plan #2108 E1, E3, E5, E6, E7, E12, E17, E18):
- * prüft das Leserecht wie der Herkunftsbaum, lädt Karten, Kommentare und die gemeldete Einstellung
- * zur Prüfung vor Ready, rechnet mit {@link KettenRechner} und löst die Namen der Menschen auf.
+ * prüft das Leserecht wie der Herkunftsbaum, lädt Karten, Kommentare, die gemeldete Einstellung zur
+ * Prüfung vor Ready und ob das Board in einem fremden System liegt (Issue #2165, Plan #2152 A11),
+ * rechnet mit {@link KettenRechner} und löst die Namen der Menschen auf.
  *
  * <p>Eine neue Rolle gibt es nicht: Wer die Karte sehen darf, sieht ihre Kette. Ohne
  * Zwischenspeicher und ohne Uhr — zweimal aufgerufen, ergibt derselbe Stand dieselbe Antwort.
@@ -73,6 +75,7 @@ public class EntscheidungsketteService {
   private final CommentService comments;
   private final KitReviewVorReadyReader reviewVorReady;
   private final UserLookup users;
+  private final BoardQuelle boardQuelle;
 
   public EntscheidungsketteService(
       CardService cards,
@@ -80,13 +83,15 @@ public class EntscheidungsketteService {
       KartenKetteLeser leser,
       CommentService comments,
       KitReviewVorReadyReader reviewVorReady,
-      UserLookup users) {
+      UserLookup users,
+      BoardQuelle boardQuelle) {
     this.cards = cards;
     this.permissions = permissions;
     this.leser = leser;
     this.comments = comments;
     this.reviewVorReady = reviewVorReady;
     this.users = users;
+    this.boardQuelle = boardQuelle;
   }
 
   /**
@@ -125,7 +130,8 @@ public class EntscheidungsketteService {
             reviewVorReady
                 .meldung(projekt)
                 .map(m -> new ReviewVorReady(m.wert(), m.geaendertAm()))
-                .orElse(null));
+                .orElse(null),
+            boardQuelle.istFremd(projekt));
     return new Namen().sicht(KettenRechner.rechne(eingabe));
   }
 
@@ -180,12 +186,19 @@ public class EntscheidungsketteService {
         a.tokenName(),
         a.agent(),
         a.spaltenSchluessel(),
-        a.laufStart());
+        a.laufStart(),
+        a.externAkteur());
   }
 
   private static LabelEreignis labelEreignis(KettenLabelEreignis e) {
     return new LabelEreignis(
-        e.kartenId(), e.labelName(), e.zeitpunkt(), e.actorUserId(), e.origin(), e.tokenName());
+        e.kartenId(),
+        e.labelName(),
+        e.zeitpunkt(),
+        e.actorUserId(),
+        e.origin(),
+        e.tokenName(),
+        e.externAkteur());
   }
 
   private static Kommentar kommentar(KettenKommentarView k) {

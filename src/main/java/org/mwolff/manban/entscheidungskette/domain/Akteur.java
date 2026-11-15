@@ -32,17 +32,24 @@ public record Akteur(
 
   /**
    * Der Akteur eines Eintrags nach seiner Herkunft: Eine Person zählt nur bei {@code SESSION}, ein
-   * Token nennt seinen Zugang (Plan #2108 E11); ohne Herkunft {@code null}.
+   * Token nennt seinen Zugang (Plan #2108 E11); ohne Herkunft {@code null}. Nennt der Eintrag einen
+   * Benutzer im fremden System (Plan #2152 A11), steht er als {@linkplain #menschGenannt(String)
+   * genannter Mensch} da, bei {@code TOKEN} als Name des Zugangs, wenn keiner gemeldet ist — auch
+   * ohne Herkunft, weil ihn das fremde System selbst festhält.
    */
   static @Nullable Akteur nachHerkunft(
       @Nullable String herkunft,
       @Nullable Long person,
       @Nullable String tokenName,
-      @Nullable String agent) {
-    if (HERKUNFT_SESSION.equals(herkunft)) {
-      return mensch(person);
+      @Nullable String agent,
+      @Nullable String externAkteur) {
+    if (HERKUNFT_TOKEN.equals(herkunft)) {
+      return werkzeug(tokenName != null ? tokenName : externAkteur, agent);
     }
-    return HERKUNFT_TOKEN.equals(herkunft) ? werkzeug(tokenName, agent) : null;
+    if (externAkteur != null) {
+      return menschGenannt(externAkteur);
+    }
+    return HERKUNFT_SESSION.equals(herkunft) ? mensch(person) : null;
   }
 
   /**

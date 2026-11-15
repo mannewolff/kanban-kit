@@ -56,6 +56,12 @@ final class PaketAufbau {
         kartenId, name, zeit, person, herkunft, TOKEN.equals(herkunft) ? ZUGANG : null);
   }
 
+  /** Ein Label, das ein Benutzer im fremden System setzte (Plan #2152 A11). */
+  static LabelEreignis labelImFremdenSystem(
+      long kartenId, String name, Instant zeit, String herkunft, @Nullable String benutzer) {
+    return new LabelEreignis(kartenId, name, zeit, null, herkunft, null, benutzer);
+  }
+
   static Kommentar vonHand(long id, String kopf, Instant zeit) {
     return new Kommentar(id, P, "von Hand umgeschrieben", zeit, TOKEN, ZUGANG, AGENT, um(99), kopf);
   }

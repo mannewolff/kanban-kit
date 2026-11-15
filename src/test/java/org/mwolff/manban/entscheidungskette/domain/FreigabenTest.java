@@ -14,6 +14,7 @@ import static org.mwolff.manban.entscheidungskette.domain.KettenAufbau.vorhanden
 import static org.mwolff.manban.entscheidungskette.domain.PaketAufbau.P;
 import static org.mwolff.manban.entscheidungskette.domain.PaketAufbau.einziges;
 import static org.mwolff.manban.entscheidungskette.domain.PaketAufbau.label;
+import static org.mwolff.manban.entscheidungskette.domain.PaketAufbau.labelImFremdenSystem;
 import static org.mwolff.manban.entscheidungskette.domain.PaketAufbau.paket;
 
 import org.junit.jupiter.api.Test;
@@ -205,5 +206,69 @@ class FreigabenTest {
     Glied glied = einziges(kette, Gliedart.FREIGABE);
     assertThat(glied.zustand()).isEqualTo(Zustand.ERFASST);
     assertThat(glied.freigegebenVon()).isNull();
+  }
+
+  // --- Fremdes Board (Issue #2165, Plan #2152 A11) --------------------------------------------
+
+  @Test
+  void freigabe_fremdesBoard_zugDesKitKontosOhneLaufkennung_istAusfuehrungDesZiellabels() {
+    Entscheidungskette kette =
+        paket()
+            .fremdesBoard()
+            .label(labelImFremdenSystem(1, "goal:implementation", um(2), SESSION, "erika"))
+            .zugImFremdenSystem(P, "READY", um(5), TOKEN, "kit-bot")
+            .rechne();
+
+    Glied glied = einziges(kette, Gliedart.FREIGABE);
+    assertThat(glied.freigegebenVon()).isEqualTo(Akteur.menschGenannt("erika"));
+    assertThat(glied.ausgefuehrtVon()).isEqualTo(Akteur.werkzeug("kit-bot", null));
+    assertThat(glied.zeitpunkt()).isEqualTo(um(2));
+    assertThat(glied.quelle().karte()).isEqualTo(1L);
+    assertThat(glied.einzelheiten())
+        .isEqualTo(new Freigabeangaben(Freigabefall.KENNZEICHEN, um(5)));
+  }
+
+  @Test
+  void freigabe_eigenesBoard_zugOhneLaufkennung_bleibtSelbstDieFreigabe() {
+    Entscheidungskette kette =
+        paket()
+            .label(labelImFremdenSystem(1, "goal:implementation", um(2), SESSION, "erika"))
+            .zugImFremdenSystem(P, "READY", um(5), TOKEN, "kit-bot")
+            .rechne();
+
+    Glied glied = einziges(kette, Gliedart.FREIGABE);
+    assertThat(glied.freigegebenVon()).isEqualTo(Akteur.werkzeug("kit-bot", null));
+    assertThat(((Freigabeangaben) glied.einzelheiten()).fall())
+        .isEqualTo(Freigabefall.ZUG_NACH_READY);
+  }
+
+  @Test
+  void freigabe_fremdesBoard_zugEinesMenschenDort_istSelbstDieFreigabe() {
+    Entscheidungskette kette =
+        paket()
+            .fremdesBoard()
+            .label(labelImFremdenSystem(1, "goal:implementation", um(2), SESSION, "erika"))
+            .zugImFremdenSystem(P, "READY", um(5), SESSION, "max")
+            .rechne();
+
+    Glied glied = einziges(kette, Gliedart.FREIGABE);
+    assertThat(glied.freigegebenVon()).isEqualTo(Akteur.menschGenannt("max"));
+    assertThat(glied.ausgefuehrtVon()).isEqualTo(Akteur.menschGenannt("max"));
+    assertThat(((Freigabeangaben) glied.einzelheiten()).fall())
+        .isEqualTo(Freigabefall.ZUG_NACH_READY);
+  }
+
+  @Test
+  void freigabe_fremdesBoard_ohneFestgehaltenenSetzer_freigeberNichtErfasst() {
+    Entscheidungskette kette =
+        paket()
+            .fremdesBoard()
+            .label(labelImFremdenSystem(1, "goal:implementation", um(2), SESSION, null))
+            .zugImFremdenSystem(P, "READY", um(5), TOKEN, "kit-bot")
+            .rechne();
+
+    Glied glied = einziges(kette, Gliedart.FREIGABE);
+    assertThat(glied.freigegebenVon()).isEqualTo(Akteur.mensch(null));
+    assertThat(((Freigabeangaben) glied.einzelheiten()).fall()).isEqualTo(Freigabefall.KENNZEICHEN);
   }
 }

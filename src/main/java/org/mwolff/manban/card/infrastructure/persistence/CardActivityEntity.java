@@ -43,6 +43,10 @@ class CardActivityEntity {
   @Column(name = "status_after")
   private @Nullable String statusAfter;
 
+  // Benutzer im fremden System (V75, Issue #2165, Plan #2152 A11); nur der Spiegel schreibt ihn.
+  @Column(name = "extern_akteur", insertable = false, updatable = false)
+  private @Nullable String externAkteur;
+
   protected CardActivityEntity() {
     // für JPA
   }
@@ -94,5 +98,9 @@ class CardActivityEntity {
 
   @Nullable String getStatusAfter() {
     return statusAfter;
+  }
+
+  @Nullable String getExternAkteur() {
+    return externAkteur;
   }
 }

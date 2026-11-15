@@ -60,7 +60,8 @@ final class Umsetzungsversuche {
   }
 
   private static @Nullable Akteur zugAkteur(Aktivitaet zug) {
-    return Akteur.nachHerkunft(zug.herkunft(), zug.person(), zug.tokenName(), zug.agent());
+    return Akteur.nachHerkunft(
+        zug.herkunft(), zug.person(), zug.tokenName(), zug.agent(), zug.externAkteur());
   }
 
   /** Der Gang durch Züge und Berichte mit dem gerade offenen Versuch. */

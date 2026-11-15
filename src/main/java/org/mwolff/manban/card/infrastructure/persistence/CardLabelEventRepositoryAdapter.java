@@ -123,7 +123,8 @@ class CardLabelEventRepositoryAdapter implements CardLabelEventRepository {
         e.getCreatedAt(),
         e.getActorUserId(),
         origin(herkunft),
-        herkunft.getTokenName());
+        herkunft.getTokenName(),
+        e.getExternAkteur());
   }
 
   private static @Nullable CardActivityOrigin origin(HerkunftEmbeddable herkunft) {

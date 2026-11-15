@@ -36,6 +36,10 @@ class CardLabelEventEntity {
   @Column(name = "actor_user_id")
   private @Nullable Long actorUserId;
 
+  // Benutzer im fremden System (V75, Issue #2165, Plan #2152 A11); nur der Spiegel schreibt ihn.
+  @Column(name = "extern_akteur", insertable = false, updatable = false)
+  private @Nullable String externAkteur;
+
   protected CardLabelEventEntity() {
     // für JPA
   }
@@ -71,5 +75,9 @@ class CardLabelEventEntity {
 
   @Nullable Long getActorUserId() {
     return actorUserId;
+  }
+
+  @Nullable String getExternAkteur() {
+    return externAkteur;
   }
 }

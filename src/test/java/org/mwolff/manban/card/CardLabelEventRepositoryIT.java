@@ -259,7 +259,8 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
                 GESETZT,
                 userId,
                 CardActivityOrigin.TOKEN,
-                "Nachtlauf"));
+                "Nachtlauf",
+                null));
   }
 
   @Test
@@ -307,6 +308,7 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
                 GESETZT,
                 null,
                 CardActivityOrigin.SESSION,
+                null,
                 null));
   }
 
@@ -322,6 +324,28 @@ class CardLabelEventRepositoryIT extends AbstractIntegrationTest {
     assertThat(events.findMitPerson(List.of(karte)))
         .containsExactly(
             new LabelEreignisMitPerson(
-                zeilenId(karte, "alt"), karte, "alt", GESETZT, null, null, null));
+                zeilenId(karte, "alt"), karte, "alt", GESETZT, null, null, null, null));
+  }
+
+  /**
+   * Ein Ereignis des Spiegels trägt den Benutzer im fremden System (Issue #2165, Plan #2152 A11).
+   */
+  @Test
+  void mitPersonLiefertDenBenutzerImFremdenSystem() {
+    long karte = karte();
+
+    events.addFremd(karte, "goal:implementation", GESETZT, CardActivityOrigin.SESSION, "erika");
+
+    assertThat(events.findMitPerson(List.of(karte)))
+        .containsExactly(
+            new LabelEreignisMitPerson(
+                zeilenId(karte, "goal:implementation"),
+                karte,
+                "goal:implementation",
+                GESETZT,
+                null,
+                CardActivityOrigin.SESSION,
+                null,
+                "erika"));
   }
 }

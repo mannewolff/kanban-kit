@@ -153,6 +153,7 @@ class CardActivityRepositoryAdapter implements CardActivityRepository {
         herkunft.getTokenName(),
         herkunft.getAgent(),
         herkunft.getRunStartedAt(),
-        statusAfter == null ? null : CardStatus.valueOf(statusAfter));
+        statusAfter == null ? null : CardStatus.valueOf(statusAfter),
+        e.getExternAkteur());
   }
 }

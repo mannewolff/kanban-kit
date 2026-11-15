@@ -14,6 +14,8 @@ import org.jspecify.annotations.Nullable;
  *     Nutzers
  * @param origin serververifizierte Herkunft; {@code null} ohne authentifizierten Kontext
  * @param tokenName Name des Zugangs bei Herkunft {@code TOKEN}
+ * @param externAkteur Benutzer im fremden System, der es setzte (Issue #2165, Plan #2152 A11);
+ *     {@code null} bei eigenem Board und ohne Angabe dort
  */
 public record LabelEreignisMitPerson(
     long id,
@@ -22,4 +24,5 @@ public record LabelEreignisMitPerson(
     Instant createdAt,
     @Nullable Long actorUserId,
     @Nullable CardActivityOrigin origin,
-    @Nullable String tokenName) {}
+    @Nullable String tokenName,
+    @Nullable String externAkteur) {}

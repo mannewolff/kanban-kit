@@ -54,6 +54,7 @@ final class KettenAufbau {
   private final List<Kommentar> kommentare = new ArrayList<>();
   private final List<LabelEreignis> labels = new ArrayList<>();
   private @Nullable ReviewVorReady review;
+  private boolean boardImFremdenSystem;
 
   private KettenAufbau(Karte karte) {
     this.geoeffnet = karte;
@@ -170,6 +171,20 @@ final class KettenAufbau {
         new Aktivitaet(kartenId, null, "MOVED", zeit, TOKEN, ZUGANG, AGENT, schluessel, laufStart));
   }
 
+  /** Ein Zug, den das fremde System festhält, mit Herkunft und Benutzer dort (Plan #2152 A11). */
+  KettenAufbau zugImFremdenSystem(
+      long kartenId, @Nullable String schluessel, Instant zeit, String herkunft, String benutzer) {
+    return aktivitaet(
+        new Aktivitaet(
+            kartenId, null, "MOVED", zeit, herkunft, null, null, schluessel, null, benutzer));
+  }
+
+  /** Das Board des Projekts liegt in einem fremden System (Plan #2152 A11). */
+  KettenAufbau fremdesBoard() {
+    this.boardImFremdenSystem = true;
+    return this;
+  }
+
   KettenAufbau label(LabelEreignis e) {
     labels.add(e);
     return this;
@@ -204,7 +219,8 @@ final class KettenAufbau {
         List.copyOf(aktivitaeten),
         List.copyOf(kommentare),
         List.copyOf(labels),
-        review);
+        review,
+        boardImFremdenSystem);
   }
 
   Entscheidungskette rechne() {

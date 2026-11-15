@@ -17,6 +17,9 @@ import org.jspecify.annotations.Nullable;
  * Header {@code Laufkennung.HEADER}, eine Selbstauskunft wie {@code agent} und nur bei
  * Token-Herkunft gesetzt. {@code statusAfter} ist der Status der Karte nach einer Bewegung.
  * Einträge vor V47 tragen in beiden {@code null}.
+ *
+ * <p>Fremdes Board (Issue #2165, Plan #2152 A11): {@code externAkteur} ist der Benutzer im fremden
+ * System, den der Spiegel festhält; bei eigenem Board und ohne Angabe dort {@code null}.
  */
 public record CardActivity(
     @Nullable Long id,
@@ -29,4 +32,34 @@ public record CardActivity(
     @Nullable String tokenName,
     @Nullable String agent,
     @Nullable Instant laufStart,
-    @Nullable CardStatus statusAfter) {}
+    @Nullable CardStatus statusAfter,
+    @Nullable String externAkteur) {
+
+  /** Ein Eintrag ohne Benutzer im fremden System. */
+  public CardActivity(
+      @Nullable Long id,
+      long cardId,
+      @Nullable Long actorUserId,
+      CardActivityType type,
+      String detail,
+      Instant createdAt,
+      @Nullable CardActivityOrigin origin,
+      @Nullable String tokenName,
+      @Nullable String agent,
+      @Nullable Instant laufStart,
+      @Nullable CardStatus statusAfter) {
+    this(
+        id,
+        cardId,
+        actorUserId,
+        type,
+        detail,
+        createdAt,
+        origin,
+        tokenName,
+        agent,
+        laufStart,
+        statusAfter,
+        null);
+  }
+}
