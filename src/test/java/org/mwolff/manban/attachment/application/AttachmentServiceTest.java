@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -17,12 +18,15 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mwolff.manban.attachment.domain.Attachment;
 import org.mwolff.manban.card.application.CardNotFoundException;
 import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.project.application.BoardQuelle;
+import org.mwolff.manban.project.application.FremdesBoardException;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectNotFoundException;
 import org.mwolff.manban.project.domain.Permission;
@@ -39,6 +43,7 @@ class AttachmentServiceTest {
   private CardService cardService;
   private PermissionChecker permissions;
   private BlobDeletionScheduler blobDeletion;
+  private BoardQuelle boardQuelle;
   private AttachmentService service;
 
   private static Attachment attachment() {
@@ -54,6 +59,7 @@ class AttachmentServiceTest {
     cardService = mock(CardService.class);
     permissions = mock(PermissionChecker.class);
     blobDeletion = mock(BlobDeletionScheduler.class);
+    boardQuelle = mock(BoardQuelle.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         new AttachmentService(
@@ -64,7 +70,8 @@ class AttachmentServiceTest {
             cardService,
             permissions,
             blobDeletion,
-            clock);
+            clock,
+            boardQuelle);
   }
 
   private void cardResolves() {
@@ -197,7 +204,8 @@ class AttachmentServiceTest {
             cardService,
             permissions,
             blobDeletion,
-            Clock.fixed(FIXED, ZoneOffset.UTC));
+            Clock.fixed(FIXED, ZoneOffset.UTC),
+            boardQuelle);
     cardResolves();
     when(attachments.countByCardId(5L)).thenReturn(1L);
 
@@ -379,6 +387,51 @@ class AttachmentServiceTest {
     // When / Then
     assertThatThrownBy(() -> service.delete(1L, 7L))
         .isInstanceOf(AttachmentNotFoundException.class);
+  }
+
+  @Test
+  @DisplayName("Anhang hochladen wird bei fremdem Board nach der Rechteprüfung abgewiesen")
+  void upload_lehntBeiFremdemBoardNachDerRechtepruefungAb() {
+    // Given: Issue #2164, Plan #2152 A10
+    cardResolves();
+    doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(1L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.upload(1L, 5L, "note.txt", new byte[] {1, 2, 3}))
+        .isInstanceOf(FremdesBoardException.class);
+    InOrder reihenfolge = inOrder(permissions, boardQuelle);
+    reihenfolge.verify(permissions).require(1L, 1L, Permission.ATTACHMENT_CREATE);
+    reihenfolge.verify(boardQuelle).pruefeSchreibbar(1L);
+    verify(attachments, never()).save(any(Attachment.class));
+    verify(storage, never()).put(any(), any(), any());
+  }
+
+  @Test
+  @DisplayName("Anhang löschen wird bei fremdem Board nach der Rechteprüfung abgewiesen")
+  void delete_lehntBeiFremdemBoardNachDerRechtepruefungAb() {
+    // Given
+    cardResolves();
+    when(attachments.findById(7L)).thenReturn(Optional.of(attachment()));
+    doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(1L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.delete(1L, 7L)).isInstanceOf(FremdesBoardException.class);
+    InOrder reihenfolge = inOrder(permissions, boardQuelle);
+    reihenfolge.verify(permissions).require(1L, 1L, Permission.ATTACHMENT_DELETE);
+    reihenfolge.verify(boardQuelle).pruefeSchreibbar(1L);
+    verify(blobDeletion, never()).scheduleDelete(any());
+    verify(attachments, never()).deleteById(7L);
+  }
+
+  @Test
+  void lesenBleibtBeiFremdemBoardMoeglich() {
+    // Given: Die Sperre trifft nur das Schreiben.
+    cardResolves();
+    doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(1L);
+    when(attachments.findByCardId(5L)).thenReturn(List.of(attachment()));
+
+    // When / Then
+    assertThat(service.list(1L, 5L)).hasSize(1);
   }
 
   /** Simuliert die DB: vergibt beim ersten Speichern eine ID (Issue #0080). */

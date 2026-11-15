@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 import org.mwolff.manban.attachment.domain.Attachment;
 import org.mwolff.manban.card.application.CardService;
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Die frühere Auflösung über das Board (gelöschtes {@code projectIdOfCard}) lieferte in diesem
  * Fall 404 bzw. 500 und machte Anhänge zum einzigen Ausreißer gegenüber {@code CommentService}, der
  * schon immer projekt-basiert prüft.
+ *
+ * <p>Schreibsperre bei fremdem Board (Issue #2164, Plan #2152 A10): Hochladen und Löschen lehnen
+ * nach der Rechteprüfung mit {@link org.mwolff.manban.project.application.FremdesBoardException}
+ * ab, wenn das Board des Projekts in einem fremden System liegt; Lesen bleibt möglich.
  */
 @Service
 public class AttachmentService {
@@ -44,6 +49,7 @@ public class AttachmentService {
   private final PermissionChecker permissions;
   private final BlobDeletionScheduler blobDeletion;
   private final Clock clock;
+  private final BoardQuelle boardQuelle;
 
   public AttachmentService(
       AttachmentRepository attachments,
@@ -53,7 +59,8 @@ public class AttachmentService {
       CardService cardService,
       PermissionChecker permissions,
       BlobDeletionScheduler blobDeletion,
-      Clock clock) {
+      Clock clock,
+      BoardQuelle boardQuelle) {
     this.attachments = attachments;
     this.storage = storage;
     this.contentTypeDetector = contentTypeDetector;
@@ -62,11 +69,14 @@ public class AttachmentService {
     this.permissions = permissions;
     this.blobDeletion = blobDeletion;
     this.clock = clock;
+    this.boardQuelle = boardQuelle;
   }
 
   @Transactional
   public AttachmentView upload(long userId, long cardId, String filename, byte[] content) {
-    permissions.require(userId, cardService.requireProjectId(cardId), Permission.ATTACHMENT_CREATE);
+    long projectId = cardService.requireProjectId(cardId);
+    permissions.require(userId, projectId, Permission.ATTACHMENT_CREATE);
+    boardQuelle.pruefeSchreibbar(projectId);
     if (attachments.countByCardId(cardId) >= properties.maxPerCard()) {
       throw new AttachmentLimitExceededException(properties.maxPerCard());
     }
@@ -128,8 +138,9 @@ public class AttachmentService {
   public void delete(long userId, long attachmentId) {
     Attachment attachment =
         attachments.findById(attachmentId).orElseThrow(AttachmentNotFoundException::new);
-    permissions.require(
-        userId, cardService.requireProjectId(attachment.cardId()), Permission.ATTACHMENT_DELETE);
+    long projectId = cardService.requireProjectId(attachment.cardId());
+    permissions.require(userId, projectId, Permission.ATTACHMENT_DELETE);
+    boardQuelle.pruefeSchreibbar(projectId);
     // Metadaten sofort, den Blob über die Outbox nachziehen (Issue #503): Löschte man den Blob
     // direkt und bräche der DB-Teil danach ab, zeigte die verbliebene Metadaten-Zeile auf ein
     // nicht mehr existierendes Objekt — der Download endete im Speicherfehler. So herum ist der

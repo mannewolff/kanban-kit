@@ -24,6 +24,7 @@ import org.mwolff.manban.card.application.EpicService;
 import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.comment.application.CommentNotFoundException;
 import org.mwolff.manban.comment.application.CommentService;
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,14 @@ import org.springframework.transaction.annotation.Transactional;
  * „nicht bereit, nicht fertig" und werden unter BACKLOG gemeldet. Sonst würde eine eigene Spalte
  * allein durch ihre Position einen Zustand behaupten, den ihr niemand gegeben hat — eine Karte in
  * „Anstehend" wäre für die Automatisierung freigegeben, eine in „Zurückgestellt" erledigt (#697).
+ *
+ * <p>Schreibsperre bei fremdem Board (Issue #2164, Plan #2152 A10): Jeder schreibende Aufruf lehnt
+ * mit {@link org.mwolff.manban.project.application.FremdesBoardException} (409) ab, wenn das Board
+ * des Projekts in einem fremden System liegt — auch für den Zugang der Desktop-App, die dann dort
+ * antwortet. Geprüft wird nach der Board-Grenze, damit eine Karte außerhalb des gebundenen Boards
+ * weiter 404 ergibt, und vor dem Idempotenz-Schlüssel, damit eine Ablehnung nichts festhält.
+ * Durchläufe und Kosten ({@code /api/kanban/night-runs}) liegen in einem anderen Modul und bleiben
+ * offen.
  */
 // PMD.CouplingBetweenObjects: Übersetzungsschicht einer fremden API auf vier Fach-Fassaden (Board,
 // Karte, Label, Kommentar) samt deren View-Typen und den Response-Records des Protokolls. Seit
@@ -66,6 +75,7 @@ public class KanbanCompatService {
   private final LabelService labelService;
   private final CommentService commentService;
   private final IdempotencyGuard idempotency;
+  private final BoardQuelle boardQuelle;
 
   public KanbanCompatService(
       BoardService boardService,
@@ -75,7 +85,8 @@ public class KanbanCompatService {
       EpicService epicService,
       LabelService labelService,
       CommentService commentService,
-      IdempotencyGuard idempotency) {
+      IdempotencyGuard idempotency,
+      BoardQuelle boardQuelle) {
     this.boardService = boardService;
     this.cardService = cardService;
     this.ingest = ingest;
@@ -84,6 +95,18 @@ public class KanbanCompatService {
     this.labelService = labelService;
     this.commentService = commentService;
     this.idempotency = idempotency;
+    this.boardQuelle = boardQuelle;
+  }
+
+  /**
+   * Lehnt ab, wenn das Projekt des gebundenen Boards ein fremdes Board hat (Issue #2164).
+   *
+   * @return die Projekt-ID des gebundenen Boards
+   */
+  private long pruefeSchreibbar(long boardId) {
+    long projectId = boardService.requireProjectId(boardId);
+    boardQuelle.pruefeSchreibbar(projectId);
+    return projectId;
   }
 
   /**
@@ -170,7 +193,7 @@ public class KanbanCompatService {
       @Nullable Integer derivedFrom,
       @Nullable String idempotencyKey) {
     long boardId = requireBound(principal);
-    long projectId = boardService.requireProjectId(boardId);
+    long projectId = pruefeSchreibbar(boardId);
     String key = normalizeExternalKey(externalKey);
     NeueKarte neu = new NeueKarte(title, body, column, key, direct, number, derivedFrom);
     String idempotent = key == null ? normalizeIdempotencyKey(idempotencyKey) : null;
@@ -233,6 +256,7 @@ public class KanbanCompatService {
       KanbanPrincipal principal, long cardId, @Nullable List<Integer> dependsOn) {
     long boardId = requireBound(principal);
     long projectId = boardService.requireProjectId(boardId);
+    boardQuelle.pruefeSchreibbar(projectId);
     ingest.replaceDependenciesFromIngest(principal.userId(), cardId, projectId, dependsOn);
   }
 
@@ -328,6 +352,7 @@ public class KanbanCompatService {
   public void move(KanbanPrincipal principal, long cardId, String column, int position) {
     long boardId = requireBound(principal);
     ingest.requireOnBoard(cardId, boardId);
+    pruefeSchreibbar(boardId);
     if (cardService.getCard(principal.userId(), cardId).status() != null) {
       // Die Kanban-Keys sind zugleich die Statusnamen der card-Fassade (E24).
       moveService.setStatus(principal.userId(), cardId, requireKanbanKey(column));
@@ -353,6 +378,7 @@ public class KanbanCompatService {
   public Item update(KanbanPrincipal principal, long cardId, String title, @Nullable String body) {
     long boardId = requireBound(principal);
     ingest.requireOnBoard(cardId, boardId);
+    pruefeSchreibbar(boardId);
     return item(boardId, ingest.updateContent(principal.userId(), cardId, title, body));
   }
 
@@ -372,6 +398,7 @@ public class KanbanCompatService {
   public void addLabel(KanbanPrincipal principal, long cardId, String name) {
     long boardId = requireBound(principal);
     ingest.requireOnBoard(cardId, boardId);
+    pruefeSchreibbar(boardId);
     labelService.addToCard(principal.userId(), cardId, name);
   }
 
@@ -380,6 +407,7 @@ public class KanbanCompatService {
   public void removeLabel(KanbanPrincipal principal, long cardId, String name) {
     long boardId = requireBound(principal);
     ingest.requireOnBoard(cardId, boardId);
+    pruefeSchreibbar(boardId);
     labelService.removeFromCard(principal.userId(), cardId, name);
   }
 
@@ -400,6 +428,7 @@ public class KanbanCompatService {
       @Nullable Instant laufStart) {
     long boardId = requireBound(principal);
     ingest.requireOnBoard(cardId, boardId);
+    pruefeSchreibbar(boardId);
     String idempotent = normalizeIdempotencyKey(idempotencyKey);
     if (idempotent == null) {
       commentService.create(principal.userId(), cardId, body, laufStart);
@@ -460,6 +489,7 @@ public class KanbanCompatService {
       @Nullable Instant laufStart) {
     long boardId = requireBound(principal);
     ingest.requireOnBoard(cardId, boardId);
+    pruefeSchreibbar(boardId);
     boolean onCard =
         commentService.list(principal.userId(), cardId).stream().anyMatch(c -> c.id() == commentId);
     if (!onCard) {

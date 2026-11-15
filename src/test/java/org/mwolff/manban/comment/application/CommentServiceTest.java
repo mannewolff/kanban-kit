@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.auth.application.UserSummary;
 import org.mwolff.manban.card.application.ActorContext;
@@ -34,6 +36,7 @@ import org.mwolff.manban.comment.application.CommentService.SpiegelNotiz;
 import org.mwolff.manban.comment.domain.Comment;
 import org.mwolff.manban.comment.domain.LaufKommentar;
 import org.mwolff.manban.project.application.BoardQuelle;
+import org.mwolff.manban.project.application.FremdesBoardException;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
@@ -1068,6 +1071,83 @@ class CommentServiceTest {
     assertThatThrownBy(() -> service.spiegelGeloescht(5L, "501", NOTIZ_GEAENDERT))
         .isInstanceOf(IllegalStateException.class);
     verify(comments, never()).findByCardIdAndExternKennung(5L, "501");
+  }
+
+  @Test
+  @DisplayName("Kommentar anlegen wird bei fremdem Board nach der Rechteprüfung abgewiesen")
+  void create_lehntBeiFremdemBoardNachDerRechtepruefungAb() {
+    // Given: Issue #2164, Plan #2152 A10
+    doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(1L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.create(1L, 5L, "Hallo", LAUF))
+        .isInstanceOf(FremdesBoardException.class);
+    InOrder reihenfolge = inOrder(permissions, boardQuelle);
+    reihenfolge.verify(permissions).require(1L, 1L, Permission.COMMENT_CREATE);
+    reihenfolge.verify(boardQuelle).pruefeSchreibbar(1L);
+    verify(comments, never()).save(any(Comment.class));
+  }
+
+  @Test
+  void create_ohneRechtErfaehrtNichtsVomFremdenBoard() {
+    // Given: Wer nicht schreiben darf, sieht 403/404 und erfährt nicht, wo das Board liegt.
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .require(1L, 1L, Permission.COMMENT_CREATE);
+
+    // When / Then
+    assertThatThrownBy(() -> service.create(1L, 5L, "Hallo"))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(boardQuelle, never()).pruefeSchreibbar(1L);
+  }
+
+  @Test
+  @DisplayName("Kommentar ändern wird bei fremdem Board abgewiesen")
+  void update_lehntBeiFremdemBoardAb() {
+    // Given
+    when(comments.findById(3L)).thenReturn(Optional.of(comment(1L)));
+    doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(1L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.update(1L, 3L, "Neu", LAUF))
+        .isInstanceOf(FremdesBoardException.class);
+    InOrder reihenfolge = inOrder(permissions, boardQuelle);
+    reihenfolge.verify(permissions).require(1L, 1L, Permission.COMMENT_UPDATE);
+    reihenfolge.verify(boardQuelle).pruefeSchreibbar(1L);
+    verify(comments, never()).save(any(Comment.class));
+  }
+
+  @Test
+  @DisplayName("Kommentar löschen wird bei fremdem Board abgewiesen")
+  void delete_lehntBeiFremdemBoardAb() {
+    // Given
+    when(comments.findById(3L)).thenReturn(Optional.of(comment(1L)));
+    doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(1L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.delete(1L, 3L)).isInstanceOf(FremdesBoardException.class);
+    InOrder reihenfolge = inOrder(permissions, boardQuelle);
+    reihenfolge.verify(permissions).require(1L, 1L, Permission.COMMENT_DELETE);
+    reihenfolge.verify(boardQuelle).pruefeSchreibbar(1L);
+    verify(comments, never()).deleteById(3L);
+  }
+
+  @Test
+  void spiegeln_umgehtDieSchreibsperre() {
+    // Given: Der Spiegel ist der eine Schreibweg, der bei fremdem Board schreiben darf.
+    when(boardQuelle.istFremd(1L)).thenReturn(true);
+    when(comments.findByCardIdAndExternKennung(5L, "501")).thenReturn(Optional.empty());
+    when(comments.save(any(Comment.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    service.spiegeln(
+        5L,
+        new SpiegelNotiz(
+            "501", new FremderAkteur("Ada", false), "Text", NOTIZ_GEAENDERT, NOTIZ_GEAENDERT));
+
+    // Then
+    verify(boardQuelle, never()).pruefeSchreibbar(1L);
+    verify(comments).save(any(Comment.class));
   }
 
   private Comment aendereUndFange(String body) {

@@ -25,6 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
  * Kommentar-Use-Cases. Anlegen erfordert COMMENT_CREATE. <b>Bearbeiten</b> darf nur der Autor
  * selbst (COMMENT_UPDATE; auch ein Admin/Owner nicht fremde Kommentare). <b>Löschen</b> ist
  * Moderation und nur Projekt-ADMIN/OWNER vorbehalten (COMMENT_DELETE).
+ *
+ * <p>Schreibsperre bei fremdem Board (Issue #2164, Plan #2152 A10): Anlegen, Ändern und Löschen
+ * lehnen nach der Rechteprüfung mit {@link
+ * org.mwolff.manban.project.application.FremdesBoardException} ab, wenn das Board des Projekts in
+ * einem fremden System liegt. Allein der Spiegel-Schreibweg ({@link #spiegeln}, {@link
+ * #spiegelGeloescht}) schreibt dann noch.
  */
 @Service
 public class CommentService {
@@ -75,6 +81,7 @@ public class CommentService {
   private CommentView anlegen(long userId, long cardId, String body, @Nullable Instant laufStart) {
     long projectId = cardService.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.COMMENT_CREATE);
+    boardQuelle.pruefeSchreibbar(projectId);
     String authorName = users.findById(userId).map(UserSummary::displayName).orElse(UNBEKANNT);
     Instant now = clock.instant();
     // Herkunft aus derselben Quelle wie der Verlauf (Issue #1620, A4); ohne Stempel bleibt sie
@@ -187,8 +194,9 @@ public class CommentService {
   private CommentView aendern(
       long userId, long commentId, String body, @Nullable Instant laufStart) {
     Comment comment = comments.findById(commentId).orElseThrow(CommentNotFoundException::new);
-    permissions.require(
-        userId, cardService.requireProjectId(comment.cardId()), Permission.COMMENT_UPDATE);
+    long projectId = cardService.requireProjectId(comment.cardId());
+    permissions.require(userId, projectId, Permission.COMMENT_UPDATE);
+    boardQuelle.pruefeSchreibbar(projectId);
     // Bearbeiten darf nur der Autor selbst — auch ein Admin/Owner nicht fremde Kommentare.
     Long author = comment.authorUserId();
     if (author == null || author != userId) {
@@ -203,8 +211,9 @@ public class CommentService {
   public void delete(long userId, long commentId) {
     Comment comment = comments.findById(commentId).orElseThrow(CommentNotFoundException::new);
     // Löschen ist Moderation: nur Projekt-ADMIN/OWNER (COMMENT_DELETE), nicht der Autor allein.
-    permissions.require(
-        userId, cardService.requireProjectId(comment.cardId()), Permission.COMMENT_DELETE);
+    long projectId = cardService.requireProjectId(comment.cardId());
+    permissions.require(userId, projectId, Permission.COMMENT_DELETE);
+    boardQuelle.pruefeSchreibbar(projectId);
     comments.deleteById(comment.requireId());
   }
 
