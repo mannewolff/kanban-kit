@@ -25,6 +25,7 @@ import org.mwolff.manban.card.application.CardIngestService.DirectCard;
 import org.mwolff.manban.card.application.CardMoveService;
 import org.mwolff.manban.card.application.CardService;
 import org.mwolff.manban.card.application.DoneRetentionService;
+import org.mwolff.manban.card.application.FlussZeitpunkt;
 import org.mwolff.manban.kanbancompat.application.KanbanCompatService;
 import org.mwolff.manban.project.application.ProjectService;
 import org.mwolff.manban.ratelimit.MutableClock;
@@ -33,6 +34,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Erfassung der Zustandsaufenthalte im {@code CardRepositoryAdapter} (Issue #1768, Plan #1765 E2,
@@ -58,6 +60,7 @@ class FlussErfassungIT extends AbstractIntegrationTest {
   @Autowired private DoneRetentionService doneRetention;
   @Autowired private JdbcTemplate jdbc;
   @Autowired private MutableClock uhr;
+  @Autowired private TransactionTemplate transaktion;
 
   private long owner;
   private long projectId;
@@ -101,6 +104,99 @@ class FlussErfassungIT extends AbstractIntegrationTest {
     long karte = anlegen(board, "In Review", "[Requirement] Story");
 
     assertThat(aufenthalte(karte)).isEmpty();
+    invariante(karte);
+  }
+
+  // --- Zeitpunkt von außen (Issue #2159, Plan #2152 A4) -----------------------------------------
+
+  @Test
+  void anlegenMitVorgabe_eintrittUndAngelegtAmSindDieVorgabe() {
+    BoardView board = board("B");
+    weiter();
+    Instant vorgabe = uhr.instant().minus(Duration.ofHours(3));
+
+    Long karte =
+        transaktion.execute(
+            status -> {
+              FlussZeitpunkt.setze(vorgabe);
+              return cardService
+                  .create(owner, board.id(), spalte(board, "Backlog"), "Paket", null, null, null)
+                  .id();
+            });
+
+    assertThat(createdAt(karte)).isEqualTo(vorgabe);
+    assertThat(aufenthalte(karte))
+        .containsExactly(new Aufenthalt(board.id(), "BACKLOG", vorgabe, null, true, null));
+    invariante(karte);
+  }
+
+  @Test
+  void vorgabeNachDemAnlegen_bestimmtDenEintrittDerNeuenKarte() {
+    BoardView board = board("B");
+    weiter();
+    Instant angelegt = uhr.instant();
+    Instant vorgabe = angelegt.minus(Duration.ofHours(2));
+
+    Long karte =
+        transaktion.execute(
+            status -> {
+              long id =
+                  cardService
+                      .create(
+                          owner, board.id(), spalte(board, "Backlog"), "Paket", null, null, null)
+                      .id();
+              FlussZeitpunkt.setze(vorgabe);
+              return id;
+            });
+
+    assertThat(createdAt(karte)).isEqualTo(angelegt);
+    assertThat(aufenthalte(karte))
+        .containsExactly(new Aufenthalt(board.id(), "BACKLOG", vorgabe, null, true, null));
+    invariante(karte);
+  }
+
+  @Test
+  void verschiebenMitVorgabe_schliesstUndOeffnetZumZeitpunktDerVorgabe() {
+    BoardView board = board("B");
+    long karte = anlegen(board, "Backlog", "Paket");
+    Instant angelegt = uhr.instant();
+    Instant vorgabe = angelegt.plusSeconds(30);
+    weiter();
+
+    transaktion.execute(
+        status -> {
+          FlussZeitpunkt.setze(vorgabe);
+          return moves.move(owner, karte, spalte(board, "Ready"), 0);
+        });
+
+    assertThat(aufenthalte(karte))
+        .containsExactly(
+            new Aufenthalt(board.id(), "BACKLOG", angelegt, vorgabe, true, "STATUS"),
+            new Aufenthalt(board.id(), "READY", vorgabe, null, true, null));
+    invariante(karte);
+  }
+
+  @Test
+  void nachDerTransaktionMitVorgabe_stempeltDieUhr() {
+    BoardView board = board("B");
+    long karte = anlegen(board, "Backlog", "Paket");
+    Instant angelegt = uhr.instant();
+    Instant vorgabe = angelegt.plusSeconds(30);
+    weiter();
+    transaktion.execute(
+        status -> {
+          FlussZeitpunkt.setze(vorgabe);
+          return moves.move(owner, karte, spalte(board, "Ready"), 0);
+        });
+
+    Instant gezogen = weiter();
+    moves.move(owner, karte, spalte(board, "In Progress"), 0);
+
+    assertThat(aufenthalte(karte))
+        .containsExactly(
+            new Aufenthalt(board.id(), "BACKLOG", angelegt, vorgabe, true, "STATUS"),
+            new Aufenthalt(board.id(), "READY", vorgabe, gezogen, true, "STATUS"),
+            new Aufenthalt(board.id(), "IN_PROGRESS", gezogen, null, true, null));
     invariante(karte);
   }
 

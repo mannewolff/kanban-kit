@@ -149,7 +149,8 @@ public final class KartenGrundlage {
 
     int number = givenNumber != null ? givenNumber : cards.allocateCardNumber(projectId);
     int position = cards.allocateActivePosition(columnId);
-    Instant now = clock.instant();
+    // Ein Zeitpunkt von außen (Issue #2159) gilt für Anlage und ersten Spalteneintrag gleich.
+    Instant now = FlussZeitpunkt.jetzt(clock);
     Card neu =
         new Card(
             null,

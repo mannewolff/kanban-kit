@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.mwolff.manban.card.application.CardFlowStayRepository;
+import org.mwolff.manban.card.application.FlussZeitpunkt;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.FlussStay.EndedBy;
 import org.mwolff.manban.card.domain.Flusslage;
@@ -29,7 +30,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * So entsteht kein Nullaufenthalt, wenn ein Weg wie {@code transfer} Board und Zustand in zwei
  * Zugriffen setzt. Ein Wechsel entsteht nur, wenn sich Zustand, Board oder Fluss-Zugehörigkeit
  * ändern (E4); gestempelt wird mit der injizierten {@link Clock}, ein neu angelegtes Paket mit
- * seinem {@code created_at}.
+ * seinem {@code created_at}. Trägt die Transaktion einen Zeitpunkt von außen ({@link
+ * FlussZeitpunkt}, Issue #2159), gilt er für Aufenthalte und Eintritt einer neuen Karte.
  *
  * <p>Gelesen wird per JDBC, nicht über JPA: {@code move}, {@code transfer}, {@code softDelete} und
  * {@code restoreFromTrash} schreiben am Persistenzkontext vorbei. Den JPA-Merge aus {@code save}
@@ -133,9 +135,14 @@ class FlussErfassung {
     @Override
     public void beforeCommit(boolean readOnly) {
       entityManager.flush();
-      Instant jetzt = clock.instant();
+      Optional<Instant> vorgabe = FlussZeitpunkt.vorgabe();
+      Instant jetzt = vorgabe.orElseGet(clock::instant);
       for (Map.Entry<Long, Optional<Flusslage>> karte : new ArrayList<>(vorher.entrySet())) {
-        schreibe(karte.getKey(), karte.getValue(), neu.contains(karte.getKey()), jetzt);
+        schreibe(
+            karte.getKey(),
+            karte.getValue(),
+            neu.contains(karte.getKey()) && vorgabe.isEmpty(),
+            jetzt);
       }
     }
 
@@ -146,10 +153,11 @@ class FlussErfassung {
 
     /**
      * Schreibt den Wechsel einer Karte. Eine endgültig gelöschte Karte hat keine Zeile mehr — ihre
-     * Aufenthalte nimmt die Cascade, hier bleibt nichts zu tun.
+     * Aufenthalte nimmt die Cascade, hier bleibt nichts zu tun. Mit {@code eintrittAngelegtAm}
+     * beginnt der neue Aufenthalt zum {@code created_at} der Karte, sonst zu {@code jetzt}.
      */
     private void schreibe(
-        long cardId, Optional<Flusslage> lageVorher, boolean angelegt, Instant jetzt) {
+        long cardId, Optional<Flusslage> lageVorher, boolean eintrittAngelegtAm, Instant jetzt) {
       Optional<Zeile> zeile = zeile(cardId);
       Optional<Flusslage> nachher = zeile.flatMap(Zeile::lage);
       if (lageVorher.equals(nachher)) {
@@ -157,7 +165,7 @@ class FlussErfassung {
       }
       lageVorher.ifPresent(v -> aufenthalte.close(cardId, jetzt, grund(v, nachher)));
       if (nachher.isPresent()) {
-        Instant eintritt = angelegt ? zeile.get().createdAt() : jetzt;
+        Instant eintritt = eintrittAngelegtAm ? zeile.get().createdAt() : jetzt;
         aufenthalte.open(cardId, nachher.get(), eintritt);
       }
     }

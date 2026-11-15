@@ -37,6 +37,8 @@ import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Verhaltenstests von Verschieben, Status und Umzug (Mockito an den Ports). Die Testmethoden
@@ -50,10 +52,13 @@ import org.springframework.context.ApplicationEventPublisher;
 // KartenSicht echt brauchen (Plan #1387, E6), wie in CardArchiveServiceTest. Ein Mock der
 // Bausteine senkte die Kopplung, ließe Abdeckung und Mutationsprüfung der Helfer aber ins Leere
 // laufen.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.CouplingBetweenObjects"})
+// PMD.CyclomaticComplexity: die Summe vieler kleiner Testmethoden, keine verzweigte Einzelmethode —
+// die Fälle mit einem Zeitpunkt von außen (Issue #2159) gehören zu denselben Verschiebe-Regeln.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CouplingBetweenObjects", "PMD.CyclomaticComplexity"})
 class CardMoveServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
+  private static final Instant VORGABE = Instant.parse("2025-12-24T18:00:00Z");
   private static final long BOARD = 10L;
   private static final long PROJECT = 1L;
 
@@ -1203,5 +1208,92 @@ class CardMoveServiceTest {
 
     assertThatThrownBy(() -> service.setStatus(1L, 5L, "READY"))
         .isInstanceOf(CardNotFoundException.class);
+  }
+
+  // --- Zeitpunkt von außen (Issue #2159, Plan #2152 A4) ---------------
+
+  /**
+   * Führt {@code schritt} wie in einer Transaktion aus, in der {@link FlussZeitpunkt} die Vorgabe
+   * trägt, und beendet die Transaktion danach — so wie es der Transaktionsmanager täte.
+   */
+  private static void mitVorgabe(Runnable schritt) {
+    TransactionSynchronizationManager.initSynchronization();
+    try {
+      FlussZeitpunkt.setze(VORGABE);
+      schritt.run();
+    } finally {
+      TransactionSynchronizationManager.getSynchronizations()
+          .forEach(s -> s.afterCompletion(TransactionSynchronization.STATUS_COMMITTED));
+      TransactionSynchronizationManager.clearSynchronization();
+    }
+  }
+
+  @Test
+  void move_mitVorgabe_stempeltSpaltenwechselAktivitaetUndDoneMitDerVorgabe() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Done", 4));
+
+    mitVorgabe(() -> service.move(9L, 1L, 21L, 0));
+
+    InOrder order = inOrder(transitions);
+    order.verify(transitions).closeOpen(1L, VORGABE);
+    order.verify(transitions).open(1L, 21L, "Done", VORGABE);
+    verify(activity)
+        .add(
+            1L,
+            9L,
+            CardActivityType.MOVED,
+            "Verschoben nach Done",
+            VORGABE,
+            ActorContext.ActorStamp.unknown(),
+            CardStatus.DONE);
+    assertThat(gespeichert().movedToDoneAt()).isEqualTo(VORGABE);
+  }
+
+  @Test
+  void move_nachEinerTransaktionMitVorgabe_stempeltWiederMitDerUhr() {
+    when(cards.findById(1L))
+        .thenReturn(Optional.of(card(1L, 20L, 1, false, null, CardType.CARD, null, null)));
+    when(boardService.requireColumn(21L, BOARD)).thenReturn(column(21L, "Ready", 1));
+    mitVorgabe(() -> {});
+
+    service.move(9L, 1L, 21L, 0);
+
+    verify(transitions).closeOpen(1L, FIXED);
+    verify(transitions).open(1L, 21L, "Ready", FIXED);
+  }
+
+  @Test
+  void setStatus_mitVorgabe_stempeltAufenthaltAktivitaetUndDoneMitDerVorgabe() {
+    when(cards.findById(5L))
+        .thenReturn(Optional.of(paket(5L, "Paket", CardType.CARD, CardStatus.IN_REVIEW)));
+
+    mitVorgabe(() -> service.setStatus(1L, 5L, "DONE"));
+
+    InOrder reihenfolge = inOrder(transitions);
+    reihenfolge.verify(transitions).closeOpen(5L, VORGABE);
+    reihenfolge.verify(transitions).open(5L, 20L, "Done", VORGABE);
+    verify(activity)
+        .add(
+            5L,
+            1L,
+            CardActivityType.STATUS_CHANGED,
+            "Status auf Done",
+            VORGABE,
+            ActorContext.ActorStamp.unknown(),
+            CardStatus.DONE);
+    assertThat(gespeichert().movedToDoneAt()).isEqualTo(VORGABE);
+  }
+
+  @Test
+  void transfer_mitVorgabe_stempeltDenSpaltenwechselMitDerVorgabe() {
+    stubTransferScenario(null);
+
+    mitVorgabe(() -> service.transfer(1L, 100L, 20L, 60L));
+
+    InOrder order = inOrder(transitions);
+    order.verify(transitions).closeOpen(100L, VORGABE);
+    order.verify(transitions).open(100L, 60L, "Backlog", VORGABE);
   }
 }

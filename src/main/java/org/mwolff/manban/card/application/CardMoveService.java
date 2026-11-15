@@ -28,7 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Karten — einzeln oder gesammelt — auf ein anderes Board umziehen. Transaktionen, Sperren,
  * Rechteprüfung, Spaltenverlauf und Ereignisse sind unverändert die aus {@link CardService} (E3);
  * die Abhängigkeiten einer Karte, die das Projekt wechselt, räumt {@link KartenAbhaengigkeiten}
- * (E11).
+ * (E11). Gestempelt wird mit der Uhr, oder mit dem Zeitpunkt von außen, den die Transaktion in
+ * {@link FlussZeitpunkt} trägt (Issue #2159).
  */
 @Service
 public class CardMoveService {
@@ -95,7 +96,7 @@ public class CardMoveService {
     // Spaltenverlauf: nur bei echtem Spaltenwechsel (kein Eintrag bei reinem Reindex). Ein einziger
     // Zeitstempel schließt die verlassene und eröffnet die Ziel-Spalte lückenlos.
     long fromColumn = card.columnId();
-    Instant switchedAt = clock.instant();
+    Instant switchedAt = FlussZeitpunkt.jetzt(clock);
     if (fromColumn != targetColumnId) {
       transitions.closeOpen(cardId, switchedAt);
       transitions.open(cardId, targetColumnId, target.name(), switchedAt);
@@ -122,7 +123,9 @@ public class CardMoveService {
     // Prüfung.
     CardView result =
         sicht.view(
-            cards.save(moved.withMovedToDoneAt(doneStempel(moved, target.name(), clock.instant()))),
+            cards.save(
+                moved.withMovedToDoneAt(
+                    doneStempel(moved, target.name(), FlussZeitpunkt.jetzt(clock)))),
             true);
     grundlage.publishChanged(card.boardId(), ActivityType.MOVED, cardId);
     return result;
@@ -179,7 +182,7 @@ public class CardMoveService {
       doMove(userId, cardId, prozessspalte.get().id().longValue(), POSITION_AM_ENDE);
       return;
     }
-    Instant jetzt = clock.instant();
+    Instant jetzt = FlussZeitpunkt.jetzt(clock);
     Card gesetzt = card.withStatus(neu);
     // Bei einem Arbeitspaket entscheidet allein der Status über Done — die Spalte geht nicht ein.
     cards.save(gesetzt.withMovedToDoneAt(doneStempel(gesetzt, null, jetzt)));
@@ -304,7 +307,7 @@ public class CardMoveService {
     }
 
     // Spaltenverlauf: der board-/spaltenübergreifende Umzug zählt als Spaltenwechsel.
-    Instant switchedAt = clock.instant();
+    Instant switchedAt = FlussZeitpunkt.jetzt(clock);
     transitions.closeOpen(cardId, switchedAt);
     transitions.open(cardId, targetColumnId, targetColumn.name(), switchedAt);
 
