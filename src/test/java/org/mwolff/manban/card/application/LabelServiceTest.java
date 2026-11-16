@@ -29,6 +29,7 @@ import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.card.domain.Label;
+import org.mwolff.manban.project.application.FremdesBoardException;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.application.ProjectAccessDeniedException;
 import org.mwolff.manban.project.domain.Permission;
@@ -266,6 +267,27 @@ class LabelServiceTest {
 
     verify(permissions).require(5L, PROJECT, Permission.BOARD_UPDATE);
     verify(labels).deleteById(1L);
+  }
+
+  /** Ein Label eines nicht schreibbaren Boards bleibt unverändert (Issue #2179). */
+  @Test
+  void update_lehntBeiNichtSchreibbaremBoardAb() {
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
+    doThrow(new FremdesBoardException()).when(grundlage).pruefeSchreibbar(PROJECT);
+
+    assertThatThrownBy(() -> service.update(5L, 1L, "Defekt", "#00f", null))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(labels, never()).save(any());
+  }
+
+  /** Ein Label eines nicht schreibbaren Boards bleibt bestehen (Issue #2179). */
+  @Test
+  void delete_lehntBeiNichtSchreibbaremBoardAb() {
+    when(labels.findById(1L)).thenReturn(Optional.of(new Label(1L, BOARD, "Bug", "#f00", false)));
+    doThrow(new FremdesBoardException()).when(grundlage).pruefeSchreibbar(PROJECT);
+
+    assertThatThrownBy(() -> service.delete(5L, 1L)).isInstanceOf(FremdesBoardException.class);
+    verify(labels, never()).deleteById(anyLong());
   }
 
   @Test
