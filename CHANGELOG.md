@@ -17,6 +17,54 @@ Was ein Versionssprung von Hand verlangt, steht an genau einer Stelle: [UPGRADIN
 Die Anmeldung per Einmalcode beendet einmal alle Sitzungen, löscht gespeicherte Passwörter und
 benennt Variablen der Zählbremse um — Einzelheiten dort.
 
+## [3.19.0] – 2026-11-16
+
+- chore: v3.18.2
+- Antworten von GitLab beim Empfang begrenzen ([#2196](https://github.com/mannewolff/kanban-kit/issues/2196))
+- Vertrauliche GitLab-Issues und interne Notizen nicht spiegeln ([#2195](https://github.com/mannewolff/kanban-kit/issues/2195))
+- Abdeckungsluecke in GitLabAbruf geschlossen ([#2193](https://github.com/mannewolff/kanban-kit/issues/2193))
+- Abdeckungsluecken in KettenEingabe geschlossen ([#2192](https://github.com/mannewolff/kanban-kit/issues/2192))
+- Abdeckungsluecke in EreignisRegisterAdapter geschlossen ([#2191](https://github.com/mannewolff/kanban-kit/issues/2191))
+- Abdeckungsluecken in AbgleichJob geschlossen ([#2190](https://github.com/mannewolff/kanban-kit/issues/2190))
+- Leere Quelldatei schluckt keine Abdeckungsluecken mehr ([#2188](https://github.com/mannewolff/kanban-kit/issues/2188))
+- Abdeckungsluecken in AbgleichService geschlossen ([#2187](https://github.com/mannewolff/kanban-kit/issues/2187))
+- Abdeckungsluecke in Comment geschlossen ([#2186](https://github.com/mannewolff/kanban-kit/issues/2186))
+- Abdeckungsluecken in FremdBoardController geschlossen ([#2185](https://github.com/mannewolff/kanban-kit/issues/2185))
+- Abdeckungsluecken in FremdBoardAnstossController geschlossen ([#2184](https://github.com/mannewolff/kanban-kit/issues/2184))
+- Mutations-Ueberlebende in FremdKartenBestand getoetet ([#2183](https://github.com/mannewolff/kanban-kit/issues/2183))
+- Mutations-Ueberlebende in VerbindungEingabe getoetet ([#2182](https://github.com/mannewolff/kanban-kit/issues/2182))
+- Mutations-Ueberlebende in Card getoetet ([#2181](https://github.com/mannewolff/kanban-kit/issues/2181))
+- Mutations-Ueberlebende in AbgleichJob getoetet ([#2180](https://github.com/mannewolff/kanban-kit/issues/2180))
+- Mutations-Ueberlebende in LabelService getoetet ([#2179](https://github.com/mannewolff/kanban-kit/issues/2179))
+- Mutations-Ueberlebende in VerbindungService getoetet ([#2177](https://github.com/mannewolff/kanban-kit/issues/2177))
+- Mutations-Ueberlebende in Comment getoetet ([#2176](https://github.com/mannewolff/kanban-kit/issues/2176))
+- Mutations-Ueberlebende in FremdKartenSchreiber getoetet ([#2175](https://github.com/mannewolff/kanban-kit/issues/2175))
+- Mutations-Ueberlebende in KartenGrundlage getoetet ([#2174](https://github.com/mannewolff/kanban-kit/issues/2174))
+- Mutations-Ueberlebende in AbgleichService getoetet ([#2173](https://github.com/mannewolff/kanban-kit/issues/2173))
+- Test bindet Idempotenz-Schluessel an das Projekt des Boards ([#2172](https://github.com/mannewolff/kanban-kit/issues/2172))
+- chore: v3.18.1
+- Betreiber-Kapitel Fremdes Board anbinden ([#2171](https://github.com/mannewolff/kanban-kit/issues/2171))
+- Einstellung Board-Quelle im Projekt ([#2169](https://github.com/mannewolff/kanban-kit/issues/2169))
+- Regelmaessiger Abgleich, geloeschte Karten und Ausfall von GitLab ([#2168](https://github.com/mannewolff/kanban-kit/issues/2168))
+- Abgleich einer Karte und Anstoss durch das Kit ([#2167](https://github.com/mannewolff/kanban-kit/issues/2167))
+- Owner bindet ein Projekt an GitLab an ([#2166](https://github.com/mannewolff/kanban-kit/issues/2166))
+- Entscheidungskette nennt den Freigeber aus GitLab ([#2165](https://github.com/mannewolff/kanban-kit/issues/2165))
+- Schreibsperre bei fremdem Board in Kommentaren, Anhaengen und /api/kanban ([#2164](https://github.com/mannewolff/kanban-kit/issues/2164))
+- Spiegel schreibt gespiegelte Karten und Kommentare ([#2162](https://github.com/mannewolff/kanban-kit/issues/2162))
+- Schreibsperre bei fremdem Board in Karten und Boards ([#2161](https://github.com/mannewolff/kanban-kit/issues/2161))
+- GitLab als erste Quelle eines fremden Boards ([#2160](https://github.com/mannewolff/kanban-kit/issues/2160))
+- Flusserfassung nimmt einen Zeitpunkt von außen ([#2159](https://github.com/mannewolff/kanban-kit/issues/2159))
+- Schnittstelle des fremden Boards mit Statuszuordnung und Herkunft ([#2158](https://github.com/mannewolff/kanban-kit/issues/2158))
+- Zugang verschlüsselt ablegen und Hosts nur aus Erlaubnisliste ([#2157](https://github.com/mannewolff/kanban-kit/issues/2157))
+- Verbindung zum fremden Board speichern und Board-Quelle als Port ([#2156](https://github.com/mannewolff/kanban-kit/issues/2156))
+- Mutations-Überlebende in Dokumentmeldungen beseitigt ([#2154](https://github.com/mannewolff/kanban-kit/issues/2154))
+- Mutations-Überlebende in KartenKetteLeser getötet ([#2153](https://github.com/mannewolff/kanban-kit/issues/2153))
+- pacer eingestellt
+- claude-workflow-kit 6.2.4
+- Acht SonarCloud-Befunde der Entscheidungskette ausgebessert ([#2148](https://github.com/mannewolff/kanban-kit/issues/2148))
+- Falltext „Zug nach Ready“ in der Entscheidungskette neutral gefasst ([#2147](https://github.com/mannewolff/kanban-kit/issues/2147))
+- Gemeldete Freigeber in der Entscheidungskette gekennzeichnet ([#2146](https://github.com/mannewolff/kanban-kit/issues/2146))
+
 ## [3.18.0] – 2026-11-11
 
 - chore: v3.17.1
