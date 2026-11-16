@@ -24,6 +24,10 @@ import org.springframework.stereotype.Component;
  * seitenweise zu je {@value #SEITENGROESSE} Einträgen gelesen. Scheitert ein Abruf, wirft die
  * Quelle {@link GitLabAbrufException} mit lesbarem Grund; weder Meldung noch Protokoll nennen den
  * Zugang.
+ *
+ * <p>Vertrauliche Issues und interne Notizen gibt sie auf keinem Weg heraus (Issue #2195): Eine
+ * Karte, die in GitLab vertraulich wird, fehlt damit in {@link #nummern} und wandert beim nächsten
+ * Vollabgleich in den Papierkorb.
  */
 @Component
 public final class GitLabQuelle implements FremdBoardQuelle {
@@ -45,6 +49,7 @@ public final class GitLabQuelle implements FremdBoardQuelle {
   @Override
   public List<Long> nummern(Verbindung verbindung) {
     return abruf.seiten(verbindung, ISSUES + "?state=all&per_page=" + SEITENGROESSE).stream()
+        .filter(eintrag -> !GitLabAntwort.vertraulich(eintrag))
         .map(eintrag -> GitLabAntwort.zahl(eintrag, "iid"))
         .toList();
   }
@@ -60,13 +65,13 @@ public final class GitLabQuelle implements FremdBoardQuelle {
                 + "&order_by=updated_at&sort=asc&per_page="
                 + SEITENGROESSE)
         .stream()
-        .map(GitLabAntwort::karte)
+        .flatMap(eintrag -> GitLabAntwort.karte(eintrag).stream())
         .toList();
   }
 
   @Override
   public Optional<FremdKarte> karte(Verbindung verbindung, long nummer) {
-    return abruf.eintrag(verbindung, ISSUES + "/" + nummer).map(GitLabAntwort::karte);
+    return abruf.eintrag(verbindung, ISSUES + "/" + nummer).flatMap(GitLabAntwort::karte);
   }
 
   @Override
