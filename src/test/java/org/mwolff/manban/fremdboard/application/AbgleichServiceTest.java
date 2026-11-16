@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -358,6 +359,52 @@ class AbgleichServiceTest {
     reihenfolge.verify(schreiber).wechseln(BOARD, 7, "READY", T1, ANNA);
     reihenfolge.verify(schreiber).wechseln(BOARD, 7, "IN_REVIEW", T2, KIT);
     verify(schreiber, never()).wechseln(eq(BOARD), eq(7), eq("BACKLOG"), any(), any());
+    // Einzeln gebucht stünde die Karte zu T2 kurz in Ready und Review zugleich — also in Ready.
+    verify(schreiber, never()).wechseln(BOARD, 7, "READY", T2, KIT);
+  }
+
+  @Test
+  void neueKarte_statuslabelsStehenAlsSpalte_nichtAlsLabel() {
+    // Given: alle vier Statuslabels und ein gewöhnliches Label, schon vor der Anbindung gesetzt
+    gitlab(
+        karte(
+            "Export",
+            "",
+            List.of("Backlog", "Ready", "In progress", "In review", "kit:night"),
+            false,
+            VORHER),
+        List.of(),
+        List.of());
+    when(bestand.kartenId(PROJEKT, 7)).thenReturn(Optional.empty());
+
+    // When
+    service.karteAbgleichen(VERBINDUNG, 7);
+
+    // Then: nur das gewöhnliche Label wird gespiegelt
+    verify(schreiber)
+        .anlegen(
+            BOARD, new FremdeKarte(7, "Export", "", "BACKLOG", ADRESSE), ANGEBUNDEN, UNBEKANNT);
+    verify(schreiber).labelSetzen(BOARD, 7, "kit:night", ANGEBUNDEN, UNBEKANNT);
+    verify(schreiber, times(1)).labelSetzen(anyLong(), anyInt(), anyString(), any(), any());
+  }
+
+  @Test
+  void quelleAndererArt_zaehltNicht() {
+    FremdBoardQuelle andere = mock(FremdBoardQuelle.class);
+    AbgleichService mitAnderer =
+        new AbgleichService(
+            List.of(andere),
+            bestand,
+            schreiber,
+            kommentare,
+            register,
+            mock(PlatformTransactionManager.class),
+            Clock.fixed(JETZT, ZoneOffset.UTC));
+
+    assertThatThrownBy(() -> mitAnderer.karteAbgleichen(VERBINDUNG, 7))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Keine Quelle für GITLAB");
+    verifyNoInteractions(schreiber);
   }
 
   @Test
@@ -426,6 +473,28 @@ class AbgleichServiceTest {
     reihenfolge.verify(bestand).nummern(PROJEKT);
     reihenfolge.verify(quelle).nummern(VERBINDUNG);
     verifyNoInteractions(schreiber);
+  }
+
+  @Test
+  void voll_liestEinzelnNur_wasWederGeaendertNochHierGespiegeltIst() {
+    // Given: 7 ist dort neu und geändert, 8 ist hier gespiegelt und unverändert, 9 fehlt hier
+    when(bestand.nummern(PROJEKT)).thenReturn(List.of(8));
+    when(quelle.nummern(VERBINDUNG)).thenReturn(List.of(7L, 8L, 9L));
+    when(quelle.geaenderteKarten(VERBINDUNG, T1))
+        .thenReturn(List.of(karte("Export", "", List.of(), false, VORHER)));
+    when(quelle.karte(VERBINDUNG, 9)).thenReturn(Optional.empty());
+    when(quelle.ereignisse(eq(VERBINDUNG), anyLong())).thenReturn(List.of());
+    when(quelle.notizen(eq(VERBINDUNG), anyLong())).thenReturn(List.of());
+    when(bestand.kartenId(PROJEKT, 7)).thenReturn(Optional.empty());
+
+    // When
+    service.vollAbgleichen(VERBINDUNG, T1);
+
+    // Then
+    verify(quelle, never()).karte(VERBINDUNG, 7);
+    verify(quelle, never()).karte(VERBINDUNG, 8);
+    verify(quelle).karte(VERBINDUNG, 9);
+    verify(schreiber, never()).alsGeloeschtMarkieren(anyLong(), anyInt(), any());
   }
 
   @Test
