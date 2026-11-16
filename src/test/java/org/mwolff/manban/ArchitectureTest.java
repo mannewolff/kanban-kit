@@ -253,6 +253,14 @@ class ArchitectureTest {
           // KartenKetteLeser ist Vertrag (Issue #2114, Plan #2108 E1): Die Entscheidungskette liest
           // Karten, Spaltenwechsel und Label-Ereignisse ueber eigene Records, ohne card.domain.
           "KartenKetteLeser",
+          // FremdKartenSchreiber ist Vertrag (Issue #2162, Plan #2152 A1, A10): der einzige
+          // Schreibweg des Spiegels eines fremden Boards, samt Records FremdeKarte und
+          // FremderAkteur.
+          "FremdKartenSchreiber",
+          // FremdKartenBestand ist Vertrag (Issue #2166, Plan #2152 A2, A18): Das Anbinden eines
+          // fremden Boards fragt, ob das Projekt Karten hat und ob ein Board je Status eine Spalte
+          // hat, samt Record KartenBestand.
+          "FremdKartenBestand",
           // Exception-Vokabular als Vertrag, Plan #1694 (A4)
           "CardNotFoundException");
 
@@ -368,6 +376,13 @@ class ArchitectureTest {
           "KitStrictnessReader",
           "KitReviewVorReadyWriter",
           "KitReviewVorReadyReader",
+          // BoardQuelle ist Vertrag (Issue #2156, Plan #2152 A10): card, comment, attachment,
+          // kanbancompat und board fragen, ob das Board des Projekts in einem fremden System liegt;
+          // umgesetzt in fremdboard.infrastructure, damit kein Modulzyklus entsteht.
+          "BoardQuelle",
+          // Die Ablehnung dazu (Issue #2161): dieselben Module werfen sie, der Fehlerhandler
+          // beantwortet sie mit 409.
+          "FremdesBoardException",
           "ProjectCreatedEvent",
           // MitgliedRolleVerlorenEvent ist Vertrag (Issue #2104, Plan #2100 E4): accesstoken
           // widerruft darauf die Zugaenge der App, ohne dass project das Modul kennt — analog
@@ -461,6 +476,31 @@ class ArchitectureTest {
           .dependOnClassesThat()
           .resideInAPackage("org.mwolff.manban.benachrichtigung.domain..")
           .as("benachrichtigung.domain ist modulintern");
+
+  // --- Modul-Grenze: fremdboard (Issue #2156, Plan #2152 A10) --------------------------------
+  // Verbindung und ihre Wertobjekte gehoeren dem Modul. Fremde Module fragen den Port
+  // project.application.BoardQuelle, den fremdboard.infrastructure umsetzt — eine Fassade in
+  // fremdboard.application gibt es nicht; kennte ein Fachmodul sie, schloesse sich ueber card der
+  // Modulzyklus.
+  static final ArchRule FREMDBOARD_DOMAIN_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.fremdboard..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.fremdboard.domain..")
+          .as("fremdboard.domain ist modulintern");
+
+  static final ArchRule FREMDBOARD_APPLICATION_IST_MODULINTERN =
+      noClasses()
+          .that()
+          .resideOutsideOfPackage("org.mwolff.manban.fremdboard..")
+          .should()
+          .dependOnClassesThat()
+          .resideInAPackage("org.mwolff.manban.fremdboard.application..")
+          .as(
+              "fremdboard.application ist modulintern (fremde Module fragen den Port"
+                  + " project.application.BoardQuelle)");
 
   // --- Modul-Grenze: language ist nur ueber den Port in common erreichbar (Issue #1639) -------
   // Plan #1638 A3: Die Fachmodule (Server-Meldungen, Mails) brauchen die Sprache der Installation,
@@ -687,6 +727,16 @@ class ArchitectureTest {
   @Test
   void benachrichtigungDomainIstModulintern() {
     BENACHRICHTIGUNG_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void fremdboardDomainIstModulintern() {
+    FREMDBOARD_DOMAIN_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
+  }
+
+  @Test
+  void fremdboardApplicationIstModulintern() {
+    FREMDBOARD_APPLICATION_IST_MODULINTERN.check(PRODUKTIONSKLASSEN);
   }
 
   @Test

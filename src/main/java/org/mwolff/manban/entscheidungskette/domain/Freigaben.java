@@ -20,10 +20,16 @@ final class Freigaben {
       Set.of(Sache.ZIEL_UMSETZUNG, Sache.ZIEL_PUSH_VORBEREITET, Sache.DURCHZIEHEN);
 
   private final List<LabelEreignis> labelEreignisse;
+  private final boolean fremdesBoard;
 
-  /** Mit den Label-Ereignissen der Kette, nach Zeitpunkt. */
-  Freigaben(List<LabelEreignis> labelEreignisse) {
+  /**
+   * Mit den Label-Ereignissen der Kette, nach Zeitpunkt.
+   *
+   * @param fremdesBoard ob das Board des Projekts in einem fremden System liegt (Plan #2152 A11)
+   */
+  Freigaben(List<LabelEreignis> labelEreignisse, boolean fremdesBoard) {
     this.labelEreignisse = labelEreignisse;
+    this.fremdesBoard = fremdesBoard;
   }
 
   /**
@@ -45,7 +51,9 @@ final class Freigaben {
   /**
    * Hat ein Lauf das Paket nach Ready gezogen und liegt am Fachplan oder Plan davor ein Ziel ab
    * „Umsetzung“ oder das Durchziehen-Kennzeichen, ist das jüngste davon die Freigabe und der Zug
-   * ihre Ausführung; sonst ist der Zug selbst die Freigabe.
+   * ihre Ausführung; sonst ist der Zug selbst die Freigabe. Bei fremdem Board gilt jeder Zug des
+   * Kit-Kontos als Zug eines Laufs, weil das fremde System keine Laufkennung festhält (Plan #2152
+   * A11).
    *
    * @param freigebende Fachplan und Plan der Kette
    */
@@ -54,8 +62,10 @@ final class Freigaben {
       return Glied.ohneAngaben(Gliedart.FREIGABE, Zustand.NICHT_ERFASST, Verweis.KEINER, Set.of());
     }
     Akteur ausfuehrer =
-        Akteur.nachHerkunft(zug.herkunft(), zug.person(), zug.tokenName(), zug.agent());
-    boolean durchLauf = HERKUNFT_KIT.equals(zug.herkunft()) && zug.laufStart() != null;
+        Akteur.nachHerkunft(
+            zug.herkunft(), zug.person(), zug.tokenName(), zug.agent(), zug.externAkteur());
+    boolean durchLauf =
+        HERKUNFT_KIT.equals(zug.herkunft()) && (zug.laufStart() != null || fremdesBoard);
     Optional<Kennzeichen> kennzeichen =
         durchLauf ? kennzeichen(zug, freigebende) : Optional.empty();
     if (kennzeichen.isEmpty()) {
@@ -75,7 +85,7 @@ final class Freigaben {
     return new Glied(
         Gliedart.FREIGABE,
         Zustand.ERFASST,
-        Akteur.nachHerkunft(e.herkunft(), e.person(), e.tokenName(), null),
+        Akteur.nachHerkunft(e.herkunft(), e.person(), e.tokenName(), null, e.externAkteur()),
         ausfuehrer,
         e.zeitpunkt(),
         null,

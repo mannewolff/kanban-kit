@@ -7,12 +7,14 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardBestandRepository;
 import org.mwolff.manban.card.application.CardMovedConcurrentlyException;
 import org.mwolff.manban.card.application.CardRepository;
+import org.mwolff.manban.card.application.FremdKartenBestand;
 import org.mwolff.manban.card.application.SortDirection;
 import org.mwolff.manban.card.domain.Card;
 import org.mwolff.manban.card.domain.CardStatus;
@@ -289,9 +291,7 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
 
   @Override
   public List<Card> findPurgeableTrash(java.time.Instant threshold) {
-    return jpa.findByDeletedAtNotNullAndDeletedAtBefore(threshold).stream()
-        .map(CardRepositoryAdapter::toDomain)
-        .toList();
+    return jpa.findPurgeableTrash(threshold).stream().map(CardRepositoryAdapter::toDomain).toList();
   }
 
   @Override
@@ -327,6 +327,27 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
   @Override
   public void lockCardNumbers(long projectId) {
     jdbc.queryForList("SELECT id FROM project WHERE id = ? FOR UPDATE", Long.class, projectId);
+  }
+
+  @Override
+  public FremdKartenBestand.KartenBestand bestand(long projectId) {
+    // Eine Zählung über alle Zeilen liefert immer genau eine Zeile.
+    return Objects.requireNonNull(
+        jdbc.queryForObject(
+            "SELECT count(*) FILTER (WHERE deleted_at IS NULL AND type <> 'EPIC' AND NOT archived)"
+                + " AS auf_boards,"
+                + " count(*) FILTER (WHERE deleted_at IS NULL AND type <> 'EPIC' AND archived)"
+                + " AS archiviert,"
+                + " count(*) FILTER (WHERE deleted_at IS NOT NULL) AS papierkorb,"
+                + " count(*) FILTER (WHERE deleted_at IS NULL AND type = 'EPIC') AS vorhaben"
+                + " FROM card WHERE project_id = ?",
+            (rs, zeile) ->
+                new FremdKartenBestand.KartenBestand(
+                    rs.getInt("auf_boards"),
+                    rs.getInt("archiviert"),
+                    rs.getInt("papierkorb"),
+                    rs.getInt("vorhaben")),
+            projectId));
   }
 
   @Override
@@ -616,7 +637,8 @@ class CardRepositoryAdapter implements CardRepository, CardBestandRepository {
         e.getDerivedFromCardId(),
         e.getRequirementCardId(),
         status == null ? null : CardStatus.valueOf(status),
-        e.getWegBelegGeaendertAm());
+        e.getWegBelegGeaendertAm(),
+        e.getExternUrl());
   }
 
   /**

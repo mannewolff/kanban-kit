@@ -89,7 +89,8 @@ class VorhabenMassenzuordnungTest {
             activity,
             actor,
             events,
-            Clock.fixed(FIXED, ZoneOffset.UTC));
+            Clock.fixed(FIXED, ZoneOffset.UTC),
+            CardServiceAufbau.KEIN_FREMDES_BOARD);
     regel = new VorhabenMassenzuordnung(cards, grundlage, permissions);
     when(cards.save(any(Card.class))).thenAnswer(inv -> inv.getArgument(0));
   }

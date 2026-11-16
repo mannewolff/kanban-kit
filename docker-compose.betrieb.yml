@@ -74,6 +74,11 @@ services:
       MANBAN_STORAGE_ACCESS_KEY: ${OBJEKTSPEICHER_ROOT_USER:?OBJEKTSPEICHER_ROOT_USER muss in .env gesetzt sein - Benutzername des Objektspeichers fuer die Anhaenge, frei waehlbar und nicht manban}
       MANBAN_STORAGE_SECRET_KEY: ${OBJEKTSPEICHER_ROOT_PASSWORD:?OBJEKTSPEICHER_ROOT_PASSWORD muss in .env gesetzt sein - Geheimnis des Objektspeichers, erzeugen mit openssl rand -hex 32}
       MANBAN_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD muss in .env gesetzt sein - Kennwort der Datenbankrolle, erzeugen mit openssl rand -hex 32}
+      # Board in einem fremden System (Issue #2157): optional, darum ohne :? — fehlt der Schluessel,
+      # ist nur das Anbinden gesperrt. Ausdruecklich auch hier, damit beide Werte im Betrieb sichtbar
+      # durchgereicht werden und nicht allein am Basis-Compose haengen.
+      MANBAN_SECRET_KEY: ${MANBAN_SECRET_KEY:-}
+      MANBAN_FREMDBOARD_HOSTS: ${MANBAN_FREMDBOARD_HOSTS:-gitlab.com}
 
   caddy:
     restart: unless-stopped

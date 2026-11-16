@@ -13,6 +13,7 @@ import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.CardType;
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
@@ -30,7 +31,16 @@ import org.springframework.stereotype.Service;
  *
  * <p>Ohne {@code @Transactional} (E3): Jede Methode läuft in der Transaktion des aufrufenden
  * Use-Case-Verfahrens; Rechteprüfungen bleiben, wo sie vorher standen.
+ *
+ * <p>Schreibsperre bei fremdem Board (Issue #2161, Plan #2152 A10): {@link #anlegen} und {@link
+ * #requireCardOp} lehnen nach der Rechteprüfung ab, wenn das Projekt sein Board in einem fremden
+ * System führt; die übrigen Schreibwege der Dienste fragen {@link #pruefeSchreibbar(long)}. Der
+ * Spiegel schreibt nicht über diese Helfer.
  */
+// PMD.CouplingBetweenObjects: Mit Issue #2161 kommt der Port BoardQuelle dazu. Die Sperre gehört
+// genau hierher, weil Anlegen und Kartenzugriff mit Rechteprüfung für alle Dienste nur hier stehen;
+// ein eigener Baustein dafür hieße, jeden Dienst um eine weitere Abhängigkeit zu erweitern.
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public final class KartenGrundlage {
 
@@ -44,6 +54,7 @@ public final class KartenGrundlage {
   private final ActorContext actor;
   private final ApplicationEventPublisher events;
   private final Clock clock;
+  private final BoardQuelle boardQuelle;
 
   public KartenGrundlage(
       CardRepository cards,
@@ -55,7 +66,8 @@ public final class KartenGrundlage {
       CardActivityRepository activity,
       ActorContext actor,
       ApplicationEventPublisher events,
-      Clock clock) {
+      Clock clock,
+      BoardQuelle boardQuelle) {
     this.cards = cards;
     this.abhaengigkeiten = abhaengigkeiten;
     this.boardService = boardService;
@@ -66,6 +78,17 @@ public final class KartenGrundlage {
     this.actor = actor;
     this.events = events;
     this.clock = clock;
+    this.boardQuelle = boardQuelle;
+  }
+
+  /**
+   * Lehnt einen Schreibweg ab, wenn das Projekt ein fremdes Board hat (Issue #2161). Aufzurufen
+   * nach der Rechteprüfung, damit ein Unberechtigter nichts über das Projekt erfährt.
+   *
+   * @throws org.mwolff.manban.project.application.FremdesBoardException bei fremdem Board
+   */
+  public void pruefeSchreibbar(long projectId) {
+    boardQuelle.pruefeSchreibbar(projectId);
   }
 
   /**
@@ -142,6 +165,7 @@ public final class KartenGrundlage {
       @Nullable Integer derivedFrom) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    boardQuelle.pruefeSchreibbar(projectId);
     Long herkunft = DerivedFrom.resolve(cards, projectId, derivedFrom, null);
     ColumnView column = boardService.requireColumn(columnId, boardId);
     Long effectiveParent =
@@ -149,7 +173,8 @@ public final class KartenGrundlage {
 
     int number = givenNumber != null ? givenNumber : cards.allocateCardNumber(projectId);
     int position = cards.allocateActivePosition(columnId);
-    Instant now = clock.instant();
+    // Ein Zeitpunkt von außen (Issue #2159) gilt für Anlage und ersten Spalteneintrag gleich.
+    Instant now = FlussZeitpunkt.jetzt(clock);
     Card neu =
         new Card(
             null,
@@ -204,6 +229,7 @@ public final class KartenGrundlage {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.require(
         userId, card.projectId(), card.type() == CardType.EPIC ? epicPermission : ticketPermission);
+    boardQuelle.pruefeSchreibbar(card.projectId());
     return card;
   }
 

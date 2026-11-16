@@ -2,6 +2,8 @@ package org.mwolff.manban.card.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.groups.Tuple.tuple;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mwolff.manban.card.application.KartenKetteLeserAufbau.FREMD;
 import static org.mwolff.manban.card.application.KartenKetteLeserAufbau.imProjekt;
 import static org.mwolff.manban.card.application.KartenKetteLeserAufbau.neu;
@@ -10,6 +12,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mwolff.manban.card.application.CardBestandRepository.KarteImBestand;
 import org.mwolff.manban.card.application.KartenKetteLeser.GliedZustand;
 import org.mwolff.manban.card.application.KartenKetteLeser.KettenGlied;
 
@@ -254,6 +257,24 @@ class KartenKetteLeserVerwandteTest {
     long plan = bau.lege(neu(1, "Plan", null, null));
     long kind = bau.lege(imProjekt(neu(4, "Geheim", null, plan), FREMD));
     bau.lege(imProjekt(neu(6, "Enkel", null, kind), FREMD));
+
+    assertThat(bau.leser.lade(plan).nachfahren())
+        .containsExactly(new KettenGlied(GliedZustand.ANDERES_PROJEKT, null, null));
+  }
+
+  @Test
+  void einDoppeltGemeldeterNachfahrInAnderemProjektStehtNurEinmalDa() {
+    long plan = bau.lege(neu(1, "Plan", null, null));
+    long kind = bau.lege(imProjekt(neu(4, "Geheim", null, plan), FREMD));
+    KarteImBestand fremd = bau.bestandNachId.get(kind);
+    // Liefert der Port dieselbe Karte zweimal, zählt sie nur beim ersten Mal (Issue #2153).
+    doAnswer(
+            aufruf ->
+                aufruf.<List<Long>>getArgument(0).contains(plan)
+                    ? List.of(fremd, fremd)
+                    : List.of())
+        .when(bau.bestand)
+        .findKinderImBestand(any());
 
     assertThat(bau.leser.lade(plan).nachfahren())
         .containsExactly(new KettenGlied(GliedZustand.ANDERES_PROJEKT, null, null));

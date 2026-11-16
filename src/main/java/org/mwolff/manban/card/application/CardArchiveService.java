@@ -162,8 +162,9 @@ public class CardArchiveService {
   @Transactional
   public void purge(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
-    permissions.require(
-        userId, boardService.requireProjectId(card.boardId()), Permission.BOARD_DELETE);
+    long projectId = boardService.requireProjectId(card.boardId());
+    permissions.require(userId, projectId, Permission.BOARD_DELETE);
+    grundlage.pruefeSchreibbar(projectId);
     // Vor dem Delete publizieren (Issue #503): Nachgelagerte Module (Anhänge) planen ihre
     // Aufräum-Aufträge ein, solange die Metadaten existieren — die Cascade nimmt sie gleich mit.
     events.publishEvent(new CardsPurgedEvent(List.of(card.requireId())));

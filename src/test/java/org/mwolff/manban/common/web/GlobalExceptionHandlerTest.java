@@ -144,6 +144,21 @@ class GlobalExceptionHandlerTest {
   }
 
   @Test
+  void fremdesBoardErgibt409MitGrundUndProblemTyp() throws Exception {
+    // Schreibsperre bei fremdem Board (Issue #2161, Plan #2152 A10): 409, Grund und eigener Typ.
+    mvc.perform(get("/probe/fremdes-board"))
+        .andExpect(status().isConflict())
+        .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.type").value("fremdes-board"))
+        .andExpect(jsonPath("$.status").value(409))
+        .andExpect(
+            jsonPath("$.detail")
+                .value(
+                    "Das Board dieses Projekts liegt in einem fremden System und wird dort"
+                        + " bearbeitet. In kanban-kit lässt es sich nur lesen."));
+  }
+
+  @Test
   void exceptionOhneProblemTypBehaeltIhrBisherigesFormat() {
     // When
     ProblemDetail problem = handler.handleException(new ProjectAccessDeniedException());
@@ -512,6 +527,11 @@ class GlobalExceptionHandlerTest {
     String vorschauVerborgen() {
       // Voll qualifiziert: Ein weiterer Import risse die PMD-Grenze ExcessiveImports (40).
       throw new org.mwolff.manban.auth.application.VorschauVerborgenException();
+    }
+
+    @GetMapping("/probe/fremdes-board")
+    String fremdesBoard() {
+      throw new org.mwolff.manban.project.application.FremdesBoardException();
     }
 
     @GetMapping("/probe/unexpected")

@@ -12,17 +12,22 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mwolff.manban.accesstoken.application.KanbanPrincipal;
@@ -40,6 +45,9 @@ import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.comment.application.CommentNotFoundException;
 import org.mwolff.manban.comment.application.CommentService;
+import org.mwolff.manban.kanbancompat.application.IdempotencyRecordStore.IdempotencyKey;
+import org.mwolff.manban.project.application.BoardQuelle;
+import org.mwolff.manban.project.application.FremdesBoardException;
 
 /** Unit-Tests der Kanban-Compat-Schicht (Spaltennamen-Normalisierung + Verhalten an den Ports). */
 // PMD.TooManyMethods: methodenreiche Testsuite — viele kleine @Test-Methoden je Erfolgs- und
@@ -48,7 +56,14 @@ import org.mwolff.manban.comment.application.CommentService;
 // die Tests, nicht verschachtelte Logik.
 // PMD.CouplingBetweenObjects: die Schicht spricht alle card-Fassaden samt ihren Sichten an; mit der
 // Labelliste (Issue #1855) kommt LabelNameColor dazu.
-@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity", "PMD.CouplingBetweenObjects"})
+// PMD.ExcessiveImports: Mit der Schreibsperre (Issue #2164) kommen Port, Ausnahme und die
+// Parameterquelle der Sperrfälle dazu; die Imports folgen der Kopplung darüber.
+@SuppressWarnings({
+  "PMD.TooManyMethods",
+  "PMD.CyclomaticComplexity",
+  "PMD.CouplingBetweenObjects",
+  "PMD.ExcessiveImports"
+})
 class KanbanCompatServiceTest {
 
   private static final long BOARD = 10L;
@@ -63,6 +78,7 @@ class KanbanCompatServiceTest {
   private EpicService epics;
   private LabelService labelService;
   private CommentService commentService;
+  private BoardQuelle boardQuelle;
   private KanbanCompatService service;
   private InMemoryIdempotencyRecordStore idempotencyStore;
 
@@ -149,6 +165,7 @@ class KanbanCompatServiceTest {
     epics = mock(EpicService.class);
     labelService = mock(LabelService.class);
     commentService = mock(CommentService.class);
+    boardQuelle = mock(BoardQuelle.class);
     idempotencyStore = new InMemoryIdempotencyRecordStore();
     service =
         new KanbanCompatService(
@@ -159,7 +176,8 @@ class KanbanCompatServiceTest {
             epics,
             labelService,
             commentService,
-            new IdempotencyGuard(idempotencyStore, Clock.systemUTC()));
+            new IdempotencyGuard(idempotencyStore, Clock.systemUTC()),
+            boardQuelle);
     // Vorgabe: eine Karte ohne eigenen Status ([Plan]-Karte, Vorhaben). Die Tests des
     // Arbeitspakets überschreiben das; die übrigen move-Tests prüfen das Verschieben.
     when(cardService.getCard(anyLong(), anyLong())).thenReturn(karte(null));
@@ -1141,6 +1159,23 @@ class KanbanCompatServiceTest {
   }
 
   @Test
+  void create_withIdempotencyKey_bindetDenSchluesselAnDasProjektDesBoards() {
+    // Given: Issue #2172 — pruefeSchreibbar liefert die Projekt-ID, unter der der Schlüssel liegt.
+    // Lieferte sie 0 (Mutant), läge der Datensatz unter einem fremden Projekt.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
+    when(ingest.createDirect(
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(55L), true));
+
+    // When
+    service.create(bound(), "Titel", "Body", null, null, false, null, null, "k-1");
+
+    // Then
+    assertThat(idempotencyStore.status(new IdempotencyKey(PROJECT, "k-1"))).isEqualTo(201);
+  }
+
+  @Test
   void create_withExternalKey_ignoresTheIdempotencyKey() {
     // Given: E8 — der fachliche Schlüssel hat Vorrang, der technische greift gar nicht erst.
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
@@ -1542,5 +1577,92 @@ class KanbanCompatServiceTest {
         .singleElement()
         .extracting(KanbanCompatService.Item::labels)
         .isEqualTo(List.of());
+  }
+
+  /** Ein schreibender Aufruf der Schicht, benannt für die Ausgabe des parametrisierten Tests. */
+  @FunctionalInterface
+  interface Schreibaufruf {
+    void ausfuehren(KanbanCompatService service, KanbanPrincipal principal);
+  }
+
+  /** Alle schreibenden Aufrufe der Schicht (Issue #2164, Plan #2152 A10). */
+  static Stream<Arguments> schreibaufrufe() {
+    return Stream.of(
+        Arguments.of(
+            "create",
+            (Schreibaufruf)
+                (s, p) ->
+                    s.create(p, "Titel", "Body", null, null, false, null, null, "schluessel")),
+        Arguments.of(
+            "replaceDependencies",
+            (Schreibaufruf) (s, p) -> s.replaceDependencies(p, 42L, List.of(7))),
+        Arguments.of("move", (Schreibaufruf) (s, p) -> s.move(p, 42L, "READY", 0)),
+        Arguments.of("update", (Schreibaufruf) (s, p) -> s.update(p, 42L, "Titel", "Body")),
+        Arguments.of("addLabel", (Schreibaufruf) (s, p) -> s.addLabel(p, 42L, "kit:night")),
+        Arguments.of("removeLabel", (Schreibaufruf) (s, p) -> s.removeLabel(p, 42L, "kit:night")),
+        Arguments.of(
+            "comment", (Schreibaufruf) (s, p) -> s.comment(p, 42L, "Text", "schluessel", LAUF)),
+        Arguments.of(
+            "updateComment", (Schreibaufruf) (s, p) -> s.updateComment(p, 42L, 3L, "Text", LAUF)));
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("schreibaufrufe")
+  void schreibenWirdBeiFremdemBoardAbgewiesen(String name, Schreibaufruf aufruf) {
+    // Given
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(PROJECT);
+
+    // When / Then
+    assertThatThrownBy(() -> aufruf.ausfuehren(service, bound()))
+        .isInstanceOf(FremdesBoardException.class);
+    verifyNoInteractions(moveService, labelService, commentService, epics);
+    verify(ingest, never()).createDirect(anyLong(), anyLong(), anyLong(), any());
+    verify(ingest, never()).replaceDependenciesFromIngest(anyLong(), anyLong(), anyLong(), any());
+    verify(ingest, never()).updateContent(anyLong(), anyLong(), anyString(), any());
+    assertThat(idempotencyStore.size()).isZero();
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("schreibaufrufe")
+  void eineKarteAusserhalbDesBoardsBleibtBeiFremdemBoard404(String name, Schreibaufruf aufruf) {
+    // Given: Die Board-Grenze geht vor; wer außerhalb fragt, erfährt nichts über das Projekt.
+    // Anlegen und Abhängigkeiten adressieren das Projekt selbst und haben keine Kartengrenze.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(PROJECT);
+    doThrow(new CardNotFoundException()).when(ingest).requireOnBoard(42L, BOARD);
+
+    // When / Then
+    if ("create".equals(name) || "replaceDependencies".equals(name)) {
+      assertThatThrownBy(() -> aufruf.ausfuehren(service, bound()))
+          .isInstanceOf(FremdesBoardException.class);
+    } else {
+      assertThatThrownBy(() -> aufruf.ausfuehren(service, bound()))
+          .isInstanceOf(CardNotFoundException.class);
+    }
+  }
+
+  @Test
+  @DisplayName("Zugang der App wird bei fremdem Board abgewiesen")
+  void zugangDerAppWirdBeiFremdemBoardAbgewiesen() {
+    // Given: Die Desktop-App (#2097) schreibt über dieselbe Schicht; geantwortet wird in GitLab.
+    KanbanPrincipal app = new KanbanPrincipal(1L, 2L, PROJECT, BOARD, "Desktop-App", true);
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(PROJECT);
+
+    // When / Then
+    assertThatThrownBy(() -> service.comment(app, 42L, "Antwort", null, null))
+        .isInstanceOf(FremdesBoardException.class);
+    verifyNoInteractions(commentService);
+  }
+
+  @Test
+  void lesenBleibtBeiFremdemBoardMoeglich() {
+    // Given: Die Sperre trifft nur das Schreiben.
+    doThrow(new FremdesBoardException()).when(boardQuelle).pruefeSchreibbar(anyLong());
+    when(commentService.list(1L, 42L)).thenReturn(List.of());
+
+    // When / Then
+    assertThat(service.listComments(bound(), 42L)).isEmpty();
   }
 }

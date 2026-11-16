@@ -34,7 +34,44 @@ class VorhabenArchivierungTest {
   @BeforeEach
   void setUp() {
     cards = mock(CardRepository.class);
-    archivierung = new VorhabenArchivierung(cards);
+    archivierung = new VorhabenArchivierung(cards, projectId -> projectId == FREMDES_PROJEKT);
+  }
+
+  /** Projekt mit fremdem Board (Issue #2161); die Karten der Fixture liegen in Projekt 1. */
+  private static final long FREMDES_PROJEKT = 2L;
+
+  @Test
+  void boardEinesProjektsMitFremdemBoardBleibtUnberuehrt() {
+    // Given: ein leeres Vorhaben im Projekt mit fremdem Board (Issue #2161, Plan #2152 A10)
+    Card epic =
+        new Card(
+            1L,
+            BOARD,
+            100L,
+            1,
+            "Vorhaben",
+            null,
+            POSITION,
+            false,
+            null,
+            null,
+            FIXED,
+            FIXED,
+            CardType.EPIC,
+            null,
+            null,
+            null,
+            FREMDES_PROJEKT,
+            null,
+            null,
+            null,
+            null);
+    boardsMitVorhaben(BOARD);
+    kartenAuf(BOARD, epic);
+
+    // When / Then: nichts archiviert, nichts gespeichert
+    assertThat(archivierung.gleicheAlleAb()).isZero();
+    verify(cards, never()).save(any(Card.class));
   }
 
   private static Card vorhaben(long id, boolean archiviert) {

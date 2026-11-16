@@ -35,7 +35,8 @@ final class Paketglieder {
         new Freigaben(
             eingabe.labelEreignisse().stream()
                 .sorted(Comparator.comparing(LabelEreignis::zeitpunkt))
-                .toList());
+                .toList(),
+            eingabe.fremdesBoard());
     this.meldungen = new Paketmeldungen(eingabe.kommentare());
     this.auslieferungen = new Auslieferungen(meldungen);
     eingabe.aktivitaeten().stream()

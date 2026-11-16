@@ -20,6 +20,12 @@ public interface CommentRepository {
    */
   List<Comment> findByCardId(long cardId);
 
+  /**
+   * Der Kommentar der Karte, den der Spiegel mit dieser Kennung aus dem fremden System übernommen
+   * hat (Issue #2162); leer, wenn er ihn noch nicht übernommen hat.
+   */
+  Optional<Comment> findByCardIdAndExternKennung(long cardId, String externKennung);
+
   void deleteById(long id);
 
   /**

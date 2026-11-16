@@ -1,0 +1,29 @@
+[
+  {
+    "id": 501,
+    "user": { "id": 3, "username": "anna", "name": "Anna" },
+    "created_at": "2026-11-02T10:00:00.000Z",
+    "resource_type": "Issue",
+    "resource_id": 1007,
+    "label": { "id": 11, "name": "Ready", "color": "#428BCA" },
+    "action": "add"
+  },
+  {
+    "id": 502,
+    "user": null,
+    "created_at": "2026-11-02T10:20:00.000Z",
+    "resource_type": "Issue",
+    "resource_id": 1007,
+    "label": { "id": 12, "name": "Backlog", "color": "#cccccc" },
+    "action": "remove"
+  },
+  {
+    "id": 503,
+    "user": { "id": 3, "username": "anna", "name": "Anna" },
+    "created_at": "2026-11-02T10:25:00.000Z",
+    "resource_type": "Issue",
+    "resource_id": 1007,
+    "label": null,
+    "action": "add"
+  }
+]

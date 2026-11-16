@@ -81,7 +81,10 @@ export function berichtLesen(xml) {
 
   const dateien = [];
   for (const [, paketKopf, paket] of text.matchAll(/<package\b([^>]*)>([\s\S]*?)<\/package>/g)) {
-    for (const [, dateiKopf, quelltext] of paket.matchAll(/<sourcefile\b([^>]*)>([\s\S]*?)<\/sourcefile>/g)) {
+    // Eine Quelldatei ohne ausfuehrbare Zeile (Interface) steht selbstschliessend da; ohne die
+    // Alternative schluckte sie die naechste Datei samt ihren Zeilen (Issue #2188).
+    const quelldateien = /<sourcefile\b([^>]*?)(?:\/>|>([\s\S]*?)<\/sourcefile>)/g;
+    for (const [, dateiKopf, quelltext = ''] of paket.matchAll(quelldateien)) {
       dateien.push({
         pfad: `${QUELLWURZEL}${attribute(paketKopf).name}/${attribute(dateiKopf).name}`,
         zeilen: zeilenAus(quelltext),

@@ -117,6 +117,20 @@ test('berichtLesen: Pfade, Zeilen, Gesamtzaehler und juengste Startzeit', () => 
   assert.equal(bericht.sitzungStart, 1700000100000);
 });
 
+test('berichtLesen: eine leere Quelldatei (Interface) uebernimmt nicht die Zeilen der naechsten (Issue #2188)', () => {
+  // JaCoCo schreibt eine Quelldatei ohne ausfuehrbare Zeile als selbstschliessendes Element.
+  const mitInterface = BEISPIEL.replace(
+    '<sourcefile name="CardService.java">',
+    '<sourcefile name="CardPort.java"/><sourcefile name="CardService.java">',
+  );
+  const bericht = berichtLesen(mitInterface);
+  const port = 'src/main/java/org/mwolff/manban/card/CardPort.java';
+  assert.deepEqual(bericht.dateien.map((d) => d.pfad), [port, KARTE, BOARD]);
+  assert.deepEqual(bericht.dateien[0].zeilen, []);
+  assert.deepEqual(bericht.dateien[1].zeilen, berichtLesen(BEISPIEL).dateien[0].zeilen);
+  assert.deepEqual(lueckenStellen(bericht), lueckenStellen(berichtLesen(BEISPIEL)));
+});
+
 test('berichtLesen: ohne Report-Ende, Sitzung oder Zeilenzaehler ist der Bericht nicht lesbar', () => {
   assert.equal(berichtLesen(''), null);
   assert.equal(berichtLesen(BEISPIEL.replace('</report>', '')), null);

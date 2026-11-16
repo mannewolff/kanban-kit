@@ -13,14 +13,17 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mwolff.manban.board.domain.Board;
 import org.mwolff.manban.board.domain.BoardColumn;
+import org.mwolff.manban.project.application.FremdesBoardException;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
 import org.springframework.context.ApplicationEventPublisher;
@@ -40,6 +43,9 @@ class BoardServiceTest {
   private ApplicationEventPublisher events;
   private BoardService service;
 
+  /** Projekte mit fremdem Board; die Board-Quelle liest diese Menge (Issue #2161). */
+  private Set<Long> fremdeProjekte;
+
   private static Board board() {
     return new Board(10L, 1L, "Board", FIXED);
   }
@@ -56,7 +62,10 @@ class BoardServiceTest {
     permissions = mock(PermissionChecker.class);
     events = mock(ApplicationEventPublisher.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
-    service = new BoardService(boards, columns, cardCounter, permissions, events, clock);
+    fremdeProjekte = new HashSet<>();
+    service =
+        new BoardService(
+            boards, columns, cardCounter, permissions, events, clock, fremdeProjekte::contains);
     when(boards.save(any(Board.class)))
         .thenAnswer(
             inv -> {
@@ -621,5 +630,96 @@ class BoardServiceTest {
 
     // When / Then
     assertThatThrownBy(() -> service.firstColumn(10L)).isInstanceOf(ColumnNotFoundException.class);
+  }
+
+  // --- Schreibsperre bei fremdem Board (Issue #2161, Plan #2152 A18) ---------------------------
+
+  private void projektEinsIstFremd() {
+    fremdeProjekte.add(1L);
+    when(boards.findById(10L)).thenReturn(Optional.of(board()));
+    when(boards.findByIdIncludingArchived(10L)).thenReturn(Optional.of(board()));
+    when(columns.findById(5L)).thenReturn(Optional.of(column(5L, "Ready", 1)));
+  }
+
+  @Test
+  void createBoard_lehntAb_wennDasProjektEinFremdesBoardHat() {
+    projektEinsIstFremd();
+
+    assertThatThrownBy(() -> service.createBoard(7L, 1L, "Neu"))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(permissions).require(7L, 1L, Permission.BOARD_CREATE);
+    verify(boards, times(0)).save(any(Board.class));
+  }
+
+  @Test
+  void renameBoard_lehntAb_wennDasProjektEinFremdesBoardHat() {
+    projektEinsIstFremd();
+
+    assertThatThrownBy(() -> service.renameBoard(7L, 10L, "Neu"))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(boards, times(0)).save(any(Board.class));
+  }
+
+  @Test
+  void deleteBoard_lehntAb_wennDasProjektEinFremdesBoardHat() {
+    projektEinsIstFremd();
+
+    assertThatThrownBy(() -> service.deleteBoard(7L, 10L))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(boards, times(0)).save(any(Board.class));
+  }
+
+  @Test
+  void restoreBoard_lehntAb_wennDasProjektEinFremdesBoardHat() {
+    projektEinsIstFremd();
+
+    assertThatThrownBy(() -> service.restoreBoard(7L, 10L))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(boards, times(0)).save(any(Board.class));
+  }
+
+  @Test
+  void purgeBoard_lehntAb_wennDasProjektEinFremdesBoardHat() {
+    projektEinsIstFremd();
+
+    assertThatThrownBy(() -> service.purgeBoard(7L, 10L)).isInstanceOf(FremdesBoardException.class);
+    verify(boards, times(0)).deleteById(any(Long.class));
+    verifyNoInteractions(events);
+  }
+
+  @Test
+  void addColumn_lehntAb_wennDasProjektEinFremdesBoardHat() {
+    projektEinsIstFremd();
+
+    assertThatThrownBy(() -> service.addColumn(7L, 10L, "Neu", null))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(columns, times(0)).save(any(BoardColumn.class));
+  }
+
+  @Test
+  void updateColumn_lehntAb_wennDasProjektEinFremdesBoardHat() {
+    projektEinsIstFremd();
+
+    assertThatThrownBy(() -> service.updateColumn(7L, 5L, "Umbenannt", null))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(columns, times(0)).save(any(BoardColumn.class));
+  }
+
+  @Test
+  void deleteColumn_lehntAb_wennDasProjektEinFremdesBoardHat() {
+    projektEinsIstFremd();
+
+    assertThatThrownBy(() -> service.deleteColumn(7L, 5L))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(columns, times(0)).deleteById(any(Long.class));
+  }
+
+  @Test
+  void reorderColumns_lehntAb_wennDasProjektEinFremdesBoardHat() {
+    projektEinsIstFremd();
+
+    assertThatThrownBy(() -> service.reorderColumns(7L, 10L, List.of(5L)))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(columns, times(0)).reorder(any(Long.class), any());
   }
 }

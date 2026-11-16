@@ -57,6 +57,10 @@ class CommentEntity {
   @Column(name = "von_hand_kopfzeile")
   private @Nullable String vonHandKopfzeile;
 
+  // Kennung im fremden System eines gespiegelten Kommentars (Issue #2162); nullable, V76.
+  @Column(name = "extern_kennung")
+  private @Nullable String externKennung;
+
   protected CommentEntity() {
     // für JPA
   }
@@ -74,7 +78,8 @@ class CommentEntity {
       @Nullable String tokenName,
       @Nullable String agent,
       @Nullable Instant vonHandGeaendertAm,
-      @Nullable String vonHandKopfzeile) {
+      @Nullable String vonHandKopfzeile,
+      @Nullable String externKennung) {
     this.id = id;
     this.cardId = cardId;
     this.authorUserId = authorUserId;
@@ -88,6 +93,7 @@ class CommentEntity {
     this.agent = agent;
     this.vonHandGeaendertAm = vonHandGeaendertAm;
     this.vonHandKopfzeile = vonHandKopfzeile;
+    this.externKennung = externKennung;
   }
 
   @Nullable Long getId() {
@@ -140,5 +146,9 @@ class CommentEntity {
 
   @Nullable String getVonHandKopfzeile() {
     return vonHandKopfzeile;
+  }
+
+  @Nullable String getExternKennung() {
+    return externKennung;
   }
 }

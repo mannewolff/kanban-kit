@@ -231,7 +231,8 @@ maschinenlesbar führen, und zeigt für denselben Stand immer dasselbe.
 - **Issue-Review** — die Prüfung des Pakets vor Ready, sofern das Projekt sie verlangt.
 - **Freigabe zur Umsetzung** — der Zug nach Ready durch einen Menschen oder, in einer Nacht-Kette,
   das Ziel ab „Umsetzung“ bzw. `kit:durchziehen` mit der Person, die es gesetzt hat; die Kette nennt,
-  welcher Fall galt.
+  welcher Fall galt. Auch ein Zugang kann die Karte nach Ready ziehen; dann nennt das Glied den
+  Zugang als Freigeber, etwa „runner-token (Werkzeug)“.
 - **Umsetzung** mit Commit und dem Prüflauf, der ihn gedeckt hat, dann **Code-Review**.
 - **Übertragung** auf den Hauptzweig mit Weg und dem Ergebnis des Build-Diensts.
 - **Veröffentlichung** mit Version; ihr Ausgang steht wörtlich da.
@@ -261,7 +262,10 @@ keinen früheren Fehlschlag.
 **Welche Meldungen zählen.** Ein Glied begründen nur Meldungen, die das Kit selbst geschrieben
 hat: Kommentare, die über einen Projekt-Zugang (Access-Token) geschrieben wurden und den festen
 Wortlaut des Kits tragen, deutsch oder englisch. Ein in der Oberfläche geschriebener Kommentar
-zählt nie, auch nicht bei gleichem Wortlaut.
+zählt nie, auch nicht bei gleichem Wortlaut. Der Freigeber von Übertragung und Veröffentlichung
+ist dabei nur eine Angabe des Kits — der Server belegt ihn nicht über eine Anmeldung —, darum
+steht hinter seinem Namen „(Mensch, laut Meldung des Kits)“. Ein Mensch, den der Server selbst
+belegt, etwa beim Zug nach Ready oder beim Setzen eines Labels, erscheint ohne diesen Zusatz.
 
 **Veröffentlichung.** Der Ausgang `Pull Request angelegt` erscheint nicht als veröffentlicht —
 ebenso wenig wie `nicht veröffentlicht`. Für das zuletzt erreichte Glied eines Nachfahren zählt

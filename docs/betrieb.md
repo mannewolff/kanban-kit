@@ -175,6 +175,8 @@ geladen und ist per `.gitignore` ausgeschlossen).
 | `MANBAN_PUSH_VAPID_PUBLIC_KEY` | öffentlicher VAPID-Schlüssel für Benachrichtigungen aufs Handy (Web Push), siehe [Benachrichtigungen aufs Handy](#benachrichtigungen-aufs-handy-web-push) | leer (aus) |
 | `MANBAN_PUSH_VAPID_PRIVATE_KEY` | privater VAPID-Schlüssel dazu — ein Geheimnis wie `MANBAN_SESSION_SECRET` | leer (aus) |
 | `MANBAN_PUSH_SUBJECT` | Kontakt für die Push-Dienste, `mailto:<adresse>` oder `https://<seite>` | leer (aus) |
+| `MANBAN_SECRET_KEY` | Schlüssel, mit dem der Lesezugang eines fremden Boards (GitLab) verschlüsselt gespeichert wird: 32 Byte hex, erzeugen mit `openssl rand -hex 32`. Leer ist das Anbinden gesperrt, ein ungültiger Wert bricht den Start ab. Ein Geheimnis wie `MANBAN_SESSION_SECRET` — nach einem Wechsel oder Verlust muss jeder Zugang neu hinterlegt werden | leer (Anbinden gesperrt) |
+| `MANBAN_FREMDBOARD_HOSTS` | Hosts, die als fremdes Board abgerufen werden dürfen, kommagetrennt (z. B. `gitlab.com,git.example.org`). Nur `https`, keine Weiterleitungen, Zeitlimit 10 s. Ein selbst betriebenes GitLab hier eintragen | `gitlab.com` |
 | `MANBAN_STORAGE_BUCKET` | Name des Buckets, in dem die Anhänge liegen. Derselbe Wert speist die S3-Identität des Speichers und den Anlegeschritt beim Start — eine Änderung wirkt auf alle drei Stellen zugleich, holt aber keine Anhänge aus dem alten Bucket nach | `manban` |
 | `POSTGRES_*`, `OBJEKTSPEICHER_ROOT_*` | DB- und Objektspeicher-Zugangsdaten. Bewusst ohne `MANBAN_`-Präfix: Sie gehören den Bausteinen, nicht der Anwendung. Aus den `OBJEKTSPEICHER_ROOT_*` speist der Stack zugleich die S3-Identität des Speichers und den Zugang von `manban-api` | siehe `docker-compose.yml` |
 

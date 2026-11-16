@@ -6,6 +6,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.domain.CardActivity;
+import org.mwolff.manban.card.domain.CardActivityOrigin;
 import org.mwolff.manban.card.domain.CardActivityType;
 import org.mwolff.manban.card.domain.CardStatus;
 import org.mwolff.manban.card.domain.LaufBewegung;
@@ -38,6 +39,21 @@ public interface CardActivityRepository {
       String detail,
       Instant createdAt,
       ActorStamp stamp,
+      @Nullable CardStatus statusAfter);
+
+  /**
+   * Hält einen Eintrag des Spiegels eines fremden Boards fest (Issue #2162, Plan #2152 A11): ohne
+   * Benutzer in kanban-kit, ohne Laufkennung, mit der Herkunft und dem Benutzer im fremden System.
+   *
+   * @param externAkteur Benutzername im fremden System; {@code null}, wenn es ihn nicht festhält
+   */
+  void addFremd(
+      long cardId,
+      CardActivityType type,
+      String detail,
+      Instant createdAt,
+      CardActivityOrigin origin,
+      @Nullable String externAkteur,
       @Nullable CardStatus statusAfter);
 
   /** Aktivitäten der Karte, chronologisch nach Zeitpunkt. */

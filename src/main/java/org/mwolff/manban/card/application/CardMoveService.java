@@ -28,7 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Karten — einzeln oder gesammelt — auf ein anderes Board umziehen. Transaktionen, Sperren,
  * Rechteprüfung, Spaltenverlauf und Ereignisse sind unverändert die aus {@link CardService} (E3);
  * die Abhängigkeiten einer Karte, die das Projekt wechselt, räumt {@link KartenAbhaengigkeiten}
- * (E11).
+ * (E11). Gestempelt wird mit der Uhr, oder mit dem Zeitpunkt von außen, den die Transaktion in
+ * {@link FlussZeitpunkt} trägt (Issue #2159).
  */
 @Service
 public class CardMoveService {
@@ -85,8 +86,9 @@ public class CardMoveService {
     if (card.type() == CardType.EPIC) {
       throw InvalidDependencyException.epicsNichtPositioniert();
     }
-    permissions.require(
-        userId, boardService.requireProjectId(card.boardId()), Permission.CARD_MOVE);
+    long projectId = boardService.requireProjectId(card.boardId());
+    permissions.require(userId, projectId, Permission.CARD_MOVE);
+    grundlage.pruefeSchreibbar(projectId);
 
     ColumnView target = boardService.requireColumn(targetColumnId, card.boardId());
 
@@ -95,7 +97,7 @@ public class CardMoveService {
     // Spaltenverlauf: nur bei echtem Spaltenwechsel (kein Eintrag bei reinem Reindex). Ein einziger
     // Zeitstempel schließt die verlassene und eröffnet die Ziel-Spalte lückenlos.
     long fromColumn = card.columnId();
-    Instant switchedAt = clock.instant();
+    Instant switchedAt = FlussZeitpunkt.jetzt(clock);
     if (fromColumn != targetColumnId) {
       transitions.closeOpen(cardId, switchedAt);
       transitions.open(cardId, targetColumnId, target.name(), switchedAt);
@@ -122,7 +124,9 @@ public class CardMoveService {
     // Prüfung.
     CardView result =
         sicht.view(
-            cards.save(moved.withMovedToDoneAt(doneStempel(moved, target.name(), clock.instant()))),
+            cards.save(
+                moved.withMovedToDoneAt(
+                    doneStempel(moved, target.name(), FlussZeitpunkt.jetzt(clock)))),
             true);
     grundlage.publishChanged(card.boardId(), ActivityType.MOVED, cardId);
     return result;
@@ -162,6 +166,7 @@ public class CardMoveService {
   public void setStatus(long userId, long cardId, String status) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.require(userId, card.projectId(), Permission.CARD_MOVE);
+    grundlage.pruefeSchreibbar(card.projectId());
     CardStatus neu = statusAus(status);
     if (!Arbeitspaket.istArbeitspaket(card.type(), card.title())) {
       throw InvalidStatusException.keinEigener();
@@ -179,7 +184,7 @@ public class CardMoveService {
       doMove(userId, cardId, prozessspalte.get().id().longValue(), POSITION_AM_ENDE);
       return;
     }
-    Instant jetzt = clock.instant();
+    Instant jetzt = FlussZeitpunkt.jetzt(clock);
     Card gesetzt = card.withStatus(neu);
     // Bei einem Arbeitspaket entscheidet allein der Status über Done — die Spalte geht nicht ein.
     cards.save(gesetzt.withMovedToDoneAt(doneStempel(gesetzt, null, jetzt)));
@@ -226,7 +231,9 @@ public class CardMoveService {
   @Transactional
   public void sortColumnByNumber(long userId, long columnId, SortDirection direction) {
     long boardId = boardService.boardIdOfColumn(columnId);
-    permissions.require(userId, boardService.requireProjectId(boardId), Permission.CARD_MOVE);
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.require(userId, projectId, Permission.CARD_MOVE);
+    grundlage.pruefeSchreibbar(projectId);
 
     cards.sortActiveByNumber(columnId, direction);
 
@@ -290,6 +297,10 @@ public class CardMoveService {
       permissions.requireOwner(userId, sourceProjectId);
       permissions.requireOwner(userId, targetProjectId);
     }
+    // Quelle und Ziel (Issue #2161, Plan #2152 A10): Ein Umzug in ein Projekt mit fremdem Board
+    // vergäbe dort eine Nummer und bräche die Gleichheit mit der Nummer im fremden System (A2).
+    grundlage.pruefeSchreibbar(sourceProjectId);
+    grundlage.pruefeSchreibbar(targetProjectId);
 
     // Innerhalb desselben Projekts bleibt die Nummer erhalten (projektweit ohnehin eindeutig) und
     // Abhängigkeiten/Zuständige wandern mit — nur so bleiben Querverweise beim Board-Wechsel
@@ -304,7 +315,7 @@ public class CardMoveService {
     }
 
     // Spaltenverlauf: der board-/spaltenübergreifende Umzug zählt als Spaltenwechsel.
-    Instant switchedAt = clock.instant();
+    Instant switchedAt = FlussZeitpunkt.jetzt(clock);
     transitions.closeOpen(cardId, switchedAt);
     transitions.open(cardId, targetColumnId, targetColumn.name(), switchedAt);
 

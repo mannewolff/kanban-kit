@@ -71,7 +71,7 @@ services:
     # Volle Fassung statt eines beweglichen Tags: Ein `latest` ist genau das, was dieses Vorhaben
     # abschafft. Das Abbild dieser Nummer steht erst mit ihrem Release in der Registry — die
     # Pruefart `eigen` in scripts/bausteine.json haelt den CI-Job deshalb gruen (Issue #1264).
-    image: ghcr.io/mannewolff/kanban-kit:3.18.0
+    image: ghcr.io/mannewolff/kanban-kit:3.19.0
     environment:
       MANBAN_BASE_URL: ${MANBAN_BASE_URL:-https://localhost}
       # Dies ist der lokale Entwicklungs-Stack: Der Schalter erlaubt den Start mit den
@@ -125,6 +125,10 @@ services:
       MANBAN_PUSH_VAPID_PUBLIC_KEY: ${MANBAN_PUSH_VAPID_PUBLIC_KEY:-}
       MANBAN_PUSH_VAPID_PRIVATE_KEY: ${MANBAN_PUSH_VAPID_PRIVATE_KEY:-}
       MANBAN_PUSH_SUBJECT: ${MANBAN_PUSH_SUBJECT:-}
+      # Board in einem fremden System (Issue #2157): optional. Ohne Schluessel ist das Anbinden
+      # gesperrt; die Hosts sind die Erlaubnisliste der abrufbaren Adressen (nur https).
+      MANBAN_SECRET_KEY: ${MANBAN_SECRET_KEY:-}
+      MANBAN_FREMDBOARD_HOSTS: ${MANBAN_FREMDBOARD_HOSTS:-gitlab.com}
       MANBAN_STORAGE_ENDPOINT: http://objektspeicher:8333
       MANBAN_STORAGE_ACCESS_KEY: ${OBJEKTSPEICHER_ROOT_USER:-manban}
       MANBAN_STORAGE_SECRET_KEY: ${OBJEKTSPEICHER_ROOT_PASSWORD:-manban-objektspeicher}

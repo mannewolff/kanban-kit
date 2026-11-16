@@ -44,7 +44,8 @@ class KartenGrundlageAktivitaetTest {
           activity,
           actor,
           mock(ApplicationEventPublisher.class),
-          Clock.fixed(JETZT, ZoneOffset.UTC));
+          Clock.fixed(JETZT, ZoneOffset.UTC),
+          CardServiceAufbau.KEIN_FREMDES_BOARD);
 
   @Test
   void aktivitaet_reichtStatusNachDerBewegungUndStempelDurch() {

@@ -45,6 +45,7 @@ import org.mwolff.manban.entscheidungskette.domain.Gliedart;
 import org.mwolff.manban.entscheidungskette.domain.Hinweis;
 import org.mwolff.manban.entscheidungskette.domain.Umsetzungsausgang;
 import org.mwolff.manban.entscheidungskette.domain.Zustand;
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.KitReviewVorReadyReader;
 import org.mwolff.manban.project.application.KitReviewVorReadyReader.Meldung;
 import org.mwolff.manban.project.application.PermissionChecker;
@@ -72,8 +73,10 @@ class EntscheidungsketteServiceTest {
   private final CommentService comments = mock(CommentService.class);
   private final KitReviewVorReadyReader reviewVorReady = mock(KitReviewVorReadyReader.class);
   private final UserLookup users = mock(UserLookup.class);
+  private final BoardQuelle boardQuelle = mock(BoardQuelle.class);
   private final EntscheidungsketteService service =
-      new EntscheidungsketteService(cards, permissions, leser, comments, reviewVorReady, users);
+      new EntscheidungsketteService(
+          cards, permissions, leser, comments, reviewVorReady, users, boardQuelle);
 
   @BeforeEach
   void stelle() {
@@ -214,18 +217,18 @@ class EntscheidungsketteServiceTest {
     EntscheidungsketteView sicht = service.kette(NUTZER, PAKET);
 
     assertThat(glieder(sicht, Dokumentart.PLAN, Gliedart.HERKUNFT).getFirst().ausgefuehrtVon())
-        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null));
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null, false));
     assertThat(glieder(sicht, Dokumentart.PAKET, Gliedart.HERKUNFT).getFirst().ausgefuehrtVon())
-        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, null, null));
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, null, null, false));
     GliedView freigabe = glieder(sicht, Dokumentart.PAKET, Gliedart.FREIGABE).getFirst();
     assertThat(freigabe.freigegebenVon())
-        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null));
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null, false));
     assertThat(freigabe.freigabe()).isNotNull();
     assertThat(freigabe.freigabe().fall()).isEqualTo(Freigabefall.ZUG_NACH_READY);
     assertThat(freigabe.umsetzung()).isNull();
     GliedView umsetzung = glieder(sicht, Dokumentart.PAKET, Gliedart.UMSETZUNG).getFirst();
     assertThat(umsetzung.ausgefuehrtVon())
-        .isEqualTo(new AkteurView(Akteurtyp.MODELL, "claude-opus-5-5", null));
+        .isEqualTo(new AkteurView(Akteurtyp.MODELL, "claude-opus-5-5", null, false));
     assertThat(umsetzung.umsetzung()).isNotNull();
     assertThat(umsetzung.umsetzung().ausgang()).isEqualTo(Umsetzungsausgang.ABGESCHLOSSEN);
     assertThat(umsetzung.umsetzung().commit()).isEqualTo("abc");
@@ -278,7 +281,7 @@ class EntscheidungsketteServiceTest {
     assertThat(runde.pruefung().pruefer()).extracting(r -> r.modell()).containsExactly("fable");
     assertThat(runde.pruefung().einarbeitung().zustand()).isEqualTo(Zustand.ERFASST);
     assertThat(runde.pruefung().einarbeitung().ausgefuehrtVon())
-        .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "Kit", "claude-opus-5-5"));
+        .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "Kit", "claude-opus-5-5", false));
     assertThat(runde.hinweise()).isEmpty();
     assertThat(glieder(sicht, Dokumentart.PAKET, Gliedart.CODE_REVIEW).getFirst().codeReview())
         .isNotNull();
@@ -288,6 +291,34 @@ class EntscheidungsketteServiceTest {
         glieder(sicht, Dokumentart.PAKET, Gliedart.VEROEFFENTLICHUNG).getFirst();
     assertThat(veroeffentlichung.veroeffentlichung()).isNotNull();
     assertThat(veroeffentlichung.veroeffentlichung().version()).isEqualTo("1.2.3");
+  }
+
+  /** Ein Freigeber aus einer Kit-Meldung geht als gemeldet durch, mit seinem Namen. */
+  @Test
+  void einGemeldeterFreigeberBleibtGemeldet() {
+    KettenKarte paket = karte(PAKET, 30, "Paket", "ARBEITSPAKET");
+    when(leser.lade(PAKET))
+        .thenReturn(new KartenKette(paket, List.of(), List.of(), List.of(), List.of(), List.of()));
+    when(comments.kettenKommentare(anyCollection()))
+        .thenReturn(
+            List.of(
+                kommentar(
+                    1,
+                    PAKET,
+                    "## Übertragung auf den Hauptzweig\n\nVersuch: 1\nAusgang: übertragen\n"
+                        + "Freigegeben von: Erika Muster, 2026-11-10T10:00:00Z\n"
+                        + "Ausgeführt von: "
+                        + MODELL
+                        + ", 2026-11-10T11:00:00Z\n",
+                    T0)));
+
+    EntscheidungsketteView sicht = service.kette(NUTZER, PAKET);
+
+    GliedView uebertragung = glieder(sicht, Dokumentart.PAKET, Gliedart.UEBERTRAGUNG).getFirst();
+    assertThat(uebertragung.freigegebenVon())
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null, true));
+    assertThat(uebertragung.ausgefuehrtVon())
+        .isEqualTo(new AkteurView(Akteurtyp.MODELL, MODELL, null, false));
   }
 
   /** Nachfahren am Plan kommen mit; ein Hinweis bleibt am Glied stehen. */
@@ -304,7 +335,8 @@ class EntscheidungsketteServiceTest {
                 List.of(),
                 List.of(),
                 List.of(
-                    new KettenLabelEreignis(PLAN, "ziel:umsetzung", T0, ERIKA, "SESSION", null))));
+                    new KettenLabelEreignis(
+                        PLAN, "ziel:umsetzung", T0, ERIKA, "SESSION", null, null))));
 
     EntscheidungsketteView sicht = service.kette(NUTZER, PLAN);
 
@@ -340,9 +372,11 @@ class EntscheidungsketteServiceTest {
                         "Kit",
                         MODELL,
                         "READY",
-                        T0.plusSeconds(30))),
+                        T0.plusSeconds(30),
+                        null)),
                 List.of(
-                    new KettenLabelEreignis(PLAN, "ziel:umsetzung", T0, ERIKA, "SESSION", null))));
+                    new KettenLabelEreignis(
+                        PLAN, "ziel:umsetzung", T0, ERIKA, "SESSION", null, null))));
 
     EntscheidungsketteView sicht = service.kette(NUTZER, PAKET);
 
@@ -350,11 +384,55 @@ class EntscheidungsketteServiceTest {
     assertThat(freigabe.freigabe()).isNotNull();
     assertThat(freigabe.freigabe().fall()).isEqualTo(Freigabefall.KENNZEICHEN);
     assertThat(freigabe.freigegebenVon())
-        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null));
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "Erika Muster", null, false));
     assertThat(freigabe.ausgefuehrtVon())
-        .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "Kit", MODELL));
+        .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "Kit", MODELL, false));
     assertThat(freigabe.zeitpunkt()).isEqualTo(T0);
     assertThat(freigabe.quelle().nummer()).isEqualTo(20);
+  }
+
+  /**
+   * Bei fremdem Board ist der Zug des Kit-Kontos ohne Laufkennung die Ausführung, und der Benutzer
+   * in GitLab, der das Ziel setzte, der Freigeber (Issue #2165, Plan #2152 A11).
+   */
+  @Test
+  void beiFremdemBoardNenntDieFreigabeDenBenutzerImFremdenSystem() {
+    KettenKarte paket = karte(PAKET, 30, "Paket", "ARBEITSPAKET");
+    KettenKarte plan = karte(PLAN, 20, "[Plan] Weg", "PLAN");
+    when(boardQuelle.istFremd(PROJEKT)).thenReturn(true);
+    when(leser.lade(PAKET))
+        .thenReturn(
+            new KartenKette(
+                paket,
+                List.of(new KettenGlied(GliedZustand.VORHANDEN, 20, plan)),
+                List.of(),
+                List.of(),
+                List.of(
+                    new KettenAktivitaet(
+                        PAKET,
+                        null,
+                        "MOVED",
+                        "",
+                        T0.plusSeconds(60),
+                        "TOKEN",
+                        null,
+                        null,
+                        "READY",
+                        null,
+                        "kit-bot")),
+                List.of(
+                    new KettenLabelEreignis(
+                        PLAN, "goal:implementation", T0, null, "SESSION", null, "erika"))));
+
+    GliedView freigabe =
+        glieder(service.kette(NUTZER, PAKET), Dokumentart.PAKET, Gliedart.FREIGABE).getFirst();
+
+    assertThat(freigabe.freigabe().fall()).isEqualTo(Freigabefall.KENNZEICHEN);
+    assertThat(freigabe.freigegebenVon())
+        .isEqualTo(new AkteurView(Akteurtyp.MENSCH, "erika", null, true));
+    assertThat(freigabe.ausgefuehrtVon())
+        .isEqualTo(new AkteurView(Akteurtyp.WERKZEUG, "kit-bot", null, false));
+    verify(users, never()).findById(anyLong());
   }
 
   @Test
@@ -384,7 +462,8 @@ class EntscheidungsketteServiceTest {
 
   private static KettenAktivitaet zug(
       long karte, long person, String typ, @Nullable String spalte, Instant zeit) {
-    return new KettenAktivitaet(karte, person, typ, "", zeit, "SESSION", null, null, spalte, null);
+    return new KettenAktivitaet(
+        karte, person, typ, "", zeit, "SESSION", null, null, spalte, null, null);
   }
 
   private static KettenKommentarView kommentar(long id, long karte, String text, Instant zeit) {

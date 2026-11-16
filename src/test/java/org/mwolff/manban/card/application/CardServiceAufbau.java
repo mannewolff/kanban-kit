@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import java.time.Clock;
 import org.mwolff.manban.auth.application.UserLookup;
 import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -25,6 +26,9 @@ import org.springframework.context.ApplicationEventPublisher;
 // Bausteine, die alle Prüflinge aus denselben Mocks bekommen sollen (Plan #1387, E6).
 @SuppressWarnings("PMD.CouplingBetweenObjects")
 final class CardServiceAufbau {
+
+  /** Vorgabe der Board-Quelle: kein Projekt hat ein fremdes Board (Issue #2161). */
+  static final BoardQuelle KEIN_FREMDES_BOARD = projectId -> false;
 
   private CardServiceAufbau() {}
 
@@ -95,6 +99,37 @@ final class CardServiceAufbau {
       Clock clock,
       UserLookup users,
       CardBestandRepository bestand) {
+    return ausPorts(
+        cards,
+        dependencies,
+        boardService,
+        permissions,
+        transitions,
+        zuordnung,
+        activity,
+        actor,
+        events,
+        clock,
+        users,
+        bestand,
+        KEIN_FREMDES_BOARD);
+  }
+
+  /** Wie die Signatur davor, mit eigener {@link BoardQuelle} (Issue #2161). */
+  static CardService ausPorts(
+      CardRepository cards,
+      CardDependencyRepository dependencies,
+      BoardService boardService,
+      PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
+      KartenZuordnung zuordnung,
+      CardActivityRepository activity,
+      ActorContext actor,
+      ApplicationEventPublisher events,
+      Clock clock,
+      UserLookup users,
+      CardBestandRepository bestand,
+      BoardQuelle quelle) {
     Bausteine b =
         bausteine(
             cards,
@@ -107,7 +142,8 @@ final class CardServiceAufbau {
             actor,
             events,
             clock,
-            bestand);
+            bestand,
+            quelle);
     return new CardService(
         cards,
         b.abhaengigkeiten(),
@@ -131,6 +167,33 @@ final class CardServiceAufbau {
       ActorContext actor,
       ApplicationEventPublisher events,
       Clock clock) {
+    return ingestAusPorts(
+        cards,
+        dependencies,
+        boardService,
+        permissions,
+        transitions,
+        zuordnung,
+        activity,
+        actor,
+        events,
+        clock,
+        KEIN_FREMDES_BOARD);
+  }
+
+  /** Wie die Signatur davor, mit eigener {@link BoardQuelle} (Issue #2161). */
+  static CardIngestService ingestAusPorts(
+      CardRepository cards,
+      CardDependencyRepository dependencies,
+      BoardService boardService,
+      PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
+      KartenZuordnung zuordnung,
+      CardActivityRepository activity,
+      ActorContext actor,
+      ApplicationEventPublisher events,
+      Clock clock,
+      BoardQuelle quelle) {
     Bausteine b =
         bausteine(
             cards,
@@ -143,7 +206,8 @@ final class CardServiceAufbau {
             actor,
             events,
             clock,
-            mock(CardBestandRepository.class));
+            mock(CardBestandRepository.class),
+            quelle);
     return new CardIngestService(
         cards, b.abhaengigkeiten(), boardService, permissions, b.grundlage(), b.sicht(), clock);
   }
@@ -159,6 +223,33 @@ final class CardServiceAufbau {
       ActorContext actor,
       ApplicationEventPublisher events,
       Clock clock) {
+    return epicAusPorts(
+        cards,
+        dependencies,
+        boardService,
+        permissions,
+        transitions,
+        zuordnung,
+        activity,
+        actor,
+        events,
+        clock,
+        KEIN_FREMDES_BOARD);
+  }
+
+  /** Wie die Signatur davor, mit eigener {@link BoardQuelle} (Issue #2161). */
+  static EpicService epicAusPorts(
+      CardRepository cards,
+      CardDependencyRepository dependencies,
+      BoardService boardService,
+      PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
+      KartenZuordnung zuordnung,
+      CardActivityRepository activity,
+      ActorContext actor,
+      ApplicationEventPublisher events,
+      Clock clock,
+      BoardQuelle quelle) {
     Bausteine b =
         bausteine(
             cards,
@@ -171,7 +262,8 @@ final class CardServiceAufbau {
             actor,
             events,
             clock,
-            mock(CardBestandRepository.class));
+            mock(CardBestandRepository.class),
+            quelle);
     return new EpicService(
         cards,
         b.abhaengigkeiten(),
@@ -196,6 +288,35 @@ final class CardServiceAufbau {
       ActorContext actor,
       ApplicationEventPublisher events,
       Clock clock) {
+    return archiveAusPorts(
+        cards,
+        bestand,
+        dependencies,
+        boardService,
+        permissions,
+        transitions,
+        zuordnung,
+        activity,
+        actor,
+        events,
+        clock,
+        KEIN_FREMDES_BOARD);
+  }
+
+  /** Wie die Signatur davor, mit eigener {@link BoardQuelle} (Issue #2161). */
+  static CardArchiveService archiveAusPorts(
+      CardRepository cards,
+      CardBestandRepository bestand,
+      CardDependencyRepository dependencies,
+      BoardService boardService,
+      PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
+      KartenZuordnung zuordnung,
+      CardActivityRepository activity,
+      ActorContext actor,
+      ApplicationEventPublisher events,
+      Clock clock,
+      BoardQuelle quelle) {
     Bausteine b =
         bausteine(
             cards,
@@ -208,7 +329,8 @@ final class CardServiceAufbau {
             actor,
             events,
             clock,
-            bestand);
+            bestand,
+            quelle);
     return new CardArchiveService(
         cards,
         bestand,
@@ -217,7 +339,7 @@ final class CardServiceAufbau {
         permissions,
         b.grundlage(),
         b.sicht(),
-        new VorhabenArchivierung(cards),
+        new VorhabenArchivierung(cards, quelle),
         events,
         clock);
   }
@@ -233,6 +355,33 @@ final class CardServiceAufbau {
       ActorContext actor,
       ApplicationEventPublisher events,
       Clock clock) {
+    return moveAusPorts(
+        cards,
+        dependencies,
+        boardService,
+        permissions,
+        transitions,
+        zuordnung,
+        activity,
+        actor,
+        events,
+        clock,
+        KEIN_FREMDES_BOARD);
+  }
+
+  /** Wie die Signatur davor, mit eigener {@link BoardQuelle} (Issue #2161). */
+  static CardMoveService moveAusPorts(
+      CardRepository cards,
+      CardDependencyRepository dependencies,
+      BoardService boardService,
+      PermissionChecker permissions,
+      CardColumnTransitionRepository transitions,
+      KartenZuordnung zuordnung,
+      CardActivityRepository activity,
+      ActorContext actor,
+      ApplicationEventPublisher events,
+      Clock clock,
+      BoardQuelle quelle) {
     Bausteine b =
         bausteine(
             cards,
@@ -245,7 +394,8 @@ final class CardServiceAufbau {
             actor,
             events,
             clock,
-            mock(CardBestandRepository.class));
+            mock(CardBestandRepository.class),
+            quelle);
     return new CardMoveService(
         cards,
         b.abhaengigkeiten(),
@@ -269,7 +419,8 @@ final class CardServiceAufbau {
       ActorContext actor,
       ApplicationEventPublisher events,
       Clock clock,
-      CardBestandRepository bestand) {
+      CardBestandRepository bestand,
+      BoardQuelle quelle) {
     KartenAbhaengigkeiten abhaengigkeiten = new KartenAbhaengigkeiten(dependencies, cards);
     KartenGrundlage grundlage =
         new KartenGrundlage(
@@ -282,7 +433,8 @@ final class CardServiceAufbau {
             activity,
             actor,
             events,
-            clock);
+            clock,
+            quelle);
     KartenSicht sicht = new KartenSicht(cards, bestand, abhaengigkeiten, zuordnung, permissions);
     return new Bausteine(abhaengigkeiten, grundlage, sicht);
   }

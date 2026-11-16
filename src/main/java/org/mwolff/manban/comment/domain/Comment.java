@@ -24,6 +24,8 @@ import org.mwolff.manban.common.Identifiable;
  *     #2108 E4); {@code null}, wenn der Text vom Kit stammt oder nie eine Meldung war
  * @param vonHandKopfzeile erste nichtleere Zeile der Fassung des Kits vor der Änderung von Hand;
  *     {@code null} ohne Änderung von Hand oder wenn jene Fassung keine solche Zeile trug
+ * @param externKennung Kennung des Kommentars im fremden System, aus dem der Spiegel ihn übernommen
+ *     hat (Issue #2162, Plan #2152 A1); {@code null} bei jedem eigenen Kommentar
  */
 public record Comment(
     @Nullable Long id,
@@ -38,10 +40,44 @@ public record Comment(
     @Nullable String tokenName,
     @Nullable String agent,
     @Nullable Instant vonHandGeaendertAm,
-    @Nullable String vonHandKopfzeile)
+    @Nullable String vonHandKopfzeile,
+    @Nullable String externKennung)
     implements Identifiable {
 
   private static final String HERKUNFT_TOKEN = "TOKEN";
+  private static final String HERKUNFT_SESSION = "SESSION";
+
+  /** Ein eigener Kommentar, nicht gespiegelt — die bisherige Parameterliste (Issue #2162). */
+  public Comment(
+      @Nullable Long id,
+      Long cardId,
+      @Nullable Long authorUserId,
+      String authorName,
+      String body,
+      Instant createdAt,
+      Instant updatedAt,
+      @Nullable Instant laufStart,
+      @Nullable String origin,
+      @Nullable String tokenName,
+      @Nullable String agent,
+      @Nullable Instant vonHandGeaendertAm,
+      @Nullable String vonHandKopfzeile) {
+    this(
+        id,
+        cardId,
+        authorUserId,
+        authorName,
+        body,
+        createdAt,
+        updatedAt,
+        laufStart,
+        origin,
+        tokenName,
+        agent,
+        vonHandGeaendertAm,
+        vonHandKopfzeile,
+        null);
+  }
 
   /** Ein Kommentar ohne Änderung von Hand — die bisherige Parameterliste (Plan #2108 E4). */
   public Comment(
@@ -70,6 +106,107 @@ public record Comment(
         agent,
         null,
         null);
+  }
+
+  /**
+   * Ein Kommentar aus einem fremden System, wie der Spiegel ihn zum ersten Mal übernimmt (Issue
+   * #2162, Plan #2152 A11, A19): ohne Benutzer von kanban-kit, mit den Zeitpunkten des fremden
+   * Systems und Herkunft {@code TOKEN}, wenn das Kit-Konto ihn schrieb, sonst {@code SESSION}.
+   * Wurde eine Meldung des Kits dort schon nach ihrer Anlage geändert, ist sie von Hand geändert;
+   * die Fassung des Kits kennt der Spiegel dann nicht, die Kopfzeile bleibt leer.
+   *
+   * @param autor Benutzername im fremden System
+   * @param vomKitKonto ob der Autor das hinterlegte Kit-Konto ist
+   */
+  public static Comment gespiegelt(
+      long cardId,
+      String externKennung,
+      String autor,
+      String text,
+      Instant angelegtAm,
+      Instant geaendertAm,
+      boolean vomKitKonto) {
+    boolean vonHand = vomKitKonto && geaendertAm.isAfter(angelegtAm);
+    return new Comment(
+        null,
+        cardId,
+        null,
+        autor,
+        text,
+        angelegtAm,
+        geaendertAm,
+        null,
+        vomKitKonto ? HERKUNFT_TOKEN : HERKUNFT_SESSION,
+        null,
+        null,
+        vonHand ? geaendertAm : null,
+        null,
+        externKennung);
+  }
+
+  /**
+   * Der Text, wie das fremde System ihn jetzt führt (Issue #2162, Plan #2152 A19). Liegt die
+   * Änderungszeit einer Meldung des Kits nach ihrer Anlage, ist sie von Hand geändert: Die Marke
+   * trägt die Änderungszeit, die Kopfzeile bleibt die der Fassung des Kits.
+   *
+   * @param geaendertAm Änderungszeitpunkt im fremden System
+   */
+  public Comment withSpiegelText(String newBody, Instant geaendertAm) {
+    boolean vonHand = HERKUNFT_TOKEN.equals(origin) && geaendertAm.isAfter(createdAt);
+    return new Comment(
+        id,
+        cardId,
+        authorUserId,
+        authorName,
+        newBody,
+        createdAt,
+        geaendertAm,
+        laufStart,
+        origin,
+        tokenName,
+        agent,
+        vonHand ? geaendertAm : vonHandGeaendertAm,
+        vonHand ? kopfzeileBeimKennzeichnen() : vonHandKopfzeile,
+        externKennung);
+  }
+
+  /**
+   * Der Kommentar, nachdem das fremde System ihn gelöscht hat (Issue #2162, Plan #2152 A19): Eine
+   * Meldung des Kits bleibt stehen und gilt ab {@code zeitpunkt} als von Hand geändert; trägt sie
+   * die Marke schon, bleibt sie, wie sie ist. Jeder andere Kommentar bleibt unverändert.
+   *
+   * @param zeitpunkt wann der Spiegel das Fehlen festgestellt hat
+   */
+  public Comment alsImFremdenSystemGeloescht(Instant zeitpunkt) {
+    if (!HERKUNFT_TOKEN.equals(origin) || vonHandGeaendertAm != null) {
+      return this;
+    }
+    return new Comment(
+        id,
+        cardId,
+        authorUserId,
+        authorName,
+        body,
+        createdAt,
+        updatedAt,
+        laufStart,
+        origin,
+        tokenName,
+        agent,
+        zeitpunkt,
+        kopfzeileBeimKennzeichnen(),
+        externKennung);
+  }
+
+  /**
+   * Ist der Kommentar schon gekennzeichnet, bleibt seine Kopfzeile; sonst die des jetzigen Texts.
+   */
+  private @Nullable String kopfzeileBeimKennzeichnen() {
+    return vonHandGeaendertAm != null ? vonHandKopfzeile : erstZeile(body);
+  }
+
+  private static @Nullable String erstZeile(String text) {
+    return text.lines().filter(zeile -> !zeile.isBlank()).findFirst().orElse(null);
   }
 
   /**
@@ -103,13 +240,14 @@ public record Comment(
         tokenName,
         agent,
         vonHand ? jetzt : null,
-        vonHand ? kopfzeileDerKitFassung() : null);
+        vonHand ? kopfzeileDerKitFassung() : null,
+        externKennung);
   }
 
   private @Nullable String kopfzeileDerKitFassung() {
     if (vonHandKopfzeile != null) {
       return vonHandKopfzeile;
     }
-    return body.lines().filter(zeile -> !zeile.isBlank()).findFirst().orElse(null);
+    return erstZeile(body);
   }
 }

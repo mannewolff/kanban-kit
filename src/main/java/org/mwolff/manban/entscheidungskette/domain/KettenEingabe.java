@@ -17,6 +17,9 @@ import org.jspecify.annotations.Nullable;
  * @param labelEreignisse der Karten der Kette, chronologisch (Plan #2108 E5, E11)
  * @param reviewVorReady die zuletzt vom Kit gemeldete Einstellung zur Prüfung vor Ready; {@code
  *     null}, solange nie gemeldet wurde (Plan #2108 E18)
+ * @param fremdesBoard ob das Board des Projekts in einem fremden System liegt (Issue #2165, Plan
+ *     #2152 A11): Dann trägt ein Zug des Kit-Kontos keine Laufkennung und gilt trotzdem als
+ *     Ausführung einer Freigabe
  */
 public record KettenEingabe(
     Karte karte,
@@ -26,7 +29,30 @@ public record KettenEingabe(
     List<Aktivitaet> aktivitaeten,
     List<Kommentar> kommentare,
     List<LabelEreignis> labelEreignisse,
-    @Nullable ReviewVorReady reviewVorReady) {
+    @Nullable ReviewVorReady reviewVorReady,
+    boolean fremdesBoard) {
+
+  /** Eine Eingabe eines Projekts mit eigenem Board. */
+  public KettenEingabe(
+      Karte karte,
+      List<Bezug> vorfahren,
+      List<Bezug> nachfahren,
+      List<Karte> ideen,
+      List<Aktivitaet> aktivitaeten,
+      List<Kommentar> kommentare,
+      List<LabelEreignis> labelEreignisse,
+      @Nullable ReviewVorReady reviewVorReady) {
+    this(
+        karte,
+        vorfahren,
+        nachfahren,
+        ideen,
+        aktivitaeten,
+        kommentare,
+        labelEreignisse,
+        reviewVorReady,
+        false);
+  }
 
   /** Die Art einer Karte, wie sie die Lese-Fassade nennt. */
   public enum Art {
@@ -81,6 +107,8 @@ public record KettenEingabe(
    * @param spaltenSchluessel bei einem Zug der Schlüssel der Zielspalte ({@code READY}, …); {@code
    *     null}, wenn er sich nicht sicher bestimmen lässt (Plan #2108 E10)
    * @param laufStart die Laufkennung des Laufs, der den Eintrag auslöste; {@code null} ohne Lauf
+   * @param externAkteur der Benutzer im fremden System, der den Eintrag auslöste; {@code null} bei
+   *     eigenem Board und wenn das fremde System ihn nicht festhält (Plan #2152 A11)
    */
   public record Aktivitaet(
       long kartenId,
@@ -91,13 +119,41 @@ public record KettenEingabe(
       @Nullable String tokenName,
       @Nullable String agent,
       @Nullable String spaltenSchluessel,
-      @Nullable Instant laufStart) {}
+      @Nullable Instant laufStart,
+      @Nullable String externAkteur) {
+
+    /** Ein Eintrag ohne Benutzer im fremden System. */
+    public Aktivitaet(
+        long kartenId,
+        @Nullable Long person,
+        String typ,
+        Instant zeitpunkt,
+        @Nullable String herkunft,
+        @Nullable String tokenName,
+        @Nullable String agent,
+        @Nullable String spaltenSchluessel,
+        @Nullable Instant laufStart) {
+      this(
+          kartenId,
+          person,
+          typ,
+          zeitpunkt,
+          herkunft,
+          tokenName,
+          agent,
+          spaltenSchluessel,
+          laufStart,
+          null);
+    }
+  }
 
   /**
    * Ein Label, das einer Karte der Kette hinzugefügt wurde (Plan #2108 E5).
    *
    * @param person wer es setzte; {@code null}, wenn nicht erfasst
    * @param herkunft {@code SESSION} oder {@code TOKEN}; {@code null} ohne bekannte Herkunft
+   * @param externAkteur der Benutzer im fremden System, der es setzte; {@code null} bei eigenem
+   *     Board und wenn das fremde System ihn nicht festhält (Plan #2152 A11)
    */
   public record LabelEreignis(
       long kartenId,
@@ -105,7 +161,20 @@ public record KettenEingabe(
       Instant zeitpunkt,
       @Nullable Long person,
       @Nullable String herkunft,
-      @Nullable String tokenName) {}
+      @Nullable String tokenName,
+      @Nullable String externAkteur) {
+
+    /** Ein Ereignis ohne Benutzer im fremden System. */
+    public LabelEreignis(
+        long kartenId,
+        String labelName,
+        Instant zeitpunkt,
+        @Nullable Long person,
+        @Nullable String herkunft,
+        @Nullable String tokenName) {
+      this(kartenId, labelName, zeitpunkt, person, herkunft, tokenName, null);
+    }
+  }
 
   /**
    * Die vom Kit gemeldete Einstellung zur Prüfung vor Ready (Plan #2108 E18).

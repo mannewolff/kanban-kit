@@ -68,14 +68,16 @@
       "areas": [
         "frontend"
       ],
-      "concurrent": true
+      "concurrent": true,
+      "kind": "mutation"
     },
     {
       "cmd": "node scripts/mutationspruefung.mjs zuordnung backend",
       "areas": [
         "backend"
       ],
-      "concurrent": true
+      "concurrent": true,
+      "kind": "mutation"
     },
     {
       "cmd": "node scripts/mutationspruefung.mjs aenderung frontend",
@@ -83,7 +85,8 @@
         "frontend"
       ],
       "stage": "push",
-      "concurrent": true
+      "concurrent": true,
+      "kind": "mutation"
     },
     {
       "cmd": "node scripts/mutationspruefung.mjs aenderung backend",
@@ -91,12 +94,14 @@
         "backend"
       ],
       "stage": "push",
-      "concurrent": true
+      "concurrent": true,
+      "kind": "mutation"
     },
     {
       "cmd": "node scripts/mutationspruefung.mjs vollauf backend",
       "stage": "push",
-      "concurrent": true
+      "concurrent": true,
+      "kind": "mutation"
     },
     {
       "cmd": "node scripts/abdeckungspruefung.mjs",
@@ -263,5 +268,13 @@
     "statusLabels": true
   },
   "scenariosFrom": 1638,
-  "strictness": "normal"
+  "strictness": "normal",
+  "checkLimits": {
+    "silenceMin": 40
+  },
+  "pacer": {
+    "enabled": true,
+    "machine": "manne",
+    "stage2": "true"
+  }
 }

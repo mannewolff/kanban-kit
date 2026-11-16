@@ -158,6 +158,7 @@ public class CardService {
       long userId, long boardId, long columnId, List<NewCard> neueKarten) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.require(userId, projectId, Permission.TICKET_CREATE);
+    grundlage.pruefeSchreibbar(projectId);
     // Die Spalte einmal vorab gegen das Board prüfen: ein falsches Ziel soll scheitern, bevor die
     // erste Karte eine Nummer verbraucht hat. anlegen prüft sie je Karte erneut (unverändert).
     boardService.requireColumn(columnId, boardId);
@@ -276,6 +277,7 @@ public class CardService {
     }
     // Projekt-basierte Rechte (#405), nicht über das Board.
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
+    grundlage.pruefeSchreibbar(card.projectId());
 
     zuordnung.ersetzeZustaendige(cardId, card.projectId(), assigneeIds, userId);
     grundlage.aktivitaet(cardId, userId, CardActivityType.ASSIGNED, "Zuständige geändert");
@@ -296,6 +298,7 @@ public class CardService {
     }
     // Projekt-basierte Rechte (#405); die Labels selbst bleiben board-scoped.
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
+    grundlage.pruefeSchreibbar(card.projectId());
 
     zuordnung.ersetzeLabels(cardId, card.boardId(), labelIds, grundlage.herkunft(), userId);
     grundlage.publishChanged(card.boardId(), ActivityType.UPDATED, cardId);
@@ -341,6 +344,7 @@ public class CardService {
       throw InvalidDependencyException.nurKartenMitLabels();
     }
     permissions.require(userId, card.projectId(), Permission.TICKET_UPDATE);
+    grundlage.pruefeSchreibbar(card.projectId());
 
     long boardId = card.boardId();
     zuordnung.aendereLabel(cardId, boardId, labelId, action, grundlage.herkunft(), userId);

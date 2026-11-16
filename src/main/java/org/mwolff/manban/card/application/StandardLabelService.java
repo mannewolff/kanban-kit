@@ -11,6 +11,7 @@ import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.board.application.BoardService.BoardSummary;
 import org.mwolff.manban.common.KitNamen;
 import org.mwolff.manban.common.KitNamen.Sache;
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +46,7 @@ public class StandardLabelService {
   private final LabelRepository labels;
   private final BoardService boardService;
   private final PlatformAdminChecker platformAdminChecker;
+  private final BoardQuelle boardQuelle;
 
   /**
    * Gruppe und Farbe je Sache — Anzeigedaten, gleich unter jedem Namen der Sache (A3). Eine Sache
@@ -63,8 +65,9 @@ public class StandardLabelService {
   public StandardLabelService(
       LabelRepository labels,
       BoardService boardService,
-      PlatformAdminChecker platformAdminChecker) {
-    this(labels, boardService, platformAdminChecker, KitNamen.STANDARD);
+      PlatformAdminChecker platformAdminChecker,
+      BoardQuelle boardQuelle) {
+    this(labels, boardService, platformAdminChecker, boardQuelle, KitNamen.STANDARD);
   }
 
   /**
@@ -76,10 +79,12 @@ public class StandardLabelService {
       LabelRepository labels,
       BoardService boardService,
       PlatformAdminChecker platformAdminChecker,
+      BoardQuelle boardQuelle,
       KitNamen register) {
     this.labels = labels;
     this.boardService = boardService;
     this.platformAdminChecker = platformAdminChecker;
+    this.boardQuelle = boardQuelle;
     this.satz = satzAus(register);
   }
 
@@ -90,14 +95,19 @@ public class StandardLabelService {
   }
 
   /**
-   * Legt jedes fehlende Label des Standardsatzes auf jedem aktiven Board aller Projekte an.
+   * Legt jedes fehlende Label des Standardsatzes auf jedem aktiven Board aller Projekte an. Boards
+   * von Projekten mit fremdem Board bleiben unberührt und zählen nicht mit (Issue #2161, Plan #2152
+   * A10): Ihre Labels pflegt das fremde System.
    *
    * @return Zahl der Boards, der neu angelegten und der übersprungenen Labels
    */
   @Transactional
   public Ergebnis aufAlleBoardsAnlegen(long actorUserId) {
     requireAdmin(actorUserId);
-    List<BoardSummary> boards = boardService.listAllActiveBoards();
+    List<BoardSummary> boards =
+        boardService.listAllActiveBoards().stream()
+            .filter(board -> !boardQuelle.istFremd(boardService.requireProjectId(board.id())))
+            .toList();
     int angelegt = 0;
     for (BoardSummary board : boards) {
       for (StandardLabel label : satz) {

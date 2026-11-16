@@ -14,8 +14,8 @@ import { Entscheidungskette } from './Entscheidungskette'
 /** Der Abschnitt „Entscheidungskette“ im Kartendialog (Issue #2118, Plan #2108 E7, E8, E15, E16). */
 
 const KEINER: Verweis = { karte: null, nummer: null, titel: null, oeffenbar: false, kommentar: null }
-const MANFRED: AkteurView = { typ: 'MENSCH', name: 'Manfred', modell: null }
-const RUNNER: AkteurView = { typ: 'WERKZEUG', name: 'runner-token', modell: 'claude-opus-5-5' }
+const MANFRED: AkteurView = { typ: 'MENSCH', name: 'Manfred', modell: null, gemeldet: false }
+const RUNNER: AkteurView = { typ: 'WERKZEUG', name: 'runner-token', modell: 'claude-opus-5-5', gemeldet: false }
 const ANGABE_LEER = { wert: null, zeitpunkt: null }
 
 const glied = (werte: Partial<GliedView>): GliedView => ({
@@ -90,7 +90,7 @@ describe('Entscheidungskette', () => {
       kette([
         glied({
           art: 'HERKUNFT',
-          ausgefuehrtVon: { typ: 'MODELL', name: 'claude-opus-5-5', modell: null },
+          ausgefuehrtVon: { typ: 'MODELL', name: 'claude-opus-5-5', modell: null, gemeldet: false },
           zeitpunkt: '2026-11-10T10:00:00Z',
           ergebnis: 'Plan geschrieben',
           quelle: { karte: 81, nummer: 12, titel: 'Der Plan', oeffenbar: true, kommentar: null },
@@ -171,11 +171,68 @@ describe('Entscheidungskette', () => {
     expect(eintrag).toHaveTextContent('Fall:Ziel oder Durchziehen-Kennzeichen am Fachplan oder Plan')
   })
 
+  it('nennt beim Zug nach Ready über einen Zugang keinen Menschen, sondern den Zugang als Freigeber (Issue #2147)', () => {
+    const zugang: AkteurView = { typ: 'WERKZEUG', name: 'runner-token', modell: null, gemeldet: false }
+    offen(
+      kette([
+        glied({
+          art: 'FREIGABE',
+          freigegebenVon: zugang,
+          ausgefuehrtVon: { ...zugang },
+          freigabe: { fall: 'ZUG_NACH_READY', zugNachReady: '2026-11-10T11:00:00Z' },
+        }),
+      ]),
+    )
+    const eintrag = screen.getByTestId('kettenglied-FREIGABE')
+    expect(eintrag).toHaveTextContent('Fall:Der Zug nach Ready ist die Freigabe')
+    expect(eintrag).toHaveTextContent('Freigegeben und ausgeführt von:runner-token (Werkzeug)')
+    expect(eintrag).not.toHaveTextContent('Mensch')
+  })
+
+  it('nennt beim Zug nach Ready durch einen Menschen den Menschen als Freigeber (Issue #2147)', () => {
+    offen(
+      kette([
+        glied({
+          art: 'FREIGABE',
+          freigegebenVon: MANFRED,
+          ausgefuehrtVon: { ...MANFRED },
+          freigabe: { fall: 'ZUG_NACH_READY', zugNachReady: '2026-11-10T11:00:00Z' },
+        }),
+      ]),
+    )
+    const eintrag = screen.getByTestId('kettenglied-FREIGABE')
+    expect(eintrag).toHaveTextContent('Fall:Der Zug nach Ready ist die Freigabe')
+    expect(eintrag).toHaveTextContent('Freigegeben und ausgeführt von:Manfred (Mensch)')
+  })
+
   it('nennt den Akteur einmal, wenn Freigabe und Ausführung dieselbe Person sind', () => {
     offen(kette([glied({ art: 'VEROEFFENTLICHUNG', freigegebenVon: MANFRED, ausgefuehrtVon: { ...MANFRED } })]))
     const eintrag = screen.getByTestId('kettenglied-VEROEFFENTLICHUNG')
     expect(eintrag).toHaveTextContent('Freigegeben und ausgeführt von:Manfred (Mensch)')
     expect(eintrag).not.toHaveTextContent('Ausgeführt von:')
+  })
+
+  it('kennzeichnet einen Freigeber, den nur eine Meldung des Kits nennt', () => {
+    offen(
+      kette([
+        glied({
+          art: 'UEBERTRAGUNG',
+          freigegebenVon: { ...MANFRED, gemeldet: true },
+          ausgefuehrtVon: { typ: 'MODELL', name: 'claude-opus-5-5', modell: null, gemeldet: false },
+        }),
+      ]),
+    )
+    const eintrag = screen.getByTestId('kettenglied-UEBERTRAGUNG')
+    expect(eintrag).toHaveTextContent('Freigegeben von:Manfred (Mensch, laut Meldung des Kits)')
+    expect(eintrag).toHaveTextContent('Ausgeführt von:claude-opus-5-5 (Modell)')
+  })
+
+  it('hält einen gemeldeten und einen belegten Menschen gleichen Namens auseinander', () => {
+    offen(kette([glied({ art: 'VEROEFFENTLICHUNG', freigegebenVon: { ...MANFRED, gemeldet: true }, ausgefuehrtVon: MANFRED })]))
+    const eintrag = screen.getByTestId('kettenglied-VEROEFFENTLICHUNG')
+    expect(eintrag).toHaveTextContent('Freigegeben von:Manfred (Mensch, laut Meldung des Kits)')
+    expect(eintrag).toHaveTextContent('Ausgeführt von:Manfred (Mensch)')
+    expect(eintrag).not.toHaveTextContent('Freigegeben und ausgeführt von:')
   })
 
   it('nennt eine fehlende Seite einer Freigabe „nicht erfasst“', () => {
@@ -320,6 +377,42 @@ describe('Entscheidungskette', () => {
     expect(onOpenCard).toHaveBeenCalledWith(20)
   })
 
+  it('zeigt eigene und mehrere Fremdprojekt-Nachfahren ohne doppelten Schlüssel', () => {
+    const fehler = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const fremd: Nachfahre = {
+      zustand: 'NICHT_ERFASST',
+      verweis: KEINER,
+      spalte: null,
+      spaltenSchluessel: null,
+      zuletztErreicht: null,
+      hinweise: [],
+    }
+    offen({
+      sichtbar: true,
+      art: 'PLAN',
+      abschnitte: [],
+      nachfahren: [
+        {
+          zustand: 'ERFASST',
+          verweis: { karte: 90, nummer: 20, titel: 'Paket A', oeffenbar: true, kommentar: null },
+          spalte: 'Ready',
+          spaltenSchluessel: 'ready',
+          zuletztErreicht: null,
+          hinweise: [],
+        },
+        fremd,
+        { ...fremd },
+      ],
+    })
+    const nachfahren = screen.getAllByTestId('kettennachfahre')
+    expect(nachfahren).toHaveLength(3)
+    expect(nachfahren[0]).toHaveTextContent('#20 Paket A')
+    expect(nachfahren[1]).toHaveTextContent('nicht erfasst')
+    expect(nachfahren[2]).toHaveTextContent('nicht erfasst')
+    expect(fehler).not.toHaveBeenCalledWith(expect.stringContaining('same key'), expect.anything(), expect.anything())
+    fehler.mockRestore()
+  })
+
   it('zeigt einen nicht erfassten Nachfahren', () => {
     offen({
       sichtbar: true,
@@ -335,7 +428,7 @@ describe('Entscheidungskette', () => {
       kette([
         glied({
           art: 'UEBERTRAGUNG',
-          ausgefuehrtVon: { typ: 'MENSCH', name: null, modell: null },
+          ausgefuehrtVon: { typ: 'MENSCH', name: null, modell: null, gemeldet: false },
           uebertragung: {
             versuch: null,
             commit: null,

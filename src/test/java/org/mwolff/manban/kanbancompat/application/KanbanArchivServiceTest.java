@@ -74,7 +74,8 @@ class KanbanArchivServiceTest {
             mock(EpicService.class),
             labelService,
             commentService,
-            new IdempotencyGuard(new InMemoryIdempotencyRecordStore(), Clock.systemUTC()));
+            new IdempotencyGuard(new InMemoryIdempotencyRecordStore(), Clock.systemUTC()),
+            projectId -> false);
     service = new KanbanArchivService(compat, search, commentService);
   }
 

@@ -138,6 +138,18 @@ manban:
     vapid-private-key: ${MANBAN_PUSH_VAPID_PRIVATE_KEY:}
     subject: ${MANBAN_PUSH_SUBJECT:}
     melde-takt: PT1M
+  # Board in einem fremden System (Issue #2157, Plan #2152 A13, A14). secret-key verschluesselt den
+  # hinterlegten Lesezugang (AES-GCM, 32 Byte hex, erzeugen mit openssl rand -hex 32); leer ist das
+  # Anbinden gesperrt, ein ungueltiger Wert bricht den Start ab. hosts ist die Erlaubnisliste der
+  # abrufbaren Hosts, kommagetrennt (nur https, keine Weiterleitungen, Zeitlimit 10 s). takt ist der
+  # Abstand zwischen zwei Laeufen des Abgleichs, mindestabstand der kuerzeste Abstand zwischen zwei
+  # Abgleichen desselben Projekts, vollabgleich der Abstand zwischen zwei vollstaendigen Abgleichen.
+  fremdboard:
+    secret-key: ${MANBAN_SECRET_KEY:}
+    hosts: ${MANBAN_FREMDBOARD_HOSTS:gitlab.com}
+    takt: PT60S
+    mindestabstand: PT2M
+    vollabgleich: PT60M
   # Benachrichtigung per Mail (Issue #2078, Plan #2070 E3): So lange wartet ein Kartenlabel mit
   # Laufkennung, ob der Lauf die Karte selbst meldet. takt ist der Abstand zwischen zwei Laeufen des
   # Jobs (Issue #2081, E2), retention-days die Aufbewahrung von Anlaessen und Zustellungen (E14);

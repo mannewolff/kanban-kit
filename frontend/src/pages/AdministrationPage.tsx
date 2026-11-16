@@ -34,6 +34,7 @@ import { languageApi } from '../api/language'
 import { projectsApi, type Project } from '../api/projects'
 import { useAuth } from '../auth/AuthContext'
 import { AppZugangSection } from '../components/AppZugangSection'
+import { FremdBoardEinstellung } from '../components/FremdBoardEinstellung'
 import { useSnackbar } from '../components/SnackbarProvider'
 import { StandardLabelsSection } from '../components/StandardLabelsSection'
 import { VorschauGesperrt } from '../components/VorschauGesperrt'
@@ -98,6 +99,8 @@ export function AdministrationPage() {
         <Persoenlich titel={t.APP_ZUGANG.TITEL}>
           <AppZugangSection />
         </Persoenlich>
+
+        <FremdBoardEinstellung />
 
         <ApiUebersichtSection />
       </Stack>

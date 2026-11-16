@@ -1,5 +1,6 @@
 package org.mwolff.manban.card.application;
 
+import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.NextCardNumberWriter;
 import org.mwolff.manban.project.application.PermissionChecker;
 import org.mwolff.manban.project.domain.Permission;
@@ -24,12 +25,17 @@ public class ProjectStartNumberService {
   private final CardRepository cards;
   private final NextCardNumberWriter projects;
   private final PermissionChecker permissions;
+  private final BoardQuelle boardQuelle;
 
   public ProjectStartNumberService(
-      CardRepository cards, NextCardNumberWriter projects, PermissionChecker permissions) {
+      CardRepository cards,
+      NextCardNumberWriter projects,
+      PermissionChecker permissions,
+      BoardQuelle boardQuelle) {
     this.cards = cards;
     this.projects = projects;
     this.permissions = permissions;
+    this.boardQuelle = boardQuelle;
   }
 
   /** Effektive nächste Kartennummer des Projekts (für die Vorbelegung im Editiermodus). */
@@ -47,6 +53,8 @@ public class ProjectStartNumberService {
   @Transactional
   public int setNextCardNumber(long userId, long projectId, int value) {
     permissions.require(userId, projectId, Permission.PROJECT_EDIT);
+    // Bei fremdem Board ist die Kartennummer die Nummer im fremden System (Plan #2152 A2, A10).
+    boardQuelle.pruefeSchreibbar(projectId);
     if (value > CardNumbers.MAX) {
       throw InvalidCardNumberException.ueberObergrenze(CardNumbers.MAX);
     }

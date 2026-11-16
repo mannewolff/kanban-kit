@@ -28,7 +28,14 @@ class TrashRetentionServiceTest {
   private ApplicationEventPublisher events;
   private TrashRetentionService service;
 
+  /** Projekt 2 hat ein fremdes Board (Issue #2161). */
+  private static final long FREMDES_PROJEKT = 2L;
+
   private static Card card(long id) {
+    return card(id, 1L);
+  }
+
+  private static Card card(long id, long projectId) {
     return new Card(
         id,
         10L,
@@ -46,7 +53,7 @@ class TrashRetentionServiceTest {
         null,
         null,
         null,
-        1L,
+        projectId,
         null,
         null,
         null,
@@ -61,7 +68,36 @@ class TrashRetentionServiceTest {
     events = mock(ApplicationEventPublisher.class);
     service =
         new TrashRetentionService(
-            cards, bestand, new KartenAbhaengigkeiten(dependencies, cards), events);
+            cards,
+            bestand,
+            new KartenAbhaengigkeiten(dependencies, cards),
+            events,
+            java.util.Set.of(FREMDES_PROJEKT)::contains);
+  }
+
+  @Test
+  void purgeExpiredTrash_laesstGespiegelteProjekteUnberuehrt() {
+    // Given: Karte 2 gehört zu einem Projekt mit fremdem Board (Issue #2161, Plan #2152 A8) —
+    // auch wenn die Abfrage sie liefern sollte, löscht der Dienst sie nicht.
+    Instant threshold = NOW.minus(Duration.ofDays(30));
+    when(cards.findPurgeableTrash(threshold))
+        .thenReturn(List.of(card(1), card(2, FREMDES_PROJEKT)));
+
+    int count = service.purgeExpiredTrash(NOW, 30);
+
+    assertThat(count).isEqualTo(1);
+    verify(cards).deleteById(1L);
+    verify(cards, org.mockito.Mockito.never()).deleteById(2L);
+    verify(events).publishEvent(new CardsPurgedEvent(List.of(1L)));
+  }
+
+  @Test
+  void purgeExpiredTrash_tutNichts_wennNurGespiegelteKartenAbgelaufenSind() {
+    Instant threshold = NOW.minus(Duration.ofDays(30));
+    when(cards.findPurgeableTrash(threshold)).thenReturn(List.of(card(2, FREMDES_PROJEKT)));
+
+    assertThat(service.purgeExpiredTrash(NOW, 30)).isZero();
+    verifyNoInteractions(events, bestand);
   }
 
   @Test

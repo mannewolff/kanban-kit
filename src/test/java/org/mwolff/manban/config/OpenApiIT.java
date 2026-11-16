@@ -73,7 +73,8 @@ class OpenApiIT extends AbstractIntegrationTest {
    * Die verlässlichen Operationen: die zwölf zum Start (Plan #1400, E4), der Einzelabruf nach
    * Nummer, die Herkunftskette und die Suche (Plan #1574, E14) sowie Liste und Download der Anhänge
    * einer Karte (Plan #1694, Issue #1699) und das Melden der Auslieferungen samt letztem Stand
-   * (Plan #1831 E2, Issue #1834) und die Labelliste des Boards (Issue #1855).
+   * (Plan #1831 E2, Issue #1834), die Labelliste des Boards (Issue #1855) und der Anstoß des
+   * fremden Boards (Issue #2167, Plan #2152 A16).
    */
   private static final List<String> VERLAESSLICH_ZUM_START =
       List.of(
@@ -91,6 +92,7 @@ class OpenApiIT extends AbstractIntegrationTest {
           "GET /api/kanban/search",
           "PATCH /api/kanban/items/{id}/comments/{commentId}",
           "POST /api/kanban/deployments",
+          "POST /api/kanban/fremdboard/anstoss",
           "POST /api/kanban/items",
           "POST /api/kanban/items/{id}/comments",
           "POST /api/kanban/items/{id}/labels",
@@ -220,6 +222,11 @@ class OpenApiIT extends AbstractIntegrationTest {
     JsonNode archivieren = spec.at("/paths/~1api~1cards~1{cardId}~1archive/post");
     assertThat(archivieren.isMissingNode()).isFalse();
     assertThat(archivieren.at("/parameters").findValuesAsText("name")).containsExactly("cardId");
+    // Die Karten-Antwort nennt die Adresse im fremden System (Issue #2162, Plan #2152 A1).
+    JsonNode adresse = spec.at("/components/schemas/CardView/properties/externUrl");
+    assertThat(adresse.isMissingNode()).isFalse();
+    assertThat(adresse.at("/type").asText()).isEqualTo("string");
+    assertThat(adresse.at("/description").asText()).contains("fremden System");
   }
 
   @Test

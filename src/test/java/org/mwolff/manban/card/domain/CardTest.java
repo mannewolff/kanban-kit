@@ -151,4 +151,16 @@ class CardTest {
     assertThat(CARD.withStatus(CardStatus.DONE).status()).isEqualTo(CardStatus.DONE);
     assertThat(CARD.withStatus(CardStatus.DONE).withStatus(null).status()).isNull();
   }
+
+  /** Issue #2181: tötet den Mutanten, der {@code withExternUrl} {@code null} liefern lässt. */
+  @Test
+  void withExternUrl_setztUndEntferntUndBehaeltDenRest() {
+    Card mitAdresse = CARD.withStatus(CardStatus.READY).withExternUrl("https://fremd.example/1");
+
+    assertThat(mitAdresse.externUrl()).isEqualTo("https://fremd.example/1");
+    assertThat(mitAdresse.status()).isEqualTo(CardStatus.READY);
+    assertThat(mitAdresse.id()).isEqualTo(CARD.id());
+    assertThat(mitAdresse.title()).isEqualTo(CARD.title());
+    assertThat(mitAdresse.withExternUrl(null).externUrl()).isNull();
+  }
 }

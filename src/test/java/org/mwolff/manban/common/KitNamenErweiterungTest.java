@@ -96,6 +96,7 @@ class KitNamenErweiterungTest {
             mock(LabelRepository.class),
             mock(BoardService.class),
             admins,
+            projectId -> false,
             registerMitZusatznamen());
 
     // When

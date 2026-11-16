@@ -1003,7 +1003,7 @@ describe('CardDetailModal', () => {
             art: 'HERKUNFT',
             zustand: 'ERFASST',
             freigegebenVon: null,
-            ausgefuehrtVon: { typ: 'MODELL', name: 'claude-opus-5-5', modell: null },
+            ausgefuehrtVon: { typ: 'MODELL', name: 'claude-opus-5-5', modell: null, gemeldet: false },
             zeitpunkt: '2026-11-10T10:00:00Z',
             ergebnis: 'Paket geschnitten',
             quelle: { karte: 300, nummer: 3, titel: 'Der Plan', oeffenbar: true, kommentar: null },

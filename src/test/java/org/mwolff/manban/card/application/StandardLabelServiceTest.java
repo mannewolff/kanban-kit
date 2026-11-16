@@ -39,7 +39,28 @@ class StandardLabelServiceTest {
     boardService = mock(BoardService.class);
     PlatformAdminChecker admins = mock(PlatformAdminChecker.class);
     when(admins.isPlatformAdmin(ADMIN)).thenReturn(true);
-    service = new StandardLabelService(labels, boardService, admins);
+    service =
+        new StandardLabelService(
+            labels, boardService, admins, projectId -> projectId == FREMDES_PROJEKT);
+  }
+
+  /** Projekt mit fremdem Board (Issue #2161). */
+  private static final long FREMDES_PROJEKT = 77L;
+
+  @Test
+  void laesstBoardsVonProjektenMitFremdemBoardAus() {
+    // Given: Board 12 gehört zu einem Projekt mit fremdem Board (Issue #2161, Plan #2152 A10)
+    when(boardService.listAllActiveBoards()).thenReturn(List.of(board(10L), board(12L)));
+    when(boardService.requireProjectId(12L)).thenReturn(FREMDES_PROJEKT);
+    when(labels.insertIfAbsent(anyLong(), anyString(), anyString())).thenReturn(true);
+
+    // When
+    Ergebnis ergebnis = service.aufAlleBoardsAnlegen(ADMIN);
+
+    // Then: nur Board 10 zählt und bekommt Labels
+    assertThat(ergebnis).isEqualTo(new Ergebnis(1, SATZ, 0));
+    verify(labels, never())
+        .insertIfAbsent(org.mockito.ArgumentMatchers.eq(12L), anyString(), anyString());
   }
 
   @Test

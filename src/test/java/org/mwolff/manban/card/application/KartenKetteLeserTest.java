@@ -223,7 +223,39 @@ class KartenKetteLeserTest {
                 "Nachtlauf",
                 "claude-opus-5-5",
                 "READY",
-                JETZT.minusSeconds(5)));
+                JETZT.minusSeconds(5),
+                null));
+  }
+
+  /** Der Benutzer im fremden System geht mit über die Grenze (Issue #2165, Plan #2152 A11). */
+  @Test
+  void derBenutzerImFremdenSystemGehtMitUeberDieGrenze() {
+    long id = bau.lege(neu(1, "A", null, null));
+    bau.aktivitaeten.add(
+        new CardActivity(
+            5L,
+            id,
+            null,
+            CardActivityType.MOVED,
+            "Verschoben nach Ready",
+            JETZT,
+            CardActivityOrigin.TOKEN,
+            null,
+            null,
+            null,
+            CardStatus.READY,
+            "kit-bot"));
+    bau.labelEreignisse.add(
+        new LabelEreignisMitPerson(
+            6L, id, "goal:implementation", JETZT, null, CardActivityOrigin.SESSION, null, "erika"));
+
+    KartenKette kette = bau.leser.lade(id);
+
+    assertThat(kette.aktivitaeten().getFirst().externAkteur()).isEqualTo("kit-bot");
+    assertThat(kette.labelEreignisse())
+        .containsExactly(
+            new KettenLabelEreignis(
+                id, "goal:implementation", JETZT, null, "SESSION", null, "erika"));
   }
 
   @ParameterizedTest
@@ -250,13 +282,14 @@ class KartenKetteLeserTest {
     long id = bau.lege(neu(1, "A", null, null));
     bau.labelEreignisse.add(
         new LabelEreignisMitPerson(
-            5L, id, "kit:nightrun", JETZT, 3L, CardActivityOrigin.SESSION, null));
-    bau.labelEreignisse.add(new LabelEreignisMitPerson(6L, id, "alt", JETZT, null, null, null));
+            5L, id, "kit:nightrun", JETZT, 3L, CardActivityOrigin.SESSION, null, null));
+    bau.labelEreignisse.add(
+        new LabelEreignisMitPerson(6L, id, "alt", JETZT, null, null, null, null));
 
     assertThat(bau.leser.lade(id).labelEreignisse())
         .containsExactly(
-            new KettenLabelEreignis(id, "kit:nightrun", JETZT, 3L, "SESSION", null),
-            new KettenLabelEreignis(id, "alt", JETZT, null, null, null));
+            new KettenLabelEreignis(id, "kit:nightrun", JETZT, 3L, "SESSION", null, null),
+            new KettenLabelEreignis(id, "alt", JETZT, null, null, null, null));
   }
 
   // --- Kit-Karte im Projekt -------------------------------------------------------------------

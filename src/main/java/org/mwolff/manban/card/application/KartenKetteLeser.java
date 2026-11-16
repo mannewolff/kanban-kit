@@ -26,7 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Lese-Fassade der Entscheidungskette (Issue #2114, Plan #2108 E1, E6, E10, E12): Sie liefert zu
  * einer Karte die Karten ihrer Kette, die Ideen, die auf sie verweisen, und deren Aktivitäten und
- * Label-Ereignisse — als eigene Records, damit {@code card.domain} modulintern bleibt.
+ * Label-Ereignisse samt Herkunft und Benutzer im fremden System (Issue #2165, Plan #2152 A11) — als
+ * eigene Records, damit {@code card.domain} modulintern bleibt.
  *
  * <p><b>Ohne Rechteprüfung:</b> Der Aufrufer hat das Leserecht an der Karte bereits geprüft. Was
  * jenseits des Projekts liegt, gibt die Fassade trotzdem nicht preis: Ein Glied in einem anderen
@@ -144,15 +145,13 @@ public class KartenKetteLeser {
       kinder.sort(Comparator.comparingInt(k -> k.karte().number()));
       List<KarteImBestand> naechste = new ArrayList<>();
       for (KarteImBestand kind : kinder) {
-        if (!besucht.add(kind.karte().requireId())) {
-          continue;
-        }
-        if (kind.karte().projectId() != projekt) {
+        boolean neu = besucht.add(kind.karte().requireId());
+        if (neu && kind.karte().projectId() != projekt) {
           glieder.add(KettenGlied.anderesProjekt());
-          continue;
+        } else if (neu) {
+          glieder.add(glied(kind, spalten));
+          naechste.add(kind);
         }
-        glieder.add(glied(kind, spalten));
-        naechste.add(kind);
       }
       stufe = naechste;
     }
@@ -318,7 +317,8 @@ public class KartenKetteLeser {
         a.tokenName(),
         a.agent(),
         CardService.spaltenSchluessel(a),
-        a.laufStart());
+        a.laufStart(),
+        a.externAkteur());
   }
 
   private static KettenLabelEreignis labelEreignis(LabelEreignisMitPerson e) {
@@ -328,7 +328,8 @@ public class KartenKetteLeser {
         e.createdAt(),
         e.actorUserId(),
         e.origin() == null ? null : e.origin().name(),
-        e.tokenName());
+        e.tokenName(),
+        e.externAkteur());
   }
 
   /** Was die Fassade über ein Glied der Kette preisgibt. */
@@ -406,6 +407,8 @@ public class KartenKetteLeser {
    *     nicht sicher bestimmen lässt (Plan #2108 E10)
    * @param laufStart Laufkennung des Laufs, der den Eintrag auslöste; {@code null} ohne Lauf (Plan
    *     #2108 E11)
+   * @param externAkteur Benutzer im fremden System, der den Eintrag auslöste; {@code null} bei
+   *     eigenem Board (Issue #2165, Plan #2152 A11)
    */
   public record KettenAktivitaet(
       long kartenId,
@@ -417,14 +420,21 @@ public class KartenKetteLeser {
       @Nullable String tokenName,
       @Nullable String agent,
       @Nullable String spaltenSchluessel,
-      @Nullable Instant laufStart) {}
+      @Nullable Instant laufStart,
+      @Nullable String externAkteur) {}
 
-  /** Ein Label, das einer Karte der Kette hinzugefügt wurde, mit der Person (Plan #2108 E5). */
+  /**
+   * Ein Label, das einer Karte der Kette hinzugefügt wurde, mit der Person (Plan #2108 E5).
+   *
+   * @param externAkteur Benutzer im fremden System, der es setzte; {@code null} bei eigenem Board
+   *     (Issue #2165, Plan #2152 A11)
+   */
   public record KettenLabelEreignis(
       long kartenId,
       String labelName,
       Instant zeitpunkt,
       @Nullable Long actorUserId,
       @Nullable String origin,
-      @Nullable String tokenName) {}
+      @Nullable String tokenName,
+      @Nullable String externAkteur) {}
 }

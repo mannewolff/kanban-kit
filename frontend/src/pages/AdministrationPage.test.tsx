@@ -34,6 +34,7 @@ vi.mock('../api/accessTokens', () => ({
   accessTokensApi: { list: vi.fn(), create: vi.fn(), revoke: vi.fn(), listApp: vi.fn() },
 }))
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn() } }))
+vi.mock('../api/fremdboard', () => ({ fremdBoardApi: { lies: vi.fn(), speichere: vi.fn() } }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn() } }))
 vi.mock('../api/config', () => ({
   configApi: { getDoneRetention: vi.fn(), setDoneRetention: vi.fn() },
@@ -832,5 +833,26 @@ describe('AdministrationPage in der Ansicht als XY', () => {
     expect(mTokens.listApp).toHaveBeenCalledTimes(1)
     const ueberschriften = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
     expect(ueberschriften.indexOf('Zugang der App')).toBe(ueberschriften.indexOf('API-Tokens') + 1)
+  })
+
+  it('zeigt die Board-Quelle nach dem Zugang der App, wenn der Angemeldete Owner ist', async () => {
+    authState.vorschau = null
+    mProjects.list.mockResolvedValue([{ id: 5, name: 'Eigenes', role: 'OWNER', createdAt: '' }])
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Board-Quelle', level: 2 })
+    const ueberschriften = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    expect(ueberschriften.indexOf('Board-Quelle')).toBe(
+      ueberschriften.indexOf('Zugang der App') + 1,
+    )
+  })
+
+  it('zeigt die Board-Quelle nicht ohne ein Projekt als Owner', async () => {
+    authState.vorschau = null
+    mProjects.list.mockResolvedValue([memberProject])
+    renderPage()
+
+    await waitFor(() => expect(mProjects.list).toHaveBeenCalled())
+    expect(screen.queryByRole('heading', { name: 'Board-Quelle' })).not.toBeInTheDocument()
   })
 })

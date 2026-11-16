@@ -98,8 +98,19 @@ interface CardJpaRepository extends JpaRepository<CardEntity, Long> {
   /** Karten im Papierkorb des Boards. */
   List<CardEntity> findByBoardIdAndDeletedAtIsNotNullOrderByNumber(Long boardId);
 
-  /** Karten, die vor dem Zeitpunkt gelöscht wurden (Papierkorb-Retention). */
-  List<CardEntity> findByDeletedAtNotNullAndDeletedAtBefore(Instant threshold);
+  /**
+   * Karten, die vor dem Zeitpunkt gelöscht wurden (Papierkorb-Retention), ohne die Karten von
+   * Projekten mit fremdem Board (Issue #2161, Plan #2152 A8): Eine gespiegelte Karte, die im
+   * fremden System verschwand, bleibt im Papierkorb, damit ihre Messungen nicht per Cascade
+   * verschwinden. Nativ, weil {@code fremdboard_verbindung} kein Entity dieses Moduls ist.
+   */
+  @Query(
+      value =
+          "select * from card c where c.deleted_at is not null and c.deleted_at < ?1"
+              + " and not exists (select 1 from fremdboard_verbindung v"
+              + " where v.project_id = c.project_id)",
+      nativeQuery = true)
+  List<CardEntity> findPurgeableTrash(Instant threshold);
 
   @Query(
       "select c from CardEntity c where c.archived = false and c.deletedAt is null "

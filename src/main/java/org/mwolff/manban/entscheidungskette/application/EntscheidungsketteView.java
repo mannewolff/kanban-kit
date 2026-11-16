@@ -89,12 +89,16 @@ public record EntscheidungsketteView(
    * @param name der Anzeigename eines Menschen, der Name eines Modells oder eines Zugangs; {@code
    *     null}, wenn nicht erfasst, etwa bei einem gelöschten Nutzer
    * @param modell das gemeldete Modell eines Werkzeugs
+   * @param gemeldet {@code true}, wenn der Akteur nur aus einer Meldung des Kits stammt und nicht
+   *     vom Server belegt ist
    */
   @Schema(
       description =
           "Wer ein Glied getan hat: ein Mensch mit Anzeigenamen, ein Modell mit seinem Namen oder"
-              + " ein Werkzeug mit dem Namen seines Zugangs und, soweit gemeldet, dem Modell.")
-  public record AkteurView(Akteurtyp typ, @Nullable String name, @Nullable String modell) {}
+              + " ein Werkzeug mit dem Namen seines Zugangs und, soweit gemeldet, dem Modell."
+              + " gemeldet ist true, wenn die Angabe nur aus einer Meldung des Kits stammt.")
+  public record AkteurView(
+      Akteurtyp typ, @Nullable String name, @Nullable String modell, boolean gemeldet) {}
 
   /** Die Angaben einer Prüfrunde mit ihrer Einarbeitung. */
   @Schema(description = "Die Angaben einer Prüfrunde mit ihrer Einarbeitung.")
