@@ -193,6 +193,27 @@ class VerbindungServiceTest {
   }
 
   @Test
+  void zweiAktiveBoardsOhneArchivWerdenAbgelehnt() {
+    when(boards.listBoards(OWNER, PROJEKT))
+        .thenReturn(List.of(board(BOARD_ID, "default"), board(12L, "Zweites")));
+
+    assertThatThrownBy(() -> service.speichern(OWNER, PROJEKT, eingabe(ZUGANG)))
+        .isInstanceOf(AnbindenAbgelehntException.class)
+        .hasMessageContaining("default, Zweites");
+    verify(verbindungen, never()).speichere(any());
+  }
+
+  @Test
+  void einArchiviertesBoardNebenDemAktivenWirdAbgelehnt() {
+    when(boards.listArchivedBoards(OWNER, PROJEKT)).thenReturn(List.of(board(13L, "Alt")));
+
+    assertThatThrownBy(() -> service.speichern(OWNER, PROJEKT, eingabe(ZUGANG)))
+        .isInstanceOf(AnbindenAbgelehntException.class)
+        .hasMessageContaining("default, Alt");
+    verify(verbindungen, never()).speichere(any());
+  }
+
+  @Test
   void einArchiviertesBoardStehtDemSpiegelBoardImWeg() {
     when(boards.listBoards(OWNER, PROJEKT)).thenReturn(List.of());
     when(boards.listArchivedBoards(OWNER, PROJEKT)).thenReturn(List.of(board(13L, "Alt")));
@@ -275,6 +296,32 @@ class VerbindungServiceTest {
     assertThatThrownBy(() -> ohneQuelle.speichern(OWNER, PROJEKT, eingabe(ZUGANG)))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("GITLAB");
+  }
+
+  @Test
+  void derProbeabrufNimmtDieQuelleDerGewaehltenArt() {
+    // Eine Quelle ohne Art steht vorn: Sie darf den Probeabruf nicht bekommen.
+    FremdBoardQuelle andere = mock(FremdBoardQuelle.class);
+    VerbindungService mitZweiQuellen = neuerService(List.of(andere, quelle));
+
+    mitZweiQuellen.speichern(OWNER, PROJEKT, eingabe(ZUGANG));
+
+    verify(quelle).geaenderteKarten(any(), any());
+    verify(andere, never()).geaenderteKarten(any(), any());
+  }
+
+  @Test
+  void eineAndereArtGiltAlsUmhaengenUndIstGesperrt() {
+    when(verbindungen.finde(PROJEKT)).thenReturn(Optional.of(gespeichert()));
+
+    // Heute gibt es nur GitLab; eine fehlende Art steht für jede andere.
+    assertThatThrownBy(
+            () ->
+                service.speichern(
+                    OWNER, PROJEKT, new VerbindungEingabe(null, ADRESSE, PFAD, ZUGANG, null, null)))
+        .isInstanceOf(AnbindenAbgelehntException.class)
+        .hasMessageContaining("lösen");
+    verify(verbindungen, never()).speichere(any());
   }
 
   @Test
