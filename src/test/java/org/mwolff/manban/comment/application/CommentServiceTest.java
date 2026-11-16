@@ -954,6 +954,21 @@ class CommentServiceTest {
   }
 
   @Test
+  void spiegeln_neuerTextOhneSpaetereAenderungszeitBleibtUngekennzeichnet() {
+    // Given
+    when(comments.findByCardIdAndExternKennung(5L, "501"))
+        .thenReturn(Optional.of(gespiegelteMeldung("alt", NOTIZ_ANGELEGT, null, null)));
+
+    // When
+    Comment geaendert = spiegleUndFange(notiz(KIT_KONTO, "neu", NOTIZ_ANGELEGT));
+
+    // Then
+    assertThat(geaendert.body()).isEqualTo("neu");
+    assertThat(geaendert.vonHandGeaendertAm()).isNull();
+    assertThat(geaendert.vonHandKopfzeile()).isNull();
+  }
+
+  @Test
   void spiegeln_geaenderteNotizEinesMenschenBleibtUngekennzeichnet() {
     // Given
     Comment mensch =
