@@ -278,6 +278,24 @@ class FremdesBoardSchreibsperreTest {
     verifyNoInteractions(zuordnung);
   }
 
+  // --- KartenGrundlage ---------------------------------------------------------------------
+
+  @Test
+  void kartenGrundlage_anlegen_lehntAb() {
+    // Issue #2174: Die Sperre steht in anlegen selbst, nicht erst beim Aufrufer — der Batch prüft
+    // vorab, die übrigen Anlege-Wege verlassen sich allein auf diese Stelle.
+    assertThatThrownBy(
+            () ->
+                grundlage()
+                    .anlegen(
+                        USER, BOARD, SPALTE, "Neu", null, null, null, null, null, null, null, null,
+                        null))
+        .isInstanceOf(FremdesBoardException.class);
+    verify(permissions).require(USER, PROJEKT, Permission.TICKET_CREATE);
+    verify(boardService, never()).requireColumn(anyLong(), anyLong());
+    nichtsGeschrieben();
+  }
+
   // --- CardMoveService ---------------------------------------------------------------------
 
   @Test
