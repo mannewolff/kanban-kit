@@ -10,6 +10,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,12 +25,14 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mwolff.manban.fremdboard.domain.FremdAbrufException;
 import org.mwolff.manban.fremdboard.domain.FremdBoardArt;
 import org.mwolff.manban.fremdboard.domain.StatusLabels;
 import org.mwolff.manban.fremdboard.domain.Verbindung;
+import org.slf4j.LoggerFactory;
 
 /**
  * Der regelmäßige Abgleich (Issue #2168, Plan #2152 A7, A8, A9) gegen einen nachgebildeten Speicher
@@ -44,12 +49,21 @@ class AbgleichJobTest {
   private Speicher speicher;
   private AbgleichService abgleich;
   private AbgleichJob job;
+  private final ListAppender<ILoggingEvent> protokoll = new ListAppender<>();
 
   @BeforeEach
   void setUp() {
     speicher = new Speicher();
     abgleich = mock(AbgleichService.class);
     job = neuerJob(abgleich);
+    protokoll.start();
+    ((Logger) LoggerFactory.getLogger(AbgleichJob.class)).addAppender(protokoll);
+  }
+
+  /** Der Logger ist global — ohne Abmelden sammelte der Appender über Testklassen hinweg weiter. */
+  @AfterEach
+  void tearDown() {
+    ((Logger) LoggerFactory.getLogger(AbgleichJob.class)).detachAppender(protokoll);
   }
 
   private AbgleichJob neuerJob(AbgleichService dienst) {
@@ -236,6 +250,49 @@ class AbgleichJobTest {
   }
 
   @Test
+  void eineLeereMeldungDesFremdenSystems_wirdAlsFehlerOhneGrundVermerkt() {
+    // Given: Die Meldung besteht nur aus Leerzeichen.
+    Verbindung verbindung = speicher.lege(verbindung(1L, null, null, null));
+    doThrow(new FremdAbrufException("   ")).when(abgleich).vollAbgleichen(eq(verbindung), any());
+
+    // When
+    job.run();
+
+    // Then
+    assertThat(speicher.finde(1L).orElseThrow().letzterFehler())
+        .isEqualTo(AbgleichJob.FEHLER_OHNE_GRUND);
+  }
+
+  @Test
+  void eineMeldungMitGenauSpaltenlaenge_bleibtVollstaendig() {
+    // Given
+    Verbindung verbindung = speicher.lege(verbindung(1L, null, null, null));
+    String meldung = "y".repeat(999) + "z";
+    doThrow(new FremdAbrufException(meldung)).when(abgleich).vollAbgleichen(eq(verbindung), any());
+
+    // When
+    job.run();
+
+    // Then
+    assertThat(speicher.finde(1L).orElseThrow().letzterFehler()).isEqualTo(meldung);
+  }
+
+  @Test
+  void einAndererKnotenGleichtZwischenAuswahlUndLesenAb_keinAnspruchUndKeinAbruf() {
+    // Given: Bei der Auswahl war das Projekt fällig; vor dem Lesen hat ein anderer Knoten es
+    // gerade abgeglichen, der Stand liegt also innerhalb des Mindestabstands.
+    speicher.lege(verbindung(1L, JETZT.minus(Duration.ofMinutes(5)), JETZT, null));
+    speicher.vorDemLesen = () -> speicher.setzeAbgleich(1L, JETZT.minusSeconds(10));
+
+    // When
+    job.run();
+
+    // Then
+    verifyNoInteractions(abgleich);
+    assertThat(speicher.ansprueche).isZero();
+  }
+
+  @Test
   void eineZwischenzeitlichEntfernteVerbindung_wirdUebersprungen() {
     // Given
     speicher.lege(verbindung(1L, null, null, null));
@@ -244,8 +301,9 @@ class AbgleichJobTest {
     // When
     job.run();
 
-    // Then
+    // Then: übersprungen, nicht gescheitert — es steht keine Warnung im Protokoll.
     verifyNoInteractions(abgleich);
+    assertThat(protokoll.list).isEmpty();
   }
 
   private static Verbindung verbindung(

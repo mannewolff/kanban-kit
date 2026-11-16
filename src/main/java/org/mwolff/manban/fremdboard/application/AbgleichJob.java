@@ -134,6 +134,6 @@ public class AbgleichJob {
     if (meldung == null || meldung.isBlank()) {
       return FEHLER_OHNE_GRUND;
     }
-    return meldung.length() <= FEHLER_LAENGE ? meldung : meldung.substring(0, FEHLER_LAENGE);
+    return meldung.substring(0, Math.min(meldung.length(), FEHLER_LAENGE));
   }
 }
