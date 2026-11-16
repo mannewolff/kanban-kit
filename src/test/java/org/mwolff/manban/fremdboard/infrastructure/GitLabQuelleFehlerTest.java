@@ -2,12 +2,21 @@ package org.mwolff.manban.fremdboard.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.mwolff.manban.fremdboard.infrastructure.GitLabTestServer.ISSUES;
 import static org.mwolff.manban.fremdboard.infrastructure.GitLabTestServer.PROJEKT;
 import static org.mwolff.manban.fremdboard.infrastructure.GitLabTestServer.ZUGANG;
 
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +26,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 /**
  * Fehlerfälle der GitLab-Quelle jenseits der Statuscodes (Issue #2160): Zeitüberschreitung, nicht
  * erreichbar, unterbrochen, unlesbare Antworten, Seitenangaben, die nicht vorwärts zeigen oder kein
- * Ende finden, und ein Host außerhalb der Erlaubnisliste.
+ * Ende finden, ein Host außerhalb der Erlaubnisliste und ein Status unter 200, den nur ein
+ * nachgestellter Client liefert (Issue #2193).
  */
 class GitLabQuelleFehlerTest {
 
@@ -173,6 +183,26 @@ class GitLabQuelleFehlerTest {
         .isInstanceOf(GitLabAbrufException.class)
         .hasMessageContaining("mehr als " + GitLabAbruf.HOECHSTE_SEITEN + " Seiten");
     assertThat(gitlab.abrufe()).hasSize(GitLabAbruf.HOECHSTE_SEITEN);
+  }
+
+  @Test
+  void statusUnter200_istKeinErfolg() throws Exception {
+    // Given: eine Antwort unterhalb der Erfolgsspanne — ein echter Server liefert sie nie als
+    // endgültige Antwort, darum steht hier ein nachgestellter Client.
+    try (HttpClient client = mock(HttpClient.class)) {
+      HttpResponse<?> antwort = mock(HttpResponse.class);
+      when(antwort.statusCode()).thenReturn(199);
+      doReturn(antwort).when(client).send(any(HttpRequest.class), any());
+      GitLabQuelle nachgestellt =
+          new GitLabQuelle(
+              new HostErlaubnis(List.of("localhost"), client, Duration.ofSeconds(1)),
+              new ZugangsTresor(GitLabTestServer.SCHLUESSEL, new SecureRandom()));
+
+      // When / Then
+      assertThatThrownBy(() -> nachgestellt.karte(gitlab.verbindung(), 7))
+          .isInstanceOf(GitLabAbrufException.class)
+          .hasMessageContaining("unerwartet mit 199");
+    }
   }
 
   @Test
