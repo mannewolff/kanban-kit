@@ -235,6 +235,25 @@ class AbgleichServiceTest {
   }
 
   @Test
+  void schliessenMitLabel_spiegeltKeinLabel() {
+    // Given: ein Schließen, das wider die Regel ein gewöhnliches Label mitträgt (Issue #2187)
+    gitlab(
+        karte("Export", "", List.of(), true, VORHER),
+        List.of(ereignis("state-1", Art.GESCHLOSSEN, "kit:night", T1, "anna")),
+        List.of());
+    when(bestand.kartenId(PROJEKT, 7)).thenReturn(Optional.of(70L));
+
+    // When
+    service.karteAbgleichen(VERBINDUNG, 7);
+
+    // Then: der Status folgt, das Label bleibt außen vor
+    verify(register).eintragen(PROJEKT, "GESCHLOSSEN", "state-1");
+    verify(schreiber, never()).labelSetzen(anyLong(), anyInt(), anyString(), any(), any());
+    verify(schreiber, never()).labelEntfernen(anyLong(), anyInt(), anyString());
+    verify(schreiber).wechseln(BOARD, 7, "DONE", T1, ANNA);
+  }
+
+  @Test
   void dokument_bekommtKeinenWechsel() {
     gitlab(
         karte("[Plan] Export", "Fachliche Quelle: Issue #2", List.of("Ready"), false, VORHER),
