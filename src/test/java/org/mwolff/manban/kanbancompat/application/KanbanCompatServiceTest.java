@@ -45,6 +45,7 @@ import org.mwolff.manban.card.application.LabelService;
 import org.mwolff.manban.card.domain.CardType;
 import org.mwolff.manban.comment.application.CommentNotFoundException;
 import org.mwolff.manban.comment.application.CommentService;
+import org.mwolff.manban.kanbancompat.application.IdempotencyRecordStore.IdempotencyKey;
 import org.mwolff.manban.project.application.BoardQuelle;
 import org.mwolff.manban.project.application.FremdesBoardException;
 
@@ -1155,6 +1156,23 @@ class KanbanCompatServiceTest {
     verify(ingest, times(1))
         .createDirect(
             1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null));
+  }
+
+  @Test
+  void create_withIdempotencyKey_bindetDenSchluesselAnDasProjektDesBoards() {
+    // Given: Issue #2172 — pruefeSchreibbar liefert die Projekt-ID, unter der der Schlüssel liegt.
+    // Lieferte sie 0 (Mutant), läge der Datensatz unter einem fremden Projekt.
+    when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
+    when(boardService.firstColumn(BOARD)).thenReturn(new ColumnView(100L, "Backlog", 0, null));
+    when(ingest.createDirect(
+            1L, BOARD, 100L, new CardIngestService.DirectCard("Titel", "Body", null, null, null)))
+        .thenReturn(new CardIngestService.CardCreation(angelegt(55L), true));
+
+    // When
+    service.create(bound(), "Titel", "Body", null, null, false, null, null, "k-1");
+
+    // Then
+    assertThat(idempotencyStore.status(new IdempotencyKey(PROJECT, "k-1"))).isEqualTo(201);
   }
 
   @Test
