@@ -6,10 +6,10 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND;
 import static java.net.HttpURLConnection.HTTP_OK;
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpRequest;
@@ -30,6 +30,11 @@ import org.slf4j.LoggerFactory;
  * HostErlaubnis}, Listen seitenweise über {@code X-Next-Page}. Jeder Fehler wird zu {@link
  * GitLabAbrufException} mit lesbarem Grund und als Warnung protokolliert — beides ohne Zugang und
  * ohne Rumpf der Antwort.
+ *
+ * <p>Die Gegenstelle bestimmt nicht, wie viel Speicher ein Abruf belegt (Issue #2196): Jede Antwort
+ * wird schon beim Empfang nach {@link Grenzen#antwortBytes} Bytes abgebrochen, eine Liste über alle
+ * Seiten nach {@link Grenzen#listeBytes} Bytes oder {@link Grenzen#eintraege} Einträgen — auch wenn
+ * der Server {@code per_page} missachtet. Den Rumpf einer Fehlerantwort liest der Abruf gar nicht.
  */
 final class GitLabAbruf {
 
@@ -43,21 +48,46 @@ final class GitLabAbruf {
   private static final Logger log = LoggerFactory.getLogger(GitLabAbruf.class);
   private static final ObjectMapper JSON = new ObjectMapper();
 
+  private static final String ABGEBROCHEN = " — Abruf abgebrochen";
+
+  /**
+   * Mengengrenzen eines Abrufs.
+   *
+   * @param antwortBytes höchste Bytes einer einzelnen Antwort
+   * @param listeBytes höchste Bytes einer Liste über alle Seiten
+   * @param eintraege höchste Zahl der Einträge einer Liste über alle Seiten
+   */
+  record Grenzen(int antwortBytes, int listeBytes, int eintraege) {
+
+    private static final int MIB = 1024 * 1024;
+
+    /**
+     * 8 MiB je Antwort, 64 MiB und {@value #HOECHSTE_SEITEN} volle Seiten zu je 100 Einträgen je
+     * Liste: weit über einer gewöhnlichen Seite der API, weit unter dem Heap der Anwendung.
+     */
+    static final Grenzen VORGABE = new Grenzen(8 * MIB, 64 * MIB, HOECHSTE_SEITEN * 100);
+  }
+
+  /** Eine erfolgreiche Antwort: der gelesene Inhalt, seine Größe und die Angabe der Folgeseite. */
+  private record Antwort(JsonNode inhalt, int bytes, Optional<String> naechsteSeite) {}
+
   private final HostErlaubnis erlaubnis;
   private final ZugangsTresor tresor;
+  private final Grenzen grenzen;
 
   GitLabAbruf(HostErlaubnis erlaubnis, ZugangsTresor tresor) {
+    this(erlaubnis, tresor, Grenzen.VORGABE);
+  }
+
+  GitLabAbruf(HostErlaubnis erlaubnis, ZugangsTresor tresor, Grenzen grenzen) {
     this.erlaubnis = erlaubnis;
     this.tresor = tresor;
+    this.grenzen = grenzen;
   }
 
   /** Ein einzelner Eintrag; leer, wenn GitLab ihn nicht kennt (404). */
   Optional<JsonNode> eintrag(Verbindung verbindung, String pfad) {
-    HttpResponse<String> antwort = abrufen(verbindung, pfad);
-    if (antwort.statusCode() == HTTP_NOT_FOUND) {
-      return Optional.empty();
-    }
-    return Optional.of(lesen(rumpf(antwort)));
+    return abrufen(verbindung, pfad, grenzen.antwortBytes(), antwortZuGross()).map(Antwort::inhalt);
   }
 
   /**
@@ -65,17 +95,34 @@ final class GitLabAbruf {
    */
   List<JsonNode> seiten(Verbindung verbindung, String pfadUndAnfrage) {
     List<JsonNode> eintraege = new ArrayList<>();
+    int restBytes = grenzen.listeBytes();
     int seite = 1;
     boolean weiter = true;
     while (weiter) {
-      HttpResponse<String> antwort = abrufen(verbindung, pfadUndAnfrage + "&page=" + seite);
-      JsonNode liste = lesen(rumpf(antwort));
+      boolean listeBegrenzt = restBytes < grenzen.antwortBytes();
+      Antwort antwort =
+          abrufen(
+                  verbindung,
+                  pfadUndAnfrage + "&page=" + seite,
+                  listeBegrenzt ? restBytes : grenzen.antwortBytes(),
+                  listeBegrenzt
+                      ? "GitLab liefert für eine Liste mehr als "
+                          + grenzen.listeBytes()
+                          + " Bytes"
+                          + ABGEBROCHEN
+                      : antwortZuGross())
+              .orElseThrow(() -> fehler(grundFuer(HTTP_NOT_FOUND), null));
+      restBytes -= antwort.bytes();
+      JsonNode liste = antwort.inhalt();
       if (!liste.isArray()) {
         throw fehler(NICHT_LESBAR, null);
       }
+      if (liste.size() > grenzen.eintraege() - eintraege.size()) {
+        throw fehler(
+            "GitLab liefert mehr als " + grenzen.eintraege() + " Einträge" + ABGEBROCHEN, null);
+      }
       liste.forEach(eintraege::add);
-      Optional<String> naechste =
-          antwort.headers().firstValue("X-Next-Page").filter(wert -> !wert.isBlank());
+      Optional<String> naechste = antwort.naechsteSeite();
       weiter = naechste.isPresent();
       if (weiter) {
         seite = folgeseite(naechste.orElseThrow(), seite);
@@ -106,7 +153,13 @@ final class GitLabAbruf {
         : new GitLabAbrufException(grund, ursache);
   }
 
-  private HttpResponse<String> abrufen(Verbindung verbindung, String pfadUndAnfrage) {
+  /**
+   * Ruft ab und liest den Rumpf einer erfolgreichen Antwort, höchstens {@code hoechstens} Bytes;
+   * leer bei 404. Eine längere Antwort bricht mit {@code zuGross} ab, sobald ihre Längenangabe oder
+   * das erste Byte über der Grenze ankommt.
+   */
+  private Optional<Antwort> abrufen(
+      Verbindung verbindung, String pfadUndAnfrage, int hoechstens, String zuGross) {
     URI ziel =
         erlaubnis.pruefe(
             ohneSchlussstrich(verbindung.basisUrl())
@@ -120,8 +173,35 @@ final class GitLabAbruf {
             .header("Accept", "application/json")
             .GET()
             .build();
+    HttpResponse<InputStream> antwort = senden(anfrage);
+    try (InputStream ein = antwort.body()) {
+      int status = antwort.statusCode();
+      if (status == HTTP_NOT_FOUND) {
+        return Optional.empty();
+      }
+      if (status < HTTP_OK || status >= HTTP_MULT_CHOICE) {
+        throw fehler(grundFuer(status), null);
+      }
+      if (antwort.headers().firstValueAsLong("Content-Length").orElse(0) > hoechstens) {
+        throw fehler(zuGross, null);
+      }
+      byte[] rumpf = ein.readNBytes(hoechstens + 1);
+      if (rumpf.length > hoechstens) {
+        throw fehler(zuGross, null);
+      }
+      return Optional.of(
+          new Antwort(
+              lesen(rumpf),
+              rumpf.length,
+              antwort.headers().firstValue("X-Next-Page").filter(wert -> !wert.isBlank())));
+    } catch (IOException e) {
+      throw fehler("Antwort von GitLab brach beim Empfang ab", e);
+    }
+  }
+
+  private HttpResponse<InputStream> senden(HttpRequest anfrage) {
     try {
-      return erlaubnis.httpClient().send(anfrage, HttpResponse.BodyHandlers.ofString());
+      return erlaubnis.httpClient().send(anfrage, HttpResponse.BodyHandlers.ofInputStream());
     } catch (HttpTimeoutException e) {
       throw fehler("GitLab hat nicht rechtzeitig geantwortet (Zeitüberschreitung)", e);
     } catch (IOException e) {
@@ -130,6 +210,10 @@ final class GitLabAbruf {
       Thread.currentThread().interrupt();
       throw fehler("Abruf bei GitLab unterbrochen", e);
     }
+  }
+
+  private String antwortZuGross() {
+    return "GitLab liefert eine Antwort über " + grenzen.antwortBytes() + " Bytes" + ABGEBROCHEN;
   }
 
   private static int folgeseite(String angabe, int seite) {
@@ -149,14 +233,6 @@ final class GitLabAbruf {
     return folgende;
   }
 
-  private static String rumpf(HttpResponse<String> antwort) {
-    int status = antwort.statusCode();
-    if (status >= HTTP_OK && status < HTTP_MULT_CHOICE) {
-      return antwort.body();
-    }
-    throw fehler(grundFuer(status), null);
-  }
-
   private static String grundFuer(int status) {
     if (status == HTTP_UNAUTHORIZED) {
       return "GitLab lehnt den Zugang ab (401) — Zugang prüfen oder neu hinterlegen";
@@ -171,10 +247,10 @@ final class GitLabAbruf {
     return "GitLab antwortet unerwartet mit " + status;
   }
 
-  private static JsonNode lesen(String rumpf) {
+  private static JsonNode lesen(byte[] rumpf) {
     try {
       return JSON.readTree(rumpf);
-    } catch (JsonProcessingException e) {
+    } catch (IOException e) {
       throw fehler(NICHT_LESBAR, e);
     }
   }

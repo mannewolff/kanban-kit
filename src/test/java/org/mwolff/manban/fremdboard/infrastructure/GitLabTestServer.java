@@ -15,10 +15,14 @@ import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
@@ -57,6 +61,9 @@ public final class GitLabTestServer implements AutoCloseable {
   private final GitLabQuelle gitLabQuelle;
   private volatile Duration verzoegerung = Duration.ZERO;
   private volatile boolean ohneEnde;
+  private volatile long flutBytes;
+  private final AtomicLong gefluteteBytes = new AtomicLong();
+  private final CountDownLatch flutEnde = new CountDownLatch(1);
 
   public GitLabTestServer() throws IOException, GeneralSecurityException {
     SSLContext tls = tlsKontext();
@@ -112,6 +119,27 @@ public final class GitLabTestServer implements AutoCloseable {
   /** Beantwortet jede unbekannte Seite mit einer leeren Liste und einer weiteren Folgeseite. */
   void endloseSeiten() {
     ohneEnde = true;
+  }
+
+  /**
+   * Stellt den Angriff aus Issue #2196 nach: Jeder Abruf bekommt Status 200 ohne Längenangabe und
+   * einen Rumpf, der bis {@code hoechstens} Bytes weiterläuft — oder bis der Abrufer die Verbindung
+   * schließt.
+   */
+  void flute(long hoechstens) {
+    flutBytes = hoechstens;
+  }
+
+  /** Bytes, die der geflutete Rumpf bis zu seinem Ende tatsächlich losgeworden ist. */
+  long geflutet() {
+    return gefluteteBytes.get();
+  }
+
+  /**
+   * Wartet, bis der geflutete Rumpf geendet hat; {@code false}, wenn das nicht rechtzeitig geschah.
+   */
+  boolean flutBeendet(Duration hoechstens) throws InterruptedException {
+    return flutEnde.await(hoechstens.toMillis(), TimeUnit.MILLISECONDS);
   }
 
   /** Die abgerufenen Pfade samt Anfrage, roh und in Reihenfolge. */
@@ -178,6 +206,10 @@ public final class GitLabTestServer implements AutoCloseable {
     abgerufen.add(schluessel);
     gesendeteZugaenge.add(austausch.getRequestHeaders().getFirst("PRIVATE-TOKEN"));
     warten();
+    if (flutBytes > 0) {
+      fluten(austausch);
+      return;
+    }
     Antwort antwort = antworten.get(schluessel);
     if (antwort == null && ohneEnde) {
       int seite = Integer.parseInt(schluessel.substring(schluessel.lastIndexOf('=') + 1));
@@ -194,6 +226,26 @@ public final class GitLabTestServer implements AutoCloseable {
     austausch.sendResponseHeaders(antwort.status(), rumpf.length == 0 ? -1 : rumpf.length);
     try (OutputStream aus = austausch.getResponseBody()) {
       aus.write(rumpf);
+    }
+  }
+
+  private void fluten(HttpExchange austausch) throws IOException {
+    byte[] stueck = new byte[64 * 1024];
+    Arrays.fill(stueck, (byte) ' ');
+    stueck[0] = '[';
+    austausch.getResponseHeaders().add("Content-Type", "application/json");
+    austausch.sendResponseHeaders(200, 0);
+    try (OutputStream aus = austausch.getResponseBody()) {
+      while (gefluteteBytes.get() < flutBytes) {
+        aus.write(stueck);
+        aus.flush();
+        gefluteteBytes.addAndGet(stueck.length);
+        stueck[0] = ' ';
+      }
+    } catch (IOException ignored) {
+      // Der Abrufer hat die Verbindung geschlossen — genau das soll die Abwehr tun.
+    } finally {
+      flutEnde.countDown();
     }
   }
 
