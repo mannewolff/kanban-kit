@@ -149,6 +149,22 @@ class AbgleichJobTest {
   }
 
   @Test
+  void anspruch_scheitert_auchVorDemErstenAbgleich_wennEinAndererKnotenZuvorBeansprucht() {
+    // Given: noch nie abgeglichen; zwischen Lesen und Anspruch beansprucht ein anderer Knoten.
+    speicher.lege(verbindung(1L, null, null, null));
+    speicher.vorDemAnspruch = () -> speicher.setzeAbgleich(1L, JETZT.minusSeconds(1));
+
+    // When
+    job.run();
+
+    // Then
+    verifyNoInteractions(abgleich);
+    assertThat(speicher.ansprueche).isZero();
+    assertThat(speicher.finde(1L).orElseThrow().letzterAbgleichAm())
+        .isEqualTo(JETZT.minusSeconds(1));
+  }
+
+  @Test
   void zweiKnoten_gleichenEinProjektNurEinmalAb() {
     // Given: zwei Knoten mit demselben Speicher; der erste gleicht ab, während der zweite startet.
     speicher.lege(verbindung(1L, JETZT.minus(Duration.ofMinutes(5)), JETZT, null));
