@@ -343,6 +343,54 @@ class CommentServiceTest {
   }
 
   @Test
+  void listJeKarte_ohneRecht_gruppiertJeKarteOhneVerborgene() {
+    // Given (Issue #2216): ein Sammelzugriff für „wartet auf dich“.
+    when(anbieter.verborgeneKartenIds(7L, 1L)).thenReturn(Set.of(6L));
+    when(comments.findKettenKommentare(List.of(5L, 6L, 9L)))
+        .thenReturn(
+            List.of(
+                mitText(3L, 5L, "erster"),
+                mitText(4L, 6L, "an der Reparatur"),
+                mitText(5L, 5L, ROTE_PRUEFUNG),
+                mitText(6L, 5L, "zweiter"),
+                mitText(7L, 9L, "dritter")));
+
+    // When
+    var jeKarte = service.listJeKarte(7L, 1L, List.of(5L, 6L, 9L));
+
+    // Then
+    verify(permissions).requireMembership(7L, 1L);
+    assertThat(jeKarte).containsOnlyKeys(5L, 9L);
+    assertThat(jeKarte.get(5L))
+        .extracting(CommentService.CommentView::body)
+        .containsExactly("erster", "zweiter");
+    assertThat(jeKarte.get(9L)).extracting(CommentService.CommentView::id).containsExactly(7L);
+  }
+
+  @Test
+  void listJeKarte_mitRecht_liefertAlles() {
+    // Given
+    when(anbieter.siehtStoerungen(8L, 1L)).thenReturn(true);
+    when(anbieter.verborgeneKartenIds(8L, 1L)).thenReturn(Set.of());
+    when(comments.findKettenKommentare(List.of(5L, 6L)))
+        .thenReturn(List.of(mitText(3L, 5L, ROTE_PRUEFUNG), mitText(4L, 6L, "Reparatur")));
+
+    // When / Then
+    assertThat(service.listJeKarte(8L, 1L, List.of(5L, 6L))).containsOnlyKeys(5L, 6L);
+  }
+
+  @Test
+  void listJeKarte_ohneMitgliedschaft_liestNichts() {
+    // Given
+    doThrow(new ProjectAccessDeniedException()).when(permissions).requireMembership(7L, 1L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.listJeKarte(7L, 1L, List.of(5L)))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verifyNoInteractions(comments);
+  }
+
+  @Test
   void list_mapsCommentsToViews() {
     // Given
     when(comments.findByCardId(5L)).thenReturn(List.of(comment(1L)));

@@ -2,6 +2,8 @@ package org.mwolff.manban.comment.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -14,6 +16,7 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -433,5 +436,53 @@ class RueckfrageServiceTest {
                     USER, CARD, RUECKFRAGE_ID, new AntwortAuftrag(false, null, null, false)))
         .isInstanceOf(UngueltigeAntwortException.class)
         .hasMessage("Die Antwort enthält keine Angabe");
+  }
+
+  @Test
+  void staendeJeKarteWertetAlleKartenMitEinemZugriffAus() {
+    // Given (Issue #2216): an CARD eine beantwortete und eine offene Rückfrage, an Karte 6 keine
+    rueckfrageAnDerKarte("## Rückfrage\n");
+    service.antworten(USER, CARD, RUECKFRAGE_ID, allesUebernehmen());
+    ankarte.add(kommentar(41L, "## Question\n" + DREI_FRAGEN, SPAETER, "STANDARD", true));
+    when(comments.listJeKarte(USER, PROJECT, List.of(CARD, 6L)))
+        .thenReturn(
+            Map.of(
+                CARD,
+                List.copyOf(ankarte),
+                6L,
+                List.of(kommentar(50L, "Nur ein Kommentar", SPAETER, null, false))));
+
+    // When
+    Map<Long, List<RueckfrageView>> staende =
+        service.staendeJeKarte(USER, PROJECT, List.of(CARD, 6L));
+
+    // Then
+    assertThat(staende).containsOnlyKeys(CARD);
+    assertThat(staende.get(CARD))
+        .extracting(RueckfrageView::kommentarId, RueckfrageView::zustand)
+        .containsExactly(
+            tuple(RUECKFRAGE_ID, RueckfrageZustand.BEANTWORTET),
+            tuple(41L, RueckfrageZustand.OFFEN));
+  }
+
+  @Test
+  void staendeJeKarteErkenntUeberholteFreigaben() {
+    // Given
+    rueckfrageAnDerKarte("## Rückfrage\nVorschau: https://p\nCommit: abc\n");
+    when(vorschauen.juengste(PROJECT)).thenReturn(Optional.of(new Vorschau(SPAETER, "neu")));
+    when(comments.listJeKarte(USER, PROJECT, List.of(CARD)))
+        .thenReturn(Map.of(CARD, List.copyOf(ankarte)));
+
+    // When / Then
+    assertThat(service.staendeJeKarte(USER, PROJECT, List.of(CARD)).get(CARD))
+        .extracting(RueckfrageView::zustand)
+        .containsExactly(RueckfrageZustand.UEBERHOLT);
+  }
+
+  @Test
+  void staendeJeKarteOhneKartenFragtNichts() {
+    // When / Then
+    assertThat(service.staendeJeKarte(USER, PROJECT, List.of())).isEmpty();
+    verify(comments, never()).listJeKarte(anyLong(), anyLong(), anyCollection());
   }
 }

@@ -3,8 +3,11 @@ package org.mwolff.manban.comment.application;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
@@ -273,6 +276,28 @@ public class CommentService {
         .filter(c -> stoerungen || !Kartenpruefung.istVerborgen(c.body()))
         .map(CommentService::view)
         .toList();
+  }
+
+  /**
+   * Die Kommentare mehrerer Karten eines Projekts je Karte, in einem Zugriff (Issue #2216, Plan
+   * #2206 E14) — für „wartet auf dich“, das die Rückfragen aller Karten eines Projekts auswertet.
+   * Reihenfolge je Karte wie {@link #list}; Karten ohne sichtbaren Kommentar fehlen. Ohne {@link
+   * Permission#REPAIR_READ} fehlen Kommentare verborgener Karten und nicht grüne Kartenprüfungen.
+   *
+   * <p>Verlangt die Mitgliedschaft im Projekt. Die Zugehörigkeit der Karten zum Projekt prüft der
+   * Aufrufer: Die IDs stammen aus einer rechtegeprüften Abfrage der Karten dieses Projekts.
+   */
+  @Transactional(readOnly = true)
+  public Map<Long, List<CommentView>> listJeKarte(
+      long userId, long projectId, Collection<Long> cardIds) {
+    permissions.requireMembership(userId, projectId);
+    boolean stoerungen = anbieter.siehtStoerungen(userId, projectId);
+    Set<Long> verborgeneKarten = anbieter.verborgeneKartenIds(userId, projectId);
+    Map<Long, List<CommentView>> jeKarte = new LinkedHashMap<>();
+    comments.findKettenKommentare(cardIds).stream()
+        .filter(c -> !verborgen(stoerungen, verborgeneKarten, c.cardId(), c.body()))
+        .forEach(c -> jeKarte.computeIfAbsent(c.cardId(), k -> new ArrayList<>()).add(view(c)));
+    return jeKarte;
   }
 
   /**

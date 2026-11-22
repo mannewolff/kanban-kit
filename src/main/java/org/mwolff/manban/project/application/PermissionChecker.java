@@ -339,6 +339,16 @@ public class PermissionChecker {
   }
 
   /**
+   * Ob der Benutzer im Projekt echt die Rolle Kunde hat (Issue #2216, Plan #2206 E12) — für Module
+   * außerhalb von {@code project}, die {@link ProjectRole} nicht sehen dürfen. Ein Plattform-Admin
+   * ohne eigene Mitgliedschaft ist kein Kunde.
+   */
+  @Transactional(readOnly = true)
+  public boolean istEchterKunde(long userId, long projectId) {
+    return echteRolleVorhanden(userId, projectId, ProjectRole.CUSTOMER);
+  }
+
+  /**
    * {@link #istEchterAppInhaber} mit Wurf (Issue #2212) — für das Anlegen und Erneuern eines
    * App-Zugangs, die ein Nichtmitglied mit 404 und ein Mitglied ohne passende Rolle mit 403
    * abweisen.

@@ -3,7 +3,10 @@ package org.mwolff.manban.comment.application;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.card.application.CardService;
@@ -57,7 +60,36 @@ public class RueckfrageService {
   @Transactional(readOnly = true)
   public List<RueckfrageView> liste(long userId, long cardId) {
     List<CommentView> kommentare = comments.list(userId, cardId);
-    Optional<Vorschau> juengste = vorschauen.juengste(cards.requireProjectId(cardId));
+    return staende(kommentare, vorschauen.juengste(cards.requireProjectId(cardId)));
+  }
+
+  /**
+   * Die Rückfragen mehrerer Karten eines Projekts mit ihrem Stand, in einem Zugriff auf die
+   * Kommentare (Issue #2216, Plan #2206 E14) — für „wartet auf dich“. Karten ohne Rückfrage fehlen.
+   * Rechte und Sicht wie {@link CommentService#listJeKarte}.
+   */
+  @Transactional(readOnly = true)
+  public Map<Long, List<RueckfrageView>> staendeJeKarte(
+      long userId, long projectId, Collection<Long> cardIds) {
+    if (cardIds.isEmpty()) {
+      return Map.of();
+    }
+    Optional<Vorschau> juengste = vorschauen.juengste(projectId);
+    Map<Long, List<RueckfrageView>> jeKarte = new LinkedHashMap<>();
+    comments
+        .listJeKarte(userId, projectId, cardIds)
+        .forEach(
+            (karte, kommentare) -> {
+              List<RueckfrageView> staende = staende(kommentare, juengste);
+              if (!staende.isEmpty()) {
+                jeKarte.put(karte, staende);
+              }
+            });
+    return jeKarte;
+  }
+
+  private static List<RueckfrageView> staende(
+      List<CommentView> kommentare, Optional<Vorschau> juengste) {
     List<EingegangeneAntwort> antworten = eingegangen(kommentare);
     return rueckfragen(kommentare).stream()
         .map(r -> view(RueckfragenAuswertung.auswerten(r, antworten, juengste)))

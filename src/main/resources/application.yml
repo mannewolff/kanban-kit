@@ -150,6 +150,10 @@ manban:
     takt: PT60S
     mindestabstand: PT2M
     vollabgleich: PT60M
+  # Erreichbarkeit des Rechenzentrums (Issue #2216, Plan #2206 E12): Liest das Rechenzentrum die
+  # Karten eines Boards laenger als die Abholfrist nicht, sieht der Kunde "gerade nicht erreichbar".
+  anbieter:
+    abholfrist: PT6M
   # Benachrichtigung per Mail (Issue #2078, Plan #2070 E3): So lange wartet ein Kartenlabel mit
   # Laufkennung, ob der Lauf die Karte selbst meldet. takt ist der Abstand zwischen zwei Laeufen des
   # Jobs (Issue #2081, E2), retention-days die Aufbewahrung von Anlaessen und Zustellungen (E14);

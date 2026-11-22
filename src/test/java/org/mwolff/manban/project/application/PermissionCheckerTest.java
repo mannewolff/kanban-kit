@@ -367,6 +367,26 @@ class PermissionCheckerTest {
   }
 
   @ParameterizedTest
+  @CsvSource({"OWNER,false", "ADMIN,false", "CUSTOMER,true", "MEMBER,false", "VIEWER,false"})
+  void istEchterKunde_folgtDerEchtenRolle(ProjectRole rolle, boolean erwartet) {
+    // Given (Issue #2216)
+    when(memberships.findByProjectIdAndUserId(7L, 1L))
+        .thenReturn(Optional.of(membership(7L, 1L, rolle)));
+
+    // When / Then
+    assertThat(checker.istEchterKunde(1L, 7L)).isEqualTo(erwartet);
+  }
+
+  @Test
+  void istEchterKunde_falsch_ohneMitgliedschaft() {
+    // Given
+    when(memberships.findByProjectIdAndUserId(7L, 1L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThat(checker.istEchterKunde(1L, 7L)).isFalse();
+  }
+
+  @ParameterizedTest
   @CsvSource({"OWNER", "ADMIN", "CUSTOMER"})
   void requireEchterAppInhaber_laesstDieRollenMitAppZugangDurch(ProjectRole rolle) {
     // Given
