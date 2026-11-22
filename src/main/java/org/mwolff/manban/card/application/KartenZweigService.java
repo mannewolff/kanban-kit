@@ -24,16 +24,19 @@ public class KartenZweigService {
   private final PermissionChecker permissions;
   private final KartenAbhaengigkeiten abhaengigkeiten;
   private final KartenZuordnung zuordnung;
+  private final Anbietersicht anbieter;
 
   public KartenZweigService(
       CardRepository cards,
       PermissionChecker permissions,
       KartenAbhaengigkeiten abhaengigkeiten,
-      KartenZuordnung zuordnung) {
+      KartenZuordnung zuordnung,
+      Anbietersicht anbieter) {
     this.cards = cards;
     this.permissions = permissions;
     this.abhaengigkeiten = abhaengigkeiten;
     this.zuordnung = zuordnung;
+    this.anbieter = anbieter;
   }
 
   /**
@@ -51,11 +54,16 @@ public class KartenZweigService {
     } catch (ProjectNotFoundException e) {
       throw new CardNotFoundException(e);
     }
+    // Eine verborgene Karte endet wie eine fremde; verborgene fehlen im Zweig (Issue #2211).
+    Set<Integer> verborgen = anbieter.verborgeneNummern(userId, karte.projectId());
+    if (verborgen.contains(karte.number())) {
+      throw new CardNotFoundException();
+    }
 
     // Bezugsmenge nach E1: derselbe Filter wie die Zugehörigkeit zum Vorhaben. Die Nummern fremder
     // Vorfahren rechnen dagegen auf dem ganzen Board — ein archivierter Vorfahr auf dem Board
     // bleibt so extern ohne Nummer, wie im Baum des Vorhabens.
-    List<Card> alle = cards.findByBoardId(karte.boardId());
+    List<Card> alle = Anbietersicht.ohneVerborgene(cards.findByBoardId(karte.boardId()), verborgen);
     List<Card> bezugsmenge = alle.stream().filter(EpicMembership::zaehlt).toList();
     Zweig zweig = DerivationTree.zweig(bezugsmenge, cardId);
 
@@ -63,7 +71,8 @@ public class KartenZweigService {
     List<DerivationNodeView> zeilen =
         DerivationTree.build(
             zweig.karten(),
-            abhaengigkeiten.abhaengigkeitenJeKarte(ids),
+            Anbietersicht.ohneVerborgeneNummern(
+                abhaengigkeiten.abhaengigkeitenJeKarte(ids), verborgen),
             FremdeVorfahren.nummern(cards, karte.projectId(), alle),
             zuordnung.gezaehlteMarken(karte.boardId(), ids));
     if (!zweig.anfangAbgeschnitten()) {

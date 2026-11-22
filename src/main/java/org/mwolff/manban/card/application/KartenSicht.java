@@ -39,18 +39,21 @@ public final class KartenSicht {
   private final KartenAbhaengigkeiten abhaengigkeiten;
   private final KartenZuordnung zuordnung;
   private final PermissionChecker permissions;
+  private final Anbietersicht anbieter;
 
   public KartenSicht(
       CardRepository cards,
       CardBestandRepository bestand,
       KartenAbhaengigkeiten abhaengigkeiten,
       KartenZuordnung zuordnung,
-      PermissionChecker permissions) {
+      PermissionChecker permissions,
+      Anbietersicht anbieter) {
     this.cards = cards;
     this.bestand = bestand;
     this.abhaengigkeiten = abhaengigkeiten;
     this.zuordnung = zuordnung;
     this.permissions = permissions;
+    this.anbieter = anbieter;
   }
 
   /**
@@ -87,8 +90,16 @@ public final class KartenSicht {
    * <p>Die Beschreibung kommt hier <b>nicht</b> mit (Issue #771): {@code description} ist immer
    * {@code null}, gesetzt ist stattdessen {@code excerpt} — die ersten {@value #AUSZUG_CODEPOINTS}
    * Codepoints. Den Volltext holt der Einzelabruf.
+   *
+   * <p>Karten, die der Betrachter nicht sieht, fehlen, und Verweise auf sie entfallen ({@link
+   * Anbietersicht}, Issue #2211).
    */
-  public List<CardView> listenSicht(long userId, long projectId, List<Card> karten) {
+  public List<CardView> listenSicht(long userId, long projectId, List<Card> alleKarten) {
+    Set<Integer> verborgen = anbieter.verborgeneNummern(userId, projectId);
+    List<Card> karten =
+        verborgen.isEmpty()
+            ? alleKarten
+            : alleKarten.stream().filter(c -> !verborgen.contains(c.number())).toList();
     Set<Long> ids = karten.stream().map(Card::requireId).collect(Collectors.toSet());
     // Karten ohne Eintrag fehlen in den Maps (Vertrag der drei findByCardIds) — die Sicht setzt
     // dort eine leere Liste, nie null.
@@ -135,6 +146,7 @@ public final class KartenSicht {
                     c.status() != null && darfStatusSetzen,
                     herkunft.get(c.requireId()),
                     c.externUrl()))
+        .map(v -> anbieter.ohneVerborgeneVerweise(v, verborgen))
         .toList();
   }
 
@@ -170,9 +182,12 @@ public final class KartenSicht {
   /**
    * Die Sicht einer einzelnen Karte für diesen Betrachter — die {@link
    * Permission#CARD_MOVE}-Prüfung für {@code canSetStatus} läuft hier einmal (Plan #1294, E10).
+   * Verweise auf Karten, die der Betrachter nicht sieht, entfallen (Issue #2211).
    */
   public CardView view(long userId, Card c) {
-    return view(c, darfStatusSetzen(userId, c.projectId()));
+    return anbieter.ohneVerborgeneVerweise(
+        view(c, darfStatusSetzen(userId, c.projectId())),
+        anbieter.verborgeneNummern(userId, c.projectId()));
   }
 
   /**

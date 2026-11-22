@@ -351,7 +351,7 @@ public class KanbanCompatService {
   @Transactional
   public void move(KanbanPrincipal principal, long cardId, String column, int position) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     if (cardService.getCard(principal.userId(), cardId).status() != null) {
       // Die Kanban-Keys sind zugleich die Statusnamen der card-Fassade (E24).
@@ -377,7 +377,7 @@ public class KanbanCompatService {
   @Transactional
   public Item update(KanbanPrincipal principal, long cardId, String title, @Nullable String body) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     return item(boardId, ingest.updateContent(principal.userId(), cardId, title, body));
   }
@@ -397,7 +397,7 @@ public class KanbanCompatService {
   @Transactional
   public void addLabel(KanbanPrincipal principal, long cardId, String name) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     labelService.addToCard(principal.userId(), cardId, name);
   }
@@ -406,7 +406,7 @@ public class KanbanCompatService {
   @Transactional
   public void removeLabel(KanbanPrincipal principal, long cardId, String name) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     labelService.removeFromCard(principal.userId(), cardId, name);
   }
@@ -427,7 +427,7 @@ public class KanbanCompatService {
       @Nullable String idempotencyKey,
       @Nullable Instant laufStart) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     String idempotent = normalizeIdempotencyKey(idempotencyKey);
     if (idempotent == null) {
@@ -454,7 +454,7 @@ public class KanbanCompatService {
   @Transactional(readOnly = true)
   public List<Comment> listComments(KanbanPrincipal principal, long cardId) {
     long boardId = requireBound(principal);
-    ingest.requireReadableOnBoard(cardId, boardId);
+    ingest.requireReadableOnBoard(principal.userId(), cardId, boardId);
     return commentService.list(principal.userId(), cardId).stream().map(Comment::aus).toList();
   }
 
@@ -477,7 +477,7 @@ public class KanbanCompatService {
       String body,
       @Nullable Instant laufStart) {
     long boardId = requireBound(principal);
-    ingest.requireOnBoard(cardId, boardId);
+    ingest.requireOnBoard(principal.userId(), cardId, boardId);
     pruefeSchreibbar(boardId);
     boolean onCard =
         commentService.list(principal.userId(), cardId).stream().anyMatch(c -> c.id() == commentId);
@@ -503,7 +503,7 @@ public class KanbanCompatService {
   @Transactional(readOnly = true)
   public List<Activity> listActivity(KanbanPrincipal principal, long cardId) {
     long boardId = requireBound(principal);
-    ingest.requireReadableOnBoard(cardId, boardId);
+    ingest.requireReadableOnBoard(principal.userId(), cardId, boardId);
     return cardService.listActivityViews(principal.userId(), cardId).stream()
         .map(
             a ->

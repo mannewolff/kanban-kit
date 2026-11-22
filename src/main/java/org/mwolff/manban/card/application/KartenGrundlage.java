@@ -55,6 +55,7 @@ public final class KartenGrundlage {
   private final ApplicationEventPublisher events;
   private final Clock clock;
   private final BoardQuelle boardQuelle;
+  private final Anbietersicht anbieter;
 
   public KartenGrundlage(
       CardRepository cards,
@@ -67,7 +68,8 @@ public final class KartenGrundlage {
       ActorContext actor,
       ApplicationEventPublisher events,
       Clock clock,
-      BoardQuelle boardQuelle) {
+      BoardQuelle boardQuelle,
+      Anbietersicht anbieter) {
     this.cards = cards;
     this.abhaengigkeiten = abhaengigkeiten;
     this.boardService = boardService;
@@ -79,6 +81,7 @@ public final class KartenGrundlage {
     this.events = events;
     this.clock = clock;
     this.boardQuelle = boardQuelle;
+    this.anbieter = anbieter;
   }
 
   /**
@@ -89,6 +92,16 @@ public final class KartenGrundlage {
    */
   public void pruefeSchreibbar(long projectId) {
     boardQuelle.pruefeSchreibbar(projectId);
+  }
+
+  /**
+   * Verlangt, dass die Karte für den Aufrufer sichtbar ist ({@link Anbietersicht}, Issue #2211) —
+   * für die Dienste, die eine Karte selbst laden statt über {@link #requireCardOp}.
+   *
+   * @throws CardNotFoundException wenn die Karte dem Aufrufer verborgen ist
+   */
+  public void pruefeSichtbar(long userId, Card card) {
+    anbieter.pruefeSichtbar(userId, card);
   }
 
   /**
@@ -223,10 +236,15 @@ public final class KartenGrundlage {
    * sind projekt-basiert und werden über {@code card.projectId()} (immer gesetzt, V18) geprüft —
    * nicht über das Board; für board-gebundene Karten ist die Prüfung identisch (die Projekt-ID
    * stimmt mit dem Board-Projekt überein).
+   *
+   * <p>Eine Karte, die der Aufrufer nicht sieht, endet vor der Rechteprüfung mit {@link
+   * CardNotFoundException} ({@link Anbietersicht}, Issue #2211) — eine 403 verriete, dass es sie
+   * gibt.
    */
   public Card requireCardOp(
       long userId, long cardId, Permission ticketPermission, Permission epicPermission) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    anbieter.pruefeSichtbar(userId, card);
     permissions.require(
         userId, card.projectId(), card.type() == CardType.EPIC ? epicPermission : ticketPermission);
     boardQuelle.pruefeSchreibbar(card.projectId());

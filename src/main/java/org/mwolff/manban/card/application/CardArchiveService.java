@@ -3,6 +3,7 @@ package org.mwolff.manban.card.application;
 import java.time.Clock;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.domain.Card;
@@ -36,6 +37,7 @@ public class CardArchiveService {
   private final VorhabenArchivierung vorhaben;
   private final ApplicationEventPublisher events;
   private final Clock clock;
+  private final Anbietersicht anbieter;
 
   public CardArchiveService(
       CardRepository cards,
@@ -47,7 +49,8 @@ public class CardArchiveService {
       KartenSicht sicht,
       VorhabenArchivierung vorhaben,
       ApplicationEventPublisher events,
-      Clock clock) {
+      Clock clock,
+      Anbietersicht anbieter) {
     this.cards = cards;
     this.bestand = bestand;
     this.abhaengigkeiten = abhaengigkeiten;
@@ -58,6 +61,7 @@ public class CardArchiveService {
     this.vorhaben = vorhaben;
     this.events = events;
     this.clock = clock;
+    this.anbieter = anbieter;
   }
 
   @Transactional
@@ -162,6 +166,7 @@ public class CardArchiveService {
   @Transactional
   public void purge(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    grundlage.pruefeSichtbar(userId, card);
     long projectId = boardService.requireProjectId(card.boardId());
     permissions.require(userId, projectId, Permission.BOARD_DELETE);
     grundlage.pruefeSchreibbar(projectId);
@@ -206,15 +211,19 @@ public class CardArchiveService {
     grundlage.publishChanged(card.boardId(), ActivityType.DELETED, card.requireId());
   }
 
-  /** Karten im Papierkorb eines Boards. Erfordert Board-Mitgliedschaft (Leserecht). */
+  /**
+   * Karten im Papierkorb eines Boards. Erfordert Board-Mitgliedschaft (Leserecht). Karten, die der
+   * Aufrufer nicht sieht, fehlen, und Verweise auf sie entfallen (Issue #2211).
+   */
   @Transactional(readOnly = true)
   public List<CardView> listTrash(long userId, long boardId) {
     long projectId = boardService.requireProjectId(boardId);
     permissions.requireMembership(userId, projectId);
     boolean darfStatusSetzen = sicht.darfStatusSetzen(userId, projectId);
-    return cards.findTrashByBoardId(boardId).stream()
+    Set<Integer> verborgen = anbieter.verborgeneNummern(userId, projectId);
+    return Anbietersicht.ohneVerborgene(cards.findTrashByBoardId(boardId), verborgen).stream()
         .filter(c -> c.type() == CardType.CARD)
-        .map(c -> sicht.view(c, darfStatusSetzen))
+        .map(c -> anbieter.ohneVerborgeneVerweise(sicht.view(c, darfStatusSetzen), verborgen))
         .toList();
   }
 }

@@ -678,4 +678,53 @@ class CardArchiveServiceTest {
 
     verify(events, never()).publishEvent(any());
   }
+
+  // --- Kunde ohne REPAIR_READ (Issue #2211) -----------------------------
+
+  /** Die Karte 2 mit der Nummer 2 trägt kit:repair. */
+  private void reparaturkarte2() {
+    when(cardLabels.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(2L));
+    when(cards.findByIds(List.of(2L)))
+        .thenReturn(List.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+  }
+
+  @Test
+  void alsKunde_fehltDieReparaturkarteImPapierkorb_samtAbhaengigkeitAufSie() {
+    reparaturkarte2();
+    when(dependencies.findByCardId(1L)).thenReturn(List.of(2));
+    when(cards.findTrashByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null),
+                card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    assertThat(service.listTrash(5L, BOARD))
+        .singleElement()
+        .satisfies(
+            k -> {
+              assertThat(k.id()).isEqualTo(1L);
+              assertThat(k.dependencies()).isEmpty();
+            });
+  }
+
+  @Test
+  void alsKunde_endenArchivierenUndEndgueltigesLoeschenDerReparaturkarteMit404() {
+    reparaturkarte2();
+    when(cards.findById(2L))
+        .thenReturn(Optional.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    assertThatThrownBy(() -> service.archive(5L, 2L)).isInstanceOf(CardNotFoundException.class);
+    assertThatThrownBy(() -> service.purge(5L, 2L)).isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).deleteById(anyLong());
+  }
+
+  @Test
+  void alsOwner_erscheintDieReparaturkarteImPapierkorb() {
+    reparaturkarte2();
+    when(permissions.hasPermission(5L, PROJECT, Permission.REPAIR_READ)).thenReturn(true);
+    when(cards.findTrashByBoardId(BOARD))
+        .thenReturn(List.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+
+    assertThat(service.listTrash(5L, BOARD)).extracting(CardView::id).containsExactly(2L);
+  }
 }

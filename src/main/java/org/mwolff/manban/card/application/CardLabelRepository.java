@@ -38,4 +38,11 @@ public interface CardLabelRepository {
    * aufsteigend. Karten ohne Labels fehlen im Ergebnis; leere Eingabe liefert eine leere Map.
    */
   Map<Long, List<Long>> findByCardIds(Collection<Long> cardIds);
+
+  /**
+   * IDs der Karten des Projekts, die ein Label mit diesem Namen tragen (Issue #2211) — eine Abfrage
+   * für das ganze Projekt, gleich auf welchem Board die Karte liegt. Archivierte Karten und Karten
+   * im Papierkorb zählen mit. Jede ID steht höchstens einmal, aufsteigend.
+   */
+  List<Long> kartenMitLabel(long projectId, String name);
 }

@@ -83,6 +83,7 @@ public class CardMoveService {
 
   private CardView doMove(long userId, long cardId, long targetColumnId, int targetPosition) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    grundlage.pruefeSichtbar(userId, card);
     if (card.type() == CardType.EPIC) {
       throw InvalidDependencyException.epicsNichtPositioniert();
     }
@@ -165,6 +166,7 @@ public class CardMoveService {
   @Transactional
   public void setStatus(long userId, long cardId, String status) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    grundlage.pruefeSichtbar(userId, card);
     permissions.require(userId, card.projectId(), Permission.CARD_MOVE);
     grundlage.pruefeSchreibbar(card.projectId());
     CardStatus neu = statusAus(status);
@@ -272,6 +274,7 @@ public class CardMoveService {
 
   private CardView doTransfer(long userId, long cardId, long targetBoardId, long targetColumnId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    grundlage.pruefeSichtbar(userId, card);
     if (card.type() == CardType.EPIC) {
       throw InvalidDependencyException.epicsNichtVerschiebbar();
     }

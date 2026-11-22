@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -209,7 +211,8 @@ class FremdesBoardSchreibsperreTest {
         actor,
         events,
         clock,
-        quelle);
+        quelle,
+        new Anbietersicht(cards, zuordnung, permissions));
   }
 
   private LabelService labelService() {
@@ -224,6 +227,15 @@ class FremdesBoardSchreibsperreTest {
         mock(CardLabelEventRepository.class),
         clock,
         grundlage());
+  }
+
+  /**
+   * Die Zuordnung wurde nur gelesen: die Abfrage der Reparaturkarten, mit der die Sichtprüfung vor
+   * der Schreibsperre läuft (Issue #2211). Geschrieben wurde nichts.
+   */
+  private void nurSichtbarkeitGeprueft() {
+    verify(zuordnung).kartenMitLabel(anyLong(), anyString());
+    verifyNoMoreInteractions(zuordnung);
   }
 
   /** Nichts wurde geschrieben: keine Karte, keine Nummer, kein Spaltenverlauf, kein Ereignis. */
@@ -260,7 +272,7 @@ class FremdesBoardSchreibsperreTest {
   void cardService_setAssignees_lehntAb() {
     assertThatThrownBy(() -> cardService().setAssignees(USER, KARTEN_ID, List.of(USER)))
         .isInstanceOf(FremdesBoardException.class);
-    verifyNoInteractions(zuordnung);
+    nurSichtbarkeitGeprueft();
     nichtsGeschrieben();
   }
 
@@ -268,14 +280,14 @@ class FremdesBoardSchreibsperreTest {
   void cardService_setLabels_lehntAb() {
     assertThatThrownBy(() -> cardService().setLabels(USER, KARTEN_ID, List.of(3L)))
         .isInstanceOf(FremdesBoardException.class);
-    verifyNoInteractions(zuordnung);
+    nurSichtbarkeitGeprueft();
   }
 
   @Test
   void cardService_changeLabel_lehntAb() {
     assertThatThrownBy(() -> cardService().changeLabel(USER, KARTEN_ID, 3L, LabelAction.ADD))
         .isInstanceOf(FremdesBoardException.class);
-    verifyNoInteractions(zuordnung);
+    nurSichtbarkeitGeprueft();
   }
 
   // --- KartenGrundlage ---------------------------------------------------------------------

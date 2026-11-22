@@ -61,6 +61,7 @@ class CardIngestServiceTest {
   private PermissionChecker permissions;
   private CardActivityRepository activity;
   private ApplicationEventPublisher events;
+  private CardLabelRepository cardLabels;
   private CardIngestService service;
 
   private static Card card(
@@ -91,6 +92,7 @@ class CardIngestServiceTest {
     ActorContext actor = mock(ActorContext.class);
     when(actor.current()).thenReturn(ActorContext.ActorStamp.unknown());
     events = mock(ApplicationEventPublisher.class);
+    cardLabels = mock(CardLabelRepository.class);
     Clock clock = Clock.fixed(FIXED, ZoneOffset.UTC);
     service =
         CardServiceAufbau.ingestAusPorts(
@@ -102,7 +104,7 @@ class CardIngestServiceTest {
             new KartenZuordnung(
                 mock(CardAssigneeRepository.class),
                 mock(LabelRepository.class),
-                mock(CardLabelRepository.class),
+                cardLabels,
                 permissions,
                 mock(CardLabelEventRepository.class),
                 ActorContext.ActorStamp::unknown,
@@ -683,14 +685,14 @@ class CardIngestServiceTest {
   void requireOnBoard_passes_whenCardIsOnBoard() {
     when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false)));
 
-    assertThatCode(() -> service.requireOnBoard(1L, BOARD)).doesNotThrowAnyException();
+    assertThatCode(() -> service.requireOnBoard(5L, 1L, BOARD)).doesNotThrowAnyException();
   }
 
   @Test
   void requireOnBoard_throwsCardNotFound_whenCardUnknown() {
     when(cards.findById(1L)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> service.requireOnBoard(1L, BOARD))
+    assertThatThrownBy(() -> service.requireOnBoard(5L, 1L, BOARD))
         .isInstanceOf(CardNotFoundException.class);
   }
 
@@ -721,7 +723,7 @@ class CardIngestServiceTest {
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(otherBoard));
 
-    assertThatThrownBy(() -> service.requireOnBoard(1L, BOARD))
+    assertThatThrownBy(() -> service.requireOnBoard(5L, 1L, BOARD))
         .isInstanceOf(CardNotFoundException.class);
   }
 
@@ -755,7 +757,7 @@ class CardIngestServiceTest {
             null);
     when(cards.findById(1L)).thenReturn(Optional.of(onLargeBoard));
 
-    assertThatCode(() -> service.requireOnBoard(1L, largeBoard)).doesNotThrowAnyException();
+    assertThatCode(() -> service.requireOnBoard(5L, 1L, largeBoard)).doesNotThrowAnyException();
   }
 
   @Test
@@ -763,7 +765,7 @@ class CardIngestServiceTest {
     // findById filtert den Papierkorb nicht: Die Schreibwege bleiben unveraendert (Issue #1622).
     when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false)));
 
-    assertThatCode(() -> service.requireOnBoard(1L, BOARD)).doesNotThrowAnyException();
+    assertThatCode(() -> service.requireOnBoard(5L, 1L, BOARD)).doesNotThrowAnyException();
     verify(cards, never()).findByIdAndDeletedAtIsNull(1L);
   }
 
@@ -772,7 +774,7 @@ class CardIngestServiceTest {
     when(cards.findByIdAndDeletedAtIsNull(1L))
         .thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false)));
 
-    assertThatCode(() -> service.requireReadableOnBoard(1L, BOARD)).doesNotThrowAnyException();
+    assertThatCode(() -> service.requireReadableOnBoard(5L, 1L, BOARD)).doesNotThrowAnyException();
   }
 
   @Test
@@ -780,7 +782,7 @@ class CardIngestServiceTest {
     when(cards.findByIdAndDeletedAtIsNull(1L))
         .thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, true)));
 
-    assertThatCode(() -> service.requireReadableOnBoard(1L, BOARD)).doesNotThrowAnyException();
+    assertThatCode(() -> service.requireReadableOnBoard(5L, 1L, BOARD)).doesNotThrowAnyException();
   }
 
   @Test
@@ -788,7 +790,7 @@ class CardIngestServiceTest {
     // Papierkorb-Karten liefert die Abfrage nicht — auch wenn findById sie noch faende.
     when(cards.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> service.requireReadableOnBoard(1L, BOARD))
+    assertThatThrownBy(() -> service.requireReadableOnBoard(5L, 1L, BOARD))
         .isInstanceOf(CardNotFoundException.class);
     verify(cards, never()).findById(1L);
   }
@@ -799,7 +801,7 @@ class CardIngestServiceTest {
     when(cards.findByIdAndDeletedAtIsNull(1L))
         .thenReturn(Optional.of(boardCard(1L, 20L, 1, 0, false)));
 
-    assertThatThrownBy(() -> service.requireReadableOnBoard(1L, 5000L))
+    assertThatThrownBy(() -> service.requireReadableOnBoard(5L, 1L, 5000L))
         .isInstanceOf(CardNotFoundException.class);
   }
 
@@ -814,5 +816,73 @@ class CardIngestServiceTest {
     assertThat(service.listBoardItems(1L, BOARD))
         .extracting(CardIngestService.BoardItemView::status)
         .containsExactly("IN_PROGRESS", null);
+  }
+
+  // --- Kunde ohne REPAIR_READ (Issue #2211) -----------------------------
+
+  @Test
+  void alsKunde_fehltDieReparaturkarteInDerKanbanListe_samtHerkunftAufSie() {
+    when(cardLabels.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(2L));
+    Card reparatur = card(2L, 20L, 2, false, null, CardType.CARD, null, null);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(
+            List.of(
+                card(1L, 20L, 1, false, null, CardType.CARD, null, null).withDerivedFrom(2L),
+                reparatur));
+    when(cards.findByIds(any())).thenReturn(List.of(reparatur));
+
+    assertThat(service.listBoardItems(5L, BOARD))
+        .singleElement()
+        .satisfies(
+            i -> {
+              assertThat(i.number()).isEqualTo(1);
+              assertThat(i.derivedFrom()).isNull();
+            });
+  }
+
+  @Test
+  void alsKunde_endenDieBoardGuardsFuerDieReparaturkarteMit404() {
+    Card reparatur = boardCard(1L, 20L, 7, 0, false);
+    when(cardLabels.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(1L));
+    when(cards.findByIds(List.of(1L))).thenReturn(List.of(reparatur));
+    when(cards.findById(1L)).thenReturn(Optional.of(reparatur));
+    when(cards.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(reparatur));
+
+    assertThatThrownBy(() -> service.requireOnBoard(5L, 1L, BOARD))
+        .isInstanceOf(CardNotFoundException.class);
+    assertThatThrownBy(() -> service.requireReadableOnBoard(5L, 1L, BOARD))
+        .isInstanceOf(CardNotFoundException.class);
+    assertThatThrownBy(() -> service.updateContent(5L, 1L, "Neu", null))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).save(any(Card.class));
+  }
+
+  @Test
+  void alsKunde_verraetDerIdempotenzTrefferDieReparaturkarteNicht() {
+    when(cardLabels.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(1L));
+    when(cards.findByIds(List.of(1L))).thenReturn(List.of(boardCard(1L, 20L, 7, 0, false)));
+    when(cards.findByProjectIdAndExternalKey(PROJECT, "ext:7"))
+        .thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false)));
+
+    assertThatThrownBy(
+            () ->
+                service.createDirect(
+                    5L,
+                    BOARD,
+                    20L,
+                    new CardIngestService.DirectCard("T", null, "ext:7", null, null)))
+        .isInstanceOf(CardNotFoundException.class);
+  }
+
+  @Test
+  void alsOwner_erscheintDieReparaturkarteInDerKanbanListe() {
+    when(cardLabels.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(2L));
+    when(permissions.hasPermission(5L, PROJECT, Permission.REPAIR_READ)).thenReturn(true);
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(List.of(card(2L, 20L, 2, false, null, CardType.CARD, null, null)));
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 2, 0, false)));
+
+    assertThat(service.listBoardItems(5L, BOARD)).hasSize(1);
+    assertThatCode(() -> service.requireOnBoard(5L, 1L, BOARD)).doesNotThrowAnyException();
   }
 }

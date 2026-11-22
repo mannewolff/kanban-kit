@@ -18,6 +18,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
@@ -1917,5 +1918,70 @@ class CardServiceTest {
     assertThat(service.listByBoard(1L, BOARD))
         .extracting(CardView::status, CardView::canSetStatus)
         .containsExactly(tuple("READY", false));
+  }
+
+  // --- Kunde ohne REPAIR_READ (Issue #2211) -----------------------------
+
+  /** Der Aufrufer 5 ist Kunde: ohne REPAIR_READ, und #8 trägt kit:repair. */
+  private void alsKundeMitReparaturkarte8() {
+    when(cardLabels.kartenMitLabel(PROJECT, "kit:repair")).thenReturn(List.of(2L));
+    when(cards.findByIds(List.of(2L))).thenReturn(List.of(boardCard(2L, 20L, 8, 1, false)));
+    when(cards.findById(1L)).thenReturn(Optional.of(boardCard(1L, 20L, 7, 0, false)));
+    when(cards.findById(2L)).thenReturn(Optional.of(boardCard(2L, 20L, 8, 1, false)));
+    when(cards.findByBoardId(BOARD))
+        .thenReturn(List.of(boardCard(1L, 20L, 7, 0, false), boardCard(2L, 20L, 8, 1, false)));
+    when(dependencies.findByCardId(1L)).thenReturn(List.of(8));
+    when(dependencies.findByCardIds(any())).thenReturn(Map.of(1L, List.of(8)));
+  }
+
+  @Test
+  void alsKunde_fehltDieReparaturkarteInDerBoardListe_samtAbhaengigkeit() {
+    alsKundeMitReparaturkarte8();
+
+    assertThat(service.listByBoard(5L, BOARD))
+        .singleElement()
+        .satisfies(
+            k -> {
+              assertThat(k.number()).isEqualTo(7);
+              assertThat(k.dependencies()).isEmpty();
+            });
+  }
+
+  @Test
+  void alsKunde_endenEinzelabrufVerlaufUndPatchDerReparaturkarteMit404() {
+    alsKundeMitReparaturkarte8();
+
+    assertThatThrownBy(() -> service.getCard(5L, 2L)).isInstanceOf(CardNotFoundException.class);
+    assertThatThrownBy(() -> service.listActivity(5L, 2L))
+        .isInstanceOf(CardNotFoundException.class);
+    assertThatThrownBy(() -> service.update(5L, 2L, "Neu", null, null, null, null, null))
+        .isInstanceOf(CardNotFoundException.class);
+    assertThatThrownBy(() -> service.setLabels(5L, 2L, List.of()))
+        .isInstanceOf(CardNotFoundException.class);
+    assertThatThrownBy(() -> service.changeLabel(5L, 2L, 3L, LabelAction.ADD))
+        .isInstanceOf(CardNotFoundException.class);
+    assertThatThrownBy(() -> service.setAssignees(5L, 2L, List.of()))
+        .isInstanceOf(CardNotFoundException.class);
+    verify(cards, never()).save(any(Card.class));
+    verify(activity, never()).findByCardId(2L);
+  }
+
+  @Test
+  void alsKunde_nenntDieSichtbareKarteIhreAbhaengigkeitAufDieReparaturkarteNicht() {
+    alsKundeMitReparaturkarte8();
+
+    assertThat(service.getCard(5L, 1L).dependencies()).isEmpty();
+  }
+
+  @Test
+  void alsOwner_erscheintAlles() {
+    alsKundeMitReparaturkarte8();
+    when(permissions.hasPermission(5L, PROJECT, Permission.REPAIR_READ)).thenReturn(true);
+
+    assertThat(service.listByBoard(5L, BOARD))
+        .extracting(CardView::number, CardView::dependencies)
+        .containsExactly(tuple(7, List.of(8)), tuple(8, List.of()));
+    assertThat(service.getCard(5L, 2L).number()).isEqualTo(8);
+    assertThat(service.getCard(5L, 1L).dependencies()).containsExactly(8);
   }
 }

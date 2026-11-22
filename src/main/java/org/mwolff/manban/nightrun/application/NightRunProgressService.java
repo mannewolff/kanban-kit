@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
+import org.mwolff.manban.card.application.Anbietersicht;
 import org.mwolff.manban.card.application.CardRunQueryService;
 import org.mwolff.manban.card.application.CardRunQueryService.LaufKarteView;
 import org.mwolff.manban.card.application.CardRunQueryService.TokenActivityView;
@@ -71,6 +72,7 @@ public class NightRunProgressService {
   private final CommentService comments;
   private final NightRunProperties properties;
   private final Clock clock;
+  private final Anbietersicht anbieter;
 
   public NightRunProgressService(
       NightRunRepository runs,
@@ -78,13 +80,15 @@ public class NightRunProgressService {
       CardRunQueryService cards,
       CommentService comments,
       NightRunProperties properties,
-      Clock clock) {
+      Clock clock,
+      Anbietersicht anbieter) {
     this.runs = runs;
     this.permissions = permissions;
     this.cards = cards;
     this.comments = comments;
     this.properties = properties;
     this.clock = clock;
+    this.anbieter = anbieter;
   }
 
   /**
@@ -140,12 +144,17 @@ public class NightRunProgressService {
    * dessen Kennung der Laufstand trägt, ohne sie der jüngste Anlauf der Karte — nie der jüngste
    * Lauf des Projekts, der bei parallelen Runnern ein fremder wäre (#1419).
    *
+   * <p>Verborgene Karten ({@link Anbietersicht}, Issue #2211): Die Karte selbst endet wie eine
+   * unbekannte, und unter den abgeleiteten fehlen sie.
+   *
    * @throws org.mwolff.manban.card.application.CardNotFoundException wenn die Karte nicht existiert
+   *     oder dem Aufrufer verborgen ist
    */
   @Transactional(readOnly = true)
   public KettenstandDerKarte kettenstand(long userId, long cardId) {
     long projectId = cards.requireProjectId(cardId);
     permissions.require(userId, projectId, Permission.TICKET_READ);
+    anbieter.requireSichtbar(userId, cardId);
     Karte karte = karte(cards.cardsByIds(List.of(cardId)).getFirst());
     Laufstand laufstand =
         comments.laufstaendeImProjekt(projectId).stream()
@@ -154,7 +163,11 @@ public class NightRunProgressService {
             .map(l -> new Laufstand(l.cardId(), l.body(), l.laufStart()))
             .orElse(null);
     List<Karte> abgeleitete =
-        cards.derivedCards(cardId).stream().map(NightRunProgressService::karte).toList();
+        anbieter
+            .sichtbare(userId, projectId, cards.derivedCards(cardId), LaufKarteView::number)
+            .stream()
+            .map(NightRunProgressService::karte)
+            .toList();
     return new KettenstandDerKarte(
         FortschrittErmittlung.kettenStand(karte, laufstand),
         FortschrittErmittlung.uebernommen(karte, laufstand),

@@ -90,7 +90,8 @@ class VorhabenMassenzuordnungTest {
             actor,
             events,
             Clock.fixed(FIXED, ZoneOffset.UTC),
-            CardServiceAufbau.KEIN_FREMDES_BOARD);
+            CardServiceAufbau.KEIN_FREMDES_BOARD,
+            new Anbietersicht(cards, zuordnung, permissions));
     regel = new VorhabenMassenzuordnung(cards, grundlage, permissions);
     when(cards.save(any(Card.class))).thenAnswer(inv -> inv.getArgument(0));
   }

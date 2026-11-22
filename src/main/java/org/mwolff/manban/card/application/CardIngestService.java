@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
@@ -38,6 +39,7 @@ public class CardIngestService {
   private final KartenGrundlage grundlage;
   private final KartenSicht sicht;
   private final Clock clock;
+  private final Anbietersicht anbieter;
 
   public CardIngestService(
       CardRepository cards,
@@ -46,7 +48,8 @@ public class CardIngestService {
       PermissionChecker permissions,
       KartenGrundlage grundlage,
       KartenSicht sicht,
-      Clock clock) {
+      Clock clock,
+      Anbietersicht anbieter) {
     this.cards = cards;
     this.abhaengigkeiten = abhaengigkeiten;
     this.boardService = boardService;
@@ -54,6 +57,7 @@ public class CardIngestService {
     this.grundlage = grundlage;
     this.sicht = sicht;
     this.clock = clock;
+    this.anbieter = anbieter;
   }
 
   /**
@@ -87,12 +91,17 @@ public class CardIngestService {
    * <p>Bewusst nicht {@link CardView}: diese Projektion kommt mit einer einzigen Abfrage aus,
    * während {@code sicht.view(...)} je Karte Abhängigkeiten, Zuständige und Labels nachlädt (N+1).
    * Der {@code kanbancompat}-Ingest listet ganze Boards und braucht davon nichts.
+   *
+   * <p>Karten, die der Aufrufer nicht sieht, fehlen; eine Herkunft auf eine von ihnen entfällt
+   * (Issue #2211).
    */
   @Transactional(readOnly = true)
   public List<BoardItemView> listBoardItems(long userId, long boardId) {
-    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
+    Set<Integer> verborgen = anbieter.verborgeneNummern(userId, projectId);
     List<Card> sichtbar =
-        cards.findByBoardId(boardId).stream()
+        Anbietersicht.ohneVerborgene(cards.findByBoardId(boardId), verborgen).stream()
             .filter(c -> !c.archived())
             .sorted(Comparator.comparingInt(Card::positionInColumn))
             .toList();
@@ -109,40 +118,51 @@ public class CardIngestService {
                     c.positionInColumn(),
                     c.type() == CardType.EPIC,
                     c.externalKey(),
-                    c.derivedFromCardId() == null
-                        ? null
-                        : herkunftsnummern.get(c.derivedFromCardId()),
+                    sichtbareNummer(
+                        c.derivedFromCardId() == null
+                            ? null
+                            : herkunftsnummern.get(c.derivedFromCardId()),
+                        verborgen),
                     statusName(c)))
         .toList();
   }
 
+  /** Die Nummer, wenn sie keine verborgene Karte trägt; sonst {@code null}. */
+  private static @Nullable Integer sichtbareNummer(
+      @Nullable Integer nummer, Set<Integer> verborgen) {
+    return nummer == null || verborgen.contains(nummer) ? null : nummer;
+  }
+
   /**
-   * Sichert zu, dass die Karte auf dem angegebenen Board liegt — der Board-Guard des
-   * token-gebundenen {@code kanbancompat}-Zugriffs (#44).
+   * Sichert zu, dass die Karte auf dem angegebenen Board liegt und der Aufrufer sie sieht — der
+   * Board-Guard des token-gebundenen {@code kanbancompat}-Zugriffs (#44, Issue #2211).
    *
-   * @throws CardNotFoundException wenn die Karte fehlt oder auf einem anderen Board liegt
+   * @throws CardNotFoundException wenn die Karte fehlt, auf einem anderen Board liegt oder dem
+   *     Aufrufer verborgen ist
    */
   @Transactional(readOnly = true)
-  public void requireOnBoard(long cardId, long boardId) {
+  public void requireOnBoard(long userId, long cardId, long boardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     // Wertvergleich der Board-IDs (Long): '!=' würde Referenzen vergleichen und bei IDs
     // jenseits des Long-Caches (> 127) falsch schlagen.
     if (!Long.valueOf(boardId).equals(card.boardId())) {
       throw new CardNotFoundException();
     }
+    anbieter.pruefeSichtbar(userId, card);
   }
 
   /**
-   * Lese-Guard (Issue #1622): wie {@link #requireOnBoard(long, long)}, lehnt zusätzlich Karten im
-   * Papierkorb mit derselben {@link CardNotFoundException} ab — Verlauf und Kommentare einer
-   * gelöschten Karte sind über ihre ID nicht mehr lesbar. Archivierte Karten bleiben lesbar.
+   * Lese-Guard (Issue #1622): wie {@link #requireOnBoard(long, long, long)}, lehnt zusätzlich
+   * Karten im Papierkorb mit derselben {@link CardNotFoundException} ab — Verlauf und Kommentare
+   * einer gelöschten Karte sind über ihre ID nicht mehr lesbar. Archivierte Karten bleiben lesbar.
    */
   @Transactional(readOnly = true)
-  public void requireReadableOnBoard(long cardId, long boardId) {
+  public void requireReadableOnBoard(long userId, long cardId, long boardId) {
     Card card = cards.findByIdAndDeletedAtIsNull(cardId).orElseThrow(CardNotFoundException::new);
     if (!Long.valueOf(boardId).equals(card.boardId())) {
       throw new CardNotFoundException();
     }
+    anbieter.pruefeSichtbar(userId, card);
   }
 
   /**
@@ -222,6 +242,8 @@ public class CardIngestService {
     if (externalKey != null) {
       Optional<Card> existing = cards.findByProjectIdAndExternalKey(projectId, externalKey);
       if (existing.isPresent()) {
+        // Ein Schlüssel einer verborgenen Karte verrät sie nicht über den Idempotenz-Treffer.
+        anbieter.pruefeSichtbar(userId, existing.get());
         requireMatchingNumber(existing.get(), givenNumber);
         // Idempotenz-Treffer: derivedFrom wird ignoriert wie Titel und Rumpf auch. Anders als
         // number, das requireMatchingNumber als Identitaetsfeld verifiziert (#565).

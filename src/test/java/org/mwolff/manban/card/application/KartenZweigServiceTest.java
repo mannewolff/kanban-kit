@@ -45,7 +45,13 @@ class KartenZweigServiceTest {
     permissions = mock(PermissionChecker.class);
     abhaengigkeiten = mock(KartenAbhaengigkeiten.class);
     zuordnung = mock(KartenZuordnung.class);
-    service = new KartenZweigService(cards, permissions, abhaengigkeiten, zuordnung);
+    service =
+        new KartenZweigService(
+            cards,
+            permissions,
+            abhaengigkeiten,
+            zuordnung,
+            new Anbietersicht(cards, zuordnung, permissions));
   }
 
   private static Card karte(

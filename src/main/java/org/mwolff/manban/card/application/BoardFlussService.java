@@ -30,6 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Ein eigener Dienst neben {@link CardCycleTimeService}, weil jener an der PMD-Kopplungsgrenze
  * steht und nur „Fluss“ die Zone braucht (E13).
  */
+// PMD.CouplingBetweenObjects: Mit Issue #2211 kommt Anbietersicht dazu. Die Liste der Platte
+// „Alter in Arbeit“ nennt Karten beim Namen; verborgene Karten herauszunehmen gehört an die Stelle,
+// an der die Karten geladen werden, und ein eigener Baustein dafür wäre eine zweite Abschrift des
+// Filters (Plan #2206 E18).
+@SuppressWarnings("PMD.CouplingBetweenObjects")
 @Service
 public class BoardFlussService {
 
@@ -38,18 +43,21 @@ public class BoardFlussService {
   private final BoardService boardService;
   private final PermissionChecker permissions;
   private final Clock clock;
+  private final Anbietersicht anbieter;
 
   public BoardFlussService(
       CardFlowStayRepository aufenthalte,
       CardRepository cards,
       BoardService boardService,
       PermissionChecker permissions,
-      Clock clock) {
+      Clock clock,
+      Anbietersicht anbieter) {
     this.aufenthalte = aufenthalte;
     this.cards = cards;
     this.boardService = boardService;
     this.permissions = permissions;
     this.clock = clock;
+    this.anbieter = anbieter;
   }
 
   /**
@@ -86,10 +94,14 @@ public class BoardFlussService {
         fluss.dataSince());
   }
 
-  /** Die Zustände Ready, In Progress und In Review der Platte „Alter in Arbeit“ (E8, E10). */
+  /**
+   * Die Zustände Ready, In Progress und In Review der Platte „Alter in Arbeit“ (E8, E10). Karten,
+   * die der Aufrufer nicht sieht, fehlen in den Listen (Issue #2211).
+   */
   @Transactional(readOnly = true)
   public AgingWipView aging(long userId, long boardId) {
-    permissions.requireMembership(userId, boardService.requireProjectId(boardId));
+    long projectId = boardService.requireProjectId(boardId);
+    permissions.requireMembership(userId, projectId);
     List<FlussStay> verlauf = aufenthalte.findByBoardId(boardId);
     List<AlterErmittlung.Zustand> zustaende =
         AlterErmittlung.ermittle(clock.instant(), boardId, verlauf);
@@ -99,7 +111,7 @@ public class BoardFlussService {
             .map(AlterErmittlung.Karte::cardId)
             .collect(Collectors.toSet());
     Map<Long, Card> karten =
-        cards.findByIds(ids).stream()
+        anbieter.sichtbare(userId, projectId, cards.findByIds(ids)).stream()
             .collect(Collectors.toMap(c -> Objects.requireNonNull(c.id()), Function.identity()));
     return new AgingWipView(
         state(zustaende.get(0), karten),

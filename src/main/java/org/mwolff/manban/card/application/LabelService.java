@@ -243,6 +243,7 @@ public class LabelService {
    */
   private Card requireLabelableCard(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    grundlage.pruefeSichtbar(userId, card);
     if (card.type() != CardType.CARD) {
       throw InvalidDependencyException.nurKartenMitLabels();
     }

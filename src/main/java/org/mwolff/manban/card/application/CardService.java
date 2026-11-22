@@ -217,14 +217,16 @@ public class CardService {
    * Einzelne Karte für Stellen, die nur eine Karten-ID kennen (Dashboard-Ausreißer, #515) — ohne
    * den Umweg über die komplette Board-Kartenliste. Leserecht wie bei den übrigen Lesepfaden:
    * Projekt-Mitgliedschaft über die Projekt-ID der Karte; Nichtmitglied und unbekannte Karte sind
-   * nicht unterscheidbar (beide 404, kein Existenz-Leak).
+   * nicht unterscheidbar (beide 404, kein Existenz-Leak). Eine Karte, die der Aufrufer nicht sieht
+   * ({@link Anbietersicht}, Issue #2211), endet ebenso.
    *
-   * @throws CardNotFoundException wenn die Karte nicht existiert
+   * @throws CardNotFoundException wenn die Karte nicht existiert oder verborgen ist
    */
   @Transactional(readOnly = true)
   public CardView getCard(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.requireMembership(userId, card.projectId());
+    grundlage.pruefeSichtbar(userId, card);
     return sicht.view(userId, card);
   }
 
@@ -272,6 +274,7 @@ public class CardService {
   @Transactional
   public CardView setAssignees(long userId, long cardId, List<Long> assigneeIds) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    grundlage.pruefeSichtbar(userId, card);
     if (card.type() != CardType.CARD) {
       throw InvalidDependencyException.nurKartenMitZustaendigen();
     }
@@ -293,6 +296,7 @@ public class CardService {
   @Transactional
   public CardView setLabels(long userId, long cardId, List<Long> labelIds) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    grundlage.pruefeSichtbar(userId, card);
     if (card.type() != CardType.CARD) {
       throw InvalidDependencyException.nurKartenMitLabels();
     }
@@ -340,6 +344,7 @@ public class CardService {
 
   private CardView doLabel(long userId, long cardId, long labelId, LabelAction action) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
+    grundlage.pruefeSichtbar(userId, card);
     if (card.type() != CardType.CARD) {
       throw InvalidDependencyException.nurKartenMitLabels();
     }
@@ -376,6 +381,7 @@ public class CardService {
   private List<CardActivity> doListActivity(long userId, long cardId) {
     Card card = cards.findById(cardId).orElseThrow(CardNotFoundException::new);
     permissions.requireMembership(userId, card.projectId());
+    grundlage.pruefeSichtbar(userId, card);
     return activity.findByCardId(cardId);
   }
 

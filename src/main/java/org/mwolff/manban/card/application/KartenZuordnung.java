@@ -99,6 +99,14 @@ public final class KartenZuordnung {
   }
 
   /**
+   * IDs der Karten des Projekts mit einem Label dieses Namens (Issue #2211) — eine Abfrage für das
+   * Projekt, gebraucht von {@link Anbietersicht}.
+   */
+  public List<Long> kartenMitLabel(long projectId, String name) {
+    return cardLabels.kartenMitLabel(projectId, name);
+  }
+
+  /**
    * Labelnamen mehrerer Karten, je Karte alphabetisch (Issue #1373). Karten ohne Labels fehlen in
    * der Map.
    *

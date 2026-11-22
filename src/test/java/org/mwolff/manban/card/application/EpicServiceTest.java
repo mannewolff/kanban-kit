@@ -308,7 +308,8 @@ class EpicServiceTest {
             mock(KartenGrundlage.class),
             mock(KartenSicht.class),
             massenzuordnung,
-            Clock.fixed(FIXED, ZoneOffset.UTC));
+            Clock.fixed(FIXED, ZoneOffset.UTC),
+            mock(Anbietersicht.class));
 
     // When / Then
     assertThat(fassade.assignParentBulk(1L, List.of(1L, 2L), 30L)).isSameAs(ergebnis);

@@ -55,7 +55,12 @@ class BoardFlussServiceTest {
     permissions = mock(PermissionChecker.class);
     service =
         new BoardFlussService(
-            aufenthalte, cards, boardService, permissions, Clock.fixed(NOW, ZoneOffset.UTC));
+            aufenthalte,
+            cards,
+            boardService,
+            permissions,
+            Clock.fixed(NOW, ZoneOffset.UTC),
+            new Anbietersicht(cards, mock(KartenZuordnung.class), permissions));
     when(boardService.requireProjectId(BOARD)).thenReturn(PROJECT);
     when(aufenthalte.marke())
         .thenReturn(new ErfassungsMarke(NOW.minus(Duration.ofDays(200)), NOW.minusSeconds(60)));
