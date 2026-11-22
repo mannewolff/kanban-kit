@@ -272,6 +272,10 @@ describe('kitWortformen — Abschnitt Köpfe der Rückfragen (Issue #2217)', () 
     expect(KOEPFE.antwort).toEqual(['## Antwort', '## Answer'])
   })
 
+  it('nennt den Kopf Gespräch in beiden Sprachen (Issue #2219)', () => {
+    expect(KOEPFE.gespraech).toEqual(['## Gespräch', '## Conversation'])
+  })
+
   it('erkennt den Kopf in der ersten nichtleeren Zeile, gleich in welcher Sprache und Schreibung', () => {
     expect(traegtKopf(KOEPFE.rueckfrage, '## Rückfrage\n\n```json kit-vorlage\n[]\n```')).toBe(true)
     expect(traegtKopf(KOEPFE.rueckfrage, '\n  ## question  \nText')).toBe(true)

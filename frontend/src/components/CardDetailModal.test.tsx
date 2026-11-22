@@ -4859,3 +4859,73 @@ describe('CardDetailModal — Rückfragen der KI (Issue #2217)', () => {
     expect(await screen.findByRole('button', { name: 'Alles übernehmen' })).toBeDisabled()
   })
 })
+
+describe('CardDetailModal — Gespräch mit der KI (Issue #2219)', () => {
+  const GESPRAECH_KUNDE = { id: 21, cardId: 100, authorUserId: 7, authorName: 'A', body: '## Gespräch\n\nGeht das schneller?', createdAt: ERST, updatedAt: ERST, zugangArt: null, vonKi: false }
+  const GESPRAECH_KI = { id: 22, cardId: 100, authorUserId: 8, authorName: 'Rechenzentrum', body: '## Gespräch\n\nJa, morgen.', createdAt: SPAETER, updatedAt: SPAETER, zugangArt: 'STANDARD', vonKi: true }
+  const GEWOEHNLICH = { id: 23, cardId: 100, authorUserId: 7, authorName: 'A', body: 'Gewöhnlicher Kommentar', createdAt: SPAETER, updatedAt: SPAETER, zugangArt: null, vonKi: false }
+
+  function apisMitGespraech() {
+    const apis = makeApis()
+    apis.commentsApi.list = vi.fn().mockResolvedValue([GESPRAECH_KUNDE, GESPRAECH_KI, GEWOEHNLICH])
+    return apis
+  }
+
+  it('zeigt das Gespräch nach den Rückfragen und vor den Kommentaren, seine Beiträge nicht noch einmal als Kommentar', async () => {
+    const apis = apisMitGespraech()
+    apis.rueckfragenApi.liste.mockResolvedValue([
+      {
+        kommentarId: 11, angelegtAm: ERST, zustand: 'OFFEN', vorschau: null, commit: null,
+        eintraege: [{
+          nr: 1, art: 'FRAGE', frage: 'Welche Farbe?', empfehlung: 'Blau', grund: '', einarbeitung: '',
+          optionen: [{ text: 'Blau', hinweis: null, empfohlen: true }],
+          zustand: 'OFFEN', wahl: null, text: null, empfehlungUebernommen: false,
+        }],
+      },
+    ])
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    const gespraech = await screen.findByTestId('gespraech-verlauf')
+    expect(await within(gespraech).findByText('Geht das schneller?')).toBeInTheDocument()
+    expect(within(gespraech).getByText('Ja, morgen.')).toBeInTheDocument()
+    const rueckfrage = await screen.findByTestId('rueckfrage-karte')
+    const kommentar = screen.getByText('Gewöhnlicher Kommentar')
+    expect(rueckfrage.compareDocumentPosition(gespraech) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(gespraech.compareDocumentPosition(kommentar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getAllByText('Geht das schneller?')).toHaveLength(1)
+    expect(screen.queryByText(/## Gespräch/)).not.toBeInTheDocument()
+  })
+
+  it('trägt einen gesendeten Beitrag ins Gespräch ein, nicht unter die Kommentare', async () => {
+    const apis = apisMitGespraech()
+    const neu = { id: 24, cardId: 100, authorUserId: 7, authorName: 'A', body: '## Gespräch\n\nDanke!', createdAt: '2026-09-03T08:00:00.000Z', updatedAt: '2026-09-03T08:00:00.000Z', zugangArt: null, vonKi: false }
+    apis.commentsApi.create.mockResolvedValue(neu)
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    const gespraech = await screen.findByTestId('gespraech-verlauf')
+    await within(gespraech).findByText('Ja, morgen.')
+    fireEvent.change(within(gespraech).getByRole('textbox', { name: 'Dein Beitrag' }), { target: { value: 'Danke!' } })
+    fireEvent.click(within(gespraech).getByRole('button', { name: 'Senden' }))
+
+    await waitFor(() => expect(apis.commentsApi.create).toHaveBeenCalledWith(100, '## Gespräch\n\nDanke!'))
+    expect(await within(gespraech).findByText('Danke!')).toBeInTheDocument()
+    expect(screen.getAllByText('Danke!')).toHaveLength(1)
+    expect(within(gespraech).getByText('Die KI antwortet gleich …')).toBeInTheDocument()
+  })
+
+  it('bietet an einer Karte ohne Gespräch „Gespräch beginnen“ und lässt die Kommentare wie heute', async () => {
+    const apis = makeApis()
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apis} />)
+
+    expect(await screen.findByRole('button', { name: 'Gespräch beginnen' })).toBeInTheDocument()
+    expect(await screen.findByText('Hallo')).toBeInTheDocument()
+  })
+
+  it('sperrt das Gespräch in der Ansicht als jemand anderes', async () => {
+    auth.vorschau = { kennung: 'vk-1', zielName: 'Grace', adminName: 'Ada', laeuftAbAm: '2026-10-27T10:30:00Z' }
+    render(<CardDetailModal card={card} canEdit projectId={9} onClose={vi.fn()} {...apisMitGespraech()} />)
+
+    const gespraech = await screen.findByTestId('gespraech-verlauf')
+    expect(await within(gespraech).findByRole('textbox', { name: 'Dein Beitrag' })).toBeDisabled()
+  })
+})

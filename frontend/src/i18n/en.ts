@@ -2282,6 +2282,16 @@ export const en: Woerterbuch = {
     VEROEFFENTLICHT_UNTER: 'Published at',
   },
 
+  GESPRAECH: {
+    TITEL: 'Conversation with the AI',
+    KI: 'AI',
+    BEGINNEN: 'Start conversation',
+    BEITRAG: 'Your message',
+    SENDEN: 'Send',
+    ANTWORTET_GLEICH: 'The AI will answer shortly …',
+    FEHLER: (meldung) => `The message could not be sent: ${meldung}`,
+  },
+
   ANBIETER: {
     ABSCHNITT: 'Status with the provider',
     WARTET_AUF_DICH: 'Waiting for you',

@@ -28,6 +28,16 @@ describe('commentsApi', () => {
     expect(result[0].body).toBe('Hallo')
   })
 
+  it('list liefert Art des Zugangs und Absender KI, wie der Server sie meldet (Issue #2219)', async () => {
+    spyFetch(JSON.stringify([{
+      id: 1, cardId: 7, authorUserId: 5, authorName: 'Rechenzentrum', body: '## Gespräch\n\nHallo',
+      createdAt: '2026-01-01', updatedAt: '2026-01-01', zugangArt: 'STANDARD', vonKi: true,
+    }]))
+    const [beitrag] = await commentsApi.list(7)
+    expect(beitrag.zugangArt).toBe('STANDARD')
+    expect(beitrag.vonKi).toBe(true)
+  })
+
   it('create ruft POST /api/cards/{id}/comments mit dem Text', async () => {
     const f = spyFetch()
     await commentsApi.create(7, 'Neuer Kommentar')

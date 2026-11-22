@@ -50,6 +50,7 @@ import {
 import { vorhabenKostenApi as defaultVorhabenKostenApi, type VorhabenKostenApi, type VorhabenKostenView } from '../api/vorhabenKosten'
 import { VorhabenKostenZeile } from './leitstand/VorhabenKostenZeile'
 import { Entscheidungskette } from './Entscheidungskette'
+import { GespraechVerlauf } from './anbieter/GespraechVerlauf'
 import { RueckfrageKarte } from './anbieter/RueckfrageKarte'
 import {
   rueckfragenApi as defaultRueckfragenApi,
@@ -62,6 +63,7 @@ import {
   type AuslieferungZuletzt,
 } from '../api/auslieferung'
 import { KOEPFE, traegtKopf } from '../lib/kitWortformen'
+import { istGespraechsbeitrag } from '../lib/gespraech'
 import { KartenAnlaeufe } from './nachtlauf/KartenAnlaeufe'
 import { KettenStufenleiste, traegtStufenleiste, type LabelAenderung } from './nachtlauf/KettenStufenleiste'
 import { Wartegrund } from './nachtlauf/Wartegrund'
@@ -1271,6 +1273,11 @@ function sichtbareKommentare(rueckfragen: readonly Rueckfrage[], comments: Comme
   return comments.filter((c) => !ids.has(c.id) && !traegtKopf(KOEPFE.antwort, c.body))
 }
 
+/** Ohne die Beiträge des Gesprächs: Sie stehen im Gespräch, nicht noch einmal als Kommentar (Issue #2219). */
+function ohneGespraech(comments: Comment[]): Comment[] {
+  return comments.filter((c) => !istGespraechsbeitrag(c.body))
+}
+
 /** Die Rückfragen der KI im Block Verlauf, vor den Kommentaren (Issue #2217); ohne Rückfrage nichts. */
 function RueckfragenAbschnitt({
   cardId,
@@ -2300,9 +2307,19 @@ function CardDetailModalView({
                 api={rueckfragenApi}
               />
 
+              {/* Das Gespräch mit der KI (Issue #2219), nach den Rückfragen und vor den Kommentaren. */}
+              <Divider />
+              <GespraechVerlauf
+                cardId={card.id}
+                comments={comments}
+                gesperrt={vorschau}
+                api={commentsApi}
+                onGesendet={(neu) => setComments((c) => [neu, ...c])}
+              />
+
               <Divider />
               <CommentsSection
-                comments={sichtbareKommentare(rueckfragenStand.rueckfragen, comments)}
+                comments={ohneGespraech(sichtbareKommentare(rueckfragenStand.rueckfragen, comments))}
                 currentUserId={user?.userId}
                 canModerateComments={canModerateComments}
                 editingCommentId={editingCommentId}

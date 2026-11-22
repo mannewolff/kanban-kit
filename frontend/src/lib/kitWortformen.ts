@@ -254,6 +254,8 @@ export const SZENARIO_SCHRITT: Wortform = {
 export const KOEPFE = {
   rueckfrage: ['## Rückfrage', '## Question'],
   antwort: ['## Antwort', '## Answer'],
+  /** Ein Beitrag im Gespräch zwischen Kunde und KI (Issue #2219, Plan #2206 E9). */
+  gespraech: ['## Gespräch', '## Conversation'],
   /** Die Karte steht beim Anbieter (Issue #2218, Plan #2206 E14). */
   beimAnbieter: ['## Beim Anbieter', '## With the provider'],
 } as const satisfies Record<string, Wortpaar>

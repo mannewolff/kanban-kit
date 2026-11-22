@@ -2421,6 +2421,17 @@ export const de = {
     VEROEFFENTLICHT_UNTER: 'Veröffentlicht unter',
   },
 
+  /** Gespräch mit der KI im Kartendetail: `GespraechVerlauf` (Issue #2219, Plan #2206 E6, E9). */
+  GESPRAECH: {
+    TITEL: 'Gespräch mit der KI',
+    KI: 'KI',
+    BEGINNEN: 'Gespräch beginnen',
+    BEITRAG: 'Dein Beitrag',
+    SENDEN: 'Senden',
+    ANTWORTET_GLEICH: 'Die KI antwortet gleich …',
+    FEHLER: (meldung: string) => `Der Beitrag ließ sich nicht senden: ${meldung}`,
+  },
+
   /** Startseite des Projekts und Board für den Kunden: `WartetAufDich`, `AnbieterHinweis` (Issue #2218, Plan #2206 E14). */
   ANBIETER: {
     ABSCHNITT: 'Stand beim Anbieter',

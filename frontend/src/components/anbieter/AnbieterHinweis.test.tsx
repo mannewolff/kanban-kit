@@ -30,7 +30,7 @@ const card: Card = {
 }
 
 function kommentar(id: number, body: string, createdAt = '2026-11-22T10:00:00Z'): Comment {
-  return { id, cardId: 100, authorUserId: 1, authorName: 'Rechenzentrum', body, createdAt, updatedAt: createdAt }
+  return { id, cardId: 100, authorUserId: 1, authorName: 'Rechenzentrum', body, createdAt, updatedAt: createdAt, zugangArt: null, vonKi: false }
 }
 
 beforeEach(() => {
