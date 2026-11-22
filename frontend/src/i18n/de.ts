@@ -2421,6 +2421,20 @@ export const de = {
     VEROEFFENTLICHT_UNTER: 'Veröffentlicht unter',
   },
 
+  /** Startseite des Projekts und Board für den Kunden: `WartetAufDich`, `AnbieterHinweis` (Issue #2218, Plan #2206 E14). */
+  ANBIETER: {
+    ABSCHNITT: 'Stand beim Anbieter',
+    WARTET_AUF_DICH: 'Wartet auf dich',
+    GRUND_RUECKFRAGE: 'Rückfrage offen',
+    GRUND_FREIGABE: 'Freigabe ausstehend',
+    VORSCHAU_ANSEHEN: 'Vorschau ansehen',
+    VEROEFFENTLICHT_UNTER: 'Veröffentlicht unter',
+    NICHT_ERREICHBAR: 'Gerade nicht erreichbar',
+    MARKE_WARTET: 'wartet auf dich',
+    IN_ARBEIT: 'beim Anbieter in Arbeit',
+    IN_ARBEIT_SEIT: (zeit: string) => `beim Anbieter in Arbeit seit ${zeit}`,
+  },
+
   /** Seitenrahmen der API-Übersicht und Ausprobieren (Issue #1660, E2); Swagger UI und das OpenAPI-Dokument bleiben, wie sie sind. */
   API_UEBERSICHT: {
     TITEL: 'API-Schnittstelle',

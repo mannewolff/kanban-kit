@@ -2282,6 +2282,19 @@ export const en: Woerterbuch = {
     VEROEFFENTLICHT_UNTER: 'Published at',
   },
 
+  ANBIETER: {
+    ABSCHNITT: 'Status with the provider',
+    WARTET_AUF_DICH: 'Waiting for you',
+    GRUND_RUECKFRAGE: 'Open question',
+    GRUND_FREIGABE: 'Approval pending',
+    VORSCHAU_ANSEHEN: 'View preview',
+    VEROEFFENTLICHT_UNTER: 'Published at',
+    NICHT_ERREICHBAR: 'Currently unreachable',
+    MARKE_WARTET: 'waiting for you',
+    IN_ARBEIT: 'in progress with the provider',
+    IN_ARBEIT_SEIT: (zeit) => `in progress with the provider since ${zeit}`,
+  },
+
   API_UEBERSICHT: {
     TITEL: 'API',
     ZURUECK: 'Back to Administration',

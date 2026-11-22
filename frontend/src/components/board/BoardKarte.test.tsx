@@ -346,3 +346,38 @@ describe('BoardKarte — Herkunft an der Nummer (Issue #1930)', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent(de.BOARD.HERKUNFT_KEINE)
   })
 })
+
+describe('BoardKarte — wartet auf dich und beim Anbieter (Issue #2218)', () => {
+  const anbieterLabel = { id: 7, boardId: 1, name: 'kit:provider', color: '#888888', countOnEpicTile: false }
+  const zeigeMit = (over: { wartetAufDich?: boolean; labels?: number[] }) =>
+    renderMitSprache(
+      <BoardKarte
+        card={{ ...card, labels: over.labels ?? [] }} epic={undefined} done={false} spaltenname="Backlog" dichte="normal" bewegt={false}
+        members={[]} boardLabels={[anbieterLabel]} retentionDays={30} selectionMode={false} selected={false} canEdit
+        wartetAufDich={over.wartetAufDich}
+        onDragStart={vi.fn()} onDragEnd={vi.fn()} onSelect={vi.fn()} onOpen={vi.fn()} onMenu={vi.fn()}
+      />,
+    )
+
+  it('trägt die Markierung „wartet auf dich“, wenn die Karte auf den Kunden wartet', () => {
+    zeigeMit({ wartetAufDich: true })
+
+    expect(screen.getByText('wartet auf dich')).toBeInTheDocument()
+  })
+
+  it('trägt keine Markierung ohne Angabe', () => {
+    zeigeMit({})
+
+    expect(screen.queryByText('wartet auf dich')).not.toBeInTheDocument()
+  })
+
+  it('zeigt an einer Karte mit Label der Sache Anbieter den Hinweis „beim Anbieter in Arbeit“', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true, status: 200, statusText: 'OK', text: () => Promise.resolve('[]'),
+    } as Response)
+    zeigeMit({ labels: [7] })
+
+    expect(await screen.findByText('beim Anbieter in Arbeit')).toBeInTheDocument()
+    vi.restoreAllMocks()
+  })
+})

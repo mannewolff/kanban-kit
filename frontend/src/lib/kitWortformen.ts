@@ -254,7 +254,31 @@ export const SZENARIO_SCHRITT: Wortform = {
 export const KOEPFE = {
   rueckfrage: ['## Rückfrage', '## Question'],
   antwort: ['## Antwort', '## Answer'],
+  /** Die Karte steht beim Anbieter (Issue #2218, Plan #2206 E14). */
+  beimAnbieter: ['## Beim Anbieter', '## With the provider'],
 } as const satisfies Record<string, Wortpaar>
+
+/** Abschnitt Zeilen: die Zeilenanfänge in Kommentaren mit Kopf, wie `KitMeldungen.Zeile` im Server. */
+export const ZEILEN = {
+  /** Seit wann eine Karte beim Anbieter steht (Issue #2218). */
+  seit: ['Seit:', 'Since:'],
+} as const satisfies Record<string, Wortpaar>
+
+/**
+ * Was hinter der ersten Zeile steht, die mit dem Zeilenanfang beginnt, in einer der beiden Sprachen,
+ * ohne umgebenden Leerraum; `undefined`, wenn keine Zeile so beginnt. Führender Leerraum und die
+ * Schreibung des Anfangs zählen nicht — wie `KitMeldungen.Zeile.rest` im Server.
+ */
+export function zeilenRest(anfang: Wortpaar, text: string): string | undefined {
+  for (const zeile of text.split('\n')) {
+    const roh = zeile.trimStart()
+    const fassung = anfang.find((f) => roh.slice(0, f.length).toLowerCase() === f.toLowerCase())
+    if (fassung !== undefined) {
+      return roh.slice(fassung.length).trim()
+    }
+  }
+  return undefined
+}
 
 /**
  * Ob die erste nichtleere Zeile des Texts der Kopf ist, in einer der beiden Sprachen. Der Kopf steht

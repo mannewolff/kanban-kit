@@ -18,6 +18,7 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import type { Board, BoardColumn } from '../api/boards'
 import { useAuth } from '../auth/AuthContext'
 import { cardsApi, type Card, type CardsApi, type LabelAction } from '../api/cards'
+import { anbieterApi } from '../api/anbieter'
 import { ApiError, apiErrorMessage } from '../api/client'
 import { columnsApi, type SortDirection } from '../api/columns'
 import { epicsApi as defaultEpicsApi, type BulkAssignResult, type Epic, type EpicsApi } from '../api/epics'
@@ -426,6 +427,23 @@ export function BoardView({
   }, [epicFilter, hiddenEpics, board.id])
 
   useEffect(() => setCards(initialCards), [initialCards])
+
+  // Karten, die auf den Kunden warten (Issue #2218, Plan #2206 E14): Der Server nennt sie je
+  // Projekt; das Board markiert seine. Neu gelesen mit jedem Laden der Karten, etwa nach einer
+  // Antwort. Ohne Antwort des Servers bleibt jede Markierung aus.
+  const [wartendeIds, setWartendeIds] = useState<ReadonlySet<number>>(() => new Set())
+  useEffect(() => {
+    let aktiv = true
+    anbieterApi.wartetAufDich(board.projectId).then(
+      (karten) => {
+        if (aktiv) setWartendeIds(new Set(karten.filter((k) => k.boardId === board.id).map((k) => k.cardId)))
+      },
+      () => {},
+    )
+    return () => {
+      aktiv = false
+    }
+  }, [board.projectId, board.id, initialCards])
 
   const sortColumns = (cols: BoardColumn[]) => [...cols].sort((a, b) => a.position - b.position)
   const [columns, setColumns] = useState<BoardColumn[]>(() => sortColumns(board.columns))
@@ -1189,6 +1207,7 @@ export function BoardView({
                 // Was die Spalte gerade zeigt — Grundlage des Spalten-Kästchens und der Karten.
                 angezeigteKarten={angezeigteKarten}
                 nachtlauf={nachtlaufKnopf(angezeigteKarten)}
+                wartendeIds={wartendeIds}
                 epics={epics}
                 dichte={dichte}
                 selectionMode={selectionMode}

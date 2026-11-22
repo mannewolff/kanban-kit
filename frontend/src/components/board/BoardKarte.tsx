@@ -22,6 +22,7 @@ import { MELDER, NUTZER_MAL_SX, TEXT_SCHWACH, ZAHL } from '../../theme'
 import type { FingerZiehen } from '../../lib/useFingerZiehen'
 import { useTabletQuer } from '../../lib/tabletQuer'
 import { type Dichte, FINGER_GRIFF_SX, karteDichteSx, karteSx } from '../boardSurfaceSx'
+import { AnbieterHinweis } from '../anbieter/AnbieterHinweis'
 import { EpicBadge } from '../EpicBadge'
 import { KartenHerkunft } from './KartenHerkunft'
 import { LabelErklaerung } from '../LabelErklaerung'
@@ -230,6 +231,35 @@ interface Props {
   fingerGriff?: ReturnType<FingerZiehen['griff']>
   /** Stand des Fingerzugs, solange diese Karte gegriffen ist. */
   fingerZustand?: 'wartet' | 'zieht'
+  /** Die Karte wartet auf den Kunden: offene Rückfrage oder ausstehende Freigabe (Issue #2218). */
+  wartetAufDich?: boolean
+}
+
+/**
+ * Markierung „wartet auf dich“ als Schild im Bernstein-Melder (Issue #2218, Plan #2206 E14): An der
+ * Karte muss der Kunde etwas tun. Der Text trägt die Bedeutung, die Farbe nur den Zustand.
+ */
+function WartetMarke() {
+  const t = useT()
+  return (
+    <Box
+      component="span"
+      data-wartet-auf-dich="ja"
+      sx={{
+        alignSelf: 'flex-start',
+        px: '6px',
+        py: '1px',
+        borderRadius: '5px',
+        border: '1px solid currentColor',
+        color: MELDER.bernst,
+        fontSize: 10,
+        fontWeight: 500,
+        lineHeight: 1.5,
+      }}
+    >
+      {t.ANBIETER.MARKE_WARTET}
+    </Box>
+  )
 }
 
 /**
@@ -260,6 +290,7 @@ export function BoardKarte({
   onEpicOpen,
   fingerGriff,
   fingerZustand,
+  wartetAufDich = false,
 }: Readonly<Props>) {
   const t = useT()
   const tabletQuer = useTabletQuer()
@@ -352,6 +383,8 @@ export function BoardKarte({
         )}
       </Box>
       {normal && <CardLabels labelIds={card.labels} boardLabels={boardLabels} cardTitle={card.title} />}
+      {wartetAufDich && <WartetMarke />}
+      <AnbieterHinweis card={card} boardLabels={boardLabels} />
       <KartenFuss card={card} epic={epic} statusmal={statusmal} doneAt={doneAt} retentionDays={retentionDays} overdue={overdue} onEpicOpen={onEpicOpen} />
     </Paper>
   )

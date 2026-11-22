@@ -78,6 +78,8 @@ interface Props {
   einfuegeIndex: number | null
   /** Knopf `kit:nightrun`; die Spalte zeigt ihn nur, wenn sie als Ready erkannt wird (Issue #1708). */
   nachtlauf?: NachtlaufKnopf
+  /** Karten, die auf den Kunden warten — sie tragen die Markierung „wartet auf dich“ (Issue #2218). */
+  wartendeIds?: ReadonlySet<number>
 }
 
 /** Stand des Fingerzugs für das Element `id`, solange er läuft; sonst `undefined`. */
@@ -146,6 +148,7 @@ export function BoardSpalte({
   spaltenZug,
   einfuegeIndex,
   nachtlauf,
+  wartendeIds,
 }: Readonly<Props>) {
   // Einmal berechnet, zweimal gebraucht (Rand der Spalte, Zähler im Kopf). Zwei Fassungen desselben
   // Vergleichs liefen bei einer Änderung auseinander (Plan #1042, P12).
@@ -267,6 +270,7 @@ export function BoardSpalte({
               onEpicOpen={onEpicOpen}
               fingerGriff={kartenZug.griff(String(card.id))}
               fingerZustand={laufenderZug(kartenZug, card.id)}
+              wartetAufDich={wartendeIds?.has(card.id)}
             />
           </Fragment>
         ))}

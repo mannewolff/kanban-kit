@@ -20,6 +20,7 @@ import { TabletQuerProvider } from '../lib/tabletQuer'
 import { setzeMedien } from '../test/setup'
 import type { KitNamenZustand } from '../api/kitNamen'
 import { KIT_NAMEN } from '../test/kitNamen'
+import { anbieterApi } from '../api/anbieter'
 import { de } from '../i18n/de'
 import { en } from '../i18n/en'
 import { HALTEZEIT_MS, RAND_SCROLL_MAX_PX } from '../lib/fingerZiehen'
@@ -34,6 +35,8 @@ vi.mock('../api/columns', () => ({
 vi.mock('../api/projects', () => ({ projectsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/boards', () => ({ boardsApi: { list: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../api/cards', () => ({ cardsApi: { bulkTransfer: vi.fn() } }))
+// „Wartet auf dich“ (Issue #2218): ohne eigene Angabe wartet keine Karte.
+vi.mock('../api/anbieter', () => ({ anbieterApi: { wartetAufDich: vi.fn().mockResolvedValue([]) } }))
 // Editiermodus wird gemockt: Bestandstests laufen mit editMode=true (Bleistifte sichtbar); einzelne
 // Tests schalten editMode.value=false, um das Ausblenden der Struktur-Affordances zu prüfen.
 const editMode = vi.hoisted(() => ({ value: true }))
@@ -4828,5 +4831,30 @@ describe('BoardView — Ansicht als XY: Veränderungen sind gesperrt (Issue #192
     expect(screen.getByTestId('card-100')).toHaveAttribute('draggable', 'true')
     expect(screen.getByTestId('column-header-20')).toHaveAttribute('draggable', 'true')
     expect(screen.queryByRole('button', { name: 'Vorschau' })).not.toBeInTheDocument()
+  })
+})
+
+describe('BoardView — Markierung „wartet auf dich“ (Issue #2218)', () => {
+  it('markiert die Karten dieses Boards, die der Server als wartend nennt', async () => {
+    const wartet = anbieterApi.wartetAufDich as unknown as ReturnType<typeof vi.fn>
+    wartet.mockResolvedValueOnce([
+      { cardId: 100, boardId: 1, number: 1, title: 'Aufgabe', grund: 'RUECKFRAGE' },
+      { cardId: 101, boardId: 2, number: 2, title: 'Fremd', grund: 'FREIGABE' },
+    ])
+    const andere: Card = { ...card, id: 101, number: 2, title: 'Gleiche Nummer, anderes Board' }
+    render(<BoardView board={board} initialCards={[card, andere]} canEdit api={mkApi()} />)
+
+    expect(await within(screen.getByTestId('card-100')).findByText('wartet auf dich')).toBeInTheDocument()
+    expect(wartet).toHaveBeenCalledWith(1)
+    expect(within(screen.getByTestId('card-101')).queryByText('wartet auf dich')).not.toBeInTheDocument()
+  })
+
+  it('markiert nichts, wenn der Server nicht antwortet', async () => {
+    const wartet = anbieterApi.wartetAufDich as unknown as ReturnType<typeof vi.fn>
+    wartet.mockRejectedValueOnce(new Error('weg'))
+    render(<BoardView board={board} initialCards={[card]} canEdit api={mkApi()} />)
+
+    await waitFor(() => expect(wartet).toHaveBeenCalled())
+    expect(screen.queryByText('wartet auf dich')).not.toBeInTheDocument()
   })
 })

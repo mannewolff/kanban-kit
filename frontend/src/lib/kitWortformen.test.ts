@@ -8,8 +8,10 @@ import {
   PROTOKOLL,
   SZENARIEN_ABSCHNITT,
   SZENARIO_SCHRITT,
+  ZEILEN,
   passe,
   traegtKopf,
+  zeilenRest,
   type Wortform,
 } from './kitWortformen'
 
@@ -284,5 +286,23 @@ describe('kitWortformen — Abschnitt Köpfe der Rückfragen (Issue #2217)', () 
     expect(traegtKopf(KOEPFE.rueckfrage, '## Antwort')).toBe(false)
     expect(traegtKopf(KOEPFE.rueckfrage, '')).toBe(false)
     expect(traegtKopf(KOEPFE.rueckfrage, '  \n \n')).toBe(false)
+  })
+})
+
+describe('kitWortformen — Beim Anbieter und Seit (Issue #2218)', () => {
+  it('nennt Kopf und Zeile in beiden Sprachen', () => {
+    expect(KOEPFE.beimAnbieter).toEqual(['## Beim Anbieter', '## With the provider'])
+    expect(ZEILEN.seit).toEqual(['Seit:', 'Since:'])
+  })
+
+  it('liest den Rest der ersten passenden Zeile, gleich in welcher Sprache und Schreibung', () => {
+    expect(zeilenRest(ZEILEN.seit, '## Beim Anbieter\nSeit: 2026-11-22T10:00:00Z\nSeit: später')).toBe('2026-11-22T10:00:00Z')
+    expect(zeilenRest(ZEILEN.seit, '## With the provider\r\n  since:  2026-11-22T10:00:00Z \r\n')).toBe('2026-11-22T10:00:00Z')
+  })
+
+  it('liefert undefined ohne passende Zeile oder bei einem Anfang mitten in der Zeile', () => {
+    expect(zeilenRest(ZEILEN.seit, '## Beim Anbieter\nText')).toBeUndefined()
+    expect(zeilenRest(ZEILEN.seit, 'Kunde seit: gestern')).toBeUndefined()
+    expect(zeilenRest(ZEILEN.seit, '')).toBeUndefined()
   })
 })

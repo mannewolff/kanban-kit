@@ -47,8 +47,12 @@
     },
     {
       "name": "bausteine-board",
-      "muster": ["src/components/board/**/*.tsx"],
-      "testMuster": ["src/components/BoardView.test.tsx", "src/components/board/KartenHerkunft.test.tsx"],
+      "muster": ["src/components/board/**/*.tsx", "src/components/anbieter/AnbieterHinweis.tsx"],
+      "testMuster": [
+        "src/components/BoardView.test.tsx",
+        "src/components/board/KartenHerkunft.test.tsx",
+        "src/components/anbieter/AnbieterHinweis.test.tsx"
+      ],
       "aufgenommen": false,
       "phase": 1,
       "reihenfolge": 5,
@@ -226,7 +230,8 @@
         "src/pages/BoardListPage.tsx",
         "src/pages/BoardPage.tsx",
         "src/pages/EpicsPage.tsx",
-        "src/pages/KartenLinkPage.tsx"
+        "src/pages/KartenLinkPage.tsx",
+        "src/components/anbieter/WartetAufDich.tsx"
       ],
       "testMuster": [
         "src/pages/ProjectsPage.test.tsx",
@@ -235,7 +240,8 @@
         "src/pages/BoardListPage.test.tsx",
         "src/pages/BoardPage.test.tsx",
         "src/pages/EpicsPage.test.tsx",
-        "src/pages/KartenLinkPage.test.tsx"
+        "src/pages/KartenLinkPage.test.tsx",
+        "src/components/anbieter/WartetAufDich.test.tsx"
       ],
       "aufgenommen": false,
       "phase": 3,

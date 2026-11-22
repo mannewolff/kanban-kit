@@ -78,6 +78,8 @@ const ALLOWLIST: ReadonlyArray<SprachAllowance> = [
   { file: 'src/components/Entscheidungskette.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #2217 — `rel` der Links zu Vorschau und Veröffentlichung einer Rückfrage
   { file: 'src/components/anbieter/RueckfrageKarte.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
+  // #2218 — `rel` der Links zu Vorschau und Veröffentlichung auf der Startseite des Projekts
+  { file: 'src/components/anbieter/WartetAufDich.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   { file: 'src/pages/AdministrationPage.tsx', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
   // #1661 — Entwicklerfehler, die keine Oberflaeche anzeigt: ungueltiger Hexwert im Theme, fehlendes `#root`
   { file: 'src/lib/kontrast.ts', rule: 'literal', resolvedIn: KEIN_ANZEIGETEXT },
