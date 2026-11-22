@@ -20,6 +20,9 @@ import org.mwolff.manban.project.domain.ProjectMembership;
 import org.mwolff.manban.project.domain.ProjectRole;
 
 /** Verhaltenstests der zentralen Rechteprüfung (Mockito an den Ports). */
+// PMD.TooManyMethods: Je Fassade der Rechteprüfung kleine Testmethoden für Erfolg, Abweisung und
+// Nichtmitglied; mit requireEchterAppInhaber (Issue #2212) überschreitet ihre Zahl die Schwelle.
+@SuppressWarnings("PMD.TooManyMethods")
 class PermissionCheckerTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -361,5 +364,39 @@ class PermissionCheckerTest {
 
     // Then
     assertThat(inhaber).isFalse();
+  }
+
+  @ParameterizedTest
+  @CsvSource({"OWNER", "ADMIN", "CUSTOMER"})
+  void requireEchterAppInhaber_laesstDieRollenMitAppZugangDurch(ProjectRole rolle) {
+    // Given
+    when(memberships.findByProjectIdAndUserId(7L, 1L))
+        .thenReturn(Optional.of(membership(7L, 1L, rolle)));
+
+    // When / Then
+    assertThatCode(() -> checker.requireEchterAppInhaber(1L, 7L)).doesNotThrowAnyException();
+  }
+
+  @ParameterizedTest
+  @CsvSource({"MEMBER", "VIEWER"})
+  void requireEchterAppInhaber_weistAndereRollenAb(ProjectRole rolle) {
+    // Given
+    when(memberships.findByProjectIdAndUserId(7L, 1L))
+        .thenReturn(Optional.of(membership(7L, 1L, rolle)));
+
+    // When / Then
+    assertThatThrownBy(() -> checker.requireEchterAppInhaber(1L, 7L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+  }
+
+  @Test
+  void requireEchterAppInhaber_verraetEinemNichtmitgliedNichts() {
+    // Given: auch ein Plattform-Admin ohne Mitgliedschaft ist hier ein Nichtmitglied.
+    when(platformAdminChecker.isPlatformAdmin(1L)).thenReturn(true);
+    when(memberships.findByProjectIdAndUserId(7L, 1L)).thenReturn(Optional.empty());
+
+    // When / Then
+    assertThatThrownBy(() -> checker.requireEchterAppInhaber(1L, 7L))
+        .isInstanceOf(ProjectNotFoundException.class);
   }
 }

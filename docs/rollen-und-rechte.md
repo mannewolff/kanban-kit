@@ -252,23 +252,26 @@ erhält **409** wie auf der übrigen Kanban-Compat-API; seine Meldung erscheint 
 
 ### Zugang der Desktop-App
 
-Der Zugang der Desktop-App ist ein board-gebundenes Token mit zwei zusätzlichen Rechten, den beiden
-Ausnahmen in der Tabelle der [Freigabe-Labels](#freigabe-labels-des-kits). Darüber hinaus kann er
-genau das, was ein board-gebundenes Token desselben Boards kann.
+Der Zugang der Desktop-App ist ein board-gebundenes Token. Hält ihn ein Admin oder Owner, trägt er
+zwei zusätzliche Rechte, die beiden Ausnahmen in der Tabelle der
+[Freigabe-Labels](#freigabe-labels-des-kits); der Zugang eines Kunden trägt sie nicht. Darüber hinaus
+kann er genau das, was ein board-gebundenes Token desselben Boards kann.
 
-- **Je Board genau einer.** Besteht schon ein wirksamer Zugang, wird ein zweiter abgewiesen, und die
-  Meldung nennt den Inhaber. Mehrere Rechner teilen sich denselben Zugang.
+- **Je Person und Board genau einer.** Kunde und Anbieter halten am selben Board je ihren eigenen
+  Zugang. Hält die Person schon einen wirksamen Zugang, wird ein zweiter abgewiesen, und die Meldung
+  nennt den Inhaber. Mehrere Rechner derselben Person teilen sich denselben Zugang.
 - **Inhaber ist, wer anlegt.** Wer den Zugang mitbenutzt, handelt unter dem Namen des Inhabers.
-- **Anlegen** kann nur, wer im Projekt des Boards Admin oder Owner ist, und nur nach Anmeldung im
-  Browser. Ein Plattform-Admin ohne Projektrolle kann es nicht.
+- **Anlegen** kann nur, wer im Projekt des Boards Admin, Owner oder Kunde ist, und nur nach Anmeldung
+  im Browser. Ein Plattform-Admin ohne Projektrolle kann es nicht.
 - **Erneuern** kann nur der Inhaber; der alte Zugang gilt danach sofort nicht mehr.
-- **Widerrufen** können der Inhaber und jeder Admin oder Owner des Projekts. Ein Widerruf ist
-  endgültig, für das Board kann sofort ein neuer Zugang angelegt werden.
+- **Widerrufen** können der Inhaber und jeder Admin oder Owner des Projekts. Ein Admin oder Owner
+  sieht dafür in der Verwaltung auch die Zugänge der anderen Personen; ein Kunde sieht nur seine
+  eigenen. Ein Widerruf ist endgültig, der Inhaber kann sofort einen neuen Zugang anlegen.
 
-Der Zugang läuft nicht von selbst ab. Er wird endgültig unwirksam, wenn der Inhaber die Rolle Admin
-oder Owner im Projekt verliert oder sein Konto gesperrt oder gelöscht wird. Danach wird jeder Aufruf
-abgewiesen, auch ein lesender, und das bleibt so, auch wenn Rolle oder Konto zurückkommen. Für das
-Board kann dann ein neuer Zugang angelegt werden.
+Der Zugang läuft nicht von selbst ab. Er wird endgültig unwirksam, wenn der Inhaber die Rolle Admin,
+Owner oder Kunde im Projekt verliert oder sein Konto gesperrt oder gelöscht wird; ein Wechsel zwischen
+diesen drei Rollen lässt ihn stehen. Danach wird jeder Aufruf abgewiesen, auch ein lesender, und das
+bleibt so, auch wenn Rolle oder Konto zurückkommen. Der Inhaber kann dann einen neuen Zugang anlegen.
 
 ### Freigabe-Labels des Kits
 
@@ -308,8 +311,8 @@ Selbstauskunft im Header `X-Agent-Model`. Eine zweite Selbstauskunft ist der Hea
 Laufkennung eines Nachtlaufs: Das Board speichert sie nur bei Token-Herkunft, sie wirkt allein auf
 die Zuordnung der Karten auf der Runner-Seite und begründet kein Recht. Der Server kann Mensch und Agent an einem
 gewöhnlichen Token nicht unterscheiden: Auch wer per CLI (`board.mjs`, `tbx`) arbeitet, setzt `kit:night` und
-`kit:nightrun` nur im Board. Einzige Ausnahme ist der [Zugang der Desktop-App](#zugang-der-desktop-app):
-Das Board erkennt die Freigabe an diesem Zugang, nicht am Menschen. Das Restrisiko ist hingenommen: Wer
+`kit:nightrun` nur im Board. Einzige Ausnahme ist der [Zugang der Desktop-App](#zugang-der-desktop-app)
+eines Admins oder Owners: Das Board erkennt die Freigabe an diesem Zugang, nicht am Menschen. Das Restrisiko ist hingenommen: Wer
 den Zugang der App besitzt, gibt frei. Dass keine KI-Sitzung an ihn kommt, muss das
 claude-workflow-kit bei der Verwahrung sicherstellen; das Board kann es nicht prüfen.
 

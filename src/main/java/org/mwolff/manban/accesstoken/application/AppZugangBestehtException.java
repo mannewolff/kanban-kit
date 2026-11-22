@@ -5,8 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
- * Am Board besteht schon ein wirksamer Zugang der App; die Meldung nennt seinen Inhaber (Plan
- * #2100, E6). Ergibt HTTP 409.
+ * Der Aufrufer hält am Board schon einen wirksamen Zugang der App; die Meldung nennt seinen Inhaber
+ * (Plan #2100, E6). Die Grenze gilt je Person und Board (Plan #2206, E4). Ergibt HTTP 409.
  */
 @ResponseStatus(HttpStatus.CONFLICT)
 public final class AppZugangBestehtException extends RuntimeException

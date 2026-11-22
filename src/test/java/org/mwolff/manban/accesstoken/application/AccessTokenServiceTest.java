@@ -50,7 +50,9 @@ import org.springframework.dao.DataIntegrityViolationException;
  */
 // PMD.TooManyMethods: Mit der Art des Tokens (Issue #2102) kommen Fälle für Auflösung und Liste
 // dazu; je Fall eine kleine Testmethode bleibt lesbarer als ein Zerschneiden nach Methodenzahl.
-@SuppressWarnings("PMD.TooManyMethods")
+// PMD.CyclomaticComplexity: Die Summe über diese Methoden; mit dem Zugang des Kunden (Issue #2212)
+// überschreitet sie die Schwelle, die einzelne Methode bleibt bei höchstens 2.
+@SuppressWarnings({"PMD.TooManyMethods", "PMD.CyclomaticComplexity"})
 class AccessTokenServiceTest {
 
   private static final Instant FIXED = Instant.parse("2026-01-02T03:04:05Z");
@@ -69,8 +71,13 @@ class AccessTokenServiceTest {
   }
 
   private static AccessToken appZugang(long id) {
+    return appZugangVon(id, 1L);
+  }
+
+  /** Ein wirksamer Zugang der App am Board 20 des Projekts 5 mit diesem Inhaber. */
+  private static AccessToken appZugangVon(long id, long inhaber) {
     return new AccessToken(
-        id, 1L, 5L, 20L, "App", "hash", "App", FIXED, null, false, AccessTokenArt.APP);
+        id, inhaber, 5L, 20L, "App", "hash", "App", FIXED, null, false, AccessTokenArt.APP);
   }
 
   @BeforeEach
@@ -322,7 +329,7 @@ class AccessTokenServiceTest {
     // Given
     when(crypto.hash("plain")).thenReturn("hash");
     when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(appZugang(4L)));
-    when(permissions.istEchterOwnerOderAdmin(1L, 5L)).thenReturn(true);
+    when(permissions.istEchterAppInhaber(1L, 5L)).thenReturn(true);
 
     // When
     Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
@@ -337,7 +344,7 @@ class AccessTokenServiceTest {
     // Given
     when(crypto.hash("plain")).thenReturn("hash");
     when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(appZugang(4L)));
-    when(permissions.istEchterOwnerOderAdmin(1L, 5L)).thenReturn(false);
+    when(permissions.istEchterAppInhaber(1L, 5L)).thenReturn(false);
 
     // When / Then
     assertThat(service.resolveBinding("plain")).isEmpty();
@@ -358,7 +365,7 @@ class AccessTokenServiceTest {
 
     // Then
     assertThat(principal).isPresent();
-    verify(permissions, never()).istEchterOwnerOderAdmin(anyLong(), anyLong());
+    verify(permissions, never()).istEchterAppInhaber(anyLong(), anyLong());
     verify(tokens, never()).markRevokedInOwnTransaction(anyLong());
   }
 
@@ -374,7 +381,7 @@ class AccessTokenServiceTest {
 
     // When / Then
     assertThat(service.resolveBinding("plain")).isEmpty();
-    verify(permissions, never()).istEchterOwnerOderAdmin(anyLong(), anyLong());
+    verify(permissions, never()).istEchterAppInhaber(anyLong(), anyLong());
   }
 
   @Test
@@ -529,7 +536,7 @@ class AccessTokenServiceTest {
 
   private void angelegtWird() {
     when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
-    when(tokens.findWirksamenAppZugang(20L)).thenReturn(Optional.empty());
+    when(tokens.findWirksamenAppZugang(20L, 1L)).thenReturn(Optional.empty());
     when(crypto.generate()).thenReturn(new GeneratedToken("tk_app", "hash-app"));
     when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
   }
@@ -587,9 +594,7 @@ class AccessTokenServiceTest {
   @Test
   void appZugangAnlegen_prueftDieEchteRolleUndKeinRecht() {
     // Given
-    doThrow(new ProjectAccessDeniedException())
-        .when(permissions)
-        .requireEchterOwnerOderAdmin(1L, 5L);
+    doThrow(new ProjectAccessDeniedException()).when(permissions).requireEchterAppInhaber(1L, 5L);
 
     // When / Then
     assertThatThrownBy(() -> service.appZugangAnlegen(1L, 5L, 20L))
@@ -608,7 +613,7 @@ class AccessTokenServiceTest {
     // Then: Issue #2122 — die Sperre vor jeder Prüfung, die Prüfungen vor dem Speichern.
     InOrder reihenfolge = inOrder(tokens, permissions, users);
     reihenfolge.verify(tokens).sperreAppZugangAusgabe(1L);
-    reihenfolge.verify(permissions).requireEchterOwnerOderAdmin(1L, 5L);
+    reihenfolge.verify(permissions).requireEchterAppInhaber(1L, 5L);
     reihenfolge.verify(users).istAktiv(1L);
     reihenfolge.verify(tokens).save(any(AccessToken.class));
   }
@@ -650,11 +655,11 @@ class AccessTokenServiceTest {
   void appZugangAnlegen_nenntDenInhaber_wennSchonEinZugangBesteht() {
     // Given
     when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
-    when(tokens.findWirksamenAppZugang(20L)).thenReturn(Optional.of(appZugang(3L)));
+    when(tokens.findWirksamenAppZugang(20L, 1L)).thenReturn(Optional.of(appZugang(3L)));
     inhaberHeisst(1L, "Erika Inhaber");
 
     // When / Then
-    assertThatThrownBy(() -> service.appZugangAnlegen(2L, 5L, 20L))
+    assertThatThrownBy(() -> service.appZugangAnlegen(1L, 5L, 20L))
         .isInstanceOfSatisfying(
             AppZugangBestehtException.class,
             e -> {
@@ -669,11 +674,11 @@ class AccessTokenServiceTest {
   void appZugangAnlegen_nenntDieKennung_wennDerInhaberUnbekanntIst() {
     // Given
     when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
-    when(tokens.findWirksamenAppZugang(20L)).thenReturn(Optional.of(appZugang(3L)));
+    when(tokens.findWirksamenAppZugang(20L, 1L)).thenReturn(Optional.of(appZugang(3L)));
     when(users.findById(1L)).thenReturn(Optional.empty());
 
     // When / Then
-    assertThatThrownBy(() -> service.appZugangAnlegen(2L, 5L, 20L))
+    assertThatThrownBy(() -> service.appZugangAnlegen(1L, 5L, 20L))
         .isInstanceOf(AppZugangBestehtException.class)
         .hasMessageContaining("#1");
   }
@@ -682,16 +687,16 @@ class AccessTokenServiceTest {
   void appZugangAnlegen_machtAusDerIndexverletzungDenKonflikt() {
     // Given: Die Prüfung sah noch keinen Zugang, der Index lässt nur den schnelleren durch.
     when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
-    when(tokens.findWirksamenAppZugang(20L))
+    when(tokens.findWirksamenAppZugang(20L, 1L))
         .thenReturn(Optional.empty())
         .thenReturn(Optional.of(appZugang(3L)));
     when(crypto.generate()).thenReturn(new GeneratedToken("tk_app", "hash-app"));
     when(tokens.save(any(AccessToken.class)))
-        .thenThrow(new DataIntegrityViolationException("uq_kanban_access_token_app_board"));
+        .thenThrow(new DataIntegrityViolationException("uq_kanban_access_token_app_person"));
     inhaberHeisst(1L, "Erika Inhaber");
 
     // When / Then
-    assertThatThrownBy(() -> service.appZugangAnlegen(2L, 5L, 20L))
+    assertThatThrownBy(() -> service.appZugangAnlegen(1L, 5L, 20L))
         .isInstanceOf(AppZugangBestehtException.class)
         .hasMessageContaining("Erika Inhaber");
   }
@@ -702,7 +707,7 @@ class AccessTokenServiceTest {
     DataIntegrityViolationException verletzung =
         new DataIntegrityViolationException("fk_kanban_access_token_board");
     when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
-    when(tokens.findWirksamenAppZugang(20L)).thenReturn(Optional.empty());
+    when(tokens.findWirksamenAppZugang(20L, 2L)).thenReturn(Optional.empty());
     when(crypto.generate()).thenReturn(new GeneratedToken("tk_app", "hash-app"));
     when(tokens.save(any(AccessToken.class))).thenThrow(verletzung);
 
@@ -748,7 +753,7 @@ class AccessTokenServiceTest {
     InOrder reihenfolge = inOrder(tokens, permissions, users);
     reihenfolge.verify(tokens).sperreAppZugangAusgabe(1L);
     reihenfolge.verify(tokens).findById(3L);
-    reihenfolge.verify(permissions).requireEchterOwnerOderAdmin(1L, 5L);
+    reihenfolge.verify(permissions).requireEchterAppInhaber(1L, 5L);
     reihenfolge.verify(users).istAktiv(1L);
     reihenfolge.verify(tokens).markRevokedIfActive(3L);
     reihenfolge.verify(tokens).save(any(AccessToken.class));
@@ -758,9 +763,7 @@ class AccessTokenServiceTest {
   void appZugangErneuern_weistDenHerabgestuftenInhaberAb() {
     // Given
     when(tokens.findById(3L)).thenReturn(Optional.of(appZugang(3L)));
-    doThrow(new ProjectAccessDeniedException())
-        .when(permissions)
-        .requireEchterOwnerOderAdmin(1L, 5L);
+    doThrow(new ProjectAccessDeniedException()).when(permissions).requireEchterAppInhaber(1L, 5L);
 
     // When / Then
     assertThatThrownBy(() -> service.appZugangErneuern(1L, 3L))
@@ -811,7 +814,7 @@ class AccessTokenServiceTest {
   void appZugangErneuern_verraetEinemNichtmitgliedNichts() {
     // Given
     when(tokens.findById(3L)).thenReturn(Optional.of(appZugang(3L)));
-    doThrow(new ProjectNotFoundException()).when(permissions).requireEchterOwnerOderAdmin(2L, 5L);
+    doThrow(new ProjectNotFoundException()).when(permissions).requireEchterAppInhaber(2L, 5L);
 
     // When / Then
     assertThatThrownBy(() -> service.appZugangErneuern(2L, 3L))
@@ -900,11 +903,16 @@ class AccessTokenServiceTest {
         .isInstanceOf(AccessTokenNotFoundException.class);
   }
 
-  private void projektMitZweiBoards(long userId) {
+  /**
+   * Projekt 5 mit zwei Boards, in dem der Aufrufer einen App-Zugang halten darf; Projekt 6 ohne
+   * dieses Recht. Am Board 20 hält Erika (1) einen Zugang.
+   */
+  private void projektMitZweiBoards(long userId, boolean ownerOderAdmin) {
     when(projects.listAccessible(userId))
         .thenReturn(List.of(new AccessibleProject(5L, "Alpha"), new AccessibleProject(6L, "Beta")));
-    when(permissions.istEchterOwnerOderAdmin(userId, 5L)).thenReturn(true);
-    when(permissions.istEchterOwnerOderAdmin(userId, 6L)).thenReturn(false);
+    when(permissions.istEchterAppInhaber(userId, 5L)).thenReturn(true);
+    when(permissions.istEchterAppInhaber(userId, 6L)).thenReturn(false);
+    when(permissions.istEchterOwnerOderAdmin(userId, 5L)).thenReturn(ownerOderAdmin);
     when(boardService.listBoards(userId, 5L))
         .thenReturn(
             List.of(
@@ -914,10 +922,15 @@ class AccessTokenServiceTest {
     inhaberHeisst(1L, "Erika Inhaber");
   }
 
+  private static AccessTokenService.AppZugangZeile leereZeile(long boardId, String boardName) {
+    return new AccessTokenService.AppZugangZeile(
+        null, 5L, "Alpha", boardId, boardName, null, false, null, null);
+  }
+
   @Test
   void appZugaengeAuflisten_liefertJeBoardEineZeileMitZugang() {
     // Given
-    projektMitZweiBoards(1L);
+    projektMitZweiBoards(1L, true);
 
     // When
     List<AccessTokenService.AppZugangZeile> zeilen = service.appZugaengeAuflisten(1L);
@@ -932,41 +945,184 @@ class AccessTokenServiceTest {
   @Test
   void appZugaengeAuflisten_liefertEineLeereZeileFuerBoardOhneZugang() {
     // Given
-    projektMitZweiBoards(1L);
+    projektMitZweiBoards(1L, true);
 
     // When
     List<AccessTokenService.AppZugangZeile> zeilen = service.appZugaengeAuflisten(1L);
 
     // Then
-    assertThat(zeilen)
-        .hasSize(2)
-        .last()
-        .isEqualTo(
-            new AccessTokenService.AppZugangZeile(
-                null, 5L, "Alpha", 21L, "Ohne Zugang", null, false, null, null));
+    assertThat(zeilen).hasSize(2).last().isEqualTo(leereZeile(21L, "Ohne Zugang"));
   }
 
   @Test
-  void appZugaengeAuflisten_kennzeichnetEinenFremdenZugang() {
+  void appZugaengeAuflisten_zeigtEinemAdminDenFremdenZugangNebenSeinerLeerenZeile() {
     // Given
-    projektMitZweiBoards(2L);
+    projektMitZweiBoards(2L, true);
+
+    // When
+    List<AccessTokenService.AppZugangZeile> zeilen = service.appZugaengeAuflisten(2L);
+
+    // Then: die eigene leere Zeile zum Anlegen, daneben Erikas Zugang zum Widerrufen.
+    assertThat(zeilen)
+        .containsExactly(
+            leereZeile(20L, "Mit Zugang"),
+            new AccessTokenService.AppZugangZeile(
+                3L, 5L, "Alpha", 20L, "Mit Zugang", "Erika Inhaber", false, FIXED, null),
+            leereZeile(21L, "Ohne Zugang"));
+  }
+
+  @Test
+  void appZugaengeAuflisten_zeigtEinemKundenKeinenFremdenZugang() {
+    // Given
+    projektMitZweiBoards(2L, false);
 
     // When
     List<AccessTokenService.AppZugangZeile> zeilen = service.appZugaengeAuflisten(2L);
 
     // Then
-    assertThat(zeilen.get(0).eigener()).isFalse();
+    assertThat(zeilen)
+        .containsExactly(leereZeile(20L, "Mit Zugang"), leereZeile(21L, "Ohne Zugang"));
   }
 
   @Test
-  void appZugaengeAuflisten_istLeerOhneAdminOderOwnerRolle() {
+  void appZugaengeAuflisten_zeigtEinemKundenSeinenEigenenZugang() {
+    // Given: Kunde (2) und Erika (1) halten am Board 20 je einen Zugang.
+    projektMitZweiBoards(2L, false);
+    when(tokens.findWirksameAppZugaenge(List.of(20L, 21L)))
+        .thenReturn(List.of(appZugang(3L), appZugangVon(4L, 2L)));
+    inhaberHeisst(2L, "Karl Kunde");
+
+    // When
+    List<AccessTokenService.AppZugangZeile> zeilen = service.appZugaengeAuflisten(2L);
+
+    // Then
+    assertThat(zeilen)
+        .containsExactly(
+            new AccessTokenService.AppZugangZeile(
+                4L, 5L, "Alpha", 20L, "Mit Zugang", "Karl Kunde", true, FIXED, null),
+            leereZeile(21L, "Ohne Zugang"));
+  }
+
+  @Test
+  void appZugaengeAuflisten_istLeerOhneRolleMitAppZugang() {
     // Given
     when(projects.listAccessible(1L)).thenReturn(List.of(new AccessibleProject(5L, "Alpha")));
-    when(permissions.istEchterOwnerOderAdmin(1L, 5L)).thenReturn(false);
+    when(permissions.istEchterAppInhaber(1L, 5L)).thenReturn(false);
 
     // When / Then
     assertThat(service.appZugaengeAuflisten(1L)).isEmpty();
     verify(boardService, never()).listBoards(anyLong(), anyLong());
+  }
+
+  // --- Ein Zugang je Person und Board (Issue #2212, Plan #2206 E3, E4) -----------------------
+
+  @Test
+  void appZugangAnlegen_kundeLegtSeinenZugangAn() {
+    // Given: Die Fassade lässt OWNER, ADMIN und CUSTOMER durch; hier ein Kunde (3).
+    when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
+    when(tokens.findWirksamenAppZugang(20L, 3L)).thenReturn(Optional.empty());
+    when(crypto.generate()).thenReturn(new GeneratedToken("tk_app", "hash-app"));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    AccessTokenService.CreatedAccessToken created = service.appZugangAnlegen(3L, 5L, 20L);
+
+    // Then
+    assertThat(created.plaintext()).isEqualTo("tk_app");
+    verify(permissions).requireEchterAppInhaber(3L, 5L);
+    verify(permissions, never()).requireEchterOwnerOderAdmin(anyLong(), anyLong());
+    assertThat(gespeicherterZugang().userId()).isEqualTo(3L);
+  }
+
+  @Test
+  void appZugangAnlegen_kundeUndAdminHaltenAmSelbenBoardJeEinen() {
+    // Given: Der Admin (1) hält am Board 20 schon einen Zugang, der Kunde (3) noch keinen.
+    when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
+    when(tokens.findWirksamenAppZugang(20L, 1L)).thenReturn(Optional.of(appZugang(3L)));
+    when(tokens.findWirksamenAppZugang(20L, 3L)).thenReturn(Optional.empty());
+    when(crypto.generate()).thenReturn(new GeneratedToken("tk_app", "hash-app"));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    service.appZugangAnlegen(3L, 5L, 20L);
+
+    // Then
+    assertThat(gespeicherterZugang())
+        .extracting(AccessToken::userId, AccessToken::boardId)
+        .containsExactly(3L, 20L);
+  }
+
+  @Test
+  void appZugangAnlegen_zweiterZugangDerselbenPersonIstEinKonflikt() {
+    // Given
+    when(boardService.findProjectId(20L)).thenReturn(Optional.of(5L));
+    when(tokens.findWirksamenAppZugang(20L, 3L)).thenReturn(Optional.of(appZugangVon(4L, 3L)));
+    inhaberHeisst(3L, "Karl Kunde");
+
+    // When / Then
+    assertThatThrownBy(() -> service.appZugangAnlegen(3L, 5L, 20L))
+        .isInstanceOf(AppZugangBestehtException.class)
+        .hasMessageContaining("Karl Kunde");
+    verify(tokens, never()).save(any(AccessToken.class));
+  }
+
+  @Test
+  void appZugangAnlegen_weistEinMitgliedAb() {
+    // Given
+    doThrow(new ProjectAccessDeniedException()).when(permissions).requireEchterAppInhaber(3L, 5L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.appZugangAnlegen(3L, 5L, 20L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(tokens, never()).save(any(AccessToken.class));
+  }
+
+  @Test
+  void appZugangErneuern_kundeErneuertSeinenZugang() {
+    // Given
+    when(tokens.findById(4L)).thenReturn(Optional.of(appZugangVon(4L, 3L)));
+    when(tokens.markRevokedIfActive(4L)).thenReturn(true);
+    when(crypto.generate()).thenReturn(new GeneratedToken("tk_neu", "hash-neu"));
+    when(tokens.save(any(AccessToken.class))).thenAnswer(inv -> saved(inv.getArgument(0)));
+
+    // When
+    AccessTokenService.CreatedAccessToken created = service.appZugangErneuern(3L, 4L);
+
+    // Then
+    assertThat(created.plaintext()).isEqualTo("tk_neu");
+    verify(permissions).requireEchterAppInhaber(3L, 5L);
+    verify(permissions, never()).requireEchterOwnerOderAdmin(anyLong(), anyLong());
+  }
+
+  @Test
+  void appZugangWiderrufen_einKundeWiderruftKeinenFremdenZugang() {
+    // Given
+    when(tokens.findById(3L)).thenReturn(Optional.of(appZugang(3L)));
+    doThrow(new ProjectAccessDeniedException())
+        .when(permissions)
+        .requireEchterOwnerOderAdmin(3L, 5L);
+
+    // When / Then
+    assertThatThrownBy(() -> service.appZugangWiderrufen(3L, 3L))
+        .isInstanceOf(ProjectAccessDeniedException.class);
+    verify(permissions, never()).requireEchterAppInhaber(anyLong(), anyLong());
+    verify(tokens, never()).markRevoked(anyLong());
+  }
+
+  @Test
+  void resolveBinding_laesstDenZugangEinesKundenWirken() {
+    // Given
+    when(crypto.hash("plain")).thenReturn("hash");
+    when(tokens.findByTokenHash("hash")).thenReturn(Optional.of(appZugangVon(4L, 3L)));
+    when(permissions.istEchterAppInhaber(3L, 5L)).thenReturn(true);
+
+    // When
+    Optional<KanbanPrincipal> principal = service.resolveBinding("plain");
+
+    // Then
+    assertThat(principal).map(KanbanPrincipal::userId).contains(3L);
+    verify(permissions, never()).istEchterOwnerOderAdmin(anyLong(), anyLong());
+    verify(tokens, never()).markRevokedInOwnTransaction(anyLong());
   }
 
   /** Simuliert die DB: vergibt beim ersten Speichern eine ID (Issue #0080). */

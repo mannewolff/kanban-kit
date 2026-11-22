@@ -905,7 +905,14 @@ class LabelServiceTest {
 
   // --- Zugang der App: Ausnahme und Verlauf (Issue #2106, Plan #2100 E2, E9) -------------------
 
+  /** Der Zugang der App eines echten Owners oder Admins (Plan #2206, E5). */
   private void givenAppZugang() {
+    givenKundenAppZugang();
+    when(permissions.istEchterOwnerOderAdmin(USER, PROJECT)).thenReturn(true);
+  }
+
+  /** Der Zugang der App eines Kunden: ohne die Sonderrechte bei Labels (Plan #2206, E5). */
+  private void givenKundenAppZugang() {
     when(actor.current())
         .thenReturn(new ActorStamp(CardActivityOrigin.TOKEN, "Desktop-App", null, null, true));
   }
@@ -1025,6 +1032,59 @@ class LabelServiceTest {
         .isInstanceOf(FreigabeLabelException.class);
     verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
     verifyKeinVerlauf();
+  }
+
+  // --- Zugang der App eines Kunden (Issue #2212, Plan #2206 E5) --------------------------------
+
+  @Test
+  void addToCard_kundenAppZugang_setztFortsetzenNicht() {
+    givenKundenAppZugang();
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:night");
+
+    assertThatThrownBy(() -> service.addToCard(USER, CARD_ID, "kit:night"))
+        .isInstanceOf(FreigabeLabelException.class)
+        .hasMessage("Label kit:night setzt nur ein Mensch im Board");
+    verify(permissions).istEchterOwnerOderAdmin(USER, PROJECT);
+    verify(cardLabels, never()).addLabel(anyLong(), anyLong());
+    verifyKeinVerlauf();
+  }
+
+  @Test
+  void removeFromCard_kundenAppZugang_nimmtKlaerenNichtAb() {
+    givenKundenAppZugang();
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "kit:klaeren");
+
+    assertThatThrownBy(() -> service.removeFromCard(USER, CARD_ID, "kit:klaeren"))
+        .isInstanceOf(FreigabeLabelException.class);
+    verify(permissions).istEchterOwnerOderAdmin(USER, PROJECT);
+    verify(cardLabels, never()).removeLabel(anyLong(), anyLong());
+    verifyKeinVerlauf();
+  }
+
+  @Test
+  void addToCard_kundenAppZugang_setztGewoehnlichesLabel_undSchreibtVerlauf() {
+    givenKundenAppZugang();
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Bug");
+    when(cardLabels.addLabel(CARD_ID, 7L)).thenReturn(true);
+
+    service.addToCard(USER, CARD_ID, "Bug");
+
+    verify(cardLabels).addLabel(CARD_ID, 7L);
+    verify(grundlage).aktivitaet(CARD_ID, USER, CardActivityType.UPDATED, "Label Bug gesetzt");
+  }
+
+  @Test
+  void addToCard_ohneAppZugang_fragtKeineRolle() {
+    givenHerkunft(CardActivityOrigin.SESSION);
+    givenCard(CardType.CARD);
+    givenBoardLabel(7L, "Bug");
+
+    service.addToCard(USER, CARD_ID, "Bug");
+
+    verify(permissions, never()).istEchterOwnerOderAdmin(anyLong(), anyLong());
   }
 
   @Test

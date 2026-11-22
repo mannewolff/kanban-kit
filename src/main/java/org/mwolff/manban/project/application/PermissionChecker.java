@@ -338,6 +338,20 @@ public class PermissionChecker {
         userId, projectId, ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.CUSTOMER);
   }
 
+  /**
+   * {@link #istEchterAppInhaber} mit Wurf (Issue #2212) — für das Anlegen und Erneuern eines
+   * App-Zugangs, die ein Nichtmitglied mit 404 und ein Mitglied ohne passende Rolle mit 403
+   * abweisen.
+   *
+   * @throws ProjectNotFoundException wenn der Benutzer keine echte Mitgliedschaft hat (404)
+   * @throws ProjectAccessDeniedException wenn die echte Rolle weder OWNER, ADMIN noch CUSTOMER ist
+   *     (403)
+   */
+  @Transactional(readOnly = true)
+  public void requireEchterAppInhaber(long userId, long projectId) {
+    pruefeEchteRolle(userId, projectId, ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.CUSTOMER);
+  }
+
   /** {@link #hatEchteRolle} ohne eigene Transaktion, für den Aufruf innerhalb dieser Klasse. */
   private boolean echteRolleVorhanden(long userId, long projectId, ProjectRole... erlaubt) {
     return memberships

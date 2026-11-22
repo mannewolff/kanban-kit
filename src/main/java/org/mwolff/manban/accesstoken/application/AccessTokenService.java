@@ -3,12 +3,13 @@ package org.mwolff.manban.accesstoken.application;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
-import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.accesstoken.domain.AccessToken;
 import org.mwolff.manban.accesstoken.domain.AccessTokenArt;
@@ -176,18 +177,22 @@ public class AccessTokenService {
    * Index, ist seine Transaktion in PostgreSQL unbrauchbar. Der Inhaber für die Meldung lässt sich
    * erst nach ihrem Rollback nachschlagen.
    *
-   * @throws ProjectAccessDeniedException Aufrufer ist Mitglied, aber weder Admin noch Owner, oder
-   *     sein Konto ist gesperrt (403)
+   * <p>Jede Person hält je Board höchstens einen Zugang; Kunde und Admin halten am selben Board je
+   * einen (Plan #2206, E3, E4).
+   *
+   * @throws ProjectAccessDeniedException Aufrufer ist Mitglied, aber weder Owner, Admin noch Kunde,
+   *     oder sein Konto ist gesperrt (403)
    * @throws org.mwolff.manban.project.application.ProjectNotFoundException Aufrufer hat keine echte
    *     Mitgliedschaft, auch als Plattform-Admin (404)
    * @throws InvalidTokenBindingException Board unbekannt oder in einem anderen Projekt (400)
-   * @throws AppZugangBestehtException am Board besteht schon ein wirksamer Zugang (409)
+   * @throws AppZugangBestehtException der Aufrufer hält am Board schon einen wirksamen Zugang (409)
    */
   public CreatedAccessToken appZugangAnlegen(long userId, long projectId, long boardId) {
     try {
       return self.getObject().appZugangAnlegenInTransaktion(userId, projectId, boardId);
     } catch (DataIntegrityViolationException verletzung) {
-      AccessToken bestehend = tokens.findWirksamenAppZugang(boardId).orElseThrow(() -> verletzung);
+      AccessToken bestehend =
+          tokens.findWirksamenAppZugang(boardId, userId).orElseThrow(() -> verletzung);
       AppZugangBestehtException konflikt = bestehtSchon(bestehend);
       konflikt.initCause(verletzung);
       throw konflikt;
@@ -204,7 +209,7 @@ public class AccessTokenService {
     requireAusgabeBerechtigt(userId, projectId);
     requireBoardImProjekt(boardId, projectId);
     tokens
-        .findWirksamenAppZugang(boardId)
+        .findWirksamenAppZugang(boardId, userId)
         .ifPresent(
             bestehend -> {
               throw bestehtSchon(bestehend);
@@ -223,7 +228,7 @@ public class AccessTokenService {
    *
    * @throws AccessTokenNotFoundException Zugang unbekannt oder schon widerrufen (404)
    * @throws ProjectAccessDeniedException Aufrufer ist Mitglied des Projekts, aber nicht Inhaber,
-   *     nicht mehr Admin oder Owner, oder sein Konto ist gesperrt (403)
+   *     nicht mehr Owner, Admin oder Kunde, oder sein Konto ist gesperrt (403)
    * @throws org.mwolff.manban.project.application.ProjectNotFoundException Aufrufer hat keine echte
    *     Mitgliedschaft (404, kein Existenz-Leak)
    */
@@ -232,7 +237,7 @@ public class AccessTokenService {
     tokens.sperreAppZugangAusgabe(userId);
     AccessToken alt = requireAppZugang(tokenId);
     long projectId = gebunden(alt.projectId());
-    permissions.requireEchterOwnerOderAdmin(userId, projectId);
+    permissions.requireEchterAppInhaber(userId, projectId);
     if (alt.userId() != userId) {
       throw new ProjectAccessDeniedException();
     }
@@ -245,7 +250,8 @@ public class AccessTokenService {
 
   /**
    * Widerruft den Zugang der App endgültig: der Inhaber oder ein echter Admin oder Owner des
-   * Projekts. Danach kann für das Board sofort ein neuer entstehen.
+   * Projekts; ein Kunde widerruft keinen fremden Zugang (Plan #2206, E3). Danach kann der Inhaber
+   * am Board sofort einen neuen anlegen.
    *
    * @throws AccessTokenNotFoundException Zugang unbekannt (404)
    * @throws ProjectAccessDeniedException Aufrufer ist Mitglied, aber weder Inhaber noch Admin oder
@@ -263,23 +269,41 @@ public class AccessTokenService {
   }
 
   /**
-   * Je Board aller Projekte, in denen der Aufrufer echter Admin oder Owner ist, eine Zeile (Plan
-   * #2100, E8); ohne solche Projekte ist die Liste leer.
+   * Je Board aller Projekte, in denen der Aufrufer einen App-Zugang halten darf (echter Owner,
+   * Admin oder Kunde), eine Zeile mit seinem eigenen Zugang oder ohne Zugang (Plan #2100, E8; Plan
+   * #2206, E3, E4). Einem echten Owner oder Admin folgen darunter die Zugänge der anderen Personen
+   * am Board, damit er sie widerrufen kann; ein Kunde sieht nur seine eigenen. Ohne solche Projekte
+   * ist die Liste leer.
    */
   @Transactional(readOnly = true)
   public List<AppZugangZeile> appZugaengeAuflisten(long userId) {
     List<ProjektBoard> boards =
         projects.listAccessible(userId).stream()
-            .filter(p -> permissions.istEchterOwnerOderAdmin(userId, p.id()))
+            .filter(p -> permissions.istEchterAppInhaber(userId, p.id()))
             .flatMap(
-                p ->
-                    boardService.listBoards(userId, p.id()).stream()
-                        .map(b -> new ProjektBoard(p, b)))
+                p -> {
+                  boolean verwaltet = permissions.istEchterOwnerOderAdmin(userId, p.id());
+                  return boardService.listBoards(userId, p.id()).stream()
+                      .map(b -> new ProjektBoard(p, b, verwaltet));
+                })
             .toList();
-    Map<Long, AccessToken> zugaenge =
+    Map<Long, List<AccessToken>> zugaenge =
         tokens.findWirksameAppZugaenge(boards.stream().map(pb -> pb.board().id()).toList()).stream()
-            .collect(Collectors.toMap(z -> gebunden(z.boardId()), Function.identity()));
-    return boards.stream().map(pb -> zeile(userId, pb, zugaenge.get(pb.board().id()))).toList();
+            .sorted(Comparator.comparing(AccessToken::requireId))
+            .collect(Collectors.groupingBy(z -> gebunden(z.boardId())));
+    return boards.stream()
+        .flatMap(pb -> zeilen(userId, pb, zugaenge.getOrDefault(pb.board().id(), List.of())))
+        .toList();
+  }
+
+  /** Die eigene Zeile des Aufrufers am Board, für einen Owner oder Admin danach die fremden. */
+  private Stream<AppZugangZeile> zeilen(long userId, ProjektBoard pb, List<AccessToken> amBoard) {
+    AccessToken eigener =
+        amBoard.stream().filter(z -> z.userId() == userId).findFirst().orElse(null);
+    Stream<AccessToken> fremde =
+        pb.verwaltet() ? amBoard.stream().filter(z -> z.userId() != userId) : Stream.empty();
+    return Stream.concat(
+        Stream.of(zeile(userId, pb, eigener)), fremde.map(z -> zeile(userId, pb, z)));
   }
 
   private AppZugangZeile zeile(long userId, ProjektBoard pb, @Nullable AccessToken zugang) {
@@ -314,7 +338,7 @@ public class AccessTokenService {
    */
   private void requireAusgabeBerechtigt(long userId, long projectId) {
     tokens.sperreAppZugangAusgabe(userId);
-    permissions.requireEchterOwnerOderAdmin(userId, projectId);
+    permissions.requireEchterAppInhaber(userId, projectId);
     requireAktivesKonto(userId);
   }
 
@@ -396,8 +420,8 @@ public class AccessTokenService {
    * zwischenzeitlich committeten Widerruf wieder zurück — ein Widerruf ist aber ein Endzustand
    * (Issue #878).
    *
-   * <p>Ein Zugang der App wirkt nur, solange sein Inhaber Admin oder Owner des Projekts ist; sonst
-   * ist die Auflösung leer und der Zugang widerrufen (Issue #2104).
+   * <p>Ein Zugang der App wirkt nur, solange sein Inhaber Owner, Admin oder Kunde des Projekts ist;
+   * sonst ist die Auflösung leer und der Zugang widerrufen (Issue #2104; Plan #2206, E3).
    */
   public Optional<KanbanPrincipal> resolveBinding(String plaintext) {
     return tokens
@@ -418,16 +442,16 @@ public class AccessTokenService {
   }
 
   /**
-   * Ob der Inhaber eines Zugangs der App noch Admin oder Owner ist (Plan #2100, E4); bei Verlust
-   * wird der Zugang endgültig widerrufen. Fängt einen Schreibweg auf, der das Ereignis vergisst.
-   * Gewöhnliche Token kommen ohne jede Abfrage durch.
+   * Ob der Inhaber eines Zugangs der App noch Owner, Admin oder Kunde ist (Plan #2100, E4; Plan
+   * #2206, E3); bei Verlust wird der Zugang endgültig widerrufen. Fängt einen Schreibweg auf, der
+   * das Ereignis vergisst. Gewöhnliche Token kommen ohne jede Abfrage durch.
    *
    * <p>Prüfung und Widerruf holen ihre Verbindung nacheinander, weil die Auflösung ohne Transaktion
    * läuft (siehe {@link #resolveBinding}).
    */
   private boolean inhaberTraegtDenZugang(AccessToken token) {
     if (token.art() != AccessTokenArt.APP
-        || permissions.istEchterOwnerOderAdmin(token.userId(), gebunden(token.projectId()))) {
+        || permissions.istEchterAppInhaber(token.userId(), gebunden(token.projectId()))) {
       return true;
     }
     tokens.markRevokedInOwnTransaction(token.requireId());
@@ -493,12 +517,15 @@ public class AccessTokenService {
           @Nullable Instant lastUsedAt,
       @Schema(description = "Ob das Token widerrufen ist.", example = "false") boolean revoked) {}
 
-  /** Ein Board der Liste mit seinem Projekt; nur innerhalb von {@link #appZugaengeAuflisten}. */
-  private record ProjektBoard(AccessibleProject projekt, BoardView board) {}
+  /**
+   * Ein Board der Liste mit seinem Projekt und ob der Aufrufer dort fremde Zugänge verwaltet; nur
+   * innerhalb von {@link #appZugaengeAuflisten}.
+   */
+  private record ProjektBoard(AccessibleProject projekt, BoardView board, boolean verwaltet) {}
 
   /**
-   * Eine Zeile der Verwaltung: ein Board und, falls vorhanden, sein wirksamer Zugang der App. Ohne
-   * Hash und ohne Klartext; {@code lastUsedAt} ist minutengenau.
+   * Eine Zeile der Verwaltung: ein Board und, falls vorhanden, ein wirksamer Zugang der App daran.
+   * Ohne Hash und ohne Klartext; {@code lastUsedAt} ist minutengenau.
    */
   @Schema(description = "Ein Board mit seinem Zugang der App, ohne Klartext.")
   public record AppZugangZeile(

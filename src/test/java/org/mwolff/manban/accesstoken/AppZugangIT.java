@@ -65,11 +65,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 // PMD.GodClass: Issue #2106 verlangt auch die Szenarien der beiden Freigaben hier; die Klasse ist
 // eine Reihe unabhängiger Szenarien mit Request-Helfern, kein Baustein mit vermischter
 // Zuständigkeit.
+// PMD.CyclomaticComplexity: Die Summe über alle Szenarien; mit dem Zugang des Kunden (Issue #2212)
+// überschreitet sie die Schwelle, die einzelne Methode bleibt bei höchstens 4.
 @SuppressWarnings({
   "PMD.ExcessiveImports",
   "PMD.CouplingBetweenObjects",
   "PMD.TooManyMethods",
-  "PMD.GodClass"
+  "PMD.GodClass",
+  "PMD.CyclomaticComplexity"
 })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
@@ -82,6 +85,8 @@ class AppZugangIT extends AbstractIntegrationTest {
   private static final String INHABER_NAME = "Erika Inhaber";
   private static final String PLAINTEXT = "plaintext";
   private static final String ADMIN_EMAIL = "admin@example.com";
+  private static final String KUNDE_EMAIL = "kunde@example.com";
+  private static final String KUNDE_NAME = "Karl Kunde";
   private static final Duration KURZER_POOL_TIMEOUT = Duration.ofSeconds(2);
   private static final String MITGLIED_NAME = "Mia Mitglied";
   private static final String APP_NAME = "Desktop-App";
@@ -96,6 +101,9 @@ class AppZugangIT extends AbstractIntegrationTest {
 
   /** Ein neues Projekt bringt schon Boards mit; die Zeile wird darum über die Board-ID gesucht. */
   private static final String ZEILE_DES_BOARDS = "$[?(@.boardId == %d)]";
+
+  /** Die Zeile eines bestimmten Zugangs; an einem Board stehen mehrere (Plan #2206, E4). */
+  private static final String ZEILE_DES_ZUGANGS = "$[?(@.tokenId == %d)]";
 
   @Autowired private MockMvc mvc;
   @Autowired private ObjectMapper json;
@@ -273,17 +281,134 @@ class AppZugangIT extends AbstractIntegrationTest {
   // --- Szenarien ------------------------------------------------------------
 
   @Test
-  @DisplayName("Szenario: Am Board besteht schon ein Zugang")
-  void amBoardBestehtSchonEinZugang() throws Exception {
+  @DisplayName("Szenario: Die Person hält am Board schon einen Zugang")
+  void diePersonHaeltAmBoardSchonEinenZugang() throws Exception {
     // Given
     Projekt projekt = projekt();
     angelegt(projekt.inhaber(), projekt);
 
     // When / Then
-    anlegen(projekt.admin(), projekt)
+    anlegen(projekt.inhaber(), projekt)
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.detail", containsString(INHABER_NAME)));
     assertThat(wirksameZugaenge(projekt.board())).isEqualTo(1);
+  }
+
+  // --- Zugang eines Kunden (Issue #2212, Plan #2206 E3, E4, E5) -------------
+
+  /** Ein Kunde im Projekt, angemeldet im Browser. */
+  private Cookie kunde(Projekt projekt) {
+    Cookie session = person(KUNDE_EMAIL, KUNDE_NAME);
+    mitglied(projekt.id(), KUNDE_EMAIL, ProjectRole.CUSTOMER);
+    return session;
+  }
+
+  private List<JsonNode> zeilen(Cookie session) throws Exception {
+    String body =
+        mvc.perform(get(PFAD).cookie(session))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    List<JsonNode> zeilen = new ArrayList<>();
+    json.readTree(body).forEach(zeilen::add);
+    return zeilen;
+  }
+
+  @Test
+  @DisplayName("Szenario: Kunde und Admin halten am selben Board je einen Zugang")
+  void kundeUndAdminHaltenAmSelbenBoardJeEinenZugang() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    Cookie kunde = kunde(projekt);
+    angelegt(projekt.admin(), projekt);
+
+    // When
+    JsonNode zugangDesKunden = angelegt(kunde, projekt);
+
+    // Then
+    kartenAbrufen(zugangDesKunden.get(PLAINTEXT).asText()).andExpect(status().isOk());
+    anlegen(kunde, projekt)
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath(DETAIL, containsString(KUNDE_NAME)));
+    anlegen(projekt.mitglied(), projekt).andExpect(status().isForbidden());
+    assertThat(wirksameZugaenge(projekt.board())).isEqualTo(2);
+  }
+
+  @Test
+  void einKundeErneuertSeinenZugangUndWiderruftKeinenFremden() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    Cookie kunde = kunde(projekt);
+    JsonNode fremd = angelegt(projekt.inhaber(), projekt);
+    JsonNode eigen = angelegt(kunde, projekt);
+
+    // When
+    erneuern(kunde, eigen.get("id").asLong()).andExpect(status().isCreated());
+
+    // Then
+    widerrufen(kunde, fremd.get("id").asLong()).andExpect(status().isForbidden());
+    kartenAbrufen(fremd.get(PLAINTEXT).asText()).andExpect(status().isOk());
+    kartenAbrufen(eigen.get(PLAINTEXT).asText()).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void einKundeSiehtNurSeineZeilen_einAdminDazuDieFremden() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    Cookie kunde = kunde(projekt);
+    JsonNode fremd = angelegt(projekt.inhaber(), projekt);
+    JsonNode eigen = angelegt(kunde, projekt);
+
+    // When
+    List<JsonNode> beimKunden = zeilen(kunde);
+    List<JsonNode> beimAdmin = zeilen(projekt.admin());
+
+    // Then
+    assertThat(beimKunden)
+        .filteredOn(z -> !z.get("tokenId").isNull())
+        .singleElement()
+        .satisfies(
+            z -> {
+              assertThat(z.get("tokenId").asLong()).isEqualTo(eigen.get("id").asLong());
+              assertThat(z.get("eigener").asBoolean()).isTrue();
+            });
+    assertThat(beimAdmin)
+        .filteredOn(z -> z.get("boardId").asLong() == projekt.board())
+        .extracting(z -> z.get("tokenId").isNull() ? null : z.get("tokenId").asLong())
+        .containsExactly(null, fremd.get("id").asLong(), eigen.get("id").asLong());
+  }
+
+  @Test
+  void derZugangEinesKundenWirdMitDemRollenwechselZumMitgliedWiderrufen() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    Cookie kunde = kunde(projekt);
+    String klartext = angelegt(kunde, projekt).get(PLAINTEXT).asText();
+
+    // When
+    rolleSetzen(projekt, KUNDE_EMAIL, ProjectRole.MEMBER);
+
+    // Then
+    kartenAbrufen(klartext).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void mitDemZugangEinesKundenLassenSichDieFreigabenNichtAendern() throws Exception {
+    // Given
+    Projekt projekt = projekt();
+    String app = angelegt(kunde(projekt), projekt).get(PLAINTEXT).asText();
+    label(projekt.inhaber(), projekt.board(), NIGHT);
+    long klaeren = label(projekt.inhaber(), projekt.board(), KLAEREN);
+    long karte = karte(app, "Frage an den Kunden");
+    labelsZuordnen(projekt.inhaber(), karte, klaeren);
+
+    // When / Then
+    labelSetzen(app, karte, NIGHT)
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath(DETAIL, containsString(NUR_EIN_MENSCH)));
+    labelAbnehmen(app, karte, KLAEREN).andExpect(status().isForbidden());
+    assertThat(labelsDerKarte(karte)).containsExactly(KLAEREN);
   }
 
   @Test
@@ -597,20 +722,27 @@ class AppZugangIT extends AbstractIntegrationTest {
     long leeresBoard = board(projekt.inhaber(), projekt.id(), "Ohne Zugang");
     JsonNode zugang = angelegt(projekt.inhaber(), projekt);
 
-    // When
+    // When: Der Admin sieht den Zugang der Inhaberin neben seiner eigenen leeren Zeile.
     String body =
         mvc.perform(get(PFAD).cookie(projekt.admin()))
             .andExpect(status().isOk())
             .andExpect(
-                jsonPath(ZEILE_DES_BOARDS + ".tokenId", projekt.board())
-                    .value(zugang.get("id").asInt()))
-            .andExpect(jsonPath(ZEILE_DES_BOARDS + ".projectName", projekt.board()).value("Alpha"))
+                jsonPath(ZEILE_DES_ZUGANGS + ".boardId", zugang.get("id").asInt())
+                    .value(contains((int) projekt.board())))
             .andExpect(
-                jsonPath(ZEILE_DES_BOARDS + ".boardName", projekt.board()).value("Entwicklung"))
+                jsonPath(ZEILE_DES_ZUGANGS + ".projectName", zugang.get("id").asInt())
+                    .value(contains("Alpha")))
             .andExpect(
-                jsonPath(ZEILE_DES_BOARDS + ".inhaberName", projekt.board()).value(INHABER_NAME))
-            .andExpect(jsonPath(ZEILE_DES_BOARDS + ".eigener", projekt.board()).value(false))
-            .andExpect(jsonPath(ZEILE_DES_BOARDS + ".createdAt", projekt.board()).exists())
+                jsonPath(ZEILE_DES_ZUGANGS + ".boardName", zugang.get("id").asInt())
+                    .value(contains("Entwicklung")))
+            .andExpect(
+                jsonPath(ZEILE_DES_ZUGANGS + ".inhaberName", zugang.get("id").asInt())
+                    .value(contains(INHABER_NAME)))
+            .andExpect(
+                jsonPath(ZEILE_DES_ZUGANGS + ".eigener", zugang.get("id").asInt())
+                    .value(contains(false)))
+            .andExpect(
+                jsonPath(ZEILE_DES_ZUGANGS + ".createdAt", zugang.get("id").asInt()).exists())
             .andExpect(
                 jsonPath(ZEILE_DES_BOARDS + ".tokenId", leeresBoard).value(contains(nullValue())))
             .andExpect(
@@ -1046,16 +1178,17 @@ class AppZugangIT extends AbstractIntegrationTest {
   // --- Nebenläufigkeit ------------------------------------------------------
 
   /**
-   * Der zweite Aufruf sieht bei der Prüfung noch keinen Zugang und läuft in den Index. Er läuft
-   * ohne die Transaktion von {@link TransactionRace}, weil die Meldung den Inhaber erst nach dem
-   * Rollback nachschlagen kann: Eine PostgreSQL-Transaktion ist nach der Verletzung unbrauchbar.
+   * Derselbe Mensch legt zweimal gleichzeitig an. Der zweite Aufruf wartet an der Ausgabesperre des
+   * Inhabers und findet danach den Zugang des ersten (Issue #2122; Plan #2206, E4); fände er ihn
+   * nicht, hielte ihn der Index. Er läuft ohne die Transaktion von {@link TransactionRace}, weil
+   * die Meldung den Inhaber nach einer Indexverletzung erst nach dem Rollback nachschlagen kann:
+   * Eine PostgreSQL-Transaktion ist nach der Verletzung unbrauchbar.
    */
   @Test
   void gleichzeitigesAnlegenErzeugtGenauEinenZugang() throws Exception {
     // Given
     Projekt projekt = projekt();
     long inhaber = users.findByEmail("inhaber@example.com").orElseThrow().requireId();
-    long admin = users.findByEmail("admin@example.com").orElseThrow().requireId();
     TransactionTemplate ohneTransaktion = new TransactionTemplate(transactionManager);
     ohneTransaktion.setPropagationBehavior(TransactionDefinition.PROPAGATION_NOT_SUPPORTED);
 
@@ -1067,7 +1200,7 @@ class AppZugangIT extends AbstractIntegrationTest {
                 () ->
                     ohneTransaktion.executeWithoutResult(
                         status ->
-                            accessTokens.appZugangAnlegen(admin, projekt.id(), projekt.board())));
+                            accessTokens.appZugangAnlegen(inhaber, projekt.id(), projekt.board())));
 
     // Then
     assertThat(race.firstFailure()).isNull();

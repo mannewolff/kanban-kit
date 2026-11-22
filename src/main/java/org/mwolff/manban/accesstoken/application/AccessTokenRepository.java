@@ -22,10 +22,16 @@ public interface AccessTokenRepository {
 
   Optional<AccessToken> findByTokenHash(String tokenHash);
 
-  /** Der wirksame Zugang der App am Board; leer, wenn keiner besteht (Plan #2100, E6). */
-  Optional<AccessToken> findWirksamenAppZugang(long boardId);
+  /**
+   * Der wirksame Zugang der App dieser Person am Board; leer, wenn sie keinen hält (Plan #2206,
+   * E4).
+   */
+  Optional<AccessToken> findWirksamenAppZugang(long boardId, long userId);
 
-  /** Die wirksamen Zugänge der App dieser Boards; je Board höchstens einer (Plan #2100, E6). */
+  /**
+   * Die wirksamen Zugänge der App dieser Boards; je Board und Person höchstens einer (Plan #2206,
+   * E4).
+   */
   List<AccessToken> findWirksameAppZugaenge(Collection<Long> boardIds);
 
   /**

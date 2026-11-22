@@ -122,6 +122,42 @@ describe('AppZugangSection', () => {
     ).toBeInTheDocument()
   })
 
+  it('zeigt einem Kunden die Boards, die der Server liefert', async () => {
+    const kundenBoard: AppZugangZeile = { ...ohneZugang, boardId: 8, boardName: 'Abnahme' }
+    const kundenZugang: AppZugangZeile = {
+      ...eigenerZugang,
+      tokenId: 21,
+      inhaberName: 'Karl Kunde',
+      lastUsedAt: null,
+    }
+    api.listApp.mockResolvedValue([kundenZugang, kundenBoard])
+    renderSection()
+
+    expect(await screen.findByRole('button', { name: erneuernName })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: widerrufenName })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Zugang für Dogfood · Abnahme anlegen' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Inhaber: Karl Kunde · angelegt am 2.3.2026 · noch nie benutzt'),
+    ).toBeInTheDocument()
+  })
+
+  it('zeigt am selben Board die eigene leere Zeile und den Zugang einer anderen Person', async () => {
+    const fehler = vi.spyOn(console, 'error').mockImplementation(() => {})
+    api.listApp.mockResolvedValue([ohneZugang, fremderZugang])
+    renderSection()
+
+    expect(await screen.findByRole('button', { name: anlegenName })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: widerrufenName })).toBeInTheDocument()
+    expect(screen.getByText('Kein Zugang')).toBeInTheDocument()
+    expect(
+      screen.getByText('Inhaber: Grace Owner · angelegt am 2.3.2026 · noch nie benutzt'),
+    ).toBeInTheDocument()
+    expect(fehler).not.toHaveBeenCalled()
+    fehler.mockRestore()
+  })
+
   it('nennt nirgends ein Ablaufdatum', async () => {
     api.listApp.mockResolvedValue([eigenerZugang])
     renderSection()

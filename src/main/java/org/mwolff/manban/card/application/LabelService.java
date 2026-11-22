@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.mwolff.manban.board.application.BoardService;
+import org.mwolff.manban.card.application.ActorContext.ActorStamp;
 import org.mwolff.manban.card.application.CardBoardActivityEvent.ActivityType;
 import org.mwolff.manban.card.application.FreigabeLabels.Richtung;
 import org.mwolff.manban.card.domain.Card;
@@ -192,7 +193,8 @@ public class LabelService {
    * @throws InvalidDependencyException wenn das Item ein Vorhaben ist (400)
    * @throws FreigabeLabelException wenn ein Token ein Freigabe-Label setzen will, das nur ein
    *     Mensch setzt (403, Issue #1421) — geprüft nach Absicht, auch wenn das Label schon
-   *     zugeordnet ist; {@code kit:night} darf allein der Zugang der App (Plan #2100, E2)
+   *     zugeordnet ist; {@code kit:night} darf allein der Zugang der App eines echten Owners oder
+   *     Admins (Plan #2100, E2; Plan #2206, E5)
    * @throws LabelNotFoundException wenn das Board kein Label dieses Namens definiert (404) — ein
    *     unbekannter Name wird abgelehnt und <em>nicht</em> angelegt, sonst erzeugte ein Tippfehler
    *     im Nachtlauf dauerhaft Label-Müll
@@ -200,7 +202,7 @@ public class LabelService {
   @Transactional
   public void addToCard(long userId, long cardId, String name) {
     Card card = requireLabelableCard(userId, cardId);
-    FreigabeLabels.pruefeEinzeln(actor.current(), name, Richtung.SETZEN);
+    FreigabeLabels.pruefeEinzeln(stempelDerFreigabe(userId, card), name, Richtung.SETZEN);
     long boardId = card.boardId();
     Label label = requireLabel(boardId, name);
     if (cardLabels.addLabel(cardId, label.requireId())) {
@@ -214,18 +216,33 @@ public class LabelService {
    * Gegenstück zu {@link #addToCard}: entfernt genau die eine Zuordnung und lässt alle übrigen
    * unangetastet. Ein nicht zugeordnetes Label zu entfernen ist ebenfalls Erfolg — außer ein Token
    * nimmt ein Freigabe-Label ab, das nur ein Mensch abnimmt (403, {@link FreigabeLabels}); {@code
-   * kit:klaeren} darf allein der Zugang der App abnehmen (Plan #2100, E2).
+   * kit:klaeren} darf allein der Zugang der App eines echten Owners oder Admins abnehmen (Plan
+   * #2100, E2; Plan #2206, E5).
    */
   @Transactional
   public void removeFromCard(long userId, long cardId, String name) {
     Card card = requireLabelableCard(userId, cardId);
-    FreigabeLabels.pruefeEinzeln(actor.current(), name, Richtung.ABNEHMEN);
+    FreigabeLabels.pruefeEinzeln(stempelDerFreigabe(userId, card), name, Richtung.ABNEHMEN);
     long boardId = card.boardId();
     Label label = requireLabel(boardId, name);
     if (cardLabels.removeLabel(cardId, label.requireId())) {
       verlaufDerApp(cardId, userId, "Label " + label.name() + " abgenommen");
       events.publishEvent(new CardBoardActivityEvent(boardId, ActivityType.UPDATED, cardId));
     }
+  }
+
+  /**
+   * Der Stempel, mit dem {@link FreigabeLabels} die Freigaben prüft (Plan #2206, E5): Die
+   * Sonderrechte des Zugangs der App gelten nur, wenn sein Inhaber echter Owner oder Admin des
+   * Projekts ist. Der Zugang eines Kunden prüft sich wie ein gewöhnliches Token.
+   */
+  private ActorStamp stempelDerFreigabe(long userId, Card card) {
+    ActorStamp stempel = actor.current();
+    if (!stempel.appZugang() || permissions.istEchterOwnerOderAdmin(userId, card.projectId())) {
+      return stempel;
+    }
+    return new ActorStamp(
+        stempel.origin(), stempel.tokenName(), stempel.agent(), stempel.laufStart(), false);
   }
 
   /** Verlaufseintrag einer tatsächlichen Änderung, nur mit dem Zugang der App (E9). */
