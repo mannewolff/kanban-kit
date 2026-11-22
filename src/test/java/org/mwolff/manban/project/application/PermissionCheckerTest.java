@@ -12,6 +12,8 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mwolff.manban.auth.application.PlatformAdminChecker;
 import org.mwolff.manban.project.domain.Permission;
 import org.mwolff.manban.project.domain.ProjectMembership;
@@ -332,5 +334,32 @@ class PermissionCheckerTest {
     // When / Then
     assertThatCode(() -> checker.requireRealRole(1L, 7L, ProjectRole.OWNER, ProjectRole.ADMIN))
         .doesNotThrowAnyException();
+  }
+
+  @ParameterizedTest
+  @CsvSource({"OWNER,true", "ADMIN,true", "CUSTOMER,true", "MEMBER,false", "VIEWER,false"})
+  void istEchterAppInhaber_folgtDerEchtenRolle(ProjectRole rolle, boolean erwartet) {
+    // Given
+    when(memberships.findByProjectIdAndUserId(7L, 1L))
+        .thenReturn(Optional.of(membership(7L, 1L, rolle)));
+
+    // When
+    boolean inhaber = checker.istEchterAppInhaber(1L, 7L);
+
+    // Then
+    assertThat(inhaber).isEqualTo(erwartet);
+  }
+
+  @Test
+  void istEchterAppInhaber_falsch_fuerPlattformAdminOhneMitgliedschaft() {
+    // Given
+    when(platformAdminChecker.isPlatformAdmin(1L)).thenReturn(true);
+    when(memberships.findByProjectIdAndUserId(7L, 1L)).thenReturn(Optional.empty());
+
+    // When
+    boolean inhaber = checker.istEchterAppInhaber(1L, 7L);
+
+    // Then
+    assertThat(inhaber).isFalse();
   }
 }

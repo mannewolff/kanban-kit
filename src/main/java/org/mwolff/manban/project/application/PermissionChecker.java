@@ -326,6 +326,18 @@ public class PermissionChecker {
     return echteRolleVorhanden(userId, projectId, ProjectRole.OWNER, ProjectRole.ADMIN);
   }
 
+  /**
+   * Ob der Benutzer einen eigenen App-Zugang anlegen und halten darf (Plan #2206, E3): echte Rolle
+   * OWNER, ADMIN oder CUSTOMER. Ein Plattform-Admin ohne eigene Mitgliedschaft ist auch hier ein
+   * Nichtmitglied — für Module außerhalb von {@code project}, die {@link ProjectRole} nicht sehen
+   * dürfen.
+   */
+  @Transactional(readOnly = true)
+  public boolean istEchterAppInhaber(long userId, long projectId) {
+    return echteRolleVorhanden(
+        userId, projectId, ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.CUSTOMER);
+  }
+
   /** {@link #hatEchteRolle} ohne eigene Transaktion, für den Aufruf innerhalb dieser Klasse. */
   private boolean echteRolleVorhanden(long userId, long projectId, ProjectRole... erlaubt) {
     return memberships

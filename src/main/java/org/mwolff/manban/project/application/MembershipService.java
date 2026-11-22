@@ -342,18 +342,20 @@ public class MembershipService {
   }
 
   /**
-   * Meldet in der laufenden Transaktion, wenn eine Rollenänderung unter ADMIN führt (Issue #2104,
-   * Plan #2100 E4). {@link #transferOwnership} ruft das bewusst nicht auf: Der bisherige Owner
-   * bleibt Admin.
+   * Meldet in der laufenden Transaktion, wenn eine Rollenänderung aus den Rollen mit App-Zugang
+   * (OWNER, ADMIN, CUSTOMER) herausführt (Issue #2104, Plan #2100 E4; Plan #2206 E3). {@link
+   * #transferOwnership} ruft das bewusst nicht auf: Der bisherige Owner bleibt Admin.
    */
   private void meldeRollenverlust(ProjectMembership vorher, ProjectRole neueRolle) {
-    if (istAdminOderOwner(vorher.role()) && !istAdminOderOwner(neueRolle)) {
+    if (traegtAppZugang(vorher.role()) && !traegtAppZugang(neueRolle)) {
       events.publishEvent(new MitgliedRolleVerlorenEvent(vorher.projectId(), vorher.userId()));
     }
   }
 
-  private static boolean istAdminOderOwner(ProjectRole rolle) {
-    return rolle == ProjectRole.OWNER || rolle == ProjectRole.ADMIN;
+  private static boolean traegtAppZugang(ProjectRole rolle) {
+    return rolle == ProjectRole.OWNER
+        || rolle == ProjectRole.ADMIN
+        || rolle == ProjectRole.CUSTOMER;
   }
 
   /**
