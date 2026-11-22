@@ -167,8 +167,8 @@ public class AbgleichService {
       }
     }
     Instant festgestellt = clock.instant();
-    for (int nummer : hier) {
-      if (!dort.contains((long) nummer)) {
+    for (Integer nummer : hier) {
+      if (!dort.contains(nummer.longValue())) {
         schreiber.alsGeloeschtMarkieren(verbindung.boardId(), nummer, festgestellt);
       }
     }

@@ -330,7 +330,7 @@ public class FremdKartenSchreiber {
   private @Nullable Long vorfahrId(long projectId, long cardId, @Nullable Integer vorfahrNummer) {
     try {
       return DerivedFrom.resolve(cards, projectId, vorfahrNummer, cardId);
-    } catch (InvalidDerivedFromException e) {
+    } catch (InvalidDerivedFromException _) {
       return null;
     }
   }

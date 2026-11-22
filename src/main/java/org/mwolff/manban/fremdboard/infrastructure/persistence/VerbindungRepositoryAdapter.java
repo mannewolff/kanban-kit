@@ -33,6 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class VerbindungRepositoryAdapter implements VerbindungRepository {
 
+  private static final String PROJECT_ID = "projectId";
+
   private static final String SPALTEN =
       "project_id, art, basis_url, projekt_pfad, zugang_verschluesselt, kit_konto,"
           + " statuslabels->>'backlog' AS label_backlog, statuslabels->>'ready' AS label_ready,"
@@ -51,7 +53,7 @@ class VerbindungRepositoryAdapter implements VerbindungRepository {
     StatusLabels labels = verbindung.statuslabels();
     MapSqlParameterSource werte =
         new MapSqlParameterSource()
-            .addValue("projectId", verbindung.projectId())
+            .addValue(PROJECT_ID, verbindung.projectId())
             .addValue("art", verbindung.art().name())
             .addValue("basisUrl", verbindung.basisUrl())
             .addValue("projektPfad", verbindung.projektPfad())
@@ -92,7 +94,7 @@ class VerbindungRepositoryAdapter implements VerbindungRepository {
     return jdbc
         .query(
             "SELECT " + SPALTEN + " FROM fremdboard_verbindung WHERE project_id = :projectId",
-            Map.of("projectId", projectId),
+            Map.of(PROJECT_ID, projectId),
             (rs, zeile) -> zuVerbindung(rs))
         .stream()
         .findFirst();
@@ -103,7 +105,7 @@ class VerbindungRepositoryAdapter implements VerbindungRepository {
     return Boolean.TRUE.equals(
         jdbc.queryForObject(
             "SELECT EXISTS (SELECT 1 FROM fremdboard_verbindung WHERE project_id = :projectId)",
-            Map.of("projectId", projectId),
+            Map.of(PROJECT_ID, projectId),
             Boolean.class));
   }
 
@@ -123,14 +125,14 @@ class VerbindungRepositoryAdapter implements VerbindungRepository {
     jdbc.queryForObject(
         "SELECT 1 FROM (SELECT pg_advisory_xact_lock("
             + "hashtextextended('fremdboard-abgleich:' || :projectId, 0))) gesperrt",
-        Map.of("projectId", projectId),
+        Map.of(PROJECT_ID, projectId),
         Integer.class);
     return jdbc.update(
             "UPDATE fremdboard_verbindung SET letzter_abgleich_am = :jetzt"
                 + " WHERE project_id = :projectId"
                 + " AND letzter_abgleich_am IS NOT DISTINCT FROM CAST(:bisher AS timestamptz)",
             new MapSqlParameterSource()
-                .addValue("projectId", projectId)
+                .addValue(PROJECT_ID, projectId)
                 .addValue("bisher", zeit(bisher))
                 .addValue("jetzt", zeit(jetzt)))
         == 1;
@@ -144,7 +146,7 @@ class VerbindungRepositoryAdapter implements VerbindungRepository {
             + " COALESCE(CAST(:voll AS timestamptz), letzter_vollabgleich_am)"
             + " WHERE project_id = :projectId",
         new MapSqlParameterSource()
-            .addValue("projectId", projectId)
+            .addValue(PROJECT_ID, projectId)
             .addValue("voll", zeit(vollabgleichAm)));
   }
 
@@ -157,7 +159,7 @@ class VerbindungRepositoryAdapter implements VerbindungRepository {
             + " THEN CAST(:bisher AS timestamptz) ELSE letzter_abgleich_am END"
             + " WHERE project_id = :projectId",
         new MapSqlParameterSource()
-            .addValue("projectId", projectId)
+            .addValue(PROJECT_ID, projectId)
             .addValue("fehler", fehler)
             .addValue("beansprucht", zeit(beansprucht))
             .addValue("bisher", zeit(bisher)));

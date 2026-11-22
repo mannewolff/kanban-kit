@@ -49,21 +49,6 @@ final class Umsetzungsversuche {
         : List.copyOf(folge.versuche);
   }
 
-  /** {@code Umgesetzt von:}, sonst der Zug nach In Progress, sonst der Zugang des Berichts. */
-  private static @Nullable Akteur umsetzer(
-      @Nullable Aktivitaet beginn, Kommentar k, Abschlussbericht gelesen) {
-    String modell = gelesen.umgesetztVon();
-    if (modell != null) {
-      return Akteur.modell(modell);
-    }
-    return beginn == null ? Akteur.werkzeug(k.tokenName(), k.agent()) : zugAkteur(beginn);
-  }
-
-  private static @Nullable Akteur zugAkteur(Aktivitaet zug) {
-    return Akteur.nachHerkunft(
-        zug.herkunft(), zug.person(), zug.tokenName(), zug.agent(), zug.externAkteur());
-  }
-
   /** Der Gang durch Züge und Berichte mit dem gerade offenen Versuch. */
   private static final class Folge {
 
@@ -159,6 +144,21 @@ final class Umsetzungsversuche {
           vonHand,
           null,
           new Umsetzungsangaben(Umsetzungsausgang.ABGESCHLOSSEN, k.zeitpunkt(), null, Angabe.LEER));
+    }
+
+    /** {@code Umgesetzt von:}, sonst der Zug nach In Progress, sonst der Zugang des Berichts. */
+    private static @Nullable Akteur umsetzer(
+        @Nullable Aktivitaet beginn, Kommentar k, Abschlussbericht gelesen) {
+      String modell = gelesen.umgesetztVon();
+      if (modell != null) {
+        return Akteur.modell(modell);
+      }
+      return beginn == null ? Akteur.werkzeug(k.tokenName(), k.agent()) : zugAkteur(beginn);
+    }
+
+    private static @Nullable Akteur zugAkteur(Aktivitaet zug) {
+      return Akteur.nachHerkunft(
+          zug.herkunft(), zug.person(), zug.tokenName(), zug.agent(), zug.externAkteur());
     }
   }
 }
